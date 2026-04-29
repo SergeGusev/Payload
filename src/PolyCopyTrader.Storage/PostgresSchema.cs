@@ -18,6 +18,7 @@ public static class PostgresSchema
         "risk_events",
         "bot_settings",
         "api_errors",
+        "scanner_status",
         "service_heartbeats"
     ];
 
@@ -57,12 +58,38 @@ CREATE TABLE IF NOT EXISTS leader_trades (
     cash_value_usd numeric(28,8) NOT NULL,
     timestamp_utc timestamptz NOT NULL,
     transaction_hash text NULL,
+    dedup_key text NOT NULL,
     raw_json jsonb NULL,
     created_at_utc timestamptz NOT NULL
 );
 
+ALTER TABLE leader_trades ADD COLUMN IF NOT EXISTS dedup_key text;
+UPDATE leader_trades
+SET dedup_key =
+    CASE
+        WHEN transaction_hash IS NOT NULL AND btrim(transaction_hash) <> '' THEN
+            lower(concat(
+                'wallet:', btrim(trader_wallet),
+                '|tx:', btrim(transaction_hash),
+                '|asset:', btrim(asset_id),
+                '|side:', side,
+                '|ts:', extract(epoch from timestamp_utc)::bigint
+            ))
+        ELSE
+            lower(concat(
+                'wallet:', btrim(trader_wallet),
+                '|fallback|asset:', btrim(asset_id),
+                '|side:', side,
+                '|ts:', extract(epoch from timestamp_utc)::bigint,
+                '|price:', price,
+                '|size:', size
+            ))
+    END
+WHERE dedup_key IS NULL OR dedup_key = '';
+ALTER TABLE leader_trades ALTER COLUMN dedup_key SET NOT NULL;
+DROP INDEX IF EXISTS ux_leader_trades_dedup;
 CREATE UNIQUE INDEX IF NOT EXISTS ux_leader_trades_dedup
-ON leader_trades(trader_wallet, COALESCE(transaction_hash, ''), asset_id, side, timestamp_utc);
+ON leader_trades(dedup_key);
 
 CREATE TABLE IF NOT EXISTS leader_positions (
     id uuid PRIMARY KEY,
@@ -72,12 +99,31 @@ CREATE TABLE IF NOT EXISTS leader_positions (
     outcome text NOT NULL,
     size numeric(28,8) NOT NULL,
     avg_price numeric(18,8) NOT NULL,
+    initial_value numeric(28,8) NOT NULL,
     current_value numeric(28,8) NOT NULL,
     cash_pnl numeric(28,8) NOT NULL,
+    percent_pnl numeric(18,8) NOT NULL,
+    total_bought numeric(28,8) NOT NULL,
+    realized_pnl numeric(28,8) NOT NULL,
     cur_price numeric(18,8) NOT NULL,
+    title text NULL,
+    market_slug text NULL,
+    opposite_asset text NULL,
+    end_date_utc timestamptz NULL,
+    negative_risk boolean NOT NULL,
     snapshot_at_utc timestamptz NOT NULL,
     raw_json jsonb NULL
 );
+
+ALTER TABLE leader_positions ADD COLUMN IF NOT EXISTS initial_value numeric(28,8) NOT NULL DEFAULT 0;
+ALTER TABLE leader_positions ADD COLUMN IF NOT EXISTS percent_pnl numeric(18,8) NOT NULL DEFAULT 0;
+ALTER TABLE leader_positions ADD COLUMN IF NOT EXISTS total_bought numeric(28,8) NOT NULL DEFAULT 0;
+ALTER TABLE leader_positions ADD COLUMN IF NOT EXISTS realized_pnl numeric(28,8) NOT NULL DEFAULT 0;
+ALTER TABLE leader_positions ADD COLUMN IF NOT EXISTS title text NULL;
+ALTER TABLE leader_positions ADD COLUMN IF NOT EXISTS market_slug text NULL;
+ALTER TABLE leader_positions ADD COLUMN IF NOT EXISTS opposite_asset text NULL;
+ALTER TABLE leader_positions ADD COLUMN IF NOT EXISTS end_date_utc timestamptz NULL;
+ALTER TABLE leader_positions ADD COLUMN IF NOT EXISTS negative_risk boolean NOT NULL DEFAULT false;
 
 CREATE TABLE IF NOT EXISTS markets (
     id uuid PRIMARY KEY,
@@ -187,6 +233,18 @@ CREATE TABLE IF NOT EXISTS api_errors (
     operation text NOT NULL,
     message text NOT NULL,
     created_at_utc timestamptz NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS scanner_status (
+    scanner_name text PRIMARY KEY,
+    status text NOT NULL,
+    last_successful_scan_utc timestamptz NULL,
+    last_error_utc timestamptz NULL,
+    last_error_message text NULL,
+    trades_fetched integer NOT NULL,
+    new_trades_stored integer NOT NULL,
+    positions_fetched integer NOT NULL,
+    updated_at_utc timestamptz NOT NULL
 );
 
 CREATE TABLE IF NOT EXISTS service_heartbeats (

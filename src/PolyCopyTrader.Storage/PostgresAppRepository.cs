@@ -8,15 +8,20 @@ public sealed class PostgresAppRepository(PostgresConnectionFactory connectionFa
 {
     public async Task AddLeaderTradeAsync(LeaderTrade trade, CancellationToken cancellationToken = default)
     {
+        await TryAddLeaderTradeAsync(trade, cancellationToken);
+    }
+
+    public async Task<bool> TryAddLeaderTradeAsync(LeaderTrade trade, CancellationToken cancellationToken = default)
+    {
         const string sql = """
 INSERT INTO leader_trades (
     id, trader_wallet, trader_name, condition_id, asset_id, market_slug, market_title, outcome,
-    side, price, size, cash_value_usd, timestamp_utc, transaction_hash, raw_json, created_at_utc
+    side, price, size, cash_value_usd, timestamp_utc, transaction_hash, dedup_key, raw_json, created_at_utc
 ) VALUES (
     @Id, @TraderWallet, @TraderName, @ConditionId, @AssetId, @MarketSlug, @MarketTitle, @Outcome,
-    @Side, @Price, @Size, @CashValueUsd, @TimestampUtc, @TransactionHash, CAST(@RawJson AS jsonb), @CreatedAtUtc
+    @Side, @Price, @Size, @CashValueUsd, @TimestampUtc, @TransactionHash, @DedupKey, CAST(@RawJson AS jsonb), @CreatedAtUtc
 )
-ON CONFLICT DO NOTHING;
+ON CONFLICT (dedup_key) DO NOTHING;
 """;
 
         await using var connection = await OpenConnectionAsync(cancellationToken);
@@ -35,9 +40,11 @@ ON CONFLICT DO NOTHING;
         command.Parameters.AddWithValue("CashValueUsd", trade.CashValueUsd);
         command.Parameters.AddWithValue("TimestampUtc", UtcDateTime(trade.TimestampUtc));
         command.Parameters.AddWithValue("TransactionHash", (object?)trade.TransactionHash ?? DBNull.Value);
+        command.Parameters.AddWithValue("DedupKey", LeaderTradeDeduplication.BuildKey(trade));
         command.Parameters.AddWithValue("RawJson", JsonSerializer.Serialize(trade));
         command.Parameters.AddWithValue("CreatedAtUtc", DateTime.UtcNow);
-        await command.ExecuteNonQueryAsync(cancellationToken);
+        var rows = await command.ExecuteNonQueryAsync(cancellationToken);
+        return rows > 0;
     }
 
     public async Task<IReadOnlyList<LeaderTrade>> GetRecentLeaderTradesAsync(CancellationToken cancellationToken = default)
@@ -74,6 +81,46 @@ LIMIT 100;
         }
 
         return results;
+    }
+
+    public async Task AddLeaderPositionAsync(LeaderPosition position, CancellationToken cancellationToken = default)
+    {
+        const string sql = """
+INSERT INTO leader_positions (
+    id, trader_wallet, condition_id, asset_id, outcome, size, avg_price, initial_value, current_value,
+    cash_pnl, percent_pnl, total_bought, realized_pnl, cur_price, title, market_slug, opposite_asset,
+    end_date_utc, negative_risk, snapshot_at_utc, raw_json
+) VALUES (
+    @Id, @TraderWallet, @ConditionId, @AssetId, @Outcome, @Size, @AvgPrice, @InitialValue, @CurrentValue,
+    @CashPnl, @PercentPnl, @TotalBought, @RealizedPnl, @CurPrice, @Title, @MarketSlug, @OppositeAsset,
+    @EndDateUtc, @NegativeRisk, @SnapshotAtUtc, CAST(@RawJson AS jsonb)
+);
+""";
+
+        await using var connection = await OpenConnectionAsync(cancellationToken);
+        await using var command = CreateCommand(connection, sql);
+        command.Parameters.AddWithValue("Id", Guid.NewGuid());
+        command.Parameters.AddWithValue("TraderWallet", position.TraderWallet);
+        command.Parameters.AddWithValue("ConditionId", position.ConditionId);
+        command.Parameters.AddWithValue("AssetId", position.AssetId);
+        command.Parameters.AddWithValue("Outcome", position.Outcome);
+        command.Parameters.AddWithValue("Size", position.Size);
+        command.Parameters.AddWithValue("AvgPrice", position.AvgPrice);
+        command.Parameters.AddWithValue("InitialValue", position.InitialValue);
+        command.Parameters.AddWithValue("CurrentValue", position.CurrentValue);
+        command.Parameters.AddWithValue("CashPnl", position.CashPnl);
+        command.Parameters.AddWithValue("PercentPnl", position.PercentPnl);
+        command.Parameters.AddWithValue("TotalBought", position.TotalBought);
+        command.Parameters.AddWithValue("RealizedPnl", position.RealizedPnl);
+        command.Parameters.AddWithValue("CurPrice", position.CurPrice);
+        command.Parameters.AddWithValue("Title", (object?)position.Title ?? DBNull.Value);
+        command.Parameters.AddWithValue("MarketSlug", (object?)position.MarketSlug ?? DBNull.Value);
+        command.Parameters.AddWithValue("OppositeAsset", (object?)position.OppositeAsset ?? DBNull.Value);
+        command.Parameters.AddWithValue("EndDateUtc", position.EndDateUtc is { } endDate ? UtcDateTime(endDate) : DBNull.Value);
+        command.Parameters.AddWithValue("NegativeRisk", position.NegativeRisk);
+        command.Parameters.AddWithValue("SnapshotAtUtc", UtcDateTime(position.SnapshotAtUtc));
+        command.Parameters.AddWithValue("RawJson", JsonSerializer.Serialize(position));
+        await command.ExecuteNonQueryAsync(cancellationToken);
     }
 
     public async Task AddSignalAsync(Signal signal, CancellationToken cancellationToken = default)
@@ -209,6 +256,76 @@ VALUES (@Id, @Component, @Operation, @Message, @CreatedAtUtc);
         command.Parameters.AddWithValue("Message", error.Message);
         command.Parameters.AddWithValue("CreatedAtUtc", UtcDateTime(error.CreatedAtUtc));
         await command.ExecuteNonQueryAsync(cancellationToken);
+    }
+
+    public async Task UpsertScannerStatusAsync(ScannerStatusSnapshot status, CancellationToken cancellationToken = default)
+    {
+        const string sql = """
+INSERT INTO scanner_status (
+    scanner_name, status, last_successful_scan_utc, last_error_utc, last_error_message,
+    trades_fetched, new_trades_stored, positions_fetched, updated_at_utc
+) VALUES (
+    @ScannerName, @Status, @LastSuccessfulScanUtc, @LastErrorUtc, @LastErrorMessage,
+    @TradesFetched, @NewTradesStored, @PositionsFetched, @UpdatedAtUtc
+)
+ON CONFLICT(scanner_name) DO UPDATE SET
+    status = excluded.status,
+    last_successful_scan_utc = excluded.last_successful_scan_utc,
+    last_error_utc = excluded.last_error_utc,
+    last_error_message = excluded.last_error_message,
+    trades_fetched = excluded.trades_fetched,
+    new_trades_stored = excluded.new_trades_stored,
+    positions_fetched = excluded.positions_fetched,
+    updated_at_utc = excluded.updated_at_utc;
+""";
+
+        await using var connection = await OpenConnectionAsync(cancellationToken);
+        await using var command = CreateCommand(connection, sql);
+        command.Parameters.AddWithValue("ScannerName", status.ScannerName);
+        command.Parameters.AddWithValue("Status", status.ScannerStatus);
+        command.Parameters.AddWithValue(
+            "LastSuccessfulScanUtc",
+            status.LastSuccessfulScanUtc is { } successfulScan ? UtcDateTime(successfulScan) : DBNull.Value);
+        command.Parameters.AddWithValue(
+            "LastErrorUtc",
+            status.LastErrorUtc is { } errorUtc ? UtcDateTime(errorUtc) : DBNull.Value);
+        command.Parameters.AddWithValue("LastErrorMessage", (object?)status.LastErrorMessage ?? DBNull.Value);
+        command.Parameters.AddWithValue("TradesFetched", status.TradesFetched);
+        command.Parameters.AddWithValue("NewTradesStored", status.NewTradesStored);
+        command.Parameters.AddWithValue("PositionsFetched", status.PositionsFetched);
+        command.Parameters.AddWithValue("UpdatedAtUtc", UtcDateTime(status.UpdatedAtUtc));
+        await command.ExecuteNonQueryAsync(cancellationToken);
+    }
+
+    public async Task<IReadOnlyList<ScannerStatusSnapshot>> GetScannerStatusesAsync(CancellationToken cancellationToken = default)
+    {
+        const string sql = """
+SELECT scanner_name, status, last_successful_scan_utc, last_error_utc, last_error_message,
+       trades_fetched, new_trades_stored, positions_fetched, updated_at_utc
+FROM scanner_status
+ORDER BY scanner_name;
+""";
+
+        await using var connection = await OpenConnectionAsync(cancellationToken);
+        await using var command = CreateCommand(connection, sql);
+        await using var reader = await command.ExecuteReaderAsync(cancellationToken);
+
+        var results = new List<ScannerStatusSnapshot>();
+        while (await reader.ReadAsync(cancellationToken))
+        {
+            results.Add(new ScannerStatusSnapshot(
+                reader.GetString(0),
+                reader.IsDBNull(2) ? null : DateTimeOffsetFromUtc(reader.GetDateTime(2)),
+                reader.IsDBNull(3) ? null : DateTimeOffsetFromUtc(reader.GetDateTime(3)),
+                reader.IsDBNull(4) ? null : reader.GetString(4),
+                reader.GetInt32(5),
+                reader.GetInt32(6),
+                reader.GetInt32(7),
+                reader.GetString(1),
+                DateTimeOffsetFromUtc(reader.GetDateTime(8))));
+        }
+
+        return results;
     }
 
     public async Task UpsertServiceHeartbeatAsync(ServiceHeartbeat heartbeat, CancellationToken cancellationToken = default)

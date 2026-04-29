@@ -2,7 +2,7 @@
 
 PolyCopyTrader is a Windows/.NET C# application for monitoring Polymarket traders and running a cautious copy-signal strategy.
 
-This repository is currently at Task 04: public Polymarket API clients. It contains project structure, typed configuration, PostgreSQL schema initialization, a basic repository, read-only Polymarket Data/CLOB/Geo clients, a Worker Service heartbeat, and a basic WPF dashboard shell.
+This repository is currently at Task 05: watchlist scanner. It contains project structure, typed configuration, PostgreSQL schema initialization, a basic repository, read-only Polymarket Data/CLOB/Geo clients, a Worker Service scanner loop, and a basic WPF dashboard shell.
 
 ## Safety
 
@@ -83,12 +83,18 @@ The `PolyCopyTrader.Polymarket` project contains read-only clients for:
 
 User trade calls explicitly send `takerOnly=false` when requested so maker fills are not silently excluded. HTTP failures are retried for transient `429`/`5xx` responses and persisted to `ApiErrors` through the configured repository. When PostgreSQL is not configured, the no-op repository keeps local scaffold runs read-only and dependency-free.
 
+## Watchlist Scanner
+
+The service scans enabled `Watchlist:Traders` entries on `Bot:PollIntervalSeconds`. Each enabled wallet is validated before any API call. Recent trades are fetched with `takerOnly=false`, deduplicated, persisted to `LeaderTrades`, and queued as in-memory candidates for the future signal engine. Current positions are written as snapshots to `LeaderPositions`.
+
+Scanner health is persisted to `scanner_status` with last success/error timestamps and per-loop fetched/stored counts. Invalid placeholder wallets are warned and skipped without crashing the service.
+
 ## Known Limitations
 
-- No scanner, signal engine, risk engine, or paper trading implementation yet.
+- No signal engine, risk engine, or paper trading implementation yet.
 - No WebSocket support yet.
 - No auth/signing/live trading support.
 
 ## Next Recommended Task
 
-Implement `Codex/05_TASK_WATCHLIST_SCANNER.md`.
+Implement `Codex/06_TASK_SIGNAL_AND_RISK_ENGINES.md`.

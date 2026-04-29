@@ -1,3 +1,5 @@
+using System.Globalization;
+
 namespace PolyCopyTrader.Domain;
 
 public enum BotMode
@@ -63,6 +65,34 @@ public sealed record LeaderTrade(
     decimal CashValueUsd,
     DateTimeOffset TimestampUtc,
     string? TransactionHash = null);
+
+public static class LeaderTradeDeduplication
+{
+    public static string BuildKey(LeaderTrade trade)
+    {
+        ArgumentNullException.ThrowIfNull(trade);
+
+        var wallet = Normalize(trade.TraderWallet);
+        var asset = Normalize(trade.AssetId);
+        var side = trade.Side.ToString().ToLowerInvariant();
+        var timestamp = trade.TimestampUtc.ToUniversalTime().ToUnixTimeSeconds().ToString(CultureInfo.InvariantCulture);
+        var transactionHash = Normalize(trade.TransactionHash);
+
+        if (!string.IsNullOrWhiteSpace(transactionHash))
+        {
+            return $"wallet:{wallet}|tx:{transactionHash}|asset:{asset}|side:{side}|ts:{timestamp}";
+        }
+
+        var price = trade.Price.ToString("0.########", CultureInfo.InvariantCulture);
+        var size = trade.Size.ToString("0.########", CultureInfo.InvariantCulture);
+        return $"wallet:{wallet}|fallback|asset:{asset}|side:{side}|ts:{timestamp}|price:{price}|size:{size}";
+    }
+
+    private static string Normalize(string? value)
+    {
+        return (value ?? string.Empty).Trim().ToLowerInvariant();
+    }
+}
 
 public sealed record LeaderPosition(
     string TraderWallet,
@@ -192,6 +222,17 @@ public sealed record ApiError(
     string Operation,
     string Message,
     DateTimeOffset CreatedAtUtc);
+
+public sealed record ScannerStatusSnapshot(
+    string ScannerName,
+    DateTimeOffset? LastSuccessfulScanUtc,
+    DateTimeOffset? LastErrorUtc,
+    string? LastErrorMessage,
+    int TradesFetched,
+    int NewTradesStored,
+    int PositionsFetched,
+    string ScannerStatus,
+    DateTimeOffset UpdatedAtUtc);
 
 public sealed record GeoblockStatus(
     bool Blocked,

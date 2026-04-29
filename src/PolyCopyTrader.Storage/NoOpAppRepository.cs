@@ -9,9 +9,19 @@ public sealed class NoOpAppRepository : IAppRepository
         return Task.CompletedTask;
     }
 
+    public Task<bool> TryAddLeaderTradeAsync(LeaderTrade trade, CancellationToken cancellationToken = default)
+    {
+        return Task.FromResult(false);
+    }
+
     public Task<IReadOnlyList<LeaderTrade>> GetRecentLeaderTradesAsync(CancellationToken cancellationToken = default)
     {
         return Task.FromResult<IReadOnlyList<LeaderTrade>>([]);
+    }
+
+    public Task AddLeaderPositionAsync(LeaderPosition position, CancellationToken cancellationToken = default)
+    {
+        return Task.CompletedTask;
     }
 
     public Task AddSignalAsync(Signal signal, CancellationToken cancellationToken = default)
@@ -37,6 +47,16 @@ public sealed class NoOpAppRepository : IAppRepository
     public Task AddApiErrorAsync(ApiError error, CancellationToken cancellationToken = default)
     {
         return Task.CompletedTask;
+    }
+
+    public Task UpsertScannerStatusAsync(ScannerStatusSnapshot status, CancellationToken cancellationToken = default)
+    {
+        return Task.CompletedTask;
+    }
+
+    public Task<IReadOnlyList<ScannerStatusSnapshot>> GetScannerStatusesAsync(CancellationToken cancellationToken = default)
+    {
+        return Task.FromResult<IReadOnlyList<ScannerStatusSnapshot>>([]);
     }
 
     public Task UpsertServiceHeartbeatAsync(ServiceHeartbeat heartbeat, CancellationToken cancellationToken = default)

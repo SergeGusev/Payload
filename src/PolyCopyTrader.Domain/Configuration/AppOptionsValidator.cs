@@ -152,6 +152,16 @@ public static class AppOptionsValidator
 
     private static void ValidateWatchlist(WatchlistOptions options, List<string> errors)
     {
+        if (options.MaxTradesPerTraderPerPoll <= 0)
+        {
+            errors.Add("Watchlist.MaxTradesPerTraderPerPoll must be greater than zero.");
+        }
+
+        if (options.MaxPositionsPerTraderPerPoll <= 0)
+        {
+            errors.Add("Watchlist.MaxPositionsPerTraderPerPoll must be greater than zero.");
+        }
+
         foreach (var trader in options.Traders)
         {
             if (string.IsNullOrWhiteSpace(trader.Name))

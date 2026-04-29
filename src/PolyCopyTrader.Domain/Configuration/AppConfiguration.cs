@@ -81,6 +81,10 @@ public sealed class PolymarketOptions
 
 public sealed class WatchlistOptions
 {
+    public int MaxTradesPerTraderPerPoll { get; init; } = 100;
+
+    public int MaxPositionsPerTraderPerPoll { get; init; } = 500;
+
     public List<TraderRuleOptions> Traders { get; init; } = [];
 }
 
