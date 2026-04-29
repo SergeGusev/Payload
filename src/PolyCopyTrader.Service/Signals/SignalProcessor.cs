@@ -74,9 +74,7 @@ public sealed class SignalProcessor(
             {
                 rejected++;
                 logger.LogError(ex, "Signal processing failed for trade {TransactionHash}.", trade.TransactionHash);
-                await repository.AddApiErrorAsync(
-                    new ApiError(Guid.NewGuid(), "SignalProcessor", "ProcessTrade", ex.Message, DateTimeOffset.UtcNow),
-                    cancellationToken);
+                await TryRecordApiErrorAsync("ProcessTrade", ex.Message, cancellationToken);
             }
         }
 
@@ -168,5 +166,22 @@ public sealed class SignalProcessor(
             decision.ProposedSizeShares,
             decision.ProposedNotionalUsd,
             decision.CreatedAtUtc);
+    }
+
+    private async Task TryRecordApiErrorAsync(
+        string operation,
+        string message,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            await repository.AddApiErrorAsync(
+                new ApiError(Guid.NewGuid(), "SignalProcessor", operation, message, DateTimeOffset.UtcNow),
+                cancellationToken);
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "Failed to persist signal processor API error for {Operation}.", operation);
+        }
     }
 }

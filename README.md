@@ -2,7 +2,7 @@
 
 PolyCopyTrader is a Windows/.NET C# application for monitoring Polymarket traders and running a cautious copy-signal strategy.
 
-This repository is currently at Task 11: analytics and reporting. It contains project structure, typed configuration, PostgreSQL schema initialization, a basic repository, read-only Polymarket Data/CLOB/Geo clients, a Worker Service scanner/signal/paper loop, local dashboard controls, public market WebSocket monitoring, analytics reports, CSV export, and a read-only monitoring dashboard.
+This repository is currently at Task 12: testing, QA, and hardening. It contains project structure, typed configuration, PostgreSQL schema initialization, a basic repository, read-only Polymarket Data/CLOB/Geo clients, a Worker Service scanner/signal/paper loop, local dashboard controls, public market WebSocket monitoring, analytics reports, CSV export, diagnostics, and a read-only monitoring dashboard.
 
 ## Safety
 
@@ -37,6 +37,16 @@ dotnet build
 ```powershell
 dotnet test
 ```
+
+## QA Check
+
+Run the repeatable pre-auth QA gate before any authenticated/live-trading work:
+
+```powershell
+.\scripts\qa-check.ps1
+```
+
+Use `.\scripts\qa-check.ps1 -SkipRuntimeSmoke` when another service instance is already bound to the local IPC port.
 
 ## Run Service
 
@@ -174,8 +184,21 @@ Interpret paper results conservatively. Paper fills are approximate, long positi
 - Market Data: latest WebSocket/market-data asset snapshots, bid, ask, spread, update time.
 - Analytics: daily, trader, category, execution-quality, and rejection reports.
 - Risk: configured limits and current usage.
+- Diagnostics: sanitized config summary, storage status, service/scanner/WebSocket status, watchlist summary, latest API errors, and risk usage.
 - Logs: API errors, risk events, service commands, and market-data events.
 - Controls: pause/resume scanner, pause/resume paper trading, kill switch, and asset pin/unpin through localhost IPC.
+
+## Troubleshooting
+
+- PostgreSQL not configured: set `POLYCOPYTRADER_POSTGRES_CONNECTION`, restart the service, and check the Diagnostics tab. In local scaffold runs, the no-op repository is expected when no connection string exists.
+- Invalid watchlist wallet: the scanner skips placeholder/invalid wallets, records a warning status, and keeps the service running.
+- HTTP 429/5xx from Polymarket: public clients retry transient failures according to `Polymarket:MaxRetries` and record API errors when retries are exhausted.
+- Malformed API response: the failing operation is recorded as an API error; scanner/signal/paper loops continue on later cycles.
+- WebSocket disconnected/stale: the market WebSocket reconnects with backoff and stale snapshots are ignored after `MarketDataWebSocket:StaleAfterSeconds`.
+- IPC unavailable: check whether `http://127.0.0.1:5118/` is already in use, then run `GET /health` or the QA script runtime smoke.
+- Database temporarily unavailable: loop-level error recording is best-effort and will not crash the worker if error persistence also fails.
+
+Do not proceed to authenticated signing or live trading unless `dotnet build`, `dotnet test`, `--print-config`, and runtime IPC smoke pass.
 
 ## Known Limitations
 
@@ -185,4 +208,4 @@ Interpret paper results conservatively. Paper fills are approximate, long positi
 
 ## Next Recommended Task
 
-Implement `Codex/12_TASK_TESTING_QA_HARDENING.md`.
+Implement `Codex/13_TASK_AUTH_SIGNING_RESEARCH_ONLY.md`.

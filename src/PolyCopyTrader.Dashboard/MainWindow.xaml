@@ -358,6 +358,16 @@
                 </DataGrid>
             </TabItem>
 
+            <TabItem Header="Diagnostics">
+                <DataGrid ItemsSource="{Binding Diagnostics}">
+                    <DataGrid.Columns>
+                        <DataGridTextColumn Header="Check" Binding="{Binding Name}" Width="180" />
+                        <DataGridTextColumn Header="Value" Binding="{Binding Value}" Width="*" />
+                        <DataGridTextColumn Header="Status" Binding="{Binding Status}" Width="100" />
+                    </DataGrid.Columns>
+                </DataGrid>
+            </TabItem>
+
             <TabItem Header="Logs">
                 <DataGrid ItemsSource="{Binding Logs}">
                     <DataGrid.Columns>

@@ -34,6 +34,45 @@ public sealed class StrategyEngineTests
     }
 
     [Fact]
+    public void SignalEngine_RejectsDisallowedCategory()
+    {
+        var engine = CreateSignalEngine();
+
+        var decision = engine.Evaluate(CreateContext(
+            OrderBook(0.73m, 0.75m),
+            marketInfo: new MarketInfo("condition-1", "sample-market", "Will sample event happen?", "SPORTS", DateTimeOffset.UtcNow.AddDays(2))));
+
+        Assert.False(decision.Accepted);
+        Assert.Equal(SignalReasonCodes.CategoryNotAllowed, decision.DecisionCode);
+    }
+
+    [Fact]
+    public void SignalEngine_RejectsStaleSignal()
+    {
+        var engine = CreateSignalEngine();
+
+        var decision = engine.Evaluate(CreateContext(
+            OrderBook(0.73m, 0.75m),
+            trade: Trade() with { TimestampUtc = DateTimeOffset.UtcNow.AddMinutes(-10) }));
+
+        Assert.False(decision.Accepted);
+        Assert.Equal(SignalReasonCodes.TradeTooOld, decision.DecisionCode);
+    }
+
+    [Fact]
+    public void SignalEngine_RejectsUnsupportedSide()
+    {
+        var engine = CreateSignalEngine();
+
+        var decision = engine.Evaluate(CreateContext(
+            OrderBook(0.73m, 0.75m),
+            trade: Trade() with { Side = TradeSide.Sell }));
+
+        Assert.False(decision.Accepted);
+        Assert.Equal(SignalReasonCodes.UnsupportedSide, decision.DecisionCode);
+    }
+
+    [Fact]
     public void SignalEngine_RejectsWideAbsoluteSpread()
     {
         var engine = CreateSignalEngine();
@@ -43,6 +82,17 @@ public sealed class StrategyEngineTests
         Assert.False(decision.Accepted);
         Assert.Equal(SignalReasonCodes.SpreadTooWideAbs, decision.DecisionCode);
         Assert.Contains(SignalReasonCodes.SpreadTooWideAbs, decision.Reasons);
+    }
+
+    [Fact]
+    public void SignalEngine_RejectsWidePercentageSpread()
+    {
+        var engine = CreateSignalEngine();
+
+        var decision = engine.Evaluate(CreateContext(OrderBook(0.300m, 0.315m)));
+
+        Assert.False(decision.Accepted);
+        Assert.Equal(SignalReasonCodes.SpreadTooWidePct, decision.DecisionCode);
     }
 
     [Fact]
@@ -80,6 +130,93 @@ public sealed class StrategyEngineTests
     }
 
     [Fact]
+    public void SignalEngine_RejectsScoreBelowIgnoreThreshold()
+    {
+        var engine = CreateSignalEngine(new SignalOptions
+        {
+            IgnoreBelowScore = 96,
+            ObserveBelowScore = 97,
+            NormalPaperOrderScore = 98
+        });
+
+        var decision = engine.Evaluate(CreateContext(OrderBook(0.73m, 0.75m)));
+
+        Assert.False(decision.Accepted);
+        Assert.Equal(SignalReasonCodes.ScoreBelowThreshold, decision.DecisionCode);
+    }
+
+    [Fact]
+    public void SignalEngine_RejectsObserveOnlyScore()
+    {
+        var engine = CreateSignalEngine(new SignalOptions
+        {
+            IgnoreBelowScore = 60,
+            ObserveBelowScore = 96,
+            NormalPaperOrderScore = 97
+        });
+
+        var decision = engine.Evaluate(CreateContext(OrderBook(0.73m, 0.75m)));
+
+        Assert.False(decision.Accepted);
+        Assert.Equal(SignalReasonCodes.ObserveOnly, decision.DecisionCode);
+    }
+
+    [Fact]
+    public void RiskEngine_RejectsMarketExposureLimit()
+    {
+        var decision = CreateRiskEngine().Evaluate(
+            Intent(25m),
+            Exposure(marketExposureUsd: 90m));
+
+        Assert.False(decision.Allowed);
+        Assert.Contains(SignalReasonCodes.RiskMarketLimit, decision.ReasonCodes);
+    }
+
+    [Fact]
+    public void RiskEngine_RejectsTraderExposureLimit()
+    {
+        var decision = CreateRiskEngine().Evaluate(
+            Intent(25m),
+            Exposure(traderExposureUsd: 290m));
+
+        Assert.False(decision.Allowed);
+        Assert.Contains(SignalReasonCodes.RiskTraderLimit, decision.ReasonCodes);
+    }
+
+    [Fact]
+    public void RiskEngine_RejectsCategoryExposureLimit()
+    {
+        var decision = CreateRiskEngine().Evaluate(
+            Intent(25m),
+            Exposure(categoryExposureUsd: 740m));
+
+        Assert.False(decision.Allowed);
+        Assert.Contains(SignalReasonCodes.RiskCategoryLimit, decision.ReasonCodes);
+    }
+
+    [Fact]
+    public void RiskEngine_RejectsTotalDeployedLimit()
+    {
+        var decision = CreateRiskEngine().Evaluate(
+            Intent(25m),
+            Exposure(totalDeployedUsd: 2_490m));
+
+        Assert.False(decision.Allowed);
+        Assert.Contains(SignalReasonCodes.RiskTotalDeployedLimit, decision.ReasonCodes);
+    }
+
+    [Fact]
+    public void RiskEngine_RejectsDailyLossLimit()
+    {
+        var decision = CreateRiskEngine().Evaluate(
+            Intent(25m),
+            Exposure(dailyLossUsd: 101m));
+
+        Assert.False(decision.Allowed);
+        Assert.Contains(SignalReasonCodes.RiskDailyLossLimit, decision.ReasonCodes);
+    }
+
+    [Fact]
     public void SignalEngine_PersistsRiskReasonInDecision()
     {
         var engine = CreateSignalEngine();
@@ -100,7 +237,7 @@ public sealed class StrategyEngineTests
         Assert.Contains(SignalReasonCodes.RiskMarketLimit, decision.Reasons);
     }
 
-    private static ISignalEngine CreateSignalEngine()
+    private static ISignalEngine CreateSignalEngine(SignalOptions? signalOptions = null)
     {
         var riskOptions = new RiskOptions
         {
@@ -113,7 +250,7 @@ public sealed class StrategyEngineTests
         };
         var paperOptions = new PaperTradingOptions { InitialBankrollUsd = 10_000m };
         return new DefaultSignalEngine(
-            new SignalOptions(),
+            signalOptions ?? new SignalOptions(),
             new ExecutionOptions(),
             riskOptions,
             paperOptions,
@@ -122,11 +259,14 @@ public sealed class StrategyEngineTests
 
     private static SignalEvaluationContext CreateContext(
         OrderBookSnapshot orderBook,
-        ExposureSnapshot? exposure = null)
+        ExposureSnapshot? exposure = null,
+        LeaderTrade? trade = null,
+        TraderRule? traderRule = null,
+        MarketInfo? marketInfo = null)
     {
         return new SignalEvaluationContext(
-            Trade(),
-            new TraderRule(
+            trade ?? Trade(),
+            traderRule ?? new TraderRule(
                 Wallet,
                 ["POLITICS"],
                 MaxLagSeconds: 300,
@@ -134,7 +274,7 @@ public sealed class StrategyEngineTests
                 MaxSpreadCents: 2m,
                 MaxSpreadPct: 3.0m,
                 MinLeaderTradeUsd: 500m),
-            new MarketInfo(
+            marketInfo ?? new MarketInfo(
                 "condition-1",
                 "sample-market",
                 "Will sample event happen?",
@@ -142,6 +282,42 @@ public sealed class StrategyEngineTests
                 DateTimeOffset.UtcNow.AddDays(2)),
             orderBook,
             exposure ?? new ExposureSnapshot(0m, 0m, 0m, 0m, 0m, 0));
+    }
+
+    private static DefaultRiskEngine CreateRiskEngine()
+    {
+        return new DefaultRiskEngine(
+            new RiskOptions(),
+            new PaperTradingOptions { InitialBankrollUsd = 10_000m });
+    }
+
+    private static ProposedOrderIntent Intent(decimal notionalUsd)
+    {
+        return new ProposedOrderIntent(
+            Wallet,
+            "condition-1",
+            "asset-1",
+            "POLITICS",
+            TradeSide.Buy,
+            0.50m,
+            notionalUsd / 0.50m,
+            notionalUsd);
+    }
+
+    private static ExposureSnapshot Exposure(
+        decimal marketExposureUsd = 0m,
+        decimal traderExposureUsd = 0m,
+        decimal categoryExposureUsd = 0m,
+        decimal totalDeployedUsd = 0m,
+        decimal dailyLossUsd = 0m)
+    {
+        return new ExposureSnapshot(
+            marketExposureUsd,
+            traderExposureUsd,
+            categoryExposureUsd,
+            totalDeployedUsd,
+            dailyLossUsd,
+            0);
     }
 
     private static LeaderTrade Trade()

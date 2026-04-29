@@ -140,6 +140,8 @@ public sealed record RiskUsageRow(string Name, decimal LimitUsd, decimal UsedUsd
 
 public sealed record LogRow(string TimestampUtc, string Severity, string Component, string Message, string Details);
 
+public sealed record DiagnosticRow(string Name, string Value, string Status);
+
 public sealed record DashboardSnapshot(
     IReadOnlyList<OverviewMetric> Overview,
     IReadOnlyList<WatchlistRow> Watchlist,
@@ -154,4 +156,5 @@ public sealed record DashboardSnapshot(
     IReadOnlyList<ExecutionQualityRow> ExecutionQuality,
     IReadOnlyList<RejectionAnalysisRow> RejectionAnalysis,
     IReadOnlyList<RiskUsageRow> RiskUsage,
+    IReadOnlyList<DiagnosticRow> Diagnostics,
     IReadOnlyList<LogRow> Logs);

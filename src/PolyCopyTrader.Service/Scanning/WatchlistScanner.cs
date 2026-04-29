@@ -83,9 +83,7 @@ public sealed class WatchlistScanner(
             {
                 scanErrorMessage = $"Trader '{trader.Name}' scan failed: {ex.Message}";
                 logger.LogError(ex, "Watchlist scan failed for trader {TraderName} ({Wallet}).", trader.Name, wallet);
-                await repository.AddApiErrorAsync(
-                    new ApiError(Guid.NewGuid(), ScannerName, "ScanTrader", scanErrorMessage, DateTimeOffset.UtcNow),
-                    cancellationToken);
+                await TryRecordApiErrorAsync("ScanTrader", scanErrorMessage, cancellationToken);
             }
         }
 
@@ -137,6 +135,23 @@ public sealed class WatchlistScanner(
     {
         await repository.UpsertScannerStatusAsync(status, cancellationToken);
         return status;
+    }
+
+    private async Task TryRecordApiErrorAsync(
+        string operation,
+        string message,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            await repository.AddApiErrorAsync(
+                new ApiError(Guid.NewGuid(), ScannerName, operation, message, DateTimeOffset.UtcNow),
+                cancellationToken);
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "Failed to persist scanner API error for {Operation}.", operation);
+        }
     }
 
     private static LeaderTrade NormalizeTrade(LeaderTrade trade, TraderRuleOptions trader, string wallet)

@@ -76,9 +76,7 @@ public sealed class PaperTradingMarketDataUpdater(
         catch (Exception ex)
         {
             logger.LogError(ex, "Failed to apply WebSocket market data update to paper trading for asset {AssetId}.", update.AssetId);
-            await repository.AddApiErrorAsync(
-                new ApiError(Guid.NewGuid(), "PaperTradingMarketDataUpdater", "ApplyUpdate", ex.Message, DateTimeOffset.UtcNow),
-                cancellationToken);
+            await TryRecordApiErrorAsync("ApplyUpdate", ex.Message, cancellationToken);
         }
         finally
         {
@@ -133,5 +131,22 @@ public sealed class PaperTradingMarketDataUpdater(
             update.Size ?? 0m,
             price * (update.Size ?? 0m),
             update.TimestampUtc);
+    }
+
+    private async Task TryRecordApiErrorAsync(
+        string operation,
+        string message,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            await repository.AddApiErrorAsync(
+                new ApiError(Guid.NewGuid(), "PaperTradingMarketDataUpdater", operation, message, DateTimeOffset.UtcNow),
+                cancellationToken);
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "Failed to persist paper trading market-data API error for {Operation}.", operation);
+        }
     }
 }

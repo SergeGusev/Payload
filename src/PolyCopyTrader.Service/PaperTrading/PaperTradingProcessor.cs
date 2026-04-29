@@ -73,9 +73,7 @@ public sealed class PaperTradingProcessor(
             catch (Exception ex)
             {
                 logger.LogError(ex, "Paper order processing failed for order {PaperOrderId}.", order.Id);
-                await repository.AddApiErrorAsync(
-                    new ApiError(Guid.NewGuid(), "PaperTradingProcessor", "ProcessOpenOrder", ex.Message, DateTimeOffset.UtcNow),
-                    cancellationToken);
+                await TryRecordApiErrorAsync("ProcessOpenOrder", ex.Message, cancellationToken);
             }
         }
 
@@ -132,12 +130,27 @@ public sealed class PaperTradingProcessor(
             catch (Exception ex)
             {
                 logger.LogError(ex, "Paper position mark update failed for asset {AssetId}.", position.AssetId);
-                await repository.AddApiErrorAsync(
-                    new ApiError(Guid.NewGuid(), "PaperTradingProcessor", "UpdatePositionMark", ex.Message, DateTimeOffset.UtcNow),
-                    cancellationToken);
+                await TryRecordApiErrorAsync("UpdatePositionMark", ex.Message, cancellationToken);
             }
         }
 
         return updated;
+    }
+
+    private async Task TryRecordApiErrorAsync(
+        string operation,
+        string message,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            await repository.AddApiErrorAsync(
+                new ApiError(Guid.NewGuid(), "PaperTradingProcessor", operation, message, DateTimeOffset.UtcNow),
+                cancellationToken);
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "Failed to persist paper trading API error for {Operation}.", operation);
+        }
     }
 }

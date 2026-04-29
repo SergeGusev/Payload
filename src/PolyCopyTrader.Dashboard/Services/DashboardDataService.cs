@@ -35,8 +35,11 @@ public sealed class DashboardDataService(
         var executionQuality = await repository.GetExecutionQualityReportsAsync(reportLimit, cancellationToken);
         var rejectionAnalysis = await repository.GetRejectionAnalysisReportsAsync(reportLimit, cancellationToken);
 
+        var overview = BuildOverview(heartbeats, scannerStatuses, openPaperOrders, paperPositions, apiErrors, marketDataStatuses);
+        var riskUsage = BuildRiskUsage(openPaperOrders, paperPositions);
+
         return new DashboardSnapshot(
-            BuildOverview(heartbeats, scannerStatuses, openPaperOrders, paperPositions, apiErrors, marketDataStatuses),
+            overview,
             BuildWatchlist(scannerStatuses, leaderTrades),
             leaderTrades.Select(ToLeaderTradeRow).ToArray(),
             signals.Select(ToSignalRow).ToArray(),
@@ -48,7 +51,8 @@ public sealed class DashboardDataService(
             categoryPerformance.Select(ToCategoryPerformanceRow).ToArray(),
             executionQuality.Select(ToExecutionQualityRow).ToArray(),
             rejectionAnalysis.Select(ToRejectionAnalysisRow).ToArray(),
-            BuildRiskUsage(openPaperOrders, paperPositions),
+            riskUsage,
+            BuildDiagnostics(overview, scannerStatuses, marketDataStatuses, apiErrors, riskUsage),
             BuildLogs(apiErrors, riskEvents, commandAudits, marketDataEvents));
     }
 
@@ -149,6 +153,38 @@ public sealed class DashboardDataService(
             Usage("Max daily loss", bankroll * risk.MaxDailyLossPct / 100m, Math.Max(0m, -paperPositions.Sum(position => position.UnrealizedPnlUsd))),
             Usage("Max open orders", risk.MaxOpenOrders, openPaperOrders.Count)
         ];
+    }
+
+    private IReadOnlyList<DiagnosticRow> BuildDiagnostics(
+        IReadOnlyList<OverviewMetric> overview,
+        IReadOnlyList<ScannerStatusSnapshot> scannerStatuses,
+        IReadOnlyList<MarketDataStatusSnapshot> marketDataStatuses,
+        IReadOnlyList<ApiError> apiErrors,
+        IReadOnlyList<RiskUsageRow> riskUsage)
+    {
+        var scanner = scannerStatuses.FirstOrDefault();
+        var marketData = marketDataStatuses.FirstOrDefault(item => item.Component == "PolymarketMarketWebSocket")
+            ?? marketDataStatuses.FirstOrDefault();
+        var latestApiErrors = apiErrors.Take(3).Select(error => $"{FormatDate(error.CreatedAtUtc)} {error.Component}.{error.Operation}: {error.Message}");
+
+        var rows = new List<DiagnosticRow>
+        {
+            new("Config summary", AppOptionsValidator.ToSanitizedSummary(configuration), "Info"),
+            new("Storage provider", configuration.Storage.Provider, storageConfigured ? "OK" : "Warning"),
+            new("Storage configured", storageConfigured ? "Yes" : "No", storageConfigured ? "OK" : "Warning"),
+            new("Storage env var", configuration.Storage.ConnectionStringEnvironmentVariable, "Info"),
+            new("Mode", configuration.Bot.Mode.ToString(), configuration.Bot.EnableLiveTrading ? "Error" : "OK"),
+            new("Live trading enabled", configuration.Bot.EnableLiveTrading ? "Yes" : "No", configuration.Bot.EnableLiveTrading ? "Error" : "OK"),
+            new("Service status", overview.FirstOrDefault(item => item.Name == "Service status")?.Value ?? "No heartbeat", "Info"),
+            new("Scanner status", scanner?.ScannerStatus ?? "No scanner status", scanner?.ScannerStatus == "Healthy" ? "OK" : "Warning"),
+            new("Scanner last error", scanner?.LastErrorMessage ?? string.Empty, string.IsNullOrWhiteSpace(scanner?.LastErrorMessage) ? "OK" : "Warning"),
+            new("WebSocket status", marketData?.ConnectionState.ToString() ?? "No market data status", marketData?.ConnectionState == MarketDataConnectionState.Connected ? "OK" : "Info"),
+            new("Watchlist summary", $"{configuration.Watchlist.Traders.Count} configured; {configuration.Watchlist.Traders.Count(trader => trader.Enabled)} enabled", "Info"),
+            new("Risk usage", string.Join("; ", riskUsage.Select(row => $"{row.Name}={row.UsedUsd:0.##}/{row.LimitUsd:0.##} {row.Status}")), riskUsage.Any(row => row.Status == "Limit") ? "Warning" : "OK"),
+            new("Latest API errors", string.Join(Environment.NewLine, latestApiErrors), apiErrors.Count == 0 ? "OK" : "Warning")
+        };
+
+        return rows;
     }
 
     private static IReadOnlyList<LogRow> BuildLogs(

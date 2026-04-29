@@ -129,12 +129,81 @@ public sealed class PolymarketClientTests
         Assert.Equal("GetUserPositions", error.Operation);
     }
 
+    [Fact]
+    public async Task Client_RetriesHttp429ThenSucceeds()
+    {
+        var callCount = 0;
+        var handler = new StubHttpMessageHandler(_ =>
+        {
+            callCount++;
+            return callCount == 1
+                ? new HttpResponseMessage(HttpStatusCode.TooManyRequests) { Content = new StringContent("slow down") }
+                : new HttpResponseMessage(HttpStatusCode.OK) { Content = new StringContent(SampleTradesJson) };
+        });
+        var client = new PolymarketDataApiClient(
+            new HttpClient(handler),
+            TestOptionsWithRetry,
+            new CapturingApiErrorSink());
+
+        var trades = await client.GetUserTradesAsync("0x56687bf447db6ffa42ffe2204a05edaa20f55839", takerOnly: false);
+
+        Assert.Single(trades);
+        Assert.Equal(2, handler.Requests.Count);
+    }
+
+    [Fact]
+    public async Task Client_RetriesHttp500ThenSucceeds()
+    {
+        var callCount = 0;
+        var handler = new StubHttpMessageHandler(_ =>
+        {
+            callCount++;
+            return callCount == 1
+                ? new HttpResponseMessage(HttpStatusCode.InternalServerError) { Content = new StringContent("server failed") }
+                : new HttpResponseMessage(HttpStatusCode.OK) { Content = new StringContent(SamplePositionsJson) };
+        });
+        var client = new PolymarketDataApiClient(
+            new HttpClient(handler),
+            TestOptionsWithRetry,
+            new CapturingApiErrorSink());
+
+        var positions = await client.GetUserPositionsAsync("0x56687bf447db6ffa42ffe2204a05edaa20f55839");
+
+        Assert.Single(positions);
+        Assert.Equal(2, handler.Requests.Count);
+    }
+
+    [Fact]
+    public async Task Client_RecordsApiErrorOnMalformedJson()
+    {
+        var sink = new CapturingApiErrorSink();
+        var handler = new StubHttpMessageHandler(_ => new HttpResponseMessage(HttpStatusCode.OK)
+        {
+            Content = new StringContent("{ not json")
+        });
+        var client = new PolymarketDataApiClient(new HttpClient(handler), TestOptions, sink);
+
+        await Assert.ThrowsAsync<PolymarketApiException>(() =>
+            client.GetUserTradesAsync("0x56687bf447db6ffa42ffe2204a05edaa20f55839", takerOnly: false));
+
+        Assert.Single(sink.Errors);
+    }
+
     private static PolymarketOptions TestOptions => new()
     {
         DataApiBaseUrl = "https://data-api.polymarket.com",
         ClobBaseUrl = "https://clob.polymarket.com",
         GeoblockUrl = "https://polymarket.com/api/geoblock",
         MaxRetries = 0,
+        RetryBaseDelayMilliseconds = 0
+    };
+
+    private static PolymarketOptions TestOptionsWithRetry => new()
+    {
+        DataApiBaseUrl = "https://data-api.polymarket.com",
+        ClobBaseUrl = "https://clob.polymarket.com",
+        GeoblockUrl = "https://polymarket.com/api/geoblock",
+        MaxRetries = 1,
         RetryBaseDelayMilliseconds = 0
     };
 
