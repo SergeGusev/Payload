@@ -15,6 +15,7 @@ public static class PostgresSchema
         "paper_orders",
         "paper_fills",
         "paper_positions",
+        "dry_run_orders",
         "risk_events",
         "market_data_status",
         "market_data_events",
@@ -234,6 +235,26 @@ CREATE TABLE IF NOT EXISTS paper_positions (
 
 CREATE UNIQUE INDEX IF NOT EXISTS ux_paper_positions_asset
 ON paper_positions(asset_id);
+
+CREATE TABLE IF NOT EXISTS dry_run_orders (
+    id uuid PRIMARY KEY,
+    signal_id uuid NOT NULL,
+    status text NOT NULL,
+    side text NOT NULL,
+    asset_id text NOT NULL,
+    condition_id text NOT NULL,
+    outcome text NOT NULL,
+    price numeric(18,8) NOT NULL,
+    size_shares numeric(28,8) NOT NULL,
+    notional_usd numeric(28,8) NOT NULL,
+    order_type text NOT NULL,
+    payload_json jsonb NOT NULL,
+    validation_summary text NOT NULL,
+    created_at_utc timestamptz NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS ix_dry_run_orders_created
+ON dry_run_orders(created_at_utc DESC);
 
 CREATE TABLE IF NOT EXISTS risk_events (
     id uuid PRIMARY KEY,

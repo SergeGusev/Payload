@@ -2,6 +2,7 @@ using Microsoft.Extensions.Logging.Abstractions;
 using PolyCopyTrader.Domain;
 using PolyCopyTrader.Domain.Configuration;
 using PolyCopyTrader.Polymarket;
+using PolyCopyTrader.Polymarket.Auth;
 using PolyCopyTrader.Service.MarketData;
 using PolyCopyTrader.Service.PaperTrading;
 using PolyCopyTrader.Service.Scanning;
@@ -36,10 +37,12 @@ public sealed class PipelineIntegrationTests
         var signalProcessor = new SignalProcessor(
             NullLogger<SignalProcessor>.Instance,
             new BotOptions { Mode = BotMode.Paper },
+            new PolymarketAuthOptions(),
             new PaperTradingOptions { InitialBankrollUsd = 10_000m, DefaultOrderTtlSeconds = 300 },
             watchlistOptions,
             queue,
             new FakeClobClient(OrderBook(bestBid: 0.73m, bestAsk: 0.75m)),
+            new FakeTradingClient(),
             SignalEngine(),
             new DefaultPaperTradingEngine(),
             repository);
@@ -204,6 +207,14 @@ public sealed class PipelineIntegrationTests
         public Task<decimal?> GetSpreadAsync(string assetId, CancellationToken cancellationToken = default)
         {
             return Task.FromResult<decimal?>(null);
+        }
+    }
+
+    private sealed class FakeTradingClient : IPolymarketTradingClient
+    {
+        public Task<ClobV2DryRunOrderResult> PrepareDryRunOrderAsync(ClobV2OrderRequest request, CancellationToken ct)
+        {
+            throw new InvalidOperationException("Paper-mode integration test should not create dry-run orders.");
         }
     }
 }

@@ -1,6 +1,7 @@
 using PolyCopyTrader.Domain;
 using PolyCopyTrader.Domain.Configuration;
 using PolyCopyTrader.Polymarket;
+using PolyCopyTrader.Polymarket.Auth;
 using PolyCopyTrader.Service.Scanning;
 using PolyCopyTrader.Storage;
 using PolyCopyTrader.Strategy;
@@ -10,10 +11,12 @@ namespace PolyCopyTrader.Service.Signals;
 public sealed class SignalProcessor(
     ILogger<SignalProcessor> logger,
     BotOptions botOptions,
+    PolymarketAuthOptions authOptions,
     PaperTradingOptions paperTradingOptions,
     WatchlistOptions watchlistOptions,
     ILeaderTradeCandidateQueue candidateQueue,
     IPolymarketClobPublicClient clobClient,
+    IPolymarketTradingClient tradingClient,
     ISignalEngine signalEngine,
     IPaperTradingEngine paperTradingEngine,
     IAppRepository repository) : ISignalProcessor
@@ -35,7 +38,8 @@ public sealed class SignalProcessor(
         {
             try
             {
-                var decision = await EvaluateAsync(trade, cancellationToken);
+                var evaluation = await EvaluateAsync(trade, cancellationToken);
+                var decision = evaluation.Decision;
                 var signal = ToSignal(trade, decision);
                 await repository.AddSignalAsync(signal, cancellationToken);
 
@@ -53,6 +57,16 @@ public sealed class SignalProcessor(
                             decision.CreatedAtUtc.AddSeconds(paperTradingOptions.DefaultOrderTtlSeconds));
                         await repository.AddPaperOrderAsync(order, cancellationToken);
                         paperOrdersCreated++;
+                    }
+
+                    if (botOptions.Mode == BotMode.DryRun &&
+                        decision.ProposedPrice is { } dryRunPrice &&
+                        decision.ProposedSizeShares is { } dryRunSizeShares)
+                    {
+                        var result = await tradingClient.PrepareDryRunOrderAsync(
+                            CreateDryRunRequest(trade, dryRunPrice, dryRunSizeShares, evaluation.OrderBook, decision.CreatedAtUtc),
+                            cancellationToken);
+                        await repository.AddDryRunOrderAsync(ToDryRunOrder(signal, trade, dryRunPrice, dryRunSizeShares, result), cancellationToken);
                     }
 
                     continue;
@@ -81,7 +95,7 @@ public sealed class SignalProcessor(
         return new SignalProcessingResult(candidates.Count, accepted, rejected, paperOrdersCreated);
     }
 
-    private async Task<SignalDecision> EvaluateAsync(LeaderTrade trade, CancellationToken cancellationToken)
+    private async Task<SignalEvaluationResult> EvaluateAsync(LeaderTrade trade, CancellationToken cancellationToken)
     {
         var traderRule = ResolveTraderRule(trade);
         var orderBook = trade.Side == TradeSide.Buy
@@ -91,13 +105,73 @@ public sealed class SignalProcessor(
         var positions = await repository.GetPaperPositionsAsync(cancellationToken);
         var exposure = BuildExposure(trade, openOrders, positions);
 
-        return signalEngine.Evaluate(
+        var decision = signalEngine.Evaluate(
             new SignalEvaluationContext(
                 trade,
                 traderRule,
                 null,
                 orderBook,
                 exposure));
+
+        return new SignalEvaluationResult(decision, orderBook);
+    }
+
+    private ClobV2OrderRequest CreateDryRunRequest(
+        LeaderTrade trade,
+        decimal price,
+        decimal sizeShares,
+        OrderBookSnapshot? orderBook,
+        DateTimeOffset createdAtUtc)
+    {
+        var signer = authOptions.SigningAddress;
+        var maker = string.IsNullOrWhiteSpace(authOptions.FunderAddress)
+            ? signer
+            : authOptions.FunderAddress;
+
+        return new ClobV2OrderRequest(
+            trade.AssetId,
+            trade.Side,
+            price,
+            sizeShares,
+            orderBook?.TickSize ?? 0.01m,
+            orderBook?.MinOrderSize ?? 1m,
+            maker,
+            signer,
+            ParseSignatureType(authOptions.SignatureType),
+            ClobV2OrderType.GTC,
+            createdAtUtc,
+            NegativeRisk: orderBook?.NegativeRisk ?? false);
+    }
+
+    private static DryRunOrder ToDryRunOrder(
+        Signal signal,
+        LeaderTrade trade,
+        decimal price,
+        decimal sizeShares,
+        ClobV2DryRunOrderResult result)
+    {
+        return new DryRunOrder(
+            Guid.NewGuid(),
+            signal.Id,
+            result.Status,
+            trade.Side,
+            trade.AssetId,
+            trade.ConditionId,
+            trade.Outcome,
+            price,
+            sizeShares,
+            price * sizeShares,
+            result.Order.OrderType.ToString(),
+            result.RedactedPayloadJson,
+            result.ValidationMessages.Count == 0 ? string.Empty : string.Join("; ", result.ValidationMessages),
+            signal.CreatedAtUtc);
+    }
+
+    private static ClobV2SignatureType ParseSignatureType(string value)
+    {
+        return Enum.TryParse<ClobV2SignatureType>(value, ignoreCase: true, out var parsed)
+            ? parsed
+            : ClobV2SignatureType.EOA;
     }
 
     private TraderRule ResolveTraderRule(LeaderTrade trade)
@@ -184,4 +258,6 @@ public sealed class SignalProcessor(
             logger.LogError(ex, "Failed to persist signal processor API error for {Operation}.", operation);
         }
     }
+
+    private sealed record SignalEvaluationResult(SignalDecision Decision, OrderBookSnapshot? OrderBook);
 }

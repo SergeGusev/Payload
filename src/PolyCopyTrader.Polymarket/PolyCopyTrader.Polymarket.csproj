@@ -1,6 +1,12 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 
   <ItemGroup>
+    <PackageReference Include="Nethereum.Signer" Version="6.1.0" />
+    <PackageReference Include="Nethereum.Signer.EIP712" Version="6.1.0" />
+    <PackageReference Include="Newtonsoft.Json" Version="13.0.4" />
+  </ItemGroup>
+
+  <ItemGroup>
     <ProjectReference Include="..\PolyCopyTrader.Domain\PolyCopyTrader.Domain.csproj" />
   </ItemGroup>
 

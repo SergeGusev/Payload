@@ -1,10 +1,11 @@
 # Polymarket Auth
 
-Current status: authenticated header infrastructure only.
+Current status: authenticated header infrastructure plus dry-run CLOB V2 order signing.
 
-Task 14 implements secure secret lookup, L2 HMAC signing, L2 header construction, and
-auth readiness reporting. It still does not implement private-key loading, L1 API-key
-creation, order signing, order posting, or live cancellation.
+Task 14 implemented secure secret lookup, L2 HMAC signing, L2 header construction, and
+auth readiness reporting. Task 15 implements dry-run-only CLOB V2 order construction,
+amount conversion, EIP-712 signing, and redacted payload rendering. It still does not
+implement L1 API-key creation, live order posting, or live cancellation.
 
 Implementation must follow `docs/auth_signing_plan.md`:
 
@@ -12,7 +13,8 @@ Implementation must follow `docs/auth_signing_plan.md`:
 - L2 auth signs requests with HMAC-SHA256 using the API secret. The HMAC message is
   `timestamp + method + requestPath + serializedBodyIfPresent`.
 - CLOB V2 order signing uses the `Polymarket CTF Exchange` domain version `2`.
-- Live order posting is out of scope until the dedicated live-trading task.
+- Live order posting and cancellation are out of scope until the dedicated live-trading
+  task.
 
 Configured secret providers:
 
@@ -23,5 +25,11 @@ Configured secret providers:
 `PolymarketAuth` config may contain provider names and lookup names only. It must not
 contain private keys, API secrets, passphrases, or raw header values.
 
+Dry-run signing may resolve `DryRunPrivateKeyName` through the configured secret
+provider. A missing dry-run key produces an unsigned dry-run payload. Tests use a
+deterministic public development key only; never fund that key and never replace it
+with a real credential in repository files.
+
 Do not add private key fields to the dashboard. Do not log auth headers, API secrets,
-passphrases, private keys, or signatures.
+passphrases, private keys, or signatures. Persisted dry-run payloads must remain
+redacted.

@@ -2,6 +2,7 @@ using Microsoft.Extensions.Logging.Abstractions;
 using PolyCopyTrader.Domain;
 using PolyCopyTrader.Domain.Configuration;
 using PolyCopyTrader.Polymarket;
+using PolyCopyTrader.Polymarket.Auth;
 using PolyCopyTrader.Service.MarketData;
 using PolyCopyTrader.Service.PaperTrading;
 using PolyCopyTrader.Service.Scanning;
@@ -163,10 +164,12 @@ public sealed class ResilienceTests
         return new SignalProcessor(
             NullLogger<SignalProcessor>.Instance,
             new BotOptions { Mode = BotMode.Paper },
+            new PolymarketAuthOptions(),
             paperOptions,
             Watchlist(),
             queue,
             clobClient,
+            new FakeTradingClient(),
             new DefaultSignalEngine(
                 new SignalOptions(),
                 new ExecutionOptions(),
@@ -175,6 +178,14 @@ public sealed class ResilienceTests
                 new DefaultRiskEngine(riskOptions, paperOptions)),
             new DefaultPaperTradingEngine(),
             repository);
+    }
+
+    private sealed class FakeTradingClient : IPolymarketTradingClient
+    {
+        public Task<ClobV2DryRunOrderResult> PrepareDryRunOrderAsync(ClobV2OrderRequest request, CancellationToken ct)
+        {
+            throw new InvalidOperationException("Paper-mode resilience tests should not create dry-run orders.");
+        }
     }
 
     private static WatchlistOptions Watchlist()

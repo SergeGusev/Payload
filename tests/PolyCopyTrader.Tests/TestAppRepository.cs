@@ -21,6 +21,8 @@ internal sealed class TestAppRepository : IAppRepository
 
     public List<PaperPosition> PaperPositions { get; } = [];
 
+    public List<DryRunOrder> DryRunOrders { get; } = [];
+
     public List<ApiError> ApiErrors { get; } = [];
 
     public List<ScannerStatusSnapshot> ScannerStatuses { get; } = [];
@@ -152,6 +154,17 @@ internal sealed class TestAppRepository : IAppRepository
     public Task<IReadOnlyList<PaperPosition>> GetPaperPositionsAsync(CancellationToken cancellationToken = default)
     {
         return Task.FromResult<IReadOnlyList<PaperPosition>>(PaperPositions.ToArray());
+    }
+
+    public Task AddDryRunOrderAsync(DryRunOrder order, CancellationToken cancellationToken = default)
+    {
+        DryRunOrders.Add(order);
+        return Task.CompletedTask;
+    }
+
+    public Task<IReadOnlyList<DryRunOrder>> GetRecentDryRunOrdersAsync(int limit = 100, CancellationToken cancellationToken = default)
+    {
+        return Task.FromResult<IReadOnlyList<DryRunOrder>>(DryRunOrders.OrderByDescending(item => item.CreatedAtUtc).Take(limit).ToArray());
     }
 
     public Task AddApiErrorAsync(ApiError error, CancellationToken cancellationToken = default)

@@ -79,6 +79,8 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
 
     public ObservableCollection<PaperPositionRow> PaperPositions { get; } = [];
 
+    public ObservableCollection<DryRunOrderRow> DryRunOrders { get; } = [];
+
     public ObservableCollection<MarketDataRow> MarketData { get; } = [];
 
     public ObservableCollection<DailyReportRow> DailyReports { get; } = [];
@@ -264,6 +266,7 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         Replace(Signals, snapshot.Signals);
         Replace(PaperOrders, snapshot.PaperOrders);
         Replace(PaperPositions, snapshot.PaperPositions);
+        Replace(DryRunOrders, snapshot.DryRunOrders);
         Replace(MarketData, snapshot.MarketData);
         Replace(DailyReports, snapshot.DailyReports);
         Replace(TraderPerformance, snapshot.TraderPerformance);
@@ -277,7 +280,7 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         Mode = Overview.FirstOrDefault(item => item.Name == "Mode")?.Value ?? "Unknown";
         ServiceStatus = Overview.FirstOrDefault(item => item.Name == "Service status")?.Value ?? "No heartbeat";
         var webSocketStatus = Overview.FirstOrDefault(item => item.Name == "WebSocket status")?.Value ?? "No market data status";
-        Summary = $"{ServiceStatus}; WS={webSocketStatus}; {StorageStatus}; {Signals.Count} signals; {PaperOrders.Count} paper orders; {PaperPositions.Count} positions.";
+        Summary = $"{ServiceStatus}; WS={webSocketStatus}; {StorageStatus}; {Signals.Count} signals; {PaperOrders.Count} paper orders; {DryRunOrders.Count} dry-run orders; {PaperPositions.Count} positions.";
     }
 
     private static void Replace<T>(ObservableCollection<T> target, IReadOnlyList<T> source)

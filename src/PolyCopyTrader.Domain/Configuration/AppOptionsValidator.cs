@@ -47,6 +47,7 @@ public static class AppOptionsValidator
             $"Auth enabled: {configuration.PolymarketAuth.Enabled}",
             $"Auth provider: {configuration.PolymarketAuth.SecretProvider}",
             $"Auth configured: {configuration.PolymarketAuth.Enabled && IsAddressLike(configuration.PolymarketAuth.SigningAddress)}",
+            $"Dry-run signing enabled: {configuration.PolymarketAuth.DryRunSigningEnabled}",
             $"Market WebSocket enabled: {configuration.Bot.UseWebSockets && configuration.MarketDataWebSocket.Enabled}",
             $"Market WebSocket URL: {configuration.MarketDataWebSocket.MarketEndpointUrl}",
             $"Signal observe threshold: {configuration.Signal.ObserveBelowScore}",
@@ -108,6 +109,31 @@ public static class AppOptionsValidator
         if (!IsSupportedSecretProvider(options.SecretProvider))
         {
             errors.Add("PolymarketAuth.SecretProvider must be Environment or CredentialManager.");
+        }
+
+        if (options.ChainId <= 0)
+        {
+            errors.Add("PolymarketAuth.ChainId must be greater than zero.");
+        }
+
+        if (!IsSupportedSignatureType(options.SignatureType))
+        {
+            errors.Add("PolymarketAuth.SignatureType must be EOA, POLY_PROXY, POLY_GNOSIS_SAFE, or POLY_1271.");
+        }
+
+        if (!string.IsNullOrWhiteSpace(options.FunderAddress) && !IsAddressLike(options.FunderAddress))
+        {
+            errors.Add("PolymarketAuth.FunderAddress must be a 0x-prefixed Ethereum address when set.");
+        }
+
+        if (options.DryRunSigningEnabled && string.IsNullOrWhiteSpace(options.DryRunPrivateKeyName))
+        {
+            errors.Add("PolymarketAuth.DryRunPrivateKeyName is required when dry-run signing is enabled.");
+        }
+
+        if (options.DryRunSigningEnabled && !IsAddressLike(options.SigningAddress))
+        {
+            errors.Add("PolymarketAuth.SigningAddress must be a 0x-prefixed Ethereum address when dry-run signing is enabled.");
         }
 
         if (!options.Enabled)
@@ -410,6 +436,14 @@ public static class AppOptionsValidator
     {
         return string.Equals(value, "Environment", StringComparison.OrdinalIgnoreCase) ||
             string.Equals(value, "CredentialManager", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static bool IsSupportedSignatureType(string value)
+    {
+        return string.Equals(value, "EOA", StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(value, "POLY_PROXY", StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(value, "POLY_GNOSIS_SAFE", StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(value, "POLY_1271", StringComparison.OrdinalIgnoreCase);
     }
 
     private static bool IsAddressLike(string value)

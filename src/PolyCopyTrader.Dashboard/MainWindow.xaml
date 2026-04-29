@@ -247,6 +247,24 @@
                 </DataGrid>
             </TabItem>
 
+            <TabItem Header="Dry Run Orders">
+                <DataGrid ItemsSource="{Binding DryRunOrders}">
+                    <DataGrid.Columns>
+                        <DataGridTextColumn Header="Created UTC" Binding="{Binding TimestampUtc}" Width="150" />
+                        <DataGridTextColumn Header="Status" Binding="{Binding Status}" Width="120" />
+                        <DataGridTextColumn Header="Side" Binding="{Binding Side}" Width="70" />
+                        <DataGridTextColumn Header="Asset" Binding="{Binding Asset}" Width="260" />
+                        <DataGridTextColumn Header="Outcome" Binding="{Binding Outcome}" Width="90" />
+                        <DataGridTextColumn Header="Price" Binding="{Binding Price}" Width="80" />
+                        <DataGridTextColumn Header="Shares" Binding="{Binding SizeShares}" Width="90" />
+                        <DataGridTextColumn Header="Notional" Binding="{Binding NotionalUsd}" Width="90" />
+                        <DataGridTextColumn Header="Order type" Binding="{Binding OrderType}" Width="90" />
+                        <DataGridTextColumn Header="Validation" Binding="{Binding ValidationSummary}" Width="260" />
+                        <DataGridTextColumn Header="Signal id" Binding="{Binding SignalId}" Width="260" />
+                    </DataGrid.Columns>
+                </DataGrid>
+            </TabItem>
+
             <TabItem Header="Market Data">
                 <DataGrid ItemsSource="{Binding MarketData}">
                     <DataGrid.Columns>

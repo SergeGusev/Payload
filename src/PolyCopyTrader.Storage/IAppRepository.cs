@@ -36,6 +36,10 @@ public interface IAppRepository
 
     Task<IReadOnlyList<PaperPosition>> GetPaperPositionsAsync(CancellationToken cancellationToken = default);
 
+    Task AddDryRunOrderAsync(DryRunOrder order, CancellationToken cancellationToken = default);
+
+    Task<IReadOnlyList<DryRunOrder>> GetRecentDryRunOrdersAsync(int limit = 100, CancellationToken cancellationToken = default);
+
     Task AddApiErrorAsync(ApiError error, CancellationToken cancellationToken = default);
 
     Task<IReadOnlyList<ApiError>> GetRecentApiErrorsAsync(int limit = 100, CancellationToken cancellationToken = default);

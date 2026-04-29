@@ -21,6 +21,7 @@ public sealed class DashboardDataService(
         var recentPaperOrders = await repository.GetRecentPaperOrdersAsync(cancellationToken: cancellationToken);
         var openPaperOrders = await repository.GetOpenPaperOrdersAsync(cancellationToken);
         var paperPositions = await repository.GetPaperPositionsAsync(cancellationToken);
+        var dryRunOrders = await repository.GetRecentDryRunOrdersAsync(cancellationToken: cancellationToken);
         var apiErrors = await repository.GetRecentApiErrorsAsync(cancellationToken: cancellationToken);
         var riskEvents = await repository.GetRecentRiskEventsAsync(cancellationToken: cancellationToken);
         var commandAudits = await repository.GetRecentServiceCommandAuditsAsync(cancellationToken: cancellationToken);
@@ -48,6 +49,7 @@ public sealed class DashboardDataService(
             signals.Select(ToSignalRow).ToArray(),
             recentPaperOrders.Select(ToPaperOrderRow).ToArray(),
             paperPositions.Select(position => ToPaperPositionRow(position, orderBooksByAsset)).ToArray(),
+            dryRunOrders.Select(ToDryRunOrderRow).ToArray(),
             orderBookSnapshots.Select(ToMarketDataRow).ToArray(),
             dailyReports.Select(ToDailyReportRow).ToArray(),
             traderPerformance.Select(ToTraderPerformanceRow).ToArray(),
@@ -299,6 +301,22 @@ public sealed class DashboardDataService(
             position.UnrealizedPnlUsd,
             "n/a",
             "n/a");
+    }
+
+    private static DryRunOrderRow ToDryRunOrderRow(DryRunOrder order)
+    {
+        return new DryRunOrderRow(
+            FormatDate(order.CreatedAtUtc),
+            order.Status.ToString(),
+            order.Side.ToString(),
+            order.AssetId,
+            order.Outcome,
+            order.Price,
+            order.SizeShares,
+            order.NotionalUsd,
+            order.OrderType,
+            order.ValidationSummary,
+            order.SignalId.ToString());
     }
 
     private static MarketDataRow ToMarketDataRow(OrderBookSnapshot snapshot)

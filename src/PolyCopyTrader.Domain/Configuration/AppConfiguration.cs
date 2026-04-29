@@ -136,6 +136,16 @@ public sealed class PolymarketAuthOptions
 
     public string SigningAddress { get; init; } = string.Empty;
 
+    public string FunderAddress { get; init; } = string.Empty;
+
+    public int ChainId { get; init; } = 137;
+
+    public string SignatureType { get; init; } = "EOA";
+
+    public bool DryRunSigningEnabled { get; init; }
+
+    public string DryRunPrivateKeyName { get; init; } = "POLYCOPYTRADER_POLYMARKET_DRY_RUN_PRIVATE_KEY";
+
     public string ApiKeyName { get; init; } = "POLYCOPYTRADER_POLYMARKET_API_KEY";
 
     public string ApiSecretName { get; init; } = "POLYCOPYTRADER_POLYMARKET_API_SECRET";

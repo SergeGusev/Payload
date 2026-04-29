@@ -1,3 +1,5 @@
+using System.Text.Json;
+using PolyCopyTrader.Domain;
 using PolyCopyTrader.Domain.Configuration;
 using PolyCopyTrader.Polymarket.Auth;
 
@@ -17,7 +19,11 @@ public sealed class AuthPlaceholderTests
     [Fact]
     public void TradingClient_IsPlaceholderWithoutLiveOrderMethods()
     {
-        Assert.Empty(typeof(IPolymarketTradingClient).GetMethods());
+        var method = Assert.Single(typeof(IPolymarketTradingClient).GetMethods());
+
+        Assert.Equal(nameof(IPolymarketTradingClient.PrepareDryRunOrderAsync), method.Name);
+        Assert.DoesNotContain("Post", method.Name, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("Cancel", method.Name, StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]
@@ -171,6 +177,165 @@ public sealed class AuthPlaceholderTests
 
         Assert.Equal("Error", status.State);
         Assert.Contains(status.MissingRequirements, item => item.Contains("base64", StringComparison.OrdinalIgnoreCase));
+    }
+
+    [Fact]
+    public void OrderAmountCalculator_ConvertsBuyAndSellAmounts()
+    {
+        var calculator = new OrderAmountCalculator();
+
+        var buy = calculator.Calculate(TradeSide.Buy, 0.74m, 100m);
+        var sell = calculator.Calculate(TradeSide.Sell, 0.74m, 100m);
+
+        Assert.Equal("74000000", buy.MakerAmount.ToString());
+        Assert.Equal("100000000", buy.TakerAmount.ToString());
+        Assert.Equal("100000000", sell.MakerAmount.ToString());
+        Assert.Equal("74000000", sell.TakerAmount.ToString());
+        Assert.Equal(0, ClobV2OrderBuilder.SideToTypedValue(TradeSide.Buy));
+        Assert.Equal(1, ClobV2OrderBuilder.SideToTypedValue(TradeSide.Sell));
+    }
+
+    [Fact]
+    public void OrderBuilder_ValidatesTickSizeAndMinimumSize()
+    {
+        var builder = new ClobV2OrderBuilder(new OrderAmountCalculator());
+
+        var errors = builder.Validate(FixedOrderRequest() with
+        {
+            Price = 0.745m,
+            TickSize = 0.01m,
+            SizeShares = 0.5m,
+            MinOrderSize = 1m
+        });
+
+        Assert.Contains(errors, error => error.Contains("tick size", StringComparison.OrdinalIgnoreCase));
+        Assert.Contains(errors, error => error.Contains("minimum order size", StringComparison.OrdinalIgnoreCase));
+    }
+
+    [Fact]
+    public void OrderBuilder_ValidatesSixDecimalTokenUnits()
+    {
+        var builder = new ClobV2OrderBuilder(new OrderAmountCalculator());
+
+        var errors = builder.Validate(FixedOrderRequest() with
+        {
+            Price = 0.01m,
+            SizeShares = 1.123456m,
+            MinOrderSize = 1m
+        });
+
+        Assert.Contains(errors, error => error.Contains("notional", StringComparison.OrdinalIgnoreCase));
+    }
+
+    [Fact]
+    public void OrderBuilder_AddsGtdExpirationToWirePayloadOnly()
+    {
+        var expiration = new DateTimeOffset(2026, 05, 01, 12, 0, 0, TimeSpan.Zero);
+        var order = new ClobV2OrderBuilder(new OrderAmountCalculator()).Build(FixedOrderRequest() with
+        {
+            OrderType = ClobV2OrderType.GTD,
+            GtdExpirationUtc = expiration
+        });
+
+        var payload = new ClobV2OrderPayloadSerializer().Serialize(order, null);
+        using var json = JsonDocument.Parse(payload);
+
+        Assert.Equal(expiration.ToUnixTimeSeconds().ToString(), order.Expiration);
+        Assert.Equal("GTD", json.RootElement.GetProperty("orderType").GetString());
+        Assert.Equal(expiration.ToUnixTimeSeconds().ToString(), json.RootElement.GetProperty("order").GetProperty("expiration").GetString());
+    }
+
+    [Fact]
+    public async Task DryRunTradingClient_MissingKeyCreatesUnsignedDryRun()
+    {
+        var client = CreateDryRunClient(new Dictionary<string, string>());
+
+        var result = await client.PrepareDryRunOrderAsync(FixedOrderRequest(), CancellationToken.None);
+
+        Assert.Equal(DryRunOrderStatus.DryRunUnsigned, result.Status);
+        Assert.Null(result.Signature);
+        Assert.Contains(@"""signature"":""""", result.PayloadJson, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task DryRunTradingClient_SignsAndRedactsPayloadWithDeterministicTestKey()
+    {
+        var signer = new ClobV2OrderSigner();
+        var privateKey = DeterministicUnfundedTestPrivateKey;
+        var signerAddress = signer.GetAddress(privateKey);
+        var client = CreateDryRunClient(new Dictionary<string, string>
+        {
+            ["dry-run-private-key"] = privateKey
+        });
+
+        var result = await client.PrepareDryRunOrderAsync(FixedOrderRequest() with
+        {
+            MakerAddress = signerAddress,
+            SignerAddress = signerAddress
+        }, CancellationToken.None);
+
+        Assert.Equal(DryRunOrderStatus.DryRunSigned, result.Status);
+        Assert.NotNull(result.Signature);
+        Assert.True(signer.Verify(result.Order, result.Signature!, signerAddress));
+        Assert.Contains(result.Signature!, result.PayloadJson, StringComparison.Ordinal);
+        Assert.DoesNotContain(result.Signature!, result.RedactedPayloadJson, StringComparison.Ordinal);
+        Assert.Contains("[REDACTED]", result.RedactedPayloadJson, StringComparison.Ordinal);
+        Assert.Equal(
+            "0x05358de9a0bc0dac3413355799171ad6b3833fd3647983395f8589da9cea8e99207258c0563ac8132ae6dd9ce3afc46b537d83d440b6d651ddbe5560405497491c",
+            result.Signature);
+    }
+
+    [Fact]
+    public async Task DryRunTradingClient_InvalidKeyCreatesRejectedDryRun()
+    {
+        var client = CreateDryRunClient(new Dictionary<string, string>
+        {
+            ["dry-run-private-key"] = "not-a-private-key"
+        });
+
+        var result = await client.PrepareDryRunOrderAsync(FixedOrderRequest(), CancellationToken.None);
+
+        Assert.Equal(DryRunOrderStatus.DryRunRejected, result.Status);
+        Assert.Null(result.Signature);
+        Assert.Contains(result.ValidationMessages, error => error.Contains("signing failed", StringComparison.OrdinalIgnoreCase));
+    }
+
+    // Public deterministic local test key only. Never fund it or replace it with a real key.
+    private const string DeterministicUnfundedTestPrivateKey =
+        "0x0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef";
+
+    private static ClobV2OrderRequest FixedOrderRequest()
+    {
+        var signer = new ClobV2OrderSigner();
+        var signerAddress = signer.GetAddress(DeterministicUnfundedTestPrivateKey);
+        return new ClobV2OrderRequest(
+            "12345678901234567890",
+            TradeSide.Buy,
+            0.74m,
+            100m,
+            0.01m,
+            1m,
+            signerAddress,
+            signerAddress,
+            ClobV2SignatureType.EOA,
+            ClobV2OrderType.GTC,
+            new DateTimeOffset(2026, 04, 29, 12, 0, 0, TimeSpan.Zero),
+            Salt: "123456789");
+    }
+
+    private static DryRunTradingClient CreateDryRunClient(IReadOnlyDictionary<string, string> secrets)
+    {
+        return new DryRunTradingClient(
+            new PolymarketAuthOptions
+            {
+                ChainId = 137,
+                DryRunSigningEnabled = true,
+                DryRunPrivateKeyName = "dry-run-private-key"
+            },
+            new FakeSecretProvider(secrets),
+            new ClobV2OrderBuilder(new OrderAmountCalculator()),
+            new ClobV2OrderSigner(),
+            new ClobV2OrderPayloadSerializer());
     }
 
     private sealed class FakeSecretProvider(IReadOnlyDictionary<string, string>? values = null) : ISecretProvider

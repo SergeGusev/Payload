@@ -2,15 +2,15 @@
 
 PolyCopyTrader is a Windows/.NET C# application for monitoring Polymarket traders and running a cautious copy-signal strategy.
 
-This repository is currently at Task 14: CLOB V2 auth/HMAC infrastructure. It contains project structure, typed configuration, PostgreSQL schema initialization, a basic repository, read-only Polymarket Data/CLOB/Geo clients, a Worker Service scanner/signal/paper loop, local dashboard controls, public market WebSocket monitoring, analytics reports, CSV export, diagnostics, a read-only monitoring dashboard, L2 HMAC header infrastructure, and placeholder trading interfaces.
+This repository is currently at Task 15: CLOB V2 dry-run order signing. It contains project structure, typed configuration, PostgreSQL schema initialization, a basic repository, read-only Polymarket Data/CLOB/Geo clients, a Worker Service scanner/signal/paper loop, local dashboard controls, public market WebSocket monitoring, analytics reports, CSV export, diagnostics, a monitoring dashboard, L2 HMAC header infrastructure, and dry-run-only CLOB V2 order construction/signing.
 
 ## Safety
 
 - No live trading exists in this scaffold.
 - No implemented order-posting or cancellation HTTP calls exist.
-- No private key handling exists.
-- Auth supports secret lookup, L2 HMAC signatures, L2 headers, and readiness only.
-- Trading interfaces are placeholders only.
+- Private-key handling is limited to optional dry-run lookup through the configured secret provider. Keys are not requested, stored in appsettings, or logged.
+- Auth supports secret lookup, L2 HMAC signatures, L2 headers, dry-run CLOB V2 order signing, and readiness reporting.
+- The trading interface only prepares signed or unsigned dry-run payloads. It does not expose post or cancel methods.
 - Default mode is read-only/paper-first by project policy.
 
 ## Project Structure
@@ -103,7 +103,7 @@ The summary is sanitized and does not include secrets. Live trading is disabled 
 dotnet run --project src/PolyCopyTrader.Dashboard/PolyCopyTrader.Dashboard.csproj
 ```
 
-The dashboard is read-only and polls PostgreSQL every `Dashboard:RefreshIntervalSeconds`. It shows overview metrics, watchlist/scanner status, leader trades, signals and rejection reasons, paper orders, paper positions, market data, analytics reports, risk usage, and API/risk logs. If PostgreSQL is not configured, it opens with empty states and a clear storage status.
+The dashboard polls PostgreSQL every `Dashboard:RefreshIntervalSeconds`. It shows overview metrics, watchlist/scanner status, leader trades, signals and rejection reasons, dry-run orders, paper orders, paper positions, market data, analytics reports, risk usage, and API/risk logs. If PostgreSQL is not configured, it opens with empty states and a clear storage status.
 
 ## Storage
 
@@ -128,9 +128,9 @@ User trade calls explicitly send `takerOnly=false` when requested so maker fills
 
 ## Auth Research
 
-Task 13 added research notes in `docs/auth_signing_plan.md`. Task 14 added native C# L2 HMAC signing, L2 header construction, secret-provider abstraction, and auth readiness reporting under `src/PolyCopyTrader.Polymarket/Auth`.
+Task 13 added research notes in `docs/auth_signing_plan.md`. Task 14 added native C# L2 HMAC signing, L2 header construction, secret-provider abstraction, and auth readiness reporting under `src/PolyCopyTrader.Polymarket/Auth`. Task 15 added native C# CLOB V2 order amount conversion, order construction, EIP-712 dry-run signing, redacted payload rendering, and dashboard/storage visibility for dry-run orders.
 
-No private keys are requested, loaded, stored, or logged. No API credentials are created or derived, no orders are signed, and no live order placement or cancellation endpoint is implemented. `PolymarketAuth` config contains provider and lookup names only; secret values must live in environment variables or Windows Credential Manager.
+No API credentials are created or derived, and no live order placement or cancellation endpoint is implemented. `PolymarketAuth` config contains provider and lookup names only; secret values must live in environment variables or Windows Credential Manager. Dry-run signing may load a private key only through `DryRunPrivateKeyName`; missing keys produce `DryRunUnsigned`, not a live failure. Test signing uses a deterministic public development key that must never be funded.
 
 ## Market WebSocket
 
@@ -165,6 +165,12 @@ For paper BUY orders, a fill is only simulated when `bestAsk <= paperBuyPrice`. 
 
 WebSocket market-data updates also dispatch into paper trading so pending orders can fill and paper positions can be re-marked without waiting for the next scanner loop. Stale WebSocket snapshots are ignored after `MarketDataWebSocket:StaleAfterSeconds`.
 
+## Dry Run Trading
+
+In `DryRun` mode, accepted signals produce CLOB V2 order payloads without sending them to Polymarket. The dry-run path validates tick size, minimum size, price, signature type, signer/funder addresses, order type, and GTD expiration. BUY and SELL amounts are converted with 6-decimal fixed math according to the official V2 order model.
+
+When `PolymarketAuth:DryRunSigningEnabled` is true and `DryRunPrivateKeyName` resolves through the configured secret provider, the app signs the order locally with the V2 EIP-712 domain. If the key is absent, the signer address does not match, or validation fails, the result is stored as `DryRunUnsigned` or `DryRunRejected`. Stored payloads are redacted and no `POST /order`, cancel, or authenticated trading HTTP call is made.
+
 ## Analytics And Reporting
 
 The service automatically generates daily reports into `daily_reports` when `Analytics:DailyReportGenerationEnabled` is true. Reports are recalculated every `Analytics:DailyReportRefreshMinutes` for the current UTC day and the previous UTC day.
@@ -187,6 +193,7 @@ Interpret paper results conservatively. Paper fills are approximate, long positi
 - Watchlist: configured traders plus scanner counters and errors.
 - Leader Trades: latest observed leader trades.
 - Signals: accepted/rejected decisions, reason codes, proposed paper details.
+- Dry Run Orders: unsigned/signed/rejected dry-run payload records and validation messages.
 - Paper Orders: lifecycle, TTL, fill timestamps, linked signal id.
 - Paper Positions: size, average price, estimated value, unrealized PnL.
 - Market Data: latest WebSocket/market-data asset snapshots, bid, ask, spread, update time.
@@ -210,10 +217,10 @@ Do not proceed to authenticated signing or live trading unless `dotnet build`, `
 
 ## Known Limitations
 
-- Auth support is limited to readiness and L2 header generation; L1 key derivation, order signing, live order placement, and live cancellation are not implemented yet.
+- Auth support does not create or derive API keys yet; live order placement and live cancellation are not implemented.
 - Trader enable/disable and cancel selected order dashboard buttons are placeholders until command-specific IPC is added.
 - User-authenticated WebSocket channel is not implemented yet.
 
 ## Next Recommended Task
 
-Implement `Codex/15_TASK_CLOB_V2_ORDER_SIGNING_DRY_RUN.md`.
+Implement `Codex/16_TASK_LIVE_TRADING_MAKER_ONLY.md`.

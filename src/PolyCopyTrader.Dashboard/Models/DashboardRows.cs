@@ -71,6 +71,19 @@ public sealed record PaperPositionRow(
     string RealizedPnlUsd,
     string SourceTrader);
 
+public sealed record DryRunOrderRow(
+    string TimestampUtc,
+    string Status,
+    string Side,
+    string Asset,
+    string Outcome,
+    decimal Price,
+    decimal SizeShares,
+    decimal NotionalUsd,
+    string OrderType,
+    string ValidationSummary,
+    string SignalId);
+
 public sealed record MarketDataRow(
     string AssetId,
     string ConditionId,
@@ -149,6 +162,7 @@ public sealed record DashboardSnapshot(
     IReadOnlyList<SignalRow> Signals,
     IReadOnlyList<PaperOrderRow> PaperOrders,
     IReadOnlyList<PaperPositionRow> PaperPositions,
+    IReadOnlyList<DryRunOrderRow> DryRunOrders,
     IReadOnlyList<MarketDataRow> MarketData,
     IReadOnlyList<DailyReportRow> DailyReports,
     IReadOnlyList<TraderPerformanceRow> TraderPerformance,

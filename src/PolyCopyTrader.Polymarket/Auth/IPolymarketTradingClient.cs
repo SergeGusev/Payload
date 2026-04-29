@@ -2,5 +2,7 @@ namespace PolyCopyTrader.Polymarket.Auth;
 
 public interface IPolymarketTradingClient
 {
-    // Placeholder only. Do not implement live order sending yet.
+    Task<ClobV2DryRunOrderResult> PrepareDryRunOrderAsync(
+        ClobV2OrderRequest request,
+        CancellationToken ct);
 }

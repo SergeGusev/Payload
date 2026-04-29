@@ -71,6 +71,11 @@ builder.Services.AddSingleton(PolymarketSecretProviderFactory.Create(appConfigur
 builder.Services.AddSingleton<PolymarketL2HmacSigner>();
 builder.Services.AddSingleton<PolymarketAuthHeaderFactory>();
 builder.Services.AddSingleton<IPolymarketAuthService, PolymarketAuthReadinessService>();
+builder.Services.AddSingleton<OrderAmountCalculator>();
+builder.Services.AddSingleton<ClobV2OrderBuilder>();
+builder.Services.AddSingleton<ClobV2OrderSigner>();
+builder.Services.AddSingleton<ClobV2OrderPayloadSerializer>();
+builder.Services.AddSingleton<IPolymarketTradingClient, DryRunTradingClient>();
 builder.Services.AddHttpClient<IPolymarketDataApiClient, PolymarketDataApiClient>();
 builder.Services.AddHttpClient<IPolymarketClobPublicClient, PolymarketClobPublicClient>();
 builder.Services.AddHttpClient<IPolymarketGeoClient, PolymarketGeoClient>();

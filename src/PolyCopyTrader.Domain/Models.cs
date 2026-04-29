@@ -27,6 +27,13 @@ public enum PaperOrderStatus
     Rejected
 }
 
+public enum DryRunOrderStatus
+{
+    DryRunUnsigned,
+    DryRunSigned,
+    DryRunRejected
+}
+
 public enum ServiceRunState
 {
     Starting,
@@ -309,6 +316,22 @@ public sealed record PaperPosition(
     decimal EstimatedValueUsd,
     decimal UnrealizedPnlUsd,
     DateTimeOffset UpdatedAtUtc);
+
+public sealed record DryRunOrder(
+    Guid Id,
+    Guid SignalId,
+    DryRunOrderStatus Status,
+    TradeSide Side,
+    string AssetId,
+    string ConditionId,
+    string Outcome,
+    decimal Price,
+    decimal SizeShares,
+    decimal NotionalUsd,
+    string OrderType,
+    string PayloadJson,
+    string ValidationSummary,
+    DateTimeOffset CreatedAtUtc);
 
 public sealed record SignalRejection(
     Guid Id,

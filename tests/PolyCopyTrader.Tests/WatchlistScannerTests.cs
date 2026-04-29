@@ -319,6 +319,16 @@ public sealed class WatchlistScannerTests
             return Task.FromResult<IReadOnlyList<PaperPosition>>([]);
         }
 
+        public Task AddDryRunOrderAsync(DryRunOrder order, CancellationToken cancellationToken = default)
+        {
+            return Task.CompletedTask;
+        }
+
+        public Task<IReadOnlyList<DryRunOrder>> GetRecentDryRunOrdersAsync(int limit = 100, CancellationToken cancellationToken = default)
+        {
+            return Task.FromResult<IReadOnlyList<DryRunOrder>>([]);
+        }
+
         public Task AddApiErrorAsync(ApiError error, CancellationToken cancellationToken = default)
         {
             ApiErrors.Add(error);

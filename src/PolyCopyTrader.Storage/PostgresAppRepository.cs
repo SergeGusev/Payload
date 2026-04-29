@@ -466,6 +466,75 @@ ORDER BY updated_at_utc DESC;
         return results;
     }
 
+    public async Task AddDryRunOrderAsync(DryRunOrder order, CancellationToken cancellationToken = default)
+    {
+        const string sql = """
+INSERT INTO dry_run_orders (
+    id, signal_id, status, side, asset_id, condition_id, outcome, price, size_shares,
+    notional_usd, order_type, payload_json, validation_summary, created_at_utc
+) VALUES (
+    @Id, @SignalId, @Status, @Side, @AssetId, @ConditionId, @Outcome, @Price, @SizeShares,
+    @NotionalUsd, @OrderType, CAST(@PayloadJson AS jsonb), @ValidationSummary, @CreatedAtUtc
+);
+""";
+
+        await using var connection = await OpenConnectionAsync(cancellationToken);
+        await using var command = CreateCommand(connection, sql);
+        command.Parameters.AddWithValue("Id", order.Id);
+        command.Parameters.AddWithValue("SignalId", order.SignalId);
+        command.Parameters.AddWithValue("Status", order.Status.ToString());
+        command.Parameters.AddWithValue("Side", order.Side.ToString());
+        command.Parameters.AddWithValue("AssetId", order.AssetId);
+        command.Parameters.AddWithValue("ConditionId", order.ConditionId);
+        command.Parameters.AddWithValue("Outcome", order.Outcome);
+        command.Parameters.AddWithValue("Price", order.Price);
+        command.Parameters.AddWithValue("SizeShares", order.SizeShares);
+        command.Parameters.AddWithValue("NotionalUsd", order.NotionalUsd);
+        command.Parameters.AddWithValue("OrderType", order.OrderType);
+        command.Parameters.AddWithValue("PayloadJson", order.PayloadJson);
+        command.Parameters.AddWithValue("ValidationSummary", order.ValidationSummary);
+        command.Parameters.AddWithValue("CreatedAtUtc", UtcDateTime(order.CreatedAtUtc));
+        await command.ExecuteNonQueryAsync(cancellationToken);
+    }
+
+    public async Task<IReadOnlyList<DryRunOrder>> GetRecentDryRunOrdersAsync(int limit = 100, CancellationToken cancellationToken = default)
+    {
+        const string sql = """
+SELECT id, signal_id, status, side, asset_id, condition_id, outcome, price, size_shares,
+       notional_usd, order_type, payload_json::text, validation_summary, created_at_utc
+FROM dry_run_orders
+ORDER BY created_at_utc DESC
+LIMIT @Limit;
+""";
+
+        await using var connection = await OpenConnectionAsync(cancellationToken);
+        await using var command = CreateCommand(connection, sql);
+        command.Parameters.AddWithValue("Limit", limit);
+        await using var reader = await command.ExecuteReaderAsync(cancellationToken);
+
+        var results = new List<DryRunOrder>();
+        while (await reader.ReadAsync(cancellationToken))
+        {
+            results.Add(new DryRunOrder(
+                reader.GetGuid(0),
+                reader.GetGuid(1),
+                Enum.Parse<DryRunOrderStatus>(reader.GetString(2)),
+                Enum.Parse<TradeSide>(reader.GetString(3)),
+                reader.GetString(4),
+                reader.GetString(5),
+                reader.GetString(6),
+                reader.GetDecimal(7),
+                reader.GetDecimal(8),
+                reader.GetDecimal(9),
+                reader.GetString(10),
+                reader.GetString(11),
+                reader.GetString(12),
+                DateTimeOffsetFromUtc(reader.GetDateTime(13))));
+        }
+
+        return results;
+    }
+
     public async Task AddApiErrorAsync(ApiError error, CancellationToken cancellationToken = default)
     {
         const string sql = """

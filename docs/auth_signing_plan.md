@@ -2,8 +2,10 @@
 
 Verified on: 2026-04-29
 
-Scope: research and implementation planning only. Task 13 does not request keys, does not
-load secrets, does not sign a live order, and does not call authenticated trading endpoints.
+Scope: research and implementation tracking. Task 13 did not request keys, did not load
+secrets, did not sign a live order, and did not call authenticated trading endpoints.
+Task 15 now signs local dry-run payloads only; it still does not call authenticated
+trading endpoints.
 
 ## Sources Checked
 
@@ -208,13 +210,17 @@ Task 14 should implement auth/HMAC infrastructure only:
 - Done in task 14: fake-secret tests and an official Python-client HMAC test vector.
 - Still true after task 14: `IPolymarketTradingClient` has no order-posting methods.
 
-Task 15 should add dry-run order signing only:
+Task 15 added dry-run order signing only:
 
-- Add V2 order models and typed-data generation.
-- Add fixed-math BUY/SELL amount conversion tests.
-- Add dry-run signature and payload rendering without HTTP submission.
-- Add maker-only payload checks using `postOnly`.
-- Keep live POST disabled and unreachable.
+- Done in task 15: V2 order models and EIP-712 typed-data signing.
+- Done in task 15: fixed-math BUY/SELL amount conversion tests.
+- Done in task 15: dry-run signature and payload rendering without HTTP submission.
+- Done in task 15: `postOnly` payload support and rejection for FOK/FAK combinations.
+- Done in task 15: unsigned, signed, and rejected dry-run records persisted for the dashboard.
+- Still true after task 15: live POST and cancellation remain disabled and unreachable.
+
+Task 15 tests use a deterministic public local development key only. It is not a
+secret and must never be funded.
 
 Task 16 should add live maker-only trading only if all prior gates pass:
 
