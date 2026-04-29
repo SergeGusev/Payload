@@ -199,13 +199,14 @@ load secrets, does not sign a live order, and does not call authenticated tradin
 
 Task 14 should implement auth/HMAC infrastructure only:
 
-- Add strongly typed auth options with environment-variable based secret references.
-- Add a secret-provider abstraction that never exposes values to logs or config summaries.
-- Add `IPolymarketAuthService` implementation for readiness only.
-- Add L1 EIP-712 auth header builder for create/derive API credentials.
-- Add L2 HMAC header builder with deterministic JSON serialization.
-- Add tests using fake secrets and official HMAC vectors.
-- Keep `IPolymarketTradingClient` without order-posting methods.
+- Done in task 14: strongly typed auth options with lookup-name references only.
+- Done in task 14: environment-variable and Windows Credential Manager secret providers.
+- Done in task 14: `IPolymarketAuthService` readiness implementation.
+- Deferred: L1 EIP-712 auth header builder for create/derive API credentials because it
+  needs signing-key handling and should be covered by a dedicated dry-run signing task.
+- Done in task 14: L2 HMAC header builder with deterministic serialized-body input.
+- Done in task 14: fake-secret tests and an official Python-client HMAC test vector.
+- Still true after task 14: `IPolymarketTradingClient` has no order-posting methods.
 
 Task 15 should add dry-run order signing only:
 

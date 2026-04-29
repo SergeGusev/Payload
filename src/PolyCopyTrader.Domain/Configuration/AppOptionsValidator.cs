@@ -18,6 +18,7 @@ public static class AppOptionsValidator
         var errors = new List<string>();
         ValidateBot(configuration.Bot, errors);
         ValidatePolymarket(configuration.Polymarket, errors);
+        ValidatePolymarketAuth(configuration.PolymarketAuth, errors);
         ValidateMarketDataWebSocket(configuration.MarketDataWebSocket, errors);
         ValidatePaperTrading(configuration.PaperTrading, errors);
         ValidateExecution(configuration.Execution, errors);
@@ -43,6 +44,9 @@ public static class AppOptionsValidator
             $"Storage env var: {configuration.Storage.ConnectionStringEnvironmentVariable}",
             $"Polymarket data API: {configuration.Polymarket.DataApiBaseUrl}",
             $"Polymarket CLOB API: {configuration.Polymarket.ClobBaseUrl}",
+            $"Auth enabled: {configuration.PolymarketAuth.Enabled}",
+            $"Auth provider: {configuration.PolymarketAuth.SecretProvider}",
+            $"Auth configured: {configuration.PolymarketAuth.Enabled && IsAddressLike(configuration.PolymarketAuth.SigningAddress)}",
             $"Market WebSocket enabled: {configuration.Bot.UseWebSockets && configuration.MarketDataWebSocket.Enabled}",
             $"Market WebSocket URL: {configuration.MarketDataWebSocket.MarketEndpointUrl}",
             $"Signal observe threshold: {configuration.Signal.ObserveBelowScore}",
@@ -96,6 +100,39 @@ public static class AppOptionsValidator
         if (options.RetryBaseDelayMilliseconds < 0)
         {
             errors.Add("Polymarket.RetryBaseDelayMilliseconds must not be negative.");
+        }
+    }
+
+    private static void ValidatePolymarketAuth(PolymarketAuthOptions options, List<string> errors)
+    {
+        if (!IsSupportedSecretProvider(options.SecretProvider))
+        {
+            errors.Add("PolymarketAuth.SecretProvider must be Environment or CredentialManager.");
+        }
+
+        if (!options.Enabled)
+        {
+            return;
+        }
+
+        if (!IsAddressLike(options.SigningAddress))
+        {
+            errors.Add("PolymarketAuth.SigningAddress must be a 0x-prefixed Ethereum address when auth is enabled.");
+        }
+
+        if (string.IsNullOrWhiteSpace(options.ApiKeyName))
+        {
+            errors.Add("PolymarketAuth.ApiKeyName is required when auth is enabled.");
+        }
+
+        if (string.IsNullOrWhiteSpace(options.ApiSecretName))
+        {
+            errors.Add("PolymarketAuth.ApiSecretName is required when auth is enabled.");
+        }
+
+        if (string.IsNullOrWhiteSpace(options.ApiPassphraseName))
+        {
+            errors.Add("PolymarketAuth.ApiPassphraseName is required when auth is enabled.");
         }
     }
 
@@ -367,5 +404,18 @@ public static class AppOptionsValidator
         {
             errors.Add($"{name} must be an absolute loopback HTTP URL.");
         }
+    }
+
+    private static bool IsSupportedSecretProvider(string value)
+    {
+        return string.Equals(value, "Environment", StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(value, "CredentialManager", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static bool IsAddressLike(string value)
+    {
+        return value.Length == 42 &&
+            value.StartsWith("0x", StringComparison.OrdinalIgnoreCase) &&
+            value.Skip(2).All(Uri.IsHexDigit);
     }
 }

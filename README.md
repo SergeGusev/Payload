@@ -2,14 +2,15 @@
 
 PolyCopyTrader is a Windows/.NET C# application for monitoring Polymarket traders and running a cautious copy-signal strategy.
 
-This repository is currently at Task 13: auth/signing research only. It contains project structure, typed configuration, PostgreSQL schema initialization, a basic repository, read-only Polymarket Data/CLOB/Geo clients, a Worker Service scanner/signal/paper loop, local dashboard controls, public market WebSocket monitoring, analytics reports, CSV export, diagnostics, a read-only monitoring dashboard, and placeholder auth/trading interfaces.
+This repository is currently at Task 14: CLOB V2 auth/HMAC infrastructure. It contains project structure, typed configuration, PostgreSQL schema initialization, a basic repository, read-only Polymarket Data/CLOB/Geo clients, a Worker Service scanner/signal/paper loop, local dashboard controls, public market WebSocket monitoring, analytics reports, CSV export, diagnostics, a read-only monitoring dashboard, L2 HMAC header infrastructure, and placeholder trading interfaces.
 
 ## Safety
 
 - No live trading exists in this scaffold.
-- No implemented authenticated Polymarket HTTP calls exist.
+- No implemented order-posting or cancellation HTTP calls exist.
 - No private key handling exists.
-- Auth/trading interfaces are placeholders only.
+- Auth supports secret lookup, L2 HMAC signatures, L2 headers, and readiness only.
+- Trading interfaces are placeholders only.
 - Default mode is read-only/paper-first by project policy.
 
 ## Project Structure
@@ -127,9 +128,9 @@ User trade calls explicitly send `takerOnly=false` when requested so maker fills
 
 ## Auth Research
 
-Task 13 added research notes in `docs/auth_signing_plan.md` and placeholder interfaces under `src/PolyCopyTrader.Polymarket/Auth`. The dashboard reports `Auth: NotConfigured`.
+Task 13 added research notes in `docs/auth_signing_plan.md`. Task 14 added native C# L2 HMAC signing, L2 header construction, secret-provider abstraction, and auth readiness reporting under `src/PolyCopyTrader.Polymarket/Auth`.
 
-No private keys are requested, loaded, stored, or logged. No L1/L2 headers are produced yet, no API credentials are created or derived, no orders are signed, and no live order placement endpoint is implemented.
+No private keys are requested, loaded, stored, or logged. No API credentials are created or derived, no orders are signed, and no live order placement or cancellation endpoint is implemented. `PolymarketAuth` config contains provider and lookup names only; secret values must live in environment variables or Windows Credential Manager.
 
 ## Market WebSocket
 
@@ -209,10 +210,10 @@ Do not proceed to authenticated signing or live trading unless `dotnet build`, `
 
 ## Known Limitations
 
-- Auth/signing/live trading support is research-only; no authenticated HTTP implementation exists yet.
+- Auth support is limited to readiness and L2 header generation; L1 key derivation, order signing, live order placement, and live cancellation are not implemented yet.
 - Trader enable/disable and cancel selected order dashboard buttons are placeholders until command-specific IPC is added.
 - User-authenticated WebSocket channel is not implemented yet.
 
 ## Next Recommended Task
 
-Implement `Codex/14_TASK_CLOB_V2_AUTH_AND_HMAC.md`.
+Implement `Codex/15_TASK_CLOB_V2_ORDER_SIGNING_DRY_RUN.md`.

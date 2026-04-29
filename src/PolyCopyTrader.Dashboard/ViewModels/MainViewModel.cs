@@ -20,7 +20,11 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
     public MainViewModel()
     {
         runtime = DashboardRepositoryFactory.Create();
-        dataService = new DashboardDataService(runtime.Repository, runtime.Configuration, runtime.StorageConfigured);
+        dataService = new DashboardDataService(
+            runtime.Repository,
+            runtime.Configuration,
+            runtime.StorageConfigured,
+            runtime.AuthService);
         controlClient = new LocalControlClient(runtime.Configuration.Ipc);
         csvExporter = new DashboardCsvExporter(runtime.Repository, runtime.Configuration);
         refreshTimer = new DispatcherTimer

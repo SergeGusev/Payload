@@ -1,6 +1,7 @@
 using PolyCopyTrader.Dashboard.Models;
 using PolyCopyTrader.Domain;
 using PolyCopyTrader.Domain.Configuration;
+using PolyCopyTrader.Polymarket.Auth;
 using PolyCopyTrader.Storage;
 
 namespace PolyCopyTrader.Dashboard.Services;
@@ -8,7 +9,8 @@ namespace PolyCopyTrader.Dashboard.Services;
 public sealed class DashboardDataService(
     IAppRepository repository,
     AppConfiguration configuration,
-    bool storageConfigured)
+    bool storageConfigured,
+    IPolymarketAuthService authService)
 {
     public async Task<DashboardSnapshot> LoadAsync(CancellationToken cancellationToken = default)
     {
@@ -34,8 +36,9 @@ public sealed class DashboardDataService(
         var categoryPerformance = await repository.GetCategoryPerformanceReportsAsync(reportLimit, cancellationToken);
         var executionQuality = await repository.GetExecutionQualityReportsAsync(reportLimit, cancellationToken);
         var rejectionAnalysis = await repository.GetRejectionAnalysisReportsAsync(reportLimit, cancellationToken);
+        var authReadiness = await authService.GetReadinessAsync(cancellationToken);
 
-        var overview = BuildOverview(heartbeats, scannerStatuses, openPaperOrders, paperPositions, apiErrors, marketDataStatuses);
+        var overview = BuildOverview(heartbeats, scannerStatuses, openPaperOrders, paperPositions, apiErrors, marketDataStatuses, authReadiness);
         var riskUsage = BuildRiskUsage(openPaperOrders, paperPositions);
 
         return new DashboardSnapshot(
@@ -52,7 +55,7 @@ public sealed class DashboardDataService(
             executionQuality.Select(ToExecutionQualityRow).ToArray(),
             rejectionAnalysis.Select(ToRejectionAnalysisRow).ToArray(),
             riskUsage,
-            BuildDiagnostics(overview, scannerStatuses, marketDataStatuses, apiErrors, riskUsage),
+            BuildDiagnostics(overview, scannerStatuses, marketDataStatuses, apiErrors, riskUsage, authReadiness),
             BuildLogs(apiErrors, riskEvents, commandAudits, marketDataEvents));
     }
 
@@ -62,7 +65,8 @@ public sealed class DashboardDataService(
         IReadOnlyList<PaperOrder> openPaperOrders,
         IReadOnlyList<PaperPosition> paperPositions,
         IReadOnlyList<ApiError> apiErrors,
-        IReadOnlyList<MarketDataStatusSnapshot> marketDataStatuses)
+        IReadOnlyList<MarketDataStatusSnapshot> marketDataStatuses,
+        AuthReadinessStatus authReadiness)
     {
         var heartbeat = heartbeats.FirstOrDefault(item => item.ServiceName == "PolyCopyTrader.Service")
             ?? heartbeats.FirstOrDefault();
@@ -82,7 +86,7 @@ public sealed class DashboardDataService(
             new OverviewMetric("Storage configured", storageConfigured ? "Yes" : "No"),
             new OverviewMetric("API status", apiErrors.Count == 0 ? "No recorded errors" : $"{apiErrors.Count} recent errors"),
             new OverviewMetric("Geoblock status", "Not checked by dashboard"),
-            new OverviewMetric("Auth", "NotConfigured"),
+            new OverviewMetric("Auth", authReadiness.State),
             new OverviewMetric("Scanner status", scanner?.ScannerStatus ?? "No scanner status"),
             new OverviewMetric("WebSocket status", marketData?.ConnectionState.ToString() ?? "No market data status"),
             new OverviewMetric("Subscribed assets", marketData?.SubscribedAssetsCount.ToString() ?? "0"),
@@ -161,7 +165,8 @@ public sealed class DashboardDataService(
         IReadOnlyList<ScannerStatusSnapshot> scannerStatuses,
         IReadOnlyList<MarketDataStatusSnapshot> marketDataStatuses,
         IReadOnlyList<ApiError> apiErrors,
-        IReadOnlyList<RiskUsageRow> riskUsage)
+        IReadOnlyList<RiskUsageRow> riskUsage,
+        AuthReadinessStatus authReadiness)
     {
         var scanner = scannerStatuses.FirstOrDefault();
         var marketData = marketDataStatuses.FirstOrDefault(item => item.Component == "PolymarketMarketWebSocket")
@@ -176,7 +181,8 @@ public sealed class DashboardDataService(
             new("Storage env var", configuration.Storage.ConnectionStringEnvironmentVariable, "Info"),
             new("Mode", configuration.Bot.Mode.ToString(), configuration.Bot.EnableLiveTrading ? "Error" : "OK"),
             new("Live trading enabled", configuration.Bot.EnableLiveTrading ? "Yes" : "No", configuration.Bot.EnableLiveTrading ? "Error" : "OK"),
-            new("Auth", "NotConfigured", "Info"),
+            new("Auth", authReadiness.State, AuthDiagnosticStatus(authReadiness)),
+            new("Auth details", AuthDetails(authReadiness), AuthDiagnosticStatus(authReadiness)),
             new("Service status", overview.FirstOrDefault(item => item.Name == "Service status")?.Value ?? "No heartbeat", "Info"),
             new("Scanner status", scanner?.ScannerStatus ?? "No scanner status", scanner?.ScannerStatus == "Healthy" ? "OK" : "Warning"),
             new("Scanner last error", scanner?.LastErrorMessage ?? string.Empty, string.IsNullOrWhiteSpace(scanner?.LastErrorMessage) ? "OK" : "Warning"),
@@ -388,6 +394,29 @@ public sealed class DashboardDataService(
     private static string FormatDate(DateTimeOffset? value)
     {
         return value?.UtcDateTime.ToString("yyyy-MM-dd HH:mm:ss") ?? string.Empty;
+    }
+
+    private static string AuthDetails(AuthReadinessStatus status)
+    {
+        if (status.MissingRequirements.Count > 0)
+        {
+            return string.Join("; ", status.MissingRequirements);
+        }
+
+        return status.State == "Ready"
+            ? "Authenticated readiness check passed."
+            : "All configured auth material is present; no server-side authenticated check has run.";
+    }
+
+    private static string AuthDiagnosticStatus(AuthReadinessStatus status)
+    {
+        return status.State switch
+        {
+            "Ready" => "OK",
+            "ConfiguredButUntested" => "Warning",
+            "Error" => "Error",
+            _ => "Info"
+        };
     }
 
     private static string FormatUsd(decimal value)

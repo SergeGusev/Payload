@@ -1,5 +1,6 @@
 using Microsoft.Extensions.Configuration;
 using PolyCopyTrader.Domain.Configuration;
+using PolyCopyTrader.Polymarket.Auth;
 using PolyCopyTrader.Storage;
 
 namespace PolyCopyTrader.Dashboard.Services;
@@ -16,6 +17,7 @@ public static class DashboardRepositoryFactory
         var appConfiguration = new AppConfiguration
         {
             Bot = configuration.GetSection("Bot").Get<BotOptions>() ?? new BotOptions(),
+            PolymarketAuth = configuration.GetSection("PolymarketAuth").Get<PolymarketAuthOptions>() ?? new PolymarketAuthOptions(),
             Dashboard = configuration.GetSection("Dashboard").Get<DashboardOptions>() ?? new DashboardOptions(),
             Storage = configuration.GetSection("Storage").Get<StorageOptions>() ?? new StorageOptions(),
             Risk = configuration.GetSection("Risk").Get<RiskOptions>() ?? new RiskOptions(),
@@ -35,14 +37,22 @@ public static class DashboardRepositoryFactory
             repository = new NoOpAppRepository();
         }
 
+        var secretProvider = PolymarketSecretProviderFactory.Create(appConfiguration.PolymarketAuth);
+        var authService = new PolymarketAuthReadinessService(
+            appConfiguration.PolymarketAuth,
+            secretProvider,
+            new PolymarketL2HmacSigner());
+
         return new DashboardRuntime(
             repository,
             appConfiguration,
-            StorageConnectionResolver.IsConfigured(appConfiguration.Storage));
+            StorageConnectionResolver.IsConfigured(appConfiguration.Storage),
+            authService);
     }
 }
 
 public sealed record DashboardRuntime(
     IAppRepository Repository,
     AppConfiguration Configuration,
-    bool StorageConfigured);
+    bool StorageConfigured,
+    IPolymarketAuthService AuthService);

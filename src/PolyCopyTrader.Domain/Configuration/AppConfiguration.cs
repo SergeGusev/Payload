@@ -12,6 +12,8 @@ public sealed class AppConfiguration
 
     public PolymarketOptions Polymarket { get; init; } = new();
 
+    public PolymarketAuthOptions PolymarketAuth { get; init; } = new();
+
     public MarketDataWebSocketOptions MarketDataWebSocket { get; init; } = new();
 
     public WatchlistOptions Watchlist { get; init; } = new();
@@ -124,6 +126,21 @@ public sealed class PolymarketOptions
     public int MaxRetries { get; init; } = 2;
 
     public int RetryBaseDelayMilliseconds { get; init; } = 250;
+}
+
+public sealed class PolymarketAuthOptions
+{
+    public bool Enabled { get; init; }
+
+    public string SecretProvider { get; init; } = "Environment";
+
+    public string SigningAddress { get; init; } = string.Empty;
+
+    public string ApiKeyName { get; init; } = "POLYCOPYTRADER_POLYMARKET_API_KEY";
+
+    public string ApiSecretName { get; init; } = "POLYCOPYTRADER_POLYMARKET_API_SECRET";
+
+    public string ApiPassphraseName { get; init; } = "POLYCOPYTRADER_POLYMARKET_API_PASSPHRASE";
 }
 
 public sealed class MarketDataWebSocketOptions

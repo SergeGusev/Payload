@@ -39,6 +39,23 @@ public sealed class ConfigurationTests
     }
 
     [Fact]
+    public void AuthEnabled_RequiresSigningAddress()
+    {
+        var configuration = new AppConfiguration
+        {
+            PolymarketAuth = new PolymarketAuthOptions
+            {
+                Enabled = true,
+                SigningAddress = "not-an-address"
+            }
+        };
+
+        var errors = AppOptionsValidator.Validate(configuration);
+
+        Assert.Contains(errors, error => error.Contains("SigningAddress", StringComparison.Ordinal));
+    }
+
+    [Fact]
     public void SanitizedSummary_DoesNotExposeSecrets()
     {
         var configuration = new AppConfiguration();

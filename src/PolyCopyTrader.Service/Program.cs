@@ -1,6 +1,7 @@
 using PolyCopyTrader.Service;
 using PolyCopyTrader.Domain.Configuration;
 using PolyCopyTrader.Polymarket;
+using PolyCopyTrader.Polymarket.Auth;
 using PolyCopyTrader.Service.Analytics;
 using PolyCopyTrader.Service.Configuration;
 using PolyCopyTrader.Service.Control;
@@ -43,6 +44,7 @@ builder.Services.AddSingleton(appConfiguration.Risk);
 builder.Services.AddSingleton(appConfiguration.Execution);
 builder.Services.AddSingleton(appConfiguration.Signal);
 builder.Services.AddSingleton(appConfiguration.Polymarket);
+builder.Services.AddSingleton(appConfiguration.PolymarketAuth);
 builder.Services.AddSingleton(appConfiguration.MarketDataWebSocket);
 builder.Services.AddSingleton(appConfiguration.Watchlist);
 builder.Services.AddSingleton(appConfiguration.PaperTrading);
@@ -65,6 +67,10 @@ else
 }
 
 builder.Services.AddSingleton<IPolymarketApiErrorSink, RepositoryPolymarketApiErrorSink>();
+builder.Services.AddSingleton(PolymarketSecretProviderFactory.Create(appConfiguration.PolymarketAuth));
+builder.Services.AddSingleton<PolymarketL2HmacSigner>();
+builder.Services.AddSingleton<PolymarketAuthHeaderFactory>();
+builder.Services.AddSingleton<IPolymarketAuthService, PolymarketAuthReadinessService>();
 builder.Services.AddHttpClient<IPolymarketDataApiClient, PolymarketDataApiClient>();
 builder.Services.AddHttpClient<IPolymarketClobPublicClient, PolymarketClobPublicClient>();
 builder.Services.AddHttpClient<IPolymarketGeoClient, PolymarketGeoClient>();

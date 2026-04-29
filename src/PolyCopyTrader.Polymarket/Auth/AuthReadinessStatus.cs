@@ -19,4 +19,46 @@ public sealed record AuthReadinessStatus(
             ],
             checkedAtUtc ?? DateTimeOffset.UtcNow);
     }
+
+    public static AuthReadinessStatus NotConfigured(
+        IReadOnlyList<string> missingRequirements,
+        DateTimeOffset? checkedAtUtc = null)
+    {
+        return new AuthReadinessStatus(
+            "NotConfigured",
+            false,
+            false,
+            missingRequirements,
+            checkedAtUtc ?? DateTimeOffset.UtcNow);
+    }
+
+    public static AuthReadinessStatus ConfiguredButUntested(DateTimeOffset? checkedAtUtc = null)
+    {
+        return new AuthReadinessStatus(
+            "ConfiguredButUntested",
+            true,
+            true,
+            [],
+            checkedAtUtc ?? DateTimeOffset.UtcNow);
+    }
+
+    public static AuthReadinessStatus Ready(DateTimeOffset? checkedAtUtc = null)
+    {
+        return new AuthReadinessStatus(
+            "Ready",
+            true,
+            true,
+            [],
+            checkedAtUtc ?? DateTimeOffset.UtcNow);
+    }
+
+    public static AuthReadinessStatus Error(string message, DateTimeOffset? checkedAtUtc = null)
+    {
+        return new AuthReadinessStatus(
+            "Error",
+            false,
+            false,
+            [message],
+            checkedAtUtc ?? DateTimeOffset.UtcNow);
+    }
 }

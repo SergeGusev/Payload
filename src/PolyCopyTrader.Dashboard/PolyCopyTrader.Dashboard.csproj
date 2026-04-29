@@ -2,6 +2,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\PolyCopyTrader.Domain\PolyCopyTrader.Domain.csproj" />
+    <ProjectReference Include="..\PolyCopyTrader.Polymarket\PolyCopyTrader.Polymarket.csproj" />
     <ProjectReference Include="..\PolyCopyTrader.Storage\PolyCopyTrader.Storage.csproj" />
     <ProjectReference Include="..\PolyCopyTrader.Strategy\PolyCopyTrader.Strategy.csproj" />
   </ItemGroup>
