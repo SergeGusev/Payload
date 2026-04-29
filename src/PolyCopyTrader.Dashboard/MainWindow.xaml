@@ -1,0 +1,74 @@
+<Window x:Class="PolyCopyTrader.Dashboard.MainWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        mc:Ignorable="d"
+        Title="{Binding AppTitle}" Height="520" Width="900"
+        MinHeight="420" MinWidth="720"
+        Background="#F6F7F9">
+    <Grid Margin="24">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="16" />
+            <RowDefinition Height="*" />
+        </Grid.RowDefinitions>
+
+        <DockPanel>
+            <StackPanel DockPanel.Dock="Left">
+                <TextBlock Text="{Binding AppTitle}"
+                           FontSize="26"
+                           FontWeight="SemiBold"
+                           Foreground="#1F2937" />
+                <TextBlock Text="Scaffold dashboard"
+                           Margin="0,6,0,0"
+                           FontSize="13"
+                           Foreground="#6B7280" />
+            </StackPanel>
+
+            <StackPanel DockPanel.Dock="Right"
+                        Orientation="Horizontal"
+                        HorizontalAlignment="Right">
+                <TextBlock Text="Mode:"
+                           VerticalAlignment="Center"
+                           Foreground="#6B7280" />
+                <TextBlock Text="{Binding Mode}"
+                           Margin="8,0,24,0"
+                           VerticalAlignment="Center"
+                           FontWeight="SemiBold"
+                           Foreground="#111827" />
+                <TextBlock Text="Status:"
+                           VerticalAlignment="Center"
+                           Foreground="#6B7280" />
+                <TextBlock Text="{Binding ServiceStatus}"
+                           Margin="8,0,0,0"
+                           VerticalAlignment="Center"
+                           FontWeight="SemiBold"
+                           Foreground="#111827" />
+            </StackPanel>
+        </DockPanel>
+
+        <Border Grid.Row="2"
+                Background="White"
+                BorderBrush="#D1D5DB"
+                BorderThickness="1"
+                CornerRadius="6"
+                Padding="24">
+            <StackPanel>
+                <TextBlock Text="Overview"
+                           FontSize="18"
+                           FontWeight="SemiBold"
+                           Foreground="#111827" />
+                <TextBlock Text="{Binding Summary}"
+                           Margin="0,12,0,0"
+                           TextWrapping="Wrap"
+                           Foreground="#374151" />
+                <TextBlock Margin="0,24,0,0"
+                           Foreground="#6B7280">
+                    <Run Text="Last updated UTC: " />
+                    <Run Text="{Binding LastUpdatedUtc}" />
+                </TextBlock>
+            </StackPanel>
+        </Border>
+    </Grid>
+</Window>

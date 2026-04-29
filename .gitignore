@@ -1,0 +1,47 @@
+## Build outputs
+bin/
+obj/
+out/
+publish/
+TestResults/
+*.trx
+*.coverage
+*.coveragexml
+coverage/
+
+## IDE/editor
+.vs/
+.vscode/
+.idea/
+*.user
+*.suo
+*.userosscache
+*.sln.docstates
+
+## Rider
+_ReSharper*/
+*.DotSettings.user
+
+## Logs and runtime data
+logs/
+*.log
+*.db
+*.db-shm
+*.db-wal
+*.sqlite
+*.sqlite3
+
+## Secrets/config overrides
+appsettings.Development.local.json
+appsettings.Production.local.json
+*.secrets.json
+.env
+.env.*
+
+## NuGet
+*.nupkg
+packages/
+
+## OS
+Thumbs.db
+Desktop.ini
