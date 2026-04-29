@@ -2,7 +2,7 @@
 
 PolyCopyTrader is a Windows/.NET C# application for monitoring Polymarket traders and running a cautious copy-signal strategy.
 
-This repository is currently at Task 02: repository scaffold. It contains project structure, placeholder domain/API/strategy/storage contracts, a Worker Service heartbeat, and a basic WPF dashboard shell.
+This repository is currently at Task 03: configuration, SQLite storage, and logging. It contains project structure, typed configuration, SQLite schema initialization, a basic repository, a Worker Service heartbeat, and a basic WPF dashboard shell.
 
 ## Safety
 
@@ -46,6 +46,14 @@ dotnet run --project src/PolyCopyTrader.Service/PolyCopyTrader.Service.csproj
 
 The service logs a heartbeat in scaffold mode and writes rolling logs under its output `logs` directory.
 
+## Print Config Summary
+
+```powershell
+dotnet run --project src/PolyCopyTrader.Service/PolyCopyTrader.Service.csproj -- --print-config
+```
+
+The summary is sanitized and does not include secrets. Live trading is disabled by configuration and validation.
+
 ## Run Dashboard
 
 ```powershell
@@ -54,9 +62,20 @@ dotnet run --project src/PolyCopyTrader.Dashboard/PolyCopyTrader.Dashboard.cspro
 
 The dashboard currently opens a basic shell. Live database views and service status polling are added in later tasks.
 
+## Storage
+
+The service initializes SQLite on startup. The default database path is configured in `src/PolyCopyTrader.Service/appsettings.json`:
+
+```json
+"Storage": {
+  "DatabasePath": "data/polycopytrader.db"
+}
+```
+
+Relative database paths resolve under the service output directory.
+
 ## Known Limitations
 
-- No SQLite persistence yet.
 - No public Polymarket API calls yet.
 - No scanner, signal engine, risk engine, or paper trading implementation yet.
 - No WebSocket support yet.
@@ -64,4 +83,4 @@ The dashboard currently opens a basic shell. Live database views and service sta
 
 ## Next Recommended Task
 
-Implement `Codex/03_TASK_CONFIG_STORAGE_LOGGING.md`.
+Implement `Codex/04_TASK_POLYMARKET_PUBLIC_API_CLIENTS.md`.

@@ -140,3 +140,41 @@ public sealed record PaperPosition(
     decimal AveragePrice,
     decimal EstimatedValueUsd,
     decimal UnrealizedPnlUsd);
+
+public sealed record SignalRejection(
+    Guid Id,
+    Guid SignalId,
+    string ReasonCode,
+    string ReasonDetails,
+    DateTimeOffset CreatedAtUtc);
+
+public sealed record PaperFill(
+    Guid Id,
+    Guid PaperOrderId,
+    decimal Price,
+    decimal SizeShares,
+    DateTimeOffset FilledAtUtc,
+    string Evidence);
+
+public sealed record RiskEvent(
+    Guid Id,
+    string ReasonCode,
+    string Details,
+    DateTimeOffset CreatedAtUtc);
+
+public sealed record ApiError(
+    Guid Id,
+    string Component,
+    string Operation,
+    string Message,
+    DateTimeOffset CreatedAtUtc);
+
+public sealed record ServiceHeartbeat(
+    string ServiceName,
+    string Status,
+    DateTimeOffset StartedAtUtc,
+    DateTimeOffset LastHeartbeatUtc,
+    string Version,
+    BotMode Mode,
+    string CurrentLoop,
+    string? LastError);
