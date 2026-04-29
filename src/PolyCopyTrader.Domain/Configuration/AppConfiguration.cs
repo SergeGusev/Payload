@@ -18,6 +18,8 @@ public sealed class AppConfiguration
 
     public DashboardOptions Dashboard { get; init; } = new();
 
+    public IpcOptions Ipc { get; init; } = new();
+
     public StorageOptions Storage { get; init; } = new();
 }
 
@@ -160,6 +162,15 @@ public sealed class PaperTradingOptions
 public sealed class DashboardOptions
 {
     public int RefreshIntervalSeconds { get; init; } = 3;
+}
+
+public sealed class IpcOptions
+{
+    public bool Enabled { get; init; } = true;
+
+    public string ListenUrl { get; init; } = "http://127.0.0.1:5118/";
+
+    public string DashboardBaseUrl { get; init; } = "http://127.0.0.1:5118/";
 }
 
 public sealed class StorageOptions

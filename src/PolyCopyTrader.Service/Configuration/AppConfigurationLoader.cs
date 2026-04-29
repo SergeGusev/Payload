@@ -24,6 +24,7 @@ public static class AppConfigurationLoader
             Watchlist = watchlist,
             PaperTrading = configuration.GetSection("PaperTrading").Get<PaperTradingOptions>() ?? new PaperTradingOptions(),
             Dashboard = configuration.GetSection("Dashboard").Get<DashboardOptions>() ?? new DashboardOptions(),
+            Ipc = configuration.GetSection("Ipc").Get<IpcOptions>() ?? new IpcOptions(),
             Storage = configuration.GetSection("Storage").Get<StorageOptions>() ?? new StorageOptions()
         };
     }

@@ -83,6 +83,10 @@
                         Command="{Binding KillSwitchCommand}" />
                 <Button Content="Resume"
                         Command="{Binding ResumeScanningCommand}" />
+                <Button Content="Pause paper"
+                        Command="{Binding PausePaperTradingCommand}" />
+                <Button Content="Resume paper"
+                        Command="{Binding ResumePaperTradingCommand}" />
                 <Button Content="Disable trader"
                         Command="{Binding DisableTraderCommand}" />
                 <Button Content="Enable trader"

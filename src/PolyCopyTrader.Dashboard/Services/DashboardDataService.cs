@@ -21,6 +21,7 @@ public sealed class DashboardDataService(
         var paperPositions = await repository.GetPaperPositionsAsync(cancellationToken);
         var apiErrors = await repository.GetRecentApiErrorsAsync(cancellationToken: cancellationToken);
         var riskEvents = await repository.GetRecentRiskEventsAsync(cancellationToken: cancellationToken);
+        var commandAudits = await repository.GetRecentServiceCommandAuditsAsync(cancellationToken: cancellationToken);
 
         return new DashboardSnapshot(
             BuildOverview(heartbeats, scannerStatuses, openPaperOrders, paperPositions, apiErrors),
@@ -30,7 +31,7 @@ public sealed class DashboardDataService(
             recentPaperOrders.Select(ToPaperOrderRow).ToArray(),
             paperPositions.Select(ToPaperPositionRow).ToArray(),
             BuildRiskUsage(openPaperOrders, paperPositions),
-            BuildLogs(apiErrors, riskEvents));
+            BuildLogs(apiErrors, riskEvents, commandAudits));
     }
 
     private IReadOnlyList<OverviewMetric> BuildOverview(
@@ -128,7 +129,8 @@ public sealed class DashboardDataService(
 
     private static IReadOnlyList<LogRow> BuildLogs(
         IReadOnlyList<ApiError> apiErrors,
-        IReadOnlyList<RiskEvent> riskEvents)
+        IReadOnlyList<RiskEvent> riskEvents,
+        IReadOnlyList<ServiceCommandAudit> commandAudits)
     {
         return apiErrors.Select(error => new LogRow(
                 FormatDate(error.CreatedAtUtc),
@@ -142,6 +144,12 @@ public sealed class DashboardDataService(
                 evt.ReasonCode,
                 evt.Details,
                 evt.Id.ToString())))
+            .Concat(commandAudits.Select(command => new LogRow(
+                FormatDate(command.CreatedAtUtc),
+                command.Accepted ? "Command" : "CommandRejected",
+                command.Command,
+                command.Message,
+                command.Source)))
             .OrderByDescending(row => row.TimestampUtc)
             .ToArray();
     }

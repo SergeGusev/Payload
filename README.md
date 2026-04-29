@@ -2,7 +2,7 @@
 
 PolyCopyTrader is a Windows/.NET C# application for monitoring Polymarket traders and running a cautious copy-signal strategy.
 
-This repository is currently at Task 08: WPF dashboard. It contains project structure, typed configuration, PostgreSQL schema initialization, a basic repository, read-only Polymarket Data/CLOB/Geo clients, a Worker Service scanner/signal/paper loop, and a read-only monitoring dashboard.
+This repository is currently at Task 09: worker service and local IPC. It contains project structure, typed configuration, PostgreSQL schema initialization, a basic repository, read-only Polymarket Data/CLOB/Geo clients, a Worker Service scanner/signal/paper loop, local dashboard controls, and a read-only monitoring dashboard.
 
 ## Safety
 
@@ -44,7 +44,36 @@ dotnet test
 dotnet run --project src/PolyCopyTrader.Service/PolyCopyTrader.Service.csproj
 ```
 
-The service logs a heartbeat in scaffold mode and writes rolling logs under its output `logs` directory.
+The service runs the scanner, signal engine, paper engine, heartbeat writer, and localhost-only IPC server. It writes rolling logs under its output `logs` directory.
+
+## Local IPC
+
+The service exposes local HTTP endpoints on `Ipc:ListenUrl`, default `http://127.0.0.1:5118/`. The listener refuses non-loopback URLs.
+
+```text
+GET  /health
+GET  /status
+POST /pause
+POST /resume
+POST /pause-scanning
+POST /resume-scanning
+POST /pause-paper
+POST /resume-paper
+```
+
+Dashboard pause/resume and kill-switch buttons call these endpoints. Commands are recorded in `service_command_audit`.
+
+## Windows Service
+
+Publish the service and install it with Windows Service Control Manager:
+
+```powershell
+dotnet publish src/PolyCopyTrader.Service/PolyCopyTrader.Service.csproj -c Release -o .\publish\service
+sc.exe create PolyCopyTrader.Service binPath= "$PWD\publish\service\PolyCopyTrader.Service.exe" start= delayed-auto
+sc.exe start PolyCopyTrader.Service
+```
+
+Use `sc.exe stop PolyCopyTrader.Service` and `sc.exe delete PolyCopyTrader.Service` to stop/remove it. Keep `POLYCOPYTRADER_POSTGRES_CONNECTION` configured as a machine/user environment variable for the service account.
 
 ## Print Config Summary
 
@@ -111,13 +140,14 @@ For paper BUY orders, a fill is only simulated when `bestAsk <= paperBuyPrice`. 
 - Paper Positions: size, average price, estimated value, unrealized PnL.
 - Risk: configured limits and current usage.
 - Logs: API errors and risk events.
+- Controls: pause/resume scanner, pause/resume paper trading, and kill switch through localhost IPC.
 
 ## Known Limitations
 
-- No WebSocket support yet.
 - No auth/signing/live trading support.
-- Dashboard command buttons are placeholders until service IPC is added.
+- WebSocket support is not implemented yet.
+- Trader enable/disable, cancel selected order, and CSV export dashboard buttons are placeholders until command-specific IPC is added.
 
 ## Next Recommended Task
 
-Implement `Codex/09_TASK_WORKER_SERVICE_AND_IPC.md`.
+Implement `Codex/10_TASK_WEBSOCKET_MARKET_DATA.md`.

@@ -480,6 +480,53 @@ LIMIT @Limit;
         return results;
     }
 
+    public async Task AddServiceCommandAuditAsync(ServiceCommandAudit audit, CancellationToken cancellationToken = default)
+    {
+        const string sql = """
+INSERT INTO service_command_audit (id, command, source, accepted, message, created_at_utc)
+VALUES (@Id, @Command, @Source, @Accepted, @Message, @CreatedAtUtc);
+""";
+
+        await using var connection = await OpenConnectionAsync(cancellationToken);
+        await using var command = CreateCommand(connection, sql);
+        command.Parameters.AddWithValue("Id", audit.Id);
+        command.Parameters.AddWithValue("Command", audit.Command);
+        command.Parameters.AddWithValue("Source", audit.Source);
+        command.Parameters.AddWithValue("Accepted", audit.Accepted);
+        command.Parameters.AddWithValue("Message", audit.Message);
+        command.Parameters.AddWithValue("CreatedAtUtc", UtcDateTime(audit.CreatedAtUtc));
+        await command.ExecuteNonQueryAsync(cancellationToken);
+    }
+
+    public async Task<IReadOnlyList<ServiceCommandAudit>> GetRecentServiceCommandAuditsAsync(int limit = 100, CancellationToken cancellationToken = default)
+    {
+        const string sql = """
+SELECT id, command, source, accepted, message, created_at_utc
+FROM service_command_audit
+ORDER BY created_at_utc DESC
+LIMIT @Limit;
+""";
+
+        await using var connection = await OpenConnectionAsync(cancellationToken);
+        await using var command = CreateCommand(connection, sql);
+        command.Parameters.AddWithValue("Limit", limit);
+        await using var reader = await command.ExecuteReaderAsync(cancellationToken);
+
+        var results = new List<ServiceCommandAudit>();
+        while (await reader.ReadAsync(cancellationToken))
+        {
+            results.Add(new ServiceCommandAudit(
+                reader.GetGuid(0),
+                reader.GetString(1),
+                reader.GetString(2),
+                reader.GetBoolean(3),
+                reader.GetString(4),
+                DateTimeOffsetFromUtc(reader.GetDateTime(5))));
+        }
+
+        return results;
+    }
+
     public async Task UpsertScannerStatusAsync(ScannerStatusSnapshot status, CancellationToken cancellationToken = default)
     {
         const string sql = """

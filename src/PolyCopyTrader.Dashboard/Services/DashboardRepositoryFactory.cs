@@ -20,7 +20,8 @@ public static class DashboardRepositoryFactory
             Storage = configuration.GetSection("Storage").Get<StorageOptions>() ?? new StorageOptions(),
             Risk = configuration.GetSection("Risk").Get<RiskOptions>() ?? new RiskOptions(),
             PaperTrading = configuration.GetSection("PaperTrading").Get<PaperTradingOptions>() ?? new PaperTradingOptions(),
-            Watchlist = configuration.GetSection("Watchlist").Get<WatchlistOptions>() ?? new WatchlistOptions()
+            Watchlist = configuration.GetSection("Watchlist").Get<WatchlistOptions>() ?? new WatchlistOptions(),
+            Ipc = configuration.GetSection("Ipc").Get<IpcOptions>() ?? new IpcOptions()
         };
 
         IAppRepository repository;

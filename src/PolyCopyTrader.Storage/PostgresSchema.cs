@@ -17,6 +17,7 @@ public static class PostgresSchema
         "paper_positions",
         "risk_events",
         "bot_settings",
+        "service_command_audit",
         "api_errors",
         "scanner_status",
         "service_heartbeats"
@@ -238,6 +239,15 @@ CREATE TABLE IF NOT EXISTS bot_settings (
     key text PRIMARY KEY,
     value text NOT NULL,
     updated_at_utc timestamptz NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS service_command_audit (
+    id uuid PRIMARY KEY,
+    command text NOT NULL,
+    source text NOT NULL,
+    accepted boolean NOT NULL,
+    message text NOT NULL,
+    created_at_utc timestamptz NOT NULL
 );
 
 CREATE TABLE IF NOT EXISTS api_errors (

@@ -11,6 +11,7 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
 {
     private readonly DashboardRuntime runtime;
     private readonly DashboardDataService dataService;
+    private readonly LocalControlClient controlClient;
     private readonly DispatcherTimer refreshTimer;
     private readonly EventHandler refreshTickHandler;
     private bool disposed;
@@ -19,6 +20,7 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
     {
         runtime = DashboardRepositoryFactory.Create();
         dataService = new DashboardDataService(runtime.Repository, runtime.Configuration, runtime.StorageConfigured);
+        controlClient = new LocalControlClient(runtime.Configuration.Ipc);
         refreshTimer = new DispatcherTimer
         {
             Interval = TimeSpan.FromSeconds(Math.Max(1, runtime.Configuration.Dashboard.RefreshIntervalSeconds))
@@ -111,39 +113,51 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
     }
 
     [RelayCommand]
-    private void PauseScanning()
+    private async Task PauseScanningAsync()
     {
-        CommandStatus = "Pause scanning requested. Placeholder only; service IPC is not implemented yet.";
+        await SendCommandAsync(() => controlClient.PauseScanningAsync());
     }
 
     [RelayCommand]
-    private void KillSwitch()
+    private async Task KillSwitchAsync()
     {
-        CommandStatus = "Kill switch requested. Placeholder only; live trading is not implemented.";
+        await SendCommandAsync(() => controlClient.PauseAllAsync());
     }
 
     [RelayCommand]
-    private void ResumeScanning()
+    private async Task ResumeScanningAsync()
     {
-        CommandStatus = "Resume scanning requested. Placeholder only; service IPC is not implemented yet.";
+        await SendCommandAsync(() => controlClient.ResumeScanningAsync());
+    }
+
+    [RelayCommand]
+    private async Task PausePaperTradingAsync()
+    {
+        await SendCommandAsync(() => controlClient.PausePaperTradingAsync());
+    }
+
+    [RelayCommand]
+    private async Task ResumePaperTradingAsync()
+    {
+        await SendCommandAsync(() => controlClient.ResumePaperTradingAsync());
     }
 
     [RelayCommand]
     private void DisableTrader()
     {
-        CommandStatus = "Disable trader requested. Placeholder only; configuration writes are not implemented yet.";
+        CommandStatus = "Disable trader requested. Placeholder only; trader configuration writes are not implemented yet.";
     }
 
     [RelayCommand]
     private void EnableTrader()
     {
-        CommandStatus = "Enable trader requested. Placeholder only; configuration writes are not implemented yet.";
+        CommandStatus = "Enable trader requested. Placeholder only; trader configuration writes are not implemented yet.";
     }
 
     [RelayCommand]
     private void CancelPaperOrder()
     {
-        CommandStatus = "Cancel paper order requested. Placeholder only; order-control IPC is not implemented yet.";
+        CommandStatus = "Cancel paper order requested. Placeholder only; selected-order IPC is not implemented yet.";
     }
 
     [RelayCommand]
@@ -157,6 +171,20 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
     private void ExportCsv()
     {
         CommandStatus = "CSV export requested. Placeholder only.";
+    }
+
+    private async Task SendCommandAsync(Func<Task<ControlCommandResponse>> send)
+    {
+        try
+        {
+            var response = await send();
+            CommandStatus = response.Message;
+            await RefreshAsync();
+        }
+        catch (Exception ex)
+        {
+            CommandStatus = $"IPC command failed: {ex.Message}";
+        }
     }
 
     public void Dispose()

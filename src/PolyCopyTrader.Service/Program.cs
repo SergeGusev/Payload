@@ -2,6 +2,7 @@ using PolyCopyTrader.Service;
 using PolyCopyTrader.Domain.Configuration;
 using PolyCopyTrader.Polymarket;
 using PolyCopyTrader.Service.Configuration;
+using PolyCopyTrader.Service.Control;
 using PolyCopyTrader.Service.PaperTrading;
 using PolyCopyTrader.Service.Polymarket;
 using PolyCopyTrader.Service.Scanning;
@@ -43,7 +44,9 @@ builder.Services.AddSingleton(appConfiguration.Polymarket);
 builder.Services.AddSingleton(appConfiguration.Watchlist);
 builder.Services.AddSingleton(appConfiguration.PaperTrading);
 builder.Services.AddSingleton(appConfiguration.Dashboard);
+builder.Services.AddSingleton(appConfiguration.Ipc);
 builder.Services.AddSingleton(appConfiguration.Storage);
+builder.Services.AddWindowsService(options => options.ServiceName = "PolyCopyTrader.Service");
 
 if (StorageConnectionResolver.IsConfigured(appConfiguration.Storage))
 {
@@ -68,7 +71,9 @@ builder.Services.AddSingleton<ISignalEngine, DefaultSignalEngine>();
 builder.Services.AddSingleton<IPaperTradingEngine, DefaultPaperTradingEngine>();
 builder.Services.AddSingleton<ISignalProcessor, SignalProcessor>();
 builder.Services.AddSingleton<IPaperTradingProcessor, PaperTradingProcessor>();
+builder.Services.AddSingleton<ServiceControlState>();
 builder.Services.AddHostedService<BotWorker>();
+builder.Services.AddHostedService<LocalControlServer>();
 
 try
 {

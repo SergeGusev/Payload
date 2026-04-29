@@ -1,6 +1,7 @@
 using System.Reflection;
 using PolyCopyTrader.Domain;
 using PolyCopyTrader.Domain.Configuration;
+using PolyCopyTrader.Service.Control;
 using PolyCopyTrader.Service.PaperTrading;
 using PolyCopyTrader.Service.Scanning;
 using PolyCopyTrader.Service.Signals;
@@ -14,13 +15,15 @@ public sealed class BotWorker(
     IAppRepository repository,
     IWatchlistScanner watchlistScanner,
     ISignalProcessor signalProcessor,
-    IPaperTradingProcessor paperTradingProcessor) : BackgroundService
+    IPaperTradingProcessor paperTradingProcessor,
+    ServiceControlState controlState) : BackgroundService
 {
     private readonly DateTimeOffset startedAtUtc = DateTimeOffset.UtcNow;
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
         logger.LogInformation("PolyCopyTrader service started in {Mode} mode.", botOptions.Mode);
+        controlState.MarkRunning();
 
         while (!stoppingToken.IsCancellationRequested)
         {
@@ -29,9 +32,27 @@ public sealed class BotWorker(
 
             try
             {
-                var scanStatus = await watchlistScanner.ScanOnceAsync(stoppingToken);
-                var signalResult = await signalProcessor.ProcessQueuedAsync(stoppingToken);
-                var paperResult = await paperTradingProcessor.ProcessOpenOrdersAsync(stoppingToken);
+                var scanStatus = controlState.ScanningPaused
+                    ? new ScannerStatusSnapshot(
+                        "WatchlistScanner",
+                        null,
+                        null,
+                        null,
+                        0,
+                        0,
+                        0,
+                        "Paused",
+                        DateTimeOffset.UtcNow)
+                    : await watchlistScanner.ScanOnceAsync(stoppingToken);
+
+                var signalResult = controlState.ScanningPaused
+                    ? new SignalProcessingResult(0, 0, 0, 0)
+                    : await signalProcessor.ProcessQueuedAsync(stoppingToken);
+
+                var paperResult = controlState.PaperTradingPaused
+                    ? new PaperTradingProcessingResult(0, 0, 0, 0)
+                    : await paperTradingProcessor.ProcessOpenOrdersAsync(stoppingToken);
+
                 currentLoop =
                     $"Scanner={scanStatus.ScannerStatus}; TradesFetched={scanStatus.TradesFetched}; " +
                     $"NewTradesStored={scanStatus.NewTradesStored}; PositionsFetched={scanStatus.PositionsFetched}; " +
@@ -60,14 +81,15 @@ public sealed class BotWorker(
                 currentLoop = "Watchlist scan failed";
                 lastError = ex.Message;
                 logger.LogError(ex, "Watchlist scan loop failed.");
-                await repository.AddApiErrorAsync(
-                    new ApiError(Guid.NewGuid(), "BotWorker", "WatchlistScanLoop", ex.Message, DateTimeOffset.UtcNow),
-                    stoppingToken);
+                controlState.MarkError(ex.Message);
+                await TryRecordApiErrorAsync(ex.Message, stoppingToken);
             }
+
+            controlState.RecordLoop(currentLoop, lastError);
 
             var heartbeat = new ServiceHeartbeat(
                 "PolyCopyTrader.Service",
-                "Running",
+                controlState.Snapshot.RunState.ToString(),
                 startedAtUtc,
                 DateTimeOffset.UtcNow,
                 Assembly.GetExecutingAssembly().GetName().Version?.ToString() ?? "0.0.0",
@@ -75,7 +97,16 @@ public sealed class BotWorker(
                 currentLoop,
                 lastError);
 
-            await repository.UpsertServiceHeartbeatAsync(heartbeat, stoppingToken);
+            try
+            {
+                await repository.UpsertServiceHeartbeatAsync(heartbeat, stoppingToken);
+            }
+            catch (Exception ex)
+            {
+                logger.LogError(ex, "Heartbeat persistence failed. Pausing scanning and paper trading.");
+                controlState.PauseAll("BotWorker");
+                controlState.MarkError("Heartbeat persistence failed: " + ex.Message);
+            }
 
             logger.LogInformation(
                 "Service heartbeat at {HeartbeatUtc}. Mode={Mode}",
@@ -83,6 +114,29 @@ public sealed class BotWorker(
                 botOptions.Mode);
 
             await Task.Delay(TimeSpan.FromSeconds(botOptions.PollIntervalSeconds), stoppingToken);
+        }
+
+        controlState.MarkStopped();
+    }
+
+    public override async Task StopAsync(CancellationToken cancellationToken)
+    {
+        controlState.MarkStopping();
+        await base.StopAsync(cancellationToken);
+        controlState.MarkStopped();
+    }
+
+    private async Task TryRecordApiErrorAsync(string message, CancellationToken cancellationToken)
+    {
+        try
+        {
+            await repository.AddApiErrorAsync(
+                new ApiError(Guid.NewGuid(), "BotWorker", "WatchlistScanLoop", message, DateTimeOffset.UtcNow),
+                cancellationToken);
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "Failed to persist API error from BotWorker.");
         }
     }
 }

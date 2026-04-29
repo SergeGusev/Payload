@@ -24,6 +24,7 @@ public static class AppOptionsValidator
         ValidateRisk(configuration.Risk, errors);
         ValidateWatchlist(configuration.Watchlist, errors);
         ValidateDashboard(configuration.Dashboard, errors);
+        ValidateIpc(configuration.Ipc, errors);
         ValidateStorage(configuration.Storage, errors);
         return errors;
     }
@@ -41,6 +42,8 @@ public static class AppOptionsValidator
             $"Polymarket data API: {configuration.Polymarket.DataApiBaseUrl}",
             $"Polymarket CLOB API: {configuration.Polymarket.ClobBaseUrl}",
             $"Signal observe threshold: {configuration.Signal.ObserveBelowScore}",
+            $"IPC enabled: {configuration.Ipc.Enabled}",
+            $"IPC dashboard URL: {configuration.Ipc.DashboardBaseUrl}",
             $"Watchlist traders: {configuration.Watchlist.Traders.Count}",
             $"Paper bankroll USD: {configuration.PaperTrading.InitialBankrollUsd}");
     }
@@ -239,6 +242,12 @@ public static class AppOptionsValidator
         }
     }
 
+    private static void ValidateIpc(IpcOptions options, List<string> errors)
+    {
+        ValidateLoopbackHttpUrl(options.ListenUrl, "Ipc.ListenUrl", errors);
+        ValidateLoopbackHttpUrl(options.DashboardBaseUrl, "Ipc.DashboardBaseUrl", errors);
+    }
+
     private static void ValidateStorage(StorageOptions options, List<string> errors)
     {
         if (!string.Equals(options.Provider, "PostgreSQL", StringComparison.OrdinalIgnoreCase))
@@ -270,6 +279,16 @@ public static class AppOptionsValidator
         if (!Uri.TryCreate(value, UriKind.Absolute, out var uri) || uri.Scheme != Uri.UriSchemeHttps)
         {
             errors.Add($"{name} must be an absolute HTTPS URL.");
+        }
+    }
+
+    private static void ValidateLoopbackHttpUrl(string value, string name, List<string> errors)
+    {
+        if (!Uri.TryCreate(value, UriKind.Absolute, out var uri) ||
+            uri.Scheme != Uri.UriSchemeHttp ||
+            !uri.IsLoopback)
+        {
+            errors.Add($"{name} must be an absolute loopback HTTP URL.");
         }
     }
 }

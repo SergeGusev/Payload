@@ -89,6 +89,16 @@ public sealed class NoOpAppRepository : IAppRepository
         return Task.FromResult<IReadOnlyList<RiskEvent>>([]);
     }
 
+    public Task AddServiceCommandAuditAsync(ServiceCommandAudit audit, CancellationToken cancellationToken = default)
+    {
+        return Task.CompletedTask;
+    }
+
+    public Task<IReadOnlyList<ServiceCommandAudit>> GetRecentServiceCommandAuditsAsync(int limit = 100, CancellationToken cancellationToken = default)
+    {
+        return Task.FromResult<IReadOnlyList<ServiceCommandAudit>>([]);
+    }
+
     public Task UpsertScannerStatusAsync(ScannerStatusSnapshot status, CancellationToken cancellationToken = default)
     {
         return Task.CompletedTask;

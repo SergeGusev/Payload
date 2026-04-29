@@ -27,6 +27,16 @@ public enum PaperOrderStatus
     Rejected
 }
 
+public enum ServiceRunState
+{
+    Starting,
+    Running,
+    Paused,
+    Stopping,
+    Stopped,
+    Error
+}
+
 public sealed record TraderProfile(
     string Name,
     string Wallet,
@@ -282,6 +292,14 @@ public sealed record RiskEvent(
     Guid Id,
     string ReasonCode,
     string Details,
+    DateTimeOffset CreatedAtUtc);
+
+public sealed record ServiceCommandAudit(
+    Guid Id,
+    string Command,
+    string Source,
+    bool Accepted,
+    string Message,
     DateTimeOffset CreatedAtUtc);
 
 public sealed record ApiError(
