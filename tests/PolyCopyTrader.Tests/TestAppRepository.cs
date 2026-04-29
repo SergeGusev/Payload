@@ -31,6 +31,8 @@ internal sealed class TestAppRepository : IAppRepository
 
     public List<ApiError> ApiErrors { get; } = [];
 
+    public List<PolymarketHttpLogEntry> PolymarketHttpLogs { get; } = [];
+
     public List<ScannerStatusSnapshot> ScannerStatuses { get; } = [];
 
     public bool ThrowOnTryAddLeaderTrade { get; set; }
@@ -251,6 +253,18 @@ internal sealed class TestAppRepository : IAppRepository
     public Task<IReadOnlyList<ApiError>> GetRecentApiErrorsAsync(int limit = 100, CancellationToken cancellationToken = default)
     {
         return Task.FromResult<IReadOnlyList<ApiError>>(ApiErrors.OrderByDescending(item => item.CreatedAtUtc).Take(limit).ToArray());
+    }
+
+    public Task AddPolymarketHttpLogAsync(PolymarketHttpLogEntry entry, CancellationToken cancellationToken = default)
+    {
+        PolymarketHttpLogs.Add(entry);
+        return Task.CompletedTask;
+    }
+
+    public Task<IReadOnlyList<PolymarketHttpLogEntry>> GetRecentPolymarketHttpLogsAsync(int limit = 100, CancellationToken cancellationToken = default)
+    {
+        return Task.FromResult<IReadOnlyList<PolymarketHttpLogEntry>>(
+            PolymarketHttpLogs.OrderByDescending(item => item.RequestedAtUtc).Take(limit).ToArray());
     }
 
     public Task<IReadOnlyList<RiskEvent>> GetRecentRiskEventsAsync(int limit = 100, CancellationToken cancellationToken = default)

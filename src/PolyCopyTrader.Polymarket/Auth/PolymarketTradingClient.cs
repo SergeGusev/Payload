@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.Globalization;
 using System.Net;
 using System.Net.Http.Headers;
@@ -23,6 +24,7 @@ public sealed class PolymarketTradingClient : IPolymarketTradingClient
     private readonly ClobV2OrderPayloadSerializer payloadSerializer;
     private readonly PolymarketAuthHeaderFactory headerFactory;
     private readonly IPolymarketApiErrorSink errorSink;
+    private readonly IPolymarketHttpLogSink httpLogSink;
 
     public PolymarketTradingClient(
         HttpClient httpClient,
@@ -33,7 +35,8 @@ public sealed class PolymarketTradingClient : IPolymarketTradingClient
         ClobV2OrderSigner orderSigner,
         ClobV2OrderPayloadSerializer payloadSerializer,
         PolymarketAuthHeaderFactory headerFactory,
-        IPolymarketApiErrorSink errorSink)
+        IPolymarketApiErrorSink errorSink,
+        IPolymarketHttpLogSink? httpLogSink = null)
     {
         this.httpClient = httpClient;
         this.polymarketOptions = polymarketOptions;
@@ -44,6 +47,7 @@ public sealed class PolymarketTradingClient : IPolymarketTradingClient
         this.payloadSerializer = payloadSerializer;
         this.headerFactory = headerFactory;
         this.errorSink = errorSink;
+        this.httpLogSink = httpLogSink ?? new NullPolymarketHttpLogSink();
         httpClient.Timeout = TimeSpan.FromSeconds(polymarketOptions.TimeoutSeconds);
     }
 
@@ -154,7 +158,7 @@ public sealed class PolymarketTradingClient : IPolymarketTradingClient
 
         var body = payloadSerializer.Serialize(order, signature, secrets.ApiKeyOwner!);
         var redactedBody = payloadSerializer.SerializeRedacted(order, signature, "[REDACTED_OWNER]");
-        var response = await SendAuthenticatedAsync(HttpMethod.Post, PostOrderPath, body, secrets.Credentials, ct);
+        var response = await SendAuthenticatedAsync(HttpMethod.Post, PostOrderPath, "PostOrder", body, secrets.Credentials, ct);
 
         if (!response.IsSuccessStatusCode)
         {
@@ -203,7 +207,7 @@ public sealed class PolymarketTradingClient : IPolymarketTradingClient
         ArgumentException.ThrowIfNullOrWhiteSpace(orderId);
         var secrets = await LoadAuthenticatedSecretsAsync(requireOwner: false, ct);
         var path = "/order/" + Uri.EscapeDataString(orderId);
-        var response = await SendAuthenticatedAsync(HttpMethod.Get, path, null, secrets.Credentials, ct);
+        var response = await SendAuthenticatedAsync(HttpMethod.Get, path, "GetLiveOrderStatus", null, secrets.Credentials, ct);
 
         if (response.StatusCode == HttpStatusCode.NotFound)
         {
@@ -237,7 +241,7 @@ public sealed class PolymarketTradingClient : IPolymarketTradingClient
         CancellationToken ct)
     {
         var secrets = await LoadAuthenticatedSecretsAsync(requireOwner: false, ct);
-        var response = await SendAuthenticatedAsync(HttpMethod.Delete, path, body, secrets.Credentials, ct);
+        var response = await SendAuthenticatedAsync(HttpMethod.Delete, path, operation, body, secrets.Credentials, ct);
 
         if (!response.IsSuccessStatusCode)
         {
@@ -305,11 +309,13 @@ public sealed class PolymarketTradingClient : IPolymarketTradingClient
     private async Task<AuthenticatedResponse> SendAuthenticatedAsync(
         HttpMethod method,
         string path,
+        string operation,
         string? body,
         PolymarketApiCredentials credentials,
         CancellationToken ct)
     {
-        using var request = new HttpRequestMessage(method, new Uri(new Uri(polymarketOptions.ClobBaseUrl), path));
+        var requestUri = new Uri(new Uri(polymarketOptions.ClobBaseUrl), path);
+        using var request = new HttpRequestMessage(method, requestUri);
         if (body is not null)
         {
             request.Content = new StringContent(body, Encoding.UTF8, "application/json");
@@ -325,15 +331,77 @@ public sealed class PolymarketTradingClient : IPolymarketTradingClient
         }
 
         request.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
-        using var response = await httpClient.SendAsync(request, ct);
-        var responseBody = await response.Content.ReadAsStringAsync(ct);
-        return new AuthenticatedResponse(response.StatusCode, response.IsSuccessStatusCode, responseBody);
+        var requestedAtUtc = DateTimeOffset.UtcNow;
+        var stopwatch = Stopwatch.StartNew();
+        try
+        {
+            using var response = await httpClient.SendAsync(request, ct);
+            var responseBody = await response.Content.ReadAsStringAsync(ct);
+            await RecordHttpLogAsync(
+                method.Method,
+                requestUri,
+                operation,
+                requestedAtUtc,
+                stopwatch.ElapsedMilliseconds,
+                response.StatusCode,
+                response.IsSuccessStatusCode,
+                Redact(responseBody),
+                null,
+                ct);
+
+            return new AuthenticatedResponse(response.StatusCode, response.IsSuccessStatusCode, responseBody);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            await RecordHttpLogAsync(
+                method.Method,
+                requestUri,
+                operation,
+                requestedAtUtc,
+                stopwatch.ElapsedMilliseconds,
+                null,
+                false,
+                string.Empty,
+                ex.Message,
+                ct);
+            throw;
+        }
     }
 
     private Task RecordErrorAsync(string operation, string message, CancellationToken ct)
     {
         return errorSink.RecordAsync(
             new ApiError(Guid.NewGuid(), nameof(PolymarketTradingClient), operation, Redact(message), DateTimeOffset.UtcNow),
+            ct);
+    }
+
+    private Task RecordHttpLogAsync(
+        string httpMethod,
+        Uri requestUri,
+        string operation,
+        DateTimeOffset requestedAtUtc,
+        long durationMilliseconds,
+        HttpStatusCode? statusCode,
+        bool succeeded,
+        string responseBody,
+        string? errorMessage,
+        CancellationToken ct)
+    {
+        return httpLogSink.RecordAsync(
+            new PolymarketHttpLogEntry(
+                Guid.NewGuid(),
+                nameof(PolymarketTradingClient),
+                operation,
+                httpMethod,
+                requestUri.AbsoluteUri,
+                requestedAtUtc,
+                statusCode is null ? null : DateTimeOffset.UtcNow,
+                Math.Max(0, durationMilliseconds),
+                1,
+                statusCode is { } value ? (int)value : null,
+                succeeded,
+                Redact(responseBody),
+                errorMessage is null ? null : Redact(errorMessage)),
             ct);
     }
 

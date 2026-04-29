@@ -11,11 +11,12 @@ public sealed class PolymarketGeoClient : IPolymarketGeoClient
     public PolymarketGeoClient(
         HttpClient httpClient,
         PolymarketOptions options,
-        IPolymarketApiErrorSink errorSink)
+        IPolymarketApiErrorSink errorSink,
+        IPolymarketHttpLogSink? httpLogSink = null)
     {
         this.options = options;
         httpClient.Timeout = TimeSpan.FromSeconds(options.TimeoutSeconds);
-        client = new PolymarketHttpClient(httpClient, options, errorSink, "PolymarketGeoClient");
+        client = new PolymarketHttpClient(httpClient, options, errorSink, "PolymarketGeoClient", httpLogSink);
     }
 
     public async Task<GeoblockStatus> GetGeoblockStatusAsync(CancellationToken cancellationToken = default)

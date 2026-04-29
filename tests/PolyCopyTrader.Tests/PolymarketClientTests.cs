@@ -130,6 +130,58 @@ public sealed class PolymarketClientTests
     }
 
     [Fact]
+    public async Task Client_RecordsPolymarketHttpLogOnSuccess()
+    {
+        var httpLogSink = new CapturingHttpLogSink();
+        var handler = new StubHttpMessageHandler(_ => new HttpResponseMessage(HttpStatusCode.OK)
+        {
+            Content = new StringContent(SampleTradesJson)
+        });
+        var client = new PolymarketDataApiClient(
+            new HttpClient(handler),
+            TestOptions,
+            new CapturingApiErrorSink(),
+            httpLogSink);
+
+        await client.GetUserTradesAsync("0x56687bf447db6ffa42ffe2204a05edaa20f55839", takerOnly: false);
+
+        var entry = Assert.Single(httpLogSink.Entries);
+        Assert.Equal("PolymarketDataApiClient", entry.Component);
+        Assert.Equal("GetUserTrades", entry.Operation);
+        Assert.Equal("GET", entry.HttpMethod);
+        Assert.Contains("/trades", entry.RequestUrl, StringComparison.Ordinal);
+        Assert.Equal(200, entry.StatusCode);
+        Assert.True(entry.Succeeded);
+        Assert.NotNull(entry.ResponseAtUtc);
+        Assert.Contains("proxyWallet", entry.ResponseBody, StringComparison.Ordinal);
+        Assert.Equal(TimeSpan.Zero, entry.RequestedAtUtc.Offset);
+    }
+
+    [Fact]
+    public async Task Client_RecordsPolymarketHttpLogOnFailure()
+    {
+        var httpLogSink = new CapturingHttpLogSink();
+        var handler = new StubHttpMessageHandler(_ => new HttpResponseMessage(HttpStatusCode.BadGateway)
+        {
+            Content = new StringContent("gateway failed")
+        });
+        var client = new PolymarketDataApiClient(
+            new HttpClient(handler),
+            TestOptions,
+            new CapturingApiErrorSink(),
+            httpLogSink);
+
+        await Assert.ThrowsAsync<PolymarketApiException>(() =>
+            client.GetUserPositionsAsync("0x56687bf447db6ffa42ffe2204a05edaa20f55839"));
+
+        var entry = Assert.Single(httpLogSink.Entries);
+        Assert.Equal("GetUserPositions", entry.Operation);
+        Assert.Equal(502, entry.StatusCode);
+        Assert.False(entry.Succeeded);
+        Assert.Contains("gateway failed", entry.ResponseBody, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task Client_RetriesHttp429ThenSucceeds()
     {
         var callCount = 0;
@@ -304,6 +356,17 @@ public sealed class PolymarketClientTests
         public Task RecordAsync(ApiError error, CancellationToken cancellationToken = default)
         {
             Errors.Add(error);
+            return Task.CompletedTask;
+        }
+    }
+
+    private sealed class CapturingHttpLogSink : IPolymarketHttpLogSink
+    {
+        public List<PolymarketHttpLogEntry> Entries { get; } = [];
+
+        public Task RecordAsync(PolymarketHttpLogEntry entry, CancellationToken cancellationToken = default)
+        {
+            Entries.Add(entry);
             return Task.CompletedTask;
         }
     }

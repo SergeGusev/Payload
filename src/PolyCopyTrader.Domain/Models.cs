@@ -530,6 +530,21 @@ public sealed record ApiError(
     string Message,
     DateTimeOffset CreatedAtUtc);
 
+public sealed record PolymarketHttpLogEntry(
+    Guid Id,
+    string Component,
+    string Operation,
+    string HttpMethod,
+    string RequestUrl,
+    DateTimeOffset RequestedAtUtc,
+    DateTimeOffset? ResponseAtUtc,
+    long DurationMilliseconds,
+    int Attempt,
+    int? StatusCode,
+    bool Succeeded,
+    string ResponseBody,
+    string? ErrorMessage);
+
 public sealed record ScannerStatusSnapshot(
     string ScannerName,
     DateTimeOffset? LastSuccessfulScanUtc,

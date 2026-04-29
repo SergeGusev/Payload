@@ -191,6 +191,8 @@ The `PolyCopyTrader.Polymarket` project contains read-only clients for:
 
 User trade calls explicitly send `takerOnly=false` when requested so maker fills are not silently excluded. HTTP failures are retried for transient `429`/`5xx` responses and persisted to `ApiErrors` through the configured repository. When PostgreSQL is not configured, the no-op repository keeps local scaffold runs read-only and dependency-free.
 
+Every Polymarket HTTP attempt is also written to PostgreSQL table `polymarket_http_logs` when storage is configured. Rows include component, operation, method, request URL, request/response UTC timestamps, duration, attempt number, HTTP status, success flag, response body preview, and error message. Request bodies and auth headers are not stored.
+
 ### Certificate Pinning
 
 `Polymarket:CertificatePins` can be configured in development or production for the Polymarket HTTP clients and the market WebSocket. Pins are keyed by endpoint host and use `sha256/<base64 SPKI SHA-256>` format. If a host has no configured pin, normal .NET TLS validation is used. If a host has pins, the certificate must match one of them; arbitrary invalid certificates are still rejected.

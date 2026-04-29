@@ -30,6 +30,7 @@ The repository also has local debugging and trader discovery support after task 
 - local Windows PostgreSQL database `polycopytrader` created and initialized.
 - trader discovery dashboard button and tab for best/worst PnL candidates.
 - Polymarket certificate pinning for HTTP clients and the market WebSocket.
+- Polymarket HTTP request/response audit table.
 
 Latest verified code state on 2026-04-29:
 
@@ -66,6 +67,21 @@ can output an appsettings fragment with `-AsAppSettings`. Always inspect printed
 certificate Subject/Issuer before trusting a pin. On 2026-04-29 the user's local
 network presented an `a1hosting.bg` certificate for Polymarket hosts, which explains
 `RemoteCertificateNameMismatch`; that is not a Polymarket certificate.
+
+Later, Polymarket HTTP request/response logging was added:
+
+- table: `polymarket_http_logs`;
+- domain record: `PolymarketHttpLogEntry`;
+- repository methods: `AddPolymarketHttpLogAsync` and `GetRecentPolymarketHttpLogsAsync`;
+- sink interface: `IPolymarketHttpLogSink`;
+- service implementation: `RepositoryPolymarketHttpLogSink`;
+- public Data API, CLOB public API, geoblock, and authenticated trading HTTP calls
+  write one row per actual HTTP attempt;
+- rows include component, operation, method, full request URL, request/response UTC
+  timestamps, duration, attempt number, status code, success flag, response body
+  preview, and error message;
+- request bodies and auth headers are intentionally not stored.
+- tests increased from 100 to 102.
 
 ## Important Safety Position
 
@@ -114,7 +130,9 @@ On 2026-04-29 we confirmed:
 - connection as user `postgres` worked with a password supplied by the user in chat;
 - database `polycopytrader` did not exist and was created;
 - the app initialized schema in that database;
-- public schema had 24 tables after initialization.
+- public schema had 24 tables at the first local PostgreSQL verification; after later
+  trader discovery and Polymarket HTTP logging changes, the schema initializer defines
+  26 tables.
 
 Do not write the local password to files. Use a shell environment variable or pass a
 connection string at runtime.
@@ -165,6 +183,7 @@ The schema initializer created these tables at the time of verification:
 - `paper_orders`
 - `paper_positions`
 - `pinned_market_assets`
+- `polymarket_http_logs`
 - `risk_events`
 - `scanner_status`
 - `service_command_audit`
@@ -533,6 +552,8 @@ Implemented history:
 - next commit after this memory update adds trader discovery for leaderboard best/worst
   candidates.
 - later commit adds Polymarket certificate pinning for HTTP and WebSocket endpoints.
+- later commit adds `scripts/get-polymarket-certificate-pins.ps1`.
+- next commit adds `polymarket_http_logs` request/response auditing.
 
 ## Known Limitations
 

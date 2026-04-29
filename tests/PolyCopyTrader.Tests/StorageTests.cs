@@ -15,6 +15,7 @@ public sealed class StorageTests
         }
 
         Assert.Contains("CREATE UNIQUE INDEX IF NOT EXISTS ux_leader_trades_dedup", PostgresSchema.SchemaSql, StringComparison.Ordinal);
+        Assert.Contains("CREATE INDEX IF NOT EXISTS ix_polymarket_http_logs_requested", PostgresSchema.SchemaSql, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -44,9 +45,25 @@ public sealed class StorageTests
             null);
 
         await repository.UpsertServiceHeartbeatAsync(heartbeat);
+        await repository.AddPolymarketHttpLogAsync(new PolymarketHttpLogEntry(
+            Guid.NewGuid(),
+            "PolymarketDataApiClient",
+            "GetUserTrades",
+            "GET",
+            "https://data-api.polymarket.com/trades",
+            DateTimeOffset.UtcNow,
+            DateTimeOffset.UtcNow,
+            10,
+            1,
+            200,
+            true,
+            "{}",
+            null));
         var heartbeats = await repository.GetServiceHeartbeatsAsync();
+        var httpLogs = await repository.GetRecentPolymarketHttpLogsAsync();
 
         Assert.Empty(heartbeats);
+        Assert.Empty(httpLogs);
     }
 
     [Fact]
@@ -75,8 +92,26 @@ public sealed class StorageTests
             null);
 
         await repository.UpsertServiceHeartbeatAsync(heartbeat);
+        var httpLog = new PolymarketHttpLogEntry(
+            Guid.NewGuid(),
+            "PolymarketDataApiClient",
+            "GetTraderLeaderboard",
+            "GET",
+            "https://data-api.polymarket.com/v1/leaderboard",
+            DateTimeOffset.UtcNow,
+            DateTimeOffset.UtcNow,
+            25,
+            1,
+            200,
+            true,
+            "[]",
+            null);
+        await repository.AddPolymarketHttpLogAsync(httpLog);
+
         var heartbeats = await repository.GetServiceHeartbeatsAsync();
+        var httpLogs = await repository.GetRecentPolymarketHttpLogsAsync();
 
         Assert.Contains(heartbeats, item => item.ServiceName == "PolyCopyTrader.Tests");
+        Assert.Contains(httpLogs, item => item.Id == httpLog.Id);
     }
 }

@@ -12,11 +12,12 @@ public sealed class PolymarketClobPublicClient : IPolymarketClobPublicClient
     public PolymarketClobPublicClient(
         HttpClient httpClient,
         PolymarketOptions options,
-        IPolymarketApiErrorSink errorSink)
+        IPolymarketApiErrorSink errorSink,
+        IPolymarketHttpLogSink? httpLogSink = null)
     {
         this.options = options;
         httpClient.Timeout = TimeSpan.FromSeconds(options.TimeoutSeconds);
-        client = new PolymarketHttpClient(httpClient, options, errorSink, "PolymarketClobPublicClient");
+        client = new PolymarketHttpClient(httpClient, options, errorSink, "PolymarketClobPublicClient", httpLogSink);
     }
 
     public async Task<OrderBookSnapshot?> GetOrderBookAsync(string assetId, CancellationToken cancellationToken = default)

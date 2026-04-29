@@ -27,6 +27,7 @@ public static class PostgresSchema
         "bot_settings",
         "service_command_audit",
         "api_errors",
+        "polymarket_http_logs",
         "scanner_status",
         "service_heartbeats"
     ];
@@ -410,6 +411,28 @@ CREATE TABLE IF NOT EXISTS api_errors (
     message text NOT NULL,
     created_at_utc timestamptz NOT NULL
 );
+
+CREATE TABLE IF NOT EXISTS polymarket_http_logs (
+    id uuid PRIMARY KEY,
+    component text NOT NULL,
+    operation text NOT NULL,
+    http_method text NOT NULL,
+    request_url text NOT NULL,
+    requested_at_utc timestamptz NOT NULL,
+    response_at_utc timestamptz NULL,
+    duration_ms bigint NOT NULL,
+    attempt integer NOT NULL,
+    status_code integer NULL,
+    succeeded boolean NOT NULL,
+    response_body text NOT NULL,
+    error_message text NULL
+);
+
+CREATE INDEX IF NOT EXISTS ix_polymarket_http_logs_requested
+ON polymarket_http_logs(requested_at_utc DESC);
+
+CREATE INDEX IF NOT EXISTS ix_polymarket_http_logs_operation
+ON polymarket_http_logs(component, operation, requested_at_utc DESC);
 
 CREATE TABLE IF NOT EXISTS scanner_status (
     scanner_name text PRIMARY KEY,

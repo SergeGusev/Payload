@@ -817,6 +817,50 @@ LIMIT @Limit;
         return results;
     }
 
+    public async Task AddPolymarketHttpLogAsync(PolymarketHttpLogEntry entry, CancellationToken cancellationToken = default)
+    {
+        const string sql = """
+INSERT INTO polymarket_http_logs (
+    id, component, operation, http_method, request_url, requested_at_utc, response_at_utc,
+    duration_ms, attempt, status_code, succeeded, response_body, error_message
+) VALUES (
+    @Id, @Component, @Operation, @HttpMethod, @RequestUrl, @RequestedAtUtc, @ResponseAtUtc,
+    @DurationMs, @Attempt, @StatusCode, @Succeeded, @ResponseBody, @ErrorMessage
+);
+""";
+
+        await using var connection = await OpenConnectionAsync(cancellationToken);
+        await using var command = CreateCommand(connection, sql);
+        AddPolymarketHttpLogParameters(command, entry);
+        await command.ExecuteNonQueryAsync(cancellationToken);
+    }
+
+    public async Task<IReadOnlyList<PolymarketHttpLogEntry>> GetRecentPolymarketHttpLogsAsync(
+        int limit = 100,
+        CancellationToken cancellationToken = default)
+    {
+        const string sql = """
+SELECT id, component, operation, http_method, request_url, requested_at_utc, response_at_utc,
+       duration_ms, attempt, status_code, succeeded, response_body, error_message
+FROM polymarket_http_logs
+ORDER BY requested_at_utc DESC
+LIMIT @Limit;
+""";
+
+        await using var connection = await OpenConnectionAsync(cancellationToken);
+        await using var command = CreateCommand(connection, sql);
+        command.Parameters.AddWithValue("Limit", limit);
+        await using var reader = await command.ExecuteReaderAsync(cancellationToken);
+
+        var results = new List<PolymarketHttpLogEntry>();
+        while (await reader.ReadAsync(cancellationToken))
+        {
+            results.Add(ReadPolymarketHttpLogEntry(reader));
+        }
+
+        return results;
+    }
+
     public async Task<IReadOnlyList<RiskEvent>> GetRecentRiskEventsAsync(int limit = 100, CancellationToken cancellationToken = default)
     {
         const string sql = """
@@ -1715,6 +1759,41 @@ ORDER BY service_name;
             reader.GetString(9),
             reader.GetInt32(10),
                 DateTimeOffsetFromUtc(reader.GetDateTime(11)));
+    }
+
+    private static void AddPolymarketHttpLogParameters(NpgsqlCommand command, PolymarketHttpLogEntry entry)
+    {
+        command.Parameters.AddWithValue("Id", entry.Id);
+        command.Parameters.AddWithValue("Component", entry.Component);
+        command.Parameters.AddWithValue("Operation", entry.Operation);
+        command.Parameters.AddWithValue("HttpMethod", entry.HttpMethod);
+        command.Parameters.AddWithValue("RequestUrl", entry.RequestUrl);
+        command.Parameters.AddWithValue("RequestedAtUtc", UtcDateTime(entry.RequestedAtUtc));
+        command.Parameters.AddWithValue("ResponseAtUtc", entry.ResponseAtUtc is { } responseAt ? UtcDateTime(responseAt) : DBNull.Value);
+        command.Parameters.AddWithValue("DurationMs", entry.DurationMilliseconds);
+        command.Parameters.AddWithValue("Attempt", entry.Attempt);
+        command.Parameters.AddWithValue("StatusCode", entry.StatusCode is { } statusCode ? statusCode : DBNull.Value);
+        command.Parameters.AddWithValue("Succeeded", entry.Succeeded);
+        command.Parameters.AddWithValue("ResponseBody", entry.ResponseBody);
+        command.Parameters.AddWithValue("ErrorMessage", (object?)entry.ErrorMessage ?? DBNull.Value);
+    }
+
+    private static PolymarketHttpLogEntry ReadPolymarketHttpLogEntry(NpgsqlDataReader reader)
+    {
+        return new PolymarketHttpLogEntry(
+            reader.GetGuid(0),
+            reader.GetString(1),
+            reader.GetString(2),
+            reader.GetString(3),
+            reader.GetString(4),
+            DateTimeOffsetFromUtc(reader.GetDateTime(5)),
+            reader.IsDBNull(6) ? null : DateTimeOffsetFromUtc(reader.GetDateTime(6)),
+            reader.GetInt64(7),
+            reader.GetInt32(8),
+            reader.IsDBNull(9) ? null : reader.GetInt32(9),
+            reader.GetBoolean(10),
+            reader.GetString(11),
+            reader.IsDBNull(12) ? null : reader.GetString(12));
     }
 
     private static void AddLiveOrderParameters(NpgsqlCommand command, LiveOrder order)

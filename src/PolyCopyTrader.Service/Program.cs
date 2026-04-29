@@ -72,6 +72,7 @@ else
 }
 
 builder.Services.AddSingleton<IPolymarketApiErrorSink, RepositoryPolymarketApiErrorSink>();
+builder.Services.AddSingleton<IPolymarketHttpLogSink, RepositoryPolymarketHttpLogSink>();
 builder.Services.AddSingleton(PolymarketSecretProviderFactory.Create(appConfiguration.PolymarketAuth));
 builder.Services.AddSingleton<PolymarketL2HmacSigner>();
 builder.Services.AddSingleton<PolymarketAuthHeaderFactory>();

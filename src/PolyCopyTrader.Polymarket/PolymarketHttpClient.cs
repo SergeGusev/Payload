@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.Net;
 using System.Text.Json;
 using PolyCopyTrader.Domain;
@@ -9,8 +10,12 @@ internal sealed class PolymarketHttpClient(
     HttpClient httpClient,
     PolymarketOptions options,
     IPolymarketApiErrorSink errorSink,
-    string component)
+    string component,
+    IPolymarketHttpLogSink? httpLogSink = null)
 {
+    private const int ResponseBodyLogLimit = 4_096;
+    private readonly IPolymarketHttpLogSink httpLogSink = httpLogSink ?? new NullPolymarketHttpLogSink();
+
     public async Task<JsonDocument> GetJsonDocumentAsync(
         Uri requestUri,
         string operation,
@@ -18,17 +23,33 @@ internal sealed class PolymarketHttpClient(
     {
         for (var attempt = 0; ; attempt++)
         {
+            var requestedAtUtc = DateTimeOffset.UtcNow;
+            var stopwatch = Stopwatch.StartNew();
+            var responseLogged = false;
             HttpResponseMessage? response = null;
             try
             {
                 response = await httpClient.GetAsync(requestUri, cancellationToken);
+                var body = await response.Content.ReadAsStringAsync(cancellationToken);
+                await RecordHttpLogAsync(
+                    HttpMethod.Get.Method,
+                    requestUri,
+                    operation,
+                    attempt,
+                    requestedAtUtc,
+                    stopwatch.ElapsedMilliseconds,
+                    response.StatusCode,
+                    response.IsSuccessStatusCode,
+                    body,
+                    null,
+                    cancellationToken);
+                responseLogged = true;
+
                 if (response.IsSuccessStatusCode)
                 {
-                    var stream = await response.Content.ReadAsStreamAsync(cancellationToken);
-                    return await JsonDocument.ParseAsync(stream, cancellationToken: cancellationToken);
+                    return JsonDocument.Parse(body);
                 }
 
-                var body = await response.Content.ReadAsStringAsync(cancellationToken);
                 if (ShouldRetry(response.StatusCode, attempt))
                 {
                     await DelayAsync(attempt, cancellationToken);
@@ -42,6 +63,22 @@ internal sealed class PolymarketHttpClient(
             }
             catch (Exception ex) when (ex is not PolymarketApiException && ex is not OperationCanceledException)
             {
+                if (!responseLogged)
+                {
+                    await RecordHttpLogAsync(
+                        HttpMethod.Get.Method,
+                        requestUri,
+                        operation,
+                        attempt,
+                        requestedAtUtc,
+                        stopwatch.ElapsedMilliseconds,
+                        null,
+                        false,
+                        string.Empty,
+                        ex.Message,
+                        cancellationToken);
+                }
+
                 if (attempt < options.MaxRetries)
                 {
                     await DelayAsync(attempt, cancellationToken);
@@ -70,16 +107,33 @@ internal sealed class PolymarketHttpClient(
     {
         for (var attempt = 0; ; attempt++)
         {
+            var requestedAtUtc = DateTimeOffset.UtcNow;
+            var stopwatch = Stopwatch.StartNew();
+            var responseLogged = false;
             HttpResponseMessage? response = null;
             try
             {
                 response = await httpClient.GetAsync(requestUri, cancellationToken);
+                var body = await response.Content.ReadAsStringAsync(cancellationToken);
+                await RecordHttpLogAsync(
+                    HttpMethod.Get.Method,
+                    requestUri,
+                    operation,
+                    attempt,
+                    requestedAtUtc,
+                    stopwatch.ElapsedMilliseconds,
+                    response.StatusCode,
+                    response.IsSuccessStatusCode,
+                    body,
+                    null,
+                    cancellationToken);
+                responseLogged = true;
+
                 if (response.IsSuccessStatusCode)
                 {
-                    return await response.Content.ReadAsStringAsync(cancellationToken);
+                    return body;
                 }
 
-                var body = await response.Content.ReadAsStringAsync(cancellationToken);
                 if (ShouldRetry(response.StatusCode, attempt))
                 {
                     await DelayAsync(attempt, cancellationToken);
@@ -93,6 +147,22 @@ internal sealed class PolymarketHttpClient(
             }
             catch (Exception ex) when (ex is not PolymarketApiException && ex is not OperationCanceledException)
             {
+                if (!responseLogged)
+                {
+                    await RecordHttpLogAsync(
+                        HttpMethod.Get.Method,
+                        requestUri,
+                        operation,
+                        attempt,
+                        requestedAtUtc,
+                        stopwatch.ElapsedMilliseconds,
+                        null,
+                        false,
+                        string.Empty,
+                        ex.Message,
+                        cancellationToken);
+                }
+
                 if (attempt < options.MaxRetries)
                 {
                     await DelayAsync(attempt, cancellationToken);
@@ -143,8 +213,44 @@ internal sealed class PolymarketHttpClient(
             cancellationToken);
     }
 
+    private Task RecordHttpLogAsync(
+        string httpMethod,
+        Uri requestUri,
+        string operation,
+        int attempt,
+        DateTimeOffset requestedAtUtc,
+        long durationMilliseconds,
+        HttpStatusCode? statusCode,
+        bool succeeded,
+        string responseBody,
+        string? errorMessage,
+        CancellationToken cancellationToken)
+    {
+        return httpLogSink.RecordAsync(
+            new PolymarketHttpLogEntry(
+                Guid.NewGuid(),
+                component,
+                operation,
+                httpMethod,
+                requestUri.AbsoluteUri,
+                requestedAtUtc,
+                statusCode is null ? null : DateTimeOffset.UtcNow,
+                Math.Max(0, durationMilliseconds),
+                attempt + 1,
+                statusCode is { } value ? (int)value : null,
+                succeeded,
+                Trim(responseBody, ResponseBodyLogLimit),
+                errorMessage is null ? null : Trim(errorMessage, ResponseBodyLogLimit)),
+            cancellationToken);
+    }
+
     private static string Trim(string value)
     {
         return value.Length <= 512 ? value : value[..512];
+    }
+
+    private static string Trim(string value, int maxLength)
+    {
+        return value.Length <= maxLength ? value : value[..maxLength];
     }
 }

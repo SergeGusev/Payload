@@ -316,6 +316,7 @@ public sealed class AuthPlaceholderTests
         {
             Content = new StringContent("""{"success":true,"orderID":"0xorder","status":"live","makingAmount":"999000","takingAmount":"1350000"}""")
         });
+        var httpLogSink = new CapturingHttpLogSink();
         var client = CreateLiveClient(handler, new Dictionary<string, string>
         {
             ["api-key"] = "fixture-key",
@@ -323,7 +324,7 @@ public sealed class AuthPlaceholderTests
             ["api-secret"] = "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=",
             ["api-passphrase"] = "fixture-passphrase",
             ["live-private-key"] = privateKey
-        });
+        }, httpLogSink);
 
         var result = await client.PlaceLiveOrderAsync(FixedOrderRequest() with
         {
@@ -346,6 +347,15 @@ public sealed class AuthPlaceholderTests
         Assert.Contains(@"""signature"":""0x", body, StringComparison.Ordinal);
         Assert.DoesNotContain(@"""signature"":""0x", result.RedactedRequestJson, StringComparison.Ordinal);
         Assert.Contains("[REDACTED]", result.RedactedRequestJson, StringComparison.Ordinal);
+
+        var httpLog = Assert.Single(httpLogSink.Entries);
+        Assert.Equal(nameof(PolymarketTradingClient), httpLog.Component);
+        Assert.Equal("PostOrder", httpLog.Operation);
+        Assert.Equal("POST", httpLog.HttpMethod);
+        Assert.Equal("https://clob.polymarket.com/order", httpLog.RequestUrl);
+        Assert.Equal(200, httpLog.StatusCode);
+        Assert.True(httpLog.Succeeded);
+        Assert.Contains("orderID", httpLog.ResponseBody, StringComparison.Ordinal);
     }
 
     // Public deterministic local test key only. Never fund it or replace it with a real key.
@@ -396,7 +406,8 @@ public sealed class AuthPlaceholderTests
 
     private static PolymarketTradingClient CreateLiveClient(
         HttpMessageHandler handler,
-        IReadOnlyDictionary<string, string> secrets)
+        IReadOnlyDictionary<string, string> secrets,
+        IPolymarketHttpLogSink? httpLogSink = null)
     {
         return new PolymarketTradingClient(
             new HttpClient(handler),
@@ -422,7 +433,8 @@ public sealed class AuthPlaceholderTests
             new ClobV2OrderSigner(),
             new ClobV2OrderPayloadSerializer(),
             new PolymarketAuthHeaderFactory(new PolymarketL2HmacSigner()),
-            new CapturingApiErrorSink());
+            new CapturingApiErrorSink(),
+            httpLogSink);
     }
 
     private sealed class FakeSecretProvider(IReadOnlyDictionary<string, string>? values = null) : ISecretProvider
@@ -438,6 +450,17 @@ public sealed class AuthPlaceholderTests
     {
         public Task RecordAsync(ApiError error, CancellationToken cancellationToken = default)
         {
+            return Task.CompletedTask;
+        }
+    }
+
+    private sealed class CapturingHttpLogSink : IPolymarketHttpLogSink
+    {
+        public List<PolymarketHttpLogEntry> Entries { get; } = [];
+
+        public Task RecordAsync(PolymarketHttpLogEntry entry, CancellationToken cancellationToken = default)
+        {
+            Entries.Add(entry);
             return Task.CompletedTask;
         }
     }

@@ -11,11 +11,12 @@ public sealed class PolymarketDataApiClient : IPolymarketDataApiClient
     public PolymarketDataApiClient(
         HttpClient httpClient,
         PolymarketOptions options,
-        IPolymarketApiErrorSink errorSink)
+        IPolymarketApiErrorSink errorSink,
+        IPolymarketHttpLogSink? httpLogSink = null)
     {
         this.options = options;
         httpClient.Timeout = TimeSpan.FromSeconds(options.TimeoutSeconds);
-        client = new PolymarketHttpClient(httpClient, options, errorSink, "PolymarketDataApiClient");
+        client = new PolymarketHttpClient(httpClient, options, errorSink, "PolymarketDataApiClient", httpLogSink);
     }
 
     public async Task<IReadOnlyList<TraderLeaderboardEntry>> GetTraderLeaderboardAsync(
