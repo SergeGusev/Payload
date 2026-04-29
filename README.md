@@ -145,14 +145,28 @@ If no PostgreSQL connection string is configured, storage is disabled and the se
 
 ### Local PostgreSQL Debugging
 
-For local debugging with real PostgreSQL storage, use the dev-only Docker Compose file. The container binds PostgreSQL to loopback only.
+If PostgreSQL is already installed locally, create a `polycopytrader` database and set the connection string in your shell:
+
+```powershell
+$env:POLYCOPYTRADER_POSTGRES_CONNECTION="Host=127.0.0.1;Port=5432;Database=polycopytrader;Username=postgres;Password=<local-password>;SSL Mode=Disable;Include Error Detail=true"
+.\scripts\run-local-service.ps1 -Mode Paper -NoPostgres -RequireDatabase
+```
+
+In a second terminal, use the same connection string for the dashboard:
+
+```powershell
+$env:POLYCOPYTRADER_POSTGRES_CONNECTION="Host=127.0.0.1;Port=5432;Database=polycopytrader;Username=postgres;Password=<local-password>;SSL Mode=Disable;Include Error Detail=true"
+.\scripts\run-local-dashboard.ps1 -NoPostgres
+```
+
+If PostgreSQL is not installed, use the dev-only Docker Compose file instead. The container binds PostgreSQL to loopback only.
 
 ```powershell
 .\scripts\start-local-postgres.ps1
 .\scripts\run-local-service.ps1 -Mode Paper -RequireDatabase
 ```
 
-In a second terminal, run the dashboard against the same local database:
+In a second terminal, run the dashboard against the same Docker database:
 
 ```powershell
 .\scripts\run-local-dashboard.ps1 -NoPostgres
