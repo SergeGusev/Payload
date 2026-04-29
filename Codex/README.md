@@ -1,5 +1,7 @@
 # PolyCopyTrader — Codex task pack
 
+Project memory for future sessions: read `20_PROJECT_MEMORY.md` first if the user asks what was built or wants to continue this project after a long break.
+
 Last verified context date: 2026-04-28. Before implementing authenticated/live trading, re-check the official Polymarket documentation because CLOB/API details can change.
 
 Core idea: this is a cautious **copy-signal** system, not blind copy-trading. Leader trades are signals that must pass filters for category, freshness, price, spread, liquidity, and risk.
