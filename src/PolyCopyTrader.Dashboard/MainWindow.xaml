@@ -21,6 +21,12 @@
             <Setter Property="Margin" Value="0,0,8,0" />
             <Setter Property="Padding" Value="10,0" />
         </Style>
+        <Style TargetType="TextBox">
+            <Setter Property="Height" Value="30" />
+            <Setter Property="Margin" Value="0,0,8,0" />
+            <Setter Property="Padding" Value="8,0" />
+            <Setter Property="VerticalContentAlignment" Value="Center" />
+        </Style>
         <Style TargetType="DataGrid">
             <Setter Property="AutoGenerateColumns" Value="False" />
             <Setter Property="CanUserAddRows" Value="False" />
@@ -87,6 +93,12 @@
                         Command="{Binding PausePaperTradingCommand}" />
                 <Button Content="Resume paper"
                         Command="{Binding ResumePaperTradingCommand}" />
+                <TextBox Width="190"
+                         Text="{Binding PinnedAssetId, UpdateSourceTrigger=PropertyChanged}" />
+                <Button Content="Pin asset"
+                        Command="{Binding PinAssetCommand}" />
+                <Button Content="Unpin asset"
+                        Command="{Binding UnpinAssetCommand}" />
                 <Button Content="Disable trader"
                         Command="{Binding DisableTraderCommand}" />
                 <Button Content="Enable trader"
@@ -231,6 +243,19 @@
                         <DataGridTextColumn Header="Unrealized PnL" Binding="{Binding UnrealizedPnlUsd}" Width="120" />
                         <DataGridTextColumn Header="Realized PnL" Binding="{Binding RealizedPnlUsd}" Width="110" />
                         <DataGridTextColumn Header="Source trader" Binding="{Binding SourceTrader}" Width="160" />
+                    </DataGrid.Columns>
+                </DataGrid>
+            </TabItem>
+
+            <TabItem Header="Market Data">
+                <DataGrid ItemsSource="{Binding MarketData}">
+                    <DataGrid.Columns>
+                        <DataGridTextColumn Header="Asset" Binding="{Binding AssetId}" Width="300" />
+                        <DataGridTextColumn Header="Market" Binding="{Binding ConditionId}" Width="300" />
+                        <DataGridTextColumn Header="Bid" Binding="{Binding BestBid}" Width="90" />
+                        <DataGridTextColumn Header="Ask" Binding="{Binding BestAsk}" Width="90" />
+                        <DataGridTextColumn Header="Spread" Binding="{Binding Spread}" Width="90" />
+                        <DataGridTextColumn Header="Snapshot UTC" Binding="{Binding SnapshotUtc}" Width="160" />
                     </DataGrid.Columns>
                 </DataGrid>
             </TabItem>

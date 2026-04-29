@@ -22,16 +22,23 @@ public sealed class DashboardDataService(
         var apiErrors = await repository.GetRecentApiErrorsAsync(cancellationToken: cancellationToken);
         var riskEvents = await repository.GetRecentRiskEventsAsync(cancellationToken: cancellationToken);
         var commandAudits = await repository.GetRecentServiceCommandAuditsAsync(cancellationToken: cancellationToken);
+        var marketDataStatuses = await repository.GetMarketDataStatusesAsync(cancellationToken);
+        var orderBookSnapshots = await repository.GetLatestOrderBookSnapshotsAsync(cancellationToken: cancellationToken);
+        var marketDataEvents = await repository.GetRecentMarketDataEventsAsync(cancellationToken: cancellationToken);
+        var orderBooksByAsset = orderBookSnapshots.ToDictionary(
+            item => item.AssetId,
+            StringComparer.OrdinalIgnoreCase);
 
         return new DashboardSnapshot(
-            BuildOverview(heartbeats, scannerStatuses, openPaperOrders, paperPositions, apiErrors),
+            BuildOverview(heartbeats, scannerStatuses, openPaperOrders, paperPositions, apiErrors, marketDataStatuses),
             BuildWatchlist(scannerStatuses, leaderTrades),
             leaderTrades.Select(ToLeaderTradeRow).ToArray(),
             signals.Select(ToSignalRow).ToArray(),
             recentPaperOrders.Select(ToPaperOrderRow).ToArray(),
-            paperPositions.Select(ToPaperPositionRow).ToArray(),
+            paperPositions.Select(position => ToPaperPositionRow(position, orderBooksByAsset)).ToArray(),
+            orderBookSnapshots.Select(ToMarketDataRow).ToArray(),
             BuildRiskUsage(openPaperOrders, paperPositions),
-            BuildLogs(apiErrors, riskEvents, commandAudits));
+            BuildLogs(apiErrors, riskEvents, commandAudits, marketDataEvents));
     }
 
     private IReadOnlyList<OverviewMetric> BuildOverview(
@@ -39,11 +46,14 @@ public sealed class DashboardDataService(
         IReadOnlyList<ScannerStatusSnapshot> scannerStatuses,
         IReadOnlyList<PaperOrder> openPaperOrders,
         IReadOnlyList<PaperPosition> paperPositions,
-        IReadOnlyList<ApiError> apiErrors)
+        IReadOnlyList<ApiError> apiErrors,
+        IReadOnlyList<MarketDataStatusSnapshot> marketDataStatuses)
     {
         var heartbeat = heartbeats.FirstOrDefault(item => item.ServiceName == "PolyCopyTrader.Service")
             ?? heartbeats.FirstOrDefault();
         var scanner = scannerStatuses.FirstOrDefault();
+        var marketData = marketDataStatuses.FirstOrDefault(item => item.Component == "PolymarketMarketWebSocket")
+            ?? marketDataStatuses.FirstOrDefault();
         var openExposure = openPaperOrders.Sum(order => order.NotionalUsd);
         var positionValue = paperPositions.Sum(position => position.EstimatedValueUsd);
         var paperPnl = paperPositions.Sum(position => position.UnrealizedPnlUsd);
@@ -58,6 +68,9 @@ public sealed class DashboardDataService(
             new OverviewMetric("API status", apiErrors.Count == 0 ? "No recorded errors" : $"{apiErrors.Count} recent errors"),
             new OverviewMetric("Geoblock status", "Not checked by dashboard"),
             new OverviewMetric("Scanner status", scanner?.ScannerStatus ?? "No scanner status"),
+            new OverviewMetric("WebSocket status", marketData?.ConnectionState.ToString() ?? "No market data status"),
+            new OverviewMetric("Subscribed assets", marketData?.SubscribedAssetsCount.ToString() ?? "0"),
+            new OverviewMetric("Last WS message UTC", FormatDate(marketData?.LastMessageUtc)),
             new OverviewMetric("Paper bankroll", FormatUsd(configuration.PaperTrading.InitialBankrollUsd)),
             new OverviewMetric("Open paper exposure", FormatUsd(openExposure)),
             new OverviewMetric("Paper position value", FormatUsd(positionValue)),
@@ -130,7 +143,8 @@ public sealed class DashboardDataService(
     private static IReadOnlyList<LogRow> BuildLogs(
         IReadOnlyList<ApiError> apiErrors,
         IReadOnlyList<RiskEvent> riskEvents,
-        IReadOnlyList<ServiceCommandAudit> commandAudits)
+        IReadOnlyList<ServiceCommandAudit> commandAudits,
+        IReadOnlyList<MarketDataEvent> marketDataEvents)
     {
         return apiErrors.Select(error => new LogRow(
                 FormatDate(error.CreatedAtUtc),
@@ -150,6 +164,12 @@ public sealed class DashboardDataService(
                 command.Command,
                 command.Message,
                 command.Source)))
+            .Concat(marketDataEvents.Select(evt => new LogRow(
+                FormatDate(evt.ReceivedAtUtc),
+                "MarketData",
+                evt.EventType.ToString(),
+                evt.Message,
+                evt.AssetId ?? evt.ConditionId ?? evt.Id.ToString())))
             .OrderByDescending(row => row.TimestampUtc)
             .ToArray();
     }
@@ -208,19 +228,33 @@ public sealed class DashboardDataService(
             order.SignalId.ToString());
     }
 
-    private static PaperPositionRow ToPaperPositionRow(PaperPosition position)
+    private static PaperPositionRow ToPaperPositionRow(
+        PaperPosition position,
+        IReadOnlyDictionary<string, OrderBookSnapshot> orderBooksByAsset)
     {
+        orderBooksByAsset.TryGetValue(position.AssetId, out var orderBook);
         return new PaperPositionRow(
             position.ConditionId,
             position.Outcome,
             position.SizeShares,
             position.AveragePrice,
-            "n/a",
-            "n/a",
+            FormatDecimal(orderBook?.BestBid),
+            FormatDecimal(orderBook?.BestAsk),
             position.EstimatedValueUsd,
             position.UnrealizedPnlUsd,
             "n/a",
             "n/a");
+    }
+
+    private static MarketDataRow ToMarketDataRow(OrderBookSnapshot snapshot)
+    {
+        return new MarketDataRow(
+            snapshot.AssetId,
+            snapshot.ConditionId ?? string.Empty,
+            FormatDecimal(snapshot.BestBid),
+            FormatDecimal(snapshot.BestAsk),
+            FormatDecimal(snapshot.SpreadAbs),
+            FormatDate(snapshot.SnapshotAtUtc));
     }
 
     private static RiskUsageRow Usage(string name, decimal limit, decimal used)
@@ -238,6 +272,11 @@ public sealed class DashboardDataService(
     private static string FormatUsd(decimal value)
     {
         return value.ToString("C2", System.Globalization.CultureInfo.GetCultureInfo("en-US"));
+    }
+
+    private static string FormatDecimal(decimal? value)
+    {
+        return value?.ToString("0.########", System.Globalization.CultureInfo.InvariantCulture) ?? "n/a";
     }
 
     private static string TtlRemaining(PaperOrder order)

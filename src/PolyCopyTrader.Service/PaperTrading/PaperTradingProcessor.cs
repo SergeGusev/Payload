@@ -1,5 +1,7 @@
 using PolyCopyTrader.Domain;
+using PolyCopyTrader.Domain.Configuration;
 using PolyCopyTrader.Polymarket;
+using PolyCopyTrader.Service.MarketData;
 using PolyCopyTrader.Storage;
 using PolyCopyTrader.Strategy;
 
@@ -9,17 +11,20 @@ public sealed class PaperTradingProcessor(
     ILogger<PaperTradingProcessor> logger,
     IPaperTradingEngine paperTradingEngine,
     IPolymarketClobPublicClient clobClient,
+    IMarketDataCache marketDataCache,
+    MarketDataWebSocketOptions marketDataWebSocketOptions,
     IAppRepository repository) : IPaperTradingProcessor
 {
     public async Task<PaperTradingProcessingResult> ProcessOpenOrdersAsync(CancellationToken cancellationToken = default)
     {
         var openOrders = await repository.GetOpenPaperOrdersAsync(cancellationToken);
+        var positions = (await repository.GetPaperPositionsAsync(cancellationToken)).ToList();
         if (openOrders.Count == 0)
         {
-            return new PaperTradingProcessingResult(0, 0, 0, 0);
+            var updatedPositionMarks = await UpdatePositionMarksAsync(positions, cancellationToken);
+            return new PaperTradingProcessingResult(0, 0, 0, updatedPositionMarks);
         }
 
-        var positions = (await repository.GetPaperPositionsAsync(cancellationToken)).ToList();
         var ordersFilled = 0;
         var ordersExpired = 0;
         var positionsUpdated = 0;
@@ -37,7 +42,7 @@ public sealed class PaperTradingProcessor(
 
             try
             {
-                var orderBook = await clobClient.GetOrderBookAsync(order.AssetId, cancellationToken);
+                var orderBook = await GetOrderBookAsync(order.AssetId, cancellationToken);
                 var fill = paperTradingEngine.TrySimulateFill(order, orderBook, null, now);
                 if (fill is null)
                 {
@@ -74,6 +79,65 @@ public sealed class PaperTradingProcessor(
             }
         }
 
+        positionsUpdated += await UpdatePositionMarksAsync(positions, cancellationToken);
         return new PaperTradingProcessingResult(openOrders.Count, ordersFilled, ordersExpired, positionsUpdated);
+    }
+
+    private async Task<OrderBookSnapshot?> GetOrderBookAsync(string assetId, CancellationToken cancellationToken)
+    {
+        return marketDataCache.TryGetFreshOrderBook(
+            assetId,
+            TimeSpan.FromSeconds(marketDataWebSocketOptions.StaleAfterSeconds),
+            out var cachedOrderBook)
+            ? cachedOrderBook
+            : await clobClient.GetOrderBookAsync(assetId, cancellationToken);
+    }
+
+    private async Task<int> UpdatePositionMarksAsync(
+        IReadOnlyCollection<PaperPosition> positions,
+        CancellationToken cancellationToken)
+    {
+        var updated = 0;
+        foreach (var position in positions)
+        {
+            try
+            {
+                var orderBook = await GetOrderBookAsync(position.AssetId, cancellationToken);
+                if (orderBook?.BestBid is not { } bestBid)
+                {
+                    continue;
+                }
+
+                var estimatedValue = position.SizeShares * bestBid;
+                var unrealizedPnl = estimatedValue - position.SizeShares * position.AveragePrice;
+                if (estimatedValue == position.EstimatedValueUsd && unrealizedPnl == position.UnrealizedPnlUsd)
+                {
+                    continue;
+                }
+
+                await repository.UpsertPaperPositionAsync(
+                    position with
+                    {
+                        EstimatedValueUsd = estimatedValue,
+                        UnrealizedPnlUsd = unrealizedPnl,
+                        UpdatedAtUtc = DateTimeOffset.UtcNow
+                    },
+                    cancellationToken);
+                updated++;
+            }
+            catch (OperationCanceledException)
+            {
+                throw;
+            }
+            catch (Exception ex)
+            {
+                logger.LogError(ex, "Paper position mark update failed for asset {AssetId}.", position.AssetId);
+                await repository.AddApiErrorAsync(
+                    new ApiError(Guid.NewGuid(), "PaperTradingProcessor", "UpdatePositionMark", ex.Message, DateTimeOffset.UtcNow),
+                    cancellationToken);
+            }
+        }
+
+        return updated;
     }
 }

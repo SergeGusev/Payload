@@ -2,7 +2,7 @@
 
 PolyCopyTrader is a Windows/.NET C# application for monitoring Polymarket traders and running a cautious copy-signal strategy.
 
-This repository is currently at Task 09: worker service and local IPC. It contains project structure, typed configuration, PostgreSQL schema initialization, a basic repository, read-only Polymarket Data/CLOB/Geo clients, a Worker Service scanner/signal/paper loop, local dashboard controls, and a read-only monitoring dashboard.
+This repository is currently at Task 10: WebSocket market data. It contains project structure, typed configuration, PostgreSQL schema initialization, a basic repository, read-only Polymarket Data/CLOB/Geo clients, a Worker Service scanner/signal/paper loop, local dashboard controls, public market WebSocket monitoring, and a read-only monitoring dashboard.
 
 ## Safety
 
@@ -59,9 +59,11 @@ POST /pause-scanning
 POST /resume-scanning
 POST /pause-paper
 POST /resume-paper
+POST /pin-asset?assetId=...
+POST /unpin-asset?assetId=...
 ```
 
-Dashboard pause/resume and kill-switch buttons call these endpoints. Commands are recorded in `service_command_audit`.
+Dashboard pause/resume, kill-switch, paper-control, and asset pin/unpin buttons call these endpoints. Commands are recorded in `service_command_audit`.
 
 ## Windows Service
 
@@ -112,6 +114,19 @@ The `PolyCopyTrader.Polymarket` project contains read-only clients for:
 
 User trade calls explicitly send `takerOnly=false` when requested so maker fills are not silently excluded. HTTP failures are retried for transient `429`/`5xx` responses and persisted to `ApiErrors` through the configured repository. When PostgreSQL is not configured, the no-op repository keeps local scaffold runs read-only and dependency-free.
 
+## Market WebSocket
+
+When `Bot:UseWebSockets` and `MarketDataWebSocket:Enabled` are true, the service runs a public market WebSocket client against `wss://ws-subscriptions-clob.polymarket.com/ws/market`.
+
+The subscription set is intentionally narrow. The service subscribes only to:
+
+- open paper-order asset ids;
+- open paper-position asset ids;
+- recent accepted/high-score signal asset ids;
+- asset ids pinned through config or dashboard IPC.
+
+The WebSocket client sends `PING` heartbeats, reconnects with backoff, resubscribes after reconnect, refreshes subscriptions dynamically, persists connection status to `market_data_status`, persists received events to `market_data_events`, and writes top-of-book snapshots to `order_book_snapshots`.
+
 ## Watchlist Scanner
 
 The service scans enabled `Watchlist:Traders` entries on `Bot:PollIntervalSeconds`. Each enabled wallet is validated before any API call. Recent trades are fetched with `takerOnly=false`, deduplicated, persisted to `LeaderTrades`, and queued as in-memory candidates for the future signal engine. Current positions are written as snapshots to `LeaderPositions`.
@@ -126,9 +141,11 @@ Queued leader trades are evaluated by `DefaultSignalEngine` after the scanner st
 
 ## Paper Trading
 
-In `Paper` mode, accepted signals create `PaperOrder` records with the proposed maker price, size, notional, and configured TTL. `PaperTradingProcessor` expires stale pending orders and simulates conservative approximate fills from observed CLOB order books.
+In `Paper` mode, accepted signals create `PaperOrder` records with the proposed maker price, size, notional, and configured TTL. `PaperTradingProcessor` expires stale pending orders and simulates conservative approximate fills from fresh WebSocket order books first, falling back to observed REST CLOB order books.
 
 For paper BUY orders, a fill is only simulated when `bestAsk <= paperBuyPrice`. Fills are stored as `PaperFill` records with `SimulatedApproximate` evidence. Long positions are updated with weighted-average cost and valued using the current bid, not midpoint or ask.
+
+WebSocket market-data updates also dispatch into paper trading so pending orders can fill and paper positions can be re-marked without waiting for the next scanner loop. Stale WebSocket snapshots are ignored after `MarketDataWebSocket:StaleAfterSeconds`.
 
 ## Dashboard Screens
 
@@ -138,16 +155,17 @@ For paper BUY orders, a fill is only simulated when `bestAsk <= paperBuyPrice`. 
 - Signals: accepted/rejected decisions, reason codes, proposed paper details.
 - Paper Orders: lifecycle, TTL, fill timestamps, linked signal id.
 - Paper Positions: size, average price, estimated value, unrealized PnL.
+- Market Data: latest WebSocket/market-data asset snapshots, bid, ask, spread, update time.
 - Risk: configured limits and current usage.
-- Logs: API errors and risk events.
-- Controls: pause/resume scanner, pause/resume paper trading, and kill switch through localhost IPC.
+- Logs: API errors, risk events, service commands, and market-data events.
+- Controls: pause/resume scanner, pause/resume paper trading, kill switch, and asset pin/unpin through localhost IPC.
 
 ## Known Limitations
 
 - No auth/signing/live trading support.
-- WebSocket support is not implemented yet.
 - Trader enable/disable, cancel selected order, and CSV export dashboard buttons are placeholders until command-specific IPC is added.
+- User-authenticated WebSocket channel is not implemented yet.
 
 ## Next Recommended Task
 
-Implement `Codex/10_TASK_WEBSOCKET_MARKET_DATA.md`.
+Implement `Codex/11_TASK_ANALYTICS_REPORTING.md`.

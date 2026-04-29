@@ -114,7 +114,7 @@ public sealed class LocalControlServer(
             if (method == "POST")
             {
                 var source = context.Request.RemoteEndPoint?.ToString() ?? "dashboard";
-                var result = path switch
+                ServiceCommandResult? result = path switch
                 {
                     "/pause" => controlState.PauseAll(source),
                     "/resume" => controlState.ResumeAll(source),
@@ -124,6 +124,16 @@ public sealed class LocalControlServer(
                     "/resume-paper" => controlState.ResumePaperTrading(source),
                     _ => null
                 };
+
+                if (result is null && path == "/pin-asset")
+                {
+                    result = await PinAssetAsync(context.Request.QueryString["assetId"], source, cancellationToken);
+                }
+
+                if (result is null && path == "/unpin-asset")
+                {
+                    result = await UnpinAssetAsync(context.Request.QueryString["assetId"], source, cancellationToken);
+                }
 
                 if (result is not null)
                 {
@@ -171,6 +181,30 @@ public sealed class LocalControlServer(
         };
     }
 
+    private async Task<ServiceCommandResult> PinAssetAsync(string? assetId, string source, CancellationToken cancellationToken)
+    {
+        if (!IsUsableAssetId(assetId))
+        {
+            return new ServiceCommandResult("PinAsset", source, false, "Asset id is required.");
+        }
+
+        await repository.AddPinnedMarketAssetAsync(
+            new PinnedMarketAsset(assetId!.Trim(), "dashboard", DateTimeOffset.UtcNow),
+            cancellationToken);
+        return new ServiceCommandResult("PinAsset", source, true, "Asset pinned for WebSocket subscription.");
+    }
+
+    private async Task<ServiceCommandResult> UnpinAssetAsync(string? assetId, string source, CancellationToken cancellationToken)
+    {
+        if (!IsUsableAssetId(assetId))
+        {
+            return new ServiceCommandResult("UnpinAsset", source, false, "Asset id is required.");
+        }
+
+        await repository.RemovePinnedMarketAssetAsync(assetId!.Trim(), cancellationToken);
+        return new ServiceCommandResult("UnpinAsset", source, true, "Asset removed from WebSocket pinned assets.");
+    }
+
     private async Task TryAuditAsync(ServiceCommandResult result, CancellationToken cancellationToken)
     {
         try
@@ -209,5 +243,11 @@ public sealed class LocalControlServer(
     private static string EnsureTrailingSlash(string value)
     {
         return value.EndsWith("/", StringComparison.Ordinal) ? value : value + "/";
+    }
+
+    private static bool IsUsableAssetId(string? assetId)
+    {
+        return !string.IsNullOrWhiteSpace(assetId) &&
+            !assetId.Contains("PLACEHOLDER", StringComparison.OrdinalIgnoreCase);
     }
 }

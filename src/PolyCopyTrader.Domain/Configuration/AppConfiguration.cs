@@ -12,6 +12,8 @@ public sealed class AppConfiguration
 
     public PolymarketOptions Polymarket { get; init; } = new();
 
+    public MarketDataWebSocketOptions MarketDataWebSocket { get; init; } = new();
+
     public WatchlistOptions Watchlist { get; init; } = new();
 
     public PaperTradingOptions PaperTrading { get; init; } = new();
@@ -120,6 +122,33 @@ public sealed class PolymarketOptions
     public int MaxRetries { get; init; } = 2;
 
     public int RetryBaseDelayMilliseconds { get; init; } = 250;
+}
+
+public sealed class MarketDataWebSocketOptions
+{
+    public bool Enabled { get; init; } = true;
+
+    public string MarketEndpointUrl { get; init; } = "wss://ws-subscriptions-clob.polymarket.com/ws/market";
+
+    public int HeartbeatSeconds { get; init; } = 10;
+
+    public int ReconnectBaseDelaySeconds { get; init; } = 2;
+
+    public int ReconnectMaxDelaySeconds { get; init; } = 60;
+
+    public int SubscriptionRefreshSeconds { get; init; } = 15;
+
+    public int StaleAfterSeconds { get; init; } = 30;
+
+    public int ReceiveBufferBytes { get; init; } = 65_536;
+
+    public int StrongSignalMinimumScore { get; init; } = 90;
+
+    public int StrongSignalLookbackMinutes { get; init; } = 30;
+
+    public int MaxSubscribedAssets { get; init; } = 100;
+
+    public List<string> PinnedAssetIds { get; init; } = [];
 }
 
 public sealed class WatchlistOptions

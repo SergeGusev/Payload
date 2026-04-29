@@ -42,6 +42,16 @@ public sealed class LocalControlClient(IpcOptions options)
         return PostAsync("resume", cancellationToken);
     }
 
+    public Task<ControlCommandResponse> PinAssetAsync(string assetId, CancellationToken cancellationToken = default)
+    {
+        return PostAsync($"pin-asset?assetId={Uri.EscapeDataString(assetId)}", cancellationToken);
+    }
+
+    public Task<ControlCommandResponse> UnpinAssetAsync(string assetId, CancellationToken cancellationToken = default)
+    {
+        return PostAsync($"unpin-asset?assetId={Uri.EscapeDataString(assetId)}", cancellationToken);
+    }
+
     public async Task<ControlStatusResponse> GetStatusAsync(CancellationToken cancellationToken = default)
     {
         using var response = await httpClient.GetAsync(BuildUri("status"), cancellationToken);

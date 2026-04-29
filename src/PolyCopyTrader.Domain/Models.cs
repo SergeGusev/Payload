@@ -37,6 +37,29 @@ public enum ServiceRunState
     Error
 }
 
+public enum MarketDataConnectionState
+{
+    Disabled,
+    Idle,
+    Connecting,
+    Connected,
+    Reconnecting,
+    Disconnected,
+    Stale,
+    Error
+}
+
+public enum MarketDataEventType
+{
+    Unknown,
+    Book,
+    PriceChange,
+    LastTradePrice,
+    BestBidAsk,
+    TickSizeChange,
+    MarketResolved
+}
+
 public sealed record TraderProfile(
     string Name,
     string Wallet,
@@ -171,6 +194,20 @@ public sealed record OrderBookSnapshot(
     public bool HasEnoughDepth => Bids.Any(level => level.Size > 0m) && Asks.Any(level => level.Size > 0m);
 }
 
+public sealed record MarketDataUpdate(
+    MarketDataEventType EventType,
+    string RawEventType,
+    string? AssetId,
+    string? ConditionId,
+    OrderBookSnapshot? OrderBookSnapshot,
+    decimal? BestBid,
+    decimal? BestAsk,
+    decimal? Price,
+    decimal? Size,
+    TradeSide Side,
+    bool MarketResolved,
+    DateTimeOffset TimestampUtc);
+
 public sealed record SignalEvaluationContext(
     LeaderTrade LeaderTrade,
     TraderRule TraderRule,
@@ -292,6 +329,32 @@ public sealed record RiskEvent(
     Guid Id,
     string ReasonCode,
     string Details,
+    DateTimeOffset CreatedAtUtc);
+
+public sealed record MarketDataEvent(
+    Guid Id,
+    MarketDataEventType EventType,
+    string? AssetId,
+    string? ConditionId,
+    string Message,
+    DateTimeOffset ReceivedAtUtc);
+
+public sealed record MarketDataStatusSnapshot(
+    string Component,
+    MarketDataConnectionState ConnectionState,
+    string Endpoint,
+    int SubscribedAssetsCount,
+    DateTimeOffset? LastMessageUtc,
+    DateTimeOffset? LastConnectedUtc,
+    DateTimeOffset? LastDisconnectedUtc,
+    int ReconnectCount,
+    bool Stale,
+    string? LastError,
+    DateTimeOffset UpdatedAtUtc);
+
+public sealed record PinnedMarketAsset(
+    string AssetId,
+    string? Note,
     DateTimeOffset CreatedAtUtc);
 
 public sealed record ServiceCommandAudit(

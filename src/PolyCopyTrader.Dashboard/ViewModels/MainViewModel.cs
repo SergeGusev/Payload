@@ -47,6 +47,9 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
     private string commandStatus = "Commands are placeholders until service IPC is added.";
 
     [ObservableProperty]
+    private string pinnedAssetId = string.Empty;
+
+    [ObservableProperty]
     private string summary;
 
     [ObservableProperty]
@@ -69,6 +72,8 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
     public ObservableCollection<PaperOrderRow> PaperOrders { get; } = [];
 
     public ObservableCollection<PaperPositionRow> PaperPositions { get; } = [];
+
+    public ObservableCollection<MarketDataRow> MarketData { get; } = [];
 
     public ObservableCollection<RiskUsageRow> RiskUsage { get; } = [];
 
@@ -143,6 +148,32 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
     }
 
     [RelayCommand]
+    private async Task PinAssetAsync()
+    {
+        var assetId = PinnedAssetId.Trim();
+        if (string.IsNullOrWhiteSpace(assetId))
+        {
+            CommandStatus = "Asset id is required.";
+            return;
+        }
+
+        await SendCommandAsync(() => controlClient.PinAssetAsync(assetId));
+    }
+
+    [RelayCommand]
+    private async Task UnpinAssetAsync()
+    {
+        var assetId = PinnedAssetId.Trim();
+        if (string.IsNullOrWhiteSpace(assetId))
+        {
+            CommandStatus = "Asset id is required.";
+            return;
+        }
+
+        await SendCommandAsync(() => controlClient.UnpinAssetAsync(assetId));
+    }
+
+    [RelayCommand]
     private void DisableTrader()
     {
         CommandStatus = "Disable trader requested. Placeholder only; trader configuration writes are not implemented yet.";
@@ -207,12 +238,14 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         Replace(Signals, snapshot.Signals);
         Replace(PaperOrders, snapshot.PaperOrders);
         Replace(PaperPositions, snapshot.PaperPositions);
+        Replace(MarketData, snapshot.MarketData);
         Replace(RiskUsage, snapshot.RiskUsage);
         Replace(Logs, snapshot.Logs);
 
         Mode = Overview.FirstOrDefault(item => item.Name == "Mode")?.Value ?? "Unknown";
         ServiceStatus = Overview.FirstOrDefault(item => item.Name == "Service status")?.Value ?? "No heartbeat";
-        Summary = $"{ServiceStatus}; {StorageStatus}; {Signals.Count} signals; {PaperOrders.Count} paper orders; {PaperPositions.Count} positions.";
+        var webSocketStatus = Overview.FirstOrDefault(item => item.Name == "WebSocket status")?.Value ?? "No market data status";
+        Summary = $"{ServiceStatus}; WS={webSocketStatus}; {StorageStatus}; {Signals.Count} signals; {PaperOrders.Count} paper orders; {PaperPositions.Count} positions.";
     }
 
     private static void Replace<T>(ObservableCollection<T> target, IReadOnlyList<T> source)

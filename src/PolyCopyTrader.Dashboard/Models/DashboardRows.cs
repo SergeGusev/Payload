@@ -71,6 +71,14 @@ public sealed record PaperPositionRow(
     string RealizedPnlUsd,
     string SourceTrader);
 
+public sealed record MarketDataRow(
+    string AssetId,
+    string ConditionId,
+    string BestBid,
+    string BestAsk,
+    string Spread,
+    string SnapshotUtc);
+
 public sealed record RiskUsageRow(string Name, decimal LimitUsd, decimal UsedUsd, decimal UsedPct, string Status);
 
 public sealed record LogRow(string TimestampUtc, string Severity, string Component, string Message, string Details);
@@ -82,5 +90,6 @@ public sealed record DashboardSnapshot(
     IReadOnlyList<SignalRow> Signals,
     IReadOnlyList<PaperOrderRow> PaperOrders,
     IReadOnlyList<PaperPositionRow> PaperPositions,
+    IReadOnlyList<MarketDataRow> MarketData,
     IReadOnlyList<RiskUsageRow> RiskUsage,
     IReadOnlyList<LogRow> Logs);

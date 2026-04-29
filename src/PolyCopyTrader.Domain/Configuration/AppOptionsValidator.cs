@@ -18,6 +18,7 @@ public static class AppOptionsValidator
         var errors = new List<string>();
         ValidateBot(configuration.Bot, errors);
         ValidatePolymarket(configuration.Polymarket, errors);
+        ValidateMarketDataWebSocket(configuration.MarketDataWebSocket, errors);
         ValidatePaperTrading(configuration.PaperTrading, errors);
         ValidateExecution(configuration.Execution, errors);
         ValidateSignal(configuration.Signal, errors);
@@ -41,6 +42,8 @@ public static class AppOptionsValidator
             $"Storage env var: {configuration.Storage.ConnectionStringEnvironmentVariable}",
             $"Polymarket data API: {configuration.Polymarket.DataApiBaseUrl}",
             $"Polymarket CLOB API: {configuration.Polymarket.ClobBaseUrl}",
+            $"Market WebSocket enabled: {configuration.Bot.UseWebSockets && configuration.MarketDataWebSocket.Enabled}",
+            $"Market WebSocket URL: {configuration.MarketDataWebSocket.MarketEndpointUrl}",
             $"Signal observe threshold: {configuration.Signal.ObserveBelowScore}",
             $"IPC enabled: {configuration.Ipc.Enabled}",
             $"IPC dashboard URL: {configuration.Ipc.DashboardBaseUrl}",
@@ -91,6 +94,60 @@ public static class AppOptionsValidator
         if (options.RetryBaseDelayMilliseconds < 0)
         {
             errors.Add("Polymarket.RetryBaseDelayMilliseconds must not be negative.");
+        }
+    }
+
+    private static void ValidateMarketDataWebSocket(MarketDataWebSocketOptions options, List<string> errors)
+    {
+        if (!Uri.TryCreate(options.MarketEndpointUrl, UriKind.Absolute, out var uri) ||
+            uri.Scheme != "wss")
+        {
+            errors.Add("MarketDataWebSocket.MarketEndpointUrl must be an absolute WSS URL.");
+        }
+
+        if (options.HeartbeatSeconds <= 0)
+        {
+            errors.Add("MarketDataWebSocket.HeartbeatSeconds must be greater than zero.");
+        }
+
+        if (options.ReconnectBaseDelaySeconds <= 0 || options.ReconnectMaxDelaySeconds <= 0)
+        {
+            errors.Add("MarketDataWebSocket reconnect delays must be greater than zero.");
+        }
+
+        if (options.ReconnectBaseDelaySeconds > options.ReconnectMaxDelaySeconds)
+        {
+            errors.Add("MarketDataWebSocket.ReconnectBaseDelaySeconds must not exceed ReconnectMaxDelaySeconds.");
+        }
+
+        if (options.SubscriptionRefreshSeconds <= 0)
+        {
+            errors.Add("MarketDataWebSocket.SubscriptionRefreshSeconds must be greater than zero.");
+        }
+
+        if (options.StaleAfterSeconds <= 0)
+        {
+            errors.Add("MarketDataWebSocket.StaleAfterSeconds must be greater than zero.");
+        }
+
+        if (options.ReceiveBufferBytes < 4096)
+        {
+            errors.Add("MarketDataWebSocket.ReceiveBufferBytes must be at least 4096.");
+        }
+
+        if (options.StrongSignalMinimumScore < 0)
+        {
+            errors.Add("MarketDataWebSocket.StrongSignalMinimumScore must not be negative.");
+        }
+
+        if (options.StrongSignalLookbackMinutes <= 0)
+        {
+            errors.Add("MarketDataWebSocket.StrongSignalLookbackMinutes must be greater than zero.");
+        }
+
+        if (options.MaxSubscribedAssets <= 0)
+        {
+            errors.Add("MarketDataWebSocket.MaxSubscribedAssets must be greater than zero.");
         }
     }
 

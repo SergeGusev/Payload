@@ -16,6 +16,9 @@ public static class PostgresSchema
         "paper_fills",
         "paper_positions",
         "risk_events",
+        "market_data_status",
+        "market_data_events",
+        "pinned_market_assets",
         "bot_settings",
         "service_command_audit",
         "api_errors",
@@ -149,6 +152,9 @@ CREATE TABLE IF NOT EXISTS order_book_snapshots (
     snapshot_at_utc timestamptz NOT NULL
 );
 
+CREATE INDEX IF NOT EXISTS ix_order_book_snapshots_asset_time
+ON order_book_snapshots(asset_id, snapshot_at_utc DESC);
+
 CREATE TABLE IF NOT EXISTS signals (
     id uuid PRIMARY KEY,
     leader_trade_id uuid NULL REFERENCES leader_trades(id),
@@ -232,6 +238,38 @@ CREATE TABLE IF NOT EXISTS risk_events (
     id uuid PRIMARY KEY,
     reason_code text NOT NULL,
     details text NOT NULL,
+    created_at_utc timestamptz NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS market_data_status (
+    component text PRIMARY KEY,
+    connection_state text NOT NULL,
+    endpoint text NOT NULL,
+    subscribed_assets_count integer NOT NULL,
+    last_message_utc timestamptz NULL,
+    last_connected_utc timestamptz NULL,
+    last_disconnected_utc timestamptz NULL,
+    reconnect_count integer NOT NULL,
+    stale boolean NOT NULL,
+    last_error text NULL,
+    updated_at_utc timestamptz NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS market_data_events (
+    id uuid PRIMARY KEY,
+    event_type text NOT NULL,
+    asset_id text NULL,
+    condition_id text NULL,
+    message text NOT NULL,
+    received_at_utc timestamptz NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS ix_market_data_events_received
+ON market_data_events(received_at_utc DESC);
+
+CREATE TABLE IF NOT EXISTS pinned_market_assets (
+    asset_id text PRIMARY KEY,
+    note text NULL,
     created_at_utc timestamptz NOT NULL
 );
 

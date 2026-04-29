@@ -480,6 +480,251 @@ LIMIT @Limit;
         return results;
     }
 
+    public async Task AddOrderBookSnapshotAsync(OrderBookSnapshot snapshot, CancellationToken cancellationToken = default)
+    {
+        const string sql = """
+INSERT INTO order_book_snapshots (
+    id, asset_id, condition_id, best_bid, best_ask, spread_abs, spread_pct, raw_json, snapshot_at_utc
+) VALUES (
+    @Id, @AssetId, @ConditionId, @BestBid, @BestAsk, @SpreadAbs, @SpreadPct, CAST(@RawJson AS jsonb), @SnapshotAtUtc
+);
+""";
+
+        await using var connection = await OpenConnectionAsync(cancellationToken);
+        await using var command = CreateCommand(connection, sql);
+        command.Parameters.AddWithValue("Id", Guid.NewGuid());
+        command.Parameters.AddWithValue("AssetId", snapshot.AssetId);
+        command.Parameters.AddWithValue("ConditionId", (object?)snapshot.ConditionId ?? DBNull.Value);
+        command.Parameters.AddWithValue("BestBid", (object?)snapshot.BestBid ?? DBNull.Value);
+        command.Parameters.AddWithValue("BestAsk", (object?)snapshot.BestAsk ?? DBNull.Value);
+        command.Parameters.AddWithValue("SpreadAbs", (object?)snapshot.SpreadAbs ?? DBNull.Value);
+        command.Parameters.AddWithValue("SpreadPct", (object?)snapshot.SpreadPct ?? DBNull.Value);
+        command.Parameters.AddWithValue("RawJson", JsonSerializer.Serialize(snapshot));
+        command.Parameters.AddWithValue("SnapshotAtUtc", UtcDateTime(snapshot.SnapshotAtUtc));
+        await command.ExecuteNonQueryAsync(cancellationToken);
+    }
+
+    public async Task<OrderBookSnapshot?> GetLatestOrderBookSnapshotAsync(string assetId, CancellationToken cancellationToken = default)
+    {
+        const string sql = """
+SELECT asset_id, condition_id, best_bid, best_ask, snapshot_at_utc
+FROM order_book_snapshots
+WHERE asset_id = @AssetId
+ORDER BY snapshot_at_utc DESC
+LIMIT 1;
+""";
+
+        await using var connection = await OpenConnectionAsync(cancellationToken);
+        await using var command = CreateCommand(connection, sql);
+        command.Parameters.AddWithValue("AssetId", assetId);
+        await using var reader = await command.ExecuteReaderAsync(cancellationToken);
+
+        return await reader.ReadAsync(cancellationToken)
+            ? ReadOrderBookSnapshot(reader)
+            : null;
+    }
+
+    public async Task<IReadOnlyList<OrderBookSnapshot>> GetLatestOrderBookSnapshotsAsync(int limit = 100, CancellationToken cancellationToken = default)
+    {
+        const string sql = """
+SELECT asset_id, condition_id, best_bid, best_ask, snapshot_at_utc
+FROM (
+    SELECT DISTINCT ON (asset_id)
+        asset_id, condition_id, best_bid, best_ask, snapshot_at_utc
+    FROM order_book_snapshots
+    ORDER BY asset_id, snapshot_at_utc DESC
+) latest
+ORDER BY snapshot_at_utc DESC
+LIMIT @Limit;
+""";
+
+        await using var connection = await OpenConnectionAsync(cancellationToken);
+        await using var command = CreateCommand(connection, sql);
+        command.Parameters.AddWithValue("Limit", limit);
+        await using var reader = await command.ExecuteReaderAsync(cancellationToken);
+
+        var results = new List<OrderBookSnapshot>();
+        while (await reader.ReadAsync(cancellationToken))
+        {
+            results.Add(ReadOrderBookSnapshot(reader));
+        }
+
+        return results;
+    }
+
+    public async Task AddMarketDataEventAsync(MarketDataEvent marketDataEvent, CancellationToken cancellationToken = default)
+    {
+        const string sql = """
+INSERT INTO market_data_events (id, event_type, asset_id, condition_id, message, received_at_utc)
+VALUES (@Id, @EventType, @AssetId, @ConditionId, @Message, @ReceivedAtUtc);
+""";
+
+        await using var connection = await OpenConnectionAsync(cancellationToken);
+        await using var command = CreateCommand(connection, sql);
+        command.Parameters.AddWithValue("Id", marketDataEvent.Id);
+        command.Parameters.AddWithValue("EventType", marketDataEvent.EventType.ToString());
+        command.Parameters.AddWithValue("AssetId", (object?)marketDataEvent.AssetId ?? DBNull.Value);
+        command.Parameters.AddWithValue("ConditionId", (object?)marketDataEvent.ConditionId ?? DBNull.Value);
+        command.Parameters.AddWithValue("Message", marketDataEvent.Message);
+        command.Parameters.AddWithValue("ReceivedAtUtc", UtcDateTime(marketDataEvent.ReceivedAtUtc));
+        await command.ExecuteNonQueryAsync(cancellationToken);
+    }
+
+    public async Task<IReadOnlyList<MarketDataEvent>> GetRecentMarketDataEventsAsync(int limit = 100, CancellationToken cancellationToken = default)
+    {
+        const string sql = """
+SELECT id, event_type, asset_id, condition_id, message, received_at_utc
+FROM market_data_events
+ORDER BY received_at_utc DESC
+LIMIT @Limit;
+""";
+
+        await using var connection = await OpenConnectionAsync(cancellationToken);
+        await using var command = CreateCommand(connection, sql);
+        command.Parameters.AddWithValue("Limit", limit);
+        await using var reader = await command.ExecuteReaderAsync(cancellationToken);
+
+        var results = new List<MarketDataEvent>();
+        while (await reader.ReadAsync(cancellationToken))
+        {
+            results.Add(new MarketDataEvent(
+                reader.GetGuid(0),
+                Enum.Parse<MarketDataEventType>(reader.GetString(1)),
+                reader.IsDBNull(2) ? null : reader.GetString(2),
+                reader.IsDBNull(3) ? null : reader.GetString(3),
+                reader.GetString(4),
+                DateTimeOffsetFromUtc(reader.GetDateTime(5))));
+        }
+
+        return results;
+    }
+
+    public async Task UpsertMarketDataStatusAsync(MarketDataStatusSnapshot status, CancellationToken cancellationToken = default)
+    {
+        const string sql = """
+INSERT INTO market_data_status (
+    component, connection_state, endpoint, subscribed_assets_count, last_message_utc,
+    last_connected_utc, last_disconnected_utc, reconnect_count, stale, last_error, updated_at_utc
+) VALUES (
+    @Component, @ConnectionState, @Endpoint, @SubscribedAssetsCount, @LastMessageUtc,
+    @LastConnectedUtc, @LastDisconnectedUtc, @ReconnectCount, @Stale, @LastError, @UpdatedAtUtc
+)
+ON CONFLICT(component) DO UPDATE SET
+    connection_state = excluded.connection_state,
+    endpoint = excluded.endpoint,
+    subscribed_assets_count = excluded.subscribed_assets_count,
+    last_message_utc = excluded.last_message_utc,
+    last_connected_utc = excluded.last_connected_utc,
+    last_disconnected_utc = excluded.last_disconnected_utc,
+    reconnect_count = excluded.reconnect_count,
+    stale = excluded.stale,
+    last_error = excluded.last_error,
+    updated_at_utc = excluded.updated_at_utc;
+""";
+
+        await using var connection = await OpenConnectionAsync(cancellationToken);
+        await using var command = CreateCommand(connection, sql);
+        command.Parameters.AddWithValue("Component", status.Component);
+        command.Parameters.AddWithValue("ConnectionState", status.ConnectionState.ToString());
+        command.Parameters.AddWithValue("Endpoint", status.Endpoint);
+        command.Parameters.AddWithValue("SubscribedAssetsCount", status.SubscribedAssetsCount);
+        command.Parameters.AddWithValue("LastMessageUtc", status.LastMessageUtc is { } lastMessage ? UtcDateTime(lastMessage) : DBNull.Value);
+        command.Parameters.AddWithValue("LastConnectedUtc", status.LastConnectedUtc is { } connected ? UtcDateTime(connected) : DBNull.Value);
+        command.Parameters.AddWithValue("LastDisconnectedUtc", status.LastDisconnectedUtc is { } disconnected ? UtcDateTime(disconnected) : DBNull.Value);
+        command.Parameters.AddWithValue("ReconnectCount", status.ReconnectCount);
+        command.Parameters.AddWithValue("Stale", status.Stale);
+        command.Parameters.AddWithValue("LastError", (object?)status.LastError ?? DBNull.Value);
+        command.Parameters.AddWithValue("UpdatedAtUtc", UtcDateTime(status.UpdatedAtUtc));
+        await command.ExecuteNonQueryAsync(cancellationToken);
+    }
+
+    public async Task<IReadOnlyList<MarketDataStatusSnapshot>> GetMarketDataStatusesAsync(CancellationToken cancellationToken = default)
+    {
+        const string sql = """
+SELECT component, connection_state, endpoint, subscribed_assets_count, last_message_utc,
+       last_connected_utc, last_disconnected_utc, reconnect_count, stale, last_error, updated_at_utc
+FROM market_data_status
+ORDER BY component;
+""";
+
+        await using var connection = await OpenConnectionAsync(cancellationToken);
+        await using var command = CreateCommand(connection, sql);
+        await using var reader = await command.ExecuteReaderAsync(cancellationToken);
+
+        var results = new List<MarketDataStatusSnapshot>();
+        while (await reader.ReadAsync(cancellationToken))
+        {
+            results.Add(new MarketDataStatusSnapshot(
+                reader.GetString(0),
+                Enum.Parse<MarketDataConnectionState>(reader.GetString(1)),
+                reader.GetString(2),
+                reader.GetInt32(3),
+                reader.IsDBNull(4) ? null : DateTimeOffsetFromUtc(reader.GetDateTime(4)),
+                reader.IsDBNull(5) ? null : DateTimeOffsetFromUtc(reader.GetDateTime(5)),
+                reader.IsDBNull(6) ? null : DateTimeOffsetFromUtc(reader.GetDateTime(6)),
+                reader.GetInt32(7),
+                reader.GetBoolean(8),
+                reader.IsDBNull(9) ? null : reader.GetString(9),
+                DateTimeOffsetFromUtc(reader.GetDateTime(10))));
+        }
+
+        return results;
+    }
+
+    public async Task AddPinnedMarketAssetAsync(PinnedMarketAsset asset, CancellationToken cancellationToken = default)
+    {
+        const string sql = """
+INSERT INTO pinned_market_assets (asset_id, note, created_at_utc)
+VALUES (@AssetId, @Note, @CreatedAtUtc)
+ON CONFLICT(asset_id) DO UPDATE SET
+    note = excluded.note;
+""";
+
+        await using var connection = await OpenConnectionAsync(cancellationToken);
+        await using var command = CreateCommand(connection, sql);
+        command.Parameters.AddWithValue("AssetId", asset.AssetId);
+        command.Parameters.AddWithValue("Note", (object?)asset.Note ?? DBNull.Value);
+        command.Parameters.AddWithValue("CreatedAtUtc", UtcDateTime(asset.CreatedAtUtc));
+        await command.ExecuteNonQueryAsync(cancellationToken);
+    }
+
+    public async Task RemovePinnedMarketAssetAsync(string assetId, CancellationToken cancellationToken = default)
+    {
+        const string sql = """
+DELETE FROM pinned_market_assets
+WHERE asset_id = @AssetId;
+""";
+
+        await using var connection = await OpenConnectionAsync(cancellationToken);
+        await using var command = CreateCommand(connection, sql);
+        command.Parameters.AddWithValue("AssetId", assetId);
+        await command.ExecuteNonQueryAsync(cancellationToken);
+    }
+
+    public async Task<IReadOnlyList<PinnedMarketAsset>> GetPinnedMarketAssetsAsync(CancellationToken cancellationToken = default)
+    {
+        const string sql = """
+SELECT asset_id, note, created_at_utc
+FROM pinned_market_assets
+ORDER BY created_at_utc DESC;
+""";
+
+        await using var connection = await OpenConnectionAsync(cancellationToken);
+        await using var command = CreateCommand(connection, sql);
+        await using var reader = await command.ExecuteReaderAsync(cancellationToken);
+
+        var results = new List<PinnedMarketAsset>();
+        while (await reader.ReadAsync(cancellationToken))
+        {
+            results.Add(new PinnedMarketAsset(
+                reader.GetString(0),
+                reader.IsDBNull(1) ? null : reader.GetString(1),
+                DateTimeOffsetFromUtc(reader.GetDateTime(2))));
+        }
+
+        return results;
+    }
+
     public async Task AddServiceCommandAuditAsync(ServiceCommandAudit audit, CancellationToken cancellationToken = default)
     {
         const string sql = """
@@ -696,6 +941,18 @@ ORDER BY service_name;
             DateTimeOffsetFromUtc(reader.GetDateTime(11)),
             reader.IsDBNull(12) ? null : DateTimeOffsetFromUtc(reader.GetDateTime(12)),
             reader.IsDBNull(13) ? null : DateTimeOffsetFromUtc(reader.GetDateTime(13)));
+    }
+
+    private static OrderBookSnapshot ReadOrderBookSnapshot(NpgsqlDataReader reader)
+    {
+        decimal? bestBid = reader.IsDBNull(2) ? null : reader.GetDecimal(2);
+        decimal? bestAsk = reader.IsDBNull(3) ? null : reader.GetDecimal(3);
+        return new OrderBookSnapshot(
+            reader.GetString(0),
+            bestBid is { } bid ? [new OrderBookLevel(bid, 0m)] : [],
+            bestAsk is { } ask ? [new OrderBookLevel(ask, 0m)] : [],
+            DateTimeOffsetFromUtc(reader.GetDateTime(4)),
+            reader.IsDBNull(1) ? null : reader.GetString(1));
     }
 
     private static IReadOnlyList<string> SplitReasonCodes(string value)

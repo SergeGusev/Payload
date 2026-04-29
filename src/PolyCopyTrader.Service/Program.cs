@@ -3,6 +3,7 @@ using PolyCopyTrader.Domain.Configuration;
 using PolyCopyTrader.Polymarket;
 using PolyCopyTrader.Service.Configuration;
 using PolyCopyTrader.Service.Control;
+using PolyCopyTrader.Service.MarketData;
 using PolyCopyTrader.Service.PaperTrading;
 using PolyCopyTrader.Service.Polymarket;
 using PolyCopyTrader.Service.Scanning;
@@ -41,6 +42,7 @@ builder.Services.AddSingleton(appConfiguration.Risk);
 builder.Services.AddSingleton(appConfiguration.Execution);
 builder.Services.AddSingleton(appConfiguration.Signal);
 builder.Services.AddSingleton(appConfiguration.Polymarket);
+builder.Services.AddSingleton(appConfiguration.MarketDataWebSocket);
 builder.Services.AddSingleton(appConfiguration.Watchlist);
 builder.Services.AddSingleton(appConfiguration.PaperTrading);
 builder.Services.AddSingleton(appConfiguration.Dashboard);
@@ -70,10 +72,14 @@ builder.Services.AddSingleton<IRiskEngine, DefaultRiskEngine>();
 builder.Services.AddSingleton<ISignalEngine, DefaultSignalEngine>();
 builder.Services.AddSingleton<IPaperTradingEngine, DefaultPaperTradingEngine>();
 builder.Services.AddSingleton<ISignalProcessor, SignalProcessor>();
+builder.Services.AddSingleton<IMarketDataCache, MarketDataCache>();
+builder.Services.AddSingleton<IRelevantMarketAssetProvider, RelevantMarketAssetProvider>();
+builder.Services.AddSingleton<IPaperTradingMarketDataUpdater, PaperTradingMarketDataUpdater>();
 builder.Services.AddSingleton<IPaperTradingProcessor, PaperTradingProcessor>();
 builder.Services.AddSingleton<ServiceControlState>();
 builder.Services.AddHostedService<BotWorker>();
 builder.Services.AddHostedService<LocalControlServer>();
+builder.Services.AddHostedService<MarketDataWebSocketService>();
 
 try
 {
