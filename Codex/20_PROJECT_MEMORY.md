@@ -315,6 +315,8 @@ When the operator clicks the dashboard `Find traders` button and
 - uses `orderBy=PNL`;
 - selects the best `CandidatesPerSide` by PnL;
 - selects the worst `CandidatesPerSide` by PnL within the fetched API window;
+- fetches all-time leaderboard PnL/volume for each selected wallet using
+  `/v1/leaderboard?timePeriod=ALL&user=<wallet>`;
 - fetches recent trades for each selected wallet;
 - fetches current positions for each selected wallet;
 - stores enriched rows in `trader_discovery_candidates`;

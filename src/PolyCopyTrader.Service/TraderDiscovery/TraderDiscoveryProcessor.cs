@@ -74,7 +74,7 @@ public sealed class TraderDiscoveryProcessor(
                 "PNL",
                 50,
                 offset,
-                cancellationToken);
+                cancellationToken: cancellationToken);
 
             foreach (var entry in entries.Where(IsUsableEntry))
             {
@@ -100,6 +100,7 @@ public sealed class TraderDiscoveryProcessor(
         IReadOnlyList<LeaderTrade> trades = [];
         IReadOnlyList<LeaderPosition> positions = [];
         var notes = new List<string>();
+        var allTimeEntry = await FetchAllTimeEntryAsync(entry, notes, cancellationToken);
 
         try
         {
@@ -166,6 +167,8 @@ public sealed class TraderDiscoveryProcessor(
             entry.XUsername,
             entry.Pnl,
             entry.Volume,
+            allTimeEntry?.Pnl,
+            allTimeEntry?.Volume,
             entry.VerifiedBadge,
             trades.Count,
             buyTrades,
@@ -179,6 +182,44 @@ public sealed class TraderDiscoveryProcessor(
             positions.Sum(position => position.RealizedPnl),
             string.Join(", ", notes),
             DateTimeOffset.UtcNow);
+    }
+
+    private async Task<TraderLeaderboardEntry?> FetchAllTimeEntryAsync(
+        TraderLeaderboardEntry entry,
+        List<string> notes,
+        CancellationToken cancellationToken)
+    {
+        if (string.Equals(options.TimePeriod, "ALL", StringComparison.OrdinalIgnoreCase))
+        {
+            return entry;
+        }
+
+        try
+        {
+            var entries = await dataApiClient.GetTraderLeaderboardAsync(
+                options.Category,
+                "ALL",
+                "PNL",
+                1,
+                0,
+                entry.Wallet,
+                cancellationToken);
+
+            await DelayIfConfiguredAsync(cancellationToken);
+            var allTime = entries.FirstOrDefault();
+            if (allTime is null)
+            {
+                notes.Add("all_time_not_found");
+            }
+
+            return allTime;
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            notes.Add("all_time_fetch_failed");
+            logger.LogWarning(ex, "Trader discovery failed to fetch all-time leaderboard stats for {Wallet}.", entry.Wallet);
+            return null;
+        }
     }
 
     private async Task DelayIfConfiguredAsync(CancellationToken cancellationToken)

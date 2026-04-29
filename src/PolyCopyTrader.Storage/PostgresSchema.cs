@@ -64,6 +64,8 @@ CREATE TABLE IF NOT EXISTS trader_discovery_candidates (
     x_username text NULL,
     leaderboard_pnl numeric(28,8) NOT NULL,
     leaderboard_volume numeric(28,8) NOT NULL,
+    all_time_pnl numeric(28,8) NULL,
+    all_time_volume numeric(28,8) NULL,
     verified_badge boolean NOT NULL,
     trades_fetched integer NOT NULL,
     buy_trades integer NOT NULL,
@@ -79,6 +81,9 @@ CREATE TABLE IF NOT EXISTS trader_discovery_candidates (
     snapshot_at_utc timestamptz NOT NULL,
     updated_at_utc timestamptz NOT NULL
 );
+
+ALTER TABLE trader_discovery_candidates ADD COLUMN IF NOT EXISTS all_time_pnl numeric(28,8) NULL;
+ALTER TABLE trader_discovery_candidates ADD COLUMN IF NOT EXISTS all_time_volume numeric(28,8) NULL;
 
 CREATE UNIQUE INDEX IF NOT EXISTS ux_trader_discovery_current
 ON trader_discovery_candidates(discovery_type, category, time_period, wallet);

@@ -1,5 +1,6 @@
 using System.Text.Json;
 using Npgsql;
+using NpgsqlTypes;
 using PolyCopyTrader.Domain;
 
 namespace PolyCopyTrader.Storage;
@@ -136,13 +137,13 @@ INSERT INTO leader_positions (
         const string sql = """
 INSERT INTO trader_discovery_candidates (
     id, discovery_type, category, time_period, rank, wallet, user_name, x_username,
-    leaderboard_pnl, leaderboard_volume, verified_badge, trades_fetched, buy_trades,
+    leaderboard_pnl, leaderboard_volume, all_time_pnl, all_time_volume, verified_badge, trades_fetched, buy_trades,
     sell_trades, recent_trade_volume_usd, average_trade_usd, last_trade_utc,
     positions_fetched, open_position_value_usd, open_position_cash_pnl_usd,
     open_position_realized_pnl_usd, notes, snapshot_at_utc, updated_at_utc
 ) VALUES (
     @Id, @DiscoveryType, @Category, @TimePeriod, @Rank, @Wallet, @UserName, @XUsername,
-    @LeaderboardPnl, @LeaderboardVolume, @VerifiedBadge, @TradesFetched, @BuyTrades,
+    @LeaderboardPnl, @LeaderboardVolume, @AllTimePnl, @AllTimeVolume, @VerifiedBadge, @TradesFetched, @BuyTrades,
     @SellTrades, @RecentTradeVolumeUsd, @AverageTradeUsd, @LastTradeUtc,
     @PositionsFetched, @OpenPositionValueUsd, @OpenPositionCashPnlUsd,
     @OpenPositionRealizedPnlUsd, @Notes, @SnapshotAtUtc, @UpdatedAtUtc
@@ -154,6 +155,8 @@ ON CONFLICT (discovery_type, category, time_period, wallet) DO UPDATE SET
     x_username = excluded.x_username,
     leaderboard_pnl = excluded.leaderboard_pnl,
     leaderboard_volume = excluded.leaderboard_volume,
+    all_time_pnl = excluded.all_time_pnl,
+    all_time_volume = excluded.all_time_volume,
     verified_badge = excluded.verified_badge,
     trades_fetched = excluded.trades_fetched,
     buy_trades = excluded.buy_trades,
@@ -189,7 +192,7 @@ ON CONFLICT (discovery_type, category, time_period, wallet) DO UPDATE SET
     {
         const string sql = """
 SELECT id, discovery_type, category, time_period, rank, wallet, user_name, x_username,
-       leaderboard_pnl, leaderboard_volume, verified_badge, trades_fetched, buy_trades,
+       leaderboard_pnl, leaderboard_volume, all_time_pnl, all_time_volume, verified_badge, trades_fetched, buy_trades,
        sell_trades, recent_trade_volume_usd, average_trade_usd, last_trade_utc,
        positions_fetched, open_position_value_usd, open_position_cash_pnl_usd,
        open_position_realized_pnl_usd, notes, snapshot_at_utc
@@ -220,19 +223,21 @@ LIMIT @Limit;
                 reader.IsDBNull(7) ? null : reader.GetString(7),
                 reader.GetDecimal(8),
                 reader.GetDecimal(9),
-                reader.GetBoolean(10),
-                reader.GetInt32(11),
-                reader.GetInt32(12),
+                reader.IsDBNull(10) ? null : reader.GetDecimal(10),
+                reader.IsDBNull(11) ? null : reader.GetDecimal(11),
+                reader.GetBoolean(12),
                 reader.GetInt32(13),
-                reader.GetDecimal(14),
-                reader.GetDecimal(15),
-                reader.IsDBNull(16) ? null : DateTimeOffsetFromUtc(reader.GetDateTime(16)),
-                reader.GetInt32(17),
-                reader.GetDecimal(18),
-                reader.GetDecimal(19),
+                reader.GetInt32(14),
+                reader.GetInt32(15),
+                reader.GetDecimal(16),
+                reader.GetDecimal(17),
+                reader.IsDBNull(18) ? null : DateTimeOffsetFromUtc(reader.GetDateTime(18)),
+                reader.GetInt32(19),
                 reader.GetDecimal(20),
-                reader.GetString(21),
-                DateTimeOffsetFromUtc(reader.GetDateTime(22))));
+                reader.GetDecimal(21),
+                reader.GetDecimal(22),
+                reader.GetString(23),
+                DateTimeOffsetFromUtc(reader.GetDateTime(24))));
         }
 
         return results;
@@ -1834,6 +1839,10 @@ ORDER BY service_name;
         command.Parameters.AddWithValue("XUsername", (object?)candidate.XUsername ?? DBNull.Value);
         command.Parameters.AddWithValue("LeaderboardPnl", candidate.LeaderboardPnl);
         command.Parameters.AddWithValue("LeaderboardVolume", candidate.LeaderboardVolume);
+        command.Parameters.Add("AllTimePnl", NpgsqlDbType.Numeric).Value =
+            candidate.AllTimePnl is { } allTimePnl ? allTimePnl : DBNull.Value;
+        command.Parameters.Add("AllTimeVolume", NpgsqlDbType.Numeric).Value =
+            candidate.AllTimeVolume is { } allTimeVolume ? allTimeVolume : DBNull.Value;
         command.Parameters.AddWithValue("VerifiedBadge", candidate.VerifiedBadge);
         command.Parameters.AddWithValue("TradesFetched", candidate.TradesFetched);
         command.Parameters.AddWithValue("BuyTrades", candidate.BuyTrades);

@@ -173,6 +173,7 @@ public sealed class WatchlistScannerTests
             string orderBy = "PNL",
             int limit = 25,
             int offset = 0,
+            string? user = null,
             CancellationToken cancellationToken = default)
         {
             return Task.FromResult<IReadOnlyList<TraderLeaderboardEntry>>([]);

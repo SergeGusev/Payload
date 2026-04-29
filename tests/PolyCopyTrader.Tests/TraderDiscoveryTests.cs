@@ -18,6 +18,10 @@ public sealed class TraderDiscoveryTests
             Entry(2, "0x2222222222222222222222222222222222222222", "Middle", 100m, 10_000m),
             Entry(3, "0x3333333333333333333333333333333333333333", "Loser", -750m, 20_000m)
         ]);
+        dataApi.AllTimeLeaderboard["0x1111111111111111111111111111111111111111"] =
+            Entry(12, "0x1111111111111111111111111111111111111111", "Winner", 2_500m, 120_000m);
+        dataApi.AllTimeLeaderboard["0x3333333333333333333333333333333333333333"] =
+            Entry(501, "0x3333333333333333333333333333333333333333", "Loser", -1_500m, 80_000m);
         dataApi.Trades["0x1111111111111111111111111111111111111111"] =
         [
             Trade("0x1111111111111111111111111111111111111111", TradeSide.Buy, 0.40m, 100m),
@@ -53,10 +57,14 @@ public sealed class TraderDiscoveryTests
         Assert.Equal(67.5m, best.RecentTradeVolumeUsd);
         Assert.Equal(250m, best.OpenPositionValueUsd);
         Assert.Equal(25m, best.OpenPositionCashPnlUsd);
+        Assert.Equal(2_500m, best.AllTimePnl);
+        Assert.Equal(120_000m, best.AllTimeVolume);
 
         var worst = Assert.Single(repository.TraderDiscoveryCandidates, item => item.DiscoveryType == "WorstPnl");
         Assert.Equal("0x3333333333333333333333333333333333333333", worst.Wallet);
         Assert.Equal(-750m, worst.LeaderboardPnl);
+        Assert.Equal(-1_500m, worst.AllTimePnl);
+        Assert.Equal(80_000m, worst.AllTimeVolume);
     }
 
     [Fact]
@@ -121,6 +129,8 @@ public sealed class TraderDiscoveryTests
     {
         public List<TraderLeaderboardEntry> Leaderboard { get; } = [];
 
+        public Dictionary<string, TraderLeaderboardEntry> AllTimeLeaderboard { get; } = new(StringComparer.OrdinalIgnoreCase);
+
         public Dictionary<string, IReadOnlyList<LeaderTrade>> Trades { get; } = new(StringComparer.OrdinalIgnoreCase);
 
         public Dictionary<string, IReadOnlyList<LeaderPosition>> Positions { get; } = new(StringComparer.OrdinalIgnoreCase);
@@ -131,8 +141,16 @@ public sealed class TraderDiscoveryTests
             string orderBy = "PNL",
             int limit = 25,
             int offset = 0,
+            string? user = null,
             CancellationToken cancellationToken = default)
         {
+            if (string.Equals(timePeriod, "ALL", StringComparison.OrdinalIgnoreCase) &&
+                !string.IsNullOrWhiteSpace(user))
+            {
+                return Task.FromResult<IReadOnlyList<TraderLeaderboardEntry>>(
+                    AllTimeLeaderboard.TryGetValue(user, out var entry) ? [entry] : []);
+            }
+
             return Task.FromResult<IReadOnlyList<TraderLeaderboardEntry>>(Leaderboard.Skip(offset).Take(limit).ToArray());
         }
 

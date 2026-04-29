@@ -246,7 +246,7 @@ Scanner health is persisted to `scanner_status` with last success/error timestam
 
 ## Trader Discovery
 
-Trader discovery is operator-triggered from the dashboard. When `TraderDiscovery:Enabled=true`, the dashboard `Find traders` button asks the service to fetch Polymarket Data API leaderboard pages for the configured category/time period, select best and worst candidates by PnL, enrich them with recent trades and current positions, and store the current candidate set in `trader_discovery_candidates`.
+Trader discovery is operator-triggered from the dashboard. When `TraderDiscovery:Enabled=true`, the dashboard `Find traders` button asks the service to fetch Polymarket Data API leaderboard pages for the configured category/time period, select best and worst candidates by PnL, enrich them with all-time leaderboard PnL/volume for the same wallet, recent trades, and current positions, and store the current candidate set in `trader_discovery_candidates`.
 
 Run the service and click `Find traders` in the dashboard controls:
 
@@ -254,7 +254,7 @@ Run the service and click `Find traders` in the dashboard controls:
 .\scripts\run-local-service.ps1 -Mode Paper -NoPostgres -RequireDatabase
 ```
 
-The dashboard shows refreshed rows in the Trader Discovery tab. Use this only for candidate research; a high leaderboard PnL is not enough to add a wallet to the watchlist without paper evaluation.
+The dashboard shows refreshed rows in the Trader Discovery tab. The `PnL`/`Volume` columns are for the configured discovery period, while `All PnL`/`All Volume` are all-time sanity-check metrics fetched by wallet. Use this only for candidate research; a high leaderboard PnL is not enough to add a wallet to the watchlist without paper evaluation.
 
 ## Signal And Risk Engines
 

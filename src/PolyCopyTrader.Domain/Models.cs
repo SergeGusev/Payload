@@ -107,6 +107,8 @@ public sealed record TraderDiscoveryCandidate(
     string? XUsername,
     decimal LeaderboardPnl,
     decimal LeaderboardVolume,
+    decimal? AllTimePnl,
+    decimal? AllTimeVolume,
     bool VerifiedBadge,
     int TradesFetched,
     int BuyTrades,

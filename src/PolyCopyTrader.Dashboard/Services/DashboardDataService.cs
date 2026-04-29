@@ -289,6 +289,8 @@ public sealed class DashboardDataService(
             candidate.Wallet,
             candidate.LeaderboardPnl,
             candidate.LeaderboardVolume,
+            candidate.AllTimePnl,
+            candidate.AllTimeVolume,
             candidate.VerifiedBadge,
             candidate.TradesFetched,
             candidate.BuyTrades,

@@ -24,6 +24,8 @@ public sealed record TraderDiscoveryRow(
     string Wallet,
     decimal Pnl,
     decimal Volume,
+    decimal? AllTimePnl,
+    decimal? AllTimeVolume,
     bool Verified,
     int TradesFetched,
     int BuyTrades,

@@ -192,6 +192,8 @@
                         <DataGridTextColumn Header="Wallet" Binding="{Binding Wallet}" Width="260" />
                         <DataGridTextColumn Header="PnL" Binding="{Binding Pnl}" Width="90" />
                         <DataGridTextColumn Header="Volume" Binding="{Binding Volume}" Width="100" />
+                        <DataGridTextColumn Header="All PnL" Binding="{Binding AllTimePnl}" Width="90" />
+                        <DataGridTextColumn Header="All Volume" Binding="{Binding AllTimeVolume}" Width="100" />
                         <DataGridCheckBoxColumn Header="Verified" Binding="{Binding Verified}" Width="80" />
                         <DataGridTextColumn Header="Trades" Binding="{Binding TradesFetched}" Width="70" />
                         <DataGridTextColumn Header="Buy" Binding="{Binding BuyTrades}" Width="60" />

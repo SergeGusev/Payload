@@ -25,6 +25,7 @@ public sealed class PolymarketDataApiClient : IPolymarketDataApiClient
         string orderBy = "PNL",
         int limit = 25,
         int offset = 0,
+        string? user = null,
         CancellationToken cancellationToken = default)
     {
         using var json = await client.GetJsonDocumentAsync(
@@ -37,7 +38,8 @@ public sealed class PolymarketDataApiClient : IPolymarketDataApiClient
                     ["timePeriod"] = timePeriod,
                     ["orderBy"] = orderBy,
                     ["limit"] = limit.ToString(),
-                    ["offset"] = offset.ToString()
+                    ["offset"] = offset.ToString(),
+                    ["user"] = user
                 }),
             "GetTraderLeaderboard",
             cancellationToken);

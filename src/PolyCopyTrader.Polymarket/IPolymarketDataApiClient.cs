@@ -10,6 +10,7 @@ public interface IPolymarketDataApiClient
         string orderBy = "PNL",
         int limit = 25,
         int offset = 0,
+        string? user = null,
         CancellationToken cancellationToken = default);
 
     Task<IReadOnlyList<LeaderTrade>> GetUserTradesAsync(
