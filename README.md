@@ -2,7 +2,7 @@
 
 PolyCopyTrader is a Windows/.NET C# application for monitoring Polymarket traders and running a cautious copy-signal strategy.
 
-This repository is currently at Task 16: gated maker-only live trading. It contains project structure, typed configuration, PostgreSQL schema initialization, a basic repository, read-only Polymarket Data/CLOB/Geo clients, a Worker Service scanner/signal/paper/live loop, local dashboard controls, public market WebSocket monitoring, analytics reports, CSV export, diagnostics, a monitoring dashboard, L2 HMAC header infrastructure, dry-run CLOB V2 signing, and manually gated tiny maker-only live order placement.
+This repository is currently at Task 17: Windows VPS deployment and security. It contains project structure, typed configuration, PostgreSQL schema initialization, a basic repository, read-only Polymarket Data/CLOB/Geo clients, a Worker Service scanner/signal/paper/live loop, local dashboard controls, public market WebSocket monitoring, analytics reports, CSV export, diagnostics, a monitoring dashboard, L2 HMAC header infrastructure, dry-run CLOB V2 signing, manually gated tiny maker-only live order placement, and Windows VPS deployment scripts.
 
 ## Safety
 
@@ -56,7 +56,7 @@ Use `.\scripts\qa-check.ps1 -SkipRuntimeSmoke` when another service instance is 
 dotnet run --project src/PolyCopyTrader.Service/PolyCopyTrader.Service.csproj
 ```
 
-The service runs the scanner, signal engine, paper engine, heartbeat writer, daily analytics report generator, market WebSocket client, and localhost-only IPC server. It writes rolling logs under its output `logs` directory.
+The service runs startup safety checks, the scanner, signal engine, paper/live maintenance engines, heartbeat writer, daily analytics report generator, market WebSocket client, and localhost-only IPC server. It writes rolling logs under its output `logs` directory.
 
 ## Local IPC
 
@@ -93,6 +93,18 @@ sc.exe start PolyCopyTrader.Service
 ```
 
 Use `sc.exe stop PolyCopyTrader.Service` and `sc.exe delete PolyCopyTrader.Service` to stop/remove it. Keep `POLYCOPYTRADER_POSTGRES_CONNECTION` configured as a machine/user environment variable for the service account.
+
+Deployment scripts are available under `deploy/`:
+
+```powershell
+.\deploy\install-service.ps1
+.\deploy\start-service.ps1
+.\deploy\stop-service.ps1
+.\deploy\backup-db.ps1
+.\deploy\uninstall-service.ps1
+```
+
+See `deploy/README.md` for VPS security, backup, logging, RDP/firewall, secret handling, and geoblock requirements.
 
 ## Print Config Summary
 
@@ -182,6 +194,8 @@ Live trading is disabled by default. To place any live order, all gates must pas
 
 Initial live orders are BUY-only, GTD-only, post-only, and capped by `LiveTrading:MaxOrderNotionalUsd` plus live bankroll percentages. Before placement the service refetches the order book, reruns signal/risk evaluation, verifies the maker price does not cross the best ask, blocks crypto/sports text matches, signs the CLOB V2 payload locally, and sends `POST /order` with L2 headers. Live orders and live events are stored in PostgreSQL; the maintenance loop polls order status and cancels expired/stale orders. The kill switch pauses new live orders and requests cancel-all.
 
+On startup the service checks Polymarket geoblock status from the actual host and writes a `StartupGeoblockCheck` live event. If blocked or if the check fails, live trading is paused.
+
 ## Analytics And Reporting
 
 The service automatically generates daily reports into `daily_reports` when `Analytics:DailyReportGenerationEnabled` is true. Reports are recalculated every `Analytics:DailyReportRefreshMinutes` for the current UTC day and the previous UTC day.
@@ -225,6 +239,7 @@ Interpret paper results conservatively. Paper fills are approximate, long positi
 - WebSocket disconnected/stale: the market WebSocket reconnects with backoff and stale snapshots are ignored after `MarketDataWebSocket:StaleAfterSeconds`.
 - IPC unavailable: check whether `http://127.0.0.1:5118/` is already in use, then run `GET /health` or the QA script runtime smoke.
 - Database temporarily unavailable: loop-level error recording is best-effort and will not crash the worker if error persistence also fails.
+- VPS backup failing: confirm PostgreSQL client tools are installed and `POLYCOPYTRADER_POSTGRES_CONNECTION` is available to the scheduled task or service account.
 
 Do not enable live trading unless `dotnet build`, `dotnet test`, `--print-config`, runtime IPC smoke, geoblock check from the actual host, and cancel-all testing pass.
 
@@ -236,4 +251,4 @@ Do not enable live trading unless `dotnet build`, `dotnet test`, `--print-config
 
 ## Next Recommended Task
 
-Implement `Codex/17_TASK_DEPLOYMENT_WINDOWS_VPS_SECURITY.md`.
+Implement `Codex/18_TASK_OPERATIONS_RUNBOOK.md`.

@@ -11,6 +11,7 @@ using PolyCopyTrader.Service.PaperTrading;
 using PolyCopyTrader.Service.Polymarket;
 using PolyCopyTrader.Service.Scanning;
 using PolyCopyTrader.Service.Signals;
+using PolyCopyTrader.Service.Startup;
 using PolyCopyTrader.Storage;
 using PolyCopyTrader.Strategy;
 using Serilog;
@@ -93,6 +94,7 @@ builder.Services.AddSingleton<IPaperTradingMarketDataUpdater, PaperTradingMarket
 builder.Services.AddSingleton<IPaperTradingProcessor, PaperTradingProcessor>();
 builder.Services.AddSingleton<ILiveTradingProcessor, LiveTradingProcessor>();
 builder.Services.AddSingleton<ServiceControlState>();
+builder.Services.AddHostedService<StartupSafetyCheckService>();
 builder.Services.AddHostedService<BotWorker>();
 builder.Services.AddHostedService<LocalControlServer>();
 builder.Services.AddHostedService<MarketDataWebSocketService>();
