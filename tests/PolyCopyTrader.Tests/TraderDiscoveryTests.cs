@@ -12,11 +12,15 @@ public sealed class TraderDiscoveryTests
     public async Task Refresh_StoresBestAndWorstCandidatesWithTradeAndPositionMetrics()
     {
         var dataApi = new FakeDataApi();
-        dataApi.Leaderboard.AddRange(
+        dataApi.PnlLeaderboard.AddRange(
         [
             Entry(1, "0x1111111111111111111111111111111111111111", "Winner", 1_000m, 50_000m),
-            Entry(2, "0x2222222222222222222222222222222222222222", "Middle", 100m, 10_000m),
-            Entry(3, "0x3333333333333333333333333333333333333333", "Loser", -750m, 20_000m)
+            Entry(2, "0x2222222222222222222222222222222222222222", "Middle", 100m, 10_000m)
+        ]);
+        dataApi.VolumeLeaderboard.AddRange(
+        [
+            Entry(17, "0x3333333333333333333333333333333333333333", "Loser", -750m, 20_000m),
+            Entry(18, "0x4444444444444444444444444444444444444444", "VolumeWinner", 25m, 100_000m)
         ]);
         dataApi.AllTimeLeaderboard["0x1111111111111111111111111111111111111111"] =
             Entry(12, "0x1111111111111111111111111111111111111111", "Winner", 2_500m, 120_000m);
@@ -65,6 +69,10 @@ public sealed class TraderDiscoveryTests
         Assert.Equal(-750m, worst.LeaderboardPnl);
         Assert.Equal(-1_500m, worst.AllTimePnl);
         Assert.Equal(80_000m, worst.AllTimeVolume);
+        Assert.Contains("loss_selected_from_volume_leaderboard", worst.Notes, StringComparison.Ordinal);
+        Assert.Equal(4, repository.TraderLeaderboardSnapshots.Count);
+        Assert.Contains(repository.TraderLeaderboardSnapshots, item => item.OrderBy == "PNL");
+        Assert.Contains(repository.TraderLeaderboardSnapshots, item => item.OrderBy == "VOL");
     }
 
     [Fact]
@@ -127,7 +135,9 @@ public sealed class TraderDiscoveryTests
 
     private sealed class FakeDataApi : IPolymarketDataApiClient
     {
-        public List<TraderLeaderboardEntry> Leaderboard { get; } = [];
+        public List<TraderLeaderboardEntry> PnlLeaderboard { get; } = [];
+
+        public List<TraderLeaderboardEntry> VolumeLeaderboard { get; } = [];
 
         public Dictionary<string, TraderLeaderboardEntry> AllTimeLeaderboard { get; } = new(StringComparer.OrdinalIgnoreCase);
 
@@ -151,7 +161,10 @@ public sealed class TraderDiscoveryTests
                     AllTimeLeaderboard.TryGetValue(user, out var entry) ? [entry] : []);
             }
 
-            return Task.FromResult<IReadOnlyList<TraderLeaderboardEntry>>(Leaderboard.Skip(offset).Take(limit).ToArray());
+            var leaderboard = string.Equals(orderBy, "VOL", StringComparison.OrdinalIgnoreCase)
+                ? VolumeLeaderboard
+                : PnlLeaderboard;
+            return Task.FromResult<IReadOnlyList<TraderLeaderboardEntry>>(leaderboard.Skip(offset).Take(limit).ToArray());
         }
 
         public Task<IReadOnlyList<LeaderTrade>> GetUserTradesAsync(

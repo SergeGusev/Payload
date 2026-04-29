@@ -125,6 +125,47 @@ INSERT INTO leader_positions (
         await command.ExecuteNonQueryAsync(cancellationToken);
     }
 
+    public async Task AddTraderLeaderboardSnapshotsAsync(
+        IReadOnlyList<TraderLeaderboardSnapshot> snapshots,
+        CancellationToken cancellationToken = default)
+    {
+        if (snapshots.Count == 0)
+        {
+            return;
+        }
+
+        const string sql = """
+INSERT INTO trader_leaderboard_snapshots (
+    id, discovery_run_id, category, time_period, order_by, page_offset, rank, wallet,
+    user_name, x_username, leaderboard_pnl, leaderboard_volume, verified_badge, snapshot_at_utc
+) VALUES (
+    @Id, @DiscoveryRunId, @Category, @TimePeriod, @OrderBy, @PageOffset, @Rank, @Wallet,
+    @UserName, @XUsername, @LeaderboardPnl, @LeaderboardVolume, @VerifiedBadge, @SnapshotAtUtc
+)
+ON CONFLICT (discovery_run_id, category, time_period, order_by, wallet) DO UPDATE SET
+    page_offset = excluded.page_offset,
+    rank = excluded.rank,
+    user_name = excluded.user_name,
+    x_username = excluded.x_username,
+    leaderboard_pnl = excluded.leaderboard_pnl,
+    leaderboard_volume = excluded.leaderboard_volume,
+    verified_badge = excluded.verified_badge,
+    snapshot_at_utc = excluded.snapshot_at_utc;
+""";
+
+        await using var connection = await OpenConnectionAsync(cancellationToken);
+        await using var transaction = await connection.BeginTransactionAsync(cancellationToken);
+        foreach (var snapshot in snapshots)
+        {
+            await using var command = CreateCommand(connection, sql);
+            command.Transaction = transaction;
+            AddTraderLeaderboardSnapshotParameters(command, snapshot);
+            await command.ExecuteNonQueryAsync(cancellationToken);
+        }
+
+        await transaction.CommitAsync(cancellationToken);
+    }
+
     public async Task UpsertTraderDiscoveryCandidatesAsync(
         IReadOnlyList<TraderDiscoveryCandidate> candidates,
         CancellationToken cancellationToken = default)
@@ -1857,6 +1898,25 @@ ORDER BY service_name;
         command.Parameters.AddWithValue("Notes", candidate.Notes);
         command.Parameters.AddWithValue("SnapshotAtUtc", UtcDateTime(candidate.SnapshotAtUtc));
         command.Parameters.AddWithValue("UpdatedAtUtc", DateTime.UtcNow);
+    }
+
+    private static void AddTraderLeaderboardSnapshotParameters(NpgsqlCommand command, TraderLeaderboardSnapshot snapshot)
+    {
+        command.Parameters.AddWithValue("Id", snapshot.Id);
+        command.Parameters.AddWithValue("DiscoveryRunId", snapshot.DiscoveryRunId);
+        command.Parameters.AddWithValue("Category", snapshot.Category);
+        command.Parameters.AddWithValue("TimePeriod", snapshot.TimePeriod);
+        command.Parameters.AddWithValue("OrderBy", snapshot.OrderBy);
+        command.Parameters.AddWithValue("PageOffset", snapshot.PageOffset);
+        command.Parameters.Add("Rank", NpgsqlDbType.Integer).Value =
+            snapshot.Rank is { } rank ? rank : DBNull.Value;
+        command.Parameters.AddWithValue("Wallet", snapshot.Wallet);
+        command.Parameters.AddWithValue("UserName", snapshot.UserName);
+        command.Parameters.AddWithValue("XUsername", (object?)snapshot.XUsername ?? DBNull.Value);
+        command.Parameters.AddWithValue("LeaderboardPnl", snapshot.LeaderboardPnl);
+        command.Parameters.AddWithValue("LeaderboardVolume", snapshot.LeaderboardVolume);
+        command.Parameters.AddWithValue("VerifiedBadge", snapshot.VerifiedBadge);
+        command.Parameters.AddWithValue("SnapshotAtUtc", UtcDateTime(snapshot.SnapshotAtUtc));
     }
 
     private static async Task<IReadOnlyList<LiveOrder>> ReadLiveOrdersAsync(

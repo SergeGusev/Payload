@@ -6,6 +6,7 @@ public static class PostgresSchema
     [
         "traders",
         "trader_rules",
+        "trader_leaderboard_snapshots",
         "trader_discovery_candidates",
         "leader_trades",
         "leader_positions",
@@ -52,6 +53,29 @@ CREATE TABLE IF NOT EXISTS trader_rules (
     min_leader_trade_usd numeric(18,8) NOT NULL,
     created_at_utc timestamptz NOT NULL
 );
+
+CREATE TABLE IF NOT EXISTS trader_leaderboard_snapshots (
+    id uuid PRIMARY KEY,
+    discovery_run_id uuid NOT NULL,
+    category text NOT NULL,
+    time_period text NOT NULL,
+    order_by text NOT NULL,
+    page_offset integer NOT NULL,
+    rank integer NULL,
+    wallet text NOT NULL,
+    user_name text NOT NULL,
+    x_username text NULL,
+    leaderboard_pnl numeric(28,8) NOT NULL,
+    leaderboard_volume numeric(28,8) NOT NULL,
+    verified_badge boolean NOT NULL,
+    snapshot_at_utc timestamptz NOT NULL
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS ux_trader_leaderboard_snapshots_run_order_wallet
+ON trader_leaderboard_snapshots(discovery_run_id, category, time_period, order_by, wallet);
+
+CREATE INDEX IF NOT EXISTS ix_trader_leaderboard_snapshots_run
+ON trader_leaderboard_snapshots(discovery_run_id, order_by, leaderboard_pnl DESC);
 
 CREATE TABLE IF NOT EXISTS trader_discovery_candidates (
     id uuid PRIMARY KEY,

@@ -136,11 +136,11 @@ service through localhost IPC.
 - `Category`: leaderboard category such as `OVERALL`, `POLITICS`, or `WEATHER`.
 - `TimePeriod`: `DAY`, `WEEK`, `MONTH`, or `ALL`.
 - `RefreshIntervalMinutes`: reserved for future scheduled refresh; not used by the current manual flow.
-- `LeaderboardPages`: number of 50-row pages to fetch, max `21`.
-- `CandidatesPerSide`: best-PnL and worst-PnL candidates to enrich.
+- `LeaderboardPages`: number of 50-row pages to fetch for each leaderboard mode, max `21`; the manual flow uses both `orderBy=PNL` and `orderBy=VOL`.
+- `CandidatesPerSide`: best-PnL candidates from the PnL window and worst negative-PnL candidates from the volume window to enrich.
 - `TradesPerCandidate`: recent trades to fetch for each candidate.
 - `PositionsPerCandidate`: current positions to fetch for each candidate.
-- `RequestDelayMilliseconds`: small delay between Data API requests.
+- `RequestDelayMilliseconds`: delay between Data API requests; defaults to `500` for conservative manual discovery.
 
 ## Analytics
 

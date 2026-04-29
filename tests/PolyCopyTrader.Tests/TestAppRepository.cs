@@ -11,6 +11,8 @@ internal sealed class TestAppRepository : IAppRepository
 
     public List<LeaderPosition> LeaderPositions { get; } = [];
 
+    public List<TraderLeaderboardSnapshot> TraderLeaderboardSnapshots { get; } = [];
+
     public List<TraderDiscoveryCandidate> TraderDiscoveryCandidates { get; } = [];
 
     public List<Signal> Signals { get; } = [];
@@ -68,6 +70,14 @@ internal sealed class TestAppRepository : IAppRepository
     public Task AddLeaderPositionAsync(LeaderPosition position, CancellationToken cancellationToken = default)
     {
         LeaderPositions.Add(position);
+        return Task.CompletedTask;
+    }
+
+    public Task AddTraderLeaderboardSnapshotsAsync(
+        IReadOnlyList<TraderLeaderboardSnapshot> snapshots,
+        CancellationToken cancellationToken = default)
+    {
+        TraderLeaderboardSnapshots.AddRange(snapshots);
         return Task.CompletedTask;
     }
 

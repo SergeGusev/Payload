@@ -229,6 +229,8 @@ public sealed class WatchlistScannerTests
 
         public List<LeaderPosition> LeaderPositions { get; } = [];
 
+        public List<TraderLeaderboardSnapshot> TraderLeaderboardSnapshots { get; } = [];
+
         public List<ScannerStatusSnapshot> ScannerStatuses { get; } = [];
 
         public List<ApiError> ApiErrors { get; } = [];
@@ -257,6 +259,14 @@ public sealed class WatchlistScannerTests
         public Task AddLeaderPositionAsync(LeaderPosition position, CancellationToken cancellationToken = default)
         {
             LeaderPositions.Add(position);
+            return Task.CompletedTask;
+        }
+
+        public Task AddTraderLeaderboardSnapshotsAsync(
+            IReadOnlyList<TraderLeaderboardSnapshot> snapshots,
+            CancellationToken cancellationToken = default)
+        {
+            TraderLeaderboardSnapshots.AddRange(snapshots);
             return Task.CompletedTask;
         }
 

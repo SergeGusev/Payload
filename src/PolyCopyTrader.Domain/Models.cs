@@ -96,6 +96,22 @@ public sealed record TraderLeaderboardEntry(
     string? XUsername,
     bool VerifiedBadge);
 
+public sealed record TraderLeaderboardSnapshot(
+    Guid Id,
+    Guid DiscoveryRunId,
+    string Category,
+    string TimePeriod,
+    string OrderBy,
+    int PageOffset,
+    int? Rank,
+    string Wallet,
+    string UserName,
+    string? XUsername,
+    decimal LeaderboardPnl,
+    decimal LeaderboardVolume,
+    bool VerifiedBadge,
+    DateTimeOffset SnapshotAtUtc);
+
 public sealed record TraderDiscoveryCandidate(
     Guid Id,
     string DiscoveryType,

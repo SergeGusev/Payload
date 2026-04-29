@@ -13,22 +13,29 @@ public sealed class TraderDiscoveryProcessor(
 {
     private const string BestPnl = "BestPnl";
     private const string WorstPnl = "WorstPnl";
+    private const string OrderByPnl = "PNL";
+    private const string OrderByVolume = "VOL";
 
     public async Task<IReadOnlyList<TraderDiscoveryCandidate>> RefreshAsync(CancellationToken cancellationToken = default)
     {
-        var leaderboard = await FetchLeaderboardWindowAsync(cancellationToken);
-        if (leaderboard.Count == 0)
+        var discoveryRunId = Guid.NewGuid();
+        var snapshotAt = DateTimeOffset.UtcNow;
+        var pnlLeaderboard = await FetchLeaderboardWindowAsync(OrderByPnl, discoveryRunId, snapshotAt, cancellationToken);
+        var volumeLeaderboard = await FetchLeaderboardWindowAsync(OrderByVolume, discoveryRunId, snapshotAt, cancellationToken);
+        if (pnlLeaderboard.Count == 0 && volumeLeaderboard.Count == 0)
         {
             logger.LogInformation("Trader discovery found no leaderboard entries.");
             return [];
         }
 
-        var best = leaderboard
+        var best = pnlLeaderboard
+            .Where(entry => entry.Pnl > 0m)
             .OrderByDescending(entry => entry.Pnl)
             .ThenByDescending(entry => entry.Volume)
             .Take(options.CandidatesPerSide)
             .ToArray();
-        var worst = leaderboard
+        var worst = volumeLeaderboard
+            .Where(entry => entry.Pnl < 0m)
             .OrderBy(entry => entry.Pnl)
             .ThenByDescending(entry => entry.Volume)
             .Take(options.CandidatesPerSide)
@@ -47,16 +54,22 @@ public sealed class TraderDiscoveryProcessor(
 
         await repository.UpsertTraderDiscoveryCandidatesAsync(candidates, cancellationToken);
         logger.LogInformation(
-            "Trader discovery refreshed. Category={Category} TimePeriod={TimePeriod} Entries={Entries} Candidates={Candidates}",
+            "Trader discovery refreshed. Category={Category} TimePeriod={TimePeriod} RunId={RunId} PnlEntries={PnlEntries} VolumeEntries={VolumeEntries} Candidates={Candidates}",
             options.Category,
             options.TimePeriod,
-            leaderboard.Count,
+            discoveryRunId,
+            pnlLeaderboard.Count,
+            volumeLeaderboard.Count,
             candidates.Count);
 
         return candidates;
     }
 
-    private async Task<IReadOnlyList<TraderLeaderboardEntry>> FetchLeaderboardWindowAsync(CancellationToken cancellationToken)
+    private async Task<IReadOnlyList<TraderLeaderboardEntry>> FetchLeaderboardWindowAsync(
+        string orderBy,
+        Guid discoveryRunId,
+        DateTimeOffset snapshotAt,
+        CancellationToken cancellationToken)
     {
         var byWallet = new Dictionary<string, TraderLeaderboardEntry>(StringComparer.OrdinalIgnoreCase);
         for (var page = 0; page < options.LeaderboardPages; page++)
@@ -71,7 +84,7 @@ public sealed class TraderDiscoveryProcessor(
             var entries = await dataApiClient.GetTraderLeaderboardAsync(
                 options.Category,
                 options.TimePeriod,
-                "PNL",
+                orderBy,
                 50,
                 offset,
                 cancellationToken: cancellationToken);
@@ -80,6 +93,13 @@ public sealed class TraderDiscoveryProcessor(
             {
                 byWallet[entry.Wallet] = entry;
             }
+
+            await repository.AddTraderLeaderboardSnapshotsAsync(
+                entries
+                    .Where(IsUsableEntry)
+                    .Select(entry => ToSnapshot(discoveryRunId, snapshotAt, orderBy, offset, entry))
+                    .ToArray(),
+                cancellationToken);
 
             if (entries.Count < 50)
             {
@@ -148,6 +168,11 @@ public sealed class TraderDiscoveryProcessor(
             notes.Add("no_open_positions");
         }
 
+        if (string.Equals(discoveryType, WorstPnl, StringComparison.Ordinal))
+        {
+            notes.Add("loss_selected_from_volume_leaderboard");
+        }
+
         var recentTradeVolume = trades.Sum(trade => trade.CashValueUsd);
         var buyTrades = trades.Count(trade => trade.Side == TradeSide.Buy);
         var sellTrades = trades.Count(trade => trade.Side == TradeSide.Sell);
@@ -199,7 +224,7 @@ public sealed class TraderDiscoveryProcessor(
             var entries = await dataApiClient.GetTraderLeaderboardAsync(
                 options.Category,
                 "ALL",
-                "PNL",
+                OrderByPnl,
                 1,
                 0,
                 entry.Wallet,
@@ -228,6 +253,30 @@ public sealed class TraderDiscoveryProcessor(
         {
             await Task.Delay(TimeSpan.FromMilliseconds(options.RequestDelayMilliseconds), cancellationToken);
         }
+    }
+
+    private TraderLeaderboardSnapshot ToSnapshot(
+        Guid discoveryRunId,
+        DateTimeOffset snapshotAt,
+        string orderBy,
+        int pageOffset,
+        TraderLeaderboardEntry entry)
+    {
+        return new TraderLeaderboardSnapshot(
+            Guid.NewGuid(),
+            discoveryRunId,
+            options.Category.ToUpperInvariant(),
+            options.TimePeriod.ToUpperInvariant(),
+            orderBy.ToUpperInvariant(),
+            pageOffset,
+            entry.Rank,
+            entry.Wallet,
+            entry.UserName,
+            entry.XUsername,
+            entry.Pnl,
+            entry.Volume,
+            entry.VerifiedBadge,
+            snapshotAt);
     }
 
     private static bool IsUsableEntry(TraderLeaderboardEntry entry)

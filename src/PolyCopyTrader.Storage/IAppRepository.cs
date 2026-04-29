@@ -12,6 +12,10 @@ public interface IAppRepository
 
     Task AddLeaderPositionAsync(LeaderPosition position, CancellationToken cancellationToken = default);
 
+    Task AddTraderLeaderboardSnapshotsAsync(
+        IReadOnlyList<TraderLeaderboardSnapshot> snapshots,
+        CancellationToken cancellationToken = default);
+
     Task UpsertTraderDiscoveryCandidatesAsync(
         IReadOnlyList<TraderDiscoveryCandidate> candidates,
         CancellationToken cancellationToken = default);

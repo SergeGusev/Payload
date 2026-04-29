@@ -46,7 +46,7 @@ Latest verified code state on 2026-04-29:
 After this note was originally created, trader discovery was added:
 
 - config section: `TraderDiscovery`;
-- table: `trader_discovery_candidates`;
+- tables: `trader_discovery_candidates` and later `trader_leaderboard_snapshots`;
 - service processor and manual IPC command: `src/PolyCopyTrader.Service/TraderDiscovery`;
 - dashboard tab: Trader Discovery;
 - tests increased from 91 to 93.
@@ -197,6 +197,7 @@ The schema initializer created these tables at the time of verification:
 - `signal_rejections`
 - `signals`
 - `trader_rules`
+- `trader_leaderboard_snapshots`
 - `trader_discovery_candidates`
 - `traders`
 
@@ -312,9 +313,12 @@ When the operator clicks the dashboard `Find traders` button and
 `TraderDiscovery:Enabled=true`, the service:
 
 - fetches `LeaderboardPages` pages from `/v1/leaderboard`;
-- uses `orderBy=PNL`;
-- selects the best `CandidatesPerSide` by PnL;
-- selects the worst `CandidatesPerSide` by PnL within the fetched API window;
+- uses `orderBy=PNL` to collect the successful leaderboard window;
+- uses `orderBy=VOL` to collect high-volume traders where real negative PnL can
+  be found;
+- stores raw fetched leaderboard rows in `trader_leaderboard_snapshots`;
+- selects the best `CandidatesPerSide` from the PnL window;
+- selects the worst negative-PnL `CandidatesPerSide` from the volume window;
 - fetches all-time leaderboard PnL/volume for each selected wallet using
   `/v1/leaderboard?timePeriod=ALL&user=<wallet>`;
 - fetches recent trades for each selected wallet;

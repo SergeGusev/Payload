@@ -288,7 +288,7 @@ public sealed class TraderDiscoveryOptions
 
     public int PositionsPerCandidate { get; init; } = 50;
 
-    public int RequestDelayMilliseconds { get; init; } = 100;
+    public int RequestDelayMilliseconds { get; init; } = 500;
 }
 
 public sealed class IpcOptions

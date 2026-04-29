@@ -24,6 +24,13 @@ public sealed class NoOpAppRepository : IAppRepository
         return Task.CompletedTask;
     }
 
+    public Task AddTraderLeaderboardSnapshotsAsync(
+        IReadOnlyList<TraderLeaderboardSnapshot> snapshots,
+        CancellationToken cancellationToken = default)
+    {
+        return Task.CompletedTask;
+    }
+
     public Task UpsertTraderDiscoveryCandidatesAsync(
         IReadOnlyList<TraderDiscoveryCandidate> candidates,
         CancellationToken cancellationToken = default)
