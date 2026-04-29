@@ -102,6 +102,65 @@ public sealed class ConfigurationTests
     }
 
     [Fact]
+    public void CertificatePins_RequireValidSha256SpkiFormat()
+    {
+        var configuration = new AppConfiguration
+        {
+            Polymarket = new PolymarketOptions
+            {
+                CertificatePins = new Dictionary<string, List<string>>(StringComparer.OrdinalIgnoreCase)
+                {
+                    ["data-api.polymarket.com"] = ["not-a-pin"]
+                }
+            }
+        };
+
+        var errors = AppOptionsValidator.Validate(configuration);
+
+        Assert.Contains(errors, error => error.Contains("CertificatePins", StringComparison.Ordinal));
+        Assert.Contains(errors, error => error.Contains("sha256/<base64-spki-hash>", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void CertificatePins_MustMatchConfiguredEndpointHosts()
+    {
+        var configuration = new AppConfiguration
+        {
+            Polymarket = new PolymarketOptions
+            {
+                CertificatePins = new Dictionary<string, List<string>>(StringComparer.OrdinalIgnoreCase)
+                {
+                    ["example.com"] = [ValidCertificatePin()]
+                }
+            }
+        };
+
+        var errors = AppOptionsValidator.Validate(configuration);
+
+        Assert.Contains(errors, error => error.Contains("example.com", StringComparison.Ordinal));
+        Assert.Contains(errors, error => error.Contains("configured Polymarket endpoint host", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void CertificatePins_AcceptConfiguredEndpointHost()
+    {
+        var configuration = new AppConfiguration
+        {
+            Polymarket = new PolymarketOptions
+            {
+                CertificatePins = new Dictionary<string, List<string>>(StringComparer.OrdinalIgnoreCase)
+                {
+                    ["data-api.polymarket.com"] = [ValidCertificatePin()]
+                }
+            }
+        };
+
+        var errors = AppOptionsValidator.Validate(configuration);
+
+        Assert.Empty(errors);
+    }
+
+    [Fact]
     public void SanitizedSummary_DoesNotExposeSecrets()
     {
         var configuration = new AppConfiguration();
@@ -111,5 +170,10 @@ public sealed class ConfigurationTests
         Assert.Contains("Mode:", summary);
         Assert.DoesNotContain("private", summary, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain("secret", summary, StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static string ValidCertificatePin()
+    {
+        return "sha256/" + Convert.ToBase64String(new byte[32]);
     }
 }

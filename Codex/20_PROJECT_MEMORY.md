@@ -29,6 +29,7 @@ The repository also has local debugging and trader discovery support after task 
 - dashboard environment-variable config support;
 - local Windows PostgreSQL database `polycopytrader` created and initialized.
 - trader discovery dashboard button and tab for best/worst PnL candidates.
+- Polymarket certificate pinning for HTTP clients and the market WebSocket.
 
 Latest verified code state on 2026-04-29:
 
@@ -48,6 +49,17 @@ After this note was originally created, trader discovery was added:
 - service processor and manual IPC command: `src/PolyCopyTrader.Service/TraderDiscovery`;
 - dashboard tab: Trader Discovery;
 - tests increased from 91 to 93.
+
+Later, Polymarket certificate pinning was added:
+
+- config field: `Polymarket:CertificatePins`;
+- pin format: `sha256/<base64 SPKI SHA-256>`;
+- supported for development and production;
+- used by Data API, CLOB API, geoblock, trading HTTP clients, and market WebSocket;
+- hosts must match configured Polymarket endpoint hosts;
+- host without configured pins still uses standard .NET TLS validation;
+- host with configured pins accepts only a matching, currently valid certificate key.
+- tests increased from 93 to 100.
 
 ## Important Safety Position
 
@@ -181,6 +193,7 @@ Projects:
   - public Data API client;
   - public CLOB API client;
   - geoblock client;
+  - Polymarket certificate pinning helper;
   - WebSocket market-data parser;
   - auth secret-provider abstraction;
   - L2 HMAC signing and header construction;
@@ -239,6 +252,12 @@ Public Polymarket support includes:
 - CLOB midpoint/spread;
 - Polymarket geoblock endpoint;
 - public market WebSocket parser/client.
+
+Outbound Polymarket connections support optional endpoint-host certificate pinning
+through `Polymarket:CertificatePins`. Pins are SPKI SHA-256 values in
+`sha256/<base64>` format. This is not an accept-any TLS bypass: if a host has pins,
+the presented certificate key must match one of them and the certificate validity
+window must be current.
 
 The scanner stores leader trades and positions. It uses `takerOnly=false` where needed
 so maker fills are not silently excluded. Invalid placeholder wallets are skipped and
@@ -507,6 +526,7 @@ Implemented history:
 - `abff28c` Support existing local PostgreSQL debugging
 - next commit after this memory update adds trader discovery for leaderboard best/worst
   candidates.
+- later commit adds Polymarket certificate pinning for HTTP and WebSocket endpoints.
 
 ## Known Limitations
 

@@ -80,10 +80,14 @@ builder.Services.AddSingleton<OrderAmountCalculator>();
 builder.Services.AddSingleton<ClobV2OrderBuilder>();
 builder.Services.AddSingleton<ClobV2OrderSigner>();
 builder.Services.AddSingleton<ClobV2OrderPayloadSerializer>();
-builder.Services.AddHttpClient<IPolymarketDataApiClient, PolymarketDataApiClient>();
-builder.Services.AddHttpClient<IPolymarketClobPublicClient, PolymarketClobPublicClient>();
-builder.Services.AddHttpClient<IPolymarketGeoClient, PolymarketGeoClient>();
-builder.Services.AddHttpClient<IPolymarketTradingClient, PolymarketTradingClient>();
+builder.Services.AddHttpClient<IPolymarketDataApiClient, PolymarketDataApiClient>()
+    .ConfigurePrimaryHttpMessageHandler(() => CreatePolymarketHttpHandler(appConfiguration.Polymarket));
+builder.Services.AddHttpClient<IPolymarketClobPublicClient, PolymarketClobPublicClient>()
+    .ConfigurePrimaryHttpMessageHandler(() => CreatePolymarketHttpHandler(appConfiguration.Polymarket));
+builder.Services.AddHttpClient<IPolymarketGeoClient, PolymarketGeoClient>()
+    .ConfigurePrimaryHttpMessageHandler(() => CreatePolymarketHttpHandler(appConfiguration.Polymarket));
+builder.Services.AddHttpClient<IPolymarketTradingClient, PolymarketTradingClient>()
+    .ConfigurePrimaryHttpMessageHandler(() => CreatePolymarketHttpHandler(appConfiguration.Polymarket));
 builder.Services.AddSingleton<ILeaderTradeCandidateQueue, InMemoryLeaderTradeCandidateQueue>();
 builder.Services.AddSingleton<IWatchlistScanner, WatchlistScanner>();
 builder.Services.AddSingleton<IRiskEngine, DefaultRiskEngine>();
@@ -126,4 +130,34 @@ catch (Exception ex)
 finally
 {
     await Log.CloseAndFlushAsync();
+}
+
+static HttpMessageHandler CreatePolymarketHttpHandler(PolymarketOptions options)
+{
+    var handler = new HttpClientHandler();
+    if (!PolymarketCertificatePinning.HasPins(options))
+    {
+        return handler;
+    }
+
+    handler.ServerCertificateCustomValidationCallback = (request, certificate, _, sslPolicyErrors) =>
+    {
+        var result = PolymarketCertificatePinning.ValidateServerCertificate(
+            request.RequestUri,
+            certificate,
+            sslPolicyErrors,
+            options);
+
+        if (!result.Accepted)
+        {
+            Log.Warning(
+                "Polymarket TLS certificate rejected for {Host}: {Message}",
+                request.RequestUri?.Host ?? "<unknown>",
+                result.Message);
+        }
+
+        return result.Accepted;
+    };
+
+    return handler;
 }

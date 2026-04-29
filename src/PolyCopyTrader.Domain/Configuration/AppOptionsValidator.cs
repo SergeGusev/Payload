@@ -2,6 +2,8 @@ namespace PolyCopyTrader.Domain.Configuration;
 
 public static class AppOptionsValidator
 {
+    private const string Sha256SubjectPublicKeyInfoPinPrefix = "sha256/";
+
     public static void ValidateAndThrow(AppConfiguration configuration)
     {
         var errors = Validate(configuration);
@@ -17,7 +19,7 @@ public static class AppOptionsValidator
 
         var errors = new List<string>();
         ValidateBot(configuration.Bot, errors);
-        ValidatePolymarket(configuration.Polymarket, errors);
+        ValidatePolymarket(configuration.Polymarket, configuration.MarketDataWebSocket, errors);
         ValidatePolymarketAuth(configuration.PolymarketAuth, errors);
         ValidateMarketDataWebSocket(configuration.MarketDataWebSocket, errors);
         ValidatePaperTrading(configuration.PaperTrading, errors);
@@ -46,6 +48,7 @@ public static class AppOptionsValidator
             $"Storage env var: {configuration.Storage.ConnectionStringEnvironmentVariable}",
             $"Polymarket data API: {configuration.Polymarket.DataApiBaseUrl}",
             $"Polymarket CLOB API: {configuration.Polymarket.ClobBaseUrl}",
+            $"Polymarket certificate pinned hosts: {configuration.Polymarket.CertificatePins?.Count ?? 0}",
             $"Auth enabled: {configuration.PolymarketAuth.Enabled}",
             $"Auth provider: {configuration.PolymarketAuth.SecretProvider}",
             $"Auth configured: {configuration.PolymarketAuth.Enabled && IsAddressLike(configuration.PolymarketAuth.SigningAddress)}",
@@ -88,12 +91,16 @@ public static class AppOptionsValidator
         }
     }
 
-    private static void ValidatePolymarket(PolymarketOptions options, List<string> errors)
+    private static void ValidatePolymarket(
+        PolymarketOptions options,
+        MarketDataWebSocketOptions marketDataWebSocketOptions,
+        List<string> errors)
     {
         ValidateAbsoluteHttpsUrl(options.DataApiBaseUrl, "Polymarket.DataApiBaseUrl", errors);
         ValidateAbsoluteHttpsUrl(options.ClobBaseUrl, "Polymarket.ClobBaseUrl", errors);
         ValidateAbsoluteHttpsUrl(options.GammaBaseUrl, "Polymarket.GammaBaseUrl", errors);
         ValidateAbsoluteHttpsUrl(options.GeoblockUrl, "Polymarket.GeoblockUrl", errors);
+        ValidateCertificatePins(options, marketDataWebSocketOptions, errors);
 
         if (options.TimeoutSeconds <= 0)
         {
@@ -108,6 +115,50 @@ public static class AppOptionsValidator
         if (options.RetryBaseDelayMilliseconds < 0)
         {
             errors.Add("Polymarket.RetryBaseDelayMilliseconds must not be negative.");
+        }
+    }
+
+    private static void ValidateCertificatePins(
+        PolymarketOptions options,
+        MarketDataWebSocketOptions marketDataWebSocketOptions,
+        List<string> errors)
+    {
+        if (options.CertificatePins is null)
+        {
+            errors.Add("Polymarket.CertificatePins must be an object keyed by endpoint host.");
+            return;
+        }
+
+        var configuredHosts = GetConfiguredPolymarketHosts(options, marketDataWebSocketOptions);
+        foreach (var entry in options.CertificatePins)
+        {
+            var host = entry.Key.Trim();
+            if (string.IsNullOrWhiteSpace(host) ||
+                host.Contains("://", StringComparison.Ordinal) ||
+                Uri.CheckHostName(host) == UriHostNameType.Unknown)
+            {
+                errors.Add("Polymarket.CertificatePins keys must be endpoint host names, for example data-api.polymarket.com.");
+                continue;
+            }
+
+            if (!configuredHosts.Contains(host))
+            {
+                errors.Add($"Polymarket.CertificatePins host '{host}' must match a configured Polymarket endpoint host.");
+            }
+
+            if (entry.Value is null || entry.Value.Count == 0)
+            {
+                errors.Add($"Polymarket.CertificatePins for host '{host}' must contain at least one pin.");
+                continue;
+            }
+
+            foreach (var pin in entry.Value)
+            {
+                if (!IsValidCertificatePin(pin))
+                {
+                    errors.Add($"Polymarket.CertificatePins for host '{host}' must use sha256/<base64-spki-hash> format.");
+                }
+            }
         }
     }
 
@@ -561,6 +612,46 @@ public static class AppOptionsValidator
             !uri.IsLoopback)
         {
             errors.Add($"{name} must be an absolute loopback HTTP URL.");
+        }
+    }
+
+    private static HashSet<string> GetConfiguredPolymarketHosts(
+        PolymarketOptions polymarket,
+        MarketDataWebSocketOptions marketDataWebSocket)
+    {
+        var hosts = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        AddHost(polymarket.DataApiBaseUrl, hosts);
+        AddHost(polymarket.ClobBaseUrl, hosts);
+        AddHost(polymarket.GammaBaseUrl, hosts);
+        AddHost(polymarket.GeoblockUrl, hosts);
+        AddHost(marketDataWebSocket.MarketEndpointUrl, hosts);
+        return hosts;
+    }
+
+    private static void AddHost(string value, HashSet<string> hosts)
+    {
+        if (Uri.TryCreate(value, UriKind.Absolute, out var uri))
+        {
+            hosts.Add(uri.Host);
+        }
+    }
+
+    private static bool IsValidCertificatePin(string value)
+    {
+        if (string.IsNullOrWhiteSpace(value) ||
+            !value.StartsWith(Sha256SubjectPublicKeyInfoPinPrefix, StringComparison.Ordinal))
+        {
+            return false;
+        }
+
+        try
+        {
+            var bytes = Convert.FromBase64String(value[Sha256SubjectPublicKeyInfoPinPrefix.Length..]);
+            return bytes.Length == 32;
+        }
+        catch (FormatException)
+        {
+            return false;
         }
     }
 

@@ -12,6 +12,7 @@ public sealed class MarketDataWebSocketService(
     ILogger<MarketDataWebSocketService> logger,
     BotOptions botOptions,
     MarketDataWebSocketOptions options,
+    PolymarketOptions polymarketOptions,
     IRelevantMarketAssetProvider assetProvider,
     IMarketDataCache marketDataCache,
     IPaperTradingMarketDataUpdater paperTradingUpdater,
@@ -74,8 +75,10 @@ public sealed class MarketDataWebSocketService(
         await PublishStatusAsync(MarketDataConnectionState.Connecting, initialAssetIds.Count, null, cancellationToken);
 
         using var socket = new ClientWebSocket();
+        var endpointUri = new Uri(options.MarketEndpointUrl);
+        ConfigurePinnedCertificateValidation(socket, endpointUri);
         using var sendLock = new SemaphoreSlim(1, 1);
-        await socket.ConnectAsync(new Uri(options.MarketEndpointUrl), cancellationToken);
+        await socket.ConnectAsync(endpointUri, cancellationToken);
 
         lastConnectedUtc = DateTimeOffset.UtcNow;
         var subscribedAssetIds = initialAssetIds.ToHashSet(StringComparer.OrdinalIgnoreCase);
@@ -138,6 +141,33 @@ public sealed class MarketDataWebSocketService(
         while (!result.EndOfMessage);
 
         return Encoding.UTF8.GetString(message.ToArray());
+    }
+
+    private void ConfigurePinnedCertificateValidation(ClientWebSocket socket, Uri endpointUri)
+    {
+        if (!PolymarketCertificatePinning.HasPins(polymarketOptions))
+        {
+            return;
+        }
+
+        socket.Options.RemoteCertificateValidationCallback = (_, certificate, _, sslPolicyErrors) =>
+        {
+            var result = PolymarketCertificatePinning.ValidateServerCertificate(
+                endpointUri,
+                certificate,
+                sslPolicyErrors,
+                polymarketOptions);
+
+            if (!result.Accepted)
+            {
+                logger.LogWarning(
+                    "Market WebSocket TLS certificate rejected for {Host}: {Message}",
+                    endpointUri.Host,
+                    result.Message);
+            }
+
+            return result.Accepted;
+        };
     }
 
     private async Task ProcessTextMessageAsync(string message, CancellationToken cancellationToken)

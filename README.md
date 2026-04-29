@@ -191,6 +191,35 @@ The `PolyCopyTrader.Polymarket` project contains read-only clients for:
 
 User trade calls explicitly send `takerOnly=false` when requested so maker fills are not silently excluded. HTTP failures are retried for transient `429`/`5xx` responses and persisted to `ApiErrors` through the configured repository. When PostgreSQL is not configured, the no-op repository keeps local scaffold runs read-only and dependency-free.
 
+### Certificate Pinning
+
+`Polymarket:CertificatePins` can be configured in development or production for the Polymarket HTTP clients and the market WebSocket. Pins are keyed by endpoint host and use `sha256/<base64 SPKI SHA-256>` format. If a host has no configured pin, normal .NET TLS validation is used. If a host has pins, the certificate must match one of them; arbitrary invalid certificates are still rejected.
+
+Example host keys:
+
+```json
+"CertificatePins": {
+  "data-api.polymarket.com": [ "sha256/<pin>" ],
+  "clob.polymarket.com": [ "sha256/<pin>" ],
+  "polymarket.com": [ "sha256/<pin>" ],
+  "ws-subscriptions-clob.polymarket.com": [ "sha256/<pin>" ]
+}
+```
+
+To print the current SPKI pin for a host:
+
+```powershell
+$hostName = "data-api.polymarket.com"
+$tcp = [Net.Sockets.TcpClient]::new($hostName, 443)
+$ssl = [Net.Security.SslStream]::new($tcp.GetStream(), $false, { $true })
+$ssl.AuthenticateAsClient($hostName)
+$cert = [Security.Cryptography.X509Certificates.X509Certificate2]::new($ssl.RemoteCertificate)
+$spki = $cert.PublicKey.ExportSubjectPublicKeyInfo()
+"sha256/" + [Convert]::ToBase64String([Security.Cryptography.SHA256]::HashData($spki))
+$ssl.Dispose()
+$tcp.Dispose()
+```
+
 ## Auth Research
 
 Task 13 added research notes in `docs/auth_signing_plan.md`. Task 14 added native C# L2 HMAC signing, L2 header construction, secret-provider abstraction, and auth readiness reporting under `src/PolyCopyTrader.Polymarket/Auth`. Task 15 added native C# CLOB V2 order amount conversion, order construction, EIP-712 dry-run signing, redacted payload rendering, and dashboard/storage visibility for dry-run orders. Task 16 added gated live `POST /order`, cancel-one, cancel-all, and order-status polling support.
@@ -297,6 +326,7 @@ Interpret paper results conservatively. Paper fills are approximate, long positi
 
 - PostgreSQL not configured: set `POLYCOPYTRADER_POSTGRES_CONNECTION`, restart the service, and check the Diagnostics tab. In local scaffold runs, the no-op repository is expected when no connection string exists.
 - Invalid watchlist wallet: the scanner skips placeholder/invalid wallets, records a warning status, and keeps the service running.
+- Polymarket TLS certificate errors: configure `Polymarket:CertificatePins` only after verifying the current endpoint certificate pin out of band. Do not use an accept-any certificate callback in production.
 - HTTP 429/5xx from Polymarket: public clients retry transient failures according to `Polymarket:MaxRetries` and record API errors when retries are exhausted.
 - Malformed API response: the failing operation is recorded as an API error; scanner/signal/paper loops continue on later cycles.
 - WebSocket disconnected/stale: the market WebSocket reconnects with backoff and stale snapshots are ignored after `MarketDataWebSocket:StaleAfterSeconds`.

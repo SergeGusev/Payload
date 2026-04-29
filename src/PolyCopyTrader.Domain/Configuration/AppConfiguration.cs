@@ -130,6 +130,8 @@ public sealed class PolymarketOptions
     public int MaxRetries { get; init; } = 2;
 
     public int RetryBaseDelayMilliseconds { get; init; } = 250;
+
+    public Dictionary<string, List<string>> CertificatePins { get; init; } = new(StringComparer.OrdinalIgnoreCase);
 }
 
 public sealed class PolymarketAuthOptions

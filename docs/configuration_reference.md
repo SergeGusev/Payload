@@ -26,6 +26,48 @@ Do not commit real credentials.
 - `MaxOpenLiveOrders`: open live order cap.
 - `CancelAllOnKillSwitch`: documents intended kill-switch behavior.
 
+## Polymarket
+
+- `DataApiBaseUrl`: public Data API base URL.
+- `ClobBaseUrl`: public/authenticated CLOB API base URL.
+- `GammaBaseUrl`: Gamma API base URL, reserved for future enrichment.
+- `GeoblockUrl`: geoblock check URL.
+- `TimeoutSeconds`: outbound HTTP timeout.
+- `MaxRetries`: retry count for transient public API failures.
+- `RetryBaseDelayMilliseconds`: base retry delay.
+- `CertificatePins`: optional endpoint-host to SPKI SHA-256 pin map.
+
+`CertificatePins` is supported in both development and production. Keys must be
+configured endpoint host names, not full URLs. Values must use
+`sha256/<base64-spki-hash>` format.
+
+If a host has no configured pin, standard .NET TLS validation is used. If a host has
+pins, the server certificate is accepted only when its Subject Public Key Info hash
+matches one of the configured pins and the certificate validity window is current.
+This can bypass CA/name validation errors for a known pinned Polymarket key without
+accepting arbitrary certificates.
+
+Example:
+
+```json
+"Polymarket": {
+  "CertificatePins": {
+    "data-api.polymarket.com": [
+      "sha256/<pin-from-current-certificate>"
+    ],
+    "clob.polymarket.com": [
+      "sha256/<pin-from-current-certificate>"
+    ],
+    "polymarket.com": [
+      "sha256/<pin-from-current-certificate>"
+    ],
+    "ws-subscriptions-clob.polymarket.com": [
+      "sha256/<pin-from-current-certificate>"
+    ]
+  }
+}
+```
+
 ## PolymarketAuth
 
 Only lookup names belong in config. Secret values belong in environment variables or
