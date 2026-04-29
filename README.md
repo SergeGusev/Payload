@@ -2,7 +2,7 @@
 
 PolyCopyTrader is a Windows/.NET C# application for monitoring Polymarket traders and running a cautious copy-signal strategy.
 
-This repository is currently at Task 03: configuration, SQLite storage, and logging. It contains project structure, typed configuration, SQLite schema initialization, a basic repository, a Worker Service heartbeat, and a basic WPF dashboard shell.
+This repository is currently at Task 03: configuration, PostgreSQL storage, and logging. It contains project structure, typed configuration, PostgreSQL schema initialization, a basic repository, a Worker Service heartbeat, and a basic WPF dashboard shell.
 
 ## Safety
 
@@ -64,15 +64,14 @@ The dashboard currently opens a basic shell. Live database views and service sta
 
 ## Storage
 
-The service initializes SQLite on startup. The default database path is configured in `src/PolyCopyTrader.Service/appsettings.json`:
+The service uses PostgreSQL through Npgsql. Do not store credentials in repository files. Configure the connection string through the `POLYCOPYTRADER_POSTGRES_CONNECTION` environment variable.
 
-```json
-"Storage": {
-  "DatabasePath": "data/polycopytrader.db"
-}
+```powershell
+$env:POLYCOPYTRADER_POSTGRES_CONNECTION="Host=...;Port=5432;Database=...;Username=...;Password=...;SSL Mode=Require"
+dotnet run --project src/PolyCopyTrader.Service/PolyCopyTrader.Service.csproj
 ```
 
-Relative database paths resolve under the service output directory.
+If no PostgreSQL connection string is configured, storage is disabled and the service uses a no-op repository. Set `Storage:RequireConfiguredDatabase` to `true` for production/VPS runs.
 
 ## Known Limitations
 

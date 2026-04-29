@@ -164,7 +164,7 @@ Details
 
 ## Live updates
 
-For MVP, polling the SQLite database every 1-3 seconds is acceptable. Later, replace or augment with IPC/WebSocket from the service.
+For MVP, polling the PostgreSQL database every 1-3 seconds is acceptable. Later, replace or augment with IPC/WebSocket from the service.
 
 ## Commands
 
@@ -184,7 +184,7 @@ Do not implement live order commands yet.
 
 ## Acceptance criteria
 
-1. Dashboard opens and shows current data from SQLite.
+1. Dashboard opens and shows current data from PostgreSQL.
 2. Dashboard refreshes without blocking UI.
 3. User can inspect signals and rejection reasons.
 4. User can inspect paper orders and positions.

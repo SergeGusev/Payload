@@ -66,7 +66,7 @@ how to view logs
 Implement database backup script:
 
 ```text
-- stop service or use SQLite backup API if possible
+- use pg_dump or provider-managed PostgreSQL backups
 - copy DB to timestamped backup
 - keep retention limit
 ```

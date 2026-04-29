@@ -1,4 +1,3 @@
-using Microsoft.Data.Sqlite;
 using PolyCopyTrader.Domain;
 using PolyCopyTrader.Domain.Configuration;
 using PolyCopyTrader.Storage;
@@ -8,37 +7,36 @@ namespace PolyCopyTrader.Tests;
 public sealed class StorageTests
 {
     [Fact]
-    public async Task SchemaInitializer_CreatesRequiredTables()
+    public void PostgresSchema_ContainsRequiredTables()
     {
-        var databasePath = CreateTempDatabasePath();
-        var factory = new SqliteConnectionFactory(new StorageOptions { DatabasePath = databasePath });
-        var initializer = new SqliteSchemaInitializer(factory);
+        foreach (var table in PostgresSchema.RequiredTables)
+        {
+            Assert.Contains($"CREATE TABLE IF NOT EXISTS {table}", PostgresSchema.SchemaSql, StringComparison.Ordinal);
+        }
 
-        await initializer.InitializeAsync();
-
-        await using var connection = factory.CreateConnection();
-        await connection.OpenAsync();
-
-        var tableNames = await GetTableNamesAsync(connection);
-        Assert.Contains("LeaderTrades", tableNames);
-        Assert.Contains("Signals", tableNames);
-        Assert.Contains("PaperOrders", tableNames);
-        Assert.Contains("ServiceHeartbeats", tableNames);
-        Assert.Contains("ApiErrors", tableNames);
+        Assert.Contains("CREATE UNIQUE INDEX IF NOT EXISTS ux_leader_trades_dedup", PostgresSchema.SchemaSql, StringComparison.Ordinal);
     }
 
     [Fact]
-    public async Task Repository_UpsertsServiceHeartbeat()
+    public void ConnectionFactory_RequiresConfiguredConnectionString()
     {
-        var databasePath = CreateTempDatabasePath();
-        var factory = new SqliteConnectionFactory(new StorageOptions { DatabasePath = databasePath });
-        await new SqliteSchemaInitializer(factory).InitializeAsync();
-        var repository = new SqliteAppRepository(factory);
+        var options = new StorageOptions
+        {
+            ConnectionString = string.Empty,
+            ConnectionStringEnvironmentVariable = "POLYCOPYTRADER_TEST_MISSING_CONNECTION"
+        };
 
+        Assert.Throws<InvalidOperationException>(() => new PostgresConnectionFactory(options));
+    }
+
+    [Fact]
+    public async Task NoOpRepository_IsSafeWhenDatabaseIsNotConfigured()
+    {
+        var repository = new NoOpAppRepository();
         var heartbeat = new ServiceHeartbeat(
             "PolyCopyTrader.Service",
             "Running",
-            DateTimeOffset.UtcNow.AddMinutes(-1),
+            DateTimeOffset.UtcNow,
             DateTimeOffset.UtcNow,
             "1.0.0",
             BotMode.ReadOnly,
@@ -48,30 +46,37 @@ public sealed class StorageTests
         await repository.UpsertServiceHeartbeatAsync(heartbeat);
         var heartbeats = await repository.GetServiceHeartbeatsAsync();
 
-        var stored = Assert.Single(heartbeats);
-        Assert.Equal("PolyCopyTrader.Service", stored.ServiceName);
-        Assert.Equal(BotMode.ReadOnly, stored.Mode);
+        Assert.Empty(heartbeats);
     }
 
-    private static string CreateTempDatabasePath()
+    [Fact]
+    public async Task PostgresRepository_InitializesSchema_WhenTestConnectionIsConfigured()
     {
-        var directory = Path.Combine(Path.GetTempPath(), "PolyCopyTrader.Tests", Guid.NewGuid().ToString("N"));
-        Directory.CreateDirectory(directory);
-        return Path.Combine(directory, "test.db");
-    }
-
-    private static async Task<HashSet<string>> GetTableNamesAsync(SqliteConnection connection)
-    {
-        await using var command = connection.CreateCommand();
-        command.CommandText = "SELECT name FROM sqlite_master WHERE type = 'table';";
-        await using var reader = await command.ExecuteReaderAsync();
-
-        var names = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        while (await reader.ReadAsync())
+        var connectionString = Environment.GetEnvironmentVariable("POLYCOPYTRADER_TEST_POSTGRES_CONNECTION");
+        if (string.IsNullOrWhiteSpace(connectionString))
         {
-            names.Add(reader.GetString(0));
+            return;
         }
 
-        return names;
+        var options = new StorageOptions { ConnectionString = connectionString };
+        var factory = new PostgresConnectionFactory(options);
+        var initializer = new PostgresSchemaInitializer(factory);
+        await initializer.InitializeAsync();
+
+        var repository = new PostgresAppRepository(factory);
+        var heartbeat = new ServiceHeartbeat(
+            "PolyCopyTrader.Tests",
+            "Running",
+            DateTimeOffset.UtcNow,
+            DateTimeOffset.UtcNow,
+            "1.0.0",
+            BotMode.ReadOnly,
+            "IntegrationTest",
+            null);
+
+        await repository.UpsertServiceHeartbeatAsync(heartbeat);
+        var heartbeats = await repository.GetServiceHeartbeatsAsync();
+
+        Assert.Contains(heartbeats, item => item.ServiceName == "PolyCopyTrader.Tests");
     }
 }

@@ -17,7 +17,7 @@ Put these Markdown files at the root of the repository or in a `codex_tasks/` fo
 |---:|---|---|
 | 1 | `01_PROJECT_BRIEF.md` | Full product brief and constraints |
 | 2 | `02_TASK_REPO_SCAFFOLD.md` | Create solution/project skeleton |
-| 3 | `03_TASK_CONFIG_STORAGE_LOGGING.md` | Config, SQLite, logging |
+| 3 | `03_TASK_CONFIG_STORAGE_LOGGING.md` | Config, PostgreSQL, logging |
 | 4 | `04_TASK_POLYMARKET_PUBLIC_API_CLIENTS.md` | Public read-only API clients |
 | 5 | `05_TASK_WATCHLIST_SCANNER.md` | Watchlist and scanner loop |
 | 6 | `06_TASK_SIGNAL_AND_RISK_ENGINES.md` | Signal scoring and risk checks |

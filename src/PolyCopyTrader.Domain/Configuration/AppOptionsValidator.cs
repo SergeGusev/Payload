@@ -34,7 +34,9 @@ public static class AppOptionsValidator
             $"Mode: {configuration.Bot.Mode}",
             $"Live trading enabled: {configuration.Bot.EnableLiveTrading}",
             $"Poll interval seconds: {configuration.Bot.PollIntervalSeconds}",
-            $"Database path: {configuration.Storage.DatabasePath}",
+            $"Storage provider: {configuration.Storage.Provider}",
+            $"Storage configured: {StorageConnectionResolver.IsConfigured(configuration.Storage)}",
+            $"Storage env var: {configuration.Storage.ConnectionStringEnvironmentVariable}",
             $"Polymarket data API: {configuration.Polymarket.DataApiBaseUrl}",
             $"Polymarket CLOB API: {configuration.Polymarket.ClobBaseUrl}",
             $"Watchlist traders: {configuration.Watchlist.Traders.Count}",
@@ -174,9 +176,19 @@ public static class AppOptionsValidator
 
     private static void ValidateStorage(StorageOptions options, List<string> errors)
     {
-        if (string.IsNullOrWhiteSpace(options.DatabasePath))
+        if (!string.Equals(options.Provider, "PostgreSQL", StringComparison.OrdinalIgnoreCase))
         {
-            errors.Add("Storage.DatabasePath is required.");
+            errors.Add("Storage.Provider must be PostgreSQL.");
+        }
+
+        if (string.IsNullOrWhiteSpace(options.ConnectionStringEnvironmentVariable))
+        {
+            errors.Add("Storage.ConnectionStringEnvironmentVariable is required.");
+        }
+
+        if (options.RequireConfiguredDatabase && !StorageConnectionResolver.IsConfigured(options))
+        {
+            errors.Add("Storage is required, but no PostgreSQL connection string is configured.");
         }
     }
 

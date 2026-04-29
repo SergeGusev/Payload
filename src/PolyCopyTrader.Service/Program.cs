@@ -37,9 +37,19 @@ builder.Services.AddSingleton(appConfiguration.Watchlist);
 builder.Services.AddSingleton(appConfiguration.PaperTrading);
 builder.Services.AddSingleton(appConfiguration.Dashboard);
 builder.Services.AddSingleton(appConfiguration.Storage);
-builder.Services.AddSingleton<SqliteConnectionFactory>();
-builder.Services.AddSingleton<ISqliteSchemaInitializer, SqliteSchemaInitializer>();
-builder.Services.AddSingleton<IAppRepository, SqliteAppRepository>();
+
+if (StorageConnectionResolver.IsConfigured(appConfiguration.Storage))
+{
+    builder.Services.AddSingleton<PostgresConnectionFactory>();
+    builder.Services.AddSingleton<IStorageSchemaInitializer, PostgresSchemaInitializer>();
+    builder.Services.AddSingleton<IAppRepository, PostgresAppRepository>();
+}
+else
+{
+    builder.Services.AddSingleton<IStorageSchemaInitializer, NoOpStorageSchemaInitializer>();
+    builder.Services.AddSingleton<IAppRepository, NoOpAppRepository>();
+}
+
 builder.Services.AddHostedService<BotWorker>();
 
 try
@@ -47,8 +57,15 @@ try
     Log.Information("Starting PolyCopyTrader service host.");
     Log.Information("Configuration summary:{NewLine}{ConfigSummary}", Environment.NewLine, AppOptionsValidator.ToSanitizedSummary(appConfiguration));
 
+    if (!StorageConnectionResolver.IsConfigured(appConfiguration.Storage))
+    {
+        Log.Warning(
+            "PostgreSQL connection string is not configured. Storage is disabled until {EnvVar} is set.",
+            appConfiguration.Storage.ConnectionStringEnvironmentVariable);
+    }
+
     var host = builder.Build();
-    await host.Services.GetRequiredService<ISqliteSchemaInitializer>().InitializeAsync();
+    await host.Services.GetRequiredService<IStorageSchemaInitializer>().InitializeAsync();
     await host.RunAsync();
 }
 catch (Exception ex)

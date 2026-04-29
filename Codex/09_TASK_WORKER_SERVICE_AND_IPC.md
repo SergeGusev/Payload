@@ -72,7 +72,7 @@ Choose one MVP approach:
 
 ### Option A — database polling
 
-Dashboard reads service status from SQLite every 1-3 seconds.
+Dashboard reads service status from PostgreSQL every 1-3 seconds.
 
 ### Option B — local HTTP endpoint
 

@@ -5,11 +5,11 @@ Last verified context date: 2026-04-28. Before implementing authenticated/live t
 Core idea: this is a cautious **copy-signal** system, not blind copy-trading. Leader trades are signals that must pass filters for category, freshness, price, spread, liquidity, and risk.
 
 
-# Task 03 — Configuration, SQLite storage, and logging
+# Task 03 — Configuration, PostgreSQL storage, and logging
 
 ## Goal
 
-Add durable configuration, SQLite persistence, and structured logging.
+Add durable configuration, PostgreSQL persistence, and structured logging.
 
 ## Scope
 
@@ -82,7 +82,7 @@ Example configuration:
 }
 ```
 
-## SQLite schema
+## PostgreSQL schema
 
 Create schema initialization code. Use either EF Core migrations or hand-written SQL. For MVP, hand-written schema is acceptable.
 
@@ -196,7 +196,7 @@ Do not log secrets. Add a `SecretRedactor` helper even before auth exists.
 
 1. App loads config into typed options.
 2. Invalid config fails fast with clear error messages.
-3. SQLite database initializes on startup.
+3. PostgreSQL database initializes on startup when a connection string is configured.
 4. Heartbeats are written by the service.
 5. Dashboard or CLI can display current config summary without secrets.
 6. Logs are written to local files.

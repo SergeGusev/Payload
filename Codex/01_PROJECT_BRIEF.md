@@ -53,7 +53,7 @@ Only if checks pass should the bot create a paper order or, in future phases, a 
 - C# / latest stable .NET LTS.
 - WPF for dashboard.
 - .NET Worker Service for background engine.
-- SQLite for MVP storage.
+- PostgreSQL for MVP storage.
 - Serilog for logging.
 - CommunityToolkit.Mvvm for MVVM.
 - System.Net.Http for REST.
@@ -76,7 +76,7 @@ PolyCopyTrader.Strategy
   SignalEngine, RiskEngine, PaperTradingEngine, ExitEngine.
 
 PolyCopyTrader.Storage
-  SQLite schema, repositories, migrations/schema init.
+  PostgreSQL schema, repositories, migrations/schema init.
 
 PolyCopyTrader.Domain
   Domain models, enums, value objects.

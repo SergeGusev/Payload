@@ -113,5 +113,11 @@ public sealed class DashboardOptions
 
 public sealed class StorageOptions
 {
-    public string DatabasePath { get; init; } = Path.Combine("data", "polycopytrader.db");
+    public string Provider { get; init; } = "PostgreSQL";
+
+    public string ConnectionString { get; init; } = string.Empty;
+
+    public string ConnectionStringEnvironmentVariable { get; init; } = "POLYCOPYTRADER_POSTGRES_CONNECTION";
+
+    public bool RequireConfiguredDatabase { get; init; }
 }

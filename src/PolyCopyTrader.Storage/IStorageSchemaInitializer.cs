@@ -1,6 +1,6 @@
 namespace PolyCopyTrader.Storage;
 
-public interface ISqliteSchemaInitializer
+public interface IStorageSchemaInitializer
 {
     Task InitializeAsync(CancellationToken cancellationToken = default);
 }

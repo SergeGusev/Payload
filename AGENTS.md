@@ -26,7 +26,7 @@ Leader trades are signal candidates, not commands. The bot may act only when cat
 - Use C#/.NET.
 - Use WPF for the dashboard.
 - Use a background Worker Service / Windows Service for the 24/7 engine.
-- Use SQLite for MVP persistence.
+- Use PostgreSQL for MVP persistence.
 - Use Serilog for logs.
 - Use CommunityToolkit.Mvvm for MVVM.
 - Keep domain logic independent from WPF.
