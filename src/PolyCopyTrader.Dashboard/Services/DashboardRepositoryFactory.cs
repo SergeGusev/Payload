@@ -12,6 +12,7 @@ public static class DashboardRepositoryFactory
         var configuration = new ConfigurationBuilder()
             .SetBasePath(AppContext.BaseDirectory)
             .AddJsonFile("appsettings.json", optional: true, reloadOnChange: true)
+            .AddEnvironmentVariables()
             .Build();
 
         var appConfiguration = new AppConfiguration

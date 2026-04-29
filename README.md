@@ -143,6 +143,29 @@ dotnet run --project src/PolyCopyTrader.Service/PolyCopyTrader.Service.csproj
 
 If no PostgreSQL connection string is configured, storage is disabled and the service uses a no-op repository. Set `Storage:RequireConfiguredDatabase` to `true` for production/VPS runs.
 
+### Local PostgreSQL Debugging
+
+For local debugging with real PostgreSQL storage, use the dev-only Docker Compose file. The container binds PostgreSQL to loopback only.
+
+```powershell
+.\scripts\start-local-postgres.ps1
+.\scripts\run-local-service.ps1 -Mode Paper -RequireDatabase
+```
+
+In a second terminal, run the dashboard against the same local database:
+
+```powershell
+.\scripts\run-local-dashboard.ps1 -NoPostgres
+```
+
+Stop the local database without deleting data:
+
+```powershell
+.\scripts\stop-local-postgres.ps1
+```
+
+Use `.\scripts\stop-local-postgres.ps1 -DeleteData` only when you intentionally want a fresh local database volume.
+
 ## Polymarket Public APIs
 
 The `PolyCopyTrader.Polymarket` project contains read-only clients for:

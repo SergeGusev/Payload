@@ -1,0 +1,23 @@
+name: polycopytrader-local
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: polycopytrader-local-postgres
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:${POLYCOPYTRADER_LOCAL_POSTGRES_PORT:-54328}:5432"
+    environment:
+      POSTGRES_DB: ${POLYCOPYTRADER_LOCAL_POSTGRES_DB:-polycopytrader}
+      POSTGRES_USER: ${POLYCOPYTRADER_LOCAL_POSTGRES_USER:-polycopytrader}
+      POSTGRES_PASSWORD: ${POLYCOPYTRADER_LOCAL_POSTGRES_PASSWORD:-polycopytrader_local_password}
+    volumes:
+      - polycopytrader-local-postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U \"$${POSTGRES_USER}\" -d \"$${POSTGRES_DB}\""]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+volumes:
+  polycopytrader-local-postgres-data:
