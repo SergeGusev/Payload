@@ -2,13 +2,14 @@
 
 PolyCopyTrader is a Windows/.NET C# application for monitoring Polymarket traders and running a cautious copy-signal strategy.
 
-This repository is currently at Task 12: testing, QA, and hardening. It contains project structure, typed configuration, PostgreSQL schema initialization, a basic repository, read-only Polymarket Data/CLOB/Geo clients, a Worker Service scanner/signal/paper loop, local dashboard controls, public market WebSocket monitoring, analytics reports, CSV export, diagnostics, and a read-only monitoring dashboard.
+This repository is currently at Task 13: auth/signing research only. It contains project structure, typed configuration, PostgreSQL schema initialization, a basic repository, read-only Polymarket Data/CLOB/Geo clients, a Worker Service scanner/signal/paper loop, local dashboard controls, public market WebSocket monitoring, analytics reports, CSV export, diagnostics, a read-only monitoring dashboard, and placeholder auth/trading interfaces.
 
 ## Safety
 
 - No live trading exists in this scaffold.
-- No authenticated Polymarket endpoints exist.
+- No implemented authenticated Polymarket HTTP calls exist.
 - No private key handling exists.
+- Auth/trading interfaces are placeholders only.
 - Default mode is read-only/paper-first by project policy.
 
 ## Project Structure
@@ -40,7 +41,7 @@ dotnet test
 
 ## QA Check
 
-Run the repeatable pre-auth QA gate before any authenticated/live-trading work:
+Run the repeatable pre-live QA gate before any authenticated/live-trading work:
 
 ```powershell
 .\scripts\qa-check.ps1
@@ -124,6 +125,12 @@ The `PolyCopyTrader.Polymarket` project contains read-only clients for:
 
 User trade calls explicitly send `takerOnly=false` when requested so maker fills are not silently excluded. HTTP failures are retried for transient `429`/`5xx` responses and persisted to `ApiErrors` through the configured repository. When PostgreSQL is not configured, the no-op repository keeps local scaffold runs read-only and dependency-free.
 
+## Auth Research
+
+Task 13 added research notes in `docs/auth_signing_plan.md` and placeholder interfaces under `src/PolyCopyTrader.Polymarket/Auth`. The dashboard reports `Auth: NotConfigured`.
+
+No private keys are requested, loaded, stored, or logged. No L1/L2 headers are produced yet, no API credentials are created or derived, no orders are signed, and no live order placement endpoint is implemented.
+
 ## Market WebSocket
 
 When `Bot:UseWebSockets` and `MarketDataWebSocket:Enabled` are true, the service runs a public market WebSocket client against `wss://ws-subscriptions-clob.polymarket.com/ws/market`.
@@ -184,7 +191,7 @@ Interpret paper results conservatively. Paper fills are approximate, long positi
 - Market Data: latest WebSocket/market-data asset snapshots, bid, ask, spread, update time.
 - Analytics: daily, trader, category, execution-quality, and rejection reports.
 - Risk: configured limits and current usage.
-- Diagnostics: sanitized config summary, storage status, service/scanner/WebSocket status, watchlist summary, latest API errors, and risk usage.
+- Diagnostics: sanitized config summary, storage status, auth status, service/scanner/WebSocket status, watchlist summary, latest API errors, and risk usage.
 - Logs: API errors, risk events, service commands, and market-data events.
 - Controls: pause/resume scanner, pause/resume paper trading, kill switch, and asset pin/unpin through localhost IPC.
 
@@ -202,10 +209,10 @@ Do not proceed to authenticated signing or live trading unless `dotnet build`, `
 
 ## Known Limitations
 
-- No auth/signing/live trading support.
+- Auth/signing/live trading support is research-only; no authenticated HTTP implementation exists yet.
 - Trader enable/disable and cancel selected order dashboard buttons are placeholders until command-specific IPC is added.
 - User-authenticated WebSocket channel is not implemented yet.
 
 ## Next Recommended Task
 
-Implement `Codex/13_TASK_AUTH_SIGNING_RESEARCH_ONLY.md`.
+Implement `Codex/14_TASK_CLOB_V2_AUTH_AND_HMAC.md`.
