@@ -150,6 +150,10 @@ public sealed class PolymarketClientTests
         Assert.Equal("GetUserTrades", entry.Operation);
         Assert.Equal("GET", entry.HttpMethod);
         Assert.Contains("/trades", entry.RequestUrl, StringComparison.Ordinal);
+        Assert.Contains("user=0x56687bf447db6ffa42ffe2204a05edaa20f55839", entry.RequestUrl, StringComparison.Ordinal);
+        Assert.Contains("takerOnly=false", entry.RequestUrl, StringComparison.Ordinal);
+        Assert.Contains("limit=100", entry.RequestUrl, StringComparison.Ordinal);
+        Assert.Contains("offset=0", entry.RequestUrl, StringComparison.Ordinal);
         Assert.Equal(200, entry.StatusCode);
         Assert.True(entry.Succeeded);
         Assert.NotNull(entry.ResponseAtUtc);

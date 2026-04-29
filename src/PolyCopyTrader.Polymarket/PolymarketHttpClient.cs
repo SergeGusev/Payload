@@ -232,7 +232,7 @@ internal sealed class PolymarketHttpClient(
                 component,
                 operation,
                 httpMethod,
-                requestUri.AbsoluteUri,
+                PolymarketRequestUrlFormatter.Format(requestUri),
                 requestedAtUtc,
                 statusCode is null ? null : DateTimeOffset.UtcNow,
                 Math.Max(0, durationMilliseconds),
