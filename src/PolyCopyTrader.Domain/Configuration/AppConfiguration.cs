@@ -26,6 +26,8 @@ public sealed class AppConfiguration
 
     public AnalyticsOptions Analytics { get; init; } = new();
 
+    public TraderDiscoveryOptions TraderDiscovery { get; init; } = new();
+
     public IpcOptions Ipc { get; init; } = new();
 
     public StorageOptions Storage { get; init; } = new();
@@ -264,6 +266,27 @@ public sealed class AnalyticsOptions
     public int DashboardReportLimit { get; init; } = 250;
 
     public string CsvExportDirectory { get; init; } = "exports";
+}
+
+public sealed class TraderDiscoveryOptions
+{
+    public bool Enabled { get; init; }
+
+    public string Category { get; init; } = "OVERALL";
+
+    public string TimePeriod { get; init; } = "MONTH";
+
+    public int RefreshIntervalMinutes { get; init; } = 360;
+
+    public int LeaderboardPages { get; init; } = 21;
+
+    public int CandidatesPerSide { get; init; } = 10;
+
+    public int TradesPerCandidate { get; init; } = 50;
+
+    public int PositionsPerCandidate { get; init; } = 50;
+
+    public int RequestDelayMilliseconds { get; init; } = 100;
 }
 
 public sealed class IpcOptions

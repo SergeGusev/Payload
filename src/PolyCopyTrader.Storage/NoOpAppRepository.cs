@@ -24,6 +24,20 @@ public sealed class NoOpAppRepository : IAppRepository
         return Task.CompletedTask;
     }
 
+    public Task UpsertTraderDiscoveryCandidatesAsync(
+        IReadOnlyList<TraderDiscoveryCandidate> candidates,
+        CancellationToken cancellationToken = default)
+    {
+        return Task.CompletedTask;
+    }
+
+    public Task<IReadOnlyList<TraderDiscoveryCandidate>> GetRecentTraderDiscoveryCandidatesAsync(
+        int limit = 100,
+        CancellationToken cancellationToken = default)
+    {
+        return Task.FromResult<IReadOnlyList<TraderDiscoveryCandidate>>([]);
+    }
+
     public Task AddSignalAsync(Signal signal, CancellationToken cancellationToken = default)
     {
         return Task.CompletedTask;

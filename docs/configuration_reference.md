@@ -74,6 +74,21 @@ caps before submitting orders.
 Each trader rule controls wallet, categories, lag, spread, slippage, leader trade size,
 and whether the trader is enabled.
 
+## TraderDiscovery
+
+Disabled by default. Uses the public Polymarket Data API leaderboard to research
+candidate wallets before adding them to the watchlist.
+
+- `Enabled`: starts the background discovery worker when true.
+- `Category`: leaderboard category such as `OVERALL`, `POLITICS`, or `WEATHER`.
+- `TimePeriod`: `DAY`, `WEEK`, `MONTH`, or `ALL`.
+- `RefreshIntervalMinutes`: background refresh cadence.
+- `LeaderboardPages`: number of 50-row pages to fetch, max `21`.
+- `CandidatesPerSide`: best-PnL and worst-PnL candidates to enrich.
+- `TradesPerCandidate`: recent trades to fetch for each candidate.
+- `PositionsPerCandidate`: current positions to fetch for each candidate.
+- `RequestDelayMilliseconds`: small delay between Data API requests.
+
 ## Analytics
 
 Controls daily report generation, dashboard report limits, and CSV export directory.

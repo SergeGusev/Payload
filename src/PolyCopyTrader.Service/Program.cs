@@ -12,6 +12,7 @@ using PolyCopyTrader.Service.Polymarket;
 using PolyCopyTrader.Service.Scanning;
 using PolyCopyTrader.Service.Signals;
 using PolyCopyTrader.Service.Startup;
+using PolyCopyTrader.Service.TraderDiscovery;
 using PolyCopyTrader.Storage;
 using PolyCopyTrader.Strategy;
 using Serilog;
@@ -53,6 +54,7 @@ builder.Services.AddSingleton(appConfiguration.PaperTrading);
 builder.Services.AddSingleton(appConfiguration.LiveTrading);
 builder.Services.AddSingleton(appConfiguration.Dashboard);
 builder.Services.AddSingleton(appConfiguration.Analytics);
+builder.Services.AddSingleton(appConfiguration.TraderDiscovery);
 builder.Services.AddSingleton(appConfiguration.Ipc);
 builder.Services.AddSingleton(appConfiguration.Storage);
 builder.Services.AddWindowsService(options => options.ServiceName = "PolyCopyTrader.Service");
@@ -93,12 +95,14 @@ builder.Services.AddSingleton<IRelevantMarketAssetProvider, RelevantMarketAssetP
 builder.Services.AddSingleton<IPaperTradingMarketDataUpdater, PaperTradingMarketDataUpdater>();
 builder.Services.AddSingleton<IPaperTradingProcessor, PaperTradingProcessor>();
 builder.Services.AddSingleton<ILiveTradingProcessor, LiveTradingProcessor>();
+builder.Services.AddSingleton<ITraderDiscoveryProcessor, TraderDiscoveryProcessor>();
 builder.Services.AddSingleton<ServiceControlState>();
 builder.Services.AddHostedService<StartupSafetyCheckService>();
 builder.Services.AddHostedService<BotWorker>();
 builder.Services.AddHostedService<LocalControlServer>();
 builder.Services.AddHostedService<MarketDataWebSocketService>();
 builder.Services.AddHostedService<DailyReportWorker>();
+builder.Services.AddHostedService<TraderDiscoveryWorker>();
 
 try
 {

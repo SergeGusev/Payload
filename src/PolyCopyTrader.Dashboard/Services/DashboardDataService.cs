@@ -16,6 +16,9 @@ public sealed class DashboardDataService(
     {
         var heartbeats = await repository.GetServiceHeartbeatsAsync(cancellationToken);
         var scannerStatuses = await repository.GetScannerStatusesAsync(cancellationToken);
+        var traderDiscovery = await repository.GetRecentTraderDiscoveryCandidatesAsync(
+            configuration.TraderDiscovery.CandidatesPerSide * 2,
+            cancellationToken);
         var leaderTrades = await repository.GetRecentLeaderTradesAsync(cancellationToken: cancellationToken);
         var signals = await repository.GetRecentSignalsAsync(cancellationToken: cancellationToken);
         var recentPaperOrders = await repository.GetRecentPaperOrdersAsync(cancellationToken: cancellationToken);
@@ -47,6 +50,7 @@ public sealed class DashboardDataService(
         return new DashboardSnapshot(
             overview,
             BuildWatchlist(scannerStatuses, leaderTrades),
+            traderDiscovery.Select(ToTraderDiscoveryRow).ToArray(),
             leaderTrades.Select(ToLeaderTradeRow).ToArray(),
             signals.Select(ToSignalRow).ToArray(),
             recentPaperOrders.Select(ToPaperOrderRow).ToArray(),
@@ -271,6 +275,31 @@ public sealed class DashboardDataService(
             trade.CashValueUsd,
             "n/a",
             trade.TransactionHash ?? string.Empty);
+    }
+
+    private static TraderDiscoveryRow ToTraderDiscoveryRow(TraderDiscoveryCandidate candidate)
+    {
+        return new TraderDiscoveryRow(
+            FormatDate(candidate.SnapshotAtUtc),
+            candidate.DiscoveryType,
+            candidate.Category,
+            candidate.TimePeriod,
+            candidate.Rank?.ToString(System.Globalization.CultureInfo.InvariantCulture) ?? "n/a",
+            string.IsNullOrWhiteSpace(candidate.UserName) ? candidate.Wallet : candidate.UserName,
+            candidate.Wallet,
+            candidate.LeaderboardPnl,
+            candidate.LeaderboardVolume,
+            candidate.VerifiedBadge,
+            candidate.TradesFetched,
+            candidate.BuyTrades,
+            candidate.SellTrades,
+            candidate.RecentTradeVolumeUsd,
+            candidate.AverageTradeUsd,
+            FormatDate(candidate.LastTradeUtc),
+            candidate.PositionsFetched,
+            candidate.OpenPositionValueUsd,
+            candidate.OpenPositionCashPnlUsd,
+            candidate.Notes);
     }
 
     private static SignalRow ToSignalRow(SignalSummary signal)

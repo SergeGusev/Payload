@@ -22,12 +22,13 @@ disabled by default.
 
 All numbered Codex tasks `01` through `18` are implemented.
 
-The repository also has local debugging support after task completion:
+The repository also has local debugging and trader discovery support after task completion:
 
 - local PostgreSQL debugging scripts;
 - optional Docker Compose PostgreSQL fallback;
 - dashboard environment-variable config support;
 - local Windows PostgreSQL database `polycopytrader` created and initialized.
+- trader discovery background worker and dashboard tab for best/worst PnL candidates.
 
 Latest verified code state on 2026-04-29:
 
@@ -39,6 +40,14 @@ Latest verified code state on 2026-04-29:
 - tests passed: 91/91;
 - local service smoke passed in `Paper` mode against PostgreSQL;
 - live trading remained disabled.
+
+After this note was originally created, trader discovery was added:
+
+- config section: `TraderDiscovery`;
+- table: `trader_discovery_candidates`;
+- service processor/worker: `src/PolyCopyTrader.Service/TraderDiscovery`;
+- dashboard tab: Trader Discovery;
+- tests increased from 91 to 93.
 
 ## Important Safety Position
 
@@ -145,6 +154,7 @@ The schema initializer created these tables at the time of verification:
 - `signal_rejections`
 - `signals`
 - `trader_rules`
+- `trader_discovery_candidates`
 - `traders`
 
 ## Project Layout
@@ -192,6 +202,7 @@ Projects:
   - public market WebSocket background service;
   - local IPC HTTP server;
   - daily analytics worker;
+  - trader discovery worker;
   - repository-backed API error sink.
 - `src/PolyCopyTrader.Dashboard`
   - WPF dashboard;
@@ -242,6 +253,25 @@ The WebSocket service subscribes only to relevant asset ids:
 
 It reconnects with backoff, sends PING heartbeats, refreshes subscriptions, persists
 market data status/events, and updates paper fills/marks from fresh top-of-book data.
+
+## Trader Discovery
+
+Trader discovery uses the public Polymarket Data API leaderboard.
+
+When enabled with `TraderDiscovery:Enabled=true`, the service:
+
+- fetches `LeaderboardPages` pages from `/v1/leaderboard`;
+- uses `orderBy=PNL`;
+- selects the best `CandidatesPerSide` by PnL;
+- selects the worst `CandidatesPerSide` by PnL within the fetched API window;
+- fetches recent trades for each selected wallet;
+- fetches current positions for each selected wallet;
+- stores enriched rows in `trader_discovery_candidates`;
+- shows them in the dashboard Trader Discovery tab.
+
+This is candidate research only. Do not add a wallet to live copy behavior based on
+leaderboard PnL alone. Review sample size, volume, categories, liquidity, recent trade
+repeatability, and paper results first.
 
 ## Signal And Risk Behavior
 
@@ -471,6 +501,8 @@ Implemented history:
 - `f273b1b` Add operations runbooks
 - `734210a` Add local PostgreSQL debug setup
 - `abff28c` Support existing local PostgreSQL debugging
+- next commit after this memory update adds trader discovery for leaderboard best/worst
+  candidates.
 
 ## Known Limitations
 

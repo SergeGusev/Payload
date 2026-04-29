@@ -96,6 +96,31 @@ public sealed record TraderLeaderboardEntry(
     string? XUsername,
     bool VerifiedBadge);
 
+public sealed record TraderDiscoveryCandidate(
+    Guid Id,
+    string DiscoveryType,
+    string Category,
+    string TimePeriod,
+    int? Rank,
+    string Wallet,
+    string UserName,
+    string? XUsername,
+    decimal LeaderboardPnl,
+    decimal LeaderboardVolume,
+    bool VerifiedBadge,
+    int TradesFetched,
+    int BuyTrades,
+    int SellTrades,
+    decimal RecentTradeVolumeUsd,
+    decimal AverageTradeUsd,
+    DateTimeOffset? LastTradeUtc,
+    int PositionsFetched,
+    decimal OpenPositionValueUsd,
+    decimal OpenPositionCashPnlUsd,
+    decimal OpenPositionRealizedPnlUsd,
+    string Notes,
+    DateTimeOffset SnapshotAtUtc);
+
 public sealed record TraderRule(
     string TraderWallet,
     IReadOnlyList<string> AllowedCategories,

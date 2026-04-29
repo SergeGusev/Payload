@@ -6,6 +6,7 @@ public static class PostgresSchema
     [
         "traders",
         "trader_rules",
+        "trader_discovery_candidates",
         "leader_trades",
         "leader_positions",
         "markets",
@@ -50,6 +51,39 @@ CREATE TABLE IF NOT EXISTS trader_rules (
     min_leader_trade_usd numeric(18,8) NOT NULL,
     created_at_utc timestamptz NOT NULL
 );
+
+CREATE TABLE IF NOT EXISTS trader_discovery_candidates (
+    id uuid PRIMARY KEY,
+    discovery_type text NOT NULL,
+    category text NOT NULL,
+    time_period text NOT NULL,
+    rank integer NULL,
+    wallet text NOT NULL,
+    user_name text NOT NULL,
+    x_username text NULL,
+    leaderboard_pnl numeric(28,8) NOT NULL,
+    leaderboard_volume numeric(28,8) NOT NULL,
+    verified_badge boolean NOT NULL,
+    trades_fetched integer NOT NULL,
+    buy_trades integer NOT NULL,
+    sell_trades integer NOT NULL,
+    recent_trade_volume_usd numeric(28,8) NOT NULL,
+    average_trade_usd numeric(28,8) NOT NULL,
+    last_trade_utc timestamptz NULL,
+    positions_fetched integer NOT NULL,
+    open_position_value_usd numeric(28,8) NOT NULL,
+    open_position_cash_pnl_usd numeric(28,8) NOT NULL,
+    open_position_realized_pnl_usd numeric(28,8) NOT NULL,
+    notes text NOT NULL,
+    snapshot_at_utc timestamptz NOT NULL,
+    updated_at_utc timestamptz NOT NULL
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS ux_trader_discovery_current
+ON trader_discovery_candidates(discovery_type, category, time_period, wallet);
+
+CREATE INDEX IF NOT EXISTS ix_trader_discovery_rank
+ON trader_discovery_candidates(discovery_type, category, time_period, leaderboard_pnl DESC);
 
 CREATE TABLE IF NOT EXISTS leader_trades (
     id uuid PRIMARY KEY,

@@ -2,7 +2,7 @@
 
 PolyCopyTrader is a Windows/.NET C# application for monitoring Polymarket traders and running a cautious copy-signal strategy.
 
-This repository is currently at Task 18: operations runbook. It contains project structure, typed configuration, PostgreSQL schema initialization, a basic repository, read-only Polymarket Data/CLOB/Geo clients, a Worker Service scanner/signal/paper/live loop, local dashboard controls, public market WebSocket monitoring, analytics reports, CSV export, diagnostics, a monitoring dashboard, L2 HMAC header infrastructure, dry-run CLOB V2 signing, manually gated tiny maker-only live order placement, Windows VPS deployment scripts, and operations runbooks.
+This repository is currently at Task 18 plus local debugging and trader discovery support. It contains project structure, typed configuration, PostgreSQL schema initialization, a basic repository, read-only Polymarket Data/CLOB/Geo clients, a Worker Service scanner/signal/paper/live loop, local dashboard controls, public market WebSocket monitoring, trader discovery, analytics reports, CSV export, diagnostics, a monitoring dashboard, L2 HMAC header infrastructure, dry-run CLOB V2 signing, manually gated tiny maker-only live order placement, Windows VPS deployment scripts, and operations runbooks.
 
 ## Safety
 
@@ -215,6 +215,19 @@ The service scans enabled `Watchlist:Traders` entries on `Bot:PollIntervalSecond
 
 Scanner health is persisted to `scanner_status` with last success/error timestamps and per-loop fetched/stored counts. Invalid placeholder wallets are warned and skipped without crashing the service.
 
+## Trader Discovery
+
+Trader discovery is disabled by default. When `TraderDiscovery:Enabled=true`, the service fetches Polymarket Data API leaderboard pages for the configured category/time period, selects best and worst candidates by PnL, enriches them with recent trades and current positions, and stores the current candidate set in `trader_discovery_candidates`.
+
+Enable locally with an environment override:
+
+```powershell
+$env:TraderDiscovery__Enabled="true"
+.\scripts\run-local-service.ps1 -Mode Paper -NoPostgres -RequireDatabase
+```
+
+The dashboard shows these rows in the Trader Discovery tab. Use this only for candidate research; a high leaderboard PnL is not enough to add a wallet to the watchlist without paper evaluation.
+
 ## Signal And Risk Engines
 
 Queued leader trades are evaluated by `DefaultSignalEngine` after the scanner stores them. The engine rejects unsupported sides, stale trades, small leader trades, missing/wide order books, unsafe maker prices, excessive slippage, category mismatches when category is known, and markets too close to event end. Accepted decisions produce proposed paper-order details only; no order placement happens in this task.
@@ -263,6 +276,7 @@ Interpret paper results conservatively. Paper fills are approximate, long positi
 
 - Overview: service heartbeat, mode, storage/API status, scanner status, bankroll, exposure, PnL.
 - Watchlist: configured traders plus scanner counters and errors.
+- Trader Discovery: leaderboard best/worst PnL candidates enriched with recent trades and positions.
 - Leader Trades: latest observed leader trades.
 - Signals: accepted/rejected decisions, reason codes, proposed paper details.
 - Dry Run Orders: unsigned/signed/rejected dry-run payload records and validation messages.

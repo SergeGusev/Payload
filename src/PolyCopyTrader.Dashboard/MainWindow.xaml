@@ -178,6 +178,33 @@
                 </DataGrid>
             </TabItem>
 
+            <TabItem Header="Trader Discovery">
+                <DataGrid ItemsSource="{Binding TraderDiscovery}">
+                    <DataGrid.Columns>
+                        <DataGridTextColumn Header="Snapshot UTC" Binding="{Binding SnapshotUtc}" Width="150" />
+                        <DataGridTextColumn Header="Type" Binding="{Binding Type}" Width="90" />
+                        <DataGridTextColumn Header="Category" Binding="{Binding Category}" Width="90" />
+                        <DataGridTextColumn Header="Period" Binding="{Binding TimePeriod}" Width="80" />
+                        <DataGridTextColumn Header="Rank" Binding="{Binding Rank}" Width="70" />
+                        <DataGridTextColumn Header="User" Binding="{Binding UserName}" Width="150" />
+                        <DataGridTextColumn Header="Wallet" Binding="{Binding Wallet}" Width="260" />
+                        <DataGridTextColumn Header="PnL" Binding="{Binding Pnl}" Width="90" />
+                        <DataGridTextColumn Header="Volume" Binding="{Binding Volume}" Width="100" />
+                        <DataGridCheckBoxColumn Header="Verified" Binding="{Binding Verified}" Width="80" />
+                        <DataGridTextColumn Header="Trades" Binding="{Binding TradesFetched}" Width="70" />
+                        <DataGridTextColumn Header="Buy" Binding="{Binding BuyTrades}" Width="60" />
+                        <DataGridTextColumn Header="Sell" Binding="{Binding SellTrades}" Width="60" />
+                        <DataGridTextColumn Header="Recent Vol" Binding="{Binding RecentTradeVolumeUsd}" Width="100" />
+                        <DataGridTextColumn Header="Avg Trade" Binding="{Binding AverageTradeUsd}" Width="100" />
+                        <DataGridTextColumn Header="Last Trade UTC" Binding="{Binding LastTradeUtc}" Width="150" />
+                        <DataGridTextColumn Header="Positions" Binding="{Binding PositionsFetched}" Width="80" />
+                        <DataGridTextColumn Header="Position Value" Binding="{Binding OpenPositionValueUsd}" Width="110" />
+                        <DataGridTextColumn Header="Position PnL" Binding="{Binding OpenPositionCashPnlUsd}" Width="110" />
+                        <DataGridTextColumn Header="Notes" Binding="{Binding Notes}" Width="*" />
+                    </DataGrid.Columns>
+                </DataGrid>
+            </TabItem>
+
             <TabItem Header="Leader Trades">
                 <DataGrid ItemsSource="{Binding LeaderTrades}">
                     <DataGrid.Columns>

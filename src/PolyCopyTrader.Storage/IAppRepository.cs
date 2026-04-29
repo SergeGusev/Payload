@@ -12,6 +12,14 @@ public interface IAppRepository
 
     Task AddLeaderPositionAsync(LeaderPosition position, CancellationToken cancellationToken = default);
 
+    Task UpsertTraderDiscoveryCandidatesAsync(
+        IReadOnlyList<TraderDiscoveryCandidate> candidates,
+        CancellationToken cancellationToken = default);
+
+    Task<IReadOnlyList<TraderDiscoveryCandidate>> GetRecentTraderDiscoveryCandidatesAsync(
+        int limit = 100,
+        CancellationToken cancellationToken = default);
+
     Task AddSignalAsync(Signal signal, CancellationToken cancellationToken = default);
 
     Task<IReadOnlyList<SignalSummary>> GetRecentSignalsAsync(int limit = 100, CancellationToken cancellationToken = default);

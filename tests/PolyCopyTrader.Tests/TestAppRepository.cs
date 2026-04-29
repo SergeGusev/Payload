@@ -11,6 +11,8 @@ internal sealed class TestAppRepository : IAppRepository
 
     public List<LeaderPosition> LeaderPositions { get; } = [];
 
+    public List<TraderDiscoveryCandidate> TraderDiscoveryCandidates { get; } = [];
+
     public List<Signal> Signals { get; } = [];
 
     public List<SignalRejection> SignalRejections { get; } = [];
@@ -65,6 +67,34 @@ internal sealed class TestAppRepository : IAppRepository
     {
         LeaderPositions.Add(position);
         return Task.CompletedTask;
+    }
+
+    public Task UpsertTraderDiscoveryCandidatesAsync(
+        IReadOnlyList<TraderDiscoveryCandidate> candidates,
+        CancellationToken cancellationToken = default)
+    {
+        foreach (var candidate in candidates)
+        {
+            TraderDiscoveryCandidates.RemoveAll(item =>
+                string.Equals(item.DiscoveryType, candidate.DiscoveryType, StringComparison.OrdinalIgnoreCase) &&
+                string.Equals(item.Category, candidate.Category, StringComparison.OrdinalIgnoreCase) &&
+                string.Equals(item.TimePeriod, candidate.TimePeriod, StringComparison.OrdinalIgnoreCase) &&
+                string.Equals(item.Wallet, candidate.Wallet, StringComparison.OrdinalIgnoreCase));
+            TraderDiscoveryCandidates.Add(candidate);
+        }
+
+        return Task.CompletedTask;
+    }
+
+    public Task<IReadOnlyList<TraderDiscoveryCandidate>> GetRecentTraderDiscoveryCandidatesAsync(
+        int limit = 100,
+        CancellationToken cancellationToken = default)
+    {
+        return Task.FromResult<IReadOnlyList<TraderDiscoveryCandidate>>(
+            TraderDiscoveryCandidates
+                .OrderByDescending(item => item.SnapshotAtUtc)
+                .Take(limit)
+                .ToArray());
     }
 
     public Task AddSignalAsync(Signal signal, CancellationToken cancellationToken = default)

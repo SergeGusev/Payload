@@ -28,6 +28,7 @@ public static class AppOptionsValidator
         ValidateLiveTrading(configuration.Bot, configuration.PolymarketAuth, configuration.LiveTrading, errors);
         ValidateDashboard(configuration.Dashboard, errors);
         ValidateAnalytics(configuration.Analytics, errors);
+        ValidateTraderDiscovery(configuration.TraderDiscovery, errors);
         ValidateIpc(configuration.Ipc, errors);
         ValidateStorage(configuration.Storage, errors);
         return errors;
@@ -57,6 +58,9 @@ public static class AppOptionsValidator
             $"IPC enabled: {configuration.Ipc.Enabled}",
             $"IPC dashboard URL: {configuration.Ipc.DashboardBaseUrl}",
             $"Daily reports enabled: {configuration.Analytics.DailyReportGenerationEnabled}",
+            $"Trader discovery enabled: {configuration.TraderDiscovery.Enabled}",
+            $"Trader discovery category: {configuration.TraderDiscovery.Category}",
+            $"Trader discovery time period: {configuration.TraderDiscovery.TimePeriod}",
             $"Watchlist traders: {configuration.Watchlist.Traders.Count}",
             $"Paper bankroll USD: {configuration.PaperTrading.InitialBankrollUsd}");
     }
@@ -467,6 +471,49 @@ public static class AppOptionsValidator
         }
     }
 
+    private static void ValidateTraderDiscovery(TraderDiscoveryOptions options, List<string> errors)
+    {
+        if (!IsSupportedLeaderboardCategory(options.Category))
+        {
+            errors.Add("TraderDiscovery.Category is invalid.");
+        }
+
+        if (!IsSupportedLeaderboardTimePeriod(options.TimePeriod))
+        {
+            errors.Add("TraderDiscovery.TimePeriod must be DAY, WEEK, MONTH, or ALL.");
+        }
+
+        if (options.RefreshIntervalMinutes <= 0)
+        {
+            errors.Add("TraderDiscovery.RefreshIntervalMinutes must be greater than zero.");
+        }
+
+        if (options.LeaderboardPages <= 0 || options.LeaderboardPages > 21)
+        {
+            errors.Add("TraderDiscovery.LeaderboardPages must be between 1 and 21.");
+        }
+
+        if (options.CandidatesPerSide <= 0 || options.CandidatesPerSide > 50)
+        {
+            errors.Add("TraderDiscovery.CandidatesPerSide must be between 1 and 50.");
+        }
+
+        if (options.TradesPerCandidate <= 0 || options.TradesPerCandidate > 100)
+        {
+            errors.Add("TraderDiscovery.TradesPerCandidate must be between 1 and 100.");
+        }
+
+        if (options.PositionsPerCandidate <= 0 || options.PositionsPerCandidate > 500)
+        {
+            errors.Add("TraderDiscovery.PositionsPerCandidate must be between 1 and 500.");
+        }
+
+        if (options.RequestDelayMilliseconds < 0)
+        {
+            errors.Add("TraderDiscovery.RequestDelayMilliseconds must not be negative.");
+        }
+    }
+
     private static void ValidateIpc(IpcOptions options, List<string> errors)
     {
         ValidateLoopbackHttpUrl(options.ListenUrl, "Ipc.ListenUrl", errors);
@@ -529,6 +576,28 @@ public static class AppOptionsValidator
             string.Equals(value, "POLY_PROXY", StringComparison.OrdinalIgnoreCase) ||
             string.Equals(value, "POLY_GNOSIS_SAFE", StringComparison.OrdinalIgnoreCase) ||
             string.Equals(value, "POLY_1271", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static bool IsSupportedLeaderboardCategory(string value)
+    {
+        return string.Equals(value, "OVERALL", StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(value, "POLITICS", StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(value, "SPORTS", StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(value, "CRYPTO", StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(value, "CULTURE", StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(value, "MENTIONS", StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(value, "WEATHER", StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(value, "ECONOMICS", StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(value, "TECH", StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(value, "FINANCE", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static bool IsSupportedLeaderboardTimePeriod(string value)
+    {
+        return string.Equals(value, "DAY", StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(value, "WEEK", StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(value, "MONTH", StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(value, "ALL", StringComparison.OrdinalIgnoreCase);
     }
 
     private static bool IsAddressLike(string value)

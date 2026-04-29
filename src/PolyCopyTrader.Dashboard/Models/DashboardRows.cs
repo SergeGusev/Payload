@@ -14,6 +14,28 @@ public sealed record WatchlistRow(
     string Status,
     string LastError);
 
+public sealed record TraderDiscoveryRow(
+    string SnapshotUtc,
+    string Type,
+    string Category,
+    string TimePeriod,
+    string Rank,
+    string UserName,
+    string Wallet,
+    decimal Pnl,
+    decimal Volume,
+    bool Verified,
+    int TradesFetched,
+    int BuyTrades,
+    int SellTrades,
+    decimal RecentTradeVolumeUsd,
+    decimal AverageTradeUsd,
+    string LastTradeUtc,
+    int PositionsFetched,
+    decimal OpenPositionValueUsd,
+    decimal OpenPositionCashPnlUsd,
+    string Notes);
+
 public sealed record LeaderTradeRow(
     string TimestampUtc,
     string Trader,
@@ -185,6 +207,7 @@ public sealed record RunbookLinkRow(string Document, string Path, string Purpose
 public sealed record DashboardSnapshot(
     IReadOnlyList<OverviewMetric> Overview,
     IReadOnlyList<WatchlistRow> Watchlist,
+    IReadOnlyList<TraderDiscoveryRow> TraderDiscovery,
     IReadOnlyList<LeaderTradeRow> LeaderTrades,
     IReadOnlyList<SignalRow> Signals,
     IReadOnlyList<PaperOrderRow> PaperOrders,

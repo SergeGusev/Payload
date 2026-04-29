@@ -124,6 +124,120 @@ INSERT INTO leader_positions (
         await command.ExecuteNonQueryAsync(cancellationToken);
     }
 
+    public async Task UpsertTraderDiscoveryCandidatesAsync(
+        IReadOnlyList<TraderDiscoveryCandidate> candidates,
+        CancellationToken cancellationToken = default)
+    {
+        if (candidates.Count == 0)
+        {
+            return;
+        }
+
+        const string sql = """
+INSERT INTO trader_discovery_candidates (
+    id, discovery_type, category, time_period, rank, wallet, user_name, x_username,
+    leaderboard_pnl, leaderboard_volume, verified_badge, trades_fetched, buy_trades,
+    sell_trades, recent_trade_volume_usd, average_trade_usd, last_trade_utc,
+    positions_fetched, open_position_value_usd, open_position_cash_pnl_usd,
+    open_position_realized_pnl_usd, notes, snapshot_at_utc, updated_at_utc
+) VALUES (
+    @Id, @DiscoveryType, @Category, @TimePeriod, @Rank, @Wallet, @UserName, @XUsername,
+    @LeaderboardPnl, @LeaderboardVolume, @VerifiedBadge, @TradesFetched, @BuyTrades,
+    @SellTrades, @RecentTradeVolumeUsd, @AverageTradeUsd, @LastTradeUtc,
+    @PositionsFetched, @OpenPositionValueUsd, @OpenPositionCashPnlUsd,
+    @OpenPositionRealizedPnlUsd, @Notes, @SnapshotAtUtc, @UpdatedAtUtc
+)
+ON CONFLICT (discovery_type, category, time_period, wallet) DO UPDATE SET
+    id = excluded.id,
+    rank = excluded.rank,
+    user_name = excluded.user_name,
+    x_username = excluded.x_username,
+    leaderboard_pnl = excluded.leaderboard_pnl,
+    leaderboard_volume = excluded.leaderboard_volume,
+    verified_badge = excluded.verified_badge,
+    trades_fetched = excluded.trades_fetched,
+    buy_trades = excluded.buy_trades,
+    sell_trades = excluded.sell_trades,
+    recent_trade_volume_usd = excluded.recent_trade_volume_usd,
+    average_trade_usd = excluded.average_trade_usd,
+    last_trade_utc = excluded.last_trade_utc,
+    positions_fetched = excluded.positions_fetched,
+    open_position_value_usd = excluded.open_position_value_usd,
+    open_position_cash_pnl_usd = excluded.open_position_cash_pnl_usd,
+    open_position_realized_pnl_usd = excluded.open_position_realized_pnl_usd,
+    notes = excluded.notes,
+    snapshot_at_utc = excluded.snapshot_at_utc,
+    updated_at_utc = excluded.updated_at_utc;
+""";
+
+        await using var connection = await OpenConnectionAsync(cancellationToken);
+        await using var transaction = await connection.BeginTransactionAsync(cancellationToken);
+        foreach (var candidate in candidates)
+        {
+            await using var command = CreateCommand(connection, sql);
+            command.Transaction = transaction;
+            AddTraderDiscoveryParameters(command, candidate);
+            await command.ExecuteNonQueryAsync(cancellationToken);
+        }
+
+        await transaction.CommitAsync(cancellationToken);
+    }
+
+    public async Task<IReadOnlyList<TraderDiscoveryCandidate>> GetRecentTraderDiscoveryCandidatesAsync(
+        int limit = 100,
+        CancellationToken cancellationToken = default)
+    {
+        const string sql = """
+SELECT id, discovery_type, category, time_period, rank, wallet, user_name, x_username,
+       leaderboard_pnl, leaderboard_volume, verified_badge, trades_fetched, buy_trades,
+       sell_trades, recent_trade_volume_usd, average_trade_usd, last_trade_utc,
+       positions_fetched, open_position_value_usd, open_position_cash_pnl_usd,
+       open_position_realized_pnl_usd, notes, snapshot_at_utc
+FROM trader_discovery_candidates
+ORDER BY snapshot_at_utc DESC,
+         discovery_type,
+         CASE WHEN discovery_type = 'WorstPnl' THEN leaderboard_pnl END ASC,
+         leaderboard_pnl DESC
+LIMIT @Limit;
+""";
+
+        await using var connection = await OpenConnectionAsync(cancellationToken);
+        await using var command = CreateCommand(connection, sql);
+        command.Parameters.AddWithValue("Limit", limit);
+        await using var reader = await command.ExecuteReaderAsync(cancellationToken);
+
+        var results = new List<TraderDiscoveryCandidate>();
+        while (await reader.ReadAsync(cancellationToken))
+        {
+            results.Add(new TraderDiscoveryCandidate(
+                reader.GetGuid(0),
+                reader.GetString(1),
+                reader.GetString(2),
+                reader.GetString(3),
+                reader.IsDBNull(4) ? null : reader.GetInt32(4),
+                reader.GetString(5),
+                reader.GetString(6),
+                reader.IsDBNull(7) ? null : reader.GetString(7),
+                reader.GetDecimal(8),
+                reader.GetDecimal(9),
+                reader.GetBoolean(10),
+                reader.GetInt32(11),
+                reader.GetInt32(12),
+                reader.GetInt32(13),
+                reader.GetDecimal(14),
+                reader.GetDecimal(15),
+                reader.IsDBNull(16) ? null : DateTimeOffsetFromUtc(reader.GetDateTime(16)),
+                reader.GetInt32(17),
+                reader.GetDecimal(18),
+                reader.GetDecimal(19),
+                reader.GetDecimal(20),
+                reader.GetString(21),
+                DateTimeOffsetFromUtc(reader.GetDateTime(22))));
+        }
+
+        return results;
+    }
+
     public async Task AddSignalAsync(Signal signal, CancellationToken cancellationToken = default)
     {
         const string sql = """
@@ -1627,6 +1741,34 @@ ORDER BY service_name;
         command.Parameters.AddWithValue("RawResponseJson", string.IsNullOrWhiteSpace(order.RawResponseJson) ? "{}" : order.RawResponseJson);
         command.Parameters.AddWithValue("ValidationSummary", order.ValidationSummary);
         command.Parameters.AddWithValue("UpdatedAtUtc", UtcDateTime(order.UpdatedAtUtc));
+    }
+
+    private static void AddTraderDiscoveryParameters(NpgsqlCommand command, TraderDiscoveryCandidate candidate)
+    {
+        command.Parameters.AddWithValue("Id", candidate.Id);
+        command.Parameters.AddWithValue("DiscoveryType", candidate.DiscoveryType);
+        command.Parameters.AddWithValue("Category", candidate.Category);
+        command.Parameters.AddWithValue("TimePeriod", candidate.TimePeriod);
+        command.Parameters.AddWithValue("Rank", candidate.Rank is { } rank ? rank : DBNull.Value);
+        command.Parameters.AddWithValue("Wallet", candidate.Wallet);
+        command.Parameters.AddWithValue("UserName", candidate.UserName);
+        command.Parameters.AddWithValue("XUsername", (object?)candidate.XUsername ?? DBNull.Value);
+        command.Parameters.AddWithValue("LeaderboardPnl", candidate.LeaderboardPnl);
+        command.Parameters.AddWithValue("LeaderboardVolume", candidate.LeaderboardVolume);
+        command.Parameters.AddWithValue("VerifiedBadge", candidate.VerifiedBadge);
+        command.Parameters.AddWithValue("TradesFetched", candidate.TradesFetched);
+        command.Parameters.AddWithValue("BuyTrades", candidate.BuyTrades);
+        command.Parameters.AddWithValue("SellTrades", candidate.SellTrades);
+        command.Parameters.AddWithValue("RecentTradeVolumeUsd", candidate.RecentTradeVolumeUsd);
+        command.Parameters.AddWithValue("AverageTradeUsd", candidate.AverageTradeUsd);
+        command.Parameters.AddWithValue("LastTradeUtc", candidate.LastTradeUtc is { } lastTrade ? UtcDateTime(lastTrade) : DBNull.Value);
+        command.Parameters.AddWithValue("PositionsFetched", candidate.PositionsFetched);
+        command.Parameters.AddWithValue("OpenPositionValueUsd", candidate.OpenPositionValueUsd);
+        command.Parameters.AddWithValue("OpenPositionCashPnlUsd", candidate.OpenPositionCashPnlUsd);
+        command.Parameters.AddWithValue("OpenPositionRealizedPnlUsd", candidate.OpenPositionRealizedPnlUsd);
+        command.Parameters.AddWithValue("Notes", candidate.Notes);
+        command.Parameters.AddWithValue("SnapshotAtUtc", UtcDateTime(candidate.SnapshotAtUtc));
+        command.Parameters.AddWithValue("UpdatedAtUtc", DateTime.UtcNow);
     }
 
     private static async Task<IReadOnlyList<LiveOrder>> ReadLiveOrdersAsync(
