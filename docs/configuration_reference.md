@@ -102,7 +102,7 @@ Windows Credential Manager.
 - `Provider`: must be `PostgreSQL`.
 - `ConnectionString`: local override; prefer environment variables.
 - `ConnectionStringEnvironmentVariable`: defaults to `POLYCOPYTRADER_POSTGRES_CONNECTION`.
-- `RequireConfiguredDatabase`: set true on VPS/production runs.
+- `RequireConfiguredDatabase`: set true when the process must fail if storage is missing. The service requires PostgreSQL even if this is overridden; the dashboard can still run without storage.
 
 ## IPC
 

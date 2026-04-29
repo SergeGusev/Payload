@@ -83,6 +83,12 @@ Later, Polymarket HTTP request/response logging was added:
 - request bodies and auth headers are intentionally not stored.
 - tests increased from 100 to 102.
 
+Later, `PolyCopyTrader.Service` was changed to require PostgreSQL storage on every
+real service run. If `POLYCOPYTRADER_POSTGRES_CONNECTION` or `Storage:ConnectionString`
+is missing, the service fails on startup instead of registering `NoOpAppRepository`.
+This prevents Polymarket HTTP logs and other audit rows from silently disappearing.
+The dashboard can still use `NoOpAppRepository` for empty diagnostic startup.
+
 ## Important Safety Position
 
 Live trading exists in code, but it is not ready to turn on casually.
@@ -213,7 +219,7 @@ Projects:
   - schema initializer;
   - Npgsql connection factory;
   - repository implementation;
-  - no-op repository fallback when storage is not configured.
+  - no-op repository fallback for dashboard/tests when storage is not configured.
 - `src/PolyCopyTrader.Polymarket`
   - public Data API client;
   - public CLOB API client;
@@ -477,6 +483,12 @@ Dashboard storage behavior:
 - after commit `abff28c`, dashboard supports env vars, including
   `POLYCOPYTRADER_POSTGRES_CONNECTION`.
 
+Service storage behavior:
+
+- service requires PostgreSQL and does not run with `NoOpAppRepository`;
+- this is intentional so Polymarket HTTP logs, API errors, commands, and trading
+  events are always persisted.
+
 ## Deployment And Operations
 
 Deployment scripts live in `deploy/`:
@@ -554,6 +566,7 @@ Implemented history:
 - later commit adds Polymarket certificate pinning for HTTP and WebSocket endpoints.
 - later commit adds `scripts/get-polymarket-certificate-pins.ps1`.
 - next commit adds `polymarket_http_logs` request/response auditing.
+- later commit makes service PostgreSQL storage mandatory so audit logs are not lost.
 
 ## Known Limitations
 

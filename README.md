@@ -120,10 +120,11 @@ See `deploy/README.md` for VPS security, backup, logging, RDP/firewall, secret h
 ## Print Config Summary
 
 ```powershell
+$env:POLYCOPYTRADER_POSTGRES_CONNECTION="Host=...;Port=5432;Database=...;Username=...;Password=...;SSL Mode=Require"
 dotnet run --project src/PolyCopyTrader.Service/PolyCopyTrader.Service.csproj -- --print-config
 ```
 
-The summary is sanitized and does not include secrets. Live trading is disabled by configuration and validation.
+The summary is sanitized and does not include secrets. Live trading is disabled by configuration and validation. The service config requires PostgreSQL to be configured.
 
 ## Run Dashboard
 
@@ -142,7 +143,7 @@ $env:POLYCOPYTRADER_POSTGRES_CONNECTION="Host=...;Port=5432;Database=...;Usernam
 dotnet run --project src/PolyCopyTrader.Service/PolyCopyTrader.Service.csproj
 ```
 
-If no PostgreSQL connection string is configured, storage is disabled and the service uses a no-op repository. Set `Storage:RequireConfiguredDatabase` to `true` for production/VPS runs.
+`PolyCopyTrader.Service` requires PostgreSQL storage. If no PostgreSQL connection string is configured, the service fails on startup instead of silently using a no-op repository. This keeps Polymarket HTTP logs, API errors, commands, and trading events from disappearing during debugging. The dashboard can still open without storage and will show empty/diagnostic states.
 
 ### Local PostgreSQL Debugging
 
@@ -189,7 +190,7 @@ The `PolyCopyTrader.Polymarket` project contains read-only clients for:
 - CLOB public API: order book, server time, midpoint, and spread.
 - Geo endpoint: current geoblock status.
 
-User trade calls explicitly send `takerOnly=false` when requested so maker fills are not silently excluded. HTTP failures are retried for transient `429`/`5xx` responses and persisted to `ApiErrors` through the configured repository. When PostgreSQL is not configured, the no-op repository keeps local scaffold runs read-only and dependency-free.
+User trade calls explicitly send `takerOnly=false` when requested so maker fills are not silently excluded. HTTP failures are retried for transient `429`/`5xx` responses and persisted to `ApiErrors` through PostgreSQL.
 
 Every Polymarket HTTP attempt is also written to PostgreSQL table `polymarket_http_logs` when storage is configured. Rows include component, operation, method, request URL, request/response UTC timestamps, duration, attempt number, HTTP status, success flag, response body preview, and error message. Request bodies and auth headers are not stored.
 
@@ -322,7 +323,7 @@ Interpret paper results conservatively. Paper fills are approximate, long positi
 
 ## Troubleshooting
 
-- PostgreSQL not configured: set `POLYCOPYTRADER_POSTGRES_CONNECTION`, restart the service, and check the Diagnostics tab. In local scaffold runs, the no-op repository is expected when no connection string exists.
+- PostgreSQL not configured: set `POLYCOPYTRADER_POSTGRES_CONNECTION` and restart the service. The service does not run with no-op storage.
 - Invalid watchlist wallet: the scanner skips placeholder/invalid wallets, records a warning status, and keeps the service running.
 - Polymarket TLS certificate errors: configure `Polymarket:CertificatePins` only after verifying the current endpoint certificate pin out of band. Do not use an accept-any certificate callback in production.
 - HTTP 429/5xx from Polymarket: public clients retry transient failures according to `Polymarket:MaxRetries` and record API errors when retries are exhausted.

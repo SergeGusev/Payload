@@ -40,6 +40,15 @@ Log.Logger = new LoggerConfiguration()
         rollingInterval: RollingInterval.Day)
     .CreateLogger();
 
+if (!StorageConnectionResolver.IsConfigured(appConfiguration.Storage))
+{
+    var message =
+        $"PolyCopyTrader.Service requires PostgreSQL storage. Set {appConfiguration.Storage.ConnectionStringEnvironmentVariable} or Storage:ConnectionString.";
+    Log.Fatal(message);
+    await Log.CloseAndFlushAsync();
+    throw new InvalidOperationException(message);
+}
+
 builder.Services.AddSerilog(Log.Logger, dispose: true);
 builder.Services.AddSingleton(appConfiguration);
 builder.Services.AddSingleton(appConfiguration.Bot);
@@ -58,18 +67,9 @@ builder.Services.AddSingleton(appConfiguration.TraderDiscovery);
 builder.Services.AddSingleton(appConfiguration.Ipc);
 builder.Services.AddSingleton(appConfiguration.Storage);
 builder.Services.AddWindowsService(options => options.ServiceName = "PolyCopyTrader.Service");
-
-if (StorageConnectionResolver.IsConfigured(appConfiguration.Storage))
-{
-    builder.Services.AddSingleton<PostgresConnectionFactory>();
-    builder.Services.AddSingleton<IStorageSchemaInitializer, PostgresSchemaInitializer>();
-    builder.Services.AddSingleton<IAppRepository, PostgresAppRepository>();
-}
-else
-{
-    builder.Services.AddSingleton<IStorageSchemaInitializer, NoOpStorageSchemaInitializer>();
-    builder.Services.AddSingleton<IAppRepository, NoOpAppRepository>();
-}
+builder.Services.AddSingleton<PostgresConnectionFactory>();
+builder.Services.AddSingleton<IStorageSchemaInitializer, PostgresSchemaInitializer>();
+builder.Services.AddSingleton<IAppRepository, PostgresAppRepository>();
 
 builder.Services.AddSingleton<IPolymarketApiErrorSink, RepositoryPolymarketApiErrorSink>();
 builder.Services.AddSingleton<IPolymarketHttpLogSink, RepositoryPolymarketHttpLogSink>();
@@ -112,14 +112,6 @@ try
 {
     Log.Information("Starting PolyCopyTrader service host.");
     Log.Information("Configuration summary:{NewLine}{ConfigSummary}", Environment.NewLine, AppOptionsValidator.ToSanitizedSummary(appConfiguration));
-
-    if (!StorageConnectionResolver.IsConfigured(appConfiguration.Storage))
-    {
-        Log.Warning(
-            "PostgreSQL connection string is not configured. Storage is disabled until {EnvVar} is set.",
-            appConfiguration.Storage.ConnectionStringEnvironmentVariable);
-    }
-
     var host = builder.Build();
     await host.Services.GetRequiredService<IStorageSchemaInitializer>().InitializeAsync();
     await host.RunAsync();
