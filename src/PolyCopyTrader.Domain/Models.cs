@@ -223,11 +223,14 @@ public sealed record PaperOrder(
     TradeSide Side,
     string AssetId,
     string ConditionId,
+    string Outcome,
     decimal Price,
     decimal SizeShares,
     decimal NotionalUsd,
     DateTimeOffset CreatedAtUtc,
-    DateTimeOffset ExpiresAtUtc);
+    DateTimeOffset ExpiresAtUtc,
+    DateTimeOffset? FilledAtUtc = null,
+    DateTimeOffset? CancelledAtUtc = null);
 
 public sealed record PaperPosition(
     string AssetId,
@@ -236,7 +239,8 @@ public sealed record PaperPosition(
     decimal SizeShares,
     decimal AveragePrice,
     decimal EstimatedValueUsd,
-    decimal UnrealizedPnlUsd);
+    decimal UnrealizedPnlUsd,
+    DateTimeOffset UpdatedAtUtc);
 
 public sealed record SignalRejection(
     Guid Id,

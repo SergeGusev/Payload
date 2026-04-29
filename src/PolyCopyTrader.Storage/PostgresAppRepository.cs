@@ -182,10 +182,10 @@ VALUES (@Id, @SignalId, @ReasonCode, @ReasonDetails, @CreatedAtUtc);
     {
         const string sql = """
 INSERT INTO paper_orders (
-    id, signal_id, status, side, asset_id, condition_id, price, size_shares, notional_usd,
+    id, signal_id, status, side, asset_id, condition_id, outcome, price, size_shares, notional_usd,
     created_at_utc, expires_at_utc, filled_at_utc, cancelled_at_utc, raw_decision_json
 ) VALUES (
-    @Id, @SignalId, @Status, @Side, @AssetId, @ConditionId, @Price, @SizeShares, @NotionalUsd,
+    @Id, @SignalId, @Status, @Side, @AssetId, @ConditionId, @Outcome, @Price, @SizeShares, @NotionalUsd,
     @CreatedAtUtc, @ExpiresAtUtc, @FilledAtUtc, @CancelledAtUtc, CAST(@RawDecisionJson AS jsonb)
 );
 """;
@@ -198,13 +198,35 @@ INSERT INTO paper_orders (
         command.Parameters.AddWithValue("Side", order.Side.ToString());
         command.Parameters.AddWithValue("AssetId", order.AssetId);
         command.Parameters.AddWithValue("ConditionId", order.ConditionId);
+        command.Parameters.AddWithValue("Outcome", order.Outcome);
         command.Parameters.AddWithValue("Price", order.Price);
         command.Parameters.AddWithValue("SizeShares", order.SizeShares);
         command.Parameters.AddWithValue("NotionalUsd", order.NotionalUsd);
         command.Parameters.AddWithValue("CreatedAtUtc", UtcDateTime(order.CreatedAtUtc));
         command.Parameters.AddWithValue("ExpiresAtUtc", UtcDateTime(order.ExpiresAtUtc));
-        command.Parameters.AddWithValue("FilledAtUtc", DBNull.Value);
-        command.Parameters.AddWithValue("CancelledAtUtc", DBNull.Value);
+        command.Parameters.AddWithValue("FilledAtUtc", order.FilledAtUtc is { } filledAt ? UtcDateTime(filledAt) : DBNull.Value);
+        command.Parameters.AddWithValue("CancelledAtUtc", order.CancelledAtUtc is { } cancelledAt ? UtcDateTime(cancelledAt) : DBNull.Value);
+        command.Parameters.AddWithValue("RawDecisionJson", JsonSerializer.Serialize(order));
+        await command.ExecuteNonQueryAsync(cancellationToken);
+    }
+
+    public async Task UpdatePaperOrderAsync(PaperOrder order, CancellationToken cancellationToken = default)
+    {
+        const string sql = """
+UPDATE paper_orders
+SET status = @Status,
+    filled_at_utc = @FilledAtUtc,
+    cancelled_at_utc = @CancelledAtUtc,
+    raw_decision_json = CAST(@RawDecisionJson AS jsonb)
+WHERE id = @Id;
+""";
+
+        await using var connection = await OpenConnectionAsync(cancellationToken);
+        await using var command = CreateCommand(connection, sql);
+        command.Parameters.AddWithValue("Id", order.Id);
+        command.Parameters.AddWithValue("Status", order.Status.ToString());
+        command.Parameters.AddWithValue("FilledAtUtc", order.FilledAtUtc is { } filledAt ? UtcDateTime(filledAt) : DBNull.Value);
+        command.Parameters.AddWithValue("CancelledAtUtc", order.CancelledAtUtc is { } cancelledAt ? UtcDateTime(cancelledAt) : DBNull.Value);
         command.Parameters.AddWithValue("RawDecisionJson", JsonSerializer.Serialize(order));
         await command.ExecuteNonQueryAsync(cancellationToken);
     }
@@ -212,8 +234,8 @@ INSERT INTO paper_orders (
     public async Task<IReadOnlyList<PaperOrder>> GetOpenPaperOrdersAsync(CancellationToken cancellationToken = default)
     {
         const string sql = """
-SELECT id, signal_id, status, side, asset_id, condition_id, price, size_shares, notional_usd,
-       created_at_utc, expires_at_utc
+SELECT id, signal_id, status, side, asset_id, condition_id, outcome, price, size_shares, notional_usd,
+       created_at_utc, expires_at_utc, filled_at_utc, cancelled_at_utc
 FROM paper_orders
 WHERE status IN ('Pending', 'PartiallyFilled')
 ORDER BY created_at_utc DESC;
@@ -233,20 +255,75 @@ ORDER BY created_at_utc DESC;
                 Enum.Parse<TradeSide>(reader.GetString(3)),
                 reader.GetString(4),
                 reader.GetString(5),
-                reader.GetDecimal(6),
+                reader.GetString(6),
                 reader.GetDecimal(7),
                 reader.GetDecimal(8),
-                DateTimeOffsetFromUtc(reader.GetDateTime(9)),
-                DateTimeOffsetFromUtc(reader.GetDateTime(10))));
+                reader.GetDecimal(9),
+                DateTimeOffsetFromUtc(reader.GetDateTime(10)),
+                DateTimeOffsetFromUtc(reader.GetDateTime(11)),
+                reader.IsDBNull(12) ? null : DateTimeOffsetFromUtc(reader.GetDateTime(12)),
+                reader.IsDBNull(13) ? null : DateTimeOffsetFromUtc(reader.GetDateTime(13))));
         }
 
         return results;
     }
 
+    public async Task AddPaperFillAsync(PaperFill fill, CancellationToken cancellationToken = default)
+    {
+        const string sql = """
+INSERT INTO paper_fills (id, paper_order_id, price, size_shares, filled_at_utc, evidence)
+VALUES (@Id, @PaperOrderId, @Price, @SizeShares, @FilledAtUtc, @Evidence);
+""";
+
+        await using var connection = await OpenConnectionAsync(cancellationToken);
+        await using var command = CreateCommand(connection, sql);
+        command.Parameters.AddWithValue("Id", fill.Id);
+        command.Parameters.AddWithValue("PaperOrderId", fill.PaperOrderId);
+        command.Parameters.AddWithValue("Price", fill.Price);
+        command.Parameters.AddWithValue("SizeShares", fill.SizeShares);
+        command.Parameters.AddWithValue("FilledAtUtc", UtcDateTime(fill.FilledAtUtc));
+        command.Parameters.AddWithValue("Evidence", fill.Evidence);
+        await command.ExecuteNonQueryAsync(cancellationToken);
+    }
+
+    public async Task UpsertPaperPositionAsync(PaperPosition position, CancellationToken cancellationToken = default)
+    {
+        const string sql = """
+INSERT INTO paper_positions (
+    id, asset_id, condition_id, outcome, size_shares, average_price,
+    estimated_value_usd, unrealized_pnl_usd, updated_at_utc
+) VALUES (
+    @Id, @AssetId, @ConditionId, @Outcome, @SizeShares, @AveragePrice,
+    @EstimatedValueUsd, @UnrealizedPnlUsd, @UpdatedAtUtc
+)
+ON CONFLICT (asset_id) DO UPDATE SET
+    condition_id = excluded.condition_id,
+    outcome = excluded.outcome,
+    size_shares = excluded.size_shares,
+    average_price = excluded.average_price,
+    estimated_value_usd = excluded.estimated_value_usd,
+    unrealized_pnl_usd = excluded.unrealized_pnl_usd,
+    updated_at_utc = excluded.updated_at_utc;
+""";
+
+        await using var connection = await OpenConnectionAsync(cancellationToken);
+        await using var command = CreateCommand(connection, sql);
+        command.Parameters.AddWithValue("Id", Guid.NewGuid());
+        command.Parameters.AddWithValue("AssetId", position.AssetId);
+        command.Parameters.AddWithValue("ConditionId", position.ConditionId);
+        command.Parameters.AddWithValue("Outcome", position.Outcome);
+        command.Parameters.AddWithValue("SizeShares", position.SizeShares);
+        command.Parameters.AddWithValue("AveragePrice", position.AveragePrice);
+        command.Parameters.AddWithValue("EstimatedValueUsd", position.EstimatedValueUsd);
+        command.Parameters.AddWithValue("UnrealizedPnlUsd", position.UnrealizedPnlUsd);
+        command.Parameters.AddWithValue("UpdatedAtUtc", UtcDateTime(position.UpdatedAtUtc));
+        await command.ExecuteNonQueryAsync(cancellationToken);
+    }
+
     public async Task<IReadOnlyList<PaperPosition>> GetPaperPositionsAsync(CancellationToken cancellationToken = default)
     {
         const string sql = """
-SELECT asset_id, condition_id, outcome, size_shares, average_price, estimated_value_usd, unrealized_pnl_usd
+SELECT asset_id, condition_id, outcome, size_shares, average_price, estimated_value_usd, unrealized_pnl_usd, updated_at_utc
 FROM paper_positions
 ORDER BY updated_at_utc DESC;
 """;
@@ -265,7 +342,8 @@ ORDER BY updated_at_utc DESC;
                 reader.GetDecimal(3),
                 reader.GetDecimal(4),
                 reader.GetDecimal(5),
-                reader.GetDecimal(6)));
+                reader.GetDecimal(6),
+                DateTimeOffsetFromUtc(reader.GetDateTime(7))));
         }
 
         return results;

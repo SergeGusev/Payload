@@ -274,9 +274,24 @@ public sealed class WatchlistScannerTests
             return Task.CompletedTask;
         }
 
+        public Task UpdatePaperOrderAsync(PaperOrder order, CancellationToken cancellationToken = default)
+        {
+            return Task.CompletedTask;
+        }
+
         public Task<IReadOnlyList<PaperOrder>> GetOpenPaperOrdersAsync(CancellationToken cancellationToken = default)
         {
             return Task.FromResult<IReadOnlyList<PaperOrder>>([]);
+        }
+
+        public Task AddPaperFillAsync(PaperFill fill, CancellationToken cancellationToken = default)
+        {
+            return Task.CompletedTask;
+        }
+
+        public Task UpsertPaperPositionAsync(PaperPosition position, CancellationToken cancellationToken = default)
+        {
+            return Task.CompletedTask;
         }
 
         public Task<IReadOnlyList<PaperPosition>> GetPaperPositionsAsync(CancellationToken cancellationToken = default)

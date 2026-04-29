@@ -8,4 +8,5 @@ public interface ISignalProcessor
 public sealed record SignalProcessingResult(
     int CandidatesProcessed,
     int SignalsAccepted,
-    int SignalsRejected);
+    int SignalsRejected,
+    int PaperOrdersCreated);

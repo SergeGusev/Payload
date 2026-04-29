@@ -1,6 +1,7 @@
 using System.Reflection;
 using PolyCopyTrader.Domain;
 using PolyCopyTrader.Domain.Configuration;
+using PolyCopyTrader.Service.PaperTrading;
 using PolyCopyTrader.Service.Scanning;
 using PolyCopyTrader.Service.Signals;
 using PolyCopyTrader.Storage;
@@ -12,7 +13,8 @@ public sealed class BotWorker(
     BotOptions botOptions,
     IAppRepository repository,
     IWatchlistScanner watchlistScanner,
-    ISignalProcessor signalProcessor) : BackgroundService
+    ISignalProcessor signalProcessor,
+    IPaperTradingProcessor paperTradingProcessor) : BackgroundService
 {
     private readonly DateTimeOffset startedAtUtc = DateTimeOffset.UtcNow;
 
@@ -29,19 +31,25 @@ public sealed class BotWorker(
             {
                 var scanStatus = await watchlistScanner.ScanOnceAsync(stoppingToken);
                 var signalResult = await signalProcessor.ProcessQueuedAsync(stoppingToken);
+                var paperResult = await paperTradingProcessor.ProcessOpenOrdersAsync(stoppingToken);
                 currentLoop =
                     $"Scanner={scanStatus.ScannerStatus}; TradesFetched={scanStatus.TradesFetched}; " +
                     $"NewTradesStored={scanStatus.NewTradesStored}; PositionsFetched={scanStatus.PositionsFetched}; " +
-                    $"SignalsAccepted={signalResult.SignalsAccepted}; SignalsRejected={signalResult.SignalsRejected}";
+                    $"SignalsAccepted={signalResult.SignalsAccepted}; SignalsRejected={signalResult.SignalsRejected}; " +
+                    $"PaperOrdersCreated={signalResult.PaperOrdersCreated}; PaperFilled={paperResult.OrdersFilled}; " +
+                    $"PaperExpired={paperResult.OrdersExpired}";
 
                 logger.LogInformation(
-                    "Watchlist scan completed. Status={ScannerStatus} TradesFetched={TradesFetched} NewTradesStored={NewTradesStored} PositionsFetched={PositionsFetched} SignalsAccepted={SignalsAccepted} SignalsRejected={SignalsRejected}",
+                    "Watchlist scan completed. Status={ScannerStatus} TradesFetched={TradesFetched} NewTradesStored={NewTradesStored} PositionsFetched={PositionsFetched} SignalsAccepted={SignalsAccepted} SignalsRejected={SignalsRejected} PaperOrdersCreated={PaperOrdersCreated} PaperFilled={PaperFilled} PaperExpired={PaperExpired}",
                     scanStatus.ScannerStatus,
                     scanStatus.TradesFetched,
                     scanStatus.NewTradesStored,
                     scanStatus.PositionsFetched,
                     signalResult.SignalsAccepted,
-                    signalResult.SignalsRejected);
+                    signalResult.SignalsRejected,
+                    signalResult.PaperOrdersCreated,
+                    paperResult.OrdersFilled,
+                    paperResult.OrdersExpired);
             }
             catch (OperationCanceledException)
             {

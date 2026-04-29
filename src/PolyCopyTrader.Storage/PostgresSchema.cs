@@ -188,6 +188,7 @@ CREATE TABLE IF NOT EXISTS paper_orders (
     side text NOT NULL,
     asset_id text NOT NULL,
     condition_id text NOT NULL,
+    outcome text NOT NULL,
     price numeric(18,8) NOT NULL,
     size_shares numeric(28,8) NOT NULL,
     notional_usd numeric(28,8) NOT NULL,
@@ -197,6 +198,8 @@ CREATE TABLE IF NOT EXISTS paper_orders (
     cancelled_at_utc timestamptz NULL,
     raw_decision_json jsonb NULL
 );
+
+ALTER TABLE paper_orders ADD COLUMN IF NOT EXISTS outcome text NOT NULL DEFAULT '';
 
 CREATE TABLE IF NOT EXISTS paper_fills (
     id uuid PRIMARY KEY,
@@ -218,6 +221,9 @@ CREATE TABLE IF NOT EXISTS paper_positions (
     unrealized_pnl_usd numeric(28,8) NOT NULL,
     updated_at_utc timestamptz NOT NULL
 );
+
+CREATE UNIQUE INDEX IF NOT EXISTS ux_paper_positions_asset
+ON paper_positions(asset_id);
 
 CREATE TABLE IF NOT EXISTS risk_events (
     id uuid PRIMARY KEY,

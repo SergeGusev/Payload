@@ -2,7 +2,7 @@
 
 PolyCopyTrader is a Windows/.NET C# application for monitoring Polymarket traders and running a cautious copy-signal strategy.
 
-This repository is currently at Task 06: signal and risk engines. It contains project structure, typed configuration, PostgreSQL schema initialization, a basic repository, read-only Polymarket Data/CLOB/Geo clients, a Worker Service scanner/signal loop, and a basic WPF dashboard shell.
+This repository is currently at Task 07: paper trading engine. It contains project structure, typed configuration, PostgreSQL schema initialization, a basic repository, read-only Polymarket Data/CLOB/Geo clients, a Worker Service scanner/signal/paper loop, and a basic WPF dashboard shell.
 
 ## Safety
 
@@ -95,12 +95,17 @@ Queued leader trades are evaluated by `DefaultSignalEngine` after the scanner st
 
 `DefaultRiskEngine` enforces configured bankroll limits for trade, market, trader, category, total deployed exposure, daily loss, and max open orders. Rejected decisions are persisted as `SignalRejection` reason codes.
 
+## Paper Trading
+
+In `Paper` mode, accepted signals create `PaperOrder` records with the proposed maker price, size, notional, and configured TTL. `PaperTradingProcessor` expires stale pending orders and simulates conservative approximate fills from observed CLOB order books.
+
+For paper BUY orders, a fill is only simulated when `bestAsk <= paperBuyPrice`. Fills are stored as `PaperFill` records with `SimulatedApproximate` evidence. Long positions are updated with weighted-average cost and valued using the current bid, not midpoint or ask.
+
 ## Known Limitations
 
-- No paper trading execution implementation yet.
 - No WebSocket support yet.
 - No auth/signing/live trading support.
 
 ## Next Recommended Task
 
-Implement `Codex/07_TASK_PAPER_TRADING_ENGINE.md`.
+Implement `Codex/08_TASK_WPF_DASHBOARD.md`.

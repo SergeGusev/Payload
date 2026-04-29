@@ -18,7 +18,13 @@ public interface IAppRepository
 
     Task AddPaperOrderAsync(PaperOrder order, CancellationToken cancellationToken = default);
 
+    Task UpdatePaperOrderAsync(PaperOrder order, CancellationToken cancellationToken = default);
+
     Task<IReadOnlyList<PaperOrder>> GetOpenPaperOrdersAsync(CancellationToken cancellationToken = default);
+
+    Task AddPaperFillAsync(PaperFill fill, CancellationToken cancellationToken = default);
+
+    Task UpsertPaperPositionAsync(PaperPosition position, CancellationToken cancellationToken = default);
 
     Task<IReadOnlyList<PaperPosition>> GetPaperPositionsAsync(CancellationToken cancellationToken = default);
 

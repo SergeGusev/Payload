@@ -2,6 +2,7 @@ using PolyCopyTrader.Service;
 using PolyCopyTrader.Domain.Configuration;
 using PolyCopyTrader.Polymarket;
 using PolyCopyTrader.Service.Configuration;
+using PolyCopyTrader.Service.PaperTrading;
 using PolyCopyTrader.Service.Polymarket;
 using PolyCopyTrader.Service.Scanning;
 using PolyCopyTrader.Service.Signals;
@@ -64,7 +65,9 @@ builder.Services.AddSingleton<ILeaderTradeCandidateQueue, InMemoryLeaderTradeCan
 builder.Services.AddSingleton<IWatchlistScanner, WatchlistScanner>();
 builder.Services.AddSingleton<IRiskEngine, DefaultRiskEngine>();
 builder.Services.AddSingleton<ISignalEngine, DefaultSignalEngine>();
+builder.Services.AddSingleton<IPaperTradingEngine, DefaultPaperTradingEngine>();
 builder.Services.AddSingleton<ISignalProcessor, SignalProcessor>();
+builder.Services.AddSingleton<IPaperTradingProcessor, PaperTradingProcessor>();
 builder.Services.AddHostedService<BotWorker>();
 
 try

@@ -9,10 +9,13 @@ namespace PolyCopyTrader.Service.Signals;
 
 public sealed class SignalProcessor(
     ILogger<SignalProcessor> logger,
+    BotOptions botOptions,
+    PaperTradingOptions paperTradingOptions,
     WatchlistOptions watchlistOptions,
     ILeaderTradeCandidateQueue candidateQueue,
     IPolymarketClobPublicClient clobClient,
     ISignalEngine signalEngine,
+    IPaperTradingEngine paperTradingEngine,
     IAppRepository repository) : ISignalProcessor
 {
     private const int MaxCandidatesPerLoop = 500;
@@ -22,11 +25,12 @@ public sealed class SignalProcessor(
         var candidates = await candidateQueue.DrainAsync(MaxCandidatesPerLoop, cancellationToken);
         if (candidates.Count == 0)
         {
-            return new SignalProcessingResult(0, 0, 0);
+            return new SignalProcessingResult(0, 0, 0, 0);
         }
 
         var accepted = 0;
         var rejected = 0;
+        var paperOrdersCreated = 0;
         foreach (var trade in candidates)
         {
             try
@@ -38,6 +42,19 @@ public sealed class SignalProcessor(
                 if (decision.Accepted)
                 {
                     accepted++;
+                    if (botOptions.Mode == BotMode.Paper &&
+                        decision.ProposedPrice is { } price &&
+                        decision.ProposedSizeShares is { } sizeShares)
+                    {
+                        var order = paperTradingEngine.CreateOrder(
+                            signal,
+                            price,
+                            sizeShares,
+                            decision.CreatedAtUtc.AddSeconds(paperTradingOptions.DefaultOrderTtlSeconds));
+                        await repository.AddPaperOrderAsync(order, cancellationToken);
+                        paperOrdersCreated++;
+                    }
+
                     continue;
                 }
 
@@ -63,7 +80,7 @@ public sealed class SignalProcessor(
             }
         }
 
-        return new SignalProcessingResult(candidates.Count, accepted, rejected);
+        return new SignalProcessingResult(candidates.Count, accepted, rejected, paperOrdersCreated);
     }
 
     private async Task<SignalDecision> EvaluateAsync(LeaderTrade trade, CancellationToken cancellationToken)
