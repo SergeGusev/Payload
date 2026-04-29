@@ -99,6 +99,8 @@
                         Command="{Binding ResumeLiveTradingCommand}" />
                 <Button Content="Cancel live"
                         Command="{Binding CancelAllLiveOrdersCommand}" />
+                <Button Content="Find traders"
+                        Command="{Binding RefreshTraderDiscoveryCommand}" />
                 <Button Content="Clear kill"
                         Command="{Binding ClearKillSwitchCommand}" />
                 <TextBox Width="190"

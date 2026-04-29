@@ -86,6 +86,7 @@ POST /resume-live
 POST /kill-switch
 POST /clear-kill-switch
 POST /cancel-all-live
+POST /refresh-trader-discovery
 POST /pin-asset?assetId=...
 POST /unpin-asset?assetId=...
 ```
@@ -217,16 +218,15 @@ Scanner health is persisted to `scanner_status` with last success/error timestam
 
 ## Trader Discovery
 
-Trader discovery is disabled by default. When `TraderDiscovery:Enabled=true`, the service fetches Polymarket Data API leaderboard pages for the configured category/time period, selects best and worst candidates by PnL, enriches them with recent trades and current positions, and stores the current candidate set in `trader_discovery_candidates`.
+Trader discovery is operator-triggered from the dashboard. When `TraderDiscovery:Enabled=true`, the dashboard `Find traders` button asks the service to fetch Polymarket Data API leaderboard pages for the configured category/time period, select best and worst candidates by PnL, enrich them with recent trades and current positions, and store the current candidate set in `trader_discovery_candidates`.
 
-Enable locally with an environment override:
+Run the service and click `Find traders` in the dashboard controls:
 
 ```powershell
-$env:TraderDiscovery__Enabled="true"
 .\scripts\run-local-service.ps1 -Mode Paper -NoPostgres -RequireDatabase
 ```
 
-The dashboard shows these rows in the Trader Discovery tab. Use this only for candidate research; a high leaderboard PnL is not enough to add a wallet to the watchlist without paper evaluation.
+The dashboard shows refreshed rows in the Trader Discovery tab. Use this only for candidate research; a high leaderboard PnL is not enough to add a wallet to the watchlist without paper evaluation.
 
 ## Signal And Risk Engines
 
@@ -291,6 +291,7 @@ Interpret paper results conservatively. Paper fills are approximate, long positi
 - Runbook: local paths and purposes for the operations documents.
 - Logs: API errors, risk events, service commands, and market-data events.
 - Controls: pause/resume scanner, pause/resume paper/live trading, kill switch, clear kill switch, cancel all live orders, and asset pin/unpin through localhost IPC.
+- Trader discovery refresh is also a localhost IPC command and only runs when the operator presses the dashboard button.
 
 ## Troubleshooting
 

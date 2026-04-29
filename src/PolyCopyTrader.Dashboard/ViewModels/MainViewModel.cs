@@ -194,6 +194,13 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
     }
 
     [RelayCommand]
+    private async Task RefreshTraderDiscoveryAsync()
+    {
+        CommandStatus = "Refreshing trader discovery...";
+        await SendCommandAsync(() => controlClient.RefreshTraderDiscoveryAsync());
+    }
+
+    [RelayCommand]
     private async Task ClearKillSwitchAsync()
     {
         await SendCommandAsync(() => controlClient.ClearKillSwitchAsync());

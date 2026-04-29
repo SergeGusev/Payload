@@ -28,7 +28,7 @@ The repository also has local debugging and trader discovery support after task 
 - optional Docker Compose PostgreSQL fallback;
 - dashboard environment-variable config support;
 - local Windows PostgreSQL database `polycopytrader` created and initialized.
-- trader discovery background worker and dashboard tab for best/worst PnL candidates.
+- trader discovery dashboard button and tab for best/worst PnL candidates.
 
 Latest verified code state on 2026-04-29:
 
@@ -45,7 +45,7 @@ After this note was originally created, trader discovery was added:
 
 - config section: `TraderDiscovery`;
 - table: `trader_discovery_candidates`;
-- service processor/worker: `src/PolyCopyTrader.Service/TraderDiscovery`;
+- service processor and manual IPC command: `src/PolyCopyTrader.Service/TraderDiscovery`;
 - dashboard tab: Trader Discovery;
 - tests increased from 91 to 93.
 
@@ -202,7 +202,7 @@ Projects:
   - public market WebSocket background service;
   - local IPC HTTP server;
   - daily analytics worker;
-  - trader discovery worker;
+  - manual trader discovery processor;
   - repository-backed API error sink.
 - `src/PolyCopyTrader.Dashboard`
   - WPF dashboard;
@@ -258,7 +258,8 @@ market data status/events, and updates paper fills/marks from fresh top-of-book 
 
 Trader discovery uses the public Polymarket Data API leaderboard.
 
-When enabled with `TraderDiscovery:Enabled=true`, the service:
+When the operator clicks the dashboard `Find traders` button and
+`TraderDiscovery:Enabled=true`, the service:
 
 - fetches `LeaderboardPages` pages from `/v1/leaderboard`;
 - uses `orderBy=PNL`;
@@ -268,6 +269,9 @@ When enabled with `TraderDiscovery:Enabled=true`, the service:
 - fetches current positions for each selected wallet;
 - stores enriched rows in `trader_discovery_candidates`;
 - shows them in the dashboard Trader Discovery tab.
+
+There is intentionally no hosted background trader-discovery worker. Discovery should
+download public leaderboard/trade/position data only after an explicit operator action.
 
 This is candidate research only. Do not add a wallet to live copy behavior based on
 leaderboard PnL alone. Review sample size, volume, categories, liquidity, recent trade

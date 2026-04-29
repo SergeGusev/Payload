@@ -4,6 +4,7 @@ using System.Text.Json;
 using PolyCopyTrader.Domain;
 using PolyCopyTrader.Domain.Configuration;
 using PolyCopyTrader.Service.LiveTrading;
+using PolyCopyTrader.Service.TraderDiscovery;
 using PolyCopyTrader.Storage;
 
 namespace PolyCopyTrader.Service.Control;
@@ -11,8 +12,10 @@ namespace PolyCopyTrader.Service.Control;
 public sealed class LocalControlServer(
     ILogger<LocalControlServer> logger,
     IpcOptions ipcOptions,
+    TraderDiscoveryOptions traderDiscoveryOptions,
     ServiceControlState controlState,
     ILiveTradingProcessor liveTradingProcessor,
+    ITraderDiscoveryProcessor traderDiscoveryProcessor,
     IAppRepository repository) : BackgroundService
 {
     private readonly JsonSerializerOptions jsonOptions = new(JsonSerializerDefaults.Web);
@@ -145,6 +148,11 @@ public sealed class LocalControlServer(
                     result = new ServiceCommandResult("CancelAllLive", source, true, "Cancel-all requested for live orders.");
                 }
 
+                if (result is null && path == "/refresh-trader-discovery")
+                {
+                    result = await RefreshTraderDiscoveryAsync(source, cancellationToken);
+                }
+
                 if (result is null && path == "/pin-asset")
                 {
                     result = await PinAssetAsync(context.Request.QueryString["assetId"], source, cancellationToken);
@@ -214,6 +222,28 @@ public sealed class LocalControlServer(
             new PinnedMarketAsset(assetId!.Trim(), "dashboard", DateTimeOffset.UtcNow),
             cancellationToken);
         return new ServiceCommandResult("PinAsset", source, true, "Asset pinned for WebSocket subscription.");
+    }
+
+    private async Task<ServiceCommandResult> RefreshTraderDiscoveryAsync(string source, CancellationToken cancellationToken)
+    {
+        if (!traderDiscoveryOptions.Enabled)
+        {
+            return new ServiceCommandResult("RefreshTraderDiscovery", source, false, "Trader discovery is disabled in service configuration.");
+        }
+
+        try
+        {
+            var candidates = await traderDiscoveryProcessor.RefreshAsync(cancellationToken);
+            return new ServiceCommandResult("RefreshTraderDiscovery", source, true, $"Trader discovery refreshed: {candidates.Count} candidates.");
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            logger.LogError(ex, "Trader discovery refresh failed for {Source}.", source);
+            await repository.AddApiErrorAsync(
+                new ApiError(Guid.NewGuid(), "LocalControlServer", "RefreshTraderDiscovery", ex.Message, DateTimeOffset.UtcNow),
+                cancellationToken);
+            return new ServiceCommandResult("RefreshTraderDiscovery", source, false, "Trader discovery failed: " + ex.Message);
+        }
     }
 
     private async Task TryCancelLiveOrdersAsync(string source, CancellationToken cancellationToken)

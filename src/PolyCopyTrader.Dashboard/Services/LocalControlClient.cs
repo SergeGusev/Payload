@@ -8,7 +8,7 @@ public sealed class LocalControlClient(IpcOptions options)
 {
     private readonly HttpClient httpClient = new()
     {
-        Timeout = TimeSpan.FromSeconds(3)
+        Timeout = Timeout.InfiniteTimeSpan
     };
     private readonly JsonSerializerOptions jsonOptions = new(JsonSerializerDefaults.Web);
 
@@ -57,6 +57,11 @@ public sealed class LocalControlClient(IpcOptions options)
         return PostAsync("cancel-all-live", cancellationToken);
     }
 
+    public Task<ControlCommandResponse> RefreshTraderDiscoveryAsync(CancellationToken cancellationToken = default)
+    {
+        return PostAsync("refresh-trader-discovery", cancellationToken, TimeSpan.FromMinutes(5));
+    }
+
     public Task<ControlCommandResponse> PauseAllAsync(CancellationToken cancellationToken = default)
     {
         return PostAsync("pause", cancellationToken);
@@ -79,23 +84,30 @@ public sealed class LocalControlClient(IpcOptions options)
 
     public async Task<ControlStatusResponse> GetStatusAsync(CancellationToken cancellationToken = default)
     {
-        using var response = await httpClient.GetAsync(BuildUri("status"), cancellationToken);
+        using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        timeout.CancelAfter(TimeSpan.FromSeconds(3));
+        using var response = await httpClient.GetAsync(BuildUri("status"), timeout.Token);
         response.EnsureSuccessStatusCode();
-        var stream = await response.Content.ReadAsStreamAsync(cancellationToken);
-        return await JsonSerializer.DeserializeAsync<ControlStatusResponse>(stream, jsonOptions, cancellationToken)
+        var stream = await response.Content.ReadAsStreamAsync(timeout.Token);
+        return await JsonSerializer.DeserializeAsync<ControlStatusResponse>(stream, jsonOptions, timeout.Token)
             ?? new ControlStatusResponse("Unknown", false, false, false, false, string.Empty, null);
     }
 
-    private async Task<ControlCommandResponse> PostAsync(string path, CancellationToken cancellationToken)
+    private async Task<ControlCommandResponse> PostAsync(
+        string path,
+        CancellationToken cancellationToken,
+        TimeSpan? timeout = null)
     {
         if (!options.Enabled)
         {
             return new ControlCommandResponse(path, "dashboard", false, "IPC is disabled in dashboard configuration.");
         }
 
-        using var response = await httpClient.PostAsync(BuildUri(path), null, cancellationToken);
-        var stream = await response.Content.ReadAsStreamAsync(cancellationToken);
-        var payload = await JsonSerializer.DeserializeAsync<ControlCommandResponse>(stream, jsonOptions, cancellationToken);
+        using var timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        timeoutCts.CancelAfter(timeout ?? TimeSpan.FromSeconds(3));
+        using var response = await httpClient.PostAsync(BuildUri(path), null, timeoutCts.Token);
+        var stream = await response.Content.ReadAsStreamAsync(timeoutCts.Token);
+        var payload = await JsonSerializer.DeserializeAsync<ControlCommandResponse>(stream, jsonOptions, timeoutCts.Token);
         if (payload is null)
         {
             return new ControlCommandResponse(path, "dashboard", false, $"Empty IPC response: {(int)response.StatusCode}.");

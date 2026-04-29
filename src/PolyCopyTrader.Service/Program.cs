@@ -102,7 +102,6 @@ builder.Services.AddHostedService<BotWorker>();
 builder.Services.AddHostedService<LocalControlServer>();
 builder.Services.AddHostedService<MarketDataWebSocketService>();
 builder.Services.AddHostedService<DailyReportWorker>();
-builder.Services.AddHostedService<TraderDiscoveryWorker>();
 
 try
 {

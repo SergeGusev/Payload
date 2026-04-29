@@ -270,7 +270,7 @@ public sealed class AnalyticsOptions
 
 public sealed class TraderDiscoveryOptions
 {
-    public bool Enabled { get; init; }
+    public bool Enabled { get; init; } = true;
 
     public string Category { get; init; } = "OVERALL";
 

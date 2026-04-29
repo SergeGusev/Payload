@@ -76,13 +76,14 @@ and whether the trader is enabled.
 
 ## TraderDiscovery
 
-Disabled by default. Uses the public Polymarket Data API leaderboard to research
-candidate wallets before adding them to the watchlist.
+Uses the public Polymarket Data API leaderboard to research candidate wallets before
+adding them to the watchlist. Refresh is manual: the dashboard button calls the
+service through localhost IPC.
 
-- `Enabled`: starts the background discovery worker when true.
+- `Enabled`: allows the manual dashboard/IPC refresh command when true.
 - `Category`: leaderboard category such as `OVERALL`, `POLITICS`, or `WEATHER`.
 - `TimePeriod`: `DAY`, `WEEK`, `MONTH`, or `ALL`.
-- `RefreshIntervalMinutes`: background refresh cadence.
+- `RefreshIntervalMinutes`: reserved for future scheduled refresh; not used by the current manual flow.
 - `LeaderboardPages`: number of 50-row pages to fetch, max `21`.
 - `CandidatesPerSide`: best-PnL and worst-PnL candidates to enrich.
 - `TradesPerCandidate`: recent trades to fetch for each candidate.
