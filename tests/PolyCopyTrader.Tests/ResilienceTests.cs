@@ -3,6 +3,7 @@ using PolyCopyTrader.Domain;
 using PolyCopyTrader.Domain.Configuration;
 using PolyCopyTrader.Polymarket;
 using PolyCopyTrader.Polymarket.Auth;
+using PolyCopyTrader.Service.Control;
 using PolyCopyTrader.Service.MarketData;
 using PolyCopyTrader.Service.PaperTrading;
 using PolyCopyTrader.Service.Scanning;
@@ -166,10 +167,13 @@ public sealed class ResilienceTests
             new BotOptions { Mode = BotMode.Paper },
             new PolymarketAuthOptions(),
             paperOptions,
+            new LiveTradingOptions(),
             Watchlist(),
             queue,
             clobClient,
+            new FakeGeoClient(),
             new FakeTradingClient(),
+            new FakeAuthService(),
             new DefaultSignalEngine(
                 new SignalOptions(),
                 new ExecutionOptions(),
@@ -177,6 +181,7 @@ public sealed class ResilienceTests
                 paperOptions,
                 new DefaultRiskEngine(riskOptions, paperOptions)),
             new DefaultPaperTradingEngine(),
+            new ServiceControlState(),
             repository);
     }
 
@@ -185,6 +190,42 @@ public sealed class ResilienceTests
         public Task<ClobV2DryRunOrderResult> PrepareDryRunOrderAsync(ClobV2OrderRequest request, CancellationToken ct)
         {
             throw new InvalidOperationException("Paper-mode resilience tests should not create dry-run orders.");
+        }
+
+        public Task<LiveOrderPlacementResult> PlaceLiveOrderAsync(ClobV2OrderRequest request, CancellationToken ct)
+        {
+            throw new InvalidOperationException("Paper-mode resilience tests should not create live orders.");
+        }
+
+        public Task<LiveOrderCancellationResult> CancelOrderAsync(string orderId, CancellationToken ct)
+        {
+            throw new InvalidOperationException("Paper-mode resilience tests should not cancel live orders.");
+        }
+
+        public Task<LiveOrderCancellationResult> CancelAllOrdersAsync(CancellationToken ct)
+        {
+            throw new InvalidOperationException("Paper-mode resilience tests should not cancel live orders.");
+        }
+
+        public Task<LiveOrderStatusResult?> GetLiveOrderStatusAsync(string orderId, CancellationToken ct)
+        {
+            throw new InvalidOperationException("Paper-mode resilience tests should not poll live orders.");
+        }
+    }
+
+    private sealed class FakeGeoClient : IPolymarketGeoClient
+    {
+        public Task<GeoblockStatus> GetGeoblockStatusAsync(CancellationToken cancellationToken = default)
+        {
+            return Task.FromResult(new GeoblockStatus(false, "127.0.0.1", "US", null));
+        }
+    }
+
+    private sealed class FakeAuthService : IPolymarketAuthService
+    {
+        public Task<AuthReadinessStatus> GetReadinessAsync(CancellationToken ct)
+        {
+            return Task.FromResult(AuthReadinessStatus.NotConfigured());
         }
     }
 

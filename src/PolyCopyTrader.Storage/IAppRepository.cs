@@ -40,6 +40,18 @@ public interface IAppRepository
 
     Task<IReadOnlyList<DryRunOrder>> GetRecentDryRunOrdersAsync(int limit = 100, CancellationToken cancellationToken = default);
 
+    Task AddLiveOrderAsync(LiveOrder order, CancellationToken cancellationToken = default);
+
+    Task UpdateLiveOrderAsync(LiveOrder order, CancellationToken cancellationToken = default);
+
+    Task<IReadOnlyList<LiveOrder>> GetOpenLiveOrdersAsync(CancellationToken cancellationToken = default);
+
+    Task<IReadOnlyList<LiveOrder>> GetRecentLiveOrdersAsync(int limit = 100, CancellationToken cancellationToken = default);
+
+    Task AddLiveTradingEventAsync(LiveTradingEvent liveEvent, CancellationToken cancellationToken = default);
+
+    Task<IReadOnlyList<LiveTradingEvent>> GetRecentLiveTradingEventsAsync(int limit = 100, CancellationToken cancellationToken = default);
+
     Task AddApiErrorAsync(ApiError error, CancellationToken cancellationToken = default);
 
     Task<IReadOnlyList<ApiError>> GetRecentApiErrorsAsync(int limit = 100, CancellationToken cancellationToken = default);

@@ -8,6 +8,8 @@ public sealed class ServiceControlState
     private ServiceRunState runState = ServiceRunState.Starting;
     private bool scanningPaused;
     private bool paperTradingPaused;
+    private bool liveTradingPaused;
+    private bool killSwitchActive;
     private string currentLoop = "Starting";
     private string? lastError;
 
@@ -46,6 +48,28 @@ public sealed class ServiceControlState
         }
     }
 
+    public bool LiveTradingPaused
+    {
+        get
+        {
+            lock (sync)
+            {
+                return liveTradingPaused || killSwitchActive;
+            }
+        }
+    }
+
+    public bool KillSwitchActive
+    {
+        get
+        {
+            lock (sync)
+            {
+                return killSwitchActive;
+            }
+        }
+    }
+
     public ServiceControlSnapshot Snapshot
     {
         get
@@ -56,6 +80,8 @@ public sealed class ServiceControlState
                     runState,
                     scanningPaused,
                     paperTradingPaused,
+                    liveTradingPaused || killSwitchActive,
+                    killSwitchActive,
                     currentLoop,
                     lastError,
                     StartedAtUtc,
@@ -68,7 +94,7 @@ public sealed class ServiceControlState
     {
         lock (sync)
         {
-            runState = scanningPaused || paperTradingPaused ? ServiceRunState.Paused : ServiceRunState.Running;
+            runState = scanningPaused || paperTradingPaused || liveTradingPaused || killSwitchActive ? ServiceRunState.Paused : ServiceRunState.Running;
         }
     }
 
@@ -104,7 +130,7 @@ public sealed class ServiceControlState
             currentLoop = loop;
             lastError = error;
             runState = error is null
-                ? scanningPaused || paperTradingPaused ? ServiceRunState.Paused : ServiceRunState.Running
+                ? scanningPaused || paperTradingPaused || liveTradingPaused || killSwitchActive ? ServiceRunState.Paused : ServiceRunState.Running
                 : ServiceRunState.Error;
         }
     }
@@ -124,7 +150,7 @@ public sealed class ServiceControlState
         lock (sync)
         {
             scanningPaused = false;
-            runState = scanningPaused || paperTradingPaused ? ServiceRunState.Paused : ServiceRunState.Running;
+            runState = scanningPaused || paperTradingPaused || liveTradingPaused || killSwitchActive ? ServiceRunState.Paused : ServiceRunState.Running;
             return new ServiceCommandResult("ResumeScanning", source, true, "Scanning resumed.");
         }
     }
@@ -144,8 +170,56 @@ public sealed class ServiceControlState
         lock (sync)
         {
             paperTradingPaused = false;
-            runState = scanningPaused || paperTradingPaused ? ServiceRunState.Paused : ServiceRunState.Running;
+            runState = scanningPaused || paperTradingPaused || liveTradingPaused || killSwitchActive ? ServiceRunState.Paused : ServiceRunState.Running;
             return new ServiceCommandResult("ResumePaperTrading", source, true, "Paper trading resumed.");
+        }
+    }
+
+    public ServiceCommandResult PauseLiveTrading(string source)
+    {
+        lock (sync)
+        {
+            liveTradingPaused = true;
+            runState = ServiceRunState.Paused;
+            return new ServiceCommandResult("PauseLiveTrading", source, true, "Live trading paused.");
+        }
+    }
+
+    public ServiceCommandResult ResumeLiveTrading(string source)
+    {
+        lock (sync)
+        {
+            if (killSwitchActive)
+            {
+                return new ServiceCommandResult("ResumeLiveTrading", source, false, "Kill switch is active. Clear it before resuming live trading.");
+            }
+
+            liveTradingPaused = false;
+            runState = scanningPaused || paperTradingPaused ? ServiceRunState.Paused : ServiceRunState.Running;
+            return new ServiceCommandResult("ResumeLiveTrading", source, true, "Live trading resumed.");
+        }
+    }
+
+    public ServiceCommandResult ActivateKillSwitch(string source)
+    {
+        lock (sync)
+        {
+            scanningPaused = true;
+            paperTradingPaused = true;
+            liveTradingPaused = true;
+            killSwitchActive = true;
+            runState = ServiceRunState.Paused;
+            return new ServiceCommandResult("KillSwitch", source, true, "Kill switch active. Scanning, paper trading, and live trading paused.");
+        }
+    }
+
+    public ServiceCommandResult ClearKillSwitch(string source)
+    {
+        lock (sync)
+        {
+            killSwitchActive = false;
+            runState = scanningPaused || paperTradingPaused || liveTradingPaused ? ServiceRunState.Paused : ServiceRunState.Running;
+            return new ServiceCommandResult("ClearKillSwitch", source, true, "Kill switch cleared. Resume subsystems explicitly as needed.");
         }
     }
 
@@ -155,8 +229,9 @@ public sealed class ServiceControlState
         {
             scanningPaused = true;
             paperTradingPaused = true;
+            liveTradingPaused = true;
             runState = ServiceRunState.Paused;
-            return new ServiceCommandResult("Pause", source, true, "Scanning and paper trading paused.");
+            return new ServiceCommandResult("Pause", source, true, "Scanning, paper trading, and live trading paused.");
         }
     }
 
@@ -166,8 +241,15 @@ public sealed class ServiceControlState
         {
             scanningPaused = false;
             paperTradingPaused = false;
-            runState = ServiceRunState.Running;
-            return new ServiceCommandResult("Resume", source, true, "Scanning and paper trading resumed.");
+            if (!killSwitchActive)
+            {
+                liveTradingPaused = false;
+                runState = ServiceRunState.Running;
+                return new ServiceCommandResult("Resume", source, true, "Scanning, paper trading, and live trading resumed.");
+            }
+
+            runState = ServiceRunState.Paused;
+            return new ServiceCommandResult("Resume", source, true, "Scanning and paper trading resumed. Live trading remains paused because kill switch is active.");
         }
     }
 }
@@ -176,6 +258,8 @@ public sealed record ServiceControlSnapshot(
     ServiceRunState RunState,
     bool ScanningPaused,
     bool PaperTradingPaused,
+    bool LiveTradingPaused,
+    bool KillSwitchActive,
     string CurrentLoop,
     string? LastError,
     DateTimeOffset StartedAtUtc,

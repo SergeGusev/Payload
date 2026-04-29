@@ -535,6 +535,129 @@ LIMIT @Limit;
         return results;
     }
 
+    public async Task AddLiveOrderAsync(LiveOrder order, CancellationToken cancellationToken = default)
+    {
+        const string sql = """
+INSERT INTO live_orders (
+    id, signal_id, status, order_id, side, asset_id, condition_id, outcome, price, size_shares,
+    notional_usd, order_type, created_at_utc, expires_at_utc, submitted_at_utc, response_status,
+    filled_size, remaining_size, cancel_status, raw_response_json, validation_summary, updated_at_utc
+) VALUES (
+    @Id, @SignalId, @Status, @OrderId, @Side, @AssetId, @ConditionId, @Outcome, @Price, @SizeShares,
+    @NotionalUsd, @OrderType, @CreatedAtUtc, @ExpiresAtUtc, @SubmittedAtUtc, @ResponseStatus,
+    @FilledSize, @RemainingSize, @CancelStatus, CAST(@RawResponseJson AS jsonb), @ValidationSummary, @UpdatedAtUtc
+);
+""";
+
+        await using var connection = await OpenConnectionAsync(cancellationToken);
+        await using var command = CreateCommand(connection, sql);
+        AddLiveOrderParameters(command, order);
+        await command.ExecuteNonQueryAsync(cancellationToken);
+    }
+
+    public async Task UpdateLiveOrderAsync(LiveOrder order, CancellationToken cancellationToken = default)
+    {
+        const string sql = """
+UPDATE live_orders
+SET status = @Status,
+    order_id = @OrderId,
+    submitted_at_utc = @SubmittedAtUtc,
+    response_status = @ResponseStatus,
+    filled_size = @FilledSize,
+    remaining_size = @RemainingSize,
+    cancel_status = @CancelStatus,
+    raw_response_json = CAST(@RawResponseJson AS jsonb),
+    validation_summary = @ValidationSummary,
+    updated_at_utc = @UpdatedAtUtc
+WHERE id = @Id;
+""";
+
+        await using var connection = await OpenConnectionAsync(cancellationToken);
+        await using var command = CreateCommand(connection, sql);
+        AddLiveOrderParameters(command, order);
+        await command.ExecuteNonQueryAsync(cancellationToken);
+    }
+
+    public async Task<IReadOnlyList<LiveOrder>> GetOpenLiveOrdersAsync(CancellationToken cancellationToken = default)
+    {
+        const string sql = """
+SELECT id, signal_id, status, order_id, side, asset_id, condition_id, outcome, price, size_shares,
+       notional_usd, order_type, created_at_utc, expires_at_utc, submitted_at_utc, response_status,
+       filled_size, remaining_size, cancel_status, raw_response_json::text, validation_summary, updated_at_utc
+FROM live_orders
+WHERE status IN ('Submitted', 'Live', 'Delayed', 'CancelRequested')
+ORDER BY created_at_utc DESC;
+""";
+
+        await using var connection = await OpenConnectionAsync(cancellationToken);
+        await using var command = CreateCommand(connection, sql);
+        await using var reader = await command.ExecuteReaderAsync(cancellationToken);
+        return await ReadLiveOrdersAsync(reader, cancellationToken);
+    }
+
+    public async Task<IReadOnlyList<LiveOrder>> GetRecentLiveOrdersAsync(int limit = 100, CancellationToken cancellationToken = default)
+    {
+        const string sql = """
+SELECT id, signal_id, status, order_id, side, asset_id, condition_id, outcome, price, size_shares,
+       notional_usd, order_type, created_at_utc, expires_at_utc, submitted_at_utc, response_status,
+       filled_size, remaining_size, cancel_status, raw_response_json::text, validation_summary, updated_at_utc
+FROM live_orders
+ORDER BY created_at_utc DESC
+LIMIT @Limit;
+""";
+
+        await using var connection = await OpenConnectionAsync(cancellationToken);
+        await using var command = CreateCommand(connection, sql);
+        command.Parameters.AddWithValue("Limit", limit);
+        await using var reader = await command.ExecuteReaderAsync(cancellationToken);
+        return await ReadLiveOrdersAsync(reader, cancellationToken);
+    }
+
+    public async Task AddLiveTradingEventAsync(LiveTradingEvent liveEvent, CancellationToken cancellationToken = default)
+    {
+        const string sql = """
+INSERT INTO live_trading_events (id, action, status, details, created_at_utc)
+VALUES (@Id, @Action, @Status, @Details, @CreatedAtUtc);
+""";
+
+        await using var connection = await OpenConnectionAsync(cancellationToken);
+        await using var command = CreateCommand(connection, sql);
+        command.Parameters.AddWithValue("Id", liveEvent.Id);
+        command.Parameters.AddWithValue("Action", liveEvent.Action);
+        command.Parameters.AddWithValue("Status", liveEvent.Status);
+        command.Parameters.AddWithValue("Details", liveEvent.Details);
+        command.Parameters.AddWithValue("CreatedAtUtc", UtcDateTime(liveEvent.CreatedAtUtc));
+        await command.ExecuteNonQueryAsync(cancellationToken);
+    }
+
+    public async Task<IReadOnlyList<LiveTradingEvent>> GetRecentLiveTradingEventsAsync(int limit = 100, CancellationToken cancellationToken = default)
+    {
+        const string sql = """
+SELECT id, action, status, details, created_at_utc
+FROM live_trading_events
+ORDER BY created_at_utc DESC
+LIMIT @Limit;
+""";
+
+        await using var connection = await OpenConnectionAsync(cancellationToken);
+        await using var command = CreateCommand(connection, sql);
+        command.Parameters.AddWithValue("Limit", limit);
+        await using var reader = await command.ExecuteReaderAsync(cancellationToken);
+
+        var results = new List<LiveTradingEvent>();
+        while (await reader.ReadAsync(cancellationToken))
+        {
+            results.Add(new LiveTradingEvent(
+                reader.GetGuid(0),
+                reader.GetString(1),
+                reader.GetString(2),
+                reader.GetString(3),
+                DateTimeOffsetFromUtc(reader.GetDateTime(4))));
+        }
+
+        return results;
+    }
+
     public async Task AddApiErrorAsync(ApiError error, CancellationToken cancellationToken = default)
     {
         const string sql = """
@@ -1477,7 +1600,68 @@ ORDER BY service_name;
             reader.GetDecimal(8),
             reader.GetString(9),
             reader.GetInt32(10),
-            DateTimeOffsetFromUtc(reader.GetDateTime(11)));
+                DateTimeOffsetFromUtc(reader.GetDateTime(11)));
+    }
+
+    private static void AddLiveOrderParameters(NpgsqlCommand command, LiveOrder order)
+    {
+        command.Parameters.AddWithValue("Id", order.Id);
+        command.Parameters.AddWithValue("SignalId", order.SignalId);
+        command.Parameters.AddWithValue("Status", order.Status.ToString());
+        command.Parameters.AddWithValue("OrderId", (object?)order.OrderId ?? DBNull.Value);
+        command.Parameters.AddWithValue("Side", order.Side.ToString());
+        command.Parameters.AddWithValue("AssetId", order.AssetId);
+        command.Parameters.AddWithValue("ConditionId", order.ConditionId);
+        command.Parameters.AddWithValue("Outcome", order.Outcome);
+        command.Parameters.AddWithValue("Price", order.Price);
+        command.Parameters.AddWithValue("SizeShares", order.SizeShares);
+        command.Parameters.AddWithValue("NotionalUsd", order.NotionalUsd);
+        command.Parameters.AddWithValue("OrderType", order.OrderType);
+        command.Parameters.AddWithValue("CreatedAtUtc", UtcDateTime(order.CreatedAtUtc));
+        command.Parameters.AddWithValue("ExpiresAtUtc", UtcDateTime(order.ExpiresAtUtc));
+        command.Parameters.AddWithValue("SubmittedAtUtc", order.SubmittedAtUtc is { } submittedAt ? UtcDateTime(submittedAt) : DBNull.Value);
+        command.Parameters.AddWithValue("ResponseStatus", order.ResponseStatus);
+        command.Parameters.AddWithValue("FilledSize", order.FilledSize);
+        command.Parameters.AddWithValue("RemainingSize", order.RemainingSize);
+        command.Parameters.AddWithValue("CancelStatus", order.CancelStatus);
+        command.Parameters.AddWithValue("RawResponseJson", string.IsNullOrWhiteSpace(order.RawResponseJson) ? "{}" : order.RawResponseJson);
+        command.Parameters.AddWithValue("ValidationSummary", order.ValidationSummary);
+        command.Parameters.AddWithValue("UpdatedAtUtc", UtcDateTime(order.UpdatedAtUtc));
+    }
+
+    private static async Task<IReadOnlyList<LiveOrder>> ReadLiveOrdersAsync(
+        NpgsqlDataReader reader,
+        CancellationToken cancellationToken)
+    {
+        var results = new List<LiveOrder>();
+        while (await reader.ReadAsync(cancellationToken))
+        {
+            results.Add(new LiveOrder(
+                reader.GetGuid(0),
+                reader.GetGuid(1),
+                Enum.Parse<LiveOrderStatus>(reader.GetString(2)),
+                reader.IsDBNull(3) ? null : reader.GetString(3),
+                Enum.Parse<TradeSide>(reader.GetString(4)),
+                reader.GetString(5),
+                reader.GetString(6),
+                reader.GetString(7),
+                reader.GetDecimal(8),
+                reader.GetDecimal(9),
+                reader.GetDecimal(10),
+                reader.GetString(11),
+                DateTimeOffsetFromUtc(reader.GetDateTime(12)),
+                DateTimeOffsetFromUtc(reader.GetDateTime(13)),
+                reader.IsDBNull(14) ? null : DateTimeOffsetFromUtc(reader.GetDateTime(14)),
+                reader.GetString(15),
+                reader.GetDecimal(16),
+                reader.GetDecimal(17),
+                reader.GetString(18),
+                reader.GetString(19),
+                reader.GetString(20),
+                DateTimeOffsetFromUtc(reader.GetDateTime(21))));
+        }
+
+        return results;
     }
 
     private static IReadOnlyList<string> SplitReasonCodes(string value)

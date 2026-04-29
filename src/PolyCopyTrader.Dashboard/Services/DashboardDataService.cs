@@ -22,6 +22,8 @@ public sealed class DashboardDataService(
         var openPaperOrders = await repository.GetOpenPaperOrdersAsync(cancellationToken);
         var paperPositions = await repository.GetPaperPositionsAsync(cancellationToken);
         var dryRunOrders = await repository.GetRecentDryRunOrdersAsync(cancellationToken: cancellationToken);
+        var liveOrders = await repository.GetRecentLiveOrdersAsync(cancellationToken: cancellationToken);
+        var liveTradingEvents = await repository.GetRecentLiveTradingEventsAsync(cancellationToken: cancellationToken);
         var apiErrors = await repository.GetRecentApiErrorsAsync(cancellationToken: cancellationToken);
         var riskEvents = await repository.GetRecentRiskEventsAsync(cancellationToken: cancellationToken);
         var commandAudits = await repository.GetRecentServiceCommandAuditsAsync(cancellationToken: cancellationToken);
@@ -39,7 +41,7 @@ public sealed class DashboardDataService(
         var rejectionAnalysis = await repository.GetRejectionAnalysisReportsAsync(reportLimit, cancellationToken);
         var authReadiness = await authService.GetReadinessAsync(cancellationToken);
 
-        var overview = BuildOverview(heartbeats, scannerStatuses, openPaperOrders, paperPositions, apiErrors, marketDataStatuses, authReadiness);
+        var overview = BuildOverview(heartbeats, scannerStatuses, openPaperOrders, paperPositions, liveOrders, apiErrors, marketDataStatuses, authReadiness);
         var riskUsage = BuildRiskUsage(openPaperOrders, paperPositions);
 
         return new DashboardSnapshot(
@@ -50,6 +52,8 @@ public sealed class DashboardDataService(
             recentPaperOrders.Select(ToPaperOrderRow).ToArray(),
             paperPositions.Select(position => ToPaperPositionRow(position, orderBooksByAsset)).ToArray(),
             dryRunOrders.Select(ToDryRunOrderRow).ToArray(),
+            liveOrders.Select(ToLiveOrderRow).ToArray(),
+            liveTradingEvents.Select(ToLiveTradingEventRow).ToArray(),
             orderBookSnapshots.Select(ToMarketDataRow).ToArray(),
             dailyReports.Select(ToDailyReportRow).ToArray(),
             traderPerformance.Select(ToTraderPerformanceRow).ToArray(),
@@ -58,7 +62,7 @@ public sealed class DashboardDataService(
             rejectionAnalysis.Select(ToRejectionAnalysisRow).ToArray(),
             riskUsage,
             BuildDiagnostics(overview, scannerStatuses, marketDataStatuses, apiErrors, riskUsage, authReadiness),
-            BuildLogs(apiErrors, riskEvents, commandAudits, marketDataEvents));
+            BuildLogs(apiErrors, riskEvents, commandAudits, marketDataEvents, liveTradingEvents));
     }
 
     private IReadOnlyList<OverviewMetric> BuildOverview(
@@ -66,6 +70,7 @@ public sealed class DashboardDataService(
         IReadOnlyList<ScannerStatusSnapshot> scannerStatuses,
         IReadOnlyList<PaperOrder> openPaperOrders,
         IReadOnlyList<PaperPosition> paperPositions,
+        IReadOnlyList<LiveOrder> liveOrders,
         IReadOnlyList<ApiError> apiErrors,
         IReadOnlyList<MarketDataStatusSnapshot> marketDataStatuses,
         AuthReadinessStatus authReadiness)
@@ -87,6 +92,7 @@ public sealed class DashboardDataService(
             new OverviewMetric("Current loop", heartbeat?.CurrentLoop ?? "Waiting for service data"),
             new OverviewMetric("Storage configured", storageConfigured ? "Yes" : "No"),
             new OverviewMetric("API status", apiErrors.Count == 0 ? "No recorded errors" : $"{apiErrors.Count} recent errors"),
+            new OverviewMetric("Live open orders", liveOrders.Count(order => order.Status is LiveOrderStatus.Submitted or LiveOrderStatus.Live or LiveOrderStatus.Delayed).ToString()),
             new OverviewMetric("Geoblock status", "Not checked by dashboard"),
             new OverviewMetric("Auth", authReadiness.State),
             new OverviewMetric("Scanner status", scanner?.ScannerStatus ?? "No scanner status"),
@@ -181,8 +187,9 @@ public sealed class DashboardDataService(
             new("Storage provider", configuration.Storage.Provider, storageConfigured ? "OK" : "Warning"),
             new("Storage configured", storageConfigured ? "Yes" : "No", storageConfigured ? "OK" : "Warning"),
             new("Storage env var", configuration.Storage.ConnectionStringEnvironmentVariable, "Info"),
-            new("Mode", configuration.Bot.Mode.ToString(), configuration.Bot.EnableLiveTrading ? "Error" : "OK"),
-            new("Live trading enabled", configuration.Bot.EnableLiveTrading ? "Yes" : "No", configuration.Bot.EnableLiveTrading ? "Error" : "OK"),
+            new("Mode", configuration.Bot.Mode.ToString(), configuration.Bot.EnableLiveTrading && configuration.Bot.Mode != BotMode.Live ? "Error" : "OK"),
+            new("Live trading enabled", configuration.Bot.EnableLiveTrading ? "Yes" : "No", configuration.Bot.EnableLiveTrading ? "Warning" : "OK"),
+            new("Live max order notional", FormatUsd(configuration.LiveTrading.MaxOrderNotionalUsd), "Info"),
             new("Auth", authReadiness.State, AuthDiagnosticStatus(authReadiness)),
             new("Auth details", AuthDetails(authReadiness), AuthDiagnosticStatus(authReadiness)),
             new("Service status", overview.FirstOrDefault(item => item.Name == "Service status")?.Value ?? "No heartbeat", "Info"),
@@ -201,7 +208,8 @@ public sealed class DashboardDataService(
         IReadOnlyList<ApiError> apiErrors,
         IReadOnlyList<RiskEvent> riskEvents,
         IReadOnlyList<ServiceCommandAudit> commandAudits,
-        IReadOnlyList<MarketDataEvent> marketDataEvents)
+        IReadOnlyList<MarketDataEvent> marketDataEvents,
+        IReadOnlyList<LiveTradingEvent> liveTradingEvents)
     {
         return apiErrors.Select(error => new LogRow(
                 FormatDate(error.CreatedAtUtc),
@@ -221,6 +229,12 @@ public sealed class DashboardDataService(
                 command.Command,
                 command.Message,
                 command.Source)))
+            .Concat(liveTradingEvents.Select(liveEvent => new LogRow(
+                FormatDate(liveEvent.CreatedAtUtc),
+                "Live",
+                liveEvent.Action,
+                liveEvent.Details,
+                liveEvent.Status)))
             .Concat(marketDataEvents.Select(evt => new LogRow(
                 FormatDate(evt.ReceivedAtUtc),
                 "MarketData",
@@ -317,6 +331,37 @@ public sealed class DashboardDataService(
             order.OrderType,
             order.ValidationSummary,
             order.SignalId.ToString());
+    }
+
+    private static LiveOrderRow ToLiveOrderRow(LiveOrder order)
+    {
+        return new LiveOrderRow(
+            FormatDate(order.CreatedAtUtc),
+            order.Status.ToString(),
+            order.OrderId ?? string.Empty,
+            order.Side.ToString(),
+            order.AssetId,
+            order.Outcome,
+            order.Price,
+            order.SizeShares,
+            order.NotionalUsd,
+            order.OrderType,
+            FormatDate(order.ExpiresAtUtc),
+            order.ResponseStatus,
+            order.FilledSize,
+            order.RemainingSize,
+            order.CancelStatus,
+            order.ValidationSummary,
+            order.SignalId.ToString());
+    }
+
+    private static LiveTradingEventRow ToLiveTradingEventRow(LiveTradingEvent liveEvent)
+    {
+        return new LiveTradingEventRow(
+            FormatDate(liveEvent.CreatedAtUtc),
+            liveEvent.Action,
+            liveEvent.Status,
+            liveEvent.Details);
     }
 
     private static MarketDataRow ToMarketDataRow(OrderBookSnapshot snapshot)

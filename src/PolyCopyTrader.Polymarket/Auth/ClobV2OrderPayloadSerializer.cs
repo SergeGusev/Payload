@@ -9,19 +9,20 @@ public sealed class ClobV2OrderPayloadSerializer
         WriteIndented = false
     };
 
-    public string Serialize(ClobV2Order order, string? signature)
+    public string Serialize(ClobV2Order order, string? signature, string owner = "[DRY_RUN_API_KEY]")
     {
-        return Serialize(order, signature, redactSignature: false);
+        return Serialize(order, signature, owner, redactSignature: false);
     }
 
-    public string SerializeRedacted(ClobV2Order order, string? signature)
+    public string SerializeRedacted(ClobV2Order order, string? signature, string owner = "[DRY_RUN_API_KEY]")
     {
-        return Serialize(order, signature, redactSignature: !string.IsNullOrWhiteSpace(signature));
+        return Serialize(order, signature, owner, redactSignature: !string.IsNullOrWhiteSpace(signature));
     }
 
-    private static string Serialize(ClobV2Order order, string? signature, bool redactSignature)
+    private static string Serialize(ClobV2Order order, string? signature, string owner, bool redactSignature)
     {
         ArgumentNullException.ThrowIfNull(order);
+        ArgumentException.ThrowIfNullOrWhiteSpace(owner);
 
         var value = new
         {
@@ -41,7 +42,7 @@ public sealed class ClobV2OrderPayloadSerializer
                 builder = order.Builder,
                 signature = redactSignature ? "[REDACTED]" : signature ?? string.Empty
             },
-            owner = "[DRY_RUN_API_KEY]",
+            owner,
             orderType = order.OrderType.ToString(),
             deferExec = order.DeferExec,
             postOnly = order.PostOnly

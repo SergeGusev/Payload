@@ -2,15 +2,15 @@
 
 PolyCopyTrader is a Windows/.NET C# application for monitoring Polymarket traders and running a cautious copy-signal strategy.
 
-This repository is currently at Task 15: CLOB V2 dry-run order signing. It contains project structure, typed configuration, PostgreSQL schema initialization, a basic repository, read-only Polymarket Data/CLOB/Geo clients, a Worker Service scanner/signal/paper loop, local dashboard controls, public market WebSocket monitoring, analytics reports, CSV export, diagnostics, a monitoring dashboard, L2 HMAC header infrastructure, and dry-run-only CLOB V2 order construction/signing.
+This repository is currently at Task 16: gated maker-only live trading. It contains project structure, typed configuration, PostgreSQL schema initialization, a basic repository, read-only Polymarket Data/CLOB/Geo clients, a Worker Service scanner/signal/paper/live loop, local dashboard controls, public market WebSocket monitoring, analytics reports, CSV export, diagnostics, a monitoring dashboard, L2 HMAC header infrastructure, dry-run CLOB V2 signing, and manually gated tiny maker-only live order placement.
 
 ## Safety
 
-- No live trading exists in this scaffold.
-- No implemented order-posting or cancellation HTTP calls exist.
-- Private-key handling is limited to optional dry-run lookup through the configured secret provider. Keys are not requested, stored in appsettings, or logged.
-- Auth supports secret lookup, L2 HMAC signatures, L2 headers, dry-run CLOB V2 order signing, and readiness reporting.
-- The trading interface only prepares signed or unsigned dry-run payloads. It does not expose post or cancel methods.
+- Live trading exists only behind `Bot:Mode=Live`, `Bot:EnableLiveTrading=true`, `LiveTrading:ManualEnableCode=LIVE_TRADING_ENABLED`, auth readiness, geoblock, clock-drift, API-error, risk, order-book, and kill-switch gates.
+- Implemented live trading is BUY-only, GTD-only, post-only/maker-only, tiny-size, and disabled by default.
+- Private-key handling is limited to secret-provider lookup for dry-run/live signing. Keys are not requested, stored in appsettings, or logged.
+- Auth supports secret lookup, L2 HMAC signatures, L2 headers, dry-run CLOB V2 order signing, live order signing/submission, cancellation, and readiness reporting.
+- Live order payloads, responses, cancellations, and live trading events are persisted with secrets and signatures redacted.
 - Default mode is read-only/paper-first by project policy.
 
 ## Project Structure
@@ -71,6 +71,11 @@ POST /pause-scanning
 POST /resume-scanning
 POST /pause-paper
 POST /resume-paper
+POST /pause-live
+POST /resume-live
+POST /kill-switch
+POST /clear-kill-switch
+POST /cancel-all-live
 POST /pin-asset?assetId=...
 POST /unpin-asset?assetId=...
 ```
@@ -128,9 +133,9 @@ User trade calls explicitly send `takerOnly=false` when requested so maker fills
 
 ## Auth Research
 
-Task 13 added research notes in `docs/auth_signing_plan.md`. Task 14 added native C# L2 HMAC signing, L2 header construction, secret-provider abstraction, and auth readiness reporting under `src/PolyCopyTrader.Polymarket/Auth`. Task 15 added native C# CLOB V2 order amount conversion, order construction, EIP-712 dry-run signing, redacted payload rendering, and dashboard/storage visibility for dry-run orders.
+Task 13 added research notes in `docs/auth_signing_plan.md`. Task 14 added native C# L2 HMAC signing, L2 header construction, secret-provider abstraction, and auth readiness reporting under `src/PolyCopyTrader.Polymarket/Auth`. Task 15 added native C# CLOB V2 order amount conversion, order construction, EIP-712 dry-run signing, redacted payload rendering, and dashboard/storage visibility for dry-run orders. Task 16 added gated live `POST /order`, cancel-one, cancel-all, and order-status polling support.
 
-No API credentials are created or derived, and no live order placement or cancellation endpoint is implemented. `PolymarketAuth` config contains provider and lookup names only; secret values must live in environment variables or Windows Credential Manager. Dry-run signing may load a private key only through `DryRunPrivateKeyName`; missing keys produce `DryRunUnsigned`, not a live failure. Test signing uses a deterministic public development key that must never be funded.
+No API credentials are created or derived. `PolymarketAuth` config contains provider and lookup names only; secret values must live in environment variables or Windows Credential Manager. Dry-run signing may load a private key only through `DryRunPrivateKeyName`; live signing uses `OrderSigningPrivateKeyName`. Missing or mismatched keys fail closed. Test signing uses a deterministic public development key that must never be funded.
 
 ## Market WebSocket
 
@@ -171,6 +176,12 @@ In `DryRun` mode, accepted signals produce CLOB V2 order payloads without sendin
 
 When `PolymarketAuth:DryRunSigningEnabled` is true and `DryRunPrivateKeyName` resolves through the configured secret provider, the app signs the order locally with the V2 EIP-712 domain. If the key is absent, the signer address does not match, or validation fails, the result is stored as `DryRunUnsigned` or `DryRunRejected`. Stored payloads are redacted and no `POST /order`, cancel, or authenticated trading HTTP call is made.
 
+## Live Trading
+
+Live trading is disabled by default. To place any live order, all gates must pass: `Bot:Mode` must be `Live`, `Bot:EnableLiveTrading` must be `true`, `LiveTrading:ManualEnableCode` must equal `LIVE_TRADING_ENABLED`, auth must be configured, geoblock must be clear from the machine running the service, CLOB server time must be within drift limits, no API-error or daily-loss lockout may be active, and the local kill switch/live pause must be clear.
+
+Initial live orders are BUY-only, GTD-only, post-only, and capped by `LiveTrading:MaxOrderNotionalUsd` plus live bankroll percentages. Before placement the service refetches the order book, reruns signal/risk evaluation, verifies the maker price does not cross the best ask, blocks crypto/sports text matches, signs the CLOB V2 payload locally, and sends `POST /order` with L2 headers. Live orders and live events are stored in PostgreSQL; the maintenance loop polls order status and cancels expired/stale orders. The kill switch pauses new live orders and requests cancel-all.
+
 ## Analytics And Reporting
 
 The service automatically generates daily reports into `daily_reports` when `Analytics:DailyReportGenerationEnabled` is true. Reports are recalculated every `Analytics:DailyReportRefreshMinutes` for the current UTC day and the previous UTC day.
@@ -194,6 +205,8 @@ Interpret paper results conservatively. Paper fills are approximate, long positi
 - Leader Trades: latest observed leader trades.
 - Signals: accepted/rejected decisions, reason codes, proposed paper details.
 - Dry Run Orders: unsigned/signed/rejected dry-run payload records and validation messages.
+- Live Orders: submitted/live/rejected/cancelled live order records.
+- Live Events: live placement, cancellation, polling, and error audit entries.
 - Paper Orders: lifecycle, TTL, fill timestamps, linked signal id.
 - Paper Positions: size, average price, estimated value, unrealized PnL.
 - Market Data: latest WebSocket/market-data asset snapshots, bid, ask, spread, update time.
@@ -201,7 +214,7 @@ Interpret paper results conservatively. Paper fills are approximate, long positi
 - Risk: configured limits and current usage.
 - Diagnostics: sanitized config summary, storage status, auth status, service/scanner/WebSocket status, watchlist summary, latest API errors, and risk usage.
 - Logs: API errors, risk events, service commands, and market-data events.
-- Controls: pause/resume scanner, pause/resume paper trading, kill switch, and asset pin/unpin through localhost IPC.
+- Controls: pause/resume scanner, pause/resume paper/live trading, kill switch, clear kill switch, cancel all live orders, and asset pin/unpin through localhost IPC.
 
 ## Troubleshooting
 
@@ -213,14 +226,14 @@ Interpret paper results conservatively. Paper fills are approximate, long positi
 - IPC unavailable: check whether `http://127.0.0.1:5118/` is already in use, then run `GET /health` or the QA script runtime smoke.
 - Database temporarily unavailable: loop-level error recording is best-effort and will not crash the worker if error persistence also fails.
 
-Do not proceed to authenticated signing or live trading unless `dotnet build`, `dotnet test`, `--print-config`, and runtime IPC smoke pass.
+Do not enable live trading unless `dotnet build`, `dotnet test`, `--print-config`, runtime IPC smoke, geoblock check from the actual host, and cancel-all testing pass.
 
 ## Known Limitations
 
-- Auth support does not create or derive API keys yet; live order placement and live cancellation are not implemented.
-- Trader enable/disable and cancel selected order dashboard buttons are placeholders until command-specific IPC is added.
+- Auth support does not create or derive API keys yet.
+- Trader enable/disable and cancel selected paper order dashboard buttons are placeholders until command-specific IPC is added.
 - User-authenticated WebSocket channel is not implemented yet.
 
 ## Next Recommended Task
 
-Implement `Codex/16_TASK_LIVE_TRADING_MAKER_ONLY.md`.
+Implement `Codex/17_TASK_DEPLOYMENT_WINDOWS_VPS_SECURITY.md`.

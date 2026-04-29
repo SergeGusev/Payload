@@ -4,8 +4,8 @@ Verified on: 2026-04-29
 
 Scope: research and implementation tracking. Task 13 did not request keys, did not load
 secrets, did not sign a live order, and did not call authenticated trading endpoints.
-Task 15 now signs local dry-run payloads only; it still does not call authenticated
-trading endpoints.
+Task 15 signs local dry-run payloads only. Task 16 adds live maker-only authenticated
+trading endpoints behind explicit service gates.
 
 ## Sources Checked
 
@@ -195,7 +195,8 @@ trading endpoints.
     - Order amount fixed-math tests for BUY/SELL without network calls.
     - Payload serialization tests proving the HMAC body matches the HTTP body.
     - Dashboard readiness tests for `NotConfigured`.
-    - Static tests that no live `POST /order` implementation exists until the live task.
+    - Static tests that live `POST /order` is unreachable unless live mode, manual
+      enablement, auth readiness, geoblock, risk, and kill-switch gates pass.
 
 ## Native C# Implementation Plan
 
@@ -222,13 +223,19 @@ Task 15 added dry-run order signing only:
 Task 15 tests use a deterministic public local development key only. It is not a
 secret and must never be funded.
 
-Task 16 should add live maker-only trading only if all prior gates pass:
+Task 16 added live maker-only trading only if all prior gates pass:
 
-- Require manual `EnableLiveTrading` and auth readiness.
-- Require tiny bankroll, separate trading wallet, and explicit signature type/funder.
-- Implement cancel-one and cancel-all before allowing live order posting.
-- Keep kill switch and post-only checks in the live path.
-- Start with small production orders only after staging/dry-run validation.
+- Done in task 16: manual `EnableLiveTrading`, `Bot.Mode=Live`, and
+  `LiveTrading.ManualEnableCode=LIVE_TRADING_ENABLED` gates.
+- Done in task 16: tiny order cap, explicit signer/funder/signature type, and fail-closed
+  auth readiness.
+- Done in task 16: cancel-one, cancel-all, and order-status polling.
+- Done in task 16: kill switch pauses live trading and requests cancel-all.
+- Done in task 16: geoblock, CLOB server-time drift, API-error lockout, stale order,
+  maker-only spread, BUY-only, GTD-only, and blocked crypto/sports text checks.
+- Still required operationally: start with tiny production orders only after VPS
+  deployment, geoblock verification from the actual host, dry-run validation, and
+  manual cancel-all testing.
 
 ## Security Design
 

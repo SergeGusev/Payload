@@ -32,6 +32,31 @@ public sealed class LocalControlClient(IpcOptions options)
         return PostAsync("resume-paper", cancellationToken);
     }
 
+    public Task<ControlCommandResponse> PauseLiveTradingAsync(CancellationToken cancellationToken = default)
+    {
+        return PostAsync("pause-live", cancellationToken);
+    }
+
+    public Task<ControlCommandResponse> ResumeLiveTradingAsync(CancellationToken cancellationToken = default)
+    {
+        return PostAsync("resume-live", cancellationToken);
+    }
+
+    public Task<ControlCommandResponse> KillSwitchAsync(CancellationToken cancellationToken = default)
+    {
+        return PostAsync("kill-switch", cancellationToken);
+    }
+
+    public Task<ControlCommandResponse> ClearKillSwitchAsync(CancellationToken cancellationToken = default)
+    {
+        return PostAsync("clear-kill-switch", cancellationToken);
+    }
+
+    public Task<ControlCommandResponse> CancelAllLiveOrdersAsync(CancellationToken cancellationToken = default)
+    {
+        return PostAsync("cancel-all-live", cancellationToken);
+    }
+
     public Task<ControlCommandResponse> PauseAllAsync(CancellationToken cancellationToken = default)
     {
         return PostAsync("pause", cancellationToken);
@@ -58,7 +83,7 @@ public sealed class LocalControlClient(IpcOptions options)
         response.EnsureSuccessStatusCode();
         var stream = await response.Content.ReadAsStreamAsync(cancellationToken);
         return await JsonSerializer.DeserializeAsync<ControlStatusResponse>(stream, jsonOptions, cancellationToken)
-            ?? new ControlStatusResponse("Unknown", false, false, string.Empty, null);
+            ?? new ControlStatusResponse("Unknown", false, false, false, false, string.Empty, null);
     }
 
     private async Task<ControlCommandResponse> PostAsync(string path, CancellationToken cancellationToken)
@@ -100,5 +125,7 @@ public sealed record ControlStatusResponse(
     string State,
     bool ScanningPaused,
     bool PaperTradingPaused,
+    bool LiveTradingPaused,
+    bool KillSwitchActive,
     string CurrentLoop,
     string? LastError);

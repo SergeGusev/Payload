@@ -26,6 +26,11 @@ public sealed class RelevantMarketAssetProvider(
             AddIfUsable(assetIds, order.AssetId);
         }
 
+        foreach (var order in await repository.GetOpenLiveOrdersAsync(cancellationToken))
+        {
+            AddIfUsable(assetIds, order.AssetId);
+        }
+
         foreach (var position in await repository.GetPaperPositionsAsync(cancellationToken))
         {
             AddIfUsable(assetIds, position.AssetId);

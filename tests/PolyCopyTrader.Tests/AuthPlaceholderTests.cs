@@ -1,6 +1,7 @@
 using System.Text.Json;
 using PolyCopyTrader.Domain;
 using PolyCopyTrader.Domain.Configuration;
+using PolyCopyTrader.Polymarket;
 using PolyCopyTrader.Polymarket.Auth;
 
 namespace PolyCopyTrader.Tests;
@@ -17,13 +18,14 @@ public sealed class AuthPlaceholderTests
     }
 
     [Fact]
-    public void TradingClient_IsPlaceholderWithoutLiveOrderMethods()
+    public void TradingClient_ExposesDryRunAndGatedLiveMethods()
     {
-        var method = Assert.Single(typeof(IPolymarketTradingClient).GetMethods());
+        var methods = typeof(IPolymarketTradingClient).GetMethods().Select(method => method.Name).ToArray();
 
-        Assert.Equal(nameof(IPolymarketTradingClient.PrepareDryRunOrderAsync), method.Name);
-        Assert.DoesNotContain("Post", method.Name, StringComparison.OrdinalIgnoreCase);
-        Assert.DoesNotContain("Cancel", method.Name, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains(nameof(IPolymarketTradingClient.PrepareDryRunOrderAsync), methods);
+        Assert.Contains(nameof(IPolymarketTradingClient.PlaceLiveOrderAsync), methods);
+        Assert.Contains(nameof(IPolymarketTradingClient.CancelAllOrdersAsync), methods);
+        Assert.DoesNotContain(methods, method => method.Contains("Taker", StringComparison.OrdinalIgnoreCase));
     }
 
     [Fact]
@@ -134,12 +136,14 @@ public sealed class AuthPlaceholderTests
                 Enabled = true,
                 SigningAddress = "0x1111111111111111111111111111111111111111",
                 ApiKeyName = "api-key",
+                ApiKeyOwnerName = "api-key-owner",
                 ApiSecretName = "api-secret",
                 ApiPassphraseName = "api-passphrase"
             },
             new FakeSecretProvider(new Dictionary<string, string>
             {
                 ["api-key"] = "fixture-key",
+                ["api-key-owner"] = "fixture-owner",
                 ["api-secret"] = "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=",
                 ["api-passphrase"] = "fixture-passphrase"
             }),
@@ -162,12 +166,14 @@ public sealed class AuthPlaceholderTests
                 Enabled = true,
                 SigningAddress = "0x1111111111111111111111111111111111111111",
                 ApiKeyName = "api-key",
+                ApiKeyOwnerName = "api-key-owner",
                 ApiSecretName = "api-secret",
                 ApiPassphraseName = "api-passphrase"
             },
             new FakeSecretProvider(new Dictionary<string, string>
             {
                 ["api-key"] = "fixture-key",
+                ["api-key-owner"] = "fixture-owner",
                 ["api-secret"] = "!!!not-base64!!!",
                 ["api-passphrase"] = "fixture-passphrase"
             }),
@@ -300,6 +306,48 @@ public sealed class AuthPlaceholderTests
         Assert.Contains(result.ValidationMessages, error => error.Contains("signing failed", StringComparison.OrdinalIgnoreCase));
     }
 
+    [Fact]
+    public async Task TradingClient_PostsLiveOrderWithL2HeadersAndRedactedRequest()
+    {
+        var signer = new ClobV2OrderSigner();
+        var privateKey = DeterministicUnfundedTestPrivateKey;
+        var signerAddress = signer.GetAddress(privateKey);
+        var handler = new CapturingHttpMessageHandler(_ => new HttpResponseMessage(System.Net.HttpStatusCode.OK)
+        {
+            Content = new StringContent("""{"success":true,"orderID":"0xorder","status":"live","makingAmount":"999000","takingAmount":"1350000"}""")
+        });
+        var client = CreateLiveClient(handler, new Dictionary<string, string>
+        {
+            ["api-key"] = "fixture-key",
+            ["api-key-owner"] = "fixture-owner",
+            ["api-secret"] = "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=",
+            ["api-passphrase"] = "fixture-passphrase",
+            ["live-private-key"] = privateKey
+        });
+
+        var result = await client.PlaceLiveOrderAsync(FixedOrderRequest() with
+        {
+            MakerAddress = signerAddress,
+            SignerAddress = signerAddress,
+            OrderType = ClobV2OrderType.GTD,
+            GtdExpirationUtc = new DateTimeOffset(2026, 05, 01, 12, 0, 0, TimeSpan.Zero)
+        }, CancellationToken.None);
+
+        var sent = Assert.Single(handler.Requests);
+        var body = handler.Bodies.Single();
+        Assert.True(result.Success);
+        Assert.Equal(HttpMethod.Post, sent.Method);
+        Assert.Equal("/order", sent.RequestUri?.AbsolutePath);
+        Assert.True(sent.Headers.Contains(PolymarketAuthHeaderFactory.PolySignature));
+        Assert.Contains(@"""owner"":""fixture-owner""", body, StringComparison.Ordinal);
+        Assert.Contains(@"""orderType"":""GTD""", body, StringComparison.Ordinal);
+        Assert.Contains(@"""postOnly"":true", body, StringComparison.Ordinal);
+        Assert.Contains(@"""expiration"":""1777636800""", body, StringComparison.Ordinal);
+        Assert.Contains(@"""signature"":""0x", body, StringComparison.Ordinal);
+        Assert.DoesNotContain(@"""signature"":""0x", result.RedactedRequestJson, StringComparison.Ordinal);
+        Assert.Contains("[REDACTED]", result.RedactedRequestJson, StringComparison.Ordinal);
+    }
+
     // Public deterministic local test key only. Never fund it or replace it with a real key.
     private const string DeterministicUnfundedTestPrivateKey =
         "0x0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef";
@@ -323,9 +371,15 @@ public sealed class AuthPlaceholderTests
             Salt: "123456789");
     }
 
-    private static DryRunTradingClient CreateDryRunClient(IReadOnlyDictionary<string, string> secrets)
+    private static PolymarketTradingClient CreateDryRunClient(IReadOnlyDictionary<string, string> secrets)
     {
-        return new DryRunTradingClient(
+        return new PolymarketTradingClient(
+            new HttpClient(new RejectingHttpMessageHandler()),
+            new PolymarketOptions
+            {
+                ClobBaseUrl = "https://clob.polymarket.com",
+                TimeoutSeconds = 30
+            },
             new PolymarketAuthOptions
             {
                 ChainId = 137,
@@ -335,7 +389,40 @@ public sealed class AuthPlaceholderTests
             new FakeSecretProvider(secrets),
             new ClobV2OrderBuilder(new OrderAmountCalculator()),
             new ClobV2OrderSigner(),
-            new ClobV2OrderPayloadSerializer());
+            new ClobV2OrderPayloadSerializer(),
+            new PolymarketAuthHeaderFactory(new PolymarketL2HmacSigner()),
+            new CapturingApiErrorSink());
+    }
+
+    private static PolymarketTradingClient CreateLiveClient(
+        HttpMessageHandler handler,
+        IReadOnlyDictionary<string, string> secrets)
+    {
+        return new PolymarketTradingClient(
+            new HttpClient(handler),
+            new PolymarketOptions
+            {
+                ClobBaseUrl = "https://clob.polymarket.com",
+                TimeoutSeconds = 30
+            },
+            new PolymarketAuthOptions
+            {
+                Enabled = true,
+                ChainId = 137,
+                SigningAddress = new ClobV2OrderSigner().GetAddress(DeterministicUnfundedTestPrivateKey),
+                FunderAddress = new ClobV2OrderSigner().GetAddress(DeterministicUnfundedTestPrivateKey),
+                ApiKeyName = "api-key",
+                ApiKeyOwnerName = "api-key-owner",
+                ApiSecretName = "api-secret",
+                ApiPassphraseName = "api-passphrase",
+                OrderSigningPrivateKeyName = "live-private-key"
+            },
+            new FakeSecretProvider(secrets),
+            new ClobV2OrderBuilder(new OrderAmountCalculator()),
+            new ClobV2OrderSigner(),
+            new ClobV2OrderPayloadSerializer(),
+            new PolymarketAuthHeaderFactory(new PolymarketL2HmacSigner()),
+            new CapturingApiErrorSink());
     }
 
     private sealed class FakeSecretProvider(IReadOnlyDictionary<string, string>? values = null) : ISecretProvider
@@ -344,6 +431,36 @@ public sealed class AuthPlaceholderTests
         {
             ct.ThrowIfCancellationRequested();
             return Task.FromResult(values is not null && values.TryGetValue(name, out var value) ? value : null);
+        }
+    }
+
+    private sealed class CapturingApiErrorSink : IPolymarketApiErrorSink
+    {
+        public Task RecordAsync(ApiError error, CancellationToken cancellationToken = default)
+        {
+            return Task.CompletedTask;
+        }
+    }
+
+    private sealed class RejectingHttpMessageHandler : HttpMessageHandler
+    {
+        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
+        {
+            throw new InvalidOperationException("Dry-run signing tests must not send HTTP requests.");
+        }
+    }
+
+    private sealed class CapturingHttpMessageHandler(Func<HttpRequestMessage, HttpResponseMessage> responseFactory) : HttpMessageHandler
+    {
+        public List<HttpRequestMessage> Requests { get; } = [];
+
+        public List<string> Bodies { get; } = [];
+
+        protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
+        {
+            Requests.Add(request);
+            Bodies.Add(request.Content is null ? string.Empty : await request.Content.ReadAsStringAsync(cancellationToken));
+            return responseFactory(request);
         }
     }
 }

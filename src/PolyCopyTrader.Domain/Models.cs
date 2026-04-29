@@ -34,6 +34,20 @@ public enum DryRunOrderStatus
     DryRunRejected
 }
 
+public enum LiveOrderStatus
+{
+    PreflightRejected,
+    Submitted,
+    Live,
+    Matched,
+    Delayed,
+    CancelRequested,
+    Cancelled,
+    CancelFailed,
+    Rejected,
+    Error
+}
+
 public enum ServiceRunState
 {
     Starting,
@@ -331,6 +345,37 @@ public sealed record DryRunOrder(
     string OrderType,
     string PayloadJson,
     string ValidationSummary,
+    DateTimeOffset CreatedAtUtc);
+
+public sealed record LiveOrder(
+    Guid Id,
+    Guid SignalId,
+    LiveOrderStatus Status,
+    string? OrderId,
+    TradeSide Side,
+    string AssetId,
+    string ConditionId,
+    string Outcome,
+    decimal Price,
+    decimal SizeShares,
+    decimal NotionalUsd,
+    string OrderType,
+    DateTimeOffset CreatedAtUtc,
+    DateTimeOffset ExpiresAtUtc,
+    DateTimeOffset? SubmittedAtUtc,
+    string ResponseStatus,
+    decimal FilledSize,
+    decimal RemainingSize,
+    string CancelStatus,
+    string RawResponseJson,
+    string ValidationSummary,
+    DateTimeOffset UpdatedAtUtc);
+
+public sealed record LiveTradingEvent(
+    Guid Id,
+    string Action,
+    string Status,
+    string Details,
     DateTimeOffset CreatedAtUtc);
 
 public sealed record SignalRejection(

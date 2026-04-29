@@ -1,3 +1,4 @@
+using PolyCopyTrader.Domain;
 using PolyCopyTrader.Domain.Configuration;
 
 namespace PolyCopyTrader.Tests;
@@ -53,6 +54,51 @@ public sealed class ConfigurationTests
         var errors = AppOptionsValidator.Validate(configuration);
 
         Assert.Contains(errors, error => error.Contains("SigningAddress", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void LiveTrading_RequiresManualCodeAndAuth()
+    {
+        var configuration = new AppConfiguration
+        {
+            Bot = new BotOptions
+            {
+                Mode = BotMode.Live,
+                EnableLiveTrading = true
+            }
+        };
+
+        var errors = AppOptionsValidator.Validate(configuration);
+
+        Assert.Contains(errors, error => error.Contains("ManualEnableCode", StringComparison.Ordinal));
+        Assert.Contains(errors, error => error.Contains("PolymarketAuth.Enabled", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void LiveTrading_ConfiguredGateCanValidate()
+    {
+        var configuration = new AppConfiguration
+        {
+            Bot = new BotOptions
+            {
+                Mode = BotMode.Live,
+                EnableLiveTrading = true
+            },
+            LiveTrading = new LiveTradingOptions
+            {
+                ManualEnableCode = "LIVE_TRADING_ENABLED"
+            },
+            PolymarketAuth = new PolymarketAuthOptions
+            {
+                Enabled = true,
+                SigningAddress = "0x1111111111111111111111111111111111111111",
+                FunderAddress = "0x1111111111111111111111111111111111111111"
+            }
+        };
+
+        var errors = AppOptionsValidator.Validate(configuration);
+
+        Assert.Empty(errors);
     }
 
     [Fact]

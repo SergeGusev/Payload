@@ -21,6 +21,7 @@ public sealed class PolymarketAuthReadinessService(
         }
 
         var apiKey = await ReadSecretAsync(options.ApiKeyName, "API key", missing, ct);
+        _ = await ReadSecretAsync(options.ApiKeyOwnerName, "API key owner", missing, ct);
         var apiSecret = await ReadSecretAsync(options.ApiSecretName, "API secret", missing, ct);
         var apiPassphrase = await ReadSecretAsync(options.ApiPassphraseName, "API passphrase", missing, ct);
 

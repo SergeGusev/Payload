@@ -81,6 +81,10 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
 
     public ObservableCollection<DryRunOrderRow> DryRunOrders { get; } = [];
 
+    public ObservableCollection<LiveOrderRow> LiveOrders { get; } = [];
+
+    public ObservableCollection<LiveTradingEventRow> LiveTradingEvents { get; } = [];
+
     public ObservableCollection<MarketDataRow> MarketData { get; } = [];
 
     public ObservableCollection<DailyReportRow> DailyReports { get; } = [];
@@ -146,7 +150,7 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
     [RelayCommand]
     private async Task KillSwitchAsync()
     {
-        await SendCommandAsync(() => controlClient.PauseAllAsync());
+        await SendCommandAsync(() => controlClient.KillSwitchAsync());
     }
 
     [RelayCommand]
@@ -165,6 +169,30 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
     private async Task ResumePaperTradingAsync()
     {
         await SendCommandAsync(() => controlClient.ResumePaperTradingAsync());
+    }
+
+    [RelayCommand]
+    private async Task PauseLiveTradingAsync()
+    {
+        await SendCommandAsync(() => controlClient.PauseLiveTradingAsync());
+    }
+
+    [RelayCommand]
+    private async Task ResumeLiveTradingAsync()
+    {
+        await SendCommandAsync(() => controlClient.ResumeLiveTradingAsync());
+    }
+
+    [RelayCommand]
+    private async Task CancelAllLiveOrdersAsync()
+    {
+        await SendCommandAsync(() => controlClient.CancelAllLiveOrdersAsync());
+    }
+
+    [RelayCommand]
+    private async Task ClearKillSwitchAsync()
+    {
+        await SendCommandAsync(() => controlClient.ClearKillSwitchAsync());
     }
 
     [RelayCommand]
@@ -267,6 +295,8 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         Replace(PaperOrders, snapshot.PaperOrders);
         Replace(PaperPositions, snapshot.PaperPositions);
         Replace(DryRunOrders, snapshot.DryRunOrders);
+        Replace(LiveOrders, snapshot.LiveOrders);
+        Replace(LiveTradingEvents, snapshot.LiveTradingEvents);
         Replace(MarketData, snapshot.MarketData);
         Replace(DailyReports, snapshot.DailyReports);
         Replace(TraderPerformance, snapshot.TraderPerformance);
@@ -280,7 +310,7 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         Mode = Overview.FirstOrDefault(item => item.Name == "Mode")?.Value ?? "Unknown";
         ServiceStatus = Overview.FirstOrDefault(item => item.Name == "Service status")?.Value ?? "No heartbeat";
         var webSocketStatus = Overview.FirstOrDefault(item => item.Name == "WebSocket status")?.Value ?? "No market data status";
-        Summary = $"{ServiceStatus}; WS={webSocketStatus}; {StorageStatus}; {Signals.Count} signals; {PaperOrders.Count} paper orders; {DryRunOrders.Count} dry-run orders; {PaperPositions.Count} positions.";
+        Summary = $"{ServiceStatus}; WS={webSocketStatus}; {StorageStatus}; {Signals.Count} signals; {PaperOrders.Count} paper orders; {DryRunOrders.Count} dry-run orders; {LiveOrders.Count} live orders; {PaperPositions.Count} positions.";
     }
 
     private static void Replace<T>(ObservableCollection<T> target, IReadOnlyList<T> source)

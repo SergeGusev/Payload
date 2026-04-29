@@ -20,6 +20,8 @@ public sealed class AppConfiguration
 
     public PaperTradingOptions PaperTrading { get; init; } = new();
 
+    public LiveTradingOptions LiveTrading { get; init; } = new();
+
     public DashboardOptions Dashboard { get; init; } = new();
 
     public AnalyticsOptions Analytics { get; init; } = new();
@@ -146,7 +148,11 @@ public sealed class PolymarketAuthOptions
 
     public string DryRunPrivateKeyName { get; init; } = "POLYCOPYTRADER_POLYMARKET_DRY_RUN_PRIVATE_KEY";
 
+    public string OrderSigningPrivateKeyName { get; init; } = "POLYCOPYTRADER_POLYMARKET_ORDER_SIGNING_PRIVATE_KEY";
+
     public string ApiKeyName { get; init; } = "POLYCOPYTRADER_POLYMARKET_API_KEY";
+
+    public string ApiKeyOwnerName { get; init; } = "POLYCOPYTRADER_POLYMARKET_API_KEY_OWNER";
 
     public string ApiSecretName { get; init; } = "POLYCOPYTRADER_POLYMARKET_API_SECRET";
 
@@ -215,6 +221,33 @@ public sealed class PaperTradingOptions
     public decimal InitialBankrollUsd { get; init; } = 10_000m;
 
     public int DefaultOrderTtlSeconds { get; init; } = 300;
+}
+
+public sealed class LiveTradingOptions
+{
+    public string ManualEnableCode { get; init; } = string.Empty;
+
+    public decimal MaxOrderNotionalUsd { get; init; } = 1.00m;
+
+    public decimal MaxTradeBankrollPct { get; init; } = 0.10m;
+
+    public decimal MaxMarketBankrollPct { get; init; } = 0.50m;
+
+    public decimal MaxDailyLossPct { get; init; } = 0.50m;
+
+    public decimal MaxTotalDeployedPct { get; init; } = 5.00m;
+
+    public int DefaultOrderTtlSeconds { get; init; } = 300;
+
+    public int MaxClockDriftSeconds { get; init; } = 5;
+
+    public int ApiErrorLockoutCount { get; init; } = 5;
+
+    public int ApiErrorLockoutWindowMinutes { get; init; } = 15;
+
+    public int MaxOpenLiveOrders { get; init; } = 1;
+
+    public bool CancelAllOnKillSwitch { get; init; } = true;
 }
 
 public sealed class DashboardOptions

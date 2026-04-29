@@ -66,4 +66,22 @@ public sealed class ServiceControlStateTests
         Assert.Equal(ServiceRunState.Error, snapshot.RunState);
         Assert.Equal("fatal", snapshot.LastError);
     }
+
+    [Fact]
+    public void KillSwitch_PausesLiveAndRequiresExplicitClear()
+    {
+        var state = new ServiceControlState();
+        state.MarkRunning();
+
+        var kill = state.ActivateKillSwitch("test");
+        var resumeLive = state.ResumeLiveTrading("test");
+        var killed = state.Snapshot;
+        var clear = state.ClearKillSwitch("test");
+
+        Assert.True(kill.Accepted);
+        Assert.False(resumeLive.Accepted);
+        Assert.True(killed.KillSwitchActive);
+        Assert.True(killed.LiveTradingPaused);
+        Assert.True(clear.Accepted);
+    }
 }

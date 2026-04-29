@@ -84,6 +84,31 @@ public sealed record DryRunOrderRow(
     string ValidationSummary,
     string SignalId);
 
+public sealed record LiveOrderRow(
+    string CreatedUtc,
+    string Status,
+    string OrderId,
+    string Side,
+    string Asset,
+    string Outcome,
+    decimal Price,
+    decimal SizeShares,
+    decimal NotionalUsd,
+    string OrderType,
+    string ExpiresUtc,
+    string ResponseStatus,
+    decimal FilledSize,
+    decimal RemainingSize,
+    string CancelStatus,
+    string ValidationSummary,
+    string SignalId);
+
+public sealed record LiveTradingEventRow(
+    string TimestampUtc,
+    string Action,
+    string Status,
+    string Details);
+
 public sealed record MarketDataRow(
     string AssetId,
     string ConditionId,
@@ -163,6 +188,8 @@ public sealed record DashboardSnapshot(
     IReadOnlyList<PaperOrderRow> PaperOrders,
     IReadOnlyList<PaperPositionRow> PaperPositions,
     IReadOnlyList<DryRunOrderRow> DryRunOrders,
+    IReadOnlyList<LiveOrderRow> LiveOrders,
+    IReadOnlyList<LiveTradingEventRow> LiveTradingEvents,
     IReadOnlyList<MarketDataRow> MarketData,
     IReadOnlyList<DailyReportRow> DailyReports,
     IReadOnlyList<TraderPerformanceRow> TraderPerformance,

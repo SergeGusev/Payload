@@ -3,6 +3,7 @@ using System.Text;
 using System.Text.Json;
 using PolyCopyTrader.Domain;
 using PolyCopyTrader.Domain.Configuration;
+using PolyCopyTrader.Service.LiveTrading;
 using PolyCopyTrader.Storage;
 
 namespace PolyCopyTrader.Service.Control;
@@ -11,6 +12,7 @@ public sealed class LocalControlServer(
     ILogger<LocalControlServer> logger,
     IpcOptions ipcOptions,
     ServiceControlState controlState,
+    ILiveTradingProcessor liveTradingProcessor,
     IAppRepository repository) : BackgroundService
 {
     private readonly JsonSerializerOptions jsonOptions = new(JsonSerializerDefaults.Web);
@@ -122,8 +124,26 @@ public sealed class LocalControlServer(
                     "/resume-scanning" => controlState.ResumeScanning(source),
                     "/pause-paper" => controlState.PausePaperTrading(source),
                     "/resume-paper" => controlState.ResumePaperTrading(source),
+                    "/pause-live" => controlState.PauseLiveTrading(source),
+                    "/resume-live" => controlState.ResumeLiveTrading(source),
+                    "/clear-kill-switch" => controlState.ClearKillSwitch(source),
                     _ => null
                 };
+
+                if (result is null && path == "/kill-switch")
+                {
+                    result = controlState.ActivateKillSwitch(source);
+                    if (result.Accepted)
+                    {
+                        await TryCancelLiveOrdersAsync(source, cancellationToken);
+                    }
+                }
+
+                if (result is null && path == "/cancel-all-live")
+                {
+                    await TryCancelLiveOrdersAsync(source, cancellationToken);
+                    result = new ServiceCommandResult("CancelAllLive", source, true, "Cancel-all requested for live orders.");
+                }
 
                 if (result is null && path == "/pin-asset")
                 {
@@ -174,6 +194,8 @@ public sealed class LocalControlServer(
             state = snapshot.RunState.ToString(),
             scanningPaused = snapshot.ScanningPaused,
             paperTradingPaused = snapshot.PaperTradingPaused,
+            liveTradingPaused = snapshot.LiveTradingPaused,
+            killSwitchActive = snapshot.KillSwitchActive,
             currentLoop = snapshot.CurrentLoop,
             lastError = snapshot.LastError,
             startedAtUtc = snapshot.StartedAtUtc,
@@ -192,6 +214,21 @@ public sealed class LocalControlServer(
             new PinnedMarketAsset(assetId!.Trim(), "dashboard", DateTimeOffset.UtcNow),
             cancellationToken);
         return new ServiceCommandResult("PinAsset", source, true, "Asset pinned for WebSocket subscription.");
+    }
+
+    private async Task TryCancelLiveOrdersAsync(string source, CancellationToken cancellationToken)
+    {
+        try
+        {
+            await liveTradingProcessor.CancelAllOpenOrdersAsync(source, cancellationToken);
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "Live cancel-all failed for {Source}.", source);
+            await repository.AddLiveTradingEventAsync(
+                new LiveTradingEvent(Guid.NewGuid(), "CancelAll", "Error", ex.Message, DateTimeOffset.UtcNow),
+                cancellationToken);
+        }
     }
 
     private async Task<ServiceCommandResult> UnpinAssetAsync(string? assetId, string source, CancellationToken cancellationToken)

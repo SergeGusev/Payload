@@ -25,6 +25,7 @@ public static class AppOptionsValidator
         ValidateSignal(configuration.Signal, errors);
         ValidateRisk(configuration.Risk, errors);
         ValidateWatchlist(configuration.Watchlist, errors);
+        ValidateLiveTrading(configuration.Bot, configuration.PolymarketAuth, configuration.LiveTrading, errors);
         ValidateDashboard(configuration.Dashboard, errors);
         ValidateAnalytics(configuration.Analytics, errors);
         ValidateIpc(configuration.Ipc, errors);
@@ -48,6 +49,8 @@ public static class AppOptionsValidator
             $"Auth provider: {configuration.PolymarketAuth.SecretProvider}",
             $"Auth configured: {configuration.PolymarketAuth.Enabled && IsAddressLike(configuration.PolymarketAuth.SigningAddress)}",
             $"Dry-run signing enabled: {configuration.PolymarketAuth.DryRunSigningEnabled}",
+            $"Live max order notional USD: {configuration.LiveTrading.MaxOrderNotionalUsd}",
+            $"Live manual approval present: {!string.IsNullOrWhiteSpace(configuration.LiveTrading.ManualEnableCode)}",
             $"Market WebSocket enabled: {configuration.Bot.UseWebSockets && configuration.MarketDataWebSocket.Enabled}",
             $"Market WebSocket URL: {configuration.MarketDataWebSocket.MarketEndpointUrl}",
             $"Signal observe threshold: {configuration.Signal.ObserveBelowScore}",
@@ -75,9 +78,9 @@ public static class AppOptionsValidator
             errors.Add("Bot.HeartbeatIntervalSeconds must be greater than zero.");
         }
 
-        if (options.EnableLiveTrading)
+        if (options.EnableLiveTrading && options.Mode != BotMode.Live)
         {
-            errors.Add("Bot.EnableLiveTrading must remain false before the live trading task.");
+            errors.Add("Bot.EnableLiveTrading requires Bot.Mode to be Live.");
         }
     }
 
@@ -149,6 +152,11 @@ public static class AppOptionsValidator
         if (string.IsNullOrWhiteSpace(options.ApiKeyName))
         {
             errors.Add("PolymarketAuth.ApiKeyName is required when auth is enabled.");
+        }
+
+        if (string.IsNullOrWhiteSpace(options.ApiKeyOwnerName))
+        {
+            errors.Add("PolymarketAuth.ApiKeyOwnerName is required when auth is enabled.");
         }
 
         if (string.IsNullOrWhiteSpace(options.ApiSecretName))
@@ -353,6 +361,83 @@ public static class AppOptionsValidator
             {
                 errors.Add($"Watchlist trader '{trader.Name}' spread limits must be greater than zero.");
             }
+        }
+    }
+
+    private static void ValidateLiveTrading(
+        BotOptions bot,
+        PolymarketAuthOptions auth,
+        LiveTradingOptions options,
+        List<string> errors)
+    {
+        if (options.MaxOrderNotionalUsd <= 0m)
+        {
+            errors.Add("LiveTrading.MaxOrderNotionalUsd must be greater than zero.");
+        }
+
+        ValidatePct(options.MaxTradeBankrollPct, "LiveTrading.MaxTradeBankrollPct", errors);
+        ValidatePct(options.MaxMarketBankrollPct, "LiveTrading.MaxMarketBankrollPct", errors);
+        ValidatePct(options.MaxDailyLossPct, "LiveTrading.MaxDailyLossPct", errors);
+        ValidatePct(options.MaxTotalDeployedPct, "LiveTrading.MaxTotalDeployedPct", errors);
+
+        if (options.MaxTradeBankrollPct > options.MaxMarketBankrollPct)
+        {
+            errors.Add("LiveTrading.MaxTradeBankrollPct must not exceed LiveTrading.MaxMarketBankrollPct.");
+        }
+
+        if (options.DefaultOrderTtlSeconds <= 0 || options.DefaultOrderTtlSeconds > 300)
+        {
+            errors.Add("LiveTrading.DefaultOrderTtlSeconds must be between 1 and 300 seconds.");
+        }
+
+        if (options.MaxClockDriftSeconds <= 0)
+        {
+            errors.Add("LiveTrading.MaxClockDriftSeconds must be greater than zero.");
+        }
+
+        if (options.ApiErrorLockoutCount <= 0)
+        {
+            errors.Add("LiveTrading.ApiErrorLockoutCount must be greater than zero.");
+        }
+
+        if (options.ApiErrorLockoutWindowMinutes <= 0)
+        {
+            errors.Add("LiveTrading.ApiErrorLockoutWindowMinutes must be greater than zero.");
+        }
+
+        if (options.MaxOpenLiveOrders <= 0)
+        {
+            errors.Add("LiveTrading.MaxOpenLiveOrders must be greater than zero.");
+        }
+
+        if (!bot.EnableLiveTrading)
+        {
+            return;
+        }
+
+        if (!string.Equals(options.ManualEnableCode, "LIVE_TRADING_ENABLED", StringComparison.Ordinal))
+        {
+            errors.Add("LiveTrading.ManualEnableCode must be LIVE_TRADING_ENABLED when live trading is enabled.");
+        }
+
+        if (!auth.Enabled)
+        {
+            errors.Add("PolymarketAuth.Enabled must be true when live trading is enabled.");
+        }
+
+        if (!IsAddressLike(auth.SigningAddress))
+        {
+            errors.Add("PolymarketAuth.SigningAddress must be configured when live trading is enabled.");
+        }
+
+        if (!IsAddressLike(auth.FunderAddress))
+        {
+            errors.Add("PolymarketAuth.FunderAddress must be configured when live trading is enabled.");
+        }
+
+        if (string.IsNullOrWhiteSpace(auth.OrderSigningPrivateKeyName))
+        {
+            errors.Add("PolymarketAuth.OrderSigningPrivateKeyName is required when live trading is enabled.");
         }
     }
 

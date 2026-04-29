@@ -23,6 +23,10 @@ internal sealed class TestAppRepository : IAppRepository
 
     public List<DryRunOrder> DryRunOrders { get; } = [];
 
+    public List<LiveOrder> LiveOrders { get; } = [];
+
+    public List<LiveTradingEvent> LiveTradingEvents { get; } = [];
+
     public List<ApiError> ApiErrors { get; } = [];
 
     public List<ScannerStatusSnapshot> ScannerStatuses { get; } = [];
@@ -165,6 +169,42 @@ internal sealed class TestAppRepository : IAppRepository
     public Task<IReadOnlyList<DryRunOrder>> GetRecentDryRunOrdersAsync(int limit = 100, CancellationToken cancellationToken = default)
     {
         return Task.FromResult<IReadOnlyList<DryRunOrder>>(DryRunOrders.OrderByDescending(item => item.CreatedAtUtc).Take(limit).ToArray());
+    }
+
+    public Task AddLiveOrderAsync(LiveOrder order, CancellationToken cancellationToken = default)
+    {
+        LiveOrders.Add(order);
+        return Task.CompletedTask;
+    }
+
+    public Task UpdateLiveOrderAsync(LiveOrder order, CancellationToken cancellationToken = default)
+    {
+        LiveOrders.RemoveAll(item => item.Id == order.Id);
+        LiveOrders.Add(order);
+        return Task.CompletedTask;
+    }
+
+    public Task<IReadOnlyList<LiveOrder>> GetOpenLiveOrdersAsync(CancellationToken cancellationToken = default)
+    {
+        return Task.FromResult<IReadOnlyList<LiveOrder>>(LiveOrders
+            .Where(order => order.Status is LiveOrderStatus.Submitted or LiveOrderStatus.Live or LiveOrderStatus.Delayed or LiveOrderStatus.CancelRequested)
+            .ToArray());
+    }
+
+    public Task<IReadOnlyList<LiveOrder>> GetRecentLiveOrdersAsync(int limit = 100, CancellationToken cancellationToken = default)
+    {
+        return Task.FromResult<IReadOnlyList<LiveOrder>>(LiveOrders.OrderByDescending(item => item.CreatedAtUtc).Take(limit).ToArray());
+    }
+
+    public Task AddLiveTradingEventAsync(LiveTradingEvent liveEvent, CancellationToken cancellationToken = default)
+    {
+        LiveTradingEvents.Add(liveEvent);
+        return Task.CompletedTask;
+    }
+
+    public Task<IReadOnlyList<LiveTradingEvent>> GetRecentLiveTradingEventsAsync(int limit = 100, CancellationToken cancellationToken = default)
+    {
+        return Task.FromResult<IReadOnlyList<LiveTradingEvent>>(LiveTradingEvents.OrderByDescending(item => item.CreatedAtUtc).Take(limit).ToArray());
     }
 
     public Task AddApiErrorAsync(ApiError error, CancellationToken cancellationToken = default)

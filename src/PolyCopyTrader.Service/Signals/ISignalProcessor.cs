@@ -9,4 +9,5 @@ public sealed record SignalProcessingResult(
     int CandidatesProcessed,
     int SignalsAccepted,
     int SignalsRejected,
-    int PaperOrdersCreated);
+    int PaperOrdersCreated,
+    int LiveOrdersSubmitted = 0);

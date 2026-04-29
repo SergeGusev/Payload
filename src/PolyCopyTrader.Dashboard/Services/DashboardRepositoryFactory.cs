@@ -22,6 +22,7 @@ public static class DashboardRepositoryFactory
             Storage = configuration.GetSection("Storage").Get<StorageOptions>() ?? new StorageOptions(),
             Risk = configuration.GetSection("Risk").Get<RiskOptions>() ?? new RiskOptions(),
             PaperTrading = configuration.GetSection("PaperTrading").Get<PaperTradingOptions>() ?? new PaperTradingOptions(),
+            LiveTrading = configuration.GetSection("LiveTrading").Get<LiveTradingOptions>() ?? new LiveTradingOptions(),
             Watchlist = configuration.GetSection("Watchlist").Get<WatchlistOptions>() ?? new WatchlistOptions(),
             Analytics = configuration.GetSection("Analytics").Get<AnalyticsOptions>() ?? new AnalyticsOptions(),
             Ipc = configuration.GetSection("Ipc").Get<IpcOptions>() ?? new IpcOptions()

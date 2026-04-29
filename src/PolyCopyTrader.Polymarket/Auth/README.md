@@ -1,11 +1,12 @@
 # Polymarket Auth
 
-Current status: authenticated header infrastructure plus dry-run CLOB V2 order signing.
+Current status: authenticated header infrastructure, dry-run CLOB V2 order signing, and gated live maker-only order submission.
 
 Task 14 implemented secure secret lookup, L2 HMAC signing, L2 header construction, and
-auth readiness reporting. Task 15 implements dry-run-only CLOB V2 order construction,
-amount conversion, EIP-712 signing, and redacted payload rendering. It still does not
-implement L1 API-key creation, live order posting, or live cancellation.
+auth readiness reporting. Task 15 implemented dry-run-only CLOB V2 order construction,
+amount conversion, EIP-712 signing, and redacted payload rendering. Task 16 implements
+live `POST /order`, cancel-one, cancel-all, and order-status polling, but only behind
+service-level live gates.
 
 Implementation must follow `docs/auth_signing_plan.md`:
 
@@ -13,8 +14,8 @@ Implementation must follow `docs/auth_signing_plan.md`:
 - L2 auth signs requests with HMAC-SHA256 using the API secret. The HMAC message is
   `timestamp + method + requestPath + serializedBodyIfPresent`.
 - CLOB V2 order signing uses the `Polymarket CTF Exchange` domain version `2`.
-- Live order posting and cancellation are out of scope until the dedicated live-trading
-  task.
+- Live order posting must remain BUY-only, GTD-only, post-only, tiny-size, and manually
+  enabled.
 
 Configured secret providers:
 
@@ -30,6 +31,11 @@ provider. A missing dry-run key produces an unsigned dry-run payload. Tests use 
 deterministic public development key only; never fund that key and never replace it
 with a real credential in repository files.
 
+Live signing resolves `OrderSigningPrivateKeyName` through the configured secret
+provider. Live API credentials also resolve through lookup names only, including
+`ApiKeyOwnerName`, `ApiKeyName`, `ApiSecretName`, and `ApiPassphraseName`.
+
 Do not add private key fields to the dashboard. Do not log auth headers, API secrets,
 passphrases, private keys, or signatures. Persisted dry-run payloads must remain
-redacted.
+redacted, and persisted live payload/response records must not include secrets or
+unredacted signatures.

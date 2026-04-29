@@ -16,6 +16,8 @@ public static class PostgresSchema
         "paper_fills",
         "paper_positions",
         "dry_run_orders",
+        "live_orders",
+        "live_trading_events",
         "risk_events",
         "market_data_status",
         "market_data_events",
@@ -255,6 +257,48 @@ CREATE TABLE IF NOT EXISTS dry_run_orders (
 
 CREATE INDEX IF NOT EXISTS ix_dry_run_orders_created
 ON dry_run_orders(created_at_utc DESC);
+
+CREATE TABLE IF NOT EXISTS live_orders (
+    id uuid PRIMARY KEY,
+    signal_id uuid NOT NULL,
+    status text NOT NULL,
+    order_id text NULL,
+    side text NOT NULL,
+    asset_id text NOT NULL,
+    condition_id text NOT NULL,
+    outcome text NOT NULL,
+    price numeric(18,8) NOT NULL,
+    size_shares numeric(28,8) NOT NULL,
+    notional_usd numeric(28,8) NOT NULL,
+    order_type text NOT NULL,
+    created_at_utc timestamptz NOT NULL,
+    expires_at_utc timestamptz NOT NULL,
+    submitted_at_utc timestamptz NULL,
+    response_status text NOT NULL,
+    filled_size numeric(28,8) NOT NULL,
+    remaining_size numeric(28,8) NOT NULL,
+    cancel_status text NOT NULL,
+    raw_response_json jsonb NOT NULL,
+    validation_summary text NOT NULL,
+    updated_at_utc timestamptz NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS ix_live_orders_open
+ON live_orders(status, created_at_utc DESC);
+
+CREATE INDEX IF NOT EXISTS ix_live_orders_order_id
+ON live_orders(order_id);
+
+CREATE TABLE IF NOT EXISTS live_trading_events (
+    id uuid PRIMARY KEY,
+    action text NOT NULL,
+    status text NOT NULL,
+    details text NOT NULL,
+    created_at_utc timestamptz NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS ix_live_trading_events_created
+ON live_trading_events(created_at_utc DESC);
 
 CREATE TABLE IF NOT EXISTS risk_events (
     id uuid PRIMARY KEY,

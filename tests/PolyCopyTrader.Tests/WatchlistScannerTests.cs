@@ -329,6 +329,36 @@ public sealed class WatchlistScannerTests
             return Task.FromResult<IReadOnlyList<DryRunOrder>>([]);
         }
 
+        public Task AddLiveOrderAsync(LiveOrder order, CancellationToken cancellationToken = default)
+        {
+            return Task.CompletedTask;
+        }
+
+        public Task UpdateLiveOrderAsync(LiveOrder order, CancellationToken cancellationToken = default)
+        {
+            return Task.CompletedTask;
+        }
+
+        public Task<IReadOnlyList<LiveOrder>> GetOpenLiveOrdersAsync(CancellationToken cancellationToken = default)
+        {
+            return Task.FromResult<IReadOnlyList<LiveOrder>>([]);
+        }
+
+        public Task<IReadOnlyList<LiveOrder>> GetRecentLiveOrdersAsync(int limit = 100, CancellationToken cancellationToken = default)
+        {
+            return Task.FromResult<IReadOnlyList<LiveOrder>>([]);
+        }
+
+        public Task AddLiveTradingEventAsync(LiveTradingEvent liveEvent, CancellationToken cancellationToken = default)
+        {
+            return Task.CompletedTask;
+        }
+
+        public Task<IReadOnlyList<LiveTradingEvent>> GetRecentLiveTradingEventsAsync(int limit = 100, CancellationToken cancellationToken = default)
+        {
+            return Task.FromResult<IReadOnlyList<LiveTradingEvent>>([]);
+        }
+
         public Task AddApiErrorAsync(ApiError error, CancellationToken cancellationToken = default)
         {
             ApiErrors.Add(error);

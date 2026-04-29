@@ -73,3 +73,28 @@ public sealed record ClobV2DryRunOrderResult(
     string PayloadJson,
     string RedactedPayloadJson,
     IReadOnlyList<string> ValidationMessages);
+
+public sealed record LiveOrderPlacementResult(
+    bool Success,
+    string? OrderId,
+    string ResponseStatus,
+    string? ErrorMessage,
+    string? MakingAmount,
+    string? TakingAmount,
+    string RawResponseJson,
+    string RedactedRequestJson);
+
+public sealed record LiveOrderCancellationResult(
+    bool Success,
+    IReadOnlyList<string> CanceledOrderIds,
+    IReadOnlyDictionary<string, string> NotCanceled,
+    string RawResponseJson,
+    string ErrorMessage = "");
+
+public sealed record LiveOrderStatusResult(
+    string OrderId,
+    string Status,
+    string OriginalSize,
+    string SizeMatched,
+    string Price,
+    string RawResponseJson);
