@@ -136,21 +136,32 @@ INSERT INTO leader_positions (
 
         const string sql = """
 INSERT INTO trader_leaderboard_snapshots (
-    id, discovery_run_id, category, time_period, order_by, page_offset, rank, wallet,
-    user_name, x_username, leaderboard_pnl, leaderboard_volume, verified_badge, snapshot_at_utc
+    id, discovery_run_id, category, time_period, wallet, user_name, x_username, verified_badge,
+    pnl_rank, pnl_page_offset, pnl_leaderboard_pnl, pnl_leaderboard_volume, pnl_snapshot_at_utc,
+    volume_rank, volume_page_offset, volume_leaderboard_pnl, volume_leaderboard_volume, volume_snapshot_at_utc,
+    updated_at_utc
 ) VALUES (
-    @Id, @DiscoveryRunId, @Category, @TimePeriod, @OrderBy, @PageOffset, @Rank, @Wallet,
-    @UserName, @XUsername, @LeaderboardPnl, @LeaderboardVolume, @VerifiedBadge, @SnapshotAtUtc
+    @Id, @DiscoveryRunId, @Category, @TimePeriod, @Wallet, @UserName, @XUsername, @VerifiedBadge,
+    @PnlRank, @PnlPageOffset, @PnlLeaderboardPnl, @PnlLeaderboardVolume, @PnlSnapshotAtUtc,
+    @VolumeRank, @VolumePageOffset, @VolumeLeaderboardPnl, @VolumeLeaderboardVolume, @VolumeSnapshotAtUtc,
+    @UpdatedAtUtc
 )
-ON CONFLICT (discovery_run_id, category, time_period, order_by, wallet) DO UPDATE SET
-    page_offset = excluded.page_offset,
-    rank = excluded.rank,
+ON CONFLICT (category, time_period, wallet) DO UPDATE SET
+    discovery_run_id = excluded.discovery_run_id,
     user_name = excluded.user_name,
     x_username = excluded.x_username,
-    leaderboard_pnl = excluded.leaderboard_pnl,
-    leaderboard_volume = excluded.leaderboard_volume,
     verified_badge = excluded.verified_badge,
-    snapshot_at_utc = excluded.snapshot_at_utc;
+    pnl_rank = excluded.pnl_rank,
+    pnl_page_offset = excluded.pnl_page_offset,
+    pnl_leaderboard_pnl = excluded.pnl_leaderboard_pnl,
+    pnl_leaderboard_volume = excluded.pnl_leaderboard_volume,
+    pnl_snapshot_at_utc = excluded.pnl_snapshot_at_utc,
+    volume_rank = excluded.volume_rank,
+    volume_page_offset = excluded.volume_page_offset,
+    volume_leaderboard_pnl = excluded.volume_leaderboard_pnl,
+    volume_leaderboard_volume = excluded.volume_leaderboard_volume,
+    volume_snapshot_at_utc = excluded.volume_snapshot_at_utc,
+    updated_at_utc = excluded.updated_at_utc;
 """;
 
         await using var connection = await OpenConnectionAsync(cancellationToken);
@@ -1906,17 +1917,31 @@ ORDER BY service_name;
         command.Parameters.AddWithValue("DiscoveryRunId", snapshot.DiscoveryRunId);
         command.Parameters.AddWithValue("Category", snapshot.Category);
         command.Parameters.AddWithValue("TimePeriod", snapshot.TimePeriod);
-        command.Parameters.AddWithValue("OrderBy", snapshot.OrderBy);
-        command.Parameters.AddWithValue("PageOffset", snapshot.PageOffset);
-        command.Parameters.Add("Rank", NpgsqlDbType.Integer).Value =
-            snapshot.Rank is { } rank ? rank : DBNull.Value;
         command.Parameters.AddWithValue("Wallet", snapshot.Wallet);
         command.Parameters.AddWithValue("UserName", snapshot.UserName);
         command.Parameters.AddWithValue("XUsername", (object?)snapshot.XUsername ?? DBNull.Value);
-        command.Parameters.AddWithValue("LeaderboardPnl", snapshot.LeaderboardPnl);
-        command.Parameters.AddWithValue("LeaderboardVolume", snapshot.LeaderboardVolume);
         command.Parameters.AddWithValue("VerifiedBadge", snapshot.VerifiedBadge);
-        command.Parameters.AddWithValue("SnapshotAtUtc", UtcDateTime(snapshot.SnapshotAtUtc));
+        command.Parameters.Add("PnlRank", NpgsqlDbType.Integer).Value =
+            snapshot.PnlRank is { } pnlRank ? pnlRank : DBNull.Value;
+        command.Parameters.Add("PnlPageOffset", NpgsqlDbType.Integer).Value =
+            snapshot.PnlPageOffset is { } pnlPageOffset ? pnlPageOffset : DBNull.Value;
+        command.Parameters.Add("PnlLeaderboardPnl", NpgsqlDbType.Numeric).Value =
+            snapshot.PnlLeaderboardPnl is { } pnlLeaderboardPnl ? pnlLeaderboardPnl : DBNull.Value;
+        command.Parameters.Add("PnlLeaderboardVolume", NpgsqlDbType.Numeric).Value =
+            snapshot.PnlLeaderboardVolume is { } pnlLeaderboardVolume ? pnlLeaderboardVolume : DBNull.Value;
+        command.Parameters.Add("PnlSnapshotAtUtc", NpgsqlDbType.TimestampTz).Value =
+            snapshot.PnlSnapshotAtUtc is { } pnlSnapshotAt ? UtcDateTime(pnlSnapshotAt) : DBNull.Value;
+        command.Parameters.Add("VolumeRank", NpgsqlDbType.Integer).Value =
+            snapshot.VolumeRank is { } volumeRank ? volumeRank : DBNull.Value;
+        command.Parameters.Add("VolumePageOffset", NpgsqlDbType.Integer).Value =
+            snapshot.VolumePageOffset is { } volumePageOffset ? volumePageOffset : DBNull.Value;
+        command.Parameters.Add("VolumeLeaderboardPnl", NpgsqlDbType.Numeric).Value =
+            snapshot.VolumeLeaderboardPnl is { } volumeLeaderboardPnl ? volumeLeaderboardPnl : DBNull.Value;
+        command.Parameters.Add("VolumeLeaderboardVolume", NpgsqlDbType.Numeric).Value =
+            snapshot.VolumeLeaderboardVolume is { } volumeLeaderboardVolume ? volumeLeaderboardVolume : DBNull.Value;
+        command.Parameters.Add("VolumeSnapshotAtUtc", NpgsqlDbType.TimestampTz).Value =
+            snapshot.VolumeSnapshotAtUtc is { } volumeSnapshotAt ? UtcDateTime(volumeSnapshotAt) : DBNull.Value;
+        command.Parameters.AddWithValue("UpdatedAtUtc", UtcDateTime(snapshot.UpdatedAtUtc));
     }
 
     private static async Task<IReadOnlyList<LiveOrder>> ReadLiveOrdersAsync(

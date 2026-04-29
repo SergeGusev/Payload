@@ -316,7 +316,9 @@ When the operator clicks the dashboard `Find traders` button and
 - uses `orderBy=PNL` to collect the successful leaderboard window;
 - uses `orderBy=VOL` to collect high-volume traders where real negative PnL can
   be found;
-- stores raw fetched leaderboard rows in `trader_leaderboard_snapshots`;
+- stores current merged leaderboard rows in `trader_leaderboard_snapshots`;
+  this table has one row per `category + time_period + wallet`, with separate
+  columns for the `orderBy=PNL` and `orderBy=VOL` leaderboard appearances;
 - selects the best `CandidatesPerSide` from the PnL window;
 - selects the worst negative-PnL `CandidatesPerSide` from the volume window;
 - fetches all-time leaderboard PnL/volume for each selected wallet using

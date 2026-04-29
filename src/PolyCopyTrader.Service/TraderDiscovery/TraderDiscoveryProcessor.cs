@@ -20,21 +20,27 @@ public sealed class TraderDiscoveryProcessor(
     {
         var discoveryRunId = Guid.NewGuid();
         var snapshotAt = DateTimeOffset.UtcNow;
-        var pnlLeaderboard = await FetchLeaderboardWindowAsync(OrderByPnl, discoveryRunId, snapshotAt, cancellationToken);
-        var volumeLeaderboard = await FetchLeaderboardWindowAsync(OrderByVolume, discoveryRunId, snapshotAt, cancellationToken);
+        var pnlLeaderboard = await FetchLeaderboardWindowAsync(OrderByPnl, cancellationToken);
+        var volumeLeaderboard = await FetchLeaderboardWindowAsync(OrderByVolume, cancellationToken);
         if (pnlLeaderboard.Count == 0 && volumeLeaderboard.Count == 0)
         {
             logger.LogInformation("Trader discovery found no leaderboard entries.");
             return [];
         }
 
+        await repository.AddTraderLeaderboardSnapshotsAsync(
+            BuildMergedSnapshots(discoveryRunId, snapshotAt, pnlLeaderboard, volumeLeaderboard),
+            cancellationToken);
+
         var best = pnlLeaderboard
+            .Select(item => item.Entry)
             .Where(entry => entry.Pnl > 0m)
             .OrderByDescending(entry => entry.Pnl)
             .ThenByDescending(entry => entry.Volume)
             .Take(options.CandidatesPerSide)
             .ToArray();
         var worst = volumeLeaderboard
+            .Select(item => item.Entry)
             .Where(entry => entry.Pnl < 0m)
             .OrderBy(entry => entry.Pnl)
             .ThenByDescending(entry => entry.Volume)
@@ -65,13 +71,11 @@ public sealed class TraderDiscoveryProcessor(
         return candidates;
     }
 
-    private async Task<IReadOnlyList<TraderLeaderboardEntry>> FetchLeaderboardWindowAsync(
+    private async Task<IReadOnlyList<LeaderboardWindowEntry>> FetchLeaderboardWindowAsync(
         string orderBy,
-        Guid discoveryRunId,
-        DateTimeOffset snapshotAt,
         CancellationToken cancellationToken)
     {
-        var byWallet = new Dictionary<string, TraderLeaderboardEntry>(StringComparer.OrdinalIgnoreCase);
+        var byWallet = new Dictionary<string, LeaderboardWindowEntry>(StringComparer.OrdinalIgnoreCase);
         for (var page = 0; page < options.LeaderboardPages; page++)
         {
             cancellationToken.ThrowIfCancellationRequested();
@@ -91,15 +95,8 @@ public sealed class TraderDiscoveryProcessor(
 
             foreach (var entry in entries.Where(IsUsableEntry))
             {
-                byWallet[entry.Wallet] = entry;
+                byWallet[entry.Wallet] = new LeaderboardWindowEntry(entry, offset);
             }
-
-            await repository.AddTraderLeaderboardSnapshotsAsync(
-                entries
-                    .Where(IsUsableEntry)
-                    .Select(entry => ToSnapshot(discoveryRunId, snapshotAt, orderBy, offset, entry))
-                    .ToArray(),
-                cancellationToken);
 
             if (entries.Count < 50)
             {
@@ -255,27 +252,59 @@ public sealed class TraderDiscoveryProcessor(
         }
     }
 
-    private TraderLeaderboardSnapshot ToSnapshot(
+    private IReadOnlyList<TraderLeaderboardSnapshot> BuildMergedSnapshots(
         Guid discoveryRunId,
         DateTimeOffset snapshotAt,
-        string orderBy,
-        int pageOffset,
-        TraderLeaderboardEntry entry)
+        IReadOnlyList<LeaderboardWindowEntry> pnlLeaderboard,
+        IReadOnlyList<LeaderboardWindowEntry> volumeLeaderboard)
     {
+        var byWallet = new Dictionary<string, (LeaderboardWindowEntry? Pnl, LeaderboardWindowEntry? Volume)>(
+            StringComparer.OrdinalIgnoreCase);
+
+        foreach (var item in pnlLeaderboard)
+        {
+            byWallet[item.Entry.Wallet] = (item, byWallet.GetValueOrDefault(item.Entry.Wallet).Volume);
+        }
+
+        foreach (var item in volumeLeaderboard)
+        {
+            byWallet[item.Entry.Wallet] = (byWallet.GetValueOrDefault(item.Entry.Wallet).Pnl, item);
+        }
+
+        return byWallet
+            .Select(item => ToMergedSnapshot(discoveryRunId, snapshotAt, item.Value.Pnl, item.Value.Volume))
+            .ToArray();
+    }
+
+    private TraderLeaderboardSnapshot ToMergedSnapshot(
+        Guid discoveryRunId,
+        DateTimeOffset snapshotAt,
+        LeaderboardWindowEntry? pnl,
+        LeaderboardWindowEntry? volume)
+    {
+        var entry = pnl?.Entry ?? volume?.Entry ?? throw new InvalidOperationException("Merged leaderboard snapshot must have at least one source.");
+        var xUsername = FirstNonEmpty(pnl?.Entry.XUsername, volume?.Entry.XUsername);
+        var userName = FirstNonEmpty(pnl?.Entry.UserName, volume?.Entry.UserName) ?? entry.Wallet;
+
         return new TraderLeaderboardSnapshot(
             Guid.NewGuid(),
             discoveryRunId,
             options.Category.ToUpperInvariant(),
             options.TimePeriod.ToUpperInvariant(),
-            orderBy.ToUpperInvariant(),
-            pageOffset,
-            entry.Rank,
             entry.Wallet,
-            entry.UserName,
-            entry.XUsername,
-            entry.Pnl,
-            entry.Volume,
-            entry.VerifiedBadge,
+            userName,
+            xUsername,
+            (pnl?.Entry.VerifiedBadge ?? false) || (volume?.Entry.VerifiedBadge ?? false),
+            pnl?.Entry.Rank,
+            pnl?.PageOffset,
+            pnl?.Entry.Pnl,
+            pnl?.Entry.Volume,
+            pnl is null ? null : snapshotAt,
+            volume?.Entry.Rank,
+            volume?.PageOffset,
+            volume?.Entry.Pnl,
+            volume?.Entry.Volume,
+            volume is null ? null : snapshotAt,
             snapshotAt);
     }
 
@@ -284,4 +313,11 @@ public sealed class TraderDiscoveryProcessor(
         return !string.IsNullOrWhiteSpace(entry.Wallet) &&
             entry.Wallet.StartsWith("0x", StringComparison.OrdinalIgnoreCase);
     }
+
+    private static string? FirstNonEmpty(params string?[] values)
+    {
+        return values.FirstOrDefault(value => !string.IsNullOrWhiteSpace(value));
+    }
+
+    private sealed record LeaderboardWindowEntry(TraderLeaderboardEntry Entry, int PageOffset);
 }

@@ -101,16 +101,21 @@ public sealed record TraderLeaderboardSnapshot(
     Guid DiscoveryRunId,
     string Category,
     string TimePeriod,
-    string OrderBy,
-    int PageOffset,
-    int? Rank,
     string Wallet,
     string UserName,
     string? XUsername,
-    decimal LeaderboardPnl,
-    decimal LeaderboardVolume,
     bool VerifiedBadge,
-    DateTimeOffset SnapshotAtUtc);
+    int? PnlRank,
+    int? PnlPageOffset,
+    decimal? PnlLeaderboardPnl,
+    decimal? PnlLeaderboardVolume,
+    DateTimeOffset? PnlSnapshotAtUtc,
+    int? VolumeRank,
+    int? VolumePageOffset,
+    decimal? VolumeLeaderboardPnl,
+    decimal? VolumeLeaderboardVolume,
+    DateTimeOffset? VolumeSnapshotAtUtc,
+    DateTimeOffset UpdatedAtUtc);
 
 public sealed record TraderDiscoveryCandidate(
     Guid Id,

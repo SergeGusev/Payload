@@ -246,7 +246,7 @@ Scanner health is persisted to `scanner_status` with last success/error timestam
 
 ## Trader Discovery
 
-Trader discovery is operator-triggered from the dashboard. When `TraderDiscovery:Enabled=true`, the dashboard `Find traders` button asks the service to fetch the full configured Polymarket leaderboard window twice: `orderBy=PNL` for successful traders and `orderBy=VOL` for high-volume loss candidates. Raw leaderboard rows are stored in `trader_leaderboard_snapshots`; the best PnL candidates and the worst negative-PnL volume candidates are enriched with all-time leaderboard PnL/volume for the same wallet, recent trades, and current positions, then stored in `trader_discovery_candidates`.
+Trader discovery is operator-triggered from the dashboard. When `TraderDiscovery:Enabled=true`, the dashboard `Find traders` button asks the service to fetch the full configured Polymarket leaderboard window twice: `orderBy=PNL` for successful traders and `orderBy=VOL` for high-volume loss candidates. Current merged leaderboard rows are stored in `trader_leaderboard_snapshots`, one row per `category + time_period + wallet`, with separate PNL and volume-leaderboard columns. The best PnL candidates and the worst negative-PnL volume candidates are enriched with all-time leaderboard PnL/volume for the same wallet, recent trades, and current positions, then stored in `trader_discovery_candidates`.
 
 Run the service and click `Find traders` in the dashboard controls:
 

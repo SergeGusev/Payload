@@ -20,7 +20,8 @@ public sealed class TraderDiscoveryTests
         dataApi.VolumeLeaderboard.AddRange(
         [
             Entry(17, "0x3333333333333333333333333333333333333333", "Loser", -750m, 20_000m),
-            Entry(18, "0x4444444444444444444444444444444444444444", "VolumeWinner", 25m, 100_000m)
+            Entry(18, "0x4444444444444444444444444444444444444444", "VolumeWinner", 25m, 100_000m),
+            Entry(19, "0x1111111111111111111111111111111111111111", "Winner", 1_000m, 75_000m)
         ]);
         dataApi.AllTimeLeaderboard["0x1111111111111111111111111111111111111111"] =
             Entry(12, "0x1111111111111111111111111111111111111111", "Winner", 2_500m, 120_000m);
@@ -71,8 +72,11 @@ public sealed class TraderDiscoveryTests
         Assert.Equal(80_000m, worst.AllTimeVolume);
         Assert.Contains("loss_selected_from_volume_leaderboard", worst.Notes, StringComparison.Ordinal);
         Assert.Equal(4, repository.TraderLeaderboardSnapshots.Count);
-        Assert.Contains(repository.TraderLeaderboardSnapshots, item => item.OrderBy == "PNL");
-        Assert.Contains(repository.TraderLeaderboardSnapshots, item => item.OrderBy == "VOL");
+        var mergedWinner = Assert.Single(repository.TraderLeaderboardSnapshots, item => item.Wallet == "0x1111111111111111111111111111111111111111");
+        Assert.Equal(1_000m, mergedWinner.PnlLeaderboardPnl);
+        Assert.Equal(50_000m, mergedWinner.PnlLeaderboardVolume);
+        Assert.Equal(1_000m, mergedWinner.VolumeLeaderboardPnl);
+        Assert.Equal(75_000m, mergedWinner.VolumeLeaderboardVolume);
     }
 
     [Fact]

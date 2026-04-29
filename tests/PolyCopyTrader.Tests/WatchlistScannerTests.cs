@@ -266,7 +266,15 @@ public sealed class WatchlistScannerTests
             IReadOnlyList<TraderLeaderboardSnapshot> snapshots,
             CancellationToken cancellationToken = default)
         {
-            TraderLeaderboardSnapshots.AddRange(snapshots);
+            foreach (var snapshot in snapshots)
+            {
+                TraderLeaderboardSnapshots.RemoveAll(item =>
+                    string.Equals(item.Category, snapshot.Category, StringComparison.OrdinalIgnoreCase) &&
+                    string.Equals(item.TimePeriod, snapshot.TimePeriod, StringComparison.OrdinalIgnoreCase) &&
+                    string.Equals(item.Wallet, snapshot.Wallet, StringComparison.OrdinalIgnoreCase));
+                TraderLeaderboardSnapshots.Add(snapshot);
+            }
+
             return Task.CompletedTask;
         }
 

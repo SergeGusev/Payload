@@ -59,23 +59,149 @@ CREATE TABLE IF NOT EXISTS trader_leaderboard_snapshots (
     discovery_run_id uuid NOT NULL,
     category text NOT NULL,
     time_period text NOT NULL,
-    order_by text NOT NULL,
-    page_offset integer NOT NULL,
-    rank integer NULL,
     wallet text NOT NULL,
     user_name text NOT NULL,
     x_username text NULL,
-    leaderboard_pnl numeric(28,8) NOT NULL,
-    leaderboard_volume numeric(28,8) NOT NULL,
     verified_badge boolean NOT NULL,
-    snapshot_at_utc timestamptz NOT NULL
+    pnl_rank integer NULL,
+    pnl_page_offset integer NULL,
+    pnl_leaderboard_pnl numeric(28,8) NULL,
+    pnl_leaderboard_volume numeric(28,8) NULL,
+    pnl_snapshot_at_utc timestamptz NULL,
+    volume_rank integer NULL,
+    volume_page_offset integer NULL,
+    volume_leaderboard_pnl numeric(28,8) NULL,
+    volume_leaderboard_volume numeric(28,8) NULL,
+    volume_snapshot_at_utc timestamptz NULL,
+    updated_at_utc timestamptz NOT NULL
 );
 
-CREATE UNIQUE INDEX IF NOT EXISTS ux_trader_leaderboard_snapshots_run_order_wallet
-ON trader_leaderboard_snapshots(discovery_run_id, category, time_period, order_by, wallet);
+ALTER TABLE trader_leaderboard_snapshots ADD COLUMN IF NOT EXISTS pnl_rank integer NULL;
+ALTER TABLE trader_leaderboard_snapshots ADD COLUMN IF NOT EXISTS pnl_page_offset integer NULL;
+ALTER TABLE trader_leaderboard_snapshots ADD COLUMN IF NOT EXISTS pnl_leaderboard_pnl numeric(28,8) NULL;
+ALTER TABLE trader_leaderboard_snapshots ADD COLUMN IF NOT EXISTS pnl_leaderboard_volume numeric(28,8) NULL;
+ALTER TABLE trader_leaderboard_snapshots ADD COLUMN IF NOT EXISTS pnl_snapshot_at_utc timestamptz NULL;
+ALTER TABLE trader_leaderboard_snapshots ADD COLUMN IF NOT EXISTS volume_rank integer NULL;
+ALTER TABLE trader_leaderboard_snapshots ADD COLUMN IF NOT EXISTS volume_page_offset integer NULL;
+ALTER TABLE trader_leaderboard_snapshots ADD COLUMN IF NOT EXISTS volume_leaderboard_pnl numeric(28,8) NULL;
+ALTER TABLE trader_leaderboard_snapshots ADD COLUMN IF NOT EXISTS volume_leaderboard_volume numeric(28,8) NULL;
+ALTER TABLE trader_leaderboard_snapshots ADD COLUMN IF NOT EXISTS volume_snapshot_at_utc timestamptz NULL;
+ALTER TABLE trader_leaderboard_snapshots ADD COLUMN IF NOT EXISTS updated_at_utc timestamptz NULL;
+UPDATE trader_leaderboard_snapshots
+SET updated_at_utc = COALESCE(updated_at_utc, now());
+ALTER TABLE trader_leaderboard_snapshots ALTER COLUMN updated_at_utc SET NOT NULL;
 
-CREATE INDEX IF NOT EXISTS ix_trader_leaderboard_snapshots_run
-ON trader_leaderboard_snapshots(discovery_run_id, order_by, leaderboard_pnl DESC);
+DO $$
+BEGIN
+    IF EXISTS (
+        SELECT 1
+        FROM information_schema.columns
+        WHERE table_name = 'trader_leaderboard_snapshots'
+          AND column_name = 'order_by'
+    ) THEN
+        UPDATE trader_leaderboard_snapshots
+        SET pnl_rank = rank,
+            pnl_page_offset = page_offset,
+            pnl_leaderboard_pnl = leaderboard_pnl,
+            pnl_leaderboard_volume = leaderboard_volume,
+            pnl_snapshot_at_utc = snapshot_at_utc
+        WHERE order_by = 'PNL'
+          AND pnl_leaderboard_pnl IS NULL;
+
+        UPDATE trader_leaderboard_snapshots
+        SET volume_rank = rank,
+            volume_page_offset = page_offset,
+            volume_leaderboard_pnl = leaderboard_pnl,
+            volume_leaderboard_volume = leaderboard_volume,
+            volume_snapshot_at_utc = snapshot_at_utc
+        WHERE order_by = 'VOL'
+          AND volume_leaderboard_pnl IS NULL;
+
+        DROP TABLE IF EXISTS trader_leaderboard_snapshot_keep;
+        CREATE TEMP TABLE trader_leaderboard_snapshot_keep AS
+        SELECT DISTINCT ON (category, time_period, wallet)
+            id AS keep_id,
+            category,
+            time_period,
+            wallet
+        FROM trader_leaderboard_snapshots
+        ORDER BY category, time_period, wallet, updated_at_utc DESC, id;
+
+        UPDATE trader_leaderboard_snapshots target
+        SET pnl_rank = pnl.pnl_rank,
+            pnl_page_offset = pnl.pnl_page_offset,
+            pnl_leaderboard_pnl = pnl.pnl_leaderboard_pnl,
+            pnl_leaderboard_volume = pnl.pnl_leaderboard_volume,
+            pnl_snapshot_at_utc = pnl.pnl_snapshot_at_utc
+        FROM trader_leaderboard_snapshot_keep keep
+        JOIN LATERAL (
+            SELECT source.pnl_rank,
+                   source.pnl_page_offset,
+                   source.pnl_leaderboard_pnl,
+                   source.pnl_leaderboard_volume,
+                   source.pnl_snapshot_at_utc
+            FROM trader_leaderboard_snapshots source
+            WHERE source.category = keep.category
+              AND source.time_period = keep.time_period
+              AND source.wallet = keep.wallet
+              AND source.pnl_leaderboard_pnl IS NOT NULL
+            ORDER BY source.pnl_snapshot_at_utc DESC NULLS LAST, source.updated_at_utc DESC, source.id
+            LIMIT 1
+        ) pnl ON true
+        WHERE target.id = keep.keep_id;
+
+        UPDATE trader_leaderboard_snapshots target
+        SET volume_rank = volume.volume_rank,
+            volume_page_offset = volume.volume_page_offset,
+            volume_leaderboard_pnl = volume.volume_leaderboard_pnl,
+            volume_leaderboard_volume = volume.volume_leaderboard_volume,
+            volume_snapshot_at_utc = volume.volume_snapshot_at_utc
+        FROM trader_leaderboard_snapshot_keep keep
+        JOIN LATERAL (
+            SELECT source.volume_rank,
+                   source.volume_page_offset,
+                   source.volume_leaderboard_pnl,
+                   source.volume_leaderboard_volume,
+                   source.volume_snapshot_at_utc
+            FROM trader_leaderboard_snapshots source
+            WHERE source.category = keep.category
+              AND source.time_period = keep.time_period
+              AND source.wallet = keep.wallet
+              AND source.volume_leaderboard_pnl IS NOT NULL
+            ORDER BY source.volume_snapshot_at_utc DESC NULLS LAST, source.updated_at_utc DESC, source.id
+            LIMIT 1
+        ) volume ON true
+        WHERE target.id = keep.keep_id;
+
+        DELETE FROM trader_leaderboard_snapshots target
+        USING trader_leaderboard_snapshot_keep keep
+        WHERE target.category = keep.category
+          AND target.time_period = keep.time_period
+          AND target.wallet = keep.wallet
+          AND target.id <> keep.keep_id;
+
+        DROP TABLE IF EXISTS trader_leaderboard_snapshot_keep;
+    END IF;
+END $$;
+
+DROP INDEX IF EXISTS ux_trader_leaderboard_snapshots_run_order_wallet;
+DROP INDEX IF EXISTS ix_trader_leaderboard_snapshots_run;
+
+ALTER TABLE trader_leaderboard_snapshots DROP COLUMN IF EXISTS order_by;
+ALTER TABLE trader_leaderboard_snapshots DROP COLUMN IF EXISTS page_offset;
+ALTER TABLE trader_leaderboard_snapshots DROP COLUMN IF EXISTS rank;
+ALTER TABLE trader_leaderboard_snapshots DROP COLUMN IF EXISTS leaderboard_pnl;
+ALTER TABLE trader_leaderboard_snapshots DROP COLUMN IF EXISTS leaderboard_volume;
+ALTER TABLE trader_leaderboard_snapshots DROP COLUMN IF EXISTS snapshot_at_utc;
+
+CREATE UNIQUE INDEX IF NOT EXISTS ux_trader_leaderboard_snapshots_current
+ON trader_leaderboard_snapshots(category, time_period, wallet);
+
+CREATE INDEX IF NOT EXISTS ix_trader_leaderboard_snapshots_pnl
+ON trader_leaderboard_snapshots(category, time_period, pnl_leaderboard_pnl DESC);
+
+CREATE INDEX IF NOT EXISTS ix_trader_leaderboard_snapshots_volume_loss
+ON trader_leaderboard_snapshots(category, time_period, volume_leaderboard_pnl ASC, volume_leaderboard_volume DESC);
 
 CREATE TABLE IF NOT EXISTS trader_discovery_candidates (
     id uuid PRIMARY KEY,
