@@ -4,8 +4,5 @@ namespace PolyCopyTrader.Strategy;
 
 public interface ISignalEngine
 {
-    Signal Evaluate(
-        LeaderTrade leaderTrade,
-        TraderRule traderRule,
-        OrderBookSnapshot? orderBookSnapshot);
+    SignalDecision Evaluate(SignalEvaluationContext context);
 }

@@ -20,6 +20,7 @@ public static class AppOptionsValidator
         ValidatePolymarket(configuration.Polymarket, errors);
         ValidatePaperTrading(configuration.PaperTrading, errors);
         ValidateExecution(configuration.Execution, errors);
+        ValidateSignal(configuration.Signal, errors);
         ValidateRisk(configuration.Risk, errors);
         ValidateWatchlist(configuration.Watchlist, errors);
         ValidateDashboard(configuration.Dashboard, errors);
@@ -39,6 +40,7 @@ public static class AppOptionsValidator
             $"Storage env var: {configuration.Storage.ConnectionStringEnvironmentVariable}",
             $"Polymarket data API: {configuration.Polymarket.DataApiBaseUrl}",
             $"Polymarket CLOB API: {configuration.Polymarket.ClobBaseUrl}",
+            $"Signal observe threshold: {configuration.Signal.ObserveBelowScore}",
             $"Watchlist traders: {configuration.Watchlist.Traders.Count}",
             $"Paper bankroll USD: {configuration.PaperTrading.InitialBankrollUsd}");
     }
@@ -135,6 +137,34 @@ public static class AppOptionsValidator
         }
     }
 
+    private static void ValidateSignal(SignalOptions options, List<string> errors)
+    {
+        if (options.IgnoreBelowScore < 0)
+        {
+            errors.Add("Signal.IgnoreBelowScore must not be negative.");
+        }
+
+        if (options.ObserveBelowScore <= options.IgnoreBelowScore)
+        {
+            errors.Add("Signal.ObserveBelowScore must be greater than Signal.IgnoreBelowScore.");
+        }
+
+        if (options.NormalPaperOrderScore <= options.ObserveBelowScore)
+        {
+            errors.Add("Signal.NormalPaperOrderScore must be greater than Signal.ObserveBelowScore.");
+        }
+
+        if (options.LargeLeaderTradeMultiplier <= 0m)
+        {
+            errors.Add("Signal.LargeLeaderTradeMultiplier must be greater than zero.");
+        }
+
+        if (options.MarketCloseWindowMinutes < 0)
+        {
+            errors.Add("Signal.MarketCloseWindowMinutes must not be negative.");
+        }
+    }
+
     private static void ValidateRisk(RiskOptions options, List<string> errors)
     {
         ValidatePct(options.MaxTradeBankrollPct, "Risk.MaxTradeBankrollPct", errors);
@@ -147,6 +177,16 @@ public static class AppOptionsValidator
         if (options.MaxTradeBankrollPct > options.MaxMarketBankrollPct)
         {
             errors.Add("Risk.MaxTradeBankrollPct must not exceed Risk.MaxMarketBankrollPct.");
+        }
+
+        if (options.MaxOpenOrders <= 0)
+        {
+            errors.Add("Risk.MaxOpenOrders must be greater than zero.");
+        }
+
+        if (options.MaxOrderAgeSeconds <= 0)
+        {
+            errors.Add("Risk.MaxOrderAgeSeconds must be greater than zero.");
         }
     }
 

@@ -20,6 +20,8 @@ public interface IAppRepository
 
     Task<IReadOnlyList<PaperOrder>> GetOpenPaperOrdersAsync(CancellationToken cancellationToken = default);
 
+    Task<IReadOnlyList<PaperPosition>> GetPaperPositionsAsync(CancellationToken cancellationToken = default);
+
     Task AddApiErrorAsync(ApiError error, CancellationToken cancellationToken = default);
 
     Task UpsertScannerStatusAsync(ScannerStatusSnapshot status, CancellationToken cancellationToken = default);

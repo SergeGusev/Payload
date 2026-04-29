@@ -4,7 +4,9 @@ using PolyCopyTrader.Polymarket;
 using PolyCopyTrader.Service.Configuration;
 using PolyCopyTrader.Service.Polymarket;
 using PolyCopyTrader.Service.Scanning;
+using PolyCopyTrader.Service.Signals;
 using PolyCopyTrader.Storage;
+using PolyCopyTrader.Strategy;
 using Serilog;
 using Serilog.Events;
 
@@ -35,6 +37,7 @@ builder.Services.AddSingleton(appConfiguration);
 builder.Services.AddSingleton(appConfiguration.Bot);
 builder.Services.AddSingleton(appConfiguration.Risk);
 builder.Services.AddSingleton(appConfiguration.Execution);
+builder.Services.AddSingleton(appConfiguration.Signal);
 builder.Services.AddSingleton(appConfiguration.Polymarket);
 builder.Services.AddSingleton(appConfiguration.Watchlist);
 builder.Services.AddSingleton(appConfiguration.PaperTrading);
@@ -59,6 +62,9 @@ builder.Services.AddHttpClient<IPolymarketClobPublicClient, PolymarketClobPublic
 builder.Services.AddHttpClient<IPolymarketGeoClient, PolymarketGeoClient>();
 builder.Services.AddSingleton<ILeaderTradeCandidateQueue, InMemoryLeaderTradeCandidateQueue>();
 builder.Services.AddSingleton<IWatchlistScanner, WatchlistScanner>();
+builder.Services.AddSingleton<IRiskEngine, DefaultRiskEngine>();
+builder.Services.AddSingleton<ISignalEngine, DefaultSignalEngine>();
+builder.Services.AddSingleton<ISignalProcessor, SignalProcessor>();
 builder.Services.AddHostedService<BotWorker>();
 
 try

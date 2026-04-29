@@ -2,7 +2,7 @@
 
 PolyCopyTrader is a Windows/.NET C# application for monitoring Polymarket traders and running a cautious copy-signal strategy.
 
-This repository is currently at Task 05: watchlist scanner. It contains project structure, typed configuration, PostgreSQL schema initialization, a basic repository, read-only Polymarket Data/CLOB/Geo clients, a Worker Service scanner loop, and a basic WPF dashboard shell.
+This repository is currently at Task 06: signal and risk engines. It contains project structure, typed configuration, PostgreSQL schema initialization, a basic repository, read-only Polymarket Data/CLOB/Geo clients, a Worker Service scanner/signal loop, and a basic WPF dashboard shell.
 
 ## Safety
 
@@ -89,12 +89,18 @@ The service scans enabled `Watchlist:Traders` entries on `Bot:PollIntervalSecond
 
 Scanner health is persisted to `scanner_status` with last success/error timestamps and per-loop fetched/stored counts. Invalid placeholder wallets are warned and skipped without crashing the service.
 
+## Signal And Risk Engines
+
+Queued leader trades are evaluated by `DefaultSignalEngine` after the scanner stores them. The engine rejects unsupported sides, stale trades, small leader trades, missing/wide order books, unsafe maker prices, excessive slippage, category mismatches when category is known, and markets too close to event end. Accepted decisions produce proposed paper-order details only; no order placement happens in this task.
+
+`DefaultRiskEngine` enforces configured bankroll limits for trade, market, trader, category, total deployed exposure, daily loss, and max open orders. Rejected decisions are persisted as `SignalRejection` reason codes.
+
 ## Known Limitations
 
-- No signal engine, risk engine, or paper trading implementation yet.
+- No paper trading execution implementation yet.
 - No WebSocket support yet.
 - No auth/signing/live trading support.
 
 ## Next Recommended Task
 
-Implement `Codex/06_TASK_SIGNAL_AND_RISK_ENGINES.md`.
+Implement `Codex/07_TASK_PAPER_TRADING_ENGINE.md`.

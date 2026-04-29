@@ -164,9 +164,14 @@ CREATE TABLE IF NOT EXISTS signals (
     score integer NOT NULL,
     decision text NOT NULL,
     proposed_paper_price numeric(18,8) NULL,
+    proposed_size_shares numeric(28,8) NULL,
+    proposed_notional_usd numeric(28,8) NULL,
     created_at_utc timestamptz NOT NULL,
     raw_context_json jsonb NULL
 );
+
+ALTER TABLE signals ADD COLUMN IF NOT EXISTS proposed_size_shares numeric(28,8) NULL;
+ALTER TABLE signals ADD COLUMN IF NOT EXISTS proposed_notional_usd numeric(28,8) NULL;
 
 CREATE TABLE IF NOT EXISTS signal_rejections (
     id uuid PRIMARY KEY,

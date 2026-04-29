@@ -2,6 +2,7 @@ using System.Reflection;
 using PolyCopyTrader.Domain;
 using PolyCopyTrader.Domain.Configuration;
 using PolyCopyTrader.Service.Scanning;
+using PolyCopyTrader.Service.Signals;
 using PolyCopyTrader.Storage;
 
 namespace PolyCopyTrader.Service;
@@ -10,7 +11,8 @@ public sealed class BotWorker(
     ILogger<BotWorker> logger,
     BotOptions botOptions,
     IAppRepository repository,
-    IWatchlistScanner watchlistScanner) : BackgroundService
+    IWatchlistScanner watchlistScanner,
+    ISignalProcessor signalProcessor) : BackgroundService
 {
     private readonly DateTimeOffset startedAtUtc = DateTimeOffset.UtcNow;
 
@@ -26,16 +28,20 @@ public sealed class BotWorker(
             try
             {
                 var scanStatus = await watchlistScanner.ScanOnceAsync(stoppingToken);
+                var signalResult = await signalProcessor.ProcessQueuedAsync(stoppingToken);
                 currentLoop =
                     $"Scanner={scanStatus.ScannerStatus}; TradesFetched={scanStatus.TradesFetched}; " +
-                    $"NewTradesStored={scanStatus.NewTradesStored}; PositionsFetched={scanStatus.PositionsFetched}";
+                    $"NewTradesStored={scanStatus.NewTradesStored}; PositionsFetched={scanStatus.PositionsFetched}; " +
+                    $"SignalsAccepted={signalResult.SignalsAccepted}; SignalsRejected={signalResult.SignalsRejected}";
 
                 logger.LogInformation(
-                    "Watchlist scan completed. Status={ScannerStatus} TradesFetched={TradesFetched} NewTradesStored={NewTradesStored} PositionsFetched={PositionsFetched}",
+                    "Watchlist scan completed. Status={ScannerStatus} TradesFetched={TradesFetched} NewTradesStored={NewTradesStored} PositionsFetched={PositionsFetched} SignalsAccepted={SignalsAccepted} SignalsRejected={SignalsRejected}",
                     scanStatus.ScannerStatus,
                     scanStatus.TradesFetched,
                     scanStatus.NewTradesStored,
-                    scanStatus.PositionsFetched);
+                    scanStatus.PositionsFetched,
+                    signalResult.SignalsAccepted,
+                    signalResult.SignalsRejected);
             }
             catch (OperationCanceledException)
             {

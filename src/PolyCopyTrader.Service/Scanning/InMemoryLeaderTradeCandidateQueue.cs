@@ -13,6 +13,18 @@ public sealed class InMemoryLeaderTradeCandidateQueue : ILeaderTradeCandidateQue
         return Task.CompletedTask;
     }
 
+    public Task<IReadOnlyList<LeaderTrade>> DrainAsync(int maxItems, CancellationToken cancellationToken = default)
+    {
+        var result = new List<LeaderTrade>();
+        while (result.Count < maxItems && trades.TryDequeue(out var trade))
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            result.Add(trade);
+        }
+
+        return Task.FromResult<IReadOnlyList<LeaderTrade>>(result);
+    }
+
     public IReadOnlyList<LeaderTrade> Snapshot()
     {
         return trades.ToArray();

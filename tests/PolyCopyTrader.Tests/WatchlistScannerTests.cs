@@ -211,6 +211,13 @@ public sealed class WatchlistScannerTests
             Trades.Add(trade);
             return Task.CompletedTask;
         }
+
+        public Task<IReadOnlyList<LeaderTrade>> DrainAsync(int maxItems, CancellationToken cancellationToken = default)
+        {
+            var drained = Trades.Take(maxItems).ToArray();
+            Trades.RemoveRange(0, drained.Length);
+            return Task.FromResult<IReadOnlyList<LeaderTrade>>(drained);
+        }
     }
 
     private sealed class FakeRepository : IAppRepository
@@ -270,6 +277,11 @@ public sealed class WatchlistScannerTests
         public Task<IReadOnlyList<PaperOrder>> GetOpenPaperOrdersAsync(CancellationToken cancellationToken = default)
         {
             return Task.FromResult<IReadOnlyList<PaperOrder>>([]);
+        }
+
+        public Task<IReadOnlyList<PaperPosition>> GetPaperPositionsAsync(CancellationToken cancellationToken = default)
+        {
+            return Task.FromResult<IReadOnlyList<PaperPosition>>([]);
         }
 
         public Task AddApiErrorAsync(ApiError error, CancellationToken cancellationToken = default)

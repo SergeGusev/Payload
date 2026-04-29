@@ -49,7 +49,8 @@ public sealed record TraderRule(
     decimal MaxSlippageCents,
     decimal MaxSpreadCents,
     decimal MaxSpreadPct,
-    decimal MinLeaderTradeUsd);
+    decimal MinLeaderTradeUsd,
+    bool Enabled = true);
 
 public sealed record LeaderTrade(
     string TraderWallet,
@@ -154,7 +155,47 @@ public sealed record OrderBookSnapshot(
             return mid <= 0m ? null : (ask - bid) / mid * 100m;
         }
     }
+
+    public bool IsCrossed => BestBid is { } bid && BestAsk is { } ask && bid >= ask;
+
+    public bool HasEnoughDepth => Bids.Any(level => level.Size > 0m) && Asks.Any(level => level.Size > 0m);
 }
+
+public sealed record SignalEvaluationContext(
+    LeaderTrade LeaderTrade,
+    TraderRule TraderRule,
+    MarketInfo? MarketInfo,
+    OrderBookSnapshot? OrderBookSnapshot,
+    ExposureSnapshot Exposure);
+
+public sealed record SignalDecision(
+    bool Accepted,
+    int Score,
+    string DecisionCode,
+    IReadOnlyList<string> Reasons,
+    decimal? ProposedPrice,
+    decimal? ProposedSizeShares,
+    decimal? ProposedNotionalUsd,
+    DateTimeOffset CreatedAtUtc);
+
+public sealed record ProposedOrderIntent(
+    string TraderWallet,
+    string ConditionId,
+    string AssetId,
+    string? Category,
+    TradeSide Side,
+    decimal Price,
+    decimal SizeShares,
+    decimal NotionalUsd);
+
+public sealed record ExposureSnapshot(
+    decimal MarketExposureUsd,
+    decimal TraderExposureUsd,
+    decimal CategoryExposureUsd,
+    decimal TotalDeployedUsd,
+    decimal DailyLossUsd,
+    int OpenOrdersCount,
+    int OldestOpenOrderAgeSeconds = 0);
 
 public sealed record Signal(
     Guid Id,
@@ -164,6 +205,7 @@ public sealed record Signal(
     string DecisionCode,
     IReadOnlyList<string> Reasons,
     decimal? ProposedPaperPrice,
+    decimal? ProposedSizeShares,
     decimal? ProposedNotionalUsd,
     DateTimeOffset CreatedAtUtc);
 
@@ -171,7 +213,8 @@ public sealed record RiskDecision(
     bool Allowed,
     IReadOnlyList<string> ReasonCodes,
     decimal AllowedNotionalUsd,
-    decimal ExposureAfterOrderUsd);
+    decimal ExposureAfterOrderUsd,
+    decimal AllowedSizeShares = 0m);
 
 public sealed record PaperOrder(
     Guid Id,

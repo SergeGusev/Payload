@@ -19,6 +19,7 @@ public static class AppConfigurationLoader
             Bot = configuration.GetSection("Bot").Get<BotOptions>() ?? new BotOptions(),
             Risk = configuration.GetSection("Risk").Get<RiskOptions>() ?? new RiskOptions(),
             Execution = configuration.GetSection("Execution").Get<ExecutionOptions>() ?? new ExecutionOptions(),
+            Signal = configuration.GetSection("Signal").Get<SignalOptions>() ?? new SignalOptions(),
             Polymarket = configuration.GetSection("Polymarket").Get<PolymarketOptions>() ?? new PolymarketOptions(),
             Watchlist = watchlist,
             PaperTrading = configuration.GetSection("PaperTrading").Get<PaperTradingOptions>() ?? new PaperTradingOptions(),

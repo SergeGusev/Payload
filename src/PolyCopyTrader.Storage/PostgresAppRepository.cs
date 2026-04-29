@@ -129,11 +129,11 @@ INSERT INTO leader_positions (
 INSERT INTO signals (
     id, leader_trade_id, trader_wallet, condition_id, asset_id, outcome, leader_price,
     best_bid, best_ask, spread_abs, spread_pct, lag_seconds, score, decision,
-    proposed_paper_price, created_at_utc, raw_context_json
+    proposed_paper_price, proposed_size_shares, proposed_notional_usd, created_at_utc, raw_context_json
 ) VALUES (
     @Id, @LeaderTradeId, @TraderWallet, @ConditionId, @AssetId, @Outcome, @LeaderPrice,
     @BestBid, @BestAsk, @SpreadAbs, @SpreadPct, @LagSeconds, @Score, @Decision,
-    @ProposedPaperPrice, @CreatedAtUtc, CAST(@RawContextJson AS jsonb)
+    @ProposedPaperPrice, @ProposedSizeShares, @ProposedNotionalUsd, @CreatedAtUtc, CAST(@RawContextJson AS jsonb)
 );
 """;
 
@@ -154,6 +154,8 @@ INSERT INTO signals (
         command.Parameters.AddWithValue("Score", signal.Score);
         command.Parameters.AddWithValue("Decision", signal.DecisionCode);
         command.Parameters.AddWithValue("ProposedPaperPrice", (object?)signal.ProposedPaperPrice ?? DBNull.Value);
+        command.Parameters.AddWithValue("ProposedSizeShares", (object?)signal.ProposedSizeShares ?? DBNull.Value);
+        command.Parameters.AddWithValue("ProposedNotionalUsd", (object?)signal.ProposedNotionalUsd ?? DBNull.Value);
         command.Parameters.AddWithValue("CreatedAtUtc", UtcDateTime(signal.CreatedAtUtc));
         command.Parameters.AddWithValue("RawContextJson", JsonSerializer.Serialize(signal));
         await command.ExecuteNonQueryAsync(cancellationToken);
@@ -236,6 +238,34 @@ ORDER BY created_at_utc DESC;
                 reader.GetDecimal(8),
                 DateTimeOffsetFromUtc(reader.GetDateTime(9)),
                 DateTimeOffsetFromUtc(reader.GetDateTime(10))));
+        }
+
+        return results;
+    }
+
+    public async Task<IReadOnlyList<PaperPosition>> GetPaperPositionsAsync(CancellationToken cancellationToken = default)
+    {
+        const string sql = """
+SELECT asset_id, condition_id, outcome, size_shares, average_price, estimated_value_usd, unrealized_pnl_usd
+FROM paper_positions
+ORDER BY updated_at_utc DESC;
+""";
+
+        await using var connection = await OpenConnectionAsync(cancellationToken);
+        await using var command = CreateCommand(connection, sql);
+        await using var reader = await command.ExecuteReaderAsync(cancellationToken);
+
+        var results = new List<PaperPosition>();
+        while (await reader.ReadAsync(cancellationToken))
+        {
+            results.Add(new PaperPosition(
+                reader.GetString(0),
+                reader.GetString(1),
+                reader.GetString(2),
+                reader.GetDecimal(3),
+                reader.GetDecimal(4),
+                reader.GetDecimal(5),
+                reader.GetDecimal(6)));
         }
 
         return results;

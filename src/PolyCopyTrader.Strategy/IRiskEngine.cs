@@ -4,7 +4,5 @@ namespace PolyCopyTrader.Strategy;
 
 public interface IRiskEngine
 {
-    RiskDecision Evaluate(
-        PaperOrder proposedOrder,
-        IReadOnlyList<PaperPosition> currentPositions);
+    RiskDecision Evaluate(ProposedOrderIntent proposedOrder, ExposureSnapshot exposure);
 }

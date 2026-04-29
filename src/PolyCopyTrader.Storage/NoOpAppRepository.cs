@@ -44,6 +44,11 @@ public sealed class NoOpAppRepository : IAppRepository
         return Task.FromResult<IReadOnlyList<PaperOrder>>([]);
     }
 
+    public Task<IReadOnlyList<PaperPosition>> GetPaperPositionsAsync(CancellationToken cancellationToken = default)
+    {
+        return Task.FromResult<IReadOnlyList<PaperPosition>>([]);
+    }
+
     public Task AddApiErrorAsync(ApiError error, CancellationToken cancellationToken = default)
     {
         return Task.CompletedTask;

@@ -8,6 +8,8 @@ public sealed class AppConfiguration
 
     public ExecutionOptions Execution { get; init; } = new();
 
+    public SignalOptions Signal { get; init; } = new();
+
     public PolymarketOptions Polymarket { get; init; } = new();
 
     public WatchlistOptions Watchlist { get; init; } = new();
@@ -45,6 +47,10 @@ public sealed class RiskOptions
     public decimal MaxTotalDeployedPct { get; init; } = 25.0m;
 
     public decimal MaxDailyLossPct { get; init; } = 1.0m;
+
+    public int MaxOpenOrders { get; init; } = 10;
+
+    public int MaxOrderAgeSeconds { get; init; } = 300;
 }
 
 public sealed class ExecutionOptions
@@ -60,6 +66,41 @@ public sealed class ExecutionOptions
     public decimal MaxSpreadPct { get; init; } = 3.0m;
 
     public decimal MinLeaderTradeUsd { get; init; } = 500m;
+}
+
+public sealed class SignalOptions
+{
+    public int IgnoreBelowScore { get; init; } = 60;
+
+    public int ObserveBelowScore { get; init; } = 75;
+
+    public int NormalPaperOrderScore { get; init; } = 90;
+
+    public int CategoryAllowedScore { get; init; } = 30;
+
+    public int AgeUnder10SecondsScore { get; init; } = 20;
+
+    public int AgeUnder60SecondsScore { get; init; } = 12;
+
+    public int AgeUnder5MinutesScore { get; init; } = 5;
+
+    public int EntryWithinHalfCentScore { get; init; } = 20;
+
+    public int EntryWithinOneCentScore { get; init; } = 15;
+
+    public int EntryWithinTwoCentsScore { get; init; } = 5;
+
+    public int LargeLeaderTradeScore { get; init; } = 15;
+
+    public int DepthAcceptableScore { get; init; } = 10;
+
+    public int SlowMarketScore { get; init; } = 5;
+
+    public int BorderlineSpreadPenalty { get; init; } = 20;
+
+    public decimal LargeLeaderTradeMultiplier { get; init; } = 2m;
+
+    public int MarketCloseWindowMinutes { get; init; } = 15;
 }
 
 public sealed class PolymarketOptions
