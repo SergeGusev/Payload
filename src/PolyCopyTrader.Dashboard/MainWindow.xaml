@@ -428,6 +428,16 @@
                 </DataGrid>
             </TabItem>
 
+            <TabItem Header="Runbook">
+                <DataGrid ItemsSource="{Binding RunbookLinks}">
+                    <DataGrid.Columns>
+                        <DataGridTextColumn Header="Document" Binding="{Binding Document}" Width="180" />
+                        <DataGridTextColumn Header="Path" Binding="{Binding Path}" Width="280" />
+                        <DataGridTextColumn Header="Purpose" Binding="{Binding Purpose}" Width="*" />
+                    </DataGrid.Columns>
+                </DataGrid>
+            </TabItem>
+
             <TabItem Header="Logs">
                 <DataGrid ItemsSource="{Binding Logs}">
                     <DataGrid.Columns>

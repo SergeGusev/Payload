@@ -180,6 +180,8 @@ public sealed record LogRow(string TimestampUtc, string Severity, string Compone
 
 public sealed record DiagnosticRow(string Name, string Value, string Status);
 
+public sealed record RunbookLinkRow(string Document, string Path, string Purpose);
+
 public sealed record DashboardSnapshot(
     IReadOnlyList<OverviewMetric> Overview,
     IReadOnlyList<WatchlistRow> Watchlist,
@@ -198,4 +200,5 @@ public sealed record DashboardSnapshot(
     IReadOnlyList<RejectionAnalysisRow> RejectionAnalysis,
     IReadOnlyList<RiskUsageRow> RiskUsage,
     IReadOnlyList<DiagnosticRow> Diagnostics,
+    IReadOnlyList<RunbookLinkRow> RunbookLinks,
     IReadOnlyList<LogRow> Logs);

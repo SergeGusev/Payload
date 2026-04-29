@@ -101,6 +101,8 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
 
     public ObservableCollection<DiagnosticRow> Diagnostics { get; } = [];
 
+    public ObservableCollection<RunbookLinkRow> RunbookLinks { get; } = [];
+
     public ObservableCollection<LogRow> Logs { get; } = [];
 
     public async Task StartAsync()
@@ -305,6 +307,7 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         Replace(RejectionAnalysis, snapshot.RejectionAnalysis);
         Replace(RiskUsage, snapshot.RiskUsage);
         Replace(Diagnostics, snapshot.Diagnostics);
+        Replace(RunbookLinks, snapshot.RunbookLinks);
         Replace(Logs, snapshot.Logs);
 
         Mode = Overview.FirstOrDefault(item => item.Name == "Mode")?.Value ?? "Unknown";

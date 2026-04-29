@@ -2,7 +2,7 @@
 
 PolyCopyTrader is a Windows/.NET C# application for monitoring Polymarket traders and running a cautious copy-signal strategy.
 
-This repository is currently at Task 17: Windows VPS deployment and security. It contains project structure, typed configuration, PostgreSQL schema initialization, a basic repository, read-only Polymarket Data/CLOB/Geo clients, a Worker Service scanner/signal/paper/live loop, local dashboard controls, public market WebSocket monitoring, analytics reports, CSV export, diagnostics, a monitoring dashboard, L2 HMAC header infrastructure, dry-run CLOB V2 signing, manually gated tiny maker-only live order placement, and Windows VPS deployment scripts.
+This repository is currently at Task 18: operations runbook. It contains project structure, typed configuration, PostgreSQL schema initialization, a basic repository, read-only Polymarket Data/CLOB/Geo clients, a Worker Service scanner/signal/paper/live loop, local dashboard controls, public market WebSocket monitoring, analytics reports, CSV export, diagnostics, a monitoring dashboard, L2 HMAC header infrastructure, dry-run CLOB V2 signing, manually gated tiny maker-only live order placement, Windows VPS deployment scripts, and operations runbooks.
 
 ## Safety
 
@@ -49,6 +49,16 @@ Run the repeatable pre-live QA gate before any authenticated/live-trading work:
 ```
 
 Use `.\scripts\qa-check.ps1 -SkipRuntimeSmoke` when another service instance is already bound to the local IPC port.
+
+## Operations Docs
+
+Operational documents live under `docs/`:
+
+- `docs/runbook.md`
+- `docs/incident_response.md`
+- `docs/live_trading_checklist.md`
+- `docs/paper_trading_evaluation.md`
+- `docs/configuration_reference.md`
 
 ## Run Service
 
@@ -227,6 +237,7 @@ Interpret paper results conservatively. Paper fills are approximate, long positi
 - Analytics: daily, trader, category, execution-quality, and rejection reports.
 - Risk: configured limits and current usage.
 - Diagnostics: sanitized config summary, storage status, auth status, service/scanner/WebSocket status, watchlist summary, latest API errors, and risk usage.
+- Runbook: local paths and purposes for the operations documents.
 - Logs: API errors, risk events, service commands, and market-data events.
 - Controls: pause/resume scanner, pause/resume paper/live trading, kill switch, clear kill switch, cancel all live orders, and asset pin/unpin through localhost IPC.
 
@@ -251,4 +262,4 @@ Do not enable live trading unless `dotnet build`, `dotnet test`, `--print-config
 
 ## Next Recommended Task
 
-Implement `Codex/18_TASK_OPERATIONS_RUNBOOK.md`.
+All numbered Codex tasks in `Codex/00_INDEX.md` are implemented. Next work should be operational validation on the intended VPS with real PostgreSQL and secret-provider configuration.

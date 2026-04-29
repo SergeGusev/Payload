@@ -62,6 +62,7 @@ public sealed class DashboardDataService(
             rejectionAnalysis.Select(ToRejectionAnalysisRow).ToArray(),
             riskUsage,
             BuildDiagnostics(overview, scannerStatuses, marketDataStatuses, apiErrors, riskUsage, authReadiness),
+            BuildRunbookLinks(),
             BuildLogs(apiErrors, riskEvents, commandAudits, marketDataEvents, liveTradingEvents));
     }
 
@@ -243,6 +244,18 @@ public sealed class DashboardDataService(
                 evt.AssetId ?? evt.ConditionId ?? evt.Id.ToString())))
             .OrderByDescending(row => row.TimestampUtc)
             .ToArray();
+    }
+
+    private static IReadOnlyList<RunbookLinkRow> BuildRunbookLinks()
+    {
+        return
+        [
+            new("Runbook", "docs/runbook.md", "Daily and weekly operating checklist."),
+            new("Incident Response", "docs/incident_response.md", "Action guide for API, WebSocket, DB, geoblock, clock, signing, and live-order incidents."),
+            new("Live Trading Checklist", "docs/live_trading_checklist.md", "Required checks before live mode or tiny production orders."),
+            new("Paper Evaluation", "docs/paper_trading_evaluation.md", "How to judge whether paper results are viable."),
+            new("Configuration Reference", "docs/configuration_reference.md", "Config sections, safety defaults, and secret handling.")
+        ];
     }
 
     private static LeaderTradeRow ToLeaderTradeRow(LeaderTrade trade)
