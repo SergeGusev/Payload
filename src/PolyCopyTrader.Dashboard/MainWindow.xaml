@@ -4,71 +4,268 @@
         xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         mc:Ignorable="d"
-        Title="{Binding AppTitle}" Height="520" Width="900"
-        MinHeight="420" MinWidth="720"
-        Background="#F6F7F9">
-    <Grid Margin="24">
+        Title="{Binding AppTitle}"
+        Height="760"
+        Width="1220"
+        MinHeight="620"
+        MinWidth="980"
+        Background="#F4F6F8">
+    <Window.Resources>
+        <Style TargetType="TextBlock">
+            <Setter Property="Foreground" Value="#1F2937" />
+            <Setter Property="FontSize" Value="13" />
+        </Style>
+        <Style TargetType="Button">
+            <Setter Property="MinWidth" Value="96" />
+            <Setter Property="Height" Value="30" />
+            <Setter Property="Margin" Value="0,0,8,0" />
+            <Setter Property="Padding" Value="10,0" />
+        </Style>
+        <Style TargetType="DataGrid">
+            <Setter Property="AutoGenerateColumns" Value="False" />
+            <Setter Property="CanUserAddRows" Value="False" />
+            <Setter Property="CanUserDeleteRows" Value="False" />
+            <Setter Property="IsReadOnly" Value="True" />
+            <Setter Property="GridLinesVisibility" Value="Horizontal" />
+            <Setter Property="HeadersVisibility" Value="Column" />
+            <Setter Property="RowHeight" Value="28" />
+            <Setter Property="AlternatingRowBackground" Value="#F9FAFB" />
+            <Setter Property="BorderBrush" Value="#D1D5DB" />
+            <Setter Property="BorderThickness" Value="1" />
+        </Style>
+    </Window.Resources>
+
+    <Grid Margin="18">
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto" />
-            <RowDefinition Height="16" />
+            <RowDefinition Height="Auto" />
             <RowDefinition Height="*" />
+            <RowDefinition Height="Auto" />
         </Grid.RowDefinitions>
 
-        <DockPanel>
+        <DockPanel Grid.Row="0" LastChildFill="True">
             <StackPanel DockPanel.Dock="Left">
                 <TextBlock Text="{Binding AppTitle}"
-                           FontSize="26"
-                           FontWeight="SemiBold"
-                           Foreground="#1F2937" />
-                <TextBlock Text="Scaffold dashboard"
-                           Margin="0,6,0,0"
-                           FontSize="13"
-                           Foreground="#6B7280" />
+                           FontSize="24"
+                           FontWeight="SemiBold" />
+                <TextBlock Text="{Binding Summary}"
+                           Margin="0,4,0,0"
+                           Foreground="#4B5563" />
             </StackPanel>
 
             <StackPanel DockPanel.Dock="Right"
                         Orientation="Horizontal"
                         HorizontalAlignment="Right">
-                <TextBlock Text="Mode:"
+                <TextBlock Text="Mode"
                            VerticalAlignment="Center"
                            Foreground="#6B7280" />
                 <TextBlock Text="{Binding Mode}"
-                           Margin="8,0,24,0"
+                           Margin="8,0,20,0"
                            VerticalAlignment="Center"
-                           FontWeight="SemiBold"
-                           Foreground="#111827" />
-                <TextBlock Text="Status:"
+                           FontWeight="SemiBold" />
+                <TextBlock Text="Service"
                            VerticalAlignment="Center"
                            Foreground="#6B7280" />
                 <TextBlock Text="{Binding ServiceStatus}"
-                           Margin="8,0,0,0"
+                           Margin="8,0,20,0"
                            VerticalAlignment="Center"
-                           FontWeight="SemiBold"
-                           Foreground="#111827" />
+                           FontWeight="SemiBold" />
+                <Button Content="Refresh"
+                        Command="{Binding RefreshCommand}" />
             </StackPanel>
         </DockPanel>
 
-        <Border Grid.Row="2"
-                Background="White"
-                BorderBrush="#D1D5DB"
-                BorderThickness="1"
-                CornerRadius="6"
-                Padding="24">
-            <StackPanel>
-                <TextBlock Text="Overview"
-                           FontSize="18"
-                           FontWeight="SemiBold"
-                           Foreground="#111827" />
-                <TextBlock Text="{Binding Summary}"
-                           Margin="0,12,0,0"
-                           TextWrapping="Wrap"
-                           Foreground="#374151" />
-                <TextBlock Margin="0,24,0,0"
-                           Foreground="#6B7280">
-                    <Run Text="Last updated UTC: " />
-                    <Run Text="{Binding LastUpdatedUtc}" />
-                </TextBlock>
+        <DockPanel Grid.Row="1" Margin="0,14,0,12">
+            <WrapPanel DockPanel.Dock="Left">
+                <Button Content="Pause"
+                        Command="{Binding PauseScanningCommand}" />
+                <Button Content="Kill switch"
+                        Command="{Binding KillSwitchCommand}" />
+                <Button Content="Resume"
+                        Command="{Binding ResumeScanningCommand}" />
+                <Button Content="Disable trader"
+                        Command="{Binding DisableTraderCommand}" />
+                <Button Content="Enable trader"
+                        Command="{Binding EnableTraderCommand}" />
+                <Button Content="Cancel order"
+                        Command="{Binding CancelPaperOrderCommand}" />
+                <Button Content="Clear logs"
+                        Command="{Binding ClearLogsCommand}" />
+                <Button Content="Export CSV"
+                        Command="{Binding ExportCsvCommand}" />
+            </WrapPanel>
+            <StackPanel DockPanel.Dock="Right"
+                        HorizontalAlignment="Right">
+                <TextBlock Text="{Binding StorageStatus}"
+                           HorizontalAlignment="Right"
+                           Foreground="#4B5563" />
+                <TextBlock Text="{Binding CommandStatus}"
+                           Margin="0,3,0,0"
+                           HorizontalAlignment="Right"
+                           Foreground="#6B7280" />
             </StackPanel>
-        </Border>
+        </DockPanel>
+
+        <TabControl Grid.Row="2">
+            <TabItem Header="Overview">
+                <ScrollViewer VerticalScrollBarVisibility="Auto">
+                    <ItemsControl ItemsSource="{Binding Overview}" Margin="0,12,0,0">
+                        <ItemsControl.ItemsPanel>
+                            <ItemsPanelTemplate>
+                                <UniformGrid Columns="3" />
+                            </ItemsPanelTemplate>
+                        </ItemsControl.ItemsPanel>
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate>
+                                <Border Background="White"
+                                        BorderBrush="#D1D5DB"
+                                        BorderThickness="1"
+                                        Padding="12"
+                                        Margin="0,0,12,12">
+                                    <StackPanel>
+                                        <TextBlock Text="{Binding Name}"
+                                                   Foreground="#6B7280" />
+                                        <TextBlock Text="{Binding Value}"
+                                                   Margin="0,6,0,0"
+                                                   FontSize="16"
+                                                   FontWeight="SemiBold" />
+                                    </StackPanel>
+                                </Border>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                </ScrollViewer>
+            </TabItem>
+
+            <TabItem Header="Watchlist">
+                <DataGrid ItemsSource="{Binding Watchlist}">
+                    <DataGrid.Columns>
+                        <DataGridTextColumn Header="Trader" Binding="{Binding TraderName}" Width="140" />
+                        <DataGridTextColumn Header="Wallet" Binding="{Binding Wallet}" Width="260" />
+                        <DataGridCheckBoxColumn Header="Enabled" Binding="{Binding Enabled}" Width="70" />
+                        <DataGridTextColumn Header="Categories" Binding="{Binding AllowedCategories}" Width="160" />
+                        <DataGridTextColumn Header="Last scan UTC" Binding="{Binding LastSuccessfulScanUtc}" Width="150" />
+                        <DataGridTextColumn Header="Last trade UTC" Binding="{Binding LastSeenTradeUtc}" Width="150" />
+                        <DataGridTextColumn Header="Fetched" Binding="{Binding TradesFetched}" Width="80" />
+                        <DataGridTextColumn Header="New" Binding="{Binding NewTradesStored}" Width="70" />
+                        <DataGridTextColumn Header="Status" Binding="{Binding Status}" Width="120" />
+                        <DataGridTextColumn Header="Last error" Binding="{Binding LastError}" Width="*" />
+                    </DataGrid.Columns>
+                </DataGrid>
+            </TabItem>
+
+            <TabItem Header="Leader Trades">
+                <DataGrid ItemsSource="{Binding LeaderTrades}">
+                    <DataGrid.Columns>
+                        <DataGridTextColumn Header="Timestamp UTC" Binding="{Binding TimestampUtc}" Width="150" />
+                        <DataGridTextColumn Header="Trader" Binding="{Binding Trader}" Width="140" />
+                        <DataGridTextColumn Header="Market" Binding="{Binding Market}" Width="260" />
+                        <DataGridTextColumn Header="Outcome" Binding="{Binding Outcome}" Width="90" />
+                        <DataGridTextColumn Header="Side" Binding="{Binding Side}" Width="70" />
+                        <DataGridTextColumn Header="Price" Binding="{Binding LeaderPrice}" Width="80" />
+                        <DataGridTextColumn Header="Size" Binding="{Binding Size}" Width="90" />
+                        <DataGridTextColumn Header="Cash" Binding="{Binding CashValueUsd}" Width="90" />
+                        <DataGridTextColumn Header="Category" Binding="{Binding Category}" Width="100" />
+                        <DataGridTextColumn Header="Tx hash" Binding="{Binding TransactionHash}" Width="240" />
+                    </DataGrid.Columns>
+                </DataGrid>
+            </TabItem>
+
+            <TabItem Header="Signals">
+                <DataGrid ItemsSource="{Binding Signals}">
+                    <DataGrid.Columns>
+                        <DataGridTextColumn Header="Timestamp UTC" Binding="{Binding TimestampUtc}" Width="150" />
+                        <DataGridTextColumn Header="Trader" Binding="{Binding Trader}" Width="170" />
+                        <DataGridTextColumn Header="Market" Binding="{Binding Market}" Width="210" />
+                        <DataGridTextColumn Header="Outcome" Binding="{Binding Outcome}" Width="90" />
+                        <DataGridTextColumn Header="Score" Binding="{Binding Score}" Width="70" />
+                        <DataGridCheckBoxColumn Header="Accepted" Binding="{Binding Accepted}" Width="80" />
+                        <DataGridTextColumn Header="Decision" Binding="{Binding DecisionCode}" Width="160" />
+                        <DataGridTextColumn Header="Reasons" Binding="{Binding ReasonCodes}" Width="220" />
+                        <DataGridTextColumn Header="Leader" Binding="{Binding LeaderPrice}" Width="80" />
+                        <DataGridTextColumn Header="Bid" Binding="{Binding BestBid}" Width="80" />
+                        <DataGridTextColumn Header="Ask" Binding="{Binding BestAsk}" Width="80" />
+                        <DataGridTextColumn Header="Spread" Binding="{Binding SpreadAbs}" Width="80" />
+                        <DataGridTextColumn Header="Spread %" Binding="{Binding SpreadPct}" Width="80" />
+                        <DataGridTextColumn Header="Lag" Binding="{Binding LagSeconds}" Width="70" />
+                        <DataGridTextColumn Header="Paper price" Binding="{Binding ProposedPaperPrice}" Width="90" />
+                        <DataGridTextColumn Header="Paper size" Binding="{Binding ProposedSizeShares}" Width="90" />
+                        <DataGridTextColumn Header="Paper notional" Binding="{Binding ProposedNotionalUsd}" Width="110" />
+                    </DataGrid.Columns>
+                </DataGrid>
+            </TabItem>
+
+            <TabItem Header="Paper Orders">
+                <DataGrid ItemsSource="{Binding PaperOrders}">
+                    <DataGrid.Columns>
+                        <DataGridTextColumn Header="Status" Binding="{Binding Status}" Width="100" />
+                        <DataGridTextColumn Header="Side" Binding="{Binding Side}" Width="70" />
+                        <DataGridTextColumn Header="Market" Binding="{Binding Market}" Width="220" />
+                        <DataGridTextColumn Header="Outcome" Binding="{Binding Outcome}" Width="90" />
+                        <DataGridTextColumn Header="Price" Binding="{Binding Price}" Width="80" />
+                        <DataGridTextColumn Header="Shares" Binding="{Binding SizeShares}" Width="90" />
+                        <DataGridTextColumn Header="Notional" Binding="{Binding NotionalUsd}" Width="90" />
+                        <DataGridTextColumn Header="Created UTC" Binding="{Binding CreatedUtc}" Width="150" />
+                        <DataGridTextColumn Header="Expires UTC" Binding="{Binding ExpiresUtc}" Width="150" />
+                        <DataGridTextColumn Header="Filled UTC" Binding="{Binding FilledUtc}" Width="150" />
+                        <DataGridTextColumn Header="TTL" Binding="{Binding TtlRemaining}" Width="80" />
+                        <DataGridTextColumn Header="Signal id" Binding="{Binding SignalId}" Width="260" />
+                    </DataGrid.Columns>
+                </DataGrid>
+            </TabItem>
+
+            <TabItem Header="Paper Positions">
+                <DataGrid ItemsSource="{Binding PaperPositions}">
+                    <DataGrid.Columns>
+                        <DataGridTextColumn Header="Market" Binding="{Binding Market}" Width="240" />
+                        <DataGridTextColumn Header="Outcome" Binding="{Binding Outcome}" Width="90" />
+                        <DataGridTextColumn Header="Size" Binding="{Binding SizeShares}" Width="90" />
+                        <DataGridTextColumn Header="Average" Binding="{Binding AveragePrice}" Width="90" />
+                        <DataGridTextColumn Header="Bid" Binding="{Binding CurrentBid}" Width="80" />
+                        <DataGridTextColumn Header="Ask" Binding="{Binding CurrentAsk}" Width="80" />
+                        <DataGridTextColumn Header="Value" Binding="{Binding EstimatedValueUsd}" Width="100" />
+                        <DataGridTextColumn Header="Unrealized PnL" Binding="{Binding UnrealizedPnlUsd}" Width="120" />
+                        <DataGridTextColumn Header="Realized PnL" Binding="{Binding RealizedPnlUsd}" Width="110" />
+                        <DataGridTextColumn Header="Source trader" Binding="{Binding SourceTrader}" Width="160" />
+                    </DataGrid.Columns>
+                </DataGrid>
+            </TabItem>
+
+            <TabItem Header="Risk">
+                <DataGrid ItemsSource="{Binding RiskUsage}">
+                    <DataGrid.Columns>
+                        <DataGridTextColumn Header="Limit" Binding="{Binding Name}" Width="180" />
+                        <DataGridTextColumn Header="Limit value" Binding="{Binding LimitUsd}" Width="120" />
+                        <DataGridTextColumn Header="Used" Binding="{Binding UsedUsd}" Width="120" />
+                        <DataGridTextColumn Header="Used %" Binding="{Binding UsedPct}" Width="100" />
+                        <DataGridTextColumn Header="Status" Binding="{Binding Status}" Width="100" />
+                    </DataGrid.Columns>
+                </DataGrid>
+            </TabItem>
+
+            <TabItem Header="Logs">
+                <DataGrid ItemsSource="{Binding Logs}">
+                    <DataGrid.Columns>
+                        <DataGridTextColumn Header="Time UTC" Binding="{Binding TimestampUtc}" Width="150" />
+                        <DataGridTextColumn Header="Severity" Binding="{Binding Severity}" Width="90" />
+                        <DataGridTextColumn Header="Component" Binding="{Binding Component}" Width="180" />
+                        <DataGridTextColumn Header="Message" Binding="{Binding Message}" Width="420" />
+                        <DataGridTextColumn Header="Details" Binding="{Binding Details}" Width="*" />
+                    </DataGrid.Columns>
+                </DataGrid>
+            </TabItem>
+        </TabControl>
+
+        <DockPanel Grid.Row="3" Margin="0,10,0,0">
+            <TextBlock DockPanel.Dock="Left"
+                       Text="{Binding LastError}"
+                       Foreground="#B91C1C" />
+            <TextBlock DockPanel.Dock="Right"
+                       HorizontalAlignment="Right"
+                       Foreground="#6B7280">
+                <Run Text="Last updated UTC: " />
+                <Run Text="{Binding LastUpdatedUtc}" />
+            </TextBlock>
+        </DockPanel>
     </Grid>
 </Window>

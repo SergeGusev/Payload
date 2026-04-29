@@ -162,6 +162,7 @@ CREATE TABLE IF NOT EXISTS signals (
     spread_pct numeric(18,8) NULL,
     lag_seconds integer NULL,
     score integer NOT NULL,
+    accepted boolean NOT NULL DEFAULT false,
     decision text NOT NULL,
     proposed_paper_price numeric(18,8) NULL,
     proposed_size_shares numeric(28,8) NULL,
@@ -172,6 +173,7 @@ CREATE TABLE IF NOT EXISTS signals (
 
 ALTER TABLE signals ADD COLUMN IF NOT EXISTS proposed_size_shares numeric(28,8) NULL;
 ALTER TABLE signals ADD COLUMN IF NOT EXISTS proposed_notional_usd numeric(28,8) NULL;
+ALTER TABLE signals ADD COLUMN IF NOT EXISTS accepted boolean NOT NULL DEFAULT false;
 
 CREATE TABLE IF NOT EXISTS signal_rejections (
     id uuid PRIMARY KEY,

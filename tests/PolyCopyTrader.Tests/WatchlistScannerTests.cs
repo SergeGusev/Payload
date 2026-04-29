@@ -264,6 +264,11 @@ public sealed class WatchlistScannerTests
             return Task.CompletedTask;
         }
 
+        public Task<IReadOnlyList<SignalSummary>> GetRecentSignalsAsync(int limit = 100, CancellationToken cancellationToken = default)
+        {
+            return Task.FromResult<IReadOnlyList<SignalSummary>>([]);
+        }
+
         public Task AddSignalRejectionAsync(SignalRejection rejection, CancellationToken cancellationToken = default)
         {
             return Task.CompletedTask;
@@ -280,6 +285,11 @@ public sealed class WatchlistScannerTests
         }
 
         public Task<IReadOnlyList<PaperOrder>> GetOpenPaperOrdersAsync(CancellationToken cancellationToken = default)
+        {
+            return Task.FromResult<IReadOnlyList<PaperOrder>>([]);
+        }
+
+        public Task<IReadOnlyList<PaperOrder>> GetRecentPaperOrdersAsync(int limit = 100, CancellationToken cancellationToken = default)
         {
             return Task.FromResult<IReadOnlyList<PaperOrder>>([]);
         }
@@ -303,6 +313,16 @@ public sealed class WatchlistScannerTests
         {
             ApiErrors.Add(error);
             return Task.CompletedTask;
+        }
+
+        public Task<IReadOnlyList<ApiError>> GetRecentApiErrorsAsync(int limit = 100, CancellationToken cancellationToken = default)
+        {
+            return Task.FromResult<IReadOnlyList<ApiError>>(ApiErrors);
+        }
+
+        public Task<IReadOnlyList<RiskEvent>> GetRecentRiskEventsAsync(int limit = 100, CancellationToken cancellationToken = default)
+        {
+            return Task.FromResult<IReadOnlyList<RiskEvent>>([]);
         }
 
         public Task UpsertScannerStatusAsync(ScannerStatusSnapshot status, CancellationToken cancellationToken = default)

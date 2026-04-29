@@ -129,11 +129,11 @@ INSERT INTO leader_positions (
 INSERT INTO signals (
     id, leader_trade_id, trader_wallet, condition_id, asset_id, outcome, leader_price,
     best_bid, best_ask, spread_abs, spread_pct, lag_seconds, score, decision,
-    proposed_paper_price, proposed_size_shares, proposed_notional_usd, created_at_utc, raw_context_json
+    accepted, proposed_paper_price, proposed_size_shares, proposed_notional_usd, created_at_utc, raw_context_json
 ) VALUES (
     @Id, @LeaderTradeId, @TraderWallet, @ConditionId, @AssetId, @Outcome, @LeaderPrice,
     @BestBid, @BestAsk, @SpreadAbs, @SpreadPct, @LagSeconds, @Score, @Decision,
-    @ProposedPaperPrice, @ProposedSizeShares, @ProposedNotionalUsd, @CreatedAtUtc, CAST(@RawContextJson AS jsonb)
+    @Accepted, @ProposedPaperPrice, @ProposedSizeShares, @ProposedNotionalUsd, @CreatedAtUtc, CAST(@RawContextJson AS jsonb)
 );
 """;
 
@@ -153,12 +153,61 @@ INSERT INTO signals (
         command.Parameters.AddWithValue("LagSeconds", DBNull.Value);
         command.Parameters.AddWithValue("Score", signal.Score);
         command.Parameters.AddWithValue("Decision", signal.DecisionCode);
+        command.Parameters.AddWithValue("Accepted", signal.Accepted);
         command.Parameters.AddWithValue("ProposedPaperPrice", (object?)signal.ProposedPaperPrice ?? DBNull.Value);
         command.Parameters.AddWithValue("ProposedSizeShares", (object?)signal.ProposedSizeShares ?? DBNull.Value);
         command.Parameters.AddWithValue("ProposedNotionalUsd", (object?)signal.ProposedNotionalUsd ?? DBNull.Value);
         command.Parameters.AddWithValue("CreatedAtUtc", UtcDateTime(signal.CreatedAtUtc));
         command.Parameters.AddWithValue("RawContextJson", JsonSerializer.Serialize(signal));
         await command.ExecuteNonQueryAsync(cancellationToken);
+    }
+
+    public async Task<IReadOnlyList<SignalSummary>> GetRecentSignalsAsync(int limit = 100, CancellationToken cancellationToken = default)
+    {
+        const string sql = """
+SELECT s.id, s.trader_wallet, s.condition_id, s.asset_id, s.outcome, s.leader_price,
+       s.best_bid, s.best_ask, s.spread_abs, s.spread_pct, s.lag_seconds, s.score,
+       s.accepted, s.decision, s.proposed_paper_price, s.proposed_size_shares,
+       s.proposed_notional_usd, s.created_at_utc,
+       COALESCE(string_agg(sr.reason_code, ',' ORDER BY sr.created_at_utc), '') AS reason_codes
+FROM signals s
+LEFT JOIN signal_rejections sr ON sr.signal_id = s.id
+GROUP BY s.id
+ORDER BY s.created_at_utc DESC
+LIMIT @Limit;
+""";
+
+        await using var connection = await OpenConnectionAsync(cancellationToken);
+        await using var command = CreateCommand(connection, sql);
+        command.Parameters.AddWithValue("Limit", limit);
+        await using var reader = await command.ExecuteReaderAsync(cancellationToken);
+
+        var results = new List<SignalSummary>();
+        while (await reader.ReadAsync(cancellationToken))
+        {
+            results.Add(new SignalSummary(
+                reader.GetGuid(0),
+                reader.GetString(1),
+                reader.GetString(2),
+                reader.GetString(3),
+                reader.GetString(4),
+                reader.GetDecimal(5),
+                reader.IsDBNull(6) ? null : reader.GetDecimal(6),
+                reader.IsDBNull(7) ? null : reader.GetDecimal(7),
+                reader.IsDBNull(8) ? null : reader.GetDecimal(8),
+                reader.IsDBNull(9) ? null : reader.GetDecimal(9),
+                reader.IsDBNull(10) ? null : reader.GetInt32(10),
+                reader.GetInt32(11),
+                reader.GetBoolean(12),
+                reader.GetString(13),
+                SplitReasonCodes(reader.GetString(18)),
+                reader.IsDBNull(14) ? null : reader.GetDecimal(14),
+                reader.IsDBNull(15) ? null : reader.GetDecimal(15),
+                reader.IsDBNull(16) ? null : reader.GetDecimal(16),
+                DateTimeOffsetFromUtc(reader.GetDateTime(17))));
+        }
+
+        return results;
     }
 
     public async Task AddSignalRejectionAsync(SignalRejection rejection, CancellationToken cancellationToken = default)
@@ -248,21 +297,31 @@ ORDER BY created_at_utc DESC;
         var results = new List<PaperOrder>();
         while (await reader.ReadAsync(cancellationToken))
         {
-            results.Add(new PaperOrder(
-                reader.GetGuid(0),
-                reader.GetGuid(1),
-                Enum.Parse<PaperOrderStatus>(reader.GetString(2)),
-                Enum.Parse<TradeSide>(reader.GetString(3)),
-                reader.GetString(4),
-                reader.GetString(5),
-                reader.GetString(6),
-                reader.GetDecimal(7),
-                reader.GetDecimal(8),
-                reader.GetDecimal(9),
-                DateTimeOffsetFromUtc(reader.GetDateTime(10)),
-                DateTimeOffsetFromUtc(reader.GetDateTime(11)),
-                reader.IsDBNull(12) ? null : DateTimeOffsetFromUtc(reader.GetDateTime(12)),
-                reader.IsDBNull(13) ? null : DateTimeOffsetFromUtc(reader.GetDateTime(13))));
+            results.Add(ReadPaperOrder(reader));
+        }
+
+        return results;
+    }
+
+    public async Task<IReadOnlyList<PaperOrder>> GetRecentPaperOrdersAsync(int limit = 100, CancellationToken cancellationToken = default)
+    {
+        const string sql = """
+SELECT id, signal_id, status, side, asset_id, condition_id, outcome, price, size_shares, notional_usd,
+       created_at_utc, expires_at_utc, filled_at_utc, cancelled_at_utc
+FROM paper_orders
+ORDER BY created_at_utc DESC
+LIMIT @Limit;
+""";
+
+        await using var connection = await OpenConnectionAsync(cancellationToken);
+        await using var command = CreateCommand(connection, sql);
+        command.Parameters.AddWithValue("Limit", limit);
+        await using var reader = await command.ExecuteReaderAsync(cancellationToken);
+
+        var results = new List<PaperOrder>();
+        while (await reader.ReadAsync(cancellationToken))
+        {
+            results.Add(ReadPaperOrder(reader));
         }
 
         return results;
@@ -364,6 +423,61 @@ VALUES (@Id, @Component, @Operation, @Message, @CreatedAtUtc);
         command.Parameters.AddWithValue("Message", error.Message);
         command.Parameters.AddWithValue("CreatedAtUtc", UtcDateTime(error.CreatedAtUtc));
         await command.ExecuteNonQueryAsync(cancellationToken);
+    }
+
+    public async Task<IReadOnlyList<ApiError>> GetRecentApiErrorsAsync(int limit = 100, CancellationToken cancellationToken = default)
+    {
+        const string sql = """
+SELECT id, component, operation, message, created_at_utc
+FROM api_errors
+ORDER BY created_at_utc DESC
+LIMIT @Limit;
+""";
+
+        await using var connection = await OpenConnectionAsync(cancellationToken);
+        await using var command = CreateCommand(connection, sql);
+        command.Parameters.AddWithValue("Limit", limit);
+        await using var reader = await command.ExecuteReaderAsync(cancellationToken);
+
+        var results = new List<ApiError>();
+        while (await reader.ReadAsync(cancellationToken))
+        {
+            results.Add(new ApiError(
+                reader.GetGuid(0),
+                reader.GetString(1),
+                reader.GetString(2),
+                reader.GetString(3),
+                DateTimeOffsetFromUtc(reader.GetDateTime(4))));
+        }
+
+        return results;
+    }
+
+    public async Task<IReadOnlyList<RiskEvent>> GetRecentRiskEventsAsync(int limit = 100, CancellationToken cancellationToken = default)
+    {
+        const string sql = """
+SELECT id, reason_code, details, created_at_utc
+FROM risk_events
+ORDER BY created_at_utc DESC
+LIMIT @Limit;
+""";
+
+        await using var connection = await OpenConnectionAsync(cancellationToken);
+        await using var command = CreateCommand(connection, sql);
+        command.Parameters.AddWithValue("Limit", limit);
+        await using var reader = await command.ExecuteReaderAsync(cancellationToken);
+
+        var results = new List<RiskEvent>();
+        while (await reader.ReadAsync(cancellationToken))
+        {
+            results.Add(new RiskEvent(
+                reader.GetGuid(0),
+                reader.GetString(1),
+                reader.GetString(2),
+                DateTimeOffsetFromUtc(reader.GetDateTime(3))));
+        }
+
+        return results;
     }
 
     public async Task UpsertScannerStatusAsync(ScannerStatusSnapshot status, CancellationToken cancellationToken = default)
@@ -516,5 +630,31 @@ ORDER BY service_name;
     private static DateTimeOffset DateTimeOffsetFromUtc(DateTime timestamp)
     {
         return new DateTimeOffset(DateTime.SpecifyKind(timestamp, DateTimeKind.Utc));
+    }
+
+    private static PaperOrder ReadPaperOrder(NpgsqlDataReader reader)
+    {
+        return new PaperOrder(
+            reader.GetGuid(0),
+            reader.GetGuid(1),
+            Enum.Parse<PaperOrderStatus>(reader.GetString(2)),
+            Enum.Parse<TradeSide>(reader.GetString(3)),
+            reader.GetString(4),
+            reader.GetString(5),
+            reader.GetString(6),
+            reader.GetDecimal(7),
+            reader.GetDecimal(8),
+            reader.GetDecimal(9),
+            DateTimeOffsetFromUtc(reader.GetDateTime(10)),
+            DateTimeOffsetFromUtc(reader.GetDateTime(11)),
+            reader.IsDBNull(12) ? null : DateTimeOffsetFromUtc(reader.GetDateTime(12)),
+            reader.IsDBNull(13) ? null : DateTimeOffsetFromUtc(reader.GetDateTime(13)));
+    }
+
+    private static IReadOnlyList<string> SplitReasonCodes(string value)
+    {
+        return string.IsNullOrWhiteSpace(value)
+            ? []
+            : value.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
     }
 }

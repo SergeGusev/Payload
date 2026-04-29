@@ -14,6 +14,8 @@ public interface IAppRepository
 
     Task AddSignalAsync(Signal signal, CancellationToken cancellationToken = default);
 
+    Task<IReadOnlyList<SignalSummary>> GetRecentSignalsAsync(int limit = 100, CancellationToken cancellationToken = default);
+
     Task AddSignalRejectionAsync(SignalRejection rejection, CancellationToken cancellationToken = default);
 
     Task AddPaperOrderAsync(PaperOrder order, CancellationToken cancellationToken = default);
@@ -22,6 +24,8 @@ public interface IAppRepository
 
     Task<IReadOnlyList<PaperOrder>> GetOpenPaperOrdersAsync(CancellationToken cancellationToken = default);
 
+    Task<IReadOnlyList<PaperOrder>> GetRecentPaperOrdersAsync(int limit = 100, CancellationToken cancellationToken = default);
+
     Task AddPaperFillAsync(PaperFill fill, CancellationToken cancellationToken = default);
 
     Task UpsertPaperPositionAsync(PaperPosition position, CancellationToken cancellationToken = default);
@@ -29,6 +33,10 @@ public interface IAppRepository
     Task<IReadOnlyList<PaperPosition>> GetPaperPositionsAsync(CancellationToken cancellationToken = default);
 
     Task AddApiErrorAsync(ApiError error, CancellationToken cancellationToken = default);
+
+    Task<IReadOnlyList<ApiError>> GetRecentApiErrorsAsync(int limit = 100, CancellationToken cancellationToken = default);
+
+    Task<IReadOnlyList<RiskEvent>> GetRecentRiskEventsAsync(int limit = 100, CancellationToken cancellationToken = default);
 
     Task UpsertScannerStatusAsync(ScannerStatusSnapshot status, CancellationToken cancellationToken = default);
 

@@ -209,6 +209,27 @@ public sealed record Signal(
     decimal? ProposedNotionalUsd,
     DateTimeOffset CreatedAtUtc);
 
+public sealed record SignalSummary(
+    Guid Id,
+    string TraderWallet,
+    string ConditionId,
+    string AssetId,
+    string Outcome,
+    decimal LeaderPrice,
+    decimal? BestBid,
+    decimal? BestAsk,
+    decimal? SpreadAbs,
+    decimal? SpreadPct,
+    int? LagSeconds,
+    int Score,
+    bool Accepted,
+    string DecisionCode,
+    IReadOnlyList<string> ReasonCodes,
+    decimal? ProposedPaperPrice,
+    decimal? ProposedSizeShares,
+    decimal? ProposedNotionalUsd,
+    DateTimeOffset CreatedAtUtc);
+
 public sealed record RiskDecision(
     bool Allowed,
     IReadOnlyList<string> ReasonCodes,

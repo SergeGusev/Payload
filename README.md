@@ -2,7 +2,7 @@
 
 PolyCopyTrader is a Windows/.NET C# application for monitoring Polymarket traders and running a cautious copy-signal strategy.
 
-This repository is currently at Task 07: paper trading engine. It contains project structure, typed configuration, PostgreSQL schema initialization, a basic repository, read-only Polymarket Data/CLOB/Geo clients, a Worker Service scanner/signal/paper loop, and a basic WPF dashboard shell.
+This repository is currently at Task 08: WPF dashboard. It contains project structure, typed configuration, PostgreSQL schema initialization, a basic repository, read-only Polymarket Data/CLOB/Geo clients, a Worker Service scanner/signal/paper loop, and a read-only monitoring dashboard.
 
 ## Safety
 
@@ -60,7 +60,7 @@ The summary is sanitized and does not include secrets. Live trading is disabled 
 dotnet run --project src/PolyCopyTrader.Dashboard/PolyCopyTrader.Dashboard.csproj
 ```
 
-The dashboard currently opens a basic shell. Live database views and service status polling are added in later tasks.
+The dashboard is read-only and polls PostgreSQL every `Dashboard:RefreshIntervalSeconds`. It shows overview metrics, watchlist/scanner status, leader trades, signals and rejection reasons, paper orders, paper positions, risk usage, and API/risk logs. If PostgreSQL is not configured, it opens with empty states and a clear storage status.
 
 ## Storage
 
@@ -101,11 +101,23 @@ In `Paper` mode, accepted signals create `PaperOrder` records with the proposed 
 
 For paper BUY orders, a fill is only simulated when `bestAsk <= paperBuyPrice`. Fills are stored as `PaperFill` records with `SimulatedApproximate` evidence. Long positions are updated with weighted-average cost and valued using the current bid, not midpoint or ask.
 
+## Dashboard Screens
+
+- Overview: service heartbeat, mode, storage/API status, scanner status, bankroll, exposure, PnL.
+- Watchlist: configured traders plus scanner counters and errors.
+- Leader Trades: latest observed leader trades.
+- Signals: accepted/rejected decisions, reason codes, proposed paper details.
+- Paper Orders: lifecycle, TTL, fill timestamps, linked signal id.
+- Paper Positions: size, average price, estimated value, unrealized PnL.
+- Risk: configured limits and current usage.
+- Logs: API errors and risk events.
+
 ## Known Limitations
 
 - No WebSocket support yet.
 - No auth/signing/live trading support.
+- Dashboard command buttons are placeholders until service IPC is added.
 
 ## Next Recommended Task
 
-Implement `Codex/08_TASK_WPF_DASHBOARD.md`.
+Implement `Codex/09_TASK_WORKER_SERVICE_AND_IPC.md`.
