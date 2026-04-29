@@ -25,6 +25,7 @@ public static class AppOptionsValidator
         ValidateRisk(configuration.Risk, errors);
         ValidateWatchlist(configuration.Watchlist, errors);
         ValidateDashboard(configuration.Dashboard, errors);
+        ValidateAnalytics(configuration.Analytics, errors);
         ValidateIpc(configuration.Ipc, errors);
         ValidateStorage(configuration.Storage, errors);
         return errors;
@@ -47,6 +48,7 @@ public static class AppOptionsValidator
             $"Signal observe threshold: {configuration.Signal.ObserveBelowScore}",
             $"IPC enabled: {configuration.Ipc.Enabled}",
             $"IPC dashboard URL: {configuration.Ipc.DashboardBaseUrl}",
+            $"Daily reports enabled: {configuration.Analytics.DailyReportGenerationEnabled}",
             $"Watchlist traders: {configuration.Watchlist.Traders.Count}",
             $"Paper bankroll USD: {configuration.PaperTrading.InitialBankrollUsd}");
     }
@@ -296,6 +298,24 @@ public static class AppOptionsValidator
         if (options.RefreshIntervalSeconds <= 0)
         {
             errors.Add("Dashboard.RefreshIntervalSeconds must be greater than zero.");
+        }
+    }
+
+    private static void ValidateAnalytics(AnalyticsOptions options, List<string> errors)
+    {
+        if (options.DailyReportRefreshMinutes <= 0)
+        {
+            errors.Add("Analytics.DailyReportRefreshMinutes must be greater than zero.");
+        }
+
+        if (options.DashboardReportLimit <= 0)
+        {
+            errors.Add("Analytics.DashboardReportLimit must be greater than zero.");
+        }
+
+        if (string.IsNullOrWhiteSpace(options.CsvExportDirectory))
+        {
+            errors.Add("Analytics.CsvExportDirectory is required.");
         }
     }
 

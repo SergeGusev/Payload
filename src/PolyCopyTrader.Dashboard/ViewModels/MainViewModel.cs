@@ -12,6 +12,7 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
     private readonly DashboardRuntime runtime;
     private readonly DashboardDataService dataService;
     private readonly LocalControlClient controlClient;
+    private readonly DashboardCsvExporter csvExporter;
     private readonly DispatcherTimer refreshTimer;
     private readonly EventHandler refreshTickHandler;
     private bool disposed;
@@ -21,6 +22,7 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         runtime = DashboardRepositoryFactory.Create();
         dataService = new DashboardDataService(runtime.Repository, runtime.Configuration, runtime.StorageConfigured);
         controlClient = new LocalControlClient(runtime.Configuration.Ipc);
+        csvExporter = new DashboardCsvExporter(runtime.Repository, runtime.Configuration);
         refreshTimer = new DispatcherTimer
         {
             Interval = TimeSpan.FromSeconds(Math.Max(1, runtime.Configuration.Dashboard.RefreshIntervalSeconds))
@@ -44,7 +46,7 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
     private string storageStatus;
 
     [ObservableProperty]
-    private string commandStatus = "Commands are placeholders until service IPC is added.";
+    private string commandStatus = "Ready.";
 
     [ObservableProperty]
     private string pinnedAssetId = string.Empty;
@@ -74,6 +76,16 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
     public ObservableCollection<PaperPositionRow> PaperPositions { get; } = [];
 
     public ObservableCollection<MarketDataRow> MarketData { get; } = [];
+
+    public ObservableCollection<DailyReportRow> DailyReports { get; } = [];
+
+    public ObservableCollection<TraderPerformanceRow> TraderPerformance { get; } = [];
+
+    public ObservableCollection<CategoryPerformanceRow> CategoryPerformance { get; } = [];
+
+    public ObservableCollection<ExecutionQualityRow> ExecutionQuality { get; } = [];
+
+    public ObservableCollection<RejectionAnalysisRow> RejectionAnalysis { get; } = [];
 
     public ObservableCollection<RiskUsageRow> RiskUsage { get; } = [];
 
@@ -199,9 +211,17 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
     }
 
     [RelayCommand]
-    private void ExportCsv()
+    private async Task ExportCsvAsync()
     {
-        CommandStatus = "CSV export requested. Placeholder only.";
+        try
+        {
+            var exportDirectory = await csvExporter.ExportAsync();
+            CommandStatus = $"CSV export written to {exportDirectory}.";
+        }
+        catch (Exception ex)
+        {
+            CommandStatus = $"CSV export failed: {ex.Message}";
+        }
     }
 
     private async Task SendCommandAsync(Func<Task<ControlCommandResponse>> send)
@@ -239,6 +259,11 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         Replace(PaperOrders, snapshot.PaperOrders);
         Replace(PaperPositions, snapshot.PaperPositions);
         Replace(MarketData, snapshot.MarketData);
+        Replace(DailyReports, snapshot.DailyReports);
+        Replace(TraderPerformance, snapshot.TraderPerformance);
+        Replace(CategoryPerformance, snapshot.CategoryPerformance);
+        Replace(ExecutionQuality, snapshot.ExecutionQuality);
+        Replace(RejectionAnalysis, snapshot.RejectionAnalysis);
         Replace(RiskUsage, snapshot.RiskUsage);
         Replace(Logs, snapshot.Logs);
 

@@ -1,6 +1,7 @@
 using PolyCopyTrader.Service;
 using PolyCopyTrader.Domain.Configuration;
 using PolyCopyTrader.Polymarket;
+using PolyCopyTrader.Service.Analytics;
 using PolyCopyTrader.Service.Configuration;
 using PolyCopyTrader.Service.Control;
 using PolyCopyTrader.Service.MarketData;
@@ -46,6 +47,7 @@ builder.Services.AddSingleton(appConfiguration.MarketDataWebSocket);
 builder.Services.AddSingleton(appConfiguration.Watchlist);
 builder.Services.AddSingleton(appConfiguration.PaperTrading);
 builder.Services.AddSingleton(appConfiguration.Dashboard);
+builder.Services.AddSingleton(appConfiguration.Analytics);
 builder.Services.AddSingleton(appConfiguration.Ipc);
 builder.Services.AddSingleton(appConfiguration.Storage);
 builder.Services.AddWindowsService(options => options.ServiceName = "PolyCopyTrader.Service");
@@ -80,6 +82,7 @@ builder.Services.AddSingleton<ServiceControlState>();
 builder.Services.AddHostedService<BotWorker>();
 builder.Services.AddHostedService<LocalControlServer>();
 builder.Services.AddHostedService<MarketDataWebSocketService>();
+builder.Services.AddHostedService<DailyReportWorker>();
 
 try
 {

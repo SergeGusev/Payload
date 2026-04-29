@@ -260,6 +260,92 @@
                 </DataGrid>
             </TabItem>
 
+            <TabItem Header="Analytics">
+                <TabControl>
+                    <TabItem Header="Daily">
+                        <DataGrid ItemsSource="{Binding DailyReports}">
+                            <DataGrid.Columns>
+                                <DataGridTextColumn Header="Date" Binding="{Binding Date}" Width="100" />
+                                <DataGridTextColumn Header="Signals" Binding="{Binding SignalsObserved}" Width="80" />
+                                <DataGridTextColumn Header="Accepted" Binding="{Binding SignalsAccepted}" Width="80" />
+                                <DataGridTextColumn Header="Rejected" Binding="{Binding SignalsRejected}" Width="80" />
+                                <DataGridTextColumn Header="Orders" Binding="{Binding PaperOrdersCreated}" Width="80" />
+                                <DataGridTextColumn Header="Fills" Binding="{Binding PaperFills}" Width="70" />
+                                <DataGridTextColumn Header="Expired" Binding="{Binding PaperExpiredOrders}" Width="80" />
+                                <DataGridTextColumn Header="Paper PnL" Binding="{Binding PaperPnl}" Width="100" />
+                                <DataGridTextColumn Header="Open exposure" Binding="{Binding OpenPaperExposure}" Width="120" />
+                                <DataGridTextColumn Header="Top rejections" Binding="{Binding TopRejectionReasons}" Width="260" />
+                                <DataGridTextColumn Header="API errors" Binding="{Binding ApiErrors}" Width="80" />
+                                <DataGridTextColumn Header="Generated UTC" Binding="{Binding GeneratedUtc}" Width="150" />
+                            </DataGrid.Columns>
+                        </DataGrid>
+                    </TabItem>
+
+                    <TabItem Header="Traders">
+                        <DataGrid ItemsSource="{Binding TraderPerformance}">
+                            <DataGrid.Columns>
+                                <DataGridTextColumn Header="Trader" Binding="{Binding Trader}" Width="220" />
+                                <DataGridTextColumn Header="Signals" Binding="{Binding Signals}" Width="70" />
+                                <DataGridTextColumn Header="Accept %" Binding="{Binding AcceptanceRatePct}" Width="80" />
+                                <DataGridTextColumn Header="Fill %" Binding="{Binding FillRatePct}" Width="80" />
+                                <DataGridTextColumn Header="Avg lag" Binding="{Binding AverageLagSeconds}" Width="80" />
+                                <DataGridTextColumn Header="Avg leader" Binding="{Binding AverageLeaderPrice}" Width="90" />
+                                <DataGridTextColumn Header="Avg proposed" Binding="{Binding AverageProposedPrice}" Width="100" />
+                                <DataGridTextColumn Header="Price diff" Binding="{Binding AveragePriceDifference}" Width="90" />
+                                <DataGridTextColumn Header="Paper PnL" Binding="{Binding PaperPnl}" Width="100" />
+                                <DataGridTextColumn Header="PnL by category" Binding="{Binding PaperPnlByCategory}" Width="180" />
+                                <DataGridTextColumn Header="Rejections" Binding="{Binding RejectionReasons}" Width="*" />
+                            </DataGrid.Columns>
+                        </DataGrid>
+                    </TabItem>
+
+                    <TabItem Header="Categories">
+                        <DataGrid ItemsSource="{Binding CategoryPerformance}">
+                            <DataGrid.Columns>
+                                <DataGridTextColumn Header="Category" Binding="{Binding Category}" Width="160" />
+                                <DataGridTextColumn Header="Signals" Binding="{Binding Signals}" Width="80" />
+                                <DataGridTextColumn Header="Accepted" Binding="{Binding Accepted}" Width="80" />
+                                <DataGridTextColumn Header="Filled" Binding="{Binding Filled}" Width="80" />
+                                <DataGridTextColumn Header="Paper PnL" Binding="{Binding PaperPnl}" Width="100" />
+                                <DataGridTextColumn Header="Avg spread" Binding="{Binding AverageSpread}" Width="100" />
+                                <DataGridTextColumn Header="Avg lag" Binding="{Binding AverageLagSeconds}" Width="100" />
+                            </DataGrid.Columns>
+                        </DataGrid>
+                    </TabItem>
+
+                    <TabItem Header="Execution">
+                        <DataGrid ItemsSource="{Binding ExecutionQuality}">
+                            <DataGrid.Columns>
+                                <DataGridTextColumn Header="Created UTC" Binding="{Binding CreatedUtc}" Width="150" />
+                                <DataGridTextColumn Header="Trader" Binding="{Binding Trader}" Width="180" />
+                                <DataGridTextColumn Header="Asset" Binding="{Binding Asset}" Width="260" />
+                                <DataGridTextColumn Header="Leader" Binding="{Binding LeaderPrice}" Width="80" />
+                                <DataGridTextColumn Header="Proposed" Binding="{Binding ProposedPrice}" Width="80" />
+                                <DataGridTextColumn Header="Fill" Binding="{Binding PaperFillPrice}" Width="80" />
+                                <DataGridTextColumn Header="Prop-Leader" Binding="{Binding ProposedMinusLeader}" Width="90" />
+                                <DataGridTextColumn Header="Fill-Prop" Binding="{Binding FillMinusProposed}" Width="90" />
+                                <DataGridTextColumn Header="Lag" Binding="{Binding LagSeconds}" Width="70" />
+                                <DataGridTextColumn Header="Spread" Binding="{Binding SpreadAtSignal}" Width="80" />
+                                <DataGridTextColumn Header="Mid +1m" Binding="{Binding MidAfter1m}" Width="80" />
+                                <DataGridTextColumn Header="Mid +5m" Binding="{Binding MidAfter5m}" Width="80" />
+                                <DataGridTextColumn Header="Mid +30m" Binding="{Binding MidAfter30m}" Width="90" />
+                            </DataGrid.Columns>
+                        </DataGrid>
+                    </TabItem>
+
+                    <TabItem Header="Rejections">
+                        <DataGrid ItemsSource="{Binding RejectionAnalysis}">
+                            <DataGrid.Columns>
+                                <DataGridTextColumn Header="Reason" Binding="{Binding ReasonCode}" Width="220" />
+                                <DataGridTextColumn Header="Count" Binding="{Binding Count}" Width="80" />
+                                <DataGridTextColumn Header="Rejected %" Binding="{Binding RejectedPct}" Width="100" />
+                                <DataGridTextColumn Header="Last UTC" Binding="{Binding LastRejectedUtc}" Width="150" />
+                            </DataGrid.Columns>
+                        </DataGrid>
+                    </TabItem>
+                </TabControl>
+            </TabItem>
+
             <TabItem Header="Risk">
                 <DataGrid ItemsSource="{Binding RiskUsage}">
                     <DataGrid.Columns>

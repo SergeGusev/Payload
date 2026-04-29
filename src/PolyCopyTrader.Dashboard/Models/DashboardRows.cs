@@ -79,6 +79,63 @@ public sealed record MarketDataRow(
     string Spread,
     string SnapshotUtc);
 
+public sealed record DailyReportRow(
+    string Date,
+    int SignalsObserved,
+    int SignalsAccepted,
+    int SignalsRejected,
+    int PaperOrdersCreated,
+    int PaperFills,
+    int PaperExpiredOrders,
+    decimal PaperPnl,
+    decimal OpenPaperExposure,
+    string TopRejectionReasons,
+    int ApiErrors,
+    string GeneratedUtc);
+
+public sealed record TraderPerformanceRow(
+    string Trader,
+    int Signals,
+    decimal AcceptanceRatePct,
+    decimal FillRatePct,
+    string AverageLagSeconds,
+    string AverageLeaderPrice,
+    string AverageProposedPrice,
+    string AveragePriceDifference,
+    decimal PaperPnl,
+    string PaperPnlByCategory,
+    string RejectionReasons);
+
+public sealed record CategoryPerformanceRow(
+    string Category,
+    int Signals,
+    int Accepted,
+    int Filled,
+    decimal PaperPnl,
+    string AverageSpread,
+    string AverageLagSeconds);
+
+public sealed record ExecutionQualityRow(
+    string CreatedUtc,
+    string Trader,
+    string Asset,
+    decimal LeaderPrice,
+    string ProposedPrice,
+    string PaperFillPrice,
+    string ProposedMinusLeader,
+    string FillMinusProposed,
+    string LagSeconds,
+    string SpreadAtSignal,
+    string MidAfter1m,
+    string MidAfter5m,
+    string MidAfter30m);
+
+public sealed record RejectionAnalysisRow(
+    string ReasonCode,
+    int Count,
+    decimal RejectedPct,
+    string LastRejectedUtc);
+
 public sealed record RiskUsageRow(string Name, decimal LimitUsd, decimal UsedUsd, decimal UsedPct, string Status);
 
 public sealed record LogRow(string TimestampUtc, string Severity, string Component, string Message, string Details);
@@ -91,5 +148,10 @@ public sealed record DashboardSnapshot(
     IReadOnlyList<PaperOrderRow> PaperOrders,
     IReadOnlyList<PaperPositionRow> PaperPositions,
     IReadOnlyList<MarketDataRow> MarketData,
+    IReadOnlyList<DailyReportRow> DailyReports,
+    IReadOnlyList<TraderPerformanceRow> TraderPerformance,
+    IReadOnlyList<CategoryPerformanceRow> CategoryPerformance,
+    IReadOnlyList<ExecutionQualityRow> ExecutionQuality,
+    IReadOnlyList<RejectionAnalysisRow> RejectionAnalysis,
     IReadOnlyList<RiskUsageRow> RiskUsage,
     IReadOnlyList<LogRow> Logs);

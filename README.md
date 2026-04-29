@@ -2,7 +2,7 @@
 
 PolyCopyTrader is a Windows/.NET C# application for monitoring Polymarket traders and running a cautious copy-signal strategy.
 
-This repository is currently at Task 10: WebSocket market data. It contains project structure, typed configuration, PostgreSQL schema initialization, a basic repository, read-only Polymarket Data/CLOB/Geo clients, a Worker Service scanner/signal/paper loop, local dashboard controls, public market WebSocket monitoring, and a read-only monitoring dashboard.
+This repository is currently at Task 11: analytics and reporting. It contains project structure, typed configuration, PostgreSQL schema initialization, a basic repository, read-only Polymarket Data/CLOB/Geo clients, a Worker Service scanner/signal/paper loop, local dashboard controls, public market WebSocket monitoring, analytics reports, CSV export, and a read-only monitoring dashboard.
 
 ## Safety
 
@@ -44,7 +44,7 @@ dotnet test
 dotnet run --project src/PolyCopyTrader.Service/PolyCopyTrader.Service.csproj
 ```
 
-The service runs the scanner, signal engine, paper engine, heartbeat writer, and localhost-only IPC server. It writes rolling logs under its output `logs` directory.
+The service runs the scanner, signal engine, paper engine, heartbeat writer, daily analytics report generator, market WebSocket client, and localhost-only IPC server. It writes rolling logs under its output `logs` directory.
 
 ## Local IPC
 
@@ -91,7 +91,7 @@ The summary is sanitized and does not include secrets. Live trading is disabled 
 dotnet run --project src/PolyCopyTrader.Dashboard/PolyCopyTrader.Dashboard.csproj
 ```
 
-The dashboard is read-only and polls PostgreSQL every `Dashboard:RefreshIntervalSeconds`. It shows overview metrics, watchlist/scanner status, leader trades, signals and rejection reasons, paper orders, paper positions, risk usage, and API/risk logs. If PostgreSQL is not configured, it opens with empty states and a clear storage status.
+The dashboard is read-only and polls PostgreSQL every `Dashboard:RefreshIntervalSeconds`. It shows overview metrics, watchlist/scanner status, leader trades, signals and rejection reasons, paper orders, paper positions, market data, analytics reports, risk usage, and API/risk logs. If PostgreSQL is not configured, it opens with empty states and a clear storage status.
 
 ## Storage
 
@@ -147,6 +147,22 @@ For paper BUY orders, a fill is only simulated when `bestAsk <= paperBuyPrice`. 
 
 WebSocket market-data updates also dispatch into paper trading so pending orders can fill and paper positions can be re-marked without waiting for the next scanner loop. Stale WebSocket snapshots are ignored after `MarketDataWebSocket:StaleAfterSeconds`.
 
+## Analytics And Reporting
+
+The service automatically generates daily reports into `daily_reports` when `Analytics:DailyReportGenerationEnabled` is true. Reports are recalculated every `Analytics:DailyReportRefreshMinutes` for the current UTC day and the previous UTC day.
+
+Dashboard analytics include:
+
+- daily summary: signals observed/accepted/rejected, paper orders, fills, expired orders, paper PnL, open paper exposure, top rejection reasons, API errors;
+- trader performance: signal counts, acceptance rate, fill rate, average lag, leader/proposed price comparison, approximate paper PnL, rejection reasons;
+- category performance: grouped by `markets.category`, or `unknown` when category is not available;
+- execution quality: leader price, proposed price, fill price, price deltas, lag/spread, and bid/ask/mid snapshots after 1m, 5m, and 30m when stored market data exists;
+- rejection analysis: reason code counts and share of rejected signals.
+
+CSV export from the dashboard writes `LeaderTrades.csv`, `Signals.csv`, `SignalRejections.csv`, `PaperOrders.csv`, `PaperPositions.csv`, and `DailyReports.csv` under `Analytics:CsvExportDirectory`.
+
+Interpret paper results conservatively. Paper fills are approximate, long positions are marked from bid-side data, and historical daily PnL is a generated snapshot over stored paper positions rather than broker-grade accounting. Use the reports to compare filters, traders, categories, and execution quality before considering any live-trading work.
+
 ## Dashboard Screens
 
 - Overview: service heartbeat, mode, storage/API status, scanner status, bankroll, exposure, PnL.
@@ -156,6 +172,7 @@ WebSocket market-data updates also dispatch into paper trading so pending orders
 - Paper Orders: lifecycle, TTL, fill timestamps, linked signal id.
 - Paper Positions: size, average price, estimated value, unrealized PnL.
 - Market Data: latest WebSocket/market-data asset snapshots, bid, ask, spread, update time.
+- Analytics: daily, trader, category, execution-quality, and rejection reports.
 - Risk: configured limits and current usage.
 - Logs: API errors, risk events, service commands, and market-data events.
 - Controls: pause/resume scanner, pause/resume paper trading, kill switch, and asset pin/unpin through localhost IPC.
@@ -163,9 +180,9 @@ WebSocket market-data updates also dispatch into paper trading so pending orders
 ## Known Limitations
 
 - No auth/signing/live trading support.
-- Trader enable/disable, cancel selected order, and CSV export dashboard buttons are placeholders until command-specific IPC is added.
+- Trader enable/disable and cancel selected order dashboard buttons are placeholders until command-specific IPC is added.
 - User-authenticated WebSocket channel is not implemented yet.
 
 ## Next Recommended Task
 
-Implement `Codex/11_TASK_ANALYTICS_REPORTING.md`.
+Implement `Codex/12_TASK_TESTING_QA_HARDENING.md`.

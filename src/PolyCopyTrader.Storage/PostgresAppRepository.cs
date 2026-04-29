@@ -47,18 +47,19 @@ ON CONFLICT (dedup_key) DO NOTHING;
         return rows > 0;
     }
 
-    public async Task<IReadOnlyList<LeaderTrade>> GetRecentLeaderTradesAsync(CancellationToken cancellationToken = default)
+    public async Task<IReadOnlyList<LeaderTrade>> GetRecentLeaderTradesAsync(int limit = 100, CancellationToken cancellationToken = default)
     {
         const string sql = """
 SELECT trader_wallet, trader_name, condition_id, asset_id, market_slug, market_title, outcome, side,
        price, size, cash_value_usd, timestamp_utc, transaction_hash
 FROM leader_trades
 ORDER BY timestamp_utc DESC
-LIMIT 100;
+LIMIT @Limit;
 """;
 
         await using var connection = await OpenConnectionAsync(cancellationToken);
         await using var command = CreateCommand(connection, sql);
+        command.Parameters.AddWithValue("Limit", limit);
         await using var reader = await command.ExecuteReaderAsync(cancellationToken);
 
         var results = new List<LeaderTrade>();
@@ -227,6 +228,34 @@ VALUES (@Id, @SignalId, @ReasonCode, @ReasonDetails, @CreatedAtUtc);
         await command.ExecuteNonQueryAsync(cancellationToken);
     }
 
+    public async Task<IReadOnlyList<SignalRejection>> GetRecentSignalRejectionsAsync(int limit = 100, CancellationToken cancellationToken = default)
+    {
+        const string sql = """
+SELECT id, signal_id, reason_code, reason_details, created_at_utc
+FROM signal_rejections
+ORDER BY created_at_utc DESC
+LIMIT @Limit;
+""";
+
+        await using var connection = await OpenConnectionAsync(cancellationToken);
+        await using var command = CreateCommand(connection, sql);
+        command.Parameters.AddWithValue("Limit", limit);
+        await using var reader = await command.ExecuteReaderAsync(cancellationToken);
+
+        var results = new List<SignalRejection>();
+        while (await reader.ReadAsync(cancellationToken))
+        {
+            results.Add(new SignalRejection(
+                reader.GetGuid(0),
+                reader.GetGuid(1),
+                reader.GetString(2),
+                reader.GetString(3),
+                DateTimeOffsetFromUtc(reader.GetDateTime(4))));
+        }
+
+        return results;
+    }
+
     public async Task AddPaperOrderAsync(PaperOrder order, CancellationToken cancellationToken = default)
     {
         const string sql = """
@@ -343,6 +372,35 @@ VALUES (@Id, @PaperOrderId, @Price, @SizeShares, @FilledAtUtc, @Evidence);
         command.Parameters.AddWithValue("FilledAtUtc", UtcDateTime(fill.FilledAtUtc));
         command.Parameters.AddWithValue("Evidence", fill.Evidence);
         await command.ExecuteNonQueryAsync(cancellationToken);
+    }
+
+    public async Task<IReadOnlyList<PaperFill>> GetRecentPaperFillsAsync(int limit = 100, CancellationToken cancellationToken = default)
+    {
+        const string sql = """
+SELECT id, paper_order_id, price, size_shares, filled_at_utc, evidence
+FROM paper_fills
+ORDER BY filled_at_utc DESC
+LIMIT @Limit;
+""";
+
+        await using var connection = await OpenConnectionAsync(cancellationToken);
+        await using var command = CreateCommand(connection, sql);
+        command.Parameters.AddWithValue("Limit", limit);
+        await using var reader = await command.ExecuteReaderAsync(cancellationToken);
+
+        var results = new List<PaperFill>();
+        while (await reader.ReadAsync(cancellationToken))
+        {
+            results.Add(new PaperFill(
+                reader.GetGuid(0),
+                reader.GetGuid(1),
+                reader.GetDecimal(2),
+                reader.GetDecimal(3),
+                DateTimeOffsetFromUtc(reader.GetDateTime(4)),
+                reader.GetString(5)));
+        }
+
+        return results;
     }
 
     public async Task UpsertPaperPositionAsync(PaperPosition position, CancellationToken cancellationToken = default)
@@ -725,6 +783,387 @@ ORDER BY created_at_utc DESC;
         return results;
     }
 
+    public async Task<DailyReport> BuildDailyReportAsync(DateOnly reportDate, CancellationToken cancellationToken = default)
+    {
+        const string sql = """
+WITH bounds AS (
+    SELECT @StartUtc::timestamptz AS start_utc, @EndUtc::timestamptz AS end_utc
+),
+top_rejections AS (
+    SELECT string_agg(reason_code || ':' || reason_count, '; ' ORDER BY reason_count DESC, reason_code) AS reasons
+    FROM (
+        SELECT sr.reason_code, count(*) AS reason_count
+        FROM signal_rejections sr, bounds b
+        WHERE sr.created_at_utc >= b.start_utc AND sr.created_at_utc < b.end_utc
+        GROUP BY sr.reason_code
+        ORDER BY reason_count DESC, sr.reason_code
+        LIMIT 5
+    ) ranked
+)
+SELECT
+    (SELECT count(*)::integer FROM signals s, bounds b WHERE s.created_at_utc >= b.start_utc AND s.created_at_utc < b.end_utc) AS signals_observed,
+    (SELECT count(*)::integer FROM signals s, bounds b WHERE s.accepted AND s.created_at_utc >= b.start_utc AND s.created_at_utc < b.end_utc) AS signals_accepted,
+    (SELECT count(*)::integer FROM signals s, bounds b WHERE NOT s.accepted AND s.created_at_utc >= b.start_utc AND s.created_at_utc < b.end_utc) AS signals_rejected,
+    (SELECT count(*)::integer FROM paper_orders po, bounds b WHERE po.created_at_utc >= b.start_utc AND po.created_at_utc < b.end_utc) AS paper_orders_created,
+    (SELECT count(*)::integer FROM paper_fills pf, bounds b WHERE pf.filled_at_utc >= b.start_utc AND pf.filled_at_utc < b.end_utc) AS paper_fills,
+    (SELECT count(*)::integer FROM paper_orders po, bounds b WHERE po.status = 'Expired' AND po.expires_at_utc >= b.start_utc AND po.expires_at_utc < b.end_utc) AS paper_expired_orders,
+    COALESCE((SELECT sum(pp.unrealized_pnl_usd) FROM paper_positions pp), 0) AS paper_pnl,
+    COALESCE((SELECT sum(po.notional_usd) FROM paper_orders po WHERE po.status IN ('Pending', 'PartiallyFilled')), 0)
+        + COALESCE((SELECT sum(pp.estimated_value_usd) FROM paper_positions pp), 0) AS open_paper_exposure,
+    COALESCE((SELECT reasons FROM top_rejections), '') AS top_rejection_reasons,
+    (SELECT count(*)::integer FROM api_errors ae, bounds b WHERE ae.created_at_utc >= b.start_utc AND ae.created_at_utc < b.end_utc) AS api_errors;
+""";
+
+        var startUtc = reportDate.ToDateTime(TimeOnly.MinValue, DateTimeKind.Utc);
+        var endUtc = reportDate.AddDays(1).ToDateTime(TimeOnly.MinValue, DateTimeKind.Utc);
+        await using var connection = await OpenConnectionAsync(cancellationToken);
+        await using var command = CreateCommand(connection, sql);
+        command.Parameters.AddWithValue("StartUtc", startUtc);
+        command.Parameters.AddWithValue("EndUtc", endUtc);
+        await using var reader = await command.ExecuteReaderAsync(cancellationToken);
+        if (!await reader.ReadAsync(cancellationToken))
+        {
+            return new DailyReport(reportDate, 0, 0, 0, 0, 0, 0, 0m, 0m, string.Empty, 0, DateTimeOffset.UtcNow);
+        }
+
+        return new DailyReport(
+            reportDate,
+            reader.GetInt32(0),
+            reader.GetInt32(1),
+            reader.GetInt32(2),
+            reader.GetInt32(3),
+            reader.GetInt32(4),
+            reader.GetInt32(5),
+            reader.GetDecimal(6),
+            reader.GetDecimal(7),
+            reader.GetString(8),
+            reader.GetInt32(9),
+            DateTimeOffset.UtcNow);
+    }
+
+    public async Task UpsertDailyReportAsync(DailyReport report, CancellationToken cancellationToken = default)
+    {
+        const string sql = """
+INSERT INTO daily_reports (
+    report_date, signals_observed, signals_accepted, signals_rejected, paper_orders_created,
+    paper_fills, paper_expired_orders, paper_pnl, open_paper_exposure, top_rejection_reasons,
+    api_errors, generated_at_utc
+) VALUES (
+    @ReportDate, @SignalsObserved, @SignalsAccepted, @SignalsRejected, @PaperOrdersCreated,
+    @PaperFills, @PaperExpiredOrders, @PaperPnl, @OpenPaperExposure, @TopRejectionReasons,
+    @ApiErrors, @GeneratedAtUtc
+)
+ON CONFLICT(report_date) DO UPDATE SET
+    signals_observed = excluded.signals_observed,
+    signals_accepted = excluded.signals_accepted,
+    signals_rejected = excluded.signals_rejected,
+    paper_orders_created = excluded.paper_orders_created,
+    paper_fills = excluded.paper_fills,
+    paper_expired_orders = excluded.paper_expired_orders,
+    paper_pnl = excluded.paper_pnl,
+    open_paper_exposure = excluded.open_paper_exposure,
+    top_rejection_reasons = excluded.top_rejection_reasons,
+    api_errors = excluded.api_errors,
+    generated_at_utc = excluded.generated_at_utc;
+""";
+
+        await using var connection = await OpenConnectionAsync(cancellationToken);
+        await using var command = CreateCommand(connection, sql);
+        command.Parameters.AddWithValue("ReportDate", report.ReportDate);
+        command.Parameters.AddWithValue("SignalsObserved", report.SignalsObserved);
+        command.Parameters.AddWithValue("SignalsAccepted", report.SignalsAccepted);
+        command.Parameters.AddWithValue("SignalsRejected", report.SignalsRejected);
+        command.Parameters.AddWithValue("PaperOrdersCreated", report.PaperOrdersCreated);
+        command.Parameters.AddWithValue("PaperFills", report.PaperFills);
+        command.Parameters.AddWithValue("PaperExpiredOrders", report.PaperExpiredOrders);
+        command.Parameters.AddWithValue("PaperPnl", report.PaperPnl);
+        command.Parameters.AddWithValue("OpenPaperExposure", report.OpenPaperExposure);
+        command.Parameters.AddWithValue("TopRejectionReasons", report.TopRejectionReasons);
+        command.Parameters.AddWithValue("ApiErrors", report.ApiErrors);
+        command.Parameters.AddWithValue("GeneratedAtUtc", UtcDateTime(report.GeneratedAtUtc));
+        await command.ExecuteNonQueryAsync(cancellationToken);
+    }
+
+    public async Task<IReadOnlyList<DailyReport>> GetDailyReportsAsync(int limit = 100, CancellationToken cancellationToken = default)
+    {
+        const string sql = """
+SELECT report_date, signals_observed, signals_accepted, signals_rejected, paper_orders_created,
+       paper_fills, paper_expired_orders, paper_pnl, open_paper_exposure, top_rejection_reasons,
+       api_errors, generated_at_utc
+FROM daily_reports
+ORDER BY report_date DESC
+LIMIT @Limit;
+""";
+
+        await using var connection = await OpenConnectionAsync(cancellationToken);
+        await using var command = CreateCommand(connection, sql);
+        command.Parameters.AddWithValue("Limit", limit);
+        await using var reader = await command.ExecuteReaderAsync(cancellationToken);
+
+        var results = new List<DailyReport>();
+        while (await reader.ReadAsync(cancellationToken))
+        {
+            results.Add(ReadDailyReport(reader));
+        }
+
+        return results;
+    }
+
+    public async Task<IReadOnlyList<TraderPerformanceReport>> GetTraderPerformanceReportsAsync(int limit = 100, CancellationToken cancellationToken = default)
+    {
+        const string sql = """
+WITH signal_stats AS (
+    SELECT
+        s.trader_wallet,
+        count(*) AS signals,
+        count(*) FILTER (WHERE s.accepted) AS accepted,
+        avg(s.lag_seconds)::numeric AS avg_lag,
+        avg(s.leader_price)::numeric AS avg_leader_price,
+        avg(s.proposed_paper_price)::numeric AS avg_proposed_price,
+        avg(s.proposed_paper_price - s.leader_price)::numeric AS avg_price_difference
+    FROM signals s
+    GROUP BY s.trader_wallet
+),
+fill_stats AS (
+    SELECT
+        s.trader_wallet,
+        count(DISTINCT po.id) AS orders,
+        count(DISTINCT po.id) FILTER (WHERE pf.id IS NOT NULL) AS filled_orders,
+        COALESCE(sum((COALESCE(pp.estimated_value_usd / NULLIF(pp.size_shares, 0), po.price) - po.price) * po.size_shares) FILTER (WHERE pf.id IS NOT NULL), 0) AS paper_pnl
+    FROM signals s
+    LEFT JOIN paper_orders po ON po.signal_id = s.id
+    LEFT JOIN paper_fills pf ON pf.paper_order_id = po.id
+    LEFT JOIN paper_positions pp ON pp.asset_id = po.asset_id
+    GROUP BY s.trader_wallet
+),
+rejection_stats AS (
+    SELECT trader_wallet, string_agg(reason_code || ':' || reason_count, '; ' ORDER BY reason_count DESC, reason_code) AS reasons
+    FROM (
+        SELECT s.trader_wallet, sr.reason_code, count(*) AS reason_count
+        FROM signals s
+        JOIN signal_rejections sr ON sr.signal_id = s.id
+        GROUP BY s.trader_wallet, sr.reason_code
+    ) ranked
+    GROUP BY trader_wallet
+),
+category_pnl AS (
+    SELECT trader_wallet, string_agg(category || ':' || pnl, '; ' ORDER BY category) AS pnl_by_category
+    FROM (
+        SELECT
+            s.trader_wallet,
+            COALESCE(m.category, 'unknown') AS category,
+            COALESCE(sum((COALESCE(pp.estimated_value_usd / NULLIF(pp.size_shares, 0), po.price) - po.price) * po.size_shares) FILTER (WHERE pf.id IS NOT NULL), 0) AS pnl
+        FROM signals s
+        LEFT JOIN markets m ON m.condition_id = s.condition_id
+        LEFT JOIN paper_orders po ON po.signal_id = s.id
+        LEFT JOIN paper_fills pf ON pf.paper_order_id = po.id
+        LEFT JOIN paper_positions pp ON pp.asset_id = po.asset_id
+        GROUP BY s.trader_wallet, COALESCE(m.category, 'unknown')
+    ) grouped
+    GROUP BY trader_wallet
+)
+SELECT
+    ss.trader_wallet,
+    ss.signals::integer,
+    CASE WHEN ss.signals = 0 THEN 0 ELSE round(ss.accepted::numeric / ss.signals * 100, 4) END AS acceptance_rate,
+    CASE WHEN COALESCE(fs.orders, 0) = 0 THEN 0 ELSE round(fs.filled_orders::numeric / fs.orders * 100, 4) END AS fill_rate,
+    ss.avg_lag,
+    ss.avg_leader_price,
+    ss.avg_proposed_price,
+    ss.avg_price_difference,
+    COALESCE(fs.paper_pnl, 0) AS paper_pnl,
+    COALESCE(cp.pnl_by_category, '') AS paper_pnl_by_category,
+    COALESCE(rs.reasons, '') AS rejection_reasons
+FROM signal_stats ss
+LEFT JOIN fill_stats fs ON fs.trader_wallet = ss.trader_wallet
+LEFT JOIN rejection_stats rs ON rs.trader_wallet = ss.trader_wallet
+LEFT JOIN category_pnl cp ON cp.trader_wallet = ss.trader_wallet
+ORDER BY ss.signals DESC, ss.trader_wallet
+LIMIT @Limit;
+""";
+
+        await using var connection = await OpenConnectionAsync(cancellationToken);
+        await using var command = CreateCommand(connection, sql);
+        command.Parameters.AddWithValue("Limit", limit);
+        await using var reader = await command.ExecuteReaderAsync(cancellationToken);
+
+        var results = new List<TraderPerformanceReport>();
+        while (await reader.ReadAsync(cancellationToken))
+        {
+            results.Add(new TraderPerformanceReport(
+                reader.GetString(0),
+                reader.GetInt32(1),
+                reader.GetDecimal(2),
+                reader.GetDecimal(3),
+                reader.IsDBNull(4) ? null : reader.GetDecimal(4),
+                reader.IsDBNull(5) ? null : reader.GetDecimal(5),
+                reader.IsDBNull(6) ? null : reader.GetDecimal(6),
+                reader.IsDBNull(7) ? null : reader.GetDecimal(7),
+                reader.GetDecimal(8),
+                reader.GetString(9),
+                reader.GetString(10)));
+        }
+
+        return results;
+    }
+
+    public async Task<IReadOnlyList<CategoryPerformanceReport>> GetCategoryPerformanceReportsAsync(int limit = 100, CancellationToken cancellationToken = default)
+    {
+        const string sql = """
+SELECT
+    COALESCE(m.category, 'unknown') AS category,
+    count(DISTINCT s.id)::integer AS signals,
+    count(DISTINCT s.id) FILTER (WHERE s.accepted)::integer AS accepted,
+    count(DISTINCT po.id) FILTER (WHERE pf.id IS NOT NULL)::integer AS filled,
+    COALESCE(sum((COALESCE(pp.estimated_value_usd / NULLIF(pp.size_shares, 0), po.price) - po.price) * po.size_shares) FILTER (WHERE pf.id IS NOT NULL), 0) AS paper_pnl,
+    avg(s.spread_abs)::numeric AS avg_spread,
+    avg(s.lag_seconds)::numeric AS avg_lag
+FROM signals s
+LEFT JOIN markets m ON m.condition_id = s.condition_id
+LEFT JOIN paper_orders po ON po.signal_id = s.id
+LEFT JOIN paper_fills pf ON pf.paper_order_id = po.id
+LEFT JOIN paper_positions pp ON pp.asset_id = po.asset_id
+GROUP BY COALESCE(m.category, 'unknown')
+ORDER BY signals DESC, category
+LIMIT @Limit;
+""";
+
+        await using var connection = await OpenConnectionAsync(cancellationToken);
+        await using var command = CreateCommand(connection, sql);
+        command.Parameters.AddWithValue("Limit", limit);
+        await using var reader = await command.ExecuteReaderAsync(cancellationToken);
+
+        var results = new List<CategoryPerformanceReport>();
+        while (await reader.ReadAsync(cancellationToken))
+        {
+            results.Add(new CategoryPerformanceReport(
+                reader.GetString(0),
+                reader.GetInt32(1),
+                reader.GetInt32(2),
+                reader.GetInt32(3),
+                reader.GetDecimal(4),
+                reader.IsDBNull(5) ? null : reader.GetDecimal(5),
+                reader.IsDBNull(6) ? null : reader.GetDecimal(6)));
+        }
+
+        return results;
+    }
+
+    public async Task<IReadOnlyList<ExecutionQualityReport>> GetExecutionQualityReportsAsync(int limit = 100, CancellationToken cancellationToken = default)
+    {
+        const string sql = """
+SELECT
+    s.id, s.trader_wallet, s.asset_id, s.condition_id, s.created_at_utc,
+    s.leader_price, s.proposed_paper_price, pf.price AS fill_price,
+    s.proposed_paper_price - s.leader_price AS proposed_minus_leader,
+    pf.price - s.proposed_paper_price AS fill_minus_proposed,
+    s.lag_seconds, s.spread_abs,
+    ob1.best_bid AS bid_1m, ob1.best_ask AS ask_1m,
+    CASE WHEN ob1.best_bid IS NULL OR ob1.best_ask IS NULL THEN NULL ELSE (ob1.best_bid + ob1.best_ask) / 2 END AS mid_1m,
+    ob5.best_bid AS bid_5m, ob5.best_ask AS ask_5m,
+    CASE WHEN ob5.best_bid IS NULL OR ob5.best_ask IS NULL THEN NULL ELSE (ob5.best_bid + ob5.best_ask) / 2 END AS mid_5m,
+    ob30.best_bid AS bid_30m, ob30.best_ask AS ask_30m,
+    CASE WHEN ob30.best_bid IS NULL OR ob30.best_ask IS NULL THEN NULL ELSE (ob30.best_bid + ob30.best_ask) / 2 END AS mid_30m
+FROM signals s
+LEFT JOIN paper_orders po ON po.signal_id = s.id
+LEFT JOIN paper_fills pf ON pf.paper_order_id = po.id
+LEFT JOIN LATERAL (
+    SELECT best_bid, best_ask FROM order_book_snapshots obs
+    WHERE obs.asset_id = s.asset_id AND obs.snapshot_at_utc >= s.created_at_utc + interval '1 minute'
+    ORDER BY obs.snapshot_at_utc
+    LIMIT 1
+) ob1 ON true
+LEFT JOIN LATERAL (
+    SELECT best_bid, best_ask FROM order_book_snapshots obs
+    WHERE obs.asset_id = s.asset_id AND obs.snapshot_at_utc >= s.created_at_utc + interval '5 minutes'
+    ORDER BY obs.snapshot_at_utc
+    LIMIT 1
+) ob5 ON true
+LEFT JOIN LATERAL (
+    SELECT best_bid, best_ask FROM order_book_snapshots obs
+    WHERE obs.asset_id = s.asset_id AND obs.snapshot_at_utc >= s.created_at_utc + interval '30 minutes'
+    ORDER BY obs.snapshot_at_utc
+    LIMIT 1
+) ob30 ON true
+ORDER BY s.created_at_utc DESC
+LIMIT @Limit;
+""";
+
+        await using var connection = await OpenConnectionAsync(cancellationToken);
+        await using var command = CreateCommand(connection, sql);
+        command.Parameters.AddWithValue("Limit", limit);
+        await using var reader = await command.ExecuteReaderAsync(cancellationToken);
+
+        var results = new List<ExecutionQualityReport>();
+        while (await reader.ReadAsync(cancellationToken))
+        {
+            results.Add(new ExecutionQualityReport(
+                reader.GetGuid(0),
+                reader.GetString(1),
+                reader.GetString(2),
+                reader.GetString(3),
+                DateTimeOffsetFromUtc(reader.GetDateTime(4)),
+                reader.GetDecimal(5),
+                reader.IsDBNull(6) ? null : reader.GetDecimal(6),
+                reader.IsDBNull(7) ? null : reader.GetDecimal(7),
+                reader.IsDBNull(8) ? null : reader.GetDecimal(8),
+                reader.IsDBNull(9) ? null : reader.GetDecimal(9),
+                reader.IsDBNull(10) ? null : reader.GetInt32(10),
+                reader.IsDBNull(11) ? null : reader.GetDecimal(11),
+                reader.IsDBNull(12) ? null : reader.GetDecimal(12),
+                reader.IsDBNull(13) ? null : reader.GetDecimal(13),
+                reader.IsDBNull(14) ? null : reader.GetDecimal(14),
+                reader.IsDBNull(15) ? null : reader.GetDecimal(15),
+                reader.IsDBNull(16) ? null : reader.GetDecimal(16),
+                reader.IsDBNull(17) ? null : reader.GetDecimal(17),
+                reader.IsDBNull(18) ? null : reader.GetDecimal(18),
+                reader.IsDBNull(19) ? null : reader.GetDecimal(19),
+                reader.IsDBNull(20) ? null : reader.GetDecimal(20)));
+        }
+
+        return results;
+    }
+
+    public async Task<IReadOnlyList<RejectionAnalysisReport>> GetRejectionAnalysisReportsAsync(int limit = 100, CancellationToken cancellationToken = default)
+    {
+        const string sql = """
+WITH rejected AS (
+    SELECT count(*) AS total_rejected FROM signals WHERE NOT accepted
+),
+reason_counts AS (
+    SELECT sr.reason_code, count(*) AS reason_count, max(sr.created_at_utc) AS last_rejected_at
+    FROM signal_rejections sr
+    GROUP BY sr.reason_code
+)
+SELECT
+    rc.reason_code,
+    rc.reason_count::integer,
+    CASE WHEN r.total_rejected = 0 THEN 0 ELSE round(rc.reason_count::numeric / r.total_rejected * 100, 4) END AS rejected_pct,
+    rc.last_rejected_at
+FROM reason_counts rc
+CROSS JOIN rejected r
+ORDER BY rc.reason_count DESC, rc.reason_code
+LIMIT @Limit;
+""";
+
+        await using var connection = await OpenConnectionAsync(cancellationToken);
+        await using var command = CreateCommand(connection, sql);
+        command.Parameters.AddWithValue("Limit", limit);
+        await using var reader = await command.ExecuteReaderAsync(cancellationToken);
+
+        var results = new List<RejectionAnalysisReport>();
+        while (await reader.ReadAsync(cancellationToken))
+        {
+            results.Add(new RejectionAnalysisReport(
+                reader.GetString(0),
+                reader.GetInt32(1),
+                reader.GetDecimal(2),
+                reader.IsDBNull(3) ? null : DateTimeOffsetFromUtc(reader.GetDateTime(3))));
+        }
+
+        return results;
+    }
+
     public async Task AddServiceCommandAuditAsync(ServiceCommandAudit audit, CancellationToken cancellationToken = default)
     {
         const string sql = """
@@ -953,6 +1392,23 @@ ORDER BY service_name;
             bestAsk is { } ask ? [new OrderBookLevel(ask, 0m)] : [],
             DateTimeOffsetFromUtc(reader.GetDateTime(4)),
             reader.IsDBNull(1) ? null : reader.GetString(1));
+    }
+
+    private static DailyReport ReadDailyReport(NpgsqlDataReader reader)
+    {
+        return new DailyReport(
+            reader.GetFieldValue<DateOnly>(0),
+            reader.GetInt32(1),
+            reader.GetInt32(2),
+            reader.GetInt32(3),
+            reader.GetInt32(4),
+            reader.GetInt32(5),
+            reader.GetInt32(6),
+            reader.GetDecimal(7),
+            reader.GetDecimal(8),
+            reader.GetString(9),
+            reader.GetInt32(10),
+            DateTimeOffsetFromUtc(reader.GetDateTime(11)));
     }
 
     private static IReadOnlyList<string> SplitReasonCodes(string value)

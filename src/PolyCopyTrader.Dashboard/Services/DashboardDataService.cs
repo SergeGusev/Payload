@@ -14,7 +14,7 @@ public sealed class DashboardDataService(
     {
         var heartbeats = await repository.GetServiceHeartbeatsAsync(cancellationToken);
         var scannerStatuses = await repository.GetScannerStatusesAsync(cancellationToken);
-        var leaderTrades = await repository.GetRecentLeaderTradesAsync(cancellationToken);
+        var leaderTrades = await repository.GetRecentLeaderTradesAsync(cancellationToken: cancellationToken);
         var signals = await repository.GetRecentSignalsAsync(cancellationToken: cancellationToken);
         var recentPaperOrders = await repository.GetRecentPaperOrdersAsync(cancellationToken: cancellationToken);
         var openPaperOrders = await repository.GetOpenPaperOrdersAsync(cancellationToken);
@@ -28,6 +28,12 @@ public sealed class DashboardDataService(
         var orderBooksByAsset = orderBookSnapshots.ToDictionary(
             item => item.AssetId,
             StringComparer.OrdinalIgnoreCase);
+        var reportLimit = configuration.Analytics.DashboardReportLimit;
+        var dailyReports = await repository.GetDailyReportsAsync(reportLimit, cancellationToken);
+        var traderPerformance = await repository.GetTraderPerformanceReportsAsync(reportLimit, cancellationToken);
+        var categoryPerformance = await repository.GetCategoryPerformanceReportsAsync(reportLimit, cancellationToken);
+        var executionQuality = await repository.GetExecutionQualityReportsAsync(reportLimit, cancellationToken);
+        var rejectionAnalysis = await repository.GetRejectionAnalysisReportsAsync(reportLimit, cancellationToken);
 
         return new DashboardSnapshot(
             BuildOverview(heartbeats, scannerStatuses, openPaperOrders, paperPositions, apiErrors, marketDataStatuses),
@@ -37,6 +43,11 @@ public sealed class DashboardDataService(
             recentPaperOrders.Select(ToPaperOrderRow).ToArray(),
             paperPositions.Select(position => ToPaperPositionRow(position, orderBooksByAsset)).ToArray(),
             orderBookSnapshots.Select(ToMarketDataRow).ToArray(),
+            dailyReports.Select(ToDailyReportRow).ToArray(),
+            traderPerformance.Select(ToTraderPerformanceRow).ToArray(),
+            categoryPerformance.Select(ToCategoryPerformanceRow).ToArray(),
+            executionQuality.Select(ToExecutionQualityRow).ToArray(),
+            rejectionAnalysis.Select(ToRejectionAnalysisRow).ToArray(),
             BuildRiskUsage(openPaperOrders, paperPositions),
             BuildLogs(apiErrors, riskEvents, commandAudits, marketDataEvents));
     }
@@ -255,6 +266,78 @@ public sealed class DashboardDataService(
             FormatDecimal(snapshot.BestAsk),
             FormatDecimal(snapshot.SpreadAbs),
             FormatDate(snapshot.SnapshotAtUtc));
+    }
+
+    private static DailyReportRow ToDailyReportRow(DailyReport report)
+    {
+        return new DailyReportRow(
+            report.ReportDate.ToString("yyyy-MM-dd"),
+            report.SignalsObserved,
+            report.SignalsAccepted,
+            report.SignalsRejected,
+            report.PaperOrdersCreated,
+            report.PaperFills,
+            report.PaperExpiredOrders,
+            report.PaperPnl,
+            report.OpenPaperExposure,
+            report.TopRejectionReasons,
+            report.ApiErrors,
+            FormatDate(report.GeneratedAtUtc));
+    }
+
+    private static TraderPerformanceRow ToTraderPerformanceRow(TraderPerformanceReport report)
+    {
+        return new TraderPerformanceRow(
+            report.TraderWallet,
+            report.Signals,
+            report.AcceptanceRatePct,
+            report.FillRatePct,
+            FormatDecimal(report.AverageLagSeconds),
+            FormatDecimal(report.AverageLeaderPrice),
+            FormatDecimal(report.AverageProposedPrice),
+            FormatDecimal(report.AveragePriceDifference),
+            report.PaperPnl,
+            report.PaperPnlByCategory,
+            report.RejectionReasons);
+    }
+
+    private static CategoryPerformanceRow ToCategoryPerformanceRow(CategoryPerformanceReport report)
+    {
+        return new CategoryPerformanceRow(
+            report.Category,
+            report.Signals,
+            report.Accepted,
+            report.Filled,
+            report.PaperPnl,
+            FormatDecimal(report.AverageSpread),
+            FormatDecimal(report.AverageLagSeconds));
+    }
+
+    private static ExecutionQualityRow ToExecutionQualityRow(ExecutionQualityReport report)
+    {
+        return new ExecutionQualityRow(
+            FormatDate(report.CreatedAtUtc),
+            report.TraderWallet,
+            report.AssetId,
+            report.LeaderPrice,
+            FormatDecimal(report.ProposedPrice),
+            FormatDecimal(report.PaperFillPrice),
+            FormatDecimal(report.ProposedMinusLeader),
+            FormatDecimal(report.FillMinusProposed),
+            report.LagSeconds?.ToString(System.Globalization.CultureInfo.InvariantCulture) ?? "n/a",
+            FormatDecimal(report.SpreadAtSignal),
+            FormatDecimal(report.MidAfter1m),
+            FormatDecimal(report.MidAfter5m),
+            FormatDecimal(report.MidAfter30m));
+    }
+
+    private static RejectionAnalysisRow ToRejectionAnalysisRow(RejectionAnalysisReport report)
+    {
+        return new RejectionAnalysisRow(
+            report.ReasonCode,
+            report.Count,
+            report.RejectedPct,
+            FormatDate(report.LastRejectedAtUtc));
     }
 
     private static RiskUsageRow Usage(string name, decimal limit, decimal used)

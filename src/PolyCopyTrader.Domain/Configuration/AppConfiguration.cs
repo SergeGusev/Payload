@@ -20,6 +20,8 @@ public sealed class AppConfiguration
 
     public DashboardOptions Dashboard { get; init; } = new();
 
+    public AnalyticsOptions Analytics { get; init; } = new();
+
     public IpcOptions Ipc { get; init; } = new();
 
     public StorageOptions Storage { get; init; } = new();
@@ -191,6 +193,17 @@ public sealed class PaperTradingOptions
 public sealed class DashboardOptions
 {
     public int RefreshIntervalSeconds { get; init; } = 3;
+}
+
+public sealed class AnalyticsOptions
+{
+    public bool DailyReportGenerationEnabled { get; init; } = true;
+
+    public int DailyReportRefreshMinutes { get; init; } = 15;
+
+    public int DashboardReportLimit { get; init; } = 250;
+
+    public string CsvExportDirectory { get; init; } = "exports";
 }
 
 public sealed class IpcOptions

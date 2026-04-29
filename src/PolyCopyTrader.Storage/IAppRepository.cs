@@ -8,7 +8,7 @@ public interface IAppRepository
 
     Task<bool> TryAddLeaderTradeAsync(LeaderTrade trade, CancellationToken cancellationToken = default);
 
-    Task<IReadOnlyList<LeaderTrade>> GetRecentLeaderTradesAsync(CancellationToken cancellationToken = default);
+    Task<IReadOnlyList<LeaderTrade>> GetRecentLeaderTradesAsync(int limit = 100, CancellationToken cancellationToken = default);
 
     Task AddLeaderPositionAsync(LeaderPosition position, CancellationToken cancellationToken = default);
 
@@ -17,6 +17,8 @@ public interface IAppRepository
     Task<IReadOnlyList<SignalSummary>> GetRecentSignalsAsync(int limit = 100, CancellationToken cancellationToken = default);
 
     Task AddSignalRejectionAsync(SignalRejection rejection, CancellationToken cancellationToken = default);
+
+    Task<IReadOnlyList<SignalRejection>> GetRecentSignalRejectionsAsync(int limit = 100, CancellationToken cancellationToken = default);
 
     Task AddPaperOrderAsync(PaperOrder order, CancellationToken cancellationToken = default);
 
@@ -27,6 +29,8 @@ public interface IAppRepository
     Task<IReadOnlyList<PaperOrder>> GetRecentPaperOrdersAsync(int limit = 100, CancellationToken cancellationToken = default);
 
     Task AddPaperFillAsync(PaperFill fill, CancellationToken cancellationToken = default);
+
+    Task<IReadOnlyList<PaperFill>> GetRecentPaperFillsAsync(int limit = 100, CancellationToken cancellationToken = default);
 
     Task UpsertPaperPositionAsync(PaperPosition position, CancellationToken cancellationToken = default);
 
@@ -57,6 +61,20 @@ public interface IAppRepository
     Task RemovePinnedMarketAssetAsync(string assetId, CancellationToken cancellationToken = default);
 
     Task<IReadOnlyList<PinnedMarketAsset>> GetPinnedMarketAssetsAsync(CancellationToken cancellationToken = default);
+
+    Task<DailyReport> BuildDailyReportAsync(DateOnly reportDate, CancellationToken cancellationToken = default);
+
+    Task UpsertDailyReportAsync(DailyReport report, CancellationToken cancellationToken = default);
+
+    Task<IReadOnlyList<DailyReport>> GetDailyReportsAsync(int limit = 100, CancellationToken cancellationToken = default);
+
+    Task<IReadOnlyList<TraderPerformanceReport>> GetTraderPerformanceReportsAsync(int limit = 100, CancellationToken cancellationToken = default);
+
+    Task<IReadOnlyList<CategoryPerformanceReport>> GetCategoryPerformanceReportsAsync(int limit = 100, CancellationToken cancellationToken = default);
+
+    Task<IReadOnlyList<ExecutionQualityReport>> GetExecutionQualityReportsAsync(int limit = 100, CancellationToken cancellationToken = default);
+
+    Task<IReadOnlyList<RejectionAnalysisReport>> GetRejectionAnalysisReportsAsync(int limit = 100, CancellationToken cancellationToken = default);
 
     Task AddServiceCommandAuditAsync(ServiceCommandAudit audit, CancellationToken cancellationToken = default);
 

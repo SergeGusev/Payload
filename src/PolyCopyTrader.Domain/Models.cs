@@ -357,6 +357,71 @@ public sealed record PinnedMarketAsset(
     string? Note,
     DateTimeOffset CreatedAtUtc);
 
+public sealed record DailyReport(
+    DateOnly ReportDate,
+    int SignalsObserved,
+    int SignalsAccepted,
+    int SignalsRejected,
+    int PaperOrdersCreated,
+    int PaperFills,
+    int PaperExpiredOrders,
+    decimal PaperPnl,
+    decimal OpenPaperExposure,
+    string TopRejectionReasons,
+    int ApiErrors,
+    DateTimeOffset GeneratedAtUtc);
+
+public sealed record TraderPerformanceReport(
+    string TraderWallet,
+    int Signals,
+    decimal AcceptanceRatePct,
+    decimal FillRatePct,
+    decimal? AverageLagSeconds,
+    decimal? AverageLeaderPrice,
+    decimal? AverageProposedPrice,
+    decimal? AveragePriceDifference,
+    decimal PaperPnl,
+    string PaperPnlByCategory,
+    string RejectionReasons);
+
+public sealed record CategoryPerformanceReport(
+    string Category,
+    int Signals,
+    int Accepted,
+    int Filled,
+    decimal PaperPnl,
+    decimal? AverageSpread,
+    decimal? AverageLagSeconds);
+
+public sealed record ExecutionQualityReport(
+    Guid SignalId,
+    string TraderWallet,
+    string AssetId,
+    string ConditionId,
+    DateTimeOffset CreatedAtUtc,
+    decimal LeaderPrice,
+    decimal? ProposedPrice,
+    decimal? PaperFillPrice,
+    decimal? ProposedMinusLeader,
+    decimal? FillMinusProposed,
+    int? LagSeconds,
+    decimal? SpreadAtSignal,
+    decimal? BidAfter1m,
+    decimal? AskAfter1m,
+    decimal? MidAfter1m,
+    decimal? BidAfter5m,
+    decimal? AskAfter5m,
+    decimal? MidAfter5m,
+    decimal? BidAfter30m,
+    decimal? AskAfter30m,
+    decimal? MidAfter30m);
+
+public sealed record RejectionAnalysisReport(
+    string ReasonCode,
+    int Count,
+    decimal RejectedPct,
+    DateTimeOffset? LastRejectedAtUtc);
+
 public sealed record ServiceCommandAudit(
     Guid Id,
     string Command,

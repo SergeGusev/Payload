@@ -248,7 +248,7 @@ public sealed class WatchlistScannerTests
             return Task.FromResult(true);
         }
 
-        public Task<IReadOnlyList<LeaderTrade>> GetRecentLeaderTradesAsync(CancellationToken cancellationToken = default)
+        public Task<IReadOnlyList<LeaderTrade>> GetRecentLeaderTradesAsync(int limit = 100, CancellationToken cancellationToken = default)
         {
             return Task.FromResult<IReadOnlyList<LeaderTrade>>(LeaderTrades);
         }
@@ -274,6 +274,11 @@ public sealed class WatchlistScannerTests
             return Task.CompletedTask;
         }
 
+        public Task<IReadOnlyList<SignalRejection>> GetRecentSignalRejectionsAsync(int limit = 100, CancellationToken cancellationToken = default)
+        {
+            return Task.FromResult<IReadOnlyList<SignalRejection>>([]);
+        }
+
         public Task AddPaperOrderAsync(PaperOrder order, CancellationToken cancellationToken = default)
         {
             return Task.CompletedTask;
@@ -297,6 +302,11 @@ public sealed class WatchlistScannerTests
         public Task AddPaperFillAsync(PaperFill fill, CancellationToken cancellationToken = default)
         {
             return Task.CompletedTask;
+        }
+
+        public Task<IReadOnlyList<PaperFill>> GetRecentPaperFillsAsync(int limit = 100, CancellationToken cancellationToken = default)
+        {
+            return Task.FromResult<IReadOnlyList<PaperFill>>([]);
         }
 
         public Task UpsertPaperPositionAsync(PaperPosition position, CancellationToken cancellationToken = default)
@@ -373,6 +383,41 @@ public sealed class WatchlistScannerTests
         public Task<IReadOnlyList<PinnedMarketAsset>> GetPinnedMarketAssetsAsync(CancellationToken cancellationToken = default)
         {
             return Task.FromResult<IReadOnlyList<PinnedMarketAsset>>([]);
+        }
+
+        public Task<DailyReport> BuildDailyReportAsync(DateOnly reportDate, CancellationToken cancellationToken = default)
+        {
+            return Task.FromResult(new DailyReport(reportDate, 0, 0, 0, 0, 0, 0, 0m, 0m, string.Empty, 0, DateTimeOffset.UtcNow));
+        }
+
+        public Task UpsertDailyReportAsync(DailyReport report, CancellationToken cancellationToken = default)
+        {
+            return Task.CompletedTask;
+        }
+
+        public Task<IReadOnlyList<DailyReport>> GetDailyReportsAsync(int limit = 100, CancellationToken cancellationToken = default)
+        {
+            return Task.FromResult<IReadOnlyList<DailyReport>>([]);
+        }
+
+        public Task<IReadOnlyList<TraderPerformanceReport>> GetTraderPerformanceReportsAsync(int limit = 100, CancellationToken cancellationToken = default)
+        {
+            return Task.FromResult<IReadOnlyList<TraderPerformanceReport>>([]);
+        }
+
+        public Task<IReadOnlyList<CategoryPerformanceReport>> GetCategoryPerformanceReportsAsync(int limit = 100, CancellationToken cancellationToken = default)
+        {
+            return Task.FromResult<IReadOnlyList<CategoryPerformanceReport>>([]);
+        }
+
+        public Task<IReadOnlyList<ExecutionQualityReport>> GetExecutionQualityReportsAsync(int limit = 100, CancellationToken cancellationToken = default)
+        {
+            return Task.FromResult<IReadOnlyList<ExecutionQualityReport>>([]);
+        }
+
+        public Task<IReadOnlyList<RejectionAnalysisReport>> GetRejectionAnalysisReportsAsync(int limit = 100, CancellationToken cancellationToken = default)
+        {
+            return Task.FromResult<IReadOnlyList<RejectionAnalysisReport>>([]);
         }
 
         public Task AddServiceCommandAuditAsync(ServiceCommandAudit audit, CancellationToken cancellationToken = default)

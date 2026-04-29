@@ -19,6 +19,7 @@ public static class PostgresSchema
         "market_data_status",
         "market_data_events",
         "pinned_market_assets",
+        "daily_reports",
         "bot_settings",
         "service_command_audit",
         "api_errors",
@@ -271,6 +272,21 @@ CREATE TABLE IF NOT EXISTS pinned_market_assets (
     asset_id text PRIMARY KEY,
     note text NULL,
     created_at_utc timestamptz NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS daily_reports (
+    report_date date PRIMARY KEY,
+    signals_observed integer NOT NULL,
+    signals_accepted integer NOT NULL,
+    signals_rejected integer NOT NULL,
+    paper_orders_created integer NOT NULL,
+    paper_fills integer NOT NULL,
+    paper_expired_orders integer NOT NULL,
+    paper_pnl numeric(28,8) NOT NULL,
+    open_paper_exposure numeric(28,8) NOT NULL,
+    top_rejection_reasons text NOT NULL,
+    api_errors integer NOT NULL,
+    generated_at_utc timestamptz NOT NULL
 );
 
 CREATE TABLE IF NOT EXISTS bot_settings (
