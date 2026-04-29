@@ -61,6 +61,12 @@ Later, Polymarket certificate pinning was added:
 - host with configured pins accepts only a matching, currently valid certificate key.
 - tests increased from 93 to 100.
 
+Script `scripts/get-polymarket-certificate-pins.ps1` prints the current SPKI pins and
+can output an appsettings fragment with `-AsAppSettings`. Always inspect printed
+certificate Subject/Issuer before trusting a pin. On 2026-04-29 the user's local
+network presented an `a1hosting.bg` certificate for Polymarket hosts, which explains
+`RemoteCertificateNameMismatch`; that is not a Polymarket certificate.
+
 ## Important Safety Position
 
 Live trading exists in code, but it is not ready to turn on casually.

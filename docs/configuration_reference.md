@@ -47,6 +47,16 @@ matches one of the configured pins and the certificate validity window is curren
 This can bypass CA/name validation errors for a known pinned Polymarket key without
 accepting arbitrary certificates.
 
+Generate pins from the machine that will run the service:
+
+```powershell
+.\scripts\get-polymarket-certificate-pins.ps1
+.\scripts\get-polymarket-certificate-pins.ps1 -AsAppSettings
+```
+
+Review the printed `Subject` and `Issuer` before trusting a pin. If they do not
+belong to Polymarket, the local network or host is intercepting TLS.
+
 Example:
 
 ```json

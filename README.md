@@ -206,19 +206,15 @@ Example host keys:
 }
 ```
 
-To print the current SPKI pin for a host:
+To print the current SPKI pins from the machine that will run the service:
 
 ```powershell
-$hostName = "data-api.polymarket.com"
-$tcp = [Net.Sockets.TcpClient]::new($hostName, 443)
-$ssl = [Net.Security.SslStream]::new($tcp.GetStream(), $false, { $true })
-$ssl.AuthenticateAsClient($hostName)
-$cert = [Security.Cryptography.X509Certificates.X509Certificate2]::new($ssl.RemoteCertificate)
-$spki = $cert.PublicKey.ExportSubjectPublicKeyInfo()
-"sha256/" + [Convert]::ToBase64String([Security.Cryptography.SHA256]::HashData($spki))
-$ssl.Dispose()
-$tcp.Dispose()
+.\scripts\get-polymarket-certificate-pins.ps1
+.\scripts\get-polymarket-certificate-pins.ps1 -AsAppSettings
 ```
+
+Review `Subject` and `Issuer` before trusting a pin. If the presented certificate is
+not a Polymarket certificate, the local network or host is intercepting TLS.
 
 ## Auth Research
 
