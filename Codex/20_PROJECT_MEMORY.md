@@ -1,6 +1,6 @@
 # PolyCopyTrader Project Memory
 
-Last updated: 2026-04-29, Europe/Sofia.
+Last updated: 2026-04-30, Europe/Sofia.
 
 This file is the high-context memory note for a future Codex session. If the user asks
 "what did we build?" or "continue the PolyCopyTrader project", read this file first,
@@ -27,20 +27,23 @@ The repository also has local debugging and trader discovery support after task 
 - local PostgreSQL debugging scripts;
 - optional Docker Compose PostgreSQL fallback;
 - dashboard environment-variable config support;
-- local Windows PostgreSQL database `polycopytrader` created and initialized.
-- trader discovery dashboard button and tab for best/worst PnL candidates.
+- local Windows PostgreSQL database `polycopytrader` created and initialized;
+- service now requires configured PostgreSQL storage and fails fast without it;
+- dashboard `Find traders` now runs deep trader discovery;
+- trader discovery dashboard button and tab for best/worst PnL candidates;
 - Polymarket certificate pinning for HTTP clients and the market WebSocket.
 - Polymarket HTTP request/response audit table.
 
-Latest verified code state on 2026-04-29:
+Latest verified code state on 2026-04-30:
 
 - branch: `master`;
-- latest commit at the time of this note: `abff28c Support existing local PostgreSQL debugging`;
-- working tree was clean after that commit;
-- `.\scripts\qa-check.ps1` passed;
-- build had 0 warnings and 0 errors;
-- tests passed: 91/91;
-- local service smoke passed in `Paper` mode against PostgreSQL;
+- latest commit before this memory refresh: `8519b5e Merge trader leaderboard snapshots by wallet`;
+- working tree was clean before this memory refresh;
+- `dotnet test tests\PolyCopyTrader.Tests\PolyCopyTrader.Tests.csproj -c Verify --no-restore`
+  passed: 102/102;
+- `dotnet build src\PolyCopyTrader.Dashboard\PolyCopyTrader.Dashboard.csproj -c Verify --no-restore`
+  passed with 0 warnings and 0 errors;
+- local PostgreSQL schema initializer test passed against the user's local database;
 - live trading remained disabled.
 
 After this note was originally created, trader discovery was added:
@@ -88,6 +91,11 @@ real service run. If `POLYCOPYTRADER_POSTGRES_CONNECTION` or `Storage:Connection
 is missing, the service fails on startup instead of registering `NoOpAppRepository`.
 This prevents Polymarket HTTP logs and other audit rows from silently disappearing.
 The dashboard can still use `NoOpAppRepository` for empty diagnostic startup.
+
+The Windows User environment variable `POLYCOPYTRADER_POSTGRES_CONNECTION` was set
+locally for the user's machine. Do not copy its value into repository files. Visual
+Studio must be restarted after changing that variable because debug processes inherit
+environment variables from the Visual Studio process.
 
 ## Important Safety Position
 
@@ -137,8 +145,8 @@ On 2026-04-29 we confirmed:
 - database `polycopytrader` did not exist and was created;
 - the app initialized schema in that database;
 - public schema had 24 tables at the first local PostgreSQL verification; after later
-  trader discovery and Polymarket HTTP logging changes, the schema initializer defines
-  26 tables.
+  trader discovery, leaderboard snapshot, and Polymarket HTTP logging changes, the
+  schema initializer defines 27 tables.
 
 Do not write the local password to files. Use a shell environment variable or pass a
 connection string at runtime.
@@ -319,6 +327,8 @@ When the operator clicks the dashboard `Find traders` button and
 - stores current merged leaderboard rows in `trader_leaderboard_snapshots`;
   this table has one row per `category + time_period + wallet`, with separate
   columns for the `orderBy=PNL` and `orderBy=VOL` leaderboard appearances;
+- repeated `Find traders` runs update existing `trader_leaderboard_snapshots` rows
+  instead of adding one row per run;
 - selects the best `CandidatesPerSide` from the PnL window;
 - selects the worst negative-PnL `CandidatesPerSide` from the volume window;
 - fetches all-time leaderboard PnL/volume for each selected wallet using
@@ -327,6 +337,14 @@ When the operator clicks the dashboard `Find traders` button and
 - fetches current positions for each selected wallet;
 - stores enriched rows in `trader_discovery_candidates`;
 - shows them in the dashboard Trader Discovery tab.
+
+Important table distinction:
+
+- `trader_leaderboard_snapshots` is the broad current candidate pool. It can contain
+  hundreds or thousands of wallets because it stores all fetched PNL/VOL leaderboard
+  rows merged by wallet.
+- `trader_discovery_candidates` is the enriched shortlist. With
+  `CandidatesPerSide=10`, it normally has 20 rows: 10 `BestPnl` and 10 `WorstPnl`.
 
 There is intentionally no hosted background trader-discovery worker. Discovery should
 download public leaderboard/trade/position data only after an explicit operator action.
@@ -569,12 +587,18 @@ Implemented history:
 - `f273b1b` Add operations runbooks
 - `734210a` Add local PostgreSQL debug setup
 - `abff28c` Support existing local PostgreSQL debugging
-- next commit after this memory update adds trader discovery for leaderboard best/worst
-  candidates.
-- later commit adds Polymarket certificate pinning for HTTP and WebSocket endpoints.
-- later commit adds `scripts/get-polymarket-certificate-pins.ps1`.
-- next commit adds `polymarket_http_logs` request/response auditing.
-- later commit makes service PostgreSQL storage mandatory so audit logs are not lost.
+- `cdffa6c` Add Codex project memory
+- `91bea5f` Add Polymarket trader discovery
+- `fe2e5e1` Make trader discovery manually triggered
+- `e26b1eb` Add Polymarket certificate pinning
+- `6adaeb0` Add Polymarket pin export helper
+- `fc9a8a3` Add Polymarket HTTP request logging
+- `716ec7e` Preserve query string in Polymarket HTTP logs
+- `41cf198` Require database in service debug profile
+- `437d089` Require service PostgreSQL storage
+- `55570a2` Add all-time trader discovery metrics
+- `d25d4eb` Deepen trader discovery search
+- `8519b5e` Merge trader leaderboard snapshots by wallet
 
 ## Known Limitations
 
@@ -592,20 +616,26 @@ Known at the time of this note:
   is their installed Windows PostgreSQL on port 5432;
 - no production VPS deployment has been completed yet;
 - no live Polymarket credentials or private keys have been configured in repo.
+- Dashboard Trader Discovery currently displays the enriched shortlist from
+  `trader_discovery_candidates`, not the full merged `trader_leaderboard_snapshots`
+  pool.
 
 ## Recommended Next Work
 
 Recommended local sequence:
 
-1. Set `POLYCOPYTRADER_POSTGRES_CONNECTION` in the shell, not in files.
+1. Make sure Visual Studio or the shell sees `POLYCOPYTRADER_POSTGRES_CONNECTION`.
 2. Run `.\scripts\run-local-service.ps1 -Mode Paper -NoPostgres -RequireDatabase`.
 3. Run `.\scripts\run-local-dashboard.ps1 -NoPostgres` in a second terminal.
-4. Add real watchlist trader wallet(s) through configuration, still with live disabled.
-5. Let paper mode collect data.
-6. Review `docs/paper_trading_evaluation.md`.
-7. Only after good paper evidence, test `DryRun` signing with a non-funded test key or
+4. Click `Find traders` to refresh deep discovery.
+5. Inspect `trader_leaderboard_snapshots`, `trader_discovery_candidates`, and
+   `polymarket_http_logs`.
+6. Add real watchlist trader wallet(s) through configuration, still with live disabled.
+7. Let paper mode collect data.
+8. Review `docs/paper_trading_evaluation.md`.
+9. Only after good paper evidence, test `DryRun` signing with a non-funded test key or
    proper secret provider setup.
-8. Before any live work, re-check official Polymarket docs and run the live checklist.
+10. Before any live work, re-check official Polymarket docs and run the live checklist.
 
 Recommended deployment sequence:
 
@@ -628,6 +658,8 @@ These links were used during implementation, but API details can change:
 - Polymarket post order: `https://docs.polymarket.com/api-reference/trade/post-a-new-order`
 - Polymarket cancel all orders: `https://docs.polymarket.com/api-reference/trade/cancel-all-orders`
 - Polymarket geoblock endpoint: `https://docs.polymarket.com/api-reference/geoblock`
+- Polymarket leaderboard endpoint: `https://docs.polymarket.com/api-reference/core/get-trader-leaderboard-rankings`
+- Polymarket rate limits: `https://docs.polymarket.com/api-reference/rate-limits`
 - Polymarket WebSocket overview: `https://docs.polymarket.com/market-data/websocket/overview`
 
 Future Codex must browse official docs again before changing authenticated or live
