@@ -2,7 +2,7 @@
 
 PolyCopyTrader is a Windows/.NET C# application for monitoring Polymarket traders and running a cautious copy-signal strategy.
 
-This repository is currently at Task 03: configuration, PostgreSQL storage, and logging. It contains project structure, typed configuration, PostgreSQL schema initialization, a basic repository, a Worker Service heartbeat, and a basic WPF dashboard shell.
+This repository is currently at Task 04: public Polymarket API clients. It contains project structure, typed configuration, PostgreSQL schema initialization, a basic repository, read-only Polymarket Data/CLOB/Geo clients, a Worker Service heartbeat, and a basic WPF dashboard shell.
 
 ## Safety
 
@@ -73,13 +73,22 @@ dotnet run --project src/PolyCopyTrader.Service/PolyCopyTrader.Service.csproj
 
 If no PostgreSQL connection string is configured, storage is disabled and the service uses a no-op repository. Set `Storage:RequireConfiguredDatabase` to `true` for production/VPS runs.
 
+## Polymarket Public APIs
+
+The `PolyCopyTrader.Polymarket` project contains read-only clients for:
+
+- Data API: trader leaderboard, user trades, and current positions.
+- CLOB public API: order book, server time, midpoint, and spread.
+- Geo endpoint: current geoblock status.
+
+User trade calls explicitly send `takerOnly=false` when requested so maker fills are not silently excluded. HTTP failures are retried for transient `429`/`5xx` responses and persisted to `ApiErrors` through the configured repository. When PostgreSQL is not configured, the no-op repository keeps local scaffold runs read-only and dependency-free.
+
 ## Known Limitations
 
-- No public Polymarket API calls yet.
 - No scanner, signal engine, risk engine, or paper trading implementation yet.
 - No WebSocket support yet.
 - No auth/signing/live trading support.
 
 ## Next Recommended Task
 
-Implement `Codex/04_TASK_POLYMARKET_PUBLIC_API_CLIENTS.md`.
+Implement `Codex/05_TASK_WATCHLIST_SCANNER.md`.

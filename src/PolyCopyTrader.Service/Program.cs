@@ -1,6 +1,8 @@
 using PolyCopyTrader.Service;
 using PolyCopyTrader.Domain.Configuration;
+using PolyCopyTrader.Polymarket;
 using PolyCopyTrader.Service.Configuration;
+using PolyCopyTrader.Service.Polymarket;
 using PolyCopyTrader.Storage;
 using Serilog;
 using Serilog.Events;
@@ -50,6 +52,10 @@ else
     builder.Services.AddSingleton<IAppRepository, NoOpAppRepository>();
 }
 
+builder.Services.AddSingleton<IPolymarketApiErrorSink, RepositoryPolymarketApiErrorSink>();
+builder.Services.AddHttpClient<IPolymarketDataApiClient, PolymarketDataApiClient>();
+builder.Services.AddHttpClient<IPolymarketClobPublicClient, PolymarketClobPublicClient>();
+builder.Services.AddHttpClient<IPolymarketGeoClient, PolymarketGeoClient>();
 builder.Services.AddHostedService<BotWorker>();
 
 try

@@ -72,6 +72,21 @@ public static class AppOptionsValidator
         ValidateAbsoluteHttpsUrl(options.ClobBaseUrl, "Polymarket.ClobBaseUrl", errors);
         ValidateAbsoluteHttpsUrl(options.GammaBaseUrl, "Polymarket.GammaBaseUrl", errors);
         ValidateAbsoluteHttpsUrl(options.GeoblockUrl, "Polymarket.GeoblockUrl", errors);
+
+        if (options.TimeoutSeconds <= 0)
+        {
+            errors.Add("Polymarket.TimeoutSeconds must be greater than zero.");
+        }
+
+        if (options.MaxRetries < 0)
+        {
+            errors.Add("Polymarket.MaxRetries must not be negative.");
+        }
+
+        if (options.RetryBaseDelayMilliseconds < 0)
+        {
+            errors.Add("Polymarket.RetryBaseDelayMilliseconds must not be negative.");
+        }
     }
 
     private static void ValidatePaperTrading(PaperTradingOptions options, List<string> errors)

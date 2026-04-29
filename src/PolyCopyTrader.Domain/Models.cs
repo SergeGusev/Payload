@@ -30,6 +30,16 @@ public sealed record TraderProfile(
     string Wallet,
     bool Enabled = true);
 
+public sealed record TraderLeaderboardEntry(
+    int? Rank,
+    string Wallet,
+    string UserName,
+    decimal Volume,
+    decimal Pnl,
+    string? ProfileImage,
+    string? XUsername,
+    bool VerifiedBadge);
+
 public sealed record TraderRule(
     string TraderWallet,
     IReadOnlyList<string> AllowedCategories,
@@ -64,7 +74,16 @@ public sealed record LeaderPosition(
     decimal CurrentValue,
     decimal CashPnl,
     decimal CurPrice,
-    DateTimeOffset SnapshotAtUtc);
+    DateTimeOffset SnapshotAtUtc,
+    decimal InitialValue = 0m,
+    decimal PercentPnl = 0m,
+    decimal TotalBought = 0m,
+    decimal RealizedPnl = 0m,
+    string? Title = null,
+    string? MarketSlug = null,
+    string? OppositeAsset = null,
+    DateTimeOffset? EndDateUtc = null,
+    bool NegativeRisk = false);
 
 public sealed record MarketInfo(
     string ConditionId,
@@ -79,7 +98,12 @@ public sealed record OrderBookSnapshot(
     string AssetId,
     IReadOnlyList<OrderBookLevel> Bids,
     IReadOnlyList<OrderBookLevel> Asks,
-    DateTimeOffset SnapshotAtUtc)
+    DateTimeOffset SnapshotAtUtc,
+    string? ConditionId = null,
+    decimal? MinOrderSize = null,
+    decimal? TickSize = null,
+    bool NegativeRisk = false,
+    decimal? LastTradePrice = null)
 {
     public decimal? BestBid => Bids.Count == 0 ? null : Bids.Max(level => level.Price);
 
@@ -168,6 +192,12 @@ public sealed record ApiError(
     string Operation,
     string Message,
     DateTimeOffset CreatedAtUtc);
+
+public sealed record GeoblockStatus(
+    bool Blocked,
+    string? Ip,
+    string? Country,
+    string? Region);
 
 public sealed record ServiceHeartbeat(
     string ServiceName,

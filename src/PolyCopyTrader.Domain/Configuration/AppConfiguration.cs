@@ -71,6 +71,12 @@ public sealed class PolymarketOptions
     public string GammaBaseUrl { get; init; } = "https://gamma-api.polymarket.com";
 
     public string GeoblockUrl { get; init; } = "https://polymarket.com/api/geoblock";
+
+    public int TimeoutSeconds { get; init; } = 30;
+
+    public int MaxRetries { get; init; } = 2;
+
+    public int RetryBaseDelayMilliseconds { get; init; } = 250;
 }
 
 public sealed class WatchlistOptions
