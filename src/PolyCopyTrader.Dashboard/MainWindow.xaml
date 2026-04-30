@@ -39,6 +39,17 @@
             <Setter Property="BorderBrush" Value="#D1D5DB" />
             <Setter Property="BorderThickness" Value="1" />
         </Style>
+        <Style x:Key="CopyableGridTextBox" TargetType="TextBox">
+            <Setter Property="IsReadOnly" Value="True" />
+            <Setter Property="TextWrapping" Value="Wrap" />
+            <Setter Property="AcceptsReturn" Value="True" />
+            <Setter Property="BorderThickness" Value="0" />
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="Padding" Value="4,2" />
+            <Setter Property="VerticalContentAlignment" Value="Top" />
+            <Setter Property="HorizontalScrollBarVisibility" Value="Disabled" />
+            <Setter Property="VerticalScrollBarVisibility" Value="Disabled" />
+        </Style>
     </Window.Resources>
 
     <Grid Margin="18">
@@ -573,13 +584,35 @@
                                 Margin="0,0,0,8">
                         <Button Content="Clear errors"
                                 Command="{Binding ClearDashboardErrorsCommand}" />
+                        <Button Content="Copy selected"
+                                Command="{Binding CopySelectedDashboardErrorCommand}" />
                     </StackPanel>
-                    <DataGrid ItemsSource="{Binding DashboardErrors}">
+                    <DataGrid ItemsSource="{Binding DashboardErrors}"
+                              SelectedItem="{Binding SelectedDashboardError, Mode=TwoWay}"
+                              RowHeight="NaN"
+                              CanUserResizeRows="True"
+                              SelectionMode="Single"
+                              SelectionUnit="FullRow"
+                              ClipboardCopyMode="IncludeHeader">
                         <DataGrid.Columns>
                             <DataGridTextColumn Header="Time UTC" Binding="{Binding TimestampUtc}" Width="150" />
                             <DataGridTextColumn Header="Source" Binding="{Binding Source}" Width="160" />
-                            <DataGridTextColumn Header="Message" Binding="{Binding Message}" Width="420" />
-                            <DataGridTextColumn Header="Details" Binding="{Binding Details}" Width="*" />
+                            <DataGridTemplateColumn Header="Message" Width="360">
+                                <DataGridTemplateColumn.CellTemplate>
+                                    <DataTemplate>
+                                        <TextBox Text="{Binding Message, Mode=OneWay}"
+                                                 Style="{StaticResource CopyableGridTextBox}" />
+                                    </DataTemplate>
+                                </DataGridTemplateColumn.CellTemplate>
+                            </DataGridTemplateColumn>
+                            <DataGridTemplateColumn Header="Details" Width="*">
+                                <DataGridTemplateColumn.CellTemplate>
+                                    <DataTemplate>
+                                        <TextBox Text="{Binding Details, Mode=OneWay}"
+                                                 Style="{StaticResource CopyableGridTextBox}" />
+                                    </DataTemplate>
+                                </DataGridTemplateColumn.CellTemplate>
+                            </DataGridTemplateColumn>
                         </DataGrid.Columns>
                     </DataGrid>
                 </DockPanel>

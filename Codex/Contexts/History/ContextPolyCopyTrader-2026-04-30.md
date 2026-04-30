@@ -18,3 +18,10 @@ Request:
 
 Result:
 Added an in-memory `Dashboard Errors` WPF tab that retains refresh, IPC command, rejected IPC response, and CSV export errors with UTC time, source, message, and details. Added clear-error commands and updated README/project memory. Dashboard build, tests, and diff check passed. Existing unrelated `PolyCopyTrader.sln` changes were left untouched.
+
+## 2026-04-30T19:08:53.7093227Z
+Request:
+Посмотри на D:/1/img2.png. Вот так выглядит сейчас отображение ошибок - слишко узко, чтобы показаться полностью и без возможности копировать, чтобы показать тебе. Сделай так, чтобы высота отображения зависела от размера сообщения и была возможность копировать.
+
+Result:
+Viewed the screenshot and updated the `Dashboard Errors` tab so rows auto-size, message/details text wraps, message/details cells are read-only selectable text boxes, and the selected error can be copied with `Copy selected`. Dashboard build, tests, and diff check passed. Existing unrelated `PolyCopyTrader.sln` changes were left untouched.

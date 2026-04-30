@@ -1,3 +1,15 @@
+## Active Update 2026-04-30 Copyable Dashboard Errors
+Goal: Make Dashboard Errors rows expand to full message/details height and make errors easy to copy.
+Status: Completed
+Done:
+- Viewed `D:/1/img2.png` and confirmed `Dashboard Errors` rows were clipped by fixed DataGrid row height.
+- Updated `src/PolyCopyTrader.Dashboard/MainWindow.xaml` so the `Dashboard Errors` grid overrides fixed row height with auto row sizing, wraps message/details text, uses read-only text boxes for selectable/copyable cell text, and supports selected-row clipboard copy.
+- Updated `src/PolyCopyTrader.Dashboard/ViewModels/MainViewModel.cs` with selected-error state and `CopySelectedDashboardErrorCommand`.
+- Updated `README.md` and `Codex/20_PROJECT_MEMORY.md` to note wrapped/copyable dashboard error details.
+Next: Restart Dashboard and use `Dashboard Errors` -> `Copy selected`, or select text directly inside Message/Details.
+Notes: `git pull --ff-only` was attempted and still cannot run because branch `master` has no configured upstream. `dotnet build src\PolyCopyTrader.Dashboard\PolyCopyTrader.Dashboard.csproj -c Verify --no-restore` passed with 0 warnings and 0 errors. `dotnet test tests\PolyCopyTrader.Tests\PolyCopyTrader.Tests.csproj -c Verify --no-restore` passed 119/119. `git diff --check` passed. Existing unrelated `PolyCopyTrader.sln` changes were left untouched and not included in this task.
+Blockers: Automatic pull/push cannot run until a Git upstream is configured.
+
 ## Active Update 2026-04-30 Dashboard Error History Tab
 Goal: Keep transient WPF Dashboard errors visible after the footer message is cleared by the next refresh.
 Status: Completed

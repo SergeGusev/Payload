@@ -1,4 +1,5 @@
 using System.Collections.ObjectModel;
+using System.Windows;
 using System.Windows.Threading;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
@@ -68,6 +69,9 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
 
     [ObservableProperty]
     private string lastError = string.Empty;
+
+    [ObservableProperty]
+    private DashboardErrorRow? selectedDashboardError;
 
     public ObservableCollection<OverviewMetric> Overview { get; } = [];
 
@@ -294,7 +298,28 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
     private void ClearDashboardErrors()
     {
         DashboardErrors.Clear();
+        SelectedDashboardError = null;
         CommandStatus = "Dashboard errors cleared locally.";
+    }
+
+    [RelayCommand(CanExecute = nameof(CanCopySelectedDashboardError))]
+    private void CopySelectedDashboardError()
+    {
+        if (SelectedDashboardError is null)
+        {
+            return;
+        }
+
+        try
+        {
+            Clipboard.SetText(FormatDashboardErrorForClipboard(SelectedDashboardError));
+            CommandStatus = "Dashboard error copied to clipboard.";
+        }
+        catch (Exception ex)
+        {
+            CommandStatus = $"Clipboard copy failed: {ex.Message}";
+            RecordDashboardError("Clipboard", ex);
+        }
     }
 
     [RelayCommand]
@@ -386,6 +411,11 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         }
     }
 
+    partial void OnSelectedDashboardErrorChanged(DashboardErrorRow? value)
+    {
+        CopySelectedDashboardErrorCommand.NotifyCanExecuteChanged();
+    }
+
     private void RecordDashboardError(string source, Exception exception)
     {
         RecordDashboardError(source, exception.Message, exception.ToString());
@@ -405,5 +435,19 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         {
             DashboardErrors.RemoveAt(DashboardErrors.Count - 1);
         }
+    }
+
+    private bool CanCopySelectedDashboardError()
+    {
+        return SelectedDashboardError is not null;
+    }
+
+    private static string FormatDashboardErrorForClipboard(DashboardErrorRow error)
+    {
+        return
+            $"Time UTC: {error.TimestampUtc}{Environment.NewLine}" +
+            $"Source: {error.Source}{Environment.NewLine}" +
+            $"Message: {error.Message}{Environment.NewLine}{Environment.NewLine}" +
+            error.Details;
     }
 }

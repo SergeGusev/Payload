@@ -597,7 +597,8 @@ Dashboard storage behavior:
   and performance tables.
 - after local error-history work, dashboard has `Dashboard Errors`, an in-memory
   tab that keeps the latest refresh, IPC command, and CSV export errors visible
-  instead of only showing transient footer text.
+  instead of only showing transient footer text. Rows auto-size for wrapped
+  message/details text and the selected error can be copied to the clipboard.
 
 Service storage behavior:
 
