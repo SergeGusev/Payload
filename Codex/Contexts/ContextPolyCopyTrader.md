@@ -1,3 +1,14 @@
+## Active Update 2026-04-30 Startup Files Answer
+Goal: Answer which repository files Codex rereads during protocol startup and task initialization.
+Status: Completed
+Done:
+- Re-read `Codex/Rules/Workflow.md`, `AGENTS.md`, `Codex/Rules/CodingRules.md`, and `Codex/Contexts/ContextPolyCopyTrader.md`.
+- Inspected `git status --porcelain=v1` and `git log -1 --oneline`.
+- Confirmed exact `start` bootstrap reads workflow, `AGENTS.md`, sorted daily history files, and active context; normal non-`start` prompts also read coding rules, active context, relevant task docs, and Git state.
+Next: Continue future tasks from the repository-local workflow and active context.
+Notes: `git pull --ff-only` was attempted and still cannot run because branch `master` has no configured upstream. No source code changed for this answer-only task; verification is limited to repository context reads.
+Blockers: Automatic pull/push cannot run until a Git upstream is configured.
+
 ## Active Update 2026-04-30 Adopt Context History Protocol
 Goal: Enable repository-local context and history persistence for future Codex work in PolyCopyTrader.
 Status: Completed
