@@ -335,6 +335,14 @@ public sealed class OnChainIngestionOptions
 
     public int PositionRefreshQueueSeedTokenBatchSize { get; init; } = 500;
 
+    public bool BackgroundActivityRefreshEnabled { get; init; } = true;
+
+    public int ActivityRefreshIntervalSeconds { get; init; } = 30;
+
+    public int ActivityRefreshWalletBatchSize { get; init; } = 100;
+
+    public int ActivityRefreshQueueSeedWalletBatchSize { get; init; } = 500;
+
     public bool BackgroundPerformanceRefreshEnabled { get; init; } = true;
 
     public int PerformanceRefreshIntervalSeconds { get; init; } = 30;

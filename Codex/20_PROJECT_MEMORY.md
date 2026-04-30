@@ -33,8 +33,8 @@ The repository also has local debugging and trader discovery support after task 
 - trader discovery dashboard button and tab for best/worst PnL candidates;
 - Polymarket certificate pinning for HTTP clients and the market WebSocket;
 - Polymarket HTTP request/response audit table;
-- background on-chain ingestion, market enrichment, position refresh, and wallet
-  performance workers.
+- background on-chain ingestion, market enrichment, activity refresh, position
+  refresh, and wallet performance workers.
 
 Latest verified code state on 2026-04-30:
 
@@ -98,12 +98,15 @@ Later, manual on-chain ingestion was added:
 - dashboard buttons: `Onchain sync` and `Enrich markets`;
 - dashboard tabs: `Onchain Leaders`, `Onchain Rankings`, `Onchain Positions`, and
   `Onchain Executions`;
-- hosted services: `OnChainIngestionWorker`, `OnChainMarketEnrichmentWorker`, and
-  `OnChainPositionRefreshWorker`, and `OnChainPerformanceRefreshWorker`;
+- hosted services: `OnChainIngestionWorker`, `OnChainMarketEnrichmentWorker`,
+  `OnChainActivityRefreshWorker`, `OnChainPositionRefreshWorker`, and
+  `OnChainPerformanceRefreshWorker`;
 - tables: `polymarket_onchain_logs`, `polymarket_onchain_fills`,
   `polymarket_onchain_wallet_fills`,
   `polymarket_onchain_wallet_executions`,
   `polymarket_onchain_token_metadata`,
+  `polymarket_onchain_wallet_activity`,
+  `polymarket_onchain_wallet_activity_refresh_queue`,
   `polymarket_onchain_wallet_positions`,
   `polymarket_onchain_position_refresh_queue`, and
   `polymarket_onchain_wallet_performance`,
@@ -126,6 +129,13 @@ Later, manual on-chain ingestion was added:
   wallet executions by wallet, transaction hash, token id, and side;
 - if raw fills already exist without wallet derived rows, the next on-chain sync
   rebuilds the missing derived range from PostgreSQL before reading more RPC data;
+- wallet activity ranking is materialized in `polymarket_onchain_wallet_activity`;
+  derived-data rebuilds enqueue affected wallets into
+  `polymarket_onchain_wallet_activity_refresh_queue`, then
+  `OnChainActivityRefreshWorker` refreshes execution count, buy/sell counts,
+  distinct token count, volume, fees, activity score, and first/last trade time
+  in wallet batches. `Onchain Rankings` reads this table instead of grouping the
+  full wallet execution table during every dashboard refresh;
 - market enrichment fetches missing execution token ids from Gamma
   `markets?clob_token_ids=...`, stores market/outcome/category/status metadata,
   writes not-found markers for unresolved tokens, and repeats batches until no
@@ -147,10 +157,10 @@ Later, manual on-chain ingestion was added:
   wallets into `polymarket_onchain_wallet_performance_refresh_queue`, then
   `OnChainPerformanceRefreshWorker` refreshes
   `polymarket_onchain_wallet_performance` in wallet batches;
-- `Onchain Rankings` remains activity-based over wallet executions, while
-  `Onchain Leaders` is a first heuristic performance score over materialized
-  positions, resolved PnL, ROI, win rate, sample quality, volume, and open
-  exposure. It has no current mark-to-market yet.
+- `Onchain Rankings` remains activity-based but is served from the materialized
+  wallet activity table, while `Onchain Leaders` is a first heuristic performance
+  score over materialized positions, resolved PnL, ROI, win rate, sample quality,
+  volume, and open exposure. It has no current mark-to-market yet.
 - tests increased from 102 to 119.
 
 Later, `PolyCopyTrader.Service` was changed to require PostgreSQL storage on every
@@ -213,7 +223,7 @@ On 2026-04-29 we confirmed:
 - the app initialized schema in that database;
 - public schema had 24 tables at the first local PostgreSQL verification; after later
   trader discovery, leaderboard snapshot, and Polymarket HTTP logging changes, the
-  schema initializer defines 34 tables.
+  schema initializer defines 36 tables.
 
 Do not write the local password to files. Use a shell environment variable or pass a
 connection string at runtime.
@@ -270,6 +280,8 @@ The schema initializer created these tables at the time of verification:
 - `polymarket_onchain_wallet_fills`
 - `polymarket_onchain_wallet_executions`
 - `polymarket_onchain_token_metadata`
+- `polymarket_onchain_wallet_activity`
+- `polymarket_onchain_wallet_activity_refresh_queue`
 - `polymarket_onchain_wallet_positions`
 - `polymarket_onchain_position_refresh_queue`
 - `polymarket_onchain_wallet_performance`
@@ -593,8 +605,8 @@ Dashboard storage behavior:
   `POLYCOPYTRADER_POSTGRES_CONNECTION`.
 - after on-chain ingestion work, dashboard has `Onchain Leaders`,
   `Onchain Rankings`, `Onchain Positions`, and `Onchain Executions` tabs fed by
-  normalized Polygon `OrderFilled` wallet executions plus materialized positions
-  and performance tables.
+  normalized Polygon `OrderFilled` wallet executions plus materialized activity,
+  positions, and performance tables.
 - after local error-history work, dashboard has `Dashboard Errors`, an in-memory
   tab that keeps the latest refresh, IPC command, and CSV export errors visible
   instead of only showing transient footer text. Rows auto-size for wrapped
@@ -710,11 +722,13 @@ Known at the time of this note:
 - Dashboard Trader Discovery currently displays the enriched shortlist from
   `trader_discovery_candidates`, not the full merged `trader_leaderboard_snapshots`
   pool.
-- Dashboard Onchain Rankings is an activity ranking only. Onchain Positions reads
-  the materialized positions table and exposes resolved PnL when Gamma metadata
-  has a winning outcome. Onchain Leaders adds a first heuristic profitability
-  score over those positions, but mark-to-market and score tuning are still
-  future work; sample quality matters.
+- Dashboard Onchain Rankings is an activity ranking only and now reads the
+  materialized wallet activity table to avoid refresh-time aggregation over
+  millions of wallet execution rows. Onchain Positions reads the materialized
+  positions table and exposes resolved PnL when Gamma metadata has a winning
+  outcome. Onchain Leaders adds a first heuristic profitability score over those
+  positions, but mark-to-market and score tuning are still future work; sample
+  quality matters.
 
 ## Recommended Next Work
 

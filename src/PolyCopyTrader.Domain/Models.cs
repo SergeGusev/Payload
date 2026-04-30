@@ -714,6 +714,12 @@ public sealed record TraderOnChainStats(
     DateTimeOffset FirstTradeUtc,
     DateTimeOffset LastTradeUtc);
 
+public sealed record OnChainActivityRefreshResult(
+    int WalletsQueued,
+    int WalletsProcessed,
+    int WalletsUpserted,
+    int QueueRemaining);
+
 public sealed record PolymarketOnChainWalletPosition(
     string Wallet,
     string TokenId,

@@ -464,6 +464,9 @@ public sealed class OnChainIngestionTests
                 PositionRefreshIntervalSeconds = 0,
                 PositionRefreshTokenBatchSize = 0,
                 PositionRefreshQueueSeedTokenBatchSize = 0,
+                ActivityRefreshIntervalSeconds = 0,
+                ActivityRefreshWalletBatchSize = 0,
+                ActivityRefreshQueueSeedWalletBatchSize = 0,
                 PerformanceRefreshIntervalSeconds = 0,
                 PerformanceRefreshWalletBatchSize = 0,
                 PerformanceRefreshQueueSeedWalletBatchSize = 0,
@@ -491,6 +494,9 @@ public sealed class OnChainIngestionTests
         Assert.Contains(errors, error => error.Contains("PositionRefreshIntervalSeconds", StringComparison.Ordinal));
         Assert.Contains(errors, error => error.Contains("PositionRefreshTokenBatchSize", StringComparison.Ordinal));
         Assert.Contains(errors, error => error.Contains("PositionRefreshQueueSeedTokenBatchSize", StringComparison.Ordinal));
+        Assert.Contains(errors, error => error.Contains("ActivityRefreshIntervalSeconds", StringComparison.Ordinal));
+        Assert.Contains(errors, error => error.Contains("ActivityRefreshWalletBatchSize", StringComparison.Ordinal));
+        Assert.Contains(errors, error => error.Contains("ActivityRefreshQueueSeedWalletBatchSize", StringComparison.Ordinal));
         Assert.Contains(errors, error => error.Contains("PerformanceRefreshIntervalSeconds", StringComparison.Ordinal));
         Assert.Contains(errors, error => error.Contains("PerformanceRefreshWalletBatchSize", StringComparison.Ordinal));
         Assert.Contains(errors, error => error.Contains("PerformanceRefreshQueueSeedWalletBatchSize", StringComparison.Ordinal));

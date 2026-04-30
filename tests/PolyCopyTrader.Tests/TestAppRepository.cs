@@ -468,6 +468,14 @@ internal sealed class TestAppRepository : IAppRepository
         return Task.FromResult<IReadOnlyList<TraderOnChainStats>>(stats);
     }
 
+    public Task<OnChainActivityRefreshResult> RefreshPolymarketOnChainWalletActivityAsync(
+        int walletLimit = 100,
+        int queueSeedWalletLimit = 500,
+        CancellationToken cancellationToken = default)
+    {
+        return Task.FromResult(new OnChainActivityRefreshResult(0, 0, 0, 0));
+    }
+
     public Task<IReadOnlyList<PolymarketOnChainWalletPosition>> GetPolymarketOnChainWalletPositionsAsync(int limit = 250, CancellationToken cancellationToken = default)
     {
         return Task.FromResult<IReadOnlyList<PolymarketOnChainWalletPosition>>(

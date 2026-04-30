@@ -74,6 +74,7 @@ public static class AppOptionsValidator
             $"On-chain background sync enabled: {configuration.OnChainIngestion.BackgroundSyncEnabled}",
             $"On-chain background market enrichment enabled: {configuration.OnChainIngestion.BackgroundMarketEnrichmentEnabled}",
             $"On-chain background position refresh enabled: {configuration.OnChainIngestion.BackgroundPositionRefreshEnabled}",
+            $"On-chain background activity refresh enabled: {configuration.OnChainIngestion.BackgroundActivityRefreshEnabled}",
             $"On-chain background performance refresh enabled: {configuration.OnChainIngestion.BackgroundPerformanceRefreshEnabled}",
             $"Watchlist traders: {configuration.Watchlist.Traders.Count}",
             $"Paper bankroll USD: {configuration.PaperTrading.InitialBankrollUsd}");
@@ -665,6 +666,21 @@ public static class AppOptionsValidator
         if (options.PositionRefreshQueueSeedTokenBatchSize <= 0 || options.PositionRefreshQueueSeedTokenBatchSize > 100_000)
         {
             errors.Add("OnChainIngestion.PositionRefreshQueueSeedTokenBatchSize must be between 1 and 100000.");
+        }
+
+        if (options.ActivityRefreshIntervalSeconds <= 0 || options.ActivityRefreshIntervalSeconds > 86_400)
+        {
+            errors.Add("OnChainIngestion.ActivityRefreshIntervalSeconds must be between 1 and 86400.");
+        }
+
+        if (options.ActivityRefreshWalletBatchSize <= 0 || options.ActivityRefreshWalletBatchSize > 10_000)
+        {
+            errors.Add("OnChainIngestion.ActivityRefreshWalletBatchSize must be between 1 and 10000.");
+        }
+
+        if (options.ActivityRefreshQueueSeedWalletBatchSize <= 0 || options.ActivityRefreshQueueSeedWalletBatchSize > 100_000)
+        {
+            errors.Add("OnChainIngestion.ActivityRefreshQueueSeedWalletBatchSize must be between 1 and 100000.");
         }
 
         if (options.PerformanceRefreshIntervalSeconds <= 0 || options.PerformanceRefreshIntervalSeconds > 86_400)

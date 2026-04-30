@@ -1,3 +1,18 @@
+## Active Update 2026-04-30 Materialize Onchain Activity Ranking
+Goal: Stop Dashboard refresh timeouts caused by `GetTraderOnChainStatsAsync` grouping millions of on-chain wallet execution rows.
+Status: Completed
+Done:
+- Diagnosed the copied Dashboard error as an Npgsql read timeout in `PostgresAppRepository.GetTraderOnChainStatsAsync`, called from `DashboardDataService.LoadAsync`.
+- Added `polymarket_onchain_wallet_activity` and `polymarket_onchain_wallet_activity_refresh_queue` schema objects.
+- Changed `GetTraderOnChainStatsAsync` to read the materialized activity table instead of aggregating `polymarket_onchain_wallet_executions` on every Dashboard refresh.
+- Added `RefreshPolymarketOnChainWalletActivityAsync` and queue seeding/refresh helpers in `src/PolyCopyTrader.Storage/PostgresAppRepository.cs`.
+- Added `OnChainActivityRefreshWorker`, config options, validation, appsettings entries, service registration, no-op/test repository implementations, and schema/config tests.
+- Added `ix_polymarket_onchain_wallet_executions_recent` to support the recent executions dashboard query.
+- Updated `README.md`, `docs/configuration_reference.md`, and `Codex/20_PROJECT_MEMORY.md`.
+Next: Restart the service first so schema initialization creates the new activity tables and the activity worker starts; then restart Dashboard. `Onchain Rankings` may be empty until the background worker fills the activity table.
+Notes: `git pull --ff-only` was attempted and still cannot run because branch `master` has no configured upstream. `dotnet build src\PolyCopyTrader.Service\PolyCopyTrader.Service.csproj -c Verify --no-restore` passed with 0 warnings and 0 errors. `dotnet build src\PolyCopyTrader.Dashboard\PolyCopyTrader.Dashboard.csproj -c Verify --no-restore` passed with 0 warnings and 0 errors. `dotnet test tests\PolyCopyTrader.Tests\PolyCopyTrader.Tests.csproj -c Verify --no-restore` passed 119/119. `git diff --check` passed. Existing unrelated `PolyCopyTrader.sln` changes were left untouched and not included in this task.
+Blockers: Automatic pull/push cannot run until a Git upstream is configured.
+
 ## Active Update 2026-04-30 Copyable Dashboard Errors
 Goal: Make Dashboard Errors rows expand to full message/details height and make errors easy to copy.
 Status: Completed

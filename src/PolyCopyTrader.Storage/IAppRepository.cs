@@ -98,6 +98,11 @@ public interface IAppRepository
 
     Task<IReadOnlyList<TraderOnChainStats>> GetTraderOnChainStatsAsync(int limit = 100, CancellationToken cancellationToken = default);
 
+    Task<OnChainActivityRefreshResult> RefreshPolymarketOnChainWalletActivityAsync(
+        int walletLimit = 100,
+        int queueSeedWalletLimit = 500,
+        CancellationToken cancellationToken = default);
+
     Task<IReadOnlyList<PolymarketOnChainWalletPosition>> GetPolymarketOnChainWalletPositionsAsync(int limit = 250, CancellationToken cancellationToken = default);
 
     Task<OnChainPositionRefreshResult> RefreshPolymarketOnChainWalletPositionsAsync(

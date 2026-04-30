@@ -170,6 +170,10 @@ every completed block batch.
 - `PositionRefreshIntervalSeconds`: pause between successful background position refresh cycles; default `30`.
 - `PositionRefreshTokenBatchSize`: number of queued token ids to aggregate into wallet positions per cycle; default `50`.
 - `PositionRefreshQueueSeedTokenBatchSize`: number of missing token ids to seed into the position refresh queue while the initial positions table is being built; default `500`.
+- `BackgroundActivityRefreshEnabled`: runs wallet-activity ranking aggregation continuously while the service is running; default `true`.
+- `ActivityRefreshIntervalSeconds`: pause between successful background activity refresh cycles; default `30`.
+- `ActivityRefreshWalletBatchSize`: number of queued wallets to aggregate into wallet activity per cycle; default `100`.
+- `ActivityRefreshQueueSeedWalletBatchSize`: number of missing wallets to seed into the activity refresh queue while the initial activity table is being built; default `500`.
 - `BackgroundPerformanceRefreshEnabled`: runs wallet-performance aggregation continuously while the service is running; default `true`.
 - `PerformanceRefreshIntervalSeconds`: pause between successful background performance refresh cycles; default `30`.
 - `PerformanceRefreshWalletBatchSize`: number of queued wallets to aggregate into wallet performance per cycle; default `100`.
@@ -190,6 +194,16 @@ by wallet, transaction hash, token id, and side. The dashboard ranking uses thos
 executions, so it is no longer maker-only. If raw fills predate the wallet tables,
 the next on-chain sync fills the missing derived range from PostgreSQL before it
 continues reading new Polygon blocks.
+
+`polymarket_onchain_wallet_activity` is a materialized activity-ranking table
+maintained by the background activity refresh worker. It reads wallet executions
+by queued wallet and stores execution count, buy/sell execution counts, distinct
+token count, notional volume, average trade size, collateral-denominated fees,
+activity score, and first/last trade time. `Onchain Rankings` reads this table
+instead of grouping the full execution table during each dashboard refresh.
+`polymarket_onchain_wallet_activity_refresh_queue` stores wallets that need
+recalculation; derived-data rebuilds enqueue affected wallets, and first startup
+after the feature is introduced seeds missing wallets in batches.
 
 `polymarket_onchain_wallet_positions` is a materialized table maintained by the
 background position refresh worker. It groups by wallet, token, market, and
@@ -222,15 +236,15 @@ worker runs the same processor every `MarketEnrichmentIntervalSeconds`.
 The on-chain background workers record transient failures in `api_errors`, then retry
 with exponential backoff from `BackgroundErrorDelaySeconds` to
 `BackgroundMaxErrorDelaySeconds`. Single-run guards prevent manual IPC commands
-and background workers from running duplicate ingestion, enrichment, position, or
-performance cycles.
+and background workers from running duplicate ingestion, enrichment, activity,
+position, or performance cycles.
 
 The dashboard has two on-chain ranking layers. `Onchain Rankings` is still
 activity-based: executions, buy/sell counts, distinct token ids, notional volume,
-and maker-side fees where the fee asset is collateral. `Onchain Leaders` is the
-first performance-based view over materialized positions. It depends on Gamma
-metadata and resolved markets for PnL/win-rate signals and does not include
-current mark-to-market yet.
+and maker-side fees where the fee asset is collateral, but it is served from the
+materialized activity table. `Onchain Leaders` is the first performance-based
+view over materialized positions. It depends on Gamma metadata and resolved
+markets for PnL/win-rate signals and does not include current mark-to-market yet.
 
 ## Analytics
 

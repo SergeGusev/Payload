@@ -25,3 +25,26 @@ Request:
 
 Result:
 Viewed the screenshot and updated the `Dashboard Errors` tab so rows auto-size, message/details text wraps, message/details cells are read-only selectable text boxes, and the selected error can be copied with `Copy selected`. Dashboard build, tests, and diff check passed. Existing unrelated `PolyCopyTrader.sln` changes were left untouched.
+
+## 2026-04-30T19:23:15.9837355Z
+Request:
+Time UTC: 2026-04-30 19:13:30Z
+Source: Refresh
+Message: Exception while reading from stream
+
+Npgsql.NpgsqlException (0x80004005): Exception while reading from stream
+ ---> System.TimeoutException: Timeout during reading attempt
+   at Npgsql.Internal.NpgsqlConnector.ReadMessageLong(Boolean async, DataRowLoadingMode dataRowLoadingMode, Boolean readingNotifications, Boolean isReadingPrependedMessage)
+   at System.Runtime.CompilerServices.PoolingAsyncValueTaskMethodBuilder`1.StateMachineBox`1.System.Threading.Tasks.Sources.IValueTaskSource<TResult>.GetResult(Int16 token)
+   at Npgsql.NpgsqlDataReader.NextResult(Boolean async, Boolean isConsuming, CancellationToken cancellationToken)
+   at Npgsql.NpgsqlDataReader.NextResult(Boolean async, Boolean isConsuming, CancellationToken cancellationToken)
+   at Npgsql.NpgsqlCommand.ExecuteReader(Boolean async, CommandBehavior behavior, CancellationToken cancellationToken)
+   at Npgsql.NpgsqlCommand.ExecuteReader(Boolean async, CommandBehavior behavior, CancellationToken cancellationToken)
+   at PolyCopyTrader.Storage.PostgresAppRepository.GetTraderOnChainStatsAsync(Int32 limit, CancellationToken cancellationToken) in D:\My\Business\PolyMarket\src\PolyCopyTrader.Storage\PostgresAppRepository.cs:line 1528
+   at PolyCopyTrader.Storage.PostgresAppRepository.GetTraderOnChainStatsAsync(Int32 limit, CancellationToken cancellationToken) in D:\My\Business\PolyMarket\src\PolyCopyTrader.Storage\PostgresAppRepository.cs:line 1547
+   at PolyCopyTrader.Storage.PostgresAppRepository.GetTraderOnChainStatsAsync(Int32 limit, CancellationToken cancellationToken) in D:\My\Business\PolyMarket\src\PolyCopyTrader.Storage\PostgresAppRepository.cs:line 1547
+   at PolyCopyTrader.Dashboard.Services.DashboardDataService.LoadAsync(CancellationToken cancellationToken) in D:\My\Business\PolyMarket\src\PolyCopyTrader.Dashboard\Services\DashboardDataService.cs:line 23
+   at PolyCopyTrader.Dashboard.ViewModels.MainViewModel.RefreshAsync() in D:\My\Business\PolyMarket\src\PolyCopyTrader.Dashboard\ViewModels\MainViewModel.cs:line 149
+
+Result:
+Replaced refresh-time aggregation for `Onchain Rankings` with a materialized `polymarket_onchain_wallet_activity` table maintained by `OnChainActivityRefreshWorker`. Added schema, refresh queue, repository refresh/read changes, config, validation, docs, tests, and a recent-executions index. Service build, Dashboard build, test suite, and diff check passed. Existing unrelated `PolyCopyTrader.sln` changes were left untouched.

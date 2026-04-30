@@ -34,6 +34,8 @@ public static class PostgresSchema
         "polymarket_onchain_wallet_fills",
         "polymarket_onchain_wallet_executions",
         "polymarket_onchain_token_metadata",
+        "polymarket_onchain_wallet_activity",
+        "polymarket_onchain_wallet_activity_refresh_queue",
         "polymarket_onchain_wallet_positions",
         "polymarket_onchain_position_refresh_queue",
         "polymarket_onchain_wallet_performance",
@@ -728,6 +730,9 @@ ON polymarket_onchain_wallet_executions(wallet, block_timestamp_utc DESC);
 CREATE INDEX IF NOT EXISTS ix_polymarket_onchain_wallet_executions_token_time
 ON polymarket_onchain_wallet_executions(token_id, block_timestamp_utc DESC);
 
+CREATE INDEX IF NOT EXISTS ix_polymarket_onchain_wallet_executions_recent
+ON polymarket_onchain_wallet_executions(block_timestamp_utc DESC, block_number DESC, first_log_index DESC);
+
 CREATE TABLE IF NOT EXISTS polymarket_onchain_token_metadata (
     token_id text PRIMARY KEY,
     condition_id text NOT NULL,
@@ -756,6 +761,36 @@ ON polymarket_onchain_token_metadata(condition_id);
 
 CREATE INDEX IF NOT EXISTS ix_polymarket_onchain_token_metadata_category
 ON polymarket_onchain_token_metadata(category);
+
+CREATE TABLE IF NOT EXISTS polymarket_onchain_wallet_activity (
+    wallet text PRIMARY KEY,
+    executions integer NOT NULL,
+    buy_executions integer NOT NULL,
+    sell_executions integer NOT NULL,
+    markets_traded integer NOT NULL,
+    volume_usd numeric(28,8) NOT NULL,
+    average_trade_usd numeric(28,8) NOT NULL,
+    fees_usd numeric(28,8) NOT NULL,
+    activity_score numeric(28,8) NOT NULL,
+    first_trade_utc timestamptz NOT NULL,
+    last_trade_utc timestamptz NOT NULL,
+    refreshed_at_utc timestamptz NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS ix_polymarket_onchain_wallet_activity_score
+ON polymarket_onchain_wallet_activity(activity_score DESC, volume_usd DESC);
+
+CREATE INDEX IF NOT EXISTS ix_polymarket_onchain_wallet_activity_last_trade
+ON polymarket_onchain_wallet_activity(last_trade_utc DESC);
+
+CREATE TABLE IF NOT EXISTS polymarket_onchain_wallet_activity_refresh_queue (
+    wallet text PRIMARY KEY,
+    reason text NOT NULL,
+    queued_at_utc timestamptz NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS ix_polymarket_onchain_wallet_activity_refresh_queue_queued
+ON polymarket_onchain_wallet_activity_refresh_queue(queued_at_utc);
 
 DO $$
 BEGIN
