@@ -1,3 +1,14 @@
+## Active Update 2026-04-30 Empty Leader Trades Table Answer
+Goal: Explain why `leader_trades` is empty while on-chain data is loading.
+Status: Completed
+Done:
+- Re-read workflow, project rules, coding rules, active context, Git state, watchlist scanner, repository writes, appsettings watchlist sections, README, and project memory.
+- Confirmed `leader_trades` is populated only by `WatchlistScanner` from configured enabled `Watchlist:Traders` via Polymarket Data API `GetUserTradesAsync`.
+- Confirmed the sample service watchlist contains disabled placeholder `0xPLACEHOLDER`, Dashboard watchlist config is empty, and on-chain ingestion writes to `polymarket_onchain_*` tables instead of `leader_trades`.
+Next: Inspect `scanner_status` and `api_errors` if an enabled watchlist is expected to be scanning; use on-chain tables for blockchain-derived wallet trades.
+Notes: `git pull --ff-only` was attempted and still cannot run because branch `master` has no configured upstream. No source code changed for this answer-only task; verification is code/config/docs inspection and `git diff --check`. Existing unrelated `PolyCopyTrader.sln` changes remain untouched.
+Blockers: Automatic pull/push cannot run until a Git upstream is configured.
+
 ## Active Update 2026-04-30 Empty Traders Table Answer
 Goal: Explain why `public.traders` is empty.
 Status: Completed

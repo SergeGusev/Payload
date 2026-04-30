@@ -117,3 +117,10 @@ Request:
 
 Result:
 Inspected schema, repository methods, scanner, Dashboard data service, and appsettings. Confirmed `public.traders` is currently only created by schema and is not populated by the implemented pipeline; the active watchlist comes from configuration, trader discovery writes to discovery tables, and on-chain wallets write to `polymarket_onchain_*` tables.
+
+## 2026-04-30T20:28:05.3949310Z
+Request:
+leader_trades тоже пустой
+
+Result:
+Inspected the watchlist scanner, repository write path, appsettings, README, and project memory. Confirmed `leader_trades` is only populated by the API watchlist scanner for enabled configured `Watchlist:Traders`; the default sample trader is disabled and on-chain ingestion writes to `polymarket_onchain_*` tables instead.
