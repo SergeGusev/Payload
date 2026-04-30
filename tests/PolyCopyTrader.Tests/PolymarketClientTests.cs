@@ -74,6 +74,27 @@ public sealed class PolymarketClientTests
     }
 
     [Fact]
+    public void Parser_ReadsGammaMarketTokenMetadata()
+    {
+        using var json = JsonDocument.Parse(SampleGammaMarketsJson);
+
+        var metadata = PolymarketJsonParser.ParseGammaMarketTokenMetadata(
+            json.RootElement,
+            "12345678901234567890");
+
+        Assert.Equal(2, metadata.Count);
+        var yes = Assert.Single(metadata, item => item.TokenId == "12345678901234567890");
+        Assert.Equal("Yes", yes.Outcome);
+        Assert.Equal("0xcondition", yes.ConditionId);
+        Assert.Equal("will-sample-event-happen", yes.MarketSlug);
+        Assert.Equal("Politics", yes.Category);
+        Assert.True(yes.Closed);
+        Assert.True(yes.Resolved);
+        Assert.Equal("Yes", yes.WinningOutcome);
+        Assert.True(yes.LookupSucceeded);
+    }
+
+    [Fact]
     public async Task DataClient_SendsTakerOnlyFalseForUserTrades()
     {
         var handler = new StubHttpMessageHandler(_ => new HttpResponseMessage(HttpStatusCode.OK)
@@ -90,6 +111,26 @@ public sealed class PolymarketClientTests
         Assert.Single(trades);
         Assert.Contains("takerOnly=false", handler.Requests.Single().RequestUri?.Query);
         Assert.Contains("user=0x56687bf447db6ffa42ffe2204a05edaa20f55839", handler.Requests.Single().RequestUri?.Query);
+    }
+
+    [Fact]
+    public async Task GammaClient_FetchesMarketByToken()
+    {
+        var handler = new StubHttpMessageHandler(_ => new HttpResponseMessage(HttpStatusCode.OK)
+        {
+            Content = new StringContent(SampleGammaMarketsJson)
+        });
+        var client = new PolymarketGammaClient(
+            new HttpClient(handler),
+            TestOptions,
+            new CapturingApiErrorSink());
+
+        var metadata = await client.GetTokenMetadataAsync("12345678901234567890", closed: false);
+
+        Assert.Equal(2, metadata.Count);
+        Assert.Contains("/markets", handler.Requests.Single().RequestUri?.AbsoluteUri);
+        Assert.Contains("clob_token_ids=12345678901234567890", handler.Requests.Single().RequestUri?.Query);
+        Assert.Contains("closed=false", handler.Requests.Single().RequestUri?.Query);
     }
 
     [Fact]
@@ -351,6 +392,25 @@ public sealed class PolymarketClientTests
   "country": "BG",
   "region": "SOF"
 }
+""";
+
+    private const string SampleGammaMarketsJson = """
+[
+  {
+    "id": "123",
+    "question": "Will sample event happen?",
+    "conditionId": "0xcondition",
+    "slug": "will-sample-event-happen",
+    "category": "Politics",
+    "endDate": "2026-09-01T00:00:00Z",
+    "active": true,
+    "closed": true,
+    "archived": false,
+    "outcomes": "[\"Yes\", \"No\"]",
+    "outcomePrices": "[\"1\", \"0\"]",
+    "clobTokenIds": "[\"12345678901234567890\", \"987654321\"]"
+  }
+]
 """;
 
     private sealed class CapturingApiErrorSink : IPolymarketApiErrorSink

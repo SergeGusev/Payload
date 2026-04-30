@@ -918,6 +918,1054 @@ LIMIT @Limit;
         return results;
     }
 
+    public async Task AddPolymarketOnChainLogsAsync(
+        IReadOnlyList<PolymarketOnChainLog> logs,
+        CancellationToken cancellationToken = default)
+    {
+        if (logs.Count == 0)
+        {
+            return;
+        }
+
+        const string sql = """
+INSERT INTO polymarket_onchain_logs (
+    id, contract_name, contract_address, exchange_version, block_number, block_hash,
+    transaction_hash, transaction_index, log_index, topic0, topics_json, data, removed, observed_at_utc
+) VALUES (
+    @Id, @ContractName, @ContractAddress, @ExchangeVersion, @BlockNumber, @BlockHash,
+    @TransactionHash, @TransactionIndex, @LogIndex, @Topic0, CAST(@TopicsJson AS jsonb), @Data, @Removed, @ObservedAtUtc
+)
+ON CONFLICT (transaction_hash, log_index) DO UPDATE SET
+    contract_name = excluded.contract_name,
+    contract_address = excluded.contract_address,
+    exchange_version = excluded.exchange_version,
+    block_number = excluded.block_number,
+    block_hash = excluded.block_hash,
+    transaction_index = excluded.transaction_index,
+    topic0 = excluded.topic0,
+    topics_json = excluded.topics_json,
+    data = excluded.data,
+    removed = excluded.removed,
+    observed_at_utc = excluded.observed_at_utc;
+""";
+
+        await using var connection = await OpenConnectionAsync(cancellationToken);
+        await using var transaction = await connection.BeginTransactionAsync(cancellationToken);
+        foreach (var log in logs)
+        {
+            await using var command = CreateCommand(connection, sql);
+            command.Transaction = transaction;
+            AddPolymarketOnChainLogParameters(command, log);
+            await command.ExecuteNonQueryAsync(cancellationToken);
+        }
+
+        await transaction.CommitAsync(cancellationToken);
+    }
+
+    public async Task AddPolymarketOnChainFillsAsync(
+        IReadOnlyList<PolymarketOnChainFill> fills,
+        CancellationToken cancellationToken = default)
+    {
+        if (fills.Count == 0)
+        {
+            return;
+        }
+
+        const string sql = """
+INSERT INTO polymarket_onchain_fills (
+    id, contract_name, contract_address, exchange_version, block_number, block_timestamp_utc,
+    transaction_hash, log_index, order_hash, maker, taker, wallet, side, token_id,
+    maker_asset_id, taker_asset_id, maker_amount_raw, taker_amount_raw, maker_amount, taker_amount,
+    price, size_shares, notional_usd, fee_raw, fee_amount, fee_asset_id, builder, metadata, imported_at_utc
+) VALUES (
+    @Id, @ContractName, @ContractAddress, @ExchangeVersion, @BlockNumber, @BlockTimestampUtc,
+    @TransactionHash, @LogIndex, @OrderHash, @Maker, @Taker, @Wallet, @Side, @TokenId,
+    @MakerAssetId, @TakerAssetId, @MakerAmountRaw, @TakerAmountRaw, @MakerAmount, @TakerAmount,
+    @Price, @SizeShares, @NotionalUsd, @FeeRaw, @FeeAmount, @FeeAssetId, @Builder, @Metadata, @ImportedAtUtc
+)
+ON CONFLICT (transaction_hash, log_index) DO UPDATE SET
+    contract_name = excluded.contract_name,
+    contract_address = excluded.contract_address,
+    exchange_version = excluded.exchange_version,
+    block_number = excluded.block_number,
+    block_timestamp_utc = excluded.block_timestamp_utc,
+    order_hash = excluded.order_hash,
+    maker = excluded.maker,
+    taker = excluded.taker,
+    wallet = excluded.wallet,
+    side = excluded.side,
+    token_id = excluded.token_id,
+    maker_asset_id = excluded.maker_asset_id,
+    taker_asset_id = excluded.taker_asset_id,
+    maker_amount_raw = excluded.maker_amount_raw,
+    taker_amount_raw = excluded.taker_amount_raw,
+    maker_amount = excluded.maker_amount,
+    taker_amount = excluded.taker_amount,
+    price = excluded.price,
+    size_shares = excluded.size_shares,
+    notional_usd = excluded.notional_usd,
+    fee_raw = excluded.fee_raw,
+    fee_amount = excluded.fee_amount,
+    fee_asset_id = excluded.fee_asset_id,
+    builder = excluded.builder,
+    metadata = excluded.metadata,
+    imported_at_utc = excluded.imported_at_utc;
+""";
+
+        await using var connection = await OpenConnectionAsync(cancellationToken);
+        await using var transaction = await connection.BeginTransactionAsync(cancellationToken);
+        foreach (var fill in fills)
+        {
+            await using var command = CreateCommand(connection, sql);
+            command.Transaction = transaction;
+            AddPolymarketOnChainFillParameters(command, fill);
+            await command.ExecuteNonQueryAsync(cancellationToken);
+        }
+
+        foreach (var range in fills
+            .GroupBy(fill => fill.ContractAddress, StringComparer.OrdinalIgnoreCase)
+            .Select(group => new
+            {
+                ContractAddress = group.Key,
+                FromBlock = group.Min(fill => fill.BlockNumber),
+                ToBlock = group.Max(fill => fill.BlockNumber)
+            }))
+        {
+            await UpsertPolymarketOnChainWalletFillsAsync(
+                connection,
+                transaction,
+                range.ContractAddress,
+                range.FromBlock,
+                range.ToBlock,
+                cancellationToken);
+            await UpsertPolymarketOnChainWalletExecutionsAsync(
+                connection,
+                transaction,
+                range.ContractAddress,
+                range.FromBlock,
+                range.ToBlock,
+                cancellationToken);
+        }
+
+        await QueuePolymarketOnChainPositionRefreshTokensAsync(
+            connection,
+            transaction,
+            fills.Select(fill => fill.TokenId).Distinct(StringComparer.OrdinalIgnoreCase),
+            "execution",
+            cancellationToken);
+
+        await transaction.CommitAsync(cancellationToken);
+    }
+
+    private static async Task UpsertPolymarketOnChainWalletFillsAsync(
+        NpgsqlConnection connection,
+        NpgsqlTransaction transaction,
+        string contractAddress,
+        long fromBlock,
+        long toBlock,
+        CancellationToken cancellationToken)
+    {
+        const string sql = """
+INSERT INTO polymarket_onchain_wallet_fills (
+    source_fill_id, contract_name, contract_address, exchange_version, block_number,
+    block_timestamp_utc, transaction_hash, log_index, order_hash, role, wallet, counterparty,
+    side, token_id, price, size_shares, notional_usd, fee_amount, fee_asset_id, imported_at_utc
+)
+SELECT id, contract_name, contract_address, exchange_version, block_number,
+       block_timestamp_utc, transaction_hash, log_index, order_hash, 'Maker',
+       maker, taker, side, token_id, price, size_shares, notional_usd,
+       fee_amount, fee_asset_id, imported_at_utc
+FROM polymarket_onchain_fills
+WHERE lower(contract_address) = lower(@ContractAddress)
+  AND block_number BETWEEN @FromBlock AND @ToBlock
+UNION ALL
+SELECT id, contract_name, contract_address, exchange_version, block_number,
+       block_timestamp_utc, transaction_hash, log_index, order_hash, 'Taker',
+       taker, maker,
+       CASE side WHEN 'Buy' THEN 'Sell' WHEN 'Sell' THEN 'Buy' ELSE side END,
+       token_id, price, size_shares, notional_usd, 0, '0', imported_at_utc
+FROM polymarket_onchain_fills
+WHERE lower(contract_address) = lower(@ContractAddress)
+  AND block_number BETWEEN @FromBlock AND @ToBlock
+ON CONFLICT (transaction_hash, log_index, role) DO UPDATE SET
+    source_fill_id = excluded.source_fill_id,
+    contract_name = excluded.contract_name,
+    contract_address = excluded.contract_address,
+    exchange_version = excluded.exchange_version,
+    block_number = excluded.block_number,
+    block_timestamp_utc = excluded.block_timestamp_utc,
+    order_hash = excluded.order_hash,
+    wallet = excluded.wallet,
+    counterparty = excluded.counterparty,
+    side = excluded.side,
+    token_id = excluded.token_id,
+    price = excluded.price,
+    size_shares = excluded.size_shares,
+    notional_usd = excluded.notional_usd,
+    fee_amount = excluded.fee_amount,
+    fee_asset_id = excluded.fee_asset_id,
+    imported_at_utc = excluded.imported_at_utc;
+""";
+
+        await using var command = CreateCommand(connection, sql);
+        command.Transaction = transaction;
+        command.CommandTimeout = 300;
+        command.Parameters.AddWithValue("ContractAddress", contractAddress);
+        command.Parameters.AddWithValue("FromBlock", fromBlock);
+        command.Parameters.AddWithValue("ToBlock", toBlock);
+        await command.ExecuteNonQueryAsync(cancellationToken);
+    }
+
+    private static async Task UpsertPolymarketOnChainWalletExecutionsAsync(
+        NpgsqlConnection connection,
+        NpgsqlTransaction transaction,
+        string contractAddress,
+        long fromBlock,
+        long toBlock,
+        CancellationToken cancellationToken)
+    {
+        const string sql = """
+DELETE FROM polymarket_onchain_wallet_executions
+WHERE lower(contract_address) = lower(@ContractAddress)
+  AND block_number BETWEEN @FromBlock AND @ToBlock;
+
+INSERT INTO polymarket_onchain_wallet_executions (
+    contract_name, contract_address, exchange_version, block_number, block_timestamp_utc,
+    transaction_hash, first_log_index, last_log_index, wallet, side, token_id, fill_count,
+    maker_fill_count, taker_fill_count, size_shares, notional_usd, average_price,
+    fees_usd, imported_at_utc
+)
+SELECT contract_name,
+       contract_address,
+       exchange_version,
+       MIN(block_number),
+       MIN(block_timestamp_utc),
+       transaction_hash,
+       MIN(log_index),
+       MAX(log_index),
+       wallet,
+       side,
+       token_id,
+       COUNT(*)::integer,
+       COUNT(*) FILTER (WHERE role = 'Maker')::integer,
+       COUNT(*) FILTER (WHERE role = 'Taker')::integer,
+       SUM(size_shares),
+       SUM(notional_usd),
+       CASE WHEN SUM(size_shares) = 0 THEN 0 ELSE SUM(notional_usd) / SUM(size_shares) END,
+       SUM(CASE WHEN fee_asset_id = '0' THEN fee_amount ELSE 0 END),
+       MAX(imported_at_utc)
+FROM polymarket_onchain_wallet_fills
+WHERE lower(contract_address) = lower(@ContractAddress)
+  AND block_number BETWEEN @FromBlock AND @ToBlock
+GROUP BY contract_name, contract_address, exchange_version, transaction_hash, wallet, side, token_id
+ON CONFLICT (contract_address, transaction_hash, wallet, side, token_id) DO UPDATE SET
+    contract_name = excluded.contract_name,
+    exchange_version = excluded.exchange_version,
+    block_number = excluded.block_number,
+    block_timestamp_utc = excluded.block_timestamp_utc,
+    first_log_index = excluded.first_log_index,
+    last_log_index = excluded.last_log_index,
+    fill_count = excluded.fill_count,
+    maker_fill_count = excluded.maker_fill_count,
+    taker_fill_count = excluded.taker_fill_count,
+    size_shares = excluded.size_shares,
+    notional_usd = excluded.notional_usd,
+    average_price = excluded.average_price,
+    fees_usd = excluded.fees_usd,
+    imported_at_utc = excluded.imported_at_utc;
+""";
+
+        await using var command = CreateCommand(connection, sql);
+        command.Transaction = transaction;
+        command.CommandTimeout = 300;
+        command.Parameters.AddWithValue("ContractAddress", contractAddress);
+        command.Parameters.AddWithValue("FromBlock", fromBlock);
+        command.Parameters.AddWithValue("ToBlock", toBlock);
+        await command.ExecuteNonQueryAsync(cancellationToken);
+    }
+
+    public async Task UpsertOnChainIngestionCursorAsync(
+        OnChainIngestionCursor cursor,
+        CancellationToken cancellationToken = default)
+    {
+        const string sql = """
+INSERT INTO polymarket_onchain_ingest_cursors (
+    contract_address, contract_name, exchange_version, from_block, to_block,
+    logs_fetched, fills_stored, started_at_utc, completed_at_utc
+) VALUES (
+    @ContractAddress, @ContractName, @ExchangeVersion, @FromBlock, @ToBlock,
+    @LogsFetched, @FillsStored, @StartedAtUtc, @CompletedAtUtc
+)
+ON CONFLICT (contract_address) DO UPDATE SET
+    contract_name = excluded.contract_name,
+    exchange_version = excluded.exchange_version,
+    from_block = excluded.from_block,
+    to_block = excluded.to_block,
+    logs_fetched = excluded.logs_fetched,
+    fills_stored = excluded.fills_stored,
+    started_at_utc = excluded.started_at_utc,
+    completed_at_utc = excluded.completed_at_utc;
+""";
+
+        await using var connection = await OpenConnectionAsync(cancellationToken);
+        await using var command = CreateCommand(connection, sql);
+        command.Parameters.AddWithValue("ContractAddress", cursor.ContractAddress);
+        command.Parameters.AddWithValue("ContractName", cursor.ContractName);
+        command.Parameters.AddWithValue("ExchangeVersion", cursor.ExchangeVersion);
+        command.Parameters.AddWithValue("FromBlock", cursor.FromBlock);
+        command.Parameters.AddWithValue("ToBlock", cursor.ToBlock);
+        command.Parameters.AddWithValue("LogsFetched", cursor.LogsFetched);
+        command.Parameters.AddWithValue("FillsStored", cursor.FillsStored);
+        command.Parameters.AddWithValue("StartedAtUtc", UtcDateTime(cursor.StartedAtUtc));
+        command.Parameters.AddWithValue("CompletedAtUtc", UtcDateTime(cursor.CompletedAtUtc));
+        await command.ExecuteNonQueryAsync(cancellationToken);
+    }
+
+    public async Task<OnChainIngestionCursor?> GetOnChainIngestionCursorAsync(
+        string contractAddress,
+        CancellationToken cancellationToken = default)
+    {
+        const string sql = """
+SELECT contract_address, contract_name, exchange_version, from_block, to_block,
+       logs_fetched, fills_stored, started_at_utc, completed_at_utc
+FROM polymarket_onchain_ingest_cursors
+WHERE lower(contract_address) = lower(@ContractAddress)
+LIMIT 1;
+""";
+
+        await using var connection = await OpenConnectionAsync(cancellationToken);
+        await using var command = CreateCommand(connection, sql);
+        command.Parameters.AddWithValue("ContractAddress", contractAddress);
+        await using var reader = await command.ExecuteReaderAsync(cancellationToken);
+        if (!await reader.ReadAsync(cancellationToken))
+        {
+            return null;
+        }
+
+        return new OnChainIngestionCursor(
+            reader.GetString(0),
+            reader.GetString(1),
+            reader.GetString(2),
+            reader.GetInt64(3),
+            reader.GetInt64(4),
+            reader.GetInt32(5),
+            reader.GetInt32(6),
+            DateTimeOffsetFromUtc(reader.GetDateTime(7)),
+            DateTimeOffsetFromUtc(reader.GetDateTime(8)));
+    }
+
+    public async Task<long?> GetLatestPolymarketOnChainFillBlockAsync(
+        string contractAddress,
+        CancellationToken cancellationToken = default)
+    {
+        const string sql = """
+SELECT max(block_number)
+FROM polymarket_onchain_fills
+WHERE lower(contract_address) = lower(@ContractAddress);
+""";
+
+        await using var connection = await OpenConnectionAsync(cancellationToken);
+        await using var command = CreateCommand(connection, sql);
+        command.Parameters.AddWithValue("ContractAddress", contractAddress);
+        var result = await command.ExecuteScalarAsync(cancellationToken);
+        return result is DBNull or null ? null : (long)result;
+    }
+
+    public async Task<OnChainBlockRange?> GetPolymarketOnChainFillBlockRangeAsync(
+        string contractAddress,
+        CancellationToken cancellationToken = default)
+    {
+        const string sql = """
+SELECT min(block_number), max(block_number)
+FROM polymarket_onchain_fills
+WHERE lower(contract_address) = lower(@ContractAddress);
+""";
+
+        await using var connection = await OpenConnectionAsync(cancellationToken);
+        await using var command = CreateCommand(connection, sql);
+        command.Parameters.AddWithValue("ContractAddress", contractAddress);
+        await using var reader = await command.ExecuteReaderAsync(cancellationToken);
+        if (!await reader.ReadAsync(cancellationToken) || reader.IsDBNull(0) || reader.IsDBNull(1))
+        {
+            return null;
+        }
+
+        return new OnChainBlockRange(reader.GetInt64(0), reader.GetInt64(1));
+    }
+
+    public async Task<OnChainBlockRange?> GetPolymarketOnChainWalletExecutionBlockRangeAsync(
+        string contractAddress,
+        CancellationToken cancellationToken = default)
+    {
+        const string sql = """
+SELECT min(block_number), max(block_number)
+FROM polymarket_onchain_wallet_executions
+WHERE lower(contract_address) = lower(@ContractAddress);
+""";
+
+        await using var connection = await OpenConnectionAsync(cancellationToken);
+        await using var command = CreateCommand(connection, sql);
+        command.Parameters.AddWithValue("ContractAddress", contractAddress);
+        await using var reader = await command.ExecuteReaderAsync(cancellationToken);
+        if (!await reader.ReadAsync(cancellationToken) || reader.IsDBNull(0) || reader.IsDBNull(1))
+        {
+            return null;
+        }
+
+        return new OnChainBlockRange(reader.GetInt64(0), reader.GetInt64(1));
+    }
+
+    public async Task RefreshPolymarketOnChainWalletDerivedDataAsync(
+        string contractAddress,
+        long fromBlock,
+        long toBlock,
+        CancellationToken cancellationToken = default)
+    {
+        if (fromBlock > toBlock)
+        {
+            return;
+        }
+
+        await using var connection = await OpenConnectionAsync(cancellationToken);
+        await using var transaction = await connection.BeginTransactionAsync(cancellationToken);
+        await UpsertPolymarketOnChainWalletFillsAsync(
+            connection,
+            transaction,
+            contractAddress,
+            fromBlock,
+            toBlock,
+            cancellationToken);
+        await UpsertPolymarketOnChainWalletExecutionsAsync(
+            connection,
+            transaction,
+            contractAddress,
+            fromBlock,
+            toBlock,
+            cancellationToken);
+        await QueuePolymarketOnChainPositionRefreshTokensForRangeAsync(
+            connection,
+            transaction,
+            contractAddress,
+            fromBlock,
+            toBlock,
+            "derived_refresh",
+            cancellationToken);
+        await transaction.CommitAsync(cancellationToken);
+    }
+
+    public async Task<IReadOnlyList<PolymarketOnChainWalletExecution>> GetRecentPolymarketOnChainWalletExecutionsAsync(
+        int limit = 100,
+        CancellationToken cancellationToken = default)
+    {
+        const string sql = """
+SELECT contract_name, contract_address, exchange_version, block_number, block_timestamp_utc,
+       transaction_hash, first_log_index, last_log_index, wallet, side, token_id,
+       fill_count, maker_fill_count, taker_fill_count, size_shares, notional_usd,
+       average_price, fees_usd, imported_at_utc
+FROM polymarket_onchain_wallet_executions
+ORDER BY block_timestamp_utc DESC, block_number DESC, first_log_index DESC
+LIMIT @Limit;
+""";
+
+        await using var connection = await OpenConnectionAsync(cancellationToken);
+        await using var command = CreateCommand(connection, sql);
+        command.Parameters.AddWithValue("Limit", limit);
+        await using var reader = await command.ExecuteReaderAsync(cancellationToken);
+
+        var results = new List<PolymarketOnChainWalletExecution>();
+        while (await reader.ReadAsync(cancellationToken))
+        {
+            results.Add(ReadPolymarketOnChainWalletExecution(reader));
+        }
+
+        return results;
+    }
+
+    public async Task<IReadOnlyList<string>> GetOnChainTokenIdsMissingMetadataAsync(
+        int limit = 100,
+        CancellationToken cancellationToken = default)
+    {
+        const string sql = """
+SELECT DISTINCT execution.token_id
+FROM polymarket_onchain_wallet_executions execution
+LEFT JOIN polymarket_onchain_token_metadata metadata
+  ON metadata.token_id = execution.token_id
+WHERE metadata.token_id IS NULL
+ORDER BY execution.token_id
+LIMIT @Limit;
+""";
+
+        await using var connection = await OpenConnectionAsync(cancellationToken);
+        await using var command = CreateCommand(connection, sql);
+        command.Parameters.AddWithValue("Limit", limit);
+        await using var reader = await command.ExecuteReaderAsync(cancellationToken);
+
+        var results = new List<string>();
+        while (await reader.ReadAsync(cancellationToken))
+        {
+            results.Add(reader.GetString(0));
+        }
+
+        return results;
+    }
+
+    public async Task UpsertPolymarketOnChainTokenMetadataAsync(
+        IReadOnlyList<PolymarketOnChainTokenMetadata> metadata,
+        CancellationToken cancellationToken = default)
+    {
+        if (metadata.Count == 0)
+        {
+            return;
+        }
+
+        const string sql = """
+INSERT INTO polymarket_onchain_token_metadata (
+    token_id, condition_id, market_id, market_slug, market_title, outcome, outcome_index,
+    category, end_date_utc, active, closed, archived, resolved, winning_outcome,
+    clob_token_ids_json, outcomes_json, lookup_succeeded, lookup_error, raw_json,
+    last_refreshed_utc
+) VALUES (
+    @TokenId, @ConditionId, @MarketId, @MarketSlug, @MarketTitle, @Outcome, @OutcomeIndex,
+    @Category, @EndDateUtc, @Active, @Closed, @Archived, @Resolved, @WinningOutcome,
+    CAST(@ClobTokenIdsJson AS jsonb), CAST(@OutcomesJson AS jsonb), @LookupSucceeded,
+    @LookupError, CAST(@RawJson AS jsonb), @LastRefreshedUtc
+)
+ON CONFLICT (token_id) DO UPDATE SET
+    condition_id = excluded.condition_id,
+    market_id = excluded.market_id,
+    market_slug = excluded.market_slug,
+    market_title = excluded.market_title,
+    outcome = excluded.outcome,
+    outcome_index = excluded.outcome_index,
+    category = excluded.category,
+    end_date_utc = excluded.end_date_utc,
+    active = excluded.active,
+    closed = excluded.closed,
+    archived = excluded.archived,
+    resolved = excluded.resolved,
+    winning_outcome = excluded.winning_outcome,
+    clob_token_ids_json = excluded.clob_token_ids_json,
+    outcomes_json = excluded.outcomes_json,
+    lookup_succeeded = excluded.lookup_succeeded,
+    lookup_error = excluded.lookup_error,
+    raw_json = excluded.raw_json,
+    last_refreshed_utc = excluded.last_refreshed_utc;
+""";
+
+        await using var connection = await OpenConnectionAsync(cancellationToken);
+        await using var transaction = await connection.BeginTransactionAsync(cancellationToken);
+        foreach (var item in metadata)
+        {
+            await using var command = CreateCommand(connection, sql);
+            command.Transaction = transaction;
+            AddPolymarketOnChainTokenMetadataParameters(command, item);
+            await command.ExecuteNonQueryAsync(cancellationToken);
+        }
+
+        await QueuePolymarketOnChainPositionRefreshTokensAsync(
+            connection,
+            transaction,
+            metadata.Select(item => item.TokenId).Distinct(StringComparer.OrdinalIgnoreCase),
+            "metadata",
+            cancellationToken);
+
+        await transaction.CommitAsync(cancellationToken);
+    }
+
+    public async Task<IReadOnlyList<PolymarketOnChainFill>> GetRecentPolymarketOnChainFillsAsync(
+        int limit = 100,
+        CancellationToken cancellationToken = default)
+    {
+        const string sql = """
+SELECT id, contract_name, contract_address, exchange_version, block_number, block_timestamp_utc,
+       transaction_hash, log_index, order_hash, maker, taker, wallet, side, token_id,
+       maker_asset_id, taker_asset_id, maker_amount_raw, taker_amount_raw, maker_amount, taker_amount,
+       price, size_shares, notional_usd, fee_raw, fee_amount, fee_asset_id, builder, metadata, imported_at_utc
+FROM polymarket_onchain_fills
+ORDER BY block_timestamp_utc DESC, block_number DESC, log_index DESC
+LIMIT @Limit;
+""";
+
+        await using var connection = await OpenConnectionAsync(cancellationToken);
+        await using var command = CreateCommand(connection, sql);
+        command.Parameters.AddWithValue("Limit", limit);
+        await using var reader = await command.ExecuteReaderAsync(cancellationToken);
+
+        var results = new List<PolymarketOnChainFill>();
+        while (await reader.ReadAsync(cancellationToken))
+        {
+            results.Add(ReadPolymarketOnChainFill(reader));
+        }
+
+        return results;
+    }
+
+    public async Task<IReadOnlyList<TraderOnChainStats>> GetTraderOnChainStatsAsync(
+        int limit = 100,
+        CancellationToken cancellationToken = default)
+    {
+        const string sql = """
+SELECT wallet,
+       COUNT(*)::integer AS executions,
+       COUNT(*) FILTER (WHERE side = 'Buy')::integer AS buy_fills,
+       COUNT(*) FILTER (WHERE side = 'Sell')::integer AS sell_fills,
+       COUNT(DISTINCT token_id)::integer AS markets_traded,
+       SUM(notional_usd) AS volume_usd,
+       AVG(notional_usd) AS average_trade_usd,
+       SUM(fees_usd) AS fees_usd,
+       (SUM(notional_usd) + COUNT(*) + COUNT(DISTINCT token_id) * 5)::numeric AS activity_score,
+       MIN(block_timestamp_utc) AS first_trade_utc,
+       MAX(block_timestamp_utc) AS last_trade_utc
+FROM polymarket_onchain_wallet_executions
+GROUP BY wallet
+ORDER BY activity_score DESC, volume_usd DESC
+LIMIT @Limit;
+""";
+
+        await using var connection = await OpenConnectionAsync(cancellationToken);
+        await using var command = CreateCommand(connection, sql);
+        command.Parameters.AddWithValue("Limit", limit);
+        await using var reader = await command.ExecuteReaderAsync(cancellationToken);
+
+        var results = new List<TraderOnChainStats>();
+        while (await reader.ReadAsync(cancellationToken))
+        {
+            results.Add(new TraderOnChainStats(
+                reader.GetString(0),
+                reader.GetInt32(1),
+                reader.GetInt32(2),
+                reader.GetInt32(3),
+                reader.GetInt32(4),
+                reader.GetDecimal(5),
+                reader.GetDecimal(6),
+                reader.GetDecimal(7),
+                reader.GetDecimal(8),
+                DateTimeOffsetFromUtc(reader.GetDateTime(9)),
+                DateTimeOffsetFromUtc(reader.GetDateTime(10))));
+        }
+
+        return results;
+    }
+
+    public async Task<IReadOnlyList<PolymarketOnChainWalletPosition>> GetPolymarketOnChainWalletPositionsAsync(
+        int limit = 250,
+        CancellationToken cancellationToken = default)
+    {
+        const string sql = """
+SELECT wallet, token_id, condition_id, market_id, market_slug, market_title, outcome,
+       category, lookup_succeeded, market_resolved, winning_outcome,
+       executions, buy_executions, sell_executions, buy_shares, sell_shares, net_shares,
+       buy_notional_usd, sell_notional_usd, net_cost_usd, fees_usd, average_buy_price,
+       average_sell_price, volume_usd, resolved_pnl_usd, position_status,
+       first_trade_utc, last_trade_utc
+FROM polymarket_onchain_wallet_positions
+ORDER BY absolute_net_cost_usd DESC, volume_usd DESC, last_trade_utc DESC
+LIMIT @Limit;
+""";
+
+        await using var connection = await OpenConnectionAsync(cancellationToken);
+        await using var command = CreateCommand(connection, sql);
+        command.Parameters.AddWithValue("Limit", limit);
+        await using var reader = await command.ExecuteReaderAsync(cancellationToken);
+
+        var results = new List<PolymarketOnChainWalletPosition>();
+        while (await reader.ReadAsync(cancellationToken))
+        {
+            results.Add(ReadPolymarketOnChainWalletPosition(reader));
+        }
+
+        return results;
+    }
+
+    public async Task<OnChainPositionRefreshResult> RefreshPolymarketOnChainWalletPositionsAsync(
+        int tokenLimit = 50,
+        int queueSeedTokenLimit = 500,
+        CancellationToken cancellationToken = default)
+    {
+        await using var connection = await OpenConnectionAsync(cancellationToken);
+        await using var transaction = await connection.BeginTransactionAsync(cancellationToken);
+
+        var tokensQueued = await SeedMissingPolymarketOnChainPositionRefreshTokensAsync(
+            connection,
+            transaction,
+            queueSeedTokenLimit,
+            cancellationToken);
+
+        await using (var createTemp = CreateCommand(
+            connection,
+            "CREATE TEMP TABLE temp_position_refresh_tokens (token_id text PRIMARY KEY) ON COMMIT DROP;"))
+        {
+            createTemp.Transaction = transaction;
+            await createTemp.ExecuteNonQueryAsync(cancellationToken);
+        }
+
+        const string pickSql = """
+WITH picked AS (
+    SELECT token_id
+    FROM polymarket_onchain_position_refresh_queue
+    ORDER BY queued_at_utc
+    LIMIT @TokenLimit
+    FOR UPDATE SKIP LOCKED
+)
+INSERT INTO temp_position_refresh_tokens (token_id)
+SELECT token_id
+FROM picked;
+""";
+
+        await using (var pickCommand = CreateCommand(connection, pickSql))
+        {
+            pickCommand.Transaction = transaction;
+            pickCommand.Parameters.AddWithValue("TokenLimit", tokenLimit);
+            await pickCommand.ExecuteNonQueryAsync(cancellationToken);
+        }
+
+        var tokensProcessed = await CountTempPositionRefreshTokensAsync(connection, transaction, cancellationToken);
+        if (tokensProcessed == 0)
+        {
+            var remaining = await CountPolymarketOnChainPositionRefreshQueueAsync(connection, transaction, cancellationToken);
+            await transaction.CommitAsync(cancellationToken);
+            return new OnChainPositionRefreshResult(tokensQueued, 0, 0, remaining);
+        }
+
+        const string deleteSql = """
+DELETE FROM polymarket_onchain_wallet_positions
+WHERE token_id IN (SELECT token_id FROM temp_position_refresh_tokens);
+""";
+
+        await using (var deleteCommand = CreateCommand(connection, deleteSql))
+        {
+            deleteCommand.Transaction = transaction;
+            deleteCommand.CommandTimeout = 300;
+            await deleteCommand.ExecuteNonQueryAsync(cancellationToken);
+        }
+
+        const string insertSql = """
+INSERT INTO polymarket_onchain_wallet_positions (
+    wallet, token_id, condition_id, market_id, market_slug, market_title, outcome,
+    category, lookup_succeeded, market_resolved, winning_outcome,
+    executions, buy_executions, sell_executions, buy_shares, sell_shares, net_shares,
+    buy_notional_usd, sell_notional_usd, net_cost_usd, absolute_net_cost_usd,
+    fees_usd, average_buy_price, average_sell_price, volume_usd, resolved_pnl_usd,
+    position_status, first_trade_utc, last_trade_utc, latest_execution_imported_at_utc,
+    metadata_refreshed_at_utc, refreshed_at_utc
+)
+WITH grouped AS (
+    SELECT
+        execution.wallet,
+        execution.token_id,
+        COALESCE(NULLIF(metadata.condition_id, ''), execution.token_id) AS condition_id,
+        COALESCE(NULLIF(metadata.market_id, ''), '') AS market_id,
+        COALESCE(NULLIF(metadata.market_slug, ''), '') AS market_slug,
+        COALESCE(NULLIF(metadata.market_title, ''), 'Unenriched token ' || left(execution.token_id, 16)) AS market_title,
+        COALESCE(NULLIF(metadata.outcome, ''), 'Unknown') AS outcome,
+        metadata.category,
+        COALESCE(metadata.lookup_succeeded, false) AS lookup_succeeded,
+        COALESCE(metadata.resolved, false) AS market_resolved,
+        metadata.winning_outcome,
+        metadata.last_refreshed_utc AS metadata_refreshed_at_utc,
+        COUNT(*)::integer AS executions,
+        COUNT(*) FILTER (WHERE execution.side = 'Buy')::integer AS buy_executions,
+        COUNT(*) FILTER (WHERE execution.side = 'Sell')::integer AS sell_executions,
+        COALESCE(SUM(execution.size_shares) FILTER (WHERE execution.side = 'Buy'), 0)::numeric AS buy_shares,
+        COALESCE(SUM(execution.size_shares) FILTER (WHERE execution.side = 'Sell'), 0)::numeric AS sell_shares,
+        COALESCE(SUM(execution.notional_usd) FILTER (WHERE execution.side = 'Buy'), 0)::numeric AS buy_notional_usd,
+        COALESCE(SUM(execution.notional_usd) FILTER (WHERE execution.side = 'Sell'), 0)::numeric AS sell_notional_usd,
+        COALESCE(SUM(execution.fees_usd), 0)::numeric AS fees_usd,
+        COALESCE(SUM(execution.notional_usd), 0)::numeric AS volume_usd,
+        MIN(execution.block_timestamp_utc) AS first_trade_utc,
+        MAX(execution.block_timestamp_utc) AS last_trade_utc,
+        MAX(execution.imported_at_utc) AS latest_execution_imported_at_utc
+    FROM polymarket_onchain_wallet_executions execution
+    LEFT JOIN polymarket_onchain_token_metadata metadata
+      ON metadata.token_id = execution.token_id
+    WHERE execution.token_id IN (SELECT token_id FROM temp_position_refresh_tokens)
+    GROUP BY
+        execution.wallet,
+        execution.token_id,
+        metadata.condition_id,
+        metadata.market_id,
+        metadata.market_slug,
+        metadata.market_title,
+        metadata.outcome,
+        metadata.category,
+        metadata.lookup_succeeded,
+        metadata.resolved,
+        metadata.winning_outcome,
+        metadata.last_refreshed_utc
+),
+positions AS (
+    SELECT
+        grouped.*,
+        (buy_shares - sell_shares)::numeric AS net_shares,
+        (buy_notional_usd - sell_notional_usd + fees_usd)::numeric AS net_cost_usd,
+        CASE WHEN buy_shares = 0 THEN 0 ELSE buy_notional_usd / buy_shares END AS average_buy_price,
+        CASE WHEN sell_shares = 0 THEN 0 ELSE sell_notional_usd / sell_shares END AS average_sell_price
+    FROM grouped
+)
+SELECT
+    wallet,
+    token_id,
+    condition_id,
+    market_id,
+    market_slug,
+    market_title,
+    outcome,
+    category,
+    lookup_succeeded,
+    market_resolved,
+    winning_outcome,
+    executions,
+    buy_executions,
+    sell_executions,
+    buy_shares,
+    sell_shares,
+    net_shares,
+    buy_notional_usd,
+    sell_notional_usd,
+    net_cost_usd,
+    abs(net_cost_usd),
+    fees_usd,
+    average_buy_price,
+    average_sell_price,
+    volume_usd,
+    CASE
+        WHEN market_resolved AND winning_outcome IS NOT NULL
+        THEN (CASE WHEN lower(outcome) = lower(winning_outcome) THEN net_shares ELSE 0 END) - net_cost_usd
+        ELSE NULL::numeric
+    END,
+    CASE
+        WHEN market_resolved THEN 'Resolved'
+        WHEN abs(net_shares) < 0.00000001 THEN 'Flat'
+        ELSE 'Open'
+    END,
+    first_trade_utc,
+    last_trade_utc,
+    latest_execution_imported_at_utc,
+    metadata_refreshed_at_utc,
+    now()
+FROM positions;
+""";
+
+        int positionsUpserted;
+        await using (var insertCommand = CreateCommand(connection, insertSql))
+        {
+            insertCommand.Transaction = transaction;
+            insertCommand.CommandTimeout = 300;
+            positionsUpserted = await insertCommand.ExecuteNonQueryAsync(cancellationToken);
+        }
+
+        await QueuePolymarketOnChainWalletPerformanceRefreshForPositionTokensAsync(
+            connection,
+            transaction,
+            "position_refresh",
+            cancellationToken);
+
+        const string clearQueueSql = """
+DELETE FROM polymarket_onchain_position_refresh_queue
+WHERE token_id IN (SELECT token_id FROM temp_position_refresh_tokens);
+""";
+
+        await using (var clearCommand = CreateCommand(connection, clearQueueSql))
+        {
+            clearCommand.Transaction = transaction;
+            await clearCommand.ExecuteNonQueryAsync(cancellationToken);
+        }
+
+        var queueRemaining = await CountPolymarketOnChainPositionRefreshQueueAsync(connection, transaction, cancellationToken);
+        await transaction.CommitAsync(cancellationToken);
+        return new OnChainPositionRefreshResult(tokensQueued, tokensProcessed, positionsUpserted, queueRemaining);
+    }
+
+    public async Task<IReadOnlyList<PolymarketOnChainWalletPerformance>> GetPolymarketOnChainWalletPerformanceAsync(
+        int limit = 100,
+        CancellationToken cancellationToken = default)
+    {
+        const string sql = """
+SELECT wallet, positions_count, open_positions, flat_positions, resolved_positions,
+       profitable_resolved_positions, losing_resolved_positions, markets_traded,
+       volume_usd, resolved_volume_usd, open_exposure_usd, resolved_cost_usd,
+       resolved_pnl_usd, resolved_roi_pct, win_rate_pct, average_position_size_usd,
+       score, sample_quality, first_active_utc, last_active_utc, refreshed_at_utc
+FROM polymarket_onchain_wallet_performance
+ORDER BY score DESC, resolved_pnl_usd DESC, volume_usd DESC
+LIMIT @Limit;
+""";
+
+        await using var connection = await OpenConnectionAsync(cancellationToken);
+        await using var command = CreateCommand(connection, sql);
+        command.Parameters.AddWithValue("Limit", limit);
+        await using var reader = await command.ExecuteReaderAsync(cancellationToken);
+
+        var results = new List<PolymarketOnChainWalletPerformance>();
+        while (await reader.ReadAsync(cancellationToken))
+        {
+            results.Add(ReadPolymarketOnChainWalletPerformance(reader));
+        }
+
+        return results;
+    }
+
+    public async Task<OnChainPerformanceRefreshResult> RefreshPolymarketOnChainWalletPerformanceAsync(
+        int walletLimit = 100,
+        int queueSeedWalletLimit = 500,
+        CancellationToken cancellationToken = default)
+    {
+        await using var connection = await OpenConnectionAsync(cancellationToken);
+        await using var transaction = await connection.BeginTransactionAsync(cancellationToken);
+
+        var walletsQueued = await SeedMissingPolymarketOnChainWalletPerformanceRefreshQueueAsync(
+            connection,
+            transaction,
+            queueSeedWalletLimit,
+            cancellationToken);
+
+        await using (var createTemp = CreateCommand(
+            connection,
+            "CREATE TEMP TABLE temp_wallet_performance_refresh_wallets (wallet text PRIMARY KEY) ON COMMIT DROP;"))
+        {
+            createTemp.Transaction = transaction;
+            await createTemp.ExecuteNonQueryAsync(cancellationToken);
+        }
+
+        const string pickSql = """
+WITH picked AS (
+    SELECT wallet
+    FROM polymarket_onchain_wallet_performance_refresh_queue
+    ORDER BY queued_at_utc
+    LIMIT @WalletLimit
+    FOR UPDATE SKIP LOCKED
+)
+INSERT INTO temp_wallet_performance_refresh_wallets (wallet)
+SELECT wallet
+FROM picked;
+""";
+
+        await using (var pickCommand = CreateCommand(connection, pickSql))
+        {
+            pickCommand.Transaction = transaction;
+            pickCommand.Parameters.AddWithValue("WalletLimit", walletLimit);
+            await pickCommand.ExecuteNonQueryAsync(cancellationToken);
+        }
+
+        var walletsProcessed = await CountTempWalletPerformanceRefreshWalletsAsync(connection, transaction, cancellationToken);
+        if (walletsProcessed == 0)
+        {
+            var remaining = await CountPolymarketOnChainWalletPerformanceRefreshQueueAsync(connection, transaction, cancellationToken);
+            await transaction.CommitAsync(cancellationToken);
+            return new OnChainPerformanceRefreshResult(walletsQueued, 0, 0, remaining);
+        }
+
+        const string deleteSql = """
+DELETE FROM polymarket_onchain_wallet_performance
+WHERE wallet IN (SELECT wallet FROM temp_wallet_performance_refresh_wallets);
+""";
+
+        await using (var deleteCommand = CreateCommand(connection, deleteSql))
+        {
+            deleteCommand.Transaction = transaction;
+            deleteCommand.CommandTimeout = 300;
+            await deleteCommand.ExecuteNonQueryAsync(cancellationToken);
+        }
+
+        const string insertSql = """
+INSERT INTO polymarket_onchain_wallet_performance (
+    wallet, positions_count, open_positions, flat_positions, resolved_positions,
+    profitable_resolved_positions, losing_resolved_positions, markets_traded,
+    volume_usd, resolved_volume_usd, open_exposure_usd, resolved_cost_usd,
+    resolved_pnl_usd, resolved_roi_pct, win_rate_pct, average_position_size_usd,
+    score, sample_quality, first_active_utc, last_active_utc, refreshed_at_utc
+)
+WITH metrics AS (
+    SELECT
+        wallet,
+        COUNT(*)::integer AS positions_count,
+        COUNT(*) FILTER (WHERE position_status = 'Open')::integer AS open_positions,
+        COUNT(*) FILTER (WHERE position_status = 'Flat')::integer AS flat_positions,
+        COUNT(*) FILTER (WHERE position_status = 'Resolved')::integer AS resolved_positions,
+        COUNT(*) FILTER (WHERE position_status = 'Resolved' AND COALESCE(resolved_pnl_usd, 0) > 0)::integer AS profitable_resolved_positions,
+        COUNT(*) FILTER (WHERE position_status = 'Resolved' AND COALESCE(resolved_pnl_usd, 0) < 0)::integer AS losing_resolved_positions,
+        COUNT(DISTINCT condition_id)::integer AS markets_traded,
+        COALESCE(SUM(volume_usd), 0)::numeric AS volume_usd,
+        COALESCE(SUM(volume_usd) FILTER (WHERE position_status = 'Resolved'), 0)::numeric AS resolved_volume_usd,
+        COALESCE(SUM(abs(net_cost_usd)) FILTER (WHERE position_status = 'Open'), 0)::numeric AS open_exposure_usd,
+        COALESCE(SUM(abs(net_cost_usd)) FILTER (WHERE position_status = 'Resolved' AND resolved_pnl_usd IS NOT NULL), 0)::numeric AS resolved_cost_usd,
+        COALESCE(SUM(resolved_pnl_usd), 0)::numeric AS resolved_pnl_usd,
+        COALESCE(AVG(abs(net_cost_usd)), 0)::numeric AS average_position_size_usd,
+        MIN(first_trade_utc) AS first_active_utc,
+        MAX(last_trade_utc) AS last_active_utc
+    FROM polymarket_onchain_wallet_positions
+    WHERE wallet IN (SELECT wallet FROM temp_wallet_performance_refresh_wallets)
+    GROUP BY wallet
+),
+scored AS (
+    SELECT
+        metrics.*,
+        CASE WHEN resolved_cost_usd = 0 THEN 0 ELSE resolved_pnl_usd / resolved_cost_usd * 100 END AS resolved_roi_pct,
+        CASE WHEN resolved_positions = 0 THEN 0 ELSE profitable_resolved_positions::numeric / resolved_positions * 100 END AS win_rate_pct
+    FROM metrics
+)
+SELECT
+    wallet,
+    positions_count,
+    open_positions,
+    flat_positions,
+    resolved_positions,
+    profitable_resolved_positions,
+    losing_resolved_positions,
+    markets_traded,
+    volume_usd,
+    resolved_volume_usd,
+    open_exposure_usd,
+    resolved_cost_usd,
+    resolved_pnl_usd,
+    resolved_roi_pct,
+    win_rate_pct,
+    average_position_size_usd,
+    (
+        resolved_pnl_usd +
+        resolved_roi_pct * 2 +
+        profitable_resolved_positions * 5 +
+        ln(volume_usd + 1) +
+        LEAST(resolved_positions, 50) * 2 -
+        open_exposure_usd * 0.02 -
+        CASE WHEN resolved_positions < 5 THEN (5 - resolved_positions) * 10 ELSE 0 END
+    )::numeric AS score,
+    CASE
+        WHEN resolved_positions >= 25 AND volume_usd >= 1000 THEN 'High'
+        WHEN resolved_positions >= 10 THEN 'Medium'
+        WHEN resolved_positions >= 3 THEN 'Low'
+        ELSE 'Thin'
+    END AS sample_quality,
+    first_active_utc,
+    last_active_utc,
+    now()
+FROM scored;
+""";
+
+        int walletsUpserted;
+        await using (var insertCommand = CreateCommand(connection, insertSql))
+        {
+            insertCommand.Transaction = transaction;
+            insertCommand.CommandTimeout = 300;
+            walletsUpserted = await insertCommand.ExecuteNonQueryAsync(cancellationToken);
+        }
+
+        const string clearQueueSql = """
+DELETE FROM polymarket_onchain_wallet_performance_refresh_queue
+WHERE wallet IN (SELECT wallet FROM temp_wallet_performance_refresh_wallets);
+""";
+
+        await using (var clearCommand = CreateCommand(connection, clearQueueSql))
+        {
+            clearCommand.Transaction = transaction;
+            await clearCommand.ExecuteNonQueryAsync(cancellationToken);
+        }
+
+        var queueRemaining = await CountPolymarketOnChainWalletPerformanceRefreshQueueAsync(connection, transaction, cancellationToken);
+        await transaction.CommitAsync(cancellationToken);
+        return new OnChainPerformanceRefreshResult(walletsQueued, walletsProcessed, walletsUpserted, queueRemaining);
+    }
+
     public async Task<IReadOnlyList<RiskEvent>> GetRecentRiskEventsAsync(int limit = 100, CancellationToken cancellationToken = default)
     {
         const string sql = """
@@ -1851,6 +2899,504 @@ ORDER BY service_name;
             reader.GetBoolean(10),
             reader.GetString(11),
             reader.IsDBNull(12) ? null : reader.GetString(12));
+    }
+
+    private static void AddPolymarketOnChainLogParameters(NpgsqlCommand command, PolymarketOnChainLog log)
+    {
+        command.Parameters.AddWithValue("Id", log.Id);
+        command.Parameters.AddWithValue("ContractName", log.ContractName);
+        command.Parameters.AddWithValue("ContractAddress", log.ContractAddress);
+        command.Parameters.AddWithValue("ExchangeVersion", log.ExchangeVersion);
+        command.Parameters.AddWithValue("BlockNumber", log.BlockNumber);
+        command.Parameters.AddWithValue("BlockHash", log.BlockHash);
+        command.Parameters.AddWithValue("TransactionHash", log.TransactionHash);
+        command.Parameters.AddWithValue("TransactionIndex", log.TransactionIndex);
+        command.Parameters.AddWithValue("LogIndex", log.LogIndex);
+        command.Parameters.AddWithValue("Topic0", log.Topic0);
+        command.Parameters.AddWithValue("TopicsJson", JsonSerializer.Serialize(log.Topics));
+        command.Parameters.AddWithValue("Data", log.Data);
+        command.Parameters.AddWithValue("Removed", log.Removed);
+        command.Parameters.AddWithValue("ObservedAtUtc", UtcDateTime(log.ObservedAtUtc));
+    }
+
+    private static void AddPolymarketOnChainFillParameters(NpgsqlCommand command, PolymarketOnChainFill fill)
+    {
+        command.Parameters.AddWithValue("Id", fill.Id);
+        command.Parameters.AddWithValue("ContractName", fill.ContractName);
+        command.Parameters.AddWithValue("ContractAddress", fill.ContractAddress);
+        command.Parameters.AddWithValue("ExchangeVersion", fill.ExchangeVersion);
+        command.Parameters.AddWithValue("BlockNumber", fill.BlockNumber);
+        command.Parameters.AddWithValue("BlockTimestampUtc", UtcDateTime(fill.BlockTimestampUtc));
+        command.Parameters.AddWithValue("TransactionHash", fill.TransactionHash);
+        command.Parameters.AddWithValue("LogIndex", fill.LogIndex);
+        command.Parameters.AddWithValue("OrderHash", fill.OrderHash);
+        command.Parameters.AddWithValue("Maker", fill.Maker);
+        command.Parameters.AddWithValue("Taker", fill.Taker);
+        command.Parameters.AddWithValue("Wallet", fill.Wallet);
+        command.Parameters.AddWithValue("Side", fill.Side.ToString());
+        command.Parameters.AddWithValue("TokenId", fill.TokenId);
+        command.Parameters.AddWithValue("MakerAssetId", fill.MakerAssetId);
+        command.Parameters.AddWithValue("TakerAssetId", fill.TakerAssetId);
+        command.Parameters.AddWithValue("MakerAmountRaw", fill.MakerAmountRaw);
+        command.Parameters.AddWithValue("TakerAmountRaw", fill.TakerAmountRaw);
+        command.Parameters.AddWithValue("MakerAmount", fill.MakerAmount);
+        command.Parameters.AddWithValue("TakerAmount", fill.TakerAmount);
+        command.Parameters.AddWithValue("Price", fill.Price);
+        command.Parameters.AddWithValue("SizeShares", fill.SizeShares);
+        command.Parameters.AddWithValue("NotionalUsd", fill.NotionalUsd);
+        command.Parameters.AddWithValue("FeeRaw", fill.FeeRaw);
+        command.Parameters.AddWithValue("FeeAmount", fill.FeeAmount);
+        command.Parameters.AddWithValue("FeeAssetId", fill.FeeAssetId);
+        command.Parameters.AddWithValue("Builder", (object?)fill.Builder ?? DBNull.Value);
+        command.Parameters.AddWithValue("Metadata", (object?)fill.Metadata ?? DBNull.Value);
+        command.Parameters.AddWithValue("ImportedAtUtc", UtcDateTime(fill.ImportedAtUtc));
+    }
+
+    private static async Task QueuePolymarketOnChainPositionRefreshTokensAsync(
+        NpgsqlConnection connection,
+        NpgsqlTransaction transaction,
+        IEnumerable<string> tokenIds,
+        string reason,
+        CancellationToken cancellationToken)
+    {
+        var distinctTokenIds = tokenIds
+            .Where(tokenId => !string.IsNullOrWhiteSpace(tokenId))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+        if (distinctTokenIds.Length == 0)
+        {
+            return;
+        }
+
+        const string sql = """
+INSERT INTO polymarket_onchain_position_refresh_queue (token_id, reason, queued_at_utc)
+SELECT unnest(@TokenIds), @Reason, now()
+ON CONFLICT (token_id) DO UPDATE SET
+    reason = excluded.reason,
+    queued_at_utc = LEAST(polymarket_onchain_position_refresh_queue.queued_at_utc, excluded.queued_at_utc);
+""";
+
+        await using var command = CreateCommand(connection, sql);
+        command.Transaction = transaction;
+        command.Parameters.AddWithValue("TokenIds", distinctTokenIds);
+        command.Parameters.AddWithValue("Reason", reason);
+        await command.ExecuteNonQueryAsync(cancellationToken);
+    }
+
+    private static async Task QueuePolymarketOnChainPositionRefreshTokensForRangeAsync(
+        NpgsqlConnection connection,
+        NpgsqlTransaction transaction,
+        string contractAddress,
+        long fromBlock,
+        long toBlock,
+        string reason,
+        CancellationToken cancellationToken)
+    {
+        const string sql = """
+INSERT INTO polymarket_onchain_position_refresh_queue (token_id, reason, queued_at_utc)
+SELECT DISTINCT token_id, @Reason, now()
+FROM polymarket_onchain_wallet_executions
+WHERE lower(contract_address) = lower(@ContractAddress)
+  AND block_number BETWEEN @FromBlock AND @ToBlock
+ON CONFLICT (token_id) DO UPDATE SET
+    reason = excluded.reason,
+    queued_at_utc = LEAST(polymarket_onchain_position_refresh_queue.queued_at_utc, excluded.queued_at_utc);
+""";
+
+        await using var command = CreateCommand(connection, sql);
+        command.Transaction = transaction;
+        command.CommandTimeout = 300;
+        command.Parameters.AddWithValue("ContractAddress", contractAddress);
+        command.Parameters.AddWithValue("FromBlock", fromBlock);
+        command.Parameters.AddWithValue("ToBlock", toBlock);
+        command.Parameters.AddWithValue("Reason", reason);
+        await command.ExecuteNonQueryAsync(cancellationToken);
+    }
+
+    private static async Task<int> SeedMissingPolymarketOnChainPositionRefreshTokensAsync(
+        NpgsqlConnection connection,
+        NpgsqlTransaction transaction,
+        int tokenLimit,
+        CancellationToken cancellationToken)
+    {
+        var initialBackfillComplete = await GetBotSettingAsync(
+            connection,
+            transaction,
+            "onchain_positions_initial_backfill_complete",
+            cancellationToken);
+        var positionsEmpty = await IsPolymarketOnChainPositionsEmptyAsync(connection, transaction, cancellationToken);
+        if (string.Equals(initialBackfillComplete, "true", StringComparison.OrdinalIgnoreCase) && !positionsEmpty)
+        {
+            return 0;
+        }
+
+        const string sql = """
+INSERT INTO polymarket_onchain_position_refresh_queue (token_id, reason, queued_at_utc)
+SELECT missing.token_id, 'missing_position', now()
+FROM (
+    SELECT DISTINCT execution.token_id
+    FROM polymarket_onchain_wallet_executions execution
+    WHERE NOT EXISTS (
+        SELECT 1
+        FROM polymarket_onchain_wallet_positions position
+        WHERE position.token_id = execution.token_id
+    )
+    ORDER BY execution.token_id
+    LIMIT @TokenLimit
+) missing
+ON CONFLICT (token_id) DO NOTHING;
+""";
+
+        int queued;
+        await using (var command = CreateCommand(connection, sql))
+        {
+            command.Transaction = transaction;
+            command.CommandTimeout = 300;
+            command.Parameters.AddWithValue("TokenLimit", tokenLimit);
+            queued = await command.ExecuteNonQueryAsync(cancellationToken);
+        }
+
+        if (queued == 0)
+        {
+            await UpsertBotSettingAsync(
+                connection,
+                transaction,
+                "onchain_positions_initial_backfill_complete",
+                "true",
+                cancellationToken);
+        }
+        else
+        {
+            await UpsertBotSettingAsync(
+                connection,
+                transaction,
+                "onchain_positions_initial_backfill_complete",
+                "false",
+                cancellationToken);
+        }
+
+        return queued;
+    }
+
+    private static async Task<bool> IsPolymarketOnChainPositionsEmptyAsync(
+        NpgsqlConnection connection,
+        NpgsqlTransaction transaction,
+        CancellationToken cancellationToken)
+    {
+        await using var command = CreateCommand(
+            connection,
+            "SELECT NOT EXISTS (SELECT 1 FROM polymarket_onchain_wallet_positions LIMIT 1);");
+        command.Transaction = transaction;
+        var result = await command.ExecuteScalarAsync(cancellationToken);
+        return result is bool empty && empty;
+    }
+
+    private static async Task<int> CountTempPositionRefreshTokensAsync(
+        NpgsqlConnection connection,
+        NpgsqlTransaction transaction,
+        CancellationToken cancellationToken)
+    {
+        await using var command = CreateCommand(connection, "SELECT count(*) FROM temp_position_refresh_tokens;");
+        command.Transaction = transaction;
+        var result = await command.ExecuteScalarAsync(cancellationToken);
+        return result is long count ? checked((int)count) : 0;
+    }
+
+    private static async Task<int> CountPolymarketOnChainPositionRefreshQueueAsync(
+        NpgsqlConnection connection,
+        NpgsqlTransaction transaction,
+        CancellationToken cancellationToken)
+    {
+        await using var command = CreateCommand(connection, "SELECT count(*) FROM polymarket_onchain_position_refresh_queue;");
+        command.Transaction = transaction;
+        var result = await command.ExecuteScalarAsync(cancellationToken);
+        return result is long count ? checked((int)count) : 0;
+    }
+
+    private static async Task QueuePolymarketOnChainWalletPerformanceRefreshForPositionTokensAsync(
+        NpgsqlConnection connection,
+        NpgsqlTransaction transaction,
+        string reason,
+        CancellationToken cancellationToken)
+    {
+        const string sql = """
+INSERT INTO polymarket_onchain_wallet_performance_refresh_queue (wallet, reason, queued_at_utc)
+SELECT DISTINCT wallet, @Reason, now()
+FROM polymarket_onchain_wallet_positions
+WHERE token_id IN (SELECT token_id FROM temp_position_refresh_tokens)
+ON CONFLICT (wallet) DO UPDATE SET
+    reason = excluded.reason,
+    queued_at_utc = LEAST(polymarket_onchain_wallet_performance_refresh_queue.queued_at_utc, excluded.queued_at_utc);
+""";
+
+        await using var command = CreateCommand(connection, sql);
+        command.Transaction = transaction;
+        command.Parameters.AddWithValue("Reason", reason);
+        await command.ExecuteNonQueryAsync(cancellationToken);
+    }
+
+    private static async Task<int> SeedMissingPolymarketOnChainWalletPerformanceRefreshQueueAsync(
+        NpgsqlConnection connection,
+        NpgsqlTransaction transaction,
+        int walletLimit,
+        CancellationToken cancellationToken)
+    {
+        var initialBackfillComplete = await GetBotSettingAsync(
+            connection,
+            transaction,
+            "onchain_wallet_performance_initial_backfill_complete",
+            cancellationToken);
+        var performanceEmpty = await IsPolymarketOnChainWalletPerformanceEmptyAsync(connection, transaction, cancellationToken);
+        if (string.Equals(initialBackfillComplete, "true", StringComparison.OrdinalIgnoreCase) && !performanceEmpty)
+        {
+            return 0;
+        }
+
+        const string sql = """
+INSERT INTO polymarket_onchain_wallet_performance_refresh_queue (wallet, reason, queued_at_utc)
+SELECT missing.wallet, 'missing_performance', now()
+FROM (
+    SELECT DISTINCT position.wallet
+    FROM polymarket_onchain_wallet_positions position
+    WHERE NOT EXISTS (
+        SELECT 1
+        FROM polymarket_onchain_wallet_performance performance
+        WHERE performance.wallet = position.wallet
+    )
+    ORDER BY position.wallet
+    LIMIT @WalletLimit
+) missing
+ON CONFLICT (wallet) DO NOTHING;
+""";
+
+        int queued;
+        await using (var command = CreateCommand(connection, sql))
+        {
+            command.Transaction = transaction;
+            command.CommandTimeout = 300;
+            command.Parameters.AddWithValue("WalletLimit", walletLimit);
+            queued = await command.ExecuteNonQueryAsync(cancellationToken);
+        }
+
+        await UpsertBotSettingAsync(
+            connection,
+            transaction,
+            "onchain_wallet_performance_initial_backfill_complete",
+            queued == 0 ? "true" : "false",
+            cancellationToken);
+
+        return queued;
+    }
+
+    private static async Task<bool> IsPolymarketOnChainWalletPerformanceEmptyAsync(
+        NpgsqlConnection connection,
+        NpgsqlTransaction transaction,
+        CancellationToken cancellationToken)
+    {
+        await using var command = CreateCommand(
+            connection,
+            "SELECT NOT EXISTS (SELECT 1 FROM polymarket_onchain_wallet_performance LIMIT 1);");
+        command.Transaction = transaction;
+        var result = await command.ExecuteScalarAsync(cancellationToken);
+        return result is bool empty && empty;
+    }
+
+    private static async Task<int> CountTempWalletPerformanceRefreshWalletsAsync(
+        NpgsqlConnection connection,
+        NpgsqlTransaction transaction,
+        CancellationToken cancellationToken)
+    {
+        await using var command = CreateCommand(connection, "SELECT count(*) FROM temp_wallet_performance_refresh_wallets;");
+        command.Transaction = transaction;
+        var result = await command.ExecuteScalarAsync(cancellationToken);
+        return result is long count ? checked((int)count) : 0;
+    }
+
+    private static async Task<int> CountPolymarketOnChainWalletPerformanceRefreshQueueAsync(
+        NpgsqlConnection connection,
+        NpgsqlTransaction transaction,
+        CancellationToken cancellationToken)
+    {
+        await using var command = CreateCommand(connection, "SELECT count(*) FROM polymarket_onchain_wallet_performance_refresh_queue;");
+        command.Transaction = transaction;
+        var result = await command.ExecuteScalarAsync(cancellationToken);
+        return result is long count ? checked((int)count) : 0;
+    }
+
+    private static async Task<string?> GetBotSettingAsync(
+        NpgsqlConnection connection,
+        NpgsqlTransaction transaction,
+        string key,
+        CancellationToken cancellationToken)
+    {
+        await using var command = CreateCommand(connection, "SELECT value FROM bot_settings WHERE key = @Key;");
+        command.Transaction = transaction;
+        command.Parameters.AddWithValue("Key", key);
+        var result = await command.ExecuteScalarAsync(cancellationToken);
+        return result is string value ? value : null;
+    }
+
+    private static async Task UpsertBotSettingAsync(
+        NpgsqlConnection connection,
+        NpgsqlTransaction transaction,
+        string key,
+        string value,
+        CancellationToken cancellationToken)
+    {
+        const string sql = """
+INSERT INTO bot_settings (key, value, updated_at_utc)
+VALUES (@Key, @Value, now())
+ON CONFLICT (key) DO UPDATE SET
+    value = excluded.value,
+    updated_at_utc = excluded.updated_at_utc;
+""";
+
+        await using var command = CreateCommand(connection, sql);
+        command.Transaction = transaction;
+        command.Parameters.AddWithValue("Key", key);
+        command.Parameters.AddWithValue("Value", value);
+        await command.ExecuteNonQueryAsync(cancellationToken);
+    }
+
+    private static void AddPolymarketOnChainTokenMetadataParameters(NpgsqlCommand command, PolymarketOnChainTokenMetadata metadata)
+    {
+        command.Parameters.AddWithValue("TokenId", metadata.TokenId);
+        command.Parameters.AddWithValue("ConditionId", metadata.ConditionId);
+        command.Parameters.AddWithValue("MarketId", metadata.MarketId);
+        command.Parameters.AddWithValue("MarketSlug", metadata.MarketSlug);
+        command.Parameters.AddWithValue("MarketTitle", metadata.MarketTitle);
+        command.Parameters.AddWithValue("Outcome", metadata.Outcome);
+        command.Parameters.AddWithValue("OutcomeIndex", metadata.OutcomeIndex);
+        command.Parameters.AddWithValue("Category", (object?)metadata.Category ?? DBNull.Value);
+        command.Parameters.AddWithValue("EndDateUtc", metadata.EndDateUtc is { } endDate ? UtcDateTime(endDate) : DBNull.Value);
+        command.Parameters.AddWithValue("Active", metadata.Active);
+        command.Parameters.AddWithValue("Closed", metadata.Closed);
+        command.Parameters.AddWithValue("Archived", metadata.Archived);
+        command.Parameters.AddWithValue("Resolved", metadata.Resolved);
+        command.Parameters.AddWithValue("WinningOutcome", (object?)metadata.WinningOutcome ?? DBNull.Value);
+        command.Parameters.AddWithValue("ClobTokenIdsJson", JsonSerializer.Serialize(metadata.ClobTokenIds));
+        command.Parameters.AddWithValue("OutcomesJson", JsonSerializer.Serialize(metadata.Outcomes));
+        command.Parameters.AddWithValue("LookupSucceeded", metadata.LookupSucceeded);
+        command.Parameters.AddWithValue("LookupError", (object?)metadata.LookupError ?? DBNull.Value);
+        command.Parameters.AddWithValue("RawJson", string.IsNullOrWhiteSpace(metadata.RawJson) ? "{}" : metadata.RawJson);
+        command.Parameters.AddWithValue("LastRefreshedUtc", UtcDateTime(metadata.LastRefreshedUtc));
+    }
+
+    private static PolymarketOnChainFill ReadPolymarketOnChainFill(NpgsqlDataReader reader)
+    {
+        return new PolymarketOnChainFill(
+            reader.GetGuid(0),
+            reader.GetString(1),
+            reader.GetString(2),
+            reader.GetString(3),
+            reader.GetInt64(4),
+            DateTimeOffsetFromUtc(reader.GetDateTime(5)),
+            reader.GetString(6),
+            reader.GetInt64(7),
+            reader.GetString(8),
+            reader.GetString(9),
+            reader.GetString(10),
+            reader.GetString(11),
+            Enum.Parse<TradeSide>(reader.GetString(12)),
+            reader.GetString(13),
+            reader.GetString(14),
+            reader.GetString(15),
+            reader.GetString(16),
+            reader.GetString(17),
+            reader.GetDecimal(18),
+            reader.GetDecimal(19),
+            reader.GetDecimal(20),
+            reader.GetDecimal(21),
+            reader.GetDecimal(22),
+            reader.GetString(23),
+            reader.GetDecimal(24),
+            reader.GetString(25),
+            reader.IsDBNull(26) ? null : reader.GetString(26),
+            reader.IsDBNull(27) ? null : reader.GetString(27),
+            DateTimeOffsetFromUtc(reader.GetDateTime(28)));
+    }
+
+    private static PolymarketOnChainWalletExecution ReadPolymarketOnChainWalletExecution(NpgsqlDataReader reader)
+    {
+        return new PolymarketOnChainWalletExecution(
+            reader.GetString(0),
+            reader.GetString(1),
+            reader.GetString(2),
+            reader.GetInt64(3),
+            DateTimeOffsetFromUtc(reader.GetDateTime(4)),
+            reader.GetString(5),
+            reader.GetInt64(6),
+            reader.GetInt64(7),
+            reader.GetString(8),
+            Enum.Parse<TradeSide>(reader.GetString(9)),
+            reader.GetString(10),
+            reader.GetInt32(11),
+            reader.GetInt32(12),
+            reader.GetInt32(13),
+            reader.GetDecimal(14),
+            reader.GetDecimal(15),
+            reader.GetDecimal(16),
+            reader.GetDecimal(17),
+            DateTimeOffsetFromUtc(reader.GetDateTime(18)));
+    }
+
+    private static PolymarketOnChainWalletPosition ReadPolymarketOnChainWalletPosition(NpgsqlDataReader reader)
+    {
+        return new PolymarketOnChainWalletPosition(
+            reader.GetString(0),
+            reader.GetString(1),
+            reader.GetString(2),
+            reader.GetString(3),
+            reader.GetString(4),
+            reader.GetString(5),
+            reader.GetString(6),
+            reader.IsDBNull(7) ? null : reader.GetString(7),
+            reader.GetBoolean(8),
+            reader.GetBoolean(9),
+            reader.IsDBNull(10) ? null : reader.GetString(10),
+            reader.GetInt32(11),
+            reader.GetInt32(12),
+            reader.GetInt32(13),
+            reader.GetDecimal(14),
+            reader.GetDecimal(15),
+            reader.GetDecimal(16),
+            reader.GetDecimal(17),
+            reader.GetDecimal(18),
+            reader.GetDecimal(19),
+            reader.GetDecimal(20),
+            reader.GetDecimal(21),
+            reader.GetDecimal(22),
+            reader.GetDecimal(23),
+            reader.IsDBNull(24) ? null : reader.GetDecimal(24),
+            reader.GetString(25),
+            DateTimeOffsetFromUtc(reader.GetDateTime(26)),
+            DateTimeOffsetFromUtc(reader.GetDateTime(27)));
+    }
+
+    private static PolymarketOnChainWalletPerformance ReadPolymarketOnChainWalletPerformance(NpgsqlDataReader reader)
+    {
+        return new PolymarketOnChainWalletPerformance(
+            reader.GetString(0),
+            reader.GetInt32(1),
+            reader.GetInt32(2),
+            reader.GetInt32(3),
+            reader.GetInt32(4),
+            reader.GetInt32(5),
+            reader.GetInt32(6),
+            reader.GetInt32(7),
+            reader.GetDecimal(8),
+            reader.GetDecimal(9),
+            reader.GetDecimal(10),
+            reader.GetDecimal(11),
+            reader.GetDecimal(12),
+            reader.GetDecimal(13),
+            reader.GetDecimal(14),
+            reader.GetDecimal(15),
+            reader.GetDecimal(16),
+            reader.GetString(17),
+            DateTimeOffsetFromUtc(reader.GetDateTime(18)),
+            DateTimeOffsetFromUtc(reader.GetDateTime(19)),
+            DateTimeOffsetFromUtc(reader.GetDateTime(20)));
     }
 
     private static void AddLiveOrderParameters(NpgsqlCommand command, LiveOrder order)

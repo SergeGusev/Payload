@@ -1,5 +1,14 @@
 # AGENTS.md
 
+## Context persistence workflow
+
+Within repository-local instructions, `Codex/Rules/Workflow.md` is the
+authoritative workflow contract for context recovery, task initialization, active
+context updates, and daily history. Higher-priority runtime instructions and the
+safety rules in this file still apply.
+
+ActiveContextFile: Codex/Contexts/ContextPolyCopyTrader.md
+
 ## Project
 
 This repository contains **PolyCopyTrader**, a Windows/.NET C# application for monitoring Polymarket traders and running a cautious copy-signal strategy.

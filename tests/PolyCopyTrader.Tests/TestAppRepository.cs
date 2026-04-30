@@ -35,6 +35,28 @@ internal sealed class TestAppRepository : IAppRepository
 
     public List<PolymarketHttpLogEntry> PolymarketHttpLogs { get; } = [];
 
+    public List<PolymarketOnChainLog> PolymarketOnChainLogs { get; } = [];
+
+    public List<PolymarketOnChainFill> PolymarketOnChainFills { get; } = [];
+
+    public List<PolymarketOnChainWalletFill> PolymarketOnChainWalletFills { get; } = [];
+
+    public List<PolymarketOnChainWalletExecution> PolymarketOnChainWalletExecutions { get; } = [];
+
+    public List<PolymarketOnChainTokenMetadata> PolymarketOnChainTokenMetadata { get; } = [];
+
+    public List<PolymarketOnChainWalletPosition> PolymarketOnChainWalletPositions { get; } = [];
+
+    public HashSet<string> PolymarketOnChainPositionRefreshQueue { get; } = new(StringComparer.OrdinalIgnoreCase);
+
+    public List<PolymarketOnChainWalletPerformance> PolymarketOnChainWalletPerformance { get; } = [];
+
+    public HashSet<string> PolymarketOnChainWalletPerformanceRefreshQueue { get; } = new(StringComparer.OrdinalIgnoreCase);
+
+    public List<OnChainBlockRange> OnChainWalletDerivedRefreshRanges { get; } = [];
+
+    public List<OnChainIngestionCursor> OnChainIngestionCursors { get; } = [];
+
     public List<ScannerStatusSnapshot> ScannerStatuses { get; } = [];
 
     public bool ThrowOnTryAddLeaderTrade { get; set; }
@@ -283,6 +305,514 @@ internal sealed class TestAppRepository : IAppRepository
     {
         return Task.FromResult<IReadOnlyList<PolymarketHttpLogEntry>>(
             PolymarketHttpLogs.OrderByDescending(item => item.RequestedAtUtc).Take(limit).ToArray());
+    }
+
+    public Task AddPolymarketOnChainLogsAsync(IReadOnlyList<PolymarketOnChainLog> logs, CancellationToken cancellationToken = default)
+    {
+        foreach (var log in logs)
+        {
+            PolymarketOnChainLogs.RemoveAll(item =>
+                string.Equals(item.TransactionHash, log.TransactionHash, StringComparison.OrdinalIgnoreCase) &&
+                item.LogIndex == log.LogIndex);
+            PolymarketOnChainLogs.Add(log);
+        }
+
+        return Task.CompletedTask;
+    }
+
+    public Task AddPolymarketOnChainFillsAsync(IReadOnlyList<PolymarketOnChainFill> fills, CancellationToken cancellationToken = default)
+    {
+        foreach (var fill in fills)
+        {
+            PolymarketOnChainFills.RemoveAll(item =>
+                string.Equals(item.TransactionHash, fill.TransactionHash, StringComparison.OrdinalIgnoreCase) &&
+                item.LogIndex == fill.LogIndex);
+            PolymarketOnChainFills.Add(fill);
+            PolymarketOnChainPositionRefreshQueue.Add(fill.TokenId);
+        }
+
+        RebuildOnChainWalletDerivedData();
+        return Task.CompletedTask;
+    }
+
+    public Task UpsertOnChainIngestionCursorAsync(OnChainIngestionCursor cursor, CancellationToken cancellationToken = default)
+    {
+        OnChainIngestionCursors.RemoveAll(item =>
+            string.Equals(item.ContractAddress, cursor.ContractAddress, StringComparison.OrdinalIgnoreCase));
+        OnChainIngestionCursors.Add(cursor);
+        return Task.CompletedTask;
+    }
+
+    public Task<OnChainIngestionCursor?> GetOnChainIngestionCursorAsync(string contractAddress, CancellationToken cancellationToken = default)
+    {
+        return Task.FromResult<OnChainIngestionCursor?>(
+            OnChainIngestionCursors.FirstOrDefault(item =>
+                string.Equals(item.ContractAddress, contractAddress, StringComparison.OrdinalIgnoreCase)));
+    }
+
+    public Task<long?> GetLatestPolymarketOnChainFillBlockAsync(string contractAddress, CancellationToken cancellationToken = default)
+    {
+        var blocks = PolymarketOnChainFills
+            .Where(item => string.Equals(item.ContractAddress, contractAddress, StringComparison.OrdinalIgnoreCase))
+            .Select(item => item.BlockNumber)
+            .ToArray();
+        return Task.FromResult(blocks.Length == 0 ? (long?)null : blocks.Max());
+    }
+
+    public Task<OnChainBlockRange?> GetPolymarketOnChainFillBlockRangeAsync(string contractAddress, CancellationToken cancellationToken = default)
+    {
+        var blocks = PolymarketOnChainFills
+            .Where(item => string.Equals(item.ContractAddress, contractAddress, StringComparison.OrdinalIgnoreCase))
+            .Select(item => item.BlockNumber)
+            .ToArray();
+        return Task.FromResult(blocks.Length == 0 ? null : new OnChainBlockRange(blocks.Min(), blocks.Max()));
+    }
+
+    public Task<OnChainBlockRange?> GetPolymarketOnChainWalletExecutionBlockRangeAsync(string contractAddress, CancellationToken cancellationToken = default)
+    {
+        var blocks = PolymarketOnChainWalletExecutions
+            .Where(item => string.Equals(item.ContractAddress, contractAddress, StringComparison.OrdinalIgnoreCase))
+            .Select(item => item.BlockNumber)
+            .ToArray();
+        return Task.FromResult(blocks.Length == 0 ? null : new OnChainBlockRange(blocks.Min(), blocks.Max()));
+    }
+
+    public Task RefreshPolymarketOnChainWalletDerivedDataAsync(string contractAddress, long fromBlock, long toBlock, CancellationToken cancellationToken = default)
+    {
+        OnChainWalletDerivedRefreshRanges.Add(new OnChainBlockRange(fromBlock, toBlock));
+        RebuildOnChainWalletDerivedData();
+        foreach (var tokenId in PolymarketOnChainWalletExecutions
+            .Where(item => string.Equals(item.ContractAddress, contractAddress, StringComparison.OrdinalIgnoreCase))
+            .Where(item => item.BlockNumber >= fromBlock && item.BlockNumber <= toBlock)
+            .Select(item => item.TokenId)
+            .Distinct(StringComparer.OrdinalIgnoreCase))
+        {
+            PolymarketOnChainPositionRefreshQueue.Add(tokenId);
+        }
+
+        return Task.CompletedTask;
+    }
+
+    public Task<IReadOnlyList<PolymarketOnChainWalletExecution>> GetRecentPolymarketOnChainWalletExecutionsAsync(int limit = 100, CancellationToken cancellationToken = default)
+    {
+        return Task.FromResult<IReadOnlyList<PolymarketOnChainWalletExecution>>(
+            PolymarketOnChainWalletExecutions
+                .OrderByDescending(item => item.BlockTimestampUtc)
+                .ThenByDescending(item => item.BlockNumber)
+                .ThenByDescending(item => item.FirstLogIndex)
+                .Take(limit)
+                .ToArray());
+    }
+
+    public Task<IReadOnlyList<string>> GetOnChainTokenIdsMissingMetadataAsync(int limit = 100, CancellationToken cancellationToken = default)
+    {
+        var known = PolymarketOnChainTokenMetadata
+            .Select(item => item.TokenId)
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+        return Task.FromResult<IReadOnlyList<string>>(
+            PolymarketOnChainWalletExecutions
+                .Select(item => item.TokenId)
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .Where(tokenId => !known.Contains(tokenId))
+                .OrderBy(tokenId => tokenId, StringComparer.Ordinal)
+                .Take(limit)
+                .ToArray());
+    }
+
+    public Task UpsertPolymarketOnChainTokenMetadataAsync(IReadOnlyList<PolymarketOnChainTokenMetadata> metadata, CancellationToken cancellationToken = default)
+    {
+        foreach (var item in metadata)
+        {
+            PolymarketOnChainTokenMetadata.RemoveAll(existing =>
+                string.Equals(existing.TokenId, item.TokenId, StringComparison.OrdinalIgnoreCase));
+            PolymarketOnChainTokenMetadata.Add(item);
+            PolymarketOnChainPositionRefreshQueue.Add(item.TokenId);
+        }
+
+        return Task.CompletedTask;
+    }
+
+    public Task<IReadOnlyList<PolymarketOnChainFill>> GetRecentPolymarketOnChainFillsAsync(int limit = 100, CancellationToken cancellationToken = default)
+    {
+        return Task.FromResult<IReadOnlyList<PolymarketOnChainFill>>(
+            PolymarketOnChainFills.OrderByDescending(item => item.BlockTimestampUtc).Take(limit).ToArray());
+    }
+
+    public Task<IReadOnlyList<TraderOnChainStats>> GetTraderOnChainStatsAsync(int limit = 100, CancellationToken cancellationToken = default)
+    {
+        var stats = PolymarketOnChainWalletExecutions
+            .GroupBy(item => item.Wallet, StringComparer.OrdinalIgnoreCase)
+            .Select(group =>
+            {
+                var executions = group.ToArray();
+                var volume = executions.Sum(item => item.NotionalUsd);
+                var feesUsd = executions.Sum(item => item.FeesUsd);
+                return new TraderOnChainStats(
+                    group.Key,
+                    executions.Length,
+                    executions.Count(item => item.Side == TradeSide.Buy),
+                    executions.Count(item => item.Side == TradeSide.Sell),
+                    executions.Select(item => item.TokenId).Distinct(StringComparer.OrdinalIgnoreCase).Count(),
+                    volume,
+                    executions.Length == 0 ? 0m : volume / executions.Length,
+                    feesUsd,
+                    volume + executions.Length + executions.Select(item => item.TokenId).Distinct(StringComparer.OrdinalIgnoreCase).Count() * 5,
+                    executions.Min(item => item.BlockTimestampUtc),
+                    executions.Max(item => item.BlockTimestampUtc));
+            })
+            .OrderByDescending(item => item.ActivityScore)
+            .ThenByDescending(item => item.VolumeUsd)
+            .Take(limit)
+            .ToArray();
+
+        return Task.FromResult<IReadOnlyList<TraderOnChainStats>>(stats);
+    }
+
+    public Task<IReadOnlyList<PolymarketOnChainWalletPosition>> GetPolymarketOnChainWalletPositionsAsync(int limit = 250, CancellationToken cancellationToken = default)
+    {
+        return Task.FromResult<IReadOnlyList<PolymarketOnChainWalletPosition>>(
+            PolymarketOnChainWalletPositions
+                .OrderByDescending(item => Math.Abs(item.NetCostUsd))
+                .ThenByDescending(item => item.VolumeUsd)
+                .ThenByDescending(item => item.LastTradeUtc)
+                .Take(limit)
+                .ToArray());
+    }
+
+    public Task<OnChainPositionRefreshResult> RefreshPolymarketOnChainWalletPositionsAsync(
+        int tokenLimit = 50,
+        int queueSeedTokenLimit = 500,
+        CancellationToken cancellationToken = default)
+    {
+        var queued = 0;
+        var knownPositionTokens = PolymarketOnChainWalletPositions
+            .Select(item => item.TokenId)
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+        foreach (var tokenId in PolymarketOnChainWalletExecutions
+            .Select(item => item.TokenId)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .Where(tokenId => !knownPositionTokens.Contains(tokenId))
+            .Take(queueSeedTokenLimit))
+        {
+            if (PolymarketOnChainPositionRefreshQueue.Add(tokenId))
+            {
+                queued++;
+            }
+        }
+
+        var tokenIds = PolymarketOnChainPositionRefreshQueue
+            .OrderBy(tokenId => tokenId, StringComparer.Ordinal)
+            .Take(tokenLimit)
+            .ToArray();
+        if (tokenIds.Length == 0)
+        {
+            return Task.FromResult(new OnChainPositionRefreshResult(queued, 0, 0, 0));
+        }
+
+        RefreshPositionsForTokens(tokenIds);
+        foreach (var tokenId in tokenIds)
+        {
+            PolymarketOnChainPositionRefreshQueue.Remove(tokenId);
+        }
+
+        return Task.FromResult(new OnChainPositionRefreshResult(
+            queued,
+            tokenIds.Length,
+            PolymarketOnChainWalletPositions.Count(item => tokenIds.Contains(item.TokenId, StringComparer.OrdinalIgnoreCase)),
+            PolymarketOnChainPositionRefreshQueue.Count));
+    }
+
+    public Task<IReadOnlyList<PolymarketOnChainWalletPerformance>> GetPolymarketOnChainWalletPerformanceAsync(int limit = 100, CancellationToken cancellationToken = default)
+    {
+        return Task.FromResult<IReadOnlyList<PolymarketOnChainWalletPerformance>>(
+            PolymarketOnChainWalletPerformance
+                .OrderByDescending(item => item.Score)
+                .ThenByDescending(item => item.ResolvedPnlUsd)
+                .ThenByDescending(item => item.VolumeUsd)
+                .Take(limit)
+                .ToArray());
+    }
+
+    public Task<OnChainPerformanceRefreshResult> RefreshPolymarketOnChainWalletPerformanceAsync(
+        int walletLimit = 100,
+        int queueSeedWalletLimit = 500,
+        CancellationToken cancellationToken = default)
+    {
+        var queued = 0;
+        var knownWallets = PolymarketOnChainWalletPerformance
+            .Select(item => item.Wallet)
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+        foreach (var wallet in PolymarketOnChainWalletPositions
+            .Select(item => item.Wallet)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .Where(wallet => !knownWallets.Contains(wallet))
+            .Take(queueSeedWalletLimit))
+        {
+            if (PolymarketOnChainWalletPerformanceRefreshQueue.Add(wallet))
+            {
+                queued++;
+            }
+        }
+
+        var wallets = PolymarketOnChainWalletPerformanceRefreshQueue
+            .OrderBy(wallet => wallet, StringComparer.Ordinal)
+            .Take(walletLimit)
+            .ToArray();
+        if (wallets.Length == 0)
+        {
+            return Task.FromResult(new OnChainPerformanceRefreshResult(queued, 0, 0, 0));
+        }
+
+        RefreshPerformanceForWallets(wallets);
+        foreach (var wallet in wallets)
+        {
+            PolymarketOnChainWalletPerformanceRefreshQueue.Remove(wallet);
+        }
+
+        return Task.FromResult(new OnChainPerformanceRefreshResult(
+            queued,
+            wallets.Length,
+            PolymarketOnChainWalletPerformance.Count(item => wallets.Contains(item.Wallet, StringComparer.OrdinalIgnoreCase)),
+            PolymarketOnChainWalletPerformanceRefreshQueue.Count));
+    }
+
+    private void RefreshPositionsForTokens(IReadOnlyList<string> tokenIds)
+    {
+        var tokenSet = tokenIds.ToHashSet(StringComparer.OrdinalIgnoreCase);
+        PolymarketOnChainWalletPositions.RemoveAll(item => tokenSet.Contains(item.TokenId));
+        var metadataByToken = PolymarketOnChainTokenMetadata.ToDictionary(
+            item => item.TokenId,
+            StringComparer.OrdinalIgnoreCase);
+        var positions = PolymarketOnChainWalletExecutions
+            .Where(item => tokenSet.Contains(item.TokenId))
+            .GroupBy(
+                item =>
+                {
+                    metadataByToken.TryGetValue(item.TokenId, out var metadata);
+                    return new PositionKey(
+                        item.Wallet,
+                        item.TokenId,
+                        metadata?.ConditionId ?? item.TokenId,
+                        metadata?.MarketId ?? string.Empty,
+                        metadata?.MarketSlug ?? string.Empty,
+                        string.IsNullOrWhiteSpace(metadata?.MarketTitle) ? "Unenriched token " + item.TokenId[..Math.Min(16, item.TokenId.Length)] : metadata!.MarketTitle,
+                        string.IsNullOrWhiteSpace(metadata?.Outcome) ? "Unknown" : metadata!.Outcome,
+                        metadata?.Category,
+                        metadata?.LookupSucceeded ?? false,
+                        metadata?.Resolved ?? false,
+                        metadata?.WinningOutcome);
+                })
+            .Select(group =>
+            {
+                var rows = group.ToArray();
+                var buyShares = rows.Where(item => item.Side == TradeSide.Buy).Sum(item => item.SizeShares);
+                var sellShares = rows.Where(item => item.Side == TradeSide.Sell).Sum(item => item.SizeShares);
+                var buyNotional = rows.Where(item => item.Side == TradeSide.Buy).Sum(item => item.NotionalUsd);
+                var sellNotional = rows.Where(item => item.Side == TradeSide.Sell).Sum(item => item.NotionalUsd);
+                var fees = rows.Sum(item => item.FeesUsd);
+                var netShares = buyShares - sellShares;
+                var netCost = buyNotional - sellNotional + fees;
+                var resolvedPnl = group.Key.MarketResolved && !string.IsNullOrWhiteSpace(group.Key.WinningOutcome)
+                    ? (string.Equals(group.Key.Outcome, group.Key.WinningOutcome, StringComparison.OrdinalIgnoreCase) ? netShares : 0m) - netCost
+                    : (decimal?)null;
+
+                return new PolymarketOnChainWalletPosition(
+                    group.Key.Wallet,
+                    group.Key.TokenId,
+                    group.Key.ConditionId,
+                    group.Key.MarketId,
+                    group.Key.MarketSlug,
+                    group.Key.MarketTitle,
+                    group.Key.Outcome,
+                    group.Key.Category,
+                    group.Key.LookupSucceeded,
+                    group.Key.MarketResolved,
+                    group.Key.WinningOutcome,
+                    rows.Length,
+                    rows.Count(item => item.Side == TradeSide.Buy),
+                    rows.Count(item => item.Side == TradeSide.Sell),
+                    buyShares,
+                    sellShares,
+                    netShares,
+                    buyNotional,
+                    sellNotional,
+                    netCost,
+                    fees,
+                    buyShares == 0m ? 0m : buyNotional / buyShares,
+                    sellShares == 0m ? 0m : sellNotional / sellShares,
+                    rows.Sum(item => item.NotionalUsd),
+                    resolvedPnl,
+                    group.Key.MarketResolved ? "Resolved" : Math.Abs(netShares) < 0.00000001m ? "Flat" : "Open",
+                    rows.Min(item => item.BlockTimestampUtc),
+                    rows.Max(item => item.BlockTimestampUtc));
+            })
+            .OrderByDescending(item => Math.Abs(item.NetCostUsd))
+            .ThenByDescending(item => item.VolumeUsd)
+            .ThenByDescending(item => item.LastTradeUtc)
+            .ToArray();
+
+        PolymarketOnChainWalletPositions.AddRange(positions);
+        foreach (var wallet in positions.Select(item => item.Wallet).Distinct(StringComparer.OrdinalIgnoreCase))
+        {
+            PolymarketOnChainWalletPerformanceRefreshQueue.Add(wallet);
+        }
+    }
+
+    private void RefreshPerformanceForWallets(IReadOnlyList<string> wallets)
+    {
+        var walletSet = wallets.ToHashSet(StringComparer.OrdinalIgnoreCase);
+        PolymarketOnChainWalletPerformance.RemoveAll(item => walletSet.Contains(item.Wallet));
+
+        var rows = PolymarketOnChainWalletPositions
+            .Where(item => walletSet.Contains(item.Wallet))
+            .GroupBy(item => item.Wallet, StringComparer.OrdinalIgnoreCase)
+            .Select(group =>
+            {
+                var positions = group.ToArray();
+                var resolved = positions.Where(item => item.PositionStatus == "Resolved").ToArray();
+                var volume = positions.Sum(item => item.VolumeUsd);
+                var resolvedVolume = resolved.Sum(item => item.VolumeUsd);
+                var openExposure = positions.Where(item => item.PositionStatus == "Open").Sum(item => Math.Abs(item.NetCostUsd));
+                var resolvedCost = resolved.Where(item => item.ResolvedPnlUsd is not null).Sum(item => Math.Abs(item.NetCostUsd));
+                var resolvedPnl = resolved.Sum(item => item.ResolvedPnlUsd ?? 0m);
+                var profitable = resolved.Count(item => (item.ResolvedPnlUsd ?? 0m) > 0m);
+                var losing = resolved.Count(item => (item.ResolvedPnlUsd ?? 0m) < 0m);
+                var roi = resolvedCost == 0m ? 0m : resolvedPnl / resolvedCost * 100m;
+                var winRate = resolved.Length == 0 ? 0m : profitable * 100m / resolved.Length;
+                var samplePenalty = resolved.Length < 5 ? (5 - resolved.Length) * 10m : 0m;
+                var score = resolvedPnl + roi * 2m + profitable * 5m +
+                    (decimal)Math.Log((double)(volume + 1m)) +
+                    Math.Min(resolved.Length, 50) * 2m -
+                    openExposure * 0.02m -
+                    samplePenalty;
+
+                return new PolymarketOnChainWalletPerformance(
+                    group.Key,
+                    positions.Length,
+                    positions.Count(item => item.PositionStatus == "Open"),
+                    positions.Count(item => item.PositionStatus == "Flat"),
+                    resolved.Length,
+                    profitable,
+                    losing,
+                    positions.Select(item => item.ConditionId).Distinct(StringComparer.OrdinalIgnoreCase).Count(),
+                    volume,
+                    resolvedVolume,
+                    openExposure,
+                    resolvedCost,
+                    resolvedPnl,
+                    roi,
+                    winRate,
+                    positions.Length == 0 ? 0m : positions.Average(item => Math.Abs(item.NetCostUsd)),
+                    score,
+                    resolved.Length >= 25 && volume >= 1_000m ? "High" :
+                        resolved.Length >= 10 ? "Medium" :
+                        resolved.Length >= 3 ? "Low" : "Thin",
+                    positions.Min(item => item.FirstTradeUtc),
+                    positions.Max(item => item.LastTradeUtc),
+                    DateTimeOffset.UtcNow);
+            });
+
+        PolymarketOnChainWalletPerformance.AddRange(rows);
+    }
+
+    private sealed record PositionKey(
+        string Wallet,
+        string TokenId,
+        string ConditionId,
+        string MarketId,
+        string MarketSlug,
+        string MarketTitle,
+        string Outcome,
+        string? Category,
+        bool LookupSucceeded,
+        bool MarketResolved,
+        string? WinningOutcome);
+
+    private void RebuildOnChainWalletDerivedData()
+    {
+        PolymarketOnChainWalletFills.Clear();
+        foreach (var fill in PolymarketOnChainFills)
+        {
+            PolymarketOnChainWalletFills.Add(ToWalletFill(fill, OnChainParticipantRole.Maker));
+            PolymarketOnChainWalletFills.Add(ToWalletFill(fill, OnChainParticipantRole.Taker));
+        }
+
+        PolymarketOnChainWalletExecutions.Clear();
+        PolymarketOnChainWalletExecutions.AddRange(
+            PolymarketOnChainWalletFills
+                .GroupBy(
+                    item => new
+                    {
+                        ContractAddress = item.ContractAddress.ToLowerInvariant(),
+                        TransactionHash = item.TransactionHash.ToLowerInvariant(),
+                        Wallet = item.Wallet.ToLowerInvariant(),
+                        item.Side,
+                        item.TokenId
+                    })
+                .Select(group =>
+                {
+                    var rows = group.ToArray();
+                    var size = rows.Sum(item => item.SizeShares);
+                    var notional = rows.Sum(item => item.NotionalUsd);
+                    return new PolymarketOnChainWalletExecution(
+                        rows[0].ContractName,
+                        rows[0].ContractAddress,
+                        rows[0].ExchangeVersion,
+                        rows.Min(item => item.BlockNumber),
+                        rows.Min(item => item.BlockTimestampUtc),
+                        rows[0].TransactionHash,
+                        rows.Min(item => item.LogIndex),
+                        rows.Max(item => item.LogIndex),
+                        rows[0].Wallet,
+                        rows[0].Side,
+                        rows[0].TokenId,
+                        rows.Length,
+                        rows.Count(item => item.Role == OnChainParticipantRole.Maker),
+                        rows.Count(item => item.Role == OnChainParticipantRole.Taker),
+                        size,
+                        notional,
+                        size == 0m ? 0m : notional / size,
+                        rows.Where(item => item.FeeAssetId == "0").Sum(item => item.FeeAmount),
+                        rows.Max(item => item.ImportedAtUtc));
+                }));
+    }
+
+    private static PolymarketOnChainWalletFill ToWalletFill(
+        PolymarketOnChainFill fill,
+        OnChainParticipantRole role)
+    {
+        var isMaker = role == OnChainParticipantRole.Maker;
+        return new PolymarketOnChainWalletFill(
+            fill.Id,
+            fill.ContractName,
+            fill.ContractAddress,
+            fill.ExchangeVersion,
+            fill.BlockNumber,
+            fill.BlockTimestampUtc,
+            fill.TransactionHash,
+            fill.LogIndex,
+            fill.OrderHash,
+            role,
+            isMaker ? fill.Maker : fill.Taker,
+            isMaker ? fill.Taker : fill.Maker,
+            isMaker ? fill.Side : Opposite(fill.Side),
+            fill.TokenId,
+            fill.Price,
+            fill.SizeShares,
+            fill.NotionalUsd,
+            isMaker ? fill.FeeAmount : 0m,
+            isMaker ? fill.FeeAssetId : "0",
+            fill.ImportedAtUtc);
+    }
+
+    private static TradeSide Opposite(TradeSide side)
+    {
+        return side switch
+        {
+            TradeSide.Buy => TradeSide.Sell,
+            TradeSide.Sell => TradeSide.Buy,
+            _ => side
+        };
     }
 
     public Task<IReadOnlyList<RiskEvent>> GetRecentRiskEventsAsync(int limit = 100, CancellationToken cancellationToken = default)

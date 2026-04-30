@@ -31,6 +31,7 @@ public static class AppOptionsValidator
         ValidateDashboard(configuration.Dashboard, errors);
         ValidateAnalytics(configuration.Analytics, errors);
         ValidateTraderDiscovery(configuration.TraderDiscovery, errors);
+        ValidateOnChainIngestion(configuration.OnChainIngestion, errors);
         ValidateIpc(configuration.Ipc, errors);
         ValidateStorage(configuration.Storage, errors);
         return errors;
@@ -64,6 +65,16 @@ public static class AppOptionsValidator
             $"Trader discovery enabled: {configuration.TraderDiscovery.Enabled}",
             $"Trader discovery category: {configuration.TraderDiscovery.Category}",
             $"Trader discovery time period: {configuration.TraderDiscovery.TimePeriod}",
+            $"On-chain ingestion enabled: {configuration.OnChainIngestion.Enabled}",
+            $"On-chain RPC configured: {IsOnChainRpcConfigured(configuration.OnChainIngestion)}",
+            $"On-chain RPC host: {GetUriHost(ResolveOnChainRpcUrl(configuration.OnChainIngestion))}",
+            $"On-chain lookback days: {configuration.OnChainIngestion.LookbackDays}",
+            $"On-chain historical start UTC: {configuration.OnChainIngestion.HistoricalBackfillStartUtc:yyyy-MM-dd}",
+            $"On-chain max block range: {configuration.OnChainIngestion.MaxBlockRange}",
+            $"On-chain background sync enabled: {configuration.OnChainIngestion.BackgroundSyncEnabled}",
+            $"On-chain background market enrichment enabled: {configuration.OnChainIngestion.BackgroundMarketEnrichmentEnabled}",
+            $"On-chain background position refresh enabled: {configuration.OnChainIngestion.BackgroundPositionRefreshEnabled}",
+            $"On-chain background performance refresh enabled: {configuration.OnChainIngestion.BackgroundPerformanceRefreshEnabled}",
             $"Watchlist traders: {configuration.Watchlist.Traders.Count}",
             $"Paper bankroll USD: {configuration.PaperTrading.InitialBankrollUsd}");
     }
@@ -565,6 +576,137 @@ public static class AppOptionsValidator
         }
     }
 
+    private static void ValidateOnChainIngestion(OnChainIngestionOptions options, List<string> errors)
+    {
+        if (!options.Enabled)
+        {
+            return;
+        }
+
+        if (!string.IsNullOrWhiteSpace(options.RpcUrlEnvironmentVariable) &&
+            options.RpcUrlEnvironmentVariable.Any(char.IsWhiteSpace))
+        {
+            errors.Add("OnChainIngestion.RpcUrlEnvironmentVariable must not contain whitespace.");
+        }
+
+        var rpcUrl = ResolveOnChainRpcUrl(options);
+        if (!Uri.TryCreate(rpcUrl, UriKind.Absolute, out var rpcUri) ||
+            (rpcUri.Scheme != Uri.UriSchemeHttp && rpcUri.Scheme != Uri.UriSchemeHttps))
+        {
+            errors.Add("OnChainIngestion.PolygonRpcUrl must be an absolute HTTP or HTTPS URL, or set the configured RPC URL environment variable.");
+        }
+
+        if (options.LookbackDays <= 0 || options.LookbackDays > 30)
+        {
+            errors.Add("OnChainIngestion.LookbackDays must be between 1 and 30 for the initial spike.");
+        }
+
+        if (options.HistoricalBackfillStartUtc > DateTimeOffset.UtcNow.AddMinutes(5))
+        {
+            errors.Add("OnChainIngestion.HistoricalBackfillStartUtc must not be in the future.");
+        }
+
+        if (options.MaxBlockRange <= 0 || options.MaxBlockRange > 10_000)
+        {
+            errors.Add("OnChainIngestion.MaxBlockRange must be between 1 and 10000 for the initial public-RPC spike.");
+        }
+
+        if (options.RequestDelayMilliseconds < 0)
+        {
+            errors.Add("OnChainIngestion.RequestDelayMilliseconds must not be negative.");
+        }
+
+        if (options.BackgroundSyncIdleDelaySeconds <= 0 || options.BackgroundSyncIdleDelaySeconds > 86_400)
+        {
+            errors.Add("OnChainIngestion.BackgroundSyncIdleDelaySeconds must be between 1 and 86400.");
+        }
+
+        if (options.BackgroundErrorDelaySeconds <= 0 || options.BackgroundErrorDelaySeconds > 86_400)
+        {
+            errors.Add("OnChainIngestion.BackgroundErrorDelaySeconds must be between 1 and 86400.");
+        }
+
+        if (options.BackgroundMaxErrorDelaySeconds < options.BackgroundErrorDelaySeconds ||
+            options.BackgroundMaxErrorDelaySeconds > 86_400)
+        {
+            errors.Add("OnChainIngestion.BackgroundMaxErrorDelaySeconds must be at least BackgroundErrorDelaySeconds and at most 86400.");
+        }
+
+        if (options.BackgroundHistoricalBatchesPerCycle <= 0 || options.BackgroundHistoricalBatchesPerCycle > 10_000)
+        {
+            errors.Add("OnChainIngestion.BackgroundHistoricalBatchesPerCycle must be between 1 and 10000.");
+        }
+
+        if (options.MarketEnrichmentBatchSize <= 0 || options.MarketEnrichmentBatchSize > 1_000)
+        {
+            errors.Add("OnChainIngestion.MarketEnrichmentBatchSize must be between 1 and 1000.");
+        }
+
+        if (options.MarketEnrichmentMaxBatchesPerRun <= 0 || options.MarketEnrichmentMaxBatchesPerRun > 1_000)
+        {
+            errors.Add("OnChainIngestion.MarketEnrichmentMaxBatchesPerRun must be between 1 and 1000.");
+        }
+
+        if (options.MarketEnrichmentIntervalSeconds <= 0 || options.MarketEnrichmentIntervalSeconds > 86_400)
+        {
+            errors.Add("OnChainIngestion.MarketEnrichmentIntervalSeconds must be between 1 and 86400.");
+        }
+
+        if (options.PositionRefreshIntervalSeconds <= 0 || options.PositionRefreshIntervalSeconds > 86_400)
+        {
+            errors.Add("OnChainIngestion.PositionRefreshIntervalSeconds must be between 1 and 86400.");
+        }
+
+        if (options.PositionRefreshTokenBatchSize <= 0 || options.PositionRefreshTokenBatchSize > 10_000)
+        {
+            errors.Add("OnChainIngestion.PositionRefreshTokenBatchSize must be between 1 and 10000.");
+        }
+
+        if (options.PositionRefreshQueueSeedTokenBatchSize <= 0 || options.PositionRefreshQueueSeedTokenBatchSize > 100_000)
+        {
+            errors.Add("OnChainIngestion.PositionRefreshQueueSeedTokenBatchSize must be between 1 and 100000.");
+        }
+
+        if (options.PerformanceRefreshIntervalSeconds <= 0 || options.PerformanceRefreshIntervalSeconds > 86_400)
+        {
+            errors.Add("OnChainIngestion.PerformanceRefreshIntervalSeconds must be between 1 and 86400.");
+        }
+
+        if (options.PerformanceRefreshWalletBatchSize <= 0 || options.PerformanceRefreshWalletBatchSize > 10_000)
+        {
+            errors.Add("OnChainIngestion.PerformanceRefreshWalletBatchSize must be between 1 and 10000.");
+        }
+
+        if (options.PerformanceRefreshQueueSeedWalletBatchSize <= 0 || options.PerformanceRefreshQueueSeedWalletBatchSize > 100_000)
+        {
+            errors.Add("OnChainIngestion.PerformanceRefreshQueueSeedWalletBatchSize must be between 1 and 100000.");
+        }
+
+        if (options.ExchangeContracts.Count == 0)
+        {
+            errors.Add("OnChainIngestion.ExchangeContracts must contain at least one contract.");
+            return;
+        }
+
+        foreach (var contract in options.ExchangeContracts)
+        {
+            if (string.IsNullOrWhiteSpace(contract.Name))
+            {
+                errors.Add("OnChainIngestion.ExchangeContracts entries require Name.");
+            }
+
+            if (!IsAddressLike(contract.Address))
+            {
+                errors.Add($"OnChainIngestion exchange contract '{contract.Name}' must have a 0x-prefixed address.");
+            }
+
+            if (!IsSupportedOnChainExchangeVersion(contract.Version))
+            {
+                errors.Add($"OnChainIngestion exchange contract '{contract.Name}' Version must be V1 or V2.");
+            }
+        }
+    }
+
     private static void ValidateIpc(IpcOptions options, List<string> errors)
     {
         ValidateLoopbackHttpUrl(options.ListenUrl, "Ipc.ListenUrl", errors);
@@ -689,6 +831,36 @@ public static class AppOptionsValidator
             string.Equals(value, "WEEK", StringComparison.OrdinalIgnoreCase) ||
             string.Equals(value, "MONTH", StringComparison.OrdinalIgnoreCase) ||
             string.Equals(value, "ALL", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static bool IsSupportedOnChainExchangeVersion(string value)
+    {
+        return string.Equals(value, "V1", StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(value, "V2", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static bool IsOnChainRpcConfigured(OnChainIngestionOptions options)
+    {
+        return !string.IsNullOrWhiteSpace(ResolveOnChainRpcUrl(options));
+    }
+
+    private static string ResolveOnChainRpcUrl(OnChainIngestionOptions options)
+    {
+        if (!string.IsNullOrWhiteSpace(options.RpcUrlEnvironmentVariable))
+        {
+            var fromEnvironment = Environment.GetEnvironmentVariable(options.RpcUrlEnvironmentVariable);
+            if (!string.IsNullOrWhiteSpace(fromEnvironment))
+            {
+                return fromEnvironment;
+            }
+        }
+
+        return options.PolygonRpcUrl;
+    }
+
+    private static string GetUriHost(string value)
+    {
+        return Uri.TryCreate(value, UriKind.Absolute, out var uri) ? uri.Host : "not configured";
     }
 
     private static bool IsAddressLike(string value)

@@ -29,6 +29,7 @@ public static class AppConfigurationLoader
             Dashboard = configuration.GetSection("Dashboard").Get<DashboardOptions>() ?? new DashboardOptions(),
             Analytics = configuration.GetSection("Analytics").Get<AnalyticsOptions>() ?? new AnalyticsOptions(),
             TraderDiscovery = configuration.GetSection("TraderDiscovery").Get<TraderDiscoveryOptions>() ?? new TraderDiscoveryOptions(),
+            OnChainIngestion = configuration.GetSection("OnChainIngestion").Get<OnChainIngestionOptions>() ?? new OnChainIngestionOptions(),
             Ipc = configuration.GetSection("Ipc").Get<IpcOptions>() ?? new IpcOptions(),
             Storage = configuration.GetSection("Storage").Get<StorageOptions>() ?? new StorageOptions()
         };

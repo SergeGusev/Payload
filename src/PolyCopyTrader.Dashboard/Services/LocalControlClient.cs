@@ -62,6 +62,21 @@ public sealed class LocalControlClient(IpcOptions options)
         return PostAsync("refresh-trader-discovery", cancellationToken, TimeSpan.FromMinutes(5));
     }
 
+    public Task<ControlCommandResponse> RefreshOnChainAsync(CancellationToken cancellationToken = default)
+    {
+        return PostAsync("refresh-onchain", cancellationToken, TimeSpan.FromMinutes(30));
+    }
+
+    public Task<ControlCommandResponse> RefreshOnChainMarketsAsync(CancellationToken cancellationToken = default)
+    {
+        return PostAsync("refresh-onchain-markets", cancellationToken, TimeSpan.FromMinutes(10));
+    }
+
+    public Task<ControlCommandResponse> CancelOnChainAsync(CancellationToken cancellationToken = default)
+    {
+        return PostAsync("cancel-onchain", cancellationToken);
+    }
+
     public Task<ControlCommandResponse> PauseAllAsync(CancellationToken cancellationToken = default)
     {
         return PostAsync("pause", cancellationToken);

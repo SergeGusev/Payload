@@ -142,6 +142,96 @@ service through localhost IPC.
 - `PositionsPerCandidate`: current positions to fetch for each candidate.
 - `RequestDelayMilliseconds`: delay between Data API requests; defaults to `500` for conservative manual discovery.
 
+## OnChainIngestion
+
+Reads Polymarket `OrderFilled` events from Polygon through JSON-RPC. This is a
+background research workflow, not trading logic. The dashboard `Onchain sync`,
+`Enrich markets`, and `Cancel onchain` buttons call the same processors through
+localhost IPC for manual forcing and diagnostics. Progress is checkpointed after
+every completed block batch.
+
+- `Enabled`: allows on-chain background workers and manual refresh commands when true.
+- `PolygonRpcUrl`: fallback Polygon JSON-RPC URL. Do not put secret RPC tokens in repository files.
+- `RpcUrlEnvironmentVariable`: environment variable override, default `POLYCOPYTRADER_POLYGON_RPC_URL`.
+- `LookbackDays`: fresh catch-up seed window, currently validated between `1` and `30`; default `7`.
+- `HistoricalBackfillStartUtc`: oldest UTC date to backfill after the fresh tail is caught up; default `2025-10-30T00:00:00Z`.
+- `MaxBlockRange`: `eth_getLogs` block span per request; default `500`; keep it at or below `10000` for public/free RPC endpoints.
+- `RequestDelayMilliseconds`: delay between RPC/Gamma calls to avoid hammering public endpoints.
+- `BackgroundSyncEnabled`: runs on-chain ingestion continuously while the service is running; default `true`.
+- `BackgroundSyncIdleDelaySeconds`: pause between successful background ingestion cycles; default `30`.
+- `BackgroundErrorDelaySeconds`: first retry delay after background ingestion or enrichment errors; default `60`.
+- `BackgroundMaxErrorDelaySeconds`: maximum exponential retry delay after repeated background errors; default `900`.
+- `BackgroundHistoricalBatchesPerCycle`: maximum historical backfill batches per background ingestion cycle, shared round-robin across contracts after fresh catch-up; default `8`.
+- `MarketEnrichmentBatchSize`: number of missing on-chain token ids to enrich per Gamma batch; default `100`.
+- `MarketEnrichmentMaxBatchesPerRun`: maximum Gamma enrichment batches per manual `Enrich markets` command; default `25`. If this limit is reached while missing tokens remain, run the command again to continue.
+- `BackgroundMarketEnrichmentEnabled`: runs missing-token Gamma enrichment continuously while the service is running; default `true`.
+- `MarketEnrichmentIntervalSeconds`: pause between successful background enrichment cycles; default `120`.
+- `BackgroundPositionRefreshEnabled`: runs wallet-position aggregation continuously while the service is running; default `true`.
+- `PositionRefreshIntervalSeconds`: pause between successful background position refresh cycles; default `30`.
+- `PositionRefreshTokenBatchSize`: number of queued token ids to aggregate into wallet positions per cycle; default `50`.
+- `PositionRefreshQueueSeedTokenBatchSize`: number of missing token ids to seed into the position refresh queue while the initial positions table is being built; default `500`.
+- `BackgroundPerformanceRefreshEnabled`: runs wallet-performance aggregation continuously while the service is running; default `true`.
+- `PerformanceRefreshIntervalSeconds`: pause between successful background performance refresh cycles; default `30`.
+- `PerformanceRefreshWalletBatchSize`: number of queued wallets to aggregate into wallet performance per cycle; default `100`.
+- `PerformanceRefreshQueueSeedWalletBatchSize`: number of missing wallets to seed into the performance refresh queue while the initial performance table is being built; default `500`.
+- `ExchangeContracts`: Polymarket V1/V2 CTF and negative-risk exchange contracts to scan.
+
+The cursor stores a completed block range per contract: `to_block` is extended
+forward first, then `from_block` is moved backward during historical backfill.
+Stopping the run after a completed batch is safe; the next run resumes from that
+range. The background ingestion worker always catches up fresh blocks first, then
+spends only `BackgroundHistoricalBatchesPerCycle` historical batches before
+sleeping and checking fresh blocks again.
+
+Raw decoded logs are stored in `polymarket_onchain_fills`. The service also
+derives `polymarket_onchain_wallet_fills` with one maker row and one taker row
+per raw fill, then aggregates those rows into `polymarket_onchain_wallet_executions`
+by wallet, transaction hash, token id, and side. The dashboard ranking uses those
+executions, so it is no longer maker-only. If raw fills predate the wallet tables,
+the next on-chain sync fills the missing derived range from PostgreSQL before it
+continues reading new Polygon blocks.
+
+`polymarket_onchain_wallet_positions` is a materialized table maintained by the
+background position refresh worker. It groups by wallet, token, market, and
+outcome, then exposes buy/sell shares, net shares, net cost, average buy/sell
+price, volume, first/last trade time, status, and resolved PnL when Gamma
+metadata provides a winning outcome. `polymarket_onchain_position_refresh_queue`
+stores token ids that need recalculation; ingestion, derived-data rebuilds, and
+Gamma enrichment enqueue affected token ids. During first startup after the
+feature is introduced, the worker seeds missing token ids in batches until the
+existing execution history has a positions row.
+
+`polymarket_onchain_wallet_performance` is a materialized wallet score table
+maintained by the background performance refresh worker. It reads the positions
+table and stores position counts, open/resolved counts, market count, volume,
+open exposure, resolved cost, resolved PnL, resolved ROI, win rate, average
+position size, sample quality, and a transparent first-pass score. The score is
+heuristic, not a trading command. `polymarket_onchain_wallet_performance_refresh_queue`
+stores wallets that need recalculation; position refreshes enqueue affected
+wallets, and first startup after the feature is introduced seeds missing wallets
+in batches until the existing positions history has a performance row.
+
+The manual `Enrich markets` command calls Gamma `markets?clob_token_ids=...` for
+missing execution token ids and stores `polymarket_onchain_token_metadata` rows
+with condition id, market title/slug, outcome, category, end date, active/closed
+status, raw JSON, and not-found markers for tokens Gamma cannot resolve. It
+rechecks missing token ids after every stored batch and continues until none are
+left or `MarketEnrichmentMaxBatchesPerRun` is reached. The background enrichment
+worker runs the same processor every `MarketEnrichmentIntervalSeconds`.
+
+The on-chain background workers record transient failures in `api_errors`, then retry
+with exponential backoff from `BackgroundErrorDelaySeconds` to
+`BackgroundMaxErrorDelaySeconds`. Single-run guards prevent manual IPC commands
+and background workers from running duplicate ingestion, enrichment, position, or
+performance cycles.
+
+The dashboard has two on-chain ranking layers. `Onchain Rankings` is still
+activity-based: executions, buy/sell counts, distinct token ids, notional volume,
+and maker-side fees where the fee asset is collateral. `Onchain Leaders` is the
+first performance-based view over materialized positions. It depends on Gamma
+metadata and resolved markets for PnL/win-rate signals and does not include
+current mark-to-market yet.
+
 ## Analytics
 
 Controls daily report generation, dashboard report limits, and CSV export directory.

@@ -19,6 +19,10 @@ public sealed class DashboardDataService(
         var traderDiscovery = await repository.GetRecentTraderDiscoveryCandidatesAsync(
             configuration.TraderDiscovery.CandidatesPerSide * 2,
             cancellationToken);
+        var onChainLeaders = await repository.GetPolymarketOnChainWalletPerformanceAsync(100, cancellationToken);
+        var onChainTraders = await repository.GetTraderOnChainStatsAsync(100, cancellationToken);
+        var onChainPositions = await repository.GetPolymarketOnChainWalletPositionsAsync(250, cancellationToken);
+        var onChainExecutions = await repository.GetRecentPolymarketOnChainWalletExecutionsAsync(250, cancellationToken);
         var leaderTrades = await repository.GetRecentLeaderTradesAsync(cancellationToken: cancellationToken);
         var signals = await repository.GetRecentSignalsAsync(cancellationToken: cancellationToken);
         var recentPaperOrders = await repository.GetRecentPaperOrdersAsync(cancellationToken: cancellationToken);
@@ -51,6 +55,10 @@ public sealed class DashboardDataService(
             overview,
             BuildWatchlist(scannerStatuses, leaderTrades),
             traderDiscovery.Select(ToTraderDiscoveryRow).ToArray(),
+            onChainLeaders.Select(ToOnChainLeaderRow).ToArray(),
+            onChainTraders.Select(ToOnChainTraderRow).ToArray(),
+            onChainPositions.Select(ToOnChainPositionRow).ToArray(),
+            onChainExecutions.Select(ToOnChainFillRow).ToArray(),
             leaderTrades.Select(ToLeaderTradeRow).ToArray(),
             signals.Select(ToSignalRow).ToArray(),
             recentPaperOrders.Select(ToPaperOrderRow).ToArray(),
@@ -108,7 +116,8 @@ public sealed class DashboardDataService(
             new OverviewMetric("Open paper exposure", FormatUsd(openExposure)),
             new OverviewMetric("Paper position value", FormatUsd(positionValue)),
             new OverviewMetric("Daily paper PnL", FormatUsd(paperPnl)),
-            new OverviewMetric("Open paper orders", openPaperOrders.Count.ToString())
+            new OverviewMetric("Open paper orders", openPaperOrders.Count.ToString()),
+            new OverviewMetric("On-chain ingestion", configuration.OnChainIngestion.Enabled ? $"{configuration.OnChainIngestion.LookbackDays}d catch-up; from {configuration.OnChainIngestion.HistoricalBackfillStartUtc:yyyy-MM-dd}" : "Disabled")
         ];
     }
 
@@ -302,6 +311,75 @@ public sealed class DashboardDataService(
             candidate.OpenPositionValueUsd,
             candidate.OpenPositionCashPnlUsd,
             candidate.Notes);
+    }
+
+    private static OnChainTraderRow ToOnChainTraderRow(TraderOnChainStats stats)
+    {
+        return new OnChainTraderRow(
+            stats.Wallet,
+            stats.Fills,
+            stats.BuyFills,
+            stats.SellFills,
+            stats.MarketsTraded,
+            stats.VolumeUsd,
+            stats.AverageTradeUsd,
+            stats.FeesUsd,
+            stats.ActivityScore,
+            FormatDate(stats.FirstTradeUtc),
+            FormatDate(stats.LastTradeUtc));
+    }
+
+    private static OnChainLeaderRow ToOnChainLeaderRow(PolymarketOnChainWalletPerformance performance)
+    {
+        return new OnChainLeaderRow(
+            performance.Wallet,
+            performance.Score,
+            performance.SampleQuality,
+            performance.ResolvedPnlUsd,
+            performance.ResolvedRoiPct,
+            performance.WinRatePct,
+            performance.ResolvedPositions,
+            performance.OpenPositions,
+            performance.MarketsTraded,
+            performance.VolumeUsd,
+            performance.OpenExposureUsd,
+            performance.AveragePositionSizeUsd,
+            FormatDate(performance.LastActiveUtc));
+    }
+
+    private static OnChainFillRow ToOnChainFillRow(PolymarketOnChainWalletExecution execution)
+    {
+        return new OnChainFillRow(
+            FormatDate(execution.BlockTimestampUtc),
+            execution.Wallet,
+            execution.Side.ToString(),
+            execution.TokenId,
+            execution.AveragePrice,
+            execution.SizeShares,
+            execution.NotionalUsd,
+            execution.ContractName,
+            execution.ExchangeVersion,
+            execution.TransactionHash);
+    }
+
+    private static OnChainPositionRow ToOnChainPositionRow(PolymarketOnChainWalletPosition position)
+    {
+        return new OnChainPositionRow(
+            position.Wallet,
+            string.IsNullOrWhiteSpace(position.MarketTitle) ? position.MarketSlug : position.MarketTitle,
+            position.Outcome,
+            position.Category ?? string.Empty,
+            position.PositionStatus,
+            position.NetShares,
+            position.NetCostUsd,
+            position.BuyShares,
+            position.SellShares,
+            position.AverageBuyPrice,
+            position.AverageSellPrice,
+            position.VolumeUsd,
+            FormatDecimal(position.ResolvedPnlUsd),
+            FormatDate(position.LastTradeUtc),
+            position.TokenId);
     }
 
     private static SignalRow ToSignalRow(SignalSummary signal)

@@ -165,6 +165,97 @@ public sealed class NoOpAppRepository : IAppRepository
         return Task.FromResult<IReadOnlyList<PolymarketHttpLogEntry>>([]);
     }
 
+    public Task AddPolymarketOnChainLogsAsync(IReadOnlyList<PolymarketOnChainLog> logs, CancellationToken cancellationToken = default)
+    {
+        return Task.CompletedTask;
+    }
+
+    public Task AddPolymarketOnChainFillsAsync(IReadOnlyList<PolymarketOnChainFill> fills, CancellationToken cancellationToken = default)
+    {
+        return Task.CompletedTask;
+    }
+
+    public Task UpsertOnChainIngestionCursorAsync(OnChainIngestionCursor cursor, CancellationToken cancellationToken = default)
+    {
+        return Task.CompletedTask;
+    }
+
+    public Task<OnChainIngestionCursor?> GetOnChainIngestionCursorAsync(string contractAddress, CancellationToken cancellationToken = default)
+    {
+        return Task.FromResult<OnChainIngestionCursor?>(null);
+    }
+
+    public Task<long?> GetLatestPolymarketOnChainFillBlockAsync(string contractAddress, CancellationToken cancellationToken = default)
+    {
+        return Task.FromResult<long?>(null);
+    }
+
+    public Task<OnChainBlockRange?> GetPolymarketOnChainFillBlockRangeAsync(string contractAddress, CancellationToken cancellationToken = default)
+    {
+        return Task.FromResult<OnChainBlockRange?>(null);
+    }
+
+    public Task<OnChainBlockRange?> GetPolymarketOnChainWalletExecutionBlockRangeAsync(string contractAddress, CancellationToken cancellationToken = default)
+    {
+        return Task.FromResult<OnChainBlockRange?>(null);
+    }
+
+    public Task RefreshPolymarketOnChainWalletDerivedDataAsync(string contractAddress, long fromBlock, long toBlock, CancellationToken cancellationToken = default)
+    {
+        return Task.CompletedTask;
+    }
+
+    public Task<IReadOnlyList<PolymarketOnChainWalletExecution>> GetRecentPolymarketOnChainWalletExecutionsAsync(int limit = 100, CancellationToken cancellationToken = default)
+    {
+        return Task.FromResult<IReadOnlyList<PolymarketOnChainWalletExecution>>([]);
+    }
+
+    public Task<IReadOnlyList<string>> GetOnChainTokenIdsMissingMetadataAsync(int limit = 100, CancellationToken cancellationToken = default)
+    {
+        return Task.FromResult<IReadOnlyList<string>>([]);
+    }
+
+    public Task UpsertPolymarketOnChainTokenMetadataAsync(IReadOnlyList<PolymarketOnChainTokenMetadata> metadata, CancellationToken cancellationToken = default)
+    {
+        return Task.CompletedTask;
+    }
+
+    public Task<IReadOnlyList<PolymarketOnChainFill>> GetRecentPolymarketOnChainFillsAsync(int limit = 100, CancellationToken cancellationToken = default)
+    {
+        return Task.FromResult<IReadOnlyList<PolymarketOnChainFill>>([]);
+    }
+
+    public Task<IReadOnlyList<TraderOnChainStats>> GetTraderOnChainStatsAsync(int limit = 100, CancellationToken cancellationToken = default)
+    {
+        return Task.FromResult<IReadOnlyList<TraderOnChainStats>>([]);
+    }
+
+    public Task<IReadOnlyList<PolymarketOnChainWalletPosition>> GetPolymarketOnChainWalletPositionsAsync(int limit = 250, CancellationToken cancellationToken = default)
+    {
+        return Task.FromResult<IReadOnlyList<PolymarketOnChainWalletPosition>>([]);
+    }
+
+    public Task<OnChainPositionRefreshResult> RefreshPolymarketOnChainWalletPositionsAsync(
+        int tokenLimit = 50,
+        int queueSeedTokenLimit = 500,
+        CancellationToken cancellationToken = default)
+    {
+        return Task.FromResult(new OnChainPositionRefreshResult(0, 0, 0, 0));
+    }
+
+    public Task<IReadOnlyList<PolymarketOnChainWalletPerformance>> GetPolymarketOnChainWalletPerformanceAsync(int limit = 100, CancellationToken cancellationToken = default)
+    {
+        return Task.FromResult<IReadOnlyList<PolymarketOnChainWalletPerformance>>([]);
+    }
+
+    public Task<OnChainPerformanceRefreshResult> RefreshPolymarketOnChainWalletPerformanceAsync(
+        int walletLimit = 100,
+        int queueSeedWalletLimit = 500,
+        CancellationToken cancellationToken = default)
+    {
+        return Task.FromResult(new OnChainPerformanceRefreshResult(0, 0, 0, 0));
+    }
+
     public Task<IReadOnlyList<RiskEvent>> GetRecentRiskEventsAsync(int limit = 100, CancellationToken cancellationToken = default)
     {
         return Task.FromResult<IReadOnlyList<RiskEvent>>([]);

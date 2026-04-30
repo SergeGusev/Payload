@@ -38,6 +38,63 @@ public sealed record TraderDiscoveryRow(
     decimal OpenPositionCashPnlUsd,
     string Notes);
 
+public sealed record OnChainTraderRow(
+    string Wallet,
+    int Fills,
+    int BuyFills,
+    int SellFills,
+    int MarketsTraded,
+    decimal VolumeUsd,
+    decimal AverageTradeUsd,
+    decimal FeesUsd,
+    decimal ActivityScore,
+    string FirstTradeUtc,
+    string LastTradeUtc);
+
+public sealed record OnChainLeaderRow(
+    string Wallet,
+    decimal Score,
+    string SampleQuality,
+    decimal ResolvedPnlUsd,
+    decimal ResolvedRoiPct,
+    decimal WinRatePct,
+    int ResolvedPositions,
+    int OpenPositions,
+    int MarketsTraded,
+    decimal VolumeUsd,
+    decimal OpenExposureUsd,
+    decimal AveragePositionSizeUsd,
+    string LastActiveUtc);
+
+public sealed record OnChainFillRow(
+    string TimestampUtc,
+    string Wallet,
+    string Side,
+    string TokenId,
+    decimal Price,
+    decimal SizeShares,
+    decimal NotionalUsd,
+    string Contract,
+    string Version,
+    string TransactionHash);
+
+public sealed record OnChainPositionRow(
+    string Wallet,
+    string Market,
+    string Outcome,
+    string Category,
+    string Status,
+    decimal NetShares,
+    decimal NetCostUsd,
+    decimal BuyShares,
+    decimal SellShares,
+    decimal AverageBuyPrice,
+    decimal AverageSellPrice,
+    decimal VolumeUsd,
+    string ResolvedPnlUsd,
+    string LastTradeUtc,
+    string TokenId);
+
 public sealed record LeaderTradeRow(
     string TimestampUtc,
     string Trader,
@@ -210,6 +267,10 @@ public sealed record DashboardSnapshot(
     IReadOnlyList<OverviewMetric> Overview,
     IReadOnlyList<WatchlistRow> Watchlist,
     IReadOnlyList<TraderDiscoveryRow> TraderDiscovery,
+    IReadOnlyList<OnChainLeaderRow> OnChainLeaders,
+    IReadOnlyList<OnChainTraderRow> OnChainTraders,
+    IReadOnlyList<OnChainPositionRow> OnChainPositions,
+    IReadOnlyList<OnChainFillRow> OnChainFills,
     IReadOnlyList<LeaderTradeRow> LeaderTrades,
     IReadOnlyList<SignalRow> Signals,
     IReadOnlyList<PaperOrderRow> PaperOrders,

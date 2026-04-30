@@ -31,8 +31,10 @@ The repository also has local debugging and trader discovery support after task 
 - service now requires configured PostgreSQL storage and fails fast without it;
 - dashboard `Find traders` now runs deep trader discovery;
 - trader discovery dashboard button and tab for best/worst PnL candidates;
-- Polymarket certificate pinning for HTTP clients and the market WebSocket.
-- Polymarket HTTP request/response audit table.
+- Polymarket certificate pinning for HTTP clients and the market WebSocket;
+- Polymarket HTTP request/response audit table;
+- background on-chain ingestion, market enrichment, position refresh, and wallet
+  performance workers.
 
 Latest verified code state on 2026-04-30:
 
@@ -40,7 +42,9 @@ Latest verified code state on 2026-04-30:
 - latest commit before this memory refresh: `8519b5e Merge trader leaderboard snapshots by wallet`;
 - working tree was clean before this memory refresh;
 - `dotnet test tests\PolyCopyTrader.Tests\PolyCopyTrader.Tests.csproj -c Verify --no-restore`
-  passed: 102/102;
+  passed: 119/119 after on-chain leaders work;
+- `dotnet build src\PolyCopyTrader.Service\PolyCopyTrader.Service.csproj -c Verify --no-restore`
+  passed with 0 warnings and 0 errors;
 - `dotnet build src\PolyCopyTrader.Dashboard\PolyCopyTrader.Dashboard.csproj -c Verify --no-restore`
   passed with 0 warnings and 0 errors;
 - local PostgreSQL schema initializer test passed against the user's local database;
@@ -85,6 +89,69 @@ Later, Polymarket HTTP request/response logging was added:
   preview, and error message;
 - request bodies and auth headers are intentionally not stored.
 - tests increased from 100 to 102.
+
+Later, manual on-chain ingestion was added:
+
+- config section: `OnChainIngestion`;
+- manual IPC command: `POST /refresh-onchain` (`/refresh-onchain-7d` remains accepted as a compatibility alias);
+- manual IPC command: `POST /refresh-onchain-markets`;
+- dashboard buttons: `Onchain sync` and `Enrich markets`;
+- dashboard tabs: `Onchain Leaders`, `Onchain Rankings`, `Onchain Positions`, and
+  `Onchain Executions`;
+- hosted services: `OnChainIngestionWorker`, `OnChainMarketEnrichmentWorker`, and
+  `OnChainPositionRefreshWorker`, and `OnChainPerformanceRefreshWorker`;
+- tables: `polymarket_onchain_logs`, `polymarket_onchain_fills`,
+  `polymarket_onchain_wallet_fills`,
+  `polymarket_onchain_wallet_executions`,
+  `polymarket_onchain_token_metadata`,
+  `polymarket_onchain_wallet_positions`,
+  `polymarket_onchain_position_refresh_queue`, and
+  `polymarket_onchain_wallet_performance`,
+  `polymarket_onchain_wallet_performance_refresh_queue`, and
+  `polymarket_onchain_ingest_cursors`;
+- Polygon JSON-RPC client reads `eth_getLogs` from configured V1/V2 CTF Exchange
+  and Neg Risk CTF Exchange contracts;
+- V1/V2 `OrderFilled` events are decoded into wallet, side, token id, price, size,
+  notional, fee, contract, and transaction hash fields;
+- each run catches up fresh blocks first, then backfills older history down to
+  `OnChainIngestion:HistoricalBackfillStartUtc` (`2025-10-30T00:00:00Z` by
+  default);
+- cursor `to_block` is the newest completed block, cursor `from_block` is the
+  oldest completed block, so cancelling and restarting resumes after the last
+  completed batch;
+- background ingestion catches up fresh blocks first, then processes at most
+  `BackgroundHistoricalBatchesPerCycle` historical batches round-robin across
+  contracts before sleeping and checking fresh blocks again;
+- raw fills are normalized into maker/taker wallet rows, then aggregated into
+  wallet executions by wallet, transaction hash, token id, and side;
+- if raw fills already exist without wallet derived rows, the next on-chain sync
+  rebuilds the missing derived range from PostgreSQL before reading more RPC data;
+- market enrichment fetches missing execution token ids from Gamma
+  `markets?clob_token_ids=...`, stores market/outcome/category/status metadata,
+  writes not-found markers for unresolved tokens, and repeats batches until no
+  missing tokens remain or `MarketEnrichmentMaxBatchesPerRun` is reached;
+- background market enrichment runs the same processor every
+  `MarketEnrichmentIntervalSeconds`;
+- both background workers record transient failures in `api_errors` and retry
+  with exponential backoff from `BackgroundErrorDelaySeconds` to
+  `BackgroundMaxErrorDelaySeconds`;
+- wallet positions aggregate executions by wallet, token, market, and outcome,
+  exposing buy/sell shares, net shares, net cost, average buy/sell price, volume,
+  and resolved PnL when Gamma metadata identifies the winning outcome;
+- positions are a materialized table, not a live SQL view; ingestion, derived
+  rebuilds, Gamma enrichment, and an initial missing-token seed enqueue token ids
+  into `polymarket_onchain_position_refresh_queue`, then
+  `OnChainPositionRefreshWorker` refreshes `polymarket_onchain_wallet_positions`
+  in token batches;
+- wallet performance is also materialized; position refreshes enqueue affected
+  wallets into `polymarket_onchain_wallet_performance_refresh_queue`, then
+  `OnChainPerformanceRefreshWorker` refreshes
+  `polymarket_onchain_wallet_performance` in wallet batches;
+- `Onchain Rankings` remains activity-based over wallet executions, while
+  `Onchain Leaders` is a first heuristic performance score over materialized
+  positions, resolved PnL, ROI, win rate, sample quality, volume, and open
+  exposure. It has no current mark-to-market yet.
+- tests increased from 102 to 119.
 
 Later, `PolyCopyTrader.Service` was changed to require PostgreSQL storage on every
 real service run. If `POLYCOPYTRADER_POSTGRES_CONNECTION` or `Storage:ConnectionString`
@@ -146,7 +213,7 @@ On 2026-04-29 we confirmed:
 - the app initialized schema in that database;
 - public schema had 24 tables at the first local PostgreSQL verification; after later
   trader discovery, leaderboard snapshot, and Polymarket HTTP logging changes, the
-  schema initializer defines 27 tables.
+  schema initializer defines 34 tables.
 
 Do not write the local password to files. Use a shell environment variable or pass a
 connection string at runtime.
@@ -198,6 +265,16 @@ The schema initializer created these tables at the time of verification:
 - `paper_positions`
 - `pinned_market_assets`
 - `polymarket_http_logs`
+- `polymarket_onchain_logs`
+- `polymarket_onchain_fills`
+- `polymarket_onchain_wallet_fills`
+- `polymarket_onchain_wallet_executions`
+- `polymarket_onchain_token_metadata`
+- `polymarket_onchain_wallet_positions`
+- `polymarket_onchain_position_refresh_queue`
+- `polymarket_onchain_wallet_performance`
+- `polymarket_onchain_wallet_performance_refresh_queue`
+- `polymarket_onchain_ingest_cursors`
 - `risk_events`
 - `scanner_status`
 - `service_command_audit`
@@ -501,6 +578,11 @@ The WPF dashboard includes:
 - Runbook;
 - Logs;
 - Controls.
+- Trader Discovery;
+- Onchain Leaders;
+- Onchain Rankings;
+- Onchain Positions;
+- Onchain Executions.
 
 Dashboard storage behavior:
 
@@ -508,6 +590,10 @@ Dashboard storage behavior:
 - if storage is missing, it uses `NoOpAppRepository` and shows empty/diagnostic state;
 - after commit `abff28c`, dashboard supports env vars, including
   `POLYCOPYTRADER_POSTGRES_CONNECTION`.
+- after on-chain ingestion work, dashboard has `Onchain Leaders`,
+  `Onchain Rankings`, `Onchain Positions`, and `Onchain Executions` tabs fed by
+  normalized Polygon `OrderFilled` wallet executions plus materialized positions
+  and performance tables.
 
 Service storage behavior:
 
@@ -619,6 +705,11 @@ Known at the time of this note:
 - Dashboard Trader Discovery currently displays the enriched shortlist from
   `trader_discovery_candidates`, not the full merged `trader_leaderboard_snapshots`
   pool.
+- Dashboard Onchain Rankings is an activity ranking only. Onchain Positions reads
+  the materialized positions table and exposes resolved PnL when Gamma metadata
+  has a winning outcome. Onchain Leaders adds a first heuristic profitability
+  score over those positions, but mark-to-market and score tuning are still
+  future work; sample quality matters.
 
 ## Recommended Next Work
 

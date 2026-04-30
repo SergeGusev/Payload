@@ -27,6 +27,7 @@ public static class DashboardRepositoryFactory
             Watchlist = configuration.GetSection("Watchlist").Get<WatchlistOptions>() ?? new WatchlistOptions(),
             Analytics = configuration.GetSection("Analytics").Get<AnalyticsOptions>() ?? new AnalyticsOptions(),
             TraderDiscovery = configuration.GetSection("TraderDiscovery").Get<TraderDiscoveryOptions>() ?? new TraderDiscoveryOptions(),
+            OnChainIngestion = configuration.GetSection("OnChainIngestion").Get<OnChainIngestionOptions>() ?? new OnChainIngestionOptions(),
             Ipc = configuration.GetSection("Ipc").Get<IpcOptions>() ?? new IpcOptions()
         };
 

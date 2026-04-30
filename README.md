@@ -2,7 +2,7 @@
 
 PolyCopyTrader is a Windows/.NET C# application for monitoring Polymarket traders and running a cautious copy-signal strategy.
 
-This repository is currently at Task 18 plus local debugging and trader discovery support. It contains project structure, typed configuration, PostgreSQL schema initialization, a basic repository, read-only Polymarket Data/CLOB/Geo clients, a Worker Service scanner/signal/paper/live loop, local dashboard controls, public market WebSocket monitoring, trader discovery, analytics reports, CSV export, diagnostics, a monitoring dashboard, L2 HMAC header infrastructure, dry-run CLOB V2 signing, manually gated tiny maker-only live order placement, Windows VPS deployment scripts, and operations runbooks.
+This repository is currently at Task 18 plus local debugging, trader discovery, and on-chain discovery support. It contains project structure, typed configuration, PostgreSQL schema initialization, a basic repository, read-only Polymarket Data/CLOB/Geo clients, a Worker Service scanner/signal/paper/live loop, local dashboard controls, public market WebSocket monitoring, trader discovery, Polygon `OrderFilled` ingestion with fresh catch-up and historical backfill, analytics reports, CSV export, diagnostics, a monitoring dashboard, L2 HMAC header infrastructure, dry-run CLOB V2 signing, manually gated tiny maker-only live order placement, Windows VPS deployment scripts, and operations runbooks.
 
 ## Safety
 
@@ -87,11 +87,14 @@ POST /kill-switch
 POST /clear-kill-switch
 POST /cancel-all-live
 POST /refresh-trader-discovery
+POST /refresh-onchain
+POST /refresh-onchain-markets
+POST /cancel-onchain
 POST /pin-asset?assetId=...
 POST /unpin-asset?assetId=...
 ```
 
-Dashboard pause/resume, kill-switch, paper-control, and asset pin/unpin buttons call these endpoints. Commands are recorded in `service_command_audit`.
+Dashboard pause/resume, kill-switch, paper-control, trader discovery, on-chain ingestion, on-chain market enrichment, and asset pin/unpin buttons call these endpoints. Commands are recorded in `service_command_audit`.
 
 ## Windows Service
 
@@ -132,7 +135,7 @@ The summary is sanitized and does not include secrets. Live trading is disabled 
 dotnet run --project src/PolyCopyTrader.Dashboard/PolyCopyTrader.Dashboard.csproj
 ```
 
-The dashboard polls PostgreSQL every `Dashboard:RefreshIntervalSeconds`. It shows overview metrics, watchlist/scanner status, leader trades, signals and rejection reasons, dry-run orders, paper orders, paper positions, market data, analytics reports, risk usage, and API/risk logs. If PostgreSQL is not configured, it opens with empty states and a clear storage status.
+The dashboard polls PostgreSQL every `Dashboard:RefreshIntervalSeconds`. It shows overview metrics, watchlist/scanner status, on-chain rankings/fills, leader trades, signals and rejection reasons, dry-run orders, paper orders, paper positions, market data, analytics reports, risk usage, and API/risk logs. If PostgreSQL is not configured, it opens with empty states and a clear storage status.
 
 ## Storage
 
@@ -256,6 +259,26 @@ Run the service and click `Find traders` in the dashboard controls:
 
 The dashboard shows refreshed shortlist rows in the Trader Discovery tab. The `PnL`/`Volume` columns are for the configured discovery period, while `All PnL`/`All Volume` are all-time sanity-check metrics fetched by wallet. Use this only for candidate research; a high leaderboard PnL is not enough to add a wallet to the watchlist without paper evaluation.
 
+## On-Chain Discovery
+
+The service can ingest Polymarket on-chain `OrderFilled` events from Polygon. This is read-only research plumbing: it does not place, cancel, or modify orders. When `OnChainIngestion:BackgroundSyncEnabled` is true, the service keeps ingestion running in the background: each cycle catches up the fresh tail first, then backfills a limited number of older historical batches down to `OnChainIngestion:HistoricalBackfillStartUtc`, default `2025-10-30T00:00:00Z`.
+
+Run the service to start background ingestion. Click `Onchain sync` in the dashboard controls, or call this endpoint, only when you want to force a manual cycle:
+
+```powershell
+Invoke-RestMethod -Method Post http://127.0.0.1:5118/refresh-onchain
+```
+
+Use `Cancel onchain` or `POST /cancel-onchain` to stop the current ingestion run. If background sync remains enabled, the worker will retry on its next cycle. Progress is checkpointed after every completed block batch and repeated batches are idempotent. In `polymarket_onchain_ingest_cursors`, `to_block` is the newest completed block and `from_block` is the oldest completed block for that contract. On the next run the service first scans `to_block + 1` through the latest Polygon block; when that is caught up, it scans backward from `from_block - 1`. The background worker limits historical work to `OnChainIngestion:BackgroundHistoricalBatchesPerCycle`, default `8`, round-robin across contracts, so fresh blocks are checked again regularly while long history slowly fills in.
+
+Set `POLYCOPYTRADER_POLYGON_RPC_URL` if you want to use a private Polygon RPC provider. Do not commit RPC URLs containing tokens. The default public RPC is only for short manual testing; if it returns pruned-history or rate-limit errors, use a full/archive provider. The ingestion scans the configured V1/V2 CTF Exchange and Neg Risk CTF Exchange contracts, persists raw logs to `polymarket_onchain_logs`, decoded fills to `polymarket_onchain_fills`, normalized maker/taker rows to `polymarket_onchain_wallet_fills`, wallet-level tx aggregates to `polymarket_onchain_wallet_executions`, and cursors to `polymarket_onchain_ingest_cursors`.
+
+When `OnChainIngestion:BackgroundMarketEnrichmentEnabled` is true, a second background worker checks missing on-chain token ids every `OnChainIngestion:MarketEnrichmentIntervalSeconds`, default `120`, and enriches them through the Gamma API. Click `Enrich markets` or call `POST /refresh-onchain-markets` only when you want to force a manual enrichment cycle. This fills `polymarket_onchain_token_metadata` with token id, condition id, market slug/title, outcome, category, end date, active/closed/archive status, winning outcome when inferable from outcome prices, and the raw Gamma JSON. Each enrichment run processes repeated batches of `OnChainIngestion:MarketEnrichmentBatchSize`, default `100`, until no missing tokens remain or `OnChainIngestion:MarketEnrichmentMaxBatchesPerRun`, default `25`, is reached.
+
+The on-chain background workers catch transient failures, write `api_errors`, pause, and retry with exponential backoff from `OnChainIngestion:BackgroundErrorDelaySeconds`, default `60`, up to `OnChainIngestion:BackgroundMaxErrorDelaySeconds`, default `900`. Manual commands and background workers share single-run guards; if one is already active, another request returns an already-running message instead of starting duplicate work.
+
+The dashboard `Onchain Rankings` tab is activity-based over wallet executions: execution count, buy/sell counts, distinct token ids, notional volume, maker-side collateral-denominated fees, and a simple activity score. The `Onchain Positions` tab reads the materialized table `polymarket_onchain_wallet_positions`, which aggregates executions by wallet, token, market, and outcome with buy/sell shares, net shares, net cost, average buy/sell prices, volume, and resolved PnL when Gamma metadata identifies the winning outcome. A background position refresh worker keeps this table updated from a token queue populated by ingestion, derived-data rebuilds, Gamma enrichment, and an initial missing-token seed. `Onchain Leaders` reads `polymarket_onchain_wallet_performance`, a second materialized table refreshed from affected wallets. It combines resolved PnL, ROI, win rate, resolved sample size, volume, and open exposure into a transparent first-pass score. The raw fill table remains the audit layer; the wallet tables, positions table, and performance table are the research layer. If raw fills already existed before the wallet tables were added, the next on-chain sync rebuilds missing wallet rows from the stored raw fills without re-reading Polygon RPC.
+
 ## Signal And Risk Engines
 
 Queued leader trades are evaluated by `DefaultSignalEngine` after the scanner stores them. The engine rejects unsupported sides, stale trades, small leader trades, missing/wide order books, unsafe maker prices, excessive slippage, category mismatches when category is known, and markets too close to event end. Accepted decisions produce proposed paper-order details only; no order placement happens in this task.
@@ -305,6 +328,10 @@ Interpret paper results conservatively. Paper fills are approximate, long positi
 - Overview: service heartbeat, mode, storage/API status, scanner status, bankroll, exposure, PnL.
 - Watchlist: configured traders plus scanner counters and errors.
 - Trader Discovery: leaderboard best/worst PnL candidates enriched with recent trades and positions.
+- Onchain Leaders: first-pass wallet score based on materialized positions, resolved PnL, ROI, win rate, sample quality, volume, and open exposure.
+- Onchain Rankings: activity ranking built from normalized wallet executions.
+- Onchain Positions: wallet positions aggregated by market token/outcome with net shares, net cost, and resolved PnL where available.
+- Onchain Executions: recent wallet-level on-chain executions with wallet, token id, side, average price, size, notional, contract, and tx hash.
 - Leader Trades: latest observed leader trades.
 - Signals: accepted/rejected decisions, reason codes, proposed paper details.
 - Dry Run Orders: unsigned/signed/rejected dry-run payload records and validation messages.
@@ -318,7 +345,7 @@ Interpret paper results conservatively. Paper fills are approximate, long positi
 - Diagnostics: sanitized config summary, storage status, auth status, service/scanner/WebSocket status, watchlist summary, latest API errors, and risk usage.
 - Runbook: local paths and purposes for the operations documents.
 - Logs: API errors, risk events, service commands, and market-data events.
-- Controls: pause/resume scanner, pause/resume paper/live trading, kill switch, clear kill switch, cancel all live orders, and asset pin/unpin through localhost IPC.
+- Controls: pause/resume scanner, pause/resume paper/live trading, kill switch, clear kill switch, cancel all live orders, trader discovery, on-chain sync/cancel, on-chain market enrichment, and asset pin/unpin through localhost IPC.
 - Trader discovery refresh is also a localhost IPC command and only runs when the operator presses the dashboard button.
 
 ## Troubleshooting
@@ -329,6 +356,7 @@ Interpret paper results conservatively. Paper fills are approximate, long positi
 - HTTP 429/5xx from Polymarket: public clients retry transient failures according to `Polymarket:MaxRetries` and record API errors when retries are exhausted.
 - Malformed API response: the failing operation is recorded as an API error; scanner/signal/paper loops continue on later cycles.
 - WebSocket disconnected/stale: the market WebSocket reconnects with backoff and stale snapshots are ignored after `MarketDataWebSocket:StaleAfterSeconds`.
+- Polygon RPC rejects `eth_getLogs`: lower `OnChainIngestion:MaxBlockRange` or configure `POLYCOPYTRADER_POLYGON_RPC_URL` for a more reliable provider. Public/free RPC endpoints commonly require ranges at or below `10000` blocks; the default is `500`.
 - IPC unavailable: check whether `http://127.0.0.1:5118/` is already in use, then run `GET /health` or the QA script runtime smoke.
 - Database temporarily unavailable: loop-level error recording is best-effort and will not crash the worker if error persistence also fails.
 - VPS backup failing: confirm PostgreSQL client tools are installed and `POLYCOPYTRADER_POSTGRES_CONNECTION` is available to the scheduled task or service account.
@@ -339,8 +367,9 @@ Do not enable live trading unless `dotnet build`, `dotnet test`, `--print-config
 
 - Auth support does not create or derive API keys yet.
 - Trader enable/disable and cancel selected paper order dashboard buttons are placeholders until command-specific IPC is added.
+- On-chain leader scoring is a transparent first pass over resolved positions; it has no current mark-to-market yet.
 - User-authenticated WebSocket channel is not implemented yet.
 
 ## Next Recommended Task
 
-All numbered Codex tasks in `Codex/00_INDEX.md` are implemented. Next work should be operational validation on the intended VPS with real PostgreSQL and secret-provider configuration.
+All numbered Codex tasks in `Codex/00_INDEX.md` are implemented. Next work should validate on-chain fills against Data API samples, then tune the on-chain leader score after enough resolved positions accumulate.

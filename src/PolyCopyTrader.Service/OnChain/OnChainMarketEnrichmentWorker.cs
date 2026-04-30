@@ -1,0 +1,93 @@
+using PolyCopyTrader.Domain;
+using PolyCopyTrader.Domain.Configuration;
+using PolyCopyTrader.Storage;
+
+namespace PolyCopyTrader.Service.OnChain;
+
+public sealed class OnChainMarketEnrichmentWorker(
+    ILogger<OnChainMarketEnrichmentWorker> logger,
+    OnChainIngestionOptions options,
+    IOnChainMarketEnrichmentProcessor processor,
+    IAppRepository repository) : BackgroundService
+{
+    protected override async Task ExecuteAsync(CancellationToken stoppingToken)
+    {
+        if (!options.Enabled || !options.BackgroundMarketEnrichmentEnabled)
+        {
+            logger.LogInformation("Background on-chain market enrichment is disabled.");
+            return;
+        }
+
+        var interval = TimeSpan.FromSeconds(options.MarketEnrichmentIntervalSeconds);
+        var baseErrorDelay = TimeSpan.FromSeconds(options.BackgroundErrorDelaySeconds);
+        var maxErrorDelay = TimeSpan.FromSeconds(options.BackgroundMaxErrorDelaySeconds);
+        var currentErrorDelay = baseErrorDelay;
+
+        logger.LogInformation(
+            "Background on-chain market enrichment worker started. IntervalSeconds={IntervalSeconds} ErrorDelaySeconds={ErrorDelaySeconds} MaxErrorDelaySeconds={MaxErrorDelaySeconds}",
+            options.MarketEnrichmentIntervalSeconds,
+            options.BackgroundErrorDelaySeconds,
+            options.BackgroundMaxErrorDelaySeconds);
+
+        while (!stoppingToken.IsCancellationRequested)
+        {
+            try
+            {
+                var result = await processor.RefreshAsync(stoppingToken);
+                currentErrorDelay = baseErrorDelay;
+                logger.LogInformation(
+                    "Background on-chain market enrichment cycle completed. Tokens={Tokens} Resolved={Resolved} NotFound={NotFound} Rows={Rows} Batches={Batches} ReachedBatchLimit={ReachedBatchLimit}",
+                    result.TokensRequested,
+                    result.TokensResolved,
+                    result.TokensNotFound,
+                    result.MetadataRowsStored,
+                    result.BatchesRun,
+                    result.ReachedBatchLimit);
+
+                await Task.Delay(interval, stoppingToken);
+            }
+            catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
+            {
+                break;
+            }
+            catch (InvalidOperationException ex) when (IsAlreadyRunning(ex))
+            {
+                logger.LogInformation("Background on-chain market enrichment skipped because another run is active.");
+                await Task.Delay(interval, stoppingToken);
+            }
+            catch (Exception ex)
+            {
+                logger.LogError(ex, "Background on-chain market enrichment cycle failed. Retrying in {DelaySeconds} seconds.", currentErrorDelay.TotalSeconds);
+                await TryRecordApiErrorAsync("BackgroundMarketEnrichment", ex.Message, stoppingToken);
+                await Task.Delay(currentErrorDelay, stoppingToken);
+                currentErrorDelay = NextErrorDelay(currentErrorDelay, maxErrorDelay);
+            }
+        }
+
+        logger.LogInformation("Background on-chain market enrichment worker stopped.");
+    }
+
+    private static bool IsAlreadyRunning(Exception ex)
+    {
+        return ex.Message.Contains("already running", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static TimeSpan NextErrorDelay(TimeSpan current, TimeSpan max)
+    {
+        return TimeSpan.FromSeconds(Math.Min(current.TotalSeconds * 2, max.TotalSeconds));
+    }
+
+    private async Task TryRecordApiErrorAsync(string operation, string message, CancellationToken cancellationToken)
+    {
+        try
+        {
+            await repository.AddApiErrorAsync(
+                new ApiError(Guid.NewGuid(), "OnChainMarketEnrichmentWorker", operation, message, DateTimeOffset.UtcNow),
+                cancellationToken);
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "Failed to persist background on-chain market enrichment error.");
+        }
+    }
+}

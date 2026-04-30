@@ -4,6 +4,7 @@ using System.Text.Json;
 using PolyCopyTrader.Domain;
 using PolyCopyTrader.Domain.Configuration;
 using PolyCopyTrader.Service.LiveTrading;
+using PolyCopyTrader.Service.OnChain;
 using PolyCopyTrader.Service.TraderDiscovery;
 using PolyCopyTrader.Storage;
 
@@ -16,6 +17,8 @@ public sealed class LocalControlServer(
     ServiceControlState controlState,
     ILiveTradingProcessor liveTradingProcessor,
     ITraderDiscoveryProcessor traderDiscoveryProcessor,
+    IOnChainIngestionProcessor onChainIngestionProcessor,
+    IOnChainMarketEnrichmentProcessor onChainMarketEnrichmentProcessor,
     IAppRepository repository) : BackgroundService
 {
     private readonly JsonSerializerOptions jsonOptions = new(JsonSerializerDefaults.Web);
@@ -153,6 +156,21 @@ public sealed class LocalControlServer(
                     result = await RefreshTraderDiscoveryAsync(source, cancellationToken);
                 }
 
+                if (result is null && (path == "/refresh-onchain" || path == "/refresh-onchain-7d"))
+                {
+                    result = await RefreshOnChainAsync(source, cancellationToken);
+                }
+
+                if (result is null && path == "/refresh-onchain-markets")
+                {
+                    result = await RefreshOnChainMarketsAsync(source, cancellationToken);
+                }
+
+                if (result is null && path == "/cancel-onchain")
+                {
+                    result = CancelOnChain(source);
+                }
+
                 if (result is null && path == "/pin-asset")
                 {
                     result = await PinAssetAsync(context.Request.QueryString["assetId"], source, cancellationToken);
@@ -244,6 +262,78 @@ public sealed class LocalControlServer(
                 cancellationToken);
             return new ServiceCommandResult("RefreshTraderDiscovery", source, false, "Trader discovery failed: " + ex.Message);
         }
+    }
+
+    private async Task<ServiceCommandResult> RefreshOnChainAsync(string source, CancellationToken cancellationToken)
+    {
+        try
+        {
+            var result = await onChainIngestionProcessor.RefreshLookbackAsync(cancellationToken);
+            return new ServiceCommandResult(
+                "RefreshOnChain",
+                source,
+                true,
+                $"On-chain ingestion refreshed: blocks {result.FromBlock}-{result.ToBlock}, {result.LogsFetched} logs, {result.FillsStored} fills.");
+        }
+        catch (OperationCanceledException)
+        {
+            return new ServiceCommandResult("RefreshOnChain", source, true, "On-chain ingestion cancelled. Restart it to resume from the latest checkpoint.");
+        }
+        catch (InvalidOperationException ex) when (IsAlreadyRunning(ex))
+        {
+            return new ServiceCommandResult("RefreshOnChain", source, false, ex.Message);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            logger.LogError(ex, "On-chain ingestion refresh failed for {Source}.", source);
+            await repository.AddApiErrorAsync(
+                new ApiError(Guid.NewGuid(), "LocalControlServer", "RefreshOnChain", ex.Message, DateTimeOffset.UtcNow),
+                cancellationToken);
+            return new ServiceCommandResult("RefreshOnChain", source, false, "On-chain ingestion failed: " + ex.Message);
+        }
+    }
+
+    private async Task<ServiceCommandResult> RefreshOnChainMarketsAsync(string source, CancellationToken cancellationToken)
+    {
+        try
+        {
+            var result = await onChainMarketEnrichmentProcessor.RefreshAsync(cancellationToken);
+            return new ServiceCommandResult(
+                "RefreshOnChainMarkets",
+                source,
+                true,
+                $"On-chain market enrichment refreshed: {result.TokensResolved}/{result.TokensRequested} tokens resolved, {result.TokensNotFound} not found, {result.MetadataRowsStored} rows stored across {result.BatchesRun} batches." +
+                (result.ReachedBatchLimit ? " Batch limit reached; run it again to continue." : " No missing tokens remain."));
+        }
+        catch (OperationCanceledException)
+        {
+            return new ServiceCommandResult("RefreshOnChainMarkets", source, true, "On-chain market enrichment cancelled.");
+        }
+        catch (InvalidOperationException ex) when (IsAlreadyRunning(ex))
+        {
+            return new ServiceCommandResult("RefreshOnChainMarkets", source, false, ex.Message);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            logger.LogError(ex, "On-chain market enrichment failed for {Source}.", source);
+            await repository.AddApiErrorAsync(
+                new ApiError(Guid.NewGuid(), "LocalControlServer", "RefreshOnChainMarkets", ex.Message, DateTimeOffset.UtcNow),
+                cancellationToken);
+            return new ServiceCommandResult("RefreshOnChainMarkets", source, false, "On-chain market enrichment failed: " + ex.Message);
+        }
+    }
+
+    private ServiceCommandResult CancelOnChain(string source)
+    {
+        var accepted = onChainIngestionProcessor.RequestCancel();
+        return accepted
+            ? new ServiceCommandResult("CancelOnChain", source, true, "On-chain ingestion cancellation requested.")
+            : new ServiceCommandResult("CancelOnChain", source, false, "No on-chain ingestion run is active.");
+    }
+
+    private static bool IsAlreadyRunning(Exception ex)
+    {
+        return ex.Message.Contains("already running", StringComparison.OrdinalIgnoreCase);
     }
 
     private async Task TryCancelLiveOrdersAsync(string source, CancellationToken cancellationToken)

@@ -29,6 +29,16 @@ public static class PostgresSchema
         "service_command_audit",
         "api_errors",
         "polymarket_http_logs",
+        "polymarket_onchain_logs",
+        "polymarket_onchain_fills",
+        "polymarket_onchain_wallet_fills",
+        "polymarket_onchain_wallet_executions",
+        "polymarket_onchain_token_metadata",
+        "polymarket_onchain_wallet_positions",
+        "polymarket_onchain_position_refresh_queue",
+        "polymarket_onchain_wallet_performance",
+        "polymarket_onchain_wallet_performance_refresh_queue",
+        "polymarket_onchain_ingest_cursors",
         "scanner_status",
         "service_heartbeats"
     ];
@@ -588,6 +598,283 @@ ON polymarket_http_logs(requested_at_utc DESC);
 
 CREATE INDEX IF NOT EXISTS ix_polymarket_http_logs_operation
 ON polymarket_http_logs(component, operation, requested_at_utc DESC);
+
+CREATE TABLE IF NOT EXISTS polymarket_onchain_logs (
+    id uuid PRIMARY KEY,
+    contract_name text NOT NULL,
+    contract_address text NOT NULL,
+    exchange_version text NOT NULL,
+    block_number bigint NOT NULL,
+    block_hash text NOT NULL,
+    transaction_hash text NOT NULL,
+    transaction_index bigint NOT NULL,
+    log_index bigint NOT NULL,
+    topic0 text NOT NULL,
+    topics_json jsonb NOT NULL,
+    data text NOT NULL,
+    removed boolean NOT NULL,
+    observed_at_utc timestamptz NOT NULL
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS ux_polymarket_onchain_logs_tx_log
+ON polymarket_onchain_logs(transaction_hash, log_index);
+
+CREATE INDEX IF NOT EXISTS ix_polymarket_onchain_logs_contract_block
+ON polymarket_onchain_logs(contract_address, block_number);
+
+CREATE TABLE IF NOT EXISTS polymarket_onchain_fills (
+    id uuid PRIMARY KEY,
+    contract_name text NOT NULL,
+    contract_address text NOT NULL,
+    exchange_version text NOT NULL,
+    block_number bigint NOT NULL,
+    block_timestamp_utc timestamptz NOT NULL,
+    transaction_hash text NOT NULL,
+    log_index bigint NOT NULL,
+    order_hash text NOT NULL,
+    maker text NOT NULL,
+    taker text NOT NULL,
+    wallet text NOT NULL,
+    side text NOT NULL,
+    token_id text NOT NULL,
+    maker_asset_id text NOT NULL,
+    taker_asset_id text NOT NULL,
+    maker_amount_raw text NOT NULL,
+    taker_amount_raw text NOT NULL,
+    maker_amount numeric(28,8) NOT NULL,
+    taker_amount numeric(28,8) NOT NULL,
+    price numeric(18,8) NOT NULL,
+    size_shares numeric(28,8) NOT NULL,
+    notional_usd numeric(28,8) NOT NULL,
+    fee_raw text NOT NULL,
+    fee_amount numeric(28,8) NOT NULL,
+    fee_asset_id text NOT NULL,
+    builder text NULL,
+    metadata text NULL,
+    imported_at_utc timestamptz NOT NULL
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS ux_polymarket_onchain_fills_tx_log
+ON polymarket_onchain_fills(transaction_hash, log_index);
+
+CREATE INDEX IF NOT EXISTS ix_polymarket_onchain_fills_wallet_time
+ON polymarket_onchain_fills(wallet, block_timestamp_utc DESC);
+
+CREATE INDEX IF NOT EXISTS ix_polymarket_onchain_fills_token_time
+ON polymarket_onchain_fills(token_id, block_timestamp_utc DESC);
+
+CREATE INDEX IF NOT EXISTS ix_polymarket_onchain_fills_contract_block
+ON polymarket_onchain_fills(contract_address, block_number);
+
+CREATE TABLE IF NOT EXISTS polymarket_onchain_wallet_fills (
+    source_fill_id uuid NOT NULL,
+    contract_name text NOT NULL,
+    contract_address text NOT NULL,
+    exchange_version text NOT NULL,
+    block_number bigint NOT NULL,
+    block_timestamp_utc timestamptz NOT NULL,
+    transaction_hash text NOT NULL,
+    log_index bigint NOT NULL,
+    order_hash text NOT NULL,
+    role text NOT NULL,
+    wallet text NOT NULL,
+    counterparty text NOT NULL,
+    side text NOT NULL,
+    token_id text NOT NULL,
+    price numeric(18,8) NOT NULL,
+    size_shares numeric(28,8) NOT NULL,
+    notional_usd numeric(28,8) NOT NULL,
+    fee_amount numeric(28,8) NOT NULL,
+    fee_asset_id text NOT NULL,
+    imported_at_utc timestamptz NOT NULL,
+    PRIMARY KEY (transaction_hash, log_index, role)
+);
+
+CREATE INDEX IF NOT EXISTS ix_polymarket_onchain_wallet_fills_wallet_time
+ON polymarket_onchain_wallet_fills(wallet, block_timestamp_utc DESC);
+
+CREATE INDEX IF NOT EXISTS ix_polymarket_onchain_wallet_fills_token_time
+ON polymarket_onchain_wallet_fills(token_id, block_timestamp_utc DESC);
+
+CREATE INDEX IF NOT EXISTS ix_polymarket_onchain_wallet_fills_contract_block
+ON polymarket_onchain_wallet_fills(contract_address, block_number);
+
+CREATE TABLE IF NOT EXISTS polymarket_onchain_wallet_executions (
+    contract_name text NOT NULL,
+    contract_address text NOT NULL,
+    exchange_version text NOT NULL,
+    block_number bigint NOT NULL,
+    block_timestamp_utc timestamptz NOT NULL,
+    transaction_hash text NOT NULL,
+    first_log_index bigint NOT NULL,
+    last_log_index bigint NOT NULL,
+    wallet text NOT NULL,
+    side text NOT NULL,
+    token_id text NOT NULL,
+    fill_count integer NOT NULL,
+    maker_fill_count integer NOT NULL,
+    taker_fill_count integer NOT NULL,
+    size_shares numeric(28,8) NOT NULL,
+    notional_usd numeric(28,8) NOT NULL,
+    average_price numeric(18,8) NOT NULL,
+    fees_usd numeric(28,8) NOT NULL,
+    imported_at_utc timestamptz NOT NULL,
+    PRIMARY KEY (contract_address, transaction_hash, wallet, side, token_id)
+);
+
+CREATE INDEX IF NOT EXISTS ix_polymarket_onchain_wallet_executions_wallet_time
+ON polymarket_onchain_wallet_executions(wallet, block_timestamp_utc DESC);
+
+CREATE INDEX IF NOT EXISTS ix_polymarket_onchain_wallet_executions_token_time
+ON polymarket_onchain_wallet_executions(token_id, block_timestamp_utc DESC);
+
+CREATE TABLE IF NOT EXISTS polymarket_onchain_token_metadata (
+    token_id text PRIMARY KEY,
+    condition_id text NOT NULL,
+    market_id text NOT NULL,
+    market_slug text NOT NULL,
+    market_title text NOT NULL,
+    outcome text NOT NULL,
+    outcome_index integer NOT NULL,
+    category text NULL,
+    end_date_utc timestamptz NULL,
+    active boolean NOT NULL,
+    closed boolean NOT NULL,
+    archived boolean NOT NULL,
+    resolved boolean NOT NULL,
+    winning_outcome text NULL,
+    clob_token_ids_json jsonb NOT NULL,
+    outcomes_json jsonb NOT NULL,
+    lookup_succeeded boolean NOT NULL,
+    lookup_error text NULL,
+    raw_json jsonb NOT NULL,
+    last_refreshed_utc timestamptz NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS ix_polymarket_onchain_token_metadata_condition
+ON polymarket_onchain_token_metadata(condition_id);
+
+CREATE INDEX IF NOT EXISTS ix_polymarket_onchain_token_metadata_category
+ON polymarket_onchain_token_metadata(category);
+
+DO $$
+BEGIN
+    IF EXISTS (
+        SELECT 1
+        FROM pg_class cls
+        JOIN pg_namespace ns ON ns.oid = cls.relnamespace
+        WHERE ns.nspname = 'public'
+          AND cls.relname = 'polymarket_onchain_wallet_positions'
+          AND cls.relkind = 'v'
+    ) THEN
+        EXECUTE 'DROP VIEW public.polymarket_onchain_wallet_positions';
+    END IF;
+END $$;
+
+CREATE TABLE IF NOT EXISTS polymarket_onchain_wallet_positions (
+    wallet text NOT NULL,
+    token_id text NOT NULL,
+    condition_id text NOT NULL,
+    market_id text NOT NULL,
+    market_slug text NOT NULL,
+    market_title text NOT NULL,
+    outcome text NOT NULL,
+    category text NULL,
+    lookup_succeeded boolean NOT NULL,
+    market_resolved boolean NOT NULL,
+    winning_outcome text NULL,
+    executions integer NOT NULL,
+    buy_executions integer NOT NULL,
+    sell_executions integer NOT NULL,
+    buy_shares numeric(28,8) NOT NULL,
+    sell_shares numeric(28,8) NOT NULL,
+    net_shares numeric(28,8) NOT NULL,
+    buy_notional_usd numeric(28,8) NOT NULL,
+    sell_notional_usd numeric(28,8) NOT NULL,
+    net_cost_usd numeric(28,8) NOT NULL,
+    absolute_net_cost_usd numeric(28,8) NOT NULL,
+    fees_usd numeric(28,8) NOT NULL,
+    average_buy_price numeric(18,8) NOT NULL,
+    average_sell_price numeric(18,8) NOT NULL,
+    volume_usd numeric(28,8) NOT NULL,
+    resolved_pnl_usd numeric(28,8) NULL,
+    position_status text NOT NULL,
+    first_trade_utc timestamptz NOT NULL,
+    last_trade_utc timestamptz NOT NULL,
+    latest_execution_imported_at_utc timestamptz NOT NULL,
+    metadata_refreshed_at_utc timestamptz NULL,
+    refreshed_at_utc timestamptz NOT NULL,
+    PRIMARY KEY (wallet, token_id)
+);
+
+CREATE INDEX IF NOT EXISTS ix_polymarket_onchain_wallet_positions_rank
+ON polymarket_onchain_wallet_positions(absolute_net_cost_usd DESC, volume_usd DESC, last_trade_utc DESC);
+
+CREATE INDEX IF NOT EXISTS ix_polymarket_onchain_wallet_positions_token
+ON polymarket_onchain_wallet_positions(token_id);
+
+CREATE INDEX IF NOT EXISTS ix_polymarket_onchain_wallet_positions_wallet
+ON polymarket_onchain_wallet_positions(wallet, last_trade_utc DESC);
+
+CREATE TABLE IF NOT EXISTS polymarket_onchain_position_refresh_queue (
+    token_id text PRIMARY KEY,
+    reason text NOT NULL,
+    queued_at_utc timestamptz NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS ix_polymarket_onchain_position_refresh_queue_queued
+ON polymarket_onchain_position_refresh_queue(queued_at_utc);
+
+CREATE TABLE IF NOT EXISTS polymarket_onchain_wallet_performance (
+    wallet text PRIMARY KEY,
+    positions_count integer NOT NULL,
+    open_positions integer NOT NULL,
+    flat_positions integer NOT NULL,
+    resolved_positions integer NOT NULL,
+    profitable_resolved_positions integer NOT NULL,
+    losing_resolved_positions integer NOT NULL,
+    markets_traded integer NOT NULL,
+    volume_usd numeric(28,8) NOT NULL,
+    resolved_volume_usd numeric(28,8) NOT NULL,
+    open_exposure_usd numeric(28,8) NOT NULL,
+    resolved_cost_usd numeric(28,8) NOT NULL,
+    resolved_pnl_usd numeric(28,8) NOT NULL,
+    resolved_roi_pct numeric(18,8) NOT NULL,
+    win_rate_pct numeric(18,8) NOT NULL,
+    average_position_size_usd numeric(28,8) NOT NULL,
+    score numeric(28,8) NOT NULL,
+    sample_quality text NOT NULL,
+    first_active_utc timestamptz NOT NULL,
+    last_active_utc timestamptz NOT NULL,
+    refreshed_at_utc timestamptz NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS ix_polymarket_onchain_wallet_performance_score
+ON polymarket_onchain_wallet_performance(score DESC, resolved_pnl_usd DESC, volume_usd DESC);
+
+CREATE INDEX IF NOT EXISTS ix_polymarket_onchain_wallet_performance_last_active
+ON polymarket_onchain_wallet_performance(last_active_utc DESC);
+
+CREATE TABLE IF NOT EXISTS polymarket_onchain_wallet_performance_refresh_queue (
+    wallet text PRIMARY KEY,
+    reason text NOT NULL,
+    queued_at_utc timestamptz NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS ix_polymarket_onchain_wallet_performance_refresh_queue_queued
+ON polymarket_onchain_wallet_performance_refresh_queue(queued_at_utc);
+
+CREATE TABLE IF NOT EXISTS polymarket_onchain_ingest_cursors (
+    contract_address text PRIMARY KEY,
+    contract_name text NOT NULL,
+    exchange_version text NOT NULL,
+    from_block bigint NOT NULL,
+    to_block bigint NOT NULL,
+    logs_fetched integer NOT NULL,
+    fills_stored integer NOT NULL,
+    started_at_utc timestamptz NOT NULL,
+    completed_at_utc timestamptz NOT NULL
+);
 
 CREATE TABLE IF NOT EXISTS scanner_status (
     scanner_name text PRIMARY KEY,

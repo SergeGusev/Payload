@@ -136,6 +136,86 @@ public static class PolymarketJsonParser
             GetString(root, "region"));
     }
 
+    public static IReadOnlyList<PolymarketOnChainTokenMetadata> ParseGammaMarketTokenMetadata(
+        JsonElement root,
+        string requestedTokenId)
+    {
+        if (root.ValueKind is JsonValueKind.Null or JsonValueKind.Undefined)
+        {
+            return [];
+        }
+
+        if (root.ValueKind != JsonValueKind.Array)
+        {
+            throw new JsonException("Gamma markets response must be a JSON array.");
+        }
+
+        var market = root.EnumerateArray().FirstOrDefault();
+        if (market.ValueKind is JsonValueKind.Null or JsonValueKind.Undefined)
+        {
+            return [];
+        }
+
+        var tokenIds = ParseStringArray(market, "clobTokenIds");
+        if (!tokenIds.Contains(requestedTokenId, StringComparer.OrdinalIgnoreCase))
+        {
+            return [];
+        }
+
+        var outcomes = ParseStringArray(market, "outcomes");
+        var outcomePrices = ParseDecimalArray(market, "outcomePrices");
+        var winningOutcome = GetWinningOutcome(outcomes, outcomePrices, GetBool(market, "closed"));
+        var refreshedAt = DateTimeOffset.UtcNow;
+        var rawJson = market.GetRawText();
+
+        return tokenIds.Select((tokenId, index) => new PolymarketOnChainTokenMetadata(
+            tokenId,
+            GetString(market, "conditionId") ?? string.Empty,
+            GetString(market, "id") ?? string.Empty,
+            GetString(market, "slug") ?? string.Empty,
+            GetString(market, "question") ?? string.Empty,
+            index < outcomes.Count ? outcomes[index] : string.Empty,
+            index,
+            GetString(market, "category"),
+            ParseDateTimeOffsetOrNull(GetString(market, "endDate")),
+            GetBool(market, "active"),
+            GetBool(market, "closed"),
+            GetBool(market, "archived"),
+            GetBool(market, "closed"),
+            winningOutcome,
+            tokenIds,
+            outcomes,
+            true,
+            null,
+            rawJson,
+            refreshedAt)).ToArray();
+    }
+
+    public static PolymarketOnChainTokenMetadata BuildMissingTokenMetadata(string tokenId, string reason)
+    {
+        return new PolymarketOnChainTokenMetadata(
+            tokenId,
+            string.Empty,
+            string.Empty,
+            string.Empty,
+            string.Empty,
+            string.Empty,
+            -1,
+            null,
+            null,
+            false,
+            false,
+            false,
+            false,
+            null,
+            [],
+            [],
+            false,
+            reason,
+            "{}",
+            DateTimeOffset.UtcNow);
+    }
+
     public static decimal? ParseSingleDecimal(JsonElement root, string propertyName)
     {
         return GetDecimalOrNull(root, propertyName);
@@ -157,6 +237,70 @@ public static class PolymarketJsonParser
         }
 
         return result;
+    }
+
+    private static IReadOnlyList<string> ParseStringArray(JsonElement element, string propertyName)
+    {
+        if (!element.TryGetProperty(propertyName, out var property) ||
+            property.ValueKind is JsonValueKind.Null or JsonValueKind.Undefined)
+        {
+            return [];
+        }
+
+        if (property.ValueKind == JsonValueKind.Array)
+        {
+            return property.EnumerateArray().Select(item => item.ToString()).ToArray();
+        }
+
+        if (property.ValueKind != JsonValueKind.String)
+        {
+            return [];
+        }
+
+        var value = property.GetString();
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            return [];
+        }
+
+        try
+        {
+            using var json = JsonDocument.Parse(value);
+            return json.RootElement.ValueKind == JsonValueKind.Array
+                ? json.RootElement.EnumerateArray().Select(item => item.ToString()).ToArray()
+                : [];
+        }
+        catch (JsonException)
+        {
+            return [];
+        }
+    }
+
+    private static IReadOnlyList<decimal> ParseDecimalArray(JsonElement element, string propertyName)
+    {
+        return ParseStringArray(element, propertyName)
+            .Select(value => decimal.TryParse(value, NumberStyles.Number, CultureInfo.InvariantCulture, out var parsed) ? parsed : (decimal?)null)
+            .Where(value => value is not null)
+            .Select(value => value!.Value)
+            .ToArray();
+    }
+
+    private static string? GetWinningOutcome(
+        IReadOnlyList<string> outcomes,
+        IReadOnlyList<decimal> outcomePrices,
+        bool closed)
+    {
+        if (!closed || outcomes.Count == 0 || outcomePrices.Count != outcomes.Count)
+        {
+            return null;
+        }
+
+        var winners = outcomePrices
+            .Select((price, index) => new { price, index })
+            .Where(item => item.price >= 0.999m)
+            .ToArray();
+
+        return winners.Length == 1 ? outcomes[winners[0].index] : null;
     }
 
     private static TradeSide ParseSide(string? value)

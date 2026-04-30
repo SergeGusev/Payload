@@ -28,6 +28,8 @@ public sealed class AppConfiguration
 
     public TraderDiscoveryOptions TraderDiscovery { get; init; } = new();
 
+    public OnChainIngestionOptions OnChainIngestion { get; init; } = new();
+
     public IpcOptions Ipc { get; init; } = new();
 
     public StorageOptions Storage { get; init; } = new();
@@ -290,6 +292,70 @@ public sealed class TraderDiscoveryOptions
 
     public int RequestDelayMilliseconds { get; init; } = 500;
 }
+
+public sealed class OnChainIngestionOptions
+{
+    public bool Enabled { get; init; } = true;
+
+    public string PolygonRpcUrl { get; init; } = "https://polygon.drpc.org";
+
+    public string RpcUrlEnvironmentVariable { get; init; } = "POLYCOPYTRADER_POLYGON_RPC_URL";
+
+    public int LookbackDays { get; init; } = 7;
+
+    public DateTimeOffset HistoricalBackfillStartUtc { get; init; } = new(2025, 10, 30, 0, 0, 0, TimeSpan.Zero);
+
+    public int MaxBlockRange { get; init; } = 500;
+
+    public int RequestDelayMilliseconds { get; init; } = 100;
+
+    public bool BackgroundSyncEnabled { get; init; } = true;
+
+    public int BackgroundSyncIdleDelaySeconds { get; init; } = 30;
+
+    public int BackgroundErrorDelaySeconds { get; init; } = 60;
+
+    public int BackgroundMaxErrorDelaySeconds { get; init; } = 900;
+
+    public int BackgroundHistoricalBatchesPerCycle { get; init; } = 8;
+
+    public int MarketEnrichmentBatchSize { get; init; } = 100;
+
+    public int MarketEnrichmentMaxBatchesPerRun { get; init; } = 25;
+
+    public bool BackgroundMarketEnrichmentEnabled { get; init; } = true;
+
+    public int MarketEnrichmentIntervalSeconds { get; init; } = 120;
+
+    public bool BackgroundPositionRefreshEnabled { get; init; } = true;
+
+    public int PositionRefreshIntervalSeconds { get; init; } = 30;
+
+    public int PositionRefreshTokenBatchSize { get; init; } = 50;
+
+    public int PositionRefreshQueueSeedTokenBatchSize { get; init; } = 500;
+
+    public bool BackgroundPerformanceRefreshEnabled { get; init; } = true;
+
+    public int PerformanceRefreshIntervalSeconds { get; init; } = 30;
+
+    public int PerformanceRefreshWalletBatchSize { get; init; } = 100;
+
+    public int PerformanceRefreshQueueSeedWalletBatchSize { get; init; } = 500;
+
+    public List<OnChainExchangeContractOptions> ExchangeContracts { get; init; } =
+    [
+        new("CTF Exchange V1", "0x4bFb41d5B3570DeFd03C39a9A4D8dE6Bd8B8982E", "V1"),
+        new("Neg Risk CTF Exchange V1", "0xC5d563A36AE78145C45a50134d48A1215220f80a", "V1"),
+        new("CTF Exchange V2", "0xE111180000d2663C0091e4f400237545B87B996B", "V2"),
+        new("Neg Risk CTF Exchange V2", "0xe2222d279d744050d28e00520010520000310F59", "V2")
+    ];
+}
+
+public sealed record OnChainExchangeContractOptions(
+    string Name,
+    string Address,
+    string Version);
 
 public sealed class IpcOptions
 {

@@ -26,3 +26,11 @@ public interface IPolymarketDataApiClient
         int offset = 0,
         CancellationToken cancellationToken = default);
 }
+
+public interface IPolymarketGammaClient
+{
+    Task<IReadOnlyList<PolymarketOnChainTokenMetadata>> GetTokenMetadataAsync(
+        string tokenId,
+        bool closed,
+        CancellationToken cancellationToken = default);
+}

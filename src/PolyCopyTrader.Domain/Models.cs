@@ -17,6 +17,12 @@ public enum TradeSide
     Sell
 }
 
+public enum OnChainParticipantRole
+{
+    Maker,
+    Taker
+}
+
 public enum PaperOrderStatus
 {
     Pending,
@@ -567,6 +573,228 @@ public sealed record PolymarketHttpLogEntry(
     bool Succeeded,
     string ResponseBody,
     string? ErrorMessage);
+
+public sealed record PolymarketOnChainLog(
+    Guid Id,
+    string ContractName,
+    string ContractAddress,
+    string ExchangeVersion,
+    long BlockNumber,
+    string BlockHash,
+    string TransactionHash,
+    long TransactionIndex,
+    long LogIndex,
+    string Topic0,
+    IReadOnlyList<string> Topics,
+    string Data,
+    bool Removed,
+    DateTimeOffset ObservedAtUtc);
+
+public sealed record PolymarketOnChainFill(
+    Guid Id,
+    string ContractName,
+    string ContractAddress,
+    string ExchangeVersion,
+    long BlockNumber,
+    DateTimeOffset BlockTimestampUtc,
+    string TransactionHash,
+    long LogIndex,
+    string OrderHash,
+    string Maker,
+    string Taker,
+    string Wallet,
+    TradeSide Side,
+    string TokenId,
+    string MakerAssetId,
+    string TakerAssetId,
+    string MakerAmountRaw,
+    string TakerAmountRaw,
+    decimal MakerAmount,
+    decimal TakerAmount,
+    decimal Price,
+    decimal SizeShares,
+    decimal NotionalUsd,
+    string FeeRaw,
+    decimal FeeAmount,
+    string FeeAssetId,
+    string? Builder,
+    string? Metadata,
+    DateTimeOffset ImportedAtUtc);
+
+public sealed record PolymarketOnChainWalletFill(
+    Guid SourceFillId,
+    string ContractName,
+    string ContractAddress,
+    string ExchangeVersion,
+    long BlockNumber,
+    DateTimeOffset BlockTimestampUtc,
+    string TransactionHash,
+    long LogIndex,
+    string OrderHash,
+    OnChainParticipantRole Role,
+    string Wallet,
+    string Counterparty,
+    TradeSide Side,
+    string TokenId,
+    decimal Price,
+    decimal SizeShares,
+    decimal NotionalUsd,
+    decimal FeeAmount,
+    string FeeAssetId,
+    DateTimeOffset ImportedAtUtc);
+
+public sealed record PolymarketOnChainWalletExecution(
+    string ContractName,
+    string ContractAddress,
+    string ExchangeVersion,
+    long BlockNumber,
+    DateTimeOffset BlockTimestampUtc,
+    string TransactionHash,
+    long FirstLogIndex,
+    long LastLogIndex,
+    string Wallet,
+    TradeSide Side,
+    string TokenId,
+    int FillCount,
+    int MakerFillCount,
+    int TakerFillCount,
+    decimal SizeShares,
+    decimal NotionalUsd,
+    decimal AveragePrice,
+    decimal FeesUsd,
+    DateTimeOffset ImportedAtUtc);
+
+public sealed record PolymarketOnChainTokenMetadata(
+    string TokenId,
+    string ConditionId,
+    string MarketId,
+    string MarketSlug,
+    string MarketTitle,
+    string Outcome,
+    int OutcomeIndex,
+    string? Category,
+    DateTimeOffset? EndDateUtc,
+    bool Active,
+    bool Closed,
+    bool Archived,
+    bool Resolved,
+    string? WinningOutcome,
+    IReadOnlyList<string> ClobTokenIds,
+    IReadOnlyList<string> Outcomes,
+    bool LookupSucceeded,
+    string? LookupError,
+    string RawJson,
+    DateTimeOffset LastRefreshedUtc);
+
+public sealed record OnChainIngestionCursor(
+    string ContractAddress,
+    string ContractName,
+    string ExchangeVersion,
+    long FromBlock,
+    long ToBlock,
+    int LogsFetched,
+    int FillsStored,
+    DateTimeOffset StartedAtUtc,
+    DateTimeOffset CompletedAtUtc);
+
+public sealed record OnChainBlockRange(
+    long FromBlock,
+    long ToBlock);
+
+public sealed record TraderOnChainStats(
+    string Wallet,
+    int Fills,
+    int BuyFills,
+    int SellFills,
+    int MarketsTraded,
+    decimal VolumeUsd,
+    decimal AverageTradeUsd,
+    decimal FeesUsd,
+    decimal ActivityScore,
+    DateTimeOffset FirstTradeUtc,
+    DateTimeOffset LastTradeUtc);
+
+public sealed record PolymarketOnChainWalletPosition(
+    string Wallet,
+    string TokenId,
+    string ConditionId,
+    string MarketId,
+    string MarketSlug,
+    string MarketTitle,
+    string Outcome,
+    string? Category,
+    bool LookupSucceeded,
+    bool MarketResolved,
+    string? WinningOutcome,
+    int Executions,
+    int BuyExecutions,
+    int SellExecutions,
+    decimal BuyShares,
+    decimal SellShares,
+    decimal NetShares,
+    decimal BuyNotionalUsd,
+    decimal SellNotionalUsd,
+    decimal NetCostUsd,
+    decimal FeesUsd,
+    decimal AverageBuyPrice,
+    decimal AverageSellPrice,
+    decimal VolumeUsd,
+    decimal? ResolvedPnlUsd,
+    string PositionStatus,
+    DateTimeOffset FirstTradeUtc,
+    DateTimeOffset LastTradeUtc);
+
+public sealed record OnChainPositionRefreshResult(
+    int TokensQueued,
+    int TokensProcessed,
+    int PositionsUpserted,
+    int QueueRemaining);
+
+public sealed record PolymarketOnChainWalletPerformance(
+    string Wallet,
+    int PositionsCount,
+    int OpenPositions,
+    int FlatPositions,
+    int ResolvedPositions,
+    int ProfitableResolvedPositions,
+    int LosingResolvedPositions,
+    int MarketsTraded,
+    decimal VolumeUsd,
+    decimal ResolvedVolumeUsd,
+    decimal OpenExposureUsd,
+    decimal ResolvedCostUsd,
+    decimal ResolvedPnlUsd,
+    decimal ResolvedRoiPct,
+    decimal WinRatePct,
+    decimal AveragePositionSizeUsd,
+    decimal Score,
+    string SampleQuality,
+    DateTimeOffset FirstActiveUtc,
+    DateTimeOffset LastActiveUtc,
+    DateTimeOffset RefreshedAtUtc);
+
+public sealed record OnChainPerformanceRefreshResult(
+    int WalletsQueued,
+    int WalletsProcessed,
+    int WalletsUpserted,
+    int QueueRemaining);
+
+public sealed record OnChainIngestionResult(
+    DateTimeOffset FromUtc,
+    DateTimeOffset ToUtc,
+    long FromBlock,
+    long ToBlock,
+    int ContractsScanned,
+    int LogsFetched,
+    int FillsStored);
+
+public sealed record OnChainMarketEnrichmentResult(
+    int TokensRequested,
+    int TokensResolved,
+    int TokensNotFound,
+    int MetadataRowsStored,
+    int BatchesRun,
+    bool ReachedBatchLimit);
 
 public sealed record ScannerStatusSnapshot(
     string ScannerName,

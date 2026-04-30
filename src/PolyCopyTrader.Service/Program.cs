@@ -2,11 +2,13 @@ using PolyCopyTrader.Service;
 using PolyCopyTrader.Domain.Configuration;
 using PolyCopyTrader.Polymarket;
 using PolyCopyTrader.Polymarket.Auth;
+using PolyCopyTrader.Polymarket.OnChain;
 using PolyCopyTrader.Service.Analytics;
 using PolyCopyTrader.Service.Configuration;
 using PolyCopyTrader.Service.Control;
 using PolyCopyTrader.Service.LiveTrading;
 using PolyCopyTrader.Service.MarketData;
+using PolyCopyTrader.Service.OnChain;
 using PolyCopyTrader.Service.PaperTrading;
 using PolyCopyTrader.Service.Polymarket;
 using PolyCopyTrader.Service.Scanning;
@@ -64,6 +66,7 @@ builder.Services.AddSingleton(appConfiguration.LiveTrading);
 builder.Services.AddSingleton(appConfiguration.Dashboard);
 builder.Services.AddSingleton(appConfiguration.Analytics);
 builder.Services.AddSingleton(appConfiguration.TraderDiscovery);
+builder.Services.AddSingleton(appConfiguration.OnChainIngestion);
 builder.Services.AddSingleton(appConfiguration.Ipc);
 builder.Services.AddSingleton(appConfiguration.Storage);
 builder.Services.AddWindowsService(options => options.ServiceName = "PolyCopyTrader.Service");
@@ -83,12 +86,18 @@ builder.Services.AddSingleton<ClobV2OrderSigner>();
 builder.Services.AddSingleton<ClobV2OrderPayloadSerializer>();
 builder.Services.AddHttpClient<IPolymarketDataApiClient, PolymarketDataApiClient>()
     .ConfigurePrimaryHttpMessageHandler(() => CreatePolymarketHttpHandler(appConfiguration.Polymarket));
+builder.Services.AddHttpClient<IPolymarketGammaClient, PolymarketGammaClient>()
+    .ConfigurePrimaryHttpMessageHandler(() => CreatePolymarketHttpHandler(appConfiguration.Polymarket));
 builder.Services.AddHttpClient<IPolymarketClobPublicClient, PolymarketClobPublicClient>()
     .ConfigurePrimaryHttpMessageHandler(() => CreatePolymarketHttpHandler(appConfiguration.Polymarket));
 builder.Services.AddHttpClient<IPolymarketGeoClient, PolymarketGeoClient>()
     .ConfigurePrimaryHttpMessageHandler(() => CreatePolymarketHttpHandler(appConfiguration.Polymarket));
 builder.Services.AddHttpClient<IPolymarketTradingClient, PolymarketTradingClient>()
     .ConfigurePrimaryHttpMessageHandler(() => CreatePolymarketHttpHandler(appConfiguration.Polymarket));
+builder.Services.AddHttpClient<IPolygonRpcClient, PolygonRpcClient>(client =>
+{
+    client.Timeout = TimeSpan.FromMinutes(2);
+});
 builder.Services.AddSingleton<ILeaderTradeCandidateQueue, InMemoryLeaderTradeCandidateQueue>();
 builder.Services.AddSingleton<IWatchlistScanner, WatchlistScanner>();
 builder.Services.AddSingleton<IRiskEngine, DefaultRiskEngine>();
@@ -101,10 +110,16 @@ builder.Services.AddSingleton<IPaperTradingMarketDataUpdater, PaperTradingMarket
 builder.Services.AddSingleton<IPaperTradingProcessor, PaperTradingProcessor>();
 builder.Services.AddSingleton<ILiveTradingProcessor, LiveTradingProcessor>();
 builder.Services.AddSingleton<ITraderDiscoveryProcessor, TraderDiscoveryProcessor>();
+builder.Services.AddSingleton<IOnChainIngestionProcessor, OnChainIngestionProcessor>();
+builder.Services.AddSingleton<IOnChainMarketEnrichmentProcessor, OnChainMarketEnrichmentProcessor>();
 builder.Services.AddSingleton<ServiceControlState>();
 builder.Services.AddHostedService<StartupSafetyCheckService>();
 builder.Services.AddHostedService<BotWorker>();
 builder.Services.AddHostedService<LocalControlServer>();
+builder.Services.AddHostedService<OnChainIngestionWorker>();
+builder.Services.AddHostedService<OnChainMarketEnrichmentWorker>();
+builder.Services.AddHostedService<OnChainPositionRefreshWorker>();
+builder.Services.AddHostedService<OnChainPerformanceRefreshWorker>();
 builder.Services.AddHostedService<MarketDataWebSocketService>();
 builder.Services.AddHostedService<DailyReportWorker>();
 
