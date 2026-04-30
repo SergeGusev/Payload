@@ -1,3 +1,16 @@
+## Active Update 2026-04-30 Dashboard Error History Tab
+Goal: Keep transient WPF Dashboard errors visible after the footer message is cleared by the next refresh.
+Status: Completed
+Done:
+- Added `DashboardErrorRow` to `src/PolyCopyTrader.Dashboard/Models/DashboardRows.cs`.
+- Added `DashboardErrors` in-memory collection, `ClearDashboardErrorsCommand`, and error recording helpers in `src/PolyCopyTrader.Dashboard/ViewModels/MainViewModel.cs`.
+- Dashboard refresh exceptions, IPC command exceptions, rejected IPC responses, and CSV export exceptions now append newest-first rows with UTC time, source, message, and details.
+- Added a `Dashboard Errors` tab and `Clear errors` buttons in `src/PolyCopyTrader.Dashboard/MainWindow.xaml`.
+- Updated `README.md` and `Codex/20_PROJECT_MEMORY.md`.
+Next: Restart or rebuild the dashboard; future transient refresh/IPC/CSV errors will accumulate in the new tab during the dashboard session.
+Notes: `git pull --ff-only` was attempted and still cannot run because branch `master` has no configured upstream. `dotnet build src\PolyCopyTrader.Dashboard\PolyCopyTrader.Dashboard.csproj -c Verify --no-restore` passed with 0 warnings and 0 errors. `dotnet test tests\PolyCopyTrader.Tests\PolyCopyTrader.Tests.csproj -c Verify --no-restore` passed 119/119. `git diff --check` passed. Existing unrelated `PolyCopyTrader.sln` changes were left untouched and not included in this task.
+Blockers: Automatic pull/push cannot run until a Git upstream is configured.
+
 ## Active Update 2026-04-30 Startup Files Answer
 Goal: Answer which repository files Codex rereads during protocol startup and task initialization.
 Status: Completed

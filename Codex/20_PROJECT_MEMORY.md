@@ -577,6 +577,7 @@ The WPF dashboard includes:
 - Diagnostics;
 - Runbook;
 - Logs;
+- Dashboard Errors;
 - Controls.
 - Trader Discovery;
 - Onchain Leaders;
@@ -594,6 +595,9 @@ Dashboard storage behavior:
   `Onchain Rankings`, `Onchain Positions`, and `Onchain Executions` tabs fed by
   normalized Polygon `OrderFilled` wallet executions plus materialized positions
   and performance tables.
+- after local error-history work, dashboard has `Dashboard Errors`, an in-memory
+  tab that keeps the latest refresh, IPC command, and CSV export errors visible
+  instead of only showing transient footer text.
 
 Service storage behavior:
 

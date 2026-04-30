@@ -345,6 +345,7 @@ Interpret paper results conservatively. Paper fills are approximate, long positi
 - Diagnostics: sanitized config summary, storage status, auth status, service/scanner/WebSocket status, watchlist summary, latest API errors, and risk usage.
 - Runbook: local paths and purposes for the operations documents.
 - Logs: API errors, risk events, service commands, and market-data events.
+- Dashboard Errors: local dashboard refresh, IPC command, and CSV export errors retained in memory for inspection.
 - Controls: pause/resume scanner, pause/resume paper/live trading, kill switch, clear kill switch, cancel all live orders, trader discovery, on-chain sync/cancel, on-chain market enrichment, and asset pin/unpin through localhost IPC.
 - Trader discovery refresh is also a localhost IPC command and only runs when the operator presses the dashboard button.
 

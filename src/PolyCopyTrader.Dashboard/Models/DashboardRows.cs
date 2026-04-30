@@ -259,6 +259,8 @@ public sealed record RiskUsageRow(string Name, decimal LimitUsd, decimal UsedUsd
 
 public sealed record LogRow(string TimestampUtc, string Severity, string Component, string Message, string Details);
 
+public sealed record DashboardErrorRow(string TimestampUtc, string Source, string Message, string Details);
+
 public sealed record DiagnosticRow(string Name, string Value, string Status);
 
 public sealed record RunbookLinkRow(string Document, string Path, string Purpose);

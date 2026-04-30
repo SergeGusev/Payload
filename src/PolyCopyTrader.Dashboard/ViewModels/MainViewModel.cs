@@ -9,6 +9,8 @@ namespace PolyCopyTrader.Dashboard.ViewModels;
 
 public sealed partial class MainViewModel : ObservableObject, IDisposable
 {
+    private const int MaxDashboardErrors = 500;
+
     private readonly DashboardRuntime runtime;
     private readonly DashboardDataService dataService;
     private readonly LocalControlClient controlClient;
@@ -115,6 +117,8 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
 
     public ObservableCollection<LogRow> Logs { get; } = [];
 
+    public ObservableCollection<DashboardErrorRow> DashboardErrors { get; } = [];
+
     public async Task StartAsync()
     {
         refreshTimer.Start();
@@ -146,6 +150,7 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         {
             LastError = ex.Message;
             Summary = $"Refresh failed: {ex.Message}";
+            RecordDashboardError("Refresh", ex);
         }
         finally
         {
@@ -286,6 +291,13 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
     }
 
     [RelayCommand]
+    private void ClearDashboardErrors()
+    {
+        DashboardErrors.Clear();
+        CommandStatus = "Dashboard errors cleared locally.";
+    }
+
+    [RelayCommand]
     private async Task ExportCsvAsync()
     {
         try
@@ -296,6 +308,7 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         catch (Exception ex)
         {
             CommandStatus = $"CSV export failed: {ex.Message}";
+            RecordDashboardError("CSV export", ex);
         }
     }
 
@@ -305,11 +318,17 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         {
             var response = await send();
             CommandStatus = response.Message;
+            if (!response.Accepted)
+            {
+                RecordDashboardError($"IPC {response.Command}", response.Message, response.Message);
+            }
+
             await RefreshAsync();
         }
         catch (Exception ex)
         {
             CommandStatus = $"IPC command failed: {ex.Message}";
+            RecordDashboardError("IPC command", ex);
         }
     }
 
@@ -364,6 +383,27 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         foreach (var item in source)
         {
             target.Add(item);
+        }
+    }
+
+    private void RecordDashboardError(string source, Exception exception)
+    {
+        RecordDashboardError(source, exception.Message, exception.ToString());
+    }
+
+    private void RecordDashboardError(string source, string message, string details)
+    {
+        DashboardErrors.Insert(
+            0,
+            new DashboardErrorRow(
+                DateTimeOffset.UtcNow.ToString("u"),
+                source,
+                message,
+                details));
+
+        while (DashboardErrors.Count > MaxDashboardErrors)
+        {
+            DashboardErrors.RemoveAt(DashboardErrors.Count - 1);
         }
     }
 }
