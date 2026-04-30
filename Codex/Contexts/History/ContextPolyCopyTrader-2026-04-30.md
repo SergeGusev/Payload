@@ -82,3 +82,10 @@ POSITION: 185
 
 Result:
 Updated Dashboard startup to run PostgreSQL schema initialization before creating `PostgresAppRepository`, so newly added tables such as `polymarket_onchain_wallet_activity` are created before the first Dashboard refresh. Updated docs/project memory. Dashboard build, tests, and diff check passed. Existing unrelated `PolyCopyTrader.sln` changes were left untouched.
+
+## 2026-04-30T19:58:23.1468891Z
+Request:
+Dashboard перестал стартовать. может, и стартует, но форму не показывает. Вот логи: 'PolyCopyTrader.Dashboard.exe' ... [Visual Studio module-load log showing Dashboard reaches repository/config/Npgsql loading but no window appears]
+
+Result:
+Removed synchronous PostgreSQL schema initialization from Dashboard startup because it could block WPF window creation on large database migrations/index creation. `GetTraderOnChainStatsAsync` now returns an empty Onchain Rankings list if the materialized activity table has not been created yet. Dashboard build, service build, tests, and diff check passed. Existing unrelated `PolyCopyTrader.sln` changes were left untouched.

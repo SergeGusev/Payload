@@ -600,9 +600,10 @@ The WPF dashboard includes:
 Dashboard storage behavior:
 
 - if PostgreSQL is configured, it uses `PostgresAppRepository`;
-- when PostgreSQL is configured, it initializes the PostgreSQL schema before the
-  first read so newly added dashboard tables exist even if only the dashboard was
-  restarted;
+- schema initialization is owned by the service, not the dashboard; this avoids
+  blocking WPF window creation on migrations or index creation over large tables;
+- if the materialized on-chain activity table is not created yet, Dashboard
+  returns an empty Onchain Rankings result instead of failing refresh;
 - if storage is missing, it uses `NoOpAppRepository` and shows empty/diagnostic state;
 - after commit `abff28c`, dashboard supports env vars, including
   `POLYCOPYTRADER_POSTGRES_CONNECTION`.

@@ -35,7 +35,6 @@ public static class DashboardRepositoryFactory
         if (StorageConnectionResolver.IsConfigured(appConfiguration.Storage))
         {
             var connectionFactory = new PostgresConnectionFactory(appConfiguration.Storage);
-            new PostgresSchemaInitializer(connectionFactory).InitializeAsync().GetAwaiter().GetResult();
             repository = new PostgresAppRepository(connectionFactory);
         }
         else

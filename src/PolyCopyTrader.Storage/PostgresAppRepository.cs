@@ -1521,26 +1521,33 @@ ORDER BY activity_score DESC, volume_usd DESC
 LIMIT @Limit;
 """;
 
-        await using var connection = await OpenConnectionAsync(cancellationToken);
-        await using var command = CreateCommand(connection, sql);
-        command.Parameters.AddWithValue("Limit", limit);
-        await using var reader = await command.ExecuteReaderAsync(cancellationToken);
-
         var results = new List<TraderOnChainStats>();
-        while (await reader.ReadAsync(cancellationToken))
+        try
         {
-            results.Add(new TraderOnChainStats(
-                reader.GetString(0),
-                reader.GetInt32(1),
-                reader.GetInt32(2),
-                reader.GetInt32(3),
-                reader.GetInt32(4),
-                reader.GetDecimal(5),
-                reader.GetDecimal(6),
-                reader.GetDecimal(7),
-                reader.GetDecimal(8),
-                DateTimeOffsetFromUtc(reader.GetDateTime(9)),
-                DateTimeOffsetFromUtc(reader.GetDateTime(10))));
+            await using var connection = await OpenConnectionAsync(cancellationToken);
+            await using var command = CreateCommand(connection, sql);
+            command.Parameters.AddWithValue("Limit", limit);
+            await using var reader = await command.ExecuteReaderAsync(cancellationToken);
+
+            while (await reader.ReadAsync(cancellationToken))
+            {
+                results.Add(new TraderOnChainStats(
+                    reader.GetString(0),
+                    reader.GetInt32(1),
+                    reader.GetInt32(2),
+                    reader.GetInt32(3),
+                    reader.GetInt32(4),
+                    reader.GetDecimal(5),
+                    reader.GetDecimal(6),
+                    reader.GetDecimal(7),
+                    reader.GetDecimal(8),
+                    DateTimeOffsetFromUtc(reader.GetDateTime(9)),
+                    DateTimeOffsetFromUtc(reader.GetDateTime(10))));
+            }
+        }
+        catch (PostgresException ex) when (ex.SqlState == PostgresErrorCodes.UndefinedTable)
+        {
+            return results;
         }
 
         return results;

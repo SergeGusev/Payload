@@ -1,3 +1,15 @@
+## Active Update 2026-04-30 Unblock Dashboard Startup
+Goal: Restore WPF Dashboard window startup after schema initialization blocked UI creation.
+Status: Completed
+Done:
+- Diagnosed Dashboard not showing as synchronous `PostgresSchemaInitializer` running inside `DashboardRepositoryFactory.Create()` before the WPF window could be displayed.
+- Removed blocking schema initialization from Dashboard startup; service owns schema initialization again.
+- Updated `PostgresAppRepository.GetTraderOnChainStatsAsync` to return an empty Onchain Rankings result when `polymarket_onchain_wallet_activity` does not exist yet instead of failing refresh.
+- Updated `README.md` and `Codex/20_PROJECT_MEMORY.md` to document that Dashboard does not run migrations on startup and gracefully handles missing activity table.
+Next: Restart Dashboard. Restart service separately to create/fill `polymarket_onchain_wallet_activity`; until then `Onchain Rankings` can be empty without blocking the rest of the dashboard.
+Notes: `git pull --ff-only` was attempted and still cannot run because branch `master` has no configured upstream. `dotnet build src\PolyCopyTrader.Dashboard\PolyCopyTrader.Dashboard.csproj -c Verify --no-restore` passed with 0 warnings and 0 errors. The first parallel service build hit a temporary Defender file lock, then `dotnet build src\PolyCopyTrader.Service\PolyCopyTrader.Service.csproj -c Verify --no-restore` passed with 0 warnings and 0 errors. `dotnet test tests\PolyCopyTrader.Tests\PolyCopyTrader.Tests.csproj -c Verify --no-restore` passed 119/119. `git diff --check` passed. Existing unrelated `PolyCopyTrader.sln` changes were left untouched and not included in this task.
+Blockers: Automatic pull/push cannot run until a Git upstream is configured.
+
 ## Active Update 2026-04-30 Dashboard Schema Initialization
 Goal: Fix Dashboard refresh failure when a newly added PostgreSQL table does not exist yet.
 Status: Completed
