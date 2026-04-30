@@ -110,3 +110,10 @@ Request:
 
 Result:
 Inspected the current PostgreSQL schema in `PostgresSchema.cs` and prepared a concise grouped inventory of all required application tables with short purpose descriptions. No source code was changed.
+
+## 2026-04-30T20:24:01.5252685Z
+Request:
+А почему в public.traders пусто?
+
+Result:
+Inspected schema, repository methods, scanner, Dashboard data service, and appsettings. Confirmed `public.traders` is currently only created by schema and is not populated by the implemented pipeline; the active watchlist comes from configuration, trader discovery writes to discovery tables, and on-chain wallets write to `polymarket_onchain_*` tables.

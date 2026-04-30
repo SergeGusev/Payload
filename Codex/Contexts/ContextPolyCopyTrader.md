@@ -1,3 +1,14 @@
+## Active Update 2026-04-30 Empty Traders Table Answer
+Goal: Explain why `public.traders` is empty.
+Status: Completed
+Done:
+- Re-read workflow, project rules, coding rules, active context, Git state, schema, repository interface, scanner, Dashboard data service, and appsettings watchlist sections.
+- Confirmed `public.traders` is only created by schema; current repository code has no `INSERT INTO traders` and no methods that read/write it.
+- Confirmed the active watchlist is read from `Watchlist:Traders` configuration, while discovery and on-chain wallets are persisted to `trader_discovery_candidates`, `trader_leaderboard_snapshots`, and `polymarket_onchain_*` materialized tables.
+Next: Decide whether to leave `traders`/`trader_rules` as future DB-backed watchlist tables or implement a config-to-DB/watchlist persistence feature.
+Notes: `git pull --ff-only` was attempted and still cannot run because branch `master` has no configured upstream. No source code changed for this answer-only task; verification is code/schema/config inspection and `git diff --check`. Existing unrelated `PolyCopyTrader.sln` changes remain untouched.
+Blockers: Automatic pull/push cannot run until a Git upstream is configured.
+
 ## Active Update 2026-04-30 Database Table Inventory Answer
 Goal: Provide a concise inventory of PostgreSQL tables and their purpose.
 Status: Completed
