@@ -96,3 +96,10 @@ Request:
 
 Result:
 Prepared the post-restart verification guidance: check the Dashboard Errors tab, confirm service-owned activity tables exist, verify `polymarket_onchain_wallet_activity` and its refresh queue are moving, inspect recent activity rows, and verify there are no recent `OnChainActivityRefreshWorker` errors. No source code was changed.
+
+## 2026-04-30T20:12:04.5786004Z
+Request:
+То есть всё, у нас теперь полная цепочка от выборки из блокчейна до списка игроков и их ставок?
+
+Result:
+Clarified that the read-only research pipeline is complete from Polygon `OrderFilled` ingestion to wallet executions, enriched market metadata, materialized activity rankings, positions, and first-pass wallet performance views in Dashboard. Also clarified that automatic strategy selection/copy-signal use is still a separate future layer.
