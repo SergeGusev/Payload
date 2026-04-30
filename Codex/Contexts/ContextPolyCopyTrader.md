@@ -1,3 +1,14 @@
+## Active Update 2026-04-30 Dashboard Schema Initialization
+Goal: Fix Dashboard refresh failure when a newly added PostgreSQL table does not exist yet.
+Status: Completed
+Done:
+- Diagnosed `42P01: relation "polymarket_onchain_wallet_activity" does not exist` as Dashboard reading a table before schema initialization had run for the updated code.
+- Updated `src/PolyCopyTrader.Dashboard/Services/DashboardRepositoryFactory.cs` so Dashboard runs `PostgresSchemaInitializer` before creating `PostgresAppRepository` when PostgreSQL storage is configured.
+- Updated `README.md` and `Codex/20_PROJECT_MEMORY.md` to document Dashboard schema initialization.
+Next: Restart Dashboard. It should create missing schema objects before the first refresh; service restart is still recommended so background workers fill the new activity table.
+Notes: `git pull --ff-only` was attempted and still cannot run because branch `master` has no configured upstream. `dotnet build src\PolyCopyTrader.Dashboard\PolyCopyTrader.Dashboard.csproj -c Verify --no-restore` passed with 0 warnings and 0 errors. `dotnet test tests\PolyCopyTrader.Tests\PolyCopyTrader.Tests.csproj -c Verify --no-restore` passed 119/119. `git diff --check` passed. Existing unrelated `PolyCopyTrader.sln` changes were left untouched and not included in this task.
+Blockers: Automatic pull/push cannot run until a Git upstream is configured.
+
 ## Active Update 2026-04-30 Materialize Onchain Activity Ranking
 Goal: Stop Dashboard refresh timeouts caused by `GetTraderOnChainStatsAsync` grouping millions of on-chain wallet execution rows.
 Status: Completed

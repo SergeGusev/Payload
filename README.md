@@ -135,7 +135,7 @@ The summary is sanitized and does not include secrets. Live trading is disabled 
 dotnet run --project src/PolyCopyTrader.Dashboard/PolyCopyTrader.Dashboard.csproj
 ```
 
-The dashboard polls PostgreSQL every `Dashboard:RefreshIntervalSeconds`. It shows overview metrics, watchlist/scanner status, on-chain rankings/fills, leader trades, signals and rejection reasons, dry-run orders, paper orders, paper positions, market data, analytics reports, risk usage, and API/risk logs. If PostgreSQL is not configured, it opens with empty states and a clear storage status.
+The dashboard initializes the PostgreSQL schema when storage is configured, then polls PostgreSQL every `Dashboard:RefreshIntervalSeconds`. It shows overview metrics, watchlist/scanner status, on-chain rankings/fills, leader trades, signals and rejection reasons, dry-run orders, paper orders, paper positions, market data, analytics reports, risk usage, and API/risk logs. If PostgreSQL is not configured, it opens with empty states and a clear storage status.
 
 ## Storage
 

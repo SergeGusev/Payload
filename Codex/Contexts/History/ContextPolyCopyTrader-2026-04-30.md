@@ -48,3 +48,37 @@ Npgsql.NpgsqlException (0x80004005): Exception while reading from stream
 
 Result:
 Replaced refresh-time aggregation for `Onchain Rankings` with a materialized `polymarket_onchain_wallet_activity` table maintained by `OnChainActivityRefreshWorker`. Added schema, refresh queue, repository refresh/read changes, config, validation, docs, tests, and a recent-executions index. Service build, Dashboard build, test suite, and diff check passed. Existing unrelated `PolyCopyTrader.sln` changes were left untouched.
+
+## 2026-04-30T19:47:53.4082377Z
+Request:
+Time UTC: 2026-04-30 19:46:02Z
+Source: Refresh
+Message: 42P01: relation "polymarket_onchain_wallet_activity" does not exist
+
+POSITION: 185
+
+Npgsql.PostgresException (0x80004005): 42P01: relation "polymarket_onchain_wallet_activity" does not exist
+
+POSITION: 185
+   at Npgsql.Internal.NpgsqlConnector.ReadMessageLong(Boolean async, DataRowLoadingMode dataRowLoadingMode, Boolean readingNotifications, Boolean isReadingPrependedMessage)
+   at System.Runtime.CompilerServices.PoolingAsyncValueTaskMethodBuilder`1.StateMachineBox`1.System.Threading.Tasks.Sources.IValueTaskSource<TResult>.GetResult(Int16 token)
+   at Npgsql.NpgsqlDataReader.NextResult(Boolean async, Boolean isConsuming, CancellationToken cancellationToken)
+   at Npgsql.NpgsqlDataReader.NextResult(Boolean async, Boolean isConsuming, CancellationToken cancellationToken)
+   at Npgsql.NpgsqlCommand.ExecuteReader(Boolean async, CommandBehavior behavior, CancellationToken cancellationToken)
+   at Npgsql.NpgsqlCommand.ExecuteReader(Boolean async, CommandBehavior behavior, CancellationToken cancellationToken)
+   at PolyCopyTrader.Storage.PostgresAppRepository.GetTraderOnChainStatsAsync(Int32 limit, CancellationToken cancellationToken) in D:\My\Business\PolyMarket\src\PolyCopyTrader.Storage\PostgresAppRepository.cs:line 1527
+   at PolyCopyTrader.Storage.PostgresAppRepository.GetTraderOnChainStatsAsync(Int32 limit, CancellationToken cancellationToken) in D:\My\Business\PolyMarket\src\PolyCopyTrader.Storage\PostgresAppRepository.cs:line 1546
+   at PolyCopyTrader.Storage.PostgresAppRepository.GetTraderOnChainStatsAsync(Int32 limit, CancellationToken cancellationToken) in D:\My\Business\PolyMarket\src\PolyCopyTrader.Storage\PostgresAppRepository.cs:line 1546
+   at PolyCopyTrader.Dashboard.Services.DashboardDataService.LoadAsync(CancellationToken cancellationToken) in D:\My\Business\PolyMarket\src\PolyCopyTrader.Dashboard\Services\DashboardDataService.cs:line 23
+   at PolyCopyTrader.Dashboard.ViewModels.MainViewModel.RefreshAsync() in D:\My\Business\PolyMarket\src\PolyCopyTrader.Dashboard\ViewModels\MainViewModel.cs:line 149
+  Exception data:
+    Severity: ERROR
+    SqlState: 42P01
+    MessageText: relation "polymarket_onchain_wallet_activity" does not exist
+    Position: 185
+    File: parse_relation.c
+    Line: 1452
+    Routine: parserOpenTable
+
+Result:
+Updated Dashboard startup to run PostgreSQL schema initialization before creating `PostgresAppRepository`, so newly added tables such as `polymarket_onchain_wallet_activity` are created before the first Dashboard refresh. Updated docs/project memory. Dashboard build, tests, and diff check passed. Existing unrelated `PolyCopyTrader.sln` changes were left untouched.
