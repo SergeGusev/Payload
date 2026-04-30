@@ -103,3 +103,10 @@ Request:
 
 Result:
 Clarified that the read-only research pipeline is complete from Polygon `OrderFilled` ingestion to wallet executions, enriched market metadata, materialized activity rankings, positions, and first-pass wallet performance views in Dashboard. Also clarified that automatic strategy selection/copy-signal use is still a separate future layer.
+
+## 2026-04-30T20:20:47.3810537Z
+Request:
+Дай мне список таблиц из базы с кратким описанием, что там храниться
+
+Result:
+Inspected the current PostgreSQL schema in `PostgresSchema.cs` and prepared a concise grouped inventory of all required application tables with short purpose descriptions. No source code was changed.

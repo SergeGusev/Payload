@@ -1,3 +1,14 @@
+## Active Update 2026-04-30 Database Table Inventory Answer
+Goal: Provide a concise inventory of PostgreSQL tables and their purpose.
+Status: Completed
+Done:
+- Re-read workflow, project rules, coding rules, active context, Git state, and `PostgresSchema`.
+- Extracted the current required PostgreSQL table list from `src/PolyCopyTrader.Storage/PostgresSchema.cs`.
+- Prepared grouped descriptions for core traders, signals/orders, diagnostics, on-chain ingestion/research, and service status tables.
+Next: Use SQL row counts when operational verification of actual database contents is needed.
+Notes: `git pull --ff-only` was attempted and still cannot run because branch `master` has no configured upstream. No source code changed for this answer-only task; verification is schema inspection and `git diff --check`. Existing unrelated `PolyCopyTrader.sln` changes remain untouched.
+Blockers: Automatic pull/push cannot run until a Git upstream is configured.
+
 ## Active Update 2026-04-30 Onchain Pipeline Boundary Answer
 Goal: Clarify whether the implemented on-chain workflow is a complete chain from Polygon ingestion to wallet/player and bet views.
 Status: Completed
