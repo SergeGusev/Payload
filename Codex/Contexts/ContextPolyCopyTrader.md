@@ -1,3 +1,14 @@
+## Active Update 2026-04-30 Dashboard Restart Verification Guidance
+Goal: Explain what to verify after the Dashboard window starts again.
+Status: Completed
+Done:
+- Re-read the repository workflow, project rules, coding rules, active context, and current Git state before answering.
+- Confirmed the latest behavior: Dashboard startup no longer runs blocking schema initialization; the service owns schema creation and background filling of `polymarket_onchain_wallet_activity`.
+- Prepared UI and SQL checks for Dashboard errors, service-created activity tables, activity worker progress, and first ranking rows.
+Next: Verify the service-created schema and activity refresh progress; `Onchain Rankings` can be empty until `polymarket_onchain_wallet_activity` has rows.
+Notes: `git pull --ff-only` was attempted and still cannot run because branch `master` has no configured upstream. No source code changed for this answer-only task; verification is limited to repository context reads and Git state inspection. Existing unrelated `PolyCopyTrader.sln` changes remain untouched.
+Blockers: Automatic pull/push cannot run until a Git upstream is configured.
+
 ## Active Update 2026-04-30 Unblock Dashboard Startup
 Goal: Restore WPF Dashboard window startup after schema initialization blocked UI creation.
 Status: Completed

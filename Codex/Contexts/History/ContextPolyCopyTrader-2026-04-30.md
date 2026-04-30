@@ -89,3 +89,10 @@ Dashboard перестал стартовать. может, и стартует
 
 Result:
 Removed synchronous PostgreSQL schema initialization from Dashboard startup because it could block WPF window creation on large database migrations/index creation. `GetTraderOnChainStatsAsync` now returns an empty Onchain Rankings list if the materialized activity table has not been created yet. Dashboard build, service build, tests, and diff check passed. Existing unrelated `PolyCopyTrader.sln` changes were left untouched.
+
+## 2026-04-30T20:04:45.5261709Z
+Request:
+Запустилось. Что мне проверить?
+
+Result:
+Prepared the post-restart verification guidance: check the Dashboard Errors tab, confirm service-owned activity tables exist, verify `polymarket_onchain_wallet_activity` and its refresh queue are moving, inspect recent activity rows, and verify there are no recent `OnChainActivityRefreshWorker` errors. No source code was changed.
