@@ -1,3 +1,21 @@
+## Active Update 2026-05-01 Post Metadata Queue Restart Check
+Goal: Verify PostgreSQL and service health after restarting with the token metadata refresh queue.
+Status: Completed
+Done:
+- Queried PostgreSQL through `POLYCOPYTRADER_POSTGRES_CONNECTION` without printing secrets.
+- Confirmed `polymarket_onchain_token_metadata_refresh_queue` and `ix_polymarket_onchain_token_metadata_refresh_queue_next_attempt` exist; queue table size was about 6.6 MB.
+- Confirmed service heartbeat is fresh: `PolyCopyTrader.Service` is `Running` in `ReadOnly`, heartbeat age was about 7 seconds at DB time `2026-05-01 19:56:28 UTC`.
+- Confirmed the metadata queue is populated and active: about 22,672 queued token ids, 22,664 due now, 8 retried, oldest queued at `2026-05-01 19:53:15 UTC`.
+- Confirmed old active missing-metadata DISTINCT scan over `polymarket_onchain_wallet_executions` was not present (`old_metadata_scan_active=0`).
+- Confirmed enrichment is progressing in logs with repeated `On-chain token metadata enriched` entries and successful Gamma HTTP 200 responses.
+- Confirmed token metadata real categories are being refreshed through `2026-05-01 19:56 UTC`: `Crypto` 6,800, `Sports` 6,206, `Politics` 1,534, `Finance` 858, plus `unknown` 22,672.
+- Confirmed category-performance rows are still moving, with newest refresh around `2026-05-01 19:56 UTC` for some categories; `unknown` remains high at 106,461 while backfill catches up.
+- Confirmed no blocking chain was present (`blocked_sessions=0`), but two active sessions were older than 2 minutes, mainly autovacuum; active queries included autovacuum, activity queue seeding, and trade-detail metadata updates.
+- Noted remaining pressure: last 30 minutes had 3 market-enrichment Npgsql stream timeouts, 2 ingestion stream timeouts, and 1 position-refresh deadlock. Stack traces show market-enrichment timeout now occurs while queuing position refresh after metadata upsert, not while scanning missing metadata; ingestion timeout occurs in `GetPolymarketOnChainFillBlockRangeAsync`.
+Next: Keep the service running. If these timeouts continue, optimize the next bottlenecks: deconflict/timeout-tune position refresh queue writes after metadata upsert and make fill block-range checks cheaper.
+Notes: DB/log verification only; no source behavior changed. Existing unrelated dirty files `PolyCopyTrader.sln` and `src/PolyCopyTrader.Storage/PostgresSchemaInitializer.cs` were left untouched. `git rev-parse --abbrev-ref --symbolic-full-name '@{u}'` failed because branch `master` has no configured upstream.
+Blockers: Automatic pull/push cannot run until a Git upstream is configured.
+
 ## Active Update 2026-05-01 Token Metadata Refresh Queue
 Goal: Stop market enrichment from repeatedly scanning the large wallet-execution table for missing token metadata.
 Status: Completed

@@ -480,3 +480,10 @@ Request:
 
 Result:
 Implemented a dedicated `polymarket_onchain_token_metadata_refresh_queue`. New fills and derived-data rebuilds enqueue affected token ids; enrichment now reads due queued token ids instead of scanning `polymarket_onchain_wallet_executions`; successful category metadata clears queue rows, while failed or blank-category lookups are rescheduled with capped backoff. Updated tests and docs. Verification passed: targeted enrichment/ingestion/storage tests 26/26, full tests 138/138, service build, dashboard build, and `git diff --check`.
+
+## 2026-05-01T19:57:27.1719127+00:00
+Request:
+Запустился, проверяй
+
+Result:
+Queried PostgreSQL through `POLYCOPYTRADER_POSTGRES_CONNECTION` without printing secrets and inspected the latest service log. Confirmed the restarted service is alive, the new metadata refresh queue and index exist, the queue has about 22.7k token ids, and the old active missing-metadata DISTINCT scan over `polymarket_onchain_wallet_executions` is no longer present. Logs show enrichment is actively resolving token metadata through Gamma. Noted remaining DB pressure: recent Npgsql stream timeouts now occur while queuing position refresh after metadata upsert and while checking fill block ranges, plus one position-refresh deadlock; no blocking chain was present. No source behavior changed.
