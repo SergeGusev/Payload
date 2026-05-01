@@ -1,3 +1,13 @@
+## Active Update 2026-05-01 Clipboard Image Shorthand
+Goal: Record the user's shorthand for future image inspection requests.
+Status: Completed
+Done:
+- Agreed that when the user asks to "посмотри картинку", it means inspect the image currently stored in the Windows clipboard.
+- Future such requests should first try to extract the clipboard bitmap to a temporary PNG and inspect it.
+Next: Use the clipboard image extraction path automatically on future "посмотри картинку" requests.
+Notes: Process agreement only; no source behavior changed. Existing unrelated dirty files `PolyCopyTrader.sln` and `src/PolyCopyTrader.Storage/PostgresSchemaInitializer.cs` were left untouched. `git rev-parse --abbrev-ref --symbolic-full-name '@{u}'` failed because branch `master` has no configured upstream.
+Blockers: Automatic pull/push cannot run until a Git upstream is configured.
+
 ## Active Update 2026-05-01 Clipboard Image Inspection
 Goal: Inspect the current Windows clipboard image for the user.
 Status: Completed

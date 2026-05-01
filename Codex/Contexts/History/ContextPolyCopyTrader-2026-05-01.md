@@ -501,3 +501,10 @@ Request:
 
 Result:
 Extracted the Windows clipboard bitmap to a temporary PNG and inspected it. The screenshot shows `PolyCopyTrader.Service.exe` still running PostgreSQL schema initialization at statement `114/149`, around on-chain activity refresh queue schema/index creation. No source behavior changed.
+
+## 2026-05-01T20:27:56.0354411Z
+Request:
+Давай договоримся - если я тебе прошу: "Посмотри картинку", то подразумеваю, что она в clipboard, хорошо?
+
+Result:
+Agreed to treat future "посмотри картинку" requests as instructions to inspect the current Windows clipboard image first. No source behavior changed.
