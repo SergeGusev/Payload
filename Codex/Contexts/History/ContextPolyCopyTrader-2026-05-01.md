@@ -270,3 +270,10 @@ Request:
 
 Result:
 Prepared a staged post-index recovery verification plan: confirm schema initialization finished, check that no CREATE INDEX/schema DDL remains active, validate queue sizes, verify category enrichment after the CLOB/condition-id fallback, verify position category propagation, and then check category performance table/queue progress. No source code changed.
+
+## 2026-05-01T13:44:52.4994562Z
+Request:
+Посмотри на D:\1\8.png. Нет категорий
+
+Result:
+Inspected the screenshot. Metadata still had 38,146 rows, 38,130 successful lookups, 16 failed lookups, 0 rows with category, and max refreshed at 2026-05-01 16:42:28.101144+03. Explained that this confirms refresh activity but does not prove the latest CLOB/condition fallback ran; provided SQL to check `polymarket_http_logs` for `GetMarketByToken`, `GetOpenMarketByCondition`, and `GetClosedMarketByCondition`. No source code changed.

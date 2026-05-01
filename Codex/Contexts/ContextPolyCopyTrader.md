@@ -1,3 +1,14 @@
+## Active Update 2026-05-01 Category Still Missing After Refresh
+Goal: Interpret `D:\1\8.png` showing no categories after another metadata refresh.
+Status: Completed
+Done:
+- Inspected `D:\1\8.png`: `polymarket_onchain_token_metadata` still has 38,146 rows, 38,130 successful lookups, 16 failed lookups, `with_category = 0`, `without_category = 38,146`, and `max_refreshed = 2026-05-01 16:42:28.101144+03`.
+- Clarified that the screenshot proves metadata was refreshed, but not necessarily that the latest CLOB/condition fallback ran; that must be verified in `polymarket_http_logs` by checking `GetMarketByToken`, `GetOpenMarketByCondition`, and `GetClosedMarketByCondition`.
+- Prepared decision SQL: if fallback operations are absent, restart/redeploy the service with commit `1b6366e`; if present and successful but still categoryless, implement local Gamma catalog/event catalog fallback.
+Next: Run the HTTP-log operation query and one recent-response sample query to decide whether this is deployment/version drift or a source-data coverage problem.
+Notes: `git rev-parse --abbrev-ref --symbolic-full-name '@{u}'` failed because branch `master` has no configured upstream, so pull/push cannot run automatically. No source code changed for this answer-only diagnostic followup. Existing unrelated dirty files `PolyCopyTrader.sln` and `src/PolyCopyTrader.Storage/PostgresSchemaInitializer.cs` were left untouched.
+Blockers: Automatic pull/push cannot run until a Git upstream is configured.
+
 ## Active Update 2026-05-01 Post Index Recovery Checks
 Goal: Provide the next operational checks after the stalled startup index creation continued.
 Status: Completed
