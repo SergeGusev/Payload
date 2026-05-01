@@ -1,3 +1,17 @@
+## Active Update 2026-05-01 Raw Data Retention Guidance
+Goal: Decide whether any PostgreSQL rows are unnecessary and whether raw blockchain logs should be deleted.
+Status: Completed
+Done:
+- Re-read repository docs and storage code for on-chain raw logs, decoded fills, serving tables, and cleanup behavior.
+- Confirmed `polymarket_onchain_logs` is intended as temporary raw staging: after decoded fills are materialized into `polymarket_onchain_trade_details`, `DeleteProcessedPolymarketOnChainRawLogsAsync` deletes matching raw logs.
+- Confirmed `polymarket_onchain_fills` is the retained audit/rebuild source and should not be purged casually; wallet fills/executions/trade details/positions/performance are indexed serving/derived tables needed for speed.
+- Queried PostgreSQL through `POLYCOPYTRADER_POSTGRES_CONNECTION` without printing secrets. System catalog sizes showed `polymarket_onchain_logs` around 14 GB with about 2.5M live rows; `pg_stat_user_tables` reported `n_dead_tup=0` and recent autovacuum, so this is live retained raw data, not just dead-table bloat.
+- Noted current ingestion state still had cursor/fills around block `85990031` and raw logs around `85990531`; raw logs beyond the cursor are an incomplete/current batch and can be refetched, but deleting them is not the main win.
+- Recommended not deleting final tables. Safe cleanup target is processed raw logs that already have a matching `polymarket_onchain_trade_details` row, preferably in small batches and outside peak ingestion. `VACUUM (ANALYZE)` reclaims reusable space; `VACUUM FULL` requires a maintenance window because it takes an exclusive lock.
+Next: If disk/DB pressure stays high, implement or run a batched maintenance cleanup for processed `polymarket_onchain_logs`, then optionally add retention for non-core diagnostic/history tables such as HTTP logs, API errors, heartbeats, and trader leaderboard snapshots.
+Notes: No repo source code changed. Existing unrelated dirty files `PolyCopyTrader.sln` and `src/PolyCopyTrader.Storage/PostgresSchemaInitializer.cs` were left untouched. `git rev-parse --abbrev-ref --symbolic-full-name '@{u}'` failed because branch `master` has no configured upstream.
+Blockers: Automatic pull/push cannot run until a Git upstream is configured.
+
 ## Active Update 2026-05-01 Post-Restart Database Ingestion Check
 Goal: Verify whether the restarted service is progressing normally in PostgreSQL.
 Status: Completed

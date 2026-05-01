@@ -424,3 +424,10 @@ Ok, the service started. Check in the database whether everything is normal.
 
 Result:
 Queried PostgreSQL through `POLYCOPYTRADER_POSTGRES_CONNECTION` without printing secrets. Confirmed the service heartbeat is fresh and raw on-chain logs are being fetched again after restart, reaching block `85990531` with recent `observed_at_utc`. Confirmed the new forward-only code path is running from `FromBlock=85990032`. Also confirmed decoded fills and the ingestion cursor had not yet advanced beyond block `85990031`, with latest Polygon around `86270134`; there were no active PostgreSQL blockers, but recent ingestion errors included a stream timeout and a deadlock. Concluded the service is alive and working on the first new batch, but the final fills/cursor tables are not yet caught up; if they remain unchanged for another 10-15 minutes, reduce ingestion batch size or split batch commits. No repo source code changed.
+
+## 2026-05-01T18:52:00+00:00
+Request:
+Are any unnecessary rows appearing in tables, for example blockchain logs, or is it better to delete nothing?
+
+Result:
+Re-read storage code and docs, then queried PostgreSQL through `POLYCOPYTRADER_POSTGRES_CONNECTION` without printing secrets. Confirmed raw `polymarket_onchain_logs` is intended as temporary staging and can be deleted after a matching `polymarket_onchain_trade_details` row exists; decoded `polymarket_onchain_fills` remains the retained audit/rebuild source and should not be casually deleted. Database catalog stats showed `polymarket_onchain_logs` around 14 GB with about 2.5M live rows and no dead tuple bloat, so it is a real cleanup target. Recommended retaining final/source tables, cleaning only processed raw logs in small batches, and using `VACUUM (ANALYZE)` afterward; `VACUUM FULL` should require a maintenance window. No repo source code changed.
