@@ -221,3 +221,10 @@ Request:
 
 Result:
 Inspected the schema, domain model, repository read SQL, refresh aggregation SQL, queue seeding, and category refresh worker. Prepared a detailed Russian field reference for `polymarket_onchain_wallet_category_performance`, including formulas for ROI, win rate, score, sample quality, refresh semantics, indexes, and caveats. No source code changed.
+
+## 2026-05-01T12:32:18.2787981Z
+Request:
+А почему категория может быть unknown ? Этой информации нет в блокчейне?
+
+Result:
+Inspected the on-chain fill parser, Gamma metadata client/parser, market enrichment worker, schema, position refresh SQL, and category performance aggregation SQL. Confirmed that market category is not present in the parsed blockchain `OrderFilled` event data; it comes from Gamma token metadata and is stored as `unknown` when metadata/category is missing or blank. No source code changed.

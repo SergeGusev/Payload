@@ -1,3 +1,14 @@
+## Active Update 2026-05-01 Unknown Onchain Category Explanation
+Goal: Explain why `polymarket_onchain_wallet_category_performance.category` can be `unknown`.
+Status: Completed
+Done:
+- Re-read workflow, project rules, coding rules, active context, Git state, on-chain fill parser, Gamma client/parser, market enrichment worker, schema, position refresh SQL, and category performance aggregation SQL.
+- Confirmed blockchain `OrderFilled` logs provide token ids, wallets, amounts, fees, and related event fields, but not the human market category.
+- Confirmed category is pulled from Gamma `/markets?clob_token_ids=...` into `polymarket_onchain_token_metadata`, copied into wallet positions, then coalesced to `unknown` during category-performance aggregation when missing or blank.
+Next: Diagnose `unknown` rows by checking missing/failed Gamma metadata and position rows with null or blank category.
+Notes: `git rev-parse --abbrev-ref --symbolic-full-name '@{u}'` failed because branch `master` has no configured upstream, so pull/push cannot run automatically. No source code changed for this answer-only task. Existing unrelated dirty files `PolyCopyTrader.sln` and `src/PolyCopyTrader.Storage/PostgresSchemaInitializer.cs` were left untouched.
+Blockers: Automatic pull/push cannot run until a Git upstream is configured.
+
 ## Active Update 2026-05-01 Wallet Category Performance Field Reference
 Goal: Describe every column in `polymarket_onchain_wallet_category_performance`.
 Status: Completed
