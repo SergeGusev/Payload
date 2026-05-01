@@ -1,3 +1,16 @@
+## Active Update 2026-05-01 Visual Studio Service Exit Screenshot
+Goal: Interpret `D:\1\12.png`, where the service exits after schema scripts.
+Status: Completed
+Done:
+- Inspected `D:\1\12.png`; schema initialization reached statement 140/140 and printed `Scripts processed`, then Visual Studio reported process exit code `-1 (0xffffffff)`.
+- Confirmed `Scripts processed` is expected when `PostgresSchemaInitializer.InitializeAsync` completes, but the service process should then continue into `host.RunAsync()` and keep running.
+- Inspected `Program.cs`; after schema initialization, all normal service logs go to `bin\Debug\net10.0\logs\polycopytrader-service-*.log`, not to the Visual Studio console.
+- Checked the latest debug log: no fatal termination was logged; the service logged startup and background worker activity after schema initialization.
+- Concluded the screenshot does not show a normal service lifetime: either the debug process was stopped/killed, or the process exited without a fatal Serilog entry. Schema scripts themselves completed successfully.
+Next: If it repeats without manually stopping debugging, inspect the tail of `src\PolyCopyTrader.Service\bin\Debug\net10.0\logs\polycopytrader-service-20260501.log` immediately after exit and verify whether a `PolyCopyTrader.Service` process remains running.
+Notes: No source code changed. Existing unrelated dirty files `PolyCopyTrader.sln` and `src/PolyCopyTrader.Storage/PostgresSchemaInitializer.cs` were left untouched. `git rev-parse --abbrev-ref --symbolic-full-name '@{u}'` failed because branch `master` has no configured upstream.
+Blockers: Automatic pull/push cannot run until a Git upstream is configured.
+
 ## Active Update 2026-05-01 Restore Fresh On-Chain Ingestion Priority
 Goal: Diagnose why `public.polymarket_onchain_fills` stopped growing and keep new-block ingestion ahead of derived-data repair.
 Status: Completed

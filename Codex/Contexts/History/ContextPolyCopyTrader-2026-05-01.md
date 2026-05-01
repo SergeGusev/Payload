@@ -410,3 +410,10 @@ Request:
 
 Result:
 Queried PostgreSQL through `POLYCOPYTRADER_POSTGRES_CONNECTION` without printing secrets. Confirmed this was not a normal no-new-trades pause: `polymarket_onchain_fills` last imported at `2026-05-01 07:39:08 UTC`, cursor `to_block=85990031` was about 279,543 blocks behind latest Polygon block, and recent ingestion errors included `Exception while reading from stream`. The service heartbeat was fresh, but active database work showed large derived/materialization inserts. Changed `OnChainIngestionProcessor` so fresh forward catch-up runs before existing derived-data repair, preventing old serving-table repair from delaying new-block ingestion. Added a regression test. Verification passed: targeted on-chain ingestion tests 12/12, service build, full tests 133/133, and `git diff --check`.
+
+## 2026-05-01T18:26:44.9488134+00:00
+Request:
+Посмотри на D:\1\12.png. Вот так сервер завершается после скриптов. Это нормально?
+
+Result:
+Inspected the screenshot and current service log. `Scripts processed` means schema initialization completed successfully, but Visual Studio process exit code `-1 (0xffffffff)` is not a normal long-running service state. The service should continue into `host.RunAsync()` after schema initialization. Checked `Program.cs` and the latest debug log; normal runtime logs go to `src\PolyCopyTrader.Service\bin\Debug\net10.0\logs\polycopytrader-service-20260501.log`, not to the console. The log showed service startup and background worker activity after schema initialization and no fatal termination entry, so the screenshot likely reflects a stopped/killed debug process or an exit path not captured as fatal, not a schema-script failure. No source code changed.
