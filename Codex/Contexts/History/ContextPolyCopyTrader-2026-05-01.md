@@ -165,3 +165,10 @@ Request:
 
 Result:
 Provided the next verification checklist after successful startup SQL: check real blockers are gone, confirm on-chain serving objects are physical tables with valid indexes, inspect estimated sizes, compare raw fill ranges to derived wallet execution/trade detail ranges, verify raw-log cleanup and refresh queues, inspect service heartbeat/api errors, and run Dashboard-visible smoke queries. No source code changed.
+
+## 2026-05-01T10:50:32.7386785Z
+Request:
+Так. Что дальше?
+
+Result:
+Clarified that the next operational milestone is running the service and letting or forcing on-chain sync so `RefreshMissingDerivedDataAsync` backfills existing `polymarket_onchain_fills` into `wallet_fills`, `wallet_executions`, `trade_details`, and downstream participant/activity/position/performance tables. No source code changed.

@@ -1,3 +1,14 @@
+## Active Update 2026-05-01 Next Operational Step After Schema
+Goal: Clarify the next operational step after successful startup schema SQL.
+Status: Completed
+Done:
+- Re-read workflow, project rules, coding rules, active context, README IPC/on-chain sections, local control server endpoints, on-chain ingestion worker, and Git state.
+- Confirmed the next milestone is running the service and letting/forcing on-chain ingestion to call `RefreshMissingDerivedDataAsync`, which backfills existing `polymarket_onchain_fills` into serving tables before continuing fresh/historical scanning.
+- Identified manual trigger endpoint `POST http://127.0.0.1:5118/refresh-onchain`, status endpoint `GET /status`, and dashboard button `Onchain sync`.
+Next: Start the service, trigger or wait for on-chain sync, watch logs for serving-data refresh messages, and monitor counts/ranges until wallet/trade serving tables become non-zero and catch up.
+Notes: `git rev-parse --abbrev-ref --symbolic-full-name '@{u}'` failed because branch `master` has no configured upstream, so pull/push cannot run automatically. No source code changed for this answer-only task; existing unrelated `PolyCopyTrader.sln` changes remain untouched.
+Blockers: Automatic pull/push cannot run until a Git upstream is configured.
+
 ## Active Update 2026-05-01 Post Schema Startup Verification
 Goal: Provide the next database checks after startup SQL completed successfully.
 Status: Completed
