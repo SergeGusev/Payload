@@ -1,3 +1,18 @@
+## Active Update 2026-05-01 Leader Category Performance Signal Gate
+Goal: Wire on-chain market metadata and wallet/category performance into stake decision logic.
+Status: Completed
+Done:
+- Extended `SignalEvaluationContext` with optional `LeaderCategoryPerformance` and added configurable `SignalOptions` gates for known market category, required leader/category performance, minimum resolved sample, ROI, win rate, score, sample quality, stale age, and performance score bonus.
+- Added new rejection reason codes for missing/weak/stale leader-category performance and missing market category.
+- Updated `SignalProcessor` to resolve `MarketInfo` from `polymarket_onchain_token_metadata`, load `polymarket_onchain_wallet_category_performance` by `(leader_wallet, category)`, and pass both into normal and live preflight signal evaluation.
+- Added indexed lookup methods to `IAppRepository`/Postgres/NoOp/test repositories for token metadata and wallet/category performance; Postgres lookup uses exact `(wallet, category)` to use the existing index, with service-side wallet normalization.
+- Enabled the strict service defaults in `src/PolyCopyTrader.Service/appsettings.json`: known category and leader category performance are required, with minimum `Low` sample quality, 3 resolved positions, non-negative ROI, win rate at least 50%, score at least 0, and 24-hour freshness.
+- Updated README and configuration reference with the new decision gates.
+- Added strategy tests for missing category, missing performance, weak performance, and accepted good performance; updated pipeline integration to verify metadata/performance are wired through the processor.
+Next: Restart the service after deploying this commit; monitor `SignalRejection` reason codes for `missing_market_category` and `missing_leader_category_performance` to see whether metadata/performance backfill is keeping up.
+Notes: Verification passed: targeted `StrategyEngineTests|PipelineIntegrationTests` 22/22 after rerun; full `dotnet test tests\PolyCopyTrader.Tests\PolyCopyTrader.Tests.csproj -c Verify --no-restore` passed 137/137; `dotnet build src\PolyCopyTrader.Service\PolyCopyTrader.Service.csproj -c Verify --no-restore` passed; `dotnet build src\PolyCopyTrader.Dashboard\PolyCopyTrader.Dashboard.csproj -c Verify --no-restore` passed; `git diff --check` passed. An initial parallel test/build hit a transient `PolyCopyTrader.Domain.dll` file lock. Existing unrelated dirty files `PolyCopyTrader.sln` and `src/PolyCopyTrader.Storage/PostgresSchemaInitializer.cs` were left untouched. `git rev-parse --abbrev-ref --symbolic-full-name '@{u}'` failed because branch `master` has no configured upstream.
+Blockers: Automatic pull/push cannot run until a Git upstream is configured.
+
 ## Active Update 2026-05-01 Betting Decision Data Sufficiency
 Goal: Assess whether the current data model is sufficient for stake decision logic.
 Status: Completed

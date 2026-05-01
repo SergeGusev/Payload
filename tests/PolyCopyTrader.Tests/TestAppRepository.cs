@@ -453,6 +453,12 @@ internal sealed class TestAppRepository : IAppRepository
         return Task.CompletedTask;
     }
 
+    public Task<PolymarketOnChainTokenMetadata?> GetPolymarketOnChainTokenMetadataAsync(string tokenId, CancellationToken cancellationToken = default)
+    {
+        return Task.FromResult(PolymarketOnChainTokenMetadata.FirstOrDefault(item =>
+            string.Equals(item.TokenId, tokenId, StringComparison.OrdinalIgnoreCase)));
+    }
+
     public Task<IReadOnlyList<PolymarketOnChainFill>> GetRecentPolymarketOnChainFillsAsync(int limit = 100, CancellationToken cancellationToken = default)
     {
         return Task.FromResult<IReadOnlyList<PolymarketOnChainFill>>(
@@ -623,6 +629,16 @@ internal sealed class TestAppRepository : IAppRepository
                 .ThenByDescending(item => item.VolumeUsd)
                 .Take(limit)
                 .ToArray());
+    }
+
+    public Task<PolymarketOnChainWalletCategoryPerformance?> GetPolymarketOnChainWalletCategoryPerformanceAsync(
+        string wallet,
+        string category,
+        CancellationToken cancellationToken = default)
+    {
+        return Task.FromResult(PolymarketOnChainWalletCategoryPerformance.FirstOrDefault(item =>
+            string.Equals(item.Wallet, wallet, StringComparison.OrdinalIgnoreCase) &&
+            string.Equals(item.Category, category, StringComparison.OrdinalIgnoreCase)));
     }
 
     public Task<OnChainCategoryPerformanceRefreshResult> RefreshPolymarketOnChainWalletCategoryPerformanceAsync(

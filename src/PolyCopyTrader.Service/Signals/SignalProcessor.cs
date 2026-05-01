@@ -126,6 +126,8 @@ public sealed class SignalProcessor(
     private async Task<SignalEvaluationResult> EvaluateAsync(LeaderTrade trade, CancellationToken cancellationToken)
     {
         var traderRule = ResolveTraderRule(trade);
+        var marketInfo = await ResolveMarketInfoAsync(trade, cancellationToken);
+        var leaderCategoryPerformance = await ResolveLeaderCategoryPerformanceAsync(trade, marketInfo, cancellationToken);
         var orderBook = trade.Side == TradeSide.Buy
             ? await clobClient.GetOrderBookAsync(trade.AssetId, cancellationToken)
             : null;
@@ -138,9 +140,10 @@ public sealed class SignalProcessor(
             new SignalEvaluationContext(
                 trade,
                 traderRule,
-                null,
+                marketInfo,
                 orderBook,
-                exposure));
+                exposure,
+                leaderCategoryPerformance));
 
         return new SignalEvaluationResult(decision, orderBook);
     }
@@ -242,10 +245,18 @@ public sealed class SignalProcessor(
         }
 
         var traderRule = ResolveTraderRule(trade);
+        var marketInfo = await ResolveMarketInfoAsync(trade, cancellationToken);
+        var leaderCategoryPerformance = await ResolveLeaderCategoryPerformanceAsync(trade, marketInfo, cancellationToken);
         var paperOrders = await repository.GetOpenPaperOrdersAsync(cancellationToken);
         var positions = await repository.GetPaperPositionsAsync(cancellationToken);
         var exposure = BuildExposure(trade, paperOrders, positions, openLiveOrders);
-        var freshDecision = signalEngine.Evaluate(new SignalEvaluationContext(trade, traderRule, null, orderBook, exposure));
+        var freshDecision = signalEngine.Evaluate(new SignalEvaluationContext(
+            trade,
+            traderRule,
+            marketInfo,
+            orderBook,
+            exposure,
+            leaderCategoryPerformance));
         if (!freshDecision.Accepted)
         {
             validation.Add("Fresh signal evaluation rejected live order: " + string.Join(", ", freshDecision.Reasons));
@@ -576,6 +587,60 @@ public sealed class SignalProcessor(
             0m,
             openOrders.Count + liveOrders.Count,
             Math.Max(oldestPaperOrderAgeSeconds, oldestLiveOrderAgeSeconds));
+    }
+
+    private async Task<MarketInfo> ResolveMarketInfoAsync(LeaderTrade trade, CancellationToken cancellationToken)
+    {
+        var metadata = await repository.GetPolymarketOnChainTokenMetadataAsync(trade.AssetId, cancellationToken);
+        if (metadata is null)
+        {
+            return new MarketInfo(
+                trade.ConditionId,
+                trade.MarketSlug,
+                trade.MarketTitle,
+                null,
+                null);
+        }
+
+        return new MarketInfo(
+            string.IsNullOrWhiteSpace(metadata.ConditionId) ? trade.ConditionId : metadata.ConditionId,
+            string.IsNullOrWhiteSpace(metadata.MarketSlug) ? trade.MarketSlug : metadata.MarketSlug,
+            string.IsNullOrWhiteSpace(metadata.MarketTitle) ? trade.MarketTitle : metadata.MarketTitle,
+            NormalizeCategory(metadata.Category),
+            metadata.EndDateUtc);
+    }
+
+    private async Task<PolymarketOnChainWalletCategoryPerformance?> ResolveLeaderCategoryPerformanceAsync(
+        LeaderTrade trade,
+        MarketInfo marketInfo,
+        CancellationToken cancellationToken)
+    {
+        var category = NormalizeCategory(marketInfo.Category);
+        if (IsUnknownCategory(category))
+        {
+            return null;
+        }
+
+        return await repository.GetPolymarketOnChainWalletCategoryPerformanceAsync(
+            NormalizeWallet(trade.TraderWallet),
+            category!,
+            cancellationToken);
+    }
+
+    private static string NormalizeWallet(string wallet)
+    {
+        return wallet.Trim().ToLowerInvariant();
+    }
+
+    private static string? NormalizeCategory(string? category)
+    {
+        return string.IsNullOrWhiteSpace(category) ? null : category.Trim();
+    }
+
+    private static bool IsUnknownCategory(string? category)
+    {
+        return string.IsNullOrWhiteSpace(category) ||
+            string.Equals(category, "unknown", StringComparison.OrdinalIgnoreCase);
     }
 
     private static Signal ToSignal(LeaderTrade trade, SignalDecision decision)

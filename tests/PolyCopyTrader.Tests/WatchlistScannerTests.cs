@@ -473,6 +473,11 @@ public sealed class WatchlistScannerTests
             return Task.CompletedTask;
         }
 
+        public Task<PolymarketOnChainTokenMetadata?> GetPolymarketOnChainTokenMetadataAsync(string tokenId, CancellationToken cancellationToken = default)
+        {
+            return Task.FromResult<PolymarketOnChainTokenMetadata?>(null);
+        }
+
         public Task<IReadOnlyList<PolymarketOnChainFill>> GetRecentPolymarketOnChainFillsAsync(int limit = 100, CancellationToken cancellationToken = default)
         {
             return Task.FromResult<IReadOnlyList<PolymarketOnChainFill>>([]);
@@ -523,6 +528,14 @@ public sealed class WatchlistScannerTests
             CancellationToken cancellationToken = default)
         {
             return Task.FromResult<IReadOnlyList<PolymarketOnChainWalletCategoryPerformance>>([]);
+        }
+
+        public Task<PolymarketOnChainWalletCategoryPerformance?> GetPolymarketOnChainWalletCategoryPerformanceAsync(
+            string wallet,
+            string category,
+            CancellationToken cancellationToken = default)
+        {
+            return Task.FromResult<PolymarketOnChainWalletCategoryPerformance?>(null);
         }
 
         public Task<OnChainCategoryPerformanceRefreshResult> RefreshPolymarketOnChainWalletCategoryPerformanceAsync(

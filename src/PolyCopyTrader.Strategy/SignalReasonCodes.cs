@@ -21,6 +21,14 @@ public static class SignalReasonCodes
     public const string RiskOpenOrdersLimit = "risk_open_orders_limit";
     public const string RiskOrderAgeLimit = "risk_order_age_limit";
     public const string MarketTooCloseToEvent = "market_too_close_to_event";
+    public const string MissingMarketCategory = "missing_market_category";
+    public const string MissingLeaderCategoryPerformance = "missing_leader_category_performance";
+    public const string LeaderCategoryPerformanceStale = "leader_category_performance_stale";
+    public const string LeaderCategoryResolvedSampleTooSmall = "leader_category_resolved_sample_too_small";
+    public const string LeaderCategorySampleQualityTooLow = "leader_category_sample_quality_too_low";
+    public const string LeaderCategoryScoreTooLow = "leader_category_score_too_low";
+    public const string LeaderCategoryRoiTooLow = "leader_category_roi_too_low";
+    public const string LeaderCategoryWinRateTooLow = "leader_category_win_rate_too_low";
     public const string ScoreBelowThreshold = "score_below_threshold";
     public const string ObserveOnly = "observe_only";
 }

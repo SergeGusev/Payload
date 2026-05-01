@@ -34,6 +34,8 @@ public sealed class PipelineIntegrationTests
         Assert.Equal("Healthy", scannerStatus.ScannerStatus);
         Assert.Single(repository.LeaderTrades);
         Assert.Single(repository.LeaderPositions);
+        repository.PolymarketOnChainTokenMetadata.Add(TokenMetadata());
+        repository.PolymarketOnChainWalletCategoryPerformance.Add(CategoryPerformance());
 
         var signalProcessor = new SignalProcessor(
             NullLogger<SignalProcessor>.Instance,
@@ -82,7 +84,16 @@ public sealed class PipelineIntegrationTests
         var riskOptions = new RiskOptions();
         var paperOptions = new PaperTradingOptions { InitialBankrollUsd = 10_000m };
         return new DefaultSignalEngine(
-            new SignalOptions(),
+            new SignalOptions
+            {
+                RequireKnownMarketCategory = true,
+                RequireLeaderCategoryPerformance = true,
+                MinLeaderCategoryResolvedPositions = 3,
+                MinLeaderCategoryResolvedRoiPct = 0m,
+                MinLeaderCategoryWinRatePct = 50m,
+                MinLeaderCategoryScore = 0m,
+                MinLeaderCategorySampleQuality = "Low"
+            },
             new ExecutionOptions(),
             riskOptions,
             paperOptions,
@@ -129,6 +140,58 @@ public sealed class PipelineIntegrationTests
             1_480m,
             DateTimeOffset.UtcNow,
             "0xabc");
+    }
+
+    private static PolymarketOnChainTokenMetadata TokenMetadata()
+    {
+        return new PolymarketOnChainTokenMetadata(
+            "asset-1",
+            "condition-1",
+            "market-1",
+            "sample-market",
+            "Will sample event happen?",
+            "Yes",
+            0,
+            "POLITICS",
+            DateTimeOffset.UtcNow.AddDays(2),
+            Active: true,
+            Closed: false,
+            Archived: false,
+            Resolved: false,
+            WinningOutcome: null,
+            ClobTokenIds: ["asset-1", "asset-2"],
+            Outcomes: ["Yes", "No"],
+            LookupSucceeded: true,
+            LookupError: null,
+            RawJson: "{}",
+            LastRefreshedUtc: DateTimeOffset.UtcNow);
+    }
+
+    private static PolymarketOnChainWalletCategoryPerformance CategoryPerformance()
+    {
+        return new PolymarketOnChainWalletCategoryPerformance(
+            Wallet,
+            "POLITICS",
+            PositionsCount: 12,
+            OpenPositions: 2,
+            FlatPositions: 3,
+            ResolvedPositions: 7,
+            ProfitableResolvedPositions: 5,
+            LosingResolvedPositions: 2,
+            MarketsTraded: 10,
+            VolumeUsd: 5_000m,
+            ResolvedVolumeUsd: 3_000m,
+            OpenExposureUsd: 500m,
+            ResolvedCostUsd: 2_000m,
+            ResolvedPnlUsd: 250m,
+            ResolvedRoiPct: 12.5m,
+            WinRatePct: 71.4m,
+            AveragePositionSizeUsd: 416.67m,
+            Score: 120m,
+            SampleQuality: "Low",
+            FirstActiveUtc: DateTimeOffset.UtcNow.AddDays(-30),
+            LastActiveUtc: DateTimeOffset.UtcNow.AddHours(-1),
+            RefreshedAtUtc: DateTimeOffset.UtcNow);
     }
 
     private static LeaderPosition Position()

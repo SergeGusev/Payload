@@ -1703,6 +1703,34 @@ LIMIT @Limit;
         return results;
     }
 
+    public async Task<PolymarketOnChainTokenMetadata?> GetPolymarketOnChainTokenMetadataAsync(
+        string tokenId,
+        CancellationToken cancellationToken = default)
+    {
+        if (string.IsNullOrWhiteSpace(tokenId))
+        {
+            return null;
+        }
+
+        const string sql = """
+SELECT token_id, condition_id, market_id, market_slug, market_title, outcome, outcome_index,
+       category, end_date_utc, active, closed, archived, resolved, winning_outcome,
+       clob_token_ids_json, outcomes_json, lookup_succeeded, lookup_error, raw_json,
+       last_refreshed_utc
+FROM polymarket_onchain_token_metadata
+WHERE token_id = @TokenId
+LIMIT 1;
+""";
+
+        await using var connection = await OpenConnectionAsync(cancellationToken);
+        await using var command = CreateCommand(connection, sql);
+        command.Parameters.AddWithValue("TokenId", tokenId);
+        await using var reader = await command.ExecuteReaderAsync(cancellationToken);
+        return await reader.ReadAsync(cancellationToken)
+            ? ReadPolymarketOnChainTokenMetadata(reader)
+            : null;
+    }
+
     public async Task UpsertPolymarketOnChainTokenMetadataAsync(
         IReadOnlyList<PolymarketOnChainTokenMetadata> metadata,
         CancellationToken cancellationToken = default)
@@ -2541,6 +2569,38 @@ LIMIT @Limit;
         }
 
         return results;
+    }
+
+    public async Task<PolymarketOnChainWalletCategoryPerformance?> GetPolymarketOnChainWalletCategoryPerformanceAsync(
+        string wallet,
+        string category,
+        CancellationToken cancellationToken = default)
+    {
+        if (string.IsNullOrWhiteSpace(wallet) || string.IsNullOrWhiteSpace(category))
+        {
+            return null;
+        }
+
+        const string sql = """
+SELECT wallet, category, positions_count, open_positions, flat_positions, resolved_positions,
+       profitable_resolved_positions, losing_resolved_positions, markets_traded,
+       volume_usd, resolved_volume_usd, open_exposure_usd, resolved_cost_usd,
+       resolved_pnl_usd, resolved_roi_pct, win_rate_pct, average_position_size_usd,
+       score, sample_quality, first_active_utc, last_active_utc, refreshed_at_utc
+FROM polymarket_onchain_wallet_category_performance
+WHERE wallet = @Wallet
+  AND category = @Category
+LIMIT 1;
+""";
+
+        await using var connection = await OpenConnectionAsync(cancellationToken);
+        await using var command = CreateCommand(connection, sql);
+        command.Parameters.AddWithValue("Wallet", wallet);
+        command.Parameters.AddWithValue("Category", category);
+        await using var reader = await command.ExecuteReaderAsync(cancellationToken);
+        return await reader.ReadAsync(cancellationToken)
+            ? ReadPolymarketOnChainWalletCategoryPerformance(reader)
+            : null;
     }
 
     public async Task<OnChainCategoryPerformanceRefreshResult> RefreshPolymarketOnChainWalletCategoryPerformanceAsync(
@@ -4551,6 +4611,41 @@ ON CONFLICT (key) DO UPDATE SET
         command.Parameters.AddWithValue("LookupError", (object?)metadata.LookupError ?? DBNull.Value);
         command.Parameters.AddWithValue("RawJson", string.IsNullOrWhiteSpace(metadata.RawJson) ? "{}" : metadata.RawJson);
         command.Parameters.AddWithValue("LastRefreshedUtc", UtcDateTime(metadata.LastRefreshedUtc));
+    }
+
+    private static PolymarketOnChainTokenMetadata ReadPolymarketOnChainTokenMetadata(NpgsqlDataReader reader)
+    {
+        return new PolymarketOnChainTokenMetadata(
+            reader.GetString(0),
+            reader.GetString(1),
+            reader.GetString(2),
+            reader.GetString(3),
+            reader.GetString(4),
+            reader.GetString(5),
+            reader.GetInt32(6),
+            reader.IsDBNull(7) ? null : reader.GetString(7),
+            reader.IsDBNull(8) ? null : DateTimeOffsetFromUtc(reader.GetDateTime(8)),
+            reader.GetBoolean(9),
+            reader.GetBoolean(10),
+            reader.GetBoolean(11),
+            reader.GetBoolean(12),
+            reader.IsDBNull(13) ? null : reader.GetString(13),
+            ReadJsonStringArray(reader, 14),
+            ReadJsonStringArray(reader, 15),
+            reader.GetBoolean(16),
+            reader.IsDBNull(17) ? null : reader.GetString(17),
+            reader.GetString(18),
+            DateTimeOffsetFromUtc(reader.GetDateTime(19)));
+    }
+
+    private static IReadOnlyList<string> ReadJsonStringArray(NpgsqlDataReader reader, int ordinal)
+    {
+        if (reader.IsDBNull(ordinal))
+        {
+            return [];
+        }
+
+        return JsonSerializer.Deserialize<string[]>(reader.GetString(ordinal)) ?? [];
     }
 
     private static PolymarketOnChainFill ReadPolymarketOnChainFill(NpgsqlDataReader reader)

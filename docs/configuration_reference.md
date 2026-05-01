@@ -118,6 +118,21 @@ Initial live trading requires:
 - `Execution:MakerOnly=true`
 - `Execution:AllowTaker=false`
 
+## Signal
+
+`DefaultSignalEngine` uses fresh order book data plus enriched on-chain market and
+leader/category performance context when those gates are enabled.
+
+- `RequireKnownMarketCategory`: reject signals when market category is missing or `unknown`.
+- `RequireLeaderCategoryPerformance`: reject signals without a matching `(wallet, category)` row in `polymarket_onchain_wallet_category_performance`.
+- `MinLeaderCategoryResolvedPositions`: minimum resolved positions for the leader in the category.
+- `MinLeaderCategoryResolvedRoiPct`: minimum resolved ROI percentage for the leader in the category.
+- `MinLeaderCategoryWinRatePct`: minimum resolved win rate percentage for the leader in the category.
+- `MinLeaderCategoryScore`: minimum category performance score.
+- `MinLeaderCategorySampleQuality`: minimum sample quality, one of `Thin`, `Low`, `Medium`, or `High`.
+- `LeaderCategoryPerformanceStaleAfterHours`: maximum allowed age of the category-performance row.
+- `LeaderCategoryPerformanceScore`: score bonus when usable leader/category performance is present.
+
 Risk settings cap paper and signal sizing. Live trading also applies `LiveTrading`
 caps before submitting orders.
 

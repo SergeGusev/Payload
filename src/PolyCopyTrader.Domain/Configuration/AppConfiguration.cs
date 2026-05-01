@@ -115,6 +115,24 @@ public sealed class SignalOptions
     public decimal LargeLeaderTradeMultiplier { get; init; } = 2m;
 
     public int MarketCloseWindowMinutes { get; init; } = 15;
+
+    public bool RequireKnownMarketCategory { get; init; }
+
+    public bool RequireLeaderCategoryPerformance { get; init; }
+
+    public int MinLeaderCategoryResolvedPositions { get; init; } = 3;
+
+    public decimal MinLeaderCategoryResolvedRoiPct { get; init; }
+
+    public decimal MinLeaderCategoryWinRatePct { get; init; } = 50m;
+
+    public decimal MinLeaderCategoryScore { get; init; }
+
+    public string MinLeaderCategorySampleQuality { get; init; } = "Low";
+
+    public int LeaderCategoryPerformanceStaleAfterHours { get; init; } = 24;
+
+    public int LeaderCategoryPerformanceScore { get; init; } = 15;
 }
 
 public sealed class PolymarketOptions

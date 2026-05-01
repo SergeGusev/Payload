@@ -452,3 +452,10 @@ Request:
 
 Result:
 Reviewed the existing signal/risk engines, signal processor, domain models, README, and on-chain serving/category-performance schemas. Concluded the database now has enough historical information for leader/category research and ranking, but the decision loop is not yet fully wired to use it: `SignalProcessor` still passes `MarketInfo = null`, and `DefaultSignalEngine` does not consume `polymarket_onchain_wallet_category_performance` for category-specific leader quality. Explained that immediate stake decisions also still require fresh order book/liquidity/spread, live market status, metadata freshness, and exposure/risk state. No repo source code changed.
+
+## 2026-05-01T19:43:00+00:00
+Request:
+Ок, добавляем
+
+Result:
+Implemented category-aware signal gating. `SignalProcessor` now resolves market metadata from `polymarket_onchain_token_metadata`, loads the leader's `polymarket_onchain_wallet_category_performance` row for the same category, and passes both into normal and live preflight evaluation. `DefaultSignalEngine` now has configurable gates for required known category, required leader/category performance, minimum resolved positions, sample quality, ROI, win rate, score, and freshness, with new rejection reason codes. Service defaults enable these gates. Added Postgres/test/no-op repository lookup methods, updated docs/config, and added strategy plus pipeline integration tests. Verification passed: full tests 137/137, service build, dashboard build, and `git diff --check`; an initial parallel run hit a transient DLL file lock before rerunning cleanly.

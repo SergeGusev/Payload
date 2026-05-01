@@ -283,7 +283,7 @@ The dashboard `Onchain Trades` tab reads `polymarket_onchain_trade_details` for 
 
 ## Signal And Risk Engines
 
-Queued leader trades are evaluated by `DefaultSignalEngine` after the scanner stores them. The engine rejects unsupported sides, stale trades, small leader trades, missing/wide order books, unsafe maker prices, excessive slippage, category mismatches when category is known, and markets too close to event end. Accepted decisions produce proposed paper-order details only; no order placement happens in this task.
+Queued leader trades are evaluated by `DefaultSignalEngine` after the scanner stores them. The service resolves market metadata from `polymarket_onchain_token_metadata`, loads the leader's row from `polymarket_onchain_wallet_category_performance` for the same market category, and passes both into the signal engine. With the default service config, the engine rejects unsupported sides, stale trades, small leader trades, missing/wide order books, unsafe maker prices, excessive slippage, unknown categories, missing or weak leader category performance, category mismatches, and markets too close to event end. Accepted decisions produce proposed paper-order details only; no order placement happens in this task.
 
 `DefaultRiskEngine` enforces configured bankroll limits for trade, market, trader, category, total deployed exposure, daily loss, and max open orders. Rejected decisions are persisted as `SignalRejection` reason codes.
 

@@ -29,6 +29,16 @@ public sealed class DefaultSignalEngine(
             return Reject(SignalReasonCodes.CategoryNotAllowed, now);
         }
 
+        if (signalOptions.RequireKnownMarketCategory && IsUnknownCategory(category))
+        {
+            return Reject(SignalReasonCodes.MissingMarketCategory, now);
+        }
+
+        if (EvaluateLeaderCategoryPerformance(context, category, now) is { } categoryPerformanceRejection)
+        {
+            return categoryPerformanceRejection;
+        }
+
         if (trade.Side != TradeSide.Buy)
         {
             return Reject(SignalReasonCodes.UnsupportedSide, now);
@@ -203,12 +213,94 @@ public sealed class DefaultSignalEngine(
             score += signalOptions.SlowMarketScore;
         }
 
+        if (HasUsableLeaderCategoryPerformance(context.LeaderCategoryPerformance, context.MarketInfo?.Category, DateTimeOffset.UtcNow))
+        {
+            score += signalOptions.LeaderCategoryPerformanceScore;
+        }
+
         if (spreadAbs > maxSpreadAbs * 0.75m || spreadPct > maxSpreadPct * 0.75m)
         {
             score -= signalOptions.BorderlineSpreadPenalty;
         }
 
         return score;
+    }
+
+    private SignalDecision? EvaluateLeaderCategoryPerformance(
+        SignalEvaluationContext context,
+        string? category,
+        DateTimeOffset now)
+    {
+        if (!signalOptions.RequireLeaderCategoryPerformance)
+        {
+            return null;
+        }
+
+        if (IsUnknownCategory(category))
+        {
+            return Reject(SignalReasonCodes.MissingMarketCategory, now);
+        }
+
+        var performance = context.LeaderCategoryPerformance;
+        if (performance is null ||
+            !string.Equals(performance.Wallet, context.LeaderTrade.TraderWallet, StringComparison.OrdinalIgnoreCase) ||
+            !string.Equals(performance.Category, category, StringComparison.OrdinalIgnoreCase))
+        {
+            return Reject(SignalReasonCodes.MissingLeaderCategoryPerformance, now);
+        }
+
+        if (IsPerformanceStale(performance, now))
+        {
+            return Reject(SignalReasonCodes.LeaderCategoryPerformanceStale, now);
+        }
+
+        if (performance.ResolvedPositions < signalOptions.MinLeaderCategoryResolvedPositions)
+        {
+            return Reject(SignalReasonCodes.LeaderCategoryResolvedSampleTooSmall, now);
+        }
+
+        if (SampleQualityRank(performance.SampleQuality) < SampleQualityRank(signalOptions.MinLeaderCategorySampleQuality))
+        {
+            return Reject(SignalReasonCodes.LeaderCategorySampleQualityTooLow, now);
+        }
+
+        if (performance.Score < signalOptions.MinLeaderCategoryScore)
+        {
+            return Reject(SignalReasonCodes.LeaderCategoryScoreTooLow, now);
+        }
+
+        if (performance.ResolvedRoiPct < signalOptions.MinLeaderCategoryResolvedRoiPct)
+        {
+            return Reject(SignalReasonCodes.LeaderCategoryRoiTooLow, now);
+        }
+
+        if (performance.WinRatePct < signalOptions.MinLeaderCategoryWinRatePct)
+        {
+            return Reject(SignalReasonCodes.LeaderCategoryWinRateTooLow, now);
+        }
+
+        return null;
+    }
+
+    private bool HasUsableLeaderCategoryPerformance(
+        PolymarketOnChainWalletCategoryPerformance? performance,
+        string? category,
+        DateTimeOffset now)
+    {
+        return performance is not null &&
+            !IsUnknownCategory(category) &&
+            string.Equals(performance.Category, category, StringComparison.OrdinalIgnoreCase) &&
+            !IsPerformanceStale(performance, now) &&
+            performance.ResolvedPositions >= signalOptions.MinLeaderCategoryResolvedPositions &&
+            SampleQualityRank(performance.SampleQuality) >= SampleQualityRank(signalOptions.MinLeaderCategorySampleQuality) &&
+            performance.Score >= signalOptions.MinLeaderCategoryScore &&
+            performance.ResolvedRoiPct >= signalOptions.MinLeaderCategoryResolvedRoiPct &&
+            performance.WinRatePct >= signalOptions.MinLeaderCategoryWinRatePct;
+    }
+
+    private bool IsPerformanceStale(PolymarketOnChainWalletCategoryPerformance performance, DateTimeOffset now)
+    {
+        return now - performance.RefreshedAtUtc > TimeSpan.FromHours(signalOptions.LeaderCategoryPerformanceStaleAfterHours);
     }
 
     private decimal ProposedNotional(int score)
@@ -228,6 +320,32 @@ public sealed class DefaultSignalEngine(
 
         return traderRule.AllowedCategories.Any(
             allowed => string.Equals(allowed, category, StringComparison.OrdinalIgnoreCase));
+    }
+
+    private static bool IsUnknownCategory(string? category)
+    {
+        return string.IsNullOrWhiteSpace(category) ||
+            string.Equals(category, "unknown", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static int SampleQualityRank(string? sampleQuality)
+    {
+        if (string.Equals(sampleQuality, "High", StringComparison.OrdinalIgnoreCase))
+        {
+            return 3;
+        }
+
+        if (string.Equals(sampleQuality, "Medium", StringComparison.OrdinalIgnoreCase))
+        {
+            return 2;
+        }
+
+        if (string.Equals(sampleQuality, "Low", StringComparison.OrdinalIgnoreCase))
+        {
+            return 1;
+        }
+
+        return 0;
     }
 
     private static SignalDecision Reject(string reasonCode, DateTimeOffset now, int score = 0)

@@ -59,6 +59,8 @@ public static class AppOptionsValidator
             $"Market WebSocket enabled: {configuration.Bot.UseWebSockets && configuration.MarketDataWebSocket.Enabled}",
             $"Market WebSocket URL: {configuration.MarketDataWebSocket.MarketEndpointUrl}",
             $"Signal observe threshold: {configuration.Signal.ObserveBelowScore}",
+            $"Signal requires market category: {configuration.Signal.RequireKnownMarketCategory}",
+            $"Signal requires leader category performance: {configuration.Signal.RequireLeaderCategoryPerformance}",
             $"IPC enabled: {configuration.Ipc.Enabled}",
             $"IPC dashboard URL: {configuration.Ipc.DashboardBaseUrl}",
             $"Daily reports enabled: {configuration.Analytics.DailyReportGenerationEnabled}",
@@ -362,6 +364,31 @@ public static class AppOptionsValidator
         if (options.MarketCloseWindowMinutes < 0)
         {
             errors.Add("Signal.MarketCloseWindowMinutes must not be negative.");
+        }
+
+        if (options.MinLeaderCategoryResolvedPositions < 0)
+        {
+            errors.Add("Signal.MinLeaderCategoryResolvedPositions must not be negative.");
+        }
+
+        if (options.MinLeaderCategoryWinRatePct < 0m || options.MinLeaderCategoryWinRatePct > 100m)
+        {
+            errors.Add("Signal.MinLeaderCategoryWinRatePct must be between 0 and 100.");
+        }
+
+        if (!IsSupportedSampleQuality(options.MinLeaderCategorySampleQuality))
+        {
+            errors.Add("Signal.MinLeaderCategorySampleQuality must be Thin, Low, Medium, or High.");
+        }
+
+        if (options.LeaderCategoryPerformanceStaleAfterHours <= 0)
+        {
+            errors.Add("Signal.LeaderCategoryPerformanceStaleAfterHours must be greater than zero.");
+        }
+
+        if (options.LeaderCategoryPerformanceScore < 0)
+        {
+            errors.Add("Signal.LeaderCategoryPerformanceScore must not be negative.");
         }
     }
 
@@ -852,6 +879,14 @@ public static class AppOptionsValidator
             string.Equals(value, "WEEK", StringComparison.OrdinalIgnoreCase) ||
             string.Equals(value, "MONTH", StringComparison.OrdinalIgnoreCase) ||
             string.Equals(value, "ALL", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static bool IsSupportedSampleQuality(string value)
+    {
+        return string.Equals(value, "Thin", StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(value, "Low", StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(value, "Medium", StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(value, "High", StringComparison.OrdinalIgnoreCase);
     }
 
     private static bool IsSupportedOnChainExchangeVersion(string value)

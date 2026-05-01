@@ -288,7 +288,8 @@ public sealed record SignalEvaluationContext(
     TraderRule TraderRule,
     MarketInfo? MarketInfo,
     OrderBookSnapshot? OrderBookSnapshot,
-    ExposureSnapshot Exposure);
+    ExposureSnapshot Exposure,
+    PolymarketOnChainWalletCategoryPerformance? LeaderCategoryPerformance = null);
 
 public sealed record SignalDecision(
     bool Accepted,

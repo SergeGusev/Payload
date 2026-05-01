@@ -34,6 +34,60 @@ public sealed class StrategyEngineTests
     }
 
     [Fact]
+    public void SignalEngine_RejectsMissingMarketCategoryWhenRequired()
+    {
+        var engine = CreateSignalEngine(StrictCategorySignalOptions());
+
+        var decision = engine.Evaluate(CreateContext(
+            OrderBook(0.73m, 0.75m),
+            marketInfo: new MarketInfo("condition-1", "sample-market", "Will sample event happen?", null, DateTimeOffset.UtcNow.AddDays(2))));
+
+        Assert.False(decision.Accepted);
+        Assert.Equal(SignalReasonCodes.MissingMarketCategory, decision.DecisionCode);
+    }
+
+    [Fact]
+    public void SignalEngine_RejectsMissingLeaderCategoryPerformanceWhenRequired()
+    {
+        var engine = CreateSignalEngine(StrictCategorySignalOptions());
+
+        var decision = engine.Evaluate(CreateContext(OrderBook(0.73m, 0.75m)));
+
+        Assert.False(decision.Accepted);
+        Assert.Equal(SignalReasonCodes.MissingLeaderCategoryPerformance, decision.DecisionCode);
+    }
+
+    [Fact]
+    public void SignalEngine_RejectsWeakLeaderCategoryPerformance()
+    {
+        var engine = CreateSignalEngine(StrictCategorySignalOptions());
+
+        var decision = engine.Evaluate(CreateContext(
+            OrderBook(0.73m, 0.75m),
+            leaderCategoryPerformance: GoodCategoryPerformance() with
+            {
+                ResolvedPositions = 1,
+                SampleQuality = "Thin"
+            }));
+
+        Assert.False(decision.Accepted);
+        Assert.Equal(SignalReasonCodes.LeaderCategoryResolvedSampleTooSmall, decision.DecisionCode);
+    }
+
+    [Fact]
+    public void SignalEngine_AcceptsWhenLeaderCategoryPerformancePasses()
+    {
+        var engine = CreateSignalEngine(StrictCategorySignalOptions());
+
+        var decision = engine.Evaluate(CreateContext(
+            OrderBook(0.73m, 0.75m),
+            leaderCategoryPerformance: GoodCategoryPerformance()));
+
+        Assert.True(decision.Accepted);
+        Assert.True(decision.Score >= 90);
+    }
+
+    [Fact]
     public void SignalEngine_RejectsDisallowedCategory()
     {
         var engine = CreateSignalEngine();
@@ -262,7 +316,8 @@ public sealed class StrategyEngineTests
         ExposureSnapshot? exposure = null,
         LeaderTrade? trade = null,
         TraderRule? traderRule = null,
-        MarketInfo? marketInfo = null)
+        MarketInfo? marketInfo = null,
+        PolymarketOnChainWalletCategoryPerformance? leaderCategoryPerformance = null)
     {
         return new SignalEvaluationContext(
             trade ?? Trade(),
@@ -281,7 +336,50 @@ public sealed class StrategyEngineTests
                 "POLITICS",
                 DateTimeOffset.UtcNow.AddDays(2)),
             orderBook,
-            exposure ?? new ExposureSnapshot(0m, 0m, 0m, 0m, 0m, 0));
+            exposure ?? new ExposureSnapshot(0m, 0m, 0m, 0m, 0m, 0),
+            leaderCategoryPerformance);
+    }
+
+    private static SignalOptions StrictCategorySignalOptions()
+    {
+        return new SignalOptions
+        {
+            RequireKnownMarketCategory = true,
+            RequireLeaderCategoryPerformance = true,
+            MinLeaderCategoryResolvedPositions = 3,
+            MinLeaderCategoryResolvedRoiPct = 0m,
+            MinLeaderCategoryWinRatePct = 50m,
+            MinLeaderCategoryScore = 0m,
+            MinLeaderCategorySampleQuality = "Low",
+            LeaderCategoryPerformanceScore = 15
+        };
+    }
+
+    private static PolymarketOnChainWalletCategoryPerformance GoodCategoryPerformance()
+    {
+        return new PolymarketOnChainWalletCategoryPerformance(
+            Wallet,
+            "POLITICS",
+            PositionsCount: 12,
+            OpenPositions: 2,
+            FlatPositions: 3,
+            ResolvedPositions: 7,
+            ProfitableResolvedPositions: 5,
+            LosingResolvedPositions: 2,
+            MarketsTraded: 10,
+            VolumeUsd: 5_000m,
+            ResolvedVolumeUsd: 3_000m,
+            OpenExposureUsd: 500m,
+            ResolvedCostUsd: 2_000m,
+            ResolvedPnlUsd: 250m,
+            ResolvedRoiPct: 12.5m,
+            WinRatePct: 71.4m,
+            AveragePositionSizeUsd: 416.67m,
+            Score: 120m,
+            SampleQuality: "Low",
+            FirstActiveUtc: DateTimeOffset.UtcNow.AddDays(-30),
+            LastActiveUtc: DateTimeOffset.UtcNow.AddHours(-1),
+            RefreshedAtUtc: DateTimeOffset.UtcNow);
     }
 
     private static DefaultRiskEngine CreateRiskEngine()

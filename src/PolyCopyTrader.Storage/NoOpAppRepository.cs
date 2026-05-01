@@ -220,6 +220,11 @@ public sealed class NoOpAppRepository : IAppRepository
         return Task.FromResult<IReadOnlyList<string>>([]);
     }
 
+    public Task<PolymarketOnChainTokenMetadata?> GetPolymarketOnChainTokenMetadataAsync(string tokenId, CancellationToken cancellationToken = default)
+    {
+        return Task.FromResult<PolymarketOnChainTokenMetadata?>(null);
+    }
+
     public Task UpsertPolymarketOnChainTokenMetadataAsync(IReadOnlyList<PolymarketOnChainTokenMetadata> metadata, CancellationToken cancellationToken = default)
     {
         return Task.CompletedTask;
@@ -275,6 +280,14 @@ public sealed class NoOpAppRepository : IAppRepository
         CancellationToken cancellationToken = default)
     {
         return Task.FromResult<IReadOnlyList<PolymarketOnChainWalletCategoryPerformance>>([]);
+    }
+
+    public Task<PolymarketOnChainWalletCategoryPerformance?> GetPolymarketOnChainWalletCategoryPerformanceAsync(
+        string wallet,
+        string category,
+        CancellationToken cancellationToken = default)
+    {
+        return Task.FromResult<PolymarketOnChainWalletCategoryPerformance?>(null);
     }
 
     public Task<OnChainCategoryPerformanceRefreshResult> RefreshPolymarketOnChainWalletCategoryPerformanceAsync(
