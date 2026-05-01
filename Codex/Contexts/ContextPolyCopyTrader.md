@@ -1,3 +1,14 @@
+## Active Update 2026-05-01 Category Enrichment Recovery Options
+Goal: Propose ways to fix all on-chain positions having `unknown` category.
+Status: Completed
+Done:
+- Re-read workflow, project rules, coding rules, active context, Git state, on-chain metadata enrichment configuration, worker, processor, repository SQL, Gamma parser, position refresh SQL, and official Polymarket market docs.
+- Identified the main current risk: `GetOnChainTokenIdsMissingMetadataAsync` only retries token ids with no metadata row; rows already marked `lookup_succeeded=false` or with blank category can stop being retried automatically.
+- Prepared a staged recovery proposal: diagnose metadata/position/queue health, fix retry semantics, add CLOB condition-id fallback, build a local market catalog, add category source/confidence, and exclude unknown categories from category-sensitive scoring/trading until resolved.
+Next: Implement the chosen recovery path, starting with robust metadata retry/backfill and automatic requeue of positions/category performance after category changes.
+Notes: `git rev-parse --abbrev-ref --symbolic-full-name '@{u}'` failed because branch `master` has no configured upstream, so pull/push cannot run automatically. No source code changed for this answer-only planning task. Existing unrelated dirty files `PolyCopyTrader.sln` and `src/PolyCopyTrader.Storage/PostgresSchemaInitializer.cs` were left untouched.
+Blockers: Automatic pull/push cannot run until a Git upstream is configured.
+
 ## Active Update 2026-05-01 Unknown Onchain Category Explanation
 Goal: Explain why `polymarket_onchain_wallet_category_performance.category` can be `unknown`.
 Status: Completed

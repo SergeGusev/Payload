@@ -228,3 +228,10 @@ Request:
 
 Result:
 Inspected the on-chain fill parser, Gamma metadata client/parser, market enrichment worker, schema, position refresh SQL, and category performance aggregation SQL. Confirmed that market category is not present in the parsed blockchain `OrderFilled` event data; it comes from Gamma token metadata and is stored as `unknown` when metadata/category is missing or blank. No source code changed.
+
+## 2026-05-01T12:38:07.4305693Z
+Request:
+Все позиции без категории. Это нам вообще всё ломает - категория - ключевое значение. Предложи варианты решения этой проблемы
+
+Result:
+Inspected the current metadata enrichment selection, Gamma lookup flow, position refresh requeue, service config, official Polymarket market docs, and local code paths. Identified that token ids with existing failed/blank metadata rows are not retried by the current missing-metadata query, which can lock positions into `unknown`. Proposed staged fixes: robust retry/backfill semantics, CLOB market-by-token fallback, local market catalog keyed by token/condition, fallback category sources, manual overrides, and excluding unknown categories from category-sensitive ratings until resolved. No source code changed.
