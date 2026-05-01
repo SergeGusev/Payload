@@ -1,3 +1,12 @@
+## Active Update 2026-05-01 Final Category Table Reminder
+Goal: Remind the user of the final category-scoped wallet rating table name.
+Status: Completed
+Done:
+- Confirmed the final category-scoped wallet performance table is `public.polymarket_onchain_wallet_category_performance`.
+Next: None
+Notes: No source code changed. Existing unrelated dirty files `PolyCopyTrader.sln` and `src/PolyCopyTrader.Storage/PostgresSchemaInitializer.cs` were left untouched. `git rev-parse --abbrev-ref --symbolic-full-name '@{u}'` failed because branch `master` has no configured upstream.
+Blockers: Automatic pull/push cannot run until a Git upstream is configured.
+
 ## Active Update 2026-05-01 Category Backfill Progress Check
 Goal: Confirm whether on-chain category propagation is healthy and only needs time.
 Status: Completed

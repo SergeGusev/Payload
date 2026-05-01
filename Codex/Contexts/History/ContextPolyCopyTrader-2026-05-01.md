@@ -336,3 +336,10 @@ Request:
 
 Result:
 Queried PostgreSQL through the project connection variable without printing secrets. Confirmed category propagation is progressing but not fully caught up: positions have non-unknown Sports/AI/Crypto/Politics rows, category performance has non-unknown Sports/AI/Crypto/Politics rows, and the position/category-performance queues still have substantial backlog. Also found 2 recent `OnChainPositionRefreshWorker` errors in the last hour, consistent with earlier deadlocks. Concluded the system is broadly healthy if queues keep moving, but should be monitored rather than treated as fully finished.
+
+## 2026-05-01T14:55:29.2356872+00:00
+Request:
+Ок, напомни мне имя нашей финальной таблицы
+
+Result:
+Reminded that the final category-scoped wallet rating table is `public.polymarket_onchain_wallet_category_performance`. No source code changed.
