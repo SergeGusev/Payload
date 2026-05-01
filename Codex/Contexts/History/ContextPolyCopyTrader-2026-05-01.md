@@ -417,3 +417,10 @@ Request:
 
 Result:
 Inspected the screenshot and current service log. `Scripts processed` means schema initialization completed successfully, but Visual Studio process exit code `-1 (0xffffffff)` is not a normal long-running service state. The service should continue into `host.RunAsync()` after schema initialization. Checked `Program.cs` and the latest debug log; normal runtime logs go to `src\PolyCopyTrader.Service\bin\Debug\net10.0\logs\polycopytrader-service-20260501.log`, not to the console. The log showed service startup and background worker activity after schema initialization and no fatal termination entry, so the screenshot likely reflects a stopped/killed debug process or an exit path not captured as fatal, not a schema-script failure. No source code changed.
+
+## 2026-05-01T18:37:00+00:00
+Request:
+Ok, the service started. Check in the database whether everything is normal.
+
+Result:
+Queried PostgreSQL through `POLYCOPYTRADER_POSTGRES_CONNECTION` without printing secrets. Confirmed the service heartbeat is fresh and raw on-chain logs are being fetched again after restart, reaching block `85990531` with recent `observed_at_utc`. Confirmed the new forward-only code path is running from `FromBlock=85990032`. Also confirmed decoded fills and the ingestion cursor had not yet advanced beyond block `85990031`, with latest Polygon around `86270134`; there were no active PostgreSQL blockers, but recent ingestion errors included a stream timeout and a deadlock. Concluded the service is alive and working on the first new batch, but the final fills/cursor tables are not yet caught up; if they remain unchanged for another 10-15 minutes, reduce ingestion batch size or split batch commits. No repo source code changed.

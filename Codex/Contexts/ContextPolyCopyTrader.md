@@ -1,3 +1,19 @@
+## Active Update 2026-05-01 Post-Restart Database Ingestion Check
+Goal: Verify whether the restarted service is progressing normally in PostgreSQL.
+Status: Completed
+Done:
+- Queried PostgreSQL through `POLYCOPYTRADER_POSTGRES_CONNECTION` without printing secrets.
+- Confirmed the service is alive: heartbeat was fresh at `2026-05-01 18:36:26 UTC`, with `RunMode=ReadOnly`.
+- Confirmed the restarted service is running the new forward-only ingestion path: the log shows fresh catch-up starting at `FromBlock=85990032` and no historical-backfill setting.
+- Confirmed raw on-chain logs are being fetched again: `polymarket_onchain_logs` reached block `85990531`, with `observed_at_utc` around `2026-05-01 18:29:51 UTC` and 56,697 rows observed in the recent window.
+- Confirmed decoded fills and cursor had not advanced yet: `polymarket_onchain_fills` remained at block `85990031`, imported at `2026-05-01 07:39:08 UTC`; `polymarket_onchain_ingest_cursors.to_block` also remained `85990031`.
+- Latest Polygon block was about `86270134`, so the cursor was still about 280,103 blocks behind.
+- Confirmed no active blocking chain in PostgreSQL (`blocker_count=0` for active/waiting sessions), but recent ingestion errors included one stream timeout and one deadlock in the last hour.
+- Category/position/performance repair is still moving: category-performance rows now include `Sports` 10,060, `Crypto` 8,913, `Politics` 3,670, `AI` 960, `Finance` 619, plus `unknown` 104,426; queues remain active.
+Next: Wait briefly for the first post-restart batch to finish. If no `On-chain batch ingested` log appears and fills/cursor stay at block `85990031` for another 10-15 minutes, reduce `OnChainIngestion:MaxBlockRange` or split batch commits so large raw-log batches cannot stall decoded fills/cursor advancement.
+Notes: No repo source code changed. Existing unrelated dirty files `PolyCopyTrader.sln` and `src/PolyCopyTrader.Storage/PostgresSchemaInitializer.cs` were left untouched. `git rev-parse --abbrev-ref --symbolic-full-name '@{u}'` failed because branch `master` has no configured upstream.
+Blockers: Automatic pull/push cannot run until a Git upstream is configured.
+
 ## Active Update 2026-05-01 Visual Studio Service Exit Screenshot
 Goal: Interpret `D:\1\12.png`, where the service exits after schema scripts.
 Status: Completed
