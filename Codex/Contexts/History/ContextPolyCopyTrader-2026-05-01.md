@@ -235,3 +235,10 @@ Request:
 
 Result:
 Inspected the current metadata enrichment selection, Gamma lookup flow, position refresh requeue, service config, official Polymarket market docs, and local code paths. Identified that token ids with existing failed/blank metadata rows are not retried by the current missing-metadata query, which can lock positions into `unknown`. Proposed staged fixes: robust retry/backfill semantics, CLOB market-by-token fallback, local market catalog keyed by token/condition, fallback category sources, manual overrides, and excluding unknown categories from category-sensitive ratings until resolved. No source code changed.
+
+## 2026-05-01T12:52:05.8415303Z
+Request:
+D:\1\1.png показывает результат по первому проверочному запросу, D:\1\2.png - по второму
+
+Result:
+Inspected the screenshots showing 38,146 metadata rows, 38,130 successful lookups, 16 failed lookups, and 0 rows with category. Fixed category recovery by retrying failed or blank-category metadata rows, parsing category from nested Gamma event/category/tag fallbacks, and preventing repeated requests for the same token inside one enrichment run. Updated tests and docs. Targeted enrichment/parser tests passed 20/20; full test project passed 123/123; diff check passed with CRLF warnings only.

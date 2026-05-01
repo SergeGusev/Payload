@@ -79,6 +79,36 @@ public sealed class OnChainMarketEnrichmentTests
     }
 
     [Fact]
+    public async Task Processor_ReenrichesTokenMetadataWithMissingCategory()
+    {
+        var repository = new TestAppRepository();
+        repository.PolymarketOnChainWalletExecutions.Add(Execution("token-1"));
+        repository.PolymarketOnChainTokenMetadata.Add(Metadata("token-1", category: null));
+        var gamma = new FakeGammaClient();
+        gamma.Metadata["token-1"] = [Metadata("token-1")];
+
+        var processor = new OnChainMarketEnrichmentProcessor(
+            NullLogger<OnChainMarketEnrichmentProcessor>.Instance,
+            new OnChainIngestionOptions
+            {
+                MarketEnrichmentBatchSize = 10,
+                RequestDelayMilliseconds = 0
+            },
+            gamma,
+            repository);
+
+        var result = await processor.RefreshAsync();
+
+        Assert.Equal(1, result.TokensRequested);
+        Assert.Equal(1, result.TokensResolved);
+        Assert.Contains(gamma.Requests, item => item == ("token-1", false));
+        Assert.Contains(repository.PolymarketOnChainTokenMetadata, item =>
+            item.TokenId == "token-1" &&
+            item.LookupSucceeded &&
+            item.Category == "Politics");
+    }
+
+    [Fact]
     public async Task Processor_StopsAtBatchLimitWhenMissingTokensRemain()
     {
         var repository = new TestAppRepository();
@@ -106,7 +136,7 @@ public sealed class OnChainMarketEnrichmentTests
         Assert.Equal(2, result.MetadataRowsStored);
         Assert.Equal(2, result.BatchesRun);
         Assert.True(result.ReachedBatchLimit);
-        Assert.Equal(["token-3"], await repository.GetOnChainTokenIdsMissingMetadataAsync());
+        Assert.Contains("token-3", await repository.GetOnChainTokenIdsMissingMetadataAsync());
     }
 
     [Fact]
@@ -140,7 +170,7 @@ public sealed class OnChainMarketEnrichmentTests
         await firstRun;
     }
 
-    private static PolymarketOnChainTokenMetadata Metadata(string tokenId)
+    private static PolymarketOnChainTokenMetadata Metadata(string tokenId, string? category = "Politics")
     {
         return new PolymarketOnChainTokenMetadata(
             tokenId,
@@ -150,7 +180,7 @@ public sealed class OnChainMarketEnrichmentTests
             "Market title",
             "Yes",
             0,
-            "Politics",
+            category,
             DateTimeOffset.UtcNow.AddDays(1),
             true,
             false,

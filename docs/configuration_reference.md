@@ -252,9 +252,12 @@ previous and new category pairs for affected tokens, so category scores stay
 current as new fills arrive or Gamma metadata changes.
 
 The manual `Enrich markets` command calls Gamma `markets?clob_token_ids=...` for
-missing execution token ids and stores `polymarket_onchain_token_metadata` rows
-with condition id, market title/slug, outcome, category, end date, active/closed
-status, raw JSON, and not-found markers for tokens Gamma cannot resolve. It
+missing or incomplete execution token metadata and stores
+`polymarket_onchain_token_metadata` rows with condition id, market title/slug,
+outcome, category, end date, active/closed status, raw JSON, and not-found
+markers for tokens Gamma cannot resolve. Rows with failed lookup or blank
+category are retried, and category parsing falls back from `market.category` to
+nested event/category/tag fields when Gamma omits the top-level category. It
 rechecks missing token ids after every stored batch and continues until none are
 left or `MarketEnrichmentMaxBatchesPerRun` is reached. The background enrichment
 worker runs the same processor every `MarketEnrichmentIntervalSeconds`.

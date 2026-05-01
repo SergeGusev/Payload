@@ -165,6 +165,7 @@ public static class PolymarketJsonParser
         var outcomes = ParseStringArray(market, "outcomes");
         var outcomePrices = ParseDecimalArray(market, "outcomePrices");
         var winningOutcome = GetWinningOutcome(outcomes, outcomePrices, GetBool(market, "closed"));
+        var category = GetGammaMarketCategory(market);
         var refreshedAt = DateTimeOffset.UtcNow;
         var rawJson = market.GetRawText();
 
@@ -176,7 +177,7 @@ public static class PolymarketJsonParser
             GetString(market, "question") ?? string.Empty,
             index < outcomes.Count ? outcomes[index] : string.Empty,
             index,
-            GetString(market, "category"),
+            category,
             ParseDateTimeOffsetOrNull(GetString(market, "endDate")),
             GetBool(market, "active"),
             GetBool(market, "closed"),
@@ -189,6 +190,17 @@ public static class PolymarketJsonParser
             null,
             rawJson,
             refreshedAt)).ToArray();
+    }
+
+    private static string? GetGammaMarketCategory(JsonElement market)
+    {
+        return FirstNonEmpty(
+            GetString(market, "category"),
+            GetFirstNestedString(market, "events", "category"),
+            GetFirstNestedArrayString(market, "events", "categories", "label", "name", "slug"),
+            GetFirstNestedArrayString(market, "series", "categories", "label", "name", "slug"),
+            GetFirstArrayString(market, "categories", "label", "name", "slug"),
+            GetFirstArrayString(market, "tags", "label", "name", "slug"));
     }
 
     public static PolymarketOnChainTokenMetadata BuildMissingTokenMetadata(string tokenId, string reason)
@@ -214,6 +226,80 @@ public static class PolymarketJsonParser
             reason,
             "{}",
             DateTimeOffset.UtcNow);
+    }
+
+    private static string? FirstNonEmpty(params string?[] values)
+    {
+        return values.FirstOrDefault(value => !string.IsNullOrWhiteSpace(value));
+    }
+
+    private static string? GetFirstNestedString(JsonElement element, string arrayPropertyName, string propertyName)
+    {
+        if (!element.TryGetProperty(arrayPropertyName, out var array) || array.ValueKind != JsonValueKind.Array)
+        {
+            return null;
+        }
+
+        foreach (var item in array.EnumerateArray())
+        {
+            var value = GetString(item, propertyName);
+            if (!string.IsNullOrWhiteSpace(value))
+            {
+                return value;
+            }
+        }
+
+        return null;
+    }
+
+    private static string? GetFirstArrayString(JsonElement element, string arrayPropertyName, params string[] propertyNames)
+    {
+        if (!element.TryGetProperty(arrayPropertyName, out var array) || array.ValueKind != JsonValueKind.Array)
+        {
+            return null;
+        }
+
+        return GetFirstArrayItemString(array, propertyNames);
+    }
+
+    private static string? GetFirstNestedArrayString(
+        JsonElement element,
+        string outerArrayPropertyName,
+        string nestedArrayPropertyName,
+        params string[] propertyNames)
+    {
+        if (!element.TryGetProperty(outerArrayPropertyName, out var outerArray) || outerArray.ValueKind != JsonValueKind.Array)
+        {
+            return null;
+        }
+
+        foreach (var outerItem in outerArray.EnumerateArray())
+        {
+            var value = GetFirstArrayString(outerItem, nestedArrayPropertyName, propertyNames);
+            if (!string.IsNullOrWhiteSpace(value))
+            {
+                return value;
+            }
+        }
+
+        return null;
+    }
+
+    private static string? GetFirstArrayItemString(JsonElement array, params string[] propertyNames)
+    {
+        foreach (var item in array.EnumerateArray())
+        {
+            foreach (var propertyName in propertyNames)
+            {
+                var value = GetString(item, propertyName);
+                if (!string.IsNullOrWhiteSpace(value))
+                {
+                    return value;
+                }
+            }
+        }
+
+        return null;
     }
 
     public static decimal? ParseSingleDecimal(JsonElement root, string propertyName)

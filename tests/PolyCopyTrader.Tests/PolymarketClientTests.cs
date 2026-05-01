@@ -95,6 +95,19 @@ public sealed class PolymarketClientTests
     }
 
     [Fact]
+    public void Parser_ReadsGammaMarketCategoryFromEventFallback()
+    {
+        using var json = JsonDocument.Parse(SampleGammaMarketsWithEventCategoryJson);
+
+        var metadata = PolymarketJsonParser.ParseGammaMarketTokenMetadata(
+            json.RootElement,
+            "12345678901234567890");
+
+        Assert.Equal(2, metadata.Count);
+        Assert.All(metadata, item => Assert.Equal("Politics", item.Category));
+    }
+
+    [Fact]
     public async Task DataClient_SendsTakerOnlyFalseForUserTrades()
     {
         var handler = new StubHttpMessageHandler(_ => new HttpResponseMessage(HttpStatusCode.OK)
@@ -409,6 +422,37 @@ public sealed class PolymarketClientTests
     "outcomes": "[\"Yes\", \"No\"]",
     "outcomePrices": "[\"1\", \"0\"]",
     "clobTokenIds": "[\"12345678901234567890\", \"987654321\"]"
+  }
+]
+""";
+
+    private const string SampleGammaMarketsWithEventCategoryJson = """
+[
+  {
+    "id": "123",
+    "question": "Will sample event happen?",
+    "conditionId": "0xcondition",
+    "slug": "will-sample-event-happen",
+    "category": null,
+    "endDate": "2026-09-01T00:00:00Z",
+    "active": true,
+    "closed": false,
+    "archived": false,
+    "outcomes": "[\"Yes\", \"No\"]",
+    "outcomePrices": "[\"0.55\", \"0.45\"]",
+    "clobTokenIds": "[\"12345678901234567890\", \"987654321\"]",
+    "events": [
+      {
+        "id": "event-1",
+        "category": "Politics",
+        "categories": [
+          {
+            "label": "Elections",
+            "slug": "elections"
+          }
+        ]
+      }
+    ]
   }
 ]
 """;

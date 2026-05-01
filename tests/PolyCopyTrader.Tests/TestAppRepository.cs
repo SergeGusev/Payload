@@ -415,14 +415,17 @@ internal sealed class TestAppRepository : IAppRepository
 
     public Task<IReadOnlyList<string>> GetOnChainTokenIdsMissingMetadataAsync(int limit = 100, CancellationToken cancellationToken = default)
     {
-        var known = PolymarketOnChainTokenMetadata
-            .Select(item => item.TokenId)
-            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var metadataByToken = PolymarketOnChainTokenMetadata
+            .GroupBy(item => item.TokenId, StringComparer.OrdinalIgnoreCase)
+            .ToDictionary(group => group.Key, group => group.Last(), StringComparer.OrdinalIgnoreCase);
         return Task.FromResult<IReadOnlyList<string>>(
             PolymarketOnChainWalletExecutions
                 .Select(item => item.TokenId)
                 .Distinct(StringComparer.OrdinalIgnoreCase)
-                .Where(tokenId => !known.Contains(tokenId))
+                .Where(tokenId =>
+                    !metadataByToken.TryGetValue(tokenId, out var metadata) ||
+                    !metadata.LookupSucceeded ||
+                    string.IsNullOrWhiteSpace(metadata.Category))
                 .OrderBy(tokenId => tokenId, StringComparer.Ordinal)
                 .Take(limit)
                 .ToArray());

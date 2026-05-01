@@ -1683,6 +1683,8 @@ FROM polymarket_onchain_wallet_executions execution
 LEFT JOIN polymarket_onchain_token_metadata metadata
   ON metadata.token_id = execution.token_id
 WHERE metadata.token_id IS NULL
+   OR NOT metadata.lookup_succeeded
+   OR NULLIF(metadata.category, '') IS NULL
 ORDER BY execution.token_id
 LIMIT @Limit;
 """;

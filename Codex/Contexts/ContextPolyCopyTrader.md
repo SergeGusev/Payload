@@ -1,3 +1,16 @@
+## Active Update 2026-05-01 Fix Blank Gamma Categories
+Goal: Recover category enrichment when Gamma metadata rows exist but `category` is blank for every token.
+Status: Completed
+Done:
+- Inspected the user's screenshots: `polymarket_onchain_token_metadata` had 38,146 rows, 38,130 successful lookups, 16 failed lookups, and 0 rows with category.
+- Updated Gamma metadata parsing to derive category from `market.category`, then nested event/category/tag fallbacks when the top-level category is missing.
+- Updated missing-metadata selection so rows with failed lookup or blank category are retried instead of being treated as complete.
+- Updated market enrichment to attempt each token at most once per refresh run, preventing failed/blank tokens from being re-requested repeatedly inside the same cycle.
+- Added parser/enrichment tests and documentation notes.
+Next: Restart/redeploy the service and run `POST /refresh-onchain-markets`; then monitor metadata categories, position refresh queue, positions without category, and category performance rows.
+Notes: `dotnet test tests\PolyCopyTrader.Tests\PolyCopyTrader.Tests.csproj -c Verify --no-restore --filter "FullyQualifiedName~PolymarketClientTests|FullyQualifiedName~OnChainMarketEnrichmentTests"` passed 20/20. `dotnet test tests\PolyCopyTrader.Tests\PolyCopyTrader.Tests.csproj -c Verify --no-restore` passed 123/123. `git diff --check` passed with CRLF warnings only. `git rev-parse --abbrev-ref --symbolic-full-name '@{u}'` failed because branch `master` has no configured upstream, so pull/push cannot run automatically. Existing unrelated dirty files `PolyCopyTrader.sln` and `src/PolyCopyTrader.Storage/PostgresSchemaInitializer.cs` were left untouched.
+Blockers: Automatic pull/push cannot run until a Git upstream is configured.
+
 ## Active Update 2026-05-01 Category Enrichment Recovery Options
 Goal: Propose ways to fix all on-chain positions having `unknown` category.
 Status: Completed

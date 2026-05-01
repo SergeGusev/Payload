@@ -52,6 +52,7 @@ public sealed class OnChainMarketEnrichmentProcessor(
         var notFound = 0;
         var rowsStored = 0;
         var batchesRun = 0;
+        var attemptedTokenIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
         logger.LogInformation(
             "Starting on-chain market enrichment. BatchSize={BatchSize} MaxBatches={MaxBatches}",
@@ -60,24 +61,28 @@ public sealed class OnChainMarketEnrichmentProcessor(
 
         while (batchesRun < options.MarketEnrichmentMaxBatchesPerRun)
         {
-            var tokenIds = await repository.GetOnChainTokenIdsMissingMetadataAsync(
-                options.MarketEnrichmentBatchSize,
-                cancellationToken);
-            if (tokenIds.Count == 0)
+            var tokenIds = (await repository.GetOnChainTokenIdsMissingMetadataAsync(
+                options.MarketEnrichmentBatchSize + attemptedTokenIds.Count,
+                cancellationToken))
+                .Where(tokenId => !attemptedTokenIds.Contains(tokenId))
+                .Take(options.MarketEnrichmentBatchSize)
+                .ToArray();
+            if (tokenIds.Length == 0)
             {
                 break;
             }
 
             batchesRun++;
-            requested += tokenIds.Count;
+            requested += tokenIds.Length;
             logger.LogInformation(
                 "On-chain market enrichment batch starting. Batch={Batch} Tokens={Tokens}",
                 batchesRun,
-                tokenIds.Count);
+                tokenIds.Length);
 
             foreach (var tokenId in tokenIds)
             {
                 cancellationToken.ThrowIfCancellationRequested();
+                attemptedTokenIds.Add(tokenId);
 
                 var metadata = await gammaClient.GetTokenMetadataAsync(tokenId, closed: false, cancellationToken);
                 await DelayIfConfiguredAsync(cancellationToken);
@@ -110,7 +115,8 @@ public sealed class OnChainMarketEnrichmentProcessor(
         }
 
         var reachedBatchLimit = batchesRun >= options.MarketEnrichmentMaxBatchesPerRun &&
-            (await repository.GetOnChainTokenIdsMissingMetadataAsync(1, cancellationToken)).Count > 0;
+            (await repository.GetOnChainTokenIdsMissingMetadataAsync(attemptedTokenIds.Count + 1, cancellationToken))
+            .Any(tokenId => !attemptedTokenIds.Contains(tokenId));
 
         logger.LogInformation(
             "On-chain market enrichment finished. Tokens={Tokens} Resolved={Resolved} NotFound={NotFound} Rows={Rows} Batches={Batches} ReachedBatchLimit={ReachedBatchLimit}",
