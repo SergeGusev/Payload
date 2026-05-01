@@ -487,3 +487,10 @@ Request:
 
 Result:
 Queried PostgreSQL through `POLYCOPYTRADER_POSTGRES_CONNECTION` without printing secrets and inspected the latest service log. Confirmed the restarted service is alive, the new metadata refresh queue and index exist, the queue has about 22.7k token ids, and the old active missing-metadata DISTINCT scan over `polymarket_onchain_wallet_executions` is no longer present. Logs show enrichment is actively resolving token metadata through Gamma. Noted remaining DB pressure: recent Npgsql stream timeouts now occur while queuing position refresh after metadata upsert and while checking fill block ranges, plus one position-refresh deadlock; no blocking chain was present. No source behavior changed.
+
+## 2026-05-01T20:06:09.3910511+00:00
+Request:
+Ок, оптимизируй.
+
+Result:
+Optimized the remaining database pressure points in `PostgresAppRepository`. Block-range checks now use normalized exact contract-address comparisons and indexed first/last block probes. Position refresh queue inserts no longer update existing queued rows and only queue tokens with executions. Derived-range metadata, position, and activity queue seeding now uses indexed `polymarket_onchain_wallet_fills` ranges and `ON CONFLICT DO NOTHING` to reduce lock contention. Verification passed: targeted tests 26/26, full tests 138/138, service build, dashboard build, `git diff --check`, and a live PostgreSQL `EXPLAIN` confirmed the fill block-range query uses `ix_polymarket_onchain_fills_contract_block` index-only scans.

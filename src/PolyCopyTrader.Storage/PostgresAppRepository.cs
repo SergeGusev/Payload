@@ -1104,7 +1104,7 @@ SELECT id, contract_name, contract_address, exchange_version, block_number,
        maker, taker, side, token_id, price, size_shares, notional_usd,
        fee_amount, fee_asset_id, imported_at_utc
 FROM polymarket_onchain_fills
-WHERE lower(contract_address) = lower(@ContractAddress)
+WHERE contract_address = @ContractAddress
   AND block_number BETWEEN @FromBlock AND @ToBlock
 UNION ALL
 SELECT id, contract_name, contract_address, exchange_version, block_number,
@@ -1113,7 +1113,7 @@ SELECT id, contract_name, contract_address, exchange_version, block_number,
        CASE side WHEN 'Buy' THEN 'Sell' WHEN 'Sell' THEN 'Buy' ELSE side END,
        token_id, price, size_shares, notional_usd, 0, '0', imported_at_utc
 FROM polymarket_onchain_fills
-WHERE lower(contract_address) = lower(@ContractAddress)
+WHERE contract_address = @ContractAddress
   AND block_number BETWEEN @FromBlock AND @ToBlock
 ON CONFLICT (transaction_hash, log_index, role) DO UPDATE SET
     source_fill_id = excluded.source_fill_id,
@@ -1138,7 +1138,7 @@ ON CONFLICT (transaction_hash, log_index, role) DO UPDATE SET
         await using var command = CreateCommand(connection, sql);
         command.Transaction = transaction;
         command.CommandTimeout = 300;
-        command.Parameters.AddWithValue("ContractAddress", contractAddress);
+        command.Parameters.AddWithValue("ContractAddress", NormalizeContractAddress(contractAddress));
         command.Parameters.AddWithValue("FromBlock", fromBlock);
         command.Parameters.AddWithValue("ToBlock", toBlock);
         await command.ExecuteNonQueryAsync(cancellationToken);
@@ -1154,7 +1154,7 @@ ON CONFLICT (transaction_hash, log_index, role) DO UPDATE SET
     {
         const string sql = """
 DELETE FROM polymarket_onchain_wallet_executions
-WHERE lower(contract_address) = lower(@ContractAddress)
+WHERE contract_address = @ContractAddress
   AND block_number BETWEEN @FromBlock AND @ToBlock;
 
 INSERT INTO polymarket_onchain_wallet_executions (
@@ -1183,7 +1183,7 @@ SELECT contract_name,
        SUM(CASE WHEN fee_asset_id = '0' THEN fee_amount ELSE 0 END),
        MAX(imported_at_utc)
 FROM polymarket_onchain_wallet_fills
-WHERE lower(contract_address) = lower(@ContractAddress)
+WHERE contract_address = @ContractAddress
   AND block_number BETWEEN @FromBlock AND @ToBlock
 GROUP BY contract_name, contract_address, exchange_version, transaction_hash, wallet, side, token_id
 ON CONFLICT (contract_address, transaction_hash, wallet, side, token_id) DO UPDATE SET
@@ -1206,7 +1206,7 @@ ON CONFLICT (contract_address, transaction_hash, wallet, side, token_id) DO UPDA
         await using var command = CreateCommand(connection, sql);
         command.Transaction = transaction;
         command.CommandTimeout = 300;
-        command.Parameters.AddWithValue("ContractAddress", contractAddress);
+        command.Parameters.AddWithValue("ContractAddress", NormalizeContractAddress(contractAddress));
         command.Parameters.AddWithValue("FromBlock", fromBlock);
         command.Parameters.AddWithValue("ToBlock", toBlock);
         await command.ExecuteNonQueryAsync(cancellationToken);
@@ -1307,7 +1307,7 @@ SELECT
 FROM polymarket_onchain_fills raw_fill
 LEFT JOIN polymarket_onchain_token_metadata token_metadata
        ON token_metadata.token_id = raw_fill.token_id
-WHERE lower(raw_fill.contract_address) = lower(@ContractAddress)
+WHERE raw_fill.contract_address = @ContractAddress
   AND raw_fill.block_number BETWEEN @FromBlock AND @ToBlock
 ON CONFLICT (transaction_hash, log_index) DO UPDATE SET
     contract_name = excluded.contract_name,
@@ -1353,7 +1353,7 @@ ON CONFLICT (transaction_hash, log_index) DO UPDATE SET
         await using var command = CreateCommand(connection, sql);
         command.Transaction = transaction;
         command.CommandTimeout = 300;
-        command.Parameters.AddWithValue("ContractAddress", contractAddress);
+        command.Parameters.AddWithValue("ContractAddress", NormalizeContractAddress(contractAddress));
         command.Parameters.AddWithValue("FromBlock", fromBlock);
         command.Parameters.AddWithValue("ToBlock", toBlock);
         await command.ExecuteNonQueryAsync(cancellationToken);
@@ -1412,7 +1412,7 @@ WHERE token_metadata.token_id = trade_detail.token_id
     {
         const string sql = """
 DELETE FROM polymarket_onchain_logs raw_log
-WHERE lower(raw_log.contract_address) = lower(@ContractAddress)
+WHERE raw_log.contract_address = @ContractAddress
   AND raw_log.block_number BETWEEN @FromBlock AND @ToBlock
   AND EXISTS (
       SELECT 1
@@ -1425,7 +1425,7 @@ WHERE lower(raw_log.contract_address) = lower(@ContractAddress)
         await using var command = CreateCommand(connection, sql);
         command.Transaction = transaction;
         command.CommandTimeout = 300;
-        command.Parameters.AddWithValue("ContractAddress", contractAddress);
+        command.Parameters.AddWithValue("ContractAddress", NormalizeContractAddress(contractAddress));
         command.Parameters.AddWithValue("FromBlock", fromBlock);
         command.Parameters.AddWithValue("ToBlock", toBlock);
         await command.ExecuteNonQueryAsync(cancellationToken);
@@ -1456,7 +1456,7 @@ ON CONFLICT (contract_address) DO UPDATE SET
 
         await using var connection = await OpenConnectionAsync(cancellationToken);
         await using var command = CreateCommand(connection, sql);
-        command.Parameters.AddWithValue("ContractAddress", cursor.ContractAddress);
+        command.Parameters.AddWithValue("ContractAddress", NormalizeContractAddress(cursor.ContractAddress));
         command.Parameters.AddWithValue("ContractName", cursor.ContractName);
         command.Parameters.AddWithValue("ExchangeVersion", cursor.ExchangeVersion);
         command.Parameters.AddWithValue("FromBlock", cursor.FromBlock);
@@ -1476,13 +1476,13 @@ ON CONFLICT (contract_address) DO UPDATE SET
 SELECT contract_address, contract_name, exchange_version, from_block, to_block,
        logs_fetched, fills_stored, started_at_utc, completed_at_utc
 FROM polymarket_onchain_ingest_cursors
-WHERE lower(contract_address) = lower(@ContractAddress)
+WHERE contract_address = @ContractAddress
 LIMIT 1;
 """;
 
         await using var connection = await OpenConnectionAsync(cancellationToken);
         await using var command = CreateCommand(connection, sql);
-        command.Parameters.AddWithValue("ContractAddress", contractAddress);
+        command.Parameters.AddWithValue("ContractAddress", NormalizeContractAddress(contractAddress));
         await using var reader = await command.ExecuteReaderAsync(cancellationToken);
         if (!await reader.ReadAsync(cancellationToken))
         {
@@ -1506,14 +1506,16 @@ LIMIT 1;
         CancellationToken cancellationToken = default)
     {
         const string sql = """
-SELECT max(block_number)
+SELECT block_number
 FROM polymarket_onchain_fills
-WHERE lower(contract_address) = lower(@ContractAddress);
+WHERE contract_address = @ContractAddress
+ORDER BY block_number DESC
+LIMIT 1;
 """;
 
         await using var connection = await OpenConnectionAsync(cancellationToken);
         await using var command = CreateCommand(connection, sql);
-        command.Parameters.AddWithValue("ContractAddress", contractAddress);
+        command.Parameters.AddWithValue("ContractAddress", NormalizeContractAddress(contractAddress));
         var result = await command.ExecuteScalarAsync(cancellationToken);
         return result is DBNull or null ? null : (long)result;
     }
@@ -1523,14 +1525,28 @@ WHERE lower(contract_address) = lower(@ContractAddress);
         CancellationToken cancellationToken = default)
     {
         const string sql = """
-SELECT min(block_number), max(block_number)
-FROM polymarket_onchain_fills
-WHERE lower(contract_address) = lower(@ContractAddress);
+WITH first_block AS (
+    SELECT block_number
+    FROM polymarket_onchain_fills
+    WHERE contract_address = @ContractAddress
+    ORDER BY block_number ASC
+    LIMIT 1
+),
+last_block AS (
+    SELECT block_number
+    FROM polymarket_onchain_fills
+    WHERE contract_address = @ContractAddress
+    ORDER BY block_number DESC
+    LIMIT 1
+)
+SELECT first_block.block_number, last_block.block_number
+FROM first_block
+CROSS JOIN last_block;
 """;
 
         await using var connection = await OpenConnectionAsync(cancellationToken);
         await using var command = CreateCommand(connection, sql);
-        command.Parameters.AddWithValue("ContractAddress", contractAddress);
+        command.Parameters.AddWithValue("ContractAddress", NormalizeContractAddress(contractAddress));
         await using var reader = await command.ExecuteReaderAsync(cancellationToken);
         if (!await reader.ReadAsync(cancellationToken) || reader.IsDBNull(0) || reader.IsDBNull(1))
         {
@@ -1545,14 +1561,28 @@ WHERE lower(contract_address) = lower(@ContractAddress);
         CancellationToken cancellationToken = default)
     {
         const string sql = """
-SELECT min(block_number), max(block_number)
-FROM polymarket_onchain_wallet_executions
-WHERE lower(contract_address) = lower(@ContractAddress);
+WITH first_block AS (
+    SELECT block_number
+    FROM polymarket_onchain_wallet_executions
+    WHERE contract_address = @ContractAddress
+    ORDER BY block_number ASC
+    LIMIT 1
+),
+last_block AS (
+    SELECT block_number
+    FROM polymarket_onchain_wallet_executions
+    WHERE contract_address = @ContractAddress
+    ORDER BY block_number DESC
+    LIMIT 1
+)
+SELECT first_block.block_number, last_block.block_number
+FROM first_block
+CROSS JOIN last_block;
 """;
 
         await using var connection = await OpenConnectionAsync(cancellationToken);
         await using var command = CreateCommand(connection, sql);
-        command.Parameters.AddWithValue("ContractAddress", contractAddress);
+        command.Parameters.AddWithValue("ContractAddress", NormalizeContractAddress(contractAddress));
         await using var reader = await command.ExecuteReaderAsync(cancellationToken);
         if (!await reader.ReadAsync(cancellationToken) || reader.IsDBNull(0) || reader.IsDBNull(1))
         {
@@ -1567,16 +1597,30 @@ WHERE lower(contract_address) = lower(@ContractAddress);
         CancellationToken cancellationToken = default)
     {
         const string sql = """
-SELECT min(block_number), max(block_number)
-FROM polymarket_onchain_trade_details
-WHERE lower(contract_address) = lower(@ContractAddress);
+WITH first_block AS (
+    SELECT block_number
+    FROM polymarket_onchain_trade_details
+    WHERE contract_address = @ContractAddress
+    ORDER BY block_number ASC
+    LIMIT 1
+),
+last_block AS (
+    SELECT block_number
+    FROM polymarket_onchain_trade_details
+    WHERE contract_address = @ContractAddress
+    ORDER BY block_number DESC
+    LIMIT 1
+)
+SELECT first_block.block_number, last_block.block_number
+FROM first_block
+CROSS JOIN last_block;
 """;
 
         try
         {
             await using var connection = await OpenConnectionAsync(cancellationToken);
             await using var command = CreateCommand(connection, sql);
-            command.Parameters.AddWithValue("ContractAddress", contractAddress);
+            command.Parameters.AddWithValue("ContractAddress", NormalizeContractAddress(contractAddress));
             await using var reader = await command.ExecuteReaderAsync(cancellationToken);
             if (!await reader.ReadAsync(cancellationToken) || reader.IsDBNull(0) || reader.IsDBNull(1))
             {
@@ -3731,6 +3775,11 @@ ORDER BY service_name;
         return timestamp.UtcDateTime;
     }
 
+    private static string NormalizeContractAddress(string contractAddress)
+    {
+        return contractAddress.Trim().ToLowerInvariant();
+    }
+
     private static DateTimeOffset DateTimeOffsetFromUtc(DateTime timestamp)
     {
         return new DateTimeOffset(DateTime.SpecifyKind(timestamp, DateTimeKind.Utc));
@@ -3888,10 +3937,15 @@ ORDER BY service_name;
 
         const string sql = """
 INSERT INTO polymarket_onchain_position_refresh_queue (token_id, reason, queued_at_utc)
-SELECT unnest(@TokenIds), @Reason, now()
-ON CONFLICT (token_id) DO UPDATE SET
-    reason = excluded.reason,
-    queued_at_utc = LEAST(polymarket_onchain_position_refresh_queue.queued_at_utc, excluded.queued_at_utc);
+SELECT input.token_id, @Reason, now()
+FROM unnest(@TokenIds) AS input(token_id)
+WHERE EXISTS (
+    SELECT 1
+    FROM polymarket_onchain_wallet_executions execution
+    WHERE execution.token_id = input.token_id
+    LIMIT 1
+)
+ON CONFLICT (token_id) DO NOTHING;
 """;
 
         await using var command = CreateCommand(connection, sql);
@@ -3922,10 +3976,7 @@ INSERT INTO polymarket_onchain_token_metadata_refresh_queue (
     token_id, reason, attempts, queued_at_utc, next_attempt_at_utc
 )
 SELECT unnest(@TokenIds), @Reason, 0, now(), now()
-ON CONFLICT (token_id) DO UPDATE SET
-    reason = excluded.reason,
-    queued_at_utc = LEAST(polymarket_onchain_token_metadata_refresh_queue.queued_at_utc, excluded.queued_at_utc),
-    next_attempt_at_utc = LEAST(polymarket_onchain_token_metadata_refresh_queue.next_attempt_at_utc, excluded.next_attempt_at_utc);
+ON CONFLICT (token_id) DO NOTHING;
 """;
 
         await using var command = CreateCommand(connection, sql);
@@ -3949,26 +4000,23 @@ INSERT INTO polymarket_onchain_token_metadata_refresh_queue (
     token_id, reason, attempts, queued_at_utc, next_attempt_at_utc
 )
 SELECT DISTINCT execution.token_id, @Reason, 0, now(), now()
-FROM polymarket_onchain_wallet_executions execution
+FROM polymarket_onchain_wallet_fills execution
 LEFT JOIN polymarket_onchain_token_metadata metadata
   ON metadata.token_id = execution.token_id
-WHERE lower(execution.contract_address) = lower(@ContractAddress)
+WHERE execution.contract_address = @ContractAddress
   AND execution.block_number BETWEEN @FromBlock AND @ToBlock
   AND (
       metadata.token_id IS NULL
       OR NOT metadata.lookup_succeeded
       OR NULLIF(metadata.category, '') IS NULL
   )
-ON CONFLICT (token_id) DO UPDATE SET
-    reason = excluded.reason,
-    queued_at_utc = LEAST(polymarket_onchain_token_metadata_refresh_queue.queued_at_utc, excluded.queued_at_utc),
-    next_attempt_at_utc = LEAST(polymarket_onchain_token_metadata_refresh_queue.next_attempt_at_utc, excluded.next_attempt_at_utc);
+ON CONFLICT (token_id) DO NOTHING;
 """;
 
         await using var command = CreateCommand(connection, sql);
         command.Transaction = transaction;
         command.CommandTimeout = 300;
-        command.Parameters.AddWithValue("ContractAddress", contractAddress);
+        command.Parameters.AddWithValue("ContractAddress", NormalizeContractAddress(contractAddress));
         command.Parameters.AddWithValue("FromBlock", fromBlock);
         command.Parameters.AddWithValue("ToBlock", toBlock);
         command.Parameters.AddWithValue("Reason", reason);
@@ -4048,18 +4096,16 @@ WHERE metadata.token_id = refresh_queue.token_id
         const string sql = """
 INSERT INTO polymarket_onchain_position_refresh_queue (token_id, reason, queued_at_utc)
 SELECT DISTINCT token_id, @Reason, now()
-FROM polymarket_onchain_wallet_executions
-WHERE lower(contract_address) = lower(@ContractAddress)
+FROM polymarket_onchain_wallet_fills
+WHERE contract_address = @ContractAddress
   AND block_number BETWEEN @FromBlock AND @ToBlock
-ON CONFLICT (token_id) DO UPDATE SET
-    reason = excluded.reason,
-    queued_at_utc = LEAST(polymarket_onchain_position_refresh_queue.queued_at_utc, excluded.queued_at_utc);
+ON CONFLICT (token_id) DO NOTHING;
 """;
 
         await using var command = CreateCommand(connection, sql);
         command.Transaction = transaction;
         command.CommandTimeout = 300;
-        command.Parameters.AddWithValue("ContractAddress", contractAddress);
+        command.Parameters.AddWithValue("ContractAddress", NormalizeContractAddress(contractAddress));
         command.Parameters.AddWithValue("FromBlock", fromBlock);
         command.Parameters.AddWithValue("ToBlock", toBlock);
         command.Parameters.AddWithValue("Reason", reason);
@@ -4078,18 +4124,16 @@ ON CONFLICT (token_id) DO UPDATE SET
         const string sql = """
 INSERT INTO polymarket_onchain_wallet_activity_refresh_queue (wallet, reason, queued_at_utc)
 SELECT DISTINCT wallet, @Reason, now()
-FROM polymarket_onchain_wallet_executions
-WHERE lower(contract_address) = lower(@ContractAddress)
+FROM polymarket_onchain_wallet_fills
+WHERE contract_address = @ContractAddress
   AND block_number BETWEEN @FromBlock AND @ToBlock
-ON CONFLICT (wallet) DO UPDATE SET
-    reason = excluded.reason,
-    queued_at_utc = LEAST(polymarket_onchain_wallet_activity_refresh_queue.queued_at_utc, excluded.queued_at_utc);
+ON CONFLICT (wallet) DO NOTHING;
 """;
 
         await using var command = CreateCommand(connection, sql);
         command.Transaction = transaction;
         command.CommandTimeout = 300;
-        command.Parameters.AddWithValue("ContractAddress", contractAddress);
+        command.Parameters.AddWithValue("ContractAddress", NormalizeContractAddress(contractAddress));
         command.Parameters.AddWithValue("FromBlock", fromBlock);
         command.Parameters.AddWithValue("ToBlock", toBlock);
         command.Parameters.AddWithValue("Reason", reason);

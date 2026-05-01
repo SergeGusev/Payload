@@ -1,3 +1,17 @@
+## Active Update 2026-05-01 Queue And Range Query Optimization
+Goal: Reduce the new database pressure points after moving market enrichment to the metadata refresh queue.
+Status: Completed
+Done:
+- Optimized on-chain block-range lookups in `PostgresAppRepository`: fill, wallet-execution, and trade-detail range queries now use normalized exact `contract_address` comparisons and two `ORDER BY block_number LIMIT 1` index probes instead of `lower(contract_address)` plus aggregate min/max scans.
+- Normalized contract-address query parameters before exact comparisons so callers can still pass mixed-case addresses while stored on-chain rows remain lowercase.
+- Changed position refresh queue inserts from `ON CONFLICT DO UPDATE` to `ON CONFLICT DO NOTHING`, and only queue token ids that already have wallet executions.
+- Changed derived-range metadata, position, and activity queue seeding to read affected tokens/wallets from indexed `polymarket_onchain_wallet_fills` range data instead of `polymarket_onchain_wallet_executions`.
+- Changed range queue seeding conflicts to `DO NOTHING` to avoid unnecessary row updates and reduce lock contention with background refresh workers.
+- Verified the live PostgreSQL plan for the new fill block-range query uses `ix_polymarket_onchain_fills_contract_block` via forward and backward index-only scans.
+Next: Restart the service and monitor `api_errors` for `BackgroundMarketEnrichment`, `BackgroundSync`, and `BackgroundPositionRefresh`; if deadlocks persist, tune worker batch sizes/concurrency next.
+Notes: Verification passed: targeted `OnChainIngestionTests|OnChainMarketEnrichmentTests|StorageTests` 26/26; full `dotnet test tests\PolyCopyTrader.Tests\PolyCopyTrader.Tests.csproj -c Verify --no-restore` 138/138; service build passed; dashboard build passed; `git diff --check` passed. Existing unrelated dirty files `PolyCopyTrader.sln` and `src/PolyCopyTrader.Storage/PostgresSchemaInitializer.cs` were left untouched. `git rev-parse --abbrev-ref --symbolic-full-name '@{u}'` failed because branch `master` has no configured upstream.
+Blockers: Automatic pull/push cannot run until a Git upstream is configured.
+
 ## Active Update 2026-05-01 Post Metadata Queue Restart Check
 Goal: Verify PostgreSQL and service health after restarting with the token metadata refresh queue.
 Status: Completed
