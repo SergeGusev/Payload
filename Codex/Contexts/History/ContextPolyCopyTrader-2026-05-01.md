@@ -308,3 +308,10 @@ Request:
 
 Result:
 Inspected the screenshots. `polymarket_onchain_token_metadata.with_category` increased from 0 to 220 while total rows stayed 38,146 and successful lookups stayed 38,130; recent HTTP logs show 86 successful `GetEvent` calls. Concluded the new Gamma event fallback is deployed and working, but most rows remain categoryless and should be monitored through additional refresh cycles and sampled for unclassifiable event payloads if progress stalls.
+
+## 2026-05-01T14:20:42.8790607+00:00
+Request:
+Отлично, всё работает. Но в public.polymarket_onchain_wallet_category_performance у всех записей категория по-прежнему unknonw
+
+Result:
+Explained that `polymarket_onchain_wallet_category_performance` is derived from `polymarket_onchain_wallet_positions`, not directly from token metadata, so category changes must pass through position refresh and then category-performance refresh. Prepared SQL checks for metadata, positions, position queue, category-performance queue, and a manual enqueue query for `(wallet, category)` pairs if positions already contain categories but performance rows have not caught up. No source code changed.

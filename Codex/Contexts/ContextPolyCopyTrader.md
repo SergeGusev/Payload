@@ -1,3 +1,14 @@
+## Active Update 2026-05-01 Category Performance Still Unknown
+Goal: Explain why `polymarket_onchain_wallet_category_performance` can still contain only `unknown` after token metadata categories start working.
+Status: Completed
+Done:
+- Re-read the refresh chain: token metadata category updates enqueue `polymarket_onchain_position_refresh_queue`; `polymarket_onchain_wallet_positions` then copies metadata categories; `polymarket_onchain_wallet_category_performance` is rebuilt only from positions, not directly from token metadata.
+- Confirmed position refresh captures old and new `(wallet, category)` pairs and enqueues category-performance refreshes, so category performance can lag by two background workers after metadata enrichment succeeds.
+- Prepared SQL to identify the exact lag point: metadata categories present, positions still unknown, category-performance queue backlog, or a missing manual enqueue for already-categorized positions.
+Next: Run the provided SQL checks; if positions have categories but category-performance queue is empty/stale, manually enqueue distinct `(wallet, category)` pairs from `polymarket_onchain_wallet_positions`.
+Notes: `git rev-parse --abbrev-ref --symbolic-full-name '@{u}'` failed because branch `master` has no configured upstream, so pull/push cannot run automatically. No source code changed for this operational diagnostic. Existing unrelated dirty files `PolyCopyTrader.sln` and `src/PolyCopyTrader.Storage/PostgresSchemaInitializer.cs` were left untouched.
+Blockers: Automatic pull/push cannot run until a Git upstream is configured.
+
 ## Active Update 2026-05-01 Event Category Fallback Verification
 Goal: Interpret `D:\1\10.png` and `D:\1\11.png` after deploying Gamma event category fallback.
 Status: Completed
