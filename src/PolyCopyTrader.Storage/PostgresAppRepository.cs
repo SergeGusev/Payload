@@ -1075,6 +1075,12 @@ ON CONFLICT (transaction_hash, log_index) DO UPDATE SET
             fills.Select(fill => fill.TokenId).Distinct(StringComparer.OrdinalIgnoreCase),
             "execution",
             cancellationToken);
+        await QueuePolymarketOnChainTokenMetadataRefreshTokensAsync(
+            connection,
+            transaction,
+            fills.Select(fill => fill.TokenId).Distinct(StringComparer.OrdinalIgnoreCase),
+            "execution",
+            cancellationToken);
 
         await transaction.CommitAsync(cancellationToken);
     }
@@ -1635,6 +1641,14 @@ WHERE lower(contract_address) = lower(@ContractAddress);
             toBlock,
             "derived_refresh",
             cancellationToken);
+        await QueuePolymarketOnChainTokenMetadataRefreshTokensForRangeAsync(
+            connection,
+            transaction,
+            contractAddress,
+            fromBlock,
+            toBlock,
+            "derived_refresh",
+            cancellationToken);
         await DeleteProcessedPolymarketOnChainRawLogsAsync(
             connection,
             transaction,
@@ -1678,28 +1692,37 @@ LIMIT @Limit;
         CancellationToken cancellationToken = default)
     {
         const string sql = """
-SELECT DISTINCT execution.token_id
-FROM polymarket_onchain_wallet_executions execution
+SELECT refresh_queue.token_id
+FROM polymarket_onchain_token_metadata_refresh_queue refresh_queue
 LEFT JOIN polymarket_onchain_token_metadata metadata
-  ON metadata.token_id = execution.token_id
-WHERE metadata.token_id IS NULL
-   OR NOT metadata.lookup_succeeded
-   OR NULLIF(metadata.category, '') IS NULL
-ORDER BY execution.token_id
+  ON metadata.token_id = refresh_queue.token_id
+WHERE refresh_queue.next_attempt_at_utc <= now()
+  AND (
+      metadata.token_id IS NULL
+      OR NOT metadata.lookup_succeeded
+      OR NULLIF(metadata.category, '') IS NULL
+  )
+ORDER BY refresh_queue.next_attempt_at_utc, refresh_queue.queued_at_utc, refresh_queue.token_id
 LIMIT @Limit;
 """;
 
         await using var connection = await OpenConnectionAsync(cancellationToken);
-        await using var command = CreateCommand(connection, sql);
-        command.Parameters.AddWithValue("Limit", limit);
-        await using var reader = await command.ExecuteReaderAsync(cancellationToken);
+        await using var transaction = await connection.BeginTransactionAsync(cancellationToken);
+        await DeleteCompletedPolymarketOnChainTokenMetadataRefreshQueueAsync(connection, transaction, cancellationToken);
 
+        await using var command = CreateCommand(connection, sql);
+        command.Transaction = transaction;
+        command.Parameters.AddWithValue("Limit", limit);
         var results = new List<string>();
-        while (await reader.ReadAsync(cancellationToken))
+        await using (var reader = await command.ExecuteReaderAsync(cancellationToken))
         {
-            results.Add(reader.GetString(0));
+            while (await reader.ReadAsync(cancellationToken))
+            {
+                results.Add(reader.GetString(0));
+            }
         }
 
+        await transaction.CommitAsync(cancellationToken);
         return results;
     }
 
@@ -1791,6 +1814,15 @@ ON CONFLICT (token_id) DO UPDATE SET
             "metadata",
             cancellationToken);
         await RefreshPolymarketOnChainTradeDetailsMetadataAsync(
+            connection,
+            transaction,
+            metadata.Select(item => item.TokenId),
+            cancellationToken);
+        await DeleteCompletedPolymarketOnChainTokenMetadataRefreshQueueAsync(
+            connection,
+            transaction,
+            cancellationToken);
+        await RescheduleIncompletePolymarketOnChainTokenMetadataRefreshQueueAsync(
             connection,
             transaction,
             metadata.Select(item => item.TokenId),
@@ -3866,6 +3898,141 @@ ON CONFLICT (token_id) DO UPDATE SET
         command.Transaction = transaction;
         command.Parameters.AddWithValue("TokenIds", distinctTokenIds);
         command.Parameters.AddWithValue("Reason", reason);
+        await command.ExecuteNonQueryAsync(cancellationToken);
+    }
+
+    private static async Task QueuePolymarketOnChainTokenMetadataRefreshTokensAsync(
+        NpgsqlConnection connection,
+        NpgsqlTransaction transaction,
+        IEnumerable<string> tokenIds,
+        string reason,
+        CancellationToken cancellationToken)
+    {
+        var distinctTokenIds = tokenIds
+            .Where(tokenId => !string.IsNullOrWhiteSpace(tokenId))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+        if (distinctTokenIds.Length == 0)
+        {
+            return;
+        }
+
+        const string sql = """
+INSERT INTO polymarket_onchain_token_metadata_refresh_queue (
+    token_id, reason, attempts, queued_at_utc, next_attempt_at_utc
+)
+SELECT unnest(@TokenIds), @Reason, 0, now(), now()
+ON CONFLICT (token_id) DO UPDATE SET
+    reason = excluded.reason,
+    queued_at_utc = LEAST(polymarket_onchain_token_metadata_refresh_queue.queued_at_utc, excluded.queued_at_utc),
+    next_attempt_at_utc = LEAST(polymarket_onchain_token_metadata_refresh_queue.next_attempt_at_utc, excluded.next_attempt_at_utc);
+""";
+
+        await using var command = CreateCommand(connection, sql);
+        command.Transaction = transaction;
+        command.Parameters.AddWithValue("TokenIds", distinctTokenIds);
+        command.Parameters.AddWithValue("Reason", reason);
+        await command.ExecuteNonQueryAsync(cancellationToken);
+    }
+
+    private static async Task QueuePolymarketOnChainTokenMetadataRefreshTokensForRangeAsync(
+        NpgsqlConnection connection,
+        NpgsqlTransaction transaction,
+        string contractAddress,
+        long fromBlock,
+        long toBlock,
+        string reason,
+        CancellationToken cancellationToken)
+    {
+        const string sql = """
+INSERT INTO polymarket_onchain_token_metadata_refresh_queue (
+    token_id, reason, attempts, queued_at_utc, next_attempt_at_utc
+)
+SELECT DISTINCT execution.token_id, @Reason, 0, now(), now()
+FROM polymarket_onchain_wallet_executions execution
+LEFT JOIN polymarket_onchain_token_metadata metadata
+  ON metadata.token_id = execution.token_id
+WHERE lower(execution.contract_address) = lower(@ContractAddress)
+  AND execution.block_number BETWEEN @FromBlock AND @ToBlock
+  AND (
+      metadata.token_id IS NULL
+      OR NOT metadata.lookup_succeeded
+      OR NULLIF(metadata.category, '') IS NULL
+  )
+ON CONFLICT (token_id) DO UPDATE SET
+    reason = excluded.reason,
+    queued_at_utc = LEAST(polymarket_onchain_token_metadata_refresh_queue.queued_at_utc, excluded.queued_at_utc),
+    next_attempt_at_utc = LEAST(polymarket_onchain_token_metadata_refresh_queue.next_attempt_at_utc, excluded.next_attempt_at_utc);
+""";
+
+        await using var command = CreateCommand(connection, sql);
+        command.Transaction = transaction;
+        command.CommandTimeout = 300;
+        command.Parameters.AddWithValue("ContractAddress", contractAddress);
+        command.Parameters.AddWithValue("FromBlock", fromBlock);
+        command.Parameters.AddWithValue("ToBlock", toBlock);
+        command.Parameters.AddWithValue("Reason", reason);
+        await command.ExecuteNonQueryAsync(cancellationToken);
+    }
+
+    private static async Task DeleteCompletedPolymarketOnChainTokenMetadataRefreshQueueAsync(
+        NpgsqlConnection connection,
+        NpgsqlTransaction transaction,
+        CancellationToken cancellationToken)
+    {
+        const string sql = """
+DELETE FROM polymarket_onchain_token_metadata_refresh_queue refresh_queue
+USING polymarket_onchain_token_metadata metadata
+WHERE metadata.token_id = refresh_queue.token_id
+  AND metadata.lookup_succeeded
+  AND NULLIF(metadata.category, '') IS NOT NULL;
+""";
+
+        await using var command = CreateCommand(connection, sql);
+        command.Transaction = transaction;
+        await command.ExecuteNonQueryAsync(cancellationToken);
+    }
+
+    private static async Task RescheduleIncompletePolymarketOnChainTokenMetadataRefreshQueueAsync(
+        NpgsqlConnection connection,
+        NpgsqlTransaction transaction,
+        IEnumerable<string> tokenIds,
+        CancellationToken cancellationToken)
+    {
+        var distinctTokenIds = tokenIds
+            .Where(tokenId => !string.IsNullOrWhiteSpace(tokenId))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+        if (distinctTokenIds.Length == 0)
+        {
+            return;
+        }
+
+        const string sql = """
+UPDATE polymarket_onchain_token_metadata_refresh_queue refresh_queue
+SET
+    reason = 'metadata_retry',
+    attempts = refresh_queue.attempts + 1,
+    last_attempted_at_utc = now(),
+    next_attempt_at_utc = now() + (LEAST((refresh_queue.attempts + 1) * 5, 60)::text || ' minutes')::interval,
+    last_error = COALESCE(
+        metadata.lookup_error,
+        CASE
+            WHEN NULLIF(metadata.category, '') IS NULL THEN 'Metadata category is missing.'
+            ELSE NULL
+        END)
+FROM polymarket_onchain_token_metadata metadata
+WHERE metadata.token_id = refresh_queue.token_id
+  AND refresh_queue.token_id = ANY(@TokenIds)
+  AND (
+      NOT metadata.lookup_succeeded
+      OR NULLIF(metadata.category, '') IS NULL
+  );
+""";
+
+        await using var command = CreateCommand(connection, sql);
+        command.Transaction = transaction;
+        command.Parameters.AddWithValue("TokenIds", distinctTokenIds);
         await command.ExecuteNonQueryAsync(cancellationToken);
     }
 

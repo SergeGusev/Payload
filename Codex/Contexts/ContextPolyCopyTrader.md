@@ -1,3 +1,16 @@
+## Active Update 2026-05-01 Token Metadata Refresh Queue
+Goal: Stop market enrichment from repeatedly scanning the large wallet-execution table for missing token metadata.
+Status: Completed
+Done:
+- Added `polymarket_onchain_token_metadata_refresh_queue` with attempt/backoff fields, a next-attempt index, and schema seeding for existing incomplete metadata rows.
+- Changed `GetOnChainTokenIdsMissingMetadataAsync` to read due token ids from the metadata refresh queue instead of `polymarket_onchain_wallet_executions`.
+- Enqueued token metadata refresh work from new on-chain fills and derived-data rebuild ranges.
+- Cleaned completed metadata queue rows after successful category enrichment and rescheduled failed/blank-category rows with short capped backoff.
+- Updated test repository behavior, enrichment/ingestion/schema tests, README, and configuration reference.
+Next: Restart the service so schema initialization creates the queue, then monitor `polymarket_onchain_token_metadata_refresh_queue`, market-enrichment errors, and `unknown` category counts.
+Notes: Verification passed: targeted `OnChainMarketEnrichmentTests|OnChainIngestionTests|StorageTests` 26/26; full `dotnet test tests\PolyCopyTrader.Tests\PolyCopyTrader.Tests.csproj -c Verify --no-restore` 138/138; service build passed; dashboard build passed; `git diff --check` passed. Existing unrelated dirty files `PolyCopyTrader.sln` and `src/PolyCopyTrader.Storage/PostgresSchemaInitializer.cs` were left untouched. `git rev-parse --abbrev-ref --symbolic-full-name '@{u}'` failed because branch `master` has no configured upstream.
+Blockers: Automatic pull/push cannot run until a Git upstream is configured.
+
 ## Active Update 2026-05-01 Next Operational Step
 Goal: Decide the next task after deploying category-aware signal gates and verifying service/database health.
 Status: Completed

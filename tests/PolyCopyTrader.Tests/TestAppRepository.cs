@@ -45,6 +45,8 @@ internal sealed class TestAppRepository : IAppRepository
 
     public List<PolymarketOnChainTokenMetadata> PolymarketOnChainTokenMetadata { get; } = [];
 
+    public HashSet<string> PolymarketOnChainTokenMetadataRefreshQueue { get; } = new(StringComparer.OrdinalIgnoreCase);
+
     public List<PolymarketOnChainWalletPosition> PolymarketOnChainWalletPositions { get; } = [];
 
     public HashSet<string> PolymarketOnChainPositionRefreshQueue { get; } = new(StringComparer.OrdinalIgnoreCase);
@@ -337,6 +339,7 @@ internal sealed class TestAppRepository : IAppRepository
                 item.LogIndex == fill.LogIndex);
             PolymarketOnChainFills.Add(fill);
             PolymarketOnChainPositionRefreshQueue.Add(fill.TokenId);
+            PolymarketOnChainTokenMetadataRefreshQueue.Add(fill.TokenId);
         }
 
         if (RebuildDerivedDataOnAddFills)
@@ -406,6 +409,7 @@ internal sealed class TestAppRepository : IAppRepository
             .Distinct(StringComparer.OrdinalIgnoreCase))
         {
             PolymarketOnChainPositionRefreshQueue.Add(tokenId);
+            PolymarketOnChainTokenMetadataRefreshQueue.Add(tokenId);
         }
 
         return Task.CompletedTask;
@@ -428,9 +432,7 @@ internal sealed class TestAppRepository : IAppRepository
             .GroupBy(item => item.TokenId, StringComparer.OrdinalIgnoreCase)
             .ToDictionary(group => group.Key, group => group.Last(), StringComparer.OrdinalIgnoreCase);
         return Task.FromResult<IReadOnlyList<string>>(
-            PolymarketOnChainWalletExecutions
-                .Select(item => item.TokenId)
-                .Distinct(StringComparer.OrdinalIgnoreCase)
+            PolymarketOnChainTokenMetadataRefreshQueue
                 .Where(tokenId =>
                     !metadataByToken.TryGetValue(tokenId, out var metadata) ||
                     !metadata.LookupSucceeded ||
@@ -448,6 +450,14 @@ internal sealed class TestAppRepository : IAppRepository
                 string.Equals(existing.TokenId, item.TokenId, StringComparison.OrdinalIgnoreCase));
             PolymarketOnChainTokenMetadata.Add(item);
             PolymarketOnChainPositionRefreshQueue.Add(item.TokenId);
+            if (item.LookupSucceeded && !string.IsNullOrWhiteSpace(item.Category))
+            {
+                PolymarketOnChainTokenMetadataRefreshQueue.Remove(item.TokenId);
+            }
+            else
+            {
+                PolymarketOnChainTokenMetadataRefreshQueue.Add(item.TokenId);
+            }
         }
 
         return Task.CompletedTask;

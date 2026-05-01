@@ -14,6 +14,7 @@ public sealed class OnChainMarketEnrichmentTests
         var repository = new TestAppRepository();
         repository.PolymarketOnChainWalletExecutions.Add(Execution("token-1"));
         repository.PolymarketOnChainWalletExecutions.Add(Execution("token-2"));
+        QueueMetadataRefresh(repository, "token-1", "token-2");
         var gamma = new FakeGammaClient();
         gamma.Metadata["token-1"] =
         [
@@ -52,6 +53,7 @@ public sealed class OnChainMarketEnrichmentTests
         repository.PolymarketOnChainWalletExecutions.Add(Execution("token-1"));
         repository.PolymarketOnChainWalletExecutions.Add(Execution("token-2"));
         repository.PolymarketOnChainWalletExecutions.Add(Execution("token-3"));
+        QueueMetadataRefresh(repository, "token-1", "token-2", "token-3");
         var gamma = new FakeGammaClient();
         gamma.Metadata["token-1"] = [Metadata("token-1")];
         gamma.Metadata["token-2"] = [Metadata("token-2")];
@@ -86,6 +88,7 @@ public sealed class OnChainMarketEnrichmentTests
         var repository = new TestAppRepository();
         repository.PolymarketOnChainWalletExecutions.Add(Execution("token-1"));
         repository.PolymarketOnChainTokenMetadata.Add(Metadata("token-1", category: null));
+        QueueMetadataRefresh(repository, "token-1");
         var gamma = new FakeGammaClient();
         gamma.Metadata["token-1"] = [Metadata("token-1")];
 
@@ -116,6 +119,7 @@ public sealed class OnChainMarketEnrichmentTests
     {
         var repository = new TestAppRepository();
         repository.PolymarketOnChainWalletExecutions.Add(Execution("token-1"));
+        QueueMetadataRefresh(repository, "token-1");
         var gamma = new FakeGammaClient();
         gamma.Metadata["token-1"] = [Metadata("token-1", category: null)];
         gamma.MetadataByCondition["condition-1"] = [Metadata("token-1", category: "Politics")];
@@ -155,6 +159,7 @@ public sealed class OnChainMarketEnrichmentTests
     {
         var repository = new TestAppRepository();
         repository.PolymarketOnChainWalletExecutions.Add(Execution("token-1"));
+        QueueMetadataRefresh(repository, "token-1");
         var gamma = new FakeGammaClient();
         gamma.Metadata["token-1"] = [Metadata("token-1", category: null) with { RawJson = MarketRawJson("event-1") }];
         gamma.EventCategories["event-1"] = "Politics";
@@ -188,6 +193,7 @@ public sealed class OnChainMarketEnrichmentTests
         repository.PolymarketOnChainWalletExecutions.Add(Execution("token-1"));
         repository.PolymarketOnChainWalletExecutions.Add(Execution("token-2"));
         repository.PolymarketOnChainWalletExecutions.Add(Execution("token-3"));
+        QueueMetadataRefresh(repository, "token-1", "token-2", "token-3");
         var gamma = new FakeGammaClient();
 
         var processor = new OnChainMarketEnrichmentProcessor(
@@ -218,6 +224,7 @@ public sealed class OnChainMarketEnrichmentTests
     {
         var repository = new TestAppRepository();
         repository.PolymarketOnChainWalletExecutions.Add(Execution("token-1"));
+        QueueMetadataRefresh(repository, "token-1");
         var beforeReturnGate = new TaskCompletionSource<object?>(TaskCreationOptions.RunContinuationsAsynchronously);
         var gamma = new FakeGammaClient
         {
@@ -243,6 +250,32 @@ public sealed class OnChainMarketEnrichmentTests
         Assert.Contains("already running", ex.Message, StringComparison.OrdinalIgnoreCase);
         beforeReturnGate.SetResult(null);
         await firstRun;
+    }
+
+    [Fact]
+    public async Task Processor_UsesMetadataRefreshQueueInsteadOfScanningExecutions()
+    {
+        var repository = new TestAppRepository();
+        repository.PolymarketOnChainWalletExecutions.Add(Execution("token-1"));
+        var gamma = new FakeGammaClient();
+        gamma.Metadata["token-1"] = [Metadata("token-1")];
+
+        var processor = new OnChainMarketEnrichmentProcessor(
+            NullLogger<OnChainMarketEnrichmentProcessor>.Instance,
+            new OnChainIngestionOptions
+            {
+                MarketEnrichmentBatchSize = 10,
+                RequestDelayMilliseconds = 0
+            },
+            gamma,
+            new FakeClobClient(),
+            repository);
+
+        var result = await processor.RefreshAsync();
+
+        Assert.Equal(0, result.TokensRequested);
+        Assert.Empty(gamma.Requests);
+        Assert.Empty(repository.PolymarketOnChainTokenMetadata);
     }
 
     private static PolymarketOnChainTokenMetadata Metadata(string tokenId, string? category = "Politics")
@@ -292,6 +325,14 @@ public sealed class OnChainMarketEnrichmentTests
             0.5m,
             0,
             DateTimeOffset.UtcNow);
+    }
+
+    private static void QueueMetadataRefresh(TestAppRepository repository, params string[] tokenIds)
+    {
+        foreach (var tokenId in tokenIds)
+        {
+            repository.PolymarketOnChainTokenMetadataRefreshQueue.Add(tokenId);
+        }
     }
 
     private static string MarketRawJson(string eventId)

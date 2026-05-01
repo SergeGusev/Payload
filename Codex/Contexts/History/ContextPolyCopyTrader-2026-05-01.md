@@ -473,3 +473,10 @@ Request:
 
 Result:
 Recommended making database-pipeline stabilization the next step before further strategy work. The first implementation target is a dedicated token metadata refresh queue so market enrichment no longer repeatedly scans the very large `polymarket_onchain_wallet_executions` table for missing metadata. The follow-up target is reducing/deconflicting position, performance, and category-performance refresh workers to lower deadlock and timeout pressure. No source behavior changed.
+
+## 2026-05-01T19:46:03.7265871+00:00
+Request:
+Ок, давай сделаем
+
+Result:
+Implemented a dedicated `polymarket_onchain_token_metadata_refresh_queue`. New fills and derived-data rebuilds enqueue affected token ids; enrichment now reads due queued token ids instead of scanning `polymarket_onchain_wallet_executions`; successful category metadata clears queue rows, while failed or blank-category lookups are rescheduled with capped backoff. Updated tests and docs. Verification passed: targeted enrichment/ingestion/storage tests 26/26, full tests 138/138, service build, dashboard build, and `git diff --check`.

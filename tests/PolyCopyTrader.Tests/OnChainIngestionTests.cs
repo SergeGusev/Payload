@@ -156,6 +156,7 @@ public sealed class OnChainIngestionTests
 
         Assert.Equal(4, repository.PolymarketOnChainWalletFills.Count);
         Assert.Equal(2, repository.PolymarketOnChainWalletExecutions.Count);
+        Assert.Contains(fill1.TokenId, repository.PolymarketOnChainTokenMetadataRefreshQueue);
         var makerExecution = Assert.Single(repository.PolymarketOnChainWalletExecutions, item =>
             item.Wallet == "0x1111111111111111111111111111111111111111" &&
             item.Side == TradeSide.Buy);

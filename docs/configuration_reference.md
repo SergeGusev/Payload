@@ -175,8 +175,8 @@ every completed block batch.
 - `BackgroundSyncIdleDelaySeconds`: pause between successful background ingestion cycles; default `30`.
 - `BackgroundErrorDelaySeconds`: first retry delay after background ingestion or enrichment errors; default `60`.
 - `BackgroundMaxErrorDelaySeconds`: maximum exponential retry delay after repeated background errors; default `900`.
-- `MarketEnrichmentBatchSize`: number of missing on-chain token ids to enrich per Gamma batch; default `100`.
-- `MarketEnrichmentMaxBatchesPerRun`: maximum Gamma enrichment batches per manual `Enrich markets` command; default `25`. If this limit is reached while missing tokens remain, run the command again to continue.
+- `MarketEnrichmentBatchSize`: number of queued missing on-chain token ids to enrich per Gamma batch; default `100`.
+- `MarketEnrichmentMaxBatchesPerRun`: maximum Gamma enrichment batches per manual `Enrich markets` command; default `25`. If this limit is reached while queued due tokens remain, run the command again to continue.
 - `BackgroundMarketEnrichmentEnabled`: runs missing-token Gamma enrichment continuously while the service is running; default `true`.
 - `MarketEnrichmentIntervalSeconds`: pause between successful background enrichment cycles; default `120`.
 - `BackgroundPositionRefreshEnabled`: runs wallet-position aggregation continuously while the service is running; default `true`.
@@ -264,16 +264,19 @@ previous and new category pairs for affected tokens, so category scores stay
 current as new fills arrive or Gamma metadata changes.
 
 The manual `Enrich markets` command calls Gamma `markets?clob_token_ids=...` for
-missing or incomplete execution token metadata and stores
+queued missing or incomplete execution token metadata and stores
 `polymarket_onchain_token_metadata` rows with condition id, market title/slug,
 outcome, category, end date, active/closed status, raw JSON, and not-found
-markers for tokens Gamma cannot resolve. Rows with failed lookup or blank
+markers for tokens Gamma cannot resolve. Ingestion and derived-data rebuilds
+write affected token ids to `polymarket_onchain_token_metadata_refresh_queue`,
+so enrichment no longer repeatedly scans the full wallet-execution table to find
+missing metadata. Rows with failed lookup or blank
 category are retried, and category parsing falls back from `market.category` to
 nested event/category fields when Gamma omits the top-level category. If token
 lookup returns metadata without a category, enrichment fetches the linked Gamma
 event and derives a category from event category/tags/text before falling back to
 CLOB `markets-by-token/{token_id}` and Gamma `condition_ids`. It rechecks missing token ids after every stored batch and
-continues until none are left or `MarketEnrichmentMaxBatchesPerRun` is reached.
+continues until no queued due tokens are left or `MarketEnrichmentMaxBatchesPerRun` is reached.
 The background enrichment worker runs the same processor every
 `MarketEnrichmentIntervalSeconds`.
 

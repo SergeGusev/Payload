@@ -34,6 +34,7 @@ public static class PostgresSchema
         "polymarket_onchain_wallet_fills",
         "polymarket_onchain_wallet_executions",
         "polymarket_onchain_token_metadata",
+        "polymarket_onchain_token_metadata_refresh_queue",
         "polymarket_onchain_wallet_activity",
         "polymarket_onchain_wallet_activity_refresh_queue",
         "polymarket_onchain_wallet_positions",
@@ -765,6 +766,39 @@ ON polymarket_onchain_token_metadata(condition_id);
 
 CREATE INDEX IF NOT EXISTS ix_polymarket_onchain_token_metadata_category
 ON polymarket_onchain_token_metadata(category);
+
+CREATE TABLE IF NOT EXISTS polymarket_onchain_token_metadata_refresh_queue (
+    token_id text PRIMARY KEY,
+    reason text NOT NULL,
+    attempts integer NOT NULL DEFAULT 0,
+    queued_at_utc timestamptz NOT NULL,
+    last_attempted_at_utc timestamptz NULL,
+    next_attempt_at_utc timestamptz NOT NULL,
+    last_error text NULL
+);
+
+ALTER TABLE polymarket_onchain_token_metadata_refresh_queue ADD COLUMN IF NOT EXISTS attempts integer NOT NULL DEFAULT 0;
+ALTER TABLE polymarket_onchain_token_metadata_refresh_queue ADD COLUMN IF NOT EXISTS last_attempted_at_utc timestamptz NULL;
+ALTER TABLE polymarket_onchain_token_metadata_refresh_queue ADD COLUMN IF NOT EXISTS next_attempt_at_utc timestamptz NULL;
+ALTER TABLE polymarket_onchain_token_metadata_refresh_queue ADD COLUMN IF NOT EXISTS last_error text NULL;
+UPDATE polymarket_onchain_token_metadata_refresh_queue
+SET next_attempt_at_utc = COALESCE(next_attempt_at_utc, queued_at_utc, now());
+ALTER TABLE polymarket_onchain_token_metadata_refresh_queue ALTER COLUMN next_attempt_at_utc SET NOT NULL;
+
+CREATE INDEX IF NOT EXISTS ix_polymarket_onchain_token_metadata_refresh_queue_next_attempt
+ON polymarket_onchain_token_metadata_refresh_queue(next_attempt_at_utc, queued_at_utc);
+
+INSERT INTO polymarket_onchain_token_metadata_refresh_queue (
+    token_id, reason, attempts, queued_at_utc, next_attempt_at_utc
+)
+SELECT token_id, 'metadata_incomplete', 0, now(), now()
+FROM polymarket_onchain_token_metadata
+WHERE NOT lookup_succeeded
+   OR NULLIF(category, '') IS NULL
+ON CONFLICT (token_id) DO UPDATE SET
+    reason = excluded.reason,
+    queued_at_utc = LEAST(polymarket_onchain_token_metadata_refresh_queue.queued_at_utc, excluded.queued_at_utc),
+    next_attempt_at_utc = LEAST(polymarket_onchain_token_metadata_refresh_queue.next_attempt_at_utc, excluded.next_attempt_at_utc);
 
 CREATE TABLE IF NOT EXISTS polymarket_onchain_wallet_activity (
     wallet text PRIMARY KEY,
