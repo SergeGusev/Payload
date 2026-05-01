@@ -1,3 +1,14 @@
+## Active Update 2026-05-01 PostgreSQL Cancel Escalation Guidance
+Goal: Explain what to do when a PostgreSQL query on `trader_leaderboard_snapshots` cannot be cancelled.
+Status: Completed
+Done:
+- Re-read workflow, project rules, coding rules, active context, and Git state.
+- Clarified that `pg_cancel_backend` can fail or appear ineffective when the wrong pid is targeted, privileges are insufficient, the backend is blocked behind another session, or PostgreSQL is rolling back a cancelled DDL/index operation.
+- Prepared an escalation path: identify blockers with `pg_stat_activity`/`pg_blocking_pids`, terminate the blocking backend with `pg_terminate_backend`, then monitor cleanup/rollback instead of repeatedly cancelling the blocked `count(*)`.
+Next: Run the blocker diagnostic query, terminate the actual blocking backend if needed, and wait if PostgreSQL is cleaning up an aborted index build.
+Notes: `git rev-parse --abbrev-ref --symbolic-full-name '@{u}'` failed because branch `master` has no configured upstream, so pull/push cannot run automatically. No source code changed for this answer-only task; existing unrelated `PolyCopyTrader.sln` changes remain untouched.
+Blockers: Automatic pull/push cannot run until a Git upstream is configured.
+
 ## Active Update 2026-05-01 Leaderboard Count Lock Guidance
 Goal: Explain why `count(*)` on `trader_leaderboard_snapshots` hangs after cancelling index creation and how to inspect size without scanning.
 Status: Completed

@@ -137,3 +137,10 @@ Request:
 
 Result:
 Explained that after cancelling index creation, `count(*)` can hang because it is waiting on DDL/rollback locks rather than simply scanning a huge table. Provided metadata-only size/estimated-row SQL from `pg_class` and lock diagnostics using `pg_stat_activity` and `pg_blocking_pids`. No source code changed.
+
+## 2026-05-01T10:30:08.8623069Z
+Request:
+И заканселить запрос не получается
+
+Result:
+Explained that an uncancellable PostgreSQL query should be escalated by identifying the actual blocking backend with `pg_stat_activity`/`pg_blocking_pids`, using `pg_terminate_backend` on the blocker when `pg_cancel_backend` is ineffective, and waiting for rollback/cleanup if an aborted index build is being unwound. No source code changed.
