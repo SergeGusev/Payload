@@ -403,3 +403,10 @@ Request:
 
 Result:
 Removed historical backward backfill from on-chain ingestion. Both manual and background sync now only scan forward from the stored `to_block + 1` to the latest Polygon block; `from_block` is no longer moved backward. Removed `HistoricalBackfillStartUtc` and `BackgroundHistoricalBatchesPerCycle` from active options, appsettings, validation summary, docs, and Dashboard overview text. Updated ingestion tests to assert old blocks are not requested after fresh catch-up. Verification passed: targeted on-chain ingestion tests 11/11, full tests 132/132, service build, dashboard build, and `git diff --check`. Existing already-stored historical rows were not deleted.
+
+## 2026-05-01T18:19:09.0558544+00:00
+Request:
+У нас перестали добавляться записи в public.polymarket_onchain_fills. Это нормально?
+
+Result:
+Queried PostgreSQL through `POLYCOPYTRADER_POSTGRES_CONNECTION` without printing secrets. Confirmed this was not a normal no-new-trades pause: `polymarket_onchain_fills` last imported at `2026-05-01 07:39:08 UTC`, cursor `to_block=85990031` was about 279,543 blocks behind latest Polygon block, and recent ingestion errors included `Exception while reading from stream`. The service heartbeat was fresh, but active database work showed large derived/materialization inserts. Changed `OnChainIngestionProcessor` so fresh forward catch-up runs before existing derived-data repair, preventing old serving-table repair from delaying new-block ingestion. Added a regression test. Verification passed: targeted on-chain ingestion tests 12/12, service build, full tests 133/133, and `git diff --check`.

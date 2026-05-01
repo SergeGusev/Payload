@@ -1,3 +1,17 @@
+## Active Update 2026-05-01 Restore Fresh On-Chain Ingestion Priority
+Goal: Diagnose why `public.polymarket_onchain_fills` stopped growing and keep new-block ingestion ahead of derived-data repair.
+Status: Completed
+Done:
+- Queried PostgreSQL through `POLYCOPYTRADER_POSTGRES_CONNECTION` without printing secrets.
+- Confirmed `polymarket_onchain_fills` had 12,518,768 rows, last blockchain time `2026-04-25 06:55:06 UTC`, last imported time `2026-05-01 07:39:08 UTC`, and zero imports in the last 2 hours.
+- Confirmed the ingestion cursor was stale at `to_block=85990031`, while latest Polygon block was about `86269574`, leaving about 279,543 blocks behind.
+- Confirmed the service heartbeat was fresh, but recent ingestion errors included `Exception while reading from stream`; database activity showed large derived/materialization inserts.
+- Changed `OnChainIngestionProcessor` so fresh forward catch-up runs before `RefreshMissingDerivedDataAsync`; cursor advancement/new fill ingestion now happens before repairing existing derived serving tables.
+- Added a regression test proving fresh block catch-up happens before existing derived-data repair.
+Next: Restart/redeploy the service with this commit, then monitor `polymarket_onchain_ingest_cursors.to_block`, `polymarket_onchain_fills.imported_at_utc`, and ingestion `api_errors`.
+Notes: `dotnet test tests\PolyCopyTrader.Tests\PolyCopyTrader.Tests.csproj -c Verify --no-restore --filter "FullyQualifiedName~OnChainIngestionTests"` passed 12/12. `dotnet build src\PolyCopyTrader.Service\PolyCopyTrader.Service.csproj -c Verify --no-restore` passed. `dotnet test tests\PolyCopyTrader.Tests\PolyCopyTrader.Tests.csproj -c Verify --no-restore` passed 133/133. `git diff --check` passed. Existing unrelated dirty files `PolyCopyTrader.sln` and `src/PolyCopyTrader.Storage/PostgresSchemaInitializer.cs` were left untouched. `git rev-parse --abbrev-ref --symbolic-full-name '@{u}'` failed because branch `master` has no configured upstream.
+Blockers: Automatic pull/push cannot run until a Git upstream is configured.
+
 ## Active Update 2026-05-01 Disable Historical On-Chain Backfill
 Goal: Stop on-chain ingestion from scanning older historical blocks after the fresh tail is caught up.
 Status: Completed

@@ -359,6 +359,52 @@ public sealed class OnChainIngestionTests
     }
 
     [Fact]
+    public async Task Processor_CatchesUpFreshBlocksBeforeRepairingExistingDerivedData()
+    {
+        var contract = new OnChainExchangeContractOptions(
+            "CTF Exchange V2",
+            "0xE111180000d2663C0091e4f400237545B87B996B",
+            "V2");
+        var fakeRpc = new FakePolygonRpcClient();
+        fakeRpc.Logs.Add(Log(
+            PolymarketOnChainOrderFilledParser.V2OrderFilledTopic,
+            blockNumber: 2,
+            dataWords: [Word(0), Word(202), Word(10_000_000), Word(20_000_000), Word(0), Word(0), Word(0)]));
+        var repository = new TestAppRepository();
+        repository.RebuildDerivedDataOnAddFills = false;
+        var existingFill = PolymarketOnChainOrderFilledParser.Parse(
+            Log(
+                PolymarketOnChainOrderFilledParser.V2OrderFilledTopic,
+                blockNumber: 1,
+                dataWords: [Word(0), Word(101), Word(10_000_000), Word(20_000_000), Word(0), Word(0), Word(0)]),
+            contract,
+            fakeRpc.Now.AddHours(-12));
+        repository.PolymarketOnChainFills.Add(existingFill);
+        await repository.UpsertOnChainIngestionCursorAsync(new OnChainIngestionCursor(
+            contract.Address.ToLowerInvariant(),
+            contract.Name,
+            contract.Version,
+            1,
+            1,
+            0,
+            0,
+            fakeRpc.Now.AddMinutes(-1),
+            fakeRpc.Now.AddMinutes(-1)));
+        repository.BeforeOnChainWalletDerivedRefresh = _ =>
+            Assert.Equal(2, repository.OnChainIngestionCursors.Single().ToBlock);
+
+        var processor = CreateProcessor(contract, fakeRpc, repository);
+        var result = await processor.RefreshLookbackAsync();
+
+        Assert.Equal(1, result.LogsFetched);
+        Assert.Equal([new LogRequest(2, 2)], fakeRpc.LogRequests);
+        Assert.Equal(2, repository.OnChainIngestionCursors.Single().ToBlock);
+        Assert.Equal(
+            [new OnChainBlockRange(1, 1), new OnChainBlockRange(2, 2)],
+            repository.OnChainWalletDerivedRefreshRanges);
+    }
+
+    [Fact]
     public async Task Processor_DoesNotBackfillHistoryAfterFreshTailIsCaughtUp()
     {
         var contract = new OnChainExchangeContractOptions(

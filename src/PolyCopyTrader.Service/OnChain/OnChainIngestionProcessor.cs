@@ -103,7 +103,6 @@ public sealed class OnChainIngestionProcessor(
             var contractAddress = contract.Address.ToLowerInvariant();
             var cursor = await repository.GetOnChainIngestionCursorAsync(contractAddress, cancellationToken);
             var storedRange = await repository.GetPolymarketOnChainFillBlockRangeAsync(contractAddress, cancellationToken);
-            await RefreshMissingDerivedDataAsync(contract.Name, contractAddress, storedRange, cancellationToken);
             var completedRange = GetCompletedRange(cursor, storedRange);
             var state = new IngestionContractState(
                 contract,
@@ -165,6 +164,12 @@ public sealed class OnChainIngestionProcessor(
                     contract.Name,
                     state.CompletedToBlock);
             }
+        }
+
+        foreach (var state in contractStates)
+        {
+            var rawRange = await repository.GetPolymarketOnChainFillBlockRangeAsync(state.ContractAddress, cancellationToken);
+            await RefreshMissingDerivedDataAsync(state.Contract.Name, state.ContractAddress, rawRange, cancellationToken);
         }
 
         logger.LogInformation(

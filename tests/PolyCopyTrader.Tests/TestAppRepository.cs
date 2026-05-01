@@ -59,6 +59,10 @@ internal sealed class TestAppRepository : IAppRepository
 
     public List<OnChainBlockRange> OnChainWalletDerivedRefreshRanges { get; } = [];
 
+    public Action<OnChainBlockRange>? BeforeOnChainWalletDerivedRefresh { get; set; }
+
+    public bool RebuildDerivedDataOnAddFills { get; set; } = true;
+
     public List<OnChainIngestionCursor> OnChainIngestionCursors { get; } = [];
 
     public List<ScannerStatusSnapshot> ScannerStatuses { get; } = [];
@@ -335,7 +339,11 @@ internal sealed class TestAppRepository : IAppRepository
             PolymarketOnChainPositionRefreshQueue.Add(fill.TokenId);
         }
 
-        RebuildOnChainWalletDerivedData();
+        if (RebuildDerivedDataOnAddFills)
+        {
+            RebuildOnChainWalletDerivedData();
+        }
+
         return Task.CompletedTask;
     }
 
@@ -388,6 +396,7 @@ internal sealed class TestAppRepository : IAppRepository
 
     public Task RefreshPolymarketOnChainWalletDerivedDataAsync(string contractAddress, long fromBlock, long toBlock, CancellationToken cancellationToken = default)
     {
+        BeforeOnChainWalletDerivedRefresh?.Invoke(new OnChainBlockRange(fromBlock, toBlock));
         OnChainWalletDerivedRefreshRanges.Add(new OnChainBlockRange(fromBlock, toBlock));
         RebuildOnChainWalletDerivedData();
         foreach (var tokenId in PolymarketOnChainWalletExecutions
