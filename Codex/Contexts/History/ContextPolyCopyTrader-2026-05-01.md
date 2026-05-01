@@ -389,3 +389,10 @@ Request:
 
 Result:
 Queried PostgreSQL through `POLYCOPYTRADER_POSTGRES_CONNECTION` without printing secrets. Confirmed the pipeline is progressing: non-`unknown` categories are increasing in metadata, positions, and `polymarket_onchain_wallet_category_performance`; service heartbeat is fresh; no current blocking PID chain was found. Noted remaining backlog: 25,765 position-refresh queue rows, 46,286 category-performance queue rows, 448,576 position rows with known metadata category but still `unknown` position category, plus recent stream timeouts and deadlocks. Concluded the system is generally healthy but still catching up under load. No repo source code changed.
+
+## 2026-05-01T16:53:19.9446220+00:00
+Request:
+Дай запрос, который показывает, с какой по какую дату мы уже выбрали данные из блокчейна
+
+Result:
+Prepared SQL that reads `min(block_timestamp_utc)` and `max(block_timestamp_utc)` from `public.polymarket_onchain_fills`, with min/max block numbers and decoded fill count. Clarified that `observed_at_utc` is ingestion/update time and should not be used as blockchain date coverage. No source code changed.

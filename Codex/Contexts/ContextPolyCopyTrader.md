@@ -1,3 +1,14 @@
+## Active Update 2026-05-01 Blockchain Date Range Query
+Goal: Provide SQL to show the already downloaded blockchain date range.
+Status: Completed
+Done:
+- Re-read schema references for on-chain logs/fills and confirmed `block_timestamp_utc` is stored on decoded fills/executions/trade details, not on raw `polymarket_onchain_logs`.
+- Prepared SQL using `public.polymarket_onchain_fills` to show min/max blockchain timestamps, min/max block numbers, and decoded fill count.
+- Also noted that `observed_at_utc` is ingestion/update time and should not be used as blockchain date coverage.
+Next: Run the provided SQL in PostgreSQL to inspect current coverage.
+Notes: No source code changed. Existing unrelated dirty files `PolyCopyTrader.sln` and `src/PolyCopyTrader.Storage/PostgresSchemaInitializer.cs` were left untouched. `git rev-parse --abbrev-ref --symbolic-full-name '@{u}'` failed because branch `master` has no configured upstream.
+Blockers: Automatic pull/push cannot run until a Git upstream is configured.
+
 ## Active Update 2026-05-01 Database Pipeline Health Check
 Goal: Check whether the PostgreSQL on-chain/category pipeline is progressing normally.
 Status: Completed
