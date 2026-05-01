@@ -515,3 +515,10 @@ Request:
 
 Result:
 Extracted and inspected the clipboard image. The service is stuck at PostgreSQL schema statement `114/149`, creating index `ix_polymarket_onchain_wallet_activity_refresh_queue_queued`. A live PostgreSQL check showed this is not a long index build: the create-index session is waiting on a relation lock and is blocked by another long-running `INSERT INTO polymarket_onchain_wallet_activity_refresh_queue ... SELECT DISTINCT execution.wallet FROM polymarket_onchain_wallet_executions ...` query. Recommended cancelling blocker pid `56984` with `SELECT pg_cancel_backend(56984);`.
+
+## 2026-05-01T20:42:53.9642189Z
+Request:
+Ок, отмени блокирующий запрос
+
+Result:
+Verified blocker pid `56984` was still the expected wallet-activity queue seed query, ran `pg_cancel_backend(56984)`, and PostgreSQL returned `True`. Confirmed the blocked schema index creation disappeared and no blocking chain remained. A new non-blocking `missing_activity` seed query appeared as pid `58160`; service heartbeat was fresh and `PolyCopyTrader.Service` was `Running` in `ReadOnly`.

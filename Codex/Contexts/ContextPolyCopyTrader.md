@@ -1,3 +1,16 @@
+## Active Update 2026-05-01 Cancel Wallet Activity Queue Blocker
+Goal: Cancel the PostgreSQL query blocking service schema startup.
+Status: Completed
+Done:
+- Rechecked the blocker before cancellation: `pid=56984` was still running the expected `INSERT INTO polymarket_onchain_wallet_activity_refresh_queue ... SELECT DISTINCT execution.wallet FROM polymarket_onchain_wallet_executions ...`.
+- Ran `pg_cancel_backend(56984)` through `POLYCOPYTRADER_POSTGRES_CONNECTION`; PostgreSQL returned `True`.
+- Confirmed the previously blocked `CREATE INDEX IF NOT EXISTS ix_polymarket_onchain_wallet_activity_refresh_queue_queued` session disappeared after cancellation.
+- Confirmed there were no remaining blocking rows for that schema index; a new `missing_activity` seed query appeared as `pid=58160`, but it was not blocking schema index creation.
+- Confirmed service heartbeat is fresh: `PolyCopyTrader.Service` is `Running` in `ReadOnly`, heartbeat age about 4 seconds at verification time.
+Next: Watch whether the new `missing_activity` seed query times out or keeps recurring; if it does, replace that full `SELECT DISTINCT` scan over `polymarket_onchain_wallet_executions` with a lighter/batched queue seeding path.
+Notes: Operational DB cancellation only; no source behavior changed. Existing unrelated dirty files `PolyCopyTrader.sln` and `src/PolyCopyTrader.Storage/PostgresSchemaInitializer.cs` were left untouched. `git rev-parse --abbrev-ref --symbolic-full-name '@{u}'` failed because branch `master` has no configured upstream.
+Blockers: Automatic pull/push cannot run until a Git upstream is configured.
+
 ## Active Update 2026-05-01 Wallet Activity Queue Index Lock Diagnosis
 Goal: Inspect the clipboard screenshot and determine whether the long startup pause is expected.
 Status: Completed
