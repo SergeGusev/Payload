@@ -382,3 +382,10 @@ group by category - по этому запросу количество unknown 
 
 Result:
 Queried PostgreSQL through the project connection variable. Confirmed `unknown` category-performance rows are growing, but non-unknown rows and positions are also growing significantly, and refresh queues still contain both unknown and non-unknown pairs. Explained that during ongoing backfill many derived rows are first materialized as `unknown` before metadata/category propagation catches up; later position refresh and category-performance refresh recalculate/delete old unknown aggregates when positions move to real categories. No source code changed.
+
+## 2026-05-01T16:35:01.2606147+00:00
+Request:
+Проверь по базе, всё ли у нас идёт нормально
+
+Result:
+Queried PostgreSQL through `POLYCOPYTRADER_POSTGRES_CONNECTION` without printing secrets. Confirmed the pipeline is progressing: non-`unknown` categories are increasing in metadata, positions, and `polymarket_onchain_wallet_category_performance`; service heartbeat is fresh; no current blocking PID chain was found. Noted remaining backlog: 25,765 position-refresh queue rows, 46,286 category-performance queue rows, 448,576 position rows with known metadata category but still `unknown` position category, plus recent stream timeouts and deadlocks. Concluded the system is generally healthy but still catching up under load. No repo source code changed.

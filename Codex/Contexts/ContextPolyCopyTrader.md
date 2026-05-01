@@ -1,3 +1,17 @@
+## Active Update 2026-05-01 Database Pipeline Health Check
+Goal: Check whether the PostgreSQL on-chain/category pipeline is progressing normally.
+Status: Completed
+Done:
+- Queried PostgreSQL through `POLYCOPYTRADER_POSTGRES_CONNECTION` without printing secrets.
+- Confirmed category propagation is still progressing: `polymarket_onchain_wallet_category_performance` now has `Crypto` 4,379, `Sports` 3,954, `Politics` 1,096, `AI` 877, `Finance` 349, `Pop Culture` 34, and `Weather` 8 rows, plus `unknown` 94,094.
+- Confirmed downstream positions also continue gaining real categories: `Sports` 24,596, `Crypto` 18,958, `Politics` 4,658, `AI` 957, `Finance` 735, `Pop Culture` 278, `Science` 111, and `Weather` 8.
+- Confirmed queues are active rather than blocked: position refresh queue has 25,765 rows, category-performance queue has 46,286 rows, and queue newest timestamps are within minutes of the check.
+- Confirmed no current blocking PID chain: active/waiting database sessions had `blocker_count = 0`; service heartbeat was fresh at 2026-05-01 16:34:22 UTC.
+- Noted active backlog and transient pressure: 448,576 position rows have known metadata category but still `unknown` position category; recent API errors include stream timeouts and several deadlocks, but the pipeline continues moving.
+Next: Keep the service running and monitor non-`unknown` growth plus queue ages; intervene if queue newest timestamps stop advancing, blocker counts appear, or deadlocks/timeouts accelerate.
+Notes: Used the temporary .NET/Npgsql diagnostic console under `%TEMP%`. No repo source code changed. Existing unrelated dirty files `PolyCopyTrader.sln` and `src/PolyCopyTrader.Storage/PostgresSchemaInitializer.cs` were left untouched. `git rev-parse --abbrev-ref --symbolic-full-name '@{u}'` failed because branch `master` has no configured upstream.
+Blockers: Automatic pull/push cannot run until a Git upstream is configured.
+
 ## Active Update 2026-05-01 Unknown Category Growth Explanation
 Goal: Explain why `unknown` rows in category performance can grow during backfill.
 Status: Completed
