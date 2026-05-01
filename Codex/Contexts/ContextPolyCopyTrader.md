@@ -1,3 +1,13 @@
+## Active Update 2026-05-01 Onchain Raw Logs Table Answer
+Goal: Identify where downloaded blockchain event logs are stored.
+Status: Completed
+Done:
+- Re-read workflow, project rules, coding rules, active context, project memory, Git state, schema, repository writes, ingestion processor, README, and configuration reference.
+- Confirmed raw Polygon `OrderFilled` event logs are persisted to `polymarket_onchain_logs`; decoded fill rows are persisted to `polymarket_onchain_fills`.
+Next: Use row counts or sampled SQL queries if operational verification of the local database contents is needed.
+Notes: `git rev-parse --abbrev-ref --symbolic-full-name '@{u}'` failed because branch `master` has no configured upstream, so pull/push cannot run automatically. No source code changed for this answer-only task; verification is code/schema/docs inspection and `git diff --check`. Existing unrelated `PolyCopyTrader.sln` changes remain untouched.
+Blockers: Automatic pull/push cannot run until a Git upstream is configured.
+
 ## Active Update 2026-04-30 Empty Leader Trades Table Answer
 Goal: Explain why `leader_trades` is empty while on-chain data is loading.
 Status: Completed
