@@ -1,3 +1,16 @@
+## Active Update 2026-05-01 Raw Log Auto-Cleanup Confirmation
+Goal: Confirm whether the service already deletes processed blockchain raw logs.
+Status: Completed
+Done:
+- Re-read the call chain around `OnChainIngestionProcessor.IngestBatchAsync`, `PostgresAppRepository.AddPolymarketOnChainFillsAsync`, `RefreshPolymarketOnChainWalletDerivedDataAsync`, and `DeleteProcessedPolymarketOnChainRawLogsAsync`.
+- Confirmed automatic cleanup already exists: normal ingestion writes raw logs, decodes fills, upserts serving tables, then calls `DeleteProcessedPolymarketOnChainRawLogsAsync` in the same fill-processing path.
+- Confirmed derived-data refresh also calls `DeleteProcessedPolymarketOnChainRawLogsAsync` after rebuilding wallet/serving rows for existing fills.
+- Cleanup deletes only rows in the current contract/block range that already have a matching `polymarket_onchain_trade_details(transaction_hash, log_index)` row.
+- Clarified that raw logs can still remain when a batch fails after raw-log insertion but before decoded fills/serving rows/cursor completion, or when old backlog has not yet passed through derived refresh.
+Next: If `polymarket_onchain_logs` remains large after ingestion stabilizes, run or implement a batched maintenance cleanup for processed rows and inspect why normal cleanup did not catch them earlier.
+Notes: No repo source code changed. Existing unrelated dirty files `PolyCopyTrader.sln` and `src/PolyCopyTrader.Storage/PostgresSchemaInitializer.cs` were left untouched. `git rev-parse --abbrev-ref --symbolic-full-name '@{u}'` failed because branch `master` has no configured upstream.
+Blockers: Automatic pull/push cannot run until a Git upstream is configured.
+
 ## Active Update 2026-05-01 Raw Log Processing Marker Explanation
 Goal: Explain whether already processed blockchain raw log rows are explicitly marked.
 Status: Completed
