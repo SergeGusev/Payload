@@ -494,3 +494,10 @@ Request:
 
 Result:
 Optimized the remaining database pressure points in `PostgresAppRepository`. Block-range checks now use normalized exact contract-address comparisons and indexed first/last block probes. Position refresh queue inserts no longer update existing queued rows and only queue tokens with executions. Derived-range metadata, position, and activity queue seeding now uses indexed `polymarket_onchain_wallet_fills` ranges and `ON CONFLICT DO NOTHING` to reduce lock contention. Verification passed: targeted tests 26/26, full tests 138/138, service build, dashboard build, `git diff --check`, and a live PostgreSQL `EXPLAIN` confirmed the fill block-range query uses `ix_polymarket_onchain_fills_contract_block` index-only scans.
+
+## 2026-05-01T20:24:22.5027624Z
+Request:
+Посмотри изображение из clipboard ?
+
+Result:
+Extracted the Windows clipboard bitmap to a temporary PNG and inspected it. The screenshot shows `PolyCopyTrader.Service.exe` still running PostgreSQL schema initialization at statement `114/149`, around on-chain activity refresh queue schema/index creation. No source behavior changed.

@@ -1,3 +1,13 @@
+## Active Update 2026-05-01 Clipboard Image Inspection
+Goal: Inspect the current Windows clipboard image for the user.
+Status: Completed
+Done:
+- Extracted the Windows clipboard bitmap to a temporary PNG and opened it for inspection.
+- Confirmed the screenshot shows `PolyCopyTrader.Service.exe` running PostgreSQL schema initialization at statement `114/149`, currently around on-chain activity refresh queue schema/index creation.
+Next: Let the schema initialization continue unless it stops on an error; after completion, verify service heartbeat and queue/ingestion progress in PostgreSQL.
+Notes: Image inspection only; no source behavior changed. Existing unrelated dirty files `PolyCopyTrader.sln` and `src/PolyCopyTrader.Storage/PostgresSchemaInitializer.cs` were left untouched. `git rev-parse --abbrev-ref --symbolic-full-name '@{u}'` failed because branch `master` has no configured upstream.
+Blockers: Automatic pull/push cannot run until a Git upstream is configured.
+
 ## Active Update 2026-05-01 Queue And Range Query Optimization
 Goal: Reduce the new database pressure points after moving market enrichment to the metadata refresh queue.
 Status: Completed
