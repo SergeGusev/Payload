@@ -1,3 +1,21 @@
+## Active Update 2026-05-01 Post Gate Deployment Database Check
+Goal: Verify PostgreSQL and service health after deploying leader/category signal gates.
+Status: Completed
+Done:
+- Queried PostgreSQL through `POLYCOPYTRADER_POSTGRES_CONNECTION` without printing secrets.
+- Confirmed service heartbeat is fresh: `PolyCopyTrader.Service` is `Running` in `ReadOnly`, last heartbeat age was about 4 seconds at DB time `2026-05-01 19:31:02 UTC`.
+- Confirmed the deployed service picked up the new signal gate configuration from logs: `Signal requires market category: True` and `Signal requires leader category performance: True`.
+- Confirmed no signals were evaluated in the last 2 hours: `signals_total=0`, so the new rejection gates have not yet been exercised by live queued trades.
+- Confirmed on-chain ingestion progressed after restart: completed fresh batches through cursor block `85992531` at `2026-05-01 19:21:28 UTC`; logs showed successful fresh batches `85990032-85990531`, `85990532-85991031`, `85991032-85991531`, `85991532-85992031`, and `85992032-85992531`.
+- Confirmed metadata/category-performance workers are active: token metadata rows around `38,414` with newest refresh at `2026-05-01 19:31:01 UTC`; wallet/category performance rows around `135,473` with newest refresh at `2026-05-01 19:30:14 UTC`.
+- Confirmed category-performance real categories are growing: `Crypto` 11,308, `Sports` 10,779, `Politics` 5,140, `AI` 978, `Finance` 881, plus `unknown` 105,955.
+- Confirmed queues remain large but moving: activity queue 118,005, position queue 30,040, performance queue 82,126, category-performance queue 29,115.
+- Confirmed no blocking chain was present (`blocker_count=0`), but active autovacuum and several long/heavy worker queries were running.
+- Noted operational pressure: API errors in the last hour included 5 position-refresh deadlocks, 4 market-enrichment stream timeouts, 1 ingestion stream timeout, and 1 performance-refresh deadlock. The latest log also showed market enrichment timing out in `GetOnChainTokenIdsMissingMetadataAsync`.
+Next: Keep the service running if the goal is catch-up, but optimize/deconflict background workers next: reduce concurrent heavy refresh pressure and make missing-token metadata lookup cheaper so strict signal gates can get known categories faster.
+Notes: No repo source code changed. Existing unrelated dirty files `PolyCopyTrader.sln` and `src/PolyCopyTrader.Storage/PostgresSchemaInitializer.cs` were left untouched. `git rev-parse --abbrev-ref --symbolic-full-name '@{u}'` failed because branch `master` has no configured upstream.
+Blockers: Automatic pull/push cannot run until a Git upstream is configured.
+
 ## Active Update 2026-05-01 Leader Category Performance Signal Gate
 Goal: Wire on-chain market metadata and wallet/category performance into stake decision logic.
 Status: Completed

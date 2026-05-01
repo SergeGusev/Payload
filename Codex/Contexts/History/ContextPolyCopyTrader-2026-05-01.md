@@ -459,3 +459,10 @@ Request:
 
 Result:
 Implemented category-aware signal gating. `SignalProcessor` now resolves market metadata from `polymarket_onchain_token_metadata`, loads the leader's `polymarket_onchain_wallet_category_performance` row for the same category, and passes both into normal and live preflight evaluation. `DefaultSignalEngine` now has configurable gates for required known category, required leader/category performance, minimum resolved positions, sample quality, ROI, win rate, score, and freshness, with new rejection reason codes. Service defaults enable these gates. Added Postgres/test/no-op repository lookup methods, updated docs/config, and added strategy plus pipeline integration tests. Verification passed: full tests 137/137, service build, dashboard build, and `git diff --check`; an initial parallel run hit a transient DLL file lock before rerunning cleanly.
+
+## 2026-05-01T19:36:00+00:00
+Request:
+Запустил. Проверь базу - всё в порядке?
+
+Result:
+Queried PostgreSQL through `POLYCOPYTRADER_POSTGRES_CONNECTION` without printing secrets and inspected the latest service log. Confirmed the service is running in `ReadOnly` with a fresh heartbeat, the new category/performance gate config is active, and on-chain ingestion advanced through block `85992531` with several successful fresh batches after restart. Confirmed metadata and wallet/category performance refresh are active and real category rows are growing, but no signals were evaluated in the last 2 hours, so the new decision gates have not been exercised yet. Noted significant DB pressure: large refresh queues remain, no blocking chain was present, but recent errors include position/performance deadlocks and market-enrichment stream timeouts, especially around missing-token metadata lookup. No repo source code changed.
