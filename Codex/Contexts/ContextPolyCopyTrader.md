@@ -1,3 +1,14 @@
+## Active Update 2026-05-01 Schema Initializer Breakpoint Guidance
+Goal: Explain where to debug empty on-chain serving table schema checks.
+Status: Completed
+Done:
+- Re-read workflow, project rules, coding rules, active context, Git state, `Program.cs`, `PostgresSchemaInitializer.cs`, and the on-chain serving table section of `PostgresSchema.cs`.
+- Identified the exact breakpoint path: `Program.cs` calls `IStorageSchemaInitializer.InitializeAsync()` before `host.RunAsync()`, which runs `PostgresSchemaInitializer.InitializeAsync()` and executes `PostgresSchema.SchemaSql`.
+- Prepared diagnostic checks for old published service binaries, wrong PostgreSQL database connection, and schema initialization exceptions.
+Next: Run the service under debugger from the current source or attach to the actual Windows Service process and inspect the schema initializer connection/command.
+Notes: `git rev-parse --abbrev-ref --symbolic-full-name '@{u}'` failed because branch `master` has no configured upstream, so pull/push cannot run automatically. No source code changed for this answer-only task; existing unrelated `PolyCopyTrader.sln` changes remain untouched.
+Blockers: Automatic pull/push cannot run until a Git upstream is configured.
+
 ## Active Update 2026-05-01 Onchain Serving Verification Guidance
 Goal: Provide concrete checks for the indexed on-chain serving tables and raw log purge behavior.
 Status: Completed

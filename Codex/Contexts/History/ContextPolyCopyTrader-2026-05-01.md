@@ -69,3 +69,17 @@ Request:
 
 Result:
 Prepared concrete verification steps for the new indexed on-chain serving tables: restart service/schema initializer, confirm tables and indexes, run on-chain sync, compare decoded fills to trade details, check participant details and refresh queues, verify processed raw logs are purged, and use `EXPLAIN ANALYZE` for query speed. No source code changed.
+
+## 2026-05-01T08:32:40.5769047Z
+Request:
+select c.relname, c.relkind
+  from pg_class c
+  join pg_namespace n on n.oid = c.relnamespace
+  where n.nspname = 'public'
+    and c.relname in (
+      'polymarket_onchain_trade_details',
+      'polymarket_onchain_participant_details'
+    ); - этот запрос возвращает пусто. Сервис запущен. Где поставить точку, чтобы проверить, что он создаёт таблицы?
+
+Result:
+Identified the schema initialization debug path: `Program.cs` calls `IStorageSchemaInitializer.InitializeAsync()` before `host.RunAsync()`, and `PostgresSchemaInitializer.InitializeAsync()` executes `PostgresSchema.SchemaSql`. Prepared breakpoint guidance and likely causes: old published service binary, wrong PostgreSQL database connection, or schema initialization failure before/inside `ExecuteNonQueryAsync`. No source code changed.
