@@ -315,3 +315,10 @@ Request:
 
 Result:
 Explained that `polymarket_onchain_wallet_category_performance` is derived from `polymarket_onchain_wallet_positions`, not directly from token metadata, so category changes must pass through position refresh and then category-performance refresh. Prepared SQL checks for metadata, positions, position queue, category-performance queue, and a manual enqueue query for `(wallet, category)` pairs if positions already contain categories but performance rows have not caught up. No source code changed.
+
+## 2026-05-01T14:29:21.0759255+00:00
+Request:
+А я могу предоставить тебе доступ к базе, чтобы ты сам делал нужные запросы?
+
+Result:
+Explained that Codex can run PostgreSQL queries from the local shell, but credentials should not be pasted into chat. Recommended using an existing local app connection string or a temporary least-privilege PostgreSQL role exposed through a local environment variable, with SELECT on public tables and limited INSERT/UPDATE permissions on refresh queue tables if manual requeue operations are needed. No source code changed.

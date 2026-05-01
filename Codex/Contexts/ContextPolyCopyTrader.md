@@ -1,3 +1,14 @@
+## Active Update 2026-05-01 Database Access Safety Guidance
+Goal: Explain how the user can safely let Codex run PostgreSQL diagnostic queries.
+Status: Completed
+Done:
+- Clarified that database access is possible through local shell tools when credentials are provided outside chat.
+- Recommended using an existing local application connection string or a temporary least-privilege PostgreSQL role exposed via a local environment variable, without pasting passwords or connection strings into the conversation.
+- Identified the minimum useful permissions for current diagnostics: SELECT on public tables and INSERT/UPDATE on on-chain refresh queue tables for manual requeue operations.
+Next: If the user sets a local connection environment variable, use it to run SQL diagnostics directly without printing or committing secrets.
+Notes: `git rev-parse --abbrev-ref --symbolic-full-name '@{u}'` failed because branch `master` has no configured upstream, so pull/push cannot run automatically. No source code changed. Existing unrelated dirty files `PolyCopyTrader.sln` and `src/PolyCopyTrader.Storage/PostgresSchemaInitializer.cs` were left untouched.
+Blockers: Automatic pull/push cannot run until a Git upstream is configured.
+
 ## Active Update 2026-05-01 Category Performance Still Unknown
 Goal: Explain why `polymarket_onchain_wallet_category_performance` can still contain only `unknown` after token metadata categories start working.
 Status: Completed
