@@ -1,3 +1,14 @@
+## Active Update 2026-05-01 Current Onchain Pipeline Purpose
+Goal: Clarify what the current operational phase is doing.
+Status: Completed
+Done:
+- Re-read workflow, project rules, coding rules, active context, README on-chain section, relevant schema/repository/processor references, and Git state.
+- Clarified that the current phase is not only filling user tables; it is building the fast research/serving layer from already decoded on-chain fills.
+- Summarized the pipeline as decoded fills to wallet fills/executions, trade details, activity/participant/position/performance summaries, plus market metadata enrichment.
+Next: Continue monitoring derived table counts/ranges until serving tables catch up, then verify Dashboard speed and completeness before tuning retention/purge behavior.
+Notes: `git rev-parse --abbrev-ref --symbolic-full-name '@{u}'` failed because branch `master` has no configured upstream, so pull/push cannot run automatically. No source code changed for this answer-only task; existing unrelated `PolyCopyTrader.sln` changes remain untouched.
+Blockers: Automatic pull/push cannot run until a Git upstream is configured.
+
 ## Active Update 2026-05-01 Activity Queue Growth Guidance
 Goal: Explain what it means when `polymarket_onchain_wallet_activity_refresh_queue` grows during initial on-chain backfill.
 Status: Completed

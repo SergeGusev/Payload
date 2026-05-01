@@ -179,3 +179,10 @@ Request:
 
 Result:
 Explained that activity queue growth is expected during initial on-chain backfill if derived-data producers discover unique wallets faster than the activity worker consumes them. Provided checks for normal backlog versus a stuck worker and recommended increasing activity refresh throughput only after confirming activity rows are growing and worker errors are absent. No source code changed.
+
+## 2026-05-01T10:58:35.2026539Z
+Request:
+Ну ок, что мы сейчас делаем вообще? Просто заполняем таблицы пользователей?
+
+Result:
+Clarified that the current phase is broader than filling user tables: the service is materializing the fast on-chain research layer from decoded fills, including trade details, wallet executions, activity rankings, participant summaries, positions, performance, and market metadata enrichment. No source code changed.
