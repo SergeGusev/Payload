@@ -214,3 +214,10 @@ Request:
 
 Result:
 Added materialized wallet/category performance storage: `polymarket_onchain_wallet_category_performance`, a refresh queue, repository read/refresh methods, a background category performance refresh worker, config/validation/appsettings, docs, and tests. Position refresh now enqueues old and new affected wallet/category pairs so scores stay current as new fills and metadata updates flow through. Service build, Dashboard build, full tests, and diff check passed; initial parallel build hit a transient Defender file lock and passed on rerun.
+
+## 2026-05-01T11:56:55.3823932Z
+Request:
+Распиши мне подробно все поля в polymarket_onchain_wallet_category_performance
+
+Result:
+Inspected the schema, domain model, repository read SQL, refresh aggregation SQL, queue seeding, and category refresh worker. Prepared a detailed Russian field reference for `polymarket_onchain_wallet_category_performance`, including formulas for ROI, win rate, score, sample quality, refresh semantics, indexes, and caveats. No source code changed.

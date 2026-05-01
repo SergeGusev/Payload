@@ -1,3 +1,14 @@
+## Active Update 2026-05-01 Wallet Category Performance Field Reference
+Goal: Describe every column in `polymarket_onchain_wallet_category_performance`.
+Status: Completed
+Done:
+- Re-read workflow, project rules, coding rules, active context, Git state, schema, domain model, repository read SQL, refresh SQL, queue seeding SQL, and category refresh worker.
+- Confirmed one row represents one `(wallet, category)` aggregate derived from `polymarket_onchain_wallet_positions`.
+- Prepared detailed field descriptions, score/sample-quality formulas, indexes, refresh behavior, and caveats.
+Next: Use the table for fast category-specific wallet rating queries; tune the score formula later if real sampled results show a better ranking signal.
+Notes: `git rev-parse --abbrev-ref --symbolic-full-name '@{u}'` failed because branch `master` has no configured upstream, so pull/push cannot run automatically. No source code changed for this answer-only task. Existing unrelated dirty files `PolyCopyTrader.sln` and `src/PolyCopyTrader.Storage/PostgresSchemaInitializer.cs` were left untouched.
+Blockers: Automatic pull/push cannot run until a Git upstream is configured.
+
 ## Active Update 2026-05-01 Wallet Category Performance Table
 Goal: Materialize fast category-specific on-chain wallet ratings and keep them updated as new data arrives.
 Status: Completed
