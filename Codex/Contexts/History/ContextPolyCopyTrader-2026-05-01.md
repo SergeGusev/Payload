@@ -301,3 +301,10 @@ Request:
 
 Result:
 Analyzed the sampled CLOB/Gamma responses and verified live Gamma behavior for the same style of markets. Implemented Gamma event-category fallback: market enrichment now extracts the linked event id from market raw JSON, fetches Gamma `/events/{eventId}`, derives deterministic categories from event category/tags/text, caches event categories per run, and applies them to token metadata before falling back to CLOB/condition metadata. Updated parser/client/enrichment tests and docs. Targeted tests passed 29/29, full test project passed 132/132, and diff check passed with CRLF warnings only.
+
+## 2026-05-01T14:13:34.5774135+00:00
+Request:
+Результаты в D:\1\10.png и D:\1\11.png
+
+Result:
+Inspected the screenshots. `polymarket_onchain_token_metadata.with_category` increased from 0 to 220 while total rows stayed 38,146 and successful lookups stayed 38,130; recent HTTP logs show 86 successful `GetEvent` calls. Concluded the new Gamma event fallback is deployed and working, but most rows remain categoryless and should be monitored through additional refresh cycles and sampled for unclassifiable event payloads if progress stalls.

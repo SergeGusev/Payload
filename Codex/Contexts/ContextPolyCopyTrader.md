@@ -1,3 +1,14 @@
+## Active Update 2026-05-01 Event Category Fallback Verification
+Goal: Interpret `D:\1\10.png` and `D:\1\11.png` after deploying Gamma event category fallback.
+Status: Completed
+Done:
+- Inspected `D:\1\10.png`: `polymarket_onchain_token_metadata` still has 38,146 total rows and 38,130 successful lookups, but `with_category` increased from 0 to 220 and `without_category` decreased to 37,926; `max_refreshed` is 2026-05-01 17:10:42.355562+03.
+- Inspected `D:\1\11.png`: recent `polymarket_http_logs` include `GetEvent`, `succeeded=true`, `status_code=200`, `count=86`.
+- Concluded the new Gamma event fallback is running and producing categories, but the remaining categoryless rows need another pass/progress check to distinguish normal backfill progress from unclassifiable events.
+Next: Keep running/forcing `POST /refresh-onchain-markets`; monitor `with_category`, category distribution, `GetEvent` calls, and sample recent no-category rows to decide whether another parser rule is needed.
+Notes: `git rev-parse --abbrev-ref --symbolic-full-name '@{u}'` failed because branch `master` has no configured upstream, so pull/push cannot run automatically. No source code changed for this screenshot diagnostic. Existing unrelated dirty files `PolyCopyTrader.sln` and `src/PolyCopyTrader.Storage/PostgresSchemaInitializer.cs` were left untouched.
+Blockers: Automatic pull/push cannot run until a Git upstream is configured.
+
 ## Active Update 2026-05-01 Gamma Event Category Fallback
 Goal: Recover on-chain token categories when Gamma market and condition responses omit category fields.
 Status: Completed
