@@ -12,3 +12,17 @@ FROM public.polymarket_onchain_logs и получил в min(observed_at_utc) з
 
 Result:
 Explained that `observed_at_utc` is the local ingestion observation time, not the blockchain event time, and it is updated on repeated upserts of the same `transaction_hash + log_index`. No retention/pruning path was found for `polymarket_onchain_logs`; blockchain coverage should be checked by block numbers, decoded fill block timestamps, and ingestion cursors.
+
+## 2026-05-01T07:10:38.3663527+00:00
+Request:
+Ок, наша конечная цель после сканирования блокчейна:
+
+1. Иметь полный список всех сделок в рамках того диапазона, который мы скачиваем, в удобном виде.
+2. По каждой сделке мы должны иметь максимально полную информацию - её участники, их ставки, время ставок и т.д.
+3. Иметь полный список участников сделок.
+4. По каждому участнику нужно иметь максимально полную информацию - его сделки, ставки, время ставок и т.д.
+
+Это всё уже есть?
+
+Result:
+Inspected the on-chain schema, repository read/write paths, Dashboard mappings, README, and configuration reference. Answered that the core DB layers exist, but the final target is only partially complete as a product surface: no dedicated participants table, no full wallet drilldown API/UI, Dashboard lists are limited/top/recent views, and some details depend on Gamma enrichment and refresh queues.

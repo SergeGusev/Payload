@@ -1,3 +1,14 @@
+## Active Update 2026-05-01 Onchain Data Goal Gap Answer
+Goal: Assess whether the current on-chain pipeline satisfies the target model of complete trades and participant history.
+Status: Completed
+Done:
+- Re-read workflow, project rules, coding rules, active context, project memory, Git state, on-chain schema, repository read/write paths, Dashboard mappings, README, and configuration reference.
+- Confirmed the core DB layers exist: raw logs, decoded fills, maker/taker wallet fills, wallet executions, token metadata, activity, positions, performance, and cursors.
+- Confirmed the target is only partially complete as a product surface: there is no dedicated participant table, no full wallet drilldown API/UI, Dashboard lists are limited/top/recent views, and some enriched deal details depend on Gamma metadata and refresh queues.
+Next: Implement a first-class on-chain participant/trade exploration layer if the next task is to make this goal operational: participant table/materialized view, full trade view, wallet drilldown, SQL/backfill checks, and Dashboard drilldown/export.
+Notes: `git rev-parse --abbrev-ref --symbolic-full-name '@{u}'` failed because branch `master` has no configured upstream, so pull/push cannot run automatically. No source code changed for this answer-only task; verification is code/schema/docs inspection and `git diff --check`. Existing unrelated `PolyCopyTrader.sln` changes remain untouched.
+Blockers: Automatic pull/push cannot run until a Git upstream is configured.
+
 ## Active Update 2026-05-01 Onchain Observed At Explanation
 Goal: Explain whether `polymarket_onchain_logs.observed_at_utc` min/max means logs are limited to one day.
 Status: Completed
