@@ -144,3 +144,10 @@ Request:
 
 Result:
 Explained that an uncancellable PostgreSQL query should be escalated by identifying the actual blocking backend with `pg_stat_activity`/`pg_blocking_pids`, using `pg_terminate_backend` on the blocker when `pg_cancel_backend` is ineffective, and waiting for rollback/cleanup if an aborted index build is being unwound. No source code changed.
+
+## 2026-05-01T10:31:28.9051008Z
+Request:
+Посмотри на D:\1\Img1.png. Вот текущие блокировки
+
+Result:
+Opened `D:\1\Img1.png` and confirmed the screenshot shows a pgAdmin result grid with row counts rather than actual PostgreSQL lock diagnostics. Clarified that pgAdmin's lock icons in result column headers mean read-only columns, not active database locks. No source code changed.
