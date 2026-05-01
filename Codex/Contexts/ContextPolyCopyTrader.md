@@ -1,3 +1,16 @@
+## Active Update 2026-05-01 Category Backfill Progress Check
+Goal: Confirm whether on-chain category propagation is healthy and only needs time.
+Status: Completed
+Done:
+- Queried PostgreSQL through `POLYCOPYTRADER_POSTGRES_CONNECTION` without printing the connection string.
+- Confirmed category propagation is progressing: `polymarket_onchain_wallet_positions` now has `Sports` 2,063 rows, `AI` 868, `Crypto` 141, and `Politics` 59.
+- Confirmed `polymarket_onchain_wallet_category_performance` has non-`unknown` rows: `Sports` 1,442, `AI` 868, `Crypto` 85, and `Politics` 11.
+- Confirmed backlog remains: `polymarket_onchain_position_refresh_queue` has 18,294 `derived_refresh` and 2,467 `metadata` rows; category-performance queue has 33,103 `unknown`, 466 `Sports`, 48 `Politics`, and 35 `Crypto`.
+- Confirmed recent retry pressure remains: 2 `OnChainPositionRefreshWorker:BackgroundPositionRefresh` errors in the last hour, consistent with the earlier deadlocks.
+Next: Let the service continue if queues keep changing; if queues stop draining or deadlocks continue, reduce refresh batch sizes or serialize position/category-performance refresh work.
+Notes: No repo source code changed. Existing unrelated dirty files `PolyCopyTrader.sln` and `src/PolyCopyTrader.Storage/PostgresSchemaInitializer.cs` were left untouched. `git rev-parse --abbrev-ref --symbolic-full-name '@{u}'` failed because branch `master` has no configured upstream.
+Blockers: Automatic pull/push cannot run until a Git upstream is configured.
+
 ## Active Update 2026-05-01 Use Project Database Connection
 Goal: Use the same PostgreSQL connection variable as the project and repair category-performance lag.
 Status: Completed

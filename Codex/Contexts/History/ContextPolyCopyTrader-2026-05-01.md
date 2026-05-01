@@ -329,3 +329,10 @@ Request:
 
 Result:
 Confirmed the project uses `POLYCOPYTRADER_POSTGRES_CONNECTION` and that it is present in the local environment; its value was not printed. Because `psql` was unavailable, used a temporary .NET/Npgsql diagnostic console with the same environment variable. Diagnostics showed metadata categories are appearing and positions/category-performance are lagging. Manually processed 2,406 non-`unknown` queued wallet/category pairs with the same aggregation SQL pattern as the worker. Verified `polymarket_onchain_wallet_category_performance` now contains `Sports`, `AI`, `Crypto`, and `Politics` rows in addition to `unknown`. No repo source code changed.
+
+## 2026-05-01T14:42:35.6093180+00:00
+Request:
+То есть сейчас всё в порядке и мы просто ждём, когда всё догонит, да?
+
+Result:
+Queried PostgreSQL through the project connection variable without printing secrets. Confirmed category propagation is progressing but not fully caught up: positions have non-unknown Sports/AI/Crypto/Politics rows, category performance has non-unknown Sports/AI/Crypto/Politics rows, and the position/category-performance queues still have substantial backlog. Also found 2 recent `OnChainPositionRefreshWorker` errors in the last hour, consistent with earlier deadlocks. Concluded the system is broadly healthy if queues keep moving, but should be monitored rather than treated as fully finished.
