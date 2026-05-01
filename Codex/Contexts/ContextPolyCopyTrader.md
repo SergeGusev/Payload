@@ -1,3 +1,15 @@
+## Active Update 2026-05-01 Schema Initialization Interrupt Safety
+Goal: Explain whether interrupting a long PostgreSQL schema initialization is dangerous.
+Status: Completed
+Done:
+- Re-read workflow, project rules, coding rules, active context, and Git state.
+- Clarified that interrupting normal PostgreSQL DDL/index creation should not corrupt data; PostgreSQL rolls back the active interrupted statement/transaction.
+- Clarified the practical risks: wasted index build time, incomplete schema initialization, and service startup remaining blocked until schema init is rerun successfully.
+- Prepared a safe interrupt order: check progress/locks first, prefer graceful service stop/cancel over killing PostgreSQL, then rerun schema verification.
+Next: Use PostgreSQL progress/lock checks before interrupting if possible.
+Notes: `git rev-parse --abbrev-ref --symbolic-full-name '@{u}'` failed because branch `master` has no configured upstream, so pull/push cannot run automatically. No source code changed for this answer-only task; existing unrelated `PolyCopyTrader.sln` changes remain untouched.
+Blockers: Automatic pull/push cannot run until a Git upstream is configured.
+
 ## Active Update 2026-05-01 Long Schema Initialization Guidance
 Goal: Explain whether a one-hour PostgreSQL schema initialization run is expected and how to diagnose it.
 Status: Completed

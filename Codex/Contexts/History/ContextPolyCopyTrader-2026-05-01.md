@@ -109,3 +109,10 @@ Request:
 
 Result:
 Explained that the new empty serving tables should not take an hour to create, so a long schema initialization run is likely creating a missing index on an existing large on-chain table or waiting on a PostgreSQL lock. Prepared SQL diagnostics using `pg_stat_progress_create_index`, `pg_stat_activity`, and `pg_blocking_pids`. No source code changed.
+
+## 2026-05-01T09:59:01.9330849Z
+Request:
+Прерывать опасно?
+
+Result:
+Explained that interrupting normal PostgreSQL schema DDL/index creation should not corrupt data because the interrupted statement/transaction is rolled back, but it can waste index-build time and leave schema initialization incomplete until rerun. Recommended checking progress/locks first, then using a graceful service stop/cancel rather than killing PostgreSQL.
