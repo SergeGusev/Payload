@@ -33,3 +33,11 @@ Request:
 
 Result:
 Added first-class on-chain trade and participant exploration surfaces: read-only PostgreSQL views `polymarket_onchain_trade_details` and `polymarket_onchain_participant_details`, typed repository reads, Dashboard tabs `Onchain Trades` and `Onchain Participants`, CSV exports `OnChainTrades.csv` and `OnChainParticipants.csv`, docs/project-memory updates, and test/fake repository coverage. Dashboard build, service build, and tests passed; first parallel test attempt failed only because the service build held a shared `obj\Verify` DLL lock.
+
+## 2026-05-01T07:52:34.2556389+00:00
+Request:
+ERROR:  relation "public.polymarket_onchain_trade_details" does not exist
+LINE 1:   select * from public.polymarket_onchain_trade_details
+
+Result:
+Explained that the new on-chain explorer view exists in the code schema but is not yet present in the local PostgreSQL database until the updated Service runs schema initialization, or the SQL client is connected to a different database. Provided restart and verification SQL guidance. No source code was changed.

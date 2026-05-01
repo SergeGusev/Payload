@@ -1,3 +1,15 @@
+## Active Update 2026-05-01 Missing Onchain Trade Details View Guidance
+Goal: Explain why `public.polymarket_onchain_trade_details` is missing and how to create it.
+Status: Completed
+Done:
+- Re-read workflow, project rules, coding rules, active context, Git state, service schema registration, local service script, schema SQL, README, and configuration reference.
+- Confirmed `polymarket_onchain_trade_details` and `polymarket_onchain_participant_details` are present in `PostgresSchema.SchemaSql` and created by `PostgresSchemaInitializer`.
+- Confirmed `PolyCopyTrader.Service` registers `PostgresSchemaInitializer`; Dashboard does not own schema initialization.
+- Explained that the local PostgreSQL database has not yet been initialized by the updated service build, or the SQL client is connected to a different database.
+Next: Restart the updated service to run schema initialization, then verify the views via `information_schema.views`.
+Notes: `git rev-parse --abbrev-ref --symbolic-full-name '@{u}'` failed because branch `master` has no configured upstream, so pull/push cannot run automatically. No source code changed for this answer-only task; verification is code/config/docs inspection. Existing unrelated `PolyCopyTrader.sln` changes remain untouched.
+Blockers: Automatic pull/push cannot run until a Git upstream is configured.
+
 ## Active Update 2026-05-01 Onchain Trade Participant Explorer
 Goal: Move the on-chain pipeline toward complete trade and participant exploration after blockchain scanning.
 Status: Completed
