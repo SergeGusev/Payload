@@ -116,3 +116,10 @@ Request:
 
 Result:
 Explained that interrupting normal PostgreSQL schema DDL/index creation should not corrupt data because the interrupted statement/transaction is rolled back, but it can waste index-build time and leave schema initialization incomplete until rerun. Recommended checking progress/locks first, then using a graceful service stop/cancel rather than killing PostgreSQL.
+
+## 2026-05-01T10:06:45.2805239Z
+Request:
+Раздели все скрипты из InitializeAsync на отдельные команды, каждая с timeout 0. Чтобы я по шагам мог их прощёлкать. И потом каждый раз добавляй заново.
+
+Result:
+Updated `PostgresSchemaInitializer.InitializeAsync()` to split `PostgresSchema.SchemaSql` into individual SQL statements and execute each with `CommandTimeout = 0`, preserving the local `try/catch`. Added a splitter that keeps dollar-quoted `DO $$ ... $$;` blocks together and tests for current schema splitting/dollar-quoted blocks. Service build, Dashboard build, full tests, and diff check passed.

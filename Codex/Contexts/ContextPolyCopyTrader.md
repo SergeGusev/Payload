@@ -1,3 +1,16 @@
+## Active Update 2026-05-01 Stepwise Schema Initialization
+Goal: Split PostgreSQL schema initialization into individually debuggable commands.
+Status: Completed
+Done:
+- Re-read workflow, project rules, coding rules, active context, and Git state.
+- Updated `PostgresSchemaInitializer.InitializeAsync()` to split `PostgresSchema.SchemaSql` into individual SQL statements and execute them one by one.
+- Kept `CommandTimeout = 0` on each individual schema command.
+- Kept the local `try/catch` with console output and rethrow for debugging.
+- Added a SQL splitter that preserves dollar-quoted `DO $$ ... $$;` blocks and quoted strings, plus unit tests for current schema splitting and dollar-quoted blocks.
+Next: Rebuild/republish/restart the service; set breakpoints on the `for` loop or `ExecuteNonQueryAsync` to step through each schema statement and inspect `statementIndex`/`commandText`.
+Notes: `git rev-parse --abbrev-ref --symbolic-full-name '@{u}'` failed because branch `master` has no configured upstream, so pull/push cannot run automatically. Verification: `dotnet build src\PolyCopyTrader.Service\PolyCopyTrader.Service.csproj -c Verify --no-restore` passed; `dotnet test tests\PolyCopyTrader.Tests\PolyCopyTrader.Tests.csproj -c Verify --no-restore` passed 121/121; `dotnet build src\PolyCopyTrader.Dashboard\PolyCopyTrader.Dashboard.csproj -c Verify --no-restore` passed; `git diff --check` passed with CRLF warnings only. Existing unrelated `PolyCopyTrader.sln` changes remain untouched.
+Blockers: Automatic pull/push cannot run until a Git upstream is configured.
+
 ## Active Update 2026-05-01 Schema Initialization Interrupt Safety
 Goal: Explain whether interrupting a long PostgreSQL schema initialization is dangerous.
 Status: Completed

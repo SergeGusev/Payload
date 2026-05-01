@@ -29,6 +29,41 @@ public sealed class StorageTests
     }
 
     [Fact]
+    public void PostgresSchemaInitializer_SplitsSchemaSqlIntoDebuggableStatements()
+    {
+        var statements = PostgresSchemaInitializer.SplitSchemaSqlStatements(PostgresSchema.SchemaSql);
+
+        Assert.True(statements.Count > PostgresSchema.RequiredTables.Count);
+        Assert.All(statements, statement => Assert.False(string.IsNullOrWhiteSpace(statement)));
+        Assert.Contains(statements, statement =>
+            statement.Contains("CREATE TABLE IF NOT EXISTS polymarket_onchain_trade_details", StringComparison.Ordinal));
+        Assert.Contains(statements, statement =>
+            statement.StartsWith("DO $$", StringComparison.Ordinal) &&
+            statement.Contains("DROP VIEW public.polymarket_onchain_trade_details", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void PostgresSchemaInitializer_KeepsDollarQuotedBlocksTogether()
+    {
+        const string sql = """
+CREATE TABLE first_table (id integer);
+DO $$
+BEGIN
+    EXECUTE 'CREATE TABLE second_table (id integer);';
+END $$;
+CREATE INDEX first_table_id_idx ON first_table(id);
+""";
+
+        var statements = PostgresSchemaInitializer.SplitSchemaSqlStatements(sql);
+
+        Assert.Equal(3, statements.Count);
+        Assert.StartsWith("CREATE TABLE first_table", statements[0], StringComparison.Ordinal);
+        Assert.StartsWith("DO $$", statements[1], StringComparison.Ordinal);
+        Assert.Contains("CREATE TABLE second_table", statements[1], StringComparison.Ordinal);
+        Assert.StartsWith("CREATE INDEX first_table_id_idx", statements[2], StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void ConnectionFactory_RequiresConfiguredConnectionString()
     {
         var options = new StorageOptions
