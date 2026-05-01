@@ -228,6 +228,56 @@
                 </DataGrid>
             </TabItem>
 
+            <TabItem Header="Onchain Trades">
+                <DataGrid ItemsSource="{Binding OnChainTradeDetails}">
+                    <DataGrid.Columns>
+                        <DataGridTextColumn Header="Timestamp UTC" Binding="{Binding TimestampUtc}" Width="150" />
+                        <DataGridTextColumn Header="Market" Binding="{Binding Market}" Width="300" />
+                        <DataGridTextColumn Header="Outcome" Binding="{Binding Outcome}" Width="100" />
+                        <DataGridTextColumn Header="Category" Binding="{Binding Category}" Width="110" />
+                        <DataGridTextColumn Header="Maker" Binding="{Binding Maker}" Width="250" />
+                        <DataGridTextColumn Header="Taker" Binding="{Binding Taker}" Width="250" />
+                        <DataGridTextColumn Header="Maker side" Binding="{Binding MakerSide}" Width="90" />
+                        <DataGridTextColumn Header="Taker side" Binding="{Binding TakerSide}" Width="90" />
+                        <DataGridTextColumn Header="Price" Binding="{Binding Price}" Width="80" />
+                        <DataGridTextColumn Header="Shares" Binding="{Binding SizeShares}" Width="90" />
+                        <DataGridTextColumn Header="Notional" Binding="{Binding NotionalUsd}" Width="90" />
+                        <DataGridTextColumn Header="Maker amt" Binding="{Binding MakerAmount}" Width="100" />
+                        <DataGridTextColumn Header="Taker amt" Binding="{Binding TakerAmount}" Width="100" />
+                        <DataGridTextColumn Header="Fee" Binding="{Binding FeeAmount}" Width="80" />
+                        <DataGridTextColumn Header="Status" Binding="{Binding Status}" Width="120" />
+                        <DataGridTextColumn Header="Token" Binding="{Binding TokenId}" Width="260" />
+                        <DataGridTextColumn Header="Tx hash" Binding="{Binding TransactionHash}" Width="240" />
+                    </DataGrid.Columns>
+                </DataGrid>
+            </TabItem>
+
+            <TabItem Header="Onchain Participants">
+                <DataGrid ItemsSource="{Binding OnChainParticipantDetails}">
+                    <DataGrid.Columns>
+                        <DataGridTextColumn Header="Wallet" Binding="{Binding Wallet}" Width="250" />
+                        <DataGridTextColumn Header="Execs" Binding="{Binding Executions}" Width="70" />
+                        <DataGridTextColumn Header="Buy" Binding="{Binding BuyExecutions}" Width="60" />
+                        <DataGridTextColumn Header="Sell" Binding="{Binding SellExecutions}" Width="60" />
+                        <DataGridTextColumn Header="Markets" Binding="{Binding MarketsTraded}" Width="80" />
+                        <DataGridTextColumn Header="Positions" Binding="{Binding PositionsCount}" Width="80" />
+                        <DataGridTextColumn Header="Open" Binding="{Binding OpenPositions}" Width="70" />
+                        <DataGridTextColumn Header="Resolved" Binding="{Binding ResolvedPositions}" Width="80" />
+                        <DataGridTextColumn Header="Volume" Binding="{Binding VolumeUsd}" Width="100" />
+                        <DataGridTextColumn Header="Avg trade" Binding="{Binding AverageTradeUsd}" Width="100" />
+                        <DataGridTextColumn Header="Fees" Binding="{Binding FeesUsd}" Width="80" />
+                        <DataGridTextColumn Header="Exposure" Binding="{Binding OpenExposureUsd}" Width="100" />
+                        <DataGridTextColumn Header="Resolved PnL" Binding="{Binding ResolvedPnlUsd}" Width="110" />
+                        <DataGridTextColumn Header="ROI %" Binding="{Binding ResolvedRoiPct}" Width="80" />
+                        <DataGridTextColumn Header="Win %" Binding="{Binding WinRatePct}" Width="80" />
+                        <DataGridTextColumn Header="Score" Binding="{Binding Score}" Width="90" />
+                        <DataGridTextColumn Header="Sample" Binding="{Binding SampleQuality}" Width="80" />
+                        <DataGridTextColumn Header="First UTC" Binding="{Binding FirstTradeUtc}" Width="150" />
+                        <DataGridTextColumn Header="Last UTC" Binding="{Binding LastTradeUtc}" Width="150" />
+                    </DataGrid.Columns>
+                </DataGrid>
+            </TabItem>
+
             <TabItem Header="Onchain Leaders">
                 <DataGrid ItemsSource="{Binding OnChainLeaders}">
                     <DataGrid.Columns>

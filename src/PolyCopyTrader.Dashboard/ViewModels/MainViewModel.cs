@@ -87,6 +87,10 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
 
     public ObservableCollection<OnChainFillRow> OnChainFills { get; } = [];
 
+    public ObservableCollection<OnChainTradeDetailRow> OnChainTradeDetails { get; } = [];
+
+    public ObservableCollection<OnChainParticipantDetailRow> OnChainParticipantDetails { get; } = [];
+
     public ObservableCollection<LeaderTradeRow> LeaderTrades { get; } = [];
 
     public ObservableCollection<SignalRow> Signals { get; } = [];
@@ -378,6 +382,8 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         Replace(OnChainTraders, snapshot.OnChainTraders);
         Replace(OnChainPositions, snapshot.OnChainPositions);
         Replace(OnChainFills, snapshot.OnChainFills);
+        Replace(OnChainTradeDetails, snapshot.OnChainTradeDetails);
+        Replace(OnChainParticipantDetails, snapshot.OnChainParticipantDetails);
         Replace(LeaderTrades, snapshot.LeaderTrades);
         Replace(Signals, snapshot.Signals);
         Replace(PaperOrders, snapshot.PaperOrders);
@@ -399,7 +405,7 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         Mode = Overview.FirstOrDefault(item => item.Name == "Mode")?.Value ?? "Unknown";
         ServiceStatus = Overview.FirstOrDefault(item => item.Name == "Service status")?.Value ?? "No heartbeat";
         var webSocketStatus = Overview.FirstOrDefault(item => item.Name == "WebSocket status")?.Value ?? "No market data status";
-        Summary = $"{ServiceStatus}; WS={webSocketStatus}; {StorageStatus}; {TraderDiscovery.Count} discovery candidates; {OnChainLeaders.Count} on-chain leaders; {OnChainPositions.Count} on-chain positions; {Signals.Count} signals; {PaperOrders.Count} paper orders; {DryRunOrders.Count} dry-run orders; {LiveOrders.Count} live orders; {PaperPositions.Count} positions.";
+        Summary = $"{ServiceStatus}; WS={webSocketStatus}; {StorageStatus}; {TraderDiscovery.Count} discovery candidates; {OnChainParticipantDetails.Count} on-chain participants; {OnChainTradeDetails.Count} on-chain trades; {OnChainLeaders.Count} on-chain leaders; {OnChainPositions.Count} on-chain positions; {Signals.Count} signals; {PaperOrders.Count} paper orders; {DryRunOrders.Count} dry-run orders; {LiveOrders.Count} live orders; {PaperPositions.Count} positions.";
     }
 
     private static void Replace<T>(ObservableCollection<T> target, IReadOnlyList<T> source)

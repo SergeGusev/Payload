@@ -2115,6 +2115,82 @@ WHERE wallet IN (SELECT wallet FROM temp_wallet_performance_refresh_wallets);
         return new OnChainPerformanceRefreshResult(walletsQueued, walletsProcessed, walletsUpserted, queueRemaining);
     }
 
+    public async Task<IReadOnlyList<PolymarketOnChainTradeDetails>> GetRecentPolymarketOnChainTradeDetailsAsync(
+        int limit = 250,
+        CancellationToken cancellationToken = default)
+    {
+        const string sql = """
+SELECT contract_name, contract_address, exchange_version, block_number, block_timestamp_utc,
+       transaction_hash, log_index, order_hash, maker, taker, maker_side, taker_side,
+       token_id, maker_asset_id, taker_asset_id, maker_amount_raw, taker_amount_raw,
+       maker_amount, taker_amount, price, size_shares, notional_usd, fee_amount,
+       fee_asset_id, builder, order_metadata, condition_id, market_id, market_slug,
+       market_title, outcome, category, lookup_succeeded, market_active, market_closed,
+       market_archived, market_resolved, winning_outcome, imported_at_utc
+FROM polymarket_onchain_trade_details
+ORDER BY block_timestamp_utc DESC, block_number DESC, log_index DESC
+LIMIT @Limit;
+""";
+
+        var results = new List<PolymarketOnChainTradeDetails>();
+        try
+        {
+            await using var connection = await OpenConnectionAsync(cancellationToken);
+            await using var command = CreateCommand(connection, sql);
+            command.Parameters.AddWithValue("Limit", limit);
+            await using var reader = await command.ExecuteReaderAsync(cancellationToken);
+
+            while (await reader.ReadAsync(cancellationToken))
+            {
+                results.Add(ReadPolymarketOnChainTradeDetails(reader));
+            }
+        }
+        catch (PostgresException ex) when (ex.SqlState == PostgresErrorCodes.UndefinedTable)
+        {
+            return results;
+        }
+
+        return results;
+    }
+
+    public async Task<IReadOnlyList<PolymarketOnChainParticipantDetails>> GetPolymarketOnChainParticipantDetailsAsync(
+        int limit = 250,
+        CancellationToken cancellationToken = default)
+    {
+        const string sql = """
+SELECT wallet, executions, buy_executions, sell_executions, markets_traded,
+       volume_usd, average_trade_usd, fees_usd, activity_score,
+       positions_count, open_positions, flat_positions, resolved_positions,
+       profitable_resolved_positions, losing_resolved_positions, open_exposure_usd,
+       resolved_cost_usd, resolved_pnl_usd, resolved_roi_pct, win_rate_pct,
+       average_position_size_usd, score, sample_quality, first_trade_utc,
+       last_trade_utc, activity_refreshed_at_utc, performance_refreshed_at_utc
+FROM polymarket_onchain_participant_details
+ORDER BY score DESC, volume_usd DESC, last_trade_utc DESC
+LIMIT @Limit;
+""";
+
+        var results = new List<PolymarketOnChainParticipantDetails>();
+        try
+        {
+            await using var connection = await OpenConnectionAsync(cancellationToken);
+            await using var command = CreateCommand(connection, sql);
+            command.Parameters.AddWithValue("Limit", limit);
+            await using var reader = await command.ExecuteReaderAsync(cancellationToken);
+
+            while (await reader.ReadAsync(cancellationToken))
+            {
+                results.Add(ReadPolymarketOnChainParticipantDetails(reader));
+            }
+        }
+        catch (PostgresException ex) when (ex.SqlState == PostgresErrorCodes.UndefinedTable)
+        {
+            return results;
+        }
+
+        return results;
+    }
+
     public async Task<IReadOnlyList<RiskEvent>> GetRecentRiskEventsAsync(int limit = 100, CancellationToken cancellationToken = default)
     {
         const string sql = """
@@ -3670,6 +3746,82 @@ ON CONFLICT (key) DO UPDATE SET
             DateTimeOffsetFromUtc(reader.GetDateTime(18)),
             DateTimeOffsetFromUtc(reader.GetDateTime(19)),
             DateTimeOffsetFromUtc(reader.GetDateTime(20)));
+    }
+
+    private static PolymarketOnChainTradeDetails ReadPolymarketOnChainTradeDetails(NpgsqlDataReader reader)
+    {
+        return new PolymarketOnChainTradeDetails(
+            reader.GetString(0),
+            reader.GetString(1),
+            reader.GetString(2),
+            reader.GetInt64(3),
+            DateTimeOffsetFromUtc(reader.GetDateTime(4)),
+            reader.GetString(5),
+            reader.GetInt64(6),
+            reader.GetString(7),
+            reader.GetString(8),
+            reader.GetString(9),
+            Enum.Parse<TradeSide>(reader.GetString(10)),
+            Enum.Parse<TradeSide>(reader.GetString(11)),
+            reader.GetString(12),
+            reader.GetString(13),
+            reader.GetString(14),
+            reader.GetString(15),
+            reader.GetString(16),
+            reader.GetDecimal(17),
+            reader.GetDecimal(18),
+            reader.GetDecimal(19),
+            reader.GetDecimal(20),
+            reader.GetDecimal(21),
+            reader.GetDecimal(22),
+            reader.GetString(23),
+            reader.IsDBNull(24) ? null : reader.GetString(24),
+            reader.IsDBNull(25) ? null : reader.GetString(25),
+            reader.GetString(26),
+            reader.GetString(27),
+            reader.GetString(28),
+            reader.GetString(29),
+            reader.GetString(30),
+            reader.IsDBNull(31) ? null : reader.GetString(31),
+            reader.GetBoolean(32),
+            reader.GetBoolean(33),
+            reader.GetBoolean(34),
+            reader.GetBoolean(35),
+            reader.GetBoolean(36),
+            reader.IsDBNull(37) ? null : reader.GetString(37),
+            DateTimeOffsetFromUtc(reader.GetDateTime(38)));
+    }
+
+    private static PolymarketOnChainParticipantDetails ReadPolymarketOnChainParticipantDetails(NpgsqlDataReader reader)
+    {
+        return new PolymarketOnChainParticipantDetails(
+            reader.GetString(0),
+            reader.GetInt32(1),
+            reader.GetInt32(2),
+            reader.GetInt32(3),
+            reader.GetInt32(4),
+            reader.GetDecimal(5),
+            reader.GetDecimal(6),
+            reader.GetDecimal(7),
+            reader.GetDecimal(8),
+            reader.GetInt32(9),
+            reader.GetInt32(10),
+            reader.GetInt32(11),
+            reader.GetInt32(12),
+            reader.GetInt32(13),
+            reader.GetInt32(14),
+            reader.GetDecimal(15),
+            reader.GetDecimal(16),
+            reader.GetDecimal(17),
+            reader.GetDecimal(18),
+            reader.GetDecimal(19),
+            reader.GetDecimal(20),
+            reader.GetDecimal(21),
+            reader.GetString(22),
+            DateTimeOffsetFromUtc(reader.GetDateTime(23)),
+            DateTimeOffsetFromUtc(reader.GetDateTime(24)),
+            DateTimeOffsetFromUtc(reader.GetDateTime(25)),
+            reader.IsDBNull(26) ? null : DateTimeOffsetFromUtc(reader.GetDateTime(26)));
     }
 
     private static void AddLiveOrderParameters(NpgsqlCommand command, LiveOrder order)

@@ -899,6 +899,105 @@ CREATE TABLE IF NOT EXISTS polymarket_onchain_wallet_performance_refresh_queue (
 CREATE INDEX IF NOT EXISTS ix_polymarket_onchain_wallet_performance_refresh_queue_queued
 ON polymarket_onchain_wallet_performance_refresh_queue(queued_at_utc);
 
+DROP VIEW IF EXISTS polymarket_onchain_trade_details;
+
+CREATE VIEW polymarket_onchain_trade_details AS
+SELECT
+    raw_fill.contract_name,
+    raw_fill.contract_address,
+    raw_fill.exchange_version,
+    raw_fill.block_number,
+    raw_fill.block_timestamp_utc,
+    raw_fill.transaction_hash,
+    raw_fill.log_index,
+    raw_fill.order_hash,
+    raw_fill.maker,
+    raw_fill.taker,
+    raw_fill.side AS maker_side,
+    CASE raw_fill.side WHEN 'Buy' THEN 'Sell' WHEN 'Sell' THEN 'Buy' ELSE raw_fill.side END AS taker_side,
+    raw_fill.token_id,
+    raw_fill.maker_asset_id,
+    raw_fill.taker_asset_id,
+    raw_fill.maker_amount_raw,
+    raw_fill.taker_amount_raw,
+    raw_fill.maker_amount,
+    raw_fill.taker_amount,
+    raw_fill.price,
+    raw_fill.size_shares,
+    raw_fill.notional_usd,
+    raw_fill.fee_amount,
+    raw_fill.fee_asset_id,
+    raw_fill.builder,
+    raw_fill.metadata AS order_metadata,
+    COALESCE(token_metadata.condition_id, '') AS condition_id,
+    COALESCE(token_metadata.market_id, '') AS market_id,
+    COALESCE(token_metadata.market_slug, '') AS market_slug,
+    COALESCE(token_metadata.market_title, 'Unenriched token ' || left(raw_fill.token_id, 16)) AS market_title,
+    COALESCE(token_metadata.outcome, 'Unknown') AS outcome,
+    token_metadata.category,
+    COALESCE(token_metadata.lookup_succeeded, false) AS lookup_succeeded,
+    COALESCE(token_metadata.active, false) AS market_active,
+    COALESCE(token_metadata.closed, false) AS market_closed,
+    COALESCE(token_metadata.archived, false) AS market_archived,
+    COALESCE(token_metadata.resolved, false) AS market_resolved,
+    token_metadata.winning_outcome,
+    raw_fill.imported_at_utc
+FROM polymarket_onchain_fills raw_fill
+LEFT JOIN polymarket_onchain_token_metadata token_metadata
+       ON token_metadata.token_id = raw_fill.token_id;
+
+DROP VIEW IF EXISTS polymarket_onchain_participant_details;
+
+CREATE VIEW polymarket_onchain_participant_details AS
+WITH position_stats AS (
+    SELECT
+        wallet,
+        COUNT(*)::integer AS positions_count,
+        COUNT(*) FILTER (WHERE position_status = 'Open')::integer AS open_positions,
+        COUNT(*) FILTER (WHERE position_status = 'Flat')::integer AS flat_positions,
+        COUNT(*) FILTER (WHERE position_status = 'Resolved')::integer AS resolved_positions,
+        COUNT(*) FILTER (WHERE position_status = 'Resolved' AND COALESCE(resolved_pnl_usd, 0) > 0)::integer AS profitable_resolved_positions,
+        COUNT(*) FILTER (WHERE position_status = 'Resolved' AND COALESCE(resolved_pnl_usd, 0) < 0)::integer AS losing_resolved_positions,
+        COALESCE(SUM(abs(net_cost_usd)) FILTER (WHERE position_status = 'Open'), 0)::numeric AS open_exposure_usd,
+        COALESCE(SUM(abs(net_cost_usd)) FILTER (WHERE position_status = 'Resolved' AND resolved_pnl_usd IS NOT NULL), 0)::numeric AS resolved_cost_usd,
+        COALESCE(SUM(resolved_pnl_usd) FILTER (WHERE resolved_pnl_usd IS NOT NULL), 0)::numeric AS resolved_pnl_usd
+    FROM polymarket_onchain_wallet_positions
+    GROUP BY wallet
+)
+SELECT
+    activity.wallet,
+    activity.executions,
+    activity.buy_executions,
+    activity.sell_executions,
+    activity.markets_traded,
+    activity.volume_usd,
+    activity.average_trade_usd,
+    activity.fees_usd,
+    activity.activity_score,
+    COALESCE(performance.positions_count, position_stats.positions_count, 0) AS positions_count,
+    COALESCE(performance.open_positions, position_stats.open_positions, 0) AS open_positions,
+    COALESCE(performance.flat_positions, position_stats.flat_positions, 0) AS flat_positions,
+    COALESCE(performance.resolved_positions, position_stats.resolved_positions, 0) AS resolved_positions,
+    COALESCE(performance.profitable_resolved_positions, position_stats.profitable_resolved_positions, 0) AS profitable_resolved_positions,
+    COALESCE(performance.losing_resolved_positions, position_stats.losing_resolved_positions, 0) AS losing_resolved_positions,
+    COALESCE(performance.open_exposure_usd, position_stats.open_exposure_usd, 0) AS open_exposure_usd,
+    COALESCE(performance.resolved_cost_usd, position_stats.resolved_cost_usd, 0) AS resolved_cost_usd,
+    COALESCE(performance.resolved_pnl_usd, position_stats.resolved_pnl_usd, 0) AS resolved_pnl_usd,
+    COALESCE(performance.resolved_roi_pct, 0) AS resolved_roi_pct,
+    COALESCE(performance.win_rate_pct, 0) AS win_rate_pct,
+    COALESCE(performance.average_position_size_usd, 0) AS average_position_size_usd,
+    COALESCE(performance.score, activity.activity_score) AS score,
+    COALESCE(performance.sample_quality, 'ActivityOnly') AS sample_quality,
+    activity.first_trade_utc,
+    activity.last_trade_utc,
+    activity.refreshed_at_utc AS activity_refreshed_at_utc,
+    performance.refreshed_at_utc AS performance_refreshed_at_utc
+FROM polymarket_onchain_wallet_activity activity
+LEFT JOIN polymarket_onchain_wallet_performance performance
+       ON lower(performance.wallet) = lower(activity.wallet)
+LEFT JOIN position_stats
+       ON lower(position_stats.wallet) = lower(activity.wallet);
+
 CREATE TABLE IF NOT EXISTS polymarket_onchain_ingest_cursors (
     contract_address text PRIMARY KEY,
     contract_name text NOT NULL,

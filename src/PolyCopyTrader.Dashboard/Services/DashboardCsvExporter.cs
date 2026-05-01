@@ -118,6 +118,60 @@ public sealed class DashboardCsvExporter(
             cancellationToken);
 
         await WriteAsync(
+            Path.Combine(exportDirectory, "OnChainTrades.csv"),
+            ["BlockTimestampUtc", "MarketTitle", "Outcome", "Category", "Maker", "Taker", "MakerSide", "TakerSide", "Price", "SizeShares", "NotionalUsd", "MakerAmount", "TakerAmount", "FeeAmount", "TokenId", "TransactionHash", "LogIndex", "MarketResolved", "WinningOutcome"],
+            (await repository.GetRecentPolymarketOnChainTradeDetailsAsync(ExportLimit, cancellationToken)).Select(trade => new object?[]
+            {
+                trade.BlockTimestampUtc,
+                trade.MarketTitle,
+                trade.Outcome,
+                trade.Category,
+                trade.Maker,
+                trade.Taker,
+                trade.MakerSide,
+                trade.TakerSide,
+                trade.Price,
+                trade.SizeShares,
+                trade.NotionalUsd,
+                trade.MakerAmount,
+                trade.TakerAmount,
+                trade.FeeAmount,
+                trade.TokenId,
+                trade.TransactionHash,
+                trade.LogIndex,
+                trade.MarketResolved,
+                trade.WinningOutcome
+            }),
+            cancellationToken);
+
+        await WriteAsync(
+            Path.Combine(exportDirectory, "OnChainParticipants.csv"),
+            ["Wallet", "Executions", "BuyExecutions", "SellExecutions", "MarketsTraded", "PositionsCount", "OpenPositions", "ResolvedPositions", "VolumeUsd", "AverageTradeUsd", "FeesUsd", "OpenExposureUsd", "ResolvedPnlUsd", "ResolvedRoiPct", "WinRatePct", "Score", "SampleQuality", "FirstTradeUtc", "LastTradeUtc"],
+            (await repository.GetPolymarketOnChainParticipantDetailsAsync(ExportLimit, cancellationToken)).Select(participant => new object?[]
+            {
+                participant.Wallet,
+                participant.Executions,
+                participant.BuyExecutions,
+                participant.SellExecutions,
+                participant.MarketsTraded,
+                participant.PositionsCount,
+                participant.OpenPositions,
+                participant.ResolvedPositions,
+                participant.VolumeUsd,
+                participant.AverageTradeUsd,
+                participant.FeesUsd,
+                participant.OpenExposureUsd,
+                participant.ResolvedPnlUsd,
+                participant.ResolvedRoiPct,
+                participant.WinRatePct,
+                participant.Score,
+                participant.SampleQuality,
+                participant.FirstTradeUtc,
+                participant.LastTradeUtc
+            }),
+            cancellationToken);
+
+        await WriteAsync(
             Path.Combine(exportDirectory, "DailyReports.csv"),
             ["ReportDate", "SignalsObserved", "SignalsAccepted", "SignalsRejected", "PaperOrdersCreated", "PaperFills", "PaperExpiredOrders", "PaperPnl", "OpenPaperExposure", "TopRejectionReasons", "ApiErrors", "GeneratedAtUtc"],
             (await repository.GetDailyReportsAsync(ExportLimit, cancellationToken)).Select(report => new object?[]

@@ -195,6 +195,17 @@ executions, so it is no longer maker-only. If raw fills predate the wallet table
 the next on-chain sync fills the missing derived range from PostgreSQL before it
 continues reading new Polygon blocks.
 
+`polymarket_onchain_trade_details` is a read-only view for the trade-level
+explorer. It joins decoded fills to token metadata and exposes block time,
+transaction hash, maker/taker participants, maker/taker side, price, share size,
+notional, raw asset amounts, fees, market title/slug, outcome, category, and
+resolved status. `polymarket_onchain_participant_details` is a read-only view for
+the participant-level explorer. It joins materialized activity, positions, and
+performance so each wallet has executions, buy/sell counts, markets traded,
+volume, fees, position counts, exposure, resolved PnL, ROI, win rate, score, and
+first/last trade time in one row. Both views are research surfaces; they do not
+place orders or change ingestion.
+
 `polymarket_onchain_wallet_activity` is a materialized activity-ranking table
 maintained by the background activity refresh worker. It reads wallet executions
 by queued wallet and stores execution count, buy/sell execution counts, distinct

@@ -95,6 +95,46 @@ public sealed record OnChainPositionRow(
     string LastTradeUtc,
     string TokenId);
 
+public sealed record OnChainTradeDetailRow(
+    string TimestampUtc,
+    string Market,
+    string Outcome,
+    string Category,
+    string Maker,
+    string Taker,
+    string MakerSide,
+    string TakerSide,
+    decimal Price,
+    decimal SizeShares,
+    decimal NotionalUsd,
+    decimal MakerAmount,
+    decimal TakerAmount,
+    decimal FeeAmount,
+    string Status,
+    string TokenId,
+    string TransactionHash);
+
+public sealed record OnChainParticipantDetailRow(
+    string Wallet,
+    int Executions,
+    int BuyExecutions,
+    int SellExecutions,
+    int MarketsTraded,
+    int PositionsCount,
+    int OpenPositions,
+    int ResolvedPositions,
+    decimal VolumeUsd,
+    decimal AverageTradeUsd,
+    decimal FeesUsd,
+    decimal OpenExposureUsd,
+    decimal ResolvedPnlUsd,
+    decimal ResolvedRoiPct,
+    decimal WinRatePct,
+    decimal Score,
+    string SampleQuality,
+    string FirstTradeUtc,
+    string LastTradeUtc);
+
 public sealed record LeaderTradeRow(
     string TimestampUtc,
     string Trader,
@@ -273,6 +313,8 @@ public sealed record DashboardSnapshot(
     IReadOnlyList<OnChainTraderRow> OnChainTraders,
     IReadOnlyList<OnChainPositionRow> OnChainPositions,
     IReadOnlyList<OnChainFillRow> OnChainFills,
+    IReadOnlyList<OnChainTradeDetailRow> OnChainTradeDetails,
+    IReadOnlyList<OnChainParticipantDetailRow> OnChainParticipantDetails,
     IReadOnlyList<LeaderTradeRow> LeaderTrades,
     IReadOnlyList<SignalRow> Signals,
     IReadOnlyList<PaperOrderRow> PaperOrders,

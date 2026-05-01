@@ -26,3 +26,10 @@ Request:
 
 Result:
 Inspected the on-chain schema, repository read/write paths, Dashboard mappings, README, and configuration reference. Answered that the core DB layers exist, but the final target is only partially complete as a product surface: no dedicated participants table, no full wallet drilldown API/UI, Dashboard lists are limited/top/recent views, and some details depend on Gamma enrichment and refresh queues.
+
+## 2026-05-01T07:32:31.7286018+00:00
+Request:
+Ок, двигайся к обозначенным в предыдущем вопросе целям
+
+Result:
+Added first-class on-chain trade and participant exploration surfaces: read-only PostgreSQL views `polymarket_onchain_trade_details` and `polymarket_onchain_participant_details`, typed repository reads, Dashboard tabs `Onchain Trades` and `Onchain Participants`, CSV exports `OnChainTrades.csv` and `OnChainParticipants.csv`, docs/project-memory updates, and test/fake repository coverage. Dashboard build, service build, and tests passed; first parallel test attempt failed only because the service build held a shared `obj\Verify` DLL lock.

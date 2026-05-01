@@ -1,3 +1,16 @@
+## Active Update 2026-05-01 Onchain Trade Participant Explorer
+Goal: Move the on-chain pipeline toward complete trade and participant exploration after blockchain scanning.
+Status: Completed
+Done:
+- Added read-only PostgreSQL views `polymarket_onchain_trade_details` and `polymarket_onchain_participant_details`.
+- Added typed domain records and repository reads for enriched trade details and participant summaries.
+- Added Dashboard tabs `Onchain Trades` and `Onchain Participants`.
+- Added `OnChainTrades.csv` and `OnChainParticipants.csv` to Dashboard CSV export.
+- Updated README, configuration reference, project memory, schema tests, no-op/test repositories, and scanner fake repository.
+Next: Add wallet drilldown/filtering so selecting a participant can show all of that wallet's trades, positions, counterparties, and market metadata beyond the current top/recent Dashboard lists.
+Notes: `git rev-parse --abbrev-ref --symbolic-full-name '@{u}'` failed because branch `master` has no configured upstream, so pull/push cannot run automatically. Verification: `dotnet build src\PolyCopyTrader.Dashboard\PolyCopyTrader.Dashboard.csproj -c Verify --no-restore` passed; `dotnet build src\PolyCopyTrader.Service\PolyCopyTrader.Service.csproj -c Verify --no-restore` passed; first parallel test attempt hit an `obj\Verify` file lock from concurrent service build, then `dotnet test tests\PolyCopyTrader.Tests\PolyCopyTrader.Tests.csproj -c Verify --no-restore` passed 119/119; `git diff --check` passed with only CRLF warnings. Existing unrelated `PolyCopyTrader.sln` changes remain untouched.
+Blockers: Automatic pull/push cannot run until a Git upstream is configured.
+
 ## Active Update 2026-05-01 Onchain Data Goal Gap Answer
 Goal: Assess whether the current on-chain pipeline satisfies the target model of complete trades and participant history.
 Status: Completed

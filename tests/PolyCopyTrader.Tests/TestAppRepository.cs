@@ -584,6 +584,133 @@ internal sealed class TestAppRepository : IAppRepository
             PolymarketOnChainWalletPerformanceRefreshQueue.Count));
     }
 
+    public Task<IReadOnlyList<PolymarketOnChainTradeDetails>> GetRecentPolymarketOnChainTradeDetailsAsync(int limit = 250, CancellationToken cancellationToken = default)
+    {
+        var metadataByToken = PolymarketOnChainTokenMetadata
+            .GroupBy(item => item.TokenId, StringComparer.OrdinalIgnoreCase)
+            .ToDictionary(group => group.Key, group => group.First(), StringComparer.OrdinalIgnoreCase);
+
+        var rows = PolymarketOnChainFills
+            .OrderByDescending(item => item.BlockTimestampUtc)
+            .ThenByDescending(item => item.BlockNumber)
+            .ThenByDescending(item => item.LogIndex)
+            .Take(limit)
+            .Select(fill =>
+            {
+                metadataByToken.TryGetValue(fill.TokenId, out var metadata);
+                return new PolymarketOnChainTradeDetails(
+                    fill.ContractName,
+                    fill.ContractAddress,
+                    fill.ExchangeVersion,
+                    fill.BlockNumber,
+                    fill.BlockTimestampUtc,
+                    fill.TransactionHash,
+                    fill.LogIndex,
+                    fill.OrderHash,
+                    fill.Maker,
+                    fill.Taker,
+                    fill.Side,
+                    Opposite(fill.Side),
+                    fill.TokenId,
+                    fill.MakerAssetId,
+                    fill.TakerAssetId,
+                    fill.MakerAmountRaw,
+                    fill.TakerAmountRaw,
+                    fill.MakerAmount,
+                    fill.TakerAmount,
+                    fill.Price,
+                    fill.SizeShares,
+                    fill.NotionalUsd,
+                    fill.FeeAmount,
+                    fill.FeeAssetId,
+                    fill.Builder,
+                    fill.Metadata,
+                    metadata?.ConditionId ?? string.Empty,
+                    metadata?.MarketId ?? string.Empty,
+                    metadata?.MarketSlug ?? string.Empty,
+                    string.IsNullOrWhiteSpace(metadata?.MarketTitle) ? "Unenriched token " + fill.TokenId[..Math.Min(16, fill.TokenId.Length)] : metadata!.MarketTitle,
+                    string.IsNullOrWhiteSpace(metadata?.Outcome) ? "Unknown" : metadata!.Outcome,
+                    metadata?.Category,
+                    metadata?.LookupSucceeded ?? false,
+                    metadata?.Active ?? false,
+                    metadata?.Closed ?? false,
+                    metadata?.Archived ?? false,
+                    metadata?.Resolved ?? false,
+                    metadata?.WinningOutcome,
+                    fill.ImportedAtUtc);
+            })
+            .ToArray();
+
+        return Task.FromResult<IReadOnlyList<PolymarketOnChainTradeDetails>>(rows);
+    }
+
+    public Task<IReadOnlyList<PolymarketOnChainParticipantDetails>> GetPolymarketOnChainParticipantDetailsAsync(int limit = 250, CancellationToken cancellationToken = default)
+    {
+        var performanceByWallet = PolymarketOnChainWalletPerformance
+            .GroupBy(item => item.Wallet, StringComparer.OrdinalIgnoreCase)
+            .ToDictionary(group => group.Key, group => group.First(), StringComparer.OrdinalIgnoreCase);
+        var positionsByWallet = PolymarketOnChainWalletPositions
+            .GroupBy(item => item.Wallet, StringComparer.OrdinalIgnoreCase)
+            .ToDictionary(group => group.Key, group => group.ToArray(), StringComparer.OrdinalIgnoreCase);
+
+        var rows = PolymarketOnChainWalletExecutions
+            .GroupBy(item => item.Wallet, StringComparer.OrdinalIgnoreCase)
+            .Select(group =>
+            {
+                var executions = group.ToArray();
+                var volume = executions.Sum(item => item.NotionalUsd);
+                var fees = executions.Sum(item => item.FeesUsd);
+                performanceByWallet.TryGetValue(group.Key, out var performance);
+                positionsByWallet.TryGetValue(group.Key, out var positions);
+                positions ??= [];
+                var positionsCount = positions.Length;
+                var openPositions = positions.Count(item => item.PositionStatus == "Open");
+                var flatPositions = positions.Count(item => item.PositionStatus == "Flat");
+                var resolvedPositions = positions.Count(item => item.PositionStatus == "Resolved");
+                var profitableResolved = positions.Count(item => item.PositionStatus == "Resolved" && (item.ResolvedPnlUsd ?? 0m) > 0m);
+                var losingResolved = positions.Count(item => item.PositionStatus == "Resolved" && (item.ResolvedPnlUsd ?? 0m) < 0m);
+                var openExposure = positions.Where(item => item.PositionStatus == "Open").Sum(item => Math.Abs(item.NetCostUsd));
+                var resolvedCost = positions.Where(item => item.PositionStatus == "Resolved" && item.ResolvedPnlUsd.HasValue).Sum(item => Math.Abs(item.NetCostUsd));
+                var resolvedPnl = positions.Sum(item => item.ResolvedPnlUsd ?? 0m);
+                var activityScore = volume + executions.Length + executions.Select(item => item.TokenId).Distinct(StringComparer.OrdinalIgnoreCase).Count() * 5;
+
+                return new PolymarketOnChainParticipantDetails(
+                    group.Key,
+                    executions.Length,
+                    executions.Count(item => item.Side == TradeSide.Buy),
+                    executions.Count(item => item.Side == TradeSide.Sell),
+                    executions.Select(item => item.TokenId).Distinct(StringComparer.OrdinalIgnoreCase).Count(),
+                    volume,
+                    executions.Length == 0 ? 0m : volume / executions.Length,
+                    fees,
+                    activityScore,
+                    performance?.PositionsCount ?? positionsCount,
+                    performance?.OpenPositions ?? openPositions,
+                    performance?.FlatPositions ?? flatPositions,
+                    performance?.ResolvedPositions ?? resolvedPositions,
+                    performance?.ProfitableResolvedPositions ?? profitableResolved,
+                    performance?.LosingResolvedPositions ?? losingResolved,
+                    performance?.OpenExposureUsd ?? openExposure,
+                    performance?.ResolvedCostUsd ?? resolvedCost,
+                    performance?.ResolvedPnlUsd ?? resolvedPnl,
+                    performance?.ResolvedRoiPct ?? 0m,
+                    performance?.WinRatePct ?? 0m,
+                    performance?.AveragePositionSizeUsd ?? 0m,
+                    performance?.Score ?? activityScore,
+                    performance?.SampleQuality ?? "ActivityOnly",
+                    executions.Min(item => item.BlockTimestampUtc),
+                    executions.Max(item => item.BlockTimestampUtc),
+                    executions.Max(item => item.ImportedAtUtc),
+                    performance?.RefreshedAtUtc);
+            })
+            .OrderByDescending(item => item.Score)
+            .ThenByDescending(item => item.VolumeUsd)
+            .Take(limit)
+            .ToArray();
+
+        return Task.FromResult<IReadOnlyList<PolymarketOnChainParticipantDetails>>(rows);
+    }
+
     private void RefreshPositionsForTokens(IReadOnlyList<string> tokenIds)
     {
         var tokenSet = tokenIds.ToHashSet(StringComparer.OrdinalIgnoreCase);

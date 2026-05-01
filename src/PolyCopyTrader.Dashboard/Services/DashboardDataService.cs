@@ -23,6 +23,8 @@ public sealed class DashboardDataService(
         var onChainTraders = await repository.GetTraderOnChainStatsAsync(100, cancellationToken);
         var onChainPositions = await repository.GetPolymarketOnChainWalletPositionsAsync(250, cancellationToken);
         var onChainExecutions = await repository.GetRecentPolymarketOnChainWalletExecutionsAsync(250, cancellationToken);
+        var onChainTradeDetails = await repository.GetRecentPolymarketOnChainTradeDetailsAsync(500, cancellationToken);
+        var onChainParticipantDetails = await repository.GetPolymarketOnChainParticipantDetailsAsync(250, cancellationToken);
         var leaderTrades = await repository.GetRecentLeaderTradesAsync(cancellationToken: cancellationToken);
         var signals = await repository.GetRecentSignalsAsync(cancellationToken: cancellationToken);
         var recentPaperOrders = await repository.GetRecentPaperOrdersAsync(cancellationToken: cancellationToken);
@@ -59,6 +61,8 @@ public sealed class DashboardDataService(
             onChainTraders.Select(ToOnChainTraderRow).ToArray(),
             onChainPositions.Select(ToOnChainPositionRow).ToArray(),
             onChainExecutions.Select(ToOnChainFillRow).ToArray(),
+            onChainTradeDetails.Select(ToOnChainTradeDetailRow).ToArray(),
+            onChainParticipantDetails.Select(ToOnChainParticipantDetailRow).ToArray(),
             leaderTrades.Select(ToLeaderTradeRow).ToArray(),
             signals.Select(ToSignalRow).ToArray(),
             recentPaperOrders.Select(ToPaperOrderRow).ToArray(),
@@ -380,6 +384,56 @@ public sealed class DashboardDataService(
             FormatDecimal(position.ResolvedPnlUsd),
             FormatDate(position.LastTradeUtc),
             position.TokenId);
+    }
+
+    private static OnChainTradeDetailRow ToOnChainTradeDetailRow(PolymarketOnChainTradeDetails trade)
+    {
+        var status = trade.MarketResolved
+            ? $"Resolved {trade.WinningOutcome ?? string.Empty}".Trim()
+            : trade.MarketClosed ? "Closed" : trade.MarketActive ? "Active" : trade.LookupSucceeded ? "Inactive" : "Unenriched";
+
+        return new OnChainTradeDetailRow(
+            FormatDate(trade.BlockTimestampUtc),
+            string.IsNullOrWhiteSpace(trade.MarketTitle) ? trade.MarketSlug : trade.MarketTitle,
+            trade.Outcome,
+            trade.Category ?? string.Empty,
+            trade.Maker,
+            trade.Taker,
+            trade.MakerSide.ToString(),
+            trade.TakerSide.ToString(),
+            trade.Price,
+            trade.SizeShares,
+            trade.NotionalUsd,
+            trade.MakerAmount,
+            trade.TakerAmount,
+            trade.FeeAmount,
+            status,
+            trade.TokenId,
+            trade.TransactionHash);
+    }
+
+    private static OnChainParticipantDetailRow ToOnChainParticipantDetailRow(PolymarketOnChainParticipantDetails participant)
+    {
+        return new OnChainParticipantDetailRow(
+            participant.Wallet,
+            participant.Executions,
+            participant.BuyExecutions,
+            participant.SellExecutions,
+            participant.MarketsTraded,
+            participant.PositionsCount,
+            participant.OpenPositions,
+            participant.ResolvedPositions,
+            participant.VolumeUsd,
+            participant.AverageTradeUsd,
+            participant.FeesUsd,
+            participant.OpenExposureUsd,
+            participant.ResolvedPnlUsd,
+            participant.ResolvedRoiPct,
+            participant.WinRatePct,
+            participant.Score,
+            participant.SampleQuality,
+            FormatDate(participant.FirstTradeUtc),
+            FormatDate(participant.LastTradeUtc));
     }
 
     private static SignalRow ToSignalRow(SignalSummary signal)
