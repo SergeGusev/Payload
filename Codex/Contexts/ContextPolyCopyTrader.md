@@ -1,3 +1,16 @@
+## Active Update 2026-05-01 Unknown Category Growth Explanation
+Goal: Explain why `unknown` rows in category performance can grow during backfill.
+Status: Completed
+Done:
+- Queried PostgreSQL through `POLYCOPYTRADER_POSTGRES_CONNECTION` without printing secrets.
+- Confirmed `polymarket_onchain_wallet_category_performance` currently has `unknown` 88,595 rows, but non-unknown rows are also growing: `Sports` 2,165, `AI` 868, `Crypto` 282, `Politics` 79, `Finance` 42.
+- Confirmed positions are also gaining real categories: `Sports` 13,038, `Crypto` 11,292, `Politics` 1,977, `AI` 879, `Finance` 478, plus smaller categories.
+- Confirmed backlogs remain in both position refresh and category-performance refresh queues, including non-unknown category pairs waiting to be processed.
+- Clarified that `unknown` can grow while new chain data is materialized before metadata/category propagation catches up; old unknown aggregates are recalculated/deleted once positions recategorize.
+Next: Monitor both unknown and non-unknown category counts plus refresh queues; intervene only if non-unknown growth stalls or queues stop draining.
+Notes: No source code changed. Existing unrelated dirty files `PolyCopyTrader.sln` and `src/PolyCopyTrader.Storage/PostgresSchemaInitializer.cs` were left untouched. `git rev-parse --abbrev-ref --symbolic-full-name '@{u}'` failed because branch `master` has no configured upstream.
+Blockers: Automatic pull/push cannot run until a Git upstream is configured.
+
 ## Active Update 2026-05-01 Polymarket Market Meaning
 Goal: Clarify what "market" means in `markets_traded`.
 Status: Completed

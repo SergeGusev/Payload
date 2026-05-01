@@ -371,3 +371,14 @@ Request:
 
 Result:
 Explained that "market" means a concrete Polymarket question/condition identified by `condition_id`, not a category or subcategory. Described the hierarchy as category -> optional event/series -> individual market/question/condition -> outcomes/tokens -> trades/positions, with examples from Sports, Finance, and Politics. No source code changed.
+
+## 2026-05-01T15:43:16.2951788+00:00
+Request:
+SELECT category, count(*)
+
+FROM public.polymarket_onchain_wallet_category_performance
+
+group by category - по этому запросу количество unknown записей растёт. Я правильно понимаю, что все новые записи - unknown, а потом они исправляются?
+
+Result:
+Queried PostgreSQL through the project connection variable. Confirmed `unknown` category-performance rows are growing, but non-unknown rows and positions are also growing significantly, and refresh queues still contain both unknown and non-unknown pairs. Explained that during ongoing backfill many derived rows are first materialized as `unknown` before metadata/category propagation catches up; later position refresh and category-performance refresh recalculate/delete old unknown aggregates when positions move to real categories. No source code changed.
