@@ -508,3 +508,10 @@ Request:
 
 Result:
 Agreed to treat future "посмотри картинку" requests as instructions to inspect the current Windows clipboard image first. No source behavior changed.
+
+## 2026-05-01T20:38:16.1298825Z
+Request:
+Ещё раз посмотри картинку. Долго висит в этом месте. Так и должно быть?
+
+Result:
+Extracted and inspected the clipboard image. The service is stuck at PostgreSQL schema statement `114/149`, creating index `ix_polymarket_onchain_wallet_activity_refresh_queue_queued`. A live PostgreSQL check showed this is not a long index build: the create-index session is waiting on a relation lock and is blocked by another long-running `INSERT INTO polymarket_onchain_wallet_activity_refresh_queue ... SELECT DISTINCT execution.wallet FROM polymarket_onchain_wallet_executions ...` query. Recommended cancelling blocker pid `56984` with `SELECT pg_cancel_backend(56984);`.

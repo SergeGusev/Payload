@@ -1,3 +1,16 @@
+## Active Update 2026-05-01 Wallet Activity Queue Index Lock Diagnosis
+Goal: Inspect the clipboard screenshot and determine whether the long startup pause is expected.
+Status: Completed
+Done:
+- Extracted and inspected the Windows clipboard screenshot; service startup is stuck at PostgreSQL schema statement `114/149`, `CREATE INDEX IF NOT EXISTS ix_polymarket_onchain_wallet_activity_refresh_queue_queued`.
+- Queried PostgreSQL through `POLYCOPYTRADER_POSTGRES_CONNECTION` without printing secrets.
+- Found the index creation session `pid=15828` active for about 29 minutes and waiting on `Lock:relation`.
+- Found blocker session `pid=56984` active for about 34 minutes running `INSERT INTO polymarket_onchain_wallet_activity_refresh_queue ... SELECT DISTINCT execution.wallet FROM polymarket_onchain_wallet_executions ...`.
+- Confirmed `polymarket_onchain_wallet_activity_refresh_queue` is not huge for this symptom: about 27 MB, estimated/live rows around 118k/117k.
+Next: Cancel blocker `pid=56984` with `SELECT pg_cancel_backend(56984);` to unblock startup; if this recurs, optimize/disable the full missing-activity startup seed from `polymarket_onchain_wallet_executions`.
+Notes: DB/image diagnosis only; no source behavior changed. Existing unrelated dirty files `PolyCopyTrader.sln` and `src/PolyCopyTrader.Storage/PostgresSchemaInitializer.cs` were left untouched. `git rev-parse --abbrev-ref --symbolic-full-name '@{u}'` failed because branch `master` has no configured upstream.
+Blockers: Automatic pull/push cannot run until a Git upstream is configured.
+
 ## Active Update 2026-05-01 Clipboard Image Shorthand
 Goal: Record the user's shorthand for future image inspection requests.
 Status: Completed
