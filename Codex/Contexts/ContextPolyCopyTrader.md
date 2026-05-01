@@ -1,3 +1,15 @@
+## Active Update 2026-05-01 Schema Initialization Timeout Fix
+Goal: Stop PostgreSQL schema initialization from failing on long-running index/table setup for large on-chain data.
+Status: Completed
+Done:
+- Re-read workflow, project rules, coding rules, active context, Git state, and schema initializer code.
+- Diagnosed `Exception while reading from stream` with inner `Timeout during reading attempt` as the default Npgsql command timeout expiring while schema SQL runs.
+- Set `PostgresSchemaInitializer` command timeout to `0` for the startup schema script so long `CREATE INDEX IF NOT EXISTS`/DDL operations can complete.
+- Removed the local swallowed exception state from the initializer by restoring normal exception propagation; service startup now fails loudly if schema initialization truly fails.
+Next: Rebuild/republish/restart the service, then rerun the table-kind SQL check.
+Notes: `git rev-parse --abbrev-ref --symbolic-full-name '@{u}'` failed because branch `master` has no configured upstream, so pull/push cannot run automatically. Verification: `dotnet build src\PolyCopyTrader.Service\PolyCopyTrader.Service.csproj -c Verify --no-restore` passed; `dotnet test tests\PolyCopyTrader.Tests\PolyCopyTrader.Tests.csproj -c Verify --no-restore` passed 119/119; `dotnet build src\PolyCopyTrader.Dashboard\PolyCopyTrader.Dashboard.csproj -c Verify --no-restore` passed; `git diff --check` passed with CRLF warnings only. Existing unrelated `PolyCopyTrader.sln` changes remain untouched.
+Blockers: Automatic pull/push cannot run until a Git upstream is configured.
+
 ## Active Update 2026-05-01 Schema Initializer Breakpoint Guidance
 Goal: Explain where to debug empty on-chain serving table schema checks.
 Status: Completed

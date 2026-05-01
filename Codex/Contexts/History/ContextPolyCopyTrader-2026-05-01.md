@@ -83,3 +83,15 @@ select c.relname, c.relkind
 
 Result:
 Identified the schema initialization debug path: `Program.cs` calls `IStorageSchemaInitializer.InitializeAsync()` before `host.RunAsync()`, and `PostgresSchemaInitializer.InitializeAsync()` executes `PostgresSchema.SchemaSql`. Prepared breakpoint guidance and likely causes: old published service binary, wrong PostgreSQL database connection, or schema initialization failure before/inside `ExecuteNonQueryAsync`. No source code changed.
+
+## 2026-05-01T08:50:06.1137658Z
+Request:
+В момент выполнения инициализирующего скрипта вылетают ошибки {"Exception while reading from stream"}
+
++InnerException
+{"Timeout during reading attempt"}
+System.Exception {System.TimeoutException}
+. Есть идеи, как победить? Может, бесконечный таймаут поставить?
+
+Result:
+Diagnosed the schema initializer failure as the default Npgsql command timeout expiring while long schema DDL/index creation runs on a large database. Updated `PostgresSchemaInitializer` to set `CommandTimeout = 0` for the startup schema script and restored normal exception propagation instead of swallowing initializer errors. Service build, Dashboard build, full tests, and diff check passed.
