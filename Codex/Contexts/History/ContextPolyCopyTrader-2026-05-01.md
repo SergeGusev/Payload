@@ -350,3 +350,10 @@ Request:
 
 Result:
 Re-read schema, domain model, and aggregation SQL for `public.polymarket_onchain_wallet_category_performance`. Prepared a concise field-by-field Russian description of the table, including row grain, formulas for ROI/win rate/score, sample-quality thresholds, and timestamp semantics. No source code changed.
+
+## 2026-05-01T15:07:21.1589360+00:00
+Request:
+А как будет пересчитываться positions_count для тех записей, что уже есть? Или просто старая запись будет удаляться и добавляться новая с новой категорией?
+
+Result:
+Explained that position refresh captures old and new `(wallet, category)` pairs around token position rebuilds, then category-performance refresh deletes each queued `(wallet, category)` row and re-inserts a freshly aggregated row from current `polymarket_onchain_wallet_positions`. If an old category no longer has positions for the wallet, its old performance row remains deleted. No source code changed.

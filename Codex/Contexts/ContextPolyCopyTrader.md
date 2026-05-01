@@ -1,3 +1,14 @@
+## Active Update 2026-05-01 Category Performance Recalculation Mechanics
+Goal: Explain how `positions_count` changes when positions are recategorized.
+Status: Completed
+Done:
+- Re-read position refresh and wallet-category performance refresh SQL.
+- Confirmed position refresh captures existing `(wallet, old_category)` pairs before deleting/rebuilding positions for refreshed tokens, then captures `(wallet, new_category)` pairs after insert and queues both for category-performance recalculation.
+- Confirmed category-performance refresh deletes queued `(wallet, category)` rows from `polymarket_onchain_wallet_category_performance` and re-inserts freshly aggregated rows from current `polymarket_onchain_wallet_positions`; if no positions remain for an old pair, the old row stays deleted.
+Next: None
+Notes: No source code changed. Existing unrelated dirty files `PolyCopyTrader.sln` and `src/PolyCopyTrader.Storage/PostgresSchemaInitializer.cs` were left untouched. `git rev-parse --abbrev-ref --symbolic-full-name '@{u}'` failed because branch `master` has no configured upstream.
+Blockers: Automatic pull/push cannot run until a Git upstream is configured.
+
 ## Active Update 2026-05-01 Category Performance Field Reference Repeat
 Goal: Re-describe fields in `public.polymarket_onchain_wallet_category_performance`.
 Status: Completed
