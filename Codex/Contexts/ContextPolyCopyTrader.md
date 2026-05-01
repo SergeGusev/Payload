@@ -1,3 +1,14 @@
+## Active Update 2026-05-01 Markets Traded Field Explanation
+Goal: Explain `markets_traded` in `public.polymarket_onchain_wallet_category_performance`.
+Status: Completed
+Done:
+- Re-read position refresh SQL and category-performance aggregation SQL.
+- Confirmed `markets_traded` is calculated as `COUNT(DISTINCT condition_id)` from `polymarket_onchain_wallet_positions` within one `(wallet, category)` group.
+- Clarified that it counts unique Polymarket questions/markets, not executions, token ids, or outcomes; unenriched rows can temporarily use token id as fallback condition id until metadata refresh corrects them.
+Next: None
+Notes: No source code changed. Existing unrelated dirty files `PolyCopyTrader.sln` and `src/PolyCopyTrader.Storage/PostgresSchemaInitializer.cs` were left untouched. `git rev-parse --abbrev-ref --symbolic-full-name '@{u}'` failed because branch `master` has no configured upstream.
+Blockers: Automatic pull/push cannot run until a Git upstream is configured.
+
 ## Active Update 2026-05-01 Category Performance Recalculation Mechanics
 Goal: Explain how `positions_count` changes when positions are recategorized.
 Status: Completed

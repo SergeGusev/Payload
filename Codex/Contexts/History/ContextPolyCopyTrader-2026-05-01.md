@@ -357,3 +357,10 @@ Request:
 
 Result:
 Explained that position refresh captures old and new `(wallet, category)` pairs around token position rebuilds, then category-performance refresh deletes each queued `(wallet, category)` row and re-inserts a freshly aggregated row from current `polymarket_onchain_wallet_positions`. If an old category no longer has positions for the wallet, its old performance row remains deleted. No source code changed.
+
+## 2026-05-01T15:31:36.7946461+00:00
+Request:
+Поясни подробнее по значению поля markets_traded
+
+Result:
+Re-read the refresh SQL and explained that `markets_traded` is `COUNT(DISTINCT condition_id)` from `polymarket_onchain_wallet_positions` inside one `(wallet, category)` aggregate. It counts unique Polymarket questions/markets, not executions, token ids, or outcomes; before metadata enrichment, token id can temporarily be used as a fallback condition id. No source code changed.
