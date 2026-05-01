@@ -1,3 +1,14 @@
+## Active Update 2026-05-01 Activity Queue Index Startup Stall
+Goal: Advise whether to wait or intervene when schema initialization stalls on an activity queue index.
+Status: Completed
+Done:
+- Inspected `D:\1\7.png`; schema initialization is at statement `105/140`, creating `ix_polymarket_onchain_wallet_activity_refresh_queue_queued`.
+- Confirmed from `PostgresSchema.cs` that this is `CREATE INDEX IF NOT EXISTS ... ON polymarket_onchain_wallet_activity_refresh_queue(queued_at_utc)`.
+- Prepared PostgreSQL diagnostics using `pg_stat_activity`, `pg_blocking_pids`, `pg_stat_progress_create_index`, and metadata-only table size estimates.
+Next: If the index shows progress, wait; if it is waiting on locks or no progress for several minutes, stop other app instances and terminate blockers or cancel/restart schema initialization.
+Notes: `git rev-parse --abbrev-ref --symbolic-full-name '@{u}'` failed because branch `master` has no configured upstream, so pull/push cannot run automatically. No source code changed for this answer-only operational guidance. Existing unrelated dirty files `PolyCopyTrader.sln` and `src/PolyCopyTrader.Storage/PostgresSchemaInitializer.cs` were left untouched.
+Blockers: Automatic pull/push cannot run until a Git upstream is configured.
+
 ## Active Update 2026-05-01 Add CLOB Condition Category Fallback
 Goal: Add the next category enrichment fallback after screenshots showed refreshed Gamma metadata still has no category fields.
 Status: Completed

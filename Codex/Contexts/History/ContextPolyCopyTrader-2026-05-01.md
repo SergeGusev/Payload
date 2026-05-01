@@ -256,3 +256,10 @@ Request:
 
 Result:
 Inspected the screenshots. Metadata had recent refresh activity (`refreshed_last_30m = 1190`), but successful Gamma raw JSON still had null category/event/tag fields across 38,130 rows. Added CLOB `markets-by-token/{token_id}` support, Gamma lookup by `condition_ids`, and a category fallback path from token metadata without category to CLOB parent market and Gamma by condition id. Added parser/client/enrichment tests and docs. Targeted tests passed 23/23; full test project passed 126/126; diff check passed with CRLF warnings only.
+
+## 2026-05-01T13:30:56.4818339Z
+Request:
+Посмотри на D:\1\7.png. Завис на создании индекса. Надо как-то решать или дождаться?
+
+Result:
+Inspected the screenshot and identified schema initialization statement `105/140` as `ix_polymarket_onchain_wallet_activity_refresh_queue_queued` on `polymarket_onchain_wallet_activity_refresh_queue(queued_at_utc)`. Explained that this queue index should normally be quick, so a long stall likely indicates blocking or an unexpectedly large queue. Provided diagnostic SQL using `pg_stat_activity`, `pg_blocking_pids`, `pg_stat_progress_create_index`, and metadata-only size estimates, plus safe guidance for waiting versus terminating blockers/cancelling. No source code changed.
