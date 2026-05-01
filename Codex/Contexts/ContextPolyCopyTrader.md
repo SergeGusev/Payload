@@ -1,3 +1,17 @@
+## Active Update 2026-05-01 Use Project Database Connection
+Goal: Use the same PostgreSQL connection variable as the project and repair category-performance lag.
+Status: Completed
+Done:
+- Confirmed the project uses `POLYCOPYTRADER_POSTGRES_CONNECTION` via `Storage.ConnectionStringEnvironmentVariable`.
+- Confirmed that environment variable is present locally; did not print or persist its value.
+- Since `psql` was not available in PATH, used a temporary .NET/Npgsql diagnostic console under `%TEMP%` and the existing environment variable.
+- Ran diagnostics: metadata had 2,470 categorized token rows; positions had some categorized rows but 224,290 position rows for categorized metadata were still stale; category-performance had only `unknown`; category-performance queue already contained non-`unknown` pairs.
+- Manually processed 2,406 non-`unknown` queued `(wallet, category)` pairs using the same aggregation SQL pattern as the worker, guarded by `FOR UPDATE SKIP LOCKED`.
+- Verified `polymarket_onchain_wallet_category_performance` now contains `Sports` 1,442 rows, `AI` 868 rows, `Crypto` 85 rows, and `Politics` 11 rows, in addition to `unknown`.
+Next: Let position refresh continue draining `polymarket_onchain_position_refresh_queue`; more categories will appear in positions and category performance as stale token positions refresh.
+Notes: `git rev-parse --abbrev-ref --symbolic-full-name '@{u}'` failed because branch `master` has no configured upstream, so pull/push cannot run automatically. No repo source code changed; only runtime DB diagnostics and a focused refresh-queue aggregation were executed. Existing unrelated dirty files `PolyCopyTrader.sln` and `src/PolyCopyTrader.Storage/PostgresSchemaInitializer.cs` were left untouched.
+Blockers: Automatic pull/push cannot run until a Git upstream is configured.
+
 ## Active Update 2026-05-01 Database Access Safety Guidance
 Goal: Explain how the user can safely let Codex run PostgreSQL diagnostic queries.
 Status: Completed

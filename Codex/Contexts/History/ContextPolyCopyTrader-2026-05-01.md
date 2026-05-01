@@ -322,3 +322,10 @@ Request:
 
 Result:
 Explained that Codex can run PostgreSQL queries from the local shell, but credentials should not be pasted into chat. Recommended using an existing local app connection string or a temporary least-privilege PostgreSQL role exposed through a local environment variable, with SELECT on public tables and limited INSERT/UPDATE permissions on refresh queue tables if manual requeue operations are needed. No source code changed.
+
+## 2026-05-01T14:35:34.5414099+00:00
+Request:
+А какую переменную сейчас использует наш проект для этого? Используй ту же самую
+
+Result:
+Confirmed the project uses `POLYCOPYTRADER_POSTGRES_CONNECTION` and that it is present in the local environment; its value was not printed. Because `psql` was unavailable, used a temporary .NET/Npgsql diagnostic console with the same environment variable. Diagnostics showed metadata categories are appearing and positions/category-performance are lagging. Manually processed 2,406 non-`unknown` queued wallet/category pairs with the same aggregation SQL pattern as the worker. Verified `polymarket_onchain_wallet_category_performance` now contains `Sports`, `AI`, `Crypto`, and `Politics` rows in addition to `unknown`. No repo source code changed.
