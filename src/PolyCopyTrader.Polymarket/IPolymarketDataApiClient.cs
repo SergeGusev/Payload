@@ -33,4 +33,10 @@ public interface IPolymarketGammaClient
         string tokenId,
         bool closed,
         CancellationToken cancellationToken = default);
+
+    Task<IReadOnlyList<PolymarketOnChainTokenMetadata>> GetTokenMetadataByConditionIdAsync(
+        string conditionId,
+        string requestedTokenId,
+        bool closed,
+        CancellationToken cancellationToken = default);
 }

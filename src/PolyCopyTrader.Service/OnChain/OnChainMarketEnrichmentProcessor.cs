@@ -9,6 +9,7 @@ public sealed class OnChainMarketEnrichmentProcessor(
     ILogger<OnChainMarketEnrichmentProcessor> logger,
     OnChainIngestionOptions options,
     IPolymarketGammaClient gammaClient,
+    IPolymarketClobPublicClient clobClient,
     IAppRepository repository) : IOnChainMarketEnrichmentProcessor
 {
     private readonly object sync = new();
@@ -84,13 +85,7 @@ public sealed class OnChainMarketEnrichmentProcessor(
                 cancellationToken.ThrowIfCancellationRequested();
                 attemptedTokenIds.Add(tokenId);
 
-                var metadata = await gammaClient.GetTokenMetadataAsync(tokenId, closed: false, cancellationToken);
-                await DelayIfConfiguredAsync(cancellationToken);
-                if (metadata.Count == 0)
-                {
-                    metadata = await gammaClient.GetTokenMetadataAsync(tokenId, closed: true, cancellationToken);
-                    await DelayIfConfiguredAsync(cancellationToken);
-                }
+                var metadata = await GetTokenMetadataWithFallbackAsync(tokenId, cancellationToken);
 
                 if (metadata.Count == 0)
                 {
@@ -128,6 +123,89 @@ public sealed class OnChainMarketEnrichmentProcessor(
             reachedBatchLimit);
 
         return new OnChainMarketEnrichmentResult(requested, resolved, notFound, rowsStored, batchesRun, reachedBatchLimit);
+    }
+
+    private async Task<IReadOnlyList<PolymarketOnChainTokenMetadata>> GetTokenMetadataWithFallbackAsync(
+        string tokenId,
+        CancellationToken cancellationToken)
+    {
+        var bestMetadata = await gammaClient.GetTokenMetadataAsync(tokenId, closed: false, cancellationToken);
+        await DelayIfConfiguredAsync(cancellationToken);
+        if (HasCategory(bestMetadata))
+        {
+            return bestMetadata;
+        }
+
+        var closedMetadata = await gammaClient.GetTokenMetadataAsync(tokenId, closed: true, cancellationToken);
+        await DelayIfConfiguredAsync(cancellationToken);
+        if (HasCategory(closedMetadata))
+        {
+            return closedMetadata;
+        }
+
+        if (bestMetadata.Count == 0)
+        {
+            bestMetadata = closedMetadata;
+        }
+
+        var marketByToken = await TryGetMarketByTokenAsync(tokenId, cancellationToken);
+        await DelayIfConfiguredAsync(cancellationToken);
+        if (marketByToken is null || string.IsNullOrWhiteSpace(marketByToken.ConditionId))
+        {
+            return bestMetadata;
+        }
+
+        var conditionMetadata = await gammaClient.GetTokenMetadataByConditionIdAsync(
+            marketByToken.ConditionId,
+            tokenId,
+            closed: false,
+            cancellationToken);
+        await DelayIfConfiguredAsync(cancellationToken);
+        if (HasCategory(conditionMetadata))
+        {
+            return conditionMetadata;
+        }
+
+        var closedConditionMetadata = await gammaClient.GetTokenMetadataByConditionIdAsync(
+            marketByToken.ConditionId,
+            tokenId,
+            closed: true,
+            cancellationToken);
+        await DelayIfConfiguredAsync(cancellationToken);
+        if (HasCategory(closedConditionMetadata))
+        {
+            return closedConditionMetadata;
+        }
+
+        if (conditionMetadata.Count > 0)
+        {
+            return conditionMetadata;
+        }
+
+        return closedConditionMetadata.Count > 0 ? closedConditionMetadata : bestMetadata;
+    }
+
+    private async Task<PolymarketClobMarketByToken?> TryGetMarketByTokenAsync(
+        string tokenId,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            return await clobClient.GetMarketByTokenAsync(tokenId, cancellationToken);
+        }
+        catch (PolymarketApiException ex)
+        {
+            logger.LogInformation(
+                ex,
+                "CLOB market-by-token fallback failed during on-chain market enrichment. TokenId={TokenId}",
+                tokenId);
+            return null;
+        }
+    }
+
+    private static bool HasCategory(IReadOnlyList<PolymarketOnChainTokenMetadata> metadata)
+    {
+        return metadata.Any(item => !string.IsNullOrWhiteSpace(item.Category));
     }
 
     private Task DelayIfConfiguredAsync(CancellationToken cancellationToken)

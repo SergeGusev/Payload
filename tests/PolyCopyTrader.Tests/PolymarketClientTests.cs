@@ -147,6 +147,26 @@ public sealed class PolymarketClientTests
     }
 
     [Fact]
+    public async Task GammaClient_FetchesMarketByConditionId()
+    {
+        var handler = new StubHttpMessageHandler(_ => new HttpResponseMessage(HttpStatusCode.OK)
+        {
+            Content = new StringContent(SampleGammaMarketsJson)
+        });
+        var client = new PolymarketGammaClient(
+            new HttpClient(handler),
+            TestOptions,
+            new CapturingApiErrorSink());
+
+        var metadata = await client.GetTokenMetadataByConditionIdAsync("0xcondition", "12345678901234567890", closed: false);
+
+        Assert.Equal(2, metadata.Count);
+        Assert.Contains("/markets", handler.Requests.Single().RequestUri?.AbsoluteUri);
+        Assert.Contains("condition_ids=0xcondition", handler.Requests.Single().RequestUri?.Query);
+        Assert.Contains("closed=false", handler.Requests.Single().RequestUri?.Query);
+    }
+
+    [Fact]
     public async Task ClobClient_ReadsOrderBookEndpoint()
     {
         var handler = new StubHttpMessageHandler(_ => new HttpResponseMessage(HttpStatusCode.OK)
@@ -163,6 +183,25 @@ public sealed class PolymarketClientTests
         Assert.NotNull(orderBook);
         Assert.Contains("/book", handler.Requests.Single().RequestUri?.AbsoluteUri);
         Assert.Contains("token_id=12345678901234567890", handler.Requests.Single().RequestUri?.Query);
+    }
+
+    [Fact]
+    public async Task ClobClient_ReadsMarketByTokenEndpoint()
+    {
+        var handler = new StubHttpMessageHandler(_ => new HttpResponseMessage(HttpStatusCode.OK)
+        {
+            Content = new StringContent(SampleClobMarketByTokenJson)
+        });
+        var client = new PolymarketClobPublicClient(
+            new HttpClient(handler),
+            TestOptions,
+            new CapturingApiErrorSink());
+
+        var market = await client.GetMarketByTokenAsync("12345678901234567890");
+
+        Assert.NotNull(market);
+        Assert.Equal("0xcondition", market.ConditionId);
+        Assert.Contains("/markets-by-token/12345678901234567890", handler.Requests.Single().RequestUri?.AbsoluteUri);
     }
 
     [Fact]
@@ -455,6 +494,14 @@ public sealed class PolymarketClientTests
     ]
   }
 ]
+""";
+
+    private const string SampleClobMarketByTokenJson = """
+{
+  "condition_id": "0xcondition",
+  "primary_token_id": "12345678901234567890",
+  "secondary_token_id": "987654321"
+}
 """;
 
     private sealed class CapturingApiErrorSink : IPolymarketApiErrorSink

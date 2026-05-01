@@ -249,3 +249,10 @@ Request:
 
 Result:
 Inspected the screenshots. Metadata remained unchanged at 38,146 total rows, 38,130 successful lookups, 16 failed lookups, 0 rows with category, and 38,146 rows without category. Wallet positions still grouped entirely under null category with 2,838,895 rows. Concluded the database has not yet been corrected by the fixed enrichment path and prepared next checks to distinguish whether the fixed service has not run or Gamma JSON lacks usable category fields. No source code changed.
+
+## 2026-05-01T13:18:04.7189499Z
+Request:
+Результаты в D:\1\5.png и D:\1\6.png
+
+Result:
+Inspected the screenshots. Metadata had recent refresh activity (`refreshed_last_30m = 1190`), but successful Gamma raw JSON still had null category/event/tag fields across 38,130 rows. Added CLOB `markets-by-token/{token_id}` support, Gamma lookup by `condition_ids`, and a category fallback path from token metadata without category to CLOB parent market and Gamma by condition id. Added parser/client/enrichment tests and docs. Targeted tests passed 23/23; full test project passed 126/126; diff check passed with CRLF warnings only.

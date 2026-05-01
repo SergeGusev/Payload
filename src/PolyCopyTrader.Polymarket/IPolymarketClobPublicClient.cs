@@ -11,4 +11,6 @@ public interface IPolymarketClobPublicClient
     Task<decimal?> GetMidpointAsync(string assetId, CancellationToken cancellationToken = default);
 
     Task<decimal?> GetSpreadAsync(string assetId, CancellationToken cancellationToken = default);
+
+    Task<PolymarketClobMarketByToken?> GetMarketByTokenAsync(string tokenId, CancellationToken cancellationToken = default);
 }

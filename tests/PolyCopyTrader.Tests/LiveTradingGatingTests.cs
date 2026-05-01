@@ -252,6 +252,11 @@ public sealed class LiveTradingGatingTests
         {
             return Task.FromResult<decimal?>(0.02m);
         }
+
+        public Task<PolymarketClobMarketByToken?> GetMarketByTokenAsync(string tokenId, CancellationToken cancellationToken = default)
+        {
+            return Task.FromResult<PolymarketClobMarketByToken?>(null);
+        }
     }
 
     private sealed class CapturingTradingClient : IPolymarketTradingClient

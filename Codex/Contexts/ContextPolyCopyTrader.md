@@ -1,3 +1,15 @@
+## Active Update 2026-05-01 Add CLOB Condition Category Fallback
+Goal: Add the next category enrichment fallback after screenshots showed refreshed Gamma metadata still has no category fields.
+Status: Completed
+Done:
+- Inspected `D:\1\5.png`: metadata was refreshed recently (`refreshed_last_30m = 1190`), proving the fixed enrichment path had run for at least some rows.
+- Inspected `D:\1\6.png`: successful Gamma raw JSON still had null `market.category`, event category, event category label, category label, and tag label across 38,130 rows.
+- Added `PolymarketClobMarketByToken`, CLOB `GET /markets-by-token/{token_id}` client support, Gamma lookup by `condition_ids`, and enrichment fallback from blank token metadata to CLOB parent market then Gamma by condition id.
+- Added parser/client/enrichment tests and updated docs.
+Next: Restart/redeploy the service and run `POST /refresh-onchain-markets` repeatedly or let the background worker process blank-category metadata; then recheck `with_category` and `polymarket_onchain_position_refresh_queue`.
+Notes: `dotnet test tests\PolyCopyTrader.Tests\PolyCopyTrader.Tests.csproj -c Verify --no-restore --filter "FullyQualifiedName~PolymarketClientTests|FullyQualifiedName~OnChainMarketEnrichmentTests"` passed 23/23. `dotnet test tests\PolyCopyTrader.Tests\PolyCopyTrader.Tests.csproj -c Verify --no-restore` passed 126/126. `git diff --check` passed with CRLF warnings only. `git rev-parse --abbrev-ref --symbolic-full-name '@{u}'` failed because branch `master` has no configured upstream, so pull/push cannot run automatically. Existing unrelated dirty files `PolyCopyTrader.sln` and `src/PolyCopyTrader.Storage/PostgresSchemaInitializer.cs` were left untouched.
+Blockers: Automatic pull/push cannot run until a Git upstream is configured.
+
 ## Active Update 2026-05-01 Category Recovery Screenshot Followup
 Goal: Interpret the post-fix category verification screenshots.
 Status: Completed

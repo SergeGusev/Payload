@@ -136,6 +136,25 @@ public static class PolymarketJsonParser
             GetString(root, "region"));
     }
 
+    public static PolymarketClobMarketByToken? ParseClobMarketByToken(JsonElement root)
+    {
+        if (root.ValueKind is JsonValueKind.Null or JsonValueKind.Undefined)
+        {
+            return null;
+        }
+
+        var conditionId = GetString(root, "condition_id") ?? string.Empty;
+        if (string.IsNullOrWhiteSpace(conditionId))
+        {
+            return null;
+        }
+
+        return new PolymarketClobMarketByToken(
+            conditionId,
+            GetString(root, "primary_token_id") ?? string.Empty,
+            GetString(root, "secondary_token_id") ?? string.Empty);
+    }
+
     public static IReadOnlyList<PolymarketOnChainTokenMetadata> ParseGammaMarketTokenMetadata(
         JsonElement root,
         string requestedTokenId)

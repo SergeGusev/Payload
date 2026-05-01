@@ -355,6 +355,11 @@ public sealed class ResilienceTests
         {
             return Task.FromResult<decimal?>(null);
         }
+
+        public Task<PolymarketClobMarketByToken?> GetMarketByTokenAsync(string tokenId, CancellationToken cancellationToken = default)
+        {
+            return Task.FromResult<PolymarketClobMarketByToken?>(null);
+        }
     }
 
     private sealed class ThrowingClobClient : IPolymarketClobPublicClient
@@ -377,6 +382,11 @@ public sealed class ResilienceTests
         public Task<decimal?> GetSpreadAsync(string assetId, CancellationToken cancellationToken = default)
         {
             throw new InvalidOperationException("spread unavailable");
+        }
+
+        public Task<PolymarketClobMarketByToken?> GetMarketByTokenAsync(string tokenId, CancellationToken cancellationToken = default)
+        {
+            throw new InvalidOperationException("market by token unavailable");
         }
     }
 }

@@ -686,6 +686,11 @@ public sealed record PolymarketOnChainTokenMetadata(
     string RawJson,
     DateTimeOffset LastRefreshedUtc);
 
+public sealed record PolymarketClobMarketByToken(
+    string ConditionId,
+    string PrimaryTokenId,
+    string SecondaryTokenId);
+
 public sealed record OnChainIngestionCursor(
     string ContractAddress,
     string ContractName,

@@ -28,6 +28,7 @@ public sealed class OnChainMarketEnrichmentTests
                 RequestDelayMilliseconds = 0
             },
             gamma,
+            new FakeClobClient(),
             repository);
 
         var result = await processor.RefreshAsync();
@@ -65,6 +66,7 @@ public sealed class OnChainMarketEnrichmentTests
                 RequestDelayMilliseconds = 0
             },
             gamma,
+            new FakeClobClient(),
             repository);
 
         var result = await processor.RefreshAsync();
@@ -95,6 +97,7 @@ public sealed class OnChainMarketEnrichmentTests
                 RequestDelayMilliseconds = 0
             },
             gamma,
+            new FakeClobClient(),
             repository);
 
         var result = await processor.RefreshAsync();
@@ -102,6 +105,45 @@ public sealed class OnChainMarketEnrichmentTests
         Assert.Equal(1, result.TokensRequested);
         Assert.Equal(1, result.TokensResolved);
         Assert.Contains(gamma.Requests, item => item == ("token-1", false));
+        Assert.Contains(repository.PolymarketOnChainTokenMetadata, item =>
+            item.TokenId == "token-1" &&
+            item.LookupSucceeded &&
+            item.Category == "Politics");
+    }
+
+    [Fact]
+    public async Task Processor_UsesConditionFallbackWhenTokenLookupHasNoCategory()
+    {
+        var repository = new TestAppRepository();
+        repository.PolymarketOnChainWalletExecutions.Add(Execution("token-1"));
+        var gamma = new FakeGammaClient();
+        gamma.Metadata["token-1"] = [Metadata("token-1", category: null)];
+        gamma.MetadataByCondition["condition-1"] = [Metadata("token-1", category: "Politics")];
+        var clob = new FakeClobClient
+        {
+            MarketsByToken =
+            {
+                ["token-1"] = new PolymarketClobMarketByToken("condition-1", "token-1", "token-1-no")
+            }
+        };
+
+        var processor = new OnChainMarketEnrichmentProcessor(
+            NullLogger<OnChainMarketEnrichmentProcessor>.Instance,
+            new OnChainIngestionOptions
+            {
+                MarketEnrichmentBatchSize = 10,
+                RequestDelayMilliseconds = 0
+            },
+            gamma,
+            clob,
+            repository);
+
+        var result = await processor.RefreshAsync();
+
+        Assert.Equal(1, result.TokensRequested);
+        Assert.Equal(1, result.TokensResolved);
+        Assert.Contains(clob.Requests, tokenId => tokenId == "token-1");
+        Assert.Contains(gamma.ConditionRequests, item => item == ("condition-1", "token-1", false));
         Assert.Contains(repository.PolymarketOnChainTokenMetadata, item =>
             item.TokenId == "token-1" &&
             item.LookupSucceeded &&
@@ -126,6 +168,7 @@ public sealed class OnChainMarketEnrichmentTests
                 RequestDelayMilliseconds = 0
             },
             gamma,
+            new FakeClobClient(),
             repository);
 
         var result = await processor.RefreshAsync();
@@ -158,6 +201,7 @@ public sealed class OnChainMarketEnrichmentTests
                 RequestDelayMilliseconds = 0
             },
             gamma,
+            new FakeClobClient(),
             repository);
 
         var firstRun = processor.RefreshAsync();
@@ -223,7 +267,11 @@ public sealed class OnChainMarketEnrichmentTests
     {
         public Dictionary<string, IReadOnlyList<PolymarketOnChainTokenMetadata>> Metadata { get; } = new(StringComparer.OrdinalIgnoreCase);
 
+        public Dictionary<string, IReadOnlyList<PolymarketOnChainTokenMetadata>> MetadataByCondition { get; } = new(StringComparer.OrdinalIgnoreCase);
+
         public List<(string TokenId, bool Closed)> Requests { get; } = [];
+
+        public List<(string ConditionId, string TokenId, bool Closed)> ConditionRequests { get; } = [];
 
         public TaskCompletionSource<object?> RequestObserved { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
 
@@ -244,6 +292,51 @@ public sealed class OnChainMarketEnrichmentTests
             return !closed && Metadata.TryGetValue(tokenId, out var metadata)
                 ? metadata
                 : [];
+        }
+
+        public Task<IReadOnlyList<PolymarketOnChainTokenMetadata>> GetTokenMetadataByConditionIdAsync(
+            string conditionId,
+            string requestedTokenId,
+            bool closed,
+            CancellationToken cancellationToken = default)
+        {
+            ConditionRequests.Add((conditionId, requestedTokenId, closed));
+            return Task.FromResult(!closed && MetadataByCondition.TryGetValue(conditionId, out var metadata)
+                ? metadata
+                : []);
+        }
+    }
+
+    private sealed class FakeClobClient : IPolymarketClobPublicClient
+    {
+        public Dictionary<string, PolymarketClobMarketByToken> MarketsByToken { get; } = new(StringComparer.OrdinalIgnoreCase);
+
+        public List<string> Requests { get; } = [];
+
+        public Task<OrderBookSnapshot?> GetOrderBookAsync(string assetId, CancellationToken cancellationToken = default)
+        {
+            return Task.FromResult<OrderBookSnapshot?>(null);
+        }
+
+        public Task<DateTimeOffset> GetServerTimeAsync(CancellationToken cancellationToken = default)
+        {
+            return Task.FromResult(DateTimeOffset.UtcNow);
+        }
+
+        public Task<decimal?> GetMidpointAsync(string assetId, CancellationToken cancellationToken = default)
+        {
+            return Task.FromResult<decimal?>(null);
+        }
+
+        public Task<decimal?> GetSpreadAsync(string assetId, CancellationToken cancellationToken = default)
+        {
+            return Task.FromResult<decimal?>(null);
+        }
+
+        public Task<PolymarketClobMarketByToken?> GetMarketByTokenAsync(string tokenId, CancellationToken cancellationToken = default)
+        {
+            Requests.Add(tokenId);
+            return Task.FromResult(MarketsByToken.TryGetValue(tokenId, out var market) ? market : null);
         }
     }
 }

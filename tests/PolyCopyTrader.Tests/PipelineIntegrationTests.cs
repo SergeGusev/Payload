@@ -214,6 +214,11 @@ public sealed class PipelineIntegrationTests
         {
             return Task.FromResult<decimal?>(null);
         }
+
+        public Task<PolymarketClobMarketByToken?> GetMarketByTokenAsync(string tokenId, CancellationToken cancellationToken = default)
+        {
+            return Task.FromResult<PolymarketClobMarketByToken?>(null);
+        }
     }
 
     private sealed class FakeTradingClient : IPolymarketTradingClient

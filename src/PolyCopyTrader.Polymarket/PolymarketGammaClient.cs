@@ -39,4 +39,26 @@ public sealed class PolymarketGammaClient : IPolymarketGammaClient
 
         return PolymarketJsonParser.ParseGammaMarketTokenMetadata(json.RootElement, tokenId);
     }
+
+    public async Task<IReadOnlyList<PolymarketOnChainTokenMetadata>> GetTokenMetadataByConditionIdAsync(
+        string conditionId,
+        string requestedTokenId,
+        bool closed,
+        CancellationToken cancellationToken = default)
+    {
+        using var json = await client.GetJsonDocumentAsync(
+            UriBuilderExtensions.WithPathAndQuery(
+                options.GammaBaseUrl,
+                "/markets",
+                new Dictionary<string, string?>
+                {
+                    ["condition_ids"] = conditionId,
+                    ["limit"] = "1",
+                    ["closed"] = closed ? "true" : "false"
+                }),
+            closed ? "GetClosedMarketByCondition" : "GetOpenMarketByCondition",
+            cancellationToken);
+
+        return PolymarketJsonParser.ParseGammaMarketTokenMetadata(json.RootElement, requestedTokenId);
+    }
 }

@@ -70,4 +70,17 @@ public sealed class PolymarketClobPublicClient : IPolymarketClobPublicClient
 
         return PolymarketJsonParser.ParseSingleDecimal(json.RootElement, "spread");
     }
+
+    public async Task<PolymarketClobMarketByToken?> GetMarketByTokenAsync(string tokenId, CancellationToken cancellationToken = default)
+    {
+        using var json = await client.GetJsonDocumentAsync(
+            UriBuilderExtensions.WithPathAndQuery(
+                options.ClobBaseUrl,
+                "/markets-by-token/" + Uri.EscapeDataString(tokenId),
+                new Dictionary<string, string?>()),
+            "GetMarketByToken",
+            cancellationToken);
+
+        return PolymarketJsonParser.ParseClobMarketByToken(json.RootElement);
+    }
 }
