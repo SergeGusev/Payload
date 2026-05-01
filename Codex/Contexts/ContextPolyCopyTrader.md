@@ -1,3 +1,13 @@
+## Active Update 2026-05-01 Onchain Serving Verification Guidance
+Goal: Provide concrete checks for the indexed on-chain serving tables and raw log purge behavior.
+Status: Completed
+Done:
+- Re-read workflow, project rules, coding rules, active context, docs, README, and Git state.
+- Prepared verification steps: restart service/schema initializer, confirm explorer objects are tables with indexes, run on-chain sync, compare decoded fills versus trade details, verify participant rows and refresh queues, verify processed raw logs are purged, and use `EXPLAIN ANALYZE` for speed checks.
+Next: Run the SQL checks against the local PostgreSQL database after restarting the service.
+Notes: `git rev-parse --abbrev-ref --symbolic-full-name '@{u}'` failed because branch `master` has no configured upstream, so pull/push cannot run automatically. No source code changed for this answer-only task; existing unrelated `PolyCopyTrader.sln` changes remain untouched.
+Blockers: Automatic pull/push cannot run until a Git upstream is configured.
+
 ## Active Update 2026-05-01 Fast Onchain Serving Tables And Raw Log Purge
 Goal: Prioritize fast on-chain query surfaces and remove old raw blockchain logs only after they are processed into indexed serving tables.
 Status: Completed

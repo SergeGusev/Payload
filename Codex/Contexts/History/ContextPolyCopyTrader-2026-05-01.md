@@ -62,3 +62,10 @@ Request:
 
 Result:
 Replaced the on-chain trade/participant explorer views with indexed serving tables, added incremental trade-detail upserts and metadata refresh propagation, wired participant-detail refresh into activity/position/performance refresh paths, and added cleanup of processed raw `polymarket_onchain_logs` after rows are materialized into `polymarket_onchain_trade_details`. Updated docs/project memory/tests. Service build, Dashboard build, full tests, and diff check passed; branch still has no upstream for automatic pull/push.
+
+## 2026-05-01T08:26:57.5921160Z
+Request:
+Как проверить?
+
+Result:
+Prepared concrete verification steps for the new indexed on-chain serving tables: restart service/schema initializer, confirm tables and indexes, run on-chain sync, compare decoded fills to trade details, check participant details and refresh queues, verify processed raw logs are purged, and use `EXPLAIN ANALYZE` for query speed. No source code changed.
