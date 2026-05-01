@@ -1,3 +1,14 @@
+## Active Update 2026-05-01 Category Recovery Screenshot Followup
+Goal: Interpret the post-fix category verification screenshots.
+Status: Completed
+Done:
+- Inspected `D:\1\3.png`: metadata still has 38,146 rows, 38,130 successful lookups, 16 failed lookups, 0 rows with category, and 38,146 rows without category.
+- Inspected `D:\1\4.png`: wallet positions still group entirely under `category = null`, count 2,838,895.
+- Concluded the database has not yet been corrected by the new enrichment path; either the service/enrichment has not run with the fixed code, or the stored/refetched Gamma JSON has no usable category fields.
+Next: Check recent `last_refreshed_utc`/errors to prove whether new enrichment ran; if it did, inspect `raw_json` category/event/tag fields and implement CLOB/condition-id fallback or a local catalog.
+Notes: `git rev-parse --abbrev-ref --symbolic-full-name '@{u}'` failed because branch `master` has no configured upstream, so pull/push cannot run automatically. No source code changed for this answer-only followup. Existing unrelated dirty files `PolyCopyTrader.sln` and `src/PolyCopyTrader.Storage/PostgresSchemaInitializer.cs` remain untouched.
+Blockers: Automatic pull/push cannot run until a Git upstream is configured.
+
 ## Active Update 2026-05-01 Fix Blank Gamma Categories
 Goal: Recover category enrichment when Gamma metadata rows exist but `category` is blank for every token.
 Status: Completed
