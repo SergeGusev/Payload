@@ -1,3 +1,14 @@
+## Active Update 2026-05-01 Category Performance Field Reference Repeat
+Goal: Re-describe fields in `public.polymarket_onchain_wallet_category_performance`.
+Status: Completed
+Done:
+- Re-read schema, domain model, and refresh aggregation SQL for `polymarket_onchain_wallet_category_performance`.
+- Confirmed one row is one `(wallet, category)` aggregate derived from `polymarket_onchain_wallet_positions`.
+- Prepared concise Russian descriptions for all columns, including score, ROI, win rate, sample quality, and timestamp semantics.
+Next: None
+Notes: No source code changed. Existing unrelated dirty files `PolyCopyTrader.sln` and `src/PolyCopyTrader.Storage/PostgresSchemaInitializer.cs` were left untouched. `git rev-parse --abbrev-ref --symbolic-full-name '@{u}'` failed because branch `master` has no configured upstream.
+Blockers: Automatic pull/push cannot run until a Git upstream is configured.
+
 ## Active Update 2026-05-01 Final Category Table Reminder
 Goal: Remind the user of the final category-scoped wallet rating table name.
 Status: Completed

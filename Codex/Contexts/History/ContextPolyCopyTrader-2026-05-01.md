@@ -343,3 +343,10 @@ Request:
 
 Result:
 Reminded that the final category-scoped wallet rating table is `public.polymarket_onchain_wallet_category_performance`. No source code changed.
+
+## 2026-05-01T15:01:06.3073999+00:00
+Request:
+Давай ещё раз пройдёмся по полям этой таблицы с их описанием
+
+Result:
+Re-read schema, domain model, and aggregation SQL for `public.polymarket_onchain_wallet_category_performance`. Prepared a concise field-by-field Russian description of the table, including row grain, formulas for ROI/win rate/score, sample-quality thresholds, and timestamp semantics. No source code changed.
