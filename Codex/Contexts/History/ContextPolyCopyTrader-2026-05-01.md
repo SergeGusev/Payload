@@ -200,3 +200,10 @@ Request:
 
 Result:
 Confirmed that the current schema has the necessary on-chain research tables for the stated goals, with the caveat that completeness now depends on backfill/enrichment catching up and queues draining, not on creating more tables. No source code changed.
+
+## 2026-05-01T11:11:41.7967085Z
+Request:
+Ок, таблицы есть, пользователи есть. Мы уже можем вычислять рейтинг каждого пользователя в конкретной категории?
+
+Result:
+Explained that category-specific ratings can be computed now from `polymarket_onchain_wallet_positions` where category metadata exists, but the persisted score tables are currently wallet-wide rather than `wallet + category`. Provided a category-scoped SQL pattern and noted that a dedicated materialized category rating table should be added for speed. No source code changed.

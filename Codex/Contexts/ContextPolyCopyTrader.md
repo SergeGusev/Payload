@@ -1,3 +1,15 @@
+## Active Update 2026-05-01 Category User Rating Capability
+Goal: Clarify whether category-specific on-chain user ratings can be computed now.
+Status: Completed
+Done:
+- Re-read workflow, project rules, coding rules, active context, schema, repository scoring SQL, configuration docs, and Git state.
+- Confirmed `category` is available in `polymarket_onchain_trade_details` and `polymarket_onchain_wallet_positions` after token metadata enrichment.
+- Confirmed existing persisted `polymarket_onchain_wallet_performance` and `polymarket_onchain_participant_details` scores are wallet-wide, not `wallet + category` materializations.
+- Prepared a category-scoped rating SQL that reuses the current wallet performance scoring formula over `polymarket_onchain_wallet_positions`.
+Next: If category rating speed matters in the Dashboard, materialize a dedicated indexed `wallet_category_performance`/`participant_category_details` table instead of running grouped SQL ad hoc.
+Notes: `git rev-parse --abbrev-ref --symbolic-full-name '@{u}'` failed because branch `master` has no configured upstream, so pull/push cannot run automatically. No source code changed for this answer-only task; existing unrelated `PolyCopyTrader.sln` changes remain untouched.
+Blockers: Automatic pull/push cannot run until a Git upstream is configured.
+
 ## Active Update 2026-05-01 Onchain Table Completeness Answer
 Goal: Clarify whether all necessary on-chain research tables now exist.
 Status: Completed
