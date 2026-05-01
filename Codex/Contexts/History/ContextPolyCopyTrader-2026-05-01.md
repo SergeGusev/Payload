@@ -431,3 +431,10 @@ Are any unnecessary rows appearing in tables, for example blockchain logs, or is
 
 Result:
 Re-read storage code and docs, then queried PostgreSQL through `POLYCOPYTRADER_POSTGRES_CONNECTION` without printing secrets. Confirmed raw `polymarket_onchain_logs` is intended as temporary staging and can be deleted after a matching `polymarket_onchain_trade_details` row exists; decoded `polymarket_onchain_fills` remains the retained audit/rebuild source and should not be casually deleted. Database catalog stats showed `polymarket_onchain_logs` around 14 GB with about 2.5M live rows and no dead tuple bloat, so it is a real cleanup target. Recommended retaining final/source tables, cleaning only processed raw logs in small batches, and using `VACUUM (ANALYZE)` afterward; `VACUUM FULL` should require a maintenance window. No repo source code changed.
+
+## 2026-05-01T19:02:00+00:00
+Request:
+А ты фиксируешь уже обработанные строки логов блокчейна?
+
+Result:
+Re-read the on-chain raw-log schema and ingestion repository code. Confirmed `polymarket_onchain_logs` has no explicit processed flag/timestamp. Processing is recorded indirectly through unique decoded rows in `polymarket_onchain_fills`, materialized rows in `polymarket_onchain_trade_details`, and the completed block cursor in `polymarket_onchain_ingest_cursors`; processed raw logs are deleted when a matching trade-detail row exists. Explained that incomplete raw rows can remain after a failed batch and are idempotently reprocessed/refetched. No repo source code changed.

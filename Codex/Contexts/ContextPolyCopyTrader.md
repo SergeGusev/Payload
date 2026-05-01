@@ -1,3 +1,15 @@
+## Active Update 2026-05-01 Raw Log Processing Marker Explanation
+Goal: Explain whether already processed blockchain raw log rows are explicitly marked.
+Status: Completed
+Done:
+- Re-read `polymarket_onchain_logs`, `polymarket_onchain_trade_details`, `polymarket_onchain_ingest_cursors`, and ingestion repository code.
+- Confirmed there is no explicit `processed_at_utc`, `processed`, or status column on `polymarket_onchain_logs`.
+- Confirmed processing is recorded indirectly and idempotently: `polymarket_onchain_fills` stores decoded source rows by unique `(transaction_hash, log_index)`, `polymarket_onchain_trade_details` stores materialized serving rows by primary key `(transaction_hash, log_index)`, and `polymarket_onchain_ingest_cursors.to_block` records the newest completed batch block.
+- Confirmed processed raw logs are deleted only when a matching `polymarket_onchain_trade_details` row exists; incomplete raw logs can remain if a batch fails after raw-log insertion and before fill/serving materialization.
+Next: Consider adding explicit batch/run audit or cleanup-watermark tables if operational visibility over processed raw logs is needed; adding a processed flag to raw logs is less useful if the retention goal is to delete processed raw rows.
+Notes: No repo source code changed. Existing unrelated dirty files `PolyCopyTrader.sln` and `src/PolyCopyTrader.Storage/PostgresSchemaInitializer.cs` were left untouched. `git rev-parse --abbrev-ref --symbolic-full-name '@{u}'` failed because branch `master` has no configured upstream.
+Blockers: Automatic pull/push cannot run until a Git upstream is configured.
+
 ## Active Update 2026-05-01 Raw Data Retention Guidance
 Goal: Decide whether any PostgreSQL rows are unnecessary and whether raw blockchain logs should be deleted.
 Status: Completed
