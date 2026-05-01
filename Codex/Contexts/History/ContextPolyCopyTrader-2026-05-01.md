@@ -95,3 +95,10 @@ System.Exception {System.TimeoutException}
 
 Result:
 Diagnosed the schema initializer failure as the default Npgsql command timeout expiring while long schema DDL/index creation runs on a large database. Updated `PostgresSchemaInitializer` to set `CommandTimeout = 0` for the startup schema script and restored normal exception propagation instead of swallowing initializer errors. Service build, Dashboard build, full tests, and diff check passed.
+
+## 2026-05-01T08:54:15.0343803Z
+Request:
+верни в InitializeAsync мой блок try - catch. Хоть ловить буду
+
+Result:
+Restored a local `try/catch` in `PostgresSchemaInitializer.InitializeAsync()` for debugging, kept `CommandTimeout = 0`, writes the exception to console, and rethrows so schema initialization failure is still fatal. Service build, Dashboard build, full tests, and diff check passed.

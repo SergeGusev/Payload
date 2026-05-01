@@ -1,3 +1,14 @@
+## Active Update 2026-05-01 Schema Initializer Catch Restore
+Goal: Restore a local catch block in schema initialization for debugging while keeping timeout behavior.
+Status: Completed
+Done:
+- Re-read workflow, project rules, coding rules, active context, and Git state.
+- Wrapped `PostgresSchemaInitializer.InitializeAsync()` in `try/catch`, writes the caught exception to console, then rethrows it.
+- Kept `command.CommandTimeout = 0` so long schema DDL/index creation is not cancelled by Npgsql's default command timeout.
+Next: Put a breakpoint in the `catch` block while debugging schema initialization.
+Notes: `git rev-parse --abbrev-ref --symbolic-full-name '@{u}'` failed because branch `master` has no configured upstream, so pull/push cannot run automatically. Verification: `dotnet build src\PolyCopyTrader.Service\PolyCopyTrader.Service.csproj -c Verify --no-restore` passed; `dotnet test tests\PolyCopyTrader.Tests\PolyCopyTrader.Tests.csproj -c Verify --no-restore` passed 119/119; `dotnet build src\PolyCopyTrader.Dashboard\PolyCopyTrader.Dashboard.csproj -c Verify --no-restore` passed; `git diff --check` passed with CRLF warnings only. Existing unrelated `PolyCopyTrader.sln` changes remain untouched.
+Blockers: Automatic pull/push cannot run until a Git upstream is configured.
+
 ## Active Update 2026-05-01 Schema Initialization Timeout Fix
 Goal: Stop PostgreSQL schema initialization from failing on long-running index/table setup for large on-chain data.
 Status: Completed
