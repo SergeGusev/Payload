@@ -1,3 +1,15 @@
+## Active Update 2026-05-01 Activity Queue Growth Guidance
+Goal: Explain what it means when `polymarket_onchain_wallet_activity_refresh_queue` grows during initial on-chain backfill.
+Status: Completed
+Done:
+- Re-read workflow, project rules, coding rules, active context, activity queue schema, activity refresh repository logic, worker code, service config, and Git state.
+- Confirmed the activity queue is keyed by wallet and can grow normally while derived backfill discovers unique wallets faster than `OnChainActivityRefreshWorker` processes them.
+- Confirmed default throughput is conservative: `ActivityRefreshWalletBatchSize=100` every `ActivityRefreshIntervalSeconds=30`, plus seed batches of `500`.
+- Prepared diagnostics to distinguish normal backlog from a stuck worker: activity rows/refreshed timestamps, queue reasons/oldest age, `OnChainActivityRefreshWorker` errors, and pg_stat_activity for long refresh statements.
+Next: If activity rows are growing and no errors exist, either wait or raise activity refresh batch/interval settings; if rows are not growing, inspect worker errors/locks first.
+Notes: `git rev-parse --abbrev-ref --symbolic-full-name '@{u}'` failed because branch `master` has no configured upstream, so pull/push cannot run automatically. No source code changed for this answer-only task; existing unrelated `PolyCopyTrader.sln` changes remain untouched.
+Blockers: Automatic pull/push cannot run until a Git upstream is configured.
+
 ## Active Update 2026-05-01 Next Operational Step After Schema
 Goal: Clarify the next operational step after successful startup schema SQL.
 Status: Completed

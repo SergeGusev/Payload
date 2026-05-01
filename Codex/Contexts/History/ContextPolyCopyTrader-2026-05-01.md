@@ -172,3 +172,10 @@ Request:
 
 Result:
 Clarified that the next operational milestone is running the service and letting or forcing on-chain sync so `RefreshMissingDerivedDataAsync` backfills existing `polymarket_onchain_fills` into `wallet_fills`, `wallet_executions`, `trade_details`, and downstream participant/activity/position/performance tables. No source code changed.
+
+## 2026-05-01T10:54:17.7978916Z
+Request:
+"activity_queue" растёт
+
+Result:
+Explained that activity queue growth is expected during initial on-chain backfill if derived-data producers discover unique wallets faster than the activity worker consumes them. Provided checks for normal backlog versus a stuck worker and recommended increasing activity refresh throughput only after confirming activity rows are growing and worker errors are absent. No source code changed.
