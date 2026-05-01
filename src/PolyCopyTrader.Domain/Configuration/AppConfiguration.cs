@@ -351,6 +351,14 @@ public sealed class OnChainIngestionOptions
 
     public int PerformanceRefreshQueueSeedWalletBatchSize { get; init; } = 500;
 
+    public bool BackgroundCategoryPerformanceRefreshEnabled { get; init; } = true;
+
+    public int CategoryPerformanceRefreshIntervalSeconds { get; init; } = 30;
+
+    public int CategoryPerformancePairBatchSize { get; init; } = 500;
+
+    public int CategoryPerformanceQueueSeedPairBatchSize { get; init; } = 1_000;
+
     public List<OnChainExchangeContractOptions> ExchangeContracts { get; init; } =
     [
         new("CTF Exchange V1", "0x4bFb41d5B3570DeFd03C39a9A4D8dE6Bd8B8982E", "V1"),

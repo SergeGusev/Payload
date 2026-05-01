@@ -178,6 +178,10 @@ every completed block batch.
 - `PerformanceRefreshIntervalSeconds`: pause between successful background performance refresh cycles; default `30`.
 - `PerformanceRefreshWalletBatchSize`: number of queued wallets to aggregate into wallet performance per cycle; default `100`.
 - `PerformanceRefreshQueueSeedWalletBatchSize`: number of missing wallets to seed into the performance refresh queue while the initial performance table is being built; default `500`.
+- `BackgroundCategoryPerformanceRefreshEnabled`: runs wallet-category performance aggregation continuously while the service is running; default `true`.
+- `CategoryPerformanceRefreshIntervalSeconds`: pause between successful background wallet-category performance refresh cycles; default `30`.
+- `CategoryPerformancePairBatchSize`: number of queued wallet/category pairs to aggregate per cycle; default `500`.
+- `CategoryPerformanceQueueSeedPairBatchSize`: number of missing wallet/category pairs to seed into the category performance refresh queue while the initial table is being built; default `1000`.
 - `ExchangeContracts`: Polymarket V1/V2 CTF and negative-risk exchange contracts to scan.
 
 The cursor stores a completed block range per contract: `to_block` is extended
@@ -239,6 +243,14 @@ stores wallets that need recalculation; position refreshes enqueue affected
 wallets, and first startup after the feature is introduced seeds missing wallets
 in batches until the existing positions history has a performance row.
 
+`polymarket_onchain_wallet_category_performance` is the category-scoped wallet
+score table. It uses the same transparent first-pass score as wallet performance
+but groups positions by `(wallet, category)`, with unknown or unenriched
+categories stored as `unknown`. `polymarket_onchain_wallet_category_performance_refresh_queue`
+stores wallet/category pairs to recalculate. Position refreshes enqueue both the
+previous and new category pairs for affected tokens, so category scores stay
+current as new fills arrive or Gamma metadata changes.
+
 The manual `Enrich markets` command calls Gamma `markets?clob_token_ids=...` for
 missing execution token ids and stores `polymarket_onchain_token_metadata` rows
 with condition id, market title/slug, outcome, category, end date, active/closed
@@ -251,7 +263,7 @@ The on-chain background workers record transient failures in `api_errors`, then 
 with exponential backoff from `BackgroundErrorDelaySeconds` to
 `BackgroundMaxErrorDelaySeconds`. Single-run guards prevent manual IPC commands
 and background workers from running duplicate ingestion, enrichment, activity,
-position, or performance cycles.
+position, performance, or category performance cycles.
 
 The dashboard has two on-chain ranking layers. `Onchain Rankings` is still
 activity-based: executions, buy/sell counts, distinct token ids, notional volume,

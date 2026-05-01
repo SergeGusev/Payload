@@ -40,6 +40,8 @@ public static class PostgresSchema
         "polymarket_onchain_position_refresh_queue",
         "polymarket_onchain_wallet_performance",
         "polymarket_onchain_wallet_performance_refresh_queue",
+        "polymarket_onchain_wallet_category_performance",
+        "polymarket_onchain_wallet_category_performance_refresh_queue",
         "polymarket_onchain_trade_details",
         "polymarket_onchain_participant_details",
         "polymarket_onchain_ingest_cursors",
@@ -900,6 +902,52 @@ CREATE TABLE IF NOT EXISTS polymarket_onchain_wallet_performance_refresh_queue (
 
 CREATE INDEX IF NOT EXISTS ix_polymarket_onchain_wallet_performance_refresh_queue_queued
 ON polymarket_onchain_wallet_performance_refresh_queue(queued_at_utc);
+
+CREATE TABLE IF NOT EXISTS polymarket_onchain_wallet_category_performance (
+    wallet text NOT NULL,
+    category text NOT NULL,
+    positions_count integer NOT NULL,
+    open_positions integer NOT NULL,
+    flat_positions integer NOT NULL,
+    resolved_positions integer NOT NULL,
+    profitable_resolved_positions integer NOT NULL,
+    losing_resolved_positions integer NOT NULL,
+    markets_traded integer NOT NULL,
+    volume_usd numeric(28,8) NOT NULL,
+    resolved_volume_usd numeric(28,8) NOT NULL,
+    open_exposure_usd numeric(28,8) NOT NULL,
+    resolved_cost_usd numeric(28,8) NOT NULL,
+    resolved_pnl_usd numeric(28,8) NOT NULL,
+    resolved_roi_pct numeric(18,8) NOT NULL,
+    win_rate_pct numeric(18,8) NOT NULL,
+    average_position_size_usd numeric(28,8) NOT NULL,
+    score numeric(28,8) NOT NULL,
+    sample_quality text NOT NULL,
+    first_active_utc timestamptz NOT NULL,
+    last_active_utc timestamptz NOT NULL,
+    refreshed_at_utc timestamptz NOT NULL,
+    PRIMARY KEY (wallet, category)
+);
+
+CREATE INDEX IF NOT EXISTS ix_polymarket_onchain_wallet_category_performance_category_score
+ON polymarket_onchain_wallet_category_performance(category, score DESC, resolved_pnl_usd DESC, volume_usd DESC);
+
+CREATE INDEX IF NOT EXISTS ix_polymarket_onchain_wallet_category_performance_wallet
+ON polymarket_onchain_wallet_category_performance(wallet, category);
+
+CREATE INDEX IF NOT EXISTS ix_polymarket_onchain_wallet_category_performance_last_active
+ON polymarket_onchain_wallet_category_performance(category, last_active_utc DESC);
+
+CREATE TABLE IF NOT EXISTS polymarket_onchain_wallet_category_performance_refresh_queue (
+    wallet text NOT NULL,
+    category text NOT NULL,
+    reason text NOT NULL,
+    queued_at_utc timestamptz NOT NULL,
+    PRIMARY KEY (wallet, category)
+);
+
+CREATE INDEX IF NOT EXISTS ix_polymarket_onchain_wallet_category_performance_refresh_queue_queued
+ON polymarket_onchain_wallet_category_performance_refresh_queue(queued_at_utc);
 
 DO $$
 BEGIN

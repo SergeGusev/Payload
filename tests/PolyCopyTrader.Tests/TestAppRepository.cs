@@ -53,6 +53,10 @@ internal sealed class TestAppRepository : IAppRepository
 
     public HashSet<string> PolymarketOnChainWalletPerformanceRefreshQueue { get; } = new(StringComparer.OrdinalIgnoreCase);
 
+    public List<PolymarketOnChainWalletCategoryPerformance> PolymarketOnChainWalletCategoryPerformance { get; } = [];
+
+    public HashSet<string> PolymarketOnChainWalletCategoryPerformanceRefreshQueue { get; } = new(StringComparer.OrdinalIgnoreCase);
+
     public List<OnChainBlockRange> OnChainWalletDerivedRefreshRanges { get; } = [];
 
     public List<OnChainIngestionCursor> OnChainIngestionCursors { get; } = [];
@@ -589,6 +593,73 @@ internal sealed class TestAppRepository : IAppRepository
             PolymarketOnChainWalletPerformanceRefreshQueue.Count));
     }
 
+    public Task<IReadOnlyList<PolymarketOnChainWalletCategoryPerformance>> GetPolymarketOnChainWalletCategoryPerformanceAsync(
+        string? category = null,
+        int limit = 100,
+        CancellationToken cancellationToken = default)
+    {
+        var rows = PolymarketOnChainWalletCategoryPerformance.AsEnumerable();
+        if (!string.IsNullOrWhiteSpace(category))
+        {
+            rows = rows.Where(item => string.Equals(item.Category, category, StringComparison.OrdinalIgnoreCase));
+        }
+
+        return Task.FromResult<IReadOnlyList<PolymarketOnChainWalletCategoryPerformance>>(
+            rows
+                .OrderByDescending(item => item.Score)
+                .ThenByDescending(item => item.ResolvedPnlUsd)
+                .ThenByDescending(item => item.VolumeUsd)
+                .Take(limit)
+                .ToArray());
+    }
+
+    public Task<OnChainCategoryPerformanceRefreshResult> RefreshPolymarketOnChainWalletCategoryPerformanceAsync(
+        int pairLimit = 500,
+        int queueSeedPairLimit = 1_000,
+        CancellationToken cancellationToken = default)
+    {
+        var queued = 0;
+        var knownPairs = PolymarketOnChainWalletCategoryPerformance
+            .Select(item => CategoryPerformanceKey(item.Wallet, item.Category))
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+        foreach (var pair in PolymarketOnChainWalletPositions
+            .Select(item => CategoryPerformanceKey(item.Wallet, CategoryName(item.Category)))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .Where(pair => !knownPairs.Contains(pair))
+            .Take(queueSeedPairLimit))
+        {
+            if (PolymarketOnChainWalletCategoryPerformanceRefreshQueue.Add(pair))
+            {
+                queued++;
+            }
+        }
+
+        var pairs = PolymarketOnChainWalletCategoryPerformanceRefreshQueue
+            .OrderBy(pair => pair, StringComparer.Ordinal)
+            .Take(pairLimit)
+            .Select(SplitCategoryPerformanceKey)
+            .ToArray();
+        if (pairs.Length == 0)
+        {
+            return Task.FromResult(new OnChainCategoryPerformanceRefreshResult(queued, 0, 0, 0));
+        }
+
+        RefreshCategoryPerformanceForPairs(pairs);
+        foreach (var pair in pairs)
+        {
+            PolymarketOnChainWalletCategoryPerformanceRefreshQueue.Remove(CategoryPerformanceKey(pair.Wallet, pair.Category));
+        }
+
+        return Task.FromResult(new OnChainCategoryPerformanceRefreshResult(
+            queued,
+            pairs.Length,
+            PolymarketOnChainWalletCategoryPerformance.Count(item =>
+                pairs.Any(pair =>
+                    string.Equals(pair.Wallet, item.Wallet, StringComparison.OrdinalIgnoreCase) &&
+                    string.Equals(pair.Category, item.Category, StringComparison.OrdinalIgnoreCase))),
+            PolymarketOnChainWalletCategoryPerformanceRefreshQueue.Count));
+    }
+
     public Task<IReadOnlyList<PolymarketOnChainTradeDetails>> GetRecentPolymarketOnChainTradeDetailsAsync(int limit = 250, CancellationToken cancellationToken = default)
     {
         var metadataByToken = PolymarketOnChainTokenMetadata
@@ -719,6 +790,10 @@ internal sealed class TestAppRepository : IAppRepository
     private void RefreshPositionsForTokens(IReadOnlyList<string> tokenIds)
     {
         var tokenSet = tokenIds.ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var affectedCategoryPairs = PolymarketOnChainWalletPositions
+            .Where(item => tokenSet.Contains(item.TokenId))
+            .Select(item => CategoryPerformanceKey(item.Wallet, CategoryName(item.Category)))
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
         PolymarketOnChainWalletPositions.RemoveAll(item => tokenSet.Contains(item.TokenId));
         var metadataByToken = PolymarketOnChainTokenMetadata.ToDictionary(
             item => item.TokenId,
@@ -796,6 +871,16 @@ internal sealed class TestAppRepository : IAppRepository
         {
             PolymarketOnChainWalletPerformanceRefreshQueue.Add(wallet);
         }
+
+        foreach (var pair in positions.Select(item => CategoryPerformanceKey(item.Wallet, CategoryName(item.Category))))
+        {
+            affectedCategoryPairs.Add(pair);
+        }
+
+        foreach (var pair in affectedCategoryPairs)
+        {
+            PolymarketOnChainWalletCategoryPerformanceRefreshQueue.Add(pair);
+        }
     }
 
     private void RefreshPerformanceForWallets(IReadOnlyList<string> wallets)
@@ -853,6 +938,108 @@ internal sealed class TestAppRepository : IAppRepository
             });
 
         PolymarketOnChainWalletPerformance.AddRange(rows);
+    }
+
+    private void RefreshCategoryPerformanceForPairs(IReadOnlyList<CategoryPerformancePair> pairs)
+    {
+        PolymarketOnChainWalletCategoryPerformance.RemoveAll(item =>
+            pairs.Any(pair =>
+                string.Equals(pair.Wallet, item.Wallet, StringComparison.OrdinalIgnoreCase) &&
+                string.Equals(pair.Category, item.Category, StringComparison.OrdinalIgnoreCase)));
+
+        var rows = PolymarketOnChainWalletPositions
+            .Where(item => pairs.Any(pair =>
+                string.Equals(pair.Wallet, item.Wallet, StringComparison.OrdinalIgnoreCase) &&
+                string.Equals(pair.Category, CategoryName(item.Category), StringComparison.OrdinalIgnoreCase)))
+            .GroupBy(
+                item => new CategoryPerformancePair(item.Wallet, CategoryName(item.Category)),
+                CategoryPerformancePairComparer.Instance)
+            .Select(group =>
+            {
+                var positions = group.ToArray();
+                var resolved = positions.Where(item => item.PositionStatus == "Resolved").ToArray();
+                var volume = positions.Sum(item => item.VolumeUsd);
+                var resolvedVolume = resolved.Sum(item => item.VolumeUsd);
+                var openExposure = positions.Where(item => item.PositionStatus == "Open").Sum(item => Math.Abs(item.NetCostUsd));
+                var resolvedCost = resolved.Where(item => item.ResolvedPnlUsd is not null).Sum(item => Math.Abs(item.NetCostUsd));
+                var resolvedPnl = resolved.Sum(item => item.ResolvedPnlUsd ?? 0m);
+                var profitable = resolved.Count(item => (item.ResolvedPnlUsd ?? 0m) > 0m);
+                var losing = resolved.Count(item => (item.ResolvedPnlUsd ?? 0m) < 0m);
+                var roi = resolvedCost == 0m ? 0m : resolvedPnl / resolvedCost * 100m;
+                var winRate = resolved.Length == 0 ? 0m : profitable * 100m / resolved.Length;
+                var samplePenalty = resolved.Length < 5 ? (5 - resolved.Length) * 10m : 0m;
+                var score = resolvedPnl + roi * 2m + profitable * 5m +
+                    (decimal)Math.Log((double)(volume + 1m)) +
+                    Math.Min(resolved.Length, 50) * 2m -
+                    openExposure * 0.02m -
+                    samplePenalty;
+
+                return new PolymarketOnChainWalletCategoryPerformance(
+                    group.Key.Wallet,
+                    group.Key.Category,
+                    positions.Length,
+                    positions.Count(item => item.PositionStatus == "Open"),
+                    positions.Count(item => item.PositionStatus == "Flat"),
+                    resolved.Length,
+                    profitable,
+                    losing,
+                    positions.Select(item => item.ConditionId).Distinct(StringComparer.OrdinalIgnoreCase).Count(),
+                    volume,
+                    resolvedVolume,
+                    openExposure,
+                    resolvedCost,
+                    resolvedPnl,
+                    roi,
+                    winRate,
+                    positions.Length == 0 ? 0m : positions.Average(item => Math.Abs(item.NetCostUsd)),
+                    score,
+                    resolved.Length >= 25 && volume >= 1_000m ? "High" :
+                        resolved.Length >= 10 ? "Medium" :
+                        resolved.Length >= 3 ? "Low" : "Thin",
+                    positions.Min(item => item.FirstTradeUtc),
+                    positions.Max(item => item.LastTradeUtc),
+                    DateTimeOffset.UtcNow);
+            });
+
+        PolymarketOnChainWalletCategoryPerformance.AddRange(rows);
+    }
+
+    private static string CategoryName(string? category)
+    {
+        return string.IsNullOrWhiteSpace(category) ? "unknown" : category;
+    }
+
+    private static string CategoryPerformanceKey(string wallet, string category)
+    {
+        return wallet + "\u001F" + category;
+    }
+
+    private static CategoryPerformancePair SplitCategoryPerformanceKey(string key)
+    {
+        var parts = key.Split('\u001F', 2);
+        return new CategoryPerformancePair(parts[0], parts.Length > 1 ? parts[1] : "unknown");
+    }
+
+    private sealed record CategoryPerformancePair(string Wallet, string Category);
+
+    private sealed class CategoryPerformancePairComparer : IEqualityComparer<CategoryPerformancePair>
+    {
+        public static readonly CategoryPerformancePairComparer Instance = new();
+
+        public bool Equals(CategoryPerformancePair? x, CategoryPerformancePair? y)
+        {
+            return x is not null &&
+                y is not null &&
+                string.Equals(x.Wallet, y.Wallet, StringComparison.OrdinalIgnoreCase) &&
+                string.Equals(x.Category, y.Category, StringComparison.OrdinalIgnoreCase);
+        }
+
+        public int GetHashCode(CategoryPerformancePair obj)
+        {
+            return HashCode.Combine(
+                StringComparer.OrdinalIgnoreCase.GetHashCode(obj.Wallet),
+                StringComparer.OrdinalIgnoreCase.GetHashCode(obj.Category));
+        }
     }
 
     private sealed record PositionKey(

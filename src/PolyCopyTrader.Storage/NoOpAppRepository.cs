@@ -269,6 +269,22 @@ public sealed class NoOpAppRepository : IAppRepository
         return Task.FromResult(new OnChainPerformanceRefreshResult(0, 0, 0, 0));
     }
 
+    public Task<IReadOnlyList<PolymarketOnChainWalletCategoryPerformance>> GetPolymarketOnChainWalletCategoryPerformanceAsync(
+        string? category = null,
+        int limit = 100,
+        CancellationToken cancellationToken = default)
+    {
+        return Task.FromResult<IReadOnlyList<PolymarketOnChainWalletCategoryPerformance>>([]);
+    }
+
+    public Task<OnChainCategoryPerformanceRefreshResult> RefreshPolymarketOnChainWalletCategoryPerformanceAsync(
+        int pairLimit = 500,
+        int queueSeedPairLimit = 1_000,
+        CancellationToken cancellationToken = default)
+    {
+        return Task.FromResult(new OnChainCategoryPerformanceRefreshResult(0, 0, 0, 0));
+    }
+
     public Task<IReadOnlyList<PolymarketOnChainTradeDetails>> GetRecentPolymarketOnChainTradeDetailsAsync(int limit = 250, CancellationToken cancellationToken = default)
     {
         return Task.FromResult<IReadOnlyList<PolymarketOnChainTradeDetails>>([]);

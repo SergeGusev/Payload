@@ -119,6 +119,16 @@ public interface IAppRepository
         int queueSeedWalletLimit = 500,
         CancellationToken cancellationToken = default);
 
+    Task<IReadOnlyList<PolymarketOnChainWalletCategoryPerformance>> GetPolymarketOnChainWalletCategoryPerformanceAsync(
+        string? category = null,
+        int limit = 100,
+        CancellationToken cancellationToken = default);
+
+    Task<OnChainCategoryPerformanceRefreshResult> RefreshPolymarketOnChainWalletCategoryPerformanceAsync(
+        int pairLimit = 500,
+        int queueSeedPairLimit = 1_000,
+        CancellationToken cancellationToken = default);
+
     Task<IReadOnlyList<PolymarketOnChainTradeDetails>> GetRecentPolymarketOnChainTradeDetailsAsync(int limit = 250, CancellationToken cancellationToken = default);
 
     Task<IReadOnlyList<PolymarketOnChainParticipantDetails>> GetPolymarketOnChainParticipantDetailsAsync(int limit = 250, CancellationToken cancellationToken = default);

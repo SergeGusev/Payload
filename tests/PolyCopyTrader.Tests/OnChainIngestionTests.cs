@@ -210,6 +210,8 @@ public sealed class OnChainIngestionTests
         var position = Assert.Single(await repository.GetPolymarketOnChainWalletPositionsAsync());
         var performanceResult = await repository.RefreshPolymarketOnChainWalletPerformanceAsync();
         var performance = Assert.Single(await repository.GetPolymarketOnChainWalletPerformanceAsync());
+        var categoryPerformanceResult = await repository.RefreshPolymarketOnChainWalletCategoryPerformanceAsync();
+        var categoryPerformance = Assert.Single(await repository.GetPolymarketOnChainWalletCategoryPerformanceAsync("Politics"));
 
         Assert.Equal(1, refreshResult.TokensProcessed);
         Assert.Equal(1, refreshResult.PositionsUpserted);
@@ -234,6 +236,12 @@ public sealed class OnChainIngestionTests
         Assert.Equal(188.46153846153846153846153846m, performance.ResolvedRoiPct);
         Assert.Equal(100m, performance.WinRatePct);
         Assert.True(performance.Score > 0m);
+        Assert.Equal(1, categoryPerformanceResult.PairsProcessed);
+        Assert.Equal(1, categoryPerformanceResult.PairsUpserted);
+        Assert.Equal("0xwallet", categoryPerformance.Wallet);
+        Assert.Equal("Politics", categoryPerformance.Category);
+        Assert.Equal(performance.ResolvedPnlUsd, categoryPerformance.ResolvedPnlUsd);
+        Assert.Equal(performance.Score, categoryPerformance.Score);
     }
 
     [Fact]
@@ -470,6 +478,9 @@ public sealed class OnChainIngestionTests
                 PerformanceRefreshIntervalSeconds = 0,
                 PerformanceRefreshWalletBatchSize = 0,
                 PerformanceRefreshQueueSeedWalletBatchSize = 0,
+                CategoryPerformanceRefreshIntervalSeconds = 0,
+                CategoryPerformancePairBatchSize = 0,
+                CategoryPerformanceQueueSeedPairBatchSize = 0,
                 ExchangeContracts =
                 [
                     new OnChainExchangeContractOptions("Broken", "0x123", "V9")
@@ -500,6 +511,9 @@ public sealed class OnChainIngestionTests
         Assert.Contains(errors, error => error.Contains("PerformanceRefreshIntervalSeconds", StringComparison.Ordinal));
         Assert.Contains(errors, error => error.Contains("PerformanceRefreshWalletBatchSize", StringComparison.Ordinal));
         Assert.Contains(errors, error => error.Contains("PerformanceRefreshQueueSeedWalletBatchSize", StringComparison.Ordinal));
+        Assert.Contains(errors, error => error.Contains("CategoryPerformanceRefreshIntervalSeconds", StringComparison.Ordinal));
+        Assert.Contains(errors, error => error.Contains("CategoryPerformancePairBatchSize", StringComparison.Ordinal));
+        Assert.Contains(errors, error => error.Contains("CategoryPerformanceQueueSeedPairBatchSize", StringComparison.Ordinal));
         Assert.Contains(errors, error => error.Contains("Version", StringComparison.Ordinal));
     }
 

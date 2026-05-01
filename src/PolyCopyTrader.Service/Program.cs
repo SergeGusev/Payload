@@ -121,6 +121,7 @@ builder.Services.AddHostedService<OnChainMarketEnrichmentWorker>();
 builder.Services.AddHostedService<OnChainActivityRefreshWorker>();
 builder.Services.AddHostedService<OnChainPositionRefreshWorker>();
 builder.Services.AddHostedService<OnChainPerformanceRefreshWorker>();
+builder.Services.AddHostedService<OnChainCategoryPerformanceRefreshWorker>();
 builder.Services.AddHostedService<MarketDataWebSocketService>();
 builder.Services.AddHostedService<DailyReportWorker>();
 

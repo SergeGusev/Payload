@@ -779,6 +779,30 @@ public sealed record PolymarketOnChainWalletPerformance(
     DateTimeOffset LastActiveUtc,
     DateTimeOffset RefreshedAtUtc);
 
+public sealed record PolymarketOnChainWalletCategoryPerformance(
+    string Wallet,
+    string Category,
+    int PositionsCount,
+    int OpenPositions,
+    int FlatPositions,
+    int ResolvedPositions,
+    int ProfitableResolvedPositions,
+    int LosingResolvedPositions,
+    int MarketsTraded,
+    decimal VolumeUsd,
+    decimal ResolvedVolumeUsd,
+    decimal OpenExposureUsd,
+    decimal ResolvedCostUsd,
+    decimal ResolvedPnlUsd,
+    decimal ResolvedRoiPct,
+    decimal WinRatePct,
+    decimal AveragePositionSizeUsd,
+    decimal Score,
+    string SampleQuality,
+    DateTimeOffset FirstActiveUtc,
+    DateTimeOffset LastActiveUtc,
+    DateTimeOffset RefreshedAtUtc);
+
 public sealed record PolymarketOnChainTradeDetails(
     string ContractName,
     string ContractAddress,
@@ -853,6 +877,12 @@ public sealed record OnChainPerformanceRefreshResult(
     int WalletsQueued,
     int WalletsProcessed,
     int WalletsUpserted,
+    int QueueRemaining);
+
+public sealed record OnChainCategoryPerformanceRefreshResult(
+    int PairsQueued,
+    int PairsProcessed,
+    int PairsUpserted,
     int QueueRemaining);
 
 public sealed record OnChainIngestionResult(

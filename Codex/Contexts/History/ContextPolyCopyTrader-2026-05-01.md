@@ -207,3 +207,10 @@ Request:
 
 Result:
 Explained that category-specific ratings can be computed now from `polymarket_onchain_wallet_positions` where category metadata exists, but the persisted score tables are currently wallet-wide rather than `wallet + category`. Provided a category-scoped SQL pattern and noted that a dedicated materialized category rating table should be added for speed. No source code changed.
+
+## 2026-05-01T11:24:22.4063976Z
+Request:
+Да, давай сделаем эту таблицу. И придумай механизм её постоянного обновления по мере загрузки новых данных
+
+Result:
+Added materialized wallet/category performance storage: `polymarket_onchain_wallet_category_performance`, a refresh queue, repository read/refresh methods, a background category performance refresh worker, config/validation/appsettings, docs, and tests. Position refresh now enqueues old and new affected wallet/category pairs so scores stay current as new fills and metadata updates flow through. Service build, Dashboard build, full tests, and diff check passed; initial parallel build hit a transient Defender file lock and passed on rerun.

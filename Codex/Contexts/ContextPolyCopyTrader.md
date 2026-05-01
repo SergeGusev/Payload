@@ -1,3 +1,15 @@
+## Active Update 2026-05-01 Wallet Category Performance Table
+Goal: Materialize fast category-specific on-chain wallet ratings and keep them updated as new data arrives.
+Status: Completed
+Done:
+- Added `polymarket_onchain_wallet_category_performance` and `polymarket_onchain_wallet_category_performance_refresh_queue` to PostgreSQL schema and required tables.
+- Added typed domain models, repository read/refresh contract, PostgreSQL implementation, no-op/test implementations, and in-memory test coverage.
+- The position refresh path now captures old and new `(wallet, category)` pairs for affected tokens and enqueues category-performance refreshes, so category scores update when new fills arrive or token metadata recategorizes positions.
+- Added `OnChainCategoryPerformanceRefreshWorker` plus service registration, config options, validation, appsettings entries, README, and configuration reference updates.
+Next: Restart the service so schema initialization creates the table/queue; monitor `polymarket_onchain_wallet_category_performance` and its refresh queue while position refresh continues.
+Notes: `git rev-parse --abbrev-ref --symbolic-full-name '@{u}'` failed because branch `master` has no configured upstream, so pull/push cannot run automatically. Verification: initial parallel service/dashboard build hit a Defender file lock on `Domain.dll`; rerun service build passed, dashboard build passed, `dotnet test tests\PolyCopyTrader.Tests\PolyCopyTrader.Tests.csproj -c Verify --no-restore` passed 121/121, `git diff --check` passed with CRLF warnings only. Existing unrelated `PolyCopyTrader.sln` changes remain untouched.
+Blockers: Automatic pull/push cannot run until a Git upstream is configured.
+
 ## Active Update 2026-05-01 Category User Rating Capability
 Goal: Clarify whether category-specific on-chain user ratings can be computed now.
 Status: Completed
