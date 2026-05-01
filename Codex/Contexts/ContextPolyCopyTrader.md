@@ -1,3 +1,14 @@
+## Active Update 2026-05-01 Leaderboard Count Lock Guidance
+Goal: Explain why `count(*)` on `trader_leaderboard_snapshots` hangs after cancelling index creation and how to inspect size without scanning.
+Status: Completed
+Done:
+- Re-read workflow, project rules, coding rules, active context, and Git state.
+- Clarified that `count(*)` can hang because it waits for an `AccessShareLock` behind DDL/rollback locks, not necessarily because the table is enormous.
+- Prepared metadata-only size/estimated-row SQL using `pg_class`, `pg_relation_size`, `pg_indexes_size`, and lock diagnostic SQL using `pg_stat_activity`/`pg_blocking_pids`.
+Next: Run the lock diagnostic query first; if `count(*)` is blocked, cancel/terminate the blocking schema/index backend or wait for rollback to finish.
+Notes: `git rev-parse --abbrev-ref --symbolic-full-name '@{u}'` failed because branch `master` has no configured upstream, so pull/push cannot run automatically. No source code changed for this answer-only task; existing unrelated `PolyCopyTrader.sln` changes remain untouched.
+Blockers: Automatic pull/push cannot run until a Git upstream is configured.
+
 ## Active Update 2026-05-01 Trader Leaderboard Snapshots Explanation
 Goal: Explain the purpose of `trader_leaderboard_snapshots` and why `count(*)` can hang.
 Status: Completed

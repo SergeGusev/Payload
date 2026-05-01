@@ -130,3 +130,10 @@ Request:
 
 Result:
 Explained that `trader_leaderboard_snapshots` is the current Polymarket leaderboard snapshot pool for manual Trader Discovery/Find traders, not the on-chain ingestion path. Identified the likely reason `count(*)` hangs: a full table scan and/or waiting behind schema DDL/migration locks from the legacy snapshot migration block. No source code changed.
+
+## 2026-05-01T10:26:00.0726703Z
+Request:
+Там долго создавался индекс, я остановил создание индекса и пытаюсь определить размер этой таблицы, чтобы понять, почему индекс так завис. Теперь висит на count(*)
+
+Result:
+Explained that after cancelling index creation, `count(*)` can hang because it is waiting on DDL/rollback locks rather than simply scanning a huge table. Provided metadata-only size/estimated-row SQL from `pg_class` and lock diagnostics using `pg_stat_activity` and `pg_blocking_pids`. No source code changed.
