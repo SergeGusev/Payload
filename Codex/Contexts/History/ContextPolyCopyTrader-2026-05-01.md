@@ -466,3 +466,10 @@ Request:
 
 Result:
 Queried PostgreSQL through `POLYCOPYTRADER_POSTGRES_CONNECTION` without printing secrets and inspected the latest service log. Confirmed the service is running in `ReadOnly` with a fresh heartbeat, the new category/performance gate config is active, and on-chain ingestion advanced through block `85992531` with several successful fresh batches after restart. Confirmed metadata and wallet/category performance refresh are active and real category rows are growing, but no signals were evaluated in the last 2 hours, so the new decision gates have not been exercised yet. Noted significant DB pressure: large refresh queues remain, no blocking chain was present, but recent errors include position/performance deadlocks and market-enrichment stream timeouts, especially around missing-token metadata lookup. No repo source code changed.
+
+## 2026-05-01T19:36:16.9515211+00:00
+Request:
+Ок. Что дальше?
+
+Result:
+Recommended making database-pipeline stabilization the next step before further strategy work. The first implementation target is a dedicated token metadata refresh queue so market enrichment no longer repeatedly scans the very large `polymarket_onchain_wallet_executions` table for missing metadata. The follow-up target is reducing/deconflicting position, performance, and category-performance refresh workers to lower deadlock and timeout pressure. No source behavior changed.

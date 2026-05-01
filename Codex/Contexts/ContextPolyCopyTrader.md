@@ -1,3 +1,15 @@
+## Active Update 2026-05-01 Next Operational Step
+Goal: Decide the next task after deploying category-aware signal gates and verifying service/database health.
+Status: Completed
+Done:
+- Reviewed the latest persisted health check and current code references for metadata enrichment, category-performance refresh, and signal gating.
+- Chose the next priority as database-pipeline stabilization before further strategy work: the signal path now depends on known market categories and fresh leader/category performance, while the latest check showed heavy refresh queues, deadlocks, and market-enrichment stream timeouts.
+- Identified the most important implementation target: stop scanning the large `polymarket_onchain_wallet_executions` table for missing metadata on every enrichment cycle and replace it with a first-class token metadata refresh queue processed with small locked batches.
+- Identified a second follow-up target: reduce/deconflict heavy position, performance, and category-performance refresh workers so catch-up and enrichment can progress without deadlock pressure.
+Next: Implement a token metadata refresh queue and then tune refresh worker batch sizes/concurrency; after restart, monitor queue ages, category growth, enrichment errors, and signal rejection reason codes.
+Notes: Answer-only planning task; no source behavior changed. Existing unrelated dirty files `PolyCopyTrader.sln` and `src/PolyCopyTrader.Storage/PostgresSchemaInitializer.cs` were left untouched. `git rev-parse --abbrev-ref --symbolic-full-name '@{u}'` failed because branch `master` has no configured upstream.
+Blockers: Automatic pull/push cannot run until a Git upstream is configured.
+
 ## Active Update 2026-05-01 Post Gate Deployment Database Check
 Goal: Verify PostgreSQL and service health after deploying leader/category signal gates.
 Status: Completed
