@@ -522,3 +522,10 @@ Request:
 
 Result:
 Verified blocker pid `56984` was still the expected wallet-activity queue seed query, ran `pg_cancel_backend(56984)`, and PostgreSQL returned `True`. Confirmed the blocked schema index creation disappeared and no blocking chain remained. A new non-blocking `missing_activity` seed query appeared as pid `58160`; service heartbeat was fresh and `PolyCopyTrader.Service` was `Running` in `ReadOnly`.
+
+## 2026-05-01T20:46:18.3632754Z
+Request:
+Ок, сейчас всё в порядке, да?
+
+Result:
+Queried PostgreSQL health after cancelling the blocker. Confirmed `blocked=0`, the wallet-activity queue index exists, no active schema index creation remains, and `PolyCopyTrader.Service` heartbeat is fresh in `Running`/`ReadOnly`. No `api_errors` were returned for the last 15 minutes. One `missing_activity` seed query remained active for about 5 minutes, but it was not blocking anything.

@@ -1,3 +1,17 @@
+## Active Update 2026-05-01 Post Blocker Cancellation Health Check
+Goal: Verify service and PostgreSQL health after cancelling the wallet-activity queue blocker.
+Status: Completed
+Done:
+- Queried PostgreSQL through `POLYCOPYTRADER_POSTGRES_CONNECTION` without printing secrets.
+- Confirmed no blocking chain remains: `blocked=0`.
+- Confirmed `ix_polymarket_onchain_wallet_activity_refresh_queue_queued` exists and no active `CREATE INDEX` session remains for it.
+- Confirmed service heartbeat is fresh: `PolyCopyTrader.Service` is `Running` in `ReadOnly`, heartbeat age about 6 seconds.
+- Confirmed no `api_errors` rows appeared in the last 15 minutes in the health query.
+- Noted one active `missing_activity` seed query (`pid=58160`) still running for about 5 minutes, but it is not blocking anything.
+Next: Treat the system as healthy now, but optimize the full wallet-activity `SELECT DISTINCT` seed if it keeps running for many minutes or recurs on startup.
+Notes: DB health check only; no source behavior changed. Existing unrelated dirty files `PolyCopyTrader.sln` and `src/PolyCopyTrader.Storage/PostgresSchemaInitializer.cs` were left untouched. `git rev-parse --abbrev-ref --symbolic-full-name '@{u}'` failed because branch `master` has no configured upstream.
+Blockers: Automatic pull/push cannot run until a Git upstream is configured.
+
 ## Active Update 2026-05-01 Cancel Wallet Activity Queue Blocker
 Goal: Cancel the PostgreSQL query blocking service schema startup.
 Status: Completed
