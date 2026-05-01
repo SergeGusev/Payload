@@ -151,3 +151,10 @@ Request:
 
 Result:
 Opened `D:\1\Img1.png` and confirmed the screenshot shows a pgAdmin result grid with row counts rather than actual PostgreSQL lock diagnostics. Clarified that pgAdmin's lock icons in result column headers mean read-only columns, not active database locks. No source code changed.
+
+## 2026-05-01T10:35:17.8024536Z
+Request:
+Как разблокировать всё это?
+
+Result:
+Provided a PostgreSQL unblock runbook: stop application sources of new DB work, use a fresh session to inspect blockers via `pg_stat_activity`/`pg_blocking_pids`, terminate blocker backends with `pg_terminate_backend`, restart PostgreSQL only as a last resort, and drop/truncate `trader_leaderboard_snapshots` only if losing Trader Discovery snapshot history is acceptable. No source code changed.

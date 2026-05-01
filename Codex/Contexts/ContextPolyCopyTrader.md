@@ -1,3 +1,14 @@
+## Active Update 2026-05-01 PostgreSQL Unblock Runbook
+Goal: Provide a concrete runbook to unblock PostgreSQL sessions stuck around schema/index/count operations.
+Status: Completed
+Done:
+- Re-read workflow, project rules, coding rules, active context, and Git state.
+- Prepared a safe operational sequence: stop the application sources of new DB queries, inspect real blockers with `pg_stat_activity`/`pg_blocking_pids`, terminate blocking backends, and restart PostgreSQL only as a last resort.
+- Clarified that `trader_leaderboard_snapshots` can be dropped/truncated after unblocking only if losing Trader Discovery leaderboard snapshot history is acceptable; it is not part of the on-chain raw/fill tables.
+Next: Stop the service/Dashboard, run the blocker diagnostic from a fresh SQL session, terminate blocker pids, then restart PostgreSQL only if termination cannot clear the stuck backends.
+Notes: `git rev-parse --abbrev-ref --symbolic-full-name '@{u}'` failed because branch `master` has no configured upstream, so pull/push cannot run automatically. No source code changed for this answer-only task; existing unrelated `PolyCopyTrader.sln` changes remain untouched.
+Blockers: Automatic pull/push cannot run until a Git upstream is configured.
+
 ## Active Update 2026-05-01 PgAdmin Lock Screenshot Interpretation
 Goal: Interpret the user's pgAdmin screenshot during PostgreSQL lock debugging.
 Status: Completed
