@@ -1,3 +1,14 @@
+## Active Update 2026-05-01 Post Schema Startup Verification
+Goal: Provide the next database checks after startup SQL completed successfully.
+Status: Completed
+Done:
+- Re-read workflow, project rules, coding rules, active context, relevant on-chain schema/docs/code, and Git state.
+- Confirmed after schema initialization the next critical verification is derived-data backfill from `polymarket_onchain_fills` into `polymarket_onchain_wallet_fills`, `polymarket_onchain_wallet_executions`, `polymarket_onchain_trade_details`, and participant/activity/position/performance layers.
+- Prepared SQL checks for blockers, object kinds, index validity, approximate sizes, exact bounded counts, derived range coverage, raw-log cleanup, queues, errors, heartbeats, and dashboard-visible smoke queries.
+Next: Start/restart the service, wait a few minutes, then run the SQL checks in the recommended order.
+Notes: `git rev-parse --abbrev-ref --symbolic-full-name '@{u}'` failed because branch `master` has no configured upstream, so pull/push cannot run automatically. No source code changed for this answer-only task; existing unrelated `PolyCopyTrader.sln` changes remain untouched.
+Blockers: Automatic pull/push cannot run until a Git upstream is configured.
+
 ## Active Update 2026-05-01 PostgreSQL Unblock Runbook
 Goal: Provide a concrete runbook to unblock PostgreSQL sessions stuck around schema/index/count operations.
 Status: Completed

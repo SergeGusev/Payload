@@ -158,3 +158,10 @@ Request:
 
 Result:
 Provided a PostgreSQL unblock runbook: stop application sources of new DB work, use a fresh session to inspect blockers via `pg_stat_activity`/`pg_blocking_pids`, terminate blocker backends with `pg_terminate_backend`, restart PostgreSQL only as a last resort, and drop/truncate `trader_leaderboard_snapshots` only if losing Trader Discovery snapshot history is acceptable. No source code changed.
+
+## 2026-05-01T10:43:19.0521756Z
+Request:
+Ок, разобрались, теперь все SQL на старте отработали нормально. Что дальше проверить?
+
+Result:
+Provided the next verification checklist after successful startup SQL: check real blockers are gone, confirm on-chain serving objects are physical tables with valid indexes, inspect estimated sizes, compare raw fill ranges to derived wallet execution/trade detail ranges, verify raw-log cleanup and refresh queues, inspect service heartbeat/api errors, and run Dashboard-visible smoke queries. No source code changed.
