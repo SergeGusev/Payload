@@ -1,3 +1,15 @@
+## Active Update 2026-05-01 Onchain Serving Tables Architecture
+Goal: Align on the target architecture for blockchain ingestion, indexed derived tables, and raw data retention.
+Status: Completed
+Done:
+- Re-read workflow, project rules, coding rules, active context, and Git state.
+- Clarified the target architecture: ingest blockchain logs, transform them into indexed serving tables, switch Dashboard/analysis to those tables, then purge/archive raw logs only after coverage validation.
+- Clarified that current raw data should not be deleted first unless we intentionally choose a full reset; existing raw fills can be used to backfill the new serving tables.
+- Proposed replacing ordinary explorer views with physical tables such as on-chain trades, trade participants, participant summaries, and indexed wallet/time/token/market access paths.
+Next: Implement physical indexed on-chain trade/participant serving tables, refresh/upsert them from existing fills and future ingestion ranges, switch Dashboard reads to those tables, then add optional raw-retention purge.
+Notes: `git rev-parse --abbrev-ref --symbolic-full-name '@{u}'` failed because branch `master` has no configured upstream, so pull/push cannot run automatically. No source code changed for this answer-only task; verification is context/Git inspection and `git diff --check`. Existing unrelated `PolyCopyTrader.sln` changes remain untouched.
+Blockers: Automatic pull/push cannot run until a Git upstream is configured.
+
 ## Active Update 2026-05-01 Views Versus Tables Speed Answer
 Goal: Explain why on-chain explorer was initially added as views and clarify the faster target design.
 Status: Completed

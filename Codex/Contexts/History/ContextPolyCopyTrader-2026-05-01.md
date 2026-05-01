@@ -48,3 +48,10 @@ Request:
 
 Result:
 Explained that ordinary PostgreSQL views are saved queries and were chosen only as a low-risk first analyst surface without duplicate storage or refresh invalidation logic. Acknowledged that for speed over large on-chain data the better target is indexed materialized tables maintained incrementally by refresh queues/workers or repository refresh methods.
+
+## 2026-05-01T08:03:59.5807838+00:00
+Request:
+Давай пройдёмся по общей идее: 1. Мы читаем блокчейн. 2. Преобразовываем его в удобные для нашей работы таблицы с индексами. 3. Удаляем блокчейн для уменьшения работы с базой данных. 4. Если для этой цели нужно удалить информацию из текущих таблиц и начать чтение блокчейна заново, я к этому готов.
+
+Result:
+Aligned on the target on-chain architecture: read blockchain logs, transform them into indexed serving tables, switch Dashboard/analysis to those tables, and only then purge/archive raw blockchain-like tables after coverage validation. Clarified that existing raw fills can backfill the new serving tables, so a full reset is optional rather than required.
