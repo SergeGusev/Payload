@@ -1,3 +1,14 @@
+## Active Update 2026-05-01 Polymarket Market Meaning
+Goal: Clarify what "market" means in `markets_traded`.
+Status: Completed
+Done:
+- Clarified that in this context a market is a concrete Polymarket question/condition identified by `condition_id`, not a category or subcategory.
+- Explained the hierarchy: broad category, optional event/series grouping, individual market/question/condition, outcomes/tokens, then trades/positions.
+- Gave examples such as a tennis set-winner market, a Fed-rate-cut market, and an Israel/Lebanon diplomatic meeting market.
+Next: None
+Notes: No source code changed. Existing unrelated dirty files `PolyCopyTrader.sln` and `src/PolyCopyTrader.Storage/PostgresSchemaInitializer.cs` were left untouched. `git rev-parse --abbrev-ref --symbolic-full-name '@{u}'` failed because branch `master` has no configured upstream.
+Blockers: Automatic pull/push cannot run until a Git upstream is configured.
+
 ## Active Update 2026-05-01 Markets Traded Field Explanation
 Goal: Explain `markets_traded` in `public.polymarket_onchain_wallet_category_performance`.
 Status: Completed

@@ -364,3 +364,10 @@ Request:
 
 Result:
 Re-read the refresh SQL and explained that `markets_traded` is `COUNT(DISTINCT condition_id)` from `polymarket_onchain_wallet_positions` inside one `(wallet, category)` aggregate. It counts unique Polymarket questions/markets, not executions, token ids, or outcomes; before metadata enrichment, token id can temporarily be used as a fallback condition id. No source code changed.
+
+## 2026-05-01T15:37:35.2707675+00:00
+Request:
+Не понимаю, что в данном контексте означает "рынок". Какая-то подкатегория?
+
+Result:
+Explained that "market" means a concrete Polymarket question/condition identified by `condition_id`, not a category or subcategory. Described the hierarchy as category -> optional event/series -> individual market/question/condition -> outcomes/tokens -> trades/positions, with examples from Sports, Finance, and Politics. No source code changed.
