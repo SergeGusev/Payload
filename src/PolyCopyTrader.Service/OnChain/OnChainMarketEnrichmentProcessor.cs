@@ -1,3 +1,4 @@
+using System.Text.Json;
 using PolyCopyTrader.Domain;
 using PolyCopyTrader.Domain.Configuration;
 using PolyCopyTrader.Polymarket;
@@ -54,6 +55,7 @@ public sealed class OnChainMarketEnrichmentProcessor(
         var rowsStored = 0;
         var batchesRun = 0;
         var attemptedTokenIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var eventCategoryById = new Dictionary<string, string?>(StringComparer.OrdinalIgnoreCase);
 
         logger.LogInformation(
             "Starting on-chain market enrichment. BatchSize={BatchSize} MaxBatches={MaxBatches}",
@@ -85,7 +87,7 @@ public sealed class OnChainMarketEnrichmentProcessor(
                 cancellationToken.ThrowIfCancellationRequested();
                 attemptedTokenIds.Add(tokenId);
 
-                var metadata = await GetTokenMetadataWithFallbackAsync(tokenId, cancellationToken);
+                var metadata = await GetTokenMetadataWithFallbackAsync(tokenId, eventCategoryById, cancellationToken);
 
                 if (metadata.Count == 0)
                 {
@@ -127,6 +129,7 @@ public sealed class OnChainMarketEnrichmentProcessor(
 
     private async Task<IReadOnlyList<PolymarketOnChainTokenMetadata>> GetTokenMetadataWithFallbackAsync(
         string tokenId,
+        Dictionary<string, string?> eventCategoryById,
         CancellationToken cancellationToken)
     {
         var bestMetadata = await gammaClient.GetTokenMetadataAsync(tokenId, closed: false, cancellationToken);
@@ -148,11 +151,17 @@ public sealed class OnChainMarketEnrichmentProcessor(
             bestMetadata = closedMetadata;
         }
 
+        var eventMetadata = await TryApplyEventCategoryFallbackAsync(bestMetadata, eventCategoryById, cancellationToken);
+        if (HasCategory(eventMetadata))
+        {
+            return eventMetadata;
+        }
+
         var marketByToken = await TryGetMarketByTokenAsync(tokenId, cancellationToken);
         await DelayIfConfiguredAsync(cancellationToken);
         if (marketByToken is null || string.IsNullOrWhiteSpace(marketByToken.ConditionId))
         {
-            return bestMetadata;
+            return eventMetadata;
         }
 
         var conditionMetadata = await gammaClient.GetTokenMetadataByConditionIdAsync(
@@ -166,6 +175,12 @@ public sealed class OnChainMarketEnrichmentProcessor(
             return conditionMetadata;
         }
 
+        var conditionEventMetadata = await TryApplyEventCategoryFallbackAsync(conditionMetadata, eventCategoryById, cancellationToken);
+        if (HasCategory(conditionEventMetadata))
+        {
+            return conditionEventMetadata;
+        }
+
         var closedConditionMetadata = await gammaClient.GetTokenMetadataByConditionIdAsync(
             marketByToken.ConditionId,
             tokenId,
@@ -177,12 +192,22 @@ public sealed class OnChainMarketEnrichmentProcessor(
             return closedConditionMetadata;
         }
 
-        if (conditionMetadata.Count > 0)
+        var closedConditionEventMetadata = await TryApplyEventCategoryFallbackAsync(closedConditionMetadata, eventCategoryById, cancellationToken);
+        if (HasCategory(closedConditionEventMetadata))
         {
-            return conditionMetadata;
+            return closedConditionEventMetadata;
         }
 
-        return closedConditionMetadata.Count > 0 ? closedConditionMetadata : bestMetadata;
+        if (conditionMetadata.Count > 0)
+        {
+            return conditionEventMetadata.Count > 0 ? conditionEventMetadata : conditionMetadata;
+        }
+
+        return closedConditionEventMetadata.Count > 0
+            ? closedConditionEventMetadata
+            : closedConditionMetadata.Count > 0
+                ? closedConditionMetadata
+                : eventMetadata;
     }
 
     private async Task<PolymarketClobMarketByToken?> TryGetMarketByTokenAsync(
@@ -199,6 +224,70 @@ public sealed class OnChainMarketEnrichmentProcessor(
                 ex,
                 "CLOB market-by-token fallback failed during on-chain market enrichment. TokenId={TokenId}",
                 tokenId);
+            return null;
+        }
+    }
+
+    private async Task<IReadOnlyList<PolymarketOnChainTokenMetadata>> TryApplyEventCategoryFallbackAsync(
+        IReadOnlyList<PolymarketOnChainTokenMetadata> metadata,
+        Dictionary<string, string?> eventCategoryById,
+        CancellationToken cancellationToken)
+    {
+        if (metadata.Count == 0 || HasCategory(metadata))
+        {
+            return metadata;
+        }
+
+        var eventId = metadata
+            .Select(item => TryParseEventId(item.RawJson))
+            .FirstOrDefault(value => !string.IsNullOrWhiteSpace(value));
+        if (string.IsNullOrWhiteSpace(eventId))
+        {
+            return metadata;
+        }
+
+        try
+        {
+            if (!eventCategoryById.TryGetValue(eventId, out var category))
+            {
+                category = await gammaClient.GetEventCategoryAsync(eventId, cancellationToken);
+                eventCategoryById[eventId] = category;
+                await DelayIfConfiguredAsync(cancellationToken);
+            }
+
+            if (string.IsNullOrWhiteSpace(category))
+            {
+                return metadata;
+            }
+
+            return metadata.Select(item => item with { Category = category }).ToArray();
+        }
+        catch (JsonException ex)
+        {
+            logger.LogInformation(
+                ex,
+                "Gamma event category fallback returned invalid JSON during on-chain market enrichment. EventId={EventId}",
+                eventId);
+            return metadata;
+        }
+        catch (PolymarketApiException ex)
+        {
+            logger.LogInformation(
+                ex,
+                "Gamma event category fallback failed during on-chain market enrichment. EventId={EventId}",
+                eventId);
+            return metadata;
+        }
+    }
+
+    private static string? TryParseEventId(string rawJson)
+    {
+        try
+        {
+            return PolymarketJsonParser.ParseGammaMarketEventId(rawJson);
+        }
+        catch (JsonException)
+        {
             return null;
         }
     }

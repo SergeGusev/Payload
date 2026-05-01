@@ -284,3 +284,20 @@ Request:
 
 Result:
 Inspected the screenshot of recent `polymarket_http_logs`. It shows successful `200` responses for `GetOpenMarketByToken`, `GetClosedMarketByToken`, `GetMarketByToken`, `GetOpenMarketByCondition`, and `GetClosedMarketByCondition`, with calls running through 2026-05-01 16:46 +03. Concluded the latest fallback path did run, so if categories are still absent the next step is inspecting response bodies and then implementing a broader catalog/event category backfill if the fallback responses contain no category fields.
+
+## 2026-05-01T14:04:17.6743000+00:00
+Request:
+{"condition_id":"0x89fedd13eb930092c8ce37d7a4044336cfeeef5518f0eade30e229000899c37c","primary_token_id":"1004234058066861677096496584575172041827818579503943220570471342553827636921","secondary_token_id":"47803573746602070267172577159700942294797111548106912259540280246667921988154"}
+
+[{"id":"2057923","question":"Set 1 Winner: Mertens vs Eala", ... }]
+
+{"condition_id":"0x4d6c9bc5f2b0ac837dd5cb0a11c57c09bc7ed9bd76ee4a5cc4fdab22315102e9","primary_token_id":"100408877574515589014379445565286548923878550168250206283847179495841643123941","secondary_token_id":"27666019241987726783184877026366486446923864603803101843224979221229731559927"}
+
+[{"id":"2002618","question":"Israel x Lebanon diplomatic meeting by May 31, 2026?", ... }]
+
+{"condition_id":"0x7c1350305c0ee65b954c4a68d3a78d6229013c1b04bd3d0094b7e16c1c5f67cb","primary_token_id":"100407332948777919084743641810336935113694049834605998796347953992751989830913","secondary_token_id":"59860743001602809486619549609421911279100523620666500611587682830363426007717"}
+
+[{"id":"949494","question":"Fed rate cut by April 2026 meeting?", ... }]
+
+Result:
+Analyzed the sampled CLOB/Gamma responses and verified live Gamma behavior for the same style of markets. Implemented Gamma event-category fallback: market enrichment now extracts the linked event id from market raw JSON, fetches Gamma `/events/{eventId}`, derives deterministic categories from event category/tags/text, caches event categories per run, and applies them to token metadata before falling back to CLOB/condition metadata. Updated parser/client/enrichment tests and docs. Targeted tests passed 29/29, full test project passed 132/132, and diff check passed with CRLF warnings only.

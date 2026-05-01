@@ -151,6 +151,37 @@ public sealed class OnChainMarketEnrichmentTests
     }
 
     [Fact]
+    public async Task Processor_UsesEventCategoryFallbackWhenMarketLookupHasEventWithoutCategory()
+    {
+        var repository = new TestAppRepository();
+        repository.PolymarketOnChainWalletExecutions.Add(Execution("token-1"));
+        var gamma = new FakeGammaClient();
+        gamma.Metadata["token-1"] = [Metadata("token-1", category: null) with { RawJson = MarketRawJson("event-1") }];
+        gamma.EventCategories["event-1"] = "Politics";
+
+        var processor = new OnChainMarketEnrichmentProcessor(
+            NullLogger<OnChainMarketEnrichmentProcessor>.Instance,
+            new OnChainIngestionOptions
+            {
+                MarketEnrichmentBatchSize = 10,
+                RequestDelayMilliseconds = 0
+            },
+            gamma,
+            new FakeClobClient(),
+            repository);
+
+        var result = await processor.RefreshAsync();
+
+        Assert.Equal(1, result.TokensRequested);
+        Assert.Equal(1, result.TokensResolved);
+        Assert.Contains(gamma.EventRequests, eventId => eventId == "event-1");
+        Assert.Contains(repository.PolymarketOnChainTokenMetadata, item =>
+            item.TokenId == "token-1" &&
+            item.LookupSucceeded &&
+            item.Category == "Politics");
+    }
+
+    [Fact]
     public async Task Processor_StopsAtBatchLimitWhenMissingTokensRemain()
     {
         var repository = new TestAppRepository();
@@ -263,15 +294,32 @@ public sealed class OnChainMarketEnrichmentTests
             DateTimeOffset.UtcNow);
     }
 
+    private static string MarketRawJson(string eventId)
+    {
+        return $$"""
+{
+  "events": [
+    {
+      "id": "{{eventId}}"
+    }
+  ]
+}
+""";
+    }
+
     private sealed class FakeGammaClient : IPolymarketGammaClient
     {
         public Dictionary<string, IReadOnlyList<PolymarketOnChainTokenMetadata>> Metadata { get; } = new(StringComparer.OrdinalIgnoreCase);
 
         public Dictionary<string, IReadOnlyList<PolymarketOnChainTokenMetadata>> MetadataByCondition { get; } = new(StringComparer.OrdinalIgnoreCase);
 
+        public Dictionary<string, string?> EventCategories { get; } = new(StringComparer.OrdinalIgnoreCase);
+
         public List<(string TokenId, bool Closed)> Requests { get; } = [];
 
         public List<(string ConditionId, string TokenId, bool Closed)> ConditionRequests { get; } = [];
+
+        public List<string> EventRequests { get; } = [];
 
         public TaskCompletionSource<object?> RequestObserved { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
 
@@ -304,6 +352,14 @@ public sealed class OnChainMarketEnrichmentTests
             return Task.FromResult(!closed && MetadataByCondition.TryGetValue(conditionId, out var metadata)
                 ? metadata
                 : []);
+        }
+
+        public Task<string?> GetEventCategoryAsync(
+            string eventId,
+            CancellationToken cancellationToken = default)
+        {
+            EventRequests.Add(eventId);
+            return Task.FromResult(EventCategories.TryGetValue(eventId, out var category) ? category : null);
         }
     }
 

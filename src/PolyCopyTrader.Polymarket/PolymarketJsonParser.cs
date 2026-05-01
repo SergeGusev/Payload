@@ -216,10 +216,300 @@ public static class PolymarketJsonParser
         return FirstNonEmpty(
             GetString(market, "category"),
             GetFirstNestedString(market, "events", "category"),
+            GetFirstNestedString(market, "events", "subcategory"),
             GetFirstNestedArrayString(market, "events", "categories", "label", "name", "slug"),
             GetFirstNestedArrayString(market, "series", "categories", "label", "name", "slug"),
             GetFirstArrayString(market, "categories", "label", "name", "slug"),
-            GetFirstArrayString(market, "tags", "label", "name", "slug"));
+            InferGammaCategory(market));
+    }
+
+    public static string? ParseGammaMarketEventId(string rawJson)
+    {
+        if (string.IsNullOrWhiteSpace(rawJson))
+        {
+            return null;
+        }
+
+        using var document = JsonDocument.Parse(rawJson);
+        return ParseGammaMarketEventId(document.RootElement);
+    }
+
+    public static string? ParseGammaMarketEventId(JsonElement market)
+    {
+        return GetFirstNestedString(market, "events", "id");
+    }
+
+    public static string? ParseGammaEventCategory(JsonElement eventRoot)
+    {
+        if (eventRoot.ValueKind is JsonValueKind.Null or JsonValueKind.Undefined)
+        {
+            return null;
+        }
+
+        return FirstNonEmpty(
+            GetString(eventRoot, "category"),
+            GetString(eventRoot, "subcategory"),
+            GetFirstArrayString(eventRoot, "categories", "label", "name", "slug"),
+            InferGammaCategory(eventRoot));
+    }
+
+    private static string? InferGammaCategory(JsonElement root)
+    {
+        var signals = new List<string>();
+        AddGammaCategorySignals(root, signals);
+
+        if (signals.Count == 0)
+        {
+            return null;
+        }
+
+        var normalizedSignals = signals
+            .Select(NormalizeCategorySignal)
+            .Where(signal => signal.Length > 0)
+            .Distinct(StringComparer.Ordinal)
+            .ToArray();
+        if (normalizedSignals.Length == 0)
+        {
+            return null;
+        }
+
+        if (AnyExactSignal(normalizedSignals, "sports"))
+        {
+            return "Sports";
+        }
+
+        if (AnyExactSignal(normalizedSignals, "crypto"))
+        {
+            return "Crypto";
+        }
+
+        if (AnyExactSignal(normalizedSignals, "finance"))
+        {
+            return "Finance";
+        }
+
+        if (AnyExactSignal(normalizedSignals, "politics", "elections", "us politics", "global politics"))
+        {
+            return "Politics";
+        }
+
+        if (AnyExactSignal(normalizedSignals, "climate and weather", "weather"))
+        {
+            return "Weather";
+        }
+
+        if (AnyExactSignal(normalizedSignals, "ai", "artificial intelligence"))
+        {
+            return "AI";
+        }
+
+        if (AnyExactSignal(normalizedSignals, "science"))
+        {
+            return "Science";
+        }
+
+        if (AnyExactSignal(normalizedSignals, "pop culture"))
+        {
+            return "Pop Culture";
+        }
+
+        var text = " " + string.Join(' ', normalizedSignals) + " ";
+        if (ContainsAnyCategoryTerm(text, "bitcoin", "btc", "ethereum", "eth", "solana", "crypto", "usdc", "blockchain"))
+        {
+            return "Crypto";
+        }
+
+        if (ContainsAnyCategoryTerm(
+            text,
+            "election",
+            "president",
+            "trump",
+            "biden",
+            "senate",
+            "congress",
+            "government",
+            "minister",
+            "ukraine",
+            "russia",
+            "china",
+            "taiwan",
+            "israel",
+            "iran",
+            "lebanon",
+            "gaza",
+            "diplomacy",
+            "ceasefire",
+            "nato",
+            "tariff",
+            "war"))
+        {
+            return "Politics";
+        }
+
+        if (ContainsAnyCategoryTerm(
+            text,
+            "sports",
+            "tennis",
+            "wta",
+            "atp",
+            "nba",
+            "nfl",
+            "mlb",
+            "nhl",
+            "soccer",
+            "football",
+            "epl",
+            "uefa",
+            "fifa",
+            "ufc",
+            "boxing",
+            "golf",
+            "cricket",
+            "formula 1",
+            "f1",
+            "madrid open"))
+        {
+            return "Sports";
+        }
+
+        if (ContainsAnyCategoryTerm(
+            text,
+            "fed",
+            "fomc",
+            "rate cut",
+            "interest rate",
+            "inflation",
+            "economy",
+            "economic",
+            "finance",
+            "treasury",
+            "recession",
+            "nasdaq",
+            "stock",
+            "oil"))
+        {
+            return "Finance";
+        }
+
+        if (ContainsAnyCategoryTerm(text, "openai", "chatgpt", "artificial intelligence", " ai "))
+        {
+            return "AI";
+        }
+
+        if (ContainsAnyCategoryTerm(text, "weather", "climate", "hurricane", "temperature", "rainfall", "snow"))
+        {
+            return "Weather";
+        }
+
+        if (ContainsAnyCategoryTerm(text, "space", "nasa", "science", "covid", "health", "disease"))
+        {
+            return "Science";
+        }
+
+        if (ContainsAnyCategoryTerm(
+            text,
+            "movie",
+            "album",
+            "music",
+            "grammy",
+            "oscars",
+            "box office",
+            "taylor swift",
+            "gta",
+            "video game"))
+        {
+            return "Pop Culture";
+        }
+
+        return null;
+    }
+
+    private static bool AnyExactSignal(IReadOnlyCollection<string> signals, params string[] values)
+    {
+        return values.Any(value => signals.Contains(value));
+    }
+
+    private static bool ContainsAnyCategoryTerm(string text, params string[] terms)
+    {
+        return terms.Any(term =>
+        {
+            var normalized = NormalizeCategorySignal(term);
+            return normalized.Length > 0 && text.Contains(" " + normalized + " ", StringComparison.Ordinal);
+        });
+    }
+
+    private static string NormalizeCategorySignal(string value)
+    {
+        var chars = value
+            .Trim()
+            .ToLowerInvariant()
+            .Select(ch => char.IsLetterOrDigit(ch) ? ch : ' ')
+            .ToArray();
+        return string.Join(' ', new string(chars).Split(' ', StringSplitOptions.RemoveEmptyEntries));
+    }
+
+    private static void AddGammaCategorySignals(JsonElement element, List<string> signals)
+    {
+        AddPropertySignals(
+            element,
+            signals,
+            "category",
+            "subcategory",
+            "slug",
+            "ticker",
+            "title",
+            "question",
+            "description",
+            "groupItemTitle",
+            "resolutionSource");
+
+        AddArrayItemSignals(element, signals, "tags", "label", "name", "slug");
+        AddArrayItemSignals(element, signals, "categories", "label", "name", "slug");
+        AddArrayItemSignals(element, signals, "series", "title", "slug", "category", "subcategory");
+
+        if (element.TryGetProperty("eventMetadata", out var eventMetadata) && eventMetadata.ValueKind == JsonValueKind.Object)
+        {
+            AddPropertySignals(eventMetadata, signals, "context_description");
+        }
+
+        if (!element.TryGetProperty("events", out var events) || events.ValueKind != JsonValueKind.Array)
+        {
+            return;
+        }
+
+        foreach (var eventItem in events.EnumerateArray())
+        {
+            AddGammaCategorySignals(eventItem, signals);
+        }
+    }
+
+    private static void AddPropertySignals(JsonElement element, List<string> signals, params string[] propertyNames)
+    {
+        foreach (var propertyName in propertyNames)
+        {
+            var value = GetString(element, propertyName);
+            if (!string.IsNullOrWhiteSpace(value))
+            {
+                signals.Add(value);
+            }
+        }
+    }
+
+    private static void AddArrayItemSignals(
+        JsonElement element,
+        List<string> signals,
+        string arrayPropertyName,
+        params string[] propertyNames)
+    {
+        if (!element.TryGetProperty(arrayPropertyName, out var array) || array.ValueKind != JsonValueKind.Array)
+        {
+            return;
+        }
+
+        foreach (var item in array.EnumerateArray())
+        {
+            AddPropertySignals(item, signals, propertyNames);
+        }
     }
 
     public static PolymarketOnChainTokenMetadata BuildMissingTokenMetadata(string tokenId, string reason)

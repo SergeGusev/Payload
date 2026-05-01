@@ -1,3 +1,17 @@
+## Active Update 2026-05-01 Gamma Event Category Fallback
+Goal: Recover on-chain token categories when Gamma market and condition responses omit category fields.
+Status: Completed
+Done:
+- Analyzed the user's sampled response bodies: CLOB market-by-token returns condition ids, and Gamma market-by-condition returns market data but still omits top-level category in the shown cases.
+- Verified against live Gamma API samples that linked Gamma events can expose category signals through event tags/text even when market responses do not include `category`, `tags`, or `categories`.
+- Added `IPolymarketGammaClient.GetEventCategoryAsync` and Gamma `/events/{eventId}` support.
+- Added parser support for extracting event id from market raw JSON, parsing event category, and deriving deterministic categories such as Sports, Finance, Politics, Crypto, Weather, AI, Science, and Pop Culture from event tags/text.
+- Updated on-chain market enrichment to fetch linked event category before CLOB/condition fallback completes, with a per-run event-category cache to avoid repeated event calls.
+- Added parser/client/enrichment tests and updated README, configuration reference, and project memory.
+Next: Restart/redeploy the service, run `POST /refresh-onchain-markets`, then recheck `polymarket_onchain_token_metadata.with_category` and downstream position/category-performance refresh queues.
+Notes: `dotnet test tests\PolyCopyTrader.Tests\PolyCopyTrader.Tests.csproj -c Verify --no-restore --filter "FullyQualifiedName~PolymarketClientTests|FullyQualifiedName~OnChainMarketEnrichmentTests"` passed 29/29. `dotnet test tests\PolyCopyTrader.Tests\PolyCopyTrader.Tests.csproj -c Verify --no-restore` passed 132/132. `git diff --check` passed with CRLF warnings only. `git rev-parse --abbrev-ref --symbolic-full-name '@{u}'` failed because branch `master` has no configured upstream, so pull/push cannot run automatically. Existing unrelated dirty files `PolyCopyTrader.sln` and `src/PolyCopyTrader.Storage/PostgresSchemaInitializer.cs` were left untouched.
+Blockers: Automatic pull/push cannot run until a Git upstream is configured.
+
 ## Active Update 2026-05-01 Category Fallback Http Log Check
 Goal: Interpret `D:\1\9.png` showing recent market metadata fallback HTTP calls.
 Status: Completed

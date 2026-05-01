@@ -39,4 +39,8 @@ public interface IPolymarketGammaClient
         string requestedTokenId,
         bool closed,
         CancellationToken cancellationToken = default);
+
+    Task<string?> GetEventCategoryAsync(
+        string eventId,
+        CancellationToken cancellationToken = default);
 }

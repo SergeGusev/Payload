@@ -61,4 +61,19 @@ public sealed class PolymarketGammaClient : IPolymarketGammaClient
 
         return PolymarketJsonParser.ParseGammaMarketTokenMetadata(json.RootElement, requestedTokenId);
     }
+
+    public async Task<string?> GetEventCategoryAsync(
+        string eventId,
+        CancellationToken cancellationToken = default)
+    {
+        using var json = await client.GetJsonDocumentAsync(
+            UriBuilderExtensions.WithPathAndQuery(
+                options.GammaBaseUrl,
+                "/events/" + Uri.EscapeDataString(eventId),
+                new Dictionary<string, string?>()),
+            "GetEvent",
+            cancellationToken);
+
+        return PolymarketJsonParser.ParseGammaEventCategory(json.RootElement);
+    }
 }

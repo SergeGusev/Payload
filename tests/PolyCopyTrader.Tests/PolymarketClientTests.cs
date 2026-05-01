@@ -107,6 +107,29 @@ public sealed class PolymarketClientTests
         Assert.All(metadata, item => Assert.Equal("Politics", item.Category));
     }
 
+    [Theory]
+    [InlineData(SampleGammaTennisEventJson, "Sports")]
+    [InlineData(SampleGammaFinanceEventJson, "Finance")]
+    [InlineData(SampleGammaPoliticsEventJson, "Politics")]
+    public void Parser_InfersGammaEventCategoryFromTagsAndText(string jsonText, string expectedCategory)
+    {
+        using var json = JsonDocument.Parse(jsonText);
+
+        var category = PolymarketJsonParser.ParseGammaEventCategory(json.RootElement);
+
+        Assert.Equal(expectedCategory, category);
+    }
+
+    [Fact]
+    public void Parser_ReadsGammaMarketEventId()
+    {
+        using var json = JsonDocument.Parse(SampleGammaMarketsWithoutCategoryJson);
+
+        var eventId = PolymarketJsonParser.ParseGammaMarketEventId(json.RootElement[0]);
+
+        Assert.Equal("386820", eventId);
+    }
+
     [Fact]
     public async Task DataClient_SendsTakerOnlyFalseForUserTrades()
     {
@@ -164,6 +187,24 @@ public sealed class PolymarketClientTests
         Assert.Contains("/markets", handler.Requests.Single().RequestUri?.AbsoluteUri);
         Assert.Contains("condition_ids=0xcondition", handler.Requests.Single().RequestUri?.Query);
         Assert.Contains("closed=false", handler.Requests.Single().RequestUri?.Query);
+    }
+
+    [Fact]
+    public async Task GammaClient_FetchesEventCategory()
+    {
+        var handler = new StubHttpMessageHandler(_ => new HttpResponseMessage(HttpStatusCode.OK)
+        {
+            Content = new StringContent(SampleGammaTennisEventJson)
+        });
+        var client = new PolymarketGammaClient(
+            new HttpClient(handler),
+            TestOptions,
+            new CapturingApiErrorSink());
+
+        var category = await client.GetEventCategoryAsync("406929");
+
+        Assert.Equal("Sports", category);
+        Assert.Contains("/events/406929", handler.Requests.Single().RequestUri?.AbsoluteUri);
     }
 
     [Fact]
@@ -461,6 +502,33 @@ public sealed class PolymarketClientTests
     "outcomes": "[\"Yes\", \"No\"]",
     "outcomePrices": "[\"1\", \"0\"]",
     "clobTokenIds": "[\"12345678901234567890\", \"987654321\"]"
+    }
+]
+""";
+
+    private const string SampleGammaMarketsWithoutCategoryJson = """
+[
+  {
+    "id": "2002618",
+    "question": "Israel x Lebanon diplomatic meeting by May 31, 2026?",
+    "conditionId": "0xcondition",
+    "slug": "israel-x-lebanon-diplomatic-meeting-by-may-31-2026",
+    "category": "",
+    "endDate": "2026-05-31T00:00:00Z",
+    "active": true,
+    "closed": true,
+    "archived": false,
+    "outcomes": "[\"Yes\", \"No\"]",
+    "outcomePrices": "[\"1\", \"0\"]",
+    "clobTokenIds": "[\"12345678901234567890\", \"987654321\"]",
+    "events": [
+      {
+        "id": "386820",
+        "slug": "israel-x-lebanon-diplomatic-meeting-by-341",
+        "title": "Israel x Lebanon diplomatic meeting by...?",
+        "category": ""
+      }
+    ]
   }
 ]
 """;
@@ -494,6 +562,49 @@ public sealed class PolymarketClientTests
     ]
   }
 ]
+""";
+
+    private const string SampleGammaTennisEventJson = """
+{
+  "id": "406929",
+  "slug": "wta-mertens-eala-2026-04-24",
+  "title": "Madrid Open: Elise Mertens vs Alexandra Eala",
+  "category": "",
+  "tags": [
+    { "id": "864", "label": "Tennis", "slug": "tennis" },
+    { "id": "1", "label": "Sports", "slug": "sports" },
+    { "id": "100639", "label": "Games", "slug": "games" }
+  ]
+}
+""";
+
+    private const string SampleGammaFinanceEventJson = """
+{
+  "id": "106884",
+  "slug": "fed-rate-cut-by-629",
+  "title": "Fed rate cut by...?",
+  "category": "",
+  "tags": [
+    { "id": "159", "label": "Fed", "slug": "fed" },
+    { "id": "100328", "label": "Economy", "slug": "economy" },
+    { "id": "120", "label": "Finance", "slug": "finance" }
+  ]
+}
+""";
+
+    private const string SampleGammaPoliticsEventJson = """
+{
+  "id": "386820",
+  "slug": "israel-x-lebanon-diplomatic-meeting-by-341",
+  "title": "Israel x Lebanon diplomatic meeting by...?",
+  "category": "",
+  "tags": [
+    { "id": "78", "label": "Iran", "slug": "iran" },
+    { "id": "849", "label": "Lebanon", "slug": "lebanon" },
+    { "id": "104010", "label": "Iran Ceasefire", "slug": "diplomacy-ceasefire" },
+    { "id": "180", "label": "Israel", "slug": "israel" }
+  ]
+}
 """;
 
     private const string SampleClobMarketByTokenJson = """

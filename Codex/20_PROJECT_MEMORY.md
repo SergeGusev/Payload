@@ -143,8 +143,10 @@ Later, manual on-chain ingestion was added:
   full wallet execution table during every dashboard refresh;
 - market enrichment fetches missing execution token ids from Gamma
   `markets?clob_token_ids=...`, stores market/outcome/category/status metadata,
-  writes not-found markers for unresolved tokens, and repeats batches until no
-  missing tokens remain or `MarketEnrichmentMaxBatchesPerRun` is reached;
+  writes not-found markers for unresolved tokens, fetches linked Gamma events to
+  derive categories from event category/tags/text when market category is blank,
+  and repeats batches until no missing tokens remain or
+  `MarketEnrichmentMaxBatchesPerRun` is reached;
 - background market enrichment runs the same processor every
   `MarketEnrichmentIntervalSeconds`;
 - both background workers record transient failures in `api_errors` and retry
