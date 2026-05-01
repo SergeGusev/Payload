@@ -263,3 +263,10 @@ Request:
 
 Result:
 Inspected the screenshot and identified schema initialization statement `105/140` as `ix_polymarket_onchain_wallet_activity_refresh_queue_queued` on `polymarket_onchain_wallet_activity_refresh_queue(queued_at_utc)`. Explained that this queue index should normally be quick, so a long stall likely indicates blocking or an unexpectedly large queue. Provided diagnostic SQL using `pg_stat_activity`, `pg_blocking_pids`, `pg_stat_progress_create_index`, and metadata-only size estimates, plus safe guidance for waiting versus terminating blockers/cancelling. No source code changed.
+
+## 2026-05-01T13:35:18.0316224Z
+Request:
+Ок, прочихалось. Что дальше проверять?
+
+Result:
+Prepared a staged post-index recovery verification plan: confirm schema initialization finished, check that no CREATE INDEX/schema DDL remains active, validate queue sizes, verify category enrichment after the CLOB/condition-id fallback, verify position category propagation, and then check category performance table/queue progress. No source code changed.

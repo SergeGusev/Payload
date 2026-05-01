@@ -1,3 +1,13 @@
+## Active Update 2026-05-01 Post Index Recovery Checks
+Goal: Provide the next operational checks after the stalled startup index creation continued.
+Status: Completed
+Done:
+- Re-read workflow, project rules, coding rules, active context, Git state, and recent schema/enrichment context.
+- Prepared a staged verification sequence: confirm schema initialization finished, confirm no active DDL/locks, check queue sizes, verify category enrichment with the new CLOB/condition fallback, then verify position and category-performance refresh progress.
+Next: Run the SQL checks in order; the most important success signal is `polymarket_onchain_token_metadata.with_category > 0`, followed by positions/categories and category performance rows moving away from null/unknown.
+Notes: `git rev-parse --abbrev-ref --symbolic-full-name '@{u}'` failed because branch `master` has no configured upstream, so pull/push cannot run automatically. No source code changed for this answer-only operational guidance. Existing unrelated dirty files `PolyCopyTrader.sln` and `src/PolyCopyTrader.Storage/PostgresSchemaInitializer.cs` were left untouched.
+Blockers: Automatic pull/push cannot run until a Git upstream is configured.
+
 ## Active Update 2026-05-01 Activity Queue Index Startup Stall
 Goal: Advise whether to wait or intervene when schema initialization stalls on an activity queue index.
 Status: Completed
