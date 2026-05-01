@@ -193,3 +193,10 @@ Request:
 
 Result:
 Listed the resulting on-chain research/materialized tables and provided SQL to monitor counts across decoded fills, raw logs, wallet fills, wallet executions, token metadata, trade details, activity, participants, positions, performance, refresh queues, and ingest cursors. No source code changed.
+
+## 2026-05-01T11:06:17.2773467Z
+Request:
+Ну то есть у нас теперь есть все необходимые таблицы?
+
+Result:
+Confirmed that the current schema has the necessary on-chain research tables for the stated goals, with the caveat that completeness now depends on backfill/enrichment catching up and queues draining, not on creating more tables. No source code changed.

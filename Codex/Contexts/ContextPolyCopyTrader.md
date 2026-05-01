@@ -1,3 +1,14 @@
+## Active Update 2026-05-01 Onchain Table Completeness Answer
+Goal: Clarify whether all necessary on-chain research tables now exist.
+Status: Completed
+Done:
+- Re-read workflow, project rules, coding rules, active context, README on-chain docs, schema table declarations, and Git state.
+- Confirmed the schema now includes the necessary current-stage tables for decoded fills, wallet fills/executions, trade details, token metadata, wallet activity, participant details, positions, performance, queues, raw-log staging, and ingest cursors.
+- Clarified that table existence is no longer the main risk; the remaining work is verifying that data backfill/enrichment has caught up and queues drain without errors.
+Next: Monitor row counts/ranges, queue sizes, metadata enrichment, and `api_errors`; only add more schema if a specific missing analysis question appears.
+Notes: `git rev-parse --abbrev-ref --symbolic-full-name '@{u}'` failed because branch `master` has no configured upstream, so pull/push cannot run automatically. No source code changed for this answer-only task; existing unrelated `PolyCopyTrader.sln` changes remain untouched.
+Blockers: Automatic pull/push cannot run until a Git upstream is configured.
+
 ## Active Update 2026-05-01 Onchain Result Table Count SQL
 Goal: List the resulting on-chain research tables and provide a count-control SQL query.
 Status: Completed
