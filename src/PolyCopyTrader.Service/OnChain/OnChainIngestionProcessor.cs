@@ -16,17 +16,15 @@ public sealed class OnChainIngestionProcessor(
 
     public Task<OnChainIngestionResult> RefreshLookbackAsync(CancellationToken cancellationToken = default)
     {
-        return RefreshWithSingleRunnerAsync(maxHistoricalBatches: null, cancellationToken);
+        return RefreshWithSingleRunnerAsync(cancellationToken);
     }
 
     public Task<OnChainIngestionResult> RefreshBackgroundCycleAsync(CancellationToken cancellationToken = default)
     {
-        return RefreshWithSingleRunnerAsync(options.BackgroundHistoricalBatchesPerCycle, cancellationToken);
+        return RefreshWithSingleRunnerAsync(cancellationToken);
     }
 
-    private async Task<OnChainIngestionResult> RefreshWithSingleRunnerAsync(
-        int? maxHistoricalBatches,
-        CancellationToken cancellationToken)
+    private async Task<OnChainIngestionResult> RefreshWithSingleRunnerAsync(CancellationToken cancellationToken)
     {
         var linkedCancellation = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         lock (sync)
@@ -42,7 +40,7 @@ public sealed class OnChainIngestionProcessor(
 
         try
         {
-            return await RefreshLookbackCoreAsync(maxHistoricalBatches, linkedCancellation.Token);
+            return await RefreshLookbackCoreAsync(linkedCancellation.Token);
         }
         finally
         {
@@ -72,9 +70,7 @@ public sealed class OnChainIngestionProcessor(
         }
     }
 
-    private async Task<OnChainIngestionResult> RefreshLookbackCoreAsync(
-        int? maxHistoricalBatches,
-        CancellationToken cancellationToken)
+    private async Task<OnChainIngestionResult> RefreshLookbackCoreAsync(CancellationToken cancellationToken)
     {
         if (!options.Enabled)
         {
@@ -85,21 +81,17 @@ public sealed class OnChainIngestionProcessor(
 
         var toUtc = DateTimeOffset.UtcNow;
         var freshFromUtc = toUtc.AddDays(-options.LookbackDays);
-        var historicalFromUtc = options.HistoricalBackfillStartUtc.ToUniversalTime();
         var latestBlock = await rpcClient.GetLatestBlockNumberAsync(cancellationToken);
         var freshFromBlock = await FindFirstBlockAtOrAfterAsync(freshFromUtc, latestBlock, cancellationToken);
-        var historicalFromBlock = await FindFirstBlockAtOrAfterAsync(historicalFromUtc, latestBlock, cancellationToken);
-        var seedFromBlock = Math.Max(freshFromBlock, historicalFromBlock);
+        var seedFromBlock = freshFromBlock;
         var logsFetched = 0;
         var fillsStored = 0;
 
         logger.LogInformation(
-            "Starting Polymarket on-chain ingestion. FreshFromUtc={FreshFromUtc} HistoricalFromUtc={HistoricalFromUtc} ToUtc={ToUtc} FreshFromBlock={FreshFromBlock} HistoricalFromBlock={HistoricalFromBlock} ToBlock={ToBlock} Contracts={Contracts}",
+            "Starting Polymarket on-chain ingestion. FreshFromUtc={FreshFromUtc} ToUtc={ToUtc} FreshFromBlock={FreshFromBlock} ToBlock={ToBlock} Contracts={Contracts}",
             freshFromUtc,
-            historicalFromUtc,
             toUtc,
             freshFromBlock,
-            historicalFromBlock,
             latestBlock,
             options.ExchangeContracts.Count);
 
@@ -123,12 +115,12 @@ public sealed class OnChainIngestionProcessor(
             contractStates.Add(state);
 
             logger.LogInformation(
-                "Polymarket on-chain contract scan prepared. Contract={Contract} CompletedFromBlock={CompletedFromBlock} CompletedToBlock={CompletedToBlock} LatestBlock={LatestBlock} HistoricalFromBlock={HistoricalFromBlock} CursorFromBlock={CursorFromBlock} CursorToBlock={CursorToBlock} StoredFromBlock={StoredFromBlock} StoredToBlock={StoredToBlock}",
+                "Polymarket on-chain contract scan prepared. Contract={Contract} CompletedFromBlock={CompletedFromBlock} CompletedToBlock={CompletedToBlock} LatestBlock={LatestBlock} FreshFromBlock={FreshFromBlock} CursorFromBlock={CursorFromBlock} CursorToBlock={CursorToBlock} StoredFromBlock={StoredFromBlock} StoredToBlock={StoredToBlock}",
                 contract.Name,
                 state.CompletedFromBlock,
                 state.CompletedToBlock,
                 latestBlock,
-                historicalFromBlock,
+                freshFromBlock,
                 cursor?.FromBlock,
                 cursor?.ToBlock,
                 storedRange?.FromBlock,
@@ -175,100 +167,17 @@ public sealed class OnChainIngestionProcessor(
             }
         }
 
-        foreach (var state in contractStates)
-        {
-            if (state.CompletedFromBlock <= historicalFromBlock)
-            {
-                logger.LogInformation(
-                    "Polymarket on-chain historical backfill already complete. Contract={Contract} FromBlock={FromBlock} TargetFromBlock={TargetFromBlock}",
-                    state.Contract.Name,
-                    state.CompletedFromBlock,
-                    historicalFromBlock);
-                continue;
-            }
-
-            logger.LogInformation(
-                "Polymarket on-chain historical backfill starting. Contract={Contract} FromBlock={FromBlock} ToBlock={ToBlock}",
-                state.Contract.Name,
-                historicalFromBlock,
-                state.CompletedFromBlock - 1);
-        }
-
-        var historicalBatchesRun = 0;
-        var historyBudgetExhausted = false;
-        while (!historyBudgetExhausted)
-        {
-            var didWork = false;
-            foreach (var state in contractStates)
-            {
-                if (state.CompletedFromBlock <= historicalFromBlock)
-                {
-                    continue;
-                }
-
-                if (maxHistoricalBatches is int maxBatches && historicalBatchesRun >= maxBatches)
-                {
-                    historyBudgetExhausted = true;
-                    break;
-                }
-
-                cancellationToken.ThrowIfCancellationRequested();
-                var historyEndBlock = state.CompletedFromBlock - 1;
-                var startBlock = Math.Max(historicalFromBlock, historyEndBlock - options.MaxBlockRange + 1);
-                var batch = await IngestBatchAsync(
-                    "history",
-                    state.Contract,
-                    state.Topic,
-                    startBlock,
-                    historyEndBlock,
-                    cancellationToken);
-                state.LogsFetched += batch.LogsFetched;
-                logsFetched += batch.LogsFetched;
-                state.FillsStored += batch.FillsStored;
-                fillsStored += batch.FillsStored;
-                state.CompletedFromBlock = startBlock;
-                historicalBatchesRun++;
-                didWork = true;
-
-                await UpsertCursorAsync(
-                    state.ContractAddress,
-                    state.Contract,
-                    state.CompletedFromBlock,
-                    state.CompletedToBlock,
-                    state.LogsFetched,
-                    state.FillsStored,
-                    state.StartedAtUtc,
-                    cancellationToken);
-
-                await DelayIfConfiguredAsync(cancellationToken);
-            }
-
-            if (!didWork)
-            {
-                break;
-            }
-        }
-
-        if (historyBudgetExhausted)
-        {
-            logger.LogInformation(
-                "Polymarket on-chain historical backfill cycle limit reached. HistoricalBatches={HistoricalBatches} MaxHistoricalBatches={MaxHistoricalBatches}",
-                historicalBatchesRun,
-                maxHistoricalBatches);
-        }
-
         logger.LogInformation(
-            "Polymarket on-chain ingestion finished. FromBlock={FromBlock} ToBlock={ToBlock} Logs={Logs} Fills={Fills} HistoricalBatches={HistoricalBatches}",
-            historicalFromBlock,
+            "Polymarket on-chain ingestion finished. FromBlock={FromBlock} ToBlock={ToBlock} Logs={Logs} Fills={Fills}",
+            freshFromBlock,
             latestBlock,
             logsFetched,
-            fillsStored,
-            historicalBatchesRun);
+            fillsStored);
 
         return new OnChainIngestionResult(
-            historicalFromUtc,
+            freshFromUtc,
             toUtc,
-            historicalFromBlock,
+            freshFromBlock,
             latestBlock,
             options.ExchangeContracts.Count,
             logsFetched,

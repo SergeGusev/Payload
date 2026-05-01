@@ -396,3 +396,10 @@ Request:
 
 Result:
 Prepared SQL that reads `min(block_timestamp_utc)` and `max(block_timestamp_utc)` from `public.polymarket_onchain_fills`, with min/max block numbers and decoded fill count. Clarified that `observed_at_utc` is ingestion/update time and should not be used as blockchain date coverage. No source code changed.
+
+## 2026-05-01T17:06:26.5082298+00:00
+Request:
+У нас сейчас правило такое - как только мы докачаем все блоки до текущей даты, начинаем собирать данные за полгода до октября. Отмени этот добор старых дат, ограничимся только новыми поступающими.
+
+Result:
+Removed historical backward backfill from on-chain ingestion. Both manual and background sync now only scan forward from the stored `to_block + 1` to the latest Polygon block; `from_block` is no longer moved backward. Removed `HistoricalBackfillStartUtc` and `BackgroundHistoricalBatchesPerCycle` from active options, appsettings, validation summary, docs, and Dashboard overview text. Updated ingestion tests to assert old blocks are not requested after fresh catch-up. Verification passed: targeted on-chain ingestion tests 11/11, full tests 132/132, service build, dashboard build, and `git diff --check`. Existing already-stored historical rows were not deleted.

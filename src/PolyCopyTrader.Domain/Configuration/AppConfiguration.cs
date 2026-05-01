@@ -303,8 +303,6 @@ public sealed class OnChainIngestionOptions
 
     public int LookbackDays { get; init; } = 7;
 
-    public DateTimeOffset HistoricalBackfillStartUtc { get; init; } = new(2025, 10, 30, 0, 0, 0, TimeSpan.Zero);
-
     public int MaxBlockRange { get; init; } = 500;
 
     public int RequestDelayMilliseconds { get; init; } = 100;
@@ -316,8 +314,6 @@ public sealed class OnChainIngestionOptions
     public int BackgroundErrorDelaySeconds { get; init; } = 60;
 
     public int BackgroundMaxErrorDelaySeconds { get; init; } = 900;
-
-    public int BackgroundHistoricalBatchesPerCycle { get; init; } = 8;
 
     public int MarketEnrichmentBatchSize { get; init; } = 100;
 

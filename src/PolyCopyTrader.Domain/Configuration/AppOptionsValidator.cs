@@ -69,7 +69,6 @@ public static class AppOptionsValidator
             $"On-chain RPC configured: {IsOnChainRpcConfigured(configuration.OnChainIngestion)}",
             $"On-chain RPC host: {GetUriHost(ResolveOnChainRpcUrl(configuration.OnChainIngestion))}",
             $"On-chain lookback days: {configuration.OnChainIngestion.LookbackDays}",
-            $"On-chain historical start UTC: {configuration.OnChainIngestion.HistoricalBackfillStartUtc:yyyy-MM-dd}",
             $"On-chain max block range: {configuration.OnChainIngestion.MaxBlockRange}",
             $"On-chain background sync enabled: {configuration.OnChainIngestion.BackgroundSyncEnabled}",
             $"On-chain background market enrichment enabled: {configuration.OnChainIngestion.BackgroundMarketEnrichmentEnabled}",
@@ -603,11 +602,6 @@ public static class AppOptionsValidator
             errors.Add("OnChainIngestion.LookbackDays must be between 1 and 30 for the initial spike.");
         }
 
-        if (options.HistoricalBackfillStartUtc > DateTimeOffset.UtcNow.AddMinutes(5))
-        {
-            errors.Add("OnChainIngestion.HistoricalBackfillStartUtc must not be in the future.");
-        }
-
         if (options.MaxBlockRange <= 0 || options.MaxBlockRange > 10_000)
         {
             errors.Add("OnChainIngestion.MaxBlockRange must be between 1 and 10000 for the initial public-RPC spike.");
@@ -632,11 +626,6 @@ public static class AppOptionsValidator
             options.BackgroundMaxErrorDelaySeconds > 86_400)
         {
             errors.Add("OnChainIngestion.BackgroundMaxErrorDelaySeconds must be at least BackgroundErrorDelaySeconds and at most 86400.");
-        }
-
-        if (options.BackgroundHistoricalBatchesPerCycle <= 0 || options.BackgroundHistoricalBatchesPerCycle > 10_000)
-        {
-            errors.Add("OnChainIngestion.BackgroundHistoricalBatchesPerCycle must be between 1 and 10000.");
         }
 
         if (options.MarketEnrichmentBatchSize <= 0 || options.MarketEnrichmentBatchSize > 1_000)

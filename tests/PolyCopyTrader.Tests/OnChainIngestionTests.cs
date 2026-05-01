@@ -99,7 +99,6 @@ public sealed class OnChainIngestionTests
             new OnChainIngestionOptions
             {
                 LookbackDays = 1,
-                HistoricalBackfillStartUtc = fakeRpc.Now.AddHours(-13),
                 MaxBlockRange = 10,
                 RequestDelayMilliseconds = 0,
                 ExchangeContracts = [contract]
@@ -360,7 +359,7 @@ public sealed class OnChainIngestionTests
     }
 
     [Fact]
-    public async Task Processor_BackfillsHistoryAfterFreshTailIsCaughtUp()
+    public async Task Processor_DoesNotBackfillHistoryAfterFreshTailIsCaughtUp()
     {
         var contract = new OnChainExchangeContractOptions(
             "CTF Exchange V2",
@@ -383,19 +382,18 @@ public sealed class OnChainIngestionTests
             fakeRpc.Now.AddMinutes(-1),
             fakeRpc.Now.AddMinutes(-1)));
 
-        var processor = CreateProcessor(contract, fakeRpc, repository, fakeRpc.Now.AddDays(-3));
+        var processor = CreateProcessor(contract, fakeRpc, repository);
         var result = await processor.RefreshLookbackAsync();
 
-        Assert.Equal(1, result.LogsFetched);
-        var request = Assert.Single(fakeRpc.LogRequests);
-        Assert.Equal((0, 0), (request.FromBlock, request.ToBlock));
-        Assert.Equal(0, repository.OnChainIngestionCursors.Single().FromBlock);
+        Assert.Equal(0, result.LogsFetched);
+        Assert.Empty(fakeRpc.LogRequests);
+        Assert.Equal(1, repository.OnChainIngestionCursors.Single().FromBlock);
         Assert.Equal(2, repository.OnChainIngestionCursors.Single().ToBlock);
-        Assert.Single(repository.PolymarketOnChainFills);
+        Assert.Empty(repository.PolymarketOnChainFills);
     }
 
     [Fact]
-    public async Task Processor_BackgroundCycleLimitsHistoricalBackfillPerRun()
+    public async Task Processor_BackgroundCycleDoesNotRunHistoricalBackfill()
     {
         var contract = new OnChainExchangeContractOptions(
             "CTF Exchange V2",
@@ -428,10 +426,8 @@ public sealed class OnChainIngestionTests
             new OnChainIngestionOptions
             {
                 LookbackDays = 1,
-                HistoricalBackfillStartUtc = fakeRpc.Now.AddDays(-3),
                 MaxBlockRange = 1,
                 RequestDelayMilliseconds = 0,
-                BackgroundHistoricalBatchesPerCycle = 1,
                 ExchangeContracts = [contract]
             },
             fakeRpc,
@@ -439,15 +435,15 @@ public sealed class OnChainIngestionTests
 
         var firstResult = await processor.RefreshBackgroundCycleAsync();
 
-        Assert.Equal(1, firstResult.LogsFetched);
-        Assert.Equal([new LogRequest(1, 1)], fakeRpc.LogRequests);
-        Assert.Equal(1, repository.OnChainIngestionCursors.Single().FromBlock);
+        Assert.Equal(0, firstResult.LogsFetched);
+        Assert.Empty(fakeRpc.LogRequests);
+        Assert.Equal(2, repository.OnChainIngestionCursors.Single().FromBlock);
 
         var secondResult = await processor.RefreshBackgroundCycleAsync();
 
-        Assert.Equal(1, secondResult.LogsFetched);
-        Assert.Equal([new LogRequest(1, 1), new LogRequest(0, 0)], fakeRpc.LogRequests);
-        Assert.Equal(0, repository.OnChainIngestionCursors.Single().FromBlock);
+        Assert.Equal(0, secondResult.LogsFetched);
+        Assert.Empty(fakeRpc.LogRequests);
+        Assert.Equal(2, repository.OnChainIngestionCursors.Single().FromBlock);
     }
 
     [Fact]
@@ -460,12 +456,10 @@ public sealed class OnChainIngestionTests
                 PolygonRpcUrl = "not-a-url",
                 RpcUrlEnvironmentVariable = "BAD ENV",
                 LookbackDays = 31,
-                HistoricalBackfillStartUtc = DateTimeOffset.UtcNow.AddDays(1),
                 MaxBlockRange = 0,
                 BackgroundSyncIdleDelaySeconds = 0,
                 BackgroundErrorDelaySeconds = 0,
                 BackgroundMaxErrorDelaySeconds = -1,
-                BackgroundHistoricalBatchesPerCycle = 0,
                 MarketEnrichmentBatchSize = 0,
                 MarketEnrichmentMaxBatchesPerRun = 0,
                 MarketEnrichmentIntervalSeconds = 0,
@@ -493,12 +487,10 @@ public sealed class OnChainIngestionTests
         Assert.Contains(errors, error => error.Contains("OnChainIngestion.PolygonRpcUrl", StringComparison.Ordinal));
         Assert.Contains(errors, error => error.Contains("RpcUrlEnvironmentVariable", StringComparison.Ordinal));
         Assert.Contains(errors, error => error.Contains("LookbackDays", StringComparison.Ordinal));
-        Assert.Contains(errors, error => error.Contains("HistoricalBackfillStartUtc", StringComparison.Ordinal));
         Assert.Contains(errors, error => error.Contains("MaxBlockRange", StringComparison.Ordinal));
         Assert.Contains(errors, error => error.Contains("BackgroundSyncIdleDelaySeconds", StringComparison.Ordinal));
         Assert.Contains(errors, error => error.Contains("BackgroundErrorDelaySeconds", StringComparison.Ordinal));
         Assert.Contains(errors, error => error.Contains("BackgroundMaxErrorDelaySeconds", StringComparison.Ordinal));
-        Assert.Contains(errors, error => error.Contains("BackgroundHistoricalBatchesPerCycle", StringComparison.Ordinal));
         Assert.Contains(errors, error => error.Contains("MarketEnrichmentBatchSize", StringComparison.Ordinal));
         Assert.Contains(errors, error => error.Contains("MarketEnrichmentMaxBatchesPerRun", StringComparison.Ordinal));
         Assert.Contains(errors, error => error.Contains("MarketEnrichmentIntervalSeconds", StringComparison.Ordinal));
@@ -585,15 +577,13 @@ public sealed class OnChainIngestionTests
     private static OnChainIngestionProcessor CreateProcessor(
         OnChainExchangeContractOptions contract,
         FakePolygonRpcClient rpcClient,
-        TestAppRepository repository,
-        DateTimeOffset? historicalBackfillStartUtc = null)
+        TestAppRepository repository)
     {
         return new OnChainIngestionProcessor(
             NullLogger<OnChainIngestionProcessor>.Instance,
             new OnChainIngestionOptions
             {
                 LookbackDays = 1,
-                HistoricalBackfillStartUtc = historicalBackfillStartUtc ?? rpcClient.Now.AddHours(-13),
                 MaxBlockRange = 1,
                 RequestDelayMilliseconds = 0,
                 ExchangeContracts = [contract]

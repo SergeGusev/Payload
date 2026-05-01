@@ -121,7 +121,7 @@ public sealed class DashboardDataService(
             new OverviewMetric("Paper position value", FormatUsd(positionValue)),
             new OverviewMetric("Daily paper PnL", FormatUsd(paperPnl)),
             new OverviewMetric("Open paper orders", openPaperOrders.Count.ToString()),
-            new OverviewMetric("On-chain ingestion", configuration.OnChainIngestion.Enabled ? $"{configuration.OnChainIngestion.LookbackDays}d catch-up; from {configuration.OnChainIngestion.HistoricalBackfillStartUtc:yyyy-MM-dd}" : "Disabled")
+            new OverviewMetric("On-chain ingestion", configuration.OnChainIngestion.Enabled ? $"{configuration.OnChainIngestion.LookbackDays}d catch-up; live tail only" : "Disabled")
         ];
     }
 

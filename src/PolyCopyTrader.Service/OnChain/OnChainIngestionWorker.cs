@@ -24,11 +24,10 @@ public sealed class OnChainIngestionWorker(
         var currentErrorDelay = baseErrorDelay;
 
         logger.LogInformation(
-            "Background on-chain ingestion worker started. IdleDelaySeconds={IdleDelaySeconds} ErrorDelaySeconds={ErrorDelaySeconds} MaxErrorDelaySeconds={MaxErrorDelaySeconds} HistoricalBatchesPerCycle={HistoricalBatchesPerCycle}",
+            "Background on-chain ingestion worker started. IdleDelaySeconds={IdleDelaySeconds} ErrorDelaySeconds={ErrorDelaySeconds} MaxErrorDelaySeconds={MaxErrorDelaySeconds}",
             options.BackgroundSyncIdleDelaySeconds,
             options.BackgroundErrorDelaySeconds,
-            options.BackgroundMaxErrorDelaySeconds,
-            options.BackgroundHistoricalBatchesPerCycle);
+            options.BackgroundMaxErrorDelaySeconds);
 
         while (!stoppingToken.IsCancellationRequested)
         {

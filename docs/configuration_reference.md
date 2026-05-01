@@ -154,14 +154,12 @@ every completed block batch.
 - `PolygonRpcUrl`: fallback Polygon JSON-RPC URL. Do not put secret RPC tokens in repository files.
 - `RpcUrlEnvironmentVariable`: environment variable override, default `POLYCOPYTRADER_POLYGON_RPC_URL`.
 - `LookbackDays`: fresh catch-up seed window, currently validated between `1` and `30`; default `7`.
-- `HistoricalBackfillStartUtc`: oldest UTC date to backfill after the fresh tail is caught up; default `2025-10-30T00:00:00Z`.
 - `MaxBlockRange`: `eth_getLogs` block span per request; default `500`; keep it at or below `10000` for public/free RPC endpoints.
 - `RequestDelayMilliseconds`: delay between RPC/Gamma calls to avoid hammering public endpoints.
 - `BackgroundSyncEnabled`: runs on-chain ingestion continuously while the service is running; default `true`.
 - `BackgroundSyncIdleDelaySeconds`: pause between successful background ingestion cycles; default `30`.
 - `BackgroundErrorDelaySeconds`: first retry delay after background ingestion or enrichment errors; default `60`.
 - `BackgroundMaxErrorDelaySeconds`: maximum exponential retry delay after repeated background errors; default `900`.
-- `BackgroundHistoricalBatchesPerCycle`: maximum historical backfill batches per background ingestion cycle, shared round-robin across contracts after fresh catch-up; default `8`.
 - `MarketEnrichmentBatchSize`: number of missing on-chain token ids to enrich per Gamma batch; default `100`.
 - `MarketEnrichmentMaxBatchesPerRun`: maximum Gamma enrichment batches per manual `Enrich markets` command; default `25`. If this limit is reached while missing tokens remain, run the command again to continue.
 - `BackgroundMarketEnrichmentEnabled`: runs missing-token Gamma enrichment continuously while the service is running; default `true`.
@@ -185,11 +183,10 @@ every completed block batch.
 - `ExchangeContracts`: Polymarket V1/V2 CTF and negative-risk exchange contracts to scan.
 
 The cursor stores a completed block range per contract: `to_block` is extended
-forward first, then `from_block` is moved backward during historical backfill.
-Stopping the run after a completed batch is safe; the next run resumes from that
-range. The background ingestion worker always catches up fresh blocks first, then
-spends only `BackgroundHistoricalBatchesPerCycle` historical batches before
-sleeping and checking fresh blocks again.
+forward as new blocks are ingested. `from_block` is kept as the oldest block
+already retained for that contract; ingestion no longer moves it backward for
+historical backfill. Stopping the run after a completed batch is safe; the next
+run resumes from `to_block + 1` and checks only new blocks.
 
 Raw Polygon log rows are stored in `polymarket_onchain_logs` only until their
 decoded fill has been materialized into the indexed serving layer. Decoded fills

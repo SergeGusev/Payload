@@ -2,7 +2,7 @@
 
 PolyCopyTrader is a Windows/.NET C# application for monitoring Polymarket traders and running a cautious copy-signal strategy.
 
-This repository is currently at Task 18 plus local debugging, trader discovery, and on-chain discovery support. It contains project structure, typed configuration, PostgreSQL schema initialization, a basic repository, read-only Polymarket Data/CLOB/Geo clients, a Worker Service scanner/signal/paper/live loop, local dashboard controls, public market WebSocket monitoring, trader discovery, Polygon `OrderFilled` ingestion with fresh catch-up and historical backfill, analytics reports, CSV export, diagnostics, a monitoring dashboard, L2 HMAC header infrastructure, dry-run CLOB V2 signing, manually gated tiny maker-only live order placement, Windows VPS deployment scripts, and operations runbooks.
+This repository is currently at Task 18 plus local debugging, trader discovery, and on-chain discovery support. It contains project structure, typed configuration, PostgreSQL schema initialization, a basic repository, read-only Polymarket Data/CLOB/Geo clients, a Worker Service scanner/signal/paper/live loop, local dashboard controls, public market WebSocket monitoring, trader discovery, Polygon `OrderFilled` ingestion with fresh catch-up for the live tail, analytics reports, CSV export, diagnostics, a monitoring dashboard, L2 HMAC header infrastructure, dry-run CLOB V2 signing, manually gated tiny maker-only live order placement, Windows VPS deployment scripts, and operations runbooks.
 
 ## Safety
 
@@ -261,7 +261,7 @@ The dashboard shows refreshed shortlist rows in the Trader Discovery tab. The `P
 
 ## On-Chain Discovery
 
-The service can ingest Polymarket on-chain `OrderFilled` events from Polygon. This is read-only research plumbing: it does not place, cancel, or modify orders. When `OnChainIngestion:BackgroundSyncEnabled` is true, the service keeps ingestion running in the background: each cycle catches up the fresh tail first, then backfills a limited number of older historical batches down to `OnChainIngestion:HistoricalBackfillStartUtc`, default `2025-10-30T00:00:00Z`.
+The service can ingest Polymarket on-chain `OrderFilled` events from Polygon. This is read-only research plumbing: it does not place, cancel, or modify orders. When `OnChainIngestion:BackgroundSyncEnabled` is true, the service keeps ingestion running in the background: each cycle catches up the fresh tail and then waits for new blocks. It no longer performs backward historical backfill after reaching the current Polygon block.
 
 Run the service to start background ingestion. Click `Onchain sync` in the dashboard controls, or call this endpoint, only when you want to force a manual cycle:
 
@@ -269,7 +269,7 @@ Run the service to start background ingestion. Click `Onchain sync` in the dashb
 Invoke-RestMethod -Method Post http://127.0.0.1:5118/refresh-onchain
 ```
 
-Use `Cancel onchain` or `POST /cancel-onchain` to stop the current ingestion run. If background sync remains enabled, the worker will retry on its next cycle. Progress is checkpointed after every completed block batch and repeated batches are idempotent. In `polymarket_onchain_ingest_cursors`, `to_block` is the newest completed block and `from_block` is the oldest completed block for that contract. On the next run the service first scans `to_block + 1` through the latest Polygon block; when that is caught up, it scans backward from `from_block - 1`. The background worker limits historical work to `OnChainIngestion:BackgroundHistoricalBatchesPerCycle`, default `8`, round-robin across contracts, so fresh blocks are checked again regularly while long history slowly fills in.
+Use `Cancel onchain` or `POST /cancel-onchain` to stop the current ingestion run. If background sync remains enabled, the worker will retry on its next cycle. Progress is checkpointed after every completed block batch and repeated batches are idempotent. In `polymarket_onchain_ingest_cursors`, `to_block` is the newest completed block and `from_block` is the oldest completed block currently retained for that contract. On the next run the service scans only `to_block + 1` through the latest Polygon block. It does not scan backward from `from_block - 1`.
 
 Set `POLYCOPYTRADER_POLYGON_RPC_URL` if you want to use a private Polygon RPC provider. Do not commit RPC URLs containing tokens. The default public RPC is only for short manual testing; if it returns pruned-history or rate-limit errors, use a full/archive provider. The ingestion scans the configured V1/V2 CTF Exchange and Neg Risk CTF Exchange contracts, temporarily persists raw logs to `polymarket_onchain_logs`, persists decoded fills to `polymarket_onchain_fills`, normalizes maker/taker rows to `polymarket_onchain_wallet_fills`, aggregates wallet-level tx rows to `polymarket_onchain_wallet_executions`, writes indexed serving rows to `polymarket_onchain_trade_details`, and stores cursors in `polymarket_onchain_ingest_cursors`. Raw log rows are deleted after the decoded fill has been materialized into the indexed serving layer; decoded fills remain the rebuild/audit source.
 

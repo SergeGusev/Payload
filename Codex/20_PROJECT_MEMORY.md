@@ -118,15 +118,14 @@ Later, manual on-chain ingestion was added:
   and Neg Risk CTF Exchange contracts;
 - V1/V2 `OrderFilled` events are decoded into wallet, side, token id, price, size,
   notional, fee, contract, and transaction hash fields;
-- each run catches up fresh blocks first, then backfills older history down to
-  `OnChainIngestion:HistoricalBackfillStartUtc` (`2025-10-30T00:00:00Z` by
-  default);
+- each run catches up the fresh block tail and then waits for new blocks; the
+  ingestion path no longer scans backward for older historical dates after it
+  reaches the current Polygon block;
 - cursor `to_block` is the newest completed block, cursor `from_block` is the
   oldest completed block, so cancelling and restarting resumes after the last
   completed batch;
-- background ingestion catches up fresh blocks first, then processes at most
-  `BackgroundHistoricalBatchesPerCycle` historical batches round-robin across
-  contracts before sleeping and checking fresh blocks again;
+- background ingestion keeps extending `to_block` forward and does not move
+  `from_block` backward for historical backfill;
 - raw Polygon log rows are deleted after their decoded fill is materialized into
   `polymarket_onchain_trade_details`; decoded fills are retained as the
   audit/rebuild source;

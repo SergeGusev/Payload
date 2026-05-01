@@ -1,3 +1,15 @@
+## Active Update 2026-05-01 Disable Historical On-Chain Backfill
+Goal: Stop on-chain ingestion from scanning older historical blocks after the fresh tail is caught up.
+Status: Completed
+Done:
+- Removed the backward historical backfill phase from `OnChainIngestionProcessor`; manual and background on-chain sync now only scan `to_block + 1` through the latest Polygon block.
+- Removed `HistoricalBackfillStartUtc` and `BackgroundHistoricalBatchesPerCycle` from active configuration/options, appsettings, validation summary, and documentation.
+- Updated Dashboard overview text to show live-tail-only catch-up.
+- Updated ingestion tests so existing cursor ranges are not moved backward and old blocks are not requested after fresh catch-up.
+Next: Restart the service so the updated ingestion worker is used; existing historical rows already stored in PostgreSQL are not deleted by this change.
+Notes: `dotnet test tests\PolyCopyTrader.Tests\PolyCopyTrader.Tests.csproj -c Verify --no-restore --filter "FullyQualifiedName~OnChainIngestionTests"` passed 11/11. `dotnet test tests\PolyCopyTrader.Tests\PolyCopyTrader.Tests.csproj -c Verify --no-restore` passed 132/132. `dotnet build src\PolyCopyTrader.Service\PolyCopyTrader.Service.csproj -c Verify --no-restore` passed. `dotnet build src\PolyCopyTrader.Dashboard\PolyCopyTrader.Dashboard.csproj -c Verify --no-restore` passed. An initial parallel dotnet run hit an `AssemblyInfo.cs` file lock; rerunning sequentially passed. Existing unrelated dirty files `PolyCopyTrader.sln` and `src/PolyCopyTrader.Storage/PostgresSchemaInitializer.cs` were left untouched. `git rev-parse --abbrev-ref --symbolic-full-name '@{u}'` failed because branch `master` has no configured upstream.
+Blockers: Automatic pull/push cannot run until a Git upstream is configured.
+
 ## Active Update 2026-05-01 Blockchain Date Range Query
 Goal: Provide SQL to show the already downloaded blockchain date range.
 Status: Completed
