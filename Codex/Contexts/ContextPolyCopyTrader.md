@@ -1,3 +1,16 @@
+## Active Update 2026-05-01 Betting Decision Data Sufficiency
+Goal: Assess whether the current data model is sufficient for stake decision logic.
+Status: Completed
+Done:
+- Re-read `DefaultSignalEngine`, `DefaultRiskEngine`, `SignalProcessor`, domain signal/risk models, README, and the on-chain serving/category-performance schemas.
+- Confirmed the new on-chain tables are sufficient for historical leader/category research: trades, participants, positions, resolved PnL, ROI, win rate, sample quality, category scores, and recency.
+- Confirmed the live/paper signal path already requires fresh order book, spread, slippage, leader trade freshness, size, and exposure/risk limits.
+- Found an integration gap: `SignalProcessor` currently calls `SignalEvaluationContext` with `MarketInfo = null`, so the signal engine does not yet consume enriched category/end-date metadata from the on-chain/Gamma tables during decisions.
+- Found another integration gap: `DefaultSignalEngine` does not yet use `polymarket_onchain_wallet_category_performance` to accept/reject/size trades by leader quality in the specific category; it uses static trader rules and generic scoring.
+Next: Wire on-chain leader/category performance and market metadata into signal evaluation, then add explicit decision gates for leader sample quality, category score, ROI/win rate, unresolved exposure, market status, and metadata freshness.
+Notes: No repo source code changed. Existing unrelated dirty files `PolyCopyTrader.sln` and `src/PolyCopyTrader.Storage/PostgresSchemaInitializer.cs` were left untouched. `git rev-parse --abbrev-ref --symbolic-full-name '@{u}'` failed because branch `master` has no configured upstream.
+Blockers: Automatic pull/push cannot run until a Git upstream is configured.
+
 ## Active Update 2026-05-01 Raw Log Auto-Cleanup Confirmation
 Goal: Confirm whether the service already deletes processed blockchain raw logs.
 Status: Completed

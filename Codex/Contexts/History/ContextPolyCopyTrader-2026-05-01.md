@@ -445,3 +445,10 @@ Request:
 
 Result:
 Re-read the ingestion and repository cleanup call chain. Confirmed processed raw blockchain logs are already deleted automatically in both the normal fill-ingestion path and the derived-data refresh path, but only after a matching `polymarket_onchain_trade_details(transaction_hash, log_index)` row exists. Clarified that raw logs can still remain after failed/incomplete batches or unfinished backlog, so a large `polymarket_onchain_logs` table can still require batched maintenance cleanup. No repo source code changed.
+
+## 2026-05-01T19:18:00+00:00
+Request:
+Ок. Достаточно ли у нас теперь информации для логики принятия решений по ставкам?
+
+Result:
+Reviewed the existing signal/risk engines, signal processor, domain models, README, and on-chain serving/category-performance schemas. Concluded the database now has enough historical information for leader/category research and ranking, but the decision loop is not yet fully wired to use it: `SignalProcessor` still passes `MarketInfo = null`, and `DefaultSignalEngine` does not consume `polymarket_onchain_wallet_category_performance` for category-specific leader quality. Explained that immediate stake decisions also still require fresh order book/liquidity/spread, live market status, metadata freshness, and exposure/risk state. No repo source code changed.
