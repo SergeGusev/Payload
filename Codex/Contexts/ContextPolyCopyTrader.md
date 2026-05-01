@@ -1,3 +1,14 @@
+## Active Update 2026-05-01 Category Fallback Http Log Check
+Goal: Interpret `D:\1\9.png` showing recent market metadata fallback HTTP calls.
+Status: Completed
+Done:
+- Inspected `D:\1\9.png`: recent `polymarket_http_logs` include successful `200` responses for `GetOpenMarketByToken`, `GetClosedMarketByToken`, `GetMarketByToken`, `GetOpenMarketByCondition`, and `GetClosedMarketByCondition`.
+- Confirmed the latest CLOB/condition fallback path did run between 2026-05-01 15:59 and 16:46 +03, including 663 CLOB token lookups and 663 open/closed condition lookups.
+- Concluded that if metadata still has `with_category = 0`, the remaining problem is response-content/parser/catalog coverage rather than an old service version or an unexecuted fallback branch.
+Next: Inspect recent HTTP response bodies for the fallback operations; if they contain no category-like fields, implement a local Gamma event/catalog category backfill keyed by condition/market/event.
+Notes: `git rev-parse --abbrev-ref --symbolic-full-name '@{u}'` failed because branch `master` has no configured upstream, so pull/push cannot run automatically. No source code changed for this screenshot diagnostic.
+Blockers: Automatic pull/push cannot run until a Git upstream is configured.
+
 ## Active Update 2026-05-01 Category Still Missing After Refresh
 Goal: Interpret `D:\1\8.png` showing no categories after another metadata refresh.
 Status: Completed

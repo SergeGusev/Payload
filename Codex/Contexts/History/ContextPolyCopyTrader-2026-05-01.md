@@ -277,3 +277,10 @@ Request:
 
 Result:
 Inspected the screenshot. Metadata still had 38,146 rows, 38,130 successful lookups, 16 failed lookups, 0 rows with category, and max refreshed at 2026-05-01 16:42:28.101144+03. Explained that this confirms refresh activity but does not prove the latest CLOB/condition fallback ran; provided SQL to check `polymarket_http_logs` for `GetMarketByToken`, `GetOpenMarketByCondition`, and `GetClosedMarketByCondition`. No source code changed.
+
+## 2026-05-01T13:50:00.6985850+00:00
+Request:
+Посмотри D:\1\9.png
+
+Result:
+Inspected the screenshot of recent `polymarket_http_logs`. It shows successful `200` responses for `GetOpenMarketByToken`, `GetClosedMarketByToken`, `GetMarketByToken`, `GetOpenMarketByCondition`, and `GetClosedMarketByCondition`, with calls running through 2026-05-01 16:46 +03. Concluded the latest fallback path did run, so if categories are still absent the next step is inspecting response bodies and then implementing a broader catalog/event category backfill if the fallback responses contain no category fields.
