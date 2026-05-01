@@ -186,3 +186,10 @@ Request:
 
 Result:
 Clarified that the current phase is broader than filling user tables: the service is materializing the fast on-chain research layer from decoded fills, including trade details, wallet executions, activity rankings, participant summaries, positions, performance, and market metadata enrichment. No source code changed.
+
+## 2026-05-01T11:03:27.2021014Z
+Request:
+Перечисли результирующие таблицы и дай селект по контролю количества записей в них
+
+Result:
+Listed the resulting on-chain research/materialized tables and provided SQL to monitor counts across decoded fills, raw logs, wallet fills, wallet executions, token metadata, trade details, activity, participants, positions, performance, refresh queues, and ingest cursors. No source code changed.

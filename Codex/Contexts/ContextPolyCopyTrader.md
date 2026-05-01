@@ -1,3 +1,14 @@
+## Active Update 2026-05-01 Onchain Result Table Count SQL
+Goal: List the resulting on-chain research tables and provide a count-control SQL query.
+Status: Completed
+Done:
+- Re-read workflow, project rules, coding rules, active context, on-chain README/config docs, schema table declarations, and Git state.
+- Confirmed the resulting fast research/materialized tables are wallet fills, wallet executions, token metadata, trade details, wallet activity, participant details, wallet positions, and wallet performance.
+- Prepared a count-control query that includes the retained audit source `polymarket_onchain_fills`, raw-log staging `polymarket_onchain_logs`, resulting tables, refresh queues, and ingest cursors.
+Next: Run the count-control SQL periodically during backfill and watch source/result counts catch up while queues drain.
+Notes: `git rev-parse --abbrev-ref --symbolic-full-name '@{u}'` failed because branch `master` has no configured upstream, so pull/push cannot run automatically. No source code changed for this answer-only task; existing unrelated `PolyCopyTrader.sln` changes remain untouched.
+Blockers: Automatic pull/push cannot run until a Git upstream is configured.
+
 ## Active Update 2026-05-01 Current Onchain Pipeline Purpose
 Goal: Clarify what the current operational phase is doing.
 Status: Completed
