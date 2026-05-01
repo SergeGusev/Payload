@@ -1,3 +1,15 @@
+## Active Update 2026-05-01 Onchain Observed At Explanation
+Goal: Explain whether `polymarket_onchain_logs.observed_at_utc` min/max means logs are limited to one day.
+Status: Completed
+Done:
+- Re-read workflow, project rules, coding rules, active context, Git state, ingestion code, repository upsert SQL, parser mapping, README, and configuration reference.
+- Confirmed `observed_at_utc` is the ingestion observation time (`DateTimeOffset.UtcNow` per batch), not the blockchain event time.
+- Confirmed `polymarket_onchain_logs` upserts on `transaction_hash, log_index` and updates `observed_at_utc`, so repeat ingestion can make old chain logs look newly observed.
+- Found no pruning/retention path for `polymarket_onchain_logs`; history depth should be checked by `block_number`, `polymarket_onchain_fills.block_timestamp_utc`, and `polymarket_onchain_ingest_cursors`.
+Next: If needed, add `block_timestamp_utc` to `polymarket_onchain_logs` for raw-log coverage queries without relying on decoded fills.
+Notes: `git rev-parse --abbrev-ref --symbolic-full-name '@{u}'` failed because branch `master` has no configured upstream, so pull/push cannot run automatically. No source code changed for this answer-only task; verification is code/schema/docs inspection and `git diff --check`. Existing unrelated `PolyCopyTrader.sln` changes remain untouched.
+Blockers: Automatic pull/push cannot run until a Git upstream is configured.
+
 ## Active Update 2026-05-01 Onchain Raw Logs Table Answer
 Goal: Identify where downloaded blockchain event logs are stored.
 Status: Completed
