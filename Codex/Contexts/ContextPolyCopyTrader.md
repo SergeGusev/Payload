@@ -1,3 +1,14 @@
+## Active Update 2026-05-01 Views Versus Tables Speed Answer
+Goal: Explain why on-chain explorer was initially added as views and clarify the faster target design.
+Status: Completed
+Done:
+- Re-read workflow, project rules, coding rules, active context, and Git state.
+- Clarified that ordinary PostgreSQL views are saved queries, not cached storage, so they are not the final best design when Dashboard/query speed over large on-chain data matters.
+- Clarified the views were chosen as a low-risk first analyst surface with no extra backfill/refresh invalidation logic, but the next speed-focused step should convert trade/participant explorer surfaces into indexed materialized tables maintained incrementally.
+Next: Replace `polymarket_onchain_trade_details` and `polymarket_onchain_participant_details` views with indexed tables plus refresh queues/workers or repository refresh methods.
+Notes: `git rev-parse --abbrev-ref --symbolic-full-name '@{u}'` failed because branch `master` has no configured upstream, so pull/push cannot run automatically. No source code changed for this answer-only task; verification is context/Git inspection and `git diff --check`. Existing unrelated `PolyCopyTrader.sln` changes remain untouched.
+Blockers: Automatic pull/push cannot run until a Git upstream is configured.
+
 ## Active Update 2026-05-01 Missing Onchain Trade Details View Guidance
 Goal: Explain why `public.polymarket_onchain_trade_details` is missing and how to create it.
 Status: Completed

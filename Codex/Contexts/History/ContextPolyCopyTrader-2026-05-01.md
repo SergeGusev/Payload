@@ -41,3 +41,10 @@ LINE 1:   select * from public.polymarket_onchain_trade_details
 
 Result:
 Explained that the new on-chain explorer view exists in the code schema but is not yet present in the local PostgreSQL database until the updated Service runs schema initialization, or the SQL client is connected to a different database. Provided restart and verification SQL guidance. No source code was changed.
+
+## 2026-05-01T07:58:07.6607694+00:00
+Request:
+А почему ты делаешь черезь вьюхи, а не через таблицы? Для меня скорость важна
+
+Result:
+Explained that ordinary PostgreSQL views are saved queries and were chosen only as a low-risk first analyst surface without duplicate storage or refresh invalidation logic. Acknowledged that for speed over large on-chain data the better target is indexed materialized tables maintained incrementally by refresh queues/workers or repository refresh methods.
