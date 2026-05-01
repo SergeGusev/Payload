@@ -55,3 +55,10 @@ Request:
 
 Result:
 Aligned on the target on-chain architecture: read blockchain logs, transform them into indexed serving tables, switch Dashboard/analysis to those tables, and only then purge/archive raw blockchain-like tables after coverage validation. Clarified that existing raw fills can backfill the new serving tables, so a full reset is optional rather than required.
+
+## 2026-05-01T08:21:15.6596108Z
+Request:
+Для меня удаление данных - не самоцель. Это я тебе хотел помочь. В общем, давай так - конечная скорость - это главный приоритет. Удаление старых данных, которые уже скачены и обработаны - это приоритет. В рамках этого делай все необходимые доработки.
+
+Result:
+Replaced the on-chain trade/participant explorer views with indexed serving tables, added incremental trade-detail upserts and metadata refresh propagation, wired participant-detail refresh into activity/position/performance refresh paths, and added cleanup of processed raw `polymarket_onchain_logs` after rows are materialized into `polymarket_onchain_trade_details`. Updated docs/project memory/tests. Service build, Dashboard build, full tests, and diff check passed; branch still has no upstream for automatic pull/push.

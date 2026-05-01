@@ -304,13 +304,16 @@ public sealed class OnChainIngestionProcessor(
         }
 
         var derivedRange = await repository.GetPolymarketOnChainWalletExecutionBlockRangeAsync(contractAddress, cancellationToken);
-        if (derivedRange is null)
+        var tradeDetailsRange = await repository.GetPolymarketOnChainTradeDetailsBlockRangeAsync(contractAddress, cancellationToken);
+        if (derivedRange is null || tradeDetailsRange is null)
         {
             logger.LogInformation(
-                "Refreshing on-chain wallet derived data for existing raw fills. Contract={Contract} Blocks={FromBlock}-{ToBlock}",
+                "Refreshing on-chain serving data for existing raw fills. Contract={Contract} Blocks={FromBlock}-{ToBlock} WalletExecutionRange={WalletExecutionRange} TradeDetailsRange={TradeDetailsRange}",
                 contractName,
                 rawRange.FromBlock,
-                rawRange.ToBlock);
+                rawRange.ToBlock,
+                FormatRange(derivedRange),
+                FormatRange(tradeDetailsRange));
             await RefreshDerivedRangeAsync(
                 contractName,
                 contractAddress,
@@ -320,32 +323,52 @@ public sealed class OnChainIngestionProcessor(
             return;
         }
 
-        if (rawRange.FromBlock < derivedRange.FromBlock)
+        var servingFromBlock = Math.Max(derivedRange.FromBlock, tradeDetailsRange.FromBlock);
+        var servingToBlock = Math.Min(derivedRange.ToBlock, tradeDetailsRange.ToBlock);
+        if (servingFromBlock > servingToBlock)
         {
             logger.LogInformation(
-                "Refreshing older on-chain wallet derived data gap. Contract={Contract} Blocks={FromBlock}-{ToBlock}",
+                "Refreshing on-chain serving data because materialized ranges do not overlap. Contract={Contract} Blocks={FromBlock}-{ToBlock} WalletExecutionRange={WalletExecutionRange} TradeDetailsRange={TradeDetailsRange}",
                 contractName,
                 rawRange.FromBlock,
-                derivedRange.FromBlock - 1);
+                rawRange.ToBlock,
+                FormatRange(derivedRange),
+                FormatRange(tradeDetailsRange));
             await RefreshDerivedRangeAsync(
                 contractName,
                 contractAddress,
                 rawRange.FromBlock,
-                derivedRange.FromBlock - 1,
+                rawRange.ToBlock,
+                cancellationToken);
+            return;
+        }
+
+        if (rawRange.FromBlock < servingFromBlock)
+        {
+            logger.LogInformation(
+                "Refreshing older on-chain serving data gap. Contract={Contract} Blocks={FromBlock}-{ToBlock}",
+                contractName,
+                rawRange.FromBlock,
+                servingFromBlock - 1);
+            await RefreshDerivedRangeAsync(
+                contractName,
+                contractAddress,
+                rawRange.FromBlock,
+                servingFromBlock - 1,
                 cancellationToken);
         }
 
-        if (rawRange.ToBlock > derivedRange.ToBlock)
+        if (rawRange.ToBlock > servingToBlock)
         {
             logger.LogInformation(
-                "Refreshing newer on-chain wallet derived data gap. Contract={Contract} Blocks={FromBlock}-{ToBlock}",
+                "Refreshing newer on-chain serving data gap. Contract={Contract} Blocks={FromBlock}-{ToBlock}",
                 contractName,
-                derivedRange.ToBlock + 1,
+                servingToBlock + 1,
                 rawRange.ToBlock);
             await RefreshDerivedRangeAsync(
                 contractName,
                 contractAddress,
-                derivedRange.ToBlock + 1,
+                servingToBlock + 1,
                 rawRange.ToBlock,
                 cancellationToken);
         }
@@ -369,13 +392,18 @@ public sealed class OnChainIngestionProcessor(
                 cancellationToken);
 
             logger.LogInformation(
-                "On-chain wallet derived data refreshed. Contract={Contract} Blocks={FromBlock}-{ToBlock}",
+                "On-chain serving data refreshed. Contract={Contract} Blocks={FromBlock}-{ToBlock}",
                 contractName,
                 startBlock,
                 endBlock);
 
             await DelayIfConfiguredAsync(cancellationToken);
         }
+    }
+
+    private static string FormatRange(OnChainBlockRange? range)
+    {
+        return range is null ? "none" : $"{range.FromBlock}-{range.ToBlock}";
     }
 
     private async Task<BatchIngestionResult> IngestBatchAsync(

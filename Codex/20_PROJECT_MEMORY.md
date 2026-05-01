@@ -111,9 +111,9 @@ Later, manual on-chain ingestion was added:
   `polymarket_onchain_position_refresh_queue`, and
   `polymarket_onchain_wallet_performance`,
   `polymarket_onchain_wallet_performance_refresh_queue`, and
+  `polymarket_onchain_trade_details`,
+  `polymarket_onchain_participant_details`, and
   `polymarket_onchain_ingest_cursors`;
-- views: `polymarket_onchain_trade_details` and
-  `polymarket_onchain_participant_details`;
 - Polygon JSON-RPC client reads `eth_getLogs` from configured V1/V2 CTF Exchange
   and Neg Risk CTF Exchange contracts;
 - V1/V2 `OrderFilled` events are decoded into wallet, side, token id, price, size,
@@ -127,6 +127,9 @@ Later, manual on-chain ingestion was added:
 - background ingestion catches up fresh blocks first, then processes at most
   `BackgroundHistoricalBatchesPerCycle` historical batches round-robin across
   contracts before sleeping and checking fresh blocks again;
+- raw Polygon log rows are deleted after their decoded fill is materialized into
+  `polymarket_onchain_trade_details`; decoded fills are retained as the
+  audit/rebuild source;
 - raw fills are normalized into maker/taker wallet rows, then aggregated into
   wallet executions by wallet, transaction hash, token id, and side;
 - if raw fills already exist without wallet derived rows, the next on-chain sync
@@ -159,15 +162,15 @@ Later, manual on-chain ingestion was added:
   wallets into `polymarket_onchain_wallet_performance_refresh_queue`, then
   `OnChainPerformanceRefreshWorker` refreshes
   `polymarket_onchain_wallet_performance` in wallet batches;
-- `polymarket_onchain_trade_details` is a read-only explorer view joining
-  decoded fills with Gamma token metadata so each trade row includes maker,
-  taker, maker/taker side, token, market, outcome, category, price, size,
-  notional, fee, block time, and transaction hash;
-- `polymarket_onchain_participant_details` is a read-only explorer view joining
-  materialized wallet activity, positions, and performance so each wallet has a
-  single participant row with execution counts, buy/sell counts, markets traded,
-  volume, fees, position counts, exposure, resolved PnL, ROI, win rate, score,
-  sample quality, and first/last trade time;
+- `polymarket_onchain_trade_details` is an indexed serving table upserted from
+  decoded fills and Gamma token metadata so each trade row includes maker, taker,
+  maker/taker side, token, market, outcome, category, price, size, notional, fee,
+  block time, and transaction hash;
+- `polymarket_onchain_participant_details` is an indexed serving table refreshed
+  from materialized wallet activity, positions, and performance so each wallet
+  has a single participant row with execution counts, buy/sell counts, markets
+  traded, volume, fees, position counts, exposure, resolved PnL, ROI, win rate,
+  score, sample quality, and first/last trade time;
 - `Onchain Rankings` remains activity-based but is served from the materialized
   wallet activity table, while `Onchain Leaders` is a first heuristic performance
   score over materialized positions, resolved PnL, ROI, win rate, sample quality,
@@ -309,7 +312,7 @@ The schema initializer created these tables at the time of verification:
 - `trader_discovery_candidates`
 - `traders`
 
-Read-only on-chain explorer views:
+Indexed on-chain explorer tables:
 
 - `polymarket_onchain_trade_details`
 - `polymarket_onchain_participant_details`
@@ -626,7 +629,7 @@ Dashboard storage behavior:
 - after on-chain ingestion work, dashboard has `Onchain Leaders`,
   `Onchain Rankings`, `Onchain Trades`, `Onchain Participants`,
   `Onchain Positions`, and `Onchain Executions` tabs fed by normalized Polygon
-  `OrderFilled` wallet executions plus trade/participant explorer views,
+  `OrderFilled` wallet executions plus indexed trade/participant explorer tables,
   materialized activity, positions, and performance tables.
 - after local error-history work, dashboard has `Dashboard Errors`, an in-memory
   tab that keeps the latest refresh, IPC command, and CSV export errors visible

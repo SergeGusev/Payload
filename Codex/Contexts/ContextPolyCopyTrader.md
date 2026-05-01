@@ -1,3 +1,16 @@
+## Active Update 2026-05-01 Fast Onchain Serving Tables And Raw Log Purge
+Goal: Prioritize fast on-chain query surfaces and remove old raw blockchain logs only after they are processed into indexed serving tables.
+Status: Completed
+Done:
+- Replaced the on-chain trade and participant explorer views with physical indexed PostgreSQL tables `polymarket_onchain_trade_details` and `polymarket_onchain_participant_details`.
+- Added incremental trade-detail upserts from decoded fills, metadata refresh propagation from Gamma token metadata, and ingestion/derived-range checks that backfill missing trade-detail ranges from existing decoded fills.
+- Added participant-detail refresh from activity, position, and performance refresh paths, including initial queue seeding for existing activity rows missing participant summaries.
+- Added raw `polymarket_onchain_logs` cleanup after decoded fills have been materialized into `polymarket_onchain_trade_details`; decoded fills remain retained as the audit/rebuild source.
+- Updated Dashboard-facing repository reads through the same table names, tests, README, configuration reference, and project memory.
+Next: Restart the service so schema initialization converts the old views into indexed tables and the next on-chain sync backfills/purges processed raw logs.
+Notes: `git rev-parse --abbrev-ref --symbolic-full-name '@{u}'` failed because branch `master` has no configured upstream, so pull/push cannot run automatically. Verification: `dotnet build src\PolyCopyTrader.Service\PolyCopyTrader.Service.csproj -c Verify --no-restore` passed; `dotnet test tests\PolyCopyTrader.Tests\PolyCopyTrader.Tests.csproj -c Verify --no-restore` passed 119/119; `dotnet build src\PolyCopyTrader.Dashboard\PolyCopyTrader.Dashboard.csproj -c Verify --no-restore` passed; `git diff --check` passed with CRLF warnings only. Existing unrelated `PolyCopyTrader.sln` changes remain untouched.
+Blockers: Automatic pull/push cannot run until a Git upstream is configured.
+
 ## Active Update 2026-05-01 Onchain Serving Tables Architecture
 Goal: Align on the target architecture for blockchain ingestion, indexed derived tables, and raw data retention.
 Status: Completed

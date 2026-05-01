@@ -187,24 +187,27 @@ range. The background ingestion worker always catches up fresh blocks first, the
 spends only `BackgroundHistoricalBatchesPerCycle` historical batches before
 sleeping and checking fresh blocks again.
 
-Raw decoded logs are stored in `polymarket_onchain_fills`. The service also
-derives `polymarket_onchain_wallet_fills` with one maker row and one taker row
-per raw fill, then aggregates those rows into `polymarket_onchain_wallet_executions`
-by wallet, transaction hash, token id, and side. The dashboard ranking uses those
-executions, so it is no longer maker-only. If raw fills predate the wallet tables,
-the next on-chain sync fills the missing derived range from PostgreSQL before it
-continues reading new Polygon blocks.
+Raw Polygon log rows are stored in `polymarket_onchain_logs` only until their
+decoded fill has been materialized into the indexed serving layer. Decoded fills
+are stored in `polymarket_onchain_fills` and remain the rebuild/audit source. The
+service also derives `polymarket_onchain_wallet_fills` with one maker row and one
+taker row per fill, then aggregates those rows into
+`polymarket_onchain_wallet_executions` by wallet, transaction hash, token id, and
+side. The dashboard ranking uses those executions, so it is no longer maker-only.
+If raw fills predate the wallet or serving tables, the next on-chain sync fills
+the missing derived range from PostgreSQL before it continues reading new Polygon
+blocks.
 
-`polymarket_onchain_trade_details` is a read-only view for the trade-level
-explorer. It joins decoded fills to token metadata and exposes block time,
-transaction hash, maker/taker participants, maker/taker side, price, share size,
-notional, raw asset amounts, fees, market title/slug, outcome, category, and
-resolved status. `polymarket_onchain_participant_details` is a read-only view for
-the participant-level explorer. It joins materialized activity, positions, and
-performance so each wallet has executions, buy/sell counts, markets traded,
-volume, fees, position counts, exposure, resolved PnL, ROI, win rate, score, and
-first/last trade time in one row. Both views are research surfaces; they do not
-place orders or change ingestion.
+`polymarket_onchain_trade_details` is an indexed table for the trade-level
+explorer. It is incrementally upserted from decoded fills plus token metadata and
+exposes block time, transaction hash, maker/taker participants, maker/taker side,
+price, share size, notional, raw asset amounts, fees, market title/slug, outcome,
+category, and resolved status. `polymarket_onchain_participant_details` is an
+indexed table for the participant-level explorer. It is incrementally refreshed
+from materialized activity, positions, and performance so each wallet has
+executions, buy/sell counts, markets traded, volume, fees, position counts,
+exposure, resolved PnL, ROI, win rate, score, and first/last trade time in one
+row. Both tables are research surfaces; they do not place orders.
 
 `polymarket_onchain_wallet_activity` is a materialized activity-ranking table
 maintained by the background activity refresh worker. It reads wallet executions

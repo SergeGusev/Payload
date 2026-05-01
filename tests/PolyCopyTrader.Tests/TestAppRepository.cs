@@ -377,6 +377,11 @@ internal sealed class TestAppRepository : IAppRepository
         return Task.FromResult(blocks.Length == 0 ? null : new OnChainBlockRange(blocks.Min(), blocks.Max()));
     }
 
+    public Task<OnChainBlockRange?> GetPolymarketOnChainTradeDetailsBlockRangeAsync(string contractAddress, CancellationToken cancellationToken = default)
+    {
+        return GetPolymarketOnChainFillBlockRangeAsync(contractAddress, cancellationToken);
+    }
+
     public Task RefreshPolymarketOnChainWalletDerivedDataAsync(string contractAddress, long fromBlock, long toBlock, CancellationToken cancellationToken = default)
     {
         OnChainWalletDerivedRefreshRanges.Add(new OnChainBlockRange(fromBlock, toBlock));

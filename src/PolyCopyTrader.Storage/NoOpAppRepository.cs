@@ -200,6 +200,11 @@ public sealed class NoOpAppRepository : IAppRepository
         return Task.FromResult<OnChainBlockRange?>(null);
     }
 
+    public Task<OnChainBlockRange?> GetPolymarketOnChainTradeDetailsBlockRangeAsync(string contractAddress, CancellationToken cancellationToken = default)
+    {
+        return Task.FromResult<OnChainBlockRange?>(null);
+    }
+
     public Task RefreshPolymarketOnChainWalletDerivedDataAsync(string contractAddress, long fromBlock, long toBlock, CancellationToken cancellationToken = default)
     {
         return Task.CompletedTask;
