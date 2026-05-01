@@ -1,3 +1,15 @@
+## Active Update 2026-05-01 Long Schema Initialization Guidance
+Goal: Explain whether a one-hour PostgreSQL schema initialization run is expected and how to diagnose it.
+Status: Completed
+Done:
+- Re-read workflow, project rules, coding rules, active context, Git state, and `PostgresSchema.cs`.
+- Confirmed the new `polymarket_onchain_trade_details` and `polymarket_onchain_participant_details` tables/indexes should be quick when first created because they start empty.
+- Identified the likely one-hour causes as missing index creation on existing large on-chain tables or lock waits from another active session.
+- Prepared SQL diagnostics using `pg_stat_progress_create_index`, `pg_stat_activity`, and `pg_blocking_pids`.
+Next: Run the PostgreSQL diagnostic SQL against the same database while schema initialization is still running.
+Notes: `git rev-parse --abbrev-ref --symbolic-full-name '@{u}'` failed because branch `master` has no configured upstream, so pull/push cannot run automatically. No source code changed for this answer-only task; existing unrelated `PolyCopyTrader.sln` changes remain untouched.
+Blockers: Automatic pull/push cannot run until a Git upstream is configured.
+
 ## Active Update 2026-05-01 Schema Initializer Catch Restore
 Goal: Restore a local catch block in schema initialization for debugging while keeping timeout behavior.
 Status: Completed

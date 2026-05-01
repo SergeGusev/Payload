@@ -102,3 +102,10 @@ Request:
 
 Result:
 Restored a local `try/catch` in `PostgresSchemaInitializer.InitializeAsync()` for debugging, kept `CommandTimeout = 0`, writes the exception to console, and rethrows so schema initialization failure is still fatal. Service build, Dashboard build, full tests, and diff check passed.
+
+## 2026-05-01T09:54:37.0215927Z
+Request:
+Уже час отрабатывает скрипт. Это нормально?
+
+Result:
+Explained that the new empty serving tables should not take an hour to create, so a long schema initialization run is likely creating a missing index on an existing large on-chain table or waiting on a PostgreSQL lock. Prepared SQL diagnostics using `pg_stat_progress_create_index`, `pg_stat_activity`, and `pg_blocking_pids`. No source code changed.
