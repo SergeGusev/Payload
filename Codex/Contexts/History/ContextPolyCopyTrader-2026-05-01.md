@@ -123,3 +123,10 @@ Request:
 
 Result:
 Updated `PostgresSchemaInitializer.InitializeAsync()` to split `PostgresSchema.SchemaSql` into individual SQL statements and execute each with `CommandTimeout = 0`, preserving the local `try/catch`. Added a splitter that keeps dollar-quoted `DO $$ ... $$;` blocks together and tests for current schema splitting/dollar-quoted blocks. Service build, Dashboard build, full tests, and diff check passed.
+
+## 2026-05-01T10:23:21.7697964Z
+Request:
+Что за таблица trader_leaderboard_snapshots ? Даже count не могу по ней посчитать
+
+Result:
+Explained that `trader_leaderboard_snapshots` is the current Polymarket leaderboard snapshot pool for manual Trader Discovery/Find traders, not the on-chain ingestion path. Identified the likely reason `count(*)` hangs: a full table scan and/or waiting behind schema DDL/migration locks from the legacy snapshot migration block. No source code changed.

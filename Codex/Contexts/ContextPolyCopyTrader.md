@@ -1,3 +1,15 @@
+## Active Update 2026-05-01 Trader Leaderboard Snapshots Explanation
+Goal: Explain the purpose of `trader_leaderboard_snapshots` and why `count(*)` can hang.
+Status: Completed
+Done:
+- Re-read workflow, project rules, coding rules, active context, Git state, schema, repository writes, TraderDiscovery processor, README, and project memory.
+- Confirmed `trader_leaderboard_snapshots` is the current Polymarket leaderboard snapshot pool used by manual Trader Discovery/Find traders, not the on-chain ingestion pipeline.
+- Confirmed schema initialization still has legacy migration work for this table: updates, duplicate collapse, deletes, dropped legacy columns, and leaderboard indexes.
+- Explained that `count(*)` can hang because PostgreSQL `count(*)` scans the table and can also wait behind schema DDL locks.
+Next: If it is blocking startup and Trader Discovery history is not needed, consider truncating/resetting this table or moving its migration out of startup schema initialization.
+Notes: `git rev-parse --abbrev-ref --symbolic-full-name '@{u}'` failed because branch `master` has no configured upstream, so pull/push cannot run automatically. No source code changed for this answer-only task; existing unrelated `PolyCopyTrader.sln` changes remain untouched.
+Blockers: Automatic pull/push cannot run until a Git upstream is configured.
+
 ## Active Update 2026-05-01 Stepwise Schema Initialization
 Goal: Split PostgreSQL schema initialization into individually debuggable commands.
 Status: Completed
