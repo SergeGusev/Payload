@@ -529,3 +529,10 @@ Request:
 
 Result:
 Queried PostgreSQL health after cancelling the blocker. Confirmed `blocked=0`, the wallet-activity queue index exists, no active schema index creation remains, and `PolyCopyTrader.Service` heartbeat is fresh in `Running`/`ReadOnly`. No `api_errors` were returned for the last 15 minutes. One `missing_activity` seed query remained active for about 5 minutes, but it was not blocking anything.
+
+## 2026-05-01T20:58:06.3671637Z
+Request:
+Ок, оставляю работать на ночь. Ты проверяй раз в полчаса, что всё нормально
+
+Result:
+Started a temporary hidden .NET overnight health monitor outside the repository. The corrected active monitor is pid `67592` and logs to `D:\1\polycopy-overnight-health-20260501-235733.log`; it runs 20 checks at 30-minute intervals. First corrected check showed service heartbeat fresh, `Running`/`ReadOnly`, `blocked=0`, wallet-activity queue index present, and no active schema index creation. It logged `WARN` because two recent `OnChainActivityRefreshWorker` stream timeouts and one long autovacuum were present, but neither was blocking.

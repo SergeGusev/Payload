@@ -1,3 +1,17 @@
+## Active Update 2026-05-01 Overnight Health Monitor
+Goal: Set up overnight health checks while the service continues running.
+Status: Completed
+Done:
+- Created and started a temporary .NET overnight monitor outside the repository as hidden process `pid=67592`.
+- Monitor log path: `D:\1\polycopy-overnight-health-20260501-235733.log`.
+- Monitor will run 20 checks at 30-minute intervals, covering about 10 hours.
+- Stopped an earlier monitor process after detecting false positives in its SQL self-matching, then launched the corrected version.
+- First corrected check: service heartbeat fresh, `PolyCopyTrader.Service` `Running` in `ReadOnly`, `blocked=0`, wallet-activity queue index exists, no active schema index creation remains.
+- First corrected check was `WARN` because of 2 recent `OnChainActivityRefreshWorker` stream timeouts and one long autovacuum on `polymarket_onchain_trade_details`; neither was blocking.
+Next: Review `D:\1\polycopy-overnight-health-20260501-235733.log` in the morning; if repeated `WARN` rows show activity-refresh stream timeouts or long `missing_activity` seed queries, optimize that wallet-activity queue seed.
+Notes: Operational monitor setup only; no source behavior changed. Existing unrelated dirty files `PolyCopyTrader.sln` and `src/PolyCopyTrader.Storage/PostgresSchemaInitializer.cs` were left untouched. `git rev-parse --abbrev-ref --symbolic-full-name '@{u}'` failed because branch `master` has no configured upstream.
+Blockers: Automatic pull/push cannot run until a Git upstream is configured.
+
 ## Active Update 2026-05-01 Post Blocker Cancellation Health Check
 Goal: Verify service and PostgreSQL health after cancelling the wallet-activity queue blocker.
 Status: Completed
