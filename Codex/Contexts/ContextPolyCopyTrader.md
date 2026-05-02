@@ -1,3 +1,15 @@
+## Active Update 2026-05-02 Signal Candidate Completion Answer
+Goal: Clarify whether the signal-candidate preparation functionality is complete.
+Status: Completed
+Done:
+- Rechecked the implemented signal-candidate pipeline: schema tables, queue/cursor, worker, processor, source selection, upsert, rejection reasons, config, and docs exist.
+- Confirmed the pipeline is a completed read-only preparation layer: it materializes candidate rows and explicit rejection reasons from on-chain wallet fills, joined with token metadata and wallet/category performance.
+- Confirmed the live database is still backfilling: about 28,230 candidate rows existed during the check, `polymarket_onchain_signal_candidate_refresh_queue` had about 1,670,222 rows, and backfill cursor `default` had `completed=false`.
+- Confirmed recent signal-candidate worker errors were absent in the last 30 minutes during the check.
+Next: Treat candidate preparation code as complete, but keep monitoring queue drain/cursor completion before considering the historical candidate dataset complete.
+Notes: Operational answer only; no source behavior changed. A temporary C# diagnostic project under `Codex/TempDbCheck` was created and removed. Existing unrelated dirty files `PolyCopyTrader.sln` and `src/PolyCopyTrader.Storage/PostgresSchemaInitializer.cs` were left untouched. `git rev-parse --abbrev-ref --symbolic-full-name '@{u}'` failed because branch `master` has no configured upstream.
+Blockers: Automatic pull/push cannot run until a Git upstream is configured.
+
 ## Active Update 2026-05-02 Startup Index Lock Unblock
 Goal: Diagnose and prevent a startup hang on an existing PostgreSQL index.
 Status: Completed

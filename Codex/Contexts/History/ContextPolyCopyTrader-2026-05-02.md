@@ -73,3 +73,10 @@ Request:
 
 Result:
 Inspected the clipboard screenshot, diagnosed startup statement `CREATE INDEX IF NOT EXISTS ix_polymarket_onchain_wallet_activity_refresh_queue_queued` as blocked by a long `INSERT ... missing_activity` backend rather than actually building the already-valid index, canceled blocker backend `60728`, confirmed the service heartbeat recovered with no active index/blocking chain, and added a schema initializer pre-check to skip already-existing indexes before sending no-op `CREATE INDEX IF NOT EXISTS` statements to PostgreSQL. Verification passed with targeted StorageTests, service build after build-server shutdown, full tests, and diff checks.
+
+## 2026-05-02T13:11:11.6846844+00:00
+Request:
+Всё, функционал по подготовке кандидатов завершён?
+
+Result:
+Confirmed from code and live PostgreSQL checks that signal-candidate preparation functionality is implemented as a read-only preparation layer with candidate/reason tables, queue/cursor backfill, worker, processor, config, and docs. Also confirmed the live historical backfill is still running: around 28,230 candidate rows, around 1,670,222 queued rows, cursor `default` not completed, and no recent signal-candidate worker errors in the last 30 minutes.
