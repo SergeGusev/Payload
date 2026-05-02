@@ -1,3 +1,19 @@
+## Active Update 2026-05-02 Post Restart Behavior Evidence Health Check
+Goal: Verify the restarted service is running and applying the new behavior-evidence candidate criteria.
+Status: Completed
+Done:
+- Confirmed `PolyCopyTrader.Service` is running from `src/PolyCopyTrader.Service/bin/Debug/net10.0/PolyCopyTrader.Service.exe` as PID 13956 in `ReadOnly`.
+- Confirmed fresh database heartbeat: service status `Running`, mode `ReadOnly`, heartbeat age under 10 seconds during checks, no last error.
+- Confirmed candidate worker is applying the new behavior-evidence policy: recent candidate updates had `Accepted/onchain_candidate_ready` and performance-based rejections, with no recent `unsupported_side`, `market_inactive`, `market_resolved`, or `leader_trade_too_small` updates.
+- Confirmed candidate totals during check: 59,191 rows, 785 accepted, 58,406 rejected, about 1,750 rows updated in the last 10 minutes.
+- Confirmed old policy rejects still exist but are decreasing through retries: `unsupported_side` 28,595, `leader_trade_too_small` 28,483, `market_inactive` 95.
+- Confirmed signal-candidate queue is large and backfill still active: about 3,974,371 queued rows, cursor `default` not completed and at block 85,904,245 / timestamp around 2026-04-23.
+- Confirmed no recent `api_errors` in the last 30 minutes and no PostgreSQL blocking chain.
+- Noted one long active `missing_activity` queue seed query running about 1h20m; it was not blocking other sessions during the check.
+Next: Let the service continue. Monitor candidate `decision_code` counts and queue size; old policy rejects should trend down while accepted/performance-based outcomes increase.
+Notes: Operational check only; no application source behavior changed. A temporary C# diagnostic project under `Codex/TempDbCheck` was created for DB queries and removed. Existing unrelated dirty files `PolyCopyTrader.sln` and `src/PolyCopyTrader.Storage/PostgresSchemaInitializer.cs` were left untouched. `git rev-parse --abbrev-ref --symbolic-full-name '@{u}'` failed because branch `master` has no configured upstream.
+Blockers: Automatic pull/push cannot run until a Git upstream is configured.
+
 ## Active Update 2026-05-02 Service Restart For New Criteria
 Goal: Confirm whether restarting the service is enough for the new behavior-evidence criteria to take effect.
 Status: Completed

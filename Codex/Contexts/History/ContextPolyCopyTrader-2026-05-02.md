@@ -167,3 +167,10 @@ Request:
 
 Result:
 Confirmed that restarting the service from the latest build is enough for new/queued candidate rows and retry-eligible old rejected rows to use the new behavior-evidence criteria. Clarified that old rejected rows recalculate gradually through retry batches after 10 minutes, not instantly, and that already accepted rows are not automatically mass-requeued.
+
+## 2026-05-02T17:08:25.8727461Z
+Request:
+Запустился. Проверь, что всё нормально
+
+Result:
+Checked the restarted service and PostgreSQL state. `PolyCopyTrader.Service` is running in `ReadOnly` as PID 13956 with fresh heartbeat and no last error. Candidate worker is applying the new behavior-evidence policy: recent candidate updates contain accepted rows and performance-based rejections, with no recent `unsupported_side`, `market_inactive`, `market_resolved`, or `leader_trade_too_small` updates. Candidate table had 59,191 rows, 785 accepted, 58,406 rejected, and about 1,750 updated in the last 10 minutes. Signal-candidate queue remains large at about 3,974,371 rows and historical cursor is not complete. No recent `api_errors` and no PostgreSQL blocking chain were found. One long `missing_activity` queue seed query was active for about 1h20m but was not blocking other sessions.
