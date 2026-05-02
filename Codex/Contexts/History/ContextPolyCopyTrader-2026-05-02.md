@@ -188,3 +188,9 @@ Request:
 
 Result:
 Checked the running service, PostgreSQL heartbeat, candidate totals, refresh queues, recent API errors, lock chains, active sessions, service log tail, and PostgreSQL slow-query log. Service was running in ReadOnly mode with a fresh heartbeat and no recent API errors or blocking chain. Candidate processing was active with 59,191 total rows, 4,057 accepted, 55,134 rejected, and 2,750 updated in the last 15 minutes. Noted a large due candidate queue, a non-blocking long `missing_activity` queue seed query, and a slow candidate queue fetch query around 20 seconds per 250-row batch. No source behavior changed; the temporary DB diagnostic project was removed.
+## 2026-05-02T19:07:13.6172364Z
+Request:
+Я правильно понимаю, что у нас будет как полный список кошельков и их характеристик, даже самых неудачных, так и отдельный список кандидатов с хорошими характеристиками?
+
+Result:
+Explained that the intended architecture has two layers: a full wallet universe in materialized wallet/activity/position/performance tables, including weak and losing wallets, and a separate selected/trusted `(wallet, category)` candidate/target subset. Clarified that `polymarket_onchain_signal_candidates` currently stores per-fill behavior evidence, not the final wallet list, so the next clean layer should be a dedicated wallet/category target-selection table or view over the full performance tables and accepted evidence.

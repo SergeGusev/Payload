@@ -1,3 +1,16 @@
+## Active Update 2026-05-02 Wallet Universe Versus Candidate List
+Goal: Clarify whether the system should keep all wallets and also a separate good-candidate subset.
+Status: Completed
+Done:
+- Rechecked schema/docs around `polymarket_onchain_wallet_activity`, `polymarket_onchain_wallet_positions`, `polymarket_onchain_wallet_performance`, `polymarket_onchain_wallet_category_performance`, and `polymarket_onchain_signal_candidates`.
+- Confirmed the architecture should keep the full wallet universe, including bad/weak wallets, in the materialized wallet, position, and performance tables.
+- Clarified that `polymarket_onchain_wallet_category_performance` is the main full statistics table for every observed `(wallet, category)` pair that can be scored, not only winners.
+- Clarified that the current `polymarket_onchain_signal_candidates` table is per-fill behavior evidence, not the final per-wallet candidate list.
+- Clarified that the next clean layer should be a separate selected/trusted `(wallet, category)` target table or view over the full performance tables and accepted behavior evidence.
+Next: Implement a final wallet/category target-selection table with stricter thresholds than behavior-evidence materialization.
+Notes: Explanation/schema inspection only; no source behavior changed. Existing unrelated dirty files `PolyCopyTrader.sln` and `src/PolyCopyTrader.Storage/PostgresSchemaInitializer.cs` were left untouched. `git rev-parse --abbrev-ref --symbolic-full-name '@{u}'` failed because branch `master` has no configured upstream.
+Blockers: Automatic pull/push cannot run until a Git upstream is configured.
+
 ## Active Update 2026-05-02 Current Service Health Check
 Goal: Check the currently running service, database progress, queues, errors, and locks.
 Status: Completed
