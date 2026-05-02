@@ -105,3 +105,9 @@ Request:
 
 Result:
 Removed the on-chain signal-candidate size rejection based on `Execution.MinLeaderTradeUsd`, removed the now-unused `ExecutionOptions` dependency from the candidate processor, added `leader_trade_too_small` to the retry queue so old rows can be recalculated, updated tests and README, and verified with service build, targeted tests, full tests, and diff checks. Existing unrelated dirty files remained untouched.
+## 2026-05-02T15:56:49.0617349+00:00
+Request:
+Поясни мне требование к кандидату: "Рынок должен быть активным и не закрытым/архивным."
+
+Result:
+Explained that the candidate processor rejects a market with `market_inactive` when Gamma metadata has `active=false`, `closed=true`, or `archived=true`, and separately rejects `market_resolved` when `resolved=true`. Clarified this is a current-actionability filter for copy-signal use and that historical fills may be rejected if their market is closed now.

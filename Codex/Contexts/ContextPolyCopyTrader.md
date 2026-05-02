@@ -1,3 +1,16 @@
+## Active Update 2026-05-02 Market Active Requirement Explanation
+Goal: Explain the candidate requirement that a market must be active and not closed or archived.
+Status: Completed
+Done:
+- Rechecked `OnChainSignalCandidateProcessor`, Gamma metadata parsing, and token metadata schema fields for `active`, `closed`, `archived`, and `resolved`.
+- Clarified that candidate preparation currently rejects a market as `market_inactive` when `active=false`, `closed=true`, or `archived=true`.
+- Clarified that `resolved` is a separate rejection (`market_resolved`) and in current parsing is derived from Gamma `closed`, so closed markets usually fail both actionability checks.
+- Clarified that this is an actionability filter for downstream copy-signal use: avoid candidates for markets that Polymarket metadata says are no longer currently tradable/usable.
+- Noted the implication for historical backfill: an old fill can be rejected if the market is closed now, even if the market was active when that historical fill happened.
+Next: If historical analysis should keep closed/resolved fills as candidates, split candidate preparation into historical classification plus a separate current-actionability gate in the next decision layer.
+Notes: Explanation only; no source behavior changed. Existing unrelated dirty files `PolyCopyTrader.sln` and `src/PolyCopyTrader.Storage/PostgresSchemaInitializer.cs` were left untouched. `git rev-parse --abbrev-ref --symbolic-full-name '@{u}'` failed because branch `master` has no configured upstream.
+Blockers: Automatic pull/push cannot run until a Git upstream is configured.
+
 ## Active Update 2026-05-02 Remove Candidate Size Filter
 Goal: Stop rejecting on-chain signal candidates by `Execution.MinLeaderTradeUsd`.
 Status: Completed
