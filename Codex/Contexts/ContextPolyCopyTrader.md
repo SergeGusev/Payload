@@ -1,3 +1,15 @@
+## Active Update 2026-05-02 Performance Freshness Explanation
+Goal: Explain what the `LeaderCategoryPerformanceStaleAfterHours` freshness criterion means.
+Status: Completed
+Done:
+- Rechecked `OnChainSignalCandidateProcessor`, `SignalOptions`, and `polymarket_onchain_wallet_category_performance` schema.
+- Clarified that freshness compares current time to `polymarket_onchain_wallet_category_performance.refreshed_at_utc`, not to the wallet's latest trade time.
+- Clarified that stale performance rejects with `leader_category_performance_stale` when `now - refreshed_at_utc` exceeds `Signal.LeaderCategoryPerformanceStaleAfterHours`, default 24 hours.
+- Clarified that this is a data-freshness guard for the aggregate wallet/category stats and stale rows are retry-eligible after the performance worker refreshes them.
+Next: Consider whether behavior-evidence materialization should keep stale-performance rows as pending/retry evidence instead of hard rejected when building the target-selection layer.
+Notes: Explanation only; no source behavior changed. Existing unrelated dirty files `PolyCopyTrader.sln` and `src/PolyCopyTrader.Storage/PostgresSchemaInitializer.cs` were left untouched. `git rev-parse --abbrev-ref --symbolic-full-name '@{u}'` failed because branch `master` has no configured upstream.
+Blockers: Automatic pull/push cannot run until a Git upstream is configured.
+
 ## Active Update 2026-05-02 Current Behavior Evidence Criteria
 Goal: Restate the current criteria for on-chain behavior-evidence candidates after the semantic rework.
 Status: Completed

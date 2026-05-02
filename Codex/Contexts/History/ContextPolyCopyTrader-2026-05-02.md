@@ -139,3 +139,10 @@ Request:
 
 Result:
 Restated the current on-chain behavior-evidence candidate criteria after inspecting the processor, retry SQL, signal config defaults, and README. Clarified required gates: usable token metadata, known category, matching fresh wallet/category performance, and configured thresholds for resolved sample size, sample quality, score, ROI, and win rate. Clarified non-gates: BUY-only, notional size, current market state, freshness, order book, spread, liquidity, risk, and watchlist membership.
+
+## 2026-05-02T16:26:53.6813630Z
+Request:
+Поясни, что такое Performance не устарел
+
+Result:
+Explained that performance freshness means the aggregate `(wallet, category)` row in `polymarket_onchain_wallet_category_performance` was recalculated recently enough, based on `refreshed_at_utc`, not that the wallet traded recently. The current gate rejects with `leader_category_performance_stale` when `now - refreshed_at_utc` exceeds `Signal.LeaderCategoryPerformanceStaleAfterHours`, default 24 hours, and stale rows are retry-eligible after the performance refresh worker updates the aggregate.
