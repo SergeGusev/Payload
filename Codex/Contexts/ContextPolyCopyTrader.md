@@ -1,3 +1,19 @@
+## Active Update 2026-05-02 PostgreSQL Slow Query Plan Logging
+Goal: Enable PostgreSQL slow-query logging with execution plans in `D:\PortgreeLogs`.
+Status: Completed
+Done:
+- Confirmed PostgreSQL service is `postgresql-x64-17`, running from `D:\PortgreeData` as `NT AUTHORITY\NetworkService`.
+- Confirmed `D:\PortgreeLogs` exists and granted explicit modify rights to the NetworkService SID.
+- Confirmed the DB connection user is PostgreSQL superuser `postgres`.
+- Found `shared_preload_libraries=auto_explain` and `logging_collector=on` were already active, but `auto_explain.log_min_duration` was `0ms`, causing every plan to be logged.
+- Changed PostgreSQL settings with `ALTER SYSTEM` and `pg_reload_conf()` so logs now go to `D:/PortgreeLogs` and only statements/plans slower than `2000ms` are logged.
+- Enabled useful diagnostics: `auto_explain.log_analyze=on`, `auto_explain.log_buffers=on`, `auto_explain.log_format=json`, `auto_explain.log_nested_statements=on`, `auto_explain.log_timing=off`, `log_lock_waits=on`, `log_temp_files=64MB`, `track_io_timing=on`, `log_rotation_size=100MB`.
+- Disabled broad statement spam with `log_statement=none` and `log_duration=off`.
+- Verified with a `pg_sleep(2.2)` probe that `D:\PortgreeLogs\postgresql-2026-05-02_111921.log` receives both duration lines and JSON execution plans.
+Next: Let the service run under load, then analyze `D:\PortgreeLogs` for repeated slow plans and add targeted indexes.
+Notes: PostgreSQL server configuration only; no source code behavior changed. No PostgreSQL restart was needed because `auto_explain` and `logging_collector` were already active and all checked settings had `pending_restart=False`. Existing unrelated dirty files `PolyCopyTrader.sln` and `src/PolyCopyTrader.Storage/PostgresSchemaInitializer.cs` were left untouched. `git rev-parse --abbrev-ref --symbolic-full-name '@{u}'` failed because branch `master` has no configured upstream.
+Blockers: Automatic pull/push cannot run until a Git upstream is configured.
+
 ## Active Update 2026-05-02 Post Restart Contention Health Check
 Goal: Verify service/database health after restarting with the reduced refresh-worker contention changes.
 Status: Completed

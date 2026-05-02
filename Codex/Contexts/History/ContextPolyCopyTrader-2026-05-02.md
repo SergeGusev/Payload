@@ -18,3 +18,10 @@ Request:
 
 Result:
 Verified the restarted service and PostgreSQL state. `PolyCopyTrader.Service` is running in `ReadOnly`, heartbeat is fresh, the logs show the new reduced/staggered refresh settings loaded at startup, PostgreSQL has `blocked_count=0`, no long active sessions over 5 minutes, and no `api_errors` since restart. One derived refresh session was holding the shared advisory lock while other derived refresh cycles skipped, and later activity/position/category-performance batches completed without new deadlocks in the checked window. Queue counts were token metadata `20`, position `42,954`, activity `143,119`, performance `86,009`, category performance `79,827`. Exact counts on huge on-chain tables were avoided after timeout and replaced with relation estimates to avoid adding load.
+
+## 2026-05-02T08:20:55.9324994Z
+Request:
+А мы можем добавить логгирование медленных запросов в D:\PortgreeLogs ? С логгированием планов этих запросов, чтобы потом проанализировать логи и добавить недостающие индексы?
+
+Result:
+Configured PostgreSQL slow-query and plan logging. Confirmed `postgresql-x64-17` runs from `D:\PortgreeData`, `D:\PortgreeLogs` exists, and the service account has modify access. `shared_preload_libraries=auto_explain` and `logging_collector=on` were already active, but `auto_explain.log_min_duration` was `0ms`; changed it to `2000ms`, moved `log_directory` to `D:/PortgreeLogs`, kept plans in JSON with `auto_explain.log_analyze=on` and `auto_explain.log_buffers=on`, enabled lock/temp-file/IO diagnostics, set rotation size to `100MB`, and disabled broad `log_statement`/`log_duration` spam. Reloaded PostgreSQL config and verified with `pg_sleep(2.2)` that `D:\PortgreeLogs\postgresql-2026-05-02_111921.log` receives slow-query duration entries and execution plans. No PostgreSQL restart was required; all checked settings had `pending_restart=False`.
