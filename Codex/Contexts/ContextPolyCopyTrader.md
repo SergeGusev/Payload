@@ -1,3 +1,20 @@
+## Active Update 2026-05-02 Current Service Health Check
+Goal: Check the currently running service, database progress, queues, errors, and locks.
+Status: Completed
+Done:
+- Confirmed `PolyCopyTrader.Service` is running as PID 11636, started locally at 2026-05-02 21:04, with fresh PostgreSQL heartbeat: `Running` / `ReadOnly`, heartbeat age about 7 seconds during the check, no last error.
+- Confirmed candidate materialization is still moving: 59,191 total candidate rows, 4,057 accepted, 55,134 rejected, and 2,750 rows updated in the last 15 minutes.
+- Confirmed recent candidate outcomes are now current performance/data decisions: 895 accepted in the last 15 minutes; rejections were score, win-rate, ROI, missing performance, sample size, and stale performance.
+- Confirmed old policy reject backlog is still present but lower than before: `unsupported_side` 23,969, `leader_trade_too_small` 23,866, and `market_inactive` 88.
+- Confirmed candidate refresh queue remains large: 4,892,177 due rows, cursor `default` not completed and at block 85,904,385 / timestamp 2026-04-23 07:20:14 UTC.
+- Confirmed derived queues are still present: activity 156,842; positions 50,572; wallet performance 93,311; category performance 109,802.
+- Confirmed no `api_errors` in the last 30 minutes and no PostgreSQL blocking chain.
+- Observed one long active `missing_activity` queue-seeding query running about 3 hours; it was not blocking other sessions during the check.
+- Observed PostgreSQL slow-query logging captured the candidate queue fetch/materialization query taking about 20 seconds for a 250-row batch, making it a likely next optimization target.
+Next: Let the service continue if the current pace is acceptable; next engineering step is to optimize candidate queue fetching/joining and the long activity queue seed path.
+Notes: Operational DB/log/process check only; no application source behavior changed. A temporary C# diagnostic project under `Codex/TempDbCheck` was used for DB queries and removed. Existing unrelated dirty files `PolyCopyTrader.sln` and `src/PolyCopyTrader.Storage/PostgresSchemaInitializer.cs` were left untouched. `git rev-parse --abbrev-ref --symbolic-full-name '@{u}'` failed because branch `master` has no configured upstream.
+Blockers: Automatic pull/push cannot run until a Git upstream is configured.
+
 ## Active Update 2026-05-02 Candidate Rejection Reason Breakdown
 Goal: Identify the main reason `polymarket_onchain_signal_candidates` has many rejected rows after the restart.
 Status: Completed

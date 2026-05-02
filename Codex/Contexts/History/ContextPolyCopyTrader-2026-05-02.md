@@ -182,3 +182,9 @@ Accepted: 785
 
 Result:
 Queried PostgreSQL rejection counts. Explained that the overall rejected total is dominated by old-policy rows from before the behavior-evidence change: `unsupported_side` 28,345, `leader_trade_too_small` 28,233, and `market_inactive` 95. Since the current service start, old-policy rejections are not being newly produced; current rejections are performance/data reasons. Since service start, primary decision-code counts were `leader_category_score_too_low` 674, `leader_category_roi_too_low` 420, `leader_category_win_rate_too_low` 254, `leader_category_resolved_sample_too_small` 140, `missing_leader_category_performance` 38, and `leader_category_performance_stale` 10. Full reason rows showed the main underlying causes are weak win rate, ROI, and score; one row can have multiple reasons.
+## 2026-05-02T18:53:29.7653390Z
+Request:
+Ок. Как там сейчас дела?
+
+Result:
+Checked the running service, PostgreSQL heartbeat, candidate totals, refresh queues, recent API errors, lock chains, active sessions, service log tail, and PostgreSQL slow-query log. Service was running in ReadOnly mode with a fresh heartbeat and no recent API errors or blocking chain. Candidate processing was active with 59,191 total rows, 4,057 accepted, 55,134 rejected, and 2,750 updated in the last 15 minutes. Noted a large due candidate queue, a non-blocking long `missing_activity` queue seed query, and a slow candidate queue fetch query around 20 seconds per 250-row batch. No source behavior changed; the temporary DB diagnostic project was removed.
