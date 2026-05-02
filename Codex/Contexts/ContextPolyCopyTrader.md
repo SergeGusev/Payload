@@ -1,3 +1,14 @@
+## Active Update 2026-05-02 Next Step Planning
+Goal: Define the next implementation direction while PostgreSQL slow-query logs accumulate.
+Status: Completed
+Done:
+- Reviewed the current persisted state: on-chain derived tables exist, refresh-worker contention was reduced, and PostgreSQL slow-query plan logging is enabled in `D:\PortgreeLogs`.
+- Recommended the next work sequence: stabilize/monitor data pipelines, verify category/data-quality coverage, then implement the decision layer that converts leader fills into scored copy-signal candidates with explicit rejection reasons.
+- Kept live trading out of scope; the next functional layer should remain `ReadOnly`/`Paper`.
+Next: Implement the signal-candidate/rejection pipeline on top of `polymarket_onchain_fills`, `polymarket_onchain_wallet_category_performance`, market metadata, and configurable freshness/spread/liquidity/risk filters.
+Notes: Planning only; no source behavior changed. Existing unrelated dirty files `PolyCopyTrader.sln` and `src/PolyCopyTrader.Storage/PostgresSchemaInitializer.cs` were left untouched. `git rev-parse --abbrev-ref --symbolic-full-name '@{u}'` failed because branch `master` has no configured upstream.
+Blockers: Automatic pull/push cannot run until a Git upstream is configured.
+
 ## Active Update 2026-05-02 PostgreSQL Slow Query Plan Logging
 Goal: Enable PostgreSQL slow-query logging with execution plans in `D:\PortgreeLogs`.
 Status: Completed

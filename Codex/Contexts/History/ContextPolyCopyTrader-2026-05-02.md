@@ -25,3 +25,10 @@ Request:
 
 Result:
 Configured PostgreSQL slow-query and plan logging. Confirmed `postgresql-x64-17` runs from `D:\PortgreeData`, `D:\PortgreeLogs` exists, and the service account has modify access. `shared_preload_libraries=auto_explain` and `logging_collector=on` were already active, but `auto_explain.log_min_duration` was `0ms`; changed it to `2000ms`, moved `log_directory` to `D:/PortgreeLogs`, kept plans in JSON with `auto_explain.log_analyze=on` and `auto_explain.log_buffers=on`, enabled lock/temp-file/IO diagnostics, set rotation size to `100MB`, and disabled broad `log_statement`/`log_duration` spam. Reloaded PostgreSQL config and verified with `pg_sleep(2.2)` that `D:\PortgreeLogs\postgresql-2026-05-02_111921.log` receives slow-query duration entries and execution plans. No PostgreSQL restart was required; all checked settings had `pending_restart=False`.
+
+## 2026-05-02T08:26:26.6284898Z
+Request:
+Ок, пока ждём логов, поехали дальше. Какие следующие шаги?
+
+Result:
+Outlined the next work sequence while slow-query logs accumulate: keep monitoring/stabilizing ingestion and derived refresh queues, verify category/data-quality coverage, then build the decision layer that turns leader fills into scored copy-signal candidates with explicit acceptance/rejection reasons. Recommended keeping the next functional layer in `ReadOnly`/`Paper`, with live trading still out of scope.
