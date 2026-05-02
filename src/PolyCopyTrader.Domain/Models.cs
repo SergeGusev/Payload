@@ -976,10 +976,18 @@ public sealed record PolymarketOnChainSignalCandidateDecision(
     IReadOnlyList<PolymarketOnChainSignalCandidateReason> Reasons);
 
 public sealed record OnChainSignalCandidateRefreshResult(
+    int SourcesQueued,
+    int RetriesQueued,
     int SourcesFetched,
     int CandidatesUpserted,
     int Accepted,
-    int Rejected);
+    int Rejected,
+    int QueueRemaining);
+
+public sealed record OnChainSignalCandidateQueueRefreshResult(
+    int SourcesQueued,
+    int RetriesQueued,
+    int QueueRemaining);
 
 public sealed record OnChainIngestionResult(
     DateTimeOffset FromUtc,

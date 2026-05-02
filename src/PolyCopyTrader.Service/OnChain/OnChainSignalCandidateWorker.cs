@@ -24,10 +24,11 @@ public sealed class OnChainSignalCandidateWorker(
         var currentErrorDelay = baseErrorDelay;
 
         logger.LogInformation(
-            "Background on-chain signal candidate worker started. IntervalSeconds={IntervalSeconds} BatchSize={BatchSize} LookbackHours={LookbackHours}",
+            "Background on-chain signal candidate worker started. IntervalSeconds={IntervalSeconds} BatchSize={BatchSize} QueueSeedBatchSize={QueueSeedBatchSize} RetryBatchSize={RetryBatchSize}",
             options.SignalCandidateRefreshIntervalSeconds,
             options.SignalCandidateBatchSize,
-            options.SignalCandidateLookbackHours);
+            options.SignalCandidateQueueSeedBatchSize,
+            options.SignalCandidateRetryBatchSize);
 
         while (!stoppingToken.IsCancellationRequested)
         {
@@ -36,11 +37,14 @@ public sealed class OnChainSignalCandidateWorker(
                 var result = await processor.RefreshAsync(stoppingToken);
                 currentErrorDelay = baseErrorDelay;
                 logger.LogInformation(
-                    "Background on-chain signal candidate cycle completed. SourcesFetched={SourcesFetched} CandidatesUpserted={CandidatesUpserted} Accepted={Accepted} Rejected={Rejected}",
+                    "Background on-chain signal candidate cycle completed. SourcesQueued={SourcesQueued} RetriesQueued={RetriesQueued} SourcesFetched={SourcesFetched} CandidatesUpserted={CandidatesUpserted} Accepted={Accepted} Rejected={Rejected} QueueRemaining={QueueRemaining}",
+                    result.SourcesQueued,
+                    result.RetriesQueued,
                     result.SourcesFetched,
                     result.CandidatesUpserted,
                     result.Accepted,
-                    result.Rejected);
+                    result.Rejected,
+                    result.QueueRemaining);
 
                 await Task.Delay(interval, stoppingToken);
             }

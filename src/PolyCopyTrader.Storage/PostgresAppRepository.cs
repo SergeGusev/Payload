@@ -1136,6 +1136,21 @@ ON CONFLICT (transaction_hash, log_index, role) DO UPDATE SET
     fee_amount = excluded.fee_amount,
     fee_asset_id = excluded.fee_asset_id,
     imported_at_utc = excluded.imported_at_utc;
+
+INSERT INTO polymarket_onchain_signal_candidate_refresh_queue (
+    source_fill_id, participant_role, block_timestamp_utc, block_number,
+    log_index, queued_at_utc, next_attempt_at_utc
+)
+SELECT wallet_fill.source_fill_id, wallet_fill.role, wallet_fill.block_timestamp_utc,
+       wallet_fill.block_number, wallet_fill.log_index, now(), now()
+FROM polymarket_onchain_wallet_fills wallet_fill
+LEFT JOIN polymarket_onchain_signal_candidates candidate
+  ON candidate.source_fill_id = wallet_fill.source_fill_id
+ AND candidate.participant_role = wallet_fill.role
+WHERE wallet_fill.contract_address = @ContractAddress
+  AND wallet_fill.block_number BETWEEN @FromBlock AND @ToBlock
+  AND candidate.id IS NULL
+ON CONFLICT (source_fill_id, participant_role) DO NOTHING;
 """;
 
         await using var command = CreateCommand(connection, sql);
@@ -2879,12 +2894,176 @@ WHERE queue.wallet = pair.wallet
         return new OnChainCategoryPerformanceRefreshResult(pairsQueued, pairsProcessed, pairsUpserted, queueRemaining);
     }
 
+    public async Task<OnChainSignalCandidateQueueRefreshResult> RefreshPolymarketOnChainSignalCandidateQueueAsync(
+        int queueSeedLimit = 1_000,
+        int retryLimit = 250,
+        CancellationToken cancellationToken = default)
+    {
+        const string ensureCursorSql = """
+INSERT INTO polymarket_onchain_signal_candidate_backfill_cursors (
+    cursor_name, last_block_timestamp_utc, last_block_number, last_log_index,
+    last_participant_role, completed, updated_at_utc
+) VALUES (
+    'default', NULL, NULL, NULL, NULL, false, now()
+)
+ON CONFLICT (cursor_name) DO NOTHING;
+""";
+
+        const string seedBackfillSql = """
+WITH cursor_row AS (
+    SELECT cursor_name, last_block_timestamp_utc, last_block_number, last_log_index,
+           last_participant_role, completed
+    FROM polymarket_onchain_signal_candidate_backfill_cursors
+    WHERE cursor_name = 'default'
+    FOR UPDATE
+),
+selected AS (
+    SELECT wallet_fill.source_fill_id, wallet_fill.role, wallet_fill.block_timestamp_utc,
+           wallet_fill.block_number, wallet_fill.log_index
+    FROM polymarket_onchain_wallet_fills wallet_fill
+    CROSS JOIN cursor_row cursor
+    WHERE NOT cursor.completed
+      AND (
+          cursor.last_block_timestamp_utc IS NULL
+          OR (
+              wallet_fill.block_timestamp_utc,
+              wallet_fill.block_number,
+              wallet_fill.log_index,
+              wallet_fill.role
+          ) > (
+              cursor.last_block_timestamp_utc,
+              cursor.last_block_number,
+              cursor.last_log_index,
+              cursor.last_participant_role
+          )
+      )
+    ORDER BY wallet_fill.block_timestamp_utc,
+             wallet_fill.block_number,
+             wallet_fill.log_index,
+             wallet_fill.role
+    LIMIT @QueueSeedLimit
+),
+inserted AS (
+    INSERT INTO polymarket_onchain_signal_candidate_refresh_queue (
+        source_fill_id, participant_role, block_timestamp_utc, block_number,
+        log_index, queued_at_utc, next_attempt_at_utc
+    )
+    SELECT selected.source_fill_id, selected.role, selected.block_timestamp_utc,
+           selected.block_number, selected.log_index, now(), now()
+    FROM selected
+    LEFT JOIN polymarket_onchain_signal_candidates candidate
+      ON candidate.source_fill_id = selected.source_fill_id
+     AND candidate.participant_role = selected.role
+    WHERE candidate.id IS NULL
+    ON CONFLICT (source_fill_id, participant_role) DO NOTHING
+    RETURNING 1
+),
+last_selected AS (
+    SELECT block_timestamp_utc, block_number, log_index, role
+    FROM selected
+    ORDER BY block_timestamp_utc DESC, block_number DESC, log_index DESC, role DESC
+    LIMIT 1
+),
+advanced AS (
+    UPDATE polymarket_onchain_signal_candidate_backfill_cursors cursor
+    SET last_block_timestamp_utc = COALESCE((SELECT block_timestamp_utc FROM last_selected), cursor.last_block_timestamp_utc),
+        last_block_number = COALESCE((SELECT block_number FROM last_selected), cursor.last_block_number),
+        last_log_index = COALESCE((SELECT log_index FROM last_selected), cursor.last_log_index),
+        last_participant_role = COALESCE((SELECT role FROM last_selected), cursor.last_participant_role),
+        completed = NOT EXISTS (SELECT 1 FROM selected),
+        updated_at_utc = now()
+    WHERE cursor.cursor_name = 'default'
+    RETURNING completed
+)
+SELECT count(*)::integer AS sources_queued
+FROM inserted;
+""";
+
+        const string seedRetriesSql = """
+WITH selected AS (
+    SELECT source_fill_id, participant_role, block_timestamp_utc, block_number, log_index
+    FROM polymarket_onchain_signal_candidates
+    WHERE decision_status = 'Rejected'
+      AND updated_at_utc <= now() - interval '10 minutes'
+      AND decision_code IN (
+          'missing_market_metadata',
+          'missing_market_category',
+          'missing_leader_category_performance',
+          'leader_category_performance_stale'
+      )
+    ORDER BY updated_at_utc, block_timestamp_utc, block_number, log_index, participant_role
+    LIMIT @RetryLimit
+),
+inserted AS (
+    INSERT INTO polymarket_onchain_signal_candidate_refresh_queue (
+        source_fill_id, participant_role, block_timestamp_utc, block_number,
+        log_index, queued_at_utc, next_attempt_at_utc
+    )
+    SELECT source_fill_id, participant_role, block_timestamp_utc, block_number,
+           log_index, now(), now()
+    FROM selected
+    ON CONFLICT (source_fill_id, participant_role) DO NOTHING
+    RETURNING 1
+)
+SELECT count(*)::integer AS retries_queued
+FROM inserted;
+""";
+
+        await using var connection = await OpenConnectionAsync(cancellationToken);
+        await using var transaction = await connection.BeginTransactionAsync(cancellationToken);
+
+        await using (var ensureCursorCommand = CreateCommand(connection, ensureCursorSql))
+        {
+            ensureCursorCommand.Transaction = transaction;
+            await ensureCursorCommand.ExecuteNonQueryAsync(cancellationToken);
+        }
+
+        var sourcesQueued = 0;
+        await using (var seedBackfillCommand = CreateCommand(connection, seedBackfillSql))
+        {
+            seedBackfillCommand.Transaction = transaction;
+            seedBackfillCommand.CommandTimeout = 300;
+            seedBackfillCommand.Parameters.AddWithValue("QueueSeedLimit", queueSeedLimit);
+            sourcesQueued = Convert.ToInt32(await seedBackfillCommand.ExecuteScalarAsync(cancellationToken));
+        }
+
+        var retriesQueued = 0;
+        await using (var seedRetriesCommand = CreateCommand(connection, seedRetriesSql))
+        {
+            seedRetriesCommand.Transaction = transaction;
+            seedRetriesCommand.CommandTimeout = 300;
+            seedRetriesCommand.Parameters.AddWithValue("RetryLimit", retryLimit);
+            retriesQueued = Convert.ToInt32(await seedRetriesCommand.ExecuteScalarAsync(cancellationToken));
+        }
+
+        var queueRemaining = await CountPolymarketOnChainSignalCandidateRefreshQueueAsync(connection, transaction, cancellationToken);
+        await transaction.CommitAsync(cancellationToken);
+
+        return new OnChainSignalCandidateQueueRefreshResult(sourcesQueued, retriesQueued, queueRemaining);
+    }
+
     public async Task<IReadOnlyList<PolymarketOnChainSignalCandidateSource>> GetPolymarketOnChainSignalCandidateSourcesAsync(
         int limit = 250,
-        int lookbackHours = 24,
         CancellationToken cancellationToken = default)
     {
         const string sql = """
+WITH due_queue AS (
+    SELECT queue.source_fill_id, queue.participant_role
+    FROM polymarket_onchain_signal_candidate_refresh_queue queue
+    WHERE queue.next_attempt_at_utc <= now()
+    ORDER BY queue.block_timestamp_utc, queue.block_number, queue.log_index, queue.participant_role
+    LIMIT @Limit
+    FOR UPDATE SKIP LOCKED
+),
+touched_queue AS (
+    UPDATE polymarket_onchain_signal_candidate_refresh_queue queue
+    SET attempt_count = queue.attempt_count + 1
+    FROM due_queue
+    WHERE queue.source_fill_id = due_queue.source_fill_id
+      AND queue.participant_role = due_queue.participant_role
+    RETURNING queue.source_fill_id, queue.participant_role, queue.block_timestamp_utc,
+              queue.block_number, queue.log_index
+)
 SELECT wallet_fill.source_fill_id, wallet_fill.contract_name, wallet_fill.contract_address,
        wallet_fill.exchange_version, wallet_fill.block_number, wallet_fill.block_timestamp_utc,
        wallet_fill.transaction_hash, wallet_fill.log_index, wallet_fill.order_hash,
@@ -2906,40 +3085,21 @@ SELECT wallet_fill.source_fill_id, wallet_fill.contract_name, wallet_fill.contra
        performance.win_rate_pct, performance.average_position_size_usd,
        performance.score, performance.sample_quality, performance.first_active_utc,
        performance.last_active_utc, performance.refreshed_at_utc
-FROM polymarket_onchain_wallet_fills wallet_fill
-LEFT JOIN polymarket_onchain_signal_candidates candidate
-  ON candidate.source_fill_id = wallet_fill.source_fill_id
- AND candidate.participant_role = wallet_fill.role
+FROM touched_queue queue
+JOIN polymarket_onchain_wallet_fills wallet_fill
+  ON wallet_fill.source_fill_id = queue.source_fill_id
+ AND wallet_fill.role = queue.participant_role
 LEFT JOIN polymarket_onchain_token_metadata metadata
   ON metadata.token_id = wallet_fill.token_id
 LEFT JOIN polymarket_onchain_wallet_category_performance performance
   ON performance.wallet = wallet_fill.wallet
  AND performance.category = COALESCE(NULLIF(metadata.category, ''), 'unknown')
-WHERE wallet_fill.block_timestamp_utc >= now() - (@LookbackHours * interval '1 hour')
-  AND (
-      candidate.id IS NULL
-      OR (
-          candidate.decision_status = 'Rejected'
-          AND candidate.updated_at_utc <= now() - interval '10 minutes'
-          AND candidate.decision_code IN (
-              'missing_market_metadata',
-              'missing_market_category',
-              'missing_leader_category_performance',
-              'leader_category_performance_stale'
-          )
-      )
-  )
-ORDER BY wallet_fill.block_timestamp_utc DESC,
-         wallet_fill.block_number DESC,
-         wallet_fill.log_index DESC,
-         wallet_fill.role
-LIMIT @Limit;
+ORDER BY queue.block_timestamp_utc, queue.block_number, queue.log_index, queue.participant_role;
 """;
 
         await using var connection = await OpenConnectionAsync(cancellationToken);
         await using var command = CreateCommand(connection, sql);
         command.Parameters.AddWithValue("Limit", limit);
-        command.Parameters.AddWithValue("LookbackHours", lookbackHours);
         await using var reader = await command.ExecuteReaderAsync(cancellationToken);
 
         var results = new List<PolymarketOnChainSignalCandidateSource>();
@@ -3044,6 +3204,12 @@ INSERT INTO polymarket_onchain_signal_candidate_reasons (
 );
 """;
 
+        const string deleteQueueSql = """
+DELETE FROM polymarket_onchain_signal_candidate_refresh_queue
+WHERE source_fill_id = @SourceFillId
+  AND participant_role = @ParticipantRole;
+""";
+
         await using var connection = await OpenConnectionAsync(cancellationToken);
         await using var transaction = await connection.BeginTransactionAsync(cancellationToken);
         foreach (var decision in decisions)
@@ -3072,6 +3238,12 @@ INSERT INTO polymarket_onchain_signal_candidate_reasons (
                 reasonCommand.Parameters.AddWithValue("CreatedAtUtc", UtcDateTime(reason.CreatedAtUtc));
                 await reasonCommand.ExecuteNonQueryAsync(cancellationToken);
             }
+
+            await using var deleteQueueCommand = CreateCommand(connection, deleteQueueSql);
+            deleteQueueCommand.Transaction = transaction;
+            deleteQueueCommand.Parameters.AddWithValue("SourceFillId", decision.Candidate.SourceFillId);
+            deleteQueueCommand.Parameters.AddWithValue("ParticipantRole", decision.Candidate.ParticipantRole.ToString());
+            await deleteQueueCommand.ExecuteNonQueryAsync(cancellationToken);
         }
 
         await transaction.CommitAsync(cancellationToken);
@@ -5030,6 +5202,17 @@ ON CONFLICT (wallet, category) DO NOTHING;
         CancellationToken cancellationToken)
     {
         await using var command = CreateCommand(connection, "SELECT count(*) FROM polymarket_onchain_wallet_category_performance_refresh_queue;");
+        command.Transaction = transaction;
+        var result = await command.ExecuteScalarAsync(cancellationToken);
+        return result is long count ? checked((int)count) : 0;
+    }
+
+    private static async Task<int> CountPolymarketOnChainSignalCandidateRefreshQueueAsync(
+        NpgsqlConnection connection,
+        NpgsqlTransaction transaction,
+        CancellationToken cancellationToken)
+    {
+        await using var command = CreateCommand(connection, "SELECT count(*) FROM polymarket_onchain_signal_candidate_refresh_queue;");
         command.Transaction = transaction;
         var result = await command.ExecuteScalarAsync(cancellationToken);
         return result is long count ? checked((int)count) : 0;

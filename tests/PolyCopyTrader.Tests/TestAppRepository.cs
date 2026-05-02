@@ -63,6 +63,12 @@ internal sealed class TestAppRepository : IAppRepository
 
     public List<PolymarketOnChainSignalCandidateReason> PolymarketOnChainSignalCandidateReasons { get; } = [];
 
+    public HashSet<string> PolymarketOnChainSignalCandidateRefreshQueue { get; } = new(StringComparer.OrdinalIgnoreCase);
+
+    private int onChainSignalCandidateBackfillCursorIndex;
+
+    private bool onChainSignalCandidateBackfillComplete;
+
     public List<OnChainBlockRange> OnChainWalletDerivedRefreshRanges { get; } = [];
 
     public Action<OnChainBlockRange>? BeforeOnChainWalletDerivedRefresh { get; set; }
@@ -702,27 +708,72 @@ internal sealed class TestAppRepository : IAppRepository
             PolymarketOnChainWalletCategoryPerformanceRefreshQueue.Count));
     }
 
-    public Task<IReadOnlyList<PolymarketOnChainSignalCandidateSource>> GetPolymarketOnChainSignalCandidateSourcesAsync(
-        int limit = 250,
-        int lookbackHours = 24,
+    public Task<OnChainSignalCandidateQueueRefreshResult> RefreshPolymarketOnChainSignalCandidateQueueAsync(
+        int queueSeedLimit = 1_000,
+        int retryLimit = 250,
         CancellationToken cancellationToken = default)
     {
-        var lookbackStart = DateTimeOffset.UtcNow.AddHours(-lookbackHours);
-        var rows = PolymarketOnChainWalletFills
-            .Where(fill => fill.BlockTimestampUtc >= lookbackStart)
-            .Where(fill =>
+        var queued = 0;
+        if (!onChainSignalCandidateBackfillComplete)
+        {
+            var orderedFills = PolymarketOnChainWalletFills
+                .OrderBy(fill => fill.BlockTimestampUtc)
+                .ThenBy(fill => fill.BlockNumber)
+                .ThenBy(fill => fill.LogIndex)
+                .ThenBy(fill => fill.Role.ToString(), StringComparer.Ordinal)
+                .ToArray();
+            var selected = orderedFills
+                .Skip(onChainSignalCandidateBackfillCursorIndex)
+                .Take(queueSeedLimit)
+                .ToArray();
+
+            foreach (var fill in selected)
             {
                 var existing = PolymarketOnChainSignalCandidates.FirstOrDefault(candidate =>
                     candidate.SourceFillId == fill.SourceFillId &&
                     string.Equals(candidate.ParticipantRole.ToString(), fill.Role.ToString(), StringComparison.OrdinalIgnoreCase));
-                return existing is null ||
-                    existing.DecisionStatus == "Rejected" &&
-                    existing.UpdatedAtUtc <= DateTimeOffset.UtcNow.AddMinutes(-10) &&
-                    IsRefreshableOnChainSignalCandidateDecision(existing.DecisionCode);
-            })
-            .OrderByDescending(fill => fill.BlockTimestampUtc)
-            .ThenByDescending(fill => fill.BlockNumber)
-            .ThenByDescending(fill => fill.LogIndex)
+                if (existing is null && PolymarketOnChainSignalCandidateRefreshQueue.Add(SignalCandidateQueueKey(fill.SourceFillId, fill.Role)))
+                {
+                    queued++;
+                }
+            }
+
+            onChainSignalCandidateBackfillCursorIndex += selected.Length;
+            onChainSignalCandidateBackfillComplete = onChainSignalCandidateBackfillCursorIndex >= orderedFills.Length;
+        }
+
+        var retriesQueued = 0;
+        var refreshableRejected = PolymarketOnChainSignalCandidates
+            .Where(candidate =>
+                candidate.DecisionStatus == "Rejected" &&
+                candidate.UpdatedAtUtc <= DateTimeOffset.UtcNow.AddMinutes(-10) &&
+                IsRefreshableOnChainSignalCandidateDecision(candidate.DecisionCode))
+            .OrderBy(candidate => candidate.UpdatedAtUtc)
+            .ThenBy(candidate => candidate.BlockTimestampUtc)
+            .Take(retryLimit);
+        foreach (var candidate in refreshableRejected)
+        {
+            if (PolymarketOnChainSignalCandidateRefreshQueue.Add(SignalCandidateQueueKey(candidate.SourceFillId, candidate.ParticipantRole)))
+            {
+                retriesQueued++;
+            }
+        }
+
+        return Task.FromResult(new OnChainSignalCandidateQueueRefreshResult(
+            queued,
+            retriesQueued,
+            PolymarketOnChainSignalCandidateRefreshQueue.Count));
+    }
+
+    public Task<IReadOnlyList<PolymarketOnChainSignalCandidateSource>> GetPolymarketOnChainSignalCandidateSourcesAsync(
+        int limit = 250,
+        CancellationToken cancellationToken = default)
+    {
+        var rows = PolymarketOnChainWalletFills
+            .Where(fill => PolymarketOnChainSignalCandidateRefreshQueue.Contains(SignalCandidateQueueKey(fill.SourceFillId, fill.Role)))
+            .OrderBy(fill => fill.BlockTimestampUtc)
+            .ThenBy(fill => fill.BlockNumber)
+            .ThenBy(fill => fill.LogIndex)
             .ThenBy(fill => fill.Role.ToString(), StringComparer.Ordinal)
             .Take(limit)
             .Select(fill =>
@@ -791,6 +842,9 @@ internal sealed class TestAppRepository : IAppRepository
             {
                 CandidateId = persistedCandidate.Id
             }));
+            PolymarketOnChainSignalCandidateRefreshQueue.Remove(SignalCandidateQueueKey(
+                persistedCandidate.SourceFillId,
+                persistedCandidate.ParticipantRole));
         }
 
         return Task.CompletedTask;
@@ -1164,6 +1218,11 @@ internal sealed class TestAppRepository : IAppRepository
             "missing_market_category" or
             "missing_leader_category_performance" or
             "leader_category_performance_stale";
+    }
+
+    private static string SignalCandidateQueueKey(Guid sourceFillId, OnChainParticipantRole role)
+    {
+        return sourceFillId.ToString("N") + "\u001F" + role;
     }
 
     private static string CategoryPerformanceKey(string wallet, string category)

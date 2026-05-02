@@ -53,3 +53,10 @@ Request:
 
 Result:
 Explained that `OnChainSignalCandidateWorker` is the background read-only job that turns `polymarket_onchain_wallet_fills` into materialized accepted/rejected rows in `polymarket_onchain_signal_candidates` with explicit reasons. Confirmed the current 24-hour limit comes from `SignalCandidateLookbackHours = 24` and the repository SQL filter on `wallet_fill.block_timestamp_utc`; this was a conservative load guard in the first implementation, not the desired product behavior. Clarified that the intended design should process all downloaded/derived source rows via historical backfill plus continuous tail processing, using batching/cursoring rather than rescanning the entire dataset each minute.
+
+## 2026-05-02T09:45:47.0347967Z
+Request:
+Ок, давай тогда переделывать нормально
+
+Result:
+Reworked on-chain signal-candidate materialization from a 24-hour rolling scan to a queue/cursor design. Added `polymarket_onchain_signal_candidate_refresh_queue` and `polymarket_onchain_signal_candidate_backfill_cursors`, plus an ordered wallet-fill index for historical backfill. Ingestion now queues newly materialized wallet fills; the candidate worker seeds the historical queue by cursor, requeues temporary metadata/category/performance rejections, processes queued fills into candidate/reason rows, and deletes processed queue entries. Replaced `SignalCandidateLookbackHours` with `SignalCandidateQueueSeedBatchSize` and `SignalCandidateRetryBatchSize`; updated docs, project memory, tests, and appsettings. Verification passed: targeted tests 19/19, full tests 142/142, service build, dashboard build, `--print-config`, and `git diff --check` with line-ending warnings only.

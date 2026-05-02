@@ -12,7 +12,7 @@ public sealed class OnChainSignalCandidateTests
     {
         var repository = new TestAppRepository();
         var sourceFillId = Guid.NewGuid();
-        repository.PolymarketOnChainWalletFills.Add(WalletFill(sourceFillId, TradeSide.Buy, 250m));
+        repository.PolymarketOnChainWalletFills.Add(WalletFill(sourceFillId, TradeSide.Buy, 250m, DateTimeOffset.UtcNow.AddDays(-7)));
         repository.PolymarketOnChainTokenMetadata.Add(TokenMetadata("token-yes", "Politics", active: true));
         repository.PolymarketOnChainWalletCategoryPerformance.Add(CategoryPerformance("0xleader", "Politics"));
 
@@ -20,6 +20,7 @@ public sealed class OnChainSignalCandidateTests
 
         var result = await processor.RefreshAsync();
 
+        Assert.Equal(1, result.SourcesQueued);
         Assert.Equal(1, result.SourcesFetched);
         Assert.Equal(1, result.Accepted);
         var candidate = Assert.Single(repository.PolymarketOnChainSignalCandidates);
@@ -73,15 +74,41 @@ public sealed class OnChainSignalCandidateTests
             reason.ReasonCode == SignalReasonCodes.LeaderTradeTooSmall);
     }
 
-    private static OnChainSignalCandidateProcessor CreateProcessor(TestAppRepository repository)
+    [Fact]
+    public async Task RefreshAsync_BackfillsHistoricalRowsAcrossQueueBatches()
+    {
+        var repository = new TestAppRepository();
+        repository.PolymarketOnChainWalletFills.Add(WalletFill(Guid.NewGuid(), TradeSide.Buy, 250m, DateTimeOffset.UtcNow.AddDays(-10)));
+        repository.PolymarketOnChainWalletFills.Add(WalletFill(Guid.NewGuid(), TradeSide.Buy, 250m, DateTimeOffset.UtcNow.AddDays(-9)));
+        repository.PolymarketOnChainWalletFills.Add(WalletFill(Guid.NewGuid(), TradeSide.Buy, 250m, DateTimeOffset.UtcNow.AddDays(-8)));
+        repository.PolymarketOnChainTokenMetadata.Add(TokenMetadata("token-yes", "Politics", active: true));
+        repository.PolymarketOnChainWalletCategoryPerformance.Add(CategoryPerformance("0xleader", "Politics"));
+
+        var processor = CreateProcessor(repository, signalCandidateBatchSize: 1, signalCandidateQueueSeedBatchSize: 2);
+
+        await processor.RefreshAsync();
+        await processor.RefreshAsync();
+        await processor.RefreshAsync();
+
+        Assert.Equal(3, repository.PolymarketOnChainSignalCandidates.Count);
+        Assert.All(repository.PolymarketOnChainSignalCandidates, candidate =>
+            Assert.Equal("Accepted", candidate.DecisionStatus));
+        Assert.Empty(repository.PolymarketOnChainSignalCandidateRefreshQueue);
+    }
+
+    private static OnChainSignalCandidateProcessor CreateProcessor(
+        TestAppRepository repository,
+        int signalCandidateBatchSize = 100,
+        int signalCandidateQueueSeedBatchSize = 100)
     {
         return new OnChainSignalCandidateProcessor(
             new OnChainIngestionOptions
             {
                 Enabled = true,
                 BackgroundSignalCandidateRefreshEnabled = true,
-                SignalCandidateBatchSize = 100,
-                SignalCandidateLookbackHours = 24
+                SignalCandidateBatchSize = signalCandidateBatchSize,
+                SignalCandidateQueueSeedBatchSize = signalCandidateQueueSeedBatchSize,
+                SignalCandidateRetryBatchSize = 100
             },
             new ExecutionOptions
             {
@@ -102,15 +129,17 @@ public sealed class OnChainSignalCandidateTests
     private static PolymarketOnChainWalletFill WalletFill(
         Guid sourceFillId,
         TradeSide side,
-        decimal notionalUsd)
+        decimal notionalUsd,
+        DateTimeOffset? blockTimestampUtc = null)
     {
+        var timestamp = blockTimestampUtc ?? DateTimeOffset.UtcNow.AddMinutes(-1);
         return new PolymarketOnChainWalletFill(
             sourceFillId,
             "CTF Exchange V1",
             "0xcontract",
             "V1",
             123,
-            DateTimeOffset.UtcNow.AddMinutes(-1),
+            timestamp,
             "0xtx",
             1,
             "0xorder",

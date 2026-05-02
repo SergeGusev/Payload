@@ -19,26 +19,40 @@ public sealed class OnChainSignalCandidateProcessor(
     {
         if (!onChainOptions.Enabled || !onChainOptions.BackgroundSignalCandidateRefreshEnabled)
         {
-            return new OnChainSignalCandidateRefreshResult(0, 0, 0, 0);
+            return new OnChainSignalCandidateRefreshResult(0, 0, 0, 0, 0, 0, 0);
         }
+
+        var queueResult = await repository.RefreshPolymarketOnChainSignalCandidateQueueAsync(
+            onChainOptions.SignalCandidateQueueSeedBatchSize,
+            onChainOptions.SignalCandidateRetryBatchSize,
+            cancellationToken);
 
         var sources = await repository.GetPolymarketOnChainSignalCandidateSourcesAsync(
             onChainOptions.SignalCandidateBatchSize,
-            onChainOptions.SignalCandidateLookbackHours,
             cancellationToken);
         if (sources.Count == 0)
         {
-            return new OnChainSignalCandidateRefreshResult(0, 0, 0, 0);
+            return new OnChainSignalCandidateRefreshResult(
+                queueResult.SourcesQueued,
+                queueResult.RetriesQueued,
+                0,
+                0,
+                0,
+                0,
+                queueResult.QueueRemaining);
         }
 
         var decisions = sources.Select(Evaluate).ToArray();
         await repository.UpsertPolymarketOnChainSignalCandidateDecisionsAsync(decisions, cancellationToken);
 
         return new OnChainSignalCandidateRefreshResult(
+            queueResult.SourcesQueued,
+            queueResult.RetriesQueued,
             sources.Count,
             decisions.Length,
             decisions.Count(decision => decision.Candidate.DecisionStatus == AcceptedStatus),
-            decisions.Count(decision => decision.Candidate.DecisionStatus == RejectedStatus));
+            decisions.Count(decision => decision.Candidate.DecisionStatus == RejectedStatus),
+            Math.Max(0, queueResult.QueueRemaining - decisions.Length));
     }
 
     private PolymarketOnChainSignalCandidateDecision Evaluate(PolymarketOnChainSignalCandidateSource source)

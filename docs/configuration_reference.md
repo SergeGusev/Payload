@@ -197,8 +197,9 @@ every completed block batch.
 - `CategoryPerformanceQueueSeedPairBatchSize`: number of missing wallet/category pairs to seed into the category performance refresh queue while the initial table is being built; default `250`.
 - `BackgroundSignalCandidateRefreshEnabled`: runs the on-chain signal-candidate materialization worker while the service is running; default `true`.
 - `SignalCandidateRefreshIntervalSeconds`: pause between successful candidate materialization cycles; default `60`.
-- `SignalCandidateBatchSize`: number of recent wallet-fill rows to evaluate into candidate/reason rows per cycle; default `250`.
-- `SignalCandidateLookbackHours`: rolling recent-fill window scanned for new or refreshable candidates; default `24`.
+- `SignalCandidateBatchSize`: number of queued wallet-fill rows to evaluate into candidate/reason rows per cycle; default `250`.
+- `SignalCandidateQueueSeedBatchSize`: number of wallet-fill source rows to advance through the historical candidate backfill cursor per cycle; default `1000`.
+- `SignalCandidateRetryBatchSize`: number of temporarily rejected candidates to requeue per cycle when metadata/category/performance may have become available; default `250`.
 - `ExchangeContracts`: Polymarket V1/V2 CTF and negative-risk exchange contracts to scan.
 
 Activity, position, wallet-performance, and wallet/category-performance refresh
@@ -206,6 +207,12 @@ cycles share a non-blocking PostgreSQL advisory lock. If another derived refresh
 cycle is already running, a worker skips its current cycle instead of overlapping
 transactions against the same materialized tables. This favors steady throughput
 over parallel refresh attempts that can deadlock and roll back.
+
+Signal-candidate materialization is queue based. The historical backfill cursor
+walks all downloaded `polymarket_onchain_wallet_fills` once in source order,
+queues missing candidates in bounded batches, and ingestion queues newly added
+wallet fills as block ranges are decoded. This avoids scanning the whole history
+on every one-minute worker cycle.
 
 The cursor stores a completed block range per contract: `to_block` is extended
 forward as new blocks are ingested. `from_block` is kept as the oldest block

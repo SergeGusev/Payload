@@ -110,7 +110,9 @@ Later, manual on-chain ingestion was added:
   `polymarket_onchain_wallet_positions`,
   `polymarket_onchain_position_refresh_queue`, and
   `polymarket_onchain_wallet_performance`,
-  `polymarket_onchain_wallet_performance_refresh_queue`, and
+  `polymarket_onchain_wallet_performance_refresh_queue`,
+  `polymarket_onchain_signal_candidate_refresh_queue`,
+  `polymarket_onchain_signal_candidate_backfill_cursors`, and
   `polymarket_onchain_signal_candidates`,
   `polymarket_onchain_signal_candidate_reasons`,
   `polymarket_onchain_trade_details`,
@@ -178,13 +180,19 @@ Later, manual on-chain ingestion was added:
   wallet activity table, while `Onchain Leaders` is a first heuristic performance
   score over materialized positions, resolved PnL, ROI, win rate, sample quality,
   volume, and open exposure. It has no current mark-to-market yet.
-- `polymarket_onchain_signal_candidates` is a bounded recent-fill decision-prep
-  table built from `polymarket_onchain_wallet_fills`; one candidate is stored per
-  source fill and participant role, enriched with market metadata, category, and
-  wallet/category performance. `polymarket_onchain_signal_candidate_reasons`
-  stores explicit rejection reasons for unsupported side, small fill, missing
-  metadata/category/performance, stale/weak performance, inactive market, or
-  resolved market. This layer is read-only and does not place paper/live orders.
+- `polymarket_onchain_signal_candidates` is a queued decision-prep table built
+  from the full downloaded `polymarket_onchain_wallet_fills` dataset; one
+  candidate is stored per source fill and participant role, enriched with market
+  metadata, category, and wallet/category performance.
+  `polymarket_onchain_signal_candidate_refresh_queue` and
+  `polymarket_onchain_signal_candidate_backfill_cursors` let
+  `OnChainSignalCandidateWorker` backfill the whole source history once in
+  bounded batches and then keep processing newly ingested wallet fills without
+  rescanning the whole table every cycle.
+  `polymarket_onchain_signal_candidate_reasons` stores explicit rejection
+  reasons for unsupported side, small fill, missing metadata/category/performance,
+  stale/weak performance, inactive market, or resolved market. This layer is
+  read-only and does not place paper/live orders.
 - tests increased from 102 to 119; later on-chain signal-candidate tests raised
   the suite to 141.
 

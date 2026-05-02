@@ -379,7 +379,9 @@ public sealed class OnChainIngestionOptions
 
     public int SignalCandidateBatchSize { get; init; } = 250;
 
-    public int SignalCandidateLookbackHours { get; init; } = 24;
+    public int SignalCandidateQueueSeedBatchSize { get; init; } = 1_000;
+
+    public int SignalCandidateRetryBatchSize { get; init; } = 250;
 
     public List<OnChainExchangeContractOptions> ExchangeContracts { get; init; } =
     [

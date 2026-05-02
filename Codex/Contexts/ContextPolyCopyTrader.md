@@ -1,3 +1,17 @@
+## Active Update 2026-05-02 Full Signal Candidate Backfill
+Goal: Replace the recent-only candidate worker with a full downloaded-history backfill plus continuous tail processing.
+Status: Completed
+Done:
+- Replaced `SignalCandidateLookbackHours` with queue-oriented config: `SignalCandidateQueueSeedBatchSize` and `SignalCandidateRetryBatchSize`.
+- Added PostgreSQL tables `polymarket_onchain_signal_candidate_refresh_queue` and `polymarket_onchain_signal_candidate_backfill_cursors`.
+- Added index `ix_polymarket_onchain_wallet_fills_signal_candidate_backfill` for cursor-ordered historical candidate source traversal.
+- Changed ingestion-derived wallet-fill upserts to enqueue new source rows for candidate materialization.
+- Changed `OnChainSignalCandidateWorker` flow: seed historical queue by cursor, enqueue refreshable temporary rejections, process queued sources, upsert candidate/reason decisions, then remove processed queue rows.
+- Updated README, configuration reference, project memory, appsettings, storage contracts, no-op/test repositories, and signal-candidate tests.
+Next: Restart the service so schema initialization creates the new queue/cursor tables and the worker starts backfilling `polymarket_onchain_signal_candidates` across the full downloaded wallet-fill dataset.
+Notes: Verification passed: targeted `OnChainSignalCandidateTests|StorageTests|ConfigurationTests` 19/19; full `dotnet test tests\PolyCopyTrader.Tests\PolyCopyTrader.Tests.csproj -c Verify --no-restore` 142/142; service build passed; dashboard build passed; `--print-config` passed; `git diff --check` passed with line-ending warnings only. Parallel test/build attempts again hit transient `obj` file locks; after `dotnet build-server shutdown`, sequential checks passed. Existing unrelated dirty files `PolyCopyTrader.sln` and `src/PolyCopyTrader.Storage/PostgresSchemaInitializer.cs` were left untouched. `git rev-parse --abbrev-ref --symbolic-full-name '@{u}'` failed because branch `master` has no configured upstream.
+Blockers: Automatic pull/push cannot run until a Git upstream is configured.
+
 ## Active Update 2026-05-02 Signal Candidate Scope Clarification
 Goal: Clarify the current signal-candidate worker scope and the mismatch with the intended full downloaded dataset.
 Status: Completed

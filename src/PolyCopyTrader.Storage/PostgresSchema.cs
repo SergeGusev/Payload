@@ -43,6 +43,8 @@ public static class PostgresSchema
         "polymarket_onchain_wallet_performance_refresh_queue",
         "polymarket_onchain_wallet_category_performance",
         "polymarket_onchain_wallet_category_performance_refresh_queue",
+        "polymarket_onchain_signal_candidate_refresh_queue",
+        "polymarket_onchain_signal_candidate_backfill_cursors",
         "polymarket_onchain_signal_candidates",
         "polymarket_onchain_signal_candidate_reasons",
         "polymarket_onchain_trade_details",
@@ -708,6 +710,9 @@ ON polymarket_onchain_wallet_fills(token_id, block_timestamp_utc DESC);
 CREATE INDEX IF NOT EXISTS ix_polymarket_onchain_wallet_fills_recent
 ON polymarket_onchain_wallet_fills(block_timestamp_utc DESC, block_number DESC, log_index DESC);
 
+CREATE INDEX IF NOT EXISTS ix_polymarket_onchain_wallet_fills_signal_candidate_backfill
+ON polymarket_onchain_wallet_fills(block_timestamp_utc, block_number, log_index, role);
+
 CREATE INDEX IF NOT EXISTS ix_polymarket_onchain_wallet_fills_contract_block
 ON polymarket_onchain_wallet_fills(contract_address, block_number);
 
@@ -987,6 +992,32 @@ CREATE TABLE IF NOT EXISTS polymarket_onchain_wallet_category_performance_refres
 
 CREATE INDEX IF NOT EXISTS ix_polymarket_onchain_wallet_category_performance_refresh_queue_queued
 ON polymarket_onchain_wallet_category_performance_refresh_queue(queued_at_utc);
+
+CREATE TABLE IF NOT EXISTS polymarket_onchain_signal_candidate_refresh_queue (
+    source_fill_id uuid NOT NULL,
+    participant_role text NOT NULL,
+    block_timestamp_utc timestamptz NOT NULL,
+    block_number bigint NOT NULL,
+    log_index bigint NOT NULL,
+    queued_at_utc timestamptz NOT NULL,
+    next_attempt_at_utc timestamptz NOT NULL,
+    attempt_count integer NOT NULL DEFAULT 0,
+    last_error text NULL,
+    PRIMARY KEY (source_fill_id, participant_role)
+);
+
+CREATE INDEX IF NOT EXISTS ix_polymarket_onchain_signal_candidate_refresh_queue_next_attempt
+ON polymarket_onchain_signal_candidate_refresh_queue(next_attempt_at_utc, block_timestamp_utc, block_number, log_index, participant_role);
+
+CREATE TABLE IF NOT EXISTS polymarket_onchain_signal_candidate_backfill_cursors (
+    cursor_name text PRIMARY KEY,
+    last_block_timestamp_utc timestamptz NULL,
+    last_block_number bigint NULL,
+    last_log_index bigint NULL,
+    last_participant_role text NULL,
+    completed boolean NOT NULL DEFAULT false,
+    updated_at_utc timestamptz NOT NULL
+);
 
 CREATE TABLE IF NOT EXISTS polymarket_onchain_signal_candidates (
     id uuid PRIMARY KEY,

@@ -741,9 +741,14 @@ public static class AppOptionsValidator
             errors.Add("OnChainIngestion.SignalCandidateBatchSize must be between 1 and 10000.");
         }
 
-        if (options.SignalCandidateLookbackHours <= 0 || options.SignalCandidateLookbackHours > 720)
+        if (options.SignalCandidateQueueSeedBatchSize <= 0 || options.SignalCandidateQueueSeedBatchSize > 100_000)
         {
-            errors.Add("OnChainIngestion.SignalCandidateLookbackHours must be between 1 and 720.");
+            errors.Add("OnChainIngestion.SignalCandidateQueueSeedBatchSize must be between 1 and 100000.");
+        }
+
+        if (options.SignalCandidateRetryBatchSize <= 0 || options.SignalCandidateRetryBatchSize > 10_000)
+        {
+            errors.Add("OnChainIngestion.SignalCandidateRetryBatchSize must be between 1 and 10000.");
         }
 
         if (options.ExchangeContracts.Count == 0)
