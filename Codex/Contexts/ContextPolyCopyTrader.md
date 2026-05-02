@@ -1,3 +1,18 @@
+## Active Update 2026-05-02 Overnight Monitor Log Review
+Goal: Review the overnight health monitor log and current database state.
+Status: Completed
+Done:
+- Reviewed `D:\1\polycopy-overnight-health-20260501-235733.log`; monitor process `pid=67592` is still running.
+- The log currently contains checks `1/20` through `15/20`; all checks are `WARN`, with no monitor `ERROR` rows.
+- Across the log, service heartbeat stayed fresh and `PolyCopyTrader.Service` remained `Running` in `ReadOnly`.
+- Across the log, `blocked=0`, `schema_active=0`, and the wallet-activity queue index existed, so the prior startup/index lock did not recur.
+- Current live DB check also showed `blocked=0`, heartbeat age about 8 seconds, and no long active queries over 10 minutes.
+- Repeated warnings are from refresh-worker failures: `OnChainActivityRefreshWorker` stream timeouts, `OnChainPositionRefreshWorker` deadlocks, some `OnChainPerformanceRefreshWorker` deadlocks, plus one market-enrichment HTTP timeout and one Polygon RPC HTTP 400.
+- Queue trend: token metadata queue dropped from about 19,874 to 22, while position/activity/performance/category-performance refresh queues grew.
+Next: Leave the monitor running until it finishes, but make the next implementation task reducing refresh-worker contention and the heavy wallet-activity seed path.
+Notes: Log/DB inspection only; no source behavior changed. Existing unrelated dirty files `PolyCopyTrader.sln` and `src/PolyCopyTrader.Storage/PostgresSchemaInitializer.cs` were left untouched. `git rev-parse --abbrev-ref --symbolic-full-name '@{u}'` failed because branch `master` has no configured upstream.
+Blockers: Automatic pull/push cannot run until a Git upstream is configured.
+
 ## Active Update 2026-05-01 Overnight Health Monitor
 Goal: Set up overnight health checks while the service continues running.
 Status: Completed
