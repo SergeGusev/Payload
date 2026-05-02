@@ -1,3 +1,17 @@
+## Active Update 2026-05-02 Candidate Rejection Reason Breakdown
+Goal: Identify the main reason `polymarket_onchain_signal_candidates` has many rejected rows after the restart.
+Status: Completed
+Done:
+- Queried PostgreSQL decision counts and full reason counts for all rows, rows updated since current service start, and recent rows.
+- Found the overall rejected total is dominated by old-policy rows that predate the behavior-evidence change: `unsupported_side` 28,345 and `leader_trade_too_small` 28,233, plus `market_inactive` 95.
+- Confirmed new logic is not producing old-policy rejections after service start: rejected rows since service start are performance/data reasons only.
+- Since service start, primary `decision_code` counts were `leader_category_score_too_low` 674, `leader_category_roi_too_low` 420, `leader_category_win_rate_too_low` 254, `leader_category_resolved_sample_too_small` 140, `missing_leader_category_performance` 38, and `leader_category_performance_stale` 10.
+- Full reason rows since service start showed the underlying dominant causes are weak category performance: `leader_category_win_rate_too_low` 1,218, `leader_category_roi_too_low` 1,207, `leader_category_score_too_low` 802; reason counts can exceed rejected rows because one row can have multiple reasons.
+- Since service start the candidate worker had produced 964 accepted rows and about 1,536 rejected rows in the checked window.
+Next: Continue monitoring old-policy counts trending down. If the accepted rate is still too low after old rows drain, tune the performance gates or move weak-performance filtering into the future wallet/category target-selection layer.
+Notes: Operational DB check only; no source behavior changed. A temporary C# diagnostic project under `Codex/TempDbCheck` was created for DB queries and removed. Existing unrelated dirty files `PolyCopyTrader.sln` and `src/PolyCopyTrader.Storage/PostgresSchemaInitializer.cs` were left untouched. `git rev-parse --abbrev-ref --symbolic-full-name '@{u}'` failed because branch `master` has no configured upstream.
+Blockers: Automatic pull/push cannot run until a Git upstream is configured.
+
 ## Active Update 2026-05-02 Post Restart Behavior Evidence Health Check
 Goal: Verify the restarted service is running and applying the new behavior-evidence candidate criteria.
 Status: Completed

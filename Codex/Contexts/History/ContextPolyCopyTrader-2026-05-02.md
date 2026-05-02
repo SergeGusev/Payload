@@ -174,3 +174,11 @@ Request:
 
 Result:
 Checked the restarted service and PostgreSQL state. `PolyCopyTrader.Service` is running in `ReadOnly` as PID 13956 with fresh heartbeat and no last error. Candidate worker is applying the new behavior-evidence policy: recent candidate updates contain accepted rows and performance-based rejections, with no recent `unsupported_side`, `market_inactive`, `market_resolved`, or `leader_trade_too_small` updates. Candidate table had 59,191 rows, 785 accepted, 58,406 rejected, and about 1,750 updated in the last 10 minutes. Signal-candidate queue remains large at about 3,974,371 rows and historical cursor is not complete. No recent `api_errors` and no PostgreSQL blocking chain were found. One long `missing_activity` queue seed query was active for about 1h20m but was not blocking other sessions.
+
+## 2026-05-02T17:12:21.9288428Z
+Request:
+Accepted: 785
+  - Rejected: 58,406 . Что-то не то. Много очень отбиваем. Какая основная причина отбития?
+
+Result:
+Queried PostgreSQL rejection counts. Explained that the overall rejected total is dominated by old-policy rows from before the behavior-evidence change: `unsupported_side` 28,345, `leader_trade_too_small` 28,233, and `market_inactive` 95. Since the current service start, old-policy rejections are not being newly produced; current rejections are performance/data reasons. Since service start, primary decision-code counts were `leader_category_score_too_low` 674, `leader_category_roi_too_low` 420, `leader_category_win_rate_too_low` 254, `leader_category_resolved_sample_too_small` 140, `missing_leader_category_performance` 38, and `leader_category_performance_stale` 10. Full reason rows showed the main underlying causes are weak win rate, ROI, and score; one row can have multiple reasons.
