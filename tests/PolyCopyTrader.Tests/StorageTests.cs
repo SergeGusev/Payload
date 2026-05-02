@@ -75,6 +75,18 @@ CREATE INDEX first_table_id_idx ON first_table(id);
         Assert.StartsWith("CREATE INDEX first_table_id_idx", statements[2], StringComparison.Ordinal);
     }
 
+    [Theory]
+    [InlineData("CREATE INDEX IF NOT EXISTS ix_demo ON demo_table(id)", "ix_demo")]
+    [InlineData("CREATE UNIQUE INDEX IF NOT EXISTS ux_demo ON demo_table(id)", "ux_demo")]
+    [InlineData("  create index if not exists ix_lower ON demo_table(id)", "ix_lower")]
+    [InlineData("CREATE TABLE demo_table (id integer)", null)]
+    public void PostgresSchemaInitializer_ReadsCreateIndexIfNotExistsName(string statement, string? expected)
+    {
+        var actual = PostgresSchemaInitializer.TryReadCreateIndexIfNotExistsName(statement);
+
+        Assert.Equal(expected, actual);
+    }
+
     [Fact]
     public void ConnectionFactory_RequiresConfiguredConnectionString()
     {

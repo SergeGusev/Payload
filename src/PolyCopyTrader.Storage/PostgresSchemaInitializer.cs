@@ -1,4 +1,5 @@
 using System.Text;
+using System.Text.RegularExpressions;
 using Npgsql;
 
 namespace PolyCopyTrader.Storage;
@@ -18,6 +19,14 @@ public sealed class PostgresSchemaInitializer(PostgresConnectionFactory connecti
                 var commandText = statements[statementIndex];
                 Console.WriteLine(
                     $"Running PostgreSQL schema statement {statementIndex + 1}/{statements.Count}: {GetStatementPreview(commandText)}");
+
+                var existingIndexName = TryReadCreateIndexIfNotExistsName(commandText);
+                if (existingIndexName is not null && await SchemaRelationExistsAsync(connection, existingIndexName, cancellationToken))
+                {
+                    Console.WriteLine(
+                        $"Skipping PostgreSQL schema statement {statementIndex + 1}/{statements.Count}: index {existingIndexName} already exists");
+                    continue;
+                }
 
                 await using var command = new NpgsqlCommand(commandText, connection);
                 command.CommandTimeout = 0;
@@ -137,6 +146,36 @@ public sealed class PostgresSchemaInitializer(PostgresConnectionFactory connecti
 
         AddStatement(statements, currentStatement);
         return statements;
+    }
+
+    public static string? TryReadCreateIndexIfNotExistsName(string statement)
+    {
+        var match = Regex.Match(
+            statement,
+            @"^\s*CREATE\s+(?:UNIQUE\s+)?INDEX\s+IF\s+NOT\s+EXISTS\s+([a-zA-Z_][a-zA-Z0-9_]*)\b",
+            RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
+
+        return match.Success ? match.Groups[1].Value : null;
+    }
+
+    private static async Task<bool> SchemaRelationExistsAsync(
+        NpgsqlConnection connection,
+        string relationName,
+        CancellationToken cancellationToken)
+    {
+        const string sql = """
+SELECT EXISTS (
+    SELECT 1
+    FROM pg_class cls
+    JOIN pg_namespace ns ON ns.oid = cls.relnamespace
+    WHERE ns.nspname = current_schema()
+      AND cls.relname = @relationName
+)
+""";
+
+        await using var command = new NpgsqlCommand(sql, connection);
+        command.Parameters.AddWithValue("relationName", relationName);
+        return (bool)(await command.ExecuteScalarAsync(cancellationToken) ?? false);
     }
 
     private static void AddStatement(List<string> statements, StringBuilder currentStatement)

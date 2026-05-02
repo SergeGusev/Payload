@@ -67,3 +67,9 @@ Request:
 
 Result:
 Verified the restarted service and PostgreSQL state after the full-history signal-candidate backfill change. The service is running in `ReadOnly` with fresh heartbeat and the new queue/cursor tables exist. Backfill started and queued source rows, but `OnChainSignalCandidateWorker` initially timed out while joining queued rows back to `polymarket_onchain_wallet_fills`; added schema index `ix_polymarket_onchain_wallet_fills_source_role` and created it live with `CREATE INDEX CONCURRENTLY`, which took about 581 seconds. After the index was available, the worker recovered: completed cycles showed `SourcesQueued=1000`, `SourcesFetched=250`, `CandidatesUpserted=250`, and candidates increased from 0 to 750 by the final check. No PostgreSQL blocking chain was present. Verification for the code fix passed: targeted tests 10/10, service build, full tests 142/142, and `git diff --check`.
+## 2026-05-02T11:33:59.0109125+00:00
+Request:
+Посмотри на картинку - зависли на создании индекса на старте. Разберись, пожалуйста
+
+Result:
+Inspected the clipboard screenshot, diagnosed startup statement `CREATE INDEX IF NOT EXISTS ix_polymarket_onchain_wallet_activity_refresh_queue_queued` as blocked by a long `INSERT ... missing_activity` backend rather than actually building the already-valid index, canceled blocker backend `60728`, confirmed the service heartbeat recovered with no active index/blocking chain, and added a schema initializer pre-check to skip already-existing indexes before sending no-op `CREATE INDEX IF NOT EXISTS` statements to PostgreSQL. Verification passed with targeted StorageTests, service build after build-server shutdown, full tests, and diff checks.

@@ -1,3 +1,17 @@
+## Active Update 2026-05-02 Startup Index Lock Unblock
+Goal: Diagnose and prevent a startup hang on an existing PostgreSQL index.
+Status: Completed
+Done:
+- Inspected the clipboard screenshot and identified startup statement `117/162` as `CREATE INDEX IF NOT EXISTS ix_polymarket_onchain_wallet_activity_refresh_queue_queued`.
+- Checked PostgreSQL with `POLYCOPYTRADER_POSTGRES_CONNECTION`; the target index already existed, was valid, and was about 2 MB, so no real index build was in progress.
+- Found the startup `CREATE INDEX IF NOT EXISTS` backend waiting on a relation lock held by an old long-running `INSERT ... missing_activity` seed into `polymarket_onchain_wallet_activity_refresh_queue`.
+- Canceled blocker backend `60728` with `pg_cancel_backend`; confirmed no active `CREATE INDEX`, no index progress rows, no blocking chain, fresh service heartbeat, and no recent `api_errors`.
+- Updated `PostgresSchemaInitializer` to pre-check catalog existence for `CREATE INDEX IF NOT EXISTS` statements and skip already-existing indexes before sending the SQL to PostgreSQL, avoiding no-op startup lock waits.
+- Added unit coverage for parsing `CREATE INDEX IF NOT EXISTS` and `CREATE UNIQUE INDEX IF NOT EXISTS` statements.
+Next: Rebuild/restart the service when convenient so the startup no-op index skip is present in the Debug/Service binary; the currently running service is already unblocked and healthy.
+Notes: Verification passed: `dotnet test tests\PolyCopyTrader.Tests\PolyCopyTrader.Tests.csproj -c Verify --no-restore --filter "StorageTests"` 10/10; first parallel service build hit a transient Microsoft Defender lock, then `dotnet build-server shutdown` and `dotnet build src\PolyCopyTrader.Service\PolyCopyTrader.Service.csproj -c Verify --no-restore` passed; full `dotnet test tests\PolyCopyTrader.Tests\PolyCopyTrader.Tests.csproj -c Verify --no-restore` passed 146/146; `git diff --check` passed with line-ending warnings only. A temporary C# diagnostic project under `Codex/TempDbCheck` was created and removed. Existing unrelated dirty `PolyCopyTrader.sln` and preexisting formatting/console-output edits in `src/PolyCopyTrader.Storage/PostgresSchemaInitializer.cs` were left unstaged. `git rev-parse --abbrev-ref --symbolic-full-name '@{u}'` failed because branch `master` has no configured upstream.
+Blockers: Automatic pull/push cannot run until a Git upstream is configured.
+
 ## Active Update 2026-05-02 Signal Candidate Backfill Restart Check
 Goal: Verify the restarted full-history signal-candidate worker and fix the first live bottleneck.
 Status: Completed
