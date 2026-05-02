@@ -1,3 +1,16 @@
+## Active Update 2026-05-02 Wallet Category Versus Market State
+Goal: Clarify whether concrete market state should affect wallet/category trust selection.
+Status: Completed
+Done:
+- Rechecked `OnChainSignalCandidateProcessor`, signal-candidate schema, reason codes, README, and configuration notes.
+- Confirmed current candidate preparation rejects rows with `market_inactive` when metadata says the market is inactive, closed, or archived, and with `market_resolved` when resolved.
+- Clarified that for the final selection target `(wallet, category)`, current state of an individual historical market is not a trust criterion; it is an actionability criterion for copying a concrete current event.
+- Identified the current design mismatch: `polymarket_onchain_signal_candidates` is carrying both historical evidence for wallet/category evaluation and current-copy eligibility.
+- Recommended keeping market state fields for audit/filtering, but moving active/closed/archived/resolved rejection out of historical candidate preparation and into the later paper-signal/actionability layer.
+Next: If accepted, change candidate preparation so closed/resolved markets remain as historical candidate evidence, requeue existing `market_inactive`/`market_resolved` rows, and enforce market-open checks only when creating actionable paper signals.
+Notes: Explanation only; no source behavior changed. Existing unrelated dirty files `PolyCopyTrader.sln` and `src/PolyCopyTrader.Storage/PostgresSchemaInitializer.cs` were left untouched. `git rev-parse --abbrev-ref --symbolic-full-name '@{u}'` failed because branch `master` has no configured upstream.
+Blockers: Automatic pull/push cannot run until a Git upstream is configured.
+
 ## Active Update 2026-05-02 Market Active Requirement Explanation
 Goal: Explain the candidate requirement that a market must be active and not closed or archived.
 Status: Completed

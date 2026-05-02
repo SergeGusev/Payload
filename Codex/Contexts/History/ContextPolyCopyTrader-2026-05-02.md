@@ -111,3 +111,10 @@ Request:
 
 Result:
 Explained that the candidate processor rejects a market with `market_inactive` when Gamma metadata has `active=false`, `closed=true`, or `archived=true`, and separately rejects `market_resolved` when `resolved=true`. Clarified this is a current-actionability filter for copy-signal use and that historical fills may be rejected if their market is closed now.
+
+## 2026-05-02T16:06:32.5637008Z
+Request:
+Но мы же вибираем в конечном итоге пару wallet+category. То есть нам надо понимать, стоит ли доверять решениям данного кошелька в рамках конкретной категории. Мне кажется, состояние рынка сделки здесь не при чём. Убеди меня, если я неправ
+
+Result:
+Explained that the user is right for wallet/category trust selection: current state of a concrete market is not a trust criterion, while it is still necessary later for deciding whether a concrete current event can be copied. Identified the current design mismatch in `polymarket_onchain_signal_candidates`: it mixes historical wallet/category evidence with current actionability checks. Recommended keeping market-state columns for audit but moving active/closed/archived/resolved rejection to the later paper-signal/actionability layer and requeueing existing `market_inactive`/`market_resolved` rows if that policy is adopted.
