@@ -1,3 +1,15 @@
+## Active Update 2026-05-02 Signal Candidate Scope Clarification
+Goal: Clarify the current signal-candidate worker scope and the mismatch with the intended full downloaded dataset.
+Status: Completed
+Done:
+- Confirmed the current implementation limits candidate source selection with `SignalCandidateLookbackHours = 24`.
+- Confirmed the repository SQL filters `polymarket_onchain_wallet_fills` by `wallet_fill.block_timestamp_utc >= now() - (@LookbackHours * interval '1 hour')`.
+- Clarified that the 24-hour window was a conservative load guard for the first implementation, not a product requirement.
+- Identified that this does not match the intended target: candidates should cover the whole currently downloaded/derived on-chain dataset, then continue processing new incoming rows.
+Next: Replace the rolling-only lookback with a bounded historical candidate backfill plus continuous tail processing, ideally using a cursor/queue so each cycle processes a batch without rescanning the whole dataset.
+Notes: Explanation only; no source behavior changed. Existing unrelated dirty files `PolyCopyTrader.sln` and `src/PolyCopyTrader.Storage/PostgresSchemaInitializer.cs` were left untouched. `git rev-parse --abbrev-ref --symbolic-full-name '@{u}'` failed because branch `master` has no configured upstream.
+Blockers: Automatic pull/push cannot run until a Git upstream is configured.
+
 ## Active Update 2026-05-02 Signal Candidate Restart Health Check
 Goal: Verify PostgreSQL/service health after starting the service with the on-chain signal-candidate pipeline.
 Status: Completed

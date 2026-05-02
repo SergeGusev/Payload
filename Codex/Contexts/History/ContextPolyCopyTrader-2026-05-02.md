@@ -46,3 +46,10 @@ Request:
 
 Result:
 Verified the restarted service and PostgreSQL state after adding the on-chain signal-candidate pipeline. `PolyCopyTrader.Service` is running in `ReadOnly` with fresh heartbeats; `polymarket_onchain_signal_candidates` and `polymarket_onchain_signal_candidate_reasons` exist; `OnChainSignalCandidateWorker` starts and runs every minute. Candidate rows are currently zero because the source table `polymarket_onchain_wallet_fills` only reaches `2026-04-26T09:18:26Z`, about 144 hours behind the current DB time, while candidate lookback is 24 hours. Ingestion is progressing again: `CTF Exchange V1` cursor advanced to block `86037531` with completion at `2026-05-02T09:16:36Z`. No PostgreSQL blocking chain and no active sessions older than 5 minutes were present; recent errors were transient Polygon/Gamma HTTP failures.
+
+## 2026-05-02T09:29:00.0538456Z
+Request:
+Объясни, что такое воркер кандидатов и почему он смотрит только последние 24 часа? Я рассчитывал, что кандидаты будут отслеживаться по всей текущей выборке
+
+Result:
+Explained that `OnChainSignalCandidateWorker` is the background read-only job that turns `polymarket_onchain_wallet_fills` into materialized accepted/rejected rows in `polymarket_onchain_signal_candidates` with explicit reasons. Confirmed the current 24-hour limit comes from `SignalCandidateLookbackHours = 24` and the repository SQL filter on `wallet_fill.block_timestamp_utc`; this was a conservative load guard in the first implementation, not the desired product behavior. Clarified that the intended design should process all downloaded/derived source rows via historical backfill plus continuous tail processing, using batching/cursoring rather than rescanning the entire dataset each minute.
