@@ -891,6 +891,96 @@ public sealed record OnChainCategoryPerformanceRefreshResult(
     int PairsUpserted,
     int QueueRemaining);
 
+public sealed record PolymarketOnChainSignalCandidateSource(
+    Guid SourceFillId,
+    string ContractName,
+    string ContractAddress,
+    string ExchangeVersion,
+    long BlockNumber,
+    DateTimeOffset BlockTimestampUtc,
+    string TransactionHash,
+    long LogIndex,
+    string OrderHash,
+    OnChainParticipantRole ParticipantRole,
+    string Wallet,
+    string Counterparty,
+    TradeSide Side,
+    string TokenId,
+    decimal Price,
+    decimal SizeShares,
+    decimal NotionalUsd,
+    decimal FeeAmount,
+    string FeeAssetId,
+    DateTimeOffset ImportedAtUtc,
+    PolymarketOnChainTokenMetadata? TokenMetadata,
+    PolymarketOnChainWalletCategoryPerformance? WalletCategoryPerformance);
+
+public sealed record PolymarketOnChainSignalCandidate(
+    Guid Id,
+    Guid SourceFillId,
+    string ContractName,
+    string ContractAddress,
+    string ExchangeVersion,
+    long BlockNumber,
+    DateTimeOffset BlockTimestampUtc,
+    string TransactionHash,
+    long LogIndex,
+    string OrderHash,
+    OnChainParticipantRole ParticipantRole,
+    string Wallet,
+    string Counterparty,
+    TradeSide Side,
+    string TokenId,
+    string ConditionId,
+    string MarketId,
+    string MarketSlug,
+    string MarketTitle,
+    string Outcome,
+    string? Category,
+    bool LookupSucceeded,
+    bool MarketActive,
+    bool MarketClosed,
+    bool MarketArchived,
+    bool MarketResolved,
+    string? WinningOutcome,
+    decimal Price,
+    decimal SizeShares,
+    decimal NotionalUsd,
+    decimal FeeAmount,
+    string FeeAssetId,
+    int? LeaderPositionsCount,
+    int? LeaderResolvedPositions,
+    int? LeaderMarketsTraded,
+    decimal? LeaderVolumeUsd,
+    decimal? LeaderResolvedPnlUsd,
+    decimal? LeaderResolvedRoiPct,
+    decimal? LeaderWinRatePct,
+    decimal? LeaderCategoryScore,
+    string? LeaderSampleQuality,
+    DateTimeOffset? LeaderPerformanceRefreshedAtUtc,
+    string DecisionStatus,
+    string DecisionCode,
+    decimal CandidateScore,
+    DateTimeOffset CreatedAtUtc,
+    DateTimeOffset UpdatedAtUtc);
+
+public sealed record PolymarketOnChainSignalCandidateReason(
+    Guid Id,
+    Guid CandidateId,
+    string ReasonCode,
+    string ReasonDetails,
+    DateTimeOffset CreatedAtUtc);
+
+public sealed record PolymarketOnChainSignalCandidateDecision(
+    PolymarketOnChainSignalCandidate Candidate,
+    IReadOnlyList<PolymarketOnChainSignalCandidateReason> Reasons);
+
+public sealed record OnChainSignalCandidateRefreshResult(
+    int SourcesFetched,
+    int CandidatesUpserted,
+    int Accepted,
+    int Rejected);
+
 public sealed record OnChainIngestionResult(
     DateTimeOffset FromUtc,
     DateTimeOffset ToUtc,

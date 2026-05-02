@@ -195,6 +195,10 @@ every completed block batch.
 - `CategoryPerformanceRefreshIntervalSeconds`: pause between successful background wallet-category performance refresh cycles; default `150`.
 - `CategoryPerformancePairBatchSize`: number of queued wallet/category pairs to aggregate per cycle; default `250`.
 - `CategoryPerformanceQueueSeedPairBatchSize`: number of missing wallet/category pairs to seed into the category performance refresh queue while the initial table is being built; default `250`.
+- `BackgroundSignalCandidateRefreshEnabled`: runs the on-chain signal-candidate materialization worker while the service is running; default `true`.
+- `SignalCandidateRefreshIntervalSeconds`: pause between successful candidate materialization cycles; default `60`.
+- `SignalCandidateBatchSize`: number of recent wallet-fill rows to evaluate into candidate/reason rows per cycle; default `250`.
+- `SignalCandidateLookbackHours`: rolling recent-fill window scanned for new or refreshable candidates; default `24`.
 - `ExchangeContracts`: Polymarket V1/V2 CTF and negative-risk exchange contracts to scan.
 
 Activity, position, wallet-performance, and wallet/category-performance refresh
@@ -216,6 +220,10 @@ service also derives `polymarket_onchain_wallet_fills` with one maker row and on
 taker row per fill, then aggregates those rows into
 `polymarket_onchain_wallet_executions` by wallet, transaction hash, token id, and
 side. The dashboard ranking uses those executions, so it is no longer maker-only.
+Recent wallet fills are also materialized into `polymarket_onchain_signal_candidates`
+and `polymarket_onchain_signal_candidate_reasons`. This layer is read-only and
+records whether a fill is ready for downstream paper evaluation or rejected with
+explicit data/performance reason codes. It does not place live or paper orders.
 If raw fills predate the wallet or serving tables, the next on-chain sync fills
 the missing derived range from PostgreSQL before it continues reading new Polygon
 blocks.

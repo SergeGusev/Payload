@@ -136,6 +136,19 @@ public interface IAppRepository
         int queueSeedPairLimit = 1_000,
         CancellationToken cancellationToken = default);
 
+    Task<IReadOnlyList<PolymarketOnChainSignalCandidateSource>> GetPolymarketOnChainSignalCandidateSourcesAsync(
+        int limit = 250,
+        int lookbackHours = 24,
+        CancellationToken cancellationToken = default);
+
+    Task UpsertPolymarketOnChainSignalCandidateDecisionsAsync(
+        IReadOnlyList<PolymarketOnChainSignalCandidateDecision> decisions,
+        CancellationToken cancellationToken = default);
+
+    Task<IReadOnlyList<PolymarketOnChainSignalCandidate>> GetRecentPolymarketOnChainSignalCandidatesAsync(
+        int limit = 250,
+        CancellationToken cancellationToken = default);
+
     Task<IReadOnlyList<PolymarketOnChainTradeDetails>> GetRecentPolymarketOnChainTradeDetailsAsync(int limit = 250, CancellationToken cancellationToken = default);
 
     Task<IReadOnlyList<PolymarketOnChainParticipantDetails>> GetPolymarketOnChainParticipantDetailsAsync(int limit = 250, CancellationToken cancellationToken = default);

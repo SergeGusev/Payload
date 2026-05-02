@@ -373,6 +373,14 @@ public sealed class OnChainIngestionOptions
 
     public int CategoryPerformanceQueueSeedPairBatchSize { get; init; } = 250;
 
+    public bool BackgroundSignalCandidateRefreshEnabled { get; init; } = true;
+
+    public int SignalCandidateRefreshIntervalSeconds { get; init; } = 60;
+
+    public int SignalCandidateBatchSize { get; init; } = 250;
+
+    public int SignalCandidateLookbackHours { get; init; } = 24;
+
     public List<OnChainExchangeContractOptions> ExchangeContracts { get; init; } =
     [
         new("CTF Exchange V1", "0x4bFb41d5B3570DeFd03C39a9A4D8dE6Bd8B8982E", "V1"),

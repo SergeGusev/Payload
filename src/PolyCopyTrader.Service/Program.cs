@@ -112,6 +112,7 @@ builder.Services.AddSingleton<ILiveTradingProcessor, LiveTradingProcessor>();
 builder.Services.AddSingleton<ITraderDiscoveryProcessor, TraderDiscoveryProcessor>();
 builder.Services.AddSingleton<IOnChainIngestionProcessor, OnChainIngestionProcessor>();
 builder.Services.AddSingleton<IOnChainMarketEnrichmentProcessor, OnChainMarketEnrichmentProcessor>();
+builder.Services.AddSingleton<IOnChainSignalCandidateProcessor, OnChainSignalCandidateProcessor>();
 builder.Services.AddSingleton<ServiceControlState>();
 builder.Services.AddHostedService<StartupSafetyCheckService>();
 builder.Services.AddHostedService<BotWorker>();
@@ -122,6 +123,7 @@ builder.Services.AddHostedService<OnChainActivityRefreshWorker>();
 builder.Services.AddHostedService<OnChainPositionRefreshWorker>();
 builder.Services.AddHostedService<OnChainPerformanceRefreshWorker>();
 builder.Services.AddHostedService<OnChainCategoryPerformanceRefreshWorker>();
+builder.Services.AddHostedService<OnChainSignalCandidateWorker>();
 builder.Services.AddHostedService<MarketDataWebSocketService>();
 builder.Services.AddHostedService<DailyReportWorker>();
 

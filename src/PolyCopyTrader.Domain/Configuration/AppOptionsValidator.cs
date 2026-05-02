@@ -78,6 +78,7 @@ public static class AppOptionsValidator
             $"On-chain background activity refresh enabled: {configuration.OnChainIngestion.BackgroundActivityRefreshEnabled}",
             $"On-chain background performance refresh enabled: {configuration.OnChainIngestion.BackgroundPerformanceRefreshEnabled}",
             $"On-chain background category performance refresh enabled: {configuration.OnChainIngestion.BackgroundCategoryPerformanceRefreshEnabled}",
+            $"On-chain background signal candidate refresh enabled: {configuration.OnChainIngestion.BackgroundSignalCandidateRefreshEnabled}",
             $"Watchlist traders: {configuration.Watchlist.Traders.Count}",
             $"Paper bankroll USD: {configuration.PaperTrading.InitialBankrollUsd}");
     }
@@ -728,6 +729,21 @@ public static class AppOptionsValidator
         if (options.CategoryPerformanceQueueSeedPairBatchSize <= 0 || options.CategoryPerformanceQueueSeedPairBatchSize > 100_000)
         {
             errors.Add("OnChainIngestion.CategoryPerformanceQueueSeedPairBatchSize must be between 1 and 100000.");
+        }
+
+        if (options.SignalCandidateRefreshIntervalSeconds <= 0 || options.SignalCandidateRefreshIntervalSeconds > 86_400)
+        {
+            errors.Add("OnChainIngestion.SignalCandidateRefreshIntervalSeconds must be between 1 and 86400.");
+        }
+
+        if (options.SignalCandidateBatchSize <= 0 || options.SignalCandidateBatchSize > 10_000)
+        {
+            errors.Add("OnChainIngestion.SignalCandidateBatchSize must be between 1 and 10000.");
+        }
+
+        if (options.SignalCandidateLookbackHours <= 0 || options.SignalCandidateLookbackHours > 720)
+        {
+            errors.Add("OnChainIngestion.SignalCandidateLookbackHours must be between 1 and 720.");
         }
 
         if (options.ExchangeContracts.Count == 0)

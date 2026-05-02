@@ -32,3 +32,10 @@ Request:
 
 Result:
 Outlined the next work sequence while slow-query logs accumulate: keep monitoring/stabilizing ingestion and derived refresh queues, verify category/data-quality coverage, then build the decision layer that turns leader fills into scored copy-signal candidates with explicit acceptance/rejection reasons. Recommended keeping the next functional layer in `ReadOnly`/`Paper`, with live trading still out of scope.
+
+## 2026-05-02T08:50:49.7877449Z
+Request:
+Поехали
+
+Result:
+Implemented the read-only on-chain signal-candidate pipeline. Added `polymarket_onchain_signal_candidates` and `polymarket_onchain_signal_candidate_reasons`, repository upsert/read methods, domain models, service worker/processor, configuration defaults and validation, documentation, and tests. The worker evaluates recent `polymarket_onchain_wallet_fills` using token metadata, market category, active/resolved market state, and wallet/category performance thresholds; accepted and rejected decisions are materialized with explicit reason codes and no live order placement. Verification passed: full tests 141/141, service build, dashboard build, `--print-config`, and `git diff --check` with line-ending warnings only. Existing unrelated dirty files `PolyCopyTrader.sln` and `src/PolyCopyTrader.Storage/PostgresSchemaInitializer.cs` were left untouched. Branch `master` has no configured upstream, so automatic pull/push is blocked.

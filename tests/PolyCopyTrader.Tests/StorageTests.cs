@@ -30,6 +30,9 @@ public sealed class StorageTests
         Assert.Contains("ix_polymarket_onchain_trade_details_recent", PostgresSchema.SchemaSql, StringComparison.Ordinal);
         Assert.Contains("CREATE TABLE IF NOT EXISTS polymarket_onchain_participant_details", PostgresSchema.SchemaSql, StringComparison.Ordinal);
         Assert.Contains("ix_polymarket_onchain_participant_details_score", PostgresSchema.SchemaSql, StringComparison.Ordinal);
+        Assert.Contains("CREATE TABLE IF NOT EXISTS polymarket_onchain_signal_candidates", PostgresSchema.SchemaSql, StringComparison.Ordinal);
+        Assert.Contains("CREATE TABLE IF NOT EXISTS polymarket_onchain_signal_candidate_reasons", PostgresSchema.SchemaSql, StringComparison.Ordinal);
+        Assert.Contains("ix_polymarket_onchain_signal_candidates_status_time", PostgresSchema.SchemaSql, StringComparison.Ordinal);
     }
 
     [Fact]

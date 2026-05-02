@@ -43,6 +43,8 @@ public static class PostgresSchema
         "polymarket_onchain_wallet_performance_refresh_queue",
         "polymarket_onchain_wallet_category_performance",
         "polymarket_onchain_wallet_category_performance_refresh_queue",
+        "polymarket_onchain_signal_candidates",
+        "polymarket_onchain_signal_candidate_reasons",
         "polymarket_onchain_trade_details",
         "polymarket_onchain_participant_details",
         "polymarket_onchain_ingest_cursors",
@@ -703,6 +705,9 @@ ON polymarket_onchain_wallet_fills(wallet, block_timestamp_utc DESC);
 CREATE INDEX IF NOT EXISTS ix_polymarket_onchain_wallet_fills_token_time
 ON polymarket_onchain_wallet_fills(token_id, block_timestamp_utc DESC);
 
+CREATE INDEX IF NOT EXISTS ix_polymarket_onchain_wallet_fills_recent
+ON polymarket_onchain_wallet_fills(block_timestamp_utc DESC, block_number DESC, log_index DESC);
+
 CREATE INDEX IF NOT EXISTS ix_polymarket_onchain_wallet_fills_contract_block
 ON polymarket_onchain_wallet_fills(contract_address, block_number);
 
@@ -982,6 +987,80 @@ CREATE TABLE IF NOT EXISTS polymarket_onchain_wallet_category_performance_refres
 
 CREATE INDEX IF NOT EXISTS ix_polymarket_onchain_wallet_category_performance_refresh_queue_queued
 ON polymarket_onchain_wallet_category_performance_refresh_queue(queued_at_utc);
+
+CREATE TABLE IF NOT EXISTS polymarket_onchain_signal_candidates (
+    id uuid PRIMARY KEY,
+    source_fill_id uuid NOT NULL,
+    contract_name text NOT NULL,
+    contract_address text NOT NULL,
+    exchange_version text NOT NULL,
+    block_number bigint NOT NULL,
+    block_timestamp_utc timestamptz NOT NULL,
+    transaction_hash text NOT NULL,
+    log_index bigint NOT NULL,
+    order_hash text NOT NULL,
+    participant_role text NOT NULL,
+    wallet text NOT NULL,
+    counterparty text NOT NULL,
+    side text NOT NULL,
+    token_id text NOT NULL,
+    condition_id text NOT NULL,
+    market_id text NOT NULL,
+    market_slug text NOT NULL,
+    market_title text NOT NULL,
+    outcome text NOT NULL,
+    category text NULL,
+    lookup_succeeded boolean NOT NULL,
+    market_active boolean NOT NULL,
+    market_closed boolean NOT NULL,
+    market_archived boolean NOT NULL,
+    market_resolved boolean NOT NULL,
+    winning_outcome text NULL,
+    price numeric(18,8) NOT NULL,
+    size_shares numeric(28,8) NOT NULL,
+    notional_usd numeric(28,8) NOT NULL,
+    fee_amount numeric(28,8) NOT NULL,
+    fee_asset_id text NOT NULL,
+    leader_positions_count integer NULL,
+    leader_resolved_positions integer NULL,
+    leader_markets_traded integer NULL,
+    leader_volume_usd numeric(28,8) NULL,
+    leader_resolved_pnl_usd numeric(28,8) NULL,
+    leader_resolved_roi_pct numeric(18,8) NULL,
+    leader_win_rate_pct numeric(18,8) NULL,
+    leader_category_score numeric(28,8) NULL,
+    leader_sample_quality text NULL,
+    leader_performance_refreshed_at_utc timestamptz NULL,
+    decision_status text NOT NULL,
+    decision_code text NOT NULL,
+    candidate_score numeric(28,8) NOT NULL,
+    created_at_utc timestamptz NOT NULL,
+    updated_at_utc timestamptz NOT NULL,
+    UNIQUE (source_fill_id, participant_role)
+);
+
+CREATE INDEX IF NOT EXISTS ix_polymarket_onchain_signal_candidates_updated
+ON polymarket_onchain_signal_candidates(updated_at_utc DESC);
+
+CREATE INDEX IF NOT EXISTS ix_polymarket_onchain_signal_candidates_status_time
+ON polymarket_onchain_signal_candidates(decision_status, block_timestamp_utc DESC);
+
+CREATE INDEX IF NOT EXISTS ix_polymarket_onchain_signal_candidates_wallet_category
+ON polymarket_onchain_signal_candidates(wallet, category, block_timestamp_utc DESC);
+
+CREATE TABLE IF NOT EXISTS polymarket_onchain_signal_candidate_reasons (
+    id uuid PRIMARY KEY,
+    candidate_id uuid NOT NULL REFERENCES polymarket_onchain_signal_candidates(id) ON DELETE CASCADE,
+    reason_code text NOT NULL,
+    reason_details text NOT NULL,
+    created_at_utc timestamptz NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS ix_polymarket_onchain_signal_candidate_reasons_candidate
+ON polymarket_onchain_signal_candidate_reasons(candidate_id, created_at_utc);
+
+CREATE INDEX IF NOT EXISTS ix_polymarket_onchain_signal_candidate_reasons_reason
+ON polymarket_onchain_signal_candidate_reasons(reason_code, created_at_utc DESC);
 
 DO $$
 BEGIN

@@ -546,6 +546,28 @@ public sealed class WatchlistScannerTests
             return Task.FromResult(new OnChainCategoryPerformanceRefreshResult(0, 0, 0, 0));
         }
 
+        public Task<IReadOnlyList<PolymarketOnChainSignalCandidateSource>> GetPolymarketOnChainSignalCandidateSourcesAsync(
+            int limit = 250,
+            int lookbackHours = 24,
+            CancellationToken cancellationToken = default)
+        {
+            return Task.FromResult<IReadOnlyList<PolymarketOnChainSignalCandidateSource>>([]);
+        }
+
+        public Task UpsertPolymarketOnChainSignalCandidateDecisionsAsync(
+            IReadOnlyList<PolymarketOnChainSignalCandidateDecision> decisions,
+            CancellationToken cancellationToken = default)
+        {
+            return Task.CompletedTask;
+        }
+
+        public Task<IReadOnlyList<PolymarketOnChainSignalCandidate>> GetRecentPolymarketOnChainSignalCandidatesAsync(
+            int limit = 250,
+            CancellationToken cancellationToken = default)
+        {
+            return Task.FromResult<IReadOnlyList<PolymarketOnChainSignalCandidate>>([]);
+        }
+
         public Task<IReadOnlyList<PolymarketOnChainTradeDetails>> GetRecentPolymarketOnChainTradeDetailsAsync(int limit = 250, CancellationToken cancellationToken = default)
         {
             return Task.FromResult<IReadOnlyList<PolymarketOnChainTradeDetails>>([]);

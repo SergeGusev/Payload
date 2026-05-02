@@ -100,7 +100,7 @@ Later, manual on-chain ingestion was added:
   `Onchain Executions`;
 - hosted services: `OnChainIngestionWorker`, `OnChainMarketEnrichmentWorker`,
   `OnChainActivityRefreshWorker`, `OnChainPositionRefreshWorker`, and
-  `OnChainPerformanceRefreshWorker`;
+  `OnChainPerformanceRefreshWorker`, plus `OnChainSignalCandidateWorker`;
 - tables: `polymarket_onchain_logs`, `polymarket_onchain_fills`,
   `polymarket_onchain_wallet_fills`,
   `polymarket_onchain_wallet_executions`,
@@ -111,6 +111,8 @@ Later, manual on-chain ingestion was added:
   `polymarket_onchain_position_refresh_queue`, and
   `polymarket_onchain_wallet_performance`,
   `polymarket_onchain_wallet_performance_refresh_queue`, and
+  `polymarket_onchain_signal_candidates`,
+  `polymarket_onchain_signal_candidate_reasons`,
   `polymarket_onchain_trade_details`,
   `polymarket_onchain_participant_details`, and
   `polymarket_onchain_ingest_cursors`;
@@ -176,7 +178,15 @@ Later, manual on-chain ingestion was added:
   wallet activity table, while `Onchain Leaders` is a first heuristic performance
   score over materialized positions, resolved PnL, ROI, win rate, sample quality,
   volume, and open exposure. It has no current mark-to-market yet.
-- tests increased from 102 to 119.
+- `polymarket_onchain_signal_candidates` is a bounded recent-fill decision-prep
+  table built from `polymarket_onchain_wallet_fills`; one candidate is stored per
+  source fill and participant role, enriched with market metadata, category, and
+  wallet/category performance. `polymarket_onchain_signal_candidate_reasons`
+  stores explicit rejection reasons for unsupported side, small fill, missing
+  metadata/category/performance, stale/weak performance, inactive market, or
+  resolved market. This layer is read-only and does not place paper/live orders.
+- tests increased from 102 to 119; later on-chain signal-candidate tests raised
+  the suite to 141.
 
 Later, `PolyCopyTrader.Service` was changed to require PostgreSQL storage on every
 real service run. If `POLYCOPYTRADER_POSTGRES_CONNECTION` or `Storage:ConnectionString`

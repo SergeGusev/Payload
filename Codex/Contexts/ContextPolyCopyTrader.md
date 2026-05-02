@@ -1,3 +1,17 @@
+## Active Update 2026-05-02 On-Chain Signal Candidate Pipeline
+Goal: Add a read-only decision-prep layer that turns on-chain wallet fills into scored copy-signal candidates with explicit rejection reasons.
+Status: Completed
+Done:
+- Added domain models, repository methods, PostgreSQL tables, and indexes for `polymarket_onchain_signal_candidates` and `polymarket_onchain_signal_candidate_reasons`.
+- Added `OnChainSignalCandidateWorker` and `OnChainSignalCandidateProcessor`; the worker reads recent `polymarket_onchain_wallet_fills`, joins token metadata and wallet/category performance, then upserts accepted/rejected candidate decisions.
+- Candidate acceptance currently requires a buy fill, minimum leader notional, known market category, usable market metadata, active/unresolved market state, fresh leader category performance, and the configured leader performance thresholds.
+- Rejections are persisted with explicit reason codes, including sell side, small notional, missing category, missing/stale leader category performance, inactive/resolved market, and missing metadata.
+- Added configuration defaults and validation for background signal-candidate refresh: enabled by default, interval `60s`, batch `250`, lookback `24h`.
+- Updated README, configuration reference, project memory, and tests.
+Next: Restart the service so schema initialization creates the new tables and the background worker starts filling them; then inspect candidate status/reason counts in PostgreSQL.
+Notes: Verification passed: `dotnet test tests\PolyCopyTrader.Tests\PolyCopyTrader.Tests.csproj -c Verify --no-restore` 141/141; service build passed; dashboard build passed; `--print-config` passed and includes the new signal-candidate refresh setting; `git diff --check` passed with line-ending warnings only. Existing unrelated dirty files `PolyCopyTrader.sln` and `src/PolyCopyTrader.Storage/PostgresSchemaInitializer.cs` were left untouched. `git rev-parse --abbrev-ref --symbolic-full-name '@{u}'` failed because branch `master` has no configured upstream.
+Blockers: Automatic pull/push cannot run until a Git upstream is configured.
+
 ## Active Update 2026-05-02 Next Step Planning
 Goal: Define the next implementation direction while PostgreSQL slow-query logs accumulate.
 Status: Completed

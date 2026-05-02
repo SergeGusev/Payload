@@ -59,6 +59,10 @@ internal sealed class TestAppRepository : IAppRepository
 
     public HashSet<string> PolymarketOnChainWalletCategoryPerformanceRefreshQueue { get; } = new(StringComparer.OrdinalIgnoreCase);
 
+    public List<PolymarketOnChainSignalCandidate> PolymarketOnChainSignalCandidates { get; } = [];
+
+    public List<PolymarketOnChainSignalCandidateReason> PolymarketOnChainSignalCandidateReasons { get; } = [];
+
     public List<OnChainBlockRange> OnChainWalletDerivedRefreshRanges { get; } = [];
 
     public Action<OnChainBlockRange>? BeforeOnChainWalletDerivedRefresh { get; set; }
@@ -698,6 +702,112 @@ internal sealed class TestAppRepository : IAppRepository
             PolymarketOnChainWalletCategoryPerformanceRefreshQueue.Count));
     }
 
+    public Task<IReadOnlyList<PolymarketOnChainSignalCandidateSource>> GetPolymarketOnChainSignalCandidateSourcesAsync(
+        int limit = 250,
+        int lookbackHours = 24,
+        CancellationToken cancellationToken = default)
+    {
+        var lookbackStart = DateTimeOffset.UtcNow.AddHours(-lookbackHours);
+        var rows = PolymarketOnChainWalletFills
+            .Where(fill => fill.BlockTimestampUtc >= lookbackStart)
+            .Where(fill =>
+            {
+                var existing = PolymarketOnChainSignalCandidates.FirstOrDefault(candidate =>
+                    candidate.SourceFillId == fill.SourceFillId &&
+                    string.Equals(candidate.ParticipantRole.ToString(), fill.Role.ToString(), StringComparison.OrdinalIgnoreCase));
+                return existing is null ||
+                    existing.DecisionStatus == "Rejected" &&
+                    existing.UpdatedAtUtc <= DateTimeOffset.UtcNow.AddMinutes(-10) &&
+                    IsRefreshableOnChainSignalCandidateDecision(existing.DecisionCode);
+            })
+            .OrderByDescending(fill => fill.BlockTimestampUtc)
+            .ThenByDescending(fill => fill.BlockNumber)
+            .ThenByDescending(fill => fill.LogIndex)
+            .ThenBy(fill => fill.Role.ToString(), StringComparer.Ordinal)
+            .Take(limit)
+            .Select(fill =>
+            {
+                var metadata = PolymarketOnChainTokenMetadata.FirstOrDefault(item =>
+                    string.Equals(item.TokenId, fill.TokenId, StringComparison.OrdinalIgnoreCase));
+                var category = string.IsNullOrWhiteSpace(metadata?.Category) ? "unknown" : metadata!.Category;
+                var performance = PolymarketOnChainWalletCategoryPerformance.FirstOrDefault(item =>
+                    string.Equals(item.Wallet, fill.Wallet, StringComparison.OrdinalIgnoreCase) &&
+                    string.Equals(item.Category, category, StringComparison.OrdinalIgnoreCase));
+
+                return new PolymarketOnChainSignalCandidateSource(
+                    fill.SourceFillId,
+                    fill.ContractName,
+                    fill.ContractAddress,
+                    fill.ExchangeVersion,
+                    fill.BlockNumber,
+                    fill.BlockTimestampUtc,
+                    fill.TransactionHash,
+                    fill.LogIndex,
+                    fill.OrderHash,
+                    fill.Role,
+                    fill.Wallet,
+                    fill.Counterparty,
+                    fill.Side,
+                    fill.TokenId,
+                    fill.Price,
+                    fill.SizeShares,
+                    fill.NotionalUsd,
+                    fill.FeeAmount,
+                    fill.FeeAssetId,
+                    fill.ImportedAtUtc,
+                    metadata,
+                    performance);
+            })
+            .ToArray();
+
+        return Task.FromResult<IReadOnlyList<PolymarketOnChainSignalCandidateSource>>(rows);
+    }
+
+    public Task UpsertPolymarketOnChainSignalCandidateDecisionsAsync(
+        IReadOnlyList<PolymarketOnChainSignalCandidateDecision> decisions,
+        CancellationToken cancellationToken = default)
+    {
+        foreach (var decision in decisions)
+        {
+            var existing = PolymarketOnChainSignalCandidates.FirstOrDefault(candidate =>
+                candidate.SourceFillId == decision.Candidate.SourceFillId &&
+                candidate.ParticipantRole == decision.Candidate.ParticipantRole);
+            var persistedCandidate = existing is null
+                ? decision.Candidate
+                : decision.Candidate with
+                {
+                    Id = existing.Id,
+                    CreatedAtUtc = existing.CreatedAtUtc
+                };
+
+            if (existing is not null)
+            {
+                PolymarketOnChainSignalCandidates.Remove(existing);
+            }
+
+            PolymarketOnChainSignalCandidates.Add(persistedCandidate);
+            PolymarketOnChainSignalCandidateReasons.RemoveAll(reason => reason.CandidateId == persistedCandidate.Id);
+            PolymarketOnChainSignalCandidateReasons.AddRange(decision.Reasons.Select(reason => reason with
+            {
+                CandidateId = persistedCandidate.Id
+            }));
+        }
+
+        return Task.CompletedTask;
+    }
+
+    public Task<IReadOnlyList<PolymarketOnChainSignalCandidate>> GetRecentPolymarketOnChainSignalCandidatesAsync(
+        int limit = 250,
+        CancellationToken cancellationToken = default)
+    {
+        return Task.FromResult<IReadOnlyList<PolymarketOnChainSignalCandidate>>(
+            PolymarketOnChainSignalCandidates
+                .OrderByDescending(item => item.UpdatedAtUtc)
+                .ThenByDescending(item => item.BlockTimestampUtc)
+                .Take(limit)
+                .ToArray());
+    }
+
     public Task<IReadOnlyList<PolymarketOnChainTradeDetails>> GetRecentPolymarketOnChainTradeDetailsAsync(int limit = 250, CancellationToken cancellationToken = default)
     {
         var metadataByToken = PolymarketOnChainTokenMetadata
@@ -1045,6 +1155,15 @@ internal sealed class TestAppRepository : IAppRepository
     private static string CategoryName(string? category)
     {
         return string.IsNullOrWhiteSpace(category) ? "unknown" : category;
+    }
+
+    private static bool IsRefreshableOnChainSignalCandidateDecision(string decisionCode)
+    {
+        return decisionCode is
+            "missing_market_metadata" or
+            "missing_market_category" or
+            "missing_leader_category_performance" or
+            "leader_category_performance_stale";
     }
 
     private static string CategoryPerformanceKey(string wallet, string category)

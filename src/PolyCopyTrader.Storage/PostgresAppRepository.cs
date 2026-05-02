@@ -2879,6 +2879,238 @@ WHERE queue.wallet = pair.wallet
         return new OnChainCategoryPerformanceRefreshResult(pairsQueued, pairsProcessed, pairsUpserted, queueRemaining);
     }
 
+    public async Task<IReadOnlyList<PolymarketOnChainSignalCandidateSource>> GetPolymarketOnChainSignalCandidateSourcesAsync(
+        int limit = 250,
+        int lookbackHours = 24,
+        CancellationToken cancellationToken = default)
+    {
+        const string sql = """
+SELECT wallet_fill.source_fill_id, wallet_fill.contract_name, wallet_fill.contract_address,
+       wallet_fill.exchange_version, wallet_fill.block_number, wallet_fill.block_timestamp_utc,
+       wallet_fill.transaction_hash, wallet_fill.log_index, wallet_fill.order_hash,
+       wallet_fill.role, wallet_fill.wallet, wallet_fill.counterparty, wallet_fill.side,
+       wallet_fill.token_id, wallet_fill.price, wallet_fill.size_shares, wallet_fill.notional_usd,
+       wallet_fill.fee_amount, wallet_fill.fee_asset_id, wallet_fill.imported_at_utc,
+       metadata.token_id, metadata.condition_id, metadata.market_id, metadata.market_slug,
+       metadata.market_title, metadata.outcome, metadata.outcome_index, metadata.category,
+       metadata.end_date_utc, metadata.active, metadata.closed, metadata.archived,
+       metadata.resolved, metadata.winning_outcome, metadata.clob_token_ids_json,
+       metadata.outcomes_json, metadata.lookup_succeeded, metadata.lookup_error,
+       metadata.raw_json, metadata.last_refreshed_utc,
+       performance.wallet, performance.category, performance.positions_count,
+       performance.open_positions, performance.flat_positions, performance.resolved_positions,
+       performance.profitable_resolved_positions, performance.losing_resolved_positions,
+       performance.markets_traded, performance.volume_usd, performance.resolved_volume_usd,
+       performance.open_exposure_usd, performance.resolved_cost_usd,
+       performance.resolved_pnl_usd, performance.resolved_roi_pct,
+       performance.win_rate_pct, performance.average_position_size_usd,
+       performance.score, performance.sample_quality, performance.first_active_utc,
+       performance.last_active_utc, performance.refreshed_at_utc
+FROM polymarket_onchain_wallet_fills wallet_fill
+LEFT JOIN polymarket_onchain_signal_candidates candidate
+  ON candidate.source_fill_id = wallet_fill.source_fill_id
+ AND candidate.participant_role = wallet_fill.role
+LEFT JOIN polymarket_onchain_token_metadata metadata
+  ON metadata.token_id = wallet_fill.token_id
+LEFT JOIN polymarket_onchain_wallet_category_performance performance
+  ON performance.wallet = wallet_fill.wallet
+ AND performance.category = COALESCE(NULLIF(metadata.category, ''), 'unknown')
+WHERE wallet_fill.block_timestamp_utc >= now() - (@LookbackHours * interval '1 hour')
+  AND (
+      candidate.id IS NULL
+      OR (
+          candidate.decision_status = 'Rejected'
+          AND candidate.updated_at_utc <= now() - interval '10 minutes'
+          AND candidate.decision_code IN (
+              'missing_market_metadata',
+              'missing_market_category',
+              'missing_leader_category_performance',
+              'leader_category_performance_stale'
+          )
+      )
+  )
+ORDER BY wallet_fill.block_timestamp_utc DESC,
+         wallet_fill.block_number DESC,
+         wallet_fill.log_index DESC,
+         wallet_fill.role
+LIMIT @Limit;
+""";
+
+        await using var connection = await OpenConnectionAsync(cancellationToken);
+        await using var command = CreateCommand(connection, sql);
+        command.Parameters.AddWithValue("Limit", limit);
+        command.Parameters.AddWithValue("LookbackHours", lookbackHours);
+        await using var reader = await command.ExecuteReaderAsync(cancellationToken);
+
+        var results = new List<PolymarketOnChainSignalCandidateSource>();
+        while (await reader.ReadAsync(cancellationToken))
+        {
+            results.Add(ReadPolymarketOnChainSignalCandidateSource(reader));
+        }
+
+        return results;
+    }
+
+    public async Task UpsertPolymarketOnChainSignalCandidateDecisionsAsync(
+        IReadOnlyList<PolymarketOnChainSignalCandidateDecision> decisions,
+        CancellationToken cancellationToken = default)
+    {
+        if (decisions.Count == 0)
+        {
+            return;
+        }
+
+        const string upsertCandidateSql = """
+INSERT INTO polymarket_onchain_signal_candidates (
+    id, source_fill_id, contract_name, contract_address, exchange_version, block_number,
+    block_timestamp_utc, transaction_hash, log_index, order_hash, participant_role,
+    wallet, counterparty, side, token_id, condition_id, market_id, market_slug,
+    market_title, outcome, category, lookup_succeeded, market_active, market_closed,
+    market_archived, market_resolved, winning_outcome, price, size_shares, notional_usd,
+    fee_amount, fee_asset_id, leader_positions_count, leader_resolved_positions,
+    leader_markets_traded, leader_volume_usd, leader_resolved_pnl_usd,
+    leader_resolved_roi_pct, leader_win_rate_pct, leader_category_score,
+    leader_sample_quality, leader_performance_refreshed_at_utc, decision_status,
+    decision_code, candidate_score, created_at_utc, updated_at_utc
+) VALUES (
+    @Id, @SourceFillId, @ContractName, @ContractAddress, @ExchangeVersion, @BlockNumber,
+    @BlockTimestampUtc, @TransactionHash, @LogIndex, @OrderHash, @ParticipantRole,
+    @Wallet, @Counterparty, @Side, @TokenId, @ConditionId, @MarketId, @MarketSlug,
+    @MarketTitle, @Outcome, @Category, @LookupSucceeded, @MarketActive, @MarketClosed,
+    @MarketArchived, @MarketResolved, @WinningOutcome, @Price, @SizeShares, @NotionalUsd,
+    @FeeAmount, @FeeAssetId, @LeaderPositionsCount, @LeaderResolvedPositions,
+    @LeaderMarketsTraded, @LeaderVolumeUsd, @LeaderResolvedPnlUsd,
+    @LeaderResolvedRoiPct, @LeaderWinRatePct, @LeaderCategoryScore,
+    @LeaderSampleQuality, @LeaderPerformanceRefreshedAtUtc, @DecisionStatus,
+    @DecisionCode, @CandidateScore, @CreatedAtUtc, @UpdatedAtUtc
+)
+ON CONFLICT (source_fill_id, participant_role) DO UPDATE SET
+    contract_name = excluded.contract_name,
+    contract_address = excluded.contract_address,
+    exchange_version = excluded.exchange_version,
+    block_number = excluded.block_number,
+    block_timestamp_utc = excluded.block_timestamp_utc,
+    transaction_hash = excluded.transaction_hash,
+    log_index = excluded.log_index,
+    order_hash = excluded.order_hash,
+    wallet = excluded.wallet,
+    counterparty = excluded.counterparty,
+    side = excluded.side,
+    token_id = excluded.token_id,
+    condition_id = excluded.condition_id,
+    market_id = excluded.market_id,
+    market_slug = excluded.market_slug,
+    market_title = excluded.market_title,
+    outcome = excluded.outcome,
+    category = excluded.category,
+    lookup_succeeded = excluded.lookup_succeeded,
+    market_active = excluded.market_active,
+    market_closed = excluded.market_closed,
+    market_archived = excluded.market_archived,
+    market_resolved = excluded.market_resolved,
+    winning_outcome = excluded.winning_outcome,
+    price = excluded.price,
+    size_shares = excluded.size_shares,
+    notional_usd = excluded.notional_usd,
+    fee_amount = excluded.fee_amount,
+    fee_asset_id = excluded.fee_asset_id,
+    leader_positions_count = excluded.leader_positions_count,
+    leader_resolved_positions = excluded.leader_resolved_positions,
+    leader_markets_traded = excluded.leader_markets_traded,
+    leader_volume_usd = excluded.leader_volume_usd,
+    leader_resolved_pnl_usd = excluded.leader_resolved_pnl_usd,
+    leader_resolved_roi_pct = excluded.leader_resolved_roi_pct,
+    leader_win_rate_pct = excluded.leader_win_rate_pct,
+    leader_category_score = excluded.leader_category_score,
+    leader_sample_quality = excluded.leader_sample_quality,
+    leader_performance_refreshed_at_utc = excluded.leader_performance_refreshed_at_utc,
+    decision_status = excluded.decision_status,
+    decision_code = excluded.decision_code,
+    candidate_score = excluded.candidate_score,
+    updated_at_utc = excluded.updated_at_utc
+RETURNING id;
+""";
+
+        const string deleteReasonsSql = """
+DELETE FROM polymarket_onchain_signal_candidate_reasons
+WHERE candidate_id = @CandidateId;
+""";
+
+        const string insertReasonSql = """
+INSERT INTO polymarket_onchain_signal_candidate_reasons (
+    id, candidate_id, reason_code, reason_details, created_at_utc
+) VALUES (
+    @Id, @CandidateId, @ReasonCode, @ReasonDetails, @CreatedAtUtc
+);
+""";
+
+        await using var connection = await OpenConnectionAsync(cancellationToken);
+        await using var transaction = await connection.BeginTransactionAsync(cancellationToken);
+        foreach (var decision in decisions)
+        {
+            await using var upsertCommand = CreateCommand(connection, upsertCandidateSql);
+            upsertCommand.Transaction = transaction;
+            AddPolymarketOnChainSignalCandidateParameters(upsertCommand, decision.Candidate);
+            var persistedId = (Guid)(await upsertCommand.ExecuteScalarAsync(cancellationToken) ??
+                throw new InvalidOperationException("Failed to upsert on-chain signal candidate."));
+
+            await using (var deleteCommand = CreateCommand(connection, deleteReasonsSql))
+            {
+                deleteCommand.Transaction = transaction;
+                deleteCommand.Parameters.AddWithValue("CandidateId", persistedId);
+                await deleteCommand.ExecuteNonQueryAsync(cancellationToken);
+            }
+
+            foreach (var reason in decision.Reasons)
+            {
+                await using var reasonCommand = CreateCommand(connection, insertReasonSql);
+                reasonCommand.Transaction = transaction;
+                reasonCommand.Parameters.AddWithValue("Id", reason.Id);
+                reasonCommand.Parameters.AddWithValue("CandidateId", persistedId);
+                reasonCommand.Parameters.AddWithValue("ReasonCode", reason.ReasonCode);
+                reasonCommand.Parameters.AddWithValue("ReasonDetails", reason.ReasonDetails);
+                reasonCommand.Parameters.AddWithValue("CreatedAtUtc", UtcDateTime(reason.CreatedAtUtc));
+                await reasonCommand.ExecuteNonQueryAsync(cancellationToken);
+            }
+        }
+
+        await transaction.CommitAsync(cancellationToken);
+    }
+
+    public async Task<IReadOnlyList<PolymarketOnChainSignalCandidate>> GetRecentPolymarketOnChainSignalCandidatesAsync(
+        int limit = 250,
+        CancellationToken cancellationToken = default)
+    {
+        const string sql = """
+SELECT id, source_fill_id, contract_name, contract_address, exchange_version, block_number,
+       block_timestamp_utc, transaction_hash, log_index, order_hash, participant_role,
+       wallet, counterparty, side, token_id, condition_id, market_id, market_slug,
+       market_title, outcome, category, lookup_succeeded, market_active, market_closed,
+       market_archived, market_resolved, winning_outcome, price, size_shares, notional_usd,
+       fee_amount, fee_asset_id, leader_positions_count, leader_resolved_positions,
+       leader_markets_traded, leader_volume_usd, leader_resolved_pnl_usd,
+       leader_resolved_roi_pct, leader_win_rate_pct, leader_category_score,
+       leader_sample_quality, leader_performance_refreshed_at_utc, decision_status,
+       decision_code, candidate_score, created_at_utc, updated_at_utc
+FROM polymarket_onchain_signal_candidates
+ORDER BY updated_at_utc DESC, block_timestamp_utc DESC
+LIMIT @Limit;
+""";
+
+        await using var connection = await OpenConnectionAsync(cancellationToken);
+        await using var command = CreateCommand(connection, sql);
+        command.Parameters.AddWithValue("Limit", limit);
+        await using var reader = await command.ExecuteReaderAsync(cancellationToken);
+
+        var results = new List<PolymarketOnChainSignalCandidate>();
+        while (await reader.ReadAsync(cancellationToken))
+        {
+            results.Add(ReadPolymarketOnChainSignalCandidate(reader));
+        }
+
+        return results;
+    }
+
     public async Task<IReadOnlyList<PolymarketOnChainTradeDetails>> GetRecentPolymarketOnChainTradeDetailsAsync(
         int limit = 250,
         CancellationToken cancellationToken = default)
@@ -4838,6 +5070,68 @@ ON CONFLICT (key) DO UPDATE SET
         await command.ExecuteNonQueryAsync(cancellationToken);
     }
 
+    private static void AddPolymarketOnChainSignalCandidateParameters(
+        NpgsqlCommand command,
+        PolymarketOnChainSignalCandidate candidate)
+    {
+        command.Parameters.AddWithValue("Id", candidate.Id);
+        command.Parameters.AddWithValue("SourceFillId", candidate.SourceFillId);
+        command.Parameters.AddWithValue("ContractName", candidate.ContractName);
+        command.Parameters.AddWithValue("ContractAddress", candidate.ContractAddress);
+        command.Parameters.AddWithValue("ExchangeVersion", candidate.ExchangeVersion);
+        command.Parameters.AddWithValue("BlockNumber", candidate.BlockNumber);
+        command.Parameters.AddWithValue("BlockTimestampUtc", UtcDateTime(candidate.BlockTimestampUtc));
+        command.Parameters.AddWithValue("TransactionHash", candidate.TransactionHash);
+        command.Parameters.AddWithValue("LogIndex", candidate.LogIndex);
+        command.Parameters.AddWithValue("OrderHash", candidate.OrderHash);
+        command.Parameters.AddWithValue("ParticipantRole", candidate.ParticipantRole.ToString());
+        command.Parameters.AddWithValue("Wallet", candidate.Wallet);
+        command.Parameters.AddWithValue("Counterparty", candidate.Counterparty);
+        command.Parameters.AddWithValue("Side", candidate.Side.ToString());
+        command.Parameters.AddWithValue("TokenId", candidate.TokenId);
+        command.Parameters.AddWithValue("ConditionId", candidate.ConditionId);
+        command.Parameters.AddWithValue("MarketId", candidate.MarketId);
+        command.Parameters.AddWithValue("MarketSlug", candidate.MarketSlug);
+        command.Parameters.AddWithValue("MarketTitle", candidate.MarketTitle);
+        command.Parameters.AddWithValue("Outcome", candidate.Outcome);
+        command.Parameters.AddWithValue("Category", (object?)candidate.Category ?? DBNull.Value);
+        command.Parameters.AddWithValue("LookupSucceeded", candidate.LookupSucceeded);
+        command.Parameters.AddWithValue("MarketActive", candidate.MarketActive);
+        command.Parameters.AddWithValue("MarketClosed", candidate.MarketClosed);
+        command.Parameters.AddWithValue("MarketArchived", candidate.MarketArchived);
+        command.Parameters.AddWithValue("MarketResolved", candidate.MarketResolved);
+        command.Parameters.AddWithValue("WinningOutcome", (object?)candidate.WinningOutcome ?? DBNull.Value);
+        command.Parameters.AddWithValue("Price", candidate.Price);
+        command.Parameters.AddWithValue("SizeShares", candidate.SizeShares);
+        command.Parameters.AddWithValue("NotionalUsd", candidate.NotionalUsd);
+        command.Parameters.AddWithValue("FeeAmount", candidate.FeeAmount);
+        command.Parameters.AddWithValue("FeeAssetId", candidate.FeeAssetId);
+        command.Parameters.Add("LeaderPositionsCount", NpgsqlDbType.Integer).Value =
+            candidate.LeaderPositionsCount is { } leaderPositionsCount ? leaderPositionsCount : DBNull.Value;
+        command.Parameters.Add("LeaderResolvedPositions", NpgsqlDbType.Integer).Value =
+            candidate.LeaderResolvedPositions is { } leaderResolvedPositions ? leaderResolvedPositions : DBNull.Value;
+        command.Parameters.Add("LeaderMarketsTraded", NpgsqlDbType.Integer).Value =
+            candidate.LeaderMarketsTraded is { } leaderMarketsTraded ? leaderMarketsTraded : DBNull.Value;
+        command.Parameters.Add("LeaderVolumeUsd", NpgsqlDbType.Numeric).Value =
+            candidate.LeaderVolumeUsd is { } leaderVolumeUsd ? leaderVolumeUsd : DBNull.Value;
+        command.Parameters.Add("LeaderResolvedPnlUsd", NpgsqlDbType.Numeric).Value =
+            candidate.LeaderResolvedPnlUsd is { } leaderResolvedPnlUsd ? leaderResolvedPnlUsd : DBNull.Value;
+        command.Parameters.Add("LeaderResolvedRoiPct", NpgsqlDbType.Numeric).Value =
+            candidate.LeaderResolvedRoiPct is { } leaderResolvedRoiPct ? leaderResolvedRoiPct : DBNull.Value;
+        command.Parameters.Add("LeaderWinRatePct", NpgsqlDbType.Numeric).Value =
+            candidate.LeaderWinRatePct is { } leaderWinRatePct ? leaderWinRatePct : DBNull.Value;
+        command.Parameters.Add("LeaderCategoryScore", NpgsqlDbType.Numeric).Value =
+            candidate.LeaderCategoryScore is { } leaderCategoryScore ? leaderCategoryScore : DBNull.Value;
+        command.Parameters.AddWithValue("LeaderSampleQuality", (object?)candidate.LeaderSampleQuality ?? DBNull.Value);
+        command.Parameters.Add("LeaderPerformanceRefreshedAtUtc", NpgsqlDbType.TimestampTz).Value =
+            candidate.LeaderPerformanceRefreshedAtUtc is { } refreshedAt ? UtcDateTime(refreshedAt) : DBNull.Value;
+        command.Parameters.AddWithValue("DecisionStatus", candidate.DecisionStatus);
+        command.Parameters.AddWithValue("DecisionCode", candidate.DecisionCode);
+        command.Parameters.AddWithValue("CandidateScore", candidate.CandidateScore);
+        command.Parameters.AddWithValue("CreatedAtUtc", UtcDateTime(candidate.CreatedAtUtc));
+        command.Parameters.AddWithValue("UpdatedAtUtc", UtcDateTime(candidate.UpdatedAtUtc));
+    }
+
     private static void AddPolymarketOnChainTokenMetadataParameters(NpgsqlCommand command, PolymarketOnChainTokenMetadata metadata)
     {
         command.Parameters.AddWithValue("TokenId", metadata.TokenId);
@@ -4862,29 +5156,38 @@ ON CONFLICT (key) DO UPDATE SET
         command.Parameters.AddWithValue("LastRefreshedUtc", UtcDateTime(metadata.LastRefreshedUtc));
     }
 
-    private static PolymarketOnChainTokenMetadata ReadPolymarketOnChainTokenMetadata(NpgsqlDataReader reader)
+    private static PolymarketOnChainTokenMetadata ReadPolymarketOnChainTokenMetadata(
+        NpgsqlDataReader reader,
+        int offset = 0)
     {
         return new PolymarketOnChainTokenMetadata(
-            reader.GetString(0),
-            reader.GetString(1),
-            reader.GetString(2),
-            reader.GetString(3),
-            reader.GetString(4),
-            reader.GetString(5),
-            reader.GetInt32(6),
-            reader.IsDBNull(7) ? null : reader.GetString(7),
-            reader.IsDBNull(8) ? null : DateTimeOffsetFromUtc(reader.GetDateTime(8)),
-            reader.GetBoolean(9),
-            reader.GetBoolean(10),
-            reader.GetBoolean(11),
-            reader.GetBoolean(12),
-            reader.IsDBNull(13) ? null : reader.GetString(13),
-            ReadJsonStringArray(reader, 14),
-            ReadJsonStringArray(reader, 15),
-            reader.GetBoolean(16),
-            reader.IsDBNull(17) ? null : reader.GetString(17),
-            reader.GetString(18),
-            DateTimeOffsetFromUtc(reader.GetDateTime(19)));
+            reader.GetString(offset),
+            reader.GetString(offset + 1),
+            reader.GetString(offset + 2),
+            reader.GetString(offset + 3),
+            reader.GetString(offset + 4),
+            reader.GetString(offset + 5),
+            reader.GetInt32(offset + 6),
+            reader.IsDBNull(offset + 7) ? null : reader.GetString(offset + 7),
+            reader.IsDBNull(offset + 8) ? null : DateTimeOffsetFromUtc(reader.GetDateTime(offset + 8)),
+            reader.GetBoolean(offset + 9),
+            reader.GetBoolean(offset + 10),
+            reader.GetBoolean(offset + 11),
+            reader.GetBoolean(offset + 12),
+            reader.IsDBNull(offset + 13) ? null : reader.GetString(offset + 13),
+            ReadJsonStringArray(reader, offset + 14),
+            ReadJsonStringArray(reader, offset + 15),
+            reader.GetBoolean(offset + 16),
+            reader.IsDBNull(offset + 17) ? null : reader.GetString(offset + 17),
+            reader.GetString(offset + 18),
+            DateTimeOffsetFromUtc(reader.GetDateTime(offset + 19)));
+    }
+
+    private static PolymarketOnChainTokenMetadata? ReadNullablePolymarketOnChainTokenMetadata(
+        NpgsqlDataReader reader,
+        int offset)
+    {
+        return reader.IsDBNull(offset) ? null : ReadPolymarketOnChainTokenMetadata(reader, offset);
     }
 
     private static IReadOnlyList<string> ReadJsonStringArray(NpgsqlDataReader reader, int ordinal)
@@ -4929,6 +5232,87 @@ ON CONFLICT (key) DO UPDATE SET
             reader.IsDBNull(26) ? null : reader.GetString(26),
             reader.IsDBNull(27) ? null : reader.GetString(27),
             DateTimeOffsetFromUtc(reader.GetDateTime(28)));
+    }
+
+    private static PolymarketOnChainSignalCandidateSource ReadPolymarketOnChainSignalCandidateSource(
+        NpgsqlDataReader reader)
+    {
+        return new PolymarketOnChainSignalCandidateSource(
+            reader.GetGuid(0),
+            reader.GetString(1),
+            reader.GetString(2),
+            reader.GetString(3),
+            reader.GetInt64(4),
+            DateTimeOffsetFromUtc(reader.GetDateTime(5)),
+            reader.GetString(6),
+            reader.GetInt64(7),
+            reader.GetString(8),
+            Enum.Parse<OnChainParticipantRole>(reader.GetString(9)),
+            reader.GetString(10),
+            reader.GetString(11),
+            Enum.Parse<TradeSide>(reader.GetString(12)),
+            reader.GetString(13),
+            reader.GetDecimal(14),
+            reader.GetDecimal(15),
+            reader.GetDecimal(16),
+            reader.GetDecimal(17),
+            reader.GetString(18),
+            DateTimeOffsetFromUtc(reader.GetDateTime(19)),
+            ReadNullablePolymarketOnChainTokenMetadata(reader, 20),
+            ReadNullablePolymarketOnChainWalletCategoryPerformance(reader, 40));
+    }
+
+    private static PolymarketOnChainSignalCandidate ReadPolymarketOnChainSignalCandidate(
+        NpgsqlDataReader reader)
+    {
+        return new PolymarketOnChainSignalCandidate(
+            reader.GetGuid(0),
+            reader.GetGuid(1),
+            reader.GetString(2),
+            reader.GetString(3),
+            reader.GetString(4),
+            reader.GetInt64(5),
+            DateTimeOffsetFromUtc(reader.GetDateTime(6)),
+            reader.GetString(7),
+            reader.GetInt64(8),
+            reader.GetString(9),
+            Enum.Parse<OnChainParticipantRole>(reader.GetString(10)),
+            reader.GetString(11),
+            reader.GetString(12),
+            Enum.Parse<TradeSide>(reader.GetString(13)),
+            reader.GetString(14),
+            reader.GetString(15),
+            reader.GetString(16),
+            reader.GetString(17),
+            reader.GetString(18),
+            reader.GetString(19),
+            reader.IsDBNull(20) ? null : reader.GetString(20),
+            reader.GetBoolean(21),
+            reader.GetBoolean(22),
+            reader.GetBoolean(23),
+            reader.GetBoolean(24),
+            reader.GetBoolean(25),
+            reader.IsDBNull(26) ? null : reader.GetString(26),
+            reader.GetDecimal(27),
+            reader.GetDecimal(28),
+            reader.GetDecimal(29),
+            reader.GetDecimal(30),
+            reader.GetString(31),
+            reader.IsDBNull(32) ? null : reader.GetInt32(32),
+            reader.IsDBNull(33) ? null : reader.GetInt32(33),
+            reader.IsDBNull(34) ? null : reader.GetInt32(34),
+            reader.IsDBNull(35) ? null : reader.GetDecimal(35),
+            reader.IsDBNull(36) ? null : reader.GetDecimal(36),
+            reader.IsDBNull(37) ? null : reader.GetDecimal(37),
+            reader.IsDBNull(38) ? null : reader.GetDecimal(38),
+            reader.IsDBNull(39) ? null : reader.GetDecimal(39),
+            reader.IsDBNull(40) ? null : reader.GetString(40),
+            reader.IsDBNull(41) ? null : DateTimeOffsetFromUtc(reader.GetDateTime(41)),
+            reader.GetString(42),
+            reader.GetString(43),
+            reader.GetDecimal(44),
+            DateTimeOffsetFromUtc(reader.GetDateTime(45)),
+            DateTimeOffsetFromUtc(reader.GetDateTime(46)));
     }
 
     private static PolymarketOnChainWalletExecution ReadPolymarketOnChainWalletExecution(NpgsqlDataReader reader)
@@ -5014,31 +5398,40 @@ ON CONFLICT (key) DO UPDATE SET
             DateTimeOffsetFromUtc(reader.GetDateTime(20)));
     }
 
-    private static PolymarketOnChainWalletCategoryPerformance ReadPolymarketOnChainWalletCategoryPerformance(NpgsqlDataReader reader)
+    private static PolymarketOnChainWalletCategoryPerformance ReadPolymarketOnChainWalletCategoryPerformance(
+        NpgsqlDataReader reader,
+        int offset = 0)
     {
         return new PolymarketOnChainWalletCategoryPerformance(
-            reader.GetString(0),
-            reader.GetString(1),
-            reader.GetInt32(2),
-            reader.GetInt32(3),
-            reader.GetInt32(4),
-            reader.GetInt32(5),
-            reader.GetInt32(6),
-            reader.GetInt32(7),
-            reader.GetInt32(8),
-            reader.GetDecimal(9),
-            reader.GetDecimal(10),
-            reader.GetDecimal(11),
-            reader.GetDecimal(12),
-            reader.GetDecimal(13),
-            reader.GetDecimal(14),
-            reader.GetDecimal(15),
-            reader.GetDecimal(16),
-            reader.GetDecimal(17),
-            reader.GetString(18),
-            DateTimeOffsetFromUtc(reader.GetDateTime(19)),
-            DateTimeOffsetFromUtc(reader.GetDateTime(20)),
-            DateTimeOffsetFromUtc(reader.GetDateTime(21)));
+            reader.GetString(offset),
+            reader.GetString(offset + 1),
+            reader.GetInt32(offset + 2),
+            reader.GetInt32(offset + 3),
+            reader.GetInt32(offset + 4),
+            reader.GetInt32(offset + 5),
+            reader.GetInt32(offset + 6),
+            reader.GetInt32(offset + 7),
+            reader.GetInt32(offset + 8),
+            reader.GetDecimal(offset + 9),
+            reader.GetDecimal(offset + 10),
+            reader.GetDecimal(offset + 11),
+            reader.GetDecimal(offset + 12),
+            reader.GetDecimal(offset + 13),
+            reader.GetDecimal(offset + 14),
+            reader.GetDecimal(offset + 15),
+            reader.GetDecimal(offset + 16),
+            reader.GetDecimal(offset + 17),
+            reader.GetString(offset + 18),
+            DateTimeOffsetFromUtc(reader.GetDateTime(offset + 19)),
+            DateTimeOffsetFromUtc(reader.GetDateTime(offset + 20)),
+            DateTimeOffsetFromUtc(reader.GetDateTime(offset + 21)));
+    }
+
+    private static PolymarketOnChainWalletCategoryPerformance? ReadNullablePolymarketOnChainWalletCategoryPerformance(
+        NpgsqlDataReader reader,
+        int offset)
+    {
+        return reader.IsDBNull(offset) ? null : ReadPolymarketOnChainWalletCategoryPerformance(reader, offset);
     }
 
     private static PolymarketOnChainTradeDetails ReadPolymarketOnChainTradeDetails(NpgsqlDataReader reader)
