@@ -1,3 +1,17 @@
+## Active Update 2026-05-02 Reduce Refresh Worker Contention
+Goal: Reduce database contention and deadlocks among on-chain derived refresh workers.
+Status: Completed
+Done:
+- Added a shared non-blocking PostgreSQL transaction advisory lock to activity, position, wallet-performance, and wallet/category-performance refresh cycles in `PostgresAppRepository`.
+- Workers that cannot acquire the derived-refresh lock now skip their current repository cycle instead of overlapping heavy transactions against the same materialized tables.
+- Changed the initial `missing_activity` seed to read distinct wallets from `polymarket_onchain_wallet_fills` instead of the heavier `polymarket_onchain_wallet_executions` aggregate table.
+- Changed position-triggered performance and category-performance queue inserts to `ON CONFLICT DO NOTHING`, avoiding updates to already-queued rows.
+- Staggered/lowered derived refresh defaults: position `60s/25/100`, activity `90s/50/100`, performance `120s/50/100`, category performance `150s/250/250`.
+- Updated service/dashboard appsettings, domain defaults, README, and configuration reference.
+Next: Restart the service to load the new code/config, then monitor `api_errors` and queue counts; expected effect is fewer deadlocks/timeouts at the cost of more serialized refresh cycles.
+Notes: Verification passed: targeted `StorageTests|OnChainIngestionTests|ConfigurationTests` 27/27; full test suite 138/138; service build passed; dashboard build passed; `git diff --check` passed. The first parallel test/dashboard build hit transient `VBCSCompiler`/Defender file locks; after `dotnet build-server shutdown`, sequential runs passed. Existing unrelated dirty files `PolyCopyTrader.sln` and `src/PolyCopyTrader.Storage/PostgresSchemaInitializer.cs` were left untouched. `git rev-parse --abbrev-ref --symbolic-full-name '@{u}'` failed because branch `master` has no configured upstream.
+Blockers: Automatic pull/push cannot run until a Git upstream is configured.
+
 ## Active Update 2026-05-02 Overnight Monitor Log Review
 Goal: Review the overnight health monitor log and current database state.
 Status: Completed

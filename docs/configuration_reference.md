@@ -180,22 +180,28 @@ every completed block batch.
 - `BackgroundMarketEnrichmentEnabled`: runs missing-token Gamma enrichment continuously while the service is running; default `true`.
 - `MarketEnrichmentIntervalSeconds`: pause between successful background enrichment cycles; default `120`.
 - `BackgroundPositionRefreshEnabled`: runs wallet-position aggregation continuously while the service is running; default `true`.
-- `PositionRefreshIntervalSeconds`: pause between successful background position refresh cycles; default `30`.
-- `PositionRefreshTokenBatchSize`: number of queued token ids to aggregate into wallet positions per cycle; default `50`.
-- `PositionRefreshQueueSeedTokenBatchSize`: number of missing token ids to seed into the position refresh queue while the initial positions table is being built; default `500`.
+- `PositionRefreshIntervalSeconds`: pause between successful background position refresh cycles; default `60`.
+- `PositionRefreshTokenBatchSize`: number of queued token ids to aggregate into wallet positions per cycle; default `25`.
+- `PositionRefreshQueueSeedTokenBatchSize`: number of missing token ids to seed into the position refresh queue while the initial positions table is being built; default `100`.
 - `BackgroundActivityRefreshEnabled`: runs wallet-activity ranking aggregation continuously while the service is running; default `true`.
-- `ActivityRefreshIntervalSeconds`: pause between successful background activity refresh cycles; default `30`.
-- `ActivityRefreshWalletBatchSize`: number of queued wallets to aggregate into wallet activity per cycle; default `100`.
-- `ActivityRefreshQueueSeedWalletBatchSize`: number of missing wallets to seed into the activity refresh queue while the initial activity table is being built; default `500`.
+- `ActivityRefreshIntervalSeconds`: pause between successful background activity refresh cycles; default `90`.
+- `ActivityRefreshWalletBatchSize`: number of queued wallets to aggregate into wallet activity per cycle; default `50`.
+- `ActivityRefreshQueueSeedWalletBatchSize`: number of missing wallets to seed into the activity refresh queue while the initial activity table is being built; default `100`.
 - `BackgroundPerformanceRefreshEnabled`: runs wallet-performance aggregation continuously while the service is running; default `true`.
-- `PerformanceRefreshIntervalSeconds`: pause between successful background performance refresh cycles; default `30`.
-- `PerformanceRefreshWalletBatchSize`: number of queued wallets to aggregate into wallet performance per cycle; default `100`.
-- `PerformanceRefreshQueueSeedWalletBatchSize`: number of missing wallets to seed into the performance refresh queue while the initial performance table is being built; default `500`.
+- `PerformanceRefreshIntervalSeconds`: pause between successful background performance refresh cycles; default `120`.
+- `PerformanceRefreshWalletBatchSize`: number of queued wallets to aggregate into wallet performance per cycle; default `50`.
+- `PerformanceRefreshQueueSeedWalletBatchSize`: number of missing wallets to seed into the performance refresh queue while the initial performance table is being built; default `100`.
 - `BackgroundCategoryPerformanceRefreshEnabled`: runs wallet-category performance aggregation continuously while the service is running; default `true`.
-- `CategoryPerformanceRefreshIntervalSeconds`: pause between successful background wallet-category performance refresh cycles; default `30`.
-- `CategoryPerformancePairBatchSize`: number of queued wallet/category pairs to aggregate per cycle; default `500`.
-- `CategoryPerformanceQueueSeedPairBatchSize`: number of missing wallet/category pairs to seed into the category performance refresh queue while the initial table is being built; default `1000`.
+- `CategoryPerformanceRefreshIntervalSeconds`: pause between successful background wallet-category performance refresh cycles; default `150`.
+- `CategoryPerformancePairBatchSize`: number of queued wallet/category pairs to aggregate per cycle; default `250`.
+- `CategoryPerformanceQueueSeedPairBatchSize`: number of missing wallet/category pairs to seed into the category performance refresh queue while the initial table is being built; default `250`.
 - `ExchangeContracts`: Polymarket V1/V2 CTF and negative-risk exchange contracts to scan.
+
+Activity, position, wallet-performance, and wallet/category-performance refresh
+cycles share a non-blocking PostgreSQL advisory lock. If another derived refresh
+cycle is already running, a worker skips its current cycle instead of overlapping
+transactions against the same materialized tables. This favors steady throughput
+over parallel refresh attempts that can deadlock and roll back.
 
 The cursor stores a completed block range per contract: `to_block` is extended
 forward as new blocks are ingested. `from_block` is kept as the oldest block

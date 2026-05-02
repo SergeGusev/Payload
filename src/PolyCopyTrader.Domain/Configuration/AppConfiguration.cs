@@ -343,35 +343,35 @@ public sealed class OnChainIngestionOptions
 
     public bool BackgroundPositionRefreshEnabled { get; init; } = true;
 
-    public int PositionRefreshIntervalSeconds { get; init; } = 30;
+    public int PositionRefreshIntervalSeconds { get; init; } = 60;
 
-    public int PositionRefreshTokenBatchSize { get; init; } = 50;
+    public int PositionRefreshTokenBatchSize { get; init; } = 25;
 
-    public int PositionRefreshQueueSeedTokenBatchSize { get; init; } = 500;
+    public int PositionRefreshQueueSeedTokenBatchSize { get; init; } = 100;
 
     public bool BackgroundActivityRefreshEnabled { get; init; } = true;
 
-    public int ActivityRefreshIntervalSeconds { get; init; } = 30;
+    public int ActivityRefreshIntervalSeconds { get; init; } = 90;
 
-    public int ActivityRefreshWalletBatchSize { get; init; } = 100;
+    public int ActivityRefreshWalletBatchSize { get; init; } = 50;
 
-    public int ActivityRefreshQueueSeedWalletBatchSize { get; init; } = 500;
+    public int ActivityRefreshQueueSeedWalletBatchSize { get; init; } = 100;
 
     public bool BackgroundPerformanceRefreshEnabled { get; init; } = true;
 
-    public int PerformanceRefreshIntervalSeconds { get; init; } = 30;
+    public int PerformanceRefreshIntervalSeconds { get; init; } = 120;
 
-    public int PerformanceRefreshWalletBatchSize { get; init; } = 100;
+    public int PerformanceRefreshWalletBatchSize { get; init; } = 50;
 
-    public int PerformanceRefreshQueueSeedWalletBatchSize { get; init; } = 500;
+    public int PerformanceRefreshQueueSeedWalletBatchSize { get; init; } = 100;
 
     public bool BackgroundCategoryPerformanceRefreshEnabled { get; init; } = true;
 
-    public int CategoryPerformanceRefreshIntervalSeconds { get; init; } = 30;
+    public int CategoryPerformanceRefreshIntervalSeconds { get; init; } = 150;
 
-    public int CategoryPerformancePairBatchSize { get; init; } = 500;
+    public int CategoryPerformancePairBatchSize { get; init; } = 250;
 
-    public int CategoryPerformanceQueueSeedPairBatchSize { get; init; } = 1_000;
+    public int CategoryPerformanceQueueSeedPairBatchSize { get; init; } = 250;
 
     public List<OnChainExchangeContractOptions> ExchangeContracts { get; init; } =
     [

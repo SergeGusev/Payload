@@ -7,6 +7,9 @@ namespace PolyCopyTrader.Storage;
 
 public sealed class PostgresAppRepository(PostgresConnectionFactory connectionFactory) : IAppRepository
 {
+    private const int OnChainDerivedRefreshLockKey1 = 0x50635452;
+    private const int OnChainDerivedRefreshLockKey2 = 0x4F435246;
+
     public async Task AddLeaderTradeAsync(LeaderTrade trade, CancellationToken cancellationToken = default)
     {
         await TryAddLeaderTradeAsync(trade, cancellationToken);
@@ -1955,6 +1958,12 @@ LIMIT @Limit;
     {
         await using var connection = await OpenConnectionAsync(cancellationToken);
         await using var transaction = await connection.BeginTransactionAsync(cancellationToken);
+        if (!await TryAcquireOnChainDerivedRefreshLockAsync(connection, transaction, cancellationToken))
+        {
+            var remaining = await CountPolymarketOnChainWalletActivityRefreshQueueAsync(connection, transaction, cancellationToken);
+            await transaction.CommitAsync(cancellationToken);
+            return new OnChainActivityRefreshResult(0, 0, 0, remaining);
+        }
 
         var walletsQueued = await SeedMissingPolymarketOnChainWalletActivityRefreshQueueAsync(
             connection,
@@ -2139,6 +2148,12 @@ LIMIT @Limit;
     {
         await using var connection = await OpenConnectionAsync(cancellationToken);
         await using var transaction = await connection.BeginTransactionAsync(cancellationToken);
+        if (!await TryAcquireOnChainDerivedRefreshLockAsync(connection, transaction, cancellationToken))
+        {
+            var remaining = await CountPolymarketOnChainPositionRefreshQueueAsync(connection, transaction, cancellationToken);
+            await transaction.CommitAsync(cancellationToken);
+            return new OnChainPositionRefreshResult(0, 0, 0, remaining);
+        }
 
         var tokensQueued = await SeedMissingPolymarketOnChainPositionRefreshTokensAsync(
             connection,
@@ -2455,6 +2470,12 @@ LIMIT @Limit;
     {
         await using var connection = await OpenConnectionAsync(cancellationToken);
         await using var transaction = await connection.BeginTransactionAsync(cancellationToken);
+        if (!await TryAcquireOnChainDerivedRefreshLockAsync(connection, transaction, cancellationToken))
+        {
+            var remaining = await CountPolymarketOnChainWalletPerformanceRefreshQueueAsync(connection, transaction, cancellationToken);
+            await transaction.CommitAsync(cancellationToken);
+            return new OnChainPerformanceRefreshResult(0, 0, 0, remaining);
+        }
 
         var walletsQueued = await SeedMissingPolymarketOnChainWalletPerformanceRefreshQueueAsync(
             connection,
@@ -2686,6 +2707,12 @@ LIMIT 1;
     {
         await using var connection = await OpenConnectionAsync(cancellationToken);
         await using var transaction = await connection.BeginTransactionAsync(cancellationToken);
+        if (!await TryAcquireOnChainDerivedRefreshLockAsync(connection, transaction, cancellationToken))
+        {
+            var remaining = await CountPolymarketOnChainWalletCategoryPerformanceRefreshQueueAsync(connection, transaction, cancellationToken);
+            await transaction.CommitAsync(cancellationToken);
+            return new OnChainCategoryPerformanceRefreshResult(0, 0, 0, remaining);
+        }
 
         var pairsQueued = await SeedMissingPolymarketOnChainWalletCategoryPerformanceRefreshQueueAsync(
             connection,
@@ -3770,6 +3797,21 @@ ORDER BY service_name;
         return new NpgsqlCommand(sql, connection);
     }
 
+    private static async Task<bool> TryAcquireOnChainDerivedRefreshLockAsync(
+        NpgsqlConnection connection,
+        NpgsqlTransaction transaction,
+        CancellationToken cancellationToken)
+    {
+        await using var command = CreateCommand(
+            connection,
+            "SELECT pg_try_advisory_xact_lock(@LockKey1, @LockKey2);");
+        command.Transaction = transaction;
+        command.Parameters.AddWithValue("LockKey1", OnChainDerivedRefreshLockKey1);
+        command.Parameters.AddWithValue("LockKey2", OnChainDerivedRefreshLockKey2);
+        var result = await command.ExecuteScalarAsync(cancellationToken);
+        return result is bool acquired && acquired;
+    }
+
     private static DateTime UtcDateTime(DateTimeOffset timestamp)
     {
         return timestamp.UtcDateTime;
@@ -4261,19 +4303,19 @@ ON CONFLICT (token_id) DO NOTHING;
 INSERT INTO polymarket_onchain_wallet_activity_refresh_queue (wallet, reason, queued_at_utc)
 SELECT missing.wallet, 'missing_activity', now()
 FROM (
-    SELECT DISTINCT execution.wallet
-    FROM polymarket_onchain_wallet_executions execution
+    SELECT DISTINCT fills.wallet
+    FROM polymarket_onchain_wallet_fills fills
     WHERE NOT EXISTS (
         SELECT 1
         FROM polymarket_onchain_wallet_activity activity
-        WHERE activity.wallet = execution.wallet
+        WHERE activity.wallet = fills.wallet
     )
       AND NOT EXISTS (
         SELECT 1
         FROM polymarket_onchain_wallet_activity_refresh_queue queued_wallet
-        WHERE queued_wallet.wallet = execution.wallet
+        WHERE queued_wallet.wallet = fills.wallet
     )
-    ORDER BY execution.wallet
+    ORDER BY fills.wallet
     LIMIT @WalletLimit
 ) missing
 ON CONFLICT (wallet) DO NOTHING;
@@ -4555,9 +4597,7 @@ INSERT INTO polymarket_onchain_wallet_performance_refresh_queue (wallet, reason,
 SELECT DISTINCT wallet, @Reason, now()
 FROM polymarket_onchain_wallet_positions
 WHERE token_id IN (SELECT token_id FROM temp_position_refresh_tokens)
-ON CONFLICT (wallet) DO UPDATE SET
-    reason = excluded.reason,
-    queued_at_utc = LEAST(polymarket_onchain_wallet_performance_refresh_queue.queued_at_utc, excluded.queued_at_utc);
+ON CONFLICT (wallet) DO NOTHING;
 """;
 
         await using var command = CreateCommand(connection, sql);
@@ -4576,9 +4616,7 @@ ON CONFLICT (wallet) DO UPDATE SET
 INSERT INTO polymarket_onchain_wallet_category_performance_refresh_queue (wallet, category, reason, queued_at_utc)
 SELECT wallet, category, @Reason, now()
 FROM temp_wallet_category_performance_refresh_pairs
-ON CONFLICT (wallet, category) DO UPDATE SET
-    reason = excluded.reason,
-    queued_at_utc = LEAST(polymarket_onchain_wallet_category_performance_refresh_queue.queued_at_utc, excluded.queued_at_utc);
+ON CONFLICT (wallet, category) DO NOTHING;
 """;
 
         await using var command = CreateCommand(connection, sql);
