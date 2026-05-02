@@ -99,3 +99,9 @@ Request:
 
 Result:
 Clarified that the current on-chain candidate pipeline does not yet keep an explicit selected/tracked wallet list. It evaluates all wallets found in downloaded on-chain wallet fills and filters each concrete trade-side candidate using wallet/category performance. Existing `Watchlist` is for the older API scanner path, not the selector for this on-chain candidate flow. The next layer should derive eligible wallet/category targets or introduce an explicit reviewed target-wallet/category table.
+## 2026-05-02T15:49:47.5547348+00:00
+Request:
+Давай уберём условие Размер сделки должен быть не ниже Execution.MinLeaderTradeUsd. Мне интересны все сделки.
+
+Result:
+Removed the on-chain signal-candidate size rejection based on `Execution.MinLeaderTradeUsd`, removed the now-unused `ExecutionOptions` dependency from the candidate processor, added `leader_trade_too_small` to the retry queue so old rows can be recalculated, updated tests and README, and verified with service build, targeted tests, full tests, and diff checks. Existing unrelated dirty files remained untouched.

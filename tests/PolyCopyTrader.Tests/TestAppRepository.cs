@@ -1217,7 +1217,8 @@ internal sealed class TestAppRepository : IAppRepository
             "missing_market_metadata" or
             "missing_market_category" or
             "missing_leader_category_performance" or
-            "leader_category_performance_stale";
+            "leader_category_performance_stale" or
+            "leader_trade_too_small";
     }
 
     private static string SignalCandidateQueueKey(Guid sourceFillId, OnChainParticipantRole role)

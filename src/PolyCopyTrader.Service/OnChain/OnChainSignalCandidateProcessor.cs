@@ -7,7 +7,6 @@ namespace PolyCopyTrader.Service.OnChain;
 
 public sealed class OnChainSignalCandidateProcessor(
     OnChainIngestionOptions onChainOptions,
-    ExecutionOptions executionOptions,
     SignalOptions signalOptions,
     IAppRepository repository) : IOnChainSignalCandidateProcessor
 {
@@ -129,15 +128,6 @@ public sealed class OnChainSignalCandidateProcessor(
         if (source.Side != TradeSide.Buy)
         {
             AddReason(reasons, SignalReasonCodes.UnsupportedSide, "Only BUY fills are eligible for copy candidates.", now);
-        }
-
-        if (source.NotionalUsd < executionOptions.MinLeaderTradeUsd)
-        {
-            AddReason(
-                reasons,
-                SignalReasonCodes.LeaderTradeTooSmall,
-                $"Fill notional {source.NotionalUsd:0.########} is below configured minimum {executionOptions.MinLeaderTradeUsd:0.########}.",
-                now);
         }
 
         if (metadata is null || !metadata.LookupSucceeded)

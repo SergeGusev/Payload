@@ -2989,7 +2989,8 @@ WITH selected AS (
           'missing_market_metadata',
           'missing_market_category',
           'missing_leader_category_performance',
-          'leader_category_performance_stale'
+          'leader_category_performance_stale',
+          'leader_trade_too_small'
       )
     ORDER BY updated_at_utc, block_timestamp_utc, block_number, log_index, participant_role
     LIMIT @RetryLimit

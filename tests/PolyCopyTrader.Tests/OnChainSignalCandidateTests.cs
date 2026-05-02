@@ -8,11 +8,11 @@ namespace PolyCopyTrader.Tests;
 public sealed class OnChainSignalCandidateTests
 {
     [Fact]
-    public async Task RefreshAsync_AcceptsBuyFillWithKnownCategoryAndStrongPerformance()
+    public async Task RefreshAsync_AcceptsSmallBuyFillWithKnownCategoryAndStrongPerformance()
     {
         var repository = new TestAppRepository();
         var sourceFillId = Guid.NewGuid();
-        repository.PolymarketOnChainWalletFills.Add(WalletFill(sourceFillId, TradeSide.Buy, 250m, DateTimeOffset.UtcNow.AddDays(-7)));
+        repository.PolymarketOnChainWalletFills.Add(WalletFill(sourceFillId, TradeSide.Buy, 5m, DateTimeOffset.UtcNow.AddDays(-7)));
         repository.PolymarketOnChainTokenMetadata.Add(TokenMetadata("token-yes", "Politics", active: true));
         repository.PolymarketOnChainWalletCategoryPerformance.Add(CategoryPerformance("0xleader", "Politics"));
 
@@ -53,7 +53,7 @@ public sealed class OnChainSignalCandidateTests
     }
 
     [Fact]
-    public async Task RefreshAsync_RejectsSellAndSmallFillsWithExplicitReasons()
+    public async Task RefreshAsync_RejectsSellFillsWithExplicitReason()
     {
         var repository = new TestAppRepository();
         var sourceFillId = Guid.NewGuid();
@@ -70,7 +70,7 @@ public sealed class OnChainSignalCandidateTests
         Assert.Equal(SignalReasonCodes.UnsupportedSide, candidate.DecisionCode);
         Assert.Contains(repository.PolymarketOnChainSignalCandidateReasons, reason =>
             reason.ReasonCode == SignalReasonCodes.UnsupportedSide);
-        Assert.Contains(repository.PolymarketOnChainSignalCandidateReasons, reason =>
+        Assert.DoesNotContain(repository.PolymarketOnChainSignalCandidateReasons, reason =>
             reason.ReasonCode == SignalReasonCodes.LeaderTradeTooSmall);
     }
 
@@ -109,10 +109,6 @@ public sealed class OnChainSignalCandidateTests
                 SignalCandidateBatchSize = signalCandidateBatchSize,
                 SignalCandidateQueueSeedBatchSize = signalCandidateQueueSeedBatchSize,
                 SignalCandidateRetryBatchSize = 100
-            },
-            new ExecutionOptions
-            {
-                MinLeaderTradeUsd = 10m
             },
             new SignalOptions
             {

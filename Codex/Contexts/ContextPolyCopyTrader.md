@@ -1,3 +1,16 @@
+## Active Update 2026-05-02 Remove Candidate Size Filter
+Goal: Stop rejecting on-chain signal candidates by `Execution.MinLeaderTradeUsd`.
+Status: Completed
+Done:
+- Removed the on-chain candidate-preparation `source.NotionalUsd < Execution.MinLeaderTradeUsd` rejection from `OnChainSignalCandidateProcessor`.
+- Removed `ExecutionOptions` from `OnChainSignalCandidateProcessor` constructor because candidate preparation no longer uses `MinLeaderTradeUsd`.
+- Added `leader_trade_too_small` to signal-candidate retry queue selection so existing rows rejected under the old size policy can be recalculated by the worker.
+- Updated `TestAppRepository` retry behavior to match PostgreSQL and updated candidate tests so a small BUY fill can be accepted while SELL remains rejected only for side.
+- Updated README to state that on-chain candidate preparation keeps all notional sizes and does not use `Execution:MinLeaderTradeUsd`.
+Next: Restart the service so new candidates stop receiving `leader_trade_too_small`; existing `leader_trade_too_small` rows will be requeued and recalculated in retry batches.
+Notes: Verification passed: service build passed; the first parallel targeted test run hit a transient `obj` file lock, then `dotnet build-server shutdown`; targeted `OnChainSignalCandidateTests|StorageTests` passed 14/14; full `dotnet test tests\PolyCopyTrader.Tests\PolyCopyTrader.Tests.csproj -c Verify --no-restore` passed 146/146; `git diff --check` passed with line-ending warnings only. Existing unrelated dirty files `PolyCopyTrader.sln` and `src/PolyCopyTrader.Storage/PostgresSchemaInitializer.cs` were left untouched. `git rev-parse --abbrev-ref --symbolic-full-name '@{u}'` failed because branch `master` has no configured upstream.
+Blockers: Automatic pull/push cannot run until a Git upstream is configured.
+
 ## Active Update 2026-05-02 Concrete Wallet Selection Clarification
 Goal: Clarify whether concrete wallets to follow are already selected.
 Status: Completed
