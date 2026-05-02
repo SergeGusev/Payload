@@ -87,3 +87,9 @@ Request:
 
 Result:
 Explained the current candidate-preparation logic from code: BUY-only, minimum notional, successful market metadata, known category, active/unresolved market, fresh wallet/category performance, and configured sample/score/ROI/win-rate thresholds. Also explained the refresh flow: new wallet fills enqueue source rows, historical backfill advances by cursor, temporary metadata/category/performance rejects are retried, a worker fetches due queue rows in batches, upserts candidate/reason rows, and deletes processed queue rows. Noted that spread, liquidity, current order book, portfolio risk, and paper-signal creation are next-layer decisions, not candidate-preparation checks.
+## 2026-05-02T15:15:46.0054018+00:00
+Request:
+То есть в данном случае кандидат - это не конкретный кошелёк, а именно сделка, по которой потом будет выбираться кошелёк?
+
+Result:
+Clarified that a signal candidate is not a wallet profile; it is a concrete trade-side event keyed by `source_fill_id + participant_role`. The wallet is already stored on the candidate row, so the next layer selects/ranks concrete candidate events from concrete wallets rather than choosing the wallet after the candidate is created.

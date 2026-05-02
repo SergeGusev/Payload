@@ -1,3 +1,14 @@
+## Active Update 2026-05-02 Candidate Entity Clarification
+Goal: Clarify whether a signal candidate represents a wallet or a trade event.
+Status: Completed
+Done:
+- Clarified that `polymarket_onchain_signal_candidates` is event-level, keyed by `source_fill_id + participant_role`, not a wallet leaderboard/profile table.
+- Clarified that the candidate row already contains the wallet, counterparty, side, token, market/category metadata, leader wallet/category performance snapshot, and candidate decision fields.
+- Clarified that the next decision layer will select concrete candidate events from concrete wallets, not discover/select the wallet after the candidate is created.
+Next: Use `Accepted` candidate rows as potential copy-signal events, then apply freshness, order-book, spread, liquidity, risk, and deduplication gates.
+Notes: Explanation only; no source behavior changed. Existing unrelated dirty files `PolyCopyTrader.sln` and `src/PolyCopyTrader.Storage/PostgresSchemaInitializer.cs` were left untouched. `git rev-parse --abbrev-ref --symbolic-full-name '@{u}'` failed because branch `master` has no configured upstream.
+Blockers: Automatic pull/push cannot run until a Git upstream is configured.
+
 ## Active Update 2026-05-02 Candidate Selection Logic Explanation
 Goal: Explain the current signal-candidate acceptance/rejection logic and update flow.
 Status: Completed
