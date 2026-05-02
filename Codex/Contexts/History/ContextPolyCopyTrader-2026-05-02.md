@@ -39,3 +39,10 @@ Request:
 
 Result:
 Implemented the read-only on-chain signal-candidate pipeline. Added `polymarket_onchain_signal_candidates` and `polymarket_onchain_signal_candidate_reasons`, repository upsert/read methods, domain models, service worker/processor, configuration defaults and validation, documentation, and tests. The worker evaluates recent `polymarket_onchain_wallet_fills` using token metadata, market category, active/resolved market state, and wallet/category performance thresholds; accepted and rejected decisions are materialized with explicit reason codes and no live order placement. Verification passed: full tests 141/141, service build, dashboard build, `--print-config`, and `git diff --check` with line-ending warnings only. Existing unrelated dirty files `PolyCopyTrader.sln` and `src/PolyCopyTrader.Storage/PostgresSchemaInitializer.cs` were left untouched. Branch `master` has no configured upstream, so automatic pull/push is blocked.
+
+## 2026-05-02T09:17:58.7628207Z
+Request:
+Запустил, проверяй
+
+Result:
+Verified the restarted service and PostgreSQL state after adding the on-chain signal-candidate pipeline. `PolyCopyTrader.Service` is running in `ReadOnly` with fresh heartbeats; `polymarket_onchain_signal_candidates` and `polymarket_onchain_signal_candidate_reasons` exist; `OnChainSignalCandidateWorker` starts and runs every minute. Candidate rows are currently zero because the source table `polymarket_onchain_wallet_fills` only reaches `2026-04-26T09:18:26Z`, about 144 hours behind the current DB time, while candidate lookback is 24 hours. Ingestion is progressing again: `CTF Exchange V1` cursor advanced to block `86037531` with completion at `2026-05-02T09:16:36Z`. No PostgreSQL blocking chain and no active sessions older than 5 minutes were present; recent errors were transient Polygon/Gamma HTTP failures.

@@ -1,3 +1,18 @@
+## Active Update 2026-05-02 Signal Candidate Restart Health Check
+Goal: Verify PostgreSQL/service health after starting the service with the on-chain signal-candidate pipeline.
+Status: Completed
+Done:
+- Confirmed `PolyCopyTrader.Service` is running in `ReadOnly` as process `57112`, with fresh heartbeats during checks.
+- Confirmed `polymarket_onchain_signal_candidates` and `polymarket_onchain_signal_candidate_reasons` exist in PostgreSQL.
+- Confirmed `OnChainSignalCandidateWorker` started and runs every minute; current cycles complete with `SourcesFetched=0`.
+- Confirmed `SourcesFetched=0` is expected right now because `polymarket_onchain_wallet_fills` currently ends at `2026-04-26T09:18:26Z`, about 144 hours behind, while signal-candidate lookback is 24 hours.
+- Confirmed ingestion is progressing again: `polymarket_onchain_ingest_cursors` for `CTF Exchange V1` advanced to block `86037531`, completed at `2026-05-02T09:16:36Z`.
+- Confirmed no PostgreSQL blocking chain and no active sessions older than 5 minutes during the final check.
+- Noted recent transient errors: 2 `OnChainIngestionWorker` Polygon RPC connection failures and 2 `OnChainMarketEnrichmentWorker` HTTP timeouts in the last 30 minutes.
+Next: Let ingestion continue until `polymarket_onchain_wallet_fills.max(block_timestamp_utc)` reaches the last 24 hours; then `polymarket_onchain_signal_candidates` should start receiving rows. If cursor progress remains slow, optimize the block-range wallet execution/position rebuild path.
+Notes: Operational check only; no application source behavior changed. A temporary C# diagnostic project under `Codex/TempDbCheck` was created and removed. Existing unrelated dirty files `PolyCopyTrader.sln` and `src/PolyCopyTrader.Storage/PostgresSchemaInitializer.cs` were left untouched. `git rev-parse --abbrev-ref --symbolic-full-name '@{u}'` failed because branch `master` has no configured upstream.
+Blockers: Automatic pull/push cannot run until a Git upstream is configured.
+
 ## Active Update 2026-05-02 On-Chain Signal Candidate Pipeline
 Goal: Add a read-only decision-prep layer that turns on-chain wallet fills into scored copy-signal candidates with explicit rejection reasons.
 Status: Completed
