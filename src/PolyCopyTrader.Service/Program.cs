@@ -117,13 +117,15 @@ builder.Services.AddSingleton<ServiceControlState>();
 builder.Services.AddHostedService<StartupSafetyCheckService>();
 builder.Services.AddHostedService<BotWorker>();
 builder.Services.AddHostedService<LocalControlServer>();
-builder.Services.AddHostedService<OnChainIngestionWorker>();
-builder.Services.AddHostedService<OnChainMarketEnrichmentWorker>();
-builder.Services.AddHostedService<OnChainActivityRefreshWorker>();
-builder.Services.AddHostedService<OnChainPositionRefreshWorker>();
-builder.Services.AddHostedService<OnChainPerformanceRefreshWorker>();
-builder.Services.AddHostedService<OnChainCategoryPerformanceRefreshWorker>();
-builder.Services.AddHostedService<OnChainSignalCandidateWorker>();
+// Temporarily paused: on-chain blockchain download and derived-data processing workers.
+// Existing PostgreSQL data is left intact; uncomment these registrations to resume.
+// builder.Services.AddHostedService<OnChainIngestionWorker>();
+// builder.Services.AddHostedService<OnChainMarketEnrichmentWorker>();
+// builder.Services.AddHostedService<OnChainActivityRefreshWorker>();
+// builder.Services.AddHostedService<OnChainPositionRefreshWorker>();
+// builder.Services.AddHostedService<OnChainPerformanceRefreshWorker>();
+// builder.Services.AddHostedService<OnChainCategoryPerformanceRefreshWorker>();
+// builder.Services.AddHostedService<OnChainSignalCandidateWorker>();
 builder.Services.AddHostedService<MarketDataWebSocketService>();
 builder.Services.AddHostedService<DailyReportWorker>();
 

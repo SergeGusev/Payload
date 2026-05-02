@@ -263,6 +263,8 @@ The dashboard shows refreshed shortlist rows in the Trader Discovery tab. The `P
 
 The service can ingest Polymarket on-chain `OrderFilled` events from Polygon. This is read-only research plumbing: it does not place, cancel, or modify orders. When `OnChainIngestion:BackgroundSyncEnabled` is true, the service keeps ingestion running in the background: each cycle catches up the fresh tail and then waits for new blocks. It no longer performs backward historical backfill after reaching the current Polygon block.
 
+On-chain collection and derived-data workers are currently paused by default. `OnChainIngestion:Enabled` and the on-chain background flags are set to `false`, and the on-chain hosted-service registrations in `PolyCopyTrader.Service/Program.cs` are commented out. Existing PostgreSQL data is not deleted. To resume, restore those registrations and set the required on-chain flags back to `true`.
+
 Run the service to start background ingestion. Click `Onchain sync` in the dashboard controls, or call this endpoint, only when you want to force a manual cycle:
 
 ```powershell

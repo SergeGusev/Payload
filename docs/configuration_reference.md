@@ -214,6 +214,13 @@ queues missing candidates in bounded batches, and ingestion queues newly added
 wallet fills as block ranges are decoded. This avoids scanning the whole history
 on every one-minute worker cycle.
 
+On-chain collection is temporarily paused in the default service configuration:
+`OnChainIngestion:Enabled` and all on-chain background flags are `false`, and
+the on-chain hosted-service registrations in `PolyCopyTrader.Service/Program.cs`
+are commented out. Existing PostgreSQL data remains available for analysis. To
+resume background collection/processing, uncomment the hosted-service
+registrations and set the relevant flags back to `true`.
+
 The cursor stores a completed block range per contract: `to_block` is extended
 forward as new blocks are ingested. `from_block` is kept as the oldest block
 already retained for that contract; ingestion no longer moves it backward for

@@ -1,3 +1,16 @@
+## Active Update 2026-05-02 Pause Onchain Background Pipeline
+Goal: Stop blockchain data collection and on-chain derived-data processing without deleting existing PostgreSQL data.
+Status: Completed
+Done:
+- Commented out on-chain hosted-service registrations in `src/PolyCopyTrader.Service/Program.cs`: ingestion, market enrichment, activity refresh, position refresh, wallet performance refresh, wallet/category performance refresh, and signal-candidate refresh workers.
+- Set `OnChainIngestion:Enabled` plus all on-chain background flags to `false` in `src/PolyCopyTrader.Service/appsettings.json` so manual/IPC on-chain commands also no-op under the default configuration.
+- Updated README and configuration reference to document that on-chain collection is temporarily paused and data is left intact.
+- Verified `dotnet build src\PolyCopyTrader.Service\PolyCopyTrader.Service.csproj -c Verify --no-restore`, full `dotnet test tests\PolyCopyTrader.Tests\PolyCopyTrader.Tests.csproj -c Verify --no-restore` 148/148, and `dotnet build src\PolyCopyTrader.Service\PolyCopyTrader.Service.csproj -c Debug --no-restore`.
+- Restarted the local Debug service. It is running as PID 13044 in `ReadOnly`; startup summary shows all on-chain flags `False`, with normal heartbeat and no on-chain worker startup messages after restart.
+Next: To resume on-chain collection later, uncomment the on-chain hosted-service registrations in `Program.cs`, set the on-chain flags back to `true`, rebuild, and restart the service.
+Notes: No database tables or rows were deleted. Existing unrelated dirty files `PolyCopyTrader.sln` and `src/PolyCopyTrader.Storage/PostgresSchemaInitializer.cs` were left untouched. `git rev-parse --abbrev-ref --symbolic-full-name '@{u}'` failed because branch `master` has no configured upstream.
+Blockers: Automatic pull/push cannot run until a Git upstream is configured.
+
 ## Active Update 2026-05-02 Wallet Universe Versus Candidate List
 Goal: Clarify whether the system should keep all wallets and also a separate good-candidate subset.
 Status: Completed

@@ -194,3 +194,9 @@ Request:
 
 Result:
 Explained that the intended architecture has two layers: a full wallet universe in materialized wallet/activity/position/performance tables, including weak and losing wallets, and a separate selected/trusted `(wallet, category)` candidate/target subset. Clarified that `polymarket_onchain_signal_candidates` currently stores per-fill behavior evidence, not the final wallet list, so the next clean layer should be a dedicated wallet/category target-selection table or view over the full performance tables and accepted evidence.
+## 2026-05-02T20:28:21.6379588Z
+Request:
+Останови пока сбор данных через блокчейн. Ничего не удаляй, просто закомментируй запуск текущих сервисов по скачиванию данных и их обработке.
+
+Result:
+Paused the on-chain pipeline without deleting database data. Commented out on-chain hosted-service registrations in `src/PolyCopyTrader.Service/Program.cs`, set `OnChainIngestion:Enabled` and all on-chain background flags to `false` in `src/PolyCopyTrader.Service/appsettings.json`, and documented the pause in README/configuration reference. Verified service build, full tests 148/148, Debug build, and restarted the local Debug service. The service is running in ReadOnly as PID 13044; startup summary shows on-chain ingestion and all on-chain background flags disabled.
