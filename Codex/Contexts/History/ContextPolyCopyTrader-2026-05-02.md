@@ -93,3 +93,9 @@ Request:
 
 Result:
 Clarified that a signal candidate is not a wallet profile; it is a concrete trade-side event keyed by `source_fill_id + participant_role`. The wallet is already stored on the candidate row, so the next layer selects/ranks concrete candidate events from concrete wallets rather than choosing the wallet after the candidate is created.
+## 2026-05-02T15:19:28.5334482+00:00
+Request:
+А конкретные кошельки, на которые мы будем ориентироваться, мы ещё не выбираем?
+
+Result:
+Clarified that the current on-chain candidate pipeline does not yet keep an explicit selected/tracked wallet list. It evaluates all wallets found in downloaded on-chain wallet fills and filters each concrete trade-side candidate using wallet/category performance. Existing `Watchlist` is for the older API scanner path, not the selector for this on-chain candidate flow. The next layer should derive eligible wallet/category targets or introduce an explicit reviewed target-wallet/category table.

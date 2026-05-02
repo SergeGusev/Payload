@@ -1,3 +1,15 @@
+## Active Update 2026-05-02 Concrete Wallet Selection Clarification
+Goal: Clarify whether concrete wallets to follow are already selected.
+Status: Completed
+Done:
+- Checked current code/docs references for watchlist, tracked wallets, candidate tables, and wallet/category performance.
+- Clarified that the on-chain candidate pipeline does not yet maintain a separate explicit list of target/tracked wallets.
+- Clarified that current candidate preparation evaluates all wallets present in downloaded on-chain wallet fills and filters per concrete trade event using wallet/category performance.
+- Clarified that existing `Watchlist` belongs to the older API scanner path and is not the selector for the new on-chain candidate pipeline.
+Next: Add the next decision/targeting layer: either derive eligible wallet/category targets from `polymarket_onchain_wallet_category_performance` and `Accepted` candidates, or create an explicit reviewed target-wallet/category table with manual overrides.
+Notes: Explanation only; no source behavior changed. Existing unrelated dirty files `PolyCopyTrader.sln` and `src/PolyCopyTrader.Storage/PostgresSchemaInitializer.cs` were left untouched. `git rev-parse --abbrev-ref --symbolic-full-name '@{u}'` failed because branch `master` has no configured upstream.
+Blockers: Automatic pull/push cannot run until a Git upstream is configured.
+
 ## Active Update 2026-05-02 Candidate Entity Clarification
 Goal: Clarify whether a signal candidate represents a wallet or a trade event.
 Status: Completed
