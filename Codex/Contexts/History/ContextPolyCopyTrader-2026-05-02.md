@@ -80,3 +80,10 @@ Request:
 
 Result:
 Confirmed from code and live PostgreSQL checks that signal-candidate preparation functionality is implemented as a read-only preparation layer with candidate/reason tables, queue/cursor backfill, worker, processor, config, and docs. Also confirmed the live historical backfill is still running: around 28,230 candidate rows, around 1,670,222 queued rows, cursor `default` not completed, and no recent signal-candidate worker errors in the last 30 minutes.
+
+## 2026-05-02T14:48:39.6772700+00:00
+Request:
+Расскажи подробнее про логику отбора кандидатов. И, отдельно - как список кандидатов обновляется в процессе подгрузки новых данных
+
+Result:
+Explained the current candidate-preparation logic from code: BUY-only, minimum notional, successful market metadata, known category, active/unresolved market, fresh wallet/category performance, and configured sample/score/ROI/win-rate thresholds. Also explained the refresh flow: new wallet fills enqueue source rows, historical backfill advances by cursor, temporary metadata/category/performance rejects are retried, a worker fetches due queue rows in batches, upserts candidate/reason rows, and deletes processed queue rows. Noted that spread, liquidity, current order book, portfolio risk, and paper-signal creation are next-layer decisions, not candidate-preparation checks.

@@ -1,3 +1,16 @@
+## Active Update 2026-05-02 Candidate Selection Logic Explanation
+Goal: Explain the current signal-candidate acceptance/rejection logic and update flow.
+Status: Completed
+Done:
+- Rechecked `OnChainSignalCandidateProcessor`, `OnChainSignalCandidateWorker`, PostgreSQL queue/cursor SQL, schema, and config defaults.
+- Clarified that candidate selection currently accepts only BUY wallet-fill sides with sufficient notional, known/enriched active unresolved market metadata, known category, and fresh wallet/category performance passing configured sample, score, ROI, and win-rate thresholds.
+- Clarified that rejected candidates persist one or more explicit reason rows and use the first reason as `decision_code`.
+- Clarified that new data is queued at wallet-fill upsert time, historical data is seeded through `polymarket_onchain_signal_candidate_backfill_cursors`, temporary metadata/category/performance rejections are retried, and processed rows are deleted from the refresh queue after candidate/reason upsert.
+- Clarified that spread/liquidity/current order book/portfolio risk checks are intentionally not part of the candidate-preparation layer and belong to the next decision/paper-signal layer.
+Next: Implement the decision layer that reads `Accepted` candidates and applies freshness, order-book, spread, liquidity, portfolio/risk, and deduplication gates before creating paper signals.
+Notes: Explanation only; no source behavior changed. Existing unrelated dirty files `PolyCopyTrader.sln` and `src/PolyCopyTrader.Storage/PostgresSchemaInitializer.cs` were left untouched. `git rev-parse --abbrev-ref --symbolic-full-name '@{u}'` failed because branch `master` has no configured upstream.
+Blockers: Automatic pull/push cannot run until a Git upstream is configured.
+
 ## Active Update 2026-05-02 Signal Candidate Completion Answer
 Goal: Clarify whether the signal-candidate preparation functionality is complete.
 Status: Completed
