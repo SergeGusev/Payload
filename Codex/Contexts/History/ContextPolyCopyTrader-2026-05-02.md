@@ -160,3 +160,10 @@ Request:
 
 Result:
 Explained that missing historical candidate rows will be added by the backfill cursor only if no row exists for `(source_fill_id, participant_role)`, while retry-eligible rejected rows are recalculated in place through PostgreSQL upsert and not duplicated. Old rejected rows with event-copy policy codes (`unsupported_side`, `market_inactive`, `market_resolved`, `leader_trade_too_small`) plus temporary data/performance rejects are requeued after 10 minutes and processed in retry batches. Already accepted rows are not automatically mass-requeued by this change because they already satisfy the looser behavior-evidence policy; refreshing their embedded performance snapshot would require explicit requeueing.
+
+## 2026-05-02T16:53:19.5620429Z
+Request:
+Ок, то есть сейчас я должен просто стартануть заново серивис и всё будет считаться по-новому?
+
+Result:
+Confirmed that restarting the service from the latest build is enough for new/queued candidate rows and retry-eligible old rejected rows to use the new behavior-evidence criteria. Clarified that old rejected rows recalculate gradually through retry batches after 10 minutes, not instantly, and that already accepted rows are not automatically mass-requeued.

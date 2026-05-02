@@ -1,3 +1,15 @@
+## Active Update 2026-05-02 Service Restart For New Criteria
+Goal: Confirm whether restarting the service is enough for the new behavior-evidence criteria to take effect.
+Status: Completed
+Done:
+- Confirmed that restarting the service from the latest build is enough for `OnChainSignalCandidateWorker` to use the new behavior-evidence logic.
+- Clarified that new/queued rows will be evaluated with the new criteria and retry-eligible old rejected rows will be recalculated in batches.
+- Clarified that recalculation is gradual: retries are seeded after 10 minutes and processed by `SignalCandidateRetryBatchSize` per cycle, default 250.
+- Clarified that already accepted rows will not be mass-requeued automatically because they already satisfy the now-looser policy.
+Next: Restart/rebuild the service binary and monitor candidate decision counts plus refresh queue size.
+Notes: Explanation only; no source behavior changed. Existing unrelated dirty files `PolyCopyTrader.sln` and `src/PolyCopyTrader.Storage/PostgresSchemaInitializer.cs` were left untouched. `git rev-parse --abbrev-ref --symbolic-full-name '@{u}'` failed because branch `master` has no configured upstream.
+Blockers: Automatic pull/push cannot run until a Git upstream is configured.
+
 ## Active Update 2026-05-02 Old Candidate Data Recalculation
 Goal: Explain what happens to existing on-chain candidate rows after the behavior-evidence criteria change.
 Status: Completed
