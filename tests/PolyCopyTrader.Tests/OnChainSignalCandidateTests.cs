@@ -53,7 +53,7 @@ public sealed class OnChainSignalCandidateTests
     }
 
     [Fact]
-    public async Task RefreshAsync_RejectsSellFillsWithExplicitReason()
+    public async Task RefreshAsync_AcceptsSellFillsAsBehaviorEvidence()
     {
         var repository = new TestAppRepository();
         var sourceFillId = Guid.NewGuid();
@@ -65,13 +65,39 @@ public sealed class OnChainSignalCandidateTests
 
         var result = await processor.RefreshAsync();
 
-        Assert.Equal(1, result.Rejected);
+        Assert.Equal(1, result.Accepted);
         var candidate = Assert.Single(repository.PolymarketOnChainSignalCandidates);
-        Assert.Equal(SignalReasonCodes.UnsupportedSide, candidate.DecisionCode);
-        Assert.Contains(repository.PolymarketOnChainSignalCandidateReasons, reason =>
-            reason.ReasonCode == SignalReasonCodes.UnsupportedSide);
-        Assert.DoesNotContain(repository.PolymarketOnChainSignalCandidateReasons, reason =>
-            reason.ReasonCode == SignalReasonCodes.LeaderTradeTooSmall);
+        Assert.Equal("Accepted", candidate.DecisionStatus);
+        Assert.Equal("onchain_candidate_ready", candidate.DecisionCode);
+        Assert.Equal(TradeSide.Sell, candidate.Side);
+        Assert.Empty(repository.PolymarketOnChainSignalCandidateReasons);
+    }
+
+    [Fact]
+    public async Task RefreshAsync_AcceptsClosedResolvedMarketsAsHistoricalBehaviorEvidence()
+    {
+        var repository = new TestAppRepository();
+        var sourceFillId = Guid.NewGuid();
+        repository.PolymarketOnChainWalletFills.Add(WalletFill(sourceFillId, TradeSide.Buy, 250m, DateTimeOffset.UtcNow.AddDays(-30)));
+        repository.PolymarketOnChainTokenMetadata.Add(TokenMetadata(
+            "token-yes",
+            "Politics",
+            active: false,
+            closed: true,
+            resolved: true));
+        repository.PolymarketOnChainWalletCategoryPerformance.Add(CategoryPerformance("0xleader", "Politics"));
+
+        var processor = CreateProcessor(repository);
+
+        var result = await processor.RefreshAsync();
+
+        Assert.Equal(1, result.Accepted);
+        var candidate = Assert.Single(repository.PolymarketOnChainSignalCandidates);
+        Assert.Equal("Accepted", candidate.DecisionStatus);
+        Assert.False(candidate.MarketActive);
+        Assert.True(candidate.MarketClosed);
+        Assert.True(candidate.MarketResolved);
+        Assert.Empty(repository.PolymarketOnChainSignalCandidateReasons);
     }
 
     [Fact]
@@ -94,6 +120,31 @@ public sealed class OnChainSignalCandidateTests
         Assert.All(repository.PolymarketOnChainSignalCandidates, candidate =>
             Assert.Equal("Accepted", candidate.DecisionStatus));
         Assert.Empty(repository.PolymarketOnChainSignalCandidateRefreshQueue);
+    }
+
+    [Fact]
+    public async Task RefreshAsync_RequeuesOldEventCopyPolicyRejections()
+    {
+        var repository = new TestAppRepository();
+        var sourceFillId = Guid.NewGuid();
+        repository.PolymarketOnChainWalletFills.Add(WalletFill(sourceFillId, TradeSide.Sell, 250m, DateTimeOffset.UtcNow.AddDays(-3)));
+        repository.PolymarketOnChainTokenMetadata.Add(TokenMetadata("token-yes", "Politics", active: false, closed: true, resolved: true));
+        repository.PolymarketOnChainWalletCategoryPerformance.Add(CategoryPerformance("0xleader", "Politics"));
+        repository.PolymarketOnChainSignalCandidates.Add(RejectedCandidate(
+            sourceFillId,
+            SignalReasonCodes.MarketInactive,
+            DateTimeOffset.UtcNow.AddMinutes(-20)));
+
+        var processor = CreateProcessor(repository);
+
+        var result = await processor.RefreshAsync();
+
+        Assert.Equal(1, result.RetriesQueued);
+        Assert.Equal(1, result.Accepted);
+        var candidate = Assert.Single(repository.PolymarketOnChainSignalCandidates);
+        Assert.Equal("Accepted", candidate.DecisionStatus);
+        Assert.Equal(TradeSide.Sell, candidate.Side);
+        Assert.Empty(repository.PolymarketOnChainSignalCandidateReasons);
     }
 
     private static OnChainSignalCandidateProcessor CreateProcessor(
@@ -155,7 +206,10 @@ public sealed class OnChainSignalCandidateTests
     private static PolymarketOnChainTokenMetadata TokenMetadata(
         string tokenId,
         string? category,
-        bool active)
+        bool active,
+        bool closed = false,
+        bool archived = false,
+        bool resolved = false)
     {
         return new PolymarketOnChainTokenMetadata(
             tokenId,
@@ -168,9 +222,9 @@ public sealed class OnChainSignalCandidateTests
             category,
             DateTimeOffset.UtcNow.AddDays(7),
             active,
-            false,
-            false,
-            false,
+            closed,
+            archived,
+            resolved,
             null,
             [tokenId, "token-no"],
             ["Yes", "No"],
@@ -207,5 +261,60 @@ public sealed class OnChainSignalCandidateTests
             FirstActiveUtc: DateTimeOffset.UtcNow.AddDays(-10),
             LastActiveUtc: DateTimeOffset.UtcNow.AddMinutes(-1),
             RefreshedAtUtc: DateTimeOffset.UtcNow);
+    }
+
+    private static PolymarketOnChainSignalCandidate RejectedCandidate(
+        Guid sourceFillId,
+        string decisionCode,
+        DateTimeOffset updatedAtUtc)
+    {
+        return new PolymarketOnChainSignalCandidate(
+            Guid.NewGuid(),
+            sourceFillId,
+            "CTF Exchange V1",
+            "0xcontract",
+            "V1",
+            123,
+            DateTimeOffset.UtcNow.AddDays(-3),
+            "0xtx",
+            1,
+            "0xorder",
+            OnChainParticipantRole.Maker,
+            "0xleader",
+            "0xcounterparty",
+            TradeSide.Sell,
+            "token-yes",
+            "condition-1",
+            "market-1",
+            "market-slug",
+            "Market title",
+            "Yes",
+            "Politics",
+            true,
+            false,
+            true,
+            false,
+            true,
+            null,
+            0.50m,
+            500m,
+            250m,
+            0m,
+            "0",
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            "Rejected",
+            decisionCode,
+            0m,
+            DateTimeOffset.UtcNow.AddHours(-1),
+            updatedAtUtc);
     }
 }

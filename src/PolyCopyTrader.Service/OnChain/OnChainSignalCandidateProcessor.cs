@@ -62,7 +62,7 @@ public sealed class OnChainSignalCandidateProcessor(
         var category = NormalizeCategory(metadata?.Category);
         var reasons = new List<PolymarketOnChainSignalCandidateReason>();
 
-        AddDataAndTradeReasons(source, metadata, category, reasons, now);
+        AddDataReasons(metadata, category, reasons, now);
         AddPerformanceReasons(source, metadata, performance, category, reasons, now);
 
         var accepted = reasons.Count == 0;
@@ -118,18 +118,12 @@ public sealed class OnChainSignalCandidateProcessor(
         return new PolymarketOnChainSignalCandidateDecision(candidate, reasons);
     }
 
-    private void AddDataAndTradeReasons(
-        PolymarketOnChainSignalCandidateSource source,
+    private static void AddDataReasons(
         PolymarketOnChainTokenMetadata? metadata,
         string? category,
         List<PolymarketOnChainSignalCandidateReason> reasons,
         DateTimeOffset now)
     {
-        if (source.Side != TradeSide.Buy)
-        {
-            AddReason(reasons, SignalReasonCodes.UnsupportedSide, "Only BUY fills are eligible for copy candidates.", now);
-        }
-
         if (metadata is null || !metadata.LookupSucceeded)
         {
             AddReason(reasons, SignalReasonCodes.MissingMarketMetadata, "Token metadata is missing or lookup failed.", now);
@@ -139,16 +133,6 @@ public sealed class OnChainSignalCandidateProcessor(
         if (IsUnknownCategory(category))
         {
             AddReason(reasons, SignalReasonCodes.MissingMarketCategory, "Market category is missing or unknown.", now);
-        }
-
-        if (!metadata.Active || metadata.Closed || metadata.Archived)
-        {
-            AddReason(reasons, SignalReasonCodes.MarketInactive, "Market is inactive, closed, or archived.", now);
-        }
-
-        if (metadata.Resolved)
-        {
-            AddReason(reasons, SignalReasonCodes.MarketResolved, "Market is already resolved.", now);
         }
     }
 

@@ -227,10 +227,14 @@ service also derives `polymarket_onchain_wallet_fills` with one maker row and on
 taker row per fill, then aggregates those rows into
 `polymarket_onchain_wallet_executions` by wallet, transaction hash, token id, and
 side. The dashboard ranking uses those executions, so it is no longer maker-only.
-Recent wallet fills are also materialized into `polymarket_onchain_signal_candidates`
-and `polymarket_onchain_signal_candidate_reasons`. This layer is read-only and
-records whether a fill is ready for downstream paper evaluation or rejected with
-explicit data/performance reason codes. It does not place live or paper orders.
+Wallet fills are also materialized into `polymarket_onchain_signal_candidates`
+and `polymarket_onchain_signal_candidate_reasons`. This layer is read-only
+behavior evidence for selecting trusted `(wallet, category)` pairs. It records
+BUY and SELL wallet-fill observations with category, market status, and
+wallet/category performance snapshots. Current market state is stored for audit
+but does not reject historical evidence; rejected rows are limited to missing
+data or wallet/category performance that does not pass the configured gates. It
+does not place live or paper orders.
 If raw fills predate the wallet or serving tables, the next on-chain sync fills
 the missing derived range from PostgreSQL before it continues reading new Polygon
 blocks.

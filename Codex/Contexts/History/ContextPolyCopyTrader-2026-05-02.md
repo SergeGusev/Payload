@@ -125,3 +125,10 @@ Request:
 
 Result:
 Accepted the clarified product model: the target is copying a wallet's behavior within a category, not one-for-one copying a concrete current trade event. Explained that this makes current event-copy filters inappropriate for historical behavior preparation: market active/closed/resolved state should not reject evidence rows, and BUY-only filtering is too narrow because SELL rows describe exits and position management. Recommended moving toward wallet/category behavior-profile and target-selection semantics, with trade rows retained as evidence rather than direct commands.
+
+## 2026-05-02T16:17:17.3619102Z
+Request:
+Давай переделывать
+
+Result:
+Reworked on-chain signal-candidate materialization into behavior-evidence semantics. BUY and SELL fills can now be accepted when metadata/category and wallet/category performance gates pass. Current market state is retained in fields but no longer causes `market_inactive` or `market_resolved` rejection for historical evidence. Old `unsupported_side`, `market_inactive`, and `market_resolved` rejected rows are requeued for recalculation. Updated tests and docs. Verification passed: targeted candidate/storage tests 16/16, full test suite 148/148, service build passed, and diff check passed for touched files with line-ending warnings only.

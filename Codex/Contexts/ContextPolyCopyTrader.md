@@ -1,3 +1,16 @@
+## Active Update 2026-05-02 Behavior Evidence Candidate Semantics
+Goal: Rework on-chain signal-candidate materialization toward wallet/category behavior evidence instead of current-trade copying.
+Status: Completed
+Done:
+- Changed `OnChainSignalCandidateProcessor` so BUY and SELL wallet fills can both become accepted behavior evidence when metadata/category and wallet/category performance gates pass.
+- Removed historical evidence rejection for current market state: inactive, closed, archived, and resolved market metadata is now stored on candidate rows but does not add `market_inactive` or `market_resolved` rejection reasons.
+- Added retry seeding for old event-copy policy decision codes: `unsupported_side`, `market_inactive`, and `market_resolved`, alongside existing `leader_trade_too_small`, so old rejected rows can be recalculated.
+- Updated `TestAppRepository` retry behavior and `OnChainSignalCandidateTests` to cover accepted SELL evidence, accepted closed/resolved market evidence, historical backfill, and requeueing old event-copy rejects.
+- Updated README and configuration reference to describe the layer as read-only behavior evidence for selecting trusted `(wallet, category)` pairs, not one-for-one trade copy.
+Next: Restart the service; old rows rejected only by event-copy policy will be requeued in retry batches and recalculated under behavior-evidence semantics. Next product step is a true wallet/category target-selection table or dashboard view over `polymarket_onchain_wallet_category_performance` and behavior evidence.
+Notes: Verification passed: targeted `dotnet test tests\PolyCopyTrader.Tests\PolyCopyTrader.Tests.csproj -c Verify --no-restore --filter "OnChainSignalCandidateTests|StorageTests"` 16/16; full `dotnet test tests\PolyCopyTrader.Tests\PolyCopyTrader.Tests.csproj -c Verify --no-restore` 148/148; `dotnet build src\PolyCopyTrader.Service\PolyCopyTrader.Service.csproj -c Verify --no-restore` passed; diff check passed for touched files with line-ending warnings only. Existing unrelated dirty files `PolyCopyTrader.sln` and `src/PolyCopyTrader.Storage/PostgresSchemaInitializer.cs` were left unstaged. `git rev-parse --abbrev-ref --symbolic-full-name '@{u}'` failed because branch `master` has no configured upstream.
+Blockers: Automatic pull/push cannot run until a Git upstream is configured.
+
 ## Active Update 2026-05-02 Behavior Copy Target Model
 Goal: Record the product requirement that the system should copy wallet/category behavior, not concrete current trades.
 Status: Completed
