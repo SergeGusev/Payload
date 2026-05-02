@@ -1,3 +1,15 @@
+## Active Update 2026-05-02 Current Behavior Evidence Criteria
+Goal: Restate the current criteria for on-chain behavior-evidence candidates after the semantic rework.
+Status: Completed
+Done:
+- Rechecked `OnChainSignalCandidateProcessor`, retry SQL, signal config defaults, and README behavior-evidence description.
+- Confirmed accepted evidence rows now require usable token metadata, known non-unknown category, matching wallet/category performance, fresh performance, and configured performance thresholds for resolved sample, sample quality, score, ROI, and win rate.
+- Confirmed BUY and SELL fills are both eligible; notional size and current market state no longer reject historical behavior evidence.
+- Confirmed old `leader_trade_too_small`, `unsupported_side`, `market_inactive`, and `market_resolved` rejected rows are retry-eligible for recalculation.
+Next: Use this criteria list as the baseline for building the next wallet/category target-selection table or dashboard view.
+Notes: Explanation only; no source behavior changed. Existing unrelated dirty files `PolyCopyTrader.sln` and `src/PolyCopyTrader.Storage/PostgresSchemaInitializer.cs` were left untouched. `git rev-parse --abbrev-ref --symbolic-full-name '@{u}'` failed because branch `master` has no configured upstream.
+Blockers: Automatic pull/push cannot run until a Git upstream is configured.
+
 ## Active Update 2026-05-02 Behavior Evidence Candidate Semantics
 Goal: Rework on-chain signal-candidate materialization toward wallet/category behavior evidence instead of current-trade copying.
 Status: Completed

@@ -132,3 +132,10 @@ Request:
 
 Result:
 Reworked on-chain signal-candidate materialization into behavior-evidence semantics. BUY and SELL fills can now be accepted when metadata/category and wallet/category performance gates pass. Current market state is retained in fields but no longer causes `market_inactive` or `market_resolved` rejection for historical evidence. Old `unsupported_side`, `market_inactive`, and `market_resolved` rejected rows are requeued for recalculation. Updated tests and docs. Verification passed: targeted candidate/storage tests 16/16, full test suite 148/148, service build passed, and diff check passed for touched files with line-ending warnings only.
+
+## 2026-05-02T16:21:34.8036141Z
+Request:
+Давай заново полный список критериев для выбора кандидатов
+
+Result:
+Restated the current on-chain behavior-evidence candidate criteria after inspecting the processor, retry SQL, signal config defaults, and README. Clarified required gates: usable token metadata, known category, matching fresh wallet/category performance, and configured thresholds for resolved sample size, sample quality, score, ROI, and win rate. Clarified non-gates: BUY-only, notional size, current market state, freshness, order book, spread, liquidity, risk, and watchlist membership.
