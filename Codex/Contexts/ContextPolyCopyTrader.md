@@ -1,3 +1,16 @@
+## Active Update 2026-05-02 Behavior Copy Target Model
+Goal: Record the product requirement that the system should copy wallet/category behavior, not concrete current trades.
+Status: Completed
+Done:
+- Clarified that the target unit is a trusted `(wallet, category)` behavior profile, not an event-level trade candidate to copy one-for-one.
+- Identified that current `polymarket_onchain_signal_candidates` logic is too event-copy oriented for this requirement.
+- Noted that market active/closed/archived/resolved state should not reject historical behavior evidence; it only matters when evaluating currently available markets for our own paper/live action.
+- Noted that BUY-only filtering is also too narrow for behavior modeling, because SELL fills are evidence about exits, profit-taking, loss-cutting, and position management.
+- Recommended reframing the next layer as wallet/category behavior profiling and target selection, with trade rows retained as evidence rather than direct commands.
+Next: Replace event-copy candidate semantics with behavior-profile/target semantics: keep all BUY/SELL historical evidence, keep market-state fields for audit, remove current-market-state rejection from historical preparation, and build a wallet/category target table or extend `polymarket_onchain_wallet_category_performance` with behavior features.
+Notes: Explanation only; no source behavior changed. Existing unrelated dirty files `PolyCopyTrader.sln` and `src/PolyCopyTrader.Storage/PostgresSchemaInitializer.cs` were left untouched. `git rev-parse --abbrev-ref --symbolic-full-name '@{u}'` failed because branch `master` has no configured upstream.
+Blockers: Automatic pull/push cannot run until a Git upstream is configured.
+
 ## Active Update 2026-05-02 Wallet Category Versus Market State
 Goal: Clarify whether concrete market state should affect wallet/category trust selection.
 Status: Completed

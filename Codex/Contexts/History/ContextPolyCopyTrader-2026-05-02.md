@@ -118,3 +118,10 @@ Request:
 
 Result:
 Explained that the user is right for wallet/category trust selection: current state of a concrete market is not a trust criterion, while it is still necessary later for deciding whether a concrete current event can be copied. Identified the current design mismatch in `polymarket_onchain_signal_candidates`: it mixes historical wallet/category evidence with current actionability checks. Recommended keeping market-state columns for audit but moving active/closed/archived/resolved rejection to the later paper-signal/actionability layer and requeueing existing `market_inactive`/`market_resolved` rows if that policy is adopted.
+
+## 2026-05-02T16:10:26.2445455Z
+Request:
+Мы не будем копировать конкретно текущую сделку. Мы будем копировать поведение валета в рамках определённой категории.
+
+Result:
+Accepted the clarified product model: the target is copying a wallet's behavior within a category, not one-for-one copying a concrete current trade event. Explained that this makes current event-copy filters inappropriate for historical behavior preparation: market active/closed/resolved state should not reject evidence rows, and BUY-only filtering is too narrow because SELL rows describe exits and position management. Recommended moving toward wallet/category behavior-profile and target-selection semantics, with trade rows retained as evidence rather than direct commands.
