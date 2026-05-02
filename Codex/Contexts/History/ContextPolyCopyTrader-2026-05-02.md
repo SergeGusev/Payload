@@ -153,3 +153,10 @@ MinLeaderCategoryResolvedPositions = 3. Не слишком мало? Объяс
 
 Result:
 Explained that default `MinLeaderCategoryResolvedPositions = 3` is a low-water behavior-evidence threshold, not a final trust threshold. It matches the category-performance `sample_quality = Low` boundary: `Low` starts at 3 resolved positions, `Medium` at 10, and `High` at 25 plus volume >= 1000. Clarified that 3 avoids trusting a single lucky position while keeping early evidence flowing, and that small samples below 5 are still penalized in score. Recommended stricter thresholds for final wallet/category target selection, likely `Medium`/10+ resolved positions or `High` for stronger confidence.
+
+## 2026-05-02T16:48:59.2978046Z
+Request:
+Ок, новые критерии нормальные. Что будет с уже старыми данными? Они будут пересчитаны или добавлены?
+
+Result:
+Explained that missing historical candidate rows will be added by the backfill cursor only if no row exists for `(source_fill_id, participant_role)`, while retry-eligible rejected rows are recalculated in place through PostgreSQL upsert and not duplicated. Old rejected rows with event-copy policy codes (`unsupported_side`, `market_inactive`, `market_resolved`, `leader_trade_too_small`) plus temporary data/performance rejects are requeued after 10 minutes and processed in retry batches. Already accepted rows are not automatically mass-requeued by this change because they already satisfy the looser behavior-evidence policy; refreshing their embedded performance snapshot would require explicit requeueing.

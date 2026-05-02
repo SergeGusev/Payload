@@ -1,3 +1,16 @@
+## Active Update 2026-05-02 Old Candidate Data Recalculation
+Goal: Explain what happens to existing on-chain candidate rows after the behavior-evidence criteria change.
+Status: Completed
+Done:
+- Rechecked candidate backfill SQL, retry SQL, schema uniqueness, PostgreSQL upsert logic, and test repository behavior.
+- Clarified that missing historical rows are added by the backfill cursor only when no candidate exists for `(source_fill_id, participant_role)`.
+- Clarified that retry-eligible rejected rows are recalculated in place and not duplicated; upsert conflict on `(source_fill_id, participant_role)` updates the existing candidate row, deletes old reasons, inserts new reasons if any, and removes the queue row.
+- Clarified that old rejected rows with `leader_trade_too_small`, `unsupported_side`, `market_inactive`, `market_resolved`, missing metadata/category/performance, or stale performance are retry-eligible after 10 minutes and processed by `SignalCandidateRetryBatchSize` batches.
+- Clarified that already accepted rows are not automatically mass-requeued by this change because they already satisfy the now-looser behavior-evidence policy; refreshing their embedded performance snapshot would require an explicit requeue/backfill command if needed.
+Next: After service restart, monitor `decision_code` counts and queue drain to confirm old event-copy rejects are converting to accepted or to current data/performance rejects.
+Notes: Explanation only; no source behavior changed. Existing unrelated dirty files `PolyCopyTrader.sln` and `src/PolyCopyTrader.Storage/PostgresSchemaInitializer.cs` were left untouched. `git rev-parse --abbrev-ref --symbolic-full-name '@{u}'` failed because branch `master` has no configured upstream.
+Blockers: Automatic pull/push cannot run until a Git upstream is configured.
+
 ## Active Update 2026-05-02 Resolved Sample Threshold Explanation
 Goal: Explain why `MinLeaderCategoryResolvedPositions` defaults to 3 and whether it is too low.
 Status: Completed
