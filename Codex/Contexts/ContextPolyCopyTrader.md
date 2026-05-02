@@ -1,3 +1,16 @@
+## Active Update 2026-05-02 Resolved Sample Threshold Explanation
+Goal: Explain why `MinLeaderCategoryResolvedPositions` defaults to 3 and whether it is too low.
+Status: Completed
+Done:
+- Rechecked `SignalOptions`, `OnChainSignalCandidateProcessor`, category-performance scoring SQL, and configuration docs.
+- Confirmed default `MinLeaderCategoryResolvedPositions = 3` aligns with the `sample_quality = Low` boundary: `Low` starts at 3 resolved positions, `Medium` at 10, and `High` at 25 plus volume >= 1000.
+- Clarified that 3 is a low-water evidence/materialization threshold, not a strong trust threshold for final wallet/category following.
+- Noted that score still penalizes very small samples below 5 resolved positions, so 3-resolved profiles are intentionally weak and should only enter low-confidence research.
+- Recommended keeping 3 only for behavior-evidence backfill while using stricter final target-selection thresholds, likely `sample_quality >= Medium` / `resolved_positions >= 10`, or `High` for stronger confidence.
+Next: Implement the wallet/category target-selection layer with stricter thresholds than the evidence-materialization layer.
+Notes: Explanation only; no source behavior changed. Existing unrelated dirty files `PolyCopyTrader.sln` and `src/PolyCopyTrader.Storage/PostgresSchemaInitializer.cs` were left untouched. `git rev-parse --abbrev-ref --symbolic-full-name '@{u}'` failed because branch `master` has no configured upstream.
+Blockers: Automatic pull/push cannot run until a Git upstream is configured.
+
 ## Active Update 2026-05-02 Performance Freshness Explanation
 Goal: Explain what the `LeaderCategoryPerformanceStaleAfterHours` freshness criterion means.
 Status: Completed

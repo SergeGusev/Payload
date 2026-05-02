@@ -146,3 +146,10 @@ Request:
 
 Result:
 Explained that performance freshness means the aggregate `(wallet, category)` row in `polymarket_onchain_wallet_category_performance` was recalculated recently enough, based on `refreshed_at_utc`, not that the wallet traded recently. The current gate rejects with `leader_category_performance_stale` when `now - refreshed_at_utc` exceeds `Signal.LeaderCategoryPerformanceStaleAfterHours`, default 24 hours, and stale rows are retry-eligible after the performance refresh worker updates the aggregate.
+
+## 2026-05-02T16:45:50.9645132Z
+Request:
+MinLeaderCategoryResolvedPositions = 3. Не слишком мало? Объясни, чем вызвана такая цифра
+
+Result:
+Explained that default `MinLeaderCategoryResolvedPositions = 3` is a low-water behavior-evidence threshold, not a final trust threshold. It matches the category-performance `sample_quality = Low` boundary: `Low` starts at 3 resolved positions, `Medium` at 10, and `High` at 25 plus volume >= 1000. Clarified that 3 avoids trusting a single lucky position while keeping early evidence flowing, and that small samples below 5 are still penalized in score. Recommended stricter thresholds for final wallet/category target selection, likely `Medium`/10+ resolved positions or `High` for stronger confidence.
