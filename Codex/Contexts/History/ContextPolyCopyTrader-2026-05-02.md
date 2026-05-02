@@ -60,3 +60,10 @@ Request:
 
 Result:
 Reworked on-chain signal-candidate materialization from a 24-hour rolling scan to a queue/cursor design. Added `polymarket_onchain_signal_candidate_refresh_queue` and `polymarket_onchain_signal_candidate_backfill_cursors`, plus an ordered wallet-fill index for historical backfill. Ingestion now queues newly materialized wallet fills; the candidate worker seeds the historical queue by cursor, requeues temporary metadata/category/performance rejections, processes queued fills into candidate/reason rows, and deletes processed queue entries. Replaced `SignalCandidateLookbackHours` with `SignalCandidateQueueSeedBatchSize` and `SignalCandidateRetryBatchSize`; updated docs, project memory, tests, and appsettings. Verification passed: targeted tests 19/19, full tests 142/142, service build, dashboard build, `--print-config`, and `git diff --check` with line-ending warnings only.
+
+## 2026-05-02T10:24:26.6120933Z
+Request:
+Ок, запустил, проверяй
+
+Result:
+Verified the restarted service and PostgreSQL state after the full-history signal-candidate backfill change. The service is running in `ReadOnly` with fresh heartbeat and the new queue/cursor tables exist. Backfill started and queued source rows, but `OnChainSignalCandidateWorker` initially timed out while joining queued rows back to `polymarket_onchain_wallet_fills`; added schema index `ix_polymarket_onchain_wallet_fills_source_role` and created it live with `CREATE INDEX CONCURRENTLY`, which took about 581 seconds. After the index was available, the worker recovered: completed cycles showed `SourcesQueued=1000`, `SourcesFetched=250`, `CandidatesUpserted=250`, and candidates increased from 0 to 750 by the final check. No PostgreSQL blocking chain was present. Verification for the code fix passed: targeted tests 10/10, service build, full tests 142/142, and `git diff --check`.

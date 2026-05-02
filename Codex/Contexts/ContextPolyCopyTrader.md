@@ -1,3 +1,18 @@
+## Active Update 2026-05-02 Signal Candidate Backfill Restart Check
+Goal: Verify the restarted full-history signal-candidate worker and fix the first live bottleneck.
+Status: Completed
+Done:
+- Confirmed `PolyCopyTrader.Service` restarted in `ReadOnly` as process `57900`, with fresh heartbeats after schema initialization.
+- Confirmed new signal-candidate queue/cursor tables exist and backfill started; cursor row `default` is advancing.
+- Confirmed `ix_polymarket_onchain_wallet_fills_signal_candidate_backfill` exists and was created at about 1.8 GB.
+- Found `OnChainSignalCandidateWorker` initially timed out in `GetPolymarketOnChainSignalCandidateSourcesAsync` because queue rows join `polymarket_onchain_wallet_fills` by `(source_fill_id, role)` without an index.
+- Added schema index `ix_polymarket_onchain_wallet_fills_source_role` and created it live with `CREATE INDEX CONCURRENTLY`; live index build took about 581 seconds and size is about 1.4 GB.
+- Confirmed the worker recovered after the index: recent log cycles completed with `SourcesQueued=1000`, `SourcesFetched=250`, `CandidatesUpserted=250`, and candidate rows increased from 0 to 750 by the final check.
+- Confirmed no PostgreSQL blocking chain during checks; old API errors remain from before the index was available.
+Next: Leave the service running; watch `polymarket_onchain_signal_candidates` and `polymarket_onchain_signal_candidate_refresh_queue` trend. Queue can grow while historical seeding runs faster than processing, then should drain after backfill cursor completes.
+Notes: Verification passed after the code fix: targeted `StorageTests|OnChainSignalCandidateTests` 10/10; service build passed after `dotnet build-server shutdown`; full `dotnet test tests\PolyCopyTrader.Tests\PolyCopyTrader.Tests.csproj -c Verify --no-restore` 142/142; `git diff --check` passed with line-ending warnings only. A temporary C# diagnostic project under `Codex/TempDbCheck` was created and removed. Existing unrelated dirty files `PolyCopyTrader.sln` and `src/PolyCopyTrader.Storage/PostgresSchemaInitializer.cs` were left untouched. `git rev-parse --abbrev-ref --symbolic-full-name '@{u}'` failed because branch `master` has no configured upstream.
+Blockers: Automatic pull/push cannot run until a Git upstream is configured.
+
 ## Active Update 2026-05-02 Full Signal Candidate Backfill
 Goal: Replace the recent-only candidate worker with a full downloaded-history backfill plus continuous tail processing.
 Status: Completed

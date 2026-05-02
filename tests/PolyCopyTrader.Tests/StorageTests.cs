@@ -37,6 +37,7 @@ public sealed class StorageTests
         Assert.Contains("ix_polymarket_onchain_signal_candidates_status_time", PostgresSchema.SchemaSql, StringComparison.Ordinal);
         Assert.Contains("ix_polymarket_onchain_signal_candidate_refresh_queue_next_attempt", PostgresSchema.SchemaSql, StringComparison.Ordinal);
         Assert.Contains("ix_polymarket_onchain_wallet_fills_signal_candidate_backfill", PostgresSchema.SchemaSql, StringComparison.Ordinal);
+        Assert.Contains("ix_polymarket_onchain_wallet_fills_source_role", PostgresSchema.SchemaSql, StringComparison.Ordinal);
     }
 
     [Fact]

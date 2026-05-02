@@ -713,6 +713,9 @@ ON polymarket_onchain_wallet_fills(block_timestamp_utc DESC, block_number DESC, 
 CREATE INDEX IF NOT EXISTS ix_polymarket_onchain_wallet_fills_signal_candidate_backfill
 ON polymarket_onchain_wallet_fills(block_timestamp_utc, block_number, log_index, role);
 
+CREATE INDEX IF NOT EXISTS ix_polymarket_onchain_wallet_fills_source_role
+ON polymarket_onchain_wallet_fills(source_fill_id, role);
+
 CREATE INDEX IF NOT EXISTS ix_polymarket_onchain_wallet_fills_contract_block
 ON polymarket_onchain_wallet_fills(contract_address, block_number);
 
