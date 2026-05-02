@@ -11,3 +11,10 @@ Request:
 
 Result:
 Implemented contention reduction for on-chain derived refresh. Added a shared non-blocking PostgreSQL advisory transaction lock around activity, position, wallet-performance, and wallet/category-performance refresh cycles; changed `missing_activity` seeding to use `polymarket_onchain_wallet_fills`; stopped updating already-queued performance/category-performance rows on conflicts; and staggered/lowered refresh intervals, batch sizes, and seed sizes. Updated service/dashboard config defaults, domain defaults, README, and configuration reference. Verification passed: targeted tests 27/27, full tests 138/138, service build, dashboard build, and `git diff --check`.
+
+## 2026-05-02T08:14:09.4098148Z
+Request:
+Запустил, проверяй
+
+Result:
+Verified the restarted service and PostgreSQL state. `PolyCopyTrader.Service` is running in `ReadOnly`, heartbeat is fresh, the logs show the new reduced/staggered refresh settings loaded at startup, PostgreSQL has `blocked_count=0`, no long active sessions over 5 minutes, and no `api_errors` since restart. One derived refresh session was holding the shared advisory lock while other derived refresh cycles skipped, and later activity/position/category-performance batches completed without new deadlocks in the checked window. Queue counts were token metadata `20`, position `42,954`, activity `143,119`, performance `86,009`, category performance `79,827`. Exact counts on huge on-chain tables were avoided after timeout and replaced with relation estimates to avoid adding load.

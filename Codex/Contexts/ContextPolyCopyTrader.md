@@ -1,3 +1,18 @@
+## Active Update 2026-05-02 Post Restart Contention Health Check
+Goal: Verify service/database health after restarting with the reduced refresh-worker contention changes.
+Status: Completed
+Done:
+- Confirmed `PolyCopyTrader.Service` is running as process `72708`, started at `2026-05-02 11:06:54 +03`.
+- Confirmed the service loaded the new refresh settings at `2026-05-02 11:07:01 +03`: position `60s/25/100`, activity `90s/50/100`, performance `120s/50/100`, category performance `150s/250/250`.
+- Checked PostgreSQL through `POLYCOPYTRADER_POSTGRES_CONNECTION` without printing secrets.
+- Confirmed heartbeat is fresh: `PolyCopyTrader.Service` is `Running` in `ReadOnly`, heartbeat age about 2 seconds during the check.
+- Confirmed `blocked_count=0`, no active sessions older than 5 minutes, and no `api_errors` since the restart.
+- Confirmed one derived refresh session can hold the advisory lock while other derived refresh cycles skip with `0` processed/upserted rows; later cycles processed activity, position, and category-performance batches without deadlocks in the checked window.
+- Queue counts during the check were approximately: token metadata `20`, position `42,954`, activity `143,119`, performance `86,009`, category performance `79,827`.
+Next: Let the service run for at least 15-30 minutes, then recheck `api_errors`, active sessions, and queue trend; current post-restart state looks healthy.
+Notes: Operational DB/log check only; no source behavior changed. Exact `count(*)` on the largest on-chain tables was avoided after timeout and replaced with PostgreSQL relation estimates to reduce load. Existing unrelated dirty files `PolyCopyTrader.sln` and `src/PolyCopyTrader.Storage/PostgresSchemaInitializer.cs` were left untouched. `git rev-parse --abbrev-ref --symbolic-full-name '@{u}'` failed because branch `master` has no configured upstream.
+Blockers: Automatic pull/push cannot run until a Git upstream is configured.
+
 ## Active Update 2026-05-02 Reduce Refresh Worker Contention
 Goal: Reduce database contention and deadlocks among on-chain derived refresh workers.
 Status: Completed
