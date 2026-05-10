@@ -2,8 +2,11 @@ using System;
 using System.Diagnostics;
 using System.IO;
 using System.ServiceProcess;
+using Microsoft.Extensions.Configuration;
 using PolyCopyTrader.Domain;
 using PolyCopyTrader.Domain.Configuration;
+using PolyCopyTrader.Service.Configuration;
+using PolyCopyTrader.Storage;
 using PolyCopyTrader.Strategy;
 
 namespace PolyCopyTrader.Service
@@ -23,6 +26,16 @@ namespace PolyCopyTrader.Service
             if (args.Length > 0 && string.Equals(args[0], "--strategy-smoke", StringComparison.OrdinalIgnoreCase))
             {
                 return RunStrategySmoke();
+            }
+
+            if (args.Length > 0 && string.Equals(args[0], "--print-config", StringComparison.OrdinalIgnoreCase))
+            {
+                return RunPrintConfig();
+            }
+
+            if (args.Length > 0 && string.Equals(args[0], "--storage-smoke", StringComparison.OrdinalIgnoreCase))
+            {
+                return RunStorageSmoke();
             }
 
             if (args.Length > 0 && string.Equals(args[0], "--install", StringComparison.OrdinalIgnoreCase))
@@ -65,7 +78,49 @@ namespace PolyCopyTrader.Service
             Console.WriteLine("  PolyCopyTrader.Net48.Service.exe --start");
             Console.WriteLine("  PolyCopyTrader.Net48.Service.exe --stop");
             Console.WriteLine("  PolyCopyTrader.Net48.Service.exe --uninstall");
+            Console.WriteLine("  PolyCopyTrader.Net48.Service.exe --print-config");
+            Console.WriteLine("  PolyCopyTrader.Net48.Service.exe --storage-smoke");
             Console.WriteLine("  PolyCopyTrader.Net48.Service.exe --strategy-smoke");
+            return 0;
+        }
+
+        private static int RunPrintConfig()
+        {
+            var configuration = LoadAppConfiguration();
+            AppOptionsValidator.ValidateAndThrow(configuration);
+            Console.WriteLine(AppOptionsValidator.ToSanitizedSummary(configuration));
+            return 0;
+        }
+
+        private static int RunStorageSmoke()
+        {
+            var configuration = LoadAppConfiguration();
+            AppOptionsValidator.ValidateAndThrow(configuration);
+
+            if (!StorageConnectionResolver.IsConfigured(configuration.Storage))
+            {
+                Console.WriteLine("Storage smoke skipped: PostgreSQL connection string is not configured.");
+                Console.WriteLine("Set " + configuration.Storage.ConnectionStringEnvironmentVariable + " or Storage:ConnectionString.");
+                return 0;
+            }
+
+            var connectionFactory = new PostgresConnectionFactory(configuration.Storage);
+            using (var connection = connectionFactory.CreateConnection())
+            {
+                connection.Open();
+                using (var command = connection.CreateCommand())
+                {
+                    command.CommandText = "SELECT 1;";
+                    var result = command.ExecuteScalar();
+                    if (!object.Equals(result, 1))
+                    {
+                        Console.Error.WriteLine("Storage smoke failed: unexpected SELECT 1 result.");
+                        return 1;
+                    }
+                }
+            }
+
+            Console.WriteLine("Storage smoke passed.");
             return 0;
         }
 
@@ -153,6 +208,17 @@ namespace PolyCopyTrader.Service
         private static string GetExecutablePath()
         {
             return typeof(Program).Assembly.Location;
+        }
+
+        private static AppConfiguration LoadAppConfiguration()
+        {
+            var baseDirectory = AppContext.BaseDirectory;
+            var builder = new ConfigurationBuilder()
+                .SetBasePath(baseDirectory)
+                .AddJsonFile("appsettings.json", optional: true, reloadOnChange: false);
+
+            builder.AddEnvironmentVariables("POLYCOPYTRADER_");
+            return AppConfigurationLoader.Load(builder.Build());
         }
 
         private static int RunSc(string arguments)

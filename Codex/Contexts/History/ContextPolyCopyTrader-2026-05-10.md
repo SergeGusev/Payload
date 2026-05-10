@@ -228,3 +228,9 @@ Request:
 
 Result:
 Started the actual `.NET Framework 4.8` port by moving the Paper-only domain/strategy core into `src4.8`. Added Net48-compatible Domain models/options required by the strategy engines, copied the Strategy source files into the Net48 workspace, added compatibility shims/global usings for records/init, replaced `ArgumentNullException.ThrowIfNull` only in the Net48 strategy copies, and added a service `--strategy-smoke` command that executes signal evaluation, risk check, paper order creation, and simulated fill. Verification passed for Debug/Release Net48 builds, Debug/Release `--strategy-smoke`, `--console`, and the main test suite rerun with `418/418` passing. An earlier test attempt with custom `BaseOutputPath` failed because existing storage tests locate source files relative to the standard output layout; rerun without that override passed.
+## 2026-05-10T14:33:00Z
+Request:
+Continue the `.NET Framework 4.8` migration and port everything at once, interrupting only if user involvement is required.
+
+Result:
+Moved the next large safe slice into `src4.8`: broader Domain/configuration helpers, Polymarket read-only clients/parsers with safe auth-readiness stubs, PostgreSQL storage schema/repository/initializer, service configuration loading/smoke commands, and the WPF Dashboard. Kept Net48 runtime posture safe: Paper/ReadOnly defaults, auth disabled, and no live order placement/signing wired in this slice. Verification passed with Debug and Release builds of `src4.8/PolyCopyTrader.Net48.sln`, Debug and Release `--strategy-smoke`, `--print-config`, and `--storage-smoke`, plus the main test suite `418/418`. Net48 build emits nullable warnings in copied storage/parsing/dashboard files but no errors. Certificate SPKI pin calculation is intentionally unsupported in the Net48 port if pins are configured; the default pin list is empty.

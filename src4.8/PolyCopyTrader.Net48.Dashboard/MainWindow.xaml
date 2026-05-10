@@ -1,0 +1,937 @@
+<Window x:Class="PolyCopyTrader.Dashboard.MainWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        xmlns:behaviors="clr-namespace:PolyCopyTrader.Dashboard.Behaviors"
+        mc:Ignorable="d"
+        Title="{Binding AppTitle}"
+        Height="760"
+        Width="1220"
+        MinHeight="620"
+        MinWidth="980"
+        Background="#F4F6F8">
+    <Window.Resources>
+        <Style TargetType="TextBlock">
+            <Setter Property="Foreground" Value="#1F2937" />
+            <Setter Property="FontSize" Value="13" />
+        </Style>
+        <Style TargetType="Button">
+            <Setter Property="MinWidth" Value="96" />
+            <Setter Property="Height" Value="30" />
+            <Setter Property="Margin" Value="0,0,8,0" />
+            <Setter Property="Padding" Value="10,0" />
+        </Style>
+        <Style TargetType="TextBox">
+            <Setter Property="Height" Value="30" />
+            <Setter Property="Margin" Value="0,0,8,0" />
+            <Setter Property="Padding" Value="8,0" />
+            <Setter Property="VerticalContentAlignment" Value="Center" />
+        </Style>
+        <Style TargetType="DataGrid">
+            <Setter Property="AutoGenerateColumns" Value="False" />
+            <Setter Property="CanUserAddRows" Value="False" />
+            <Setter Property="CanUserDeleteRows" Value="False" />
+            <Setter Property="IsReadOnly" Value="True" />
+            <Setter Property="GridLinesVisibility" Value="Horizontal" />
+            <Setter Property="HeadersVisibility" Value="Column" />
+            <Setter Property="RowHeight" Value="28" />
+            <Setter Property="AlternatingRowBackground" Value="#F9FAFB" />
+            <Setter Property="BorderBrush" Value="#D1D5DB" />
+            <Setter Property="BorderThickness" Value="1" />
+        </Style>
+        <Style x:Key="CopyableGridTextBox" TargetType="TextBox">
+            <Setter Property="IsReadOnly" Value="True" />
+            <Setter Property="TextWrapping" Value="Wrap" />
+            <Setter Property="AcceptsReturn" Value="True" />
+            <Setter Property="BorderThickness" Value="0" />
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="Padding" Value="4,2" />
+            <Setter Property="VerticalContentAlignment" Value="Top" />
+            <Setter Property="HorizontalScrollBarVisibility" Value="Disabled" />
+            <Setter Property="VerticalScrollBarVisibility" Value="Disabled" />
+        </Style>
+        <DataTemplate x:Key="StrategyRecentGridTemplate">
+            <DataGrid ItemsSource="{Binding}"
+                      behaviors:DataGridSelectionPersistence.KeyProperties="Name">
+                <DataGrid.Columns>
+                    <DataGridTextColumn Header="Name" Binding="{Binding Name}" Width="260" />
+                    <DataGridTextColumn Header="Orders" Binding="{Binding OrdersCount}" Width="70" />
+                    <DataGridTextColumn Header="Filled" Binding="{Binding FilledOrdersCount}" Width="70" />
+                    <DataGridTextColumn Header="Expired" Binding="{Binding ExpiredOrdersCount}" Width="75" />
+                    <DataGridTextColumn Header="Open" Binding="{Binding OpenOrdersCount}" Width="70" />
+                    <DataGridTextColumn Header="Entered" Binding="{Binding EnteredRunsCount}" Width="75" />
+                    <DataGridTextColumn Header="Skipped" Binding="{Binding SkippedRunsCount}" Width="75" />
+                    <DataGridTextColumn Header="Settled" Binding="{Binding SettledRunsCount}" Width="75" />
+                    <DataGridTextColumn Header="Won" Binding="{Binding WonRunsCount}" Width="60" />
+                    <DataGridTextColumn Header="Lost" Binding="{Binding LostRunsCount}" Width="60" />
+                    <DataGridTextColumn Header="Win %" Binding="{Binding WinRatePct}" Width="70" />
+                    <DataGridTextColumn Header="ROI %" Binding="{Binding RoiPct}" Width="70" />
+                    <DataGridTextColumn Header="PnL" Binding="{Binding RealizedPnlUsd}" Width="80" />
+                    <DataGridTextColumn Header="Filled cost" Binding="{Binding FilledCostUsd}" Width="90" />
+                    <DataGridTextColumn Header="Avg fill" Binding="{Binding AvgFillPrice}" Width="80" />
+                    <DataGridTextColumn Header="Avg delay s" Binding="{Binding AvgEntryDelaySeconds}" Width="90" />
+                    <DataGridTextColumn Header="Max delay s" Binding="{Binding MaxEntryDelaySeconds}" Width="90" />
+                    <DataGridTextColumn Header="Top skip" Binding="{Binding TopSkipReason}" Width="220" />
+                    <DataGridTextColumn Header="Last order UTC" Binding="{Binding LastOrderUtc}" Width="150" />
+                    <DataGridTextColumn Header="Last run UTC" Binding="{Binding LastRunUtc}" Width="150" />
+                </DataGrid.Columns>
+            </DataGrid>
+        </DataTemplate>
+    </Window.Resources>
+
+    <Grid Margin="18">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+            <RowDefinition Height="Auto" />
+        </Grid.RowDefinitions>
+
+        <DockPanel Grid.Row="0" LastChildFill="True">
+            <StackPanel DockPanel.Dock="Left">
+                <TextBlock Text="{Binding AppTitle}"
+                           FontSize="24"
+                           FontWeight="SemiBold" />
+                <TextBlock Text="{Binding Summary}"
+                           Margin="0,4,0,0"
+                           Foreground="#4B5563" />
+            </StackPanel>
+
+            <StackPanel DockPanel.Dock="Right"
+                        Orientation="Horizontal"
+                        HorizontalAlignment="Right">
+                <TextBlock Text="Mode"
+                           VerticalAlignment="Center"
+                           Foreground="#6B7280" />
+                <TextBlock Text="{Binding Mode}"
+                           Margin="8,0,20,0"
+                           VerticalAlignment="Center"
+                           FontWeight="SemiBold" />
+                <TextBlock Text="Service"
+                           VerticalAlignment="Center"
+                           Foreground="#6B7280" />
+                <TextBlock Text="{Binding ServiceStatus}"
+                           Margin="8,0,20,0"
+                           VerticalAlignment="Center"
+                           FontWeight="SemiBold" />
+                <Button Content="Refresh"
+                        Command="{Binding RefreshCommand}" />
+            </StackPanel>
+        </DockPanel>
+
+        <Border Grid.Row="1"
+                Background="{Binding ServiceBannerBackground}"
+                BorderBrush="{Binding ServiceBannerBorderBrush}"
+                BorderThickness="1"
+                Padding="12,10"
+                Margin="0,14,0,0">
+            <StackPanel>
+                <TextBlock Text="{Binding ServiceBannerTitle}"
+                           FontSize="18"
+                           FontWeight="SemiBold"
+                           Foreground="{Binding ServiceBannerForeground}" />
+                <TextBlock Text="{Binding ServiceBannerDetail}"
+                           Margin="0,4,0,0"
+                           TextWrapping="Wrap"
+                           Foreground="{Binding ServiceBannerForeground}" />
+            </StackPanel>
+        </Border>
+
+        <DockPanel Grid.Row="2" Margin="0,14,0,12">
+            <WrapPanel DockPanel.Dock="Left">
+                <Button Content="Pause"
+                        Command="{Binding PauseScanningCommand}" />
+                <Button Content="Kill switch"
+                        Command="{Binding KillSwitchCommand}" />
+                <Button Content="Resume"
+                        Command="{Binding ResumeScanningCommand}" />
+                <Button Content="Pause paper"
+                        Command="{Binding PausePaperTradingCommand}" />
+                <Button Content="Resume paper"
+                        Command="{Binding ResumePaperTradingCommand}" />
+                <Button Content="Pause live"
+                        Command="{Binding PauseLiveTradingCommand}" />
+                <Button Content="Resume live"
+                        Command="{Binding ResumeLiveTradingCommand}" />
+                <Button Content="Cancel live"
+                        Command="{Binding CancelAllLiveOrdersCommand}" />
+                <Button Content="Find traders"
+                        Command="{Binding RefreshTraderDiscoveryCommand}" />
+                <Button Content="Onchain sync"
+                        Command="{Binding RefreshOnChainCommand}" />
+                <Button Content="Enrich markets"
+                        Command="{Binding RefreshOnChainMarketsCommand}" />
+                <Button Content="Cancel onchain"
+                        Command="{Binding CancelOnChainCommand}" />
+                <Button Content="Clear kill"
+                        Command="{Binding ClearKillSwitchCommand}" />
+                <TextBox Width="190"
+                         Text="{Binding PinnedAssetId, UpdateSourceTrigger=PropertyChanged}" />
+                <Button Content="Pin asset"
+                        Command="{Binding PinAssetCommand}" />
+                <Button Content="Unpin asset"
+                        Command="{Binding UnpinAssetCommand}" />
+                <Button Content="Disable trader"
+                        Command="{Binding DisableTraderCommand}" />
+                <Button Content="Enable trader"
+                        Command="{Binding EnableTraderCommand}" />
+                <Button Content="Cancel order"
+                        Command="{Binding CancelPaperOrderCommand}" />
+                <Button Content="Clear logs"
+                        Command="{Binding ClearLogsCommand}" />
+                <Button Content="Clear errors"
+                        Command="{Binding ClearDashboardErrorsCommand}" />
+                <Button Content="Export CSV"
+                        Command="{Binding ExportCsvCommand}" />
+            </WrapPanel>
+            <StackPanel DockPanel.Dock="Right"
+                        HorizontalAlignment="Right">
+                <TextBlock Text="{Binding StorageStatus}"
+                           HorizontalAlignment="Right"
+                           Foreground="#4B5563" />
+                <TextBlock Text="{Binding CommandStatus}"
+                           Margin="0,3,0,0"
+                           HorizontalAlignment="Right"
+                           Foreground="#6B7280" />
+            </StackPanel>
+        </DockPanel>
+
+        <TabControl Grid.Row="3">
+            <TabItem Header="Overview">
+                <ScrollViewer VerticalScrollBarVisibility="Auto">
+                    <ItemsControl ItemsSource="{Binding Overview}" Margin="0,12,0,0">
+                        <ItemsControl.ItemsPanel>
+                            <ItemsPanelTemplate>
+                                <UniformGrid Columns="3" />
+                            </ItemsPanelTemplate>
+                        </ItemsControl.ItemsPanel>
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate>
+                                <Border Background="White"
+                                        BorderBrush="#D1D5DB"
+                                        BorderThickness="1"
+                                        Padding="12"
+                                        Margin="0,0,12,12">
+                                    <StackPanel>
+                                        <TextBlock Text="{Binding Name}"
+                                                   Foreground="#6B7280" />
+                                        <TextBlock Text="{Binding Value}"
+                                                   Margin="0,6,0,0"
+                                                   FontSize="16"
+                                                   FontWeight="SemiBold" />
+                                    </StackPanel>
+                                </Border>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                </ScrollViewer>
+            </TabItem>
+
+            <TabItem Header="Strategies">
+                <TabControl>
+                    <TabItem Header="All">
+                        <DataGrid ItemsSource="{Binding Strategies}"
+                                  behaviors:DataGridSelectionPersistence.KeyProperties="StrategyId">
+                    <DataGrid.Columns>
+                        <DataGridTemplateColumn Header="Name" Width="260">
+                            <DataGridTemplateColumn.CellTemplate>
+                                <DataTemplate>
+                                    <TextBox Text="{Binding Name, Mode=OneWay}"
+                                             Style="{StaticResource CopyableGridTextBox}" />
+                                </DataTemplate>
+                            </DataGridTemplateColumn.CellTemplate>
+                        </DataGridTemplateColumn>
+                        <DataGridTemplateColumn Header="Enabled" Width="70">
+                            <DataGridTemplateColumn.CellTemplate>
+                                <DataTemplate>
+                                    <CheckBox IsChecked="{Binding Enabled, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                              Command="{Binding DataContext.SetStrategyEnabledCommand, RelativeSource={RelativeSource AncestorType=DataGrid}}"
+                                              CommandParameter="{Binding}"
+                                              HorizontalAlignment="Center" />
+                                </DataTemplate>
+                            </DataGridTemplateColumn.CellTemplate>
+                        </DataGridTemplateColumn>
+                        <DataGridTemplateColumn Header="Live" Width="60">
+                            <DataGridTemplateColumn.CellTemplate>
+                                <DataTemplate>
+                                    <CheckBox IsChecked="{Binding LiveStakes, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                              Command="{Binding DataContext.SetStrategyLiveStakesCommand, RelativeSource={RelativeSource AncestorType=DataGrid}}"
+                                              CommandParameter="{Binding}"
+                                              HorizontalAlignment="Center" />
+                                </DataTemplate>
+                            </DataGridTemplateColumn.CellTemplate>
+                        </DataGridTemplateColumn>
+                        <DataGridTemplateColumn Header="Paper $" Width="80">
+                            <DataGridTemplateColumn.CellTemplate>
+                                <DataTemplate>
+                                    <TextBox Text="{Binding PaperStakeAmount, Mode=TwoWay, UpdateSourceTrigger=LostFocus}"
+                                             HorizontalContentAlignment="Right"
+                                             Padding="4,2" />
+                                </DataTemplate>
+                            </DataGridTemplateColumn.CellTemplate>
+                        </DataGridTemplateColumn>
+                        <DataGridTemplateColumn Header="Live $" Width="80">
+                            <DataGridTemplateColumn.CellTemplate>
+                                <DataTemplate>
+                                    <TextBox Text="{Binding LiveStakeAmount, Mode=TwoWay, UpdateSourceTrigger=LostFocus}"
+                                             HorizontalContentAlignment="Right"
+                                             Padding="4,2" />
+                                </DataTemplate>
+                            </DataGridTemplateColumn.CellTemplate>
+                        </DataGridTemplateColumn>
+                        <DataGridTemplateColumn Header="Live bal" Width="90">
+                            <DataGridTemplateColumn.CellTemplate>
+                                <DataTemplate>
+                                    <TextBox Text="{Binding LiveAvailableBalance, Mode=TwoWay, UpdateSourceTrigger=LostFocus}"
+                                             HorizontalContentAlignment="Right"
+                                             Padding="4,2" />
+                                </DataTemplate>
+                            </DataGridTemplateColumn.CellTemplate>
+                        </DataGridTemplateColumn>
+                        <DataGridTemplateColumn Header="Save" Width="60">
+                            <DataGridTemplateColumn.CellTemplate>
+                                <DataTemplate>
+                                    <Button Content="Save"
+                                            Command="{Binding DataContext.SaveStrategyStakeAmountsCommand, RelativeSource={RelativeSource AncestorType=DataGrid}}"
+                                            CommandParameter="{Binding}" />
+                                </DataTemplate>
+                            </DataGridTemplateColumn.CellTemplate>
+                        </DataGridTemplateColumn>
+                        <DataGridTextColumn Header="Orders" Binding="{Binding OrdersCount}" Width="70" />
+                        <DataGridTextColumn Header="Filled" Binding="{Binding FilledOrdersCount}" Width="70" />
+                        <DataGridTextColumn Header="Open orders" Binding="{Binding OpenOrdersCount}" Width="90" />
+                        <DataGridTextColumn Header="Open pos" Binding="{Binding OpenPositionsCount}" Width="80" />
+                        <DataGridTextColumn Header="Observed" Binding="{Binding ObservedRunsCount}" Width="80" />
+                        <DataGridTextColumn Header="Entered" Binding="{Binding EnteredRunsCount}" Width="70" />
+                        <DataGridTextColumn Header="Skipped" Binding="{Binding SkippedRunsCount}" Width="70" />
+                        <DataGridTextColumn Header="Settled runs" Binding="{Binding SettledRunsCount}" Width="90" />
+                        <DataGridTextColumn Header="Settled" Binding="{Binding SettledPositionsCount}" Width="80" />
+                        <DataGridTextColumn Header="Won" Binding="{Binding WonPositionsCount}" Width="60" />
+                        <DataGridTextColumn Header="Lost" Binding="{Binding LostPositionsCount}" Width="60" />
+                        <DataGridTextColumn Header="Stake" Binding="{Binding StakeUsd}" Width="90" />
+                        <DataGridTextColumn Header="Realized" Binding="{Binding RealizedPnlUsd}" Width="90" />
+                        <DataGridTextColumn Header="Open unrealized" Binding="{Binding UnrealizedPnlUsd}" Width="110" />
+                        <DataGridTextColumn Header="MtM PnL" Binding="{Binding TotalPnlUsd}" Width="90" />
+                        <DataGridTextColumn Header="Win %" Binding="{Binding WinRatePct}" Width="70" />
+                        <DataGridTextColumn Header="Loss %" Binding="{Binding LossRatePct}" Width="70" />
+                        <DataGridTextColumn Header="Avg win" Binding="{Binding AvgWinPnlUsd}" Width="80" />
+                        <DataGridTextColumn Header="Avg loss" Binding="{Binding AvgLossPnlUsd}" Width="80" />
+                        <DataGridTextColumn Header="Profit factor" Binding="{Binding ProfitFactor}" Width="95" />
+                        <DataGridTextColumn Header="Expectancy" Binding="{Binding ExpectancyPnlUsd}" Width="90" />
+                        <DataGridTextColumn Header="MtM ROI %" Binding="{Binding RoiPct}" Width="80" />
+                        <DataGridTextColumn Header="Closed ROI %" Binding="{Binding ClosedRoiPct}" Width="95" />
+                        <DataGridTextColumn Header="Avg delay s" Binding="{Binding AvgEntryDelaySeconds}" Width="90" />
+                        <DataGridTextColumn Header="Max delay s" Binding="{Binding MaxEntryDelaySeconds}" Width="90" />
+                        <DataGridTextColumn Header="Live orders" Binding="{Binding LiveOrdersCount}" Width="90" />
+                        <DataGridTextColumn Header="Live filled" Binding="{Binding LiveFilledOrdersCount}" Width="90" />
+                        <DataGridTextColumn Header="Live open" Binding="{Binding LiveOpenOrdersCount}" Width="80" />
+                        <DataGridTextColumn Header="Live settled" Binding="{Binding LiveSettledOrdersCount}" Width="90" />
+                        <DataGridTextColumn Header="Live won" Binding="{Binding LiveWonOrdersCount}" Width="80" />
+                        <DataGridTextColumn Header="Live lost" Binding="{Binding LiveLostOrdersCount}" Width="80" />
+                        <DataGridTextColumn Header="Live stake" Binding="{Binding LiveStakeUsd}" Width="90" />
+                        <DataGridTextColumn Header="Live PnL" Binding="{Binding LiveRealizedPnlUsd}" Width="90" />
+                        <DataGridTextColumn Header="Live win %" Binding="{Binding LiveWinRatePct}" Width="80" />
+                        <DataGridTextColumn Header="Live loss %" Binding="{Binding LiveLossRatePct}" Width="80" />
+                        <DataGridTextColumn Header="Live avg win" Binding="{Binding LiveAvgWinPnlUsd}" Width="95" />
+                        <DataGridTextColumn Header="Live avg loss" Binding="{Binding LiveAvgLossPnlUsd}" Width="100" />
+                        <DataGridTextColumn Header="Live profit factor" Binding="{Binding LiveProfitFactor}" Width="120" />
+                        <DataGridTextColumn Header="Live expectancy" Binding="{Binding LiveExpectancyPnlUsd}" Width="115" />
+                        <DataGridTextColumn Header="Live ROI %" Binding="{Binding LiveRoiPct}" Width="85" />
+                        <DataGridTextColumn Header="Live last order UTC" Binding="{Binding LiveLastOrderUtc}" Width="150" />
+                        <DataGridTextColumn Header="Live last settle UTC" Binding="{Binding LiveLastSettlementUtc}" Width="150" />
+                        <DataGridTextColumn Header="Last order UTC" Binding="{Binding LastOrderUtc}" Width="150" />
+                        <DataGridTextColumn Header="Last run UTC" Binding="{Binding LastRunUtc}" Width="150" />
+                            </DataGrid.Columns>
+                        </DataGrid>
+                    </TabItem>
+                    <TabItem Header="24 hours">
+                        <ContentControl Content="{Binding StrategyRecent24Hours}"
+                                        ContentTemplate="{StaticResource StrategyRecentGridTemplate}" />
+                    </TabItem>
+                    <TabItem Header="6 hours">
+                        <ContentControl Content="{Binding StrategyRecent6Hours}"
+                                        ContentTemplate="{StaticResource StrategyRecentGridTemplate}" />
+                    </TabItem>
+                    <TabItem Header="1 hour">
+                        <ContentControl Content="{Binding StrategyRecent1Hour}"
+                                        ContentTemplate="{StaticResource StrategyRecentGridTemplate}" />
+                    </TabItem>
+                </TabControl>
+            </TabItem>
+
+            <TabItem Header="Watchlist">
+                <DataGrid ItemsSource="{Binding Watchlist}"
+                          behaviors:DataGridSelectionPersistence.KeyProperties="Wallet">
+                    <DataGrid.Columns>
+                        <DataGridTextColumn Header="Trader" Binding="{Binding TraderName}" Width="140" />
+                        <DataGridTextColumn Header="Wallet" Binding="{Binding Wallet}" Width="260" />
+                        <DataGridCheckBoxColumn Header="Enabled" Binding="{Binding Enabled}" Width="70" />
+                        <DataGridTextColumn Header="Categories" Binding="{Binding AllowedCategories}" Width="160" />
+                        <DataGridTextColumn Header="Last scan UTC" Binding="{Binding LastSuccessfulScanUtc}" Width="150" />
+                        <DataGridTextColumn Header="Last trade UTC" Binding="{Binding LastSeenTradeUtc}" Width="150" />
+                        <DataGridTextColumn Header="Fetched" Binding="{Binding TradesFetched}" Width="80" />
+                        <DataGridTextColumn Header="New" Binding="{Binding NewTradesStored}" Width="70" />
+                        <DataGridTextColumn Header="Status" Binding="{Binding Status}" Width="120" />
+                        <DataGridTextColumn Header="Last error" Binding="{Binding LastError}" Width="*" />
+                    </DataGrid.Columns>
+                </DataGrid>
+            </TabItem>
+
+            <TabItem Header="Trader Discovery">
+                <DataGrid ItemsSource="{Binding TraderDiscovery}"
+                          behaviors:DataGridSelectionPersistence.KeyProperties="Wallet,Type,Category,TimePeriod">
+                    <DataGrid.Columns>
+                        <DataGridTextColumn Header="Snapshot UTC" Binding="{Binding SnapshotUtc}" Width="150" />
+                        <DataGridTextColumn Header="Type" Binding="{Binding Type}" Width="90" />
+                        <DataGridTextColumn Header="Category" Binding="{Binding Category}" Width="90" />
+                        <DataGridTextColumn Header="Period" Binding="{Binding TimePeriod}" Width="80" />
+                        <DataGridTextColumn Header="Rank" Binding="{Binding Rank}" Width="70" />
+                        <DataGridTextColumn Header="User" Binding="{Binding UserName}" Width="150" />
+                        <DataGridTextColumn Header="Wallet" Binding="{Binding Wallet}" Width="260" />
+                        <DataGridTextColumn Header="PnL" Binding="{Binding Pnl}" Width="90" />
+                        <DataGridTextColumn Header="Volume" Binding="{Binding Volume}" Width="100" />
+                        <DataGridTextColumn Header="All PnL" Binding="{Binding AllTimePnl}" Width="90" />
+                        <DataGridTextColumn Header="All Volume" Binding="{Binding AllTimeVolume}" Width="100" />
+                        <DataGridCheckBoxColumn Header="Verified" Binding="{Binding Verified}" Width="80" />
+                        <DataGridTextColumn Header="Trades" Binding="{Binding TradesFetched}" Width="70" />
+                        <DataGridTextColumn Header="Buy" Binding="{Binding BuyTrades}" Width="60" />
+                        <DataGridTextColumn Header="Sell" Binding="{Binding SellTrades}" Width="60" />
+                        <DataGridTextColumn Header="Recent Vol" Binding="{Binding RecentTradeVolumeUsd}" Width="100" />
+                        <DataGridTextColumn Header="Avg Trade" Binding="{Binding AverageTradeUsd}" Width="100" />
+                        <DataGridTextColumn Header="Last Trade UTC" Binding="{Binding LastTradeUtc}" Width="150" />
+                        <DataGridTextColumn Header="Positions" Binding="{Binding PositionsFetched}" Width="80" />
+                        <DataGridTextColumn Header="Position Value" Binding="{Binding OpenPositionValueUsd}" Width="110" />
+                        <DataGridTextColumn Header="Position PnL" Binding="{Binding OpenPositionCashPnlUsd}" Width="110" />
+                        <DataGridTextColumn Header="Notes" Binding="{Binding Notes}" Width="*" />
+                    </DataGrid.Columns>
+                </DataGrid>
+            </TabItem>
+
+            <TabItem Header="Onchain Trades">
+                <DataGrid ItemsSource="{Binding OnChainTradeDetails}"
+                          behaviors:DataGridSelectionPersistence.KeyProperties="TransactionHash,TokenId,Maker,Taker">
+                    <DataGrid.Columns>
+                        <DataGridTextColumn Header="Timestamp UTC" Binding="{Binding TimestampUtc}" Width="150" />
+                        <DataGridTextColumn Header="Market" Binding="{Binding Market}" Width="300" />
+                        <DataGridTextColumn Header="Outcome" Binding="{Binding Outcome}" Width="100" />
+                        <DataGridTextColumn Header="Category" Binding="{Binding Category}" Width="110" />
+                        <DataGridTextColumn Header="Maker" Binding="{Binding Maker}" Width="250" />
+                        <DataGridTextColumn Header="Taker" Binding="{Binding Taker}" Width="250" />
+                        <DataGridTextColumn Header="Maker side" Binding="{Binding MakerSide}" Width="90" />
+                        <DataGridTextColumn Header="Taker side" Binding="{Binding TakerSide}" Width="90" />
+                        <DataGridTextColumn Header="Price" Binding="{Binding Price}" Width="80" />
+                        <DataGridTextColumn Header="Shares" Binding="{Binding SizeShares}" Width="90" />
+                        <DataGridTextColumn Header="Notional" Binding="{Binding NotionalUsd}" Width="90" />
+                        <DataGridTextColumn Header="Maker amt" Binding="{Binding MakerAmount}" Width="100" />
+                        <DataGridTextColumn Header="Taker amt" Binding="{Binding TakerAmount}" Width="100" />
+                        <DataGridTextColumn Header="Fee" Binding="{Binding FeeAmount}" Width="80" />
+                        <DataGridTextColumn Header="Status" Binding="{Binding Status}" Width="120" />
+                        <DataGridTextColumn Header="Token" Binding="{Binding TokenId}" Width="260" />
+                        <DataGridTextColumn Header="Tx hash" Binding="{Binding TransactionHash}" Width="240" />
+                    </DataGrid.Columns>
+                </DataGrid>
+            </TabItem>
+
+            <TabItem Header="Onchain Participants">
+                <DataGrid ItemsSource="{Binding OnChainParticipantDetails}"
+                          behaviors:DataGridSelectionPersistence.KeyProperties="Wallet">
+                    <DataGrid.Columns>
+                        <DataGridTextColumn Header="Wallet" Binding="{Binding Wallet}" Width="250" />
+                        <DataGridTextColumn Header="Execs" Binding="{Binding Executions}" Width="70" />
+                        <DataGridTextColumn Header="Buy" Binding="{Binding BuyExecutions}" Width="60" />
+                        <DataGridTextColumn Header="Sell" Binding="{Binding SellExecutions}" Width="60" />
+                        <DataGridTextColumn Header="Markets" Binding="{Binding MarketsTraded}" Width="80" />
+                        <DataGridTextColumn Header="Positions" Binding="{Binding PositionsCount}" Width="80" />
+                        <DataGridTextColumn Header="Open" Binding="{Binding OpenPositions}" Width="70" />
+                        <DataGridTextColumn Header="Resolved" Binding="{Binding ResolvedPositions}" Width="80" />
+                        <DataGridTextColumn Header="Volume" Binding="{Binding VolumeUsd}" Width="100" />
+                        <DataGridTextColumn Header="Avg trade" Binding="{Binding AverageTradeUsd}" Width="100" />
+                        <DataGridTextColumn Header="Fees" Binding="{Binding FeesUsd}" Width="80" />
+                        <DataGridTextColumn Header="Exposure" Binding="{Binding OpenExposureUsd}" Width="100" />
+                        <DataGridTextColumn Header="Resolved PnL" Binding="{Binding ResolvedPnlUsd}" Width="110" />
+                        <DataGridTextColumn Header="ROI %" Binding="{Binding ResolvedRoiPct}" Width="80" />
+                        <DataGridTextColumn Header="Win %" Binding="{Binding WinRatePct}" Width="80" />
+                        <DataGridTextColumn Header="Score" Binding="{Binding Score}" Width="90" />
+                        <DataGridTextColumn Header="Sample" Binding="{Binding SampleQuality}" Width="80" />
+                        <DataGridTextColumn Header="First UTC" Binding="{Binding FirstTradeUtc}" Width="150" />
+                        <DataGridTextColumn Header="Last UTC" Binding="{Binding LastTradeUtc}" Width="150" />
+                    </DataGrid.Columns>
+                </DataGrid>
+            </TabItem>
+
+            <TabItem Header="Onchain Leaders">
+                <DataGrid ItemsSource="{Binding OnChainLeaders}"
+                          behaviors:DataGridSelectionPersistence.KeyProperties="Wallet">
+                    <DataGrid.Columns>
+                        <DataGridTextColumn Header="Wallet" Binding="{Binding Wallet}" Width="250" />
+                        <DataGridTextColumn Header="Score" Binding="{Binding Score}" Width="90" />
+                        <DataGridTextColumn Header="Sample" Binding="{Binding SampleQuality}" Width="80" />
+                        <DataGridTextColumn Header="Resolved PnL" Binding="{Binding ResolvedPnlUsd}" Width="110" />
+                        <DataGridTextColumn Header="ROI %" Binding="{Binding ResolvedRoiPct}" Width="90" />
+                        <DataGridTextColumn Header="Win %" Binding="{Binding WinRatePct}" Width="90" />
+                        <DataGridTextColumn Header="Resolved" Binding="{Binding ResolvedPositions}" Width="80" />
+                        <DataGridTextColumn Header="Open" Binding="{Binding OpenPositions}" Width="70" />
+                        <DataGridTextColumn Header="Markets" Binding="{Binding MarketsTraded}" Width="80" />
+                        <DataGridTextColumn Header="Volume" Binding="{Binding VolumeUsd}" Width="110" />
+                        <DataGridTextColumn Header="Open exposure" Binding="{Binding OpenExposureUsd}" Width="120" />
+                        <DataGridTextColumn Header="Avg position" Binding="{Binding AveragePositionSizeUsd}" Width="110" />
+                        <DataGridTextColumn Header="Last active UTC" Binding="{Binding LastActiveUtc}" Width="150" />
+                    </DataGrid.Columns>
+                </DataGrid>
+            </TabItem>
+
+            <TabItem Header="Onchain Rankings">
+                <DataGrid ItemsSource="{Binding OnChainTraders}"
+                          behaviors:DataGridSelectionPersistence.KeyProperties="Wallet">
+                    <DataGrid.Columns>
+                        <DataGridTextColumn Header="Wallet" Binding="{Binding Wallet}" Width="260" />
+                        <DataGridTextColumn Header="Execs" Binding="{Binding Fills}" Width="70" />
+                        <DataGridTextColumn Header="Buy" Binding="{Binding BuyFills}" Width="60" />
+                        <DataGridTextColumn Header="Sell" Binding="{Binding SellFills}" Width="60" />
+                        <DataGridTextColumn Header="Markets" Binding="{Binding MarketsTraded}" Width="80" />
+                        <DataGridTextColumn Header="Volume" Binding="{Binding VolumeUsd}" Width="100" />
+                        <DataGridTextColumn Header="Avg Trade" Binding="{Binding AverageTradeUsd}" Width="100" />
+                        <DataGridTextColumn Header="Fees USD" Binding="{Binding FeesUsd}" Width="90" />
+                        <DataGridTextColumn Header="Score" Binding="{Binding ActivityScore}" Width="90" />
+                        <DataGridTextColumn Header="First UTC" Binding="{Binding FirstTradeUtc}" Width="150" />
+                        <DataGridTextColumn Header="Last UTC" Binding="{Binding LastTradeUtc}" Width="150" />
+                    </DataGrid.Columns>
+                </DataGrid>
+            </TabItem>
+
+            <TabItem Header="Onchain Positions">
+                <DataGrid ItemsSource="{Binding OnChainPositions}"
+                          behaviors:DataGridSelectionPersistence.KeyProperties="Wallet,TokenId">
+                    <DataGrid.Columns>
+                        <DataGridTextColumn Header="Wallet" Binding="{Binding Wallet}" Width="250" />
+                        <DataGridTextColumn Header="Market" Binding="{Binding Market}" Width="280" />
+                        <DataGridTextColumn Header="Outcome" Binding="{Binding Outcome}" Width="100" />
+                        <DataGridTextColumn Header="Category" Binding="{Binding Category}" Width="110" />
+                        <DataGridTextColumn Header="Status" Binding="{Binding Status}" Width="80" />
+                        <DataGridTextColumn Header="Net shares" Binding="{Binding NetShares}" Width="100" />
+                        <DataGridTextColumn Header="Net cost" Binding="{Binding NetCostUsd}" Width="100" />
+                        <DataGridTextColumn Header="Buy shares" Binding="{Binding BuyShares}" Width="100" />
+                        <DataGridTextColumn Header="Sell shares" Binding="{Binding SellShares}" Width="100" />
+                        <DataGridTextColumn Header="Avg buy" Binding="{Binding AverageBuyPrice}" Width="90" />
+                        <DataGridTextColumn Header="Avg sell" Binding="{Binding AverageSellPrice}" Width="90" />
+                        <DataGridTextColumn Header="Volume" Binding="{Binding VolumeUsd}" Width="100" />
+                        <DataGridTextColumn Header="Resolved PnL" Binding="{Binding ResolvedPnlUsd}" Width="110" />
+                        <DataGridTextColumn Header="Last UTC" Binding="{Binding LastTradeUtc}" Width="150" />
+                        <DataGridTextColumn Header="Token" Binding="{Binding TokenId}" Width="260" />
+                    </DataGrid.Columns>
+                </DataGrid>
+            </TabItem>
+
+            <TabItem Header="Onchain Executions">
+                <DataGrid ItemsSource="{Binding OnChainFills}"
+                          behaviors:DataGridSelectionPersistence.KeyProperties="TransactionHash,TokenId,Wallet">
+                    <DataGrid.Columns>
+                        <DataGridTextColumn Header="Timestamp UTC" Binding="{Binding TimestampUtc}" Width="150" />
+                        <DataGridTextColumn Header="Wallet" Binding="{Binding Wallet}" Width="260" />
+                        <DataGridTextColumn Header="Side" Binding="{Binding Side}" Width="70" />
+                        <DataGridTextColumn Header="Token" Binding="{Binding TokenId}" Width="260" />
+                        <DataGridTextColumn Header="Avg Price" Binding="{Binding Price}" Width="80" />
+                        <DataGridTextColumn Header="Size" Binding="{Binding SizeShares}" Width="90" />
+                        <DataGridTextColumn Header="Notional" Binding="{Binding NotionalUsd}" Width="90" />
+                        <DataGridTextColumn Header="Contract" Binding="{Binding Contract}" Width="170" />
+                        <DataGridTextColumn Header="Version" Binding="{Binding Version}" Width="70" />
+                        <DataGridTextColumn Header="Tx hash" Binding="{Binding TransactionHash}" Width="240" />
+                    </DataGrid.Columns>
+                </DataGrid>
+            </TabItem>
+
+            <TabItem Header="Leader Trades">
+                <DataGrid ItemsSource="{Binding LeaderTrades}"
+                          behaviors:DataGridSelectionPersistence.KeyProperties="TransactionHash,Trader">
+                    <DataGrid.Columns>
+                        <DataGridTextColumn Header="Timestamp UTC" Binding="{Binding TimestampUtc}" Width="150" />
+                        <DataGridTextColumn Header="Trader" Binding="{Binding Trader}" Width="140" />
+                        <DataGridTextColumn Header="Market" Binding="{Binding Market}" Width="260" />
+                        <DataGridTextColumn Header="Outcome" Binding="{Binding Outcome}" Width="90" />
+                        <DataGridTextColumn Header="Side" Binding="{Binding Side}" Width="70" />
+                        <DataGridTextColumn Header="Price" Binding="{Binding LeaderPrice}" Width="80" />
+                        <DataGridTextColumn Header="Size" Binding="{Binding Size}" Width="90" />
+                        <DataGridTextColumn Header="Cash" Binding="{Binding CashValueUsd}" Width="90" />
+                        <DataGridTextColumn Header="Category" Binding="{Binding Category}" Width="100" />
+                        <DataGridTextColumn Header="Tx hash" Binding="{Binding TransactionHash}" Width="240" />
+                    </DataGrid.Columns>
+                </DataGrid>
+            </TabItem>
+
+            <TabItem Header="Signals">
+                <DataGrid ItemsSource="{Binding Signals}"
+                          behaviors:DataGridSelectionPersistence.KeyProperties="TimestampUtc,Trader,Market,Outcome,DecisionCode">
+                    <DataGrid.Columns>
+                        <DataGridTextColumn Header="Timestamp UTC" Binding="{Binding TimestampUtc}" Width="150" />
+                        <DataGridTextColumn Header="Trader" Binding="{Binding Trader}" Width="170" />
+                        <DataGridTextColumn Header="Market" Binding="{Binding Market}" Width="210" />
+                        <DataGridTextColumn Header="Outcome" Binding="{Binding Outcome}" Width="90" />
+                        <DataGridTextColumn Header="Score" Binding="{Binding Score}" Width="70" />
+                        <DataGridCheckBoxColumn Header="Accepted" Binding="{Binding Accepted}" Width="80" />
+                        <DataGridTextColumn Header="Decision" Binding="{Binding DecisionCode}" Width="160" />
+                        <DataGridTextColumn Header="Reasons" Binding="{Binding ReasonCodes}" Width="220" />
+                        <DataGridTextColumn Header="Leader" Binding="{Binding LeaderPrice}" Width="80" />
+                        <DataGridTextColumn Header="Bid" Binding="{Binding BestBid}" Width="80" />
+                        <DataGridTextColumn Header="Ask" Binding="{Binding BestAsk}" Width="80" />
+                        <DataGridTextColumn Header="Spread" Binding="{Binding SpreadAbs}" Width="80" />
+                        <DataGridTextColumn Header="Spread %" Binding="{Binding SpreadPct}" Width="80" />
+                        <DataGridTextColumn Header="Lag" Binding="{Binding LagSeconds}" Width="70" />
+                        <DataGridTextColumn Header="Paper price" Binding="{Binding ProposedPaperPrice}" Width="90" />
+                        <DataGridTextColumn Header="Paper size" Binding="{Binding ProposedSizeShares}" Width="90" />
+                        <DataGridTextColumn Header="Paper notional" Binding="{Binding ProposedNotionalUsd}" Width="110" />
+                    </DataGrid.Columns>
+                </DataGrid>
+            </TabItem>
+
+            <TabItem Header="Paper Orders">
+                <DataGrid ItemsSource="{Binding PaperOrders}"
+                          behaviors:DataGridSelectionPersistence.KeyProperties="SignalId,Side,Outcome">
+                    <DataGrid.Columns>
+                        <DataGridTextColumn Header="Status" Binding="{Binding Status}" Width="100" />
+                        <DataGridTextColumn Header="Side" Binding="{Binding Side}" Width="70" />
+                        <DataGridTextColumn Header="Copied wallet" Binding="{Binding CopiedTraderWallet}" Width="180" />
+                        <DataGridTextColumn Header="Market" Binding="{Binding Market}" Width="220" />
+                        <DataGridTextColumn Header="Outcome" Binding="{Binding Outcome}" Width="90" />
+                        <DataGridTextColumn Header="Price" Binding="{Binding Price}" Width="80" />
+                        <DataGridTextColumn Header="Shares" Binding="{Binding SizeShares}" Width="90" />
+                        <DataGridTextColumn Header="Notional" Binding="{Binding NotionalUsd}" Width="90" />
+                        <DataGridTextColumn Header="Created UTC" Binding="{Binding CreatedUtc}" Width="150" />
+                        <DataGridTextColumn Header="Expires UTC" Binding="{Binding ExpiresUtc}" Width="150" />
+                        <DataGridTextColumn Header="Filled UTC" Binding="{Binding FilledUtc}" Width="150" />
+                        <DataGridTextColumn Header="TTL" Binding="{Binding TtlRemaining}" Width="80" />
+                        <DataGridTextColumn Header="Signal id" Binding="{Binding SignalId}" Width="260" />
+                    </DataGrid.Columns>
+                </DataGrid>
+            </TabItem>
+
+            <TabItem Header="Paper Positions">
+                <DataGrid ItemsSource="{Binding PaperPositions}"
+                          behaviors:DataGridSelectionPersistence.KeyProperties="SourceTrader,Market,Outcome">
+                    <DataGrid.Columns>
+                        <DataGridTextColumn Header="Market" Binding="{Binding Market}" Width="240" />
+                        <DataGridTextColumn Header="Outcome" Binding="{Binding Outcome}" Width="90" />
+                        <DataGridTextColumn Header="Size" Binding="{Binding SizeShares}" Width="90" />
+                        <DataGridTextColumn Header="Average" Binding="{Binding AveragePrice}" Width="90" />
+                        <DataGridTextColumn Header="Bid" Binding="{Binding CurrentBid}" Width="80" />
+                        <DataGridTextColumn Header="Ask" Binding="{Binding CurrentAsk}" Width="80" />
+                        <DataGridTextColumn Header="Value" Binding="{Binding EstimatedValueUsd}" Width="100" />
+                        <DataGridTextColumn Header="Unrealized PnL" Binding="{Binding UnrealizedPnlUsd}" Width="120" />
+                        <DataGridTextColumn Header="Realized PnL" Binding="{Binding RealizedPnlUsd}" Width="110" />
+                        <DataGridTextColumn Header="Source trader" Binding="{Binding SourceTrader}" Width="160" />
+                    </DataGrid.Columns>
+                </DataGrid>
+            </TabItem>
+
+            <TabItem Header="Copied Ratings">
+                <DataGrid ItemsSource="{Binding PaperCopiedTraderPerformance}"
+                          behaviors:DataGridSelectionPersistence.KeyProperties="Wallet,Category">
+                    <DataGrid.Columns>
+                        <DataGridTextColumn Header="Wallet" Binding="{Binding Wallet}" Width="230" />
+                        <DataGridTextColumn Header="Category" Binding="{Binding Category}" Width="100" />
+                        <DataGridTextColumn Header="Score" Binding="{Binding Score}" Width="90" />
+                        <DataGridTextColumn Header="MtM PnL" Binding="{Binding TotalPnlUsd}" Width="100" />
+                        <DataGridTextColumn Header="MtM ROI %" Binding="{Binding RoiPct}" Width="90" />
+                        <DataGridTextColumn Header="Win %" Binding="{Binding WinRatePct}" Width="80" />
+                        <DataGridTextColumn Header="Orders" Binding="{Binding OrdersCount}" Width="70" />
+                        <DataGridTextColumn Header="Filled" Binding="{Binding FilledOrdersCount}" Width="70" />
+                        <DataGridTextColumn Header="Open" Binding="{Binding OpenPositionsCount}" Width="70" />
+                        <DataGridTextColumn Header="Settled" Binding="{Binding SettledPositionsCount}" Width="80" />
+                        <DataGridTextColumn Header="Won" Binding="{Binding WonPositionsCount}" Width="60" />
+                        <DataGridTextColumn Header="Lost" Binding="{Binding LostPositionsCount}" Width="60" />
+                        <DataGridTextColumn Header="Buy cost" Binding="{Binding BuyCostUsd}" Width="100" />
+                        <DataGridTextColumn Header="Realized" Binding="{Binding RealizedPnlUsd}" Width="100" />
+                        <DataGridTextColumn Header="Unrealized" Binding="{Binding UnrealizedPnlUsd}" Width="100" />
+                        <DataGridTextColumn Header="Last order UTC" Binding="{Binding LastOrderUtc}" Width="150" />
+                        <DataGridTextColumn Header="Refreshed UTC" Binding="{Binding RefreshedUtc}" Width="150" />
+                    </DataGrid.Columns>
+                </DataGrid>
+            </TabItem>
+
+            <TabItem Header="Dry Run Orders">
+                <DataGrid ItemsSource="{Binding DryRunOrders}"
+                          behaviors:DataGridSelectionPersistence.KeyProperties="SignalId,TimestampUtc">
+                    <DataGrid.Columns>
+                        <DataGridTextColumn Header="Created UTC" Binding="{Binding TimestampUtc}" Width="150" />
+                        <DataGridTextColumn Header="Status" Binding="{Binding Status}" Width="120" />
+                        <DataGridTextColumn Header="Side" Binding="{Binding Side}" Width="70" />
+                        <DataGridTextColumn Header="Asset" Binding="{Binding Asset}" Width="260" />
+                        <DataGridTextColumn Header="Outcome" Binding="{Binding Outcome}" Width="90" />
+                        <DataGridTextColumn Header="Price" Binding="{Binding Price}" Width="80" />
+                        <DataGridTextColumn Header="Shares" Binding="{Binding SizeShares}" Width="90" />
+                        <DataGridTextColumn Header="Notional" Binding="{Binding NotionalUsd}" Width="90" />
+                        <DataGridTextColumn Header="Order type" Binding="{Binding OrderType}" Width="90" />
+                        <DataGridTextColumn Header="Validation" Binding="{Binding ValidationSummary}" Width="260" />
+                        <DataGridTextColumn Header="Signal id" Binding="{Binding SignalId}" Width="260" />
+                    </DataGrid.Columns>
+                </DataGrid>
+            </TabItem>
+
+            <TabItem Header="Live Orders">
+                <DataGrid ItemsSource="{Binding LiveOrders}"
+                          behaviors:DataGridSelectionPersistence.KeyProperties="OrderId,SignalId">
+                    <DataGrid.Columns>
+                        <DataGridTextColumn Header="Created UTC" Binding="{Binding CreatedUtc}" Width="150" />
+                        <DataGridTextColumn Header="Status" Binding="{Binding Status}" Width="110" />
+                        <DataGridTextColumn Header="Order id" Binding="{Binding OrderId}" Width="230" />
+                        <DataGridTextColumn Header="Side" Binding="{Binding Side}" Width="70" />
+                        <DataGridTextColumn Header="Asset" Binding="{Binding Asset}" Width="240" />
+                        <DataGridTextColumn Header="Outcome" Binding="{Binding Outcome}" Width="90" />
+                        <DataGridTextColumn Header="Price" Binding="{Binding Price}" Width="80" />
+                        <DataGridTextColumn Header="Shares" Binding="{Binding SizeShares}" Width="90" />
+                        <DataGridTextColumn Header="Notional" Binding="{Binding NotionalUsd}" Width="90" />
+                        <DataGridTextColumn Header="Type" Binding="{Binding OrderType}" Width="70" />
+                        <DataGridTextColumn Header="Expires UTC" Binding="{Binding ExpiresUtc}" Width="150" />
+                        <DataGridTextColumn Header="Response" Binding="{Binding ResponseStatus}" Width="110" />
+                        <DataGridTextColumn Header="Filled" Binding="{Binding FilledSize}" Width="90" />
+                        <DataGridTextColumn Header="Remaining" Binding="{Binding RemainingSize}" Width="90" />
+                        <DataGridTextColumn Header="Avg fill" Binding="{Binding AverageFillPrice}" Width="80" />
+                        <DataGridTextColumn Header="Filled $" Binding="{Binding FilledNotionalUsd}" Width="90" />
+                        <DataGridTextColumn Header="Cost basis" Binding="{Binding CostBasisUsd}" Width="90" />
+                        <DataGridTextColumn Header="Fee" Binding="{Binding FeeUsd}" Width="70" />
+                        <DataGridTextColumn Header="Settlement" Binding="{Binding SettlementValueUsd}" Width="90" />
+                        <DataGridTextColumn Header="Realized" Binding="{Binding RealizedPnlUsd}" Width="90" />
+                        <DataGridTextColumn Header="Settled UTC" Binding="{Binding SettledUtc}" Width="150" />
+                        <DataGridTextColumn Header="Winning" Binding="{Binding WinningOutcome}" Width="90" />
+                        <DataGridTextColumn Header="Won" Binding="{Binding Won}" Width="60" />
+                        <DataGridTextColumn Header="Settle source" Binding="{Binding SettlementSource}" Width="150" />
+                        <DataGridTextColumn Header="Cancel" Binding="{Binding CancelStatus}" Width="130" />
+                        <DataGridTextColumn Header="Validation" Binding="{Binding ValidationSummary}" Width="260" />
+                    </DataGrid.Columns>
+                </DataGrid>
+            </TabItem>
+
+            <TabItem Header="Live Events">
+                <DataGrid ItemsSource="{Binding LiveTradingEvents}"
+                          behaviors:DataGridSelectionPersistence.KeyProperties="TimestampUtc,Action,Status">
+                    <DataGrid.Columns>
+                        <DataGridTextColumn Header="Created UTC" Binding="{Binding TimestampUtc}" Width="150" />
+                        <DataGridTextColumn Header="Action" Binding="{Binding Action}" Width="140" />
+                        <DataGridTextColumn Header="Status" Binding="{Binding Status}" Width="90" />
+                        <DataGridTextColumn Header="Details" Binding="{Binding Details}" Width="600" />
+                    </DataGrid.Columns>
+                </DataGrid>
+            </TabItem>
+
+            <TabItem Header="Live Readiness">
+                <DataGrid ItemsSource="{Binding LiveReadiness}"
+                          behaviors:DataGridSelectionPersistence.KeyProperties="Gate">
+                    <DataGrid.Columns>
+                        <DataGridTextColumn Header="Gate" Binding="{Binding Gate}" Width="220" />
+                        <DataGridTextColumn Header="Value" Binding="{Binding Value}" Width="220" />
+                        <DataGridTextColumn Header="Status" Binding="{Binding Status}" Width="90" />
+                        <DataGridTextColumn Header="Details" Binding="{Binding Details}" Width="*" />
+                    </DataGrid.Columns>
+                </DataGrid>
+            </TabItem>
+
+            <TabItem Header="Market Data">
+                <DataGrid ItemsSource="{Binding MarketData}"
+                          behaviors:DataGridSelectionPersistence.KeyProperties="AssetId">
+                    <DataGrid.Columns>
+                        <DataGridTextColumn Header="Asset" Binding="{Binding AssetId}" Width="300" />
+                        <DataGridTextColumn Header="Market" Binding="{Binding ConditionId}" Width="300" />
+                        <DataGridTextColumn Header="Bid" Binding="{Binding BestBid}" Width="90" />
+                        <DataGridTextColumn Header="Ask" Binding="{Binding BestAsk}" Width="90" />
+                        <DataGridTextColumn Header="Spread" Binding="{Binding Spread}" Width="90" />
+                        <DataGridTextColumn Header="Snapshot UTC" Binding="{Binding SnapshotUtc}" Width="160" />
+                    </DataGrid.Columns>
+                </DataGrid>
+            </TabItem>
+
+            <TabItem Header="Analytics">
+                <TabControl>
+                    <TabItem Header="Daily">
+                        <DataGrid ItemsSource="{Binding DailyReports}"
+                                  behaviors:DataGridSelectionPersistence.KeyProperties="Date">
+                            <DataGrid.Columns>
+                                <DataGridTextColumn Header="Date" Binding="{Binding Date}" Width="100" />
+                                <DataGridTextColumn Header="Signals" Binding="{Binding SignalsObserved}" Width="80" />
+                                <DataGridTextColumn Header="Accepted" Binding="{Binding SignalsAccepted}" Width="80" />
+                                <DataGridTextColumn Header="Rejected" Binding="{Binding SignalsRejected}" Width="80" />
+                                <DataGridTextColumn Header="Orders" Binding="{Binding PaperOrdersCreated}" Width="80" />
+                                <DataGridTextColumn Header="Fills" Binding="{Binding PaperFills}" Width="70" />
+                                <DataGridTextColumn Header="Expired" Binding="{Binding PaperExpiredOrders}" Width="80" />
+                                <DataGridTextColumn Header="Paper PnL" Binding="{Binding PaperPnl}" Width="100" />
+                                <DataGridTextColumn Header="Open exposure" Binding="{Binding OpenPaperExposure}" Width="120" />
+                                <DataGridTextColumn Header="Top rejections" Binding="{Binding TopRejectionReasons}" Width="260" />
+                                <DataGridTextColumn Header="API errors" Binding="{Binding ApiErrors}" Width="80" />
+                                <DataGridTextColumn Header="Generated UTC" Binding="{Binding GeneratedUtc}" Width="150" />
+                            </DataGrid.Columns>
+                        </DataGrid>
+                    </TabItem>
+
+                    <TabItem Header="Traders">
+                        <DataGrid ItemsSource="{Binding TraderPerformance}"
+                                  behaviors:DataGridSelectionPersistence.KeyProperties="Trader">
+                            <DataGrid.Columns>
+                                <DataGridTextColumn Header="Trader" Binding="{Binding Trader}" Width="220" />
+                                <DataGridTextColumn Header="Signals" Binding="{Binding Signals}" Width="70" />
+                                <DataGridTextColumn Header="Accept %" Binding="{Binding AcceptanceRatePct}" Width="80" />
+                                <DataGridTextColumn Header="Fill %" Binding="{Binding FillRatePct}" Width="80" />
+                                <DataGridTextColumn Header="Avg lag" Binding="{Binding AverageLagSeconds}" Width="80" />
+                                <DataGridTextColumn Header="Avg leader" Binding="{Binding AverageLeaderPrice}" Width="90" />
+                                <DataGridTextColumn Header="Avg proposed" Binding="{Binding AverageProposedPrice}" Width="100" />
+                                <DataGridTextColumn Header="Price diff" Binding="{Binding AveragePriceDifference}" Width="90" />
+                                <DataGridTextColumn Header="Paper PnL" Binding="{Binding PaperPnl}" Width="100" />
+                                <DataGridTextColumn Header="PnL by category" Binding="{Binding PaperPnlByCategory}" Width="180" />
+                                <DataGridTextColumn Header="Rejections" Binding="{Binding RejectionReasons}" Width="*" />
+                            </DataGrid.Columns>
+                        </DataGrid>
+                    </TabItem>
+
+                    <TabItem Header="Categories">
+                        <DataGrid ItemsSource="{Binding CategoryPerformance}"
+                                  behaviors:DataGridSelectionPersistence.KeyProperties="Category">
+                            <DataGrid.Columns>
+                                <DataGridTextColumn Header="Category" Binding="{Binding Category}" Width="160" />
+                                <DataGridTextColumn Header="Signals" Binding="{Binding Signals}" Width="80" />
+                                <DataGridTextColumn Header="Accepted" Binding="{Binding Accepted}" Width="80" />
+                                <DataGridTextColumn Header="Filled" Binding="{Binding Filled}" Width="80" />
+                                <DataGridTextColumn Header="Paper PnL" Binding="{Binding PaperPnl}" Width="100" />
+                                <DataGridTextColumn Header="Avg spread" Binding="{Binding AverageSpread}" Width="100" />
+                                <DataGridTextColumn Header="Avg lag" Binding="{Binding AverageLagSeconds}" Width="100" />
+                            </DataGrid.Columns>
+                        </DataGrid>
+                    </TabItem>
+
+                    <TabItem Header="Execution">
+                        <DataGrid ItemsSource="{Binding ExecutionQuality}"
+                                  behaviors:DataGridSelectionPersistence.KeyProperties="CreatedUtc,Trader,Asset">
+                            <DataGrid.Columns>
+                                <DataGridTextColumn Header="Created UTC" Binding="{Binding CreatedUtc}" Width="150" />
+                                <DataGridTextColumn Header="Trader" Binding="{Binding Trader}" Width="180" />
+                                <DataGridTextColumn Header="Asset" Binding="{Binding Asset}" Width="260" />
+                                <DataGridTextColumn Header="Leader" Binding="{Binding LeaderPrice}" Width="80" />
+                                <DataGridTextColumn Header="Proposed" Binding="{Binding ProposedPrice}" Width="80" />
+                                <DataGridTextColumn Header="Fill" Binding="{Binding PaperFillPrice}" Width="80" />
+                                <DataGridTextColumn Header="Prop-Leader" Binding="{Binding ProposedMinusLeader}" Width="90" />
+                                <DataGridTextColumn Header="Fill-Prop" Binding="{Binding FillMinusProposed}" Width="90" />
+                                <DataGridTextColumn Header="Lag" Binding="{Binding LagSeconds}" Width="70" />
+                                <DataGridTextColumn Header="Spread" Binding="{Binding SpreadAtSignal}" Width="80" />
+                                <DataGridTextColumn Header="Mid +1m" Binding="{Binding MidAfter1m}" Width="80" />
+                                <DataGridTextColumn Header="Mid +5m" Binding="{Binding MidAfter5m}" Width="80" />
+                                <DataGridTextColumn Header="Mid +30m" Binding="{Binding MidAfter30m}" Width="90" />
+                            </DataGrid.Columns>
+                        </DataGrid>
+                    </TabItem>
+
+                    <TabItem Header="Rejections">
+                        <DataGrid ItemsSource="{Binding RejectionAnalysis}"
+                                  behaviors:DataGridSelectionPersistence.KeyProperties="ReasonCode">
+                            <DataGrid.Columns>
+                                <DataGridTextColumn Header="Reason" Binding="{Binding ReasonCode}" Width="220" />
+                                <DataGridTextColumn Header="Count" Binding="{Binding Count}" Width="80" />
+                                <DataGridTextColumn Header="Rejected %" Binding="{Binding RejectedPct}" Width="100" />
+                                <DataGridTextColumn Header="Last UTC" Binding="{Binding LastRejectedUtc}" Width="150" />
+                            </DataGrid.Columns>
+                        </DataGrid>
+                    </TabItem>
+                </TabControl>
+            </TabItem>
+
+            <TabItem Header="Risk">
+                <DataGrid ItemsSource="{Binding RiskUsage}"
+                          behaviors:DataGridSelectionPersistence.KeyProperties="Name">
+                    <DataGrid.Columns>
+                        <DataGridTextColumn Header="Limit" Binding="{Binding Name}" Width="180" />
+                        <DataGridTextColumn Header="Limit value" Binding="{Binding LimitUsd}" Width="120" />
+                        <DataGridTextColumn Header="Used" Binding="{Binding UsedUsd}" Width="120" />
+                        <DataGridTextColumn Header="Used %" Binding="{Binding UsedPct}" Width="100" />
+                        <DataGridTextColumn Header="Status" Binding="{Binding Status}" Width="100" />
+                    </DataGrid.Columns>
+                </DataGrid>
+            </TabItem>
+
+            <TabItem Header="Diagnostics">
+                <DataGrid ItemsSource="{Binding Diagnostics}"
+                          behaviors:DataGridSelectionPersistence.KeyProperties="Name">
+                    <DataGrid.Columns>
+                        <DataGridTextColumn Header="Check" Binding="{Binding Name}" Width="180" />
+                        <DataGridTextColumn Header="Value" Binding="{Binding Value}" Width="*" />
+                        <DataGridTextColumn Header="Status" Binding="{Binding Status}" Width="100" />
+                    </DataGrid.Columns>
+                </DataGrid>
+            </TabItem>
+
+            <TabItem Header="Runbook">
+                <DataGrid ItemsSource="{Binding RunbookLinks}"
+                          behaviors:DataGridSelectionPersistence.KeyProperties="Document,Path">
+                    <DataGrid.Columns>
+                        <DataGridTextColumn Header="Document" Binding="{Binding Document}" Width="180" />
+                        <DataGridTextColumn Header="Path" Binding="{Binding Path}" Width="280" />
+                        <DataGridTextColumn Header="Purpose" Binding="{Binding Purpose}" Width="*" />
+                    </DataGrid.Columns>
+                </DataGrid>
+            </TabItem>
+
+            <TabItem Header="Logs">
+                <DataGrid ItemsSource="{Binding Logs}"
+                          behaviors:DataGridSelectionPersistence.KeyProperties="TimestampUtc,Component,Message">
+                    <DataGrid.Columns>
+                        <DataGridTextColumn Header="Time UTC" Binding="{Binding TimestampUtc}" Width="150" />
+                        <DataGridTextColumn Header="Severity" Binding="{Binding Severity}" Width="90" />
+                        <DataGridTextColumn Header="Component" Binding="{Binding Component}" Width="180" />
+                        <DataGridTextColumn Header="Message" Binding="{Binding Message}" Width="420" />
+                        <DataGridTextColumn Header="Details" Binding="{Binding Details}" Width="*" />
+                    </DataGrid.Columns>
+                </DataGrid>
+            </TabItem>
+
+            <TabItem Header="Dashboard Errors">
+                <DockPanel>
+                    <StackPanel DockPanel.Dock="Top"
+                                Orientation="Horizontal"
+                                Margin="0,0,0,8">
+                        <Button Content="Clear errors"
+                                Command="{Binding ClearDashboardErrorsCommand}" />
+                        <Button Content="Copy selected"
+                                Command="{Binding CopySelectedDashboardErrorCommand}" />
+                    </StackPanel>
+                    <DataGrid ItemsSource="{Binding DashboardErrors}"
+                              behaviors:DataGridSelectionPersistence.KeyProperties="TimestampUtc,Source,Message"
+                              SelectedItem="{Binding SelectedDashboardError, Mode=TwoWay}"
+                              RowHeight="NaN"
+                              CanUserResizeRows="True"
+                              SelectionMode="Single"
+                              SelectionUnit="FullRow"
+                              ClipboardCopyMode="IncludeHeader">
+                        <DataGrid.Columns>
+                            <DataGridTextColumn Header="Time UTC" Binding="{Binding TimestampUtc}" Width="150" />
+                            <DataGridTextColumn Header="Source" Binding="{Binding Source}" Width="160" />
+                            <DataGridTemplateColumn Header="Message" Width="360">
+                                <DataGridTemplateColumn.CellTemplate>
+                                    <DataTemplate>
+                                        <TextBox Text="{Binding Message, Mode=OneWay}"
+                                                 Style="{StaticResource CopyableGridTextBox}" />
+                                    </DataTemplate>
+                                </DataGridTemplateColumn.CellTemplate>
+                            </DataGridTemplateColumn>
+                            <DataGridTemplateColumn Header="Details" Width="*">
+                                <DataGridTemplateColumn.CellTemplate>
+                                    <DataTemplate>
+                                        <TextBox Text="{Binding Details, Mode=OneWay}"
+                                                 Style="{StaticResource CopyableGridTextBox}" />
+                                    </DataTemplate>
+                                </DataGridTemplateColumn.CellTemplate>
+                            </DataGridTemplateColumn>
+                        </DataGrid.Columns>
+                    </DataGrid>
+                </DockPanel>
+            </TabItem>
+        </TabControl>
+
+        <DockPanel Grid.Row="4" Margin="0,10,0,0">
+            <TextBlock DockPanel.Dock="Left"
+                       Text="{Binding LastError}"
+                       Foreground="#B91C1C" />
+            <TextBlock DockPanel.Dock="Right"
+                       HorizontalAlignment="Right"
+                       Foreground="#6B7280">
+                <Run Text="Last updated UTC: " />
+                <Run Text="{Binding LastUpdatedUtc}" />
+            </TextBlock>
+        </DockPanel>
+    </Grid>
+</Window>

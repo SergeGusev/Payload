@@ -1,3 +1,16 @@
+## Active Update 2026-05-10 Net48 Storage Polymarket Dashboard Port
+Goal: Continue the `.NET Framework 4.8` migration by moving the remaining safe Paper/ReadOnly slices into `src4.8`.
+Status: Completed
+Done:
+- Replaced the narrow Net48 Domain scaffold with the broader Domain models, configuration, CSV/math helpers, secret redaction, runtime/storage validation, and Framework-compatible `DateOnly` shim.
+- Ported Polymarket read-only clients/parsers and safe auth-readiness stubs into `src4.8/PolyCopyTrader.Net48.Polymarket`; live order placement/signing is not wired in this Net48 slice.
+- Ported PostgreSQL storage schema/repository/initializer into `src4.8/PolyCopyTrader.Net48.Storage` with Net48-compatible Npgsql usage and synchronous transaction/file API substitutions where required.
+- Added Net48 service configuration loading, safe `appsettings.json` defaults, `--print-config`, and `--storage-smoke`.
+- Ported the WPF Dashboard files into `src4.8/PolyCopyTrader.Net48.Dashboard`, wired configuration/storage/read-only Polymarket references, and removed the scaffold placeholder.
+Next: If full Net48 runtime parity is required, port the real background worker host loop/service orchestration next; keep live trading disabled until explicitly requested and verified.
+Notes: Verification passed: Debug and Release `dotnet build src4.8/PolyCopyTrader.Net48.sln`; Debug and Release `--strategy-smoke`, `--print-config`, and `--storage-smoke`; main `dotnet test tests/PolyCopyTrader.Tests/PolyCopyTrader.Tests.csproj --configuration Release` passed `418/418`. Net48 builds currently emit nullable warnings in copied storage/parsing/dashboard files but no errors. Net48 certificate SPKI pin calculation is intentionally unsupported if pins are configured; default pin list is empty.
+Blockers: None.
+
 ## Active Update 2026-05-10 Net48 Domain Strategy Port
 Goal: Start the actual `.NET Framework 4.8` port by moving the Paper-only domain and strategy core into `src4.8`.
 Status: Completed
