@@ -1,3 +1,16 @@
+## Active Update 2026-05-10 Net48 Paper Runtime Launch
+Goal: Explain and fix how to run `PolyCopyTrader.Net48.Service` so it stays running like the old service.
+Status: Completed / Service Running / Paper Active / Live Paused
+Done:
+- Clarified that launching the Net48 service executable without arguments exits by design; interactive runtime must use `--run`, while installed Windows Service mode must use `--install`/`--start`.
+- Found the initial Net48 safe `appsettings.json` had BTC/Gamma/Binance/odds workers disabled, so the process stayed up but did not collect BTC strategy statistics.
+- Updated `src4.8/PolyCopyTrader.Net48.Service/appsettings.json` to enable Paper BTC runtime collection: BTC strategy worker, Gamma market ingestion, BTC Binance reference stream, BTC odds archive, BTC-only market WebSocket, order-book refresh, Paper settlement/accounting, PostgreSQL-required storage, and IPC.
+- Kept safety gates disabled: `Bot:EnableLiveTrading=false`, `PolymarketAuth:Enabled=false`, on-chain ingestion disabled, trader discovery disabled, Data API trader ingestion disabled, and Live trading paused over IPC after startup.
+- Started the Release Net48 service with `--run`; IPC reports `Running`, Paper/scanning unpaused, Live paused, and BTC strategy loop active.
+Next: Let the Net48 Paper runtime collect statistics and monitor Dashboard/IPC for parity with the old service; if this must run as a real Windows Service on the VPS, install/start it from an elevated console.
+Notes: Verification passed: Net48 `--print-config` shows Paper mode, Live/Auth disabled, BTC/Gamma/Binance enabled; `--host-smoke` passed with 20 hosted services; Release `dotnet build src4.8/PolyCopyTrader.Net48.sln --no-restore` passed with warnings only; running process PID was `30156` at verification time.
+Blockers: None.
+
 ## Active Update 2026-05-10 Net48 Service Runtime Port
 Goal: Continue the `.NET Framework 4.8` migration by wiring the real Paper/ReadOnly service runtime instead of leaving only smoke commands.
 Status: Completed

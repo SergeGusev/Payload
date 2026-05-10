@@ -1,3 +1,10 @@
+## 2026-05-10T16:58:00Z
+Request:
+User asked how to run `PolyCopyTrader.Net48.Service` so it does not immediately exit, noting that the old service started and kept running.
+
+Result:
+Explained that Net48 direct executable launch without arguments exits by design and that interactive runtime must use `--run` or installed service mode must use `--install`/`--start`. Found the first Net48 run stayed alive but used a safe config with BTC/Gamma/Binance workers disabled, so it was not collecting strategy statistics. Updated `src4.8/PolyCopyTrader.Net48.Service/appsettings.json` for Paper BTC collection while keeping Live/Auth/on-chain/trader discovery disabled, verified `--print-config`, `--host-smoke`, and Release build, then started the Release Net48 service with `--run` and paused Live over IPC. IPC reported Running with Paper/scanning unpaused and Live paused.
+
 ## 2026-05-10T10:00:00.0000000Z
 Request:
 А ты можешь не полностью очистить историю, а только ту, которая не соответствует GTD ?
