@@ -1,3 +1,10 @@
+## 2026-05-10T17:06:30Z
+Request:
+User asked to check whether the Net48 service works normally and collects everything needed, then sent a Dashboard screenshot with an error.
+
+Result:
+Found the Net48 service running in Paper mode with Live paused and fresh BTC activity in logs/DB: strategy runs, Paper orders, BTC odds ticks, Gamma fetches, and BTC order-book refresh cycles. The screenshot showed Dashboard failing on `InvalidCastException: Can't cast database type date to DateOnly` while reading `daily_reports.report_date`. Fixed Net48 `PostgresAppRepository` to read PostgreSQL `date` as `DateTime` and convert to the compatibility `DateOnly`, and to write daily report dates using `NpgsqlDbType.Date`. Rebuilt Debug/Release, restarted the Net48 service with `--run`, paused Live, verified IPC Running, `--host-smoke`, `--storage-smoke`, and a temporary Net48 repository smoke calling `GetDailyReportsAsync`; the smoke read daily reports without the screenshot exception. Temporary diagnostic artifacts were removed.
+
 ## 2026-05-10T16:58:00Z
 Request:
 User asked how to run `PolyCopyTrader.Net48.Service` so it does not immediately exit, noting that the old service started and kept running.

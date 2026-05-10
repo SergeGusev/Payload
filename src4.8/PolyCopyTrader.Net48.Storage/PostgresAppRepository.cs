@@ -4518,7 +4518,7 @@ ORDER BY participant.block_timestamp_utc, participant.block_number, participant.
 	{
 		using NpgsqlConnection connection = await OpenConnectionAsync(cancellationToken);
 		using NpgsqlCommand command = CreateCommand(connection, "INSERT INTO daily_reports (\n    report_date, signals_observed, signals_accepted, signals_rejected, paper_orders_created,\n    paper_fills, paper_expired_orders, paper_pnl, open_paper_exposure, top_rejection_reasons,\n    api_errors, generated_at_utc\n) VALUES (\n    @ReportDate, @SignalsObserved, @SignalsAccepted, @SignalsRejected, @PaperOrdersCreated,\n    @PaperFills, @PaperExpiredOrders, @PaperPnl, @OpenPaperExposure, @TopRejectionReasons,\n    @ApiErrors, @GeneratedAtUtc\n)\nON CONFLICT(report_date) DO UPDATE SET\n    signals_observed = excluded.signals_observed,\n    signals_accepted = excluded.signals_accepted,\n    signals_rejected = excluded.signals_rejected,\n    paper_orders_created = excluded.paper_orders_created,\n    paper_fills = excluded.paper_fills,\n    paper_expired_orders = excluded.paper_expired_orders,\n    paper_pnl = excluded.paper_pnl,\n    open_paper_exposure = excluded.open_paper_exposure,\n    top_rejection_reasons = excluded.top_rejection_reasons,\n    api_errors = excluded.api_errors,\n    generated_at_utc = excluded.generated_at_utc;");
-		command.Parameters.AddWithValue("ReportDate", report.ReportDate);
+		command.Parameters.AddWithValue("ReportDate", NpgsqlDbType.Date, report.ReportDate.ToDateTime());
 		command.Parameters.AddWithValue("SignalsObserved", report.SignalsObserved);
 		command.Parameters.AddWithValue("SignalsAccepted", report.SignalsAccepted);
 		command.Parameters.AddWithValue("SignalsRejected", report.SignalsRejected);
@@ -5422,7 +5422,7 @@ LIMIT @Limit;
 
 	private static DailyReport ReadDailyReport(NpgsqlDataReader reader)
 	{
-		return new DailyReport(reader.GetFieldValue<DateOnly>(0), reader.GetInt32(1), reader.GetInt32(2), reader.GetInt32(3), reader.GetInt32(4), reader.GetInt32(5), reader.GetInt32(6), reader.GetDecimal(7), reader.GetDecimal(8), reader.GetString(9), reader.GetInt32(10), DateTimeOffsetFromUtc(reader.GetDateTime(11)));
+		return new DailyReport(DateOnly.FromDateTime(reader.GetDateTime(0)), reader.GetInt32(1), reader.GetInt32(2), reader.GetInt32(3), reader.GetInt32(4), reader.GetInt32(5), reader.GetInt32(6), reader.GetDecimal(7), reader.GetDecimal(8), reader.GetString(9), reader.GetInt32(10), DateTimeOffsetFromUtc(reader.GetDateTime(11)));
 	}
 
 	private static void AddPolymarketHttpLogParameters(NpgsqlCommand command, PolymarketHttpLogEntry entry)

@@ -1,3 +1,18 @@
+## Active Update 2026-05-10 Net48 Dashboard Daily Report Fix And Health Check
+Goal: Check whether the Net48 service is collecting the needed Paper BTC statistics and fix the Dashboard startup error from the screenshot.
+Status: Completed / Service Running / Paper Active / Live Paused
+Done:
+- Inspected the clipboard screenshot. The Dashboard error was `InvalidCastException: Can't cast database type date to DateOnly` while reading `daily_reports.report_date` in `PostgresAppRepository.ReadDailyReport`.
+- Fixed Net48 storage to read PostgreSQL `date` as `DateTime` and convert it through the Framework-compatible `DateOnly.FromDateTime`; daily report writes now send `ReportDate.ToDateTime()` with `NpgsqlDbType.Date`.
+- Rebuilt Net48 Debug and Release successfully, with existing nullable warnings only.
+- Restarted the Net48 Release service with `--run` and paused Live over IPC.
+- Verified IPC reports `Running`, scanning and Paper unpaused, Live paused, `lastError=null`.
+- Verified service collection from logs and DB: recent BTC order-book refresh, Gamma ingestion, BTC odds archive cycles, fresh BTC odds ticks, fresh strategy runs, and fresh Paper orders.
+- Verified the Dashboard daily report repository path with a temporary Net48 smoke calling `GetDailyReportsAsync`; it read existing reports without the screenshot exception. Temporary smoke artifacts were removed.
+Next: Keep Net48 Paper service running and monitor Dashboard. Old stale `market_data_status` rows from previous all-active WebSocket shards remain in DB, but the current aggregate BTC WebSocket status is fresh and connected.
+Notes: Verification passed: Release `--host-smoke`, Release `--storage-smoke`, Debug/Release Net48 builds, temporary Dashboard repository smoke, and IPC status check. At DB check time there were fresh 15-minute rows: strategy runs, Paper orders, BTC odds ticks, and Gamma market fetches.
+Blockers: None.
+
 ## Active Update 2026-05-10 Net48 Paper Runtime Launch
 Goal: Explain and fix how to run `PolyCopyTrader.Net48.Service` so it stays running like the old service.
 Status: Completed / Service Running / Paper Active / Live Paused
