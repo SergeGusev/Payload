@@ -290,3 +290,9 @@ Continue the `.NET Framework 4.8` migration and port everything at once, interru
 
 Result:
 Moved the next large safe slice into `src4.8`: broader Domain/configuration helpers, Polymarket read-only clients/parsers with safe auth-readiness stubs, PostgreSQL storage schema/repository/initializer, service configuration loading/smoke commands, and the WPF Dashboard. Kept Net48 runtime posture safe: Paper/ReadOnly defaults, auth disabled, and no live order placement/signing wired in this slice. Verification passed with Debug and Release builds of `src4.8/PolyCopyTrader.Net48.sln`, Debug and Release `--strategy-smoke`, `--print-config`, and `--storage-smoke`, plus the main test suite `418/418`. Net48 build emits nullable warnings in copied storage/parsing/dashboard files but no errors. Certificate SPKI pin calculation is intentionally unsupported in the Net48 port if pins are configured; the default pin list is empty.
+## 2026-05-10T21:00:45.0000000+00:00
+Request:
+Всё нормально? Мне кажется, не создаются новые ордера
+
+Result:
+Checked the running Net48 service and both PostgreSQL databases. The service is running in Paper mode and is creating new paper orders in the local/source PostgreSQL 17.5 database on `127.0.0.1` (`205` paper orders in the latest 15 minutes, latest at `2026-05-10 21:00:15 UTC`). The new PostgreSQL 9.6 target at `192.168.0.101` is not receiving those writes because the service connection string still points to `127.0.0.1`; its latest paper order remains `2026-05-10 19:42:03 UTC`. No production code changed.

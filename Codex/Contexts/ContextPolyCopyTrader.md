@@ -1,3 +1,16 @@
+## Active Update 2026-05-10 Net48 Service Order Creation Check
+Goal: Verify whether the restarted Net48 service is creating new paper orders.
+Status: Completed
+Done:
+- Confirmed `PolyCopyTrader.Net48.Service` is running as PID `26224` with IPC status `Running`, scanning/paper trading unpaused, kill switch inactive, and no last error.
+- Verified the running service uses `POLYCOPYTRADER_POSTGRES_CONNECTION` with `Host=127.0.0.1`, `Database=polycopytrader`; the connected server is PostgreSQL `17.5`.
+- Verified local/source PostgreSQL `17.5` is receiving new data: `paper_orders` showed `205` rows in the latest 15 minutes, including Binance strategy orders at `2026-05-10 21:00:15 UTC`, and `btc_up_down_5m_odds_ticks` had `120` rows in the latest 15 minutes.
+- Compared the new target PostgreSQL `9.6.24` at `192.168.0.101`; it is not receiving the currently running service data, with last `paper_orders` at `2026-05-10 19:42:03 UTC` and no BTC odds ticks in the latest 15 minutes.
+- Removed the temporary read-only DB probe from `artifacts`.
+Next: If collection should happen on the new server database, change `POLYCOPYTRADER_POSTGRES_CONNECTION` to `Host=192.168.0.101;Database=polycopytrader;...` and restart the Net48 service.
+Notes: `git pull --ff-only` reported already up to date. No production code changed. Verification was read-only DB diagnostics plus IPC `/status`/`/health`.
+Blockers: None.
+
 ## Active Update 2026-05-10 PostgreSQL 9.6 Target Database Prep
 Goal: Prepare the new Windows Server 2008 R2 PostgreSQL target at `192.168.0.101` for the same application connection string after standard backup/restore was not viable across PostgreSQL versions.
 Status: Completed
