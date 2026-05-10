@@ -21,7 +21,19 @@ public sealed class StrategyEngineTests
     }
 
     [Fact]
-    public void SignalEngine_AcceptsBuySignalWithSafeMakerPrice()
+    public void MakerPriceFormula_SellUsesAskTickMinExitAndBidTick()
+    {
+        var proposed = MakerPriceCalculator.CalculateSell(
+            bestBid: 0.73m,
+            bestAsk: 0.76m,
+            tickSize: 0.01m,
+            minExit: 0.74m);
+
+        Assert.Equal(0.75m, proposed);
+    }
+
+    [Fact]
+    public void SignalEngine_AcceptsBuySignalAtLeaderPrice()
     {
         var engine = CreateSignalEngine();
 
@@ -88,6 +100,62 @@ public sealed class StrategyEngineTests
     }
 
     [Fact]
+    public void SignalEngine_RejectsWeakCopiedTraderOverallPerformance()
+    {
+        var engine = CreateSignalEngine();
+
+        var decision = engine.Evaluate(CreateContext(
+            OrderBook(0.73m, 0.75m),
+            copiedTraderOverallPerformance: CopiedPerformance("OVERALL", settledPositionsCount: 3, totalPnlUsd: -3m, roiPct: -15m, score: 30m)));
+
+        Assert.False(decision.Accepted);
+        Assert.Equal(SignalReasonCodes.CopiedTraderPerformanceTooWeak, decision.DecisionCode);
+    }
+
+    [Fact]
+    public void SignalEngine_RejectsWeakCopiedTraderCategoryPerformance()
+    {
+        var engine = CreateSignalEngine();
+
+        var decision = engine.Evaluate(CreateContext(
+            OrderBook(0.73m, 0.75m),
+            copiedTraderCategoryPerformance: CopiedPerformance("POLITICS", settledPositionsCount: 3, totalPnlUsd: -3m, roiPct: -15m, score: 30m)));
+
+        Assert.False(decision.Accepted);
+        Assert.Equal(SignalReasonCodes.CopiedTraderCategoryPerformanceTooWeak, decision.DecisionCode);
+    }
+
+    [Fact]
+    public void SignalEngine_IgnoresThinCopiedTraderPerformance()
+    {
+        var engine = CreateSignalEngine();
+
+        var decision = engine.Evaluate(CreateContext(
+            OrderBook(0.73m, 0.75m),
+            copiedTraderOverallPerformance: CopiedPerformance("OVERALL", settledPositionsCount: 2, totalPnlUsd: -50m, roiPct: -80m, score: 0m)));
+
+        Assert.True(decision.Accepted);
+    }
+
+    [Fact]
+    public void SignalEngine_AddsCopiedTraderPerformanceScoreForHealthyPerformance()
+    {
+        var engine = CreateSignalEngine(new SignalOptions { NormalPaperOrderScore = 200 });
+        var trade = Trade();
+        var orderBook = OrderBook(0.735m, 0.745m);
+
+        var baseline = engine.Evaluate(CreateContext(orderBook, trade: trade));
+        var decision = engine.Evaluate(CreateContext(
+            orderBook,
+            trade: trade,
+            copiedTraderOverallPerformance: CopiedPerformance("OVERALL", settledPositionsCount: 5, totalPnlUsd: 4m, roiPct: 12m, score: 70m)));
+
+        Assert.True(baseline.Accepted);
+        Assert.True(decision.Accepted);
+        Assert.Equal(baseline.Score + 10, decision.Score);
+    }
+
+    [Fact]
     public void SignalEngine_RejectsDisallowedCategory()
     {
         var engine = CreateSignalEngine();
@@ -114,13 +182,77 @@ public sealed class StrategyEngineTests
     }
 
     [Fact]
-    public void SignalEngine_RejectsUnsupportedSide()
+    public void SignalEngine_AcceptsSellSignalWhenCopiedPositionExists()
+    {
+        var engine = CreateSignalEngine();
+
+        var decision = engine.Evaluate(CreateContext(
+            OrderBook(0.73m, 0.75m),
+            trade: Trade() with { Side = TradeSide.Sell },
+            availablePositionSizeShares: 20m));
+
+        Assert.True(decision.Accepted);
+        Assert.Equal(0.74m, decision.ProposedPrice);
+        Assert.True(decision.ProposedSizeShares <= 20m);
+    }
+
+    [Fact]
+    public void SignalEngine_UsesMarketMinimumOrderSizeWhenConfigured()
+    {
+        var engine = CreateSignalEngine(
+            paperOptions: new PaperTradingOptions
+            {
+                InitialBankrollUsd = 10_000m,
+                UseMinimumMarketOrderSize = true
+            });
+
+        var decision = engine.Evaluate(CreateContext(OrderBook(0.73m, 0.75m, minOrderSize: 5m)));
+
+        Assert.True(decision.Accepted);
+        Assert.Equal(5m, decision.ProposedSizeShares);
+        Assert.Equal(3.70m, decision.ProposedNotionalUsd);
+    }
+
+    [Fact]
+    public void SignalEngine_RejectsSellBelowMarketMinimumWhenMinimumSizeConfigured()
+    {
+        var engine = CreateSignalEngine(
+            paperOptions: new PaperTradingOptions
+            {
+                InitialBankrollUsd = 10_000m,
+                UseMinimumMarketOrderSize = true
+            });
+
+        var decision = engine.Evaluate(CreateContext(
+            OrderBook(0.73m, 0.75m, minOrderSize: 5m),
+            trade: Trade() with { Side = TradeSide.Sell },
+            availablePositionSizeShares: 4m));
+
+        Assert.False(decision.Accepted);
+        Assert.Equal(SignalReasonCodes.PaperPositionBelowMarketMinimum, decision.DecisionCode);
+    }
+
+    [Fact]
+    public void SignalEngine_RejectsSellWhenCopiedPositionIsMissing()
     {
         var engine = CreateSignalEngine();
 
         var decision = engine.Evaluate(CreateContext(
             OrderBook(0.73m, 0.75m),
             trade: Trade() with { Side = TradeSide.Sell }));
+
+        Assert.False(decision.Accepted);
+        Assert.Equal(SignalReasonCodes.NoPaperPositionToSell, decision.DecisionCode);
+    }
+
+    [Fact]
+    public void SignalEngine_RejectsUnsupportedSide()
+    {
+        var engine = CreateSignalEngine();
+
+        var decision = engine.Evaluate(CreateContext(
+            OrderBook(0.73m, 0.75m),
+            trade: Trade() with { Side = TradeSide.Unknown }));
 
         Assert.False(decision.Accepted);
         Assert.Equal(SignalReasonCodes.UnsupportedSide, decision.DecisionCode);
@@ -150,14 +282,14 @@ public sealed class StrategyEngineTests
     }
 
     [Fact]
-    public void SignalEngine_RejectsWhenPriceMovedTooFar()
+    public void SignalEngine_UsesLeaderPriceEvenWhenBookMovedPastLeader()
     {
         var engine = CreateSignalEngine();
 
         var decision = engine.Evaluate(CreateContext(OrderBook(0.79m, 0.80m)));
 
-        Assert.False(decision.Accepted);
-        Assert.Equal(SignalReasonCodes.PriceMovedTooFar, decision.DecisionCode);
+        Assert.True(decision.Accepted);
+        Assert.Equal(0.74m, decision.ProposedPrice);
     }
 
     [Fact]
@@ -291,7 +423,9 @@ public sealed class StrategyEngineTests
         Assert.Contains(SignalReasonCodes.RiskMarketLimit, decision.Reasons);
     }
 
-    private static ISignalEngine CreateSignalEngine(SignalOptions? signalOptions = null)
+    private static ISignalEngine CreateSignalEngine(
+        SignalOptions? signalOptions = null,
+        PaperTradingOptions? paperOptions = null)
     {
         var riskOptions = new RiskOptions
         {
@@ -302,7 +436,7 @@ public sealed class StrategyEngineTests
             MaxTotalDeployedPct = 25.0m,
             MaxDailyLossPct = 1.0m
         };
-        var paperOptions = new PaperTradingOptions { InitialBankrollUsd = 10_000m };
+        paperOptions ??= new PaperTradingOptions { InitialBankrollUsd = 10_000m };
         return new DefaultSignalEngine(
             signalOptions ?? new SignalOptions(),
             new ExecutionOptions(),
@@ -317,7 +451,10 @@ public sealed class StrategyEngineTests
         LeaderTrade? trade = null,
         TraderRule? traderRule = null,
         MarketInfo? marketInfo = null,
-        PolymarketOnChainWalletCategoryPerformance? leaderCategoryPerformance = null)
+        PolymarketOnChainWalletCategoryPerformance? leaderCategoryPerformance = null,
+        PaperCopiedTraderPerformance? copiedTraderOverallPerformance = null,
+        PaperCopiedTraderPerformance? copiedTraderCategoryPerformance = null,
+        decimal? availablePositionSizeShares = null)
     {
         return new SignalEvaluationContext(
             trade ?? Trade(),
@@ -337,7 +474,10 @@ public sealed class StrategyEngineTests
                 DateTimeOffset.UtcNow.AddDays(2)),
             orderBook,
             exposure ?? new ExposureSnapshot(0m, 0m, 0m, 0m, 0m, 0),
-            leaderCategoryPerformance);
+            leaderCategoryPerformance,
+            copiedTraderOverallPerformance,
+            copiedTraderCategoryPerformance,
+            availablePositionSizeShares);
     }
 
     private static SignalOptions StrictCategorySignalOptions()
@@ -379,6 +519,41 @@ public sealed class StrategyEngineTests
             SampleQuality: "Low",
             FirstActiveUtc: DateTimeOffset.UtcNow.AddDays(-30),
             LastActiveUtc: DateTimeOffset.UtcNow.AddHours(-1),
+            RefreshedAtUtc: DateTimeOffset.UtcNow);
+    }
+
+    private static PaperCopiedTraderPerformance CopiedPerformance(
+        string category,
+        int settledPositionsCount,
+        decimal totalPnlUsd,
+        decimal roiPct,
+        decimal score)
+    {
+        var won = totalPnlUsd >= 0m ? settledPositionsCount : 0;
+        var lost = settledPositionsCount - won;
+
+        return new PaperCopiedTraderPerformance(
+            Wallet,
+            category,
+            OrdersCount: settledPositionsCount,
+            FilledOrdersCount: settledPositionsCount,
+            BuyFillsCount: settledPositionsCount,
+            SellFillsCount: 0,
+            OpenPositionsCount: 0,
+            SettledPositionsCount: settledPositionsCount,
+            WonPositionsCount: won,
+            LostPositionsCount: lost,
+            BuyCostUsd: 100m,
+            SellProceedsUsd: 0m,
+            SettlementValueUsd: 100m + totalPnlUsd,
+            RealizedPnlUsd: totalPnlUsd,
+            UnrealizedPnlUsd: 0m,
+            TotalPnlUsd: totalPnlUsd,
+            RoiPct: roiPct,
+            WinRatePct: settledPositionsCount == 0 ? 0m : won * 100m / settledPositionsCount,
+            Score: score,
+            FirstOrderUtc: DateTimeOffset.UtcNow.AddDays(-7),
+            LastOrderUtc: DateTimeOffset.UtcNow.AddHours(-1),
             RefreshedAtUtc: DateTimeOffset.UtcNow);
     }
 
@@ -436,7 +611,7 @@ public sealed class StrategyEngineTests
             "0xabc");
     }
 
-    private static OrderBookSnapshot OrderBook(decimal bestBid, decimal bestAsk)
+    private static OrderBookSnapshot OrderBook(decimal bestBid, decimal bestAsk, decimal? minOrderSize = null)
     {
         return new OrderBookSnapshot(
             "asset-1",
@@ -444,6 +619,7 @@ public sealed class StrategyEngineTests
             [new OrderBookLevel(bestAsk, 1_000m)],
             DateTimeOffset.UtcNow,
             "condition-1",
+            MinOrderSize: minOrderSize,
             TickSize: 0.01m);
     }
 }

@@ -6,4 +6,9 @@ public static class MakerPriceCalculator
     {
         return Math.Min(Math.Min(bestBid + tickSize, maxEntry), bestAsk - tickSize);
     }
+
+    public static decimal CalculateSell(decimal bestBid, decimal bestAsk, decimal tickSize, decimal minExit)
+    {
+        return Math.Max(Math.Max(bestAsk - tickSize, minExit), bestBid + tickSize);
+    }
 }

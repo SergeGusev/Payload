@@ -50,6 +50,21 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
     private string serviceStatus = "No heartbeat";
 
     [ObservableProperty]
+    private string serviceBannerTitle = "SERVICE UNKNOWN";
+
+    [ObservableProperty]
+    private string serviceBannerDetail = "Waiting for first IPC status refresh.";
+
+    [ObservableProperty]
+    private string serviceBannerBackground = "#FEF3C7";
+
+    [ObservableProperty]
+    private string serviceBannerForeground = "#78350F";
+
+    [ObservableProperty]
+    private string serviceBannerBorderBrush = "#F59E0B";
+
+    [ObservableProperty]
     private string storageStatus;
 
     [ObservableProperty]
@@ -99,11 +114,25 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
 
     public ObservableCollection<PaperPositionRow> PaperPositions { get; } = [];
 
+    public ObservableCollection<StrategyPerformanceRow> Strategies { get; } = [];
+
+    public ObservableCollection<StrategyRecentPerformanceRow> StrategyRecentPerformance { get; } = [];
+
+    public ObservableCollection<StrategyRecentPerformanceRow> StrategyRecent24Hours { get; } = [];
+
+    public ObservableCollection<StrategyRecentPerformanceRow> StrategyRecent6Hours { get; } = [];
+
+    public ObservableCollection<StrategyRecentPerformanceRow> StrategyRecent1Hour { get; } = [];
+
+    public ObservableCollection<PaperCopiedTraderPerformanceRow> PaperCopiedTraderPerformance { get; } = [];
+
     public ObservableCollection<DryRunOrderRow> DryRunOrders { get; } = [];
 
     public ObservableCollection<LiveOrderRow> LiveOrders { get; } = [];
 
     public ObservableCollection<LiveTradingEventRow> LiveTradingEvents { get; } = [];
+
+    public ObservableCollection<LiveReadinessRow> LiveReadiness { get; } = [];
 
     public ObservableCollection<MarketDataRow> MarketData { get; } = [];
 
@@ -150,8 +179,13 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         {
             IsRefreshing = true;
             LastError = string.Empty;
-            var snapshot = await dataService.LoadAsync();
+            var controlStatus = await TryGetControlStatusAsync();
+            ApplyServiceBanner(controlStatus.Status, controlStatus.Error);
+            var snapshot = await dataService.LoadAsync(
+                controlStatus.Status,
+                controlStatus.Error);
             Apply(snapshot);
+            ApplyServiceBanner(controlStatus.Status, controlStatus.Error);
             LastUpdatedUtc = DateTimeOffset.UtcNow;
         }
         catch (Exception ex)
@@ -164,6 +198,108 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         {
             IsRefreshing = false;
         }
+    }
+
+    private void ApplyServiceBanner(ControlStatusResponse? status, string? error)
+    {
+        if (status is null)
+        {
+            ServiceBannerTitle = "SERVICE UNAVAILABLE";
+            ServiceBannerDetail = string.IsNullOrWhiteSpace(error)
+                ? "Dashboard could not read IPC /status."
+                : "Dashboard could not read IPC /status: " + TrimForBanner(error, 240);
+            ServiceBannerBackground = "#FEE2E2";
+            ServiceBannerForeground = "#7F1D1D";
+            ServiceBannerBorderBrush = "#EF4444";
+            return;
+        }
+
+        if (status.KillSwitchActive)
+        {
+            ServiceBannerTitle = "KILL SWITCH ACTIVE";
+            ServiceBannerBackground = "#FEE2E2";
+            ServiceBannerForeground = "#7F1D1D";
+            ServiceBannerBorderBrush = "#EF4444";
+        }
+        else if (status.ScanningPaused || status.PaperTradingPaused ||
+            string.Equals(status.State, "Paused", StringComparison.OrdinalIgnoreCase))
+        {
+            ServiceBannerTitle = "SERVICE PAUSED";
+            ServiceBannerBackground = "#FEF3C7";
+            ServiceBannerForeground = "#78350F";
+            ServiceBannerBorderBrush = "#F59E0B";
+        }
+        else if (string.Equals(status.State, "Running", StringComparison.OrdinalIgnoreCase))
+        {
+            ServiceBannerTitle = "SERVICE RUNNING";
+            ServiceBannerBackground = "#DCFCE7";
+            ServiceBannerForeground = "#14532D";
+            ServiceBannerBorderBrush = "#22C55E";
+        }
+        else
+        {
+            ServiceBannerTitle = "SERVICE " + status.State.ToUpperInvariant();
+            ServiceBannerBackground = "#E0F2FE";
+            ServiceBannerForeground = "#0C4A6E";
+            ServiceBannerBorderBrush = "#38BDF8";
+        }
+
+        ServiceBannerDetail = BuildServiceBannerDetail(status);
+    }
+
+    private static string BuildServiceBannerDetail(ControlStatusResponse status)
+    {
+        var details = new List<string>
+        {
+            "IPC state=" + status.State,
+            BuildPauseSummary(status)
+        };
+
+        if (status.KillSwitchActive)
+        {
+            details.Add("kill switch active");
+        }
+
+        if (!string.IsNullOrWhiteSpace(status.LastError))
+        {
+            details.Add("last error=" + TrimForBanner(status.LastError, 160));
+        }
+
+        if (!string.IsNullOrWhiteSpace(status.CurrentLoop))
+        {
+            details.Add("loop=" + TrimForBanner(status.CurrentLoop, 220));
+        }
+
+        return string.Join("; ", details);
+    }
+
+    private static string BuildPauseSummary(ControlStatusResponse status)
+    {
+        var paused = new List<string>();
+        if (status.ScanningPaused)
+        {
+            paused.Add("scanning");
+        }
+
+        if (status.PaperTradingPaused)
+        {
+            paused.Add("paper");
+        }
+
+        if (status.LiveTradingPaused)
+        {
+            paused.Add("live");
+        }
+
+        return paused.Count == 0
+            ? "pauses clear"
+            : "paused=" + string.Join(", ", paused);
+    }
+
+    private static string TrimForBanner(string value, int maxLength)
+    {
+        var trimmed = value.Trim();
+        return trimmed.Length <= maxLength ? trimmed : trimmed[..maxLength] + "...";
     }
 
     [RelayCommand]
@@ -341,6 +477,154 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         }
     }
 
+    [RelayCommand]
+    private async Task SetStrategyEnabledAsync(StrategyPerformanceRow? strategy)
+    {
+        if (strategy is null)
+        {
+            return;
+        }
+
+        if (!runtime.StorageConfigured)
+        {
+            CommandStatus = "Strategy toggle requires PostgreSQL storage.";
+            await RefreshAsync();
+            return;
+        }
+
+        var enabled = strategy.Enabled;
+        try
+        {
+            var updated = await runtime.Repository.SetStrategyEnabledAsync(
+                strategy.StrategyId,
+                enabled,
+                DateTimeOffset.UtcNow);
+            CommandStatus = updated
+                ? $"Strategy {strategy.Name} {(enabled ? "enabled" : "disabled")}."
+                : $"Strategy {strategy.Name} was not found.";
+            if (!updated)
+            {
+                RecordDashboardError("Strategy toggle", CommandStatus, CommandStatus);
+            }
+
+            dataService.InvalidateStrategyPerformanceCache();
+            await RefreshAsync();
+        }
+        catch (Exception ex)
+        {
+            CommandStatus = $"Strategy toggle failed: {ex.Message}";
+            RecordDashboardError("Strategy toggle", ex);
+            dataService.InvalidateStrategyPerformanceCache();
+            await RefreshAsync();
+        }
+    }
+
+    [RelayCommand]
+    private async Task SetStrategyLiveStakesAsync(StrategyPerformanceRow? strategy)
+    {
+        if (strategy is null)
+        {
+            return;
+        }
+
+        if (!runtime.StorageConfigured)
+        {
+            CommandStatus = "Strategy live toggle requires PostgreSQL storage.";
+            await RefreshAsync();
+            return;
+        }
+
+        var liveStakes = strategy.LiveStakes;
+        try
+        {
+            var updated = await runtime.Repository.SetStrategyLiveStakesAsync(
+                strategy.StrategyId,
+                liveStakes,
+                DateTimeOffset.UtcNow);
+            CommandStatus = updated
+                ? $"Strategy {strategy.Name} live stakes {(liveStakes ? "enabled" : "disabled")}."
+                : $"Strategy {strategy.Name} was not found.";
+            if (!updated)
+            {
+                RecordDashboardError("Strategy live toggle", CommandStatus, CommandStatus);
+            }
+
+            dataService.InvalidateStrategyPerformanceCache();
+            await RefreshAsync();
+        }
+        catch (Exception ex)
+        {
+            CommandStatus = $"Strategy live toggle failed: {ex.Message}";
+            RecordDashboardError("Strategy live toggle", ex);
+            dataService.InvalidateStrategyPerformanceCache();
+            await RefreshAsync();
+        }
+    }
+
+    [RelayCommand]
+    private async Task SaveStrategyStakeAmountsAsync(StrategyPerformanceRow? strategy)
+    {
+        if (strategy is null)
+        {
+            return;
+        }
+
+        if (!runtime.StorageConfigured)
+        {
+            CommandStatus = "Strategy stake amounts require PostgreSQL storage.";
+            await RefreshAsync();
+            return;
+        }
+
+        if (strategy.PaperStakeAmount <= 0m || strategy.LiveStakeAmount <= 0m)
+        {
+            CommandStatus = "Strategy stake amounts must be greater than zero.";
+            RecordDashboardError("Strategy stakes", CommandStatus, CommandStatus);
+            await RefreshAsync();
+            return;
+        }
+
+        if (strategy.LiveAvailableBalance < 0m)
+        {
+            CommandStatus = "Strategy live available balance must be zero or greater.";
+            RecordDashboardError("Strategy stakes", CommandStatus, CommandStatus);
+            await RefreshAsync();
+            return;
+        }
+
+        try
+        {
+            var updatedAtUtc = DateTimeOffset.UtcNow;
+            var amountsUpdated = await runtime.Repository.SetStrategyStakeAmountsAsync(
+                strategy.StrategyId,
+                strategy.PaperStakeAmount,
+                strategy.LiveStakeAmount,
+                updatedAtUtc);
+            var balanceUpdated = await runtime.Repository.SetStrategyLiveAvailableBalanceAsync(
+                strategy.StrategyId,
+                strategy.LiveAvailableBalance,
+                updatedAtUtc);
+            var updated = amountsUpdated && balanceUpdated;
+            CommandStatus = updated
+                ? $"Strategy {strategy.Name} stake amounts and live balance saved."
+                : $"Strategy {strategy.Name} was not found.";
+            if (!updated)
+            {
+                RecordDashboardError("Strategy stakes", CommandStatus, CommandStatus);
+            }
+
+            dataService.InvalidateStrategyPerformanceCache();
+            await RefreshAsync();
+        }
+        catch (Exception ex)
+        {
+            CommandStatus = $"Strategy stakes save failed: {ex.Message}";
+            RecordDashboardError("Strategy stakes", ex);
+            dataService.InvalidateStrategyPerformanceCache();
+            await RefreshAsync();
+        }
+    }
+
     private async Task SendCommandAsync(Func<Task<ControlCommandResponse>> send)
     {
         try
@@ -388,9 +672,22 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         Replace(Signals, snapshot.Signals);
         Replace(PaperOrders, snapshot.PaperOrders);
         Replace(PaperPositions, snapshot.PaperPositions);
+        Replace(Strategies, snapshot.Strategies);
+        Replace(StrategyRecentPerformance, snapshot.StrategyRecentPerformance);
+        Replace(StrategyRecent24Hours, snapshot.StrategyRecentPerformance
+            .Where(item => string.Equals(item.Window, "24h", StringComparison.OrdinalIgnoreCase))
+            .ToArray());
+        Replace(StrategyRecent6Hours, snapshot.StrategyRecentPerformance
+            .Where(item => string.Equals(item.Window, "6h", StringComparison.OrdinalIgnoreCase))
+            .ToArray());
+        Replace(StrategyRecent1Hour, snapshot.StrategyRecentPerformance
+            .Where(item => string.Equals(item.Window, "1h", StringComparison.OrdinalIgnoreCase))
+            .ToArray());
+        Replace(PaperCopiedTraderPerformance, snapshot.PaperCopiedTraderPerformance);
         Replace(DryRunOrders, snapshot.DryRunOrders);
         Replace(LiveOrders, snapshot.LiveOrders);
         Replace(LiveTradingEvents, snapshot.LiveTradingEvents);
+        Replace(LiveReadiness, snapshot.LiveReadiness);
         Replace(MarketData, snapshot.MarketData);
         Replace(DailyReports, snapshot.DailyReports);
         Replace(TraderPerformance, snapshot.TraderPerformance);
@@ -405,7 +702,20 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         Mode = Overview.FirstOrDefault(item => item.Name == "Mode")?.Value ?? "Unknown";
         ServiceStatus = Overview.FirstOrDefault(item => item.Name == "Service status")?.Value ?? "No heartbeat";
         var webSocketStatus = Overview.FirstOrDefault(item => item.Name == "WebSocket status")?.Value ?? "No market data status";
-        Summary = $"{ServiceStatus}; WS={webSocketStatus}; {StorageStatus}; {TraderDiscovery.Count} discovery candidates; {OnChainParticipantDetails.Count} on-chain participants; {OnChainTradeDetails.Count} on-chain trades; {OnChainLeaders.Count} on-chain leaders; {OnChainPositions.Count} on-chain positions; {Signals.Count} signals; {PaperOrders.Count} paper orders; {DryRunOrders.Count} dry-run orders; {LiveOrders.Count} live orders; {PaperPositions.Count} positions.";
+        var liveBlocked = LiveReadiness.Count(item => item.Status is "Blocked" or "Error");
+        Summary = $"{ServiceStatus}; WS={webSocketStatus}; {StorageStatus}; live blockers={liveBlocked}; {TraderDiscovery.Count} discovery candidates; {OnChainParticipantDetails.Count} on-chain participants; {OnChainTradeDetails.Count} on-chain trades; {OnChainLeaders.Count} on-chain leaders; {OnChainPositions.Count} on-chain positions; {Signals.Count} signals; {Strategies.Count} strategies; {PaperOrders.Count} paper orders; {PaperCopiedTraderPerformance.Count} copied ratings; {DryRunOrders.Count} dry-run orders; {LiveOrders.Count} live orders; {PaperPositions.Count} positions.";
+    }
+
+    private async Task<(ControlStatusResponse? Status, string? Error)> TryGetControlStatusAsync()
+    {
+        try
+        {
+            return (await controlClient.GetStatusAsync(), null);
+        }
+        catch (Exception ex)
+        {
+            return (null, ex.Message);
+        }
     }
 
     private static void Replace<T>(ObservableCollection<T> target, IReadOnlyList<T> source)

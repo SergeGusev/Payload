@@ -4,8 +4,9 @@ Verified on: 2026-04-29
 
 Scope: research and implementation tracking. Task 13 did not request keys, did not load
 secrets, did not sign a live order, and did not call authenticated trading endpoints.
-Task 15 signs local dry-run payloads only. Task 16 adds live maker-only authenticated
-trading endpoints behind explicit service gates.
+Task 15 signs local dry-run payloads only. A later bootstrap command added safe
+L1 `ClobAuth` signing for L2 API credential derive/create. Task 16 adds live
+maker-only authenticated trading endpoints behind explicit service gates.
 
 ## Sources Checked
 
@@ -107,24 +108,24 @@ trading endpoints behind explicit service gates.
 
 9. Fields sent in the HTTP body but not signed:
    The V2 POST `/order` body includes a signed `order` object plus top-level order
-   metadata. `expiration` remains in the `order` body for GTD/order-expiry handling
-   but is not part of the EIP-712 signed struct. `signature` is the EIP-712 signature
-   over the signed struct, not an input field to that struct. Top-level fields such as
-   `owner`, `orderType`, `deferExec`, and SDK-supported `postOnly` are transport or
-   matching controls and are not part of the EIP-712 signed struct.
+   metadata. `signature` is the EIP-712 signature over the signed struct, not an
+   input field to that struct. Top-level fields such as `owner`, `orderType`,
+   `deferExec`, and SDK-supported `postOnly` are transport or matching controls
+   and are not part of the EIP-712 signed struct.
 
-   Native C# should follow the current POST `/order` endpoint and official V2 client:
-   do not send legacy V1 `taker`, `nonce`, or `feeRateBps` unless the official docs
-   and staging tests later require a change.
+   Native C# follows the current V2 order shape with `timestamp`, `metadata`,
+   and `builder` in the signed order struct. It must not send the older signed
+   `taker`, `nonce`, or `feeRateBps` fields.
 
 10. `signatureType` choice:
     - `0` EOA: standard externally owned wallet; funder is the EOA address.
     - `1` POLY_PROXY: Polymarket proxy wallet for Magic/email style accounts.
-    - `2` POLY_GNOSIS_SAFE: Polymarket Gnosis Safe proxy wallet; docs describe this
-      as the common choice for users who do not fit EOA or Magic/email proxy.
-    - The official V2 Python enum also exposes `3` POLY_1271 for smart-contract
-      wallet signatures. That should stay out of the first live path unless explicitly
-      validated later.
+    - `2` POLY_GNOSIS_SAFE: Polymarket Gnosis Safe proxy wallet.
+    - `3` POLY_1271: Polymarket deposit wallet. This uses the same V2 order fields,
+      but `maker` and `signer` are both the deposit wallet address, while the owner
+      EOA signs an ERC-7739 `TypedDataSign` wrapper. The wrapped signature appends
+      the app domain separator, order struct hash, order type string, and type-string
+      length to the 65-byte inner signature.
 
     The app should not guess this from a private key. It should require explicit
     configuration and show `NotConfigured` until the user chooses a signature type and
@@ -135,7 +136,9 @@ trading endpoints behind explicit service gates.
     address holding funds on Polymarket. For an EOA they are normally the same address.
     For proxy or safe users, the signer can be an EOA while the funder/maker is the
     Polymarket proxy/safe wallet shown on Polymarket. Orders should use `maker=funder`
-    and `signer=signing address`.
+    and `signer=signing address`. For deposit-wallet `POLY_1271` users, the order
+    payload should use `maker=funder` and `signer=funder`; the private key still
+    belongs to the configured EOA `SigningAddress`.
 
 12. BUY/SELL makerAmount/takerAmount mapping:
     The official V2 builder uses 6-decimal token units for collateral and conditional
@@ -167,7 +170,14 @@ trading endpoints behind explicit service gates.
     FAK. Before creating a post-only order, preflight against fresh order book data:
     a BUY must not cross the best ask and a SELL must not cross the best bid. The live
     path should reject any response that reports an immediate match for a maker-only
-    order and should keep the current paper/risk gates in front of signing.
+    order and should keep the current paper/risk gates in front of signing. Current
+    Follow leader Paper signal prices use the leader's historical trade price, so
+    the live path must reject them unless a separate live execution policy is
+    explicitly added.
+    BTC 5-minute live-shadow tests use BUY-only GTD limit orders with
+    `postOnly: false`, `OpeningLimitGtdTtlSeconds` (`120` seconds by default), a
+    shared Paper-shadow/Live decision, and the same live/manual/risk/strategy-balance
+    gates before signing.
 
 15. Cancel one order or all orders:
     Cancel one order with L2 headers:
@@ -205,8 +215,8 @@ Task 14 should implement auth/HMAC infrastructure only:
 - Done in task 14: strongly typed auth options with lookup-name references only.
 - Done in task 14: environment-variable and Windows Credential Manager secret providers.
 - Done in task 14: `IPolymarketAuthService` readiness implementation.
-- Deferred: L1 EIP-712 auth header builder for create/derive API credentials because it
-  needs signing-key handling and should be covered by a dedicated dry-run signing task.
+- Done after task 16: L1 EIP-712 auth header builder and a command-mode CLOB API
+  credential bootstrap path for create/derive using the configured signing key.
 - Done in task 14: L2 HMAC header builder with deterministic serialized-body input.
 - Done in task 14: fake-secret tests and an official Python-client HMAC test vector.
 - Still true after task 14: `IPolymarketTradingClient` has no order-posting methods.
@@ -236,6 +246,15 @@ Task 16 added live maker-only trading only if all prior gates pass:
 - Still required operationally: start with tiny production orders only after VPS
   deployment, geoblock verification from the actual host, dry-run validation, and
   manual cancel-all testing.
+
+Post-task bootstrap note:
+
+- `--bootstrap-polymarket-api-credentials` runs only while Live is disabled, signs
+  the L1 CLOB auth message locally, tries `GET /auth/derive-api-key`, falls back
+  to `POST /auth/api-key` when no key exists, and stores the returned API key,
+  API key owner, secret, and passphrase through Windows Credential Manager target
+  names. It must not print credential values, signatures, private keys, or raw
+  auth headers.
 
 ## Security Design
 

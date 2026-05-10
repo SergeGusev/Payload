@@ -3,7 +3,10 @@ using PolyCopyTrader.Domain.Configuration;
 using PolyCopyTrader.Polymarket;
 using PolyCopyTrader.Polymarket.Auth;
 using PolyCopyTrader.Service.Control;
+using PolyCopyTrader.Service.LiveTrading;
+using PolyCopyTrader.Service.PaperTrading;
 using PolyCopyTrader.Service.Scanning;
+using PolyCopyTrader.Service.Strategies;
 using PolyCopyTrader.Storage;
 using PolyCopyTrader.Strategy;
 
@@ -24,6 +27,8 @@ public sealed class SignalProcessor(
     ISignalEngine signalEngine,
     IPaperTradingEngine paperTradingEngine,
     ServiceControlState controlState,
+    IExposureSnapshotCache exposureCache,
+    IStrategyStateProvider strategyStateProvider,
     IAppRepository repository) : ISignalProcessor
 {
     private const int MaxCandidatesPerLoop = 500;
@@ -53,6 +58,15 @@ public sealed class SignalProcessor(
             return new SignalProcessingResult(0, 0, 0, 0);
         }
 
+        var followLeaderSettings = await strategyStateProvider.GetStrategySettingsAsync(StrategyIds.FollowLeader, cancellationToken);
+        if (!followLeaderSettings.Enabled)
+        {
+            logger.LogInformation(
+                "Follow leader signal processing skipped because the strategy is disabled. DroppedCandidates={DroppedCandidates}",
+                candidates.Count);
+            return new SignalProcessingResult(candidates.Count, 0, candidates.Count, 0);
+        }
+
         var accepted = 0;
         var rejected = 0;
         var paperOrdersCreated = 0;
@@ -69,7 +83,7 @@ public sealed class SignalProcessor(
                 if (decision.Accepted)
                 {
                     accepted++;
-                    if (botOptions.Mode == BotMode.Paper &&
+                    if (RuntimeModePolicy.IsPaperTradingEnabled(botOptions, paperTradingOptions) &&
                         decision.ProposedPrice is { } price &&
                         decision.ProposedSizeShares is { } sizeShares)
                     {
@@ -79,6 +93,7 @@ public sealed class SignalProcessor(
                             sizeShares,
                             decision.CreatedAtUtc.AddSeconds(paperTradingOptions.DefaultOrderTtlSeconds));
                         await repository.AddPaperOrderAsync(order, cancellationToken);
+                        exposureCache.ApplyPaperOrder(order);
                         paperOrdersCreated++;
                     }
 
@@ -92,9 +107,9 @@ public sealed class SignalProcessor(
                         await repository.AddDryRunOrderAsync(ToDryRunOrder(signal, trade, dryRunPrice, dryRunSizeShares, result), cancellationToken);
                     }
 
-                    if (botOptions.Mode == BotMode.Live)
+                    if (botOptions.Mode == BotMode.Live && followLeaderSettings.LiveStakes)
                     {
-                        liveOrdersSubmitted += await TryPlaceLiveOrderAsync(signal, trade, cancellationToken) ? 1 : 0;
+                        liveOrdersSubmitted += await TryPlaceLiveOrderAsync(signal, trade, followLeaderSettings, cancellationToken) ? 1 : 0;
                     }
 
                     continue;
@@ -128,13 +143,18 @@ public sealed class SignalProcessor(
         var traderRule = ResolveTraderRule(trade);
         var marketInfo = await ResolveMarketInfoAsync(trade, cancellationToken);
         var leaderCategoryPerformance = await ResolveLeaderCategoryPerformanceAsync(trade, marketInfo, cancellationToken);
-        var orderBook = trade.Side == TradeSide.Buy
+        var copiedTraderOverallPerformance = await ResolveCopiedTraderPerformanceAsync(trade, "OVERALL", cancellationToken);
+        var copiedTraderCategoryPerformance = await ResolveCopiedTraderPerformanceAsync(trade, marketInfo.Category, cancellationToken);
+        var orderBook = trade.Side is TradeSide.Buy or TradeSide.Sell
             ? await clobClient.GetOrderBookAsync(trade.AssetId, cancellationToken)
             : null;
-        var openOrders = await repository.GetOpenPaperOrdersAsync(cancellationToken);
-        var positions = await repository.GetPaperPositionsAsync(cancellationToken);
-        var liveOrders = await repository.GetOpenLiveOrdersAsync(cancellationToken);
-        var exposure = BuildExposure(trade, openOrders, positions, liveOrders);
+        var exposureSnapshot = await exposureCache.GetSnapshotAsync(cancellationToken);
+        var exposure = BuildExposure(
+            trade,
+            exposureSnapshot.OpenPaperOrders,
+            exposureSnapshot.PaperPositions,
+            exposureSnapshot.OpenLiveOrders);
+        var availablePositionSize = FindCopiedPosition(exposureSnapshot.PaperPositions, trade)?.SizeShares;
 
         var decision = signalEngine.Evaluate(
             new SignalEvaluationContext(
@@ -143,7 +163,10 @@ public sealed class SignalProcessor(
                 marketInfo,
                 orderBook,
                 exposure,
-                leaderCategoryPerformance));
+                leaderCategoryPerformance,
+                copiedTraderOverallPerformance,
+                copiedTraderCategoryPerformance,
+                availablePositionSize));
 
         return new SignalEvaluationResult(decision, orderBook);
     }
@@ -151,6 +174,7 @@ public sealed class SignalProcessor(
     private async Task<bool> TryPlaceLiveOrderAsync(
         Signal signal,
         LeaderTrade trade,
+        StrategyRuntimeSettings strategySettings,
         CancellationToken cancellationToken)
     {
         var validation = new List<string>();
@@ -176,12 +200,15 @@ public sealed class SignalProcessor(
             validation.Add("Initial live trading only allows BUY orders.");
         }
 
+        validation.Add("Live placement for leader-price Follow leader signals is disabled until a separate live execution policy is explicitly implemented.");
+
         if (IsBlockedMarketForLive(trade))
         {
             validation.Add("Initial live trading blocks crypto and sports markets.");
         }
 
-        var openLiveOrders = await repository.GetOpenLiveOrdersAsync(cancellationToken);
+        var exposureSnapshot = await exposureCache.GetSnapshotAsync(cancellationToken);
+        var openLiveOrders = exposureSnapshot.OpenLiveOrders;
         if (openLiveOrders.Count >= liveTradingOptions.MaxOpenLiveOrders)
         {
             validation.Add("Maximum open live order count reached.");
@@ -234,7 +261,8 @@ public sealed class SignalProcessor(
         {
             orderBook = await clobClient.GetOrderBookAsync(trade.AssetId, cancellationToken);
             var serverTime = await clobClient.GetServerTimeAsync(cancellationToken);
-            if (Math.Abs((serverTime - now).TotalSeconds) > liveTradingOptions.MaxClockDriftSeconds)
+            var clockCheckUtc = DateTimeOffset.UtcNow;
+            if (Math.Abs((serverTime - clockCheckUtc).TotalSeconds) > liveTradingOptions.MaxClockDriftSeconds)
             {
                 validation.Add("CLOB server time drift exceeds configured limit.");
             }
@@ -247,16 +275,24 @@ public sealed class SignalProcessor(
         var traderRule = ResolveTraderRule(trade);
         var marketInfo = await ResolveMarketInfoAsync(trade, cancellationToken);
         var leaderCategoryPerformance = await ResolveLeaderCategoryPerformanceAsync(trade, marketInfo, cancellationToken);
-        var paperOrders = await repository.GetOpenPaperOrdersAsync(cancellationToken);
-        var positions = await repository.GetPaperPositionsAsync(cancellationToken);
-        var exposure = BuildExposure(trade, paperOrders, positions, openLiveOrders);
+        var copiedTraderOverallPerformance = await ResolveCopiedTraderPerformanceAsync(trade, "OVERALL", cancellationToken);
+        var copiedTraderCategoryPerformance = await ResolveCopiedTraderPerformanceAsync(trade, marketInfo.Category, cancellationToken);
+        var exposure = BuildExposure(
+            trade,
+            exposureSnapshot.OpenPaperOrders,
+            exposureSnapshot.PaperPositions,
+            openLiveOrders);
+        var availablePositionSize = FindCopiedPosition(exposureSnapshot.PaperPositions, trade)?.SizeShares;
         var freshDecision = signalEngine.Evaluate(new SignalEvaluationContext(
             trade,
             traderRule,
             marketInfo,
             orderBook,
             exposure,
-            leaderCategoryPerformance));
+            leaderCategoryPerformance,
+            copiedTraderOverallPerformance,
+            copiedTraderCategoryPerformance,
+            availablePositionSize));
         if (!freshDecision.Accepted)
         {
             validation.Add("Fresh signal evaluation rejected live order: " + string.Join(", ", freshDecision.Reasons));
@@ -271,13 +307,27 @@ public sealed class SignalProcessor(
 
         if (orderBook?.BestAsk is not { } bestAsk || price <= 0m || price >= bestAsk)
         {
-            validation.Add("Live maker BUY price would cross or lacks a fresh best ask.");
+            validation.Add("Live maker BUY price would cross/use best ask, or lacks a fresh best ask; live taker execution is not enabled.");
         }
 
         var maxNotional = Math.Min(
             liveTradingOptions.MaxOrderNotionalUsd,
             liveTradingOptions.MaxTradeBankrollPct / 100m * paperTradingOptions.InitialBankrollUsd);
-        var notional = Math.Min(freshDecision.ProposedNotionalUsd ?? 0m, maxNotional);
+        var desiredNotional = strategySettings.LiveStakeAmount > 0m
+            ? strategySettings.LiveStakeAmount
+            : freshDecision.ProposedNotionalUsd ?? 0m;
+        var notional = Math.Min(desiredNotional, maxNotional);
+        if (notional > 0m)
+        {
+            await ValidateStrategyLiveBalanceAsync(
+                strategySettings,
+                openLiveOrders,
+                notional,
+                validation,
+                now,
+                cancellationToken);
+        }
+
         var liveSizeShares = price > 0m ? RoundDown(notional / price, 4) : 0m;
         if (liveSizeShares <= 0m)
         {
@@ -333,6 +383,41 @@ public sealed class SignalProcessor(
             result.ErrorMessage ?? result.ResponseStatus,
             cancellationToken);
         return result.Success && (liveOrder.Status is LiveOrderStatus.Live or LiveOrderStatus.Delayed);
+    }
+
+    private async Task ValidateStrategyLiveBalanceAsync(
+        StrategyRuntimeSettings strategySettings,
+        IReadOnlyList<LiveOrder> openLiveOrders,
+        decimal requiredNotionalUsd,
+        List<string> validation,
+        DateTimeOffset nowUtc,
+        CancellationToken cancellationToken)
+    {
+        var normalizedStrategyId = StrategyIds.Normalize(strategySettings.StrategyId);
+        var reservedNotionalUsd = openLiveOrders
+            .Where(order => StrategyIds.Normalize(order.StrategyId) == normalizedStrategyId)
+            .Sum(order => order.NotionalUsd);
+        var availableForNewStake = strategySettings.LiveAvailableBalance - reservedNotionalUsd;
+        if (availableForNewStake >= requiredNotionalUsd)
+        {
+            return;
+        }
+
+        var message =
+            $"Strategy live available balance is insufficient. StrategyId={normalizedStrategyId}; " +
+            $"Available={strategySettings.LiveAvailableBalance:0.########}; Reserved={reservedNotionalUsd:0.########}; " +
+            $"AvailableForNewStake={availableForNewStake:0.########}; Required={requiredNotionalUsd:0.########}.";
+        validation.Add(message);
+        logger.LogError(
+            "Strategy live available balance is insufficient. StrategyId={StrategyId} Available={AvailableBalance} Reserved={ReservedNotionalUsd} Required={RequiredNotionalUsd}. Live stakes will be disabled for this strategy.",
+            normalizedStrategyId,
+            strategySettings.LiveAvailableBalance,
+            reservedNotionalUsd,
+            requiredNotionalUsd);
+        await repository.SetStrategyLiveStakesAsync(normalizedStrategyId, false, nowUtc, cancellationToken);
+        await repository.AddLiveTradingEventAsync(
+            new LiveTradingEvent(Guid.NewGuid(), "StrategyLiveBalance", "Error", message, nowUtc),
+            cancellationToken);
     }
 
     private ClobV2OrderRequest CreateDryRunRequest(
@@ -407,7 +492,8 @@ public sealed class SignalProcessor(
             result.Order.OrderType.ToString(),
             result.RedactedPayloadJson,
             result.ValidationMessages.Count == 0 ? string.Empty : string.Join("; ", result.ValidationMessages),
-            signal.CreatedAtUtc);
+            signal.CreatedAtUtc,
+            StrategyId: StrategyIds.FollowLeader);
     }
 
     private async Task PersistLiveOrderAsync(
@@ -418,6 +504,7 @@ public sealed class SignalProcessor(
         CancellationToken cancellationToken)
     {
         await repository.AddLiveOrderAsync(order, cancellationToken);
+        exposureCache.ApplyLiveOrder(order);
         await repository.AddLiveTradingEventAsync(
             new LiveTradingEvent(Guid.NewGuid(), action, status, details, DateTimeOffset.UtcNow),
             cancellationToken);
@@ -453,7 +540,8 @@ public sealed class SignalProcessor(
             string.Empty,
             "{}",
             string.Join("; ", validation),
-            DateTimeOffset.UtcNow);
+            DateTimeOffset.UtcNow,
+            StrategyId: StrategyIds.FollowLeader);
     }
 
     private static LiveOrder ToLiveOrder(
@@ -465,6 +553,12 @@ public sealed class SignalProcessor(
         LiveOrderPlacementResult result)
     {
         var status = MapPlacementStatus(result);
+        var fillSummary = LiveOrderPlacementAccounting.FromPlacementResult(
+            trade.Side,
+            price,
+            sizeShares,
+            status,
+            result);
         return new LiveOrder(
             Guid.NewGuid(),
             signal.Id,
@@ -482,12 +576,16 @@ public sealed class SignalProcessor(
             expiresAtUtc,
             result.Success ? DateTimeOffset.UtcNow : null,
             result.ResponseStatus,
-            status == LiveOrderStatus.Matched ? sizeShares : 0m,
-            status == LiveOrderStatus.Matched ? 0m : sizeShares,
+            fillSummary.FilledSize,
+            fillSummary.RemainingSize,
             string.Empty,
             string.IsNullOrWhiteSpace(result.RawResponseJson) ? "{}" : result.RawResponseJson,
             result.ErrorMessage ?? string.Empty,
-            DateTimeOffset.UtcNow);
+            DateTimeOffset.UtcNow,
+            StrategyId: StrategyIds.FollowLeader,
+            AverageFillPrice: fillSummary.AverageFillPrice,
+            FilledNotionalUsd: fillSummary.FilledNotionalUsd,
+            CostBasisUsd: fillSummary.CostBasisUsd);
     }
 
     private static LiveOrderStatus MapPlacementStatus(LiveOrderPlacementResult result)
@@ -502,6 +600,7 @@ public sealed class SignalProcessor(
             "live" => LiveOrderStatus.Live,
             "matched" => LiveOrderStatus.Matched,
             "delayed" => LiveOrderStatus.Delayed,
+            "unmatched" => LiveOrderStatus.Unmatched,
             _ => LiveOrderStatus.Submitted
         };
     }
@@ -589,6 +688,15 @@ public sealed class SignalProcessor(
             Math.Max(oldestPaperOrderAgeSeconds, oldestLiveOrderAgeSeconds));
     }
 
+    private static PaperPosition? FindCopiedPosition(
+        IEnumerable<PaperPosition> positions,
+        LeaderTrade trade)
+    {
+        return positions.FirstOrDefault(position =>
+            string.Equals(position.AssetId, trade.AssetId, StringComparison.OrdinalIgnoreCase) &&
+            string.Equals(position.CopiedTraderWallet, trade.TraderWallet, StringComparison.OrdinalIgnoreCase));
+    }
+
     private async Task<MarketInfo> ResolveMarketInfoAsync(LeaderTrade trade, CancellationToken cancellationToken)
     {
         var metadata = await repository.GetPolymarketOnChainTokenMetadataAsync(trade.AssetId, cancellationToken);
@@ -624,6 +732,23 @@ public sealed class SignalProcessor(
         return await repository.GetPolymarketOnChainWalletCategoryPerformanceAsync(
             NormalizeWallet(trade.TraderWallet),
             category!,
+            cancellationToken);
+    }
+
+    private async Task<PaperCopiedTraderPerformance?> ResolveCopiedTraderPerformanceAsync(
+        LeaderTrade trade,
+        string? category,
+        CancellationToken cancellationToken)
+    {
+        var normalizedCategory = NormalizeCategory(category);
+        if (IsUnknownCategory(normalizedCategory))
+        {
+            return null;
+        }
+
+        return await repository.GetPaperCopiedTraderPerformanceAsync(
+            NormalizeWallet(trade.TraderWallet),
+            normalizedCategory!,
             cancellationToken);
     }
 

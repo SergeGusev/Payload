@@ -13,8 +13,12 @@ public sealed class PaperTradingProcessor(
     IPolymarketClobPublicClient clobClient,
     IMarketDataCache marketDataCache,
     MarketDataWebSocketOptions marketDataWebSocketOptions,
+    PaperTradingOptions paperTradingOptions,
+    IExposureSnapshotCache exposureCache,
     IAppRepository repository) : IPaperTradingProcessor
 {
+    private const string PaperLiveShadowTestSource = "paper_live_shadow_test";
+
     public async Task<PaperTradingProcessingResult> ProcessOpenOrdersAsync(CancellationToken cancellationToken = default)
     {
         var openOrders = await repository.GetOpenPaperOrdersAsync(cancellationToken);
@@ -29,46 +33,98 @@ public sealed class PaperTradingProcessor(
         var ordersExpired = 0;
         var positionsUpdated = 0;
         var now = DateTimeOffset.UtcNow;
+        var fillSimulationCandidatesProcessed = 0;
+        var maxFillSimulationCandidates = Math.Max(1, paperTradingOptions.OpenOrderFillSimulationBatchSize);
 
         foreach (var order in openOrders)
         {
+            if (string.Equals(order.ExecutionSource, PaperLiveShadowTestSource, StringComparison.OrdinalIgnoreCase))
+            {
+                continue;
+            }
+
             var expiredOrder = paperTradingEngine.ExpireIfNeeded(order, now);
             if (expiredOrder.Status != order.Status)
             {
                 await repository.UpdatePaperOrderAsync(expiredOrder, cancellationToken);
+                exposureCache.ApplyPaperOrder(expiredOrder);
                 ordersExpired++;
                 continue;
             }
 
+            if (fillSimulationCandidatesProcessed >= maxFillSimulationCandidates)
+            {
+                continue;
+            }
+
+            fillSimulationCandidatesProcessed++;
+
             try
             {
                 var orderBook = await GetOrderBookAsync(order.AssetId, cancellationToken);
-                var fill = paperTradingEngine.TrySimulateFill(order, orderBook, null, now);
+                var existingFills = await repository.GetPaperFillsForOrderAsync(order.Id, cancellationToken);
+                var previouslyFilledShares = GetFilledShares(existingFills, order.SizeShares);
+                var fill = paperTradingEngine.TrySimulateFill(order, orderBook, null, now, previouslyFilledShares);
                 if (fill is null)
                 {
                     continue;
                 }
 
-                var filledOrder = paperTradingEngine.ApplyFillStatus(order, fill);
+                var currentPosition = FindPosition(positions, order);
+                if (order.Side == TradeSide.Sell && currentPosition is null)
+                {
+                    continue;
+                }
+
+                var currentBid = orderBook?.BestBid ?? currentPosition?.AveragePrice ?? 0m;
+                if (order.Side == TradeSide.Sell && currentPosition is not null)
+                {
+                    fill = fill with
+                    {
+                        RealizedPnlUsd = (fill.Price - currentPosition.AveragePrice) * fill.SizeShares
+                    };
+                }
+
+                var filledOrder = paperTradingEngine.ApplyFillStatus(order, fill, previouslyFilledShares);
                 await repository.AddPaperFillAsync(fill, cancellationToken);
                 await repository.UpdatePaperOrderAsync(filledOrder, cancellationToken);
+                exposureCache.ApplyPaperOrder(filledOrder);
                 ordersFilled++;
 
+                var updatedPosition = order.Side == TradeSide.Buy
+                    ? paperTradingEngine.ApplyBuyFill(currentPosition, order, fill, currentBid, now)
+                    : paperTradingEngine.ApplySellFill(currentPosition!, order, fill, currentBid, now);
+                await repository.UpsertPaperPositionAsync(updatedPosition, cancellationToken);
+                exposureCache.ApplyPaperPosition(updatedPosition);
                 if (order.Side == TradeSide.Buy)
                 {
-                    var currentPosition = positions.FirstOrDefault(
-                        position => string.Equals(position.AssetId, order.AssetId, StringComparison.OrdinalIgnoreCase));
-                    var currentBid = orderBook?.BestBid ?? 0m;
-                    var updatedPosition = paperTradingEngine.ApplyBuyFill(currentPosition, order, fill, currentBid, now);
-                    await repository.UpsertPaperPositionAsync(updatedPosition, cancellationToken);
-                    positions.RemoveAll(position => string.Equals(position.AssetId, updatedPosition.AssetId, StringComparison.OrdinalIgnoreCase));
-                    positions.Add(updatedPosition);
-                    positionsUpdated++;
+                    await repository.ActivatePaperCopiedLeaderPositionAsync(
+                        order.Id,
+                        fill.SizeShares,
+                        fill.FilledAtUtc,
+                        cancellationToken);
                 }
+
+                RemovePosition(positions, updatedPosition);
+                positions.Add(updatedPosition);
+                positionsUpdated++;
             }
-            catch (OperationCanceledException)
+            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
             {
                 throw;
+            }
+            catch (OperationCanceledException ex)
+            {
+                logger.LogError(ex, "Paper order processing timed out for order {PaperOrderId}.", order.Id);
+                await TryRecordApiErrorAsync("ProcessOpenOrderTimeout", ex.Message, cancellationToken);
+            }
+            catch (PolymarketApiException ex) when (IsMissingOrderBook(ex))
+            {
+                logger.LogDebug(
+                    "Paper order processing skipped because CLOB has no order book for asset {AssetId}. PaperOrderId={PaperOrderId} Message={Message}",
+                    order.AssetId,
+                    order.Id,
+                    ex.Message);
             }
             catch (Exception ex)
             {
@@ -121,11 +177,29 @@ public sealed class PaperTradingProcessor(
                         UpdatedAtUtc = DateTimeOffset.UtcNow
                     },
                     cancellationToken);
+                exposureCache.ApplyPaperPosition(position with
+                {
+                    EstimatedValueUsd = estimatedValue,
+                    UnrealizedPnlUsd = unrealizedPnl,
+                    UpdatedAtUtc = DateTimeOffset.UtcNow
+                });
                 updated++;
             }
-            catch (OperationCanceledException)
+            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
             {
                 throw;
+            }
+            catch (OperationCanceledException ex)
+            {
+                logger.LogError(ex, "Paper position mark update timed out for asset {AssetId}.", position.AssetId);
+                await TryRecordApiErrorAsync("UpdatePositionMarkTimeout", ex.Message, cancellationToken);
+            }
+            catch (PolymarketApiException ex) when (IsMissingOrderBook(ex))
+            {
+                logger.LogDebug(
+                    "Paper position mark update skipped because CLOB has no order book for asset {AssetId}. Message={Message}",
+                    position.AssetId,
+                    ex.Message);
             }
             catch (Exception ex)
             {
@@ -135,6 +209,36 @@ public sealed class PaperTradingProcessor(
         }
 
         return updated;
+    }
+
+    private static PaperPosition? FindPosition(
+        IEnumerable<PaperPosition> positions,
+        PaperOrder order)
+    {
+        return positions.FirstOrDefault(position =>
+            string.Equals(position.AssetId, order.AssetId, StringComparison.OrdinalIgnoreCase) &&
+            string.Equals(position.CopiedTraderWallet, order.CopiedTraderWallet, StringComparison.OrdinalIgnoreCase));
+    }
+
+    private static void RemovePosition(
+        List<PaperPosition> positions,
+        PaperPosition updatedPosition)
+    {
+        positions.RemoveAll(position =>
+            string.Equals(position.AssetId, updatedPosition.AssetId, StringComparison.OrdinalIgnoreCase) &&
+            string.Equals(position.CopiedTraderWallet, updatedPosition.CopiedTraderWallet, StringComparison.OrdinalIgnoreCase));
+    }
+
+    private static decimal GetFilledShares(IReadOnlyList<PaperFill> fills, decimal maxShares)
+    {
+        return Math.Min(maxShares, fills.Sum(fill => Math.Max(0m, fill.SizeShares)));
+    }
+
+    private static bool IsMissingOrderBook(PolymarketApiException ex)
+    {
+        return string.Equals(ex.Operation, "GetOrderBook", StringComparison.Ordinal) &&
+            (ex.Message.Contains("No orderbook exists", StringComparison.OrdinalIgnoreCase) ||
+                ex.Message.Contains("HTTP 404", StringComparison.OrdinalIgnoreCase));
     }
 
     private async Task TryRecordApiErrorAsync(

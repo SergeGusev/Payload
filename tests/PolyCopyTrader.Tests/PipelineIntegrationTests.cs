@@ -8,6 +8,7 @@ using PolyCopyTrader.Service.MarketData;
 using PolyCopyTrader.Service.PaperTrading;
 using PolyCopyTrader.Service.Scanning;
 using PolyCopyTrader.Service.Signals;
+using PolyCopyTrader.Service.Strategies;
 using PolyCopyTrader.Strategy;
 
 namespace PolyCopyTrader.Tests;
@@ -52,6 +53,8 @@ public sealed class PipelineIntegrationTests
             SignalEngine(),
             new DefaultPaperTradingEngine(),
             new ServiceControlState(),
+            new ExposureSnapshotCache(repository),
+            new StrategyStateProvider(NullLogger<StrategyStateProvider>.Instance, repository),
             repository);
 
         var signalResult = await signalProcessor.ProcessQueuedAsync();
@@ -67,6 +70,8 @@ public sealed class PipelineIntegrationTests
             new FakeClobClient(OrderBook(bestBid: 0.73m, bestAsk: 0.74m)),
             new MarketDataCache(new MarketDataWebSocketOptions()),
             new MarketDataWebSocketOptions(),
+            new PaperTradingOptions(),
+            new ExposureSnapshotCache(repository),
             repository);
 
         var paperResult = await paperProcessor.ProcessOpenOrdersAsync();
@@ -77,6 +82,175 @@ public sealed class PipelineIntegrationTests
         var position = Assert.Single(repository.PaperPositions);
         Assert.Equal("asset-1", position.AssetId);
         Assert.True(position.EstimatedValueUsd > 0m);
+    }
+
+    [Fact]
+    public async Task PaperTradingProcessor_BalancedBuyFillTracksPartialDepthAndRemainingShares()
+    {
+        var repository = new TestAppRepository();
+        var now = DateTimeOffset.UtcNow;
+        var order = new PaperOrder(
+            Guid.NewGuid(),
+            Guid.NewGuid(),
+            Wallet,
+            PaperOrderStatus.Pending,
+            TradeSide.Buy,
+            "asset-1",
+            "condition-1",
+            "Yes",
+            0.50m,
+            10m,
+            5m,
+            now,
+            now.AddMinutes(5));
+        await repository.AddPaperOrderAsync(order);
+
+        var firstProcessor = CreatePaperProcessor(
+            repository,
+            OrderBook(
+                "asset-1",
+                [new OrderBookLevel(0.49m, 100m)],
+                [new OrderBookLevel(0.49m, 4m), new OrderBookLevel(0.51m, 100m)]));
+
+        var firstResult = await firstProcessor.ProcessOpenOrdersAsync();
+
+        Assert.Equal(1, firstResult.OrdersFilled);
+        Assert.Equal(PaperOrderStatus.PartiallyFilled, repository.PaperOrders.Single().Status);
+        Assert.Equal(4m, Assert.Single(repository.PaperFills).SizeShares);
+        Assert.Equal(4m, Assert.Single(repository.PaperPositions).SizeShares);
+
+        var secondProcessor = CreatePaperProcessor(
+            repository,
+            OrderBook(
+                "asset-1",
+                [new OrderBookLevel(0.49m, 100m)],
+                [new OrderBookLevel(0.50m, 100m)]));
+
+        var secondResult = await secondProcessor.ProcessOpenOrdersAsync();
+
+        Assert.Equal(1, secondResult.OrdersFilled);
+        Assert.Equal(PaperOrderStatus.Filled, repository.PaperOrders.Single().Status);
+        Assert.Equal(2, repository.PaperFills.Count);
+        Assert.Equal(6m, repository.PaperFills.OrderBy(fill => fill.FilledAtUtc).Last().SizeShares);
+        var position = Assert.Single(repository.PaperPositions);
+        Assert.Equal(10m, position.SizeShares);
+        Assert.Equal(0.496m, position.AveragePrice);
+    }
+
+    [Fact]
+    public async Task PaperTradingProcessor_SellFillClosesCopiedWalletPosition()
+    {
+        var repository = new TestAppRepository();
+        var now = DateTimeOffset.UtcNow;
+        var order = new PaperOrder(
+            Guid.NewGuid(),
+            Guid.NewGuid(),
+            Wallet,
+            PaperOrderStatus.Pending,
+            TradeSide.Sell,
+            "asset-1",
+            "condition-1",
+            "Yes",
+            0.74m,
+            25m,
+            18.50m,
+            now,
+            now.AddMinutes(5));
+        await repository.AddPaperOrderAsync(order);
+        await repository.UpsertPaperPositionAsync(new PaperPosition(
+            "asset-1",
+            "condition-1",
+            "Yes",
+            100m,
+            0.60m,
+            73m,
+            13m,
+            now,
+            Wallet));
+
+        var paperProcessor = new PaperTradingProcessor(
+            NullLogger<PaperTradingProcessor>.Instance,
+            new DefaultPaperTradingEngine(),
+            new FakeClobClient(OrderBook(bestBid: 0.74m, bestAsk: 0.75m)),
+            new MarketDataCache(new MarketDataWebSocketOptions()),
+            new MarketDataWebSocketOptions(),
+            new PaperTradingOptions(),
+            new ExposureSnapshotCache(repository),
+            repository);
+
+        var paperResult = await paperProcessor.ProcessOpenOrdersAsync();
+
+        Assert.Equal(1, paperResult.OrdersFilled);
+        Assert.Equal(PaperOrderStatus.Filled, repository.PaperOrders.Single().Status);
+        var fill = Assert.Single(repository.PaperFills);
+        Assert.Equal(3.50m, fill.RealizedPnlUsd);
+        var position = Assert.Single(repository.PaperPositions);
+        Assert.Equal(75m, position.SizeShares);
+        Assert.Equal(Wallet, position.CopiedTraderWallet);
+    }
+
+    [Fact]
+    public async Task PaperTradingProcessor_BatchesFillSimulationButExpiresAllDueOrders()
+    {
+        var repository = new TestAppRepository();
+        var now = DateTimeOffset.UtcNow;
+        await repository.AddPaperOrderAsync(PaperOrder("expired-1", now.AddSeconds(-1)));
+        await repository.AddPaperOrderAsync(PaperOrder("expired-2", now.AddSeconds(-1)));
+        await repository.AddPaperOrderAsync(PaperOrder("active-1", now.AddMinutes(5)));
+        await repository.AddPaperOrderAsync(PaperOrder("active-2", now.AddMinutes(5)));
+
+        var paperProcessor = new PaperTradingProcessor(
+            NullLogger<PaperTradingProcessor>.Instance,
+            new DefaultPaperTradingEngine(),
+            new FakeClobClient(OrderBook(bestBid: 0.49m, bestAsk: 0.49m)),
+            new MarketDataCache(new MarketDataWebSocketOptions()),
+            new MarketDataWebSocketOptions(),
+            new PaperTradingOptions { OpenOrderFillSimulationBatchSize = 1 },
+            new ExposureSnapshotCache(repository),
+            repository);
+
+        var paperResult = await paperProcessor.ProcessOpenOrdersAsync();
+
+        Assert.Equal(4, paperResult.OpenOrdersChecked);
+        Assert.Equal(2, paperResult.OrdersExpired);
+        Assert.Equal(1, paperResult.OrdersFilled);
+        Assert.Equal(2, repository.PaperOrders.Count(order => order.Status == PaperOrderStatus.Expired));
+        Assert.Equal(1, repository.PaperOrders.Count(order => order.Status == PaperOrderStatus.Filled));
+        Assert.Equal(1, repository.PaperOrders.Count(order => order.Status == PaperOrderStatus.Pending));
+    }
+
+    private static PaperTradingProcessor CreatePaperProcessor(
+        TestAppRepository repository,
+        OrderBookSnapshot orderBook)
+    {
+        return new PaperTradingProcessor(
+            NullLogger<PaperTradingProcessor>.Instance,
+            new DefaultPaperTradingEngine(),
+            new FakeClobClient(orderBook),
+            new MarketDataCache(new MarketDataWebSocketOptions()),
+            new MarketDataWebSocketOptions(),
+            new PaperTradingOptions(),
+            new ExposureSnapshotCache(repository),
+            repository);
+    }
+
+    private static PaperOrder PaperOrder(string assetId, DateTimeOffset expiresAtUtc)
+    {
+        var now = DateTimeOffset.UtcNow;
+        return new PaperOrder(
+            Guid.NewGuid(),
+            Guid.NewGuid(),
+            Wallet,
+            PaperOrderStatus.Pending,
+            TradeSide.Buy,
+            assetId,
+            "condition-1",
+            "Yes",
+            0.50m,
+            10m,
+            5m,
+            now,
+            expiresAtUtc);
     }
 
     private static ISignalEngine SignalEngine()
@@ -211,10 +385,21 @@ public sealed class PipelineIntegrationTests
 
     private static OrderBookSnapshot OrderBook(decimal bestBid, decimal bestAsk)
     {
-        return new OrderBookSnapshot(
+        return OrderBook(
             "asset-1",
             [new OrderBookLevel(bestBid, 1_000m)],
-            [new OrderBookLevel(bestAsk, 1_000m)],
+            [new OrderBookLevel(bestAsk, 1_000m)]);
+    }
+
+    private static OrderBookSnapshot OrderBook(
+        string assetId,
+        IReadOnlyList<OrderBookLevel> bids,
+        IReadOnlyList<OrderBookLevel> asks)
+    {
+        return new OrderBookSnapshot(
+            assetId,
+            bids,
+            asks,
             DateTimeOffset.UtcNow,
             "condition-1",
             TickSize: 0.01m);
@@ -238,6 +423,16 @@ public sealed class PipelineIntegrationTests
 
         public Task<IReadOnlyList<LeaderTrade>> GetUserTradesAsync(
             string wallet,
+            bool takerOnly,
+            int limit = 100,
+            int offset = 0,
+            CancellationToken cancellationToken = default)
+        {
+            return Task.FromResult(trades);
+        }
+
+        public Task<IReadOnlyList<LeaderTrade>> GetMarketTradesAsync(
+            string conditionId,
             bool takerOnly,
             int limit = 100,
             int offset = 0,

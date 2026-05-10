@@ -2,8 +2,6 @@ using System.Reflection;
 using PolyCopyTrader.Domain;
 using PolyCopyTrader.Domain.Configuration;
 using PolyCopyTrader.Service.Control;
-using PolyCopyTrader.Service.LiveTrading;
-using PolyCopyTrader.Service.PaperTrading;
 using PolyCopyTrader.Service.Scanning;
 using PolyCopyTrader.Service.Signals;
 using PolyCopyTrader.Storage;
@@ -16,8 +14,6 @@ public sealed class BotWorker(
     IAppRepository repository,
     IWatchlistScanner watchlistScanner,
     ISignalProcessor signalProcessor,
-    IPaperTradingProcessor paperTradingProcessor,
-    ILiveTradingProcessor liveTradingProcessor,
     ServiceControlState controlState) : BackgroundService
 {
     private readonly DateTimeOffset startedAtUtc = DateTimeOffset.UtcNow;
@@ -51,22 +47,14 @@ public sealed class BotWorker(
                     ? new SignalProcessingResult(0, 0, 0, 0)
                     : await signalProcessor.ProcessQueuedAsync(stoppingToken);
 
-                var paperResult = controlState.PaperTradingPaused
-                    ? new PaperTradingProcessingResult(0, 0, 0, 0)
-                    : await paperTradingProcessor.ProcessOpenOrdersAsync(stoppingToken);
-
-                var liveResult = await liveTradingProcessor.ProcessOpenOrdersAsync(stoppingToken);
-
                 currentLoop =
                     $"Scanner={scanStatus.ScannerStatus}; TradesFetched={scanStatus.TradesFetched}; " +
                     $"NewTradesStored={scanStatus.NewTradesStored}; PositionsFetched={scanStatus.PositionsFetched}; " +
                     $"SignalsAccepted={signalResult.SignalsAccepted}; SignalsRejected={signalResult.SignalsRejected}; " +
-                    $"PaperOrdersCreated={signalResult.PaperOrdersCreated}; PaperFilled={paperResult.OrdersFilled}; " +
-                    $"PaperExpired={paperResult.OrdersExpired}; LiveOrdersSubmitted={signalResult.LiveOrdersSubmitted}; " +
-                    $"LiveOpenChecked={liveResult.OpenOrdersChecked}; LiveCanceled={liveResult.OrdersCanceled}";
+                    $"PaperOrdersCreated={signalResult.PaperOrdersCreated}; LiveOrdersSubmitted={signalResult.LiveOrdersSubmitted}";
 
                 logger.LogInformation(
-                    "Watchlist scan completed. Status={ScannerStatus} TradesFetched={TradesFetched} NewTradesStored={NewTradesStored} PositionsFetched={PositionsFetched} SignalsAccepted={SignalsAccepted} SignalsRejected={SignalsRejected} PaperOrdersCreated={PaperOrdersCreated} PaperFilled={PaperFilled} PaperExpired={PaperExpired} LiveOrdersSubmitted={LiveOrdersSubmitted} LiveCanceled={LiveCanceled}",
+                    "Watchlist scan completed. Status={ScannerStatus} TradesFetched={TradesFetched} NewTradesStored={NewTradesStored} PositionsFetched={PositionsFetched} SignalsAccepted={SignalsAccepted} SignalsRejected={SignalsRejected} PaperOrdersCreated={PaperOrdersCreated} LiveOrdersSubmitted={LiveOrdersSubmitted}",
                     scanStatus.ScannerStatus,
                     scanStatus.TradesFetched,
                     scanStatus.NewTradesStored,
@@ -74,10 +62,7 @@ public sealed class BotWorker(
                     signalResult.SignalsAccepted,
                     signalResult.SignalsRejected,
                     signalResult.PaperOrdersCreated,
-                    paperResult.OrdersFilled,
-                    paperResult.OrdersExpired,
-                    signalResult.LiveOrdersSubmitted,
-                    liveResult.OrdersCanceled);
+                    signalResult.LiveOrdersSubmitted);
             }
             catch (OperationCanceledException)
             {
@@ -110,9 +95,9 @@ public sealed class BotWorker(
             }
             catch (Exception ex)
             {
-                logger.LogError(ex, "Heartbeat persistence failed. Pausing scanning and paper trading.");
-                controlState.PauseAll("BotWorker");
-                controlState.MarkError("Heartbeat persistence failed: " + ex.Message);
+                logger.LogError(ex, "Heartbeat persistence failed. Service will keep running and retry.");
+                currentLoop = AppendHeartbeatPersistenceFailure(currentLoop, ex.Message);
+                controlState.RecordLoop(currentLoop, lastError);
             }
 
             logger.LogInformation(
@@ -145,5 +130,17 @@ public sealed class BotWorker(
         {
             logger.LogError(ex, "Failed to persist API error from BotWorker.");
         }
+    }
+
+    private static string AppendHeartbeatPersistenceFailure(string currentLoop, string message)
+    {
+        const int maxMessageLength = 300;
+        var trimmed = string.IsNullOrWhiteSpace(message) ? "unknown error" : message.Trim();
+        if (trimmed.Length > maxMessageLength)
+        {
+            trimmed = trimmed[..maxMessageLength];
+        }
+
+        return currentLoop + "; Heartbeat persistence failed: " + trimmed;
     }
 }

@@ -55,7 +55,7 @@ public static class PolymarketMarketDataWebSocketParser
             "last_trade_price" => [ParseLastTradePrice(root, rawEventType)],
             "best_bid_ask" => [ParseBestBidAsk(root, rawEventType)],
             "tick_size_change" => [ParseSimple(root, MarketDataEventType.TickSizeChange, rawEventType)],
-            "market_resolved" => [ParseSimple(root, MarketDataEventType.MarketResolved, rawEventType, marketResolved: true)],
+            "market_resolved" => ParseMarketResolved(root, rawEventType),
             _ => [ParseSimple(root, MarketDataEventType.Unknown, rawEventType)]
         };
     }
@@ -75,7 +75,8 @@ public static class PolymarketMarketDataWebSocketParser
             null,
             TradeSide.Unknown,
             false,
-            orderBook.SnapshotAtUtc);
+            orderBook.SnapshotAtUtc,
+            RawJson: root.GetRawText());
     }
 
     private static IReadOnlyList<MarketDataUpdate> ParsePriceChange(JsonElement root, string rawEventType)
@@ -106,7 +107,8 @@ public static class PolymarketMarketDataWebSocketParser
                 GetDecimalOrNull(change, "size"),
                 ParseSide(GetString(change, "side")),
                 false,
-                timestamp));
+                timestamp,
+                RawJson: change.GetRawText()));
         }
 
         return updates;
@@ -126,7 +128,9 @@ public static class PolymarketMarketDataWebSocketParser
             GetDecimalOrNull(root, "size"),
             ParseSide(GetString(root, "side")),
             false,
-            ParseTimestamp(GetString(root, "timestamp")));
+            ParseTimestamp(GetString(root, "timestamp")),
+            GetString(root, "transaction_hash"),
+            root.GetRawText());
     }
 
     private static MarketDataUpdate ParseBestBidAsk(JsonElement root, string rawEventType)
@@ -149,19 +153,63 @@ public static class PolymarketMarketDataWebSocketParser
             null,
             TradeSide.Unknown,
             false,
-            timestamp);
+            timestamp,
+            RawJson: root.GetRawText());
+    }
+
+    private static IReadOnlyList<MarketDataUpdate> ParseMarketResolved(JsonElement root, string rawEventType)
+    {
+        var assetIds = GetStringArray(root, "assets_ids");
+        var winningAssetId = GetString(root, "winning_asset_id");
+        var winningOutcome = GetString(root, "winning_outcome");
+        if (assetIds.Count == 0)
+        {
+            var assetId = GetString(root, "asset_id");
+            if (!string.IsNullOrWhiteSpace(assetId))
+            {
+                assetIds = [assetId];
+            }
+        }
+
+        if (assetIds.Count == 0)
+        {
+            return
+            [
+                ParseSimple(
+                    root,
+                    MarketDataEventType.MarketResolved,
+                    rawEventType,
+                    marketResolved: true,
+                    winningAssetId: winningAssetId,
+                    winningOutcome: winningOutcome)
+            ];
+        }
+
+        return assetIds
+            .Select(assetId => ParseSimple(
+                root,
+                MarketDataEventType.MarketResolved,
+                rawEventType,
+                assetId,
+                marketResolved: true,
+                winningAssetId: winningAssetId,
+                winningOutcome: winningOutcome))
+            .ToArray();
     }
 
     private static MarketDataUpdate ParseSimple(
         JsonElement root,
         MarketDataEventType eventType,
         string rawEventType,
-        bool marketResolved = false)
+        string? assetId = null,
+        bool marketResolved = false,
+        string? winningAssetId = null,
+        string? winningOutcome = null)
     {
         return new MarketDataUpdate(
             eventType,
             rawEventType,
-            GetString(root, "asset_id"),
+            assetId ?? GetString(root, "asset_id"),
             GetString(root, "market"),
             null,
             null,
@@ -170,7 +218,10 @@ public static class PolymarketMarketDataWebSocketParser
             null,
             TradeSide.Unknown,
             marketResolved,
-            ParseTimestamp(GetString(root, "timestamp")));
+            ParseTimestamp(GetString(root, "timestamp")),
+            RawJson: root.GetRawText(),
+            WinningAssetId: winningAssetId,
+            WinningOutcome: winningOutcome);
     }
 
     private static OrderBookSnapshot? BuildTopOfBookSnapshot(
@@ -224,6 +275,51 @@ public static class PolymarketMarketDataWebSocketParser
         return property.ValueKind == JsonValueKind.String
             ? property.GetString()
             : property.ToString();
+    }
+
+    private static IReadOnlyList<string> GetStringArray(JsonElement element, string propertyName)
+    {
+        if (!element.TryGetProperty(propertyName, out var property) ||
+            property.ValueKind is JsonValueKind.Null or JsonValueKind.Undefined)
+        {
+            return [];
+        }
+
+        if (property.ValueKind == JsonValueKind.Array)
+        {
+            return property
+                .EnumerateArray()
+                .Select(item => item.ToString())
+                .Where(value => !string.IsNullOrWhiteSpace(value))
+                .ToArray();
+        }
+
+        if (property.ValueKind != JsonValueKind.String)
+        {
+            return [];
+        }
+
+        var value = property.GetString();
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            return [];
+        }
+
+        try
+        {
+            using var json = JsonDocument.Parse(value);
+            return json.RootElement.ValueKind == JsonValueKind.Array
+                ? json.RootElement
+                    .EnumerateArray()
+                    .Select(item => item.ToString())
+                    .Where(item => !string.IsNullOrWhiteSpace(item))
+                    .ToArray()
+                : [];
+        }
+        catch (JsonException)
+        {
+            return [];
+        }
     }
 
     private static decimal? GetDecimalOrNull(JsonElement element, string propertyName)

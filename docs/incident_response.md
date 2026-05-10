@@ -8,7 +8,7 @@ then diagnose.
 - Pause live trading.
 - Leave scanner running only if rate limits are mild.
 - Check API error count and affected component.
-- Inspect `polymarket_http_logs` for request URLs, UTC timestamps, status codes, and response previews.
+- Inspect `polymarket_http_logs` for request URLs, UTC timestamps, status codes, and response previews. The default policy keeps `429` rows but not all successful requests.
 - Increase poll intervals only after writing down the change.
 - Resume after errors normalize.
 
@@ -17,7 +17,7 @@ then diagnose.
 - Pause live trading.
 - Keep kill switch available.
 - Avoid retries beyond configured limits.
-- Inspect `polymarket_http_logs` before changing endpoint, DNS, or TLS settings.
+- Inspect `polymarket_http_logs` before changing endpoint, DNS, or TLS settings. The default policy keeps `5xx`/network rows but not all successful requests.
 - Resume only after several healthy loops.
 
 ## WebSocket Stale Or Disconnected

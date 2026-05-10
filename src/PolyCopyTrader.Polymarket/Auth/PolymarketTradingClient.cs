@@ -141,7 +141,7 @@ public sealed class PolymarketTradingClient : IPolymarketTradingClient
     {
         ArgumentNullException.ThrowIfNull(request);
 
-        var secrets = await LoadAuthenticatedSecretsAsync(requireOwner: true, ct);
+        var secrets = await LoadAuthenticatedSecretsAsync(ct);
         var privateKey = await ReadRequiredSecretAsync(authOptions.OrderSigningPrivateKeyName, "order signing private key", ct);
         var order = orderBuilder.Build(request);
         var signerAddress = orderSigner.GetAddress(privateKey);
@@ -156,7 +156,7 @@ public sealed class PolymarketTradingClient : IPolymarketTradingClient
             throw new InvalidOperationException("Live order signature verification failed.");
         }
 
-        var body = payloadSerializer.Serialize(order, signature, secrets.ApiKeyOwner!);
+        var body = payloadSerializer.Serialize(order, signature, secrets.Credentials.ApiKey);
         var redactedBody = payloadSerializer.SerializeRedacted(order, signature, "[REDACTED_OWNER]");
         var response = await SendAuthenticatedAsync(HttpMethod.Post, PostOrderPath, "PostOrder", body, secrets.Credentials, ct);
 
@@ -205,7 +205,7 @@ public sealed class PolymarketTradingClient : IPolymarketTradingClient
     public async Task<LiveOrderStatusResult?> GetLiveOrderStatusAsync(string orderId, CancellationToken ct)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(orderId);
-        var secrets = await LoadAuthenticatedSecretsAsync(requireOwner: false, ct);
+        var secrets = await LoadAuthenticatedSecretsAsync(ct);
         var path = "/order/" + Uri.EscapeDataString(orderId);
         var response = await SendAuthenticatedAsync(HttpMethod.Get, path, "GetLiveOrderStatus", null, secrets.Credentials, ct);
 
@@ -240,7 +240,7 @@ public sealed class PolymarketTradingClient : IPolymarketTradingClient
         string operation,
         CancellationToken ct)
     {
-        var secrets = await LoadAuthenticatedSecretsAsync(requireOwner: false, ct);
+        var secrets = await LoadAuthenticatedSecretsAsync(ct);
         var response = await SendAuthenticatedAsync(HttpMethod.Delete, path, operation, body, secrets.Credentials, ct);
 
         if (!response.IsSuccessStatusCode)
@@ -279,18 +279,14 @@ public sealed class PolymarketTradingClient : IPolymarketTradingClient
             Redact(response.Body));
     }
 
-    private async Task<AuthenticatedSecrets> LoadAuthenticatedSecretsAsync(bool requireOwner, CancellationToken ct)
+    private async Task<AuthenticatedSecrets> LoadAuthenticatedSecretsAsync(CancellationToken ct)
     {
         var apiKey = await ReadRequiredSecretAsync(authOptions.ApiKeyName, "API key", ct);
         var apiSecret = await ReadRequiredSecretAsync(authOptions.ApiSecretName, "API secret", ct);
         var apiPassphrase = await ReadRequiredSecretAsync(authOptions.ApiPassphraseName, "API passphrase", ct);
-        var owner = requireOwner
-            ? await ReadRequiredSecretAsync(authOptions.ApiKeyOwnerName, "API key owner", ct)
-            : null;
 
         return new AuthenticatedSecrets(
-            new PolymarketApiCredentials(apiKey, apiSecret, apiPassphrase),
-            owner);
+            new PolymarketApiCredentials(apiKey, apiSecret, apiPassphrase));
     }
 
     private async Task<string> ReadRequiredSecretAsync(string name, string label, CancellationToken ct)
@@ -410,7 +406,9 @@ public sealed class PolymarketTradingClient : IPolymarketTradingClient
         return new ClobV2Order(
             request.Salt ?? "0",
             request.MakerAddress,
-            request.SignerAddress,
+            request.SignatureType == ClobV2SignatureType.POLY_1271
+                ? request.MakerAddress
+                : request.SignerAddress,
             request.TokenId,
             "0",
             "0",
@@ -448,9 +446,7 @@ public sealed class PolymarketTradingClient : IPolymarketTradingClient
         return value.Length <= 2_048 ? value : value[..2_048];
     }
 
-    private sealed record AuthenticatedSecrets(
-        PolymarketApiCredentials Credentials,
-        string? ApiKeyOwner);
+    private sealed record AuthenticatedSecrets(PolymarketApiCredentials Credentials);
 
     private sealed record AuthenticatedResponse(
         HttpStatusCode StatusCode,

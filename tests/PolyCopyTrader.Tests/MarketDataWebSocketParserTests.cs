@@ -45,6 +45,8 @@ public sealed class MarketDataWebSocketParserTests
         Assert.Equal(0.456m, update.Price);
         Assert.Equal(219.217767m, update.Size);
         Assert.Equal(TradeSide.Buy, update.Side);
+        Assert.Equal("0xeeefffggghhh", update.TransactionHash);
+        Assert.Contains("\"transaction_hash\"", update.RawJson, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -58,6 +60,24 @@ public sealed class MarketDataWebSocketParserTests
         Assert.Equal(0.73m, updates[0].BestBid);
         Assert.Equal(0.77m, updates[0].BestAsk);
         Assert.Empty(pong);
+    }
+
+    [Fact]
+    public void Parser_ReadsMarketResolvedForEachAsset()
+    {
+        var updates = PolymarketMarketDataWebSocketParser.ParseMarketMessage(MarketResolvedJson);
+
+        Assert.Equal(2, updates.Count);
+        Assert.All(updates, update =>
+        {
+            Assert.Equal(MarketDataEventType.MarketResolved, update.EventType);
+            Assert.True(update.MarketResolved);
+            Assert.Equal("0xcondition", update.ConditionId);
+            Assert.Equal("token-yes", update.WinningAssetId);
+            Assert.Equal("Yes", update.WinningOutcome);
+        });
+        Assert.Contains(updates, update => update.AssetId == "token-yes");
+        Assert.Contains(updates, update => update.AssetId == "token-no");
     }
 
     private const string BookJson = """
@@ -122,6 +142,21 @@ public sealed class MarketDataWebSocketParserTests
   "best_ask": "0.77",
   "spread": "0.04",
   "timestamp": "1766789469958"
+}
+""";
+
+    private const string MarketResolvedJson = """
+{
+  "event_type": "market_resolved",
+  "id": "1031769",
+  "market": "0xcondition",
+  "assets_ids": [
+    "token-yes",
+    "token-no"
+  ],
+  "winning_asset_id": "token-yes",
+  "winning_outcome": "Yes",
+  "timestamp": "1766790415550"
 }
 """;
 }

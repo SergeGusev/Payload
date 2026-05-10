@@ -1,3 +1,4 @@
+using System.Text;
 using System.Text.Json;
 
 namespace PolyCopyTrader.Polymarket.Auth;
@@ -24,30 +25,34 @@ public sealed class ClobV2OrderPayloadSerializer
         ArgumentNullException.ThrowIfNull(order);
         ArgumentException.ThrowIfNullOrWhiteSpace(owner);
 
-        var value = new
+        using var stream = new MemoryStream();
+        using (var writer = new Utf8JsonWriter(stream, new JsonWriterOptions { Indented = false }))
         {
-            order = new
-            {
-                salt = order.Salt,
-                maker = order.Maker,
-                signer = order.Signer,
-                tokenId = order.TokenId,
-                makerAmount = order.MakerAmount,
-                takerAmount = order.TakerAmount,
-                side = ClobV2OrderBuilder.SideToWire(order.Side),
-                expiration = order.Expiration,
-                signatureType = (int)order.SignatureType,
-                timestamp = order.Timestamp,
-                metadata = order.Metadata,
-                builder = order.Builder,
-                signature = redactSignature ? "[REDACTED]" : signature ?? string.Empty
-            },
-            owner,
-            orderType = order.OrderType.ToString(),
-            deferExec = order.DeferExec,
-            postOnly = order.PostOnly
-        };
+            writer.WriteStartObject();
+            writer.WritePropertyName("order");
+            writer.WriteStartObject();
+            writer.WritePropertyName("salt");
+            writer.WriteRawValue(order.Salt);
+            writer.WriteString("maker", order.Maker);
+            writer.WriteString("signer", order.Signer);
+            writer.WriteString("tokenId", order.TokenId);
+            writer.WriteString("makerAmount", order.MakerAmount);
+            writer.WriteString("takerAmount", order.TakerAmount);
+            writer.WriteString("side", ClobV2OrderBuilder.SideToWire(order.Side));
+            writer.WriteString("expiration", order.Expiration);
+            writer.WriteNumber("signatureType", (int)order.SignatureType);
+            writer.WriteString("timestamp", order.Timestamp);
+            writer.WriteString("metadata", order.Metadata);
+            writer.WriteString("builder", order.Builder);
+            writer.WriteString("signature", redactSignature ? "[REDACTED]" : signature ?? string.Empty);
+            writer.WriteEndObject();
+            writer.WriteString("owner", owner);
+            writer.WriteString("orderType", order.OrderType.ToString());
+            writer.WriteBoolean("deferExec", order.DeferExec);
+            writer.WriteBoolean("postOnly", order.PostOnly);
+            writer.WriteEndObject();
+        }
 
-        return JsonSerializer.Serialize(value, JsonOptions);
+        return Encoding.UTF8.GetString(stream.ToArray());
     }
 }

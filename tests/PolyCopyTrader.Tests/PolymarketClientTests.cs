@@ -26,6 +26,21 @@ public sealed class PolymarketClientTests
     }
 
     [Fact]
+    public void Parser_ReadsTypedDataApiTradeProfileFields()
+    {
+        using var json = JsonDocument.Parse(SampleTradesJson);
+
+        var trades = PolymarketJsonParser.ParseDataApiTrades(json.RootElement);
+
+        var trade = Assert.Single(trades);
+        Assert.Equal("0x56687bf447db6ffa42ffe2204a05edaa20f55839", trade.TraderWallet);
+        Assert.Equal("Gopfan", trade.TraderName);
+        Assert.Equal("sample-event", trade.EventSlug);
+        Assert.Equal("0xabc", trade.TransactionHash);
+        Assert.Contains("proxyWallet", trade.RawJson, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void Parser_ReadsPositions()
     {
         using var json = JsonDocument.Parse(SamplePositionsJson);
@@ -38,6 +53,44 @@ public sealed class PolymarketClientTests
         Assert.Equal(0.81m, position.CurPrice);
         Assert.Equal("987654321", position.OppositeAsset);
         Assert.True(position.NegativeRisk);
+    }
+
+    [Fact]
+    public void Parser_ReadsTypedCurrentPositions()
+    {
+        using var json = JsonDocument.Parse(SamplePositionsJson);
+
+        var positions = PolymarketJsonParser.ParseDataApiCurrentPositions(json.RootElement);
+
+        var position = Assert.Single(positions);
+        Assert.Equal(PolymarketDataApiPositionStatus.Open, position.Status);
+        Assert.Equal(74m, position.InitialValue);
+        Assert.Equal(81m, position.CurrentValue);
+        Assert.Equal(7m, position.CashPnl);
+        Assert.Equal(1.25m, position.RealizedPnl);
+        Assert.Equal("12345", position.EventId);
+        Assert.Equal("Politics", position.Category);
+        Assert.False(position.Redeemable);
+        Assert.True(position.Mergeable);
+        Assert.Contains("proxyWallet", position.RawJson, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Parser_ReadsTypedClosedPositions()
+    {
+        using var json = JsonDocument.Parse(SampleClosedPositionsJson);
+
+        var positions = PolymarketJsonParser.ParseDataApiClosedPositions(json.RootElement);
+
+        var position = Assert.Single(positions);
+        Assert.Equal(PolymarketDataApiPositionStatus.Closed, position.Status);
+        Assert.Null(position.Size);
+        Assert.Equal(0.40m, position.AvgPrice);
+        Assert.Equal(100m, position.TotalBought);
+        Assert.Equal(8m, position.RealizedPnl);
+        Assert.Equal(DateTimeOffset.FromUnixTimeSeconds(1710000300), position.TimestampUtc);
+        Assert.Equal("Sports", position.Category);
+        Assert.Equal("No", position.OppositeOutcome);
     }
 
     [Fact]
@@ -92,6 +145,47 @@ public sealed class PolymarketClientTests
         Assert.True(yes.Resolved);
         Assert.Equal("Yes", yes.WinningOutcome);
         Assert.True(yes.LookupSucceeded);
+    }
+
+    [Fact]
+    public void Parser_ReadsGammaActiveMarkets()
+    {
+        using var json = JsonDocument.Parse(SampleGammaActiveMarketsJson);
+
+        var markets = PolymarketJsonParser.ParseGammaActiveMarkets(json.RootElement);
+
+        var market = Assert.Single(markets);
+        Assert.Equal("2002618", market.MarketId);
+        Assert.Equal("0xcondition", market.ConditionId);
+        Assert.Equal("question-1", market.QuestionId);
+        Assert.Equal("israel-x-lebanon-diplomatic-meeting-by-may-31-2026", market.Slug);
+        Assert.Equal("Israel x Lebanon diplomatic meeting by May 31, 2026?", market.Question);
+        Assert.Equal("386820", market.EventId);
+        Assert.Equal("israel-x-lebanon-diplomatic-meeting-by-341", market.EventSlug);
+        Assert.Equal("Israel x Lebanon diplomatic meeting by...?", market.EventTitle);
+        Assert.Equal("politics", market.SeriesSlug);
+        Assert.Equal("Politics", market.Category);
+        Assert.True(market.Active);
+        Assert.False(market.Closed);
+        Assert.True(market.AcceptingOrders);
+        Assert.True(market.EnableOrderBook);
+        Assert.True(market.NegativeRisk);
+        Assert.Equal(123.45m, market.Liquidity);
+        Assert.Equal(67.89m, market.LiquidityClob);
+        Assert.Equal(1000m, market.Volume);
+        Assert.Equal(10.5m, market.Volume24Hr);
+        Assert.Equal(0.42m, market.BestBid);
+        Assert.Equal(0.43m, market.BestAsk);
+        Assert.Equal(0.01m, market.Spread);
+        Assert.Equal(0.425m, market.LastTradePrice);
+        Assert.Equal(5m, market.OrderMinSize);
+        Assert.Equal(0.01m, market.OrderPriceMinTickSize);
+        Assert.Equal(DateTimeOffset.Parse("2026-05-01T12:00:00Z"), market.CreatedAtUtc);
+        Assert.Equal(DateTimeOffset.Parse("2026-05-31T00:00:00Z"), market.EndDateUtc);
+        Assert.Equal(["Yes", "No"], market.Outcomes);
+        Assert.Equal(["12345678901234567890", "987654321"], market.ClobTokenIds);
+        Assert.Contains("\"id\": \"2002618\"", market.RawJson, StringComparison.Ordinal);
+        Assert.True(market.FetchedAtUtc > DateTimeOffset.UtcNow.AddMinutes(-1));
     }
 
     [Fact]
@@ -150,6 +244,90 @@ public sealed class PolymarketClientTests
     }
 
     [Fact]
+    public async Task DataClient_SendsMarketParameterForMarketTrades()
+    {
+        var handler = new StubHttpMessageHandler(_ => new HttpResponseMessage(HttpStatusCode.OK)
+        {
+            Content = new StringContent(SampleTradesJson)
+        });
+        var client = new PolymarketDataApiClient(
+            new HttpClient(handler),
+            TestOptions,
+            new CapturingApiErrorSink());
+
+        var trades = await client.GetMarketTradesAsync("0xcondition", takerOnly: false, limit: 50, offset: 25);
+
+        Assert.Single(trades);
+        Assert.Contains("/trades", handler.Requests.Single().RequestUri?.AbsoluteUri);
+        Assert.Contains("market=0xcondition", handler.Requests.Single().RequestUri?.Query);
+        Assert.Contains("takerOnly=false", handler.Requests.Single().RequestUri?.Query);
+        Assert.Contains("limit=50", handler.Requests.Single().RequestUri?.Query);
+        Assert.Contains("offset=25", handler.Requests.Single().RequestUri?.Query);
+    }
+
+    [Fact]
+    public async Task DataClient_SendsTimestampForGlobalDataApiTrades()
+    {
+        var handler = new StubHttpMessageHandler(_ => new HttpResponseMessage(HttpStatusCode.OK)
+        {
+            Content = new StringContent(SampleTradesJson)
+        });
+        var client = new PolymarketDataApiClient(
+            new HttpClient(handler),
+            TestOptions,
+            new CapturingApiErrorSink());
+
+        var trades = await client.GetGlobalDataApiTradesAsync(takerOnly: false, limit: 1000, timestampCacheBuster: 123456789);
+
+        Assert.Single(trades);
+        Assert.Contains("/trades", handler.Requests.Single().RequestUri?.AbsoluteUri);
+        Assert.Contains("takerOnly=false", handler.Requests.Single().RequestUri?.Query);
+        Assert.Contains("limit=1000", handler.Requests.Single().RequestUri?.Query);
+        Assert.Contains("timestamp=123456789", handler.Requests.Single().RequestUri?.Query);
+    }
+
+    [Fact]
+    public async Task DataClient_SendsTimestampForPositionEndpoints()
+    {
+        var handler = new StubHttpMessageHandler(request =>
+        {
+            var path = request.RequestUri?.AbsolutePath ?? string.Empty;
+            return new HttpResponseMessage(HttpStatusCode.OK)
+            {
+                Content = new StringContent(path.Contains("closed-positions", StringComparison.Ordinal)
+                    ? SampleClosedPositionsJson
+                    : SamplePositionsJson)
+            };
+        });
+        var client = new PolymarketDataApiClient(
+            new HttpClient(handler),
+            TestOptions,
+            new CapturingApiErrorSink());
+
+        var current = await client.GetUserCurrentPositionsAsync(
+            "0x56687bf447db6ffa42ffe2204a05edaa20f55839",
+            limit: 500,
+            offset: 25,
+            timestampCacheBuster: 123);
+        var closed = await client.GetUserClosedPositionsAsync(
+            "0x56687bf447db6ffa42ffe2204a05edaa20f55839",
+            limit: 50,
+            offset: 100,
+            timestampCacheBuster: 456);
+
+        Assert.Single(current);
+        Assert.Single(closed);
+        Assert.Contains("/positions", handler.Requests[0].RequestUri?.AbsoluteUri);
+        Assert.Contains("limit=500", handler.Requests[0].RequestUri?.Query);
+        Assert.Contains("offset=25", handler.Requests[0].RequestUri?.Query);
+        Assert.Contains("timestamp=123", handler.Requests[0].RequestUri?.Query);
+        Assert.Contains("/closed-positions", handler.Requests[1].RequestUri?.AbsoluteUri);
+        Assert.Contains("limit=50", handler.Requests[1].RequestUri?.Query);
+        Assert.Contains("offset=100", handler.Requests[1].RequestUri?.Query);
+        Assert.Contains("timestamp=456", handler.Requests[1].RequestUri?.Query);
+    }
+
+    [Fact]
     public async Task GammaClient_FetchesMarketByToken()
     {
         var handler = new StubHttpMessageHandler(_ => new HttpResponseMessage(HttpStatusCode.OK)
@@ -167,6 +345,30 @@ public sealed class PolymarketClientTests
         Assert.Contains("/markets", handler.Requests.Single().RequestUri?.AbsoluteUri);
         Assert.Contains("clob_token_ids=12345678901234567890", handler.Requests.Single().RequestUri?.Query);
         Assert.Contains("closed=false", handler.Requests.Single().RequestUri?.Query);
+    }
+
+    [Fact]
+    public async Task GammaClient_FetchesActiveMarketsPage()
+    {
+        var handler = new StubHttpMessageHandler(_ => new HttpResponseMessage(HttpStatusCode.OK)
+        {
+            Content = new StringContent(SampleGammaActiveMarketsJson)
+        });
+        var client = new PolymarketGammaClient(
+            new HttpClient(handler),
+            TestOptions,
+            new CapturingApiErrorSink());
+
+        var markets = await client.GetActiveMarketsAsync(offset: 200);
+
+        Assert.Single(markets);
+        Assert.Contains("/markets", handler.Requests.Single().RequestUri?.AbsoluteUri);
+        Assert.Contains("active=true", handler.Requests.Single().RequestUri?.Query);
+        Assert.Contains("closed=false", handler.Requests.Single().RequestUri?.Query);
+        Assert.Contains("limit=500", handler.Requests.Single().RequestUri?.Query);
+        Assert.Contains("order=createdAt", handler.Requests.Single().RequestUri?.Query);
+        Assert.Contains("ascending=false", handler.Requests.Single().RequestUri?.Query);
+        Assert.Contains("offset=200", handler.Requests.Single().RequestUri?.Query);
     }
 
     [Fact]
@@ -224,6 +426,31 @@ public sealed class PolymarketClientTests
         Assert.NotNull(orderBook);
         Assert.Contains("/book", handler.Requests.Single().RequestUri?.AbsoluteUri);
         Assert.Contains("token_id=12345678901234567890", handler.Requests.Single().RequestUri?.Query);
+    }
+
+    [Fact]
+    public async Task ClobClient_DoesNotRecordApiErrorForMissingOrderBook()
+    {
+        var sink = new CapturingApiErrorSink();
+        var httpLogSink = new CapturingHttpLogSink();
+        var handler = new StubHttpMessageHandler(_ => new HttpResponseMessage(HttpStatusCode.NotFound)
+        {
+            Content = new StringContent("""{"error":"No orderbook exists for the requested token id"}""")
+        });
+        var client = new PolymarketClobPublicClient(
+            new HttpClient(handler),
+            TestOptions,
+            sink,
+            httpLogSink);
+
+        await Assert.ThrowsAsync<PolymarketApiException>(() =>
+            client.GetOrderBookAsync("12345678901234567890"));
+
+        Assert.Empty(sink.Errors);
+        var log = Assert.Single(httpLogSink.Entries);
+        Assert.Equal("GetOrderBook", log.Operation);
+        Assert.Equal(404, log.StatusCode);
+        Assert.False(log.Succeeded);
     }
 
     [Fact]
@@ -430,14 +657,47 @@ public sealed class PolymarketClientTests
     "cashPnl": 7,
     "percentPnl": 9.45,
     "totalBought": 100,
-    "realizedPnl": 0,
+    "realizedPnl": 1.25,
+    "percentRealizedPnl": 1.69,
     "curPrice": 0.81,
+    "redeemable": false,
+    "mergeable": true,
     "title": "Will sample event happen?",
     "slug": "will-sample-event-happen",
+    "eventId": "12345",
+    "eventSlug": "sample-event",
+    "category": "Politics",
     "outcome": "Yes",
+    "outcomeIndex": 0,
+    "oppositeOutcome": "No",
     "oppositeAsset": "987654321",
     "endDate": "2026-09-01T00:00:00Z",
     "negativeRisk": true
+  }
+]
+""";
+
+    private const string SampleClosedPositionsJson = """
+[
+  {
+    "proxyWallet": "0x56687bf447db6ffa42ffe2204a05edaa20f55839",
+    "asset": "12345678901234567890",
+    "conditionId": "0xdd22472e552920b8438158ea7238bfadfa4f736aa4cee91a6b86c39ead110917",
+    "avgPrice": 0.40,
+    "totalBought": 100,
+    "realizedPnl": 8,
+    "curPrice": 0,
+    "timestamp": 1710000300,
+    "title": "Will sample event happen?",
+    "slug": "will-sample-event-happen",
+    "icon": "https://example.com/icon.png",
+    "eventSlug": "sample-event",
+    "category": "Sports",
+    "outcome": "Yes",
+    "outcomeIndex": 0,
+    "oppositeOutcome": "No",
+    "oppositeAsset": "987654321",
+    "endDate": "2026-09-01T00:00:00Z"
   }
 ]
 """;
@@ -503,6 +763,52 @@ public sealed class PolymarketClientTests
     "outcomePrices": "[\"1\", \"0\"]",
     "clobTokenIds": "[\"12345678901234567890\", \"987654321\"]"
     }
+]
+""";
+
+    private const string SampleGammaActiveMarketsJson = """
+[
+  {
+    "id": "2002618",
+    "questionID": "question-1",
+    "question": "Israel x Lebanon diplomatic meeting by May 31, 2026?",
+    "conditionId": "0xcondition",
+    "slug": "israel-x-lebanon-diplomatic-meeting-by-may-31-2026",
+    "category": "",
+    "endDate": "2026-05-31T00:00:00Z",
+    "createdAt": "2026-05-01T12:00:00Z",
+    "updatedAt": "2026-05-01T12:30:00Z",
+    "startDate": "2026-05-01T00:00:00Z",
+    "eventStartTime": "2026-05-02T00:00:00Z",
+    "active": true,
+    "closed": false,
+    "archived": false,
+    "restricted": false,
+    "acceptingOrders": true,
+    "enableOrderBook": true,
+    "negRisk": true,
+    "liquidityNum": "123.45",
+    "liquidityClob": 67.89,
+    "volumeNum": "1000",
+    "volume24hr": "10.5",
+    "bestBid": "0.42",
+    "bestAsk": "0.43",
+    "spread": "0.01",
+    "lastTradePrice": "0.425",
+    "orderMinSize": "5",
+    "orderPriceMinTickSize": "0.01",
+    "outcomes": "[\"Yes\", \"No\"]",
+    "clobTokenIds": "[\"12345678901234567890\", \"987654321\"]",
+    "events": [
+      {
+        "id": "386820",
+        "slug": "israel-x-lebanon-diplomatic-meeting-by-341",
+        "title": "Israel x Lebanon diplomatic meeting by...?",
+        "category": "Politics",
+        "seriesSlug": "politics"
+      }
+    ]
+  }
 ]
 """;
 

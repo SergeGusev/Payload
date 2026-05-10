@@ -45,6 +45,53 @@ public sealed class NoOpAppRepository : IAppRepository
         return Task.FromResult<IReadOnlyList<TraderDiscoveryCandidate>>([]);
     }
 
+    public Task<PolymarketDataApiTrader?> GetPolymarketDataApiTraderAsync(
+        string wallet,
+        CancellationToken cancellationToken = default)
+    {
+        return Task.FromResult<PolymarketDataApiTrader?>(null);
+    }
+
+    public Task UpsertPolymarketDataApiTraderAsync(
+        PolymarketDataApiTrader trader,
+        CancellationToken cancellationToken = default)
+    {
+        return Task.CompletedTask;
+    }
+
+    public Task<int> UpsertPolymarketDataApiTradersAsync(
+        IReadOnlyList<PolymarketDataApiTrader> traders,
+        CancellationToken cancellationToken = default)
+    {
+        return Task.FromResult(0);
+    }
+
+    public Task<IReadOnlyList<PolymarketDataApiTrader>> GetPolymarketDataApiTradersForSyncAsync(
+        int limit,
+        DateTimeOffset incrementalSyncBeforeUtc,
+        CancellationToken cancellationToken = default)
+    {
+        return Task.FromResult<IReadOnlyList<PolymarketDataApiTrader>>([]);
+    }
+
+    public Task MarkPolymarketDataApiTraderSyncedAsync(
+        string wallet,
+        bool fullSync,
+        int tradesFetched,
+        int tradesInserted,
+        DateTimeOffset? latestTradeTimestampUtc,
+        CancellationToken cancellationToken = default)
+    {
+        return Task.CompletedTask;
+    }
+
+    public Task UpsertPolymarketGammaMarketAsync(
+        PolymarketGammaMarket market,
+        CancellationToken cancellationToken = default)
+    {
+        return Task.CompletedTask;
+    }
+
     public Task AddSignalAsync(Signal signal, CancellationToken cancellationToken = default)
     {
         return Task.CompletedTask;
@@ -105,6 +152,93 @@ public sealed class NoOpAppRepository : IAppRepository
         return Task.FromResult<IReadOnlyList<PaperPosition>>([]);
     }
 
+    public Task<bool> TryAddPaperPositionSettlementAsync(PaperPositionSettlement settlement, CancellationToken cancellationToken = default)
+    {
+        return Task.FromResult(false);
+    }
+
+    public Task<IReadOnlyList<PaperPositionSettlement>> GetRecentPaperPositionSettlementsAsync(int limit = 100, CancellationToken cancellationToken = default)
+    {
+        return Task.FromResult<IReadOnlyList<PaperPositionSettlement>>([]);
+    }
+
+    public Task<int> RefreshPaperCopiedTraderPerformanceAsync(CancellationToken cancellationToken = default)
+    {
+        return Task.FromResult(0);
+    }
+
+    public Task<IReadOnlyList<PaperCopiedTraderPerformance>> GetPaperCopiedTraderPerformanceAsync(int limit = 100, CancellationToken cancellationToken = default)
+    {
+        return Task.FromResult<IReadOnlyList<PaperCopiedTraderPerformance>>([]);
+    }
+
+    public Task<PaperCopiedTraderPerformance?> GetPaperCopiedTraderPerformanceAsync(
+        string copiedTraderWallet,
+        string category,
+        CancellationToken cancellationToken = default)
+    {
+        return Task.FromResult<PaperCopiedTraderPerformance?>(null);
+    }
+
+    public Task<IReadOnlyList<StrategyPerformance>> GetStrategyPerformanceAsync(int limit = 100, CancellationToken cancellationToken = default)
+    {
+        return Task.FromResult<IReadOnlyList<StrategyPerformance>>([]);
+    }
+
+    public Task<IReadOnlyList<StrategyRecentPerformance>> GetStrategyRecentPerformanceAsync(int limit = 250, CancellationToken cancellationToken = default)
+    {
+        return Task.FromResult<IReadOnlyList<StrategyRecentPerformance>>([]);
+    }
+
+    public Task<IReadOnlyDictionary<Guid, bool>> GetStrategyEnabledStatesAsync(CancellationToken cancellationToken = default)
+    {
+        return Task.FromResult<IReadOnlyDictionary<Guid, bool>>(
+            StrategyIds.AllStrategyIds.ToDictionary(strategyId => strategyId, _ => true));
+    }
+
+    public Task<IReadOnlyDictionary<Guid, StrategyRuntimeSettings>> GetStrategyRuntimeSettingsAsync(CancellationToken cancellationToken = default)
+    {
+        return Task.FromResult<IReadOnlyDictionary<Guid, StrategyRuntimeSettings>>(
+            StrategyIds.AllStrategyIds.ToDictionary(StrategyIds.Normalize, StrategyRuntimeSettings.Default));
+    }
+
+    public Task<bool> SetStrategyEnabledAsync(
+        Guid strategyId,
+        bool enabled,
+        DateTimeOffset updatedAtUtc,
+        CancellationToken cancellationToken = default)
+    {
+        return Task.FromResult(false);
+    }
+
+    public Task<bool> SetStrategyLiveStakesAsync(
+        Guid strategyId,
+        bool liveStakes,
+        DateTimeOffset updatedAtUtc,
+        CancellationToken cancellationToken = default)
+    {
+        return Task.FromResult(false);
+    }
+
+    public Task<bool> SetStrategyStakeAmountsAsync(
+        Guid strategyId,
+        decimal paperStakeAmount,
+        decimal liveStakeAmount,
+        DateTimeOffset updatedAtUtc,
+        CancellationToken cancellationToken = default)
+    {
+        return Task.FromResult(false);
+    }
+
+    public Task<bool> SetStrategyLiveAvailableBalanceAsync(
+        Guid strategyId,
+        decimal liveAvailableBalance,
+        DateTimeOffset updatedAtUtc,
+        CancellationToken cancellationToken = default)
+    {
+        return Task.FromResult(false);
+    }
+
     public Task AddDryRunOrderAsync(DryRunOrder order, CancellationToken cancellationToken = default)
     {
         return Task.CompletedTask;
@@ -130,9 +264,30 @@ public sealed class NoOpAppRepository : IAppRepository
         return Task.FromResult<IReadOnlyList<LiveOrder>>([]);
     }
 
+    public Task<IReadOnlyList<LiveOrder>> GetMatchedLiveOrdersPendingBalanceSettlementAsync(
+        int limit = 100,
+        CancellationToken cancellationToken = default)
+    {
+        return Task.FromResult<IReadOnlyList<LiveOrder>>([]);
+    }
+
     public Task<IReadOnlyList<LiveOrder>> GetRecentLiveOrdersAsync(int limit = 100, CancellationToken cancellationToken = default)
     {
         return Task.FromResult<IReadOnlyList<LiveOrder>>([]);
+    }
+
+    public Task<StrategyLiveBalanceAdjustmentResult> ApplyLiveOrderSettlementToStrategyBalanceAsync(
+        Guid liveOrderId,
+        Guid strategyId,
+        decimal settlementValueUsd,
+        decimal realizedPnlUsd,
+        string? winningAssetId,
+        string winningOutcome,
+        DateTimeOffset settledAtUtc,
+        DateTimeOffset updatedAtUtc,
+        CancellationToken cancellationToken = default)
+    {
+        return Task.FromResult(new StrategyLiveBalanceAdjustmentResult(false, 0m, false));
     }
 
     public Task AddLiveTradingEventAsync(LiveTradingEvent liveEvent, CancellationToken cancellationToken = default)
@@ -165,6 +320,15 @@ public sealed class NoOpAppRepository : IAppRepository
         return Task.FromResult<IReadOnlyList<PolymarketHttpLogEntry>>([]);
     }
 
+    public Task<PolymarketHttpLogCleanupResult> CleanupPolymarketHttpLogsAsync(
+        DateTimeOffset successfulBeforeUtc,
+        DateTimeOffset failedBeforeUtc,
+        int batchSize,
+        CancellationToken cancellationToken = default)
+    {
+        return Task.FromResult(new PolymarketHttpLogCleanupResult(0, 0, 0));
+    }
+
     public Task AddPolymarketOnChainLogsAsync(IReadOnlyList<PolymarketOnChainLog> logs, CancellationToken cancellationToken = default)
     {
         return Task.CompletedTask;
@@ -175,6 +339,11 @@ public sealed class NoOpAppRepository : IAppRepository
         return Task.CompletedTask;
     }
 
+    public Task<int> AddPolymarketOnChainTradeCapturesAsync(IReadOnlyList<PolymarketOnChainTradeCapture> captures, CancellationToken cancellationToken = default)
+    {
+        return Task.FromResult(captures.Count);
+    }
+
     public Task UpsertOnChainIngestionCursorAsync(OnChainIngestionCursor cursor, CancellationToken cancellationToken = default)
     {
         return Task.CompletedTask;
@@ -183,6 +352,16 @@ public sealed class NoOpAppRepository : IAppRepository
     public Task<OnChainIngestionCursor?> GetOnChainIngestionCursorAsync(string contractAddress, CancellationToken cancellationToken = default)
     {
         return Task.FromResult<OnChainIngestionCursor?>(null);
+    }
+
+    public Task UpsertOnChainTradeCaptureCursorAsync(OnChainTradeCaptureCursor cursor, CancellationToken cancellationToken = default)
+    {
+        return Task.CompletedTask;
+    }
+
+    public Task<OnChainTradeCaptureCursor?> GetOnChainTradeCaptureCursorAsync(string contractAddress, CancellationToken cancellationToken = default)
+    {
+        return Task.FromResult<OnChainTradeCaptureCursor?>(null);
     }
 
     public Task<long?> GetLatestPolymarketOnChainFillBlockAsync(string contractAddress, CancellationToken cancellationToken = default)
@@ -365,6 +544,30 @@ public sealed class NoOpAppRepository : IAppRepository
     public Task<IReadOnlyList<MarketDataEvent>> GetRecentMarketDataEventsAsync(int limit = 100, CancellationToken cancellationToken = default)
     {
         return Task.FromResult<IReadOnlyList<MarketDataEvent>>([]);
+    }
+
+    public Task<bool> TryAddPolymarketWebSocketTradeTickAsync(PolymarketWebSocketTradeTick tradeTick, CancellationToken cancellationToken = default)
+    {
+        return Task.FromResult(false);
+    }
+
+    public Task UpdatePolymarketWebSocketTradeTickMatchAsync(PolymarketWebSocketTradeTick tradeTick, CancellationToken cancellationToken = default)
+    {
+        return Task.CompletedTask;
+    }
+
+    public Task<IReadOnlyList<PolymarketWebSocketTradeTick>> GetPendingPolymarketWebSocketTradeTickMatchesAsync(
+        DateTimeOffset dueBeforeUtc,
+        int maxAttempts,
+        int limit,
+        CancellationToken cancellationToken = default)
+    {
+        return Task.FromResult<IReadOnlyList<PolymarketWebSocketTradeTick>>([]);
+    }
+
+    public Task<IReadOnlyList<PolymarketWebSocketTradeTick>> GetRecentPolymarketWebSocketTradeTicksAsync(int limit = 100, CancellationToken cancellationToken = default)
+    {
+        return Task.FromResult<IReadOnlyList<PolymarketWebSocketTradeTick>>([]);
     }
 
     public Task UpsertMarketDataStatusAsync(MarketDataStatusSnapshot status, CancellationToken cancellationToken = default)

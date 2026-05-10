@@ -12,7 +12,21 @@ public interface IMarketDataCache
 
     void ApplyUpdate(MarketDataUpdate update);
 
+    OrderBookCacheLookup GetOrderBook(string assetId, TimeSpan maxAge);
+
     bool TryGetFreshOrderBook(string assetId, TimeSpan maxAge, out OrderBookSnapshot snapshot);
 
     void UpdateStatus(MarketDataStatusSnapshot status);
 }
+
+public enum OrderBookCacheLookupStatus
+{
+    Fresh,
+    Missing,
+    Stale
+}
+
+public sealed record OrderBookCacheLookup(
+    OrderBookCacheLookupStatus Status,
+    OrderBookSnapshot? Snapshot,
+    TimeSpan? Age);

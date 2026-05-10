@@ -1,9 +1,12 @@
+using System.Globalization;
 using PolyCopyTrader.Domain;
 
 namespace PolyCopyTrader.Strategy;
 
 public sealed class DefaultPaperTradingEngine : IPaperTradingEngine
 {
+    private const decimal FillEpsilon = 0.00000001m;
+
     public PaperOrder CreateOrder(Signal signal, decimal price, decimal sizeShares, DateTimeOffset expiresAtUtc)
     {
         if (!signal.Accepted)
@@ -19,6 +22,7 @@ public sealed class DefaultPaperTradingEngine : IPaperTradingEngine
         return new PaperOrder(
             Guid.NewGuid(),
             signal.Id,
+            signal.LeaderTrade.TraderWallet,
             PaperOrderStatus.Pending,
             signal.LeaderTrade.Side,
             signal.LeaderTrade.AssetId,
@@ -28,7 +32,8 @@ public sealed class DefaultPaperTradingEngine : IPaperTradingEngine
             sizeShares,
             signal.ProposedNotionalUsd ?? price * sizeShares,
             signal.CreatedAtUtc,
-            expiresAtUtc);
+            expiresAtUtc,
+            StrategyId: StrategyIds.FollowLeader);
     }
 
     public PaperOrder ExpireIfNeeded(PaperOrder order, DateTimeOffset nowUtc)
@@ -38,38 +43,53 @@ public sealed class DefaultPaperTradingEngine : IPaperTradingEngine
             return order;
         }
 
-        return order.ExpiresAtUtc < nowUtc
-            ? order with { Status = PaperOrderStatus.Expired }
-            : order;
+        if (order.ExpiresAtUtc >= nowUtc)
+        {
+            return order;
+        }
+
+        var expiredStatus = order.Status == PaperOrderStatus.PartiallyFilled
+            ? PaperOrderStatus.PartiallyFilledExpired
+            : PaperOrderStatus.Expired;
+
+        return order with { Status = expiredStatus };
     }
 
     public PaperFill? TrySimulateFill(
         PaperOrder order,
         OrderBookSnapshot? orderBookSnapshot,
         LeaderTrade? observedTrade,
-        DateTimeOffset nowUtc)
+        DateTimeOffset nowUtc,
+        decimal previouslyFilledShares = 0m)
     {
         if (order.Status is not (PaperOrderStatus.Pending or PaperOrderStatus.PartiallyFilled))
         {
             return null;
         }
 
+        var remainingShares = GetRemainingShares(order, previouslyFilledShares);
+        if (remainingShares <= 0m)
+        {
+            return null;
+        }
+
         if (order.Side == TradeSide.Buy)
         {
-            return TrySimulateBuyFill(order, orderBookSnapshot, observedTrade, nowUtc);
+            return TrySimulateBuyFill(order, orderBookSnapshot, observedTrade, nowUtc, remainingShares);
         }
 
         if (order.Side == TradeSide.Sell)
         {
-            return TrySimulateSellFill(order, orderBookSnapshot, observedTrade, nowUtc);
+            return TrySimulateSellFill(order, orderBookSnapshot, observedTrade, nowUtc, remainingShares);
         }
 
         return null;
     }
 
-    public PaperOrder ApplyFillStatus(PaperOrder order, PaperFill fill)
+    public PaperOrder ApplyFillStatus(PaperOrder order, PaperFill fill, decimal previouslyFilledShares = 0m)
     {
-        var status = fill.SizeShares >= order.SizeShares
+        var cumulativeFilledShares = Math.Min(order.SizeShares, Math.Max(0m, previouslyFilledShares) + fill.SizeShares);
+        var status = cumulativeFilledShares >= order.SizeShares - FillEpsilon
             ? PaperOrderStatus.Filled
             : PaperOrderStatus.PartiallyFilled;
 
@@ -113,23 +133,95 @@ public sealed class DefaultPaperTradingEngine : IPaperTradingEngine
             averagePrice,
             estimatedValue,
             unrealizedPnl,
-            nowUtc);
+            nowUtc,
+            order.CopiedTraderWallet);
+    }
+
+    public PaperPosition ApplySellFill(
+        PaperPosition currentPosition,
+        PaperOrder order,
+        PaperFill fill,
+        decimal currentBid,
+        DateTimeOffset nowUtc)
+    {
+        ArgumentNullException.ThrowIfNull(currentPosition);
+
+        if (order.Side != TradeSide.Sell)
+        {
+            throw new InvalidOperationException("Only SELL paper fills are supported for sell position accounting.");
+        }
+
+        if (!string.Equals(currentPosition.AssetId, order.AssetId, StringComparison.OrdinalIgnoreCase) ||
+            !string.Equals(currentPosition.CopiedTraderWallet, order.CopiedTraderWallet, StringComparison.OrdinalIgnoreCase))
+        {
+            throw new InvalidOperationException("SELL paper fills require a matching copied-wallet paper position.");
+        }
+
+        if (currentBid < 0m)
+        {
+            throw new InvalidOperationException("Current bid must not be negative.");
+        }
+
+        if (fill.SizeShares > currentPosition.SizeShares)
+        {
+            throw new InvalidOperationException("SELL paper fill size exceeds the current paper position.");
+        }
+
+        var newSize = currentPosition.SizeShares - fill.SizeShares;
+        var averagePrice = newSize <= 0m ? 0m : currentPosition.AveragePrice;
+        var estimatedValue = newSize * currentBid;
+        var unrealizedPnl = estimatedValue - (newSize * averagePrice);
+
+        return currentPosition with
+        {
+            SizeShares = newSize,
+            AveragePrice = averagePrice,
+            EstimatedValueUsd = estimatedValue,
+            UnrealizedPnlUsd = unrealizedPnl,
+            UpdatedAtUtc = nowUtc
+        };
     }
 
     private static PaperFill? TrySimulateBuyFill(
         PaperOrder order,
         OrderBookSnapshot? orderBookSnapshot,
         LeaderTrade? observedTrade,
-        DateTimeOffset nowUtc)
+        DateTimeOffset nowUtc,
+        decimal remainingShares)
     {
-        if (orderBookSnapshot?.BestAsk is { } bestAsk && bestAsk <= order.Price)
+        if (orderBookSnapshot is not null)
         {
-            return FullFill(order, nowUtc, $"SimulatedApproximate: bestAsk {bestAsk} <= paper buy price {order.Price}.");
+            var depthFill = TrySimulateDepthFill(
+                order,
+                orderBookSnapshot.Asks
+                    .Where(level => level is { Price: > 0m, Size: > 0m } && level.Price <= order.Price)
+                    .OrderBy(level => level.Price),
+                remainingShares,
+                nowUtc,
+                $"BalancedGtcDepth: BUY limit {Format(order.Price)} crossed ask depth");
+            if (depthFill is not null)
+            {
+                return depthFill with
+                {
+                    Evidence = string.Concat(
+                        depthFill.Evidence,
+                        orderBookSnapshot.BestAsk is { } bestAsk
+                            ? $" BestAsk={Format(bestAsk)}."
+                            : " BestAsk=null.")
+                };
+            }
         }
 
-        if (observedTrade is { Price: var tradePrice } && tradePrice <= order.Price)
+        if (observedTrade is { Price: var tradePrice, Size: > 0m } && tradePrice <= order.Price)
         {
-            return FullFill(order, nowUtc, $"SimulatedApproximate: observed trade {tradePrice} <= paper buy price {order.Price}.");
+            var fillSize = Math.Min(remainingShares, observedTrade.Size);
+            return new PaperFill(
+                Guid.NewGuid(),
+                order.Id,
+                tradePrice,
+                fillSize,
+                nowUtc,
+                $"BalancedGtcTrade: BUY limit {Format(order.Price)} filled {Format(fillSize)} of remaining {Format(remainingShares)} from observed trade at {Format(tradePrice)}.");
         }
 
         return null;
@@ -139,23 +231,106 @@ public sealed class DefaultPaperTradingEngine : IPaperTradingEngine
         PaperOrder order,
         OrderBookSnapshot? orderBookSnapshot,
         LeaderTrade? observedTrade,
-        DateTimeOffset nowUtc)
+        DateTimeOffset nowUtc,
+        decimal remainingShares)
     {
-        if (orderBookSnapshot?.BestBid is { } bestBid && bestBid >= order.Price)
+        if (orderBookSnapshot is not null)
         {
-            return FullFill(order, nowUtc, $"SimulatedApproximate: bestBid {bestBid} >= paper sell price {order.Price}.");
+            var depthFill = TrySimulateDepthFill(
+                order,
+                orderBookSnapshot.Bids
+                    .Where(level => level is { Price: > 0m, Size: > 0m } && level.Price >= order.Price)
+                    .OrderByDescending(level => level.Price),
+                remainingShares,
+                nowUtc,
+                $"BalancedGtcDepth: SELL limit {Format(order.Price)} crossed bid depth");
+            if (depthFill is not null)
+            {
+                return depthFill with
+                {
+                    Evidence = string.Concat(
+                        depthFill.Evidence,
+                        orderBookSnapshot.BestBid is { } bestBid
+                            ? $" BestBid={Format(bestBid)}."
+                            : " BestBid=null.")
+                };
+            }
         }
 
-        if (observedTrade is { Price: var tradePrice } && tradePrice >= order.Price)
+        if (observedTrade is { Price: var tradePrice, Size: > 0m } && tradePrice >= order.Price)
         {
-            return FullFill(order, nowUtc, $"SimulatedApproximate: observed trade {tradePrice} >= paper sell price {order.Price}.");
+            var fillSize = Math.Min(remainingShares, observedTrade.Size);
+            return new PaperFill(
+                Guid.NewGuid(),
+                order.Id,
+                tradePrice,
+                fillSize,
+                nowUtc,
+                $"BalancedGtcTrade: SELL limit {Format(order.Price)} filled {Format(fillSize)} of remaining {Format(remainingShares)} from observed trade at {Format(tradePrice)}.");
         }
 
         return null;
     }
 
-    private static PaperFill FullFill(PaperOrder order, DateTimeOffset nowUtc, string evidence)
+    private static PaperFill? TrySimulateDepthFill(
+        PaperOrder order,
+        IOrderedEnumerable<OrderBookLevel> levels,
+        decimal remainingShares,
+        DateTimeOffset nowUtc,
+        string evidencePrefix)
     {
-        return new PaperFill(Guid.NewGuid(), order.Id, order.Price, order.SizeShares, nowUtc, evidence);
+        var filledShares = 0m;
+        var filledNotional = 0m;
+        var levelsUsed = 0;
+
+        foreach (var level in levels)
+        {
+            if (filledShares >= remainingShares)
+            {
+                break;
+            }
+
+            var takeShares = Math.Min(remainingShares - filledShares, level.Size);
+            if (takeShares <= 0m)
+            {
+                continue;
+            }
+
+            filledShares += takeShares;
+            filledNotional += takeShares * level.Price;
+            levelsUsed++;
+        }
+
+        if (filledShares <= 0m)
+        {
+            return null;
+        }
+
+        var averageFillPrice = filledNotional / filledShares;
+        var evidence = string.Concat(
+            evidencePrefix,
+            ". FilledShares=",
+            Format(filledShares),
+            " RemainingBeforeFill=",
+            Format(remainingShares),
+            " AvgFillPrice=",
+            Format(averageFillPrice),
+            " FilledNotionalUsd=",
+            Format(filledNotional),
+            " LevelsUsed=",
+            levelsUsed.ToString(CultureInfo.InvariantCulture),
+            ".");
+
+        return new PaperFill(Guid.NewGuid(), order.Id, averageFillPrice, filledShares, nowUtc, evidence);
+    }
+
+    private static decimal GetRemainingShares(PaperOrder order, decimal previouslyFilledShares)
+    {
+        return Math.Max(0m, order.SizeShares - Math.Max(0m, previouslyFilledShares));
+    }
+
+    private static string Format(decimal value)
+    {
+        return value.ToString("0.########", CultureInfo.InvariantCulture);
     }
 }

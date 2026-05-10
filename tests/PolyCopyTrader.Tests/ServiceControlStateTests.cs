@@ -40,6 +40,39 @@ public sealed class ServiceControlStateTests
     }
 
     [Fact]
+    public void PauseLiveTradingOnly_DoesNotPauseServiceRunState()
+    {
+        var state = new ServiceControlState();
+        state.MarkRunning();
+
+        var result = state.PauseLiveTrading("test");
+        state.RecordLoop("loop", null);
+        var snapshot = state.Snapshot;
+
+        Assert.True(result.Accepted);
+        Assert.True(snapshot.LiveTradingPaused);
+        Assert.False(snapshot.ScanningPaused);
+        Assert.False(snapshot.PaperTradingPaused);
+        Assert.Equal(ServiceRunState.Running, snapshot.RunState);
+    }
+
+    [Fact]
+    public void StartupLivePause_RemainsStartingUntilServiceMarksRunning()
+    {
+        var state = new ServiceControlState();
+
+        state.PauseLiveTrading("startup");
+        var starting = state.Snapshot;
+        state.MarkRunning();
+        var running = state.Snapshot;
+
+        Assert.True(starting.LiveTradingPaused);
+        Assert.Equal(ServiceRunState.Starting, starting.RunState);
+        Assert.True(running.LiveTradingPaused);
+        Assert.Equal(ServiceRunState.Running, running.RunState);
+    }
+
+    [Fact]
     public void RecordLoop_KeepsPausedStateWhenOneSubsystemIsPaused()
     {
         var state = new ServiceControlState();

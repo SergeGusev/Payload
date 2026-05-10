@@ -10,4 +10,6 @@ public interface ILiveTradingProcessor
 public sealed record LiveTradingProcessingResult(
     int OpenOrdersChecked,
     int OrdersPolled,
-    int OrdersCanceled);
+    int OrdersCanceled,
+    int BalanceSettlementsApplied = 0,
+    int DataApiReconciledOrders = 0);

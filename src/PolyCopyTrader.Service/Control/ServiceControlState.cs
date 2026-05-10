@@ -94,7 +94,7 @@ public sealed class ServiceControlState
     {
         lock (sync)
         {
-            runState = scanningPaused || paperTradingPaused || liveTradingPaused || killSwitchActive ? ServiceRunState.Paused : ServiceRunState.Running;
+            runState = ComputeActiveRunState();
         }
     }
 
@@ -130,7 +130,7 @@ public sealed class ServiceControlState
             currentLoop = loop;
             lastError = error;
             runState = error is null
-                ? scanningPaused || paperTradingPaused || liveTradingPaused || killSwitchActive ? ServiceRunState.Paused : ServiceRunState.Running
+                ? ComputeActiveRunState()
                 : ServiceRunState.Error;
         }
     }
@@ -150,7 +150,7 @@ public sealed class ServiceControlState
         lock (sync)
         {
             scanningPaused = false;
-            runState = scanningPaused || paperTradingPaused || liveTradingPaused || killSwitchActive ? ServiceRunState.Paused : ServiceRunState.Running;
+            runState = ComputeActiveRunState();
             return new ServiceCommandResult("ResumeScanning", source, true, "Scanning resumed.");
         }
     }
@@ -170,7 +170,7 @@ public sealed class ServiceControlState
         lock (sync)
         {
             paperTradingPaused = false;
-            runState = scanningPaused || paperTradingPaused || liveTradingPaused || killSwitchActive ? ServiceRunState.Paused : ServiceRunState.Running;
+            runState = ComputeActiveRunState();
             return new ServiceCommandResult("ResumePaperTrading", source, true, "Paper trading resumed.");
         }
     }
@@ -180,7 +180,7 @@ public sealed class ServiceControlState
         lock (sync)
         {
             liveTradingPaused = true;
-            runState = ServiceRunState.Paused;
+            runState = ComputeActiveRunStatePreservingStarting();
             return new ServiceCommandResult("PauseLiveTrading", source, true, "Live trading paused.");
         }
     }
@@ -195,7 +195,7 @@ public sealed class ServiceControlState
             }
 
             liveTradingPaused = false;
-            runState = scanningPaused || paperTradingPaused ? ServiceRunState.Paused : ServiceRunState.Running;
+            runState = ComputeActiveRunState();
             return new ServiceCommandResult("ResumeLiveTrading", source, true, "Live trading resumed.");
         }
     }
@@ -218,7 +218,7 @@ public sealed class ServiceControlState
         lock (sync)
         {
             killSwitchActive = false;
-            runState = scanningPaused || paperTradingPaused || liveTradingPaused ? ServiceRunState.Paused : ServiceRunState.Running;
+            runState = ComputeActiveRunState();
             return new ServiceCommandResult("ClearKillSwitch", source, true, "Kill switch cleared. Resume subsystems explicitly as needed.");
         }
     }
@@ -251,6 +251,20 @@ public sealed class ServiceControlState
             runState = ServiceRunState.Paused;
             return new ServiceCommandResult("Resume", source, true, "Scanning and paper trading resumed. Live trading remains paused because kill switch is active.");
         }
+    }
+
+    private ServiceRunState ComputeActiveRunState()
+    {
+        return scanningPaused || paperTradingPaused || killSwitchActive
+            ? ServiceRunState.Paused
+            : ServiceRunState.Running;
+    }
+
+    private ServiceRunState ComputeActiveRunStatePreservingStarting()
+    {
+        return runState == ServiceRunState.Starting
+            ? ServiceRunState.Starting
+            : ComputeActiveRunState();
     }
 }
 

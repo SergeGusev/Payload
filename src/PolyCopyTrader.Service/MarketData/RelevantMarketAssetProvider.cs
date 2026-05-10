@@ -5,11 +5,17 @@ namespace PolyCopyTrader.Service.MarketData;
 
 public sealed class RelevantMarketAssetProvider(
     MarketDataWebSocketOptions options,
-    IAppRepository repository) : IRelevantMarketAssetProvider
+    IAppRepository repository,
+    IActiveMarketAssetSubscriptionRegistry activeMarketAssetSubscriptionRegistry) : IRelevantMarketAssetProvider
 {
     public async Task<IReadOnlyCollection<string>> GetRelevantAssetIdsAsync(CancellationToken cancellationToken = default)
     {
         var assetIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+        foreach (var assetId in activeMarketAssetSubscriptionRegistry.GetAssetIds())
+        {
+            AddIfUsable(assetIds, assetId);
+        }
 
         foreach (var assetId in options.PinnedAssetIds)
         {
@@ -50,7 +56,9 @@ public sealed class RelevantMarketAssetProvider(
             }
         }
 
-        return assetIds.Take(options.MaxSubscribedAssets).ToArray();
+        return options.MaxSubscribedAssets <= 0
+            ? assetIds.ToArray()
+            : assetIds.Take(options.MaxSubscribedAssets).ToArray();
     }
 
     private static void AddIfUsable(HashSet<string> assetIds, string? assetId)

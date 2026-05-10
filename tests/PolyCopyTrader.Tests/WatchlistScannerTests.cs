@@ -192,6 +192,16 @@ public sealed class WatchlistScannerTests
             return Task.FromResult(TradesToReturn);
         }
 
+        public Task<IReadOnlyList<LeaderTrade>> GetMarketTradesAsync(
+            string conditionId,
+            bool takerOnly,
+            int limit = 100,
+            int offset = 0,
+            CancellationToken cancellationToken = default)
+        {
+            return Task.FromResult(TradesToReturn);
+        }
+
         public Task<IReadOnlyList<LeaderPosition>> GetUserPositionsAsync(
             string wallet,
             int limit = 100,
@@ -292,6 +302,13 @@ public sealed class WatchlistScannerTests
             return Task.FromResult<IReadOnlyList<TraderDiscoveryCandidate>>([]);
         }
 
+        public Task UpsertPolymarketGammaMarketAsync(
+            PolymarketGammaMarket market,
+            CancellationToken cancellationToken = default)
+        {
+            return Task.CompletedTask;
+        }
+
         public Task AddSignalAsync(Signal signal, CancellationToken cancellationToken = default)
         {
             return Task.CompletedTask;
@@ -350,6 +367,26 @@ public sealed class WatchlistScannerTests
         public Task<IReadOnlyList<PaperPosition>> GetPaperPositionsAsync(CancellationToken cancellationToken = default)
         {
             return Task.FromResult<IReadOnlyList<PaperPosition>>([]);
+        }
+
+        public Task<bool> TryAddPaperPositionSettlementAsync(PaperPositionSettlement settlement, CancellationToken cancellationToken = default)
+        {
+            return Task.FromResult(false);
+        }
+
+        public Task<IReadOnlyList<PaperPositionSettlement>> GetRecentPaperPositionSettlementsAsync(int limit = 100, CancellationToken cancellationToken = default)
+        {
+            return Task.FromResult<IReadOnlyList<PaperPositionSettlement>>([]);
+        }
+
+        public Task<int> RefreshPaperCopiedTraderPerformanceAsync(CancellationToken cancellationToken = default)
+        {
+            return Task.FromResult(0);
+        }
+
+        public Task<IReadOnlyList<PaperCopiedTraderPerformance>> GetPaperCopiedTraderPerformanceAsync(int limit = 100, CancellationToken cancellationToken = default)
+        {
+            return Task.FromResult<IReadOnlyList<PaperCopiedTraderPerformance>>([]);
         }
 
         public Task AddDryRunOrderAsync(DryRunOrder order, CancellationToken cancellationToken = default)
@@ -413,6 +450,15 @@ public sealed class WatchlistScannerTests
             return Task.FromResult<IReadOnlyList<PolymarketHttpLogEntry>>([]);
         }
 
+        public Task<PolymarketHttpLogCleanupResult> CleanupPolymarketHttpLogsAsync(
+            DateTimeOffset successfulBeforeUtc,
+            DateTimeOffset failedBeforeUtc,
+            int batchSize,
+            CancellationToken cancellationToken = default)
+        {
+            return Task.FromResult(new PolymarketHttpLogCleanupResult(0, 0, 0));
+        }
+
         public Task AddPolymarketOnChainLogsAsync(IReadOnlyList<PolymarketOnChainLog> logs, CancellationToken cancellationToken = default)
         {
             return Task.CompletedTask;
@@ -423,6 +469,11 @@ public sealed class WatchlistScannerTests
             return Task.CompletedTask;
         }
 
+        public Task<int> AddPolymarketOnChainTradeCapturesAsync(IReadOnlyList<PolymarketOnChainTradeCapture> captures, CancellationToken cancellationToken = default)
+        {
+            return Task.FromResult(captures.Count);
+        }
+
         public Task UpsertOnChainIngestionCursorAsync(OnChainIngestionCursor cursor, CancellationToken cancellationToken = default)
         {
             return Task.CompletedTask;
@@ -431,6 +482,16 @@ public sealed class WatchlistScannerTests
         public Task<OnChainIngestionCursor?> GetOnChainIngestionCursorAsync(string contractAddress, CancellationToken cancellationToken = default)
         {
             return Task.FromResult<OnChainIngestionCursor?>(null);
+        }
+
+        public Task UpsertOnChainTradeCaptureCursorAsync(OnChainTradeCaptureCursor cursor, CancellationToken cancellationToken = default)
+        {
+            return Task.CompletedTask;
+        }
+
+        public Task<OnChainTradeCaptureCursor?> GetOnChainTradeCaptureCursorAsync(string contractAddress, CancellationToken cancellationToken = default)
+        {
+            return Task.FromResult<OnChainTradeCaptureCursor?>(null);
         }
 
         public Task<long?> GetLatestPolymarketOnChainFillBlockAsync(string contractAddress, CancellationToken cancellationToken = default)
@@ -613,6 +674,30 @@ public sealed class WatchlistScannerTests
         public Task<IReadOnlyList<MarketDataEvent>> GetRecentMarketDataEventsAsync(int limit = 100, CancellationToken cancellationToken = default)
         {
             return Task.FromResult<IReadOnlyList<MarketDataEvent>>([]);
+        }
+
+        public Task<bool> TryAddPolymarketWebSocketTradeTickAsync(PolymarketWebSocketTradeTick tradeTick, CancellationToken cancellationToken = default)
+        {
+            return Task.FromResult(false);
+        }
+
+        public Task UpdatePolymarketWebSocketTradeTickMatchAsync(PolymarketWebSocketTradeTick tradeTick, CancellationToken cancellationToken = default)
+        {
+            return Task.CompletedTask;
+        }
+
+        public Task<IReadOnlyList<PolymarketWebSocketTradeTick>> GetPendingPolymarketWebSocketTradeTickMatchesAsync(
+            DateTimeOffset dueBeforeUtc,
+            int maxAttempts,
+            int limit,
+            CancellationToken cancellationToken = default)
+        {
+            return Task.FromResult<IReadOnlyList<PolymarketWebSocketTradeTick>>([]);
+        }
+
+        public Task<IReadOnlyList<PolymarketWebSocketTradeTick>> GetRecentPolymarketWebSocketTradeTicksAsync(int limit = 100, CancellationToken cancellationToken = default)
+        {
+            return Task.FromResult<IReadOnlyList<PolymarketWebSocketTradeTick>>([]);
         }
 
         public Task UpsertMarketDataStatusAsync(MarketDataStatusSnapshot status, CancellationToken cancellationToken = default)

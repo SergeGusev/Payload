@@ -8,9 +8,16 @@ public interface IPaperTradingEngine
 
     PaperOrder ExpireIfNeeded(PaperOrder order, DateTimeOffset nowUtc);
 
-    PaperFill? TrySimulateFill(PaperOrder order, OrderBookSnapshot? orderBookSnapshot, LeaderTrade? observedTrade, DateTimeOffset nowUtc);
+    PaperFill? TrySimulateFill(
+        PaperOrder order,
+        OrderBookSnapshot? orderBookSnapshot,
+        LeaderTrade? observedTrade,
+        DateTimeOffset nowUtc,
+        decimal previouslyFilledShares = 0m);
 
-    PaperOrder ApplyFillStatus(PaperOrder order, PaperFill fill);
+    PaperOrder ApplyFillStatus(PaperOrder order, PaperFill fill, decimal previouslyFilledShares = 0m);
 
     PaperPosition ApplyBuyFill(PaperPosition? currentPosition, PaperOrder order, PaperFill fill, decimal currentBid, DateTimeOffset nowUtc);
+
+    PaperPosition ApplySellFill(PaperPosition currentPosition, PaperOrder order, PaperFill fill, decimal currentBid, DateTimeOffset nowUtc);
 }

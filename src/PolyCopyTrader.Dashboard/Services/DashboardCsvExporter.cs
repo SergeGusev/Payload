@@ -81,12 +81,13 @@ public sealed class DashboardCsvExporter(
 
         await WriteAsync(
             Path.Combine(exportDirectory, "PaperOrders.csv"),
-            ["CreatedAtUtc", "OrderId", "SignalId", "Status", "Side", "AssetId", "ConditionId", "Outcome", "Price", "SizeShares", "NotionalUsd", "ExpiresAtUtc", "FilledAtUtc", "CancelledAtUtc"],
+            ["CreatedAtUtc", "OrderId", "SignalId", "CopiedTraderWallet", "Status", "Side", "AssetId", "ConditionId", "Outcome", "Price", "SizeShares", "NotionalUsd", "ExpiresAtUtc", "FilledAtUtc", "CancelledAtUtc"],
             (await repository.GetRecentPaperOrdersAsync(ExportLimit, cancellationToken)).Select(order => new object?[]
             {
                 order.CreatedAtUtc,
                 order.Id,
                 order.SignalId,
+                order.CopiedTraderWallet,
                 order.Status,
                 order.Side,
                 order.AssetId,
@@ -103,10 +104,11 @@ public sealed class DashboardCsvExporter(
 
         await WriteAsync(
             Path.Combine(exportDirectory, "PaperPositions.csv"),
-            ["UpdatedAtUtc", "AssetId", "ConditionId", "Outcome", "SizeShares", "AveragePrice", "EstimatedValueUsd", "UnrealizedPnlUsd"],
+            ["UpdatedAtUtc", "CopiedTraderWallet", "AssetId", "ConditionId", "Outcome", "SizeShares", "AveragePrice", "EstimatedValueUsd", "UnrealizedPnlUsd"],
             (await repository.GetPaperPositionsAsync(cancellationToken)).Select(position => new object?[]
             {
                 position.UpdatedAtUtc,
+                position.CopiedTraderWallet,
                 position.AssetId,
                 position.ConditionId,
                 position.Outcome,
@@ -114,6 +116,144 @@ public sealed class DashboardCsvExporter(
                 position.AveragePrice,
                 position.EstimatedValueUsd,
                 position.UnrealizedPnlUsd
+            }),
+            cancellationToken);
+
+        await WriteAsync(
+            Path.Combine(exportDirectory, "PaperPositionSettlements.csv"),
+            ["SettledAtUtc", "CopiedTraderWallet", "AssetId", "ConditionId", "Outcome", "WinningAssetId", "WinningOutcome", "Category", "SettledSizeShares", "AveragePrice", "CostBasisUsd", "SettlementValueUsd", "RealizedPnlUsd", "Won", "SettlementSource"],
+            (await repository.GetRecentPaperPositionSettlementsAsync(ExportLimit, cancellationToken)).Select(settlement => new object?[]
+            {
+                settlement.SettledAtUtc,
+                settlement.CopiedTraderWallet,
+                settlement.AssetId,
+                settlement.ConditionId,
+                settlement.Outcome,
+                settlement.WinningAssetId,
+                settlement.WinningOutcome,
+                settlement.Category,
+                settlement.SettledSizeShares,
+                settlement.AveragePrice,
+                settlement.CostBasisUsd,
+                settlement.SettlementValueUsd,
+                settlement.RealizedPnlUsd,
+                settlement.Won,
+                settlement.SettlementSource
+            }),
+            cancellationToken);
+
+        await WriteAsync(
+            Path.Combine(exportDirectory, "PaperCopiedTraderPerformance.csv"),
+            ["CopiedTraderWallet", "Category", "Score", "MarkToMarketPnlUsd", "MarkToMarketRoiPct", "WinRatePct", "OrdersCount", "FilledOrdersCount", "OpenPositionsCount", "SettledPositionsCount", "WonPositionsCount", "LostPositionsCount", "BuyCostUsd", "SellProceedsUsd", "SettlementValueUsd", "RealizedPnlUsd", "UnrealizedPnlUsd", "FirstOrderUtc", "LastOrderUtc", "RefreshedAtUtc"],
+            (await repository.GetPaperCopiedTraderPerformanceAsync(ExportLimit, cancellationToken)).Select(performance => new object?[]
+            {
+                performance.CopiedTraderWallet,
+                performance.Category,
+                performance.Score,
+                performance.TotalPnlUsd,
+                performance.RoiPct,
+                performance.WinRatePct,
+                performance.OrdersCount,
+                performance.FilledOrdersCount,
+                performance.OpenPositionsCount,
+                performance.SettledPositionsCount,
+                performance.WonPositionsCount,
+                performance.LostPositionsCount,
+                performance.BuyCostUsd,
+                performance.SellProceedsUsd,
+                performance.SettlementValueUsd,
+                performance.RealizedPnlUsd,
+                performance.UnrealizedPnlUsd,
+                performance.FirstOrderUtc,
+                performance.LastOrderUtc,
+                performance.RefreshedAtUtc
+            }),
+            cancellationToken);
+
+        await WriteAsync(
+            Path.Combine(exportDirectory, "Strategies.csv"),
+            ["Name", "Enabled", "LiveStakes", "PaperStakeAmount", "LiveStakeAmount", "LiveAvailableBalance", "OrdersCount", "FilledOrdersCount", "OpenOrdersCount", "OpenPositionsCount", "ObservedRunsCount", "EnteredRunsCount", "SkippedRunsCount", "SettledRunsCount", "SettledPositionsCount", "WonPositionsCount", "LostPositionsCount", "StakeUsd", "RealizedPnlUsd", "OpenUnrealizedPnlUsd", "MarkToMarketPnlUsd", "WinRatePct", "LossRatePct", "AvgWinPnlUsd", "AvgLossPnlUsd", "ProfitFactor", "ExpectancyPnlUsd", "MarkToMarketRoiPct", "ClosedRoiPct", "AvgEntryDelaySeconds", "MaxEntryDelaySeconds", "LiveOrdersCount", "LiveFilledOrdersCount", "LiveOpenOrdersCount", "LiveSettledOrdersCount", "LiveWonOrdersCount", "LiveLostOrdersCount", "LiveStakeUsd", "LiveRealizedPnlUsd", "LiveWinRatePct", "LiveLossRatePct", "LiveAvgWinPnlUsd", "LiveAvgLossPnlUsd", "LiveProfitFactor", "LiveExpectancyPnlUsd", "LiveRoiPct", "LiveLastOrderUtc", "LiveLastSettlementUtc", "LastOrderUtc", "LastRunUtc"],
+            (await repository.GetStrategyPerformanceAsync(ExportLimit, cancellationToken)).Select(strategy => new object?[]
+            {
+                strategy.Name,
+                strategy.Enabled,
+                strategy.LiveStakes,
+                strategy.PaperStakeAmount,
+                strategy.LiveStakeAmount,
+                strategy.LiveAvailableBalance,
+                strategy.OrdersCount,
+                strategy.FilledOrdersCount,
+                strategy.OpenOrdersCount,
+                strategy.OpenPositionsCount,
+                strategy.ObservedRunsCount,
+                strategy.EnteredRunsCount,
+                strategy.SkippedRunsCount,
+                strategy.SettledRunsCount,
+                strategy.SettledPositionsCount,
+                strategy.WonPositionsCount,
+                strategy.LostPositionsCount,
+                strategy.StakeUsd,
+                strategy.RealizedPnlUsd,
+                strategy.UnrealizedPnlUsd,
+                strategy.TotalPnlUsd,
+                strategy.WinRatePct,
+                strategy.LossRatePct,
+                strategy.AvgWinPnlUsd,
+                strategy.AvgLossPnlUsd,
+                strategy.ProfitFactor,
+                strategy.ExpectancyPnlUsd,
+                strategy.RoiPct,
+                strategy.ClosedRoiPct,
+                strategy.AvgEntryDelaySeconds,
+                strategy.MaxEntryDelaySeconds,
+                strategy.LiveOrdersCount,
+                strategy.LiveFilledOrdersCount,
+                strategy.LiveOpenOrdersCount,
+                strategy.LiveSettledOrdersCount,
+                strategy.LiveWonOrdersCount,
+                strategy.LiveLostOrdersCount,
+                strategy.LiveStakeUsd,
+                strategy.LiveRealizedPnlUsd,
+                strategy.LiveWinRatePct,
+                strategy.LiveLossRatePct,
+                strategy.LiveAvgWinPnlUsd,
+                strategy.LiveAvgLossPnlUsd,
+                strategy.LiveProfitFactor,
+                strategy.LiveExpectancyPnlUsd,
+                strategy.LiveRoiPct,
+                strategy.LiveLastOrderUtc,
+                strategy.LiveLastSettlementUtc,
+                strategy.LastOrderUtc,
+                strategy.LastRunUtc
+            }),
+            cancellationToken);
+
+        await WriteAsync(
+            Path.Combine(exportDirectory, "StrategyRecentPerformance.csv"),
+            ["Window", "Name", "OrdersCount", "FilledOrdersCount", "ExpiredOrdersCount", "OpenOrdersCount", "EnteredRunsCount", "SkippedRunsCount", "SettledRunsCount", "WonRunsCount", "LostRunsCount", "WinRatePct", "RoiPct", "RealizedPnlUsd", "FilledCostUsd", "AvgFillPrice", "AvgEntryDelaySeconds", "MaxEntryDelaySeconds", "TopSkipReason", "LastOrderUtc", "LastRunUtc"],
+            (await repository.GetStrategyRecentPerformanceAsync(ExportLimit, cancellationToken)).Select(strategy => new object?[]
+            {
+                strategy.Window,
+                strategy.Name,
+                strategy.OrdersCount,
+                strategy.FilledOrdersCount,
+                strategy.ExpiredOrdersCount,
+                strategy.OpenOrdersCount,
+                strategy.EnteredRunsCount,
+                strategy.SkippedRunsCount,
+                strategy.SettledRunsCount,
+                strategy.WonRunsCount,
+                strategy.LostRunsCount,
+                strategy.WinRatePct,
+                strategy.RoiPct,
+                strategy.RealizedPnlUsd,
+                strategy.FilledCostUsd,
+                strategy.AvgFillPrice,
+                strategy.AvgEntryDelaySeconds,
+                strategy.MaxEntryDelaySeconds,
+                strategy.TopSkipReason,
+                strategy.LastOrderUtc,
+                strategy.LastRunUtc
             }),
             cancellationToken);
 

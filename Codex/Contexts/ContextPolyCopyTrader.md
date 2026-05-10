@@ -1,3 +1,5219 @@
+## Active Update 2026-05-10 Windows Server 2008 R2 Options
+Goal: Discuss realistic deployment/version options for Windows Server 2008 R2.
+Status: Completed / Feasibility Answer Only
+Done:
+- Reviewed current targets/packages and official platform constraints.
+- Concluded current `net10.0` / `net10.0-windows` app cannot run on Windows Server 2008 R2 and a direct backport would be a major rewrite/downgrade.
+- Identified practical options: upgrade/move runtime to a supported Windows Server, keep 2008 R2 only as a remote access host, split a lightweight .NET Framework 4.8 client/agent for 2008 R2 while engine runs elsewhere, or do a risky full backport to .NET Framework 4.8 / legacy .NET Core with loss of support.
+Next: None unless user requests a concrete migration/deployment plan.
+Notes: No code or database changes. Branch `master` has no upstream.
+Blockers: None.
+
+## Active Update 2026-05-10 Dotnet Core 2.2 Feasibility
+Goal: Answer whether the current project could be converted to .NET Core SDK `2.2.207`.
+Status: Completed / Feasibility Answer Only
+Done:
+- Inspected project targets and package versions: production projects target `net10.0` / `net10.0-windows`, Dashboard uses WPF, packages include Microsoft.Extensions `10.0.7`, Npgsql `10.0.2`, Serilog `4.x/10.x`, Nethereum `6.1.0`, and code uses modern C# constructs such as records, init-only properties, nullable reference types, implicit usings, target-typed/new collection expressions, and modern async syntax.
+- Determined a direct retarget to .NET Core SDK `2.2.207` is not practical: WPF on .NET Core was not available in 2.2, .NET Core 2.2 is unsupported/EOL, and major package/code downgrades would be required.
+- Recommended, if an older runtime is mandatory, targeting `net6.0-windows` or `net8.0-windows` instead; otherwise keep the current modern target.
+Next: None unless the user explicitly requests a migration plan.
+Notes: No code or database changes. Branch `master` has no upstream.
+Blockers: None.
+
+## Active Update 2026-05-10 Entry Delay Cause Review
+Goal: Estimate what causes current strategy entry delays and how they can be reduced.
+Status: Completed / Diagnostic Only
+Done:
+- Inspected the BTC 5m strategy worker and processor: one worker runs every `1s`, then iterates enabled variants sequentially and performs per-run DB reads/writes, order-book lookup/fallback, pricing, sizing, and order creation.
+- Ran a temporary read-only C# PostgreSQL probe grouped by market/due time and strategy family, then removed the temporary artifact.
+- Last-30-minute due buckets show most non-open due groups are fast (`<1..3s`), while market-open due groups can span about `10s` when `20..30` strategies fire at the exact same `entry_due_at_utc`.
+- Family-level last-30-minute delays show `More/Less` are fast (`avg ~1.3s`, p95 below `3s`), while Binance open-at-start families are slower (`avg ~12s`, max about `21s`) because they are later in the sequential variant queue and do more per-variant work.
+- Confirmed the earlier `224s`/`269s` outliers are restart/backfill/late-market-start cases, not the current steady-state pattern.
+Next: Best improvement options are batching/shared per-market decisions, prioritizing open-at-start variants, prewarming per-market order-book/min-size data, and reducing/paralleling per-variant DB/API work.
+Notes: No production code or database changes. Branch `master` has no upstream.
+Blockers: None.
+
+## Active Update 2026-05-10 Entry Delay Diagnostic
+Goal: Check the current strategy entry-delay health metric added earlier.
+Status: Completed / Diagnostic Only
+Done:
+- Ran a temporary read-only C# PostgreSQL diagnostic against `strategy_market_paper_runs`, then removed the temporary artifact.
+- Current 15-minute delay summary: `257` orders, average `3.848s`, median `1.362s`, p90 `11.487s`, p95 `16.1s`, max `21.29s`, `0` above `30s`.
+- Current 30-minute delay summary: `518` orders, average `3.834s`, median `1.593s`, p90 `10.606s`, p95 `13.112s`, max `28.688s`, `0` above `30s`.
+- Last-hour summary is worse because it includes one catch-up after strategy/service restart: `995` orders, average `6.057s`, median `1.968s`, p95 `17.858s`, max `224.656s`, `19` above `30s`.
+- Identified the last-hour outlier as the new Binance fractional bps rows for market `btc-updown-5m-1778415000`, due at `2026-05-10T12:10:00Z` and entered at about `2026-05-10T12:13:44Z` after the restart/schema insertion.
+- Six-hour outliers include `BTC Up or Down 5m Up/Down` around `2026-05-10T09:44:29Z`, with delay about `269s`; those are older than the current 30-minute window.
+Next: Treat the current steady-state delay as acceptable for now; investigate only if max delay exceeds `30s` again in the rolling 15/30-minute windows without a restart/backfill explanation.
+Notes: No production code or database changes. Branch `master` has no upstream.
+Blockers: None.
+
+## Active Update 2026-05-10 BTC GTD TTL Clarification
+Goal: Clarify whether all current strategies place two-minute orders.
+Status: Completed / Explanation Only
+Done:
+- Verified current BTC Up/Down 5m Paper strategy paths use GTD pending limit orders, with `BtcUpDown5mStrategy:OpeningLimitGtdTtlSeconds=120`.
+- Confirmed `ResolveOpeningLimitExpiresAtUtc` caps the order lifetime at the earlier of `now + 120 seconds` and BTC market close, so very late entries can live for less than two minutes.
+- Noted that Follow Leader / on-chain Paper uses the generic `PaperTrading:DefaultOrderTtlSeconds=300`, not the BTC two-minute TTL; those workers are currently disabled in service config.
+- Noted Live is paused; the currently documented BTC Paper/Live-shadow path also uses GTD with the configured TTL when explicitly enabled.
+Next: None.
+Notes: No code or database changes. Branch `master` has no upstream.
+Blockers: None.
+
+## Active Update 2026-05-10 Binance Fractional Bps Grid
+Goal: Add Binance threshold strategies from `0.1 bps` through `0.9 bps`, preserving the existing `0.5 bps` strategy.
+Status: Completed / Service Running / Paper Active / Live Paused
+Done:
+- Added eight new Paper-only Binance threshold variants: `0.1`, `0.2`, `0.3`, `0.4`, `0.6`, `0.7`, `0.8`, and `0.9 bps`.
+- Preserved existing `BTC Up or Down 5m Binance 0.5 bps` id/code and now have a full fractional grid `0.1..0.9 bps`.
+- Seeded all new rows in PostgreSQL with `enabled=true`, `paper_stake_amount=1.00`, and `live_stakes=false`.
+- Added the fractional bps variants to the Strategy Selector candidate list alongside the existing Binance threshold variants.
+- Updated BTC strategy docs in README and configuration reference to describe threshold `0.1..0.9/1/2/5 bps`.
+- Updated tests to expect `109` BTC variants and `12` Binance bps-threshold variants, with exact fractional-threshold assertions.
+- Restarted the service so schema initialization inserted the new strategies; verified `0.1 bps` and `0.9 bps` rows exist, are Paper-enabled, Live-disabled, and have lifecycle rows.
+Next: Let Paper collect data and compare the fractional threshold grid by fill rate, skip reason, ROI, and recent-window stability.
+Notes: Verification passed: focused BTC/storage tests `112/112`; full test project `418/418`. Tests used separate `BaseOutputPath` directories to avoid the running service locking default build output, then those temporary output directories were removed. `git diff --check` reported only existing LF/CRLF warnings. Branch `master` has no upstream, so no commit/push was performed.
+Blockers: None.
+
+## Active Update 2026-05-10 Binance Half Bps Strategy
+Goal: Add a `BTC Up or Down 5m Binance 0.5 bps` variant analogous to the existing Binance bps-threshold strategies.
+Status: Completed / Service Running / Paper Active / Live Paused
+Done:
+- Added stable strategy id/code/name for `btc_up_down_5m_binance_bps_0_5` / `BTC Up or Down 5m Binance 0.5 bps`.
+- Added `DecisionThresholdBps` to `BtcUpDown5mStrategyVariant` so fractional bps thresholds are represented explicitly instead of overloading integer `DecisionDepth`.
+- Updated Binance bps-threshold logic to use the decimal threshold and added the 0.5 bps variant to the Strategy Selector candidate set.
+- Added the PostgreSQL seed row with `enabled=true`, `paper_stake_amount=1.00`, and `live_stakes=false`.
+- Updated README and configuration reference docs for threshold `0.5/1/2/5 bps`.
+- Added/updated BTC processor tests, including decimal-threshold coverage for a `0.6 bps` move.
+- Restarted the service so schema initialization inserted the new row; verified via diagnostic that the strategy exists in PostgreSQL and Live is disabled for it.
+Next: Let Paper collect enough fills/settlements for the new half-bps variant, then compare against base Binance and `1/2/5 bps`.
+Notes: Verification passed: focused BTC/storage tests `112/112`; full test project `418/418`. Initial focused test command failed only because the running service locked default build output; reran tests with a separate `BaseOutputPath`. `git diff --check` reported only existing LF/CRLF warnings. Branch `master` has no upstream, so no commit/push was performed.
+Blockers: None.
+
+## Active Update 2026-05-10 Binance Strategy Opinion
+Goal: Give an opinion on `BTC Up or Down 5m Binance` using current Paper diagnostics.
+Status: Completed / Diagnostic Opinion Only
+Done:
+- Ran the existing strategy diagnostic for `btc_up_down_5m_binance`: `75` settled orders, `39` wins, `36` losses, realized PnL `+44.2238`, ROI `23.3%`, weighted average fill price `0.42266414`, profit factor `1.5282`.
+- Noted recent-window results remain positive but less decisive: last `50` settled ROI `10.43%`, last `20` settled ROI `21.7%`.
+- Identified the main edge as entry/fill selection rather than a strong raw directional edge: win rate is only `52%`, while average fill price is low enough that break-even is below the actual win rate.
+- Noted high non-fill rate: `299` `gtd_limit_not_filled` expirations vs `75` settled orders, so Live readiness depends on whether real fills/queue priority match Paper.
+Next: Keep collecting Paper data and compare against Binance price/edge variants before considering Live; require a larger settled sample and stable recent windows.
+Notes: No code or DB data changed. Branch `master` has no upstream.
+Blockers: None.
+
+## Active Update 2026-05-10 Rebuild Cleaned Strategy Stats Answer
+Goal: Explain whether cleaned BTC strategy statistics can be rebuilt from remaining data.
+Status: Completed / Explanation Only
+Done:
+- Clarified that the deleted `strategy_market_paper_runs`, `paper_orders`, `paper_fills`, positions, and settlements were the authoritative Paper statistics, so Dashboard-style honest Paper stats cannot be exactly reconstructed from current remaining rows.
+- Clarified that an approximate/counterfactual backtest can be built from remaining market archives such as `btc_up_down_5m_odds_ticks`, Gamma metadata, and any available `order_book_snapshots`, but it must be labeled separately and not mixed into live Paper stats.
+- Noted the main limitation: compact odds/archive data can estimate direction, limit touch, and rough entry, but exact GTD fill size/VWAP/queue priority requires full order-book snapshots during the 120-second order lifetime, which are not guaranteed for the old period.
+Next: If requested, implement a separate BTC retrospective backtest table/report for cleaned strategies instead of repopulating `paper_orders`.
+Notes: No production code or DB data changed. Branch `master` has no upstream.
+Blockers: None.
+
+## Active Update 2026-05-10 Skip 1 FAK Diagnostic
+Goal: Explain whether `BTC Up or Down 5m Skip 1` previously lost in Live because of FAK execution.
+Status: Completed / Diagnostic Only / Service Still Running
+Done:
+- Re-read the persisted BTC execution context and confirmed `Skip` strategies were already in the opening-limit family, not the old standard/Gamma FAK family that was cleaned.
+- Ran the existing strategy diagnostic for `btc_up_down_5m_skip_1`: current Paper sample is `39` settled, `20` wins, `19` losses, realized PnL `+29.30280002`, ROI `29.85%`, weighted average fill price `0.39255888`.
+- Verified recent `Skip 1` Paper raw decisions have `order_execution_mode=GTD`, `order_type=GTD`, and `decision_source=clob_close_book_price_evidence`.
+- Ran a temporary read-only live diagnostic and removed it; current `live_orders` table has `0` `btc_up_down_5m_skip_1` rows, so exact previous Live test rows are no longer available in DB.
+- Used persisted context to identify earlier Live-shadow issues/losses as GTC/GTD/limit-order shadow cycles with accounting/partial-fill and timing caveats, not FAK execution.
+Next: Treat `Skip 1` as a small-sample GTD candidate only; do not infer Live readiness from the current top ranking without more fresh GTD fills and, if desired, a new controlled Live-shadow run.
+Notes: No production code or DB data changed. Branch `master` has no upstream.
+Blockers: None.
+
+## Active Update 2026-05-10 GTD-Only BTC History Cleanup
+Goal: Remove only BTC Paper history that was produced by the old non-GTD execution model.
+Status: Completed / Service Running / Paper Active / Live Paused
+Done:
+- Confirmed no `PolyCopyTrader.Service` process was running before cleanup.
+- Ran a transaction-based PostgreSQL cleanup for ordinary BTC `Less/More 30..270`, ordinary `Less/More Gamma 30..270`, and `BTC Less 180 Martin`.
+- Deleted old non-GTD history for those 37 strategies: `17,768` strategy run rows, `13,443` paper orders, `13,443` fills, `13,443` paper positions, `13,443` settlements, `13,443` now-orphan signals, and `72` stale performance rows.
+- Preserved GTD-era data for those same strategies: `52` GTD paper orders and `52` linked strategy run rows remain.
+- Verified after commit that cleanup candidates are now `0` for runs/orders/fills/positions/settlements/signals/performance rows, while the `52` GTD rows are still preserved.
+- Removed the temporary cleanup utility and restarted the service through `dotnet run --project src\PolyCopyTrader.Service\PolyCopyTrader.Service.csproj`.
+- Paused Live over IPC after restart; status is `Running`, `paperTradingPaused=false`, `liveTradingPaused=true`, `killSwitchActive=false`, `lastError=null`.
+Next: Let Paper collect fresh GTD-only statistics and use the Dashboard after it refreshes.
+Notes: No production source code was changed for this cleanup. Verification was PostgreSQL dry-run/execute/post-commit preview plus IPC status check. Branch `master` has no upstream, and the worktree already contains many unrelated dirty files, so no commit/push was performed.
+Blockers: None.
+
+## Active Update 2026-05-10 GTD-Only Cleanup Plan
+Goal: Answer whether old non-GTD BTC Paper history can be removed without clearing all strategy history.
+Status: Completed / Explanation Only
+Done:
+- Clarified that targeted cleanup is possible and safer than full wipe.
+- Defined the intended cleanup scope: remove pre-GTD history only for strategies that used the old immediate model (`Less/More`, ordinary `Gamma`, and `BTC Less 180 Martin`), while preserving capped/opening-limit strategies that were already GTD.
+- Noted that deletion must include linked run rows, paper orders, fills, settlements, and possibly open positions so Dashboard statistics are not contaminated by leftover FAK-era rows.
+- Recommended a dry-run count first and explicit confirmation before destructive PostgreSQL deletes.
+Next: On explicit user approval, stop the service, run dry-run counts for affected rows, show the numbers, then execute the targeted cleanup in a transaction and restart Paper service.
+Notes: No code or database data changed in this answer. Branch `master` has no upstream.
+Blockers: Awaiting explicit approval before destructive DB cleanup.
+
+## Active Update 2026-05-10 FAK Strategy Check
+Goal: Answer whether any strategies still place FAK-style orders.
+Status: Completed / Diagnostic Only / Service Running / Paper Active / Live Paused
+Done:
+- Confirmed ordinary BTC taker Paper variants still use `order_execution_mode=FAK`: standard `Less/More 30..270`, unsuffixed `Less/More Gamma 30..270`, and `BTC Less 180 Martin`.
+- Confirmed capped/opening-limit BTC variants use GTD: CLOB `Below`, new `Gamma Below`, `Middle`, `Skip`, `Binance`, `Always Up/Down`, `Ensemble`, `Dynamic Markov`, and `Strategy Selector`.
+- Spot-checked diagnostics: `btc_up_down_5m_more_120` recent decisions have `execution_mode=FAK`; `btc_up_down_5m_more_120_below_70` and `btc_up_down_5m_more_120_gamma_below_65` have `execution_mode=GTD`.
+- Live remains paused; current live-shadow path is GTD, while legacy standard BTC FAK live submission is not active.
+Next: If desired, convert remaining standard/Gamma taker Paper variants from FAK to GTD or disable them selectively.
+Notes: No code changed. Branch `master` has no upstream.
+Blockers: None.
+
+## Active Update 2026-05-10 BTC Gamma Capped Variants
+Goal: Add promising Paper-only filtered Gamma BTC 5m strategies.
+Status: Completed / Service Running / Paper Active / Live Paused
+Done:
+- Added 7 Paper-only capped `More Gamma` variants: `More 60 Gamma Below 70/80`, `More 90 Gamma Below 70`, `More 120 Gamma Below 65/70`, and `More 150 Gamma Below 70/80`.
+- Added `GammaOutcomeSelectionEntryPriceCap` behavior: outcome is selected by the old Gamma-first `More` rule, then a pending two-minute GTD limit BUY is placed at the configured cap.
+- Kept these variants blocked from Live by the existing Gamma/opening-limit gates; seeded rows have `live_stakes=false`.
+- Updated PostgreSQL seed SQL, README, configuration reference, strategy-id tests, storage seed tests, and BTC processor coverage.
+- Restarted the local service so schema initialization inserted the new strategies; IPC reports `Running`, `paperTradingPaused=false`, `liveTradingPaused=true`, `killSwitchActive=false`, `lastError=null`.
+Next: Let the new variants collect Paper fills/settlements, then compare fill rate, `gtd_limit_not_filled`, ROI, and recent-window stability against base `More Gamma` and CLOB-capped variants.
+Notes: Verification passed: focused BTC/storage tests `111/111`; full test project `417/417`; service build passed with 0 warnings/errors. `git diff --check` reported only LF/CRLF warnings. Branch `master` has no upstream.
+Blockers: None.
+
+## Active Update 2026-05-10 BTC More 120 Gamma Diagnostic
+Goal: Evaluate `BTC Up or Down 5m More 120 Gamma` from current Paper history.
+Status: Completed / Diagnostic Only / Service Still Running
+Done:
+- Confirmed `btc_up_down_5m_more_120_gamma` is enabled for Paper and has `live_stakes=false`.
+- Ran the existing strategy diagnostic directly from the built `DiagnoseLess30` artifact without changing source code.
+- Current all-history result: `378` settled, `200` wins, `178` losses, win rate `52.91%`, realized PnL `+72.7991055` USD, ROI `+5.93%`, profit factor `1.164`, weighted average fill price `0.4457`.
+- Recent windows: last `20` settled ROI `+0.34%`, last `50` ROI `+10.05%`, last `100` ROI `+5.14%`.
+- Compared with standard `btc_up_down_5m_more_120`: `379` settled, win rate `73.09%`, PnL `+35.55876171` USD, ROI `+2.14%`, profit factor `1.086`.
+Next: Keep the Gamma variant as a Paper comparison/control for the old Gamma-first selector; do not treat it as Live-ready without more stability checks and entry-price filtering.
+Notes: No code changed. `dotnet build-server shutdown` was used to clear a compiler lock before running diagnostics. Branch `master` has no upstream.
+Blockers: None.
+
+## Active Update 2026-05-10 Strategy Entry Delay Health Metrics
+Goal: Add health statistics for the delay between planned strategy entry time and actual paper order placement time.
+Status: Completed / Service Running / Paper Active / Live Paused
+Done:
+- Added `AvgEntryDelaySeconds` and `MaxEntryDelaySeconds` to cumulative `StrategyPerformance` and windowed `StrategyRecentPerformance`.
+- Metrics are computed from existing `strategy_market_paper_runs.entry_due_at_utc` and `entered_at_utc`, clamped at zero, so no schema migration is needed.
+- Added `Avg delay s` and `Max delay s` columns to the Dashboard `Strategies > All`, `24 hours`, `6 hours`, and `1 hour` grids.
+- Added the same delay metrics to `Strategies.csv` and `StrategyRecentPerformance.csv`.
+- Updated TestAppRepository and StrategyPerformance tests to cover all-history and recent-window delay calculations.
+- Updated README and configuration reference with the new decision-health metrics.
+- Restarted the service after verification; IPC reports `Running`, `paperTradingPaused=false`, `liveTradingPaused=true`, `killSwitchActive=false`, `lastError=null`.
+Next: Restart the currently open Dashboard window to load the new UI columns; then monitor high max delay values by strategy/window.
+Notes: Verification passed: focused strategy/storage tests `26/26`; full test project `416/416`; service build passed; Dashboard build passed through a temporary `OutDir` because the live Dashboard process and Visual Studio held the normal WPF output DLLs. `git diff --check` reported only LF/CRLF warnings. Branch `master` has no upstream.
+Blockers: None.
+
+## Active Update 2026-05-10 BTC Capped Variants GTD Entry
+Goal: Change capped BTC `More/Less ... Below ...` strategies from immediate cap-only taker fills to resting GTD limit orders at the cap.
+Status: Completed / Service Running / Paper Active / Live Paused
+Done:
+- Changed `StandardEntryPriceCap` BTC variants to use the opening-limit path: they still select `More`/`Less` from fresh CLOB/WebSocket/REST executable VWAP, but then place a pending two-minute GTD limit BUY at the configured `Below` cap.
+- Removed the previous selected-VWAP-below-cap skip for these capped variants; current executable price can be at/above the cap, and the paper order waits for later ask depth at or below the cap.
+- Preserved honest Paper accounting: positions/fills are still created only by the Paper open-order worker when visible ask depth crosses the limit before expiry; unfilled GTD orders expire and do not settle as wins/losses.
+- Added/updated tests for capped GTD placement, including an at/above-cap case that now creates a pending order instead of skipping.
+- Updated StrategyIds descriptions, PostgreSQL seed descriptions, README, and configuration docs.
+- Stopped the previous Debug service PID `61164`, ran verification, rebuilt, restarted the service, and paused Live over IPC.
+Next: Monitor capped variants for open/pending counts, fill rate, and `gtd_limit_not_filled` rate versus the old immediate-fill assumptions.
+Notes: Verification passed: focused BTC/storage tests `110/110`; full test project `416/416`; service build passed. IPC after restart: `Running`, `paperTradingPaused=false`, `liveTradingPaused=true`, `killSwitchActive=false`, `lastError=null`. `git diff --check` reported only existing LF/CRLF warnings. Branch `master` has no upstream.
+Blockers: None.
+
+## Active Update 2026-05-10 BTC Threshold Entry Behavior Explanation
+Goal: Explain whether threshold strategies require current order-book liquidity or place resting orders waiting for future liquidity.
+Status: Completed / Explanation Only
+Done:
+- Confirmed capped `More/Less ... Below ...` variants use CLOB-first immediate taker/FAK-style Paper selection: they estimate executable ask-side VWAP from the current book and skip if the selected outcome cannot be filled now or is at/above the cap.
+- Confirmed opening-limit strategies (`Middle`, `Skip`, `Binance`, `Always Up/Down`, related variants) create pending GTD limit BUY orders for up to `OpeningLimitGtdTtlSeconds` (`120` seconds) and then the Paper open-order worker fills them only when later book ask depth crosses the limit price.
+- Clarified that the two families intentionally behave differently: capped taker variants do not wait for future liquidity, while GTD opening-limit variants do wait until expiry/market close.
+Next: None.
+Notes: Relevant files inspected: `src/PolyCopyTrader.Service/Strategies/BtcUpDown5mPaperStrategyProcessor.cs`, `src/PolyCopyTrader.Strategy/DefaultPaperTradingEngine.cs`.
+Blockers: None.
+
+## Active Update 2026-05-10 BTC Volume Interpretation Correction
+Goal: Clarify why the BTC 5m market volume snapshot looked too small compared with expected thousands.
+Status: Completed / Diagnostic Only / Service Still Running
+Done:
+- Queried a 14-market Gamma row around `2026-05-10T07:36:53Z` for BTC Up/Down 5m slugs from 12 windows back through the next window.
+- Confirmed mature/recent closed BTC 5m markets often show tens of thousands of USD in volume; the last 12 queried previous windows averaged about `48371.615423` USD and maxed about `79982.030690` USD.
+- Confirmed the small current-market number was from a just-started/current 5-minute market and Gamma volume can be incomplete or backfilled shortly after market open/close.
+- Current window at that snapshot was `btc-updown-5m-1778398500` with reported volume about `344.64528` USD and CLOB liquidity about `9882.6177` USD.
+Next: Treat current Gamma `volume` as lag-prone diagnostics; use CLOB orderbook/liquidity/depth for execution decisions.
+Notes: Source endpoint pattern: `https://gamma-api.polymarket.com/events/slug/{slug}`. Branch `master` has no upstream.
+Blockers: None.
+
+## Active Update 2026-05-10 BTC Market Volume Snapshot
+Goal: Answer the current BTC Up/Down 5m Polymarket volume question with a fresh external Gamma/API snapshot.
+Status: Completed / Diagnostic Only / Service Still Running
+Done:
+- Queried Polymarket Gamma event endpoints for previous/current/next `btc-updown-5m-*` slugs around `2026-05-10T07:29:43Z`, then refreshed the current slug at `2026-05-10T07:30:27Z`.
+- Current window at the final snapshot was `btc-updown-5m-1778398200`, ending `2026-05-10T07:35:00Z`.
+- Current market volume was about `61.183919` USD and CLOB liquidity was about `8746.3265` USD; the just-finished previous window `btc-updown-5m-1778397900` was about `795.862529` USD near close.
+Next: None.
+Notes: Source endpoint pattern: `https://gamma-api.polymarket.com/events/slug/{slug}`. Branch `master` has no upstream.
+Blockers: None.
+
+## Active Update 2026-05-10 BTC Additional Capped Strategy Variants
+Goal: Add all proposed Paper-only BTC capped comparison variants and restart collection without enabling Live.
+Status: Completed / Service Running / Paper Active / Live Paused
+Done:
+- Added nine built-in Paper strategies: `BTC Up or Down 5m More 30 Below 55`, `More 120 Below 70`, `More 150 Below 65`, `More 270 Below 65`, `More 270 Below 60`, `Less 120 Below 20`, `Less 120 Below 30`, `Less 90 Below 20`, and `Less 60 Below 20`.
+- Generalized the capped-entry strategy factory so both `More` and `Less` variants use the same CLOB-first executable VWAP selector with a strict selected-entry cap.
+- Fixed capped `Less` selection so the cap is applied after the lower-priced executable outcome is selected, not while scoring the opposite high-priced outcome.
+- Added deterministic ids/codes, PostgreSQL seed rows, README/configuration docs, and processor/storage tests for the new variants.
+- Restarted the service from `src/PolyCopyTrader.Service/bin/Debug/net10.0/PolyCopyTrader.Service.exe` as PID `61164` and paused Live over IPC.
+- Verified all nine new PostgreSQL strategy rows are `enabled=true`, `live_stakes=false`.
+Next: Let the new variants collect Paper samples, then compare fill count, skip rate, ROI, and expectancy against their base strategies.
+Notes: Verification passed: focused BTC/storage tests `110/110`; full test project `416/416`; service build passed. IPC status after restart: `Running`, `paperTradingPaused=false`, `liveTradingPaused=true`, `killSwitchActive=false`, `lastError=null`. `git diff --check` reported only existing LF/CRLF warnings. Branch `master` has no upstream.
+Blockers: None.
+
+## Active Update 2026-05-10 BTC Strategy Loss Opportunity Review
+Goal: Review current BTC Paper strategy losses and propose, without implementing, where capped/filtered alternatives may be useful.
+Status: Completed / Diagnostic Only / No Strategy Changes
+Done:
+- Ran a temporary C# PostgreSQL diagnostic to compute all-history, last-100, price-band, and threshold-filter summaries for BTC strategies; removed the temporary diagnostic files afterwards.
+- Found strongest capped-variant candidates: `More 30 Below 55`, `More 120 Below 70`, `More 150 Below 65`, and `More 270 Below 60/65`.
+- Found weaker or already-covered candidates: `More 90 Below 55` and the newly added `More 60 Below 60`.
+- Found possible low-price `Less` filters, but with small/fragile samples: `Less 120 Below 20/30`, `Less 90 Below 20`, and `Less 60 Below 20`.
+- Marked several groups as poor candidates for more variants now: `Middle Revert`, `Skip 1 Revert`, `Gamma Less`, and `More 90 Below 60/65/70`, because current collected samples are materially negative or already being tested.
+Next: If approved, add only the highest-signal Paper-only variants first: `More 30 Below 55`, `More 120 Below 70`, `More 150 Below 65`, and `More 270 Below 65` or `Below 60`.
+Notes: Diagnostic command: `dotnet run --project artifacts\strategy-loss-opportunities\StrategyLossOpportunities.csproj`. No production code was changed for this review. Branch `master` has no upstream.
+Blockers: None.
+
+## Active Update 2026-05-10 BTC More 60 Capped Variants
+Goal: Add Paper-only `BTC Up or Down 5m More 60` comparison variants capped by executable entry price.
+Status: Completed / Service Running / Paper Active / Live Paused
+Done:
+- Added built-in strategies `BTC Up or Down 5m More 60 Below 60` (`btc_up_down_5m_more_60_below_60`) and `BTC Up or Down 5m More 60 Below 55` (`btc_up_down_5m_more_60_below_55`).
+- Both variants reuse the CLOB-first `More 60` taker selector and skip with `execution_price_above_strategy_cap` unless the selected executable FAK VWAP is strictly below `0.60` or `0.55`.
+- Added deterministic ids, StrategyIds registration, PostgreSQL seed rows, docs, storage checks, and processor coverage for the 60-second capped behavior.
+- Stopped the locked Debug service process, verified tests/builds, restarted the service from `src/PolyCopyTrader.Service/bin/Debug/net10.0/PolyCopyTrader.Service.exe`, and paused Live over IPC.
+- Verified PostgreSQL seeded both new strategy rows as `enabled=true`, `live_stakes=false`.
+Next: Let the new Paper variants collect enough samples, then compare fill count, skip rate, ROI, and expectancy against base `More 60`.
+Notes: Verification passed: focused BTC/storage tests `109/109`; full test project `415/415`; service build passed. IPC status after restart: `Running`, `paperTradingPaused=false`, `liveTradingPaused=true`, `killSwitchActive=false`, `lastError=null`. Branch `master` has no upstream.
+Blockers: None.
+
+## Active Update 2026-05-10 BTC More 60 Live Readiness Diagnostic
+Goal: Explain why `BTC Up or Down 5m More 60` is not yet a Live candidate.
+Status: Completed / Diagnostic Only
+Done:
+- Ran the existing strategy diagnostic for `btc_up_down_5m_more_60`.
+- Current all-history Paper result: `355` settled, `240` wins, `115` losses, win rate `67.61%`, weighted average fill price `0.65591374`, realized PnL `+57.24766726`, ROI `3.96%`, profit factor `1.13`.
+- Rolling results are unstable: last `100` settled are `-8.82873967` PnL / `-2.10%` ROI, while last `50` are `+8.76%` and last `20` are `+31.05%`.
+- Price-band analysis shows edge concentrated below `0.60`: `0.50-0.59` ROI `13.27%`; `0.60-0.69` ROI `-2.59%`; `0.90-1.00` ROI `-18.07%`.
+- Conclusion: base `More 60` has a small all-history positive edge but not enough robustness for Live; a capped variant below about `0.60` is a better Paper experiment.
+Next: Consider adding `More 60 Below 60` / `Below 55` comparison variants before any Live-shadow attempt.
+Notes: Diagnostic command: `dotnet run --project artifacts\diagnose-less30\DiagnoseLess30.csproj --no-restore -- btc_up_down_5m_more_60`. Branch `master` has no upstream.
+Blockers: None.
+
+## Active Update 2026-05-10 Polymarket HTTP Log Retention Policy
+Goal: Stop `polymarket_http_logs` from growing as a full archive of successful HTTP traffic while preserving incident diagnostics.
+Status: Completed / Service Running / Paper Active / Live Paused
+Done:
+- Added `PolymarketHttpLoggingOptions` with defaults that skip successful HTTP requests and expected `404` lookups, while keeping network errors, `401/403`, `429`, and `5xx` rows.
+- Added configurable success sampling and full-success persistence switches, both disabled by default in `src/PolyCopyTrader.Service/appsettings.json`.
+- Added `PolymarketHttpLogRetentionWorker`, registered it as a hosted service, and added batched retention cleanup for `polymarket_http_logs`.
+- Retention defaults: successful/sampled logs kept `6` hours, failed logs kept `14` days, cleanup every `10` minutes, up to `2` batches of `25,000` rows per cycle.
+- Added repository cleanup support plus tests for default filtering, success sampling, and retention deletion.
+- Updated README, configuration reference, and incident response notes.
+- Rebuilt and restarted the service from `src/PolyCopyTrader.Service/bin/Debug/net10.0/PolyCopyTrader.Service.exe`; paused Live over IPC after restart.
+- Runtime verification: IPC `/status` reports `Running`, `paperTradingPaused=false`, `liveTradingPaused=true`, `killSwitchActive=false`, `lastError=null`.
+- Runtime DB spot-check after restart found no `polymarket_http_logs` rows in the latest 30-second window under normal successful/404 traffic. Retention worker logged its first cleanup and deleted `50,000` old successful rows.
+Next: Consider suppressing `System.Net.Http` info-level file log spam separately; it is not the PostgreSQL table but still grows service log files quickly.
+Notes: Verification passed: focused HTTP-log/config tests `26/26`; full test suite `414/414`; service build passed. Existing Storage nullable warnings remain. `git diff --check` passed for touched files. Branch `master` has no upstream, so pull/commit/push were not possible.
+Blockers: None.
+
+## Active Update 2026-05-10 Polymarket HTTP Log Policy Discussion
+Goal: Assess whether `polymarket_http_logs` is needed in its current always-on form.
+Status: Completed / Discussion Only
+Done:
+- Checked code references for `polymarket_http_logs`, `IPolymarketHttpLogSink`, and repository read/write methods.
+- Found the table is primarily written by `RepositoryPolymarketHttpLogSink`; strategy execution and Dashboard do not depend on it for normal operation.
+- Confirmed its current value is incident/debug diagnostics only: endpoint/status/latency/body-preview troubleshooting, rate-limit visibility, and auth/live smoke investigation.
+- Recommended keeping the schema/capability but disabling full successful-request persistence by default; retain errors/rate limits/auth failures and optionally small sampled/short-TTL success logs.
+Next: If approved, implement configurable HTTP log policy plus retention cleanup and optionally truncate/archive existing oversized log rows.
+Notes: Branch `master` has no upstream. No production code was changed for this discussion.
+Blockers: None.
+
+## Active Update 2026-05-10 PostgreSQL Table Growth Diagnostic
+Goal: Check whether any PostgreSQL tables are growing too quickly under the current BTC strategy runtime.
+Status: Completed / Diagnostic Only / Service Still Running
+Done:
+- Built and ran a temporary C# PostgreSQL diagnostic under `artifacts/table-growth-check`, then deleted the temporary project and build output.
+- Found the main growth risk: `polymarket_http_logs` is about `15.3 GB` total and had about `3,098,510` rows in the last 24 hours, about `135,586` rows in the last hour.
+- Current `polymarket_http_logs` drivers in the last hour were mostly `PolymarketClobPublicClient.GetOrderBook` (`51,232` rows/hour), Gamma closed/open market lookups, and older Data API calls from before the recent worker pause.
+- BTC strategy append tables are growing but at expected Paper-collection scale: `paper_orders`/`signals` about `13.6k` rows/day each, `strategy_market_paper_runs` about `7.4k` rows/day, `btc_up_down_5m_odds_ticks` about `16.3k` rows/day, `order_book_snapshots` about `9.2k` rows/day.
+- Recently disabled pipelines still have large historical tables but are not currently appending in the sampled window: `polymarket_websocket_trade_ticks`, `market_data_events`, and `polymarket_data_api_positions`; on-chain captures had no rows in the last hour/six hours.
+Next: Add a retention/disable/sampling policy for `polymarket_http_logs`; consider retention for odds ticks/order-book snapshots once enough Paper statistics are collected.
+Notes: Diagnostic command: `dotnet run --project artifacts\table-growth-check\TableGrowthCheck.csproj ...`. Build emitted only existing Storage nullable warnings. Branch `master` has no upstream, so no pull/commit/push was possible.
+Blockers: None.
+
+## Active Update 2026-05-10 BTC-Only Background Runtime Profile
+Goal: Pause background services that are not needed for current BTC Up/Down 5m strategy collection without deleting code.
+Status: Completed / Service Running / Paper Active / Live Paused
+Done:
+- Updated `src/PolyCopyTrader.Service/appsettings.json` to keep the BTC path active while disabling non-BTC side pipelines.
+- Kept enabled: `BinanceBtcUsdReference`, `BtcUpDown5mOddsArchive`, `GammaMarketIngestion`, `MarketDataWebSocket` with `BtcUpDown5mOnly`, `BtcUpDown5mStrategy`, BTC order-book refresh, Paper open-order/accounting, Live maintenance, and IPC.
+- Disabled via configuration: `BinanceCryptoReference`, `CryptoUpDown5mOddsArchive`, `ChainlinkBtcUsdDiagnostics`, `DataApiTraderIngestion`, Polymarket rating refresh, `TraderDiscovery`, on-chain trade capture, on-chain paper signals/hot path, leader activity exit tracking, and daily report generation.
+- Set `Bot.EnableLiveTrading=false` and paused Live over IPC after restart.
+- Throttled required `GammaMarketIngestion` from `PollIntervalSeconds=0` to `5` to preserve BTC market discovery while avoiding a tight Gamma polling loop.
+- Rebuilt and restarted the service from `src/PolyCopyTrader.Service/bin/Debug/net10.0/PolyCopyTrader.Service.exe`.
+- Runtime verification: IPC `/status` reports `Running`, `paperTradingPaused=false`, `liveTradingPaused=true`, `killSwitchActive=false`, `lastError=null`; BTC strategy cycles continue.
+Next: Monitor logs/Dashboard for BTC order cadence and verify no unwanted Data API/on-chain/ETH-SOL-XRP workers resume.
+Notes: Verification passed: `dotnet build src\PolyCopyTrader.Service\PolyCopyTrader.Service.csproj --no-restore`; filtered configuration tests passed `25/25` using `-p:BaseOutputPath=D:\My\Business\PolyMarket\artifacts\test-build-config\`. Build/test still show existing Storage nullable warnings. `git diff --check -- src/PolyCopyTrader.Service/appsettings.json` reported only the existing LF/CRLF warning. Branch `master` has no upstream, so pull/commit/push were not possible.
+Blockers: None.
+
+## Active Update 2026-05-09 BTC Strategy Expansion Without Self-Opposing Orders
+Goal: Add new Paper-only BTC 5-minute strategy variants while avoiding any strategy that places both sides of the same Polymarket market.
+Status: Completed / Service Running / Paper Active / Live Paused
+Done:
+- Added built-in Paper strategies: `BTC Up or Down 5m More 90 Below 60`, `Below 55`, `Binance Edge 2/4/6`, `Binance 15s/30s/45s`, `Ensemble 2 of 3`, `Dynamic Markov`, and `Strategy Selector`.
+- Did not add the self-opposing / dual-side idea because Polymarket does not allow placing orders against yourself.
+- `Binance Edge` variants reuse the archive fair-value model with required edge margins of `0.02`, `0.04`, and `0.06`.
+- `Binance delayed` variants use the same start-relative Binance direction but wait 15/30/45 seconds after market open.
+- `Ensemble 2 of 3` votes between Binance start-relative, Middle 1, and Skip 1 and enters only one outcome when at least two votes agree.
+- `Dynamic Markov` uses recent BTC 5-minute result transitions and enters only when conditional next-outcome probability is at least `0.55`.
+- `Strategy Selector` ranks selected opening-limit strategies by recent positive Paper expectancy and reuses the best current signal.
+- Added PostgreSQL seed rows and README/configuration docs for the new variants.
+- Verification passed: `dotnet test tests\PolyCopyTrader.Tests\PolyCopyTrader.Tests.csproj --no-restore` passed `411/411`; `dotnet test tests\PolyCopyTrader.Tests\PolyCopyTrader.Tests.csproj --no-build` passed `411/411`.
+- Restarted service from Debug build; IPC reports `Running`, Paper active, Live paused, kill switch inactive, `lastError=null`.
+Next: Let the new Paper variants collect enough samples in Dashboard recent/cumulative strategy tabs before considering any Live-shadow candidate.
+Notes: Branch `master` has no upstream, so no pull/commit/push was possible. `git diff --check` reported only existing LF/CRLF warnings for touched files.
+Blockers: None.
+
+## Active Update 2026-05-09 Dashboard Strategies Nested Period Tabs
+Goal: Make strategy analytics easier to use by keeping one top-level `Strategies` tab with period tabs inside it.
+Status: Completed / Dashboard Build Passed / Service Still Running
+Done:
+- Removed the separate top-level `Strategy Recent` tab from Dashboard.
+- Kept top-level `Strategies` and added nested tabs: `All` (default), `24 hours`, `6 hours`, and `1 hour`.
+- `All` keeps the existing full strategy table with enable/live/stake controls and cumulative Paper/Live metrics.
+- `24 hours`, `6 hours`, and `1 hour` reuse the same recent-period table columns and bind to filtered collections from the existing `StrategyRecentPerformance` snapshot.
+- Updated README/configuration docs to describe period tabs under `Strategies`.
+- Verification passed: `dotnet build src\PolyCopyTrader.Dashboard\PolyCopyTrader.Dashboard.csproj --no-restore` succeeded with existing Storage nullable warnings only; `dotnet test tests\PolyCopyTrader.Tests\PolyCopyTrader.Tests.csproj --no-build` passed `406/406`.
+- Service was not restarted because only Dashboard UI/docs changed; IPC still reports `Running`, Paper active, Live paused, kill switch inactive, `lastError=null`.
+Next: Reopen Dashboard to pick up the new nested tab layout.
+Notes: Branch `master` still has no upstream and worktree remains dirty, so no commit/push was made.
+Blockers: None.
+
+## Active Update 2026-05-09 Dashboard Strategy Recent Metrics
+Goal: Add Dashboard visibility for recent strategy activity so order throughput and short-window performance are clear.
+Status: Completed / Service Running / Paper Active / Live Paused
+Done:
+- Added `StrategyRecentPerformance` domain/storage support and PostgreSQL aggregation for `1h`, `6h`, and `24h` windows per strategy.
+- The recent report counts recent orders, filled/expired/open orders, entered/skipped/settled runs, wins/losses, win rate, ROI, realized PnL, filled cost, weighted average fill price, top skip reason, and last order/run timestamps.
+- Added Dashboard `Strategy Recent` tab, ViewModel snapshot plumbing, cached refresh alongside `Strategies`, and CSV export `StrategyRecentPerformance.csv`.
+- Added TestAppRepository support plus unit coverage for window metrics, and updated README/configuration docs.
+- Verification passed: focused `StrategyPerformanceTests` `5/5`, Dashboard build `0` warnings/errors, full test project `406/406`.
+- Restarted service from current Debug build as PID `44440`; IPC reports `Running`, scanning active, Paper active, Live paused, kill switch inactive, `lastError=null`.
+Next: Use the `Strategy Recent` tab to compare short-window order creation/fill/expiry and skip reasons against cumulative `Strategies` totals.
+Notes: Stopped running Debug service PID `25524` and Dashboard PID `63384` to release locked DLLs for build/test. Dashboard UI was not restarted; service was restarted. Branch `master` still has no upstream and worktree remains dirty, so no commit/push was made.
+Blockers: None.
+
+## Active Update 2026-05-09 Operational Health And Improvement Check
+Goal: Check whether the currently running Paper collection looks healthy and identify practical improvement ideas.
+Status: Completed / Diagnostic Only / Service Running
+Done:
+- Verified IPC status: service `Running`, scanning active, Paper active, Live paused, kill switch inactive, `lastError=null`; current service PID `25524`.
+- Checked fresh Binance diagnostics. Binance family strategies are enabled with `live_stakes=false`; recent GTD orders are being created and expired/settled normally. New bps variants are also active: `1 bps` has started placing orders, while `2 bps` / `5 bps` mostly skip due to `btc_reference_move_below_bps_threshold` so far.
+- Checked `BTC Up or Down 5m More 90`: `205` settled rows, `151` wins, `54` losses, ROI `6.23%`, last-50 ROI `21.95%`, latest settled market `2026-05-09T18:10Z`.
+- Recent log tail showed BTC 5m order-book refresh working repeatedly with `refreshed=2`, `missing=0`, `failed=0`; no recent fatal/error pattern was found in the inspected tail.
+Next: Keep collecting Paper data, but prioritize dashboard/diagnostic improvements: stale Observed-run cleanup/visibility, clearer active worker heartbeat, and strategy comparison panels for bps/price-ladder variants.
+Notes: `git pull --ff-only` was unavailable because branch `master` has no upstream. No source changes were made for this check.
+Blockers: None.
+
+## Active Update 2026-05-09 Binance Bps Threshold Variants
+Goal: Keep the existing `BTC Up or Down 5m Binance` baseline and add comparison variants that skip small BTC market-start moves by bps threshold.
+Status: Completed / Service Running / Paper Active / Live Paused
+Done:
+- Added Paper-only built-in variants `BTC Up or Down 5m Binance 1 bps`, `BTC Up or Down 5m Binance 2 bps`, and `BTC Up or Down 5m Binance 5 bps`.
+- The baseline `btc_up_down_5m_binance` logic was left unchanged. New bps variants reuse the same Binance start-relative Up/Down direction and fixed `0.50` two-minute GTD limit, but skip with `btc_reference_move_below_bps_threshold` unless `abs((current_btc - start_btc) / start_btc * 10000) >= N`.
+- Added bps-threshold strategy ids/codes, processor behavior, raw decision diagnostics (`btc_abs_move_from_start_bps`, `btc_min_move_from_start_bps`), PostgreSQL seed rows, README/configuration docs, diagnostic artifact coverage, and unit tests.
+- Restarted the service from `src/PolyCopyTrader.Service/bin/Debug/net10.0/PolyCopyTrader.Service.exe` as PID `25524`; IPC reports `Running`, Paper active, Live paused, kill switch inactive, and `lastError=null`.
+- Verified PostgreSQL seeded all three new strategies with `enabled=true`, `live_stakes=false`. Initial rows created immediately after restart have no settled history yet; one current-cycle bps skip was observed for each threshold.
+Next: Let the new bps variants collect Paper samples beside the unchanged baseline, then compare skip rate, fill count, average filled price, win rate, ROI, and expectancy by threshold.
+Notes: `git rev-parse --abbrev-ref --symbolic-full-name @{u}` confirmed branch `master` has no upstream, so `git pull --ff-only` / commit / push were not possible. Focused tests passed `103/103`; full `dotnet test tests\PolyCopyTrader.Tests\PolyCopyTrader.Tests.csproj --no-restore` passed `405/405`. `git diff --check` reported only existing LF/CRLF warnings.
+Blockers: None.
+
+## Active Update 2026-05-09 Binance Strategy 19/19 Diagnostic
+Goal: Check whether `BTC Up or Down 5m Binance` reaching `19/19` wins/losses means the Binance/BTC correlation stopped working.
+Status: Completed / Diagnostic Only / Service Running
+Done:
+- Verified service remains `Running`, Paper active, Live paused, kill switch inactive, `lastError=null`.
+- Ran Binance strategy diagnostics. `btc_up_down_5m_binance` currently has `38` settled filled rows, `19` wins, `19` losses, settled fill cost `96.97319998`, realized PnL `+17.02680002`, ROI `17.56%`, weighted avg fill price `0.42719471`.
+- Important interpretation: 50% win rate is still above break-even for the actual filled price (`~42.7%`), so the filled Paper result is positive despite equal wins/losses.
+- Ran BTC/odds correlation diagnostic. Market-start-relative BTC move still explains current Up price: correlation `0.71725902`, direction accuracy vs `0.5` `86.78%`. This is weaker than an earlier small-sample `0.8877`, but still meaningful.
+- Built and removed a temporary C# diagnostic to compare Binance selected direction against inferred final market outcome. Results: all Binance orders with inferred outcome `75/135` correct (`55.56%`), expired-only `56/97` (`57.73%`), filled-only `19/38` (`50%`). `Binance Clever` all orders `74/132` (`56.06%`), filled-only `12/22` (`54.55%`).
+- Conclusion: BTC still correlates with current Polymarket odds, but the simple Binance start-relative direction is not a strong predictor of the final 5-minute outcome, especially on the subset that actually fills. The strategy can still have positive expectancy only if it enters below true break-even.
+Next: Analyze thresholds by absolute BTC move from market start and consider variants that skip tiny moves, e.g. `abs(btc_move_from_start_usd)` / bps thresholds, while keeping price/edge discipline.
+Notes: No production code changed. Temporary `artifacts/binance-signal-outcome-check` was deleted after use.
+Blockers: None.
+
+## Active Update 2026-05-09 More 90 Entry Price Cap Variants
+Goal: Create/check `BTC Up or Down 5m More 90` comparison variants that enter only when executable entry price is below `0.70` / `0.65`, then restart Paper collection.
+Status: Completed / Service Running / Paper Active / Live Paused
+Done:
+- Ran a retrospective filter check for current `btc_up_down_5m_more_90` Paper results. Base sample at the time of the filter probe: `183` settled, `136` wins, `47` losses, ROI `6.01%`, weighted avg fill `0.70263552`.
+- Strict executable fill filters improved historical ROI: `<0.70` had `89` settled, ROI `16.11%`; `<0.65` had `71` settled, ROI `17.91%`. Recent last-50 filtered slices were stronger but still small samples.
+- Added Paper-only built-in strategies `BTC Up or Down 5m More 90 Below 70` (`btc_up_down_5m_more_90_below_70`) and `BTC Up or Down 5m More 90 Below 65` (`btc_up_down_5m_more_90_below_65`).
+- The new variants use the same CLOB-first `More 90` executable VWAP selector and skip with `execution_price_above_strategy_cap` unless the selected executable FAK average price is strictly below the cap.
+- Added `strategy_entry_price_cap` to taker entry/rejection diagnostics, PostgreSQL seed rows, README/configuration docs, and tests for variant registration plus enter/skip behavior.
+- Verified with focused tests (`101/101`) and full test project (`403/403`).
+- Restarted service from `src/PolyCopyTrader.Service/bin/Debug/net10.0/PolyCopyTrader.Service.exe` as PID `39840`; IPC reports `Running`, Paper active, Live paused, kill switch inactive, and `lastError=null`.
+- Verified PostgreSQL seeded both new strategies with `enabled=true`, `live_stakes=false`; they currently have no settled history yet.
+Next: Let the two capped variants collect Paper data side by side with base `More 90`, then compare fill count, skips by `execution_price_above_strategy_cap`, ROI, expectancy, and rolling performance before considering any Live-shadow candidate.
+Notes: `dotnet test tests\PolyCopyTrader.Tests\PolyCopyTrader.Tests.csproj --no-restore` passed `403/403`. The first test attempt was blocked by the running Debug service locking DLLs; stopped PID `51724`, tested, then restarted PID `39840`. Temporary probe `artifacts/more90-filter-probe` was removed. Branch has no upstream and worktree has many pre-existing changes, so no commit/push was made.
+Blockers: None.
+
+## Active Update 2026-05-09 BTC 5m Order-Book Refresh And Throughput
+Goal: Add a dedicated BTC 5m order-book freshness worker and verify whether Dashboard's apparent one-order-per-hour view reflects actual Paper order throughput.
+Status: Completed / Service Running / Paper Active / Live Paused
+Done:
+- Added `BtcUpDown5mOrderBookRefreshWorker`, registered it as a hosted service, and configured it to refresh near-active BTC Up/Down 5m CLOB `/book` snapshots every second for the current/near markets.
+- Added `BtcUpDown5mStrategy` refresh-worker options, validation, appsettings, README/configuration docs, and tests.
+- Fixed the BTC taker REST fallback freshness path so a just-fetched CLOB `/book` snapshot is stamped with local receive time for taker execution decisions instead of being rejected only because Polymarket's embedded book timestamp is a few seconds old.
+- Restarted the service from `src/PolyCopyTrader.Service/bin/Debug/net10.0/PolyCopyTrader.Service.exe` as PID `51724`; IPC reports `Running`, scanning active, Paper active, kill switch inactive, and `lastError=null`.
+- Paused Live over IPC after restart; all inspected BTC strategy rows have `live_stakes=false`, so ongoing collection is Paper-only.
+- Monitored the new refresh worker in logs: recent summaries show `refreshed=2`, `missing=0`, `failed=0` for the active BTC market.
+- Checked PostgreSQL throughput: top opening/Binance strategies had `18` orders in the prior 90-minute window, and the `2026-05-09T16:15Z` BTC market already had `39` `Entered` runs. A focused last-10-minute query showed most BTC strategies with `2` orders across the `16:10Z` and `16:15Z` five-minute windows.
+- Stale-cache rejects after the restart/fix were not observed. The remaining `missing_orderbook_cache_stale` rows in a 30-minute query were old rows last updated at `2026-05-09T15:54:30Z`, before the current fixed service start at `2026-05-09T15:57:09Z`.
+Next: Keep collecting Paper stats. If Dashboard still looks like one order per hour, add separate Dashboard counters for created orders, entered runs, filled/settled orders, and `gtd_limit_not_filled` expirations so UI does not confuse "currently open/final filled" with "orders created".
+Notes: Verification passed with `dotnet test tests\PolyCopyTrader.Tests\PolyCopyTrader.Tests.csproj --no-restore` (`401/401`). `git pull --ff-only` was skipped because branch `master` has no upstream. No commit/push was made because the repo has no upstream and a large pre-existing dirty worktree.
+Blockers: None.
+
+## Active Update 2026-05-09 BTC More 90 Strategy Analysis
+Goal: Evaluate `BTC Up or Down 5m More 90` using current Paper PostgreSQL statistics.
+Status: Completed / Diagnostic Only
+Done:
+- Reused and parameterized the local C# diagnostic under `artifacts/diagnose-less30` so it can analyze an arbitrary strategy code.
+- Ran diagnostics for `btc_up_down_5m_more_90`.
+- Current result: `178` settled filled Paper orders, `131` wins, `47` losses, win rate `73.6%`, settled fill cost `770.48430003`, realized PnL `+38.69555322`, ROI `5.02%`, weighted avg fill price `0.7021749`, profit factor `1.201`.
+- Rolling result improved recently: last `100` settled `+37.90479441` ROI `8.87%`, last `50` `+40.60275856` ROI `19.06%`, last `20` `+24.30963437` ROI `28.6%`.
+- Price bands show the edge is concentrated in lower `More` entries: `0.50-0.59` ROI `16.72%`, `0.60-0.69` ROI `14.14%`, while `0.70-0.79` is `-3.86%`, `0.80-0.89` is `0.99%`, and `0.90-1.00` is `-7.43%`.
+- Break-even by weighted average fill price is about `70.22%`; observed win rate `73.6%` has a rough normal 95% CI around `67.1%-80.1%`, so the edge is promising but not statistically proved.
+- Operational caveat: there are `53` skipped runs with `missing_orderbook_cache_stale`, latest around `2026-05-09T15:06Z`, so current taker quote freshness is still causing missed entries.
+Next: Continue Paper collection; consider a filtered variant for More entries with limit/entry price below about `0.70` before considering any Live candidate.
+Notes: No production code changed. Diagnostic command: `dotnet run --project artifacts\diagnose-less30\DiagnoseLess30.csproj --no-restore -- btc_up_down_5m_more_90`. Branch has no upstream and worktree has many pre-existing changes.
+Blockers: None.
+
+## Active Update 2026-05-09 Dedicated Paper Open-Order Worker
+Goal: Decouple general Paper open-order expiry/fill processing from the main `BotWorker` loop after an operational lag made the service look stalled.
+Status: Completed / Service Running / Live Disabled
+Done:
+- Added a dedicated `PaperTradingWorker` hosted service that calls `IPaperTradingProcessor.ProcessOpenOrdersAsync` independently every `PaperTrading:OpenOrderProcessingIntervalSeconds`, default `5`.
+- Removed general Paper open-order processing from `BotWorker`; the watchlist heartbeat no longer waits on open-order fill/expiry simulation.
+- Added `PaperTrading:OpenOrderFillSimulationBatchSize`, default `100`, so fill simulation for non-expired open orders is capped per cycle while due expirations are still processed first.
+- Added configuration validation, docs, and tests for the new options and batching behavior.
+- Rebuilt/published service to `artifacts/paper-open-order-worker-build` and restarted it as PID `58928`; service config loaded as `Mode=Live`, `PaperTrading:RunInLiveMode=true`, IPC on `http://127.0.0.1:5118/`.
+- Disabled all strategy LiveStakes with `--disable-all-live-stakes` before restart and paused Live via IPC after restart; `/status` reports `Running`, `paperTradingPaused=false`, `liveTradingPaused=true`, `killSwitchActive=false`, `lastError=null`.
+- Runtime verification: Binance price-ladder orders were created for the `2026-05-09T14:50Z` BTC window at `14:50:08Z`-`14:50:09Z` and moved from `Pending` to `Expired` after their `14:52:08Z`-`14:52:09Z` GTD deadline.
+Next: Let Paper collection continue. If dashboard/operator visibility still looks ambiguous, add dedicated per-worker heartbeat fields instead of overloading `currentLoop`.
+Notes: Full test project passed `399/399`; service build and publish passed with existing Storage nullable warnings only; `git diff --check` reported LF/CRLF warnings only. BTC-specific opening-limit runs still synchronize their own GTD order/run status as `gtd_limit_not_filled`, so the new worker mainly isolates the generic Paper open-order pipeline from the watchlist loop.
+Blockers: None for continued Paper collection. Branch still has no upstream and the worktree contains many pre-existing changes, so no commit/push was made.
+
+## Active Update 2026-05-09 Service Apparent Stall Diagnostic
+Goal: Check why the system appeared to be standing still after enabling Paper-only Binance price ladder collection.
+Status: Completed / Diagnostic Only
+Done:
+- Verified the service process is alive: PID `58304`, started from `artifacts/binance-price-ladder-build/PolyCopyTrader.Service.exe`.
+- Verified IPC `/status`: `state=Running`, `scanningPaused=false`, `paperTradingPaused=false`, `liveTradingPaused=true`, `killSwitchActive=false`, `lastError=null`.
+- Verified the service is not stuck in one loop; `currentLoop` changes across BTC strategy phases. The sampled status at `2026-05-09T14:31:28Z` was between due entry windows: `BTC5mStrategy Observed=0; Entries=0; Skipped=0; Settled=0`.
+- Verified Binance Paper orders are still being created. Latest price-ladder orders were created at `2026-05-09T14:30:10Z`, with two-minute GTD expiry around `2026-05-09T14:32:10Z`.
+- Found the real operational issue: the main `BotWorker` heartbeat/order-processing loop lagged from `2026-05-09T14:24:40Z` to `2026-05-09T14:34:14Z`. During that gap BTC strategy workers still placed orders, but general Paper open-order processing did not promptly update GTD expiry/fill statuses.
+- After the main loop caught up at `2026-05-09T14:34:14Z`, the `2026-05-09T14:30Z` Binance price-ladder orders moved from `Pending` to `Expired`; the log line reported `PaperFilled=8` for other open orders in the same processing pass.
+- Confirmed the next `2026-05-09T14:35Z` Binance window placed orders normally around `2026-05-09T14:35:08Z`-`2026-05-09T14:35:09Z`; the `0.50` baseline filled immediately and the price-ladder variants were pending at the time of the check.
+- Verified the prior `2026-05-09T14:25Z` Binance price-ladder orders filled, while earlier windows include normal `gtd_limit_not_filled` expirations.
+- Noted a visibility issue: some diagnostics show pre-created future `Observed` rows above real entered rows, which can make the dashboard/probes look inactive if sorted by market start instead of actual order activity.
+Next: Fix the operational lag by decoupling Paper open-order expiry/fill processing from the general watchlist `BotWorker` loop, or at minimum cap/batch `GetOpenPaperOrdersAsync` and avoid doing unbounded CLOB `/book` calls for every pending order in one loop. Separately consider reducing background HTTP/log noise.
+Notes: No code changed. Verification was IPC status, service process inspection, and `artifacts/diagnose-binance-strategies` recent order diagnostics. Live remains disabled.
+Blockers: None.
+
+## Active Update 2026-05-09 Binance Price Ladder Strategies
+Goal: Add Paper-only Binance price ladder strategy variants and restart collection without Live exposure.
+Status: Completed / Service Running / Live Disabled
+Done:
+- Added 5 BTC 5m Binance comparison variants: fixed-price `BTC Up or Down 5m Binance 45/47/49`, `BTC Up or Down 5m Binance Clever Aggressive`, and `BTC Up or Down 5m Binance Clever Conservative`.
+- Fixed-price variants reuse the existing Binance start-relative direction signal and place two-minute GTD Paper BUYs at `0.45`, `0.47`, or `0.49`; the existing `BTC Up or Down 5m Binance` remains the `0.50` baseline.
+- Clever variants reuse the existing fair-value archive model: baseline margin remains `0.03`, Aggressive uses `0.01`, Conservative uses `0.05`.
+- Added PostgreSQL seed rows, StrategyIds entries, processor behavior support, diagnostics, docs, and focused tests.
+- Rebuilt and restarted service from `artifacts/binance-price-ladder-build/PolyCopyTrader.Service.exe`, PID `58304`; ran `--disable-all-live-stakes` after schema seed and paused Live over IPC.
+- Runtime verification: all 7 Binance strategy rows are enabled with `live_stakes=false`; the new variants already created their first Paper pending orders at `2026-05-09T14:15:56Z`-`2026-05-09T14:15:57Z`.
+Next: Let Paper collection run, then compare fixed-price fill rate/PnL and Clever margin variants against the existing Binance baselines.
+Notes: `dotnet test tests/PolyCopyTrader.Tests/PolyCopyTrader.Tests.csproj --no-restore --filter "FullyQualifiedName~BtcUpDown5mPaperStrategyProcessorTests"` passed `77/77`; full `dotnet test ...` passed `398/398`; service build passed with existing Storage nullable warnings only. `git diff --check` reported LF/CRLF warnings only. Branch `master` has no upstream, so no pull/push/commit was possible; worktree still has many pre-existing changes.
+Blockers: None for Paper collection.
+
+## Active Update 2026-05-09 Binance Price Ladder Discussion
+Goal: Evaluate whether adding extra Binance strategy orders at slightly different prices makes sense.
+Status: Completed / Discussion Only
+Done:
+- Checked current service and Binance diagnostics before answering. Service is `Running`, Paper active, Live paused; branch still has no upstream.
+- Current post-fix Binance strategies are placing orders. Latest examples show plain Binance at `0.50`, Clever usually around `0.45-0.48`; some orders fill, some expire as `gtd_limit_not_filled`.
+- Conclusion: a small Paper-only price ladder is useful as an experiment to estimate fill-rate/EV sensitivity, but should not be used in Live yet and should not duplicate exposure without explicit caps.
+Next: If requested, add Paper-only Binance ladder variants using the same signal/outcome with fixed prices or Clever margin variants, then compare filled-rate, avg fill price, realized PnL, and per-market opportunity cost.
+Notes: No code changed. Verification was service IPC plus `artifacts/BinanceStrategyProbe`. Recent BTC odds archive remains fresh with latest sample around `2026-05-09T13:40:27Z`.
+Blockers: None.
+
+## Active Update 2026-05-09 Binance Post-Fix Health Check
+Goal: Verify whether Binance BTC 5m strategies are healthy after the order-placement fix.
+Status: Completed / Diagnostic Only
+Done:
+- Verified IPC status: service `Running`, scanning active, Paper active, `liveTradingPaused=true`, kill switch inactive, no last error.
+- Verified current service PID `63040` is running from `artifacts/binance-stale-sizing-fix-build/Debug/net10.0/PolyCopyTrader.Service.exe`.
+- Verified both `btc_up_down_5m_binance` and `btc_up_down_5m_binance_clever` are enabled, `live_stakes=false`, `paper_stake_amount=1`.
+- Verified post-fix Paper orders are being created on successive BTC 5m markets: new orders appeared at `12:25`, `12:30`, `12:35`, `12:40`, and `12:45` UTC windows; latest DB rows at `2026-05-09T12:45:11Z`.
+- Verified `btc_up_down_5m_odds_ticks` is healthy: `340` ticks in the last 30 minutes, latest sample `2026-05-09T12:48:05Z`.
+- Verified there are no oldest due observed Binance runs; old `btc_reference_equal_market_start` skips remain historical only.
+Next: Continue collecting Paper stats; treat `gtd_limit_not_filled` as normal GTD behavior unless the rate becomes unexpectedly high.
+Notes: No code changed in this check. Recent Binance API errors are old websocket reconnect events from `2026-05-09T03:32Z`, not current failures.
+Blockers: None.
+
+## Active Update 2026-05-09 Binance Strategies Resume Orders Fix
+Goal: Fix `BTC Up or Down 5m Binance` and `BTC Up or Down 5m Binance Clever` so they resume Paper order placement.
+Status: Completed / Service Running / Live Disabled
+Done:
+- Fixed several BTC 5m processor issues found while diagnosing stale Binance strategies: per-variant entry budgeting, near-window market observation, latest odds-tick current BTC source for start-relative decisions, 120-second equal-start waiting, bounded settlement/close-book work, and stale CLOB min-order-size fallback for GTD opening-limit sizing.
+- Main final bug was opening-limit stake sizing: CLOB `/book` often arrived slightly older than the 1500 ms taker freshness limit, so GTD Binance orders silently deferred sizing even though `min_order_size` was available. Stale CLOB/Gamma min size is now accepted for sizing because GTD limit sizing only needs the minimum order size, not a fresh executable taker quote.
+- Added test `ProcessAsync_BinanceStartRelativeUsesStaleClobMinOrderSizeForOpeningLimitSizing` and supporting latest BTC odds tick repository/test plumbing.
+- Rebuilt and restarted service from `artifacts/binance-stale-sizing-fix-build/Debug/net10.0/PolyCopyTrader.Service.exe`, PID `63040`; ran `--disable-all-live-stakes` and paused Live over IPC.
+- Runtime verification: at `2026-05-09T12:25:28Z`, both `btc_up_down_5m_binance` and `btc_up_down_5m_binance_clever` placed new Paper GTD orders for `btc-updown-5m-1778329500`, outcome `Up`, price `0.50`, size `6`, notional `$3.00`, status `Pending`.
+Next: Let Paper collection continue and recheck Binance strategy performance after enough new settled samples.
+Notes: `git pull --ff-only` was not run because branch `master` has no upstream. Focused BTC processor tests passed `72/72`. Service build passed with existing Storage nullable warnings only. `git diff --check` passed with LF/CRLF warnings only. IPC status after restart is `Running`, Paper active, `liveTradingPaused=true`, kill switch inactive.
+Blockers: None for Paper collection. Automatic commit/push remains unavailable because no upstream is configured and the worktree has many pre-existing changes.
+
+## Active Update 2026-05-09 Binance Strategies No-Orders Diagnostic
+Goal: Check whether `BTC Up or Down 5m Binance` and `BTC Up or Down 5m Binance Clever` are still placing Paper orders.
+Status: Completed / Diagnostic Only
+Done:
+- Verified service IPC status: `Running`, scanning active, Paper active, Live paused, kill switch inactive; service PID `50616`.
+- Verified both Binance strategies are enabled in DB, `live_stakes=false`, `paper_stake_amount=1`.
+- Recent Paper orders exist, but none in the last 30 minutes: `btc_up_down_5m_binance` last order `2026-05-09T10:50:11Z`; `btc_up_down_5m_binance_clever` last order `2026-05-09T10:30:11Z`.
+- Last 24h run diagnostics show recent skips dominated by `btc_reference_equal_market_start`: Binance `51` skips, Clever `50` skips.
+- BTC odds archive and Binance stream are healthy: `btc_up_down_5m_odds_ticks` had `344` ticks in the last 30 minutes, latest `2026-05-09T11:26:37Z`, latest Binance fetched near `2026-05-09T11:26:35Z`.
+- Root cause found: for recent BTC 5m markets, archived first tick price and decision current price are identical, e.g. `btc-updown-5m-1778325900` first tick `80343.81` and decision current `80343.81`; the strategy therefore treats the market as “equal to start” and skips.
+Next: Fix Binance start-relative strategy so market-start BTC reference is captured independently at market open, or use a tolerance/time-aware rule instead of comparing current price to a first archive row that may equal the decision price. Then restart service and verify new Binance orders resume.
+Notes: No production code changed in this diagnostic. Added temporary `artifacts/BinanceStrategyProbe` for DB inspection. Current issue is not Binance connectivity and not strategy disabled state.
+Blockers: Current start-price source can collapse to the same price as the decision price, causing repeated `btc_reference_equal_market_start` skips.
+
+## Active Update 2026-05-09 ETH SOL XRP 5m Odds Analytics Archive
+Goal: Add research analytics for ETH/SOL/XRP Up or Down 5m markets and keep collecting for a week.
+Status: Completed / Service Running / Live Disabled
+Done:
+- Added a research-only `CryptoUpDown5mOddsArchive` pipeline for configured assets `ETH,SOL,XRP`; no ETH/SOL/XRP trading strategies were added.
+- Added Binance combined trade-stream reference pricing via `wss://data-stream.binance.vision:443/stream?streams=ethusdt@trade/solusdt@trade/xrpusdt@trade`.
+- Added PostgreSQL table `crypto_up_down_5m_odds_ticks` with per-tick Binance price, inferred market-start price, move from start in USD/bps, Up/Down bid/ask/mid/proxy, book source/age, timing fields, and diagnostics JSON.
+- Added generic crypto 5m Gamma market analyzer, archive processor/worker, repository methods, schema entries/indexes, config validation, appsettings, tests, README, and configuration reference docs.
+- Fixed new config binding normalization so default `ETH,SOL,XRP` lists do not duplicate when JSON values are bound.
+- Rebuilt and restarted service from `artifacts/crypto-analytics-build/Debug/net10.0/PolyCopyTrader.Service.exe`, PID `50616`; ran `--disable-all-live-stakes` and paused Live over IPC. IPC `/status` is `Running`, `liveTradingPaused=true`, kill switch inactive.
+- Runtime verification: `crypto_up_down_5m_odds_ticks` is filling. Probe output for last 30 minutes: ETH `54` ticks, SOL `54` ticks, XRP `51` ticks, latest sample `2026-05-09T10:20:31Z`; all current ticks are `clob_rest` backed because market WS subscription scope is still BTC-focused.
+Next: Let ETH/SOL/XRP archive accumulate for about a week, then analyze liquidity/spread/fillability and correlation between Binance asset moves from market start and Polymarket Up/Down prices.
+Notes: Focused crypto archive tests passed `3/3`; focused configuration/schema tests passed `44/44`, later combined focused tests passed `47/47`; service build passed `0` warnings/errors after stopping a locked running process. `git diff --check` passed with LF/CRLF warnings only. Branch `master` still has no upstream, and the worktree contains many pre-existing changes.
+Blockers: Non-BTC analytics currently rely on CLOB REST fallback rather than WebSocket cache. This is fine for research, but if ETH/SOL/XRP become active strategy candidates, market-data subscription scope should be generalized beyond BTC.
+
+## Active Update 2026-05-09 ETH SOL XRP 5m Market Check
+Goal: Check whether ETH/SOL/XRP Up or Down 5m markets are worth researching next to BTC.
+Status: Completed / Diagnostic Only
+Done:
+- Queried Polymarket public Gamma active markets and CLOB `/book` for `btc`, `eth`, `sol`, and `xrp` `*-updown-5m-*` markets.
+- In the active Gamma sample, found `53` BTC, `53` ETH, `53` SOL, and `54` XRP 5m markets.
+- Average listed liquidity in the sample: BTC about `$6.65k`, ETH about `$4.20k`, SOL about `$2.04k`, XRP about `$2.01k`.
+- Nearest sampled CLOB books: BTC and ETH had `0.01` spreads; SOL and XRP had `0.02` spreads. BTC top-of-book size was materially better than SOL/XRP; ETH was usable but thinner/asymmetric at the touch.
+Next: If we extend beyond BTC, start with data collection/archive for ETH first, then SOL/XRP as secondary research only; do not treat them as Live candidates without Paper samples.
+Notes: Used official Polymarket Gamma and CLOB public endpoints. No production code changed. `git pull --ff-only` failed because branch `master` has no upstream. Current service config still has `MarketDataWebSocket:SubscriptionScope=BtcUpDown5mOnly`, so non-BTC strategies would need scoped subscription/generalized crypto 5m support.
+Blockers: None for research; production strategy support requires code changes to generalize BTC-specific analyzers and add non-BTC price streams.
+
+## Active Update 2026-05-09 Binance Strategies Audit
+Goal: Check whether `BTC Up or Down 5m Binance` and `BTC Up or Down 5m Binance Clever` justify themselves on current Paper data.
+Status: Completed / Diagnostic Only
+Done:
+- Built a temporary C# diagnostic under `artifacts/diagnose-binance-strategies` and queried PostgreSQL.
+- `btc_up_down_5m_binance`: `86` Paper orders, `24` rows with fills/settled, `16` wins, `8` losses, filled cost `61.81439998`, realized PnL `+34.18560002`, ROI `55.30%`, weighted average fill price `0.43226853`, win rate `66.67%`. Order statuses: `62` expired, `23` filled, `1` partially filled expired.
+- `btc_up_down_5m_binance_clever`: `83` Paper orders, `12` filled/settled, `9` wins, `3` losses, filled cost `28.6444`, realized PnL `+28.0556`, ROI `97.94%`, weighted average fill price `0.37517223`, win rate `75%`. Order statuses: `71` expired, `12` filled.
+- Main interpretation: both are positive on filled Paper orders; `Clever` has stronger ROI on fills but much smaller sample and lower fill rate; plain `Binance` is currently more stable because it has twice the settled sample.
+- Main caveat: GTD orders that do not fill are neutral in accounting, so these results include strong fill-selection effects. This is acceptable for Paper-GTD modeling but not enough for Live without more samples and shadow validation.
+Next: Keep collecting data; compare rolling/hourly PnL and fill rate before considering Live. Plain `Binance` is the better monitoring candidate now; `Clever` is promising but under-sampled.
+Notes: No production code changed. Diagnostic artifact only. Build produced existing Storage nullable warnings. Branch `master` has no upstream and the worktree has many pre-existing changes, so no pull/push/commit was attempted.
+Blockers: Sample is small: `Binance` has only `24` settled fills and `Clever` only `12`.
+
+## Active Update 2026-05-09 BTC Less 30 Success Audit
+Goal: Explain whether the current success of `BTC Up or Down 5m Less 30` looks real.
+Status: Completed / Diagnostic Only
+Done:
+- Built a temporary C# diagnostic under `artifacts/diagnose-less30` and queried PostgreSQL without printing secrets.
+- Current `Less 30` closed sample: `124` settled rows, `53` wins, `71` losses, realized PnL `+58.80934397` on filled cost `310.99999997`, ROI `18.91%`, weighted average fill price `0.35652633`, win rate `42.74%`.
+- The arithmetic is internally consistent: win rate is below 50%, but above the approximate break-even implied by the average binary entry price, so profitable PnL is possible.
+- Compared standard Less/More siblings: `Less 30` is currently the top PnL standard variant; `More 30` is strongly negative, while other delays are mixed.
+- Caveats found: the sample covers only `2026-05-08T19:50Z` through `2026-05-09T06:20Z`; profit is clustered in a few hours; all `Less 30` orders used `clob_book` REST rather than WebSocket cache; median actual order creation was `38.2s` after market start and `8.2s` after the nominal 30-second due time; raw `quote_age_ms` is negative for all 125 due to the REST timestamp being captured after the processor's earlier `nowUtc`, so that diagnostic should be fixed before relying on quote-age analysis.
+Next: Keep collecting, then evaluate `Less 30` by rolling/hourly PnL, price buckets, and live-shadow fill comparability before treating it as a Live candidate. Consider testing filters around entry price >= `0.30`, because very cheap buckets are currently negative.
+Notes: No production code changed. Diagnostic artifact only. Branch `master` has no upstream and the worktree has many pre-existing changes, so no pull/push/commit was attempted.
+Blockers: Paper result is realistic for CLOB-book FAK simulation but not proof of live executability; REST latency and quote-age diagnostics need attention.
+
+## Active Update 2026-05-09 BTC 5m Book Bootstrap For Skip/Middle
+Goal: Let `BTC Up or Down 5m Skip 1` and related opening-limit BTC strategies price from the selected outcome book when dynamic break-even history is not available yet.
+Status: Completed / Service Running / Live Disabled
+Done:
+- Changed the dynamic opening-limit path for `Middle`, `Middle Revert`, `Skip`, and `Skip Revert`: if own settled sample count is below `OpeningLimitBreakEvenMinSettledRuns`, the run now bootstraps from the selected outcome order book instead of skipping immediately.
+- Book bootstrap uses fresh WebSocket cache first and falls back to CLOB REST `/book` when enabled. If selected outcome `best_ask <= 0.50`, it uses `best_ask`; otherwise it uses `best_bid + tick`, capped by `OpeningLimitMaxPrice` and `0.50`.
+- Added raw decision diagnostics with `dynamic_break_even_book_bootstrap` / rejected mode, source, quote age, selected asset, bid/ask/spread/tick/min-size, price source, raw limit price, and rejection reason.
+- Added focused tests for Middle bootstrap from `best_bid + tick` and Skip 1 bootstrap from selected outcome `best_ask`; updated README and configuration reference.
+- Rebuilt and restarted the service from `artifacts/book-bootstrap-build/Debug/net10.0/PolyCopyTrader.Service.exe`, disabled all LiveStakes, and paused Live over IPC.
+- Verified runtime behavior: after restart, Skip 1 created a new Paper order for market `btc-updown-5m-1778307900` at `2026-05-09T06:25:01Z`, outcome `Up`, entry price `0.49`, order id `54bbb9f2-164b-4b8e-a26a-40f666d08968`.
+Next: Let the new bootstrap logic collect samples, then compare Skip/Middle fill rate and PnL against the break-even-priced phase once enough own settled rows are available.
+Notes: Focused BTC processor tests passed `65/65`; extended focused suite with configuration tests passed `86/86`; service build passed with existing Storage nullable warnings only; `git diff --check` passed with LF/CRLF warnings only. IPC `/status` reports `Running`, `liveTradingPaused=true`, kill switch false, but `currentLoop` still displays `Starting` despite healthy DB activity. Branch `master` has no upstream, and the worktree has many pre-existing uncommitted/untracked changes, so no pull/push/commit was attempted.
+Blockers: Old skipped runs remain skipped and are not reprocessed; only new BTC 5m windows use book bootstrap.
+
+## Active Update 2026-05-09 BTC 5m Binance Clever Strategy
+Goal: Add `BTC Up or Down 5m Binance Clever` with fair-value entry pricing from the odds archive.
+Status: Completed / Service Running / Live Disabled
+Done:
+- Added built-in strategy `btc_up_down_5m_binance_clever` with id `b7c50005-0000-4000-8011-000000000002`, behavior `BinanceStartRelativeClever`, and PostgreSQL seed row.
+- Implemented Clever decision logic in `BtcUpDown5mPaperStrategyProcessor`: same Binance start-relative Up/Down direction as `Binance`, but entry limit is estimated from recent `btc_up_down_5m_odds_ticks` samples with similar direction-normalized BTC move, seconds-to-close, and book-quality penalties.
+- Pricing model uses archive weighted-kNN v1: fair value minus `0.03` edge margin, discounted for one-sided/wide/non-WebSocket current book evidence, capped at `OpeningLimitMaxPrice` / `0.50`, and floored to tick.
+- Clever skips when current odds archive snapshot is missing, current target spread is too wide, comparable archive sample count is below 20, or the safe limit is non-positive.
+- Added tests for Clever Up entry price and insufficient fair-value sample; updated README and configuration reference.
+- Rebuilt and restarted the service from `artifacts/binance-clever-build/Debug/net10.0/PolyCopyTrader.Service.exe`; disabled all LiveStakes and confirmed IPC status is `Running` with `liveTradingPaused=true`.
+Next: Let `Binance` and `Binance Clever` collect Paper samples side by side, then compare fill rate, realized ROI, and skipped reasons before tuning the `0.03` margin or sample weights.
+Notes: Focused BTC processor tests passed `64/64`; extended focused suite passed `113/113`; service build passed with existing Storage nullable warnings only; `git diff --check` passed with LF/CRLF warnings only. `--disable-all-live-stakes` found and disabled `62` strategies. `git pull --ff-only` and automatic push/commit remain unavailable because branch `master` has no upstream.
+Blockers: Clever fair value is a heuristic over archived market odds, not a fitted/proven profitability model; archive rows still use first archived BTC sample as the market-start reference.
+
+## Active Update 2026-05-09 Binance Strategy Execution Rationale
+Goal: Clarify why `BTC Up or Down 5m Binance` uses the current opening-limit GTD execution model.
+Status: Completed
+Done:
+- Clarified that the model was chosen both for comparability with the current BTC paper strategies and because it is a defensible first Paper version for this signal.
+- Noted that GTD 120 seconds and `post_only=false` are intentional for short-lived opening signals and realistic limit-order behavior.
+- Noted that the `0.50` cap is conservative and should later be replaced by a fair-value/break-even threshold derived from the odds archive once enough data is collected.
+Next: After enough Paper samples, evaluate `0.50` versus dynamic fair-value entry thresholds for the Binance strategy.
+Notes: Answer-only task; no source code changed. `git pull --ff-only` remains unavailable because branch `master` has no upstream.
+Blockers: None.
+
+## Active Update 2026-05-09 BTC 5m Binance Strategy
+Goal: Add `BTC Up or Down 5m Binance` using the start-relative Binance BTC/USDT logic.
+Status: Completed / Service Running / Live Disabled
+Done:
+- Added built-in strategy `btc_up_down_5m_binance` with behavior `BinanceStartRelative` and PostgreSQL seed row.
+- Implemented the decision logic in `BtcUpDown5mPaperStrategyProcessor`: wait for BTC 5m trading, compare latest Binance BTC/USDT price with the archived market-start BTC reference from `btc_up_down_5m_odds_ticks`, buy Up when current is above start, buy Down when current is below start, and skip only exact equality.
+- Reused the opening-limit GTD path with `post_only=false`, two-minute lifetime, fixed max entry price `0.50`, dynamic minimum-order stake sizing, and deferred runs while the market-start reference is not archived yet.
+- Added focused tests for Up, Down, and missing-start-reference behavior; updated README and configuration reference.
+- Rebuilt and restarted the service from `artifacts/binance-strategy-build/Debug/net10.0/PolyCopyTrader.Service.exe`; disabled all LiveStakes and confirmed IPC status is `Running` with `liveTradingPaused=true`.
+- Verified the archive and new strategy are active: recent archive rows reached `217`, and `btc_up_down_5m_binance` had `2` entered runs plus observed/skipped history.
+Next: Let the strategy collect Paper data, then compare its realized fill/PnL distribution against the existing Skip/Middle/Always strategies and the odds archive correlation model.
+Notes: Focused BTC processor tests passed `62/62`; extended focused suite passed `111/111`; service build passed with existing nullable warnings only; `git diff --check` passed with LF/CRLF warnings only. `git pull --ff-only` and automatic push/commit remain unavailable because branch `master` has no upstream.
+Blockers: The start reference is the first archived BTC sample for a market, not an official Polymarket settlement/opening oracle value.
+
+## Active Update 2026-05-09 BTC 5m Odds Archive
+Goal: Create the compact archive needed to study Binance BTC/USDT versus Polymarket BTC Up/Down 5m odds and explain how the strong start-relative correlation can be used.
+Status: Completed / Service Running / Live Disabled
+Done:
+- Added `BtcUpDown5mOddsArchive` configuration with 5-second polling, 500-market scan window, WebSocket-cache preference, CLOB REST fallback, and 15-second max order-book age.
+- Added domain model and PostgreSQL table `btc_up_down_5m_odds_ticks` with BTC price, market start/end timing, BTC move from market start, Up/Down bid/ask/mid/proxy prices, source/age fields, and diagnostics JSON.
+- Added repository methods, schema/indexes, `BtcUpDown5mOddsArchiveProcessor`, and `BtcUpDown5mOddsArchiveWorker`; registered them in the service.
+- Added focused tests for archive processing, REST fallback, start-price reuse, configuration, and schema; updated README and configuration reference.
+- Rebuilt service from `artifacts/odds-archive-build/Debug/net10.0`, disabled all LiveStakes, restarted service as PID `13772`, and applied IPC `/pause-live`.
+- Verified archive writes are live and increasing: `recent_rows=20`, latest sampled UTC `2026-05-08T21:43:31Z`, one current market captured, Up/Down proxies available with `websocket_cache` and CLOB REST fallback.
+Next: Let the archive accumulate for multiple hours, then fit a time-aware fair-value model for Up price from BTC move-from-start bps, seconds-to-close, spread, and one-sided book diagnostics.
+Notes: Focused tests passed `45/45`; service build passed with 0 warnings/errors; `git diff --check` passed with LF/CRLF warnings only. IPC `/status` reports `Running`, `liveTradingPaused=true`, kill switch false, `lastError=null`. Branch `master` has no upstream, so pull/push cannot be completed automatically.
+Blockers: Early archive rows are still sparse; current `BinanceStartPriceUsd` is the first archived sample for a market, not yet an exact exchange/server-provided open price.
+
+## Active Update 2026-05-09 Binance BTC vs Polymarket Odds Correlation
+Goal: Check whether Binance BTC/USDT movement can predict Polymarket BTC 5m Up/Down odds changes.
+Status: Completed
+Done:
+- Built and ran a temporary C# diagnostic utility under `artifacts/correlate-binance-bets`.
+- Compared `btc_usd_reference_correlation_samples.binance_price_usd` against mapped BTC 5m `order_book_snapshots` for the `Up` token.
+- Current data: `308` Binance samples from `2026-05-08T20:07:20Z` to `2026-05-08T21:17:08Z`; `267` Up-price observations across `18` BTC 5m markets, including `69` true bid/ask mid observations and `198` single-sided price proxies.
+- Same-interval BTC delta vs Up-price delta: correlation `0.3730`, directional accuracy `60.87%`; mid-only correlation `0.3638`, directional accuracy `50%`.
+- Lead tests using prior BTC movement to predict the next Up-price change were weak: 10s corr `0.0733`, 20s `0.0628`, 30s `-0.0439`, 60s `-0.1045`, 120s `0.0044`.
+- Market-start-relative BTC move vs current Up price was strong: correlation `0.8877`, direction accuracy vs `0.5` was `93.45%`.
+Next: If this should become a real signal search, persist a compact BTC 5m odds tick table continuously for BTC markets and test fair-value mispricing against Binance move, time remaining, spread, and liquidity.
+Notes: Command passed: `dotnet run --project artifacts\correlate-binance-bets\CorrelateBinanceBets.csproj ...`. No production source code changed. Branch `master` has no upstream, so pull/push cannot be completed automatically.
+Blockers: Current persisted odds data is sparse and biased toward captured/close-book snapshots because general WebSocket order-book snapshot persistence is disabled.
+
+## Active Update 2026-05-08 Always Up/Down Pair Audit
+Goal: Explain why `BTC Up or Down 5m Up` and `BTC Up or Down 5m Down` statistics are not strict mirror images.
+Status: Completed
+Done:
+- Queried `strategy_market_paper_runs`, `paper_orders`, and `paper_fills` for `btc_up_down_5m_up` / `btc_up_down_5m_down` with a temporary C# diagnostic utility under `artifacts/diagnose-up-down`.
+- Current DB summary: Down has `8` settled losses, `0` wins, `6` GTD expirations, and one filled entered row; Up has `7` settled rows (`3` wins / `4` losses), `6` GTD expirations, and two filled entered rows.
+- Pairing by `market_id` showed only `2` markets where both Up and Down are settled; in both, PnL signs are opposite. `same_settled_sign=0`.
+- The non-mirror dashboard statistics are due to conditional GTD limit execution at `0.45`: many markets fill only one side while the opposite-side order expires as `gtd_limit_not_filled`.
+Next: If paired comparison is needed, compare only same-market rows where both sides are filled/settled; otherwise treat the two strategies as separate fill-selected samples.
+Notes: Diagnostic command passed: `dotnet run --project artifacts\diagnose-up-down\DiagnoseUpDown.csproj --no-build ...`; no production source code changed. Branch `master` has no upstream, so pull/push cannot be completed automatically.
+Blockers: None.
+
+## Active Update 2026-05-08 BTC Reference Correlation Continue
+Goal: Keep Binance/Chainlink BTC reference correlation accumulation running.
+Status: Completed / Service Running / Live Disabled
+Done:
+- Verified service is still running from `artifacts/chainlink-corr-10s-build2/Debug/net10.0/PolyCopyTrader.Service.exe`, PID `24272`.
+- IPC `/status` reports `Running`, `paperTradingPaused=false`, `liveTradingPaused=true`, kill switch false.
+- Verified correlation table continues growing: `162` total rows through `2026-05-08T20:51:56Z`.
+Next: Continue accumulating; run another analysis after a longer window, preferably several hours or a full day.
+Notes: No source code changed. Query utility output was truncated intentionally after the summary header; command returned nonzero because the pipeline stopped after `Select-Object -First 18`, but it confirmed the latest row and count.
+Blockers: None.
+
+## Active Update 2026-05-08 BTC Reference Correlation Initial Read
+Goal: Analyze the currently accumulated Binance/Chainlink BTC reference correlation samples.
+Status: Completed
+Done:
+- Queried `btc_usd_reference_correlation_samples` and computed stats with a temporary C# utility under `artifacts/query-chainlink-correlation`.
+- Total rows: `142` from `2026-05-08T20:08:22Z` to `2026-05-08T20:48:20Z`.
+- Latest continuous 10-second segment: `124` rows from `2026-05-08T20:27:11Z` to `2026-05-08T20:48:20Z`; average interval `10.32s`, max interval `11.14s`.
+- 10-second segment stats: price-level correlation `0.9298`, delta correlation `0.1361`, average Binance-Chainlink diff `+8.79 USD` / `+1.096 bps`, median diff `+8.81 USD`, median absolute diff `9.24 USD`, p95 absolute diff `24.64 USD`, max absolute diff `50.35 USD`.
+- Chainlink matched timestamp was usually older than Binance by about `10.48s` median (`time_delta_seconds` negative).
+Next: Keep accumulating for a longer period before making production decisions; current data already suggests source differences are small in bps but Chainlink is not a clean fresh substitute for the Binance trade stream.
+Notes: Answer-only analysis; no production source code changed in this turn. Branch `master` has no upstream, so pull/push cannot be completed automatically.
+Blockers: None.
+
+## Active Update 2026-05-08 BTC Reference Correlation 10s
+Goal: Increase Binance/Chainlink BTC reference correlation accumulation frequency from 60 seconds to 10 seconds.
+Status: Completed / Service Running / Live Disabled
+Done:
+- Changed `ChainlinkBtcUsdDiagnostics.PollIntervalSeconds` default and service `appsettings.json` value from `60` to `10`.
+- Updated `ChainlinkBtcUsdCorrelationWorker` to compare Chainlink against the freshest Binance trade-stream price from `IBtcUsdReferencePriceClient`, not the one-minute arithmetic-mean sample cache.
+- Updated configuration test expectations plus README/configuration reference wording.
+- Rebuilt and restarted service from `artifacts/chainlink-corr-10s-build2/Debug/net10.0/PolyCopyTrader.Service.exe`, PID `24272`; explicitly paused Live trading and confirmed `LiveStakes strategies: 0`.
+- Verified logs show `PollIntervalSeconds=10` and DB rows are being added around every 10 seconds: latest observed rows at `20:27:11Z`, `20:27:21Z`, `20:27:31Z`, `20:27:42Z`, and `20:27:52Z`.
+Next: Let the service continue accumulating and later compute correlation/lag/delta stats from `btc_usd_reference_correlation_samples`.
+Notes: Focused tests passed `22/22`; service build passed with existing Storage nullable warnings and 0 errors; `git diff --check` passed with LF/CRLF warnings only. IPC `/status` reports `Running`, `paperTradingPaused=false`, `liveTradingPaused=true`, kill switch false. Branch `master` has no upstream, so pull/push cannot be completed automatically.
+Blockers: None.
+
+## Active Update 2026-05-08 BTC Reference Correlation Accumulation
+Goal: Start accumulating paired Binance BTC/USDT and Chainlink BTC/USD observations for later correlation analysis.
+Status: Completed / Service Running / Live Disabled
+Done:
+- Added `ChainlinkBtcUsdDiagnostics` configuration and validation with default Chainlink BTC/USD feed, 60-second polling, 15-second timeout, and 30-second nearest-point tolerance.
+- Added PostgreSQL table `btc_usd_reference_correlation_samples` plus repository methods to store and read recent paired observations.
+- Added `ChainlinkBtcUsdCorrelationWorker`: it reads the latest Binance sampled BTC/USDT cache value, fetches Chainlink `live-data-engine-stream-data`, pairs the nearest `benchmark` node, computes USD and bps deltas, and persists the sample.
+- Added tests for config validation/defaults, schema presence, and Chainlink JSON parsing; updated README and configuration reference.
+- Rebuilt and restarted the service from `artifacts/chainlink-corr-build/Debug/net10.0/PolyCopyTrader.Service.exe`, PID `38148`; disabled all LiveStakes and paused Live trading through IPC.
+- Verified accumulation started: `btc_usd_reference_correlation_samples` already had 2 rows at check time, with latest observed diffs around `+9.69` and `+10.06` USD vs Chainlink.
+Next: Let the service run to accumulate enough rows, then calculate correlation/lag/delta statistics from `btc_usd_reference_correlation_samples`.
+Notes: Focused tests passed `43/43`; service build passed with existing Storage nullable warnings and 0 errors; `git diff --check` passed with LF/CRLF warnings only. IPC `/status` reports `Running`, `paperTradingPaused=false`, `liveTradingPaused=true`, kill switch false; `/btc-usd-reference` sample count reached `3`. Branch `master` has no upstream, so pull/push cannot be completed automatically.
+Blockers: None.
+
+## Active Update 2026-05-08 Strategy History Reset
+Goal: Clear all accumulated strategy history and restart statistics collection from a clean slate.
+Status: Completed / Service Running / Live Disabled
+Done:
+- Stopped running service PID `45640` before database cleanup.
+- Cleared strategy/Paper/Live history tables in one committed transaction: `paper_live_shadow_discrepancies`, `paper_live_shadow_decisions`, `live_orders`, `live_trading_events`, `dry_run_orders`, `paper_copied_leader_activity_events`, `paper_copied_leader_positions`, `strategy_market_paper_runs`, `paper_fills`, `paper_orders`, `paper_positions`, `paper_position_settlements`, `paper_copied_trader_performance`, `signal_rejections`, `signals`, `risk_events`, `daily_reports`, and `order_book_snapshots`.
+- Pre-clean counts included `strategy_market_paper_runs=40686`, `paper_orders=16560`, `paper_fills=15143`, `paper_positions=15113`, `paper_position_settlements=15089`, `signals=16567`, `order_book_snapshots=96430`; post-clean counts were `0` for every cleared table.
+- Preserved `strategies` and did not change `enabled`, `live_stakes`, paper/live stake amounts, or strategy balances during the cleanup itself.
+- Ran `--disable-all-live-stakes` before restart: `Strategies found: 60`, `Strategies live-disabled: 60`.
+- Restarted service from `artifacts/always-up-down-build/Debug/net10.0/PolyCopyTrader.Service.exe`, PID `53592`; IPC `/pause-live` accepted.
+Verification:
+- IPC `/status`: `Running`, `paperTradingPaused=false`, `liveTradingPaused=true`, kill switch false, current loop idle with zero fetched/created/submitted counts.
+- `/btc-usd-reference` is live again with Binance sample collection restarted from `sampleCount=1`.
+Next: Treat all strategy rows created after `2026-05-08T19:47:15Z` as the new statistics baseline.
+Notes: Cleanup used a temporary .NET utility under `artifacts/clear-strategy-history`; the first DELETE-based attempt timed out before commit, then the TRUNCATE-based transactional cleanup completed successfully.
+Blockers: None.
+
+## Active Update 2026-05-08 GTD BTC Paper Restart
+Goal: Switch BTC opening-limit entries from GTC to 120-second GTD, add always-Up/always-Down BTC 5m strategies, and restart Paper collection with Live disabled.
+Status: Completed / Service Running / Live Disabled
+Done:
+- Changed BTC opening-limit Paper/Live-shadow order model from `GTC` to `GTD` with configurable `BtcUpDown5mStrategy.OpeningLimitGtdTtlSeconds=120`; raw decisions now record `order_ttl_seconds`, `gtd_expiration_utc`, and `cancel_deadline_utc`.
+- Added built-in strategies `btc_up_down_5m_up` and `btc_up_down_5m_down`; both wait until the BTC 5m market is actually accepting orders / has an order book, then place a two-minute GTD Paper BUY at fixed limit `0.45` on Up or Down respectively.
+- Updated strategy IDs, schema seeds, docs, config validation, and focused BTC tests; built the service artifact at `artifacts/always-up-down-build/Debug/net10.0`.
+- Restarted service from `artifacts/always-up-down-build/Debug/net10.0/PolyCopyTrader.Service.exe`, PID `45640`; IPC status is `Running`, `paperTradingPaused=false`, `liveTradingPaused=true`, kill switch false.
+- Ran `--disable-all-live-stakes` after schema initialization: `Strategies found: 60`, `Strategies live-disabled: 60`; `--print-live-shadow-state` reports `LiveStakes strategies: 0`.
+- Sent IPC `/pause-live` and `/cancel-all-live`; no new Live orders should be submitted while collecting Paper statistics.
+- Confirmed Binance BTC/USDT reference stream is collecting samples from `wss://data-stream.binance.vision:443/ws/btcusdt@trade`.
+- Extracted Chainlink Data Streams values from `https://data.chain.link/api/live-data-engine-stream-data` and historical minute buckets from `https://data.chain.link/api/historical-data-engine-stream-data`; preliminary match of three minute buckets showed Binance-vs-Chainlink open price correlation `0.999409`, delta correlation `1.0`, average Binance minus Chainlink open `+8.171306 USD` (~1 bp). Sample is too small for a firm statistical conclusion.
+Verification:
+- `dotnet test tests\PolyCopyTrader.Tests\PolyCopyTrader.Tests.csproj --no-restore --filter "FullyQualifiedName~BtcUpDown5mPaperStrategyProcessorTests|FullyQualifiedName~StorageTests|FullyQualifiedName~ConfigurationTests|FullyQualifiedName~LiveTradingGatingTests" -p:BaseOutputPath=D:\My\Business\PolyMarket\artifacts\always-up-down-test\ -p:UseSharedCompilation=false` passed `112/112`.
+- `dotnet build src\PolyCopyTrader.Service\PolyCopyTrader.Service.csproj --no-restore -p:BaseOutputPath=D:\My\Business\PolyMarket\artifacts\always-up-down-build\ -p:UseSharedCompilation=false` passed with existing Storage nullable warnings and 0 errors.
+- `git diff --check` on touched files passed with LF/CRLF warnings only.
+Next: Let Paper run and later inspect new `btc_up_down_5m_up` / `btc_up_down_5m_down` rows plus GTD expiry/fill behavior. If Binance/Chainlink comparison matters, add a small persistent diagnostic table instead of relying on ad hoc sampling.
+Notes: IPC `/status` still reports `currentLoop=Starting`, likely because the legacy watchlist scan loop has not completed its first pass; independent BTC reference and BTC strategy workers are running. Branch `master` has no upstream, so pull/push cannot be completed automatically.
+Blockers: None.
+
+## Active Update 2026-05-08 Resume Live Shadow Skip1
+Goal: Resume the `BTC Up or Down 5m Skip 1` Live-shadow test after close-book inference fixes.
+Status: Completed / Live Test Running
+Done:
+- Verified service PID `63516` is running from `artifacts/close-book-fix-build/Debug/net10.0/PolyCopyTrader.Service.exe`, no DB open Live orders, and `LiveStakes` initially disabled for all strategies.
+- Enabled `live_stakes=true` only for `btc_up_down_5m_skip_1` and resumed live trading through IPC; service status is `Running`, `liveTradingPaused=false`, kill switch false.
+- Observed new Live-shadow cycles: 17:20 `Down @0.28` accepted then cancelled unfilled at close; 17:25 `Up @0.28` accepted then cancelled/expired unfilled; 17:30 `Down @0.28` partially filled `6.01/7.15` and settled as loss `-1.6828`; 17:35 rejected by configured total deployed exposure while the 17:30 position was unsettled; 17:40 `Up @0.28` fully filled `7.15/7.15` and is awaiting settlement.
+- Verified CLOB authenticated open-orders report currently shows `Orders summarized: 0`; `paper_live_shadow_discrepancies` remains `0`.
+Next: Keep monitoring 17:40 settlement and whether the next cycle proceeds after exposure is released.
+Notes: No source code changed for this operational resume. DB state: `live_stakes_enabled=1`, `Skip1 live_available_balance=94.2685` after the 17:30 loss, latest 17:40 live order is matched/full fill but unsettled. Branch `master` has no upstream, so pull/push cannot be completed automatically.
+Blockers: None.
+
+## Active Update 2026-05-08 One-Sided Close-Book Inference
+Goal: Reduce false `btc_previous_close_book_orderbook_unavailable` skips by accepting decisive one-sided BTC close-book evidence and saving pre-close snapshots.
+Status: Completed / Service Running / Live Paused
+Done:
+- Added final-minute close-book capture for BTC 5-minute markets: the service fetches/saves CLOB `/book` snapshots during the last `CloseBookCaptureLookbackSeconds=60`, throttled by `CloseBookCaptureIntervalSeconds=10`.
+- Close-book inference now falls back from current `/book` to the latest stored `order_book_snapshots` row for the token when post-close `/book` is missing.
+- Skip/Skip Revert inference no longer requires a midpoint: `Up best_bid >= 0.5` infers `Up`, `Up best_ask < 0.5` infers `Down`, `Down best_ask <= 0.5` infers `Up`, and `Down best_bid > 0.5` infers `Down`; conflicting evidence skips with diagnostics.
+- Updated focused BTC tests, test repository snapshot storage, appsettings/config validation, README, and configuration reference.
+- Rebuilt and restarted the service from `artifacts/close-book-fix-build/Debug/net10.0/PolyCopyTrader.Service.exe`; new PID is `63516`.
+Next: Monitor new Skip rows for `btc_close_book_inference_conflict` or remaining `btc_previous_close_book_orderbook_unavailable`; Live remains paused until explicitly resumed.
+Notes: `dotnet test ... --filter "FullyQualifiedName~BtcUpDown5mPaperStrategyProcessorTests"` passed `57/57`; `dotnet test ... --filter "FullyQualifiedName~ConfigurationTests"` passed `19/19`; service build passed with existing Storage nullable warnings; `git diff --check` passed with LF/CRLF warnings only. IPC `/status` is `Running`, `liveTradingPaused=true`, kill switch false. DB check after restart: `live_stakes_enabled=0`, `open_live_orders=0`, recent close-book snapshots increased to `28`; `Skip 1` entered from one-sided evidence, while some deeper `Skip N` rows still skipped because they needed older pre-restart markets with no available close-book snapshot.
+Blockers: Branch `master` has no upstream, so pull/push cannot be completed automatically.
+
+## Active Update 2026-05-08 Close-Book Unavailable Audit
+Goal: Check whether BTC Skip strategies have already encountered missing/unusable close-book data for winner inference.
+Status: Completed
+Done:
+- Queried `strategy_market_paper_runs` for `skip_reason='btc_previous_close_book_orderbook_unavailable'`.
+- Found `70` skipped strategy rows across `7` distinct BTC 5-minute current markets: `2026-05-08 16:25Z` through `16:55Z`; each affected all 10 `Skip` / `Skip Revert` variants.
+- Latest diagnostics show the previous market book was one-sided, not fully absent: `Up best_bid=0.99` with no ask and `Down best_ask=0.01` with no bid, so midpoint could not be computed.
+Next: If the product goal is fewer skips, add a one-sided close-book inference fallback such as `Up best_bid >= 0.5 => Up` / `Up best_ask < 0.5 => Down`, with diagnostics.
+Notes: Answer-only DB audit; no source code changed. Branch `master` has no upstream, so pull/push cannot be completed automatically.
+Blockers: None.
+
+## Active Update 2026-05-08 Live Matched Submit Accounting Fix
+Goal: Explain why the latest Live-shadow position showed `5c` instead of the submitted `28c` limit and fix the accounting.
+Status: Completed / Live Disabled
+Done:
+- Confirmed the `15:40Z-15:45Z` BTC `Skip 1` Live-shadow order was submitted as a `0.28` GTC BUY limit, but CLOB returned `status=matched`, `makingAmount=0.3575`, `takingAmount=7.15`; actual average fill is `0.3575 / 7.15 = 0.05`.
+- Paused Live, disabled LiveStakes for all strategies, and verified service status remains `liveTradingPaused=true` with `0` live-enabled strategies and no DB open Live orders.
+- Added `LiveOrderPlacementAccounting` so matched submit responses derive filled size, average fill, filled notional, and cost basis from CLOB `makingAmount` / `takingAmount` instead of the limit price.
+- Wired the accounting into BTC Live-shadow placement, the legacy BTC Live path, and the generic SignalProcessor Live conversion.
+- Added a focused BTC Live-shadow test for a limit `0.50` order matched at actual `0.05`; focused BTC tests, LiveTrading/Auth tests, service build, and diff-check passed.
+- Repaired the affected historical DB rows for the concrete order: Live, Paper fill, Paper settlement, strategy run, and strategy live balance now show avg `0.05`, cost/PnL `0.3575`; live balance was adjusted by `+1.6445`.
+- Replaced the old running service process with the fixed build from `artifacts/live-accounting-fix-build/Debug/net10.0`; IPC status is `Running`, `liveTradingPaused=true`, `0` live-enabled strategies, and `0` DB open Live orders.
+Next: Keep Live disabled until the user explicitly restarts Live-shadow; future matched submit responses should record actual execution price, not limit.
+Notes: `dotnet test ... BtcUpDown5mPaperStrategyProcessorTests` passed `54/54`; `dotnet test ... LiveTradingGatingTests|AuthPlaceholderTests` passed `42/42`; `dotnet build src\PolyCopyTrader.Service\PolyCopyTrader.Service.csproj --no-restore ...` passed with existing Storage nullable warnings. An attempted build with custom `BaseIntermediateOutputPath` failed because SDK default excludes no longer hid old `obj` files; the normal sequential rebuild passed. Branch `master` has no upstream, so pull/push cannot be completed automatically.
+Blockers: None.
+
+## Active Update 2026-05-08 Skip Close-Book Unavailable Diagnostics
+Goal: Make unavailable close-book order books auditable for BTC `Skip` strategies and skip those runs immediately.
+Status: Completed / Service Stopped
+Done:
+- Added a terminal skip path for strict `Skip` / `Skip Revert` close-book inference when the previous market's order book is unavailable or lacks usable bid/ask.
+- New skip reason is `btc_previous_close_book_orderbook_unavailable`; it is intentionally not deferred like a missing previous market.
+- `skip_diagnostics_json` now includes `diagnostic_type=btc_skip_close_book_result_lookup`, expected previous window, market/token ids, lookup reasons, orderbook-unavailable flag, and any partial bid/ask/midpoint evidence.
+- Added a focused test covering missing close-book order books and updated README/configuration docs.
+Verification:
+- `dotnet test tests\PolyCopyTrader.Tests\PolyCopyTrader.Tests.csproj --no-restore --filter "FullyQualifiedName~BtcUpDown5mPaperStrategyProcessorTests" -p:BaseOutputPath=D:\My\Business\PolyMarket\artifacts\test-build\ -p:UseSharedCompilation=false` passed `53/53`.
+- `dotnet build src\PolyCopyTrader.Service\PolyCopyTrader.Service.csproj --no-restore -p:BaseOutputPath=D:\My\Business\PolyMarket\artifacts\test-build-service\ -p:UseSharedCompilation=false` passed with existing Storage nullable warnings and 0 errors.
+- `git diff --check` on touched files passed with existing LF/CRLF warnings in docs.
+Next: Start Paper or Live-shadow only after explicit user command; query `strategy_market_paper_runs` by skip reason to audit whether this happens in production.
+Notes: A parallel build/test attempt hit the known shared `obj` lock and one initial assertion needed narrowing to the current market row; sequential rerun passed. Branch `master` has no upstream, so pull/push cannot be completed automatically.
+Blockers: None.
+
+## Active Update 2026-05-08 Skip Close-Book Midpoint Inference
+Goal: Change strict `BTC Up or Down 5m Skip N` results from delayed Gamma settlement to immediate CLOB close-book midpoint inference.
+Status: Completed / Service Stopped
+Done:
+- Updated `BtcUpDown5mPaperStrategyProcessor` so `Skip` / `Skip Revert` inspect the immediately previous BTC 5-minute markets with no gaps, fetch each previous market's closed `Up` CLOB order book, and compute `Up mid = (best_bid + best_ask) / 2`.
+- Implemented the requested no-confidence-skip rule: `Up mid >= 0.5` infers previous result `Up`; `Up mid < 0.5` infers previous result `Down`. If `Up` book is unavailable but `Down` midpoint exists, the code uses `1 - Down mid` as the inferred `Up` midpoint.
+- Updated raw decision JSON to record `decision_source=clob_close_book_midpoint`, close-book bid/ask/midpoint fields, inferred `Up` midpoint, result source, and result lag.
+- Added/updated focused tests, including the exact boundary case `Up mid == 0.5` => inferred `Up`.
+- Updated README and configuration reference to document close-book inference for `Skip`.
+Verification:
+- `dotnet test tests\PolyCopyTrader.Tests\PolyCopyTrader.Tests.csproj --no-restore --filter "FullyQualifiedName~BtcUpDown5mPaperStrategyProcessorTests" -p:BaseOutputPath=D:\My\Business\PolyMarket\artifacts\test-build\ -p:UseSharedCompilation=false` passed `52/52`.
+- `dotnet build src\PolyCopyTrader.Service\PolyCopyTrader.Service.csproj --no-restore -p:BaseOutputPath=D:\My\Business\PolyMarket\artifacts\test-build\ -p:UseSharedCompilation=false` passed with 0 warnings/errors.
+- `git diff --check` passed with existing LF/CRLF warnings in context/docs.
+Next: Start Paper or controlled Live-shadow only after explicit user command; current safety state remains no running service and `LiveStakes strategies: 0`.
+Notes: A parallel test/build attempt hit a transient `CS2012` object-file lock; rerunning tests separately passed. Branch `master` has no upstream, so pull/push cannot be completed automatically.
+Blockers: None.
+
+## Active Update 2026-05-08 Strict Skip Settlement-Lag Experiment Stopped
+Goal: Remove the strict `Skip` entry wait cap, measure when the immediately previous BTC 5-minute result becomes available, and stop when the observed lag is too large.
+Status: Completed / Service Stopped
+Done:
+- Changed strict `Skip` / `Skip Revert` runs so `btc_previous_market_results_missing` keeps the run `Observed` past `EntryGraceSeconds` while the current market remains open.
+- Added decision JSON diagnostics: `decision_seconds_after_market_start` and `strict_previous_result_settlement_lags[*].settlement_lag_seconds`.
+- Updated focused tests and docs; verification passed: `BtcUpDown5mPaperStrategyProcessorTests` `51/51`, service build passed with 0 warnings/errors, and diff-check passed with existing LF/CRLF warnings in docs.
+- Started an experiment for `btc_up_down_5m_skip_1`; measured two results before user stopped the run:
+  - market `15:40Z`: decision at `15:44:03Z`, previous result lag `243.6s`;
+  - market `15:45Z`: decision at `15:49:18Z`, previous result lag `258.1s`.
+- Live safety state after stop: service processes stopped, `LiveStakes` disabled for all 58 strategies, authenticated CLOB open orders `0`.
+Next: Consider replacing the strict previous-result dependency with a provisional close-book inference from the just-closed BTC 5-minute market, then later reconcile it against official/Gamma settlement.
+Notes: During the experiment the second Live-shadow attempt was preflight rejected due API-error lockout and live exposure limit; no new open CLOB order remained.
+Blockers: Need product decision on whether CLOB close-book inference is acceptable for the `Skip` signal.
+
+## Active Update 2026-05-08 Live-Shadow Strict Previous Settlement Blocker
+Goal: Resume the `BTC Up or Down 5m Skip 1` Live-shadow test after requiring the immediately previous BTC 5-minute market with no gaps.
+Status: Blocked / Live Disabled
+Done:
+- Enabled LiveStakes only for `btc_up_down_5m_skip_1`, verified CLOB open orders were zero, and started the rebuilt service.
+- Observed the `15:20Z` and `15:25Z` Skip 1 cycles did not create Live bets because the immediately previous market settlement was missing (`btc_previous_market_results_missing`).
+- Paused Live, stopped the first resumed service, added a Skip deferral path so strict previous-result runs remain `Observed` while the entry window is still open, and added focused tests.
+- Verification passed: focused `BtcUpDown5mPaperStrategyProcessorTests` `50/50`, service build passed with 0 warnings/errors, and `git diff --check` on touched files passed.
+- Restarted the updated service and observed the `15:30Z` cycle still skipped as `entry_due_expired`; the previous market result appeared about 3m20s after close, outside the current 30-second grace window.
+- Safety action: paused Live, disabled LiveStakes for all 58 strategies, and verified authenticated CLOB open orders are zero.
+Next: Decide whether strict Skip strategies may enter late after the previous settlement appears, for example until `market_close_utc - safety_window`, or must remain opening-only and therefore skip most Live-shadow cycles.
+Notes: Current service process is running with Paper active and `liveTradingPaused=true`; `LiveStakes strategies: 0`; branch `master` has no upstream, so pull/push cannot be completed automatically.
+Blockers: User decision required on late-entry behavior for strict `Skip 1`; continuing the current test without that change will keep producing no new Live stakes.
+
+## Active Update 2026-05-08 Live-Shadow Resume Readiness Check
+Goal: Check whether `BTC Up or Down 5m Skip 1` Live-shadow can be resumed after the strict previous-market fix.
+Status: Completed
+Done:
+- Verified no `PolyCopyTrader.Service` process is currently running.
+- Queried Live-shadow DB state from the already built `artifacts/test-build` service binary.
+- Confirmed `LiveStakes strategies: 0`, so Live is still disabled for every strategy.
+- Confirmed recent Live-shadow orders are reconciled/cancelled/matched in DB; latest `14:20Z` order is `Cancelled`, the `14:15Z` partial fill is reconciled and settled as loss.
+- Ran authenticated read-only CLOB open-orders report; HTTP 200 and `Orders summarized: 0`.
+Next: To actually resume the test, explicitly enable LiveStakes only for `btc_up_down_5m_skip_1` and start the service.
+Notes: Two parallel `dotnet run` diagnostics failed due build output locks from Defender/VBCSCompiler; re-ran diagnostics successfully from `artifacts/test-build` without modifying code.
+Blockers: None for readiness; Live test is not running until explicitly started.
+
+## Active Update 2026-05-08 Strict Previous BTC Skip Results
+Goal: Change `BTC Up or Down 5m Skip N` so it uses only the immediately previous BTC 5-minute markets with no gaps.
+Status: Completed
+Done:
+- Updated `BtcUpDown5mPaperStrategyProcessor` so `Skip N` builds expected previous starts from the current market start (`T-5m`, `T-10m`, etc.) and selects only matching settled BTC 5m results.
+- Added skip reason `btc_previous_market_results_missing` when any required previous window is absent from DB settlement history; older available markets are no longer used to fill holes.
+- Added strict diagnostics to Skip raw decision JSON: `strict_previous_markets`, `strict_previous_window_minutes`, `expected_previous_market_starts_utc`, and `missing_previous_market_starts_utc`.
+- Added tests for missing immediate previous market and a gap inside the previous sequence.
+- Updated README to document strict contiguous `Skip N` / `Skip N Revert` behavior.
+Verification:
+- `dotnet test tests\PolyCopyTrader.Tests\PolyCopyTrader.Tests.csproj --no-restore --filter "FullyQualifiedName~BtcUpDown5mPaperStrategyProcessorTests" -p:BaseOutputPath=D:\My\Business\PolyMarket\artifacts\test-build\` passed: 49/49.
+- `dotnet build src\PolyCopyTrader.Service\PolyCopyTrader.Service.csproj --no-restore -p:BaseOutputPath=D:\My\Business\PolyMarket\artifacts\test-build\` passed with 0 warnings and 0 errors.
+- `git diff --check` on touched files passed, with only the existing README LF/CRLF warning.
+Next: Restart the service only after an explicit user command; no Live test was started.
+Notes: `Get-Process PolyCopyTrader.Service` returned no running service process during verification.
+Blockers: None.
+
+## Active Update 2026-05-08 Skip1 Raw Decision Audit
+Goal: Audit `BTC Up or Down 5m Skip 1` database rows by `paper_orders.raw_decision_json`.
+Status: Completed
+Done:
+- Queried PostgreSQL via existing local C# `out\dbprobe` using `POLYCOPYTRADER_POSTGRES_CONNECTION`; no connection string or secrets were printed.
+- Audited all `Skip 1` paper orders whose `raw_decision_json` contains `market_results_used`.
+- Result: `33` audited orders, `33` matched the rule, `0` mismatches.
+- Found the apparent screenshot issue is source-result lag: decisions use the latest settled BTC 5m result available in DB, not necessarily the immediately previous 5-minute window.
+- Lag distribution between order market and source market: `10m=24`, `15m=5`, `20m=2`, `40m=1`, `45m=1`.
+Next: Decide whether `Skip 1` should wait for the immediately previous BTC 5m window to settle instead of using the latest available settled result.
+Notes: No source code changed. The dbprobe build emitted existing nullable warnings on first run, then `--no-build` queries completed normally.
+Blockers: None.
+
+## Active Update 2026-05-08 Skip1 Screenshot Condition Review
+Goal: Inspect the Polymarket positions screenshot and explain whether it proves `BTC Up or Down 5m Skip 1` violated the opposite-previous-result rule.
+Status: Completed
+Done:
+- Extracted the clipboard screenshot to a temp PNG and inspected it.
+- Noted the Polymarket UI is sorted `Alphabetically`, not chronologically, so adjacent rows do not prove decision order.
+- Identified that the screenshot shows chosen positions and current values, not the `market_results_used` snapshot that the bot used when deciding.
+- Prepared the correct DB verification approach: compare each order's selected outcome against `raw_decision_json.market_results_used[0].winning_outcome`.
+Next: Run the verification SQL if the user wants a strict per-order audit.
+Notes: No source code changed. Branch `master` has no configured upstream, so automatic pull/push is not available.
+Blockers: None.
+
+## Active Update 2026-05-08 Skip1 Strategy Logic Answer
+Goal: Explain whether `BTC Up or Down 5m Skip 1` is implemented as betting opposite to the previous BTC 5m outcome.
+Status: Completed
+Done:
+- Rechecked `StrategyIds` and `BtcUpDown5mPaperStrategyProcessor` logic for Skip strategies.
+- Confirmed `Skip 1` uses the latest settled BTC 5m market result and chooses the opposite outcome: previous Up -> Down, previous Down -> Up.
+- Clarified that this is not stored as an explicit "until this strategy wins" state machine; the repeated behavior comes from repeatedly observing the latest market outcome.
+Next: None.
+Notes: No source code changed for this answer-only task. Branch `master` has no configured upstream, so automatic pull/push is not available.
+Blockers: None.
+
+## Active Update 2026-05-08 Paper-Shadow Partial-Fill Remainder Fix
+Goal: Fix the BTC Skip 1 Live-shadow mismatch where a partially filled Paper-shadow order was later treated as fully expired.
+Status: Completed
+Done:
+- Added `PaperOrderStatus.PartiallyFilledExpired` to represent filled shares with an expired/cancelled unfilled remainder.
+- Updated `DefaultPaperTradingEngine.ExpireIfNeeded` so partially filled orders no longer become plain `Expired`.
+- Updated BTC 5m opening-limit settlement to read fills before expiring/skipping a run and to settle using actual filled shares while closing the unfilled remainder as `PartiallyFilledExpired`.
+- Updated PostgreSQL/TestAppRepository strategy and daily stats so `PartiallyFilledExpired` counts as a filled/expired historical order, but not as an open order.
+- Added/updated tests for partial-fill expiry and BTC opening-limit settlement status.
+Next:
+- Live-shadow can be resumed only after an explicit user command; the debug service was stopped for rebuild/testing and was not restarted.
+Notes: Focused tests passed `70/70` for `PaperTradingEngineTests|BtcUpDown5mPaperStrategyProcessorTests|LiveTradingGatingTests`. `dotnet build src\PolyCopyTrader.Service\PolyCopyTrader.Service.csproj --no-restore -p:BaseOutputPath=D:\My\Business\PolyMarket\artifacts\test-build\` passed with 0 warnings and 0 errors. `git diff --check` on touched files reported only existing LF/CRLF warnings. Branch `master` has no upstream, so automatic pull/push/commit cannot be completed.
+Blockers: None for the fix; Live restart remains a manual decision.
+
+## Active Update 2026-05-08 Partial-Fill Fix Plan
+Goal: Explain how to fix the `BTC Up or Down 5m Skip 1` Live-shadow partial-fill mismatch.
+Status: Completed
+Done:
+- Reviewed Paper-shadow and Live-shadow lifecycle code.
+- Identified the likely fix area: GTC Paper-shadow order lifecycle and BTC opening-limit settlement should distinguish an unfilled expired order from a partially filled order whose remainder expired/cancelled.
+- Planned correction:
+  - sync Paper-shadow from cumulative Live filled size before expiring/skipping a GTC run;
+  - preserve partial fills as first-class filled exposure;
+  - close only the unfilled remainder at cancel/market close;
+  - settle PnL only on actual filled shares;
+  - add diagnostics showing paper filled shares/cost, not only order status.
+Next:
+- Implement the partial-fill/open-remainder Paper-shadow fix and tests before Live-shadow can be resumed.
+Notes: For the observed `14:15Z` order, correct Paper-shadow accounting should be `filled=2.09`, `avg=0.28`, `cost=$0.5852`, with only the remaining `5.06` shares cancelled/expired.
+Blockers: None for design; implementation still required.
+
+## Active Update 2026-05-08 Live-Shadow Monitoring Stopped On Partial-Fill Mismatch
+Goal: Continue monitoring `BTC Up or Down 5m Skip 1` Live-shadow and stop Live on the first material Paper/Live mismatch.
+Status: Completed / Live Disabled
+Done:
+- Monitored the running Debug service PID `30120`; service remained `Running` with scanning and paper enabled.
+- Observed live-shadow cycles after `13:50Z`:
+  - `14:00Z` order was cancelled with no fill.
+  - `14:05Z` order was cancelled with no fill.
+  - `14:10Z` order matched fully: `Down`, limit `0.28`, size `7.15`, cost `$2.002`, later settled as a loss with `winning=Up`.
+  - `14:15Z` produced a material mismatch: Paper-shadow was observed as expired while Live reconciled a partial fill `2.09 / 7.15` shares at avg `0.28`, cost `$0.5852`.
+  - `14:20Z` order was open when the mismatch was detected.
+- Safety action taken immediately after the mismatch:
+  - IPC `POST /pause-live` accepted.
+  - IPC `POST /cancel-all-live` accepted.
+  - `--disable-all-live-stakes` disabled LiveStakes for all 58 strategies.
+  - CLOB authenticated open-orders report returned `Orders summarized: 0`.
+  - Service status shows `liveTradingPaused=true`, `killSwitchActive=false`, `lastError=null`.
+Next:
+- Do not resume Live-shadow until partial-fill Paper-shadow accounting is fixed and retested.
+- Investigate why the `14:15Z` Live partial fill did not keep Paper-shadow aligned at the time it was detected.
+Notes: Current residual real exposure is the partial `14:15Z Down` fill: `2.09` shares at avg `0.28`, cost `$0.5852`; settlement/PnL had not been written yet during the final monitor check.
+Blockers: Live-shadow is intentionally stopped pending a fix for the GTC partial-fill/open-order Paper-shadow model.
+
+## Active Update 2026-05-08 Limit 0.29 Explanation
+Goal: Explain how the BTC Skip 1 Live-shadow limit price `0.29` is calculated.
+Status: Completed
+Done:
+- Rechecked code and config for BTC 5m `Middle`/`Skip` dynamic opening-limit pricing.
+- Confirmed formula: get the strategy's recent settled paper runs, compute `winRate = wins / settledRuns`, then `rawLimit = winRate - OpeningLimitBreakEvenMargin`, cap at `OpeningLimitMaxPrice` (`0.50`), and floor to `OpeningLimitPriceTickSize` (`0.01`).
+- Confirmed current config: dynamic pricing enabled, lookback `100`, minimum settled sample `30`, margin `0.10`, max price `0.50`, tick `0.01`.
+- Verified the Debug service is still running and the latest `BTC Up or Down 5m Skip 1` Live-shadow order at `2026-05-08T13:50:10Z` was reconciled as `Matched` at limit/avg `0.29`, size `6.9`, cost `$2.001`, with `liveOpen=0`.
+Next:
+- Continue monitoring Live-shadow Skip 1 if the user asks; no code change was made for this explanation.
+Notes: `0.29` means the rolling measured win rate used by pricing is around `0.39`; subtracting the configured `0.10` margin gives about `0.29`, then the value is rounded down to the nearest `0.01`.
+Blockers: None.
+
+## Active Update 2026-05-08 Live Stake Amounts
+Goal: Report the actual Live amounts used in the recent Polymarket tests.
+Status: Completed
+Done:
+- Rechecked live-shadow CLI state: two accepted `BTC Up or Down 5m Skip 1` live-shadow orders used limit `0.29`, size `6.9`, notional `$2.001` each.
+- Rechecked Data API positions: the `May 8, 8:55AM-9:00AM ET` closed `Down` position has total bought `6.9` at avg `0.29` for cost `$2.001`; the `May 8, 9:05AM-9:10AM ET` current `Up` position has size `6.9` at avg `0.29` for cost `$2.001`.
+- Rechecked direct smoke position: `May 9, 6:15AM-6:20AM ET`, `Up`, size `5` at avg `0.51`, cost `$2.55`.
+- Rejected and preflight-rejected Live attempts did not create positions and had zero spend.
+Next: Fix Live accounting/status reconciliation before any further live-shadow testing.
+Notes: Strategy Live spend was `$4.002` across two Skip 1 live-shadow orders; including the direct non-strategy smoke order, intended test Live purchase cost was `$6.552`.
+Blockers: None for reporting; accounting bug remains for implementation.
+
+## Active Update 2026-05-08 Polymarket Closed Position Count
+Goal: Explain why the Polymarket screenshot shows only one row in the positions list.
+Status: Completed
+Done:
+- Extracted and inspected the clipboard screenshot.
+- Confirmed the UI is on `Positions -> Closed`, not open orders; the visible row is a settled closed position.
+- Queried Data API for wallet `0x49d6...4cEC`: current positions count is `2`; closed positions count is `1`.
+- Verified CLOB `GET /data/orders` via read-only diagnostic still returns `Orders summarized: 0`, so there are no open orders in the order book.
+Next: Fix Live accounting before any further live-shadow test so filled positions are reconciled from Data API positions/trades.
+Notes: The only closed position currently shown by Data API is `Bitcoin Up or Down - May 8, 8:55AM-9:00AM ET`, `Down`, avg `0.29`, total bought `6.9`, realized PnL about `$4.899`. The two current positions remain the May 9 direct smoke and the May 8 9:05-9:10 Skip 1 position.
+Blockers: None for this explanation.
+
+## Active Update 2026-05-08 Polymarket Active Positions Screenshot
+Goal: Inspect the Polymarket screenshot and reconcile the visible active rows with CLOB open orders and Data API positions.
+Status: Completed / Accounting Bug Identified
+Done:
+- Extracted the screenshot from the Windows clipboard and inspected it.
+- Confirmed the Polymarket UI is showing `Positions -> Active`, not active/open orders.
+- Added and ran read-only `--clob-authenticated-open-orders-report`; CLOB `GET /data/orders` returned HTTP 200 with `Orders summarized: 0`, so there are no open live orders to cancel.
+- Queried public Data API positions for wallet `0x49d6...4cEC`; it returns two active positions:
+  - `Bitcoin Up or Down - May 9, 6:15AM-6:20AM ET`, `Up`, size `5`, avg `0.51`, current value about `$2.525`; this is the direct minimum live smoke order.
+  - `Bitcoin Up or Down - May 8, 9:05AM-9:10AM ET`, `Up`, size `6.9`, avg `0.29`, current value `$0`, cash PnL `-$2.001`; this matches the 13:05Z Skip 1 live-shadow order.
+- Corrected the prior interpretation: `GET /order/{id}` returning `NotFound` plus DB filled `0` was not sufficient evidence of no fill; the UI/Data API position shows the 13:05Z order did fill and then lost value.
+- Added read-only CLI diagnostics for open CLOB orders; no order placement/cancel was sent.
+Verification:
+- `dotnet build src\PolyCopyTrader.Service\PolyCopyTrader.Service.csproj --no-restore` passed with existing Storage nullable warnings and 0 errors.
+- `dotnet test tests\PolyCopyTrader.Tests\PolyCopyTrader.Tests.csproj --no-restore --filter "LiveTradingGatingTests|ConfigurationTests|ResilienceTests" -p:BaseOutputPath=D:\My\Business\PolyMarket\artifacts\test-build\` passed `42/42` with existing Storage nullable warnings.
+Next:
+- Keep Live disabled until live accounting is fixed to reconcile fills from Data API positions/trades instead of treating `order NotFound` as no-fill.
+Notes: This is not an active-order risk now; it is a Live accounting/status reconciliation bug. The database currently underreports the 13:05Z live-shadow fill/loss.
+Blockers: Need implementation work before any further live-shadow testing.
+
+## Active Update 2026-05-08 Live-Shadow Payment/Trade Reconciliation
+Goal: Reconcile the two recent live-shadow payments/orders and confirm whether the bot left any active risk.
+Status: Completed / Needs External Trade Review
+Done:
+- Confirmed no background `PolyCopyTrader.Service` process is running.
+- Verified `--print-live-shadow-state`: `LiveStakes strategies: 0`; the latest Paper shadow order is `Cancelled`.
+- Verified the two accepted live-shadow orders from `12:55Z` and `13:05Z`: DB filled size is `0`, and `--print-live-shadow-exchange-status` returns `exchangeStatus=NotFound` for both redacted order ids.
+- Ran authenticated read-only CLOB trades report: CLOB returns 3 confirmed trades on the account.
+- Identified the known direct smoke trade as `BUY Up` at `0.51` for size `5` (about `$2.55`), created at `2026-05-08T12:30:46Z`.
+- Identified two additional confirmed CLOB trades that do not match the live-shadow orders by price/size: `BUY Down` at `0.70` for size `120` (about `$84`) at `2026-05-08T13:05:52Z`, and `SELL Down` at `0.28` for size `98.01` (about `$27.44`) at `2026-05-08T12:56:21Z`.
+Verification:
+- `dotnet test tests\PolyCopyTrader.Tests\PolyCopyTrader.Tests.csproj --no-restore --filter "LiveTradingGatingTests|ConfigurationTests|ResilienceTests" -p:BaseOutputPath=D:\My\Business\PolyMarket\artifacts\test-build\` passed `42/42` with existing Storage nullable warnings.
+Next:
+- Treat bot/live-shadow risk as closed: no open bot orders and LiveStakes disabled.
+- Review the two non-shadow confirmed trades in Polymarket UI/wallet history; do not include them in Skip 1 strategy PnL unless their manual origin is confirmed.
+Notes: The DB still shows `CancelFailed` for the two live-shadow order records because the earlier cancel-all response was empty; exchange lookup and zero filled size indicate no active/open residue from those bot orders. Code was already adjusted so future successful empty cancel responses are treated as closed/no-open-residue.
+Blockers: The two non-shadow confirmed trades have no order id in the CLOB `/trades` response, so their origin cannot be proven from the current bot correlation records alone.
+
+## Active Update 2026-05-08 Live-Shadow Skip 1 Paused After No-Fill Test
+Goal: Finish the current `BTC Up or Down 5m Skip 1` live-shadow cycle without allowing another live bet.
+Status: Completed / Live Disabled
+Done:
+- Stopped the running Debug service and confirmed IPC is no longer available afterward.
+- Issued `pause-live` and `cancel-all-live` before stopping; CLOB cancel-all returned successfully but with empty `canceled` and `not_canceled`, consistent with no cancellable open residue.
+- Verified `--print-live-shadow-state`: `liveOpen=0`; latest shadow Paper order is `Cancelled`; latest Live record has filled `0`, remaining `6.9`, and raw cancel-all response `{"canceled": [], "not_canceled": {}}`.
+- Disabled `LiveStakes` for all strategies via new `--disable-all-live-stakes`; verified `LiveStakes strategies: 0`, so the next service start will not create live orders unless LiveStakes is explicitly re-enabled.
+- Added `LiveTradingMaintenanceWorker` so live order status/cancel/settlement maintenance is independent from the general `BotWorker` scan loop.
+- Added `LiveTrading.MaintenancePollIntervalSeconds`, a `--disable-all-live-stakes` admin command, and handling for successful empty cancel responses as closed/no-open-residue instead of a hard cancel failure for future cycles.
+Verification:
+- `dotnet build src\PolyCopyTrader.Service\PolyCopyTrader.Service.csproj --no-restore` passed with existing Storage nullable warnings and 0 errors.
+- Focused tests passed `42/42` for `LiveTradingGatingTests|ConfigurationTests|ResilienceTests`.
+- `git diff --check` on touched files reported LF/CRLF warnings only.
+Next:
+- Do not restart Live-shadow until explicitly requested; to resume, re-enable LiveStakes only for the desired strategy and start the rebuilt service.
+Notes: The 13:05Z live-shadow order was accepted by CLOB as `live` but recorded no fills before cancel/no-open-residue handling; realized Live/Paper PnL for that cycle is effectively zero.
+Blockers: None for stopping new live bets. External Polymarket UI can be used as an additional visual check for open orders if desired.
+
+## Active Update 2026-05-08 Live-Shadow Skip 1 Test Started
+Goal: Start the `BTC Up or Down 5m Skip 1` Paper/Live shadow test after fixing future-market guard.
+Status: Running
+Done:
+- Rebuilt the Debug service after the future-market guard fix; build passed with existing Storage nullable warnings and 0 errors.
+- Verified no background `PolyCopyTrader.Service.exe` was running before launch.
+- Verified runtime config from Debug appsettings: `Mode=Live`, `EnableLiveTrading=true`, `PaperTrading.RunInLiveMode=true`, `SignatureType=POLY_1271`, `EntryGraceSeconds=30`, `MaxOrderNotionalUsd=5.0`.
+- Verified auth: `--auth-readiness-smoke` OK and `--clob-authenticated-read-smoke` returned HTTP 200 with authenticated trade object count `1`.
+- Verified live-shadow state before launch: only `btc_up_down_5m_skip_1` has `LiveStakes=true`, `liveStake=1`, `liveBalance=100`, and `liveOpen=0`.
+- Started Debug service PID `32464`.
+- Verified IPC `http://127.0.0.1:5118/health` and `/status`: state `Running`, scanning/paper/live paused flags false, kill switch false, no last error.
+- First live-shadow order was created on the current BTC 5m market `btc-updown-5m-1778244900` (`2026-05-08T12:55:00Z` to `13:00:00Z`), not a future market:
+  - correlation `32e4c82d-a107-401e-9fe3-65c38691ade6`;
+  - outcome `Down`;
+  - limit price `0.29`;
+  - size `6.9`;
+  - notional `$2.001`;
+  - CLOB submit success true, response/status `live`;
+  - order id redacted in console output as `0x04c9...6517`;
+  - Paper-shadow order is `Pending`; Live order is `Live`, filled `0`, remaining `6.9`, `liveOpen=1`.
+Next:
+- Monitor after the `13:00Z` market close for cancel/fill/settlement and Paper-shadow vs Live discrepancy handling.
+Notes: The May 9 smoke position is still a separate real matched position and was intentionally left alone per user instruction.
+Blockers: None at launch; current live order is open and waiting for fill/cancel/close.
+
+## Active Update 2026-05-08 Future BTC 5m Live Smoke Guard
+Goal: Explain and fix why the direct minimum live smoke order landed in a future `BTC Up or Down 5m` market shown as May 9 in Polymarket UI.
+Status: Completed
+Done:
+- Inspected the clipboard screenshot and confirmed the matched smoke order was in `BTC Up or Down 5m`, `May 9, 6:15-6:20AM ET`, not the current 5-minute BTC market.
+- Root cause: `ClobMinimumLiveOrderSmokeCommand` intentionally searched for "any" active accepting market with a small enough ask, but it only prioritized BTC 5m and did not require `market_start_utc <= now < market_end_utc`. Polymarket had future BTC 5m markets already accepting orders, so the command selected one.
+- Fixed the smoke command so it only considers markets whose computed window start has already arrived and whose end time is still in the future.
+- Added a Paper/Live shadow preflight guard for `BTC Up or Down 5m Skip 1`: live placement is refused if the BTC 5m market start is unknown, the market has not started yet, the end time is unknown, or the market has already ended.
+- Added tests for refusing future BTC markets in the direct smoke command and for refusing future-market live placement in the Skip 1 live-shadow strategy path.
+Verification:
+- Focused tests passed `76/76` for `AuthPlaceholderTests|BtcUpDown5mPaperStrategyProcessorTests`.
+- Full tests passed `352/352`.
+- `git diff --check` reported LF/CRLF warnings only.
+- Confirmed no `PolyCopyTrader.Service.exe` background process is running after the one-shot commands.
+Next:
+- Before the next live test, rebuild/start the service deliberately; the previous future-market smoke bug is fixed, but the matched May 9 smoke position still exists on Polymarket as a real trade.
+Notes: The regular strategy path already did not submit future markets immediately because entries are selected by `entry_due_at_utc <= now`; the new live preflight is an additional hard guard.
+Blockers: None.
+
+## Active Update 2026-05-08 Polymarket V2 SDK Port And Minimal Live Smoke
+Goal: Download official Polymarket SDK sources, align the C# CLOB V2 signing/order path with them, and place one minimum-size live smoke order directly instead of waiting for a strategy trigger.
+Status: Completed
+Done:
+- Downloaded official SDK source trees into `artifacts/polymarket-sdk-src/`: `py-clob-client-v2`, `clob-client-v2`, and `rs-clob-client-v2`.
+- Ported the important V2 order details into the C# implementation:
+  - V2 signed order fields use `timestamp`, `metadata`, and `builder`, with legacy `taker`, `nonce`, and `feeRateBps` removed;
+  - POST `/order` uses top-level `owner` as the CLOB API key;
+  - `POLY_1271` deposit-wallet signatures match the official wrapped-signature shape;
+  - limit amount rounding follows the official SDK tick-size rounding config;
+  - order salt generation now stays within JavaScript/JSON-safe integer range, matching SDK expectations.
+- Added `--clob-min-live-order-smoke --submit`, which selects an active market, posts one minimum-size GTC `BUY` with `postOnly=false`, caps notional by `LiveTrading.MaxOrderNotionalUsd`, and cancels any open residue when applicable.
+- Added focused tests for SDK-style rounding, JSON-safe salt, the `POLY_1271` signature vector, and the minimum live smoke command path.
+- Verified auth from the Debug binary: `--auth-readiness-smoke` OK and `--clob-authenticated-read-smoke` returned HTTP 200.
+- Ran a direct minimum live smoke order after the salt/payload fixes: market `btc-updown-5m-1778321700`, outcome `Up`, limit `0.51`, size `5`, estimated notional `$2.55`, CLOB submit `success=True`, status `matched`, order id redacted in console output.
+- Re-ran authenticated read after submit; CLOB `/trades` returned object count `1`.
+- Verified no background `PolyCopyTrader.Service.exe` remained running after the one-shot smoke commands finished.
+Verification:
+- `dotnet test tests\PolyCopyTrader.Tests\PolyCopyTrader.Tests.csproj --no-restore -p:BaseOutputPath=D:\My\Business\PolyMarket\artifacts\test-build\` passed `350/350`.
+- `dotnet build src\PolyCopyTrader.Service\PolyCopyTrader.Service.csproj --no-restore` passed with existing nullable warnings in Storage and 0 errors.
+Next:
+- The direct CLOB live submit path is now proven for a minimum order. The background Live-shadow strategy loop is still not restarted by this smoke; start it separately only when ready to resume the Skip 1 shadow cycle.
+Notes: Official docs/SDKs checked: Polymarket Clients & SDKs, V2 migration guide, authentication docs, and the Python/TypeScript/Rust V2 SDK repositories. Branch `master` has no upstream and the working tree contains many pre-existing unrelated local changes.
+Blockers: None for direct minimum live smoke. Full unattended Live-shadow execution still needs a deliberate service start/resume decision.
+
+## Active Update 2026-05-08 Live-Shadow Skip 1 Launch Attempt
+Goal: Launch the `BTC Up or Down 5m Skip 1` Paper/Live shadow test.
+Status: Blocked / Live Paused
+Done:
+- Enabled Live stakes only for `btc_up_down_5m_skip_1`; all other strategies are live-disabled.
+- Started the Debug service and monitored real BTC 5m windows.
+- Corrected CLOB V2 order serialization/signing toward the official V2 SDK shape:
+  - restored signed order fields to `timestamp`, `metadata`, and `builder`;
+  - removed legacy signed `taker`, `nonce`, and `feeRateBps`;
+  - kept POST `/order` body with `expiration`, `owner`, `orderType`, `deferExec`, and `postOnly`;
+  - set `SignatureType=POLY_1271` for the Polymarket deposit wallet and `maker=signer=funder`.
+- Implemented `POLY_1271` ERC-7739-style wrapped signature support and changed the inner signature to raw digest signing, matching the official Python V2 SDK pattern.
+- Adjusted BTC live-shadow limit sizing to CLOB-compatible 2-decimal limit order size precision, so the latest attempt used `size=6.9` instead of `6.8966`.
+- Changed live submit request timestamp to be generated immediately before submit, not at the earlier decision timestamp.
+- Verified the configured funder contract is not a Gnosis Safe via read-only Polygon RPC (`owner()` returns the EOA and `getOwners()`/`getThreshold()` revert), consistent with a deposit-wallet style contract.
+- Verified auth readiness and read-only CLOB L2 auth: `--auth-readiness-smoke` OK and `--clob-authenticated-read-smoke` returned HTTP 200.
+- Ran focused tests `85/85` and full tests `346/346` after the fixes.
+- Safety action: after repeated POST `/order` failures, paused Live trading via IPC. Service remains running.
+Current runtime:
+- Debug service PID `50088` is running.
+- IPC `/status`: service `Running`, `liveTradingPaused=true`, kill switch false, no last error.
+- Latest monitored attempts at `2026-05-08T11:55Z` and `2026-05-08T12:00Z` still returned `HTTP 400` with raw response `{"error": "Invalid order payload"}`.
+- No Live `orderId` was created, `liveOpen=0`, and Paper-shadow orders were cancelled.
+Next:
+- Do not resume Live until the payload/signature path is diagnosed further.
+- Recommended next diagnostic: add a no-submit redacted payload/debug command and/or a read-only deposit-wallet `isValidSignature`/balance-allowance smoke to isolate whether CLOB rejects the JSON shape, `POLY_1271` signature wrapper, wallet readiness/approval, or another V2 constraint.
+Notes: Official Polymarket docs/SDK were checked for CLOB V2 fields, POST `/order` wire body, `postOnly`, `POLY_1271`, and limit-order rounding. Branch `master` has no upstream; working tree contains many pre-existing unrelated local changes.
+Blockers: CLOB production still rejects the Live-shadow signed order as `Invalid order payload`; Live is paused for safety.
+
+## Active Update 2026-05-08 Service Running With Live Paused
+Goal: Fix Dashboard/service status so an intentionally paused Live subsystem does not make the whole service look paused.
+Status: Completed
+Done:
+- Changed `ServiceControlState` so overall `RunState` is `Paused` only when scanning, Paper, or kill switch pauses service work; Live-only pause now keeps the service `Running`.
+- Kept `LiveTradingPaused=true` exposed as a separate IPC/status flag, so Live readiness still clearly shows Live is disabled.
+- Updated Dashboard banner logic so `SERVICE PAUSED` is driven by scanning/Paper/general paused state, not by Live-only pause.
+- Added tests covering Live-only pause and startup Live pause semantics.
+- Rebuilt and restarted Debug Service PID `48140` and Dashboard PID `63384`.
+Next: If desired, refine Dashboard text to show a distinct `SERVICE RUNNING / LIVE PAUSED` title instead of only listing Live pause in banner details.
+Notes: Full Verify tests passed `342/342`; Verify/Debug builds for Service and Dashboard passed with 0 warnings/errors. IPC `/health` now reports `state=Running`; `/status` reports `state=Running`, `scanningPaused=false`, `paperTradingPaused=false`, `liveTradingPaused=true`, `killSwitchActive=false`, `lastError=null`. `git diff --check` reported LF/CRLF warnings only.
+Blockers: None.
+
+## Active Update 2026-05-08 Live Strategy Statistics Fields
+Goal: Add Live trading accounting/statistics fields analogous to Paper metrics so strategy effectiveness can be evaluated on real orders.
+Status: Completed
+Done:
+- Extended `live_orders` with accounting columns: `average_fill_price`, `filled_notional_usd`, `cost_basis_usd`, `fee_usd`, `won`, and `settlement_source`; added a strategy/settlement index and legacy backfill defaults.
+- Extended domain/repository models so Live order status/settlement persists average fill, filled notional, cost basis, fee, win/loss flag, and settlement source.
+- Added separate Live aggregates to `StrategyPerformance`: order/fill/open/settled/won/lost counts, stake, realized PnL, win/loss rates, average win/loss, profit factor, expectancy, ROI, last order, and last settlement.
+- Added Live metrics to Dashboard `Strategies`, Live accounting columns to `Live Orders`, and Live strategy metrics to CSV export.
+- Updated Live settlement accounting to prefer stored cost basis over raw limit price when computing realized PnL; current exact fill-price quality still depends on available CLOB/status data.
+- Updated README/configuration docs and tests for schema and Live performance aggregation.
+- Stopped old Debug service PID `14580`, rebuilt, and restarted the Debug service as PID `57816`; PostgreSQL schema probe confirmed all 6 new columns and index `ix_live_orders_strategy_settlement`.
+Next: When enabling the first Live shadow test, compare these Live aggregates against Paper-shadow per `correlation id`; if Polymarket fill/trade endpoints provide exact per-fill prices, wire them into the new accounting fields.
+Notes: Branch `master` has no upstream. Focused tests passed `25/25`; full Verify tests passed `340/340`; Debug service build passed with 0 warnings/errors. IPC `/health` reports `ok=true`; `/status` reports service process alive, `liveTradingPaused=true`, kill switch false, `lastError=null`. `git diff --check` reported LF/CRLF warnings only.
+Blockers: None.
+
+## Active Update 2026-05-08 BTC Middle Revert Variants
+Goal: Add five `BTC Up or Down 5m Middle N Revert` variants for `N=1..5` analogous to the new `Skip Revert` variants.
+Status: Completed
+Done:
+- Added five built-in BTC variants with codes `btc_up_down_5m_middle_1_revert` through `btc_up_down_5m_middle_5_revert`, names `BTC Up or Down 5m Middle N Revert`, and ids in group `b7c50005-0000-4000-8009-*`.
+- Added `MiddleReferenceRevert` behavior; it uses the same market-open GTC opening-limit path and Binance/reference stack as `Middle N`, then inverts the resolved `Up`/`Down` decision.
+- Added raw decision diagnostics for Middle Revert entries: `decision_source=binance_trade_stream_middle_reference_revert`, `revert_decision=true`, `base_selected_direction`, and final `selected_direction`.
+- Extended dynamic-price bootstrap so new Middle Revert variants use the paired base `Middle N` history until they have enough own settled rows, treating base losses as estimated Revert wins.
+- Added PostgreSQL seed rows, updated README/configuration docs, and verified PostgreSQL contains 5 enabled Middle Revert rows with `paper_stake_amount=1`.
+- Stopped old locked Debug service PID `53712`, rebuilt, and restarted the Debug service as PID `55900`.
+Next: Monitor the next BTC 5m market-open windows for `Middle Revert` order creation, especially `limit_pricing_mode=dynamic_break_even_revert_bootstrap_from_base_middle` until each variant builds its own sample.
+Notes: Branch `master` has no upstream. Focused BTC/schema tests passed `67/67`; full Verify tests passed `339/339`; Debug service build passed with 0 warnings/errors after stopping the locked old process. IPC `/health` and `/status` report `Running`, pauses false, kill switch false, `lastError=null`. `git diff --check` reported LF/CRLF warnings only.
+Blockers: None.
+
+## Active Update 2026-05-08 BTC Skip Revert Variants
+Goal: Add five `BTC Up or Down 5m Skip N Revert` variants for `N=1..5` that invert the current `Skip N` decision.
+Status: Completed
+Done:
+- Added five built-in BTC variants with codes `btc_up_down_5m_skip_1_revert` through `btc_up_down_5m_skip_5_revert`, names `BTC Up or Down 5m Skip N Revert`, and ids in group `b7c50005-0000-4000-8008-*`.
+- Added `SkipConsecutiveMarketResultsRevert` behavior; it uses the same market-open GTC opening-limit path as `Skip N`, but after the standard Skip direction is resolved it inverts `Up`/`Down`.
+- Added raw decision diagnostics for Revert entries: `decision_source=previous_btc_5m_market_results_revert`, `revert_decision=true`, and `base_selected_direction` beside final `selected_direction`.
+- Added dynamic-price bootstrap for new Revert variants: until a Revert has enough own settled runs, it prices from the paired base `Skip N` history by treating base losses as estimated Revert wins.
+- Added PostgreSQL seed rows, updated strategy descriptions/docs, and verified PostgreSQL contains 5 enabled Revert rows with `paper_stake_amount=1`.
+- Rebuilt and restarted the Debug service as PID `53712`.
+Next: Monitor the next BTC 5m market-open windows for `Skip Revert` order creation, especially `limit_pricing_mode=dynamic_break_even_revert_bootstrap_from_base_skip` until each Revert variant builds its own sample.
+Notes: Branch `master` has no upstream. Focused BTC/schema tests passed `65/65`; full Verify tests passed `337/337`; Debug service build passed with 0 warnings/errors. IPC `/health` and `/status` report `Running`, pauses false, kill switch false, `lastError=null`. `git diff --check` reported LF/CRLF warnings only.
+Blockers: None.
+
+## Active Update 2026-05-08 Dynamic Break-Even Opening Limits Implemented
+Goal: Make BTC 5m `Middle N` and `Skip N` place GTC opening orders at dynamic break-even-derived limits with a `0.50` cap.
+Status: Completed
+Done:
+- Added `BtcUpDown5mStrategy` options for dynamic opening-limit break-even pricing: enabled flag, lookback runs, minimum settled sample, margin, max price, and tick size.
+- Changed `BtcUpDown5mPaperStrategyProcessor` so `MiddleReference` and `SkipConsecutiveMarketResults` use each variant's recent settled runs to compute `limitPrice = floorToTick(min(maxPrice, wins/settled - margin))`; insufficient history or non-positive price skips the run.
+- Kept the configured maximum opening limit at `0.50`; service config sets lookback `100`, min sample `30`, margin `0.10`, max price `0.50`, and tick `0.01`.
+- Added break-even diagnostics to `paper_orders.raw_decision_json` / skip diagnostics and tests for dynamic price, cap at half, insufficient sample, and Skip behavior.
+- Updated README and configuration reference.
+- Stopped old locked service PID `45768`, rebuilt, and restarted Debug service as PID `46524`.
+Next: Monitor the next BTC `Middle/Skip` windows for `opening_limit_break_even_sample_insufficient` skips and actual dynamic `limit_price` values.
+Notes: Branch `master` has no upstream. Focused tests passed `61/61`. Full test suite first had one flaky failure that passed individually, then full rerun passed `335/335`. Debug service build passed with 0 warnings/errors. IPC `/health` and `/status` report `Running`, pauses false, kill switch false, `lastError=null`. `git diff --check` reported LF/CRLF warnings only.
+Blockers: None.
+
+## Active Update 2026-05-08 Dynamic Break-Even Limit Concept
+Goal: Validate the idea of dynamic break-even limit pricing for BTC 5m `Skip N` and `Middle N`.
+Status: Completed
+Done:
+- Explained that for a binary BUY, expected value per share is `winRate - entryPrice`, so a dynamic max entry price can be `settledWins / settledRuns - margin`.
+- Clarified that subtracting `0.10` from break-even would set `Skip 1` with `44/96` historical wins to about `0.3583`, practically `0.35` on a one-cent tick.
+- Clarified that this cannot guarantee every filled order wins; it only makes the series positive-expectation if future win-rate remains close to the historical estimate.
+- Recommended using a rolling per-strategy sample, a minimum settled sample threshold, floor-to-tick rounding, and skipping when the computed limit is not positive or no ask fills at or below it.
+Next: Implement this filter for `MiddleReference` and `SkipConsecutiveMarketResults` variants if requested.
+Notes: Answer-only strategy-design task; no source behavior changed. Branch `master` has no upstream.
+Blockers: None.
+
+## Active Update 2026-05-08 Skip 1 Break-Even Price
+Goal: Answer the break-even maximum entry price for `BTC Up or Down 5m Skip 1` using a `44:52` win/loss ratio.
+Status: Completed
+Done:
+- Calculated the binary-contract break-even entry price as `wins / (wins + losses) = 44 / 96 = 0.458333`.
+- Explained that this is a maximum average fill price, not a guaranteed profitability setting; a practical cent-tick limit would be `0.45`, with a safer margin around `0.44`.
+- Noted that lowering the limit changes which orders fill, so future win/loss ratio can differ from the historical `44:52` sample.
+Next: None.
+Notes: Answer-only task; no source behavior changed. Branch `master` has no upstream.
+Blockers: None.
+
+## Active Update 2026-05-08 Limit Price Fill Clarification
+Goal: Clarify that a `0.50` BTC Skip GTC buy limit is a maximum acceptable price, not the guaranteed fill price.
+Status: Completed
+Done:
+- Explained that a BUY limit at `0.50` can be filled by resting asks at any price `<= 0.50`; in the Paper balanced model the fill uses the matched ask/VWAP price, e.g. `0.31`.
+- Clarified that if no ask at or below `0.50` appears, the order remains pending/expired and is not settled as a bet.
+Next: None.
+Notes: Answer-only clarification; no source behavior changed. Branch `master` has no upstream.
+Blockers: None.
+
+## Active Update 2026-05-08 Skip 1 Positive PnL Explanation
+Goal: Explain why `BTC Up or Down 5m Skip 1` shows positive profit despite more lost than won settled bets.
+Status: Completed
+Done:
+- Re-read workflow/project rules/coding rules, active context, Git state, Dashboard strategy aggregate code, and BTC 5m GTC settlement code.
+- Queried PostgreSQL read-only with a temporary C#/.NET Npgsql probe without printing connection details.
+- Confirmed all `Skip 1` Paper orders use limit price `0.50`, but actual fills are recorded at the matched ask/VWAP and settled runs overwrite `entry_price`/`stake_usd` with actual filled average price/cost basis.
+- Current DB sample has `96` settled runs, `44` wins, `52` losses, closed realized PnL `+40.60`, one open position with unrealized `-0.06`, and effective MtM about `+40.54`.
+- The positive result comes from payoff asymmetry: settled fill prices range `0.01..0.50`, average settled entry price is `0.3734375`, gross wins are `158.315`, gross losses are `117.715`, average win is `+3.59806818`, and average loss is `-2.26375`.
+Next: If Dashboard clarity is needed, add separate columns for order limit price, average fill/entry price, closed realized PnL, and MtM PnL.
+Notes: Answer/diagnostic task only; no source behavior changed. Branch `master` has no upstream.
+Blockers: None.
+
+## Active Update 2026-05-08 Persistent Dashboard Row Selection
+Goal: Preserve selected Dashboard DataGrid rows across refreshes so horizontal inspection is not interrupted.
+Status: Completed
+Done:
+- Added `DataGridSelectionPersistence` WPF attached behavior that stores the selected row key and restores selection after `ObservableCollection.Clear/Add` refreshes.
+- Added explicit stable key properties to the Dashboard DataGrids, including strategy `StrategyId`, wallet rows by `Wallet`, on-chain positions by `Wallet+TokenId`, paper positions by `SourceTrader+Market+Outcome`, paper orders by `SignalId+Side+Outcome`, live orders by `OrderId+SignalId`, and equivalent keys for analytics/log/readiness tables.
+- Updated README to document that Dashboard row selection is restored across refreshes.
+- Rebuilt and restarted the Debug Dashboard visibly as PID `25848`.
+Next: If the user wants the horizontal scroll offset itself persisted per grid/tab, add a separate ScrollViewer offset behavior.
+Notes: Branch `master` has no upstream. Verify Dashboard build passed with 0 warnings/errors. Debug Dashboard build passed with 0 warnings/errors after stopping the old Dashboard PID `60776`. Full Verify test suite passed `331/331`. Service `/health` remained `Running`. `git diff --check` reported LF/CRLF warnings only.
+Blockers: None.
+
+## Active Update 2026-05-08 Dashboard UI Refresh One Minute
+Goal: Make the Dashboard UI refresh timer match the requested one-minute strategy refresh cadence.
+Status: Completed
+Done:
+- Changed `DashboardOptions.RefreshIntervalSeconds` default from `3` to `60`.
+- Changed `Dashboard:RefreshIntervalSeconds` to `60` in both Dashboard and Service appsettings so source and copied Debug output use one-minute UI refresh.
+- Updated configuration tests and docs/README to document the one-minute Dashboard UI polling interval.
+- Rebuilt and restarted the Debug Dashboard visibly as PID `60776`; copied Debug `appsettings.json` now has `RefreshIntervalSeconds=60` and `StrategyRefreshIntervalSeconds=60`.
+Next: If row selection still disappears too often within the one-minute interval, add selection restoration by stable row keys or avoid `Clear/Add` for the active DataGrid.
+Notes: Branch `master` has no upstream. Focused `ConfigurationTests` passed `19/19`. Verify Dashboard build passed with 0 warnings/errors. Debug Dashboard build passed with 0 warnings/errors after stopping two existing Dashboard processes that locked output DLLs. Service `/health` remained `Running`. `git diff --check` reported LF/CRLF warnings only.
+Blockers: None.
+
+## Active Update 2026-05-08 Open Positions Location Answer
+Goal: Explain where current open positions can be viewed in Dashboard and PostgreSQL.
+Status: Completed
+Done:
+- Re-read workflow, project rules, coding rules, active context, Dashboard XAML/view models/data service, repository queries, and current Git state.
+- Confirmed Dashboard has `Paper Positions`, `Paper Orders`, `Strategies`, `Onchain Positions`, and `Live Orders` views relevant to positions/orders.
+- Confirmed strict open Paper positions are rows in `paper_positions` with `size_shares > 0`; the Dashboard `Paper Positions` tab currently displays all `paper_positions` rows, so closed/settled rows can appear with size `0`.
+- Confirmed BTC 5m strategy runs that have entered but not settled are visible as `strategy_market_paper_runs.status = 'Entered'`; the `Strategies` tab shows per-strategy `Open pos` and `Entered` counters.
+Next: If the user wants less ambiguity, add a Dashboard filter/toggle so `Paper Positions` shows only `Size > 0` by default.
+Notes: Answer-only task. Attempted a direct PostgreSQL count via PowerShell/Npgsql, but direct `Add-Type` loading failed because runtime dependencies were not loaded into PowerShell; no DB data was changed. `git diff --check` reported LF/CRLF warnings only. Branch `master` has no upstream.
+Blockers: None.
+
+## Active Update 2026-05-08 Binance BTC Reference And Runtime Refresh
+Goal: Move BTC reference pricing to Binance trade WebSocket, round minimum-derived stakes up to whole USD, and slow Dashboard strategy performance DB refresh to one minute.
+Status: Completed
+Done:
+- Added `BinanceBtcUsdReference` configuration and replaced the registered BTC reference client/worker with `BinanceBtcUsdTradeStreamService` connected to `wss://data-stream.binance.vision:443/ws/btcusdt@trade`.
+- Binance trade stream now keeps the latest BTC/USDT trade for Middle strategy decisions and samples it into the existing 100-point arithmetic-mean cache once per minute.
+- Disabled Coinbase Exchange as the active BTC reference source; Coinbase client files remain but are no longer registered by the service.
+- Changed BTC strategy minimum-stake sizing so computed target notional is buffered by 10%, multiplied by the configured Paper/Live stake multiplier, then rounded upward to a whole USD amount.
+- Added Dashboard strategy performance caching with `Dashboard:StrategyRefreshIntervalSeconds` defaulting to `60`; strategy command actions invalidate the cache immediately.
+- Updated README/configuration docs and tests for Binance reference, whole-dollar stake rounding, and strategy refresh interval validation.
+- Restarted Debug service and Dashboard after rebuilding; running PIDs are service `45768` and Dashboard `26756`.
+Next: Monitor BTC 5m Paper windows after the Binance switch; if `currentLoop` still reads `Starting`, remember that this field is from the old watchlist loop, while Binance `/btc-usd-reference` and BTC strategy workers are separate hosted services.
+Notes: Branch `master` has no upstream, so automatic pull/push/commit was not possible. Last commit before this work was `89c4eb9 Pause on-chain background pipeline`. Verification passed: focused Verify tests for configuration/BTC reference/BTC strategy processor `61/61`; full Verify test suite `331/331`; Verify service build passed with existing nullable warnings; Verify Dashboard build passed; Debug service build passed with 0 warnings/errors; Debug Dashboard build passed with 0 warnings/errors; `git diff --check` reported LF/CRLF warnings only. Runtime verification passed: `/health` reports `Running`; `/btc-usd-reference` reports `source=BinanceTradeWebSocket`, `sampleCount=2`, and one-minute samples at `2026-05-08T06:01:10Z` and `2026-05-08T06:02:10Z`.
+Blockers: None.
+
+## Active Update 2026-05-08 Dynamic Stake Win-Rate Check
+Goal: Check whether fixed `$5` BTC Paper staking had a higher win conversion than the dynamic minimum-stake model.
+Status: Completed
+Done:
+- Queried settled BTC Paper rows in PostgreSQL from `strategy_market_paper_runs` joined to `strategies`, excluding transition windows for the main comparable check.
+- For comparable standard BTC Less/More strategies, clean fixed `$5` period had `2887` settled rows, `1438` wins, `49.81%` win rate, and `-10.39%` ROI.
+- Clean dynamic minimum-stake period had `2079` settled rows, `1042` wins, `50.12%` win rate, and `-0.96%` ROI.
+- Found the side split: Less fell from `25.75%` to `19.67%` wins, while More rose from `73.66%` to `79.85%` wins.
+- Dynamic stake bands did not support "small stakes win and high stakes lose": `<1` stake rows had `6.55%` wins, while `>=5` stake rows had `94.82%` wins, though the `>=5` band still had slightly negative ROI.
+Next: If needed, add a Dashboard/SQL report that compares stake models by strategy, side, delay, and market period.
+Notes: Diagnostic SQL only; no source behavior changed. `git diff --check` reported LF/CRLF warnings only. Branch `master` has no upstream.
+Blockers: None.
+
+## Active Update 2026-05-08 Runtime Health Snapshot
+Goal: Check the current operational state of the service, Dashboard, PostgreSQL, WebSocket, BTC strategies, and BTC reference feed.
+Status: Completed
+Done:
+- Verified `PolyCopyTrader.Service.exe` PID `30240` and `PolyCopyTrader.Dashboard.exe` PID `33372` are running and responding.
+- Verified IPC `/health` and `/status` report `Running`, scanning/Paper/Live pauses false, kill switch false, and `lastError=null`.
+- Verified PostgreSQL currently reports `pg_is_in_recovery()=false`; recent errors still show recovery/DB instability earlier today.
+- Checked recent BTC Paper activity: 46 enabled BTC strategies, with recent full windows placing 35-37 orders; skipped runs are mostly expected `btc_reference_equal_mean`, `btc_market_results_not_consecutive`, `gtc_limit_not_filled`, plus some `missing_orderbook_empty_side`.
+- Confirmed market WebSocket aggregate status is connected, fresh, and subscribed to about 1299 assets; stale old shard rows from the previous broad subscription set remain in `market_data_status`.
+- Found Coinbase Exchange BTC ticker is being polled, but the API itself currently returns the same stale trade timestamp/value (`2026-05-08T01:16:04Z`, `79642.9`) on direct requests and in service samples, causing Middle strategies to skip as `btc_reference_equal_mean`.
+Next: Consider adding source-staleness validation/failover for the Coinbase BTC reference feed and cleaning stale historical WebSocket shard status rows from Dashboard-facing diagnostics.
+Notes: Runtime checks only; no source behavior changed. `git diff --check` reported LF/CRLF warnings only. Branch `master` has no upstream.
+Blockers: Reliable Middle strategy decisions need a fresh BTC/USD reference feed; current Coinbase Exchange ticker response is stale from the upstream endpoint.
+
+## Active Update 2026-05-07 Dashboard Service Status Banner
+Goal: Make the service run/pause/kill-switch state prominent in the WPF Dashboard.
+Status: Completed
+Done:
+- Confirmed the Dashboard already had a small `Service` text field sourced from persisted heartbeat overview data.
+- Added a full-width colored status banner near the top of `MainWindow.xaml` driven by localhost IPC `/status`, separate from PostgreSQL heartbeat freshness.
+- Added `MainViewModel` banner properties and mapping for `SERVICE RUNNING`, `SERVICE PAUSED`, `KILL SWITCH ACTIVE`, `SERVICE UNAVAILABLE`, and other IPC states.
+- Banner details show IPC state, pause flags, kill-switch status, last error when present, and a trimmed current service loop.
+- Updated README Dashboard documentation and restarted the Debug Dashboard.
+Next: None.
+Notes: Verification passed: Dashboard Verify build `0` warnings/errors, full Verify tests `327/327`, Debug Dashboard build `0` warnings/errors, and `git diff --check` reported LF/CRLF warnings only. Updated Debug Dashboard is running as PID `33372`; service IPC `/status` is `Running`, pauses false, kill switch false. Branch `master` has no upstream.
+Blockers: None.
+
+## Active Update 2026-05-07 Heartbeat Persistence Recovery Resilience
+Goal: Prevent transient PostgreSQL recovery/heartbeat persistence failures from pausing scanning, Paper, or Live subsystems.
+Status: Completed
+Done:
+- Changed `BotWorker` heartbeat persistence error handling so a failed `service_heartbeats` write is logged and appended to `currentLoop`, but no longer calls `PauseAll` or marks the service error state.
+- Added a bounded diagnostic formatter for heartbeat persistence failures to avoid oversized IPC/status messages.
+- Added a regression test proving a simulated heartbeat persistence failure leaves service state `Running`, scanning/Paper/Live pause flags false, and kill switch false.
+- Added `TestAppRepository` hooks for simulating heartbeat persistence failure and awaiting the heartbeat attempt.
+- Stopped the old locked Debug service process, rebuilt Debug, and restarted the updated service as `PolyCopyTrader.Service.exe` PID `30240`.
+Next: Monitor the next PostgreSQL recovery event; the service should keep retrying instead of remaining manually paused.
+Notes: Verification passed: focused Verify resilience tests `11/11`, Service Verify build `0` warnings/errors, full Verify tests `327/327`, Debug Service build `0` warnings/errors, and `git diff --check` reported LF/CRLF warnings only. IPC `/health` and `/status` on `http://127.0.0.1:5118` returned `Running`, pauses false, kill switch false, `lastError=null`. Branch `master` has no upstream.
+Blockers: None.
+
+## Active Update 2026-05-07 Chainlink Data Streams Access Limitation
+Goal: Clarify the impact of unavailable access to Chainlink BTC/USD Data Streams.
+Status: Completed
+Done:
+- Checked current Chainlink Data Streams docs and BTC/USD stream page.
+- Confirmed the public Chainlink BTC/USD Data Streams page is delayed/informational and does not provide real-time market data.
+- Confirmed real-time Chainlink Data Streams API/WebSocket access requires Chainlink-provided API credentials with HMAC authentication and feed permissions.
+- Concluded that without Chainlink Data Streams access, the service cannot exactly reproduce Polymarket BTC 5m start/current/close reference values before settlement; Coinbase/Binance remain approximations and Polymarket Gamma/WebSocket still only provide outcome prices/order book plus final winning outcome.
+Next: Keep Coinbase as a research approximation or add a gated Chainlink Data Streams client only if proper credentials/access are obtained.
+Notes: No code changes or tests were run. Branch `master` has no upstream.
+Blockers: Exact pre-settlement BTC 5m resolution-price replication requires Chainlink Data Streams access or another authorized source for the same reports.
+
+## Active Update 2026-05-07 Polymarket BTC Resolution Figures
+Goal: Clarify whether Polymarket itself provides the BTC reference figures used to resolve BTC Up or Down 5m markets.
+Status: Completed
+Done:
+- Checked current Polymarket Gamma API payloads for active BTC Up/Down 5m markets and the local Gamma/WebSocket parsers.
+- Confirmed current BTC 5m Gamma payloads include resolution rules and `resolutionSource=https://data.chain.link/streams/btc-usd`; the market description says the market is about Chainlink BTC/USD stream data, not other spot markets.
+- Confirmed Gamma and CLOB/WebSocket provide market/outcome prices, best bid/ask, order book, last trade price, min order size, and market resolution winner, but not parsed numeric BTC start/current/close Chainlink values.
+- Confirmed our service stores Gamma `raw_json` in `polymarket_gamma_markets.raw_json`, so the resolution source/rules are available for audit even though start/close BTC values are not extracted.
+Next: If needed, add a Chainlink/Polymarket reference-price capture layer for BTC market start/current/close values.
+Notes: Checked official Polymarket docs for API separation, Gamma market metadata, WebSocket `market_resolved`, and UMA resolution. No code changes or tests were run. Branch `master` has no upstream.
+Blockers: None.
+
+## Active Update 2026-05-07 BTC Reference Price Usage
+Goal: Explain whether the service gets the current BTC/USD price while BTC 5m markets run or close.
+Status: Completed
+Done:
+- Inspected Coinbase BTC/USD reference price worker, cache, IPC endpoint, BTC Middle strategy decision code, and BTC/paper settlement code.
+- Confirmed the service fetches Coinbase Exchange `BTC-USD` ticker once per minute, keeps the last 100 samples in an in-memory cache, and exposes the snapshot via `/btc-usd-reference`.
+- Confirmed Middle BTC strategies also fetch a fresh Coinbase BTC/USD price at entry decision time and write the current price plus reference-window values into `raw_decision_json`.
+- Confirmed BTC settlement does not fetch Coinbase BTC/USD at market close; it settles from Polymarket/Gamma resolved `winningOutcome` / winning asset metadata.
+Next: If close-price analysis is needed, add per-market BTC open/close snapshots persisted to PostgreSQL.
+Notes: Current `/btc-usd-reference` returned `sampleCount=100`, latest `PriceUsd=80160.89`, `FetchedAtUtc=2026-05-07T20:15:25.8097201Z`, arithmetic mean `80118.9437`. No code changes or tests were run. Branch `master` has no upstream.
+Blockers: None.
+
+## Active Update 2026-05-07 Pause Cause Diagnostic
+Goal: Explain why the running service is in Paused state.
+Status: Completed
+Done:
+- Re-read workflow, AGENTS, coding rules, active context, Git state, current IPC status, control-state code, BotWorker code, service logs, and service command audit rows.
+- Confirmed the service process is alive as PID `3524`, IPC `/health` is OK, `/status` is `Paused`, all pause flags are true, kill switch is false, and `lastError=null`.
+- Found the direct cause: `BotWorker` failed to persist `service_heartbeats` while PostgreSQL was in recovery/not accepting connections, then executed `controlState.PauseAll("BotWorker")`.
+- Confirmed this is automatic service behavior from `src/PolyCopyTrader.Service/BotWorker.cs`: heartbeat persistence failure logs "Heartbeat persistence failed. Pausing scanning and paper trading." and calls `PauseAll`, which also pauses live.
+- Verified no recent manual pause command exists in `service_command_audit`; the latest audit row is `CancelAllLive` at `2026-05-07T16:33:07Z`.
+Next: Resume the service once PostgreSQL is stable, then consider changing heartbeat-failure handling so a short PostgreSQL recovery does not leave the bot permanently paused.
+Notes: First relevant log: `2026-05-07 22:27:07 +03:00 [ERR] Heartbeat persistence failed. Pausing scanning and paper trading.` Exception was PostgreSQL `57P03`, `database system is not yet accepting connections`, detail `Consistent recovery state has not been yet reached`. No code changes or tests were run. Branch `master` has no upstream.
+Blockers: None.
+
+## Active Update 2026-05-07 Order Size Reject Check
+Goal: Check whether BTC Paper orders were rejected because of order size after the minimum-stake multiplier change.
+Status: Completed
+Done:
+- Re-read workflow, AGENTS, coding rules, active context, config, Git state, and current IPC status.
+- Checked service logs after the latest restart window from `2026-05-07 21:35:08 +03:00` across log files `_020`, `_021`, and `_022`.
+- Confirmed order-size related reasons were absent after the new sizing model: `order_below_min_size=0`, `invalid_min_order_size=0`, `paper_taker_minimum_stake_rejected=0`, `minimum buffered notional exceeds=0`.
+- Observed remaining skips were other reasons: `btc_market_results_not_consecutive`, `gtc_limit_not_filled`, `missing_orderbook_empty_side`, `entry_due_expired`, `btc_reference_mixed_around_mean`, and a few market/price selection gates.
+Next: If needed, inspect why the service is currently paused and whether to resume it.
+Notes: IPC `/status` currently reports `Paused`, with scanning/paper/live pauses true and `lastError=null`. Branch `master` has no upstream; no code changes or tests were run for this diagnostic.
+Blockers: None.
+
+## Active Update 2026-05-07 Minimum Stake Multiplier
+Goal: Treat configured Paper/Live BTC stake values as multipliers over the computed minimum passing order size, with a 10% buffer, and restart the service.
+Status: Completed
+Done:
+- Changed BTC taker Paper sizing so strategy Paper stake value is a multiplier; when `min_order_size` is available, target notional is minimum executable buy notional for `min_order_size` shares plus 10%, multiplied by the stake multiplier.
+- Changed BTC Middle/Skip GTC sizing so target shares are `min_order_size * 1.10 * stake_multiplier` at the `0.50` limit price when `min_order_size` is available.
+- Changed BTC Live preflight sizing to use the same minimum-size +10% multiplier model before live order construction; Live still respects `LiveTrading.MaxOrderNotionalUsd`.
+- Set both Paper and Live strategy stake values to `1.00` for all `48` strategies with the new `--set-stake-multiplier 1.00` command, preserving enabled/live flags and balances.
+- Updated defaults/config/docs/tests/schema wording for stake multiplier behavior and added focused tests for minimum-notional sizing and the new stake admin command.
+- Stopped the old Debug service PID `19552` and restarted the Debug service as PID `3524`.
+Next: Monitor the next BTC windows if the user wants counts under the new dynamic minimum-size stake model.
+Notes: Runtime `/status` is `Running`, pauses false, kill switch false, `lastError=null`. Fresh BTC logs show dynamic Paper stakes such as `Price=0.20 StakeUsd=1.1 SizeShares=5.5` and `Price=0.81 StakeUsd=4.455 SizeShares=5.5`. Verification passed: Debug build succeeded; focused tests `61/61`; full Debug tests `323/323`; `git diff --check` reported LF/CRLF warnings only. Branch `master` has no upstream, so pull/push/commit was not performed. Live remains disabled, and current `LiveTrading.MaxOrderNotionalUsd=1.0` can intentionally reject Live orders whose computed minimum buffered notional exceeds `$1`.
+Blockers: None.
+
+## Active Update 2026-05-07 Minimum Passing Stake Explanation
+Goal: Explain whether BTC entries can calculate the minimum order amount that should pass market minimum-size validation.
+Status: Completed
+Done:
+- Re-read workflow, AGENTS, coding rules, active context, Git state, current service status, and current BTC taker fill estimator code.
+- Confirmed the current taker estimator already reads `orderBook.MinOrderSize`, walks executable ask depth, computes VWAP, and rejects when `target_size_shares < min_order_size`.
+- Clarified that the minimum passing notional can be calculated from the fresh book as the cost to buy exactly `min_order_size` shares: if the top ask has enough depth, `min_order_size * bestAsk`; otherwise VWAP over asks until the minimum share count is reached.
+- Noted the practical caveat: this is exact for the quote snapshot, but Live submission can still race with book changes, so a tiny rounding/race buffer is safer than a bare exact amount.
+Next: If requested, implement a BTC stake sizing mode that uses minimum-passing-notional instead of fixed `$5.00`.
+Notes: Answer-only task; no source behavior changed and no tests were run. IPC `/status` stayed `Running` with no last error. Branch `master` has no upstream.
+Blockers: None.
+
+## Active Update 2026-05-07 Polymarket Chart Not Bet Size
+Goal: Explain why the Polymarket chart can show `$1` labels while `$2.50` Paper taker orders were rejected.
+Status: Completed
+Done:
+- Re-read workflow, AGENTS, coding rules, active context, Git state, and latest BTC logs; branch `master` still has no upstream.
+- Extracted the screenshot from the Windows clipboard and inspected it locally.
+- Confirmed the screenshot labels `+$1`, `+$2`, etc. are BTC price-distance markers around the chart target/current price, not Polymarket order notional sizes.
+- Confirmed the relevant runtime CLOB diagnostics report `min_order_size=5`; the earlier `$2.50` taker skips came from buying fewer than `5` shares when the executable price was above `$0.50`.
+Next: None unless the user wants a different sizing mode such as exact notional versus minimum-share fill.
+Notes: Answer/screenshot task only; no source behavior changed and no tests were run. Historical explanation: `$2.50 / 0.88 = 2.84` shares, below the current `5` share minimum; `$5.00 / 0.88 = 5.68` shares, so it passes.
+Blockers: None.
+
+## Active Update 2026-05-07 Paper Stake Back To Five
+Goal: Restore Paper stake sizing from `$2.50` to `$5.00`.
+Status: Completed
+Done:
+- Re-read workflow, AGENTS, coding rules, active context, relevant stake/config files, Git state, and current IPC status.
+- Stopped the running Debug service PID `29000` before changing stake settings.
+- Changed `BtcUpDown5mStrategy.StakeUsd` defaults and `src/PolyCopyTrader.Service/appsettings.json` from `2.50`/`2.5` to `5.00`/`5.0`.
+- Updated docs/schema/test expectations so Paper defaults and seeded BTC strategy paper stake use `$5.00`; live stake defaults were left unchanged.
+- Added `--set-paper-stake-usd`, a command-mode service helper that updates `strategies.paper_stake_amount` while preserving each strategy's enabled/live settings and live stake amount.
+- Ran the real command with `5.00`; PostgreSQL reported `48` strategies found, `48` updated, `0` failed.
+- Restarted the Debug service from its `bin\Debug\net10.0` working directory as PID `19552`; `/health` returned `ok=true` and `/status` returned `Running`, pauses false, kill switch false, `lastError=null`.
+- Confirmed the post-restart BTC worker started with `StakeUsd=5.0`, `EntryGraceSeconds=30`, and created new BTC Paper entries with `StakeUsd=5.00000000`.
+Next: Monitor the next full BTC 5m window if the user wants a clean count after the stake change.
+Notes: Verification passed: service Debug build `0` warnings/errors after `dotnet build-server shutdown`; full Debug test project `323/323`; `git diff --check` passed with LF/CRLF warnings only. Branch `master` has no upstream, so pull/push/commit was not performed. Historical orders created before the change remain historical `$2.50` rows.
+Blockers: None.
+
+## Active Update 2026-05-07 Paper Bets Not Flowing Diagnostic
+Goal: Diagnose why the user is not seeing expected BTC Paper bets.
+Status: Completed
+Done:
+- Re-read workflow, AGENTS, coding rules, active context, current service config, Git state, IPC status, and BTC strategy code/logs.
+- Confirmed the Debug service is running on IPC `http://127.0.0.1:5118/` with pauses false, kill switch false, and `lastError=null`.
+- Confirmed current mode is still Paper: `Bot.Mode=Paper`, `Bot.EnableLiveTrading=false`; Live orders are therefore intentionally not expected.
+- Checked BTC logs through the next BTC 5m window; Paper orders are being created. In the active log sample there were `9` GTC BTC orders, `11` taker BTC entries, and `49` BTC skips.
+- Identified the dominant skip reason as `order_below_min_size`: with fixed `$2.50` taker notional and Polymarket market minimum `5` shares, any taker entry above `0.50` can be too small because `$2.50 / price < 5`.
+- Other observed skip reasons were strategy-driven: `btc_market_results_not_consecutive`, `btc_reference_mixed_around_mean`, old GTC `gtc_limit_not_filled`, and a few `missing_orderbook_empty_side`.
+Next: Decide whether taker BTC strategies should keep exact `$2.50` and skip above `0.50`, or allow buying the minimum `5` shares even when actual notional exceeds `$2.50`.
+Notes: Diagnostic task only; no source code changed and no tests were run. Branch `master` has no upstream.
+Blockers: None.
+
+## Active Update 2026-05-07 Funding Before Live Answer
+Goal: Explain whether the Polymarket account must be funded before the first Live order and how to do it safely.
+Status: Completed
+Done:
+- Re-read workflow, AGENTS, coding rules, active context, Git state, and current auth/live readiness context.
+- Checked current official Polymarket deposit documentation and help pages.
+- Clarified that auth checks can pass without funds, but the first Live order needs real Polymarket balance/collateral.
+- Clarified that the local Dashboard `Live bal` is only an internal strategy risk limit, not actual exchange funding.
+- Prepared a UI-first funding path: use Polymarket `Deposit`, copy the deposit address from that flow, send a tiny test amount on the selected supported network/token, wait for confirmation, and do not send directly to the profile/API address unless the Deposit flow explicitly gives it.
+Next: After the user confirms the UI balance is funded, select one tiny BTC strategy and set its live stake/balance gates for the first Live smoke.
+Notes: Answer-only task; no source code changed and no tests were run. Branch `master` has no upstream. Official sources checked: Polymarket deposit docs/help and supported-assets docs.
+Blockers: Live order placement should wait until the UI shows spendable Polymarket balance.
+
+## Active Update 2026-05-07 Auth Services Status Answer
+Goal: Clarify whether Polymarket authorization services have been tested and are working.
+Status: Completed
+Done:
+- Re-read workflow, coding rules, active context, Git state, and current IPC status.
+- Confirmed completed auth checks: L2 credentials derived/stored, local L2 HMAC readiness passed, local order EIP-712 dry-run signing passed, authenticated read-only CLOB `GET /trades` returned HTTP `200`, and CLOB `DELETE /cancel-all` smoke returned status `OK` with `0` canceled and `0` not-canceled.
+- Confirmed service is still `Running`, pauses false, kill switch false, and `lastError=null`.
+Next: Select exactly one tiny BTC strategy for the first controlled Live smoke; Live order placement remains untested and intentionally disabled.
+Notes: Answer-only status task; no source changes or tests were run in this turn. Branch `master` has no upstream.
+Blockers: Live order placement is not tested until the user selects the strategy and explicitly changes Live gates.
+
+## Active Update 2026-05-07 Cancel-All Smoke Confirmed
+Goal: Run the controlled CLOB cancel-all readiness smoke after the user confirmed no manual open orders need preserving.
+Status: Completed
+Done:
+- Re-read workflow, project rules, active context, live checklist, Git state, and current service state.
+- Confirmed service/auth state before cancellation: IPC `/status` was `Running`, auth read-only CLOB smoke returned HTTP `200`, and Live remained disabled.
+- Ran existing IPC `POST /cancel-all-live`; IPC accepted the command and service stayed `Running`.
+- Added `--clob-cancel-all-smoke`, a direct command-mode CLOB `DELETE /cancel-all` smoke that prints only canceled/not-canceled counts and no raw response body or secrets.
+- Ran the real direct cancel-all smoke successfully: `Canceled count: 0`, `Not canceled count: 0`, status `OK`.
+- Updated README/auth/live-checklist docs and added tests for the cancel-all smoke command.
+- Restarted the Debug service as PID `29000`; IPC `/health` returned `ok=true`, `/status` returned `Running`, pauses false, kill switch false, and `lastError=null`.
+Next: Choose exactly one tiny BTC strategy for the first controlled Live stake test, set its `live_stakes=true`, keep all other strategies disabled for Live, and only then consider enabling Live config gates for one smoke order.
+Notes: Branch `master` has no upstream, so pull/push/commit was not performed. Verification passed: Debug service build 0 warnings/errors; focused auth/bootstrap/smoke tests `32/32`; full Debug test project `321/321`; `git diff --check` passed with LF/CRLF warnings only.
+Blockers: Live order placement remains intentionally blocked until the user selects the one strategy for the first tiny Live smoke and the Live gates are explicitly changed.
+
+## Active Update 2026-05-07 CLOB Authenticated Read Smoke
+Goal: Perform the next safe Live-readiness step without enabling Live or sending/cancelling orders.
+Status: Completed
+Done:
+- Re-read workflow, project rules, active context, live checklist, current config, service code, and Git state.
+- Re-ran sanitized config and local auth checks: Paper mode, Live disabled, Auth configured, `--auth-readiness-smoke` passed, and `--dry-run-signing-smoke` passed.
+- Confirmed current `cancel-all-live` is not safe as a blind smoke because it unconditionally calls CLOB `DELETE /cancel-all`, which could cancel real manual open orders on the Polymarket account.
+- Added `--clob-authenticated-read-smoke`, a read-only authenticated CLOB `GET /trades` check with L2 headers that never places or cancels orders and does not print the response body.
+- Ran the real read-only CLOB smoke successfully: HTTP `200`, response shape `object count=0`, status `OK`.
+- Updated auth/config/live-checklist docs to include the read-only authenticated smoke.
+- Restarted the Debug service as PID `48148`; IPC `/health` returned `ok=true`, `/status` returned `Running`, pauses false, kill switch false, and `lastError=null`.
+Next: Before any destructive cancel-all smoke, manually confirm in Polymarket UI that there are no open manual orders to preserve, or add an account open-orders read endpoint and only cancel explicitly selected test orders. Then choose exactly one tiny BTC strategy for Live stake testing.
+Notes: Branch `master` has no upstream, so pull/push/commit was not performed. Verification passed: Debug service build 0 warnings/errors; focused auth/live-smoke tests `31/31`; full Debug test project `320/320`; `git diff --check` passed with LF/CRLF warnings only.
+Blockers: A real cancel-all smoke is intentionally not run until the user confirms it is acceptable to cancel every open CLOB order for the configured account.
+
+## Active Update 2026-05-07 Polymarket L2 Credential Bootstrap
+Goal: Add and run a safe native C# flow to derive/store Polymarket CLOB L2 API credentials and enable auth readiness without enabling Live.
+Status: Completed
+Done:
+- Added CLOB L1 `ClobAuth` EIP-712 signing and L1 header creation for API credential derive/create.
+- Added `--bootstrap-polymarket-api-credentials`, which refuses Live mode, reads the order-signing key only from the configured secret provider, derives or creates CLOB L2 credentials, stores them in Windows Credential Manager, and prints only redacted status/target names.
+- Added Windows Credential Manager write support through `ISecretWriter`.
+- Ran the real bootstrap command successfully; CLOB returned `Credential source: Derived`, and all four configured L2 targets now exist in Windows Credential Manager.
+- Enabled `PolymarketAuth.Enabled=true` and `PolymarketAuth.DryRunSigningEnabled=true` while keeping `Bot.Mode=Paper` and `Bot.EnableLiveTrading=false`.
+- Added `--auth-readiness-smoke`; it validates local L2 HMAC/header readiness without HTTP or live orders.
+- Updated README/auth/config/live-checklist docs and added bootstrap/readiness tests.
+- Restarted the Debug service as PID `22996`; IPC `/health` returned `ok=true`, `/status` returned `Running`, pauses false, kill switch false, and `lastError=null`.
+Next: Use Dashboard `Live Readiness` and a controlled cancel-all/status smoke before any later manual Live enablement; Live remains disabled now.
+Notes: Branch `master` has no upstream, so pull/push/commit was not performed. Verification passed: Debug service build 0 warnings/errors; focused auth/bootstrap tests `29/29`; full Debug test project `318/318`; real `--auth-readiness-smoke` returned `ConfiguredButUntested` with `CanAuthenticate=True`; real `--dry-run-signing-smoke` returned `DryRunSigned`; `git diff --check` passed with LF/CRLF warnings only. Official Polymarket docs confirm L1 auth is used to create/derive API credentials and `owner` is the API key/order owner.
+Blockers: None for Paper/auth readiness. Live trading is still intentionally blocked by config gates and should not be enabled until the separate Live checklist is complete.
+
+## Active Update 2026-05-07 Next Live Step After Funder Update
+Goal: Explain the next step after setting the correct Polymarket funder/proxy address.
+Status: Completed
+Done:
+- Re-read workflow, project rules, coding rules, active context, live/auth docs, Git state, current config, current IPC status, and Credential Manager state.
+- Confirmed current config remains safe/non-live: `Bot.Mode=Paper`, `Bot.EnableLiveTrading=false`, `PolymarketAuth.Enabled=false`, `PolymarketAuth.DryRunSigningEnabled=false`.
+- Confirmed signer/funder/signature model is now set to signer `0x799e...7B7c`, funder `0x49d6...4cEC`, and `POLY_GNOSIS_SAFE`.
+- Confirmed the service is running on IPC `5118` with `Running`, pauses false, kill switch false, and `lastError=null`.
+- Confirmed the four L2 API credential targets are still absent from Windows Credential Manager: API key, API key owner, API secret, and API passphrase.
+- Rechecked current official Polymarket authentication docs: authenticated CLOB endpoints need L2 headers, L2 credentials must be created/derived with L1 auth, and the Polymarket settings wallet address is the funder.
+- Noted the project currently has L2 HMAC, order signing, live submission, and dry-run smoke infrastructure, but does not yet have a native C# command to create/derive/store L2 API credentials.
+Next: Implement a safe native C# API-credential bootstrap command that reads the signing key from Credential Manager, signs the L1 `ClobAuth` message, calls Polymarket `derive/create API key`, stores only the returned L2 credentials in Credential Manager, and prints only redacted status. Then enable dry-run/auth readiness only.
+Notes: Answer/planning task only; no source behavior changed and no tests were run. Official docs checked at `https://docs.polymarket.com/api-reference/authentication` and `https://docs.polymarket.com/trading/quickstart`. Branch `master` has no upstream, so no pull/push/commit was performed.
+Blockers: Live auth cannot pass until L2 API credentials exist in Credential Manager.
+
+## Active Update 2026-05-07 Update Polymarket Funder Address
+Goal: Update the configured Polymarket proxy/funder address from the user's Polymarket settings.
+Status: Completed
+Done:
+- Re-read workflow, project rules, coding rules, active context, Git state, and current service/config state.
+- Confirmed the user-provided public Polymarket address is `0x49d6fEE74b294951668a4160f450Ff1C92E94cEC`.
+- Stopped the running Debug service PID `29088`.
+- Updated `src/PolyCopyTrader.Service/appsettings.json` `PolymarketAuth.FunderAddress` from the old `0xfa8e...79df` address to `0x49d6fEE74b294951668a4160f450Ff1C92E94cEC`.
+- Built `src\PolyCopyTrader.Service\PolyCopyTrader.Service.csproj` in Debug successfully with `0` warnings and `0` errors.
+- Restarted the Debug service as PID `45652`; `/health` returned `ok=true`, `/status` returned `Running`, pauses false, kill switch false, and `lastError=null`.
+- Verified the copied Debug output `appsettings.json` also has the new funder address.
+Next: Configure/derive/store Polymarket L2 API credentials in Credential Manager, then enable only dry-run/auth readiness checks before any Live switch.
+Notes: `git diff --check -- src/PolyCopyTrader.Service/appsettings.json` passed with LF/CRLF warning only. Branch `master` has no upstream, so no pull/push/commit was performed. No secrets were requested or printed.
+Blockers: Live auth remains blocked until L2 API credentials are available and `PolymarketAuth.Enabled` is intentionally turned on.
+
+## Active Update 2026-05-07 Polymarket Profile Address Screenshot Verified
+Goal: Re-check the user's Polymarket settings screenshot and identify the shown Address.
+Status: Completed
+Done:
+- Re-read workflow, project rules, coding rules, active context, Git state, and current wallet/auth context.
+- Extracted the screenshot from the Windows clipboard to a temporary PNG and inspected it locally.
+- Confirmed the screenshot shows Polymarket `Profile Settings` with an `Address` field and the warning `Do not send funds to this address. This address is for API use only.`
+- Identified the screenshot address as a Polymarket profile/proxy/funder/API address, not the MetaMask signer address and not a direct deposit destination.
+- Noted a config mismatch: the screenshot address starts `0x49d6` and ends `4cEC`, while current configured `PolymarketAuth.FunderAddress` is `0xfa8e...79df`.
+Next: Update `PolymarketAuth.FunderAddress` to the screenshot Polymarket address before auth readiness/live checks, while continuing to use Polymarket Deposit UI rather than sending funds directly to that address.
+Notes: Answer/screenshot-verification task only; no source behavior changed and no tests were run. Official Polymarket docs were checked for the statement that the wallet address shown on Polymarket.com/settings is the proxy wallet/funder. Branch `master` has no upstream, so no pull/push/commit was performed.
+Blockers: None for explanation; live auth remains blocked until the config funder address and L2 API credentials are correct.
+
+## Active Update 2026-05-07 Polymarket Address Screenshot Clarification
+Goal: Clarify whether an `Address` shown in the user's Polymarket screenshot is the proxy/funder wallet address.
+Status: Completed
+Done:
+- Re-read workflow, project rules, active context, Git state, and current wallet/auth context.
+- Tried to extract the screenshot from the Windows clipboard using WinForms clipboard and `Get-Clipboard -Format Image`; both attempts found no clipboard image.
+- Prepared the distinction: `Address` in Polymarket profile/wallet/deposit/account settings is the Polymarket wallet/proxy/funder address, while `Address` in MetaMask is the signer EOA address.
+- Restated the current expected public addresses without secrets: signer should be `0x799e...7B7c`; funder/proxy should be `0xfa8e...79df`.
+Next: User should resend/upload the screenshot or copy it to the clipboard again if exact visual confirmation is required.
+Notes: Answer/status task only; no source behavior changed and no tests were run. Branch `master` has no upstream, so no pull/push/commit was performed.
+Blockers: Exact screenshot confirmation is blocked because no image was available from the clipboard in this turn.
+
+## Active Update 2026-05-07 Wallet Setup Next Steps Answer
+Goal: Explain the next wallet/setup steps after the user created MetaMask.
+Status: Completed
+Done:
+- Re-read workflow, project rules, active context, live/auth docs, runtime config, Git state, current IPC status, and relevant auth code.
+- Checked current `PolymarketAuth` config: auth is disabled, signer `0x799e...7B7c`, funder `0xfa8e...79df`, `SignatureType=POLY_GNOSIS_SAFE`, `SecretProvider=CredentialManager`, and both dry-run/live signing key lookups point to `POLYCOPYTRADER_POLYMARKET_ORDER_SIGNING_PRIVATE_KEY`.
+- Confirmed Windows Credential Manager has a generic credential target named `POLYCOPYTRADER_POLYMARKET_ORDER_SIGNING_PRIVATE_KEY`; no secret value was read or printed.
+- Confirmed Polymarket API credential targets are not present in Credential Manager yet: API key, owner, secret, and passphrase targets all returned none.
+- Verified current service still runs on IPC `http://127.0.0.1:5118/` with `Running`, pauses false, kill switch false, and `lastError=null`.
+- Checked current official MetaMask and Polymarket docs for private-key export safety, signature/funder model, CLOB auth levels, and deposits.
+- Noted that `docs/LIve.txt` contains a line that looks like a private key; it was not repeated, but any real key previously written there should be considered exposed before Live.
+Next: User should confirm the MetaMask signer public address matches config, confirm the Polymarket proxy/funder address from the UI, fund only a tiny bankroll, and then we should add/run a safe native API-credential derivation/storage path or otherwise store L2 API credentials securely.
+Notes: Answer/status task only; no source behavior changed and no tests were run. Branch `master` has no upstream, so no pull/push/commit was performed.
+Blockers: Live auth cannot pass until `PolymarketAuth.Enabled` is enabled intentionally and L2 API key/owner/secret/passphrase are stored in the configured secret provider.
+
+## Active Update 2026-05-07 Live Resume State Answer
+Goal: Answer where the Live rollout paused and verify current runtime/config state.
+Status: Completed
+Done:
+- Re-read the active context, live checklist, auth/signing plan, runtime config, Git state, and current service status.
+- Confirmed the local Debug service is running as PID `29088` on IPC `http://127.0.0.1:5118/`; `/status` returned `Running`, pauses false, kill switch false, and `lastError=null`.
+- Confirmed current config remains non-live: `Bot.Mode=Paper`, `Bot.EnableLiveTrading=false`, `PolymarketAuth.Enabled=false`, `LiveTrading.ManualEnableCode` empty, `LiveTrading.MaxOrderNotionalUsd=1.0`, and `LiveTrading.MaxOpenLiveOrders=1`.
+- Confirmed `PaperTrading.RunInLiveMode=true`, so shadow Paper is configured to keep running after a future Live switch.
+- Queried PostgreSQL and confirmed all `48` strategies currently have `live_stakes=false`; all `48` have `paper_stake_amount=2.50`.
+- Summarized that Live infrastructure exists behind gates, but actual Live trading has not been enabled and no strategy is currently allowed to place Live orders.
+Next: Run a concrete Live readiness audit, enable auth/dry-run signing checks without exposing secrets, choose exactly one tiny BTC strategy, set its live stake/balance, validate cancel-all/status checks, then perform a controlled Live smoke only if every gate is clean.
+Notes: Answer/status task only; no source behavior changed and no tests were run. Branch `master` has no upstream, so no pull/push/commit was performed.
+Blockers: Live remains intentionally disabled until config gates, auth readiness, per-strategy live stakes, VPS/geoblock, and dry-run/cancel-all smoke checks pass.
+
+## Active Update 2026-05-07 Paper Stake 2.50
+Goal: Move active Paper stake sizing from `$5` to `$2.50`.
+Status: Completed
+Done:
+- Stopped the running Debug service before changing stake values.
+- Changed `BtcUpDown5mStrategy:StakeUsd` defaults in code and `appsettings.json` from `5.00` to `2.50`.
+- Updated PostgreSQL seed/default descriptions for BTC strategy paper stakes to use `2.50` / configured Paper stake wording.
+- Updated current PostgreSQL runtime strategy settings so all `48` rows in `strategies.paper_stake_amount` are `2.50`; no `enabled` flags were changed.
+- Resized three unfilled open pending `$5` Paper orders to `$2.50`, including `paper_orders`, linked `signals`, linked `strategy_market_paper_runs`, and raw decision JSON target size/notional.
+- Restarted the Debug service as PID `29088`; IPC `/status` returned `Running`, pauses false, kill switch false, and `lastError=null`.
+- Confirmed fresh post-restart BTC orders are created with `notional_usd=2.50`; no open `$5` Paper orders remain.
+Next: Monitor the next BTC window if needed; historical filled `$5` orders remain historical records and were not rewritten.
+Notes: Focused tests `ConfigurationTests|BtcUpDown5mPaperStrategyProcessorTests|StorageTests` passed `75/75`; full Verify test project passed `310/310`; Debug service build passed with `0` errors and existing nullable warnings in `PostgresAppRepository.cs`; `git diff --check` passed with LF/CRLF warnings only. Branch `master` has no upstream, so no pull/push/commit was performed.
+Blockers: None.
+
+## Active Update 2026-05-07 Coinbase Exchange BTC Reference
+Goal: Move the BTC/USD reference feed used by BTC Middle strategies from CoinGecko to Coinbase Exchange.
+Status: Completed
+Done:
+- Replaced `CoinGeckoOptions` with `CoinbaseExchangeOptions` and updated config loading, validation, sanitized summaries, service DI, and `appsettings.json`.
+- Replaced the CoinGecko BTC/USD client/worker with a Coinbase Exchange ticker client/worker using `GET /products/BTC-USD/ticker`, default product `BTC-USD`, source `CoinbaseExchange`, and ticker `time` as source update time.
+- Kept the same in-memory BTC/USD reference cache shape, window size default `100`, local IPC endpoint `GET /btc-usd-reference`, and BTC Middle strategy arithmetic-mean decision model.
+- Updated BTC Middle raw decision diagnostics to `decision_source="coinbase_exchange_middle_reference"`.
+- Updated README, configuration reference, strategy descriptions, PostgreSQL seeded descriptions, and tests to remove CoinGecko references.
+- Restarted the Debug service as PID `50132`; IPC `/status` returned `Running`, pauses false, kill switch false, and `lastError=null`; `/btc-usd-reference` returned `source="CoinbaseExchange"`, `sampleCount=2`, and latest BTC/USD `80444`.
+Next: Let the service run until the Coinbase reference cache fills more samples; BTC Middle variants will use Coinbase Exchange for fresh and cached reference values.
+Notes: Focused tests `CoinbaseExchangeBtcUsdReferenceTests|ConfigurationTests|BtcUpDown5mPaperStrategyProcessorTests` passed `56/56`; full Verify test project passed `310/310`; Debug service build passed with `0` errors and existing nullable warnings in `PostgresAppRepository.cs`; `git diff --check` passed with LF/CRLF warnings only. Branch `master` has no upstream, so no pull/push/commit was performed.
+Blockers: None.
+
+## Active Update 2026-05-07 Balanced GTC Paper Fill Model
+Goal: Make ordinary Paper GTC limit orders track realistic partial fills and settle only the filled stake.
+Status: Completed
+Done:
+- Added per-order Paper fill lookup through `IAppRepository.GetPaperFillsForOrderAsync`, PostgreSQL implementation, test repository implementation, and `ix_paper_fills_order_time`.
+- Changed `DefaultPaperTradingEngine` from full-fill-on-cross to balanced depth/VWAP fills: BUY consumes ask levels at or below the limit, SELL consumes bid levels at or above the limit, each fill is capped to remaining shares, and cumulative fills control `PartiallyFilled` versus `Filled`.
+- Updated `PaperTradingProcessor` and `PaperTradingMarketDataUpdater` to pass existing filled shares into fill simulation/status updates.
+- Updated copied leader activation so later partial BUY fills add to an already active copied position instead of being ignored.
+- Updated BTC Middle/Skip GTC settlement to summarize actual `paper_fills` for the run's order, use actual filled shares/VWAP/cost basis, and ignore any unfilled remainder; runs with zero fills still skip as `gtc_limit_not_filled`.
+- Updated README, configuration reference, paper evaluation notes, strategy descriptions, and tests for balanced partial-fill behavior.
+- Restarted the Debug service as PID `54332`; IPC `/status` returned `Running`, pauses false, kill switch false, and `lastError=null`.
+Next: Monitor the next BTC windows for `BalancedGtcDepth` evidence rows in `paper_fills` and verify Dashboard strategy PnL reflects only filled GTC size.
+Notes: Focused tests `PaperTradingEngineTests|PipelineIntegrationTests|BtcUpDown5mPaperStrategyProcessorTests|StorageTests` passed `69/69`; full Verify test project passed `310/310`; Debug service build passed with `0` warnings and `0` errors after stopping old PID `55480`; `git diff --check` passed with LF/CRLF warnings only. Branch `master` has no upstream, so no pull/push/commit was performed.
+Blockers: None.
+
+## Active Update 2026-05-07 Middle Skip GTC Limit Orders
+Goal: Remove post-only semantics from BTC Middle/Skip Paper entries so the orders are modeled as accepted ordinary GTC limit orders.
+Status: Completed
+Done:
+- Changed BTC Middle/Skip Paper entry path from `maker_post_only` to ordinary GTC limit semantics at `0.50`, `$5`, `10` shares.
+- Updated raw decision JSON for Middle/Skip entries to `pricing_mode="paper_gtc_limit"`, `order_execution_mode="GTC"`, and `post_only=false`.
+- Renamed the internal entry/settlement helpers from maker-post-only wording to opening-limit wording.
+- Changed unfilled Middle/Skip settlement skip reason from `maker_post_only_not_filled` to `gtc_limit_not_filled`.
+- Updated runtime log message to `BTC Up or Down 5m GTC limit paper order placed`.
+- Updated strategy descriptions, README, configuration reference, and BTC processor tests.
+- Restarted the Debug service as PID `55480`; IPC `/status` returned `Running`, pauses false, kill switch false, and `lastError=null`.
+- Confirmed fresh runtime logs show BTC worker `VariantCount=47` and new `GTC limit paper order placed` messages for current Skip entries.
+Next: If stricter realism is needed, extend Paper accounting to model immediate partial taker fill plus resting residual for marketable GTC limits; current generic Paper order pipeline still fills accepted limit orders through subsequent book/trade updates.
+Notes: Focused `BtcUpDown5mPaperStrategyProcessorTests|StorageTests|ConfigurationTests` passed `74/74`; full Verify test project passed `306/306`; Debug build passed with `0` warnings and `0` errors; diff check passed with LF/CRLF warnings only. Branch `master` has no upstream, so no pull/push/commit was performed.
+Blockers: None.
+
+## Active Update 2026-05-07 GTC Non Post Only Clarification
+Goal: Clarify how a normal GTC limit order behaves without post-only.
+Status: Completed
+Done:
+- Confirmed that a GTC order without `postOnly` is a regular limit order: if non-marketable it rests on the book, and if marketable it can immediately match resting liquidity as taker.
+- Clarified that a BUY GTC at `0.50` executes against asks `<= 0.50`; if visible/available liquidity is smaller than the order, the matched part fills and the remainder can stay live at `0.50` unless the order is otherwise rejected/cancelled.
+- Clarified that a fully matched GTC order will not leave anything in the book, while a partially matched or non-matched GTC can have an open remainder.
+- Noted that this removes maker-only guarantee and would require Paper to model a hybrid immediate taker fill plus resting residual if we switch Middle/Skip from post-only to ordinary GTC.
+Next: None unless the BTC Middle/Skip Paper model should be changed from maker post-only to ordinary GTC limit behavior.
+Notes: Answer/research only; official Polymarket docs were checked earlier in this thread and again for GTC/partial-fill behavior; no tests run. Branch `master` has no upstream.
+Blockers: None.
+
+## Active Update 2026-05-07 Maker Order Limits Explanation
+Goal: Explain why maker/post-only orders are not always accepted.
+Status: Completed
+Done:
+- Clarified that ordinary limit orders may be accepted and immediately matched as taker, while post-only orders are stricter: they are accepted only if they can rest on the book.
+- Checked official Polymarket docs: post-only works only with GTC/GTD, is rejected with FOK/FAK, and is rejected if it would cross/match the book.
+- Explained practical BTC `BUY 0.50` rule: if current best ask is `<= 0.50`, the order is marketable and a real post-only order should be rejected; if best ask is `> 0.50` or no ask exists, it can rest if other validations pass.
+- Listed other acceptance gates: market accepting orders, signature/auth, balance/allowance/reserved funds, tick size, min size, expiration, duplicate detection, and race conditions between preflight and submit.
+- Noted current Paper Middle/Skip model still assumes local placement acceptance and should add a post-only preflight if maker realism is important.
+Next: Add post-only acceptance preflight to Middle/Skip Paper if the experiment should model rejected maker orders, e.g. `bestAsk <= 0.50` => skip/reject rather than create pending order.
+Notes: Answer/research only; official Polymarket docs were checked; no tests run. Branch `master` has no upstream.
+Blockers: None.
+
+## Active Update 2026-05-07 Maker Post Only Accounting Clarification
+Goal: Clarify whether BTC Middle/Skip Paper calculations assume maker post-only orders are accepted.
+Status: Completed
+Done:
+- Confirmed current BTC Middle/Skip Paper implementation creates a `PaperOrderStatus.Pending` order at `0.50`, `$5`, `10` shares after the strategy decision, so Paper assumes placement/acceptance into our local open-order book.
+- Confirmed it does not count the order as filled immediately: no `PaperFill`, no `PaperPosition`, and no realized PnL are created at entry time.
+- Confirmed fill/PnL happen only later if `PaperTradingProcessor`/`PaperTradingMarketDataUpdater` simulates a fill; otherwise maker strategy settlement marks the run `maker_post_only_not_filled`.
+- Noted modeling caveat: current Paper does not verify post-only acceptance against live best ask at placement; it assumes the maker order can rest. This is acceptable as a first approximation but should be tightened if comparing maker realism closely.
+Next: Consider adding explicit post-only placement validation such as "BUY maker at 0.50 only rests when current best ask is above 0.50" and queue/fill realism if the Middle/Skip analysis depends on maker acceptance quality.
+Notes: Answer/code-inspection only; no tests run. Branch `master` has no upstream and worktree remains dirty.
+Blockers: None.
+
+## Active Update 2026-05-07 BTC Middle Skip Maker Strategies
+Goal: Add five BTC Middle and five BTC Skip Paper strategies that enter immediately after BTC 5m market open as maker post-only orders at `0.50` with `$5` stake.
+Status: Completed
+Done:
+- Added `btc_up_down_5m_middle_1..5` and `btc_up_down_5m_skip_1..5` strategy variants; the duplicated user item `Middle 4` was implemented as `Middle 5`.
+- Seeded the 10 strategies in PostgreSQL with `paper_stake_amount=5.00` without overwriting existing `enabled` flags.
+- Middle strategies use the in-memory CoinGecko BTC/USD reference cache arithmetic mean plus a fresh current CoinGecko BTC/USD reading at decision time: all compared values above mean buy `Down`, all below mean buy `Up`, equality/mixed/insufficient data skip with diagnostics.
+- Cached the fresh decision-time BTC/USD lookup once per market so all Middle variants in the same 5m window reuse it instead of making separate CoinGecko calls.
+- Skip strategies infer recent settled BTC 5m market winning outcomes from settled Paper runs and buy the opposite side after N consecutive identical outcomes.
+- New Middle/Skip entries create pending Paper BUY maker post-only orders at price `0.50`, `$5` notional, and `10` shares; they do not create immediate fills/positions and are excluded from Live placement.
+- Maker post-only runs settle only if their Paper order filled; unfilled/expired orders become `maker_post_only_not_filled`.
+- Added repository methods for recent BTC market-result inference and paper-order lookup; updated tests and docs.
+- Restarted the Debug service as PID `48132`; IPC `/status` returned `Running`, pauses false, kill switch false, and `lastError=null`.
+- Confirmed runtime startup lines: BTC worker `VariantCount=47`, CoinGecko worker started, schema processed `279/279` statements.
+- Observed the next BTC window after restart: `Middle 1/2` placed maker post-only orders at `0.50`, `Middle 3` skipped by `btc_reference_mixed_around_mean`, and `Middle 4/5` skipped by `btc_reference_samples_insufficient` while the restarted cache had only two samples; no `btc_reference_fetch_failed` appeared after the shared-current-price fix.
+Next: Let the CoinGecko cache refill toward 100 samples and review Middle/Skip Paper performance after several BTC 5m windows.
+Notes: Focused `BtcUpDown5mPaperStrategyProcessorTests|StorageTests|ConfigurationTests` passed `74/74`; full Verify test project passed `306/306`; Debug service build passed with `0` warnings and `0` errors; `git diff --check` on touched files passed with LF/CRLF warnings only. Branch `master` has no upstream, so no pull/push/commit was performed. Worktree remains dirty with unrelated pre-existing changes.
+Blockers: None.
+
+## Active Update 2026-05-07 CoinGecko BTC USD Reference Worker
+Goal: Read BTC/USD from CoinGecko once per minute, retain the latest 100 values, and compute their arithmetic mean.
+Status: Completed
+Done:
+- Added `CoinGecko` application configuration, loading, validation, and sanitized config summary.
+- Added a typed CoinGecko BTC/USD client using `/api/v3/simple/price` with `ids=bitcoin`, `vs_currencies=usd`, `include_last_updated_at=true`, `precision=full`, a required User-Agent, and an optional API key header from `POLYCOPYTRADER_COINGECKO_API_KEY`.
+- Added an in-memory BTC/USD reference price cache that keeps a sliding window of the latest `100` values and computes `ArithmeticMeanUsd` over the retained samples.
+- Added `CoinGeckoBtcUsdPriceWorker`, which samples immediately on startup and then every `60` seconds, logs latest price/window/mean, and persists API errors through the repository.
+- Added local IPC endpoint `GET /btc-usd-reference` returning source, window size, sample count, full-window flag, arithmetic mean, latest point, and retained samples newest-first.
+- Updated service DI, appsettings, README, and configuration reference.
+- Added cache/client/configuration tests.
+- Restarted the Debug service as PID `20716`; IPC `/status` returned `Running` and `/btc-usd-reference` returned `sampleCount=2`, latest BTC/USD `80959.32361096528`, arithmetic mean `80949.686760924845`.
+Next: Wire `IBtcUsdReferencePriceCache` into future BTC strategy experiments when external BTC/USD reference data is needed; add PostgreSQL persistence later if the 100-sample window must survive service restarts.
+Notes: Full Verify test project passed `302/302`; focused CoinGecko/configuration tests passed `20/20`; Debug service build passed after stopping the locked old service. Initial runtime attempt received CoinGecko HTTP `403` until the client started sending a configured User-Agent. `git diff --check` on touched files passed with LF/CRLF warnings only. Branch `master` has no upstream, so no pull/push/commit was performed. The cache is in memory and the mean is over available samples until 100 values have been collected.
+Blockers: None.
+
+## Active Update 2026-05-07 CoinGecko BTC USD Check
+Goal: Check whether PolyCopyTrader can use CoinGecko for BTC/USD reference pricing.
+Status: Completed
+Done:
+- Verified official CoinGecko docs expose `GET /api/v3/simple/price` for coin prices by id, with `ids=bitcoin`, `vs_currencies=usd`, and optional `include_last_updated_at=true`.
+- Confirmed CoinGecko docs say `include_last_updated_at=true` can be used to detect stale prices and that simple price data is cached/updated every 60 seconds for Public API and 20 seconds for Pro API.
+- Confirmed CoinGecko pricing page currently lists Demo at `10k` call credits/month, `30` calls/minute, and data freshness from `60 sec`; API keys are expected for Public/Demo use, though the keyless simple price request still worked from the local machine during this check.
+- Tested from the local environment: `https://api.coingecko.com/api/v3/simple/price?ids=bitcoin&vs_currencies=usd&include_last_updated_at=true&precision=full` returned HTTP `200` and JSON with `bitcoin.usd=80943.89046462867`, `last_updated_at=1778153142` (`2026-05-07T11:25:42Z`).
+- Confirmed `usd` is present in `/simple/supported_vs_currencies`.
+- Conclusion: CoinGecko is usable as a BTC/USD external reference source, but not as a sub-second execution/source-of-truth feed for BTC 5-minute market decisions.
+Next: If implementing, add a typed C# CoinGecko client with API-key config, timeout/retry/rate-limit handling, stale-price checks, and persistence of source timestamp/age.
+Notes: Research/runtime API check only; no application source behavior changed and no tests were run. Branch `master` has no upstream.
+Blockers: None.
+
+## Active Update 2026-05-07 New Strategy Readiness Answer
+Goal: Answer whether the BTC Paper setup is operating normally enough to proceed with new strategies.
+Status: Completed
+Done:
+- Verified the service IPC on the active configured port `http://127.0.0.1:5118/`: `/health` returned `ok=true`, `state=Running`; `/status` returned `Running`, pauses false, kill switch false, `lastError=null`, and `startedAtUtc=2026-05-07T11:15:45.0034353+00:00`.
+- Noted the earlier failed `http://127.0.0.1:5050/status` check was against the wrong/stale port; current config uses IPC port `5118`.
+- Confirmed the Debug service process is running as PID `30220`.
+- Checked latest BTC Paper logs: the current `btc-updown-5m-1778152800` market had started placing standard/Gamma BTC entries at `$5` notional with `0` skips in the first observed due points.
+- Confirmed the previous completed `btc-updown-5m-1778152500` market placed entries through late delays and only skipped a few `270s` runs due `missing_orderbook_empty_side` with populated diagnostics showing a real one-sided CLOB book.
+- Reaffirmed the readiness conclusion: acceptable/normal for continuing BTC Paper experiments and adding new Paper strategies, but not a final Live-ready declaration.
+Next: Proceed with new Paper strategy work when requested; keep monitoring late-window `missing_orderbook_empty_side` and unrelated noisy on-chain RPC errors separately.
+Notes: Answer/status/log check only; no source behavior changed and no tests were run. Branch `master` has no upstream and the worktree remains dirty with unrelated changes.
+Blockers: None for Paper strategy work.
+
+## Active Update 2026-05-07 BTC Missing Orderbook Analysis
+Goal: Analyze whether new `missing_orderbook_empty_side` diagnostics are sufficient and what they show.
+Status: Completed
+Done:
+- Confirmed the service had stopped before the analysis check: no `PolyCopyTrader.Service` process and no `5118` listener.
+- Diagnosed the stop from logs as `HostOptions.BackgroundServiceExceptionBehavior=StopHost` after a `TaskCanceledException`/HTTP timeout in `PaperTradingProcessor.UpdatePositionMarksAsync` while fetching CLOB `/book` for ordinary Paper mark-to-market.
+- Fixed `PaperTradingProcessor` so `OperationCanceledException` is rethrown only when the service cancellation token is actually cancelled; external HTTP timeouts are now logged and persisted as `ProcessOpenOrderTimeout` or `UpdatePositionMarkTimeout` instead of stopping the host.
+- Added `PaperTradingProcessor_SurvivesOrderBookTimeoutWhenMarkingPosition` resilience test.
+- Rebuilt and restarted the Debug service as PID `30220`; IPC `/health` and `/status` returned `Running`, pauses false, kill switch false, and `lastError=null`.
+- Analyzed post-diagnostic BTC skips since `2026-05-07T09:57:24.9083201Z`: `27` `missing_orderbook_empty_side`, all `27` with `skip_diagnostics_json`.
+- All `27` rejected diagnostic candidates had `source=clob_book`, `rest_attempted=true`, `cache_status=Stale`, and `has_executable_ask_depth=false`.
+- The REST CLOB `/book` snapshots were one-sided: `best_bid=0.99`, `best_ask=null`, `asks=[]`, and `20` bid levels for every rejected candidate.
+- Rejected outcomes: `Down=18`, `Up=9`.
+- Affected windows: `13:10` local `6` skips, `13:20` local `3`, `13:25` local `9`, `13:30` local `9`.
+- Affected delays were only late-window variants: `210s`, `240s`, and `270s`, with standard and Gamma variants both affected.
+Next: Treat these skips as real no-ask-liquidity events, not WebSocket pipeline failures. Continue monitoring future skips; the immediate engineering issue found during analysis was the now-fixed Paper mark-timeout host stop.
+Notes: Verification passed after the timeout fix: focused `ResilienceTests` `10/10`; full Verify test project `299/299`; Debug service build passed with `0` warnings and `0` errors; diff check on touched files passed with LF/CRLF warnings only. Branch `master` has no upstream, so no pull/push/commit was performed.
+Blockers: None.
+
+## Active Update 2026-05-07 BTC Missing Orderbook Diagnostics
+Goal: Persist detailed diagnostics for BTC taker Paper skips such as `missing_orderbook_empty_side`.
+Status: Completed
+Done:
+- Added nullable `StrategyMarketPaperRun.SkipDiagnosticsJson` and PostgreSQL `strategy_market_paper_runs.skip_diagnostics_json jsonb`.
+- Updated PostgreSQL schema creation/migration, run insert/update/select/read code, and repository parameters so skipped BTC runs can carry structured diagnostics.
+- Extended `BtcUpDown5mPaperStrategyProcessor` taker order-book lookup to retain cache status, cache snapshot, cache age, whether REST `/book` was attempted, REST source, final quote age, top asks/bids, and executable-ask-depth flags even when the lookup is rejected.
+- BTC taker outcome-selection and entry-pricing rejects now build `btc_taker_orderbook_rejection` JSON diagnostics and pass them into skipped strategy runs.
+- `SkipRunAsync` stores diagnostics JSON on the run and logs it when present; trade behavior is unchanged.
+- Added a focused BTC test proving `missing_orderbook_empty_side` persists diagnostics when REST `/book` returns a book with no executable asks.
+- Updated README, `docs/configuration_reference.md`, and `docs/paper_trading_evaluation.md` to document the new skip diagnostics.
+- Restarted the local Debug service from `src/PolyCopyTrader.Service/bin/Debug/net10.0` as `PolyCopyTrader.Service.exe` PID `53016`; IPC `/health` and `/status` returned `Running`, pauses false, kill switch false, and `lastError=null`.
+- Verified the local PostgreSQL column exists via `information_schema.columns`; after restart there were no new `missing_orderbook_empty_side` skips yet, so no live production diagnostic row has been observed after this deployment.
+Next: On the next `missing_orderbook_empty_side`, query `strategy_market_paper_runs.skip_diagnostics_json` to see cache status, REST usage, top book depth, and whether REST truly returned an empty executable ask side.
+Notes: Verification passed: focused BTC processor tests `31/31`; full Verify test project `298/298`; Debug service build passed with `0` errors and existing storage nullable warnings; diff check on touched files passed with LF/CRLF warnings only. Branch `master` has no upstream, so no pull/push/commit was performed.
+Blockers: None.
+
+## Active Update 2026-05-07 BTC Operational State Answer
+Goal: Answer whether the current BTC Paper service state can be considered normal with nothing left to fix.
+Status: Completed
+Done:
+- Rechecked the running local Debug service status: `Running`, PID `52396`, pauses false, kill switch false, and `lastError=null`.
+- Parsed recent BTC Paper service logs after the BTC-only WebSocket scope change.
+- Fresh observed windows from logs:
+  - `btc-updown-5m-1778145000` (`12:10` local): `36` entries, `0` skips.
+  - `btc-updown-5m-1778145300` (`12:15` local): `36` entries, `0` skips.
+  - `btc-updown-5m-1778145600` (`12:20` local): `27` entries, `9` skips, all `missing_orderbook_empty_side`.
+  - `btc-updown-5m-1778145900` (`12:25` local): `33` entries, `3` skips, all `missing_orderbook_empty_side`.
+  - `btc-updown-5m-1778146200` (`12:30` local): early sample had `8` entries and `0` skips.
+- Confirmed the correct conclusion is nuanced: BTC Paper is operational enough to continue smoke testing, but not clean enough to say there is nothing left to fix.
+- Remaining runtime concerns: clustered `missing_orderbook_empty_side` skips, periodic `PolymarketMarketWebSocket:shard-001` reconnects even after BTC-only narrowing, and repeated noisy `On-chain trade capture cycle failed` errors while Follow leader is paused.
+Next: Add targeted diagnostics around `missing_orderbook_empty_side` before changing more trading logic: record cache freshness/status, whether REST `/book` fallback was called, REST top bid/ask/depth, quote age, asset id, market slug, strategy, and delay. Consider disabling/noising down `OnChainTradeCaptureWorker` while the current focus is BTC Paper.
+Notes: Runtime/log diagnostic only; no source behavior changed and no tests were run. Branch `master` has no upstream.
+Blockers: None.
+
+## Active Update 2026-05-07 BTC Missed Bets Monitoring
+Goal: Continue monitoring missed BTC Paper entries and their rejection reasons after narrowing market WebSocket subscriptions to BTC-only.
+Status: Completed
+Done:
+- Verified the local Debug service remains `Running` as `PolyCopyTrader.Service.exe` PID `52396`; IPC `/status` has all pauses false, kill switch false, and `lastError=null`.
+- Used service logs for the runtime monitor because `psql`, `csi`, and `dotnet-script` are not available in the shell.
+- Parsed recent BTC Paper entry/skip logs by market window.
+- Recent windows from logs:
+  - `btc-updown-5m-1778140800` (`11:00` local): `36` entries, `0` skips.
+  - `btc-updown-5m-1778141100` (`11:05` local): `33` entries, `3` skips, all `missing_orderbook_empty_side`.
+  - `btc-updown-5m-1778141400` (`11:10` local): `36` entries, `0` skips.
+  - `btc-updown-5m-1778141700` (`11:15` local): `30` entries, `6` skips, all `missing_orderbook_empty_side` at late `240s/270s` points.
+  - `btc-updown-5m-1778142000` (`11:20` local): `36` entries, `0` skips.
+  - `btc-updown-5m-1778142300` (`11:25` local): `36` entries, `0` skips, including successful `240s/270s` entries.
+- Current in-progress `btc-updown-5m-1778142600` (`11:30` local) had only the first `30s` entries at the final sample: `4` entries, `0` skips.
+- WebSocket still reconnects periodically even after BTC-only narrowing; recent shard warnings included reconnects at `11:18:53`, `11:20:48`, `11:28:45`, and `11:30:45` local. The `11:25` window still completed `36/36` despite a reconnect shortly before the `240s` entries.
+Next: Keep watching whether `missing_orderbook_empty_side` reappears in later windows; if it does, inspect whether the failing asset had an empty REST `/book` side or whether the WebSocket reconnect caused stale/missing cache before REST fallback.
+Notes: Runtime/log diagnostic only; no source behavior changed and no tests were run. Branch `master` has no upstream.
+Blockers: None.
+
+## Active Update 2026-05-07 BTC Only WebSocket Subscription Scope
+Goal: Narrow market WebSocket registration/subscriptions to BTC Up/Down 5m assets while Follow leader is paused.
+Status: Completed
+Done:
+- Added `MarketDataWebSocketSubscriptionScope` with `AllActiveMarkets` default and `BtcUpDown5mOnly`.
+- Added `MarketDataWebSocket:SubscriptionScope` to service config and set the local service to `BtcUpDown5mOnly`.
+- Changed `GammaMarketIngestionProcessor` so Gamma still upserts every active market to PostgreSQL, but the WebSocket subscription registry receives only BTC Up/Down 5m markets when the BTC-only scope is selected.
+- Kept non-Gamma safety subscriptions through `RelevantMarketAssetProvider`: pinned assets, open paper/live orders, open paper positions, and recent strong/accepted signals.
+- Added tests proving BTC-only scope upserts all Gamma markets but registers only BTC WebSocket assets and removes stale non-BTC registry assets after a full scan.
+- Updated README and configuration reference to document `SubscriptionScope` and why it is safer than a numeric subscription cap for BTC-only testing.
+- Stopped the previous Debug service and restarted the rebuilt service from `src/PolyCopyTrader.Service/bin/Debug/net10.0` as `PolyCopyTrader.Service.exe` PID `52396`; IPC `/health` and `/status` returned `Running`.
+- Verified sanitized Debug config prints `Market WebSocket subscription scope: BtcUpDown5mOnly`.
+- Runtime logs after restart showed the new market WebSocket started as one shard with `219` assets; later Gamma registration logs included only `SubscriptionScope="BtcUpDown5mOnly"` additions instead of the previous broad 30-shard all-market set.
+- Confirmed BTC Paper entries continued after restart; a late 270-second sample still had 3 `missing_orderbook_empty_side` skips, so BTC-only sockets reduce load but do not eliminate thin/empty late-window order books.
+Next: Monitor whether the reduced WebSocket scope lowers stale shard and missing-orderbook rates over several full BTC buckets.
+Notes: Verification passed: focused `ConfigurationTests|GammaMarketIngestionTests|ActiveMarketAssetSubscriptionRegistryTests` `27/27`; full `dotnet test tests\PolyCopyTrader.Tests\PolyCopyTrader.Tests.csproj -c Verify --no-restore` `297/297`; Debug service build passed with `0` errors and existing storage nullable warnings; `git diff --check` on touched files passed with LF/CRLF warnings only. Branch `master` has no upstream, so no pull/push/commit was performed.
+Blockers: None.
+
+## Active Update 2026-05-07 BTC Only WebSocket Scope Answer
+Goal: Answer whether pausing Follow leader means market WebSocket subscriptions can be narrowed to BTC only.
+Status: Completed
+Done:
+- Confirmed conceptually that when Follow leader is paused and only BTC Up/Down 5m Paper strategies are being tested, the service does not need to keep market WebSocket subscriptions for all active Polymarket/Gamma markets.
+- Confirmed current code/config does not yet narrow subscriptions automatically: `GammaMarketIngestionProcessor` registers all active Gamma markets, `RelevantMarketAssetProvider` includes all asset ids from that active-market registry, and `MarketDataWebSocket:MaxSubscribedAssets=0` applies no cap.
+- Noted that BTC-only subscriptions should include current/upcoming BTC Up/Down 5m outcome token ids plus safety exceptions for pinned assets, open orders, and open positions.
+- Noted that using only a numeric cap is unsafe because it can arbitrarily exclude BTC assets; the filter should be semantic, e.g. via `BtcUpDown5mMarketAnalyzer`.
+- Noted that on-chain/copy-signal workers should be disabled or made compatible with BTC-only market data if they are not part of the current experiment.
+Next: Implement a configurable BTC-only market WebSocket subscription scope and restart the service if the user asks to proceed.
+Notes: Answer-only analysis; no source behavior changed and no tests were run. Branch `master` has no upstream.
+Blockers: None.
+
+## Active Update 2026-05-07 BTC 5m Market Mechanics Answer
+Goal: Explain whether BTC Up or Down 5m is one market or a new market every five minutes.
+Status: Completed
+Done:
+- Confirmed from `BtcUpDown5mMarketAnalyzer` that service recognizes market slugs like `btc-updown-5m-<unix>` and derives the market window start from `EventStartTimeUtc`, slug Unix timestamp, or `EndDateUtc - 5 minutes`.
+- Explained that BTC Up or Down 5m is a series of separate 5-minute markets; each window has its own market id, condition id, and two CLOB token ids/outcomes.
+- Explained that our service creates one `strategy_market_paper_runs` row per market plus strategy variant, so a single 5-minute market can produce up to 36 current standard/Gamma entries plus the disabled/conditional Martin row.
+Next: None.
+Notes: Answer-only code/docs explanation; no source behavior changed and no tests were run. Branch `master` has no upstream.
+Blockers: None.
+
+## Active Update 2026-05-07 BTC Bet Placement Check
+Goal: Check whether current BTC Paper bets are being placed normally.
+Status: Completed
+Done:
+- Verified service IPC `/status` is `Running`, all pauses `false`, kill switch `false`, and `lastError=null`.
+- In the last 35 minutes, BTC strategies created `225` Paper orders across `36` enabled standard/Gamma BTC strategies with total notional `$1120.80`; all `225` fresh orders had `order_execution_mode=FAK`.
+- Confirmed live orders remain `0` in the same window because runtime is still Paper/live disabled.
+- Completed/near-completed windows showed mixed quality: `06:55 UTC` and `07:00 UTC` had `36/36`; `07:20 UTC` had `36/36`; `07:05 UTC` had `30/36`; `07:10 UTC` had `24/36`; `07:15 UTC` had `33/36`.
+- Current `07:25 UTC` market was still in progress during the check and had advanced to `24` entries, `0` skips, with later due rows still `Observed`.
+- Recent skips were all `missing_orderbook_empty_side`, concentrated on later delay points (`180s..270s`) in earlier windows.
+- FAK partial fills occurred as expected: 4 recent BTC orders had notional below `$5`, minimum `$3.4136`, because visible executable ask depth was thinner than the target stake.
+- Market WebSocket aggregate was currently `Stale` with several stale/disconnected shards, while individual recent BTC orders still continued; recent API errors were mostly unrelated Polygon `Unknown block` errors from `OnChainTradeCaptureWorker`, plus one market WebSocket shard close.
+Next: Monitor the WebSocket shard health and `missing_orderbook_empty_side`; if skips continue, inspect BTC token shard assignment and REST `/book` fallback behavior for the skipped assets.
+Notes: Runtime/DB diagnostic only; no source behavior changed and no tests were run. Branch `master` has no upstream.
+Blockers: None.
+
+## Active Update 2026-05-07 Service Status Check
+Goal: Check whether the local PolyCopyTrader service is currently running.
+Status: Completed
+Done:
+- Verified IPC `/health` returned `ok=true`, `state=Running`.
+- Verified IPC `/status` returned `Running`, pauses `false`, kill switch `false`, and `lastError=null`.
+- Verified Windows process `PolyCopyTrader.Service.exe` is running as PID `48696`.
+Next: None.
+Notes: Answer-only runtime check; no application source behavior changed. Branch `master` has no upstream.
+Blockers: None.
+
+## Active Update 2026-05-07 BTC FAK Order Submission
+Goal: Change BTC taker order handling so insufficient visible depth no longer blocks the order and BTC live orders are submitted as FAK.
+Status: Completed
+Done:
+- Changed `TakerBuyFillEstimator` so partial executable ask depth within the limit price is accepted instead of rejecting as `insufficient_liquidity_within_slippage`; Paper now records the actually filled partial notional when visible depth is thinner than the target stake.
+- Kept price, spread, quote freshness, executable ask presence, and minimum submitted-size checks; removed only the full-depth requirement.
+- Added `order_execution_mode = "FAK"` to BTC taker Paper raw decision JSON and updated evidence text to `FAK-style taker Paper fill`.
+- Changed BTC live stake request creation from GTD post-only to BUY `FAK` with `postOnly=false`; maker-only crossed-best-ask rejection and matched-response pause were removed for the BTC live path.
+- Follow leader live maker-only behavior remains unchanged and still rejects leader-price live placement.
+- Updated tests for partial FAK Paper fills and BTC live FAK request creation.
+- Updated README, auth notes, configuration reference, paper evaluation notes, and live checklist.
+- Rebuilt and restarted the local Debug service from the build output directory as `PolyCopyTrader.Service.exe` PID `48696`; IPC `/health` and `/status` returned `Running`.
+- Verified fresh BTC Paper orders after restart include `order_execution_mode=FAK` in `raw_decision_json`.
+Next: Monitor whether partial FAK fills produce notional below `$5` in thin books; that is expected and should be compared separately from full `$5` fills.
+Notes: Verification passed: focused `TakerBuyFillEstimatorTests|BtcUpDown5mPaperStrategyProcessorTests` `35/35`; full `dotnet test tests\PolyCopyTrader.Tests\PolyCopyTrader.Tests.csproj -c Verify --no-restore` `296/296`; Service Debug build `0 warnings/0 errors`; `git diff --check` on touched tracked files passed with only LF/CRLF warnings. `dotnet test PolyCopyTrader.sln -c Verify --no-restore` remains invalid because the solution has no `Verify|Any CPU` configuration. Branch `master` has no upstream; existing unrelated dirty working-tree changes were left untouched.
+Blockers: None.
+
+## Active Update 2026-05-07 BTC Gamma Comparison Strategies
+Goal: Add 18 BTC 5m comparison strategies with `Gamma` postfix that keep the old Gamma-first `Less`/`More` selection logic.
+Status: Completed
+Done:
+- Added 18 BTC Up/Down 5m Gamma variants: 9 `Less` delays and 9 `More` delays for 30..270 seconds, e.g. `BTC Up or Down 5m Less 180 Gamma`.
+- Preserved the existing standard strategy IDs and the existing `BTC Less 180 Martin` variant.
+- Added `BtcUpDown5mStrategyBehavior.GammaOutcomeSelection` so standard variants continue using fixed CLOB-first executable selection, while Gamma variants intentionally select by Gamma outcome prices first.
+- Gamma comparison variants still use taker Paper CLOB/WebSocket pricing/fill simulation after choosing the asset, so they reproduce the historical selection bug but with realistic Paper execution prices.
+- Blocked Gamma comparison variants from live submission; they are Paper comparison strategies only.
+- Seeded the 18 Gamma strategies in PostgreSQL with `enabled=true` and `$5` `paper_stake_amount`, while preserving existing `enabled` and stake values on future schema init conflicts.
+- Updated README and configuration reference to document standard vs Gamma BTC behavior.
+- Restarted the local Debug service as `PolyCopyTrader.Service.exe` PID `35148`; IPC `/health` returned `Running`.
+- Verified PostgreSQL now has 18 `btc_up_down_5m_*_gamma` strategies, all enabled, min/max stake `$5`.
+Next: Compare standard vs Gamma Paper results after at least a few complete BTC 5-minute buckets; current first Gamma run after restart skipped the already-expired `05:40:30Z` entry due to starting mid-window.
+Notes: Verification passed: focused `dotnet test tests\PolyCopyTrader.Tests\PolyCopyTrader.Tests.csproj -c Verify --no-restore --filter "FullyQualifiedName~BtcUpDown5mPaperStrategyProcessorTests|FullyQualifiedName~StorageTests"` passed `50/50`; full `dotnet test PolyCopyTrader.sln --no-restore` passed `295/295`; `git diff --check` passed on touched tracked files with only LF/CRLF warnings. `dotnet test PolyCopyTrader.sln -c Verify --no-restore` is not valid because the solution has no `Verify|Any CPU` configuration. Branch `master` has no upstream; existing unrelated dirty working-tree changes were left untouched.
+Blockers: None.
+
+## Active Update 2026-05-07 Less More 0.92 Bug Explanation
+Goal: Explain the historical BTC `Less`/`More` selection bug that allowed a `Less` entry at `0.92`.
+Status: Completed
+Done:
+- Re-read workflow, project rules, coding rules, active context, Git status, and the BTC processor/test code.
+- Confirmed the historical bug was a split between selection price and execution price: the older path selected `Less`/`More` from Gamma/reference outcome prices, then priced/fill-simulated the selected asset separately from CLOB/WebSocket taker depth.
+- Confirmed the old directional guard only checked the selected Gamma/reference price; it did not reject after CLOB executable VWAP moved/came back above `0.5`.
+- Confirmed the temporary relaxation that raised `maxAllowedPrice` to `bestAsk` allowed the estimator to accept the current executable ask even when it was far above the reference cap.
+- Current fixed behavior prices both outcome assets from executable CLOB/WS VWAP first, chooses `Less` as the lower executable side and `More` as the higher executable side, and rejects crossed executable prices as `execution_price_direction_mismatch`.
+Next: Keep the final executable-price guard and rejected quote snapshot persistence as the next diagnostic hardening task.
+Notes: Answer-only code/context explanation; no source behavior changed and no tests were run. Branch `master` has no upstream.
+Blockers: None.
+
+## Active Update 2026-05-07 Current BTC Paper Monitoring
+Goal: Monitor the current BTC Paper situation after recent missed-bet diagnostics.
+Status: Completed
+Done:
+- Confirmed branch `master` has no upstream and continued locally.
+- Confirmed the local Debug service is running; IPC `/health` and `/status` returned `Running`, pauses `false`, kill switch `false`, and `lastError=null`.
+- Confirmed PostgreSQL was not in recovery during monitoring.
+- Observed a WebSocket aggregate `Stale` state at the start of monitoring after a broad shard reconnect around `2026-05-07T05:06Z`; it recovered to `Connected`, `stale=false`, `lastError=null` by `2026-05-07T05:15:30Z`.
+- Monitored completed BTC market `btc-updown-5m-1778130600` (`2026-05-07T05:10:00Z`): all 18 standard BTC due runs entered, 0 skipped, 0 observed remaining.
+- Confirmed `paper_orders` for `2026-05-07T05:10:00Z..05:15:00Z`: 18 orders from 18 distinct standard BTC strategies, total notional `$90.00000000`, first order `05:10:37Z`, last order `05:14:37Z`.
+- Checked current BTC market `btc-updown-5m-1778130900` at `2026-05-07T05:16:50Z`: 6 due runs, 6 entered, 0 skipped, 12 future observed rows.
+- Current BTC entries were `$5` notional and used CLOB/WS taker Paper pricing.
+Next: Continue watching later BTC buckets if `missing_orderbook_empty_side` reappears; otherwise add persistence for rejected quote/order-book snapshots so any future skip is immediately explainable.
+Notes: Monitoring/DB diagnostic only; no application source code changed and no tests were run. Context/history files were updated per workflow.
+Blockers: None.
+
+## Active Update 2026-05-07 Missed BTC Paper Bets Diagnostic
+Goal: Diagnose why BTC 5-minute Paper bets were skipped after the fresh service restart.
+Status: Completed
+Done:
+- Confirmed branch `master` has no upstream and continued locally.
+- Confirmed the local Debug service is still running as PID `29764`; IPC `/health` and `/status` returned `Running`, pauses `false`, kill switch `false`, and `lastError=null`.
+- Confirmed PostgreSQL was not in recovery during the check.
+- Inspected standard BTC strategy runs for market `btc-updown-5m-1778107800` after the clean restart.
+- Found 11 entered Paper orders for the market, all at exactly `$5` notional.
+- Found 7 final skipped runs for the same market: one `insufficient_liquidity_within_slippage` at `30s`, and six `missing_orderbook_empty_side` at `210s`, `240s`, and `270s`.
+- Noted that when the user reported three missing bets, only the first three skips had fired; the later `240s`/`270s` due points had not completed yet.
+- Checked API/runtime diagnostics: one transient WebSocket shard close happened at `2026-05-06T22:52:25Z`, but the aggregate market WebSocket was connected and fresh by the final check.
+Next: Consider persisting rejected BTC taker quote/order-book snapshots in `strategy_market_paper_runs` or a diagnostic table so future skip rows show the exact historical ask levels that caused each reject.
+Notes: Answer-only DB/log diagnostic; no source code changed and no tests were run. `order_book_snapshots` is stale from 2026-05-03 and is not useful for this live BTC skip diagnosis; current BTC taker decisions rely on WebSocket cache and REST CLOB `/book`.
+Blockers: None.
+
+## Active Update 2026-05-07 Stop Clean History Restart Keep Enabled
+Goal: Stop the service, clear strategy/trading history without changing strategy `Enabled`, and restart fresh.
+Status: Completed
+Done:
+- Confirmed branch `master` has no upstream and continued locally.
+- Stopped the running Debug service process `PolyCopyTrader.Service.exe` PID `25276`.
+- Cleared strategy/trading history in one PostgreSQL transaction while explicitly not updating the `strategies` table.
+- Removed `6577` rows total from: `polymarket_onchain_paper_signal_results`, copied-leader Paper tables, `paper_position_settlements`, `strategy_market_paper_runs`, `paper_fills`, `paper_orders`, `paper_positions`, `signal_rejections`, `dry_run_orders`, `live_orders`, `signals`, `live_trading_events`, `risk_events`, and `daily_reports`.
+- Verified all cleaned tables had `0` rows at transaction end.
+- Verified `strategies.enabled` was unchanged: `20` strategies total, `20` enabled, `0` disabled, checksum unchanged.
+- Restarted the local Debug service as `PolyCopyTrader.Service.exe` PID `29764`.
+- IPC `/health` and `/status` returned `Running`, pauses `false`, kill switch `false`, `lastError=null`.
+- Observed that after restart the service immediately began creating new post-clean runtime rows and Paper entries from current cached Gamma markets.
+Next: Monitor the next BTC five-minute bucket from the new baseline if bet count/skip reasons are needed.
+Notes: Runtime/DB maintenance task only; no application tests were run. `psql` was not available in PATH, so the existing local .NET `out/dbprobe` helper was used for the transaction. Branch `master` has no upstream, so automatic commit/push cannot run.
+Blockers: None.
+
+## Active Update 2026-05-07 BTC CLOB Based Less More Selection
+Goal: Make BTC taker Paper choose `Less`/`More` from real executable CLOB/WebSocket prices instead of Gamma prices.
+Status: Completed
+Done:
+- Changed `BtcUpDown5mPaperStrategyProcessor` taker flow so stake is determined first, then both market outcome assets are priced from fresh WebSocket order-book depth with REST CLOB `/book` fallback.
+- BTC taker Paper now computes executable VWAP for the configured stake on both outcomes, selects `Less` as the lower executable VWAP and `More` as the higher executable VWAP, and keeps the final side boundary guard (`Less < 0.5`, `More > 0.5`).
+- Gamma is now only market/outcome/token mapping plus settlement/reference diagnostics for BTC taker Paper; Gamma/CLOB drift is recorded but no longer rejects BTC taker entries.
+- Added explicit skip reasons `clob_outcome_selection_incomplete` and `clob_outcome_selection_ambiguous`.
+- Extended `paper_orders.raw_decision_json` for BTC taker entries with both outcome-selection quote snapshots.
+- Added one REST CLOB `/book` confirmation pass when WebSocket candidate selection is incomplete, ambiguous, or crosses the final side boundary.
+- Updated BTC processor tests for CLOB-based `Less`/`More` selection, REST retry after stale WebSocket crossed-side pricing, both-sides missing/depth cases, and exact VWAP behavior.
+- Updated README, configuration reference, and paper evaluation notes.
+- Restarted the local Debug service as `PolyCopyTrader.Service.exe` PID `25276`.
+Next: Monitor a fresh 5-minute BTC bucket and confirm standard BTC strategy skips no longer cluster around the old Gamma-first `execution_price_direction_mismatch` pattern.
+Notes: Verification passed: focused `BtcUpDown5mPaperStrategyProcessorTests|TakerBuyFillEstimatorTests` `31/31`; full `dotnet test PolyCopyTrader.sln` `292/292`; IPC `/health` and `/status` returned `Running`, pauses `false`, kill switch `false`, `lastError=null`. The first test attempt was blocked by the previously running Debug service locking DLLs, so old service process PID `6788` was stopped before rebuilding; the intermediate restarted service PID `34420` was also stopped for the final rebuild. `git diff --check` on tracked touched files reported only LF/CRLF warnings. Branch `master` has no upstream, so automatic commit/push cannot run.
+Blockers: None.
+
+## Active Update 2026-05-07 CLOB Based Less More Selection Answer
+Goal: Explain whether BTC `Less`/`More` can be determined directly from real executable CLOB prices.
+Status: Completed
+Done:
+- Re-checked the BTC processor selection path: current code selects lower/higher outcome from Gamma market prices first, then estimates executable CLOB/WebSocket taker price for the selected asset.
+- Confirmed current `execution_price_direction_mismatch` skips happen when the later executable CLOB/VWAP price no longer matches the selected `Less`/`More` side.
+- Concluded CLOB-based outcome selection is feasible and better aligned with Paper-as-Live simulation: price both outcome books, classify by executable VWAP, and keep Gamma only for market/outcome/token metadata and settlement context.
+Next: Implement CLOB-based BTC outcome selection: estimate both outcome sides from fresh order books, choose `Less` as the lower executable price and `More` as the higher executable price, then persist both quote snapshots.
+Notes: Answer-only; no source code changed for this prompt. Branch `master` has no upstream.
+Blockers: None.
+
+## Active Update 2026-05-07 Not All Bets Reason
+Goal: Diagnose why not every enabled BTC strategy creates a Paper bet.
+Status: Completed
+Done:
+- Confirmed service IPC `/health` and `/status` are `Running`, `lastError=null`, pauses `false`, kill switch `false`.
+- Queried BTC strategy lifecycle rows around `2026-05-06T22:25:04Z`; PostgreSQL was not in recovery.
+- Confirmed all 18 standard BTC strategies are enabled with `paper_stake_amount=5`; Martin is disabled.
+- Current market `btc-updown-5m-1778106300` was all `Observed` because due times had not arrived yet (`30..270` seconds after market start).
+- Recent started markets show many skips: `btc-updown-5m-1778106000` had 3 placed and 15 skipped; `btc-updown-5m-1778105700` had 2 placed and 16 skipped; `btc-updown-5m-1778105400` had 12 placed and 6 skipped.
+- Current active skip driver since restart is `execution_price_direction_mismatch` (50 rows), plus one `missing_orderbook_empty_side`; the 228 `entry_due_already_passed` rows are a one-time startup/backfill artifact from already-past markets.
+Next: Investigate `execution_price_direction_mismatch` samples with Gamma selected outcome, CLOB asset, best ask, VWAP, and outcome token mapping to decide whether the guard is correctly rejecting crossed-side executable prices or is too strict/stale.
+Notes: Answer-only diagnostic; no source code changed for this prompt. Branch `master` has no upstream, so automatic pull/push/commit cannot run.
+Blockers: None.
+
+## Active Update 2026-05-07 Five Dollar Stake High Profit Explanation
+Goal: Explain why a closed Paper row can show about `$18.81` realized profit from a `$5` stake.
+Status: Completed
+Done:
+- Extracted and inspected the clipboard screenshot; it showed `Stake=5`, `Settled=1`, `Won=1`, `Realized=18.80952381`, and `MtM PnL=18.80952381`.
+- Queried settled BTC strategy runs and found the matching row: `btc_up_down_5m_less_270`, market `btc-updown-5m-1778105400`, outcome `Down`, entry price `0.21`, stake `$5`, size `23.80952381`, settlement price `1`, settlement value `23.80952381`, realized PnL `18.80952381`.
+- Confirmed this is expected binary-share payout math: profit is `stake / entry_price - stake` when the bought outcome resolves to `1`.
+Next: Consider adding `Entry price`, `Shares`, and `Settlement value` columns to the closed-bet Dashboard view so high wins are self-explanatory.
+Notes: Answer-only diagnostic; no source code changed for this prompt. Branch `master` has no upstream, so automatic pull/push/commit cannot run.
+Blockers: None.
+
+## Active Update 2026-05-07 Closed Profit Location Answer
+Goal: Explain where to view profit from already closed Paper bets.
+Status: Completed
+Done:
+- Re-checked Dashboard tab/column names after the `Total PnL` wording change.
+- Confirmed closed/earned strategy-level profit is visible in Dashboard `Strategies` tab column `Realized`.
+- Confirmed related closed-only context columns are `Settled runs`, `Settled`, `Won`, `Lost`, and `Closed ROI %`.
+- Confirmed per-position/current position view has `Paper Positions` with `Realized PnL`, while copied-leader aggregate rows show `Realized` in `Copied Ratings`.
+Next: If the user wants exact per-closed-bet rows, add or expose a dedicated `Paper Settlements`/closed bets table in the Dashboard.
+Notes: Answer-only diagnostic; no source code changed for this prompt. Branch `master` has no upstream, so automatic pull/push/commit cannot run.
+Blockers: None.
+
+## Active Update 2026-05-07 Rename Open PnL Labels
+Goal: Remove misleading `Total PnL` wording for open Paper mark-to-market values.
+Status: Completed
+Done:
+- Kept the useful mark-to-market calculation unchanged but renamed Dashboard `Strategies` and `Copied Ratings` visible columns from `Total PnL` / `ROI %` to `MtM PnL` / `MtM ROI %`.
+- Renamed corresponding CSV headers from `TotalPnlUsd` / `RoiPct` to `MarkToMarketPnlUsd` / `MarkToMarketRoiPct` for Strategy and copied-rating exports.
+- Updated README and configuration reference to document that `Realized` / `Closed ROI %` are closed/earned metrics, while `MtM` includes open unrealized PnL.
+- Rebuilt and restarted the Debug Dashboard after closing the old locked Dashboard process; service was left running.
+Next: None.
+Notes: Verification passed: Dashboard Verify build `0 warnings/0 errors`, Dashboard Debug build `0 warnings/0 errors` after closing `PolyCopyTrader.Dashboard.exe` PID `54256`, full Verify tests `290/290`, diff check on touched files passed with LF/CRLF warnings only. Local service IPC `/health` and `/status` still returned `Running`, `lastError=null`, pauses `false`, kill switch `false`. Branch `master` has no upstream, so automatic pull/push/commit cannot run.
+Blockers: None.
+
+## Active Update 2026-05-07 Dashboard Total PnL Source
+Goal: Explain where Dashboard `Strategies` tab `Total PnL` comes from.
+Status: Completed
+Done:
+- Extracted and inspected the clipboard screenshot; visible rows show `Realized=0` and `Total PnL` exactly equal to `Open unrealized`.
+- Inspected Dashboard binding and repository SQL: `TotalPnlUsd` in the `Strategies` tab is `realized_pnl_usd + unrealized_pnl_usd`.
+- Confirmed `unrealized_pnl_usd` comes from open `paper_positions`, marked from current best bid/current market mark, so it moves before settlement.
+- Queried PostgreSQL and confirmed current nonzero rows are open Paper positions with `won=0`, `lost=0`, `realized_pnl_usd=0`, and nonzero `open_unrealized_pnl_usd`.
+Next: Consider renaming the visible column or adding a separate closed-only PnL column if the current label is confusing during open markets.
+Notes: Answer-only diagnostic; no source code changed for this prompt. Branch `master` has no upstream, so automatic pull/push/commit cannot run.
+Blockers: None.
+
+## Active Update 2026-05-07 Reset Strategy History And Restart
+Goal: Stop the service, clear prior strategy/trading history, and start a fresh Paper run.
+Status: Completed
+Done:
+- Stopped the running Debug service before cleanup (`dotnet.exe` PID `40288`, `PolyCopyTrader.Service.exe` PID `15592`).
+- Cleared strategy/trading history tables in one explicit PostgreSQL transaction without broad `CASCADE`.
+- Rows removed: `232649` total across `polymarket_onchain_paper_signal_results`, `paper_copied_leader_activity_events`, `paper_copied_leader_positions`, `paper_copied_trader_performance`, `paper_position_settlements`, `strategy_market_paper_runs`, `paper_fills`, `paper_orders`, `paper_positions`, `signal_rejections`, `dry_run_orders`, `live_orders`, `signals`, `live_trading_events`, `risk_events`, and `daily_reports`.
+- Verified those cleared tables had total `0` rows immediately after the cleanup transaction.
+- Restarted the local Debug service as `dotnet.exe` PID `44324` and `PolyCopyTrader.Service.exe` PID `50736`.
+- IPC `/health` and `/status` returned `Running`, `lastError=null`, pauses `false`, kill switch `false`.
+- Confirmed `Live trading enabled: False`, BTC entry grace `30`, and BTC Paper taker pricing enabled.
+- After restart, new fresh rows started appearing with timestamps at or after `2026-05-06T21:42:45Z`; these are new post-reset runtime rows, not retained history.
+Next: Monitor the first full post-reset BTC five-minute bucket if clean baseline counts are needed.
+Notes: Runtime/DB maintenance task only; no source behavior changed and no code tests were run. The cleanup intentionally preserved strategy settings, Gamma markets, market/reference caches, Data API/on-chain reference data, bot settings, pinned assets, and raw diagnostic/source tables. Branch `master` has no upstream, so automatic pull/push/commit cannot run.
+Blockers: None.
+
+## Active Update 2026-05-07 BTC Five Minute Post-Fix Monitor
+Goal: Monitor the next five minutes after the BTC executable-price direction guard fix.
+Status: Completed
+Done:
+- Monitored window `2026-05-06T21:32:18.6019127Z` to `2026-05-06T21:37:18.6019127Z`.
+- Service stayed `Running` throughout status checks; pauses were `false`, kill switch was `false`, and `lastError=null`.
+- PostgreSQL was not in recovery at the final check.
+- Confirmed 18 standard BTC strategies enabled and 19 BTC strategies enabled including Martin.
+- Counted 18 standard BTC due runs in the window: 18 entered, 0 skipped, 0 observed waiting.
+- Counted 18 standard BTC `paper_orders` created from 18 distinct strategies, total notional `$60.33333334`, first order `2026-05-06T21:32:32Z`, last order `2026-05-06T21:37:09Z`.
+- All 18 orders used `raw_decision_json.source=clob_book`.
+- Confirmed no crossed-side standard BTC paper orders were created since the fixed service restart at `2026-05-06T21:28:19Z`.
+Next: Continue watching future buckets; if `execution_price_direction_mismatch` appears, inspect whether REST CLOB is truly crossed-side or WebSocket cache is stale.
+Notes: Runtime/DB monitoring only; no source behavior changed and no tests were run. Branch `master` has no upstream, so automatic pull/push/commit cannot run.
+Blockers: None.
+
+## Active Update 2026-05-07 BTC Final Execution Direction Guard
+Goal: Prevent BTC `Less` Paper strategies from entering above `0.5` and BTC `More` Paper strategies from entering below `0.5` after taker VWAP pricing.
+Status: Completed
+Done:
+- Added final executable-price direction validation in `BtcUpDown5mPaperStrategyProcessor`: Gamma selection still checks the selected reference, and taker Paper now also checks `estimate.AverageFillPrice`.
+- Added `SignalReasonCodes.OutcomePriceDirectionMismatch` and `SignalReasonCodes.ExecutionPriceDirectionMismatch`; CLOB/WebSocket fills that cross the side boundary now skip with `execution_price_direction_mismatch`.
+- Kept REST `/book` retry for WebSocket-cache pricing rejects when the cached executable price is direction-inconsistent, so stale cache can be corrected before skipping.
+- Added BTC regression tests for `Less 180` with executable CLOB price `0.92` and `More` with executable CLOB price `0.30`; both now skip instead of creating `paper_orders`.
+- Updated README and configuration reference to document that the final executable Paper entry price must match the `Less`/`More` side boundary.
+- Restarted the local Debug service with the fix as `dotnet.exe` PID `40288` and `PolyCopyTrader.Service.exe` PID `15592`.
+Next: Watch the next BTC five-minute bucket and confirm any crossed-side opportunities are skipped as `execution_price_direction_mismatch`.
+Notes: Verification passed: focused BTC tests `24/24`, full Verify tests `289/289`, Service Debug build `0 warnings/0 errors`, IPC `/health` and `/status` `Running`, sanitized config confirms Paper taker pricing enabled and live trading disabled, and `git diff --check` on touched files with LF/CRLF warnings only. Branch `master` has no upstream, so automatic pull/push/commit cannot run.
+Blockers: None.
+
+## Active Update 2026-05-07 BTC Entry Grace 30 Seconds
+Goal: Increase BTC 5-minute Paper entry grace window to 30 seconds.
+Status: Completed
+Done:
+- Changed `src/PolyCopyTrader.Service/appsettings.json` `BtcUpDown5mStrategy:EntryGraceSeconds` from `10` to `30`.
+- Verified sanitized Debug config prints `BTC Up or Down 5m strategy entry grace seconds: 30`.
+- Stopped the old service process (`PolyCopyTrader.Service.exe` PID `4160`, parent `dotnet.exe` PID `33048`), rebuilt Debug, and restarted the service.
+- New local Debug service processes are `dotnet.exe` PID `45444` and `PolyCopyTrader.Service.exe` PID `37416`.
+- IPC `/health` and `/status` returned `Running`, `lastError=null`, pauses `false`, kill switch `false`.
+Next: Re-run a five-minute BTC count to see whether the previous `Less 60`/`More 60` `entry_due_expired` skips disappear.
+Notes: Verification passed: focused `ConfigurationTests|BtcUpDown5mPaperStrategyProcessorTests` in Verify `39/39`, Service Debug build `0 warnings/0 errors`, sanitized `--print-config`, IPC smoke, and `git diff --check` on touched files with LF/CRLF warnings only. Live trading remains disabled.
+Blockers: None.
+
+## Active Update 2026-05-07 Five Minute BTC Bet Count
+Goal: Count how many standard BTC 5-minute Paper bets are created over a fresh five-minute watch window.
+Status: Completed
+Done:
+- Watched `2026-05-06T21:04:51Z` to `2026-05-06T21:09:51Z` (`2026-05-07 00:04:51-00:09:51 +03:00`).
+- Confirmed 18 standard BTC strategies were enabled at the start.
+- Confirmed 18 standard BTC due runs in the window.
+- Confirmed 16 standard BTC `paper_orders` were created from 16 distinct strategies, total notional `$56.60230357`.
+- All 16 successful orders used `raw_decision_json.source=clob_book`.
+- The two skipped runs were `btc_up_down_5m_less_60` and `btc_up_down_5m_more_60`, both `entry_due_expired` at `2026-05-07 00:06:00 +03:00`.
+- No `gamma_clob_price_mismatch` appeared in this watched window.
+Next: Investigate why the 60-second Less/More due pair expired, and decide whether to widen `EntryGraceSeconds` or reduce cycle latency.
+Notes: Runtime/DB observation only; no source behavior changed and no tests were run. During the watch IPC status changed from `Running` to `Paused` for the generic scanner/paper/live flags, but BTC orders continued to be created by the BTC worker. Branch `master` has no upstream, so automatic pull/push/commit cannot run.
+Blockers: None.
+
+## Active Update 2026-05-07 Service Status Check
+Goal: Verify whether the local PolyCopyTrader service is currently running.
+Status: Completed
+Done:
+- Confirmed `PolyCopyTrader.Service.exe` is running as PID `4160` from the Debug build, with parent `dotnet.exe` PID `33048`.
+- IPC `/health` returned `ok=true`, `state=Running`.
+- IPC `/status` returned `state=Running`, scanning/Paper/live pauses `false`, kill switch `false`, and `lastError=null`.
+- Fresh log file `polycopytrader-service-20260507.log` is active and shows ongoing Gamma/CLOB/Data API/on-chain cycles around `2026-05-07 00:01:52 +03:00`.
+Next: None.
+Notes: Runtime check only; no source behavior changed and no tests were run. Branch `master` has no upstream, so automatic pull/push/commit cannot run.
+Blockers: None.
+
+## Active Update 2026-05-06 Trust REST CLOB Book For BTC Paper
+Goal: Stop rejecting BTC Paper taker entries as `gamma_clob_price_mismatch` when REST CLOB `/book` provides an executable book.
+Status: Completed
+Done:
+- Updated BTC Paper taker pricing so source `clob_book` is trusted for execution and no longer rejects on `PaperTakerMaxGammaClobDiff`; `clob_vs_gamma_diff` remains in successful `paper_orders.raw_decision_json` as diagnostics.
+- Added a fallback path: if a fresh `websocket_cache` estimate would reject as `gamma_clob_price_mismatch`, the processor rechecks REST CLOB `/book` once and uses that REST book if it is fresh and executable.
+- Added focused regression tests for direct `clob_book` with large Gamma/CLOB diff and for WebSocket-cache mismatch resolving through REST CLOB `/book`.
+- Updated README and configuration reference to document that REST CLOB `/book` is trusted and Gamma/CLOB drift is diagnostic for that source.
+- Restarted the local Debug service with the new code as `dotnet.exe` PID `33048` and `PolyCopyTrader.Service.exe` PID `4160`; IPC `/health` and `/status` report `Running`, `lastError=null`.
+Next: Monitor the next BTC 5-minute bucket to confirm `gamma_clob_price_mismatch` drops and entries increase.
+Notes: Verification passed: focused BTC taker tests `26/26`, full Verify tests `287/287`, Service Debug build `0 warnings/0 errors`, and `git diff --check` on touched files with LF/CRLF warnings only. Live trading behavior was not changed.
+Blockers: None.
+
+## Active Update 2026-05-06 WebSocket Cache Role In BTC Pricing
+Goal: Clarify whether cached Polymarket market WebSocket data participates in BTC Paper entry decisions.
+Status: Completed
+Done:
+- Confirmed BTC Paper taker pricing first checks `MarketDataCache.GetOrderBook(assetId, maxAge)`.
+- Confirmed a fresh cached order book with positive ask depth is used as source `websocket_cache` for VWAP estimation.
+- Confirmed REST CLOB `/book` is only fallback when the WebSocket cache is missing, stale, or has no executable ask depth; fetched REST books are also written back into the same cache.
+- Confirmed WebSocket events update both `ActiveMarketAssetSubscriptionRegistry` and `MarketDataCache`, but BTC entry VWAP currently uses the full-depth `MarketDataCache`, not the active top-of-book snapshot helper.
+Next: If needed, add reject-detail persistence so skipped BTC runs show whether each decision used `websocket_cache` or `clob_book`.
+Notes: Explanation-only task; no source behavior changed and no tests were run. Branch `master` has no upstream, so automatic pull/push/commit cannot run.
+Blockers: None.
+
+## Active Update 2026-05-06 Gamma CLOB Mismatch Explanation
+Goal: Explain the BTC Paper skip reason `gamma_clob_price_mismatch`.
+Status: Completed
+Done:
+- Inspected the BTC 5-minute Paper taker pricing path and confirmed `gamma_clob_price_mismatch` is raised after a fresh WebSocket/REST CLOB order book is found and a taker BUY VWAP estimate is computed.
+- Confirmed the check is `abs(estimated CLOB VWAP - Gamma outcome price) > BtcUpDown5mStrategy.PaperTakerMaxGammaClobDiff`.
+- Confirmed current service config sets `PaperTakerMaxGammaClobDiff=0.15`, `PaperTakerPricingEnabled=true`, `PaperTakerMaxQuoteAgeMilliseconds=1500`, `PaperTakerMaxSpreadAbs=0.10`, and `PaperTakerRestFallbackEnabled=true`.
+- Explained that Gamma is currently the outcome-selection/reference source, while CLOB/WebSocket/REST depth is the executable Paper entry source.
+Next: If needed, add structured rejection details for skipped BTC runs so each `gamma_clob_price_mismatch` stores Gamma price, CLOB VWAP, diff, quote source/age, spread, and top ask depth.
+Notes: Explanation-only task; no source behavior changed and no tests were run. Branch `master` has no upstream, so automatic pull/push/commit cannot run.
+Blockers: Current skipped `strategy_market_paper_runs` preserve the reason but not the full quote/VWAP snapshot, so per-skip root-cause analysis needs an instrumentation change.
+
+## Active Update 2026-05-06 Market WebSocket Supervisor Resilience
+Goal: Keep the service alive when PostgreSQL temporarily returns `57P03` during crash recovery.
+Status: Completed
+Done:
+- Hardened `MarketDataWebSocketService.ExecuteAsync` so each supervisor cycle catches non-cancellation exceptions, updates the in-memory market-data status to `Reconnecting`, waits a short bounded retry delay, and continues instead of letting `BackgroundService` stop the host.
+- Guarded the market WebSocket shutdown path so shard stopping or final disconnected-status publication cannot add another unhandled exception during DB recovery.
+- Added a resilience regression test that makes `IRelevantMarketAssetProvider` throw once and verifies the market WebSocket supervisor reaches a later cycle.
+- Verification passed: focused `ResilienceTests|MarketData` tests `23/23`, Service Debug build `0 warnings/0 errors`, and full test project with `--no-build` `285/285`.
+- Stopped the old locked Debug service process `11044`, rebuilt, and restarted the local Debug service through `dotnet run --project src\PolyCopyTrader.Service\PolyCopyTrader.Service.csproj --configuration Debug --no-restore`.
+- Runtime after restart: `dotnet.exe` PID `53564`, `PolyCopyTrader.Service.exe` PID `53736`; IPC `/health` and `/status` report `Running`, `lastError=null`, kill switch inactive, and Paper not paused.
+Next: Observe the next PostgreSQL recovery event; the service should now survive the market WebSocket supervisor `57P03` path. Separately tune `gamma_clob_price_mismatch` if BTC Paper throughput is still below the 18-orders-per-5-min target.
+Notes: Live trading remains disabled by configuration; no live order placement was enabled or called. Fresh logs still show unrelated non-fatal on-chain trade capture retries. Branch `master` has no upstream, so automatic pull/push/commit cannot run.
+Blockers: PostgreSQL itself is still crashing with Windows `postgres.exe` `0xc0000005`; this patch keeps the service alive through transient recovery windows but does not fix the database crash root cause.
+
+## Active Update 2026-05-06 Five Minute BTC Follow-Up Check
+Goal: Recheck BTC Paper order throughput five minutes after the user's 23:19 local-time request.
+Status: Completed
+Done:
+- Started the five-minute watch at `2026-05-06T20:20:11Z`; service `/health` was initially `Running`.
+- At `2026-05-06T20:22:36Z`, `/health` no longer responded.
+- Found another Windows Application Error for `postgres.exe` at `2026-05-06 23:20:53 +03:00` with exception code `0xc0000005` and fault offset `0x00000000002263da`.
+- Confirmed service log shows PostgreSQL `57P03` recovery errors at `23:20:57 +03:00`; `MarketDataWebSocketService` threw an unhandled exception and HostOptions stopped the host.
+- Restarted the local Debug service as `PolyCopyTrader.Service.exe` PID `11044`; `/health` returned `Running`.
+- At the `20:25 UTC` check, confirmed standard BTC enabled strategies = `18`; BTC strategies including Martin = `19`.
+- For the `20:20-20:25 UTC` due bucket: `18` standard BTC due runs, `7` entered/created orders, `11` skipped, `0` still observed.
+- Skip reasons in that bucket were `entry_due_expired=8` and `gamma_clob_price_mismatch=3`.
+- Real `paper_orders` in `20:20-20:25 UTC`: `7` orders from `7` distinct standard BTC strategies, total notional about `$30.48163228`, first `20:20:33Z`, last `20:24:35Z`.
+Next: Fix service resilience first so PostgreSQL recovery does not stop the host; then tune Gamma/CLOB mismatch if the target remains closer to 18 entries per cycle.
+Notes: Runtime/DB diagnostic task only; no repository behavior changed and no tests were run. Branch `master` has no upstream, so automatic pull/push/commit cannot run.
+Blockers: PostgreSQL continues to crash with `0xc0000005` and service still stops on unhandled background `57P03`.
+
+## Active Update 2026-05-06 BTC Paper Order Throughput Check
+Goal: Count how many of the 18 standard BTC 5-minute strategies actually produce Paper orders per 5-minute cycle.
+Status: Completed
+Done:
+- Queried PostgreSQL with a temporary C#/.NET Npgsql probe without printing connection details.
+- Confirmed `18` standard BTC 5-minute strategies are enabled; `19` BTC strategies exist including `btc_up_down_5m_less_180_martin`, but Martin is currently disabled.
+- Counted standard BTC `paper_orders` by 5-minute `created_at_utc` bucket in the last hour: `20:10=10`, `20:05=2`, `20:00=2`, `19:55=10`, `19:45=9`, `19:40=4`, `19:35=2`, `19:30=2`.
+- Counted standard BTC due runs by `entry_due_at_utc`: `20:10` had `18` due, `10` entered, `2` skipped, and `6` remained `Observed`; `20:05` had `2` entered and `16` skipped; `20:00` had `2` entered and `16` skipped; `19:55` had `10` entered and `8` skipped.
+- Found a fresh PostgreSQL crash at `2026-05-06T20:13:07Z` / `23:13:07 EEST` with `postgres.exe` `0xc0000005`, followed by PostgreSQL recovery and service shutdown.
+- Confirmed service log shows `MarketDataWebSocketService` threw unhandled `57P03` while PostgreSQL was recovering; HostOptions stopped the host, which explains no BTC orders after `2026-05-06T20:12:34Z`.
+- Restarted the local Debug service as `PolyCopyTrader.Service.exe` PID `47364`; `/health` returned `Running`.
+- Recent skip reasons were dominated by `gamma_clob_price_mismatch`; in the last 20 minutes: `20:10` had `2` Gamma/CLOB skips, `20:05` had `11` Gamma/CLOB, `3` stale orderbook, `2` entry due expired, and `20:00` had `15` Gamma/CLOB plus `1` empty orderbook side.
+Next: Harden background services so transient PostgreSQL `57P03` does not stop the host, then tune/disable `PaperTakerMaxGammaClobDiff` if we intentionally want more BTC Paper entries.
+Notes: Runtime/DB diagnostic task only; no repository behavior changed and no tests were run. Branch `master` has no upstream, so automatic pull/push/commit cannot run.
+Blockers: PostgreSQL continues to crash with `0xc0000005`, causing service downtime and missed due entries.
+
+## Active Update 2026-05-06 Disable WebSocket Trade Tick Diagnostics
+Goal: Temporarily stop writing to `polymarket_websocket_trade_ticks` and avoid heavy schema backfill work on that table.
+Status: Completed
+Done:
+- Changed `MarketTradeDiagnosticsOptions.Enabled` default to `false`.
+- Set `src/PolyCopyTrader.Service/appsettings.json` `MarketTradeDiagnostics:Enabled=false`.
+- Guarded the `polymarket_websocket_trade_ticks` schema backfill update so it only touches rows with missing/blank `dedup_key` or missing `updated_at_utc`, instead of rewriting the whole table on every schema initialization.
+- Updated README and configuration reference to document diagnostic trade ticks as disabled by default.
+- Updated tests for the disabled default and explicit opt-in diagnostic recording.
+- Rebuilt and restarted the local Debug service as `PolyCopyTrader.Service.exe` PID `6956`; `/health` and `/status` returned `Running`, `lastError=null`.
+- Verified runtime config prints `Market trade diagnostics enabled: False`.
+- Verified DB count did not increase after restart: `polymarket_websocket_trade_ticks` stayed at `68668` rows and latest row remained `2026-05-06T20:08:02Z`.
+Next: Continue monitoring PostgreSQL stability; if crashes persist, reduce `auto_explain` and inspect Windows/PostgreSQL crash dumps.
+Notes: Verification passed: focused tests `46/46`, Service Debug build `0 warnings/0 errors`, IPC health/status smoke, DB row-count smoke, and `git diff --check` on touched files. An earlier Debug build failed only because the old service process PID `47076` held DLL locks; after stopping it, the build passed. Branch `master` has no upstream, so automatic pull/push/commit cannot run.
+Blockers: PostgreSQL `0xc0000005` root cause remains unproven until stability is observed or crash dumps are inspected.
+
+## Active Update 2026-05-06 WebSocket Trade Tick Table Explanation
+Goal: Explain what `polymarket_websocket_trade_ticks` stores and why it exists.
+Status: Completed
+Done:
+- Inspected schema, repository writes, WebSocket processing, market trade diagnostic service, and docs.
+- Confirmed `polymarket_websocket_trade_ticks` is a diagnostic table for Polymarket market WebSocket `last_trade_price` messages, not a table of our Paper/Live orders.
+- Confirmed current service path records raw JSON plus asset/condition, side, price, size, trade timestamp, transaction hash presence, receive/update timestamps, and an initial `trader_match_status=NotFound`.
+- Confirmed current docs say the background `/trades` wallet-enrichment retry queue is no longer active; historical rows can still have `trader_wallet` from the previous matcher path.
+- Queried runtime counts: `68665` rows from `2026-05-03T16:39:30Z` to `2026-05-06T20:02:39Z`; all have transaction hashes, `11581` are `FoundByTransactionHash`, and `57084` are `NotFound`.
+Next: If reducing PostgreSQL load is the priority, disable `MarketTradeDiagnostics.Enabled` or add retention/cleanup plus fix the schema backfill `UPDATE` guard.
+Notes: Answer-only/runtime inspection task. No source behavior changed and no tests were run. Branch `master` has no upstream, so automatic pull/push/commit cannot run.
+Blockers: None.
+
+## Active Update 2026-05-06 PostgreSQL Recovery Cause Check
+Goal: Explain why local PostgreSQL often enters recovery while PolyCopyTrader is running.
+Status: Completed
+Done:
+- Checked Windows Application Event Log and found repeated `postgres.exe` crashes on `2026-05-06` with exception code `0xc0000005` at `09:54:23`, `13:32:37`, `16:07:03`, `19:23:14`, `19:33:09`, `21:41:56`, `22:37:35`, and `22:47:52` local time.
+- Confirmed PostgreSQL log recovery symptoms after the crashes: `database system is not yet accepting connections`, `Consistent recovery state has not been yet reached`, followed by `redo done` and `checkpoint complete`.
+- Confirmed the DB is currently healthy: `/health` returned `Running`, PostgreSQL reports `pg_is_in_recovery() = false`, version `PostgreSQL 17.5 on x86_64-windows`, data directory `D:/PortgreeData`, log directory `D:/PortgreeLogs`.
+- Confirmed installed PostgreSQL extensions are only `plpgsql`, but `shared_preload_libraries=auto_explain` is active with JSON analyze/buffer logging for queries slower than `2000ms`.
+- Found an app-side contributor to DB write pressure: `src/PolyCopyTrader.Storage/PostgresSchema.cs` runs `UPDATE polymarket_websocket_trade_ticks` without a `WHERE` guard during schema initialization, rewriting the tick table; current stats show about `68664` live rows, `68656` updates, and total relation size `270 MB`.
+Next: Fix the schema backfill update to touch only missing `dedup_key`/`updated_at_utc` rows, reduce or temporarily disable heavy PostgreSQL `auto_explain` diagnostics, then add service retry resilience for transient `57P03` recovery windows.
+Notes: Diagnostic/runtime task only; no repository behavior changed. A temporary C# Npgsql probe in `%TEMP%` was used without printing the connection string. Branch `master` has no upstream, so automatic pull/push/commit cannot run.
+Blockers: Exact root cause of the PostgreSQL `0xc0000005` access violations is not proven from available logs; it requires PostgreSQL/Windows crash dump or eliminating load/config factors.
+
+## Active Update 2026-05-06 Gamma CLOB Mismatch Count Check
+Goal: Count recent BTC Paper `gamma_clob_price_mismatch` skips.
+Status: Completed
+Done:
+- Queried PostgreSQL with a temporary C#/.NET Npgsql probe.
+- Counted `gamma_clob_price_mismatch`: `17` since stake raise at `2026-05-06T19:30:00Z`, `11` since patched service restart at `2026-05-06T19:41:57Z`, and `17` in the last 60 minutes as of DB time `2026-05-06T19:53:14Z`.
+- Since patched restart, skip reasons were `entry_due_expired=36`, `gamma_clob_price_mismatch=11`, `martin_waiting_for_less180_losses_0_of_3=1`, and `martin_waiting_for_less180_losses_1_of_3=1`.
+- Found the service had stopped at `2026-05-06T19:47:57Z` because PostgreSQL returned `57P03` recovery/not accepting connections to a WebSocket background worker; restarted the Debug service as PID `47076`.
+- IPC `/health` and `/status` after restart returned `Running`, `lastError=null`.
+Next: Consider relaxing or disabling `PaperTakerMaxGammaClobDiff` if the user wants fewer Gamma/CLOB sanity skips; separately harden background workers so transient PostgreSQL recovery does not stop the host.
+Notes: Runtime DB/service check only; no source behavior changed and no code tests were run. Branch `master` has no upstream, so automatic pull/push/commit cannot run.
+Blockers: Service resilience to transient PostgreSQL recovery remains a code hardening task.
+
+## Active Update 2026-05-06 BTC Paper Best Ask Guard Disabled
+Goal: Temporarily stop `best_ask_above_max_entry` from blocking BTC Paper taker entries.
+Status: Completed
+Done:
+- Changed BTC Paper taker pricing so, after a fresh order book is found, `maxAllowedPrice` is temporarily raised to current `bestAsk` when `bestAsk` is above the Gamma/reference cap.
+- Left the shared `TakerBuyFillEstimator` guard intact for other callers; this is scoped to BTC Paper entry pricing only.
+- Left Live trading behavior unchanged.
+- Added a regression test proving BTC Paper can enter when Gamma/reference cap is `0.40` and CLOB `bestAsk` is `0.41`.
+- Rebuilt and restarted the Debug service as `PolyCopyTrader.Service.exe` PID `28044`; IPC `/health` and `/status` returned `Running`, `lastError=null`.
+- Verified runtime behavior: `btc_up_down_5m_less_180` entered at `2026-05-06T19:43:04Z` with Paper price `0.35`; fresh skips after restart were `entry_due_expired`, `martin_waiting_for_less180_losses_0_of_3`, and `gamma_clob_price_mismatch`, not fresh `best_ask_above_max_entry`.
+Next: Monitor fresh skip reasons and report them in chat during active monitoring; consider a Dashboard rejection feed for permanent push-style visibility.
+Notes: Verification passed: focused BTC/estimator tests `24/24`, Service Debug build, IPC smoke, DB runtime check, and `git diff --check` on touched files. Branch `master` has no upstream, so automatic pull/push/commit cannot run.
+Blockers: Chat cannot receive automatic push events from the service after the assistant stops monitoring; permanent visibility needs a dashboard/log feed.
+
+## Active Update 2026-05-06 Best Ask Above Max Entry Explanation
+Goal: Explain the BTC Paper skip reason `best_ask_above_max_entry`.
+Status: Completed
+Done:
+- Rechecked the BTC Paper taker pricing code and estimator rejection rule.
+- Confirmed `best_ask_above_max_entry` means current executable CLOB best ask is higher than the bot's configured max allowed BUY price.
+- Confirmed the max allowed price for BTC Paper taker entries is `min(PaperTakerMaxEntryPrice, gamma reference price + PaperTakerMaxReferenceSlippage)`, currently with defaults/config values around absolute cap `0.80` and reference slippage `0.03`.
+- Clarified that this is intentional anti-chasing behavior, not a service failure.
+Next: Monitor how often this rejection appears; tune max reference slippage only if we intentionally accept more chasing.
+Notes: Answer-only/code-inspection task. No source behavior changed and no tests were run. Branch `master` has no upstream, so automatic pull/push/commit cannot run.
+Blockers: None.
+
+## Active Update 2026-05-06 BTC Standard Paper Stake Raise
+Goal: Raise BTC 5-minute Paper stakes so realistic CLOB/taker minimum-size checks can pass.
+Status: Completed
+Done:
+- Updated PostgreSQL `strategies.paper_stake_amount` from `$1.00` to `$5.00` for the 18 standard BTC 5m Less/More strategies.
+- Left `btc_up_down_5m_less_180_martin` at `$1.00` because it has a separate Martin progression and raising it would change the progression from 1/2/4/8/16 to 5/10/20/40/80.
+- Did not change `live_stakes`, `live_stake_amount`, or `live_available_balance`.
+- Verified service IPC on `http://127.0.0.1:5118/health` and `/status`; service is `Running`, `lastError=null`, kill switch inactive, and Paper trading is not paused.
+- Verified new BTC Paper orders started appearing after the stake raise for standard BTC variants; `Less 180` itself next skipped on `best_ask_above_max_entry`, so minimum-size is no longer the immediate blocker there, but price chasing is still blocked.
+Next: Monitor the next BTC 5m cycles for `paper_orders.raw_decision_json`; if `best_ask_above_max_entry` is too frequent, tune max reference slippage or max entry price deliberately.
+Notes: Runtime DB update only; no source behavior changed and no code tests were needed. Branch `master` has no upstream, so automatic pull/push/commit cannot run.
+Blockers: None for standard BTC Paper stake size; Martin remains intentionally unchanged.
+
+## Active Update 2026-05-06 BTC Less 180 No New Bets Check
+Goal: Explain why strategy `b7c50005-0000-4000-8001-000000000180` is not creating new Paper orders.
+Status: Completed
+Done:
+- Queried PostgreSQL read-only with a temporary C#/.NET Npgsql probe without printing connection details.
+- Confirmed the strategy is enabled as `btc_up_down_5m_less_180`, but its `paper_stake_amount` is still `$1.00`.
+- Confirmed no new `paper_orders` exist for this strategy in the last 2 hours; latest orders are old Gamma-price fills from `2026-05-06T16:18:04Z` and earlier.
+- Confirmed the worker is processing the strategy after the Paper restart: recent due runs were skipped at `2026-05-06T19:03Z`, `19:08Z`, `19:13Z`, `19:18Z`, and `19:23Z`.
+- Found the current skip reasons: mostly `order_below_min_size`, plus one `best_ask_above_max_entry`; earlier rows after restart were `entry_due_expired` backlog.
+- Confirmed recent Gamma snapshots for BTC 5m markets report `order_min_size=5` shares while the configured `$1` stake implies only about 1-2 shares at realistic CLOB prices, so the new taker/VWAP Paper model correctly refuses to simulate an impossible real order.
+Next: Raise BTC Paper stake to a realistic minimum such as `$5` for BTC 5m strategies, or intentionally change sizing logic to auto-size up to market minimum if that risk behavior is desired.
+Notes: Read-only DB/code inspection task; no source behavior changed and no tests were needed. Branch `master` has no upstream, so automatic pull/push/commit cannot run.
+Blockers: Current `$1` BTC stake is below the actual market minimum order size when realistic CLOB/taker Paper pricing is enabled.
+
+## Active Update 2026-05-06 Service Running Check
+Goal: Confirm whether the local PolyCopyTrader service is running after switching back to realistic Paper mode.
+Status: Completed
+Done:
+- Checked local IPC `/health` and `/status`; both report `Running`, `lastError=null`.
+- Confirmed service processes are active: `dotnet.exe` PID `36104` and `PolyCopyTrader.Service.exe` PID `2288`.
+- Confirmed controls are clear: scanning not paused, Paper trading not paused, live trading not paused, kill switch inactive.
+- Checked the fresh log tail; no fresh error/fatal/exception lines were present.
+Next: Let Paper run and monitor BTC Paper orders/skips in Dashboard or `paper_orders.raw_decision_json`.
+Notes: Runtime check only; no source behavior changed and no code tests were needed. Branch `master` has no upstream, so automatic pull/push/commit cannot run.
+Blockers: None for current Paper runtime.
+
+## Active Update 2026-05-06 BTC Paper Vs Live Pricing Clarification
+Goal: Clarify whether current BTC Paper entry selection is exactly the same technology as BTC Live.
+Status: Completed
+Done:
+- Rechecked `BtcUpDown5mPaperStrategyProcessor` pricing and live preflight paths.
+- Confirmed BTC Paper entries currently use the new taker-style VWAP estimator over fresh WebSocket/CLOB ask depth with quote-age, spread, max-entry, liquidity, minimum-size, and Gamma/CLOB sanity checks.
+- Confirmed current BTC Live placement path is still maker-only/post-only GTD: it rejects when the live price would cross/use best ask and creates `ClobV2OrderRequest` with `PostOnly=true`.
+- Clarified that current BTC Paper is close to the intended future taker Live execution model, but it is not exactly the same as the currently implemented Live path until live taker/FOK-or-FAK execution is added deliberately.
+Next: If/when Live taker is explicitly requested, port the Paper VWAP quote/depth policy into a live limit/FOK-or-FAK execution policy with a final quote freshness check, fee accounting, and existing live safety gates.
+Notes: Answer-only/code-inspection task. No source behavior changed and no tests were run. Branch `master` has no upstream, so automatic pull/push/commit cannot run.
+Blockers: Current Live BTC path remains maker-only/post-only by design.
+
+## Active Update 2026-05-06 Paper Realistic Runtime
+Goal: Restart the service in Paper mode while keeping Paper entries as close as current code supports to real executable trading.
+Status: Completed
+Done:
+- Switched service `Bot:Mode` from `DryRun` to `Paper`.
+- Kept `Bot:EnableLiveTrading=false`, `PolymarketAuth:Enabled=false`, and `LiveTrading:ManualEnableCode` empty; no live trading was enabled.
+- Disabled `PolymarketAuth:DryRunSigningEnabled` because current runtime is Paper, not DryRun.
+- Left realistic Paper knobs enabled: `MarketDataWebSocket` on, `PaperTrading:UseMinimumMarketOrderSize=true`, BTC Paper taker VWAP/depth pricing on, REST CLOB fallback on, and Paper settlement/performance refresh on.
+- Restarted the local Debug service. IPC `/health` and `/status` returned `Running`, `lastError=null`; fresh logs show `Mode: Paper` and the BTC 5-minute Paper worker running.
+Next: Monitor fresh `paper_orders.raw_decision_json` for BTC entries and skip reasons. For maximum realism beyond BTC, the next code task is a Follow leader Paper taker/VWAP shadow-entry model instead of leader-price maker-style pending fills.
+Notes: Verification passed: sanitized `--print-config` showed `Mode: Paper`, live disabled, dry-run signing disabled, BTC Paper taker pricing enabled; focused config/BTC/market-data tests passed `42/42`; Service Debug build passed; `git diff --check` passed for service appsettings. Branch `master` has no upstream, so automatic pull/push/commit cannot run.
+Blockers: Follow leader Paper entries are still maker-style at leader trade price and fill only when the market trades back through that price; this is conservative but not yet taker-VWAP realistic.
+
+## Active Update 2026-05-06 Live Plus Paper Runtime
+Goal: Allow Paper trading to keep running alongside Live mode without weakening live-order gates.
+Status: Completed
+Done:
+- Added `PaperTrading:RunInLiveMode` and shared `RuntimeModePolicy` so Paper runtime is enabled in `Bot:Mode=Paper`, or in `Bot:Mode=Live` only when the new flag is true.
+- Wired Follow leader signal processing to create Paper orders in Live mode when `RunInLiveMode=true`, while Live placement still runs through the separate live preflight path and live gates.
+- Wired on-chain Paper signal processing, BTC 5-minute Paper worker/processor, and Paper accounting settlement to use the same runtime policy.
+- Set service `appsettings.json` to `PaperTrading:RunInLiveMode=true`; current service config still remains `Mode=DryRun`, `EnableLiveTrading=false`, and `PolymarketAuth:Enabled=false`.
+- Updated README, configuration reference, live checklist, sanitized config output, and regression tests for Live+Paper behavior.
+- Restarted the local Debug service with the new code. IPC `/health` and `/status` returned `Running`, `lastError=null`; fresh log tail had no errors.
+Next: Before an actual Live+Paper session, switch deliberately from `DryRun` to `Live` only after the existing live-readiness gates pass; then verify that new signals create both Paper rows and live preflight/live rows as expected.
+Notes: Verification passed: focused tests `62/62`, full tests `283/283`, Service Verify build, Dashboard Verify build, sanitized `--print-config`, Debug service restart/IPC smoke, and `git diff --check` on touched files. Initial parallel Service build failed only due an `obj` DLL lock from concurrent test/build activity; `dotnet build-server shutdown` and sequential rebuild passed. Branch `master` has no upstream, so automatic pull/push/commit cannot run.
+Blockers: Live remains intentionally disabled in config; no live order placement was enabled or submitted.
+
+## Active Update 2026-05-06 BTC Paper Taker VWAP
+Goal: Make BTC 5-minute Paper entries use fresh executable CLOB/WebSocket depth and VWAP instead of immediate fills at Gamma `outcomePrices`.
+Status: Completed
+Done:
+- Updated `MarketDataCache` so WebSocket `price_change` deltas apply to the existing full `book` depth instead of replacing it with a top-of-book-only snapshot; `best_bid_ask` updates preserve known executable depth.
+- Added `TakerBuyFillEstimator` in `PolyCopyTrader.Strategy` to simulate FOK-style Paper BUY fills over positive ask depth up to `maxAllowedPrice`, returning VWAP or explicit rejection reasons.
+- Added BTC Paper taker config knobs: `PaperTakerPricingEnabled`, REST fallback, max quote age, max entry price, max reference slippage, max spread, and max Gamma/CLOB diff.
+- Enabled BTC Paper taker pricing explicitly in service `appsettings.json`; code default remains disabled so taker-style Paper pricing is opt-in.
+- Wired `BtcUpDown5mPaperStrategyProcessor` to require fresh executable depth for BTC Paper entries, use WebSocket cache first, fetch REST CLOB `/book` when depth is missing/stale, skip with explicit reasons on stale/missing/insufficient liquidity, and persist quote/depth/VWAP details in `paper_orders.raw_decision_json`.
+- Added `PaperOrder.RawDecisionJson` support so custom decision snapshots can be stored without changing the existing table schema.
+- Updated README, configuration reference, and paper-trading evaluation notes.
+- Restarted the local Debug service with the new code. IPC `/health` returned `ok=true`, `/status` is `Running`, `lastError=null`; service process is `PolyCopyTrader.Service.exe` PID `22064` under `dotnet` PID `28044`.
+Next: Let BTC Paper run in `Paper` mode and review new `paper_orders.raw_decision_json` snapshots plus skip reasons such as `best_ask_above_max_entry`, `insufficient_liquidity_within_slippage`, and `gamma_clob_price_mismatch`; then tune thresholds/stake size.
+Notes: Verification passed: focused estimator/cache/BTC/config tests `41/41`, full test project `280/280`, Service Verify build, Dashboard Verify build, sanitized `--print-config`, Debug service build/start, and `git diff --check` on touched files. Full test run emitted existing nullable warnings in `PostgresAppRepository` during rebuild; Verify builds reported 0 warnings/errors. Branch `master` has no upstream, so automatic pull/push/commit cannot run.
+Blockers: Current service config is `Mode=DryRun`, so BTC 5-minute worker still does not place Paper BTC entries until mode is switched back to `Paper`. Live remains disabled.
+
+## Active Update 2026-05-06 Polymarket WebSocket Freshness Answer
+Goal: Clarify whether Polymarket WebSocket should provide continuously refreshed data through price-change events.
+Status: Completed
+Done:
+- Rechecked official Polymarket WebSocket docs and local WebSocket code.
+- Confirmed the market channel uses `price_change`, not `price_changed`; it is emitted when orders are placed or cancelled and includes price-level change data plus `best_bid`/`best_ask`.
+- Confirmed `best_bid_ask` is the top-of-book event and requires `custom_feature_enabled=true`; our shard subscription already sends that flag.
+- Confirmed `book` provides full order-book snapshots, `last_trade_price` reports matched trades, and our parser/cache currently update top-of-book from `price_change`/`best_bid_ask` and full depth from `book`.
+- Identified the key implementation gap for taker VWAP: current in-memory cache can have fresh top-of-book from events, but `price_change`/`best_bid_ask` snapshots store size `0`, so reliable executable depth requires maintaining a real local order book by applying price-level deltas to the last `book`, or REST `/book` fallback at decision time.
+Next: Before BTC Paper taker VWAP, implement/verify a local depth cache that applies `price_change` deltas and exposes quote age/depth, with CLOB `/book` fallback when depth is missing or stale.
+Notes: Answer-only task. Used official Polymarket docs and local code inspection. No source behavior changed and no tests were run. Branch `master` has no upstream, so automatic pull/push/commit cannot run.
+Blockers: None for the explanation; depth-aware taker pricing needs a code-change task.
+
+## Active Update 2026-05-06 BTC Taker Depth Review
+Goal: Review external advice on moving BTC entry pricing toward taker-style executable CLOB pricing.
+Status: Completed
+Done:
+- Compared the pasted taker-entry critique with the current BTC Paper findings and agreed with the main correction: CLOB/WebSocket order book must be the execution source, while Gamma `outcomePrices` should be only a sanity/staleness check.
+- Identified the key design change: Paper taker BUY should simulate executable liquidity and VWAP over ask depth up to a configured max allowed price; `bestAsk` is valid only when the full requested size is available at that level.
+- Recommended keeping this paper-only and behind explicit configuration first; Live stays disabled and no live order placement should be added in this task.
+- Noted that BTC standalone 5m strategies do not have a leader price, so their max-entry rule must be config-driven (`max entry`, spread, quote age, liquidity) rather than `leaderPrice + slippage`; Follow leader can use leader price plus slippage.
+- Recommended FOK-style all-or-nothing semantics first for paper/live-readiness accounting, with FAK/partial fills deferred until accounting supports them.
+Next: Implement a C#/.NET Paper-only taker fill estimator with unit tests, persist full quote/depth snapshots for BTC entries, and wire BTC Paper to skip stale or insufficient-liquidity entries.
+Notes: Answer-only review. No source behavior changed and no tests were run. Branch `master` has no upstream, so automatic pull/push/commit cannot run.
+Blockers: Exact Polymarket fee formula should be verified against current official docs before using fees for production PnL or Live gating.
+
+## Active Update 2026-05-06 BTC Less 180 Paper Price DB Check
+Goal: Check why `paper_orders` for `btc_up_down_5m_less_180` are almost all `0.495` while live market prices visually move much wider.
+Status: Completed
+Done:
+- Queried PostgreSQL read-only for strategy `b7c50005-0000-4000-8001-000000000180` using a temporary C#/.NET Npgsql probe without printing the connection string.
+- Confirmed `Less 180` has 200 Paper orders; 155 are exactly `0.495`, 19 are `0.485`, and median/p25/p75 are all `0.495`.
+- Confirmed this pattern is broad across BTC Less variants: recent medians are `0.495`; More variants mirror at `0.505`.
+- Joined recent orders to strategy runs and current Gamma rows. Orders are placed close to the configured due time (`~180-190s` after market start), but the persisted price is only the Paper/signal price, not the full entry-time Gamma/order-book snapshot.
+- Found current Gamma rows for those same markets often later show much wider `outcomePrices` such as `["0.785","0.215"]`, `["0.745","0.255"]`, `["0.315","0.685"]`, etc.; this does not reconstruct entry-time values because `polymarket_gamma_markets` stores only the latest row.
+- Checked nearby persisted WebSocket `last_trade_price` ticks where available; some entries near `0.495` had nearby ticks at `0.22`, `0.66`, `0.70`, confirming that live trade movement can diverge sharply from the Paper entry price.
+- Reconfirmed code root cause: BTC Paper entry uses `executionPrice = selectedOutcome.Price` from Gamma `outcomePrices`; it does not use CLOB/WebSocket best bid/ask or maker-safe price, and it stores no raw market-price snapshot on the order/run.
+Next: Change BTC Paper entry pricing to require a fresh CLOB/WebSocket quote at entry time, store the quote source/snapshot on the run/order, and skip entries when the fresh price cannot be proven.
+Notes: No source behavior changed and no tests were run. The only file changes were context/history updates. Branch `master` has no upstream, so automatic pull/push/commit cannot run.
+Blockers: Existing historical Paper orders cannot reconstruct the exact entry-time Gamma/order-book snapshot because it was not persisted.
+
+## Active Update 2026-05-06 BTC Strategy Entry Price Explanation
+Goal: Explain how BTC Up/Down 5m strategies currently form buy price and why entries cluster near `0.5`.
+Status: Completed
+Done:
+- Inspected `BtcUpDown5mPaperStrategyProcessor`, `BtcUpDown5mMarketAnalyzer`, Gamma parsing, and BTC strategy tests.
+- Confirmed Paper BTC entries select an outcome from Gamma `outcomePrices`: Less selects the unique lower-priced outcome; More selects the unique higher-priced outcome.
+- Confirmed Paper execution price is set directly to `selectedOutcome.Price`; order book best bid/ask is not used for Paper BTC entry pricing, and `GetBestAskExecutionPriceAsync` is currently unused in that processor.
+- Confirmed directional gates force Less prices to `(0, 0.5)` and More prices to `(0.5, 1]`, so fresh balanced BTC 5-minute markets naturally cluster close to `0.5`.
+- Confirmed tests explicitly encode this behavior: Less with `0.35/0.65` buys `0.35`; More buys `0.65`; More skips when both outcomes are below/equal-ish half.
+Next: Consider changing BTC Paper entry pricing to use fresh CLOB best ask/maker-safe price or add an explicit max/min distance-from-half filter before using the strategy for Live.
+Notes: Answer-only/code-inspection task. No source behavior changed and no tests were run. Branch `master` has no upstream, so automatic pull/push/commit cannot run.
+Blockers: None for the explanation; strategy-quality improvement requires a separate code-change task.
+
+## Active Update 2026-05-06 DryRun Signing Credential Smoke
+Goal: Use the locally stored Polymarket order-signing private key credential for the next no-money Live-readiness step without exposing secrets or enabling Live.
+Status: Completed
+Done:
+- Confirmed Windows Credential Manager has a generic credential target named `POLYCOPYTRADER_POLYMARKET_ORDER_SIGNING_PRIVATE_KEY` without reading or printing the private key value.
+- Updated service appsettings to `Bot:Mode=DryRun`, `Bot:EnableLiveTrading=false`, `PolymarketAuth:SecretProvider=CredentialManager`, `PolymarketAuth:SigningAddress=0x799ea2c976e59C3fa42Bd670282bCf5129487B7c`, `PolymarketAuth:FunderAddress=0xfa8eb31d09b77cde3470ca1ee4727d96872b79df`, `PolymarketAuth:SignatureType=POLY_GNOSIS_SAFE`, `PolymarketAuth:DryRunSigningEnabled=true`, and both dry-run/live order signing secret names pointing to `POLYCOPYTRADER_POLYMARKET_ORDER_SIGNING_PRIVATE_KEY`.
+- Added safe CLI command `--dry-run-signing-smoke` that constructs a synthetic CLOB order, signs it locally through the configured secret provider, verifies the recovered signer, and prints only status/redacted metadata. It does not send HTTP requests and does not print the private key, raw signature, or raw payload.
+- Added regression tests for signed, unsigned, and mismatched-key smoke outcomes.
+- Ran real smoke command against Credential Manager: `DryRunSigned`, signature present, local signature verified, live trading false, auth false.
+- Verification passed: sanitized `--print-config`, focused auth/config/live/smoke tests `44/44`, full test project `270/270`, `git diff --check` on touched files, and Service Debug build.
+- Found the running service had stopped because PostgreSQL returned `57P03: the database system is in recovery mode` to a background worker; after the database recovered, restarted `PolyCopyTrader.Service.exe`, then rebuilt/restarted Debug again with the final code as PID `48424`. IPC `/health` and `/status` are back to `Running`, kill switch false, pauses false, `lastError=null`.
+Next: Wait for a real accepted Follow leader signal to produce persisted `dry_run_orders` with `DryRunSigned`, or add an explicit non-live dry-run order persistence smoke if we need a database row before live-readiness review.
+Notes: No live mode was enabled, `PolymarketAuth:Enabled` remains false, no authenticated order/cancel endpoint was called, and no private key/signature was printed. Branch `master` has no upstream, so automatic pull/push/commit cannot run.
+Blockers: DryRun mode currently has no enabled real Follow leader wallet in `Watchlist`, and BTC 5m is paper-only outside `Paper`/`Live`, so automatic dry-run order rows may not appear until a qualifying Follow leader source is enabled.
+
+## Active Update 2026-05-06 Follow Leader Dynamic Copied Rating Guard
+Goal: Add dynamic local Paper-performance protection for `Follow leader` so losing copied wallets/categories stop producing new Paper signals automatically.
+Status: Completed
+Done:
+- Added local copied-trader performance context to `SignalEvaluationContext`: overall and category rows from `paper_copied_trader_performance`.
+- Updated `DefaultSignalEngine` to reject copied wallets/categories after a minimum settled Paper sample when our local total PnL, ROI, or bounded score is too weak. New rejection codes are `copied_trader_performance_too_weak` and `copied_trader_category_performance_too_weak`.
+- Added a local copied-performance score bonus for leaders that have enough local sample and pass the guard.
+- Added Signal config knobs: `CopiedTraderPerformanceGuardEnabled`, min settled positions, min total PnL, min ROI, min 0-100 score, and score bonus. Service appsettings enables the guard by default with sample `3`, min PnL `-2`, min ROI `-10`, min score `35`, and bonus `10`.
+- Reworked `paper_copied_trader_performance.score` into a bounded 0-100 local rating based on local Paper total PnL, ROI, win rate, settled sample size, lost-position penalty, and open-position penalty.
+- Added repository lookup by `(copied wallet, category)` and wired it into both the normal `SignalProcessor` and low-latency `OnChainPaperSignalProcessor`.
+- Updated test repository scoring and added strategy/config/storage regression coverage.
+- Updated README and `docs/configuration_reference.md`.
+- Added service file-log rolling by size (`50_000_000` bytes, size roll enabled, 30 retained files) after finding the current daily Debug log had reached about 1GB.
+- Verification passed: full test project `267/267`, Service Verify build, Dashboard Verify build, focused strategy/config/storage tests, and `git diff --check` on touched files. Service Debug build initially failed because the old service process locked DLLs; stopped only that service process, rebuilt Debug successfully, added the log rolling fix, rebuilt Debug again, and restarted `PolyCopyTrader.Service.exe` as PID `2780`.
+Next: Monitor new rejection counts for `copied_trader_performance_too_weak` and `copied_trader_category_performance_too_weak`; tune thresholds after the sample grows beyond the current short window.
+Notes: Runtime IPC after restart returned `/health ok=true` and `/status state=Running`, live disabled, kill switch false, `lastError=null`; last observed `currentLoop` was still `Starting` while the process was active. A new size-roll log file `polycopytrader-service-20260506_001.log` was created. Branch `master` has no upstream, so automatic pull/push/commit cannot run.
+Blockers: Local copied-leader conclusions are still sample-sensitive; do not use this as Live approval. Automatic pull/push cannot run until a Git upstream is configured.
+
+## Active Update 2026-05-06 Follow Leader By Leader Analytics
+Goal: Analyze whether `Follow leader` performs better or worse with specific copied wallets.
+Status: Completed
+Done:
+- Queried PostgreSQL read-only using a temporary C# Npgsql probe; no source behavior changed.
+- Confirmed `Follow leader` current sample has 347 wallets with orders, 1,655 Paper orders, 745 filled orders, 237 settled positions, 154 wins, 83 losses, closed win rate `64.98%`, closed PnL `-68.1806`, 241 open positions, open unrealized PnL `-16.0919`, and closed+open PnL `-84.2724`.
+- Confirmed `leader_trades` currently has 0 rows, so the report can identify leaders only by copied wallet address, not trader display names.
+- Found best wallets with at least 3 settled positions: `0x33c910...5124` `+9.6921`, `0xe40172...7b88` `+4.1119`, `0xf46b08...c51d` `+3.9500`, `0x7e4bd2...ac6b` `+3.1950` closed and `+5.4350` including open, and `0x8546b4...2540` `+2.4004`.
+- Found worst wallets with at least 3 settled positions: `0x1df667...cba0` `-15.0800`, `0x970367...69c2` `-9.5500`, `0x3bcda8...ac63` `-9.4500`, `0x1df231...9a0` `-8.4800`, and `0x7d9a51...05e6` `-7.7850`.
+- Found losses cluster mostly in `Sports`, with some `Crypto` wallets causing near-total losses despite high count-based win rates.
+Next: Add or use a per-wallet/category allowlist/blocklist or dashboard drilldown before any Live copy trading; at minimum exclude the worst wallets/categories until a larger sample says otherwise.
+Notes: Analytics-only task; no code tests were needed. Branch `master` has no upstream, so automatic pull/push/commit cannot run.
+Blockers: The sample is short (`2026-05-05T20:32:37Z` to `2026-05-06T11:14:27Z`) and leader display names are unavailable because `leader_trades` is empty.
+
+## Active Update 2026-05-06 Private Key Setup Guidance
+Goal: Explain how the user should create and locally store a private key for DryRun signing without exposing it to Codex.
+Status: Completed
+Done:
+- Re-read workflow, rules, active context, live checklist, auth plan, Git state, and current secret-provider/signing code.
+- Checked current official Polymarket docs for authentication, signature type/funder rules, quickstart, and geoblock requirements, plus MetaMask official export guidance.
+- Recommended the safest first path: create a fresh isolated EOA wallet, keep it unfunded for DryRun, store its private key locally in Windows Credential Manager under `POLYCOPYTRADER_POLYMARKET_DRY_RUN_PRIVATE_KEY`, and configure only public address/signature type in appsettings.
+- Clarified that the private key must never be sent in chat, committed, logged, or pasted into a command for Codex to run.
+Next: User creates/stores the local dry-run key and provides only the public signer address/signature type, or confirms they edited non-secret config themselves.
+Notes: Answer-only task. No source behavior changed and no code tests were run. Branch `master` has no upstream, so automatic pull/push/commit cannot run.
+Blockers: DryRun signing remains blocked until the local secret exists and the configured signer address matches that key.
+
+## Active Update 2026-05-06 DryRun User Inputs
+Goal: Clarify what the user must provide before the next DryRun/Live-readiness step.
+Status: Completed
+Done:
+- Re-read workflow, rules, active context, live checklist, auth/signing plan, Git status, latest commit, and current auth/config code.
+- Confirmed the next step is not Live; it is `DryRun` order signing until a fresh `DryRunSigned` row exists.
+- Confirmed dry-run signing needs a configured signer address, signature type, and a locally resolvable `PolymarketAuth:DryRunPrivateKeyName`; L2 API credentials are needed later for authenticated cancel-all/order status smoke.
+- Prepared user-safe guidance: public signer/funder addresses and chosen signature type may be shared if the user wants Codex to edit non-secret config, but private key, API secret, passphrase, and seed phrase must stay local and out of chat.
+Next: Wait for the user to configure local secrets or provide only public/non-secret config values; then switch/verify `DryRun` without enabling live trading.
+Notes: Answer-only task. No source behavior changed and no code tests were run. Branch `master` has no upstream, so automatic pull/push/commit cannot run.
+Blockers: DryRun signing cannot produce `DryRunSigned` until the local dry-run private-key lookup is configured and matches the configured signer address.
+
+## Active Update 2026-05-06 Live No-Money Readiness Pass
+Goal: Execute the next safe Live-preparation step without enabling live trading or sending authenticated order/cancel requests.
+Status: Completed
+Done:
+- Confirmed current runtime via IPC: service is `Running`, `lastError=null`, scanning and Paper are not paused, kill switch is inactive, and `LiveOrdersSubmitted=0`.
+- Confirmed sanitized config still deliberately blocks Live: `Mode=Paper`, `EnableLiveTrading=False`, auth disabled/not configured, dry-run signing disabled, and no live manual approval code.
+- Checked direct Polymarket geoblock from the current host and latest startup geoblock DB event; both report `blocked=false`, country `BG`, region `03`. Do not treat this as approval for any different VPS/IP.
+- Queried PostgreSQL without printing the connection string: `dry_run_orders` has no rows, `live_orders` has no rows, and there are no open live orders.
+- Found recent non-fatal API errors in the last hour: 13 on-chain Polygon RPC `Unknown block` errors, several market WebSocket close/cancel events, and one Gamma market ingestion timeout.
+- Rechecked current official Polymarket docs for CLOB auth, POST `/order`, DELETE `/cancel-all`, and geographic restrictions.
+Next: Before Live, move only to `DryRun` with local secret lookup names configured outside chat, verify a fresh `DryRunSigned` row, clear recent API-error readiness blockers, then run kill-switch and cancel-all smoke in a safe authenticated context.
+Notes: No source behavior changed. No live mode was enabled, no `POST /order` was called, and no `DELETE /cancel-all` was called. Verification used IPC `/status`, sanitized `--print-config`, direct geoblock check, PostgreSQL read-only queries, and official docs. Branch `master` has no upstream, so automatic pull/push/commit cannot run.
+Blockers: Live cannot proceed until eligibility/venue and actual target-host geoblock are confirmed, a separate tiny-funded wallet and local secret lookup names are configured without exposing secrets, dry-run signing produces `DryRunSigned`, recent API-error lockout is clear, PostgreSQL backup exists, and cancel-all/kill-switch checks pass.
+
+## Active Update 2026-05-06 Live Next Practical Task
+Goal: Decide the next concrete step toward Live after the BTC Less/Martin fix.
+Status: Completed
+Done:
+- Re-read workflow, rules, active context, live checklist, auth/signing plan, Git status, and latest commit.
+- Checked sanitized service config and IPC status; service is `Running`, `lastError=null`, live submissions remain `0`, and current live blockers are still deliberate: `Mode=Paper`, live disabled, auth disabled/not configured, dry-run signing disabled, and no manual approval code.
+- Rechecked current official Polymarket docs for CLOB authentication, order posting, cancel-all, and geoblock requirements.
+- Recommended the next practical task as a no-money Live readiness pass focused on venue/eligibility, actual VPS geoblock, isolated tiny wallet/secret lookup setup, dry-run signing to `DryRunSigned`, cancel-all/kill-switch smoke, and only then one tiny manually enabled live session.
+Next: Perform a no-money dry-run signing readiness pass once the user has a compliant host/venue decision and local secret lookup names configured without exposing secrets.
+Notes: Answer-only task. No source behavior changed and no code tests were run; config/IPC/docs checks passed. Branch `master` has no upstream, so automatic pull/push/commit cannot run.
+Blockers: Automatic pull/push cannot run until a Git upstream is configured. Live cannot proceed until eligibility/geoblock and local secret setup are handled outside chat.
+
+## Active Update 2026-05-06 BTC Less Losing Check
+Goal: Check whether recent BTC Less strategy losses were caused by broken selection or settlement logic.
+Status: Completed
+Done:
+- Queried PostgreSQL strategy runs and settlements for BTC 5-minute Less/More variants.
+- Confirmed standard BTC Less/More settlement mapping is internally consistent: no missing settlement rows and no selected-outcome/result or selected-asset/result mismatches across settled BTC strategy rows.
+- Confirmed the recent pain is real but data-driven: `Less 180` had an 8-loss current streak, `BTC Less 180 Martin` had a 5-loss streak at first check and then settled another max-stake loss, while corresponding More variants were winning the same recent markets.
+- Found a separate Martin timing defect: the processor settled old due runs after placing new entries, so Martin could make a next entry before seeing the previous settled loss.
+- Fixed BTC 5-minute processing order to settle due runs before placing new entries and kept the existing post-entry settlement pass.
+- Added regression coverage proving `BTC Less 180 Martin` settles a due own loss before deciding the next stake.
+- Restarted the Debug service with the fix; IPC `/health` is OK and `/status` is `Running` with `lastError=null`.
+Next: Watch the next few `BTC Less 180 Martin` rows; after a max-stake loss the configured behavior resets to the base stake, while standard Less losses remain market outcomes rather than a code inversion.
+Notes: Branch `master` has no upstream, so automatic pull/push/commit cannot run. Touched files are in the already-untracked BTC strategy/test paths. Focused `BtcUpDown5mPaperStrategyProcessorTests` passed 16/16. Full test project passed 262/262. Service Verify build and Dashboard Verify build passed with 0 warnings/errors. `git diff --check` for touched tracked paths passed; untracked source/test paths are not included by Git diff. Fresh log tail after restart had no `[ERR]`, fatal, exception, SSL, or DNS errors.
+Blockers: Automatic pull/push cannot run until a Git upstream is configured.
+
+## Active Update 2026-05-06 Live Next Steps Answer
+Goal: Identify the next safe steps required before any live Polymarket trading session.
+Status: Completed
+Done:
+- Rechecked repository status/latest commit and local live-trading/auth documentation.
+- Rechecked current official Polymarket docs for CLOB authentication, `POST /order`, `DELETE /cancel-all`, order lifecycle/post-only behavior, error/cancel-only states, and geoblock requirements.
+- Confirmed current sanitized config still blocks live trading: `Mode=Paper`, `EnableLiveTrading=False`, auth disabled/not configured, dry-run signing disabled, and no manual approval code.
+- Confirmed IPC `/health` and `/status` are reachable with `state=Running`, `lastError=null`, kill switch false, and `LiveOrdersSubmitted=0`.
+- Prepared the recommended live-readiness sequence: venue/compliance and VPS geoblock first, isolated tiny-funded wallet, secret lookup configuration, dry-run signing, cancel-all/kill-switch checks, one-strategy tiny live stake, then a manually enabled one-order live session only.
+Next: Configure a no-money dry-run signing readiness pass and keep Dashboard `Live Readiness` as the punch list before any live enablement.
+Notes: Answer-only task. No source behavior changed and no code tests were run; runtime IPC/config checks passed. Branch `master` has no upstream, so automatic pull/push/commit cannot run.
+Blockers: Automatic pull/push cannot run until a Git upstream is configured.
+
+## Active Update 2026-05-06 Service Runtime Check
+Goal: Verify whether the PolyCopyTrader background service is currently running.
+Status: Completed
+Done:
+- Confirmed `PolyCopyTrader.Service.exe` is running from the Debug build as PID `43892`, started `2026-05-06 11:59:23` local time.
+- Confirmed IPC `/health` returns `ok=true`, `state=Running`.
+- Confirmed IPC `/status` returns `state=Running`, scanning/paper/live pauses are false, kill switch false, and `lastError=null`.
+- Checked the latest service log tail; no `[ERR]`, fatal, exception, TLS/certificate, `No orderbook exists`, or SSL failure lines appeared in the fresh tail.
+- Observed active Gamma/CLOB/Data API requests and on-chain Paper signal processing in the fresh log tail.
+Next: Keep monitoring Dashboard `Live Readiness`, `Live Events`, and logs before any live-mode configuration changes.
+Notes: Runtime/log check only; no code tests were needed. Branch `master` has no upstream, so automatic pull/push/commit cannot run.
+Blockers: Automatic pull/push cannot run until a Git upstream is configured.
+
+## Active Update 2026-05-06 Live Readiness Dashboard
+Goal: Continue live-trading preparation by making the current live blockers visible without enabling or placing live orders.
+Status: Completed
+Done:
+- Added a Dashboard `Live Readiness` tab with read-only gate rows for live config, auth readiness, recent dry-run signing, startup geoblock check, IPC service state, live pause, kill switch, open/stale live orders, API-error lockout, daily-loss lockout, strategy live-stake funding, and market WebSocket status.
+- Changed Dashboard refresh to read localhost IPC `/status` best-effort and surface IPC unavailability as a readiness warning instead of failing the refresh.
+- Updated Overview geoblock status from the latest `StartupGeoblockCheck` live event and added `live blockers=<count>` to the dashboard summary.
+- Updated README, configuration reference, and live trading checklist.
+Next: Reopen Dashboard and check `Live Readiness`; the expected blockers should remain until live mode/auth/manual enablement are deliberately configured.
+Notes: Branch `master` has no upstream, so automatic pull/push/commit cannot run. Checked current official Polymarket docs for CLOB auth/order/cancel/post-only behavior. Dashboard Verify build passed with 0 warnings/errors. Focused `LiveTradingGatingTests|AuthPlaceholderTests|ConfigurationTests` passed 40/40. Full test project passed 261/261. Service Verify build passed with 0 warnings/errors. `git diff --check` on changed files passed with existing LF/CRLF warnings only. IPC `/status` was reachable (`state=Running`, kill switch false, live pause false). Sanitized `--print-config` shows current expected live blockers: `Mode=Paper`, live disabled, auth disabled, and no manual approval code.
+Blockers: Automatic pull/push cannot run until a Git upstream is configured.
+
+## Active Update 2026-05-06 Paper Missing OrderBook Error Suppression
+Goal: Identify and remove repeated service errors caused by stale Paper position CLOB order-book lookups.
+Status: Completed
+Done:
+- Identified the source as `BotWorker` calling `PaperTradingProcessor.ProcessOpenOrdersAsync`; its `UpdatePositionMarksAsync` loop was logging CLOB `/book` `404 No orderbook exists for the requested token id` as `Error` for open Paper positions whose token ids no longer have order books.
+- Identified a second source in `PolymarketHttpClient`: the shared HTTP layer persisted the same expected CLOB `/book` 404 into `api_errors` before the Paper processor handled it.
+- Updated `PolymarketHttpClient` so `PolymarketClobPublicClient` `GetOrderBook` 404 responses with `No orderbook exists` still throw to callers and remain in HTTP logs, but are not persisted as API errors.
+- Updated `PaperTradingProcessor` so missing CLOB order books during Paper order processing or Paper position mark updates are skipped at Debug level without `api_errors`; other exceptions still log/persist as errors.
+- Added regression tests for both behaviors and restarted the Debug service with the new code.
+Next: Old `api_errors` rows remain historical data; remove them manually only if the Dashboard should be cleared of already-stored old rows.
+Notes: Branch `master` has no upstream, so automatic pull/push/commit cannot run. Focused `PolymarketClientTests|ResilienceTests` passed 39/39. Full test project passed 261/261. Service Verify build passed with 0 warnings/errors. `git diff --check` on changed files passed with existing LF/CRLF warnings only. Restarted service processes: `dotnet.exe` PID `30784`, `PolyCopyTrader.Service.exe` PID `43892`; IPC `/health` ok, `/status` has `lastError=null`; fresh log tail after restart had no `Paper position mark update failed`, `No orderbook exists`, TLS certificate errors, or `[ERR]`.
+Blockers: Automatic pull/push cannot run until a Git upstream is configured.
+
+## Active Update 2026-05-06 Service Error Recheck
+Goal: Check whether the service errors observed after restart are gone.
+Status: Completed
+Done:
+- Checked IPC `/status`; service still responds with `lastError=null`, scanning and Paper not paused, kill switch false, live trading paused by safety state.
+- Checked the fresh service log tail. The previous TLS/certificate failures (`RemoteCertificateNameMismatch`, `RemoteCertificateChainErrors`, SSL connection failure) were absent in the latest 1200 log lines.
+- Found remaining non-fatal Paper mark errors: repeated CLOB `404 No orderbook exists for the requested token id` during Paper position mark updates.
+Next: If needed, investigate/clean stale Paper positions whose CLOB token ids no longer have order books, or make mark updates treat that 404 as a non-error stale/closed-market condition.
+Notes: Runtime/log check only; no code tests were needed. Branch `master` has no upstream, so automatic pull/push/commit cannot run.
+Blockers: Automatic pull/push cannot run until a Git upstream is configured.
+
+## Active Update 2026-05-06 Start Service Restart
+Goal: Start the PolyCopyTrader background service from the current repository state.
+Status: Completed
+Done:
+- Found an existing Debug service process and stopped it to avoid running a stale instance.
+- Started a new hidden `dotnet run --project src\PolyCopyTrader.Service\PolyCopyTrader.Service.csproj --configuration Debug --no-restore` process.
+- Verified IPC `/health` returned `ok=true`; new processes are `dotnet.exe` PID `39116` and `PolyCopyTrader.Service.exe` PID `5084`.
+- Verified `/status`: scanning and Paper are not paused, kill switch is false, lastError is null; live trading is paused by service safety state.
+- Checked fresh logs and observed repeated non-fatal Polymarket Data API TLS/certificate failures: `RemoteCertificateNameMismatch` and `RemoteCertificateChainErrors`.
+Next: Investigate the TLS/certificate errors if Polymarket API ingestion is expected to work from this machine/network.
+Notes: Runtime task only; no code tests were needed. Branch `master` has no upstream, so automatic pull/push/commit cannot run.
+Blockers: Automatic pull/push cannot run until a Git upstream is configured.
+
+## Active Update 2026-05-06 Clipboard Image Rule
+Goal: Persist the user's shorthand that image-inspection requests refer to the Windows clipboard.
+Status: Completed
+Done:
+- Added an `AGENTS.md` user interaction rule: when the user asks to inspect a picture/image/screenshot, assume it is in the Windows clipboard unless another source is explicitly provided.
+- The rule says to first extract the clipboard bitmap to a temporary image file and inspect it.
+Next: On future "посмотри картинку" requests, automatically try the Windows clipboard image path first.
+Notes: Documentation/rules-only change. `git diff --check -- AGENTS.md Codex/Contexts/ContextPolyCopyTrader.md Codex/Contexts/History/ContextPolyCopyTrader-2026-05-06.md` passed with existing LF/CRLF warnings only. Branch `master` has no upstream, so automatic pull/push/commit cannot run.
+Blockers: Automatic pull/push cannot run until a Git upstream is configured.
+
+## Active Update 2026-05-06 Strategy Live Available Balance
+Goal: Add a live-only available balance per strategy, editable from Dashboard, and block live stakes when a strategy cannot fund its own live order.
+Status: Completed
+Done:
+- Added `strategies.live_available_balance numeric(28,8) NOT NULL DEFAULT 100.00` with idempotent schema migration and nonnegative check constraint.
+- Extended strategy runtime/performance models and repository reads/updates so Dashboard shows and saves live-only `Live bal` next to `Paper $` and `Live $`.
+- Added live-order settlement fields (`balance_effect_applied`, settlement value, realized PnL, settled UTC, winning asset/outcome) and one-time repository application to strategy live balance.
+- Updated live preflight in Follow leader and BTC 5-minute live paths to reserve open live orders per strategy; insufficient strategy balance logs an error, writes `StrategyLiveBalance`, and sets `live_stakes=false`.
+- Updated live maintenance to resolve matched live orders through closed Gamma metadata, add winning realized PnL to strategy balance, subtract losses, clamp balance at zero, and disable live stakes if balance falls below the configured live stake.
+- Updated README and configuration reference.
+Next: Restart the service so schema initialization creates the new columns; then use Dashboard `Strategies` -> `Live bal` to inspect or manually adjust per-strategy live balances.
+Notes: Focused tests `LiveTradingGatingTests|BtcUpDown5mPaperStrategyProcessorTests|StorageTests|StrategyPerformanceTests` passed 47/47. Full test project passed 259/259. Dashboard Verify build and Service Verify build passed with 0 warnings/errors. `git diff --check` passed with existing LF/CRLF warnings only. Branch `master` has no upstream, so automatic pull/push/commit cannot run.
+Blockers: Automatic pull/push cannot run until a Git upstream is configured.
+
+## Active Update 2026-05-06 Live Trading Requirements Answer
+Goal: Explain what is needed before learning or enabling live Polymarket betting.
+Status: Completed
+Done:
+- Re-read workflow, project rules, coding rules, active context, Git status, local live trading docs, auth/signing plan, configuration reference, runbook, incident response, and live trading code paths.
+- Checked current official Polymarket docs for CLOB authentication, order creation, post-only orders, geoblock checks, and Polymarket US API/authentication.
+- Answered that the first decision is venue/compliance: current code targets international `clob.polymarket.com`, while Polymarket US uses separate API/auth docs; geoblock/eligibility must be respected.
+- Summarized required pieces: isolated tiny-funded wallet, L1/L2 credentials or US API keys depending venue, secret storage, dry-run signing, maker-only live policy, kill switch/cancel-all, risk limits, VPS/geoblock/clock checks, PostgreSQL audit logs, and staged paper -> dry-run -> one tiny live order process.
+Next: Decide whether the first practical task is a no-money live readiness audit or a tiny dry-run signing walkthrough.
+Notes: Answer-only task. No source behavior changed and no tests were run. Branch `master` has no upstream, so automatic pull/push/commit cannot run.
+Blockers: Automatic pull/push cannot run until a Git upstream is configured.
+
+## Active Update 2026-05-06 Live Stakes Column Check
+Goal: Check code usage of `strategies.live_stakes` and ensure the PostgreSQL column exists.
+Status: Completed
+Done:
+- Found `live_stakes` used by Dashboard strategy toggles, repository reads/updates, runtime strategy settings, and service live-gating paths.
+- Confirmed `PostgresSchema` already declares `live_stakes boolean NOT NULL DEFAULT false` on `strategies` and includes `ALTER TABLE strategies ADD COLUMN IF NOT EXISTS live_stakes boolean NOT NULL DEFAULT false`.
+- Checked the configured PostgreSQL database without printing the connection string; `live_stakes` already existed before DDL.
+- Ran idempotent `ALTER TABLE public.strategies ADD COLUMN IF NOT EXISTS live_stakes boolean NOT NULL DEFAULT false` and verified the resulting column is `boolean`, `NOT NULL`, default `false`.
+Next: None
+Notes: `psql` is not available in PATH, so the database check used a temporary .NET/Npgsql console under `%TEMP%`, then removed it. Focused `StorageTests.PostgresSchema_ContainsRequiredTables` passed 1/1; the build emitted existing nullable warnings in `PostgresAppRepository.cs`. Branch `master` has no upstream, so automatic pull/push/commit cannot run.
+Blockers: Automatic pull/push cannot run until a Git upstream is configured.
+
+## Active Update 2026-05-06 Startup History Answer
+Goal: Clarify whether repository history is reread during startup.
+Status: Completed
+Done:
+- Confirmed exact `start` bootstrap rereads `Codex/Rules/Workflow.md`, `AGENTS.md`, all sorted `Codex/Contexts/History/*.md`, and the active context file from `AGENTS.md`.
+- Clarified normal non-`start` prompts reread workflow, `AGENTS.md`, coding rules, active context, relevant docs, Git status, and latest commit, but do not necessarily reread the full history.
+Next: None
+Notes: Answer-only task. Branch `master` has no upstream, so automatic pull/push/commit cannot run. No source behavior changed and no tests were run.
+Blockers: Automatic pull/push cannot run until a Git upstream is configured.
+
+## Active Update 2026-05-06 Last Task Answer
+Goal: Identify the latest persisted task in the active context.
+Status: Completed
+Done:
+- Confirmed the previous active task was `Dashboard Strategy Name Binding Fix`.
+- Identified its goal: fix the Dashboard crash from binding editable `TextBox.Text` to read-only `StrategyPerformanceRow.Name`.
+Next: Continue from the Dashboard Strategy Name Binding Fix follow-up: restart/reopen the Dashboard window to load the fixed XAML.
+Notes: Answer-only task. Read workflow, `AGENTS.md`, coding rules, active context, Git status, and latest commit. Branch `master` has no upstream, so automatic pull/push/commit cannot run. No source behavior changed and no tests were run.
+Blockers: Automatic pull/push cannot run until a Git upstream is configured.
+
+## Active Update 2026-05-06 Dashboard Strategy Name Binding Fix
+Goal: Fix the Dashboard crash caused by binding editable `TextBox.Text` to read-only `StrategyPerformanceRow.Name`.
+Status: Completed
+Done:
+- Updated the `Strategies` tab `Name` cell template in `MainWindow.xaml` to bind `TextBox.Text` with `Mode=OneWay`.
+- Preserved selectable/copyable strategy names while avoiding writes back to the read-only row property.
+Next: Restart/reopen the Dashboard window to load the fixed XAML.
+Notes: Dashboard Verify build passed with 0 warnings and 0 errors. `git diff --check` passed for the changed files with existing LF/CRLF warnings only. Branch `master` has no upstream, so automatic pull/push/commit cannot run.
+Blockers: Automatic pull/push cannot run until a Git upstream is configured.
+
+## Active Update 2026-05-06 Start Service
+Goal: Start the PolyCopyTrader background service after it was stopped.
+Status: Completed
+Done:
+- Started `dotnet run --project src\PolyCopyTrader.Service\PolyCopyTrader.Service.csproj --configuration Debug --no-restore` hidden from the repository root.
+- Verified running process ids `61016` (`dotnet.exe`) and `21384` (`PolyCopyTrader.Service.exe`).
+- Verified IPC `/health` returns `ok=true`, `/status` returns `state=Running`, pauses are false, kill switch is false, and `lastError=null`.
+Next: Monitor Paper strategy outcomes and service logs.
+Notes: Service logs are active. Fresh logs still include recurring non-fatal `No orderbook exists for the requested token id` errors while marking one existing Paper position. Branch `master` has no upstream, so automatic pull/push/commit cannot run. No source behavior changed.
+Blockers: Automatic pull/push cannot run until a Git upstream is configured.
+
+## Active Update 2026-05-06 Stop Service
+Goal: Stop the currently running PolyCopyTrader background service.
+Status: Completed
+Done:
+- Found the service running as `dotnet run --project src\PolyCopyTrader.Service\PolyCopyTrader.Service.csproj --configuration Debug --no-restore` with child `PolyCopyTrader.Service.exe`.
+- Stopped process ids `27884` and `12896`.
+- Verified no `PolyCopyTrader.Service` processes remain; no Windows Service registration matching `PolyCopyTrader` was running.
+Next: Restart the service when ready to resume Paper strategy monitoring.
+Notes: Branch `master` has no upstream, so automatic pull/push/commit cannot run. No source behavior changed.
+Blockers: Automatic pull/push cannot run until a Git upstream is configured.
+
+## Active Update 2026-05-06 BTC Less 180 Martin Strategy
+Goal: Add the `BTC Less 180 Martin` paper strategy tied to standard `BTC Up or Down 5m Less 180` losses.
+Status: Completed
+Done:
+- Added built-in strategy id/code/name `btc_up_down_5m_less_180_martin` / `BTC Less 180 Martin` and seeded it into PostgreSQL table `strategies`.
+- Added Martin behavior to the BTC 5-minute paper processor: after three fresh settled standard `Less 180` losses it enters the 180-second lower-priced outcome; after its own losses it uses the configured 1/2/4/8/16 USD stake progression; after a win it resets and waits for a new three-loss trigger.
+- Added repository support for reading recent settled strategy runs, config options/validation, service appsettings defaults, tests, and documentation.
+Next: Restart the service so schema initialization can upsert the new strategy row; then monitor the Dashboard `Strategies` tab for `BTC Less 180 Martin` rows and outcomes.
+Notes: Focused `BtcUpDown5mPaperStrategyProcessorTests` passed 14/14. Focused `BtcUpDown5mPaperStrategyProcessorTests|StorageTests|ConfigurationTests|StrategyPerformanceTests` passed 52/52. Full test project passed 254/254. Service Verify build passed. Dashboard Verify build passed. `git diff --check` passed with existing LF/CRLF warnings only. Branch `master` has no upstream, so automatic pull/push/commit cannot run.
+Blockers: Automatic pull/push cannot run until a Git upstream is configured.
+
+## Active Update 2026-05-06 BTC 5m Monthly Up Down Streaks
+Goal: Calculate maximum consecutive `Up` and `Down` outcomes for live historical `BTC Up or Down 5m` markets over the last month.
+Status: Completed
+Done:
+- Used live Polymarket Gamma `/markets` data, querying deterministic exact slugs `btc-updown-5m-{unix_start}` in batches with `closed=true&limit=100`.
+- Window: rolling 30 days from `2026-04-06T05:59:52Z` to `2026-05-06T05:59:52Z`; 8,642 candidate slugs queried, 8,636 closed resolved BTC 5m markets parsed.
+- Winner was inferred from closed-market `outcomes` and `outcomePrices`; unique max price maps to `Up` or `Down`.
+- Results: `Up` wins `4,351`, max consecutive `Up` streak `12`, occurred once from `2026-04-10T10:30:00Z` through `2026-04-10T11:25:00Z`.
+- Results: `Down` wins `4,285`, max consecutive `Down` streak `10`, occurred three times: `2026-04-25T10:55:00Z`-`11:40:00Z`, `2026-04-30T03:55:00Z`-`04:40:00Z`, and `2026-05-01T20:05:00Z`-`20:50:00Z`.
+Next: Consider adding this as a reusable analytics query/worker if BTC 5m streak length should drive strategy gating.
+Notes: Answer/data-analysis task only; no source behavior changed and no tests were run. Branch `master` has no upstream, so automatic pull/push/commit cannot run.
+Blockers: Automatic pull/push cannot run until a Git upstream is configured.
+
+## Active Update 2026-05-06 Strategy Worst Failure Streak Counts
+Goal: Add the count of worst-length failure streaks for each strategy to the current streak analysis.
+Status: Completed
+Done:
+- Re-ran the PostgreSQL read-only streak query with `max_failure_streak_count`.
+- Defined `max_failure_streak_count` as the number of distinct failure streaks whose length equals the strategy's maximum failure streak length.
+- Current results: `Follow leader` max streak `5` occurred once; BTC `Less` max-5 variants mostly had two such streaks, max-6 variants had one; BTC `More` max-8 variants had one such streak each, while `More 180` max streak `6` occurred three times.
+- Noted that the service continued adding settled outcomes while monitoring, so current BTC `More` failure streaks increased versus the previous snapshot.
+Next: If needed for ongoing monitoring, persist/display both `Max failure streak` and `Max failure streak count` in the Dashboard strategy row.
+Notes: Answer/data-analysis task only; no source behavior changed and no tests were run. Branch `master` has no upstream, so automatic pull/push/commit cannot run.
+Blockers: Automatic pull/push cannot run until a Git upstream is configured.
+
+## Active Update 2026-05-06 Strategy Failure Streak Analysis
+Goal: Calculate the maximum consecutive failure streak for each strategy from the current PostgreSQL data.
+Status: Completed
+Done:
+- Queried PostgreSQL read-only for closed strategy outcomes.
+- Used the same outcome basis as `Win %`: `paper_position_settlements.won = false` for `Follow leader`, and `strategy_market_paper_runs.status = 'Settled' AND realized_pnl_usd < 0` for BTC variants.
+- Counted streaks by chronological close time; any non-failure closes/resets the streak.
+- Current results: `Follow leader` max failure streak `5`; BTC `Less` variants max `5-6`; BTC `More` variants max `6-8`, with `More 30/60/90/120/150` currently the worst at `8`.
+Next: If this should be watched continuously, add `Max failure streak` and `Current failure streak` to `StrategyPerformance` and the Dashboard `Strategies` tab.
+Notes: Answer/data-analysis task only; no source behavior changed and no tests were run. Branch `master` has no upstream, so automatic pull/push/commit cannot run.
+Blockers: Automatic pull/push cannot run until a Git upstream is configured.
+
+## Active Update 2026-05-06 Strategy Dashboard Payoff Metrics
+Goal: Add dashboard metrics that explain high win-rate but negative-PnL strategies.
+Status: Completed
+Done:
+- Extended `StrategyPerformance` with `AvgWinPnlUsd`, `AvgLossPnlUsd`, nullable `ProfitFactor`, and `ExpectancyPnlUsd`.
+- Updated PostgreSQL `GetStrategyPerformanceAsync` to compute those metrics from the same closed outcomes used by `Win %`: BTC strategy settled runs for BTC variants, and `paper_position_settlements` for `Follow leader`.
+- Updated the in-memory test repository, Dashboard row mapping, `Strategies` tab columns, and strategy CSV export. Renamed the visible `Unrealized` column to `Open unrealized` for clarity.
+- Added a regression test for payoff quality metrics where two wins and one larger loss produce negative expectancy.
+- Updated README and configuration reference documentation for the new strategy metrics.
+- Verified the real PostgreSQL query against the configured database; `Follow leader` now surfaces `Profit factor < 1` and negative `Expectancy` directly in the strategy row.
+Next: Use `Profit factor`, `Expectancy`, and `Open unrealized` when deciding whether a strategy is actually profitable despite its count-based `Win %`.
+Notes: Focused `StrategyPerformanceTests` passed 3/3. Dashboard Verify build passed. Full test project passed 250/250. `git diff --check` passed with existing LF/CRLF warnings only. Branch `master` has no upstream, so automatic pull/push/commit cannot run.
+Blockers: Automatic pull/push cannot run until a Git upstream is configured.
+
+## Active Update 2026-05-06 Follow Leader Win Rate Vs PnL Analysis
+Goal: Explain why `Follow leader` shows roughly 80% wins while Total PnL is negative.
+Status: Completed
+Done:
+- Queried PostgreSQL read-only for current `Follow leader` Paper aggregates and settlement details.
+- Confirmed current closed settlements are 26 total, 21 won, 5 lost: `80.77%` count-based win rate.
+- Confirmed closed settlement PnL is negative: wins total `+16.3769` USD with average `+0.7799`, while losses total `-20.4000` USD with average `-4.0800`.
+- Confirmed additional open-position drag: 205 open copied-wallet positions with unrealized PnL about `-5.6962` USD; SELL exits are net positive about `+5.8609` USD, but Total PnL remains about `-3.8584` USD.
+- Identified root cause: Dashboard win rate is count-based over settled positions, not money-weighted; many wins are tiny or near-1.0 entries, while binary losses lose the full cost basis.
+Next: Consider adding dashboard columns for average win, average loss, profit factor, expectancy, and open unrealized PnL so high win-rate/negative-expectancy cases are obvious.
+Notes: Answer/data-analysis task only; no source behavior changed and no tests were run. Branch `master` has no upstream, so automatic pull/push/commit cannot run.
+Blockers: Automatic pull/push cannot run until a Git upstream is configured.
+
+## Active Update 2026-05-05 Runtime Strategy Enabled Toggles
+Goal: Make Dashboard `Enabled` checkboxes stop and start strategies without a service restart.
+Status: Completed
+Done:
+- Added repository APIs to read and update `strategies.enabled`, with PostgreSQL implementation and test/no-op support.
+- Added `StrategyStateProvider`, registered in the service, which refreshes enabled strategy ids from PostgreSQL through a one-second in-memory cache.
+- Updated the Dashboard `Strategies` tab so the `Enabled` checkbox writes the strategy row immediately through `SetStrategyEnabledAsync`; strategy rows now keep `StrategyId`.
+- Updated Follow leader queued and on-chain Paper signal paths to skip creating new signals/orders while `follow_leader` is disabled.
+- Updated BTC 5-minute processing so disabled variants do not observe new runs or place new entries; existing entered runs still settle even after the variant is disabled.
+- Updated README/configuration reference and added tests for disabled Follow leader hot-path orders and disabled BTC variants.
+- Restarted the Debug service; IPC reports `Running`, paused flags and kill switch are false, and `lastError=null`.
+Next: Use the Dashboard `Strategies` tab to toggle strategies; changes should apply to new entries/signals within about one second.
+Notes: Dashboard build `dotnet build src\PolyCopyTrader.Dashboard\PolyCopyTrader.Dashboard.csproj --configuration Verify --no-restore /p:UseSharedCompilation=false` passed. Focused tests `BtcUpDown5mPaperStrategyProcessorTests|OnChainPaperSignalProcessorTests|PipelineIntegrationTests|LiveTradingGatingTests|ResilienceTests|StrategyPerformanceTests` passed 41/41. Full `dotnet test tests\PolyCopyTrader.Tests\PolyCopyTrader.Tests.csproj --configuration Verify --no-restore /p:UseSharedCompilation=false` passed 249/249. `git diff --check` passed with existing LF/CRLF warnings only. Branch `master` has no upstream, so automatic pull/push/commit cannot run.
+Blockers: Automatic pull/push cannot run until a Git upstream is configured.
+
+## Active Update 2026-05-05 Strategy Enabled Dashboard Behavior
+Goal: Determine whether clicking `Enabled` in the Dashboard Strategies tab stops strategies immediately.
+Status: Completed
+Done:
+- Confirmed the Dashboard Strategies `Enabled` checkbox is currently bound to the read-only/statistical `StrategyPerformanceRow.Enabled` snapshot and has no command or repository write path.
+- Confirmed `IAppRepository`/`PostgresAppRepository` expose only `GetStrategyPerformanceAsync` for strategy rows; there is no `UPDATE strategies SET enabled=...` method.
+- Confirmed BTC 5m execution uses `BtcUpDown5mStrategy.EnabledVariantCodes` loaded from config, not `strategies.enabled`.
+- Confirmed Follow leader/on-chain Paper signal paths tag orders with `StrategyIds.FollowLeader` but do not check `strategies.enabled`.
+Next: Implement editable `strategies.enabled` control if runtime strategy switching is needed: persist toggles from Dashboard and have each strategy check enabled state before creating new signals/orders.
+Notes: Answer/data-analysis task only; no source behavior changed and no tests were run.
+Blockers: None.
+
+## Active Update 2026-05-05 Leader Exit Leader Sell Price
+Goal: Make copied leader exits use the leader's sell activity price.
+Status: Completed
+Done:
+- Updated `LeaderActivityExitProcessor` so matched Data API `/activity` `TRADE`/`SELL` rows create proportional Paper SELL orders at the leader activity `price`, not the current cached/CLOB `bestBid`.
+- Removed leader-exit order-book lookup dependencies from the processor; rows with invalid activity prices outside `(0, 1]` are skipped.
+- Updated `LeaderActivityExitProcessorTests`, README, and configuration reference for leader-price exit behavior.
+- Restarted the Debug service; IPC reports `Running`, paused flags and kill switch are false, and `lastError=null`.
+Next: Monitor new Follow leader SELL rows; new exits should have `paper_orders.price = signals.leader_price = signals.proposed_paper_price`.
+Notes: `LeaderActivityExitProcessorTests` passed 4/4. Focused tests `LeaderActivityExitProcessorTests|PipelineIntegrationTests|StrategyEngineTests|PaperTradingEngineTests` passed 39/39. Full `dotnet test tests\PolyCopyTrader.Tests\PolyCopyTrader.Tests.csproj --configuration Verify --no-restore /p:UseSharedCompilation=false` passed 247/247. `git diff --check` passed with existing LF/CRLF warnings only. Paper/strategy tables were not cleared for this task. Branch `master` has no upstream, so automatic pull/push/commit cannot run.
+Blockers: Automatic pull/push cannot run until a Git upstream is configured.
+
+## Active Update 2026-05-05 Paper Metrics Plausibility Check
+Goal: Check whether current Paper metrics after the pricing reset look plausible.
+Status: Completed
+Done:
+- Confirmed service IPC is `Running`, pauses and kill switch are false, and `lastError=null`.
+- Checked post-reset table sizes: `paper_orders=662`, `paper_fills=536`, `paper_positions=481`, `paper_position_settlements=353`, `signals=4152`, `strategy_market_paper_runs=5742`.
+- Confirmed BTC 5m entered/settled runs use `Gamma outcomePrices` evidence only; `Less` has 0 entries at or above 0.5, and `More` has 0 entries at or below 0.5.
+- BTC 5m aggregate after reset: `Less` 178 settled, 102 wins, 76 losses, +30.1350 USD PnL, 16.93% closed ROI; `More` 175 settled, 79 wins, 96 losses, -21.7616 USD PnL, -12.44% closed ROI.
+- Confirmed Follow leader BUY orders match leader price exactly: 272 BUY orders, 0 price mismatches.
+- Noted Follow leader SELL partial exits still use current bestBid rather than leader sell price: 17 SELL exits, 14 mismatches versus `leader_price`.
+Next: Decide whether copied leader SELL exits should also switch to leader activity sell price for full consistency with the new Follow leader Paper pricing rule.
+Notes: Answer/data-analysis task only; no source behavior changed and no tests were run. Branch `master` has no upstream, so automatic pull/push/commit cannot run.
+Blockers: Automatic pull/push cannot run until a Git upstream is configured.
+
+## Active Update 2026-05-05 Paper Price Reset And Service Restart
+Goal: Change Paper entry pricing, clear strategy Paper data, and restart the service.
+Status: Completed
+Done:
+- Updated Follow leader Paper signal pricing so accepted BUY/SELL Paper orders use the original leader trade price as `ProposedPrice`.
+- Updated BTC 5m Paper strategy entries so `Less`/`More` use Gamma `outcomePrices` for both side selection and Paper entry price; `Less` must be below 0.5 and `More` must be above 0.5.
+- Kept live trading fail-closed for Follow leader signals until a separate live execution policy is explicitly implemented.
+- Updated tests and docs for the new Paper pricing behavior.
+- Cleared `signal_rejections`, `strategy_market_paper_runs`, `paper_copied_leader_activity_events`, `paper_copied_leader_positions`, `paper_copied_trader_performance`, `paper_fills`, `paper_orders`, `paper_positions`, `paper_position_settlements`, `risk_events`, `signals`, and `daily_reports`.
+- Started the service from Debug build; IPC status is `Running`, pauses and kill switch are false, and `lastError=null`.
+- Verified new data after restart: Follow leader rows have `order_price = leader_price = proposed_paper_price`; BTC 5m rows show `Gamma outcomePrices` fill evidence, including `Less 240` at 0.495 and `More 240` at 0.505.
+Next: Monitor strategy statistics after the reset; old strategy Paper history has been intentionally removed.
+Notes: No running service process was found before restart. Focused tests `StrategyEngineTests|BtcUpDown5mPaperStrategyProcessorTests|PipelineIntegrationTests|LiveTradingGatingTests` passed 41/41. Full `dotnet test tests\PolyCopyTrader.Tests\PolyCopyTrader.Tests.csproj --configuration Verify --no-restore /p:UseSharedCompilation=false` passed 247/247. `git diff --check` passed with existing LF/CRLF warnings only. Branch `master` has no upstream, so automatic pull/push/commit cannot run.
+Blockers: Automatic pull/push cannot run until a Git upstream is configured.
+
+## Active Update 2026-05-05 BTC More 210 Low Entry Price Explanation
+Goal: Explain why `BTC Up or Down 5m More 210` entered at price 0.0600.
+Status: Completed
+Done:
+- Checked the specific run `btc-updown-5m-1777995300` and paper order `c5aed559-3b29-44c9-870b-a2360379a5d4`.
+- Confirmed `entry_price=0.0600` came from the fill evidence source `cached best ask`, i.e. the in-memory CLOB order-book cache for the selected `Down` token.
+- Confirmed the same market had paired strategy entries around the same moment: `Less 210` bought `Up` at 0.9500 from `clob /book`, while `More 210` bought `Down` at 0.0600 from cached best ask.
+- Identified the design issue: BTC 5m `Less`/`More` currently selects the outcome using Gamma `outcomePrices`, but then prices execution using CLOB best ask. Those sources can disagree or lag in fast 5-minute markets.
+- Noted historical order-book snapshots were unavailable for May 5 because `PersistOrderBookSnapshots=false`; the evidence comes from paper fill evidence, paper order rows, strategy run rows, and service logs.
+Next: If we want the strategy names to mean live top-of-book `Less`/`More`, choose both the outcome and execution price from the same fresh `/book` data for both outcomes at entry time, and persist both selected/other quotes for audit.
+Notes: Answer/data-analysis task only; no source behavior changed and no tests were run. Branch `master` has no upstream, so automatic pull/push/commit cannot run.
+Blockers: Automatic pull/push cannot run until a Git upstream is configured.
+
+## Active Update 2026-05-05 BTC More 210 Closed ROI Explanation
+Goal: Explain why `BTC Up or Down 5m More 210` shows high `Closed ROI %` despite more losses than wins.
+Status: Completed
+Done:
+- Queried PostgreSQL for `btc_up_down_5m_more_210` strategy runs.
+- Confirmed current settled stats are 18 settled, 8 wins, 10 losses, closed stake 18.0000 USD, realized PnL 13.2336 USD, and `Closed ROI %` 73.52.
+- Identified the driver: one settled win at entry price 0.0600 bought 16.6667 shares for 1 USD and settled at 1.0000, producing 15.6667 USD profit.
+- Confirmed that excluding that one run leaves 17 settled runs, -2.4330 USD PnL, and -14.31% closed ROI.
+- Noted that win/loss counts are misleading for binary markets because losses are capped at the stake, while low-price winners can pay many multiples of the stake.
+Next: Treat this strategy's current high `Closed ROI %` as outlier-sensitive until the sample size is much larger; consider adding median PnL or ROI-without-top-N-wins later if needed.
+Notes: Answer/data-analysis task only; no source behavior changed and no tests were run. Branch `master` has no upstream, so automatic pull/push/commit cannot run.
+Blockers: Automatic pull/push cannot run until a Git upstream is configured.
+
+## Active Update 2026-05-05 Copyable Strategy Names
+Goal: Make strategy names copyable from the WPF dashboard Strategies tab.
+Status: Completed
+Done:
+- Changed the Strategies tab `Name` column from a plain `DataGridTextColumn` to a template column with the existing read-only `CopyableGridTextBox` style.
+- Strategy names can now be selected and copied from the grid cell, while the visible column set remains `Name` without internal strategy `Code`.
+- Updated README to mention selectable/copyable strategy names in the Strategies tab.
+Next: Restart/reopen the dashboard to use the updated Strategies tab UI.
+Notes: `dotnet build src\PolyCopyTrader.Dashboard\PolyCopyTrader.Dashboard.csproj --configuration Verify --no-restore /p:UseSharedCompilation=false` passed cleanly. `git diff --check` passed with existing LF/CRLF warnings only. Branch `master` has no upstream, so automatic pull/push/commit cannot run.
+Blockers: Automatic pull/push cannot run until a Git upstream is configured.
+
+## Active Update 2026-05-05 Strategies Closed ROI Column
+Goal: Add closed-only ROI to the Strategies dashboard and remove the visible Code column.
+Status: Completed
+Done:
+- Added `ClosedRoiPct` to `StrategyPerformance` and `StrategyPerformanceRow`.
+- Updated PostgreSQL strategy aggregation so `Closed ROI %` is `realized_pnl_usd * 100 / closed_stake_usd`, where closed stake comes from settled BTC run stake, paper settlement cost basis, and inferred SELL fill cost basis.
+- Removed the visible `Code` column from the Strategies WPF grid and from `Strategies.csv`; the dashboard now shows strategy `Name` plus `Closed ROI %`.
+- Added `StrategyPerformanceTests` covering closed ROI for settled runs and separate live-snapshot ROI with open unrealized PnL.
+- Updated README and configuration reference for the new column.
+Next: Restart/reopen the dashboard to see the updated Strategies tab.
+Notes: `dotnet build src\PolyCopyTrader.Dashboard\PolyCopyTrader.Dashboard.csproj --configuration Verify --no-restore /p:UseSharedCompilation=false` passed with existing nullable warnings in `PostgresAppRepository`. `dotnet test tests\PolyCopyTrader.Tests\PolyCopyTrader.Tests.csproj --configuration Verify --no-restore /p:UseSharedCompilation=false --filter "StrategyPerformanceTests"` passed 2/2. Full `dotnet test tests\PolyCopyTrader.Tests\PolyCopyTrader.Tests.csproj --configuration Verify --no-restore /p:UseSharedCompilation=false` passed 247/247. `git diff --check` passed with existing LF/CRLF warnings only. Branch `master` has no upstream, so automatic pull/push/commit cannot run.
+Blockers: Automatic pull/push cannot run until a Git upstream is configured.
+
+## Active Update 2026-05-05 Closed ROI Answer
+Goal: Explain whether the Strategies dashboard has ROI only for closed bets.
+Status: Completed
+Done:
+- Confirmed the current `ROI %` column uses `(Realized + Unrealized) / Stake * 100`.
+- Confirmed there is not currently a separate closed-only ROI column.
+- Clarified that closed-only ROI should be `Realized / closed stake * 100`, using settled run stake or settlement cost basis.
+Next: Add `Closed ROI %` and `Closed Stake` to Strategies if stable completed-bet comparison is needed.
+Notes: Answer-only task; no source behavior changed and no tests were run. Branch `master` has no upstream, so automatic pull/push/commit cannot run.
+Blockers: Automatic pull/push cannot run until a Git upstream is configured.
+
+## Active Update 2026-05-05 Realized Unrealized Explanation
+Goal: Explain Realized and Unrealized PnL in the Strategies dashboard.
+Status: Completed
+Done:
+- Confirmed `Realized` comes from closed/settled Paper outcomes and realized SELL/fill PnL.
+- Confirmed `Unrealized` comes from currently open Paper positions marked to current estimated value.
+- Clarified that `Total PnL = Realized + Unrealized` and `ROI %` uses that total over `Stake`.
+Next: Prefer settled/realized metrics for stable comparisons, and treat unrealized ROI as a live snapshot.
+Notes: Answer-only task; no source behavior changed and no tests were run. Branch `master` has no upstream, so automatic pull/push/commit cannot run.
+Blockers: Automatic pull/push cannot run until a Git upstream is configured.
+
+## Active Update 2026-05-05 Strategy ROI Column Answer
+Goal: Identify which dashboard column shows strategy profit percentage relative to invested stake.
+Status: Completed
+Done:
+- Inspected the Strategies dashboard tab, `StrategyPerformance`, and `GetStrategyPerformanceAsync`.
+- Confirmed the relevant dashboard column is `ROI %`, bound to `RoiPct`.
+- Confirmed formula is `Total PnL * 100 / Stake`, where `Total PnL = Realized + Unrealized`.
+Next: Use the Strategies tab sorted by `ROI %` descending, while checking sample size columns like `Settled`/`Settled runs`.
+Notes: Answer-only task; no source behavior changed and no tests were run. Branch `master` has no upstream, so automatic pull/push/commit cannot run.
+Blockers: Automatic pull/push cannot run until a Git upstream is configured.
+
+## Active Update 2026-05-05 Best Ask Bid Signal Pricing
+Goal: Price strategy BUY decisions at best ask and SELL decisions at best bid.
+Status: Completed
+Done:
+- Updated `DefaultSignalEngine` so accepted BUY signals use the current order-book `bestAsk` and accepted SELL signals use `bestBid`, still bounded by configured leader-price slippage.
+- Updated copied leader activity exits so proportional Paper SELL exits also require current `bestBid` and no longer fall back to the activity price.
+- Kept live trading fail-closed: live maker-only preflight now explicitly rejects best-ask/taker-style signal prices until a separate live taker policy is added.
+- Updated strategy/live tests and docs to describe top-of-book Paper pricing and the live limitation.
+Next: Restart the service before monitoring new Paper orders under the updated pricing policy.
+Notes: Targeted tests `StrategyEngineTests|PipelineIntegrationTests|LiveTradingGatingTests|OnChainPaperSignalProcessorTests|BtcUpDown5mPaperStrategyProcessorTests|LeaderActivityExitProcessorTests` passed 60/60. Full `dotnet test tests\PolyCopyTrader.Tests\PolyCopyTrader.Tests.csproj --configuration Verify --no-restore /p:UseSharedCompilation=false` passed 245/245. `git diff --check` passed with existing LF/CRLF warnings only. Branch `master` has no upstream, so automatic pull/push/commit cannot run.
+Blockers: Automatic pull/push cannot run until a Git upstream is configured.
+
+## Active Update 2026-05-05 Follow Leader Entry Price Explanation
+Goal: Explain whether Follow leader entry price uses ask or bid.
+Status: Completed
+Done:
+- Inspected `DefaultSignalEngine.ProposedBuyPrice`, `ProposedSellPrice`, and `MakerPriceCalculator`.
+- Confirmed Follow leader BUY uses a maker-style price derived from best bid, best ask, tick size, and leader price plus slippage; it does not buy directly at best ask.
+- Confirmed SELL similarly uses a maker-style price above best bid and bounded by leader price minus slippage.
+Next: Decide whether Follow leader should switch from maker-style Paper pricing to immediate best-ask/best-bid taker emulation for closer live-copy latency.
+Notes: Answer-only task; no source behavior changed and no tests were run. Branch `master` has no upstream, so automatic pull/push/commit cannot run.
+Blockers: Automatic pull/push cannot run until a Git upstream is configured.
+
+## Active Update 2026-05-05 Follow Leader Stake Size Explanation
+Goal: Explain how Follow leader Paper order size is currently determined.
+Status: Completed
+Done:
+- Inspected `DefaultSignalEngine`, `DefaultRiskEngine`, Paper order creation, and current service configuration.
+- Confirmed Follow leader does not currently copy the leader's notional or size proportionally; leader trade size is used as a minimum-quality filter, while our Paper order size comes from `PaperTrading:UseMinimumMarketOrderSize` or bankroll/risk sizing.
+Next: Decide whether Follow leader should remain minimum-size testing or switch to proportional leader-size emulation.
+Notes: Answer-only task; no source behavior changed and no tests were run. Branch `master` has no upstream, so automatic pull/push/commit cannot run.
+Blockers: Automatic pull/push cannot run until a Git upstream is configured.
+
+## Active Update 2026-05-05 Dashboard Analytics Decimal Overflow Fix
+Goal: Read the clipboard screenshot error and fix the dashboard refresh overflow in category analytics.
+Status: Completed
+Done:
+- Extracted the clipboard image and identified `System.OverflowException: Value was either too large or too small for a Decimal` in `PostgresAppRepository.GetCategoryPerformanceReportsAsync`.
+- Updated `GetCategoryPerformanceReportsAsync` and the related `GetTraderPerformanceReportsAsync` dashboard analytics query to avoid dividing `estimated_value_usd / size_shares`, to join paper positions by both `asset_id` and `copied_trader_wallet`, and to round/clamp numeric outputs before Npgsql reads them as C# `decimal`.
+- Verified the fixed queries against the current PostgreSQL database; trader rows and category rows now load without overflow.
+Next: Restart/reopen the dashboard so it loads the rebuilt code.
+Notes: `dotnet build src\PolyCopyTrader.Dashboard\PolyCopyTrader.Dashboard.csproj --configuration Verify --no-restore /p:UseSharedCompilation=false` passed with existing nullable warnings in `PostgresAppRepository`. `dotnet test tests\PolyCopyTrader.Tests\PolyCopyTrader.Tests.csproj --configuration Verify --no-restore /p:UseSharedCompilation=false` passed 244/244. `git diff --check` passed with existing LF/CRLF warnings only. Temporary analytics probe files were removed. Branch `master` has no upstream, so automatic pull/push/commit cannot run.
+Blockers: Automatic pull/push cannot run until a Git upstream is configured.
+
+## Active Update 2026-05-05 Dashboard Strategies Tab
+Goal: Show all configured strategies, including Follow leader, in a separate dashboard tab.
+Status: Completed
+Done:
+- Added domain/storage/dashboard models for `StrategyPerformance` and `StrategyPerformanceRow`.
+- Added PostgreSQL `GetStrategyPerformanceAsync` aggregation over `strategies`, Paper orders, fills, open positions, settlements, and `strategy_market_paper_runs`.
+- Added WPF `Strategies` tab, ViewModel collection, dashboard load mapping, summary count, and `Strategies.csv` export.
+- Updated README and configuration reference with the new strategy dashboard view.
+Next: Run the dashboard UI and use the new tab for ongoing strategy comparison during Paper runs.
+Notes: `dotnet build src\PolyCopyTrader.Dashboard\PolyCopyTrader.Dashboard.csproj --configuration Verify --no-restore /p:UseSharedCompilation=false` passed. `dotnet test tests\PolyCopyTrader.Tests\PolyCopyTrader.Tests.csproj --configuration Verify --no-restore /p:UseSharedCompilation=false` passed 244/244. `git diff --check` passed with existing LF/CRLF warnings only. A temporary C# probe against PostgreSQL confirmed `GetStrategyPerformanceAsync` returned 19 strategy rows, then the probe files were removed. Branch `master` has no upstream, so automatic pull/push/commit cannot run.
+Blockers: Automatic pull/push cannot run until a Git upstream is configured.
+
+## Active Update 2026-05-05 BTC Strategy Performance Snapshot
+Goal: Summarize current BTC 5m variant strategy outcomes by wins, losses, open runs, and percentages.
+Status: Completed
+Done:
+- Queried PostgreSQL `strategy_market_paper_runs` joined to `strategies` for the 18 `btc_up_down_5m_*` strategies.
+- Counted wins/losses from `Settled` rows with positive/negative `realized_pnl_usd`; counted currently hanging bets from `Entered` rows.
+- Calculated settled win/loss percentages and settled ROI as `sum(realized_pnl_usd) / sum(stake_usd) * 100`.
+- Noted that the sample is still very small, with most variants having only 2-4 settled runs.
+Next: Add a dashboard/query view for strategy comparison if this report will be used repeatedly.
+Notes: Used a temporary C# Npgsql DB probe outside the repository and removed it afterward. No source behavior changed and no tests were run. Branch `master` has no upstream, so automatic pull/push/commit cannot run.
+Blockers: Automatic pull/push cannot run until a Git upstream is configured.
+
+## Active Update 2026-05-05 BTC 5m Window Completeness Check
+Goal: Verify whether BTC 5m strategy is currently placing all 18 variant orders in every 5-minute window.
+Status: Completed
+Done:
+- Confirmed service IPC still reports `Running` with `lastError=null`.
+- Queried PostgreSQL by BTC 5m market window and strategy run status.
+- Confirmed the first fully post-fix window `btc-updown-5m-1777995300` at 2026-05-05T15:35:00Z placed 18/18 Paper orders with no skips.
+- Found the next completed window `btc-updown-5m-1777995600` at 2026-05-05T15:40:00Z placed 16/18 Paper orders; `Less 150` and `More 150` skipped as `entry_due_expired` because they were processed about 12 seconds after due time while `EntryGraceSeconds=10`.
+- Confirmed no `missing_orderbook_cache_stale` skips in post-fix windows; remaining BTC miss is scheduling/grace timing, not order-book freshness.
+Next: Increase BTC `EntryGraceSeconds`, reduce worker delay/load, or change due-entry selection to process near-due variants more deterministically if 18/18 per window is required.
+Notes: Monitoring used a temporary C# Npgsql DB probe outside the repository and removed it afterward. No source behavior changed. Branch `master` has no upstream, so automatic pull/push/commit cannot run.
+Blockers: Automatic pull/push cannot run until a Git upstream is configured.
+
+## Active Update 2026-05-05 CLOB Fallback Restart Monitor
+Goal: Verify the restarted service is running the CLOB `/book` fallback build and no longer rejecting on stale order-book cache.
+Status: Completed
+Done:
+- Confirmed `PolyCopyTrader.Service` PID 70200 is running from Debug output timestamped 2026-05-05 18:34:58 local time, after the `/book` fallback edits.
+- Confirmed IPC `/status` returned `Running`, pauses false, kill switch false, and `lastError=null`.
+- Confirmed from logs and PostgreSQL that `missing_orderbook_cache_stale` is 0 since the restart at 2026-05-05T15:35:20Z.
+- Confirmed on-chain hot Paper processing created Paper orders after restart and BTC 5m variant entries progressed through the 30..270 second variants for the current window.
+- Observed a separate noisy issue: `PaperTradingProcessor.UpdatePositionMarksAsync` still logs many CLOB 404 `No orderbook exists for the requested token id` errors for open paper-position mark updates; this is not the stale-cache decision path.
+Next: Consider suppressing or downgrading expected CLOB 404 mark-update failures in `PaperTradingProcessor`, or pruning/settling stale paper positions whose tokens no longer have order books.
+Notes: Monitoring used IPC, file-log tail, and a temporary C# Npgsql DB probe that was removed afterward. No source behavior changed during this monitoring task. Branch `master` has no upstream, so automatic pull/push/commit cannot run.
+Blockers: Automatic pull/push cannot run until a Git upstream is configured.
+
+## Active Update 2026-05-05 CLOB Book Fallback For Stale Cache
+Goal: Use CLOB `/book` to refresh order-book data before paper decisions instead of rejecting on stale in-memory cache.
+Status: Completed
+Done:
+- Updated BTC 5m Paper entries to prefer cached WebSocket books, then active best-bid/ask snapshots, then fetch CLOB `/book`, update `MarketDataCache` and the active asset registry, and decide from that fresh REST snapshot.
+- Updated on-chain hot Paper signal processing so missing/stale/unsubscribed/unusable WebSocket cache triggers CLOB `/book`, writes the returned snapshot into `MarketDataCache`, and no longer emits `missing_orderbook_cache_stale` as the final rejection reason.
+- Updated tests for BTC 5m and on-chain paper fallback behavior, including REST missing/not-found paths, and updated README/config docs.
+Next: Stop/rebuild/restart the running Debug service so PID 18044 loads the new fallback code, then monitor `paper_orders`, `strategy_market_paper_runs`, and `polymarket_onchain_paper_signal_results`.
+Notes: `dotnet test tests\PolyCopyTrader.Tests\PolyCopyTrader.Tests.csproj --configuration Verify --filter "BtcUpDown5mPaperStrategyProcessorTests|OnChainPaperSignalProcessorTests"` passed 24/24. Full `dotnet test tests\PolyCopyTrader.Tests\PolyCopyTrader.Tests.csproj --configuration Verify` passed 244/244. `git diff --check` passed with existing LF/CRLF warnings only. Debug service PID 18044 was still running from `src\PolyCopyTrader.Service\bin\Debug\net10.0\PolyCopyTrader.Service.exe`, so Debug output was not rebuilt over the running process. Branch `master` has no upstream, so automatic pull/push/commit cannot run.
+Blockers: Running Debug service must be restarted/rebuilt to pick up the new code; automatic pull/push cannot run until a Git upstream is configured.
+
+## Active Update 2026-05-05 Stale Orderbook Policy Discussion
+Goal: Discuss whether BTC 5m Paper should remove order-book staleness checks.
+Status: Completed
+Done:
+- Explained that removing staleness checks would reduce `missing_orderbook_cache_stale` skips but would make Paper fills use potentially old prices, which can distort strategy statistics.
+- Clarified that stale pricing is especially dangerous for BTC 5m because a few minutes is most of the market lifetime and prices can move from near `0.50` to near `0.98`/`0.03`.
+- Noted that stale data can distort both entry price and the `Less`/`More` outcome choice, because the selected outcome still depends on potentially old Gamma `outcomePrices`.
+- Recommended not removing the check globally or for live-like paths; safer options are a bounded BTC-specific max age, just-in-time CLOB `/book` fallback, and recording price source/age on every Paper entry.
+Next: If approved, implement a bounded BTC 5m stale-price policy or CLOB fallback with explicit price source/age diagnostics.
+Notes: Discussion-only task; no source behavior changed and no tests were run. Branch `master` has no upstream, so automatic pull/push/commit cannot run.
+Blockers: Automatic pull/push cannot run until a Git upstream is configured.
+
+## Active Update 2026-05-05 BTC 5m Orderbook Staleness Explanation
+Goal: Explain the BTC 5m `missing_orderbook_cache_stale` problem in simple detailed terms.
+Status: Completed
+Done:
+- Clarified that `missing_orderbook_cache_stale` is a conservative freshness rejection, not proof that the market has no order book.
+- Explained the data path from Gamma market discovery to WebSocket subscription, in-memory order-book/top-of-book cache, BTC 5m due entry, and skip decision.
+- Used the observed restart evidence: service on fresh Debug build created two BTC variant Paper orders at 2026-05-05 17:54:06 local time, then later due entries for the 17:55 window skipped as `missing_orderbook_cache_stale`.
+- Identified the core mechanism: our current freshness threshold is 30 seconds, while BTC 5m markets can be discovered/subscribed ahead of the entry and may not emit fresh per-token WebSocket book/top-of-book events every 30 seconds.
+- Listed practical fix directions: strategy-specific longer price max age, just-in-time CLOB `/book` fetch before entry, current BTC market priority subscription, top-of-book cache treatment, and better diagnostic logging.
+Next: Choose whether BTC 5m Paper should prefer strict freshest WebSocket-only pricing or allow a bounded just-in-time CLOB/Gamma fallback for more complete strategy statistics.
+Notes: Explanation-only task; no source behavior changed and no tests were run. Branch `master` has no upstream, so automatic pull/push/commit cannot run.
+Blockers: Automatic pull/push cannot run until a Git upstream is configured.
+
+## Active Update 2026-05-05 BTC 5m Restart Monitor
+Goal: Monitor the service after the user's restart and verify BTC 5m variant order creation.
+Status: Completed
+Done:
+- Confirmed IPC `/status` no longer responds and no `PolyCopyTrader.Service` process is running.
+- Confirmed the last running service wrote logs until 2026-05-05 17:32:25 local time, then stopped without a visible fatal/shutdown line in the log tail.
+- Confirmed Windows Application/System events in the recent window did not show a `PolyCopyTrader.Service` crash; only previous temporary DB probe errors were present.
+- Confirmed the last run used an old Debug DLL timestamped 2026-05-05 17:09:37 local time, so it did not include the active-snapshot fallback fix.
+- Confirmed the old run still created one BTC variant Paper order: `btc_up_down_5m_less_90`, market `btc-updown-5m-1777991400`, outcome `Down`, entry price `0.37`, notional `$1`, created/filled at 2026-05-05 17:31:30 local time.
+- Confirmed other recent BTC variant due runs were still mostly skipped as `missing_orderbook_cache_stale`.
+- Built the Debug service successfully after the stop, so the next restart will load the newer fallback code.
+Next: Restart the service again, then monitor whether BTC variant orders continue after 17:44 with the updated Debug DLL.
+Notes: `dotnet build src\PolyCopyTrader.Service\PolyCopyTrader.Service.csproj --configuration Debug` passed with 0 warnings/errors. No source behavior changed during this monitoring task beyond building generated Debug output. Branch `master` has no upstream, so automatic pull/push/commit cannot run.
+Blockers: Service is stopped and must be restarted before live monitoring can continue; automatic pull/push cannot run until a Git upstream is configured.
+
+## Active Update 2026-05-05 Missing Orderbook Cache Stale Analysis
+Goal: Explain likely causes of `missing_orderbook_cache_stale` for BTC 5m strategy entries.
+Status: Completed
+Done:
+- Confirmed from code that `missing_orderbook_cache_stale` means the asset is considered subscribed and `MarketDataCache` has a snapshot for it, but the snapshot timestamp is older than `MarketDataWebSocket:StaleAfterSeconds` (default 30 seconds).
+- Confirmed this differs from `missing_orderbook_unsubscribed`, `missing_orderbook_cache_miss`, and `missing_orderbook_empty_side`.
+- Identified the likely BTC 5m cause: token ids can be subscribed long before the due entry, and if no fresh book/top-of-book event arrives during the last 30 seconds, the entry sees a stale cache even though Gamma/active snapshots may still have a best ask.
+- Confirmed parser detail: `price_change` and `best_bid_ask` events build top-of-book snapshots with level size `0`, so old BTC entry logic requiring `Size > 0` could reject those as unusable even when the best ask was fresh.
+Next: After service restart with the active-snapshot fallback, monitor whether stale skips remain; if they do, consider per-strategy best-ask max age, just-in-time current BTC resubscription, or a due-time CLOB/Gamma fallback.
+Notes: Analysis-only task; no source behavior changed and no tests were run. Branch `master` has no upstream, so automatic pull/push/commit cannot run.
+Blockers: Automatic pull/push cannot run until a Git upstream is configured.
+
+## Active Update 2026-05-05 BTC 5m Best Ask Snapshot Fallback
+Goal: Monitor the restarted service and fix why BTC 5m variant orders still do not appear.
+Status: Completed
+Done:
+- Confirmed `PolyCopyTrader.Service` PID 50456 is running from the Debug build, IPC `/status` is `Running`, all pauses are false, kill switch is false, and `lastError=null`.
+- Confirmed the BTC 5m variant strategies still have `0` `paper_orders`; fresh due runs after restart are being skipped with `missing_orderbook_cache_stale`.
+- Diagnosed the cause as too strict a dependency on full `OrderBookSnapshot` cache entries: the active asset registry is updated by WebSocket best-bid/ask events, but the BTC strategy was not using that fresher compact snapshot.
+- Updated `BtcUpDown5mPaperStrategyProcessor` so full fresh order-book snapshots remain preferred, but a fresh active asset snapshot `BestAsk` is used as fallback for Paper entry/fill/position price.
+- Added BTC strategy tests for fresh active-snapshot best ask fallback and stale active-snapshot rejection; updated README wording for the WebSocket best-ask source.
+Next: Restart the service so the running Debug process picks up the new fallback, then monitor `paper_orders` for the BTC variant strategies again.
+Notes: Targeted `dotnet test tests\PolyCopyTrader.Tests\PolyCopyTrader.Tests.csproj --configuration Verify --filter BtcUpDown5mPaperStrategyProcessorTests` passed 9/9. Full `dotnet test tests\PolyCopyTrader.Tests\PolyCopyTrader.Tests.csproj --configuration Verify` passed 243/243. `git diff --check` passed with LF/CRLF warnings only. The running service was not stopped or restarted during this monitor/fix task. Branch `master` has no upstream, so automatic pull/push/commit cannot run.
+Blockers: The currently running Debug service still has the old strict book-snapshot logic until it is restarted from the rebuilt source; automatic pull/push cannot run until a Git upstream is configured.
+
+## Active Update 2026-05-05 BTC 5m Best Ask Entry
+Goal: Change BTC 5m Paper variants to enter at order-book best ask instead of Gamma `outcomePrices`.
+Status: Completed
+Done:
+- Updated `BtcUpDown5mPaperStrategyProcessor` so `Less`/`More` still choose the target outcome from Gamma `outcomePrices`, but the actual Paper entry/fill/position price is the selected token's fresh cached WebSocket order-book best ask.
+- Added explicit skip behavior when a fresh usable best ask is unavailable, using existing `missing_orderbook_*` reason codes.
+- Updated BTC 5m tests to seed cached order books, assert best-ask entry prices, and cover missing-best-ask skipping.
+- Updated README and configuration reference to document best-ask Paper execution.
+Next: Restart the service manually and monitor the new variant rows; skipped runs with `missing_orderbook_*` will indicate WebSocket cache/subscription warm-up issues.
+Notes: Targeted BTC strategy tests passed 7/7. Full `dotnet test tests\PolyCopyTrader.Tests\PolyCopyTrader.Tests.csproj --configuration Verify --no-restore` passed 241/241. `dotnet build src\PolyCopyTrader.Service\PolyCopyTrader.Service.csproj --configuration Debug --no-restore` passed with 0 warnings. `git diff --check` passed with LF/CRLF warnings only. Branch `master` has no upstream, so automatic pull/push/commit cannot run.
+Blockers: Service must be restarted manually to run the updated Debug build; automatic pull/push cannot run until a Git upstream is configured.
+
+## Active Update 2026-05-05 BTC 5m Entry Price Explanation
+Goal: Explain how the BTC 5m strategy chooses the paper entry price.
+Status: Completed
+Done:
+- Confirmed the BTC 5m variants currently use Gamma `outcomePrices` from `polymarket_gamma_markets.raw_json`, not best bid or best ask from the order book.
+- Confirmed `Less` selects the unique lower `outcomePrices` value, `More` selects the unique higher value, then records an immediate Paper fill at that same price.
+- Confirmed size is calculated as `StakeUsd / selectedOutcome.Price`.
+Next: If closer live/taker emulation is required, change BTC 5m Paper entry pricing to use fresh WebSocket/CLOB order book ask for BUY fill simulation.
+Notes: Answer-only task; no source code changed and no tests were run. Branch `master` has no upstream, so automatic pull/push/commit cannot run.
+Blockers: Automatic pull/push cannot run until a Git upstream is configured.
+
+## Active Update 2026-05-05 BTC 5m Variant Strategy Family
+Goal: Replace the single `BTC Up or Down 5m` Paper experiment with 18 per-delay strategy variants and clean the old strategy data.
+Status: Completed
+Done:
+- Replaced the legacy `btc_up_down_5m` strategy catalog entry with 18 built-in variants: `BTC Up or Down 5m Less {30..270}` and `BTC Up or Down 5m More {30..270}` at 30-second steps.
+- Updated the BTC 5m worker so each variant has its own `strategy_id`, synthetic wallet `strategy:<variant_code>`, lifecycle run row, immediate $1 Paper BUY fill, position, settlement, and PnL.
+- Implemented `Less` as lower-priced outcome and `More` as higher-priced outcome, with per-variant due times and `BtcUpDown5mStrategy:EntryGraceSeconds` late-entry skipping.
+- Removed old `EntryDelaySeconds` and single synthetic wallet config, added `EnabledVariantCodes`, raised per-cycle entry/settlement defaults to 250, and updated README/config docs/tests/schema seed.
+- Cleaned PostgreSQL old data for `btc_up_down_5m`: old strategy rows/runs/orders are now 0, and the new strategy variant rows total 18.
+Next: Restart the service manually and monitor `strategy_market_paper_runs`, `paper_orders`, and `paper_position_settlements` grouped by `strategy_id`/synthetic wallet to compare the 18 variants.
+Notes: `dotnet test tests\PolyCopyTrader.Tests\PolyCopyTrader.Tests.csproj --configuration Verify` passed 240/240. `dotnet build src\PolyCopyTrader.Service\PolyCopyTrader.Service.csproj --configuration Debug` passed with existing nullable warnings in `PostgresAppRepository`. `git diff --check` passed with LF/CRLF warnings only. Branch `master` has no upstream, so automatic pull/push/commit cannot run.
+Blockers: Service was not running during cleanup/build and must be restarted manually; automatic pull/push cannot run until a Git upstream is configured.
+
+## Active Update 2026-05-05 BTC Strategy Win Loss Clarification
+Goal: Clarify whether the completed BTC 5m Paper trades won, lost, or remain in progress.
+Status: Completed
+Done:
+- Confirmed the current BTC 5m strategy settlement split is 10 settled runs: 8 won and 2 lost.
+- Confirmed aggregate realized PnL across settled BTC strategy positions is `6.54176053`.
+- Confirmed 2 additional BTC strategy runs are currently `Entered`, so they are in progress and not counted in the 8/2 settled split.
+Next: Continue monitoring the two open `Entered` runs until they settle.
+Notes: Status-check task only; no source behavior changed and no tests were run. Branch `master` has no upstream, so automatic pull/push/commit cannot run.
+Blockers: Automatic pull/push cannot run until a Git upstream is configured.
+
+## Active Update 2026-05-05 BTC Strategy Settlement Check
+Goal: Check whether any BTC 5m Paper trades from the new strategy have completed.
+Status: Completed
+Done:
+- Confirmed the service is running again as PID 54696 with IPC `/status` returning `Running`, pauses false, kill switch false, and `lastError=null`.
+- Confirmed the BTC 5m strategy has 10 settled runs in `strategy_market_paper_runs`.
+- Confirmed settlement rows for synthetic wallet `strategy:btc_up_down_5m` total 10, with aggregate realized PnL `6.54176053`.
+- Confirmed recent settled examples include `btc-updown-5m-1777986600` and `btc-updown-5m-1777986300`, both winning `Up` outcomes.
+Next: Continue monitoring open `Entered` runs and address process-exit/logging/orderbook-noise issues separately.
+Notes: Status-check task only; no source behavior changed and no tests were run. Branch `master` has no upstream, so automatic pull/push/commit cannot run.
+Blockers: Automatic pull/push cannot run until a Git upstream is configured.
+
+## Active Update 2026-05-05 BTC Paper Orders Stopped Check
+Goal: Determine why `paper_orders` stopped growing for the BTC 5m strategy.
+Status: Completed
+Done:
+- Confirmed `PolyCopyTrader.Service` was no longer running at 16:03 local time and IPC `/status` failed to connect.
+- Confirmed BTC 5m `paper_orders` did grow after the previous monitoring snapshot up to the last filled order at 15:51:04 local time; total BTC strategy filled orders were 8.
+- Confirmed two due BTC 5m runs remained stuck in `Observed` at 16:03: `btc-updown-5m-1777985700` due 15:56 and `btc-updown-5m-1777986000` due 16:01.
+- Confirmed `non_5m_runs=0`, so the filter fix still holds.
+- Checked the service log tail and Windows Application/System logs; the service log stops abruptly at 15:52:17 without a fatal/shutdown line, and Windows event logs did not show a crash entry for `PolyCopyTrader.Service`.
+Next: Restart the service, then investigate why the process exits without an explicit fatal log if it happens again; separately fix the noisy Paper mark-update CLOB 404 loop.
+Notes: Monitoring/diagnostic task only; no source behavior changed and no tests were run. Branch `master` has no upstream, so automatic pull/push/commit cannot run.
+Blockers: The service process is stopped and must be restarted for BTC 5m Paper orders to resume; automatic pull/push cannot run until a Git upstream is configured.
+
+## Active Update 2026-05-05 BTC 5m Restart Monitoring
+Goal: Monitor the restarted service after the BTC 5m filter cleanup.
+Status: Completed
+Done:
+- Confirmed `PolyCopyTrader.Service` PID 47796 restarted from the updated Debug build and IPC `/status` stayed `Running` with pauses false, kill switch false, and `lastError=null`.
+- Confirmed the BTC 5m strategy created new $1 Paper entries after restart at 15:36, 15:41, and 15:46 local time, all with `btc-updown-5m-*` slugs.
+- Confirmed `non_5m_runs=0` after multiple cycles, so hourly/15m/4h markets are no longer being captured by the BTC 5m strategy.
+- Confirmed settlement continued after restart: total BTC 5m settlements reached 5, with aggregate settled PnL `3.20752287` in the strategy table; open synthetic BTC positions were 2 with mark-to-market unrealized PnL around `+0.53586077`.
+- Confirmed the on-chain hot path was still processing: 895 results in the latest 10-minute sample and latest result age about 1.361 seconds.
+- Observed ongoing non-BTC issues: file log `polycopytrader-service-20260505.log` did not update after 15:35:10, and `PaperTradingProcessor`/`PolymarketClobPublicClient` continued frequent `No orderbook exists for the requested token id` mark-update errors.
+Next: Investigate the noisy `UpdatePositionMark`/CLOB 404 loop and why the file log is not updating after service start.
+Notes: Monitoring-only task; no source behavior changed and no tests were run. Database/IPC/process checks were used for verification. Branch `master` has no upstream, so automatic pull/push/commit cannot run.
+Blockers: Automatic pull/push cannot run until a Git upstream is configured.
+
+## Active Update 2026-05-05 BTC 5m Strategy Monitoring Cleanup
+Goal: Monitor the restarted BTC 5m Paper strategy and correct any active data-quality issue.
+Status: Completed
+Done:
+- Confirmed the Debug service started the BTC Up/Down 5m worker and created Paper entries/settlements.
+- Found the market filter was too broad because it accepted any `Bitcoin Up or Down - ...` question, which included hourly, 15m, and 4h markets.
+- Tightened BTC 5m detection to exact `btc-updown-5m-<unix>` slug/event_slug or exact `series_slug = btc-up-or-down-5m`, and added a regression test for 15m/4h/hourly exclusions.
+- Stopped the running old-code `PolyCopyTrader.Service`, rebuilt Debug, and cleaned only the mistakenly created non-5m rows for the `btc_up_down_5m` strategy from `strategy_market_paper_runs`, `paper_orders`, `paper_fills`, `paper_positions`, and synthetic `signals`.
+Next: Manually restart the service from the updated Debug build, then monitor that new BTC strategy cycles only create `btc-updown-5m-*` runs/orders.
+Notes: `dotnet test tests\PolyCopyTrader.Tests\PolyCopyTrader.Tests.csproj --configuration Verify` passed 239/239. `dotnet build src\PolyCopyTrader.Service\PolyCopyTrader.Service.csproj --configuration Debug` passed with existing nullable warnings. Post-cleanup DB check showed `non_5m_runs=0`, 3 BTC 5m filled Paper orders, 2 settlements, and only 5m slugs in latest strategy runs. `git diff --check` reported LF/CRLF warnings only. Branch `master` has no upstream, so automatic pull/push/commit cannot run.
+Blockers: Service is intentionally stopped after the cleanup and must be restarted manually; automatic pull/push cannot run until a Git upstream is configured.
+
+## Active Update 2026-05-05 BTC 5m Paper Strategy
+Goal: Implement the experimental BTC Up/Down 5-minute Paper strategy with $1 entries and settlement PnL.
+Status: Completed
+Done:
+- Added configurable `BtcUpDown5mStrategy` options and registered the paper-only hosted worker/processor.
+- Added `strategy_market_paper_runs` to persist one lifecycle row per BTC 5-minute market with observed, entered, skipped, and settled status plus entry/settlement PnL fields.
+- Implemented BTC 5m market detection from Gamma rows, window-start parsing from `eventStartTime`/slug, entry scheduling at window start plus 60 seconds, lower-priced-outcome selection, immediate $1 Paper BUY fills, synthetic strategy wallet positions, and closed-Gamma settlement into `paper_position_settlements`.
+- Added repository methods, README/config docs, and tests covering paper entry and settlement.
+Next: Restart the service so schema initialization creates `strategy_market_paper_runs` and the new worker starts; then monitor `strategy_market_paper_runs`, `paper_orders`, and `paper_position_settlements`.
+Notes: `dotnet test tests\PolyCopyTrader.Tests\PolyCopyTrader.Tests.csproj --configuration Verify` passed 236/236. Targeted `BtcUpDown5mPaperStrategyProcessorTests|StorageTests` with `--no-build` passed 23/23. `git diff --check` passed with LF/CRLF warnings only. A parallel `dotnet build` attempt failed only because `VBCSCompiler` locked `obj\Verify\net10.0\PolyCopyTrader.Domain.dll`; after `dotnet build-server shutdown`, the full Verify test build passed. Branch `master` has no upstream, so automatic pull/push/commit cannot run.
+Blockers: Running service must be restarted to activate the worker and apply schema; automatic pull/push cannot run until a Git upstream is configured.
+
+## Active Update 2026-05-05 BTC 5m Strategy Catalog
+Goal: Add `BTC Up or Down 5m` as a separate strategy catalog entry.
+Status: Completed
+Done:
+- Added `StrategyIds.BtcUpDown5m` with stable id `b7c50005-0000-4000-8000-000000000005`, code `btc_up_down_5m`, and name `BTC Up or Down 5m`.
+- Extended the `strategies` seed SQL with the experimental `BTC Up or Down 5m` row.
+- Updated `StorageTests` to assert the new built-in strategy seed.
+- Updated README to list both built-in strategies and clarify that BTC 5m is currently a catalog entry only until entry/exit rules are implemented.
+Next: Define the BTC 5m strategy behavior: market discovery window, signal source, entry timing, paper sizing, exit/settlement handling, and how orders should receive `StrategyIds.BtcUpDown5m`.
+Notes: `dotnet test tests\PolyCopyTrader.Tests\PolyCopyTrader.Tests.csproj -c Verify --no-restore --filter "FullyQualifiedName~StorageTests" -p:UseSharedCompilation=false` passed 21/21. Full `dotnet test tests\PolyCopyTrader.Tests\PolyCopyTrader.Tests.csproj -c Verify --no-restore -p:UseSharedCompilation=false` passed 234/234. `git diff --check` passed with LF/CRLF warnings only. Branch `master` has no upstream, so automatic pull/push/commit cannot run.
+Blockers: Running service must be restarted to seed the new strategy row; automatic pull/push cannot run until a Git upstream is configured.
+
+## Active Update 2026-05-05 BTC 5m Market Mechanics Answer
+Goal: Explain how Polymarket BTC Up/Down 5-minute recurring markets are structured.
+Status: Completed
+Done:
+- Checked the Polymarket page for a concrete `BTC Up or Down 5m` event and Polymarket API documentation.
+- Confirmed each 5-minute window is represented as a separate event/market with its own slug, condition id, and CLOB token ids; for the checked example the event contained one market.
+- Confirmed the market resolves by comparing Chainlink BTC/USD at the end of the named time range against the beginning of that range.
+- Clarified that new windows appear every 5 minutes, but market records can be created/published ahead of the actual trading/resolution window.
+Next: If we build a dedicated short-window strategy, filter by slug pattern plus `endDate`/`closed`/`acceptingOrders` rather than treating the whole `BTC Up or Down 5m` series as one market.
+Notes: Answer-only task; no source code changed and no tests were run. Branch `master` has no upstream, so automatic pull/push/commit cannot run.
+Blockers: Automatic pull/push cannot run until a Git upstream is configured.
+
+## Active Update 2026-05-05 Rename Strategies Table
+Goal: Rename the strategy catalog from copy-specific naming to generic strategy naming.
+Status: Completed
+Done:
+- Renamed the PostgreSQL strategy catalog from `copy_strategies` to `strategies` in required tables, create SQL, seed SQL, and order foreign-key references.
+- Added an idempotent schema migration block that renames existing `public.copy_strategies` to `strategies` when the old table exists and the new table does not.
+- Renamed domain `CopyStrategyIds` to `StrategyIds` and `CopyStrategy` to `TradingStrategy`.
+- Updated Paper, DryRun, Live, and accepted on-chain Paper order persistence/creation references to the neutral `StrategyIds` naming.
+- Updated README and storage/paper tests to assert `strategies` while preserving the old-table rename migration.
+Next: Restart the running service when ready so schema initialization applies the table rename and the process loads the new neutral domain names.
+Notes: A Debug test attempt failed because the running `PolyCopyTrader.Service` PID 37664 and Visual Studio held Debug DLLs locked. Reran in Verify: targeted `PaperTradingEngineTests|StorageTests` passed 28/28; full `dotnet test tests\PolyCopyTrader.Tests\PolyCopyTrader.Tests.csproj -c Verify --no-restore -p:UseSharedCompilation=false` passed 234/234. `git diff --check` passed with LF/CRLF warnings only. Branch `master` has no upstream, so automatic pull/push/commit cannot run.
+Blockers: Running service must be restarted to apply the schema/code rename; automatic pull/push cannot run until a Git upstream is configured.
+
+## Active Update 2026-05-05 Copy Strategy Entity
+Goal: Add a first-class strategy entity so current and future order-producing strategies can be compared.
+Status: Completed
+Done:
+- Added domain strategy constants/entity with built-in `Follow leader` strategy id `f0110a0d-1ead-4c00-8b01-000000000001`, code `follow_leader`, and name `Follow leader`.
+- Added PostgreSQL table `copy_strategies`, seeded the built-in `Follow leader` row, and added `strategy_id` columns plus strategy/time indexes to `paper_orders`, `dry_run_orders`, and `live_orders`.
+- Updated paper, dry-run, live, and accepted on-chain Paper order persistence to write/read `strategy_id`, normalizing empty strategy ids to the built-in `Follow leader`.
+- Updated the current paper/live order creation paths so all generated orders are explicitly tied to `Follow leader`.
+- Updated README and tests to document/assert the strategy catalog and paper-order strategy assignment.
+Next: Restart the service so schema initialization creates `copy_strategies` and backfills existing order rows with the default `Follow leader` strategy id.
+Notes: `dotnet test PolyCopyTrader.sln --no-restore` passed 234/234. The build still reports pre-existing nullable warnings in `PostgresAppRepository`; no new test failures. Branch `master` has no upstream, so automatic pull/push/commit cannot run.
+Blockers: Running service must be restarted to apply the new schema and code; automatic pull/push cannot run until a Git upstream is configured.
+
+## Active Update 2026-05-05 Orderbook Diagnostics And Candidate Fallback
+Goal: Split `missing_orderbook` diagnostics and let the hot path try the next best candidate when order-book data is unavailable.
+Status: Completed
+Done:
+- Added explicit order-book rejection codes: `missing_orderbook_unsubscribed`, `missing_orderbook_cache_miss`, `missing_orderbook_cache_stale`, `missing_orderbook_rest_missing`, `missing_orderbook_rest_not_found`, and `missing_orderbook_empty_side`.
+- Extended `IMarketDataCache`/`MarketDataCache` with `GetOrderBook(...)`, returning fresh/missing/stale status plus snapshot age while preserving existing `TryGetFreshOrderBook(...)` callers.
+- Changed `OnChainPaperSignalProcessor` so order-book lookup returns a typed result with an optional rejection reason; on-chain paper results and signal rejections now store the specific `missing_orderbook_*` code instead of only the generic code for these paths.
+- Changed the hot on-chain Paper selection from one selected BUY candidate to sorted BUY selections; it now attempts candidates in score order and continues to the next candidate only while the previous attempt failed with a `missing_orderbook*` reason.
+- Updated README and configuration reference to document score-ordered candidate attempts and cache-only order-book subreasons.
+- Added tests for cache miss without REST fallback, trying the next best candidate after a cache miss, stale cache subreason, and CLOB no-orderbook REST subreason.
+Next: Restart the service to load the new Debug/Verify build, then monitor `polymarket_onchain_paper_signal_results` grouped by the new `missing_orderbook_*` decision codes and check whether Paper orders increase.
+Notes: Verification passed: `dotnet test tests\PolyCopyTrader.Tests\PolyCopyTrader.Tests.csproj -c Verify --no-restore --filter "FullyQualifiedName~OnChainPaperSignalProcessorTests" -p:UseSharedCompilation=false` passed 14/14; full `dotnet test tests\PolyCopyTrader.Tests\PolyCopyTrader.Tests.csproj -c Verify --no-restore -p:UseSharedCompilation=false` passed 234/234; `dotnet build src\PolyCopyTrader.Service\PolyCopyTrader.Service.csproj -c Verify --no-restore -p:UseSharedCompilation=false` passed with 0 warnings/errors; `git diff --check` passed with LF/CRLF warnings only. Branch `master` has no upstream, so automatic pull/push/commit cannot run.
+Blockers: Running service must be restarted to activate the code; automatic pull/push cannot run until a Git upstream is configured.
+
+## Active Update 2026-05-05 Missing Orderbook Explanation
+Goal: Explain what `missing_orderbook` means and when it is produced.
+Status: Completed
+Done:
+- Re-read the signal engine, on-chain Paper hot path, market-data cache, WebSocket parser, CLOB order-book client, relevant tests, README/config docs, and recent project context.
+- Confirmed `missing_orderbook` is emitted by `DefaultSignalEngine` when the passed order book is missing either `BestBid` or `BestAsk`, so the strategy cannot compute spread, maker price, slippage, or minimum order size.
+- Confirmed the on-chain Paper hot path calls `GetOrderBookAsync(..., cacheOnly: true)` after selecting one best BUY candidate; it accepts only a fresh in-memory WebSocket order book and returns `null` without REST fallback when cache is missing or stale.
+- Confirmed non-hot/backlog paths can still fall back to CLOB `/book`; deterministic CLOB `No orderbook exists` / HTTP 404 is normalized to a `null` order book and then rejected as `missing_orderbook`.
+- Identified practical causes: unsubscribed/not-yet-warmed token, WebSocket shard reconnect/warm-up, stale cached snapshot older than `MarketDataWebSocket:StaleAfterSeconds` (30s), CLOB 404/no-orderbook, empty bid/ask side, or selected candidate not having cache despite other candidates in the same window.
+Next: Consider splitting `missing_orderbook` into diagnostic subreasons and/or changing hot selection to skip cache-miss candidates and try the next best candidate in the same fresh window.
+Notes: Explanation-only task; no source behavior changed and no tests were run. Branch `master` has no upstream, so automatic pull/push/commit cannot run.
+Blockers: Automatic pull/push cannot run until a Git upstream is configured.
+
+## Active Update 2026-05-05 Continued Service Monitoring
+Goal: Continue monitoring the running service after the Paper accounting fix restart.
+Status: Completed
+Done:
+- Confirmed `PolyCopyTrader.Service` PID 17264 stayed `Running`; IPC pauses remained false, kill switch stayed off, and `lastError=null`.
+- Confirmed `PaperAccountingWorker` remained fixed: 0 `PaperAccountingWorker` errors since the 2026-05-05 09:53:24 UTC service start.
+- Confirmed `paper_copied_trader_performance` continued refreshing on schedule: 36 rows, latest refresh 2026-05-05 10:08:44 UTC, and no duplicate `(copied_trader_wallet, category)` rows were observed.
+- Confirmed on-chain Paper signal processing stayed fresh on the final sample: latest result age about 0.93 seconds, 38 results in the preceding minute.
+- Since restart, on-chain Paper decisions were dominated by `missing_orderbook` and `market_too_close_to_event`; only 1 Paper order was created, it expired, and 0 Paper fills were observed after restart.
+- Observed 2 transient Polygon RPC `Unknown block` errors at 2026-05-05 10:01:19 UTC; they did not continue in the later 5-minute window.
+- Observed recurring WebSocket reconnects across shards; shards returned to `Connected`, final aggregate had 32 rows, 0 stale rows, about 90k subscribed assets, and 1 connected shard with `last_message_utc=null` shortly after reconnect.
+- Process memory stayed around 1.0-1.2 GB private/working set and the process remained responsive.
+Next: Investigate the remaining trading bottleneck (`missing_orderbook`) and watch WebSocket reconnect churn if it continues.
+Notes: Monitoring-only task; no source behavior changed and no tests were run. Branch `master` has no upstream, so automatic pull/push/commit cannot run.
+Blockers: Automatic pull/push cannot run until a Git upstream is configured.
+
+## Active Update 2026-05-05 Post-Restart Paper Accounting Monitoring
+Goal: Monitor the restarted service and confirm the Paper copied-trader performance rebuild fix is active.
+Status: Completed
+Done:
+- Confirmed restarted `PolyCopyTrader.Service` PID 17264 is running from Debug output, IPC state is `Running`, pauses are false, kill switch is off, and `lastError=null`.
+- Confirmed the service started at 2026-05-05 09:53:24 UTC and the Debug `PolyCopyTrader.Storage.dll` was rebuilt shortly before restart.
+- Confirmed `PaperAccountingWorker` duplicate-key errors did not recur after restart: 0 `PaperAccountingWorker` errors since 2026-05-05 09:53:24 UTC.
+- Confirmed `paper_copied_trader_performance` refreshed repeatedly after restart: 36 rows, latest refresh 2026-05-05 09:56:30 UTC, and no duplicate `(copied_trader_wallet, category)` rows.
+- Confirmed on-chain Paper signal processing remains fresh: latest result age was about 1.6 seconds on one sample; since restart, rejections were mainly `market_too_close_to_event` and `missing_orderbook`, with one `paper_order_small` created.
+- Confirmed market-data WebSockets recovered after one transient shard-009 close: 32 status rows, 0 stale rows, shard-009 connected, and about 90k subscribed assets.
+- Confirmed Paper since restart: 1 new pending Paper order at 2026-05-05 09:53:58 UTC and 0 fills.
+Next: Continue with the remaining trading bottleneck: `missing_orderbook` and close-to-event filtering are now the dominant Paper rejection reasons, not the accounting rebuild.
+Notes: Monitoring-only task; no source behavior changed and no tests were run. Branch `master` has no upstream, so automatic pull/push/commit cannot run.
+Blockers: Automatic pull/push cannot run until a Git upstream is configured.
+
+## Active Update 2026-05-05 Paper Accounting Rebuild Fix
+Goal: Fix duplicate-key failures in the Paper copied-trader performance rebuild.
+Status: Completed
+Done:
+- Changed `PostgresAppRepository.RefreshPaperCopiedTraderPerformanceAsync` so the refresh uses an explicit PostgreSQL transaction.
+- Added a transaction-level advisory lock for `paper_copied_trader_performance` rebuilds to serialize concurrent refresh callers.
+- Split the old data-modifying CTE into an ordered `DELETE FROM paper_copied_trader_performance;` followed by the existing `WITH event_rows ... INSERT INTO paper_copied_trader_performance ... SELECT count(*)` query inside the same transaction.
+- Removed the unsafe `WITH deleted AS (DELETE FROM paper_copied_trader_performance)` shape from the refresh query.
+- Added a `StorageTests` assertion that the refresh uses the lock and standalone delete, and does not reintroduce `WITH deleted AS`.
+Next: Restart the currently running Debug service when ready so PID 10860 loads the new DLL; until restart, the live process still uses the old implementation.
+Notes: `dotnet build src\PolyCopyTrader.Storage\PolyCopyTrader.Storage.csproj --no-restore -p:UseSharedCompilation=false` passed with existing nullable warnings. First Debug `StorageTests` run failed because the running service/Visual Studio locked the Debug service copy of `PolyCopyTrader.Storage.dll`; reran in `Verify` configuration and `StorageTests` passed 21/21. `dotnet build src\PolyCopyTrader.Service\PolyCopyTrader.Service.csproj -c Verify --no-restore -p:UseSharedCompilation=false` passed with 0 warnings/errors after retrying around a temporary compiler lock. `git diff --check` passed with LF/CRLF warnings only. Branch `master` has no upstream, so automatic pull/push/commit cannot run.
+Blockers: Running Debug service must be restarted to activate the code fix; automatic pull/push cannot run until a Git upstream is configured.
+
+## Active Update 2026-05-05 Paper Accounting Fix Status Check
+Goal: Confirm whether the `paper_copied_trader_performance` rebuild duplicate-key issue has already been fixed.
+Status: Completed
+Done:
+- Rechecked `PostgresAppRepository.RefreshPaperCopiedTraderPerformanceAsync`.
+- Confirmed the code still uses one data-modifying CTE with `WITH deleted AS (DELETE FROM paper_copied_trader_performance)` followed by `inserted AS (INSERT INTO paper_copied_trader_performance ...)`.
+- Confirmed there is no `ON CONFLICT` handling in that refresh insert and no ordered transaction split in the current method.
+- Confirmed PostgreSQL still recorded recent `PaperAccountingWorker` cycle errors: 20 errors in the last 10 minutes, latest at 2026-05-05 09:35:28 UTC.
+Next: Fix `RefreshPaperCopiedTraderPerformanceAsync` by splitting delete and insert into ordered commands inside one transaction, or by converting the rebuild into an upsert-safe refresh.
+Notes: Status-check only; no source behavior changed and no tests were run. Branch `master` has no upstream, so automatic pull/push/commit cannot run.
+Blockers: Automatic pull/push cannot run until a Git upstream is configured.
+
+## Active Update 2026-05-05 Paper Accounting Worker Explanation
+Goal: Explain what `PaperAccountingWorker` does and why it reports duplicate-key errors on `paper_copied_trader_performance_pkey`.
+Status: Completed
+Done:
+- Reviewed `PaperAccountingWorker`, `PaperSettlementProcessor`, `PostgresAppRepository.RefreshPaperCopiedTraderPerformanceAsync`, and `paper_copied_trader_performance` schema.
+- Confirmed the worker is a Paper-mode background accounting task: it periodically settles resolved paper positions and continuously rebuilds our local copied-trader performance table by wallet/category.
+- Confirmed `paper_copied_trader_performance` is keyed by `(copied_trader_wallet, category)` and is used as our own copied-wallet effectiveness rating, separate from Polymarket leaderboard/category ratings.
+- Confirmed current DB state has no duplicate rows for `(copied_trader_wallet, category)` and only one `PolyCopyTrader.Service` process is running.
+- Identified the likely bug: `RefreshPaperCopiedTraderPerformanceAsync` combines `DELETE FROM paper_copied_trader_performance` and `INSERT INTO paper_copied_trader_performance` in one data-modifying `WITH`; PostgreSQL does not guarantee execution order between those CTE parts, so the insert can conflict with still-existing rows.
+Next: If approved, change the refresh to run delete/truncate and insert as ordered statements inside one transaction, or use `INSERT ... ON CONFLICT DO UPDATE`.
+Notes: Answer-only analysis; no source behavior changed and no tests were run. Branch `master` has no upstream, so automatic pull/push/commit cannot run.
+Blockers: Automatic pull/push cannot run until a Git upstream is configured.
+
+## Active Update 2026-05-05 Restart Monitoring After Min Leader Reduction
+Goal: Monitor the restarted service after lowering the minimum leader-trade threshold to 0.10 USD.
+Status: Completed
+Done:
+- Confirmed `PolyCopyTrader.Service` PID 10860 is running, IPC status is `Running`, pauses are false, kill switch is off, and `lastError=null`.
+- Confirmed the on-chain Paper hot path is current: `polymarket_onchain_paper_signal_results` reached 71497, latest result was about 3 seconds old on the last snapshot, and processing continued during monitoring.
+- Confirmed the lower threshold took effect behaviorally: since restart there were 10 new `paper_orders`, 5 new fills, 6 open positions, and `leader_trade_too_small` was no longer the dominant recent rejection.
+- Confirmed current paper state: 12 total orders, 6 filled and 6 expired, 6 fills total, 6 open positions, estimated value about 8.068 USD, and unrealized PnL about +0.038 USD.
+- Confirmed market-data WebSockets are healthy: 32 `market_data_status` rows, 0 stale rows, and roughly 90k subscribed assets.
+- Identified the current blocker for more Paper orders: `missing_orderbook` dominates recent on-chain candidate rejections, growing to 516 since restart, while `leader_trade_too_small` was only 16.
+- Found the file log sink still appears stale: the latest Debug service log file remained last-written at 2026-05-05 11:22:18 local time even though IPC/DB activity is live.
+- Confirmed the separate `PaperAccountingWorker` duplicate-key error still repeats every cycle for `paper_copied_trader_performance_pkey`.
+Next: Fix the `PaperAccountingWorker` upsert duplicate-key path and investigate why hot selected candidates often miss fresh cache-only order books.
+Notes: Monitoring-only task; no service source behavior changed and no tests were run. Branch `master` has no upstream, so automatic pull/push/commit cannot run.
+Blockers: Automatic pull/push cannot run until a Git upstream is configured.
+
+## Active Update 2026-05-05 Lower Leader Trade Minimum
+Goal: Lower the minimum leader trade notional so paper testing does not ignore tiny successful leader trades.
+Status: Completed
+Done:
+- Changed `Execution:MinLeaderTradeUsd` in service config from `500` to `0.10`.
+- Changed the placeholder watchlist trader `MinLeaderTradeUsd` from `500` to `0.10` so `DefaultSignalEngine`'s `max(traderRule.MinLeaderTradeUsd, Execution.MinLeaderTradeUsd)` does not preserve the old threshold.
+- Changed default `ExecutionOptions.MinLeaderTradeUsd` and `TraderRuleOptions.MinLeaderTradeUsd` to `0.10m`.
+- Updated `README.md`, `docs/configuration_reference.md`, and `ConfigurationTests` to document/assert the new default.
+- Updated the ignored Debug runtime `appsettings.json` so a direct restart of the current Debug service artifact also sees `0.10`.
+Next: Start the service again when ready; the next start will load the new `0.10` threshold.
+Notes: `dotnet build src\PolyCopyTrader.Service\PolyCopyTrader.Service.csproj -c Verify --no-restore` passed with existing nullable warnings. First configuration test attempt hit a temporary `VBCSCompiler` file lock; rerun with `-p:UseSharedCompilation=false` passed 14/14. `git diff --check` passed with LF/CRLF warnings only. A final IPC/process check found no running `PolyCopyTrader.Service` process; I did not restart it. Branch `master` has no upstream, so automatic pull/push/commit cannot run.
+Blockers: Automatic pull/push cannot run until a Git upstream is configured.
+
+## Active Update 2026-05-05 Min Leader Trade Explanation
+Goal: Explain what `leader_trade_too_small` means and why the threshold is currently 500 USD.
+Status: Completed
+Done:
+- Confirmed `DefaultSignalEngine` rejects a signal as `leader_trade_too_small` when `LeaderTrade.CashValueUsd` is below `max(traderRule.MinLeaderTradeUsd, Execution.MinLeaderTradeUsd)`.
+- Confirmed the on-chain hot path maps each selected `OrderFilled` participant into `LeaderTrade`, with `CashValueUsd` coming from decoded candidate `NotionalUsd`.
+- Confirmed service config sets `Execution:MinLeaderTradeUsd=500` and the default `TraderRule.MinLeaderTradeUsd` is also 500, so current Paper hot path ignores leader trades below 500 USD notional.
+- Clarified that this threshold filters signal eligibility only; it is not the copied Paper order size.
+Next: Decide whether to lower `Execution:MinLeaderTradeUsd` for active Paper testing.
+Notes: Answer-only task; no source behavior changed and no tests were run. Branch `master` has no upstream, so automatic pull/push/commit cannot run.
+Blockers: Automatic pull/push cannot run until a Git upstream is configured.
+
+## Active Update 2026-05-05 Live Blockchain Hot Path Monitoring
+Goal: Monitor the running service after hot-path optimization and identify current latency bottlenecks.
+Status: Completed
+Done:
+- Confirmed `PolyCopyTrader.Service` PID 32252 is running in Paper mode, IPC status is healthy on `http://127.0.0.1:5118/status`, kill switch is off, pauses are false, and `lastError=null`.
+- Confirmed on-chain trade capture cursors are current with `lag_blocks=0` across all four configured exchange contracts; `polymarket_onchain_paper_signal_results` continued growing from 70150 to 70314 during monitoring.
+- Confirmed `polymarket_onchain_trade_captures` remains empty as expected because capture persistence is disabled; hot decisions are still written to `polymarket_onchain_paper_signal_results`.
+- Measured recent hot-path timing from logs: trade-range processing averaged about 249 ms with max about 687 ms, RPC fetch averaged about 227 ms, hot signal selection averaged about 20 ms, selected-candidate processing averaged about 2 ms, and order book/exposure/evaluation were effectively 0 ms on rejected candidates.
+- Confirmed WebSocket market data had 32 non-stale rows/shards, about 90074 subscribed assets in aggregate status, and fresh updates.
+- Confirmed new Paper orders did not grow after the 08:03 UTC order; the dominant rejection reason over the last 10 minutes was `leader_trade_too_small`, with a smaller number of `missing_orderbook` rejections.
+- Found a separate repeated `PaperAccountingWorker` issue: duplicate key errors on `paper_copied_trader_performance_pkey` every refresh cycle for the same wallet/category.
+Next: Fix `PaperAccountingWorker` duplicate-key upsert logic, then decide whether current `Execution:MinLeaderTradeUsd=500` is intentionally strict for paper testing or should be lowered to generate more copied paper orders.
+Notes: Monitoring used service logs, IPC `/status`, PostgreSQL snapshots through a temporary ignored `out/dbprobe` .NET probe, process metrics, `pg_stat_activity`, and `pg_locks`. No service source behavior changed. No tests were run because this was a monitoring-only task. Branch `master` has no upstream, so automatic pull/push/commit cannot run.
+Blockers: Automatic pull/push cannot run until a Git upstream is configured.
+
+## Active Update 2026-05-05 Blockchain Latency Monitoring Plan
+Goal: Confirm how to monitor blockchain hot-path delays and identify bottlenecks while the service is running.
+Status: Completed
+Done:
+- Confirmed the current code already emits the main timing fields needed to split latency by pipeline stage: RPC fetch, decode, hot signal, candidate lookup, selection, processing, order book, exposure, evaluation, persistence, and total time.
+- Defined the monitoring focus as both per-stage milliseconds and end-to-end age from observed/block timestamp to candidate processing/order creation.
+- Noted that live monitoring can combine service log tailing with PostgreSQL snapshots of cursors, recent paper signal results, decision reasons, and paper orders.
+Next: When the service is started, monitor the timing logs and database snapshots; if `CandidateLookupMs` dominates, move market/rating enrichment from SQL to memory.
+Notes: Answer-only task; no source behavior changed and no tests were run. Branch `master` has no upstream, so automatic pull/push/commit cannot run.
+Blockers: Automatic pull/push cannot run until a Git upstream is configured.
+
+## Active Update 2026-05-05 Hot Path Cache Optimization
+Goal: Implement the first low-risk hot-path optimization phase for on-chain Paper copying.
+Status: Completed
+Done:
+- Added `IExposureSnapshotCache` / `ExposureSnapshotCache` as a singleton memory snapshot for open Paper orders, Paper positions, and open Live orders, with first-use PostgreSQL refresh and in-memory updates after order/position changes.
+- Wired Paper trading, market-data Paper fills, settlements, live-order maintenance, regular signal processing, leader activity exits, and on-chain Paper processing to keep the exposure cache current.
+- Changed the low-latency on-chain hot path to use cache-only WebSocket order books; if a fresh cached book is missing/stale, the selected candidate is rejected instead of waiting on CLOB REST.
+- Added per-selected-candidate timing logs for order book, exposure, evaluation, persistence, and total time.
+- Added `AddAcceptedOnChainPaperOrderAsync` to persist accepted on-chain Paper BUY signal, paper order, copied-leader link, and on-chain result in one PostgreSQL transaction.
+- Added tests for the exposure cache, cache-only hot-path behavior, and the batched PostgreSQL accepted-order method; updated README and configuration reference.
+Next: Monitor `OrderBookMs`, `ExposureMs`, `EvaluationMs`, `PersistenceMs`, `ProcessingMs`, and `TotalMs`; if candidate lookup remains high, move market/rating candidate enrichment from SQL to memory.
+Notes: `dotnet build src\PolyCopyTrader.Service\PolyCopyTrader.Service.csproj --no-restore` passed. Targeted hot-path/cache/storage/paper/live tests passed 52/52. Full `dotnet test tests\PolyCopyTrader.Tests\PolyCopyTrader.Tests.csproj --no-restore` passed 231/231. `git diff --check` passed with LF/CRLF warnings only. Branch `master` has no upstream, so automatic pull/push/commit cannot run.
+Blockers: Automatic pull/push cannot run until a Git upstream is configured.
+
+## Active Update 2026-05-05 Hot Path Optimization Options
+Goal: Identify which expensive on-chain Paper hot-path operations should be accelerated with memory caches, batch writes, or bounded parallelism.
+Status: Completed
+Done:
+- Reviewed the current hot path in `OnChainTradeCaptureProcessor`, `OnChainPaperSignalProcessor`, `MarketDataCache`, active market asset registry, Paper trading processors, and PostgreSQL repository calls.
+- Identified the main remaining costs after latest-N selection: candidate enrichment SQL, order book lookup fallback, exposure reads, and multiple persistence round-trips for accepted Paper orders.
+- Recommended prioritizing in-memory exposure snapshots, cache-first order book behavior, batched accepted-order persistence, and eventually in-memory candidate enrichment from active market/rating snapshots.
+Next: If approved, implement the low-risk first phase: parallelize independent selected-candidate reads and add timing around order book, exposure reads, evaluation, and persistence.
+Notes: Design discussion only; no source behavior changed and no tests were run. Branch `master` has no upstream, so automatic pull/push/commit cannot run.
+Blockers: Automatic pull/push cannot run until a Git upstream is configured.
+
+## Active Update 2026-05-05 Expensive Hot Path Explanation
+Goal: Explain what "expensive part" means in the latest-N on-chain Paper selection description.
+Status: Completed
+Done:
+- Clarified that the cheap stage uses already-loaded candidate fields for local filtering/pre-scoring.
+- Clarified that the expensive stage starts after one best BUY candidate is selected and includes CLOB order book lookup, paper/live exposure reads, full `SignalEngine` evaluation, signal/result/order persistence, and copied-leader entry tracking.
+Next: None
+Notes: Answer-only task; no source behavior changed and no tests were run. Branch `master` has no upstream, so automatic pull/push/commit cannot run.
+Blockers: Automatic pull/push cannot run until a Git upstream is configured.
+
+## Active Update 2026-05-05 Latest N On-Chain Hot Selection
+Goal: Process only a bounded latest on-chain window and copy one best BUY candidate per hot block-range batch.
+Status: Completed
+Done:
+- Added `OnChainIngestion:PaperSignalLatestCandidatesLimit` with default `100`, validation, sanitized config summary, and service/dashboard appsettings entries.
+- Changed the on-chain hot Paper path to keep only the newest configured decoded captures before repository candidate lookup.
+- Changed hot Paper selection to drop non-BUY/SELL participants from trading selection, pre-score BUY candidates with cheap local fields, and process only the best selected BUY candidate through order book, risk, signal persistence, paper order creation, and copied-leader entry tracking.
+- Added hot-path timing logs for candidate filtering, candidate lookup, selection, processing, and total time.
+- Added trade-capture range timing logs for RPC fetch, decode, hot signal processing, optional persistence, and total range time.
+- Added tests proving the hot path chooses the better-rated BUY candidate and respects the latest candidate window.
+- Updated README and configuration reference for latest-N behavior and timing diagnostics.
+Next: Restart the service and monitor `FetchMs`, `DecodeMs`, `HotSignalMs`, `CandidateLookupMs`, `SelectionMs`, `ProcessingMs`, and `TotalMs`; reduce `PaperSignalLatestCandidatesLimit` below `100` if the hot path still lags.
+Notes: `dotnet build src\PolyCopyTrader.Service\PolyCopyTrader.Service.csproj --no-restore` passed. `dotnet test tests\PolyCopyTrader.Tests\PolyCopyTrader.Tests.csproj --no-restore` passed 227/227. Targeted `OnChainPaperSignalProcessorTests|ConfigurationTests` passed 24/24. `git diff --check` passed with LF/CRLF warnings only. Branch `master` has no upstream, so automatic pull/push/commit cannot run.
+Blockers: Automatic pull/push cannot run until a Git upstream is configured.
+
+## Active Update 2026-05-05 Latest N On-Chain Selection Proposal
+Goal: Evaluate the proposed blockchain processing policy that only considers the latest configurable N on-chain candidates and copies the best-scored one.
+Status: Completed
+Done:
+- Reviewed current hot-path shape: fresh decoded captures are passed directly to `OnChainPaperSignalProcessor`, which maps maker/taker participants and processes them sequentially.
+- Agreed the latest-N bounded selection is a better fit for low latency than processing every fresh blockchain candidate.
+- Recommended applying N to the newest BUY candidate participants after SELL filtering, not to a historical backlog.
+- Recommended dropping older unselected candidates for trading rather than carrying them forward, because backlog undermines the one-second copy objective.
+- Recommended measuring fetch/decode/candidate-map/precheck/score/order times per batch and keeping default N at 100.
+Next: If approved, implement configurable latest-N selection with batch timing diagnostics and one best Paper BUY order per batch.
+Notes: Design discussion only; no source behavior changed and no tests were run. Branch `master` has no upstream, so automatic pull/push/commit cannot run.
+Blockers: Automatic pull/push cannot run until a Git upstream is configured.
+
+## Active Update 2026-05-05 Leader Activity Exit Worker
+Goal: Move copied exits out of on-chain SELL handling and into a separate leader `/activity` background worker.
+Status: Completed
+Done:
+- Added typed Data API `/activity` parsing/client support for wallet activity rows with type, side, asset, condition, size, price, timestamp, and transaction hash.
+- Added `paper_copied_leader_positions` and `paper_copied_leader_activity_events` schema/repository support to link copied BUY entries to leaders and dedupe observed leader SELL activity.
+- Added copied-entry tracking on on-chain BUY paper order creation and activation after the BUY paper order fills.
+- Added `LeaderActivityExitWorker`/`LeaderActivityExitProcessor` to poll active copied links, match leader `TRADE`/`SELL` activity by wallet and asset after entry, and create proportional Paper SELL orders capped by available copied position.
+- Changed on-chain SELL participant notifications to be persisted as ignored with `decision_code='onchain_sell_ignored'` and no signal/order.
+- Updated configuration, appsettings, README, configuration reference, repository tests, on-chain processor tests, and new leader activity exit tests.
+Next: Restart the service and monitor `paper_copied_leader_positions`, `paper_copied_leader_activity_events`, and Paper SELL orders created from leader `/activity`.
+Notes: `dotnet build src\PolyCopyTrader.Service\PolyCopyTrader.Service.csproj --no-restore` passed. `dotnet test tests\PolyCopyTrader.Tests\PolyCopyTrader.Tests.csproj --no-restore` passed 225/225. Targeted tests for on-chain signals, leader exits, storage, and configuration passed 45/45. `git diff --check` passed with LF/CRLF warnings only. Branch `master` has no upstream, so automatic pull/push/commit cannot run.
+Blockers: Automatic pull/push cannot run until a Git upstream is configured.
+
+## Active Update 2026-05-05 Proportional Leader Exit Policy
+Goal: Decide whether copied positions should be reduced proportionally as the leader sells in parts.
+Status: Completed
+Done:
+- Chose proportional partial exits as the preferred copy behavior instead of waiting for the leader to fully close.
+- Defined the single-entry scaling model as `copy_ratio = our_initial_token_size / leader_initial_token_size`.
+- Defined each observed leader sell on the same `asset`/`conditionId` as an exit signal with target cumulative copied sell size `min(our_initial_token_size, cumulative_leader_sold_after_entry * copy_ratio)`.
+- Noted the implementation must persist cumulative leader sells and cumulative copied sells per copied entry to make retries/restarts idempotent.
+- Noted multiple copied entries on the same leader/outcome should be handled either as separate links or, preferably, by proportional reduction across active copied links for the same leader wallet and asset.
+Next: When implementing leader-exit tracking, add copied-position/link state and partial-exit accounting before creating Paper/Live sell orders.
+Notes: Design-only task; no source behavior changed and no tests were run. Branch `master` has no upstream, so automatic pull/push/commit cannot run.
+Blockers: Automatic pull/push cannot run until a Git upstream is configured.
+
+## Active Update 2026-05-05 Leader Exit Tracking Research
+Goal: Determine whether a copied leader entry can later be tracked by the leader's original transaction hash to detect exits.
+Status: Completed
+Done:
+- Reviewed current Polymarket Data API docs for `/activity`, `/trades`, `/positions`, `/closed-positions`, and the positions/tokens model.
+- Confirmed `/activity` exposes wallet activity rows with `type`, `side`, `asset`, `conditionId`, `size`, `price`, `timestamp`, and `transactionHash`.
+- Confirmed positions are ERC1155 outcome-token balances, so the original entry transaction hash is an evidence anchor, not a persistent lot/position identifier.
+- Ran a live Data API spot check: recent activity for one wallet showed multiple `TRADE` rows on the same `asset`/`conditionId`, including `BUY` and later `SELL` rows with different transaction hashes, while `/positions` returned the remaining open balance.
+- Concluded we can track leader exits by wallet plus `asset`/`conditionId` and net balance/activity changes, but cannot prove that a later sell references the exact original entry lot.
+Next: Implement copied-leader-position state keyed by leader wallet and outcome token, with hot on-chain sell detection and Data API reconciliation via `/activity` and `/positions`.
+Notes: Research-only task; no source behavior changed and no tests were run. Branch `master` has no upstream, so automatic pull/push/commit cannot run.
+Blockers: Automatic pull/push cannot run until a Git upstream is configured.
+
+## Active Update 2026-05-05 Hot Path Runtime Monitoring
+Goal: Monitor the restarted service after resetting on-chain persistence and enabling the low-latency hot path.
+Status: Completed
+Done:
+- Confirmed `PolyCopyTrader.Service` is running as process `6064`; IPC reports `Running`, Paper mode, no kill switch, no last error.
+- Confirmed WebSocket market data is healthy: 32 connected non-stale shards and about 180k subscribed assets.
+- Confirmed on-chain capture cursors are advancing for the V2 contracts and `polymarket_onchain_trade_captures` remains empty, matching `TradeCapturePersistCaptures=false`.
+- Confirmed `captures_stored=0` while `logs_fetched` rises quickly: by the last sample CTF Exchange V2 had `13560` fetched logs and Neg Risk CTF Exchange V2 had `2571`.
+- Confirmed no recent `api_errors` and no processor failures.
+- Observed `polymarket_onchain_paper_signal_results` grew from `0` after cleanup to `32395` by `2026-05-05T06:06:30Z`; `signals` grew to `80829`; `paper_orders`, `paper_fills`, and `paper_positions` stayed at `0`.
+- Observed dominant rejection reason is `trade_too_old` (`19994` rows), followed by `missing_polymarket_rating` (`7390`), `leader_trade_too_small` (`1711`), `polymarket_rating_pnl_too_low` (`1308`), and `no_paper_position_to_sell` (`986`).
+- Identified a hot-path bottleneck: even a 1-2 block live range can contain thousands of decoded participants, and sequential candidate processing makes most candidates exceed the configured 2-second lag before they reach decision evaluation.
+- Also observed exchange contract addresses appearing as copied trader wallets in on-chain paper results, especially `0xe111...` (`4800` rows) and `0xe222...` (`1017` rows), so we should filter configured exchange contract addresses from candidate wallets.
+Next: Optimize the hot path before leaving it to run: prefilter exchange-contract wallets, avoid persisting rejected `Signal` rows for obviously ineligible candidates, and make processing prioritize only wallets with fresh Polymarket ratings before any CLOB/order/risk work.
+Notes: Monitoring only; no source code was changed besides context/history. Verification was IPC plus PostgreSQL snapshots. Branch `master` has no upstream, so automatic pull/push/commit cannot run.
+Blockers: Automatic pull/push cannot run until a Git upstream is configured.
+
+## Active Update 2026-05-05 Blockchain Persistence Reset
+Goal: Clear all PostgreSQL tables used by the saved on-chain/blockchain persistence layer so the next service run starts fresh.
+Status: Completed
+Done:
+- Confirmed no `PolyCopyTrader.Service` process was running before the cleanup.
+- Truncated every existing `public.polymarket_onchain_%` base table, covering old full-ingestion tables, diagnostic trade captures, capture/ingest cursors, on-chain paper signal results, derived serving tables, metadata tables, and refresh queues.
+- Left non-blockchain tables intact, including Gamma markets, Data API traders/ratings, paper orders/fills/positions, signals, API errors, and WebSocket diagnostics.
+- Ran `VACUUM (ANALYZE)` on the truncated on-chain tables and verified exact post-cleanup row count is `0`.
+- Reduced target on-chain table disk footprint from approximately `1789.63 MB` to `0.84 MB`; largest cleared table was `polymarket_onchain_trade_captures` at approximately `1737.30 MB`.
+Next: Start the service when ready; in the current low-latency config `polymarket_onchain_trade_captures` should remain empty because capture persistence is disabled, while cursors and Paper results will begin from scratch.
+Notes: Database-only maintenance task; no source code changed for the cleanup itself. Verification was exact post-truncate row counts plus size check. Branch `master` has no upstream, so automatic pull/push/commit cannot run.
+Blockers: Automatic pull/push cannot run until a Git upstream is configured.
+
+## Active Update 2026-05-05 On-Chain Hot Paper Path
+Goal: Replace the delayed DB-backlog Paper path with immediate processing of freshly decoded on-chain `OrderFilled` captures.
+Status: Completed
+Done:
+- Added `IOnChainPaperSignalProcessor.ProcessCapturesAsync` and wired `OnChainTradeCaptureProcessor` to call it immediately after decoding each fresh `eth_getLogs` range, before optional capture persistence.
+- Added low-latency on-chain options: `TradeCapturePersistCaptures`, `TradeCaptureSkipStaleCursor`, `TradeCaptureMaxCursorLagBlocks`, `PaperSignalBacklogEnabled`, `PaperSignalHotPathEnabled`, and `PaperSignalHotMaxAgeSeconds`, with validation and configuration summary output.
+- Set the service config to keep only capture cursors for the live-tail path: `TradeCapturePersistCaptures=false`, `PaperSignalBacklogEnabled=false`, `PaperSignalHotPathEnabled=true`, `TradeCaptureSkipStaleCursor=true`, recent window `2` blocks, and signal lag/hot age `2` seconds.
+- Added a PostgreSQL hot candidate query that builds maker/taker `OnChainPaperSignalCandidate` rows from an in-memory JSON batch of captures instead of reading `polymarket_onchain_trade_captures`.
+- Kept the old capture-backlog query and worker available behind `PaperSignalBacklogEnabled=true` for diagnostics.
+- Moved on-chain Paper stale-trade rejection before CLOB order-book lookup and classified deterministic CLOB `No orderbook exists` / HTTP 404 as a normal missing-orderbook rejection path by returning `null` order book.
+- When capture persistence is disabled, hot Paper signals use the local observed timestamp instead of spending an extra RPC call fetching block timestamp before decision evaluation.
+- Updated tests, README, and configuration reference for the hot path and cursor-skipping behavior.
+Next: Restart the service and monitor `paper_orders`, `polymarket_onchain_paper_signal_results`, capture cursor movement, and logs for `HotCandidates`/`HotPaperOrders`; do not expect `polymarket_onchain_trade_captures` to grow while persistence is disabled.
+Notes: Targeted tests `OnChainTradeCaptureTests|OnChainPaperSignalProcessorTests|ConfigurationTests|StorageTests` passed 44/44. Full tests passed 220/220. Service and Dashboard builds passed with 0 warnings. `git diff --check` passed for touched files with LF/CRLF warnings only. Branch `master` has no upstream, so automatic pull/push/commit cannot run.
+Blockers: Automatic pull/push cannot run until a Git upstream is configured.
+
+## Active Update 2026-05-05 Live Hot Path Diagnosis
+Goal: Explain why the current on-chain Paper pipeline is processing trades hours late instead of acting seconds after a leader.
+Status: Completed
+Done:
+- Rechecked the running architecture: `OnChainTradeCaptureWorker` writes decoded captures to `polymarket_onchain_trade_captures`, while `OnChainPaperSignalWorker` later reads pending rows from the table.
+- Confirmed the pending candidate query intentionally orders by oldest `(block_timestamp_utc, block_number, log_index)`, so fresh live captures are placed behind any historical backlog.
+- Identified the four-hour lag as self-inflicted backlog processing, not blockchain or RPC latency: recent no-orderbook examples had block/import times around `2026-05-04 17:04 UTC` and Paper processing around `2026-05-04 20:51 UTC`.
+- Clarified that the current capture/paper split is diagnostic/audit plumbing, not a live copy-trading hot path.
+- Recommended replacing the current DB-queue path for trading with a direct hot path from newly decoded captures to in-memory/cached decision and immediate Paper/Live action, while leaving DB writes as audit.
+Next: Implement a hot on-chain signal path that processes only newly captured current-block fills, skips stale/catch-up ranges for trading, and uses preloaded caches instead of FIFO DB backlog.
+Notes: Answer-only architecture diagnosis; no source behavior changed and no tests were run. Branch `master` has no upstream, so automatic pull/push/commit cannot run.
+Blockers: Automatic pull/push cannot run until a Git upstream is configured.
+
+## Active Update 2026-05-04 No Orderbook Lag Check
+Goal: Verify whether frequent CLOB no-orderbook errors are happening seconds after live on-chain captures.
+Status: Completed
+Done:
+- Queried recent `onchain_paper_signal_error` rows with `No orderbook exists` and joined them to `polymarket_onchain_trade_captures` plus Gamma metadata.
+- Found recent no-orderbook samples were not live-tail events: block/import timestamps were around `2026-05-04 17:02-17:04 UTC`, while Paper processing occurred around `2026-05-04 20:51 UTC`.
+- Measured about 3h33m to 3h47m `processed_at_utc - block_timestamp_utc` lag for the recent no-orderbook set.
+- Confirmed all sampled no-orderbook rows had Gamma flags `active=true`, `closed=false`, `archived=false`, `restricted=true`, `accepting_orders=true`, `enable_order_book=true`, which means Gamma metadata is not sufficient to decide current CLOB tradability for stale short-lived markets.
+- Noted current code checks signal freshness inside `DefaultSignalEngine`, after order-book retrieval, so stale backlog can call CLOB and become `Error` before it can be rejected as `trade_too_old`.
+Next: Move the on-chain Paper freshness precheck before order-book lookup, and classify deterministic CLOB no-orderbook responses as rejected `missing_orderbook`.
+Notes: Answer-only analysis; no source behavior changed and no tests were run. Branch `master` has no upstream, so automatic pull/push/commit cannot run.
+Blockers: Automatic pull/push cannot run until a Git upstream is configured.
+
+## Active Update 2026-05-04 No Orderbook Classification
+Goal: Clarify whether CLOB `No orderbook exists for the requested token id` should be treated as an operational failure.
+Status: Completed
+Done:
+- Reviewed local CLOB client and on-chain paper signal processing flow.
+- Confirmed `PolymarketClobPublicClient.GetOrderBookAsync` throws `PolymarketApiException` for HTTP 404 before `DefaultSignalEngine` can emit existing `SignalReasonCodes.MissingOrderBook`.
+- Clarified that CLOB 404/no-orderbook is not a service or database авария, but it is a hard blocker for copying a signal because Paper/Live cannot price or fill an order without an order book.
+- Recommended classifying this deterministic CLOB 404 as `missing_orderbook`/`orderbook_not_found` rejection, while leaving 429/5xx/network failures as operational/transient errors.
+Next: Add targeted handling for CLOB no-orderbook responses in the on-chain Paper path so they become explicit rejection rows instead of `Error/onchain_paper_signal_error`.
+Notes: Answer-only analysis; no source behavior changed and no tests were run. Branch `master` has no upstream, so automatic pull/push/commit cannot run.
+Blockers: Automatic pull/push cannot run until a Git upstream is configured.
+
+## Active Update 2026-05-04 Post-Optimization Runtime Monitoring
+Goal: Monitor the restarted service after optimizing the on-chain Paper candidate query.
+Status: Completed
+Done:
+- Confirmed `PolyCopyTrader.Service.exe` is running as process `26548`; IPC `http://127.0.0.1:5118/status` reports `Running`, kill switch inactive.
+- Confirmed the candidate-query timeout is resolved: logs show repeated `On-chain paper signal cycle completed` batches of 250 candidates and no new timeout failures.
+- Confirmed `polymarket_onchain_paper_signal_results` advanced from the stalled 32,500 rows to 36,526 rows during monitoring.
+- Confirmed `paper_orders`, `paper_fills`, `paper_positions`, and `paper_position_settlements` remain empty.
+- Observed recent decisions dominated by `missing_polymarket_rating`, `missing_market_category`, `polymarket_rating_pnl_too_low`, and `GetOrderBook` 404 errors persisted as `Error/onchain_paper_signal_error`.
+- Confirmed WebSocket market data status is healthy: 32 rows connected, 0 stale, 175,378 subscribed assets.
+- Observed the capture worker write a large catch-up batch: `CTF Exchange V2 Blocks=86399985-86400484 Logs=55850 Captures=55850`; current capture rows reached 543,206 and approximate pending participants reached 1,049,886.
+Next: Convert CLOB `GetOrderBook` 404/no-orderbook cases into explicit rejected signal reasons instead of error rows, then consider cleanup/throttling for `polymarket_onchain_trade_captures`.
+Notes: Monitoring only; no source behavior changed and no tests were run in this turn. Branch `master` has no upstream, so automatic pull/push/commit cannot run.
+Blockers: Automatic pull/push cannot run until a Git upstream is configured.
+
+## Active Update 2026-05-04 Optimize Paper Signal Candidate Query
+Goal: Remove the PostgreSQL timeout from `GetPendingOnChainPaperSignalCandidatesAsync` so the on-chain Paper worker can resume processing capture backlog.
+Status: Completed
+Done:
+- Rewrote `PostgresAppRepository.GetPendingOnChainPaperSignalCandidatesAsync` to first materialize a bounded ordered `pending_captures` batch with unprocessed Maker/Taker participants, then run Gamma/category/rating joins only for that small participant batch.
+- Added partial index `ix_polymarket_onchain_trade_captures_pending_order` on `(block_timestamp_utc, block_number, log_index) WHERE NOT removed`.
+- Updated storage schema tests to assert the new index and bounded candidate-query shape.
+- Updated README and configuration reference to document the bounded on-chain Paper candidate query.
+- Applied the new index to the configured PostgreSQL database and ran `ANALYZE` on `polymarket_onchain_trade_captures` and `polymarket_onchain_paper_signal_results`.
+- Verified the real repository method on the current backlog returned 250 candidates in 403 ms instead of timing out.
+Next: Restart the service and monitor `polymarket_onchain_paper_signal_results`, `paper_orders`, and capture backlog growth.
+Notes: `dotnet build src\PolyCopyTrader.Service\PolyCopyTrader.Service.csproj --no-restore` passed. Targeted tests `StorageTests|OnChainPaperSignalProcessorTests` passed 24/24 after one transient Defender file-lock retry. Full test project passed 215/215. `git diff --check` passed for touched files with LF/CRLF warnings only. Branch `master` has no upstream, so automatic pull/push/commit cannot run.
+Blockers: Automatic pull/push cannot run until a Git upstream is configured.
+
+## Active Update 2026-05-04 Restart Monitoring
+Goal: Monitor the restarted service after allowing `restricted=true` markets in Paper-mode prechecks.
+Status: Completed
+Done:
+- Confirmed the restarted `PolyCopyTrader.Service.exe` process is running and IPC `http://127.0.0.1:5118/status` reports `Running` with kill switch inactive.
+- Confirmed the on-chain trade capture worker and Data API/Gamma loops are active.
+- Confirmed Paper-mode order flow is still not producing orders: `paper_orders`, `paper_fills`, `paper_positions`, and `paper_position_settlements` remain empty.
+- Confirmed `polymarket_onchain_paper_signal_results` is stalled at 32,500 rejected rows, with max `processed_at_utc` still `2026-05-04 17:23:32 UTC`.
+- Observed capture backlog growth during monitoring from about 416,906 capture rows to 467,665 capture rows, with approximately 902,830 unprocessed participant candidates.
+- Identified the current blocker as repeated `OnChainPaperSignalWorker` timeouts in `PostgresAppRepository.GetPendingOnChainPaperSignalCandidatesAsync`; logs show exponential retry reaching the 30 second maximum.
+Next: Optimize the pending on-chain paper-signal candidate query and add/activate processed-capture cleanup before expecting Paper orders to appear.
+Notes: No source behavior changed for this monitoring pass. Branch `master` has no upstream, so automatic pull/push/commit cannot run.
+Blockers: Automatic pull/push cannot run until a Git upstream is configured.
+
+## Active Update 2026-05-04 Restricted Does Not Reject
+Goal: Stop treating Gamma `restricted=true` as a Paper/Live rejection reason while keeping it separated from `market_inactive`.
+Status: Completed
+Done:
+- Removed `MarketRestricted` from the on-chain paper precheck that emits `market_inactive`.
+- Updated the inactive-market rejection detail to cover only inactive, closed, or archived markets.
+- Added `SignalReasonCodes.MarketRestricted` for explicit future diagnostics without writing it to `signal_rejections`.
+- Added a regression test proving an otherwise eligible restricted Gamma market can create a paper order and does not emit `market_inactive` or `market_restricted`.
+Next: Restart the service from the rebuilt code if the current run should pick up this behavior.
+Notes: Targeted tests `OnChainPaperSignalProcessorTests|StorageTests` passed 23/23. Full test project passed 214/214. `git diff --check` passed for touched source/test files with LF/CRLF warnings only. The previously running local service is no longer reachable on IPC `127.0.0.1:5118`; no service restart was performed. Branch `master` has no upstream, so automatic pull/push/commit cannot run.
+Blockers: Automatic pull/push cannot run until a Git upstream is configured.
+
+## Active Update 2026-05-04 Restricted Market Explanation
+Goal: Explain what Gamma `restricted` means and why it blocks current Paper-mode bets.
+Status: Completed
+Done:
+- Reviewed local parsing and paper-signal precheck logic for `restricted`.
+- Clarified that `restricted` is a Gamma market metadata flag distinct from `active`, `closed`, `acceptingOrders`, and `enableOrderBook`.
+- Explained that the current code groups `restricted` with inactive/closed/archived markets, causing `market_inactive` rejections before paper order creation.
+- Recommended splitting `market_restricted` into its own reason and making it a Paper-mode configurable warning while keeping it a hard block for Live.
+Next: Implement configurable Paper-mode handling for restricted markets if we want the current run to create paper orders.
+Notes: Answer-only explanation; no source behavior changed and no tests were run. Branch `master` has no upstream, so automatic pull/push/commit cannot run.
+Blockers: Automatic pull/push cannot run until a Git upstream is configured.
+
+## Active Update 2026-05-04 Monitoring Follow-up Recommendations
+Goal: Summarize whether monitoring exposed issues that should be fixed before continuing the Paper-mode on-chain experiment.
+Status: Completed
+Done:
+- Ran a fresh health/database check while the service was running.
+- Confirmed the service health endpoint reports `Running`, but paper orders remain zero.
+- Confirmed processed paper-signal rows increased to 30,500 and are still all `Rejected`, dominated by `market_inactive` and `missing_market_category`.
+- Confirmed capture backlog continued growing to 92,359 capture rows and about 154,218 pending participant candidates.
+- Identified recommended fixes: Paper-mode handling for Gamma `restricted`, candidate-query/backlog optimization, processed capture cleanup, low-confirmation RPC retry behavior, and better worker metrics.
+Next: Implement the priority fixes before relying on the run for Paper-mode effectiveness statistics.
+Notes: Answer-only recommendation; no source behavior changed and no tests were run. Branch `master` has no upstream, so automatic pull/push/commit cannot run.
+Blockers: Automatic pull/push cannot run until a Git upstream is configured.
+
+## Active Update 2026-05-04 Paper Order Status Check
+Goal: Check whether the restarted on-chain-to-paper cycle has created any paper bets.
+Status: Completed
+Done:
+- Queried PostgreSQL after the service restart.
+- Confirmed `paper_orders`, `paper_fills`, `paper_positions`, and `paper_position_settlements` are still empty.
+- Confirmed `polymarket_onchain_paper_signal_results` had 28,250 rows, all `Rejected`, with recent rejection reasons dominated by `market_inactive` and `missing_market_category`.
+- Observed capture backlog growth: 75,114 capture rows and approximately 121,978 pending participant candidates at the time of the check.
+Next: Decide whether to relax the `restricted` market precheck for Paper mode or reduce the capture/write rate until paper processing catches up.
+Notes: Answer-only database status check; no source behavior changed and no tests were run. Branch `master` has no upstream, so automatic pull/push/commit cannot run.
+Blockers: Automatic pull/push cannot run until a Git upstream is configured.
+
+## Active Update 2026-05-04 Clean Restart Table List
+Goal: Identify which PostgreSQL tables to clear before restarting the on-chain-to-paper experiment from scratch.
+Status: Completed
+Done:
+- Reviewed schema dependencies for on-chain trade captures, paper-signal results, paper orders/fills/positions/settlements, copied-trader performance, and signals.
+- Recommended clearing the on-chain capture cursor/buffer/dedupe tables plus downstream Paper-mode tables.
+- Recommended keeping Gamma market metadata, discovered traders, Polymarket rating tables, category mappings, and service/log tables unless a broader diagnostic reset is explicitly needed.
+Next: Stop the service, run the selected reset SQL manually, then restart the service with the intended lookback configuration.
+Notes: Answer-only planning; no database changes were executed and no tests were run. Branch `master` has no upstream, so automatic pull/push/commit cannot run.
+Blockers: Automatic pull/push cannot run until a Git upstream is configured.
+
+## Active Update 2026-05-04 Capture Cleanup Pipeline Discussion
+Goal: Evaluate whether capture cleanup should be folded into the block-loading and paper-signal loop.
+Status: Completed
+Done:
+- Rechecked the current separated `OnChainTradeCaptureWorker` and `OnChainPaperSignalWorker` flow.
+- Concluded that a combined synchronous block-batch pipeline is possible, but global `TRUNCATE polymarket_onchain_trade_captures` is unsafe in the current architecture.
+- Recommended deleting only processed capture ids after both Maker and Taker results exist, or using captures as short-lived staging if the workers are intentionally merged.
+Next: Choose between the current decoupled producer/consumer plus cleanup worker, or a larger refactor to a single synchronous block-batch paper-signal pipeline.
+Notes: Answer-only planning; no source behavior changed and no tests were run. Branch `master` has no upstream, so automatic pull/push/commit cannot run.
+Blockers: Automatic pull/push cannot run until a Git upstream is configured.
+
+## Active Update 2026-05-04 Onchain Trade Capture Cleanup Plan
+Goal: Propose a safe cleanup policy for `public.polymarket_onchain_trade_captures`.
+Status: Completed
+Done:
+- Reviewed the current write path, paper-signal read path, and dedupe/audit table dependency.
+- Identified that capture rows must be kept until both `Maker` and `Taker` participant results exist in `polymarket_onchain_paper_signal_results`.
+- Proposed processed-first batched deletion, a short safety retention window, separate handling for removed/stuck rows, and manual vacuum/partition options.
+Next: Implement a configurable cleanup worker or one-off cleanup SQL after choosing the retention window.
+Notes: Answer-only planning; no source behavior changed and no tests were run. Branch `master` has no upstream, so automatic pull/push/commit cannot run.
+Blockers: Automatic pull/push cannot run until a Git upstream is configured.
+
+## Active Update 2026-05-04 Service Stop
+Goal: Stop the locally started PolyCopyTrader service instance.
+Status: Completed
+Done:
+- Stopped the `dotnet` process running `PolyCopyTrader.Service.dll` with process id `62596`.
+- Verified no `PolyCopyTrader.Service.dll` dotnet process remains.
+- Verified IPC `http://127.0.0.1:5118/status` no longer responds.
+- Checked the redirected stderr log `runlogs/service-20260504-192835.err.log`; it is empty.
+Next: Restart the service only when ready to resume Paper-mode monitoring.
+Notes: No source behavior changed and no tests were run. Branch `master` has no upstream, so automatic pull/push/commit cannot run.
+Blockers: Automatic pull/push cannot run until a Git upstream is configured.
+
+## Active Update 2026-05-04 Trade Close Behavior Explanation
+Goal: Explain what the system does when a copied paper trade is closed.
+Status: Completed
+Done:
+- Reviewed active close through SELL fills and passive close through market resolution settlement.
+- Prepared an answer-only explanation of order/fill/position updates, realized PnL, settlement PnL, zeroing positions, and copied-trader performance refresh.
+Next: Decide whether “closing a trade” should prefer leader SELL, our own risk stop/take-profit, or hold-to-resolution as separate future strategies.
+Notes: No source behavior changed and no tests were run. Branch `master` has no upstream, so automatic pull/push/commit cannot run.
+Blockers: Automatic pull/push cannot run until a Git upstream is configured.
+
+## Active Update 2026-05-04 SELL Flow Explanation
+Goal: Explain the current SELL paper-trading flow end to end.
+Status: Completed
+Done:
+- Reviewed SELL-specific signal, risk, fill, position, and market-data update paths.
+- Prepared an answer-only walkthrough of SELL candidate sourcing, copied-wallet position requirement, maker exit price, minimum-size handling, risk treatment, fill simulation, realized PnL, remaining position marks, and current limitations.
+Next: Decide whether future Paper/Live behavior should allow partial SELL sizing above minimum size or continue using minimum market order size for all test signals.
+Notes: No source behavior changed and no tests were run. Branch `master` has no upstream, so automatic pull/push/commit cannot run.
+Blockers: Automatic pull/push cannot run until a Git upstream is configured.
+
+## Active Update 2026-05-04 BUY Flow Explanation
+Goal: Explain the current BUY paper-trading flow end to end.
+Status: Completed
+Done:
+- Reviewed the on-chain paper signal processor, signal engine, risk engine, paper trading engine, market-data paper updater, and current service configuration.
+- Prepared an answer-only walkthrough of BUY candidate sourcing, filtering, maker price calculation, minimum-size paper order creation, fill simulation, position accounting, settlement, and copied-trader performance updates.
+Next: Decide whether to use `paper_copied_trader_performance` as an additional live priority/gating input for future BUY decisions.
+Notes: No source behavior changed and no tests were run. Branch `master` has no upstream, so automatic pull/push/commit cannot run.
+Blockers: Automatic pull/push cannot run until a Git upstream is configured.
+
+## Active Update 2026-05-04 Paper Realism And Copied Trader Rating
+Goal: Make Paper mode emulate live copied behavior more closely and maintain a local effectiveness rating for copied wallets.
+Status: Completed
+Done:
+- Added final paper position settlement from `market_resolved` WebSocket events and a periodic closed-Gamma scan.
+- Added `paper_position_settlements` and `paper_copied_trader_performance` with PostgreSQL repository methods, required schema entries, dashboard tab, and CSV export.
+- Rebuilt copied-wallet performance continuously with `OVERALL` and category rows using paper orders, fills, open positions, and final settlements.
+- Included copied-wallet settlement realized PnL in daily paper PnL and kept live order placement unchanged.
+- Added `PaperAccountingWorker`, settlement configuration, tests, README, and configuration reference updates.
+- Applied the schema update to the configured PostgreSQL database through the existing schema initializer.
+Next: Restart the service and monitor `paper_orders`, `paper_fills`, `paper_position_settlements`, `paper_positions`, and `paper_copied_trader_performance` before tuning the scoring formula.
+Notes: Full tests passed 213/213. Targeted settlement/parser/storage/config tests passed 37/37. Service build passed through full tests; Dashboard build passed. PostgreSQL schema integration test passed 1/1. `git diff --check` passed with LF/CRLF warnings only. Branch `master` has no upstream, so automatic pull/push/commit cannot run.
+Blockers: Automatic pull/push cannot run until a Git upstream is configured.
+
+## Active Update 2026-05-04 Paper Result Tracking Gap
+Goal: Clarify whether current Paper-mode positions are settled by final market outcomes.
+Status: Completed
+Done:
+- Reviewed paper trading processors and PnL paths.
+- Confirmed current Paper-mode accounting marks open positions from current best bid and records approximate realized PnL only when our paper SELL fills.
+- Confirmed `market_resolved` WebSocket events currently remove resolved assets from the active subscription cache but do not settle `paper_positions`.
+- Confirmed on-chain research tables can compute historical resolved PnL for observed wallets when Gamma metadata has `winning_outcome`, but that layer is separate from our `paper_orders`/`paper_positions`.
+Next: Add a paper settlement worker that resolves open paper positions from Gamma/WebSocket winning outcome and writes final paper win/loss records.
+Notes: Answer-only review; no source behavior changed and no tests were run. Branch `master` has no upstream, so automatic pull/push/commit cannot run.
+Blockers: Automatic pull/push cannot run until a Git upstream is configured.
+
+## Active Update 2026-05-04 Minimum Market Size Paper Orders
+Goal: Make Paper-mode test orders use the market minimum order size instead of bankroll-sized order amounts.
+Status: Completed
+Done:
+- Added `PaperTrading.UseMinimumMarketOrderSize` and enabled it in the service and dashboard appsettings for the current test run.
+- Updated `DefaultSignalEngine` so accepted signals use `OrderBookSnapshot.MinOrderSize` as the proposed size when the option is enabled, falling back to `1` only when the source does not provide a minimum.
+- BUY paper orders now use the market minimum share size in this mode, and SELL paper orders require the matching copied-wallet position to have at least that market minimum.
+- Added `paper_position_below_market_minimum` rejection for SELL candidates whose remaining copied-wallet paper position is below the current market minimum.
+- Updated sanitized config summary, README, configuration reference, and strategy tests.
+Next: Restart the service and monitor `paper_orders.size_shares`, `paper_orders.notional_usd`, and `signal_rejections` reason `paper_position_below_market_minimum`.
+Notes: Targeted tests `StrategyEngineTests|ConfigurationTests` passed 39/39. Full tests passed 210/210. Service and Dashboard builds passed. No database schema update was needed. Branch `master` has no upstream, so automatic pull/push/commit cannot run.
+Blockers: Automatic pull/push cannot run until a Git upstream is configured.
+
+## Active Update 2026-05-04 Paper SELL Support
+Goal: Allow important SELL signals in Paper mode without creating invalid sells without a copied-wallet position.
+Status: Completed
+Done:
+- Updated `DefaultSignalEngine` to support SELL signals when `AvailablePositionSizeShares > 0`, with maker-style sell pricing based on best ask minus tick, leader price minus slippage, and best bid plus tick.
+- Added `no_paper_position_to_sell` rejection and kept unsupported sides rejected for non-BUY/non-SELL values.
+- Updated risk evaluation so SELL closes exposure instead of consuming new bankroll limits, while still respecting open-order age/count gates.
+- Added copied-wallet scoped paper positions via `PaperPosition.CopiedTraderWallet`, PostgreSQL `paper_positions.copied_trader_wallet`, and unique `(copied_trader_wallet, asset_id)`.
+- Added SELL fill accounting: matching copied-wallet paper positions are reduced, sell size is capped by available position size through signal evaluation, and `paper_fills.realized_pnl_usd` stores approximate realized PnL.
+- Updated paper processors, market-data fill updater, on-chain paper signal processor, dashboard/CSV position source trader display, schema/repository reads and writes, README, configuration reference, and tests.
+- Applied the schema update to the configured PostgreSQL database through the existing schema initializer.
+Next: Restart the service and monitor SELL-related rows in `paper_orders`, `paper_fills.realized_pnl_usd`, `paper_positions`, `signals`, and `signal_rejections` reason `no_paper_position_to_sell`.
+Notes: Targeted tests `StrategyEngineTests|PaperTradingEngineTests|PipelineIntegrationTests|OnChainPaperSignalProcessorTests|StorageTests` passed 54/54. Full tests passed 208/208. Service and Dashboard builds passed. PostgreSQL schema integration test passed against the configured connection string. `git diff --check` passed with LF/CRLF warnings only. Branch `master` has no upstream, so automatic pull/push/commit cannot run.
+Blockers: Automatic pull/push cannot run until a Git upstream is configured.
+
+## Active Update 2026-05-04 Onchain Capture To Paper Signals
+Goal: Build the on-chain `OrderFilled` capture path into conservative Paper-mode copy signals.
+Status: Completed
+Done:
+- Added `OnChainPaperSignalWorker` and `OnChainPaperSignalProcessor` that read diagnostic `polymarket_onchain_trade_captures`, split maker/taker participants, resolve Gamma market/category data, check Polymarket wallet/category ratings, evaluate the existing signal/risk engines, and create paper orders only for accepted BUY signals in `Bot:Mode=Paper`.
+- Added `polymarket_onchain_paper_signal_results` as the dedupe/audit table with copied wallet, counterparty, participant role, rating snapshot fields, status, decision code, signal id, and paper order id.
+- Added `OnChainIngestion:PaperSignal*` options, validation, service DI/hosted worker registration, service appsettings for the experiment, PostgreSQL repository methods, test repository support, schema/indexes, README, and configuration reference updates.
+- Added lookup indexes for paper-signal candidate selection on Gamma CLOB token ids and Polymarket wallet/category ratings.
+- Preserved the existing safety boundary: no live order placement; paper orders store `CopiedTraderWallet` for later copied-wallet effectiveness analysis.
+- Applied the schema update to the configured PostgreSQL database through the existing schema initializer.
+Next: Restart the service and monitor `public.polymarket_onchain_paper_signal_results`, `public.signals`, `public.signal_rejections`, and `public.paper_orders` while paper signals accumulate.
+Notes: Targeted tests `OnChainPaperSignalProcessorTests|ConfigurationTests|StorageTests` passed 33/33. Full tests passed 201/201. Service and Dashboard builds passed. PostgreSQL schema integration test passed against the configured connection string. `git diff --check` passed with LF/CRLF warnings only. Branch `master` has no upstream, so automatic pull/push/commit cannot run.
+Blockers: Automatic pull/push cannot run until a Git upstream is configured.
+
+## Active Update 2026-05-04 Add Copied Wallet To Paper Orders
+Goal: Store the wallet whose behavior is being copied directly on every paper order.
+Status: Completed
+Done:
+- Added `CopiedTraderWallet` to the `PaperOrder` domain model.
+- Updated `DefaultPaperTradingEngine.CreateOrder` to copy `signal.LeaderTrade.TraderWallet` into each paper order.
+- Added `copied_trader_wallet text NOT NULL DEFAULT ''` and `ix_paper_orders_copied_wallet_time` to `paper_orders`, with schema initialization backfilling existing paper orders from `signals.trader_wallet`.
+- Updated PostgreSQL insert/select/read paths, Dashboard paper-order rows, paper-order CSV export, and tests.
+- Applied the schema update to the configured PostgreSQL database.
+Next: Build the on-chain-capture-to-paper signal pipeline using `CopiedTraderWallet` for copied-wallet effectiveness statistics.
+Notes: Targeted tests `PaperTradingEngineTests|StorageTests|PipelineIntegrationTests|ResilienceTests` passed 29/29. Full tests passed 196/196. Service and Dashboard builds passed. PostgreSQL schema integration test passed. `git diff --check` passed with LF/CRLF warnings only. Branch `master` has no upstream, so automatic pull/push/commit cannot run.
+Blockers: Automatic pull/push cannot run until a Git upstream is configured.
+
+## Active Update 2026-05-04 Paper Pipeline Readiness
+Goal: Decide whether the on-chain capture diagnostic is enough to begin paper-bet work.
+Status: Completed
+Done:
+- Confirmed the diagnostic `polymarket_onchain_trade_captures` path appears to work and is sufficient to move to paper-bet implementation.
+- Recommended the next implementation as a separate paper-signal pipeline over captured `OrderFilled` rows, not live order placement and not re-enabling the old heavy on-chain derived workers.
+- Identified the required paper boundary: split maker/taker participant sides, enrich token/category from market data, match wallets against the Polymarket rating table, deduplicate by transaction/log/role, run existing strategy/risk filters, and record explicit rejection reasons.
+Next: Implement on-chain-capture-to-paper signal processing with conservative Paper mode only.
+Notes: Answer-only decision; no source behavior changed besides context/history update. Branch `master` has no upstream, so automatic pull/push/commit cannot run.
+Blockers: Automatic pull/push cannot run until a Git upstream is configured.
+
+## Active Update 2026-05-04 Onchain Trade Capture Diagnostics
+Goal: Capture newly mined Polymarket `OrderFilled` blockchain operations into an isolated diagnostic table.
+Status: Completed
+Done:
+- Added a lightweight `OnChainTradeCaptureWorker` and `OnChainTradeCaptureProcessor` that poll Polygon `eth_getLogs` for configured V1/V2 CTF Exchange and Neg Risk CTF Exchange contracts, decode `OrderFilled` with the existing parser, and write decoded rows only to `polymarket_onchain_trade_captures`.
+- Added `polymarket_onchain_trade_captures` and `polymarket_onchain_trade_capture_cursors` to PostgreSQL schema, repository writes, no-op/test repositories, and live schema initialization.
+- Added `OnChainIngestion:TradeCapture*` options, defaults, validation, service/dashboard appsettings, configuration summary, and docs.
+- Kept the older full on-chain ingestion/derived-data hosted services paused; the diagnostic worker is registered independently and does not write old raw/fill/derived tables.
+- Added regression tests for isolated capture writes and cursor catch-up behavior.
+Next: Restart the service from the updated build and monitor `public.polymarket_onchain_trade_captures`, `public.polymarket_onchain_trade_capture_cursors`, and `api_errors` component `OnChainTradeCaptureWorker`.
+Notes: Official Polymarket docs checked: trades settle on-chain, CTF Exchange V2/Neg Risk CTF Exchange V2 are current Polygon contracts, and public market WebSocket `last_trade_price` is still wallet-less. PostgreSQL schema integration test passed. Full tests passed 196/196. Service and Dashboard builds passed. `git diff --check` passed with LF/CRLF warnings only. Branch `master` has no upstream, so automatic pull/push/commit cannot run.
+Blockers: Automatic pull/push cannot run until a Git upstream is configured.
+
+## Active Update 2026-05-04 Add Leaderboard PnL To Volume Ratio
+Goal: Store the derived leaderboard PnL-to-volume percentage ratio beside Polymarket rating rows.
+Status: Completed
+Done:
+- Added nullable `LeaderboardPnlToVolumePct` to `PolymarketDataApiWalletCategoryRating`.
+- Added `leaderboard_pnl_to_volume_pct numeric(18,8)` and an index for ratio sorting to `polymarket_data_api_wallet_category_ratings`.
+- Updated Polymarket-only rating refresh to compute `leaderboard_pnl_usd / leaderboard_volume_usd * 100` only when leaderboard volume is positive.
+- Updated PostgreSQL upsert parameters, storage/ingestion tests, README, and configuration reference.
+- Applied schema migration to the configured PostgreSQL database and backfilled 16,036 existing rating rows.
+Next: Restart the service from the updated build so future rating refreshes keep `leaderboard_pnl_to_volume_pct` current.
+Notes: Targeted tests `DataApiTraderActivityIngestionTests|StorageTests|ConfigurationTests` passed 34/34. Full tests passed 194/194. Service and Dashboard builds passed. PostgreSQL schema integration test passed 1/1. `git diff --check` passed with LF/CRLF warnings only. Branch `master` has no upstream, so automatic pull/push/commit cannot run.
+Blockers: Automatic pull/push cannot run until a Git upstream is configured.
+
+## Active Update 2026-05-04 Leaderboard PnL Percent Ratio
+Goal: Clarify whether `leaderboard_pnl_usd / leaderboard_volume_usd` is a valid percentage PnL metric.
+Status: Completed
+Done:
+- Confirmed official `/v1/leaderboard` exposes `pnl` and `vol`, but not a percentage PnL field.
+- Explained that `pnl / vol * 100` can be stored or displayed only as a rough efficiency ratio, not as Polymarket's official ROI/percent PnL.
+- Clarified that the closer percentage fields are positions-derived (`percentPnl`, `percentRealizedPnl`) and now belong in the new position snapshot columns.
+Next: If needed, add a separate derived field named like `leaderboard_pnl_to_volume_pct` to avoid confusing it with official or position ROI.
+Notes: Answer-only clarification; no source behavior changed. Official Polymarket leaderboard and positions docs checked. Branch `master` has no upstream, so automatic pull/push/commit cannot run.
+Blockers: Automatic pull/push cannot run until a Git upstream is configured.
+
+## Active Update 2026-05-04 Add Position Snapshots To Ratings
+Goal: Add `/positions` and `/closed-positions` data beside Polymarket leaderboard ratings in `polymarket_data_api_wallet_category_ratings`.
+Status: Completed
+Done:
+- Extended `PolymarketDataApiWalletCategoryRating`, PostgreSQL schema, and rating upsert SQL with aggregate current-position, closed-position, and combined position PnL/value/percent snapshot fields.
+- Added conservative rating-position config defaults: one `/positions` page of 500 and one `/closed-positions` page of 50 per wallet refresh, controlled independently from the legacy disabled performance path.
+- Updated the Polymarket-only rating refresh worker to fetch, category-enrich, aggregate, and store position snapshots beside leaderboard rank/PnL/volume rows.
+- Updated tests and documentation for the new position snapshot fields and config options.
+- Applied the schema migration to the configured PostgreSQL database through the existing C# schema initializer without starting the service host.
+Next: Restart the service from the updated build so future rating refreshes populate the new columns; then compare leaderboard PnL with positions-derived snapshot PnL.
+Notes: Official Polymarket docs checked: `/positions` exposes current value/PnL/percent fields, `/closed-positions` exposes closed realized PnL fields, and `/v1/leaderboard` exposes rank/PnL/volume. Targeted tests `DataApiTraderActivityIngestionTests|StorageTests|ConfigurationTests` passed 34/34. Full tests passed 194/194. Service and Dashboard builds passed. PostgreSQL schema integration test passed 1/1. `git diff --check` passed with LF/CRLF warnings only. Branch `master` has no upstream, so automatic pull/push/commit cannot run.
+Blockers: Automatic pull/push cannot run until a Git upstream is configured.
+
+## Active Update 2026-05-04 Percent PnL Location
+Goal: Clarify where Polymarket exposes percentage PnL.
+Status: Completed
+Done:
+- Confirmed `/v1/leaderboard` exposes `pnl` and `vol`, but not percentage PnL.
+- Confirmed percentage fields were seen on Data API `/positions`: `percentPnl` and `percentRealizedPnl`.
+- Clarified the current simplified `polymarket_data_api_wallet_category_ratings` table does not store percent PnL because it only reads leaderboard data.
+- Noted our old disabled positions path and `polymarket_data_api_positions` schema/parser already include `percent_pnl` and `percent_realized_pnl`.
+Next: If percent PnL is needed beside leaderboard ratings, add it as a separate positions-derived snapshot rather than pretending leaderboard provides it.
+Notes: Answer-only clarification; no source behavior changed. Official Polymarket positions/leaderboard docs checked. Branch `master` has no upstream, so automatic pull/push/commit cannot run.
+Blockers: Automatic pull/push cannot run until a Git upstream is configured.
+
+## Active Update 2026-05-04 Leaderboard PnL Meaning
+Goal: Clarify the meaning of `leaderboard_pnl_usd` in `polymarket_data_api_wallet_category_ratings`.
+Status: Completed
+Done:
+- Confirmed `leaderboard_pnl_usd` is copied from the Polymarket Data API `/v1/leaderboard` response field `pnl`.
+- Clarified it is scoped by wallet, mapped Polymarket category, configured `timePeriod`, and configured `orderBy`, and is a Polymarket-provided PnL benchmark rather than our independent realized-profit calculation.
+- Clarified that `found=false` rows have no Polymarket leaderboard entry for that wallet/category/time-period slice and should not be interpreted as zero profit.
+Next: None
+Notes: Answer-only clarification; no source behavior changed. Official Polymarket leaderboard docs checked. Branch `master` has no upstream, so automatic pull/push/commit cannot run.
+Blockers: Automatic pull/push cannot run until a Git upstream is configured.
+
+## Active Update 2026-05-04 Fast Trade Source Candidate Review
+Goal: Re-evaluate non-on-chain candidates for fastest completed trade detection with wallet attribution.
+Status: Completed
+Done:
+- Confirmed public WebSocket market trade ticks remain insufficient for leader attribution because `last_trade_price` does not include wallet addresses.
+- Confirmed authenticated user WebSocket and CLOB `/trades` are useful for own-account diagnostics but not for arbitrary leader wallet monitoring.
+- Recommended treating on-chain `OrderFilled` logs from current Polymarket V2 exchange contracts as the primary reliable wallet-attributed source.
+- Identified pending exchange transactions and managed on-chain streaming/indexer providers as optional experiments, not replacements for finalized on-chain logs.
+Next: Build a diagnostic on-chain tail that compares Polygon log subscription latency, block polling fallback, and optional pending-transaction detection for V2 CTF Exchange and Neg Risk CTF Exchange.
+Notes: Answer-only review with current Polymarket docs checked. No source behavior changed. Branch `master` has no upstream, so automatic pull/push/commit cannot run.
+Blockers: Automatic pull/push cannot run until a Git upstream is configured.
+
+## Active Update 2026-05-04 Return To Fast Trade Source
+Goal: Decide whether the simplified Polymarket-only rating table needs more work before returning to fastest trade-source detection.
+Status: Completed
+Done:
+- Confirmed the growing `public.polymarket_data_api_wallet_category_ratings` table is enough to treat the simplified rating pipeline as operational for now.
+- Recommended leaving only lightweight monitoring for rating refresh errors, due backlog, and category mapping gaps.
+- Recommended returning to the faster trade-source problem with a measurement-first approach across WebSocket trade ticks, Data API `/trades`, and on-chain fill logs.
+Next: Design and implement a latency/coverage experiment to compare candidate completed-trade sources using common transaction/market/outcome keys.
+Notes: Answer-only decision; no source behavior changed. Branch `master` has no upstream, so automatic pull/push/commit cannot run.
+Blockers: Automatic pull/push cannot run until a Git upstream is configured.
+
+## Active Update 2026-05-04 Simplified Polymarket Rating Worker
+Goal: Keep the legacy self-computed rating path in source as commented code and implement the simplified Polymarket-only category rating pipeline.
+Status: Completed
+Done:
+- Disabled the legacy `/positions` and `/closed-positions` self-computed performance refresh invocation in `DataApiTraderActivityIngestionProcessor` by commenting out the call path instead of deleting the implementation.
+- Added rating refresh scheduling fields to `polymarket_data_api_traders`: refreshed timestamp, next refresh timestamp, attempt count, and last error.
+- Added `polymarket_data_api_wallet_category_ratings` as the simplified working table for Polymarket leaderboard-derived wallet/category ratings.
+- Added repository methods, typed models, config options, `DataApiTraderRatingRefreshWorker`, DI registration, tests, and documentation for the new Polymarket-only refresh loop.
+- Applied the PostgreSQL migration to the current database; verification before service start showed 10,171 traders due for rating refresh, 10 enabled category mappings, and 0 rating rows.
+Next: Start the service when ready and monitor `polymarket_data_api_wallet_category_ratings` growth plus any `RefreshPolymarketRatings` API errors.
+Notes: Targeted tests `DataApiTraderActivityIngestionTests|StorageTests|ConfigurationTests` passed 34/34. Full tests passed 194/194. Service and Dashboard builds passed. `git diff --check` passed with LF/CRLF warnings only. The service was not started. Branch `master` has no upstream, so automatic pull/push/commit cannot run.
+Blockers: Automatic pull/push cannot run until a Git upstream is configured. `PostgresAppRepository.cs` remains recovered from Debug assembly from the prior full-disk incident and has a large formatting/source-shape diff.
+
+## Active Update 2026-05-04 Polymarket-Only Rating Path Discussion
+Goal: Evaluate using Polymarket-provided category ratings as the next simpler rating pipeline.
+Status: Completed
+Done:
+- Reviewed the current Data API trader discovery, category performance, leaderboard, and mapping context.
+- Agreed the proposed path is simpler: keep `polymarket_data_api_traders` as wallet discovery, add rating refresh scheduling metadata, and maintain a separate Polymarket-only wallet/category ratings table.
+- Recommended not defaulting the refresh timestamp to current time for newly discovered traders; use nullable/epoch or a separate due timestamp so new wallets are refreshed promptly.
+- Recommended keeping retry/status metadata and source fields in the new rating table so failures and Polymarket category/time-period semantics remain auditable.
+Next: If approved, implement schema/options/worker/repository methods for a Polymarket-only Data API wallet category ratings refresh loop.
+Notes: Design answer only; no source behavior changed. `git diff --check` should be run before final response. Branch `master` has no upstream, so automatic pull/push/commit cannot run.
+Blockers: Automatic pull/push cannot run until a Git upstream is configured. `PostgresAppRepository.cs` remains recovered from Debug assembly from the prior full-disk incident and has a large formatting/source-shape diff.
+
+## Active Update 2026-05-04 Add Polymarket Category Mapping Table
+Goal: Add a local-to-Polymarket category mapping table and diagnostics for missing mappings.
+Status: Completed
+Done:
+- Added `polymarket_category_mappings` to PostgreSQL schema and required tables, with seed rows for obvious mappings: Politics/POLITICS, Sports/SPORTS, Crypto/CRYPTO, Culture/CULTURE, Pop Culture/CULTURE, Mentions/MENTIONS, Weather/WEATHER, Economics/ECONOMICS, Tech/TECH, and Finance/FINANCE.
+- Added repository lookup `GetMissingPolymarketLeaderboardCategoryMappingsAsync` to find wallet category-performance rows whose local category has no enabled mapping.
+- Updated Data API trader activity position/performance refresh to log a warning and persist `api_errors` operation `MissingPolymarketCategoryMapping` for each unmapped local category.
+- Updated tests and docs for the mapping table and diagnostics.
+- Applied the mapping table migration/seed to the current PostgreSQL database.
+Next: Decide whether currently unmapped local categories `AI` and `Science` should map to `TECH` or stay explicitly unmapped until we validate Polymarket semantics.
+Notes: DB verification showed 10 seed mappings installed and current unmapped categories `AI` and `Science`. Targeted tests `StorageTests|DataApiTraderActivityIngestionTests` passed 21/21. Full tests passed 193/193. Service and Dashboard builds passed. `git diff --check` should be run before final response. Branch `master` has no upstream, so automatic pull/push/commit cannot run.
+Blockers: Automatic pull/push cannot run until a Git upstream is configured. `PostgresAppRepository.cs` remains recovered from Debug assembly from the prior full-disk incident and has a large formatting/source-shape diff.
+
+## Active Update 2026-05-04 Gamma Category Source Explanation
+Goal: Explain where local Gamma categories come from and why they may differ from Polymarket leaderboard categories.
+Status: Completed
+Done:
+- Reviewed the Gamma parser, Data API position enrichment flow, and category-performance materialization SQL.
+- Clarified that local category rows are based on Data API position categories when present, otherwise Gamma market/event metadata and parser inference, then `unknown`.
+- Clarified that Polymarket leaderboard categories are a separate fixed Data API enum, so leaderboard PnL needs an explicit mapping before it can be safely written into wallet/category performance rows.
+Next: If leaderboard category benchmarks are needed, define a project-owned category mapping table from local categories to Polymarket leaderboard enum values.
+Notes: Answer-only task; no source behavior changed. `git diff --check` should be run before final response.
+Blockers: Automatic pull/push cannot run until a Git upstream is configured. `PostgresAppRepository.cs` remains recovered from Debug assembly from the prior full-disk incident and has a large formatting/source-shape diff.
+
+## Active Update 2026-05-04 Add Data API External PnL Fields
+Goal: Add Polymarket-derived external PnL benchmark fields to both Data API wallet performance tables.
+Status: Completed
+Done:
+- Extended `polymarket_data_api_wallet_performance` and `polymarket_data_api_wallet_category_performance` schema with nullable `polymarket_positions_*` benchmark columns and nullable `polymarket_leaderboard_*` columns.
+- Added `ALTER TABLE ... ADD COLUMN IF NOT EXISTS` migrations so existing PostgreSQL databases get the new columns without table rebuilds.
+- Updated `RefreshPolymarketDataApiPositionsAndPerformanceAsync` to populate position-derived benchmark fields from the already materialized Polymarket `open_cash_pnl_usd`, `open_realized_pnl_usd`, `open_current_value_usd`, `closed_realized_pnl_usd`, and `total_pnl_usd` values for both wallet-level and wallet/category rows.
+- Left local `score` unchanged; benchmark fields are comparison data only.
+- Updated README, configuration reference, and storage tests.
+- Applied the nullable-column migration to the current PostgreSQL database and backfilled existing performance rows from current PnL columns.
+Next: Wire mapped leaderboard snapshots into the nullable `polymarket_leaderboard_*` columns when we decide the exact Polymarket category mapping.
+Notes: Current DB verification: `polymarket_data_api_wallet_performance` has 12 new columns and 21/21 benchmark rows backfilled; `polymarket_data_api_wallet_category_performance` has 12 new columns and 63/63 benchmark rows backfilled. `dotnet test tests\PolyCopyTrader.Tests\PolyCopyTrader.Tests.csproj -c Verify --no-restore --filter StorageTests` passed 14/14. Full tests passed 191/191. Service and Dashboard builds passed. `git diff --check` should be run before final response.
+Blockers: Automatic pull/push cannot run until a Git upstream is configured. `PostgresAppRepository.cs` remains recovered from Debug assembly from the prior full-disk incident and has a large formatting/source-shape diff.
+
+## Active Update 2026-05-04 External PnL Category Split Clarification
+Goal: Clarify where Polymarket-provided PnL should live when category-specific signal decisions use category performance.
+Status: Completed
+Done:
+- Clarified that storing external Polymarket PnL only in `polymarket_data_api_wallet_performance` is insufficient for category-specific signal decisions.
+- Refined the design: wallet-level performance should store overall Polymarket benchmarks, while wallet/category performance should store category-split Polymarket benchmarks where they can be derived or mapped.
+- Recommended deriving category-split external PnL primarily from `/positions` and `/closed-positions` using our Gamma-enriched categories, and optionally adding leaderboard category PnL only when our category maps cleanly to Polymarket's fixed leaderboard category enum.
+Next: If implementing external PnL, add nullable external PnL fields to both wallet-level and wallet/category-level Data API performance tables, with clear source/period/category metadata.
+Notes: Design answer only; no source behavior changed. `git diff --check` should be run before final response.
+Blockers: Automatic pull/push cannot run until a Git upstream is configured. `PostgresAppRepository.cs` remains recovered from Debug assembly from the prior full-disk incident and has a large formatting/source-shape diff.
+
+## Active Update 2026-05-04 Data API Rating Table Selection
+Goal: Decide whether the new Data API rating flow should use wallet-level or wallet/category-level performance.
+Status: Completed
+Done:
+- Reviewed the current schema and strategy usage around wallet and category performance.
+- Decided that `polymarket_data_api_wallet_category_performance` should be the primary table for copy-signal decisions because trader quality must be evaluated in the market category being traded.
+- Decided that `polymarket_data_api_wallet_performance` remains useful for global trader overview, candidate discovery, dashboard sorting, and fallback/diagnostics, but should not replace category-specific checks.
+- Clarified that external Polymarket leaderboard PnL belongs naturally in wallet-level performance, while position-derived PnL can be aggregated both globally and by category.
+Next: If implementing Data API signal gating, add repository read methods/models for `polymarket_data_api_wallet_category_performance` and wire strategy context to the Data API category row.
+Notes: Design answer only; no source behavior changed. `git diff --check` should be run before final response.
+Blockers: Automatic pull/push cannot run until a Git upstream is configured. `PostgresAppRepository.cs` remains recovered from Debug assembly from the prior full-disk incident and has a large formatting/source-shape diff.
+
+## Active Update 2026-05-04 Polymarket External PnL Design Review
+Goal: Evaluate using Polymarket-provided PnL as a side-by-side benchmark for trader rating.
+Status: Completed
+Done:
+- Confirmed from current Polymarket docs and live Data API samples that `/v1/leaderboard` returns `pnl` and `vol`, `/positions` returns current position `cashPnl`, `realizedPnl`, and `currentValue`, and `/closed-positions` returns closed-position `realizedPnl`.
+- Confirmed the existing C# client/parser already supports typed calls for leaderboard, current positions, and closed positions.
+- Confirmed current Data API wallet/category performance is already computed from stored position fields; Polymarket PnL should be added as an external comparison/benchmark, not used to replace the local `score`.
+- Recommended storing source-specific nullable external PnL fields near wallet/category performance rows, with source endpoint, category/time period, and refresh timestamp so dashboard comparisons are auditable.
+Next: If approved, implement schema/model/client/storage/dashboard changes for external Polymarket PnL fields and add parser/storage tests.
+Notes: Design task only; no source behavior changed. `git diff --check` should be run before final response.
+Blockers: Automatic pull/push cannot run until a Git upstream is configured. `PostgresAppRepository.cs` remains recovered from Debug assembly from the prior full-disk incident and has a large formatting/source-shape diff.
+
+## Active Update 2026-05-04 Reduce Trader And Status Update Churn
+Goal: Stop PostgreSQL update bloat from Data API trader discovery and status/heartbeat rows, then compact the already bloated tables.
+Status: Completed
+Done:
+- Added PostgreSQL `ON CONFLICT DO UPDATE ... WHERE` guards for `polymarket_data_api_traders`: profile/newer-trade changes still update immediately, but seen-only `last_seen_at_utc`/`last_global_seen_at_utc` refreshes are throttled to 5 minutes.
+- Added PostgreSQL update guards for `market_data_status`, `scanner_status`, and `service_heartbeats`: state/error/counter changes still update immediately, while clock-only rows are throttled to 60 seconds.
+- Changed `MarketDataWebSocket.StatusPersistIntervalSeconds` default and service appsettings value from 5 seconds to 60 seconds.
+- Changed `DataApiTraderIngestion.ExistingTraderRefreshIntervalSeconds` default and service appsettings value from 300 seconds to 3,600 seconds to reduce repeated per-wallet fresh-sync cursor updates.
+- Updated README, configuration reference, and storage/configuration tests for the new throttling behavior.
+- Ran `VACUUM FULL ANALYZE` on existing churn tables after confirming no `PolyCopyTrader.Service` process/service was running.
+- Compaction results: `polymarket_data_api_traders` 532 MB -> 2,360 kB; `market_data_status` 53 MB -> 32 kB; `service_heartbeats` 2,504 kB -> 32 kB; `scanner_status` 680 kB -> 32 kB. Database size went from about 2,692 MB to 2,107 MB; `D:` free space went to about 296.45 GB.
+Next: Restart/deploy the service from the current build before monitoring churn counters; remaining storage work is optional retention for HTTP logs and diagnostic tick/event tables.
+Notes: `dotnet test tests\PolyCopyTrader.Tests\PolyCopyTrader.Tests.csproj -c Verify --no-restore --filter "StorageTests|ConfigurationTests"` passed 25/25. `dotnet build src\PolyCopyTrader.Service\PolyCopyTrader.Service.csproj -c Verify --no-restore` passed. Full tests passed 190/190. Dashboard build passed. `git diff --check` should be run before final response.
+Blockers: Automatic pull/push cannot run until a Git upstream is configured. `PostgresAppRepository.cs` remains recovered from Debug assembly from the prior full-disk incident and has a large formatting/source-shape diff.
+
+## Active Update 2026-05-04 Post-Gamma Cleanup Optimization Review
+Goal: Check whether meaningful database optimization opportunities remain after Gamma table truncate/rebuild.
+Status: Completed
+Done:
+- Ran a fresh read-only PostgreSQL size review after Gamma cleanup; database `polycopytrader` is about 2,692 MB and `D:` has about 295.79 GB free.
+- Confirmed the remaining largest tables: `polymarket_http_logs` 1,056 MB, `polymarket_data_api_traders` 532 MB, `polymarket_data_api_positions` 335 MB, `polymarket_websocket_trade_ticks` 253 MB, rebuilt `polymarket_gamma_markets` 221 MB, `order_book_snapshots` 103 MB, `market_data_status` 53 MB, Gamma compact backup 41 MB, and `market_data_events` 30 MB.
+- Concluded the large storage emergency is resolved; remaining cleanup is incremental and mostly retention/update-churn work rather than urgent disk reclamation.
+- Identified actionable remaining optimizations: retention/truncate diagnostics (`polymarket_http_logs`, `polymarket_websocket_trade_ticks`, `order_book_snapshots`, `market_data_events`), no-op/throttled upserts for `polymarket_data_api_traders`, and no-op/throttled writes for status/heartbeat tables.
+- Recommended keeping `polymarket_data_api_positions` for ratings and keeping the Gamma compact backup temporarily until category/rating behavior is verified.
+Next: If desired, implement retention for diagnostic tables and fix Data API trader/status update churn; otherwise proceed with functional pipeline/rating work.
+Notes: Diagnostic/read-only database task; no application source code changed. `git diff --check` should be run before final response.
+Blockers: Automatic pull/push cannot run until a Git upstream is configured. `PostgresAppRepository.cs` remains recovered from Debug assembly from the prior full-disk incident and has a large formatting/source-shape diff.
+
+## Active Update 2026-05-04 Gamma Table Truncate And Rebuild
+Goal: Reclaim `polymarket_gamma_markets` bloat by compact-backup, truncate, and one-shot active-market rebuild.
+Status: Completed
+Done:
+- Confirmed no `PolyCopyTrader.Service` Windows service/process was running before the operation; only VS/MSBuild/vstest dotnet processes were present.
+- Created compact backup table `public.polymarket_gamma_markets_backup_20260504_063934_compact` without `raw_json`; it contains 52,006 rows and occupies about 41 MB.
+- Cancelled active autovacuum workers holding Gamma/Gamma-TOAST locks, then truncated `public.polymarket_gamma_markets`.
+- Verified immediate cleanup: Gamma went from 52,006 rows and about 97 GB to 0 rows and 48 kB; database size went to about 2,472 MB and `D:` free space to about 295.85 GB.
+- Ran a one-shot C# rebuild through the current Gamma client and PostgreSQL repository without leaving the background service running; fetched 42,835 active-market items through 87 pages and upserted them into `polymarket_gamma_markets`.
+- Verified rebuilt state: `polymarket_gamma_markets` has 42,772 unique active rows, 0 closed, 0 archived, 42,718 accepting orders/order-book rows, 23,295 rows with non-empty category, and occupies about 221 MB; database size is about 2,692 MB and `D:` free space about 295.63 GB.
+Next: Start/restart the normal service from the current build when ready so WebSocket subscriptions and ongoing Gamma refresh resume; keep the compact backup temporarily until category/rating behavior is verified.
+Notes: Destructive database operation explicitly requested by the user. No application source code changed; used temporary C# utilities outside the repository. One-shot rebuild compiled with existing nullable warnings from recovered `PostgresAppRepository.cs`. `git diff --check` should be run before final response.
+Blockers: Automatic pull/push cannot run until a Git upstream is configured. `PostgresAppRepository.cs` remains recovered from Debug assembly from the prior full-disk incident and has a large formatting/source-shape diff.
+
+## Active Update 2026-05-04 Fresh Database Heavy Tables Review
+Goal: Provide a fresh PostgreSQL size review after dropping `polymarket_data_api_trades`.
+Status: Completed
+Done:
+- Queried PostgreSQL size/statistics metadata after the raw Data API trades table drop; database `polycopytrader` is about 99.55 GB and `D:` has about 198.62 GB free.
+- Confirmed `polymarket_gamma_markets` is still the dominant issue at about 97 GB total, with about 14 GB heap, 83 GB TOAST, 957 MB indexes, about 53.9k live rows, and about 20.3M dead rows.
+- Confirmed remaining medium-size tables: `polymarket_http_logs` about 1056 MB, `polymarket_data_api_traders` about 532 MB for only 8,366 rows, `polymarket_data_api_positions` about 335 MB, `polymarket_websocket_trade_ticks` about 253 MB, `order_book_snapshots` about 103 MB, and `market_data_status` about 53 MB for only 32 rows.
+- Confirmed `polymarket_data_api_trades` no longer exists and occupies 0 bytes.
+- Noted autovacuum was active on `polymarket_gamma_markets` and its TOAST table; this can make space reusable inside PostgreSQL but will not return the 97 GB file footprint to Windows.
+Next: Reclaim `polymarket_gamma_markets` after the fixed Gamma upsert is deployed, then reduce churn in `polymarket_data_api_traders`/status tables and add retention for diagnostic logs/ticks.
+Notes: Diagnostic/read-only database task; no application source code changed. `git diff --check` should be run before final response.
+Blockers: Automatic pull/push cannot run until a Git upstream is configured. `PostgresAppRepository.cs` remains recovered from Debug assembly from the prior full-disk incident and has a large formatting/source-shape diff.
+
+## Active Update 2026-05-04 Remove Data API Trades Table
+Goal: Remove `public.polymarket_data_api_trades` from both application code and PostgreSQL.
+Status: Completed
+Done:
+- Removed `polymarket_data_api_trades` from `PostgresSchema.RequiredTables` and deleted its `CREATE TABLE` plus index definitions from schema initialization.
+- Removed `TryAddPolymarketDataApiTradeAsync` from `IAppRepository`, `NoOpAppRepository`, `PostgresAppRepository`, and `TestAppRepository`.
+- Removed the PostgreSQL insert method/helper for raw Data API trade rows and removed `PolymarketDataApiTradeDeduplication`.
+- Changed the Data API trader sync worker so per-wallet `/trades` pages advance `last_trade_timestamp_utc` without storing raw rows; incremental sync now stops at the first row at or before the stored timestamp cursor.
+- Updated Data API sync tests, storage schema tests, README, and configuration reference for the no-raw-trade-table behavior.
+- Dropped `public.polymarket_data_api_trades` from PostgreSQL. It was about 3.37 GB before drop and no longer exists after drop; database size went from about 102.92 GB to 99.55 GB, and `D:` free space went from about 195.25 GB to 198.62 GB.
+Next: Restart/deploy the service so the running worker uses the code that no longer writes the removed table; next storage optimization remains `polymarket_gamma_markets` bloat reclamation.
+Notes: `dotnet build src\PolyCopyTrader.Storage\PolyCopyTrader.Storage.csproj -c Verify --no-restore` passed with existing decompiled-source nullable warnings. Service and Dashboard builds passed. Full tests passed 188/188. `git diff --check` should be run before final response.
+Blockers: Automatic pull/push cannot run until a Git upstream is configured. `PostgresAppRepository.cs` remains recovered from Debug assembly from the prior full-disk incident and has a large formatting/source-shape diff.
+
+## Active Update 2026-05-04 Data API Trades Table Necessity Review
+Goal: Evaluate whether `public.polymarket_data_api_trades` is needed as a long-lived table if `/activity` can feed rating calculations.
+Status: Completed
+Done:
+- Inspected current code paths and confirmed the fast global `/trades` loop already uses `/trades` only for trader discovery and does not persist global trade rows.
+- Confirmed `polymarket_data_api_trades` is currently populated only by the slow per-wallet sync worker through `/trades?user=...`.
+- Confirmed Data API wallet and category ratings are computed from `polymarket_data_api_positions` into `polymarket_data_api_wallet_performance` and `polymarket_data_api_wallet_category_performance`, not from `polymarket_data_api_trades`.
+- Checked current official Polymarket docs: `/activity?user=...` provides user on-chain activity with event type, size/usdcSize, transaction hash, market/outcome fields, side, timestamp, paging, filters, and sorting; `/trades` remains useful as a global recent-trade discovery endpoint.
+- Recommended treating `polymarket_data_api_trades` as optional raw/audit cache rather than a required scoring table; for MVP it can be replaced by in-memory `/activity` aggregation plus materialized rating/activity summary tables.
+Next: If accepted, implement a Data API activity ingestion path that computes aggregates/performance and stops writing `polymarket_data_api_trades`; only after deploy should the old table be truncated/dropped or retained briefly for diagnostics.
+Notes: Answer/design task only; no application source code changed. `git diff --check` should be run before final response.
+Blockers: Automatic pull/push cannot run until a Git upstream is configured. `PostgresAppRepository.cs` remains recovered from Debug assembly from the prior full-disk incident and has a large formatting/source-shape diff.
+
+## Active Update 2026-05-04 Gamma Upsert No-Op Update Suppression
+Goal: Start with optimization item 1 by stopping `polymarket_gamma_markets` from rewriting unchanged rows on every Gamma scan.
+Status: Completed
+Done:
+- Changed `UpsertPolymarketGammaMarketAsync` so `ON CONFLICT (market_id) DO UPDATE` has a `WHERE ... IS DISTINCT FROM ...` predicate over decision-relevant Gamma fields.
+- Deliberately excluded `fetched_at_utc` from the changed-row predicate; if only the poll timestamp changes, PostgreSQL now skips the update and does not create a new heap/TOAST row version.
+- Kept updates for actual market payload changes, including status flags, prices, liquidity/volume, timestamps from Gamma, outcomes, CLOB token ids, and `raw_json`.
+- Added a storage regression test asserting the Gamma upsert keeps the no-op guard and does not compare `fetched_at_utc` as a payload change.
+- Updated README and configuration reference to document that unchanged Gamma rows are not rewritten just to move `fetched_at_utc`.
+- Validated the predicate against the current PostgreSQL table by re-upserting one existing row with only a newer `fetched_at_utc`; result was `source_count=1; affected_count=0`.
+Next: Restart/deploy the service so the running Gamma worker uses the fixed upsert, then decide how to reclaim the already accumulated Gamma bloat (`TRUNCATE` plus rebuild cache, or `VACUUM FULL`/rewrite during maintenance).
+Notes: No destructive PostgreSQL operation was performed for this request. `dotnet build src\PolyCopyTrader.Storage\PolyCopyTrader.Storage.csproj -c Verify --no-restore` passed with existing decompiled-source nullable warnings. Service and Dashboard builds passed. Full tests passed 188/188. `git diff --check` should be run before final response.
+Blockers: Automatic pull/push cannot run until a Git upstream is configured. `PostgresAppRepository.cs` remains recovered from Debug assembly from the prior full-disk incident and has a large formatting/source-shape diff.
+
+## Active Update 2026-05-04 Post-Onchain Table Size Review
+Goal: Re-check PostgreSQL table sizes after on-chain truncation and outline optimization opportunities.
+Status: Completed
+Done:
+- Queried PostgreSQL size/statistics metadata after the on-chain cleanup; database size is about 103 GB and `D:` has about 195.05 GB free.
+- Confirmed `polymarket_gamma_markets` remains the dominant issue: about 97 GB total, 83 GB TOAST, about 54k live rows, about 20.3M dead rows, and only about 188 MB of live `raw_json`.
+- Confirmed Data API storage is much smaller: `polymarket_data_api_trades` about 3.4 GB for about 1.45M rows, `polymarket_data_api_traders` about 532 MB with 99.64% dead rows, and `polymarket_data_api_positions` about 335 MB.
+- Confirmed diagnostic tables are bounded but should get retention: `polymarket_http_logs` about 1.0 GB, `polymarket_websocket_trade_ticks` about 253 MB with 82.7% dead rows, `order_book_snapshots` about 103 MB, and `market_data_events` about 30 MB.
+- Identified index observations: large Gamma indexes are mostly bloat-driven; Data API trade `transaction_hash`, `wallet_time`, and `recent` indexes currently show zero scans in stats but may be needed by upcoming workflows.
+- Current PostgreSQL activity includes autovacuum on Gamma TOAST, `polymarket_gamma_markets`, and `polymarket_websocket_trade_ticks`; this will make space reusable internally but not return it to the OS.
+Next: First fix Gamma/Data API no-op update churn, then reclaim Gamma/trader bloat with `TRUNCATE`/rebuild or `VACUUM FULL` during a maintenance window; add retention worker/partitions for diagnostic append-only tables.
+Notes: Diagnostic/design task only; no application source code changed and no destructive DB operation performed for this request. `git diff --check` should be run before final response.
+Blockers: Automatic pull/push cannot run until a Git upstream is configured. `PostgresAppRepository.cs` remains recovered from Debug assembly from the prior task and has a large formatting/source-shape diff.
+
+## Active Update 2026-05-04 Onchain Layer Truncate
+Goal: Remove the old on-chain PostgreSQL data layer and return its disk space to the system.
+Status: Completed
+Done:
+- Enumerated all `public.polymarket_onchain_*` ordinary tables and confirmed they occupied about 136.22 GB before deletion.
+- First `TRUNCATE` attempt hit `55P03 lock timeout`; diagnosed blocking locks from PID `71104` running an old on-chain wallet activity refresh for about 38 hours and PID `71108` autovacuuming `polymarket_onchain_logs`.
+- Terminated only the blocking on-chain PostgreSQL backends (`71104`, `71108`), then ran one `TRUNCATE TABLE ... RESTART IDENTITY` across 21 `polymarket_onchain_*` tables.
+- Ran `ANALYZE` after the truncate.
+- Confirmed `polymarket_onchain_*` total size dropped from about 136.22 GB to about 728 kB, and database size dropped from about 239.14 GB to about 102.92 GB.
+- Confirmed Windows free space on `D:` increased to about 194.97 GB.
+Next: Keep `OnChainIngestion` disabled unless the old layer is intentionally rebuilt; next storage task should reclaim `polymarket_gamma_markets` bloat and prevent no-op Gamma/Data API updates.
+Notes: Destructive database operation explicitly requested by the user. No application source code changed for this operation. `git diff --check` passed with LF/CRLF warnings only.
+Blockers: Automatic pull/push cannot run until a Git upstream is configured. `PostgresAppRepository.cs` remains recovered from Debug assembly from the prior task and has a large formatting/source-shape diff.
+
+## Active Update 2026-05-04 Database Size And Cleanup Plan
+Goal: Check PostgreSQL table sizes and decide which data can be cleaned automatically.
+Status: Completed
+Done:
+- Queried PostgreSQL size/statistics metadata without full scans; database `polycopytrader` is about 239 GB.
+- Confirmed the largest relation is `polymarket_gamma_markets` at about 97 GB, with only about 55k live rows and about 20.2M dead rows; estimated dead size is about 96 GB.
+- Confirmed the old on-chain path is the main historical footprint: `polymarket_onchain_wallet_fills` 38 GB, `polymarket_onchain_wallet_executions` 30 GB, `polymarket_onchain_trade_details` 25 GB, `polymarket_onchain_fills` 22 GB, and `polymarket_onchain_logs` 14 GB.
+- Confirmed diagnostic/temporary retention candidates: `polymarket_http_logs` about 1.0 GB, `polymarket_websocket_trade_ticks` 252 MB, `order_book_snapshots` 103 MB, `market_data_events` 30 MB, and `api_errors` 5.7 MB.
+- Noted `polymarket_data_api_traders` is about 524 MB with about 8k live rows and 2.35M dead rows, caused by frequent upserts of already-known traders.
+- Concluded automatic cleanup is useful for diagnostic append-only tables, but cache/state bloat must be fixed by reducing unnecessary updates; `DELETE` alone will not return OS disk space unless data is partitioned/dropped or tables are rewritten.
+Next: Implement a PostgreSQL maintenance worker for bounded retention on logs/diagnostics, and separately change Gamma/Data API upserts to skip unchanged rows or throttle last-seen updates. Consider manual archive/truncate of old on-chain data if the paused path is no longer needed.
+Notes: Diagnostic/design task only; no application source code changed for this request. Branch `master` has no configured upstream.
+Blockers: Automatic pull/push cannot run until a Git upstream is configured. `PostgresAppRepository.cs` remains recovered from Debug assembly from the previous task and has a large formatting/source-shape diff.
+
+## Active Update 2026-05-04 Data API Category Performance Stall
+Goal: Diagnose why `polymarket_data_api_wallet_category_performance` is not growing while `polymarket_data_api_traders` grows.
+Status: Completed
+Done:
+- Queried PostgreSQL and confirmed `polymarket_data_api_wallet_category_performance` has only 62 rows, with newest `refreshed_at_utc` at `2026-05-03T21:20:06Z`; `polymarket_data_api_wallet_performance` has only 20 rows.
+- Confirmed the rating source assumption: Data API wallet/category rating is intended to come from `polymarket_data_api_wallet_category_performance`; global wallet score comes from `polymarket_data_api_wallet_performance`.
+- Found repeated `RefreshTraderPerformance` failures: `42702: column reference "category" is ambiguous`, caused by the category-performance CTE selecting `position.*` and a computed `AS category`.
+- Fixed the ambiguous SQL by computing `resolved_category` and projecting it as `category` in the next CTE; validated the fixed read query against PostgreSQL.
+- Found an operational blocker: `D:` reached 0 free bytes and PostgreSQL began failing writes with `53100: No space left on device`.
+- Identified major DB bloat: `polymarket_gamma_markets` is about 96 GB with about 20 million dead rows; this needs database maintenance and likely an ingestion write-amplification fix.
+- During the first failed write on a full disk, `PostgresAppRepository.cs` was left empty; recovered it from the already-built Debug assembly with ILSpy, fixed the category SQL in the recovered source, and verified builds/tests.
+Next: Restart the service after deploying the fixed build, then monitor `polymarket_data_api_wallet_category_performance`; separately reclaim/compact `polymarket_gamma_markets` and reduce Gamma upsert churn so the disk does not fill again.
+Notes: No upstream configured for branch `master`, so pull/push/commit were not performed. `dotnet build src\PolyCopyTrader.Storage\PolyCopyTrader.Storage.csproj -c Verify` passed with warnings from decompiled recovery source. `dotnet build src\PolyCopyTrader.Service\PolyCopyTrader.Service.csproj -c Verify --no-restore` passed. `dotnet build src\PolyCopyTrader.Dashboard\PolyCopyTrader.Dashboard.csproj -c Verify --no-restore` passed. Full `dotnet test tests\PolyCopyTrader.Tests\PolyCopyTrader.Tests.csproj -c Verify --no-restore` passed 187/187. `git diff --check` passed with LF/CRLF warnings only after fixing trailing whitespace.
+Blockers: `PostgresAppRepository.cs` was recovered from a compiled assembly, so formatting/source shape differs heavily from the prior hand-written file; a cleaner source restoration from backup would be preferable if available. Automatic pull/push cannot run until a Git upstream is configured.
+
+## Active Update 2026-05-04 Data API Trader Growth Diagnosis
+Goal: Check whether the traders-only Data API discovery loop is stuck again or just receiving repeated `/trades` windows.
+Status: Completed
+Done:
+- Queried PostgreSQL counters and confirmed `polymarket_data_api_traders` was actively updating: 2244 rows at `2026-05-03T22:11:15Z`, then 2583 rows after a 75 second observation.
+- Confirmed `GetGlobalTrades` is running continuously from the current service process, with about 68-70 requests per minute and `last_global_seen_at_utc` updating to the current DB time.
+- Confirmed the apparent stall is caused by Data API `/trades` returning the same response window for several minutes: one response body hash repeated 300 times from `2026-05-03T22:07:24Z` to `2026-05-03T22:11:14Z`, then a new response window arrived at `2026-05-03T22:11:47Z` and added 339 traders.
+- Checked a live `/trades?limit=1000&takerOnly=false&timestamp=...` snapshot and found 452 distinct wallets, all already present in `polymarket_data_api_traders` at that moment.
+Next: Treat trader growth as stepwise because the upstream Data API snapshot refreshes in batches; continue monitoring for long gaps much larger than several minutes.
+Notes: Diagnostic task only; no application source code changed. Branch `master` has no configured upstream. Used a temporary C# query utility outside the repository because `psql` is unavailable.
+Blockers: Automatic pull/push cannot run until a Git upstream is configured.
+
+## Active Update 2026-05-04 Data API Traders Only Fast Loop
+Goal: Make the global `/trades` polling loop add only traders and move all other work out of that loop.
+Status: Completed
+Done:
+- Changed the fast Data API discovery path so it no longer writes global rows into `polymarket_data_api_trades`.
+- Removed per-wallet `GetPolymarketDataApiTraderAsync` reads from the global discovery loop; it now builds representative trader rows from the global page and writes them through a batch upsert.
+- Added `UpsertPolymarketDataApiTradersAsync` to the repository contract and implemented it for PostgreSQL, no-op storage, and tests.
+- Kept `polymarket_data_api_trades` population exclusively in the separate sync worker through per-wallet full/fresh sync.
+- Updated discovery worker logging to report `TradersUpserted` instead of global trade inserts, and updated tests/docs for the traders-only fast path.
+Next: Restart the running service again, then verify `GetGlobalTrades` keeps firing and `polymarket_data_api_traders` continues growing without waiting for `polymarket_data_api_trades`, position refresh, or Gamma.
+Notes: No upstream configured for branch `master`, so pull/push/commit were not performed. Targeted `dotnet test tests\PolyCopyTrader.Tests\PolyCopyTrader.Tests.csproj -c Verify --no-restore --filter "DataApiTraderActivityIngestionTests|ConfigurationTests"` passed 17/17. Full `dotnet test tests\PolyCopyTrader.Tests\PolyCopyTrader.Tests.csproj -c Verify --no-restore` passed 187/187. `dotnet build src\PolyCopyTrader.Service\PolyCopyTrader.Service.csproj -c Verify --no-restore` passed. `dotnet build src\PolyCopyTrader.Dashboard\PolyCopyTrader.Dashboard.csproj -c Verify --no-restore` passed. `dotnet run --project src\PolyCopyTrader.Service\PolyCopyTrader.Service.csproj -c Verify --no-restore -- --print-config` passed. `git diff --check` passed with LF/CRLF warnings only.
+Blockers: Automatic pull/push cannot run until a Git upstream is configured.
+
+## Active Update 2026-05-04 Data API Discovery Sync Split
+Goal: Keep global `/trades` discovery from being blocked by per-wallet sync, position refresh, and Gamma enrichment.
+Status: Completed
+Done:
+- Changed `DataApiTraderActivityIngestionProcessor.RefreshAsync` into a fast discovery path: it fetches global `/trades`, upserts discovered `polymarket_data_api_traders`, and saves global trade rows immediately without running user full/fresh sync or position refresh.
+- Added `RefreshTraderSyncBatchAsync` and a new `DataApiTraderActivitySyncWorker` that separately processes pending/stale traders in bounded batches.
+- Added repository method `GetPolymarketDataApiTradersForSyncAsync` with pending-first/stale-incremental selection and implemented it for PostgreSQL, no-op storage, and tests.
+- Added config fields `SyncBatchSize`, `SyncPollDelayMilliseconds`, and `ExistingTraderRefreshIntervalSeconds`; service defaults are `5`, `1000`, and `300`.
+- Kept position refresh/Gamma category enrichment in the slow sync worker and reused in-memory category caches across sync batches to reduce duplicate Gamma lookups.
+- Updated Data API ingestion tests, config tests, README, and configuration reference for the two-worker design.
+Next: Restart the currently running service process so it uses the new discovery/sync split; then verify `GetGlobalTrades` continues every cycle and `polymarket_data_api_traders` grows past 605.
+Notes: No upstream configured for branch `master`, so pull/push/commit were not performed. Targeted `dotnet test tests\PolyCopyTrader.Tests\PolyCopyTrader.Tests.csproj -c Verify --no-restore --filter "DataApiTraderActivityIngestionTests|ConfigurationTests"` passed 17/17. Full `dotnet test tests\PolyCopyTrader.Tests\PolyCopyTrader.Tests.csproj -c Verify --no-restore` passed 187/187. `dotnet build src\PolyCopyTrader.Service\PolyCopyTrader.Service.csproj -c Verify --no-restore` passed. `dotnet build src\PolyCopyTrader.Dashboard\PolyCopyTrader.Dashboard.csproj -c Verify --no-restore` passed. `dotnet run --project src\PolyCopyTrader.Service\PolyCopyTrader.Service.csproj -c Verify --no-restore -- --print-config` passed and shows sync batch size 5 and sync poll delay 1000 ms. `git diff --check` passed with LF/CRLF warnings only.
+Blockers: Automatic pull/push cannot run until a Git upstream is configured.
+
+## Active Update 2026-05-04 Data API Global Poll Stall Diagnosis
+Goal: Verify why `polymarket_data_api_traders` stayed at 605 despite active `/trades` activity.
+Status: Completed
+Done:
+- Confirmed the service process is running, but the Data API trader worker has not issued a new `GetGlobalTrades` request since `2026-05-03T21:24:09Z`.
+- Queried live `https://data-api.polymarket.com/trades?limit=1000&takerOnly=false&timestamp=...`; it returned 1000 trades from `2026-05-03T21:36:20Z..21:36:40Z`, 438 distinct wallets, and 320 wallets missing from local `polymarket_data_api_traders`.
+- Confirmed the stall is not lack of market activity. The worker is still inside the old cycle: after `GetGlobalTrades`, it moved into per-wallet sync/position refresh and then Gamma category enrichment.
+- Confirmed the hot path problem from `polymarket_http_logs`: in the last 20 minutes there were 9447 `PolymarketGammaClient.GetClosedMarketByCondition` calls and no new global `/trades` calls after `21:24:09Z`.
+Next: Decouple fast global `/trades` discovery from slow per-wallet full sync, position refresh, and Gamma category enrichment; at minimum persist/upsert the global page first and move position/category enrichment out of the global polling critical path.
+Notes: Answer/diagnostic task only; no application source code changed. `git diff --check` passed with LF/CRLF warnings only. Branch `master` still has no configured upstream.
+Blockers: Automatic pull/push cannot run until a Git upstream is configured.
+
+## Active Update 2026-05-04 Data API Trades Endpoint Clarification
+Goal: Clarify whether Data API `/trades` should be treated as latest active bets.
+Status: Completed
+Done:
+- Checked the current official Polymarket docs for Data API `/trades`, Data API positions, and market WebSocket events.
+- Clarified that `GET /trades` is a trade-history endpoint returning executed trade records with wallet, side, asset, condition, size, price, timestamp, outcome, and transaction hash.
+- Clarified that it is not a complete list of active open bets/orders/positions; current user exposure belongs to `/positions?user=...`, while orderbook/open orders require CLOB/book or authenticated user/order channels.
+- Reconnected this to the current 605 trader count: global `/trades` can expose recent active wallets, but it is still a limited history window and not a full trader universe.
+Next: If the goal is current active exposure, keep `/trades` for trader discovery/history and rely on `/positions` plus market metadata for open positions.
+Notes: Answer-only task; no application source code changed. `git diff --check` passed with LF/CRLF warnings only. Branch `master` still has no configured upstream.
+Blockers: Automatic pull/push cannot run until a Git upstream is configured.
+
+## Active Update 2026-05-04 Data API Trader Count Check
+Goal: Check whether 605 accumulated Data API traders is plausible.
+Status: Completed
+Done:
+- Queried PostgreSQL read-only counters for the Data API trader layer without printing the connection string.
+- Confirmed `polymarket_data_api_traders` has 605 rows, matching 605 distinct `trader_wallet` values in `polymarket_data_api_trades`.
+- Confirmed `polymarket_data_api_trades` has 1,352,133 rows: 1,349,281 from `user_full`, 2,449 from `user_incremental`, and 403 from `global`.
+- Confirmed 473 traders have `full_sync_completed=true`, 132 are still pending, and the latest local Data API activity timestamps were around `2026-05-03T21:24Z`.
+- Noted this is plausible for the current local ingestion window, but not a plausible count for all Polymarket traders.
+Next: Let the service continue running and watch whether `polymarket_data_api_traders` grows past the current 605 as new global `/trades` snapshots expose new wallets.
+Notes: Answer/diagnostic task only; no application source code changed. Used a temporary C# console query outside the repository because `psql` was unavailable and PowerShell could not load `Npgsql.dll` directly. `git diff --check` passed with LF/CRLF warnings only. Branch `master` still has no configured upstream.
+Blockers: Automatic pull/push cannot run until a Git upstream is configured.
+
+## Active Update 2026-05-04 Data API Position Category Enrichment
+Goal: Reduce `unknown` rows in Data API wallet/category performance by enriching position categories before persistence.
+Status: Completed
+Done:
+- Added Data API position category persistence support end to end: `polymarket_data_api_positions.category` is populated through `@Category`, and category performance now prefers `position.category` before falling back to active Gamma market rows and then `unknown`.
+- Added on-demand Gamma category enrichment in `DataApiTraderActivityIngestionProcessor`: when `/positions` or `/closed-positions` lacks category, the worker looks up Gamma by `condition_id` plus token id for expected and opposite closed/open states, then falls back to `eventId` category.
+- Preserved Data API category values when already present and kept Gamma enrichment failures non-fatal while logging/persisting explicit API errors.
+- Updated parser/processor tests and docs to cover saved Data API categories, Gamma condition enrichment, and event category fallback.
+Next: Restart the service so refreshed wallets repopulate `polymarket_data_api_positions.category` and then inspect remaining `unknown` rows; old rows update when their wallet positions are refreshed.
+Notes: No upstream configured for branch `master`, so pull/push/commit were not performed. `dotnet test tests\PolyCopyTrader.Tests\PolyCopyTrader.Tests.csproj -c Verify --no-restore --filter "DataApiTraderActivityIngestionTests|PolymarketClientTests|ConfigurationTests|StorageTests"` passed 56/56. Full `dotnet test tests\PolyCopyTrader.Tests\PolyCopyTrader.Tests.csproj -c Verify --no-restore` passed 186/186. `dotnet build src\PolyCopyTrader.Service\PolyCopyTrader.Service.csproj -c Verify --no-restore` passed. `dotnet build src\PolyCopyTrader.Dashboard\PolyCopyTrader.Dashboard.csproj -c Verify --no-restore` passed. `dotnet run --project src\PolyCopyTrader.Service\PolyCopyTrader.Service.csproj -c Verify --no-restore -- --print-config` passed. `git diff --check` passed with LF/CRLF warnings only.
+Blockers: Automatic pull/push cannot run until a Git upstream is configured.
+
+## Active Update 2026-05-04 Unknown Category Explanation
+Goal: Explain why `unknown` categories appear again in the Data API performance layer.
+Status: Completed
+Done:
+- Confirmed `polymarket_data_api_wallet_category_performance` uses `COALESCE(NULLIF(market.category, ''), 'unknown')` when joining `polymarket_data_api_positions` to `polymarket_gamma_markets` by `condition_id`.
+- Explained that this is expected in the current implementation because `polymarket_gamma_markets` is populated by active non-closed Gamma markets only, while Data API positions include closed/old markets and markets that Gamma may return without a category.
+- Clarified that `unknown` is acceptable as a temporary metadata gap marker, but not as a final desired category state for scoring.
+Next: Add on-demand Gamma category enrichment for Data API position `condition_id`/`slug`/`eventId`, then recalculate affected wallet/category performance rows.
+Notes: Answer-only task; no application source code changed. `git diff --check` passed with LF/CRLF warnings only. Branch `master` still has no configured upstream.
+Blockers: Automatic pull/push cannot run until a Git upstream is configured.
+
+## Active Update 2026-05-04 Trader Table Clarification
+Goal: Clarify which PostgreSQL table accumulates discovered traders in the current Data API path.
+Status: Completed
+Done:
+- Confirmed the current Data API trader discovery/ingestion path stores accumulated wallets in `polymarket_data_api_traders`.
+- Clarified related tables: raw trades in `polymarket_data_api_trades`, current/closed positions in `polymarket_data_api_positions`, wallet PnL/rating in `polymarket_data_api_wallet_performance`, and category ratings in `polymarket_data_api_wallet_category_performance`.
+- Noted older/manual tables have different purposes: `traders` is the configured watchlist, `trader_leaderboard_snapshots` stores leaderboard snapshots, and `trader_discovery_candidates` stores manual discovery shortlist rows.
+Next: None.
+Notes: Answer-only task; no application source code changed. `git diff --check` passed with LF/CRLF warnings only. Branch `master` still has no configured upstream.
+Blockers: Automatic pull/push cannot run until a Git upstream is configured.
+
+## Active Update 2026-05-03 Polymarket PnL Source Clarification
+Goal: Clarify whether Polymarket Data API already provides user PnL and whether local calculations are still needed.
+Status: Completed
+Done:
+- Clarified that Polymarket Data API position endpoints provide the important per-position PnL fields, so the service does not need to reconstruct PnL from raw trades alone.
+- Clarified that local aggregation is still needed to combine current and closed positions, avoid double-counting, group by wallet/category, compute ROI/win rate/sample quality/score, and preserve snapshots for ranking and audit.
+- Clarified that Data API values should be treated as Polymarket-like PnL inputs, while the project rating remains a local decision metric rather than a direct Polymarket field.
+Next: Validate sampled `polymarket_data_api_wallet_performance` rows against Polymarket UI after the service has populated the new tables.
+Notes: Answer/clarification task only; no application source code changed. Branch `master` still has no configured upstream.
+Blockers: Automatic pull/push cannot run until a Git upstream is configured.
+
+## Active Update 2026-05-03 Data API Polymarket-like PnL Layer
+Goal: Add the Data API position/performance layer needed to approximate Polymarket user PnL and trader rating.
+Status: Completed
+Done:
+- Added typed `PolymarketDataApiPosition`/`PolymarketDataApiPerformanceRefreshResult` models plus Data API client methods for `/positions` and `/closed-positions` with timestamp cache-busters.
+- Added parser coverage for current positions and closed positions, preserving Polymarket PnL fields: `currentValue`, `cashPnl`, `realizedPnl`, `avgPrice`, `totalBought`, `curPrice`, and metadata fields.
+- Added PostgreSQL tables `polymarket_data_api_positions`, `polymarket_data_api_wallet_performance`, and `polymarket_data_api_wallet_category_performance`.
+- Added repository aggregation that refreshes open position snapshots, upserts closed positions, and materializes wallet/category PnL, ROI, win rate, volume, sample quality, and heuristic score using Polymarket Data API fields.
+- Extended `DataApiTraderActivityIngestionProcessor` so each processed wallet can refresh current/closed positions and performance after trade sync, controlled by new `DataApiTraderIngestion` config fields.
+- Updated README, configuration reference, appsettings, parser/client/config/processor tests, and in-memory test repository support.
+Next: Restart the service so schema initialization creates the new Data API position/performance tables; inspect `polymarket_data_api_wallet_performance` after several cycles and compare sampled wallets with Polymarket UI.
+Notes: `dotnet test tests\PolyCopyTrader.Tests\PolyCopyTrader.Tests.csproj -c Verify --no-restore --filter "DataApiTraderActivityIngestionTests|PolymarketClientTests|ConfigurationTests|StorageTests"` passed 55/55. Full `dotnet test tests\PolyCopyTrader.Tests\PolyCopyTrader.Tests.csproj -c Verify --no-restore` passed 185/185. `dotnet build src\PolyCopyTrader.Service\PolyCopyTrader.Service.csproj -c Verify --no-restore` passed. `dotnet build src\PolyCopyTrader.Dashboard\PolyCopyTrader.Dashboard.csproj -c Verify --no-restore` passed. `dotnet run --project src\PolyCopyTrader.Service\PolyCopyTrader.Service.csproj -c Verify --no-restore -- --print-config` passed and shows position refresh enabled with max 1000 refreshes per cycle. `git diff --check` passed with LF/CRLF warnings only. Branch `master` still has no configured upstream.
+Blockers: Automatic pull/push cannot run until a Git upstream is configured.
+
+## Active Update 2026-05-03 Data API Trader Rating Data Sufficiency
+Goal: Answer whether the collected Data API user activity is sufficient to calculate a trader rating.
+Status: Completed
+Done:
+- Reviewed current Data API trader tables, the existing on-chain activity/performance scoring layers, and Gamma market metadata available in the repo.
+- Concluded Data API trade/activity rows are sufficient for activity and first-pass behavior scoring: trade count, volume, markets/outcomes traded, average trade size, buy/sell mix, recency, and deduped transaction evidence.
+- Concluded they are not sufficient by themselves for reliable performance scoring: resolved PnL, ROI, win rate, open exposure, and category score require derived positions plus Gamma/CLOB enrichment for market category, current prices, closed/resolved state, and winning outcome.
+- Noted that exact all-time accounting may also need non-TRADE activity types such as split/merge/redeem/conversion and must track sample completeness for wallets whose history exceeds the accessible Data API window.
+Next: If rating is implemented on the new Data API path, add Data API activity/position/performance materialized tables analogous to the existing on-chain activity, positions, wallet performance, and wallet/category performance tables.
+Notes: Answer/design task only; no application source code changed. Branch `master` still has no configured upstream.
+Blockers: Automatic pull/push cannot run until a Git upstream is configured.
+
+## Active Update 2026-05-03 Data API User Activity Endpoint Evaluation
+Goal: Evaluate using `https://data-api.polymarket.com/activity?user=<wallet>` for per-wallet trader activity sync.
+Status: Completed
+Done:
+- Checked the official Polymarket `GET /activity` docs and compared the contract with `GET /trades`.
+- Confirmed `/activity` requires `user`, supports `type=TRADE`, `start`, `end`, `sortBy=TIMESTAMP`, `sortDirection=DESC`, and has a documented max `limit` of 500.
+- Ran a live diagnostic for a recent wallet discovered from global `/trades`; `/activity` returned 500 `TRADE` rows ordered by non-increasing `timestamp`, with `transactionHash` and `usdcSize` present.
+- Concluded `/activity` is a good candidate for the per-wallet sync path, but it cannot replace global `/trades` discovery because it requires a known wallet.
+Next: If accepted, replace the per-wallet `/trades?user=...` sync portion with `/activity?user=...&type=TRADE&sortBy=TIMESTAMP&sortDirection=DESC`, while keeping global `/trades` as the wallet discovery source.
+Notes: Answer/design task only; no application source code changed. Branch `master` still has no configured upstream.
+Blockers: Automatic pull/push cannot run until a Git upstream is configured.
+
+## Active Update 2026-05-03 Data API Trader Activity Ingestion
+Goal: Implement a read-only Data API `/trades` trader-activity ingestion loop that accepts global source gaps.
+Status: Completed
+Done:
+- Added typed `PolymarketDataApiTrade`/`PolymarketDataApiTrader` models and Data API client methods for global `/trades` plus per-wallet `/trades?user=...`, both supporting a `timestamp` cache-buster.
+- Added separate PostgreSQL tables `polymarket_data_api_traders` and `polymarket_data_api_trades`, with wallet/time/transaction indexes and deterministic trade deduplication.
+- Added `DataApiTraderIngestion` config and a hosted worker/processor: each successful cycle fetches global `limit=1000` with `timestamp`, extracts unique `proxyWallet` traders, full-syncs newly seen wallets through accessible per-wallet offsets up to `MaxUserHistoricalOffset=3000`, fresh-syncs known wallets until the first stored trade, and inserts global page rows afterward as a safety net.
+- Kept this path separate from `leader_trades`, signal generation, paper trading, and live trading.
+- Updated README/configuration reference and added focused parser/client/config/processor tests.
+Next: Restart the service to initialize the new tables and start the `DataApiTraderActivityIngestionWorker`; watch `polymarket_data_api_traders` and `polymarket_data_api_trades` growth and API error rate.
+Notes: Targeted tests `dotnet test tests\PolyCopyTrader.Tests\PolyCopyTrader.Tests.csproj -c Verify --no-restore --filter "DataApiTraderActivityIngestionTests|PolymarketClientTests|ConfigurationTests"` passed 41/41. Full `dotnet test tests\PolyCopyTrader.Tests\PolyCopyTrader.Tests.csproj -c Verify --no-restore` passed 181/181. `dotnet build src\PolyCopyTrader.Service\PolyCopyTrader.Service.csproj -c Verify --no-restore` passed. `dotnet build src\PolyCopyTrader.Dashboard\PolyCopyTrader.Dashboard.csproj -c Verify --no-restore` passed. `dotnet run --project src\PolyCopyTrader.Service\PolyCopyTrader.Service.csproj -c Verify --no-restore -- --print-config` passed and shows Data API trader ingestion enabled, global limit 1000, poll delay 0, max user offset 3000. `git diff --check` passed with LF/CRLF warnings only. Branch `master` still has no configured upstream.
+Blockers: Automatic pull/push cannot run until a Git upstream is configured.
+
+## Active Update 2026-05-03 Data API Trades Snapshot Jump Clarification
+Goal: Confirm observed first-page `/trades` polling behavior with repeated timestamp-busted requests.
+Status: Completed
+Done:
+- Confirmed that repeated global `/trades` calls can return the same 1000-row/500-row page for many requests, then jump to a newer snapshot.
+- Restated previous evidence: exact `limit=1000` URL returned the same page for 24 polls over two minutes; timestamp-busted `limit=500` returned the same snapshot for many calls, then jumped with no overlap.
+- Noted that adding a changing `timestamp` parameter reduces Cloudflare cache-key reuse but did not make the backend publish a continuously updated cursor stream.
+Next: Continue treating `/trades` first-page polling as non-gap-free and use it only for diagnostics/enrichment unless a stronger cursor source is found.
+Notes: Answer/clarification task only; no application source code changed. Branch `master` still has no configured upstream.
+Blockers: Automatic pull/push cannot run until a Git upstream is configured.
+
+## Active Update 2026-05-03 Data API Trades Limit Cap Experiment
+Goal: Check whether global Data API `/trades` can return more than 1000 rows with a larger `limit`, such as 4000.
+Status: Completed
+Done:
+- Ran fresh cache-busted requests to global `/trades` with requested limits `1000`, `1001`, `2000`, and `4000`.
+- Confirmed all four requests succeeded, but every response returned exactly `1000` rows.
+- Confirmed `limit=4000` did not expand the window; it returned the same apparent page range as `limit=1000` in the sampled run, `2026-05-03T19:41:08Z..2026-05-03T19:40:26Z`.
+Next: Treat `1000` as the effective maximum page size for Data API `/trades`.
+Notes: Experiment/answer task only; no application source code changed. Branch `master` still has no configured upstream.
+Blockers: Automatic pull/push cannot run until a Git upstream is configured.
+
+## Active Update 2026-05-03 Data API Trades Offset Ordering Experiment
+Goal: Re-test whether global Data API `/trades` pages fetched through `offset` form one newest-to-oldest timeline.
+Status: Completed
+Done:
+- Ran a fresh cache-busted global `/trades` offset experiment with `limit=1000` and offsets `0,1000,2000,3000`; offset `4000` returned HTTP 400.
+- Confirmed every returned page was internally ordered by non-increasing `timestamp`, with zero internal inversions.
+- Confirmed the concatenated `limit=1000` window was not globally newest-to-oldest: offset `1000` started at `2026-05-03T19:37:58Z`, newer than offset `0`'s last row at `2026-05-03T19:35:34Z`; the 4000-row concatenation had 2 page-boundary time inversions.
+- Repeated with `limit=500` and offsets `0..3000`; offset `3500` returned HTTP 400, pages were internally ordered, but the 3500-row concatenation had 3 page-boundary time inversions.
+Next: Treat `/trades` offset pagination as page-internally newest-first but not as a coherent snapshot/cursor; do not use it for gap-free global ingestion.
+Notes: Experiment/answer task only; no application source code changed. Branch `master` still has no configured upstream.
+Blockers: Automatic pull/push cannot run until a Git upstream is configured.
+
+## Active Update 2026-05-03 OrderFilled Wallet Clarification
+Goal: Clarify whether `OrderFilled` contains trader wallet information.
+Status: Completed
+Done:
+- Clarified that `OrderFilled` does not contain a single Data API-style `proxyWallet`/`trader_wallet` field.
+- Clarified that it does contain on-chain participant addresses: `maker` and `taker`; the current local derived layer expands each decoded fill into maker/taker wallet rows.
+- Noted that maker/taker addresses are useful for wallet activity and leader discovery, but the taker can be the Exchange contract in some multi-order fills, so actual initiating taker identity may require transaction tracing or Data API/CLOB correlation.
+Next: If implementing on-chain real-time activity, use participant rows from decoded fills and keep Data API/profile enrichment as a separate mapping layer.
+Notes: Answer/design task only; no application source code changed. Branch `master` still has no configured upstream.
+Blockers: Automatic pull/push cannot run until a Git upstream is configured.
+
+## Active Update 2026-05-03 OrderFilled Watching Details
+Goal: Explain how the service would watch Polymarket `OrderFilled` logs and what information each event contains.
+Status: Completed
+Done:
+- Rechecked official docs and local on-chain implementation files for the current `OrderFilled` ingestion path.
+- Explained the intended pipeline: scan Polygon `eth_getLogs` per configured Exchange contract and `OrderFilled` topic, store raw logs keyed by `transaction_hash + log_index`, decode fills, enrich token ids to market metadata, and advance a per-contract block cursor after each completed batch.
+- Summarized V1/V2 event shapes currently handled by the local parser: V1 derives maker side from `makerAssetId`/`takerAssetId`; V2 carries explicit side and token id; both provide order hash, maker, taker, amounts, fee, tx hash, block, and log index.
+- Noted important gaps: `OrderFilled` does not contain market title/category/profile names/orderbook state, and production gap-free use should add a confirmation/reorg-safe rescan window on top of the currently paused scanner.
+Next: If implemented, revive the paused on-chain pipeline and add confirmation-lag/reorg handling before using it as the gap-free activity source.
+Notes: Answer/design task only; no application source code changed. Branch `master` still has no configured upstream.
+Blockers: Automatic pull/push cannot run until a Git upstream is configured.
+
+## Active Update 2026-05-03 Blockchain Inclusion Event Clarification
+Goal: Clarify which Polymarket event corresponds to a trade being added to blockchain.
+Status: Completed
+Done:
+- Rechecked official Polymarket docs for public market WebSocket, authenticated user WebSocket trade lifecycle, contracts, and on-chain order info.
+- Clarified that public `last_trade_price` is emitted when maker and taker orders are matched, before it is a replayable on-chain confirmation source.
+- Clarified that authenticated user-channel trade statuses include `MINED` and `CONFIRMED`, but this is filtered to the authenticated user's orders/trades and is not a global activity feed.
+- Identified `OrderFilled` logs emitted by the Polymarket Exchange contracts on Polygon as the relevant global on-chain signal for trade settlement/inclusion scanning.
+Next: Use `OrderFilled` log scanning with block/log cursor if we implement the gap-free activity pipeline.
+Notes: Answer/design task only; no application source code changed. Branch `master` still has no configured upstream.
+Blockers: Automatic pull/push cannot run until a Git upstream is configured.
+
+## Active Update 2026-05-03 Gap-Free Activity Source Ideas
+Goal: Brainstorm reliable ways to collect the latest Polymarket activity without gaps after Data API polling experiments showed page jumps.
+Status: Completed
+Done:
+- Reviewed current official Polymarket docs for market WebSocket, Data API trades, authenticated CLOB trades, contracts, and on-chain `OrderFilled` events.
+- Concluded global Data API `/trades` first-page or offset polling should stay an enrichment/sanity source, not the gap-free activity source, because live experiments showed cache/window jumps with no overlap.
+- Recommended a hybrid design: keep sharded public market WebSockets for low-latency candidate ticks, add an on-chain Polygon log scanner over Polymarket Exchange contracts as the replayable ground truth, and reconcile/join both streams by `transactionHash`, asset/condition, price, size, and time.
+- Listed secondary options: per-market polling only for hot markets, known-wallet polling for already discovered leaders, third-party Polygon log indexers/webhooks, and requesting an official/private cursor-based firehose if available.
+Next: If we choose this direction, revive/replace the paused on-chain background pipeline as a live tail plus backfill scanner with persistent block/log cursor and reorg-safe confirmations.
+Notes: Answer/design task only; no application source code changed. Branch `master` still has no configured upstream.
+Blockers: Automatic pull/push cannot run until a Git upstream is configured.
+
+## Active Update 2026-05-03 No Delay Trades Polling Experiment
+Goal: Test whether removing the 1-second polling delay makes global `/trades?limit=500&timestamp=<unix_ms>` ingestion gap-free.
+Status: Completed
+Done:
+- Ran sequential no-delay polling against `https://data-api.polymarket.com/trades?limit=500&timestamp=<unix_ms>` after an initial 500-hash snapshot.
+- The loop made 339 successful requests in 166.33 seconds with no HTTP errors; average request duration was about 488 ms and max about 1723 ms.
+- The first 338 requests kept returning the same page covering `2026-05-03T18:53:42Z..18:53:20Z`, with first known hash at index 0 and 0 new rows.
+- Request 339 changed to a page covering `2026-05-03T18:58:42Z..18:58:24Z`, but it had no overlap with the known 500 transaction hashes, so the algorithm again hit a no-overlap/gap event and had to add all 500 rows.
+Next: Do not rely on global first-page Data API polling for gap-free trade ingestion even with no artificial delay; the endpoint appears to publish/update snapshots in multi-minute jumps.
+Notes: Experiment/answer task only; no application source code changed except context/history. Branch `master` still has no configured upstream.
+Blockers: Automatic pull/push cannot run until a Git upstream is configured.
+
+## Active Update 2026-05-03 Timestamp Cache Busted Trades Polling Experiment
+Goal: Repeat the first-page global `/trades` polling experiment with `limit=500` and a `timestamp` query parameter to avoid Cloudflare cache key reuse.
+Status: Completed
+Done:
+- Polled `https://data-api.polymarket.com/trades?limit=500&timestamp=<unix_ms>` in memory for 120 iterations at 1-second intervals after an initial 500-hash snapshot.
+- Initial page covered `2026-05-03T18:43:42Z..18:43:30Z` and contained 500 unique transaction hashes.
+- All 120 requests succeeded; average request duration was about 561 ms, max about 3155 ms.
+- Observed one no-overlap transition at iteration 72: the page changed to `2026-05-03T18:48:40Z..18:48:24Z` and contained zero known hashes from the prior in-memory set, so the "stop at first known transactionHash" algorithm had to add all 500 rows and still could not prove gap-free ingestion.
+- Confirmed the `timestamp` parameter produced a Cloudflare MISS on a sampled request, but the endpoint still returned cacheable responses with `Cache-Control: public, max-age=300`.
+Next: Do not rely on global first-page `/trades` polling for gap-free ingestion, even with a timestamp cache buster and `limit=500`.
+Notes: Experiment/answer task only; no application source code changed except context/history. Branch `master` still has no configured upstream.
+Blockers: Automatic pull/push cannot run until a Git upstream is configured.
+
+## Active Update 2026-05-03 Global Trades First Page Polling Experiment
+Goal: Test whether repeatedly polling global `/trades?limit=1000` and adding rows until the first known `transactionHash` can keep up without gaps.
+Status: Completed
+Done:
+- Ran an exact-URL experiment against `https://data-api.polymarket.com/trades?limit=1000`: 24 polls, 5 seconds apart, after an initial in-memory 1000-hash snapshot.
+- Exact URL returned the same first page every time during the 2-minute run: first trade `2026-05-03T18:36:04Z`, last trade `2026-05-03T18:35:20Z`, first known hash at index 0 on every poll, 0 new rows.
+- Ran a control experiment with a cache-buster query parameter: 60 polls, 1 second apart, using the same "add until first known transactionHash" logic.
+- The control saw one response change from the `18:36:04..18:35:20Z` page to an `18:41:06..18:40:20Z` page, but the new page had no overlap with the previous known 1000 hashes, so it produced one no-overlap/gap event and 1000 newly added rows.
+- Confirmed headers again: exact URL had `Cache-Control: public, max-age=300`, `cf-cache-status: HIT`, and `Age`; cache-busted URL had `cf-cache-status: MISS` but still `Cache-Control: public, max-age=300`.
+Next: Do not rely on first-page global `/trades?limit=1000` polling as a gap-free operation feed; use WebSocket/on-chain or a stronger cursor/backfill design.
+Notes: Experiment/answer task only; no application source code changed except context/history. Branch `master` still has no configured upstream.
+Blockers: Automatic pull/push cannot run until a Git upstream is configured.
+
+## Active Update 2026-05-03 Global Data API Trades Ordering Experiment
+Goal: Experimentally check whether global `https://data-api.polymarket.com/trades` returns all-market trades from newest to oldest.
+Status: Completed
+Done:
+- Queried global `/trades` without a `market` filter, confirming it returns trades across markets.
+- Ran an accessible-window pagination experiment with `limit=1000` and offsets `0,1000,2000,3000`; offset `4000` returned HTTP 400 `max historical activity offset of 3000 exceeded`.
+- Confirmed each fetched page was internally ordered by non-increasing `timestamp` (newer to older within the page).
+- Confirmed the paginated global walk is not a reliable newest-to-oldest snapshot: one run had `offset=1000` first timestamp `2026-05-03T18:27:40Z`, newer than the previous `offset=0` page last timestamp `2026-05-03T18:20:24Z`.
+- Confirmed `limit=10000` still returned only 1000 rows in the live experiment.
+- Observed Cloudflare caching headers on normal requests (`Cache-Control: public, max-age=300`, `cf-cache-status: HIT`, `Age` present), so different offset queries can be cached/generated at different times.
+Next: Treat `/trades` as page-internally newest-first but do not rely on offset pagination as a complete ordered global stream; use WebSocket/on-chain/cursor-like storage for reliable ordering.
+Notes: Experiment/answer task only; no application source code changed except context/history. Used PowerShell/curl requests to the public Data API and official docs for parameter reference. Branch `master` still has no configured upstream.
+Blockers: Automatic pull/push cannot run until a Git upstream is configured.
+
+## Active Update 2026-05-03 Disable Trade Tick Wallet Enrichment Queue
+Goal: Remove the active `/trades` wallet-enrichment queue while keeping diagnostic tick recording and market updates.
+Status: Completed
+Done:
+- Simplified `MarketTradeTickDiagnosticService` to only record `last_trade_price` ticks into `polymarket_websocket_trade_ticks`.
+- Removed fresh/retry `Channel` queues, pending PostgreSQL retry scanning, `/trades` calls, and `trader_wallet` updates from the active diagnostic service.
+- Stopped registering `MarketTradeTickDiagnosticService` as a hosted background service; it remains registered only behind `IMarketTradeTickDiagnosticService` for WebSocket hook recording.
+- Kept `MarketTradeTickMatcher` and `MarketTradeTickPagedLookup` in code/tests so the `/trades` lookup logic remains available for the next implementation.
+- Reduced `MarketTradeDiagnostics` config to `Enabled`, `MarketTradesLimit`, and `MatchTimestampToleranceSeconds`; updated service appsettings, validation, sanitized config output, README, configuration reference, and tests.
+Next: Restart the service so new ticks are recorded without any wallet-enrichment queue; expect new diagnostic rows to keep `trader_wallet` null and `match_attempts=0`.
+Notes: Targeted `dotnet test tests\PolyCopyTrader.Tests\PolyCopyTrader.Tests.csproj -c Verify --no-restore --filter "ConfigurationTests|MarketTradeTickMatcherTests"` passed 19/19. Full `dotnet test tests\PolyCopyTrader.Tests\PolyCopyTrader.Tests.csproj -c Verify --no-restore` passed 176/176. `dotnet build src\PolyCopyTrader.Service\PolyCopyTrader.Service.csproj -c Verify --no-restore` passed. `dotnet run --project src\PolyCopyTrader.Service\PolyCopyTrader.Service.csproj -c Verify --no-restore -- --print-config` passed and no longer prints trade enrichment concurrency settings. `dotnet build src\PolyCopyTrader.Dashboard\PolyCopyTrader.Dashboard.csproj -c Verify --no-restore` passed. `git diff --check` passed with LF/CRLF warnings only. The running user-started service was not stopped or restarted. Branch `master` still has no configured upstream.
+Blockers: Automatic pull/push cannot run until a Git upstream is configured.
+
+## Active Update 2026-05-03 Fire And Forget Tick Enrichment Design Answer
+Goal: Explain whether every WebSocket trade tick should start an unawaited wallet-enrichment task instead of using queues.
+Status: Completed
+Done:
+- Re-read workflow, project rules, coding rules, active context, Git state, and the current `MarketTradeTickDiagnosticService`.
+- Explained that raw unbounded fire-and-forget `Task.Run` per tick is technically possible but is a poor default for a 24/7 service because it removes backpressure, can create unbounded HTTP/database concurrency, makes cancellation/shutdown unreliable, hides exceptions unless carefully observed, and can flood Polymarket/Data API during bursts.
+- Recommended keeping the current bounded worker/queue model, or if lower latency is needed, using a bounded task scheduler/semaphore pattern that still tracks tasks and caps concurrency.
+Next: If desired, tune fresh `EnrichmentConcurrency` upward or implement a bounded per-tick task launcher with `SemaphoreSlim` and tracked completion metrics, not raw unawaited tasks.
+Notes: Answer/design task only; no source code changed except context/history. Branch `master` still has no configured upstream.
+Blockers: Automatic pull/push cannot run until a Git upstream is configured.
+
+## Active Update 2026-05-03 Split Trade Tick Enrichment Queues
+Goal: Split fresh WebSocket trade tick enrichment from delayed retry/backlog enrichment.
+Status: Completed
+Done:
+- Replaced the single `MarketTradeTickDiagnosticService` enrichment channel with separate bounded fresh and retry channels.
+- `RecordAsync` now enqueues newly inserted `last_trade_price` ticks only to the fresh queue before returning to the WebSocket path.
+- PostgreSQL pending retry scans now enqueue stored `NotFound` ticks only to the retry queue, using the same in-memory deduplication key set to avoid duplicate concurrent enrichment.
+- Added `MarketTradeDiagnostics.RetryQueueCapacity` default `10000` and `RetryEnrichmentConcurrency` default `1`; existing `EnrichmentConcurrency` remains the fresh tick worker count and defaults to `3`.
+- Updated service appsettings, config validation, sanitized config output, README, configuration reference, and configuration tests.
+Next: Restart the running service so the fresh/retry queue split takes effect, then watch `polymarket_websocket_trade_ticks` for new rows reaching `match_attempts > 0` without waiting behind old retry scans.
+Notes: Targeted `dotnet test tests\PolyCopyTrader.Tests\PolyCopyTrader.Tests.csproj -c Verify --no-restore --filter "ConfigurationTests|MarketTradeTickMatcherTests"` passed 19/19. Full `dotnet test tests\PolyCopyTrader.Tests\PolyCopyTrader.Tests.csproj -c Verify --no-restore` passed 176/176. `dotnet build src\PolyCopyTrader.Service\PolyCopyTrader.Service.csproj -c Verify --no-restore` passed. `dotnet run --project src\PolyCopyTrader.Service\PolyCopyTrader.Service.csproj -c Verify --no-restore -- --print-config` passed and showed fresh concurrency 3 / retry concurrency 1. `dotnet build src\PolyCopyTrader.Dashboard\PolyCopyTrader.Dashboard.csproj -c Verify --no-restore` passed. `git diff --check` passed with LF/CRLF warnings only. The running user-started service was not stopped or restarted. Branch `master` still has no configured upstream.
+Blockers: Automatic pull/push cannot run until a Git upstream is configured.
+
+## Active Update 2026-05-03 Trade Tick Enrichment Backlog Diagnosis
+Goal: Diagnose why `public.polymarket_websocket_trade_ticks` has rows that appear to have only one or no trader lookup pass for a long time.
+Status: Completed
+Done:
+- Queried PostgreSQL through the temporary .NET/Npgsql diagnostic probe without printing secrets.
+- Confirmed WebSocket sharding is now producing ticks: table had 866 rows from `2026-05-03 12:51:34 UTC` to `2026-05-03 14:11:52 UTC`, with 510 matched by transaction hash and 356 still `NotFound`.
+- Confirmed market WebSocket status is healthy overall: aggregate `PolymarketMarketWebSocket` is `Connected`, subscribed assets count is about `91,228`, and shard rows `001..031` are mostly `Connected`.
+- Confirmed there was only 1 current `NotFound` row with `match_attempts=1`; it was not due for retry yet because `last_match_attempt_utc=2026-05-03 14:11:51 UTC` and pending retry delay is 30 seconds.
+- Confirmed the larger visible backlog is actually rows with `match_attempts=0`: 205 rows had been inserted but had not yet reached the enrichment workers.
+- Confirmed the pending retry SQL would select those rows (`match_attempts < 100`, condition id present, due), so they are not excluded by the repository filter.
+- Identified the practical bottleneck: `MarketTradeDiagnostics.EnrichmentConcurrency=3`, while each fresh tick can spend up to 4 initial attempts, each attempt can scan multiple `/trades` pages up to the 3000-offset limit, and retries have 1-second delays; incoming WebSocket ticks are now faster than this lookup path.
+- Recent API errors are dominated by expected Data API `max historical activity offset of 3000 exceeded` responses during deep paged lookup.
+Next: Split fresh tick enrichment from delayed retry/backlog processing and tune lookup throughput, or increase `MarketTradeDiagnostics.EnrichmentConcurrency` carefully while watching Data API 400/429/5xx pressure.
+Notes: Diagnostic/answer task only; no repo source code changed. Branch `master` still has no configured upstream.
+Blockers: Automatic pull/push cannot run until a Git upstream is configured.
+
+## Active Update 2026-05-03 Stable WebSocket Shard Allocation Fix
+Goal: Diagnose why trade tick count still did not increase after starting sharded WebSocket code and fix the shard churn.
+Status: Completed
+Done:
+- Confirmed the running Debug service process PID `67860` was built from the new sharded code and IPC `/health`/`/status` reported `Running`.
+- Inspected recent logs and found the actual blocker: during the primary Gamma full scan, every newly fetched page added assets and the stateless shard planner repacked all shards, causing repeated `Restarting market WebSocket shard ... after asset plan change` loops.
+- Added `MarketDataWebSocketShardAllocator`, a stateful stable allocator that keeps existing asset-to-shard assignments, keeps all outcomes for a market/condition together, fills existing shards up to `ShardMaxAssets`, and starts new shards only when needed.
+- Updated `MarketDataWebSocketService` to use the stable allocator instead of stateless repacking.
+- Updated `MarketDataWebSocketShardRunner` so existing open shard connections can dynamically send subscribe/unsubscribe updates without reconnecting.
+- Updated README and configuration reference to document stable shard assignment and dynamic subscribe behavior.
+- Added tests proving existing assets stay on the same shard when later Gamma pages arrive and new shards start without moving a full existing shard.
+Next: Restart the currently running Debug service so it uses this second fix, then inspect logs for the absence of repeated `after asset plan change` restarts and check whether `polymarket_websocket_trade_ticks` starts growing.
+Notes: Targeted `dotnet test tests\PolyCopyTrader.Tests\PolyCopyTrader.Tests.csproj -c Verify --no-restore --filter "ConfigurationTests|MarketDataWebSocketShardPlannerTests"` passed 16/16. Full `dotnet test tests\PolyCopyTrader.Tests\PolyCopyTrader.Tests.csproj -c Verify --no-restore` passed 176/176. `dotnet build src\PolyCopyTrader.Service\PolyCopyTrader.Service.csproj -c Verify --no-restore` passed. `dotnet run --project src\PolyCopyTrader.Service\PolyCopyTrader.Service.csproj -c Verify --no-restore -- --print-config` passed. `dotnet build src\PolyCopyTrader.Dashboard\PolyCopyTrader.Dashboard.csproj -c Verify --no-restore` passed. `git diff --check` passed with LF/CRLF warnings only. The running user-started Debug service was not stopped or restarted. Branch `master` still has no configured upstream.
+Blockers: Automatic pull/push cannot run until a Git upstream is configured.
+
+## Active Update 2026-05-03 Sharded Market WebSocket Supervisor
+Goal: Replace the single all-active market WebSocket connection with bounded sharded connections and watchdog restarts.
+Status: Completed
+Done:
+- Refactored `MarketDataWebSocketService` into a supervisor that reconciles desired asset subscriptions, starts/stops shard runners, publishes aggregate `market_data_status`, and dispatches parsed updates through the existing cache, diagnostic tick, persistence, and paper-trading paths.
+- Added `MarketDataWebSocketShardRunner` for per-shard `ClientWebSocket` connect/subscribe/heartbeat/receive/reconnect loops; failed heartbeat/send/receive reconnects only that shard.
+- Added watchdog restart logic: still-open shards with no received protocol frame past `MarketDataWebSocket:WatchdogStaleSeconds` are aborted and reopened by the supervisor.
+- Added `MarketDataWebSocketShardPlanner` to group all outcomes for one market/condition on the same shard and pack groups by `ShardMaxAssets`, with `MaxShardConnections` as a soft cap.
+- Added shard config defaults in service config: `ShardMaxAssets=3000`, `MaxShardConnections=64`, `WatchdogIntervalSeconds=10`, `WatchdogStaleSeconds=90`.
+- Updated sanitized config summary, validation, README, and `docs/configuration_reference.md`.
+- Added planner/config tests covering market outcome grouping, soft max-shard packing, pinned/singleton assets, and invalid shard settings.
+Next: Restart the service when ready and inspect `market_data_status` for aggregate `PolymarketMarketWebSocket` plus `PolymarketMarketWebSocket:shard-###` rows; then check whether `polymarket_websocket_trade_ticks` starts growing again.
+Notes: Targeted `dotnet test tests\PolyCopyTrader.Tests\PolyCopyTrader.Tests.csproj -c Verify --no-restore --filter "ConfigurationTests|MarketDataWebSocketShardPlannerTests"` passed 14/14. Full `dotnet test tests\PolyCopyTrader.Tests\PolyCopyTrader.Tests.csproj -c Verify --no-restore` passed 174/174. `dotnet build src\PolyCopyTrader.Service\PolyCopyTrader.Service.csproj -c Verify --no-restore` passed after a transient parallel-build `VBCSCompiler` file lock. `dotnet run --project src\PolyCopyTrader.Service\PolyCopyTrader.Service.csproj -c Verify --no-restore -- --print-config` passed and showed shard settings. `dotnet build src\PolyCopyTrader.Dashboard\PolyCopyTrader.Dashboard.csproj -c Verify --no-restore` passed. `git diff --check` passed with LF/CRLF warnings only. The currently running Debug service was not stopped or restarted. Branch `master` still has no configured upstream.
+Blockers: Automatic pull/push cannot run until a Git upstream is configured.
+
+## Active Update 2026-05-03 WebSocket Sharding Design Answer
+Goal: Explain whether all-active market WebSocket coverage should use one socket per market and a watchdog loop.
+Status: Completed
+Done:
+- Confirmed that one WebSocket per active market is technically possible in .NET but not a practical default for the full active universe because it would mean tens of thousands of TLS/WebSocket connections for about 91k asset ids.
+- Recommended bounded WebSocket sharding instead: group market asset ids into configurable shard connections, keep all outcomes for one market/condition on the same shard, and tune shard size around a few thousand asset ids.
+- Recommended a supervisor/watchdog task that maintains shard runners, tracks per-shard state, last receive/heartbeat/connect/error/reconnect count, and cancels/reopens only unhealthy shards.
+- Noted that per-market dedicated sockets can still be useful for a small set of priority markets, tracked positions, or strong-signal markets, but not for all active markets.
+Next: If approved, implement `MarketDataWebSocket` sharding/supervisor with configurable `ShardMaxAssets`, `MaxShardConnections`, watchdog interval, stale threshold, and per-shard status persistence.
+Notes: Answer/design task only; no source code changed. Inspected current `MarketDataWebSocketService`, active subscription registry, configuration options, appsettings, Git state, and project workflow files. Branch `master` still has no configured upstream.
+Blockers: Automatic pull/push cannot run until a Git upstream is configured.
+
+## Active Update 2026-05-03 Trade Tick Stalled Row Count
+Goal: Diagnose why `public.polymarket_websocket_trade_ticks` stayed at 70 rows for a long time.
+Status: Completed
+Done:
+- Confirmed the diagnostic table is not growing: it has 70 rows, first tick at `2026-05-03 12:51:34 UTC`, last tick at `2026-05-03 12:52:04 UTC`, and latest enrichment update at `2026-05-03 13:00:31 UTC`.
+- Confirmed all 70 current rows are matched by transaction hash (`trader_match_status=2`), so the stall is not caused by wallet lookup or enrichment failures.
+- Confirmed the service process is running and Gamma market ingestion continues, but `market_data_status` shows `PolymarketMarketWebSocket` is `Reconnecting`, `stale=true`, with about `91,084` subscribed assets and `reconnect_count=24`.
+- Confirmed service logs repeatedly show `Market WebSocket connection failed` with `The remote party closed the WebSocket connection without completing the close handshake`.
+- Concluded that one all-active WebSocket connection with about 91k asset ids is unstable; `polymarket_websocket_trade_ticks` only grows when `last_trade_price` messages are actually received.
+Next: Implement WebSocket connection sharding for all-active market coverage, or temporarily cap `MarketDataWebSocket:MaxSubscribedAssets` for partial diagnostic sampling.
+Notes: Diagnostic/answer task only; no source code changed. Verification used PostgreSQL status/table queries, IPC health/status, and service log inspection. Branch `master` still has no configured upstream.
+Blockers: Stable all-active market WebSocket coverage needs sharding across multiple connections. Automatic pull/push cannot run until a Git upstream is configured.
+
+## Active Update 2026-05-03 Match Attempts Explanation
+Goal: Explain why `polymarket_websocket_trade_ticks.match_attempts` starts at 1 for some rows and later grows.
+Status: Completed
+Done:
+- Queried the current diagnostic table: it now has 70 rows, all with `transaction_hash`, all matched to wallets (`trader_match_status=2`), and `match_attempts` distribution `1,5,8,9,12,17`.
+- Clarified that `match_attempts` counts enrichment retry attempts, not Data API pages scanned. Page count is recorded in `match_details` as `pages_scanned`.
+- Clarified that rows with `match_attempts=1` were found on the first enrichment attempt; rows with larger values missed earlier attempts and were found later by delayed retry after Data API indexing/ordering made the transaction visible.
+- Noted the service is currently running again as PID `56836`; this is a different process from the Codex-started PID `65832` that was previously stopped.
+Next: If more precise diagnostics are needed, add separate columns for `pages_scanned`, `last_matched_offset`, and terminal lookup reason instead of encoding them only in `match_details`.
+Notes: Answer-only task; no source changes or tests. Branch `master` still has no configured upstream.
+Blockers: Automatic pull/push cannot run until a Git upstream is configured.
+
+## Active Update 2026-05-03 Stop Debug Service
+Goal: Stop the Debug service process started by Codex.
+Status: Completed
+Done:
+- Stopped `PolyCopyTrader.Service.exe` PID `65832`.
+- Verified no remaining `PolyCopyTrader.Service` process is running.
+- Verified IPC `/health` no longer responds.
+Next: None
+Notes: No source code changes or tests. Branch `master` still has no configured upstream.
+Blockers: Automatic pull/push cannot run until a Git upstream is configured.
+
+## Active Update 2026-05-03 Change Application Confirmation
+Goal: Confirm whether the requested WebSocket tick enrichment changes are in place.
+Status: Completed
+Done:
+- Confirmed code changes are present: `RecordAsync` inserts the tick immediately and enrichment calls `MarketTradeTickPagedLookup.MatchAsync`.
+- Confirmed paged lookup scans Data API market trades by `offset += pageSize` and records `history_offset_limit_reached` / `empty_page` terminal details.
+- Confirmed the Debug service is running with the latest build as PID `65832` and IPC `/health` returns `Running`.
+- Restated that previous verification passed: targeted tests 19/19, full tests 171/171, service `--print-config`, Dashboard build, Debug service build/restart, and `git diff --check` with LF/CRLF warnings only.
+Next: None
+Notes: Answer-only confirmation; no source changes or tests in this prompt. Branch `master` still has no configured upstream, so changes are local/uncommitted.
+Blockers: Automatic pull/push cannot run until a Git upstream is configured.
+
+## Active Update 2026-05-03 Synchronous WebSocket Processing Risk
+Goal: Explain the risks of doing paged Data API lookup directly in the WebSocket receive path.
+Status: Completed
+Done:
+- Clarified that synchronous receive-path processing is technically possible but risks head-of-line blocking, socket buffer buildup, stale heartbeats, reconnects, and lost/delayed market updates when one tick performs multi-page HTTP lookup.
+- Clarified that the slow observed diagnostic-table growth is not a sufficient safety signal because only `last_trade_price` is persisted, generic market-data events are disabled, current all-active WebSocket coverage is unstable on one connection, and market activity can burst.
+- Recommended keeping WebSocket receive work minimal while making the decision pipeline synchronous with respect to wallet lookup if required: receive/record tick immediately, then process ordered enrichment/decision before acting.
+Next: If the user explicitly accepts the receive-path risks, implement a synchronous receive-path enrichment mode behind config.
+Notes: Answer-only task; no source changes or tests. Branch `master` still has no configured upstream.
+Blockers: Automatic pull/push cannot run until a Git upstream is configured.
+
+## Active Update 2026-05-03 Paged Trade Tick Lookup
+Goal: Scan all available Data API market-trades pages when enriching `last_trade_price` ticks by transaction hash.
+Status: Completed
+Done:
+- Added `MarketTradeTickPagedLookup` so enrichment scans `/trades?market=...` with `offset=0`, then `offset += MarketTradeDiagnostics.MarketTradesLimit` until the transaction hash is found, an empty page is returned, or Data API reports its historical offset limit.
+- Kept the heavy HTTP pagination out of the WebSocket receive path: ticks are still recorded immediately, then the enrichment queue performs paged lookup.
+- Updated diagnostics to use `MarketTradesLimit=1000` as both page size and offset step.
+- Increased `MarketTradeDiagnostics.MaxMatchAttempts` default/service setting to `100` so already-stored rows at 30 attempts can be retried with the new paged lookup.
+- Updated docs/tests for paged lookup and history-limit handling.
+- Restarted the Debug service; current PID is `65832`.
+- Live diagnostic result after paged retries: matched wallets improved from 90/132 to 118/132. The remaining 14 show `transaction_hash_not_found;composite_not_found;history_offset_limit_reached:4000;pages_scanned:4`.
+Next: Implement WebSocket connection sharding for stable fresh all-active tick intake, then decide whether remaining history-limit misses need an additional source beyond public Data API `/trades`.
+Notes: `dotnet test tests\PolyCopyTrader.Tests\PolyCopyTrader.Tests.csproj -c Verify --no-restore --filter "MarketTradeTickMatcherTests|ConfigurationTests"` passed 19/19. Full `dotnet test tests\PolyCopyTrader.Tests\PolyCopyTrader.Tests.csproj -c Verify --no-restore` passed 171/171. `dotnet run --project src\PolyCopyTrader.Service\PolyCopyTrader.Service.csproj -c Verify --no-restore -- --print-config` passed. `dotnet build src\PolyCopyTrader.Dashboard\PolyCopyTrader.Dashboard.csproj -c Verify --no-restore` passed. `dotnet build src\PolyCopyTrader.Service\PolyCopyTrader.Service.csproj -c Debug --no-restore` passed before restart. `git diff --check` passed with LF/CRLF warnings only. Branch `master` still has no configured upstream.
+Blockers: Full all-active WebSocket coverage still needs multiple WebSocket connections; one connection is not stable with ~91k asset ids. Automatic pull/push cannot run until a Git upstream is configured.
+
+## Active Update 2026-05-03 Offset Pagination Clarification
+Goal: Clarify whether increasing Data API `/trades` offset can retrieve every market trader.
+Status: Completed
+Done:
+- Explained that offset pagination can retrieve more market-trade rows and should help diagnostics, but it is not a reliable guarantee of all historical traders for real-time matching.
+- Noted the documented Data API parameters include `limit` and `offset`, while live checks showed practical offset/history limits can still apply.
+- Clarified that paging many offsets per WebSocket tick would add latency, request load, and rate-limit risk, so it should be a bounded delayed diagnostic/enrichment path rather than the synchronous tick reaction path.
+Next: If accepted, add bounded paged lookup for unresolved ticks in the delayed retry worker.
+Notes: Answer-only task; no source changes or tests. Branch `master` still has no configured upstream.
+Blockers: Automatic pull/push cannot run until a Git upstream is configured.
+
+## Active Update 2026-05-03 Market Trades Window Clarification
+Goal: Explain what was meant by the accessible Data API market-trades window.
+Status: Completed
+Done:
+- Clarified that "accessible window" means the finite slice of recent rows Data API `/trades?market=...&limit=...&offset=...` lets us retrieve for a market, not a database or WebSocket time window.
+- Clarified that the docs expose `limit`, `offset`, `market`, `user`, and `side` filters and return `transactionHash`, but do not expose a direct request filter by `transactionHash`.
+- Clarified that high-volume markets can push a WebSocket tx outside the retrievable recent market-trades slice before delayed lookup sees it, which leaves `transaction_hash_not_found;composite_not_found`.
+Next: None
+Notes: Answer-only task; no source changes or tests. Branch `master` still has no configured upstream.
+Blockers: Automatic pull/push cannot run until a Git upstream is configured.
+
+## Active Update 2026-05-03 Trade Tick Wallet Match Retries
+Goal: Diagnose and reduce `NotFound` wallets in `polymarket_websocket_trade_ticks`.
+Status: Completed
+Done:
+- Confirmed the issue was not missing hashes: all 132 diagnostic ticks had `transaction_hash`.
+- Confirmed two practical causes: Data API often did not expose the WebSocket transaction inside the first 100-market-trade lookup during the immediate four-attempt window, and some multi-row transactions needed looser matching because Data API prices can differ from WebSocket last-trade prices.
+- Increased `MarketTradeDiagnostics.MarketTradesLimit` default/service setting from `100` to `1000`, increased total `MaxMatchAttempts` from `4` to `30`, and added delayed PostgreSQL-backed retries for stored `NotFound` ticks with scan/delay/batch config.
+- Added pending tick repository support and in-memory enqueue deduplication so old `NotFound` rows are retried without relying only on the original in-memory queue.
+- Relaxed diagnostic price tolerance to `0.000001` and added a transaction-hash fallback that can identify a wallet by unique `asset + side + size + timestamp` when exact tx rows have Data API price drift.
+- Restarted the Debug service; current PID is `46232`.
+- After delayed retries, the current table improved from 23/132 matched wallets to 90/132 matched wallets. The remaining 42 are still `transaction_hash_not_found;composite_not_found`, mostly because the Data API market-trade query no longer returns those older high-volume tx rows within its accessible recent window.
+Next: Implement WebSocket connection sharding for stable fresh all-active tick intake; consider adding a direct CLOB/user/trade-event lookup path if Data API market-trade history windows remain insufficient.
+Notes: `dotnet test tests\PolyCopyTrader.Tests\PolyCopyTrader.Tests.csproj -c Verify --no-restore --filter "ConfigurationTests|MarketTradeTickMatcherTests|StorageTests"` passed 26/26. `dotnet test tests\PolyCopyTrader.Tests\PolyCopyTrader.Tests.csproj -c Verify --no-restore` passed 169/169. `dotnet run --project src\PolyCopyTrader.Service\PolyCopyTrader.Service.csproj -c Verify --no-restore -- --print-config` passed. `dotnet build src\PolyCopyTrader.Dashboard\PolyCopyTrader.Dashboard.csproj -c Verify --no-restore` passed. `dotnet build src\PolyCopyTrader.Service\PolyCopyTrader.Service.csproj -c Debug --no-restore` passed before service restarts. `git diff --check` passed with LF/CRLF warnings only. Official Data API docs list market/user/side filters and transactionHash in the response, but no transaction-hash request filter. Branch `master` still has no configured upstream.
+Blockers: Full all-active WebSocket coverage still needs multiple WebSocket connections; one connection is not stable with ~91k asset ids. Automatic pull/push cannot run until a Git upstream is configured.
+
+## Active Update 2026-05-03 Price Change Ordering Answer
+Goal: Clarify whether `price_change` is guaranteed to arrive before `last_trade_price`.
+Status: Completed
+Done:
+- Checked local parser behavior and official Polymarket market WebSocket docs.
+- Clarified that `price_change` is an orderbook price-level/top-of-book update and `last_trade_price` is a trade execution event.
+- Clarified that no documented ordering guarantee says `price_change` always arrives before `last_trade_price`; the service must treat them as independent near-real-time messages.
+- Recommended not relying on receive order for decisions; use event timestamps, transaction hash, and freshness checks for cached bid/ask/orderbook.
+Next: If needed, add lightweight ordering diagnostics around `last_trade_price` without re-enabling generic `market_data_events` persistence.
+Notes: Answer-only task; no source changes or tests. Consulted official Polymarket market WebSocket documentation. Branch `master` still has no configured upstream.
+Blockers: Automatic pull/push cannot run until a Git upstream is configured.
+
+## Active Update 2026-05-03 Processed Event Types Detail
+Goal: Clarify exactly which Polymarket market WebSocket `event_type` values are processed and how.
+Status: Completed
+Done:
+- Confirmed parser handles `book`, `price_change`, `last_trade_price`, `best_bid_ask`, `tick_size_change`, and `market_resolved`.
+- Confirmed unknown `event_type` values are parsed as `MarketDataEventType.Unknown`.
+- Clarified that `book`, `price_change`, `best_bid_ask`, and `last_trade_price` update in-memory caches; `market_resolved` removes the asset from the active registry; `tick_size_change` is parsed but not yet used for decision-cache mutation.
+- Clarified that only `last_trade_price` is persisted into `polymarket_websocket_trade_ticks` by default.
+Next: None
+Notes: Answer-only task; no source changes or tests. Branch `master` still has no configured upstream.
+Blockers: Automatic pull/push cannot run until a Git upstream is configured.
+
+## Active Update 2026-05-03 WebSocket Subscription Reminder
+Goal: Remind which market WebSocket assets and event types the service currently subscribes to/processes.
+Status: Completed
+Done:
+- Confirmed subscriptions are to Polymarket market WebSocket asset ids (`assets_ids`), not to Data API events or trader/user WebSocket channels.
+- Confirmed desired asset ids currently include all active Gamma market `clobTokenIds`, plus pinned assets, open paper/live orders, paper positions, and recent accepted/high-score signal assets.
+- Confirmed the parser handles `book`, `price_change`, `last_trade_price`, `best_bid_ask`, `tick_size_change`, `market_resolved`, and preserves unknown events as `Unknown`.
+- Confirmed diagnostic persistence is only for `last_trade_price` ticks in `polymarket_websocket_trade_ticks`; generic `market_data_events` and `order_book_snapshots` are disabled by default after the load mitigation.
+Next: None
+Notes: Answer-only task; no source changes or tests. Branch `master` still has no configured upstream.
+Blockers: Automatic pull/push cannot run until a Git upstream is configured.
+
+## Active Update 2026-05-03 Live Diagnostic Check
+Goal: Check the running diagnostic WebSocket ingestion and reduce immediate PostgreSQL pressure from all-active market data.
+Status: Completed
+Done:
+- Confirmed the service process started and IPC `/health` / `/status` returned `Running`.
+- Queried PostgreSQL through a temporary .NET/Npgsql probe without printing secrets; confirmed `polymarket_websocket_trade_ticks` exists and is receiving rows.
+- Observed 131 diagnostic trade ticks by 2026-05-03T10:42:47Z; all 131 had `transaction_hash`, 23 had a trader wallet found by transaction hash, and 108 were still `NotFound`.
+- Observed the old generic WebSocket persistence path was the main immediate database load: before mitigation, `market_data_events` had tens of thousands of `PriceChange` rows in minutes.
+- Added all-active WebSocket load controls: subscription batching, disabled generic `market_data_events` and `order_book_snapshots` persistence by default, and throttled unchanged `market_data_status` writes. Diagnostic trade ticks remain enabled.
+- Restarted the Debug service with the new code as PID 14524. After restart, generic `market_data_events` stopped growing, while diagnostic ticks continued briefly.
+- Found a remaining WebSocket stability blocker: a single Polymarket market WebSocket connection becomes unstable around the full ~91k asset subscription set and the remote side closes the connection. This needs sharded WebSocket connections or an intentional temporary cap.
+Next: Implement WebSocket connection sharding for all-active-market coverage, or temporarily cap `MarketDataWebSocket:MaxSubscribedAssets` for partial diagnostic sampling.
+Notes: `dotnet test tests\PolyCopyTrader.Tests\PolyCopyTrader.Tests.csproj -c Verify --no-restore --filter "ConfigurationTests|MarketDataWebSocketParserTests|MarketTradeTickMatcherTests"` passed 20/20. Full `dotnet test tests\PolyCopyTrader.Tests\PolyCopyTrader.Tests.csproj -c Verify --no-restore` passed 167/167. `dotnet run --project src\PolyCopyTrader.Service\PolyCopyTrader.Service.csproj -c Verify --no-restore -- --print-config` passed and showed generic WebSocket persistence disabled. `dotnet build src\PolyCopyTrader.Dashboard\PolyCopyTrader.Dashboard.csproj -c Verify --no-restore` passed. `dotnet build src\PolyCopyTrader.Service\PolyCopyTrader.Service.csproj -c Debug --no-restore` initially failed because the running service locked Debug DLLs, then passed after stopping PID 13176. `git diff --check` passed with LF/CRLF warnings only. Branch `master` still has no configured upstream.
+Blockers: Full all-active WebSocket coverage needs multiple WebSocket connections; one connection is not stable with ~91k asset ids. Automatic pull/push cannot run until a Git upstream is configured.
+
+## Active Update 2026-05-03 WebSocket Trade Tick Diagnostics
+Goal: Run market WebSocket trade ticks in diagnostic mode and measure trader-identification feasibility.
+Status: Completed
+Done:
+- Added `polymarket_websocket_trade_ticks` with raw tick JSON, asset/condition ids, side, price, size, trade timestamp, transaction hash presence, trader match status, wallet, match attempt metadata, and deduplication by tick key.
+- Extended WebSocket parsing so `last_trade_price` carries `transaction_hash` and raw JSON through `MarketDataUpdate`.
+- Added `MarketTradeDiagnostics` config and a hosted diagnostic service that writes each `last_trade_price` tick immediately, then enriches in the background from Data API market trades with bounded concurrency and retries.
+- Implemented trader match statuses: `1` not found, `2` found by transaction hash, `3` found by composite asset/side/price/size/timestamp fields.
+- Added Data API `GetMarketTradesAsync`, repository methods, PostgreSQL storage, no-op/test repository support, docs, and tests for parser, client, schema, config, matcher, and diagnostic insert behavior.
+Next: Run the service against PostgreSQL and inspect `polymarket_websocket_trade_ticks` growth rate plus `transaction_hash_present` / `trader_match_status` distribution.
+Notes: `dotnet test tests\PolyCopyTrader.Tests\PolyCopyTrader.Tests.csproj -c Verify --no-restore --filter "MarketTradeTickMatcherTests|MarketDataWebSocketParserTests|PolymarketClientTests|StorageTests|ConfigurationTests"` passed 55/55. Full `dotnet test tests\PolyCopyTrader.Tests\PolyCopyTrader.Tests.csproj -c Verify --no-restore` passed 167/167. `dotnet run --project src\PolyCopyTrader.Service\PolyCopyTrader.Service.csproj -c Verify --no-restore -- --print-config` passed and showed market trade diagnostics enabled. `dotnet build src\PolyCopyTrader.Dashboard\PolyCopyTrader.Dashboard.csproj -c Verify --no-restore` passed. `git diff --check` passed with LF/CRLF warnings only. Existing unrelated dirty files were not reverted. Branch `master` still has no configured upstream.
+Blockers: Automatic pull/push cannot run until a Git upstream is configured.
+
+## Active Update 2026-05-03 Tick Reaction Clarification
+Goal: Clarify whether WebSocket trade processing can react to every tick without artificial delay.
+Status: Completed
+Done:
+- Clarified that the service can and should react to every WebSocket tick locally: update caches, persist/dedupe the tick, and enqueue wallet enrichment immediately.
+- Clarified that the risky part is not per-tick reaction but synchronous per-tick external Data API lookup inside the WebSocket receive path, because wallet is absent from the public market WebSocket payload.
+- Recommended an immediate enrichment queue with deduplication, bounded concurrency, and no fixed batching delay for the first lookup; retry/backoff only when Data API has not indexed the trade yet or returns transient errors.
+- No application code changed for this clarification.
+Next: If accepted, implement a zero-delay pending trade enrichment worker with bounded concurrency and retry-on-miss/error.
+Notes: Answer-only task; no tests were run. Branch `master` still has no configured upstream.
+Blockers: Automatic pull/push cannot run until a Git upstream is configured.
+
+## Active Update 2026-05-03 WebSocket Trade Wallet Proposal
+Goal: Propose how to obtain trader wallets when processing public market WebSocket trade events.
+Status: Completed
+Done:
+- Checked current project context and official Polymarket docs for market WebSocket and Data API trades.
+- Confirmed public market WebSocket `last_trade_price` gives trade execution fields such as asset id, market, price, size, side, timestamp, and `transaction_hash`, but not `proxyWallet`.
+- Confirmed public Data API `/trades` returns `proxyWallet`, `conditionId`, `asset`, side, size, price, timestamp, and `transactionHash`, and can filter by market/user/side with `takerOnly=false`.
+- Proposed a hybrid design: use WebSocket as a low-latency trigger, queue unresolved trade ticks, enrich them from Data API latest market trades, match by transaction hash first and composite fields second, then optionally verify high-value matches on-chain later.
+Next: If accepted, design new API-first trade-event tables and an enrichment worker without re-enabling the old broad on-chain pipeline.
+Notes: Proposal-only task; no application source code changed and no tests were run. Branch `master` still has no configured upstream.
+Blockers: Automatic pull/push cannot run until a Git upstream is configured.
+
+## Active Update 2026-05-03 Active Market Decision Cache
+Goal: Keep the active Gamma market in-memory hash current and store compact decision-relevant market data in it.
+Status: Completed
+Done:
+- Extended Gamma active-market parsing and storage with `lastTradePrice`, `orderMinSize`, and `orderPriceMinTickSize`.
+- Replaced the active WebSocket subscription registry internals with an `assetId -> ActiveMarketAssetSnapshot` dictionary containing compact decision fields: market ids/slugs/question, event/category context, outcome mapping, active/closed/archived/restricted/order-book flags, liquidity/volume, best bid/ask, spread, last trade price, order minimum size, price tick size, and timestamps.
+- Kept the "before DB" ordering: each Gamma page updates the in-memory decision snapshot cache before PostgreSQL upserts.
+- Added full-scan pruning: after Gamma returns the empty page, assets missing from the latest `active=true&closed=false` full result are removed from the registry and unsubscribed.
+- Wired WebSocket market-data updates into the registry so `book`, `price_change`, `best_bid_ask`, and `last_trade_price` update cached pricing on the fly, while `market_resolved` removes resolved assets from the active registry.
+- Updated README/config docs and tests for decision snapshots, full-scan removal, WebSocket price updates, market-resolved asset expansion, and new Gamma fields.
+Next: Use `ActiveMarketAssetSnapshot` as the market-context input when the new API-first signal/decision layer is introduced.
+Notes: `git rev-parse --abbrev-ref --symbolic-full-name '@{u}'` still reports no upstream for branch `master`; no pull/push was possible. `dotnet test tests\PolyCopyTrader.Tests\PolyCopyTrader.Tests.csproj -c Verify --no-restore` passed 161/161. `dotnet run --project src\PolyCopyTrader.Service\PolyCopyTrader.Service.csproj -c Verify --no-restore -- --print-config` passed. `dotnet build src\PolyCopyTrader.Dashboard\PolyCopyTrader.Dashboard.csproj -c Verify --no-restore` passed. `git diff --check` passed with LF/CRLF warnings only. Existing unrelated dirty files, including `PolyCopyTrader.sln` and `src/PolyCopyTrader.Storage/PostgresSchemaInitializer.cs`, were not reverted.
+Blockers: Automatic pull/push cannot run until a Git upstream is configured.
+
+## Active Update 2026-05-03 Market WebSocket Lifecycle Answer
+Goal: Clarify whether Polymarket market WebSocket reports closed/inactive transitions.
+Status: Completed
+Done:
+- Checked official Polymarket WebSocket docs: the market channel can emit `market_resolved` when `custom_feature_enabled=true`, but the documented market channel events do not include a direct Gamma-style `closed` or `inactive` transition event.
+- Checked the current WebSocket parser: `market_resolved` is parsed as `MarketDataEventType.MarketResolved` and persisted as a market-data event.
+- Confirmed the active Gamma subscription registry is still add-only; it does not remove assets from memory when a market later disappears from `active=true&closed=false`.
+- Recommended treating Gamma full polling as the authoritative source for active subscription membership, with WebSocket lifecycle events as optional early hints.
+Next: Add registry replacement/removal after each full Gamma scan so assets absent from `active=true&closed=false` are unsubscribed.
+Notes: Answer-only task; no source code changed and no tests were run. Consulted official Polymarket WebSocket documentation and inspected `PolymarketMarketDataWebSocketParser` / `MarketDataWebSocketService`. `git rev-parse --abbrev-ref --symbolic-full-name '@{u}'` still reports no upstream for branch `master`.
+Blockers: Automatic pull/push cannot run until a Git upstream is configured.
+
+## Active Update 2026-05-03 Gamma Before DB WebSocket Subscriptions
+Goal: Register WebSocket subscriptions for newly fetched active Gamma markets before writing those markets to PostgreSQL.
+Status: Completed
+Done:
+- Added singleton `IActiveMarketAssetSubscriptionRegistry` / `ActiveMarketAssetSubscriptionRegistry` to keep active Gamma market `clobTokenIds` in memory and signal subscription changes.
+- Changed `GammaMarketIngestionProcessor` so each fetched Gamma page registers active market WebSocket assets before `UpsertPolymarketGammaMarketAsync` writes the page to `polymarket_gamma_markets`.
+- Changed `RelevantMarketAssetProvider` to include active Gamma market registry assets in the desired WebSocket subscription set.
+- Changed `MarketDataWebSocketService` so the subscription loop wakes immediately on registry changes instead of waiting only for `SubscriptionRefreshSeconds`.
+- Changed `MarketDataWebSocket:MaxSubscribedAssets` default/service setting to `0` for unlimited local subscriptions; positive values still cap intentionally.
+- Updated README/config docs and tests for registry ordering, provider inclusion, and unlimited subscription defaults.
+Next: Restart the service and watch WebSocket status/logs while Gamma ingestion discovers active markets.
+Notes: `git rev-parse --abbrev-ref --symbolic-full-name '@{u}'` still reports no upstream for branch `master`; no pull/push was possible. `dotnet test tests\PolyCopyTrader.Tests\PolyCopyTrader.Tests.csproj -c Verify --no-restore --filter "GammaMarketIngestionTests|ActiveMarketAssetSubscriptionRegistryTests|ConfigurationTests"` passed 15/15. Full `dotnet test tests\PolyCopyTrader.Tests\PolyCopyTrader.Tests.csproj -c Verify --no-restore` passed 156/156. `dotnet run --project src\PolyCopyTrader.Service\PolyCopyTrader.Service.csproj -c Verify --no-restore -- --print-config` passed. `dotnet build src\PolyCopyTrader.Dashboard\PolyCopyTrader.Dashboard.csproj -c Verify --no-restore` passed. `git diff --check` passed with line-ending warnings only. Existing unrelated dirty files `PolyCopyTrader.sln` and `src/PolyCopyTrader.Storage/PostgresSchemaInitializer.cs` were left untouched.
+Blockers: Automatic pull/push cannot run until a Git upstream is configured.
+
+## Active Update 2026-05-03 All Active Market WebSocket Direction
+Goal: Clarify the requested WebSocket subscription model for all active Gamma markets.
+Status: Completed
+Done:
+- Confirmed the existing `MarketDataWebSocketService` can dynamically subscribe/unsubscribe while connected.
+- Confirmed current `RelevantMarketAssetProvider` only returns pinned/open-order/position/recent-signal assets and caps them at `MarketDataWebSocket:MaxSubscribedAssets=100`; it does not subscribe to all active Gamma markets.
+- Clarified that Polymarket market WebSocket subscriptions are by CLOB token/asset ids (`assets_ids`), so all-active-market coverage means subscribing to every active market's `clobTokenIds`, not to `market_id` values.
+- No application code changed for this clarification.
+Next: Implement an all-active Gamma market asset provider backed by `polymarket_gamma_markets` or by the in-memory Gamma ingestion state, and handle batching/limits/reconnect resubscription.
+Notes: Inspected `MarketDataWebSocketService`, `RelevantMarketAssetProvider`, WebSocket options, and service appsettings. Branch `master` still has no configured upstream. Existing unrelated dirty files were left untouched.
+Blockers: Automatic pull/push cannot run until a Git upstream is configured.
+
+## Active Update 2026-05-03 Polymarket Retry Backoff
+Goal: Retry Polymarket transient HTTP failures after a one-second delay while preserving exponential backoff.
+Status: Completed
+Done:
+- Set `PolymarketOptions.RetryBaseDelayMilliseconds` default to `1000`.
+- Set service `Polymarket:RetryBaseDelayMilliseconds` to `1000`.
+- Kept `PolymarketHttpClient` exponential backoff as `RetryBaseDelayMilliseconds * 2^attempt` for retryable `429` and `5xx` responses and transient request exceptions.
+- Updated README and configuration reference to document one-second base retry delay with exponential backoff.
+- Added configuration test coverage for the `1000` ms default.
+Next: Restart the service to apply the retry delay setting.
+Notes: `git rev-parse --abbrev-ref --symbolic-full-name '@{u}'` still reports no upstream for branch `master`; no pull/push was possible. `dotnet test tests\PolyCopyTrader.Tests\PolyCopyTrader.Tests.csproj -c Verify --no-restore --filter "PolymarketClientTests|ConfigurationTests"` passed 34/34. Full `dotnet test tests\PolyCopyTrader.Tests\PolyCopyTrader.Tests.csproj -c Verify --no-restore` passed 153/153. `dotnet run --project src\PolyCopyTrader.Service\PolyCopyTrader.Service.csproj -c Verify --no-restore -- --print-config` passed. `git diff --check` passed with line-ending warnings only. Existing unrelated dirty files `PolyCopyTrader.sln` and `src/PolyCopyTrader.Storage/PostgresSchemaInitializer.cs` were left untouched.
+Blockers: Automatic pull/push cannot run until a Git upstream is configured.
+
+## Active Update 2026-05-03 Poll Interval Explanation
+Goal: Clarify the difference between `GammaMarketIngestion:PollIntervalSeconds` and `Bot:PollIntervalSeconds`.
+Status: Completed
+Done:
+- Confirmed `Bot:PollIntervalSeconds` is used only by `BotWorker` between the main watchlist/signal/paper/live/heartbeat loop iterations.
+- Confirmed `GammaMarketIngestion:PollIntervalSeconds` is used only by `GammaMarketIngestionWorker` between full Gamma active-market ingestion passes.
+- No application code changed for this explanation.
+Next: None
+Notes: Inspected `BotWorker`, `GammaMarketIngestionWorker`, and service appsettings. Branch `master` still has no configured upstream. Existing unrelated dirty files were left untouched.
+Blockers: Automatic pull/push cannot run until a Git upstream is configured.
+
+## Active Update 2026-05-03 Gamma Zero Poll Delay
+Goal: Set the Gamma active-market ingestion delay between cycles to zero seconds.
+Status: Completed
+Done:
+- Set `GammaMarketIngestionOptions.PollIntervalSeconds` default to `0`.
+- Set `GammaMarketIngestion:PollIntervalSeconds` to `0` in service `appsettings.json`.
+- Updated Gamma ingestion validation to allow `0..86400` seconds.
+- Updated README/config docs and configuration tests for the new zero-delay default.
+Next: Restart the service to apply the new Gamma ingestion interval.
+Notes: The main `Bot:PollIntervalSeconds` default remains `10`; only Gamma ingestion changed. `git rev-parse --abbrev-ref --symbolic-full-name '@{u}'` still reports no upstream for branch `master`; no pull/push was possible. `dotnet test tests\PolyCopyTrader.Tests\PolyCopyTrader.Tests.csproj -c Verify --no-restore --filter "ConfigurationTests|GammaMarketIngestionTests"` passed 12/12. Full `dotnet test tests\PolyCopyTrader.Tests\PolyCopyTrader.Tests.csproj -c Verify --no-restore` passed 153/153. `dotnet run --project src\PolyCopyTrader.Service\PolyCopyTrader.Service.csproj -c Verify --no-restore -- --print-config` passed and showed Gamma poll interval `0` and page limit `500`. `git diff --check` passed with line-ending warnings only. Existing unrelated dirty files `PolyCopyTrader.sln` and `src/PolyCopyTrader.Storage/PostgresSchemaInitializer.cs` were left untouched.
+Blockers: Automatic pull/push cannot run until a Git upstream is configured.
+
+## Active Update 2026-05-03 Gamma Full Upsert Correction
+Goal: Change Gamma active-market ingestion from stop-on-existing insert-only scanning to full paged upsert scanning.
+Status: Completed
+Done:
+- Changed Gamma active-market default page size from `100` to `500` in domain defaults, service appsettings, and Gamma client defaults.
+- Replaced insert-only `TryAddPolymarketGammaMarketAsync` with `UpsertPolymarketGammaMarketAsync`.
+- Changed PostgreSQL storage to `INSERT ... ON CONFLICT (market_id) DO UPDATE` for all stored Gamma market fields and payload JSON.
+- Updated `GammaMarketIngestionProcessor` so every cycle walks all `offset` pages until Gamma returns an empty array; existing markets no longer stop the cycle.
+- Updated worker logging/result model from inserted/stopped counts to upserted/full-pass counts.
+- Updated README/config docs and tests for full-pass paged upsert behavior.
+Next: Add a Dashboard/API view over `polymarket_gamma_markets`, or begin the next API-first ingestion source.
+Notes: `git rev-parse --abbrev-ref --symbolic-full-name '@{u}'` still reports no upstream for branch `master`; no pull/push was possible. `dotnet test tests\PolyCopyTrader.Tests\PolyCopyTrader.Tests.csproj -c Verify --no-restore --filter "PolymarketClientTests|GammaMarketIngestionTests|ConfigurationTests|StorageTests"` passed 46/46. Full `dotnet test tests\PolyCopyTrader.Tests\PolyCopyTrader.Tests.csproj -c Verify --no-restore` passed 153/153. `dotnet run --project src\PolyCopyTrader.Service\PolyCopyTrader.Service.csproj -c Verify --no-restore -- --print-config` passed and showed Gamma page limit `500`. `dotnet build src\PolyCopyTrader.Dashboard\PolyCopyTrader.Dashboard.csproj -c Verify --no-restore` passed. `git diff --check` passed with line-ending warnings only. Existing unrelated dirty files `PolyCopyTrader.sln` and `src/PolyCopyTrader.Storage/PostgresSchemaInitializer.cs` were left untouched.
+Blockers: Automatic pull/push cannot run until a Git upstream is configured.
+
+## Active Update 2026-05-03 Gamma Active Market Ingestion
+Goal: Build the first API-first ingestion loop for all active Polymarket Gamma markets into new PostgreSQL domain tables.
+Status: Completed
+Done:
+- Added `PolymarketGammaMarket` and `GammaMarketIngestionResult` domain models plus `GammaMarketIngestionOptions` with defaults `Enabled=true`, `PollIntervalSeconds=10`, and `PageLimit=100`.
+- Added `IPolymarketGammaClient.GetActiveMarketsAsync` and parser support for Gamma `/markets?active=true&closed=false&limit=...&order=createdAt&ascending=false&offset=...`.
+- Added new table `polymarket_gamma_markets` with insert-only repository method `TryAddPolymarketGammaMarketAsync`; existing service tables/logging remain shared.
+- Added `GammaMarketIngestionWorker` and `GammaMarketIngestionProcessor`: first run walks offset pages until an empty array; later cycles stop at the first existing `market_id` and wait the configured pause.
+- Registered the worker in `Program.cs` while keeping on-chain workers paused/commented.
+- Updated README/config docs and tests for parsing, client query construction, pagination, stop-on-existing behavior, config validation, and schema coverage.
+Next: Add a Dashboard/API view over `polymarket_gamma_markets`, or start the next API-first table fed by trades/activity/positions.
+Notes: `dotnet test tests\PolyCopyTrader.Tests\PolyCopyTrader.Tests.csproj -c Verify --no-restore --filter "PolymarketClientTests|GammaMarketIngestionTests|ConfigurationTests|StorageTests"` passed 46/46. Full `dotnet test tests\PolyCopyTrader.Tests\PolyCopyTrader.Tests.csproj -c Verify --no-restore` passed 153/153. `dotnet run --project src\PolyCopyTrader.Service\PolyCopyTrader.Service.csproj -c Verify --no-restore -- --print-config` succeeded and printed Gamma ingestion defaults. `dotnet build -c Verify --no-restore` failed only because the solution has no `Verify|Any CPU` configuration; `dotnet build src\PolyCopyTrader.Dashboard\PolyCopyTrader.Dashboard.csproj -c Verify --no-restore` passed. `git diff --check` passed with line-ending warnings only. Existing unrelated dirty files `PolyCopyTrader.sln` and `src/PolyCopyTrader.Storage/PostgresSchemaInitializer.cs` were left untouched.
+Blockers: Automatic pull/push cannot run until a Git upstream is configured.
+
+## Active Update 2026-05-03 Polymarket Docs Orientation
+Goal: Read the main Polymarket documentation areas to understand source systems for the new approach.
+Status: Completed
+Done:
+- Read the docs index plus core concepts for markets/events, prices/orderbook, and positions/tokens.
+- Read market-data guidance: public REST endpoints are split across Gamma API for events/markets/discovery, CLOB API for public prices/orderbooks/spreads, and Data API for positions/trades/activity/analytics.
+- Read relevant Data API pages for trades, user activity, current positions, closed positions, total position value, top holders, public profiles, and leaderboard rankings.
+- Read WebSocket overview: public market channel streams orderbook/price/trade/lifecycle updates by asset IDs, while authenticated user channel uses condition IDs.
+- Read resources for on-chain data and contract addresses; Polymarket documents third-party analytics providers and Polygon mainnet contract addresses.
+- Noted for the new attempt that we can likely build a simpler API-first model in new tables before returning to direct raw on-chain reconstruction.
+Next: Design the new API-first table model and ingestion boundaries using new domain tables in the same PostgreSQL database.
+Notes: Documentation reading only; no application source code changed and no tests were run. Existing unrelated dirty files `PolyCopyTrader.sln` and `src/PolyCopyTrader.Storage/PostgresSchemaInitializer.cs` were left untouched. `git rev-parse --abbrev-ref --symbolic-full-name '@{u}'` failed because branch `master` has no configured upstream.
+Blockers: Automatic pull/push cannot run until a Git upstream is configured.
+
+## Active Update 2026-05-03 Polymarket Docs Access Check
+Goal: Confirm whether Codex can read the current Polymarket documentation.
+Status: Completed
+Done:
+- Opened `https://docs.polymarket.com/` successfully.
+- Opened `https://docs.polymarket.com/llms.txt`, which exposes the documentation index for API reference, market data, trading, WebSocket, on-chain resources, contracts, and related pages.
+Next: Use specific Polymarket docs pages as source material when designing the new table model and API integration path.
+Notes: Documentation access check only; no application source code changed and no tests were run. Existing unrelated dirty files `PolyCopyTrader.sln` and `src/PolyCopyTrader.Storage/PostgresSchemaInitializer.cs` were left untouched. `git rev-parse --abbrev-ref --symbolic-full-name '@{u}'` failed because branch `master` has no configured upstream.
+Blockers: Automatic pull/push cannot run until a Git upstream is configured.
+
+## Active Update 2026-05-03 New Table Strategy Direction
+Goal: Record the decision to pause the current on-chain/domain-table path and try a new approach in separate tables.
+Status: Completed
+Done:
+- Recorded that the previous on-chain/domain-table approach is paused because it is taking too long and becoming too complex.
+- Established that future experiments should use the same PostgreSQL database but new domain tables, so new semantics do not mix with the existing on-chain research tables.
+- Clarified that shared service/infrastructure tables such as logs, errors, heartbeat/status, and similar operational tables can remain shared.
+- Existing data must be preserved unless a future task explicitly requests deletion.
+Next: Define the new table model and pipeline boundaries before implementing the replacement approach.
+Notes: Direction-setting task; no application source code changed and no tests were run. Existing unrelated dirty files `PolyCopyTrader.sln` and `src/PolyCopyTrader.Storage/PostgresSchemaInitializer.cs` were left untouched. `git rev-parse --abbrev-ref --symbolic-full-name '@{u}'` failed because branch `master` has no configured upstream.
+Blockers: Automatic pull/push cannot run until a Git upstream is configured.
+
+## Active Update 2026-05-03 Project Direction Summary
+Goal: Summarize the current PolyCopyTrader project direction and immediate state.
+Status: Completed
+Done:
+- Summarized that the project is building a cautious Polymarket copy-signal system focused on wallet/category behavior analysis, not blind trade mirroring.
+- Restated that the on-chain ingestion and derived-data workers are currently paused without deleting PostgreSQL data.
+- Identified the next product layer as final wallet/category target selection over the full wallet universe and behavior-evidence/performance tables.
+Next: Implement a final trusted `(wallet, category)` target-selection table or Dashboard view when work resumes.
+Notes: Answer-only task; no application source code changed and no tests were run. Existing unrelated dirty files `PolyCopyTrader.sln` and `src/PolyCopyTrader.Storage/PostgresSchemaInitializer.cs` were left untouched. `git rev-parse --abbrev-ref --symbolic-full-name '@{u}'` failed because branch `master` has no configured upstream.
+Blockers: Automatic pull/push cannot run until a Git upstream is configured.
+
+## Active Update 2026-05-03 Install Codex CLI
+Goal: Install the OpenAI Codex CLI globally with npm.
+Status: Completed
+Done:
+- Ran `npm install -g @openai/codex`; npm completed successfully and changed 2 packages.
+- Verified the global package as `@openai/codex@0.128.0` and `codex --version` as `codex-cli 0.128.0`.
+Next: None
+Notes: npm reported a cleanup warning for an old temporary `C:\Users\serge\AppData\Roaming\npm\node_modules\@openai\.codex-*` directory because `codex.exe` was locked; the installed CLI still resolved successfully. Existing unrelated dirty files `PolyCopyTrader.sln` and `src/PolyCopyTrader.Storage/PostgresSchemaInitializer.cs` were left untouched. `git rev-parse --abbrev-ref --symbolic-full-name '@{u}'` failed because branch `master` has no configured upstream.
+Blockers: Automatic pull/push cannot run until a Git upstream is configured.
+
 ## Active Update 2026-05-02 Pause Onchain Background Pipeline
 Goal: Stop blockchain data collection and on-chain derived-data processing without deleting existing PostgreSQL data.
 Status: Completed
@@ -1292,6 +6508,47 @@ Done:
 - Confirmed the active watchlist is read from `Watchlist:Traders` configuration, while discovery and on-chain wallets are persisted to `trader_discovery_candidates`, `trader_leaderboard_snapshots`, and `polymarket_onchain_*` materialized tables.
 Next: Decide whether to leave `traders`/`trader_rules` as future DB-backed watchlist tables or implement a config-to-DB/watchlist persistence feature.
 Notes: `git pull --ff-only` was attempted and still cannot run because branch `master` has no configured upstream. No source code changed for this answer-only task; verification is code/schema/config inspection and `git diff --check`. Existing unrelated `PolyCopyTrader.sln` changes remain untouched.
+Blockers: Automatic pull/push cannot run until a Git upstream is configured.
+
+## Active Update 2026-05-08 BTC Skip1 Paper/Live Shadow Implementation
+Goal: Implement the agreed Paper-shadow/Live GTC test path for `BTC Up or Down 5m Skip 1`.
+Status: Completed
+Done:
+- Added shared Paper/Live shadow domain fields and PostgreSQL schema support: `correlation_id`, `execution_source`, GTC `post_only`, linked `paper_order_id`, `paper_live_shadow_decisions`, and `paper_live_shadow_discrepancies`.
+- Implemented BTC Skip 1-only live shadow flow: one saved decision, Paper-shadow order, Live intent, GTC limit BUY submit with `post_only=false`, submit result persistence, and non-Skip legacy BTC live submit disabled.
+- Updated live maintenance so shadow GTC orders live until their cancel deadline, late Live fills are mirrored into Paper fills/positions, and critical Paper/Live shape or observability mismatches disable Live stakes and cancel open strategy/correlation orders.
+- Prevented normal Paper orderbook simulation from independently filling `paper_live_shadow_test` orders.
+- Updated README and tests for the new GTC shadow behavior.
+Next: Manually enable Live only for `BTC Up or Down 5m Skip 1`, resume live trading when ready, and monitor `paper_live_shadow_decisions`, `live_orders`, `paper_orders`, and discrepancy rows.
+Notes: `dotnet test tests\PolyCopyTrader.Tests\PolyCopyTrader.Tests.csproj --no-restore -p:BaseOutputPath=D:\My\Business\PolyMarket\artifacts\test-build\` passed 343/343; initial full test had one stale-orderbook timing flake that passed on targeted repeat and full repeat. `dotnet build src\PolyCopyTrader.Service\PolyCopyTrader.Service.csproj --no-restore` passed with existing nullable warnings. `git diff --check` passed with line-ending warnings only. Stopped old `PolyCopyTrader.Service` process, rebuilt, restarted it; IPC `/health` and `/status` report `state=Running`, `liveTradingPaused=true`, kill switch false. Full solution build still cannot run while Dashboard keeps its output DLLs locked.
+Blockers: Repository still has no configured upstream, so automatic pull/push/commit flow cannot be completed; working tree also contains many pre-existing unrelated local changes.
+
+## Active Update 2026-05-09 BTC Quote Age Timing Fix
+Goal: Fix BTC Paper diagnostics/timing issues and restart the service in Paper mode with Live disabled.
+Status: Completed
+Done:
+- Clamped negative order-book cache and REST snapshot ages to zero so new `quote_age_ms` diagnostics cannot go negative when exchange timestamps are slightly ahead of local processing time.
+- Reordered `BtcUpDown5mPaperStrategyProcessor.ProcessAsync` so due entries are placed before the heavier market observe/settlement pass, then newly observed due runs are caught in the same cycle.
+- Refreshed `nowUtc` per processed run and added raw decision timing diagnostics: `entry_due_at_utc`, `entry_delay_seconds`, `decision_delay_ms`, market start/end fields, market id/slug, and WebSocket-vs-REST cache diagnostics.
+- Set `BtcUpDown5mStrategy:PollIntervalSeconds` to `1` and documented it as the BTC strategy worker loop delay.
+- Disabled LiveStakes for all 62 strategies, restarted the service from `artifacts/quote-age-fix-build/Debug/net10.0/PolyCopyTrader.Service.exe`, and paused live trading over IPC.
+- Added a small C# diagnostic under `artifacts/diagnose-quote-age-fix` and verified fresh rows after restart.
+Next: Let more fresh BTC windows accumulate and compare new `decision_delay_ms` / `quote_age_ms` rows; old rows still contain the previous diagnostics.
+Notes: `git pull --ff-only` failed because branch `master` has no upstream. Verification passed: focused BTC processor tests `66/66`, configuration tests passed, service build succeeded with `0` warnings and `0` errors, and `git diff --check` on touched files passed with only CRLF normalization warnings. Runtime status after restart: service PID `64692`, `state=Running`, `paperTradingPaused=false`, `liveTradingPaused=true`, `killSwitchActive=false`. Diagnostic query confirmed a new Skip 1 Paper run for `btc-updown-5m-1778310000` entered at `2026-05-09T07:00:58Z`; that specific delay is expected because the service was started after the market opened. Fresh `Less/More` rows after `07:02Z` show nonnegative `quote_age_ms`, with examples around `829-986ms`; the `07:05Z` opening-limit rows show `decision_delay_ms` around `5.3-12.3s`.
+Blockers: Automatic pull/push/commit remains unavailable until a Git upstream is configured; the worktree also contains many pre-existing unrelated changes.
+
+## Active Update 2026-05-10 Convert BTC Entries To GTD
+Goal: Convert remaining BTC strategy order creation away from immediate FAK-style entries to GTD limit orders.
+Status: Completed
+Done:
+- Changed standard BTC `Less/More`, ordinary `Gamma`, and `BTC Less 180 Martin` Paper entries to create pending GTD BUY limit orders with `post_only=false` and `OpeningLimitGtdTtlSeconds` instead of immediate filled orders/fills/positions.
+- Kept CLOB/WebSocket/REST executable VWAP as quote-selection/limit-seeding input, then size GTD orders through minimum-order-size buffered sizing and settle only actually filled shares.
+- Updated settlement handling so new converted GTD orders require fill summaries, while older immediate historical runs without the converted execution source can still settle normally.
+- Changed the legacy gated BTC live request path from FAK to GTD with bounded expiration, although live remains paused and separately gated.
+- Updated BTC strategy tests and docs to describe GTD behavior; remaining `FAK` references are only generic CLOB SDK/order-type validation and auth-planning notes.
+- Restarted the local service in Paper mode and paused Live over IPC.
+Next: Monitor Paper fill/expiry rates after the GTD conversion; no Live testing until explicitly requested.
+Notes: `dotnet test tests/PolyCopyTrader.Tests/PolyCopyTrader.Tests.csproj --filter "FullyQualifiedName~BtcUpDown5mPaperStrategyProcessorTests" --no-restore` passed 90/90. `dotnet test PolyCopyTrader.sln --no-restore` passed 417/417. `git diff --check` passed with existing line-ending warnings. IPC status after restart: Running, Paper active, Live paused. Branch `master` has no upstream, so no commit/push was performed.
 Blockers: Automatic pull/push cannot run until a Git upstream is configured.
 
 ## Active Update 2026-04-30 Database Table Inventory Answer

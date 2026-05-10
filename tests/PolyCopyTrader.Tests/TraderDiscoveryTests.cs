@@ -182,6 +182,21 @@ public sealed class TraderDiscoveryTests
             return Task.FromResult<IReadOnlyList<LeaderTrade>>((trades ?? []).Skip(offset).Take(limit).ToArray());
         }
 
+        public Task<IReadOnlyList<LeaderTrade>> GetMarketTradesAsync(
+            string conditionId,
+            bool takerOnly,
+            int limit = 100,
+            int offset = 0,
+            CancellationToken cancellationToken = default)
+        {
+            var trades = Trades.Values.SelectMany(item => item)
+                .Where(item => string.Equals(item.ConditionId, conditionId, StringComparison.OrdinalIgnoreCase))
+                .Skip(offset)
+                .Take(limit)
+                .ToArray();
+            return Task.FromResult<IReadOnlyList<LeaderTrade>>(trades);
+        }
+
         public Task<IReadOnlyList<LeaderPosition>> GetUserPositionsAsync(
             string wallet,
             int limit = 100,

@@ -8,21 +8,40 @@ public static class PostgresSchema
         "trader_rules",
         "trader_leaderboard_snapshots",
         "trader_discovery_candidates",
+        "polymarket_category_mappings",
+        "polymarket_data_api_traders",
+        "polymarket_data_api_positions",
+        "polymarket_data_api_wallet_performance",
+        "polymarket_data_api_wallet_category_performance",
+        "polymarket_data_api_wallet_category_ratings",
+        "polymarket_gamma_markets",
         "leader_trades",
         "leader_positions",
         "markets",
         "order_book_snapshots",
         "signals",
         "signal_rejections",
+        "strategies",
         "paper_orders",
         "paper_fills",
+        "strategy_market_paper_runs",
         "paper_positions",
+        "paper_position_settlements",
+        "paper_copied_trader_performance",
+        "btc_usd_reference_correlation_samples",
+        "btc_up_down_5m_odds_ticks",
+        "crypto_up_down_5m_odds_ticks",
+        "paper_copied_leader_positions",
+        "paper_copied_leader_activity_events",
         "dry_run_orders",
         "live_orders",
+        "paper_live_shadow_decisions",
+        "paper_live_shadow_discrepancies",
         "live_trading_events",
         "risk_events",
         "market_data_status",
         "market_data_events",
+        "polymarket_websocket_trade_ticks",
         "pinned_market_assets",
         "daily_reports",
         "bot_settings",
@@ -31,6 +50,8 @@ public static class PostgresSchema
         "polymarket_http_logs",
         "polymarket_onchain_logs",
         "polymarket_onchain_fills",
+        "polymarket_onchain_trade_captures",
+        "polymarket_onchain_paper_signal_results",
         "polymarket_onchain_wallet_fills",
         "polymarket_onchain_wallet_executions",
         "polymarket_onchain_token_metadata",
@@ -50,6 +71,7 @@ public static class PostgresSchema
         "polymarket_onchain_trade_details",
         "polymarket_onchain_participant_details",
         "polymarket_onchain_ingest_cursors",
+        "polymarket_onchain_trade_capture_cursors",
         "scanner_status",
         "service_heartbeats"
     ];
@@ -262,6 +284,402 @@ ON trader_discovery_candidates(discovery_type, category, time_period, wallet);
 CREATE INDEX IF NOT EXISTS ix_trader_discovery_rank
 ON trader_discovery_candidates(discovery_type, category, time_period, leaderboard_pnl DESC);
 
+CREATE TABLE IF NOT EXISTS polymarket_category_mappings (
+    local_category text PRIMARY KEY,
+    polymarket_leaderboard_category text NOT NULL,
+    enabled boolean NOT NULL DEFAULT true,
+    notes text NULL,
+    created_at_utc timestamptz NOT NULL DEFAULT now(),
+    updated_at_utc timestamptz NOT NULL DEFAULT now(),
+    CONSTRAINT ck_polymarket_category_mappings_leaderboard_category
+        CHECK (polymarket_leaderboard_category IN (
+            'OVERALL',
+            'POLITICS',
+            'SPORTS',
+            'CRYPTO',
+            'CULTURE',
+            'MENTIONS',
+            'WEATHER',
+            'ECONOMICS',
+            'TECH',
+            'FINANCE'
+        ))
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS ux_polymarket_category_mappings_local_lower
+ON polymarket_category_mappings (lower(local_category));
+
+CREATE INDEX IF NOT EXISTS ix_polymarket_category_mappings_leaderboard
+ON polymarket_category_mappings(polymarket_leaderboard_category);
+
+INSERT INTO polymarket_category_mappings (
+    local_category,
+    polymarket_leaderboard_category,
+    enabled,
+    notes,
+    created_at_utc,
+    updated_at_utc
+) VALUES
+    ('Politics', 'POLITICS', true, 'Seed obvious mapping.', now(), now()),
+    ('Sports', 'SPORTS', true, 'Seed obvious mapping.', now(), now()),
+    ('Crypto', 'CRYPTO', true, 'Seed obvious mapping.', now(), now()),
+    ('Culture', 'CULTURE', true, 'Seed obvious mapping.', now(), now()),
+    ('Pop Culture', 'CULTURE', true, 'Seed obvious mapping.', now(), now()),
+    ('Mentions', 'MENTIONS', true, 'Seed obvious mapping.', now(), now()),
+    ('Weather', 'WEATHER', true, 'Seed obvious mapping.', now(), now()),
+    ('Economics', 'ECONOMICS', true, 'Seed obvious mapping.', now(), now()),
+    ('Tech', 'TECH', true, 'Seed obvious mapping.', now(), now()),
+    ('Finance', 'FINANCE', true, 'Seed obvious mapping.', now(), now())
+ON CONFLICT DO NOTHING;
+
+CREATE TABLE IF NOT EXISTS polymarket_data_api_traders (
+    wallet text PRIMARY KEY,
+    name text NOT NULL,
+    pseudonym text NULL,
+    bio text NULL,
+    profile_image text NULL,
+    profile_image_optimized text NULL,
+    first_seen_at_utc timestamptz NOT NULL,
+    last_seen_at_utc timestamptz NOT NULL,
+    last_global_seen_at_utc timestamptz NULL,
+    last_full_sync_at_utc timestamptz NULL,
+    last_incremental_sync_at_utc timestamptz NULL,
+    last_trade_timestamp_utc timestamptz NULL,
+    full_sync_completed boolean NOT NULL DEFAULT false,
+    full_sync_trades_fetched integer NOT NULL DEFAULT 0,
+    full_sync_trades_inserted integer NOT NULL DEFAULT 0,
+    incremental_sync_count integer NOT NULL DEFAULT 0,
+    polymarket_rating_refreshed_at_utc timestamptz NULL,
+    polymarket_rating_next_refresh_at_utc timestamptz NOT NULL DEFAULT now(),
+    polymarket_rating_refresh_attempts integer NOT NULL DEFAULT 0,
+    polymarket_rating_last_error text NULL,
+    updated_at_utc timestamptz NOT NULL
+);
+
+ALTER TABLE polymarket_data_api_traders
+    ADD COLUMN IF NOT EXISTS polymarket_rating_refreshed_at_utc timestamptz NULL,
+    ADD COLUMN IF NOT EXISTS polymarket_rating_next_refresh_at_utc timestamptz NOT NULL DEFAULT now(),
+    ADD COLUMN IF NOT EXISTS polymarket_rating_refresh_attempts integer NOT NULL DEFAULT 0,
+    ADD COLUMN IF NOT EXISTS polymarket_rating_last_error text NULL;
+
+CREATE INDEX IF NOT EXISTS ix_polymarket_data_api_traders_last_seen
+ON polymarket_data_api_traders(last_seen_at_utc DESC);
+
+CREATE INDEX IF NOT EXISTS ix_polymarket_data_api_traders_last_trade
+ON polymarket_data_api_traders(last_trade_timestamp_utc DESC NULLS LAST);
+
+CREATE INDEX IF NOT EXISTS ix_polymarket_data_api_traders_rating_next
+ON polymarket_data_api_traders(polymarket_rating_next_refresh_at_utc, last_seen_at_utc DESC);
+
+CREATE TABLE IF NOT EXISTS polymarket_data_api_positions (
+    id uuid PRIMARY KEY,
+    wallet text NOT NULL,
+    position_status text NOT NULL,
+    asset_id text NOT NULL,
+    condition_id text NOT NULL,
+    size numeric(28,8) NULL,
+    avg_price numeric(18,8) NOT NULL,
+    initial_value_usd numeric(28,8) NULL,
+    current_value_usd numeric(28,8) NULL,
+    cash_pnl_usd numeric(28,8) NULL,
+    percent_pnl numeric(18,8) NULL,
+    total_bought numeric(28,8) NOT NULL,
+    realized_pnl_usd numeric(28,8) NOT NULL,
+    percent_realized_pnl numeric(18,8) NULL,
+    cur_price numeric(18,8) NOT NULL,
+    timestamp_utc timestamptz NULL,
+    market_title text NOT NULL,
+    market_slug text NOT NULL,
+    icon text NULL,
+    event_id text NULL,
+    event_slug text NULL,
+    category text NULL,
+    outcome text NOT NULL,
+    outcome_index integer NULL,
+    opposite_outcome text NULL,
+    opposite_asset text NULL,
+    end_date_utc timestamptz NULL,
+    redeemable boolean NULL,
+    mergeable boolean NULL,
+    negative_risk boolean NULL,
+    raw_json jsonb NOT NULL,
+    fetched_at_utc timestamptz NOT NULL,
+    updated_at_utc timestamptz NOT NULL
+);
+
+ALTER TABLE polymarket_data_api_positions ADD COLUMN IF NOT EXISTS category text NULL;
+
+CREATE UNIQUE INDEX IF NOT EXISTS ux_polymarket_data_api_positions_wallet_status_asset
+ON polymarket_data_api_positions(wallet, position_status, asset_id);
+
+CREATE INDEX IF NOT EXISTS ix_polymarket_data_api_positions_wallet
+ON polymarket_data_api_positions(wallet, position_status, updated_at_utc DESC);
+
+CREATE INDEX IF NOT EXISTS ix_polymarket_data_api_positions_condition
+ON polymarket_data_api_positions(condition_id);
+
+CREATE INDEX IF NOT EXISTS ix_polymarket_data_api_positions_category
+ON polymarket_data_api_positions(category);
+
+CREATE INDEX IF NOT EXISTS ix_polymarket_data_api_positions_timestamp
+ON polymarket_data_api_positions(timestamp_utc DESC NULLS LAST);
+
+CREATE TABLE IF NOT EXISTS polymarket_data_api_wallet_performance (
+    wallet text PRIMARY KEY,
+    positions_count integer NOT NULL,
+    open_positions integer NOT NULL,
+    closed_positions integer NOT NULL,
+    profitable_positions integer NOT NULL,
+    losing_positions integer NOT NULL,
+    markets_traded integer NOT NULL,
+    outcomes_traded integer NOT NULL,
+    volume_usd numeric(28,8) NOT NULL,
+    open_initial_value_usd numeric(28,8) NOT NULL,
+    open_current_value_usd numeric(28,8) NOT NULL,
+    open_cash_pnl_usd numeric(28,8) NOT NULL,
+    open_realized_pnl_usd numeric(28,8) NOT NULL,
+    closed_cost_basis_usd numeric(28,8) NOT NULL,
+    closed_realized_pnl_usd numeric(28,8) NOT NULL,
+    total_cost_basis_usd numeric(28,8) NOT NULL,
+    total_current_value_usd numeric(28,8) NOT NULL,
+    total_pnl_usd numeric(28,8) NOT NULL,
+    realized_pnl_usd numeric(28,8) NOT NULL,
+    roi_pct numeric(18,8) NOT NULL,
+    win_rate_pct numeric(18,8) NOT NULL,
+    average_position_size_usd numeric(28,8) NOT NULL,
+    score numeric(28,8) NOT NULL,
+    sample_quality text NOT NULL,
+    last_position_timestamp_utc timestamptz NULL,
+    polymarket_positions_open_cash_pnl_usd numeric(28,8) NULL,
+    polymarket_positions_open_realized_pnl_usd numeric(28,8) NULL,
+    polymarket_positions_open_current_value_usd numeric(28,8) NULL,
+    polymarket_positions_closed_realized_pnl_usd numeric(28,8) NULL,
+    polymarket_positions_total_pnl_usd numeric(28,8) NULL,
+    polymarket_positions_refreshed_at_utc timestamptz NULL,
+    polymarket_leaderboard_pnl_usd numeric(28,8) NULL,
+    polymarket_leaderboard_volume_usd numeric(28,8) NULL,
+    polymarket_leaderboard_rank integer NULL,
+    polymarket_leaderboard_category text NULL,
+    polymarket_leaderboard_time_period text NULL,
+    polymarket_leaderboard_refreshed_at_utc timestamptz NULL,
+    refreshed_at_utc timestamptz NOT NULL
+);
+
+ALTER TABLE polymarket_data_api_wallet_performance
+    ADD COLUMN IF NOT EXISTS polymarket_positions_open_cash_pnl_usd numeric(28,8) NULL,
+    ADD COLUMN IF NOT EXISTS polymarket_positions_open_realized_pnl_usd numeric(28,8) NULL,
+    ADD COLUMN IF NOT EXISTS polymarket_positions_open_current_value_usd numeric(28,8) NULL,
+    ADD COLUMN IF NOT EXISTS polymarket_positions_closed_realized_pnl_usd numeric(28,8) NULL,
+    ADD COLUMN IF NOT EXISTS polymarket_positions_total_pnl_usd numeric(28,8) NULL,
+    ADD COLUMN IF NOT EXISTS polymarket_positions_refreshed_at_utc timestamptz NULL,
+    ADD COLUMN IF NOT EXISTS polymarket_leaderboard_pnl_usd numeric(28,8) NULL,
+    ADD COLUMN IF NOT EXISTS polymarket_leaderboard_volume_usd numeric(28,8) NULL,
+    ADD COLUMN IF NOT EXISTS polymarket_leaderboard_rank integer NULL,
+    ADD COLUMN IF NOT EXISTS polymarket_leaderboard_category text NULL,
+    ADD COLUMN IF NOT EXISTS polymarket_leaderboard_time_period text NULL,
+    ADD COLUMN IF NOT EXISTS polymarket_leaderboard_refreshed_at_utc timestamptz NULL;
+
+CREATE INDEX IF NOT EXISTS ix_polymarket_data_api_wallet_performance_score
+ON polymarket_data_api_wallet_performance(score DESC, total_pnl_usd DESC, volume_usd DESC);
+
+CREATE INDEX IF NOT EXISTS ix_polymarket_data_api_wallet_performance_pnl
+ON polymarket_data_api_wallet_performance(total_pnl_usd DESC, volume_usd DESC);
+
+CREATE TABLE IF NOT EXISTS polymarket_data_api_wallet_category_performance (
+    wallet text NOT NULL,
+    category text NOT NULL,
+    positions_count integer NOT NULL,
+    open_positions integer NOT NULL,
+    closed_positions integer NOT NULL,
+    profitable_positions integer NOT NULL,
+    losing_positions integer NOT NULL,
+    markets_traded integer NOT NULL,
+    outcomes_traded integer NOT NULL,
+    volume_usd numeric(28,8) NOT NULL,
+    open_initial_value_usd numeric(28,8) NOT NULL,
+    open_current_value_usd numeric(28,8) NOT NULL,
+    open_cash_pnl_usd numeric(28,8) NOT NULL,
+    open_realized_pnl_usd numeric(28,8) NOT NULL,
+    closed_cost_basis_usd numeric(28,8) NOT NULL,
+    closed_realized_pnl_usd numeric(28,8) NOT NULL,
+    total_cost_basis_usd numeric(28,8) NOT NULL,
+    total_current_value_usd numeric(28,8) NOT NULL,
+    total_pnl_usd numeric(28,8) NOT NULL,
+    realized_pnl_usd numeric(28,8) NOT NULL,
+    roi_pct numeric(18,8) NOT NULL,
+    win_rate_pct numeric(18,8) NOT NULL,
+    average_position_size_usd numeric(28,8) NOT NULL,
+    score numeric(28,8) NOT NULL,
+    sample_quality text NOT NULL,
+    last_position_timestamp_utc timestamptz NULL,
+    polymarket_positions_open_cash_pnl_usd numeric(28,8) NULL,
+    polymarket_positions_open_realized_pnl_usd numeric(28,8) NULL,
+    polymarket_positions_open_current_value_usd numeric(28,8) NULL,
+    polymarket_positions_closed_realized_pnl_usd numeric(28,8) NULL,
+    polymarket_positions_total_pnl_usd numeric(28,8) NULL,
+    polymarket_positions_refreshed_at_utc timestamptz NULL,
+    polymarket_leaderboard_pnl_usd numeric(28,8) NULL,
+    polymarket_leaderboard_volume_usd numeric(28,8) NULL,
+    polymarket_leaderboard_rank integer NULL,
+    polymarket_leaderboard_category text NULL,
+    polymarket_leaderboard_time_period text NULL,
+    polymarket_leaderboard_refreshed_at_utc timestamptz NULL,
+    refreshed_at_utc timestamptz NOT NULL,
+    PRIMARY KEY (wallet, category)
+);
+
+ALTER TABLE polymarket_data_api_wallet_category_performance
+    ADD COLUMN IF NOT EXISTS polymarket_positions_open_cash_pnl_usd numeric(28,8) NULL,
+    ADD COLUMN IF NOT EXISTS polymarket_positions_open_realized_pnl_usd numeric(28,8) NULL,
+    ADD COLUMN IF NOT EXISTS polymarket_positions_open_current_value_usd numeric(28,8) NULL,
+    ADD COLUMN IF NOT EXISTS polymarket_positions_closed_realized_pnl_usd numeric(28,8) NULL,
+    ADD COLUMN IF NOT EXISTS polymarket_positions_total_pnl_usd numeric(28,8) NULL,
+    ADD COLUMN IF NOT EXISTS polymarket_positions_refreshed_at_utc timestamptz NULL,
+    ADD COLUMN IF NOT EXISTS polymarket_leaderboard_pnl_usd numeric(28,8) NULL,
+    ADD COLUMN IF NOT EXISTS polymarket_leaderboard_volume_usd numeric(28,8) NULL,
+    ADD COLUMN IF NOT EXISTS polymarket_leaderboard_rank integer NULL,
+    ADD COLUMN IF NOT EXISTS polymarket_leaderboard_category text NULL,
+    ADD COLUMN IF NOT EXISTS polymarket_leaderboard_time_period text NULL,
+    ADD COLUMN IF NOT EXISTS polymarket_leaderboard_refreshed_at_utc timestamptz NULL;
+
+CREATE INDEX IF NOT EXISTS ix_polymarket_data_api_wallet_category_performance_score
+ON polymarket_data_api_wallet_category_performance(category, score DESC, total_pnl_usd DESC, volume_usd DESC);
+
+CREATE TABLE IF NOT EXISTS polymarket_data_api_wallet_category_ratings (
+    wallet text NOT NULL,
+    local_category text NOT NULL,
+    polymarket_category text NOT NULL,
+    time_period text NOT NULL,
+    order_by text NOT NULL,
+    found boolean NOT NULL,
+    leaderboard_rank integer NULL,
+    user_name text NULL,
+    x_username text NULL,
+    profile_image text NULL,
+    verified_badge boolean NOT NULL DEFAULT false,
+    leaderboard_pnl_usd numeric(28,8) NULL,
+    leaderboard_volume_usd numeric(28,8) NULL,
+    leaderboard_pnl_to_volume_pct numeric(18,8) NULL,
+    current_positions_count integer NOT NULL DEFAULT 0,
+    current_positions_initial_value_usd numeric(28,8) NOT NULL DEFAULT 0,
+    current_positions_current_value_usd numeric(28,8) NOT NULL DEFAULT 0,
+    current_positions_cash_pnl_usd numeric(28,8) NOT NULL DEFAULT 0,
+    current_positions_realized_pnl_usd numeric(28,8) NOT NULL DEFAULT 0,
+    current_positions_total_pnl_usd numeric(28,8) NOT NULL DEFAULT 0,
+    current_positions_percent_pnl numeric(18,8) NULL,
+    current_positions_percent_realized_pnl numeric(18,8) NULL,
+    closed_positions_count integer NOT NULL DEFAULT 0,
+    closed_positions_cost_basis_usd numeric(28,8) NOT NULL DEFAULT 0,
+    closed_positions_realized_pnl_usd numeric(28,8) NOT NULL DEFAULT 0,
+    closed_positions_percent_realized_pnl numeric(18,8) NULL,
+    positions_total_cost_basis_usd numeric(28,8) NOT NULL DEFAULT 0,
+    positions_total_pnl_usd numeric(28,8) NOT NULL DEFAULT 0,
+    positions_total_percent_pnl numeric(18,8) NULL,
+    positions_refreshed_at_utc timestamptz NULL,
+    raw_json jsonb NOT NULL,
+    refreshed_at_utc timestamptz NOT NULL,
+    updated_at_utc timestamptz NOT NULL,
+    PRIMARY KEY (wallet, local_category, polymarket_category, time_period, order_by)
+);
+
+ALTER TABLE polymarket_data_api_wallet_category_ratings
+    ADD COLUMN IF NOT EXISTS leaderboard_pnl_to_volume_pct numeric(18,8) NULL,
+    ADD COLUMN IF NOT EXISTS current_positions_count integer NOT NULL DEFAULT 0,
+    ADD COLUMN IF NOT EXISTS current_positions_initial_value_usd numeric(28,8) NOT NULL DEFAULT 0,
+    ADD COLUMN IF NOT EXISTS current_positions_current_value_usd numeric(28,8) NOT NULL DEFAULT 0,
+    ADD COLUMN IF NOT EXISTS current_positions_cash_pnl_usd numeric(28,8) NOT NULL DEFAULT 0,
+    ADD COLUMN IF NOT EXISTS current_positions_realized_pnl_usd numeric(28,8) NOT NULL DEFAULT 0,
+    ADD COLUMN IF NOT EXISTS current_positions_total_pnl_usd numeric(28,8) NOT NULL DEFAULT 0,
+    ADD COLUMN IF NOT EXISTS current_positions_percent_pnl numeric(18,8) NULL,
+    ADD COLUMN IF NOT EXISTS current_positions_percent_realized_pnl numeric(18,8) NULL,
+    ADD COLUMN IF NOT EXISTS closed_positions_count integer NOT NULL DEFAULT 0,
+    ADD COLUMN IF NOT EXISTS closed_positions_cost_basis_usd numeric(28,8) NOT NULL DEFAULT 0,
+    ADD COLUMN IF NOT EXISTS closed_positions_realized_pnl_usd numeric(28,8) NOT NULL DEFAULT 0,
+    ADD COLUMN IF NOT EXISTS closed_positions_percent_realized_pnl numeric(18,8) NULL,
+    ADD COLUMN IF NOT EXISTS positions_total_cost_basis_usd numeric(28,8) NOT NULL DEFAULT 0,
+    ADD COLUMN IF NOT EXISTS positions_total_pnl_usd numeric(28,8) NOT NULL DEFAULT 0,
+    ADD COLUMN IF NOT EXISTS positions_total_percent_pnl numeric(18,8) NULL,
+    ADD COLUMN IF NOT EXISTS positions_refreshed_at_utc timestamptz NULL;
+
+CREATE INDEX IF NOT EXISTS ix_polymarket_data_api_wallet_category_ratings_category_pnl
+ON polymarket_data_api_wallet_category_ratings(polymarket_category, time_period, order_by, leaderboard_pnl_usd DESC NULLS LAST, leaderboard_volume_usd DESC NULLS LAST);
+
+CREATE INDEX IF NOT EXISTS ix_polymarket_data_api_wallet_category_ratings_leaderboard_ratio
+ON polymarket_data_api_wallet_category_ratings(polymarket_category, time_period, order_by, leaderboard_pnl_to_volume_pct DESC NULLS LAST, leaderboard_volume_usd DESC NULLS LAST);
+
+CREATE INDEX IF NOT EXISTS ix_polymarket_data_api_wallet_category_ratings_positions_pnl
+ON polymarket_data_api_wallet_category_ratings(polymarket_category, time_period, order_by, positions_total_pnl_usd DESC, positions_total_cost_basis_usd DESC);
+
+CREATE INDEX IF NOT EXISTS ix_polymarket_data_api_wallet_category_ratings_wallet
+ON polymarket_data_api_wallet_category_ratings(wallet, refreshed_at_utc DESC);
+
+CREATE INDEX IF NOT EXISTS ix_polymarket_data_api_wallet_category_ratings_lookup
+ON polymarket_data_api_wallet_category_ratings(
+    lower(wallet),
+    lower(local_category),
+    lower(polymarket_category),
+    time_period,
+    order_by
+);
+
+CREATE TABLE IF NOT EXISTS polymarket_gamma_markets (
+    market_id text PRIMARY KEY,
+    condition_id text NOT NULL,
+    question_id text NOT NULL,
+    slug text NOT NULL,
+    question text NOT NULL,
+    event_id text NULL,
+    event_slug text NULL,
+    event_title text NULL,
+    series_slug text NULL,
+    category text NULL,
+    active boolean NOT NULL,
+    closed boolean NOT NULL,
+    archived boolean NOT NULL,
+    restricted boolean NOT NULL,
+    accepting_orders boolean NOT NULL,
+    enable_order_book boolean NOT NULL,
+    negative_risk boolean NOT NULL,
+    liquidity numeric(28,8) NULL,
+    liquidity_clob numeric(28,8) NULL,
+    volume numeric(28,8) NULL,
+    volume_24hr numeric(28,8) NULL,
+    best_bid numeric(18,8) NULL,
+    best_ask numeric(18,8) NULL,
+    spread numeric(18,8) NULL,
+    last_trade_price numeric(18,8) NULL,
+    order_min_size numeric(28,8) NULL,
+    order_price_min_tick_size numeric(18,8) NULL,
+    created_at_utc timestamptz NULL,
+    updated_at_utc timestamptz NULL,
+    start_date_utc timestamptz NULL,
+    end_date_utc timestamptz NULL,
+    event_start_time_utc timestamptz NULL,
+    outcomes_json jsonb NOT NULL,
+    clob_token_ids_json jsonb NOT NULL,
+    raw_json jsonb NOT NULL,
+    fetched_at_utc timestamptz NOT NULL
+);
+
+ALTER TABLE polymarket_gamma_markets ADD COLUMN IF NOT EXISTS last_trade_price numeric(18,8) NULL;
+ALTER TABLE polymarket_gamma_markets ADD COLUMN IF NOT EXISTS order_min_size numeric(28,8) NULL;
+ALTER TABLE polymarket_gamma_markets ADD COLUMN IF NOT EXISTS order_price_min_tick_size numeric(18,8) NULL;
+
+CREATE INDEX IF NOT EXISTS ix_polymarket_gamma_markets_created
+ON polymarket_gamma_markets(created_at_utc DESC NULLS LAST, market_id DESC);
+
+CREATE INDEX IF NOT EXISTS ix_polymarket_gamma_markets_condition
+ON polymarket_gamma_markets(condition_id);
+
+CREATE INDEX IF NOT EXISTS ix_polymarket_gamma_markets_slug
+ON polymarket_gamma_markets(slug);
+
+CREATE INDEX IF NOT EXISTS ix_polymarket_gamma_markets_event
+ON polymarket_gamma_markets(event_id);
+
+CREATE INDEX IF NOT EXISTS ix_polymarket_gamma_markets_clob_token_ids
+ON polymarket_gamma_markets USING gin(clob_token_ids_json);
+
 CREATE TABLE IF NOT EXISTS leader_trades (
     id uuid PRIMARY KEY,
     trader_wallet text NOT NULL,
@@ -370,6 +788,69 @@ CREATE TABLE IF NOT EXISTS order_book_snapshots (
 CREATE INDEX IF NOT EXISTS ix_order_book_snapshots_asset_time
 ON order_book_snapshots(asset_id, snapshot_at_utc DESC);
 
+CREATE TABLE IF NOT EXISTS polymarket_websocket_trade_ticks (
+    id uuid PRIMARY KEY,
+    dedup_key text NOT NULL,
+    asset_id text NOT NULL,
+    condition_id text NULL,
+    side text NOT NULL,
+    price numeric(18,8) NULL,
+    size numeric(28,8) NULL,
+    trade_timestamp_utc timestamptz NOT NULL,
+    transaction_hash text NULL,
+    transaction_hash_present boolean NOT NULL,
+    trader_match_status integer NOT NULL,
+    trader_wallet text NULL,
+    received_at_utc timestamptz NOT NULL,
+    matched_at_utc timestamptz NULL,
+    match_attempts integer NOT NULL,
+    last_match_attempt_utc timestamptz NULL,
+    last_match_error text NULL,
+    matched_transaction_hash text NULL,
+    match_details text NULL,
+    raw_json jsonb NOT NULL,
+    updated_at_utc timestamptz NOT NULL
+);
+
+ALTER TABLE polymarket_websocket_trade_ticks ADD COLUMN IF NOT EXISTS dedup_key text NULL;
+ALTER TABLE polymarket_websocket_trade_ticks ADD COLUMN IF NOT EXISTS transaction_hash_present boolean NOT NULL DEFAULT false;
+ALTER TABLE polymarket_websocket_trade_ticks ADD COLUMN IF NOT EXISTS trader_match_status integer NOT NULL DEFAULT 1;
+ALTER TABLE polymarket_websocket_trade_ticks ADD COLUMN IF NOT EXISTS trader_wallet text NULL;
+ALTER TABLE polymarket_websocket_trade_ticks ADD COLUMN IF NOT EXISTS matched_at_utc timestamptz NULL;
+ALTER TABLE polymarket_websocket_trade_ticks ADD COLUMN IF NOT EXISTS match_attempts integer NOT NULL DEFAULT 0;
+ALTER TABLE polymarket_websocket_trade_ticks ADD COLUMN IF NOT EXISTS last_match_attempt_utc timestamptz NULL;
+ALTER TABLE polymarket_websocket_trade_ticks ADD COLUMN IF NOT EXISTS last_match_error text NULL;
+ALTER TABLE polymarket_websocket_trade_ticks ADD COLUMN IF NOT EXISTS matched_transaction_hash text NULL;
+ALTER TABLE polymarket_websocket_trade_ticks ADD COLUMN IF NOT EXISTS match_details text NULL;
+ALTER TABLE polymarket_websocket_trade_ticks ADD COLUMN IF NOT EXISTS updated_at_utc timestamptz NULL;
+UPDATE polymarket_websocket_trade_ticks
+SET dedup_key = COALESCE(
+        NULLIF(dedup_key, ''),
+        lower(concat(
+            'fallback|condition:', COALESCE(condition_id, ''),
+            '|asset:', asset_id,
+            '|side:', side,
+            '|ts:', extract(epoch from trade_timestamp_utc)::bigint,
+            '|price:', COALESCE(price::text, ''),
+            '|size:', COALESCE(size::text, '')
+        ))),
+    updated_at_utc = COALESCE(updated_at_utc, received_at_utc, now())
+WHERE dedup_key IS NULL OR dedup_key = '' OR updated_at_utc IS NULL;
+ALTER TABLE polymarket_websocket_trade_ticks ALTER COLUMN dedup_key SET NOT NULL;
+ALTER TABLE polymarket_websocket_trade_ticks ALTER COLUMN updated_at_utc SET NOT NULL;
+
+CREATE UNIQUE INDEX IF NOT EXISTS ux_polymarket_websocket_trade_ticks_dedup
+ON polymarket_websocket_trade_ticks(dedup_key);
+
+CREATE INDEX IF NOT EXISTS ix_polymarket_websocket_trade_ticks_received
+ON polymarket_websocket_trade_ticks(received_at_utc DESC);
+
+CREATE INDEX IF NOT EXISTS ix_polymarket_websocket_trade_ticks_match_status
+ON polymarket_websocket_trade_ticks(trader_match_status, received_at_utc DESC);
+
+CREATE INDEX IF NOT EXISTS ix_polymarket_websocket_trade_ticks_transaction_hash
+ON polymarket_websocket_trade_ticks(transaction_hash);
+
 CREATE TABLE IF NOT EXISTS signals (
     id uuid PRIMARY KEY,
     leader_trade_id uuid NULL REFERENCES leader_trades(id),
@@ -405,9 +886,1160 @@ CREATE TABLE IF NOT EXISTS signal_rejections (
     created_at_utc timestamptz NOT NULL
 );
 
+DO $$
+BEGIN
+    IF to_regclass('public.strategies') IS NULL
+       AND to_regclass('public.copy_strategies') IS NOT NULL THEN
+        ALTER TABLE public.copy_strategies RENAME TO strategies;
+    END IF;
+END $$;
+
+CREATE TABLE IF NOT EXISTS strategies (
+    id uuid PRIMARY KEY,
+    code text NOT NULL UNIQUE,
+    name text NOT NULL UNIQUE,
+    description text NOT NULL DEFAULT '',
+    enabled boolean NOT NULL DEFAULT true,
+    live_stakes boolean NOT NULL DEFAULT false,
+    paper_stake_amount numeric(28,8) NOT NULL DEFAULT 1.00,
+    live_stake_amount numeric(28,8) NOT NULL DEFAULT 1.00,
+    live_available_balance numeric(28,8) NOT NULL DEFAULT 100.00,
+    created_at_utc timestamptz NOT NULL,
+    updated_at_utc timestamptz NOT NULL,
+    CONSTRAINT ck_strategies_paper_stake_amount_positive CHECK (paper_stake_amount > 0),
+    CONSTRAINT ck_strategies_live_stake_amount_positive CHECK (live_stake_amount > 0),
+    CONSTRAINT ck_strategies_live_available_balance_nonnegative CHECK (live_available_balance >= 0)
+);
+
+ALTER TABLE strategies ADD COLUMN IF NOT EXISTS live_stakes boolean NOT NULL DEFAULT false;
+ALTER TABLE strategies ADD COLUMN IF NOT EXISTS paper_stake_amount numeric(28,8) NOT NULL DEFAULT 1.00;
+ALTER TABLE strategies ADD COLUMN IF NOT EXISTS live_stake_amount numeric(28,8) NOT NULL DEFAULT 1.00;
+ALTER TABLE strategies ADD COLUMN IF NOT EXISTS live_available_balance numeric(28,8) NOT NULL DEFAULT 100.00;
+
+DO $$
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1
+        FROM pg_constraint
+        WHERE conname = 'ck_strategies_paper_stake_amount_positive'
+          AND conrelid = 'public.strategies'::regclass
+    ) THEN
+        ALTER TABLE strategies
+            ADD CONSTRAINT ck_strategies_paper_stake_amount_positive CHECK (paper_stake_amount > 0);
+    END IF;
+
+    IF NOT EXISTS (
+        SELECT 1
+        FROM pg_constraint
+        WHERE conname = 'ck_strategies_live_stake_amount_positive'
+          AND conrelid = 'public.strategies'::regclass
+    ) THEN
+        ALTER TABLE strategies
+            ADD CONSTRAINT ck_strategies_live_stake_amount_positive CHECK (live_stake_amount > 0);
+    END IF;
+
+    IF NOT EXISTS (
+        SELECT 1
+        FROM pg_constraint
+        WHERE conname = 'ck_strategies_live_available_balance_nonnegative'
+          AND conrelid = 'public.strategies'::regclass
+    ) THEN
+        ALTER TABLE strategies
+            ADD CONSTRAINT ck_strategies_live_available_balance_nonnegative CHECK (live_available_balance >= 0);
+    END IF;
+END $$;
+
+INSERT INTO strategies (id, code, name, description, enabled, created_at_utc, updated_at_utc)
+VALUES (
+    'f0110a0d-1ead-4c00-8b01-000000000001',
+    'follow_leader',
+    'Follow leader',
+    'Follow accepted signals from selected leader traders.',
+    true,
+    now(),
+    now()
+),
+(
+    'b7c50005-0000-4000-8001-000000000030',
+    'btc_up_down_5m_less_30',
+    'BTC Up or Down 5m Less 30',
+    'Bet the configured Paper stake multiplier on the lower-priced BTC 5m outcome 30 seconds after window start.',
+    true,
+    now(),
+    now()
+),
+(
+    'b7c50005-0000-4000-8001-000000000060',
+    'btc_up_down_5m_less_60',
+    'BTC Up or Down 5m Less 60',
+    'Bet the configured Paper stake multiplier on the lower-priced BTC 5m outcome 60 seconds after window start.',
+    true,
+    now(),
+    now()
+),
+(
+    'b7c50005-0000-4000-8021-000000060020',
+    'btc_up_down_5m_less_60_below_20',
+    'BTC Up or Down 5m Less 60 Below 20',
+    'Bet the configured Paper stake multiplier on the lower-priced BTC 5m outcome 60 seconds after window start using a two-minute GTD limit BUY at 0.20.',
+    true,
+    now(),
+    now()
+),
+(
+    'b7c50005-0000-4000-8001-000000000090',
+    'btc_up_down_5m_less_90',
+    'BTC Up or Down 5m Less 90',
+    'Bet the configured Paper stake multiplier on the lower-priced BTC 5m outcome 90 seconds after window start.',
+    true,
+    now(),
+    now()
+),
+(
+    'b7c50005-0000-4000-8021-000000090020',
+    'btc_up_down_5m_less_90_below_20',
+    'BTC Up or Down 5m Less 90 Below 20',
+    'Bet the configured Paper stake multiplier on the lower-priced BTC 5m outcome 90 seconds after window start using a two-minute GTD limit BUY at 0.20.',
+    true,
+    now(),
+    now()
+),
+(
+    'b7c50005-0000-4000-8001-000000000120',
+    'btc_up_down_5m_less_120',
+    'BTC Up or Down 5m Less 120',
+    'Bet the configured Paper stake multiplier on the lower-priced BTC 5m outcome 120 seconds after window start.',
+    true,
+    now(),
+    now()
+),
+(
+    'b7c50005-0000-4000-8021-000000120020',
+    'btc_up_down_5m_less_120_below_20',
+    'BTC Up or Down 5m Less 120 Below 20',
+    'Bet the configured Paper stake multiplier on the lower-priced BTC 5m outcome 120 seconds after window start using a two-minute GTD limit BUY at 0.20.',
+    true,
+    now(),
+    now()
+),
+(
+    'b7c50005-0000-4000-8021-000000120030',
+    'btc_up_down_5m_less_120_below_30',
+    'BTC Up or Down 5m Less 120 Below 30',
+    'Bet the configured Paper stake multiplier on the lower-priced BTC 5m outcome 120 seconds after window start using a two-minute GTD limit BUY at 0.30.',
+    true,
+    now(),
+    now()
+),
+(
+    'b7c50005-0000-4000-8001-000000000150',
+    'btc_up_down_5m_less_150',
+    'BTC Up or Down 5m Less 150',
+    'Bet the configured Paper stake multiplier on the lower-priced BTC 5m outcome 150 seconds after window start.',
+    true,
+    now(),
+    now()
+),
+(
+    'b7c50005-0000-4000-8001-000000000180',
+    'btc_up_down_5m_less_180',
+    'BTC Up or Down 5m Less 180',
+    'Bet the configured Paper stake multiplier on the lower-priced BTC 5m outcome 180 seconds after window start.',
+    true,
+    now(),
+    now()
+),
+(
+    'b7c50005-0000-4000-8003-000000000180',
+    'btc_up_down_5m_less_180_martin',
+    'BTC Less 180 Martin',
+    'After BTC Less 180 loses three times in a row, bet on the lower-priced BTC 5m outcome 180 seconds after window start using the configured Paper stake multiplier progression until this strategy wins.',
+    true,
+    now(),
+    now()
+),
+(
+    'b7c50005-0000-4000-8001-000000000210',
+    'btc_up_down_5m_less_210',
+    'BTC Up or Down 5m Less 210',
+    'Bet the configured Paper stake multiplier on the lower-priced BTC 5m outcome 210 seconds after window start.',
+    true,
+    now(),
+    now()
+),
+(
+    'b7c50005-0000-4000-8001-000000000240',
+    'btc_up_down_5m_less_240',
+    'BTC Up or Down 5m Less 240',
+    'Bet the configured Paper stake multiplier on the lower-priced BTC 5m outcome 240 seconds after window start.',
+    true,
+    now(),
+    now()
+),
+(
+    'b7c50005-0000-4000-8001-000000000270',
+    'btc_up_down_5m_less_270',
+    'BTC Up or Down 5m Less 270',
+    'Bet the configured Paper stake multiplier on the lower-priced BTC 5m outcome 270 seconds after window start.',
+    true,
+    now(),
+    now()
+),
+(
+    'b7c50005-0000-4000-8002-000000000030',
+    'btc_up_down_5m_more_30',
+    'BTC Up or Down 5m More 30',
+    'Bet the configured Paper stake multiplier on the higher-priced BTC 5m outcome 30 seconds after window start.',
+    true,
+    now(),
+    now()
+),
+(
+    'b7c50005-0000-4000-8020-000000030055',
+    'btc_up_down_5m_more_30_below_55',
+    'BTC Up or Down 5m More 30 Below 55',
+    'Bet the configured Paper stake multiplier on the higher-priced BTC 5m outcome 30 seconds after window start using a two-minute GTD limit BUY at 0.55.',
+    true,
+    now(),
+    now()
+),
+(
+    'b7c50005-0000-4000-8002-000000000060',
+    'btc_up_down_5m_more_60',
+    'BTC Up or Down 5m More 60',
+    'Bet the configured Paper stake multiplier on the higher-priced BTC 5m outcome 60 seconds after window start.',
+    true,
+    now(),
+    now()
+),
+(
+    'b7c50005-0000-4000-8019-000000000060',
+    'btc_up_down_5m_more_60_below_60',
+    'BTC Up or Down 5m More 60 Below 60',
+    'Bet the configured Paper stake multiplier on the higher-priced BTC 5m outcome 60 seconds after window start using a two-minute GTD limit BUY at 0.60.',
+    true,
+    now(),
+    now()
+),
+(
+    'b7c50005-0000-4000-8019-000000000055',
+    'btc_up_down_5m_more_60_below_55',
+    'BTC Up or Down 5m More 60 Below 55',
+    'Bet the configured Paper stake multiplier on the higher-priced BTC 5m outcome 60 seconds after window start using a two-minute GTD limit BUY at 0.55.',
+    true,
+    now(),
+    now()
+),
+(
+    'b7c50005-0000-4000-8002-000000000090',
+    'btc_up_down_5m_more_90',
+    'BTC Up or Down 5m More 90',
+    'Bet the configured Paper stake multiplier on the higher-priced BTC 5m outcome 90 seconds after window start.',
+    true,
+    now(),
+    now()
+),
+(
+    'b7c50005-0000-4000-8012-000000000070',
+    'btc_up_down_5m_more_90_below_70',
+    'BTC Up or Down 5m More 90 Below 70',
+    'Bet the configured Paper stake multiplier on the higher-priced BTC 5m outcome 90 seconds after window start using a two-minute GTD limit BUY at 0.70.',
+    true,
+    now(),
+    now()
+),
+(
+    'b7c50005-0000-4000-8012-000000000065',
+    'btc_up_down_5m_more_90_below_65',
+    'BTC Up or Down 5m More 90 Below 65',
+    'Bet the configured Paper stake multiplier on the higher-priced BTC 5m outcome 90 seconds after window start using a two-minute GTD limit BUY at 0.65.',
+    true,
+    now(),
+    now()
+),
+(
+    'b7c50005-0000-4000-8012-000000000060',
+    'btc_up_down_5m_more_90_below_60',
+    'BTC Up or Down 5m More 90 Below 60',
+    'Bet the configured Paper stake multiplier on the higher-priced BTC 5m outcome 90 seconds after window start using a two-minute GTD limit BUY at 0.60.',
+    true,
+    now(),
+    now()
+),
+(
+    'b7c50005-0000-4000-8012-000000000055',
+    'btc_up_down_5m_more_90_below_55',
+    'BTC Up or Down 5m More 90 Below 55',
+    'Bet the configured Paper stake multiplier on the higher-priced BTC 5m outcome 90 seconds after window start using a two-minute GTD limit BUY at 0.55.',
+    true,
+    now(),
+    now()
+),
+(
+    'b7c50005-0000-4000-8002-000000000120',
+    'btc_up_down_5m_more_120',
+    'BTC Up or Down 5m More 120',
+    'Bet the configured Paper stake multiplier on the higher-priced BTC 5m outcome 120 seconds after window start.',
+    true,
+    now(),
+    now()
+),
+(
+    'b7c50005-0000-4000-8020-000000120070',
+    'btc_up_down_5m_more_120_below_70',
+    'BTC Up or Down 5m More 120 Below 70',
+    'Bet the configured Paper stake multiplier on the higher-priced BTC 5m outcome 120 seconds after window start using a two-minute GTD limit BUY at 0.70.',
+    true,
+    now(),
+    now()
+),
+(
+    'b7c50005-0000-4000-8002-000000000150',
+    'btc_up_down_5m_more_150',
+    'BTC Up or Down 5m More 150',
+    'Bet the configured Paper stake multiplier on the higher-priced BTC 5m outcome 150 seconds after window start.',
+    true,
+    now(),
+    now()
+),
+(
+    'b7c50005-0000-4000-8020-000000150065',
+    'btc_up_down_5m_more_150_below_65',
+    'BTC Up or Down 5m More 150 Below 65',
+    'Bet the configured Paper stake multiplier on the higher-priced BTC 5m outcome 150 seconds after window start using a two-minute GTD limit BUY at 0.65.',
+    true,
+    now(),
+    now()
+),
+(
+    'b7c50005-0000-4000-8002-000000000180',
+    'btc_up_down_5m_more_180',
+    'BTC Up or Down 5m More 180',
+    'Bet the configured Paper stake multiplier on the higher-priced BTC 5m outcome 180 seconds after window start.',
+    true,
+    now(),
+    now()
+),
+(
+    'b7c50005-0000-4000-8002-000000000210',
+    'btc_up_down_5m_more_210',
+    'BTC Up or Down 5m More 210',
+    'Bet the configured Paper stake multiplier on the higher-priced BTC 5m outcome 210 seconds after window start.',
+    true,
+    now(),
+    now()
+),
+(
+    'b7c50005-0000-4000-8002-000000000240',
+    'btc_up_down_5m_more_240',
+    'BTC Up or Down 5m More 240',
+    'Bet the configured Paper stake multiplier on the higher-priced BTC 5m outcome 240 seconds after window start.',
+    true,
+    now(),
+    now()
+),
+(
+    'b7c50005-0000-4000-8002-000000000270',
+    'btc_up_down_5m_more_270',
+    'BTC Up or Down 5m More 270',
+    'Bet the configured Paper stake multiplier on the higher-priced BTC 5m outcome 270 seconds after window start.',
+    true,
+    now(),
+    now()
+),
+(
+    'b7c50005-0000-4000-8020-000000270065',
+    'btc_up_down_5m_more_270_below_65',
+    'BTC Up or Down 5m More 270 Below 65',
+    'Bet the configured Paper stake multiplier on the higher-priced BTC 5m outcome 270 seconds after window start using a two-minute GTD limit BUY at 0.65.',
+    true,
+    now(),
+    now()
+),
+(
+    'b7c50005-0000-4000-8020-000000270060',
+    'btc_up_down_5m_more_270_below_60',
+    'BTC Up or Down 5m More 270 Below 60',
+    'Bet the configured Paper stake multiplier on the higher-priced BTC 5m outcome 270 seconds after window start using a two-minute GTD limit BUY at 0.60.',
+    true,
+    now(),
+    now()
+)
+ON CONFLICT (id) DO UPDATE SET
+    code = excluded.code,
+    name = excluded.name,
+    description = excluded.description,
+    updated_at_utc = excluded.updated_at_utc;
+
+INSERT INTO strategies (id, code, name, description, enabled, paper_stake_amount, created_at_utc, updated_at_utc)
+VALUES (
+    'b7c50005-0000-4000-8004-000000000030',
+    'btc_up_down_5m_less_30_gamma',
+    'BTC Up or Down 5m Less 30 Gamma',
+    'Experimental comparison strategy: choose the lower-priced BTC 5m outcome from Gamma outcomePrices 30 seconds after window start, then use taker Paper pricing for the selected asset.',
+    true,
+    1.00,
+    now(),
+    now()
+),
+(
+    'b7c50005-0000-4000-8004-000000000060',
+    'btc_up_down_5m_less_60_gamma',
+    'BTC Up or Down 5m Less 60 Gamma',
+    'Experimental comparison strategy: choose the lower-priced BTC 5m outcome from Gamma outcomePrices 60 seconds after window start, then use taker Paper pricing for the selected asset.',
+    true,
+    1.00,
+    now(),
+    now()
+),
+(
+    'b7c50005-0000-4000-8004-000000000090',
+    'btc_up_down_5m_less_90_gamma',
+    'BTC Up or Down 5m Less 90 Gamma',
+    'Experimental comparison strategy: choose the lower-priced BTC 5m outcome from Gamma outcomePrices 90 seconds after window start, then use taker Paper pricing for the selected asset.',
+    true,
+    1.00,
+    now(),
+    now()
+),
+(
+    'b7c50005-0000-4000-8004-000000000120',
+    'btc_up_down_5m_less_120_gamma',
+    'BTC Up or Down 5m Less 120 Gamma',
+    'Experimental comparison strategy: choose the lower-priced BTC 5m outcome from Gamma outcomePrices 120 seconds after window start, then use taker Paper pricing for the selected asset.',
+    true,
+    1.00,
+    now(),
+    now()
+),
+(
+    'b7c50005-0000-4000-8004-000000000150',
+    'btc_up_down_5m_less_150_gamma',
+    'BTC Up or Down 5m Less 150 Gamma',
+    'Experimental comparison strategy: choose the lower-priced BTC 5m outcome from Gamma outcomePrices 150 seconds after window start, then use taker Paper pricing for the selected asset.',
+    true,
+    1.00,
+    now(),
+    now()
+),
+(
+    'b7c50005-0000-4000-8004-000000000180',
+    'btc_up_down_5m_less_180_gamma',
+    'BTC Up or Down 5m Less 180 Gamma',
+    'Experimental comparison strategy: choose the lower-priced BTC 5m outcome from Gamma outcomePrices 180 seconds after window start, then use taker Paper pricing for the selected asset.',
+    true,
+    1.00,
+    now(),
+    now()
+),
+(
+    'b7c50005-0000-4000-8004-000000000210',
+    'btc_up_down_5m_less_210_gamma',
+    'BTC Up or Down 5m Less 210 Gamma',
+    'Experimental comparison strategy: choose the lower-priced BTC 5m outcome from Gamma outcomePrices 210 seconds after window start, then use taker Paper pricing for the selected asset.',
+    true,
+    1.00,
+    now(),
+    now()
+),
+(
+    'b7c50005-0000-4000-8004-000000000240',
+    'btc_up_down_5m_less_240_gamma',
+    'BTC Up or Down 5m Less 240 Gamma',
+    'Experimental comparison strategy: choose the lower-priced BTC 5m outcome from Gamma outcomePrices 240 seconds after window start, then use taker Paper pricing for the selected asset.',
+    true,
+    1.00,
+    now(),
+    now()
+),
+(
+    'b7c50005-0000-4000-8004-000000000270',
+    'btc_up_down_5m_less_270_gamma',
+    'BTC Up or Down 5m Less 270 Gamma',
+    'Experimental comparison strategy: choose the lower-priced BTC 5m outcome from Gamma outcomePrices 270 seconds after window start, then use taker Paper pricing for the selected asset.',
+    true,
+    1.00,
+    now(),
+    now()
+),
+(
+    'b7c50005-0000-4000-8005-000000000030',
+    'btc_up_down_5m_more_30_gamma',
+    'BTC Up or Down 5m More 30 Gamma',
+    'Experimental comparison strategy: choose the higher-priced BTC 5m outcome from Gamma outcomePrices 30 seconds after window start, then use taker Paper pricing for the selected asset.',
+    true,
+    1.00,
+    now(),
+    now()
+),
+(
+    'b7c50005-0000-4000-8005-000000000060',
+    'btc_up_down_5m_more_60_gamma',
+    'BTC Up or Down 5m More 60 Gamma',
+    'Experimental comparison strategy: choose the higher-priced BTC 5m outcome from Gamma outcomePrices 60 seconds after window start, then use taker Paper pricing for the selected asset.',
+    true,
+    1.00,
+    now(),
+    now()
+),
+(
+    'b7c50005-0000-4000-8005-000000000090',
+    'btc_up_down_5m_more_90_gamma',
+    'BTC Up or Down 5m More 90 Gamma',
+    'Experimental comparison strategy: choose the higher-priced BTC 5m outcome from Gamma outcomePrices 90 seconds after window start, then use taker Paper pricing for the selected asset.',
+    true,
+    1.00,
+    now(),
+    now()
+),
+(
+    'b7c50005-0000-4000-8005-000000000120',
+    'btc_up_down_5m_more_120_gamma',
+    'BTC Up or Down 5m More 120 Gamma',
+    'Experimental comparison strategy: choose the higher-priced BTC 5m outcome from Gamma outcomePrices 120 seconds after window start, then use taker Paper pricing for the selected asset.',
+    true,
+    1.00,
+    now(),
+    now()
+),
+(
+    'b7c50005-0000-4000-8005-000000000150',
+    'btc_up_down_5m_more_150_gamma',
+    'BTC Up or Down 5m More 150 Gamma',
+    'Experimental comparison strategy: choose the higher-priced BTC 5m outcome from Gamma outcomePrices 150 seconds after window start, then use taker Paper pricing for the selected asset.',
+    true,
+    1.00,
+    now(),
+    now()
+),
+(
+    'b7c50005-0000-4000-8005-000000000180',
+    'btc_up_down_5m_more_180_gamma',
+    'BTC Up or Down 5m More 180 Gamma',
+    'Experimental comparison strategy: choose the higher-priced BTC 5m outcome from Gamma outcomePrices 180 seconds after window start, then use taker Paper pricing for the selected asset.',
+    true,
+    1.00,
+    now(),
+    now()
+),
+(
+    'b7c50005-0000-4000-8005-000000000210',
+    'btc_up_down_5m_more_210_gamma',
+    'BTC Up or Down 5m More 210 Gamma',
+    'Experimental comparison strategy: choose the higher-priced BTC 5m outcome from Gamma outcomePrices 210 seconds after window start, then use taker Paper pricing for the selected asset.',
+    true,
+    1.00,
+    now(),
+    now()
+),
+(
+    'b7c50005-0000-4000-8005-000000000240',
+    'btc_up_down_5m_more_240_gamma',
+    'BTC Up or Down 5m More 240 Gamma',
+    'Experimental comparison strategy: choose the higher-priced BTC 5m outcome from Gamma outcomePrices 240 seconds after window start, then use taker Paper pricing for the selected asset.',
+    true,
+    1.00,
+    now(),
+    now()
+),
+(
+    'b7c50005-0000-4000-8005-000000000270',
+    'btc_up_down_5m_more_270_gamma',
+    'BTC Up or Down 5m More 270 Gamma',
+    'Experimental comparison strategy: choose the higher-priced BTC 5m outcome from Gamma outcomePrices 270 seconds after window start, then use taker Paper pricing for the selected asset.',
+    true,
+    1.00,
+    now(),
+    now()
+),
+(
+    'b7c50005-0000-4000-8022-000000060070',
+    'btc_up_down_5m_more_60_gamma_below_70',
+    'BTC Up or Down 5m More 60 Gamma Below 70',
+    'Experimental Paper-only comparison strategy: choose the higher-priced BTC 5m outcome from Gamma outcomePrices 60 seconds after window start, then place a two-minute GTD limit BUY at 0.70.',
+    true,
+    1.00,
+    now(),
+    now()
+),
+(
+    'b7c50005-0000-4000-8022-000000060080',
+    'btc_up_down_5m_more_60_gamma_below_80',
+    'BTC Up or Down 5m More 60 Gamma Below 80',
+    'Experimental Paper-only comparison strategy: choose the higher-priced BTC 5m outcome from Gamma outcomePrices 60 seconds after window start, then place a two-minute GTD limit BUY at 0.80.',
+    true,
+    1.00,
+    now(),
+    now()
+),
+(
+    'b7c50005-0000-4000-8022-000000090070',
+    'btc_up_down_5m_more_90_gamma_below_70',
+    'BTC Up or Down 5m More 90 Gamma Below 70',
+    'Experimental Paper-only comparison strategy: choose the higher-priced BTC 5m outcome from Gamma outcomePrices 90 seconds after window start, then place a two-minute GTD limit BUY at 0.70.',
+    true,
+    1.00,
+    now(),
+    now()
+),
+(
+    'b7c50005-0000-4000-8022-000000120065',
+    'btc_up_down_5m_more_120_gamma_below_65',
+    'BTC Up or Down 5m More 120 Gamma Below 65',
+    'Experimental Paper-only comparison strategy: choose the higher-priced BTC 5m outcome from Gamma outcomePrices 120 seconds after window start, then place a two-minute GTD limit BUY at 0.65.',
+    true,
+    1.00,
+    now(),
+    now()
+),
+(
+    'b7c50005-0000-4000-8022-000000120070',
+    'btc_up_down_5m_more_120_gamma_below_70',
+    'BTC Up or Down 5m More 120 Gamma Below 70',
+    'Experimental Paper-only comparison strategy: choose the higher-priced BTC 5m outcome from Gamma outcomePrices 120 seconds after window start, then place a two-minute GTD limit BUY at 0.70.',
+    true,
+    1.00,
+    now(),
+    now()
+),
+(
+    'b7c50005-0000-4000-8022-000000150070',
+    'btc_up_down_5m_more_150_gamma_below_70',
+    'BTC Up or Down 5m More 150 Gamma Below 70',
+    'Experimental Paper-only comparison strategy: choose the higher-priced BTC 5m outcome from Gamma outcomePrices 150 seconds after window start, then place a two-minute GTD limit BUY at 0.70.',
+    true,
+    1.00,
+    now(),
+    now()
+),
+(
+    'b7c50005-0000-4000-8022-000000150080',
+    'btc_up_down_5m_more_150_gamma_below_80',
+    'BTC Up or Down 5m More 150 Gamma Below 80',
+    'Experimental Paper-only comparison strategy: choose the higher-priced BTC 5m outcome from Gamma outcomePrices 150 seconds after window start, then place a two-minute GTD limit BUY at 0.80.',
+    true,
+    1.00,
+    now(),
+    now()
+)
+ON CONFLICT (id) DO UPDATE SET
+    code = excluded.code,
+    name = excluded.name,
+    description = excluded.description,
+    updated_at_utc = excluded.updated_at_utc;
+
+INSERT INTO strategies (id, code, name, description, enabled, paper_stake_amount, created_at_utc, updated_at_utc)
+VALUES (
+    'b7c50005-0000-4000-8006-000000000001',
+    'btc_up_down_5m_middle_1',
+    'BTC Up or Down 5m Middle 1',
+    'Immediately after BTC 5m market open, compare the latest Binance BTC/USDT trade-stream price against the cached arithmetic mean; above mean buys Down, below mean buys Up, otherwise skip. Paper entry is an ordinary GTD Paper BUY with dynamic break-even pricing.',
+    true,
+    1.00,
+    now(),
+    now()
+),
+(
+    'b7c50005-0000-4000-8006-000000000002',
+    'btc_up_down_5m_middle_2',
+    'BTC Up or Down 5m Middle 2',
+    'Immediately after BTC 5m market open, compare the latest Binance BTC/USDT trade-stream price plus the latest 1 cached reference sample(s) against the cached arithmetic mean; above mean buys Down, below mean buys Up, otherwise skip. Paper entry is an ordinary GTD Paper BUY with dynamic break-even pricing.',
+    true,
+    1.00,
+    now(),
+    now()
+),
+(
+    'b7c50005-0000-4000-8006-000000000003',
+    'btc_up_down_5m_middle_3',
+    'BTC Up or Down 5m Middle 3',
+    'Immediately after BTC 5m market open, compare the latest Binance BTC/USDT trade-stream price plus the latest 2 cached reference sample(s) against the cached arithmetic mean; above mean buys Down, below mean buys Up, otherwise skip. Paper entry is an ordinary GTD Paper BUY with dynamic break-even pricing.',
+    true,
+    1.00,
+    now(),
+    now()
+),
+(
+    'b7c50005-0000-4000-8006-000000000004',
+    'btc_up_down_5m_middle_4',
+    'BTC Up or Down 5m Middle 4',
+    'Immediately after BTC 5m market open, compare the latest Binance BTC/USDT trade-stream price plus the latest 3 cached reference sample(s) against the cached arithmetic mean; above mean buys Down, below mean buys Up, otherwise skip. Paper entry is an ordinary GTD Paper BUY with dynamic break-even pricing.',
+    true,
+    1.00,
+    now(),
+    now()
+),
+(
+    'b7c50005-0000-4000-8006-000000000005',
+    'btc_up_down_5m_middle_5',
+    'BTC Up or Down 5m Middle 5',
+    'Immediately after BTC 5m market open, compare the latest Binance BTC/USDT trade-stream price plus the latest 4 cached reference sample(s) against the cached arithmetic mean; above mean buys Down, below mean buys Up, otherwise skip. Paper entry is an ordinary GTD Paper BUY with dynamic break-even pricing.',
+    true,
+    1.00,
+    now(),
+    now()
+),
+(
+    'b7c50005-0000-4000-8009-000000000001',
+    'btc_up_down_5m_middle_1_revert',
+    'BTC Up or Down 5m Middle 1 Revert',
+    'Immediately after BTC 5m market open, compare the latest Binance BTC/USDT trade-stream price against the cached arithmetic mean, then invert the standard Middle 1 decision; above mean buys Up, below mean buys Down, otherwise skip. Paper entry is an ordinary GTD Paper BUY with dynamic break-even pricing.',
+    true,
+    1.00,
+    now(),
+    now()
+),
+(
+    'b7c50005-0000-4000-8009-000000000002',
+    'btc_up_down_5m_middle_2_revert',
+    'BTC Up or Down 5m Middle 2 Revert',
+    'Immediately after BTC 5m market open, compare the latest Binance BTC/USDT trade-stream price plus the latest 1 cached reference sample(s) against the cached arithmetic mean, then invert the standard Middle 2 decision; above mean buys Up, below mean buys Down, otherwise skip. Paper entry is an ordinary GTD Paper BUY with dynamic break-even pricing.',
+    true,
+    1.00,
+    now(),
+    now()
+),
+(
+    'b7c50005-0000-4000-8009-000000000003',
+    'btc_up_down_5m_middle_3_revert',
+    'BTC Up or Down 5m Middle 3 Revert',
+    'Immediately after BTC 5m market open, compare the latest Binance BTC/USDT trade-stream price plus the latest 2 cached reference sample(s) against the cached arithmetic mean, then invert the standard Middle 3 decision; above mean buys Up, below mean buys Down, otherwise skip. Paper entry is an ordinary GTD Paper BUY with dynamic break-even pricing.',
+    true,
+    1.00,
+    now(),
+    now()
+),
+(
+    'b7c50005-0000-4000-8009-000000000004',
+    'btc_up_down_5m_middle_4_revert',
+    'BTC Up or Down 5m Middle 4 Revert',
+    'Immediately after BTC 5m market open, compare the latest Binance BTC/USDT trade-stream price plus the latest 3 cached reference sample(s) against the cached arithmetic mean, then invert the standard Middle 4 decision; above mean buys Up, below mean buys Down, otherwise skip. Paper entry is an ordinary GTD Paper BUY with dynamic break-even pricing.',
+    true,
+    1.00,
+    now(),
+    now()
+),
+(
+    'b7c50005-0000-4000-8009-000000000005',
+    'btc_up_down_5m_middle_5_revert',
+    'BTC Up or Down 5m Middle 5 Revert',
+    'Immediately after BTC 5m market open, compare the latest Binance BTC/USDT trade-stream price plus the latest 4 cached reference sample(s) against the cached arithmetic mean, then invert the standard Middle 5 decision; above mean buys Up, below mean buys Down, otherwise skip. Paper entry is an ordinary GTD Paper BUY with dynamic break-even pricing.',
+    true,
+    1.00,
+    now(),
+    now()
+),
+(
+    'b7c50005-0000-4000-8007-000000000001',
+    'btc_up_down_5m_skip_1',
+    'BTC Up or Down 5m Skip 1',
+    'Immediately after BTC 5m market open, inspect the latest 1 settled BTC 5m market result(s); after consecutive Up results buy Down, after consecutive Down results buy Up, otherwise skip. Paper entry is an ordinary GTD Paper BUY with dynamic break-even pricing.',
+    true,
+    1.00,
+    now(),
+    now()
+),
+(
+    'b7c50005-0000-4000-8007-000000000002',
+    'btc_up_down_5m_skip_2',
+    'BTC Up or Down 5m Skip 2',
+    'Immediately after BTC 5m market open, inspect the latest 2 settled BTC 5m market result(s); after consecutive Up results buy Down, after consecutive Down results buy Up, otherwise skip. Paper entry is an ordinary GTD Paper BUY with dynamic break-even pricing.',
+    true,
+    1.00,
+    now(),
+    now()
+),
+(
+    'b7c50005-0000-4000-8007-000000000003',
+    'btc_up_down_5m_skip_3',
+    'BTC Up or Down 5m Skip 3',
+    'Immediately after BTC 5m market open, inspect the latest 3 settled BTC 5m market result(s); after consecutive Up results buy Down, after consecutive Down results buy Up, otherwise skip. Paper entry is an ordinary GTD Paper BUY with dynamic break-even pricing.',
+    true,
+    1.00,
+    now(),
+    now()
+),
+(
+    'b7c50005-0000-4000-8007-000000000004',
+    'btc_up_down_5m_skip_4',
+    'BTC Up or Down 5m Skip 4',
+    'Immediately after BTC 5m market open, inspect the latest 4 settled BTC 5m market result(s); after consecutive Up results buy Down, after consecutive Down results buy Up, otherwise skip. Paper entry is an ordinary GTD Paper BUY with dynamic break-even pricing.',
+    true,
+    1.00,
+    now(),
+    now()
+),
+(
+    'b7c50005-0000-4000-8007-000000000005',
+    'btc_up_down_5m_skip_5',
+    'BTC Up or Down 5m Skip 5',
+    'Immediately after BTC 5m market open, inspect the latest 5 settled BTC 5m market result(s); after consecutive Up results buy Down, after consecutive Down results buy Up, otherwise skip. Paper entry is an ordinary GTD Paper BUY with dynamic break-even pricing.',
+    true,
+    1.00,
+    now(),
+    now()
+),
+(
+    'b7c50005-0000-4000-8008-000000000001',
+    'btc_up_down_5m_skip_1_revert',
+    'BTC Up or Down 5m Skip 1 Revert',
+    'Immediately after BTC 5m market open, inspect the latest 1 settled BTC 5m market result(s), then invert the standard Skip 1 decision; after consecutive Up results buy Up, after consecutive Down results buy Down, otherwise skip. Paper entry is an ordinary GTD Paper BUY with dynamic break-even pricing.',
+    true,
+    1.00,
+    now(),
+    now()
+),
+(
+    'b7c50005-0000-4000-8008-000000000002',
+    'btc_up_down_5m_skip_2_revert',
+    'BTC Up or Down 5m Skip 2 Revert',
+    'Immediately after BTC 5m market open, inspect the latest 2 settled BTC 5m market result(s), then invert the standard Skip 2 decision; after consecutive Up results buy Up, after consecutive Down results buy Down, otherwise skip. Paper entry is an ordinary GTD Paper BUY with dynamic break-even pricing.',
+    true,
+    1.00,
+    now(),
+    now()
+),
+(
+    'b7c50005-0000-4000-8008-000000000003',
+    'btc_up_down_5m_skip_3_revert',
+    'BTC Up or Down 5m Skip 3 Revert',
+    'Immediately after BTC 5m market open, inspect the latest 3 settled BTC 5m market result(s), then invert the standard Skip 3 decision; after consecutive Up results buy Up, after consecutive Down results buy Down, otherwise skip. Paper entry is an ordinary GTD Paper BUY with dynamic break-even pricing.',
+    true,
+    1.00,
+    now(),
+    now()
+),
+(
+    'b7c50005-0000-4000-8008-000000000004',
+    'btc_up_down_5m_skip_4_revert',
+    'BTC Up or Down 5m Skip 4 Revert',
+    'Immediately after BTC 5m market open, inspect the latest 4 settled BTC 5m market result(s), then invert the standard Skip 4 decision; after consecutive Up results buy Up, after consecutive Down results buy Down, otherwise skip. Paper entry is an ordinary GTD Paper BUY with dynamic break-even pricing.',
+    true,
+    1.00,
+    now(),
+    now()
+),
+(
+    'b7c50005-0000-4000-8008-000000000005',
+    'btc_up_down_5m_skip_5_revert',
+    'BTC Up or Down 5m Skip 5 Revert',
+    'Immediately after BTC 5m market open, inspect the latest 5 settled BTC 5m market result(s), then invert the standard Skip 5 decision; after consecutive Up results buy Up, after consecutive Down results buy Down, otherwise skip. Paper entry is an ordinary GTD Paper BUY with dynamic break-even pricing.',
+    true,
+    1.00,
+    now(),
+    now()
+),
+(
+    'b7c50005-0000-4000-8010-000000000001',
+    'btc_up_down_5m_up',
+    'BTC Up or Down 5m Up',
+    'After BTC 5m trading starts, always place an Up GTD limit BUY at 0.45 for two minutes; settlement uses only actually filled shares.',
+    true,
+    1.00,
+    now(),
+    now()
+),
+(
+    'b7c50005-0000-4000-8010-000000000002',
+    'btc_up_down_5m_down',
+    'BTC Up or Down 5m Down',
+    'After BTC 5m trading starts, always place a Down GTD limit BUY at 0.45 for two minutes; settlement uses only actually filled shares.',
+    true,
+    1.00,
+    now(),
+    now()
+),
+(
+    'b7c50005-0000-4000-8011-000000000001',
+    'btc_up_down_5m_binance',
+    'BTC Up or Down 5m Binance',
+    'After BTC 5m trading starts, compare the latest Binance BTC/USDT trade-stream price with the archived market-start reference; above start buys Up, below start buys Down, equal skips. Paper entry is a GTD limit BUY capped at 0.50 for two minutes; settlement uses only actually filled shares.',
+    true,
+    1.00,
+    now(),
+    now()
+),
+(
+    'b7c50005-0000-4000-8013-000000000010',
+    'btc_up_down_5m_binance_bps_0_1',
+    'BTC Up or Down 5m Binance 0.1 bps',
+    'After BTC 5m trading starts, compare the latest Binance BTC/USDT trade-stream price with the archived market-start reference; skip unless the absolute move from start is at least 0.1 bps; above start buys Up, below start buys Down. Paper entry is a GTD limit BUY capped at 0.50 for two minutes; settlement uses only actually filled shares.',
+    true,
+    1.00,
+    now(),
+    now()
+),
+(
+    'b7c50005-0000-4000-8013-000000000020',
+    'btc_up_down_5m_binance_bps_0_2',
+    'BTC Up or Down 5m Binance 0.2 bps',
+    'After BTC 5m trading starts, compare the latest Binance BTC/USDT trade-stream price with the archived market-start reference; skip unless the absolute move from start is at least 0.2 bps; above start buys Up, below start buys Down. Paper entry is a GTD limit BUY capped at 0.50 for two minutes; settlement uses only actually filled shares.',
+    true,
+    1.00,
+    now(),
+    now()
+),
+(
+    'b7c50005-0000-4000-8013-000000000030',
+    'btc_up_down_5m_binance_bps_0_3',
+    'BTC Up or Down 5m Binance 0.3 bps',
+    'After BTC 5m trading starts, compare the latest Binance BTC/USDT trade-stream price with the archived market-start reference; skip unless the absolute move from start is at least 0.3 bps; above start buys Up, below start buys Down. Paper entry is a GTD limit BUY capped at 0.50 for two minutes; settlement uses only actually filled shares.',
+    true,
+    1.00,
+    now(),
+    now()
+),
+(
+    'b7c50005-0000-4000-8013-000000000040',
+    'btc_up_down_5m_binance_bps_0_4',
+    'BTC Up or Down 5m Binance 0.4 bps',
+    'After BTC 5m trading starts, compare the latest Binance BTC/USDT trade-stream price with the archived market-start reference; skip unless the absolute move from start is at least 0.4 bps; above start buys Up, below start buys Down. Paper entry is a GTD limit BUY capped at 0.50 for two minutes; settlement uses only actually filled shares.',
+    true,
+    1.00,
+    now(),
+    now()
+),
+(
+    'b7c50005-0000-4000-8013-000000000050',
+    'btc_up_down_5m_binance_bps_0_5',
+    'BTC Up or Down 5m Binance 0.5 bps',
+    'After BTC 5m trading starts, compare the latest Binance BTC/USDT trade-stream price with the archived market-start reference; skip unless the absolute move from start is at least 0.5 bps; above start buys Up, below start buys Down. Paper entry is a GTD limit BUY capped at 0.50 for two minutes; settlement uses only actually filled shares.',
+    true,
+    1.00,
+    now(),
+    now()
+),
+(
+    'b7c50005-0000-4000-8013-000000000060',
+    'btc_up_down_5m_binance_bps_0_6',
+    'BTC Up or Down 5m Binance 0.6 bps',
+    'After BTC 5m trading starts, compare the latest Binance BTC/USDT trade-stream price with the archived market-start reference; skip unless the absolute move from start is at least 0.6 bps; above start buys Up, below start buys Down. Paper entry is a GTD limit BUY capped at 0.50 for two minutes; settlement uses only actually filled shares.',
+    true,
+    1.00,
+    now(),
+    now()
+),
+(
+    'b7c50005-0000-4000-8013-000000000070',
+    'btc_up_down_5m_binance_bps_0_7',
+    'BTC Up or Down 5m Binance 0.7 bps',
+    'After BTC 5m trading starts, compare the latest Binance BTC/USDT trade-stream price with the archived market-start reference; skip unless the absolute move from start is at least 0.7 bps; above start buys Up, below start buys Down. Paper entry is a GTD limit BUY capped at 0.50 for two minutes; settlement uses only actually filled shares.',
+    true,
+    1.00,
+    now(),
+    now()
+),
+(
+    'b7c50005-0000-4000-8013-000000000080',
+    'btc_up_down_5m_binance_bps_0_8',
+    'BTC Up or Down 5m Binance 0.8 bps',
+    'After BTC 5m trading starts, compare the latest Binance BTC/USDT trade-stream price with the archived market-start reference; skip unless the absolute move from start is at least 0.8 bps; above start buys Up, below start buys Down. Paper entry is a GTD limit BUY capped at 0.50 for two minutes; settlement uses only actually filled shares.',
+    true,
+    1.00,
+    now(),
+    now()
+),
+(
+    'b7c50005-0000-4000-8013-000000000090',
+    'btc_up_down_5m_binance_bps_0_9',
+    'BTC Up or Down 5m Binance 0.9 bps',
+    'After BTC 5m trading starts, compare the latest Binance BTC/USDT trade-stream price with the archived market-start reference; skip unless the absolute move from start is at least 0.9 bps; above start buys Up, below start buys Down. Paper entry is a GTD limit BUY capped at 0.50 for two minutes; settlement uses only actually filled shares.',
+    true,
+    1.00,
+    now(),
+    now()
+),
+(
+    'b7c50005-0000-4000-8013-000000000001',
+    'btc_up_down_5m_binance_bps_1',
+    'BTC Up or Down 5m Binance 1 bps',
+    'After BTC 5m trading starts, compare the latest Binance BTC/USDT trade-stream price with the archived market-start reference; skip unless the absolute move from start is at least 1 bps; above start buys Up, below start buys Down. Paper entry is a GTD limit BUY capped at 0.50 for two minutes; settlement uses only actually filled shares.',
+    true,
+    1.00,
+    now(),
+    now()
+),
+(
+    'b7c50005-0000-4000-8013-000000000002',
+    'btc_up_down_5m_binance_bps_2',
+    'BTC Up or Down 5m Binance 2 bps',
+    'After BTC 5m trading starts, compare the latest Binance BTC/USDT trade-stream price with the archived market-start reference; skip unless the absolute move from start is at least 2 bps; above start buys Up, below start buys Down. Paper entry is a GTD limit BUY capped at 0.50 for two minutes; settlement uses only actually filled shares.',
+    true,
+    1.00,
+    now(),
+    now()
+),
+(
+    'b7c50005-0000-4000-8013-000000000005',
+    'btc_up_down_5m_binance_bps_5',
+    'BTC Up or Down 5m Binance 5 bps',
+    'After BTC 5m trading starts, compare the latest Binance BTC/USDT trade-stream price with the archived market-start reference; skip unless the absolute move from start is at least 5 bps; above start buys Up, below start buys Down. Paper entry is a GTD limit BUY capped at 0.50 for two minutes; settlement uses only actually filled shares.',
+    true,
+    1.00,
+    now(),
+    now()
+),
+(
+    'b7c50005-0000-4000-8011-000000000045',
+    'btc_up_down_5m_binance_45',
+    'BTC Up or Down 5m Binance 45',
+    'After BTC 5m trading starts, compare the latest Binance BTC/USDT trade-stream price with the archived market-start reference; above start buys Up, below start buys Down, equal skips. Paper entry is a GTD limit BUY at fixed 0.45 for two minutes; settlement uses only actually filled shares.',
+    true,
+    1.00,
+    now(),
+    now()
+),
+(
+    'b7c50005-0000-4000-8011-000000000047',
+    'btc_up_down_5m_binance_47',
+    'BTC Up or Down 5m Binance 47',
+    'After BTC 5m trading starts, compare the latest Binance BTC/USDT trade-stream price with the archived market-start reference; above start buys Up, below start buys Down, equal skips. Paper entry is a GTD limit BUY at fixed 0.47 for two minutes; settlement uses only actually filled shares.',
+    true,
+    1.00,
+    now(),
+    now()
+),
+(
+    'b7c50005-0000-4000-8011-000000000049',
+    'btc_up_down_5m_binance_49',
+    'BTC Up or Down 5m Binance 49',
+    'After BTC 5m trading starts, compare the latest Binance BTC/USDT trade-stream price with the archived market-start reference; above start buys Up, below start buys Down, equal skips. Paper entry is a GTD limit BUY at fixed 0.49 for two minutes; settlement uses only actually filled shares.',
+    true,
+    1.00,
+    now(),
+    now()
+),
+(
+    'b7c50005-0000-4000-8011-000000000002',
+    'btc_up_down_5m_binance_clever',
+    'BTC Up or Down 5m Binance Clever',
+    'After BTC 5m trading starts, compare the latest Binance BTC/USDT trade-stream price with the archived market-start reference, estimate a fair target outcome price from recent odds archive samples with similar BTC move/time-to-close/book quality, and place a two-minute GTD limit BUY only below fair value with a safety margin.',
+    true,
+    1.00,
+    now(),
+    now()
+),
+(
+    'b7c50005-0000-4000-8011-000000000101',
+    'btc_up_down_5m_binance_clever_aggressive',
+    'BTC Up or Down 5m Binance Clever Aggressive',
+    'After BTC 5m trading starts, compare the latest Binance BTC/USDT trade-stream price with the archived market-start reference, estimate a fair target outcome price from recent odds archive samples with similar BTC move/time-to-close/book quality, and place a two-minute GTD limit BUY only below fair value with a 0.01 safety margin.',
+    true,
+    1.00,
+    now(),
+    now()
+),
+(
+    'b7c50005-0000-4000-8011-000000000105',
+    'btc_up_down_5m_binance_clever_conservative',
+    'BTC Up or Down 5m Binance Clever Conservative',
+    'After BTC 5m trading starts, compare the latest Binance BTC/USDT trade-stream price with the archived market-start reference, estimate a fair target outcome price from recent odds archive samples with similar BTC move/time-to-close/book quality, and place a two-minute GTD limit BUY only below fair value with a 0.05 safety margin.',
+    true,
+    1.00,
+    now(),
+    now()
+),
+(
+    'b7c50005-0000-4000-8014-000000000002',
+    'btc_up_down_5m_binance_edge_2',
+    'BTC Up or Down 5m Binance Edge 2',
+    'After BTC 5m trading starts, use the Binance start-relative direction, estimate fair value from the BTC odds archive, and place a two-minute GTD limit BUY only when the safe price is at least 0.02 below fair value.',
+    true,
+    1.00,
+    now(),
+    now()
+),
+(
+    'b7c50005-0000-4000-8014-000000000004',
+    'btc_up_down_5m_binance_edge_4',
+    'BTC Up or Down 5m Binance Edge 4',
+    'After BTC 5m trading starts, use the Binance start-relative direction, estimate fair value from the BTC odds archive, and place a two-minute GTD limit BUY only when the safe price is at least 0.04 below fair value.',
+    true,
+    1.00,
+    now(),
+    now()
+),
+(
+    'b7c50005-0000-4000-8014-000000000006',
+    'btc_up_down_5m_binance_edge_6',
+    'BTC Up or Down 5m Binance Edge 6',
+    'After BTC 5m trading starts, use the Binance start-relative direction, estimate fair value from the BTC odds archive, and place a two-minute GTD limit BUY only when the safe price is at least 0.06 below fair value.',
+    true,
+    1.00,
+    now(),
+    now()
+),
+(
+    'b7c50005-0000-4000-8015-000000000015',
+    'btc_up_down_5m_binance_15s',
+    'BTC Up or Down 5m Binance 15s',
+    'Wait 15 seconds after BTC 5m trading starts, then compare the latest Binance BTC/USDT trade-stream price with the archived market-start reference; above start buys Up, below start buys Down, equal skips. Paper entry is a GTD limit BUY capped at 0.50 for two minutes.',
+    true,
+    1.00,
+    now(),
+    now()
+),
+(
+    'b7c50005-0000-4000-8015-000000000030',
+    'btc_up_down_5m_binance_30s',
+    'BTC Up or Down 5m Binance 30s',
+    'Wait 30 seconds after BTC 5m trading starts, then compare the latest Binance BTC/USDT trade-stream price with the archived market-start reference; above start buys Up, below start buys Down, equal skips. Paper entry is a GTD limit BUY capped at 0.50 for two minutes.',
+    true,
+    1.00,
+    now(),
+    now()
+),
+(
+    'b7c50005-0000-4000-8015-000000000045',
+    'btc_up_down_5m_binance_45s',
+    'BTC Up or Down 5m Binance 45s',
+    'Wait 45 seconds after BTC 5m trading starts, then compare the latest Binance BTC/USDT trade-stream price with the archived market-start reference; above start buys Up, below start buys Down, equal skips. Paper entry is a GTD limit BUY capped at 0.50 for two minutes.',
+    true,
+    1.00,
+    now(),
+    now()
+),
+(
+    'b7c50005-0000-4000-8016-000000000002',
+    'btc_up_down_5m_ensemble_2_of_3',
+    'BTC Up or Down 5m Ensemble 2 of 3',
+    'Immediately after BTC 5m market open, vote between Binance start-relative, Middle 1, and Skip 1 signals. Enter only when at least two available votes select the same outcome. Paper entry is a GTD limit BUY with dynamic break-even pricing.',
+    true,
+    1.00,
+    now(),
+    now()
+),
+(
+    'b7c50005-0000-4000-8017-000000000050',
+    'btc_up_down_5m_dynamic_markov',
+    'BTC Up or Down 5m Dynamic Markov',
+    'Immediately after BTC 5m market open, estimate the next result from recent BTC 5m result transitions and enter only when the transition edge is strong enough. Paper entry is a GTD limit BUY with dynamic break-even pricing.',
+    true,
+    1.00,
+    now(),
+    now()
+),
+(
+    'b7c50005-0000-4000-8018-000000000030',
+    'btc_up_down_5m_strategy_selector',
+    'BTC Up or Down 5m Strategy Selector',
+    'Immediately after BTC 5m market open, choose the best positive-expectancy opening BTC strategy from recent settled Paper history, then reuse that strategy''s current direction signal for one GTD limit BUY.',
+    true,
+    1.00,
+    now(),
+    now()
+)
+ON CONFLICT (id) DO UPDATE SET
+    code = excluded.code,
+    name = excluded.name,
+    description = excluded.description,
+    updated_at_utc = excluded.updated_at_utc;
+
 CREATE TABLE IF NOT EXISTS paper_orders (
     id uuid PRIMARY KEY,
     signal_id uuid NOT NULL,
+    strategy_id uuid NOT NULL DEFAULT 'f0110a0d-1ead-4c00-8b01-000000000001' REFERENCES strategies(id),
+    copied_trader_wallet text NOT NULL DEFAULT '',
     status text NOT NULL,
     side text NOT NULL,
     asset_id text NOT NULL,
@@ -420,10 +2052,32 @@ CREATE TABLE IF NOT EXISTS paper_orders (
     expires_at_utc timestamptz NOT NULL,
     filled_at_utc timestamptz NULL,
     cancelled_at_utc timestamptz NULL,
-    raw_decision_json jsonb NULL
+    raw_decision_json jsonb NULL,
+    correlation_id uuid NULL,
+    execution_source text NOT NULL DEFAULT ''
 );
 
+ALTER TABLE paper_orders ADD COLUMN IF NOT EXISTS strategy_id uuid NOT NULL DEFAULT 'f0110a0d-1ead-4c00-8b01-000000000001' REFERENCES strategies(id);
+ALTER TABLE paper_orders ADD COLUMN IF NOT EXISTS copied_trader_wallet text NOT NULL DEFAULT '';
 ALTER TABLE paper_orders ADD COLUMN IF NOT EXISTS outcome text NOT NULL DEFAULT '';
+ALTER TABLE paper_orders ADD COLUMN IF NOT EXISTS correlation_id uuid NULL;
+ALTER TABLE paper_orders ADD COLUMN IF NOT EXISTS execution_source text NOT NULL DEFAULT '';
+
+UPDATE paper_orders order_row
+SET copied_trader_wallet = signal.trader_wallet
+FROM signals signal
+WHERE order_row.signal_id = signal.id
+  AND order_row.copied_trader_wallet = '';
+
+CREATE INDEX IF NOT EXISTS ix_paper_orders_copied_wallet_time
+ON paper_orders(copied_trader_wallet, created_at_utc DESC);
+
+CREATE INDEX IF NOT EXISTS ix_paper_orders_strategy_time
+ON paper_orders(strategy_id, created_at_utc DESC);
+
+CREATE INDEX IF NOT EXISTS ix_paper_orders_correlation
+ON paper_orders(correlation_id)
+WHERE correlation_id IS NOT NULL;
 
 CREATE TABLE IF NOT EXISTS paper_fills (
     id uuid PRIMARY KEY,
@@ -431,11 +2085,61 @@ CREATE TABLE IF NOT EXISTS paper_fills (
     price numeric(18,8) NOT NULL,
     size_shares numeric(28,8) NOT NULL,
     filled_at_utc timestamptz NOT NULL,
-    evidence text NOT NULL
+    evidence text NOT NULL,
+    realized_pnl_usd numeric(28,8) NOT NULL DEFAULT 0
 );
+
+ALTER TABLE paper_fills ADD COLUMN IF NOT EXISTS realized_pnl_usd numeric(28,8) NOT NULL DEFAULT 0;
+
+CREATE INDEX IF NOT EXISTS ix_paper_fills_order_time
+ON paper_fills(paper_order_id, filled_at_utc ASC);
+
+CREATE TABLE IF NOT EXISTS strategy_market_paper_runs (
+    id uuid PRIMARY KEY,
+    strategy_id uuid NOT NULL REFERENCES strategies(id),
+    market_id text NOT NULL,
+    condition_id text NOT NULL,
+    market_slug text NOT NULL,
+    market_title text NOT NULL,
+    category text NULL,
+    market_start_utc timestamptz NULL,
+    market_end_utc timestamptz NULL,
+    detected_at_utc timestamptz NOT NULL,
+    entry_due_at_utc timestamptz NOT NULL,
+    status text NOT NULL,
+    selected_asset_id text NULL,
+    selected_outcome text NULL,
+    entry_price numeric(18,8) NULL,
+    stake_usd numeric(28,8) NOT NULL,
+    size_shares numeric(28,8) NULL,
+    signal_id uuid NULL REFERENCES signals(id),
+    paper_order_id uuid NULL REFERENCES paper_orders(id),
+    entered_at_utc timestamptz NULL,
+    settlement_price numeric(18,8) NULL,
+    settlement_value_usd numeric(28,8) NULL,
+    realized_pnl_usd numeric(28,8) NULL,
+    settled_at_utc timestamptz NULL,
+    skip_reason text NULL,
+    skip_diagnostics_json jsonb NULL,
+    created_at_utc timestamptz NOT NULL,
+    updated_at_utc timestamptz NOT NULL,
+    UNIQUE (strategy_id, market_id)
+);
+
+ALTER TABLE strategy_market_paper_runs ADD COLUMN IF NOT EXISTS skip_diagnostics_json jsonb NULL;
+
+CREATE INDEX IF NOT EXISTS ix_strategy_market_paper_runs_entry_due
+ON strategy_market_paper_runs(strategy_id, status, entry_due_at_utc);
+
+CREATE INDEX IF NOT EXISTS ix_strategy_market_paper_runs_settlement_due
+ON strategy_market_paper_runs(strategy_id, status, market_end_utc);
+
+CREATE INDEX IF NOT EXISTS ix_strategy_market_paper_runs_order
+ON strategy_market_paper_runs(paper_order_id);
 
 CREATE TABLE IF NOT EXISTS paper_positions (
     id uuid PRIMARY KEY,
+    copied_trader_wallet text NOT NULL DEFAULT '',
     asset_id text NOT NULL,
     condition_id text NOT NULL,
     outcome text NOT NULL,
@@ -446,12 +2150,245 @@ CREATE TABLE IF NOT EXISTS paper_positions (
     updated_at_utc timestamptz NOT NULL
 );
 
-CREATE UNIQUE INDEX IF NOT EXISTS ux_paper_positions_asset
-ON paper_positions(asset_id);
+ALTER TABLE paper_positions ADD COLUMN IF NOT EXISTS copied_trader_wallet text NOT NULL DEFAULT '';
+
+DROP INDEX IF EXISTS ux_paper_positions_asset;
+
+CREATE UNIQUE INDEX IF NOT EXISTS ux_paper_positions_wallet_asset
+ON paper_positions(copied_trader_wallet, asset_id);
+
+CREATE INDEX IF NOT EXISTS ix_paper_positions_wallet_updated
+ON paper_positions(copied_trader_wallet, updated_at_utc DESC);
+
+CREATE TABLE IF NOT EXISTS paper_position_settlements (
+    id uuid PRIMARY KEY,
+    copied_trader_wallet text NOT NULL,
+    asset_id text NOT NULL,
+    condition_id text NOT NULL,
+    outcome text NOT NULL,
+    winning_asset_id text NULL,
+    winning_outcome text NOT NULL,
+    category text NULL,
+    settled_size_shares numeric(28,8) NOT NULL,
+    average_price numeric(18,8) NOT NULL,
+    cost_basis_usd numeric(28,8) NOT NULL,
+    settlement_value_usd numeric(28,8) NOT NULL,
+    realized_pnl_usd numeric(28,8) NOT NULL,
+    won boolean NOT NULL,
+    settlement_source text NOT NULL,
+    settled_at_utc timestamptz NOT NULL,
+    created_at_utc timestamptz NOT NULL
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS ux_paper_position_settlements_wallet_asset
+ON paper_position_settlements(copied_trader_wallet, asset_id);
+
+CREATE INDEX IF NOT EXISTS ix_paper_position_settlements_wallet_time
+ON paper_position_settlements(copied_trader_wallet, settled_at_utc DESC);
+
+CREATE INDEX IF NOT EXISTS ix_paper_position_settlements_condition
+ON paper_position_settlements(condition_id, settled_at_utc DESC);
+
+CREATE TABLE IF NOT EXISTS paper_copied_trader_performance (
+    copied_trader_wallet text NOT NULL,
+    category text NOT NULL,
+    orders_count integer NOT NULL,
+    filled_orders_count integer NOT NULL,
+    buy_fills_count integer NOT NULL,
+    sell_fills_count integer NOT NULL,
+    open_positions_count integer NOT NULL,
+    settled_positions_count integer NOT NULL,
+    won_positions_count integer NOT NULL,
+    lost_positions_count integer NOT NULL,
+    buy_cost_usd numeric(28,8) NOT NULL,
+    sell_proceeds_usd numeric(28,8) NOT NULL,
+    settlement_value_usd numeric(28,8) NOT NULL,
+    realized_pnl_usd numeric(28,8) NOT NULL,
+    unrealized_pnl_usd numeric(28,8) NOT NULL,
+    total_pnl_usd numeric(28,8) NOT NULL,
+    roi_pct numeric(18,8) NOT NULL,
+    win_rate_pct numeric(18,8) NOT NULL,
+    score numeric(28,8) NOT NULL,
+    first_order_utc timestamptz NULL,
+    last_order_utc timestamptz NULL,
+    refreshed_at_utc timestamptz NOT NULL,
+    PRIMARY KEY (copied_trader_wallet, category)
+);
+
+CREATE INDEX IF NOT EXISTS ix_paper_copied_trader_performance_score
+ON paper_copied_trader_performance(category, score DESC, total_pnl_usd DESC);
+
+CREATE TABLE IF NOT EXISTS btc_usd_reference_correlation_samples (
+    id uuid PRIMARY KEY,
+    binance_price_usd numeric(28,8) NOT NULL,
+    binance_source_updated_at_utc timestamptz NOT NULL,
+    binance_fetched_at_utc timestamptz NOT NULL,
+    chainlink_price_usd numeric(28,8) NOT NULL,
+    chainlink_valid_after_utc timestamptz NOT NULL,
+    time_delta_seconds numeric(18,8) NOT NULL,
+    price_diff_usd numeric(28,8) NOT NULL,
+    price_diff_bps numeric(18,8) NOT NULL,
+    chainlink_feed_id text NOT NULL,
+    chainlink_query_window text NOT NULL,
+    raw_json jsonb NOT NULL,
+    created_at_utc timestamptz NOT NULL,
+    UNIQUE (binance_source_updated_at_utc, chainlink_valid_after_utc)
+);
+
+CREATE INDEX IF NOT EXISTS ix_btc_usd_reference_correlation_samples_created
+ON btc_usd_reference_correlation_samples(created_at_utc DESC);
+
+CREATE TABLE IF NOT EXISTS btc_up_down_5m_odds_ticks (
+    id uuid PRIMARY KEY,
+    market_id text NOT NULL,
+    condition_id text NOT NULL,
+    market_slug text NOT NULL,
+    market_start_utc timestamptz NOT NULL,
+    market_end_utc timestamptz NOT NULL,
+    sampled_at_utc timestamptz NOT NULL,
+    seconds_after_start numeric(18,8) NOT NULL,
+    seconds_to_close numeric(18,8) NOT NULL,
+    binance_price_usd numeric(28,8) NOT NULL,
+    binance_source_updated_at_utc timestamptz NOT NULL,
+    binance_fetched_at_utc timestamptz NOT NULL,
+    binance_start_price_usd numeric(28,8) NOT NULL,
+    btc_move_from_start_usd numeric(28,8) NOT NULL,
+    btc_move_from_start_bps numeric(18,8) NOT NULL,
+    up_asset_id text NOT NULL,
+    up_best_bid numeric(18,8) NULL,
+    up_best_ask numeric(18,8) NULL,
+    up_mid numeric(18,8) NULL,
+    up_price_proxy numeric(18,8) NULL,
+    up_price_proxy_kind text NOT NULL,
+    up_last_trade_price numeric(18,8) NULL,
+    up_book_source text NOT NULL,
+    up_book_age_ms numeric(18,8) NULL,
+    down_asset_id text NOT NULL,
+    down_best_bid numeric(18,8) NULL,
+    down_best_ask numeric(18,8) NULL,
+    down_mid numeric(18,8) NULL,
+    down_price_proxy numeric(18,8) NULL,
+    down_price_proxy_kind text NOT NULL,
+    down_last_trade_price numeric(18,8) NULL,
+    down_book_source text NOT NULL,
+    down_book_age_ms numeric(18,8) NULL,
+    diagnostics_json jsonb NOT NULL DEFAULT '{}'::jsonb,
+    created_at_utc timestamptz NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS ix_btc_up_down_5m_odds_ticks_market_time
+ON btc_up_down_5m_odds_ticks(market_id, sampled_at_utc);
+
+CREATE INDEX IF NOT EXISTS ix_btc_up_down_5m_odds_ticks_sampled
+ON btc_up_down_5m_odds_ticks(sampled_at_utc DESC);
+
+CREATE INDEX IF NOT EXISTS ix_btc_up_down_5m_odds_ticks_start
+ON btc_up_down_5m_odds_ticks(market_start_utc, sampled_at_utc);
+
+CREATE TABLE IF NOT EXISTS crypto_up_down_5m_odds_ticks (
+    id uuid PRIMARY KEY,
+    asset_symbol text NOT NULL,
+    binance_symbol text NOT NULL,
+    market_id text NOT NULL,
+    condition_id text NOT NULL,
+    market_slug text NOT NULL,
+    market_start_utc timestamptz NOT NULL,
+    market_end_utc timestamptz NOT NULL,
+    sampled_at_utc timestamptz NOT NULL,
+    seconds_after_start numeric(18,8) NOT NULL,
+    seconds_to_close numeric(18,8) NOT NULL,
+    binance_price_usd numeric(28,8) NOT NULL,
+    binance_source_updated_at_utc timestamptz NOT NULL,
+    binance_fetched_at_utc timestamptz NOT NULL,
+    binance_start_price_usd numeric(28,8) NOT NULL,
+    asset_move_from_start_usd numeric(28,8) NOT NULL,
+    asset_move_from_start_bps numeric(18,8) NOT NULL,
+    up_asset_id text NOT NULL,
+    up_best_bid numeric(18,8) NULL,
+    up_best_ask numeric(18,8) NULL,
+    up_mid numeric(18,8) NULL,
+    up_price_proxy numeric(18,8) NULL,
+    up_price_proxy_kind text NOT NULL,
+    up_last_trade_price numeric(18,8) NULL,
+    up_book_source text NOT NULL,
+    up_book_age_ms numeric(18,8) NULL,
+    down_asset_id text NOT NULL,
+    down_best_bid numeric(18,8) NULL,
+    down_best_ask numeric(18,8) NULL,
+    down_mid numeric(18,8) NULL,
+    down_price_proxy numeric(18,8) NULL,
+    down_price_proxy_kind text NOT NULL,
+    down_last_trade_price numeric(18,8) NULL,
+    down_book_source text NOT NULL,
+    down_book_age_ms numeric(18,8) NULL,
+    diagnostics_json jsonb NOT NULL DEFAULT '{}'::jsonb,
+    created_at_utc timestamptz NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS ix_crypto_up_down_5m_odds_ticks_asset_market_time
+ON crypto_up_down_5m_odds_ticks(asset_symbol, market_id, sampled_at_utc);
+
+CREATE INDEX IF NOT EXISTS ix_crypto_up_down_5m_odds_ticks_sampled
+ON crypto_up_down_5m_odds_ticks(sampled_at_utc DESC);
+
+CREATE INDEX IF NOT EXISTS ix_crypto_up_down_5m_odds_ticks_asset_start
+ON crypto_up_down_5m_odds_ticks(asset_symbol, market_start_utc, sampled_at_utc);
+
+CREATE TABLE IF NOT EXISTS paper_copied_leader_positions (
+    id uuid PRIMARY KEY,
+    entry_signal_id uuid NOT NULL,
+    entry_paper_order_id uuid NOT NULL,
+    copied_trader_wallet text NOT NULL,
+    asset_id text NOT NULL,
+    condition_id text NOT NULL,
+    outcome text NOT NULL,
+    entry_transaction_hash text NULL,
+    entry_timestamp_utc timestamptz NOT NULL,
+    leader_entry_price numeric(18,8) NOT NULL,
+    leader_initial_size_shares numeric(28,8) NOT NULL,
+    copied_initial_size_shares numeric(28,8) NOT NULL DEFAULT 0,
+    leader_sold_size_shares numeric(28,8) NOT NULL DEFAULT 0,
+    copied_exit_requested_size_shares numeric(28,8) NOT NULL DEFAULT 0,
+    status text NOT NULL,
+    last_activity_timestamp_utc timestamptz NULL,
+    last_activity_transaction_hash text NULL,
+    last_activity_sync_at_utc timestamptz NULL,
+    next_activity_sync_at_utc timestamptz NOT NULL,
+    created_at_utc timestamptz NOT NULL,
+    updated_at_utc timestamptz NOT NULL,
+    UNIQUE (entry_paper_order_id)
+);
+
+CREATE INDEX IF NOT EXISTS ix_paper_copied_leader_positions_due
+ON paper_copied_leader_positions(status, next_activity_sync_at_utc, copied_trader_wallet);
+
+CREATE INDEX IF NOT EXISTS ix_paper_copied_leader_positions_wallet_asset
+ON paper_copied_leader_positions(copied_trader_wallet, asset_id, status);
+
+CREATE TABLE IF NOT EXISTS paper_copied_leader_activity_events (
+    id uuid PRIMARY KEY,
+    dedup_key text NOT NULL,
+    copied_trader_wallet text NOT NULL,
+    asset_id text NOT NULL,
+    condition_id text NOT NULL,
+    side text NOT NULL,
+    price numeric(18,8) NOT NULL,
+    size_shares numeric(28,8) NOT NULL,
+    usdc_size numeric(28,8) NOT NULL,
+    transaction_hash text NULL,
+    activity_timestamp_utc timestamptz NOT NULL,
+    raw_json jsonb NOT NULL,
+    observed_at_utc timestamptz NOT NULL,
+    UNIQUE (dedup_key)
+);
+
+CREATE INDEX IF NOT EXISTS ix_paper_copied_leader_activity_events_wallet_asset_time
+ON paper_copied_leader_activity_events(copied_trader_wallet, asset_id, activity_timestamp_utc DESC);
 
 CREATE TABLE IF NOT EXISTS dry_run_orders (
     id uuid PRIMARY KEY,
     signal_id uuid NOT NULL,
+    strategy_id uuid NOT NULL DEFAULT 'f0110a0d-1ead-4c00-8b01-000000000001' REFERENCES strategies(id),
     status text NOT NULL,
     side text NOT NULL,
     asset_id text NOT NULL,
@@ -466,12 +2403,18 @@ CREATE TABLE IF NOT EXISTS dry_run_orders (
     created_at_utc timestamptz NOT NULL
 );
 
+ALTER TABLE dry_run_orders ADD COLUMN IF NOT EXISTS strategy_id uuid NOT NULL DEFAULT 'f0110a0d-1ead-4c00-8b01-000000000001' REFERENCES strategies(id);
+
 CREATE INDEX IF NOT EXISTS ix_dry_run_orders_created
 ON dry_run_orders(created_at_utc DESC);
+
+CREATE INDEX IF NOT EXISTS ix_dry_run_orders_strategy_time
+ON dry_run_orders(strategy_id, created_at_utc DESC);
 
 CREATE TABLE IF NOT EXISTS live_orders (
     id uuid PRIMARY KEY,
     signal_id uuid NOT NULL,
+    strategy_id uuid NOT NULL DEFAULT 'f0110a0d-1ead-4c00-8b01-000000000001' REFERENCES strategies(id),
     status text NOT NULL,
     order_id text NULL,
     side text NOT NULL,
@@ -488,17 +2431,151 @@ CREATE TABLE IF NOT EXISTS live_orders (
     response_status text NOT NULL,
     filled_size numeric(28,8) NOT NULL,
     remaining_size numeric(28,8) NOT NULL,
+    average_fill_price numeric(18,8) NULL,
+    filled_notional_usd numeric(28,8) NOT NULL DEFAULT 0,
+    cost_basis_usd numeric(28,8) NOT NULL DEFAULT 0,
+    fee_usd numeric(28,8) NOT NULL DEFAULT 0,
     cancel_status text NOT NULL,
     raw_response_json jsonb NOT NULL,
     validation_summary text NOT NULL,
+    balance_effect_applied boolean NOT NULL DEFAULT false,
+    settlement_value_usd numeric(28,8) NULL,
+    realized_pnl_usd numeric(28,8) NULL,
+    settled_at_utc timestamptz NULL,
+    winning_asset_id text NULL,
+    winning_outcome text NULL,
+    won boolean NULL,
+    settlement_source text NOT NULL DEFAULT '',
+    correlation_id uuid NULL,
+    execution_source text NOT NULL DEFAULT '',
+    post_only boolean NULL,
+    paper_order_id uuid NULL REFERENCES paper_orders(id),
     updated_at_utc timestamptz NOT NULL
 );
+
+ALTER TABLE live_orders ADD COLUMN IF NOT EXISTS strategy_id uuid NOT NULL DEFAULT 'f0110a0d-1ead-4c00-8b01-000000000001' REFERENCES strategies(id);
+ALTER TABLE live_orders ADD COLUMN IF NOT EXISTS balance_effect_applied boolean NOT NULL DEFAULT false;
+ALTER TABLE live_orders ADD COLUMN IF NOT EXISTS average_fill_price numeric(18,8) NULL;
+ALTER TABLE live_orders ADD COLUMN IF NOT EXISTS filled_notional_usd numeric(28,8) NOT NULL DEFAULT 0;
+ALTER TABLE live_orders ADD COLUMN IF NOT EXISTS cost_basis_usd numeric(28,8) NOT NULL DEFAULT 0;
+ALTER TABLE live_orders ADD COLUMN IF NOT EXISTS fee_usd numeric(28,8) NOT NULL DEFAULT 0;
+ALTER TABLE live_orders ADD COLUMN IF NOT EXISTS settlement_value_usd numeric(28,8) NULL;
+ALTER TABLE live_orders ADD COLUMN IF NOT EXISTS realized_pnl_usd numeric(28,8) NULL;
+ALTER TABLE live_orders ADD COLUMN IF NOT EXISTS settled_at_utc timestamptz NULL;
+ALTER TABLE live_orders ADD COLUMN IF NOT EXISTS winning_asset_id text NULL;
+ALTER TABLE live_orders ADD COLUMN IF NOT EXISTS winning_outcome text NULL;
+ALTER TABLE live_orders ADD COLUMN IF NOT EXISTS won boolean NULL;
+ALTER TABLE live_orders ADD COLUMN IF NOT EXISTS settlement_source text NOT NULL DEFAULT '';
+ALTER TABLE live_orders ADD COLUMN IF NOT EXISTS correlation_id uuid NULL;
+ALTER TABLE live_orders ADD COLUMN IF NOT EXISTS execution_source text NOT NULL DEFAULT '';
+ALTER TABLE live_orders ADD COLUMN IF NOT EXISTS post_only boolean NULL;
+ALTER TABLE live_orders ADD COLUMN IF NOT EXISTS paper_order_id uuid NULL REFERENCES paper_orders(id);
+
+UPDATE live_orders
+SET average_fill_price = COALESCE(average_fill_price, CASE WHEN filled_size > 0 THEN price ELSE NULL END),
+    filled_notional_usd = CASE
+        WHEN filled_notional_usd > 0 THEN filled_notional_usd
+        WHEN filled_size > 0 THEN price * filled_size
+        ELSE filled_notional_usd
+    END,
+    cost_basis_usd = CASE
+        WHEN cost_basis_usd > 0 THEN cost_basis_usd
+        WHEN filled_size > 0 THEN (price * filled_size) + fee_usd
+        ELSE cost_basis_usd
+    END,
+    won = COALESCE(won, CASE
+        WHEN settled_at_utc IS NULL OR realized_pnl_usd IS NULL THEN NULL
+        WHEN COALESCE(settlement_value_usd, 0) > 0 THEN true
+        ELSE false
+    END),
+    settlement_source = CASE
+        WHEN settlement_source <> '' THEN settlement_source
+        WHEN settled_at_utc IS NOT NULL THEN 'legacy_live_order_settlement'
+        ELSE settlement_source
+    END
+WHERE (average_fill_price IS NULL AND filled_size > 0)
+   OR (filled_notional_usd = 0 AND filled_size > 0)
+   OR (cost_basis_usd = 0 AND filled_size > 0)
+   OR (won IS NULL AND settled_at_utc IS NOT NULL)
+   OR (settlement_source = '' AND settled_at_utc IS NOT NULL);
 
 CREATE INDEX IF NOT EXISTS ix_live_orders_open
 ON live_orders(status, created_at_utc DESC);
 
 CREATE INDEX IF NOT EXISTS ix_live_orders_order_id
 ON live_orders(order_id);
+
+CREATE INDEX IF NOT EXISTS ix_live_orders_strategy_time
+ON live_orders(strategy_id, created_at_utc DESC);
+
+CREATE INDEX IF NOT EXISTS ix_live_orders_correlation
+ON live_orders(correlation_id)
+WHERE correlation_id IS NOT NULL;
+
+CREATE INDEX IF NOT EXISTS ix_live_orders_paper_order
+ON live_orders(paper_order_id)
+WHERE paper_order_id IS NOT NULL;
+
+CREATE INDEX IF NOT EXISTS ix_live_orders_strategy_settlement
+ON live_orders(strategy_id, settled_at_utc DESC)
+WHERE settled_at_utc IS NOT NULL;
+
+CREATE INDEX IF NOT EXISTS ix_live_orders_pending_balance_settlement
+ON live_orders(status, balance_effect_applied, updated_at_utc)
+WHERE status = 'Matched' AND balance_effect_applied = false;
+
+CREATE TABLE IF NOT EXISTS paper_live_shadow_decisions (
+    correlation_id uuid PRIMARY KEY,
+    strategy_id uuid NOT NULL REFERENCES strategies(id),
+    market_id text NOT NULL,
+    condition_id text NOT NULL,
+    asset_id text NOT NULL,
+    outcome text NOT NULL,
+    side text NOT NULL,
+    limit_price numeric(18,8) NOT NULL,
+    target_notional_usd numeric(28,8) NOT NULL,
+    requested_size_shares numeric(28,8) NOT NULL,
+    max_reserved_notional_usd numeric(28,8) NOT NULL,
+    order_type text NOT NULL,
+    post_only boolean NOT NULL,
+    order_book_snapshot_json jsonb NOT NULL,
+    quote_age_ms integer NULL,
+    source text NOT NULL,
+    quote_received_at_utc timestamptz NOT NULL,
+    decision_created_at_utc timestamptz NOT NULL,
+    market_start_utc timestamptz NULL,
+    market_close_utc timestamptz NULL,
+    submit_deadline_utc timestamptz NOT NULL,
+    cancel_deadline_utc timestamptz NOT NULL,
+    signal_id uuid NULL REFERENCES signals(id),
+    paper_order_id uuid NULL REFERENCES paper_orders(id),
+    live_order_id uuid NULL REFERENCES live_orders(id),
+    status text NOT NULL,
+    updated_at_utc timestamptz NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS ix_paper_live_shadow_decisions_strategy_time
+ON paper_live_shadow_decisions(strategy_id, decision_created_at_utc DESC);
+
+CREATE INDEX IF NOT EXISTS ix_paper_live_shadow_decisions_status
+ON paper_live_shadow_decisions(status, updated_at_utc DESC);
+
+CREATE TABLE IF NOT EXISTS paper_live_shadow_discrepancies (
+    id uuid PRIMARY KEY,
+    correlation_id uuid NOT NULL,
+    strategy_id uuid NOT NULL REFERENCES strategies(id),
+    classification text NOT NULL,
+    severity text NOT NULL,
+    details text NOT NULL,
+    raw_json jsonb NOT NULL,
+    created_at_utc timestamptz NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS ix_paper_live_shadow_discrepancies_strategy_time
+ON paper_live_shadow_discrepancies(strategy_id, created_at_utc DESC);
+
+CREATE INDEX IF NOT EXISTS ix_paper_live_shadow_discrepancies_correlation
+ON paper_live_shadow_discrepancies(correlation_id, created_at_utc DESC);
 
 CREATE TABLE IF NOT EXISTS live_trading_events (
     id uuid PRIMARY KEY,
@@ -676,6 +2753,104 @@ ON polymarket_onchain_fills(token_id, block_timestamp_utc DESC);
 
 CREATE INDEX IF NOT EXISTS ix_polymarket_onchain_fills_contract_block
 ON polymarket_onchain_fills(contract_address, block_number);
+
+CREATE TABLE IF NOT EXISTS polymarket_onchain_trade_captures (
+    id uuid PRIMARY KEY,
+    contract_name text NOT NULL,
+    contract_address text NOT NULL,
+    exchange_version text NOT NULL,
+    block_number bigint NOT NULL,
+    block_timestamp_utc timestamptz NOT NULL,
+    block_hash text NOT NULL,
+    transaction_hash text NOT NULL,
+    transaction_index bigint NOT NULL,
+    log_index bigint NOT NULL,
+    order_hash text NOT NULL,
+    maker text NOT NULL,
+    taker text NOT NULL,
+    wallet text NOT NULL,
+    side text NOT NULL,
+    token_id text NOT NULL,
+    maker_asset_id text NOT NULL,
+    taker_asset_id text NOT NULL,
+    maker_amount_raw text NOT NULL,
+    taker_amount_raw text NOT NULL,
+    maker_amount numeric(28,8) NOT NULL,
+    taker_amount numeric(28,8) NOT NULL,
+    price numeric(28,12) NOT NULL,
+    size_shares numeric(28,8) NOT NULL,
+    notional_usd numeric(28,8) NOT NULL,
+    fee_raw text NOT NULL,
+    fee_amount numeric(28,8) NOT NULL,
+    fee_asset_id text NOT NULL,
+    builder text NULL,
+    metadata text NULL,
+    raw_topics_json jsonb NOT NULL,
+    raw_data text NOT NULL,
+    removed boolean NOT NULL,
+    observed_at_utc timestamptz NOT NULL,
+    imported_at_utc timestamptz NOT NULL
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS ux_polymarket_onchain_trade_captures_tx_log
+ON polymarket_onchain_trade_captures(transaction_hash, log_index);
+
+CREATE INDEX IF NOT EXISTS ix_polymarket_onchain_trade_captures_contract_block
+ON polymarket_onchain_trade_captures(contract_address, block_number, log_index);
+
+CREATE INDEX IF NOT EXISTS ix_polymarket_onchain_trade_captures_time
+ON polymarket_onchain_trade_captures(block_timestamp_utc DESC);
+
+CREATE INDEX IF NOT EXISTS ix_polymarket_onchain_trade_captures_pending_order
+ON polymarket_onchain_trade_captures(block_timestamp_utc, block_number, log_index)
+WHERE NOT removed;
+
+CREATE INDEX IF NOT EXISTS ix_polymarket_onchain_trade_captures_wallet_time
+ON polymarket_onchain_trade_captures(wallet, block_timestamp_utc DESC);
+
+CREATE INDEX IF NOT EXISTS ix_polymarket_onchain_trade_captures_token_time
+ON polymarket_onchain_trade_captures(token_id, block_timestamp_utc DESC);
+
+CREATE TABLE IF NOT EXISTS polymarket_onchain_paper_signal_results (
+    id uuid PRIMARY KEY,
+    capture_id uuid NOT NULL,
+    transaction_hash text NOT NULL,
+    log_index bigint NOT NULL,
+    participant_role text NOT NULL,
+    copied_trader_wallet text NOT NULL,
+    counterparty_wallet text NOT NULL,
+    side text NOT NULL,
+    token_id text NOT NULL,
+    condition_id text NOT NULL,
+    market_slug text NOT NULL,
+    outcome text NOT NULL,
+    local_category text NULL,
+    polymarket_category text NULL,
+    rating_found boolean NULL,
+    leaderboard_rank integer NULL,
+    leaderboard_pnl_usd numeric(28,8) NULL,
+    leaderboard_volume_usd numeric(28,8) NULL,
+    leaderboard_pnl_to_volume_pct numeric(18,8) NULL,
+    signal_id uuid NULL,
+    paper_order_id uuid NULL,
+    status text NOT NULL,
+    decision_code text NOT NULL,
+    reason_details text NOT NULL,
+    processed_at_utc timestamptz NOT NULL,
+    UNIQUE (transaction_hash, log_index, participant_role)
+);
+
+CREATE INDEX IF NOT EXISTS ix_polymarket_onchain_paper_signal_results_wallet_time
+ON polymarket_onchain_paper_signal_results(copied_trader_wallet, processed_at_utc DESC);
+
+CREATE INDEX IF NOT EXISTS ix_polymarket_onchain_paper_signal_results_status_time
+ON polymarket_onchain_paper_signal_results(status, processed_at_utc DESC);
+
+CREATE INDEX IF NOT EXISTS ix_polymarket_onchain_paper_signal_results_signal
+ON polymarket_onchain_paper_signal_results(signal_id);
+
+CREATE INDEX IF NOT EXISTS ix_polymarket_onchain_paper_signal_results_order
+ON polymarket_onchain_paper_signal_results(paper_order_id);
 
 CREATE TABLE IF NOT EXISTS polymarket_onchain_wallet_fills (
     source_fill_id uuid NOT NULL,
@@ -1239,6 +3414,19 @@ CREATE TABLE IF NOT EXISTS polymarket_onchain_ingest_cursors (
     fills_stored integer NOT NULL,
     started_at_utc timestamptz NOT NULL,
     completed_at_utc timestamptz NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS polymarket_onchain_trade_capture_cursors (
+    contract_address text PRIMARY KEY,
+    contract_name text NOT NULL,
+    exchange_version text NOT NULL,
+    next_block bigint NOT NULL,
+    last_scanned_block bigint NOT NULL,
+    last_target_block bigint NOT NULL,
+    logs_fetched integer NOT NULL,
+    captures_stored integer NOT NULL,
+    started_at_utc timestamptz NOT NULL,
+    updated_at_utc timestamptz NOT NULL
 );
 
 CREATE TABLE IF NOT EXISTS scanner_status (

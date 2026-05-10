@@ -39,9 +39,19 @@ public sealed class DefaultSignalEngine(
             return categoryPerformanceRejection;
         }
 
-        if (trade.Side != TradeSide.Buy)
+        if (EvaluateCopiedTraderPerformance(context, category, now) is { } copiedTraderPerformanceRejection)
+        {
+            return copiedTraderPerformanceRejection;
+        }
+
+        if (trade.Side is not (TradeSide.Buy or TradeSide.Sell))
         {
             return Reject(SignalReasonCodes.UnsupportedSide, now);
+        }
+
+        if (trade.Side == TradeSide.Sell && context.AvailablePositionSizeShares is not > 0m)
+        {
+            return Reject(SignalReasonCodes.NoPaperPositionToSell, now);
         }
 
         var age = now - trade.TimestampUtc;
@@ -63,7 +73,7 @@ public sealed class DefaultSignalEngine(
         }
 
         var orderBook = context.OrderBookSnapshot;
-        if (orderBook?.BestBid is not { } bestBid || orderBook.BestAsk is not { } bestAsk)
+        if (orderBook?.BestBid is null || orderBook.BestAsk is null)
         {
             return Reject(SignalReasonCodes.MissingOrderBook, now);
         }
@@ -80,25 +90,13 @@ public sealed class DefaultSignalEngine(
             return Reject(SignalReasonCodes.SpreadTooWidePct, now);
         }
 
-        var tickSize = orderBook.TickSize is > 0m ? orderBook.TickSize.Value : 0.01m;
-        var maxEntry = trade.Price + Math.Min(traderRule.MaxSlippageCents, executionOptions.MaxSlippageCents) / 100m;
-        if (bestAsk > maxEntry + tickSize)
+        var proposedPrice = ProposedLeaderPrice(trade.Price, now);
+        if (!proposedPrice.Accepted)
         {
-            return Reject(SignalReasonCodes.PriceMovedTooFar, now);
+            return proposedPrice.Decision!;
         }
 
-        var proposedPrice = MakerPriceCalculator.Calculate(bestBid, bestAsk, tickSize, maxEntry);
-        if (proposedPrice <= 0m || proposedPrice >= bestAsk)
-        {
-            return Reject(SignalReasonCodes.NoSafeMakerPrice, now);
-        }
-
-        if (proposedPrice > maxEntry)
-        {
-            return Reject(SignalReasonCodes.PriceMovedTooFar, now);
-        }
-
-        var score = Score(context, proposedPrice, age, spreadAbs, spreadPct, maxSpreadAbs, maxSpreadPct);
+        var score = Score(context, proposedPrice.Price, age, spreadAbs, spreadPct, maxSpreadAbs, maxSpreadPct);
         if (score < signalOptions.IgnoreBelowScore)
         {
             return Reject(SignalReasonCodes.ScoreBelowThreshold, now, score);
@@ -109,8 +107,25 @@ public sealed class DefaultSignalEngine(
             return Reject(SignalReasonCodes.ObserveOnly, now, score);
         }
 
-        var proposedNotional = ProposedNotional(score);
-        var proposedSize = proposedNotional / proposedPrice;
+        var marketMinOrderSize = orderBook.MinOrderSize is > 0m ? orderBook.MinOrderSize.Value : 1m;
+        var proposedSize = ProposedSize(score, proposedPrice.Price, marketMinOrderSize);
+        var proposedNotional = proposedSize * proposedPrice.Price;
+        if (trade.Side == TradeSide.Sell)
+        {
+            if (paperTradingOptions.UseMinimumMarketOrderSize &&
+                (context.AvailablePositionSizeShares ?? 0m) < marketMinOrderSize)
+            {
+                return Reject(SignalReasonCodes.PaperPositionBelowMarketMinimum, now, score);
+            }
+
+            proposedSize = Math.Min(proposedSize, context.AvailablePositionSizeShares ?? 0m);
+            proposedNotional = proposedSize * proposedPrice.Price;
+            if (proposedSize <= 0m || proposedNotional <= 0m)
+            {
+                return Reject(SignalReasonCodes.NoPaperPositionToSell, now, score);
+            }
+        }
+
         var riskDecision = riskEngine.Evaluate(
             new ProposedOrderIntent(
                 trade.TraderWallet,
@@ -118,7 +133,7 @@ public sealed class DefaultSignalEngine(
                 trade.AssetId,
                 category,
                 trade.Side,
-                proposedPrice,
+                proposedPrice.Price,
                 proposedSize,
                 proposedNotional),
             context.Exposure);
@@ -130,7 +145,7 @@ public sealed class DefaultSignalEngine(
                 score,
                 riskDecision.ReasonCodes[0],
                 riskDecision.ReasonCodes,
-                proposedPrice,
+                proposedPrice.Price,
                 proposedSize,
                 proposedNotional,
                 now);
@@ -145,10 +160,17 @@ public sealed class DefaultSignalEngine(
             score,
             decisionCode,
             [],
-            proposedPrice,
+            proposedPrice.Price,
             riskDecision.AllowedSizeShares,
             riskDecision.AllowedNotionalUsd,
             now);
+    }
+
+    private static PriceDecision ProposedLeaderPrice(decimal leaderPrice, DateTimeOffset now)
+    {
+        return leaderPrice <= 0m || leaderPrice > 1m
+            ? PriceDecision.Reject(SignalReasonCodes.NoSafeMakerPrice, now)
+            : PriceDecision.Accept(leaderPrice);
     }
 
     private int Score(
@@ -181,7 +203,9 @@ public sealed class DefaultSignalEngine(
             score += signalOptions.AgeUnder5MinutesScore;
         }
 
-        var entryDelta = proposedPrice - trade.Price;
+        var entryDelta = trade.Side == TradeSide.Sell
+            ? trade.Price - proposedPrice
+            : proposedPrice - trade.Price;
         if (entryDelta <= 0.005m)
         {
             score += signalOptions.EntryWithinHalfCentScore;
@@ -216,6 +240,18 @@ public sealed class DefaultSignalEngine(
         if (HasUsableLeaderCategoryPerformance(context.LeaderCategoryPerformance, context.MarketInfo?.Category, DateTimeOffset.UtcNow))
         {
             score += signalOptions.LeaderCategoryPerformanceScore;
+        }
+
+        if (HasUsableCopiedTraderPerformance(
+                context.CopiedTraderCategoryPerformance,
+                trade.TraderWallet,
+                context.MarketInfo?.Category) ||
+            HasUsableCopiedTraderPerformance(
+                context.CopiedTraderOverallPerformance,
+                trade.TraderWallet,
+                "OVERALL"))
+        {
+            score += signalOptions.CopiedTraderPerformanceScore;
         }
 
         if (spreadAbs > maxSpreadAbs * 0.75m || spreadPct > maxSpreadPct * 0.75m)
@@ -282,6 +318,35 @@ public sealed class DefaultSignalEngine(
         return null;
     }
 
+    private SignalDecision? EvaluateCopiedTraderPerformance(
+        SignalEvaluationContext context,
+        string? category,
+        DateTimeOffset now)
+    {
+        if (!signalOptions.CopiedTraderPerformanceGuardEnabled)
+        {
+            return null;
+        }
+
+        if (IsWeakCopiedTraderPerformance(
+                context.CopiedTraderCategoryPerformance,
+                context.LeaderTrade.TraderWallet,
+                category))
+        {
+            return Reject(SignalReasonCodes.CopiedTraderCategoryPerformanceTooWeak, now);
+        }
+
+        if (IsWeakCopiedTraderPerformance(
+                context.CopiedTraderOverallPerformance,
+                context.LeaderTrade.TraderWallet,
+                "OVERALL"))
+        {
+            return Reject(SignalReasonCodes.CopiedTraderPerformanceTooWeak, now);
+        }
+
+        return null;
+    }
+
     private bool HasUsableLeaderCategoryPerformance(
         PolymarketOnChainWalletCategoryPerformance? performance,
         string? category,
@@ -298,17 +363,60 @@ public sealed class DefaultSignalEngine(
             performance.WinRatePct >= signalOptions.MinLeaderCategoryWinRatePct;
     }
 
+    private bool HasUsableCopiedTraderPerformance(
+        PaperCopiedTraderPerformance? performance,
+        string wallet,
+        string? category)
+    {
+        return HasMinimumCopiedTraderSample(performance, wallet, category) &&
+            !IsWeakCopiedTraderPerformance(performance, wallet, category);
+    }
+
+    private bool IsWeakCopiedTraderPerformance(
+        PaperCopiedTraderPerformance? performance,
+        string wallet,
+        string? category)
+    {
+        if (!HasMinimumCopiedTraderSample(performance, wallet, category))
+        {
+            return false;
+        }
+
+        var observedPerformance = performance!;
+        return observedPerformance.TotalPnlUsd <= signalOptions.CopiedTraderPerformanceMinTotalPnlUsd ||
+            observedPerformance.RoiPct <= signalOptions.CopiedTraderPerformanceMinRoiPct ||
+            observedPerformance.Score < signalOptions.CopiedTraderPerformanceMinScore;
+    }
+
+    private bool HasMinimumCopiedTraderSample(
+        PaperCopiedTraderPerformance? performance,
+        string wallet,
+        string? category)
+    {
+        return performance is not null &&
+            !IsUnknownCategory(category) &&
+            string.Equals(performance.CopiedTraderWallet, wallet, StringComparison.OrdinalIgnoreCase) &&
+            string.Equals(performance.Category, category, StringComparison.OrdinalIgnoreCase) &&
+            performance.SettledPositionsCount >= signalOptions.CopiedTraderPerformanceMinSettledPositions;
+    }
+
     private bool IsPerformanceStale(PolymarketOnChainWalletCategoryPerformance performance, DateTimeOffset now)
     {
         return now - performance.RefreshedAtUtc > TimeSpan.FromHours(signalOptions.LeaderCategoryPerformanceStaleAfterHours);
     }
 
-    private decimal ProposedNotional(int score)
+    private decimal ProposedSize(int score, decimal proposedPrice, decimal marketMinOrderSize)
     {
+        if (paperTradingOptions.UseMinimumMarketOrderSize)
+        {
+            return marketMinOrderSize;
+        }
+
         var maxTradeNotional = paperTradingOptions.InitialBankrollUsd * riskOptions.MaxTradeBankrollPct / 100m;
-        return score >= signalOptions.NormalPaperOrderScore
+        var proposedNotional = score >= signalOptions.NormalPaperOrderScore
             ? maxTradeNotional
             : maxTradeNotional / 2m;
+        return proposedNotional / proposedPrice;
     }
 
     private static bool IsCategoryAllowed(TraderRule traderRule, string? category)
@@ -351,5 +459,21 @@ public sealed class DefaultSignalEngine(
     private static SignalDecision Reject(string reasonCode, DateTimeOffset now, int score = 0)
     {
         return new SignalDecision(false, score, reasonCode, [reasonCode], null, null, null, now);
+    }
+
+    private readonly record struct PriceDecision(
+        bool Accepted,
+        decimal Price,
+        SignalDecision? Decision)
+    {
+        public static PriceDecision Accept(decimal price)
+        {
+            return new PriceDecision(true, price, null);
+        }
+
+        public static PriceDecision Reject(string reasonCode, DateTimeOffset now)
+        {
+            return new PriceDecision(false, 0m, DefaultSignalEngine.Reject(reasonCode, now));
+        }
     }
 }

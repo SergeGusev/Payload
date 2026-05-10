@@ -13,6 +13,10 @@ ActiveContextFile: Codex/Contexts/ContextPolyCopyTrader.md
 
 This repository contains **PolyCopyTrader**, a Windows/.NET C# application for monitoring Polymarket traders and running a cautious copy-signal strategy.
 
+## User interaction rules
+
+- When the user asks to inspect a picture/image/screenshot, assume the image is in the Windows clipboard unless the user explicitly provides another source. First try to extract the clipboard bitmap to a temporary image file and inspect it.
+
 ## Core principle
 
 This is **not** a blind copy-trading bot.

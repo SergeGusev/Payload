@@ -3,12 +3,16 @@ using PolyCopyTrader.Domain;
 using PolyCopyTrader.Domain.Configuration;
 using PolyCopyTrader.Polymarket;
 using PolyCopyTrader.Polymarket.Auth;
+using PolyCopyTrader.Service;
 using PolyCopyTrader.Service.Control;
+using PolyCopyTrader.Service.LiveTrading;
 using PolyCopyTrader.Service.MarketData;
 using PolyCopyTrader.Service.PaperTrading;
 using PolyCopyTrader.Service.Scanning;
 using PolyCopyTrader.Service.Signals;
+using PolyCopyTrader.Service.Strategies;
 using PolyCopyTrader.Strategy;
+using PolyCopyTrader.Storage;
 
 namespace PolyCopyTrader.Tests;
 
@@ -91,6 +95,7 @@ public sealed class ResilienceTests
         await repository.AddPaperOrderAsync(new PaperOrder(
             Guid.NewGuid(),
             Guid.NewGuid(),
+            "0xleader",
             PaperOrderStatus.Pending,
             TradeSide.Buy,
             "asset-1",
@@ -107,12 +112,80 @@ public sealed class ResilienceTests
             new ThrowingClobClient(),
             new MarketDataCache(new MarketDataWebSocketOptions()),
             new MarketDataWebSocketOptions(),
+            new PaperTradingOptions(),
+            new ExposureSnapshotCache(repository),
             repository);
 
         var result = await processor.ProcessOpenOrdersAsync();
 
         Assert.Equal(1, result.OpenOrdersChecked);
         Assert.Equal(0, result.OrdersFilled);
+    }
+
+    [Fact]
+    public async Task PaperTradingProcessor_SkipsMissingOrderBookWhenMarkingPosition()
+    {
+        var repository = new TestAppRepository();
+        var position = new PaperPosition(
+            "asset-1",
+            "condition-1",
+            "Yes",
+            10m,
+            0.50m,
+            5m,
+            0m,
+            DateTimeOffset.UtcNow,
+            "0xleader");
+        await repository.UpsertPaperPositionAsync(position);
+        var processor = new PaperTradingProcessor(
+            NullLogger<PaperTradingProcessor>.Instance,
+            new DefaultPaperTradingEngine(),
+            new MissingOrderBookClobClient(),
+            new MarketDataCache(new MarketDataWebSocketOptions()),
+            new MarketDataWebSocketOptions(),
+            new PaperTradingOptions(),
+            new ExposureSnapshotCache(repository),
+            repository);
+
+        var result = await processor.ProcessOpenOrdersAsync();
+
+        Assert.Equal(0, result.OpenOrdersChecked);
+        Assert.Equal(0, result.PositionsUpdated);
+        Assert.Empty(repository.ApiErrors);
+        Assert.Equal(position, Assert.Single(repository.PaperPositions));
+    }
+
+    [Fact]
+    public async Task PaperTradingProcessor_SurvivesOrderBookTimeoutWhenMarkingPosition()
+    {
+        var repository = new TestAppRepository();
+        var position = new PaperPosition(
+            "asset-1",
+            "condition-1",
+            "Yes",
+            10m,
+            0.50m,
+            5m,
+            0m,
+            DateTimeOffset.UtcNow,
+            "0xleader");
+        await repository.UpsertPaperPositionAsync(position);
+        var processor = new PaperTradingProcessor(
+            NullLogger<PaperTradingProcessor>.Instance,
+            new DefaultPaperTradingEngine(),
+            new TimeoutClobClient(),
+            new MarketDataCache(new MarketDataWebSocketOptions()),
+            new MarketDataWebSocketOptions(),
+            new PaperTradingOptions(),
+            new ExposureSnapshotCache(repository),
+            repository);
+
+        var result = await processor.ProcessOpenOrdersAsync();
+
+        Assert.Equal(0, result.OpenOrdersChecked);
+        Assert.Equal(0, result.PositionsUpdated);
+        Assert.Contains(repository.ApiErrors, error => error.Operation == "UpdatePositionMarkTimeout");
+        Assert.Equal(position, Assert.Single(repository.PaperPositions));
     }
 
     [Fact]
@@ -141,6 +214,98 @@ public sealed class ResilienceTests
         var fresh = cache.TryGetFreshOrderBook("asset-1", TimeSpan.FromSeconds(30), out _);
 
         Assert.False(fresh);
+    }
+
+    [Fact]
+    public async Task MarketDataWebSocketService_RetriesSupervisorCycleAfterAssetProviderFailure()
+    {
+        var options = new MarketDataWebSocketOptions
+        {
+            SubscriptionRefreshSeconds = 1,
+            WatchdogIntervalSeconds = 1,
+            StatusPersistIntervalSeconds = 1
+        };
+        var assetProvider = new ThrowOnceRelevantMarketAssetProvider();
+        var cache = new MarketDataCache(options);
+        var service = new MarketDataWebSocketService(
+            NullLogger<MarketDataWebSocketService>.Instance,
+            NullLoggerFactory.Instance,
+            new BotOptions { UseWebSockets = true },
+            options,
+            new PolymarketOptions(),
+            assetProvider,
+            new ActiveMarketAssetSubscriptionRegistry(),
+            new NoOpMarketTradeTickDiagnosticService(),
+            cache,
+            new NoOpPaperTradingMarketDataUpdater(),
+            new NoOpAppRepository());
+
+        await service.StartAsync(CancellationToken.None);
+        try
+        {
+            var completed = await Task.WhenAny(assetProvider.SecondCall, Task.Delay(TimeSpan.FromSeconds(5)));
+
+            Assert.Same(assetProvider.SecondCall, completed);
+            Assert.True(assetProvider.Calls >= 2);
+        }
+        finally
+        {
+            using var stopCts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+            await service.StopAsync(stopCts.Token);
+        }
+    }
+
+    [Fact]
+    public async Task BotWorker_HeartbeatPersistenceFailure_DoesNotPauseSubsystems()
+    {
+        var repository = new TestAppRepository { ThrowOnUpsertServiceHeartbeat = true };
+        var controlState = new ServiceControlState();
+        var service = new BotWorker(
+            NullLogger<BotWorker>.Instance,
+            new BotOptions { Mode = BotMode.Paper, PollIntervalSeconds = 60 },
+            repository,
+            new NoOpWatchlistScanner(),
+            new NoOpSignalProcessor(),
+            controlState);
+
+        await service.StartAsync(CancellationToken.None);
+        try
+        {
+            var completed = await Task.WhenAny(
+                repository.ServiceHeartbeatAttempt.Task,
+                Task.Delay(TimeSpan.FromSeconds(5)));
+
+            Assert.Same(repository.ServiceHeartbeatAttempt.Task, completed);
+            await WaitUntilAsync(
+                () => controlState.Snapshot.CurrentLoop.Contains("Heartbeat persistence failed", StringComparison.Ordinal),
+                TimeSpan.FromSeconds(5));
+
+            var snapshot = controlState.Snapshot;
+            Assert.Equal(ServiceRunState.Running, snapshot.RunState);
+            Assert.False(snapshot.ScanningPaused);
+            Assert.False(snapshot.PaperTradingPaused);
+            Assert.False(snapshot.LiveTradingPaused);
+            Assert.False(snapshot.KillSwitchActive);
+        }
+        finally
+        {
+            using var stopCts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+            await service.StopAsync(stopCts.Token);
+        }
+    }
+
+    private static async Task WaitUntilAsync(Func<bool> condition, TimeSpan timeout)
+    {
+        var deadline = DateTimeOffset.UtcNow.Add(timeout);
+        while (!condition())
+        {
+            if (DateTimeOffset.UtcNow >= deadline)
+            {
+                Assert.True(condition(), "Condition was not met before the timeout.");
+            }
+
+            await Task.Delay(TimeSpan.FromMilliseconds(50));
+        }
     }
 
     private static WatchlistScanner CreateScanner(
@@ -182,6 +347,8 @@ public sealed class ResilienceTests
                 new DefaultRiskEngine(riskOptions, paperOptions)),
             new DefaultPaperTradingEngine(),
             new ServiceControlState(),
+            new ExposureSnapshotCache(repository),
+            new StrategyStateProvider(NullLogger<StrategyStateProvider>.Instance, repository),
             repository);
     }
 
@@ -264,6 +431,90 @@ public sealed class ResilienceTests
             "0xabc");
     }
 
+    private sealed class ThrowOnceRelevantMarketAssetProvider : IRelevantMarketAssetProvider
+    {
+        private readonly TaskCompletionSource<bool> secondCall = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        private int calls;
+
+        public int Calls => Volatile.Read(ref calls);
+
+        public Task SecondCall => secondCall.Task;
+
+        public Task<IReadOnlyCollection<string>> GetRelevantAssetIdsAsync(CancellationToken cancellationToken = default)
+        {
+            var call = Interlocked.Increment(ref calls);
+            if (call == 1)
+            {
+                throw new InvalidOperationException("simulated database recovery");
+            }
+
+            secondCall.TrySetResult(true);
+            return Task.FromResult<IReadOnlyCollection<string>>([]);
+        }
+    }
+
+    private sealed class NoOpMarketTradeTickDiagnosticService : IMarketTradeTickDiagnosticService
+    {
+        public Task RecordAsync(MarketDataUpdate update, CancellationToken cancellationToken = default)
+        {
+            return Task.CompletedTask;
+        }
+    }
+
+    private sealed class NoOpPaperTradingMarketDataUpdater : IPaperTradingMarketDataUpdater
+    {
+        public Task ApplyUpdateAsync(MarketDataUpdate update, CancellationToken cancellationToken = default)
+        {
+            return Task.CompletedTask;
+        }
+    }
+
+    private sealed class NoOpWatchlistScanner : IWatchlistScanner
+    {
+        public Task<ScannerStatusSnapshot> ScanOnceAsync(CancellationToken cancellationToken = default)
+        {
+            return Task.FromResult(new ScannerStatusSnapshot(
+                "NoOpWatchlistScanner",
+                DateTimeOffset.UtcNow,
+                null,
+                null,
+                0,
+                0,
+                0,
+                "OK",
+                DateTimeOffset.UtcNow));
+        }
+    }
+
+    private sealed class NoOpSignalProcessor : ISignalProcessor
+    {
+        public Task<SignalProcessingResult> ProcessQueuedAsync(CancellationToken cancellationToken = default)
+        {
+            return Task.FromResult(new SignalProcessingResult(0, 0, 0, 0));
+        }
+    }
+
+    private sealed class NoOpPaperTradingProcessor : IPaperTradingProcessor
+    {
+        public Task<PaperTradingProcessingResult> ProcessOpenOrdersAsync(CancellationToken cancellationToken = default)
+        {
+            return Task.FromResult(new PaperTradingProcessingResult(0, 0, 0, 0));
+        }
+    }
+
+    private sealed class NoOpLiveTradingProcessor : ILiveTradingProcessor
+    {
+        public Task<LiveTradingProcessingResult> ProcessOpenOrdersAsync(CancellationToken cancellationToken = default)
+        {
+            return Task.FromResult(new LiveTradingProcessingResult(0, 0, 0));
+        }
+
+        public Task CancelAllOpenOrdersAsync(string source, CancellationToken cancellationToken = default)
+        {
+            return Task.CompletedTask;
+        }
+    }
+
     private sealed class StaticDataApiClient(
         IReadOnlyList<LeaderTrade> trades,
         IReadOnlyList<LeaderPosition> positions) : IPolymarketDataApiClient
@@ -282,6 +533,16 @@ public sealed class ResilienceTests
 
         public Task<IReadOnlyList<LeaderTrade>> GetUserTradesAsync(
             string wallet,
+            bool takerOnly,
+            int limit = 100,
+            int offset = 0,
+            CancellationToken cancellationToken = default)
+        {
+            return Task.FromResult(trades);
+        }
+
+        public Task<IReadOnlyList<LeaderTrade>> GetMarketTradesAsync(
+            string conditionId,
             bool takerOnly,
             int limit = 100,
             int offset = 0,
@@ -316,6 +577,16 @@ public sealed class ResilienceTests
 
         public Task<IReadOnlyList<LeaderTrade>> GetUserTradesAsync(
             string wallet,
+            bool takerOnly,
+            int limit = 100,
+            int offset = 0,
+            CancellationToken cancellationToken = default)
+        {
+            throw new InvalidOperationException(message);
+        }
+
+        public Task<IReadOnlyList<LeaderTrade>> GetMarketTradesAsync(
+            string conditionId,
             bool takerOnly,
             int limit = 100,
             int offset = 0,
@@ -367,6 +638,65 @@ public sealed class ResilienceTests
         public Task<OrderBookSnapshot?> GetOrderBookAsync(string assetId, CancellationToken cancellationToken = default)
         {
             throw new InvalidOperationException("order book unavailable");
+        }
+
+        public Task<DateTimeOffset> GetServerTimeAsync(CancellationToken cancellationToken = default)
+        {
+            throw new InvalidOperationException("server time unavailable");
+        }
+
+        public Task<decimal?> GetMidpointAsync(string assetId, CancellationToken cancellationToken = default)
+        {
+            throw new InvalidOperationException("midpoint unavailable");
+        }
+
+        public Task<decimal?> GetSpreadAsync(string assetId, CancellationToken cancellationToken = default)
+        {
+            throw new InvalidOperationException("spread unavailable");
+        }
+
+        public Task<PolymarketClobMarketByToken?> GetMarketByTokenAsync(string tokenId, CancellationToken cancellationToken = default)
+        {
+            throw new InvalidOperationException("market by token unavailable");
+        }
+    }
+
+    private sealed class TimeoutClobClient : IPolymarketClobPublicClient
+    {
+        public Task<OrderBookSnapshot?> GetOrderBookAsync(string assetId, CancellationToken cancellationToken = default)
+        {
+            throw new TaskCanceledException("The request was canceled due to the configured HttpClient.Timeout of 30 seconds elapsing.");
+        }
+
+        public Task<DateTimeOffset> GetServerTimeAsync(CancellationToken cancellationToken = default)
+        {
+            throw new TaskCanceledException("server time timed out");
+        }
+
+        public Task<decimal?> GetMidpointAsync(string assetId, CancellationToken cancellationToken = default)
+        {
+            throw new TaskCanceledException("midpoint timed out");
+        }
+
+        public Task<decimal?> GetSpreadAsync(string assetId, CancellationToken cancellationToken = default)
+        {
+            throw new TaskCanceledException("spread timed out");
+        }
+
+        public Task<PolymarketClobMarketByToken?> GetMarketByTokenAsync(string tokenId, CancellationToken cancellationToken = default)
+        {
+            throw new TaskCanceledException("market by token timed out");
+        }
+    }
+
+    private sealed class MissingOrderBookClobClient : IPolymarketClobPublicClient
+    {
+        public Task<OrderBookSnapshot?> GetOrderBookAsync(string assetId, CancellationToken cancellationToken = default)
+        {
+            throw new PolymarketApiException(
+                "PolymarketClobPublicClient",
+                "GetOrderBook",
+                """GetOrderBook failed with HTTP 404 Not Found. Body: {"error":"No orderbook exists for the requested token id"}""");
         }
 
         public Task<DateTimeOffset> GetServerTimeAsync(CancellationToken cancellationToken = default)

@@ -3,6 +3,7 @@ using System.Text;
 using System.Text.Json;
 using PolyCopyTrader.Domain;
 using PolyCopyTrader.Domain.Configuration;
+using PolyCopyTrader.Service.ExternalPrices;
 using PolyCopyTrader.Service.LiveTrading;
 using PolyCopyTrader.Service.OnChain;
 using PolyCopyTrader.Service.TraderDiscovery;
@@ -19,6 +20,7 @@ public sealed class LocalControlServer(
     ITraderDiscoveryProcessor traderDiscoveryProcessor,
     IOnChainIngestionProcessor onChainIngestionProcessor,
     IOnChainMarketEnrichmentProcessor onChainMarketEnrichmentProcessor,
+    IBtcUsdReferencePriceCache btcUsdReferencePriceCache,
     IAppRepository repository) : BackgroundService
 {
     private readonly JsonSerializerOptions jsonOptions = new(JsonSerializerDefaults.Web);
@@ -116,6 +118,12 @@ public sealed class LocalControlServer(
             if (method == "GET" && path == "/status")
             {
                 await WriteAsync(context.Response, HttpStatusCode.OK, StatusPayload(), cancellationToken);
+                return;
+            }
+
+            if (method == "GET" && path == "/btc-usd-reference")
+            {
+                await WriteAsync(context.Response, HttpStatusCode.OK, btcUsdReferencePriceCache.Snapshot, cancellationToken);
                 return;
             }
 

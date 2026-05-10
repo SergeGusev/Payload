@@ -12,7 +12,15 @@ public sealed class DashboardDataService(
     bool storageConfigured,
     IPolymarketAuthService authService)
 {
-    public async Task<DashboardSnapshot> LoadAsync(CancellationToken cancellationToken = default)
+    private IReadOnlyList<StrategyPerformance>? cachedStrategyPerformance;
+    private DateTimeOffset cachedStrategyPerformanceAtUtc = DateTimeOffset.MinValue;
+    private IReadOnlyList<StrategyRecentPerformance>? cachedStrategyRecentPerformance;
+    private DateTimeOffset cachedStrategyRecentPerformanceAtUtc = DateTimeOffset.MinValue;
+
+    public async Task<DashboardSnapshot> LoadAsync(
+        ControlStatusResponse? controlStatus = null,
+        string? controlStatusError = null,
+        CancellationToken cancellationToken = default)
     {
         var heartbeats = await repository.GetServiceHeartbeatsAsync(cancellationToken);
         var scannerStatuses = await repository.GetScannerStatusesAsync(cancellationToken);
@@ -30,6 +38,9 @@ public sealed class DashboardDataService(
         var recentPaperOrders = await repository.GetRecentPaperOrdersAsync(cancellationToken: cancellationToken);
         var openPaperOrders = await repository.GetOpenPaperOrdersAsync(cancellationToken);
         var paperPositions = await repository.GetPaperPositionsAsync(cancellationToken);
+        var paperCopiedTraderPerformance = await repository.GetPaperCopiedTraderPerformanceAsync(250, cancellationToken);
+        var strategyPerformance = await GetStrategyPerformanceAsync(cancellationToken);
+        var strategyRecentPerformance = await GetStrategyRecentPerformanceAsync(cancellationToken);
         var dryRunOrders = await repository.GetRecentDryRunOrdersAsync(cancellationToken: cancellationToken);
         var liveOrders = await repository.GetRecentLiveOrdersAsync(cancellationToken: cancellationToken);
         var liveTradingEvents = await repository.GetRecentLiveTradingEventsAsync(cancellationToken: cancellationToken);
@@ -50,8 +61,28 @@ public sealed class DashboardDataService(
         var rejectionAnalysis = await repository.GetRejectionAnalysisReportsAsync(reportLimit, cancellationToken);
         var authReadiness = await authService.GetReadinessAsync(cancellationToken);
 
-        var overview = BuildOverview(heartbeats, scannerStatuses, openPaperOrders, paperPositions, liveOrders, apiErrors, marketDataStatuses, authReadiness);
+        var overview = BuildOverview(
+            heartbeats,
+            scannerStatuses,
+            openPaperOrders,
+            paperPositions,
+            liveOrders,
+            liveTradingEvents,
+            apiErrors,
+            marketDataStatuses,
+            authReadiness);
         var riskUsage = BuildRiskUsage(openPaperOrders, paperPositions);
+        var liveReadiness = BuildLiveReadiness(
+            authReadiness,
+            strategyPerformance,
+            dryRunOrders,
+            liveOrders,
+            liveTradingEvents,
+            apiErrors,
+            riskEvents,
+            marketDataStatuses,
+            controlStatus,
+            controlStatusError);
 
         return new DashboardSnapshot(
             overview,
@@ -67,9 +98,13 @@ public sealed class DashboardDataService(
             signals.Select(ToSignalRow).ToArray(),
             recentPaperOrders.Select(ToPaperOrderRow).ToArray(),
             paperPositions.Select(position => ToPaperPositionRow(position, orderBooksByAsset)).ToArray(),
+            strategyPerformance.Select(ToStrategyPerformanceRow).ToArray(),
+            strategyRecentPerformance.Select(ToStrategyRecentPerformanceRow).ToArray(),
+            paperCopiedTraderPerformance.Select(ToPaperCopiedTraderPerformanceRow).ToArray(),
             dryRunOrders.Select(ToDryRunOrderRow).ToArray(),
             liveOrders.Select(ToLiveOrderRow).ToArray(),
             liveTradingEvents.Select(ToLiveTradingEventRow).ToArray(),
+            liveReadiness,
             orderBookSnapshots.Select(ToMarketDataRow).ToArray(),
             dailyReports.Select(ToDailyReportRow).ToArray(),
             traderPerformance.Select(ToTraderPerformanceRow).ToArray(),
@@ -82,12 +117,53 @@ public sealed class DashboardDataService(
             BuildLogs(apiErrors, riskEvents, commandAudits, marketDataEvents, liveTradingEvents));
     }
 
+    public void InvalidateStrategyPerformanceCache()
+    {
+        cachedStrategyPerformance = null;
+        cachedStrategyPerformanceAtUtc = DateTimeOffset.MinValue;
+        cachedStrategyRecentPerformance = null;
+        cachedStrategyRecentPerformanceAtUtc = DateTimeOffset.MinValue;
+    }
+
+    private async Task<IReadOnlyList<StrategyPerformance>> GetStrategyPerformanceAsync(
+        CancellationToken cancellationToken)
+    {
+        var nowUtc = DateTimeOffset.UtcNow;
+        var refreshInterval = TimeSpan.FromSeconds(Math.Max(1, configuration.Dashboard.StrategyRefreshIntervalSeconds));
+        if (cachedStrategyPerformance is not null &&
+            nowUtc - cachedStrategyPerformanceAtUtc < refreshInterval)
+        {
+            return cachedStrategyPerformance;
+        }
+
+        cachedStrategyPerformance = await repository.GetStrategyPerformanceAsync(250, cancellationToken);
+        cachedStrategyPerformanceAtUtc = nowUtc;
+        return cachedStrategyPerformance;
+    }
+
+    private async Task<IReadOnlyList<StrategyRecentPerformance>> GetStrategyRecentPerformanceAsync(
+        CancellationToken cancellationToken)
+    {
+        var nowUtc = DateTimeOffset.UtcNow;
+        var refreshInterval = TimeSpan.FromSeconds(Math.Max(1, configuration.Dashboard.StrategyRefreshIntervalSeconds));
+        if (cachedStrategyRecentPerformance is not null &&
+            nowUtc - cachedStrategyRecentPerformanceAtUtc < refreshInterval)
+        {
+            return cachedStrategyRecentPerformance;
+        }
+
+        cachedStrategyRecentPerformance = await repository.GetStrategyRecentPerformanceAsync(250, cancellationToken);
+        cachedStrategyRecentPerformanceAtUtc = nowUtc;
+        return cachedStrategyRecentPerformance;
+    }
+
     private IReadOnlyList<OverviewMetric> BuildOverview(
         IReadOnlyList<ServiceHeartbeat> heartbeats,
         IReadOnlyList<ScannerStatusSnapshot> scannerStatuses,
         IReadOnlyList<PaperOrder> openPaperOrders,
         IReadOnlyList<PaperPosition> paperPositions,
         IReadOnlyList<LiveOrder> liveOrders,
+        IReadOnlyList<LiveTradingEvent> liveTradingEvents,
         IReadOnlyList<ApiError> apiErrors,
         IReadOnlyList<MarketDataStatusSnapshot> marketDataStatuses,
         AuthReadinessStatus authReadiness)
@@ -109,8 +185,8 @@ public sealed class DashboardDataService(
             new OverviewMetric("Current loop", heartbeat?.CurrentLoop ?? "Waiting for service data"),
             new OverviewMetric("Storage configured", storageConfigured ? "Yes" : "No"),
             new OverviewMetric("API status", apiErrors.Count == 0 ? "No recorded errors" : $"{apiErrors.Count} recent errors"),
-            new OverviewMetric("Live open orders", liveOrders.Count(order => order.Status is LiveOrderStatus.Submitted or LiveOrderStatus.Live or LiveOrderStatus.Delayed).ToString()),
-            new OverviewMetric("Geoblock status", "Not checked by dashboard"),
+            new OverviewMetric("Live open orders", liveOrders.Count(order => order.Status is LiveOrderStatus.Submitted or LiveOrderStatus.Live or LiveOrderStatus.Delayed or LiveOrderStatus.Unmatched).ToString()),
+            new OverviewMetric("Geoblock status", FormatGeoblockOverview(liveTradingEvents)),
             new OverviewMetric("Auth", authReadiness.State),
             new OverviewMetric("Scanner status", scanner?.ScannerStatus ?? "No scanner status"),
             new OverviewMetric("WebSocket status", marketData?.ConnectionState.ToString() ?? "No market data status"),
@@ -121,7 +197,13 @@ public sealed class DashboardDataService(
             new OverviewMetric("Paper position value", FormatUsd(positionValue)),
             new OverviewMetric("Daily paper PnL", FormatUsd(paperPnl)),
             new OverviewMetric("Open paper orders", openPaperOrders.Count.ToString()),
-            new OverviewMetric("On-chain ingestion", configuration.OnChainIngestion.Enabled ? $"{configuration.OnChainIngestion.LookbackDays}d catch-up; live tail only" : "Disabled")
+            new OverviewMetric(
+                "On-chain ingestion",
+                configuration.OnChainIngestion.Enabled
+                    ? $"{configuration.OnChainIngestion.LookbackDays}d catch-up; live tail only"
+                    : configuration.OnChainIngestion.TradeCaptureEnabled
+                        ? "Diagnostic trade capture only"
+                        : "Disabled")
         ];
     }
 
@@ -217,6 +299,131 @@ public sealed class DashboardDataService(
             new("Watchlist summary", $"{configuration.Watchlist.Traders.Count} configured; {configuration.Watchlist.Traders.Count(trader => trader.Enabled)} enabled", "Info"),
             new("Risk usage", string.Join("; ", riskUsage.Select(row => $"{row.Name}={row.UsedUsd:0.##}/{row.LimitUsd:0.##} {row.Status}")), riskUsage.Any(row => row.Status == "Limit") ? "Warning" : "OK"),
             new("Latest API errors", string.Join(Environment.NewLine, latestApiErrors), apiErrors.Count == 0 ? "OK" : "Warning")
+        };
+
+        return rows;
+    }
+
+    private IReadOnlyList<LiveReadinessRow> BuildLiveReadiness(
+        AuthReadinessStatus authReadiness,
+        IReadOnlyList<StrategyPerformance> strategies,
+        IReadOnlyList<DryRunOrder> dryRunOrders,
+        IReadOnlyList<LiveOrder> liveOrders,
+        IReadOnlyList<LiveTradingEvent> liveTradingEvents,
+        IReadOnlyList<ApiError> apiErrors,
+        IReadOnlyList<RiskEvent> riskEvents,
+        IReadOnlyList<MarketDataStatusSnapshot> marketDataStatuses,
+        ControlStatusResponse? controlStatus,
+        string? controlStatusError)
+    {
+        var now = DateTimeOffset.UtcNow;
+        var liveOpenStatuses = new[]
+        {
+            LiveOrderStatus.Submitted,
+            LiveOrderStatus.Live,
+            LiveOrderStatus.Delayed,
+            LiveOrderStatus.Unmatched,
+            LiveOrderStatus.CancelRequested
+        };
+        var openLiveOrders = liveOrders
+            .Where(order => liveOpenStatuses.Contains(order.Status))
+            .ToArray();
+        var staleLiveOrders = openLiveOrders.Count(order =>
+            now - order.CreatedAtUtc > TimeSpan.FromSeconds(configuration.LiveTrading.DefaultOrderTtlSeconds));
+        var recentPolymarketErrors = apiErrors.Count(error =>
+            error.CreatedAtUtc >= now.AddMinutes(-configuration.LiveTrading.ApiErrorLockoutWindowMinutes) &&
+            error.Component.Contains("Polymarket", StringComparison.OrdinalIgnoreCase));
+        var dailyLossLockout = riskEvents.Any(item =>
+            item.CreatedAtUtc >= now.AddDays(-1) &&
+            item.ReasonCode.Contains("daily_loss", StringComparison.OrdinalIgnoreCase));
+        var latestGeoblock = LatestEvent(liveTradingEvents, "StartupGeoblockCheck");
+        var liveEnabledStrategies = strategies.Where(item => item.LiveStakes).ToArray();
+        var fundedLiveStrategies = liveEnabledStrategies
+            .Count(item => item.LiveStakeAmount > 0m && item.LiveAvailableBalance >= item.LiveStakeAmount);
+        var marketData = marketDataStatuses.FirstOrDefault(item => item.Component == "PolymarketMarketWebSocket")
+            ?? marketDataStatuses.FirstOrDefault();
+        var lastDryRunSigned = dryRunOrders
+            .Where(item => item.Status == DryRunOrderStatus.DryRunSigned)
+            .OrderByDescending(item => item.CreatedAtUtc)
+            .FirstOrDefault();
+
+        var rows = new List<LiveReadinessRow>
+        {
+            Gate(
+                "Bot mode",
+                configuration.Bot.Mode.ToString(),
+                configuration.Bot.Mode == BotMode.Live,
+                "Live orders are unreachable unless Bot:Mode is Live."),
+            Gate(
+                "Explicit live enable",
+                configuration.Bot.EnableLiveTrading ? "true" : "false",
+                configuration.Bot.EnableLiveTrading,
+                "Bot:EnableLiveTrading must be true."),
+            Gate(
+                "Manual enable code",
+                string.IsNullOrWhiteSpace(configuration.LiveTrading.ManualEnableCode) ? "empty" : "configured",
+                string.Equals(configuration.LiveTrading.ManualEnableCode, "LIVE_TRADING_ENABLED", StringComparison.Ordinal),
+                "LiveTrading:ManualEnableCode must equal LIVE_TRADING_ENABLED."),
+            Gate(
+                "Maker-only execution",
+                $"MakerOnly={configuration.Execution.MakerOnly}; AllowTaker={configuration.Execution.AllowTaker}",
+                configuration.Execution.MakerOnly && !configuration.Execution.AllowTaker,
+                "Initial live trading must remain post-only maker style."),
+            new(
+                "Max live order size",
+                FormatUsd(configuration.LiveTrading.MaxOrderNotionalUsd),
+                configuration.LiveTrading.MaxOrderNotionalUsd <= 1m ? "OK" : "Warning",
+                "Keep the first live session at a tiny order cap."),
+            Gate(
+                "Auth readiness",
+                authReadiness.State,
+                authReadiness.CanAuthenticate,
+                AuthDetails(authReadiness)),
+            new(
+                "Dry-run signed order",
+                lastDryRunSigned is null ? "none recent" : FormatDate(lastDryRunSigned.CreatedAtUtc),
+                lastDryRunSigned is null ? "Warning" : "OK",
+                "Run dry-run signing before a live session and confirm a DryRunSigned row."),
+            BuildGeoblockReadinessRow(latestGeoblock),
+            controlStatus is null
+                ? new LiveReadinessRow("IPC service status", "Unavailable", "Warning", controlStatusError ?? "Dashboard could not read /status.")
+                : new LiveReadinessRow("IPC service status", controlStatus.State, controlStatus.State is "Running" or "Paused" ? "OK" : "Warning", controlStatus.LastError ?? string.Empty),
+            controlStatus is null
+                ? new LiveReadinessRow("Live pause", "Unknown", "Warning", "IPC status is unavailable.")
+                : Gate("Live pause", controlStatus.LiveTradingPaused ? "paused" : "clear", !controlStatus.LiveTradingPaused, "Live trading must be unpaused for a live session."),
+            controlStatus is null
+                ? new LiveReadinessRow("Kill switch", "Unknown", "Warning", "IPC status is unavailable.")
+                : Gate("Kill switch", controlStatus.KillSwitchActive ? "active" : "clear", !controlStatus.KillSwitchActive, "Kill switch must be clear."),
+            Gate(
+                "Open live order count",
+                $"{openLiveOrders.Length}/{configuration.LiveTrading.MaxOpenLiveOrders}",
+                openLiveOrders.Length < configuration.LiveTrading.MaxOpenLiveOrders,
+                "The live preflight blocks when the open live-order cap is reached."),
+            Gate(
+                "Stale live orders",
+                staleLiveOrders.ToString(System.Globalization.CultureInfo.InvariantCulture),
+                staleLiveOrders == 0,
+                "Stale live orders must be cancelled before new placement."),
+            Gate(
+                "API error lockout",
+                $"{recentPolymarketErrors}/{configuration.LiveTrading.ApiErrorLockoutCount}",
+                recentPolymarketErrors < configuration.LiveTrading.ApiErrorLockoutCount,
+                $"Window: {configuration.LiveTrading.ApiErrorLockoutWindowMinutes} minutes."),
+            Gate(
+                "Daily loss lockout",
+                dailyLossLockout ? "active" : "clear",
+                !dailyLossLockout,
+                "Recent daily_loss risk events block live placement."),
+            new(
+                "Strategy live stakes",
+                $"{fundedLiveStrategies}/{liveEnabledStrategies.Length} funded enabled",
+                liveEnabledStrategies.Length == 0 ? "Warning" : fundedLiveStrategies == liveEnabledStrategies.Length ? "OK" : "Warning",
+                "A strategy also needs Live enabled and enough Live bal for its next stake."),
+            new(
+                "Market WebSocket",
+                marketData?.ConnectionState.ToString() ?? "No status",
+                marketData?.ConnectionState == MarketDataConnectionState.Connected && !marketData.Stale ? "OK" : "Warning",
+                "Not the only live price source, but useful for preflight quality.")
         };
 
         return rows;
@@ -463,6 +670,7 @@ public sealed class DashboardDataService(
         return new PaperOrderRow(
             order.Status.ToString(),
             order.Side.ToString(),
+            order.CopiedTraderWallet,
             order.ConditionId,
             order.Outcome,
             order.Price,
@@ -490,7 +698,7 @@ public sealed class DashboardDataService(
             position.EstimatedValueUsd,
             position.UnrealizedPnlUsd,
             "n/a",
-            "n/a");
+            string.IsNullOrWhiteSpace(position.CopiedTraderWallet) ? "n/a" : position.CopiedTraderWallet);
     }
 
     private static DryRunOrderRow ToDryRunOrderRow(DryRunOrder order)
@@ -507,6 +715,111 @@ public sealed class DashboardDataService(
             order.OrderType,
             order.ValidationSummary,
             order.SignalId.ToString());
+    }
+
+    private static PaperCopiedTraderPerformanceRow ToPaperCopiedTraderPerformanceRow(PaperCopiedTraderPerformance performance)
+    {
+        return new PaperCopiedTraderPerformanceRow(
+            performance.CopiedTraderWallet,
+            performance.Category,
+            performance.Score,
+            performance.TotalPnlUsd,
+            performance.RoiPct,
+            performance.WinRatePct,
+            performance.OrdersCount,
+            performance.FilledOrdersCount,
+            performance.OpenPositionsCount,
+            performance.SettledPositionsCount,
+            performance.WonPositionsCount,
+            performance.LostPositionsCount,
+            performance.BuyCostUsd,
+            performance.RealizedPnlUsd,
+            performance.UnrealizedPnlUsd,
+            FormatDate(performance.LastOrderUtc),
+            FormatDate(performance.RefreshedAtUtc));
+    }
+
+    private static StrategyPerformanceRow ToStrategyPerformanceRow(StrategyPerformance performance)
+    {
+        return new StrategyPerformanceRow(
+            performance.StrategyId,
+            performance.Name,
+            performance.Enabled,
+            performance.LiveStakes,
+            performance.PaperStakeAmount,
+            performance.LiveStakeAmount,
+            performance.LiveAvailableBalance,
+            performance.OrdersCount,
+            performance.FilledOrdersCount,
+            performance.OpenOrdersCount,
+            performance.OpenPositionsCount,
+            performance.ObservedRunsCount,
+            performance.EnteredRunsCount,
+            performance.SkippedRunsCount,
+            performance.SettledRunsCount,
+            performance.SettledPositionsCount,
+            performance.WonPositionsCount,
+            performance.LostPositionsCount,
+            performance.StakeUsd,
+            performance.RealizedPnlUsd,
+            performance.UnrealizedPnlUsd,
+            performance.TotalPnlUsd,
+            performance.WinRatePct,
+            performance.LossRatePct,
+            performance.AvgWinPnlUsd,
+            performance.AvgLossPnlUsd,
+            performance.ProfitFactor,
+            performance.ExpectancyPnlUsd,
+            performance.RoiPct,
+            performance.ClosedRoiPct,
+            performance.AvgEntryDelaySeconds,
+            performance.MaxEntryDelaySeconds,
+            performance.LiveOrdersCount,
+            performance.LiveFilledOrdersCount,
+            performance.LiveOpenOrdersCount,
+            performance.LiveSettledOrdersCount,
+            performance.LiveWonOrdersCount,
+            performance.LiveLostOrdersCount,
+            performance.LiveStakeUsd,
+            performance.LiveRealizedPnlUsd,
+            performance.LiveWinRatePct,
+            performance.LiveLossRatePct,
+            performance.LiveAvgWinPnlUsd,
+            performance.LiveAvgLossPnlUsd,
+            performance.LiveProfitFactor,
+            performance.LiveExpectancyPnlUsd,
+            performance.LiveRoiPct,
+            FormatDate(performance.LiveLastOrderUtc),
+            FormatDate(performance.LiveLastSettlementUtc),
+            FormatDate(performance.LastOrderUtc),
+            FormatDate(performance.LastRunUtc));
+    }
+
+    private static StrategyRecentPerformanceRow ToStrategyRecentPerformanceRow(StrategyRecentPerformance performance)
+    {
+        return new StrategyRecentPerformanceRow(
+            performance.Window,
+            performance.WindowHours,
+            performance.Name,
+            performance.OrdersCount,
+            performance.FilledOrdersCount,
+            performance.ExpiredOrdersCount,
+            performance.OpenOrdersCount,
+            performance.EnteredRunsCount,
+            performance.SkippedRunsCount,
+            performance.SettledRunsCount,
+            performance.WonRunsCount,
+            performance.LostRunsCount,
+            performance.WinRatePct,
+            performance.RoiPct,
+            performance.RealizedPnlUsd,
+            performance.FilledCostUsd,
+            performance.AvgFillPrice,
+            performance.AvgEntryDelaySeconds,
+            performance.MaxEntryDelaySeconds,
+            performance.TopSkipReason,
+            FormatDate(performance.LastOrderUtc),
+            FormatDate(performance.LastRunUtc));
     }
 
     private static LiveOrderRow ToLiveOrderRow(LiveOrder order)
@@ -526,6 +839,16 @@ public sealed class DashboardDataService(
             order.ResponseStatus,
             order.FilledSize,
             order.RemainingSize,
+            order.AverageFillPrice,
+            order.FilledNotionalUsd,
+            order.CostBasisUsd,
+            order.FeeUsd,
+            order.SettlementValueUsd,
+            order.RealizedPnlUsd,
+            FormatDate(order.SettledAtUtc),
+            order.WinningOutcome ?? string.Empty,
+            order.Won,
+            order.SettlementSource,
             order.CancelStatus,
             order.ValidationSummary,
             order.SignalId.ToString());
@@ -656,6 +979,52 @@ public sealed class DashboardDataService(
             "Error" => "Error",
             _ => "Info"
         };
+    }
+
+    private static LiveReadinessRow Gate(string gate, string value, bool passed, string details)
+    {
+        return new LiveReadinessRow(gate, value, passed ? "OK" : "Blocked", details);
+    }
+
+    private static LiveReadinessRow BuildGeoblockReadinessRow(LiveTradingEvent? latestGeoblock)
+    {
+        if (latestGeoblock is null)
+        {
+            return new LiveReadinessRow(
+                "Startup geoblock check",
+                "No event",
+                "Warning",
+                "Restart the service on the intended host so StartupGeoblockCheck is recorded.");
+        }
+
+        var status = latestGeoblock.Status switch
+        {
+            "OK" => "OK",
+            "Blocked" => "Blocked",
+            "Error" => "Error",
+            _ => "Warning"
+        };
+        return new LiveReadinessRow(
+            "Startup geoblock check",
+            latestGeoblock.Status,
+            status,
+            $"{FormatDate(latestGeoblock.CreatedAtUtc)} {latestGeoblock.Details}");
+    }
+
+    private static LiveTradingEvent? LatestEvent(IReadOnlyList<LiveTradingEvent> events, string action)
+    {
+        return events
+            .Where(item => string.Equals(item.Action, action, StringComparison.OrdinalIgnoreCase))
+            .OrderByDescending(item => item.CreatedAtUtc)
+            .FirstOrDefault();
+    }
+
+    private static string FormatGeoblockOverview(IReadOnlyList<LiveTradingEvent> liveTradingEvents)
+    {
+        var latest = LatestEvent(liveTradingEvents, "StartupGeoblockCheck");
+        return latest is null
+            ? "No startup check event"
+            : $"{latest.Status} {FormatDate(latest.CreatedAtUtc)}";
     }
 
     private static string FormatUsd(decimal value)

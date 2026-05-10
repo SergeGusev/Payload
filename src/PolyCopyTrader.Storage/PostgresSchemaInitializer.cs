@@ -8,37 +8,39 @@ public sealed class PostgresSchemaInitializer(PostgresConnectionFactory connecti
 {
     public async Task InitializeAsync(CancellationToken cancellationToken = default)
     {
-        try
-        {
-            await using var connection = connectionFactory.CreateConnection();
-            await connection.OpenAsync(cancellationToken);
+		try
+		{
+			await using var connection = connectionFactory.CreateConnection();
+			await connection.OpenAsync(cancellationToken);
 
-            var statements = SplitSchemaSqlStatements(PostgresSchema.SchemaSql);
-            for (var statementIndex = 0; statementIndex < statements.Count; statementIndex++)
-            {
-                var commandText = statements[statementIndex];
-                Console.WriteLine(
-                    $"Running PostgreSQL schema statement {statementIndex + 1}/{statements.Count}: {GetStatementPreview(commandText)}");
+			var statements = SplitSchemaSqlStatements(PostgresSchema.SchemaSql);
+			for (var statementIndex = 0; statementIndex < statements.Count; statementIndex++)
+			{
+				var commandText = statements[statementIndex];
+				Console.WriteLine(
+					$"Running PostgreSQL schema statement {statementIndex + 1}/{statements.Count}: {GetStatementPreview(commandText)}");
 
-                var existingIndexName = TryReadCreateIndexIfNotExistsName(commandText);
-                if (existingIndexName is not null && await SchemaRelationExistsAsync(connection, existingIndexName, cancellationToken))
-                {
-                    Console.WriteLine(
-                        $"Skipping PostgreSQL schema statement {statementIndex + 1}/{statements.Count}: index {existingIndexName} already exists");
-                    continue;
-                }
+				var existingIndexName = TryReadCreateIndexIfNotExistsName(commandText);
+				if (existingIndexName is not null && await SchemaRelationExistsAsync(connection, existingIndexName, cancellationToken))
+				{
+					Console.WriteLine(
+						$"Skipping PostgreSQL schema statement {statementIndex + 1}/{statements.Count}: index {existingIndexName} already exists");
+					continue;
+				}
 
-                await using var command = new NpgsqlCommand(commandText, connection);
-                command.CommandTimeout = 0;
-                await command.ExecuteNonQueryAsync(cancellationToken);
-            }
-        }
-        catch (Exception ex)
+				await using var command = new NpgsqlCommand(commandText, connection);
+				command.CommandTimeout = 0;
+				await command.ExecuteNonQueryAsync(cancellationToken);
+			}
+
+			Console.WriteLine("Scripts processed");
+		}
+		catch (Exception ex)
         {
             Console.WriteLine(ex);
             throw;
         }
-    }
+	}
 
     public static IReadOnlyList<string> SplitSchemaSqlStatements(string schemaSql)
     {

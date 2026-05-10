@@ -366,6 +366,14 @@ public sealed class OnChainMarketEnrichmentTests
 
         public TaskCompletionSource<object?>? BeforeReturnGate { get; init; }
 
+        public Task<IReadOnlyList<PolymarketGammaMarket>> GetActiveMarketsAsync(
+            int limit = 500,
+            int offset = 0,
+            CancellationToken cancellationToken = default)
+        {
+            return Task.FromResult<IReadOnlyList<PolymarketGammaMarket>>([]);
+        }
+
         public async Task<IReadOnlyList<PolymarketOnChainTokenMetadata>> GetTokenMetadataAsync(
             string tokenId,
             bool closed,

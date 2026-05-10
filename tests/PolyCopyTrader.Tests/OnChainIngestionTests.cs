@@ -504,6 +504,12 @@ public sealed class OnChainIngestionTests
                 RpcUrlEnvironmentVariable = "BAD ENV",
                 LookbackDays = 31,
                 MaxBlockRange = 0,
+                TradeCapturePollDelayMilliseconds = -1,
+                TradeCaptureRequestDelayMilliseconds = -1,
+                TradeCaptureStartLookbackBlocks = -1,
+                TradeCaptureConfirmations = -1,
+                TradeCaptureErrorDelayMilliseconds = 0,
+                TradeCaptureMaxErrorDelayMilliseconds = -1,
                 BackgroundSyncIdleDelaySeconds = 0,
                 BackgroundErrorDelaySeconds = 0,
                 BackgroundMaxErrorDelaySeconds = -1,
@@ -535,6 +541,12 @@ public sealed class OnChainIngestionTests
         Assert.Contains(errors, error => error.Contains("RpcUrlEnvironmentVariable", StringComparison.Ordinal));
         Assert.Contains(errors, error => error.Contains("LookbackDays", StringComparison.Ordinal));
         Assert.Contains(errors, error => error.Contains("MaxBlockRange", StringComparison.Ordinal));
+        Assert.Contains(errors, error => error.Contains("TradeCapturePollDelayMilliseconds", StringComparison.Ordinal));
+        Assert.Contains(errors, error => error.Contains("TradeCaptureRequestDelayMilliseconds", StringComparison.Ordinal));
+        Assert.Contains(errors, error => error.Contains("TradeCaptureStartLookbackBlocks", StringComparison.Ordinal));
+        Assert.Contains(errors, error => error.Contains("TradeCaptureConfirmations", StringComparison.Ordinal));
+        Assert.Contains(errors, error => error.Contains("TradeCaptureErrorDelayMilliseconds", StringComparison.Ordinal));
+        Assert.Contains(errors, error => error.Contains("TradeCaptureMaxErrorDelayMilliseconds", StringComparison.Ordinal));
         Assert.Contains(errors, error => error.Contains("BackgroundSyncIdleDelaySeconds", StringComparison.Ordinal));
         Assert.Contains(errors, error => error.Contains("BackgroundErrorDelaySeconds", StringComparison.Ordinal));
         Assert.Contains(errors, error => error.Contains("BackgroundMaxErrorDelaySeconds", StringComparison.Ordinal));

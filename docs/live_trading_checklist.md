@@ -17,21 +17,32 @@ Live trading is disabled by default. Use this checklist before any live session.
 
 - `Bot:Mode` is `Live`.
 - `Bot:EnableLiveTrading` is `true`.
+- `PaperTrading:RunInLiveMode` is `true` if this session should continue shadow Paper alongside Live.
 - `LiveTrading:ManualEnableCode` is `LIVE_TRADING_ENABLED`.
-- `Execution:MakerOnly` is `true`.
-- `Execution:AllowTaker` is `false`.
+- Follow leader live remains maker-only: `Execution:MakerOnly=true` and `Execution:AllowTaker=false`.
+- BTC 5-minute Live-shadow stakes, if enabled per strategy, are intentional BUY-only `GTD` limit orders with `postOnly=false` and `OpeningLimitGtdTtlSeconds` (`120` seconds by default); any immediately marketable portion may fill as taker and the remainder can rest until GTD expiration/cancel/market close.
 - `LiveTrading:MaxOrderNotionalUsd` is tiny.
 - `LiveTrading:MaxOpenLiveOrders` is tiny, initially `1`.
 - `PolymarketAuth:SigningAddress` is the signer wallet.
 - `PolymarketAuth:FunderAddress` is the funded Polymarket wallet/proxy.
 - `PolymarketAuth:SignatureType` is explicitly chosen.
 - Secret lookup names point to environment variables or Credential Manager entries.
+- L2 API Credential Manager targets exist. With Live disabled, they can be derived
+  or created by running `.\PolyCopyTrader.Service.exe --bootstrap-polymarket-api-credentials`
+  from the service output directory.
+- `--auth-readiness-smoke` and `--dry-run-signing-smoke` both pass from the same
+  output directory and do not print secrets.
+- `--clob-authenticated-read-smoke` passes from the same output directory. It
+  sends only CLOB `GET /trades`; it does not place or cancel orders.
 
 ## Functional Checks
 
 - Dashboard connects.
+- Dashboard `Live Readiness` shows no `Blocked` or `Error` rows for the intended live session.
 - Kill switch pauses live trading.
 - Cancel-all live command works in a safe test context.
+- `--clob-cancel-all-smoke` passes only after the operator confirms that all
+  open CLOB account orders may be cancelled.
 - No stale live orders exist.
 - API error lockout is clear.
 - WebSocket status is healthy.

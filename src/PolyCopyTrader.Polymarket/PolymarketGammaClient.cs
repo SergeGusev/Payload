@@ -19,6 +19,30 @@ public sealed class PolymarketGammaClient : IPolymarketGammaClient
         client = new PolymarketHttpClient(httpClient, options, errorSink, "PolymarketGammaClient", httpLogSink);
     }
 
+    public async Task<IReadOnlyList<PolymarketGammaMarket>> GetActiveMarketsAsync(
+        int limit = 500,
+        int offset = 0,
+        CancellationToken cancellationToken = default)
+    {
+        using var json = await client.GetJsonDocumentAsync(
+            UriBuilderExtensions.WithPathAndQuery(
+                options.GammaBaseUrl,
+                "/markets",
+                new Dictionary<string, string?>
+                {
+                    ["active"] = "true",
+                    ["closed"] = "false",
+                    ["limit"] = limit.ToString(),
+                    ["order"] = "createdAt",
+                    ["ascending"] = "false",
+                    ["offset"] = offset.ToString()
+                }),
+            "GetActiveMarkets",
+            cancellationToken);
+
+        return PolymarketJsonParser.ParseGammaActiveMarkets(json.RootElement);
+    }
+
     public async Task<IReadOnlyList<PolymarketOnChainTokenMetadata>> GetTokenMetadataAsync(
         string tokenId,
         bool closed,

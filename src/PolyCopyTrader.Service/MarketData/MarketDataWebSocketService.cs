@@ -1,5 +1,4 @@
-using System.Net.WebSockets;
-using System.Text;
+using System.Collections.Concurrent;
 using System.Text.Json;
 using PolyCopyTrader.Domain;
 using PolyCopyTrader.Domain.Configuration;
@@ -10,167 +9,239 @@ namespace PolyCopyTrader.Service.MarketData;
 
 public sealed class MarketDataWebSocketService(
     ILogger<MarketDataWebSocketService> logger,
+    ILoggerFactory loggerFactory,
     BotOptions botOptions,
     MarketDataWebSocketOptions options,
     PolymarketOptions polymarketOptions,
     IRelevantMarketAssetProvider assetProvider,
+    IActiveMarketAssetSubscriptionRegistry activeMarketAssetSubscriptionRegistry,
+    IMarketTradeTickDiagnosticService tradeTickDiagnosticService,
     IMarketDataCache marketDataCache,
     IPaperTradingMarketDataUpdater paperTradingUpdater,
     IAppRepository repository) : BackgroundService
 {
     private const string ComponentName = "PolymarketMarketWebSocket";
-    private readonly JsonSerializerOptions jsonOptions = new(JsonSerializerDefaults.Web);
-    private DateTimeOffset? lastMessageUtc;
-    private DateTimeOffset? lastConnectedUtc;
-    private DateTimeOffset? lastDisconnectedUtc;
-    private int reconnectCount;
+    private readonly ConcurrentDictionary<string, MarketDataWebSocketShardRunner> shardRunners = new(StringComparer.OrdinalIgnoreCase);
+    private readonly MarketDataWebSocketShardAllocator shardAllocator = new(new MarketDataWebSocketOptionsAdapter(
+        options.ShardMaxAssets,
+        options.MaxShardConnections));
+    private readonly object statusGate = new();
+    private readonly Dictionary<string, MarketDataStatusSnapshot> shardStatuses = new(StringComparer.OrdinalIgnoreCase);
+    private DateTimeOffset? lastAggregateStatusPersistedUtc;
+    private MarketDataConnectionState? lastPersistedAggregateState;
+    private int? lastPersistedAggregateSubscribedAssetsCount;
+    private string? lastPersistedAggregateError;
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
         if (!botOptions.UseWebSockets || !options.Enabled)
         {
-            await PublishStatusAsync(MarketDataConnectionState.Disabled, 0, "Market WebSocket is disabled.", stoppingToken);
+            marketDataCache.ReplaceSubscribedAssets([]);
+            await PublishAggregateStatusAsync(MarketDataConnectionState.Disabled, 0, "Market WebSocket is disabled.", stoppingToken);
             logger.LogInformation("Market WebSocket service is disabled.");
             return;
         }
 
-        var reconnectDelay = TimeSpan.FromSeconds(options.ReconnectBaseDelaySeconds);
-        while (!stoppingToken.IsCancellationRequested)
-        {
-            var assetIds = await assetProvider.GetRelevantAssetIdsAsync(stoppingToken);
-            if (assetIds.Count == 0)
-            {
-                marketDataCache.ReplaceSubscribedAssets([]);
-                await PublishStatusAsync(MarketDataConnectionState.Idle, 0, null, stoppingToken);
-                await Task.Delay(TimeSpan.FromSeconds(options.SubscriptionRefreshSeconds), stoppingToken);
-                continue;
-            }
-
-            try
-            {
-                await RunConnectionAsync(assetIds, stoppingToken);
-                reconnectDelay = TimeSpan.FromSeconds(options.ReconnectBaseDelaySeconds);
-            }
-            catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
-            {
-                throw;
-            }
-            catch (Exception ex)
-            {
-                reconnectCount++;
-                lastDisconnectedUtc = DateTimeOffset.UtcNow;
-                logger.LogWarning(ex, "Market WebSocket connection failed. Reconnecting in {ReconnectDelaySeconds} seconds.", reconnectDelay.TotalSeconds);
-                await TryRecordApiErrorAsync("ConnectionLoop", ex.Message, stoppingToken);
-                await PublishStatusAsync(MarketDataConnectionState.Reconnecting, marketDataCache.SubscribedAssetIds.Count, ex.Message, stoppingToken);
-                await Task.Delay(reconnectDelay, stoppingToken);
-                reconnectDelay = TimeSpan.FromSeconds(Math.Min(
-                    reconnectDelay.TotalSeconds * 2,
-                    options.ReconnectMaxDelaySeconds));
-            }
-        }
-    }
-
-    private async Task RunConnectionAsync(IReadOnlyCollection<string> initialAssetIds, CancellationToken cancellationToken)
-    {
-        await PublishStatusAsync(MarketDataConnectionState.Connecting, initialAssetIds.Count, null, cancellationToken);
-
-        using var socket = new ClientWebSocket();
-        var endpointUri = new Uri(options.MarketEndpointUrl);
-        ConfigurePinnedCertificateValidation(socket, endpointUri);
-        using var sendLock = new SemaphoreSlim(1, 1);
-        await socket.ConnectAsync(endpointUri, cancellationToken);
-
-        lastConnectedUtc = DateTimeOffset.UtcNow;
-        var subscribedAssetIds = initialAssetIds.ToHashSet(StringComparer.OrdinalIgnoreCase);
-        await SendSubscriptionAsync(socket, subscribedAssetIds, sendLock, cancellationToken);
-        marketDataCache.ReplaceSubscribedAssets(subscribedAssetIds);
-        await PublishStatusAsync(MarketDataConnectionState.Connected, subscribedAssetIds.Count, null, cancellationToken);
-
-        using var connectionCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-        var heartbeat = HeartbeatLoopAsync(socket, sendLock, connectionCts.Token);
-        var refresh = SubscriptionRefreshLoopAsync(socket, subscribedAssetIds, sendLock, connectionCts.Token);
-
         try
         {
-            await ReceiveLoopAsync(socket, connectionCts.Token);
+            while (!stoppingToken.IsCancellationRequested)
+            {
+                try
+                {
+                    await ReconcileShardsAsync(stoppingToken);
+                    await RestartUnhealthyShardsAsync(stoppingToken);
+                    await PublishAggregateStatusAsync(stoppingToken);
+                    await WaitForSupervisorWakeAsync(stoppingToken);
+                }
+                catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
+                {
+                    break;
+                }
+                catch (Exception ex)
+                {
+                    logger.LogWarning(ex, "Market WebSocket supervisor cycle failed; retrying without stopping service.");
+                    PublishSupervisorErrorStatus(ex);
+                    await WaitForSupervisorRetryAsync(stoppingToken);
+                }
+            }
         }
         finally
         {
-            await connectionCts.CancelAsync();
-            await SafeAwaitAsync(heartbeat);
-            await SafeAwaitAsync(refresh);
-            lastDisconnectedUtc = DateTimeOffset.UtcNow;
-            await PublishStatusAsync(MarketDataConnectionState.Disconnected, subscribedAssetIds.Count, null, cancellationToken);
+            try
+            {
+                await StopAllShardsAsync(CancellationToken.None);
+            }
+            catch (Exception ex)
+            {
+                logger.LogError(ex, "Market WebSocket supervisor failed to stop all shards during shutdown.");
+            }
+
+            marketDataCache.ReplaceSubscribedAssets([]);
+            try
+            {
+                await PublishAggregateStatusAsync(MarketDataConnectionState.Disconnected, 0, null, CancellationToken.None);
+            }
+            catch (Exception ex)
+            {
+                logger.LogError(ex, "Market WebSocket supervisor failed to publish disconnected status during shutdown.");
+            }
         }
     }
 
-    private async Task ReceiveLoopAsync(ClientWebSocket socket, CancellationToken cancellationToken)
+    private void PublishSupervisorErrorStatus(Exception exception)
     {
-        while (!cancellationToken.IsCancellationRequested && socket.State == WebSocketState.Open)
+        var currentStatus = marketDataCache.Status;
+        marketDataCache.UpdateStatus(currentStatus with
         {
-            var message = await ReceiveTextMessageAsync(socket, cancellationToken);
-            if (message is null)
-            {
-                break;
-            }
-
-            await ProcessTextMessageAsync(message, cancellationToken);
-        }
+            ConnectionState = MarketDataConnectionState.Reconnecting,
+            Stale = true,
+            LastError = exception.Message,
+            UpdatedAtUtc = DateTimeOffset.UtcNow
+        });
     }
 
-    private async Task<string?> ReceiveTextMessageAsync(ClientWebSocket socket, CancellationToken cancellationToken)
+    private async Task WaitForSupervisorRetryAsync(CancellationToken cancellationToken)
     {
-        var buffer = new byte[options.ReceiveBufferBytes];
-        using var message = new MemoryStream();
-        WebSocketReceiveResult result;
-        do
-        {
-            result = await socket.ReceiveAsync(new ArraySegment<byte>(buffer), cancellationToken);
-            if (result.MessageType == WebSocketMessageType.Close)
-            {
-                return null;
-            }
+        await Task.Delay(GetSupervisorDelay(), cancellationToken);
+    }
 
-            if (result.MessageType != WebSocketMessageType.Text)
+    private async Task ReconcileShardsAsync(CancellationToken cancellationToken)
+    {
+        var desiredAssetIds = await assetProvider.GetRelevantAssetIdsAsync(cancellationToken);
+        if (desiredAssetIds.Count == 0)
+        {
+            marketDataCache.ReplaceSubscribedAssets([]);
+            await StopAllShardsAsync(cancellationToken);
+            await PublishAggregateStatusAsync(MarketDataConnectionState.Idle, 0, null, cancellationToken);
+            return;
+        }
+
+        var plans = shardAllocator.Reconcile(
+            desiredAssetIds,
+            activeMarketAssetSubscriptionRegistry.GetSnapshots());
+        var plannedAssetIds = plans.SelectMany(plan => plan.AssetIds).ToArray();
+        marketDataCache.ReplaceSubscribedAssets(plannedAssetIds);
+
+        var desiredComponents = plans
+            .Select(plan => plan.Component)
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+        foreach (var component in shardRunners.Keys.ToArray())
+        {
+            if (desiredComponents.Contains(component))
             {
                 continue;
             }
 
-            message.Write(buffer, 0, result.Count);
+            if (shardRunners.TryRemove(component, out var removed))
+            {
+                logger.LogInformation("Stopping removed market WebSocket shard {Component}.", component);
+                await removed.StopAsync();
+                RemoveShardStatus(component);
+                await PublishShardRemovedStatusAsync(component, cancellationToken);
+            }
         }
-        while (!result.EndOfMessage);
 
-        return Encoding.UTF8.GetString(message.ToArray());
+        foreach (var plan in plans)
+        {
+            if (shardRunners.TryGetValue(plan.Component, out var existing))
+            {
+                await existing.UpdateAssetsAsync(plan.AssetIds, cancellationToken);
+                continue;
+            }
+
+            StartShard(plan, cancellationToken);
+        }
     }
 
-    private void ConfigurePinnedCertificateValidation(ClientWebSocket socket, Uri endpointUri)
+    private async Task RestartUnhealthyShardsAsync(CancellationToken cancellationToken)
     {
-        if (!PolymarketCertificatePinning.HasPins(polymarketOptions))
+        var now = DateTimeOffset.UtcNow;
+        foreach (var runner in shardRunners.Values.ToArray())
+        {
+            if (!runner.ShouldRestart(now))
+            {
+                continue;
+            }
+
+            var plan = new MarketDataWebSocketShardPlan(
+                0,
+                runner.Component,
+                runner.AssetIds);
+            logger.LogWarning(
+                "Restarting unhealthy market WebSocket shard {Component}; subscribed assets: {SubscribedAssetsCount}.",
+                runner.Component,
+                runner.AssetIds.Count);
+
+            if (shardRunners.TryRemove(runner.Component, out var removed))
+            {
+                await removed.StopAsync();
+                StartShard(plan, cancellationToken);
+            }
+        }
+    }
+
+    private void StartShard(MarketDataWebSocketShardPlan plan, CancellationToken stoppingToken)
+    {
+        var runner = new MarketDataWebSocketShardRunner(
+            loggerFactory.CreateLogger<MarketDataWebSocketShardRunner>(),
+            plan,
+            options,
+            polymarketOptions,
+            repository,
+            ProcessTextMessageAsync,
+            OnShardStatus);
+
+        if (!shardRunners.TryAdd(plan.Component, runner))
         {
             return;
         }
 
-        socket.Options.RemoteCertificateValidationCallback = (_, certificate, _, sslPolicyErrors) =>
-        {
-            var result = PolymarketCertificatePinning.ValidateServerCertificate(
-                endpointUri,
-                certificate,
-                sslPolicyErrors,
-                polymarketOptions);
-
-            if (!result.Accepted)
-            {
-                logger.LogWarning(
-                    "Market WebSocket TLS certificate rejected for {Host}: {Message}",
-                    endpointUri.Host,
-                    result.Message);
-            }
-
-            return result.Accepted;
-        };
+        logger.LogInformation(
+            "Starting market WebSocket shard {Component} with {SubscribedAssetsCount} assets.",
+            plan.Component,
+            plan.AssetIds.Count);
+        runner.Start(stoppingToken);
     }
 
-    private async Task ProcessTextMessageAsync(string message, CancellationToken cancellationToken)
+    private async Task StopAllShardsAsync(CancellationToken cancellationToken)
+    {
+        foreach (var component in shardRunners.Keys.ToArray())
+        {
+            if (!shardRunners.TryRemove(component, out var runner))
+            {
+                continue;
+            }
+
+            await runner.StopAsync();
+            RemoveShardStatus(component);
+            await PublishShardRemovedStatusAsync(component, cancellationToken);
+        }
+    }
+
+    private async Task WaitForSupervisorWakeAsync(CancellationToken cancellationToken)
+    {
+        using var waitCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        var delayTask = Task.Delay(GetSupervisorDelay(), waitCts.Token);
+        var changeTask = activeMarketAssetSubscriptionRegistry.WaitForChangeAsync(waitCts.Token);
+        var completedTask = await Task.WhenAny(delayTask, changeTask);
+        await waitCts.CancelAsync();
+        try
+        {
+            await completedTask;
+        }
+        catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
+        {
+        }
+    }
+
+    private TimeSpan GetSupervisorDelay()
+    {
+        var delaySeconds = Math.Max(1, Math.Min(options.SubscriptionRefreshSeconds, options.WatchdogIntervalSeconds));
+        return TimeSpan.FromSeconds(Math.Min(delaySeconds, 10));
+    }
+
+    private async Task ProcessTextMessageAsync(string component, string message, CancellationToken cancellationToken)
     {
         IReadOnlyList<MarketDataUpdate> updates;
         try
@@ -179,8 +250,8 @@ public sealed class MarketDataWebSocketService(
         }
         catch (JsonException ex)
         {
-            logger.LogWarning(ex, "Market WebSocket message parsing failed.");
-            await TryRecordApiErrorAsync("ParseMarketMessage", ex.Message, cancellationToken);
+            logger.LogWarning(ex, "Market WebSocket shard {Component} message parsing failed.", component);
+            await TryRecordApiErrorAsync(component, "ParseMarketMessage", ex.Message, cancellationToken);
             return;
         }
 
@@ -189,18 +260,23 @@ public sealed class MarketDataWebSocketService(
             return;
         }
 
-        lastMessageUtc = DateTimeOffset.UtcNow;
         foreach (var update in updates)
         {
             try
             {
+                activeMarketAssetSubscriptionRegistry.ApplyMarketDataUpdate(update);
                 marketDataCache.ApplyUpdate(update);
-                if (update.OrderBookSnapshot is not null)
+                await tradeTickDiagnosticService.RecordAsync(update, cancellationToken);
+                if (options.PersistOrderBookSnapshots && update.OrderBookSnapshot is not null)
                 {
                     await repository.AddOrderBookSnapshotAsync(update.OrderBookSnapshot, cancellationToken);
                 }
 
-                await repository.AddMarketDataEventAsync(ToMarketDataEvent(update), cancellationToken);
+                if (options.PersistMarketDataEvents)
+                {
+                    await repository.AddMarketDataEventAsync(ToMarketDataEvent(update), cancellationToken);
+                }
+
                 await paperTradingUpdater.ApplyUpdateAsync(update, cancellationToken);
             }
             catch (OperationCanceledException)
@@ -209,185 +285,265 @@ public sealed class MarketDataWebSocketService(
             }
             catch (Exception ex)
             {
-                logger.LogError(ex, "Failed to persist or dispatch market data update {EventType}.", update.EventType);
-                await TryRecordApiErrorAsync("ProcessMarketDataUpdate", ex.Message, cancellationToken);
-            }
-        }
-
-        await PublishStatusAsync(MarketDataConnectionState.Connected, marketDataCache.SubscribedAssetIds.Count, null, cancellationToken);
-    }
-
-    private async Task HeartbeatLoopAsync(ClientWebSocket socket, SemaphoreSlim sendLock, CancellationToken cancellationToken)
-    {
-        while (!cancellationToken.IsCancellationRequested && socket.State == WebSocketState.Open)
-        {
-            await Task.Delay(TimeSpan.FromSeconds(options.HeartbeatSeconds), cancellationToken);
-            await SendTextAsync(socket, "PING", sendLock, cancellationToken);
-            await PublishStatusAsync(MarketDataConnectionState.Connected, marketDataCache.SubscribedAssetIds.Count, null, cancellationToken);
-        }
-    }
-
-    private async Task SubscriptionRefreshLoopAsync(
-        ClientWebSocket socket,
-        HashSet<string> subscribedAssetIds,
-        SemaphoreSlim sendLock,
-        CancellationToken cancellationToken)
-    {
-        while (!cancellationToken.IsCancellationRequested && socket.State == WebSocketState.Open)
-        {
-            await Task.Delay(TimeSpan.FromSeconds(options.SubscriptionRefreshSeconds), cancellationToken);
-            var desiredAssetIds = (await assetProvider.GetRelevantAssetIdsAsync(cancellationToken))
-                .ToHashSet(StringComparer.OrdinalIgnoreCase);
-
-            var toSubscribe = desiredAssetIds.Except(subscribedAssetIds, StringComparer.OrdinalIgnoreCase).ToArray();
-            var toUnsubscribe = subscribedAssetIds.Except(desiredAssetIds, StringComparer.OrdinalIgnoreCase).ToArray();
-
-            if (toSubscribe.Length > 0)
-            {
-                await SendSubscriptionUpdateAsync(socket, "subscribe", toSubscribe, sendLock, cancellationToken);
-                foreach (var assetId in toSubscribe)
-                {
-                    subscribedAssetIds.Add(assetId);
-                }
-            }
-
-            if (toUnsubscribe.Length > 0)
-            {
-                await SendSubscriptionUpdateAsync(socket, "unsubscribe", toUnsubscribe, sendLock, cancellationToken);
-                foreach (var assetId in toUnsubscribe)
-                {
-                    subscribedAssetIds.Remove(assetId);
-                }
-            }
-
-            marketDataCache.ReplaceSubscribedAssets(subscribedAssetIds);
-            await PublishStatusAsync(
-                subscribedAssetIds.Count == 0 ? MarketDataConnectionState.Idle : MarketDataConnectionState.Connected,
-                subscribedAssetIds.Count,
-                null,
-                cancellationToken);
-
-            if (subscribedAssetIds.Count == 0)
-            {
-                await socket.CloseAsync(WebSocketCloseStatus.NormalClosure, "No relevant assets", cancellationToken);
-                return;
+                logger.LogError(ex, "Failed to persist or dispatch market data update {EventType} from {Component}.", update.EventType, component);
+                await TryRecordApiErrorAsync(component, "ProcessMarketDataUpdate", ex.Message, cancellationToken);
             }
         }
     }
 
-    private async Task SendSubscriptionAsync(
-        ClientWebSocket socket,
-        IReadOnlyCollection<string> assetIds,
-        SemaphoreSlim sendLock,
-        CancellationToken cancellationToken)
+    private void OnShardStatus(MarketDataStatusSnapshot status)
     {
-        var payload = new Dictionary<string, object>
+        lock (statusGate)
         {
-            ["assets_ids"] = assetIds,
-            ["type"] = "market",
-            ["custom_feature_enabled"] = true
-        };
-
-        await SendJsonAsync(socket, payload, sendLock, cancellationToken);
-    }
-
-    private async Task SendSubscriptionUpdateAsync(
-        ClientWebSocket socket,
-        string operation,
-        IReadOnlyCollection<string> assetIds,
-        SemaphoreSlim sendLock,
-        CancellationToken cancellationToken)
-    {
-        var payload = new Dictionary<string, object>
-        {
-            ["assets_ids"] = assetIds,
-            ["operation"] = operation
-        };
-
-        if (operation == "subscribe")
-        {
-            payload["custom_feature_enabled"] = true;
-        }
-
-        await SendJsonAsync(socket, payload, sendLock, cancellationToken);
-    }
-
-    private async Task SendJsonAsync(ClientWebSocket socket, object payload, SemaphoreSlim sendLock, CancellationToken cancellationToken)
-    {
-        var json = JsonSerializer.Serialize(payload, jsonOptions);
-        await SendTextAsync(socket, json, sendLock, cancellationToken);
-    }
-
-    private static async Task SendTextAsync(ClientWebSocket socket, string message, SemaphoreSlim sendLock, CancellationToken cancellationToken)
-    {
-        var bytes = Encoding.UTF8.GetBytes(message);
-        await sendLock.WaitAsync(cancellationToken);
-        try
-        {
-            if (socket.State == WebSocketState.Open)
-            {
-                await socket.SendAsync(new ArraySegment<byte>(bytes), WebSocketMessageType.Text, true, cancellationToken);
-            }
-        }
-        finally
-        {
-            sendLock.Release();
+            shardStatuses[status.Component] = status;
         }
     }
 
-    private async Task PublishStatusAsync(
-        MarketDataConnectionState requestedState,
-        int subscribedAssetsCount,
-        string? lastError,
-        CancellationToken cancellationToken)
+    private void RemoveShardStatus(string component)
     {
-        var stale = lastMessageUtc is { } lastMessage &&
-            DateTimeOffset.UtcNow - lastMessage > TimeSpan.FromSeconds(options.StaleAfterSeconds);
-        var state = requestedState == MarketDataConnectionState.Connected && stale
-            ? MarketDataConnectionState.Stale
-            : requestedState;
+        lock (statusGate)
+        {
+            shardStatuses.Remove(component);
+        }
+    }
 
+    private async Task PublishShardRemovedStatusAsync(string component, CancellationToken cancellationToken)
+    {
         var status = new MarketDataStatusSnapshot(
-            ComponentName,
-            state,
+            component,
+            MarketDataConnectionState.Disconnected,
             options.MarketEndpointUrl,
-            subscribedAssetsCount,
-            lastMessageUtc,
-            lastConnectedUtc,
-            lastDisconnectedUtc,
-            reconnectCount,
-            stale,
-            lastError,
+            0,
+            null,
+            null,
+            DateTimeOffset.UtcNow,
+            0,
+            false,
+            "Shard removed from current subscription plan.",
             DateTimeOffset.UtcNow);
-
-        marketDataCache.UpdateStatus(status);
 
         try
         {
             await repository.UpsertMarketDataStatusAsync(status, cancellationToken);
         }
-        catch (OperationCanceledException)
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
             throw;
         }
         catch (Exception ex)
         {
-            logger.LogError(ex, "Failed to persist market data WebSocket status.");
+            logger.LogError(ex, "Failed to persist removed market WebSocket shard status for {Component}.", component);
         }
     }
 
-    private async Task TryRecordApiErrorAsync(string operation, string message, CancellationToken cancellationToken)
+    private async Task PublishAggregateStatusAsync(CancellationToken cancellationToken)
+    {
+        var statuses = GetShardStatuses();
+        var subscribedAssetsCount = marketDataCache.SubscribedAssetIds.Count;
+        var now = DateTimeOffset.UtcNow;
+        var state = CalculateAggregateState(statuses, shardRunners.Count);
+        var lastError = BuildAggregateError(statuses, shardRunners.Count);
+        var status = new MarketDataStatusSnapshot(
+            ComponentName,
+            state,
+            options.MarketEndpointUrl,
+            subscribedAssetsCount,
+            MaxDate(statuses.Select(shard => shard.LastMessageUtc)),
+            MaxDate(statuses.Select(shard => shard.LastConnectedUtc)),
+            MaxDate(statuses.Select(shard => shard.LastDisconnectedUtc)),
+            statuses.Sum(shard => shard.ReconnectCount),
+            state == MarketDataConnectionState.Stale || statuses.Any(shard => shard.Stale),
+            lastError,
+            now);
+
+        marketDataCache.UpdateStatus(status);
+        await PersistAggregateStatusIfNeededAsync(status, cancellationToken);
+    }
+
+    private async Task PublishAggregateStatusAsync(
+        MarketDataConnectionState state,
+        int subscribedAssetsCount,
+        string? lastError,
+        CancellationToken cancellationToken)
+    {
+        var status = new MarketDataStatusSnapshot(
+            ComponentName,
+            state,
+            options.MarketEndpointUrl,
+            subscribedAssetsCount,
+            null,
+            null,
+            state == MarketDataConnectionState.Disconnected ? DateTimeOffset.UtcNow : null,
+            0,
+            false,
+            lastError,
+            DateTimeOffset.UtcNow);
+
+        marketDataCache.UpdateStatus(status);
+        await PersistAggregateStatusIfNeededAsync(status, cancellationToken);
+    }
+
+    private MarketDataStatusSnapshot[] GetShardStatuses()
+    {
+        lock (statusGate)
+        {
+            return shardStatuses.Values.ToArray();
+        }
+    }
+
+    private static MarketDataConnectionState CalculateAggregateState(
+        IReadOnlyCollection<MarketDataStatusSnapshot> statuses,
+        int runnerCount)
+    {
+        if (runnerCount == 0)
+        {
+            return MarketDataConnectionState.Idle;
+        }
+
+        if (statuses.Count == 0)
+        {
+            return MarketDataConnectionState.Connecting;
+        }
+
+        var healthy = statuses.Count(status =>
+            status.ConnectionState == MarketDataConnectionState.Connected && !status.Stale);
+        var unhealthy = statuses.Count - healthy;
+        if (healthy == runnerCount && unhealthy == 0)
+        {
+            return MarketDataConnectionState.Connected;
+        }
+
+        if (healthy > 0)
+        {
+            return MarketDataConnectionState.Stale;
+        }
+
+        if (statuses.Any(status => status.ConnectionState == MarketDataConnectionState.Connecting))
+        {
+            return MarketDataConnectionState.Connecting;
+        }
+
+        if (statuses.Any(status => status.ConnectionState == MarketDataConnectionState.Reconnecting))
+        {
+            return MarketDataConnectionState.Reconnecting;
+        }
+
+        if (statuses.Any(status => status.ConnectionState == MarketDataConnectionState.Error))
+        {
+            return MarketDataConnectionState.Error;
+        }
+
+        return MarketDataConnectionState.Disconnected;
+    }
+
+    private static string? BuildAggregateError(
+        IReadOnlyCollection<MarketDataStatusSnapshot> statuses,
+        int runnerCount)
+    {
+        if (runnerCount == 0)
+        {
+            return null;
+        }
+
+        var healthy = statuses.Count(status =>
+            status.ConnectionState == MarketDataConnectionState.Connected && !status.Stale);
+        var missing = Math.Max(0, runnerCount - statuses.Count);
+        var unhealthy = runnerCount - healthy;
+        if (unhealthy == 0)
+        {
+            return null;
+        }
+
+        var reconnecting = statuses.Count(status => status.ConnectionState == MarketDataConnectionState.Reconnecting);
+        var stale = statuses.Count(status => status.Stale || status.ConnectionState == MarketDataConnectionState.Stale);
+        var disconnected = statuses.Count(status => status.ConnectionState == MarketDataConnectionState.Disconnected);
+        var error = statuses.Count(status => status.ConnectionState == MarketDataConnectionState.Error);
+        var sampleError = statuses
+            .Select(status => status.LastError)
+            .FirstOrDefault(lastError => !string.IsNullOrWhiteSpace(lastError));
+
+        return string.Join(
+            "; ",
+            new[]
+            {
+                $"healthy_shards={healthy}/{runnerCount}",
+                $"missing_status_shards={missing}",
+                $"reconnecting_shards={reconnecting}",
+                $"stale_shards={stale}",
+                $"disconnected_shards={disconnected}",
+                $"error_shards={error}",
+                string.IsNullOrWhiteSpace(sampleError) ? null : "sample_error=" + sampleError
+            }.Where(part => part is not null));
+    }
+
+    private async Task PersistAggregateStatusIfNeededAsync(
+        MarketDataStatusSnapshot status,
+        CancellationToken cancellationToken)
+    {
+        if (!ShouldPersistAggregateStatus(status))
+        {
+            return;
+        }
+
+        try
+        {
+            await repository.UpsertMarketDataStatusAsync(status, cancellationToken);
+            lastAggregateStatusPersistedUtc = DateTimeOffset.UtcNow;
+            lastPersistedAggregateState = status.ConnectionState;
+            lastPersistedAggregateSubscribedAssetsCount = status.SubscribedAssetsCount;
+            lastPersistedAggregateError = status.LastError;
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "Failed to persist aggregate market WebSocket status.");
+        }
+    }
+
+    private bool ShouldPersistAggregateStatus(MarketDataStatusSnapshot status)
+    {
+        if (lastAggregateStatusPersistedUtc is null ||
+            lastPersistedAggregateState != status.ConnectionState ||
+            lastPersistedAggregateSubscribedAssetsCount != status.SubscribedAssetsCount ||
+            !string.Equals(lastPersistedAggregateError, status.LastError, StringComparison.Ordinal))
+        {
+            return true;
+        }
+
+        return DateTimeOffset.UtcNow - lastAggregateStatusPersistedUtc.Value >=
+            TimeSpan.FromSeconds(options.StatusPersistIntervalSeconds);
+    }
+
+    private async Task TryRecordApiErrorAsync(
+        string component,
+        string operation,
+        string message,
+        CancellationToken cancellationToken)
     {
         try
         {
             await repository.AddApiErrorAsync(
-                new ApiError(Guid.NewGuid(), ComponentName, operation, message, DateTimeOffset.UtcNow),
+                new ApiError(Guid.NewGuid(), component, operation, message, DateTimeOffset.UtcNow),
                 cancellationToken);
         }
         catch (Exception ex)
         {
-            logger.LogError(ex, "Failed to persist market WebSocket API error.");
+            logger.LogError(ex, "Failed to persist market WebSocket API error for {Component}.", component);
         }
+    }
+
+    private static DateTimeOffset? MaxDate(IEnumerable<DateTimeOffset?> values)
+    {
+        return values
+            .Where(value => value is not null)
+            .Select(value => value!.Value)
+            .DefaultIfEmpty()
+            .Max() is { } max && max != default
+            ? max
+            : null;
     }
 
     private static MarketDataEvent ToMarketDataEvent(MarketDataUpdate update)
@@ -410,19 +566,5 @@ public sealed class MarketDataWebSocketService(
             update.ConditionId,
             message,
             DateTimeOffset.UtcNow);
-    }
-
-    private static async Task SafeAwaitAsync(Task task)
-    {
-        try
-        {
-            await task;
-        }
-        catch (OperationCanceledException)
-        {
-        }
-        catch
-        {
-        }
     }
 }

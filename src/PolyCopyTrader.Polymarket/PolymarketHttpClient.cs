@@ -90,7 +90,11 @@ internal sealed class PolymarketHttpClient(
             }
             catch (PolymarketApiException ex)
             {
-                await RecordErrorAsync(operation, ex.Message, cancellationToken);
+                if (!IsExpectedMissingOrderBook(ex))
+                {
+                    await RecordErrorAsync(operation, ex.Message, cancellationToken);
+                }
+
                 throw;
             }
             finally
@@ -174,7 +178,11 @@ internal sealed class PolymarketHttpClient(
             }
             catch (PolymarketApiException ex)
             {
-                await RecordErrorAsync(operation, ex.Message, cancellationToken);
+                if (!IsExpectedMissingOrderBook(ex))
+                {
+                    await RecordErrorAsync(operation, ex.Message, cancellationToken);
+                }
+
                 throw;
             }
             finally
@@ -211,6 +219,14 @@ internal sealed class PolymarketHttpClient(
         return errorSink.RecordAsync(
             new ApiError(Guid.NewGuid(), component, operation, message, DateTimeOffset.UtcNow),
             cancellationToken);
+    }
+
+    private bool IsExpectedMissingOrderBook(PolymarketApiException ex)
+    {
+        return string.Equals(component, "PolymarketClobPublicClient", StringComparison.Ordinal) &&
+            string.Equals(ex.Operation, "GetOrderBook", StringComparison.Ordinal) &&
+            ex.Message.Contains("HTTP 404", StringComparison.OrdinalIgnoreCase) &&
+            ex.Message.Contains("No orderbook exists", StringComparison.OrdinalIgnoreCase);
     }
 
     private Task RecordHttpLogAsync(

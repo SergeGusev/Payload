@@ -8,6 +8,7 @@ namespace PolyCopyTrader.Polymarket.Auth;
 public sealed class ClobV2OrderBuilder(OrderAmountCalculator amountCalculator)
 {
     private static readonly BigInteger MaxUInt256 = (BigInteger.One << 256) - BigInteger.One;
+    private const long MaxJsonSafeInteger = 9_007_199_254_740_991L;
 
     public ClobV2Order Build(ClobV2OrderRequest request)
     {
@@ -19,12 +20,16 @@ public sealed class ClobV2OrderBuilder(OrderAmountCalculator amountCalculator)
             throw new ArgumentException(string.Join("; ", validationErrors), nameof(request));
         }
 
-        var amounts = amountCalculator.Calculate(request.Side, request.Price, request.SizeShares);
+        var amounts = amountCalculator.Calculate(request.Side, request.Price, request.SizeShares, request.TickSize);
+
+        var signerAddress = request.SignatureType == ClobV2SignatureType.POLY_1271
+            ? request.MakerAddress
+            : request.SignerAddress;
 
         return new ClobV2Order(
             request.Salt ?? GenerateSalt(),
             request.MakerAddress,
-            request.SignerAddress,
+            signerAddress,
             request.TokenId,
             amounts.MakerAmount.ToString(CultureInfo.InvariantCulture),
             amounts.TakerAmount.ToString(CultureInfo.InvariantCulture),
@@ -144,10 +149,13 @@ public sealed class ClobV2OrderBuilder(OrderAmountCalculator amountCalculator)
 
     private static string GenerateSalt()
     {
-        Span<byte> bytes = stackalloc byte[32];
+        var nowMs = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
+        var upperExclusive = Math.Clamp(nowMs, 2L, MaxJsonSafeInteger);
+        Span<byte> bytes = stackalloc byte[8];
         RandomNumberGenerator.Fill(bytes);
-        bytes[^1] &= 0x7F;
-        return new BigInteger(bytes, isUnsigned: true, isBigEndian: true).ToString(CultureInfo.InvariantCulture);
+        var random = BitConverter.ToUInt64(bytes) & 0x1F_FF_FF_FF_FF_FF_FF;
+        var salt = (long)(random % (ulong)(upperExclusive - 1L)) + 1L;
+        return salt.ToString(CultureInfo.InvariantCulture);
     }
 
     private static bool TryParseUInt256(string value, out BigInteger result)

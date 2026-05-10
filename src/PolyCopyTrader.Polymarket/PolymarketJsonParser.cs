@@ -37,6 +37,13 @@ public static class PolymarketJsonParser
 
     public static IReadOnlyList<LeaderTrade> ParseTrades(JsonElement root)
     {
+        return ParseDataApiTrades(root)
+            .Select(trade => trade.ToLeaderTrade())
+            .ToArray();
+    }
+
+    public static IReadOnlyList<PolymarketDataApiTrade> ParseDataApiTrades(JsonElement root)
+    {
         if (root.ValueKind is JsonValueKind.Null or JsonValueKind.Undefined)
         {
             return [];
@@ -47,31 +54,107 @@ public static class PolymarketJsonParser
             throw new JsonException("Trades response must be a JSON array.");
         }
 
-        var trades = new List<LeaderTrade>();
+        var trades = new List<PolymarketDataApiTrade>();
         foreach (var item in root.EnumerateArray())
         {
             var price = GetDecimal(item, "price");
             var size = GetDecimal(item, "size");
-            trades.Add(new LeaderTrade(
+            trades.Add(new PolymarketDataApiTrade(
                 GetString(item, "proxyWallet") ?? string.Empty,
-                GetString(item, "name") ?? GetString(item, "pseudonym") ?? string.Empty,
-                GetString(item, "conditionId") ?? string.Empty,
-                GetString(item, "asset") ?? string.Empty,
-                GetString(item, "slug") ?? string.Empty,
-                GetString(item, "title") ?? string.Empty,
-                GetString(item, "outcome") ?? string.Empty,
                 ParseSide(GetString(item, "side")),
-                price,
+                GetString(item, "asset") ?? string.Empty,
+                GetString(item, "conditionId") ?? string.Empty,
                 size,
-                price * size,
+                price,
                 FromUnixSeconds(GetLong(item, "timestamp")),
-                GetString(item, "transactionHash")));
+                GetString(item, "title") ?? string.Empty,
+                GetString(item, "slug") ?? string.Empty,
+                GetString(item, "icon"),
+                GetString(item, "eventSlug"),
+                GetString(item, "outcome") ?? string.Empty,
+                GetIntOrNull(item, "outcomeIndex"),
+                GetString(item, "name") ?? string.Empty,
+                GetString(item, "pseudonym"),
+                GetString(item, "bio"),
+                GetString(item, "profileImage"),
+                GetString(item, "profileImageOptimized"),
+                GetString(item, "transactionHash"),
+                item.GetRawText()));
         }
 
         return trades;
     }
 
+    public static IReadOnlyList<PolymarketDataApiActivity> ParseDataApiActivity(JsonElement root)
+    {
+        if (root.ValueKind is JsonValueKind.Null or JsonValueKind.Undefined)
+        {
+            return [];
+        }
+
+        if (root.ValueKind != JsonValueKind.Array)
+        {
+            throw new JsonException("Activity response must be a JSON array.");
+        }
+
+        var activities = new List<PolymarketDataApiActivity>();
+        foreach (var item in root.EnumerateArray())
+        {
+            activities.Add(new PolymarketDataApiActivity(
+                GetString(item, "proxyWallet") ?? string.Empty,
+                FromUnixSeconds(GetLong(item, "timestamp")),
+                GetString(item, "conditionId") ?? string.Empty,
+                ParseActivityType(GetString(item, "type")),
+                GetDecimal(item, "size"),
+                GetDecimal(item, "usdcSize"),
+                GetString(item, "transactionHash"),
+                GetDecimal(item, "price"),
+                GetString(item, "asset") ?? string.Empty,
+                ParseSide(GetString(item, "side")),
+                GetIntOrNull(item, "outcomeIndex"),
+                GetString(item, "title") ?? string.Empty,
+                GetString(item, "slug") ?? string.Empty,
+                GetString(item, "icon"),
+                GetString(item, "eventSlug"),
+                GetString(item, "outcome") ?? string.Empty,
+                GetString(item, "name") ?? string.Empty,
+                GetString(item, "pseudonym"),
+                GetString(item, "bio"),
+                GetString(item, "profileImage"),
+                GetString(item, "profileImageOptimized"),
+                item.GetRawText()));
+        }
+
+        return activities;
+    }
+
     public static IReadOnlyList<LeaderPosition> ParsePositions(JsonElement root)
+    {
+        return ParseDataApiCurrentPositions(root)
+            .Select(position => new LeaderPosition(
+                position.Wallet,
+                position.ConditionId,
+                position.AssetId,
+                position.Outcome,
+                position.Size ?? 0m,
+                position.AvgPrice,
+                position.CurrentValue ?? 0m,
+                position.CashPnl ?? 0m,
+                position.CurPrice,
+                DateTimeOffset.UtcNow,
+                position.InitialValue ?? 0m,
+                position.PercentPnl ?? 0m,
+                position.TotalBought,
+                position.RealizedPnl,
+                position.MarketTitle,
+                position.MarketSlug,
+                position.OppositeAsset,
+                position.EndDateUtc,
+                position.NegativeRisk ?? false))
+            .ToArray();
+    }
+
+    public static IReadOnlyList<PolymarketDataApiPosition> ParseDataApiCurrentPositions(JsonElement root)
     {
         if (root.ValueKind is JsonValueKind.Null or JsonValueKind.Undefined)
         {
@@ -83,29 +166,91 @@ public static class PolymarketJsonParser
             throw new JsonException("Positions response must be a JSON array.");
         }
 
-        var positions = new List<LeaderPosition>();
+        var positions = new List<PolymarketDataApiPosition>();
         foreach (var item in root.EnumerateArray())
         {
-            positions.Add(new LeaderPosition(
+            positions.Add(new PolymarketDataApiPosition(
                 GetString(item, "proxyWallet") ?? string.Empty,
-                GetString(item, "conditionId") ?? string.Empty,
+                PolymarketDataApiPositionStatus.Open,
                 GetString(item, "asset") ?? string.Empty,
-                GetString(item, "outcome") ?? string.Empty,
-                GetDecimal(item, "size"),
+                GetString(item, "conditionId") ?? string.Empty,
+                GetDecimalOrNull(item, "size"),
                 GetDecimal(item, "avgPrice"),
-                GetDecimal(item, "currentValue"),
-                GetDecimal(item, "cashPnl"),
-                GetDecimal(item, "curPrice"),
-                DateTimeOffset.UtcNow,
-                GetDecimal(item, "initialValue"),
-                GetDecimal(item, "percentPnl"),
+                GetDecimalOrNull(item, "initialValue"),
+                GetDecimalOrNull(item, "currentValue"),
+                GetDecimalOrNull(item, "cashPnl"),
+                GetDecimalOrNull(item, "percentPnl"),
                 GetDecimal(item, "totalBought"),
                 GetDecimal(item, "realizedPnl"),
-                GetString(item, "title"),
-                GetString(item, "slug"),
+                GetDecimalOrNull(item, "percentRealizedPnl"),
+                GetDecimal(item, "curPrice"),
+                null,
+                GetString(item, "title") ?? string.Empty,
+                GetString(item, "slug") ?? string.Empty,
+                GetString(item, "icon"),
+                GetString(item, "eventId"),
+                GetString(item, "eventSlug"),
+                GetString(item, "category"),
+                GetString(item, "outcome") ?? string.Empty,
+                GetIntOrNull(item, "outcomeIndex"),
+                GetString(item, "oppositeOutcome"),
                 GetString(item, "oppositeAsset"),
                 ParseDateTimeOffsetOrNull(GetString(item, "endDate")),
-                GetBool(item, "negativeRisk")));
+                GetBoolOrNull(item, "redeemable"),
+                GetBoolOrNull(item, "mergeable"),
+                GetBoolOrNull(item, "negativeRisk"),
+                item.GetRawText()));
+        }
+
+        return positions;
+    }
+
+    public static IReadOnlyList<PolymarketDataApiPosition> ParseDataApiClosedPositions(JsonElement root)
+    {
+        if (root.ValueKind is JsonValueKind.Null or JsonValueKind.Undefined)
+        {
+            return [];
+        }
+
+        if (root.ValueKind != JsonValueKind.Array)
+        {
+            throw new JsonException("Closed positions response must be a JSON array.");
+        }
+
+        var positions = new List<PolymarketDataApiPosition>();
+        foreach (var item in root.EnumerateArray())
+        {
+            positions.Add(new PolymarketDataApiPosition(
+                GetString(item, "proxyWallet") ?? string.Empty,
+                PolymarketDataApiPositionStatus.Closed,
+                GetString(item, "asset") ?? string.Empty,
+                GetString(item, "conditionId") ?? string.Empty,
+                null,
+                GetDecimal(item, "avgPrice"),
+                null,
+                null,
+                null,
+                null,
+                GetDecimal(item, "totalBought"),
+                GetDecimal(item, "realizedPnl"),
+                null,
+                GetDecimal(item, "curPrice"),
+                GetUnixTimestampOrNull(item, "timestamp"),
+                GetString(item, "title") ?? string.Empty,
+                GetString(item, "slug") ?? string.Empty,
+                GetString(item, "icon"),
+                GetString(item, "eventId"),
+                GetString(item, "eventSlug"),
+                GetString(item, "category"),
+                GetString(item, "outcome") ?? string.Empty,
+                GetIntOrNull(item, "outcomeIndex"),
+                GetString(item, "oppositeOutcome"),
+                GetString(item, "oppositeAsset"),
+                ParseDateTimeOffsetOrNull(GetString(item, "endDate")),
+                null,
+                null,
+                GetBoolOrNull(item, "negativeRisk"),
+                item.GetRawText()));
         }
 
         return positions;
@@ -153,6 +298,68 @@ public static class PolymarketJsonParser
             conditionId,
             GetString(root, "primary_token_id") ?? string.Empty,
             GetString(root, "secondary_token_id") ?? string.Empty);
+    }
+
+    public static IReadOnlyList<PolymarketGammaMarket> ParseGammaActiveMarkets(JsonElement root)
+    {
+        if (root.ValueKind is JsonValueKind.Null or JsonValueKind.Undefined)
+        {
+            return [];
+        }
+
+        if (root.ValueKind != JsonValueKind.Array)
+        {
+            throw new JsonException("Gamma active markets response must be a JSON array.");
+        }
+
+        var fetchedAt = DateTimeOffset.UtcNow;
+        var markets = new List<PolymarketGammaMarket>();
+        foreach (var market in root.EnumerateArray())
+        {
+            markets.Add(new PolymarketGammaMarket(
+                GetString(market, "id") ?? string.Empty,
+                GetString(market, "conditionId") ?? string.Empty,
+                GetString(market, "questionID") ?? string.Empty,
+                GetString(market, "slug") ?? string.Empty,
+                GetString(market, "question") ?? string.Empty,
+                GetFirstNestedString(market, "events", "id"),
+                GetFirstNestedString(market, "events", "slug"),
+                GetFirstNestedString(market, "events", "title"),
+                FirstNonEmpty(
+                    GetString(market, "seriesSlug"),
+                    GetFirstNestedString(market, "events", "seriesSlug"),
+                    GetFirstNestedString(market, "series", "slug"),
+                    GetFirstNestedArrayString(market, "events", "series", "slug")),
+                GetGammaMarketCategory(market),
+                GetBool(market, "active"),
+                GetBool(market, "closed"),
+                GetBool(market, "archived"),
+                GetBool(market, "restricted"),
+                GetBool(market, "acceptingOrders"),
+                GetBool(market, "enableOrderBook"),
+                GetBool(market, "negRisk"),
+                FirstDecimalOrNull(market, "liquidityNum", "liquidity"),
+                FirstDecimalOrNull(market, "liquidityClob"),
+                FirstDecimalOrNull(market, "volumeNum", "volume"),
+                FirstDecimalOrNull(market, "volume24hr", "volume24Hr"),
+                GetDecimalOrNull(market, "bestBid"),
+                GetDecimalOrNull(market, "bestAsk"),
+                GetDecimalOrNull(market, "spread"),
+                ParseDateTimeOffsetOrNull(GetString(market, "createdAt")),
+                ParseDateTimeOffsetOrNull(GetString(market, "updatedAt")),
+                ParseDateTimeOffsetOrNull(GetString(market, "startDate")),
+                ParseDateTimeOffsetOrNull(GetString(market, "endDate")),
+                ParseDateTimeOffsetOrNull(GetString(market, "eventStartTime")),
+                ParseStringArray(market, "outcomes"),
+                ParseStringArray(market, "clobTokenIds"),
+                market.GetRawText(),
+                fetchedAt,
+                GetDecimalOrNull(market, "lastTradePrice"),
+                GetDecimalOrNull(market, "orderMinSize"),
+                GetDecimalOrNull(market, "orderPriceMinTickSize")));
+        }
+
+        return markets;
     }
 
     public static IReadOnlyList<PolymarketOnChainTokenMetadata> ParseGammaMarketTokenMetadata(
@@ -707,6 +914,48 @@ public static class PolymarketJsonParser
                 : TradeSide.Unknown;
     }
 
+    private static PolymarketDataApiActivityType ParseActivityType(string? value)
+    {
+        if (string.Equals(value, "TRADE", StringComparison.OrdinalIgnoreCase))
+        {
+            return PolymarketDataApiActivityType.Trade;
+        }
+
+        if (string.Equals(value, "SPLIT", StringComparison.OrdinalIgnoreCase))
+        {
+            return PolymarketDataApiActivityType.Split;
+        }
+
+        if (string.Equals(value, "MERGE", StringComparison.OrdinalIgnoreCase))
+        {
+            return PolymarketDataApiActivityType.Merge;
+        }
+
+        if (string.Equals(value, "REDEEM", StringComparison.OrdinalIgnoreCase))
+        {
+            return PolymarketDataApiActivityType.Redeem;
+        }
+
+        if (string.Equals(value, "REWARD", StringComparison.OrdinalIgnoreCase))
+        {
+            return PolymarketDataApiActivityType.Reward;
+        }
+
+        if (string.Equals(value, "CONVERSION", StringComparison.OrdinalIgnoreCase))
+        {
+            return PolymarketDataApiActivityType.Conversion;
+        }
+
+        if (string.Equals(value, "MAKER_REBATE", StringComparison.OrdinalIgnoreCase))
+        {
+            return PolymarketDataApiActivityType.MakerRebate;
+        }
+
+        return string.Equals(value, "REFERRAL_REWARD", StringComparison.OrdinalIgnoreCase)
+            ? PolymarketDataApiActivityType.ReferralReward
+            : PolymarketDataApiActivityType.Unknown;
+    }
+
     private static DateTimeOffset ParseOrderBookTimestamp(string? value)
     {
         if (long.TryParse(value, NumberStyles.Integer, CultureInfo.InvariantCulture, out var unix))
@@ -727,6 +976,12 @@ public static class PolymarketJsonParser
     private static DateTimeOffset FromUnixSeconds(long value)
     {
         return value <= 0 ? DateTimeOffset.UnixEpoch : DateTimeOffset.FromUnixTimeSeconds(value);
+    }
+
+    private static DateTimeOffset? GetUnixTimestampOrNull(JsonElement element, string propertyName)
+    {
+        var value = GetLong(element, propertyName);
+        return value <= 0 ? null : DateTimeOffset.FromUnixTimeSeconds(value);
     }
 
     private static DateTimeOffset? ParseDateTimeOffsetOrNull(string? value)
@@ -768,6 +1023,20 @@ public static class PolymarketJsonParser
         return decimal.TryParse(property.ToString(), NumberStyles.Number, CultureInfo.InvariantCulture, out var parsed)
             ? parsed
             : null;
+    }
+
+    private static decimal? FirstDecimalOrNull(JsonElement element, params string[] propertyNames)
+    {
+        foreach (var propertyName in propertyNames)
+        {
+            var value = GetDecimalOrNull(element, propertyName);
+            if (value is not null)
+            {
+                return value;
+            }
+        }
+
+        return null;
     }
 
     private static long GetLong(JsonElement element, string propertyName)
@@ -817,6 +1086,22 @@ public static class PolymarketJsonParser
             JsonValueKind.False => false,
             JsonValueKind.String => bool.TryParse(property.GetString(), out var parsed) && parsed,
             _ => false
+        };
+    }
+
+    private static bool? GetBoolOrNull(JsonElement element, string propertyName)
+    {
+        if (!element.TryGetProperty(propertyName, out var property) || property.ValueKind is JsonValueKind.Null or JsonValueKind.Undefined)
+        {
+            return null;
+        }
+
+        return property.ValueKind switch
+        {
+            JsonValueKind.True => true,
+            JsonValueKind.False => false,
+            JsonValueKind.String => bool.TryParse(property.GetString(), out var parsed) ? parsed : null,
+            _ => null
         };
     }
 }

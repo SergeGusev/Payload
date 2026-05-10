@@ -1,7 +1,7 @@
 ﻿
 Microsoft Visual Studio Solution File, Format Version 12.00
-# Visual Studio Version 17
-VisualStudioVersion = 17.0.31903.59
+# Visual Studio Version 18
+VisualStudioVersion = 18.5.11723.231 stable
 MinimumVisualStudioVersion = 10.0.40219.1
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "src", "src", "{827E0CD3-B72D-47B6-A68D-7590B98EB39B}"
 EndProject
@@ -20,6 +20,13 @@ EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "tests", "tests", "{0AB3BF05-4346-4AA6-1389-037BE0695223}"
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "PolyCopyTrader.Tests", "tests\PolyCopyTrader.Tests\PolyCopyTrader.Tests.csproj", "{71419CBE-63AB-4F4C-AA89-6F1AF0FA2147}"
+EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "codex", "codex", "{FE72B42D-B1D6-44D7-B88A-29A4190AA1E9}"
+EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "history", "history", "{0FF743E7-DCA0-4D6C-9482-8D6FA87BE4A0}"
+	ProjectSection(SolutionItems) = preProject
+		..\SoftAIn\Source\Admin\Admin.Shared\Codex\Rules\ContextHistoryProtocol.md = ..\SoftAIn\Source\Admin\Admin.Shared\Codex\Rules\ContextHistoryProtocol.md
+	EndProjectSection
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -127,5 +134,9 @@ Global
 		{185F1D45-45A2-4AA5-8883-8925CCEFC121} = {827E0CD3-B72D-47B6-A68D-7590B98EB39B}
 		{66281DDD-C0C7-476F-9507-34C890DF7A11} = {827E0CD3-B72D-47B6-A68D-7590B98EB39B}
 		{71419CBE-63AB-4F4C-AA89-6F1AF0FA2147} = {0AB3BF05-4346-4AA6-1389-037BE0695223}
+		{0FF743E7-DCA0-4D6C-9482-8D6FA87BE4A0} = {FE72B42D-B1D6-44D7-B88A-29A4190AA1E9}
+	EndGlobalSection
+	GlobalSection(ExtensibilityGlobals) = postSolution
+		SolutionGuid = {74012CEE-8A11-4B94-982F-EF9D0C18CB78}
 	EndGlobalSection
 EndGlobal

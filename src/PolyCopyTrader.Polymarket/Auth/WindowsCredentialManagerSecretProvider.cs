@@ -3,9 +3,10 @@ using System.Text;
 
 namespace PolyCopyTrader.Polymarket.Auth;
 
-public sealed class WindowsCredentialManagerSecretProvider : ISecretProvider
+public sealed class WindowsCredentialManagerSecretProvider : ISecretProvider, ISecretWriter
 {
     private const uint GenericCredentialType = 1;
+    private const uint PersistLocalMachine = 2;
 
     public Task<string?> GetSecretAsync(string name, CancellationToken ct)
     {
@@ -41,6 +42,64 @@ public sealed class WindowsCredentialManagerSecretProvider : ISecretProvider
         }
     }
 
+    public Task SetSecretAsync(string name, string value, CancellationToken ct)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(name);
+        ArgumentNullException.ThrowIfNull(value);
+        ct.ThrowIfCancellationRequested();
+
+        if (!OperatingSystem.IsWindows())
+        {
+            throw new PlatformNotSupportedException("Windows Credential Manager is only available on Windows.");
+        }
+
+        var targetNamePtr = IntPtr.Zero;
+        var userNamePtr = IntPtr.Zero;
+        var credentialBlobPtr = IntPtr.Zero;
+        try
+        {
+            var bytes = Encoding.UTF8.GetBytes(value);
+            targetNamePtr = Marshal.StringToCoTaskMemUni(name);
+            userNamePtr = Marshal.StringToCoTaskMemUni("polycopytrader");
+            credentialBlobPtr = Marshal.AllocHGlobal(bytes.Length);
+            Marshal.Copy(bytes, 0, credentialBlobPtr, bytes.Length);
+
+            var credential = new NativeCredentialWrite
+            {
+                Type = GenericCredentialType,
+                TargetName = targetNamePtr,
+                CredentialBlobSize = (uint)bytes.Length,
+                CredentialBlob = credentialBlobPtr,
+                Persist = PersistLocalMachine,
+                UserName = userNamePtr
+            };
+
+            if (!CredWrite(ref credential, 0))
+            {
+                throw new InvalidOperationException($"Failed to write Windows credential '{name}'. Win32Error={Marshal.GetLastWin32Error()}.");
+            }
+
+            return Task.CompletedTask;
+        }
+        finally
+        {
+            if (credentialBlobPtr != IntPtr.Zero)
+            {
+                Marshal.FreeHGlobal(credentialBlobPtr);
+            }
+
+            if (targetNamePtr != IntPtr.Zero)
+            {
+                Marshal.FreeCoTaskMem(targetNamePtr);
+            }
+
+            if (userNamePtr != IntPtr.Zero)
+            {
+                Marshal.FreeCoTaskMem(userNamePtr);
+            }
+        }
+    }
+
     private static string DecodeCredentialBlob(byte[] bytes)
     {
         var utf8 = Encoding.UTF8.GetString(bytes).TrimEnd('\0');
@@ -63,6 +122,9 @@ public sealed class WindowsCredentialManagerSecretProvider : ISecretProvider
     [DllImport("Advapi32.dll", EntryPoint = "CredFree", SetLastError = true)]
     private static extern void CredFree(IntPtr credentialPtr);
 
+    [DllImport("Advapi32.dll", EntryPoint = "CredWriteW", CharSet = CharSet.Unicode, SetLastError = true)]
+    private static extern bool CredWrite(ref NativeCredentialWrite userCredential, uint flags);
+
     [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
     private readonly struct NativeCredential
     {
@@ -78,5 +140,22 @@ public sealed class WindowsCredentialManagerSecretProvider : ISecretProvider
         public readonly IntPtr Attributes;
         public readonly IntPtr TargetAlias;
         public readonly IntPtr UserName;
+    }
+
+    [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
+    private struct NativeCredentialWrite
+    {
+        public uint Flags;
+        public uint Type;
+        public IntPtr TargetName;
+        public IntPtr Comment;
+        public long LastWritten;
+        public uint CredentialBlobSize;
+        public IntPtr CredentialBlob;
+        public uint Persist;
+        public uint AttributeCount;
+        public IntPtr Attributes;
+        public IntPtr TargetAlias;
+        public IntPtr UserName;
     }
 }

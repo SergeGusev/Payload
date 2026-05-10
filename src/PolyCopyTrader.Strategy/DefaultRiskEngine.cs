@@ -24,6 +24,18 @@ public sealed class DefaultRiskEngine(
             reasons.Add(SignalReasonCodes.RiskOrderAgeLimit);
         }
 
+        if (proposedOrder.Side == TradeSide.Sell)
+        {
+            return reasons.Count > 0
+                ? new RiskDecision(false, reasons, 0m, exposure.TotalDeployedUsd)
+                : new RiskDecision(
+                    true,
+                    [],
+                    proposedOrder.NotionalUsd,
+                    Math.Max(0m, exposure.TotalDeployedUsd - notional),
+                    proposedOrder.SizeShares);
+        }
+
         if (notional > Budget(riskOptions.MaxTradeBankrollPct, bankroll))
         {
             reasons.Add(SignalReasonCodes.RiskTradeLimit);
