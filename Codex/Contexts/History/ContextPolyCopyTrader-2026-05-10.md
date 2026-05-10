@@ -214,3 +214,10 @@ Request:
 
 Result:
 The clipboard did not contain an image, so the exact screenshot text could not be inspected. Diagnosed and fixed the likely `.NET Framework` scaffold issue where direct interactive launch entered `ServiceBase.Run(...)` and produced the standard Windows Service startup error. Updated the Net48 service so direct launch behaves like `--console`, added `--install`, `--uninstall`, `--start`, and `--stop` helpers backed by `sc.exe`, and documented the commands in `src4.8/README.md`. Verification passed: Debug and Release builds, direct executable launch, and `--console` launch. A stale scaffold process locking the Debug exe was stopped before rebuilding.
+
+## 2026-05-10T13:52:29.4338041Z
+Request:
+Посмотри картинку. Так всё задумано?
+
+Result:
+Extracted and inspected the screenshot from the Windows clipboard. Confirmed the Visual Studio Debug Console output is expected for the current `PolyCopyTrader.Net48.Service` scaffold: it prints Paper/ReadOnly posture and Windows Service helper commands, then exits with code `0`. Clarified that this is interactive console/help mode, not an installed/running Windows Service and not the trading engine yet. No code changes were made.

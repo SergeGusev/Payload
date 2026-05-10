@@ -1,3 +1,14 @@
+## Active Update 2026-05-10 Net48 Console Screenshot Review
+Goal: Inspect the latest `PolyCopyTrader.Net48.Service` screenshot and confirm whether the observed behavior is expected.
+Status: Completed / Explanation Only
+Done:
+- Extracted the screenshot from the Windows clipboard and inspected it.
+- Confirmed the Visual Studio Debug Console shows the expected scaffold output: service name, Paper/ReadOnly runtime posture, service command help, and process exit code `0`.
+- Clarified that this is interactive console/help mode, not an installed/running Windows Service and not the real trading engine yet.
+Next: To test actual Windows Service mode, run the Release exe from an elevated console with `--install` and `--start`.
+Notes: No code changes. Branch `master` is tracking `origin/master`.
+Blockers: None.
+
 ## Active Update 2026-05-10 Net48 Service Startup Fix
 Goal: Fix the `.NET Framework 4.8` scaffold service startup behavior reported from the screenshot.
 Status: Completed
