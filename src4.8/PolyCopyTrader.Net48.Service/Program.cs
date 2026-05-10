@@ -3,6 +3,8 @@ using System.Diagnostics;
 using System.IO;
 using System.ServiceProcess;
 using PolyCopyTrader.Domain;
+using PolyCopyTrader.Domain.Configuration;
+using PolyCopyTrader.Strategy;
 
 namespace PolyCopyTrader.Service
 {
@@ -16,6 +18,11 @@ namespace PolyCopyTrader.Service
             if (args.Length > 0 && string.Equals(args[0], "--console", StringComparison.OrdinalIgnoreCase))
             {
                 return RunConsole();
+            }
+
+            if (args.Length > 0 && string.Equals(args[0], "--strategy-smoke", StringComparison.OrdinalIgnoreCase))
+            {
+                return RunStrategySmoke();
             }
 
             if (args.Length > 0 && string.Equals(args[0], "--install", StringComparison.OrdinalIgnoreCase))
@@ -58,6 +65,88 @@ namespace PolyCopyTrader.Service
             Console.WriteLine("  PolyCopyTrader.Net48.Service.exe --start");
             Console.WriteLine("  PolyCopyTrader.Net48.Service.exe --stop");
             Console.WriteLine("  PolyCopyTrader.Net48.Service.exe --uninstall");
+            Console.WriteLine("  PolyCopyTrader.Net48.Service.exe --strategy-smoke");
+            return 0;
+        }
+
+        private static int RunStrategySmoke()
+        {
+            var now = DateTimeOffset.UtcNow;
+            var riskOptions = new RiskOptions();
+            var paperOptions = new PaperTradingOptions { InitialBankrollUsd = 1000m, UseMinimumMarketOrderSize = true };
+            var riskEngine = new DefaultRiskEngine(riskOptions, paperOptions);
+            var signalEngine = new DefaultSignalEngine(
+                new SignalOptions(),
+                new ExecutionOptions(),
+                riskOptions,
+                paperOptions,
+                riskEngine);
+            var paperEngine = new DefaultPaperTradingEngine();
+
+            var orderBook = new OrderBookSnapshot(
+                "asset-up",
+                new[] { new OrderBookLevel(0.48m, 50m) },
+                new[] { new OrderBookLevel(0.49m, 50m) },
+                now,
+                "condition-1",
+                MinOrderSize: 5m,
+                TickSize: 0.01m);
+
+            var leaderTrade = new LeaderTrade(
+                "0xleader",
+                "leader",
+                "condition-1",
+                "asset-up",
+                "market-slug",
+                "Market title",
+                "Up",
+                TradeSide.Buy,
+                0.50m,
+                10m,
+                5m,
+                now);
+
+            var decision = signalEngine.Evaluate(new SignalEvaluationContext(
+                leaderTrade,
+                new TraderRule("0xleader", Array.Empty<string>(), 60, 1m, 2m, 5m, 0.10m),
+                new MarketInfo("condition-1", "market-slug", "Market title", "Crypto", now.AddDays(2)),
+                orderBook,
+                new ExposureSnapshot(0m, 0m, 0m, 0m, 0m, 0)));
+
+            if (!decision.Accepted || decision.ProposedPrice == null || decision.ProposedSizeShares == null)
+            {
+                Console.Error.WriteLine("Strategy smoke failed: decision was not accepted. Reason: " + decision.DecisionCode);
+                return 1;
+            }
+
+            var signal = new Signal(
+                Guid.NewGuid(),
+                leaderTrade,
+                decision.Score,
+                decision.Accepted,
+                decision.DecisionCode,
+                decision.Reasons,
+                decision.ProposedPrice,
+                decision.ProposedSizeShares,
+                decision.ProposedNotionalUsd,
+                decision.CreatedAtUtc);
+            var order = paperEngine.CreateOrder(
+                signal,
+                decision.ProposedPrice.Value,
+                decision.ProposedSizeShares.Value,
+                now.AddMinutes(2));
+            var fill = paperEngine.TrySimulateFill(order, orderBook, null, now);
+
+            if (fill == null)
+            {
+                Console.Error.WriteLine("Strategy smoke failed: expected a simulated fill.");
+                return 1;
+            }
+
+            Console.WriteLine("Strategy smoke passed.");
+            Console.WriteLine("Decision: " + decision.DecisionCode + ", score " + decision.Score);
+            Console.WriteLine("Order: " + order.Id + ", price " + order.Price + ", shares " + order.SizeShares);
+            Console.WriteLine("Fill: " + fill.Price + ", shares " + fill.SizeShares);
             return 0;
         }
 

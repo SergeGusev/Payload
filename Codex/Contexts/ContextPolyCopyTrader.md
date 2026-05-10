@@ -1,3 +1,16 @@
+## Active Update 2026-05-10 Net48 Domain Strategy Port
+Goal: Start the actual `.NET Framework 4.8` port by moving the Paper-only domain and strategy core into `src4.8`.
+Status: Completed
+Done:
+- Added a narrow `src4.8` Domain core with the models/options needed by `DefaultSignalEngine`, `DefaultRiskEngine`, `DefaultPaperTradingEngine`, `MakerPriceCalculator`, and `TakerBuyFillEstimator`.
+- Added .NET Framework compatibility shims/global usings for records/init and copied the Strategy source files into `src4.8/PolyCopyTrader.Net48.Strategy`.
+- Replaced modern `ArgumentNullException.ThrowIfNull` calls only in the Net48 strategy copies with Framework-compatible null checks.
+- Added `PolyCopyTrader.Net48.Service.exe --strategy-smoke`, which runs signal evaluation, risk check, paper order creation, and simulated fill in process.
+- Updated `src4.8/README.md` with the smoke command.
+Next: Port the next slice: configuration loading plus PostgreSQL storage using .NET Framework-compatible package versions.
+Notes: Verification passed: `dotnet build src4.8/PolyCopyTrader.Net48.sln --configuration Debug`; `dotnet build src4.8/PolyCopyTrader.Net48.sln --configuration Release`; Debug and Release `--strategy-smoke`; `--console`; main `dotnet test tests/PolyCopyTrader.Tests/PolyCopyTrader.Tests.csproj --configuration Release` passed `418/418`. An earlier test attempt with custom `BaseOutputPath` failed because existing storage tests locate source files relative to the standard output layout; rerun without that override passed.
+Blockers: None.
+
 ## Active Update 2026-05-10 Net48 Console Screenshot Review
 Goal: Inspect the latest `PolyCopyTrader.Net48.Service` screenshot and confirm whether the observed behavior is expected.
 Status: Completed / Explanation Only

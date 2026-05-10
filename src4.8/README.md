@@ -27,12 +27,16 @@ Service commands:
 .\PolyCopyTrader.Net48.Service.exe --start
 .\PolyCopyTrader.Net48.Service.exe --stop
 .\PolyCopyTrader.Net48.Service.exe --uninstall
+.\PolyCopyTrader.Net48.Service.exe --strategy-smoke
 ```
 
 Run `--install`, `--start`, `--stop`, and `--uninstall` from an elevated
 administrator console. Direct interactive launch without arguments prints the
 same scaffold/help text as `--console`; the process only enters Windows Service
 mode when started by the Service Control Manager.
+
+`--strategy-smoke` runs the first ported Paper-only strategy pipeline slice in
+process: signal evaluation, risk check, paper order creation, and simulated fill.
 
 Porting constraints:
 

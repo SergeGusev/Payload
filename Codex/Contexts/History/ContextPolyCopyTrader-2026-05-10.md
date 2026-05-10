@@ -221,3 +221,10 @@ Request:
 
 Result:
 Extracted and inspected the screenshot from the Windows clipboard. Confirmed the Visual Studio Debug Console output is expected for the current `PolyCopyTrader.Net48.Service` scaffold: it prints Paper/ReadOnly posture and Windows Service helper commands, then exits with code `0`. Clarified that this is interactive console/help mode, not an installed/running Windows Service and not the trading engine yet. No code changes were made.
+
+## 2026-05-10T14:03:32.5214286Z
+Request:
+Давай переносить
+
+Result:
+Started the actual `.NET Framework 4.8` port by moving the Paper-only domain/strategy core into `src4.8`. Added Net48-compatible Domain models/options required by the strategy engines, copied the Strategy source files into the Net48 workspace, added compatibility shims/global usings for records/init, replaced `ArgumentNullException.ThrowIfNull` only in the Net48 strategy copies, and added a service `--strategy-smoke` command that executes signal evaluation, risk check, paper order creation, and simulated fill. Verification passed for Debug/Release Net48 builds, Debug/Release `--strategy-smoke`, `--console`, and the main test suite rerun with `418/418` passing. An earlier test attempt with custom `BaseOutputPath` failed because existing storage tests locate source files relative to the standard output layout; rerun without that override passed.
