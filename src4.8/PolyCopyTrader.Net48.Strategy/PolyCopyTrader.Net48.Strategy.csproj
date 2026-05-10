@@ -1,0 +1,10 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <AssemblyName>PolyCopyTrader.Net48.Strategy</AssemblyName>
+    <RootNamespace>PolyCopyTrader.Strategy</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\PolyCopyTrader.Net48.Domain\PolyCopyTrader.Net48.Domain.csproj" />
+  </ItemGroup>
+</Project>

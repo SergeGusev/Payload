@@ -1,0 +1,18 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <AssemblyName>PolyCopyTrader.Net48.Service</AssemblyName>
+    <RootNamespace>PolyCopyTrader.Service</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Reference Include="System.ServiceProcess" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\PolyCopyTrader.Net48.Domain\PolyCopyTrader.Net48.Domain.csproj" />
+    <ProjectReference Include="..\PolyCopyTrader.Net48.Polymarket\PolyCopyTrader.Net48.Polymarket.csproj" />
+    <ProjectReference Include="..\PolyCopyTrader.Net48.Storage\PolyCopyTrader.Net48.Storage.csproj" />
+    <ProjectReference Include="..\PolyCopyTrader.Net48.Strategy\PolyCopyTrader.Net48.Strategy.csproj" />
+  </ItemGroup>
+</Project>

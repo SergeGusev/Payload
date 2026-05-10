@@ -1,3 +1,27 @@
+## Active Update 2026-05-10 Net48 Scaffold
+Goal: Create an isolated `.NET Framework 4.8` solution workspace under `src4.8`.
+Status: Completed
+Done:
+- Created `src4.8/PolyCopyTrader.Net48.sln` as a classic `.sln` file, not `.slnx`, for better Visual Studio/.NET Framework compatibility.
+- Added SDK-style `net48` projects for Domain, Strategy, Polymarket, Storage, Service, and Dashboard under `src4.8`.
+- Added a shared `src4.8/Directory.Build.props` with `TargetFramework=net48`, `LangVersion=latest`, nullable enabled, and binding redirects enabled.
+- Added buildable service and WPF dashboard scaffolds; both are placeholders only and do not contain trading logic yet.
+- Added `src4.8/README.md` documenting that this is an isolated Windows Server 2008 R2 compatibility workspace and must start Paper/ReadOnly first.
+Next: Begin porting shared Domain/Strategy types into `src4.8` and choose pinned .NET Framework-compatible package versions.
+Notes: Verification passed: `dotnet build src4.8/PolyCopyTrader.Net48.sln --configuration Debug`, `dotnet build src4.8/PolyCopyTrader.Net48.sln --configuration Release`, and `PolyCopyTrader.Net48.Service.exe --console`. `git diff --check` only reported an existing LF/CRLF warning for the context file.
+Blockers: None.
+
+## Active Update 2026-05-10 Framework 4.8 vs Core 2.2 on 2008 R2
+Goal: Choose the less bad runtime path if Windows Server 2008 R2 is mandatory.
+Status: Completed / Feasibility Answer Only
+Done:
+- Rechecked current project targets (`net10.0`, `net10.0-windows`, WPF Dashboard) and official support constraints.
+- Recommended `.NET Framework 4.8` over `.NET Core SDK 2.2.x` for a forced Windows Server 2008 R2 build because Framework 4.8 is installable on 2008 R2 SP1 and better matches WPF/Windows Service compatibility.
+- Noted both paths require a major backport, but .NET Core 2.2.x is worse for this project: it is EOL, lacks WPF support, and would still require heavy package/runtime downgrades.
+Next: If a 2008 R2 build is required, create a separate migration plan for a Framework 4.8 service/dashboard backport, ideally starting with Paper-only engine.
+Notes: No production code or database changes. Branch `master` has no upstream.
+Blockers: None.
+
 ## Active Update 2026-05-10 Windows Server 2008 R2 Options
 Goal: Discuss realistic deployment/version options for Windows Server 2008 R2.
 Status: Completed / Feasibility Answer Only

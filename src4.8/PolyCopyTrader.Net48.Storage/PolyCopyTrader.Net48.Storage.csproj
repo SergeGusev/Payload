@@ -1,0 +1,10 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <AssemblyName>PolyCopyTrader.Net48.Storage</AssemblyName>
+    <RootNamespace>PolyCopyTrader.Storage</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\PolyCopyTrader.Net48.Domain\PolyCopyTrader.Net48.Domain.csproj" />
+  </ItemGroup>
+</Project>

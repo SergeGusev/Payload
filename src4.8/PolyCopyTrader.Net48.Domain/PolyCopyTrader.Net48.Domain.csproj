@@ -1,0 +1,6 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <AssemblyName>PolyCopyTrader.Net48.Domain</AssemblyName>
+    <RootNamespace>PolyCopyTrader.Domain</RootNamespace>
+  </PropertyGroup>
+</Project>

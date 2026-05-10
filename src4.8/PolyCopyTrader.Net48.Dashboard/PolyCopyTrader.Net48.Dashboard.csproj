@@ -1,0 +1,18 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <AssemblyName>PolyCopyTrader.Net48.Dashboard</AssemblyName>
+    <RootNamespace>PolyCopyTrader.Dashboard</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Reference Include="PresentationCore" />
+    <Reference Include="PresentationFramework" />
+    <Reference Include="System.Xaml" />
+    <Reference Include="WindowsBase" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\PolyCopyTrader.Net48.Domain\PolyCopyTrader.Net48.Domain.csproj" />
+  </ItemGroup>
+</Project>
