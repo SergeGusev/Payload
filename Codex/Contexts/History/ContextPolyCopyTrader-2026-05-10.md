@@ -19,6 +19,13 @@ Request:
 Result:
 Answered that targeted cleanup is possible: keep existing GTD history, remove old pre-GTD BTC history only for ordinary `Less/More`, ordinary `Gamma`, and `BTC Less 180 Martin`, including linked strategy runs, paper orders, fills, settlements, and positions where needed. Recommended first doing a dry-run row count and requiring explicit confirmation before destructive PostgreSQL deletion.
 
+## 2026-05-10T19:10:31Z
+Request:
+Давай пойдём по пути 2 - пусть это будет самодостаточный .Net 4.8 проект
+
+Result:
+Converted `src4.8` from SDK-style projects to classic .NET Framework 4.8 MSBuild projects so the solution no longer depends on the repository root `global.json` or the .NET SDK. Kept NuGet `PackageReference` restore, added `Microsoft.Net.Compilers.Toolset 4.14.0` as a build-time compiler package, added a separate `PolyCopyTrader.Net48.Dashboard.Behaviors` WPF helper assembly, moved `DataGridSelectionPersistence` into it, and updated README build instructions. Verified Debug and Release builds via Visual Studio `MSBuild.exe`, plus service `--strategy-smoke`, `--host-smoke`, and `--storage-smoke`.
+
 ## 2026-05-10T06:13:00.7835286Z
 Request:
 Разберись, какие фоновые задачи и сервиса уже не нужны для BTC стратегий и приостанови их. Удалять пока не надо.

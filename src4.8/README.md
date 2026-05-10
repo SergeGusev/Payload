@@ -7,7 +7,10 @@ Target:
 
 - Runtime: .NET Framework 4.8
 - Intended legacy OS: Windows Server 2008 R2 SP1
-- Build posture: build on a modern development machine, deploy binaries to the legacy server
+- Build posture: classic .NET Framework projects under `src4.8`, buildable with
+  Visual Studio/MSBuild and NuGet restore; the `src4.8` solution no longer uses
+  SDK-style projects and does not require the .NET SDK or the repository root
+  `global.json`.
 - Runtime posture while porting: Paper / ReadOnly first, Live only after explicit revalidation
 
 Current scaffold:
@@ -17,7 +20,28 @@ Current scaffold:
 - `PolyCopyTrader.Net48.Polymarket`
 - `PolyCopyTrader.Net48.Storage`
 - `PolyCopyTrader.Net48.Service`
+- `PolyCopyTrader.Net48.Dashboard.Behaviors`
 - `PolyCopyTrader.Net48.Dashboard`
+
+Build commands:
+
+```powershell
+cd src4.8
+& "C:\Path\To\MSBuild.exe" .\PolyCopyTrader.Net48.sln /t:Restore /p:Configuration=Release /p:Platform="Any CPU"
+& "C:\Path\To\MSBuild.exe" .\PolyCopyTrader.Net48.sln /p:Configuration=Release /p:Platform="Any CPU"
+```
+
+The output is written to each project's `bin\Release` folder, for example:
+
+```powershell
+.\PolyCopyTrader.Net48.Service\bin\Release\PolyCopyTrader.Net48.Service.exe --host-smoke
+.\PolyCopyTrader.Net48.Service\bin\Release\PolyCopyTrader.Net48.Service.exe --storage-smoke
+```
+
+The projects use `PackageReference`, including `Microsoft.Net.Compilers.Toolset`,
+so NuGet restore must be available. This is still a .NET Framework 4.8 build;
+the compiler package is only a build-time tool so current C# syntax can be built
+without SDK-style projects.
 
 Service commands:
 

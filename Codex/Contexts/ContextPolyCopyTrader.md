@@ -1,3 +1,15 @@
+## Active Update 2026-05-10 Net48 Classic Project Conversion
+Goal: Make `src4.8` a self-contained classic .NET Framework 4.8 solution that does not require the .NET SDK/global.json.
+Status: Completed
+Done:
+- Converted all existing `src4.8` projects from SDK-style `<Project Sdk=...>` to classic MSBuild `.csproj` format targeting `v4.8`.
+- Kept `PackageReference` restore and added `Microsoft.Net.Compilers.Toolset 4.14.0` as a build-time compiler package so current C# syntax can compile without SDK-style projects.
+- Added `PolyCopyTrader.Net48.Dashboard.Behaviors` and moved `DataGridSelectionPersistence` there so WPF XAML references an external behavior assembly and no longer breaks Dashboard markup compilation/source generators.
+- Updated `src4.8/README.md` with `MSBuild.exe /t:Restore` and build/smoke commands.
+Next: Validate the classic solution on the actual Windows Server 2008 R2 development machine; install/enable NuGet restore and .NET Framework 4.8 Developer Pack there before opening/building `src4.8/PolyCopyTrader.Net48.sln`.
+Notes: Verification passed with Visual Studio MSBuild for .NET Framework: Debug restore/build, Release build, Release `--host-smoke`, Release `--storage-smoke`, Debug `--strategy-smoke`, Debug `--host-smoke`, Debug `--storage-smoke`, and `git diff --check -- src4.8` with line-ending warnings only. Existing nullable warnings remain.
+Blockers: None.
+
 ## Active Update 2026-05-10 Net48 Dashboard Daily Report Fix And Health Check
 Goal: Check whether the Net48 service is collecting the needed Paper BTC statistics and fix the Dashboard startup error from the screenshot.
 Status: Completed / Service Running / Paper Active / Live Paused

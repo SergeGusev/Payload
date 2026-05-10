@@ -442,7 +442,7 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         CommandStatus = "Dashboard errors cleared locally.";
     }
 
-    [RelayCommand(CanExecute = nameof(CanCopySelectedDashboardError))]
+    [RelayCommand]
     private void CopySelectedDashboardError()
     {
         if (SelectedDashboardError is null)
@@ -727,11 +727,6 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         }
     }
 
-    partial void OnSelectedDashboardErrorChanged(DashboardErrorRow? value)
-    {
-        CopySelectedDashboardErrorCommand.NotifyCanExecuteChanged();
-    }
-
     private void RecordDashboardError(string source, Exception exception)
     {
         RecordDashboardError(source, exception.Message, exception.ToString());
@@ -751,11 +746,6 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         {
             DashboardErrors.RemoveAt(DashboardErrors.Count - 1);
         }
-    }
-
-    private bool CanCopySelectedDashboardError()
-    {
-        return SelectedDashboardError is not null;
     }
 
     private static string FormatDashboardErrorForClipboard(DashboardErrorRow error)

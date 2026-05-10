@@ -1,10 +1,30 @@
-<Project Sdk="Microsoft.NET.Sdk">
+<Project ToolsVersion="15.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <Import Project="$(MSBuildToolsPath)\Microsoft.Common.props" Condition="Exists('$(MSBuildToolsPath)\Microsoft.Common.props')" />
+
   <PropertyGroup>
+    <ProjectGuid>{FA7C5BAE-2CB0-4C35-92B5-DBE30463A7EC}</ProjectGuid>
+    <OutputType>Library</OutputType>
     <AssemblyName>PolyCopyTrader.Net48.Strategy</AssemblyName>
     <RootNamespace>PolyCopyTrader.Strategy</RootNamespace>
+    <FileAlignment>512</FileAlignment>
   </PropertyGroup>
+
+  <ItemGroup>
+    <Reference Include="System" />
+    <Reference Include="System.Core" />
+    <Reference Include="System.Data" />
+    <Reference Include="System.Net.Http" />
+    <Reference Include="System.Xml" />
+    <Reference Include="System.Xml.Linq" />
+  </ItemGroup>
 
   <ItemGroup>
     <ProjectReference Include="..\PolyCopyTrader.Net48.Domain\PolyCopyTrader.Net48.Domain.csproj" />
   </ItemGroup>
+
+  <ItemGroup>
+    <Compile Include="**\*.cs" Exclude="$(BaseIntermediateOutputPath)**\*;$(IntermediateOutputPath)**\*;bin\**\*;obj\**\*" />
+  </ItemGroup>
+
+  <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
 </Project>

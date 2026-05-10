@@ -13,6 +13,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "PolyCopyTrader.Net48.Storag
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "PolyCopyTrader.Net48.Service", "PolyCopyTrader.Net48.Service\PolyCopyTrader.Net48.Service.csproj", "{7ECA4993-483D-4535-92BD-38DDEB632EBE}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "PolyCopyTrader.Net48.Dashboard.Behaviors", "PolyCopyTrader.Net48.Dashboard.Behaviors\PolyCopyTrader.Net48.Dashboard.Behaviors.csproj", "{2C828B6A-8B88-40F8-8EB4-D19E91502898}"
+EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "PolyCopyTrader.Net48.Dashboard", "PolyCopyTrader.Net48.Dashboard\PolyCopyTrader.Net48.Dashboard.csproj", "{9286FA00-B849-4EE2-9AEE-293E53E371D4}"
 EndProject
 Global
@@ -85,6 +87,18 @@ Global
 		{7ECA4993-483D-4535-92BD-38DDEB632EBE}.Release|x64.Build.0 = Release|Any CPU
 		{7ECA4993-483D-4535-92BD-38DDEB632EBE}.Release|x86.ActiveCfg = Release|Any CPU
 		{7ECA4993-483D-4535-92BD-38DDEB632EBE}.Release|x86.Build.0 = Release|Any CPU
+		{2C828B6A-8B88-40F8-8EB4-D19E91502898}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{2C828B6A-8B88-40F8-8EB4-D19E91502898}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{2C828B6A-8B88-40F8-8EB4-D19E91502898}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{2C828B6A-8B88-40F8-8EB4-D19E91502898}.Debug|x64.Build.0 = Debug|Any CPU
+		{2C828B6A-8B88-40F8-8EB4-D19E91502898}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{2C828B6A-8B88-40F8-8EB4-D19E91502898}.Debug|x86.Build.0 = Debug|Any CPU
+		{2C828B6A-8B88-40F8-8EB4-D19E91502898}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{2C828B6A-8B88-40F8-8EB4-D19E91502898}.Release|Any CPU.Build.0 = Release|Any CPU
+		{2C828B6A-8B88-40F8-8EB4-D19E91502898}.Release|x64.ActiveCfg = Release|Any CPU
+		{2C828B6A-8B88-40F8-8EB4-D19E91502898}.Release|x64.Build.0 = Release|Any CPU
+		{2C828B6A-8B88-40F8-8EB4-D19E91502898}.Release|x86.ActiveCfg = Release|Any CPU
+		{2C828B6A-8B88-40F8-8EB4-D19E91502898}.Release|x86.Build.0 = Release|Any CPU
 		{9286FA00-B849-4EE2-9AEE-293E53E371D4}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
 		{9286FA00-B849-4EE2-9AEE-293E53E371D4}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{9286FA00-B849-4EE2-9AEE-293E53E371D4}.Debug|x64.ActiveCfg = Debug|Any CPU

@@ -1,12 +1,23 @@
-<Project Sdk="Microsoft.NET.Sdk">
+<Project ToolsVersion="15.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <Import Project="$(MSBuildToolsPath)\Microsoft.Common.props" Condition="Exists('$(MSBuildToolsPath)\Microsoft.Common.props')" />
+
   <PropertyGroup>
+    <ProjectGuid>{7ECA4993-483D-4535-92BD-38DDEB632EBE}</ProjectGuid>
     <OutputType>Exe</OutputType>
     <AssemblyName>PolyCopyTrader.Net48.Service</AssemblyName>
     <RootNamespace>PolyCopyTrader.Service</RootNamespace>
+    <FileAlignment>512</FileAlignment>
   </PropertyGroup>
 
   <ItemGroup>
+    <Reference Include="System" />
+    <Reference Include="System.Configuration" />
+    <Reference Include="System.Core" />
+    <Reference Include="System.Data" />
+    <Reference Include="System.Net.Http" />
     <Reference Include="System.ServiceProcess" />
+    <Reference Include="System.Xml" />
+    <Reference Include="System.Xml.Linq" />
   </ItemGroup>
 
   <ItemGroup>
@@ -25,6 +36,7 @@
   </ItemGroup>
 
   <ItemGroup>
+    <None Include="App.config" />
     <None Include="appsettings.json" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
@@ -34,4 +46,10 @@
     <ProjectReference Include="..\PolyCopyTrader.Net48.Storage\PolyCopyTrader.Net48.Storage.csproj" />
     <ProjectReference Include="..\PolyCopyTrader.Net48.Strategy\PolyCopyTrader.Net48.Strategy.csproj" />
   </ItemGroup>
+
+  <ItemGroup>
+    <Compile Include="**\*.cs" Exclude="$(BaseIntermediateOutputPath)**\*;$(IntermediateOutputPath)**\*;bin\**\*;obj\**\*" />
+  </ItemGroup>
+
+  <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
 </Project>
