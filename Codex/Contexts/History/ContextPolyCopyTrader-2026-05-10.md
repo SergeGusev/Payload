@@ -26,6 +26,13 @@ Request:
 Result:
 Converted `src4.8` from SDK-style projects to classic .NET Framework 4.8 MSBuild projects so the solution no longer depends on the repository root `global.json` or the .NET SDK. Kept NuGet `PackageReference` restore, added `Microsoft.Net.Compilers.Toolset 4.14.0` as a build-time compiler package, added a separate `PolyCopyTrader.Net48.Dashboard.Behaviors` WPF helper assembly, moved `DataGridSelectionPersistence` into it, and updated README build instructions. Verified Debug and Release builds via Visual Studio `MSBuild.exe`, plus service `--strategy-smoke`, `--host-smoke`, and `--storage-smoke`.
 
+## 2026-05-10T19:26:41Z
+Request:
+Перенеси солюшн PolyCopyTrader.Net48.sln на уровень вверх, рядом с PolyCopyTrader.sln
+
+Result:
+Moved `PolyCopyTrader.Net48.sln` from `src4.8` to the repository root next to `PolyCopyTrader.sln`, updated all solution project paths to point into `src4.8`, and updated `src4.8/README.md` build commands. Verified root solution restore/build with Visual Studio `MSBuild.exe` in Debug and Release, plus Release service `--host-smoke`, `--storage-smoke`, and `--strategy-smoke`.
+
 ## 2026-05-10T06:13:00.7835286Z
 Request:
 Разберись, какие фоновые задачи и сервиса уже не нужны для BTC стратегий и приостанови их. Удалять пока не надо.

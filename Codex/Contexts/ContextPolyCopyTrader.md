@@ -1,3 +1,14 @@
+## Active Update 2026-05-10 Net48 Solution Moved To Root
+Goal: Move `PolyCopyTrader.Net48.sln` from `src4.8` to the repository root next to `PolyCopyTrader.sln`.
+Status: Completed
+Done:
+- Moved `src4.8/PolyCopyTrader.Net48.sln` to root as `PolyCopyTrader.Net48.sln`.
+- Updated all project paths inside the Net48 solution to include the `src4.8\...` prefix.
+- Updated `src4.8/README.md` build commands to run from the repository root against `.\PolyCopyTrader.Net48.sln`.
+Next: Open/build `PolyCopyTrader.Net48.sln` from the repository root on the Windows Server 2008 R2 development machine.
+Notes: Verification passed: root `PolyCopyTrader.Net48.sln` `MSBuild.exe /t:Restore`, Debug build, Release build, Release `--host-smoke`, Release `--storage-smoke`, Release `--strategy-smoke`, and `git diff --check` on touched files with line-ending warnings only.
+Blockers: None.
+
 ## Active Update 2026-05-10 Net48 Classic Project Conversion
 Goal: Make `src4.8` a self-contained classic .NET Framework 4.8 solution that does not require the .NET SDK/global.json.
 Status: Completed

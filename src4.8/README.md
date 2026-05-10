@@ -26,7 +26,7 @@ Current scaffold:
 Build commands:
 
 ```powershell
-cd src4.8
+# From the repository root:
 & "C:\Path\To\MSBuild.exe" .\PolyCopyTrader.Net48.sln /t:Restore /p:Configuration=Release /p:Platform="Any CPU"
 & "C:\Path\To\MSBuild.exe" .\PolyCopyTrader.Net48.sln /p:Configuration=Release /p:Platform="Any CPU"
 ```
