@@ -1,3 +1,18 @@
+## Active Update 2026-05-10 PostgreSQL Cleanup
+Goal: Clean the largest PostgreSQL tables after stopping the service.
+Status: Completed / Service Stopped
+Done:
+- Verified no `PolyCopyTrader.Service` or `PolyCopyTrader.Net48.Service` process/Windows Service was running before cleanup.
+- Measured database size before cleanup: `polycopytrader` was about `19.848 GB`.
+- Truncated diagnostic/disabled research tables with no foreign-key dependencies: `polymarket_http_logs`, `polymarket_websocket_trade_ticks`, `polymarket_onchain_trade_captures`, `polymarket_data_api_positions`, `polymarket_data_api_wallet_category_ratings`, `polymarket_data_api_traders`, and `api_errors`.
+- Dropped old backup table `polymarket_gamma_markets_backup_20260504_063934_compact`.
+- Cleaned `polymarket_gamma_markets` only for old non-BTC rows older than one day; deleted `39,557` rows and kept BTC-like rows plus recent rows.
+- Ran `VACUUM FULL` and `ANALYZE` on `polymarket_gamma_markets`.
+- Measured database size after cleanup: about `0.827 GB`; `polymarket_gamma_markets` is now about `0.390 GB` with `73,359` estimated rows.
+Next: Restart the Net48 service when collection should resume. Paper strategy history tables were intentionally not cleaned.
+Notes: Temporary cleanup/probe projects under `artifacts` were removed after use. No production source code changed.
+Blockers: None.
+
 ## Active Update 2026-05-10 Net48 Dashboard Old MSBuild CommunityToolkit Fix
 Goal: Fix the Windows Server 2008 R2 / old MSBuild project-load error in `PolyCopyTrader.Net48.Dashboard.csproj` caused by `CommunityToolkit.Mvvm.Windows.targets` calling `[MSBuild]::IsTargetFrameworkCompatible(...)`.
 Status: Completed
