@@ -1,3 +1,15 @@
+## Active Update 2026-05-10 Net48 Dashboard Old MSBuild CommunityToolkit Fix
+Goal: Fix the Windows Server 2008 R2 / old MSBuild project-load error in `PolyCopyTrader.Net48.Dashboard.csproj` caused by `CommunityToolkit.Mvvm.Windows.targets` calling `[MSBuild]::IsTargetFrameworkCompatible(...)`.
+Status: Completed
+Done:
+- Kept `CommunityToolkit.Mvvm 8.4.2` for the Net48 Dashboard runtime/reference surface, but excluded its `build`, `buildTransitive`, and automatic `analyzers` assets.
+- Added explicit `MvvmToolkitEnableINotifyPropertyChangingSupport` and `CompilerVisibleProperty` wiring so generated MVVM code keeps the same property-changing behavior without importing the package targets that require newer MSBuild.
+- Added a Dashboard-only `SelectNet48DashboardAnalyzers` target before `CoreCompile` that clears NuGet-provided analyzer items and adds back exactly one compatible MVVM Toolkit source generator DLL from `roslyn4.12`.
+- This avoids both the old-MSBuild `IsTargetFrameworkCompatible` load error and the classic-project duplicate analyzer/source-generator imports that caused duplicate generated commands/properties.
+Next: Pull/build the root `PolyCopyTrader.Net48.sln` on the Windows Server 2008 R2 machine after NuGet restore; the Dashboard project should load without needing the .NET SDK.
+Notes: Verification passed with Visual Studio MSBuild for .NET Framework: root Net48 solution restore, Debug rebuild, Release rebuild, Release `--host-smoke`, Release `--storage-smoke`, Release `--strategy-smoke`, and `git diff --check` on the touched csproj with line-ending warnings only. Existing nullable warnings remain.
+Blockers: None.
+
 ## Active Update 2026-05-10 Net48 Solution Moved To Root
 Goal: Move `PolyCopyTrader.Net48.sln` from `src4.8` to the repository root next to `PolyCopyTrader.sln`.
 Status: Completed

@@ -8,6 +8,7 @@
     <RootNamespace>PolyCopyTrader.Dashboard</RootNamespace>
     <ProjectTypeGuids>{60DC8134-EBA5-43B8-BCC9-BB4BC16C2548};{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}</ProjectTypeGuids>
     <FileAlignment>512</FileAlignment>
+    <MvvmToolkitEnableINotifyPropertyChangingSupport Condition="'$(MvvmToolkitEnableINotifyPropertyChangingSupport)' == ''">true</MvvmToolkitEnableINotifyPropertyChangingSupport>
   </PropertyGroup>
 
   <ItemGroup>
@@ -25,13 +26,25 @@
   </ItemGroup>
 
   <ItemGroup>
-    <PackageReference Include="CommunityToolkit.Mvvm" Version="8.4.2" />
+    <PackageReference Include="CommunityToolkit.Mvvm" Version="8.4.2" ExcludeAssets="build;buildTransitive;analyzers" />
     <PackageReference Include="Microsoft.Extensions.Configuration" Version="6.0.0" />
     <PackageReference Include="Microsoft.Extensions.Configuration.Binder" Version="6.0.0" />
     <PackageReference Include="Microsoft.Extensions.Configuration.EnvironmentVariables" Version="6.0.1" />
     <PackageReference Include="Microsoft.Extensions.Configuration.Json" Version="6.0.0" />
     <PackageReference Include="System.Text.Json" Version="8.0.5" />
   </ItemGroup>
+
+  <ItemGroup>
+    <CompilerVisibleProperty Include="MvvmToolkitEnableINotifyPropertyChangingSupport" />
+  </ItemGroup>
+
+  <Target Name="SelectNet48DashboardAnalyzers" BeforeTargets="CoreCompile">
+    <ItemGroup>
+      <Analyzer Remove="@(Analyzer)" />
+      <Analyzer Include="$(NuGetPackageRoot)communitytoolkit.mvvm\8.4.2\analyzers\dotnet\roslyn4.12\cs\CommunityToolkit.Mvvm.SourceGenerators.dll"
+                Condition="Exists('$(NuGetPackageRoot)communitytoolkit.mvvm\8.4.2\analyzers\dotnet\roslyn4.12\cs\CommunityToolkit.Mvvm.SourceGenerators.dll')" />
+    </ItemGroup>
+  </Target>
 
   <ItemGroup>
     <None Include="App.config" />

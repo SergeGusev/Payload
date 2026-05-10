@@ -1,3 +1,10 @@
+## 2026-05-10T17:42:00Z
+Request:
+User reported that loading `src4.8\PolyCopyTrader.Net48.Dashboard\PolyCopyTrader.Net48.Dashboard.csproj` on the new server failed in `CommunityToolkit.Mvvm.Windows.targets` because old MSBuild does not have `[MSBuild]::IsTargetFrameworkCompatible(...)`.
+
+Result:
+Fixed the Net48 Dashboard project to avoid importing `CommunityToolkit.Mvvm 8.4.2` build/buildTransitive targets and automatic multi-version analyzers. The project now keeps the package runtime/reference assets, explicitly exposes `MvvmToolkitEnableINotifyPropertyChangingSupport`, and before `CoreCompile` clears package analyzers then adds back exactly one MVVM Toolkit source generator from `roslyn4.12`. This avoids both the old-MSBuild target-load failure and duplicate generated MVVM code in classic `.csproj` builds. Verification passed with root Net48 solution restore, Debug rebuild, Release rebuild, Release `--host-smoke`, Release `--storage-smoke`, Release `--strategy-smoke`, and `git diff --check` on the touched csproj with only line-ending warnings.
+
 ## 2026-05-10T17:06:30Z
 Request:
 User asked to check whether the Net48 service works normally and collects everything needed, then sent a Dashboard screenshot with an error.
