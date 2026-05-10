@@ -8,6 +8,7 @@ using PolyCopyTrader.Domain.Configuration;
 using PolyCopyTrader.Service.Configuration;
 using PolyCopyTrader.Storage;
 using PolyCopyTrader.Strategy;
+using Serilog;
 
 namespace PolyCopyTrader.Service
 {
@@ -21,6 +22,16 @@ namespace PolyCopyTrader.Service
             if (args.Length > 0 && string.Equals(args[0], "--console", StringComparison.OrdinalIgnoreCase))
             {
                 return RunConsole();
+            }
+
+            if (args.Length > 0 && string.Equals(args[0], "--run", StringComparison.OrdinalIgnoreCase))
+            {
+                return RunHost(args);
+            }
+
+            if (args.Length > 0 && string.Equals(args[0], "--host-smoke", StringComparison.OrdinalIgnoreCase))
+            {
+                return RunHostSmoke(args);
             }
 
             if (args.Length > 0 && string.Equals(args[0], "--strategy-smoke", StringComparison.OrdinalIgnoreCase))
@@ -64,7 +75,7 @@ namespace PolyCopyTrader.Service
                 return RunConsole();
             }
 
-            ServiceBase.Run(new PolyCopyTraderNet48Service());
+            ServiceBase.Run(new PolyCopyTraderNet48Service(args));
             return 0;
         }
 
@@ -81,7 +92,60 @@ namespace PolyCopyTrader.Service
             Console.WriteLine("  PolyCopyTrader.Net48.Service.exe --print-config");
             Console.WriteLine("  PolyCopyTrader.Net48.Service.exe --storage-smoke");
             Console.WriteLine("  PolyCopyTrader.Net48.Service.exe --strategy-smoke");
+            Console.WriteLine("  PolyCopyTrader.Net48.Service.exe --host-smoke");
+            Console.WriteLine("  PolyCopyTrader.Net48.Service.exe --run");
             return 0;
+        }
+
+        private static int RunHostSmoke(string[] args)
+        {
+            try
+            {
+                using (var host = Net48ServiceHostFactory.Build(args))
+                {
+                    var hostedServices = host.Services.GetServices<IHostedService>().ToArray();
+                    host.Services.GetRequiredService<IStorageSchemaInitializer>();
+                    host.Services.GetRequiredService<IAppRepository>();
+                    Console.WriteLine("Host smoke passed.");
+                    Console.WriteLine("Hosted services: " + hostedServices.Length);
+                }
+
+                return 0;
+            }
+            catch (Exception ex)
+            {
+                Console.Error.WriteLine(ex);
+                Log.CloseAndFlush();
+                return 1;
+            }
+            finally
+            {
+                Log.CloseAndFlush();
+            }
+        }
+
+        private static int RunHost(string[] args)
+        {
+            try
+            {
+                using (var host = Net48ServiceHostFactory.Build(args))
+                {
+                    host.Services.GetRequiredService<IStorageSchemaInitializer>().InitializeAsync().GetAwaiter().GetResult();
+                    host.Run();
+                }
+
+                return 0;
+            }
+            catch (Exception ex)
+            {
+                Console.Error.WriteLine(ex);
+                Log.CloseAndFlush();
+                return 1;
+            }
+            finally
+            {
+                Log.CloseAndFlush();
+            }
         }
 
         private static int RunPrintConfig()
@@ -212,13 +276,7 @@ namespace PolyCopyTrader.Service
 
         private static AppConfiguration LoadAppConfiguration()
         {
-            var baseDirectory = AppContext.BaseDirectory;
-            var builder = new ConfigurationBuilder()
-                .SetBasePath(baseDirectory)
-                .AddJsonFile("appsettings.json", optional: true, reloadOnChange: false);
-
-            builder.AddEnvironmentVariables("POLYCOPYTRADER_");
-            return AppConfigurationLoader.Load(builder.Build());
+            return Net48ServiceHostFactory.LoadAppConfiguration();
         }
 
         private static int RunSc(string arguments)

@@ -1,3 +1,16 @@
+## Active Update 2026-05-10 Net48 Service Runtime Port
+Goal: Continue the `.NET Framework 4.8` migration by wiring the real Paper/ReadOnly service runtime instead of leaving only smoke commands.
+Status: Completed
+Done:
+- Copied safe service workers/processors into `src4.8/PolyCopyTrader.Net48.Service`: analytics, IPC control, trader/data ingestion, external price streams, Gamma ingestion, market data, paper accounting/settlement, scanner/signals, BTC/crypto strategy workers, and trader discovery.
+- Added a Net48 Generic Host factory with Serilog file logging, PostgreSQL storage/schema initialization, Polymarket read-only HTTP clients, disabled auth/trading clients, disabled live/on-chain processors, and 20 hosted services.
+- Updated `PolyCopyTraderNet48Service` so installed Windows Service mode starts/stops the Generic Host; interactive `--run` runs the same host, while direct launch still prints safe command help.
+- Added `--host-smoke` to materialize hosted services and verify DI without starting long-running loops.
+- Added Net48 compatibility shims/edits for Framework-missing APIs such as generated regexes, `Lock`, `IReadOnlySet`, default interface methods, range/index operators, `DateTimeOffset.UnixEpoch`, `CancelAsync`, `Chunk`, `TakeLast`, `HttpContent` cancellation overloads, and WebSocket certificate callback limitations.
+Next: Validate on an actual Windows Server 2008 R2 SP1 machine with .NET Framework 4.8 installed; if it runs there, decide whether to port any remaining disabled slices. Live order placement remains deliberately disabled in Net48.
+Notes: Verification passed: Debug and Release `dotnet build src4.8/PolyCopyTrader.Net48.sln`; Release `--host-smoke` reported 20 hosted services; Release `--strategy-smoke`, `--print-config`, and `--storage-smoke` passed; main `dotnet test tests/PolyCopyTrader.Tests/PolyCopyTrader.Tests.csproj --configuration Release` passed `418/418`. Net48 builds still emit nullable warnings but no errors.
+Blockers: None.
+
 ## Active Update 2026-05-10 Net48 Storage Polymarket Dashboard Port
 Goal: Continue the `.NET Framework 4.8` migration by moving the remaining safe Paper/ReadOnly slices into `src4.8`.
 Status: Completed

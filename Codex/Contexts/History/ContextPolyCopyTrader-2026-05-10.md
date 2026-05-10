@@ -228,6 +228,13 @@ Request:
 
 Result:
 Started the actual `.NET Framework 4.8` port by moving the Paper-only domain/strategy core into `src4.8`. Added Net48-compatible Domain models/options required by the strategy engines, copied the Strategy source files into the Net48 workspace, added compatibility shims/global usings for records/init, replaced `ArgumentNullException.ThrowIfNull` only in the Net48 strategy copies, and added a service `--strategy-smoke` command that executes signal evaluation, risk check, paper order creation, and simulated fill. Verification passed for Debug/Release Net48 builds, Debug/Release `--strategy-smoke`, `--console`, and the main test suite rerun with `418/418` passing. An earlier test attempt with custom `BaseOutputPath` failed because existing storage tests locate source files relative to the standard output layout; rerun without that override passed.
+## 2026-05-10T14:59:00Z
+Request:
+Continue the `.NET Framework 4.8` migration after the first safe port commit and keep going until user input is needed.
+
+Result:
+Ported the real Net48 service runtime layer for Paper/ReadOnly operation. Copied and adapted safe workers/processors for analytics, dashboard IPC, data ingestion, external price streams, Gamma ingestion, market data, paper accounting/settlement, scanning/signals, BTC/crypto strategy workers, and trader discovery. Added a Generic Host factory with Serilog file logging, PostgreSQL storage/schema initialization, read-only Polymarket clients, disabled auth/trading client stubs, disabled live/on-chain processor stubs, and 20 hosted services. Windows Service mode now starts/stops the Generic Host; interactive `--run` runs the same host, while direct launch still prints safe command help. Added `--host-smoke` for DI verification without starting long-running loops. Verification passed: Debug/Release Net48 solution builds, Release `--host-smoke` with 20 hosted services, Release `--strategy-smoke`, `--print-config`, `--storage-smoke`, and the main test suite `418/418`. Net48 builds still emit nullable warnings but no errors. Live order placement remains deliberately disabled in Net48.
+
 ## 2026-05-10T14:33:00Z
 Request:
 Continue the `.NET Framework 4.8` migration and port everything at once, interrupting only if user involvement is required.
