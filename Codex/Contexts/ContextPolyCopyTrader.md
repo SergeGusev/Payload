@@ -1,3 +1,14 @@
+## Active Update 2026-05-11 Old Database Intent Confirmed
+Goal: Record that ongoing statistics collection should continue against the old/local PostgreSQL database.
+Status: Completed
+Done:
+- User confirmed that working in the old database is intentional.
+- Verified `PolyCopyTrader.Net48.Service` is still running as PID `26224`.
+- Verified IPC `/status` is `Running`, scanning/paper trading are unpaused, kill switch is inactive, `lastError` is null, and current loop is `BTC5mStrategy observing markets`.
+Next: Continue collecting Paper statistics in the old/local database unless the user explicitly asks to switch to `192.168.0.101`.
+Notes: `git pull --ff-only` reported already up to date. No production code changed.
+Blockers: None.
+
 ## Active Update 2026-05-10 Net48 Service Order Creation Check
 Goal: Verify whether the restarted Net48 service is creating new paper orders.
 Status: Completed
