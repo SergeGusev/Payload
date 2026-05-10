@@ -19,6 +19,21 @@ Current scaffold:
 - `PolyCopyTrader.Net48.Service`
 - `PolyCopyTrader.Net48.Dashboard`
 
+Service commands:
+
+```powershell
+.\PolyCopyTrader.Net48.Service.exe --console
+.\PolyCopyTrader.Net48.Service.exe --install
+.\PolyCopyTrader.Net48.Service.exe --start
+.\PolyCopyTrader.Net48.Service.exe --stop
+.\PolyCopyTrader.Net48.Service.exe --uninstall
+```
+
+Run `--install`, `--start`, `--stop`, and `--uninstall` from an elevated
+administrator console. Direct interactive launch without arguments prints the
+same scaffold/help text as `--console`; the process only enters Windows Service
+mode when started by the Service Control Manager.
+
 Porting constraints:
 
 - Do not share source files blindly from the modern `net10.0` implementation until package and language compatibility are checked.

@@ -1,3 +1,16 @@
+## Active Update 2026-05-10 Net48 Service Startup Fix
+Goal: Fix the `.NET Framework 4.8` scaffold service startup behavior reported from the screenshot.
+Status: Completed
+Done:
+- Clipboard did not contain an image, so the exact screenshot text could not be inspected.
+- Diagnosed the likely scaffold issue: direct interactive launch of `PolyCopyTrader.Net48.Service.exe` entered `ServiceBase.Run(...)`, which causes the standard .NET Framework service error unless launched by the Service Control Manager.
+- Updated `src4.8/PolyCopyTrader.Net48.Service/Program.cs` so direct interactive launch behaves like `--console` and prints service commands instead of entering service mode.
+- Added `--install`, `--uninstall`, `--start`, and `--stop` helpers backed by `sc.exe`.
+- Updated `src4.8/README.md` with the service commands and administrator-console note.
+Next: If Windows Server 2008 R2 still shows a different error, inspect the exact screenshot/text and Event Viewer entry.
+Notes: Verification passed: Debug and Release builds of `src4.8/PolyCopyTrader.Net48.sln`; direct service executable launch; `--console` launch. A stale scaffold process locking the Debug exe was stopped before rebuilding. `git diff --check` reported only LF/CRLF warnings.
+Blockers: None.
+
 ## Active Update 2026-05-10 Net48 Scaffold
 Goal: Create an isolated `.NET Framework 4.8` solution workspace under `src4.8`.
 Status: Completed

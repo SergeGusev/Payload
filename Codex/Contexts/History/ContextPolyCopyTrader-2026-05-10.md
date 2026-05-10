@@ -207,3 +207,10 @@ Request:
 
 Result:
 Created an isolated `.NET Framework 4.8` workspace under `src4.8` with a classic `PolyCopyTrader.Net48.sln` solution. Added buildable SDK-style `net48` project scaffolds for Domain, Strategy, Polymarket, Storage, Service, and Dashboard, plus shared `Directory.Build.props` and a porting README. Service and Dashboard are placeholders only and contain no trading logic yet. Verified the scaffold with Debug and Release builds and ran the service console smoke command successfully. No changes were made to the existing `src` projects or main `PolyCopyTrader.sln`.
+
+## 2026-05-10T13:49:40.4626959Z
+Request:
+Посмотри картинку. Вот такую ошибку я получаю, когда пытаюсь стартовать сервис PolyCopyTrader.Net48.Service
+
+Result:
+The clipboard did not contain an image, so the exact screenshot text could not be inspected. Diagnosed and fixed the likely `.NET Framework` scaffold issue where direct interactive launch entered `ServiceBase.Run(...)` and produced the standard Windows Service startup error. Updated the Net48 service so direct launch behaves like `--console`, added `--install`, `--uninstall`, `--start`, and `--stop` helpers backed by `sc.exe`, and documented the commands in `src4.8/README.md`. Verification passed: Debug and Release builds, direct executable launch, and `--console` launch. A stale scaffold process locking the Debug exe was stopped before rebuilding.
