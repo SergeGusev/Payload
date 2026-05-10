@@ -1,3 +1,18 @@
+## Active Update 2026-05-10 PostgreSQL 9.6 Target Database Prep
+Goal: Prepare the new Windows Server 2008 R2 PostgreSQL target at `192.168.0.101` for the same application connection string after standard backup/restore was not viable across PostgreSQL versions.
+Status: Completed
+Done:
+- Connected to current source `polycopytrader` on PostgreSQL `17.5` and target server `192.168.0.101` on PostgreSQL `9.6.24`.
+- Found that target database `polycopytrader` did not exist, but target service database `postgres` already contained the full app schema and copied row counts matching source after cleanup.
+- Verified target `postgres` selected counts matched source for key tables: `strategies=110`, `polymarket_gamma_markets=73359`, `btc_up_down_5m_odds_ticks=30776`, `crypto_up_down_5m_odds_ticks=33911`, `paper_orders=17689`, `paper_fills=5030`, `paper_positions=4915`, `paper_position_settlements=4878`, `strategy_market_paper_runs=28456`, `signals=17689`, plus service/status/settings rows.
+- Terminated one idle pgAdmin connection to target `postgres` that blocked database cloning.
+- Created target database `polycopytrader` on `192.168.0.101` using `postgres` as the template so the original connection string can work with only host changed.
+- Verified target `polycopytrader` has the same 70 public tables and matching selected counts.
+- Verified Net48 service storage path against the target by temporarily replacing only `Host` with `192.168.0.101`; `--storage-smoke` passed.
+Next: On the new server, set `POLYCOPYTRADER_POSTGRES_CONNECTION` to the same connection string with `Host=192.168.0.101` and `Database=polycopytrader`, then start the Net48 service/Dashboard.
+Notes: Temporary diagnostic projects under `artifacts` were removed after use. No production source code changed.
+Blockers: None.
+
 ## Active Update 2026-05-10 PostgreSQL Cleanup
 Goal: Clean the largest PostgreSQL tables after stopping the service.
 Status: Completed / Service Stopped

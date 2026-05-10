@@ -1,3 +1,10 @@
+## 2026-05-10T18:20:00Z
+Request:
+User is moving to a new Windows Server 2008 R2 machine and asked whether Codex could copy the needed PostgreSQL tables to the older PostgreSQL 9 target at `192.168.0.101`, using the same access parameters except host.
+
+Result:
+Inspected source and target without printing secrets. Source is PostgreSQL `17.5` database `polycopytrader`; target is PostgreSQL `9.6.24`. The target database `polycopytrader` did not exist, but target database `postgres` already had the full 70-table application schema and matching selected row counts after cleanup. Terminated one idle pgAdmin connection to target `postgres` that blocked cloning, created target database `polycopytrader` using `postgres` as template, then verified target `polycopytrader` has the same 70 public tables and matching selected counts for key tables (`strategies`, Gamma markets, BTC/crypto odds ticks, Paper orders/fills/positions/settlements/runs, signals, settings/status). Verified the Net48 storage path by temporarily changing only `Host=192.168.0.101` in the current process environment and running `PolyCopyTrader.Net48.Service.exe --storage-smoke`; it passed. Temporary diagnostic projects under `artifacts` were removed.
+
 ## 2026-05-10T18:00:00Z
 Request:
 User accepted the PostgreSQL cleanup plan and asked to execute it.
