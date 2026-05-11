@@ -1,3 +1,16 @@
+## Active Update 2026-05-11 Live Candidate Review
+Goal: Check whether current Paper BTC strategy statistics have produced candidates for Live testing.
+Status: Completed
+Done:
+- Verified the old/local PostgreSQL `17.5` database is still active: latest `paper_orders` at `2026-05-11 05:08:31 UTC`, `226` paper orders in the last 15 minutes, `639` updated strategy runs in the last 15 minutes, and `154` BTC odds ticks in the last 15 minutes.
+- Ranked enabled strategies by settled Paper results across all history and recent windows.
+- Current strongest Paper candidates are `BTC Up or Down 5m More 150 Below 65` (`89` settled, `+77.8822` PnL, `28.43%` ROI, PF `1.90`, positive 6h), `BTC Up or Down 5m More 90 Below 55` (`96` settled, `+70.7499`, `22.07%` ROI, PF `1.568`, positive 6h), and `BTC Up or Down 5m More 120 Below 70` (`99` settled, `+73.2412`, `24.33%` ROI, PF `1.761`, but weak 6h at `+0.8602` / `1.39%` ROI).
+- Very strong but still thin sample: `BTC Up or Down 5m More 270 Below 60/65` with `43/44` settled and high ROI; needs more data before Live.
+- Negative/not candidates now: `BTC Up or Down 5m Binance` is down to `139` settled, `-2.1697` all-time PnL and `-30.0135` over 24h; base `More 60` is negative all-time.
+Next: Keep collecting Paper data; first Live-shadow candidate, if user wants controlled testing, should be `BTC Up or Down 5m More 150 Below 65`, with `More 90 Below 55` as second watchlist item.
+Notes: All top candidates currently have `live_stakes=false`; no Live order placement was enabled. Temporary read-only DB probe was removed. Verification was read-only SQL diagnostics plus IPC/service freshness checks.
+Blockers: None.
+
 ## Active Update 2026-05-11 Old Database Intent Confirmed
 Goal: Record that ongoing statistics collection should continue against the old/local PostgreSQL database.
 Status: Completed
