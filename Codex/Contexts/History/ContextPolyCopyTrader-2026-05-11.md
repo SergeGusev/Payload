@@ -281,3 +281,9 @@ Press any key to close this window . . .
 
 Result:
 Changed the Net48 service entry point so interactive no-argument launches from Visual Studio or a console start the long-running host instead of printing help and exiting. Kept `--console` as the explicit help command, added an unknown-command error path, verified Release/Debug service builds, `--console`, `--host-smoke`, and the full test suite (`423/423`).
+## 2026-05-11T15:18:43.1901019+00:00
+Request:
+Запустились на новом сервере. Проверь, пожалуйста, статус работы. Имей в виду, база уже на 192.168.0.101
+
+Result:
+Checked `192.168.0.101/polycopytrader` directly. The Net48 service is alive in Paper mode and heartbeat updates (`15:16:46 UTC` then `15:17:46 UTC`), and new Paper orders are being written. However, market data is not healthy on Windows Server 2008 R2: Binance and Polymarket WebSocket clients fail with `The WebSocket protocol is not supported on this platform`, BTC odds ticks and lag diagnostics have no recent rows, Gamma is stale, and Polymarket CLOB/Gamma/Data API requests are producing many HTTPS/timeouts/errors. No production code changed.

@@ -1,3 +1,18 @@
+## Active Update 2026-05-11 New Server Runtime Health Check
+Goal: Check whether the Net48 service is running against the new PostgreSQL database on `192.168.0.101`.
+Status: Completed
+Done:
+- Queried `192.168.0.101/polycopytrader` using the current connection settings as a credential template without printing secrets.
+- Confirmed PostgreSQL target is `polycopytrader` on PostgreSQL `9.6.24`.
+- Confirmed `PolyCopyTrader.Service` heartbeat is `Running`, `Paper`, and updating: `2026-05-11 15:16:46 UTC` then `2026-05-11 15:17:46 UTC`.
+- Confirmed Paper orders are being created on the new database: `17` paper orders in the latest 15-minute window during the check.
+- Found critical runtime degradation on the new server: `btc_up_down_5m_odds_ticks` and `btc_order_book_lag_diagnostic_events` had `0` rows in the latest 15-minute window, Gamma freshness was stale since `2026-05-11 13:32:54 UTC`, and API errors were being produced heavily.
+- Found the main platform issue: Binance and Polymarket market WebSocket clients fail on Windows Server 2008 R2 with `The WebSocket protocol is not supported on this platform`.
+- Found broader outbound HTTP failures/timeouts to Polymarket CLOB/Gamma/Data API: recent errors include `GetOrderBook`, `GetActiveMarkets`, and `GetUserCurrentPositions`.
+Next: Fix Windows Server 2008 R2 runtime networking: replace/abstract `ClientWebSocket` for Net48 or add REST fallback, and diagnose TLS/outbound HTTPS failures for Polymarket endpoints before trusting collected Paper stats.
+Notes: No production code changed. A temporary C# status probe was created under `%TEMP%`, run, and removed. Git state before context update had only `artifacts/polymarket-sdk-src/` untracked.
+Blockers: Windows Server 2008 R2 does not support .NET Framework `ClientWebSocket`; current Net48 WebSocket implementation cannot work there as-is.
+
 ## Active Update 2026-05-11 Net48 Interactive No-Args Runs Host
 Goal: Make the Net48 service keep running when launched from Visual Studio or a console without command-line arguments.
 Status: Completed
