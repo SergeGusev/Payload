@@ -1,3 +1,15 @@
+## Active Update 2026-05-11 Dashboard Strategy Category Filters
+Goal: Add strategy category filters to each Strategies dashboard tab.
+Status: Completed
+Done:
+- Added independent category filters above the Strategies All, 24 hours, 6 hours, and 1 hour tabs in both the main and Net48 WPF dashboards.
+- Dashboard now keeps unfiltered strategy snapshots internally and applies per-tab category filters without changing the underlying snapshot data.
+- Categories are derived from strategy names: BTC Up or Down 5m Binance, More, More Gamma, Less, Less Gamma, Middle, Middle Revert, Skip, Skip Revert, Up, Down, and Other.
+- Summary strategy count now uses the unfiltered strategy count so the header does not change when a UI filter is selected.
+Next: Use the new per-tab category dropdowns in Dashboard to inspect strategy groups by time window.
+Notes: Verification passed: `dotnet build src\PolyCopyTrader.Dashboard\PolyCopyTrader.Dashboard.csproj -c Debug`, `dotnet test tests\PolyCopyTrader.Tests\PolyCopyTrader.Tests.csproj --no-restore` (`423/423` passed), and `git diff --check`. Net48 `dotnet build` is still not a valid local verification path in this shell because MSBuild/nuget tooling for old-style Net48 PackageReference projects is unavailable here; it fails before these Dashboard changes on unresolved packages such as System.Text.Json, Nethereum, and Npgsql.
+Blockers: None for the main Dashboard. Net48 rebuild should be done with Visual Studio/Build Tools MSBuild on the target machine.
+
 ## Active Update 2026-05-11 Conservative Paper GTD Fill Model
 Goal: Implement a more realistic pure Paper fill model for BTC GTD limit orders without relying on Live fills.
 Status: Completed

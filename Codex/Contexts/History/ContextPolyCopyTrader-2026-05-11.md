@@ -140,3 +140,10 @@ Request:
 
 Result:
 Implemented a conservative pure Paper GTD fill model for BTC strategies in main and Net48 code paths. BTC GTD Paper fills now require either immediate submit-snapshot executable ask evidence or later trade-through evidence, and late ask-only snapshots no longer create fills. Added configuration, raw decision diagnostics, and focused tests. Root test suite passed; Net48 restore passed, but Net48 build/restart could not be completed in this shell because only old .NET Framework MSBuild is installed and dotnet build does not resolve PackageReference assemblies for these old-style Net48 projects here.
+
+## 2026-05-11T09:59:07.2399915Z
+Request:
+Add grouping/filtering of Dashboard strategies by categories such as BTC Up or Down 5m Binance, More, More Gamma, etc. Put the filter at the top of each Strategies inner tab: All, 24 hours, 6 hours, and 1 hour.
+
+Result:
+Added per-tab strategy category ComboBox filters to the main and Net48 WPF dashboards. Categories are inferred from strategy names and applied independently for All, 24h, 6h, and 1h tables. Kept snapshot data unfiltered internally and kept the summary strategy count based on the full set. Verification passed for the main Dashboard build, root tests, and diff check; Net48 dotnet build remains blocked by local old-style PackageReference tooling, unrelated to this UI change.

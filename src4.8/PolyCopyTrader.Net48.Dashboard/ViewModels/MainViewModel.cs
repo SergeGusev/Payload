@@ -11,6 +11,8 @@ namespace PolyCopyTrader.Dashboard.ViewModels;
 public sealed partial class MainViewModel : ObservableObject, IDisposable
 {
     private const int MaxDashboardErrors = 500;
+    private const string AllStrategyCategories = "All categories";
+    private const string BtcUpDown5mPrefix = "BTC Up or Down 5m ";
 
     private readonly DashboardRuntime runtime;
     private readonly DashboardDataService dataService;
@@ -18,6 +20,8 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
     private readonly DashboardCsvExporter csvExporter;
     private readonly DispatcherTimer refreshTimer;
     private readonly EventHandler refreshTickHandler;
+    private IReadOnlyList<StrategyPerformanceRow> allStrategies = [];
+    private IReadOnlyList<StrategyRecentPerformanceRow> allStrategyRecentPerformance = [];
     private bool disposed;
 
     public MainViewModel()
@@ -88,6 +92,18 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
     [ObservableProperty]
     private DashboardErrorRow? selectedDashboardError;
 
+    [ObservableProperty]
+    private string selectedStrategyCategory = AllStrategyCategories;
+
+    [ObservableProperty]
+    private string selectedStrategy24HoursCategory = AllStrategyCategories;
+
+    [ObservableProperty]
+    private string selectedStrategy6HoursCategory = AllStrategyCategories;
+
+    [ObservableProperty]
+    private string selectedStrategy1HourCategory = AllStrategyCategories;
+
     public ObservableCollection<OverviewMetric> Overview { get; } = [];
 
     public ObservableCollection<WatchlistRow> Watchlist { get; } = [];
@@ -117,6 +133,8 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
     public ObservableCollection<StrategyPerformanceRow> Strategies { get; } = [];
 
     public ObservableCollection<StrategyRecentPerformanceRow> StrategyRecentPerformance { get; } = [];
+
+    public ObservableCollection<string> StrategyCategoryOptions { get; } = [AllStrategyCategories];
 
     public ObservableCollection<StrategyRecentPerformanceRow> StrategyRecent24Hours { get; } = [];
 
@@ -155,6 +173,26 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
     public ObservableCollection<LogRow> Logs { get; } = [];
 
     public ObservableCollection<DashboardErrorRow> DashboardErrors { get; } = [];
+
+    partial void OnSelectedStrategyCategoryChanged(string value)
+    {
+        ApplyStrategyFilters();
+    }
+
+    partial void OnSelectedStrategy24HoursCategoryChanged(string value)
+    {
+        ApplyStrategyFilters();
+    }
+
+    partial void OnSelectedStrategy6HoursCategoryChanged(string value)
+    {
+        ApplyStrategyFilters();
+    }
+
+    partial void OnSelectedStrategy1HourCategoryChanged(string value)
+    {
+        ApplyStrategyFilters();
+    }
 
     public async Task StartAsync()
     {
@@ -672,17 +710,10 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         Replace(Signals, snapshot.Signals);
         Replace(PaperOrders, snapshot.PaperOrders);
         Replace(PaperPositions, snapshot.PaperPositions);
-        Replace(Strategies, snapshot.Strategies);
-        Replace(StrategyRecentPerformance, snapshot.StrategyRecentPerformance);
-        Replace(StrategyRecent24Hours, snapshot.StrategyRecentPerformance
-            .Where(item => string.Equals(item.Window, "24h", StringComparison.OrdinalIgnoreCase))
-            .ToArray());
-        Replace(StrategyRecent6Hours, snapshot.StrategyRecentPerformance
-            .Where(item => string.Equals(item.Window, "6h", StringComparison.OrdinalIgnoreCase))
-            .ToArray());
-        Replace(StrategyRecent1Hour, snapshot.StrategyRecentPerformance
-            .Where(item => string.Equals(item.Window, "1h", StringComparison.OrdinalIgnoreCase))
-            .ToArray());
+        allStrategies = snapshot.Strategies;
+        allStrategyRecentPerformance = snapshot.StrategyRecentPerformance;
+        RefreshStrategyCategoryOptions();
+        ApplyStrategyFilters();
         Replace(PaperCopiedTraderPerformance, snapshot.PaperCopiedTraderPerformance);
         Replace(DryRunOrders, snapshot.DryRunOrders);
         Replace(LiveOrders, snapshot.LiveOrders);
@@ -703,7 +734,146 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         ServiceStatus = Overview.FirstOrDefault(item => item.Name == "Service status")?.Value ?? "No heartbeat";
         var webSocketStatus = Overview.FirstOrDefault(item => item.Name == "WebSocket status")?.Value ?? "No market data status";
         var liveBlocked = LiveReadiness.Count(item => item.Status is "Blocked" or "Error");
-        Summary = $"{ServiceStatus}; WS={webSocketStatus}; {StorageStatus}; live blockers={liveBlocked}; {TraderDiscovery.Count} discovery candidates; {OnChainParticipantDetails.Count} on-chain participants; {OnChainTradeDetails.Count} on-chain trades; {OnChainLeaders.Count} on-chain leaders; {OnChainPositions.Count} on-chain positions; {Signals.Count} signals; {Strategies.Count} strategies; {PaperOrders.Count} paper orders; {PaperCopiedTraderPerformance.Count} copied ratings; {DryRunOrders.Count} dry-run orders; {LiveOrders.Count} live orders; {PaperPositions.Count} positions.";
+        Summary = $"{ServiceStatus}; WS={webSocketStatus}; {StorageStatus}; live blockers={liveBlocked}; {TraderDiscovery.Count} discovery candidates; {OnChainParticipantDetails.Count} on-chain participants; {OnChainTradeDetails.Count} on-chain trades; {OnChainLeaders.Count} on-chain leaders; {OnChainPositions.Count} on-chain positions; {Signals.Count} signals; {allStrategies.Count} strategies; {PaperOrders.Count} paper orders; {PaperCopiedTraderPerformance.Count} copied ratings; {DryRunOrders.Count} dry-run orders; {LiveOrders.Count} live orders; {PaperPositions.Count} positions.";
+    }
+
+    private void RefreshStrategyCategoryOptions()
+    {
+        var selected = new[]
+        {
+            SelectedStrategyCategory,
+            SelectedStrategy24HoursCategory,
+            SelectedStrategy6HoursCategory,
+            SelectedStrategy1HourCategory
+        };
+        var categories = allStrategies
+            .Select(item => item.Name)
+            .Concat(allStrategyRecentPerformance.Select(item => item.Name))
+            .Select(GetStrategyCategory)
+            .Where(item => !string.IsNullOrWhiteSpace(item))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .OrderBy(item => item, StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+
+        Replace(StrategyCategoryOptions, new[] { AllStrategyCategories }.Concat(categories).ToArray());
+        SelectedStrategyCategory = NormalizeSelectedStrategyCategory(selected[0]);
+        SelectedStrategy24HoursCategory = NormalizeSelectedStrategyCategory(selected[1]);
+        SelectedStrategy6HoursCategory = NormalizeSelectedStrategyCategory(selected[2]);
+        SelectedStrategy1HourCategory = NormalizeSelectedStrategyCategory(selected[3]);
+    }
+
+    private void ApplyStrategyFilters()
+    {
+        Replace(
+            Strategies,
+            allStrategies
+                .Where(item => IsStrategyCategoryVisible(item.Name, SelectedStrategyCategory))
+                .ToArray());
+        Replace(
+            StrategyRecentPerformance,
+            allStrategyRecentPerformance
+                .Where(item => IsStrategyCategoryVisible(item.Name, SelectedStrategyCategory))
+                .ToArray());
+        Replace(
+            StrategyRecent24Hours,
+            allStrategyRecentPerformance
+                .Where(item => string.Equals(item.Window, "24h", StringComparison.OrdinalIgnoreCase))
+                .Where(item => IsStrategyCategoryVisible(item.Name, SelectedStrategy24HoursCategory))
+                .ToArray());
+        Replace(
+            StrategyRecent6Hours,
+            allStrategyRecentPerformance
+                .Where(item => string.Equals(item.Window, "6h", StringComparison.OrdinalIgnoreCase))
+                .Where(item => IsStrategyCategoryVisible(item.Name, SelectedStrategy6HoursCategory))
+                .ToArray());
+        Replace(
+            StrategyRecent1Hour,
+            allStrategyRecentPerformance
+                .Where(item => string.Equals(item.Window, "1h", StringComparison.OrdinalIgnoreCase))
+                .Where(item => IsStrategyCategoryVisible(item.Name, SelectedStrategy1HourCategory))
+                .ToArray());
+    }
+
+    private string NormalizeSelectedStrategyCategory(string selected)
+    {
+        return StrategyCategoryOptions.Contains(selected, StringComparer.OrdinalIgnoreCase)
+            ? selected
+            : AllStrategyCategories;
+    }
+
+    private static bool IsStrategyCategoryVisible(string strategyName, string selectedCategory)
+    {
+        return string.IsNullOrWhiteSpace(selectedCategory) ||
+            string.Equals(selectedCategory, AllStrategyCategories, StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(GetStrategyCategory(strategyName), selectedCategory, StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static string GetStrategyCategory(string strategyName)
+    {
+        var name = strategyName.Trim();
+        if (!name.StartsWith(BtcUpDown5mPrefix, StringComparison.OrdinalIgnoreCase))
+        {
+            return "Other";
+        }
+
+        var suffix = name.Substring(BtcUpDown5mPrefix.Length).Trim();
+        if (StartsWithStrategyWord(suffix, "More"))
+        {
+            return ContainsStrategyWord(suffix, "Gamma")
+                ? BtcUpDown5mPrefix + "More Gamma"
+                : BtcUpDown5mPrefix + "More";
+        }
+
+        if (StartsWithStrategyWord(suffix, "Less"))
+        {
+            return ContainsStrategyWord(suffix, "Gamma")
+                ? BtcUpDown5mPrefix + "Less Gamma"
+                : BtcUpDown5mPrefix + "Less";
+        }
+
+        if (StartsWithStrategyWord(suffix, "Binance"))
+        {
+            return BtcUpDown5mPrefix + "Binance";
+        }
+
+        if (StartsWithStrategyWord(suffix, "Middle"))
+        {
+            return ContainsStrategyWord(suffix, "Revert")
+                ? BtcUpDown5mPrefix + "Middle Revert"
+                : BtcUpDown5mPrefix + "Middle";
+        }
+
+        if (StartsWithStrategyWord(suffix, "Skip"))
+        {
+            return ContainsStrategyWord(suffix, "Revert")
+                ? BtcUpDown5mPrefix + "Skip Revert"
+                : BtcUpDown5mPrefix + "Skip";
+        }
+
+        if (StartsWithStrategyWord(suffix, "Up"))
+        {
+            return BtcUpDown5mPrefix + "Up";
+        }
+
+        if (StartsWithStrategyWord(suffix, "Down"))
+        {
+            return BtcUpDown5mPrefix + "Down";
+        }
+
+        return BtcUpDown5mPrefix + "Other";
+    }
+
+    private static bool StartsWithStrategyWord(string value, string word)
+    {
+        return value.Equals(word, StringComparison.OrdinalIgnoreCase) ||
+            value.StartsWith(word + " ", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static bool ContainsStrategyWord(string value, string word)
+    {
+        return value
+            .Split(new[] { ' ' }, StringSplitOptions.RemoveEmptyEntries)
+            .Any(item => string.Equals(item, word, StringComparison.OrdinalIgnoreCase));
     }
 
     private async Task<(ControlStatusResponse? Status, string? Error)> TryGetControlStatusAsync()

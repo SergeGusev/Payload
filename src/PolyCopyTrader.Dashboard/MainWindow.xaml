@@ -232,8 +232,21 @@
             <TabItem Header="Strategies">
                 <TabControl>
                     <TabItem Header="All">
-                        <DataGrid ItemsSource="{Binding Strategies}"
-                                  behaviors:DataGridSelectionPersistence.KeyProperties="StrategyId">
+                        <DockPanel>
+                            <StackPanel DockPanel.Dock="Top"
+                                        Orientation="Horizontal"
+                                        Margin="0,0,0,8">
+                                <TextBlock Text="Category"
+                                           VerticalAlignment="Center"
+                                           Foreground="#6B7280" />
+                                <ComboBox Width="300"
+                                          Height="30"
+                                          Margin="8,0,0,0"
+                                          ItemsSource="{Binding StrategyCategoryOptions}"
+                                          SelectedItem="{Binding SelectedStrategyCategory, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
+                            </StackPanel>
+                            <DataGrid ItemsSource="{Binding Strategies}"
+                                      behaviors:DataGridSelectionPersistence.KeyProperties="StrategyId">
                     <DataGrid.Columns>
                         <DataGridTemplateColumn Header="Name" Width="260">
                             <DataGridTemplateColumn.CellTemplate>
@@ -344,19 +357,62 @@
                         <DataGridTextColumn Header="Last order UTC" Binding="{Binding LastOrderUtc}" Width="150" />
                         <DataGridTextColumn Header="Last run UTC" Binding="{Binding LastRunUtc}" Width="150" />
                             </DataGrid.Columns>
-                        </DataGrid>
+                            </DataGrid>
+                        </DockPanel>
                     </TabItem>
                     <TabItem Header="24 hours">
-                        <ContentControl Content="{Binding StrategyRecent24Hours}"
-                                        ContentTemplate="{StaticResource StrategyRecentGridTemplate}" />
+                        <DockPanel>
+                            <StackPanel DockPanel.Dock="Top"
+                                        Orientation="Horizontal"
+                                        Margin="0,0,0,8">
+                                <TextBlock Text="Category"
+                                           VerticalAlignment="Center"
+                                           Foreground="#6B7280" />
+                                <ComboBox Width="300"
+                                          Height="30"
+                                          Margin="8,0,0,0"
+                                          ItemsSource="{Binding StrategyCategoryOptions}"
+                                          SelectedItem="{Binding SelectedStrategy24HoursCategory, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
+                            </StackPanel>
+                            <ContentControl Content="{Binding StrategyRecent24Hours}"
+                                            ContentTemplate="{StaticResource StrategyRecentGridTemplate}" />
+                        </DockPanel>
                     </TabItem>
                     <TabItem Header="6 hours">
-                        <ContentControl Content="{Binding StrategyRecent6Hours}"
-                                        ContentTemplate="{StaticResource StrategyRecentGridTemplate}" />
+                        <DockPanel>
+                            <StackPanel DockPanel.Dock="Top"
+                                        Orientation="Horizontal"
+                                        Margin="0,0,0,8">
+                                <TextBlock Text="Category"
+                                           VerticalAlignment="Center"
+                                           Foreground="#6B7280" />
+                                <ComboBox Width="300"
+                                          Height="30"
+                                          Margin="8,0,0,0"
+                                          ItemsSource="{Binding StrategyCategoryOptions}"
+                                          SelectedItem="{Binding SelectedStrategy6HoursCategory, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
+                            </StackPanel>
+                            <ContentControl Content="{Binding StrategyRecent6Hours}"
+                                            ContentTemplate="{StaticResource StrategyRecentGridTemplate}" />
+                        </DockPanel>
                     </TabItem>
                     <TabItem Header="1 hour">
-                        <ContentControl Content="{Binding StrategyRecent1Hour}"
-                                        ContentTemplate="{StaticResource StrategyRecentGridTemplate}" />
+                        <DockPanel>
+                            <StackPanel DockPanel.Dock="Top"
+                                        Orientation="Horizontal"
+                                        Margin="0,0,0,8">
+                                <TextBlock Text="Category"
+                                           VerticalAlignment="Center"
+                                           Foreground="#6B7280" />
+                                <ComboBox Width="300"
+                                          Height="30"
+                                          Margin="8,0,0,0"
+                                          ItemsSource="{Binding StrategyCategoryOptions}"
+                                          SelectedItem="{Binding SelectedStrategy1HourCategory, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
+                            </StackPanel>
+                            <ContentControl Content="{Binding StrategyRecent1Hour}"
+                                            ContentTemplate="{StaticResource StrategyRecentGridTemplate}" />
+                        </DockPanel>
                     </TabItem>
                 </TabControl>
             </TabItem>
