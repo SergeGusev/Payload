@@ -1,0 +1,173 @@
+1. Maker-стратегия на 5m/15m/1H BTC: “зарабатывать spread, не угадывать BTC”
+
+Суть: не покупать market order, а ставить лимитки около fair probability и быть maker’ом. На crypto-рынках taker fee у Polymarket считается как C × feeRate × p × (1-p), для Crypto feeRate указан как 0.07; максимальная комиссия приходится примерно на 50% outcomes, а makers не платят fee.
+
+Практика:
+
+Считаешь fair probability для “BTC Up/Down” на оставшееся время.
+Ставишь bid ниже fair и ask выше fair, либо зеркально через YES/NO.
+Не держишь большой inventory перед expiry, особенно если цена BTC рядом с линией.
+Ребейты считать бонусом, а не основным PnL: Polymarket пишет, что maker rebates платятся ежедневно и зависят от исполненной maker-ликвидности.
+
+Пример логики: если модель даёт p(Up)=0.54, не надо покупать YES по 0.53 как taker, потому что комиссия съест edge. Лучше поставить bid YES 0.515–0.525 и ask/NO на другой стороне. Эта стратегия больше похожа на micro market making, чем на трейдинг BTC.
+
+2. Settlement-source edge: торговать не “BTC вообще”, а конкретный источник резолва
+
+В BTC-рынках Polymarket правила могут резолвить исход по конкретной бирже и конкретной свече. Например, у daily BTC Up/Down рынок описывает резолв через Binance BTC/USDT 1-minute candle close, а не “среднюю цену BTC где-то в интернете”.
+
+Edge появляется, когда толпа смотрит TradingView/Coinbase/CoinMarketCap, а резолв идёт по Binance candle close. Для short-duration рынков это критично.
+
+Рабочий вариант:
+
+Подключить Binance BTCUSDT websocket.
+Синхронизировать clock.
+Отслеживать именно candle close, указанную в rules.
+За 30–90 секунд до expiry торговать только если есть явное расхождение между order book probability и фактической вероятностью close above/below.
+
+Главный риск: такие рынки уже пасут боты. Если ты делаешь это руками, edge почти всегда исчезает быстрее, чем ты нажмёшь кнопку.
+
+3. Quant pricing для “BTC above X”: покупать только когда market probability хуже модели
+
+Для рынков типа “BTC above $X by/date/on date” нужно считать не “мне кажется BTC пойдёт вверх”, а fair probability.
+
+Для terminal close market:
+
+p ≈ Φ((ln(S/K)) / (σ√T))
+
+где S — текущая цена BTC по источнику резолва, K — strike, T — время до резолва, σ — краткосрочная волатильность. Для “hit $X before date” это уже не terminal digital, а barrier-style probability — там простая формула “close above” даст неправильную оценку.
+
+Правило входа:
+
+Buy YES, если model_p - ask_yes > fee + slippage + margin_of_safety
+Buy NO, если (1 - model_p) - ask_no > fee + slippage + margin_of_safety
+
+На практике я бы не трогал сделку, если чистый edge меньше 2–4 центов на share для ручного трейда. Для бота можно ниже, но только с нормальной статистикой fills/cancels.
+
+4. Complete-set arbitrage: YES + NO дешевле $1
+
+Механика Polymarket основана на outcome-токенах: полный набор YES+NO можно конвертировать обратно в collateral; документация описывает merge как 100 Yes + 100 No → $100 pUSD, а winning shares после resolution redeem’ятся по $1.
+
+Стратегия:
+
+Если ask_yes + ask_no + fees + execution_cost < 1.00
+→ купить YES и NO одинаковым размером
+→ merge/redeem
+
+Обратная сторона:
+
+Если bid_yes + bid_no > 1.00 + costs
+→ split $1 collateral into YES+NO
+→ продать обе стороны
+
+Это почти арбитраж, но не “бесплатные деньги”: есть leg risk, частичный fill, задержка, комиссия taker, лимиты ликвидности и операционный риск. Работает лучше через API и маленькие рынки/моменты резких движений, где book временно кривой.
+
+5. Ladder arbitrage на страйках: вероятности должны быть монотонны
+
+Для одного expiry события:
+
+P(BTC > 90k) ≤ P(BTC > 85k)
+P(BTC > 100k) ≤ P(BTC > 90k)
+
+Если рынок нарушает монотонность, можно строить “доминирующую” позицию.
+
+Пример:
+
+A = BTC > 85k
+B = BTC > 90k
+B логически подразумевает A.
+
+Если YES на A стоит слишком дёшево относительно YES на B, можно купить:
+
+YES(A) + NO(B)
+
+Пейофф:
+
+BTC ≤ 85k:        0 + 1 = 1
+85k < BTC ≤ 90k:  1 + 1 = 2
+BTC > 90k:        1 + 0 = 1
+
+Если суммарная стоимость позиции меньше $1 после fees, это положительный expected value с бонусом в middle range.
+
+Это один из самых чистых классов Polymarket-стратегий, потому что основан не на “предсказании BTC”, а на логических constraints.
+
+6. Calendar arbitrage: более длинный “hit by” не может быть дешевле короткого
+
+Для рынков вида “BTC hits $150k by June / by September / by end of 2026” вероятность более позднего дедлайна должна быть не ниже более раннего:
+
+P(hit by Sep) ≥ P(hit by Jun)
+
+Если рынок даёт наоборот, можно брать long-date YES + short-date NO.
+
+Пейофф логика:
+
+hit early:      long YES = 1, short NO = 0 → 1
+hit later:      long YES = 1, short NO = 1 → 2
+never hits:     long YES = 0, short NO = 1 → 1
+
+Если cost < $1 after fees, это логический edge. Но важно: это работает для hit-by markets. Для “BTC above X on exact date” монотонность по времени не обязана быть строгой.
+
+7. Cross-venue hedge: Polymarket binary против perps/options
+
+Это уже более продвинутая стратегия. Ты оцениваешь Polymarket outcome как binary option и сравниваешь его с probability из Deribit/CME/options/perps.
+
+Примеры:
+
+Polymarket “BTC above 85k Friday” стоит 0.42, а option-implied probability около 0.50 → buy YES, частично hedge delta через BTC perp.
+Polymarket переоценивает far-out target типа “BTC hits 150k” → buy NO, а хвостовой риск покрывать cheap call spread/options, если доступно.
+
+Смысл: зарабатывать не на направлении BTC, а на разнице между prediction-market probability и derivatives-implied probability.
+
+Минусы: hedge у digital option резко меняется около strike. Если BTC подходит к уровню перед expiry, delta становится нервной, а ручной hedge может ухудшить PnL.
+
+8. Volatility-event strategy: торговать только вокруг макро/crypto catalysts
+
+BTC Polymarket часто переоценивает/недооценивает волатильность перед событиями:
+
+CPI/FOMC/NFP.
+ETF-flow headlines.
+крупные crypto hearings/regulatory news.
+expiry опционов.
+резкие движения funding/open interest.
+
+Идея:
+
+Если market pricing слишком уверен в “Up/Down”, а впереди событие с высокой дисперсией — брать сторону с дешёвым convexity.
+Если после события рынок ещё держит “паническую” вероятность, а spot уже стабилизировался — fade через NO/YES.
+
+Это не “купить перед новостью”, а именно оценка: цена binary должна отражать вероятность crossing/close, а не эмоцию последних 5 минут.
+
+9. Anti-retail стратегия: не торговать 50/50 как taker
+
+На 50% outcome комиссия и spread самые болезненные. У crypto fee формула симметрична и максимальна около 50%, а документация показывает, что для 100 shares на 50¢ crypto taker fee достигает $1.75.
+
+Поэтому плохой паттерн:
+
+BTC пошёл вверх → market buy UP по 0.52
+BTC откатил → sell по 0.47
+повторить
+
+Хороший паттерн:
+
+Торговать только:
+1) как maker,
+2) при явном model edge,
+3) при логическом arbitrage,
+4) при source/settlement edge.
+10. Мини-чеклист перед любой сделкой
+
+Перед входом я бы проверял:
+
+1. What exactly resolves the market?
+2. Source: Binance? Coinbase? candle close? daily close? hit intraday?
+3. Exact expiry time and timezone.
+4. Best bid/ask, not displayed probability.
+5. feesEnabled?
+6. Taker fee per share.
+7. Can I enter as maker?
+8. Is there enough depth to exit?
+9. Is my edge > fee + spread + latency + error risk?
+10. What happens if I get partial fill?
+
+Polymarket даёт API для book, prices, midpoint, spread и price history, так что эти стратегии лучше гонять через order book data, а не глазами через сайт.
+
+Самые практичные варианты для BTC: maker + rebate на short-duration рынках, settlement-source edge, complete-set / ladder / calendar arbitrage, и только потом directional quant pricing. Направленный “я думаю BTC вверх” — обычно самый слабый edge, потому что ты соревнуешься с теми же людьми, которые уже смотрят spot/perps/options.

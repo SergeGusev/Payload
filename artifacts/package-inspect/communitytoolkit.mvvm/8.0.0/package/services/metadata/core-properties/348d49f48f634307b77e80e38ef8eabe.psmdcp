@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<coreProperties xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:dcterms="http://purl.org/dc/terms/" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns="http://schemas.openxmlformats.org/package/2006/metadata/core-properties">
+  <dc:creator>Microsoft</dc:creator>
+  <dc:description>This package includes a .NET MVVM library with helpers such as:
+      - ObservableObject: a base class for objects implementing the INotifyPropertyChanged interface.
+      - ObservableRecipient: a base class for observable objects with support for the IMessenger service.
+      - ObservableValidator: a base class for objects implementing the INotifyDataErrorInfo interface.
+      - RelayCommand: a simple delegate command implementing the ICommand interface.
+      - AsyncRelayCommand: a delegate command supporting asynchronous operations and cancellation.
+      - WeakReferenceMessenger: a messaging system to exchange messages through different loosely-coupled objects.
+      - StrongReferenceMessenger: a high-performance messaging system that trades weak references for speed.
+      - Ioc: a helper class to configure dependency injection service containers.</dc:description>
+  <dc:identifier>CommunityToolkit.Mvvm</dc:identifier>
+  <version>8.0.0</version>
+  <keywords>dotnet Community Toolkit .NET MVVM MVVMToolkit INotifyPropertyChanged Observable IOC DI Dependency Injection Object Messaging Extensions Helpers</keywords>
+  <lastModifiedBy>NuGet.Build.Tasks.Pack, Version=6.2.1.7, Culture=neutral, PublicKeyToken=31bf3856ad364e35;</lastModifiedBy>
+</coreProperties>

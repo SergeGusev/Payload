@@ -1,0 +1,141 @@
+Да. Для нашего первого Live я бы делал отдельный свежий MetaMask wallet/account, не основной. Схема такая: MetaMask дает нам signer address + private key, Polymarket дает/
+  показывает funder/proxy wallet.
+
+  Важное Правило
+  Private key, seed phrase, API secret, passphrase:
+
+  - не присылать мне;
+  - не вставлять в чат;
+  - не коммитить;
+  - не хранить в appsettings.json;
+  - не скриншотить;
+  - не вставлять в команды, которые запускает Codex.
+
+  Вариант, Который Я Рекомендую
+  Для Polymarket через browser wallet чаще всего схема такая:
+
+  SignatureType = POLY_GNOSIS_SAFE
+  SigningAddress = твой fresh MetaMask address
+  FunderAddress = Polymarket proxy wallet address
+
+  То есть:
+
+  - SigningAddress - адрес MetaMask-кошелька, приватный ключ которого подписывает EIP-712.
+  - FunderAddress - адрес кошелька на Polymarket, где лежат средства.
+
+  Polymarket docs прямо говорят: если funds находятся в proxy wallet на Polymarket, используй proxy wallet как funder. Для browser-wallet accounts обычно используется
+  GNOSIS_SAFE.
+
+  Шаг 1. Создать Новый Wallet
+  Самый простой путь:
+
+  1. Открыть официальный сайт MetaMask: https://metamask.io.
+  2. Установить extension только из официального источника.
+  3. Лучше открыть отдельный Chrome/Edge profile, например Poly Live Wallet, чтобы не смешивать с личными кошельками.
+  4. В MetaMask выбрать Create a new wallet.
+  5. Записать seed phrase офлайн на бумагу. Не в файл, не в облако.
+  6. Создать account, например назвать его PolyCopyTrader Live Tiny.
+  7. Скопировать public address. Это будет кандидат на SigningAddress.
+
+  Шаг 2. Взять Private Key
+  В MetaMask:
+
+  1. Открой MetaMask.
+  2. Выбери нужный account PolyCopyTrader Live Tiny.
+  3. Нажми меню с тремя точками.
+  4. Account details.
+  5. Show private key / Private key.
+  6. Введи пароль MetaMask.
+  7. MetaMask покажет private key.
+
+  Этот private key нужен только тебе локально, чтобы положить его в Windows Credential Manager или env var. Мне его не отправлять.
+
+  Шаг 3. Подключить Wallet к Polymarket
+  На целевом VPS/IP или с того окружения, которое будет использоваться:
+
+  1. Открыть https://polymarket.com.
+  2. Подключить fresh MetaMask wallet.
+  3. Проверить, что регион не заблокирован.
+  4. В профиле/settings найти wallet/proxy/funder address.
+  5. Скопировать этот address. Это будет FunderAddress.
+
+  Если Polymarket показывает proxy wallet, то для нас почти наверняка:
+
+  SignatureType = POLY_GNOSIS_SAFE
+  SigningAddress = MetaMask EOA address
+  FunderAddress = Polymarket proxy wallet address
+
+  Если ты сознательно используешь standalone EOA без proxy, тогда:
+
+  SignatureType = EOA
+  SigningAddress = same EOA address
+  FunderAddress = same EOA address
+
+  Но для Polymarket UI/proxy flow я бы шел через POLY_GNOSIS_SAFE.
+
+  Шаг 4. Положить Private Key Локально
+  Я рекомендую Windows Credential Manager.
+
+  Открыть PowerShell самостоятельно, не через меня, и выполнить интерактивно:
+
+  cmdkey /generic:POLYCOPYTRADER_POLYMARKET_DRY_RUN_PRIVATE_KEY /user:polycopytrader /pass:PASTE_PRIVATE_KEY_HERE
+
+  Позже, только перед реальным Live:
+
+  cmdkey /generic:POLYCOPYTRADER_POLYMARKET_ORDER_SIGNING_PRIVATE_KEY /user:polycopytrader /pass:04d55fe76df87562d377a5dac7d5aae399af2767ab8fc65e40b9b5bfad752ef5
+
+  Для первого этапа достаточно DRY_RUN_PRIVATE_KEY.
+
+  Шаг 5. Что Можно Дать Мне
+  Мне можно дать только это:
+
+  SigningAddress = 0x...
+  FunderAddress = 0x...
+  SignatureType = POLY_GNOSIS_SAFE или EOA
+  SecretProvider = CredentialManager
+
+  Private key не давать.
+
+  Шаг 6. Конфиг Для DryRun
+  После того как ты локально положишь ключ, мы ставим примерно так:
+
+  "Bot": {
+    "Mode": "DryRun",
+    "EnableLiveTrading": false
+  },
+  "PolymarketAuth": {
+    "Enabled": false,
+    "SecretProvider": "CredentialManager",
+    "SigningAddress": "0xYOUR_SIGNER",
+    "FunderAddress": "0xYOUR_FUNDER",
+    "ChainId": 137,
+    "SignatureType": "POLY_GNOSIS_SAFE",
+    "DryRunSigningEnabled": true,
+    "DryRunPrivateKeyName": "POLYCOPYTRADER_POLYMARKET_DRY_RUN_PRIVATE_KEY"
+  }
+
+  На этом этапе денег на кошельке может не быть. Цель - получить DryRunSigned, не отправляя order.
+
+  Шаг 7. Фандинг Только После DryRun
+  Деньги заводим только после успешного dry-run signing.
+
+  Для tiny Live нужны:
+
+  - USDC.e / pUSD по требованиям текущего Polymarket flow;
+  - если EOA, может понадобиться POL на gas;
+  - если proxy/Gnosis flow, Polymarket обычно использует gasless relayer, но funder/proxy должен иметь средства/allowance.
+
+  Первый Live bankroll: минимальный, например $5-$20, не больше.
+
+  Стоп-Сигналы
+  Не продолжаем, если:
+
+  - не понимаем SignatureType;
+  - SigningAddress не совпадает с private key;
+  - FunderAddress не тот адрес, где будут средства;
+  - geoblock blocked=true;
+  - DryRun не создает DryRunSigned;
+  - Dashboard Live Readiness показывает blockers;
+  - cancel-all не проверен.
+
+  Источники: MetaMask private key export guidance, Polymarket auth/signature type/funder docs, Polymarket quickstart.

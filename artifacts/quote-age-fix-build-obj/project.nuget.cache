@@ -1,0 +1,12 @@
+{
+  "version": 2,
+  "dgSpecHash": "v1Y2eyxe9aQ=",
+  "success": true,
+  "projectFilePath": "D:\\My\\Business\\PolyMarket\\src\\PolyCopyTrader.Storage\\PolyCopyTrader.Storage.csproj",
+  "expectedPackageFiles": [
+    "C:\\Users\\serge\\.nuget\\packages\\microsoft.extensions.dependencyinjection.abstractions\\10.0.0\\microsoft.extensions.dependencyinjection.abstractions.10.0.0.nupkg.sha512",
+    "C:\\Users\\serge\\.nuget\\packages\\microsoft.extensions.logging.abstractions\\10.0.0\\microsoft.extensions.logging.abstractions.10.0.0.nupkg.sha512",
+    "C:\\Users\\serge\\.nuget\\packages\\npgsql\\10.0.2\\npgsql.10.0.2.nupkg.sha512"
+  ],
+  "logs": []
+}

@@ -1,0 +1,5 @@
+D:\My\Business\PolyMarket\artifacts\live-accounting-fix-obj\Debug\net10.0\PolyCopyTrader.Domain.csproj.AssemblyReference.cache
+D:\My\Business\PolyMarket\artifacts\live-accounting-fix-obj\Debug\net10.0\PolyCopyTrader.Domain.GeneratedMSBuildEditorConfig.editorconfig
+D:\My\Business\PolyMarket\artifacts\live-accounting-fix-obj\Debug\net10.0\PolyCopyTrader.Domain.AssemblyInfoInputs.cache
+D:\My\Business\PolyMarket\artifacts\live-accounting-fix-obj\Debug\net10.0\PolyCopyTrader.Domain.AssemblyInfo.cs
+D:\My\Business\PolyMarket\artifacts\live-accounting-fix-obj\Debug\net10.0\PolyCopyTrader.Domain.csproj.CoreCompileInputs.cache

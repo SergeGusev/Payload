@@ -1,0 +1,156 @@
+1. Включаем Live-доступность только для стратегии BTC Up or Down 5m Skip 1.
+     Все остальные стратегии в Live не участвуют.
+  2. Для очередного BTC 5m маркета формируем одно общее решение для Paper-shadow и Live.
+     Это не два независимых расчёта, а один decision, в котором фиксируем:
+      - correlation_id;
+      - strategy_id;
+      - market_id;
+      - condition_id;
+      - asset_id;
+      - outcome;
+      - side=BUY;
+      - limit_price;
+      - target_notional_usd;
+      - requested_size_shares;
+      - max_reserved_notional_usd = requested_size_shares * limit_price;
+      - order_type=GTC;
+      - post_only=false;
+      - snapshot стакана;
+      - quote_age_ms;
+      - source=paper_live_shadow_test;
+      - время получения котировки;
+      - время формирования decision;
+      - market_start_utc;
+      - market_close_utc;
+      - submit_deadline_utc;
+      - cancel_deadline_utc.
+  3. Сначала сохраняем общий decision в БД.
+     Если сохранить decision не удалось, Live-ордер не отправляем.
+  4. Из сохранённого decision:
+      - создаём Paper-shadow ордер, который моделирует именно этот будущий Live-ордер;
+      - создаём Live intent/record в БД;
+      - отправляем настоящий Live order;
+      - после submit обновляем Live record фактическим submit result.
+  5. Live order отправляем как GTC limit BUY, post_only=false.
+
+     Это гибридная модель:
+      - marketable-часть может исполниться сразу как taker;
+      - неисполненный остаток остаётся в стакане как обычный лимитный ордер;
+      - ордер живёт до fill / cancel / market close.
+  6. Paper-shadow использует ту же модель исполнения, что и Live:
+      - GTC limit BUY;
+      - post_only=false;
+      - immediate fill моделируется по snapshot стакана на момент submit;
+      - late fill для Paper-shadow подтверждается прежде всего по Live order status / fills / trades, связанным с order_id;
+      - стакан после submit используется только как вспомогательная диагностика, но сам по себе не считается доказательством fill;
+      - если late fill нельзя наблюдать достаточно точно, фиксируем paper_fill_observability_gap;
+      - неисполненный остаток остаётся pending/open до fill / cancel / market close.
+  7. Связку Paper-shadow и Live сохраняем через общий correlation_id.
+     Сравниваем потом именно одну и ту же ставку, а не похожие ставки в одном маркете.
+  8. После отправки Live order сразу обновляем Live record фактическим submit result:
+      - submit status: matched, live, delayed, unmatched, rejected, error;
+      - order_id;
+      - filled / not filled / partial;
+      - filled size;
+      - average fill price;
+      - spent notional;
+      - remaining size;
+      - raw response/status.
+  9. Если Live submit прошёл, но мы не смогли сохранить order_id или raw response в БД, это аварийный сценарий:
+      - пытаемся отменить этот Live order;
+      - если order_id неизвестен, запускаем cancel-all по strategy_id / рынку, насколько это возможно через API;
+      - выключаем Live-доступность стратегии;
+      - фиксируем ошибку;
+      - не продолжаем цикл до разбора.
+  10. Live результат загружаем не только сразу после submit, а периодически до завершения маркета:
+
+  - open order status;
+  - cumulative filled size;
+  - average fill price;
+  - spent notional;
+  - remaining size;
+  - cancellations/rejections;
+  - финальный статус после market close.
+
+  11. Сразу после отправки сравниваем только начальное исполнение:
+
+  - совпал ли outcome;
+  - совпал ли limit price;
+  - совпал ли order type;
+  - совпал ли post_only=false;
+  - совпал ли requested size/notional;
+  - близки ли filled size и average fill price;
+  - если Live не исполнился, Paper-shadow тоже не должен считать позицию открытой;
+  - если Live order принят и остался в стакане, Paper-shadow должен держать pending/open order.
+
+  12. Окончательное совпадение по fill нельзя требовать сразу, потому что GTC может добираться позже.
+  13. До завершения маркета отслеживаем:
+
+  - Live fills;
+  - Paper-shadow fills;
+  - remaining open size;
+  - partial fills;
+  - cancel/reject events.
+
+  14. При наступлении cancel_deadline_utc или market close:
+
+  - пытаемся отменить неисполненный остаток Live order, если он ещё открыт;
+  - если отмена невозможна из-за закрытия рынка, фиксируем финальный статус;
+  - Paper-shadow закрывает/игнорирует неисполненный остаток;
+  - settlement считаем только по реально filled shares.
+
+  15. После settlement считаем Paper-shadow результат только по реально filled Paper shares.
+     Live результат считаем только по реально filled Live shares.
+  16. Итоговое сравнение:
+
+  - одинаковый resolved outcome;
+  - одинаковая логика win/loss;
+  - близкий filled size;
+  - близкий average fill price;
+  - близкий realized PnL;
+  - если Live был partial, Paper-shadow сравниваем не с полной заявкой, а с фактически исполненной частью.
+
+  17. Допуски:
+
+  - price tolerance = 0.01;
+  - size tolerance = 0.01 shares;
+  - PnL tolerance = 0.01 USD;
+  - live status delay tolerance = 10 sec.
+
+  18. Если Paper-shadow и Live совпали в пределах допусков, продолжаем следующий цикл.
+  19. Если итоговое расхождение вне допусков:
+
+  - сразу выключаем Live-доступность BTC Up or Down 5m Skip 1;
+  - отменяем все open Live orders с этим strategy_id и/или correlation_id;
+  - фиксируем discrepancy record;
+  - не продолжаем Live-тест до исправления или твоего решения.
+
+  20. Классифицируем расхождение:
+
+  - ошибка выбора outcome;
+  - ошибка limit price;
+  - ошибка размера;
+  - ошибка GTC / partial-fill / open-order модели;
+  - race condition между quote и submit;
+  - ошибка отслеживания late fill;
+  - ошибка cancel / remaining-size accounting;
+  - ошибка settlement / PnL;
+  - ошибка загрузки Live status;
+  - недостаточная наблюдаемость Paper-shadow fill: paper_fill_observability_gap.
+
+  21. Если расхождение можно исправить:
+
+  - исправляем Paper/Live accounting;
+  - прогоняем тесты;
+  - оставляем Live-доступность выключенной до успешной проверки;
+  - после исправления возвращаемся к пункту 1.
+
+  22. Если исправить нельзя или причина неустранима:
+
+  - Live остаётся выключенным;
+  - я пишу тебе причину расхождения;
+  - объясняю, почему её нельзя корректно устранить;
+  - дальше ждём твоего решения.
+
+  23. Все корректировки в Paper-shadow логику после тестов сохраняются.
+     Даже при выключенном Live режиме Paper должен давать максимально достоверную эмуляцию реального исполнения.
