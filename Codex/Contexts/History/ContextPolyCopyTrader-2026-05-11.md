@@ -147,3 +147,10 @@ Add grouping/filtering of Dashboard strategies by categories such as BTC Up or D
 
 Result:
 Added per-tab strategy category ComboBox filters to the main and Net48 WPF dashboards. Categories are inferred from strategy names and applied independently for All, 24h, 6h, and 1h tables. Kept snapshot data unfiltered internally and kept the summary strategy count based on the full set. Verification passed for the main Dashboard build, root tests, and diff check; Net48 dotnet build remains blocked by local old-style PackageReference tooling, unrelated to this UI change.
+
+## 2026-05-11T10:09:08.9653839Z
+Request:
+Очисти всю Paper историю (Live оставь). Будем собирать статистику заново
+
+Result:
+Cleared all Paper trading/history tables while preserving Live history. `paper_orders`, `paper_fills`, `paper_positions`, `paper_position_settlements`, `strategy_market_paper_runs`, Paper copied-leader/performance tables, Paper/Live shadow decision/discrepancy tables, on-chain Paper signal results, and daily reports are now empty. `live_orders` remained at 24 rows and `live_trading_events` remained at 82 rows; 24 old `live_orders.paper_order_id` links were set to NULL so Live rows could remain after Paper deletion. Service IPC was unavailable and no PolyCopyTrader service/process was visible, so the service was not restarted.

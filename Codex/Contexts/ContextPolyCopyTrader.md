@@ -1,3 +1,15 @@
+## Active Update 2026-05-11 Clear Paper History
+Goal: Clear all Paper trading history while preserving Live trading history.
+Status: Completed
+Done:
+- Confirmed the service IPC was unavailable and no PolyCopyTrader process/service was visible, so cleanup did not race a running service.
+- Cleared Paper/history tables: `paper_orders`, `paper_fills`, `paper_positions`, `paper_position_settlements`, `strategy_market_paper_runs`, `paper_copied_trader_performance`, `paper_copied_leader_positions`, `paper_copied_leader_activity_events`, `paper_live_shadow_decisions`, `paper_live_shadow_discrepancies`, `polymarket_onchain_paper_signal_results`, and `daily_reports`.
+- Preserved Live tables: `live_orders` stayed at `24` rows and `live_trading_events` stayed at `82` rows.
+- Detached old Live rows from deleted Paper rows by setting `live_orders.paper_order_id = NULL` for `24` rows before deleting Paper orders.
+Next: Start the service when Paper collection should resume.
+Notes: Verification was the cleanup tool's before/after DB counts: every Paper table listed above is now `0`, `live_orders=24`, `live_trading_events=82`, and `live_orders.paper_order_id not null=0`. Temporary cleanup utility was created under `%TEMP%` and removed after use.
+Blockers: None.
+
 ## Active Update 2026-05-11 Dashboard Strategy Category Filters
 Goal: Add strategy category filters to each Strategies dashboard tab.
 Status: Completed
