@@ -1,3 +1,15 @@
+## Active Update 2026-05-11 New Server Live Secrets Answer
+Goal: Identify the environment variables and secret entries required for Net48 live order placement on the new Windows Server 2008 R2 machine.
+Status: Completed
+Done:
+- Re-read Net48 appsettings, configuration binding, auth/readiness code, storage connection resolver, and live-trading validation.
+- Confirmed required runtime gates are `Bot:Mode=Live`, `Bot:EnableLiveTrading=true`, `LiveTrading:ManualEnableCode=LIVE_TRADING_ENABLED`, `PolymarketAuth:Enabled=true`, valid signer/funder addresses, PostgreSQL connection, and strategy-level `live_stakes=true`.
+- Confirmed current Net48 service uses `SecretProvider=CredentialManager` in appsettings, so the required secret target names are `POLYCOPYTRADER_POLYMARKET_ORDER_SIGNING_PRIVATE_KEY`, `POLYCOPYTRADER_POLYMARKET_API_KEY`, `POLYCOPYTRADER_POLYMARKET_API_KEY_OWNER`, `POLYCOPYTRADER_POLYMARKET_API_SECRET`, and `POLYCOPYTRADER_POLYMARKET_API_PASSPHRASE`.
+- Noted that the current Net48 executable exposes `--print-config`, `--storage-smoke`, `--host-smoke`, `--strategy-smoke`, service install/start/stop commands, but not the older .NET 10 auth bootstrap/smoke commands.
+Next: On the new server, configure the PostgreSQL env var and Credential Manager targets under the same Windows account that runs the service, then validate with `--print-config` and `--storage-smoke` before enabling any strategy Live flag.
+Notes: Read-only answer task; no production behavior changed.
+Blockers: None.
+
 ## Active Update 2026-05-11 Net48 Dashboard Local NuGet Cache
 Goal: Prevent Windows Server 2008 R2 from loading stale `CommunityToolkit.Mvvm 8.4.2` targets for the Net48 Dashboard.
 Status: Completed

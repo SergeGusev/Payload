@@ -99,6 +99,13 @@ Request:
 Result:
 Hardened the Net48 Dashboard compatibility fix against stale server NuGet state. Added a Net48 local package root in `src4.8/Directory.Build.props` so restore uses `src4.8\.nuget\packages` instead of `J:\Users\Administrator\.nuget\packages`, ignored that local package cache, and verified local Dashboard restore/rebuild succeeds with `CommunityToolkit.Mvvm 8.2.2` only. The running service was not stopped.
 
+## 2026-05-11T08:24:49.4218685Z
+Request:
+Ок, ребилд прошёл. Теперь скажи, какие переменные окружения или другие секреты должны быть заведены на новом сервере, чтобы он мог делать боевые ставки?
+
+Result:
+Reviewed the Net48 configuration and auth/live validation paths. Answered that the new server needs PostgreSQL connection via `POLYCOPYTRADER_POSTGRES_CONNECTION`, live gates (`Bot:Mode=Live`, `Bot:EnableLiveTrading=true`, `LiveTrading:ManualEnableCode=LIVE_TRADING_ENABLED`, auth enabled), public signer/funder addresses, and Credential Manager targets for the order-signing private key plus Polymarket CLOB API key/owner/secret/passphrase. No production code changed.
+
 ## 2026-05-11T07:38:10.0000000+00:00
 Request:
 Ок, поехали
