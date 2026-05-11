@@ -79,3 +79,9 @@ Request:
 
 Result:
 Compared old .NET 10 and Net48 configuration loading and appsettings without printing secrets. Net48 can reuse the old non-secret runtime configuration: both bind the same core sections and Net48 supports appsettings plus environment variables. Old `.NET 10` appsettings has the public Live/Auth posture (`Bot.Mode=Live`, `PaperTrading.RunInLiveMode=true`, `PolymarketAuth.Enabled=true`, `SecretProvider=CredentialManager`, signer/funder addresses present, signature type `POLY_1271`, manual approval present, max live order notional `5.0`). It still has `Bot.EnableLiveTrading=false`, so actual live placement previously also required an explicit runtime override or final switch. No code or runtime state changed.
+## 2026-05-11T07:21:55.7766981Z
+Request:
+Да, перенеси, пожалуйста.
+
+Result:
+Transferred the old .NET 10 non-secret Live/Auth runtime posture into `src4.8/PolyCopyTrader.Net48.Service/appsettings.json`: `Bot.Mode=Live`, `PolymarketAuth.Enabled=true`, `SecretProvider=CredentialManager`, public signer/funder addresses, `ChainId=137`, `SignatureType=POLY_1271`, dry-run signing, the existing order-signing secret target, `PaperTrading.RunInLiveMode=true`, and `LiveTrading.MaxOrderNotionalUsd=5.0`. Kept `Bot.EnableLiveTrading=false`, so the transfer does not authorize live order placement by itself. Rebuilt Net48 Release, ran `--host-smoke`, `--storage-smoke`, and `--print-config`, then restarted the Net48 service. IPC status is `Running`, Paper unpaused, kill switch inactive, and no last error.

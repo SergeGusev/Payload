@@ -1,3 +1,17 @@
+## Active Update 2026-05-11 Port Net10 Live Runtime Config To Net48
+Goal: Transfer the old .NET 10 non-secret Live/Auth runtime configuration into the Net48 service.
+Status: Completed
+Done:
+- Updated `src4.8/PolyCopyTrader.Net48.Service/appsettings.json` to match the old .NET 10 Live runtime posture for non-secret settings.
+- Set Net48 `Bot.Mode=Live` while keeping `Bot.EnableLiveTrading=false`.
+- Enabled Net48 `PolymarketAuth` with `SecretProvider=CredentialManager`, public signer/funder addresses, `ChainId=137`, `SignatureType=POLY_1271`, dry-run signing, and the existing order-signing secret target name.
+- Set `PaperTrading.RunInLiveMode=true` so Paper keeps collecting while the service runs in Live mode.
+- Set `LiveTrading.MaxOrderNotionalUsd=5.0`.
+- Rebuilt Net48 Release, verified the copied output config, and restarted the Net48 service.
+Next: To start the actual controlled Live test, explicitly set `Bot.EnableLiveTrading=true` and enable `live_stakes` only for `btc_up_down_5m_more_150_below_65`; until then no live orders should be placed.
+Notes: Verification passed: Visual Studio MSBuild Release (`0` warnings/errors for incremental build), Release `--host-smoke`, Release `--storage-smoke`, Release `--print-config` showed `Mode: Live`, `Live trading enabled: False`, `Auth enabled: True`, `Auth provider: CredentialManager`, `Auth configured: True`, `Live max order notional USD: 5.0`, and `Paper runs in live mode: True`. Service restarted as PID `68460`; IPC `/status` reports `Running`, Paper unpaused, kill switch inactive, and no last error.
+Blockers: None.
+
 ## Active Update 2026-05-11 Net10 Runtime Config Reuse Answer
 Goal: Check whether Net48 can reuse the old .NET 10 runtime configuration for Live setup.
 Status: Completed
