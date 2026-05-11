@@ -1,3 +1,17 @@
+## Active Update 2026-05-11 Binance Book Lag Correlation
+Goal: Check whether Binance BTC/USDT moves lead Polymarket BTC 5m order-book price moves.
+Status: Completed
+Done:
+- Ran a temporary read-only C# lag-correlation probe against the old/local PostgreSQL `17.5` database and removed the probe afterward.
+- Analyzed `15,210` usable `btc_up_down_5m_odds_ticks` rows across `272` BTC 5-minute markets from `2026-05-10 05:17:26 UTC` to `2026-05-11 05:17:18 UTC`.
+- Level correlation between `btc_move_from_start_bps` and `Up` price was strongest at `0s` lag: corr `0.7339`, R2 `0.5387`, direction accuracy vs `0.5` `86.99%`; `+5s` lag was lower at corr `0.7283`, and `-5s` was lower at corr `0.7314`.
+- Delta correlation also peaked at `0s`: 10-second BTC delta vs Up-price delta corr `0.4704` at `0s`, versus `0.3535` at `+5s`; 20-second delta corr `0.5390` at `0s`, versus `0.4649` at `+5s`.
+- Segmented checks also peaked at `0s`: first 60s corr `0.6104`, 60-180s corr `0.5213`, last 120s corr `0.3872`, last 60s corr `0.4160`.
+- Sampling limitation: the odds archive median gap is `5.168s`, and median Binance source-to-sample age is `2740ms`, so this archive cannot prove or reject sub-5-second lead/lag.
+Next: If sub-5-second lag matters, add a dedicated event-level diagnostic that persists Binance trade events and Polymarket best-bid/ask WebSocket changes with local receive timestamps for short retention, then rerun lag analysis on 250ms-1s buckets.
+Notes: No production code changed. Live remained untouched.
+Blockers: None.
+
 ## Active Update 2026-05-11 Live Candidate Review
 Goal: Check whether current Paper BTC strategy statistics have produced candidates for Live testing.
 Status: Completed

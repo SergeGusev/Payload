@@ -1,3 +1,10 @@
+## 2026-05-11T05:18:30.0000000+00:00
+Request:
+Попробуй найти корреляцию между курсом Binance и колебаниями стакана - может, они чуть отстают?
+
+Result:
+Ran a temporary read-only C# lag-correlation probe against the old/local PostgreSQL database and removed it afterward. Analyzed `15,210` BTC odds ticks across `272` markets. Aggregate level and delta correlations both peaked at `0s` lag, not at `+5s/+10s`: level corr `0.7339` at `0s`, 10-second delta corr `0.4704` at `0s`, 20-second delta corr `0.5390` at `0s`. Segments for first 60s, 60-180s, last 120s, and last 60s also peaked at `0s`. Current 5-second archive does not show Polymarket book lagging Binance by 5+ seconds; sub-5-second lag cannot be proven with this archive because median sampling gap is `5.168s`.
+
 ## 2026-05-11T05:09:30.0000000+00:00
 Request:
 Проверь, появились ли кандидаты на Live
