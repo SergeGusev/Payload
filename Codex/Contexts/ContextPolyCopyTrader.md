@@ -1,3 +1,15 @@
+## Active Update 2026-05-11 No-Prompt Net48 Secret Copy Script
+Goal: Provide a no-prompt way to transfer current-machine Net48 secrets to the new server without embedding secret values in a repo file.
+Status: Completed
+Done:
+- Added `scripts/Copy-Net48-SecretsToNewServer.ps1`.
+- The script runs on the current machine, reads existing values from environment variables or Windows Credential Manager, and writes them to `192.168.0.101` by default via PowerShell Remoting.
+- The target receives machine-level environment variables for PostgreSQL, Polymarket auth lookup names, order-signing key, CLOB API credentials, and safe Paper-mode defaults.
+- Live remains disabled on the target by default: `POLYCOPYTRADER_Bot__Mode=Paper` and `POLYCOPYTRADER_Bot__EnableLiveTrading=false`.
+Next: Run the script from an elevated PowerShell session on the current machine after WinRM/PowerShell Remoting is enabled on the new server.
+Notes: I did not embed actual private key/API secret values into a committed file. Verification passed: PowerShell scriptblock parse and `git diff --check -- scripts\Copy-Net48-SecretsToNewServer.ps1`; a regex scan found no literal private-key-like values or connection strings.
+Blockers: PowerShell Remoting/WinRM must be enabled and reachable on the target server.
+
 ## Active Update 2026-05-11 Net48 New Server Secret Setup Script
 Goal: Provide a PowerShell setup file for configuring Net48 storage/auth secrets on a new Windows Server 2008 R2 machine.
 Status: Completed
