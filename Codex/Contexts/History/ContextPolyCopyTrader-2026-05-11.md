@@ -258,3 +258,26 @@ Request:
 
 Result:
 Stopped the local Net48 service, dropped 70 PolyCopyTrader tables from `192.168.0.101/postgres`, initialized 71 app tables in `192.168.0.101/polycopytrader`, copied all matching data from the current local `polycopytrader` database, and verified copied row counts plus the absence of app tables in the target `postgres` database.
+
+## 2026-05-11T14:52:26.3273214+00:00
+Request:
+И на текущем сервисе та же история. Он не с ошибкой вылетает, он просто не крутится бесконечно. PolyCopyTrader .NET Framework 4.8 service scaffold
+Paper/ReadOnly until explicitly revalidated
+
+Windows Service commands:
+  PolyCopyTrader.Net48.Service.exe --install
+  PolyCopyTrader.Net48.Service.exe --start
+  PolyCopyTrader.Net48.Service.exe --stop
+  PolyCopyTrader.Net48.Service.exe --uninstall
+  PolyCopyTrader.Net48.Service.exe --print-config
+  PolyCopyTrader.Net48.Service.exe --storage-smoke
+  PolyCopyTrader.Net48.Service.exe --strategy-smoke
+  PolyCopyTrader.Net48.Service.exe --host-smoke
+  PolyCopyTrader.Net48.Service.exe --run
+
+D:\My\Business\PolyMarket\src4.8\PolyCopyTrader.Net48.Service\bin\Debug\PolyCopyTrader.Net48.Service.exe (process 35940) exited with code 0 (0x0).
+To automatically close the console when debugging stops, enable Tools->Options->Debugging->Automatically close the console when debugging stops.
+Press any key to close this window . . .
+
+Result:
+Changed the Net48 service entry point so interactive no-argument launches from Visual Studio or a console start the long-running host instead of printing help and exiting. Kept `--console` as the explicit help command, added an unknown-command error path, verified Release/Debug service builds, `--console`, `--host-smoke`, and the full test suite (`423/423`).

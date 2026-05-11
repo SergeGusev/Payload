@@ -1,3 +1,14 @@
+## Active Update 2026-05-11 Net48 Interactive No-Args Runs Host
+Goal: Make the Net48 service keep running when launched from Visual Studio or a console without command-line arguments.
+Status: Completed
+Done:
+- Changed `Program.Main` so an interactive no-argument launch starts the long-running service host instead of printing scaffold/help and exiting with code `0`.
+- Kept `--console` as the explicit help/scaffold command and added an explicit unknown-command error path.
+- Left non-interactive Windows Service startup unchanged.
+Next: Pull/rebuild on the new server; launching `PolyCopyTrader.Net48.Service.exe` without arguments should now run the host, while `--console` still prints help and exits.
+Notes: `dotnet build src4.8\PolyCopyTrader.Net48.Service\PolyCopyTrader.Net48.Service.csproj -c Release` passed with existing nullable warnings. `dotnet build src4.8\PolyCopyTrader.Net48.Service\PolyCopyTrader.Net48.Service.csproj -c Debug` passed with existing nullable warnings. `PolyCopyTrader.Net48.Service.exe --console` passed. `PolyCopyTrader.Net48.Service.exe --host-smoke` passed with `Hosted services: 22`. `dotnet test tests\PolyCopyTrader.Tests\PolyCopyTrader.Tests.csproj -c Release --no-restore` passed `423/423`. `git diff --check -- src4.8\PolyCopyTrader.Net48.Service\Program.cs` passed with the existing LF-to-CRLF warning.
+Blockers: None.
+
 ## Active Update 2026-05-11 Net48 Service Crash Diagnostics Guidance
 Goal: Tell the user where to inspect why the Net48 service starts and immediately exits on the new server.
 Status: Completed

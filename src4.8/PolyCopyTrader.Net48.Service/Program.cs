@@ -70,9 +70,17 @@ namespace PolyCopyTrader.Service
                 return RunSc("stop " + ServiceName);
             }
 
+            if (args.Length > 0)
+            {
+                Console.Error.WriteLine("Unknown command: " + args[0]);
+                Console.Error.WriteLine();
+                RunConsole();
+                return 1;
+            }
+
             if (Environment.UserInteractive)
             {
-                return RunConsole();
+                return RunInteractiveHost(args);
             }
 
             ServiceBase.Run(new PolyCopyTraderNet48Service(args));
@@ -83,6 +91,10 @@ namespace PolyCopyTrader.Service
         {
             Console.WriteLine("PolyCopyTrader .NET Framework 4.8 service scaffold");
             Console.WriteLine(Net48PortInfo.RuntimePosture);
+            Console.WriteLine();
+            Console.WriteLine("Interactive run:");
+            Console.WriteLine("  PolyCopyTrader.Net48.Service.exe");
+            Console.WriteLine("  PolyCopyTrader.Net48.Service.exe --run");
             Console.WriteLine();
             Console.WriteLine("Windows Service commands:");
             Console.WriteLine("  PolyCopyTrader.Net48.Service.exe --install");
@@ -95,6 +107,14 @@ namespace PolyCopyTrader.Service
             Console.WriteLine("  PolyCopyTrader.Net48.Service.exe --host-smoke");
             Console.WriteLine("  PolyCopyTrader.Net48.Service.exe --run");
             return 0;
+        }
+
+        private static int RunInteractiveHost(string[] args)
+        {
+            Console.WriteLine("Starting PolyCopyTrader .NET Framework 4.8 service host in interactive mode.");
+            Console.WriteLine("Press Ctrl+C to stop.");
+            Console.WriteLine();
+            return RunHost(args);
         }
 
         private static int RunHostSmoke(string[] args)
