@@ -73,3 +73,9 @@ Request:
 
 Result:
 Prepared the selected `BTC Up or Down 5m More 150 Below 65` strategy for controlled Net48 Paper/Live-shadow testing. Extended the BTC shadow allowlist beyond `Skip 1`, ported the real Polymarket CLOB auth/trading client stack into `src4.8`, wired real auth/trading services and the live maintenance worker into the Net48 host, and rebuilt successfully. Runtime Live was not started because the current environment contains only the PostgreSQL connection; Live/auth flags, signer/funder addresses, API credentials, and the order-signing private-key secret are absent. Verified both `btc_up_down_5m_more_150_below_65` and `btc_up_down_5m_skip_1` remain `live_stakes=false`. Restarted the Net48 Release service in safe Paper configuration; IPC status is `Running` with Paper unpaused, kill switch inactive, and no last error. Verification also passed `git diff --check`, Release `--host-smoke`, Release `--storage-smoke`, and `dotnet test tests/PolyCopyTrader.Tests/PolyCopyTrader.Tests.csproj --no-restore` (`418/418`).
+## 2026-05-11T07:17:24.6524173Z
+Request:
+А ты можешь взять runtime-конфигурацию из старого кода, для .Net 10 ?
+
+Result:
+Compared old .NET 10 and Net48 configuration loading and appsettings without printing secrets. Net48 can reuse the old non-secret runtime configuration: both bind the same core sections and Net48 supports appsettings plus environment variables. Old `.NET 10` appsettings has the public Live/Auth posture (`Bot.Mode=Live`, `PaperTrading.RunInLiveMode=true`, `PolymarketAuth.Enabled=true`, `SecretProvider=CredentialManager`, signer/funder addresses present, signature type `POLY_1271`, manual approval present, max live order notional `5.0`). It still has `Bot.EnableLiveTrading=false`, so actual live placement previously also required an explicit runtime override or final switch. No code or runtime state changed.

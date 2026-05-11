@@ -1,3 +1,16 @@
+## Active Update 2026-05-11 Net10 Runtime Config Reuse Answer
+Goal: Check whether Net48 can reuse the old .NET 10 runtime configuration for Live setup.
+Status: Completed
+Done:
+- Compared configuration loading in old `src/PolyCopyTrader.Service` and Net48 `src4.8/PolyCopyTrader.Net48.Service`.
+- Confirmed both bind the same core `AppConfiguration` sections; Net48 already supports `appsettings.json`, environment-specific appsettings, unprefixed environment variables, and `POLYCOPYTRADER_`-prefixed environment variables.
+- Confirmed old .NET 10 `appsettings.json` contains the public Live/Auth runtime posture: `Bot.Mode=Live`, `PaperTrading.RunInLiveMode=true`, `PolymarketAuth.Enabled=true`, `SecretProvider=CredentialManager`, signer/funder addresses present, signature type `POLY_1271`, manual Live approval present, and `LiveTrading.MaxOrderNotionalUsd=5.0`.
+- Confirmed old `.NET 10` appsettings still has `Bot.EnableLiveTrading=false`; actual live placement therefore also required a runtime override or later switch.
+- Confirmed Net48 appsettings is still safe/default: `Bot.Mode=Paper`, `PolymarketAuth.Enabled=false`, `PaperTrading.RunInLiveMode=false`.
+Next: If user approves, copy the non-secret old Live/Auth/runtime settings into Net48 appsettings, keep `EnableLiveTrading=false` until the final explicit switch, then use Credential Manager secrets already referenced by name.
+Notes: Read-only analysis; no code or runtime state changed.
+Blockers: None.
+
 ## Active Update 2026-05-11 Enable More 150 Below 65 Live-Shadow
 Goal: Enable the selected `BTC Up or Down 5m More 150 Below 65` strategy for controlled Paper/Live-shadow testing.
 Status: Blocked
