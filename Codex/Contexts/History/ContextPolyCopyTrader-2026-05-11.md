@@ -161,3 +161,10 @@ Request:
 
 Result:
 Started the Net48 Release service as hidden background process PID 70048 using `--run` and process override `Bot__EnableLiveTrading=false`, because the Release config prints `Live trading enabled: True` and the request was to resume Paper collection. IPC `/status` returns `Running`, Paper is not paused, kill switch is inactive, and there is no last error. Verified fresh Paper rows are being collected (`paper_orders=24`, `paper_fills=25`, `paper_positions=23`, `strategy_market_paper_runs=765`) while Live history did not grow (`live_orders=24`, `live_orders_since_start=0`).
+
+## 2026-05-11T10:19:50.7403530Z
+Request:
+Как там наша статистика по корреляции стакана на ВТС и стакана на Polymarket?
+
+Result:
+Checked current BTC/Binance vs Polymarket diagnostics. Since `2026-05-11T06:38Z`, `btc_order_book_lag_diagnostic_events` has `8,534` BinanceBookTicker, `185,572` BinanceTrade, and `342,945` PolymarketTopOfBook events. Normalized `BTC move from market start -> Up price proxy` correlation is strong: 24h `0.7664`, 6h `0.8574`, 1h `0.9242`, with direction accuracy 24h `84.11%`, 6h `87.50%`, 1h `92.11%`. Lag scan showed the best correlation at `0s`; using older BTC inputs steadily worsens the result, so there is no current evidence of an exploitable Polymarket delay at 5s+ granularity.

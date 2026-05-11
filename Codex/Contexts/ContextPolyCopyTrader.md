@@ -1,3 +1,17 @@
+## Active Update 2026-05-11 BTC Binance Polymarket Book Correlation Check
+Goal: Check current correlation diagnostics between BTC/Binance book data and Polymarket BTC 5m order books.
+Status: Completed
+Done:
+- Verified service IPC remained `Running` during the read-only analysis.
+- Read `btc_order_book_lag_diagnostic_events`: since `2026-05-11T06:38Z`, diagnostics contained `8,534` BinanceBookTicker rows, `185,572` BinanceTrade rows, and `342,945` PolymarketTopOfBook rows.
+- Read `btc_up_down_5m_odds_ticks` for normalized BTC move-from-market-start analysis.
+- Current normalized correlation `BTC move from market start -> Up price proxy`: all available `0.7242`, 24h `0.7664`, 6h `0.8574`, 1h `0.9242`; direction accuracy: all `82.97%`, 24h `84.11%`, 6h `87.50%`, 1h `92.11%`.
+- Lag scan using odds ticks showed best correlation at `0s`; correlations decay with older BTC inputs: 24h `0s=0.767`, `5s=0.7604`, `10s=0.7478`, `60s=0.6314`; 1h `0s=0.9141`, `5s=0.9074`, `10s=0.8931`, `60s=0.7219`.
+- Direct raw Binance level vs Polymarket mid was judged not meaningful because BTC 5m markets reset every window; normalized move-from-start is the useful metric.
+Next: Keep using/currently testing start-relative Binance logic; no evidence yet of an exploitable Polymarket lag at 5s+ granularity.
+Notes: Read-only DB analysis with temporary C# utilities under `%TEMP%`, removed after use. No production code changed.
+Blockers: None.
+
 ## Active Update 2026-05-11 Start Net48 Paper Service
 Goal: Start the Net48 service so Paper statistics collection resumes after the cleanup.
 Status: Completed
