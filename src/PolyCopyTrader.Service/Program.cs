@@ -37,6 +37,15 @@ if (args.Contains("--bootstrap-polymarket-api-credentials", StringComparer.Ordin
     return;
 }
 
+if (args.Contains("--binance-sbe-smoke", StringComparer.OrdinalIgnoreCase))
+{
+    Environment.ExitCode = await BinanceSbeSmokeCommand.ExecuteAsync(
+        args,
+        Console.Out,
+        CancellationToken.None);
+    return;
+}
+
 var builder = Host.CreateApplicationBuilder(args);
 var appConfiguration = AppConfigurationLoader.Load(builder.Configuration);
 AppOptionsValidator.ValidateAndThrow(appConfiguration);

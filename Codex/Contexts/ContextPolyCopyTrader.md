@@ -1,3 +1,16 @@
+## Active Update 2026-05-11 Binance SBE Smoke Command
+Goal: Implement a no-database Binance SBE market-data smoke command and verify the local decoder.
+Status: Completed
+Done:
+- Added `--binance-sbe-smoke` to the .NET 10 service startup path before host/DI/storage initialization.
+- Added a minimal SBE stream decoder for Binance `TradesStreamEvent` (`templateId=10000`) and `BestBidAskStreamEvent` (`templateId=10001`) using the official `stream_1_0.xml` layout.
+- Added a smoke WebSocket command that sets `X-MBX-APIKEY`, connects to `stream-sbe.binance.com`, receives binary frames, decodes a configured number of messages, and prints only market data plus secret source labels.
+- Added decoder unit tests for best bid/ask, trade, and unsupported-template handling.
+- Ran the smoke command against the local key files; Binance returned HTTP `400` during WebSocket upgrade when using the public PEM body as `X-MBX-APIKEY`.
+Next: Provide the actual Binance API Key id from API Management via `POLYCOPYTRADER_BINANCE_SBE_API_KEY`, `--binance-sbe-api-key`, or `--binance-sbe-api-key-file`, then rerun `--binance-sbe-smoke`.
+Notes: No database writes were added. The private key file is not printed, stored, logged, or sent by the smoke command; for SBE market data Binance requires the API key header, not a request signature. Verification passed: service Release build, focused decoder tests `3/3`, full tests `426/426`, and `git diff --check` with line-ending warnings only.
+Blockers: Real Binance SBE connection cannot be fully verified until the API Key id is available; the local PEM public key body alone is not accepted by Binance.
+
 ## Active Update 2026-05-11 Binance SBE Market Data Review
 Goal: Review Binance Spot SBE Market Data Streams documentation and assess relevance for PolyCopyTrader BTC diagnostics.
 Status: Completed

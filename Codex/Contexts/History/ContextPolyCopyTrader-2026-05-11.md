@@ -305,6 +305,13 @@ Request:
 
 Result:
 Checked the old/local server. The .NET 10 service and Dashboard are running; service heartbeat is fresh against local PostgreSQL `127.0.0.1:5432/polycopytrader`. Current BTC market data is active: aggregate Polymarket WebSocket is connected with 648 subscribed assets, BTC odds ticks and BTC/order-book lag diagnostics are being written, and no API errors or HTTP failures were persisted in the last 15 minutes. Paper trading is active with 118 orders created since the recent restart, 5 filled, and 91 still open. Live has no open orders.
+## 2026-05-11T16:33:30.4499566Z
+Request:
+Я хочу, чтобы ты пока это просто реализовал, не записывая в базу. Ключ лежит в C:\Keys\Binance\binance_sbe_ed25519_private.pem. Пока просто сделай вызовы и убедись, что всё работает. Потом пришлю план тестирования
+
+Result:
+Implemented a no-database `--binance-sbe-smoke` command and minimal Binance SBE decoder for trade and best bid/ask streams. Build and tests passed. Real WebSocket smoke reached Binance but failed the upgrade with HTTP 400 when using the public PEM body as the API key header, so the actual Binance API Key id is still needed for full verification.
+
 ## 2026-05-11T16:17:27.7519940Z
 Request:
 Ознакомься с разделом https://developers.binance.com/docs/binance-spot-api-docs/sbe-market-data-streams
