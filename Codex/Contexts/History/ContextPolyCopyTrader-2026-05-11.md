@@ -1,3 +1,10 @@
+## 2026-05-11T05:55:23.0000000+00:00
+Request:
+Add `https://api.binance.com/api/v3/ticker/bookTicker?symbol=BTCUSDT` to diagnostics to test correlation between Binance quote movement, Binance trade price, and Polymarket order-book movement.
+
+Result:
+Implemented Net48 Binance REST `bookTicker` event-level diagnostics. Added config options and appsettings for 1000 ms polling, added `best_bid_size`/`best_ask_size` columns to `btc_order_book_lag_diagnostic_events`, updated storage inserts and the diagnostic event model, and extended `BtcOrderBookLagDiagnosticService` with a background REST poll loop using `IHttpClientFactory`. `BinanceBookTicker` rows store bid/ask prices, bid/ask sizes, and mid; existing Binance trade and Polymarket top-of-book events were updated to the expanded model. README and configuration reference were updated. Rebuilt the root Net48 solution with Visual Studio MSBuild Release, ran Release `--host-smoke` and `--storage-smoke`, restarted the Net48 service, and paused Live through IPC. A temporary C# DB probe showed latest 2-minute rows: `BinanceBookTicker=69`, `BinanceTrade=1863`, `PolymarketTopOfBook=2087`; the probe was removed. `dotnet test tests/PolyCopyTrader.Tests/PolyCopyTrader.Tests.csproj --no-restore` passed `418/418`. Service status is `Running`, Paper unpaused, Live paused, kill switch inactive, no last error.
+
 ## 2026-05-11T05:42:39.2666567+00:00
 Request:
 Ок, сделай такую диагностику.

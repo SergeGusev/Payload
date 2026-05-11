@@ -130,11 +130,12 @@ restart.
 ## BtcOrderBookLagDiagnostics
 
 When enabled, the service stores event-level lag diagnostics in
-`btc_order_book_lag_diagnostic_events`: every received Binance BTC/USDT trade
-and every Polymarket top-of-book WebSocket update gets a local receive
-timestamp, source event timestamp, best bid/ask/mid where available, and
-calculated local lag milliseconds. This is for short-window research into
-whether Binance ticks lead Polymarket book movement.
+`btc_order_book_lag_diagnostic_events`: every received Binance BTC/USDT trade,
+Binance REST `bookTicker` snapshot, and Polymarket top-of-book WebSocket update
+gets a local receive timestamp, source event timestamp where available, best
+bid/ask/mid where available, top-level sizes where available, and calculated
+local lag milliseconds. This is for short-window research into whether Binance
+ticks or quote changes lead Polymarket book movement.
 
 - `Enabled`: records the diagnostic stream when true; default `false`.
 - `FlushIntervalMilliseconds`: buffer flush interval, default `1000`.
@@ -146,6 +147,14 @@ whether Binance ticks lead Polymarket book movement.
 - `CleanupBatchSize`: maximum rows deleted per cleanup batch, default `50000`.
 - `CaptureBinanceTrades`: records Binance trade events when true, default
   `true`.
+- `CaptureBinanceBookTicker`: records Binance REST book-ticker snapshots when
+  true, default `true`.
+- `BinanceBookTickerUrl`: Binance REST book-ticker endpoint, default
+  `https://api.binance.com/api/v3/ticker/bookTicker?symbol=BTCUSDT`.
+- `BinanceBookTickerPollIntervalMilliseconds`: book-ticker polling interval,
+  default `1000`.
+- `BinanceBookTickerTimeoutMilliseconds`: book-ticker HTTP timeout, default
+  `2000`.
 - `CapturePolymarketTopOfBook`: records Polymarket top-of-book updates when
   true, default `true`.
 

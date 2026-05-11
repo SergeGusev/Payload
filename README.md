@@ -220,11 +220,13 @@ only and do not influence strategy decisions.
 
 When `BtcOrderBookLagDiagnostics:Enabled=true`, the service also stores a
 short-retention event-level archive in `btc_order_book_lag_diagnostic_events`.
-It records every received Binance BTC/USDT trade and Polymarket top-of-book
-WebSocket update with local receive time, source event time, best bid/ask/mid,
-and local lag milliseconds. This archive is meant to test whether Binance ticks
-lead Polymarket order-book moves; it is buffered in memory and cleaned by
-retention so it does not replace the compact odds archive.
+It records every received Binance BTC/USDT trade, Binance REST `bookTicker`
+snapshot, and Polymarket top-of-book WebSocket update with local receive time,
+source event time where available, best bid/ask/mid, level sizes where
+available, and local lag milliseconds. This archive is meant to test whether
+Binance ticks or quote changes lead Polymarket order-book moves; it is buffered
+in memory and cleaned by retention so it does not replace the compact odds
+archive.
 
 ### Certificate Pinning
 

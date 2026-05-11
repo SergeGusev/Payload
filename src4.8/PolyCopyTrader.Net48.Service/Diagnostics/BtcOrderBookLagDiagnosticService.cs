@@ -1,4 +1,6 @@
 using System.Collections.Concurrent;
+using System.Globalization;
+using System.Text.Json;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using PolyCopyTrader.Domain;
@@ -17,11 +19,13 @@ public interface IBtcOrderBookLagDiagnosticService
 public sealed class BtcOrderBookLagDiagnosticService(
     ILogger<BtcOrderBookLagDiagnosticService> logger,
     BtcOrderBookLagDiagnosticsOptions options,
+    IHttpClientFactory httpClientFactory,
     IAppRepository repository) : BackgroundService, IBtcOrderBookLagDiagnosticService
 {
     private readonly ConcurrentQueue<BtcOrderBookLagDiagnosticEvent> queue = new();
     private int queuedCount;
     private long droppedCount;
+    private DateTimeOffset lastBookTickerErrorLogUtc = DateTimeOffset.MinValue;
 
     public void RecordBinanceTrade(BtcUsdReferencePricePoint point)
     {
@@ -39,6 +43,8 @@ public sealed class BtcOrderBookLagDiagnosticService(
             null,
             "BTCUSDT",
             point.PriceUsd,
+            null,
+            null,
             null,
             null,
             null,
@@ -71,6 +77,8 @@ public sealed class BtcOrderBookLagDiagnosticService(
         }
 
         decimal? mid = bestBid is { } bid && bestAsk is { } ask ? (bid + ask) / 2m : null;
+        decimal? bestBidSize = GetLevelSize(update.OrderBookSnapshot?.Bids, bestBid);
+        decimal? bestAskSize = GetLevelSize(update.OrderBookSnapshot?.Asks, bestAsk);
         DateTimeOffset? sourceTimestampUtc = update.TimestampUtc == default ? null : update.TimestampUtc;
         Enqueue(new BtcOrderBookLagDiagnosticEvent(
             Guid.NewGuid(),
@@ -81,7 +89,9 @@ public sealed class BtcOrderBookLagDiagnosticService(
             null,
             null,
             bestBid,
+            bestBidSize,
             bestAsk,
+            bestAskSize,
             mid,
             update.Price,
             update.Size,
@@ -107,6 +117,9 @@ public sealed class BtcOrderBookLagDiagnosticService(
             options.MaxBatchSize);
 
         DateTimeOffset nextCleanupUtc = DateTimeOffset.UtcNow.AddMinutes(options.CleanupIntervalMinutes);
+        Task? bookTickerTask = options.CaptureBinanceBookTicker
+            ? RunBinanceBookTickerLoopAsync(stoppingToken)
+            : null;
         try
         {
             while (!stoppingToken.IsCancellationRequested)
@@ -126,9 +139,68 @@ public sealed class BtcOrderBookLagDiagnosticService(
         }
         finally
         {
+            if (bookTickerTask is not null)
+            {
+                await AwaitBackgroundTaskAsync(bookTickerTask);
+            }
+
             await FlushAsync(CancellationToken.None);
             logger.LogInformation("BTC/order-book lag diagnostics stopped.");
         }
+    }
+
+    private async Task RunBinanceBookTickerLoopAsync(CancellationToken stoppingToken)
+    {
+        logger.LogInformation(
+            "BTC/order-book lag diagnostics Binance bookTicker polling started. Url={Url} PollIntervalMilliseconds={PollIntervalMilliseconds}",
+            options.BinanceBookTickerUrl,
+            options.BinanceBookTickerPollIntervalMilliseconds);
+
+        HttpClient httpClient = httpClientFactory.CreateClient(nameof(BtcOrderBookLagDiagnosticService));
+        httpClient.Timeout = TimeSpan.FromMilliseconds(options.BinanceBookTickerTimeoutMilliseconds);
+        TimeSpan pollInterval = TimeSpan.FromMilliseconds(Math.Max(1, options.BinanceBookTickerPollIntervalMilliseconds));
+
+        while (!stoppingToken.IsCancellationRequested)
+        {
+            try
+            {
+                using HttpResponseMessage response = await httpClient.GetAsync(options.BinanceBookTickerUrl, stoppingToken);
+                DateTimeOffset receivedAtUtc = DateTimeOffset.UtcNow;
+                string json = await response.Content.ReadAsStringAsync();
+                if (!response.IsSuccessStatusCode)
+                {
+                    LogBookTickerError($"HTTP {(int)response.StatusCode}: {response.ReasonPhrase}");
+                }
+                else if (TryParseBinanceBookTicker(json, receivedAtUtc, out BtcOrderBookLagDiagnosticEvent? diagnosticEvent, out string? parseError) &&
+                         diagnosticEvent is not null)
+                {
+                    Enqueue(diagnosticEvent);
+                }
+                else
+                {
+                    LogBookTickerError(parseError ?? "Unexpected bookTicker response.");
+                }
+            }
+            catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
+            {
+                break;
+            }
+            catch (Exception ex)
+            {
+                LogBookTickerError(ex.Message);
+            }
+
+            try
+            {
+                await Task.Delay(pollInterval, stoppingToken);
+            }
+            catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
+            {
+                break;
+            }
+        }
+
+        logger.LogInformation("BTC/order-book lag diagnostics Binance bookTicker polling stopped.");
     }
 
     private void Enqueue(BtcOrderBookLagDiagnosticEvent diagnosticEvent)
@@ -221,5 +293,125 @@ public sealed class BtcOrderBookLagDiagnosticService(
     private static decimal ToMilliseconds(DateTimeOffset receivedAtUtc, DateTimeOffset sourceTimestampUtc)
     {
         return (decimal)(receivedAtUtc - sourceTimestampUtc).TotalMilliseconds;
+    }
+
+    private static decimal? GetLevelSize(IReadOnlyList<OrderBookLevel>? levels, decimal? price)
+    {
+        if (levels is null || price is null)
+        {
+            return null;
+        }
+
+        foreach (OrderBookLevel level in levels)
+        {
+            if (level.Price == price.Value)
+            {
+                return level.Size;
+            }
+        }
+
+        return null;
+    }
+
+    private static bool TryParseBinanceBookTicker(
+        string json,
+        DateTimeOffset receivedAtUtc,
+        out BtcOrderBookLagDiagnosticEvent? diagnosticEvent,
+        out string? error)
+    {
+        diagnosticEvent = null;
+        error = null;
+
+        try
+        {
+            using JsonDocument document = JsonDocument.Parse(json);
+            JsonElement root = document.RootElement;
+            string symbol = ReadString(root, "symbol") ?? "BTCUSDT";
+            decimal? bidPrice = ReadDecimal(root, "bidPrice");
+            decimal? bidQty = ReadDecimal(root, "bidQty");
+            decimal? askPrice = ReadDecimal(root, "askPrice");
+            decimal? askQty = ReadDecimal(root, "askQty");
+            if (bidPrice is null && askPrice is null)
+            {
+                error = "Binance bookTicker response has no bidPrice or askPrice.";
+                return false;
+            }
+
+            decimal? mid = bidPrice is { } bid && askPrice is { } ask ? (bid + ask) / 2m : null;
+            diagnosticEvent = new BtcOrderBookLagDiagnosticEvent(
+                Guid.NewGuid(),
+                "BinanceBookTicker",
+                "BookTicker",
+                null,
+                null,
+                symbol,
+                mid ?? bidPrice ?? askPrice,
+                bidPrice,
+                bidQty,
+                askPrice,
+                askQty,
+                mid,
+                null,
+                null,
+                null,
+                receivedAtUtc,
+                null,
+                "REST",
+                DateTimeOffset.UtcNow);
+            return true;
+        }
+        catch (JsonException ex)
+        {
+            error = "Invalid Binance bookTicker JSON: " + ex.Message;
+            return false;
+        }
+    }
+
+    private static string? ReadString(JsonElement root, string propertyName)
+    {
+        return root.TryGetProperty(propertyName, out JsonElement property) && property.ValueKind == JsonValueKind.String
+            ? property.GetString()
+            : null;
+    }
+
+    private static decimal? ReadDecimal(JsonElement root, string propertyName)
+    {
+        if (!root.TryGetProperty(propertyName, out JsonElement property))
+        {
+            return null;
+        }
+
+        if (property.ValueKind == JsonValueKind.Number && property.TryGetDecimal(out decimal number))
+        {
+            return number;
+        }
+
+        return property.ValueKind == JsonValueKind.String &&
+               decimal.TryParse(property.GetString(), NumberStyles.Number, CultureInfo.InvariantCulture, out decimal value)
+            ? value
+            : null;
+    }
+
+    private void LogBookTickerError(string message)
+    {
+        DateTimeOffset now = DateTimeOffset.UtcNow;
+        if ((now - lastBookTickerErrorLogUtc).TotalSeconds < 60)
+        {
+            return;
+        }
+
+        lastBookTickerErrorLogUtc = now;
+        logger.LogWarning("BTC/order-book lag diagnostics Binance bookTicker polling failed: {ErrorMessage}", message);
+    }
+
+    private static async Task AwaitBackgroundTaskAsync(Task task)
+    {
+        try
+        {
+            await task;
+        }
+        catch (OperationCanceledException)
+        {
+        }
     }
 }

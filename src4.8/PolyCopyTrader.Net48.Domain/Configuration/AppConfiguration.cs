@@ -330,6 +330,14 @@ public sealed class BtcOrderBookLagDiagnosticsOptions
 
     public bool CaptureBinanceTrades { get; init; } = true;
 
+    public bool CaptureBinanceBookTicker { get; init; } = true;
+
+    public string BinanceBookTickerUrl { get; init; } = "https://api.binance.com/api/v3/ticker/bookTicker?symbol=BTCUSDT";
+
+    public int BinanceBookTickerPollIntervalMilliseconds { get; init; } = 1_000;
+
+    public int BinanceBookTickerTimeoutMilliseconds { get; init; } = 2_000;
+
     public bool CapturePolymarketTopOfBook { get; init; } = true;
 }
 

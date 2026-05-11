@@ -2248,7 +2248,9 @@ CREATE TABLE IF NOT EXISTS btc_order_book_lag_diagnostic_events (
     binance_symbol text NULL,
     binance_price_usd numeric(28,8) NULL,
     best_bid numeric(18,8) NULL,
+    best_bid_size numeric(28,8) NULL,
     best_ask numeric(18,8) NULL,
+    best_ask_size numeric(28,8) NULL,
     mid numeric(18,8) NULL,
     trade_price numeric(18,8) NULL,
     trade_size numeric(28,8) NULL,
@@ -2258,6 +2260,9 @@ CREATE TABLE IF NOT EXISTS btc_order_book_lag_diagnostic_events (
     raw_event_type text NOT NULL DEFAULT '',
     created_at_utc timestamptz NOT NULL
 );
+
+ALTER TABLE btc_order_book_lag_diagnostic_events ADD COLUMN IF NOT EXISTS best_bid_size numeric(28,8) NULL;
+ALTER TABLE btc_order_book_lag_diagnostic_events ADD COLUMN IF NOT EXISTS best_ask_size numeric(28,8) NULL;
 
 CREATE INDEX IF NOT EXISTS ix_btc_order_book_lag_events_received
 ON btc_order_book_lag_diagnostic_events(received_at_utc DESC);

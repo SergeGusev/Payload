@@ -1,3 +1,18 @@
+## Active Update 2026-05-11 Binance REST BookTicker Diagnostics
+Goal: Add Binance REST `bookTicker` BTCUSDT snapshots to the event-level lag diagnostics so Binance quote movement can be correlated with Binance trades and Polymarket BTC order-book movement.
+Status: Completed
+Done:
+- Extended `BtcOrderBookLagDiagnostics` with `CaptureBinanceBookTicker`, `BinanceBookTickerUrl`, `BinanceBookTickerPollIntervalMilliseconds`, and `BinanceBookTickerTimeoutMilliseconds`; enabled polling every 1000 ms in Net48 service appsettings.
+- Added `best_bid_size` and `best_ask_size` to `btc_order_book_lag_diagnostic_events`, schema initialization, storage inserts, and the shared diagnostic event model.
+- Updated `BtcOrderBookLagDiagnosticService` to run a background Binance REST `bookTicker` poll loop through `IHttpClientFactory`, parse bid/ask prices and sizes, and persist source `BinanceBookTicker` with event type `BookTicker`.
+- Existing Binance trade and Polymarket top-of-book diagnostics now fill the expanded model; Polymarket events also store top-level size when a full snapshot is available.
+- Updated README and `docs/configuration_reference.md`.
+- Rebuilt the root Net48 solution with Visual Studio MSBuild Release, ran Release `--host-smoke` and `--storage-smoke`, restarted the Net48 service from `src4.8/PolyCopyTrader.Net48.Service/bin/Release/PolyCopyTrader.Net48.Service.exe`, and paused Live through IPC.
+- Verified the old/local PostgreSQL diagnostic table is receiving all three sources in the latest 2-minute window: `BinanceBookTicker=69`, `BinanceTrade=1863`, `PolymarketTopOfBook=2087`. Temporary C# probe was removed.
+Next: Let the 180-minute diagnostic window accumulate, then compare lead/lag between Binance trades, Binance bookTicker mid/bid/ask, and Polymarket top-of-book events.
+Notes: Service is running as PID `65876`; IPC `/status` reports `Running`, scanning/Paper unpaused, Live paused, kill switch inactive, and no last error. Verification passed: VS MSBuild Release, Release `--host-smoke`, Release `--storage-smoke`, DB row-count probe, IPC status, and `dotnet test tests/PolyCopyTrader.Tests/PolyCopyTrader.Tests.csproj --no-restore` (`418` passed). Builds/tests still emit existing nullable warnings.
+Blockers: None.
+
 ## Active Update 2026-05-11 Event-Level Binance/Book Lag Diagnostics
 Goal: Add short-retention event-level diagnostics for Binance BTC/USDT trades versus Polymarket BTC 5m top-of-book updates.
 Status: Completed

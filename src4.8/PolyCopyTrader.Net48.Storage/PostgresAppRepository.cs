@@ -2602,11 +2602,11 @@ LIMIT @Limit;
 			using NpgsqlCommand command = CreateCommand(connection, """
 INSERT INTO btc_order_book_lag_diagnostic_events (
     id, source, event_type, asset_id, condition_id, binance_symbol, binance_price_usd,
-    best_bid, best_ask, mid, trade_price, trade_size, source_timestamp_utc,
+    best_bid, best_bid_size, best_ask, best_ask_size, mid, trade_price, trade_size, source_timestamp_utc,
     received_at_utc, local_lag_ms, raw_event_type, created_at_utc
 ) VALUES (
     @Id, @Source, @EventType, @AssetId, @ConditionId, @BinanceSymbol, @BinancePriceUsd,
-    @BestBid, @BestAsk, @Mid, @TradePrice, @TradeSize, @SourceTimestampUtc,
+    @BestBid, @BestBidSize, @BestAsk, @BestAskSize, @Mid, @TradePrice, @TradeSize, @SourceTimestampUtc,
     @ReceivedAtUtc, @LocalLagMs, @RawEventType, @CreatedAtUtc
 );
 """);
@@ -6843,7 +6843,9 @@ LIMIT @Limit;
 		command.Parameters.AddWithValue("BinanceSymbol", ((object)diagnosticEvent.BinanceSymbol) ?? ((object)DBNull.Value));
 		command.Parameters.AddWithValue("BinancePriceUsd", NullableDecimal(diagnosticEvent.BinancePriceUsd));
 		command.Parameters.AddWithValue("BestBid", NullableDecimal(diagnosticEvent.BestBid));
+		command.Parameters.AddWithValue("BestBidSize", NullableDecimal(diagnosticEvent.BestBidSize));
 		command.Parameters.AddWithValue("BestAsk", NullableDecimal(diagnosticEvent.BestAsk));
+		command.Parameters.AddWithValue("BestAskSize", NullableDecimal(diagnosticEvent.BestAskSize));
 		command.Parameters.AddWithValue("Mid", NullableDecimal(diagnosticEvent.Mid));
 		command.Parameters.AddWithValue("TradePrice", NullableDecimal(diagnosticEvent.TradePrice));
 		command.Parameters.AddWithValue("TradeSize", NullableDecimal(diagnosticEvent.TradeSize));

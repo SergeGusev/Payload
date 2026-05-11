@@ -531,6 +531,20 @@ public static class AppOptionsValidator
         {
             errors.Add("BtcOrderBookLagDiagnostics.CleanupBatchSize must be between 1 and 1000000.");
         }
+
+        ValidateAbsoluteHttpsUrl(options.BinanceBookTickerUrl, "BtcOrderBookLagDiagnostics.BinanceBookTickerUrl", errors);
+
+        if (options.BinanceBookTickerPollIntervalMilliseconds <= 0 ||
+            options.BinanceBookTickerPollIntervalMilliseconds > 60_000)
+        {
+            errors.Add("BtcOrderBookLagDiagnostics.BinanceBookTickerPollIntervalMilliseconds must be between 1 and 60000.");
+        }
+
+        if (options.BinanceBookTickerTimeoutMilliseconds <= 0 ||
+            options.BinanceBookTickerTimeoutMilliseconds > 60_000)
+        {
+            errors.Add("BtcOrderBookLagDiagnostics.BinanceBookTickerTimeoutMilliseconds must be between 1 and 60000.");
+        }
     }
 
     private static void ValidateDataApiTraderIngestion(DataApiTraderIngestionOptions options, List<string> errors)
