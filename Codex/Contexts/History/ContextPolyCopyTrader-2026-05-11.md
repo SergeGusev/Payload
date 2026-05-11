@@ -60,3 +60,10 @@ Request:
 
 Result:
 Rechecked persisted context. The first controlled Live-shadow candidate was `BTC Up or Down 5m More 150 Below 65`; `BTC Up or Down 5m More 90 Below 55` was the second watchlist/backup candidate. Earlier `BTC Up or Down 5m Skip 1` was used for Live-shadow mechanics/accounting tests, not as the current preferred profitability candidate.
+
+## 2026-05-11T06:53:23.6030720Z
+Request:
+Переход на Live будет сопровождаться изменениями в базе данных или в коде?
+
+Result:
+Rechecked the Net48 BTC Paper/Live-shadow code path and docs. Current controlled BTC live-shadow placement is still explicitly hard-gated to `BTC Up or Down 5m Skip 1`, so moving the selected `BTC Up or Down 5m More 150 Below 65` candidate to controlled Live-shadow requires code changes, not just DB flags. Existing schema is already generic enough for the test (`strategies.live_stakes`, `live_orders`, `live_trading_events`, `paper_live_shadow_decisions`, `paper_live_shadow_discrepancies`), so no new schema migration is expected. Runtime DB/config changes will still be needed: keep all other strategies live-disabled, enable/fund only the chosen strategy, set Live config gates, and Live/shadow rows will be created naturally during the test.

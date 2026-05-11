@@ -1,3 +1,16 @@
+## Active Update 2026-05-11 Live Transition Change Scope
+Goal: Clarify whether moving the selected strategy to Live requires database or code changes.
+Status: Completed
+Done:
+- Rechecked the Net48 BTC Paper/Live-shadow code path and documentation.
+- Confirmed current controlled BTC Paper/Live-shadow placement is still hard-gated to `BTC Up or Down 5m Skip 1`.
+- Confirmed `BTC Up or Down 5m More 150 Below 65` cannot be moved to controlled Live-shadow by DB flags alone; code must be generalized or whitelisted for that strategy.
+- Confirmed existing DB schema already has the needed generic live/shadow structures: `strategies.live_stakes`, `live_orders`, `live_trading_events`, `paper_live_shadow_decisions`, and `paper_live_shadow_discrepancies`.
+- Confirmed the required DB/config changes are runtime enablement, not a new schema migration: set only the chosen strategy live-enabled/live-funded and keep all other strategies disabled; when running, live/shadow activity will naturally create rows.
+Next: If user approves implementation, extend the Paper/Live-shadow allowlist from Skip 1 to the selected `More 150 Below 65` candidate, add focused tests, rebuild, and only then enable the DB/config gates.
+Notes: Read-only analysis; no production behavior changed.
+Blockers: None.
+
 ## Active Update 2026-05-11 Live Candidate Reminder
 Goal: Remind which strategy was selected as the first Live candidate.
 Status: Completed
