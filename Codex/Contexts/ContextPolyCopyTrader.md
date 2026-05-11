@@ -1,3 +1,18 @@
+## Active Update 2026-05-11 Old Server Runtime Check
+Goal: Check the current .NET 10 runtime/data collection state on the old server after abandoning the new Windows Server 2008 R2 host.
+Status: Completed
+Done:
+- Confirmed `PolyCopyTrader.Service.exe` is running from `src\PolyCopyTrader.Service\bin\Debug\net10.0` and `PolyCopyTrader.Dashboard.exe` is also running.
+- Confirmed the service is connected to local PostgreSQL `127.0.0.1:5432/polycopytrader` on PostgreSQL `17.5`.
+- Confirmed heartbeat is fresh: `PolyCopyTrader.Service` is `Running`, mode `Live`, last heartbeat age about `5.2s` at DB time `2026-05-11 16:11:54 UTC`.
+- Confirmed current market data is healthy enough for BTC: aggregate `PolymarketMarketWebSocket` is `Connected`, subscribed assets `648`, last message `2026-05-11 16:11:48 UTC`, stale `false`.
+- Confirmed BTC data collection is active: `btc_up_down_5m_odds_ticks` had `45` ticks in the last 5/15 minutes; lag diagnostics last 15 minutes had `BinanceTrade=20632`, `BinanceBookTicker=172`, `PolymarketTopOfBook=5217`.
+- Confirmed Paper activity is active since restart: `118` Paper orders in the last 15/60 minutes, `91` still open, `5` filled, latest order `2026-05-11 16:11:30 UTC`.
+- Confirmed no API errors or persisted HTTP failures in the last 15 minutes; Live had no open orders and latest Live order was earlier at `2026-05-11 09:32:30 UTC`.
+Next: Keep collecting stats on the old server. If this should be 24/7 unattended, consider running the Release service as a proper Windows Service instead of the Debug exe.
+Notes: Inspection only; no production code changed. Old stale `market_data_status` shard rows from May 7 still exist, but the current aggregate/shard-001 statuses are fresh and connected.
+Blockers: None.
+
 ## Active Update 2026-05-11 Confirm Net10 GTD Depth Fill Logic
 Goal: Check whether the recent Net48 order executability/depth behavior exists in the main .NET 10 code path.
 Status: Completed

@@ -299,3 +299,9 @@ Request:
 
 Result:
 Inspected the main .NET 10 code path. Confirmed the conservative Paper GTD fill model is present and wired: immediate Paper fill is created only up to executable ask depth captured in the initial snapshot, while GTD order creation itself is not blocked by missing immediate depth and can wait for later fill evidence.
+## 2026-05-11T16:12:20.1839161+00:00
+Request:
+Проверь (уже на старом сервере, от нового отказались) - как идёт процесс
+
+Result:
+Checked the old/local server. The .NET 10 service and Dashboard are running; service heartbeat is fresh against local PostgreSQL `127.0.0.1:5432/polycopytrader`. Current BTC market data is active: aggregate Polymarket WebSocket is connected with 648 subscribed assets, BTC odds ticks and BTC/order-book lag diagnostics are being written, and no API errors or HTTP failures were persisted in the last 15 minutes. Paper trading is active with 118 orders created since the recent restart, 5 filled, and 91 still open. Live has no open orders.
