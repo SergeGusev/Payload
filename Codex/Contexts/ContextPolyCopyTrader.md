@@ -1,3 +1,32 @@
+## Active Update 2026-05-11 Net48 Dashboard Old MSBuild Toolkit Fix
+Goal: Fix the Windows Server 2008 R2 project-load failure in Net48 Dashboard caused by CommunityToolkit.Mvvm targets using a newer MSBuild method.
+Status: Completed
+Done:
+- Kept the running Net48 service untouched after the user's interruption; IPC `/status` still reports `Running`, Live unpaused, kill switch inactive, and no last error.
+- Diagnosed the Dashboard load failure as `CommunityToolkit.Mvvm 8.4.2` importing WPF temporary `buildTransitive` targets that call `[MSBuild]::IsTargetFrameworkCompatible(...)`, which old MSBuild on Windows Server 2008 R2 does not provide.
+- Inspected CommunityToolkit.Mvvm packages and confirmed `8.3.2+` contains the incompatible MSBuild call while `8.2.2` does not.
+- Changed only `src4.8/PolyCopyTrader.Net48.Dashboard/PolyCopyTrader.Net48.Dashboard.csproj` to use `CommunityToolkit.Mvvm 8.2.2` and the matching `roslyn4.3` source generator path.
+- Removed stale local generated WPF `*_wpftmp*` obj files and verified the regenerated Net48 Dashboard NuGet targets no longer import CommunityToolkit targets or contain `IsTargetFrameworkCompatible`.
+- Preserved the safety default in source `appsettings.json` by leaving `Bot.EnableLiveTrading=false`; the currently running service process remains live-enabled from its already-loaded Release output config.
+Next: On the Windows Server 2008 R2 machine, pull the updated project, delete `src4.8\PolyCopyTrader.Net48.Dashboard\obj` if it exists, restore/build again, and verify the project loads.
+Notes: Verification passed: Net48 Dashboard `/restore /t:Rebuild /p:Configuration=Release` succeeded with existing nullable warnings; generated `obj\*.nuget.g.targets` and `project.assets.json` no longer contain the problematic CommunityToolkit Windows targets; service PID `15160` remained running.
+Blockers: None.
+
+## Active Update 2026-05-11 Controlled Live Start And Exposure Preflight Fix
+Goal: Start the controlled Live-shadow run for `BTC Up or Down 5m More 150 Below 65` and resolve the first safe preflight blocker.
+Status: Completed
+Done:
+- Stopped the previous Net48 service process, enabled global Live in the Release output, and set `live_stakes=true` only for `btc_up_down_5m_more_150_below_65`; `btc_up_down_5m_skip_1` and all other strategies remained Live-disabled.
+- Restarted the Net48 service from Release output; IPC `/status` reported `Running`, scanning/Paper/Live unpaused, kill switch inactive, and no last error.
+- Observed the first Live-shadow decision/live order row for the selected strategy; no Polymarket order was submitted because our preflight rejected it with `Live market exposure would exceed configured limit`.
+- Diagnosed the blocker as BTC Live preflight counting all Paper orders/positions in the same market against real Live market/total exposure limits.
+- Updated `BtcUpDown5mPaperStrategyProcessor` so BTC Live-shadow market and total exposure caps count open Live orders only, while Paper exposure remains for Paper accounting/statistics.
+- Rebuilt Net48 Release and reran the full test project (`418/418` passed); restarted the service from patched Release output.
+- Kept source `src4.8/PolyCopyTrader.Net48.Service/appsettings.json` safe with `EnableLiveTrading=false`; the currently running process remains live-enabled from its already-loaded Release output config.
+Next: Continue monitoring `live_orders`, `paper_live_shadow_decisions`, and discrepancy rows for the next actual Live submit attempt.
+Notes: Verification passed: Net48 Release MSBuild succeeded with existing nullable warnings, `dotnet test tests\PolyCopyTrader.Tests\PolyCopyTrader.Tests.csproj --no-restore` passed `418/418`, Release `--host-smoke`, Release `--storage-smoke`, and IPC `/status` after restart was healthy.
+Blockers: None.
+
 ## Active Update 2026-05-11 Live Readiness Check Before Start
 Goal: Verify whether the Net48 service is ready for the controlled Live start.
 Status: Completed

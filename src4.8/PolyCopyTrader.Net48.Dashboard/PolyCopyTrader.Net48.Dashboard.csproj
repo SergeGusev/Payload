@@ -26,7 +26,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <PackageReference Include="CommunityToolkit.Mvvm" Version="8.4.2" ExcludeAssets="build;buildTransitive;analyzers" />
+    <PackageReference Include="CommunityToolkit.Mvvm" Version="8.2.2" ExcludeAssets="build;buildTransitive;analyzers" />
     <PackageReference Include="Microsoft.Extensions.Configuration" Version="6.0.0" />
     <PackageReference Include="Microsoft.Extensions.Configuration.Binder" Version="6.0.0" />
     <PackageReference Include="Microsoft.Extensions.Configuration.EnvironmentVariables" Version="6.0.1" />
@@ -41,8 +41,8 @@
   <Target Name="SelectNet48DashboardAnalyzers" BeforeTargets="CoreCompile">
     <ItemGroup>
       <Analyzer Remove="@(Analyzer)" />
-      <Analyzer Include="$(NuGetPackageRoot)communitytoolkit.mvvm\8.4.2\analyzers\dotnet\roslyn4.12\cs\CommunityToolkit.Mvvm.SourceGenerators.dll"
-                Condition="Exists('$(NuGetPackageRoot)communitytoolkit.mvvm\8.4.2\analyzers\dotnet\roslyn4.12\cs\CommunityToolkit.Mvvm.SourceGenerators.dll')" />
+      <Analyzer Include="$(NuGetPackageRoot)communitytoolkit.mvvm\8.2.2\analyzers\dotnet\roslyn4.3\cs\CommunityToolkit.Mvvm.SourceGenerators.dll"
+                Condition="Exists('$(NuGetPackageRoot)communitytoolkit.mvvm\8.2.2\analyzers\dotnet\roslyn4.3\cs\CommunityToolkit.Mvvm.SourceGenerators.dll')" />
     </ItemGroup>
   </Target>
 

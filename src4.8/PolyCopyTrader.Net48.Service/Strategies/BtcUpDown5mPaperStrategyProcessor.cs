@@ -6245,19 +6245,8 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
 
         var marketExposure = openLiveOrders
             .Where(order => string.Equals(order.ConditionId, signal.LeaderTrade.ConditionId, StringComparison.OrdinalIgnoreCase))
-            .Sum(order => order.NotionalUsd) +
-            exposureSnapshot.OpenPaperOrders
-                .Where(order => order.Id != paperOrder.Id && order.CorrelationId != correlationId)
-                .Where(order => string.Equals(order.ConditionId, signal.LeaderTrade.ConditionId, StringComparison.OrdinalIgnoreCase))
-                .Sum(order => order.NotionalUsd) +
-            exposureSnapshot.PaperPositions
-                .Where(position => string.Equals(position.ConditionId, signal.LeaderTrade.ConditionId, StringComparison.OrdinalIgnoreCase))
-                .Sum(position => position.EstimatedValueUsd);
-        var totalExposure = openLiveOrders.Sum(order => order.NotionalUsd) +
-            exposureSnapshot.OpenPaperOrders
-                .Where(order => order.Id != paperOrder.Id && order.CorrelationId != correlationId)
-                .Sum(order => order.NotionalUsd) +
-            exposureSnapshot.PaperPositions.Sum(position => position.EstimatedValueUsd);
+            .Sum(order => order.NotionalUsd);
+        var totalExposure = openLiveOrders.Sum(order => order.NotionalUsd);
         if (marketExposure + liveNotional > maxMarketNotional)
         {
             validation.Add("Live market exposure would exceed configured limit.");
@@ -6617,16 +6606,8 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
 
         var marketExposure = openLiveOrders
             .Where(order => string.Equals(order.ConditionId, signal.LeaderTrade.ConditionId, StringComparison.OrdinalIgnoreCase))
-            .Sum(order => order.NotionalUsd) +
-            exposureSnapshot.OpenPaperOrders
-                .Where(order => string.Equals(order.ConditionId, signal.LeaderTrade.ConditionId, StringComparison.OrdinalIgnoreCase))
-                .Sum(order => order.NotionalUsd) +
-            exposureSnapshot.PaperPositions
-                .Where(position => string.Equals(position.ConditionId, signal.LeaderTrade.ConditionId, StringComparison.OrdinalIgnoreCase))
-                .Sum(position => position.EstimatedValueUsd);
-        var totalExposure = openLiveOrders.Sum(order => order.NotionalUsd) +
-            exposureSnapshot.OpenPaperOrders.Sum(order => order.NotionalUsd) +
-            exposureSnapshot.PaperPositions.Sum(position => position.EstimatedValueUsd);
+            .Sum(order => order.NotionalUsd);
+        var totalExposure = openLiveOrders.Sum(order => order.NotionalUsd);
         if (marketExposure + liveNotional > maxMarketNotional)
         {
             validation.Add("Live market exposure would exceed configured limit.");

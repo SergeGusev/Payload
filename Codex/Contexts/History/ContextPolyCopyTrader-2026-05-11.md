@@ -85,6 +85,20 @@ Request:
 
 Result:
 Transferred the old .NET 10 non-secret Live/Auth runtime posture into `src4.8/PolyCopyTrader.Net48.Service/appsettings.json`: `Bot.Mode=Live`, `PolymarketAuth.Enabled=true`, `SecretProvider=CredentialManager`, public signer/funder addresses, `ChainId=137`, `SignatureType=POLY_1271`, dry-run signing, the existing order-signing secret target, `PaperTrading.RunInLiveMode=true`, and `LiveTrading.MaxOrderNotionalUsd=5.0`. Kept `Bot.EnableLiveTrading=false`, so the transfer does not authorize live order placement by itself. Rebuilt Net48 Release, ran `--host-smoke`, `--storage-smoke`, and `--print-config`, then restarted the Net48 service. IPC status is `Running`, Paper unpaused, kill switch inactive, and no last error.
+## 2026-05-11T07:48:16.8481539+00:00
+Request:
+Пусть сервис сам работает, давай разберёмся с одной ошибкой. Когда я пытаюсь загрузить наши проекты на сервере Windows Server 2008R2 SP1, я вижу ошибку для сервиса 48 Dashboard: C:\My\Business\Polymaket\Source\Payload\src4.8\PolyCopyTrader.Net48.Dashboard\PolyCopyTrader.Net48.Dashboard.csproj : error  : Invalid static method invocation syntax: "[MSBuild]::IsTargetFrameworkCompatible('$(TargetFramework)', 'net8.0-windows10.0.17763.0')". Method '[MSBuild]::IsTargetFrameworkCompatible' not found. Static method invocation should be of the form: $([FullTypeName]::Method()), e.g. $([System.IO.Path]::Combine(`a`, `b`)). Check that all parameters are defined, are of the correct type, and are specified in the right order.  J:\Users\Administrator\.nuget\packages\communitytoolkit.mvvm\8.4.2\buildTransitive\CommunityToolkit.Mvvm.Windows.targets
+
+Result:
+Left the running service alone and fixed the Net48 Dashboard project-load issue by downgrading only its CommunityToolkit.Mvvm reference from 8.4.2 to 8.2.2 and pointing the manual MVVM Toolkit source generator path to roslyn4.3. Verified Net48 Dashboard restore/rebuild succeeds and generated NuGet targets no longer contain the incompatible CommunityToolkit Windows targets or `IsTargetFrameworkCompatible`.
+
+## 2026-05-11T07:38:10.0000000+00:00
+Request:
+Ок, поехали
+
+Result:
+Started the controlled Net48 Live-shadow run for `BTC Up or Down 5m More 150 Below 65`: enabled Live only for that strategy in the database, restarted the service live-enabled, observed the first safe preflight rejection, fixed the BTC Live preflight to count only open Live orders against Live market/total exposure caps instead of all Paper exposure, rebuilt and tested. Source appsettings remains safe with `EnableLiveTrading=false`; the running process remains live-enabled from loaded Release output config.
+
 ## 2026-05-11T07:26:12.8497059+00:00
 Request:
 Ок. Можем запускаться?
