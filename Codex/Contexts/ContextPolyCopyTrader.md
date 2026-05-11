@@ -1,3 +1,15 @@
+## Active Update 2026-05-11 BTC Start-Relative Strategy Usage Answer
+Goal: Confirm whether BTC deviation from the 5-minute market start is already used in strategies.
+Status: Completed
+Done:
+- Inspected the Net48 BTC strategy processor and strategy seed definitions.
+- Confirmed the `BTC Up or Down 5m Binance` family uses current Binance BTC/USDT versus the archived market-start reference to choose Up/Down, with bps-threshold variants skipping weak moves.
+- Confirmed `BTC Up or Down 5m Binance Clever`, Clever margin variants, and Edge variants also use the same start-relative move and compare against recent odds archive fair-value samples.
+- Clarified that Middle strategies use deviation from the rolling Binance arithmetic mean, Skip strategies use previous BTC market results, and More/Less/Gamma strategies use Polymarket/Gamma odds rather than BTC start-relative move.
+Next: Consider a separate calibrated fair-value model from start-relative BTC move if we want to use the signal beyond direction/threshold filtering.
+Notes: Read-only code inspection; no production code changed.
+Blockers: None.
+
 ## Active Update 2026-05-11 BTC Market Creation Lead Check
 Goal: Determine how early BTC Up/Down 5m markets are created and whether order books exist before the trading window starts.
 Status: Completed

@@ -175,3 +175,10 @@ Request:
 
 Result:
 Checked BTC Up/Down 5m market creation and pre-start order-book data. Gamma `created_at_utc` is typically about `1433` minutes before `market_start_utc`, roughly `23h 53m` before the 5-minute period starts. Current upcoming markets starting in `1-96` minutes are already `accepting_orders=true`, `enable_order_book=true`, and have visible `best_bid`/`best_ask` around `0.50/0.51` with liquidity and sometimes volume. WebSocket diagnostics show pre-start two-sided top-of-book quotes for 25 recent markets, up to about `29.5` minutes before start; our `btc_up_down_5m_odds_ticks` archive has no pre-start ticks because it intentionally samples only at/after market start.
+
+## 2026-05-11T10:56:22.9165385Z
+Request:
+Но это отклонение BTC от старта 5-ти минутного периода мы уже успользуем в наших стратегиях, правильно?
+
+Result:
+Inspected the Net48 BTC strategy processor and strategy seed definitions. Confirmed the `BTC Up or Down 5m Binance` family uses current Binance BTC/USDT versus the archived market-start reference to choose Up/Down, with bps-threshold variants filtering weak moves. Confirmed Clever/Clever margin/Edge Binance variants use the same start-relative move as part of fair-value estimation. Clarified that Middle uses rolling arithmetic mean deviation, Skip uses previous market results, and More/Less/Gamma use Polymarket/Gamma odds rather than BTC start-relative move.
