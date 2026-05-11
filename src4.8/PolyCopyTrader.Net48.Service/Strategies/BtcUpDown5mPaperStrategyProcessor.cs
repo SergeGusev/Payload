@@ -3595,7 +3595,7 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
             candidate.Behavior == baseBehavior.Value &&
             candidate.DecisionDepth == variant.DecisionDepth &&
             candidate.EntryDelaySeconds == variant.EntryDelaySeconds &&
-            candidate.DecisionThresholdBps is null);
+            candidate.DecisionThresholdBps == variant.DecisionThresholdBps);
     }
 
     private static IReadOnlyList<BtcUpDown5mStrategyVariant> GetEnsembleVoteCandidateVariants()

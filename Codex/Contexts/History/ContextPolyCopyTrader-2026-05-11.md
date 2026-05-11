@@ -203,3 +203,9 @@ Ok, do it. 30 seconds for a decision is too much.
 
 Result:
 Implemented bounded async BTC due-entry processing in the Net48 service. Added `BtcUpDown5mStrategy.MaxConcurrentEntryDecisions`, set it to `8`, reduced `EntryGraceSeconds` from `30` to `10`, and shared the per-cycle BTC current-price cache across concurrent variant tasks. Fixed Middle Revert base-variant lookup so bps-threshold Middle variants no longer cause `Sequence contains more than one matching element`. Added Net48 build support for PackageReference from the command line via `src4.8/Directory.Build.targets` and `TargetFramework=net48`. Verified focused BTC processor tests passed 91/91, Net48 Release build passed with nullable warnings, restarted the Net48 service as PID 65616 with `Bot__EnableLiveTrading=false`, and observed the 14:35 local BTC window placing Middle/Middle Revert decisions about 0.9 seconds after market start. PostgreSQL `57P03` recovery errors still appeared later in that window and remain a separate operational issue.
+## 2026-05-11T12:12:04.9004195Z
+Request:
+Добавь для Middle Revert такие же значения bps, как для Middle
+
+Result:
+Added 45 Net48 BTC Middle Revert bps-threshold strategy variants for depths `1..5` and thresholds `0.1..0.9` bps, seeded them into PostgreSQL with `paper_stake_amount`, and matched Revert bps dynamic pricing bootstrap to the corresponding base Middle bps variant. Verified Net48 Release service build, reflected `MiddleRevertBpsCount=45` and `TotalVariants=199`, restarted the Net48 service in Paper mode with `Bot__EnableLiveTrading=false`, confirmed IPC `/status` is `Running`, and ran the main regression test project successfully (`423/423`).

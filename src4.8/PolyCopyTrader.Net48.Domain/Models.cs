@@ -1104,6 +1104,14 @@ public static class StrategyIds
 
         for (var depth = 1; depth <= 5; depth++)
         {
+            for (var thresholdTenths = 1; thresholdTenths <= 9; thresholdTenths++)
+            {
+                variants.Add(CreateBtcUpDown5mMiddleRevertBpsThresholdVariant(depth, thresholdTenths / 10m));
+            }
+        }
+
+        for (var depth = 1; depth <= 5; depth++)
+        {
             variants.Add(CreateBtcUpDown5mSkipVariant(depth));
         }
 
@@ -1223,6 +1231,26 @@ public static class StrategyIds
             0,
             BtcUpDown5mStrategyBehavior.MiddleReferenceRevert,
             depth);
+    }
+
+    private static BtcUpDown5mStrategyVariant CreateBtcUpDown5mMiddleRevertBpsThresholdVariant(int depth, decimal thresholdBps)
+    {
+        var cachedSamples = depth - 1;
+        var sampleDescription = cachedSamples == 0
+            ? "the latest Binance BTC/USDT trade-stream price"
+            : $"the latest Binance BTC/USDT trade-stream price plus the latest {cachedSamples} cached reference sample(s)";
+        var thresholdName = thresholdBps.ToString("0.#", CultureInfo.InvariantCulture);
+        var thresholdId = (int)(thresholdBps * 10m);
+        return new BtcUpDown5mStrategyVariant(
+            Guid.Parse($"b7c50005-0000-4000-8024-0000000{depth:000}{thresholdId:00}"),
+            $"btc_up_down_5m_middle_{depth}_revert_bps_0_{thresholdId}",
+            $"BTC Up or Down 5m Middle {depth} Revert {thresholdName} bps",
+            $"Immediately after BTC 5m market open, compare {sampleDescription} against the cached arithmetic mean, then invert the standard Middle {depth} decision; above mean buys Up, below mean buys Down, otherwise skip. Enter only when every compared price is at least {thresholdName} bps away from the mean. Paper entry is a GTD limit BUY with dynamic break-even pricing; settlement uses only actually filled shares.",
+            BtcUpDown5mStrategyDirection.Dynamic,
+            0,
+            BtcUpDown5mStrategyBehavior.MiddleReferenceRevert,
+            depth,
+            thresholdBps);
     }
 
     private static BtcUpDown5mStrategyVariant CreateBtcUpDown5mSkipVariant(int depth)

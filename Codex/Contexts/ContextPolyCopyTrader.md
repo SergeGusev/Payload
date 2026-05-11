@@ -1,3 +1,16 @@
+## Active Update 2026-05-11 Middle Revert Bps Variants
+Goal: Add the same bps-threshold variants for Net48 Middle Revert BTC strategies that already exist for Middle.
+Status: Completed
+Done:
+- Added 45 Net48 `BTC Up or Down 5m Middle N Revert M bps` strategy variants: depths `1..5` and thresholds `0.1..0.9` bps.
+- Seeded those strategies into PostgreSQL with ids under group `8024` and codes like `btc_up_down_5m_middle_1_revert_bps_0_1`.
+- Updated Net48 Middle Revert base-variant lookup so bps Revert variants pair with the matching bps Middle variant for dynamic break-even bootstrap.
+- Fixed the new Net48 seed SQL to use `paper_stake_amount` rather than the obsolete `default_stake_usd` column.
+- Rebuilt and restarted the Net48 service in Paper mode with `Bot__EnableLiveTrading=false`; IPC `/status` is `Running`.
+Next: Let Paper statistics accumulate for the new Middle Revert bps variants.
+Notes: Verification passed: `dotnet build src4.8\PolyCopyTrader.Net48.Service\PolyCopyTrader.Net48.Service.csproj -c Release` (nullable warnings only), reflection check showed `MiddleRevertBpsCount=45` and `TotalVariants=199`, service log shows `Mode="Paper"` and `VariantCount=199`, and `dotnet test tests\PolyCopyTrader.Tests\PolyCopyTrader.Tests.csproj -c Release --no-restore` passed `423/423`.
+Blockers: None.
+
 ## Active Update 2026-05-11 Bounded BTC Entry Processing
 Goal: Reduce BTC strategy decision latency so opening-limit strategies do not wait ~30 seconds behind sequential variant processing.
 Status: Completed
