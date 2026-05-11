@@ -46,6 +46,15 @@ if (args.Contains("--binance-sbe-smoke", StringComparer.OrdinalIgnoreCase))
     return;
 }
 
+if (args.Contains("--btc-source-comparison-csv", StringComparer.OrdinalIgnoreCase))
+{
+    Environment.ExitCode = await BtcSourceComparisonCsvCommand.ExecuteAsync(
+        args,
+        Console.Out,
+        CancellationToken.None);
+    return;
+}
+
 var builder = Host.CreateApplicationBuilder(args);
 var appConfiguration = AppConfigurationLoader.Load(builder.Configuration);
 AppOptionsValidator.ValidateAndThrow(appConfiguration);

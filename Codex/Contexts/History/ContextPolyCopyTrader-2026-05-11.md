@@ -325,3 +325,9 @@ Request:
 
 Result:
 Reviewed the official Binance SBE Market Data Streams documentation and SBE schema. Summarized endpoint, authentication, stream types, timing, limits, and relevance for PolyCopyTrader BTC diagnostics; no production code changed.
+## 2026-05-11T17:01:17.0418619Z
+Request:
+Предложен план тестирования: от старта до закрытия одного BTC 5m рынка в непрерывном цикле параллельно получать свежий Binance SBE stream, текущий Binance bookTicker и текущий Polymarket order book, фиксировать общий timestamp и среднюю цену/значение каждого источника в памяти, а после закрытия выгружать Excel/CSV для визуального сравнения трех графиков.
+
+Result:
+Implemented a .NET 10 no-database `--btc-source-comparison-csv` command. The command finds the target BTC 5m market, starts Binance SBE bestBidAsk and Binance JSON bookTicker streams, samples Polymarket Up/Down CLOB books in parallel with the stream snapshots on each tick, stores rows in memory, and writes a CSV under `artifacts/btc-source-comparison`. The CSV contains raw bid/ask/mid values and normalized from-start bps columns for plotting BTC/USD movement and Polymarket Up probability movement on one chart. Added the command to `Program.cs` before normal host/storage startup and documented it in README. Build and full tests passed (`426/426`); missing-key smoke confirms the command fails safely until the real Binance SBE API key id is supplied.

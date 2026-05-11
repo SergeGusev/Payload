@@ -1,3 +1,15 @@
+## Active Update 2026-05-11 BTC Source Comparison CSV Command
+Goal: Implement the proposed no-database test that samples Binance SBE, Binance bookTicker, and Polymarket BTC 5m order-book data through one market window and exports a file for visual comparison.
+Status: Completed
+Done:
+- Added `--btc-source-comparison-csv` to the .NET 10 service startup path before normal host/DI/storage initialization.
+- Added a no-DB in-memory sampler that finds the target BTC 5m Gamma market, starts Binance SBE bestBidAsk and Binance JSON bookTicker streams, polls the Polymarket CLOB Up/Down books in parallel on each sample tick, and records one common `sample_utc` for all three sources.
+- The CSV includes raw bid/ask/mid values plus normalized from-start bps columns so BTC/USD movement and Polymarket Up probability movement can be plotted on one visual axis.
+- Documented the command in README and kept the SBE API key requirement explicit: the Binance API key id must be supplied separately; the Ed25519 private key file alone is not enough for `X-MBX-APIKEY`.
+Next: Provide/configure the real Binance SBE API key id, then run the command for one BTC 5m window and inspect the generated CSV/graph.
+Notes: Verification passed: `dotnet build .\src\PolyCopyTrader.Service\PolyCopyTrader.Service.csproj -c Release --no-restore -p:UseSharedCompilation=false -m:1`, `dotnet test .\tests\PolyCopyTrader.Tests\PolyCopyTrader.Tests.csproj -c Release --no-restore -p:UseSharedCompilation=false -m:1` (`426/426`), missing-key smoke for `--btc-source-comparison-csv`, and `git diff --check` on touched files with line-ending warnings only.
+Blockers: Full live SBE stream verification still requires the actual Binance API key id.
+
 ## Active Update 2026-05-11 Runtime Process Health Check
 Goal: Check whether the currently running old-server .NET 10 process is operating normally.
 Status: Completed

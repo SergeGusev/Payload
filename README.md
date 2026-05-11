@@ -228,6 +228,17 @@ Binance ticks or quote changes lead Polymarket order-book moves; it is buffered
 in memory and cleaned by retention so it does not replace the compact odds
 archive.
 
+For one-off visual comparison of Binance SBE best bid/ask, Binance JSON
+`bookTicker`, and the active BTC 5-minute Polymarket order book, run the service
+with `--btc-source-comparison-csv`. This command starts before the normal host,
+does not use PostgreSQL, samples one BTC 5-minute market in memory, and writes a
+CSV under `artifacts/btc-source-comparison`. The raw BTC/USD prices and
+Polymarket probability are different units, so the CSV also contains normalized
+from-start bps columns intended for plotting the three sources on one chart.
+Binance SBE requires the API key id in `POLYCOPYTRADER_BINANCE_SBE_API_KEY`,
+`--binance-sbe-api-key`, or `--binance-sbe-api-key-file`; the Ed25519 private
+key file alone is not sent and is not enough for the WebSocket header.
+
 ### Certificate Pinning
 
 `Polymarket:CertificatePins` can be configured in development or production for the Polymarket HTTP clients and the market WebSocket. Pins are keyed by endpoint host and use `sha256/<base64 SPKI SHA-256>` format. If a host has no configured pin, normal .NET TLS validation is used. If a host has pins, the certificate must match one of them; arbitrary invalid certificates are still rejected.
