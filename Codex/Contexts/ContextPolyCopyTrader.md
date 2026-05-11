@@ -1,3 +1,15 @@
+## Active Update 2026-05-11 BTC Source Comparison Excel Chart
+Goal: Convert the generated BTC source comparison CSV into an Excel workbook with charts.
+Status: Completed
+Done:
+- Created `artifacts/btc-source-comparison/btc-source-comparison-btc-updown-5m-1778520300-20260511-173000.xlsx` from the latest comparison CSV.
+- Workbook contains `Summary`, `ChartData`, and `RawData` sheets.
+- Added three native Excel charts: shape comparison scaled by each source's own max move, true bps-from-start comparison, and raw BTC mid vs Polymarket Up probability with secondary axis.
+- Exported chart PNG previews for verification and confirmed workbook opens with 3 sheets, 3 charts, 299 chart rows, 299 raw rows, and 0 formula-error cells.
+Next: Inspect the workbook visually in Excel; the top chart is the best one for judging lead/lag by shape.
+Notes: Used Excel COM through PowerShell because project rules avoid Python/Node sidecars. The generated workbook lives under ignored `artifacts/btc-source-comparison/`; no strategy/runtime code changed.
+Blockers: None.
+
 ## Active Update 2026-05-11 Binance SBE Key Verification
 Goal: Verify the provided Binance SBE API key id and complete one BTC source comparison capture.
 Status: Completed
