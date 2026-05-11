@@ -1,3 +1,16 @@
+## Active Update 2026-05-11 Conservative Paper GTD Fill Model
+Goal: Implement a more realistic pure Paper fill model for BTC GTD limit orders without relying on Live fills.
+Status: Completed
+Done:
+- Added a BTC-only conservative GTD Paper fill estimator in both the main and Net48 service code paths.
+- BTC GTD Paper orders no longer use the generic late `ask <= limit` balanced fill rule; they use immediate submit-snapshot executable ask evidence or late trade-through evidence where the bid side clears below the limit and last trade is at/below the limit.
+- Persisted Paper GTD diagnostics in `raw_decision_json`: initial book snapshot fields, queue-ahead estimate, immediate executable ask size/VWAP, fill model, confidence, and fill evidence.
+- Added configuration gates: `PaperGtdConservativeFillEnabled`, `PaperGtdImmediateFillDepthMultiplier`, and `PaperGtdMinLateFillEvidenceSeconds`.
+- Added focused tests proving later ask-only evidence no longer fills BTC GTD Paper orders.
+Next: Rebuild/restart the Net48 service with Visual Studio/MSBuild 15+ on the target machine so the running Paper collector uses the new estimator.
+Notes: Verification passed: `dotnet test tests\PolyCopyTrader.Tests\PolyCopyTrader.Tests.csproj --no-restore` (`423/423` passed), `dotnet restore PolyCopyTrader.Net48.sln`, and `git diff --check`. Net48 local build could not be completed in this shell because Visual Studio MSBuild is not installed; `dotnet build` does not resolve PackageReference assemblies for these old-style Net48 projects here, and .NET Framework MSBuild 4.8 does not support the project toolset/PackageReference.
+Blockers: Net48 Release output was not rebuilt or restarted in this environment; requires Visual Studio/Build Tools MSBuild on the deployment machine.
+
 ## Active Update 2026-05-11 Pure Paper Fill Accuracy Discussion
 Goal: Explain whether pure Paper GTD fill prediction can be made more accurate without using Live fill data.
 Status: Completed

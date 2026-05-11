@@ -4382,6 +4382,7 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
         var roundedTargetNotionalUsd = RoundStakeNotionalUsd(rawTargetNotionalUsd);
         var targetSizeShares = RoundUpToClobLimitSizeShares(roundedTargetNotionalUsd, limitPrice);
         var targetNotionalUsd = targetSizeShares * limitPrice;
+        var immediateExecutableAsk = GetBuyExecutableAskSummary(orderBook, limitPrice, targetSizeShares);
         return new BtcMinimumStakeSizing(
             Available: true,
             RejectionReason: null,
@@ -4395,7 +4396,52 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
             TargetNotionalUsd: targetNotionalUsd,
             TargetSizeShares: targetSizeShares,
             ReferencePrice: limitPrice,
-            LevelsUsed: 0);
+            LevelsUsed: 0,
+            PaperGtdSnapshotAtUtc: orderBook.SnapshotAtUtc,
+            PaperGtdBestBid: orderBook.BestBid,
+            PaperGtdBestAsk: orderBook.BestAsk,
+            PaperGtdLastTradePrice: orderBook.LastTradePrice,
+            PaperGtdQueueAheadShares: GetBuyQueueAheadShares(orderBook, limitPrice),
+            PaperGtdImmediateExecutableAskShares: immediateExecutableAsk.Shares,
+            PaperGtdImmediateExecutableAskVwap: immediateExecutableAsk.Vwap);
+    }
+
+    private static decimal GetBuyQueueAheadShares(OrderBookSnapshot orderBook, decimal limitPrice)
+    {
+        return orderBook.Bids
+            .Where(level => level is { Price: > 0m, Size: > 0m } && level.Price >= limitPrice)
+            .Sum(level => level.Size);
+    }
+
+    private static (decimal Shares, decimal? Vwap) GetBuyExecutableAskSummary(
+        OrderBookSnapshot orderBook,
+        decimal limitPrice,
+        decimal targetSizeShares)
+    {
+        var shares = 0m;
+        var notional = 0m;
+        foreach (var level in orderBook.Asks
+            .Where(level => level is { Price: > 0m, Size: > 0m } && level.Price <= limitPrice)
+            .OrderBy(level => level.Price))
+        {
+            if (shares >= targetSizeShares)
+            {
+                break;
+            }
+
+            var takeShares = targetSizeShares > 0m
+                ? Math.Min(targetSizeShares - shares, level.Size)
+                : level.Size;
+            if (takeShares <= 0m)
+            {
+                continue;
+            }
+
+            shares += takeShares;
+            notional += takeShares * level.Price;
+        }
+
+        return shares <= 0m ? (0m, null) : (shares, notional / shares);
     }
 
     private static BtcMinimumStakeSizing CreateLimitMinimumStakeSizingFromMinOrderSize(
@@ -4491,6 +4537,13 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
         root["target_notional_usd"] = sizing.TargetNotionalUsd;
         root["target_size_shares"] = sizing.TargetSizeShares;
         root["stake_sizing_rejection_reason"] = sizing.RejectionReason;
+        root["paper_gtd_initial_snapshot_at_utc"] = sizing.PaperGtdSnapshotAtUtc?.ToString("O", CultureInfo.InvariantCulture);
+        root["paper_gtd_initial_best_bid"] = sizing.PaperGtdBestBid;
+        root["paper_gtd_initial_best_ask"] = sizing.PaperGtdBestAsk;
+        root["paper_gtd_initial_last_trade_price"] = sizing.PaperGtdLastTradePrice;
+        root["paper_gtd_initial_queue_ahead_shares"] = sizing.PaperGtdQueueAheadShares;
+        root["paper_gtd_initial_executable_ask_shares"] = sizing.PaperGtdImmediateExecutableAskShares;
+        root["paper_gtd_initial_executable_ask_vwap"] = sizing.PaperGtdImmediateExecutableAskVwap;
         return root.ToJsonString();
     }
 
@@ -7538,7 +7591,14 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
         decimal TargetNotionalUsd,
         decimal TargetSizeShares,
         decimal ReferencePrice,
-        int LevelsUsed)
+        int LevelsUsed,
+        DateTimeOffset? PaperGtdSnapshotAtUtc = null,
+        decimal? PaperGtdBestBid = null,
+        decimal? PaperGtdBestAsk = null,
+        decimal? PaperGtdLastTradePrice = null,
+        decimal? PaperGtdQueueAheadShares = null,
+        decimal? PaperGtdImmediateExecutableAskShares = null,
+        decimal? PaperGtdImmediateExecutableAskVwap = null)
     {
         public static BtcMinimumStakeSizing Reject(
             string reason,

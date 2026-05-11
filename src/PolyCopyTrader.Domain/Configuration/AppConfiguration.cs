@@ -563,6 +563,12 @@ public sealed class BtcUpDown5mStrategyOptions
 
     public int OpeningLimitGtdTtlSeconds { get; init; } = 120;
 
+    public bool PaperGtdConservativeFillEnabled { get; init; } = true;
+
+    public decimal PaperGtdImmediateFillDepthMultiplier { get; init; } = 1.0m;
+
+    public int PaperGtdMinLateFillEvidenceSeconds { get; init; } = 1;
+
     public int CloseBookCaptureLookbackSeconds { get; init; } = 60;
 
     public int CloseBookCaptureIntervalSeconds { get; init; } = 10;

@@ -133,3 +133,10 @@ Request:
 
 Result:
 Checked Net48 Live readiness without enabling order placement. Service is running, IPC status is healthy, auth config is enabled and Credential Manager targets are present, host/storage smokes pass, and no strategy currently has `live_stakes=true`. Actual Live start still requires explicitly enabling `Bot.EnableLiveTrading=true` and `live_stakes` only for `btc_up_down_5m_more_150_below_65`.
+
+## 2026-05-11T09:40:43.2868927Z
+Request:
+Ок, давай это сделаем.
+
+Result:
+Implemented a conservative pure Paper GTD fill model for BTC strategies in main and Net48 code paths. BTC GTD Paper fills now require either immediate submit-snapshot executable ask evidence or later trade-through evidence, and late ask-only snapshots no longer create fills. Added configuration, raw decision diagnostics, and focused tests. Root test suite passed; Net48 restore passed, but Net48 build/restart could not be completed in this shell because only old .NET Framework MSBuild is installed and dotnet build does not resolve PackageReference assemblies for these old-style Net48 projects here.

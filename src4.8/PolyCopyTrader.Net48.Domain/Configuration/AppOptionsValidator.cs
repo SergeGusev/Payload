@@ -1179,6 +1179,18 @@ public static class AppOptionsValidator
             errors.Add("BtcUpDown5mStrategy.OpeningLimitGtdTtlSeconds must be between 30 and 300.");
         }
 
+        if (options.PaperGtdImmediateFillDepthMultiplier <= 0m ||
+            options.PaperGtdImmediateFillDepthMultiplier > 10m)
+        {
+            errors.Add("BtcUpDown5mStrategy.PaperGtdImmediateFillDepthMultiplier must be greater than zero and at most 10.");
+        }
+
+        if (options.PaperGtdMinLateFillEvidenceSeconds < 0 ||
+            options.PaperGtdMinLateFillEvidenceSeconds > 300)
+        {
+            errors.Add("BtcUpDown5mStrategy.PaperGtdMinLateFillEvidenceSeconds must be between 0 and 300.");
+        }
+
         if (options.CloseBookCaptureLookbackSeconds < 0 || options.CloseBookCaptureLookbackSeconds > 600)
         {
             errors.Add("BtcUpDown5mStrategy.CloseBookCaptureLookbackSeconds must be between 0 and 600.");

@@ -170,6 +170,7 @@ internal static class Net48ServiceHostFactory
         services.AddSingleton<IMarketTradeTickDiagnosticService>(sp => sp.GetRequiredService<MarketTradeTickDiagnosticService>());
         services.AddSingleton<IExposureSnapshotCache, ExposureSnapshotCache>();
         services.AddSingleton<IPaperTradingMarketDataUpdater, PaperTradingMarketDataUpdater>();
+        services.AddSingleton<ConservativePaperGtdFillEstimator>();
         services.AddSingleton<IPaperTradingProcessor, PaperTradingProcessor>();
         services.AddSingleton<IPaperSettlementProcessor, PaperSettlementProcessor>();
         services.AddSingleton<ILeaderActivityExitProcessor, LeaderActivityExitProcessor>();

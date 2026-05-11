@@ -283,6 +283,7 @@ builder.Services.AddSingleton<MarketTradeTickDiagnosticService>();
 builder.Services.AddSingleton<IMarketTradeTickDiagnosticService>(sp => sp.GetRequiredService<MarketTradeTickDiagnosticService>());
 builder.Services.AddSingleton<IExposureSnapshotCache, ExposureSnapshotCache>();
 builder.Services.AddSingleton<IPaperTradingMarketDataUpdater, PaperTradingMarketDataUpdater>();
+builder.Services.AddSingleton<ConservativePaperGtdFillEstimator>();
 builder.Services.AddSingleton<IPaperTradingProcessor, PaperTradingProcessor>();
 builder.Services.AddSingleton<IPaperSettlementProcessor, PaperSettlementProcessor>();
 builder.Services.AddSingleton<ILeaderActivityExitProcessor, LeaderActivityExitProcessor>();

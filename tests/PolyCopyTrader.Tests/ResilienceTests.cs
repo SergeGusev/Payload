@@ -114,6 +114,7 @@ public sealed class ResilienceTests
             new MarketDataWebSocketOptions(),
             new PaperTradingOptions(),
             new ExposureSnapshotCache(repository),
+            new ConservativePaperGtdFillEstimator(new BtcUpDown5mStrategyOptions()),
             repository);
 
         var result = await processor.ProcessOpenOrdersAsync();
@@ -145,6 +146,7 @@ public sealed class ResilienceTests
             new MarketDataWebSocketOptions(),
             new PaperTradingOptions(),
             new ExposureSnapshotCache(repository),
+            new ConservativePaperGtdFillEstimator(new BtcUpDown5mStrategyOptions()),
             repository);
 
         var result = await processor.ProcessOpenOrdersAsync();
@@ -178,6 +180,7 @@ public sealed class ResilienceTests
             new MarketDataWebSocketOptions(),
             new PaperTradingOptions(),
             new ExposureSnapshotCache(repository),
+            new ConservativePaperGtdFillEstimator(new BtcUpDown5mStrategyOptions()),
             repository);
 
         var result = await processor.ProcessOpenOrdersAsync();

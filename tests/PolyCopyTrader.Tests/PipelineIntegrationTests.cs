@@ -72,6 +72,7 @@ public sealed class PipelineIntegrationTests
             new MarketDataWebSocketOptions(),
             new PaperTradingOptions(),
             new ExposureSnapshotCache(repository),
+            new ConservativePaperGtdFillEstimator(new BtcUpDown5mStrategyOptions()),
             repository);
 
         var paperResult = await paperProcessor.ProcessOpenOrdersAsync();
@@ -176,6 +177,7 @@ public sealed class PipelineIntegrationTests
             new MarketDataWebSocketOptions(),
             new PaperTradingOptions(),
             new ExposureSnapshotCache(repository),
+            new ConservativePaperGtdFillEstimator(new BtcUpDown5mStrategyOptions()),
             repository);
 
         var paperResult = await paperProcessor.ProcessOpenOrdersAsync();
@@ -207,6 +209,7 @@ public sealed class PipelineIntegrationTests
             new MarketDataWebSocketOptions(),
             new PaperTradingOptions { OpenOrderFillSimulationBatchSize = 1 },
             new ExposureSnapshotCache(repository),
+            new ConservativePaperGtdFillEstimator(new BtcUpDown5mStrategyOptions()),
             repository);
 
         var paperResult = await paperProcessor.ProcessOpenOrdersAsync();
@@ -231,6 +234,7 @@ public sealed class PipelineIntegrationTests
             new MarketDataWebSocketOptions(),
             new PaperTradingOptions(),
             new ExposureSnapshotCache(repository),
+            new ConservativePaperGtdFillEstimator(new BtcUpDown5mStrategyOptions()),
             repository);
     }
 
