@@ -182,3 +182,10 @@ Request:
 
 Result:
 Inspected the Net48 BTC strategy processor and strategy seed definitions. Confirmed the `BTC Up or Down 5m Binance` family uses current Binance BTC/USDT versus the archived market-start reference to choose Up/Down, with bps-threshold variants filtering weak moves. Confirmed Clever/Clever margin/Edge Binance variants use the same start-relative move as part of fair-value estimation. Clarified that Middle uses rolling arithmetic mean deviation, Skip uses previous market results, and More/Less/Gamma use Polymarket/Gamma odds rather than BTC start-relative move.
+
+## 2026-05-11T11:04:20.8119339Z
+Request:
+Почему по BTC Up or Down 5m Middle идут ставки, а по BTC Up or Down 5m Middle Revert не идут?
+
+Result:
+Inspected Net48 Middle/Revert strategy logic and ran read-only PostgreSQL diagnostics. All five `btc_up_down_5m_middle_N_revert` strategies are enabled and Paper-only, but have `0` Paper orders after the latest cleanup. Plain Middle variants are entering normally, for example the 11:00 UTC market entered at about `11:00:03`. Revert runs are being skipped before signal/pricing diagnostics with `entry_due_expired`; for the 11:00 UTC market all five Revert variants were skipped at about `11:00:31`, just after the configured 30-second grace. Cause: fixed variant processing order puts Revert after plain Middle plus 45 Middle bps variants, and Middle/Revert are not allowed after the 30-second entry grace. Temporary probe under `artifacts/middle-revert-probe` was removed after use.

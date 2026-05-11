@@ -1,3 +1,16 @@
+## Active Update 2026-05-11 Middle Revert No Orders Diagnosis
+Goal: Explain why `BTC Up or Down 5m Middle` strategies place Paper orders while `Middle Revert` strategies do not.
+Status: Completed
+Done:
+- Inspected Net48 Middle/Revert strategy logic and ran read-only PostgreSQL diagnostics.
+- Confirmed all five `btc_up_down_5m_middle_N_revert` strategies are enabled and Paper-only, but have `0` Paper orders after the latest cleanup.
+- Confirmed plain Middle variants are entering normally; examples from the 11:00 UTC market entered at about `11:00:03`.
+- Found Revert runs are being skipped before signal/pricing diagnostics with `entry_due_expired`; for the 11:00 UTC market all five Revert variants were skipped at about `11:00:31`, just after the configured 30-second grace.
+- Identified the cause as scheduling/order starvation: variants are processed in fixed order, Revert comes after plain Middle and 45 Middle bps-threshold variants, and Middle/Revert are not allowed after the 30-second entry grace.
+Next: If requested, fix by processing due opening-limit runs globally by due time/priority or by giving Middle/Revert the same post-grace handling as other opening-limit strategies.
+Notes: Read-only DB analysis used a temporary C# probe under `artifacts/middle-revert-probe`, removed after use. No production code changed.
+Blockers: None.
+
 ## Active Update 2026-05-11 BTC Start-Relative Strategy Usage Answer
 Goal: Confirm whether BTC deviation from the 5-minute market start is already used in strategies.
 Status: Completed
