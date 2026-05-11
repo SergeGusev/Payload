@@ -1,3 +1,16 @@
+## Active Update 2026-05-11 New Server Database Recopy
+Goal: Put the copied PolyCopyTrader schema/data into `192.168.0.101/polycopytrader` and remove accidental app tables from `192.168.0.101/postgres`.
+Status: Completed
+Done:
+- Stopped the local `PolyCopyTrader.Net48.Service.exe` process before database maintenance.
+- Built and ran a temporary C#/.NET/Npgsql transfer utility without printing secrets.
+- Dropped 70 PolyCopyTrader public tables from `192.168.0.101/postgres`.
+- Created the full Net48 schema with 71 app tables in `192.168.0.101/polycopytrader`.
+- Truncated the target app tables and copied all matching data from the current `127.0.0.1/polycopytrader` database, including `paper_orders` 5,276 rows, `live_orders` 24 rows, `polymarket_gamma_markets` 81,909 rows, and `btc_order_book_lag_diagnostic_events` 1,382,113 rows.
+Next: Point the new server runtime connection string at `Host=192.168.0.101;Database=polycopytrader` and start the service there when ready.
+Notes: `git pull --ff-only` reported already up to date. Transfer verification confirmed row counts for every copied table and confirmed no known app tables remain in `192.168.0.101/postgres`. Remote WinRM service stop was attempted but skipped because authentication failed; local service was stopped successfully.
+Blockers: None.
+
 ## Active Update 2026-05-11 New Postgres Cleanup
 Goal: Remove PolyCopyTrader tables that were accidentally created in the new PostgreSQL database on `192.168.0.101`.
 Status: Completed

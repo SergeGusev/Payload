@@ -230,3 +230,10 @@ Request:
 
 Result:
 Added 45 Net48 BTC Middle Revert bps-threshold strategy variants for depths `1..5` and thresholds `0.1..0.9` bps, seeded them into PostgreSQL with `paper_stake_amount`, and matched Revert bps dynamic pricing bootstrap to the corresponding base Middle bps variant. Verified Net48 Release service build, reflected `MiddleRevertBpsCount=45` and `TotalVariants=199`, restarted the Net48 service in Paper mode with `Bot__EnableLiveTrading=false`, confirmed IPC `/status` is `Running`, and ran the main regression test project successfully (`423/423`).
+
+## 2026-05-11T13:56:44.2419702+00:00
+Request:
+А почему в polycopytrader? Я же просил в базе postgres. Пожалуйста, 1. Останови сервис. 2. Удали наши таблицы в базе postgres. 3. В базе polycopytrader создай все наши таблицы и скопируй туда данные из текущего сервера. Будем там пробовать запускаться.
+
+Result:
+Stopped the local Net48 service, dropped 70 PolyCopyTrader tables from `192.168.0.101/postgres`, initialized 71 app tables in `192.168.0.101/polycopytrader`, copied all matching data from the current local `polycopytrader` database, and verified copied row counts plus the absence of app tables in the target `postgres` database.
