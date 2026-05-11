@@ -1,3 +1,17 @@
+## Active Update 2026-05-11 Start Net48 Paper Service
+Goal: Start the Net48 service so Paper statistics collection resumes after the cleanup.
+Status: Completed
+Done:
+- Verified no PolyCopyTrader process was running and IPC `/status` was unavailable before start.
+- Confirmed `--storage-smoke` passed.
+- Noted the Release config prints `Live trading enabled: True`, so the background process was started with process environment override `Bot__EnableLiveTrading=false`.
+- Started `src4.8\PolyCopyTrader.Net48.Service\bin\Release\PolyCopyTrader.Net48.Service.exe --run` as hidden process PID `70048`.
+- Verified IPC `/status` returns `Running`, `paperTradingPaused=false`, `killSwitchActive=false`, and `lastError=null`.
+- Verified Paper collection resumed and Live did not grow after start: `paper_orders=24`, `paper_fills=25`, `paper_positions=23`, `strategy_market_paper_runs=765`, `live_orders=24`, `live_orders_since_start=0`.
+Next: Let the service run and collect fresh Paper statistics.
+Notes: Service is running as a background process, not as an installed Windows service. If restarted manually without the override, the current Release config may enable Live placement; keep `Bot__EnableLiveTrading=false` unless Live is explicitly intended.
+Blockers: None.
+
 ## Active Update 2026-05-11 Clear Paper History
 Goal: Clear all Paper trading history while preserving Live trading history.
 Status: Completed

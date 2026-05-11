@@ -154,3 +154,10 @@ Request:
 
 Result:
 Cleared all Paper trading/history tables while preserving Live history. `paper_orders`, `paper_fills`, `paper_positions`, `paper_position_settlements`, `strategy_market_paper_runs`, Paper copied-leader/performance tables, Paper/Live shadow decision/discrepancy tables, on-chain Paper signal results, and daily reports are now empty. `live_orders` remained at 24 rows and `live_trading_events` remained at 82 rows; 24 old `live_orders.paper_order_id` links were set to NULL so Live rows could remain after Paper deletion. Service IPC was unavailable and no PolyCopyTrader service/process was visible, so the service was not restarted.
+
+## 2026-05-11T10:13:26.9720920Z
+Request:
+Стартани сервис
+
+Result:
+Started the Net48 Release service as hidden background process PID 70048 using `--run` and process override `Bot__EnableLiveTrading=false`, because the Release config prints `Live trading enabled: True` and the request was to resume Paper collection. IPC `/status` returns `Running`, Paper is not paused, kill switch is inactive, and there is no last error. Verified fresh Paper rows are being collected (`paper_orders=24`, `paper_fills=25`, `paper_positions=23`, `strategy_market_paper_runs=765`) while Live history did not grow (`live_orders=24`, `live_orders_since_start=0`).
