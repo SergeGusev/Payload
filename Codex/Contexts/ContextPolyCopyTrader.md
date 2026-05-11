@@ -1,3 +1,16 @@
+## Active Update 2026-05-11 BTC 24h Source Collection Started
+Goal: Start a 24-hour no-database BTC source comparison collection run.
+Status: Completed
+Done:
+- Confirmed this collection should avoid PostgreSQL and keep per-market data only in memory until each market CSV is written.
+- Created an ignored artifact runner under `artifacts/btc-source-comparison/run-24h-btc-source-comparison.ps1`.
+- Started the runner as a background PowerShell process for 24 hours, with Binance SBE API key passed only through the child process environment and not in the process command line.
+- Output directory is `artifacts/btc-source-comparison/24h-20260511-182123`; log file is `collector.log`.
+- Verified the runner process and child `dotnet exec ... --btc-source-comparison-csv` process are active and the first partial market capture started for `btc-updown-5m-1778523600`.
+Next: Periodically inspect `collector.log` and generated CSV count/quality; after 24 hours, merge/analyze all CSVs into a model dataset.
+Notes: No database writes are used by this runner. No source/runtime strategy code changed. The runner artifact is ignored by Git.
+Blockers: None.
+
 ## Active Update 2026-05-11 BTC Source Comparison Interpretation
 Goal: Interpret whether the generated BTC/Binance/Polymarket comparison chart suggests actionable use.
 Status: Completed

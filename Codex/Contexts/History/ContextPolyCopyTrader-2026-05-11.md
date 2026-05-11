@@ -325,6 +325,13 @@ Request:
 
 Result:
 Reviewed the official Binance SBE Market Data Streams documentation and SBE schema. Summarized endpoint, authentication, stream types, timing, limits, and relevance for PolyCopyTrader BTC diagnostics; no production code changed.
+## 2026-05-11T18:22:11.3315213Z
+Request:
+Ок, приступай к сбору на сутки. Мне кажется, базу можно не задействовать, правильно? За один маркет собрали - собираем по второму, а в это время параллельно по первому сохраняемся. Сохранились - удалили данные первого. Правильно?
+
+Result:
+Confirmed PostgreSQL is not needed for this collection. Created an ignored artifact runner `artifacts/btc-source-comparison/run-24h-btc-source-comparison.ps1` and started it as a background 24-hour no-DB collection process. The Binance SBE API key was passed only via child process environment and does not appear in the process command line. Output directory is `artifacts/btc-source-comparison/24h-20260511-182123`; `collector.log` shows the first partial market capture for `btc-updown-5m-1778523600` started successfully.
+
 ## 2026-05-11T18:13:32.6142584Z
 Request:
 Что ты сам скажешь по этому графику? Есть возможности для использования?
