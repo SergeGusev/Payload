@@ -203,6 +203,13 @@ Ok, do it. 30 seconds for a decision is too much.
 
 Result:
 Implemented bounded async BTC due-entry processing in the Net48 service. Added `BtcUpDown5mStrategy.MaxConcurrentEntryDecisions`, set it to `8`, reduced `EntryGraceSeconds` from `30` to `10`, and shared the per-cycle BTC current-price cache across concurrent variant tasks. Fixed Middle Revert base-variant lookup so bps-threshold Middle variants no longer cause `Sequence contains more than one matching element`. Added Net48 build support for PackageReference from the command line via `src4.8/Directory.Build.targets` and `TargetFramework=net48`. Verified focused BTC processor tests passed 91/91, Net48 Release build passed with nullable warnings, restarted the Net48 service as PID 65616 with `Bot__EnableLiveTrading=false`, and observed the 14:35 local BTC window placing Middle/Middle Revert decisions about 0.9 seconds after market start. PostgreSQL `57P03` recovery errors still appeared later in that window and remain a separate operational issue.
+## 2026-05-11T12:21:03.7197899Z
+Request:
+Сделай файл, содержащий команды для PowerShell, которые я выполню на новом сервере. Эти команды должны прописать в нужных хранилищах все строки соединения и ключи для работы нашего 4.8 приложения. Если там будут секретные ключи, я разрешаю.
+
+Result:
+Added `scripts/Setup-Net48-NewServerSecrets.ps1`. The script prompts for the PostgreSQL connection string, Polymarket order-signing private key, CLOB API credentials, optional API key owner, and optional Polygon RPC URL; it writes machine-level environment config for the Net48 app, keeps Live disabled by default, and supports either machine-environment secrets or Windows Credential Manager secrets. No secret values were committed. Verification passed with PowerShell scriptblock parsing and `git diff --check`.
+
 ## 2026-05-11T12:12:04.9004195Z
 Request:
 Добавь для Middle Revert такие же значения bps, как для Middle

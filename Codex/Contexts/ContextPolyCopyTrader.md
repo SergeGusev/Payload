@@ -1,3 +1,15 @@
+## Active Update 2026-05-11 Net48 New Server Secret Setup Script
+Goal: Provide a PowerShell setup file for configuring Net48 storage/auth secrets on a new Windows Server 2008 R2 machine.
+Status: Completed
+Done:
+- Added `scripts/Setup-Net48-NewServerSecrets.ps1`.
+- The script prompts for PostgreSQL connection string, Polymarket order-signing private key, CLOB API key/secret/passphrase, optional API key owner, and optional Polygon RPC URL.
+- It writes PostgreSQL and runtime config as machine-level environment variables, keeps Live disabled by default, and supports either machine-environment secrets or Windows Credential Manager secrets.
+- Default secret store is `MachineEnvironment` so an installed Windows Service can read secrets regardless of service account; `-SecretStore CredentialManager` is available when the app runs under the same Windows user.
+Next: Run the script as Administrator on the new server, then restart PowerShell/service and run `--print-config` plus `--storage-smoke`.
+Notes: No secret values were committed; the file contains only prompts, public addresses, target names, and commands. Verification passed: PowerShell scriptblock parse and `git diff --check -- scripts/Setup-Net48-NewServerSecrets.ps1`.
+Blockers: None.
+
 ## Active Update 2026-05-11 Middle Revert Bps Variants
 Goal: Add the same bps-threshold variants for Net48 Middle Revert BTC strategies that already exist for Middle.
 Status: Completed
