@@ -1,3 +1,15 @@
+## Active Update 2026-05-11 PostgreSQL 9 Dashboard Decimal Cast Fix
+Goal: Fix Net48 Dashboard refresh failure on the new PostgreSQL 9 server caused by `double precision` delay aggregates being read as `decimal`.
+Status: Completed
+Done:
+- Extracted and inspected the clipboard screenshot showing Dashboard `Refresh` error: `Can't cast database type double precision to Decimal` in `PostgresAppRepository.GetStrategyPerformanceAsync`.
+- Identified PostgreSQL 9.6 returning `EXTRACT(EPOCH FROM ...)` delay aggregates as `double precision`.
+- Updated both Net48 and main `PostgresAppRepository` strategy performance queries so `avg_entry_delay_seconds` and `max_entry_delay_seconds` are explicitly cast to `numeric`.
+- Verified against `192.168.0.101/polycopytrader`: PostgreSQL is `9.6.24`, raw delay expression type is `double precision`, and the fixed expression type is `numeric`.
+Next: Rebuild/copy the updated Net48 binaries to the new server and restart Dashboard/service there.
+Notes: `dotnet build src4.8\PolyCopyTrader.Net48.Storage\PolyCopyTrader.Net48.Storage.csproj -c Release` passed. `dotnet build src4.8\PolyCopyTrader.Net48.Service\PolyCopyTrader.Net48.Service.csproj -c Release` passed with existing nullable warnings. `dotnet build src\PolyCopyTrader.Storage\PolyCopyTrader.Storage.csproj -c Release` passed. `dotnet test tests\PolyCopyTrader.Tests\PolyCopyTrader.Tests.csproj -c Release --no-restore` passed 423/423. `dotnet build` for the Net48 Dashboard still fails locally on existing WPF/XAML entry point generation (`InitializeComponent`/`Main`) because classic MSBuild is not available in PATH; this is separate from the PostgreSQL cast fix.
+Blockers: None for the storage/service fix. Dashboard executable still needs to be rebuilt in an environment that can build the Net48 WPF project, or by copying a prebuilt Dashboard that references the updated Storage DLL.
+
 ## Active Update 2026-05-11 New Server Database Recopy
 Goal: Put the copied PolyCopyTrader schema/data into `192.168.0.101/polycopytrader` and remove accidental app tables from `192.168.0.101/postgres`.
 Status: Completed

@@ -231,6 +231,13 @@ Request:
 Result:
 Added 45 Net48 BTC Middle Revert bps-threshold strategy variants for depths `1..5` and thresholds `0.1..0.9` bps, seeded them into PostgreSQL with `paper_stake_amount`, and matched Revert bps dynamic pricing bootstrap to the corresponding base Middle bps variant. Verified Net48 Release service build, reflected `MiddleRevertBpsCount=45` and `TotalVariants=199`, restarted the Net48 service in Paper mode with `Bot__EnableLiveTrading=false`, confirmed IPC `/status` is `Running`, and ran the main regression test project successfully (`423/423`).
 
+## 2026-05-11T14:29:30.1133223+00:00
+Request:
+Посмотри картинку. Такую ошибку я получаю на новом сервере. Там более старый Posgres = 9
+
+Result:
+Inspected the clipboard screenshot and diagnosed Dashboard `Refresh` failure as PostgreSQL 9.6 returning `EXTRACT(EPOCH FROM ...)` delay aggregates as `double precision` while `GetStrategyPerformanceAsync` reads them as `decimal`. Updated both Net48 and main storage queries to cast `avg_entry_delay_seconds` and `max_entry_delay_seconds` to `numeric`, verified the type on `192.168.0.101/polycopytrader`, built Net48 Storage/Service, and ran the full test suite successfully (`423/423`). Net48 Dashboard `dotnet build` still fails locally on existing WPF/XAML entry-point generation because classic MSBuild is not available in PATH.
+
 ## 2026-05-11T13:56:44.2419702+00:00
 Request:
 А почему в polycopytrader? Я же просил в базе postgres. Пожалуйста, 1. Останови сервис. 2. Удали наши таблицы в базе postgres. 3. В базе polycopytrader создай все наши таблицы и скопируй туда данные из текущего сервера. Будем там пробовать запускаться.

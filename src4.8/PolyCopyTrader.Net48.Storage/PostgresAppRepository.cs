@@ -1435,8 +1435,8 @@ run_agg AS (
         COALESCE(sum(COALESCE(realized_pnl_usd, 0)) FILTER (WHERE status = 'Settled' AND COALESCE(realized_pnl_usd, 0) > 0), 0) AS positive_pnl_usd,
         COALESCE(sum(-COALESCE(realized_pnl_usd, 0)) FILTER (WHERE status = 'Settled' AND COALESCE(realized_pnl_usd, 0) < 0), 0) AS loss_abs_pnl_usd,
         COALESCE(avg(COALESCE(realized_pnl_usd, 0)) FILTER (WHERE status = 'Settled'), 0) AS expectancy_pnl_usd,
-        COALESCE(avg(GREATEST(0, EXTRACT(EPOCH FROM (entered_at_utc - entry_due_at_utc)))) FILTER (WHERE entered_at_utc IS NOT NULL), 0) AS avg_entry_delay_seconds,
-        COALESCE(max(GREATEST(0, EXTRACT(EPOCH FROM (entered_at_utc - entry_due_at_utc)))) FILTER (WHERE entered_at_utc IS NOT NULL), 0) AS max_entry_delay_seconds,
+        COALESCE(avg(GREATEST(0, EXTRACT(EPOCH FROM (entered_at_utc - entry_due_at_utc)))) FILTER (WHERE entered_at_utc IS NOT NULL), 0)::numeric AS avg_entry_delay_seconds,
+        COALESCE(max(GREATEST(0, EXTRACT(EPOCH FROM (entered_at_utc - entry_due_at_utc)))) FILTER (WHERE entered_at_utc IS NOT NULL), 0)::numeric AS max_entry_delay_seconds,
         max(updated_at_utc) AS last_run_utc
     FROM strategy_market_paper_runs
     GROUP BY strategy_id
@@ -1787,8 +1787,8 @@ LEFT JOIN LATERAL (
         (count(*) FILTER (WHERE status = 'Settled' AND settled_at_utc >= sw.window_start_utc AND settled_at_utc <= sw.window_end_utc AND COALESCE(realized_pnl_usd, 0) < 0))::integer AS lost_runs_count,
         COALESCE(sum(stake_usd) FILTER (WHERE status = 'Settled' AND settled_at_utc >= sw.window_start_utc AND settled_at_utc <= sw.window_end_utc), 0) AS settled_stake_usd,
         COALESCE(sum(COALESCE(realized_pnl_usd, 0)) FILTER (WHERE status = 'Settled' AND settled_at_utc >= sw.window_start_utc AND settled_at_utc <= sw.window_end_utc), 0) AS realized_pnl_usd,
-        COALESCE(avg(GREATEST(0, EXTRACT(EPOCH FROM (entered_at_utc - entry_due_at_utc)))) FILTER (WHERE entered_at_utc >= sw.window_start_utc AND entered_at_utc <= sw.window_end_utc), 0) AS avg_entry_delay_seconds,
-        COALESCE(max(GREATEST(0, EXTRACT(EPOCH FROM (entered_at_utc - entry_due_at_utc)))) FILTER (WHERE entered_at_utc >= sw.window_start_utc AND entered_at_utc <= sw.window_end_utc), 0) AS max_entry_delay_seconds,
+        COALESCE(avg(GREATEST(0, EXTRACT(EPOCH FROM (entered_at_utc - entry_due_at_utc)))) FILTER (WHERE entered_at_utc >= sw.window_start_utc AND entered_at_utc <= sw.window_end_utc), 0)::numeric AS avg_entry_delay_seconds,
+        COALESCE(max(GREATEST(0, EXTRACT(EPOCH FROM (entered_at_utc - entry_due_at_utc)))) FILTER (WHERE entered_at_utc >= sw.window_start_utc AND entered_at_utc <= sw.window_end_utc), 0)::numeric AS max_entry_delay_seconds,
         max(updated_at_utc) FILTER (WHERE updated_at_utc >= sw.window_start_utc AND updated_at_utc <= sw.window_end_utc) AS last_run_utc
     FROM strategy_market_paper_runs run
     WHERE run.strategy_id = sw.strategy_id
