@@ -1,3 +1,10 @@
+## 2026-05-11T05:42:39.2666567+00:00
+Request:
+Ок, сделай такую диагностику.
+
+Result:
+Implemented Net48 event-level Binance/Polymarket order-book lag diagnostics. Added config `BtcOrderBookLagDiagnostics`, table `btc_order_book_lag_diagnostic_events`, repository batch insert/cleanup methods, a buffered hosted diagnostic worker, Binance per-trade recording before reference sampling, and Polymarket WebSocket receive timestamps for top-of-book `Book`/`PriceChange`/`BestBidAsk` updates. Enabled the diagnostic in service appsettings with 180-minute retention and documented it in README/config reference. Rebuilt with Visual Studio MSBuild Release, ran `--host-smoke` (`21` hosted services) and `--storage-smoke`, restarted the Net48 service from `src4.8/.../bin/Release/PolyCopyTrader.Net48.Service.exe`, and paused Live through IPC. A temporary C# DB probe showed latest 5-minute rows: `BinanceTrade=2912`, `PolymarketTopOfBook=2230`; the probe was removed.
+
 ## 2026-05-11T05:18:30.0000000+00:00
 Request:
 Попробуй найти корреляцию между курсом Binance и колебаниями стакана - может, они чуть отстают?

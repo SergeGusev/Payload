@@ -26,6 +26,7 @@ public static class AppOptionsValidator
         ValidatePolymarketAuth(configuration.PolymarketAuth, errors);
         ValidateMarketDataWebSocket(configuration.MarketDataWebSocket, errors);
         ValidateMarketTradeDiagnostics(configuration.MarketTradeDiagnostics, errors);
+        ValidateBtcOrderBookLagDiagnostics(configuration.BtcOrderBookLagDiagnostics, errors);
         ValidateDataApiTraderIngestion(configuration.DataApiTraderIngestion, errors);
         ValidatePaperTrading(configuration.PaperTrading, errors);
         ValidateExecution(configuration.Execution, errors);
@@ -85,6 +86,8 @@ public static class AppOptionsValidator
             $"Market WebSocket persists order book snapshots: {configuration.MarketDataWebSocket.PersistOrderBookSnapshots}",
             $"Market WebSocket persists market data events: {configuration.MarketDataWebSocket.PersistMarketDataEvents}",
             $"Market trade diagnostics enabled: {configuration.MarketTradeDiagnostics.Enabled}",
+            $"BTC/order-book lag diagnostics enabled: {configuration.BtcOrderBookLagDiagnostics.Enabled}",
+            $"BTC/order-book lag diagnostics retention minutes: {configuration.BtcOrderBookLagDiagnostics.RetentionMinutes}",
             $"Data API trader ingestion enabled: {configuration.DataApiTraderIngestion.Enabled}",
             $"Data API trader ingestion global limit: {configuration.DataApiTraderIngestion.GlobalTradesLimit}",
             $"Data API trader ingestion poll delay milliseconds: {configuration.DataApiTraderIngestion.PollDelayMilliseconds}",
@@ -494,6 +497,39 @@ public static class AppOptionsValidator
         if (options.MatchTimestampToleranceSeconds < 0 || options.MatchTimestampToleranceSeconds > 300)
         {
             errors.Add("MarketTradeDiagnostics.MatchTimestampToleranceSeconds must be between 0 and 300.");
+        }
+    }
+
+    private static void ValidateBtcOrderBookLagDiagnostics(BtcOrderBookLagDiagnosticsOptions options, List<string> errors)
+    {
+        if (options.FlushIntervalMilliseconds <= 0 || options.FlushIntervalMilliseconds > 60_000)
+        {
+            errors.Add("BtcOrderBookLagDiagnostics.FlushIntervalMilliseconds must be between 1 and 60000.");
+        }
+
+        if (options.MaxBatchSize <= 0 || options.MaxBatchSize > 100_000)
+        {
+            errors.Add("BtcOrderBookLagDiagnostics.MaxBatchSize must be between 1 and 100000.");
+        }
+
+        if (options.MaxQueueSize <= 0 || options.MaxQueueSize > 1_000_000)
+        {
+            errors.Add("BtcOrderBookLagDiagnostics.MaxQueueSize must be between 1 and 1000000.");
+        }
+
+        if (options.RetentionMinutes <= 0 || options.RetentionMinutes > 10_080)
+        {
+            errors.Add("BtcOrderBookLagDiagnostics.RetentionMinutes must be between 1 and 10080.");
+        }
+
+        if (options.CleanupIntervalMinutes <= 0 || options.CleanupIntervalMinutes > 1_440)
+        {
+            errors.Add("BtcOrderBookLagDiagnostics.CleanupIntervalMinutes must be between 1 and 1440.");
+        }
+
+        if (options.CleanupBatchSize <= 0 || options.CleanupBatchSize > 1_000_000)
+        {
+            errors.Add("BtcOrderBookLagDiagnostics.CleanupBatchSize must be between 1 and 1000000.");
         }
     }
 

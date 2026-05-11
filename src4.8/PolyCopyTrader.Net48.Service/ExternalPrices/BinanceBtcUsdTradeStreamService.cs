@@ -1,6 +1,7 @@
 using System.Net.WebSockets;
 using PolyCopyTrader.Domain;
 using PolyCopyTrader.Domain.Configuration;
+using PolyCopyTrader.Service.Diagnostics;
 using PolyCopyTrader.Storage;
 
 namespace PolyCopyTrader.Service.ExternalPrices;
@@ -9,6 +10,7 @@ public sealed class BinanceBtcUsdTradeStreamService(
     ILogger<BinanceBtcUsdTradeStreamService> logger,
     BinanceBtcUsdReferenceOptions options,
     IBtcUsdReferencePriceCache cache,
+    IBtcOrderBookLagDiagnosticService btcOrderBookLagDiagnosticService,
     IAppRepository repository) : BackgroundService, IBtcUsdReferencePriceClient
 {
     private readonly object sync = new();
@@ -136,6 +138,8 @@ public sealed class BinanceBtcUsdTradeStreamService(
         {
             latest = point;
         }
+
+        btcOrderBookLagDiagnosticService.RecordBinanceTrade(point);
 
         if (fetchedAtUtc < nextSampleAtUtc)
         {

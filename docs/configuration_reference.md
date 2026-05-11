@@ -127,6 +127,28 @@ The latest cache snapshot is exposed on the local IPC endpoint
 `GET /btc-usd-reference`. The window is in memory; it is rebuilt after a service
 restart.
 
+## BtcOrderBookLagDiagnostics
+
+When enabled, the service stores event-level lag diagnostics in
+`btc_order_book_lag_diagnostic_events`: every received Binance BTC/USDT trade
+and every Polymarket top-of-book WebSocket update gets a local receive
+timestamp, source event timestamp, best bid/ask/mid where available, and
+calculated local lag milliseconds. This is for short-window research into
+whether Binance ticks lead Polymarket book movement.
+
+- `Enabled`: records the diagnostic stream when true; default `false`.
+- `FlushIntervalMilliseconds`: buffer flush interval, default `1000`.
+- `MaxBatchSize`: maximum rows written per flush, default `1000`.
+- `MaxQueueSize`: maximum in-memory queued diagnostic events before dropping,
+  default `100000`.
+- `RetentionMinutes`: retention window for the diagnostic table, default `180`.
+- `CleanupIntervalMinutes`: cleanup interval, default `10`.
+- `CleanupBatchSize`: maximum rows deleted per cleanup batch, default `50000`.
+- `CaptureBinanceTrades`: records Binance trade events when true, default
+  `true`.
+- `CapturePolymarketTopOfBook`: records Polymarket top-of-book updates when
+  true, default `true`.
+
 ## BinanceCryptoReference
 
 The service can keep a Binance combined trade WebSocket open for non-BTC

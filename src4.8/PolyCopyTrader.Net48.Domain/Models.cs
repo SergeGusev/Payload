@@ -135,6 +135,25 @@ public sealed record BtcUsdReferenceCorrelationSample(
     string RawJson,
     DateTimeOffset CreatedAtUtc);
 
+public sealed record BtcOrderBookLagDiagnosticEvent(
+    Guid Id,
+    string Source,
+    string EventType,
+    string? AssetId,
+    string? ConditionId,
+    string? BinanceSymbol,
+    decimal? BinancePriceUsd,
+    decimal? BestBid,
+    decimal? BestAsk,
+    decimal? Mid,
+    decimal? TradePrice,
+    decimal? TradeSize,
+    DateTimeOffset? SourceTimestampUtc,
+    DateTimeOffset ReceivedAtUtc,
+    decimal? LocalLagMilliseconds,
+    string RawEventType,
+    DateTimeOffset CreatedAtUtc);
+
 public sealed record BtcUpDown5mOddsTick(
     Guid Id,
     string MarketId,

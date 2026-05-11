@@ -218,6 +218,14 @@ fresh Binance trade point, and stores the result in
 `btc_usd_reference_correlation_samples`. These rows are for correlation analysis
 only and do not influence strategy decisions.
 
+When `BtcOrderBookLagDiagnostics:Enabled=true`, the service also stores a
+short-retention event-level archive in `btc_order_book_lag_diagnostic_events`.
+It records every received Binance BTC/USDT trade and Polymarket top-of-book
+WebSocket update with local receive time, source event time, best bid/ask/mid,
+and local lag milliseconds. This archive is meant to test whether Binance ticks
+lead Polymarket order-book moves; it is buffered in memory and cleaned by
+retention so it does not replace the compact odds archive.
+
 ### Certificate Pinning
 
 `Polymarket:CertificatePins` can be configured in development or production for the Polymarket HTTP clients and the market WebSocket. Pins are keyed by endpoint host and use `sha256/<base64 SPKI SHA-256>` format. If a host has no configured pin, normal .NET TLS validation is used. If a host has pins, the certificate must match one of them; arbitrary invalid certificates are still rejected.

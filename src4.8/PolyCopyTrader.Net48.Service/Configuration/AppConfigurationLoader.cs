@@ -30,6 +30,7 @@ public static class AppConfigurationLoader
             PolymarketAuth = configuration.GetSection("PolymarketAuth").Get<PolymarketAuthOptions>() ?? new PolymarketAuthOptions(),
             MarketDataWebSocket = configuration.GetSection("MarketDataWebSocket").Get<MarketDataWebSocketOptions>() ?? new MarketDataWebSocketOptions(),
             MarketTradeDiagnostics = configuration.GetSection("MarketTradeDiagnostics").Get<MarketTradeDiagnosticsOptions>() ?? new MarketTradeDiagnosticsOptions(),
+            BtcOrderBookLagDiagnostics = configuration.GetSection("BtcOrderBookLagDiagnostics").Get<BtcOrderBookLagDiagnosticsOptions>() ?? new BtcOrderBookLagDiagnosticsOptions(),
             DataApiTraderIngestion = configuration.GetSection("DataApiTraderIngestion").Get<DataApiTraderIngestionOptions>() ?? new DataApiTraderIngestionOptions(),
             Watchlist = watchlist,
             PaperTrading = configuration.GetSection("PaperTrading").Get<PaperTradingOptions>() ?? new PaperTradingOptions(),

@@ -20,6 +20,8 @@ public sealed class AppConfiguration
 
     public MarketTradeDiagnosticsOptions MarketTradeDiagnostics { get; init; } = new();
 
+    public BtcOrderBookLagDiagnosticsOptions BtcOrderBookLagDiagnostics { get; init; } = new();
+
     public DataApiTraderIngestionOptions DataApiTraderIngestion { get; init; } = new();
 
     public WatchlistOptions Watchlist { get; init; } = new();
@@ -308,6 +310,27 @@ public sealed class MarketTradeDiagnosticsOptions
     public int MarketTradesLimit { get; init; } = 1_000;
 
     public int MatchTimestampToleranceSeconds { get; init; } = 5;
+}
+
+public sealed class BtcOrderBookLagDiagnosticsOptions
+{
+    public bool Enabled { get; init; }
+
+    public int FlushIntervalMilliseconds { get; init; } = 1_000;
+
+    public int MaxBatchSize { get; init; } = 1_000;
+
+    public int MaxQueueSize { get; init; } = 100_000;
+
+    public int RetentionMinutes { get; init; } = 180;
+
+    public int CleanupIntervalMinutes { get; init; } = 10;
+
+    public int CleanupBatchSize { get; init; } = 50_000;
+
+    public bool CaptureBinanceTrades { get; init; } = true;
+
+    public bool CapturePolymarketTopOfBook { get; init; } = true;
 }
 
 public sealed class DataApiTraderIngestionOptions

@@ -293,6 +293,15 @@ public interface IAppRepository
         int limit = 100,
         CancellationToken cancellationToken = default);
 
+    Task AddBtcOrderBookLagDiagnosticEventsAsync(
+        IReadOnlyList<BtcOrderBookLagDiagnosticEvent> events,
+        CancellationToken cancellationToken = default);
+
+    Task<int> CleanupBtcOrderBookLagDiagnosticEventsAsync(
+        DateTimeOffset receivedBeforeUtc,
+        int batchSize,
+        CancellationToken cancellationToken = default);
+
     Task AddBtcUpDown5mOddsTickAsync(
         BtcUpDown5mOddsTick tick,
         CancellationToken cancellationToken = default);

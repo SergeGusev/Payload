@@ -6,6 +6,7 @@ using PolyCopyTrader.Service.Analytics;
 using PolyCopyTrader.Service.Configuration;
 using PolyCopyTrader.Service.Control;
 using PolyCopyTrader.Service.DataApiTraderActivity;
+using PolyCopyTrader.Service.Diagnostics;
 using PolyCopyTrader.Service.ExternalPrices;
 using PolyCopyTrader.Service.GammaMarkets;
 using PolyCopyTrader.Service.LiveTrading;
@@ -102,6 +103,7 @@ internal static class Net48ServiceHostFactory
         services.AddSingleton(appConfiguration.PolymarketHttpLogging);
         services.AddSingleton(appConfiguration.PolymarketAuth);
         services.AddSingleton(appConfiguration.MarketDataWebSocket);
+        services.AddSingleton(appConfiguration.BtcOrderBookLagDiagnostics);
         services.AddSingleton(appConfiguration.Watchlist);
         services.AddSingleton(appConfiguration.PaperTrading);
         services.AddSingleton(appConfiguration.LiveTrading);
@@ -154,6 +156,8 @@ internal static class Net48ServiceHostFactory
         services.AddSingleton<BinanceCryptoReferenceTradeStreamService>();
         services.AddSingleton<ICryptoReferencePriceClient>(sp => sp.GetRequiredService<BinanceCryptoReferenceTradeStreamService>());
         services.AddHttpClient<ChainlinkBtcUsdCorrelationWorker>();
+        services.AddSingleton<BtcOrderBookLagDiagnosticService>();
+        services.AddSingleton<IBtcOrderBookLagDiagnosticService>(sp => sp.GetRequiredService<BtcOrderBookLagDiagnosticService>());
         services.AddSingleton<MarketTradeTickDiagnosticService>();
         services.AddSingleton<IMarketTradeTickDiagnosticService>(sp => sp.GetRequiredService<MarketTradeTickDiagnosticService>());
         services.AddSingleton<IExposureSnapshotCache, ExposureSnapshotCache>();
@@ -179,6 +183,7 @@ internal static class Net48ServiceHostFactory
         services.AddHostedService<PaperTradingWorker>();
         services.AddHostedService<LocalControlServer>();
         services.AddHostedService<GammaMarketIngestionWorker>();
+        services.AddSingleton<IHostedService>(sp => sp.GetRequiredService<BtcOrderBookLagDiagnosticService>());
         services.AddHostedService(sp => sp.GetRequiredService<BinanceBtcUsdTradeStreamService>());
         services.AddHostedService(sp => sp.GetRequiredService<BinanceCryptoReferenceTradeStreamService>());
         services.AddHostedService<ChainlinkBtcUsdCorrelationWorker>();

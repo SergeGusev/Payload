@@ -1,3 +1,20 @@
+## Active Update 2026-05-11 Event-Level Binance/Book Lag Diagnostics
+Goal: Add short-retention event-level diagnostics for Binance BTC/USDT trades versus Polymarket BTC 5m top-of-book updates.
+Status: Completed
+Done:
+- Added Net48 `BtcOrderBookLagDiagnostics` config and enabled it in the service appsettings with 1s buffered flushes, 1000-row batches, 100k in-memory queue, and 180-minute retention.
+- Added PostgreSQL table `btc_order_book_lag_diagnostic_events` with indexes by receive time, source, asset, and condition; schema initialization and storage smoke now create/verify it.
+- Added `BtcOrderBookLagDiagnosticService` as a hosted background buffer/cleanup worker and explicit `IHostedService` registration; correct host smoke from `bin\Release` reports `21` hosted services.
+- Binance BTC trade stream now records every received trade event before one-minute reference sampling; Polymarket market WebSocket shard runner passes a local `received_at_utc` into parsing, and top-of-book `Book`/`PriceChange`/`BestBidAsk` events are recorded with best bid/ask/mid and local lag milliseconds.
+- Documented the diagnostic table/options in README and `docs/configuration_reference.md`.
+- Rebuilt the root Net48 solution with Visual Studio MSBuild. Plain `dotnet build` is not valid for this classic Net48 solution here because it does not resolve PackageReference correctly.
+- Restarted the Net48 service from the current classic output path `src4.8/PolyCopyTrader.Net48.Service/bin/Release/PolyCopyTrader.Net48.Service.exe` as PID `63172`. The older `bin/Release/net48` exe path is stale and should not be used.
+- IPC `/status` reports `Running`, scanning and Paper unpaused, Live paused, kill switch inactive, and no last error.
+- Verified rows are being persisted: temporary C# probe showed, for the latest 5-minute window, `BinanceTrade=2912` and `PolymarketTopOfBook=2230`; the probe was removed.
+Next: Let this event-level table accumulate for a few hours, then rerun lead/lag correlation with sub-second buckets while the 180-minute retention window still contains data.
+Notes: Live trading remains disabled by config and additionally paused through IPC. Verification passed: VS MSBuild restore/build Release, Release `--host-smoke`, Release `--storage-smoke`, IPC status, diagnostic log startup line, and temporary DB row-count probe.
+Blockers: None.
+
 ## Active Update 2026-05-11 Binance Book Lag Correlation
 Goal: Check whether Binance BTC/USDT moves lead Polymarket BTC 5m order-book price moves.
 Status: Completed

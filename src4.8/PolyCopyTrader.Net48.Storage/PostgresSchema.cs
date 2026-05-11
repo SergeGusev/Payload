@@ -29,6 +29,7 @@ public static class PostgresSchema
         "paper_position_settlements",
         "paper_copied_trader_performance",
         "btc_usd_reference_correlation_samples",
+        "btc_order_book_lag_diagnostic_events",
         "btc_up_down_5m_odds_ticks",
         "crypto_up_down_5m_odds_ticks",
         "paper_copied_leader_positions",
@@ -2237,6 +2238,40 @@ CREATE TABLE IF NOT EXISTS btc_usd_reference_correlation_samples (
 
 CREATE INDEX IF NOT EXISTS ix_btc_usd_reference_correlation_samples_created
 ON btc_usd_reference_correlation_samples(created_at_utc DESC);
+
+CREATE TABLE IF NOT EXISTS btc_order_book_lag_diagnostic_events (
+    id uuid PRIMARY KEY,
+    source text NOT NULL,
+    event_type text NOT NULL,
+    asset_id text NULL,
+    condition_id text NULL,
+    binance_symbol text NULL,
+    binance_price_usd numeric(28,8) NULL,
+    best_bid numeric(18,8) NULL,
+    best_ask numeric(18,8) NULL,
+    mid numeric(18,8) NULL,
+    trade_price numeric(18,8) NULL,
+    trade_size numeric(28,8) NULL,
+    source_timestamp_utc timestamptz NULL,
+    received_at_utc timestamptz NOT NULL,
+    local_lag_ms numeric(18,8) NULL,
+    raw_event_type text NOT NULL DEFAULT '',
+    created_at_utc timestamptz NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS ix_btc_order_book_lag_events_received
+ON btc_order_book_lag_diagnostic_events(received_at_utc DESC);
+
+CREATE INDEX IF NOT EXISTS ix_btc_order_book_lag_events_source_received
+ON btc_order_book_lag_diagnostic_events(source, received_at_utc DESC);
+
+CREATE INDEX IF NOT EXISTS ix_btc_order_book_lag_events_asset_received
+ON btc_order_book_lag_diagnostic_events(asset_id, received_at_utc DESC)
+WHERE asset_id IS NOT NULL;
+
+CREATE INDEX IF NOT EXISTS ix_btc_order_book_lag_events_condition_received
+ON btc_order_book_lag_diagnostic_events(condition_id, received_at_utc DESC)
+WHERE condition_id IS NOT NULL;
 
 CREATE TABLE IF NOT EXISTS btc_up_down_5m_odds_ticks (
     id uuid PRIMARY KEY,

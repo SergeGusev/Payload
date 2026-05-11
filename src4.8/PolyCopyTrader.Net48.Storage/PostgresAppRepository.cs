@@ -2588,6 +2588,67 @@ LIMIT @Limit;
 		return result;
 	}
 
+	public async Task AddBtcOrderBookLagDiagnosticEventsAsync(IReadOnlyList<BtcOrderBookLagDiagnosticEvent> events, CancellationToken cancellationToken = default(CancellationToken))
+	{
+		if (events.Count == 0)
+		{
+			return;
+		}
+
+		using NpgsqlConnection connection = await OpenConnectionAsync(cancellationToken);
+		using NpgsqlTransaction transaction = connection.BeginTransaction();
+		foreach (BtcOrderBookLagDiagnosticEvent diagnosticEvent in events)
+		{
+			using NpgsqlCommand command = CreateCommand(connection, """
+INSERT INTO btc_order_book_lag_diagnostic_events (
+    id, source, event_type, asset_id, condition_id, binance_symbol, binance_price_usd,
+    best_bid, best_ask, mid, trade_price, trade_size, source_timestamp_utc,
+    received_at_utc, local_lag_ms, raw_event_type, created_at_utc
+) VALUES (
+    @Id, @Source, @EventType, @AssetId, @ConditionId, @BinanceSymbol, @BinancePriceUsd,
+    @BestBid, @BestAsk, @Mid, @TradePrice, @TradeSize, @SourceTimestampUtc,
+    @ReceivedAtUtc, @LocalLagMs, @RawEventType, @CreatedAtUtc
+);
+""");
+			command.Transaction = transaction;
+			AddBtcOrderBookLagDiagnosticEventParameters(command, diagnosticEvent);
+			await command.ExecuteNonQueryAsync(cancellationToken);
+		}
+
+		transaction.Commit();
+	}
+
+	public async Task<int> CleanupBtcOrderBookLagDiagnosticEventsAsync(
+		DateTimeOffset receivedBeforeUtc,
+		int batchSize,
+		CancellationToken cancellationToken = default(CancellationToken))
+	{
+		if (batchSize <= 0)
+		{
+			return 0;
+		}
+
+		using NpgsqlConnection connection = await OpenConnectionAsync(cancellationToken);
+		using NpgsqlCommand command = CreateCommand(connection, """
+WITH deleted AS (
+    DELETE FROM btc_order_book_lag_diagnostic_events events
+    WHERE events.ctid IN (
+        SELECT ctid
+        FROM btc_order_book_lag_diagnostic_events
+        WHERE received_at_utc < @ReceivedBeforeUtc
+        ORDER BY received_at_utc ASC
+        LIMIT @BatchSize
+    )
+    RETURNING 1
+)
+SELECT count(*)::integer FROM deleted;
+""");
+		command.Parameters.AddWithValue("ReceivedBeforeUtc", UtcDateTime(receivedBeforeUtc));
+		command.Parameters.AddWithValue("BatchSize", batchSize);
+		object? result = await command.ExecuteScalarAsync(cancellationToken);
+		return result is int deleted ? deleted : 0;
+	}
+
 	public async Task AddBtcUpDown5mOddsTickAsync(BtcUpDown5mOddsTick tick, CancellationToken cancellationToken = default(CancellationToken))
 	{
 		using NpgsqlConnection connection = await OpenConnectionAsync(cancellationToken);
@@ -6770,6 +6831,27 @@ LIMIT @Limit;
 			reader.GetString(10),
 			reader.GetString(11),
 			DateTimeOffsetFromUtc(reader.GetDateTime(12)));
+	}
+
+	private static void AddBtcOrderBookLagDiagnosticEventParameters(NpgsqlCommand command, BtcOrderBookLagDiagnosticEvent diagnosticEvent)
+	{
+		command.Parameters.AddWithValue("Id", diagnosticEvent.Id);
+		command.Parameters.AddWithValue("Source", diagnosticEvent.Source);
+		command.Parameters.AddWithValue("EventType", diagnosticEvent.EventType);
+		command.Parameters.AddWithValue("AssetId", ((object)diagnosticEvent.AssetId) ?? ((object)DBNull.Value));
+		command.Parameters.AddWithValue("ConditionId", ((object)diagnosticEvent.ConditionId) ?? ((object)DBNull.Value));
+		command.Parameters.AddWithValue("BinanceSymbol", ((object)diagnosticEvent.BinanceSymbol) ?? ((object)DBNull.Value));
+		command.Parameters.AddWithValue("BinancePriceUsd", NullableDecimal(diagnosticEvent.BinancePriceUsd));
+		command.Parameters.AddWithValue("BestBid", NullableDecimal(diagnosticEvent.BestBid));
+		command.Parameters.AddWithValue("BestAsk", NullableDecimal(diagnosticEvent.BestAsk));
+		command.Parameters.AddWithValue("Mid", NullableDecimal(diagnosticEvent.Mid));
+		command.Parameters.AddWithValue("TradePrice", NullableDecimal(diagnosticEvent.TradePrice));
+		command.Parameters.AddWithValue("TradeSize", NullableDecimal(diagnosticEvent.TradeSize));
+		command.Parameters.AddWithValue("SourceTimestampUtc", NullableDateTime(diagnosticEvent.SourceTimestampUtc));
+		command.Parameters.AddWithValue("ReceivedAtUtc", UtcDateTime(diagnosticEvent.ReceivedAtUtc));
+		command.Parameters.AddWithValue("LocalLagMs", NullableDecimal(diagnosticEvent.LocalLagMilliseconds));
+		command.Parameters.AddWithValue("RawEventType", diagnosticEvent.RawEventType);
+		command.Parameters.AddWithValue("CreatedAtUtc", UtcDateTime(diagnosticEvent.CreatedAtUtc));
 	}
 
 	private static void AddBtcUpDown5mOddsTickParameters(NpgsqlCommand command, BtcUpDown5mOddsTick tick)
