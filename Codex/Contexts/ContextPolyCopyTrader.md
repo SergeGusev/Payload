@@ -1,3 +1,16 @@
+## Active Update 2026-05-11 BTC Source Comparison Interpretation
+Goal: Interpret whether the generated BTC/Binance/Polymarket comparison chart suggests actionable use.
+Status: Completed
+Done:
+- Analyzed the generated CSV from `btc-updown-5m-1778520300` with PowerShell, without changing production code.
+- Found Binance SBE and Binance JSON bookTicker are effectively identical at this cadence (`corr=1.0`).
+- Found Binance move from market start and Polymarket Up probability move are strongly correlated on levels (`corr=0.9054`) and by segments (`0-60s=0.9379`, `60-180s=0.9757`, `180-300s=0.9670`).
+- Lag scan did not show a usable delayed Polymarket response: best level lag and best 1/3/5/10-second delta lags were all `0s`.
+- Observed sensitivity mismatch: Binance moved only about `4.0 bps` max while Polymarket Up probability moved about `5250 probability bps` near expiry.
+Next: Use this as evidence for a fair-value/residual strategy test rather than a simple latency-arbitrage strategy.
+Notes: No source code changed beyond context/history. Analysis used the generated CSV only.
+Blockers: One 5-minute market is not enough for statistical strategy approval; repeat across many windows before implementing Live logic.
+
 ## Active Update 2026-05-11 BTC Source Comparison Excel Chart
 Goal: Convert the generated BTC source comparison CSV into an Excel workbook with charts.
 Status: Completed

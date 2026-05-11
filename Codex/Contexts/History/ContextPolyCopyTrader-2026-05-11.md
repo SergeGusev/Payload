@@ -325,6 +325,13 @@ Request:
 
 Result:
 Reviewed the official Binance SBE Market Data Streams documentation and SBE schema. Summarized endpoint, authentication, stream types, timing, limits, and relevance for PolyCopyTrader BTC diagnostics; no production code changed.
+## 2026-05-11T18:13:32.6142584Z
+Request:
+Что ты сам скажешь по этому графику? Есть возможности для использования?
+
+Result:
+Analyzed the generated BTC source comparison CSV quantitatively. Binance SBE and Binance JSON bookTicker are effectively identical at this cadence (`corr=1.0`). Binance move from market start and Polymarket Up probability move are strongly correlated (`corr=0.9054` overall; segment correlations `0.9379`, `0.9757`, `0.9670`). Lag scan did not show a usable delayed Polymarket reaction: best level lag and best 1/3/5/10-second delta lags were all `0s`. Interpreted the result as useful for fair-value/residual modelling, not for simple Binance-leads-Polymarket latency trading.
+
 ## 2026-05-11T18:05:18.0217308Z
 Request:
 А ты можешь из этого csv сделать Excel с графиком?
