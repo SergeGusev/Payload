@@ -30,6 +30,7 @@ logs/
 *.db-wal
 *.sqlite
 *.sqlite3
+artifacts/btc-source-comparison/
 
 ## Secrets/config overrides
 appsettings.Development.local.json

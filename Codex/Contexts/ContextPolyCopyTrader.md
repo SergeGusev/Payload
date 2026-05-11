@@ -1,3 +1,15 @@
+## Active Update 2026-05-11 Binance SBE Key Verification
+Goal: Verify the provided Binance SBE API key id and complete one BTC source comparison capture.
+Status: Completed
+Done:
+- Verified Binance SBE connectivity with `--binance-sbe-smoke`; it connected and decoded 4 binary `bestBidAsk` messages without printing the key.
+- Fixed `--btc-source-comparison-csv` market lookup to query Gamma directly by target `btc-updown-5m-{unix}` slug before falling back to the broad active-market page.
+- Improved the Polymarket chart proxy so one-sided late-market books such as `Up bid=0.99` / `Down ask=0.01` still produce an implied Up value.
+- Ran a full no-DB capture for `btc-updown-5m-1778520300` from `2026-05-11T17:25:00Z` to `2026-05-11T17:30:00Z`; generated `artifacts/btc-source-comparison/btc-source-comparison-btc-updown-5m-1778520300-20260511-173000.csv` with 298 rows.
+Next: Load the generated CSV into Excel or another charting tool and compare `sbe_mid_bps_from_start`, `json_mid_bps_from_start`, and `polymarket_up_delta_probability_bps_from_start` / `polymarket_up_relative_bps_from_start`.
+Notes: Verification passed: service Release build, full tests `426/426`, SBE smoke, full CSV run, and generated CSV quality check showing SBE rows `298/298`, JSON rows `298/298`, Polymarket rows `298/298`, and zero per-source error rows. The API key was used only in process environment for command execution and was not committed.
+Blockers: None.
+
 ## Active Update 2026-05-11 BTC Source Comparison CSV Command
 Goal: Implement the proposed no-database test that samples Binance SBE, Binance bookTicker, and Polymarket BTC 5m order-book data through one market window and exports a file for visual comparison.
 Status: Completed

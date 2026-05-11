@@ -164,12 +164,23 @@ public static class BtcSourceComparisonCsvCommand
             new NullPolymarketApiErrorSink(),
             null);
         DateTimeOffset stopPollingUtc = targetStartUtc.AddSeconds(options.MarketLookupGraceSeconds);
+        string targetSlug = "btc-updown-5m-" + targetStartUtc.ToUnixTimeSeconds().ToString(CultureInfo.InvariantCulture);
         Exception? lastError = null;
 
         while (DateTimeOffset.UtcNow <= stopPollingUtc)
         {
             try
             {
+                PolymarketGammaMarket? slugCandidate = await GetMarketBySlugAsync(
+                    httpClient,
+                    options,
+                    targetSlug,
+                    cancellationToken);
+                if (slugCandidate is not null && BtcUpDown5mMarketAnalyzer.IsCandidate(slugCandidate))
+                {
+                    return slugCandidate;
+                }
+
                 var markets = await gammaClient.GetActiveMarketsAsync(500, 0, cancellationToken);
                 var candidate = markets
                     .Where(BtcUpDown5mMarketAnalyzer.IsCandidate)
@@ -203,6 +214,30 @@ public static class BtcSourceComparisonCsvCommand
             "Could not find active BTC Up or Down 5m market for start " +
             targetStartUtc.ToString("O", CultureInfo.InvariantCulture) +
             (lastError is null ? "." : ". Last error: " + lastError.Message));
+    }
+
+    private static async Task<PolymarketGammaMarket?> GetMarketBySlugAsync(
+        HttpClient httpClient,
+        BtcSourceComparisonOptions options,
+        string slug,
+        CancellationToken cancellationToken)
+    {
+        string url = BuildGammaMarketsBySlugUrl(options.GammaBaseUrl, slug);
+        using var response = await httpClient.GetAsync(url, cancellationToken);
+        response.EnsureSuccessStatusCode();
+        await using Stream stream = await response.Content.ReadAsStreamAsync(cancellationToken);
+        using JsonDocument document = await JsonDocument.ParseAsync(stream, cancellationToken: cancellationToken);
+        return PolymarketJsonParser.ParseGammaActiveMarkets(document.RootElement)
+            .FirstOrDefault(market => string.Equals(market.Slug, slug, StringComparison.OrdinalIgnoreCase));
+    }
+
+    private static string BuildGammaMarketsBySlugUrl(string gammaBaseUrl, string slug)
+    {
+        string normalizedBaseUrl = gammaBaseUrl.TrimEnd('/');
+        return normalizedBaseUrl +
+            "/markets?slug=" +
+            Uri.EscapeDataString(slug) +
+            "&limit=1";
     }
 
     private static string WriteCsv(
@@ -653,7 +688,7 @@ public static class BtcSourceComparisonCsvCommand
                 OrderBookSnapshot? down = downTask is null ? null : await downTask;
                 decimal? upMid = Mid(up?.BestBid, up?.BestAsk);
                 decimal? downMid = Mid(down?.BestBid, down?.BestAsk);
-                decimal? impliedUpMid = upMid ?? (downMid.HasValue ? 1m - downMid.Value : null);
+                decimal? impliedUpMid = ComputeImpliedUpProxy(up, down, upMid, downMid);
                 return new PolymarketComparisonSnapshot(
                     sampleUtc,
                     up?.BestBid,
@@ -684,6 +719,49 @@ public static class BtcSourceComparisonCsvCommand
                     null,
                     ex.Message);
             }
+        }
+
+        private static decimal? ComputeImpliedUpProxy(
+            OrderBookSnapshot? up,
+            OrderBookSnapshot? down,
+            decimal? upMid,
+            decimal? downMid)
+        {
+            if (upMid.HasValue && downMid.HasValue)
+            {
+                return Average(upMid.Value, 1m - downMid.Value);
+            }
+
+            if (upMid.HasValue)
+            {
+                return upMid.Value;
+            }
+
+            if (downMid.HasValue)
+            {
+                return 1m - downMid.Value;
+            }
+
+            decimal? bidSideProxy = AverageNullable(up?.BestBid, down?.BestAsk is { } downAsk ? 1m - downAsk : null);
+            if (bidSideProxy.HasValue)
+            {
+                return bidSideProxy.Value;
+            }
+
+            decimal? askSideProxy = AverageNullable(up?.BestAsk, down?.BestBid is { } downBid ? 1m - downBid : null);
+            return askSideProxy;
+        }
+
+        private static decimal Average(decimal left, decimal right)
+        {
+            return (left + right) / 2m;
+        }
+
+        private static decimal? AverageNullable(decimal? left, decimal? right)
+        {
+            return left.HasValue && right.HasValue
+                ? Average(left.Value, right.Value)
+                : left ?? right;
         }
     }
 

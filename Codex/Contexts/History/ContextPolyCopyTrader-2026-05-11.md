@@ -325,6 +325,13 @@ Request:
 
 Result:
 Reviewed the official Binance SBE Market Data Streams documentation and SBE schema. Summarized endpoint, authentication, stream types, timing, limits, and relevance for PolyCopyTrader BTC diagnostics; no production code changed.
+## 2026-05-11T17:30:33.0892283Z
+Request:
+Binance API Key was provided by the user for SBE verification.
+
+Result:
+Used the provided Binance API key id only in the current PowerShell process, without committing or printing it. `--binance-sbe-smoke` connected to Binance SBE and decoded 4 binary `bestBidAsk` messages. The first full comparison run exposed a market lookup issue because broad Gamma active-market paging did not include the target window; fixed the command to query Gamma directly by target BTC 5m slug. Also improved Polymarket implied Up proxy for one-sided late-market books. Rebuilt and retested (`426/426`), then ran a full no-DB comparison for `btc-updown-5m-1778520300` from `17:25:00Z` to `17:30:00Z`. Generated `artifacts/btc-source-comparison/btc-source-comparison-btc-updown-5m-1778520300-20260511-173000.csv` with 298 rows, complete SBE/JSON/Polymarket values, and zero per-source error rows.
+
 ## 2026-05-11T17:01:17.0418619Z
 Request:
 Предложен план тестирования: от старта до закрытия одного BTC 5m рынка в непрерывном цикле параллельно получать свежий Binance SBE stream, текущий Binance bookTicker и текущий Polymarket order book, фиксировать общий timestamp и среднюю цену/значение каждого источника в памяти, а после закрытия выгружать Excel/CSV для визуального сравнения трех графиков.
