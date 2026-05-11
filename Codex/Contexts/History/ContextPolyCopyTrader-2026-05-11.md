@@ -305,3 +305,9 @@ Request:
 
 Result:
 Checked the old/local server. The .NET 10 service and Dashboard are running; service heartbeat is fresh against local PostgreSQL `127.0.0.1:5432/polycopytrader`. Current BTC market data is active: aggregate Polymarket WebSocket is connected with 648 subscribed assets, BTC odds ticks and BTC/order-book lag diagnostics are being written, and no API errors or HTTP failures were persisted in the last 15 minutes. Paper trading is active with 118 orders created since the recent restart, 5 filled, and 91 still open. Live has no open orders.
+## 2026-05-11T16:17:27.7519940Z
+Request:
+Ознакомься с разделом https://developers.binance.com/docs/binance-spot-api-docs/sbe-market-data-streams
+
+Result:
+Reviewed the official Binance SBE Market Data Streams documentation and SBE schema. Summarized endpoint, authentication, stream types, timing, limits, and relevance for PolyCopyTrader BTC diagnostics; no production code changed.

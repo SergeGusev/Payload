@@ -1,3 +1,14 @@
+## Active Update 2026-05-11 Binance SBE Market Data Review
+Goal: Review Binance Spot SBE Market Data Streams documentation and assess relevance for PolyCopyTrader BTC diagnostics.
+Status: Completed
+Done:
+- Read the official Binance SBE Market Data Streams section and related SBE schema reference.
+- Confirmed SBE streams use `stream-sbe.binance.com`, binary SBE payloads, microsecond timestamps, Ed25519 API key authentication, and support `trade`, `bestBidAsk`, `depth`, and `depth20` streams.
+- Assessed that SBE can improve Binance-side timing diagnostics, especially `bestBidAsk` with event time and auto-culling, but requires a new C# binary decoder and API key plumbing.
+Next: Decide whether to keep current JSON Binance streams or add SBE as an optional diagnostic/feed implementation.
+Notes: Documentation-only task; no production code changed. Sources reviewed: Binance SBE Market Data Streams and Binance SBE `stream_1_0.xml` schema.
+Blockers: None.
+
 ## Active Update 2026-05-11 Old Server Runtime Check
 Goal: Check the current .NET 10 runtime/data collection state on the old server after abandoning the new Windows Server 2008 R2 host.
 Status: Completed
