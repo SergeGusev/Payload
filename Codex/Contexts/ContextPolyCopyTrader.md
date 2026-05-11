@@ -1,3 +1,15 @@
+## Active Update 2026-05-11 Live Candidate Reminder
+Goal: Remind which strategy was selected as the first Live candidate.
+Status: Completed
+Done:
+- Rechecked persisted `Live Candidate Review` context.
+- Confirmed the first controlled Live-shadow candidate was `BTC Up or Down 5m More 150 Below 65`.
+- Confirmed `BTC Up or Down 5m More 90 Below 55` was the second watchlist/backup candidate.
+- Noted that earlier `BTC Up or Down 5m Skip 1` was a Live-shadow mechanics/accounting test, not the current preferred profitability candidate.
+Next: If Live is resumed, start with a controlled small-size Live-shadow test for `BTC Up or Down 5m More 150 Below 65`.
+Notes: Read-only context answer; no production code changed.
+Blockers: None.
+
 ## Active Update 2026-05-11 Initial Binance BookTicker / Polymarket Book Correlation
 Goal: Inspect the first event-level correlation data between Binance BTCUSDT order-book snapshots and Polymarket BTC 5m top-of-book updates.
 Status: Completed

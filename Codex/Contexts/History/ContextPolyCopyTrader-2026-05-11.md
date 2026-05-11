@@ -53,3 +53,10 @@ Request:
 
 Result:
 Ran a temporary read-only C# probe against `btc_order_book_lag_diagnostic_events` and removed it afterward. As of `2026-05-11T06:32:16Z`, the table had `1,692` Binance bookTicker rows, `54,009` Binance trade rows, and `56,798` Polymarket top-of-book rows. Mapping Polymarket BTC 5m events to Up probability showed strong level correlation between Binance book mid move from market start and Polymarket Up price: `0.7749` at 0s, gradually rising to `0.8020` when comparing Polymarket with Binance book data from 5 seconds earlier. Native Up and inverted Down events matched, so the normalization looked sound. Short-window delta correlations were near zero for 1s/2s and weakly negative for 5s/10s; no actionable short-term lead/lag signal is visible yet. Binance bookTicker and Binance trade price matched almost perfectly at this cadence (`corr=0.999924`).
+
+## 2026-05-11T06:43:46.0924609Z
+Request:
+Напомни, какую из стратегий мы решили выводить в Live
+
+Result:
+Rechecked persisted context. The first controlled Live-shadow candidate was `BTC Up or Down 5m More 150 Below 65`; `BTC Up or Down 5m More 90 Below 55` was the second watchlist/backup candidate. Earlier `BTC Up or Down 5m Skip 1` was used for Live-shadow mechanics/accounting tests, not as the current preferred profitability candidate.
