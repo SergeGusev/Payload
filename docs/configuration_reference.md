@@ -666,7 +666,8 @@ safety buffer times the configured Paper stake multiplier; diagnostics record
 `post_only=false` plus the selected pricing model inputs, cap, final limit, GTD
 expiration, and `OpeningLimitGtdTtlSeconds` (`120` by default). They
 do not create immediate fills and are not submitted to live trading unless
-the controlled Paper/Live-shadow path is explicitly enabled for `Skip 1`. The
+the controlled Paper/Live-shadow path is explicitly enabled for an allowed BTC variant,
+currently `Skip 1` or `More 150 Below 65`. The
 generic Paper open-order pipeline then applies balanced GTD
 accounting: visible ask depth at or below the limit creates partial `paper_fills`
 rows with VWAP evidence, cumulative fills determine `PartiallyFilled` versus

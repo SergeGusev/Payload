@@ -67,3 +67,9 @@ Request:
 
 Result:
 Rechecked the Net48 BTC Paper/Live-shadow code path and docs. Current controlled BTC live-shadow placement is still explicitly hard-gated to `BTC Up or Down 5m Skip 1`, so moving the selected `BTC Up or Down 5m More 150 Below 65` candidate to controlled Live-shadow requires code changes, not just DB flags. Existing schema is already generic enough for the test (`strategies.live_stakes`, `live_orders`, `live_trading_events`, `paper_live_shadow_decisions`, `paper_live_shadow_discrepancies`), so no new schema migration is expected. Runtime DB/config changes will still be needed: keep all other strategies live-disabled, enable/fund only the chosen strategy, set Live config gates, and Live/shadow rows will be created naturally during the test.
+## 2026-05-11T07:09:41.9260251Z
+Request:
+Ок, включай
+
+Result:
+Prepared the selected `BTC Up or Down 5m More 150 Below 65` strategy for controlled Net48 Paper/Live-shadow testing. Extended the BTC shadow allowlist beyond `Skip 1`, ported the real Polymarket CLOB auth/trading client stack into `src4.8`, wired real auth/trading services and the live maintenance worker into the Net48 host, and rebuilt successfully. Runtime Live was not started because the current environment contains only the PostgreSQL connection; Live/auth flags, signer/funder addresses, API credentials, and the order-signing private-key secret are absent. Verified both `btc_up_down_5m_more_150_below_65` and `btc_up_down_5m_skip_1` remain `live_stakes=false`. Restarted the Net48 Release service in safe Paper configuration; IPC status is `Running` with Paper unpaused, kill switch inactive, and no last error. Verification also passed `git diff --check`, Release `--host-smoke`, Release `--storage-smoke`, and `dotnet test tests/PolyCopyTrader.Tests/PolyCopyTrader.Tests.csproj --no-restore` (`418/418`).

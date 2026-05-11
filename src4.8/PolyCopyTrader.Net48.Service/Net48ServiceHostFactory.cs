@@ -130,8 +130,14 @@ internal static class Net48ServiceHostFactory
 
         services.AddSingleton<IPolymarketApiErrorSink, RepositoryPolymarketApiErrorSink>();
         services.AddSingleton<IPolymarketHttpLogSink, RepositoryPolymarketHttpLogSink>();
-        services.AddSingleton<IPolymarketAuthService, DisabledPolymarketAuthService>();
-        services.AddSingleton<IPolymarketTradingClient, DisabledPolymarketTradingClient>();
+        services.AddSingleton(PolymarketSecretProviderFactory.Create(appConfiguration.PolymarketAuth));
+        services.AddSingleton<PolymarketL2HmacSigner>();
+        services.AddSingleton<PolymarketAuthHeaderFactory>();
+        services.AddSingleton<IPolymarketAuthService, PolymarketAuthReadinessService>();
+        services.AddSingleton<OrderAmountCalculator>();
+        services.AddSingleton<ClobV2OrderBuilder>();
+        services.AddSingleton<ClobV2OrderSigner>();
+        services.AddSingleton<ClobV2OrderPayloadSerializer>();
         services.AddHttpClient<IPolymarketDataApiClient, PolymarketDataApiClient>()
             .ConfigurePrimaryHttpMessageHandler(() => CreatePolymarketHttpHandler(appConfiguration.Polymarket));
         services.AddHttpClient<IPolymarketGammaClient, PolymarketGammaClient>()
@@ -139,6 +145,8 @@ internal static class Net48ServiceHostFactory
         services.AddHttpClient<IPolymarketClobPublicClient, PolymarketClobPublicClient>()
             .ConfigurePrimaryHttpMessageHandler(() => CreatePolymarketHttpHandler(appConfiguration.Polymarket));
         services.AddHttpClient<IPolymarketGeoClient, PolymarketGeoClient>()
+            .ConfigurePrimaryHttpMessageHandler(() => CreatePolymarketHttpHandler(appConfiguration.Polymarket));
+        services.AddHttpClient<IPolymarketTradingClient, PolymarketTradingClient>()
             .ConfigurePrimaryHttpMessageHandler(() => CreatePolymarketHttpHandler(appConfiguration.Polymarket));
 
         services.AddSingleton<ILeaderTradeCandidateQueue, InMemoryLeaderTradeCandidateQueue>();
@@ -165,7 +173,7 @@ internal static class Net48ServiceHostFactory
         services.AddSingleton<IPaperTradingProcessor, PaperTradingProcessor>();
         services.AddSingleton<IPaperSettlementProcessor, PaperSettlementProcessor>();
         services.AddSingleton<ILeaderActivityExitProcessor, LeaderActivityExitProcessor>();
-        services.AddSingleton<ILiveTradingProcessor, DisabledLiveTradingProcessor>();
+        services.AddSingleton<ILiveTradingProcessor, LiveTradingProcessor>();
         services.AddSingleton<ITraderDiscoveryProcessor, TraderDiscoveryProcessor>();
         services.AddSingleton<IGammaMarketIngestionProcessor, GammaMarketIngestionProcessor>();
         services.AddSingleton<IStrategyStateProvider, StrategyStateProvider>();
@@ -181,6 +189,7 @@ internal static class Net48ServiceHostFactory
         services.AddHostedService<PolymarketHttpLogRetentionWorker>();
         services.AddHostedService<BotWorker>();
         services.AddHostedService<PaperTradingWorker>();
+        services.AddHostedService<LiveTradingMaintenanceWorker>();
         services.AddHostedService<LocalControlServer>();
         services.AddHostedService<GammaMarketIngestionWorker>();
         services.AddSingleton<IHostedService>(sp => sp.GetRequiredService<BtcOrderBookLagDiagnosticService>());

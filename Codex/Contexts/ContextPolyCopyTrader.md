@@ -1,3 +1,18 @@
+## Active Update 2026-05-11 Enable More 150 Below 65 Live-Shadow
+Goal: Enable the selected `BTC Up or Down 5m More 150 Below 65` strategy for controlled Paper/Live-shadow testing.
+Status: Blocked
+Done:
+- Extended the Net48 BTC Paper/Live-shadow allowlist from only `BTC Up or Down 5m Skip 1` to also allow `BTC Up or Down 5m More 150 Below 65`.
+- Ported the real Polymarket CLOB auth/trading pieces into `src4.8`: secret providers, L2 HMAC headers, CLOB V2 order amount builder, EIP-712 signer, payload serializer, readiness service, and trading client.
+- Replaced the Net48 disabled auth/trading DI registrations with the real readiness/trading client and enabled the Net48 live order maintenance worker for polling/cancel/settlement handling.
+- Kept runtime defaults safe: no appsettings secrets were added and default mode remains Paper.
+- Checked current environment without printing values: only `POLYCOPYTRADER_POSTGRES_CONNECTION` is present; Live/auth env vars and Polymarket secret values are absent.
+- Queried the current PostgreSQL strategy rows: `btc_up_down_5m_more_150_below_65` and `btc_up_down_5m_skip_1` both remain `live_stakes=false`.
+- Restarted the Net48 Release service in the current safe Paper configuration; IPC `/status` reports `Running`, Paper unpaused, kill switch inactive, and no last error.
+Next: Configure Live/auth environment or Credential Manager secrets, then explicitly enable global Live gates and set only `btc_up_down_5m_more_150_below_65.live_stakes=true` for the controlled test.
+Notes: Verification passed: NuGet restore for Net48, Visual Studio MSBuild Release (`0` errors, existing nullable warnings), Release `--host-smoke` (`22` hosted services), Release `--storage-smoke`, `dotnet test tests/PolyCopyTrader.Tests/PolyCopyTrader.Tests.csproj --no-restore` (`418/418` passed), `git diff --check`, PostgreSQL strategy flag probe, and IPC `/status`. Real live order placement was not started because auth/live settings are missing in the current process environment.
+Blockers: Missing current Live runtime configuration/secrets: `Bot__Mode`, `Bot__EnableLiveTrading`, `LiveTrading__ManualEnableCode`, `PolymarketAuth__Enabled`, signer/funder addresses, API key/secret/passphrase, and order-signing private-key secret are not available to the running service.
+
 ## Active Update 2026-05-11 Live Transition Change Scope
 Goal: Clarify whether moving the selected strategy to Live requires database or code changes.
 Status: Completed
