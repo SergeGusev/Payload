@@ -2036,6 +2036,44 @@ ON CONFLICT (id) DO UPDATE SET
     description = excluded.description,
     updated_at_utc = excluded.updated_at_utc;
 
+INSERT INTO strategies (id, code, name, description, enabled, paper_stake_amount, created_at_utc, updated_at_utc)
+WITH depths(depth, sample_description) AS (
+    VALUES
+        (1, 'the latest Binance BTC/USDT trade-stream price'),
+        (2, 'the latest Binance BTC/USDT trade-stream price plus the latest 1 cached reference sample(s)'),
+        (3, 'the latest Binance BTC/USDT trade-stream price plus the latest 2 cached reference sample(s)'),
+        (4, 'the latest Binance BTC/USDT trade-stream price plus the latest 3 cached reference sample(s)'),
+        (5, 'the latest Binance BTC/USDT trade-stream price plus the latest 4 cached reference sample(s)')
+),
+thresholds(threshold_digit, threshold_name) AS (
+    VALUES
+        (1, '0.1'),
+        (2, '0.2'),
+        (3, '0.3'),
+        (4, '0.4'),
+        (5, '0.5'),
+        (6, '0.6'),
+        (7, '0.7'),
+        (8, '0.8'),
+        (9, '0.9')
+)
+SELECT
+    ('b7c50005-0000-4000-8023-' || lpad(((depths.depth * 100) + thresholds.threshold_digit)::text, 12, '0'))::uuid,
+    'btc_up_down_5m_middle_' || depths.depth || '_bps_0_' || thresholds.threshold_digit,
+    'BTC Up or Down 5m Middle ' || depths.depth || ' ' || thresholds.threshold_name || ' bps',
+    'Immediately after BTC 5m market open, compare ' || depths.sample_description || ' against the cached arithmetic mean; above mean buys Down, below mean buys Up, otherwise skip. Enter only when every compared price is at least ' || thresholds.threshold_name || ' bps away from the mean. Paper entry is a GTD limit BUY with dynamic break-even pricing; settlement uses only actually filled shares.',
+    true,
+    1.00,
+    now(),
+    now()
+FROM depths
+CROSS JOIN thresholds
+ON CONFLICT (id) DO UPDATE SET
+    code = excluded.code,
+    name = excluded.name,
+    description = excluded.description,
+    updated_at_utc = excluded.updated_at_utc;
+
 CREATE TABLE IF NOT EXISTS paper_orders (
     id uuid PRIMARY KEY,
     signal_id uuid NOT NULL,

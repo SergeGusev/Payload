@@ -2808,6 +2808,28 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
                     reason));
         }
 
+        var minimumMeanDeviationBps = CalculateMinimumMeanDeviationBps(comparedPrices, meanUsd);
+        if (variant.DecisionThresholdBps is { } thresholdBps &&
+            thresholdBps > 0m &&
+            (minimumMeanDeviationBps is null || minimumMeanDeviationBps.Value < thresholdBps))
+        {
+            return BtcOpeningLimitDecision.Reject(
+                "btc_reference_mean_deviation_below_threshold",
+                BuildMiddleReferenceRawDecisionJson(
+                    market,
+                    variant,
+                    stakeUsd,
+                    nowUtc,
+                    snapshot,
+                    currentPrice,
+                    requiredCachedSamples,
+                    cachedSamples,
+                    baseSelectedDirection,
+                    selectedDirection: null,
+                    selectedOutcome: null,
+                    reason: "btc_reference_mean_deviation_below_threshold"));
+        }
+
         var selectedDirection = IsMiddleReferenceRevert(variant)
             ? InvertDirection(baseSelectedDirection.Value)
             : baseSelectedDirection.Value;
@@ -3400,6 +3422,20 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
         }
 
         return prices.All(price => price < meanUsd) ? BtcPriceDirection.Up : null;
+    }
+
+    private static decimal? CalculateMinimumMeanDeviationBps(
+        IReadOnlyList<decimal> prices,
+        decimal meanUsd)
+    {
+        if (prices.Count == 0 || meanUsd <= 0m)
+        {
+            return null;
+        }
+
+        return prices
+            .Select(price => Math.Abs(price - meanUsd) / meanUsd * 10_000m)
+            .Min();
     }
 
     private static BtcPriceDirection? ResolveStartRelativeDirection(decimal currentPriceUsd, decimal startPriceUsd)
@@ -5105,6 +5141,17 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
         var limitPrice = GetBinanceStartRelativeLimitPrice(variant);
         var marketStartUtc = BtcUpDown5mMarketAnalyzer.GetWindowStartUtc(market);
         var entryDueAtUtc = GetEntryDueAtUtc(marketStartUtc, variant);
+        var comparedPrices = currentPrice is null
+            ? Array.Empty<decimal>()
+            : cachedSamples
+                .Select(sample => sample.PriceUsd)
+                .Prepend(currentPrice.PriceUsd)
+                .ToArray();
+        var meanDeviationBps = snapshot.ArithmeticMeanUsd is { } meanUsd && meanUsd > 0m && comparedPrices.Length > 0
+            ? comparedPrices
+                .Select(price => Math.Abs(price - meanUsd) / meanUsd * 10_000m)
+                .ToArray()
+            : [];
         return JsonSerializer.Serialize(new
         {
             pricing_mode = OpeningLimitPricingMode,
@@ -5134,6 +5181,10 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
             reference_is_full_window = snapshot.IsFullWindow,
             reference_arithmetic_mean_usd = snapshot.ArithmeticMeanUsd,
             required_cached_samples = requiredCachedSamples,
+            decision_threshold_bps = variant.DecisionThresholdBps,
+            compared_prices_usd = comparedPrices,
+            mean_deviation_bps = meanDeviationBps,
+            minimum_mean_deviation_bps = meanDeviationBps.Length == 0 ? (decimal?)null : meanDeviationBps.Min(),
             cached_samples_used = cachedSamples
                 .Select(sample => new
                 {

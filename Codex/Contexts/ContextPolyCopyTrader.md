@@ -1,3 +1,16 @@
+## Active Update 2026-05-11 BTC Middle Bps Threshold Strategies
+Goal: Add bps-threshold variants for each BTC Up or Down 5m Middle N strategy.
+Status: Completed
+Done:
+- Added 45 Net48 BTC Middle threshold variants: `BTC Up or Down 5m Middle {N} {M} bps`, with `N=1..5` and `M=0.1..0.9`.
+- Each new variant keeps standard Middle mean-reversion direction but requires every compared Binance/reference price to be at least the configured bps distance from the arithmetic mean.
+- Added skip reason `btc_reference_mean_deviation_below_threshold` and raw decision diagnostics for `decision_threshold_bps`, compared prices, per-price mean deviations, and minimum deviation.
+- Added PostgreSQL seed rows for the 45 strategies and documented the behavior in README/configuration reference.
+- Rebuilt and restarted the Net48 Release service; Paper is running and Live is paused.
+Next: Let the new Middle threshold variants accumulate Paper statistics.
+Notes: Verification passed: VS MSBuild Release (`0` errors, existing nullable warnings), Release `--host-smoke`, Release `--storage-smoke`, `dotnet test tests/PolyCopyTrader.Tests/PolyCopyTrader.Tests.csproj --no-restore` (`418` passed), DB probe showing `middle_bps_count=45`, and IPC `/status` `Running` with Paper unpaused and Live paused.
+Blockers: None.
+
 ## Active Update 2026-05-11 BTC Middle Strategy Explanation
 Goal: Explain the current implemented logic of BTC Up or Down 5m Middle strategies.
 Status: Completed

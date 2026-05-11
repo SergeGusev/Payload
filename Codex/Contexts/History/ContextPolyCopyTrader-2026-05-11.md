@@ -39,3 +39,10 @@ Request:
 
 Result:
 Read the Net48 Middle strategy definitions and implementation. Confirmed Middle 1-5 use the latest fresh Binance BTC/USDT trade-stream price plus `N-1` latest sampled cached reference prices, compare all of them against the arithmetic mean of the Binance reference cache, select Down when all compared prices are above mean, select Up when all are below mean, and skip equal or mixed cases. Middle Revert variants invert that decision. Entries use GTD limit BUY Paper orders with dynamic break-even pricing capped at 0.50 and 120-second TTL. No production code changed.
+
+## 2026-05-11T06:24:12.3440258Z
+Request:
+Добавь к каждой Middle N стратегии минимальную сумму расхожения со средним в bps, аналогично тому, как сделано в BTC Up or Down 5m Binance 0.M bps. При M от 1 до 9
+
+Result:
+Implemented 45 Net48 Paper BTC Middle bps-threshold variants: `BTC Up or Down 5m Middle {N} {M} bps`, with `N=1..5` and `M=0.1..0.9`. They reuse the standard Middle mean-reversion direction but skip with `btc_reference_mean_deviation_below_threshold` unless every compared price is at least the configured bps distance from the Binance cache arithmetic mean. Added raw decision diagnostics for the configured threshold, compared prices, each mean deviation, and minimum deviation. Added PostgreSQL seed rows and updated README/configuration docs. Rebuilt the Net48 Release solution, ran `--host-smoke`, `--storage-smoke`, and `dotnet test tests/PolyCopyTrader.Tests/PolyCopyTrader.Tests.csproj --no-restore` (`418/418` passed). Restarted the Net48 service, paused Live, and verified the old/local DB has `middle_bps_count=45` with sample rows enabled.

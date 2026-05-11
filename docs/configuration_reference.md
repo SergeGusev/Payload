@@ -538,8 +538,8 @@ The worker observes BTC 5-minute Gamma markets and records one lifecycle row per
 market and strategy variant in `strategy_market_paper_runs`. Built-in variants
 are standard `Less` and `More` plus comparison `Less Gamma` and `More Gamma` at
 30-second steps from 30 to 270 seconds after window start, plus `Middle 1..5`,
-`Middle 1..5 Revert`, `Skip 1..5`, `Skip 1..5 Revert`, `Binance`,
-threshold `Binance 0.1..0.9/1/2/5 bps`, fixed-price `Binance 45/47/49`, delayed
+threshold `Middle 1..5 0.1..0.9 bps`, `Middle 1..5 Revert`, `Skip 1..5`,
+`Skip 1..5 Revert`, `Binance`, threshold `Binance 0.1..0.9/1/2/5 bps`, fixed-price `Binance 45/47/49`, delayed
 `Binance 15s/30s/45s`, `Binance Clever`, fair-value `Binance Edge 2/4/6`,
 `Ensemble 2 of 3`, `Dynamic Markov`, `Strategy Selector`, capped `Less`
 comparison variants, capped `More` comparison variants, and capped `More Gamma`
@@ -589,7 +589,10 @@ one-minute reference samples, to the Binance cache arithmetic mean: `Middle 1` u
 trade price, `Middle 2` uses the latest trade price plus the latest cached sample, up through
 `Middle 5` with four cached samples. If all compared values are above the mean,
 the strategy buys `Down`; if all are below, it buys `Up`; equality or mixed
-sides skip the run. The `Middle Revert` variants inspect the same reference
+sides skip the run. The `Middle 0.1..0.9 bps` threshold variants keep the same
+direction logic, but every compared value must be at least the configured bps
+distance from the mean; otherwise the run skips with
+`btc_reference_mean_deviation_below_threshold`. The `Middle Revert` variants inspect the same reference
 stack and invert that final decision: above mean buys `Up`, and below mean buys
 `Down`. The `Skip` variants inspect the exact immediately previous BTC
 5-minute windows without gaps, but they infer those results from close-book
