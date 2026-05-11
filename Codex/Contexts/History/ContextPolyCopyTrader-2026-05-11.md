@@ -196,3 +196,10 @@ Request:
 
 Result:
 Re-read the Net48 due-entry code path. `PlaceDueEntriesAsync` currently loops variants sequentially, calls `GetDueStrategyMarketPaperRunsAsync` per strategy, and processes runs sequentially; each per-strategy query orders by due time but there is no global due queue across strategies. Answered that parallel processing is feasible, but should be implemented as bounded async concurrency rather than raw threads: fetch due runs globally by due time, claim/lock rows to avoid duplicate processing, process independent decisions through a configurable semaphore, and throttle external CLOB/DB/API work. Noted that global due ordering alone may fix Middle Revert starvation, with bounded parallelism as the next performance improvement.
+
+## 2026-05-11T11:40:00.0000000Z
+Request:
+Ok, do it. 30 seconds for a decision is too much.
+
+Result:
+Implemented bounded async BTC due-entry processing in the Net48 service. Added `BtcUpDown5mStrategy.MaxConcurrentEntryDecisions`, set it to `8`, reduced `EntryGraceSeconds` from `30` to `10`, and shared the per-cycle BTC current-price cache across concurrent variant tasks. Fixed Middle Revert base-variant lookup so bps-threshold Middle variants no longer cause `Sequence contains more than one matching element`. Added Net48 build support for PackageReference from the command line via `src4.8/Directory.Build.targets` and `TargetFramework=net48`. Verified focused BTC processor tests passed 91/91, Net48 Release build passed with nullable warnings, restarted the Net48 service as PID 65616 with `Bot__EnableLiveTrading=false`, and observed the 14:35 local BTC window placing Middle/Middle Revert decisions about 0.9 seconds after market start. PostgreSQL `57P03` recovery errors still appeared later in that window and remain a separate operational issue.

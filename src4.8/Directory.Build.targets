@@ -1,0 +1,19 @@
+<Project>
+  <PropertyGroup Condition="'$(UsingMicrosoftNETSdk)' != 'true'">
+    <MicrosoftNETBuildTasksDirectory Condition="'$(MicrosoftNETBuildTasksDirectory)' == ''">$(MSBuildSDKsPath)\Microsoft.NET.Sdk\tools\net472\</MicrosoftNETBuildTasksDirectory>
+    <MicrosoftNETBuildTasksAssembly Condition="'$(MicrosoftNETBuildTasksAssembly)' == ''">$(MicrosoftNETBuildTasksDirectory)Microsoft.NET.Build.Tasks.dll</MicrosoftNETBuildTasksAssembly>
+    <_DotNetAppHostExecutableNameWithoutExtension Condition="'$(_DotNetAppHostExecutableNameWithoutExtension)' == ''">apphost</_DotNetAppHostExecutableNameWithoutExtension>
+    <DefaultImplicitPackages Condition="'$(DefaultImplicitPackages)' == ''">false</DefaultImplicitPackages>
+  </PropertyGroup>
+
+  <Import
+    Project="$(MSBuildSDKsPath)\Microsoft.NET.Sdk\targets\Microsoft.NET.Sdk.FrameworkReferenceResolution.targets"
+    Condition="'$(UsingMicrosoftNETSdk)' != 'true' and Exists('$(MSBuildSDKsPath)\Microsoft.NET.Sdk\targets\Microsoft.NET.Sdk.FrameworkReferenceResolution.targets')" />
+
+  <Import
+    Project="$(MSBuildSDKsPath)\Microsoft.NET.Sdk\targets\Microsoft.PackageDependencyResolution.targets"
+    Condition="'$(UsingMicrosoftNETSdk)' != 'true' and Exists('$(MSBuildSDKsPath)\Microsoft.NET.Sdk\targets\Microsoft.PackageDependencyResolution.targets')" />
+
+  <Target Name="_DefaultMicrosoftNETPlatformLibrary" Condition="'$(UsingMicrosoftNETSdk)' != 'true'" />
+  <Target Name="_ComputePackageReferencePublish" Condition="'$(UsingMicrosoftNETSdk)' != 'true'" />
+</Project>

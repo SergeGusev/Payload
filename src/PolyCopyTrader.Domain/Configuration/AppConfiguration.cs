@@ -527,6 +527,8 @@ public sealed class BtcUpDown5mStrategyOptions
 
     public int MaxEntriesPerCycle { get; init; } = 250;
 
+    public int MaxConcurrentEntryDecisions { get; init; } = 1;
+
     public int MaxSettlementsPerCycle { get; init; } = 250;
 
     public int MartinTriggerLosses { get; init; } = 3;

@@ -398,27 +398,60 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
         IReadOnlyDictionary<Guid, StrategyRuntimeSettings> strategySettings,
         CancellationToken cancellationToken)
     {
-        var entriesPlaced = 0;
-        var runsSkipped = 0;
         if (variants.Count == 0)
         {
-            return (entriesPlaced, runsSkipped);
+            return (0, 0);
         }
 
         var perVariantLimit = Math.Max(1, options.MaxEntriesPerCycle / variants.Count);
-        var btcCurrentPrices = new Dictionary<string, BtcCurrentPriceLookupResult>(StringComparer.OrdinalIgnoreCase);
+        var maxConcurrency = Math.Max(1, Math.Min(options.MaxConcurrentEntryDecisions, variants.Count));
+        var btcCurrentPrices = new System.Collections.Concurrent.ConcurrentDictionary<string, BtcCurrentPriceLookupResult>(
+            StringComparer.OrdinalIgnoreCase);
+        using var throttler = new SemaphoreSlim(maxConcurrency, maxConcurrency);
 
-        foreach (var variant in variants)
+        var tasks = variants.Select(async variant =>
         {
-            var runs = await repository.GetDueStrategyMarketPaperRunsAsync(
-                variant.Id,
-                StrategyMarketPaperRunStatuses.Observed,
-                nowUtc,
-                perVariantLimit,
-                cancellationToken);
-
-            foreach (var run in runs)
+            await throttler.WaitAsync(cancellationToken);
+            try
             {
+                return await PlaceDueEntriesForVariantAsync(
+                    nowUtc,
+                    variant,
+                    perVariantLimit,
+                    strategySettings,
+                    btcCurrentPrices,
+                    cancellationToken);
+            }
+            finally
+            {
+                throttler.Release();
+            }
+        }).ToArray();
+
+        var results = await Task.WhenAll(tasks);
+        return (results.Sum(item => item.EntriesPlaced), results.Sum(item => item.RunsSkipped));
+    }
+
+    private async Task<(int EntriesPlaced, int RunsSkipped)> PlaceDueEntriesForVariantAsync(
+        DateTimeOffset nowUtc,
+        BtcUpDown5mStrategyVariant variant,
+        int perVariantLimit,
+        IReadOnlyDictionary<Guid, StrategyRuntimeSettings> strategySettings,
+        IDictionary<string, BtcCurrentPriceLookupResult> btcCurrentPrices,
+        CancellationToken cancellationToken)
+    {
+        var entriesPlaced = 0;
+        var runsSkipped = 0;
+
+        var runs = await repository.GetDueStrategyMarketPaperRunsAsync(
+            variant.Id,
+            StrategyMarketPaperRunStatuses.Observed,
+            nowUtc,
+            perVariantLimit,
+            cancellationToken);
+
+        foreach (var run in runs)
+        {
                 nowUtc = DateTimeOffset.UtcNow;
                 try
                 {
@@ -920,7 +953,6 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
                     await TryRecordApiErrorAsync("PlaceDueEntry", ex.Message, cancellationToken);
                 }
             }
-        }
 
         return (entriesPlaced, runsSkipped);
     }
@@ -3561,7 +3593,9 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
 
         return StrategyIds.BtcUpDown5mVariants.SingleOrDefault(candidate =>
             candidate.Behavior == baseBehavior.Value &&
-            candidate.DecisionDepth == variant.DecisionDepth);
+            candidate.DecisionDepth == variant.DecisionDepth &&
+            candidate.EntryDelaySeconds == variant.EntryDelaySeconds &&
+            candidate.DecisionThresholdBps is null);
     }
 
     private static IReadOnlyList<BtcUpDown5mStrategyVariant> GetEnsembleVoteCandidateVariants()

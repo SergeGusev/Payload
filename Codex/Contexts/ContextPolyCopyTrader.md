@@ -1,3 +1,17 @@
+## Active Update 2026-05-11 Bounded BTC Entry Processing
+Goal: Reduce BTC strategy decision latency so opening-limit strategies do not wait ~30 seconds behind sequential variant processing.
+Status: Completed
+Done:
+- Changed the Net48 BTC due-entry processor to process strategy variants with bounded async concurrency via `BtcUpDown5mStrategy.MaxConcurrentEntryDecisions`.
+- Added config/validation/logging for `MaxConcurrentEntryDecisions`; set `MaxConcurrentEntryDecisions=8` and reduced `EntryGraceSeconds` from `30` to `10` in Net48 and main service appsettings.
+- Shared the per-cycle BTC current-price cache across concurrent variant tasks.
+- Fixed Middle Revert base-variant lookup so it ignores bps-threshold Middle variants; this removed the `Sequence contains more than one matching element` failure.
+- Repaired Net48 command-line build support for PackageReference by adding `src4.8/Directory.Build.targets` and `TargetFramework=net48` in `src4.8/Directory.Build.props`.
+- Rebuilt the Net48 Release service and restarted it as PID 65616 with `Bot__EnableLiveTrading=false`.
+Next: Continue monitoring decision-delay diagnostics. The 14:35 local BTC window showed Middle/Middle Revert decisions around 0.9 seconds after market start; Binance start-relative variants still took about 8.4 seconds because they wait on the BTC current-price path, but remained within the new 10-second grace.
+Notes: `dotnet test tests\PolyCopyTrader.Tests\PolyCopyTrader.Tests.csproj --filter "BtcUpDown5mPaperStrategyProcessorTests"` passed 91/91. `dotnet test tests\PolyCopyTrader.Tests\PolyCopyTrader.Tests.csproj --filter "MiddleReferenceRevert|BtcUpDown5mPaperStrategyProcessorTests"` passed 91/91. `dotnet build src4.8\PolyCopyTrader.Net48.Service\PolyCopyTrader.Net48.Service.csproj -c Release` passed with 29 nullable warnings. The first post-restart window also logged PostgreSQL `57P03` recovery errors around 14:35:24 local; this is the known database recovery problem, and the order-book worker resumed afterward.
+Blockers: None for the latency fix. PostgreSQL recovery remains a separate operational risk.
+
 ## Active Update 2026-05-11 Parallel Due Entry Processing Discussion
 Goal: Answer whether BTC entries can be processed in parallel instead of sequentially.
 Status: Completed
