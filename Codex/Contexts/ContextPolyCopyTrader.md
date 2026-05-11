@@ -1,3 +1,15 @@
+## Active Update 2026-05-11 Pure Paper Fill Accuracy Discussion
+Goal: Explain whether pure Paper GTD fill prediction can be made more accurate without using Live fill data.
+Status: Completed
+Done:
+- Clarified that Live-shadow mirroring fixes Live/Paper comparison but does not solve standalone Paper fill prediction.
+- Explained that pure Paper cannot be exact because we do not know our queue position in the matching engine, hidden cancels, competing orders, and full per-order lifecycle.
+- Proposed a more conservative standalone Paper model: only fill when evidence after our simulated submit shows enough opposite-side aggressive flow or top-of-book crossing after accounting for queue-ahead and a confidence haircut; otherwise leave the Paper order unfilled/expired.
+- Recommended storing a fill confidence/evidence mode so Paper statistics can be split into high-confidence and low-confidence fills.
+Next: If requested, implement a conservative Paper GTD fill model based on post-submit order-book/trade evidence and calibrate it against the recent Live sample.
+Notes: Discussion-only task; no production code changed.
+Blockers: None.
+
 ## Active Update 2026-05-11 More 150 Paper Live Difference Check
 Goal: Explain why `BTC Up or Down 5m More 150 Below 65` shows different Paper and Live counts/results.
 Status: Completed

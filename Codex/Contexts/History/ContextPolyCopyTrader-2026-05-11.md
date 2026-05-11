@@ -113,6 +113,13 @@ Request:
 Result:
 Ran a temporary read-only C# PostgreSQL probe and removed it afterward. Confirmed recent Paper rows are paired `paper_live_shadow_test` rows with Live orders. The difference is caused by actual Live execution: many Live orders were accepted/resting but stayed unfilled (`filled_size=0`, `remaining_size=6.16`) and later became `CancelFailed`, while Paper-shadow sometimes marked the paired simulated order filled/settled. Current moving 1h sample at probe time showed Paper 12 created / 4 settled / 3 wins / 1 loss versus Live 12 created / 3 filled-settled / 2 wins / 1 loss. No source code changed.
 
+## 2026-05-11T09:16:48.7542227Z
+Request:
+То есть ты будешь просто зеркалить Live. Это не решит нашу проблему. Есть ли решение повысить точность предсказаний чисто на Paper ставках, без привлечения Live информации?
+
+Result:
+Answered conceptually that pure Paper GTD fill prediction can be improved but cannot be made exact without Live/order-owner data. Proposed a conservative evidence-based Paper fill model using post-submit order-book/trade evidence, queue-ahead estimates, confidence haircuts, and separate high-confidence/low-confidence fill labels. No production code changed.
+
 ## 2026-05-11T07:38:10.0000000+00:00
 Request:
 Ок, поехали
