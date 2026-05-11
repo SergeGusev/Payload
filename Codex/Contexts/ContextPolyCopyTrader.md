@@ -1,3 +1,15 @@
+## Active Update 2026-05-11 Net48 Dashboard Local NuGet Cache
+Goal: Prevent Windows Server 2008 R2 from loading stale `CommunityToolkit.Mvvm 8.4.2` targets for the Net48 Dashboard.
+Status: Completed
+Done:
+- Confirmed the repeated server error still points at global cache path `J:\Users\Administrator\.nuget\packages\communitytoolkit.mvvm\8.4.2`, while the repository Net48 Dashboard project already references `CommunityToolkit.Mvvm 8.2.2`.
+- Added a Net48 solution-local NuGet package root in `src4.8/Directory.Build.props` via `RestorePackagesPath` and `NuGetPackageRoot`, so Net48 restore uses `src4.8\.nuget\packages` instead of the server user's stale global package cache.
+- Added `src4.8/.nuget/` to `.gitignore`.
+- Verified local restore/rebuild of `src4.8\PolyCopyTrader.Net48.Dashboard\PolyCopyTrader.Net48.Dashboard.csproj` now uses the local package root and does not regenerate any `CommunityToolkit.Mvvm 8.4.2` imports or `IsTargetFrameworkCompatible` calls.
+Next: On the Windows Server 2008 R2 machine, pull the commit, remove the Dashboard `obj/bin` folders and `src4.8\.nuget` once, then restore/build/open the Net48 solution again.
+Notes: Verification passed: Visual Studio MSBuild `/restore /t:Rebuild /p:Configuration=Release` for Net48 Dashboard succeeded with existing nullable warnings; generated `project.assets.json` contains only `CommunityToolkit.Mvvm/8.2.2`; service was left running.
+Blockers: None.
+
 ## Active Update 2026-05-11 Net48 Dashboard Old MSBuild Toolkit Fix
 Goal: Fix the Windows Server 2008 R2 project-load failure in Net48 Dashboard caused by CommunityToolkit.Mvvm targets using a newer MSBuild method.
 Status: Completed

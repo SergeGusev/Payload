@@ -92,6 +92,13 @@ Request:
 Result:
 Left the running service alone and fixed the Net48 Dashboard project-load issue by downgrading only its CommunityToolkit.Mvvm reference from 8.4.2 to 8.2.2 and pointing the manual MVVM Toolkit source generator path to roslyn4.3. Verified Net48 Dashboard restore/rebuild succeeds and generated NuGet targets no longer contain the incompatible CommunityToolkit Windows targets or `IsTargetFrameworkCompatible`.
 
+## 2026-05-11T08:04:37.1638926Z
+Request:
+Та же проблема C:\My\Business\Polymaket\Source\Payload\src4.8\PolyCopyTrader.Net48.Dashboard\PolyCopyTrader.Net48.Dashboard.csproj : error  : Invalid static method invocation syntax: "[MSBuild]::IsTargetFrameworkCompatible('$(TargetFramework)', 'net8.0-windows10.0.17763.0')". Method '[MSBuild]::IsTargetFrameworkCompatible' not found. Static method invocation should be of the form: $([FullTypeName]::Method()), e.g. $([System.IO.Path]::Combine(`a`, `b`)). Check that all parameters are defined, are of the correct type, and are specified in the right order.  J:\Users\Administrator\.nuget\packages\communitytoolkit.mvvm\8.4.2\buildTransitive\CommunityToolkit.Mvvm.Windows.targets
+
+Result:
+Hardened the Net48 Dashboard compatibility fix against stale server NuGet state. Added a Net48 local package root in `src4.8/Directory.Build.props` so restore uses `src4.8\.nuget\packages` instead of `J:\Users\Administrator\.nuget\packages`, ignored that local package cache, and verified local Dashboard restore/rebuild succeeds with `CommunityToolkit.Mvvm 8.2.2` only. The running service was not stopped.
+
 ## 2026-05-11T07:38:10.0000000+00:00
 Request:
 Ок, поехали

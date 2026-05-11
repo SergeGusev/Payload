@@ -41,6 +41,7 @@ appsettings.Production.local.json
 ## NuGet
 *.nupkg
 packages/
+src4.8/.nuget/
 
 ## OS
 Thumbs.db

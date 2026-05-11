@@ -10,6 +10,8 @@
     <AutoGenerateBindingRedirects>true</AutoGenerateBindingRedirects>
     <GenerateBindingRedirectsOutputType>true</GenerateBindingRedirectsOutputType>
     <RestoreProjectStyle>PackageReference</RestoreProjectStyle>
+    <RestorePackagesPath>$(MSBuildThisFileDirectory).nuget\packages</RestorePackagesPath>
+    <NuGetPackageRoot>$(MSBuildThisFileDirectory).nuget\packages\</NuGetPackageRoot>
     <PlatformTarget>AnyCPU</PlatformTarget>
     <Prefer32Bit>false</Prefer32Bit>
   </PropertyGroup>
