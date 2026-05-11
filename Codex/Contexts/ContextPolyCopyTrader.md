@@ -1,3 +1,14 @@
+## Active Update 2026-05-11 Net48 Service Crash Diagnostics Guidance
+Goal: Tell the user where to inspect why the Net48 service starts and immediately exits on the new server.
+Status: Completed
+Done:
+- Re-read workflow, AGENTS, coding rules, active context, Git state, and Net48 service startup/logging code.
+- Confirmed Net48 Serilog writes to `<service exe directory>\logs\polycopytrader-net48-service-YYYYMMDD.log` after `Net48ServiceHostFactory.Build` reaches `ConfigureSerilog`.
+- Confirmed early configuration/storage failures can happen before file logging, so Windows Event Viewer and console smoke commands are the first diagnostics.
+Next: User should run `--print-config`, `--storage-smoke`, `--host-smoke`, and then `--run` from the service binary directory on the new server, plus check Event Viewer and the service `logs` directory.
+Notes: No production code changed. Verification was code inspection of `Program.cs`, `PolyCopyTraderNet48Service.cs`, `Net48ServiceHostFactory.cs`, and `appsettings.json`.
+Blockers: Need the actual console/event-log error text from the new server to diagnose the concrete crash.
+
 ## Active Update 2026-05-11 Net48 Explicit Compile Includes
 Goal: Fix old-server Net48 build errors where `ConservativePaperGtdFillEstimator` exists but is not compiled.
 Status: Completed

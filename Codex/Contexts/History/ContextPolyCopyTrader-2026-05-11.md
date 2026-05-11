@@ -231,6 +231,13 @@ Request:
 Result:
 Added 45 Net48 BTC Middle Revert bps-threshold strategy variants for depths `1..5` and thresholds `0.1..0.9` bps, seeded them into PostgreSQL with `paper_stake_amount`, and matched Revert bps dynamic pricing bootstrap to the corresponding base Middle bps variant. Verified Net48 Release service build, reflected `MiddleRevertBpsCount=45` and `TotalVariants=199`, restarted the Net48 service in Paper mode with `Bot__EnableLiveTrading=false`, confirmed IPC `/status` is `Running`, and ran the main regression test project successfully (`423/423`).
 
+## 2026-05-11T14:45:05.6430676+00:00
+Request:
+Сервис на новом сервере запускается и сразу вылетает. Где посмотреть?
+
+Result:
+Inspected Net48 service startup and logging code and prepared diagnostics guidance: check Windows Event Viewer for early startup failures, inspect `<service exe directory>\logs\polycopytrader-net48-service-YYYYMMDD.log` when Serilog initializes, and run `--print-config`, `--storage-smoke`, `--host-smoke`, and `--run` from the service binary directory to capture the concrete exception.
+
 ## 2026-05-11T14:37:44.9545712+00:00
 Request:
 The type or namespace name 'ConservativePaperGtdFillEstimator' could not be found (are you missing a using directive or an assembly reference?)
