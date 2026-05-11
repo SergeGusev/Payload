@@ -19,7 +19,18 @@
   </ItemGroup>
 
   <ItemGroup>
-    <Compile Include="**\*.cs" Exclude="$(BaseIntermediateOutputPath)**\*;$(IntermediateOutputPath)**\*;bin\**\*;obj\**\*" />
+    <Compile Include="AnalyticsMath.cs" />
+    <Compile Include="Compatibility\DateOnly.cs" />
+    <Compile Include="Compatibility\IsExternalInit.cs" />
+    <Compile Include="Configuration\AppConfiguration.cs" />
+    <Compile Include="Configuration\AppOptionsValidator.cs" />
+    <Compile Include="Configuration\RuntimeModePolicy.cs" />
+    <Compile Include="Configuration\StorageConnectionResolver.cs" />
+    <Compile Include="CsvFormatter.cs" />
+    <Compile Include="GlobalUsings.cs" />
+    <Compile Include="Models.cs" />
+    <Compile Include="Net48PortInfo.cs" />
+    <Compile Include="Security\SecretRedactor.cs" />
   </ItemGroup>
 
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />

@@ -23,7 +23,18 @@
   </ItemGroup>
 
   <ItemGroup>
-    <Compile Include="**\*.cs" Exclude="$(BaseIntermediateOutputPath)**\*;$(IntermediateOutputPath)**\*;bin\**\*;obj\**\*" />
+    <Compile Include="Compatibility\IsExternalInit.cs" />
+    <Compile Include="DefaultPaperTradingEngine.cs" />
+    <Compile Include="DefaultRiskEngine.cs" />
+    <Compile Include="DefaultSignalEngine.cs" />
+    <Compile Include="GlobalUsings.cs" />
+    <Compile Include="IPaperTradingEngine.cs" />
+    <Compile Include="IRiskEngine.cs" />
+    <Compile Include="ISignalEngine.cs" />
+    <Compile Include="MakerPriceCalculator.cs" />
+    <Compile Include="SignalReasonCodes.cs" />
+    <Compile Include="StrategyPortInfo.cs" />
+    <Compile Include="TakerBuyFillEstimator.cs" />
   </ItemGroup>
 
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />

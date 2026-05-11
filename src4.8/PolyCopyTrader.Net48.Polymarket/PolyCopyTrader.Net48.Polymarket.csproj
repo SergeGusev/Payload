@@ -30,7 +30,50 @@
   </ItemGroup>
 
   <ItemGroup>
-    <Compile Include="**\*.cs" Exclude="$(BaseIntermediateOutputPath)**\*;$(IntermediateOutputPath)**\*;bin\**\*;obj\**\*" />
+    <Compile Include="Auth\AuthReadinessStatus.cs" />
+    <Compile Include="Auth\ClobV2ExchangeContracts.cs" />
+    <Compile Include="Auth\ClobV2OrderBuilder.cs" />
+    <Compile Include="Auth\ClobV2OrderPayloadSerializer.cs" />
+    <Compile Include="Auth\ClobV2OrderSigner.cs" />
+    <Compile Include="Auth\ClobV2OrderTypes.cs" />
+    <Compile Include="Auth\DisabledPolymarketAuthService.cs" />
+    <Compile Include="Auth\DisabledPolymarketTradingClient.cs" />
+    <Compile Include="Auth\EnvironmentVariableSecretProvider.cs" />
+    <Compile Include="Auth\Guard.cs" />
+    <Compile Include="Auth\IPolymarketAuthService.cs" />
+    <Compile Include="Auth\IPolymarketTradingClient.cs" />
+    <Compile Include="Auth\ISecretProvider.cs" />
+    <Compile Include="Auth\ISecretWriter.cs" />
+    <Compile Include="Auth\OrderAmountCalculator.cs" />
+    <Compile Include="Auth\PolymarketApiCredentials.cs" />
+    <Compile Include="Auth\PolymarketAuthenticatedRequest.cs" />
+    <Compile Include="Auth\PolymarketAuthHeaderFactory.cs" />
+    <Compile Include="Auth\PolymarketAuthReadinessService.cs" />
+    <Compile Include="Auth\PolymarketL2HmacSigner.cs" />
+    <Compile Include="Auth\PolymarketSecretProviderFactory.cs" />
+    <Compile Include="Auth\PolymarketTradingClient.cs" />
+    <Compile Include="Auth\WindowsCredentialManagerSecretProvider.cs" />
+    <Compile Include="Compatibility\IsExternalInit.cs" />
+    <Compile Include="GlobalUsings.cs" />
+    <Compile Include="IPolymarketApiErrorSink.cs" />
+    <Compile Include="IPolymarketClobPublicClient.cs" />
+    <Compile Include="IPolymarketDataApiClient.cs" />
+    <Compile Include="IPolymarketGeoClient.cs" />
+    <Compile Include="IPolymarketHttpLogSink.cs" />
+    <Compile Include="NullPolymarketApiErrorSink.cs" />
+    <Compile Include="NullPolymarketHttpLogSink.cs" />
+    <Compile Include="PolymarketApiException.cs" />
+    <Compile Include="PolymarketCertificatePinning.cs" />
+    <Compile Include="PolymarketClobPublicClient.cs" />
+    <Compile Include="PolymarketDataApiClient.cs" />
+    <Compile Include="PolymarketGammaClient.cs" />
+    <Compile Include="PolymarketGeoClient.cs" />
+    <Compile Include="PolymarketHttpClient.cs" />
+    <Compile Include="PolymarketJsonParser.cs" />
+    <Compile Include="PolymarketMarketDataWebSocketParser.cs" />
+    <Compile Include="PolymarketPortInfo.cs" />
+    <Compile Include="PolymarketRequestUrlFormatter.cs" />
+    <Compile Include="UriBuilderExtensions.cs" />
   </ItemGroup>
 
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />

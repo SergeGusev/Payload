@@ -1,3 +1,14 @@
+## Active Update 2026-05-11 Net48 Explicit Compile Includes
+Goal: Fix old-server Net48 build errors where `ConservativePaperGtdFillEstimator` exists but is not compiled.
+Status: Completed
+Done:
+- Confirmed `ConservativePaperGtdFillEstimator.cs` is tracked and used by `Net48ServiceHostFactory` and `PaperTradingProcessor`.
+- Replaced recursive `Compile Include="**\*.cs"` globs in all `src4.8` project files with explicit `.cs` compile item lists.
+- Verified `src4.8\PolyCopyTrader.Net48.Service\PolyCopyTrader.Net48.Service.csproj` now explicitly includes `PaperTrading\ConservativePaperGtdFillEstimator.cs`.
+Next: Pull this commit on the Windows Server 2008 R2 machine, restore packages, and rebuild the Net48 solution/project.
+Notes: `dotnet build src4.8\PolyCopyTrader.Net48.Service\PolyCopyTrader.Net48.Service.csproj -c Release` passed with existing nullable warnings. `dotnet build src4.8\PolyCopyTrader.Net48.Dashboard.Behaviors\PolyCopyTrader.Net48.Dashboard.Behaviors.csproj -c Release` passed. `dotnet test tests\PolyCopyTrader.Tests\PolyCopyTrader.Tests.csproj -c Release --no-restore` passed 423/423. `git diff --check -- src4.8` passed with line-ending warnings only.
+Blockers: None.
+
 ## Active Update 2026-05-11 PostgreSQL 9 Dashboard Decimal Cast Fix
 Goal: Fix Net48 Dashboard refresh failure on the new PostgreSQL 9 server caused by `double precision` delay aggregates being read as `decimal`.
 Status: Completed

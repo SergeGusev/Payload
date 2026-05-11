@@ -231,6 +231,13 @@ Request:
 Result:
 Added 45 Net48 BTC Middle Revert bps-threshold strategy variants for depths `1..5` and thresholds `0.1..0.9` bps, seeded them into PostgreSQL with `paper_stake_amount`, and matched Revert bps dynamic pricing bootstrap to the corresponding base Middle bps variant. Verified Net48 Release service build, reflected `MiddleRevertBpsCount=45` and `TotalVariants=199`, restarted the Net48 service in Paper mode with `Bot__EnableLiveTrading=false`, confirmed IPC `/status` is `Running`, and ran the main regression test project successfully (`423/423`).
 
+## 2026-05-11T14:37:44.9545712+00:00
+Request:
+The type or namespace name 'ConservativePaperGtdFillEstimator' could not be found (are you missing a using directive or an assembly reference?)
+
+Result:
+Diagnosed the Net48 build error as likely old-MSBuild project item expansion: `ConservativePaperGtdFillEstimator.cs` exists and is tracked, but the Net48 projects used recursive `Compile Include="**\*.cs"` globs. Replaced those globs in all `src4.8` project files with explicit compile item lists, verified `PaperTrading\ConservativePaperGtdFillEstimator.cs` is explicitly included in the service project, built the Net48 Service and Dashboard.Behaviors projects successfully, and ran the full test suite successfully (`423/423`).
+
 ## 2026-05-11T14:29:30.1133223+00:00
 Request:
 Посмотри картинку. Такую ошибку я получаю на новом сервере. Там более старый Posgres = 9

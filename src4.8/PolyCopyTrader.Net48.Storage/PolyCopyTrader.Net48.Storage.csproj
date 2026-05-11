@@ -28,7 +28,17 @@
   </ItemGroup>
 
   <ItemGroup>
-    <Compile Include="**\*.cs" Exclude="$(BaseIntermediateOutputPath)**\*;$(IntermediateOutputPath)**\*;bin\**\*;obj\**\*" />
+    <Compile Include="Compatibility\IsExternalInit.cs" />
+    <Compile Include="GlobalUsings.cs" />
+    <Compile Include="IAppRepository.cs" />
+    <Compile Include="IStorageSchemaInitializer.cs" />
+    <Compile Include="NoOpAppRepository.cs" />
+    <Compile Include="NoOpStorageSchemaInitializer.cs" />
+    <Compile Include="PostgresAppRepository.cs" />
+    <Compile Include="PostgresConnectionFactory.cs" />
+    <Compile Include="PostgresSchema.cs" />
+    <Compile Include="PostgresSchemaInitializer.cs" />
+    <Compile Include="StoragePortInfo.cs" />
   </ItemGroup>
 
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
