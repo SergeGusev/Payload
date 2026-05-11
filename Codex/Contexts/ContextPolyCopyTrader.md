@@ -1,3 +1,15 @@
+## Active Update 2026-05-11 Port Recent Net48 Work Back To Net10
+Goal: Return to the .NET 10 service and port the recent Net48-only strategy/diagnostic changes back into the main code path.
+Status: Completed
+Done:
+- Added Middle and Middle Revert bps BTC 5m variants to the main .NET 10 strategy catalog and PostgreSQL seed schema.
+- Fixed Middle Revert bps bootstrap lookup so it matches the base Middle variant with the same threshold.
+- Ported BTC/order-book lag diagnostics from Net48 to .NET 10: config, validation, appsettings, DI registration, background service, repository methods, schema table, Binance trade/bookTicker capture, and Polymarket top-of-book capture.
+- Updated tests for the expanded strategy catalog and the new WebSocket service dependency.
+Next: Deploy/restart the .NET 10 service on the selected server; schema initialization will create `btc_order_book_lag_diagnostic_events` if missing.
+Notes: `dotnet build .\src\PolyCopyTrader.Service\PolyCopyTrader.Service.csproj -c Release --no-restore -p:UseSharedCompilation=false -m:1` passed with 0 warnings/errors. `dotnet test .\tests\PolyCopyTrader.Tests\PolyCopyTrader.Tests.csproj -c Release --no-restore -p:UseSharedCompilation=false -m:1` passed `423/423` with existing nullable warnings from `PostgresAppRepository`. `git diff --check` passed with LF-to-CRLF warnings only.
+Blockers: None.
+
 ## Active Update 2026-05-11 New Server Runtime Health Check
 Goal: Check whether the Net48 service is running against the new PostgreSQL database on `192.168.0.101`.
 Status: Completed

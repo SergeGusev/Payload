@@ -3,6 +3,7 @@ using System.Text.Json;
 using PolyCopyTrader.Domain;
 using PolyCopyTrader.Domain.Configuration;
 using PolyCopyTrader.Polymarket;
+using PolyCopyTrader.Service.Diagnostics;
 using PolyCopyTrader.Storage;
 
 namespace PolyCopyTrader.Service.MarketData;
@@ -15,6 +16,7 @@ public sealed class MarketDataWebSocketService(
     PolymarketOptions polymarketOptions,
     IRelevantMarketAssetProvider assetProvider,
     IActiveMarketAssetSubscriptionRegistry activeMarketAssetSubscriptionRegistry,
+    IBtcOrderBookLagDiagnosticService btcOrderBookLagDiagnosticService,
     IMarketTradeTickDiagnosticService tradeTickDiagnosticService,
     IMarketDataCache marketDataCache,
     IPaperTradingMarketDataUpdater paperTradingUpdater,
@@ -241,7 +243,7 @@ public sealed class MarketDataWebSocketService(
         return TimeSpan.FromSeconds(Math.Min(delaySeconds, 10));
     }
 
-    private async Task ProcessTextMessageAsync(string component, string message, CancellationToken cancellationToken)
+    private async Task ProcessTextMessageAsync(string component, string message, DateTimeOffset receivedAtUtc, CancellationToken cancellationToken)
     {
         IReadOnlyList<MarketDataUpdate> updates;
         try
@@ -266,6 +268,7 @@ public sealed class MarketDataWebSocketService(
             {
                 activeMarketAssetSubscriptionRegistry.ApplyMarketDataUpdate(update);
                 marketDataCache.ApplyUpdate(update);
+                btcOrderBookLagDiagnosticService.RecordPolymarketTopOfBook(update, receivedAtUtc);
                 await tradeTickDiagnosticService.RecordAsync(update, cancellationToken);
                 if (options.PersistOrderBookSnapshots && update.OrderBookSnapshot is not null)
                 {

@@ -177,14 +177,14 @@ public sealed class BtcUpDown5mPaperStrategyProcessorTests
     [Fact]
     public void StrategyIds_IncludeStandardMartinAndGammaBtcVariants()
     {
-        Assert.Equal(109, StrategyIds.BtcUpDown5mVariants.Count);
+        Assert.Equal(199, StrategyIds.BtcUpDown5mVariants.Count);
         Assert.Equal(18, StrategyIds.BtcUpDown5mVariants.Count(variant => variant.Behavior == BtcUpDown5mStrategyBehavior.Standard));
         Assert.Equal(15, StrategyIds.BtcUpDown5mVariants.Count(variant => variant.Behavior == BtcUpDown5mStrategyBehavior.StandardEntryPriceCap));
         Assert.Equal(18, StrategyIds.BtcUpDown5mVariants.Count(variant => variant.Behavior == BtcUpDown5mStrategyBehavior.GammaOutcomeSelection));
         Assert.Equal(7, StrategyIds.BtcUpDown5mVariants.Count(variant => variant.Behavior == BtcUpDown5mStrategyBehavior.GammaOutcomeSelectionEntryPriceCap));
         Assert.Single(StrategyIds.BtcUpDown5mVariants, variant => variant.Behavior == BtcUpDown5mStrategyBehavior.Less180Martin);
-        Assert.Equal(5, StrategyIds.BtcUpDown5mVariants.Count(variant => variant.Behavior == BtcUpDown5mStrategyBehavior.MiddleReference));
-        Assert.Equal(5, StrategyIds.BtcUpDown5mVariants.Count(variant => variant.Behavior == BtcUpDown5mStrategyBehavior.MiddleReferenceRevert));
+        Assert.Equal(50, StrategyIds.BtcUpDown5mVariants.Count(variant => variant.Behavior == BtcUpDown5mStrategyBehavior.MiddleReference));
+        Assert.Equal(50, StrategyIds.BtcUpDown5mVariants.Count(variant => variant.Behavior == BtcUpDown5mStrategyBehavior.MiddleReferenceRevert));
         Assert.Equal(5, StrategyIds.BtcUpDown5mVariants.Count(variant => variant.Behavior == BtcUpDown5mStrategyBehavior.SkipConsecutiveMarketResults));
         Assert.Equal(5, StrategyIds.BtcUpDown5mVariants.Count(variant => variant.Behavior == BtcUpDown5mStrategyBehavior.SkipConsecutiveMarketResultsRevert));
         Assert.Single(StrategyIds.BtcUpDown5mVariants, variant => variant.Behavior == BtcUpDown5mStrategyBehavior.AlwaysUp);
@@ -207,6 +207,14 @@ public sealed class BtcUpDown5mPaperStrategyProcessorTests
             variant => variant.Code == "btc_up_down_5m_middle_5").Name);
         Assert.Equal("BTC Up or Down 5m Middle 5 Revert", StrategyIds.BtcUpDown5mVariants.Single(
             variant => variant.Code == "btc_up_down_5m_middle_5_revert").Name);
+        Assert.Equal("BTC Up or Down 5m Middle 5 0.9 bps", StrategyIds.BtcUpDown5mVariants.Single(
+            variant => variant.Code == "btc_up_down_5m_middle_5_bps_0_9").Name);
+        Assert.Equal(0.9m, StrategyIds.BtcUpDown5mVariants.Single(
+            variant => variant.Code == "btc_up_down_5m_middle_5_bps_0_9").DecisionThresholdBps);
+        Assert.Equal("BTC Up or Down 5m Middle 5 Revert 0.9 bps", StrategyIds.BtcUpDown5mVariants.Single(
+            variant => variant.Code == "btc_up_down_5m_middle_5_revert_bps_0_9").Name);
+        Assert.Equal(0.9m, StrategyIds.BtcUpDown5mVariants.Single(
+            variant => variant.Code == "btc_up_down_5m_middle_5_revert_bps_0_9").DecisionThresholdBps);
         Assert.Equal("BTC Up or Down 5m Skip 5", StrategyIds.BtcUpDown5mVariants.Single(
             variant => variant.Code == "btc_up_down_5m_skip_5").Name);
         Assert.Equal("BTC Up or Down 5m Skip 5 Revert", StrategyIds.BtcUpDown5mVariants.Single(

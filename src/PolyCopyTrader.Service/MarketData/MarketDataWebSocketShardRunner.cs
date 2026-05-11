@@ -14,7 +14,7 @@ public sealed class MarketDataWebSocketShardRunner(
     MarketDataWebSocketOptions options,
     PolymarketOptions polymarketOptions,
     IAppRepository repository,
-    Func<string, string, CancellationToken, Task> processTextMessageAsync,
+    Func<string, string, DateTimeOffset, CancellationToken, Task> processTextMessageAsync,
     Action<MarketDataStatusSnapshot> onStatus)
 {
     private readonly JsonSerializerOptions jsonOptions = new(JsonSerializerDefaults.Web);
@@ -237,8 +237,9 @@ public sealed class MarketDataWebSocketShardRunner(
                 break;
             }
 
-            SetLastMessageUtc(DateTimeOffset.UtcNow);
-            await processTextMessageAsync(Component, message, cancellationToken);
+            DateTimeOffset receivedAtUtc = DateTimeOffset.UtcNow;
+            SetLastMessageUtc(receivedAtUtc);
+            await processTextMessageAsync(Component, message, receivedAtUtc, cancellationToken);
             await PublishStatusAsync(MarketDataConnectionState.Connected, null, cancellationToken);
         }
     }

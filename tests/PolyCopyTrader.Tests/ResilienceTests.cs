@@ -5,6 +5,7 @@ using PolyCopyTrader.Polymarket;
 using PolyCopyTrader.Polymarket.Auth;
 using PolyCopyTrader.Service;
 using PolyCopyTrader.Service.Control;
+using PolyCopyTrader.Service.Diagnostics;
 using PolyCopyTrader.Service.LiveTrading;
 using PolyCopyTrader.Service.MarketData;
 using PolyCopyTrader.Service.PaperTrading;
@@ -238,6 +239,7 @@ public sealed class ResilienceTests
             new PolymarketOptions(),
             assetProvider,
             new ActiveMarketAssetSubscriptionRegistry(),
+            new NoOpBtcOrderBookLagDiagnosticService(),
             new NoOpMarketTradeTickDiagnosticService(),
             cache,
             new NoOpPaperTradingMarketDataUpdater(),
@@ -461,6 +463,17 @@ public sealed class ResilienceTests
         public Task RecordAsync(MarketDataUpdate update, CancellationToken cancellationToken = default)
         {
             return Task.CompletedTask;
+        }
+    }
+
+    private sealed class NoOpBtcOrderBookLagDiagnosticService : IBtcOrderBookLagDiagnosticService
+    {
+        public void RecordBinanceTrade(BtcUsdReferencePricePoint point)
+        {
+        }
+
+        public void RecordPolymarketTopOfBook(MarketDataUpdate update, DateTimeOffset receivedAtUtc)
+        {
         }
     }
 

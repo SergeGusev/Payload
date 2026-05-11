@@ -29,6 +29,7 @@ public static class PostgresSchema
         "paper_position_settlements",
         "paper_copied_trader_performance",
         "btc_usd_reference_correlation_samples",
+        "btc_order_book_lag_diagnostic_events",
         "btc_up_down_5m_odds_ticks",
         "crypto_up_down_5m_odds_ticks",
         "paper_copied_leader_positions",
@@ -2035,6 +2036,82 @@ ON CONFLICT (id) DO UPDATE SET
     description = excluded.description,
     updated_at_utc = excluded.updated_at_utc;
 
+INSERT INTO strategies (id, code, name, description, enabled, paper_stake_amount, created_at_utc, updated_at_utc)
+WITH depths(depth, sample_description) AS (
+    VALUES
+        (1, 'the latest Binance BTC/USDT trade-stream price'),
+        (2, 'the latest Binance BTC/USDT trade-stream price plus the latest 1 cached reference sample(s)'),
+        (3, 'the latest Binance BTC/USDT trade-stream price plus the latest 2 cached reference sample(s)'),
+        (4, 'the latest Binance BTC/USDT trade-stream price plus the latest 3 cached reference sample(s)'),
+        (5, 'the latest Binance BTC/USDT trade-stream price plus the latest 4 cached reference sample(s)')
+),
+thresholds(threshold_digit, threshold_name) AS (
+    VALUES
+        (1, '0.1'),
+        (2, '0.2'),
+        (3, '0.3'),
+        (4, '0.4'),
+        (5, '0.5'),
+        (6, '0.6'),
+        (7, '0.7'),
+        (8, '0.8'),
+        (9, '0.9')
+)
+SELECT
+    ('b7c50005-0000-4000-8023-' || lpad(((depths.depth * 100) + thresholds.threshold_digit)::text, 12, '0'))::uuid,
+    'btc_up_down_5m_middle_' || depths.depth || '_bps_0_' || thresholds.threshold_digit,
+    'BTC Up or Down 5m Middle ' || depths.depth || ' ' || thresholds.threshold_name || ' bps',
+    'Immediately after BTC 5m market open, compare ' || depths.sample_description || ' against the cached arithmetic mean; above mean buys Down, below mean buys Up, otherwise skip. Enter only when every compared price is at least ' || thresholds.threshold_name || ' bps away from the mean. Paper entry is a GTD limit BUY with dynamic break-even pricing; settlement uses only actually filled shares.',
+    true,
+    1.00,
+    now(),
+    now()
+FROM depths
+CROSS JOIN thresholds
+ON CONFLICT (id) DO UPDATE SET
+    code = excluded.code,
+    name = excluded.name,
+    description = excluded.description,
+    updated_at_utc = excluded.updated_at_utc;
+
+WITH depths(depth, sample_description) AS (
+    VALUES
+        (1, 'the latest Binance BTC/USDT trade-stream price'),
+        (2, 'the latest Binance BTC/USDT trade-stream price plus the latest 1 cached reference sample(s)'),
+        (3, 'the latest Binance BTC/USDT trade-stream price plus the latest 2 cached reference sample(s)'),
+        (4, 'the latest Binance BTC/USDT trade-stream price plus the latest 3 cached reference sample(s)'),
+        (5, 'the latest Binance BTC/USDT trade-stream price plus the latest 4 cached reference sample(s)')
+),
+thresholds(threshold_digit, threshold_name) AS (
+    VALUES
+        (1, '0.1'),
+        (2, '0.2'),
+        (3, '0.3'),
+        (4, '0.4'),
+        (5, '0.5'),
+        (6, '0.6'),
+        (7, '0.7'),
+        (8, '0.8'),
+        (9, '0.9')
+)
+INSERT INTO strategies (id, code, name, description, enabled, paper_stake_amount, created_at_utc, updated_at_utc)
+SELECT
+    ('b7c50005-0000-4000-8024-' || lpad(((depths.depth * 100) + thresholds.threshold_digit)::text, 12, '0'))::uuid,
+    'btc_up_down_5m_middle_' || depths.depth || '_revert_bps_0_' || thresholds.threshold_digit,
+    'BTC Up or Down 5m Middle ' || depths.depth || ' Revert ' || thresholds.threshold_name || ' bps',
+    'Immediately after BTC 5m market open, compare ' || depths.sample_description || ' against the cached arithmetic mean, then invert the standard Middle ' || depths.depth || ' decision; above mean buys Up, below mean buys Down, otherwise skip. Enter only when every compared price is at least ' || thresholds.threshold_name || ' bps away from the mean. Paper entry is a GTD limit BUY with dynamic break-even pricing; settlement uses only actually filled shares.',
+    true,
+    1.00,
+    now(),
+    now()
+FROM depths
+CROSS JOIN thresholds
+ON CONFLICT (id) DO UPDATE SET
+    code = excluded.code,
+    name = excluded.name,
+    description = excluded.description,
+    updated_at_utc = excluded.updated_at_utc;
+
 CREATE TABLE IF NOT EXISTS paper_orders (
     id uuid PRIMARY KEY,
     signal_id uuid NOT NULL,
@@ -2237,6 +2314,45 @@ CREATE TABLE IF NOT EXISTS btc_usd_reference_correlation_samples (
 
 CREATE INDEX IF NOT EXISTS ix_btc_usd_reference_correlation_samples_created
 ON btc_usd_reference_correlation_samples(created_at_utc DESC);
+
+CREATE TABLE IF NOT EXISTS btc_order_book_lag_diagnostic_events (
+    id uuid PRIMARY KEY,
+    source text NOT NULL,
+    event_type text NOT NULL,
+    asset_id text NULL,
+    condition_id text NULL,
+    binance_symbol text NULL,
+    binance_price_usd numeric(28,8) NULL,
+    best_bid numeric(18,8) NULL,
+    best_bid_size numeric(28,8) NULL,
+    best_ask numeric(18,8) NULL,
+    best_ask_size numeric(28,8) NULL,
+    mid numeric(18,8) NULL,
+    trade_price numeric(18,8) NULL,
+    trade_size numeric(28,8) NULL,
+    source_timestamp_utc timestamptz NULL,
+    received_at_utc timestamptz NOT NULL,
+    local_lag_ms numeric(18,8) NULL,
+    raw_event_type text NOT NULL DEFAULT '',
+    created_at_utc timestamptz NOT NULL
+);
+
+ALTER TABLE btc_order_book_lag_diagnostic_events ADD COLUMN IF NOT EXISTS best_bid_size numeric(28,8) NULL;
+ALTER TABLE btc_order_book_lag_diagnostic_events ADD COLUMN IF NOT EXISTS best_ask_size numeric(28,8) NULL;
+
+CREATE INDEX IF NOT EXISTS ix_btc_order_book_lag_events_received
+ON btc_order_book_lag_diagnostic_events(received_at_utc DESC);
+
+CREATE INDEX IF NOT EXISTS ix_btc_order_book_lag_events_source_received
+ON btc_order_book_lag_diagnostic_events(source, received_at_utc DESC);
+
+CREATE INDEX IF NOT EXISTS ix_btc_order_book_lag_events_asset_received
+ON btc_order_book_lag_diagnostic_events(asset_id, received_at_utc DESC)
+WHERE asset_id IS NOT NULL;
+
+CREATE INDEX IF NOT EXISTS ix_btc_order_book_lag_events_condition_received
+ON btc_order_book_lag_diagnostic_events(condition_id, received_at_utc DESC)
+WHERE condition_id IS NOT NULL;
 
 CREATE TABLE IF NOT EXISTS btc_up_down_5m_odds_ticks (
     id uuid PRIMARY KEY,

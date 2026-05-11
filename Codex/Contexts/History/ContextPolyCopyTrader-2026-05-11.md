@@ -287,3 +287,9 @@ Request:
 
 Result:
 Checked `192.168.0.101/polycopytrader` directly. The Net48 service is alive in Paper mode and heartbeat updates (`15:16:46 UTC` then `15:17:46 UTC`), and new Paper orders are being written. However, market data is not healthy on Windows Server 2008 R2: Binance and Polymarket WebSocket clients fail with `The WebSocket protocol is not supported on this platform`, BTC odds ticks and lag diagnostics have no recent rows, Gamma is stale, and Polymarket CLOB/Gamma/Data API requests are producing many HTTPS/timeouts/errors. No production code changed.
+## 2026-05-11T15:51:23.3622175+00:00
+Request:
+Нет, буду другой сервер искать. Ты можешь всё, что мы делали последнего для 4.8, перенести на 10 ? Возвращаемся на него
+
+Result:
+Ported the latest relevant Net48 work back to the main .NET 10 service: Middle/Middle Revert bps BTC variants, matching Revert bootstrap logic, BTC/order-book lag diagnostics with Binance trade/bookTicker and Polymarket top-of-book capture, schema/repository/config/DI support, and tests. Verified .NET 10 service build and full test suite (`423/423`).

@@ -433,6 +433,21 @@ public interface IAppRepository
         return Task.FromResult<IReadOnlyList<BtcUsdReferenceCorrelationSample>>([]);
     }
 
+    Task AddBtcOrderBookLagDiagnosticEventsAsync(
+        IReadOnlyList<BtcOrderBookLagDiagnosticEvent> events,
+        CancellationToken cancellationToken = default)
+    {
+        return Task.CompletedTask;
+    }
+
+    Task<int> CleanupBtcOrderBookLagDiagnosticEventsAsync(
+        DateTimeOffset receivedBeforeUtc,
+        int batchSize,
+        CancellationToken cancellationToken = default)
+    {
+        return Task.FromResult(0);
+    }
+
     Task AddBtcUpDown5mOddsTickAsync(
         BtcUpDown5mOddsTick tick,
         CancellationToken cancellationToken = default)
