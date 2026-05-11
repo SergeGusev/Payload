@@ -189,3 +189,10 @@ Request:
 
 Result:
 Inspected Net48 Middle/Revert strategy logic and ran read-only PostgreSQL diagnostics. All five `btc_up_down_5m_middle_N_revert` strategies are enabled and Paper-only, but have `0` Paper orders after the latest cleanup. Plain Middle variants are entering normally, for example the 11:00 UTC market entered at about `11:00:03`. Revert runs are being skipped before signal/pricing diagnostics with `entry_due_expired`; for the 11:00 UTC market all five Revert variants were skipped at about `11:00:31`, just after the configured 30-second grace. Cause: fixed variant processing order puts Revert after plain Middle plus 45 Middle bps variants, and Middle/Revert are not allowed after the 30-second entry grace. Temporary probe under `artifacts/middle-revert-probe` was removed after use.
+
+## 2026-05-11T11:10:57.4493799Z
+Request:
+А мы можем обрабатывать ставки не последовательно, а параллельно, мультипоточно?
+
+Result:
+Re-read the Net48 due-entry code path. `PlaceDueEntriesAsync` currently loops variants sequentially, calls `GetDueStrategyMarketPaperRunsAsync` per strategy, and processes runs sequentially; each per-strategy query orders by due time but there is no global due queue across strategies. Answered that parallel processing is feasible, but should be implemented as bounded async concurrency rather than raw threads: fetch due runs globally by due time, claim/lock rows to avoid duplicate processing, process independent decisions through a configurable semaphore, and throttle external CLOB/DB/API work. Noted that global due ordering alone may fix Middle Revert starvation, with bounded parallelism as the next performance improvement.

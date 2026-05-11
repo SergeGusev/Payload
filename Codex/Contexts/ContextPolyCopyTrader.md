@@ -1,3 +1,16 @@
+## Active Update 2026-05-11 Parallel Due Entry Processing Discussion
+Goal: Answer whether BTC entries can be processed in parallel instead of sequentially.
+Status: Completed
+Done:
+- Re-read the current Net48 due-entry code path.
+- Confirmed `PlaceDueEntriesAsync` currently loops variants sequentially, calls `GetDueStrategyMarketPaperRunsAsync` per strategy, and then processes each run sequentially.
+- Confirmed the repository query itself orders runs within one strategy by `entry_due_at_utc`, but there is no global due queue across strategies.
+- Recommended bounded async parallelism rather than raw multi-threading: fetch due runs globally by due time, claim/lock rows to avoid double processing, process independent decisions concurrently with a configurable semaphore, and throttle external CLOB/DB/API work.
+- Noted that global due ordering alone may fix the Middle Revert starvation; bounded parallelism is the next performance improvement.
+Next: If requested, implement a global due-entry queue with bounded concurrency and tests around duplicate prevention and deadline behavior.
+Notes: Discussion/read-only task; no production code changed.
+Blockers: None.
+
 ## Active Update 2026-05-11 Middle Revert No Orders Diagnosis
 Goal: Explain why `BTC Up or Down 5m Middle` strategies place Paper orders while `Middle Revert` strategies do not.
 Status: Completed
