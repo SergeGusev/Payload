@@ -1,3 +1,17 @@
+## Active Update 2026-05-11 BTC Market Creation Lead Check
+Goal: Determine how early BTC Up/Down 5m markets are created and whether order books exist before the trading window starts.
+Status: Completed
+Done:
+- Ran read-only PostgreSQL analysis against `polymarket_gamma_markets`, `btc_up_down_5m_odds_ticks`, and `btc_order_book_lag_diagnostic_events`.
+- For `713` archived BTC 5m markets, Gamma `created_at_utc` was typically about `1433` minutes before `market_start_utc`, i.e. roughly `23h 53m` before the 5-minute period starts.
+- Current upcoming BTC 5m markets also show the same pattern: markets starting in `1` to `96` minutes were created about `1432-1433` minutes earlier.
+- Current upcoming markets already have `accepting_orders=true`, `enable_order_book=true`, and visible `best_bid`/`best_ask` around `0.50/0.51`, with liquidity and sometimes nonzero volume.
+- WebSocket/top-of-book diagnostics proved pre-start books existed for `25` recent markets, with `8,072` pre-start two-sided top-of-book events in the last 30 minutes before start; first observed pre-start quotes were up to `29.5` minutes before start.
+- `btc_up_down_5m_odds_ticks` has `0` ticks before `market_start_utc`, because our odds archive starts at/after market start rather than collecting pre-start odds.
+Next: Decide whether to add a dedicated pre-start odds archive if we want to analyze or trade the pre-start period systematically.
+Notes: Read-only DB analysis with temporary C# utilities under `%TEMP%`, removed after use. Service remained running; no production code changed.
+Blockers: None.
+
 ## Active Update 2026-05-11 BTC Binance Polymarket Book Correlation Check
 Goal: Check current correlation diagnostics between BTC/Binance book data and Polymarket BTC 5m order books.
 Status: Completed

@@ -168,3 +168,10 @@ Request:
 
 Result:
 Checked current BTC/Binance vs Polymarket diagnostics. Since `2026-05-11T06:38Z`, `btc_order_book_lag_diagnostic_events` has `8,534` BinanceBookTicker, `185,572` BinanceTrade, and `342,945` PolymarketTopOfBook events. Normalized `BTC move from market start -> Up price proxy` correlation is strong: 24h `0.7664`, 6h `0.8574`, 1h `0.9242`, with direction accuracy 24h `84.11%`, 6h `87.50%`, 1h `92.11%`. Lag scan showed the best correlation at `0s`; using older BTC inputs steadily worsens the result, so there is no current evidence of an exploitable Polymarket delay at 5s+ granularity.
+
+## 2026-05-11T10:49:09.4678848Z
+Request:
+Ты говорил, что маркет создаётся раньше, чем начинается сама торговля. Насколько раньше? И есть там ставки между моментом создания маркета и стартом периода торговли?
+
+Result:
+Checked BTC Up/Down 5m market creation and pre-start order-book data. Gamma `created_at_utc` is typically about `1433` minutes before `market_start_utc`, roughly `23h 53m` before the 5-minute period starts. Current upcoming markets starting in `1-96` minutes are already `accepting_orders=true`, `enable_order_book=true`, and have visible `best_bid`/`best_ask` around `0.50/0.51` with liquidity and sometimes volume. WebSocket diagnostics show pre-start two-sided top-of-book quotes for 25 recent markets, up to about `29.5` minutes before start; our `btc_up_down_5m_odds_ticks` archive has no pre-start ticks because it intentionally samples only at/after market start.
