@@ -1,3 +1,16 @@
+## Active Update 2026-05-11 New Postgres Cleanup
+Goal: Remove PolyCopyTrader tables that were accidentally created in the new PostgreSQL database on `192.168.0.101`.
+Status: Completed
+Done:
+- Connected to target PostgreSQL host `192.168.0.101`, database `polycopytrader`, using the current connection string as a credential template with the host replaced.
+- Ran a dry-run against `information_schema.tables`; found `70` public tables and all `70` matched the known PolyCopyTrader schema table list.
+- Executed `DROP TABLE ... CASCADE` for those `70` known PolyCopyTrader tables.
+- Re-ran verification; `public` now has `0` tables and `0` remaining PolyCopyTrader tables.
+- Removed the temporary C# cleanup utility from `%TEMP%`.
+Next: None.
+Notes: No production code changed. The running local Net48 service was not stopped and continues using the old/local database.
+Blockers: None.
+
 ## Active Update 2026-05-11 No-Prompt Net48 Secret Copy Script
 Goal: Provide a no-prompt way to transfer current-machine Net48 secrets to the new server without embedding secret values in a repo file.
 Status: Completed

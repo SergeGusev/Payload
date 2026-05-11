@@ -203,6 +203,13 @@ Ok, do it. 30 seconds for a decision is too much.
 
 Result:
 Implemented bounded async BTC due-entry processing in the Net48 service. Added `BtcUpDown5mStrategy.MaxConcurrentEntryDecisions`, set it to `8`, reduced `EntryGraceSeconds` from `30` to `10`, and shared the per-cycle BTC current-price cache across concurrent variant tasks. Fixed Middle Revert base-variant lookup so bps-threshold Middle variants no longer cause `Sequence contains more than one matching element`. Added Net48 build support for PackageReference from the command line via `src4.8/Directory.Build.targets` and `TargetFramework=net48`. Verified focused BTC processor tests passed 91/91, Net48 Release build passed with nullable warnings, restarted the Net48 service as PID 65616 with `Bot__EnableLiveTrading=false`, and observed the 14:35 local BTC window placing Middle/Middle Revert decisions about 0.9 seconds after market start. PostgreSQL `57P03` recovery errors still appeared later in that window and remain a separate operational issue.
+## 2026-05-11T13:25:31.9916170Z
+Request:
+На новой базе данных (192.168.0.101) из базы Postres удали наши таблицы, которые попали туда по ошибке
+
+Result:
+Connected to PostgreSQL on `192.168.0.101` using the current connection string as a credential template with host replaced. Dry-run found `70` public tables, all matching the known PolyCopyTrader schema table list. Dropped those `70` tables with `DROP TABLE ... CASCADE`, then verified `public` has `0` tables and `0` remaining PolyCopyTrader tables. Removed the temporary C# cleanup utility from `%TEMP%`; local Net48 service remained running against the old/local database.
+
 ## 2026-05-11T12:29:09.9868915Z
 Request:
 Мне не нужно, чтобы скрипт что-то запрашивал. Мне нужно, чтобы ты сразу вставил в него значения из текущей машины.
