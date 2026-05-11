@@ -1,3 +1,18 @@
+## Active Update 2026-05-11 Runtime Process Health Check
+Goal: Check whether the currently running old-server .NET 10 process is operating normally.
+Status: Completed
+Done:
+- Confirmed `PolyCopyTrader.Service.exe` and `PolyCopyTrader.Dashboard.exe` are running from Debug .NET 10 output; no installed Windows Service record is present.
+- Confirmed PostgreSQL target is local `127.0.0.1:5432/polycopytrader` on PostgreSQL `17.5`.
+- Confirmed service heartbeat is `Running`, mode `Live`, with no `last_error`; current live orders remain inactive/open total `0`.
+- Confirmed Polymarket market WebSocket aggregate and `shard-001` are `Connected`, `stale=false`, subscribed assets `692`, with recent messages.
+- Confirmed Paper activity is active: last 15 minutes had `506` Paper orders created and `46` fills; latest Paper order was at `2026-05-11 16:46:33 UTC` in DB timestamps.
+- Confirmed BTC data collection is active: last 15 minutes had BTC odds ticks and lag diagnostics for `BinanceTrade`, `BinanceBookTicker`, and `PolymarketTopOfBook`.
+- Found one recent `PolymarketMarketWebSocket:shard-001` `ConnectionLoop` API error in the last 15 minutes, but current WebSocket status recovered; no persisted HTTP failures in the last 15 minutes.
+Next: Continue collecting Paper statistics. If reconnect errors become frequent or WebSocket status turns stale, inspect service logs around `2026-05-11 16:36:49 UTC`.
+Notes: Inspection only; no production code changed. A temporary C# Npgsql probe under `%TEMP%` was used without printing secrets.
+Blockers: None.
+
 ## Active Update 2026-05-11 Binance SBE Smoke Command
 Goal: Implement a no-database Binance SBE market-data smoke command and verify the local decoder.
 Status: Completed

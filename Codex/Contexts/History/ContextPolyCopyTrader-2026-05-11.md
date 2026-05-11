@@ -305,6 +305,13 @@ Request:
 
 Result:
 Checked the old/local server. The .NET 10 service and Dashboard are running; service heartbeat is fresh against local PostgreSQL `127.0.0.1:5432/polycopytrader`. Current BTC market data is active: aggregate Polymarket WebSocket is connected with 648 subscribed assets, BTC odds ticks and BTC/order-book lag diagnostics are being written, and no API errors or HTTP failures were persisted in the last 15 minutes. Paper trading is active with 118 orders created since the recent restart, 5 filled, and 91 still open. Live has no open orders.
+## 2026-05-11T16:46:54.6066810Z
+Request:
+Процесс нормально идёт?
+
+Result:
+Checked running .NET 10 service/dashboard processes and local PostgreSQL health. Service heartbeat, Polymarket WebSocket, BTC ticks, Binance/Polymarket lag diagnostics, and Paper order creation were all active; one recent WebSocket reconnect error was observed but current status had recovered and no HTTP failures were present.
+
 ## 2026-05-11T16:33:30.4499566Z
 Request:
 Я хочу, чтобы ты пока это просто реализовал, не записывая в базу. Ключ лежит в C:\Keys\Binance\binance_sbe_ed25519_private.pem. Пока просто сделай вызовы и убедись, что всё работает. Потом пришлю план тестирования
