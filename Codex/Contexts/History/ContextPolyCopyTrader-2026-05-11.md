@@ -46,3 +46,10 @@ Request:
 
 Result:
 Implemented 45 Net48 Paper BTC Middle bps-threshold variants: `BTC Up or Down 5m Middle {N} {M} bps`, with `N=1..5` and `M=0.1..0.9`. They reuse the standard Middle mean-reversion direction but skip with `btc_reference_mean_deviation_below_threshold` unless every compared price is at least the configured bps distance from the Binance cache arithmetic mean. Added raw decision diagnostics for the configured threshold, compared prices, each mean deviation, and minimum deviation. Added PostgreSQL seed rows and updated README/configuration docs. Rebuilt the Net48 Release solution, ran `--host-smoke`, `--storage-smoke`, and `dotnet test tests/PolyCopyTrader.Tests/PolyCopyTrader.Tests.csproj --no-restore` (`418/418` passed). Restarted the Net48 service, paused Live, and verified the old/local DB has `middle_bps_count=45` with sample rows enabled.
+
+## 2026-05-11T06:32:27.0608569Z
+Request:
+Посмотри первые данные по корреляции стакана Binance и стакана Polymarket. Что-нибудь видно?
+
+Result:
+Ran a temporary read-only C# probe against `btc_order_book_lag_diagnostic_events` and removed it afterward. As of `2026-05-11T06:32:16Z`, the table had `1,692` Binance bookTicker rows, `54,009` Binance trade rows, and `56,798` Polymarket top-of-book rows. Mapping Polymarket BTC 5m events to Up probability showed strong level correlation between Binance book mid move from market start and Polymarket Up price: `0.7749` at 0s, gradually rising to `0.8020` when comparing Polymarket with Binance book data from 5 seconds earlier. Native Up and inverted Down events matched, so the normalization looked sound. Short-window delta correlations were near zero for 1s/2s and weakly negative for 5s/10s; no actionable short-term lead/lag signal is visible yet. Binance bookTicker and Binance trade price matched almost perfectly at this cadence (`corr=0.999924`).

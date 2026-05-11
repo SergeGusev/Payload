@@ -1,3 +1,17 @@
+## Active Update 2026-05-11 Initial Binance BookTicker / Polymarket Book Correlation
+Goal: Inspect the first event-level correlation data between Binance BTCUSDT order-book snapshots and Polymarket BTC 5m top-of-book updates.
+Status: Completed
+Done:
+- Ran a temporary read-only C# probe against `btc_order_book_lag_diagnostic_events` and removed it afterward.
+- Analyzed data through `2026-05-11T06:32:16Z`: `BinanceBookTicker=1,692`, `BinanceTrade=54,009`, `PolymarketTopOfBook=56,798`.
+- Mapped Polymarket events to BTC 5m `Up` probability using `btc_up_down_5m_odds_ticks`: native Up mid and `1 - Down mid` gave matching results.
+- Found strong level correlation between Binance book mid move from market start and Polymarket Up price: `corr=0.7749` at 0s, rising gradually to `0.8020` when comparing Polymarket with Binance from 5s earlier.
+- Delta correlations over 1s/2s windows are near zero; 5s/10s windows are weakly negative, so the first data does not yet show an actionable short-term lead/lag signal.
+- Binance bookTicker and Binance trade price are almost identical at this cadence: `corr=0.999924`.
+Next: Keep accumulating event-level data; rerun with a longer sample and consider bucketed state reconstruction before turning this into strategy logic.
+Notes: Read-only diagnostic task; no production code changed. Service remains running separately from this probe.
+Blockers: None.
+
 ## Active Update 2026-05-11 BTC Middle Bps Threshold Strategies
 Goal: Add bps-threshold variants for each BTC Up or Down 5m Middle N strategy.
 Status: Completed
