@@ -293,3 +293,9 @@ Request:
 
 Result:
 Ported the latest relevant Net48 work back to the main .NET 10 service: Middle/Middle Revert bps BTC variants, matching Revert bootstrap logic, BTC/order-book lag diagnostics with Binance trade/bookTicker and Polymarket top-of-book capture, schema/repository/config/DI support, and tests. Verified .NET 10 service build and full test suite (`423/423`).
+## 2026-05-11T15:58:47.5837220+00:00
+Request:
+А проверка выполнимости ордера только в случае достаточной наличности в стакане перенёс?
+
+Result:
+Inspected the main .NET 10 code path. Confirmed the conservative Paper GTD fill model is present and wired: immediate Paper fill is created only up to executable ask depth captured in the initial snapshot, while GTD order creation itself is not blocked by missing immediate depth and can wait for later fill evidence.

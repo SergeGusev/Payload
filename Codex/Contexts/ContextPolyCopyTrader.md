@@ -1,3 +1,14 @@
+## Active Update 2026-05-11 Confirm Net10 GTD Depth Fill Logic
+Goal: Check whether the recent Net48 order executability/depth behavior exists in the main .NET 10 code path.
+Status: Completed
+Done:
+- Verified the .NET 10 service has `ConservativePaperGtdFillEstimator` and it is wired into `PaperTradingProcessor`.
+- Confirmed .NET 10 records initial executable ask shares/VWAP for GTD opening-limit Paper orders and only creates immediate Paper fills up to observed executable ask depth.
+- Confirmed this is not a pre-submit guard: GTD orders can still be created even if immediate executable depth is absent, then Paper waits for later high-confidence fill evidence.
+Next: None.
+Notes: Inspection only; no production code changed. Relevant files: `src/PolyCopyTrader.Service/PaperTrading/ConservativePaperGtdFillEstimator.cs`, `src/PolyCopyTrader.Service/PaperTrading/PaperTradingProcessor.cs`, `src/PolyCopyTrader.Service/Strategies/BtcUpDown5mPaperStrategyProcessor.cs`.
+Blockers: None.
+
 ## Active Update 2026-05-11 Port Recent Net48 Work Back To Net10
 Goal: Return to the .NET 10 service and port the recent Net48-only strategy/diagnostic changes back into the main code path.
 Status: Completed
