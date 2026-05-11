@@ -1,3 +1,17 @@
+## Active Update 2026-05-11 Live Readiness Check Before Start
+Goal: Verify whether the Net48 service is ready for the controlled Live start.
+Status: Completed
+Done:
+- Confirmed the repository is up to date and the Net48 service process is running from the Release output.
+- Verified IPC `/status` reports `Running`, scanning/Paper/Live unpaused, kill switch inactive, and no last error.
+- Verified runtime config is in Live posture but still safe: `Mode=Live`, `Bot.EnableLiveTrading=false`, `PolymarketAuth.Enabled=true`, `Auth configured=True`, `PaperTrading.RunInLiveMode=true`, and max live order notional is `5.0`.
+- Checked Credential Manager target presence without printing secrets; all expected Polymarket auth/signing targets are present.
+- Verified PostgreSQL strategy flags: `btc_up_down_5m_more_150_below_65` and `btc_up_down_5m_skip_1` are enabled but `live_stakes=false`; globally `live_stakes=true` count is `0`.
+- Ran Net48 Release `--host-smoke` and `--storage-smoke`.
+Next: Actual Live start still requires explicitly setting `Bot.EnableLiveTrading=true` and enabling `live_stakes` only for `btc_up_down_5m_more_150_below_65`.
+Notes: No source/config changes were made for this check. A transient second process seen during probing was the short-lived `--print-config`; the persistent service process is PID `68460`.
+Blockers: None.
+
 ## Active Update 2026-05-11 Port Net10 Live Runtime Config To Net48
 Goal: Transfer the old .NET 10 non-secret Live/Auth runtime configuration into the Net48 service.
 Status: Completed

@@ -85,3 +85,9 @@ Request:
 
 Result:
 Transferred the old .NET 10 non-secret Live/Auth runtime posture into `src4.8/PolyCopyTrader.Net48.Service/appsettings.json`: `Bot.Mode=Live`, `PolymarketAuth.Enabled=true`, `SecretProvider=CredentialManager`, public signer/funder addresses, `ChainId=137`, `SignatureType=POLY_1271`, dry-run signing, the existing order-signing secret target, `PaperTrading.RunInLiveMode=true`, and `LiveTrading.MaxOrderNotionalUsd=5.0`. Kept `Bot.EnableLiveTrading=false`, so the transfer does not authorize live order placement by itself. Rebuilt Net48 Release, ran `--host-smoke`, `--storage-smoke`, and `--print-config`, then restarted the Net48 service. IPC status is `Running`, Paper unpaused, kill switch inactive, and no last error.
+## 2026-05-11T07:26:12.8497059+00:00
+Request:
+Ок. Можем запускаться?
+
+Result:
+Checked Net48 Live readiness without enabling order placement. Service is running, IPC status is healthy, auth config is enabled and Credential Manager targets are present, host/storage smokes pass, and no strategy currently has `live_stakes=true`. Actual Live start still requires explicitly enabling `Bot.EnableLiveTrading=true` and `live_stakes` only for `btc_up_down_5m_more_150_below_65`.
