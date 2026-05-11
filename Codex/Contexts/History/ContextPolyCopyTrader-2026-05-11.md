@@ -32,3 +32,10 @@ Request:
 
 Result:
 Confirmed that continuing to collect statistics in the old/local PostgreSQL database is intentional. Verified the Net48 service remains running in Paper mode with IPC status `Running`, paper trading unpaused, kill switch inactive, and no last error. No production code changed.
+
+## 2026-05-11T06:05:00.0000000+00:00
+Request:
+Расскажи логику наших BTC Up or Down 5m Middle стратегий
+
+Result:
+Read the Net48 Middle strategy definitions and implementation. Confirmed Middle 1-5 use the latest fresh Binance BTC/USDT trade-stream price plus `N-1` latest sampled cached reference prices, compare all of them against the arithmetic mean of the Binance reference cache, select Down when all compared prices are above mean, select Up when all are below mean, and skip equal or mixed cases. Middle Revert variants invert that decision. Entries use GTD limit BUY Paper orders with dynamic break-even pricing capped at 0.50 and 120-second TTL. No production code changed.

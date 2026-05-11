@@ -1,3 +1,16 @@
+## Active Update 2026-05-11 BTC Middle Strategy Explanation
+Goal: Explain the current implemented logic of BTC Up or Down 5m Middle strategies.
+Status: Completed
+Done:
+- Read the Net48 Middle strategy variant definitions and `BtcUpDown5mPaperStrategyProcessor.GetMiddleReferenceEntryDecisionAsync`.
+- Confirmed standard Middle 1-5 compare the latest fresh Binance BTC/USDT trade-stream price plus `N-1` latest sampled cached reference prices against the arithmetic mean of the Binance reference cache.
+- Confirmed standard Middle is mean-reversion: all compared prices above mean selects Down; all below mean selects Up; equal/mixed cases skip.
+- Confirmed Middle Revert 1-5 invert the standard Middle decision.
+- Confirmed entries use the opening-limit Paper model: GTD limit BUY, post_only=false, 120-second TTL, dynamic break-even pricing capped at 0.50, and settlement uses actually filled shares.
+Next: None.
+Notes: Read-only explanation task; no production code changed and no tests were needed.
+Blockers: None.
+
 ## Active Update 2026-05-11 Binance REST BookTicker Diagnostics
 Goal: Add Binance REST `bookTicker` BTCUSDT snapshots to the event-level lag diagnostics so Binance quote movement can be correlated with Binance trades and Polymarket BTC order-book movement.
 Status: Completed
