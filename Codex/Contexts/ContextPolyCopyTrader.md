@@ -1,3 +1,17 @@
+## Active Update 2026-05-11 More 150 Paper Live Difference Check
+Goal: Explain why `BTC Up or Down 5m More 150 Below 65` shows different Paper and Live counts/results.
+Status: Completed
+Done:
+- Ran a temporary read-only C# PostgreSQL probe and removed it afterward.
+- Confirmed all recent Paper orders for the strategy are `paper_live_shadow_test` rows with `correlation_id` and paired Live orders, so the difference is not caused by unrelated paper-only strategy executions.
+- Found the current moving 1h window had Paper `12` orders created, `4` settled runs, `3` wins and `1` loss; Live had `12` orders created, only `3` filled/settled, `2` wins and `1` loss.
+- Identified the core mismatch: multiple Live orders were accepted as `response_status=live` but remained `filled_size=0`, `remaining_size=6.16`, and later `status=CancelFailed`, while Paper-shadow sometimes marked the paired order filled/settled from the simulated book model.
+- Example mismatch: the `2026-05-11 07:57:30 UTC` pair had Paper `Filled/Settled/Win` with `+3.0184`, but Live stayed unfilled with `filled_size=0`, `remaining_size=6.16`, `CancelFailed`.
+- Confirmed service is still running with Live unpaused and kill switch inactive.
+Next: Pause Live and fix Paper/Live-shadow discrepancy detection/accounting before treating Paper-shadow results for this strategy as Live-equivalent.
+Notes: Read-only DB analysis; no production code changed.
+Blockers: Paper-shadow can currently overstate Live fills for GTD orders when actual Live remains unfilled, and no discrepancy row was recorded for the observed mismatch.
+
 ## Active Update 2026-05-11 New Server Live Secrets Answer
 Goal: Identify the environment variables and secret entries required for Net48 live order placement on the new Windows Server 2008 R2 machine.
 Status: Completed

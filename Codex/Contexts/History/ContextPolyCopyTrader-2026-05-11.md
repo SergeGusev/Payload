@@ -106,6 +106,13 @@ Request:
 Result:
 Reviewed the Net48 configuration and auth/live validation paths. Answered that the new server needs PostgreSQL connection via `POLYCOPYTRADER_POSTGRES_CONNECTION`, live gates (`Bot:Mode=Live`, `Bot:EnableLiveTrading=true`, `LiveTrading:ManualEnableCode=LIVE_TRADING_ENABLED`, auth enabled), public signer/funder addresses, and Credential Manager targets for the order-signing private key plus Polymarket CLOB API key/owner/secret/passphrase. No production code changed.
 
+## 2026-05-11T08:56:29.0682790Z
+Request:
+Для BTC Up or Down 5m More 150 Below 65 я в Paper режиме вижу за последний час 5 ставок, 3 победы. А в Live я вижу 4 ставки, победы и поражения пополам. Откуда взялась разница?
+
+Result:
+Ran a temporary read-only C# PostgreSQL probe and removed it afterward. Confirmed recent Paper rows are paired `paper_live_shadow_test` rows with Live orders. The difference is caused by actual Live execution: many Live orders were accepted/resting but stayed unfilled (`filled_size=0`, `remaining_size=6.16`) and later became `CancelFailed`, while Paper-shadow sometimes marked the paired simulated order filled/settled. Current moving 1h sample at probe time showed Paper 12 created / 4 settled / 3 wins / 1 loss versus Live 12 created / 3 filled-settled / 2 wins / 1 loss. No source code changed.
+
 ## 2026-05-11T07:38:10.0000000+00:00
 Request:
 Ок, поехали
