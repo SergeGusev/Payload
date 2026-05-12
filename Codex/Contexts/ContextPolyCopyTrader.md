@@ -1,3 +1,16 @@
+## Active Update 2026-05-12 Historical Strategy Testability Answer
+Goal: Identify which existing strategies can be tested offline on one year of historical data.
+Status: Completed
+Done:
+- Re-read workflow, AGENTS, coding rules, active context, Git state, and the BTC strategy catalog/processor.
+- Confirmed the existing strategy catalog contains `199` BTC Up/Down 5m variants plus `follow_leader`.
+- Classified BTC variants by historical-test data requirement: outcome-only direction tests, entry-price/order-book tests, Binance-reference tests, fair-value/odds-archive tests, and walk-forward meta-strategy tests.
+- Noted that `CryptoUpDown5m` currently has odds archive collection only, not implemented trading strategy variants.
+- Noted that `follow_leader` can be replayed from historical on-chain/Data API captures, but requires historical order book, market metadata, leader/category filters, and settlement/Paper position state, so it is more complex than BTC 5m strategy replay.
+Next: If requested, build a year-long offline backtest runner starting with BTC 5m outcome/price variants, then add order-book/fill realism and Binance/odds-archive variants.
+Notes: No source/runtime code changed. Inspection focused on `StrategyIds`, `BtcUpDown5mPaperStrategyProcessor`, BTC/Crypto odds archive processors, and `DefaultSignalEngine`.
+Blockers: Accurate one-year tests require historical data not guaranteed to exist locally: BTC/crypto reference prices, Polymarket market metadata, per-entry prices/order books, and settlement outcomes.
+
 ## Active Update 2026-05-12 BTC Partial Collection Analysis
 Goal: Analyze the available partial BTC source-comparison CSV collection.
 Status: Completed
