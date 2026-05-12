@@ -396,6 +396,21 @@ public sealed class AuthPlaceholderTests
     }
 
     [Fact]
+    public void OrderBuilder_RequiresGtdExpirationAfterSecurityThreshold()
+    {
+        var builder = new ClobV2OrderBuilder(new OrderAmountCalculator());
+        var request = FixedOrderRequest();
+
+        var errors = builder.Validate(request with
+        {
+            OrderType = ClobV2OrderType.GTD,
+            GtdExpirationUtc = request.CreatedAtUtc.AddSeconds(60)
+        });
+
+        Assert.Contains(errors, error => error.Contains("more than 60 seconds", StringComparison.OrdinalIgnoreCase));
+    }
+
+    [Fact]
     public void OrderBuilder_GeneratesJsonSafeSaltLikeOfficialSdk()
     {
         var order = new ClobV2OrderBuilder(new OrderAmountCalculator()).Build(FixedOrderRequest() with

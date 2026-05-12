@@ -129,6 +129,8 @@ public static class AppOptionsValidator
             $"BTC Up or Down 5m opening limit break-even margin: {configuration.BtcUpDown5mStrategy.OpeningLimitBreakEvenMargin}",
             $"BTC Up or Down 5m opening limit max price: {configuration.BtcUpDown5mStrategy.OpeningLimitMaxPrice}",
             $"BTC Up or Down 5m opening limit GTD TTL seconds: {configuration.BtcUpDown5mStrategy.OpeningLimitGtdTtlSeconds}",
+            $"BTC Up or Down 5m opening limit expire before market end seconds: {configuration.BtcUpDown5mStrategy.OpeningLimitExpireBeforeMarketEndSeconds}",
+            $"BTC Up or Down 5m CLOB GTD expiration security buffer seconds: {configuration.BtcUpDown5mStrategy.ClobGtdExpirationSecurityBufferSeconds}",
             $"BTC Up or Down 5m order-book refresh worker enabled: {configuration.BtcUpDown5mStrategy.OrderBookRefreshWorkerEnabled}",
             $"BTC Up or Down 5m order-book refresh interval ms: {configuration.BtcUpDown5mStrategy.OrderBookRefreshIntervalMilliseconds}",
             $"BTC Up or Down 5m order-book refresh max markets: {configuration.BtcUpDown5mStrategy.OrderBookRefreshMaxMarketsPerCycle}",
@@ -923,9 +925,9 @@ public static class AppOptionsValidator
             errors.Add("LiveTrading.MaxTradeBankrollPct must not exceed LiveTrading.MaxMarketBankrollPct.");
         }
 
-        if (options.DefaultOrderTtlSeconds <= 0 || options.DefaultOrderTtlSeconds > 300)
+        if (options.DefaultOrderTtlSeconds <= 60 || options.DefaultOrderTtlSeconds > 300)
         {
-            errors.Add("LiveTrading.DefaultOrderTtlSeconds must be between 1 and 300 seconds.");
+            errors.Add("LiveTrading.DefaultOrderTtlSeconds must be greater than 60 and at most 300 seconds.");
         }
 
         if (options.MaintenancePollIntervalSeconds <= 0 || options.MaintenancePollIntervalSeconds > 300)
@@ -1178,6 +1180,18 @@ public static class AppOptionsValidator
         if (options.OpeningLimitGtdTtlSeconds < 30 || options.OpeningLimitGtdTtlSeconds > 300)
         {
             errors.Add("BtcUpDown5mStrategy.OpeningLimitGtdTtlSeconds must be between 30 and 300.");
+        }
+
+        if (options.OpeningLimitExpireBeforeMarketEndSeconds < 0 ||
+            options.OpeningLimitExpireBeforeMarketEndSeconds > 300)
+        {
+            errors.Add("BtcUpDown5mStrategy.OpeningLimitExpireBeforeMarketEndSeconds must be between 0 and 300.");
+        }
+
+        if (options.ClobGtdExpirationSecurityBufferSeconds < 60 ||
+            options.ClobGtdExpirationSecurityBufferSeconds > 300)
+        {
+            errors.Add("BtcUpDown5mStrategy.ClobGtdExpirationSecurityBufferSeconds must be between 60 and 300.");
         }
 
         if (options.PaperGtdImmediateFillDepthMultiplier <= 0m ||

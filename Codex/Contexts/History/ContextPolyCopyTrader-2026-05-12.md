@@ -32,3 +32,9 @@ Request:
 
 Result:
 Checked local CLOB order request/building code and current official Polymarket docs. Answered that GTD supports a UTC Unix-second expiration timestamp and the local code already has `GtdExpirationUtc`, but current strategy code uses TTL-based deadlines. Noted that official docs describe a one-minute GTD security threshold/buffer, so for a precise operational deadline such as one minute before market end, the safer implementation is a market-relative local deadline plus either adjusted wire expiration or an explicit scheduled cancel at the target time.
+## 2026-05-12T06:12:25.8192402Z
+Request:
+Ok, make these changes. Also answer whether "as soon as possible" for AlwaysUp/AlwaysDown means placing orders a day before market start.
+
+Result:
+Implemented market-relative BTC opening-limit GTD expiration. BTC paper opening-limit and converted taker-GTD orders now use a local deadline one minute before market end by default, include explicit diagnostics for the deadline mode, and send live-shadow/full-live CLOB GTD requests with a one-minute wire expiration buffer. Added configuration, validation, docs, strategy-description updates, and tests. Confirmed that AlwaysUp/AlwaysDown do not place orders 24 hours early: observation is near-market, their entry due time is the market start, and placement waits for the due time plus tradeable market state. Verification passed: targeted tests 145/145, full tests 428/428, and git diff check.

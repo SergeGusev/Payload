@@ -57,6 +57,8 @@ public sealed class ConfigurationTests
         Assert.Equal(0.50m, configuration.BtcUpDown5mStrategy.OpeningLimitMaxPrice);
         Assert.Equal(0.01m, configuration.BtcUpDown5mStrategy.OpeningLimitPriceTickSize);
         Assert.Equal(120, configuration.BtcUpDown5mStrategy.OpeningLimitGtdTtlSeconds);
+        Assert.Equal(60, configuration.BtcUpDown5mStrategy.OpeningLimitExpireBeforeMarketEndSeconds);
+        Assert.Equal(60, configuration.BtcUpDown5mStrategy.ClobGtdExpirationSecurityBufferSeconds);
         Assert.False(configuration.CoinbaseExchange.Enabled);
         Assert.Equal("https://api.exchange.coinbase.com", configuration.CoinbaseExchange.BaseUrl);
         Assert.Equal("BTC-USD", configuration.CoinbaseExchange.ProductId);
@@ -264,6 +266,8 @@ public sealed class ConfigurationTests
                 OpeningLimitMaxPrice = 0.51m,
                 OpeningLimitPriceTickSize = 0m,
                 OpeningLimitGtdTtlSeconds = 29,
+                OpeningLimitExpireBeforeMarketEndSeconds = -1,
+                ClobGtdExpirationSecurityBufferSeconds = 59,
                 OrderBookRefreshIntervalMilliseconds = 99,
                 OrderBookRefreshMaxMarketsPerCycle = 0,
                 OrderBookRefreshMarketLookaheadSeconds = -1,
@@ -285,6 +289,8 @@ public sealed class ConfigurationTests
         Assert.Contains(errors, error => error.Contains("BtcUpDown5mStrategy.OpeningLimitMaxPrice", StringComparison.Ordinal));
         Assert.Contains(errors, error => error.Contains("BtcUpDown5mStrategy.OpeningLimitPriceTickSize", StringComparison.Ordinal));
         Assert.Contains(errors, error => error.Contains("BtcUpDown5mStrategy.OpeningLimitGtdTtlSeconds", StringComparison.Ordinal));
+        Assert.Contains(errors, error => error.Contains("BtcUpDown5mStrategy.OpeningLimitExpireBeforeMarketEndSeconds", StringComparison.Ordinal));
+        Assert.Contains(errors, error => error.Contains("BtcUpDown5mStrategy.ClobGtdExpirationSecurityBufferSeconds", StringComparison.Ordinal));
         Assert.Contains(errors, error => error.Contains("BtcUpDown5mStrategy.OrderBookRefreshIntervalMilliseconds", StringComparison.Ordinal));
         Assert.Contains(errors, error => error.Contains("BtcUpDown5mStrategy.OrderBookRefreshMaxMarketsPerCycle", StringComparison.Ordinal));
         Assert.Contains(errors, error => error.Contains("BtcUpDown5mStrategy.OrderBookRefreshMarketLookaheadSeconds", StringComparison.Ordinal));

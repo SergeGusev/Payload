@@ -19,7 +19,7 @@ Do not commit real credentials.
 - `MaxMarketBankrollPct`: live market bankroll cap.
 - `MaxDailyLossPct`: live daily loss lockout reference.
 - `MaxTotalDeployedPct`: live total deployed cap.
-- `DefaultOrderTtlSeconds`: GTD order lifetime, max 300 seconds.
+- `DefaultOrderTtlSeconds`: live GTD order lifetime fallback; must be greater than Polymarket's one-minute GTD security threshold and at most 300 seconds.
 - `MaxClockDriftSeconds`: maximum allowed CLOB server-time drift.
 - `ApiErrorLockoutCount`: recent Polymarket error threshold.
 - `ApiErrorLockoutWindowMinutes`: lockout lookback window.
@@ -554,14 +554,14 @@ depth is missing or stale, computes executable ask-depth BUY VWAP for currently
 available executable asks, then selects `Less` as the lower executable VWAP and `More` as the higher
 executable VWAP. Capped `Less ... Below ...` and `More ... Below ...` variants
 keep the standard CLOB-first selector at their respective delays, but they place
-a two-minute GTD limit BUY at the configured `Below` cap instead of requiring
+a GTD limit BUY at the configured `Below` cap instead of requiring
 immediate executable liquidity below that cap. The
 `Gamma`-suffixed variants intentionally use the older
 Gamma-first selector for comparison: `Less Gamma` selects the lower Gamma
 outcome price, `More Gamma` selects the higher Gamma outcome price, and the
 selected asset then uses the CLOB/WebSocket quote as the GTD limit seed. The
 `More ... Gamma Below ...` variants keep that Gamma-first selection but place
-a two-minute GTD limit BUY at the configured cap. The Gamma variants are Paper comparison strategies and are not submitted to live
+a GTD limit BUY at the configured cap. The Gamma variants are Paper comparison strategies and are not submitted to live
 trading. CLOB/WebSocket/REST prices are trusted for BTC taker Paper; CLOB/Gamma
 drift remains diagnostic and is not a skip reason. The run is skipped if either
 side lacks a usable quote, the quote is stale, spread is too wide, the submitted
@@ -626,13 +626,13 @@ pricing from the paired base strategy history by treating base losses as
 estimated Revert wins; if that sample is also insufficient, it uses the same
 order-book bootstrap. The
 `BTC Up or Down 5m Up` and `BTC Up or Down 5m Down` wait until the market is
-actually accepting orders with an order book, then place a two-minute GTD BUY at
+actually accepting orders with an order book, then place a GTD BUY at
 fixed price `0.45` on the corresponding outcome. The
 `BTC Up or Down 5m Binance` variant also waits for the market to accept orders,
 reads the latest Binance BTC/USDT trade-stream price and the archived market
 start reference from `btc_up_down_5m_odds_ticks`, then buys `Up` when current
 BTC is above start and `Down` when current BTC is below start. Equality skips,
-and the order is a two-minute GTD BUY capped at `0.50`. If the archived start
+and the order is a GTD BUY capped at `0.50`. If the archived start
 reference is not available yet, the observed run waits for the next processor
 cycle instead of being permanently skipped. `BTC Up or Down 5m Binance 0.1 bps`
 through `0.9 bps`, plus `1 bps`, `2 bps`, and `5 bps`, use the same direction and `0.50` GTD limit, but skip with
@@ -664,7 +664,8 @@ sides of the same Polymarket market. The
 order size still targets the current market minimum passing size plus a `10%`
 safety buffer times the configured Paper stake multiplier; diagnostics record
 `post_only=false` plus the selected pricing model inputs, cap, final limit, GTD
-expiration, and `OpeningLimitGtdTtlSeconds` (`120` by default). They
+expiration mode, local cancel deadline, CLOB wire expiration, and fallback
+`OpeningLimitGtdTtlSeconds` (`120` by default). They
 do not create immediate fills and are not submitted to live trading unless
 the controlled Paper/Live-shadow path is explicitly enabled for an allowed BTC variant,
 currently `Skip 1` or `More 150 Below 65`. The
@@ -728,7 +729,9 @@ leader exits can still be tracked.
 - `OpeningLimitBreakEvenMargin`: safety amount subtracted from `wins / settledRuns` before placing `Middle`/`Middle Revert`/`Skip`/`Skip Revert` opening-limit orders; default `0.10`.
 - `OpeningLimitMaxPrice`: maximum `Middle`/`Middle Revert`/`Skip`/`Skip Revert` opening-limit BUY price after the break-even margin; default and maximum `0.50`.
 - `OpeningLimitPriceTickSize`: tick used to floor dynamic `Middle`/`Middle Revert`/`Skip`/`Skip Revert` opening-limit prices; default `0.01`.
-- `OpeningLimitGtdTtlSeconds`: lifetime for BTC opening-limit GTD Paper and Paper/Live-shadow orders; default `120`, valid range `30..300`.
+- `OpeningLimitGtdTtlSeconds`: fallback lifetime for BTC opening-limit GTD Paper and Paper/Live-shadow orders when market-relative expiration is disabled or market end is unavailable; default `120`, valid range `30..300`.
+- `OpeningLimitExpireBeforeMarketEndSeconds`: local BTC opening-limit GTD cancel deadline offset from market close; default `60`, valid range `0..300`, with `0` disabling the market-relative deadline and falling back to `OpeningLimitGtdTtlSeconds`.
+- `ClobGtdExpirationSecurityBufferSeconds`: extra seconds added to the CLOB wire `expiration` for GTD orders so the local effective deadline honors Polymarket's GTD security threshold; default `60`, valid range `60..300`.
 - `CloseBookCaptureLookbackSeconds`: how long before BTC 5-minute market close the worker starts saving close-book snapshots for result inference; default `60`, use `0` to disable capture.
 - `CloseBookCaptureIntervalSeconds`: minimum seconds between close-book snapshot fetches for the same token during the capture window; default `10`.
 - `OrderBookRefreshWorkerEnabled`: enables a dedicated BTC 5-minute order-book refresh loop that keeps the shared market-data cache warm from CLOB `/book`; default `true`.

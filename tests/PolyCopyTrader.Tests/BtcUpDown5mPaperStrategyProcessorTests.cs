@@ -1812,10 +1812,13 @@ public sealed class BtcUpDown5mPaperStrategyProcessorTests
         Assert.Equal(2.50m, order.NotionalUsd);
         Assert.Contains("\"pricing_mode\":\"paper_gtd_limit\"", order.RawDecisionJson, StringComparison.Ordinal);
         Assert.Contains("\"order_execution_mode\":\"GTD\"", order.RawDecisionJson, StringComparison.Ordinal);
-        Assert.Contains("\"order_ttl_seconds\":120", order.RawDecisionJson, StringComparison.Ordinal);
+        Assert.Contains("\"order_ttl_seconds\":240", order.RawDecisionJson, StringComparison.Ordinal);
+        Assert.Contains("\"configured_order_ttl_seconds\":120", order.RawDecisionJson, StringComparison.Ordinal);
+        Assert.Contains("\"gtd_expiration_mode\":\"market_end_relative\"", order.RawDecisionJson, StringComparison.Ordinal);
+        Assert.Contains("\"market_end_expire_before_seconds\":60", order.RawDecisionJson, StringComparison.Ordinal);
         Assert.Contains("\"post_only\":false", order.RawDecisionJson, StringComparison.Ordinal);
         Assert.Contains("\"decision_source\":\"binance_trade_stream_middle_reference\"", order.RawDecisionJson, StringComparison.Ordinal);
-        Assert.Equal(120d, (order.ExpiresAtUtc - order.CreatedAtUtc).TotalSeconds, precision: 3);
+        Assert.InRange((order.ExpiresAtUtc - now).TotalSeconds, 238d, 241d);
         Assert.Empty(repository.PaperFills);
         Assert.Empty(repository.PaperPositions);
     }
@@ -1896,12 +1899,14 @@ public sealed class BtcUpDown5mPaperStrategyProcessorTests
         Assert.Equal("asset-up", order.AssetId);
         Assert.Equal("Up", order.Outcome);
         Assert.Equal(0.45m, order.Price);
-        Assert.Equal(120d, (order.ExpiresAtUtc - order.CreatedAtUtc).TotalSeconds, precision: 3);
+        Assert.InRange((order.ExpiresAtUtc - now).TotalSeconds, 238d, 241d);
         Assert.Contains("\"decision_source\":\"always_up_after_trading_started\"", order.RawDecisionJson, StringComparison.Ordinal);
         Assert.Contains("\"opening_limit_price_mode\":\"fixed\"", order.RawDecisionJson, StringComparison.Ordinal);
         Assert.Contains("\"fixed_limit_price\":0.45", order.RawDecisionJson, StringComparison.Ordinal);
         Assert.Contains("\"order_execution_mode\":\"GTD\"", order.RawDecisionJson, StringComparison.Ordinal);
-        Assert.Contains("\"order_ttl_seconds\":120", order.RawDecisionJson, StringComparison.Ordinal);
+        Assert.Contains("\"order_ttl_seconds\":240", order.RawDecisionJson, StringComparison.Ordinal);
+        Assert.Contains("\"configured_order_ttl_seconds\":120", order.RawDecisionJson, StringComparison.Ordinal);
+        Assert.Contains("\"gtd_expiration_mode\":\"market_end_relative\"", order.RawDecisionJson, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -1938,6 +1943,28 @@ public sealed class BtcUpDown5mPaperStrategyProcessorTests
         Assert.Equal("Down", order.Outcome);
         Assert.Equal(0.45m, order.Price);
         Assert.Contains("\"decision_source\":\"always_down_after_trading_started\"", order.RawDecisionJson, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task ProcessAsync_AlwaysUpSkipsWhenMarketRelativeGtdDeadlinePassed()
+    {
+        var now = DateTimeOffset.UtcNow;
+        var repository = new TestAppRepository();
+        repository.PolymarketGammaMarkets.Add(CreateMarket(
+            now.AddMinutes(-4),
+            now.AddSeconds(30),
+            upPrice: 0.50m,
+            downPrice: 0.50m));
+        var processor = CreateProcessor(repository, [], AlwaysUpVariant.Code);
+
+        var result = await processor.ProcessAsync();
+
+        Assert.Equal(0, result.EntriesPlaced);
+        Assert.Equal(1, result.RunsSkipped);
+        var run = Assert.Single(repository.StrategyMarketPaperRuns);
+        Assert.Equal(StrategyMarketPaperRunStatuses.Skipped, run.Status);
+        Assert.Equal("opening_limit_market_relative_expiration_elapsed", run.SkipReason);
+        Assert.Empty(repository.PaperOrders);
     }
 
     [Fact]
@@ -3795,13 +3822,13 @@ public sealed class BtcUpDown5mPaperStrategyProcessorTests
         Assert.Equal(ClobV2OrderType.GTD, request.OrderType);
         Assert.False(request.PostOnly);
         Assert.NotNull(request.GtdExpirationUtc);
-        Assert.InRange((request.GtdExpirationUtc.Value - request.CreatedAtUtc).TotalSeconds, 100d, 120d);
+        Assert.InRange((request.GtdExpirationUtc.Value - request.CreatedAtUtc).TotalSeconds, 295d, 301d);
 
         var liveOrder = Assert.Single(repository.LiveOrders);
         Assert.Equal("GTD", liveOrder.OrderType);
         Assert.Equal(LiveOrderStatus.Live, liveOrder.Status);
         Assert.Equal(0.50m, liveOrder.Price);
-        Assert.InRange((liveOrder.ExpiresAtUtc - liveOrder.CreatedAtUtc).TotalSeconds, 119d, 121d);
+        Assert.InRange((liveOrder.ExpiresAtUtc - liveOrder.CreatedAtUtc).TotalSeconds, 235d, 241d);
         Assert.Equal("paper_live_shadow_test", liveOrder.ExecutionSource);
         Assert.False(liveOrder.PostOnly);
         Assert.NotNull(liveOrder.CorrelationId);

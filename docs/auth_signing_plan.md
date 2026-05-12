@@ -161,8 +161,8 @@ maker-only authenticated trading endpoints behind explicit service gates.
 13. GTD expirations:
     Use `orderType: "GTD"` and include `expiration` as a UNIX timestamp in seconds in
     the POST `/order` wire body. In V2 this field is not signed. For GTC orders use
-    expiration `0`. The implementation should validate UTC timestamps, enforce a
-    future expiration with a small clock-skew buffer, and use server time for readiness
+    expiration `0`. The implementation should validate UTC timestamps, enforce
+    Polymarket's one-minute GTD security threshold, and use server time for readiness
     checks when possible.
 
 14. Post-only/maker-only behavior:
@@ -175,9 +175,11 @@ maker-only authenticated trading endpoints behind explicit service gates.
     the live path must reject them unless a separate live execution policy is
     explicitly added.
     BTC 5-minute live-shadow tests use BUY-only GTD limit orders with
-    `postOnly: false`, `OpeningLimitGtdTtlSeconds` (`120` seconds by default), a
-    shared Paper-shadow/Live decision, and the same live/manual/risk/strategy-balance
-    gates before signing.
+    `postOnly: false`, a local market-relative cancel deadline
+    (`OpeningLimitExpireBeforeMarketEndSeconds`, `60` seconds by default), a CLOB
+    GTD wire expiration with the configured security buffer, a shared
+    Paper-shadow/Live decision, and the same live/manual/risk/strategy-balance gates
+    before signing.
 
 15. Cancel one order or all orders:
     Cancel one order with L2 headers:

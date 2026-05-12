@@ -9,6 +9,7 @@ public sealed class ClobV2OrderBuilder(OrderAmountCalculator amountCalculator)
 {
     private static readonly BigInteger MaxUInt256 = (BigInteger.One << 256) - BigInteger.One;
     private const long MaxJsonSafeInteger = 9_007_199_254_740_991L;
+    private const int GtdExpirationSecurityThresholdSeconds = 60;
 
     public ClobV2Order Build(ClobV2OrderRequest request)
     {
@@ -90,9 +91,9 @@ public sealed class ClobV2OrderBuilder(OrderAmountCalculator amountCalculator)
             {
                 errors.Add("GTD orders require an expiration timestamp.");
             }
-            else if (request.GtdExpirationUtc <= request.CreatedAtUtc.AddSeconds(30))
+            else if (request.GtdExpirationUtc <= request.CreatedAtUtc.AddSeconds(GtdExpirationSecurityThresholdSeconds))
             {
-                errors.Add("GTD expiration must be at least 30 seconds after order creation.");
+                errors.Add("GTD expiration must be more than 60 seconds after order creation.");
             }
         }
         else if (request.GtdExpirationUtc is not null)

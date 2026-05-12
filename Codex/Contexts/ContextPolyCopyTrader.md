@@ -1,3 +1,17 @@
+## Active Update 2026-05-12 Market-Relative BTC GTD Expiration
+Goal: Implement market-relative BTC opening-limit GTD deadlines and answer whether AlwaysUp/AlwaysDown place orders a day before market start.
+Status: Completed
+Done:
+- Added BTC strategy configuration for `OpeningLimitExpireBeforeMarketEndSeconds` and `ClobGtdExpirationSecurityBufferSeconds`, defaulting both to `60`.
+- Changed BTC opening-limit and converted taker-GTD paper orders to use a local market-relative cancel deadline of `marketEndUtc - OpeningLimitExpireBeforeMarketEndSeconds` when market end is known, with the old TTL behavior retained as fallback.
+- Sent CLOB live-shadow/full-live GTD orders with a wire expiration that includes the configured one-minute security buffer, while persisting the local cancellation deadline separately.
+- Tightened CLOB GTD validation to require expiration more than `60` seconds after order creation and adjusted live default TTL validation accordingly.
+- Updated raw decision diagnostics, appsettings, strategy descriptions, configuration docs, signing/live-checklist docs, README, and tests.
+- Confirmed AlwaysUp/AlwaysDown are not placed 24 hours early: observation only looks near BTC 5m markets, runs become due at the market start for these variants, and placement waits until the due time and tradeable state.
+Next: For real live trading, validate the exact CLOB GTD/cancel behavior in a tiny controlled live-shadow run before enabling funds.
+Notes: Verification passed: targeted BTC/config/auth tests `145/145`, full test suite `428/428`, and `git diff --check`. Existing untracked `artifacts/polymarket-sdk-src/` remains untouched.
+Blockers: None.
+
 ## Active Update 2026-05-12 GTD Exact Expiration Clarification
 Goal: Clarify whether GTD orders can be submitted with an exact expiration time such as one minute before market close.
 Status: Completed

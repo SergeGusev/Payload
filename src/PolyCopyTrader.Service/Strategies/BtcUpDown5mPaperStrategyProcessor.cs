@@ -573,16 +573,26 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
                             market.OrderMinSize,
                             nowUtc,
                             cancellationToken);
-                        DateTimeOffset cancelDeadlineUtc = ResolveOpeningLimitExpiresAtUtc(
-                            market,
-                            nowUtc,
-                            options.OpeningLimitGtdTtlSeconds);
+                        var expiration = ResolveOpeningLimitExpiration(market, nowUtc);
+                        if (!expiration.Available || expiration.LocalExpiresAtUtc is null)
+                        {
+                            await SkipRunAsync(
+                                run,
+                                variant,
+                                expiration.RejectionReason ?? "opening_limit_expiration_rejected",
+                                nowUtc,
+                                cancellationToken,
+                                limitPricing.RawDecisionJson);
+                            runsSkipped++;
+                            continue;
+                        }
+
+                        var cancelDeadlineUtc = expiration.LocalExpiresAtUtc.Value;
                         var limitRawDecisionJson = AttachOpeningLimitStakeSizingJson(
                             limitPricing.RawDecisionJson,
                             stakeMultiplier,
                             limitSizing,
-                            cancelDeadlineUtc,
-                            options.OpeningLimitGtdTtlSeconds);
+                            expiration);
                         if (!limitSizing.Available)
                         {
                             if (ShouldDeferOpeningLimitStakeSizing(run, variant, limitSizing, nowUtc))
@@ -620,8 +630,7 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
                                     null,
                                     "paper_live_shadow_snapshot_missing",
                                     PaperLiveShadowTestSource,
-                                    cancelDeadlineUtc,
-                                    options.OpeningLimitGtdTtlSeconds);
+                                    expiration);
                                 await SkipRunAsync(
                                     run,
                                     variant,
@@ -668,8 +677,7 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
                                 shadowSnapshot.OrderBook,
                                 null,
                                 PaperLiveShadowTestSource,
-                                cancelDeadlineUtc,
-                                options.OpeningLimitGtdTtlSeconds);
+                                expiration);
                         }
 
                         var limitSignal = CreateSignal(
@@ -714,8 +722,7 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
                                 limitPrice,
                                 limitSizeShares,
                                 stakeUsd,
-                                cancelDeadlineUtc,
-                                options.OpeningLimitGtdTtlSeconds,
+                                expiration,
                                 shadowCorrelationId,
                                 BtcUpDown5mMarketAnalyzer.GetWindowStartUtc(market),
                                 market.EndDateUtc,
@@ -857,10 +864,21 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
                     var reservedNotionalUsd = gtdSizing.TargetNotionalUsd > 0m
                         ? gtdSizing.TargetNotionalUsd
                         : sizeShares * gtdLimitPrice;
-                    var gtdCancelDeadlineUtc = ResolveOpeningLimitExpiresAtUtc(
-                        market,
-                        nowUtc,
-                        options.OpeningLimitGtdTtlSeconds);
+                    var gtdExpiration = ResolveOpeningLimitExpiration(market, nowUtc);
+                    if (!gtdExpiration.Available || gtdExpiration.LocalExpiresAtUtc is null)
+                    {
+                        await SkipRunAsync(
+                            run,
+                            variant,
+                            gtdExpiration.RejectionReason ?? "paper_gtd_expiration_rejected",
+                            nowUtc,
+                            cancellationToken,
+                            entryPricing.RawDecisionJson);
+                        runsSkipped++;
+                        continue;
+                    }
+
+                    var gtdCancelDeadlineUtc = gtdExpiration.LocalExpiresAtUtc.Value;
                     var rawDecisionJson = AttachConvertedTakerGtdPricingJson(
                         entryPricing.RawDecisionJson,
                         gtdLimitPrice,
@@ -870,8 +888,7 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
                         rawDecisionJson,
                         stakeMultiplier,
                         gtdSizing,
-                        gtdCancelDeadlineUtc,
-                        options.OpeningLimitGtdTtlSeconds);
+                        gtdExpiration);
                     var signal = CreateSignal(market, selectedOutcome, variant, gtdLimitPrice, sizeShares, reservedNotionalUsd, nowUtc);
                     var order = CreatePendingOpeningLimitPaperOrder(
                         signal,
@@ -4499,8 +4516,7 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
         string rawDecisionJson,
         decimal stakeMultiplier,
         BtcMinimumStakeSizing sizing,
-        DateTimeOffset expiresAtUtc,
-        int orderTtlSeconds)
+        OpeningLimitExpirationDecision expiration)
     {
         JsonObject root;
         try
@@ -4516,9 +4532,14 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
         root["order_execution_mode"] = OpeningLimitOrderType;
         root["order_type"] = OpeningLimitOrderType;
         root["post_only"] = false;
-        root["order_ttl_seconds"] = orderTtlSeconds;
-        root["gtd_expiration_utc"] = expiresAtUtc.ToString("O", CultureInfo.InvariantCulture);
-        root["cancel_deadline_utc"] = expiresAtUtc.ToString("O", CultureInfo.InvariantCulture);
+        root["order_ttl_seconds"] = expiration.LocalTtlSeconds;
+        root["configured_order_ttl_seconds"] = expiration.ConfiguredTtlSeconds;
+        root["gtd_expiration_mode"] = expiration.Mode;
+        root["market_end_expire_before_seconds"] = expiration.MarketEndExpireBeforeSeconds;
+        root["clob_gtd_expiration_security_buffer_seconds"] = expiration.ClobSecurityBufferSeconds;
+        root["gtd_expiration_utc"] = expiration.LocalExpiresAtUtc?.ToString("O", CultureInfo.InvariantCulture);
+        root["cancel_deadline_utc"] = expiration.LocalExpiresAtUtc?.ToString("O", CultureInfo.InvariantCulture);
+        root["clob_wire_gtd_expiration_utc"] = expiration.ClobGtdExpirationUtc?.ToString("O", CultureInfo.InvariantCulture);
         root["stake_multiplier"] = stakeMultiplier;
         root["minimum_stake_safety_multiplier"] = MinimumStakeSafetyMultiplier;
         root["stake_sizing_source"] = sizing.Source;
@@ -4546,8 +4567,7 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
         OrderBookSnapshot? orderBook,
         string? rejectionReason,
         string source,
-        DateTimeOffset expiresAtUtc,
-        int orderTtlSeconds)
+        OpeningLimitExpirationDecision expiration)
     {
         JsonObject root;
         try
@@ -4565,9 +4585,14 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
         root["order_type"] = OpeningLimitOrderType;
         root["order_execution_mode"] = OpeningLimitOrderType;
         root["post_only"] = false;
-        root["order_ttl_seconds"] = orderTtlSeconds;
-        root["gtd_expiration_utc"] = expiresAtUtc.ToString("O", CultureInfo.InvariantCulture);
-        root["cancel_deadline_utc"] = expiresAtUtc.ToString("O", CultureInfo.InvariantCulture);
+        root["order_ttl_seconds"] = expiration.LocalTtlSeconds;
+        root["configured_order_ttl_seconds"] = expiration.ConfiguredTtlSeconds;
+        root["gtd_expiration_mode"] = expiration.Mode;
+        root["market_end_expire_before_seconds"] = expiration.MarketEndExpireBeforeSeconds;
+        root["clob_gtd_expiration_security_buffer_seconds"] = expiration.ClobSecurityBufferSeconds;
+        root["gtd_expiration_utc"] = expiration.LocalExpiresAtUtc?.ToString("O", CultureInfo.InvariantCulture);
+        root["cancel_deadline_utc"] = expiration.LocalExpiresAtUtc?.ToString("O", CultureInfo.InvariantCulture);
+        root["clob_wire_gtd_expiration_utc"] = expiration.ClobGtdExpirationUtc?.ToString("O", CultureInfo.InvariantCulture);
         root["quote_age_ms"] = quoteAgeMs;
         root["snapshot_at_utc"] = orderBook is null
             ? null
@@ -6105,16 +6130,48 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
             ExecutionSource: executionSource);
     }
 
-    private static DateTimeOffset ResolveOpeningLimitExpiresAtUtc(
+    private OpeningLimitExpirationDecision ResolveOpeningLimitExpiration(
         PolymarketGammaMarket market,
-        DateTimeOffset nowUtc,
-        int orderTtlSeconds)
+        DateTimeOffset nowUtc)
     {
-        var ttlSeconds = Math.Max(1, orderTtlSeconds);
-        var ttlExpirationUtc = nowUtc.AddSeconds(ttlSeconds);
-        return market.EndDateUtc is { } marketEnd && marketEnd > nowUtc && marketEnd < ttlExpirationUtc
+        var configuredTtlSeconds = Math.Max(1, options.OpeningLimitGtdTtlSeconds);
+        var clobBufferSeconds = Math.Max(60, options.ClobGtdExpirationSecurityBufferSeconds);
+        if (options.OpeningLimitExpireBeforeMarketEndSeconds > 0 && market.EndDateUtc is { } marketEndUtc)
+        {
+            var localExpiresAtUtc = marketEndUtc.AddSeconds(-options.OpeningLimitExpireBeforeMarketEndSeconds);
+            if (localExpiresAtUtc <= nowUtc)
+            {
+                return OpeningLimitExpirationDecision.Reject(
+                    "opening_limit_market_relative_expiration_elapsed",
+                    configuredTtlSeconds,
+                    options.OpeningLimitExpireBeforeMarketEndSeconds,
+                    clobBufferSeconds,
+                    localExpiresAtUtc);
+            }
+
+            return OpeningLimitExpirationDecision.Enter(
+                localExpiresAtUtc,
+                localExpiresAtUtc.AddSeconds(clobBufferSeconds),
+                nowUtc,
+                configuredTtlSeconds,
+                options.OpeningLimitExpireBeforeMarketEndSeconds,
+                clobBufferSeconds,
+                "market_end_relative");
+        }
+
+        var ttlExpirationUtc = nowUtc.AddSeconds(configuredTtlSeconds);
+        var expiresAtUtc = market.EndDateUtc is { } marketEnd && marketEnd > nowUtc && marketEnd < ttlExpirationUtc
             ? marketEnd
             : ttlExpirationUtc;
+        var mode = expiresAtUtc == ttlExpirationUtc ? "ttl" : "market_end_cap";
+        return OpeningLimitExpirationDecision.Enter(
+            expiresAtUtc,
+            expiresAtUtc.AddSeconds(clobBufferSeconds),
+            nowUtc,
+            configuredTtlSeconds,
+            options.OpeningLimitExpireBeforeMarketEndSeconds,
+            clobBufferSeconds,
+            mode);
     }
 
     private async Task<bool> TryPlacePaperLiveShadowOrderAsync(
@@ -6125,8 +6182,7 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
         decimal price,
         decimal sizeShares,
         decimal stakeUsd,
-        DateTimeOffset cancelDeadlineUtc,
-        int orderTtlSeconds,
+        OpeningLimitExpirationDecision expiration,
         Guid correlationId,
         DateTimeOffset? marketStartUtc,
         DateTimeOffset? marketEndUtc,
@@ -6171,14 +6227,21 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
             validation.Add("Live GTD BUY size must be greater than zero.");
         }
 
-        if (orderTtlSeconds < 30)
+        var cancelDeadlineUtc = expiration.LocalExpiresAtUtc ?? nowUtc;
+        var clobGtdExpirationUtc = expiration.ClobGtdExpirationUtc ?? cancelDeadlineUtc;
+        if ((expiration.LocalTtlSeconds ?? 0) < 30)
         {
             validation.Add("Live GTD order TTL must be at least 30 seconds.");
         }
 
         if (cancelDeadlineUtc <= nowUtc.AddSeconds(30))
         {
-            validation.Add("Live GTD expiration is too soon for CLOB placement.");
+            validation.Add("Live GTD local cancel deadline is too soon for CLOB placement.");
+        }
+
+        if (clobGtdExpirationUtc <= nowUtc.AddSeconds(60))
+        {
+            validation.Add("Live GTD wire expiration is too soon for CLOB placement.");
         }
 
         var liveNotional = price * sizeShares;
@@ -6372,7 +6435,7 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
         }
 
         var submitUtc = DateTimeOffset.UtcNow;
-        var request = CreatePaperLiveShadowRequest(outcome, price, sizeShares, orderBook, submitUtc, cancelDeadlineUtc);
+        var request = CreatePaperLiveShadowRequest(outcome, price, sizeShares, orderBook, submitUtc, clobGtdExpirationUtc);
         LiveOrderPlacementResult result;
         try
         {
@@ -6702,7 +6765,8 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
         }
 
         var submitUtc = DateTimeOffset.UtcNow;
-        var request = CreateLiveRequest(signal, outcome, price, liveSizeShares, orderBook, submitUtc);
+        var liveOrderExpiresAtUtc = submitUtc.AddSeconds(liveTradingOptions.DefaultOrderTtlSeconds);
+        var request = CreateLiveRequest(signal, outcome, price, liveSizeShares, orderBook, submitUtc, liveOrderExpiresAtUtc);
         LiveOrderPlacementResult result;
         try
         {
@@ -6745,7 +6809,7 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
             price,
             liveSizeShares,
             nowUtc,
-            ResolveLiveOrderExpiresAtUtc(request, nowUtc),
+            liveOrderExpiresAtUtc,
             status,
             result.OrderId,
             result.ResponseStatus,
@@ -6810,9 +6874,10 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
         decimal price,
         decimal sizeShares,
         OrderBookSnapshot? orderBook,
-        DateTimeOffset createdAtUtc)
+        DateTimeOffset createdAtUtc,
+        DateTimeOffset localExpiresAtUtc)
     {
-        var gtdExpirationUtc = createdAtUtc.AddSeconds(liveTradingOptions.DefaultOrderTtlSeconds);
+        var gtdExpirationUtc = ResolveClobGtdExpirationUtc(localExpiresAtUtc);
         return new ClobV2OrderRequest(
             outcome.AssetId,
             TradeSide.Buy,
@@ -6855,13 +6920,9 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
             PostOnly: false);
     }
 
-    private static DateTimeOffset ResolveLiveOrderExpiresAtUtc(
-        ClobV2OrderRequest request,
-        DateTimeOffset createdAtUtc)
+    private DateTimeOffset ResolveClobGtdExpirationUtc(DateTimeOffset localExpiresAtUtc)
     {
-        return request.OrderType == ClobV2OrderType.GTD && request.GtdExpirationUtc is { } expiration
-            ? expiration
-            : createdAtUtc;
+        return localExpiresAtUtc.AddSeconds(Math.Max(60, options.ClobGtdExpirationSecurityBufferSeconds));
     }
 
     private LiveOrder CreateLiveOrder(
@@ -7567,6 +7628,58 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
         decimal? DownBestAsk,
         decimal? DownMidpoint,
         decimal InferredUpMidpoint);
+
+    private sealed record OpeningLimitExpirationDecision(
+        bool Available,
+        DateTimeOffset? LocalExpiresAtUtc,
+        DateTimeOffset? ClobGtdExpirationUtc,
+        int? LocalTtlSeconds,
+        int ConfiguredTtlSeconds,
+        int MarketEndExpireBeforeSeconds,
+        int ClobSecurityBufferSeconds,
+        string Mode,
+        string? RejectionReason)
+    {
+        public static OpeningLimitExpirationDecision Enter(
+            DateTimeOffset localExpiresAtUtc,
+            DateTimeOffset clobGtdExpirationUtc,
+            DateTimeOffset nowUtc,
+            int configuredTtlSeconds,
+            int marketEndExpireBeforeSeconds,
+            int clobSecurityBufferSeconds,
+            string mode)
+        {
+            return new OpeningLimitExpirationDecision(
+                Available: true,
+                localExpiresAtUtc,
+                clobGtdExpirationUtc,
+                Math.Max(1, (int)Math.Ceiling((localExpiresAtUtc - nowUtc).TotalSeconds)),
+                configuredTtlSeconds,
+                marketEndExpireBeforeSeconds,
+                clobSecurityBufferSeconds,
+                mode,
+                RejectionReason: null);
+        }
+
+        public static OpeningLimitExpirationDecision Reject(
+            string reason,
+            int configuredTtlSeconds,
+            int marketEndExpireBeforeSeconds,
+            int clobSecurityBufferSeconds,
+            DateTimeOffset? localExpiresAtUtc)
+        {
+            return new OpeningLimitExpirationDecision(
+                Available: false,
+                localExpiresAtUtc,
+                localExpiresAtUtc?.AddSeconds(clobSecurityBufferSeconds),
+                LocalTtlSeconds: null,
+                configuredTtlSeconds,
+                marketEndExpireBeforeSeconds,
+                clobSecurityBufferSeconds,
+                "market_end_relative",
+                reason);
+        }
+    }
 
     private sealed record OpeningLimitFillSummary(
         decimal SizeShares,

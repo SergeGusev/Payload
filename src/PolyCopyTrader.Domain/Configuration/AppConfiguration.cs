@@ -596,6 +596,10 @@ public sealed class BtcUpDown5mStrategyOptions
 
     public int OpeningLimitGtdTtlSeconds { get; init; } = 120;
 
+    public int OpeningLimitExpireBeforeMarketEndSeconds { get; init; } = 60;
+
+    public int ClobGtdExpirationSecurityBufferSeconds { get; init; } = 60;
+
     public bool PaperGtdConservativeFillEnabled { get; init; } = true;
 
     public decimal PaperGtdImmediateFillDepthMultiplier { get; init; } = 1.0m;
