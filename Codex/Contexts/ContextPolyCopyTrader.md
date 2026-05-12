@@ -1,3 +1,15 @@
+## Active Update 2026-05-12 Secret Transfer Retry Blocked
+Goal: Repeat the prior secure Net48 secret transfer to the same target machine.
+Status: Blocked
+Done:
+- Recovered the prior transfer method: `scripts/Copy-Net48-SecretsToNewServer.ps1`.
+- Confirmed the prior default target address is `192.168.0.101`.
+- Confirmed the current PowerShell session is elevated.
+- Checked target reachability before running the secret-transfer script.
+Next: Bring the target machine online or enable/reopen WinRM/PowerShell Remoting on the target, then rerun the transfer script.
+Notes: `Test-Connection 192.168.0.101 -Count 2 -Quiet` returned `False`; `Test-WSMan -ComputerName 192.168.0.101` failed with a WinRM accessibility/firewall error. No secret values were printed, stored, committed, or transferred. The transfer script was not run because the target was unreachable.
+Blockers: Target `192.168.0.101` is not reachable over the network/WinRM from this machine.
+
 ## Active Update 2026-05-12 Global Codex CLI Install
 Goal: Install the latest requested global npm package for the OpenAI Codex CLI.
 Status: Completed
