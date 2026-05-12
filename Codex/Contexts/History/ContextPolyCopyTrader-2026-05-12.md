@@ -154,3 +154,10 @@ Request:
 
 Result:
 Checked `btc_up_down_5m_preopen_full_up_37` with a temporary read-only C# PostgreSQL probe, then removed it. Confirmed the positive balance is explained by actual filled cost and asymmetric binary-option payoff: only 9 filled/settled paper orders contribute to closed PnL, wins total about `+15.5712`, losses total about `-10.3808`, leaving `+5.1904`; expired/pending orders do not affect PnL.
+
+## 2026-05-12T14:19:47.9314781Z
+Request:
+А как ты в paper режиме узнаешь, что было куплено по 0.21 ? Находишь такие ставки в стакане?
+
+Result:
+Inspected the Paper fill path and queried `paper_fills.evidence` for `btc_up_down_5m_preopen_full_up_37` with a temporary read-only C# PostgreSQL probe, then removed it. Confirmed the `0.21` fill came from visible CLOB ask depth: evidence recorded `BalancedGtcDepth: BUY limit 0.37 crossed ask depth ... AvgFillPrice=0.21 ... BestAsk=0.21`. Clarified that this is Paper simulation from public order-book evidence, not proof of actual live queue ownership.

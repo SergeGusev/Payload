@@ -1,3 +1,15 @@
+## Active Update 2026-05-12 Paper Fill Evidence Clarification
+Goal: Explain how Paper mode inferred a `0.21` fill for `BTC Up or Down 5m PreOpen Full Up 37`.
+Status: Completed
+Done:
+- Inspected the Paper fill code path and the actual `paper_fills.evidence` rows for `btc_up_down_5m_preopen_full_up_37` with a temporary read-only C# PostgreSQL probe.
+- Confirmed the `0.21` fill was recorded by the general balanced depth model, not by final market settlement: evidence says `BalancedGtcDepth: BUY limit 0.37 crossed ask depth ... AvgFillPrice=0.21 ... BestAsk=0.21`.
+- Confirmed Paper uses fresh CLOB/WebSocket order book depth or REST `/book` fallback; for BUY orders it consumes visible ask levels at or below the limit and records VWAP in `paper_fills.price`.
+- Noted the limitation that this is a Paper simulation from public book evidence, not proof of actual live queue ownership/execution.
+Next: If higher fidelity is needed, tighten pre-open Paper GTD fills to use the conservative GTD model consistently or record per-level book evidence in `paper_fills`.
+Notes: No production code changed. Temporary files under `artifacts\diagnose-paper-fill-evidence` were removed. `git pull --ff-only` was already up to date; pre-existing untracked `artifacts/polymarket-sdk-src/` remains untouched.
+Blockers: None.
+
 ## Active Update 2026-05-12 PreOpen Full Up 37 Balance Explanation
 Goal: Explain why `BTC Up or Down 5m PreOpen Full Up 37` can show positive balance with 3 wins and 6 losses.
 Status: Completed
