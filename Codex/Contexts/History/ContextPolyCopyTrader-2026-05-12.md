@@ -32,6 +32,13 @@ Request:
 
 Result:
 Checked local CLOB order request/building code and current official Polymarket docs. Answered that GTD supports a UTC Unix-second expiration timestamp and the local code already has `GtdExpirationUtc`, but current strategy code uses TTL-based deadlines. Noted that official docs describe a one-minute GTD security threshold/buffer, so for a precise operational deadline such as one minute before market end, the safer implementation is a market-relative local deadline plus either adjusted wire expiration or an explicit scheduled cancel at the target time.
+## 2026-05-12T06:25:22.2031586Z
+Request:
+Проведи анализ текущих маркетов пятиминутных маркетов, которые будут стартовать через сутки - стоят ли там уже ставки, сколько их там, какие коэффициенты.
+
+Result:
+Queried live Polymarket Gamma, CLOB book, and Data API endpoints for BTC 5-minute markets around the one-day-ahead boundary. At `2026-05-12T06:24Z`, exact `+24h` slugs were not yet available; the latest available future market started `2026-05-13T06:10Z`, about `23h45m` ahead. Found 13 active markets from `05:10Z` through `06:10Z` with resting CLOB liquidity already posted, no executed trades, typical Up bid/ask `0.50/0.51`, Down bid/ask `0.49/0.50`, and one-tick spread. Noted that public CLOB data exposes aggregated price levels/sizes, not individual resting order counts.
+
 ## 2026-05-12T06:12:25.8192402Z
 Request:
 Ok, make these changes. Also answer whether "as soon as possible" for AlwaysUp/AlwaysDown means placing orders a day before market start.

@@ -1,3 +1,17 @@
+## Active Update 2026-05-12 BTC 5m Future Market Liquidity Check
+Goal: Analyze current Polymarket BTC 5-minute markets around the one-day-ahead start boundary.
+Status: Completed
+Done:
+- Queried live Gamma/CLOB/Data API data with PowerShell for BTC 5m slugs around `now + 24h`.
+- At snapshot `2026-05-12T06:24Z`, exact one-day-ahead windows from `2026-05-13T06:15Z` through `06:40Z` were not yet available; the latest available future market was `btc-updown-5m-1778652600` starting `2026-05-13T06:10Z`, about `23h45m` ahead.
+- Found 13 available markets from `2026-05-13T05:10Z` through `06:10Z`; all were active/open, with CLOB liquidity already posted.
+- Confirmed no executed trades in the checked future markets: Gamma `volume`/`volumeClob`/`lastTradePrice` were empty and Data API returned zero trades.
+- Observed resting order-book liquidity already present: typical top of book was Up bid `0.50`, Up ask `0.51`; Down bid `0.49`, Down ask `0.50`; spread `0.01`; Gamma outcome prices `0.505/0.495`.
+- Noted CLOB public books expose aggregated price levels and sizes, not individual order counts, so "how many bets" can be reported as liquidity/levels/shares, not unique user orders.
+Next: If needed, repeat the check closer to the exact `+24h` frontier or build a small report command that polls the market creation frontier over time.
+Notes: No source/runtime code changed. Verification was live API inspection plus `git diff --check`; no tests were run because this was read-only analysis.
+Blockers: Public CLOB book does not expose individual resting order identities/counts.
+
 ## Active Update 2026-05-12 Market-Relative BTC GTD Expiration
 Goal: Implement market-relative BTC opening-limit GTD deadlines and answer whether AlwaysUp/AlwaysDown place orders a day before market start.
 Status: Completed
