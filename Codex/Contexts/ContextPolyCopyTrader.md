@@ -1,3 +1,20 @@
+## Active Update 2026-05-12 BTC Partial Collection Analysis
+Goal: Analyze the available partial BTC source-comparison CSV collection.
+Status: Completed
+Done:
+- Analyzed the 31 completed CSV files in `artifacts/btc-source-comparison/24h-20260511-182123` using PowerShell only.
+- Dataset covers `2026-05-11T18:21:24Z` through `2026-05-11T20:54:59Z`, with `9,109` rows across 31 BTC 5-minute markets; first market is partial and starts at second `84`.
+- Data quality was good: Polymarket rows `9,109/9,109`, SBE rows `9,068/9,109`, JSON rows `9,047/9,109`; only startup `no_snapshot` errors were present (`SBE=41`, `JSON=62`, Polymarket `0`).
+- Binance SBE and Binance JSON were effectively the same source at this cadence: level correlation `0.999748`, median absolute bps difference `0`, p95 `0.519 bps`, max `3.566 bps`.
+- Binance BTC bps-from-start and Polymarket Up probability delta were strongly related: pooled level correlation `0.8883`, segment correlations `0-60s=0.9499`, `60-180s=0.9401`, `180-300s=0.8642`.
+- Regression slope was about `374` Polymarket probability-bps per `1` Binance BTC bps overall, with strongest fit in the first minute (`R2=0.902`).
+- Lag scan did not show meaningful latency edge: best level correlation was at `+1s` Binance lead (`0.888719`) versus zero-lag `0.888294`; delta correlations also peaked at `0s` or `+1s` depending on horizon.
+- Early Binance sign versus final BTC direction improved late in the market: `60s=66.7%`, `120s=71.0%`, `180s=77.4%`, `240s=90.3%`, but 240s is near close and often already priced.
+- Rough buy-at-current-ask simulation was positive only in selected tiny samples, especially `30s` with `abs(Binance move) >= 2 bps` (`13` trades, `76.9%` win, `+0.092` average/share); many later high-confidence entries were negative after paying already-rich ask prices.
+Next: Treat this as evidence for a fair-value/residual model and collect more windows; do not infer a live latency-arbitrage strategy from this partial sample.
+Notes: No source/runtime code changed. Verification was the analysis commands plus `git diff --check` before commit. Prior collector stop reason remains unknown.
+Blockers: Sample is small and time-clustered: only 31 markets from one ~2.5-hour period, with no order-depth/fill simulation beyond top ask.
+
 ## Active Update 2026-05-12 Resume Point Check
 Goal: Answer where the project stopped and verify the latest BTC collection state.
 Status: Completed
