@@ -6,7 +6,15 @@ namespace PolyCopyTrader.Tests;
 
 internal sealed class TestAppRepository : IAppRepository
 {
+    private readonly object sync = new();
     private readonly HashSet<string> leaderTradeKeys = [];
+    private int polymarketGammaMarketLookupsInFlight;
+    private int maxPolymarketGammaMarketLookupsInFlight;
+
+    public TimeSpan PolymarketGammaMarketLookupDelay { get; set; } = TimeSpan.Zero;
+
+    public int MaxConcurrentPolymarketGammaMarketLookups =>
+        System.Threading.Volatile.Read(ref maxPolymarketGammaMarketLookupsInFlight);
 
     public List<LeaderTrade> LeaderTrades { get; } = [];
 
@@ -523,27 +531,61 @@ internal sealed class TestAppRepository : IAppRepository
             .ToArray());
     }
 
-    public Task<PolymarketGammaMarket?> GetPolymarketGammaMarketAsync(
+    public async Task<PolymarketGammaMarket?> GetPolymarketGammaMarketAsync(
         string marketId,
         CancellationToken cancellationToken = default)
     {
-        return Task.FromResult(PolymarketGammaMarkets.FirstOrDefault(market =>
-            string.Equals(market.MarketId, marketId, StringComparison.OrdinalIgnoreCase)));
+        var current = System.Threading.Interlocked.Increment(ref polymarketGammaMarketLookupsInFlight);
+        try
+        {
+            var recorded = System.Threading.Volatile.Read(ref maxPolymarketGammaMarketLookupsInFlight);
+            while (current > recorded)
+            {
+                var previous = System.Threading.Interlocked.CompareExchange(
+                    ref maxPolymarketGammaMarketLookupsInFlight,
+                    current,
+                    recorded);
+                if (previous == recorded)
+                {
+                    break;
+                }
+
+                recorded = previous;
+            }
+
+            if (PolymarketGammaMarketLookupDelay > TimeSpan.Zero)
+            {
+                await Task.Delay(PolymarketGammaMarketLookupDelay, cancellationToken);
+            }
+
+            lock (sync)
+            {
+                return PolymarketGammaMarkets.FirstOrDefault(market =>
+                    string.Equals(market.MarketId, marketId, StringComparison.OrdinalIgnoreCase));
+            }
+        }
+        finally
+        {
+            System.Threading.Interlocked.Decrement(ref polymarketGammaMarketLookupsInFlight);
+        }
     }
 
     public Task<bool> TryAddStrategyMarketPaperRunAsync(
         StrategyMarketPaperRun run,
         CancellationToken cancellationToken = default)
     {
-        if (StrategyMarketPaperRuns.Any(item =>
-            item.StrategyId == run.StrategyId &&
-            string.Equals(item.MarketId, run.MarketId, StringComparison.OrdinalIgnoreCase)))
+        lock (sync)
         {
-            return Task.FromResult(false);
-        }
+            if (StrategyMarketPaperRuns.Any(item =>
+                item.StrategyId == run.StrategyId &&
+                string.Equals(item.MarketId, run.MarketId, StringComparison.OrdinalIgnoreCase)))
+            {
+                return Task.FromResult(false);
+            }
 
-        StrategyMarketPaperRuns.Add(run);
-        return Task.FromResult(true);
+            StrategyMarketPaperRuns.Add(run);
+            return Task.FromResult(true);
+        }
     }
 
     public Task<IReadOnlyList<StrategyMarketPaperRun>> GetDueStrategyMarketPaperRunsAsync(
@@ -553,14 +595,40 @@ internal sealed class TestAppRepository : IAppRepository
         int limit,
         CancellationToken cancellationToken = default)
     {
-        return Task.FromResult<IReadOnlyList<StrategyMarketPaperRun>>(StrategyMarketPaperRuns
-            .Where(run => run.StrategyId == strategyId)
-            .Where(run => string.Equals(run.Status, status, StringComparison.OrdinalIgnoreCase))
-            .Where(run => run.EntryDueAtUtc <= dueBeforeUtc)
-            .OrderBy(run => run.EntryDueAtUtc)
-            .ThenBy(run => run.DetectedAtUtc)
-            .Take(limit)
-            .ToArray());
+        lock (sync)
+        {
+            return Task.FromResult<IReadOnlyList<StrategyMarketPaperRun>>(StrategyMarketPaperRuns
+                .Where(run => run.StrategyId == strategyId)
+                .Where(run => string.Equals(run.Status, status, StringComparison.OrdinalIgnoreCase))
+                .Where(run => run.EntryDueAtUtc <= dueBeforeUtc)
+                .OrderBy(run => run.EntryDueAtUtc)
+                .ThenBy(run => run.DetectedAtUtc)
+                .Take(limit)
+                .ToArray());
+        }
+    }
+
+    public Task<IReadOnlyList<StrategyMarketPaperRun>> GetDueStrategyMarketPaperRunsAsync(
+        IReadOnlyCollection<Guid> strategyIds,
+        string status,
+        DateTimeOffset dueBeforeUtc,
+        int limit,
+        CancellationToken cancellationToken = default)
+    {
+        var normalizedStrategyIds = strategyIds
+            .Select(StrategyIds.Normalize)
+            .ToHashSet();
+        lock (sync)
+        {
+            return Task.FromResult<IReadOnlyList<StrategyMarketPaperRun>>(StrategyMarketPaperRuns
+                .Where(run => normalizedStrategyIds.Contains(StrategyIds.Normalize(run.StrategyId)))
+                .Where(run => string.Equals(run.Status, status, StringComparison.OrdinalIgnoreCase))
+                .Where(run => run.EntryDueAtUtc <= dueBeforeUtc)
+                .OrderBy(run => run.EntryDueAtUtc)
+                .ThenBy(run => run.DetectedAtUtc)
+                .Take(limit)
+                .ToArray());
+        }
     }
 
     public Task<IReadOnlyList<StrategyMarketPaperRun>> GetStrategyMarketPaperRunsForSettlementAsync(
@@ -623,8 +691,11 @@ internal sealed class TestAppRepository : IAppRepository
         StrategyMarketPaperRun run,
         CancellationToken cancellationToken = default)
     {
-        StrategyMarketPaperRuns.RemoveAll(item => item.Id == run.Id);
-        StrategyMarketPaperRuns.Add(run);
+        lock (sync)
+        {
+            StrategyMarketPaperRuns.RemoveAll(item => item.Id == run.Id);
+            StrategyMarketPaperRuns.Add(run);
+        }
         return Task.CompletedTask;
     }
 
@@ -645,7 +716,10 @@ internal sealed class TestAppRepository : IAppRepository
 
     public Task AddSignalAsync(Signal signal, CancellationToken cancellationToken = default)
     {
-        Signals.Add(signal);
+        lock (sync)
+        {
+            Signals.Add(signal);
+        }
         return Task.CompletedTask;
     }
 
@@ -690,14 +764,20 @@ internal sealed class TestAppRepository : IAppRepository
 
     public Task AddPaperOrderAsync(PaperOrder order, CancellationToken cancellationToken = default)
     {
-        PaperOrders.Add(order);
+        lock (sync)
+        {
+            PaperOrders.Add(order);
+        }
         return Task.CompletedTask;
     }
 
     public Task UpdatePaperOrderAsync(PaperOrder order, CancellationToken cancellationToken = default)
     {
-        PaperOrders.RemoveAll(item => item.Id == order.Id);
-        PaperOrders.Add(order);
+        lock (sync)
+        {
+            PaperOrders.RemoveAll(item => item.Id == order.Id);
+            PaperOrders.Add(order);
+        }
         return Task.CompletedTask;
     }
 

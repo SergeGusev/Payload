@@ -2248,6 +2248,9 @@ ALTER TABLE strategy_market_paper_runs ADD COLUMN IF NOT EXISTS skip_diagnostics
 CREATE INDEX IF NOT EXISTS ix_strategy_market_paper_runs_entry_due
 ON strategy_market_paper_runs(strategy_id, status, entry_due_at_utc);
 
+CREATE INDEX IF NOT EXISTS ix_strategy_market_paper_runs_status_entry_due
+ON strategy_market_paper_runs(status, entry_due_at_utc, detected_at_utc);
+
 CREATE INDEX IF NOT EXISTS ix_strategy_market_paper_runs_settlement_due
 ON strategy_market_paper_runs(strategy_id, status, market_end_utc);
 

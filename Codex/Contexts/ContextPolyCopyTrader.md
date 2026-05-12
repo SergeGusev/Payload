@@ -1,3 +1,18 @@
+## Active Update 2026-05-12 BTC Due Entry Run-Level Parallelization
+Goal: Reduce BTC strategy entry placement latency so individual bets do not wait behind unrelated bets, with a practical target of at most about 2 seconds per stake.
+Status: Completed
+Done:
+- Replaced BTC entry selection from variant-level fan-out with a global due-run queue across all enabled variants, ordered by `entry_due_at_utc` and capped by `MaxEntriesPerCycle`.
+- Changed due-entry processing to bounded run-level parallelism, so multiple due runs for the same variant can be processed concurrently up to `MaxConcurrentEntryDecisions`.
+- Increased the default BTC `MaxConcurrentEntryDecisions` from 8 to 16.
+- Added per-cycle Gamma market metadata task caching, so strategies hitting the same market share the same repository lookup.
+- Added a repository overload for querying due strategy-market paper runs by multiple strategy IDs and a PostgreSQL index on `(status, entry_due_at_utc, detected_at_utc)`.
+- Added regression coverage proving same-variant due runs are processed concurrently, and made the test repository safe for the touched concurrent paths.
+- Updated README with the new global due-entry queue behavior.
+Next: Monitor fresh BTC entry timing in service logs; if any entries still exceed the 2-second target, the next bottleneck is likely the single worker cycle sharing observe/settle/entry work or external CLOB/Gamma latency, not stake-to-stake queueing.
+Notes: Verification passed with targeted BTC processor tests (`98/98`), full test suite (`434/434`), `dotnet build src\PolyCopyTrader.Service\PolyCopyTrader.Service.csproj --no-restore` on normal Debug output, and `git diff --check`. The Debug service was restarted as PID `2120`; IPC `/status` returned `Running`, pause flags false, kill switch false, and `lastError=null`. Build still reports existing nullable warnings in `PostgresAppRepository`; no new build errors. Pre-existing untracked `artifacts/polymarket-sdk-src/` remains untouched.
+Blockers: None.
+
 ## Active Update 2026-05-12 BTC Entry Latency Parallelization Analysis
 Goal: Analyze recurring 10-15 second BTC strategy entry delays and outline a safer parallelization approach.
 Status: Completed

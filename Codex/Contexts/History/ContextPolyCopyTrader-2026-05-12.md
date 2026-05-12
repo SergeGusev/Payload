@@ -133,3 +133,10 @@ Analyze recurring large, around 15 second, bet placement delays and think throug
 
 Result:
 Inspected the current BTC strategy worker, processor, config, repository, exposure cache, and fresh service logs. Found that `MaxConcurrentEntryDecisions=8` provides variant-level parallelism, but `MaxEntriesPerCycle=250` across `519` variants makes the per-variant due-run limit `1`, and each variant still processes its run sequentially. The 15:20 local log window showed a monolithic cycle with `Observed=358 Entries=186 Skipped=9` finishing at `15:20:08`; deferred `btc_up_down_5m_binance*` entries then retried around `15:20:09`, so unrelated observe/preopen work can delay deferred/opening entries. Recommended moving to a global due-run queue with bounded workers, atomic run claiming, shared per-market snapshots, and a small serialized risk/commit section instead of simply increasing unbounded concurrency.
+
+## 2026-05-12T12:55:00Z
+Request:
+Ок, делай, что считаешь нужным. Конечная цель - максимум 2 секунды на ставку.
+
+Result:
+Implemented BTC due-entry run-level parallelization. Entry selection now pulls a global due-run queue across all enabled variants ordered by `entry_due_at_utc`, rather than one due run per variant, and processes those runs with bounded parallel workers up to `MaxConcurrentEntryDecisions`. Raised the default concurrency from 8 to 16, added per-cycle Gamma market lookup task caching, added a multi-strategy repository query plus PostgreSQL due-entry index, and updated README. Added a regression test proving same-variant due runs are processed concurrently and adjusted the test repository for the touched concurrent paths. Verification passed with focused BTC tests (`98/98`), full tests (`434/434`), normal Debug service build, and `git diff --check`. Restarted the Debug service as PID `2120`; IPC `/status` returned `Running`, pause flags false, kill switch false, and `lastError=null`.

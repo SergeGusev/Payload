@@ -2157,6 +2157,80 @@ public sealed class BtcUpDown5mPaperStrategyProcessorTests
     }
 
     [Fact]
+    public async Task ProcessAsync_DueRunsForSameVariantAreProcessedConcurrently()
+    {
+        var now = DateTimeOffset.UtcNow;
+        var repository = new TestAppRepository
+        {
+            PolymarketGammaMarketLookupDelay = TimeSpan.FromMilliseconds(75)
+        };
+        for (var index = 0; index < 4; index++)
+        {
+            var marketStartUtc = now.AddSeconds(-5 - index);
+            var market = CreateMarket(
+                marketStartUtc,
+                marketStartUtc.AddMinutes(5),
+                upPrice: 0.50m,
+                downPrice: 0.50m,
+                marketId: "parallel-market-" + index.ToString(CultureInfo.InvariantCulture),
+                conditionId: "parallel-condition-" + index.ToString(CultureInfo.InvariantCulture),
+                upAssetId: "parallel-up-" + index.ToString(CultureInfo.InvariantCulture),
+                downAssetId: "parallel-down-" + index.ToString(CultureInfo.InvariantCulture),
+                orderMinSize: 5m);
+            repository.PolymarketGammaMarkets.Add(market);
+            repository.StrategyMarketPaperRuns.Add(new StrategyMarketPaperRun(
+                Guid.NewGuid(),
+                AlwaysUpVariant.Id,
+                market.MarketId,
+                market.ConditionId,
+                market.Slug,
+                market.Question,
+                market.Category,
+                marketStartUtc,
+                marketStartUtc.AddMinutes(5),
+                now.AddMinutes(-1),
+                marketStartUtc,
+                StrategyMarketPaperRunStatuses.Observed,
+                SelectedAssetId: null,
+                SelectedOutcome: null,
+                EntryPrice: null,
+                StakeUsd: 1m,
+                SizeShares: null,
+                SignalId: null,
+                PaperOrderId: null,
+                EnteredAtUtc: null,
+                SettlementPrice: null,
+                SettlementValueUsd: null,
+                RealizedPnlUsd: null,
+                SettledAtUtc: null,
+                SkipReason: null,
+                now.AddMinutes(-1),
+                now.AddMinutes(-1)));
+        }
+
+        var processor = CreateProcessorCoreWithOptions(
+            repository,
+            [],
+            [],
+            _ => { },
+            [],
+            CreateBtcOptions(
+                paperTakerPricingEnabled: false,
+                enabledVariantCodes: [AlwaysUpVariant.Code],
+                maxEntriesPerCycle: 4,
+                maxConcurrentEntryDecisions: 4));
+
+        var result = await processor.ProcessAsync();
+
+        Assert.Equal(4, result.EntriesPlaced);
+        Assert.True(repository.MaxConcurrentPolymarketGammaMarketLookups > 1);
+        Assert.Equal(4, repository.PaperOrders.Count);
+        Assert.All(
+            repository.StrategyMarketPaperRuns.Where(run => run.StrategyId == AlwaysUpVariant.Id),
+            run => Assert.Equal(StrategyMarketPaperRunStatuses.Entered, run.Status));
+    }
+
+    [Fact]
     public async Task ProcessAsync_AlwaysDownWaitsUntilMarketAcceptsOrders()
     {
         var now = DateTimeOffset.UtcNow;
@@ -4565,14 +4639,17 @@ public sealed class BtcUpDown5mPaperStrategyProcessorTests
         bool openingLimitDynamicBreakEvenPricingEnabled = false,
         int openingLimitBreakEvenLookbackRuns = 100,
         int openingLimitBreakEvenMinSettledRuns = 30,
-        decimal openingLimitBreakEvenMargin = 0.10m)
+        decimal openingLimitBreakEvenMargin = 0.10m,
+        int maxEntriesPerCycle = 25,
+        int maxConcurrentEntryDecisions = 1)
     {
         return new BtcUpDown5mStrategyOptions
         {
             StakeUsd = 1m,
             EntryGraceSeconds = 10,
             MaxMarketsPerCycle = 500,
-            MaxEntriesPerCycle = 25,
+            MaxEntriesPerCycle = maxEntriesPerCycle,
+            MaxConcurrentEntryDecisions = maxConcurrentEntryDecisions,
             MaxSettlementsPerCycle = 50,
             MartinStakeLevels = 5,
             EnabledVariantCodes = enabledVariantCodes.ToList(),
