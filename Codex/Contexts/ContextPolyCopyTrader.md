@@ -1,3 +1,17 @@
+## Active Update 2026-05-12 BTC Hourly Historical Backtest
+Goal: Recalculate the BTC Up/Down historical strategy analysis for hourly markets.
+Status: Completed
+Done:
+- Extended the ignored read-only C# analyzer under `artifacts/btc-source-comparison/historical-backtest` to support `--market hourly`, including series-based loading from Gamma `/events?series_slug=btc-up-or-down-hourly` so older hourly slugs without the year are included.
+- Completed a 365-day requested Gamma outcome-only pass over `7,994` resolved BTC hourly markets actually available from `2025-05-23T11:00Z` through `2026-05-12T05:00Z`.
+- Outcome-only results at theoretical guaranteed `0.45` fills: AlwaysUp `4017/7994` (`50.25%`, `+0.0525/share`, `+11.67%` ROI on $1 stake); AlwaysDown `3977/7994` (`49.75%`, `+0.0475/share`, `+10.56%` ROI).
+- Previous-result mean-reversion rows were stronger on outcome-only math: Skip1 `51.29%`, Skip2 `53.79%`, Skip3 `54.03%`, Skip4 `55.38%`, Skip5 `55.28%`, all assuming every signal fills at `0.45`.
+- Completed a 30-day fill-aware approximation over `717` recent hourly markets using public Data API trades at limit `0.45`; sell-fill candidate results were negative: AlwaysUp `182/524` wins (`34.73%`, `-0.1027/share per fill-market`) and AlwaysDown `139/500` wins (`27.80%`, `-0.1720/share per fill-market`).
+- Stored final report artifacts under `artifacts/btc-source-comparison/hourly-series-backtest-output-20260512-113016`.
+Next: If requested, add hourly support to a tracked read-only report command and improve fill simulation with deeper trade pagination, order-book snapshots, and explicit cancel-before-close assumptions.
+Notes: Verification passed with `dotnet build artifacts\btc-source-comparison\historical-backtest\BtcHistoricalBacktest.csproj`, `dotnet run --no-build ... --market hourly --days 365 --fill-days 30`, and output table inspection. The analyzer remains in ignored artifacts; no production runtime code changed.
+Blockers: Public Data API trades do not prove maker ownership, and fill-aware inference only observes trade touches/sells rather than a full historical queue simulation.
+
 ## Active Update 2026-05-12 BTC Up Down Historical Backtest
 Goal: Deep-check BTC Up/Down 5m strategies against historical public data.
 Status: Completed

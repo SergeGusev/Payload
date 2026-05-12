@@ -73,3 +73,9 @@ Ok, make these changes. Also answer whether "as soon as possible" for AlwaysUp/A
 
 Result:
 Implemented market-relative BTC opening-limit GTD expiration. BTC paper opening-limit and converted taker-GTD orders now use a local deadline one minute before market end by default, include explicit diagnostics for the deadline mode, and send live-shadow/full-live CLOB GTD requests with a one-minute wire expiration buffer. Added configuration, validation, docs, strategy-description updates, and tests. Confirmed that AlwaysUp/AlwaysDown do not place orders 24 hours early: observation is near-market, their entry due time is the market start, and placement waits for the due time plus tradeable market state. Verification passed: targeted tests 145/145, full tests 428/428, and git diff check.
+## 2026-05-12T08:36:35.8357096Z
+Request:
+Пересчитай то же самое по часовому BTC рынку
+
+Result:
+Extended the ignored read-only historical analyzer for BTC hourly markets and reran the analysis on the available Gamma hourly series. The final report covers 7,994 resolved BTC hourly markets from 2025-05-23T11:00Z through 2026-05-12T05:00Z, plus a 30-day fill-aware approximation over 717 recent markets. Outcome-only guaranteed 0.45 fills were mildly positive for AlwaysUp/AlwaysDown and stronger for previous-result mean reversion, but observed 0.45 fill candidates were negative due to adverse selection. Artifacts are under `artifacts/btc-source-comparison/hourly-series-backtest-output-20260512-113016`.
