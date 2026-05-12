@@ -1510,14 +1510,14 @@ public static class StrategyIds
             new(BtcUpDownFixedOutcome.Down, "down", "Down", 2)
         ];
 
-        var variants = new List<BtcUpDown5mStrategyVariant>(intervals.Length * lifetimes.Length * outcomes.Length * 20);
+        var variants = new List<BtcUpDown5mStrategyVariant>(intervals.Length * lifetimes.Length * outcomes.Length * 40);
         foreach (var interval in intervals)
         {
             foreach (var lifetime in lifetimes)
             {
                 foreach (var outcome in outcomes)
                 {
-                    for (var priceCents = 49; priceCents >= 30; priceCents--)
+                    for (var priceCents = 49; priceCents >= 10; priceCents--)
                     {
                         variants.Add(CreateBtcPreOpenFixedDirectionVariant(
                             interval,

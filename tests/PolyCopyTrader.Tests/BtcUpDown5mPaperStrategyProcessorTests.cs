@@ -180,7 +180,7 @@ public sealed class BtcUpDown5mPaperStrategyProcessorTests
     [Fact]
     public void StrategyIds_IncludeStandardMartinAndGammaBtcVariants()
     {
-        Assert.Equal(519, StrategyIds.BtcUpDown5mVariants.Count);
+        Assert.Equal(839, StrategyIds.BtcUpDown5mVariants.Count);
         Assert.Equal(18, StrategyIds.BtcUpDown5mVariants.Count(variant => variant.Behavior == BtcUpDown5mStrategyBehavior.Standard));
         Assert.Equal(15, StrategyIds.BtcUpDown5mVariants.Count(variant => variant.Behavior == BtcUpDown5mStrategyBehavior.StandardEntryPriceCap));
         Assert.Equal(18, StrategyIds.BtcUpDown5mVariants.Count(variant => variant.Behavior == BtcUpDown5mStrategyBehavior.GammaOutcomeSelection));
@@ -202,17 +202,17 @@ public sealed class BtcUpDown5mPaperStrategyProcessorTests
         Assert.Single(StrategyIds.BtcUpDown5mVariants, variant => variant.Behavior == BtcUpDown5mStrategyBehavior.EnsembleVote);
         Assert.Single(StrategyIds.BtcUpDown5mVariants, variant => variant.Behavior == BtcUpDown5mStrategyBehavior.DynamicMarkov);
         Assert.Single(StrategyIds.BtcUpDown5mVariants, variant => variant.Behavior == BtcUpDown5mStrategyBehavior.StrategySelector);
-        Assert.Equal(320, StrategyIds.BtcUpDown5mVariants.Count(variant => variant.Behavior == BtcUpDown5mStrategyBehavior.PreOpenFixedDirection));
-        Assert.Equal(80, StrategyIds.BtcUpDown5mVariants.Count(variant =>
+        Assert.Equal(640, StrategyIds.BtcUpDown5mVariants.Count(variant => variant.Behavior == BtcUpDown5mStrategyBehavior.PreOpenFixedDirection));
+        Assert.Equal(160, StrategyIds.BtcUpDown5mVariants.Count(variant =>
             variant.MarketInterval == BtcUpDownMarketInterval.FiveMinutes &&
             variant.Behavior == BtcUpDown5mStrategyBehavior.PreOpenFixedDirection));
-        Assert.Equal(80, StrategyIds.BtcUpDown5mVariants.Count(variant =>
+        Assert.Equal(160, StrategyIds.BtcUpDown5mVariants.Count(variant =>
             variant.MarketInterval == BtcUpDownMarketInterval.FifteenMinutes &&
             variant.Behavior == BtcUpDown5mStrategyBehavior.PreOpenFixedDirection));
-        Assert.Equal(80, StrategyIds.BtcUpDown5mVariants.Count(variant =>
+        Assert.Equal(160, StrategyIds.BtcUpDown5mVariants.Count(variant =>
             variant.MarketInterval == BtcUpDownMarketInterval.OneHour &&
             variant.Behavior == BtcUpDown5mStrategyBehavior.PreOpenFixedDirection));
-        Assert.Equal(80, StrategyIds.BtcUpDown5mVariants.Count(variant =>
+        Assert.Equal(160, StrategyIds.BtcUpDown5mVariants.Count(variant =>
             variant.MarketInterval == BtcUpDownMarketInterval.FourHours &&
             variant.Behavior == BtcUpDown5mStrategyBehavior.PreOpenFixedDirection));
         Assert.Equal("BTC Up or Down 5m Less 180 Gamma", StrategyIds.GetBtcUpDown5mVariant(
@@ -274,6 +274,10 @@ public sealed class BtcUpDown5mPaperStrategyProcessorTests
             variant.Code == "btc_up_down_4h_preopen_full_down_30" &&
             variant.FixedOutcome == BtcUpDownFixedOutcome.Down &&
             variant.FixedLimitPrice == 0.30m);
+        Assert.Contains(StrategyIds.BtcUpDown5mVariants, variant =>
+            variant.Code == "btc_up_down_4h_preopen_full_down_10" &&
+            variant.FixedOutcome == BtcUpDownFixedOutcome.Down &&
+            variant.FixedLimitPrice == 0.10m);
         Assert.Equal("BTC Up or Down 5m Binance Clever", BinanceCleverVariant.Name);
         Assert.Equal("BTC Up or Down 5m Binance Clever Aggressive", BinanceCleverAggressiveVariant.Name);
         Assert.Equal("BTC Up or Down 5m Binance Clever Conservative", BinanceCleverConservativeVariant.Name);

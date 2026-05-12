@@ -2130,7 +2130,7 @@ outcomes(outcome_id, outcome_code, outcome_name) AS (
         (2, 'down', 'Down')
 ),
 prices(price_cents) AS (
-    SELECT generate_series(49, 30, -1)
+    SELECT generate_series(49, 10, -1)
 )
 INSERT INTO strategies (id, code, name, description, enabled, paper_stake_amount, created_at_utc, updated_at_utc)
 SELECT

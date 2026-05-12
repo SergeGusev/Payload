@@ -1,3 +1,15 @@
+## Active Update 2026-05-12 PreOpen Low Price Expansion
+Goal: Add fixed-direction PreOpen strategy prices from `0.10` through `0.29` to the existing `0.30` through `0.49` range.
+Status: Completed
+Done:
+- Expanded the domain PreOpen fixed-direction generator from price cents `49..30` to `49..10`.
+- Expanded the PostgreSQL strategy seed `generate_series` to create the matching database rows.
+- Updated strategy-count/schema tests and README documentation from 320 to 640 PreOpen variants.
+- Rebuilt and restarted the local Debug service; fresh logs show new low-price PreOpen variants such as `preopen_*_11`, `preopen_*_16`, `preopen_*_22`, and `preopen_*_29` placing Paper GTD orders.
+Next: Monitor the new `0.10..0.29` PreOpen variants separately in Dashboard strategy performance.
+Notes: Verification passed with focused BTC/schema tests (`119/119`), full solution tests (`436/436`) using temporary `.codex-test-build`, normal Debug service build, IPC `/status` `Running` with pause flags false, kill switch false, and `lastError=null`, and `git diff --check` with line-ending warnings only. The temporary test output was removed. The first standard-output test attempt failed before running tests because the old service process locked Debug DLLs.
+Blockers: None.
+
 ## Active Update 2026-05-12 Target Script Execution Policy Guidance
 Goal: Explain how to run the encrypted package importer on the target when PowerShell says running scripts is disabled.
 Status: Completed

@@ -269,3 +269,10 @@ Request:
 
 Result:
 Explained that the target PowerShell execution policy is blocking the importer script. Recommended running the importer with a process-scoped bypass using `powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\Import-Net48-SecretsPackage.ps1 -PackagePath .\polycopytrader-net48-secrets.enc.json`, or setting `Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass -Force` in the current elevated session and optionally `Unblock-File` on copied files. No secrets were read or transferred.
+
+## 2026-05-12T21:06:37.5374912Z
+Request:
+Мы с тобой сделали много PreOpen стратегий со ставками от 0.30 до 0.49. Добавь в каждую из таких стратегий ставки от 0.10 до 0.29 включительно с шагом 0.01
+
+Result:
+Expanded BTC fixed-direction PreOpen strategy generation and PostgreSQL seeding from `0.49..0.30` to `0.49..0.10`, adding the requested `0.10..0.29` Paper-only variants for all BTC 5m/15m/1h/4h intervals, Half/Full lifetimes, and Up/Down directions. Updated tests and README, ran focused tests (`119/119`), full tests (`436/436`), built and restarted the Debug service, and confirmed IPC status is running with no last error; fresh logs show low-price PreOpen variants placing Paper GTD orders.
