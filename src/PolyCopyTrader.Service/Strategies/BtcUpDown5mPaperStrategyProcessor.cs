@@ -585,7 +585,6 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
                             stakeMultiplier,
                             market.OrderMinSize,
                             nowUtc,
-                            IsPreOpenFixedDirectionOpeningLimitEntry(variant),
                             cancellationToken);
                         var expiration = ResolveOpeningLimitExpiration(market, variant, nowUtc);
                         if (!expiration.Available || expiration.LocalExpiresAtUtc is null)
@@ -4354,21 +4353,12 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
         decimal stakeMultiplier,
         decimal? fallbackMinOrderSize,
         DateTimeOffset nowUtc,
-        bool requireOrderBookLiquidity,
         CancellationToken cancellationToken)
     {
         var maxAge = GetPaperTakerMaxQuoteAge();
         var lookup = marketDataCache.GetOrderBook(assetId, maxAge);
         if (lookup is { Status: OrderBookCacheLookupStatus.Fresh, Snapshot: { } cached })
         {
-            if (requireOrderBookLiquidity && !HasOrderBookLiquidity(cached))
-            {
-                return BtcMinimumStakeSizing.Reject(
-                    "opening_limit_orderbook_liquidity_missing",
-                    stakeMultiplier,
-                    Source: WebSocketCacheSource);
-            }
-
             return CreateLimitMinimumStakeSizing(cached, limitPrice, stakeMultiplier, WebSocketCacheSource);
         }
 
@@ -4380,23 +4370,7 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
                 var fetchedAge = GetSnapshotAge(fetched.OrderBook.SnapshotAtUtc);
                 if (fetchedAge <= maxAge)
                 {
-                    if (requireOrderBookLiquidity && !HasOrderBookLiquidity(fetched.OrderBook))
-                    {
-                        return BtcMinimumStakeSizing.Reject(
-                            "opening_limit_orderbook_liquidity_missing",
-                            stakeMultiplier,
-                            Source: ClobBookSource);
-                    }
-
                     return CreateLimitMinimumStakeSizing(fetched.OrderBook, limitPrice, stakeMultiplier, ClobBookSource);
-                }
-
-                if (requireOrderBookLiquidity)
-                {
-                    return BtcMinimumStakeSizing.Reject(
-                        SignalReasonCodes.MissingOrderBookCacheStale,
-                        stakeMultiplier,
-                        Source: ClobBookSource);
                 }
 
                 if ((fetched.OrderBook.MinOrderSize ?? lookup.Snapshot?.MinOrderSize ?? fallbackMinOrderSize) is { } staleMinOrderSize &&
@@ -4418,16 +4392,6 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
                     stakeMultiplier,
                     Source: ClobBookSource);
             }
-        }
-
-        if (requireOrderBookLiquidity)
-        {
-            return BtcMinimumStakeSizing.Reject(
-                lookup.Status == OrderBookCacheLookupStatus.Stale
-                    ? SignalReasonCodes.MissingOrderBookCacheStale
-                    : SignalReasonCodes.MissingOrderBookCacheMiss,
-                stakeMultiplier,
-                Source: WebSocketCacheSource);
         }
 
         if ((lookup.Snapshot?.MinOrderSize ?? fallbackMinOrderSize) is { } minOrderSize && minOrderSize > 0m)
@@ -5237,12 +5201,6 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
     private static bool HasExecutableAskDepth(OrderBookSnapshot snapshot)
     {
         return snapshot.Asks.Any(level => level.Price is > 0m and <= 1m && level.Size > 0m);
-    }
-
-    private static bool HasOrderBookLiquidity(OrderBookSnapshot snapshot)
-    {
-        return snapshot.Bids.Any(level => level.Price is >= 0m and < 1m && level.Size > 0m) ||
-            snapshot.Asks.Any(level => level.Price is > 0m and <= 1m && level.Size > 0m);
     }
 
     private static DateTimeOffset? GetEntryDueAtUtc(

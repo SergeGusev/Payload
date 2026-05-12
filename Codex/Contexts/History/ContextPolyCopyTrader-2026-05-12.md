@@ -92,3 +92,10 @@ Request:
 
 Result:
 Implemented the BTC fixed-direction pre-open strategy expansion requested in the prior turn, using the corrected `0.01` price step from `0.49` down through `0.30`. Added 320 Paper-only AlwaysUp/AlwaysDown variants across BTC 5m, 15m, 1h, and 4h markets, with Half-period and Full-period GTD lifetimes, five-minute pre-open entry due times, fixed selected outcomes, fixed prices, and book-liquidity gating. Updated strategy generation, market detection, repository queries, order-book refresh, paper order decision/expiration logic, dashboard grouping, PostgreSQL seeds, README notes, and unit tests. Verification passed with the full test suite (`430/430`) and Dashboard build.
+
+## 2026-05-12T10:38:00.3577137Z
+Request:
+Ты написал: "Ордер создаётся только если по выбранному outcome есть свежий стакан с ликвидностью.". Это неправильно. Мы создаём ордер всегда. Но считаем его выполненным только тогда, когда есть ставки на его цену с нужной ликвидностью
+
+Result:
+Corrected the BTC pre-open fixed-direction paper GTD behavior. Removed the selected-outcome liquidity gate from order creation, so due pre-open orders are created as pending GTD orders even when the selected outcome book is empty or not currently executable. Kept fill accounting in the Paper GTD fill pipeline, where execution requires visible asks at or below the BUY limit or later high-confidence trade-through evidence while the order is alive. Added a regression test for creating a 15m pre-open AlwaysUp order with an empty selected-outcome book and zero initial executable ask shares. Updated README wording. Verification passed with targeted BTC/GTD tests (`100/100`), full tests (`431/431`), and `git diff --check`.

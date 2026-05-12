@@ -1529,6 +1529,42 @@ public sealed class BtcUpDown5mPaperStrategyProcessorTests
     }
 
     [Fact]
+    public async Task ProcessAsync_PreOpenFixedDirectionCreatesOrderWithoutSelectedBookLiquidity()
+    {
+        var now = DateTimeOffset.UtcNow;
+        var marketStart = now.AddMinutes(5);
+        var marketEnd = marketStart.AddMinutes(15);
+        var variant = StrategyIds.BtcUpDown5mVariants.Single(item =>
+            item.Code == "btc_up_down_15m_preopen_half_up_49");
+        var repository = new TestAppRepository();
+        repository.PolymarketGammaMarkets.Add(CreateMarket(
+            marketStart,
+            marketEnd,
+            upPrice: 0.50m,
+            downPrice: 0.50m,
+            slug: "btc-updown-15m-" + marketStart.ToUnixTimeSeconds().ToString(CultureInfo.InvariantCulture),
+            seriesSlug: "btc-up-or-down-15m",
+            orderMinSize: 5m));
+        var processor = CreateProcessorCore(
+            repository,
+            [],
+            [OrderBook("asset-up", [], [], now, 5m)],
+            variant.Code);
+
+        var result = await processor.ProcessAsync();
+
+        Assert.Equal(1, result.MarketsObserved);
+        Assert.Equal(1, result.EntriesPlaced);
+        Assert.Empty(repository.PaperFills);
+        var order = Assert.Single(repository.PaperOrders);
+        Assert.Equal(PaperOrderStatus.Pending, order.Status);
+        Assert.Equal("asset-up", order.AssetId);
+        Assert.Equal(0.49m, order.Price);
+        Assert.Contains("\"paper_gtd_initial_executable_ask_shares\":0", order.RawDecisionJson, StringComparison.Ordinal);
+        Assert.Contains("\"stake_sizing_source\":\"websocket_cache\"", order.RawDecisionJson, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task ProcessAsync_PreOpenFullPeriodAlwaysDownPlacesFourHourGtdLimit()
     {
         var now = DateTimeOffset.UtcNow;

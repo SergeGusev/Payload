@@ -1,10 +1,22 @@
+## Active Update 2026-05-12 BTC PreOpen Order Creation Fill Separation
+Goal: Correct BTC pre-open fixed-direction strategies so paper GTD orders are created even without current selected-outcome liquidity, while fills remain liquidity/evidence gated.
+Status: Completed
+Done:
+- Removed the pre-open-specific order-book liquidity gate from BTC opening-limit stake sizing, so due pre-open fixed-direction variants create pending Paper GTD orders using the normal min-order-size sizing path.
+- Left execution accounting in the Paper GTD fill pipeline: fills still require visible asks at or below the BUY limit in the initial snapshot or later high-confidence trade-through evidence while the order is alive.
+- Added a regression test proving a 15m pre-open AlwaysUp order is created against an empty selected-outcome book with zero initial executable ask shares and no paper fill.
+- Corrected README wording to separate order creation from order execution.
+Next: None.
+Notes: Verification passed with targeted BTC/GTD tests `100/100`, full suite `dotnet test PolyCopyTrader.sln --no-restore -p:BaseOutputPath=D:\My\Business\PolyMarket\artifacts\test-build\` (`431/431`), and `git diff --check`. Generated test-build outputs were restored from Git status; pre-existing untracked `artifacts/polymarket-sdk-src/` remains untouched.
+Blockers: None.
+
 ## Active Update 2026-05-12 BTC PreOpen Fixed Direction Strategies
 Goal: Add BTC Up/Down fixed AlwaysUp and AlwaysDown paper strategies for 5m, 15m, 1h, and 4h markets, with half-period GTD and full-period variants using a 0.49 to 0.30 ladder in 0.01 steps.
 Status: Completed
 Done:
 - Added 320 Paper-only `PreOpenFixedDirection` strategy variants across BTC 5m, 15m, 1h, and 4h intervals, split into Half and Full lifetime groups, AlwaysUp and AlwaysDown directions, and fixed limit prices from `0.49` through `0.30`.
 - Set the new variants to become due five minutes before market open; Half variants expire at the midpoint of the market period, while Full variants expire at market end minus the configured BTC opening-limit buffer.
-- Extended BTC market detection, repository loading, order-book refresh, opening-limit decision logic, fixed-price handling, and order-book-liquidity gating so these variants only place a paper order when the selected outcome has fresh book liquidity.
+- Extended BTC market detection, repository loading, order-book refresh, opening-limit decision logic, fixed-price handling, and Paper GTD diagnostics for the new variants.
 - Updated dashboard grouping and repository/dashboard performance limits so the expanded strategy catalog remains visible.
 - Added PostgreSQL seed logic for the new generated strategy catalog, README documentation, and focused unit coverage for strategy generation and 15m/4h pre-open GTD placement.
 Next: Watch the first paper runs for `paper_order_rejected` reasons and verify that local Gamma coverage contains the expected 15m/hourly/4h BTC markets before comparing performance.
