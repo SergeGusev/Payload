@@ -1,3 +1,14 @@
+## Active Update 2026-05-12 Target WinRM Recovery Guidance
+Goal: Explain what must be enabled so the secret-transfer target at `192.168.0.101` becomes reachable again.
+Status: Completed
+Done:
+- Confirmed the current source machine has active Wi-Fi IPv4 `192.168.0.100/24`.
+- Prepared target-side recovery steps for power/network/IP verification, WinRM service/listener setup, Windows Firewall rules, and workgroup TrustedHosts.
+- Kept the secret-transfer script blocked until `Test-Connection` and `Test-WSMan` succeed.
+Next: On the target machine, enable WinRM/PowerShell Remoting and firewall access for TCP `5985`, then test from the source machine.
+Notes: No source code or runtime configuration changed. No secret values were read, printed, stored, or transferred.
+Blockers: Target `192.168.0.101` remains unreachable until the target-side network/WinRM/firewall state is corrected.
+
 ## Active Update 2026-05-12 Secret Transfer Retry Blocked
 Goal: Repeat the prior secure Net48 secret transfer to the same target machine.
 Status: Blocked

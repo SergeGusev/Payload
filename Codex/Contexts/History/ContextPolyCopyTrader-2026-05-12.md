@@ -182,3 +182,10 @@ Request:
 
 Result:
 Recovered the prior transfer method, `scripts/Copy-Net48-SecretsToNewServer.ps1`, whose default target is `192.168.0.101`, and confirmed the current PowerShell session is elevated. Did not run the transfer because the target is currently unreachable: ping returned false and `Test-WSMan` failed with a WinRM accessibility/firewall error. No secret values were printed, stored, committed, or transferred.
+
+## 2026-05-12T16:01:26.7104047Z
+Request:
+Что надо сделать, чтобы машина стала доступна?
+
+Result:
+Explained the target-side recovery steps for `192.168.0.101`: verify the machine is powered on and still has that IP, enable WinRM/PowerShell Remoting from elevated PowerShell, enable Windows Firewall rules for WinRM/TCP `5985`, configure TrustedHosts on the source if the machines are in a workgroup, then verify with `Test-Connection` and `Test-WSMan` before rerunning `scripts\Copy-Net48-SecretsToNewServer.ps1`. No secrets were read or transferred.
