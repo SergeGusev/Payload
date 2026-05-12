@@ -32,6 +32,13 @@ Request:
 
 Result:
 Checked local CLOB order request/building code and current official Polymarket docs. Answered that GTD supports a UTC Unix-second expiration timestamp and the local code already has `GtdExpirationUtc`, but current strategy code uses TTL-based deadlines. Noted that official docs describe a one-minute GTD security threshold/buffer, so for a precise operational deadline such as one minute before market end, the safer implementation is a market-relative local deadline plus either adjusted wire expiration or an explicit scheduled cancel at the target time.
+## 2026-05-12T07:58:02.5798691Z
+Request:
+Прервалось, повтори
+
+Result:
+Repeated and completed the BTC Up/Down historical analysis. Generated ignored read-only reports under `artifacts/btc-source-comparison/`. The deepest pass covered 30 days and `8,636` resolved BTC 5m markets for outcome-only strategy math; a 1-day fill-aware approximation covered `276` markets using public Data API trades; local 31-market second-level Binance/Polymarket CSVs were also reprocessed. Main conclusion: outcome-only `0.45` assumptions look positive only because they assume guaranteed favorable fills; fill-aware `AlwaysUp/AlwaysDown` at `0.45` were strongly negative due to adverse selection, while small-sample Binance early-move signals showed the most interesting positive pockets.
+
 ## 2026-05-12T07:07:39.0879863Z
 Request:
 Ок, а можешь сам оценить, сколько реально зарабатывать на таких ставках, если ставить минимальную цену?

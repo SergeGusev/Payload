@@ -1,3 +1,17 @@
+## Active Update 2026-05-12 BTC Up Down Historical Backtest
+Goal: Deep-check BTC Up/Down 5m strategies against historical public data.
+Status: Completed
+Done:
+- Built and ran an ignored read-only C# analyzer under `artifacts/btc-source-comparison/historical-backtest` using public Gamma/Data API and local BTC source-comparison CSVs; no production trading code changed.
+- Completed a 30-day Gamma outcome-only pass over `8,636` resolved BTC 5m markets from `2026-04-12T06:55Z` through `2026-05-12T06:50Z`.
+- Outcome-only results, assuming impossible guaranteed fills at `0.45`: AlwaysUp `50.42%` win rate and `+0.0542` per share; AlwaysDown `49.58%` and `+0.0458`; Skip1 `51.33%`; Skip5 `56.88%` but only `436` trades. These are directional math, not executable PnL.
+- Completed a 1-day fill-aware approximation over `276` markets using public Data API trades for `AlwaysUp/AlwaysDown` at `0.45`; public trades do not reveal maker ownership, so this infers possible passive fills from observed trade touches/sells.
+- Fill-aware results were strongly negative: AlwaysUp sell-fill candidates `115` markets, only `6` winners (`5.22%`), about `-0.398` per 1-share fill-market; AlwaysDown sell-fill candidates `97` markets, `9` winners (`9.28%`), about `-0.357` per fill-market.
+- Reprocessed local 31-market second-level CSV collection: Binance sign at `30s` with `>=2 bps` move was `10/12` wins and `+0.159/share` at observed ask; `60s >=2 bps` was `11/14` and `+0.0586/share`; later signals often had high win rate but worse observed ask PnL due to pricing already moving.
+Next: If requested, turn the ignored analyzer into a supported read-only report command with paginated trade capture, order-book snapshots, and configurable GTD/cancel assumptions.
+Notes: Reports were written under `artifacts/btc-source-comparison/historical-backtest-output-20260512-074605` and `historical-backtest-output-20260512-075004`. Verification used successful `dotnet run` executions and `git diff --check`; no production tests were run because no tracked runtime code changed.
+Blockers: Public data cannot prove maker ownership of fills and the local second-level Binance/Polymarket dataset is only 31 markets.
+
 ## Active Update 2026-05-12 BTC Minimum Price Profit Estimate
 Goal: Estimate realistic profitability of posting minimum-price BTC 5m orders.
 Status: Completed
