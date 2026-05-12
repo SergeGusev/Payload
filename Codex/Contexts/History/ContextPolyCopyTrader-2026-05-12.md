@@ -168,3 +168,10 @@ Make Paper mode stricter: even if the book has better orders, close/account fill
 
 Result:
 Changed balanced Paper BUY/SELL fills and conservative BTC GTD immediate fills so order-book/trade evidence still decides whether and how many shares can fill, but `paper_fills.price` uses the submitted paper limit price. Preserved better observed prices in fill evidence as `ObservedDepthVwap`, `ObservedAskVwap`, or observed trade price for diagnostics. Added strict BUY/SELL unit coverage, updated the partial-depth pipeline expectation from `0.496` to `0.50`, and documented the stricter Paper PnL model in README. Verification passed with full tests `436/436` using a temporary repo-local test output directory, normal Debug service build, service restart as PID `22264`, healthy IPC `/status`, and `git diff --check`; the temporary output was removed afterward. Pre-existing untracked `artifacts/polymarket-sdk-src/` remains untouched.
+
+## 2026-05-12T15:48:50.6613007Z
+Request:
+npm install -g @openai/codex
+
+Result:
+Installed the global npm package `@openai/codex`. Verified `codex --version` reports `codex-cli 0.130.0` and `npm list -g @openai/codex --depth=0` reports `@openai/codex@0.130.0`. npm completed successfully but warned that a leftover temporary directory under `%APPDATA%\npm\node_modules\@openai` could not be cleaned up because `codex.exe` was locked.

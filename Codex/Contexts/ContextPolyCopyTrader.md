@@ -1,3 +1,14 @@
+## Active Update 2026-05-12 Global Codex CLI Install
+Goal: Install the latest requested global npm package for the OpenAI Codex CLI.
+Status: Completed
+Done:
+- Ran `npm install -g @openai/codex`.
+- Verified `codex --version` reports `codex-cli 0.130.0`.
+- Verified `npm list -g @openai/codex --depth=0` reports `@openai/codex@0.130.0`.
+Next: None.
+Notes: npm completed with `changed 2 packages in 38s`. npm also warned that Windows could not remove a leftover temporary directory under `%APPDATA%\npm\node_modules\@openai\.codex-VTsjU5s4` because `codex.exe` was locked; the installed command works. Repository source files were not changed by the npm install; `git status --porcelain=v1` still only shows pre-existing untracked `artifacts/polymarket-sdk-src/` before context/history updates.
+Blockers: None.
+
 ## Active Update 2026-05-12 Paper Limit Price Fill Accounting
 Goal: Make Paper-mode fill accounting stricter by using the submitted paper limit price even when visible book depth or observed trade evidence is better.
 Status: Completed
