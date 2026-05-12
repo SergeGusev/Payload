@@ -7,8 +7,8 @@ Done:
 - Preserved explicit pre-open Half/Full expiration modes, including Half-period midpoint cancellation and Full-period market-end safety cancellation.
 - Added a regression test proving `More 270` at `start+270s` creates a GTD Paper order expiring at market end with `gtd_expiration_mode=market_end_cap`.
 - Updated README to document the late-entry expiration bypass.
-Next: Restart the running service so the new expiration policy is loaded, then monitor `btc_up_down_5m_more_270` for fresh orders.
-Notes: Verification passed with focused BTC processor tests `97/97`, full `dotnet test tests\PolyCopyTrader.Tests\PolyCopyTrader.Tests.csproj --no-restore -p:BaseOutputPath=D:\My\Business\PolyMarket\artifacts\test-build\` (`433/433`), and `git diff --check`. Generated `artifacts\test-build` binaries were restored; pre-existing untracked `artifacts/polymarket-sdk-src/` remains untouched.
+Next: Monitor `btc_up_down_5m_more_270` for fresh orders after the next due windows.
+Notes: Verification passed with focused BTC processor tests `97/97`, full `dotnet test tests\PolyCopyTrader.Tests\PolyCopyTrader.Tests.csproj --no-restore -p:BaseOutputPath=D:\My\Business\PolyMarket\artifacts\test-build\` (`433/433`), `dotnet build src\PolyCopyTrader.Service\PolyCopyTrader.Service.csproj --no-restore`, and `git diff --check`. Generated `artifacts\test-build` binaries were restored; pre-existing untracked `artifacts/polymarket-sdk-src/` remains untouched. Restarted the Debug service as PID `16488`; IPC `/status` returned `Running`, pause flags false, kill switch false, and `lastError=null`.
 Blockers: None.
 
 ## Active Update 2026-05-12 BTC More270 No Recent Orders Diagnostic
