@@ -1,3 +1,17 @@
+## Active Update 2026-05-12 Paper Limit Price Fill Accounting
+Goal: Make Paper-mode fill accounting stricter by using the submitted paper limit price even when visible book depth or observed trade evidence is better.
+Status: Completed
+Done:
+- Changed balanced Paper BUY/SELL fills so crossed book/trade evidence still decides whether and how many shares fill, but `paper_fills.price` is the order limit price.
+- Kept the observed better execution price in fill evidence as `ObservedDepthVwap` or observed trade price, so later diagnostics still show why the Paper fill was considered executable.
+- Changed conservative BTC GTD immediate fills to account at the submitted limit while preserving the observed ask VWAP in evidence.
+- Added/updated Paper engine, conservative GTD estimator, and pipeline integration tests for strict limit-price accounting, including the `0.21` visible ask versus `0.37` order-limit case.
+- Updated README to document that Paper PnL is deliberately stricter than the better visible market price.
+- Rebuilt and restarted the local Debug service so the running Paper worker loads the new fill-accounting behavior.
+Next: Monitor fresh Paper fills for `FillPrice=<limit>` plus observed-depth evidence.
+Notes: Verification passed with `dotnet test PolyCopyTrader.sln --no-restore "-p:BaseOutputPath=D:\My\Business\PolyMarket\.codex-test-build\"` (`436/436`), normal Debug service build, service restart as PID `22264`, IPC `/status` `Running` with pause flags false, kill switch false, and `lastError=null`, and `git diff --check`. The temporary `.codex-test-build` output was removed. A first `%TEMP%` output attempt was unsuitable because storage tests resolve repository source files by walking up from the test output directory. Builds still report existing nullable warnings in `PostgresAppRepository`; pre-existing untracked `artifacts/polymarket-sdk-src/` remains untouched.
+Blockers: None.
+
 ## Active Update 2026-05-12 Paper Fill Evidence Clarification
 Goal: Explain how Paper mode inferred a `0.21` fill for `BTC Up or Down 5m PreOpen Full Up 37`.
 Status: Completed

@@ -218,10 +218,10 @@ public sealed class DefaultPaperTradingEngine : IPaperTradingEngine
             return new PaperFill(
                 Guid.NewGuid(),
                 order.Id,
-                tradePrice,
+                order.Price,
                 fillSize,
                 nowUtc,
-                $"BalancedGtcTrade: BUY limit {Format(order.Price)} filled {Format(fillSize)} of remaining {Format(remainingShares)} from observed trade at {Format(tradePrice)}.");
+                $"BalancedGtcTrade: BUY limit {Format(order.Price)} filled {Format(fillSize)} of remaining {Format(remainingShares)} from observed trade at {Format(tradePrice)}. FillPrice={Format(order.Price)}.");
         }
 
         return null;
@@ -263,10 +263,10 @@ public sealed class DefaultPaperTradingEngine : IPaperTradingEngine
             return new PaperFill(
                 Guid.NewGuid(),
                 order.Id,
-                tradePrice,
+                order.Price,
                 fillSize,
                 nowUtc,
-                $"BalancedGtcTrade: SELL limit {Format(order.Price)} filled {Format(fillSize)} of remaining {Format(remainingShares)} from observed trade at {Format(tradePrice)}.");
+                $"BalancedGtcTrade: SELL limit {Format(order.Price)} filled {Format(fillSize)} of remaining {Format(remainingShares)} from observed trade at {Format(tradePrice)}. FillPrice={Format(order.Price)}.");
         }
 
         return null;
@@ -280,7 +280,7 @@ public sealed class DefaultPaperTradingEngine : IPaperTradingEngine
         string evidencePrefix)
     {
         var filledShares = 0m;
-        var filledNotional = 0m;
+        var observedDepthNotional = 0m;
         var levelsUsed = 0;
 
         foreach (var level in levels)
@@ -297,7 +297,7 @@ public sealed class DefaultPaperTradingEngine : IPaperTradingEngine
             }
 
             filledShares += takeShares;
-            filledNotional += takeShares * level.Price;
+            observedDepthNotional += takeShares * level.Price;
             levelsUsed++;
         }
 
@@ -306,7 +306,9 @@ public sealed class DefaultPaperTradingEngine : IPaperTradingEngine
             return null;
         }
 
-        var averageFillPrice = filledNotional / filledShares;
+        var observedDepthVwap = observedDepthNotional / filledShares;
+        var fillPrice = order.Price;
+        var filledNotional = fillPrice * filledShares;
         var evidence = string.Concat(
             evidencePrefix,
             ". FilledShares=",
@@ -314,14 +316,16 @@ public sealed class DefaultPaperTradingEngine : IPaperTradingEngine
             " RemainingBeforeFill=",
             Format(remainingShares),
             " AvgFillPrice=",
-            Format(averageFillPrice),
+            Format(fillPrice),
+            " ObservedDepthVwap=",
+            Format(observedDepthVwap),
             " FilledNotionalUsd=",
             Format(filledNotional),
             " LevelsUsed=",
             levelsUsed.ToString(CultureInfo.InvariantCulture),
             ".");
 
-        return new PaperFill(Guid.NewGuid(), order.Id, averageFillPrice, filledShares, nowUtc, evidence);
+        return new PaperFill(Guid.NewGuid(), order.Id, fillPrice, filledShares, nowUtc, evidence);
     }
 
     private static decimal GetRemainingShares(PaperOrder order, decimal previouslyFilledShares)

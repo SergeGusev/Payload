@@ -126,12 +126,15 @@ public sealed class ConservativePaperGtdFillEstimator(BtcUpDown5mStrategyOptions
             return null;
         }
 
-        var fillPrice = baseline.ImmediateExecutableAskVwap ?? baseline.BestAsk ?? order.Price;
+        var observedAskVwap = baseline.ImmediateExecutableAskVwap ?? baseline.BestAsk;
+        var fillPrice = order.Price;
         var evidence = string.Concat(
             "ConservativeGtdImmediateFill: initial submit snapshot had marketable asks within BUY limit. Limit=",
             Format(order.Price),
             " FillPrice=",
             Format(fillPrice),
+            " ObservedAskVwap=",
+            FormatNullable(observedAskVwap),
             " FillShares=",
             Format(fillShares),
             " InitialExecutableAskShares=",

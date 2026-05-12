@@ -161,3 +161,10 @@ Request:
 
 Result:
 Inspected the Paper fill path and queried `paper_fills.evidence` for `btc_up_down_5m_preopen_full_up_37` with a temporary read-only C# PostgreSQL probe, then removed it. Confirmed the `0.21` fill came from visible CLOB ask depth: evidence recorded `BalancedGtcDepth: BUY limit 0.37 crossed ask depth ... AvgFillPrice=0.21 ... BestAsk=0.21`. Clarified that this is Paper simulation from public order-book evidence, not proof of actual live queue ownership.
+
+## 2026-05-12T14:34:26.6031941Z
+Request:
+Make Paper mode stricter: even if the book has better orders, close/account fills at the submitted limit price, e.g. `0.37` instead of the visible `0.21`.
+
+Result:
+Changed balanced Paper BUY/SELL fills and conservative BTC GTD immediate fills so order-book/trade evidence still decides whether and how many shares can fill, but `paper_fills.price` uses the submitted paper limit price. Preserved better observed prices in fill evidence as `ObservedDepthVwap`, `ObservedAskVwap`, or observed trade price for diagnostics. Added strict BUY/SELL unit coverage, updated the partial-depth pipeline expectation from `0.496` to `0.50`, and documented the stricter Paper PnL model in README. Verification passed with full tests `436/436` using a temporary repo-local test output directory, normal Debug service build, service restart as PID `22264`, healthy IPC `/status`, and `git diff --check`; the temporary output was removed afterward. Pre-existing untracked `artifacts/polymarket-sdk-src/` remains untouched.

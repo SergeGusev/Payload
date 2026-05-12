@@ -41,8 +41,9 @@ public sealed class ConservativePaperGtdFillEstimatorTests
         Assert.True(result.Handled);
         Assert.NotNull(result.Fill);
         Assert.Equal(6m, result.Fill!.SizeShares);
-        Assert.Equal(0.48m, result.Fill.Price);
+        Assert.Equal(order.Price, result.Fill.Price);
         Assert.Contains("ConservativeGtdImmediateFill", result.Fill.Evidence);
+        Assert.Contains("ObservedAskVwap=0.48", result.Fill.Evidence);
         Assert.Contains("filled_immediate_marketable", result.Order.RawDecisionJson);
     }
 

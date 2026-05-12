@@ -73,9 +73,31 @@ public sealed class PaperTradingEngineTests
         var fill = engine.TrySimulateFill(order, orderBook, observedTrade: null, DateTimeOffset.UtcNow);
 
         Assert.NotNull(fill);
-        Assert.Equal(0.73m, fill.Price);
+        Assert.Equal(order.Price, fill.Price);
         Assert.Equal(4m, fill.SizeShares);
         Assert.Contains("FilledShares=4", fill.Evidence);
+        Assert.Contains("ObservedDepthVwap=0.73", fill.Evidence);
+    }
+
+    [Fact]
+    public void TrySimulateFill_BuyUsesLimitPriceWhenAskDepthIsBetter()
+    {
+        var order = PendingOrder(DateTimeOffset.UtcNow.AddMinutes(5)) with
+        {
+            Price = 0.37m,
+            NotionalUsd = 3.70m
+        };
+        var orderBook = OrderBook(
+            [new OrderBookLevel(0.20m, 100m)],
+            [new OrderBookLevel(0.21m, 100m)]);
+
+        var fill = engine.TrySimulateFill(order, orderBook, observedTrade: null, DateTimeOffset.UtcNow);
+
+        Assert.NotNull(fill);
+        Assert.Equal(0.37m, fill.Price);
+        Assert.Equal(order.SizeShares, fill.SizeShares);
+        Assert.Contains("AvgFillPrice=0.37", fill.Evidence);
+        Assert.Contains("ObservedDepthVwap=0.21", fill.Evidence);
     }
 
     [Fact]
@@ -121,6 +143,28 @@ public sealed class PaperTradingEngineTests
         Assert.Equal(order.Price, fill.Price);
         Assert.Equal(order.SizeShares, fill.SizeShares);
         Assert.Contains("BalancedGtcDepth", fill.Evidence);
+    }
+
+    [Fact]
+    public void TrySimulateFill_SellUsesLimitPriceWhenBidDepthIsBetter()
+    {
+        var order = PendingOrder(DateTimeOffset.UtcNow.AddMinutes(5)) with
+        {
+            Side = TradeSide.Sell,
+            Price = 0.37m,
+            NotionalUsd = 3.70m
+        };
+        var orderBook = OrderBook(
+            [new OrderBookLevel(0.50m, 100m)],
+            [new OrderBookLevel(0.51m, 100m)]);
+
+        var fill = engine.TrySimulateFill(order, orderBook, observedTrade: null, DateTimeOffset.UtcNow);
+
+        Assert.NotNull(fill);
+        Assert.Equal(0.37m, fill.Price);
+        Assert.Equal(order.SizeShares, fill.SizeShares);
+        Assert.Contains("AvgFillPrice=0.37", fill.Evidence);
+        Assert.Contains("ObservedDepthVwap=0.5", fill.Evidence);
     }
 
     [Fact]

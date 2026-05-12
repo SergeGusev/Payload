@@ -135,7 +135,7 @@ public sealed class PipelineIntegrationTests
         Assert.Equal(6m, repository.PaperFills.OrderBy(fill => fill.FilledAtUtc).Last().SizeShares);
         var position = Assert.Single(repository.PaperPositions);
         Assert.Equal(10m, position.SizeShares);
-        Assert.Equal(0.496m, position.AveragePrice);
+        Assert.Equal(0.50m, position.AveragePrice);
     }
 
     [Fact]
