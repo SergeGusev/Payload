@@ -220,7 +220,7 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
                 }
                 else if (IsEntryExpired(entryDueAtUtc, nowUtc) &&
                     !IsSkipConsecutiveMarketResults(variant) &&
-                    !IsOpeningLimitEntryAllowedAfterEntryGrace(variant))
+                    !IsOpeningLimitEntryAllowedAfterEntryGrace(variant, windowStart, nowUtc))
                 {
                     status = StrategyMarketPaperRunStatuses.Skipped;
                     skipReason = "entry_due_already_passed";
@@ -470,7 +470,7 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
                     var settings = GetStrategySettings(strategySettings, variant.Id);
                     if (IsEntryExpired(run.EntryDueAtUtc, nowUtc) &&
                         !IsSkipConsecutiveMarketResults(variant) &&
-                        !IsOpeningLimitEntryAllowedAfterEntryGrace(variant))
+                        !IsOpeningLimitEntryAllowedAfterEntryGrace(variant, run.MarketStartUtc, nowUtc))
                     {
                         await SkipRunAsync(run, variant, "entry_due_expired", nowUtc, cancellationToken);
                         runsSkipped++;
@@ -495,6 +495,13 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
                     if (market.Closed || market.Archived)
                     {
                         await SkipRunAsync(run, variant, "market_not_tradeable", nowUtc, cancellationToken);
+                        runsSkipped++;
+                        continue;
+                    }
+
+                    if (IsPreOpenEntryWindowElapsed(variant, BtcUpDown5mMarketAnalyzer.GetWindowStartUtc(market) ?? run.MarketStartUtc, nowUtc))
+                    {
+                        await SkipRunAsync(run, variant, "preopen_entry_window_elapsed", nowUtc, cancellationToken);
                         runsSkipped++;
                         continue;
                     }
@@ -1520,9 +1527,34 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
             : BinanceCleverFairValueEdgeMargin;
     }
 
-    private static bool IsOpeningLimitEntryAllowedAfterEntryGrace(BtcUpDown5mStrategyVariant variant)
+    private static bool IsOpeningLimitEntryAllowedAfterEntryGrace(
+        BtcUpDown5mStrategyVariant variant,
+        DateTimeOffset? marketStartUtc,
+        DateTimeOffset nowUtc)
     {
-        return IsAlwaysDirectionOpeningLimitEntry(variant) || IsBinanceStartRelativeOpeningLimitEntry(variant);
+        return IsAlwaysDirectionOpeningLimitEntry(variant) ||
+            IsBinanceStartRelativeOpeningLimitEntry(variant) ||
+            IsPreOpenEntryWindowStillOpen(variant, marketStartUtc, nowUtc);
+    }
+
+    private static bool IsPreOpenEntryWindowStillOpen(
+        BtcUpDown5mStrategyVariant variant,
+        DateTimeOffset? marketStartUtc,
+        DateTimeOffset nowUtc)
+    {
+        return IsPreOpenFixedDirectionOpeningLimitEntry(variant) &&
+            marketStartUtc is { } startUtc &&
+            nowUtc < startUtc;
+    }
+
+    private static bool IsPreOpenEntryWindowElapsed(
+        BtcUpDown5mStrategyVariant variant,
+        DateTimeOffset? marketStartUtc,
+        DateTimeOffset nowUtc)
+    {
+        return IsPreOpenFixedDirectionOpeningLimitEntry(variant) &&
+            marketStartUtc is { } startUtc &&
+            nowUtc >= startUtc;
     }
 
     private static bool ShouldRunPaperLiveShadowTest(
@@ -3619,8 +3651,7 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
         DateTimeOffset nowUtc)
     {
         _ = run;
-        _ = nowUtc;
-        return IsOpeningLimitEntryAllowedAfterEntryGrace(variant);
+        return IsOpeningLimitEntryAllowedAfterEntryGrace(variant, run.MarketStartUtc, nowUtc);
     }
 
     private bool ShouldDeferOpeningLimitStakeSizing(
@@ -3630,8 +3661,7 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
         DateTimeOffset nowUtc)
     {
         _ = run;
-        _ = nowUtc;
-        return IsOpeningLimitEntryAllowedAfterEntryGrace(variant) &&
+        return IsOpeningLimitEntryAllowedAfterEntryGrace(variant, run.MarketStartUtc, nowUtc) &&
             IsCloseBookOrderBookUnavailableReason(sizing.RejectionReason);
     }
 

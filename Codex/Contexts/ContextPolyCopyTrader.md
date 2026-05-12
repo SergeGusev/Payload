@@ -1,3 +1,17 @@
+## Active Update 2026-05-12 Service Runtime Check And PreOpen Grace Fix
+Goal: Check the running service after BTC pre-open strategy changes and fix any runtime issue found.
+Status: Completed
+Done:
+- Confirmed the running service process `PolyCopyTrader.Service.exe` is responsive, IPC `/status` reports `Running`, no pause flags, no kill switch, and `lastError=null`.
+- Checked fresh service logs under `src\PolyCopyTrader.Service\bin\Debug\net10.0\logs`; order-book refresh cycles were active with `markets=4`, `assets=8`, `missing=0`, `failed=0`, and live trading remained disabled in the sanitized config.
+- Found one transient Market WebSocket parse warning after startup, but no fatal/error log entries in the checked window; CLOB 404 book messages were logged as expected missing-book info.
+- Found a real issue for new pre-open variants: 15m pre-open runs were skipped as `entry_due_expired` about 12 seconds after due time because `EntryGraceSeconds=10` was too narrow during startup/load.
+- Changed BTC pre-open fixed-direction runs to allow late creation after the nominal due time while the market has not opened yet, and to skip with `preopen_entry_window_elapsed` once the market start has passed.
+- Added regression coverage for a 15m pre-open order created one minute after nominal due time but before market start.
+Next: Restart the currently running service so the pre-open grace fix is loaded into the runtime process.
+Notes: Verification passed with targeted BTC processor tests `96/96`, full suite `dotnet test PolyCopyTrader.sln --no-restore -p:BaseOutputPath=D:\My\Business\PolyMarket\artifacts\test-build\` (`432/432`), and `git diff --check`. Generated test-build outputs were restored from Git status; pre-existing untracked `artifacts/polymarket-sdk-src/` remains untouched.
+Blockers: None.
+
 ## Active Update 2026-05-12 BTC PreOpen Order Creation Fill Separation
 Goal: Correct BTC pre-open fixed-direction strategies so paper GTD orders are created even without current selected-outcome liquidity, while fills remain liquidity/evidence gated.
 Status: Completed

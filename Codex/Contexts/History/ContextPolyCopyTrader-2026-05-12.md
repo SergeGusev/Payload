@@ -99,3 +99,10 @@ Request:
 
 Result:
 Corrected the BTC pre-open fixed-direction paper GTD behavior. Removed the selected-outcome liquidity gate from order creation, so due pre-open orders are created as pending GTD orders even when the selected outcome book is empty or not currently executable. Kept fill accounting in the Paper GTD fill pipeline, where execution requires visible asks at or below the BUY limit or later high-confidence trade-through evidence while the order is alive. Added a regression test for creating a 15m pre-open AlwaysUp order with an empty selected-outcome book and zero initial executable ask shares. Updated README wording. Verification passed with targeted BTC/GTD tests (`100/100`), full tests (`431/431`), and `git diff --check`.
+
+## 2026-05-12T11:17:39.9686737Z
+Request:
+Запустил сервис. Проверь, всё ли там нормально
+
+Result:
+Checked the running `PolyCopyTrader.Service.exe` process, IPC `/status`, and fresh service logs. The service was responsive and running with no pause flags, no kill switch, and `lastError=null`; live trading was disabled. Order-book refresh cycles were active with no missing/failed refreshes in the sampled lines. Found one transient Market WebSocket parse warning and expected CLOB `/book` 404 info logs. Found and fixed a real issue for new BTC pre-open variants: 15m pre-open runs could be skipped as `entry_due_expired` a few seconds after due time because the global 10-second entry grace was too narrow during startup/load. Updated the processor to allow pre-open orders after due time while the market has not opened yet, and to skip once the market start has passed. Verification passed with targeted tests (`96/96`), full tests (`432/432`), and `git diff --check`.

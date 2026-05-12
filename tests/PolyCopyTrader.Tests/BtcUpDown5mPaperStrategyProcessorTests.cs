@@ -1565,6 +1565,40 @@ public sealed class BtcUpDown5mPaperStrategyProcessorTests
     }
 
     [Fact]
+    public async Task ProcessAsync_PreOpenFixedDirectionAllowsLateEntryBeforeMarketStart()
+    {
+        var now = DateTimeOffset.UtcNow;
+        var marketStart = now.AddMinutes(4);
+        var marketEnd = marketStart.AddMinutes(15);
+        var variant = StrategyIds.BtcUpDown5mVariants.Single(item =>
+            item.Code == "btc_up_down_15m_preopen_half_up_49");
+        var repository = new TestAppRepository();
+        repository.PolymarketGammaMarkets.Add(CreateMarket(
+            marketStart,
+            marketEnd,
+            upPrice: 0.50m,
+            downPrice: 0.50m,
+            slug: "btc-updown-15m-" + marketStart.ToUnixTimeSeconds().ToString(CultureInfo.InvariantCulture),
+            seriesSlug: "btc-up-or-down-15m",
+            orderMinSize: 5m));
+        var processor = CreateProcessorCore(
+            repository,
+            [],
+            [OrderBook("asset-up", [], [], now, 5m)],
+            variant.Code);
+
+        var result = await processor.ProcessAsync();
+
+        Assert.Equal(1, result.MarketsObserved);
+        Assert.Equal(1, result.EntriesPlaced);
+        var run = Assert.Single(repository.StrategyMarketPaperRuns);
+        Assert.Equal(marketStart.AddMinutes(-5), run.EntryDueAtUtc);
+        Assert.Equal(StrategyMarketPaperRunStatuses.Entered, run.Status);
+        Assert.Null(run.SkipReason);
+        Assert.Single(repository.PaperOrders);
+    }
+
+    [Fact]
     public async Task ProcessAsync_PreOpenFullPeriodAlwaysDownPlacesFourHourGtdLimit()
     {
         var now = DateTimeOffset.UtcNow;
