@@ -1,3 +1,17 @@
+## Active Update 2026-05-12 Resume Point Check
+Goal: Answer where the project stopped and verify the latest BTC collection state.
+Status: Completed
+Done:
+- Re-read workflow, AGENTS, coding rules, active context, Git state, and BTC source comparison artifacts.
+- Confirmed the latest active task was the 24-hour no-database BTC source comparison run under `artifacts/btc-source-comparison/24h-20260511-182123`.
+- Found the runner is no longer active; no current `dotnet`/PowerShell process is running `--btc-source-comparison-csv`.
+- Found `31` CSV files were written, from `btc-source-comparison-btc-updown-5m-1778523600-20260511-182500.csv` through `btc-source-comparison-btc-updown-5m-1778532600-20260511-205500.csv`, totaling `5,558,433` bytes.
+- `collector.log` last write is `2026-05-11T20:55:03Z`; it ends after starting `btc-updown-5m-1778532900` and connecting Binance SBE/JSON streams, with no completion line for that market and no explicit exception.
+- No `PolyCopyTrader.Service.exe` or `PolyCopyTrader.Dashboard.exe` process was found during this check.
+Next: Decide whether to restart the 24-hour collector from the current market or first diagnose why the previous runner stopped at `2026-05-11T20:55:03Z`; then merge/analyze the 31 completed CSVs.
+Notes: `git pull --ff-only` reported already up to date; `git status --porcelain=v1` showed only untracked `artifacts/polymarket-sdk-src/` before context/history updates. No source/runtime code changed.
+Blockers: The prior 24-hour collection did not complete; stop reason is not recorded in `collector.log`.
+
 ## Active Update 2026-05-11 BTC 24h Source Collection Started
 Goal: Start a 24-hour no-database BTC source comparison collection run.
 Status: Completed
