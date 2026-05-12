@@ -209,3 +209,24 @@ At line:1 char:2
 
 Result:
 Checked TCP/WinRM instead of ICMP. `Test-NetConnection 192.168.0.101 -Port 5985` and `Test-WSMan -ComputerName 192.168.0.101` now succeed, so ping failure is not the blocker. Ran `scripts\Copy-Net48-SecretsToNewServer.ps1`; it read source secret names without printing values, but remote `Invoke-Command` failed before writing because Negotiate authentication could not establish a logon session. Next retry needs explicit target credentials via `-Credential (Get-Credential)`.
+
+## 2026-05-12T16:29:21.3083659Z
+Request:
+.\scripts\Copy-Net48-SecretsToNewServer.ps1 : The term '.\scripts\Copy-Net48-SecretsToNewServer.ps1' is not recognized
+as the name of a cmdlet, function, script file, or operable program. Check the spelling of the name, or if a path was
+included, verify that the path is correct and try again.
+At line:2 char:3
++   .\scripts\Copy-Net48-SecretsToNewServer.ps1 -Credential $cred
++   ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : ObjectNotFound: (.\scripts\Copy-...ToNewServer.ps1:String) [], CommandNotFoundException
+    + FullyQualifiedErrorId : CommandNotFoundException
+
+Result:
+Explained that the user was running from `C:\WINDOWS\system32`, so the relative script path did not resolve. Provided retry commands to either `Set-Location D:\My\Business\PolyMarket` before running `.\scripts\Copy-Net48-SecretsToNewServer.ps1 -Credential $cred`, or call the script by absolute path. Kept password handling through `Get-Credential` only.
+
+## 2026-05-12T16:33:15.1978619Z
+Request:
+User retried the secret-transfer script from `D:\My\Business\PolyMarket` with explicit target credentials. The password supplied to `Get-Credential` is intentionally redacted from repository history.
+
+Result:
+The script reached WinRM on `192.168.0.101`, read local source secret names from environment/Credential Manager without printing values, but remote `Invoke-Command` failed with `Access is denied`. Explained that the remaining blocker is target-side authorization: use the target computer-name credential format, ensure the target account is in local Administrators, and enable local-account remote admin token support if needed.

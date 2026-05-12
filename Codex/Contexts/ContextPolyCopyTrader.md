@@ -1,3 +1,25 @@
+## Active Update 2026-05-12 Secret Transfer Access Denied
+Goal: Diagnose the secret-transfer retry after explicit target credentials were supplied.
+Status: Blocked
+Done:
+- Confirmed the user ran the transfer from the repository root with `Get-Credential`.
+- The script read local source secret names from environment/Credential Manager without printing values.
+- Remote `Invoke-Command` reached WinRM on `192.168.0.101` but failed with `Access is denied`.
+- Identified likely target-side fixes: use the target computer-name credential format, ensure the target account is in local Administrators, and enable `LocalAccountTokenFilterPolicy` for local-account remote administration if needed.
+Next: On the target machine, grant the target account administrator rights and enable local-account remote admin token support, then retry with `TargetComputerName\UserName`.
+Notes: Secret values and the user-provided password were intentionally not recorded.
+Blockers: Target WinRM authentication/authorization denies the supplied account.
+
+## Active Update 2026-05-12 Secret Transfer Command Path Guidance
+Goal: Explain why the secret-transfer script was not recognized from `C:\WINDOWS\system32` and how to run it safely.
+Status: Completed
+Done:
+- Identified the command failure as a working-directory issue: the script path `.\scripts\Copy-Net48-SecretsToNewServer.ps1` is relative to repository root, not `C:\WINDOWS\system32`.
+- Provided safe retry commands using `Get-Credential` for the target account rather than putting the password on the command line.
+Next: Run the transfer from `D:\My\Business\PolyMarket` or call the script by absolute path.
+Notes: No secret values were printed, stored, committed, or transferred in this guidance step.
+Blockers: None.
+
 ## Active Update 2026-05-12 Secret Transfer Auth Blocked
 Goal: Retry the Net48 secret transfer once WinRM became reachable.
 Status: Blocked
