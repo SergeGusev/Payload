@@ -1,3 +1,14 @@
+## Active Update 2026-05-12 Target Script Execution Policy Guidance
+Goal: Explain how to run the encrypted package importer on the target when PowerShell says running scripts is disabled.
+Status: Completed
+Done:
+- Provided a one-command `powershell.exe -ExecutionPolicy Bypass -File ...` import path that avoids changing persistent policy.
+- Provided an alternate current-session-only `Set-ExecutionPolicy -Scope Process Bypass` path plus `Unblock-File` for copied scripts.
+- Noted how to inspect policy scopes with `Get-ExecutionPolicy -List` if Group Policy still blocks script execution.
+Next: On the target machine, run the importer with process-scoped execution policy bypass.
+Notes: No code changed. No secret values were read, printed, stored, or transferred.
+Blockers: None.
+
 ## Active Update 2026-05-12 Encrypted Package Byte Array Fix
 Goal: Fix the encrypted Net48 secret package exporter error where PowerShell unrolled `byte[]` values into `Object[]`.
 Status: Completed

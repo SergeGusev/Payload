@@ -262,3 +262,10 @@ User ran `.\scripts\Export-Net48-SecretsPackage.ps1`; it read the expected sourc
 
 Result:
 Fixed the encrypted package scripts so PowerShell byte-array helper functions return `byte[]` without pipeline unrolling. Updated exporter `New-RandomBytes`, exporter/importer `Get-KeyMaterial`, and exporter/importer `Join-Bytes`. Verified both scripts parse, a test-only AES/HMAC round trip returns `ROUNDTRIP_OK`, `git diff --check` passes, and a regex scan found no obvious secret literals. The failed prior exporter run did not create `artifacts/net48-secret-transfer`.
+
+## 2026-05-12T18:23:47.8666374Z
+Request:
+Я вижу ошибку на новой машине: running scripts is disabled on this system. Как это решить?
+
+Result:
+Explained that the target PowerShell execution policy is blocking the importer script. Recommended running the importer with a process-scoped bypass using `powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\Import-Net48-SecretsPackage.ps1 -PackagePath .\polycopytrader-net48-secrets.enc.json`, or setting `Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass -Force` in the current elevated session and optionally `Unblock-File` on copied files. No secrets were read or transferred.
