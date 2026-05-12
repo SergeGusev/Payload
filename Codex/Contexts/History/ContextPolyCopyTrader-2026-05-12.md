@@ -113,3 +113,10 @@ Does `entry_due_expired` happen after 30 seconds, and does the observed timing m
 
 Result:
 Clarified the timing from the BTC 15m pre-open log example. Market `btc-updown-15m-1778584500` started at `2026-05-12T11:15:00Z` (`14:15:00 +03`), so the five-minute pre-open due time was `14:10:00 +03`; the skip at roughly `14:10:12 +03` was about 12 seconds late, not 42 seconds. The `30` seconds setting is `OrderBookRefreshMarketBehindSeconds`, an order-book refresh candidate lookbehind window, not the entry grace. The old `entry_due_expired` skip was from global `EntryGraceSeconds=10` plus processor/startup lag; commit `e21e27d` already allows pre-open creation after due while the market has not opened.
+
+## 2026-05-12T11:44:30.4398523Z
+Request:
+Мне кажется, или по BTC Up or Down 5m More 270 давно не было ставок?
+
+Result:
+Checked IPC and PostgreSQL with a temporary read-only C# probe, then removed the probe. The service was running with Paper active and BTC5m cycles alive. `btc_up_down_5m_more_270` is enabled and Paper-only, but it has not created a paper order since `2026-05-11T20:39:30Z` and has not filled since `2026-05-11T20:19:42Z`; the last 6 hours showed 57 due-runs, 54 skips, 3 future observed rows, 0 paper orders, and 0 fills. Main post-last-order skip reasons were `opening_limit_market_relative_expiration_elapsed` and `missing_orderbook_empty_side`. Identified the likely logic conflict: `More 270` becomes due at market start plus 270 seconds, while the current local GTD deadline is market end minus 60 seconds, which is start plus 240 seconds for a 5-minute market.

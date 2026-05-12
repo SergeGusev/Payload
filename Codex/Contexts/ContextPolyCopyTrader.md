@@ -1,3 +1,17 @@
+## Active Update 2026-05-12 BTC More270 No Recent Orders Diagnostic
+Goal: Check whether `BTC Up or Down 5m More 270` has stopped creating bets recently and identify why.
+Status: Completed
+Done:
+- Confirmed the service is running via IPC with Paper active, no kill switch, and current BTC5m cycles creating entries for other variants.
+- Ran a temporary read-only C# PostgreSQL probe for `btc_up_down_5m_more_270` and nearby variants, then removed the probe directory.
+- Confirmed `btc_up_down_5m_more_270` is enabled, Paper-only (`live_stakes=false`), and still has observed due runs.
+- Confirmed no `paper_orders` have been created for base `More 270` since `2026-05-11T20:39:30Z` and no fills since `2026-05-11T20:19:42Z`; in the last 6 hours it had 57 due-runs, 54 skips, 3 future observed rows, 0 paper orders, and 0 fills.
+- Found the main post-last-order skip causes: 30 runs skipped as `opening_limit_market_relative_expiration_elapsed`, 25 as `missing_orderbook_empty_side`, 3 as old `entry_due_expired`, and 2 as `entry_due_already_passed`.
+- Identified the likely configuration/logic conflict: `More 270` is due 270 seconds after a 5-minute market starts, but the default local GTD deadline is market end minus `OpeningLimitExpireBeforeMarketEndSeconds=60`, i.e. 240 seconds after start, so the due time is after the allowed GTD deadline.
+Next: Decide whether late-in-window BTC variants such as `More 270` should use a different local expiration policy, be disabled, or keep their historical rows only.
+Notes: No production code changed. Diagnostic command used a temporary C# probe under `artifacts\diagnose-more270`, then deleted it; `git status` returned only the pre-existing untracked `artifacts/polymarket-sdk-src/`.
+Blockers: None.
+
 ## Active Update 2026-05-12 EntryDueExpired Timing Clarification
 Goal: Clarify whether `entry_due_expired` is tied to a 30-second timeout and whether observed skips imply 42 seconds to place a stake.
 Status: Completed
