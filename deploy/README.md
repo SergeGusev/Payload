@@ -44,6 +44,29 @@ Use environment variables or Windows Credential Manager lookup names for:
 Keep `Ipc:ListenUrl` and `Ipc:DashboardBaseUrl` on loopback, for example
 `http://127.0.0.1:5118/`. Do not expose IPC through the VPS firewall.
 
+## Net48 Secret Transfer Without WinRM
+
+If WinRM authorization is blocked but the current machine already has the Net48
+secrets, export an encrypted transfer package instead of writing plaintext
+secrets into a script:
+
+```powershell
+.\scripts\Export-Net48-SecretsPackage.ps1
+```
+
+Choose a one-time transfer package password. Copy the generated encrypted
+package from `artifacts\net48-secret-transfer` plus
+`scripts\Import-Net48-SecretsPackage.ps1` to the target machine. On the target,
+run PowerShell as Administrator:
+
+```powershell
+.\Import-Net48-SecretsPackage.ps1 -PackagePath .\polycopytrader-net48-secrets.enc.json
+```
+
+The importer prompts for the same transfer package password and writes
+machine-level environment variables. It does not print secret values. Delete the
+encrypted package after the target smoke checks pass.
+
 ## Logs
 
 Service logs are written under the service output directory:

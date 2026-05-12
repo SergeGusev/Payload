@@ -31,6 +31,7 @@ logs/
 *.sqlite
 *.sqlite3
 artifacts/btc-source-comparison/
+artifacts/net48-secret-transfer/
 
 ## Secrets/config overrides
 appsettings.Development.local.json

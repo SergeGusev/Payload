@@ -1,3 +1,16 @@
+## Active Update 2026-05-12 Encrypted Net48 Secret Package Transfer
+Goal: Provide a safe alternative to a plaintext hardcoded secret script for moving Net48 secrets when WinRM authorization is blocked.
+Status: Completed
+Done:
+- Declined creating a plaintext script with embedded private key/API secret values.
+- Added `scripts/Export-Net48-SecretsPackage.ps1`, which reads the current machine's Net48 secret/config values from environment variables or Windows Credential Manager and writes a password-encrypted package.
+- Added `scripts/Import-Net48-SecretsPackage.ps1`, which runs on the target machine, decrypts the package in memory, and writes machine-level environment variables without printing secret values.
+- Ignored `artifacts/net48-secret-transfer/` so generated encrypted packages are not accidentally committed.
+- Documented the no-WinRM encrypted package workflow in `deploy/README.md`.
+Next: Run the exporter on the current machine, copy the encrypted package and importer to the target, then run the importer as Administrator on the target.
+Notes: Verification passed: PowerShell scriptblock parse for both new scripts, `git diff --check`, and regex scan for private-key-like literals, explicit API-secret assignments, connection-string assignments, and the previously mentioned password returned no matches. No secret values were printed, stored in repository files, or committed.
+Blockers: None.
+
 ## Active Update 2026-05-12 WinRM Local Admin Troubleshooting
 Goal: Provide next remediation steps after `DESKTOP-Q010N6E\Tommy` still receives WinRM `Access is denied`.
 Status: Completed
