@@ -1,3 +1,15 @@
+## Active Update 2026-05-12 Secret Transfer Auth Blocked
+Goal: Retry the Net48 secret transfer once WinRM became reachable.
+Status: Blocked
+Done:
+- Confirmed `Test-NetConnection 192.168.0.101 -Port 5985` succeeds from source `192.168.0.100`.
+- Confirmed `Test-WSMan -ComputerName 192.168.0.101` succeeds and source TrustedHosts contains `192.168.0.101`.
+- Ran `scripts/Copy-Net48-SecretsToNewServer.ps1`; it read source secret names from environment/Credential Manager without printing values.
+- Remote `Invoke-Command` failed before writing target settings because Negotiate authentication could not establish a logon session.
+Next: Rerun the transfer with explicit target credentials: `.\scripts\Copy-Net48-SecretsToNewServer.ps1 -Credential (Get-Credential)`.
+Notes: `Test-Connection`/ICMP still fails, but WinRM transport on TCP `5985` works; ping is not required for the transfer. No secret values were printed or committed. Remote write did not complete.
+Blockers: Need valid administrator credentials for the target machine/session, or target-side WinRM authentication must be configured for the current account.
+
 ## Active Update 2026-05-12 Target WinRM Recovery Guidance
 Goal: Explain what must be enabled so the secret-transfer target at `192.168.0.101` becomes reachable again.
 Status: Completed

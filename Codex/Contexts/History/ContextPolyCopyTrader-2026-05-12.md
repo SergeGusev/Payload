@@ -189,3 +189,23 @@ Request:
 
 Result:
 Explained the target-side recovery steps for `192.168.0.101`: verify the machine is powered on and still has that IP, enable WinRM/PowerShell Remoting from elevated PowerShell, enable Windows Firewall rules for WinRM/TCP `5985`, configure TrustedHosts on the source if the machines are in a workgroup, then verify with `Test-Connection` and `Test-WSMan` before rerunning `scripts\Copy-Net48-SecretsToNewServer.ps1`. No secrets were read or transferred.
+
+## 2026-05-12T16:14:17.7183502Z
+Request:
+PS C:\WINDOWS\system32>  Test-Connection 192.168.0.101 -Count 2
+Test-Connection : Testing connection to computer '192.168.0.101' failed: Error due to lack of resources
+At line:1 char:2
++  Test-Connection 192.168.0.101 -Count 2
++  ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : ResourceUnavailable: (192.168.0.101:String) [Test-Connection], PingException
+    + FullyQualifiedErrorId : TestConnectionException,Microsoft.PowerShell.Commands.TestConnectionCommand
+
+Test-Connection : Testing connection to computer '192.168.0.101' failed: Error due to lack of resources
+At line:1 char:2
++  Test-Connection 192.168.0.101 -Count 2
++  ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : ResourceUnavailable: (192.168.0.101:String) [Test-Connection], PingException
+    + FullyQualifiedErrorId : TestConnectionException,Microsoft.PowerShell.Commands.TestConnectionCommand
+
+Result:
+Checked TCP/WinRM instead of ICMP. `Test-NetConnection 192.168.0.101 -Port 5985` and `Test-WSMan -ComputerName 192.168.0.101` now succeed, so ping failure is not the blocker. Ran `scripts\Copy-Net48-SecretsToNewServer.ps1`; it read source secret names without printing values, but remote `Invoke-Command` failed before writing because Negotiate authentication could not establish a logon session. Next retry needs explicit target credentials via `-Credential (Get-Credential)`.
