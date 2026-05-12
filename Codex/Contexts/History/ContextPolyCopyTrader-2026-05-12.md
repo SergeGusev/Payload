@@ -79,3 +79,9 @@ Request:
 
 Result:
 Extended the ignored read-only historical analyzer for BTC hourly markets and reran the analysis on the available Gamma hourly series. The final report covers 7,994 resolved BTC hourly markets from 2025-05-23T11:00Z through 2026-05-12T05:00Z, plus a 30-day fill-aware approximation over 717 recent markets. Outcome-only guaranteed 0.45 fills were mildly positive for AlwaysUp/AlwaysDown and stronger for previous-result mean reversion, but observed 0.45 fill candidates were negative due to adverse selection. Artifacts are under `artifacts/btc-source-comparison/hourly-series-backtest-output-20260512-113016`.
+## 2026-05-12T09:34:19.1189455Z
+Request:
+Прерывай. Удали то, что было временным для этого рассчёта
+
+Result:
+Stopped the interrupted BTC hourly 30-minute fill-aware backtest process, deleted the temporary output directories created for that attempt, and removed the temporary 30-minute fill-window changes from the ignored artifact analyzer. Verified the artifact analyzer still builds and no matching backtest process or temporary output directory remains.

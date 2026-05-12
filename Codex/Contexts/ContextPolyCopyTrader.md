@@ -1,3 +1,14 @@
+## Active Update 2026-05-12 BTC Hourly 30m Fill Recalc Cleanup
+Goal: Stop the interrupted BTC hourly 30-minute fill recalculation and remove temporary artifacts from that attempt.
+Status: Completed
+Done:
+- Stopped the running `BtcHistoricalBacktest` dotnet process that was processing the interrupted yearly hourly 30-minute fill-aware run.
+- Removed temporary output directories from this attempt: `historical-backtest-output-20260512-085318`, `hourly-30m-fill-backtest-output-20260512-115405`, and `hourly-30m-fill-backtest-output-20260512-122109`.
+- Removed the temporary 30-minute fill-window changes from the ignored analyzer under `artifacts/btc-source-comparison/historical-backtest`, leaving the prior hourly-capable analyzer in place.
+Next: None unless the 30-minute condition should be recalculated later with a resumable/cached implementation.
+Notes: Verification passed with `dotnet build artifacts\btc-source-comparison\historical-backtest\BtcHistoricalBacktest.csproj`; no remaining `BtcHistoricalBacktest` dotnet process or temporary 30-minute output directory was found. No production runtime code changed.
+Blockers: None.
+
 ## Active Update 2026-05-12 BTC Hourly Historical Backtest
 Goal: Recalculate the BTC Up/Down historical strategy analysis for hourly markets.
 Status: Completed
