@@ -255,3 +255,10 @@ Request:
 
 Result:
 Declined creating a plaintext hardcoded script with private key/API secret values. Added a safe encrypted-package alternative: `scripts/Export-Net48-SecretsPackage.ps1` reads the current machine's Net48 values from environment/Credential Manager and writes a password-encrypted package; `scripts/Import-Net48-SecretsPackage.ps1` decrypts it on the target and writes machine-level environment variables without printing secret values. Ignored `artifacts/net48-secret-transfer/` and documented the workflow in `deploy/README.md`. Verification passed with PowerShell parse checks, `git diff --check`, and a regex scan for obvious secret literals.
+
+## 2026-05-12T18:10:39.2575860Z
+Request:
+User ran `.\scripts\Export-Net48-SecretsPackage.ps1`; it read the expected source secret names and then failed after transfer package password entry with `Exception calling "BlockCopy"... Object must be an array of primitives` at `scripts\Export-Net48-SecretsPackage.ps1:299`.
+
+Result:
+Fixed the encrypted package scripts so PowerShell byte-array helper functions return `byte[]` without pipeline unrolling. Updated exporter `New-RandomBytes`, exporter/importer `Get-KeyMaterial`, and exporter/importer `Join-Bytes`. Verified both scripts parse, a test-only AES/HMAC round trip returns `ROUNDTRIP_OK`, `git diff --check` passes, and a regex scan found no obvious secret literals. The failed prior exporter run did not create `artifacts/net48-secret-transfer`.

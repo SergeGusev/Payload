@@ -1,3 +1,14 @@
+## Active Update 2026-05-12 Encrypted Package Byte Array Fix
+Goal: Fix the encrypted Net48 secret package exporter error where PowerShell unrolled `byte[]` values into `Object[]`.
+Status: Completed
+Done:
+- Changed exporter byte-array helper returns to use unary comma for `New-RandomBytes`, `Get-KeyMaterial`, and `Join-Bytes`.
+- Changed importer byte-array helper returns to use unary comma for `Get-KeyMaterial` and `Join-Bytes`.
+- Verified both scripts parse and a test-only AES/HMAC encrypt/decrypt round trip succeeds without using real secrets.
+Next: Rerun `.\scripts\Export-Net48-SecretsPackage.ps1` on the current machine.
+Notes: Verification passed with PowerShell scriptblock parse, synthetic crypto round-trip `ROUNDTRIP_OK`, `git diff --check`, and regex scan for obvious secret literals. The failed prior exporter run did not create `artifacts/net48-secret-transfer`.
+Blockers: None.
+
 ## Active Update 2026-05-12 Encrypted Net48 Secret Package Transfer
 Goal: Provide a safe alternative to a plaintext hardcoded secret script for moving Net48 secrets when WinRM authorization is blocked.
 Status: Completed

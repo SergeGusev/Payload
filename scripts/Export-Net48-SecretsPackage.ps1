@@ -249,7 +249,7 @@ function New-RandomBytes {
     $rng = [Security.Cryptography.RandomNumberGenerator]::Create()
     try {
         $rng.GetBytes($bytes)
-        return $bytes
+        return , $bytes
     }
     finally {
         $rng.Dispose()
@@ -265,7 +265,7 @@ function Get-KeyMaterial {
 
     $kdf = New-Object Security.Cryptography.Rfc2898DeriveBytes($Password, $Salt, $KdfIterations)
     try {
-        return $kdf.GetBytes($Length)
+        return , ($kdf.GetBytes($Length))
     }
     finally {
         $kdf.Dispose()
@@ -281,7 +281,7 @@ function Join-Bytes {
     $joined = New-Object byte[] ($First.Length + $Second.Length)
     [Buffer]::BlockCopy($First, 0, $joined, 0, $First.Length)
     [Buffer]::BlockCopy($Second, 0, $joined, $First.Length, $Second.Length)
-    return $joined
+    return , $joined
 }
 
 function Protect-PlainText {
