@@ -32,6 +32,13 @@ Request:
 
 Result:
 Checked local CLOB order request/building code and current official Polymarket docs. Answered that GTD supports a UTC Unix-second expiration timestamp and the local code already has `GtdExpirationUtc`, but current strategy code uses TTL-based deadlines. Noted that official docs describe a one-minute GTD security threshold/buffer, so for a precise operational deadline such as one minute before market end, the safer implementation is a market-relative local deadline plus either adjusted wire expiration or an explicit scheduled cancel at the target time.
+## 2026-05-12T07:07:39.0879863Z
+Request:
+Ок, а можешь сам оценить, сколько реально зарабатывать на таких ставках, если ставить минимальную цену?
+
+Result:
+Estimated profitability of passive minimum-price BTC 5m orders. Live future books showed large existing `0.01` queues of roughly `13.9k-15.5k` shares per outcome, with min order size `5` and tick size `0.01`. Theoretical maker break-even for a `0.01` BUY is a post-fill win probability above `1%`, but a sample of 72 completed BTC 5m markets showed `8,652` BUY trades at `0.01` and `1,711` at `0.02` in the latest 500 trades per market, all on losing outcomes, for sampled PnL of about `-$5,262.69` at `0.01` and `-$1,266.20` at `0.02` if those fills were ours. Concluded passive minimum-price orders are near-zero if unfilled and negative when filled; viable market making requires active quote/cancel and inventory control.
+
 ## 2026-05-12T06:54:32.8487308Z
 Request:
 А ты сможешь найти тех, кто делает такие ставки? И оценить успешность их деятельности на Polymarket?

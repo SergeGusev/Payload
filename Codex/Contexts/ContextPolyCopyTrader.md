@@ -1,3 +1,17 @@
+## Active Update 2026-05-12 BTC Minimum Price Profit Estimate
+Goal: Estimate realistic profitability of posting minimum-price BTC 5m orders.
+Status: Completed
+Done:
+- Verified current BTC 5m market parameters from live future books: minimum order size `5`, tick size `0.01`, crypto fee rate `0.07`, maker rebate rate `0.2`, and maker fee effectively `0`.
+- Observed heavy existing queue at minimum price in future BTC 5m books: about `13.9k-15.5k` shares already bid at `0.01` per outcome, so small new orders would sit behind substantial queue.
+- Computed theoretical maker economics: a BUY at `0.01` breaks even only if the conditional win probability after fill exceeds `1%`; a 5-share minimum fill risks `$0.05` and pays about `$4.95` only if it wins.
+- Sampled 72 completed BTC 5m markets, using the latest 500 Data API trades per market and Gamma final `outcomePrices`; found `8,652` BUY trades at `0.01` and `1,711` at `0.02` in that sample, all on losing outcomes.
+- Sampled conditional PnL if those fills were ours: `0.01` buys lost about `$5,262.69`; `0.02` buys lost about `$1,266.20`. This is not a full exhaustive backtest, but it indicates strong adverse selection for minimum-price resting buys.
+- Concluded that posting minimum-price orders and leaving them active is likely near-zero if unfilled and negative when filled; viable maker PnL would require active quoting/canceling and inventory control, not passive `0.01` bids.
+Next: If requested, implement a proper read-only BTC min-price fill analyzer with pagination, exact market windows, and configurable cancel-before-close assumptions.
+Notes: No source/runtime code changed. Verification was live Polymarket API inspection plus official Polymarket fee docs; no tests were run.
+Blockers: Data API sample used only the latest 500 trades per market and does not label maker/taker, so it is an indicative sample rather than a complete attribution-grade backtest.
+
 ## Active Update 2026-05-12 BTC Maker Identity Feasibility
 Goal: Determine whether early BTC 5m liquidity providers can be identified and their Polymarket success evaluated.
 Status: Completed
