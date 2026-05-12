@@ -1,3 +1,17 @@
+## Active Update 2026-05-12 Always Direction Strategy Explanation
+Goal: Explain how the existing `AlwaysUp` and `AlwaysDown` BTC Up/Down 5m strategies currently work.
+Status: Completed
+Done:
+- Re-read workflow, AGENTS, coding rules, active context, Git state, and the strategy implementation.
+- Confirmed `AlwaysUp`/`AlwaysDown` are baseline BTC 5-minute paper strategies, not predictive strategies.
+- Confirmed both variants wait until the BTC 5m market is tradeable, select the fixed outcome (`Up` or `Down`), and create a Paper BUY GTD limit order at `0.45`.
+- Confirmed the configured/opening GTD TTL is `120` seconds by default and is capped by market end.
+- Confirmed settlement uses only actually filled shares; if no fills exist, the run is skipped as `gtd_limit_not_filled`.
+- Noted the current implementation nuance that these orders are tagged as `paper_gtd_limit`; the conservative GTD fill estimator recognizes `pricing_mode=opening_limit`/converted orders, so these Always variants are effectively filled by the generic paper fill simulation from order-book ask depth or observed trades.
+Next: If requested, backtest `AlwaysUp`/`AlwaysDown` first as a baseline using historical BTC 5m markets, final outcomes, and entry-window order-book/trade data around the first two minutes.
+Notes: No source/runtime code changed. Main files inspected: `Models.cs`, `BtcUpDown5mPaperStrategyProcessor.cs`, `AppConfiguration.cs`, `PaperTradingProcessor.cs`, `DefaultPaperTradingEngine.cs`, and `ConservativePaperGtdFillEstimator.cs`.
+Blockers: None for the explanation. Fill-realistic historical testing requires archived order book or trade evidence near the 0.45 limit.
+
 ## Active Update 2026-05-12 Historical Strategy Testability Answer
 Goal: Identify which existing strategies can be tested offline on one year of historical data.
 Status: Completed
