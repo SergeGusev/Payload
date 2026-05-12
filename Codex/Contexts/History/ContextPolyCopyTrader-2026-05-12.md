@@ -106,3 +106,10 @@ Request:
 
 Result:
 Checked the running `PolyCopyTrader.Service.exe` process, IPC `/status`, and fresh service logs. The service was responsive and running with no pause flags, no kill switch, and `lastError=null`; live trading was disabled. Order-book refresh cycles were active with no missing/failed refreshes in the sampled lines. Found one transient Market WebSocket parse warning and expected CLOB `/book` 404 info logs. Found and fixed a real issue for new BTC pre-open variants: 15m pre-open runs could be skipped as `entry_due_expired` a few seconds after due time because the global 10-second entry grace was too narrow during startup/load. Updated the processor to allow pre-open orders after due time while the market has not opened yet, and to skip once the market start has passed. Verification passed with targeted tests (`96/96`), full tests (`432/432`), and `git diff --check`.
+
+## 2026-05-12T11:30:47.8493023Z
+Request:
+Does `entry_due_expired` happen after 30 seconds, and does the observed timing mean 42 seconds are spent placing a stake?
+
+Result:
+Clarified the timing from the BTC 15m pre-open log example. Market `btc-updown-15m-1778584500` started at `2026-05-12T11:15:00Z` (`14:15:00 +03`), so the five-minute pre-open due time was `14:10:00 +03`; the skip at roughly `14:10:12 +03` was about 12 seconds late, not 42 seconds. The `30` seconds setting is `OrderBookRefreshMarketBehindSeconds`, an order-book refresh candidate lookbehind window, not the entry grace. The old `entry_due_expired` skip was from global `EntryGraceSeconds=10` plus processor/startup lag; commit `e21e27d` already allows pre-open creation after due while the market has not opened.

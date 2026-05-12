@@ -1,3 +1,15 @@
+## Active Update 2026-05-12 EntryDueExpired Timing Clarification
+Goal: Clarify whether `entry_due_expired` is tied to a 30-second timeout and whether observed skips imply 42 seconds to place a stake.
+Status: Completed
+Done:
+- Rechecked the BTC 15m pre-open example from the service logs: market `btc-updown-15m-1778584500` started at `2026-05-12T11:15:00Z` (`14:15:00 +03`), so the pre-open due time was `2026-05-12T11:10:00Z` (`14:10:00 +03`).
+- Confirmed the logged `entry_due_expired` decisions around `14:10:12 +03` were about 12 seconds after due time, not 42 seconds.
+- Clarified that `OrderBookRefreshMarketBehindSeconds=30` is an order-book refresh candidate lookbehind setting, not the strategy entry grace/expiration.
+- Clarified that the old skip was caused by global `EntryGraceSeconds=10` plus processor/startup delay; the current pre-open fix allows late creation while `now < marketStartUtc`.
+Next: Monitor fresh service logs after the restarted service runs through new pre-open due windows.
+Notes: No code changed for this clarification; previous commit `e21e27d` already changed the pre-open grace behavior.
+Blockers: None.
+
 ## Active Update 2026-05-12 Service Runtime Check And PreOpen Grace Fix
 Goal: Check the running service after BTC pre-open strategy changes and fix any runtime issue found.
 Status: Completed
