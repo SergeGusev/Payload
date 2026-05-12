@@ -120,3 +120,10 @@ Request:
 
 Result:
 Checked IPC and PostgreSQL with a temporary read-only C# probe, then removed the probe. The service was running with Paper active and BTC5m cycles alive. `btc_up_down_5m_more_270` is enabled and Paper-only, but it has not created a paper order since `2026-05-11T20:39:30Z` and has not filled since `2026-05-11T20:19:42Z`; the last 6 hours showed 57 due-runs, 54 skips, 3 future observed rows, 0 paper orders, and 0 fills. Main post-last-order skip reasons were `opening_limit_market_relative_expiration_elapsed` and `missing_orderbook_empty_side`. Identified the likely logic conflict: `More 270` becomes due at market start plus 270 seconds, while the current local GTD deadline is market end minus 60 seconds, which is start plus 240 seconds for a 5-minute market.
+
+## 2026-05-12T12:03:22.1205187Z
+Request:
+Давай для всех ставок, которые ставятся позже второй половины периода, отменим время завершения ордера.
+
+Result:
+Implemented a BTC GTD expiration policy change: non-preopen entries whose due time is after the market midpoint no longer apply the market-end-minus-safety local deadline and instead use the fallback TTL/market-end cap. This fixes late 5m variants such as `BTC Up or Down 5m More 270`, whose due time is `start+270s`, after the old `marketEnd-60s` deadline. Pre-open Half/Full expiration behavior is unchanged. Added a regression test for `More 270` creating a GTD Paper order with `gtd_expiration_mode=market_end_cap`, updated README, and verified focused BTC tests `97/97`, full tests `433/433`, and `git diff --check`.

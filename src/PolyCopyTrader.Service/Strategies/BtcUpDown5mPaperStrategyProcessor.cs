@@ -6347,7 +6347,16 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
                 "preopen_full_period");
         }
 
-        if (options.OpeningLimitExpireBeforeMarketEndSeconds > 0 && market.EndDateUtc is { } marketEndUtc)
+        var marketStartForLateEntryCheck = BtcUpDown5mMarketAnalyzer.GetWindowStartUtc(market);
+        var marketEndForLateEntryCheck = GetEffectiveMarketEndUtc(market, variant, marketStartForLateEntryCheck);
+        var entryDueAfterMarketMidpoint = IsEntryDueAfterMarketMidpoint(
+            variant,
+            marketStartForLateEntryCheck,
+            marketEndForLateEntryCheck);
+
+        if (!entryDueAfterMarketMidpoint &&
+            options.OpeningLimitExpireBeforeMarketEndSeconds > 0 &&
+            market.EndDateUtc is { } marketEndUtc)
         {
             var localExpiresAtUtc = marketEndUtc.AddSeconds(-options.OpeningLimitExpireBeforeMarketEndSeconds);
             if (localExpiresAtUtc <= nowUtc)
@@ -6384,6 +6393,24 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
             options.OpeningLimitExpireBeforeMarketEndSeconds,
             clobBufferSeconds,
             mode);
+    }
+
+    private static bool IsEntryDueAfterMarketMidpoint(
+        BtcUpDown5mStrategyVariant variant,
+        DateTimeOffset? marketStartUtc,
+        DateTimeOffset? marketEndUtc)
+    {
+        if (variant.PreOpenLifetimeMode != BtcUpDownPreOpenLifetimeMode.Default ||
+            marketStartUtc is null ||
+            marketEndUtc is null ||
+            marketEndUtc <= marketStartUtc)
+        {
+            return false;
+        }
+
+        var entryDueAtUtc = marketStartUtc.Value.AddSeconds(variant.EntryDelaySeconds);
+        var midpointUtc = marketStartUtc.Value.AddTicks((marketEndUtc.Value - marketStartUtc.Value).Ticks / 2);
+        return entryDueAtUtc > midpointUtc;
     }
 
     private static DateTimeOffset? GetEffectiveMarketEndUtc(

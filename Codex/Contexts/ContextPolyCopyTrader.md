@@ -1,3 +1,16 @@
+## Active Update 2026-05-12 Late Entry GTD Expiration Bypass
+Goal: For bets placed after the market midpoint, stop applying the market-end-minus-safety local GTD deadline.
+Status: Completed
+Done:
+- Changed BTC GTD expiration resolution so non-preopen entries whose `entry_due_at_utc` is after the market midpoint bypass `OpeningLimitExpireBeforeMarketEndSeconds` and use the fallback TTL/market-end cap instead.
+- This lets late 5m variants such as base `BTC Up or Down 5m More 270` create an order in the final half of the market instead of being rejected by `opening_limit_market_relative_expiration_elapsed`.
+- Preserved explicit pre-open Half/Full expiration modes, including Half-period midpoint cancellation and Full-period market-end safety cancellation.
+- Added a regression test proving `More 270` at `start+270s` creates a GTD Paper order expiring at market end with `gtd_expiration_mode=market_end_cap`.
+- Updated README to document the late-entry expiration bypass.
+Next: Restart the running service so the new expiration policy is loaded, then monitor `btc_up_down_5m_more_270` for fresh orders.
+Notes: Verification passed with focused BTC processor tests `97/97`, full `dotnet test tests\PolyCopyTrader.Tests\PolyCopyTrader.Tests.csproj --no-restore -p:BaseOutputPath=D:\My\Business\PolyMarket\artifacts\test-build\` (`433/433`), and `git diff --check`. Generated `artifacts\test-build` binaries were restored; pre-existing untracked `artifacts/polymarket-sdk-src/` remains untouched.
+Blockers: None.
+
 ## Active Update 2026-05-12 BTC More270 No Recent Orders Diagnostic
 Goal: Check whether `BTC Up or Down 5m More 270` has stopped creating bets recently and identify why.
 Status: Completed

@@ -21,6 +21,9 @@ public sealed class BtcUpDown5mPaperStrategyProcessorTests
     private static readonly BtcUpDown5mStrategyVariant More60Variant =
         StrategyIds.GetBtcUpDown5mVariant(BtcUpDown5mStrategyDirection.More, 60);
 
+    private static readonly BtcUpDown5mStrategyVariant More270Variant =
+        StrategyIds.GetBtcUpDown5mVariant(BtcUpDown5mStrategyDirection.More, 270);
+
     private static readonly BtcUpDown5mStrategyVariant More90Below70Variant =
         StrategyIds.BtcUpDown5mVariants.Single(variant => variant.Code == StrategyIds.BtcUpDown5mMore90Below70Code);
 
@@ -811,6 +814,58 @@ public sealed class BtcUpDown5mPaperStrategyProcessorTests
         Assert.Equal(0.60m, order.Price);
         Assert.Empty(repository.PaperFills);
         Assert.Contains("\"strategy_entry_price_cap\":0.6", order.RawDecisionJson, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task ProcessAsync_More270UsesMarketEndCapWhenEntryIsAfterMarketMidpoint()
+    {
+        var now = DateTimeOffset.UtcNow;
+        var marketStartUtc = now.AddSeconds(-270);
+        var marketEndUtc = marketStartUtc.AddMinutes(5);
+        var repository = new TestAppRepository();
+        repository.PolymarketGammaMarkets.Add(CreateMarket(
+            marketStartUtc,
+            marketEndUtc,
+            upPrice: 0.58m,
+            downPrice: 0.42m));
+        var orderBooks = new[]
+        {
+            OrderBook(
+                "asset-up",
+                [new OrderBookLevel(0.57m, 100m)],
+                [new OrderBookLevel(0.58m, 100m)],
+                now),
+            OrderBook(
+                "asset-down",
+                [new OrderBookLevel(0.42m, 100m)],
+                [new OrderBookLevel(0.43m, 100m)],
+                now)
+        };
+        var processor = CreateTakerProcessorCore(
+            repository,
+            orderBooks,
+            orderBooks,
+            More270Variant.Code);
+
+        var result = await processor.ProcessAsync();
+
+        Assert.Equal(1, result.EntriesPlaced);
+        Assert.Equal(0, result.RunsSkipped);
+        var run = Assert.Single(repository.StrategyMarketPaperRuns);
+        Assert.Equal(More270Variant.Id, run.StrategyId);
+        Assert.Equal(StrategyMarketPaperRunStatuses.Entered, run.Status);
+        Assert.Equal("Up", run.SelectedOutcome);
+        Assert.Equal(0.58m, run.EntryPrice);
+
+        var order = Assert.Single(repository.PaperOrders);
+        Assert.Equal(More270Variant.Id, order.StrategyId);
+        Assert.Equal(PaperOrderStatus.Pending, order.Status);
+        Assert.Equal(0.58m, order.Price);
+        Assert.InRange((order.ExpiresAtUtc - marketEndUtc).TotalMilliseconds, -100d, 100d);
+        Assert.DoesNotContain("opening_limit_market_relative_expiration_elapsed", run.SkipReason ?? string.Empty, StringComparison.Ordinal);
+        Assert.Contains("\"gtd_expiration_mode\":\"market_end_cap\"", order.RawDecisionJson, StringComparison.Ordinal);
+        Assert.Contains("\"market_end_expire_before_seconds\":60", order.RawDecisionJson, StringComparison.Ordinal);
+        Assert.Contains("\"converted_to_gtd_limit_order\":true", order.RawDecisionJson, StringComparison.Ordinal);
     }
 
     [Fact]
