@@ -147,3 +147,10 @@ Request:
 
 Result:
 Checked runtime status, configuration, current strategy live flags, paper strategy performance, 24h/6h recent windows, and historical live-shadow results with a temporary read-only C# PostgreSQL probe, then removed the probe. The service is running with no kill switch or last error, but global live placement is blocked by `Bot:EnableLiveTrading=false` and zero strategies currently have `live_stakes=true`. No strategy has at least 100 settled paper runs with positive closed ROI/expectancy. Several BTC 5m paper candidates have positive 30-86 settled-run samples, especially `btc_up_down_5m_more_270`, `btc_up_down_5m_more_60_below_55`, and `btc_up_down_5m_more_60_below_60`, but the sample is not enough to call them fully live-ready. The only historical paper-live-shadow strategy, `btc_up_down_5m_more_150_below_65`, was negative: 24 shadow live orders, 11 filled/settled, 4 won, 7 lost, PnL `-16.324` on `40.964` cost. Conclusion: no current strategy should be treated as ready for full live; best next step is controlled shadow or one-strategy micro-live validation.
+
+## 2026-05-12T14:08:28.5879170Z
+Request:
+Объясни, почему у стратегии BTC Up or Down 5m PreOpen Full Up 37 при 6 поражениях и 3 выигрышах ещё положительный баланс?
+
+Result:
+Checked `btc_up_down_5m_preopen_full_up_37` with a temporary read-only C# PostgreSQL probe, then removed it. Confirmed the positive balance is explained by actual filled cost and asymmetric binary-option payoff: only 9 filled/settled paper orders contribute to closed PnL, wins total about `+15.5712`, losses total about `-10.3808`, leaving `+5.1904`; expired/pending orders do not affect PnL.

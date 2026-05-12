@@ -1,3 +1,15 @@
+## Active Update 2026-05-12 PreOpen Full Up 37 Balance Explanation
+Goal: Explain why `BTC Up or Down 5m PreOpen Full Up 37` can show positive balance with 3 wins and 6 losses.
+Status: Completed
+Done:
+- Ran a temporary read-only C# PostgreSQL probe for `btc_up_down_5m_preopen_full_up_37` and removed it after use.
+- Confirmed the strategy has 33 paper orders, but only 9 filled/settled orders currently contribute to closed PnL; expired/pending orders contribute no PnL.
+- Confirmed the 9 settled runs are 3 won and 6 lost with total closed PnL `+5.1904` on filled cost `19.1396`.
+- Confirmed the positive result comes from asymmetric low-price payoff and actual fill prices below/at the `0.37` limit: wins total `+15.5712`, losses total `-10.3808`.
+Next: Treat this as a small paper sample only; do not infer live readiness from 9 settled fills.
+Notes: No production code changed. Temporary files under `artifacts\diagnose-preopen-full-up37` were removed. `git pull --ff-only` was already up to date; pre-existing untracked `artifacts/polymarket-sdk-src/` remains untouched.
+Blockers: None.
+
 ## Active Update 2026-05-12 Live Strategy Readiness Check
 Goal: Assess whether any current strategy looks ready to enable for live trading.
 Status: Completed
