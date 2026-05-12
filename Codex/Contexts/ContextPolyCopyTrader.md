@@ -1,3 +1,19 @@
+## Active Update 2026-05-12 Live Strategy Readiness Check
+Goal: Assess whether any current strategy looks ready to enable for live trading.
+Status: Completed
+Done:
+- Confirmed runtime is healthy via IPC `/status` with `state=Running`, no pause flags, no kill switch, and `lastError=null`.
+- Confirmed `Bot:Mode=Live` but global `Bot:EnableLiveTrading=false`, so live placement is currently blocked by configuration.
+- Confirmed no strategies currently have `live_stakes=true`.
+- Ran a temporary read-only C# PostgreSQL probe and removed it after use.
+- Found no strategy with at least 100 settled paper runs and positive closed ROI/expectancy.
+- Found several 5m BTC paper candidates with 30-86 settled runs and positive results, led by `btc_up_down_5m_more_270`, `btc_up_down_5m_more_60_below_55`, `btc_up_down_5m_more_60_below_60`, `btc_up_down_5m_more_90_below_55`, and `btc_up_down_5m_more_60`.
+- Found the only historical paper-live-shadow strategy, `btc_up_down_5m_more_150_below_65`, is not live-ready by results: 24 shadow live orders, 11 filled/settled, 4 won, 7 lost, PnL `-16.324` on `40.964` cost, last shadow order `2026-05-11T09:32:30Z`.
+- Found zero paper-live-shadow discrepancies, so the shadow plumbing itself has not recorded mismatches.
+Next: If moving toward live, start with a controlled shadow or one-strategy micro-live gate for the best paper candidate rather than enabling full live trading.
+Notes: No production code changed. Temporary files under `artifacts\live-readiness-probe` were removed. `git status` shows only the pre-existing untracked `artifacts/polymarket-sdk-src/`.
+Blockers: Current evidence is not strong enough for full live readiness; live remains globally disabled.
+
 ## Active Update 2026-05-12 BTC Due Entry Run-Level Parallelization
 Goal: Reduce BTC strategy entry placement latency so individual bets do not wait behind unrelated bets, with a practical target of at most about 2 seconds per stake.
 Status: Completed

@@ -140,3 +140,10 @@ Request:
 
 Result:
 Implemented BTC due-entry run-level parallelization. Entry selection now pulls a global due-run queue across all enabled variants ordered by `entry_due_at_utc`, rather than one due run per variant, and processes those runs with bounded parallel workers up to `MaxConcurrentEntryDecisions`. Raised the default concurrency from 8 to 16, added per-cycle Gamma market lookup task caching, added a multi-strategy repository query plus PostgreSQL due-entry index, and updated README. Added a regression test proving same-variant due runs are processed concurrently and adjusted the test repository for the touched concurrent paths. Verification passed with focused BTC tests (`98/98`), full tests (`434/434`), normal Debug service build, and `git diff --check`. Restarted the Debug service as PID `2120`; IPC `/status` returned `Running`, pause flags false, kill switch false, and `lastError=null`.
+
+## 2026-05-12T13:12:00Z
+Request:
+Видишь ли ты сейчас какие-нибудь стратегии, готовые для live ?
+
+Result:
+Checked runtime status, configuration, current strategy live flags, paper strategy performance, 24h/6h recent windows, and historical live-shadow results with a temporary read-only C# PostgreSQL probe, then removed the probe. The service is running with no kill switch or last error, but global live placement is blocked by `Bot:EnableLiveTrading=false` and zero strategies currently have `live_stakes=true`. No strategy has at least 100 settled paper runs with positive closed ROI/expectancy. Several BTC 5m paper candidates have positive 30-86 settled-run samples, especially `btc_up_down_5m_more_270`, `btc_up_down_5m_more_60_below_55`, and `btc_up_down_5m_more_60_below_60`, but the sample is not enough to call them fully live-ready. The only historical paper-live-shadow strategy, `btc_up_down_5m_more_150_below_65`, was negative: 24 shadow live orders, 11 filled/settled, 4 won, 7 lost, PnL `-16.324` on `40.964` cost. Conclusion: no current strategy should be treated as ready for full live; best next step is controlled shadow or one-strategy micro-live validation.
