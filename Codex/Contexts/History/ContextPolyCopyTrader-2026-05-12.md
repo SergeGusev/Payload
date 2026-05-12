@@ -32,6 +32,13 @@ Request:
 
 Result:
 Checked local CLOB order request/building code and current official Polymarket docs. Answered that GTD supports a UTC Unix-second expiration timestamp and the local code already has `GtdExpirationUtc`, but current strategy code uses TTL-based deadlines. Noted that official docs describe a one-minute GTD security threshold/buffer, so for a precise operational deadline such as one minute before market end, the safer implementation is a market-relative local deadline plus either adjusted wire expiration or an explicit scheduled cancel at the target time.
+## 2026-05-12T06:31:07.4107421Z
+Request:
+В чём практический смысл таких ставок?
+
+Result:
+Explained that the observed early BTC 5m orders are best interpreted as resting market-maker liquidity rather than executed directional bets. The practical purpose is to seed usable order books, quote a symmetric 50/50 market, and earn the spread or complete-set edge when both Up and Down sides are filled. Also noted the strategy implication: early liquidity is useful for market availability/liquidity monitoring, but is not a signal for AlwaysUp/AlwaysDown to enter before market start.
+
 ## 2026-05-12T06:25:22.2031586Z
 Request:
 Проведи анализ текущих маркетов пятиминутных маркетов, которые будут стартовать через сутки - стоят ли там уже ставки, сколько их там, какие коэффициенты.

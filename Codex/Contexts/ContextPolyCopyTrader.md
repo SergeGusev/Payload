@@ -1,3 +1,15 @@
+## Active Update 2026-05-12 BTC Early Liquidity Interpretation
+Goal: Explain the practical purpose of resting BTC 5m orders posted nearly a day before market start.
+Status: Completed
+Done:
+- Interpreted the observed early BTC 5m books as resting maker liquidity rather than executed directional bets.
+- Noted the practical maker logic: quote symmetric Up/Down books around fair 50/50, earn one-tick spread or complete-set edge when both sides fill, and keep markets usable from creation time.
+- Explained that public CLOB data showed zero executed trades in the checked future markets, so there was no evidence of crowd conviction about a future BTC move.
+- Connected this to the strategy implication: early books are useful for liquidity/market-creation monitoring, but not a signal for `AlwaysUp`/`AlwaysDown` to enter before market start.
+Next: If needed, add a read-only report command that separates future-market resting liquidity from actual executed trades and flags symmetric maker ladders.
+Notes: No source/runtime code changed. Verification was explanatory analysis based on the prior live Gamma/CLOB/Data API snapshot; no tests were run.
+Blockers: None.
+
 ## Active Update 2026-05-12 BTC 5m Future Market Liquidity Check
 Goal: Analyze current Polymarket BTC 5-minute markets around the one-day-ahead start boundary.
 Status: Completed
