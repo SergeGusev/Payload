@@ -1,3 +1,16 @@
+## Active Update 2026-05-12 GTD Exact Expiration Clarification
+Goal: Clarify whether GTD orders can be submitted with an exact expiration time such as one minute before market close.
+Status: Completed
+Done:
+- Re-read workflow, AGENTS, coding rules, active context, Git state, local GTD order code, and current official Polymarket CLOB order documentation.
+- Confirmed Polymarket GTD supports an expiration timestamp in UTC Unix seconds, and CLOB V2 keeps `expiration` in the POST `/order` wire body for GTD expiry handling.
+- Confirmed local `ClobV2OrderRequest` already has `GtdExpirationUtc`, and `ClobV2OrderBuilder` serializes it to the wire `expiration` field for `OrderType=GTD`.
+- Confirmed current BTC Paper/opening-limit expiry is computed as `min(now + OpeningLimitGtdTtlSeconds, marketEndUtc)`; current live request creation generally uses `createdAtUtc + DefaultOrderTtlSeconds`.
+- Noted official docs describe a one-minute GTD security threshold/buffer, while local validation currently only enforces more than 30 seconds after creation.
+Next: If requested, implement a market-relative GTD deadline mode, e.g. desired local deadline `marketEndUtc - 60s`, with CLOB wire expiration adjusted for Polymarket's one-minute buffer and/or an explicit scheduled cancel at the desired deadline.
+Notes: No source/runtime code changed. Verification was inspection plus `git diff --check`; no tests were run because this was an explanatory answer.
+Blockers: Exact live behavior around the one-minute CLOB buffer should be validated with a tiny controlled dry-run/live-shadow before relying on it for real funds.
+
 ## Active Update 2026-05-12 Always Direction Strategy Explanation
 Goal: Explain how the existing `AlwaysUp` and `AlwaysDown` BTC Up/Down 5m strategies currently work.
 Status: Completed

@@ -25,3 +25,10 @@ Request:
 
 Result:
 Inspected the BTC Up/Down 5m strategy catalog and paper strategy processor. Confirmed `AlwaysUp` and `AlwaysDown` are fixed-direction baseline Paper GTD limit strategies: after the 5-minute market starts accepting orders, they select `Up` or `Down`, place a Paper BUY limit at `0.45` for up to `120` seconds, and settle only actually filled shares. If no fill exists, the run is skipped as `gtd_limit_not_filled`. Also noted the current fill implementation nuance: these orders are tagged `paper_gtd_limit`, so practical fills come through the generic paper fill simulation based on ask depth/trades rather than the conservative GTD estimator that recognizes `pricing_mode=opening_limit`/converted orders.
+
+## 2026-05-12T05:47:07.4109744Z
+Request:
+Мы можем при заказе GTD указать точное время завершения действия ордера - например, за минуту до окончания рынка?
+
+Result:
+Checked local CLOB order request/building code and current official Polymarket docs. Answered that GTD supports a UTC Unix-second expiration timestamp and the local code already has `GtdExpirationUtc`, but current strategy code uses TTL-based deadlines. Noted that official docs describe a one-minute GTD security threshold/buffer, so for a precise operational deadline such as one minute before market end, the safer implementation is a market-relative local deadline plus either adjusted wire expiration or an explicit scheduled cancel at the target time.
