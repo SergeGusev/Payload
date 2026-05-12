@@ -127,3 +127,9 @@ Request:
 
 Result:
 Implemented a BTC GTD expiration policy change: non-preopen entries whose due time is after the market midpoint no longer apply the market-end-minus-safety local deadline and instead use the fallback TTL/market-end cap. This fixes late 5m variants such as `BTC Up or Down 5m More 270`, whose due time is `start+270s`, after the old `marketEnd-60s` deadline. Pre-open Half/Full expiration behavior is unchanged. Added a regression test for `More 270` creating a GTD Paper order with `gtd_expiration_mode=market_end_cap`, updated README, and verified focused BTC tests `97/97`, full tests `433/433`, service Debug build, and `git diff --check`. Restarted the Debug service as PID `16488`; IPC `/status` returned `Running`, pause flags false, kill switch false, and `lastError=null`.
+## 2026-05-12T12:36:00Z
+Request:
+Analyze recurring large, around 15 second, bet placement delays and think through how to parallelize so bets do not wait on each other.
+
+Result:
+Inspected the current BTC strategy worker, processor, config, repository, exposure cache, and fresh service logs. Found that `MaxConcurrentEntryDecisions=8` provides variant-level parallelism, but `MaxEntriesPerCycle=250` across `519` variants makes the per-variant due-run limit `1`, and each variant still processes its run sequentially. The 15:20 local log window showed a monolithic cycle with `Observed=358 Entries=186 Skipped=9` finishing at `15:20:08`; deferred `btc_up_down_5m_binance*` entries then retried around `15:20:09`, so unrelated observe/preopen work can delay deferred/opening entries. Recommended moving to a global due-run queue with bounded workers, atomic run claiming, shared per-market snapshots, and a small serialized risk/commit section instead of simply increasing unbounded concurrency.

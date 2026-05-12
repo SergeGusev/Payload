@@ -1,3 +1,16 @@
+## Active Update 2026-05-12 BTC Entry Latency Parallelization Analysis
+Goal: Analyze recurring 10-15 second BTC strategy entry delays and outline a safer parallelization approach.
+Status: Completed
+Done:
+- Confirmed current BTC entry processing is already parallelized across strategy variants with `MaxConcurrentEntryDecisions=8`, but each variant still fetches and processes due runs sequentially.
+- Confirmed `MaxEntriesPerCycle=250` and `VariantCount=519` make the current per-variant due-run limit effectively `1`, so the worker fans out across variants rather than across due bets.
+- Found the practical queue source in the 15:20 local log window: one monolithic cycle completed with `Observed=358 Entries=186 Skipped=9` at `15:20:08`, while deferred `btc_up_down_5m_binance*` entries retried only after that cycle, around `15:20:09`.
+- Identified that due-entry placement, observe/seed, settlement, close-book capture, and deferred retries share one sequential worker cycle, so a deferred order can wait behind unrelated observe/preopen work.
+- Confirmed `ExposureSnapshotCache` itself is lock-protected, but signal/order/run persistence is currently three separate repository calls; stronger parallelism needs an atomic claim/commit boundary to avoid duplicate or inconsistent entries.
+Next: Replace variant-level entry fan-out with a due-run work queue plus bounded workers, atomic run claiming, shared per-market snapshots, and a small serialized commit/risk section.
+Notes: Analysis only; no production code changed. Checked current config/logs/source files and left the pre-existing untracked `artifacts/polymarket-sdk-src/` untouched.
+Blockers: None.
+
 ## Active Update 2026-05-12 Late Entry GTD Expiration Bypass
 Goal: For bets placed after the market midpoint, stop applying the market-end-minus-safety local GTD deadline.
 Status: Completed
