@@ -32,6 +32,13 @@ Request:
 
 Result:
 Checked local CLOB order request/building code and current official Polymarket docs. Answered that GTD supports a UTC Unix-second expiration timestamp and the local code already has `GtdExpirationUtc`, but current strategy code uses TTL-based deadlines. Noted that official docs describe a one-minute GTD security threshold/buffer, so for a precise operational deadline such as one minute before market end, the safer implementation is a market-relative local deadline plus either adjusted wire expiration or an explicit scheduled cancel at the target time.
+## 2026-05-12T06:54:32.8487308Z
+Request:
+А ты сможешь найти тех, кто делает такие ставки? И оценить успешность их деятельности на Polymarket?
+
+Result:
+Checked live public Polymarket APIs. Concluded that exact owners of current unfilled day-ahead resting orders cannot be identified from public CLOB `/book`, because it only exposes aggregated price levels and sizes. Executed trades can be analyzed: Data API `/trades` exposes `proxyWallet`, username/pseudonym, side, price, size, outcome, and transaction hash, while leaderboard and closed-position endpoints provide wallet-level PnL/volume. Example recent BTC 5m trade participants showed available success metrics, but those examples are not proof of ownership of the earlier unfilled resting orders.
+
 ## 2026-05-12T06:31:07.4107421Z
 Request:
 В чём практический смысл таких ставок?

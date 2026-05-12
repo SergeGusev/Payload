@@ -1,3 +1,16 @@
+## Active Update 2026-05-12 BTC Maker Identity Feasibility
+Goal: Determine whether early BTC 5m liquidity providers can be identified and their Polymarket success evaluated.
+Status: Completed
+Done:
+- Confirmed public CLOB `/book` exposes aggregated price levels and sizes only; it does not expose owners of unfilled resting orders.
+- Confirmed public Data API `/trades` exposes executed trade participants (`proxyWallet`, username/pseudonym, side, price, size, outcome, transaction hash), but does not directly label maker versus taker in the public response used here.
+- Confirmed CLOB `/trades` without authentication returned `401 Unauthorized`, so the immediately available public path is Data API plus public profile/leaderboard/positions endpoints.
+- Checked example recent BTC 5m trade participants against `/v1/leaderboard` and `/closed-positions`; wallet-level success metrics are available, including category/time-period PnL and volume.
+- Example from recent executed BTC 5m trades: `jacoboku` (`0x3590...d307`) showed Crypto MONTH volume about `47836.94` and PnL about `2337.61`; `0xa41e...e39b` showed Crypto MONTH volume about `88386.32` and PnL about `1188.30`; these are evidence of active/successful executed traders, not proof that they owned the earlier unfilled day-ahead book.
+Next: If requested, implement a read-only analyzer that samples BTC 5m trades over a chosen window, ranks wallets by BTC-specific realized PnL, and separately flags likely market-maker behavior as an inference.
+Notes: No source/runtime code changed. Verification was live public API inspection via PowerShell; no tests were run.
+Blockers: Exact attribution of current unfilled resting orders is blocked by public CLOB book anonymity.
+
 ## Active Update 2026-05-12 BTC Early Liquidity Interpretation
 Goal: Explain the practical purpose of resting BTC 5m orders posted nearly a day before market start.
 Status: Completed
