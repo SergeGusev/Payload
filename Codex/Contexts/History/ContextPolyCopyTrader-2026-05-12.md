@@ -237,3 +237,12 @@ User retried the secret-transfer script from `D:\My\Business\PolyMarket` with `G
 
 Result:
 The script again reached WinRM on `192.168.0.101`, read local source secret names from environment/Credential Manager without printing values, and failed at remote `Invoke-Command` with `Access is denied`. Concluded the blocker remains target-side authorization for `DESKTOP-Q010N6E\Tommy`; advised verifying local Administrators membership, enabling `LocalAccountTokenFilterPolicy`, restarting WinRM, and testing a minimal `Invoke-Command` before retrying the transfer.
+
+## 2026-05-12T17:02:35.7736004Z
+Request:
+Tommy единственный пользователь удалённой машины, он же администратор.
+
+Что ещё мы можем попробовать?
+
+Result:
+Explained that local administrator status alone can still fail over WinRM because of UAC remote token filtering, endpoint permissions, or local security policy. Provided target-side remediation commands to add `Tommy` to Administrators and Remote Management Users, enable `LocalAccountTokenFilterPolicy`, reset PowerShell Remoting, and test authenticated `Invoke-Command` before retrying secret transfer. Also provided a fallback path to run the local target setup script directly on the target if WinRM remains blocked. No passwords or secret values were recorded.

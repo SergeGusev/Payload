@@ -1,3 +1,14 @@
+## Active Update 2026-05-12 WinRM Local Admin Troubleshooting
+Goal: Provide next remediation steps after `DESKTOP-Q010N6E\Tommy` still receives WinRM `Access is denied`.
+Status: Completed
+Done:
+- Clarified that a local administrator account can still be denied by WinRM due to UAC remote token filtering, endpoint permissions, or local security policy.
+- Prepared target-side commands to add `Tommy` to Administrators and Remote Management Users, enable `LocalAccountTokenFilterPolicy`, reset PowerShell Remoting, and test authenticated WinRM before rerunning the secret transfer.
+- Prepared a fallback path: run `scripts\Setup-Net48-NewServerSecrets.ps1` locally on the target if WinRM authorization remains blocked.
+Next: Run the target-side remediation commands, then test `Invoke-Command { whoami }` before retrying secret transfer.
+Notes: No secret values or passwords were recorded.
+Blockers: None for guidance; secret transfer remains blocked until authenticated remote commands succeed.
+
 ## Active Update 2026-05-12 Target Credential Access Denied Repeat
 Goal: Diagnose repeated WinRM `Access is denied` using `DESKTOP-Q010N6E\Tommy`.
 Status: Blocked
