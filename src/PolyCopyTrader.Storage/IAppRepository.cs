@@ -131,6 +131,13 @@ public interface IAppRepository
         return Task.FromResult<IReadOnlyList<PolymarketGammaMarket>>([]);
     }
 
+    Task<IReadOnlyList<PolymarketGammaMarket>> GetBtcUpDownStrategyGammaMarketsAsync(
+        int limit,
+        CancellationToken cancellationToken = default)
+    {
+        return GetBtcUpDown5mGammaMarketsAsync(limit, cancellationToken);
+    }
+
     Task<IReadOnlyList<PolymarketGammaMarket>> GetCryptoUpDown5mGammaMarketsAsync(
         IReadOnlyCollection<string> assetSymbols,
         int limit,
@@ -250,12 +257,12 @@ public interface IAppRepository
         return Task.FromResult<PaperCopiedTraderPerformance?>(null);
     }
 
-    Task<IReadOnlyList<StrategyPerformance>> GetStrategyPerformanceAsync(int limit = 100, CancellationToken cancellationToken = default)
+    Task<IReadOnlyList<StrategyPerformance>> GetStrategyPerformanceAsync(int limit = 1000, CancellationToken cancellationToken = default)
     {
         return Task.FromResult<IReadOnlyList<StrategyPerformance>>([]);
     }
 
-    Task<IReadOnlyList<StrategyRecentPerformance>> GetStrategyRecentPerformanceAsync(int limit = 250, CancellationToken cancellationToken = default)
+    Task<IReadOnlyList<StrategyRecentPerformance>> GetStrategyRecentPerformanceAsync(int limit = 3000, CancellationToken cancellationToken = default)
     {
         return Task.FromResult<IReadOnlyList<StrategyRecentPerformance>>([]);
     }

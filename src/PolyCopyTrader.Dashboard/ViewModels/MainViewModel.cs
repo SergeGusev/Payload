@@ -12,7 +12,8 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
 {
     private const int MaxDashboardErrors = 500;
     private const string AllStrategyCategories = "All categories";
-    private const string BtcUpDown5mPrefix = "BTC Up or Down 5m ";
+    private const string BtcUpDownPrefix = "BTC Up or Down ";
+    private static readonly string[] BtcUpDownIntervals = ["5m", "15m", "1h", "4h"];
 
     private readonly DashboardRuntime runtime;
     private readonly DashboardDataService dataService;
@@ -811,56 +812,84 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
     private static string GetStrategyCategory(string strategyName)
     {
         var name = strategyName.Trim();
-        if (!name.StartsWith(BtcUpDown5mPrefix, StringComparison.OrdinalIgnoreCase))
+        if (!name.StartsWith(BtcUpDownPrefix, StringComparison.OrdinalIgnoreCase))
         {
             return "Other";
         }
 
-        var suffix = name.Substring(BtcUpDown5mPrefix.Length).Trim();
+        var btcSuffix = name.Substring(BtcUpDownPrefix.Length).Trim();
+        var interval = BtcUpDownIntervals.FirstOrDefault(candidate =>
+            btcSuffix.Equals(candidate, StringComparison.OrdinalIgnoreCase) ||
+            btcSuffix.StartsWith(candidate + " ", StringComparison.OrdinalIgnoreCase));
+        if (string.IsNullOrWhiteSpace(interval))
+        {
+            return "Other";
+        }
+
+        var categoryPrefix = BtcUpDownPrefix + interval + " ";
+        var suffix = btcSuffix.Substring(interval.Length).Trim();
+        if (StartsWithStrategyWord(suffix, "PreOpen"))
+        {
+            var parts = suffix.Split(new[] { ' ' }, StringSplitOptions.RemoveEmptyEntries);
+            if (parts.Length >= 2 &&
+                (string.Equals(parts[1], "Half", StringComparison.OrdinalIgnoreCase) ||
+                    string.Equals(parts[1], "Full", StringComparison.OrdinalIgnoreCase)))
+            {
+                return categoryPrefix + "PreOpen " + parts[1];
+            }
+
+            return categoryPrefix + "PreOpen";
+        }
+
+        if (!string.Equals(interval, "5m", StringComparison.OrdinalIgnoreCase))
+        {
+            return categoryPrefix + "Other";
+        }
+
         if (StartsWithStrategyWord(suffix, "More"))
         {
             return ContainsStrategyWord(suffix, "Gamma")
-                ? BtcUpDown5mPrefix + "More Gamma"
-                : BtcUpDown5mPrefix + "More";
+                ? categoryPrefix + "More Gamma"
+                : categoryPrefix + "More";
         }
 
         if (StartsWithStrategyWord(suffix, "Less"))
         {
             return ContainsStrategyWord(suffix, "Gamma")
-                ? BtcUpDown5mPrefix + "Less Gamma"
-                : BtcUpDown5mPrefix + "Less";
+                ? categoryPrefix + "Less Gamma"
+                : categoryPrefix + "Less";
         }
 
         if (StartsWithStrategyWord(suffix, "Binance"))
         {
-            return BtcUpDown5mPrefix + "Binance";
+            return categoryPrefix + "Binance";
         }
 
         if (StartsWithStrategyWord(suffix, "Middle"))
         {
             return ContainsStrategyWord(suffix, "Revert")
-                ? BtcUpDown5mPrefix + "Middle Revert"
-                : BtcUpDown5mPrefix + "Middle";
+                ? categoryPrefix + "Middle Revert"
+                : categoryPrefix + "Middle";
         }
 
         if (StartsWithStrategyWord(suffix, "Skip"))
         {
             return ContainsStrategyWord(suffix, "Revert")
-                ? BtcUpDown5mPrefix + "Skip Revert"
-                : BtcUpDown5mPrefix + "Skip";
+                ? categoryPrefix + "Skip Revert"
+                : categoryPrefix + "Skip";
         }
 
         if (StartsWithStrategyWord(suffix, "Up"))
         {
-            return BtcUpDown5mPrefix + "Up";
+            return categoryPrefix + "Up";
         }
 
         if (StartsWithStrategyWord(suffix, "Down"))
         {
-            return BtcUpDown5mPrefix + "Down";
+            return categoryPrefix + "Down";
         }
 
-        return BtcUpDown5mPrefix + "Other";
+        return categoryPrefix + "Other";
     }
 
     private static bool StartsWithStrategyWord(string value, string word)

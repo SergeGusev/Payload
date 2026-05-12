@@ -1024,7 +1024,7 @@ public static class StrategyIds
     private static IReadOnlyList<BtcUpDown5mStrategyVariant> CreateBtcUpDown5mVariants()
     {
         int[] delays = [30, 60, 90, 120, 150, 180, 210, 240, 270];
-        var variants = new List<BtcUpDown5mStrategyVariant>(100);
+        var variants = new List<BtcUpDown5mStrategyVariant>(520);
 
         foreach (var delay in delays)
         {
@@ -1147,6 +1147,7 @@ public static class StrategyIds
         variants.Add(CreateBtcUpDown5mEnsembleVariant());
         variants.Add(CreateBtcUpDown5mDynamicMarkovVariant());
         variants.Add(CreateBtcUpDown5mStrategySelectorVariant());
+        variants.AddRange(CreateBtcPreOpenFixedDirectionVariants());
 
         return variants;
     }
@@ -1486,6 +1487,95 @@ public static class StrategyIds
             BtcUpDown5mStrategyBehavior.GammaOutcomeSelectionEntryPriceCap,
             maxEntryPriceCents);
     }
+
+    private static IReadOnlyList<BtcUpDown5mStrategyVariant> CreateBtcPreOpenFixedDirectionVariants()
+    {
+        BtcPreOpenIntervalSpec[] intervals =
+        [
+            new(BtcUpDownMarketInterval.FiveMinutes, "5m", "5m", "5-minute", 1),
+            new(BtcUpDownMarketInterval.FifteenMinutes, "15m", "15m", "15-minute", 2),
+            new(BtcUpDownMarketInterval.OneHour, "1h", "1h", "hourly", 3),
+            new(BtcUpDownMarketInterval.FourHours, "4h", "4h", "4-hour", 4)
+        ];
+
+        BtcPreOpenLifetimeSpec[] lifetimes =
+        [
+            new(BtcUpDownPreOpenLifetimeMode.HalfPeriod, "half", "Half", "until the half-period local cancel deadline", 1),
+            new(BtcUpDownPreOpenLifetimeMode.FullPeriod, "full", "Full", "until the market-end local safety deadline", 2)
+        ];
+
+        BtcPreOpenOutcomeSpec[] outcomes =
+        [
+            new(BtcUpDownFixedOutcome.Up, "up", "Up", 1),
+            new(BtcUpDownFixedOutcome.Down, "down", "Down", 2)
+        ];
+
+        var variants = new List<BtcUpDown5mStrategyVariant>(intervals.Length * lifetimes.Length * outcomes.Length * 20);
+        foreach (var interval in intervals)
+        {
+            foreach (var lifetime in lifetimes)
+            {
+                foreach (var outcome in outcomes)
+                {
+                    for (var priceCents = 49; priceCents >= 30; priceCents--)
+                    {
+                        variants.Add(CreateBtcPreOpenFixedDirectionVariant(
+                            interval,
+                            lifetime,
+                            outcome,
+                            priceCents));
+                    }
+                }
+            }
+        }
+
+        return variants;
+    }
+
+    private static BtcUpDown5mStrategyVariant CreateBtcPreOpenFixedDirectionVariant(
+        BtcPreOpenIntervalSpec interval,
+        BtcPreOpenLifetimeSpec lifetime,
+        BtcPreOpenOutcomeSpec outcome,
+        int limitPriceCents)
+    {
+        var limitPrice = limitPriceCents / 100m;
+        var category = $"BTC Up/Down {interval.Name} PreOpen {lifetime.Name}";
+        return new BtcUpDown5mStrategyVariant(
+            Guid.Parse($"b7c50005-0000-4000-803{interval.IdSuffix}-0000000{lifetime.IdSuffix}{outcome.IdSuffix}{limitPriceCents:000}"),
+            $"btc_up_down_{interval.Code}_preopen_{lifetime.Code}_{outcome.Code}_{limitPriceCents}",
+            $"BTC Up or Down {interval.Name} PreOpen {lifetime.Name} {outcome.Name} {limitPriceCents}",
+            $"Five minutes before the BTC {interval.Description} market opens, always place a Paper GTD limit BUY on {outcome.Name} at {limitPrice.ToString("0.00", CultureInfo.InvariantCulture)} and keep it {lifetime.Description}; settlement uses only actually filled shares.",
+            BtcUpDown5mStrategyDirection.Dynamic,
+            -300,
+            BtcUpDown5mStrategyBehavior.PreOpenFixedDirection,
+            limitPriceCents,
+            null,
+            interval.Interval,
+            lifetime.Mode,
+            outcome.Outcome,
+            limitPrice,
+            category);
+    }
+
+    private sealed record BtcPreOpenIntervalSpec(
+        BtcUpDownMarketInterval Interval,
+        string Code,
+        string Name,
+        string Description,
+        int IdSuffix);
+
+    private sealed record BtcPreOpenLifetimeSpec(
+        BtcUpDownPreOpenLifetimeMode Mode,
+        string Code,
+        string Name,
+        string Description,
+        int IdSuffix);
+
+    private sealed record BtcPreOpenOutcomeSpec(
+        BtcUpDownFixedOutcome Outcome,
+        string Code,
+        string Name,
+        int IdSuffix);
 }
 
 public enum BtcUpDown5mStrategyDirection
@@ -1493,6 +1583,27 @@ public enum BtcUpDown5mStrategyDirection
     Less,
     More,
     Dynamic
+}
+
+public enum BtcUpDownMarketInterval
+{
+    FiveMinutes,
+    FifteenMinutes,
+    OneHour,
+    FourHours
+}
+
+public enum BtcUpDownPreOpenLifetimeMode
+{
+    Default,
+    HalfPeriod,
+    FullPeriod
+}
+
+public enum BtcUpDownFixedOutcome
+{
+    Up,
+    Down
 }
 
 public enum BtcUpDown5mStrategyBehavior
@@ -1517,7 +1628,8 @@ public enum BtcUpDown5mStrategyBehavior
     DynamicMarkov,
     StrategySelector,
     StandardEntryPriceCap,
-    GammaOutcomeSelectionEntryPriceCap
+    GammaOutcomeSelectionEntryPriceCap,
+    PreOpenFixedDirection
 }
 
 public sealed record BtcUpDown5mStrategyVariant(
@@ -1529,7 +1641,12 @@ public sealed record BtcUpDown5mStrategyVariant(
     int EntryDelaySeconds,
     BtcUpDown5mStrategyBehavior Behavior = BtcUpDown5mStrategyBehavior.Standard,
     int DecisionDepth = 0,
-    decimal? DecisionThresholdBps = null)
+    decimal? DecisionThresholdBps = null,
+    BtcUpDownMarketInterval MarketInterval = BtcUpDownMarketInterval.FiveMinutes,
+    BtcUpDownPreOpenLifetimeMode PreOpenLifetimeMode = BtcUpDownPreOpenLifetimeMode.Default,
+    BtcUpDownFixedOutcome? FixedOutcome = null,
+    decimal? FixedLimitPrice = null,
+    string Category = "")
 {
     public string CopiedTraderWallet => "strategy:" + Code;
 }

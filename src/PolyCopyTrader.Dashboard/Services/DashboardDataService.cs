@@ -136,7 +136,8 @@ public sealed class DashboardDataService(
             return cachedStrategyPerformance;
         }
 
-        cachedStrategyPerformance = await repository.GetStrategyPerformanceAsync(250, cancellationToken);
+        var strategyLimit = Math.Max(1000, StrategyIds.AllStrategyIds.Count);
+        cachedStrategyPerformance = await repository.GetStrategyPerformanceAsync(strategyLimit, cancellationToken);
         cachedStrategyPerformanceAtUtc = nowUtc;
         return cachedStrategyPerformance;
     }
@@ -152,7 +153,8 @@ public sealed class DashboardDataService(
             return cachedStrategyRecentPerformance;
         }
 
-        cachedStrategyRecentPerformance = await repository.GetStrategyRecentPerformanceAsync(250, cancellationToken);
+        var strategyRecentLimit = Math.Max(3000, StrategyIds.AllStrategyIds.Count * 3);
+        cachedStrategyRecentPerformance = await repository.GetStrategyRecentPerformanceAsync(strategyRecentLimit, cancellationToken);
         cachedStrategyRecentPerformanceAtUtc = nowUtc;
         return cachedStrategyRecentPerformance;
     }

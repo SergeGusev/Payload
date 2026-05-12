@@ -2112,6 +2112,46 @@ ON CONFLICT (id) DO UPDATE SET
     description = excluded.description,
     updated_at_utc = excluded.updated_at_utc;
 
+WITH intervals(interval_id, interval_code, interval_name, interval_description) AS (
+    VALUES
+        (1, '5m', '5m', '5-minute'),
+        (2, '15m', '15m', '15-minute'),
+        (3, '1h', '1h', 'hourly'),
+        (4, '4h', '4h', '4-hour')
+),
+lifetimes(lifetime_id, lifetime_code, lifetime_name, lifetime_description) AS (
+    VALUES
+        (1, 'half', 'Half', 'until the half-period local cancel deadline'),
+        (2, 'full', 'Full', 'until the market-end local safety deadline')
+),
+outcomes(outcome_id, outcome_code, outcome_name) AS (
+    VALUES
+        (1, 'up', 'Up'),
+        (2, 'down', 'Down')
+),
+prices(price_cents) AS (
+    SELECT generate_series(49, 30, -1)
+)
+INSERT INTO strategies (id, code, name, description, enabled, paper_stake_amount, created_at_utc, updated_at_utc)
+SELECT
+    ('b7c50005-0000-4000-803' || intervals.interval_id || '-0000000' || lifetimes.lifetime_id || outcomes.outcome_id || lpad(prices.price_cents::text, 3, '0'))::uuid,
+    'btc_up_down_' || intervals.interval_code || '_preopen_' || lifetimes.lifetime_code || '_' || outcomes.outcome_code || '_' || prices.price_cents,
+    'BTC Up or Down ' || intervals.interval_name || ' PreOpen ' || lifetimes.lifetime_name || ' ' || outcomes.outcome_name || ' ' || prices.price_cents,
+    'Five minutes before the BTC ' || intervals.interval_description || ' market opens, always place a Paper GTD limit BUY on ' || outcomes.outcome_name || ' at ' || to_char((prices.price_cents::numeric / 100), 'FM0.00') || ' and keep it ' || lifetimes.lifetime_description || '; settlement uses only actually filled shares.',
+    true,
+    1.00,
+    now(),
+    now()
+FROM intervals
+CROSS JOIN lifetimes
+CROSS JOIN outcomes
+CROSS JOIN prices
+ON CONFLICT (id) DO UPDATE SET
+    code = excluded.code,
+    name = excluded.name,
+    description = excluded.description,
+    updated_at_utc = excluded.updated_at_utc;
+
 CREATE TABLE IF NOT EXISTS paper_orders (
     id uuid PRIMARY KEY,
     signal_id uuid NOT NULL,

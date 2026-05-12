@@ -509,6 +509,20 @@ internal sealed class TestAppRepository : IAppRepository
             .ToArray());
     }
 
+    public Task<IReadOnlyList<PolymarketGammaMarket>> GetBtcUpDownStrategyGammaMarketsAsync(
+        int limit,
+        CancellationToken cancellationToken = default)
+    {
+        return Task.FromResult<IReadOnlyList<PolymarketGammaMarket>>(PolymarketGammaMarkets
+            .Where(market =>
+                market.Active &&
+                !market.Archived &&
+                BtcUpDown5mMarketAnalyzer.IsStrategyCandidate(market))
+            .OrderBy(market => market.EventStartTimeUtc ?? market.EndDateUtc ?? market.CreatedAtUtc)
+            .Take(limit)
+            .ToArray());
+    }
+
     public Task<PolymarketGammaMarket?> GetPolymarketGammaMarketAsync(
         string marketId,
         CancellationToken cancellationToken = default)
@@ -793,7 +807,7 @@ internal sealed class TestAppRepository : IAppRepository
         return Task.FromResult(performance);
     }
 
-    public Task<IReadOnlyList<StrategyPerformance>> GetStrategyPerformanceAsync(int limit = 100, CancellationToken cancellationToken = default)
+    public Task<IReadOnlyList<StrategyPerformance>> GetStrategyPerformanceAsync(int limit = 1000, CancellationToken cancellationToken = default)
     {
         var strategies = new[]
         {
@@ -979,7 +993,7 @@ internal sealed class TestAppRepository : IAppRepository
             .ToArray());
     }
 
-    public Task<IReadOnlyList<StrategyRecentPerformance>> GetStrategyRecentPerformanceAsync(int limit = 250, CancellationToken cancellationToken = default)
+    public Task<IReadOnlyList<StrategyRecentPerformance>> GetStrategyRecentPerformanceAsync(int limit = 3000, CancellationToken cancellationToken = default)
     {
         var now = DateTimeOffset.UtcNow;
         var windows = new[]

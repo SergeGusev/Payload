@@ -181,7 +181,7 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
         IReadOnlyDictionary<Guid, StrategyRuntimeSettings> strategySettings,
         CancellationToken cancellationToken)
     {
-        var markets = await repository.GetBtcUpDown5mGammaMarketsAsync(
+        var markets = await repository.GetBtcUpDownStrategyGammaMarketsAsync(
             options.MaxMarketsPerCycle,
             cancellationToken);
 
@@ -190,7 +190,8 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
 
         foreach (var market in markets)
         {
-            if (!BtcUpDown5mMarketAnalyzer.IsCandidate(market))
+            var marketInterval = BtcUpDown5mMarketAnalyzer.GetMarketInterval(market);
+            if (marketInterval is null)
             {
                 continue;
             }
@@ -203,6 +204,11 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
 
             foreach (var variant in variants)
             {
+                if (!DoesVariantApplyToMarket(variant, marketInterval.Value))
+                {
+                    continue;
+                }
+
                 var settings = GetStrategySettings(strategySettings, variant.Id);
                 var entryDueAtUtc = windowStart?.AddSeconds(variant.EntryDelaySeconds) ?? nowUtc;
                 var status = StrategyMarketPaperRunStatuses.Observed;
@@ -375,6 +381,13 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
         }
 
         return windowStartUtc.Value >= nowUtc.Subtract(MarketObserveBehindWindow);
+    }
+
+    private static bool DoesVariantApplyToMarket(
+        BtcUpDown5mStrategyVariant variant,
+        BtcUpDownMarketInterval marketInterval)
+    {
+        return variant.MarketInterval == marketInterval;
     }
 
     private void CleanupClosingOrderBookCaptureAttempts(DateTimeOffset nowUtc)
@@ -572,8 +585,9 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
                             stakeMultiplier,
                             market.OrderMinSize,
                             nowUtc,
+                            IsPreOpenFixedDirectionOpeningLimitEntry(variant),
                             cancellationToken);
-                        var expiration = ResolveOpeningLimitExpiration(market, nowUtc);
+                        var expiration = ResolveOpeningLimitExpiration(market, variant, nowUtc);
                         if (!expiration.Available || expiration.LocalExpiresAtUtc is null)
                         {
                             await SkipRunAsync(
@@ -864,7 +878,7 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
                     var reservedNotionalUsd = gtdSizing.TargetNotionalUsd > 0m
                         ? gtdSizing.TargetNotionalUsd
                         : sizeShares * gtdLimitPrice;
-                    var gtdExpiration = ResolveOpeningLimitExpiration(market, nowUtc);
+                    var gtdExpiration = ResolveOpeningLimitExpiration(market, variant, nowUtc);
                     if (!gtdExpiration.Available || gtdExpiration.LocalExpiresAtUtc is null)
                     {
                         await SkipRunAsync(
@@ -1410,7 +1424,8 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
             BtcUpDown5mStrategyBehavior.DynamicMarkov or
             BtcUpDown5mStrategyBehavior.StrategySelector or
             BtcUpDown5mStrategyBehavior.StandardEntryPriceCap or
-            BtcUpDown5mStrategyBehavior.GammaOutcomeSelectionEntryPriceCap;
+            BtcUpDown5mStrategyBehavior.GammaOutcomeSelectionEntryPriceCap or
+            BtcUpDown5mStrategyBehavior.PreOpenFixedDirection;
     }
 
     private static bool UsesConvertedTakerGtdPaperOrderSettlement(BtcUpDown5mStrategyVariant variant)
@@ -1429,6 +1444,11 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
     private static bool IsAlwaysDirectionOpeningLimitEntry(BtcUpDown5mStrategyVariant variant)
     {
         return variant.Behavior is BtcUpDown5mStrategyBehavior.AlwaysUp or BtcUpDown5mStrategyBehavior.AlwaysDown;
+    }
+
+    private static bool IsPreOpenFixedDirectionOpeningLimitEntry(BtcUpDown5mStrategyVariant variant)
+    {
+        return variant.Behavior == BtcUpDown5mStrategyBehavior.PreOpenFixedDirection;
     }
 
     private static bool IsBinanceStartRelativeOpeningLimitEntry(BtcUpDown5mStrategyVariant variant)
@@ -1452,6 +1472,7 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
     private static bool IsFixedPriceOpeningLimitEntry(BtcUpDown5mStrategyVariant variant)
     {
         return IsAlwaysDirectionOpeningLimitEntry(variant) ||
+            IsPreOpenFixedDirectionOpeningLimitEntry(variant) ||
             variant.Behavior is BtcUpDown5mStrategyBehavior.BinanceStartRelative or
             BtcUpDown5mStrategyBehavior.BinanceStartRelativeFixedPrice or
             BtcUpDown5mStrategyBehavior.BinanceStartRelativeBpsThreshold or
@@ -1467,6 +1488,13 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
         }
 
         return Math.Min(0.50m, Math.Max(0.01m, variant.DecisionDepth / 100m));
+    }
+
+    private static decimal GetFixedDirectionLimitPrice(BtcUpDown5mStrategyVariant variant)
+    {
+        return variant.FixedLimitPrice is > 0m
+            ? Math.Min(0.99m, variant.FixedLimitPrice.Value)
+            : AlwaysDirectionLimitPrice;
     }
 
     private static decimal? GetBinanceStartRelativeMinMoveBps(BtcUpDown5mStrategyVariant variant)
@@ -1538,6 +1566,11 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
                 cancellationToken),
             BtcUpDown5mStrategyBehavior.AlwaysUp or
                 BtcUpDown5mStrategyBehavior.AlwaysDown => GetAlwaysDirectionEntryDecision(
+                market,
+                variant,
+                stakeUsd,
+                nowUtc),
+            BtcUpDown5mStrategyBehavior.PreOpenFixedDirection => GetPreOpenFixedDirectionEntryDecision(
                 market,
                 variant,
                 stakeUsd,
@@ -1664,8 +1697,10 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
                 ? RoundDownToTick(
                     Math.Min(Math.Min(options.OpeningLimitMaxPrice, 0.50m), GetBinanceStartRelativeLimitPrice(variant)),
                     options.OpeningLimitPriceTickSize)
-                : IsAlwaysDirectionOpeningLimitEntry(variant)
-                    ? AlwaysDirectionLimitPrice
+                : IsAlwaysDirectionOpeningLimitEntry(variant) || IsPreOpenFixedDirectionOpeningLimitEntry(variant)
+                    ? RoundDownToTick(
+                        Math.Min(Math.Min(options.OpeningLimitMaxPrice, 0.50m), GetFixedDirectionLimitPrice(variant)),
+                        options.OpeningLimitPriceTickSize)
                     : RoundDownToTick(Math.Min(options.OpeningLimitMaxPrice, 0.50m), options.OpeningLimitPriceTickSize);
             if (fixedLimitPrice <= 0m)
             {
@@ -1939,6 +1974,59 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
                 selectedDirection,
             selectedOutcome,
             reason: null));
+    }
+
+    private static BtcOpeningLimitDecision GetPreOpenFixedDirectionEntryDecision(
+        PolymarketGammaMarket market,
+        BtcUpDown5mStrategyVariant variant,
+        decimal stakeUsd,
+        DateTimeOffset nowUtc)
+    {
+        var selectedDirection = variant.FixedOutcome switch
+        {
+            BtcUpDownFixedOutcome.Up => BtcPriceDirection.Up,
+            BtcUpDownFixedOutcome.Down => BtcPriceDirection.Down,
+            _ => (BtcPriceDirection?)null
+        };
+        if (selectedDirection is null)
+        {
+            return BtcOpeningLimitDecision.Reject(
+                "fixed_outcome_not_configured",
+                BuildAlwaysDirectionRawDecisionJson(
+                    market,
+                    variant,
+                    stakeUsd,
+                    nowUtc,
+                    BtcPriceDirection.Up,
+                    selectedOutcome: null,
+                    reason: "fixed_outcome_not_configured"));
+        }
+
+        var selectedOutcome = TrySelectOutcomeForDirection(market, selectedDirection.Value);
+        if (selectedOutcome is null)
+        {
+            return BtcOpeningLimitDecision.Reject(
+                "target_outcome_not_available",
+                BuildAlwaysDirectionRawDecisionJson(
+                    market,
+                    variant,
+                    stakeUsd,
+                    nowUtc,
+                    selectedDirection.Value,
+                    selectedOutcome: null,
+                    reason: "target_outcome_not_available"));
+        }
+
+        return BtcOpeningLimitDecision.Enter(
+            selectedOutcome,
+            BuildAlwaysDirectionRawDecisionJson(
+                market,
+                variant,
+                stakeUsd,
+                nowUtc,
+                selectedDirection.Value,
+                selectedOutcome,
+                reason: null));
     }
 
     private async Task<BtcOpeningLimitDecision> GetBinanceStartRelativeEntryDecisionAsync(
@@ -4266,12 +4354,21 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
         decimal stakeMultiplier,
         decimal? fallbackMinOrderSize,
         DateTimeOffset nowUtc,
+        bool requireOrderBookLiquidity,
         CancellationToken cancellationToken)
     {
         var maxAge = GetPaperTakerMaxQuoteAge();
         var lookup = marketDataCache.GetOrderBook(assetId, maxAge);
         if (lookup is { Status: OrderBookCacheLookupStatus.Fresh, Snapshot: { } cached })
         {
+            if (requireOrderBookLiquidity && !HasOrderBookLiquidity(cached))
+            {
+                return BtcMinimumStakeSizing.Reject(
+                    "opening_limit_orderbook_liquidity_missing",
+                    stakeMultiplier,
+                    Source: WebSocketCacheSource);
+            }
+
             return CreateLimitMinimumStakeSizing(cached, limitPrice, stakeMultiplier, WebSocketCacheSource);
         }
 
@@ -4283,7 +4380,23 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
                 var fetchedAge = GetSnapshotAge(fetched.OrderBook.SnapshotAtUtc);
                 if (fetchedAge <= maxAge)
                 {
+                    if (requireOrderBookLiquidity && !HasOrderBookLiquidity(fetched.OrderBook))
+                    {
+                        return BtcMinimumStakeSizing.Reject(
+                            "opening_limit_orderbook_liquidity_missing",
+                            stakeMultiplier,
+                            Source: ClobBookSource);
+                    }
+
                     return CreateLimitMinimumStakeSizing(fetched.OrderBook, limitPrice, stakeMultiplier, ClobBookSource);
+                }
+
+                if (requireOrderBookLiquidity)
+                {
+                    return BtcMinimumStakeSizing.Reject(
+                        SignalReasonCodes.MissingOrderBookCacheStale,
+                        stakeMultiplier,
+                        Source: ClobBookSource);
                 }
 
                 if ((fetched.OrderBook.MinOrderSize ?? lookup.Snapshot?.MinOrderSize ?? fallbackMinOrderSize) is { } staleMinOrderSize &&
@@ -4305,6 +4418,16 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
                     stakeMultiplier,
                     Source: ClobBookSource);
             }
+        }
+
+        if (requireOrderBookLiquidity)
+        {
+            return BtcMinimumStakeSizing.Reject(
+                lookup.Status == OrderBookCacheLookupStatus.Stale
+                    ? SignalReasonCodes.MissingOrderBookCacheStale
+                    : SignalReasonCodes.MissingOrderBookCacheMiss,
+                stakeMultiplier,
+                Source: WebSocketCacheSource);
         }
 
         if ((lookup.Snapshot?.MinOrderSize ?? fallbackMinOrderSize) is { } minOrderSize && minOrderSize > 0m)
@@ -5116,6 +5239,12 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
         return snapshot.Asks.Any(level => level.Price is > 0m and <= 1m && level.Size > 0m);
     }
 
+    private static bool HasOrderBookLiquidity(OrderBookSnapshot snapshot)
+    {
+        return snapshot.Bids.Any(level => level.Price is >= 0m and < 1m && level.Size > 0m) ||
+            snapshot.Asks.Any(level => level.Price is > 0m and <= 1m && level.Size > 0m);
+    }
+
     private static DateTimeOffset? GetEntryDueAtUtc(
         DateTimeOffset? marketStartUtc,
         BtcUpDown5mStrategyVariant variant)
@@ -5276,32 +5405,50 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
     {
         var marketStartUtc = BtcUpDown5mMarketAnalyzer.GetWindowStartUtc(market);
         var entryDueAtUtc = GetEntryDueAtUtc(marketStartUtc, variant);
+        var limitPrice = GetFixedDirectionLimitPrice(variant);
         return JsonSerializer.Serialize(new
         {
             pricing_mode = OpeningLimitPricingMode,
             order_execution_mode = OpeningLimitOrderType,
             post_only = false,
             strategy_code = variant.Code,
-            decision_source = selectedDirection == BtcPriceDirection.Up
-                ? "always_up_after_trading_started"
-                : "always_down_after_trading_started",
+            decision_source = GetFixedDirectionDecisionSource(variant, selectedDirection),
             quote_received_at_utc = nowUtc,
             condition_id = market.ConditionId,
             market_id = market.MarketId,
             market_slug = market.Slug,
             market_start_utc = marketStartUtc,
             market_end_utc = market.EndDateUtc,
+            strategy_category = variant.Category,
+            market_interval = variant.MarketInterval.ToString(),
+            preopen_lifetime_mode = variant.PreOpenLifetimeMode.ToString(),
             entry_delay_seconds = variant.EntryDelaySeconds,
             entry_due_at_utc = entryDueAtUtc,
             decision_delay_ms = GetDecisionDelayMilliseconds(entryDueAtUtc, nowUtc),
             selected_direction = selectedDirection.ToString(),
             asset_id = selectedOutcome?.AssetId,
             outcome = selectedOutcome?.Outcome,
-            limit_price = AlwaysDirectionLimitPrice,
+            limit_price = limitPrice,
             target_notional_usd = targetNotionalUsd,
-            target_size_shares = targetNotionalUsd / AlwaysDirectionLimitPrice,
+            target_size_shares = limitPrice > 0m ? targetNotionalUsd / limitPrice : (decimal?)null,
             skip_reason = reason
         });
+    }
+
+    private static string GetFixedDirectionDecisionSource(
+        BtcUpDown5mStrategyVariant variant,
+        BtcPriceDirection selectedDirection)
+    {
+        if (IsPreOpenFixedDirectionOpeningLimitEntry(variant))
+        {
+            return selectedDirection == BtcPriceDirection.Up
+                ? "fixed_up_preopen"
+                : "fixed_down_preopen";
+        }
+
+        return selectedDirection == BtcPriceDirection.Up
+            ? "always_up_after_trading_started"
+            : "always_down_after_trading_started";
     }
 
     private static string BuildBinanceStartRelativeRawDecisionJson(
@@ -6132,10 +6279,86 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
 
     private OpeningLimitExpirationDecision ResolveOpeningLimitExpiration(
         PolymarketGammaMarket market,
+        BtcUpDown5mStrategyVariant variant,
         DateTimeOffset nowUtc)
     {
         var configuredTtlSeconds = Math.Max(1, options.OpeningLimitGtdTtlSeconds);
         var clobBufferSeconds = Math.Max(60, options.ClobGtdExpirationSecurityBufferSeconds);
+
+        if (variant.PreOpenLifetimeMode == BtcUpDownPreOpenLifetimeMode.HalfPeriod)
+        {
+            var marketStartUtc = BtcUpDown5mMarketAnalyzer.GetWindowStartUtc(market);
+            var effectiveMarketEndUtc = GetEffectiveMarketEndUtc(market, variant, marketStartUtc);
+            if (marketStartUtc is null || effectiveMarketEndUtc is null || effectiveMarketEndUtc <= marketStartUtc)
+            {
+                return OpeningLimitExpirationDecision.Reject(
+                    "opening_limit_half_period_window_unknown",
+                    configuredTtlSeconds,
+                    options.OpeningLimitExpireBeforeMarketEndSeconds,
+                    clobBufferSeconds,
+                    localExpiresAtUtc: null,
+                    mode: "preopen_half_period");
+            }
+
+            var localExpiresAtUtc = marketStartUtc.Value.AddTicks((effectiveMarketEndUtc.Value - marketStartUtc.Value).Ticks / 2);
+            if (localExpiresAtUtc <= nowUtc)
+            {
+                return OpeningLimitExpirationDecision.Reject(
+                    "opening_limit_half_period_expiration_elapsed",
+                    configuredTtlSeconds,
+                    options.OpeningLimitExpireBeforeMarketEndSeconds,
+                    clobBufferSeconds,
+                    localExpiresAtUtc,
+                    "preopen_half_period");
+            }
+
+            return OpeningLimitExpirationDecision.Enter(
+                localExpiresAtUtc,
+                localExpiresAtUtc.AddSeconds(clobBufferSeconds),
+                nowUtc,
+                configuredTtlSeconds,
+                options.OpeningLimitExpireBeforeMarketEndSeconds,
+                clobBufferSeconds,
+                "preopen_half_period");
+        }
+
+        if (variant.PreOpenLifetimeMode == BtcUpDownPreOpenLifetimeMode.FullPeriod)
+        {
+            var marketStartUtc = BtcUpDown5mMarketAnalyzer.GetWindowStartUtc(market);
+            var effectiveMarketEndUtc = GetEffectiveMarketEndUtc(market, variant, marketStartUtc);
+            if (effectiveMarketEndUtc is null)
+            {
+                return OpeningLimitExpirationDecision.Reject(
+                    "opening_limit_full_period_market_end_unknown",
+                    configuredTtlSeconds,
+                    options.OpeningLimitExpireBeforeMarketEndSeconds,
+                    clobBufferSeconds,
+                    localExpiresAtUtc: null,
+                    mode: "preopen_full_period");
+            }
+
+            var localExpiresAtUtc = effectiveMarketEndUtc.Value.AddSeconds(-Math.Max(0, options.OpeningLimitExpireBeforeMarketEndSeconds));
+            if (localExpiresAtUtc <= nowUtc)
+            {
+                return OpeningLimitExpirationDecision.Reject(
+                    "opening_limit_full_period_expiration_elapsed",
+                    configuredTtlSeconds,
+                    options.OpeningLimitExpireBeforeMarketEndSeconds,
+                    clobBufferSeconds,
+                    localExpiresAtUtc,
+                    "preopen_full_period");
+            }
+
+            return OpeningLimitExpirationDecision.Enter(
+                localExpiresAtUtc,
+                localExpiresAtUtc.AddSeconds(clobBufferSeconds),
+                nowUtc,
+                configuredTtlSeconds,
+                options.OpeningLimitExpireBeforeMarketEndSeconds,
+                clobBufferSeconds,
+                "preopen_full_period");
+        }
+
         if (options.OpeningLimitExpireBeforeMarketEndSeconds > 0 && market.EndDateUtc is { } marketEndUtc)
         {
             var localExpiresAtUtc = marketEndUtc.AddSeconds(-options.OpeningLimitExpireBeforeMarketEndSeconds);
@@ -6146,7 +6369,8 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
                     configuredTtlSeconds,
                     options.OpeningLimitExpireBeforeMarketEndSeconds,
                     clobBufferSeconds,
-                    localExpiresAtUtc);
+                    localExpiresAtUtc,
+                    "market_end_relative");
             }
 
             return OpeningLimitExpirationDecision.Enter(
@@ -6172,6 +6396,19 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
             options.OpeningLimitExpireBeforeMarketEndSeconds,
             clobBufferSeconds,
             mode);
+    }
+
+    private static DateTimeOffset? GetEffectiveMarketEndUtc(
+        PolymarketGammaMarket market,
+        BtcUpDown5mStrategyVariant variant,
+        DateTimeOffset? marketStartUtc)
+    {
+        if (market.EndDateUtc is { } marketEndUtc)
+        {
+            return marketEndUtc;
+        }
+
+        return marketStartUtc?.Add(BtcUpDown5mMarketAnalyzer.GetIntervalDuration(variant.MarketInterval));
     }
 
     private async Task<bool> TryPlacePaperLiveShadowOrderAsync(
@@ -7666,7 +7903,8 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
             int configuredTtlSeconds,
             int marketEndExpireBeforeSeconds,
             int clobSecurityBufferSeconds,
-            DateTimeOffset? localExpiresAtUtc)
+            DateTimeOffset? localExpiresAtUtc,
+            string mode)
         {
             return new OpeningLimitExpirationDecision(
                 Available: false,
@@ -7676,7 +7914,7 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
                 configuredTtlSeconds,
                 marketEndExpireBeforeSeconds,
                 clobSecurityBufferSeconds,
-                "market_end_relative",
+                mode,
                 reason);
         }
     }

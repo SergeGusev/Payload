@@ -536,6 +536,20 @@ WHERE wallet = @Wallet;
 		return results;
 	}
 
+	public async Task<IReadOnlyList<PolymarketGammaMarket>> GetBtcUpDownStrategyGammaMarketsAsync(int limit, CancellationToken cancellationToken = default(CancellationToken))
+	{
+		await using NpgsqlConnection connection = await OpenConnectionAsync(cancellationToken);
+		await using NpgsqlCommand command = CreateCommand(connection, "SELECT " + PolymarketGammaMarketSelectColumns + "\nFROM polymarket_gamma_markets\nWHERE active\n  AND NOT archived\n  AND (\n      lower(slug) ~ '^btc-updown-(5m|15m|4h)-[0-9]+$'\n      OR lower(COALESCE(event_slug, '')) ~ '^btc-updown-(5m|15m|4h)-[0-9]+$'\n      OR lower(COALESCE(series_slug, '')) IN ('btc-up-or-down-5m', 'btc-up-or-down-15m', 'btc-up-or-down-hourly', 'btc-up-or-down-4h')\n  )\n  AND (end_date_utc IS NULL OR end_date_utc >= now() - interval '4 hours')\nORDER BY COALESCE(event_start_time_utc, end_date_utc, created_at_utc) ASC NULLS LAST,\n         market_id ASC\nLIMIT @Limit;");
+		command.Parameters.AddWithValue("Limit", limit);
+		List<PolymarketGammaMarket> results = new List<PolymarketGammaMarket>();
+		await using NpgsqlDataReader reader = await command.ExecuteReaderAsync(cancellationToken);
+		while (await reader.ReadAsync(cancellationToken))
+		{
+			results.Add(ReadPolymarketGammaMarket(reader));
+		}
+		return results;
+	}
+
 	public async Task<IReadOnlyList<PolymarketGammaMarket>> GetCryptoUpDown5mGammaMarketsAsync(IReadOnlyCollection<string> assetSymbols, int limit, CancellationToken cancellationToken = default(CancellationToken))
 	{
 		var normalizedSymbols = assetSymbols
@@ -1343,7 +1357,7 @@ LIMIT 1;
 		return await reader.ReadAsync(cancellationToken) ? ReadPaperCopiedTraderPerformance(reader) : null;
 	}
 
-	public async Task<IReadOnlyList<StrategyPerformance>> GetStrategyPerformanceAsync(int limit = 100, CancellationToken cancellationToken = default(CancellationToken))
+	public async Task<IReadOnlyList<StrategyPerformance>> GetStrategyPerformanceAsync(int limit = 1000, CancellationToken cancellationToken = default(CancellationToken))
 	{
 		await using NpgsqlConnection connection = await OpenConnectionAsync(cancellationToken);
 		await using NpgsqlCommand command = CreateCommand(connection, """
@@ -1685,7 +1699,7 @@ LIMIT @Limit;
 		return results;
 	}
 
-	public async Task<IReadOnlyList<StrategyRecentPerformance>> GetStrategyRecentPerformanceAsync(int limit = 250, CancellationToken cancellationToken = default(CancellationToken))
+	public async Task<IReadOnlyList<StrategyRecentPerformance>> GetStrategyRecentPerformanceAsync(int limit = 3000, CancellationToken cancellationToken = default(CancellationToken))
 	{
 		DateTimeOffset nowUtc = DateTimeOffset.UtcNow;
 		await using NpgsqlConnection connection = await OpenConnectionAsync(cancellationToken);

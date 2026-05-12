@@ -85,3 +85,10 @@ Request:
 
 Result:
 Stopped the interrupted BTC hourly 30-minute fill-aware backtest process, deleted the temporary output directories created for that attempt, and removed the temporary 30-minute fill-window changes from the ignored artifact analyzer. Verified the artifact analyzer still builds and no matching backtest process or temporary output directory remains.
+
+## 2026-05-12T10:26:11.4744659Z
+Request:
+Да, ты прав, шаг 0.01
+
+Result:
+Implemented the BTC fixed-direction pre-open strategy expansion requested in the prior turn, using the corrected `0.01` price step from `0.49` down through `0.30`. Added 320 Paper-only AlwaysUp/AlwaysDown variants across BTC 5m, 15m, 1h, and 4h markets, with Half-period and Full-period GTD lifetimes, five-minute pre-open entry due times, fixed selected outcomes, fixed prices, and book-liquidity gating. Updated strategy generation, market detection, repository queries, order-book refresh, paper order decision/expiration logic, dashboard grouping, PostgreSQL seeds, README notes, and unit tests. Verification passed with the full test suite (`430/430`) and Dashboard build.

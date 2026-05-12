@@ -20,6 +20,41 @@ public static partial class BtcUpDown5mMarketAnalyzer
             string.Equals(market.SeriesSlug, "btc-up-or-down-5m", StringComparison.OrdinalIgnoreCase);
     }
 
+    public static bool IsStrategyCandidate(PolymarketGammaMarket market)
+    {
+        return GetMarketInterval(market) is not null;
+    }
+
+    public static BtcUpDownMarketInterval? GetMarketInterval(PolymarketGammaMarket market)
+    {
+        var slugInterval = GetSlugInterval(market.Slug) ?? GetSlugInterval(market.EventSlug);
+        if (slugInterval is not null)
+        {
+            return slugInterval;
+        }
+
+        return market.SeriesSlug?.Trim().ToLowerInvariant() switch
+        {
+            "btc-up-or-down-5m" => BtcUpDownMarketInterval.FiveMinutes,
+            "btc-up-or-down-15m" => BtcUpDownMarketInterval.FifteenMinutes,
+            "btc-up-or-down-hourly" => BtcUpDownMarketInterval.OneHour,
+            "btc-up-or-down-4h" => BtcUpDownMarketInterval.FourHours,
+            _ => null
+        };
+    }
+
+    public static TimeSpan GetIntervalDuration(BtcUpDownMarketInterval interval)
+    {
+        return interval switch
+        {
+            BtcUpDownMarketInterval.FiveMinutes => TimeSpan.FromMinutes(5),
+            BtcUpDownMarketInterval.FifteenMinutes => TimeSpan.FromMinutes(15),
+            BtcUpDownMarketInterval.OneHour => TimeSpan.FromHours(1),
+            BtcUpDownMarketInterval.FourHours => TimeSpan.FromHours(4),
+            _ => TimeSpan.FromMinutes(5)
+        };
+    }
+
     public static DateTimeOffset? GetWindowStartUtc(PolymarketGammaMarket market)
     {
         if (market.EventStartTimeUtc is { } eventStart)
@@ -30,7 +65,7 @@ public static partial class BtcUpDown5mMarketAnalyzer
         var slug = !string.IsNullOrWhiteSpace(market.Slug) ? market.Slug : market.EventSlug;
         if (!string.IsNullOrWhiteSpace(slug))
         {
-            var match = UpDown5mSlugRegex().Match(slug);
+            var match = UpDownIntervalSlugRegex().Match(slug);
             if (match.Success &&
                 long.TryParse(match.Groups["unix"].Value, NumberStyles.None, CultureInfo.InvariantCulture, out var unixSeconds))
             {
@@ -38,7 +73,13 @@ public static partial class BtcUpDown5mMarketAnalyzer
             }
         }
 
-        return market.EndDateUtc?.AddMinutes(-5);
+        if (market.EndDateUtc is not { } endUtc)
+        {
+            return null;
+        }
+
+        var interval = GetMarketInterval(market) ?? BtcUpDownMarketInterval.FiveMinutes;
+        return endUtc.Subtract(GetIntervalDuration(interval));
     }
 
     public static BtcUpDown5mOutcomeQuote? TrySelectLosingOutcome(PolymarketGammaMarket market)
@@ -111,6 +152,28 @@ public static partial class BtcUpDown5mMarketAnalyzer
         return !string.IsNullOrWhiteSpace(slug) && UpDown5mSlugRegex().IsMatch(slug);
     }
 
+    private static BtcUpDownMarketInterval? GetSlugInterval(string? slug)
+    {
+        if (string.IsNullOrWhiteSpace(slug))
+        {
+            return null;
+        }
+
+        var match = UpDownIntervalSlugRegex().Match(slug);
+        if (!match.Success)
+        {
+            return null;
+        }
+
+        return match.Groups["interval"].Value.ToLowerInvariant() switch
+        {
+            "5m" => BtcUpDownMarketInterval.FiveMinutes,
+            "15m" => BtcUpDownMarketInterval.FifteenMinutes,
+            "4h" => BtcUpDownMarketInterval.FourHours,
+            _ => null
+        };
+    }
+
     private static IReadOnlyList<decimal> ParseDecimalArray(string rawJson, string propertyName)
     {
         if (string.IsNullOrWhiteSpace(rawJson))
@@ -178,4 +241,7 @@ public static partial class BtcUpDown5mMarketAnalyzer
 
     [GeneratedRegex("^btc-updown-5m-(?<unix>\\d+)$", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
     private static partial Regex UpDown5mSlugRegex();
+
+    [GeneratedRegex("^btc-updown-(?<interval>5m|15m|4h)-(?<unix>\\d+)$", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
+    private static partial Regex UpDownIntervalSlugRegex();
 }

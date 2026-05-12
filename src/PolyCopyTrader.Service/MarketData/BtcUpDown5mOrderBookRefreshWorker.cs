@@ -72,7 +72,7 @@ public sealed class BtcUpDown5mOrderBookRefreshWorker(
     public async Task<BtcUpDown5mOrderBookRefreshResult> RefreshOnceAsync(CancellationToken cancellationToken = default)
     {
         var nowUtc = DateTimeOffset.UtcNow;
-        var markets = await repository.GetBtcUpDown5mGammaMarketsAsync(GetGammaMarketFetchLimit(), cancellationToken);
+        var markets = await repository.GetBtcUpDownStrategyGammaMarketsAsync(GetGammaMarketFetchLimit(), cancellationToken);
         var selectedMarkets = SelectRefreshMarkets(markets, nowUtc);
         if (selectedMarkets.Count == 0)
         {
@@ -188,7 +188,7 @@ public sealed class BtcUpDown5mOrderBookRefreshWorker(
 
         return markets
             .Where(market => market.Active && !market.Closed && !market.Archived)
-            .Where(BtcUpDown5mMarketAnalyzer.IsCandidate)
+            .Where(BtcUpDown5mMarketAnalyzer.IsStrategyCandidate)
             .Select(market => new
             {
                 Market = market,
