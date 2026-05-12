@@ -230,3 +230,10 @@ User retried the secret-transfer script from `D:\My\Business\PolyMarket` with ex
 
 Result:
 The script reached WinRM on `192.168.0.101`, read local source secret names from environment/Credential Manager without printing values, but remote `Invoke-Command` failed with `Access is denied`. Explained that the remaining blocker is target-side authorization: use the target computer-name credential format, ensure the target account is in local Administrators, and enable local-account remote admin token support if needed.
+
+## 2026-05-12T16:43:40.0303065Z
+Request:
+User retried the secret-transfer script from `D:\My\Business\PolyMarket` with `Get-Credential -UserName "DESKTOP-Q010N6E\Tommy"`. The password supplied to `Get-Credential` is intentionally redacted from repository history.
+
+Result:
+The script again reached WinRM on `192.168.0.101`, read local source secret names from environment/Credential Manager without printing values, and failed at remote `Invoke-Command` with `Access is denied`. Concluded the blocker remains target-side authorization for `DESKTOP-Q010N6E\Tommy`; advised verifying local Administrators membership, enabling `LocalAccountTokenFilterPolicy`, restarting WinRM, and testing a minimal `Invoke-Command` before retrying the transfer.

@@ -1,3 +1,15 @@
+## Active Update 2026-05-12 Target Credential Access Denied Repeat
+Goal: Diagnose repeated WinRM `Access is denied` using `DESKTOP-Q010N6E\Tommy`.
+Status: Blocked
+Done:
+- User retried `scripts\Copy-Net48-SecretsToNewServer.ps1` from repository root with `Get-Credential -UserName "DESKTOP-Q010N6E\Tommy"`.
+- The script again read local source secret names from environment/Credential Manager without printing values.
+- Remote `Invoke-Command` reached `192.168.0.101` but failed with `Access is denied`.
+- Prepared a target-side remediation and minimal `Invoke-Command { whoami; whoami /groups }` test before retrying secret transfer.
+Next: On `DESKTOP-Q010N6E`, ensure `Tommy` is a local administrator, enable local-account remote admin token support, restart WinRM, then test a minimal remote command.
+Notes: The password entered into `Get-Credential` was not recorded. No secret values were printed, committed, or transferred.
+Blockers: Target machine still denies WinRM remote command authorization for `DESKTOP-Q010N6E\Tommy`.
+
 ## Active Update 2026-05-12 Secret Transfer Access Denied
 Goal: Diagnose the secret-transfer retry after explicit target credentials were supplied.
 Status: Blocked
