@@ -1,3 +1,17 @@
+## Active Update 2026-05-13 Migrate PostgreSQL To 192.168.0.101
+Goal: Copy the current local `polycopytrader` PostgreSQL database structure and data to `192.168.0.101`.
+Status: Completed
+Done:
+- Confirmed the background service remained stopped; only the Dashboard process was running.
+- Verified source local database access at `127.0.0.1:5432/polycopytrader` and target access at `192.168.0.101:5432/polycopytrader` using the configured PostgreSQL credentials without printing secrets.
+- Used Docker PostgreSQL client tools from `postgres:18-alpine` because local `pg_dump`/`pg_restore` were not installed; source server was PostgreSQL `17.5`, target server `18.3`.
+- Created a custom-format `pg_dump` from the source and restored it to the target with `pg_restore --clean --if-exists --no-owner --no-privileges --exit-on-error`.
+- Verified source and target match by schema object counts and per-table row counts: `71` public tables, `219` indexes, `1035` constraints, `0` sequences, and `1,463,229` total rows.
+- Removed the temporary dump, restore logs, and `.codex-temp` diagnostic scripts after verification.
+Next: Point the new computer/service environment to `Host=192.168.0.101;Port=5432;Database=polycopytrader;...` when ready, without committing secrets.
+Notes: No source code changed. Target database size after restore was different from source (`~1.45 GB` vs `~5.77 GB`) due PostgreSQL version/storage/index representation, but object counts and row counts matched.
+Blockers: None.
+
 ## Active Update 2026-05-13 Stop Service For Migration
 Goal: Stop the running PolyCopyTrader background service before moving to a new computer.
 Status: Completed
