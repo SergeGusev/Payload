@@ -1,3 +1,14 @@
+## Active Update 2026-05-13 Merge Skip Dashboard Categories
+Goal: Show base `Skip` and `Skip Revert` strategies under one dashboard category.
+Status: Completed
+Done:
+- Changed the dashboard strategy category resolver so any BTC 5m strategy whose suffix starts with `Skip` maps to `BTC Up or Down 5m Skip`.
+- This keeps strategy names unchanged but removes the separate `BTC Up or Down 5m Skip Revert` category from the filter options.
+- Rebuilt the Dashboard in normal Debug output, stopped the old Dashboard process, and started the rebuilt Dashboard executable.
+Next: None.
+Notes: Verification passed: dashboard build succeeded; focused `ConfigurationTests|StorageTests` passed `44/44`; `git diff --check` passed with line-ending warnings only. Existing nullable warnings in `PostgresAppRepository.cs` remained.
+Blockers: None.
+
 ## Active Update 2026-05-13 Dashboard Skip Category Empty Fix
 Goal: Fix the dashboard showing an empty grid after selecting `BTC Up or Down 5m Skip`.
 Status: Completed

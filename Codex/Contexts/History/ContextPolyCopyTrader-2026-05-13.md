@@ -450,3 +450,9 @@ Request:
 
 Result:
 Extracted and inspected the clipboard screenshot. Confirmed the `Strategies` tab showed category `BTC Up or Down 5m Skip` with an empty grid. Fixed `DashboardDataService` so all-time and recent strategy grids fetch up to `10_000` strategy rows instead of relying on `StrategyIds.AllStrategyIds.Count`, which can omit late-ordered Skip rows in an older running dashboard while recent data still exposes the category. Verified with an isolated Dashboard build and focused tests. The currently running dashboard process still needs restart/rebuild to pick up the fix.
+## 2026-05-13T13:14:32.7226071Z
+Request:
+Объедини стратегии Skip и Skip Revert в одной категории
+
+Result:
+Changed the dashboard category resolver so both base `BTC Up or Down 5m Skip` strategies and `Skip Revert` strategies map to the single category `BTC Up or Down 5m Skip`. Rebuilt and restarted the Dashboard. Verification passed with dashboard build, focused `ConfigurationTests|StorageTests` `44/44`, and `git diff --check`.

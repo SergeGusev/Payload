@@ -874,9 +874,7 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
 
         if (StartsWithStrategyWord(suffix, "Skip"))
         {
-            return ContainsStrategyWord(suffix, "Revert")
-                ? categoryPrefix + "Skip Revert"
-                : categoryPrefix + "Skip";
+            return categoryPrefix + "Skip";
         }
 
         if (StartsWithStrategyWord(suffix, "Up"))
