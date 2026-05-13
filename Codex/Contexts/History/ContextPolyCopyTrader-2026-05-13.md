@@ -71,3 +71,10 @@ Request:
 
 Result:
 Added 320 Paper-only BTC `PreOpen Half ... Sell` variants across `5m`, `15m`, `1h`, and `4h`. They enter like the matching Half fixed-direction strategy, then in the final quarter infer current direction from the order book and create a Paper SELL on the held outcome when direction has flipped. Settlement now combines sell proceeds and any remaining resolution value without double-counting sell fills. Added schema seeding, repository queries, docs, and regression tests for variant generation, sell/no-sell behavior, and sell-exit PnL. Verification passed with full solution tests `442/442` and `git diff --check`. Restarted the service; after clearing one orphaned PostgreSQL backend that blocked schema init, IPC `/status` is `Running`, Paper active, Live paused, kill switch false.
+
+## 2026-05-13T09:18:07.0557229+00:00
+Request:
+А почему ты добавил их только для Up стратегий?
+
+Result:
+Verified that the Sell variants were not added only for Up. The domain generator and PostgreSQL seed use both outcomes; PostgreSQL contains `160 up_sell` and `160 down_sell` enabled strategy rows. Runtime data also contains both `up_sell` and `down_sell` runs and orders, including filled `down_sell` Paper SELL exits. The likely confusion is that tests used `Up 49 Sell` as the representative scenario, and the current settled sample has only `up_sell` settled rows so far while `down_sell` rows are not yet settled.

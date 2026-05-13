@@ -1,3 +1,15 @@
+## Active Update 2026-05-13 PreOpen Sell Direction Check
+Goal: Verify whether the new PreOpen Half Sell variants were added only for Up or for both Up and Down.
+Status: Completed
+Done:
+- Rechecked the domain variant generator and PostgreSQL seed SQL: both use outcomes `up` and `down` for `PreOpen Half ... Sell`.
+- Queried PostgreSQL `strategies`: `160 up_sell` and `160 down_sell` rows exist and are enabled.
+- Queried runtime rows: both `up_sell` and `down_sell` have `strategy_market_paper_runs` and Paper BUY orders; `down_sell` also has filled Paper SELL exit orders in the current sample.
+- Identified the likely source of confusion: the regression tests use `Up 49 Sell` as the representative scenario, and the current sample has settled rows only for `up_sell` so far, while `down_sell` rows are mostly entered/open/expired or sell-filled but not settled yet.
+Next: None.
+Notes: No production code changed. Service IPC `/status` remained `Running`, Paper active, Live paused, kill switch false, and `lastError=null`.
+Blockers: None.
+
 ## Active Update 2026-05-13 PreOpen Half Sell Exits
 Goal: Add protective Paper SELL-exit variants for every BTC PreOpen Half fixed-direction strategy.
 Status: Completed
