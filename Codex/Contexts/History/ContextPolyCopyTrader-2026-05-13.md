@@ -56,3 +56,10 @@ Request:
 
 Result:
 Stopped the Debug service, cleared Paper execution/accounting/history tables plus Paper-linked on-chain result rows, daily reports, and accumulated HTTP/API error history from the connection outage, then verified all tracked reset tables were zero. Pre-clean counts included `strategy_market_paper_runs=5934`, `paper_orders=2461`, `paper_fills=277`, `paper_positions=269`, `paper_position_settlements=107`, `paper_copied_trader_performance=1324`, `api_errors=119014`, and `polymarket_http_logs=195581`. Restarted the service, immediately reapplied live trading pause, and verified IPC `/status` is `Running`, Paper active, Live paused, kill switch false, and `lastError=null`. Fresh logs showed CLOB/Gamma requests returning HTTP 200.
+
+## 2026-05-13T07:39:01.3738157+00:00
+Request:
+Ставки ставятся?
+
+Result:
+Verified that Paper bets are being placed after the reset. IPC `/status` reported `Running`, Paper active, Live paused, kill switch false, and `lastError=null`. A read-only PostgreSQL diagnostic found `paper_orders=520`, all within the last 10 minutes, with first order at `2026-05-13T07:30:03Z` and latest order at `2026-05-13T07:38:00Z`. Due `Observed` backlog was zero. Latest BTC 5m entries for `btc-updown-5m-1778657700` had entry delays around `0.093s`, `0.440s`, and `0.863s`; recent HTTP failures were absent. Temporary diagnostic files were removed.

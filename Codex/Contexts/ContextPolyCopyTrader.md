@@ -1,3 +1,16 @@
+## Active Update 2026-05-13 Post Reset Bet Placement Check
+Goal: Verify whether Paper bets are being placed after the fresh reset and connection fix.
+Status: Completed
+Done:
+- Confirmed the Debug service is `Running` with scanning active, Paper active, Live paused, kill switch false, and `lastError=null`.
+- Ran a read-only PostgreSQL check over the post-reset sample: `paper_orders=520`, all within the last 10 minutes, with first order at `2026-05-13T07:30:03Z` and latest order at `2026-05-13T07:38:00Z`.
+- Confirmed no due `Observed` backlog: `due_observed=0`.
+- Confirmed latest orders are current BTC 5m strategy entries for `btc-updown-5m-1778657700`; recent entry delays were about `0.093s`, `0.440s`, and `0.863s`.
+- Confirmed no recent failed HTTP calls in `polymarket_http_logs` for the last 20 minutes.
+Next: Monitor the first complete clean 5-minute windows after reset; separate initial catch-up skips from ongoing entry health.
+Notes: Run status counts at the check were `Skipped=1703`, `Observed=730`, `Entered=486`, `Settled=29`. Recent skips were dominated by initial catch-up/restart effects (`entry_due_already_passed=1442`) plus normal strategy skip reasons. Temporary read-only C# diagnostic utility was removed after use.
+Blockers: None.
+
 ## Active Update 2026-05-13 Fresh Reset After Connection Fix
 Goal: Clear contaminated Paper/runtime history after the Polymarket connection issue was fixed and restart clean collection.
 Status: Completed
