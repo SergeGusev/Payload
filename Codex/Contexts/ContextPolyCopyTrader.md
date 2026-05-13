@@ -1,3 +1,19 @@
+## Active Update 2026-05-13 Audit BTC Less 270 Win Rate
+Goal: Check whether `BTC Up or Down 5m Less 270` and `BTC Up or Down 5m Less 270 Gamma` have suspiciously high win rates in the new PostgreSQL database.
+Status: Completed
+Done:
+- Re-read workflow/project rules, coding rules, active context, and current Git state before the audit.
+- Queried PostgreSQL at `192.168.0.101:5432/polycopytrader` through Docker `psql` without printing secrets.
+- Confirmed dashboard `Win %` is settled-only: `won_runs_count / settled_runs_count`, excluding `Observed`, `Entered`, `Skipped`, expired/unfilled GTD orders, and pending orders.
+- Found `BTC Up or Down 5m Less 270` is not high-win: all-time current sample has `13` settled runs, `2` wins, `11` losses, `15.38%` settled win rate, but still positive PnL `+38.4935` because one very cheap `0.02` winning entry paid about `+49`.
+- Found `BTC Up or Down 5m Less 270 Gamma` has a genuinely high settled win rate in the copied/current-day sample: `21` settled, `15` wins, `6` losses, `71.43%`, PnL `+60.7394`.
+- Verified no settlement-accounting mismatch for these rows: run settlement PnL matches `paper_position_settlements`, no missing settlement rows, no non-binary settlement prices, no entries after settlement/end.
+- Identified the main reason for the Gamma win-rate spike: `Less Gamma` selects the outcome by lower stale Gamma `outcomePrices`, but then seeds the GTD limit from current CLOB/WebSocket/REST pricing. Because Gamma can be behind CLOB near 270s, `Less Gamma` sometimes buys at `0.54..0.99`; all `13` settled Gamma entries with `entry_price >= 0.50` were wins, which inflates win rate but with small average profit on high-priced entries.
+- Since the new service start at `2026-05-13T16:04:14Z`, these two strategies had no settled rows yet; the visible settled win-rate sample comes from rows copied/accumulated before the new-server service start.
+Next: If `Less Gamma` should mean "cheap/currently lower CLOB price" instead of "lower Gamma reference price", add the same current execution-price directional filter/cap to Gamma comparison variants or disable Gamma variants from candidate evaluation.
+Notes: No production code changed. Verification used read-only SQL diagnostics plus `git diff --check`.
+Blockers: None.
+
 ## Active Update 2026-05-13 Monitor New Server Via New Database
 Goal: Monitor the service started on the new server through PostgreSQL at `192.168.0.101`.
 Status: Completed
