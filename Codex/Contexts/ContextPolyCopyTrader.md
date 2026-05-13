@@ -1,3 +1,14 @@
+## Active Update 2026-05-13 Countertrend Dashboard Category
+Goal: Show BTC 5m Countertrend strategies in their own dashboard category.
+Status: Completed
+Done:
+- Changed the dashboard category resolver so BTC 5m strategy names containing the `Countertrend` word map to `BTC Up or Down 5m Countertrend`.
+- Strategy names/codes and execution logic remain unchanged; only dashboard filter categorization changed.
+- Rebuilt the Dashboard in normal Debug output, stopped the old Dashboard process, and started the rebuilt Dashboard executable.
+Next: None.
+Notes: Verification passed: isolated dashboard build succeeded; focused `ConfigurationTests|StorageTests` passed `44/44`; normal dashboard build succeeded; `git diff --check` passed with line-ending warnings only. Existing nullable warnings in `PostgresAppRepository.cs` remained.
+Blockers: None.
+
 ## Active Update 2026-05-13 Move Fixed Up Down To Other Category
 Goal: Show fixed-direction BTC 5m Up/Down strategies under the dashboard Other category.
 Status: Completed

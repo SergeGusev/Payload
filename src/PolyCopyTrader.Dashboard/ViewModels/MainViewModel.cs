@@ -877,6 +877,11 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
             return categoryPrefix + "Skip";
         }
 
+        if (ContainsStrategyWord(suffix, "Countertrend"))
+        {
+            return categoryPrefix + "Countertrend";
+        }
+
         if (StartsWithStrategyWord(suffix, "Up"))
         {
             return categoryPrefix + "Other";

@@ -463,3 +463,10 @@ Move `BTC Up or Down 5m Down` and `BTC Up or Down 5m Up` into the Other category
 
 Result:
 Changed the dashboard category resolver so fixed-direction BTC 5m `Up` and `Down` strategies map to `BTC Up or Down 5m Other`. Strategy names and codes were not changed. Rebuilt and restarted the Dashboard. Verification passed with dashboard build, focused `ConfigurationTests|StorageTests` `44/44`, and `git diff --check`; the first parallel test attempt hit a local compiler file lock and passed after `dotnet build-server shutdown` and retry.
+
+## 2026-05-13T13:56:26.4714413Z
+Request:
+Для Countertrend стратегий заведи отдельную категорию
+
+Result:
+Changed the dashboard category resolver so BTC 5m strategy names containing `Countertrend`, including `BTC Up or Down 5m Prev Score Countertrend XX`, map to `BTC Up or Down 5m Countertrend`. Strategy names, codes, and execution logic were not changed. Rebuilt and restarted the Dashboard. Verification passed with isolated dashboard build, focused `ConfigurationTests|StorageTests` `44/44`, normal dashboard build, and `git diff --check`.
