@@ -1,3 +1,16 @@
+## Active Update 2026-05-13 1h PreOpen Full Settled Backlog Diagnosis
+Goal: Explain why `BTC Up or Down 1h PreOpen Full` shows few `Settled` rows despite always-entry intent.
+Status: Completed
+Done:
+- Confirmed all 80 `btc_up_down_1h_preopen_full_*` strategies are enabled and live stakes are off.
+- Confirmed recent 1h PreOpen Full markets are creating entries/orders: recent hourly markets have 80 `Entered` runs and 80 linked Paper orders.
+- Found the low `Settled` count is mainly settlement backlog, not missing placement: 673 ended `Entered` runs remain, including 596 linked `Pending` orders and 56 linked `Filled` orders with fills.
+- Confirmed logs repeatedly show settlement metadata timeouts on earlier 5m variants and `BTC Up or Down 5m settlement stopped after reaching the per-cycle time budget. Variants=839 BudgetSeconds=5`, so sequential per-variant settlement can starve later variants like PreOpen 1h Full.
+- Also confirmed `Settled` only counts filled orders; unfilled GTD orders become `Skipped` with `gtd_limit_not_filled`, not `Settled`.
+Next: Refactor BTC settlement to use a global due-run queue with bounded concurrency or otherwise prioritize ended filled/expired runs across all variants.
+Notes: Verification was read-only: `git pull --ff-only` already up to date, temporary C# PostgreSQL probe removed, IPC `/status` `Running` with Paper active, Live paused, kill switch false, and `lastError=null`; log search confirmed repeated settlement budget stops/timeouts. No production code changed.
+Blockers: None.
+
 ## Active Update 2026-05-12 PreOpen Low Price Expansion
 Goal: Add fixed-direction PreOpen strategy prices from `0.10` through `0.29` to the existing `0.30` through `0.49` range.
 Status: Completed
