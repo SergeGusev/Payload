@@ -1,3 +1,14 @@
+## Active Update 2026-05-13 Move Fixed Up Down To Other Category
+Goal: Show fixed-direction BTC 5m Up/Down strategies under the dashboard Other category.
+Status: Completed
+Done:
+- Changed the dashboard category resolver so `BTC Up or Down 5m Up` and `BTC Up or Down 5m Down` map to `BTC Up or Down 5m Other`.
+- Strategy names/codes remain unchanged; only dashboard filter categorization changed.
+- Rebuilt the Dashboard in normal Debug output, stopped the old Dashboard process, and started the rebuilt Dashboard executable.
+Next: None.
+Notes: Verification passed: dashboard build succeeded; focused `ConfigurationTests|StorageTests` passed `44/44`; `git diff --check` passed with line-ending warnings only. A first parallel test attempt hit a local compiler file lock and passed after `dotnet build-server shutdown` and retry. Existing nullable warnings in `PostgresAppRepository.cs` remained.
+Blockers: None.
+
 ## Active Update 2026-05-13 Merge Skip Dashboard Categories
 Goal: Show base `Skip` and `Skip Revert` strategies under one dashboard category.
 Status: Completed

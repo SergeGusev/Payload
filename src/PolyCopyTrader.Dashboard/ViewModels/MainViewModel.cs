@@ -879,12 +879,12 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
 
         if (StartsWithStrategyWord(suffix, "Up"))
         {
-            return categoryPrefix + "Up";
+            return categoryPrefix + "Other";
         }
 
         if (StartsWithStrategyWord(suffix, "Down"))
         {
-            return categoryPrefix + "Down";
+            return categoryPrefix + "Other";
         }
 
         return categoryPrefix + "Other";

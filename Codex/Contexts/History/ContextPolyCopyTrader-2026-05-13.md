@@ -456,3 +456,10 @@ Request:
 
 Result:
 Changed the dashboard category resolver so both base `BTC Up or Down 5m Skip` strategies and `Skip Revert` strategies map to the single category `BTC Up or Down 5m Skip`. Rebuilt and restarted the Dashboard. Verification passed with dashboard build, focused `ConfigurationTests|StorageTests` `44/44`, and `git diff --check`.
+
+## 2026-05-13T13:51:48.0458082Z
+Request:
+Move `BTC Up or Down 5m Down` and `BTC Up or Down 5m Up` into the Other category.
+
+Result:
+Changed the dashboard category resolver so fixed-direction BTC 5m `Up` and `Down` strategies map to `BTC Up or Down 5m Other`. Strategy names and codes were not changed. Rebuilt and restarted the Dashboard. Verification passed with dashboard build, focused `ConfigurationTests|StorageTests` `44/44`, and `git diff --check`; the first parallel test attempt hit a local compiler file lock and passed after `dotnet build-server shutdown` and retry.
