@@ -85,3 +85,10 @@ Request:
 
 Result:
 Changed BTC PreOpen Sell variants from `PreOpen Half ... Sell` to `PreOpen Full ... Sell` while preserving their existing `804...` strategy ids. The entry BUY for Sell variants now uses a Full-period mode with no pre-close local cancel deadline and expires only at market end for Paper accounting. Updated strategy seed SQL, docs, and tests; restarted the service so schema initialization renamed the existing rows. PostgreSQL verification showed `320` `preopen_full_*_sell` strategies, `0` `preopen_half_*_sell`, split `160` Up and `160` Down, all enabled. Verification passed with focused BTC/Storage tests `126/126`, full solution tests `443/443`, and `git diff --check`.
+
+## 2026-05-13T10:02:33.1435456+00:00
+Request:
+User asked to check whether bets are being placed normally.
+
+Result:
+Verified that Paper bets are being placed normally. HTTP IPC `/status` reported `Running`, scanning active, Paper active, Live paused, kill switch false, and `lastError=null`; `/health` returned `ok=true`. The visible `dotnet run` process was the parent of `PolyCopyTrader.Service.exe` PID `30084`, not a second independent strategy loop. PostgreSQL at `2026-05-13 13:01:33+03` showed the latest Paper order at `2026-05-13 13:01:30.327817+03`, only `3.643s` old, with `326` orders in the last 2 minutes and no due `Observed` backlog. The last-10-minute BUY sample had `1228` entries, average delay `2.731s`, p95 about `3.021s`, max `28.918s`, and the newest BTC 5m tick entries were about `0.328s` after due. Recent HTTP failure count was zero in `polymarket_http_logs`; isolated API timeout/WebSocket reconnect rows did not stop order creation.

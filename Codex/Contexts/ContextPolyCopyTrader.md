@@ -1,3 +1,17 @@
+## Active Update 2026-05-13 Current Bet Placement Check
+Goal: Verify whether Paper bets are currently being placed normally after the PreOpen Sell Full change.
+Status: Completed
+Done:
+- Confirmed HTTP IPC `/status` at `2026-05-13T10:00:35Z`: service `Running`, scanning active, Paper active, Live paused, kill switch false, and `lastError=null`; `/health` also returned `ok=true`.
+- Confirmed the visible `dotnet run` process is the parent of `PolyCopyTrader.Service.exe` PID `30084`, not a second independent strategy loop.
+- Queried PostgreSQL after a fresh 30-second tick: at DB time `2026-05-13 13:01:33+03`, the latest Paper order was `2026-05-13 13:01:30.327817+03`, only `3.643s` old; `326` orders existed in the last 2 minutes and `360` in the last 5 minutes.
+- Confirmed there is no due entry backlog: `due_observed=0`, with the next observed due timestamp at `2026-05-13 13:02:00+03`.
+- Confirmed recent entry timing is healthy overall: the last-10-minute BUY sample had `1228` entries, average delay `2.731s`, p95 about `3.021s`, and max `28.918s`; the latest BTC 5m tick entries were about `0.328s` after due.
+- Confirmed PreOpen Sell strategy seeding remains correct: `320` `preopen_full_*_sell`, `0` `preopen_half_*_sell`, all `320` full sell variants enabled.
+Next: Continue monitoring entry delays; treat isolated API timeout/WebSocket reconnect rows as non-blocking unless they start correlating with stale latest orders or due `Observed` backlog.
+Notes: No source code changed. Verification was read-only via IPC and PostgreSQL. Recent `polymarket_http_logs` had `0` failed HTTP calls in the last 20 minutes. Recent `api_errors` included isolated order-book timeout/WebSocket reconnect messages, but Paper orders continued after them.
+Blockers: None.
+
 ## Active Update 2026-05-13 PreOpen Sell Full Entry
 Goal: Move PreOpen Sell variants from Half to Full and keep their entry BUY alive through the full market.
 Status: Completed
