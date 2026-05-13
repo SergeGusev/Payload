@@ -1,3 +1,20 @@
+## Active Update 2026-05-13 New Server Health Check
+Goal: Check the new server after migration.
+Status: Completed
+Done:
+- Re-ran repository task initialization, confirmed Git was already up to date, and inspected current context/Git state.
+- Confirmed `192.168.0.101:5432` PostgreSQL is reachable from the dev machine.
+- Queried the new database without printing secrets. `PolyCopyTrader.Service` heartbeat is fresh: status `Running`, mode `Live`, started `2026-05-13T16:04:14Z`, last heartbeat age about `43s`, `last_error=<none>`.
+- Confirmed current market data is active: main WebSocket and `shard-001` are connected with `830` subscribed assets and messages about `15s` old; stale shard rows from May 7 remain in `market_data_status` but are not current-service rows.
+- Confirmed active data writes: BTC odds latest sample age about `3s`, Gamma latest fetch age about `2s`, latest Paper order age about `27s`, and latest run update age about `27s`.
+- Recent Paper activity is high: last 15 minutes had `1,501` Paper orders (`493` pending, `4` filled, `1,004` expired) and `3,357` run updates. Entry delay over the last 15 minutes averaged `2.725s`, max `10.603s`.
+- Found no HTTP failures in `polymarket_http_logs` for the last 30 minutes. `api_errors` had recent transient entries: CLOB order-book refresh timeouts and WebSocket reconnect/heartbeat closures; the WebSocket was connected again at check time.
+- Found no live orders in the last 30 minutes and `0` open live orders; latest live order remains from `2026-05-11`.
+- Noted two limitations/issues: remote IPC `http://192.168.0.101:5118/health` and `/status` timed out from the dev machine, so current in-memory live pause/kill-switch state could not be verified through IPC; `34` stale Countertrend `Observed` rows remain due at `2026-05-13T15:30:00Z`/`15:35:00Z`.
+Next: If needed, check IPC/firewall/bind address on the new server so `/status` is reachable from the dev machine, and optionally clean or skip the stale Countertrend observed rows.
+Notes: No production code changed. Verification used network checks, read-only PostgreSQL diagnostics, and `git diff --check`.
+Blockers: IPC status is not reachable remotely, but DB health shows the service is currently running and writing.
+
 ## Active Update 2026-05-13 New Server Schema Deployment Answer
 Goal: Clarify whether publishing and starting a new service build on the new server applies database schema changes automatically.
 Status: Completed
