@@ -1,3 +1,15 @@
+## Active Update 2026-05-13 CLOB Timeout Clarification
+Goal: Clarify whether CLOB order-book requests currently use 30 seconds or 2 seconds.
+Status: Completed
+Done:
+- Rechecked the relevant CLOB order-book paths in the service code.
+- Clarified that the previously reported `CLOB order-book timeout` came from `BtcUpDown5mOrderBookRefreshWorker`, which wraps each cache-warming `/book` request with `OrderBookRefreshRequestTimeoutSeconds=2`.
+- Clarified that the global `Polymarket:TimeoutSeconds=30` still applies to normal Polymarket HTTP client calls, including direct CLOB client calls that are not wrapped by the refresh-worker 2-second cancellation token.
+- Clarified that BTC strategy entry fallback REST order-book fetches call the CLOB client without the refresh-worker 2-second wrapper, so their effective request timeout is the general HTTP path unless an outer cancellation applies.
+Next: None.
+Notes: No production code changed. Verification was code inspection.
+Blockers: None.
+
 ## Active Update 2026-05-13 CLOB Timeout And WebSocket Frequency Answer
 Goal: Explain whether to increase CLOB order-book timeout and how often the WebSocket disconnects on the new server.
 Status: Completed

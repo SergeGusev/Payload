@@ -529,3 +529,9 @@ Request:
 
 Result:
 Inspected service timeout config/code and queried PostgreSQL on `192.168.0.101`. The global `Polymarket:TimeoutSeconds` is already `30`; the observed CLOB errors come from the separate BTC order-book refresh worker timeout `BtcUpDown5mStrategy:OrderBookRefreshRequestTimeoutSeconds=2`, which cancels individual `/book` refreshes after 2 seconds. Since the new service start around `2026-05-13T16:04:14Z`, there were `7` CLOB refresh timeout errors total; last 30 minutes `7`, last 15 minutes `1`, last 5 minutes `0`. WebSocket errors were also counted: since service start `PolymarketMarketWebSocket:shard-001` had `7` WebSocket `api_errors` and `reconnect_count=4`, with reconnect/error buckets around `19:20`, `19:23`, `19:28`, and `19:54` Europe/Sofia time; last 5 minutes had `0` WebSocket errors at query time. Current WebSocket status was connected, non-stale, with `834` subscribed assets. Recommendation: do not raise the global HTTP timeout; if needed, test only the refresh-worker timeout from `2s` to `3s`, because larger timeouts can block the sequential refresh loop and worsen cache freshness/entry latency. No production code changed.
+## 2026-05-13T17:57:06.3139282Z
+Request:
+То есть сейчас у нас не 30 секунд таймаут, а 2 секунды?
+
+Result:
+Clarified that both timeouts exist. The previously reported `CLOB order-book timeout` was from `BtcUpDown5mOrderBookRefreshWorker`, which wraps each cache-warming CLOB `/book` request with `BtcUpDown5mStrategy:OrderBookRefreshRequestTimeoutSeconds=2`. The global `Polymarket:TimeoutSeconds=30` still applies to normal Polymarket HTTP client calls. BTC strategy entry fallback REST order-book fetches call the CLOB client without the refresh-worker 2-second wrapper, so their effective request timeout is the general HTTP path unless an outer cancellation applies. No production code changed.
