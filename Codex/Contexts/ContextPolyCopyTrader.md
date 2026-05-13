@@ -1,3 +1,14 @@
+## Active Update 2026-05-13 Orders Column Meaning
+Goal: Clarify what the Dashboard `Orders` column counts.
+Status: Completed
+Done:
+- Confirmed Dashboard `Orders` binds to `OrdersCount`; `Entered`, `Skipped`, and `Settled` are separate run counters.
+- Confirmed all-time and recent performance SQL calculate `OrdersCount` from rows in `paper_orders`, not from all considered strategy runs.
+- Confirmed skipped/considered-but-not-placed decisions are represented through `strategy_market_paper_runs` counters and skip reasons, not through `Orders`.
+Next: None.
+Notes: No production code changed. Verification was code inspection of Dashboard bindings, performance SQL, domain models, and performance tests.
+Blockers: None.
+
 ## Active Update 2026-05-13 Empty Ask Resting GTD Orders
 Goal: Make BTC Paper GTD entries place resting limit orders when the selected order book exists but has an empty ask side.
 Status: Completed
