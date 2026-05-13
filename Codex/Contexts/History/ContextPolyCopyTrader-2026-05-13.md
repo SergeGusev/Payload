@@ -398,3 +398,10 @@ Request:
 
 Result:
 Inspected the BTC odds archive writer, repository readers, schema indexes, config, and current PostgreSQL stats. Confirmed `btc_up_down_5m_odds_ticks` stores compact 5-second active-market archive samples, not every raw Binance BTC trade tick. Current table stats were `58,517` rows, `1,129` markets, latest sample `2026-05-13T10:42:14Z`, `11,366` rows in the last 24 hours, and about `70 MB` total relation size. Identified active dependencies: Binance start-relative strategies, Binance Clever fair-value strategies, and Prev Score Countertrend. No production code changed.
+
+## 2026-05-13T11:46:09.5513741Z
+Request:
+Очень много скипов. Посмотри причины, пожалуйста
+
+Result:
+Analyzed current PostgreSQL Paper run skips by reason, strategy, family, and recent windows. Found the dominant current reason is `gtd_limit_not_filled`: after a follow-up check, `4,679` of `4,997` last-hour skips were unfilled/expired GTD Paper orders rather than decision skips. True decision filters in the last hour were much smaller: `btc_previous_score_neutral=119`, `btc_reference_move_below_bps_threshold=110`, `btc_market_results_not_consecutive=40`, `missing_orderbook_empty_side=23`, and minor strategy selector/ensemble/markov filters. A transient `Observed` due group at `11:45:00Z` cleared to `0` after about 35 seconds, so there was no persistent due backlog. No production code changed.

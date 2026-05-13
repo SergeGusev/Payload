@@ -1,3 +1,16 @@
+## Active Update 2026-05-13 Skip Reason Analysis
+Goal: Analyze why the dashboard shows many skipped BTC strategy runs.
+Status: Completed
+Done:
+- Queried current PostgreSQL Paper runs read-only and grouped skips by reason, strategy, family, and recent window.
+- Found the dominant last-hour skip reason is `gtd_limit_not_filled`: `4,679` of `4,997` skips after a follow-up check, meaning the strategy did place GTD Paper BUY orders but they expired/unfilled before settlement.
+- Confirmed true decision skips are much smaller in the last hour: `btc_previous_score_neutral=119`, `btc_reference_move_below_bps_threshold=110`, `btc_market_results_not_consecutive=40`, `missing_orderbook_empty_side=23`, `strategy_selector_no_positive_candidate=12`, and a few minor filters.
+- Confirmed no persistent due backlog: an initial `394` due `Observed` rows were exactly at the `11:45:00Z` due group; after waiting about 35 seconds, due `Observed` returned to `0`.
+- Noted older 3-hour skips include restart/catch-up style reasons (`entry_due_already_passed=1683`, `entry_due_expired=911`, `market_already_ended=219`), but they were not present in the current last-hour top reasons.
+Next: Consider separating unfilled GTD expirations from real decision skips in dashboard/reporting so `gtd_limit_not_filled` does not dominate the skip metric.
+Notes: No production code changed. Verification was a temporary read-only C# Npgsql diagnostic under `.codex-temp`, removed after use. Recent API errors were low-volume WebSocket close/order-book timeout events and did not correlate with a due backlog.
+Blockers: None.
+
 ## Active Update 2026-05-13 BTC Odds Tick Table Review
 Goal: Explain whether `btc_up_down_5m_odds_ticks` stores all BTC ticks, how fast it grows, and where it is required.
 Status: Completed
