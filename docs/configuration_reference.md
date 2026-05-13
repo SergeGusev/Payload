@@ -763,7 +763,7 @@ leader exits can still be tracked.
 - `OrderBookRefreshMaxMarketsPerCycle`: maximum active/near BTC 5-minute markets refreshed per cycle; default `4`.
 - `OrderBookRefreshMarketLookaheadSeconds`: include markets whose start time is within this future window; default `90`.
 - `OrderBookRefreshMarketBehindSeconds`: keep refreshing recently closed/ending markets inside this trailing window; default `30`.
-- `OrderBookRefreshRequestTimeoutSeconds`: per-asset CLOB `/book` timeout for the refresh worker; default `2`.
+- `OrderBookRefreshRequestTimeoutSeconds`: per-asset CLOB `/book` timeout for the refresh worker; default `5`.
 - `EnabledVariantCodes`: optional config-level allowlist of built-in variant codes; empty means all built-in BTC strategy variants are eligible, subject to the runtime `strategies.enabled` flags.
 
 ## OnChainIngestion

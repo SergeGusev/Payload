@@ -1,3 +1,15 @@
+## Active Update 2026-05-13 Raise CLOB Refresh Timeout
+Goal: Raise the BTC 5m order-book refresh worker CLOB `/book` timeout to 5 seconds.
+Status: Completed
+Done:
+- Changed `BtcUpDown5mStrategy:OrderBookRefreshRequestTimeoutSeconds` in `src/PolyCopyTrader.Service/appsettings.json` from `2` to `5`.
+- Changed the C# default in `src/PolyCopyTrader.Domain/Configuration/AppConfiguration.cs` from `2` to `5`.
+- Updated `docs/configuration_reference.md` to document the new default `5`.
+- Did not change the global `Polymarket:TimeoutSeconds=30`.
+Next: Publish the updated service build to the new server and restart the service for the timeout change to take effect there.
+Notes: `dotnet build src\PolyCopyTrader.Service\PolyCopyTrader.Service.csproj -c Verify --no-restore` passed with existing nullable warnings in `PostgresAppRepository.cs`. First parallel focused test run hit a local generated-file lock; after `dotnet build-server shutdown`, `dotnet test tests\PolyCopyTrader.Tests\PolyCopyTrader.Tests.csproj -c Verify --no-restore --filter "ConfigurationTests|BtcUpDown5mOrderBookRefreshWorkerTests"` passed `24/24`. `git diff --check` passed.
+Blockers: None.
+
 ## Active Update 2026-05-13 CLOB Timeout Clarification
 Goal: Clarify whether CLOB order-book requests currently use 30 seconds or 2 seconds.
 Status: Completed

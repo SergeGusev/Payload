@@ -535,3 +535,9 @@ Request:
 
 Result:
 Clarified that both timeouts exist. The previously reported `CLOB order-book timeout` was from `BtcUpDown5mOrderBookRefreshWorker`, which wraps each cache-warming CLOB `/book` request with `BtcUpDown5mStrategy:OrderBookRefreshRequestTimeoutSeconds=2`. The global `Polymarket:TimeoutSeconds=30` still applies to normal Polymarket HTTP client calls. BTC strategy entry fallback REST order-book fetches call the CLOB client without the refresh-worker 2-second wrapper, so their effective request timeout is the general HTTP path unless an outer cancellation applies. No production code changed.
+## 2026-05-13T18:08:08.5829952Z
+Request:
+Давай хотя бы до 5 поднимем
+
+Result:
+Raised the BTC 5-minute order-book refresh worker timeout from `2` to `5` seconds by changing `BtcUpDown5mStrategy:OrderBookRefreshRequestTimeoutSeconds` in `src/PolyCopyTrader.Service/appsettings.json`, the C# default in `src/PolyCopyTrader.Domain/Configuration/AppConfiguration.cs`, and the documented default in `docs/configuration_reference.md`. The global `Polymarket:TimeoutSeconds=30` was not changed. Verification: service build passed with existing nullable warnings in `PostgresAppRepository.cs`; the first parallel focused test run hit a local generated-file lock, then after `dotnet build-server shutdown` focused tests `ConfigurationTests|BtcUpDown5mOrderBookRefreshWorkerTests` passed `24/24`; `git diff --check` passed. The change requires publishing/restarting the service on the new server to take effect.

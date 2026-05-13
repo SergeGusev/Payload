@@ -634,7 +634,7 @@ public sealed class BtcUpDown5mStrategyOptions
 
     public int OrderBookRefreshMarketBehindSeconds { get; init; } = 30;
 
-    public int OrderBookRefreshRequestTimeoutSeconds { get; init; } = 2;
+    public int OrderBookRefreshRequestTimeoutSeconds { get; init; } = 5;
 
     public List<string> EnabledVariantCodes { get; init; } = [];
 }
