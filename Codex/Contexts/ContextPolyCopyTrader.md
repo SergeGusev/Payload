@@ -1,3 +1,17 @@
+## Active Update 2026-05-13 Less 270 Gamma Skip Explanation
+Goal: Explain skip causes for `BTC Up or Down 5m Less 270 Gamma`.
+Status: Completed
+Done:
+- Inspected the strategy definition: `Less 270 Gamma` selects the lower-priced BTC 5m outcome from Gamma `outcomePrices` at `market_start + 270s`, then seeds a Paper GTD BUY from current CLOB/WebSocket/REST ask-depth VWAP for the selected asset.
+- Queried PostgreSQL for `btc_up_down_5m_less_270_gamma`: current strategy row is enabled, Paper stake `1.00`, Live stakes disabled.
+- Current run summary: all-time/post-reset `57` runs, `42` skipped, `12` settled, `3` observed; last hour `15` runs, `10` skipped, `2` settled, `3` observed.
+- Skip reasons: last hour `gtd_limit_not_filled=8` and `missing_orderbook_empty_side=2`; all-time/post-reset `gtd_limit_not_filled=22`, `missing_orderbook_empty_side=13`, `entry_due_already_passed=5`, `entry_due_expired=2`.
+- Confirmed recent `gtd_limit_not_filled` orders were placed around `+270s` and expired at market end about `28-30s` later with `gtd_expiration_mode=market_end_cap`; examples had Gamma-selected lower outcome prices around `0.345-0.495` but executable CLOB VWAP limits from `0.01` to `0.98`.
+- Confirmed `missing_orderbook_empty_side` examples had empty ask arrays for the selected asset near the end of the market, so no executable BUY price could be formed.
+Next: Consider whether Gamma comparison variants should stay enabled in the main dashboard metric or be separated as experimental comparison strategies because their skips are mostly expected.
+Notes: No production code changed. Verification was code inspection plus a temporary read-only C# Npgsql diagnostic under `.codex-temp`, removed after use.
+Blockers: None.
+
 ## Active Update 2026-05-13 Skip Reason Analysis
 Goal: Analyze why the dashboard shows many skipped BTC strategy runs.
 Status: Completed

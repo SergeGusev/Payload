@@ -405,3 +405,10 @@ Request:
 
 Result:
 Analyzed current PostgreSQL Paper run skips by reason, strategy, family, and recent windows. Found the dominant current reason is `gtd_limit_not_filled`: after a follow-up check, `4,679` of `4,997` last-hour skips were unfilled/expired GTD Paper orders rather than decision skips. True decision filters in the last hour were much smaller: `btc_previous_score_neutral=119`, `btc_reference_move_below_bps_threshold=110`, `btc_market_results_not_consecutive=40`, `missing_orderbook_empty_side=23`, and minor strategy selector/ensemble/markov filters. A transient `Observed` due group at `11:45:00Z` cleared to `0` after about 35 seconds, so there was no persistent due backlog. No production code changed.
+
+## 2026-05-13T11:53:24.6360462Z
+Request:
+Объясни скипы у BTC Up or Down 5m Less 270 Gamma
+
+Result:
+Inspected the `BTC Up or Down 5m Less 270 Gamma` strategy definition and queried its current Paper runs. Confirmed it selects the lower-priced outcome by Gamma `outcomePrices` at `market_start + 270s`, then creates a Paper GTD BUY from CLOB/WebSocket/REST ask-depth VWAP for that selected asset. Current post-reset stats: `57` runs, `42` skipped, `12` settled, `3` observed; last hour `15` runs, `10` skipped, `2` settled, `3` observed. Skip reasons are mostly expected late-market execution behavior: last hour `gtd_limit_not_filled=8`, `missing_orderbook_empty_side=2`; post-reset `gtd_limit_not_filled=22`, `missing_orderbook_empty_side=13`, `entry_due_already_passed=5`, `entry_due_expired=2`. Recent GTD orders were placed around `+270s` and expired at market end about `28-30s` later with `market_end_cap`, while missing-book skips had empty ask arrays for the selected asset. No production code changed.
