@@ -391,3 +391,10 @@ Score показывает среднее смещение BTC от старта
 
 Result:
 Implemented the BTC 5-minute previous-market score countertrend strategy using existing `btc_up_down_5m_odds_ticks` samples, with time-weighted winsorized BTC deviation scoring, epsilon/min-sample/time-share configuration, and 17 fixed-price variants from `0.10` to `0.90`. Added repository loading by previous market start, strategy seeding, config validation, docs, and regression tests. Verification passed with focused tests `152/152`, full solution tests `446/446`, `git diff --check`, Debug service build, service restart, live pause reapplied, IPC health/status OK, and PostgreSQL verification showing all 17 new strategies enabled.
+
+## 2026-05-13T10:42:50.0207021Z
+Request:
+А мы все тики BTC записываем в таблицу btc_up_down_5m_odds_ticks ? Она не слишком быстро растёт? Где есть необходимость в ней?
+
+Result:
+Inspected the BTC odds archive writer, repository readers, schema indexes, config, and current PostgreSQL stats. Confirmed `btc_up_down_5m_odds_ticks` stores compact 5-second active-market archive samples, not every raw Binance BTC trade tick. Current table stats were `58,517` rows, `1,129` markets, latest sample `2026-05-13T10:42:14Z`, `11,366` rows in the last 24 hours, and about `70 MB` total relation size. Identified active dependencies: Binance start-relative strategies, Binance Clever fair-value strategies, and Prev Score Countertrend. No production code changed.

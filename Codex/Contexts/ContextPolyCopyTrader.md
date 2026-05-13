@@ -1,3 +1,15 @@
+## Active Update 2026-05-13 BTC Odds Tick Table Review
+Goal: Explain whether `btc_up_down_5m_odds_ticks` stores all BTC ticks, how fast it grows, and where it is required.
+Status: Completed
+Done:
+- Confirmed the table stores one compact odds/archive sample per active BTC 5-minute market per `BtcUpDown5mOddsArchive` cycle, not every raw Binance trade tick.
+- Verified current service config has `BtcUpDown5mOddsArchive:PollIntervalSeconds=5`, so a continuously running single active BTC 5-minute market would produce about `17,280` rows/day before outages/restarts.
+- Queried PostgreSQL read-only: current table has `58,517` rows across `1,129` markets, first sample `2026-05-08T21:41:46Z`, latest sample `2026-05-13T10:42:14Z`, `11,366` rows in the last 24 hours, and about `70 MB` total relation size.
+- Mapped active readers: Binance start-relative variants need the first archived start price, Binance Clever needs current/recent archived odds samples, and Prev Score Countertrend needs previous-market samples.
+Next: Add configurable retention/cleanup for `btc_up_down_5m_odds_ticks` if long-term historical backtesting is not needed.
+Notes: No production code changed. Verification was code inspection plus a temporary read-only C# Npgsql query tool under `.codex-temp`, removed after use. Existing untracked `artifacts/polymarket-sdk-src/` remained untouched.
+Blockers: None.
+
 ## Active Update 2026-05-13 BTC Previous Score Countertrend
 Goal: Add a BTC 5-minute countertrend strategy that scores the immediately previous market by time-weighted BTC deviation from its start price and enters the next market against that bias.
 Status: Completed
