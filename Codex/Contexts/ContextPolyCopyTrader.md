@@ -1,3 +1,15 @@
+## Active Update 2026-05-13 Missing OrderBook Empty Side Meaning
+Goal: Clarify whether `missing_orderbook_empty_side` is a local skip and what it means.
+Status: Completed
+Done:
+- Confirmed `missing_orderbook_empty_side` is a local skip on our side before creating a Paper order.
+- The BTC taker/GTD pricing path first tries the fresh WebSocket order-book cache and, if enabled, REST CLOB `/book`; if the resulting order book has no executable ask level (`price > 0 && price <= 1 && size > 0`) for the selected asset, it rejects with `SignalReasonCodes.MissingOrderBookEmptySide`.
+- The selected strategy run is then updated to `Skipped` with that reason and diagnostics; no Paper order is created.
+- In recent `Less 270 Gamma` examples the diagnostics showed ask arrays empty while bid arrays existed, so the asset could be sold into but not bought at that instant.
+Next: None.
+Notes: No production code changed. Verification was code inspection only.
+Blockers: None.
+
 ## Active Update 2026-05-13 Less 270 Gamma Skip Explanation
 Goal: Explain skip causes for `BTC Up or Down 5m Less 270 Gamma`.
 Status: Completed

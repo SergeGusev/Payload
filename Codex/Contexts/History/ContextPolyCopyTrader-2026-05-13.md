@@ -412,3 +412,10 @@ Request:
 
 Result:
 Inspected the `BTC Up or Down 5m Less 270 Gamma` strategy definition and queried its current Paper runs. Confirmed it selects the lower-priced outcome by Gamma `outcomePrices` at `market_start + 270s`, then creates a Paper GTD BUY from CLOB/WebSocket/REST ask-depth VWAP for that selected asset. Current post-reset stats: `57` runs, `42` skipped, `12` settled, `3` observed; last hour `15` runs, `10` skipped, `2` settled, `3` observed. Skip reasons are mostly expected late-market execution behavior: last hour `gtd_limit_not_filled=8`, `missing_orderbook_empty_side=2`; post-reset `gtd_limit_not_filled=22`, `missing_orderbook_empty_side=13`, `entry_due_already_passed=5`, `entry_due_expired=2`. Recent GTD orders were placed around `+270s` and expired at market end about `28-30s` later with `market_end_cap`, while missing-book skips had empty ask arrays for the selected asset. No production code changed.
+
+## 2026-05-13T12:01:01.6439450Z
+Request:
+missing_orderbook_empty_side - это мы скипаем сами на своей стороне?
+
+Result:
+Confirmed from code that `missing_orderbook_empty_side` is a local BTC taker/GTD pricing skip before Paper order creation. The worker first checks fresh WebSocket order-book cache and optional REST CLOB `/book`; if the selected asset has no executable ask level (`price > 0 && price <= 1 && size > 0`), it rejects with `SignalReasonCodes.MissingOrderBookEmptySide`, updates the strategy run to `Skipped`, and does not create a Paper order. Recent Less 270 Gamma diagnostics showed empty ask arrays with bids present, meaning the asset could be sold into but not bought at that instant.
