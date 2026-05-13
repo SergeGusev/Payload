@@ -180,7 +180,7 @@ public sealed class NoOpAppRepository : IAppRepository
         return Task.FromResult<PaperCopiedTraderPerformance?>(null);
     }
 
-    public Task<IReadOnlyList<StrategyPerformance>> GetStrategyPerformanceAsync(int limit = 1000, CancellationToken cancellationToken = default)
+    public Task<IReadOnlyList<StrategyPerformance>> GetStrategyPerformanceAsync(int limit = 2000, CancellationToken cancellationToken = default)
     {
         return Task.FromResult<IReadOnlyList<StrategyPerformance>>([]);
     }

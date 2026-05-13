@@ -63,3 +63,11 @@ Request:
 
 Result:
 Verified that Paper bets are being placed after the reset. IPC `/status` reported `Running`, Paper active, Live paused, kill switch false, and `lastError=null`. A read-only PostgreSQL diagnostic found `paper_orders=520`, all within the last 10 minutes, with first order at `2026-05-13T07:30:03Z` and latest order at `2026-05-13T07:38:00Z`. Due `Observed` backlog was zero. Latest BTC 5m entries for `btc-updown-5m-1778657700` had entry delays around `0.093s`, `0.440s`, and `0.863s`; recent HTTP failures were absent. Temporary diagnostic files were removed.
+
+## 2026-05-13T08:52:04.4093710+00:00
+Request:
+Для каждой из наших Preopen стратегий, которые ставят по времени на половину рынка (Half) , добавить аналогичную стратегию с постфиксом Sell. Суть Sell стратегий - при наступлении последней четверти времени рынка проверяет его текущее
+направление. Если оно совпадает со ставкой стратегии - всё нормально. Если не совпадает - то мы выставляем Sell ордер по цене, по которой его сразу купят.
+
+Result:
+Added 320 Paper-only BTC `PreOpen Half ... Sell` variants across `5m`, `15m`, `1h`, and `4h`. They enter like the matching Half fixed-direction strategy, then in the final quarter infer current direction from the order book and create a Paper SELL on the held outcome when direction has flipped. Settlement now combines sell proceeds and any remaining resolution value without double-counting sell fills. Added schema seeding, repository queries, docs, and regression tests for variant generation, sell/no-sell behavior, and sell-exit PnL. Verification passed with full solution tests `442/442` and `git diff --check`. Restarted the service; after clearing one orphaned PostgreSQL backend that blocked schema init, IPC `/status` is `Running`, Paper active, Live paused, kill switch false.

@@ -709,6 +709,33 @@ internal sealed class TestAppRepository : IAppRepository
         }
     }
 
+    public Task<IReadOnlyList<StrategyMarketPaperRun>> GetPreOpenSellExitDueRunsAsync(
+        IReadOnlyCollection<Guid> strategyIds,
+        DateTimeOffset dueBeforeUtc,
+        int limit,
+        CancellationToken cancellationToken = default)
+    {
+        var normalizedStrategyIds = strategyIds
+            .Select(StrategyIds.Normalize)
+            .ToHashSet();
+        lock (sync)
+        {
+            return Task.FromResult<IReadOnlyList<StrategyMarketPaperRun>>(StrategyMarketPaperRuns
+                .Where(run => normalizedStrategyIds.Contains(StrategyIds.Normalize(run.StrategyId)))
+                .Where(run => string.Equals(run.Status, StrategyMarketPaperRunStatuses.Entered, StringComparison.OrdinalIgnoreCase))
+                .Where(run => run.MarketStartUtc is not null && run.MarketEndUtc is not null)
+                .Where(run => run.MarketStartUtc < run.MarketEndUtc)
+                .Where(run => run.MarketEndUtc > dueBeforeUtc)
+                .Where(run => run.MarketStartUtc!.Value.AddTicks((run.MarketEndUtc!.Value - run.MarketStartUtc.Value).Ticks * 3 / 4) <= dueBeforeUtc)
+                .OrderBy(run => run.MarketEndUtc)
+                .ThenBy(run => run.EnteredAtUtc)
+                .ThenBy(run => run.DetectedAtUtc)
+                .ThenBy(run => run.StrategyId)
+                .Take(limit)
+                .ToArray());
+        }
+    }
+
     public Task<IReadOnlyList<StrategyMarketPaperRun>> GetRecentStrategyMarketPaperRunsAsync(
         Guid strategyId,
         string status,
@@ -887,6 +914,27 @@ internal sealed class TestAppRepository : IAppRepository
         return Task.FromResult(PaperOrders.FirstOrDefault(order => order.CorrelationId == correlationId));
     }
 
+    public Task<IReadOnlyList<PaperOrder>> GetPaperOrdersForStrategyAssetAsync(
+        Guid strategyId,
+        string copiedTraderWallet,
+        string assetId,
+        DateTimeOffset createdAfterUtc,
+        int limit,
+        CancellationToken cancellationToken = default)
+    {
+        lock (sync)
+        {
+            return Task.FromResult<IReadOnlyList<PaperOrder>>(PaperOrders
+                .Where(order => StrategyIds.Normalize(order.StrategyId) == StrategyIds.Normalize(strategyId))
+                .Where(order => string.Equals(order.CopiedTraderWallet, copiedTraderWallet, StringComparison.OrdinalIgnoreCase))
+                .Where(order => string.Equals(order.AssetId, assetId, StringComparison.OrdinalIgnoreCase))
+                .Where(order => order.CreatedAtUtc >= createdAfterUtc)
+                .OrderByDescending(order => order.CreatedAtUtc)
+                .Take(limit)
+                .ToArray());
+        }
+    }
+
     public Task<IReadOnlyList<PaperOrder>> GetRecentPaperOrdersAsync(int limit = 100, CancellationToken cancellationToken = default)
     {
         return Task.FromResult<IReadOnlyList<PaperOrder>>(PaperOrders.OrderByDescending(item => item.CreatedAtUtc).Take(limit).ToArray());
@@ -985,7 +1033,7 @@ internal sealed class TestAppRepository : IAppRepository
         return Task.FromResult(performance);
     }
 
-    public Task<IReadOnlyList<StrategyPerformance>> GetStrategyPerformanceAsync(int limit = 1000, CancellationToken cancellationToken = default)
+    public Task<IReadOnlyList<StrategyPerformance>> GetStrategyPerformanceAsync(int limit = 2000, CancellationToken cancellationToken = default)
     {
         var strategies = new[]
         {
@@ -1046,18 +1094,18 @@ internal sealed class TestAppRepository : IAppRepository
                     : settlements.Sum(settlement => settlement.CostBasisUsd);
             }
 
-            var realized = (useRunsForSettled
-                    ? settledRuns.Sum(run => run.RealizedPnlUsd ?? 0m)
-                    : settlements.Sum(settlement => settlement.RealizedPnlUsd)) +
-                fills.Sum(item => item.Fill.RealizedPnlUsd);
+            var realized = useRunsForSettled
+                ? settledRuns.Sum(run => run.RealizedPnlUsd ?? 0m)
+                : settlements.Sum(settlement => settlement.RealizedPnlUsd) +
+                    fills.Sum(item => item.Fill.RealizedPnlUsd);
             var unrealized = positions.Sum(position => position.UnrealizedPnlUsd);
             var total = realized + unrealized;
-            var closedStake = (useRunsForSettled
-                    ? settledRuns.Sum(run => run.StakeUsd)
-                    : settlements.Sum(settlement => settlement.CostBasisUsd)) +
-                fills
-                    .Where(item => item.Order.Side == TradeSide.Sell)
-                    .Sum(item => item.Fill.Price * item.Fill.SizeShares - item.Fill.RealizedPnlUsd);
+            var closedStake = useRunsForSettled
+                ? settledRuns.Sum(run => run.StakeUsd)
+                : settlements.Sum(settlement => settlement.CostBasisUsd) +
+                    fills
+                        .Where(item => item.Order.Side == TradeSide.Sell)
+                        .Sum(item => item.Fill.Price * item.Fill.SizeShares - item.Fill.RealizedPnlUsd);
             var closedPnlRows = useRunsForSettled
                 ? settledRuns.Select(run => run.RealizedPnlUsd ?? 0m).ToArray()
                 : settlements.Select(settlement => settlement.RealizedPnlUsd).ToArray();

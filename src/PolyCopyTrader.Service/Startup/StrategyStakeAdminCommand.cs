@@ -8,6 +8,7 @@ namespace PolyCopyTrader.Service.Startup;
 public static class StrategyStakeAdminCommand
 {
     private const string PaperLiveShadowTestSource = "paper_live_shadow_test";
+    private const int StrategyAdminFetchLimit = int.MaxValue;
 
     public static async Task<int> ExecuteAsync(
         AppConfiguration configuration,
@@ -63,7 +64,7 @@ public static class StrategyStakeAdminCommand
             return 1;
         }
 
-        var strategies = await repository.GetStrategyPerformanceAsync(1000, cancellationToken);
+        var strategies = await repository.GetStrategyPerformanceAsync(StrategyAdminFetchLimit, cancellationToken);
         if (strategies.Count == 0)
         {
             await output.WriteLineAsync("No strategies found.");
@@ -132,7 +133,7 @@ public static class StrategyStakeAdminCommand
         }
 
         var normalizedCode = strategyCode.Trim();
-        var strategies = await repository.GetStrategyPerformanceAsync(1000, cancellationToken);
+        var strategies = await repository.GetStrategyPerformanceAsync(StrategyAdminFetchLimit, cancellationToken);
         var target = strategies.FirstOrDefault(strategy =>
             string.Equals(strategy.Code, normalizedCode, StringComparison.OrdinalIgnoreCase));
         if (target is null)
@@ -198,7 +199,7 @@ public static class StrategyStakeAdminCommand
         ArgumentNullException.ThrowIfNull(repository);
         ArgumentNullException.ThrowIfNull(output);
 
-        var strategies = await repository.GetStrategyPerformanceAsync(1000, cancellationToken);
+        var strategies = await repository.GetStrategyPerformanceAsync(StrategyAdminFetchLimit, cancellationToken);
         var updatedAtUtc = DateTimeOffset.UtcNow;
         var disabled = 0;
         var failed = 0;
@@ -246,7 +247,7 @@ public static class StrategyStakeAdminCommand
         ArgumentNullException.ThrowIfNull(repository);
         ArgumentNullException.ThrowIfNull(output);
 
-        var strategies = await repository.GetStrategyPerformanceAsync(1000, cancellationToken);
+        var strategies = await repository.GetStrategyPerformanceAsync(StrategyAdminFetchLimit, cancellationToken);
         var liveStrategies = strategies.Where(strategy => strategy.LiveStakes).ToArray();
         await output.WriteLineAsync($"LiveStakes strategies: {liveStrategies.Length}");
         foreach (var strategy in liveStrategies)

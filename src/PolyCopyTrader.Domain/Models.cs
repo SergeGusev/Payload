@@ -1510,7 +1510,8 @@ public static class StrategyIds
             new(BtcUpDownFixedOutcome.Down, "down", "Down", 2)
         ];
 
-        var variants = new List<BtcUpDown5mStrategyVariant>(intervals.Length * lifetimes.Length * outcomes.Length * 40);
+        var variants = new List<BtcUpDown5mStrategyVariant>(intervals.Length * lifetimes.Length * outcomes.Length * 40
+            + intervals.Length * outcomes.Length * 40);
         foreach (var interval in intervals)
         {
             foreach (var lifetime in lifetimes)
@@ -1523,7 +1524,17 @@ public static class StrategyIds
                             interval,
                             lifetime,
                             outcome,
-                            priceCents));
+                            priceCents,
+                            hasSellExit: false));
+                        if (lifetime.Mode == BtcUpDownPreOpenLifetimeMode.HalfPeriod)
+                        {
+                            variants.Add(CreateBtcPreOpenFixedDirectionVariant(
+                                interval,
+                                lifetime,
+                                outcome,
+                                priceCents,
+                                hasSellExit: true));
+                        }
                     }
                 }
             }
@@ -1536,18 +1547,24 @@ public static class StrategyIds
         BtcPreOpenIntervalSpec interval,
         BtcPreOpenLifetimeSpec lifetime,
         BtcPreOpenOutcomeSpec outcome,
-        int limitPriceCents)
+        int limitPriceCents,
+        bool hasSellExit)
     {
         var limitPrice = limitPriceCents / 100m;
-        var category = $"BTC Up/Down {interval.Name} PreOpen {lifetime.Name}";
+        var sellSuffix = hasSellExit ? " Sell" : string.Empty;
+        var category = $"BTC Up/Down {interval.Name} PreOpen {lifetime.Name}{sellSuffix}";
         return new BtcUpDown5mStrategyVariant(
-            Guid.Parse($"b7c50005-0000-4000-803{interval.IdSuffix}-0000000{lifetime.IdSuffix}{outcome.IdSuffix}{limitPriceCents:000}"),
-            $"btc_up_down_{interval.Code}_preopen_{lifetime.Code}_{outcome.Code}_{limitPriceCents}",
-            $"BTC Up or Down {interval.Name} PreOpen {lifetime.Name} {outcome.Name} {limitPriceCents}",
-            $"Five minutes before the BTC {interval.Description} market opens, always place a Paper GTD limit BUY on {outcome.Name} at {limitPrice.ToString("0.00", CultureInfo.InvariantCulture)} and keep it {lifetime.Description}; settlement uses only actually filled shares.",
+            Guid.Parse($"b7c50005-0000-4000-{(hasSellExit ? "804" : "803")}{interval.IdSuffix}-0000000{lifetime.IdSuffix}{outcome.IdSuffix}{limitPriceCents:000}"),
+            $"btc_up_down_{interval.Code}_preopen_{lifetime.Code}_{outcome.Code}_{limitPriceCents}{(hasSellExit ? "_sell" : string.Empty)}",
+            $"BTC Up or Down {interval.Name} PreOpen {lifetime.Name} {outcome.Name} {limitPriceCents}{sellSuffix}",
+            hasSellExit
+                ? $"Five minutes before the BTC {interval.Description} market opens, always place a Paper GTD limit BUY on {outcome.Name} at {limitPrice.ToString("0.00", CultureInfo.InvariantCulture)} and keep it {lifetime.Description}; during the final quarter of the market, place a Paper SELL on filled shares if the current market direction no longer matches {outcome.Name}."
+                : $"Five minutes before the BTC {interval.Description} market opens, always place a Paper GTD limit BUY on {outcome.Name} at {limitPrice.ToString("0.00", CultureInfo.InvariantCulture)} and keep it {lifetime.Description}; settlement uses only actually filled shares.",
             BtcUpDown5mStrategyDirection.Dynamic,
             -300,
-            BtcUpDown5mStrategyBehavior.PreOpenFixedDirection,
+            hasSellExit
+                ? BtcUpDown5mStrategyBehavior.PreOpenFixedDirectionSell
+                : BtcUpDown5mStrategyBehavior.PreOpenFixedDirection,
             limitPriceCents,
             null,
             interval.Interval,
@@ -1629,7 +1646,8 @@ public enum BtcUpDown5mStrategyBehavior
     StrategySelector,
     StandardEntryPriceCap,
     GammaOutcomeSelectionEntryPriceCap,
-    PreOpenFixedDirection
+    PreOpenFixedDirection,
+    PreOpenFixedDirectionSell
 }
 
 public sealed record BtcUpDown5mStrategyVariant(

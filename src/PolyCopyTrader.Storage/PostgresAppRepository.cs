@@ -714,6 +714,32 @@ WHERE wallet = @Wallet;
 		return results;
 	}
 
+	public async Task<IReadOnlyList<StrategyMarketPaperRun>> GetPreOpenSellExitDueRunsAsync(IReadOnlyCollection<Guid> strategyIds, DateTimeOffset dueBeforeUtc, int limit, CancellationToken cancellationToken = default(CancellationToken))
+	{
+		var normalizedStrategyIds = strategyIds
+			.Select(StrategyIds.Normalize)
+			.Distinct()
+			.ToArray();
+		if (normalizedStrategyIds.Length == 0 || limit <= 0)
+		{
+			return Array.Empty<StrategyMarketPaperRun>();
+		}
+
+		await using NpgsqlConnection connection = await OpenConnectionAsync(cancellationToken);
+		await using NpgsqlCommand command = CreateCommand(connection, "SELECT run.id, run.strategy_id, run.market_id, run.condition_id, run.market_slug, run.market_title, run.category,\n       run.market_start_utc, run.market_end_utc, run.detected_at_utc, run.entry_due_at_utc, run.status,\n       run.selected_asset_id, run.selected_outcome, run.entry_price, run.stake_usd, run.size_shares,\n       run.signal_id, run.paper_order_id, run.entered_at_utc, run.settlement_price, run.settlement_value_usd,\n       run.realized_pnl_usd, run.settled_at_utc, run.skip_reason, run.created_at_utc, run.updated_at_utc,\n       run.skip_diagnostics_json::text\nFROM strategy_market_paper_runs run\nWHERE run.strategy_id = ANY(@StrategyIds)\n  AND run.status = @Status\n  AND run.market_start_utc IS NOT NULL\n  AND run.market_end_utc IS NOT NULL\n  AND run.market_start_utc < run.market_end_utc\n  AND run.market_end_utc > @DueBeforeUtc\n  AND run.market_start_utc + ((run.market_end_utc - run.market_start_utc) * 0.75) <= @DueBeforeUtc\nORDER BY run.market_end_utc ASC, run.entered_at_utc ASC, run.detected_at_utc ASC, run.strategy_id ASC\nLIMIT @Limit;");
+		command.Parameters.AddWithValue("StrategyIds", normalizedStrategyIds);
+		command.Parameters.AddWithValue("Status", StrategyMarketPaperRunStatuses.Entered);
+		command.Parameters.Add("DueBeforeUtc", NpgsqlDbType.TimestampTz).Value = UtcDateTime(dueBeforeUtc);
+		command.Parameters.AddWithValue("Limit", limit);
+		List<StrategyMarketPaperRun> results = [];
+		await using NpgsqlDataReader reader = await command.ExecuteReaderAsync(cancellationToken);
+		while (await reader.ReadAsync(cancellationToken))
+		{
+			results.Add(ReadStrategyMarketPaperRun(reader));
+		}
+		return results;
+	}
+
 	public async Task<IReadOnlyList<StrategyMarketPaperRun>> GetRecentStrategyMarketPaperRunsAsync(Guid strategyId, string status, int limit, CancellationToken cancellationToken = default(CancellationToken))
 	{
 		await using NpgsqlConnection connection = await OpenConnectionAsync(cancellationToken);
@@ -998,6 +1024,29 @@ WHERE wallet = @Wallet;
 		command.Parameters.AddWithValue("CorrelationId", correlationId);
 		await using NpgsqlDataReader reader = await command.ExecuteReaderAsync(cancellationToken);
 		return await reader.ReadAsync(cancellationToken) ? ReadPaperOrder(reader) : null;
+	}
+
+	public async Task<IReadOnlyList<PaperOrder>> GetPaperOrdersForStrategyAssetAsync(Guid strategyId, string copiedTraderWallet, string assetId, DateTimeOffset createdAfterUtc, int limit, CancellationToken cancellationToken = default(CancellationToken))
+	{
+		if (limit <= 0 || string.IsNullOrWhiteSpace(assetId))
+		{
+			return Array.Empty<PaperOrder>();
+		}
+
+		await using NpgsqlConnection connection = await OpenConnectionAsync(cancellationToken);
+		await using NpgsqlCommand command = CreateCommand(connection, "SELECT " + PaperOrderSelectColumns + "\nFROM paper_orders\nWHERE strategy_id = @StrategyId\n  AND copied_trader_wallet = @CopiedTraderWallet\n  AND asset_id = @AssetId\n  AND created_at_utc >= @CreatedAfterUtc\nORDER BY created_at_utc DESC\nLIMIT @Limit;");
+		command.Parameters.AddWithValue("StrategyId", StrategyIds.Normalize(strategyId));
+		command.Parameters.AddWithValue("CopiedTraderWallet", copiedTraderWallet ?? string.Empty);
+		command.Parameters.AddWithValue("AssetId", assetId);
+		command.Parameters.Add("CreatedAfterUtc", NpgsqlDbType.TimestampTz).Value = UtcDateTime(createdAfterUtc);
+		command.Parameters.AddWithValue("Limit", limit);
+		List<PaperOrder> results = [];
+		await using NpgsqlDataReader reader = await command.ExecuteReaderAsync(cancellationToken);
+		while (await reader.ReadAsync(cancellationToken))
+		{
+			results.Add(ReadPaperOrder(reader));
+		}
+		return results;
 	}
 
 	public async Task<IReadOnlyList<PaperOrder>> GetRecentPaperOrdersAsync(int limit = 100, CancellationToken cancellationToken = default(CancellationToken))
@@ -1444,7 +1493,7 @@ LIMIT 1;
 		return await reader.ReadAsync(cancellationToken) ? ReadPaperCopiedTraderPerformance(reader) : null;
 	}
 
-	public async Task<IReadOnlyList<StrategyPerformance>> GetStrategyPerformanceAsync(int limit = 1000, CancellationToken cancellationToken = default(CancellationToken))
+	public async Task<IReadOnlyList<StrategyPerformance>> GetStrategyPerformanceAsync(int limit = 2000, CancellationToken cancellationToken = default(CancellationToken))
 	{
 		await using NpgsqlConnection connection = await OpenConnectionAsync(cancellationToken);
 		await using NpgsqlCommand command = CreateCommand(connection, """
@@ -1609,12 +1658,12 @@ combined AS (
         END AS stake_usd,
         CASE
             WHEN COALESCE(run_agg.runs_count, 0) > 0 THEN COALESCE(run_agg.settled_stake_usd, 0)
-            ELSE COALESCE(settlement_agg.cost_basis_usd, 0)
-        END + COALESCE(fill_agg.closed_fill_cost_basis_usd, 0) AS closed_stake_usd,
+            ELSE COALESCE(settlement_agg.cost_basis_usd, 0) + COALESCE(fill_agg.closed_fill_cost_basis_usd, 0)
+        END AS closed_stake_usd,
         CASE
             WHEN COALESCE(run_agg.runs_count, 0) > 0 THEN COALESCE(run_agg.realized_pnl_usd, 0)
-            ELSE COALESCE(settlement_agg.realized_pnl_usd, 0)
-        END + COALESCE(fill_agg.realized_fill_pnl_usd, 0) AS realized_pnl_usd,
+            ELSE COALESCE(settlement_agg.realized_pnl_usd, 0) + COALESCE(fill_agg.realized_fill_pnl_usd, 0)
+        END AS realized_pnl_usd,
         CASE
             WHEN COALESCE(run_agg.runs_count, 0) > 0 THEN COALESCE(run_agg.avg_win_pnl_usd, 0)
             ELSE COALESCE(settlement_agg.avg_win_pnl_usd, 0)

@@ -207,6 +207,15 @@ public interface IAppRepository
         return Task.FromResult<IReadOnlyList<StrategyMarketPaperRun>>([]);
     }
 
+    Task<IReadOnlyList<StrategyMarketPaperRun>> GetPreOpenSellExitDueRunsAsync(
+        IReadOnlyCollection<Guid> strategyIds,
+        DateTimeOffset dueBeforeUtc,
+        int limit,
+        CancellationToken cancellationToken = default)
+    {
+        return Task.FromResult<IReadOnlyList<StrategyMarketPaperRun>>([]);
+    }
+
     Task<IReadOnlyList<StrategyMarketPaperRun>> GetRecentStrategyMarketPaperRunsAsync(
         Guid strategyId,
         string status,
@@ -254,6 +263,17 @@ public interface IAppRepository
         return Task.FromResult<PaperOrder?>(null);
     }
 
+    Task<IReadOnlyList<PaperOrder>> GetPaperOrdersForStrategyAssetAsync(
+        Guid strategyId,
+        string copiedTraderWallet,
+        string assetId,
+        DateTimeOffset createdAfterUtc,
+        int limit,
+        CancellationToken cancellationToken = default)
+    {
+        return Task.FromResult<IReadOnlyList<PaperOrder>>([]);
+    }
+
     Task<IReadOnlyList<PaperOrder>> GetRecentPaperOrdersAsync(int limit = 100, CancellationToken cancellationToken = default);
 
     Task AddPaperFillAsync(PaperFill fill, CancellationToken cancellationToken = default);
@@ -285,7 +305,7 @@ public interface IAppRepository
         return Task.FromResult<PaperCopiedTraderPerformance?>(null);
     }
 
-    Task<IReadOnlyList<StrategyPerformance>> GetStrategyPerformanceAsync(int limit = 1000, CancellationToken cancellationToken = default)
+    Task<IReadOnlyList<StrategyPerformance>> GetStrategyPerformanceAsync(int limit = 2000, CancellationToken cancellationToken = default)
     {
         return Task.FromResult<IReadOnlyList<StrategyPerformance>>([]);
     }

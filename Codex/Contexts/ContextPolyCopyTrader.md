@@ -1,3 +1,17 @@
+## Active Update 2026-05-13 PreOpen Half Sell Exits
+Goal: Add protective Paper SELL-exit variants for every BTC PreOpen Half fixed-direction strategy.
+Status: Completed
+Done:
+- Added 320 `PreOpen Half ... Sell` Paper-only variants across BTC `5m`, `15m`, `1h`, and `4h`, with deterministic strategy ids, codes, names, categories, and PostgreSQL strategy seeding.
+- Implemented final-quarter SELL-exit processing for those variants: if the current inferred market direction no longer matches the fixed entry direction, the strategy creates a Paper SELL at executable bid depth for the held outcome.
+- Kept entry behavior identical to the matching PreOpen Half BUY variant, prevented duplicate sell exits, and made settlement/PnL account for sell proceeds plus any remaining shares at final resolution.
+- Added repository methods for due sell-exit runs and same-strategy asset orders, widened strategy admin/performance fetch limits for the larger strategy set, and updated README/config docs.
+- Added regression tests for variant generation, schema seeding, sell placement, no-sell when direction matches, and settlement PnL after sell exit.
+- Restarted the service after verification; IPC `/status` is `Running`, Paper active, Live paused, kill switch false, and `lastError=null`.
+Next: Monitor the first complete markets with enabled `PreOpen Half ... Sell` variants and compare sell-exit timing/fill behavior against the base Half variants.
+Notes: Verification passed: `dotnet test PolyCopyTrader.sln --no-restore` passed `442/442` twice before service restart, and `git diff --check` passed with line-ending warnings only. During restart, PostgreSQL schema initialization was blocked by an orphaned `paper_orders` SELECT backend `26932`; `pg_cancel_backend`/`pg_terminate_backend` did not release it, so the single stuck backend process was stopped, the service was restarted cleanly, and live pause was reapplied through IPC.
+Blockers: None.
+
 ## Active Update 2026-05-13 Post Reset Bet Placement Check
 Goal: Verify whether Paper bets are being placed after the fresh reset and connection fix.
 Status: Completed

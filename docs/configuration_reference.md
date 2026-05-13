@@ -676,6 +676,13 @@ rows with VWAP evidence, cumulative fills determine `PartiallyFilled` versus
 orders that never fill before expiration are marked `gtd_limit_not_filled` instead of being
 counted as won or lost.
 
+`PreOpen Half ... Sell` variants use the same fixed-price half-period BUY entry
+as the paired `PreOpen Half` strategy. During the final quarter of the market
+they compare current Up/Down order-book direction with the fixed entry outcome;
+if it differs, they submit a Paper SELL for the filled shares at a marketable
+bid-side limit. The exit is still paper-only and is filled by the ordinary Paper
+open-order pipeline.
+
 The dashboard `Strategies` tab reads all rows from `strategies`, including
 `follow_leader`, and aggregates Paper orders, positions, settlements, and
 strategy run lifecycle counters so the BTC variants can be compared against the
@@ -741,7 +748,7 @@ leader exits can still be tracked.
 - `OrderBookRefreshMarketLookaheadSeconds`: include markets whose start time is within this future window; default `90`.
 - `OrderBookRefreshMarketBehindSeconds`: keep refreshing recently closed/ending markets inside this trailing window; default `30`.
 - `OrderBookRefreshRequestTimeoutSeconds`: per-asset CLOB `/book` timeout for the refresh worker; default `2`.
-- `EnabledVariantCodes`: optional config-level allowlist of built-in variant codes; empty means all 66 BTC variants are eligible, subject to the runtime `strategies.enabled` flags.
+- `EnabledVariantCodes`: optional config-level allowlist of built-in variant codes; empty means all built-in BTC strategy variants are eligible, subject to the runtime `strategies.enabled` flags.
 
 ## OnChainIngestion
 
