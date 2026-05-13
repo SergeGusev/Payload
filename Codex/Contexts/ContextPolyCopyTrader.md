@@ -1,3 +1,17 @@
+## Active Update 2026-05-13 Entry Delay Monitoring
+Goal: Monitor how long Paper entries take from planned `entry_due_at_utc` to actual Paper order creation after the clean reset.
+Status: Completed
+Done:
+- Ran read-only PostgreSQL monitoring over the fresh Paper sample and compared `entry_due_at_utc` with linked `paper_orders.created_at_utc` / run `entered_at_utc`.
+- Confirmed post-reset runs are being collected with no due `Observed` backlog at the inspected times.
+- Measured clean 5m PreOpen due groups after the reset at roughly `4.7s` average / `6.8s` max per market group after restart noise cleared.
+- Measured normal 60/90/120/150s offset groups mostly within sub-second to about `6s` in the latest cycle.
+- Found the remaining large delay is concentrated in Binance/open-family strategies: market `btc-updown-5m-1778655300` had Binance entries at about `75.9s` after due, while the later market `btc-updown-5m-1778655600` improved but still had Binance-at-open around `32.8s`.
+- Identified the likely scheduling cause: PreOpen due for the next market shares the same timestamp as regular open entries for the current market, and the new PreOpen priority pass can run before the more time-sensitive current-market open/Binance entries.
+Next: Adjust BTC entry scheduling so current-market open/delayed regular entries are not blocked behind same-timestamp PreOpen batches for future markets.
+Notes: Monitoring used a temporary read-only C# Npgsql utility under `.codex-temp/MonitorEntryDelay`, then removed it. No production code changed. Service remained `Running` with Paper active, Live paused, kill switch false, and `lastError=null`.
+Blockers: None.
+
 ## Active Update 2026-05-13 Paper History Reset After PreOpen Fix
 Goal: Clear Paper history again after the BTC PreOpen due-throughput fix so fresh statistics start from a clean sample.
 Status: Completed

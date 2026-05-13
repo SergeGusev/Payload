@@ -34,3 +34,10 @@ Request:
 
 Result:
 Stopped the Debug service, cleared Paper execution/accounting history in PostgreSQL, verified the tracked Paper tables were zero before restart, removed the temporary C# reset utility, and restarted the Debug service. Pre-clean counts were `strategy_market_paper_runs=2948`, `paper_orders=524`, and `paper_copied_trader_performance=694`; `paper_fills`, `paper_positions`, `paper_position_settlements`, copied-leader activity, and paper-live-shadow tables were already zero. Preserved strategies, market data, signals, live orders, and on-chain audit/dedupe history, while nulling any `paper_order_id` links before deleting Paper orders. IPC `/status` after restart returned `Running`, Paper active, Live paused, kill switch false, and `lastError=null`.
+
+## 2026-05-13T07:03:55.4737554+00:00
+Request:
+Ок, последи. Сейчас меня интересует следующий параметр: через какое время после начала принятия решения по ставке эта ставка сделана. Например, если мы ставим за 5 минут до старта рынка - то когда реально поставим. Если стратегия должна срабатывать через 30, 60 и т.д. секунд - то через сколько она реально срабатывает.
+
+Result:
+Monitored the fresh Paper sample with a temporary read-only C# Npgsql utility, comparing `strategy_market_paper_runs.entry_due_at_utc` with linked `paper_orders.created_at_utc` / run `entered_at_utc`. Clean 5m PreOpen groups after reset were roughly `4.7s` average and `6.8s` max once restart noise was excluded; 60/90/120/150s offset groups were mostly sub-second to about `6s` in the latest cycle. The large remaining delays were concentrated in Binance/open-family entries: market `btc-updown-5m-1778655300` reached about `75.9s` after due, and the next market `btc-updown-5m-1778655600` still showed about `32.8s` for Binance-at-open. The likely cause is scheduling priority: PreOpen entries for the next market have the same `entry_due_at_utc` as current-market open/Binance entries, and the new PreOpen priority pass can run before those more time-sensitive current-market entries. The temporary utility was removed; no production code changed.
