@@ -49,3 +49,10 @@ Request:
 
 Result:
 Changed the BTC entry scheduler so regular/current-market due entries and Martin due entries run before the PreOpen due batch both before and after observation. PreOpen still drains the complete earliest due timestamp group without `MaxEntriesPerCycle` splitting, but it can no longer block same-cycle current-market open/delayed entries with the same due timestamp. Added regression coverage proving a current-market always-up entry is placed before a same-due future PreOpen group while the PreOpen group still drains fully with `MaxEntriesPerCycle=1`. Updated README, ran focused BTC processor tests `101/101`, ran full solution tests `439/439`, rebuilt normal Debug service output, and restarted the service. IPC `/status` after restart returned `Running`, Paper active, Live paused, kill switch false, and `lastError=null`.
+
+## 2026-05-13T07:31:32.5339518+00:00
+Request:
+Разобрался с соединением. Почисть всю историю и поехали заново.
+
+Result:
+Stopped the Debug service, cleared Paper execution/accounting/history tables plus Paper-linked on-chain result rows, daily reports, and accumulated HTTP/API error history from the connection outage, then verified all tracked reset tables were zero. Pre-clean counts included `strategy_market_paper_runs=5934`, `paper_orders=2461`, `paper_fills=277`, `paper_positions=269`, `paper_position_settlements=107`, `paper_copied_trader_performance=1324`, `api_errors=119014`, and `polymarket_http_logs=195581`. Restarted the service, immediately reapplied live trading pause, and verified IPC `/status` is `Running`, Paper active, Live paused, kill switch false, and `lastError=null`. Fresh logs showed CLOB/Gamma requests returning HTTP 200.

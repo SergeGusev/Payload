@@ -1,3 +1,16 @@
+## Active Update 2026-05-13 Fresh Reset After Connection Fix
+Goal: Clear contaminated Paper/runtime history after the Polymarket connection issue was fixed and restart clean collection.
+Status: Completed
+Done:
+- Stopped the running Debug service before touching PostgreSQL.
+- Cleared Paper execution/accounting/history tables plus Paper-linked on-chain result rows, daily reports, and accumulated HTTP/API error history from the connection outage.
+- Preserved strategies, market data, signals, live orders, raw/on-chain market capture data, service heartbeats, and runtime settings; nulled `live_orders.paper_order_id` links before deleting Paper orders.
+- Verified tracked reset tables were zero after the transaction, then restarted the Debug service.
+- Reapplied live trading pause after restart; scanning and Paper collection are active.
+Next: Monitor the first clean post-reset 5-minute windows, especially entry delays and skip reasons now that CLOB/Gamma return HTTP 200.
+Notes: Pre-clean counts included `strategy_market_paper_runs=5934`, `paper_orders=2461`, `paper_fills=277`, `paper_positions=269`, `paper_position_settlements=107`, `paper_copied_trader_performance=1324`, `api_errors=119014`, and `polymarket_http_logs=195581`; all tracked reset tables were zero immediately after cleanup. Temporary C# reset utility built successfully and was used for the transaction. Fresh log tail after restart shows `clob.polymarket.com/book` and `gamma-api.polymarket.com/markets` returning HTTP 200, and BTC order-book refresh `refreshed=8`, `failed=0`. IPC `/status` after live pause is `Running`, Paper active, Live paused, kill switch false, and `lastError=null`; service PID is `31192`, started at `2026-05-13T07:30:01.205975Z`.
+Blockers: None.
+
 ## Active Update 2026-05-13 Current Market Entry Priority
 Goal: Ensure current-market BTC entries run before same-timestamp PreOpen entries for future markets.
 Status: Completed
