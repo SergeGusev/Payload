@@ -1742,6 +1742,20 @@ internal sealed class TestAppRepository : IAppRepository
                 .ToArray());
     }
 
+    public Task<IReadOnlyList<BtcUpDown5mOddsTick>> GetBtcUpDown5mOddsTicksForMarketStartAsync(
+        DateTimeOffset marketStartUtc,
+        int limit = 500,
+        CancellationToken cancellationToken = default)
+    {
+        return Task.FromResult<IReadOnlyList<BtcUpDown5mOddsTick>>(
+            BtcUpDown5mOddsTicks
+                .Where(tick => tick.MarketStartUtc == marketStartUtc)
+                .OrderBy(tick => tick.SampledAtUtc)
+                .ThenBy(tick => tick.CreatedAtUtc)
+                .Take(limit)
+                .ToArray());
+    }
+
     public Task<IReadOnlyList<PolymarketGammaMarket>> GetCryptoUpDown5mGammaMarketsAsync(
         IReadOnlyCollection<string> assetSymbols,
         int limit,

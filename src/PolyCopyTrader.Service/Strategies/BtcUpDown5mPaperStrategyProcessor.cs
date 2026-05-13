@@ -2156,6 +2156,7 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
             BtcUpDown5mStrategyBehavior.StrategySelector or
             BtcUpDown5mStrategyBehavior.StandardEntryPriceCap or
             BtcUpDown5mStrategyBehavior.GammaOutcomeSelectionEntryPriceCap or
+            BtcUpDown5mStrategyBehavior.PreviousScoreCounterTrend or
             BtcUpDown5mStrategyBehavior.PreOpenFixedDirection or
             BtcUpDown5mStrategyBehavior.PreOpenFixedDirectionSell;
     }
@@ -2189,6 +2190,11 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
         return variant.Behavior == BtcUpDown5mStrategyBehavior.PreOpenFixedDirectionSell;
     }
 
+    private static bool IsPreviousScoreCounterTrendOpeningLimitEntry(BtcUpDown5mStrategyVariant variant)
+    {
+        return variant.Behavior == BtcUpDown5mStrategyBehavior.PreviousScoreCounterTrend;
+    }
+
     private static bool IsBinanceStartRelativeOpeningLimitEntry(BtcUpDown5mStrategyVariant variant)
     {
         return variant.Behavior is BtcUpDown5mStrategyBehavior.BinanceStartRelative or
@@ -2211,6 +2217,7 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
     {
         return IsAlwaysDirectionOpeningLimitEntry(variant) ||
             IsPreOpenFixedDirectionOpeningLimitEntry(variant) ||
+            IsPreviousScoreCounterTrendOpeningLimitEntry(variant) ||
             variant.Behavior is BtcUpDown5mStrategyBehavior.BinanceStartRelative or
             BtcUpDown5mStrategyBehavior.BinanceStartRelativeFixedPrice or
             BtcUpDown5mStrategyBehavior.BinanceStartRelativeBpsThreshold or
@@ -2266,6 +2273,7 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
     {
         return IsAlwaysDirectionOpeningLimitEntry(variant) ||
             IsBinanceStartRelativeOpeningLimitEntry(variant) ||
+            IsPreviousScoreCounterTrendOpeningLimitEntry(variant) ||
             IsPreOpenEntryWindowStillOpen(variant, marketStartUtc, nowUtc);
     }
 
@@ -2371,6 +2379,12 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
                 stakeUsd,
                 nowUtc,
                 cancellationToken),
+            BtcUpDown5mStrategyBehavior.PreviousScoreCounterTrend => await GetPreviousScoreCounterTrendEntryDecisionAsync(
+                market,
+                variant,
+                stakeUsd,
+                nowUtc,
+                cancellationToken),
             BtcUpDown5mStrategyBehavior.StrategySelector => await GetStrategySelectorEntryDecisionAsync(
                 market,
                 variant,
@@ -2453,6 +2467,23 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
                     options.OpeningLimitPriceTickSize,
                     overrideLimitPrice,
                     RejectionReason: null));
+        }
+
+        if (IsPreviousScoreCounterTrendOpeningLimitEntry(variant))
+        {
+            var fixedLimitPrice = RoundDownToTick(
+                Math.Min(1m, GetFixedDirectionLimitPrice(variant)),
+                options.OpeningLimitPriceTickSize);
+            if (fixedLimitPrice <= 0m)
+            {
+                return BtcOpeningLimitPriceDecision.Reject(
+                    "opening_limit_price_non_positive",
+                    AttachFixedOpeningLimitPricingJson(rawDecisionJson, fixedLimitPrice));
+            }
+
+            return BtcOpeningLimitPriceDecision.Enter(
+                fixedLimitPrice,
+                AttachFixedOpeningLimitPricingJson(rawDecisionJson, fixedLimitPrice));
         }
 
         if (IsFixedPriceOpeningLimitEntry(variant))
@@ -2791,6 +2822,284 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
                 selectedDirection.Value,
                 selectedOutcome,
                 reason: null));
+    }
+
+    private async Task<BtcOpeningLimitDecision> GetPreviousScoreCounterTrendEntryDecisionAsync(
+        PolymarketGammaMarket market,
+        BtcUpDown5mStrategyVariant variant,
+        decimal stakeUsd,
+        DateTimeOffset nowUtc,
+        CancellationToken cancellationToken)
+    {
+        var marketStartUtc = BtcUpDown5mMarketAnalyzer.GetWindowStartUtc(market);
+        if (marketStartUtc is null)
+        {
+            return BtcOpeningLimitDecision.Reject(
+                "btc_previous_score_current_market_start_missing",
+                BuildPreviousScoreCounterTrendRawDecisionJson(
+                    market,
+                    variant,
+                    stakeUsd,
+                    nowUtc,
+                    signal: null,
+                    selectedOutcome: null,
+                    reason: "btc_previous_score_current_market_start_missing"));
+        }
+
+        var previousMarketStartUtc = marketStartUtc.Value.AddMinutes(-5);
+        var ticks = await repository.GetBtcUpDown5mOddsTicksForMarketStartAsync(
+            previousMarketStartUtc,
+            limit: 1_000,
+            cancellationToken);
+        if (ticks.Count == 0)
+        {
+            var missingSignal = BtcPreviousScoreCounterTrendSignal.Reject(
+                "btc_previous_score_samples_missing",
+                PreviousMarketStartUtc: previousMarketStartUtc,
+                PreviousMarketEndUtc: marketStartUtc.Value);
+            return BtcOpeningLimitDecision.Reject(
+                "btc_previous_score_samples_missing",
+                BuildPreviousScoreCounterTrendRawDecisionJson(
+                    market,
+                    variant,
+                    stakeUsd,
+                    nowUtc,
+                    missingSignal,
+                    selectedOutcome: null,
+                    reason: "btc_previous_score_samples_missing"));
+        }
+
+        var previousTicks = SelectPreviousScoreCounterTrendTickGroup(ticks, marketStartUtc.Value);
+        var signal = CalculatePreviousScoreCounterTrendSignal(
+            previousTicks,
+            previousMarketStartUtc,
+            marketStartUtc.Value);
+        if (!signal.ShouldEnter || signal.SelectedDirection is null)
+        {
+            return BtcOpeningLimitDecision.Reject(
+                signal.RejectionReason ?? "btc_previous_score_countertrend_rejected",
+                BuildPreviousScoreCounterTrendRawDecisionJson(
+                    market,
+                    variant,
+                    stakeUsd,
+                    nowUtc,
+                    signal,
+                    selectedOutcome: null,
+                    signal.RejectionReason ?? "btc_previous_score_countertrend_rejected"));
+        }
+
+        var selectedOutcome = TrySelectOutcomeForDirection(market, signal.SelectedDirection.Value);
+        if (selectedOutcome is null)
+        {
+            return BtcOpeningLimitDecision.Reject(
+                "target_outcome_not_available",
+                BuildPreviousScoreCounterTrendRawDecisionJson(
+                    market,
+                    variant,
+                    stakeUsd,
+                    nowUtc,
+                    signal,
+                    selectedOutcome: null,
+                    reason: "target_outcome_not_available"));
+        }
+
+        return BtcOpeningLimitDecision.Enter(
+            selectedOutcome,
+            BuildPreviousScoreCounterTrendRawDecisionJson(
+                market,
+                variant,
+                stakeUsd,
+                nowUtc,
+                signal,
+                selectedOutcome,
+                reason: null));
+    }
+
+    private static IReadOnlyList<BtcUpDown5mOddsTick> SelectPreviousScoreCounterTrendTickGroup(
+        IReadOnlyList<BtcUpDown5mOddsTick> ticks,
+        DateTimeOffset currentMarketStartUtc)
+    {
+        var expectedPreviousEndUtc = currentMarketStartUtc;
+        var matchingEndTicks = ticks
+            .Where(tick => Math.Abs((tick.MarketEndUtc - expectedPreviousEndUtc).TotalSeconds) <= 2)
+            .ToArray();
+        var candidates = matchingEndTicks.Length > 0 ? matchingEndTicks : ticks;
+        return candidates
+            .GroupBy(tick => tick.MarketId, StringComparer.OrdinalIgnoreCase)
+            .OrderByDescending(group => group.Count())
+            .ThenByDescending(group => group.Max(tick => tick.SampledAtUtc))
+            .First()
+            .OrderBy(tick => tick.SampledAtUtc)
+            .ThenBy(tick => tick.CreatedAtUtc)
+            .ToArray();
+    }
+
+    private BtcPreviousScoreCounterTrendSignal CalculatePreviousScoreCounterTrendSignal(
+        IReadOnlyList<BtcUpDown5mOddsTick> ticks,
+        DateTimeOffset previousMarketStartUtc,
+        DateTimeOffset previousMarketEndUtc)
+    {
+        var previousMarketId = ticks.FirstOrDefault()?.MarketId;
+        var previousMarketSlug = ticks.FirstOrDefault()?.MarketSlug;
+        var samples = ticks
+            .Where(tick => tick.SampledAtUtc >= previousMarketStartUtc &&
+                tick.SampledAtUtc <= previousMarketEndUtc &&
+                tick.BinancePriceUsd > 0m)
+            .OrderBy(tick => tick.SampledAtUtc)
+            .ThenBy(tick => tick.CreatedAtUtc)
+            .ToArray();
+        if (samples.Length < options.PreviousScoreCounterTrendMinSamples)
+        {
+            return BtcPreviousScoreCounterTrendSignal.Reject(
+                "btc_previous_score_samples_insufficient",
+                PreviousMarketId: previousMarketId,
+                PreviousMarketSlug: previousMarketSlug,
+                PreviousMarketStartUtc: previousMarketStartUtc,
+                PreviousMarketEndUtc: previousMarketEndUtc,
+                RawSampleCount: ticks.Count,
+                ValidSampleCount: samples.Length);
+        }
+
+        var startPrice = samples
+            .Select(sample => sample.BinanceStartPriceUsd)
+            .FirstOrDefault(price => price > 0m);
+        if (startPrice <= 0m)
+        {
+            return BtcPreviousScoreCounterTrendSignal.Reject(
+                "btc_previous_score_start_price_missing",
+                PreviousMarketId: previousMarketId,
+                PreviousMarketSlug: previousMarketSlug,
+                PreviousMarketStartUtc: previousMarketStartUtc,
+                PreviousMarketEndUtc: previousMarketEndUtc,
+                RawSampleCount: ticks.Count,
+                ValidSampleCount: samples.Length);
+        }
+
+        var segments = new List<BtcPreviousScoreCounterTrendSegment>(samples.Length);
+        for (var index = 0; index < samples.Length; index++)
+        {
+            var sample = samples[index];
+            var durationEndUtc = index + 1 < samples.Length
+                ? samples[index + 1].SampledAtUtc
+                : previousMarketEndUtc;
+            var durationSeconds = ToDecimalSeconds(durationEndUtc - sample.SampledAtUtc);
+            if (durationSeconds <= 0m)
+            {
+                continue;
+            }
+
+            var deviation = (sample.BinancePriceUsd - startPrice) / startPrice;
+            segments.Add(new BtcPreviousScoreCounterTrendSegment(deviation, durationSeconds));
+        }
+
+        var totalDurationSeconds = segments.Sum(segment => segment.DurationSeconds);
+        if (totalDurationSeconds <= 0m)
+        {
+            return BtcPreviousScoreCounterTrendSignal.Reject(
+                "btc_previous_score_duration_missing",
+                PreviousMarketId: previousMarketId,
+                PreviousMarketSlug: previousMarketSlug,
+                PreviousMarketStartUtc: previousMarketStartUtc,
+                PreviousMarketEndUtc: previousMarketEndUtc,
+                StartPriceUsd: startPrice,
+                RawSampleCount: ticks.Count,
+                ValidSampleCount: samples.Length,
+                SegmentCount: segments.Count);
+        }
+
+        var sortedDeviations = segments
+            .Select(segment => segment.Deviation)
+            .OrderBy(deviation => deviation)
+            .ToArray();
+        var winsorPercent = Math.Min(0.499999m, Math.Max(0m, options.PreviousScoreCounterTrendWinsorPercent));
+        var lowerBound = Percentile(sortedDeviations, winsorPercent);
+        var upperBound = Percentile(sortedDeviations, 1m - winsorPercent);
+        var weightedDeviationSum = segments.Sum(segment =>
+            Clamp(segment.Deviation, lowerBound, upperBound) * segment.DurationSeconds);
+        var score = weightedDeviationSum / totalDurationSeconds;
+        var upDuration = segments
+            .Where(segment => segment.Deviation > 0m)
+            .Sum(segment => segment.DurationSeconds);
+        var downDuration = segments
+            .Where(segment => segment.Deviation < 0m)
+            .Sum(segment => segment.DurationSeconds);
+        var upTimeShare = upDuration / totalDurationSeconds;
+        var downTimeShare = downDuration / totalDurationSeconds;
+        var epsilon = Math.Max(0m, options.PreviousScoreCounterTrendEpsilonScore);
+
+        BtcPriceDirection? previousBias = null;
+        string? rejectionReason = null;
+        if (score > epsilon)
+        {
+            previousBias = BtcPriceDirection.Up;
+            if (options.PreviousScoreCounterTrendEnableTimeShareFilter &&
+                upTimeShare < options.PreviousScoreCounterTrendMinUpTimeShare)
+            {
+                rejectionReason = "btc_previous_score_up_time_share_below_threshold";
+            }
+        }
+        else if (score < -epsilon)
+        {
+            previousBias = BtcPriceDirection.Down;
+            if (options.PreviousScoreCounterTrendEnableTimeShareFilter &&
+                downTimeShare < options.PreviousScoreCounterTrendMinDownTimeShare)
+            {
+                rejectionReason = "btc_previous_score_down_time_share_below_threshold";
+            }
+        }
+        else
+        {
+            rejectionReason = "btc_previous_score_neutral";
+        }
+
+        var selectedDirection = rejectionReason is null && previousBias is { } bias
+            ? InvertDirection(bias)
+            : (BtcPriceDirection?)null;
+        return new BtcPreviousScoreCounterTrendSignal(
+            rejectionReason is null && selectedDirection is not null,
+            rejectionReason,
+            previousBias,
+            selectedDirection,
+            score,
+            startPrice,
+            ticks.Count,
+            samples.Length,
+            segments.Count,
+            totalDurationSeconds,
+            lowerBound,
+            upperBound,
+            upTimeShare,
+            downTimeShare,
+            previousMarketId,
+            previousMarketSlug,
+            previousMarketStartUtc,
+            previousMarketEndUtc);
+    }
+
+    private static decimal Clamp(decimal value, decimal min, decimal max)
+    {
+        return value < min ? min : value > max ? max : value;
+    }
+
+    private static decimal Percentile(IReadOnlyList<decimal> sortedValues, decimal percentile)
+    {
+        if (sortedValues.Count == 0)
+        {
+            return 0m;
+        }
+
+        var boundedPercentile = Math.Min(1m, Math.Max(0m, percentile));
+        var position = (double)boundedPercentile * (sortedValues.Count - 1);
+        var lowerIndex = (int)Math.Floor(position);
+        var upperIndex = (int)Math.Ceiling(position);
+        if (lowerIndex == upperIndex)
+        {
+            return sortedValues[lowerIndex];
+        }
+
+        var fraction = (decimal)(position - lowerIndex);
+        return sortedValues[lowerIndex] +
+            ((sortedValues[upperIndex] - sortedValues[lowerIndex]) * fraction);
     }
 
     private async Task<BtcOpeningLimitDecision> GetBinanceStartRelativeEntryDecisionAsync(
@@ -4367,9 +4676,24 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
             return true;
         }
 
+        if (IsPreviousScoreCounterTrendOpeningLimitEntry(variant) &&
+            !IsOpeningLimitSignalWaitExpired(run.EntryDueAtUtc, nowUtc) &&
+            IsPreviousScoreCounterTrendDeferredReason(decision.SkipReason))
+        {
+            return true;
+        }
+
         return IsSkipConsecutiveMarketResults(variant) &&
             (string.Equals(decision.SkipReason, "btc_previous_market_results_missing", StringComparison.Ordinal) ||
                 string.Equals(decision.SkipReason, "btc_previous_close_book_result_missing", StringComparison.Ordinal));
+    }
+
+    private static bool IsPreviousScoreCounterTrendDeferredReason(string? reason)
+    {
+        return string.Equals(reason, "btc_previous_score_samples_missing", StringComparison.Ordinal) ||
+            string.Equals(reason, "btc_previous_score_samples_insufficient", StringComparison.Ordinal) ||
+            string.Equals(reason, "btc_previous_score_start_price_missing", StringComparison.Ordinal) ||
+            string.Equals(reason, "btc_previous_score_duration_missing", StringComparison.Ordinal);
     }
 
     private bool IsOpeningLimitSignalWaitExpired(DateTimeOffset entryDueAtUtc, DateTimeOffset nowUtc)
@@ -6185,6 +6509,65 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
         return selectedDirection == BtcPriceDirection.Up
             ? "always_up_after_trading_started"
             : "always_down_after_trading_started";
+    }
+
+    private string BuildPreviousScoreCounterTrendRawDecisionJson(
+        PolymarketGammaMarket market,
+        BtcUpDown5mStrategyVariant variant,
+        decimal targetNotionalUsd,
+        DateTimeOffset nowUtc,
+        BtcPreviousScoreCounterTrendSignal? signal,
+        BtcUpDown5mOutcomeQuote? selectedOutcome,
+        string? reason)
+    {
+        var marketStartUtc = BtcUpDown5mMarketAnalyzer.GetWindowStartUtc(market);
+        var entryDueAtUtc = GetEntryDueAtUtc(marketStartUtc, variant);
+        var limitPrice = GetFixedDirectionLimitPrice(variant);
+        return JsonSerializer.Serialize(new
+        {
+            pricing_mode = OpeningLimitPricingMode,
+            order_execution_mode = OpeningLimitOrderType,
+            post_only = false,
+            strategy_code = variant.Code,
+            decision_source = "previous_btc_market_time_weighted_winsor_score_countertrend",
+            quote_received_at_utc = nowUtc,
+            condition_id = market.ConditionId,
+            market_id = market.MarketId,
+            market_slug = market.Slug,
+            market_start_utc = marketStartUtc,
+            market_end_utc = market.EndDateUtc,
+            entry_delay_seconds = variant.EntryDelaySeconds,
+            entry_due_at_utc = entryDueAtUtc,
+            decision_delay_ms = GetDecisionDelayMilliseconds(entryDueAtUtc, nowUtc),
+            previous_market_id = signal?.PreviousMarketId,
+            previous_market_slug = signal?.PreviousMarketSlug,
+            previous_market_start_utc = signal?.PreviousMarketStartUtc,
+            previous_market_end_utc = signal?.PreviousMarketEndUtc,
+            previous_score = signal?.Score,
+            previous_bias = signal?.PreviousBias?.ToString() ?? "None",
+            btc_start_price_usd = signal?.StartPriceUsd,
+            btc_raw_sample_count = signal?.RawSampleCount,
+            btc_valid_sample_count = signal?.ValidSampleCount,
+            btc_segment_count = signal?.SegmentCount,
+            btc_total_duration_seconds = signal?.TotalDurationSeconds,
+            score_epsilon = options.PreviousScoreCounterTrendEpsilonScore,
+            min_samples = options.PreviousScoreCounterTrendMinSamples,
+            winsor_percent = options.PreviousScoreCounterTrendWinsorPercent,
+            winsor_lower_bound = signal?.WinsorLowerBound,
+            winsor_upper_bound = signal?.WinsorUpperBound,
+            time_share_filter_enabled = options.PreviousScoreCounterTrendEnableTimeShareFilter,
+            min_up_time_share = options.PreviousScoreCounterTrendMinUpTimeShare,
+            min_down_time_share = options.PreviousScoreCounterTrendMinDownTimeShare,
+            up_time_share = signal?.UpTimeShare,
+            down_time_share = signal?.DownTimeShare,
+            selected_direction = signal?.SelectedDirection?.ToString(),
+            asset_id = selectedOutcome?.AssetId,
+            outcome = selectedOutcome?.Outcome,
+            limit_price = limitPrice,
+            target_notional_usd = targetNotionalUsd,
+            target_size_shares = limitPrice > 0m ? targetNotionalUsd / limitPrice : (decimal?)null,
+            skip_reason = reason
+        });
     }
 
     private static string BuildBinanceStartRelativeRawDecisionJson(
@@ -8561,6 +8944,70 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
         decimal Distance,
         decimal AlignedMoveBps,
         decimal SecondsToClose);
+
+    private sealed record BtcPreviousScoreCounterTrendSegment(
+        decimal Deviation,
+        decimal DurationSeconds);
+
+    private sealed record BtcPreviousScoreCounterTrendSignal(
+        bool ShouldEnter,
+        string? RejectionReason,
+        BtcPriceDirection? PreviousBias,
+        BtcPriceDirection? SelectedDirection,
+        decimal? Score,
+        decimal? StartPriceUsd,
+        int RawSampleCount,
+        int ValidSampleCount,
+        int SegmentCount,
+        decimal TotalDurationSeconds,
+        decimal? WinsorLowerBound,
+        decimal? WinsorUpperBound,
+        decimal UpTimeShare,
+        decimal DownTimeShare,
+        string? PreviousMarketId,
+        string? PreviousMarketSlug,
+        DateTimeOffset? PreviousMarketStartUtc,
+        DateTimeOffset? PreviousMarketEndUtc)
+    {
+        public static BtcPreviousScoreCounterTrendSignal Reject(
+            string RejectionReason,
+            BtcPriceDirection? PreviousBias = null,
+            decimal? Score = null,
+            decimal? StartPriceUsd = null,
+            int RawSampleCount = 0,
+            int ValidSampleCount = 0,
+            int SegmentCount = 0,
+            decimal TotalDurationSeconds = 0m,
+            decimal? WinsorLowerBound = null,
+            decimal? WinsorUpperBound = null,
+            decimal UpTimeShare = 0m,
+            decimal DownTimeShare = 0m,
+            string? PreviousMarketId = null,
+            string? PreviousMarketSlug = null,
+            DateTimeOffset? PreviousMarketStartUtc = null,
+            DateTimeOffset? PreviousMarketEndUtc = null)
+        {
+            return new BtcPreviousScoreCounterTrendSignal(
+                false,
+                RejectionReason,
+                PreviousBias,
+                null,
+                Score,
+                StartPriceUsd,
+                RawSampleCount,
+                ValidSampleCount,
+                SegmentCount,
+                TotalDurationSeconds,
+                WinsorLowerBound,
+                WinsorUpperBound,
+                UpTimeShare,
+                DownTimeShare,
+                PreviousMarketId,
+                PreviousMarketSlug,
+                PreviousMarketStartUtc,
+                PreviousMarketEndUtc);
+        }
+    }
 
     private sealed record BtcOpeningLimitSignalVote(
         string StrategyCode,

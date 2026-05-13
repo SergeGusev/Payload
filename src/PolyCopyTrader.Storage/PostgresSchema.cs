@@ -2112,6 +2112,26 @@ ON CONFLICT (id) DO UPDATE SET
     description = excluded.description,
     updated_at_utc = excluded.updated_at_utc;
 
+WITH prices(price_cents) AS (
+    SELECT generate_series(10, 90, 5)
+)
+INSERT INTO strategies (id, code, name, description, enabled, paper_stake_amount, created_at_utc, updated_at_utc)
+SELECT
+    ('b7c50005-0000-4000-8025-' || lpad(prices.price_cents::text, 12, '0'))::uuid,
+    'btc_up_down_5m_prev_score_countertrend_' || prices.price_cents,
+    'BTC Up or Down 5m Prev Score Countertrend ' || prices.price_cents,
+    'At BTC 5m market open, score the immediately previous BTC 5m market from archived Binance BTC samples using a time-weighted winsorized average deviation from market start; previous Up buys Down, previous Down buys Up, neutral or insufficient samples skip. Paper entry is a fixed-price GTD limit BUY at ' || to_char((prices.price_cents::numeric / 100), 'FM0.00') || '.',
+    true,
+    1.00,
+    now(),
+    now()
+FROM prices
+ON CONFLICT (id) DO UPDATE SET
+    code = excluded.code,
+    name = excluded.name,
+    description = excluded.description,
+    updated_at_utc = excluded.updated_at_utc;
+
 WITH intervals(interval_id, interval_code, interval_name, interval_description) AS (
     VALUES
         (1, '5m', '5m', '5-minute'),

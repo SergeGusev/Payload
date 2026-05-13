@@ -92,3 +92,302 @@ User asked to check whether bets are being placed normally.
 
 Result:
 Verified that Paper bets are being placed normally. HTTP IPC `/status` reported `Running`, scanning active, Paper active, Live paused, kill switch false, and `lastError=null`; `/health` returned `ok=true`. The visible `dotnet run` process was the parent of `PolyCopyTrader.Service.exe` PID `30084`, not a second independent strategy loop. PostgreSQL at `2026-05-13 13:01:33+03` showed the latest Paper order at `2026-05-13 13:01:30.327817+03`, only `3.643s` old, with `326` orders in the last 2 minutes and no due `Observed` backlog. The last-10-minute BUY sample had `1228` entries, average delay `2.731s`, p95 about `3.021s`, max `28.918s`, and the newest BTC 5m tick entries were about `0.328s` after due. Recent HTTP failure count was zero in `polymarket_http_logs`; isolated API timeout/WebSocket reconnect rows did not stop order creation.
+
+## 2026-05-13T10:30:04.3198099+00:00
+Request:
+Нужно реализовать стратегию контртренда по предыдущему BTC-маркету.
+
+Цель стратегии:
+Определять, был ли BTC на предыдущем рынке преимущественно выше или ниже стартовой цены с учётом не только времени нахождения выше/ниже старта, но и размера смещения от старта. После этого на следующем рынке ставить против
+направления предыдущего рынка.
+
+Главная идея:
+На рынке N считаем signed score:
+
+    Score = среднее отклонение BTC от стартовой цены за весь рынок
+
+Отклонение считается так:
+
+    Deviation = (BTC_current - BTC_start) / BTC_start
+
+Если Score положительный, значит BTC в среднем был выше старта — предыдущий рынок считаем UP.
+Если Score отрицательный, значит BTC в среднем был ниже старта — предыдущий рынок считаем DOWN.
+Если Score слишком близок к нулю — сигнала нет.
+
+На следующем рынке N+1 используем сигнал с рынка N:
+
+    PrevBias = UP   -> ставим на Down
+    PrevBias = DOWN -> ставим на Up
+    PrevBias = NONE -> ставку пропускаем
+
+Важно:
+Ставка делается только на следующем рынке, а не на том же самом, на котором считался Score.
+
+------------------------------------------------------------
+ПЕРЕМЕННЫЕ
+------------------------------------------------------------
+
+Для каждого рынка нужно хранить:
+
+    btcStartPrice
+        Стартовая цена BTC в начале текущего рынка.
+
+    btcSamples
+        Коллекция замеров BTC во время текущего рынка.
+        Каждый элемент должен содержать:
+            price
+            timestamp
+
+    prevBias
+        Сигнал, рассчитанный по предыдущему рынку.
+        Возможные значения:
+            UP
+            DOWN
+            NONE
+            undefined
+
+    prevScore
+        Численное значение Score с предыдущего рынка.
+
+    epsilonScore
+        Минимальный порог значимого Score.
+        Например:
+            0.0001
+        Это примерно 0.01% отклонения от старта.
+        Значение можно сделать настраиваемым.
+
+    minSamples
+        Минимальное количество BTC-замеров для расчёта сигнала.
+        Например:
+            10
+
+    winsorPercent
+        Процент ограничения выбросов сверху и снизу.
+        Например:
+            0.10
+        Это значит ограничивать нижние 10% и верхние 10% значений Deviation.
+
+------------------------------------------------------------
+ЛОГИКА В НАЧАЛЕ КАЖДОГО РЫНКА
+------------------------------------------------------------
+
+В начале нового рынка:
+
+1. Сначала используем prevBias, рассчитанный на прошлом рынке.
+
+2. Если prevBias не определён:
+       ставку пропускаем.
+
+3. Если prevBias = NONE:
+       ставку пропускаем.
+
+4. Если prevBias = UP:
+       предыдущий рынок был преимущественно выше старта,
+       поэтому текущая стратегия должна ставить на Down.
+
+5. Если prevBias = DOWN:
+       предыдущий рынок был преимущественно ниже старта,
+       поэтому текущая стратегия должна ставить на Up.
+
+6. После принятия решения по ставке нужно подготовить сбор данных для нового рынка:
+
+       btcStartPrice = текущая цена BTC
+       btcSamples = empty collection
+
+Важно:
+Для получения BTC использовать уже существующий общий опрос BTC.
+Не нужно заводить отдельный опрос BTC специально для этой стратегии.
+
+------------------------------------------------------------
+ЛОГИКА ВО ВРЕМЯ РЫНКА
+------------------------------------------------------------
+
+Во время рынка при каждом доступном обновлении BTC:
+
+1. Получить текущую цену BTC:
+
+       btcCurrentPrice
+
+2. Получить текущий timestamp:
+
+       now
+
+3. Добавить замер в btcSamples:
+
+       {
+           price: btcCurrentPrice,
+           timestamp: now
+       }
+
+Важно:
+Не нужно сразу считать итоговый Score на каждом тике.
+Достаточно собирать значения, а итоговый Score считать в конце рынка.
+
+------------------------------------------------------------
+ЛОГИКА В КОНЦЕ КАЖДОГО РЫНКА
+------------------------------------------------------------
+
+В конце рынка нужно рассчитать сигнал для следующего рынка.
+
+1. Если btcStartPrice не определён:
+       prevBias = NONE
+       prevScore = null
+       закончить расчёт.
+
+2. Если btcSamples пустой или количество замеров меньше minSamples:
+       prevBias = NONE
+       prevScore = null
+       закончить расчёт.
+
+3. Для каждого замера BTC посчитать отклонение от старта:
+
+       Deviation_i = (price_i - btcStartPrice) / btcStartPrice
+
+4. Нужно учитывать не только размер отклонения, но и время, в течение которого это отклонение действовало.
+
+   Для этого каждому Deviation_i назначить duration_i.
+
+   duration_i = timestamp_{i+1} - timestamp_i
+
+   Для последнего замера можно использовать:
+
+       duration_last = marketEndTimestamp - timestamp_last
+
+   Если duration_i <= 0, такой элемент нужно пропустить.
+
+5. Перед расчётом Score нужно ограничить выбросы через winsorization.
+
+   Не удалять выбросы, а именно ограничивать.
+
+   Алгоритм:
+       - собрать все Deviation_i
+       - найти нижний квантиль по winsorPercent
+       - найти верхний квантиль по 1 - winsorPercent
+       - если Deviation_i ниже нижнего квантиля, заменить его на нижний квантиль
+       - если Deviation_i выше верхнего квантиля, заменить его на верхний квантиль
+       - остальные значения оставить без изменений
+
+   Пример:
+       winsorPercent = 0.10
+
+   Значит:
+       нижняя граница = 10-й процентиль
+       верхняя граница = 90-й процентиль
+
+6. После ограничения выбросов посчитать time-weighted Score:
+
+       Score = sum(Deviation_i_winsorized * duration_i) / sum(duration_i)
+
+   Где:
+       Deviation_i_winsorized — отклонение после ограничения выбросов
+       duration_i — длительность действия этого значения
+
+7. Если totalDuration <= 0:
+       prevBias = NONE
+       prevScore = null
+       закончить расчёт.
+
+8. Сохранить численное значение:
+
+       prevScore = Score
+
+9. Определить направление предыдущего рынка:
+
+       if Score > epsilonScore:
+           prevBias = UP
+
+       else if Score < -epsilonScore:
+           prevBias = DOWN
+
+       else:
+           prevBias = NONE
+
+------------------------------------------------------------
+ИНТЕРПРЕТАЦИЯ SCORE
+------------------------------------------------------------
+
+Score показывает среднее смещение BTC от старта за рынок.
+
+Пример:
+
+    btcStartPrice = 100
+
+    Если BTC долго находился около 101:
+        Deviation примерно +0.01
+        Score будет положительным
+        prevBias = UP
+
+    Если BTC долго находился около 99:
+        Deviation примерно -0.01
+        Score будет отрицательным
+        prevBias = DOWN
+
+    Если BTC большую часть времени был выше старта, но в самом конце кратко ушёл ниже старта:
+        Score, скорее всего, останется положительным
+        prevBias = UP
+        на следующем рынке ставим Down
+
+Это желаемое поведение.
+
+
+------------------------------------------------------------
+СТАВКИ
+------------------------------------------------------------
+
+Размеры ставок:
+
+    от 0.10 до 0.90
+    шаг 0.05
+
+Под каждый размер ставки используется отдельная стратегия.
+
+Важно:
+Все эти стратегии могут использовать один и тот же prevBias / prevScore, но каждая стратегия должна иметь свой собственный размер ставки.
+
+Перед ставкой стратегия должна проверить:
+
+    1. prevBias определён
+    2. prevBias не равен NONE
+    3. текущий рынок доступен для ставки
+    4. нужный outcome доступен
+    5. стратегия с данным размером ставки ещё не поставила на этот рынок
+
+Логика выбора стороны:
+
+    if prevBias == UP:
+        side = Down
+
+    if prevBias == DOWN:
+        side = Up
+
+    if prevBias == NONE or undefined:
+        skip
+
+------------------------------------------------------------
+ВАЖНЫЕ ТРЕБОВАНИЯ
+------------------------------------------------------------
+
+1. Не считать сигнал по текущему рынку для ставки на текущем рынке.
+   Сигнал текущего рынка используется только на следующем рынке.
+
+2. Не использовать финальную цену BTC как единственный сигнал.
+   Нам важно не только закрытие рынка, а среднее смещение BTC от старта за весь рынок.
+
+3. Не использовать простое количество замеров, если есть timestamp.
+   Нужно считать time-weighted average, чтобы нерегулярный опрос BTC не искажал сигнал.
+
+4. Не удалять 10% выбросов полностью.
+   Лучше использовать winsorization:
+       выбросы не удаляются, а ограничиваются верхним/нижним квантилем.
+   Так мы не теряем куски времени, но уменьшаем влияние резких шпилек.
+
+5. Все параметры должны быть настраиваемыми:
+       epsilonScore
+       minSamples
+       winsorPercent
+       enableTimeShareFilter
+       minUpTimeShare
+       minDownTimeShare
+
+Result:
+Implemented the BTC 5-minute previous-market score countertrend strategy using existing `btc_up_down_5m_odds_ticks` samples, with time-weighted winsorized BTC deviation scoring, epsilon/min-sample/time-share configuration, and 17 fixed-price variants from `0.10` to `0.90`. Added repository loading by previous market start, strategy seeding, config validation, docs, and regression tests. Verification passed with focused tests `152/152`, full solution tests `446/446`, `git diff --check`, Debug service build, service restart, live pause reapplied, IPC health/status OK, and PostgreSQL verification showing all 17 new strategies enabled.

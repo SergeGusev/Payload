@@ -2890,6 +2890,36 @@ LIMIT @Limit;
 		return results;
 	}
 
+	public async Task<IReadOnlyList<BtcUpDown5mOddsTick>> GetBtcUpDown5mOddsTicksForMarketStartAsync(DateTimeOffset marketStartUtc, int limit = 500, CancellationToken cancellationToken = default(CancellationToken))
+	{
+		await using NpgsqlConnection connection = await OpenConnectionAsync(cancellationToken);
+		await using NpgsqlCommand command = CreateCommand(connection, """
+SELECT id, market_id, condition_id, market_slug, market_start_utc, market_end_utc,
+       sampled_at_utc, seconds_after_start, seconds_to_close,
+       binance_price_usd, binance_source_updated_at_utc, binance_fetched_at_utc,
+       binance_start_price_usd, btc_move_from_start_usd, btc_move_from_start_bps,
+       up_asset_id, up_best_bid, up_best_ask, up_mid, up_price_proxy,
+       up_price_proxy_kind, up_last_trade_price, up_book_source, up_book_age_ms,
+       down_asset_id, down_best_bid, down_best_ask, down_mid, down_price_proxy,
+       down_price_proxy_kind, down_last_trade_price, down_book_source, down_book_age_ms,
+       diagnostics_json::text, created_at_utc
+FROM btc_up_down_5m_odds_ticks
+WHERE market_start_utc = @MarketStartUtc
+ORDER BY sampled_at_utc ASC, created_at_utc ASC
+LIMIT @Limit;
+""");
+		command.Parameters.AddWithValue("MarketStartUtc", UtcDateTime(marketStartUtc));
+		command.Parameters.AddWithValue("Limit", Math.Max(1, limit));
+		await using NpgsqlDataReader reader = await command.ExecuteReaderAsync(cancellationToken);
+		List<BtcUpDown5mOddsTick> results = [];
+		while (await reader.ReadAsync(cancellationToken))
+		{
+			results.Add(ReadBtcUpDown5mOddsTick(reader));
+		}
+
+		return results;
+	}
+
 	public async Task AddCryptoUpDown5mOddsTickAsync(CryptoUpDown5mOddsTick tick, CancellationToken cancellationToken = default(CancellationToken))
 	{
 		await using NpgsqlConnection connection = await OpenConnectionAsync(cancellationToken);

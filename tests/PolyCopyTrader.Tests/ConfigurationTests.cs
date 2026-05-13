@@ -60,6 +60,12 @@ public sealed class ConfigurationTests
         Assert.Equal(120, configuration.BtcUpDown5mStrategy.OpeningLimitGtdTtlSeconds);
         Assert.Equal(60, configuration.BtcUpDown5mStrategy.OpeningLimitExpireBeforeMarketEndSeconds);
         Assert.Equal(60, configuration.BtcUpDown5mStrategy.ClobGtdExpirationSecurityBufferSeconds);
+        Assert.Equal(0.0001m, configuration.BtcUpDown5mStrategy.PreviousScoreCounterTrendEpsilonScore);
+        Assert.Equal(10, configuration.BtcUpDown5mStrategy.PreviousScoreCounterTrendMinSamples);
+        Assert.Equal(0.10m, configuration.BtcUpDown5mStrategy.PreviousScoreCounterTrendWinsorPercent);
+        Assert.False(configuration.BtcUpDown5mStrategy.PreviousScoreCounterTrendEnableTimeShareFilter);
+        Assert.Equal(0.50m, configuration.BtcUpDown5mStrategy.PreviousScoreCounterTrendMinUpTimeShare);
+        Assert.Equal(0.50m, configuration.BtcUpDown5mStrategy.PreviousScoreCounterTrendMinDownTimeShare);
         Assert.False(configuration.CoinbaseExchange.Enabled);
         Assert.Equal("https://api.exchange.coinbase.com", configuration.CoinbaseExchange.BaseUrl);
         Assert.Equal("BTC-USD", configuration.CoinbaseExchange.ProductId);
@@ -269,6 +275,11 @@ public sealed class ConfigurationTests
                 OpeningLimitGtdTtlSeconds = 29,
                 OpeningLimitExpireBeforeMarketEndSeconds = -1,
                 ClobGtdExpirationSecurityBufferSeconds = 59,
+                PreviousScoreCounterTrendEpsilonScore = -0.01m,
+                PreviousScoreCounterTrendMinSamples = 1,
+                PreviousScoreCounterTrendWinsorPercent = 0.50m,
+                PreviousScoreCounterTrendMinUpTimeShare = -0.01m,
+                PreviousScoreCounterTrendMinDownTimeShare = 1.01m,
                 MaxConcurrentSettlements = 0,
                 OrderBookRefreshIntervalMilliseconds = 99,
                 OrderBookRefreshMaxMarketsPerCycle = 0,
@@ -293,6 +304,11 @@ public sealed class ConfigurationTests
         Assert.Contains(errors, error => error.Contains("BtcUpDown5mStrategy.OpeningLimitGtdTtlSeconds", StringComparison.Ordinal));
         Assert.Contains(errors, error => error.Contains("BtcUpDown5mStrategy.OpeningLimitExpireBeforeMarketEndSeconds", StringComparison.Ordinal));
         Assert.Contains(errors, error => error.Contains("BtcUpDown5mStrategy.ClobGtdExpirationSecurityBufferSeconds", StringComparison.Ordinal));
+        Assert.Contains(errors, error => error.Contains("BtcUpDown5mStrategy.PreviousScoreCounterTrendEpsilonScore", StringComparison.Ordinal));
+        Assert.Contains(errors, error => error.Contains("BtcUpDown5mStrategy.PreviousScoreCounterTrendMinSamples", StringComparison.Ordinal));
+        Assert.Contains(errors, error => error.Contains("BtcUpDown5mStrategy.PreviousScoreCounterTrendWinsorPercent", StringComparison.Ordinal));
+        Assert.Contains(errors, error => error.Contains("BtcUpDown5mStrategy.PreviousScoreCounterTrendMinUpTimeShare", StringComparison.Ordinal));
+        Assert.Contains(errors, error => error.Contains("BtcUpDown5mStrategy.PreviousScoreCounterTrendMinDownTimeShare", StringComparison.Ordinal));
         Assert.Contains(errors, error => error.Contains("BtcUpDown5mStrategy.MaxConcurrentSettlements", StringComparison.Ordinal));
         Assert.Contains(errors, error => error.Contains("BtcUpDown5mStrategy.OrderBookRefreshIntervalMilliseconds", StringComparison.Ordinal));
         Assert.Contains(errors, error => error.Contains("BtcUpDown5mStrategy.OrderBookRefreshMaxMarketsPerCycle", StringComparison.Ordinal));

@@ -1199,6 +1199,36 @@ public static class AppOptionsValidator
             errors.Add("BtcUpDown5mStrategy.ClobGtdExpirationSecurityBufferSeconds must be between 60 and 300.");
         }
 
+        if (options.PreviousScoreCounterTrendEpsilonScore < 0m ||
+            options.PreviousScoreCounterTrendEpsilonScore > 1m)
+        {
+            errors.Add("BtcUpDown5mStrategy.PreviousScoreCounterTrendEpsilonScore must be between zero and one.");
+        }
+
+        if (options.PreviousScoreCounterTrendMinSamples < 2 ||
+            options.PreviousScoreCounterTrendMinSamples > 10_000)
+        {
+            errors.Add("BtcUpDown5mStrategy.PreviousScoreCounterTrendMinSamples must be between 2 and 10000.");
+        }
+
+        if (options.PreviousScoreCounterTrendWinsorPercent < 0m ||
+            options.PreviousScoreCounterTrendWinsorPercent >= 0.50m)
+        {
+            errors.Add("BtcUpDown5mStrategy.PreviousScoreCounterTrendWinsorPercent must be between zero and less than 0.50.");
+        }
+
+        if (options.PreviousScoreCounterTrendMinUpTimeShare < 0m ||
+            options.PreviousScoreCounterTrendMinUpTimeShare > 1m)
+        {
+            errors.Add("BtcUpDown5mStrategy.PreviousScoreCounterTrendMinUpTimeShare must be between zero and one.");
+        }
+
+        if (options.PreviousScoreCounterTrendMinDownTimeShare < 0m ||
+            options.PreviousScoreCounterTrendMinDownTimeShare > 1m)
+        {
+            errors.Add("BtcUpDown5mStrategy.PreviousScoreCounterTrendMinDownTimeShare must be between zero and one.");
+        }
+
         if (options.PaperGtdImmediateFillDepthMultiplier <= 0m ||
             options.PaperGtdImmediateFillDepthMultiplier > 10m)
         {

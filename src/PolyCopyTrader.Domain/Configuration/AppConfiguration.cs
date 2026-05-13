@@ -602,6 +602,18 @@ public sealed class BtcUpDown5mStrategyOptions
 
     public int ClobGtdExpirationSecurityBufferSeconds { get; init; } = 60;
 
+    public decimal PreviousScoreCounterTrendEpsilonScore { get; init; } = 0.0001m;
+
+    public int PreviousScoreCounterTrendMinSamples { get; init; } = 10;
+
+    public decimal PreviousScoreCounterTrendWinsorPercent { get; init; } = 0.10m;
+
+    public bool PreviousScoreCounterTrendEnableTimeShareFilter { get; init; }
+
+    public decimal PreviousScoreCounterTrendMinUpTimeShare { get; init; } = 0.50m;
+
+    public decimal PreviousScoreCounterTrendMinDownTimeShare { get; init; } = 0.50m;
+
     public bool PaperGtdConservativeFillEnabled { get; init; } = true;
 
     public decimal PaperGtdImmediateFillDepthMultiplier { get; init; } = 1.0m;

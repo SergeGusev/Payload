@@ -531,6 +531,14 @@ public interface IAppRepository
         return Task.FromResult<IReadOnlyList<BtcUpDown5mOddsTick>>([]);
     }
 
+    Task<IReadOnlyList<BtcUpDown5mOddsTick>> GetBtcUpDown5mOddsTicksForMarketStartAsync(
+        DateTimeOffset marketStartUtc,
+        int limit = 500,
+        CancellationToken cancellationToken = default)
+    {
+        return Task.FromResult<IReadOnlyList<BtcUpDown5mOddsTick>>([]);
+    }
+
     Task AddCryptoUpDown5mOddsTickAsync(
         CryptoUpDown5mOddsTick tick,
         CancellationToken cancellationToken = default)

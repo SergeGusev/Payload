@@ -1024,7 +1024,7 @@ public static class StrategyIds
     private static IReadOnlyList<BtcUpDown5mStrategyVariant> CreateBtcUpDown5mVariants()
     {
         int[] delays = [30, 60, 90, 120, 150, 180, 210, 240, 270];
-        var variants = new List<BtcUpDown5mStrategyVariant>(520);
+        var variants = new List<BtcUpDown5mStrategyVariant>(540);
 
         foreach (var delay in delays)
         {
@@ -1147,6 +1147,7 @@ public static class StrategyIds
         variants.Add(CreateBtcUpDown5mEnsembleVariant());
         variants.Add(CreateBtcUpDown5mDynamicMarkovVariant());
         variants.Add(CreateBtcUpDown5mStrategySelectorVariant());
+        variants.AddRange(CreateBtcPreviousScoreCounterTrendVariants());
         variants.AddRange(CreateBtcPreOpenFixedDirectionVariants());
 
         return variants;
@@ -1442,6 +1443,37 @@ public static class StrategyIds
             30);
     }
 
+    private static IReadOnlyList<BtcUpDown5mStrategyVariant> CreateBtcPreviousScoreCounterTrendVariants()
+    {
+        var variants = new List<BtcUpDown5mStrategyVariant>(17);
+        for (var priceCents = 10; priceCents <= 90; priceCents += 5)
+        {
+            variants.Add(CreateBtcPreviousScoreCounterTrendVariant(priceCents));
+        }
+
+        return variants;
+    }
+
+    private static BtcUpDown5mStrategyVariant CreateBtcPreviousScoreCounterTrendVariant(int limitPriceCents)
+    {
+        var limitPrice = limitPriceCents / 100m;
+        return new BtcUpDown5mStrategyVariant(
+            Guid.Parse($"b7c50005-0000-4000-8025-000000000{limitPriceCents:000}"),
+            $"btc_up_down_5m_prev_score_countertrend_{limitPriceCents}",
+            $"BTC Up or Down 5m Prev Score Countertrend {limitPriceCents}",
+            $"At BTC 5m market open, score the immediately previous BTC 5m market from archived Binance BTC samples using a time-weighted winsorized average deviation from market start; previous Up buys Down, previous Down buys Up, neutral or insufficient samples skip. Paper entry is a fixed-price GTD limit BUY at {limitPrice.ToString("0.00", CultureInfo.InvariantCulture)}.",
+            BtcUpDown5mStrategyDirection.Dynamic,
+            0,
+            BtcUpDown5mStrategyBehavior.PreviousScoreCounterTrend,
+            limitPriceCents,
+            null,
+            BtcUpDownMarketInterval.FiveMinutes,
+            BtcUpDownPreOpenLifetimeMode.Default,
+            null,
+            limitPrice,
+            "BTC Up/Down 5m Previous Score Countertrend");
+    }
+
     private static BtcUpDown5mStrategyVariant CreateBtcUpDown5mEntryPriceCapVariant(
         Guid id,
         string code,
@@ -1650,6 +1682,7 @@ public enum BtcUpDown5mStrategyBehavior
     StrategySelector,
     StandardEntryPriceCap,
     GammaOutcomeSelectionEntryPriceCap,
+    PreviousScoreCounterTrend,
     PreOpenFixedDirection,
     PreOpenFixedDirectionSell
 }

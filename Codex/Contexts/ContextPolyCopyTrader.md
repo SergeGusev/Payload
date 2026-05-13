@@ -1,3 +1,17 @@
+## Active Update 2026-05-13 BTC Previous Score Countertrend
+Goal: Add a BTC 5-minute countertrend strategy that scores the immediately previous market by time-weighted BTC deviation from its start price and enters the next market against that bias.
+Status: Completed
+Done:
+- Added 17 Paper-only `BTC Up or Down 5m Prev Score Countertrend 10..90` variants with fixed GTD BUY limits from `0.10` to `0.90` in `0.05` steps.
+- Implemented previous-market score calculation from existing `btc_up_down_5m_odds_ticks` samples, using archived Binance start price, timestamp-duration weighting, winsorized deviations, epsilon neutrality, minimum sample count, and optional up/down time-share filters.
+- Added repository query support for loading ticks by previous market start time and seeded the new strategies into PostgreSQL.
+- Integrated the strategy into the existing BTC opening-limit Paper pipeline without adding a separate BTC poller; current-market scoring is not used for current-market entry.
+- Updated service config, validation, README, configuration reference, and regression tests.
+- Rebuilt and restarted the Debug service on the new code; IPC status is `Running`, Paper active, Live paused, kill switch false, and `lastError=null`; database verification found `17` new countertrend strategies, all enabled.
+Next: Monitor the first complete BTC 5-minute windows for `prev_score_countertrend` entries and neutral/insufficient-sample skip rates.
+Notes: Verification passed: focused test filter `152/152`; full solution via isolated output `dotnet test PolyCopyTrader.sln --no-restore -p:BaseOutputPath=.codex-test-build\` passed `446/446`; `dotnet build src\PolyCopyTrader.Service\PolyCopyTrader.Service.csproj --no-restore` passed with existing nullable warnings in `PostgresAppRepository.cs`; `git diff --check` passed with LF/CRLF warnings only. A solution-level `--configuration Verify` test attempt was invalid because the solution has no `Verify|Any CPU` configuration, so isolated `BaseOutputPath` was used instead. Initial Debug test attempt was blocked by the running service locking Debug DLLs.
+Blockers: None.
+
 ## Active Update 2026-05-13 Current Bet Placement Check
 Goal: Verify whether Paper bets are currently being placed normally after the PreOpen Sell Full change.
 Status: Completed

@@ -541,7 +541,7 @@ are standard `Less` and `More` plus comparison `Less Gamma` and `More Gamma` at
 threshold `Middle 1..5 0.1..0.9 bps`, `Middle 1..5 Revert`, `Skip 1..5`,
 `Skip 1..5 Revert`, `Binance`, threshold `Binance 0.1..0.9/1/2/5 bps`, fixed-price `Binance 45/47/49`, delayed
 `Binance 15s/30s/45s`, `Binance Clever`, fair-value `Binance Edge 2/4/6`,
-`Ensemble 2 of 3`, `Dynamic Markov`, `Strategy Selector`, capped `Less`
+`Prev Score Countertrend 10..90`, `Ensemble 2 of 3`, `Dynamic Markov`, `Strategy Selector`, capped `Less`
 comparison variants, capped `More` comparison variants, and capped `More Gamma`
 comparison variants. When
 `PaperTakerPricingEnabled=false`, `Less` selects the lower-priced Gamma
@@ -653,7 +653,14 @@ not positive. The `Binance 45/47/49` variants use the same Binance direction
 signal with fixed GTD BUY limits at `0.45`, `0.47`, and `0.49`; `Binance Clever
 Aggressive` and `Binance Clever Conservative` use the same fair-value model with
 `0.01` and `0.05` safety margins; `Binance Edge 2/4/6` use `0.02`, `0.04`, and
-`0.06` required fair-value edge. `Ensemble 2 of 3` votes between Binance
+`0.06` required fair-value edge. `Prev Score Countertrend 10..90` reads the
+immediately previous BTC 5-minute market from `btc_up_down_5m_odds_ticks`,
+computes a time-weighted average BTC deviation from that previous market's
+start price, winsorizes deviations before averaging, and then enters the next
+market against the previous bias: previous `Up` buys `Down`, previous `Down`
+buys `Up`, and neutral or insufficient samples skip. Each `10..90` variant uses
+the same previous-market score but its own fixed GTD BUY limit price from
+`0.10` to `0.90` in `0.05` steps. `Ensemble 2 of 3` votes between Binance
 start-relative, Middle 1, and Skip 1 and enters only when at least two available
 votes agree on the same single outcome. `Dynamic Markov` estimates the next
 result from recent BTC 5-minute result transitions and enters only when the
@@ -740,6 +747,12 @@ leader exits can still be tracked.
 - `OpeningLimitGtdTtlSeconds`: fallback lifetime for BTC opening-limit GTD Paper and Paper/Live-shadow orders when market-relative expiration is disabled or market end is unavailable; default `120`, valid range `30..300`.
 - `OpeningLimitExpireBeforeMarketEndSeconds`: local BTC opening-limit GTD cancel deadline offset from market close; default `60`, valid range `0..300`, with `0` disabling the market-relative deadline and falling back to `OpeningLimitGtdTtlSeconds`.
 - `ClobGtdExpirationSecurityBufferSeconds`: extra seconds added to the CLOB wire `expiration` for GTD orders so the local effective deadline honors Polymarket's GTD security threshold; default `60`, valid range `60..300`.
+- `PreviousScoreCounterTrendEpsilonScore`: minimum absolute previous-market time-weighted score required before `Prev Score Countertrend` enters; default `0.0001`.
+- `PreviousScoreCounterTrendMinSamples`: minimum archived BTC samples required from the immediately previous 5-minute market; default `10`.
+- `PreviousScoreCounterTrendWinsorPercent`: lower/upper tail percentage used to winsorize previous-market deviations before averaging; default `0.10`, valid range `0..<0.50`.
+- `PreviousScoreCounterTrendEnableTimeShareFilter`: when true, requires the previous-market bias to also meet the configured positive/negative duration share before entering; default `false`.
+- `PreviousScoreCounterTrendMinUpTimeShare`: minimum positive-deviation duration share for a previous `Up` bias when the time-share filter is enabled; default `0.50`.
+- `PreviousScoreCounterTrendMinDownTimeShare`: minimum negative-deviation duration share for a previous `Down` bias when the time-share filter is enabled; default `0.50`.
 - `CloseBookCaptureLookbackSeconds`: how long before BTC 5-minute market close the worker starts saving close-book snapshots for result inference; default `60`, use `0` to disable capture.
 - `CloseBookCaptureIntervalSeconds`: minimum seconds between close-book snapshot fetches for the same token during the capture window; default `10`.
 - `OrderBookRefreshWorkerEnabled`: enables a dedicated BTC 5-minute order-book refresh loop that keeps the shared market-data cache warm from CLOB `/book`; default `true`.
