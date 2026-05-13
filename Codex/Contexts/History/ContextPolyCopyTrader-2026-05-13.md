@@ -484,3 +484,10 @@ Request:
 
 Result:
 Retried PostgreSQL connectivity to `192.168.0.101`. TCP is now reachable: direct .NET `TcpClient` connected and `Test-NetConnection` reported `TcpTestSucceeded=True` from local IP `192.168.0.100`, although ping still timed out. A temporary .NET/Npgsql diagnostic used the current `POLYCOPYTRADER_POSTGRES_CONNECTION` with only `Host` changed to `192.168.0.101`; PostgreSQL responded but rejected auth with `no pg_hba.conf entry for host "192.168.0.100", user "postgres", database "polycopytrader", no encryption`. Retrying with SSL Require failed because no SSL-enabled connection from this host is configured. No source code changed; the temporary diagnostic project was removed.
+
+## 2026-05-13T15:26:41.3303808Z
+Request:
+Останови сервис, будем на новый компьютер переезжать
+
+Result:
+Stopped the running Debug background service process `PolyCopyTrader.Service.exe` PID `42732`. No installed Windows Service named/displayed like `PolyCopyTrader` was present. Verified no `PolyCopyTrader.Service` process remains; the separate Dashboard process is still running as PID `20324`. No source code changed.

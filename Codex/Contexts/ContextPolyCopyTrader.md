@@ -1,3 +1,15 @@
+## Active Update 2026-05-13 Stop Service For Migration
+Goal: Stop the running PolyCopyTrader background service before moving to a new computer.
+Status: Completed
+Done:
+- Confirmed no installed Windows Service named/displayed like `PolyCopyTrader` was present.
+- Found the Debug background service process `PolyCopyTrader.Service.exe` running as PID `42732`.
+- Stopped PID `42732` and verified no `PolyCopyTrader.Service` process remains.
+- Confirmed the separate Dashboard process is still running as PID `20324`.
+Next: None.
+Notes: No source code changed. Verification used `Get-Service`, `Get-Process`, and post-stop process inspection.
+Blockers: None.
+
 ## Active Update 2026-05-13 PostgreSQL 192.168.0.101 Retry
 Goal: Retry PostgreSQL reachability at `192.168.0.101`.
 Status: Completed
