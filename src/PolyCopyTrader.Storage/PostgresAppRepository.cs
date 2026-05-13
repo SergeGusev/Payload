@@ -641,6 +641,36 @@ WHERE wallet = @Wallet;
 		return results;
 	}
 
+	public async Task<IReadOnlyList<StrategyMarketPaperRun>> GetDueStrategyMarketPaperRunsAtEarliestDueAsync(IReadOnlyCollection<Guid> strategyIds, string status, DateTimeOffset dueBeforeUtc, CancellationToken cancellationToken = default(CancellationToken))
+	{
+		if (strategyIds.Count == 0)
+		{
+			return Array.Empty<StrategyMarketPaperRun>();
+		}
+
+		Guid[] normalizedStrategyIds = strategyIds
+			.Select(StrategyIds.Normalize)
+			.Distinct()
+			.ToArray();
+		if (normalizedStrategyIds.Length == 0)
+		{
+			return Array.Empty<StrategyMarketPaperRun>();
+		}
+
+		await using NpgsqlConnection connection = await OpenConnectionAsync(cancellationToken);
+		await using NpgsqlCommand command = CreateCommand(connection, "WITH earliest_due AS (\n    SELECT min(entry_due_at_utc) AS entry_due_at_utc\n    FROM strategy_market_paper_runs\n    WHERE strategy_id = ANY(@StrategyIds)\n      AND status = @Status\n      AND entry_due_at_utc <= @DueBeforeUtc\n)\nSELECT run.id, run.strategy_id, run.market_id, run.condition_id, run.market_slug, run.market_title, run.category,\n       run.market_start_utc, run.market_end_utc, run.detected_at_utc, run.entry_due_at_utc, run.status,\n       run.selected_asset_id, run.selected_outcome, run.entry_price, run.stake_usd, run.size_shares,\n       run.signal_id, run.paper_order_id, run.entered_at_utc, run.settlement_price, run.settlement_value_usd,\n       run.realized_pnl_usd, run.settled_at_utc, run.skip_reason, run.created_at_utc, run.updated_at_utc,\n       run.skip_diagnostics_json::text\nFROM strategy_market_paper_runs run\nCROSS JOIN earliest_due due\nWHERE run.strategy_id = ANY(@StrategyIds)\n  AND run.status = @Status\n  AND due.entry_due_at_utc IS NOT NULL\n  AND run.entry_due_at_utc = due.entry_due_at_utc\nORDER BY run.entry_due_at_utc ASC, run.detected_at_utc ASC, run.strategy_id ASC;");
+		command.Parameters.AddWithValue("StrategyIds", normalizedStrategyIds);
+		command.Parameters.AddWithValue("Status", status);
+		command.Parameters.Add("DueBeforeUtc", NpgsqlDbType.TimestampTz).Value = UtcDateTime(dueBeforeUtc);
+		List<StrategyMarketPaperRun> results = new List<StrategyMarketPaperRun>();
+		await using NpgsqlDataReader reader = await command.ExecuteReaderAsync(cancellationToken);
+		while (await reader.ReadAsync(cancellationToken))
+		{
+			results.Add(ReadStrategyMarketPaperRun(reader));
+		}
+		return results;
+	}
+
 	public async Task<IReadOnlyList<StrategyMarketPaperRun>> GetStrategyMarketPaperRunsForSettlementAsync(Guid strategyId, DateTimeOffset marketEndedBeforeUtc, int limit, CancellationToken cancellationToken = default(CancellationToken))
 	{
 		await using NpgsqlConnection connection = await OpenConnectionAsync(cancellationToken);

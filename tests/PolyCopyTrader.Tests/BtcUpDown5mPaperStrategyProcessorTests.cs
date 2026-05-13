@@ -1658,6 +1658,54 @@ public sealed class BtcUpDown5mPaperStrategyProcessorTests
     }
 
     [Fact]
+    public async Task ProcessAsync_PreOpenDueEntriesUseCompleteEarliestDueGroupAndSharedBookFetch()
+    {
+        var now = DateTimeOffset.UtcNow;
+        var marketStart = now.AddMinutes(4);
+        var marketEnd = marketStart.AddMinutes(15);
+        var variants = new[]
+        {
+            StrategyIds.BtcUpDown5mVariants.Single(item => item.Code == "btc_up_down_15m_preopen_half_up_49"),
+            StrategyIds.BtcUpDown5mVariants.Single(item => item.Code == "btc_up_down_15m_preopen_half_up_48"),
+            StrategyIds.BtcUpDown5mVariants.Single(item => item.Code == "btc_up_down_15m_preopen_half_up_47")
+        };
+        var repository = new TestAppRepository();
+        var market = CreateMarket(
+            marketStart,
+            marketEnd,
+            upPrice: 0.50m,
+            downPrice: 0.50m,
+            slug: "btc-updown-15m-" + marketStart.ToUnixTimeSeconds().ToString(CultureInfo.InvariantCulture),
+            seriesSlug: "btc-up-or-down-15m",
+            orderMinSize: 5m);
+        repository.PolymarketGammaMarkets.Add(market);
+        repository.StrategyMarketPaperRuns.AddRange(variants.Select(variant =>
+            CreateObservedRun(variant, market, marketStart, now.AddMinutes(-2))));
+        var clobClient = new FakeClobClient([]);
+        var processor = CreateProcessorCoreWithOptions(
+            repository,
+            [],
+            [],
+            _ => { },
+            [],
+            CreateBtcOptions(
+                paperTakerPricingEnabled: false,
+                enabledVariantCodes: variants.Select(variant => variant.Code).ToArray(),
+                maxEntriesPerCycle: 1,
+                maxConcurrentEntryDecisions: 4),
+            clobClient: clobClient);
+
+        var result = await processor.ProcessAsync();
+
+        Assert.Equal(0, result.MarketsObserved);
+        Assert.Equal(3, result.EntriesPlaced);
+        Assert.Equal(0, result.RunsSkipped);
+        Assert.Equal(3, repository.PaperOrders.Count);
+        Assert.All(repository.StrategyMarketPaperRuns, run => Assert.Equal(StrategyMarketPaperRunStatuses.Entered, run.Status));
+        Assert.Equal(1, clobClient.GetOrderBookCalls);
+    }
+
+    [Fact]
     public async Task ProcessAsync_PreOpenFullPeriodAlwaysDownPlacesFourHourGtdLimit()
     {
         var now = DateTimeOffset.UtcNow;
@@ -4674,7 +4722,8 @@ public sealed class BtcUpDown5mPaperStrategyProcessorTests
         BtcUpDown5mStrategyOptions strategyOptions,
         IBtcUsdReferencePriceClient? btcUsdReferencePriceClient = null,
         IBtcUsdReferencePriceCache? btcUsdReferencePriceCache = null,
-        IPolymarketGammaClient? gammaClient = null)
+        IPolymarketGammaClient? gammaClient = null,
+        IPolymarketClobPublicClient? clobClient = null)
     {
         var marketDataWebSocketOptions = new MarketDataWebSocketOptions { StaleAfterSeconds = 30 };
         var marketDataCache = new MarketDataCache(marketDataWebSocketOptions);
@@ -4714,7 +4763,7 @@ public sealed class BtcUpDown5mPaperStrategyProcessorTests
             strategyOptions,
             marketDataWebSocketOptions,
             gammaClient ?? new FakeGammaClient(metadata),
-            new FakeClobClient(clobOrderBooks),
+            clobClient ?? new FakeClobClient(clobOrderBooks),
             new PassGeoClient(),
             new CapturingTradingClient(),
             new ReadyAuthService(),
@@ -5007,6 +5056,42 @@ public sealed class BtcUpDown5mPaperStrategyProcessorTests
             SkipReason: null,
             marketStartUtc,
             marketStartUtc.AddSeconds(Math.Max(0, variant.EntryDelaySeconds)));
+    }
+
+    private static StrategyMarketPaperRun CreateObservedRun(
+        BtcUpDown5mStrategyVariant variant,
+        PolymarketGammaMarket market,
+        DateTimeOffset marketStartUtc,
+        DateTimeOffset detectedAtUtc)
+    {
+        return new StrategyMarketPaperRun(
+            Guid.NewGuid(),
+            variant.Id,
+            market.MarketId,
+            market.ConditionId,
+            market.Slug,
+            market.Question,
+            market.Category,
+            marketStartUtc,
+            market.EndDateUtc,
+            detectedAtUtc,
+            marketStartUtc.AddSeconds(variant.EntryDelaySeconds),
+            StrategyMarketPaperRunStatuses.Observed,
+            SelectedAssetId: null,
+            SelectedOutcome: null,
+            EntryPrice: null,
+            StakeUsd: 1m,
+            SizeShares: null,
+            SignalId: null,
+            PaperOrderId: null,
+            EnteredAtUtc: null,
+            SettlementPrice: null,
+            SettlementValueUsd: null,
+            RealizedPnlUsd: null,
+            SettledAtUtc: null,
+            SkipReason: null,
+            detectedAtUtc,
+            detectedAtUtc);
     }
 
     private static void AddBtcSettledMarketResult(
@@ -5380,6 +5465,19 @@ public sealed class BtcUpDown5mPaperStrategyProcessorTests
     private sealed class FakeClobClient : IPolymarketClobPublicClient
     {
         private readonly IReadOnlyDictionary<string, OrderBookSnapshot> orderBooksByAssetId;
+        private readonly object sync = new();
+        private readonly Dictionary<string, int> orderBookCallsByAssetId = new(StringComparer.OrdinalIgnoreCase);
+
+        public int GetOrderBookCalls
+        {
+            get
+            {
+                lock (sync)
+                {
+                    return orderBookCallsByAssetId.Values.Sum();
+                }
+            }
+        }
 
         public FakeClobClient(OrderBookSnapshot? orderBook)
             : this(ToClobOrderBooks(orderBook))
@@ -5395,6 +5493,12 @@ public sealed class BtcUpDown5mPaperStrategyProcessorTests
 
         public Task<OrderBookSnapshot?> GetOrderBookAsync(string assetId, CancellationToken cancellationToken = default)
         {
+            lock (sync)
+            {
+                orderBookCallsByAssetId.TryGetValue(assetId, out var calls);
+                orderBookCallsByAssetId[assetId] = calls + 1;
+            }
+
             return Task.FromResult(
                 orderBooksByAssetId.TryGetValue(assetId, out var orderBook)
                     ? orderBook

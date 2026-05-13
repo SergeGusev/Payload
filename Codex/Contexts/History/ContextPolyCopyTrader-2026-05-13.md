@@ -18,3 +18,12 @@ User asked to clear all Paper history and start collecting Paper results again f
 
 Result:
 Stopped the Debug service, cleared the Paper execution/accounting/run tables in PostgreSQL, preserved strategies/live orders/market data/leader and signal history/on-chain dedupe audit, and nulled old Paper-order links from live/on-chain audit rows before deleting Paper orders. Cleared tables included `strategy_market_paper_runs`, `paper_orders`, `paper_fills`, `paper_positions`, `paper_position_settlements`, `paper_copied_trader_performance`, `paper_copied_leader_positions`, `paper_copied_leader_activity_events`, `paper_live_shadow_decisions`, and `paper_live_shadow_discrepancies`. Verified all cleared tables were zero before restarting the service. Restarted the service; IPC `/status` returned `Running`, Paper active, Live paused, kill switch false, and `lastError=null`. No code changed and the temporary reset tool was removed.
+
+## 2026-05-13T06:40:02.2207635+00:00
+Request:
+Нет, меня не устраивает вариант, при котором мы пропускаем ставки из-за медленной работы, так портится статистика. Мне надо понять, что мы можем сделать, чтобы такой медленной работы не было.
+
+Ок, давай делать
+
+Result:
+Implemented a BTC PreOpen due-entry throughput fix. PreOpen fixed-direction entries now run through a priority pass that selects the complete earliest due timestamp group without being split by `MaxEntriesPerCycle`, while ordinary BTC entries keep the global capped queue. Added per-cycle CLOB `/book` fallback task caching per asset so a shared PreOpen token makes one fallback request instead of repeating the same slow failure/timeout per strategy. Raised Debug `MaxConcurrentEntryDecisions` to 32, updated docs, added regression coverage for complete PreOpen due-group placement with shared fallback fetch, rebuilt and restarted the Debug service, cleared fresh Paper history again, and verified IPC `/status` is `Running` with Paper active, Live paused, kill switch false, and `lastError=null`. Verification passed with focused BTC processor tests `100/100`, full solution tests `438/438`, normal Debug service build, and `git diff --check` with line-ending warnings only.

@@ -1,3 +1,17 @@
+## Active Update 2026-05-13 BTC PreOpen Due Throughput
+Goal: Prevent PreOpen due entries from being delayed or skipped by slow BTC entry queue work.
+Status: Completed
+Done:
+- Split PreOpen fixed-direction variants into a priority due-entry pass before the ordinary BTC entry queue, both before and after market observation.
+- Added a repository query for the complete earliest due PreOpen timestamp group, bypassing `MaxEntriesPerCycle` for that group.
+- Cached CLOB `/book` fallback tasks per asset inside each entry cycle so shared PreOpen tokens do not repeat the same REST failure/timeout per strategy.
+- Raised Debug service `MaxConcurrentEntryDecisions` to 32 and documented the PreOpen priority/asset-cache behavior.
+- Added regression coverage proving three PreOpen runs place in one cycle with `MaxEntriesPerCycle=1` and only one shared CLOB fallback request.
+- Cleared fresh paper history again and restarted the Debug service on the new build.
+Next: Monitor Dashboard `Avg delay s` / `Max delay s` on the new clean Paper sample, especially around 5m/15m PreOpen due groups.
+Notes: Focused BTC processor tests passed (`100/100`); full solution tests passed (`438/438`); normal Debug service build passed with existing nullable warnings; `git diff --check` only reported LF/CRLF warnings; IPC `/status` is `Running`, Paper active, Live paused, kill switch false, and `lastError=null`. Paper reset removed `strategy_market_paper_runs=5934`, `paper_orders=2248`, and `paper_copied_trader_performance=1012`, leaving tracked Paper tables zero before restart.
+Blockers: None.
+
 ## Active Update 2026-05-13 Paper History Reset
 Goal: Clear existing Paper execution/accounting history so new Paper results are collected from a clean slate.
 Status: Completed

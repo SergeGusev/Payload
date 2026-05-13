@@ -92,10 +92,20 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
         var martinEntryVariants = entryVariants
             .Where(variant => variant.Behavior == BtcUpDown5mStrategyBehavior.Less180Martin)
             .ToArray();
+        var preOpenEntryVariants = entryVariants
+            .Where(IsPreOpenFixedDirectionOpeningLimitEntry)
+            .ToArray();
         var regularEntryVariants = entryVariants
             .Where(variant => variant.Behavior != BtcUpDown5mStrategyBehavior.Less180Martin)
+            .Where(variant => !IsPreOpenFixedDirectionOpeningLimitEntry(variant))
             .ToArray();
 
+        controlState.RecordLoop($"BTC5mStrategy placing PreOpen due entries before observe. Variants={preOpenEntryVariants.Length}", null);
+        var (preOpenEntriesPlacedBeforeObserve, preOpenEntrySkippedBeforeObserve) = await PlaceDuePreOpenEntriesAsync(
+            DateTimeOffset.UtcNow,
+            preOpenEntryVariants,
+            strategySettings,
+            cancellationToken);
         controlState.RecordLoop($"BTC5mStrategy placing regular due entries before observe. Variants={regularEntryVariants.Length}", null);
         var (regularEntriesPlacedBeforeObserve, regularEntrySkippedBeforeObserve) = await PlaceDueEntriesAsync(
             DateTimeOffset.UtcNow,
@@ -121,6 +131,12 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
             cancellationToken);
         var observed = observeResult.Observed;
         var observeSkipped = observeResult.Skipped;
+        controlState.RecordLoop($"BTC5mStrategy placing PreOpen due entries after observe. Variants={preOpenEntryVariants.Length}", null);
+        var (preOpenEntriesPlacedAfterObserve, preOpenEntrySkippedAfterObserve) = await PlaceDuePreOpenEntriesAsync(
+            DateTimeOffset.UtcNow,
+            preOpenEntryVariants,
+            strategySettings,
+            cancellationToken);
         controlState.RecordLoop($"BTC5mStrategy placing regular due entries after observe. Variants={regularEntryVariants.Length}", null);
         var (regularEntriesPlacedAfterObserve, regularEntrySkippedAfterObserve) = await PlaceDueEntriesAsync(
             DateTimeOffset.UtcNow,
@@ -143,8 +159,10 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
         await CaptureClosingOrderBookSnapshotsAsync(DateTimeOffset.UtcNow, observeResult.Markets, cancellationToken);
         return new BtcUpDown5mPaperStrategyResult(
             observed,
-            regularEntriesPlacedBeforeObserve + martinEntriesPlacedBeforeObserve + regularEntriesPlacedAfterObserve + martinEntriesPlacedAfterObserve,
-            observeSkipped + regularEntrySkippedBeforeObserve + martinEntrySkippedBeforeObserve + regularEntrySkippedAfterObserve + martinEntrySkippedAfterObserve,
+            preOpenEntriesPlacedBeforeObserve + regularEntriesPlacedBeforeObserve + martinEntriesPlacedBeforeObserve +
+            preOpenEntriesPlacedAfterObserve + regularEntriesPlacedAfterObserve + martinEntriesPlacedAfterObserve,
+            observeSkipped + preOpenEntrySkippedBeforeObserve + regularEntrySkippedBeforeObserve + martinEntrySkippedBeforeObserve +
+            preOpenEntrySkippedAfterObserve + regularEntrySkippedAfterObserve + martinEntrySkippedAfterObserve,
             settledRunsBeforeMartinEntries + settledRunsBeforeMartinEntriesAfterObserve + settledRunsAfterEntries);
     }
 
@@ -427,10 +445,55 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
             return (0, 0);
         }
 
+        return await PlaceDueEntryRunsAsync(
+            runs,
+            variantsById,
+            strategySettings,
+            cancellationToken);
+    }
+
+    private async Task<(int EntriesPlaced, int RunsSkipped)> PlaceDuePreOpenEntriesAsync(
+        DateTimeOffset nowUtc,
+        IReadOnlyList<BtcUpDown5mStrategyVariant> variants,
+        IReadOnlyDictionary<Guid, StrategyRuntimeSettings> strategySettings,
+        CancellationToken cancellationToken)
+    {
+        if (variants.Count == 0)
+        {
+            return (0, 0);
+        }
+
+        var variantsById = variants
+            .ToDictionary(variant => StrategyIds.Normalize(variant.Id));
+        var runs = await repository.GetDueStrategyMarketPaperRunsAtEarliestDueAsync(
+            variantsById.Keys.ToArray(),
+            StrategyMarketPaperRunStatuses.Observed,
+            nowUtc,
+            cancellationToken);
+        if (runs.Count == 0)
+        {
+            return (0, 0);
+        }
+
+        return await PlaceDueEntryRunsAsync(
+            runs,
+            variantsById,
+            strategySettings,
+            cancellationToken);
+    }
+
+    private async Task<(int EntriesPlaced, int RunsSkipped)> PlaceDueEntryRunsAsync(
+        IReadOnlyList<StrategyMarketPaperRun> runs,
+        IReadOnlyDictionary<Guid, BtcUpDown5mStrategyVariant> variantsById,
+        IReadOnlyDictionary<Guid, StrategyRuntimeSettings> strategySettings,
+        CancellationToken cancellationToken)
+    {
         var maxConcurrency = Math.Max(1, Math.Min(options.MaxConcurrentEntryDecisions, runs.Count));
         var btcCurrentPrices = new System.Collections.Concurrent.ConcurrentDictionary<string, BtcCurrentPriceLookupResult>(
             StringComparer.OrdinalIgnoreCase);
         var marketLookupTasks = new System.Collections.Concurrent.ConcurrentDictionary<string, Lazy<Task<PolymarketGammaMarket?>>>(
+            StringComparer.OrdinalIgnoreCase);
+        var orderBookFetchTasks = new System.Collections.Concurrent.ConcurrentDictionary<string, Lazy<Task<OrderBookFetchResult>>>(
             StringComparer.OrdinalIgnoreCase);
         using var throttler = new SemaphoreSlim(maxConcurrency, maxConcurrency);
 
@@ -451,6 +514,7 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
                     strategySettings,
                     btcCurrentPrices,
                     marketLookupTasks,
+                    orderBookFetchTasks,
                     cancellationToken);
             }
             finally
@@ -470,6 +534,7 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
         IReadOnlyDictionary<Guid, StrategyRuntimeSettings> strategySettings,
         IDictionary<string, BtcCurrentPriceLookupResult> btcCurrentPrices,
         System.Collections.Concurrent.ConcurrentDictionary<string, Lazy<Task<PolymarketGammaMarket?>>> marketLookupTasks,
+        System.Collections.Concurrent.ConcurrentDictionary<string, Lazy<Task<OrderBookFetchResult>>> orderBookFetchTasks,
         CancellationToken cancellationToken)
     {
         var entriesPlaced = 0;
@@ -608,6 +673,7 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
                             stakeMultiplier,
                             market.OrderMinSize,
                             nowUtc,
+                            orderBookFetchTasks,
                             cancellationToken);
                         var expiration = ResolveOpeningLimitExpiration(market, variant, nowUtc);
                         if (!expiration.Available || expiration.LocalExpiresAtUtc is null)
@@ -4458,6 +4524,7 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
         decimal stakeMultiplier,
         decimal? fallbackMinOrderSize,
         DateTimeOffset nowUtc,
+        System.Collections.Concurrent.ConcurrentDictionary<string, Lazy<Task<OrderBookFetchResult>>> orderBookFetchTasks,
         CancellationToken cancellationToken)
     {
         var maxAge = GetPaperTakerMaxQuoteAge();
@@ -4469,7 +4536,7 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
 
         if (options.PaperTakerRestFallbackEnabled)
         {
-            var fetched = await FetchAndCacheOrderBookAsync(assetId, cancellationToken);
+            var fetched = await GetOrFetchOrderBookAsync(assetId, orderBookFetchTasks, cancellationToken);
             if (fetched.OrderBook is not null)
             {
                 var fetchedAge = GetSnapshotAge(fetched.OrderBook.SnapshotAtUtc);
@@ -5130,6 +5197,20 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
     {
         var age = DateTimeOffset.UtcNow - snapshotAtUtc;
         return age < TimeSpan.Zero ? TimeSpan.Zero : age;
+    }
+
+    private Task<OrderBookFetchResult> GetOrFetchOrderBookAsync(
+        string assetId,
+        System.Collections.Concurrent.ConcurrentDictionary<string, Lazy<Task<OrderBookFetchResult>>> orderBookFetchTasks,
+        CancellationToken cancellationToken)
+    {
+        var fetchTask = orderBookFetchTasks.GetOrAdd(
+            assetId,
+            static (key, state) => new Lazy<Task<OrderBookFetchResult>>(
+                () => state.Processor.FetchAndCacheOrderBookAsync(key, state.CancellationToken),
+                LazyThreadSafetyMode.ExecutionAndPublication),
+            (Processor: this, CancellationToken: cancellationToken));
+        return fetchTask.Value;
     }
 
     private async Task<OrderBookFetchResult> FetchAndCacheOrderBookAsync(

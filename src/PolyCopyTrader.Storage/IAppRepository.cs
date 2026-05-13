@@ -180,6 +180,15 @@ public interface IAppRepository
         return Task.FromResult<IReadOnlyList<StrategyMarketPaperRun>>([]);
     }
 
+    Task<IReadOnlyList<StrategyMarketPaperRun>> GetDueStrategyMarketPaperRunsAtEarliestDueAsync(
+        IReadOnlyCollection<Guid> strategyIds,
+        string status,
+        DateTimeOffset dueBeforeUtc,
+        CancellationToken cancellationToken = default)
+    {
+        return Task.FromResult<IReadOnlyList<StrategyMarketPaperRun>>([]);
+    }
+
     Task<IReadOnlyList<StrategyMarketPaperRun>> GetStrategyMarketPaperRunsForSettlementAsync(
         Guid strategyId,
         DateTimeOffset marketEndedBeforeUtc,

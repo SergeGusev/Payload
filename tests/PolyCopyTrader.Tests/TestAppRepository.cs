@@ -631,6 +631,37 @@ internal sealed class TestAppRepository : IAppRepository
         }
     }
 
+    public Task<IReadOnlyList<StrategyMarketPaperRun>> GetDueStrategyMarketPaperRunsAtEarliestDueAsync(
+        IReadOnlyCollection<Guid> strategyIds,
+        string status,
+        DateTimeOffset dueBeforeUtc,
+        CancellationToken cancellationToken = default)
+    {
+        var normalizedStrategyIds = strategyIds
+            .Select(StrategyIds.Normalize)
+            .ToHashSet();
+        lock (sync)
+        {
+            var dueRuns = StrategyMarketPaperRuns
+                .Where(run => normalizedStrategyIds.Contains(StrategyIds.Normalize(run.StrategyId)))
+                .Where(run => string.Equals(run.Status, status, StringComparison.OrdinalIgnoreCase))
+                .Where(run => run.EntryDueAtUtc <= dueBeforeUtc)
+                .ToArray();
+            if (dueRuns.Length == 0)
+            {
+                return Task.FromResult<IReadOnlyList<StrategyMarketPaperRun>>([]);
+            }
+
+            var earliestDueAtUtc = dueRuns.Min(run => run.EntryDueAtUtc);
+            return Task.FromResult<IReadOnlyList<StrategyMarketPaperRun>>(dueRuns
+                .Where(run => run.EntryDueAtUtc == earliestDueAtUtc)
+                .OrderBy(run => run.EntryDueAtUtc)
+                .ThenBy(run => run.DetectedAtUtc)
+                .ThenBy(run => run.StrategyId)
+                .ToArray());
+        }
+    }
+
     public Task<IReadOnlyList<StrategyMarketPaperRun>> GetStrategyMarketPaperRunsForSettlementAsync(
         Guid strategyId,
         DateTimeOffset marketEndedBeforeUtc,
