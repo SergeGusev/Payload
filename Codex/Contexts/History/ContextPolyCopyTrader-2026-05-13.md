@@ -432,3 +432,9 @@ Request:
 
 Result:
 Clarified that Dashboard `Orders` counts actual `paper_orders` created by a strategy, while considered/skipped strategy runs are tracked separately through `strategy_market_paper_runs` counters such as `Entered`, `Skipped`, and `Settled`.
+## 2026-05-13T12:42:39.2705096Z
+Request:
+То есть если мы получали missing_orderbook_empty_side, то ордер не создавался, правильно?
+
+Result:
+Clarified that historical `missing_orderbook_empty_side` skips did not create Paper orders, but current BTC taker/GTD behavior after the empty-ask resting-limit change creates a pending resting GTD BUY when a book snapshot exists and only the executable ask side is empty; those orders store `empty_side_reason=missing_orderbook_empty_side` in raw decision diagnostics.

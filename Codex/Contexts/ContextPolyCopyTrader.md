@@ -1,3 +1,14 @@
+## Active Update 2026-05-13 Missing Empty Side Order Creation Clarification
+Goal: Clarify whether `missing_orderbook_empty_side` created an order.
+Status: Completed
+Done:
+- Confirmed historical rows skipped with `missing_orderbook_empty_side` did not create Paper orders.
+- Confirmed current BTC taker/GTD behavior after the empty-ask change creates a pending resting GTD BUY when the order book snapshot exists but has no executable ask side.
+- Confirmed current orders created from that path carry diagnostics such as `resting_limit_due_to_empty_ask_side=true` and `empty_side_reason=missing_orderbook_empty_side` in `paper_orders.raw_decision_json`.
+Next: None.
+Notes: No production code changed. Verification was code inspection of `BtcUpDown5mPaperStrategyProcessor`, README behavior docs, and regression tests.
+Blockers: None.
+
 ## Active Update 2026-05-13 Orders Column Meaning
 Goal: Clarify what the Dashboard `Orders` column counts.
 Status: Completed
