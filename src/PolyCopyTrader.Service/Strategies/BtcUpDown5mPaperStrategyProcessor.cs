@@ -4987,6 +4987,26 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
                     snapshots)
             };
         }
+        else if (selectedPricing.OrderBookLookup is not null &&
+            selectedPricing.Estimate is null &&
+            selectedPricing.Sizing is not null &&
+            selectedPricing.ClobGammaDiff is { } restingClobGammaDiff)
+        {
+            selectedPricing = selectedPricing with
+            {
+                RawDecisionJson = BuildRestingTakerPaperEntryRawDecisionJson(
+                    market,
+                    selected.Outcome,
+                    variant,
+                    selectedPricing.OrderBookLookup,
+                    selectedPricing.AverageFillPrice,
+                    selectedPricing.NotionalUsd,
+                    selectedPricing.Sizing,
+                    restingClobGammaDiff,
+                    nowUtc,
+                    snapshots)
+            };
+        }
 
         return BtcTakerOutcomeSelectionResult.Fill(selected.Outcome, selectedPricing);
     }
@@ -5063,6 +5083,21 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
             : await GetFreshTakerOrderBookAsync(outcome.AssetId, nowUtc, cancellationToken);
         if (orderBookLookup.RejectionReason is not null || orderBookLookup.OrderBook is null)
         {
+            if (string.Equals(orderBookLookup.RejectionReason, SignalReasonCodes.MissingOrderBookEmptySide, StringComparison.Ordinal) &&
+                orderBookLookup.OrderBook is not null)
+            {
+                return CreateRestingTakerPaperEntryPricingResult(
+                    market,
+                    outcome,
+                    variant,
+                    orderBookLookup,
+                    stakeMultiplier,
+                    nowUtc,
+                    enforceDirectionalPrice,
+                    enforceStrategyEntryPriceCap,
+                    outcomeSelectionSnapshots);
+            }
+
             var reason = orderBookLookup.RejectionReason ?? SignalReasonCodes.MissingOrderBook;
             var snapshot = CreateTakerOutcomePricingSnapshot(outcome, stakeMultiplier, orderBookLookup, null, reason);
             return BtcPaperEntryPricingResult.Reject(
@@ -5261,6 +5296,200 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
             estimate,
             sizing,
             clobGammaDiff);
+    }
+
+    private BtcPaperEntryPricingResult CreateRestingTakerPaperEntryPricingResult(
+        PolymarketGammaMarket market,
+        BtcUpDown5mOutcomeQuote outcome,
+        BtcUpDown5mStrategyVariant variant,
+        TakerOrderBookLookupResult orderBookLookup,
+        decimal stakeMultiplier,
+        DateTimeOffset nowUtc,
+        bool enforceDirectionalPrice,
+        bool enforceStrategyEntryPriceCap,
+        IReadOnlyList<BtcTakerOutcomePricingSnapshot>? outcomeSelectionSnapshots)
+    {
+        if (orderBookLookup.OrderBook is not { } orderBook)
+        {
+            var reason = orderBookLookup.RejectionReason ?? SignalReasonCodes.MissingOrderBook;
+            return BtcPaperEntryPricingResult.Reject(
+                reason,
+                CreateTakerOutcomePricingSnapshot(outcome, stakeMultiplier, orderBookLookup, null, reason));
+        }
+
+        var limitPrice = GetPaperTakerMaxAllowedPrice(outcome.Price);
+        if (enforceDirectionalPrice && !IsDirectionalPriceAllowedForVariant(limitPrice, variant))
+        {
+            var snapshot = CreateRestingTakerOutcomePricingSnapshot(
+                outcome,
+                stakeMultiplier,
+                orderBookLookup,
+                limitPrice,
+                sizeShares: 0m,
+                notionalUsd: 0m,
+                SignalReasonCodes.ExecutionPriceDirectionMismatch);
+            return BtcPaperEntryPricingResult.Reject(
+                SignalReasonCodes.ExecutionPriceDirectionMismatch,
+                snapshot,
+                BuildTakerPaperRejectionDiagnosticsJson(
+                    market,
+                    variant,
+                    SignalReasonCodes.ExecutionPriceDirectionMismatch,
+                    stakeMultiplier,
+                    nowUtc,
+                    [snapshot]));
+        }
+
+        if (enforceStrategyEntryPriceCap &&
+            TryGetStandardEntryPriceCap(variant) is { } entryPriceCap &&
+            limitPrice >= entryPriceCap)
+        {
+            var snapshot = CreateRestingTakerOutcomePricingSnapshot(
+                outcome,
+                stakeMultiplier,
+                orderBookLookup,
+                limitPrice,
+                sizeShares: 0m,
+                notionalUsd: 0m,
+                SignalReasonCodes.ExecutionPriceAboveStrategyCap);
+            return BtcPaperEntryPricingResult.Reject(
+                SignalReasonCodes.ExecutionPriceAboveStrategyCap,
+                snapshot,
+                BuildTakerPaperRejectionDiagnosticsJson(
+                    market,
+                    variant,
+                    SignalReasonCodes.ExecutionPriceAboveStrategyCap,
+                    stakeMultiplier,
+                    nowUtc,
+                    [snapshot]));
+        }
+
+        var sizing = CreateLimitMinimumStakeSizing(orderBook, limitPrice, stakeMultiplier, orderBookLookup.Source);
+        if (!sizing.Available)
+        {
+            var reason = sizing.RejectionReason ?? "paper_taker_resting_limit_sizing_rejected";
+            var snapshot = CreateRestingTakerOutcomePricingSnapshot(
+                outcome,
+                stakeMultiplier,
+                orderBookLookup,
+                limitPrice,
+                sizeShares: 0m,
+                notionalUsd: 0m,
+                reason);
+            return BtcPaperEntryPricingResult.Reject(
+                reason,
+                snapshot,
+                BuildTakerPaperRejectionDiagnosticsJson(
+                    market,
+                    variant,
+                    reason,
+                    stakeMultiplier,
+                    nowUtc,
+                    [snapshot]));
+        }
+
+        var targetNotionalUsd = sizing.TargetNotionalUsd;
+        var sizeShares = sizing.TargetSizeShares;
+        if (targetNotionalUsd <= 0m || sizeShares <= 0m)
+        {
+            const string reason = "paper_taker_resting_limit_size_non_positive";
+            var snapshot = CreateRestingTakerOutcomePricingSnapshot(
+                outcome,
+                stakeMultiplier,
+                orderBookLookup,
+                limitPrice,
+                sizeShares,
+                targetNotionalUsd,
+                reason);
+            return BtcPaperEntryPricingResult.Reject(
+                reason,
+                snapshot,
+                BuildTakerPaperRejectionDiagnosticsJson(
+                    market,
+                    variant,
+                    reason,
+                    stakeMultiplier,
+                    nowUtc,
+                    [snapshot]));
+        }
+
+        var clobGammaDiff = Math.Abs(limitPrice - outcome.Price);
+        var rawDecisionJson = BuildRestingTakerPaperEntryRawDecisionJson(
+            market,
+            outcome,
+            variant,
+            orderBookLookup,
+            limitPrice,
+            targetNotionalUsd,
+            sizing,
+            clobGammaDiff,
+            nowUtc,
+            outcomeSelectionSnapshots);
+        var quoteAgeMs = orderBookLookup.Age?.TotalMilliseconds;
+        var evidence = string.Concat(
+            "BtcUpDown5mPaper:",
+            variant.Code,
+            ": GTD resting limit order placed despite empty ask side from ",
+            orderBookLookup.Source,
+            ". LimitPrice=",
+            limitPrice.ToString("0.########", CultureInfo.InvariantCulture),
+            " SizeShares=",
+            sizeShares.ToString("0.########", CultureInfo.InvariantCulture),
+            " NotionalUsd=",
+            targetNotionalUsd.ToString("0.########", CultureInfo.InvariantCulture),
+            " GammaPrice=",
+            outcome.Price.ToString("0.########", CultureInfo.InvariantCulture),
+            quoteAgeMs is null ? string.Empty : " QuoteAgeMs=" + quoteAgeMs.Value.ToString("0", CultureInfo.InvariantCulture));
+
+        return BtcPaperEntryPricingResult.CreateFilled(
+            limitPrice,
+            sizeShares,
+            targetNotionalUsd,
+            orderBookLookup.Source,
+            evidence,
+            rawDecisionJson,
+            CreateRestingTakerOutcomePricingSnapshot(
+                outcome,
+                targetNotionalUsd,
+                orderBookLookup,
+                limitPrice,
+                sizeShares,
+                targetNotionalUsd,
+                rejectionReason: null),
+            orderBookLookup,
+            estimate: null,
+            sizing: sizing,
+            clobGammaDiff: clobGammaDiff);
+    }
+
+    private static BtcTakerOutcomePricingSnapshot CreateRestingTakerOutcomePricingSnapshot(
+        BtcUpDown5mOutcomeQuote outcome,
+        decimal targetNotionalUsd,
+        TakerOrderBookLookupResult orderBookLookup,
+        decimal limitPrice,
+        decimal sizeShares,
+        decimal notionalUsd,
+        string? rejectionReason)
+    {
+        var orderBook = orderBookLookup.OrderBook;
+        var syntheticEstimate = new TakerBuyFillEstimate(
+            Filled: true,
+            RejectionReason: null,
+            AverageFillPrice: limitPrice,
+            SizeShares: sizeShares,
+            NotionalUsd: notionalUsd,
+            TargetSizeShares: sizeShares,
+            MaxAllowedPrice: limitPrice,
+            BestBid: orderBook?.BestBid,
+            BestAsk: orderBook?.BestAsk,
+            SpreadAbs: orderBook?.SpreadAbs,
+            LevelsUsed: 0);
+        return CreateTakerOutcomePricingSnapshot(
+            outcome,
+            targetNotionalUsd,
+            orderBookLookup,
+            syntheticEstimate,
+            rejectionReason);
     }
 
     private decimal GetPaperTakerMaxAllowedPrice(decimal referencePrice)
@@ -5834,7 +6063,12 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
             root["pre_gtd_order_execution_mode"] = orderExecutionMode?.ToString();
         }
 
-        root["opening_limit_price_mode"] = "selected_entry_quote_price";
+        var isRestingLimit = root.TryGetPropertyValue("resting_limit_due_to_empty_ask_side", out var restingLimitNode) &&
+            bool.TryParse(restingLimitNode?.ToString(), out var restingLimitValue) &&
+            restingLimitValue;
+        root["opening_limit_price_mode"] = isRestingLimit
+            ? "resting_limit_no_executable_ask_depth"
+            : "selected_entry_quote_price";
         root["limit_price"] = limitPrice;
         root["break_even_pricing_enabled"] = false;
         root["opening_limit_pricing_rejection_reason"] = null;
@@ -7136,6 +7370,95 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
         });
     }
 
+    private static string BuildRestingTakerPaperEntryRawDecisionJson(
+        PolymarketGammaMarket market,
+        BtcUpDown5mOutcomeQuote outcome,
+        BtcUpDown5mStrategyVariant variant,
+        TakerOrderBookLookupResult orderBookLookup,
+        decimal limitPrice,
+        decimal targetNotionalUsd,
+        BtcMinimumStakeSizing sizing,
+        decimal clobGammaDiff,
+        DateTimeOffset nowUtc,
+        IReadOnlyList<BtcTakerOutcomePricingSnapshot>? outcomeSelectionSnapshots)
+    {
+        var orderBook = orderBookLookup.OrderBook;
+        var marketStartUtc = BtcUpDown5mMarketAnalyzer.GetWindowStartUtc(market);
+        var entryDueAtUtc = GetEntryDueAtUtc(marketStartUtc, variant);
+        var cacheOrderBook = orderBookLookup.CacheOrderBook;
+        decimal? noEstimatedFillPrice = null;
+        decimal? noEstimatedFillShares = null;
+        decimal? noEstimatedFillNotional = null;
+        return JsonSerializer.Serialize(new
+        {
+            pricing_mode = "paper_taker_resting_limit",
+            order_execution_mode = OpeningLimitOrderType,
+            quote_pricing_mode = "resting_limit_no_executable_ask_depth",
+            resting_limit_due_to_empty_ask_side = true,
+            empty_side_reason = SignalReasonCodes.MissingOrderBookEmptySide,
+            strategy_code = variant.Code,
+            outcome_selection_source = GetTakerOutcomeSelectionSource(variant, outcomeSelectionSnapshots),
+            source = orderBookLookup.Source,
+            rest_attempted = orderBookLookup.RestAttempted,
+            cache_status = orderBookLookup.CacheStatus?.ToString(),
+            cache_quote_exchange_timestamp_utc = cacheOrderBook?.SnapshotAtUtc,
+            cache_age_ms = orderBookLookup.CacheAge?.TotalMilliseconds,
+            cache_best_bid = cacheOrderBook?.BestBid,
+            cache_best_ask = cacheOrderBook?.BestAsk,
+            cache_has_executable_ask_depth = cacheOrderBook is not null && HasExecutableAskDepth(cacheOrderBook),
+            quote_received_at_utc = nowUtc,
+            quote_exchange_timestamp_utc = orderBook?.SnapshotAtUtc,
+            quote_age_ms = orderBookLookup.Age?.TotalMilliseconds,
+            market_id = market.MarketId,
+            market_slug = market.Slug,
+            market_start_utc = marketStartUtc,
+            market_end_utc = market.EndDateUtc,
+            entry_delay_seconds = variant.EntryDelaySeconds,
+            entry_due_at_utc = entryDueAtUtc,
+            decision_delay_ms = GetDecisionDelayMilliseconds(entryDueAtUtc, nowUtc),
+            condition_id = market.ConditionId,
+            asset_id = outcome.AssetId,
+            outcome = outcome.Outcome,
+            best_bid = orderBook?.BestBid,
+            best_ask = orderBook?.BestAsk,
+            spread = orderBook?.SpreadAbs,
+            last_trade_price = orderBook?.LastTradePrice,
+            tick_size = orderBook?.TickSize,
+            min_order_size = orderBook?.MinOrderSize,
+            has_executable_ask_depth = orderBook is not null && HasExecutableAskDepth(orderBook),
+            strategy_entry_price_cap = TryGetStandardEntryPriceCap(variant),
+            stake_multiplier = sizing.StakeMultiplier,
+            minimum_stake_safety_multiplier = sizing.SafetyMultiplier,
+            minimum_notional_usd = sizing.MinimumNotionalUsd,
+            raw_target_notional_usd = sizing.RawTargetNotionalUsd,
+            stake_notional_rounding = sizing.RoundingMode,
+            target_notional_usd = targetNotionalUsd,
+            target_size_shares = sizing.TargetSizeShares,
+            max_allowed_price = limitPrice,
+            limit_price = limitPrice,
+            estimated_fill_price = noEstimatedFillPrice,
+            estimated_fill_shares = noEstimatedFillShares,
+            estimated_fill_notional = noEstimatedFillNotional,
+            levels_used = 0,
+            gamma_outcome_price = outcome.Price,
+            gamma_fetched_at_utc = market.FetchedAtUtc,
+            clob_vs_gamma_diff = clobGammaDiff,
+            outcome_selection_candidates = outcomeSelectionSnapshots?
+                .Select(ToTakerOutcomePricingSnapshotJson)
+                .ToArray(),
+            asks = orderBook?.Asks
+                .OrderBy(level => level.Price)
+                .Take(20)
+                .Select(level => new { price = level.Price, size = level.Size })
+                .ToArray(),
+            bids = orderBook?.Bids
+                .OrderByDescending(level => level.Price)
+                .Take(20)
+                .Select(level => new { price = level.Price, size = level.Size })
+                .ToArray()
+        });
+    }
+
     private string BuildTakerPaperRejectionDiagnosticsJson(
         PolymarketGammaMarket market,
         BtcUpDown5mStrategyVariant variant,
@@ -7217,7 +7540,14 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
             return GammaOutcomePriceSource;
         }
 
-        return outcomeSelectionSnapshots is null ? null : "clob_executable_vwap";
+        if (outcomeSelectionSnapshots is null)
+        {
+            return null;
+        }
+
+        return outcomeSelectionSnapshots.Any(snapshot => !snapshot.HasExecutableAskDepth)
+            ? "clob_resting_limit"
+            : "clob_executable_vwap";
     }
 
     private static decimal? TryGetStandardEntryPriceCap(BtcUpDown5mStrategyVariant variant)

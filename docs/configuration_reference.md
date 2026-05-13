@@ -552,31 +552,34 @@ settlement metadata only. The worker evaluates both outcome assets from fresh
 CLOB/WebSocket executable depth, with REST CLOB `/book` fallback when cached
 depth is missing or stale, computes executable ask-depth BUY VWAP for currently
 available executable asks, then selects `Less` as the lower executable VWAP and `More` as the higher
-executable VWAP. Capped `Less ... Below ...` and `More ... Below ...` variants
+executable VWAP. If a candidate book exists but has no executable asks, the
+worker creates a resting GTD BUY limit from the Gamma reference plus
+`PaperTakerMaxReferenceSlippage` instead of skipping immediately. Capped `Less ... Below ...` and `More ... Below ...` variants
 keep the standard CLOB-first selector at their respective delays, but they place
 a GTD limit BUY at the configured `Below` cap instead of requiring
 immediate executable liquidity below that cap. The
 `Gamma`-suffixed variants intentionally use the older
 Gamma-first selector for comparison: `Less Gamma` selects the lower Gamma
 outcome price, `More Gamma` selects the higher Gamma outcome price, and the
-selected asset then uses the CLOB/WebSocket quote as the GTD limit seed. The
+selected asset then uses the CLOB/WebSocket quote as the GTD limit seed, or the
+same resting-limit empty-ask fallback when the selected book has no asks. The
 `More ... Gamma Below ...` variants keep that Gamma-first selection but place
 a GTD limit BUY at the configured cap. The Gamma variants are Paper comparison strategies and are not submitted to live
 trading. CLOB/WebSocket/REST prices are trusted for BTC taker Paper; CLOB/Gamma
-drift remains diagnostic and is not a skip reason. The run is skipped if either
-side lacks a usable quote, the quote is stale, spread is too wide, the submitted
+drift remains diagnostic and is not a skip reason. The run is skipped if a
+needed order book is missing/stale, spread is too wide on available executable quotes, the submitted
 target size is below market minimum, both executable prices are tied, or a standard selected
 executable side violates the boundary: `Less` stays below `0.5`, and `More`
 stays above `0.5`. `paper_orders.raw_decision_json` stores the selected entry
 quote, source, age, top of book, top depth, Gamma reference, max price,
 estimated VWAP, reserved target notional, `order_execution_mode=GTD`, `limit_price`, and an `outcome_selection_source` of
-`clob_executable_vwap` or `gamma_outcome_price`; GTD variants store
+`clob_executable_vwap`, `clob_resting_limit`, or `gamma_outcome_price`; GTD variants store
 the final order diagnostics with `order_execution_mode=GTD`,
 `opening_limit_price_mode`, and `limit_price`.
 When a BTC taker run skips with quote/order-book context, the lifecycle row's
 `skip_diagnostics_json` stores cache status, REST `/book` usage, quote age,
 top bid/ask depth, executable-depth flags, and both outcome candidates so
-`missing_orderbook_empty_side` can be diagnosed after the fact.
+non-empty-book liquidity gaps can be diagnosed after the fact.
 The extra
 `BTC Less 180 Martin` variant uses the 180-second `Less` outcome, waits for
 fresh consecutive settled losses from the standard `BTC Up or Down 5m Less 180`
@@ -735,7 +738,7 @@ leader exits can still be tracked.
 - `PaperTakerRestFallbackEnabled`: when true, fetches CLOB `/book` before rejecting a missing/stale/incomplete WebSocket depth cache; default `true`.
 - `PaperTakerMaxQuoteAgeMilliseconds`: maximum age for BTC Paper taker quote/depth; default `1500`.
 - `PaperTakerMaxEntryPrice`: absolute cap for any BTC Paper taker BUY; default `0.80`.
-- `PaperTakerMaxReferenceSlippage`: maximum allowed price above each outcome's Gamma reference before the temporary best-ask allowance is applied; in taker Paper this is a diagnostic/reference cap, not the selector.
+- `PaperTakerMaxReferenceSlippage`: maximum resting-limit uplift above each outcome's Gamma reference when executable ask depth is absent; executable quotes can still seed a higher GTD limit through the temporary best-ask allowance.
 - `PaperTakerMaxSpreadAbs`: maximum absolute bid/ask spread accepted for BTC Paper taker entries; default `0.10`.
 - `PaperTakerMaxGammaClobDiff`: legacy diagnostic threshold retained in config; BTC taker Paper now records Gamma/CLOB drift but does not skip solely because of it.
 - `OpeningLimitDynamicBreakEvenPricingEnabled`: when true, `Middle`, `Middle Revert`, `Skip`, and `Skip Revert` GTD limit prices are derived from each strategy's own recent settled win-rate; default `true`.

@@ -419,3 +419,10 @@ missing_orderbook_empty_side - это мы скипаем сами на свое
 
 Result:
 Confirmed from code that `missing_orderbook_empty_side` is a local BTC taker/GTD pricing skip before Paper order creation. The worker first checks fresh WebSocket order-book cache and optional REST CLOB `/book`; if the selected asset has no executable ask level (`price > 0 && price <= 1 && size > 0`), it rejects with `SignalReasonCodes.MissingOrderBookEmptySide`, updates the strategy run to `Skipped`, and does not create a Paper order. Recent Less 270 Gamma diagnostics showed empty ask arrays with bids present, meaning the asset could be sold into but not bought at that instant.
+
+## 2026-05-13T12:22:44.6333643+00:00
+Request:
+Мы же договаривались, что мы ставим всегда в надежде, что в стакане появятся встречные заявки.
+
+Result:
+Implemented the agreed BTC Paper GTD behavior for empty ask sides. When a selected/orderbook candidate has a present book snapshot but no executable asks, `missing_orderbook_empty_side` no longer skips; the worker now creates a pending resting GTD BUY limit using the Gamma reference plus `PaperTakerMaxReferenceSlippage`, capped by `PaperTakerMaxEntryPrice`, and records empty-ask diagnostics in `paper_orders.raw_decision_json`. Truly missing/stale books and other validation guards still skip. Added regression tests for standard CLOB-first and Gamma-first empty-ask entries, updated README/config docs, rebuilt and restarted the Debug service, and confirmed IPC `Running`, Paper active, Live paused, kill switch false, `lastError=null`. Verification passed: focused BTC processor tests `109/109`, full solution tests `447/447`, Debug service build, and `git diff --check`.

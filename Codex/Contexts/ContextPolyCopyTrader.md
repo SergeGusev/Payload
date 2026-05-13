@@ -1,3 +1,17 @@
+## Active Update 2026-05-13 Empty Ask Resting GTD Orders
+Goal: Make BTC Paper GTD entries place resting limit orders when the selected order book exists but has an empty ask side.
+Status: Completed
+Done:
+- Changed BTC taker/GTD Paper pricing so `missing_orderbook_empty_side` no longer skips when a book snapshot exists; it now creates a pending resting GTD BUY limit using the Gamma reference plus `PaperTakerMaxReferenceSlippage`, capped by `PaperTakerMaxEntryPrice`.
+- Added raw decision diagnostics for empty-ask resting orders: `pre_gtd_pricing_mode=paper_taker_resting_limit`, `opening_limit_price_mode=resting_limit_no_executable_ask_depth`, `resting_limit_due_to_empty_ask_side=true`, and `empty_side_reason=missing_orderbook_empty_side`.
+- Kept truly missing/stale order books, invalid sizing, directional boundary violations, ties, and other existing guards as skips.
+- Added regression coverage for both CLOB-first standard selection and Gamma-first selection placing pending orders despite an empty ask side.
+- Updated README and configuration reference to document the empty-ask resting-limit behavior.
+- Rebuilt and restarted the Debug service on the new code; IPC status is `Running`, Paper active, Live paused, kill switch false, and `lastError=null`.
+Next: Monitor new BTC runs to confirm `missing_orderbook_empty_side` disappears from active skip reasons and those cases move to entered/pending orders or later `gtd_limit_not_filled`.
+Notes: Verification passed: focused BTC processor tests `109/109`; full solution tests `447/447` using isolated `BaseOutputPath`; normal Debug service build passed with existing nullable warnings in `PostgresAppRepository.cs`; `git diff --check` passed with line-ending warnings only.
+Blockers: None.
+
 ## Active Update 2026-05-13 Missing OrderBook Empty Side Meaning
 Goal: Clarify whether `missing_orderbook_empty_side` is a local skip and what it means.
 Status: Completed

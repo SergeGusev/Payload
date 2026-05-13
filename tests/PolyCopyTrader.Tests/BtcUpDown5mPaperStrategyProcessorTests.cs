@@ -1355,7 +1355,7 @@ public sealed class BtcUpDown5mPaperStrategyProcessorTests
     }
 
     [Fact]
-    public async Task ProcessAsync_TakerPaperPricingPersistsMissingOrderBookEmptySideDiagnostics()
+    public async Task ProcessAsync_TakerPaperPricingPlacesRestingLimitWhenAskSideEmpty()
     {
         var now = DateTimeOffset.UtcNow;
         var repository = new TestAppRepository();
@@ -1384,21 +1384,86 @@ public sealed class BtcUpDown5mPaperStrategyProcessorTests
 
         var result = await processor.ProcessAsync();
 
-        Assert.Equal(0, result.EntriesPlaced);
-        Assert.Equal(1, result.RunsSkipped);
+        Assert.Equal(1, result.EntriesPlaced);
+        Assert.Equal(0, result.RunsSkipped);
         var run = Assert.Single(repository.StrategyMarketPaperRuns);
-        Assert.Equal(StrategyMarketPaperRunStatuses.Skipped, run.Status);
-        Assert.Equal(SignalReasonCodes.MissingOrderBookEmptySide, run.SkipReason);
-        Assert.NotNull(run.SkipDiagnosticsJson);
-        Assert.Contains("\"diagnostic_type\":\"btc_taker_orderbook_rejection\"", run.SkipDiagnosticsJson, StringComparison.Ordinal);
-        Assert.Contains("\"reason\":\"missing_orderbook_empty_side\"", run.SkipDiagnosticsJson, StringComparison.Ordinal);
-        Assert.Contains("\"asset_id\":\"asset-up\"", run.SkipDiagnosticsJson, StringComparison.Ordinal);
-        Assert.Contains("\"source\":\"clob_book\"", run.SkipDiagnosticsJson, StringComparison.Ordinal);
-        Assert.Contains("\"rest_attempted\":true", run.SkipDiagnosticsJson, StringComparison.Ordinal);
-        Assert.Contains("\"cache_status\":\"Missing\"", run.SkipDiagnosticsJson, StringComparison.Ordinal);
-        Assert.Contains("\"has_executable_ask_depth\":false", run.SkipDiagnosticsJson, StringComparison.Ordinal);
-        Assert.Contains("\"asks\":[]", run.SkipDiagnosticsJson, StringComparison.Ordinal);
-        Assert.Empty(repository.PaperOrders);
+        Assert.Equal(StrategyMarketPaperRunStatuses.Entered, run.Status);
+        Assert.Null(run.SkipReason);
+        Assert.Equal("asset-up", run.SelectedAssetId);
+        Assert.Equal("Up", run.SelectedOutcome);
+        Assert.Equal(0.40m, run.EntryPrice);
+        Assert.Equal(2.5m, run.SizeShares);
+        Assert.Equal(1m, run.StakeUsd);
+
+        var order = Assert.Single(repository.PaperOrders);
+        Assert.Equal(PaperOrderStatus.Pending, order.Status);
+        Assert.Equal("asset-up", order.AssetId);
+        Assert.Equal(0.40m, order.Price);
+        Assert.Equal(2.5m, order.SizeShares);
+        Assert.Equal(1m, order.NotionalUsd);
+        Assert.Contains("\"pricing_mode\":\"paper_gtd_limit\"", order.RawDecisionJson, StringComparison.Ordinal);
+        Assert.Contains("\"pre_gtd_pricing_mode\":\"paper_taker_resting_limit\"", order.RawDecisionJson, StringComparison.Ordinal);
+        Assert.Contains("\"opening_limit_price_mode\":\"resting_limit_no_executable_ask_depth\"", order.RawDecisionJson, StringComparison.Ordinal);
+        Assert.Contains("\"resting_limit_due_to_empty_ask_side\":true", order.RawDecisionJson, StringComparison.Ordinal);
+        Assert.Contains("\"empty_side_reason\":\"missing_orderbook_empty_side\"", order.RawDecisionJson, StringComparison.Ordinal);
+        Assert.Contains("\"source\":\"clob_book\"", order.RawDecisionJson, StringComparison.Ordinal);
+        Assert.Contains("\"rest_attempted\":true", order.RawDecisionJson, StringComparison.Ordinal);
+        Assert.Contains("\"cache_status\":\"Missing\"", order.RawDecisionJson, StringComparison.Ordinal);
+        Assert.Contains("\"has_executable_ask_depth\":false", order.RawDecisionJson, StringComparison.Ordinal);
+        Assert.Contains("\"asks\":[]", order.RawDecisionJson, StringComparison.Ordinal);
+        Assert.Empty(repository.PaperFills);
+    }
+
+    [Fact]
+    public async Task ProcessAsync_GammaSelectionPlacesRestingLimitWhenSelectedAskSideEmpty()
+    {
+        var now = DateTimeOffset.UtcNow;
+        var repository = new TestAppRepository();
+        repository.PolymarketGammaMarkets.Add(CreateMarket(
+            now.AddSeconds(-60),
+            now.AddMinutes(3),
+            upPrice: 0.35m,
+            downPrice: 0.65m));
+        var processor = CreateTakerProcessorCore(
+            repository,
+            orderBooks: [],
+            clobOrderBooks:
+            [
+                OrderBook(
+                    "asset-up",
+                    [new OrderBookLevel(0.34m, 100m)],
+                    [],
+                    now),
+                OrderBook(
+                    "asset-down",
+                    [new OrderBookLevel(0.64m, 100m)],
+                    [new OrderBookLevel(0.66m, 100m)],
+                    now)
+            ],
+            Less60GammaVariant.Code);
+
+        var result = await processor.ProcessAsync();
+
+        Assert.Equal(1, result.EntriesPlaced);
+        Assert.Equal(0, result.RunsSkipped);
+        var run = Assert.Single(repository.StrategyMarketPaperRuns);
+        Assert.Equal(StrategyMarketPaperRunStatuses.Entered, run.Status);
+        Assert.Equal(Less60GammaVariant.Id, run.StrategyId);
+        Assert.Equal("asset-up", run.SelectedAssetId);
+        Assert.Equal("Up", run.SelectedOutcome);
+        Assert.Equal(0.40m, run.EntryPrice);
+
+        var order = Assert.Single(repository.PaperOrders);
+        Assert.Equal(PaperOrderStatus.Pending, order.Status);
+        Assert.Equal(Less60GammaVariant.Id, order.StrategyId);
+        Assert.Equal("asset-up", order.AssetId);
+        Assert.Equal(0.40m, order.Price);
+        Assert.Contains("\"outcome_selection_source\":\"gamma_outcome_price\"", order.RawDecisionJson, StringComparison.Ordinal);
+        Assert.Contains("\"pre_gtd_pricing_mode\":\"paper_taker_resting_limit\"", order.RawDecisionJson, StringComparison.Ordinal);
+        Assert.Contains("\"opening_limit_price_mode\":\"resting_limit_no_executable_ask_depth\"", order.RawDecisionJson, StringComparison.Ordinal);
+        Assert.Contains("\"resting_limit_due_to_empty_ask_side\":true", order.RawDecisionJson, StringComparison.Ordinal);
+        Assert.Contains("\"empty_side_reason\":\"missing_orderbook_empty_side\"", order.RawDecisionJson, StringComparison.Ordinal);
+        Assert.Empty(repository.PaperFills);
     }
 
     [Fact]
