@@ -1,3 +1,16 @@
+## Active Update 2026-05-13 Paper History Reset After PreOpen Fix
+Goal: Clear Paper history again after the BTC PreOpen due-throughput fix so fresh statistics start from a clean sample.
+Status: Completed
+Done:
+- Stopped the running Debug service before touching PostgreSQL.
+- Cleared Paper execution/accounting tables in one transaction: `strategy_market_paper_runs`, `paper_orders`, `paper_fills`, `paper_positions`, `paper_position_settlements`, `paper_copied_trader_performance`, `paper_copied_leader_positions`, `paper_copied_leader_activity_events`, `paper_live_shadow_decisions`, and `paper_live_shadow_discrepancies`.
+- Preserved strategies, market data, signals, live orders, and on-chain audit/dedupe rows; nulled `paper_order_id` links before deleting Paper orders.
+- Verified all cleared Paper tables were zero before restarting the service.
+- Removed the temporary C# reset utility and restarted the Debug service.
+Next: Let the restarted service collect a new Paper sample under commit `79930e0` and monitor Dashboard delay metrics.
+Notes: Pre-clean counts were `strategy_market_paper_runs=2948`, `paper_orders=524`, and `paper_copied_trader_performance=694`; other Paper fill/position/settlement/shadow tables were already zero. IPC `/status` after restart is `Running`, Paper active, Live paused, kill switch false, and `lastError=null`; service PID is `39892`, started at `2026-05-13T06:45:42.6230446Z`. No production code changed.
+Blockers: None.
+
 ## Active Update 2026-05-13 BTC PreOpen Due Throughput
 Goal: Prevent PreOpen due entries from being delayed or skipped by slow BTC entry queue work.
 Status: Completed

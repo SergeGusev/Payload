@@ -27,3 +27,10 @@ Request:
 
 Result:
 Implemented a BTC PreOpen due-entry throughput fix. PreOpen fixed-direction entries now run through a priority pass that selects the complete earliest due timestamp group without being split by `MaxEntriesPerCycle`, while ordinary BTC entries keep the global capped queue. Added per-cycle CLOB `/book` fallback task caching per asset so a shared PreOpen token makes one fallback request instead of repeating the same slow failure/timeout per strategy. Raised Debug `MaxConcurrentEntryDecisions` to 32, updated docs, added regression coverage for complete PreOpen due-group placement with shared fallback fetch, rebuilt and restarted the Debug service, cleared fresh Paper history again, and verified IPC `/status` is `Running` with Paper active, Live paused, kill switch false, and `lastError=null`. Verification passed with focused BTC processor tests `100/100`, full solution tests `438/438`, normal Debug service build, and `git diff --check` with line-ending warnings only.
+
+## 2026-05-13T06:46:04.2490766+00:00
+Request:
+Ок, чисть историю и начнём заново
+
+Result:
+Stopped the Debug service, cleared Paper execution/accounting history in PostgreSQL, verified the tracked Paper tables were zero before restart, removed the temporary C# reset utility, and restarted the Debug service. Pre-clean counts were `strategy_market_paper_runs=2948`, `paper_orders=524`, and `paper_copied_trader_performance=694`; `paper_fills`, `paper_positions`, `paper_position_settlements`, copied-leader activity, and paper-live-shadow tables were already zero. Preserved strategies, market data, signals, live orders, and on-chain audit/dedupe history, while nulling any `paper_order_id` links before deleting Paper orders. IPC `/status` after restart returned `Running`, Paper active, Live paused, kill switch false, and `lastError=null`.
