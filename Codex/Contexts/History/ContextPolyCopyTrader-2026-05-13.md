@@ -41,3 +41,11 @@ Request:
 
 Result:
 Monitored the fresh Paper sample with a temporary read-only C# Npgsql utility, comparing `strategy_market_paper_runs.entry_due_at_utc` with linked `paper_orders.created_at_utc` / run `entered_at_utc`. Clean 5m PreOpen groups after reset were roughly `4.7s` average and `6.8s` max once restart noise was excluded; 60/90/120/150s offset groups were mostly sub-second to about `6s` in the latest cycle. The large remaining delays were concentrated in Binance/open-family entries: market `btc-updown-5m-1778655300` reached about `75.9s` after due, and the next market `btc-updown-5m-1778655600` still showed about `32.8s` for Binance-at-open. The likely cause is scheduling priority: PreOpen entries for the next market have the same `entry_due_at_utc` as current-market open/Binance entries, and the new PreOpen priority pass can run before those more time-sensitive current-market entries. The temporary utility was removed; no production code changed.
+
+## 2026-05-13T07:15:59.8008082+00:00
+Request:
+Ты писал: PreOpen для следующего рынка имеет тот же entry_due_at_utc, что и open/Binance стратегии
+  текущего рынка. Мы можем сменить приоритеты так, чтобы стратегии для текущего рынка имели приоритет над стратегиями будущих рынков ?
+
+Result:
+Changed the BTC entry scheduler so regular/current-market due entries and Martin due entries run before the PreOpen due batch both before and after observation. PreOpen still drains the complete earliest due timestamp group without `MaxEntriesPerCycle` splitting, but it can no longer block same-cycle current-market open/delayed entries with the same due timestamp. Added regression coverage proving a current-market always-up entry is placed before a same-due future PreOpen group while the PreOpen group still drains fully with `MaxEntriesPerCycle=1`. Updated README, ran focused BTC processor tests `101/101`, ran full solution tests `439/439`, rebuilt normal Debug service output, and restarted the service. IPC `/status` after restart returned `Running`, Paper active, Live paused, kill switch false, and `lastError=null`.

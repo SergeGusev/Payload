@@ -1706,6 +1706,80 @@ public sealed class BtcUpDown5mPaperStrategyProcessorTests
     }
 
     [Fact]
+    public async Task ProcessAsync_CurrentMarketEntriesRunBeforeSameDueFuturePreOpenEntries()
+    {
+        var now = DateTimeOffset.UtcNow;
+        var currentMarketStart = now.AddSeconds(-2);
+        var currentMarketEnd = currentMarketStart.AddMinutes(5);
+        var futureMarketStart = currentMarketStart.AddMinutes(5);
+        var futureMarketEnd = futureMarketStart.AddMinutes(5);
+        var preOpenVariants = new[]
+        {
+            StrategyIds.BtcUpDown5mVariants.Single(item => item.Code == "btc_up_down_5m_preopen_half_up_49"),
+            StrategyIds.BtcUpDown5mVariants.Single(item => item.Code == "btc_up_down_5m_preopen_half_up_48"),
+            StrategyIds.BtcUpDown5mVariants.Single(item => item.Code == "btc_up_down_5m_preopen_half_up_47")
+        };
+        var repository = new TestAppRepository();
+        var currentMarket = CreateMarket(
+            currentMarketStart,
+            currentMarketEnd,
+            upPrice: 0.50m,
+            downPrice: 0.50m,
+            marketId: "current-market",
+            conditionId: "current-condition",
+            upAssetId: "current-up",
+            downAssetId: "current-down",
+            orderMinSize: 5m);
+        var futureMarket = CreateMarket(
+            futureMarketStart,
+            futureMarketEnd,
+            upPrice: 0.50m,
+            downPrice: 0.50m,
+            marketId: "future-market",
+            conditionId: "future-condition",
+            upAssetId: "future-up",
+            downAssetId: "future-down",
+            orderMinSize: 5m);
+        repository.PolymarketGammaMarkets.Add(currentMarket);
+        repository.PolymarketGammaMarkets.Add(futureMarket);
+        repository.StrategyMarketPaperRuns.Add(CreateObservedRun(
+            AlwaysUpVariant,
+            currentMarket,
+            currentMarketStart,
+            currentMarketStart.AddMinutes(-1)));
+        repository.StrategyMarketPaperRuns.AddRange(preOpenVariants.Select(variant =>
+            CreateObservedRun(variant, futureMarket, futureMarketStart, currentMarketStart.AddMinutes(-1))));
+        var processor = CreateProcessorCoreWithOptions(
+            repository,
+            [],
+            [
+                OrderBook("current-up", [], [], now, 5m),
+                OrderBook("future-up", [], [], now, 5m)
+            ],
+            _ => { },
+            [],
+            CreateBtcOptions(
+                paperTakerPricingEnabled: false,
+                enabledVariantCodes: preOpenVariants.Select(variant => variant.Code).Append(AlwaysUpVariant.Code).ToArray(),
+                maxEntriesPerCycle: 1,
+                maxConcurrentEntryDecisions: 1,
+                maxMarketsPerCycle: 0));
+
+        var result = await processor.ProcessAsync();
+
+        Assert.Equal(0, result.MarketsObserved);
+        Assert.Equal(4, result.EntriesPlaced);
+        Assert.Equal(0, result.RunsSkipped);
+        Assert.Equal(4, repository.PaperOrders.Count);
+        Assert.Equal(AlwaysUpVariant.Id, repository.PaperOrders[0].StrategyId);
+        Assert.All(repository.StrategyMarketPaperRuns, run => Assert.Equal(StrategyMarketPaperRunStatuses.Entered, run.Status));
+        foreach (var variant in preOpenVariants)
+        {
+            Assert.Contains(repository.PaperOrders, order => order.StrategyId == variant.Id);
+        }
+    }
+
+    [Fact]
     public async Task ProcessAsync_PreOpenFullPeriodAlwaysDownPlacesFourHourGtdLimit()
     {
         var now = DateTimeOffset.UtcNow;
@@ -4792,13 +4866,14 @@ public sealed class BtcUpDown5mPaperStrategyProcessorTests
         int maxEntriesPerCycle = 25,
         int maxConcurrentEntryDecisions = 1,
         int maxSettlementsPerCycle = 50,
-        int maxConcurrentSettlements = 1)
+        int maxConcurrentSettlements = 1,
+        int maxMarketsPerCycle = 500)
     {
         return new BtcUpDown5mStrategyOptions
         {
             StakeUsd = 1m,
             EntryGraceSeconds = 10,
-            MaxMarketsPerCycle = 500,
+            MaxMarketsPerCycle = maxMarketsPerCycle,
             MaxEntriesPerCycle = maxEntriesPerCycle,
             MaxConcurrentEntryDecisions = maxConcurrentEntryDecisions,
             MaxSettlementsPerCycle = maxSettlementsPerCycle,

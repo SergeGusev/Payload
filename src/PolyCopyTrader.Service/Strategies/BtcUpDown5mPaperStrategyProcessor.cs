@@ -100,12 +100,6 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
             .Where(variant => !IsPreOpenFixedDirectionOpeningLimitEntry(variant))
             .ToArray();
 
-        controlState.RecordLoop($"BTC5mStrategy placing PreOpen due entries before observe. Variants={preOpenEntryVariants.Length}", null);
-        var (preOpenEntriesPlacedBeforeObserve, preOpenEntrySkippedBeforeObserve) = await PlaceDuePreOpenEntriesAsync(
-            DateTimeOffset.UtcNow,
-            preOpenEntryVariants,
-            strategySettings,
-            cancellationToken);
         controlState.RecordLoop($"BTC5mStrategy placing regular due entries before observe. Variants={regularEntryVariants.Length}", null);
         var (regularEntriesPlacedBeforeObserve, regularEntrySkippedBeforeObserve) = await PlaceDueEntriesAsync(
             DateTimeOffset.UtcNow,
@@ -123,6 +117,12 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
             martinEntryVariants,
             strategySettings,
             cancellationToken);
+        controlState.RecordLoop($"BTC5mStrategy placing PreOpen due entries before observe. Variants={preOpenEntryVariants.Length}", null);
+        var (preOpenEntriesPlacedBeforeObserve, preOpenEntrySkippedBeforeObserve) = await PlaceDuePreOpenEntriesAsync(
+            DateTimeOffset.UtcNow,
+            preOpenEntryVariants,
+            strategySettings,
+            cancellationToken);
         controlState.RecordLoop("BTC5mStrategy observing markets", null);
         var observeResult = await ObserveMarketsAsync(
             DateTimeOffset.UtcNow,
@@ -131,12 +131,6 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
             cancellationToken);
         var observed = observeResult.Observed;
         var observeSkipped = observeResult.Skipped;
-        controlState.RecordLoop($"BTC5mStrategy placing PreOpen due entries after observe. Variants={preOpenEntryVariants.Length}", null);
-        var (preOpenEntriesPlacedAfterObserve, preOpenEntrySkippedAfterObserve) = await PlaceDuePreOpenEntriesAsync(
-            DateTimeOffset.UtcNow,
-            preOpenEntryVariants,
-            strategySettings,
-            cancellationToken);
         controlState.RecordLoop($"BTC5mStrategy placing regular due entries after observe. Variants={regularEntryVariants.Length}", null);
         var (regularEntriesPlacedAfterObserve, regularEntrySkippedAfterObserve) = await PlaceDueEntriesAsync(
             DateTimeOffset.UtcNow,
@@ -151,6 +145,12 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
         var (martinEntriesPlacedAfterObserve, martinEntrySkippedAfterObserve) = await PlaceDueEntriesAsync(
             DateTimeOffset.UtcNow,
             martinEntryVariants,
+            strategySettings,
+            cancellationToken);
+        controlState.RecordLoop($"BTC5mStrategy placing PreOpen due entries after observe. Variants={preOpenEntryVariants.Length}", null);
+        var (preOpenEntriesPlacedAfterObserve, preOpenEntrySkippedAfterObserve) = await PlaceDuePreOpenEntriesAsync(
+            DateTimeOffset.UtcNow,
+            preOpenEntryVariants,
             strategySettings,
             cancellationToken);
         controlState.RecordLoop("BTC5mStrategy settling due runs after entries", null);

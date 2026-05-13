@@ -1,3 +1,16 @@
+## Active Update 2026-05-13 Current Market Entry Priority
+Goal: Ensure current-market BTC entries run before same-timestamp PreOpen entries for future markets.
+Status: Completed
+Done:
+- Reordered the BTC worker entry cycle so regular due entries and Martin due entries run before the PreOpen due batch both before and after market observation.
+- Kept the PreOpen complete-earliest-due-group behavior intact, but removed its ability to block same-cycle current-market open/delayed strategies.
+- Added a regression test proving a current-market always-up entry is placed before a same-due future PreOpen group while the PreOpen group still drains completely with `MaxEntriesPerCycle=1`.
+- Updated README documentation for the new current-market-before-future-PreOpen priority.
+- Rebuilt and restarted the Debug service on the new code.
+Next: Monitor the next clean 5-minute windows for Binance/open delay; ignore the first window after restart if it includes restart noise.
+Notes: Focused BTC processor tests passed (`101/101`); full solution tests passed (`439/439`); normal Debug service build passed with existing nullable warnings in `PostgresAppRepository.cs`; IPC `/status` after restart is `Running`, Paper active, Live paused, kill switch false, and `lastError=null`; service PID is `3520`, started at `2026-05-13T07:15:34.0482652Z`.
+Blockers: None.
+
 ## Active Update 2026-05-13 Entry Delay Monitoring
 Goal: Monitor how long Paper entries take from planned `entry_due_at_utc` to actual Paper order creation after the clean reset.
 Status: Completed
