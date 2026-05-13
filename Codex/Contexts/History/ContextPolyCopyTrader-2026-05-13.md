@@ -11,3 +11,10 @@ User asked to implement the proposed settlement fix for the low `1h PreOpen Full
 
 Result:
 Implemented a global BTC settlement queue across enabled variants instead of sequential per-variant settlement with a 5-second cycle budget. Added a multi-strategy due-run repository query, settlement prioritization for filled/partially-filled/expired runs, bounded concurrent settlement via `BtcUpDown5mStrategy.MaxConcurrentSettlements`, per-cycle Gamma metadata lookup caching, a supporting schema index, docs/config updates, and regression tests showing slow early variants no longer starve `1h PreOpen Full`. Verification passed with focused tests `143/143`, full solution tests `437/437`, normal Debug service build, `git diff --check`, and a service restart with IPC `/status` `Running` and live trading still paused.
+
+## 2026-05-13T05:58:15.0000000+00:00
+Request:
+User asked to clear all Paper history and start collecting Paper results again from a clean slate.
+
+Result:
+Stopped the Debug service, cleared the Paper execution/accounting/run tables in PostgreSQL, preserved strategies/live orders/market data/leader and signal history/on-chain dedupe audit, and nulled old Paper-order links from live/on-chain audit rows before deleting Paper orders. Cleared tables included `strategy_market_paper_runs`, `paper_orders`, `paper_fills`, `paper_positions`, `paper_position_settlements`, `paper_copied_trader_performance`, `paper_copied_leader_positions`, `paper_copied_leader_activity_events`, `paper_live_shadow_decisions`, and `paper_live_shadow_discrepancies`. Verified all cleared tables were zero before restarting the service. Restarted the service; IPC `/status` returned `Running`, Paper active, Live paused, kill switch false, and `lastError=null`. No code changed and the temporary reset tool was removed.

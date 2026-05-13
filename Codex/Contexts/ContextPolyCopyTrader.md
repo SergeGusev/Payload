@@ -1,3 +1,16 @@
+## Active Update 2026-05-13 Paper History Reset
+Goal: Clear existing Paper execution/accounting history so new Paper results are collected from a clean slate.
+Status: Completed
+Done:
+- Stopped the running Debug service before touching the database.
+- Cleared Paper history tables in one PostgreSQL transaction: `strategy_market_paper_runs`, `paper_orders`, `paper_fills`, `paper_positions`, `paper_position_settlements`, `paper_copied_trader_performance`, `paper_copied_leader_positions`, `paper_copied_leader_activity_events`, `paper_live_shadow_decisions`, and `paper_live_shadow_discrepancies`.
+- Preserved `strategies`, `live_orders`, market data, leader/signal history, and on-chain dedupe/audit history; nulled paper-order links from live/on-chain audit rows before deleting Paper orders.
+- Verified the cleared Paper tables were all zero before restarting the service.
+- Restarted the Debug service; IPC `/status` is `Running`, scanning/paper are active, live trading remains paused, kill switch is false, and `lastError=null`.
+Next: Let the service collect fresh Paper rows under the current fill-pricing rules.
+Notes: Pre-clean counts included `paper_orders=82735`, `paper_fills=13883`, `strategy_market_paper_runs=114970`, `paper_positions=13505`, `paper_position_settlements=13313`, and `paper_copied_trader_performance=1606`. No code changed; temporary reset tool was removed. The first reset attempt timed out before commit, then reran successfully with a longer command timeout.
+Blockers: None.
+
 ## Active Update 2026-05-13 BTC Global Settlement Queue
 Goal: Stop BTC settlement starvation by processing due settlement runs from one bounded queue across all enabled BTC variants.
 Status: Completed
