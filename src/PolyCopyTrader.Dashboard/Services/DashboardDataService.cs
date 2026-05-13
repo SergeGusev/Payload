@@ -12,6 +12,8 @@ public sealed class DashboardDataService(
     bool storageConfigured,
     IPolymarketAuthService authService)
 {
+    private const int StrategyDashboardFetchLimit = 10_000;
+
     private IReadOnlyList<StrategyPerformance>? cachedStrategyPerformance;
     private DateTimeOffset cachedStrategyPerformanceAtUtc = DateTimeOffset.MinValue;
     private IReadOnlyList<StrategyRecentPerformance>? cachedStrategyRecentPerformance;
@@ -136,8 +138,7 @@ public sealed class DashboardDataService(
             return cachedStrategyPerformance;
         }
 
-        var strategyLimit = Math.Max(1000, StrategyIds.AllStrategyIds.Count);
-        cachedStrategyPerformance = await repository.GetStrategyPerformanceAsync(strategyLimit, cancellationToken);
+        cachedStrategyPerformance = await repository.GetStrategyPerformanceAsync(StrategyDashboardFetchLimit, cancellationToken);
         cachedStrategyPerformanceAtUtc = nowUtc;
         return cachedStrategyPerformance;
     }
@@ -153,8 +154,7 @@ public sealed class DashboardDataService(
             return cachedStrategyRecentPerformance;
         }
 
-        var strategyRecentLimit = Math.Max(3000, StrategyIds.AllStrategyIds.Count * 3);
-        cachedStrategyRecentPerformance = await repository.GetStrategyRecentPerformanceAsync(strategyRecentLimit, cancellationToken);
+        cachedStrategyRecentPerformance = await repository.GetStrategyRecentPerformanceAsync(StrategyDashboardFetchLimit, cancellationToken);
         cachedStrategyRecentPerformanceAtUtc = nowUtc;
         return cachedStrategyRecentPerformance;
     }

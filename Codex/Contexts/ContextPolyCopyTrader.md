@@ -1,3 +1,15 @@
+## Active Update 2026-05-13 Dashboard Skip Category Empty Fix
+Goal: Fix the dashboard showing an empty grid after selecting `BTC Up or Down 5m Skip`.
+Status: Completed
+Done:
+- Inspected the clipboard screenshot: the `Strategies` tab had category `BTC Up or Down 5m Skip` selected but the grid was empty.
+- Identified the cause as a dashboard fetch-limit mismatch: recent strategy data could expose the Skip category, while the all-strategy grid could omit Skip rows near the end of the ordered strategy list when loaded by an older/smaller strategy-count limit.
+- Changed `DashboardDataService` to fetch up to `10_000` strategies for both all-time and recent strategy grids instead of deriving the limit from `StrategyIds.AllStrategyIds.Count`.
+- Confirmed the running dashboard process is still the old `bin\Debug\net10.0-windows` executable and must be restarted/rebuilt to pick up the fix.
+Next: Restart/rebuild the Dashboard so the running UI uses the new strategy fetch limit.
+Notes: Verification passed: dashboard project build with isolated output succeeded; focused `ConfigurationTests|StorageTests` passed `44/44`; `git diff --check` passed with line-ending warnings only. The first isolated dashboard build hit a `VBCSCompiler` lock on default `obj`, then `dotnet build-server shutdown` and a retry passed.
+Blockers: None.
+
 ## Active Update 2026-05-13 Skip Strategy Visibility Check
 Goal: Check where the BTC 5m Skip strategies went in the dashboard/runtime data.
 Status: Completed

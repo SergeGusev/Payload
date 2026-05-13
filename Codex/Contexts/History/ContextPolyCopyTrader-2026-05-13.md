@@ -444,3 +444,9 @@ Request:
 
 Result:
 Confirmed the BTC 5m Skip strategies were not deleted or disabled. PostgreSQL contains all 10 `btc_up_down_5m_skip_%` rows, all enabled. Dashboard ordering places them near the bottom at rows 1166-1175 out of 1177 strategies, so they are easy to miss after the PreOpen/Sell strategy expansion. Recent activity exists for Skip 1/2/3; Skip 4/5 had no orders in the last hour because their stricter consecutive-result condition did not trigger entries.
+## 2026-05-13T13:05:33.0557053Z
+Request:
+Посмотри на картинку. Я выбрал категорию Skip и там пусто
+
+Result:
+Extracted and inspected the clipboard screenshot. Confirmed the `Strategies` tab showed category `BTC Up or Down 5m Skip` with an empty grid. Fixed `DashboardDataService` so all-time and recent strategy grids fetch up to `10_000` strategy rows instead of relying on `StrategyIds.AllStrategyIds.Count`, which can omit late-ordered Skip rows in an older running dashboard while recent data still exposes the category. Verified with an isolated Dashboard build and focused tests. The currently running dashboard process still needs restart/rebuild to pick up the fix.
