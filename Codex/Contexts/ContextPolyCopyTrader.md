@@ -1,3 +1,16 @@
+## Active Update 2026-05-13 PostgreSQL 192.168.0.101 Retry
+Goal: Retry PostgreSQL reachability at `192.168.0.101`.
+Status: Completed
+Done:
+- Retested `192.168.0.101:5432`; direct .NET TCP connect succeeded and `Test-NetConnection` reported `TcpTestSucceeded=True` from local IP `192.168.0.100`.
+- Ping to `192.168.0.101` still timed out, but ARP still showed a dynamic MAC entry `60-ff-9e-19-fb-8a`.
+- Ran a temporary .NET/Npgsql diagnostic using the current `POLYCOPYTRADER_POSTGRES_CONNECTION` with only `Host` replaced by `192.168.0.101`; the PostgreSQL server responded but rejected access.
+- Non-SSL attempt failed with `no pg_hba.conf entry for host "192.168.0.100", user "postgres", database "polycopytrader", no encryption`.
+- SSL Require attempt failed with `SSL connection requested. No SSL enabled connection from this host is configured.`
+Next: Add/adjust a PostgreSQL `pg_hba.conf` rule allowing `192.168.0.100` for database `polycopytrader` and user `postgres`, then reload/restart PostgreSQL. Use non-SSL if SSL is not configured on the server.
+Notes: No source code changed. Temporary `.codex-temp/PostgresRetryDiagnostic` was removed after use. The blocker moved from network reachability to PostgreSQL host-based auth.
+Blockers: PostgreSQL rejects this client via `pg_hba.conf`.
+
 ## Active Update 2026-05-13 PostgreSQL 192.168.0.101 Reachability Check
 Goal: Check whether the current PostgreSQL server is reachable at `192.168.0.101`.
 Status: Completed

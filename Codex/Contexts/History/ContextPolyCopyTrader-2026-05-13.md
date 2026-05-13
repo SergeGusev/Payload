@@ -477,3 +477,10 @@ Request:
 
 Result:
 Checked connectivity to PostgreSQL at `192.168.0.101`. The local `POLYCOPYTRADER_POSTGRES_CONNECTION` exists but points to `127.0.0.1`, so the diagnostic explicitly targeted `192.168.0.101:5432`. `Test-NetConnection` failed, a direct .NET `TcpClient` connect timed out after 5 seconds, and ping lost `2/2` packets. ARP showed a dynamic MAC entry for `192.168.0.101` on Wi-Fi from local IP `192.168.0.100/24`, so the address is visible at L2, but PostgreSQL TCP `5432` is not reachable. No source code changed.
+
+## 2026-05-13T15:24:14.6999079Z
+Request:
+Попробуй ещё раз
+
+Result:
+Retried PostgreSQL connectivity to `192.168.0.101`. TCP is now reachable: direct .NET `TcpClient` connected and `Test-NetConnection` reported `TcpTestSucceeded=True` from local IP `192.168.0.100`, although ping still timed out. A temporary .NET/Npgsql diagnostic used the current `POLYCOPYTRADER_POSTGRES_CONNECTION` with only `Host` changed to `192.168.0.101`; PostgreSQL responded but rejected auth with `no pg_hba.conf entry for host "192.168.0.100", user "postgres", database "polycopytrader", no encryption`. Retrying with SSL Require failed because no SSL-enabled connection from this host is configured. No source code changed; the temporary diagnostic project was removed.
