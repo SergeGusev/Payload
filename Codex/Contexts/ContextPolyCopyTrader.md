@@ -1,3 +1,18 @@
+## Active Update 2026-05-13 Monitor New Server Via New Database
+Goal: Monitor the service started on the new server through PostgreSQL at `192.168.0.101`.
+Status: Completed
+Done:
+- Confirmed the local old `PolyCopyTrader.Service` process remained stopped; only the local Dashboard process was running.
+- Queried the new database at `192.168.0.101:5432/polycopytrader` with a temporary Npgsql monitor without printing secrets.
+- Observed fresh service heartbeat: `PolyCopyTrader.Service` started at `2026-05-13T16:04:14Z`, status `Running`, `last_error=<none>`, heartbeat age stayed under about one minute.
+- Confirmed the new service is writing active data: BTC odds archive latest sample stayed within a few seconds, Gamma fetches were fresh, strategy runs and Paper orders were increasing.
+- Confirmed no `api_errors` in the last 30 minutes during the monitoring window and no `live_orders` in the last 30 minutes.
+- Noted risk: heartbeat reports `mode=Live`; DB showed a `StartupGeoblockCheck` OK event but does not expose current in-memory pause flags, and remote IPC `192.168.0.101:5118` was not reachable from this machine.
+- Found a stale due backlog of `34` `Observed` rows, all `BTC Up or Down 5m Prev Score Countertrend 10..90` entries due at `2026-05-13T15:30:00Z` and `15:35:00Z`; newer processing continued normally.
+Next: If Live mode was not intended, pause live trading or restart the new service in Paper/ReadOnly mode from the new server. Consider cleaning or handling the stale Countertrend observed rows separately if they matter for dashboard metrics.
+Notes: No source code changed. Temporary `.codex-temp/NewDbMonitor` was removed after use.
+Blockers: None for basic service health; current live-pause state cannot be verified through DB alone.
+
 ## Active Update 2026-05-13 Migrate PostgreSQL To 192.168.0.101
 Goal: Copy the current local `polycopytrader` PostgreSQL database structure and data to `192.168.0.101`.
 Status: Completed

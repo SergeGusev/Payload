@@ -498,3 +498,10 @@ Request:
 
 Result:
 Copied the current local PostgreSQL database `polycopytrader` to `192.168.0.101:5432/polycopytrader` with structure and data. Used Docker PostgreSQL client tools from `postgres:18-alpine` because local `pg_dump`/`pg_restore` were unavailable. Source server was PostgreSQL `17.5`, target server `18.3`. Created a custom-format dump from the source and restored it to the target with clean/no-owner/no-privileges/exit-on-error options. Verified source and target matched by schema counts and per-table row counts: `71` public tables, `219` indexes, `1035` constraints, `0` sequences, and `1,463,229` total rows. Removed temporary dump/logs/scripts after verification. No source code changed.
+
+## 2026-05-13T16:13:12.9193708Z
+Request:
+Запустил сервис на новом сервере. Последи за ним через новую базу данных
+
+Result:
+Monitored the new server through PostgreSQL at `192.168.0.101:5432/polycopytrader` using a temporary Npgsql diagnostic without printing secrets. The service heartbeat was fresh: `PolyCopyTrader.Service` started at `2026-05-13T16:04:14Z`, status `Running`, `last_error=<none>`, heartbeat age under about one minute. The service was actively writing BTC odds ticks, Gamma market fetches, strategy runs, and Paper orders. No `api_errors` and no `live_orders` appeared in the 30-minute window. Noted that heartbeat reports `mode=Live`; DB showed only a `StartupGeoblockCheck` OK live event and cannot prove current in-memory live pause state, while remote IPC `192.168.0.101:5118` was not reachable. Found a stale due backlog of `34` Countertrend `Observed` rows due at `2026-05-13T15:30:00Z`/`15:35:00Z`. Temporary diagnostics were removed; no source code changed.
