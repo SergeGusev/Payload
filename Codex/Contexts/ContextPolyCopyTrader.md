@@ -1,3 +1,16 @@
+## Active Update 2026-05-13 New Server Schema Deployment Answer
+Goal: Clarify whether publishing and starting a new service build on the new server applies database schema changes automatically.
+Status: Completed
+Done:
+- Re-read workflow/project rules, active context, Git state, service startup, schema initializer, and schema SQL.
+- Confirmed `PolyCopyTrader.Service` registers `PostgresSchemaInitializer` and runs `InitializeAsync()` before `RunAsync()`, so the service applies `PostgresSchema.SchemaSql` on startup.
+- Confirmed current schema management is mostly idempotent SQL: `CREATE TABLE IF NOT EXISTS`, `ALTER TABLE ... ADD COLUMN IF NOT EXISTS`, `CREATE INDEX IF NOT EXISTS`, and strategy seed `INSERT ... ON CONFLICT`.
+- Clarified that normal additive schema changes should be applied by deploying the new service build to the new server and starting it against the target PostgreSQL database.
+- Clarified limits: this is not a full versioned migration/rollback system; destructive or complex migrations such as renames, type changes, new non-null constraints, unique indexes on dirty data, or large blocking indexes need explicit SQL/backfill testing and a backup.
+Next: For future schema changes, treat additive changes as normal startup schema initialization; treat data-destructive or locking changes as a planned migration.
+Notes: No production code changed. Verification was code inspection plus `git diff --check`.
+Blockers: None.
+
 ## Active Update 2026-05-13 Audit BTC Less 270 Win Rate
 Goal: Check whether `BTC Up or Down 5m Less 270` and `BTC Up or Down 5m Less 270 Gamma` have suspiciously high win rates in the new PostgreSQL database.
 Status: Completed
