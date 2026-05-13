@@ -1,3 +1,14 @@
+## Active Update 2026-05-13 Skip Strategy Visibility Check
+Goal: Check where the BTC 5m Skip strategies went in the dashboard/runtime data.
+Status: Completed
+Done:
+- Confirmed PostgreSQL still has all 10 `btc_up_down_5m_skip_%` strategies: `Skip 1..5` and `Skip 1..5 Revert`, all enabled.
+- Confirmed total strategy count is `1177`, dashboard all-strategy limit is also `1177`, and Skip rows sit near the bottom of dashboard ordering at rows `1166..1175`.
+- Confirmed recent activity exists: `Skip 1`/`Skip 1 Revert` had last orders at `2026-05-13T12:55:00Z`; `Skip 2`/Revert at `12:50:00Z`; `Skip 3`/Revert at `12:00:01Z`; `Skip 4/5` had no orders in the last hour because their stricter consecutive-result condition did not produce entries.
+Next: If visibility remains confusing, add a text search or pin/favorite strategy filter in the dashboard so important non-PreOpen rows are not buried by the larger strategy set.
+Notes: No production code changed. Verification used read-only PostgreSQL diagnostics plus dashboard filter/order code inspection. Temporary `.codex-temp` diagnostic project was removed.
+Blockers: None.
+
 ## Active Update 2026-05-13 Missing Empty Side Order Creation Clarification
 Goal: Clarify whether `missing_orderbook_empty_side` created an order.
 Status: Completed

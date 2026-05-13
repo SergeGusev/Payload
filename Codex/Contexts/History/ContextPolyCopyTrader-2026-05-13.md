@@ -438,3 +438,9 @@ Request:
 
 Result:
 Clarified that historical `missing_orderbook_empty_side` skips did not create Paper orders, but current BTC taker/GTD behavior after the empty-ask resting-limit change creates a pending resting GTD BUY when a book snapshot exists and only the executable ask side is empty; those orders store `empty_side_reason=missing_orderbook_empty_side` in raw decision diagnostics.
+## 2026-05-13T12:58:03.1589705Z
+Request:
+Куда делись Skip стратегии?
+
+Result:
+Confirmed the BTC 5m Skip strategies were not deleted or disabled. PostgreSQL contains all 10 `btc_up_down_5m_skip_%` rows, all enabled. Dashboard ordering places them near the bottom at rows 1166-1175 out of 1177 strategies, so they are easy to miss after the PreOpen/Sell strategy expansion. Recent activity exists for Skip 1/2/3; Skip 4/5 had no orders in the last hour because their stricter consecutive-result condition did not trigger entries.
