@@ -1,3 +1,18 @@
+## Active Update 2026-05-13 CLOB Timeout And WebSocket Frequency Answer
+Goal: Explain whether to increase CLOB order-book timeout and how often the WebSocket disconnects on the new server.
+Status: Completed
+Done:
+- Re-read repository workflow/context and inspected timeout-related service config/code.
+- Confirmed the global `Polymarket:TimeoutSeconds` is `30`, but the BTC order-book refresh worker has its own per-asset `BtcUpDown5mStrategy:OrderBookRefreshRequestTimeoutSeconds=2`.
+- Confirmed the timeout errors seen in `api_errors` are from `BtcUpDown5mOrderBookRefreshWorker.RefreshAssetAsync`, which cancels individual CLOB `/book` refreshes after the 2-second worker timeout and records `request timed out`.
+- Queried `192.168.0.101` PostgreSQL. Since the new service start around `2026-05-13T16:04:14Z`, CLOB refresh had `7` timeout errors total; last 30 minutes `7`, last 15 minutes `1`, last 5 minutes `0`.
+- Queried WebSocket reliability. Since service start, `PolymarketMarketWebSocket:shard-001` had `7` WebSocket `api_errors` and `reconnect_count=4`; buckets were around `19:20`, `19:23`, `19:28`, and `19:54` Europe/Sofia time. Last 5 minutes had `0` WebSocket errors at the time of the query.
+- Confirmed current WebSocket status remained connected, non-stale, with aggregate and shard rows on `834` subscribed assets.
+- Recommendation captured: do not increase global Polymarket timeout; if we change anything, only test `OrderBookRefreshRequestTimeoutSeconds` from `2` to `3` seconds and monitor, because larger values can block the sequential refresh loop and worsen cache freshness/entry latency.
+Next: If CLOB refresh timeouts become frequent or cause stale book evidence, adjust the worker timeout to `3s` and monitor entry delay plus book age; otherwise leave it unchanged.
+Notes: No production code changed. Verification used code/config inspection, read-only PostgreSQL diagnostics, and `git diff --check`.
+Blockers: None.
+
 ## Active Update 2026-05-13 New Server Health Check
 Goal: Check the new server after migration.
 Status: Completed
