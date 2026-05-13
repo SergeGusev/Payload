@@ -7206,7 +7206,13 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
                     mode: "preopen_full_period");
             }
 
-            var localExpiresAtUtc = effectiveMarketEndUtc.Value.AddSeconds(-Math.Max(0, options.OpeningLimitExpireBeforeMarketEndSeconds));
+            var isPreOpenSellVariant = IsPreOpenFixedDirectionSellExit(variant);
+            var localExpiresAtUtc = isPreOpenSellVariant
+                ? effectiveMarketEndUtc.Value
+                : effectiveMarketEndUtc.Value.AddSeconds(-Math.Max(0, options.OpeningLimitExpireBeforeMarketEndSeconds));
+            var expirationMode = isPreOpenSellVariant
+                ? "preopen_full_period_no_preclose_cancel"
+                : "preopen_full_period";
             if (localExpiresAtUtc <= nowUtc)
             {
                 return OpeningLimitExpirationDecision.Reject(
@@ -7215,7 +7221,7 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
                     options.OpeningLimitExpireBeforeMarketEndSeconds,
                     clobBufferSeconds,
                     localExpiresAtUtc,
-                    "preopen_full_period");
+                    expirationMode);
             }
 
             return OpeningLimitExpirationDecision.Enter(
@@ -7225,7 +7231,7 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
                 configuredTtlSeconds,
                 options.OpeningLimitExpireBeforeMarketEndSeconds,
                 clobBufferSeconds,
-                "preopen_full_period");
+                expirationMode);
         }
 
         var marketStartForLateEntryCheck = BtcUpDown5mMarketAnalyzer.GetWindowStartUtc(market);

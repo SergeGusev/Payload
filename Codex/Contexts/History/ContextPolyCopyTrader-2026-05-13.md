@@ -78,3 +78,10 @@ Request:
 
 Result:
 Verified that the Sell variants were not added only for Up. The domain generator and PostgreSQL seed use both outcomes; PostgreSQL contains `160 up_sell` and `160 down_sell` enabled strategy rows. Runtime data also contains both `up_sell` and `down_sell` runs and orders, including filled `down_sell` Paper SELL exits. The likely confusion is that tests used `Up 49 Sell` as the representative scenario, and the current settled sample has only `up_sell` settled rows so far while `down_sell` rows are not yet settled.
+
+## 2026-05-13T09:54:20.4663133+00:00
+Request:
+Я ошибся с логикой Sell стратегий. Их нет смысла добавлять к Half, потому что он вылетит до последней четверти. 1. Переименуй эти стратегии, заменив Half на Full. 2. Измени логику этих стратегий так, чтобы они ставили ставку без ограничения по времени.
+
+Result:
+Changed BTC PreOpen Sell variants from `PreOpen Half ... Sell` to `PreOpen Full ... Sell` while preserving their existing `804...` strategy ids. The entry BUY for Sell variants now uses a Full-period mode with no pre-close local cancel deadline and expires only at market end for Paper accounting. Updated strategy seed SQL, docs, and tests; restarted the service so schema initialization renamed the existing rows. PostgreSQL verification showed `320` `preopen_full_*_sell` strategies, `0` `preopen_half_*_sell`, split `160` Up and `160` Down, all enabled. Verification passed with focused BTC/Storage tests `126/126`, full solution tests `443/443`, and `git diff --check`.

@@ -204,6 +204,12 @@ public sealed class BtcUpDown5mPaperStrategyProcessorTests
         Assert.Single(StrategyIds.BtcUpDown5mVariants, variant => variant.Behavior == BtcUpDown5mStrategyBehavior.StrategySelector);
         Assert.Equal(640, StrategyIds.BtcUpDown5mVariants.Count(variant => variant.Behavior == BtcUpDown5mStrategyBehavior.PreOpenFixedDirection));
         Assert.Equal(320, StrategyIds.BtcUpDown5mVariants.Count(variant => variant.Behavior == BtcUpDown5mStrategyBehavior.PreOpenFixedDirectionSell));
+        Assert.Equal(0, StrategyIds.BtcUpDown5mVariants.Count(variant =>
+            variant.Behavior == BtcUpDown5mStrategyBehavior.PreOpenFixedDirectionSell &&
+            variant.PreOpenLifetimeMode == BtcUpDownPreOpenLifetimeMode.HalfPeriod));
+        Assert.Equal(320, StrategyIds.BtcUpDown5mVariants.Count(variant =>
+            variant.Behavior == BtcUpDown5mStrategyBehavior.PreOpenFixedDirectionSell &&
+            variant.PreOpenLifetimeMode == BtcUpDownPreOpenLifetimeMode.FullPeriod));
         Assert.Equal(160, StrategyIds.BtcUpDown5mVariants.Count(variant =>
             variant.MarketInterval == BtcUpDownMarketInterval.FiveMinutes &&
             variant.Behavior == BtcUpDown5mStrategyBehavior.PreOpenFixedDirection));
@@ -283,16 +289,18 @@ public sealed class BtcUpDown5mPaperStrategyProcessorTests
         Assert.Equal(BtcUpDownFixedOutcome.Up, preOpen15mHalfUp49.FixedOutcome);
         Assert.Equal(0.49m, preOpen15mHalfUp49.FixedLimitPrice);
         Assert.Equal("BTC Up/Down 15m PreOpen Half", preOpen15mHalfUp49.Category);
-        var preOpen15mHalfUp49Sell = StrategyIds.BtcUpDown5mVariants.Single(variant =>
+        Assert.DoesNotContain(StrategyIds.BtcUpDown5mVariants, variant =>
             variant.Code == "btc_up_down_15m_preopen_half_up_49_sell");
-        Assert.Equal("BTC Up or Down 15m PreOpen Half Up 49 Sell", preOpen15mHalfUp49Sell.Name);
-        Assert.Equal(BtcUpDown5mStrategyBehavior.PreOpenFixedDirectionSell, preOpen15mHalfUp49Sell.Behavior);
-        Assert.Equal(-300, preOpen15mHalfUp49Sell.EntryDelaySeconds);
-        Assert.Equal(BtcUpDownMarketInterval.FifteenMinutes, preOpen15mHalfUp49Sell.MarketInterval);
-        Assert.Equal(BtcUpDownPreOpenLifetimeMode.HalfPeriod, preOpen15mHalfUp49Sell.PreOpenLifetimeMode);
-        Assert.Equal(BtcUpDownFixedOutcome.Up, preOpen15mHalfUp49Sell.FixedOutcome);
-        Assert.Equal(0.49m, preOpen15mHalfUp49Sell.FixedLimitPrice);
-        Assert.Equal("BTC Up/Down 15m PreOpen Half Sell", preOpen15mHalfUp49Sell.Category);
+        var preOpen15mFullUp49Sell = StrategyIds.BtcUpDown5mVariants.Single(variant =>
+            variant.Code == "btc_up_down_15m_preopen_full_up_49_sell");
+        Assert.Equal("BTC Up or Down 15m PreOpen Full Up 49 Sell", preOpen15mFullUp49Sell.Name);
+        Assert.Equal(BtcUpDown5mStrategyBehavior.PreOpenFixedDirectionSell, preOpen15mFullUp49Sell.Behavior);
+        Assert.Equal(-300, preOpen15mFullUp49Sell.EntryDelaySeconds);
+        Assert.Equal(BtcUpDownMarketInterval.FifteenMinutes, preOpen15mFullUp49Sell.MarketInterval);
+        Assert.Equal(BtcUpDownPreOpenLifetimeMode.FullPeriod, preOpen15mFullUp49Sell.PreOpenLifetimeMode);
+        Assert.Equal(BtcUpDownFixedOutcome.Up, preOpen15mFullUp49Sell.FixedOutcome);
+        Assert.Equal(0.49m, preOpen15mFullUp49Sell.FixedLimitPrice);
+        Assert.Equal("BTC Up/Down 15m PreOpen Full Sell", preOpen15mFullUp49Sell.Category);
         Assert.Contains(StrategyIds.BtcUpDown5mVariants, variant =>
             variant.Code == "btc_up_down_4h_preopen_full_down_30" &&
             variant.FixedOutcome == BtcUpDownFixedOutcome.Down &&
@@ -1681,13 +1689,13 @@ public sealed class BtcUpDown5mPaperStrategyProcessorTests
     }
 
     [Fact]
-    public async Task ProcessAsync_PreOpenHalfSellPlacesSellWhenLastQuarterDirectionOpposes()
+    public async Task ProcessAsync_PreOpenFullSellPlacesSellWhenLastQuarterDirectionOpposes()
     {
         var now = DateTimeOffset.UtcNow;
         var marketStart = now.AddMinutes(-12);
         var marketEnd = marketStart.AddMinutes(15);
         var variant = StrategyIds.BtcUpDown5mVariants.Single(item =>
-            item.Code == "btc_up_down_15m_preopen_half_up_49_sell");
+            item.Code == "btc_up_down_15m_preopen_full_up_49_sell");
         var repository = new TestAppRepository();
         var market = CreateMarket(
             marketStart,
@@ -1713,7 +1721,7 @@ public sealed class BtcUpDown5mPaperStrategyProcessorTests
             10m,
             4.9m,
             marketStart.AddMinutes(-5),
-            marketStart.AddMinutes(7.5),
+            marketEnd,
             FilledAtUtc: marketStart.AddMinutes(-4),
             StrategyId: variant.Id));
         repository.PaperFills.Add(new PaperFill(
@@ -1785,13 +1793,13 @@ public sealed class BtcUpDown5mPaperStrategyProcessorTests
     }
 
     [Fact]
-    public async Task ProcessAsync_PreOpenHalfSellDoesNotSellWhenLastQuarterDirectionMatches()
+    public async Task ProcessAsync_PreOpenFullSellDoesNotSellWhenLastQuarterDirectionMatches()
     {
         var now = DateTimeOffset.UtcNow;
         var marketStart = now.AddMinutes(-12);
         var marketEnd = marketStart.AddMinutes(15);
         var variant = StrategyIds.BtcUpDown5mVariants.Single(item =>
-            item.Code == "btc_up_down_15m_preopen_half_up_49_sell");
+            item.Code == "btc_up_down_15m_preopen_full_up_49_sell");
         var repository = new TestAppRepository();
         var market = CreateMarket(
             marketStart,
@@ -1817,7 +1825,7 @@ public sealed class BtcUpDown5mPaperStrategyProcessorTests
             10m,
             4.9m,
             marketStart.AddMinutes(-5),
-            marketStart.AddMinutes(7.5),
+            marketEnd,
             FilledAtUtc: marketStart.AddMinutes(-4),
             StrategyId: variant.Id));
         repository.PaperFills.Add(new PaperFill(
@@ -2049,6 +2057,43 @@ public sealed class BtcUpDown5mPaperStrategyProcessorTests
     }
 
     [Fact]
+    public async Task ProcessAsync_PreOpenFullSellPlacesFifteenMinuteGtdLimitWithoutPrecloseCancel()
+    {
+        var now = DateTimeOffset.UtcNow;
+        var marketStart = now.AddMinutes(5);
+        var marketEnd = marketStart.AddMinutes(15);
+        var variant = StrategyIds.BtcUpDown5mVariants.Single(item =>
+            item.Code == "btc_up_down_15m_preopen_full_up_49_sell");
+        var repository = new TestAppRepository();
+        repository.PolymarketGammaMarkets.Add(CreateMarket(
+            marketStart,
+            marketEnd,
+            upPrice: 0.50m,
+            downPrice: 0.50m,
+            slug: "btc-updown-15m-" + marketStart.ToUnixTimeSeconds().ToString(CultureInfo.InvariantCulture),
+            seriesSlug: "btc-up-or-down-15m",
+            orderMinSize: 5m));
+        var processor = CreateProcessorCore(
+            repository,
+            [],
+            [OrderBook("asset-up", [], [], now, 5m)],
+            variant.Code);
+
+        var result = await processor.ProcessAsync();
+
+        Assert.Equal(1, result.MarketsObserved);
+        Assert.Equal(1, result.EntriesPlaced);
+        var order = Assert.Single(repository.PaperOrders);
+        Assert.Equal(PaperOrderStatus.Pending, order.Status);
+        Assert.Equal("asset-up", order.AssetId);
+        Assert.Equal("Up", order.Outcome);
+        Assert.Equal(0.49m, order.Price);
+        Assert.Equal(marketEnd, order.ExpiresAtUtc);
+        Assert.Contains("\"gtd_expiration_mode\":\"preopen_full_period_no_preclose_cancel\"", order.RawDecisionJson, StringComparison.Ordinal);
+        Assert.Contains("\"fixed_limit_price\":0.49", order.RawDecisionJson, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task ProcessAsync_SettlesEnteredRunFromClosedGammaMetadata()
     {
         var now = DateTimeOffset.UtcNow;
@@ -2209,12 +2254,12 @@ public sealed class BtcUpDown5mPaperStrategyProcessorTests
     }
 
     [Fact]
-    public async Task ProcessAsync_SettlesPreOpenHalfSellRunWithSellFillPnlOnly()
+    public async Task ProcessAsync_SettlesPreOpenFullSellRunWithSellFillPnlOnly()
     {
         var now = DateTimeOffset.UtcNow;
         var repository = new TestAppRepository();
         var variant = StrategyIds.BtcUpDown5mVariants.Single(item =>
-            item.Code == "btc_up_down_15m_preopen_half_up_49_sell");
+            item.Code == "btc_up_down_15m_preopen_full_up_49_sell");
         var marketStart = now.AddMinutes(-20);
         var marketEnd = now.AddMinutes(-5);
         var buyOrderId = Guid.NewGuid();
@@ -2262,7 +2307,7 @@ public sealed class BtcUpDown5mPaperStrategyProcessorTests
             10m,
             4.9m,
             marketStart.AddMinutes(-5),
-            marketStart.AddMinutes(7.5),
+            marketEnd,
             FilledAtUtc: marketStart.AddMinutes(-4),
             StrategyId: variant.Id));
         repository.PaperOrders.Add(new PaperOrder(

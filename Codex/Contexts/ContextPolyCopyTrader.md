@@ -1,3 +1,16 @@
+## Active Update 2026-05-13 PreOpen Sell Full Entry
+Goal: Move PreOpen Sell variants from Half to Full and keep their entry BUY alive through the full market.
+Status: Completed
+Done:
+- Changed BTC PreOpen Sell variant generation from `PreOpen Half ... Sell` to `PreOpen Full ... Sell` for both Up and Down across `5m`, `15m`, `1h`, and `4h`.
+- Preserved the existing `804...` strategy ids while changing codes/names/categories/descriptions, so schema initialization renames existing strategy rows instead of creating another 320 rows.
+- Changed Sell variant entry expiration so the Paper BUY has no pre-close local cancel deadline; it expires at market end for Paper accounting instead of half-period or `marketEnd - safety offset`.
+- Updated PostgreSQL strategy seed SQL, README, configuration reference, and BTC/storage regression tests.
+- Restarted the service and verified PostgreSQL now has `320` `preopen_full_*_sell` strategies, `0` `preopen_half_*_sell`, split `160` Up and `160` Down, all enabled.
+Next: Monitor Full Sell entries in the next complete markets; old Paper runs for the same strategy ids were not deleted because the user did not request a history reset.
+Notes: Verification passed: focused BTC/Storage tests `126/126`, full solution `dotnet test PolyCopyTrader.sln --no-restore` `443/443`, and `git diff --check` passed with line-ending warnings only. Service IPC after restart is `Running`, Paper active, Live paused, kill switch false, and `lastError=null`.
+Blockers: None.
+
 ## Active Update 2026-05-13 PreOpen Sell Direction Check
 Goal: Verify whether the new PreOpen Half Sell variants were added only for Up or for both Up and Down.
 Status: Completed

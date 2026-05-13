@@ -676,12 +676,12 @@ rows with VWAP evidence, cumulative fills determine `PartiallyFilled` versus
 orders that never fill before expiration are marked `gtd_limit_not_filled` instead of being
 counted as won or lost.
 
-`PreOpen Half ... Sell` variants use the same fixed-price half-period BUY entry
-as the paired `PreOpen Half` strategy. During the final quarter of the market
-they compare current Up/Down order-book direction with the fixed entry outcome;
-if it differs, they submit a Paper SELL for the filled shares at a marketable
-bid-side limit. The exit is still paper-only and is filled by the ordinary Paper
-open-order pipeline.
+`PreOpen Full ... Sell` variants use a fixed-price Full BUY entry without the
+pre-close local cancel deadline used by ordinary Full variants. During the final
+quarter of the market they compare current Up/Down order-book direction with
+the fixed entry outcome; if it differs, they submit a Paper SELL for the filled
+shares at a marketable bid-side limit. The exit is still paper-only and is
+filled by the ordinary Paper open-order pipeline.
 
 The dashboard `Strategies` tab reads all rows from `strategies`, including
 `follow_leader`, and aggregates Paper orders, positions, settlements, and

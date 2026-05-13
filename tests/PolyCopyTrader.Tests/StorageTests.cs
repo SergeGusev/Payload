@@ -103,9 +103,9 @@ public sealed class StorageTests
         Assert.Contains("generate_series(49, 10, -1)", PostgresSchema.SchemaSql, StringComparison.Ordinal);
         Assert.Contains("'btc_up_down_' || intervals.interval_code || '_preopen_'", PostgresSchema.SchemaSql, StringComparison.Ordinal);
         Assert.Contains("'b7c50005-0000-4000-803' || intervals.interval_id", PostgresSchema.SchemaSql, StringComparison.Ordinal);
-        Assert.Contains("'btc_up_down_' || intervals.interval_code || '_preopen_half_' || outcomes.outcome_code || '_' || prices.price_cents || '_sell'", PostgresSchema.SchemaSql, StringComparison.Ordinal);
+        Assert.Contains("'btc_up_down_' || intervals.interval_code || '_preopen_full_' || outcomes.outcome_code || '_' || prices.price_cents || '_sell'", PostgresSchema.SchemaSql, StringComparison.Ordinal);
         Assert.Contains("'b7c50005-0000-4000-804' || intervals.interval_id", PostgresSchema.SchemaSql, StringComparison.Ordinal);
-        Assert.Contains("PreOpen Half ' || outcomes.outcome_name || ' ' || prices.price_cents || ' Sell'", PostgresSchema.SchemaSql, StringComparison.Ordinal);
+        Assert.Contains("PreOpen Full ' || outcomes.outcome_name || ' ' || prices.price_cents || ' Sell'", PostgresSchema.SchemaSql, StringComparison.Ordinal);
         Assert.Contains("BTC Up or Down 5m Less 30", PostgresSchema.SchemaSql, StringComparison.Ordinal);
         Assert.Contains("BTC Up or Down 5m Less 30 Gamma", PostgresSchema.SchemaSql, StringComparison.Ordinal);
         Assert.Contains("BTC Less 180 Martin", PostgresSchema.SchemaSql, StringComparison.Ordinal);

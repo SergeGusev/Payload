@@ -2170,9 +2170,9 @@ prices(price_cents) AS (
 INSERT INTO strategies (id, code, name, description, enabled, paper_stake_amount, created_at_utc, updated_at_utc)
 SELECT
     ('b7c50005-0000-4000-804' || intervals.interval_id || '-00000001' || outcomes.outcome_id || lpad(prices.price_cents::text, 3, '0'))::uuid,
-    'btc_up_down_' || intervals.interval_code || '_preopen_half_' || outcomes.outcome_code || '_' || prices.price_cents || '_sell',
-    'BTC Up or Down ' || intervals.interval_name || ' PreOpen Half ' || outcomes.outcome_name || ' ' || prices.price_cents || ' Sell',
-    'Five minutes before the BTC ' || intervals.interval_description || ' market opens, always place a Paper GTD limit BUY on ' || outcomes.outcome_name || ' at ' || to_char((prices.price_cents::numeric / 100), 'FM0.00') || ' and keep it until the half-period local cancel deadline; during the final quarter of the market, place a Paper SELL on filled shares if the current market direction no longer matches ' || outcomes.outcome_name || '.',
+    'btc_up_down_' || intervals.interval_code || '_preopen_full_' || outcomes.outcome_code || '_' || prices.price_cents || '_sell',
+    'BTC Up or Down ' || intervals.interval_name || ' PreOpen Full ' || outcomes.outcome_name || ' ' || prices.price_cents || ' Sell',
+    'Five minutes before the BTC ' || intervals.interval_description || ' market opens, always place a Paper GTD limit BUY on ' || outcomes.outcome_name || ' at ' || to_char((prices.price_cents::numeric / 100), 'FM0.00') || ' and keep it without a pre-close local cancel deadline; during the final quarter of the market, place a Paper SELL on filled shares if the current market direction no longer matches ' || outcomes.outcome_name || '.',
     true,
     1.00,
     now(),

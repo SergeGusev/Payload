@@ -1526,7 +1526,7 @@ public static class StrategyIds
                             outcome,
                             priceCents,
                             hasSellExit: false));
-                        if (lifetime.Mode == BtcUpDownPreOpenLifetimeMode.HalfPeriod)
+                        if (lifetime.Mode == BtcUpDownPreOpenLifetimeMode.FullPeriod)
                         {
                             variants.Add(CreateBtcPreOpenFixedDirectionVariant(
                                 interval,
@@ -1553,12 +1553,16 @@ public static class StrategyIds
         var limitPrice = limitPriceCents / 100m;
         var sellSuffix = hasSellExit ? " Sell" : string.Empty;
         var category = $"BTC Up/Down {interval.Name} PreOpen {lifetime.Name}{sellSuffix}";
+        var idLifetimeSuffix = hasSellExit ? 1 : lifetime.IdSuffix;
+        var entryLifetimeDescription = hasSellExit
+            ? "without a pre-close local cancel deadline"
+            : lifetime.Description;
         return new BtcUpDown5mStrategyVariant(
-            Guid.Parse($"b7c50005-0000-4000-{(hasSellExit ? "804" : "803")}{interval.IdSuffix}-0000000{lifetime.IdSuffix}{outcome.IdSuffix}{limitPriceCents:000}"),
+            Guid.Parse($"b7c50005-0000-4000-{(hasSellExit ? "804" : "803")}{interval.IdSuffix}-0000000{idLifetimeSuffix}{outcome.IdSuffix}{limitPriceCents:000}"),
             $"btc_up_down_{interval.Code}_preopen_{lifetime.Code}_{outcome.Code}_{limitPriceCents}{(hasSellExit ? "_sell" : string.Empty)}",
             $"BTC Up or Down {interval.Name} PreOpen {lifetime.Name} {outcome.Name} {limitPriceCents}{sellSuffix}",
             hasSellExit
-                ? $"Five minutes before the BTC {interval.Description} market opens, always place a Paper GTD limit BUY on {outcome.Name} at {limitPrice.ToString("0.00", CultureInfo.InvariantCulture)} and keep it {lifetime.Description}; during the final quarter of the market, place a Paper SELL on filled shares if the current market direction no longer matches {outcome.Name}."
+                ? $"Five minutes before the BTC {interval.Description} market opens, always place a Paper GTD limit BUY on {outcome.Name} at {limitPrice.ToString("0.00", CultureInfo.InvariantCulture)} and keep it {entryLifetimeDescription}; during the final quarter of the market, place a Paper SELL on filled shares if the current market direction no longer matches {outcome.Name}."
                 : $"Five minutes before the BTC {interval.Description} market opens, always place a Paper GTD limit BUY on {outcome.Name} at {limitPrice.ToString("0.00", CultureInfo.InvariantCulture)} and keep it {lifetime.Description}; settlement uses only actually filled shares.",
             BtcUpDown5mStrategyDirection.Dynamic,
             -300,
