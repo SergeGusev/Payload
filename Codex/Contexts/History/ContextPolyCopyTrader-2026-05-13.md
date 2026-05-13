@@ -470,3 +470,10 @@ Request:
 
 Result:
 Changed the dashboard category resolver so BTC 5m strategy names containing `Countertrend`, including `BTC Up or Down 5m Prev Score Countertrend XX`, map to `BTC Up or Down 5m Countertrend`. Strategy names, codes, and execution logic were not changed. Rebuilt and restarted the Dashboard. Verification passed with isolated dashboard build, focused `ConfigurationTests|StorageTests` `44/44`, normal dashboard build, and `git diff --check`.
+
+## 2026-05-13T14:12:42.0501262Z
+Request:
+С прошлым новым сервером ты смог достучаться до PostgreeSql по адресу 192.168.0.101. Попробуй достучаться к текущему по тому же адресу.
+
+Result:
+Checked connectivity to PostgreSQL at `192.168.0.101`. The local `POLYCOPYTRADER_POSTGRES_CONNECTION` exists but points to `127.0.0.1`, so the diagnostic explicitly targeted `192.168.0.101:5432`. `Test-NetConnection` failed, a direct .NET `TcpClient` connect timed out after 5 seconds, and ping lost `2/2` packets. ARP showed a dynamic MAC entry for `192.168.0.101` on Wi-Fi from local IP `192.168.0.100/24`, so the address is visible at L2, but PostgreSQL TCP `5432` is not reachable. No source code changed.

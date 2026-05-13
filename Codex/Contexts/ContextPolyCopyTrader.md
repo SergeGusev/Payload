@@ -1,3 +1,15 @@
+## Active Update 2026-05-13 PostgreSQL 192.168.0.101 Reachability Check
+Goal: Check whether the current PostgreSQL server is reachable at `192.168.0.101`.
+Status: Completed
+Done:
+- Confirmed `POLYCOPYTRADER_POSTGRES_CONNECTION` is present in the current process environment; the stored host is `127.0.0.1`, so the diagnostic explicitly targeted `192.168.0.101`.
+- Tested `192.168.0.101:5432` with `Test-NetConnection`; TCP failed.
+- Tested the same endpoint with a direct .NET `TcpClient`; connect timed out after 5 seconds.
+- Ping to `192.168.0.101` timed out, but ARP showed a dynamic MAC entry `60-ff-9e-19-fb-8a` on the Wi-Fi interface from local IP `192.168.0.100/24`.
+Next: If this PostgreSQL server should be reachable, check server power/network, Windows/Linux firewall, PostgreSQL `listen_addresses`, `pg_hba.conf`, and whether the current server still has IP `192.168.0.101`.
+Notes: No source code changed. `psql` is not installed on this machine; the connection did not reach PostgreSQL auth/query stage because TCP port `5432` did not open.
+Blockers: PostgreSQL at `192.168.0.101:5432` is not reachable from this machine.
+
 ## Active Update 2026-05-13 Countertrend Dashboard Category
 Goal: Show BTC 5m Countertrend strategies in their own dashboard category.
 Status: Completed
