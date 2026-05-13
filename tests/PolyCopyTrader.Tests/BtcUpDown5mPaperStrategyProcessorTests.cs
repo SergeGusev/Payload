@@ -1865,6 +1865,101 @@ public sealed class BtcUpDown5mPaperStrategyProcessorTests
     }
 
     [Fact]
+    public async Task ProcessAsync_SettlementUsesGlobalConcurrentQueueSoSlowEarlyVariantsDoNotStarvePreOpen()
+    {
+        var now = DateTimeOffset.UtcNow;
+        var repository = new TestAppRepository();
+        var less30Variant = StrategyIds.GetBtcUpDown5mVariant(BtcUpDown5mStrategyDirection.Less, 30);
+        var slowRun1 = CreateEnteredSettlementRun(
+            less30Variant,
+            "slow-market-1",
+            "slow-condition-1",
+            "slow-asset-1",
+            "Up",
+            now.AddMinutes(-30),
+            paperOrderId: null);
+        var slowRun2 = CreateEnteredSettlementRun(
+            Less60Variant,
+            "slow-market-2",
+            "slow-condition-2",
+            "slow-asset-2",
+            "Up",
+            now.AddMinutes(-25),
+            paperOrderId: null);
+        var preOpenVariant = StrategyIds.BtcUpDown5mVariants.Single(item =>
+            item.Code == "btc_up_down_1h_preopen_full_up_37");
+        var preOpenOrderId = Guid.NewGuid();
+        var preOpenRun = CreateEnteredSettlementRun(
+            preOpenVariant,
+            "preopen-market",
+            "condition-1",
+            "asset-up",
+            "Up",
+            now.AddMinutes(-20),
+            preOpenOrderId);
+        repository.StrategyMarketPaperRuns.AddRange([slowRun1, slowRun2, preOpenRun]);
+        repository.PaperOrders.Add(new PaperOrder(
+            preOpenOrderId,
+            preOpenRun.SignalId!.Value,
+            preOpenVariant.CopiedTraderWallet,
+            PaperOrderStatus.PartiallyFilled,
+            TradeSide.Buy,
+            "asset-up",
+            "condition-1",
+            "Up",
+            0.37m,
+            5m,
+            1.85m,
+            now.AddMinutes(-20),
+            now.AddMinutes(-1),
+            StrategyId: preOpenVariant.Id));
+        repository.PaperFills.Add(new PaperFill(
+            Guid.NewGuid(),
+            preOpenOrderId,
+            0.37m,
+            5m,
+            now.AddMinutes(-19),
+            "BalancedGtcDepth"));
+        repository.PaperPositions.Add(new PaperPosition(
+            "asset-up",
+            "condition-1",
+            "Up",
+            5m,
+            0.37m,
+            1.85m,
+            0m,
+            now.AddMinutes(-19),
+            preOpenVariant.CopiedTraderWallet));
+        var processor = CreateProcessorCoreWithOptions(
+            repository,
+            [
+                TokenMetadata("asset-up", "Up", "Up"),
+                TokenMetadata("asset-down", "Down", "Up")
+            ],
+            [],
+            _ => { },
+            [],
+            CreateBtcOptions(
+                paperTakerPricingEnabled: false,
+                enabledVariantCodes: [less30Variant.Code, Less60Variant.Code, preOpenVariant.Code],
+                maxSettlementsPerCycle: 3,
+                maxConcurrentSettlements: 3),
+            gammaClient: new SlowTokenMetadataGammaClient(
+                ["slow-asset-1", "slow-asset-2"],
+                [
+                    TokenMetadata("asset-up", "Up", "Up"),
+                    TokenMetadata("asset-down", "Down", "Up")
+                ]));
+
+        var result = await processor.ProcessAsync();
+
+        Assert.Equal(1, result.RunsSettled);
+        Assert.Equal(StrategyMarketPaperRunStatuses.Settled, repository.StrategyMarketPaperRuns.Single(run => run.Id == preOpenRun.Id).Status);
+        Assert.Equal(StrategyMarketPaperRunStatuses.Entered, repository.StrategyMarketPaperRuns.Single(run => run.Id == slowRun1.Id).Status);
+        Assert.Equal(StrategyMarketPaperRunStatuses.Entered, repository.StrategyMarketPaperRuns.Single(run => run.Id == slowRun2.Id).Status);
+    }
+
+    [Fact]
     public async Task ProcessAsync_Less180MartinWaitsForThreeLess180Losses()
     {
         var now = DateTimeOffset.UtcNow;
@@ -4578,7 +4673,8 @@ public sealed class BtcUpDown5mPaperStrategyProcessorTests
         IReadOnlyList<OrderBookSnapshot> clobOrderBooks,
         BtcUpDown5mStrategyOptions strategyOptions,
         IBtcUsdReferencePriceClient? btcUsdReferencePriceClient = null,
-        IBtcUsdReferencePriceCache? btcUsdReferencePriceCache = null)
+        IBtcUsdReferencePriceCache? btcUsdReferencePriceCache = null,
+        IPolymarketGammaClient? gammaClient = null)
     {
         var marketDataWebSocketOptions = new MarketDataWebSocketOptions { StaleAfterSeconds = 30 };
         var marketDataCache = new MarketDataCache(marketDataWebSocketOptions);
@@ -4617,7 +4713,7 @@ public sealed class BtcUpDown5mPaperStrategyProcessorTests
             new LiveTradingOptions { ManualEnableCode = "LIVE_TRADING_ENABLED", MaxOrderNotionalUsd = 2.50m },
             strategyOptions,
             marketDataWebSocketOptions,
-            new FakeGammaClient(metadata),
+            gammaClient ?? new FakeGammaClient(metadata),
             new FakeClobClient(clobOrderBooks),
             new PassGeoClient(),
             new CapturingTradingClient(),
@@ -4645,7 +4741,9 @@ public sealed class BtcUpDown5mPaperStrategyProcessorTests
         int openingLimitBreakEvenMinSettledRuns = 30,
         decimal openingLimitBreakEvenMargin = 0.10m,
         int maxEntriesPerCycle = 25,
-        int maxConcurrentEntryDecisions = 1)
+        int maxConcurrentEntryDecisions = 1,
+        int maxSettlementsPerCycle = 50,
+        int maxConcurrentSettlements = 1)
     {
         return new BtcUpDown5mStrategyOptions
         {
@@ -4654,7 +4752,8 @@ public sealed class BtcUpDown5mPaperStrategyProcessorTests
             MaxMarketsPerCycle = 500,
             MaxEntriesPerCycle = maxEntriesPerCycle,
             MaxConcurrentEntryDecisions = maxConcurrentEntryDecisions,
-            MaxSettlementsPerCycle = 50,
+            MaxSettlementsPerCycle = maxSettlementsPerCycle,
+            MaxConcurrentSettlements = maxConcurrentSettlements,
             MartinStakeLevels = 5,
             EnabledVariantCodes = enabledVariantCodes.ToList(),
             PaperTakerPricingEnabled = paperTakerPricingEnabled,
@@ -4869,6 +4968,45 @@ public sealed class BtcUpDown5mPaperStrategyProcessorTests
             SkipReason: null,
             marketStartUtc,
             marketStartUtc.AddMinutes(5)));
+    }
+
+    private static StrategyMarketPaperRun CreateEnteredSettlementRun(
+        BtcUpDown5mStrategyVariant variant,
+        string marketId,
+        string conditionId,
+        string selectedAssetId,
+        string selectedOutcome,
+        DateTimeOffset marketStartUtc,
+        Guid? paperOrderId)
+    {
+        return new StrategyMarketPaperRun(
+            Guid.NewGuid(),
+            variant.Id,
+            marketId,
+            conditionId,
+            "btc-updown-5m-" + marketStartUtc.ToUnixTimeSeconds().ToString(CultureInfo.InvariantCulture),
+            "Bitcoin Up or Down - " + marketId,
+            "Crypto",
+            marketStartUtc,
+            marketStartUtc.AddMinutes(5),
+            marketStartUtc,
+            marketStartUtc.AddSeconds(variant.EntryDelaySeconds),
+            StrategyMarketPaperRunStatuses.Entered,
+            selectedAssetId,
+            selectedOutcome,
+            0.37m,
+            1.85m,
+            5m,
+            Guid.NewGuid(),
+            paperOrderId,
+            marketStartUtc.AddSeconds(Math.Max(0, variant.EntryDelaySeconds)),
+            SettlementPrice: null,
+            SettlementValueUsd: null,
+            RealizedPnlUsd: null,
+            SettledAtUtc: null,
+            SkipReason: null,
+            marketStartUtc,
+            marketStartUtc.AddSeconds(Math.Max(0, variant.EntryDelaySeconds)));
     }
 
     private static void AddBtcSettledMarketResult(
@@ -5171,6 +5309,54 @@ public sealed class BtcUpDown5mPaperStrategyProcessorTests
                 metadata.Any(item => string.Equals(item.TokenId, tokenId, StringComparison.OrdinalIgnoreCase))
                     ? metadata
                     : []);
+        }
+
+        public Task<IReadOnlyList<PolymarketOnChainTokenMetadata>> GetTokenMetadataByConditionIdAsync(
+            string conditionId,
+            string requestedTokenId,
+            bool closed,
+            CancellationToken cancellationToken = default)
+        {
+            return Task.FromResult<IReadOnlyList<PolymarketOnChainTokenMetadata>>(
+                metadata.Any(item => string.Equals(item.ConditionId, conditionId, StringComparison.OrdinalIgnoreCase))
+                    ? metadata
+                    : []);
+        }
+
+        public Task<string?> GetEventCategoryAsync(string eventId, CancellationToken cancellationToken = default)
+        {
+            return Task.FromResult<string?>(null);
+        }
+    }
+
+    private sealed class SlowTokenMetadataGammaClient(
+        IReadOnlyCollection<string> slowTokenIds,
+        IReadOnlyList<PolymarketOnChainTokenMetadata> metadata) : IPolymarketGammaClient
+    {
+        private readonly HashSet<string> slowTokenIdSet = slowTokenIds.ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+        public Task<IReadOnlyList<PolymarketGammaMarket>> GetActiveMarketsAsync(
+            int limit = 500,
+            int offset = 0,
+            CancellationToken cancellationToken = default)
+        {
+            return Task.FromResult<IReadOnlyList<PolymarketGammaMarket>>([]);
+        }
+
+        public async Task<IReadOnlyList<PolymarketOnChainTokenMetadata>> GetTokenMetadataAsync(
+            string tokenId,
+            bool closed,
+            CancellationToken cancellationToken = default)
+        {
+            if (slowTokenIdSet.Contains(tokenId))
+            {
+                await Task.Delay(TimeSpan.FromSeconds(10), cancellationToken);
+                return [];
+            }
+
+            return metadata.Any(item => string.Equals(item.TokenId, tokenId, StringComparison.OrdinalIgnoreCase))
+                ? metadata
+                : [];
         }
 
         public Task<IReadOnlyList<PolymarketOnChainTokenMetadata>> GetTokenMetadataByConditionIdAsync(

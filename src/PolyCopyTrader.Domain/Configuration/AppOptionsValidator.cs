@@ -1110,6 +1110,11 @@ public static class AppOptionsValidator
             errors.Add("BtcUpDown5mStrategy.MaxSettlementsPerCycle must be greater than zero.");
         }
 
+        if (options.MaxConcurrentSettlements <= 0 || options.MaxConcurrentSettlements > 32)
+        {
+            errors.Add("BtcUpDown5mStrategy.MaxConcurrentSettlements must be between 1 and 32.");
+        }
+
         if (options.MartinTriggerLosses <= 0 || options.MartinTriggerLosses > 100)
         {
             errors.Add("BtcUpDown5mStrategy.MartinTriggerLosses must be between 1 and 100.");

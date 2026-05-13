@@ -50,6 +50,7 @@ public sealed class ConfigurationTests
         Assert.Equal(0.03m, configuration.BtcUpDown5mStrategy.PaperTakerMaxReferenceSlippage);
         Assert.Equal(0.10m, configuration.BtcUpDown5mStrategy.PaperTakerMaxSpreadAbs);
         Assert.Equal(0.15m, configuration.BtcUpDown5mStrategy.PaperTakerMaxGammaClobDiff);
+        Assert.Equal(16, configuration.BtcUpDown5mStrategy.MaxConcurrentSettlements);
         Assert.True(configuration.BtcUpDown5mStrategy.OpeningLimitDynamicBreakEvenPricingEnabled);
         Assert.Equal(100, configuration.BtcUpDown5mStrategy.OpeningLimitBreakEvenLookbackRuns);
         Assert.Equal(30, configuration.BtcUpDown5mStrategy.OpeningLimitBreakEvenMinSettledRuns);
@@ -268,6 +269,7 @@ public sealed class ConfigurationTests
                 OpeningLimitGtdTtlSeconds = 29,
                 OpeningLimitExpireBeforeMarketEndSeconds = -1,
                 ClobGtdExpirationSecurityBufferSeconds = 59,
+                MaxConcurrentSettlements = 0,
                 OrderBookRefreshIntervalMilliseconds = 99,
                 OrderBookRefreshMaxMarketsPerCycle = 0,
                 OrderBookRefreshMarketLookaheadSeconds = -1,
@@ -291,6 +293,7 @@ public sealed class ConfigurationTests
         Assert.Contains(errors, error => error.Contains("BtcUpDown5mStrategy.OpeningLimitGtdTtlSeconds", StringComparison.Ordinal));
         Assert.Contains(errors, error => error.Contains("BtcUpDown5mStrategy.OpeningLimitExpireBeforeMarketEndSeconds", StringComparison.Ordinal));
         Assert.Contains(errors, error => error.Contains("BtcUpDown5mStrategy.ClobGtdExpirationSecurityBufferSeconds", StringComparison.Ordinal));
+        Assert.Contains(errors, error => error.Contains("BtcUpDown5mStrategy.MaxConcurrentSettlements", StringComparison.Ordinal));
         Assert.Contains(errors, error => error.Contains("BtcUpDown5mStrategy.OrderBookRefreshIntervalMilliseconds", StringComparison.Ordinal));
         Assert.Contains(errors, error => error.Contains("BtcUpDown5mStrategy.OrderBookRefreshMaxMarketsPerCycle", StringComparison.Ordinal));
         Assert.Contains(errors, error => error.Contains("BtcUpDown5mStrategy.OrderBookRefreshMarketLookaheadSeconds", StringComparison.Ordinal));

@@ -64,7 +64,6 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
     private static readonly TimeSpan MarketObserveBehindWindow = TimeSpan.FromMinutes(10);
     private static readonly TimeSpan CloseBookCaptureMaxDuration = TimeSpan.FromSeconds(5);
     private static readonly TimeSpan CloseBookCaptureOrderBookTimeout = TimeSpan.FromSeconds(2);
-    private static readonly TimeSpan SettlementMaxDuration = TimeSpan.FromSeconds(5);
     private static readonly TimeSpan SettlementMetadataTimeout = TimeSpan.FromSeconds(3);
 
     private readonly Dictionary<string, DateTimeOffset> closingOrderBookCaptureAttempts = new(StringComparer.OrdinalIgnoreCase);
@@ -1028,196 +1027,242 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
         IReadOnlyList<BtcUpDown5mStrategyVariant> variants,
         CancellationToken cancellationToken)
     {
-        var variantsById = variants.ToDictionary(variant => variant.Id);
-        var settled = 0;
+        var variantsById = variants.ToDictionary(variant => StrategyIds.Normalize(variant.Id));
         if (variants.Count == 0)
         {
-            return settled;
+            return 0;
         }
 
-        var startedUtc = DateTimeOffset.UtcNow;
-        var perVariantLimit = Math.Max(1, options.MaxSettlementsPerCycle / variants.Count);
-        foreach (var variant in variants)
+        var runs = await repository.GetStrategyMarketPaperRunsForSettlementAsync(
+            variantsById.Keys.ToArray(),
+            nowUtc,
+            options.MaxSettlementsPerCycle,
+            cancellationToken);
+        if (runs.Count == 0)
         {
-            if (DateTimeOffset.UtcNow - startedUtc >= SettlementMaxDuration)
+            return 0;
+        }
+
+        var maxConcurrency = Math.Max(1, Math.Min(options.MaxConcurrentSettlements, runs.Count));
+        var metadataLookupTasks = new System.Collections.Concurrent.ConcurrentDictionary<string, Lazy<Task<IReadOnlyList<PolymarketOnChainTokenMetadata>>>>(
+            StringComparer.OrdinalIgnoreCase);
+        using var throttler = new SemaphoreSlim(maxConcurrency, maxConcurrency);
+
+        var tasks = runs.Select(async run =>
+        {
+            if (!variantsById.TryGetValue(StrategyIds.Normalize(run.StrategyId), out var runVariant))
             {
-                logger.LogInformation(
-                    "BTC Up or Down 5m settlement stopped after reaching the per-cycle time budget. Variants={Variants} BudgetSeconds={BudgetSeconds}",
-                    variants.Count,
-                    SettlementMaxDuration.TotalSeconds);
-                break;
+                return 0;
             }
 
-            var runs = await repository.GetStrategyMarketPaperRunsForSettlementAsync(
-                variant.Id,
+            await throttler.WaitAsync(cancellationToken);
+            try
+            {
+                return await SettleDueRunAsync(
+                    DateTimeOffset.UtcNow,
+                    run,
+                    runVariant,
+                    metadataLookupTasks,
+                    cancellationToken);
+            }
+            finally
+            {
+                throttler.Release();
+            }
+        }).ToArray();
+
+        var results = await Task.WhenAll(tasks);
+        return results.Sum();
+    }
+
+    private async Task<int> SettleDueRunAsync(
+        DateTimeOffset nowUtc,
+        StrategyMarketPaperRun run,
+        BtcUpDown5mStrategyVariant runVariant,
+        System.Collections.Concurrent.ConcurrentDictionary<string, Lazy<Task<IReadOnlyList<PolymarketOnChainTokenMetadata>>>> metadataLookupTasks,
+        CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(run.SelectedAssetId) ||
+            string.IsNullOrWhiteSpace(run.SelectedOutcome) ||
+            run.EntryPrice is null ||
+            run.SizeShares is null)
+        {
+            await SkipRunAsync(run, runVariant, "entry_details_missing", nowUtc, cancellationToken);
+            return 0;
+        }
+
+        OpeningLimitFillSummary? openingLimitFillSummary = null;
+        if (UsesOpeningLimitEntry(runVariant))
+        {
+            openingLimitFillSummary = await GetOpeningLimitFillSummaryAsync(run, runVariant, nowUtc, cancellationToken);
+            if (openingLimitFillSummary is null)
+            {
+                return 0;
+            }
+        }
+        else if (UsesConvertedTakerGtdPaperOrderSettlement(runVariant) &&
+            run.PaperOrderId is { } settlementPaperOrderId)
+        {
+            var paperOrder = await repository.GetPaperOrderAsync(settlementPaperOrderId, cancellationToken);
+            if (IsConvertedTakerGtdPaperOrder(paperOrder))
+            {
+                openingLimitFillSummary = await GetOpeningLimitFillSummaryAsync(run, runVariant, nowUtc, cancellationToken);
+                if (openingLimitFillSummary is null)
+                {
+                    return 0;
+                }
+            }
+        }
+
+        try
+        {
+            using var metadataTimeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+            metadataTimeout.CancelAfter(SettlementMetadataTimeout);
+            var metadata = await GetSettlementMetadataAsync(
+                run,
+                metadataLookupTasks,
+                metadataTimeout.Token);
+
+            var winningOutcome = metadata
+                .FirstOrDefault(item => item.Resolved && !string.IsNullOrWhiteSpace(item.WinningOutcome))
+                ?.WinningOutcome;
+            if (string.IsNullOrWhiteSpace(winningOutcome))
+            {
+                return 0;
+            }
+
+            var winningAssetId = metadata
+                .FirstOrDefault(item => string.Equals(item.Outcome, winningOutcome, StringComparison.OrdinalIgnoreCase))
+                ?.TokenId;
+            var won = string.Equals(run.SelectedAssetId, winningAssetId, StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(run.SelectedOutcome, winningOutcome, StringComparison.OrdinalIgnoreCase);
+            var settlementPrice = won ? 1m : 0m;
+            var settledSizeShares = openingLimitFillSummary?.SizeShares ?? run.SizeShares.Value;
+            var entryPrice = openingLimitFillSummary?.AverageFillPrice ?? run.EntryPrice.Value;
+            var costBasisUsd = openingLimitFillSummary?.NotionalUsd ?? run.StakeUsd;
+            var settlementValue = settledSizeShares * settlementPrice;
+            var realizedPnl = settlementValue - costBasisUsd;
+            var category = metadata.FirstOrDefault(item => !string.IsNullOrWhiteSpace(item.Category))?.Category ?? run.Category;
+
+            var settlement = new PaperPositionSettlement(
+                Guid.NewGuid(),
+                runVariant.CopiedTraderWallet,
+                run.SelectedAssetId,
+                run.ConditionId,
+                run.SelectedOutcome,
+                winningAssetId,
+                winningOutcome,
+                category,
+                settledSizeShares,
+                entryPrice,
+                costBasisUsd,
+                settlementValue,
+                realizedPnl,
+                won,
+                "BtcUpDown5mGammaClosedMarket",
                 nowUtc,
-                perVariantLimit,
+                nowUtc);
+
+            await repository.TryAddPaperPositionSettlementAsync(settlement, cancellationToken);
+            var settledPosition = new PaperPosition(
+                run.SelectedAssetId,
+                run.ConditionId,
+                run.SelectedOutcome,
+                0m,
+                0m,
+                0m,
+                0m,
+                nowUtc,
+                runVariant.CopiedTraderWallet);
+            await repository.UpsertPaperPositionAsync(settledPosition, cancellationToken);
+            exposureCache.ApplyPaperPosition(settledPosition);
+
+            await repository.UpdateStrategyMarketPaperRunAsync(
+                run with
+                {
+                    Status = StrategyMarketPaperRunStatuses.Settled,
+                    EntryPrice = entryPrice,
+                    StakeUsd = costBasisUsd,
+                    SizeShares = settledSizeShares,
+                    SettlementPrice = settlementPrice,
+                    SettlementValueUsd = settlementValue,
+                    RealizedPnlUsd = realizedPnl,
+                    SettledAtUtc = nowUtc,
+                    UpdatedAtUtc = nowUtc
+                },
                 cancellationToken);
 
-            foreach (var run in runs)
+            logger.LogInformation(
+                "BTC Up or Down 5m paper run settled. Strategy={StrategyCode} Market={MarketSlug} Outcome={Outcome} Won={Won} RealizedPnlUsd={RealizedPnlUsd}",
+                runVariant.Code,
+                run.MarketSlug,
+                run.SelectedOutcome,
+                won,
+                realizedPnl);
+
+            return 1;
+        }
+        catch (OperationCanceledException)
+        {
+            if (cancellationToken.IsCancellationRequested)
             {
-                if (DateTimeOffset.UtcNow - startedUtc >= SettlementMaxDuration)
-                {
-                    logger.LogInformation(
-                        "BTC Up or Down 5m settlement stopped after reaching the per-cycle time budget. Variants={Variants} BudgetSeconds={BudgetSeconds}",
-                        variants.Count,
-                        SettlementMaxDuration.TotalSeconds);
-                    break;
-                }
-
-                var runVariant = variantsById.TryGetValue(run.StrategyId, out var matchedVariant)
-                    ? matchedVariant
-                    : variant;
-                if (string.IsNullOrWhiteSpace(run.SelectedAssetId) ||
-                    string.IsNullOrWhiteSpace(run.SelectedOutcome) ||
-                    run.EntryPrice is null ||
-                    run.SizeShares is null)
-                {
-                    await SkipRunAsync(run, runVariant, "entry_details_missing", nowUtc, cancellationToken);
-                    continue;
-                }
-
-                OpeningLimitFillSummary? openingLimitFillSummary = null;
-                if (UsesOpeningLimitEntry(runVariant))
-                {
-                    openingLimitFillSummary = await GetOpeningLimitFillSummaryAsync(run, runVariant, nowUtc, cancellationToken);
-                    if (openingLimitFillSummary is null)
-                    {
-                        continue;
-                    }
-                }
-                else if (UsesConvertedTakerGtdPaperOrderSettlement(runVariant) &&
-                    run.PaperOrderId is { } settlementPaperOrderId)
-                {
-                    var paperOrder = await repository.GetPaperOrderAsync(settlementPaperOrderId, cancellationToken);
-                    if (IsConvertedTakerGtdPaperOrder(paperOrder))
-                    {
-                        openingLimitFillSummary = await GetOpeningLimitFillSummaryAsync(run, runVariant, nowUtc, cancellationToken);
-                        if (openingLimitFillSummary is null)
-                        {
-                            continue;
-                        }
-                    }
-                }
-
-                try
-                {
-                    using var metadataTimeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-                    metadataTimeout.CancelAfter(SettlementMetadataTimeout);
-                    var metadata = await gammaClient.GetTokenMetadataAsync(run.SelectedAssetId, closed: true, metadataTimeout.Token);
-                    if (metadata.Count == 0)
-                    {
-                        metadata = await gammaClient.GetTokenMetadataByConditionIdAsync(
-                            run.ConditionId,
-                            run.SelectedAssetId,
-                            closed: true,
-                            metadataTimeout.Token);
-                    }
-
-                    var winningOutcome = metadata
-                        .FirstOrDefault(item => item.Resolved && !string.IsNullOrWhiteSpace(item.WinningOutcome))
-                        ?.WinningOutcome;
-                    if (string.IsNullOrWhiteSpace(winningOutcome))
-                    {
-                        continue;
-                    }
-
-                    var winningAssetId = metadata
-                        .FirstOrDefault(item => string.Equals(item.Outcome, winningOutcome, StringComparison.OrdinalIgnoreCase))
-                        ?.TokenId;
-                    var won = string.Equals(run.SelectedAssetId, winningAssetId, StringComparison.OrdinalIgnoreCase) ||
-                        string.Equals(run.SelectedOutcome, winningOutcome, StringComparison.OrdinalIgnoreCase);
-                    var settlementPrice = won ? 1m : 0m;
-                    var settledSizeShares = openingLimitFillSummary?.SizeShares ?? run.SizeShares.Value;
-                    var entryPrice = openingLimitFillSummary?.AverageFillPrice ?? run.EntryPrice.Value;
-                    var costBasisUsd = openingLimitFillSummary?.NotionalUsd ?? run.StakeUsd;
-                    var settlementValue = settledSizeShares * settlementPrice;
-                    var realizedPnl = settlementValue - costBasisUsd;
-                    var category = metadata.FirstOrDefault(item => !string.IsNullOrWhiteSpace(item.Category))?.Category ?? run.Category;
-
-                    var settlement = new PaperPositionSettlement(
-                        Guid.NewGuid(),
-                        runVariant.CopiedTraderWallet,
-                        run.SelectedAssetId,
-                        run.ConditionId,
-                        run.SelectedOutcome,
-                        winningAssetId,
-                        winningOutcome,
-                        category,
-                        settledSizeShares,
-                        entryPrice,
-                        costBasisUsd,
-                        settlementValue,
-                        realizedPnl,
-                        won,
-                        "BtcUpDown5mGammaClosedMarket",
-                        nowUtc,
-                        nowUtc);
-
-                    await repository.TryAddPaperPositionSettlementAsync(settlement, cancellationToken);
-                    var settledPosition = new PaperPosition(
-                        run.SelectedAssetId,
-                        run.ConditionId,
-                        run.SelectedOutcome,
-                        0m,
-                        0m,
-                        0m,
-                        0m,
-                        nowUtc,
-                        runVariant.CopiedTraderWallet);
-                    await repository.UpsertPaperPositionAsync(settledPosition, cancellationToken);
-                    exposureCache.ApplyPaperPosition(settledPosition);
-
-                    await repository.UpdateStrategyMarketPaperRunAsync(
-                        run with
-                        {
-                            Status = StrategyMarketPaperRunStatuses.Settled,
-                            EntryPrice = entryPrice,
-                            StakeUsd = costBasisUsd,
-                            SizeShares = settledSizeShares,
-                            SettlementPrice = settlementPrice,
-                            SettlementValueUsd = settlementValue,
-                            RealizedPnlUsd = realizedPnl,
-                            SettledAtUtc = nowUtc,
-                            UpdatedAtUtc = nowUtc
-                        },
-                        cancellationToken);
-                    settled++;
-
-                    logger.LogInformation(
-                        "BTC Up or Down 5m paper run settled. Strategy={StrategyCode} Market={MarketSlug} Outcome={Outcome} Won={Won} RealizedPnlUsd={RealizedPnlUsd}",
-                        runVariant.Code,
-                        run.MarketSlug,
-                        run.SelectedOutcome,
-                        won,
-                        realizedPnl);
-                }
-                catch (OperationCanceledException)
-                {
-                    if (cancellationToken.IsCancellationRequested)
-                    {
-                        throw;
-                    }
-
-                    logger.LogInformation(
-                        "BTC Up or Down 5m paper settlement metadata request timed out. Strategy={StrategyCode} MarketId={MarketId} TimeoutSeconds={TimeoutSeconds}",
-                        runVariant.Code,
-                        run.MarketId,
-                        SettlementMetadataTimeout.TotalSeconds);
-                }
-                catch (Exception ex)
-                {
-                    logger.LogError(
-                        ex,
-                        "BTC Up or Down 5m paper settlement failed. Strategy={StrategyCode} MarketId={MarketId}.",
-                        runVariant.Code,
-                        run.MarketId);
-                    await TryRecordApiErrorAsync("SettleDueRun", ex.Message, cancellationToken);
-                }
+                throw;
             }
+
+            logger.LogInformation(
+                "BTC Up or Down 5m paper settlement metadata request timed out. Strategy={StrategyCode} MarketId={MarketId} TimeoutSeconds={TimeoutSeconds}",
+                runVariant.Code,
+                run.MarketId,
+                SettlementMetadataTimeout.TotalSeconds);
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(
+                ex,
+                "BTC Up or Down 5m paper settlement failed. Strategy={StrategyCode} MarketId={MarketId}.",
+                runVariant.Code,
+                run.MarketId);
+            await TryRecordApiErrorAsync("SettleDueRun", ex.Message, cancellationToken);
         }
 
-        return settled;
+        return 0;
+    }
+
+    private Task<IReadOnlyList<PolymarketOnChainTokenMetadata>> GetSettlementMetadataAsync(
+        StrategyMarketPaperRun run,
+        System.Collections.Concurrent.ConcurrentDictionary<string, Lazy<Task<IReadOnlyList<PolymarketOnChainTokenMetadata>>>> metadataLookupTasks,
+        CancellationToken cancellationToken)
+    {
+        var selectedAssetId = run.SelectedAssetId ?? string.Empty;
+        var cacheKey = string.IsNullOrWhiteSpace(selectedAssetId)
+            ? "condition:" + run.ConditionId
+            : "asset:" + selectedAssetId;
+        var lookup = metadataLookupTasks.GetOrAdd(
+            cacheKey,
+            _ => new Lazy<Task<IReadOnlyList<PolymarketOnChainTokenMetadata>>>(
+                () => LoadSettlementMetadataAsync(selectedAssetId, run.ConditionId, cancellationToken),
+                LazyThreadSafetyMode.ExecutionAndPublication));
+        return lookup.Value;
+    }
+
+    private async Task<IReadOnlyList<PolymarketOnChainTokenMetadata>> LoadSettlementMetadataAsync(
+        string selectedAssetId,
+        string conditionId,
+        CancellationToken cancellationToken)
+    {
+        var metadata = string.IsNullOrWhiteSpace(selectedAssetId)
+            ? Array.Empty<PolymarketOnChainTokenMetadata>()
+            : await gammaClient.GetTokenMetadataAsync(selectedAssetId, closed: true, cancellationToken);
+        if (metadata.Count == 0 && !string.IsNullOrWhiteSpace(conditionId))
+        {
+            metadata = await gammaClient.GetTokenMetadataByConditionIdAsync(
+                conditionId,
+                selectedAssetId,
+                closed: true,
+                cancellationToken);
+        }
+
+        return metadata;
     }
 
     private async Task<OpeningLimitFillSummary?> GetOpeningLimitFillSummaryAsync(

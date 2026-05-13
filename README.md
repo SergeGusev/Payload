@@ -417,7 +417,7 @@ The `BTC Up or Down 5m` paper worker watches BTC 5-minute Gamma markets from `po
 
 Paper fill accounting deliberately uses the submitted paper limit price as the fill price even when visible book depth or an observed trade is better than the limit. The better observed depth/trade price remains in fill evidence only; this makes Paper PnL stricter for strategy comparison.
 
-BTC due-entry placement is selected globally by `entry_due_at_utc` across enabled variants, capped by `MaxEntriesPerCycle`, and processed as bounded parallel run-level work items up to `MaxConcurrentEntryDecisions`. Per-cycle Gamma market metadata is cached so a burst of strategies for the same market does not repeat the same repository lookup.
+BTC due-entry placement is selected globally by `entry_due_at_utc` across enabled variants, capped by `MaxEntriesPerCycle`, and processed as bounded parallel run-level work items up to `MaxConcurrentEntryDecisions`. BTC due settlement now uses the same global-queue shape across all variants instead of walking one variant at a time: ended `Entered` runs are selected by market end, filled/partially-filled orders are prioritized, the batch is capped by `MaxSettlementsPerCycle`, and work runs concurrently up to `MaxConcurrentSettlements`. Per-cycle Gamma market metadata is cached for settlement so a burst of strategies sharing the same token does not repeat the same closed-market lookup or timeout.
 
 Late-entry BTC GTD orders whose due time is after the market midpoint bypass the market-end safety offset and use the fallback TTL/market-end cap instead, so variants such as `More 270` can still place an order in the final half of a 5-minute market.
 

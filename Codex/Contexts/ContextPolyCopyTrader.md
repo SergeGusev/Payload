@@ -1,3 +1,16 @@
+## Active Update 2026-05-13 BTC Global Settlement Queue
+Goal: Stop BTC settlement starvation by processing due settlement runs from one bounded queue across all enabled BTC variants.
+Status: Completed
+Done:
+- Added a multi-strategy settlement repository query that pulls due `Entered` runs globally, prioritizing runs with fills, filled/partially-filled orders, expired orders, and then oldest market end time.
+- Reworked BTC settlement to remove the sequential per-variant 5-second cycle budget, use `MaxSettlementsPerCycle` as the batch cap, settle with bounded `MaxConcurrentSettlements`, and cache Gamma metadata lookups per cycle.
+- Added `BtcUpDown5mStrategy.MaxConcurrentSettlements` config/validation/docs and set it to 16 by default and in service appsettings.
+- Added schema index support for settlement lookup and regression coverage proving slow early variants do not starve `1h PreOpen Full` settlement.
+- Rebuilt and restarted the Debug service; IPC `/status` is `Running`, scanning/paper are active, live trading remains paused, kill switch is false, and `lastError=null`.
+Next: Monitor the `BTC Up or Down 1h PreOpen Full` backlog and settlement throughput now that filled due runs are no longer blocked behind earlier slow variants.
+Notes: Verification passed with focused tests (`143/143`), full solution tests (`437/437`), normal Debug service build, `git diff --check` with line-ending warnings only, and IPC status check after restart. Build still reports existing nullable warnings in `PostgresAppRepository.cs`.
+Blockers: None.
+
 ## Active Update 2026-05-13 1h PreOpen Full Settled Backlog Diagnosis
 Goal: Explain why `BTC Up or Down 1h PreOpen Full` shows few `Settled` rows despite always-entry intent.
 Status: Completed

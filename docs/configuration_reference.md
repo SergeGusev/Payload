@@ -712,7 +712,8 @@ leader exits can still be tracked.
 - `EntryGraceSeconds`: maximum late-entry grace after a variant's due time before the run is skipped; default `10`. Strict `Skip` / `Skip Revert` decisions no longer wait for Gamma settlement: they infer each immediately previous BTC 5-minute result from close-book CLOB price evidence. Full `Up` midpoint maps `>= 0.5` to `Up` and `< 0.5` to `Down`; single-sided `Up best_bid >= 0.5`, `Up best_ask < 0.5`, `Down best_ask <= 0.5`, and `Down best_bid > 0.5` are also decisive. If current close-book fetch stops responding, the worker uses the latest stored snapshot for that token when available. Missing or conflicting evidence is skipped with diagnostics in `skip_diagnostics_json`.
 - `MaxMarketsPerCycle`: maximum BTC 5-minute Gamma markets observed per cycle; default `500`.
 - `MaxEntriesPerCycle`: maximum due entries processed per cycle across variants; default `250`.
-- `MaxSettlementsPerCycle`: maximum due settlements processed per cycle across variants; default `250`.
+- `MaxSettlementsPerCycle`: maximum due settlements selected per cycle from the global settlement queue across variants; default `250`.
+- `MaxConcurrentSettlements`: maximum due settlement work items processed concurrently; default `16` in the service config.
 - `MartinTriggerLosses`: fresh consecutive losses required from standard `BTC Up or Down 5m Less 180` before `BTC Less 180 Martin` starts; default `3`.
 - `MartinStakeLevels`: number of stake levels in the Martin progression; default `1`, so Martin also uses the base stake multiplier without escalating.
 - `MartinStateLookbackRuns`: recent settled run depth used to reconstruct Martin trigger/progression state; default `50`.

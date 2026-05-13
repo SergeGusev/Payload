@@ -658,6 +658,32 @@ WHERE wallet = @Wallet;
 		return results;
 	}
 
+	public async Task<IReadOnlyList<StrategyMarketPaperRun>> GetStrategyMarketPaperRunsForSettlementAsync(IReadOnlyCollection<Guid> strategyIds, DateTimeOffset marketEndedBeforeUtc, int limit, CancellationToken cancellationToken = default(CancellationToken))
+	{
+		var normalizedStrategyIds = strategyIds
+			.Select(StrategyIds.Normalize)
+			.Distinct()
+			.ToArray();
+		if (normalizedStrategyIds.Length == 0)
+		{
+			return Array.Empty<StrategyMarketPaperRun>();
+		}
+
+		await using NpgsqlConnection connection = await OpenConnectionAsync(cancellationToken);
+		await using NpgsqlCommand command = CreateCommand(connection, "SELECT run.id, run.strategy_id, run.market_id, run.condition_id, run.market_slug, run.market_title, run.category,\n       run.market_start_utc, run.market_end_utc, run.detected_at_utc, run.entry_due_at_utc, run.status,\n       run.selected_asset_id, run.selected_outcome, run.entry_price, run.stake_usd, run.size_shares,\n       run.signal_id, run.paper_order_id, run.entered_at_utc, run.settlement_price, run.settlement_value_usd,\n       run.realized_pnl_usd, run.settled_at_utc, run.skip_reason, run.created_at_utc, run.updated_at_utc,\n       run.skip_diagnostics_json::text\nFROM strategy_market_paper_runs run\nLEFT JOIN paper_orders paper_order ON paper_order.id = run.paper_order_id\nLEFT JOIN LATERAL (\n    SELECT 1 AS has_fill\n    FROM paper_fills fill_row\n    WHERE fill_row.paper_order_id = run.paper_order_id\n    LIMIT 1\n) fill_row ON true\nWHERE run.strategy_id = ANY(@StrategyIds)\n  AND run.status = @Status\n  AND run.market_end_utc IS NOT NULL\n  AND run.market_end_utc <= @MarketEndedBeforeUtc\nORDER BY\n  CASE\n    WHEN fill_row.has_fill IS NOT NULL THEN 0\n    WHEN paper_order.status IN ('Filled', 'PartiallyFilled', 'PartiallyFilledExpired') THEN 1\n    WHEN paper_order.status = 'Expired' THEN 2\n    WHEN paper_order.id IS NULL THEN 3\n    ELSE 4\n  END ASC,\n  run.market_end_utc ASC,\n  run.entered_at_utc ASC,\n  run.detected_at_utc ASC\nLIMIT @Limit;");
+		command.Parameters.AddWithValue("StrategyIds", normalizedStrategyIds);
+		command.Parameters.AddWithValue("Status", StrategyMarketPaperRunStatuses.Entered);
+		command.Parameters.Add("MarketEndedBeforeUtc", NpgsqlDbType.TimestampTz).Value = UtcDateTime(marketEndedBeforeUtc);
+		command.Parameters.AddWithValue("Limit", limit);
+		List<StrategyMarketPaperRun> results = new List<StrategyMarketPaperRun>();
+		await using NpgsqlDataReader reader = await command.ExecuteReaderAsync(cancellationToken);
+		while (await reader.ReadAsync(cancellationToken))
+		{
+			results.Add(ReadStrategyMarketPaperRun(reader));
+		}
+		return results;
+	}
+
 	public async Task<IReadOnlyList<StrategyMarketPaperRun>> GetRecentStrategyMarketPaperRunsAsync(Guid strategyId, string status, int limit, CancellationToken cancellationToken = default(CancellationToken))
 	{
 		await using NpgsqlConnection connection = await OpenConnectionAsync(cancellationToken);

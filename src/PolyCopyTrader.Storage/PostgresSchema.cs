@@ -2254,6 +2254,9 @@ ON strategy_market_paper_runs(status, entry_due_at_utc, detected_at_utc);
 CREATE INDEX IF NOT EXISTS ix_strategy_market_paper_runs_settlement_due
 ON strategy_market_paper_runs(strategy_id, status, market_end_utc);
 
+CREATE INDEX IF NOT EXISTS ix_strategy_market_paper_runs_status_market_end
+ON strategy_market_paper_runs(status, market_end_utc, entered_at_utc, strategy_id);
+
 CREATE INDEX IF NOT EXISTS ix_strategy_market_paper_runs_order
 ON strategy_market_paper_runs(paper_order_id);
 

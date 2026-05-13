@@ -637,14 +637,45 @@ internal sealed class TestAppRepository : IAppRepository
         int limit,
         CancellationToken cancellationToken = default)
     {
-        return Task.FromResult<IReadOnlyList<StrategyMarketPaperRun>>(StrategyMarketPaperRuns
-            .Where(run => run.StrategyId == strategyId)
-            .Where(run => string.Equals(run.Status, StrategyMarketPaperRunStatuses.Entered, StringComparison.OrdinalIgnoreCase))
-            .Where(run => run.MarketEndUtc is not null && run.MarketEndUtc <= marketEndedBeforeUtc)
-            .OrderBy(run => run.MarketEndUtc)
-            .ThenBy(run => run.EnteredAtUtc)
-            .Take(limit)
-            .ToArray());
+        lock (sync)
+        {
+            return Task.FromResult<IReadOnlyList<StrategyMarketPaperRun>>(StrategyMarketPaperRuns
+                .Where(run => run.StrategyId == strategyId)
+                .Where(run => string.Equals(run.Status, StrategyMarketPaperRunStatuses.Entered, StringComparison.OrdinalIgnoreCase))
+                .Where(run => run.MarketEndUtc is not null && run.MarketEndUtc <= marketEndedBeforeUtc)
+                .OrderBy(run => run.MarketEndUtc)
+                .ThenBy(run => run.EnteredAtUtc)
+                .Take(limit)
+                .ToArray());
+        }
+    }
+
+    public Task<IReadOnlyList<StrategyMarketPaperRun>> GetStrategyMarketPaperRunsForSettlementAsync(
+        IReadOnlyCollection<Guid> strategyIds,
+        DateTimeOffset marketEndedBeforeUtc,
+        int limit,
+        CancellationToken cancellationToken = default)
+    {
+        var normalizedStrategyIds = strategyIds
+            .Select(StrategyIds.Normalize)
+            .ToHashSet();
+        lock (sync)
+        {
+            var filledPaperOrderIds = PaperFills
+                .Select(fill => fill.PaperOrderId)
+                .ToHashSet();
+            var paperOrdersById = PaperOrders.ToDictionary(order => order.Id);
+            return Task.FromResult<IReadOnlyList<StrategyMarketPaperRun>>(StrategyMarketPaperRuns
+                .Where(run => normalizedStrategyIds.Contains(StrategyIds.Normalize(run.StrategyId)))
+                .Where(run => string.Equals(run.Status, StrategyMarketPaperRunStatuses.Entered, StringComparison.OrdinalIgnoreCase))
+                .Where(run => run.MarketEndUtc is not null && run.MarketEndUtc <= marketEndedBeforeUtc)
+                .OrderBy(run => GetSettlementPriority(run, paperOrdersById, filledPaperOrderIds))
+                .ThenBy(run => run.MarketEndUtc)
+                .ThenBy(run => run.EnteredAtUtc)
+                .ThenBy(run => run.DetectedAtUtc)
+                .Take(limit)
+                .ToArray());
+        }
     }
 
     public Task<IReadOnlyList<StrategyMarketPaperRun>> GetRecentStrategyMarketPaperRunsAsync(
@@ -660,6 +691,30 @@ internal sealed class TestAppRepository : IAppRepository
             .ThenByDescending(run => run.MarketStartUtc ?? run.EntryDueAtUtc)
             .Take(limit)
             .ToArray());
+    }
+
+    private static int GetSettlementPriority(
+        StrategyMarketPaperRun run,
+        IReadOnlyDictionary<Guid, PaperOrder> paperOrdersById,
+        IReadOnlySet<Guid> filledPaperOrderIds)
+    {
+        if (run.PaperOrderId is { } paperOrderId && filledPaperOrderIds.Contains(paperOrderId))
+        {
+            return 0;
+        }
+
+        if (run.PaperOrderId is { } orderId &&
+            paperOrdersById.TryGetValue(orderId, out var order))
+        {
+            return order.Status switch
+            {
+                PaperOrderStatus.Filled or PaperOrderStatus.PartiallyFilled or PaperOrderStatus.PartiallyFilledExpired => 1,
+                PaperOrderStatus.Expired => 2,
+                _ => 4
+            };
+        }
+
+        return 3;
     }
 
     public Task<IReadOnlyList<BtcUpDown5mMarketResult>> GetRecentBtcUpDown5mMarketResultsAsync(
@@ -790,7 +845,10 @@ internal sealed class TestAppRepository : IAppRepository
 
     public Task<PaperOrder?> GetPaperOrderAsync(Guid paperOrderId, CancellationToken cancellationToken = default)
     {
-        return Task.FromResult(PaperOrders.FirstOrDefault(order => order.Id == paperOrderId));
+        lock (sync)
+        {
+            return Task.FromResult(PaperOrders.FirstOrDefault(order => order.Id == paperOrderId));
+        }
     }
 
     public Task<PaperOrder?> GetPaperOrderByCorrelationIdAsync(Guid correlationId, CancellationToken cancellationToken = default)
@@ -816,19 +874,25 @@ internal sealed class TestAppRepository : IAppRepository
 
     public Task<IReadOnlyList<PaperFill>> GetPaperFillsForOrderAsync(Guid paperOrderId, CancellationToken cancellationToken = default)
     {
-        return Task.FromResult<IReadOnlyList<PaperFill>>(PaperFills
-            .Where(item => item.PaperOrderId == paperOrderId)
-            .OrderBy(item => item.FilledAtUtc)
-            .ThenBy(item => item.Id)
-            .ToArray());
+        lock (sync)
+        {
+            return Task.FromResult<IReadOnlyList<PaperFill>>(PaperFills
+                .Where(item => item.PaperOrderId == paperOrderId)
+                .OrderBy(item => item.FilledAtUtc)
+                .ThenBy(item => item.Id)
+                .ToArray());
+        }
     }
 
     public Task UpsertPaperPositionAsync(PaperPosition position, CancellationToken cancellationToken = default)
     {
-        PaperPositions.RemoveAll(item =>
-            string.Equals(item.AssetId, position.AssetId, StringComparison.OrdinalIgnoreCase) &&
-            string.Equals(item.CopiedTraderWallet, position.CopiedTraderWallet, StringComparison.OrdinalIgnoreCase));
-        PaperPositions.Add(position);
+        lock (sync)
+        {
+            PaperPositions.RemoveAll(item =>
+                string.Equals(item.AssetId, position.AssetId, StringComparison.OrdinalIgnoreCase) &&
+                string.Equals(item.CopiedTraderWallet, position.CopiedTraderWallet, StringComparison.OrdinalIgnoreCase));
+            PaperPositions.Add(position);
+        }
         return Task.CompletedTask;
     }
 
@@ -839,15 +903,18 @@ internal sealed class TestAppRepository : IAppRepository
 
     public Task<bool> TryAddPaperPositionSettlementAsync(PaperPositionSettlement settlement, CancellationToken cancellationToken = default)
     {
-        if (PaperPositionSettlements.Any(item =>
-            string.Equals(item.AssetId, settlement.AssetId, StringComparison.OrdinalIgnoreCase) &&
-            string.Equals(item.CopiedTraderWallet, settlement.CopiedTraderWallet, StringComparison.OrdinalIgnoreCase)))
+        lock (sync)
         {
-            return Task.FromResult(false);
-        }
+            if (PaperPositionSettlements.Any(item =>
+                string.Equals(item.AssetId, settlement.AssetId, StringComparison.OrdinalIgnoreCase) &&
+                string.Equals(item.CopiedTraderWallet, settlement.CopiedTraderWallet, StringComparison.OrdinalIgnoreCase)))
+            {
+                return Task.FromResult(false);
+            }
 
-        PaperPositionSettlements.Add(settlement);
-        return Task.FromResult(true);
+            PaperPositionSettlements.Add(settlement);
+            return Task.FromResult(true);
+        }
     }
 
     public Task<IReadOnlyList<PaperPositionSettlement>> GetRecentPaperPositionSettlementsAsync(int limit = 100, CancellationToken cancellationToken = default)
