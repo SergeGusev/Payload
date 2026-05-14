@@ -1,3 +1,18 @@
+## Active Update 2026-05-14 New Database Health Check
+Goal: Check whether the service is healthy through the new PostgreSQL database at `192.168.0.101`.
+Status: Completed
+Done:
+- Ran repository task initialization, including `git pull --ff-only`, which reported `Already up to date`.
+- Queried the new PostgreSQL database read-only with a temporary C#/.NET/Npgsql diagnostic and removed the temporary project afterward.
+- Found PostgreSQL itself reachable on `192.168.0.101:5432`, but service data is stale: `PolyCopyTrader.Service` last heartbeat was `2026-05-13T22:32:21Z`, about `6h54m` old at the check time.
+- Found BTC odds, Gamma market fetches, Paper orders, and strategy run updates also stopped around `2026-05-13T22:32Z`; there were `0` rows in the latest 30-minute windows.
+- Found remote IPC `192.168.0.101:5118` is not reachable from this machine; `/health` timed out.
+- Found backlog caused by the stopped service: `688` due `Observed` strategy runs and `1,587` `Entered` runs past market end.
+- Found no live orders in the last 60 minutes and no repository-open live order statuses; `strategies.live_stakes` is `false` for all enabled strategies.
+Next: Restart or inspect `PolyCopyTrader.Service` on the new server and check its service logs around `2026-05-13T22:32Z` / `2026-05-14T01:32` Europe/Sofia.
+Notes: Latest DB API errors before the stop were CLOB refresh timeouts and WebSocket close/heartbeat events. `git diff --check` was run after context/history updates and reported only existing line-ending warnings plus the untracked SDK artifact.
+Blockers: The service appears stopped or no longer writing to the new database; remote IPC is not reachable from the dev machine.
+
 ## Active Update 2026-05-13 Raise CLOB Refresh Timeout
 Goal: Raise the BTC 5m order-book refresh worker CLOB `/book` timeout to 5 seconds.
 Status: Completed
