@@ -1,3 +1,16 @@
+## Active Update 2026-05-14 Oldest BTC 5m Market Probe
+Goal: Determine how far back BTC Up or Down 5m market history can be found.
+Status: Completed
+Done:
+- Ran a temporary read-only C#/.NET probe against the new PostgreSQL database and public Polymarket Data/Gamma APIs, then removed the temporary project.
+- Found the oldest BTC 5m Gamma market metadata currently present in the new DB: `btc-updown-5m-1766162100`, slug epoch `2025-12-19T16:35:00Z`, condition `0x33f2f9edc51b2f6f92f2636b6fce7ee468770a581e6951c301b932fd7a3fd127`.
+- Checked the oldest December 2025 and January 2026 BTC 5m conditions from the DB through public Data API `/trades?market=<conditionId>`; they returned `0` rows.
+- Found the earliest checked DB BTC 5m market with non-empty Data API trade history: `btc-updown-5m-1777876500`, slug epoch `2026-05-04T06:35:00Z`, condition `0xd0d732fc516a3648f17d4e7dffea213c6bc3f3ab15d62b1b9ba7985aaad41a8f`.
+- Public Data API returned `1000` rows for that May 4 market with `limit=10000`, indicating usable history there but likely server-side page cap/pagination behavior.
+Next: If full BTC 5m trade-history ingestion is needed, implement a read-only paginated importer/exporter starting from the May 4 market range and separately preserve older Gamma metadata even when Data API trades are empty.
+Notes: Direct Gamma `/markets?slug=...` exact lookups were not reliable for older historical slugs during this probe; the DB rows were previously ingested from Gamma listings and should be treated as available metadata, while trade availability is proven through Data API counts.
+Blockers: None.
+
 ## Active Update 2026-05-14 BTC 5m Trade API Probe
 Goal: Check whether BTC Up or Down 5m market trade history can be pulled through Polymarket API.
 Status: Completed
