@@ -102,3 +102,10 @@ Request:
 
 Result:
 Changed the `btc_5m_history` backfill so the BTC Up or Down 5m market list comes directly from Polymarket Gamma API by generated `btc-updown-5m-<unix>` slugs instead of reading `polymarket_gamma_markets`. PostgreSQL now remains only for the `btc_5m_history` truncate/cache/write path, while BTC/USDT prices continue to come from Binance Spot REST `aggTrades`. Updated command tests and README. Verification passed: service Release build, targeted BTC history command tests 13/13, full test project 460/460, `git diff --check` with CRLF warnings only, and a dry-run against `2025-12-18T04:25:00Z` loaded one resolved Gamma market from Polymarket API and computed 60 points without writing.
+
+## 2026-05-14T13:15:23.1723577+00:00
+Request:
+Давай реальный запускать
+
+Result:
+Ran the real `btc_5m_history` backfill. Two early attempts were stopped before completion because the original per-market DB cache reload/write and then per-market Binance price loading were too slow for `18,983` markets. Optimized the command to aggregate rows in memory, save the final `btc_5m_history` rows once, and source BTC/USDT prices from cached Binance 1-second `klines` chunks. The successful real run used Polymarket Gamma API for the market list, performed `TRUNCATE btc_5m_history RESTART IDENTITY`, processed all `18,983` markets, saved `305,079` rows, and reported no unknown-result/no-trade/no-start/Binance-error skips. Verified table totals: `sum(count)=1,138,980`, `sum(up_count)=573,720`, `sum(down_count)=565,260`, so `up_count + down_count = count = 18,983 * 60`. Updated README/tests for the 1-second kline source and optimized write path. Verification passed: service Release build, targeted command tests 13/13, earliest-market dry-run 1/1, full test project 460/460, and `git diff --check` with CRLF warnings only.

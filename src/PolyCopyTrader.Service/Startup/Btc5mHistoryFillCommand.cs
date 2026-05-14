@@ -18,7 +18,7 @@ public static class Btc5mHistoryFillCommand
     private const int FirstSampleSecond = 2;
     private const int SampleStepSeconds = 5;
     private const int CentsBucketSize = 5;
-    private const int BinanceAggTradesLimit = 1000;
+    private const int BinanceBtcPricePointsLimit = 1000;
     private static readonly DateTimeOffset DefaultMarketStartUtc = DateTimeOffset.FromUnixTimeSeconds(1766031900);
 
     private static readonly Regex BtcFiveMinuteSlugRegex = new(
@@ -44,7 +44,7 @@ public static class Btc5mHistoryFillCommand
         var options = Btc5mHistoryFillOptions.FromArgs(args);
         using var httpClient = new HttpClient { Timeout = TimeSpan.FromSeconds(options.HttpTimeoutSeconds) };
         var database = new Btc5mHistoryDatabase(new PostgresConnectionFactory(configuration.Storage));
-        var binance = new BinanceAggTradeClient(httpClient, options.BinanceBaseUrl, options.BinanceRequestDelayMilliseconds);
+        var binance = new BinanceOneSecondKlineClient(httpClient, options.BinanceBaseUrl, options.BinanceRequestDelayMilliseconds);
         var marketSource = new GammaBtc5mHistoryMarketSource(
             httpClient,
             options.GammaBaseUrl,
@@ -56,7 +56,7 @@ public static class Btc5mHistoryFillCommand
 
     public static async Task<int> ExecuteAsync(
         IBtc5mHistoryDatabase database,
-        IBinanceAggTradeClient binance,
+        IBinanceBtcPriceClient binance,
         Btc5mHistoryFillOptions options,
         TextWriter output,
         CancellationToken cancellationToken)
@@ -66,7 +66,7 @@ public static class Btc5mHistoryFillCommand
 
     public static async Task<int> ExecuteAsync(
         IBtc5mHistoryDatabase database,
-        IBinanceAggTradeClient binance,
+        IBinanceBtcPriceClient binance,
         IBtc5mHistoryMarketSource marketSource,
         Btc5mHistoryFillOptions options,
         TextWriter output,
@@ -103,6 +103,7 @@ public static class Btc5mHistoryFillCommand
             await database.TruncateHistoryAsync(cancellationToken);
         }
 
+        var cache = new Dictionary<Btc5mHistoryPointKey, Btc5mHistoryCacheRow>();
         var summary = new Btc5mHistoryFillSummary(MarketsLoaded: markets.Count);
         for (var marketIndex = 0; marketIndex < markets.Count; marketIndex++)
         {
@@ -115,10 +116,10 @@ public static class Btc5mHistoryFillCommand
 
             var tradesFromUtc = market.StartUtc.AddMinutes(-5);
             var tradesToUtc = market.EndUtc;
-            IReadOnlyList<BinanceAggTrade> trades;
+            IReadOnlyList<BinanceBtcPricePoint> trades;
             try
             {
-                trades = await binance.GetAggTradesAsync(tradesFromUtc, tradesToUtc, cancellationToken);
+                trades = await binance.GetPricePointsAsync(tradesFromUtc, tradesToUtc, cancellationToken);
             }
             catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException or JsonException)
             {
@@ -131,13 +132,10 @@ public static class Btc5mHistoryFillCommand
             if (trades.Count == 0)
             {
                 summary = summary with { MarketsSkippedNoTrades = summary.MarketsSkippedNoTrades + 1 };
-                await output.WriteLineAsync($"Skipped {market.Slug}: Binance BTCUSDT trade history is empty.");
+                await output.WriteLineAsync($"Skipped {market.Slug}: Binance BTCUSDT price history is empty.");
                 continue;
             }
 
-            var cache = options.DryRun
-                ? []
-                : await database.LoadHistoryCacheAsync(cancellationToken);
             var buildResult = BuildMarketCacheUpdates(market, trades, cache);
             if (buildResult.SkipReason is not null)
             {
@@ -149,11 +147,6 @@ public static class Btc5mHistoryFillCommand
                 };
                 await output.WriteLineAsync($"Skipped {market.Slug}: {buildResult.SkipReason.Value}.");
                 continue;
-            }
-
-            if (!options.DryRun)
-            {
-                await database.SaveHistoryCacheChangesAsync(buildResult.ChangedRows, cancellationToken);
             }
 
             summary = summary with
@@ -174,6 +167,16 @@ public static class Btc5mHistoryFillCommand
             }
         }
 
+        if (!options.DryRun)
+        {
+            var changedRows = cache.Values
+                .Where(row => row.State != Btc5mHistoryCacheState.Loaded)
+                .ToArray();
+            await output.WriteLineAsync(
+                "Saving btc_5m_history rows: " + changedRows.Length.ToString(CultureInfo.InvariantCulture));
+            await database.SaveHistoryCacheChangesAsync(changedRows, cancellationToken);
+        }
+
         await output.WriteLineAsync("BTC 5m history fill complete.");
         await output.WriteLineAsync(summary.ToDisplayString());
         return summary.MarketsProcessed > 0 ? 0 : 1;
@@ -181,7 +184,7 @@ public static class Btc5mHistoryFillCommand
 
     public static Btc5mHistoryMarketBuildResult BuildMarketCacheUpdates(
         Btc5mHistoryMarket market,
-        IReadOnlyList<BinanceAggTrade> trades,
+        IReadOnlyList<BinanceBtcPricePoint> trades,
         IDictionary<Btc5mHistoryPointKey, Btc5mHistoryCacheRow> cache)
     {
         ArgumentNullException.ThrowIfNull(market);
@@ -206,6 +209,7 @@ public static class Btc5mHistoryFillCommand
         var pointsInserted = 0;
         var pointsUpdated = 0;
         var pointsSkippedMissingPrice = 0;
+        var touchedRows = new Dictionary<Btc5mHistoryPointKey, Btc5mHistoryCacheRow>();
 
         foreach (var secCounter in EnumerateSampleCounters())
         {
@@ -230,6 +234,7 @@ public static class Btc5mHistoryFillCommand
                     downCount: 0,
                     state: Btc5mHistoryCacheState.Inserted);
                 cache.Add(key, row);
+                touchedRows[key] = row;
                 pointsInserted++;
                 continue;
             }
@@ -238,11 +243,13 @@ public static class Btc5mHistoryFillCommand
             if (row.State == Btc5mHistoryCacheState.Loaded)
             {
                 row.State = Btc5mHistoryCacheState.Updated;
-                pointsUpdated++;
             }
+
+            touchedRows[key] = row;
+            pointsUpdated++;
         }
 
-        foreach (var row in cache.Values.Where(row => row.State != Btc5mHistoryCacheState.Loaded))
+        foreach (var row in touchedRows.Values)
         {
             if (string.Equals(market.Result, "Up", StringComparison.OrdinalIgnoreCase))
             {
@@ -255,7 +262,7 @@ public static class Btc5mHistoryFillCommand
         }
 
         return new Btc5mHistoryMarketBuildResult(
-            cache.Values.Where(row => row.State != Btc5mHistoryCacheState.Loaded).ToArray(),
+            touchedRows.Values.ToArray(),
             pointsInserted,
             pointsUpdated,
             pointsSkippedMissingPrice,
@@ -381,7 +388,7 @@ public static class Btc5mHistoryFillCommand
     }
 
     private static bool TryGetLastPriceAtOrBefore(
-        IReadOnlyList<BinanceAggTrade> sortedTrades,
+        IReadOnlyList<BinanceBtcPricePoint> sortedTrades,
         DateTimeOffset targetUtc,
         out decimal price)
     {
@@ -590,12 +597,16 @@ ON CONFLICT (seconds, cents) DO UPDATE SET
 
     }
 
-    private sealed class BinanceAggTradeClient(
+    private sealed class BinanceOneSecondKlineClient(
         HttpClient httpClient,
         string binanceBaseUrl,
-        int requestDelayMilliseconds) : IBinanceAggTradeClient
+        int requestDelayMilliseconds) : IBinanceBtcPriceClient
     {
-        public async Task<IReadOnlyList<BinanceAggTrade>> GetAggTradesAsync(
+        private readonly List<BinanceBtcPricePoint> cachedPoints = [];
+        private DateTimeOffset? cachedFromUtc;
+        private DateTimeOffset? cachedToUtc;
+
+        public async Task<IReadOnlyList<BinanceBtcPricePoint>> GetPricePointsAsync(
             DateTimeOffset fromUtc,
             DateTimeOffset toUtc,
             CancellationToken cancellationToken)
@@ -605,91 +616,117 @@ ON CONFLICT (seconds, cents) DO UPDATE SET
                 return [];
             }
 
-            var trades = new List<BinanceAggTrade>();
-            long? nextFromId = null;
-            while (true)
+            await EnsureCacheCoversAsync(fromUtc, toUtc, cancellationToken);
+
+            return cachedPoints
+                .Where(point => point.TradeTimeUtc >= fromUtc && point.TradeTimeUtc <= toUtc)
+                .OrderBy(trade => trade.TradeTimeUtc)
+                .ThenBy(trade => trade.AggregateTradeId)
+                .ToArray();
+        }
+
+        private async Task EnsureCacheCoversAsync(
+            DateTimeOffset fromUtc,
+            DateTimeOffset toUtc,
+            CancellationToken cancellationToken)
+        {
+            if (cachedFromUtc is { } cacheFrom &&
+                cachedToUtc is { } cacheTo &&
+                fromUtc >= cacheFrom &&
+                toUtc <= cacheTo)
             {
-                var requestUri = BuildAggTradesUri(fromUtc, toUtc, nextFromId);
+                return;
+            }
+
+            var chunkFromUtc = FloorToUtcDay(fromUtc);
+            var chunkToUtc = chunkFromUtc.AddDays(1).AddMinutes(10);
+            cachedPoints.Clear();
+
+            var nextStartTimeMilliseconds = chunkFromUtc.ToUnixTimeMilliseconds();
+            var endTimeMilliseconds = chunkToUtc.ToUnixTimeMilliseconds();
+            while (nextStartTimeMilliseconds <= endTimeMilliseconds)
+            {
+                var requestUri = BuildKlinesUri(nextStartTimeMilliseconds, endTimeMilliseconds);
                 using var response = await httpClient.GetAsync(requestUri, cancellationToken);
                 response.EnsureSuccessStatusCode();
                 await using var stream = await response.Content.ReadAsStreamAsync(cancellationToken);
                 using var document = await JsonDocument.ParseAsync(stream, cancellationToken: cancellationToken);
-                var page = ParseAggTrades(document.RootElement);
+                var page = ParseKlines(document.RootElement);
                 if (page.Count == 0)
                 {
                     break;
                 }
 
-                foreach (var trade in page)
-                {
-                    if (trade.TradeTimeUtc >= fromUtc && trade.TradeTimeUtc <= toUtc)
-                    {
-                        trades.Add(trade);
-                    }
-                }
+                cachedPoints.AddRange(page);
 
-                var last = page[^1];
-                if (page.Count < BinanceAggTradesLimit || last.TradeTimeUtc > toUtc)
+                var lastOpenTimeMilliseconds = page[^1].AggregateTradeId;
+                var next = lastOpenTimeMilliseconds + 1000;
+                if (next <= nextStartTimeMilliseconds)
                 {
                     break;
                 }
 
-                nextFromId = last.AggregateTradeId + 1;
+                nextStartTimeMilliseconds = next;
+                if (page.Count < BinanceBtcPricePointsLimit)
+                {
+                    break;
+                }
+
                 if (requestDelayMilliseconds > 0)
                 {
                     await Task.Delay(requestDelayMilliseconds, cancellationToken);
                 }
             }
 
-            return trades
-                .OrderBy(trade => trade.TradeTimeUtc)
-                .ThenBy(trade => trade.AggregateTradeId)
-                .ToArray();
+            cachedFromUtc = chunkFromUtc;
+            cachedToUtc = chunkToUtc;
         }
 
-        private string BuildAggTradesUri(DateTimeOffset fromUtc, DateTimeOffset toUtc, long? fromId)
+        private string BuildKlinesUri(long startTimeMilliseconds, long endTimeMilliseconds)
         {
             var normalizedBaseUrl = binanceBaseUrl.TrimEnd('/');
-            if (fromId is not null)
-            {
-                return normalizedBaseUrl +
-                    "/api/v3/aggTrades?symbol=BTCUSDT&limit=" +
-                    BinanceAggTradesLimit.ToString(CultureInfo.InvariantCulture) +
-                    "&fromId=" +
-                    fromId.Value.ToString(CultureInfo.InvariantCulture);
-            }
-
             return normalizedBaseUrl +
-                "/api/v3/aggTrades?symbol=BTCUSDT&limit=" +
-                BinanceAggTradesLimit.ToString(CultureInfo.InvariantCulture) +
+                "/api/v3/klines?symbol=BTCUSDT&interval=1s&limit=" +
+                BinanceBtcPricePointsLimit.ToString(CultureInfo.InvariantCulture) +
                 "&startTime=" +
-                fromUtc.ToUnixTimeMilliseconds().ToString(CultureInfo.InvariantCulture) +
+                startTimeMilliseconds.ToString(CultureInfo.InvariantCulture) +
                 "&endTime=" +
-                toUtc.ToUnixTimeMilliseconds().ToString(CultureInfo.InvariantCulture);
+                endTimeMilliseconds.ToString(CultureInfo.InvariantCulture);
         }
 
-        private static IReadOnlyList<BinanceAggTrade> ParseAggTrades(JsonElement root)
+        private static IReadOnlyList<BinanceBtcPricePoint> ParseKlines(JsonElement root)
         {
             if (root.ValueKind != JsonValueKind.Array)
             {
-                throw new JsonException("Binance aggTrades response must be a JSON array.");
+                throw new JsonException("Binance klines response must be a JSON array.");
             }
 
-            var trades = new List<BinanceAggTrade>();
+            var points = new List<BinanceBtcPricePoint>();
             foreach (var item in root.EnumerateArray())
             {
-                var id = item.GetProperty("a").GetInt64();
-                var priceText = item.GetProperty("p").GetString() ?? "0";
-                if (!decimal.TryParse(priceText, NumberStyles.Number, CultureInfo.InvariantCulture, out var price))
+                if (item.ValueKind != JsonValueKind.Array || item.GetArrayLength() < 7)
                 {
-                    throw new JsonException("Binance aggTrade price was not a decimal.");
+                    throw new JsonException("Binance kline item must be an array with at least 7 fields.");
                 }
 
-                var tradeTimeUtc = DateTimeOffset.FromUnixTimeMilliseconds(item.GetProperty("T").GetInt64());
-                trades.Add(new BinanceAggTrade(id, price, tradeTimeUtc));
+                var openTimeMilliseconds = item[0].GetInt64();
+                var priceText = item[4].GetString() ?? "0";
+                if (!decimal.TryParse(priceText, NumberStyles.Number, CultureInfo.InvariantCulture, out var price))
+                {
+                    throw new JsonException("Binance kline close price was not a decimal.");
+                }
+
+                var closeTimeUtc = DateTimeOffset.FromUnixTimeMilliseconds(item[6].GetInt64());
+                points.Add(new BinanceBtcPricePoint(openTimeMilliseconds, price, closeTimeUtc));
             }
 
-            return trades;
+            return points;
+        }
+
+        private static DateTimeOffset FloorToUtcDay(DateTimeOffset value)
+        {
+            var utc = value.ToUniversalTime();
+            return new DateTimeOffset(utc.Year, utc.Month, utc.Day, 0, 0, 0, TimeSpan.Zero);
         }
     }
 
@@ -815,9 +852,9 @@ public interface IBtc5mHistoryDatabase
         CancellationToken cancellationToken);
 }
 
-public interface IBinanceAggTradeClient
+public interface IBinanceBtcPriceClient
 {
-    Task<IReadOnlyList<BinanceAggTrade>> GetAggTradesAsync(
+    Task<IReadOnlyList<BinanceBtcPricePoint>> GetPricePointsAsync(
         DateTimeOffset fromUtc,
         DateTimeOffset toUtc,
         CancellationToken cancellationToken);
@@ -953,7 +990,7 @@ public sealed record Btc5mHistoryMarket(
     DateTimeOffset EndUtc,
     string? Result);
 
-public sealed record BinanceAggTrade(
+public sealed record BinanceBtcPricePoint(
     long AggregateTradeId,
     decimal Price,
     DateTimeOffset TradeTimeUtc);

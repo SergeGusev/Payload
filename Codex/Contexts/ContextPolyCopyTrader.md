@@ -1,3 +1,17 @@
+## Active Update 2026-05-14 BTC 5m History Real Fill
+Goal: Run the real `btc_5m_history` backfill against Polymarket Gamma API markets and Binance BTC/USDT API history.
+Status: Completed
+Done:
+- Ran the real `--fill-btc-5m-history` command with a new `TRUNCATE btc_5m_history RESTART IDENTITY`.
+- Optimized the command before the successful run: it now aggregates `btc_5m_history` in memory and saves the final rows once, instead of reloading/saving the table per market.
+- Replaced per-market Binance `aggTrades` windows with cached Binance BTCUSDT 1-second `klines` chunks, using the latest completed 1-second close at or below each sample time.
+- The successful run loaded `18,983` resolved BTC Up or Down 5m markets from Polymarket Gamma API, processed all `18,983`, and saved `305,079` `btc_5m_history` rows.
+- Verified database totals: `sum(count)=1,138,980`, `sum(up_count)=573,720`, `sum(down_count)=565,260`, and `up_count + down_count = count = 18,983 * 60`.
+- Updated README and command tests for the Binance 1-second kline source and in-memory aggregate write path.
+Next: Use `btc_5m_history` for analysis/querying; rerun the fill later if more closed BTC 5m markets need to be added.
+Notes: Two earlier real attempts were stopped before completion because the first DB-cache-per-market and second per-market Binance request approaches were too slow; the successful run used `--btc-5m-history-binance-delay-ms 0`. Verification passed: `dotnet build src\PolyCopyTrader.Service\PolyCopyTrader.Service.csproj -c Release --no-restore`, targeted `Btc5mHistoryFillCommandTests` 13/13, dry-run against `2025-12-18T04:25:00Z` with 1 market and 60 points, full `dotnet test tests\PolyCopyTrader.Tests\PolyCopyTrader.Tests.csproj -c Release --no-restore` 460/460, and `git diff --check` with CRLF warnings only.
+Blockers: None.
+
 ## Active Update 2026-05-14 BTC History Polymarket API Source
 Goal: Change the BTC 5m history backfill so the Polymarket market list comes directly from Polymarket Gamma API instead of PostgreSQL.
 Status: Completed

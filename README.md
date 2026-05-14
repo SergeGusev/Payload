@@ -161,7 +161,8 @@ including markets with zero volume. PostgreSQL is used only for truncating,
 reading, and writing the output/cache table `btc_5m_history`; the local
 `polymarket_gamma_markets` cache is not used as the market source for this
 backfill. The command then rebuilds the `(seconds, cents)` counters from public
-Binance BTCUSDT `aggTrades`.
+Binance BTCUSDT 1-second `klines`, using the latest completed 1-second close at
+or below each market sample time.
 
 ```powershell
 dotnet run --project src/PolyCopyTrader.Service/PolyCopyTrader.Service.csproj -- --fill-btc-5m-history

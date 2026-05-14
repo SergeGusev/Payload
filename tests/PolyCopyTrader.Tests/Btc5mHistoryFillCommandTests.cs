@@ -87,9 +87,9 @@ public sealed class Btc5mHistoryFillCommandTests
         };
         var trades = new[]
         {
-            new BinanceAggTrade(1, 100.00m, startUtc.AddSeconds(-1)),
-            new BinanceAggTrade(2, 100.12m, startUtc.AddSeconds(2)),
-            new BinanceAggTrade(3, 99.88m, startUtc.AddSeconds(7))
+            new BinanceBtcPricePoint(1, 100.00m, startUtc.AddSeconds(-1)),
+            new BinanceBtcPricePoint(2, 100.12m, startUtc.AddSeconds(2)),
+            new BinanceBtcPricePoint(3, 99.88m, startUtc.AddSeconds(7))
         };
 
         var result = Btc5mHistoryFillCommand.BuildMarketCacheUpdates(market, trades, cache);
@@ -126,11 +126,11 @@ public sealed class Btc5mHistoryFillCommandTests
             startUtc.AddMinutes(5),
             "Down");
         var database = new FakeBtc5mHistoryDatabase();
-        var binance = new FakeBinanceAggTradeClient(
+        var binance = new FakeBinanceOneSecondKlineClient(
             [
-                new BinanceAggTrade(1, 100.00m, startUtc.AddSeconds(-1)),
-                new BinanceAggTrade(2, 99.88m, startUtc.AddSeconds(2)),
-                new BinanceAggTrade(3, 99.90m, startUtc.AddSeconds(7))
+                new BinanceBtcPricePoint(1, 100.00m, startUtc.AddSeconds(-1)),
+                new BinanceBtcPricePoint(2, 99.88m, startUtc.AddSeconds(2)),
+                new BinanceBtcPricePoint(3, 99.90m, startUtc.AddSeconds(7))
             ]);
         var marketSource = new FakeBtc5mHistoryMarketSource([market]);
         using var output = new StringWriter();
@@ -170,7 +170,7 @@ public sealed class Btc5mHistoryFillCommandTests
 
         var exitCode = await Btc5mHistoryFillCommand.ExecuteAsync(
             database,
-            new FakeBinanceAggTradeClient([]),
+            new FakeBinanceOneSecondKlineClient([]),
             marketSource,
             CreateOptions(),
             output,
@@ -225,9 +225,9 @@ public sealed class Btc5mHistoryFillCommandTests
         }
     }
 
-    private sealed class FakeBinanceAggTradeClient(IReadOnlyList<BinanceAggTrade> trades) : IBinanceAggTradeClient
+    private sealed class FakeBinanceOneSecondKlineClient(IReadOnlyList<BinanceBtcPricePoint> trades) : IBinanceBtcPriceClient
     {
-        public Task<IReadOnlyList<BinanceAggTrade>> GetAggTradesAsync(
+        public Task<IReadOnlyList<BinanceBtcPricePoint>> GetPricePointsAsync(
             DateTimeOffset fromUtc,
             DateTimeOffset toUtc,
             CancellationToken cancellationToken)
