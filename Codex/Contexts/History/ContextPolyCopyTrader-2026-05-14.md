@@ -88,3 +88,10 @@ btc_5m_history пустая. Что-то не получилось?
 
 Result:
 Diagnosed the empty `btc_5m_history`: the configured local PostgreSQL target is `127.0.0.1:5432/polycopytrader`; `btc_5m_history` had `0` rows, while `polymarket_gamma_markets` had `2997` BTC 5m rows but `0` with `closed=true` and `2935` ended rows still cached as `active=true/closed=false` without local `outcomePrices`. Updated the backfill command to load closed OR ended BTC 5m rows, resolve missing final Up/Down results from Gamma API by slug in batches, and avoid truncating when no known result can be resolved. Verified a dry-run from `2026-02-12T00:40:00Z` resolves `1/1` market and computes `60` inserted points without writing. Full tests passed 459/459 and service Release build passed. Full real backfill was not run because it truncates and can take a long time against thousands of markets.
+
+## 2026-05-14T10:15:43.0277565Z
+Request:
+А зачем мы берём BTC из базы? Я рассчитывал, что будем брать их из API
+
+Result:
+Clarified by code inspection that BTC/USDT price history is not read from PostgreSQL. The backfill reads BTC prices from Binance Spot REST `aggTrades` API. PostgreSQL is currently used only to get the Polymarket BTC 5m market catalog from `polymarket_gamma_markets`, to load/write the `btc_5m_history` cache/output table, and Gamma API is used to resolve missing Polymarket outcomes by slug. No code changed.

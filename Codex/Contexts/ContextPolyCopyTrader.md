@@ -1,3 +1,14 @@
+## Active Update 2026-05-14 BTC History API Source Clarification
+Goal: Clarify whether the BTC 5m history backfill reads BTC prices from the database or from APIs.
+Status: Completed
+Done:
+- Confirmed `Btc5mHistoryFillCommand` reads BTC/USDT prices from Binance Spot REST `aggTrades` API through `BinanceAggTradeClient`.
+- Confirmed PostgreSQL is currently used for the market catalog (`polymarket_gamma_markets`) and for the output/cache table (`btc_5m_history`), not for BTC price history.
+- Confirmed missing Polymarket market outcomes are resolved from Gamma API by slug before backfill when local Gamma rows lack `outcomePrices`.
+Next: Decide whether the Polymarket market catalog itself should also be sourced directly from Gamma API instead of local PostgreSQL cache.
+Notes: No code changed for this clarification. Inspected `Btc5mHistoryFillCommand` references for `LoadClosedBtc5mMarketsAsync`, `GetAggTradesAsync`, `GammaBtc5mHistoryResolver`, `TRUNCATE btc_5m_history`, and `LoadHistoryCacheAsync`.
+Blockers: None.
+
 ## Active Update 2026-05-14 BTC 5m History Empty Diagnosis
 Goal: Diagnose why `btc_5m_history` stayed empty and make the backfill command work with the local Gamma cache shape.
 Status: Completed
