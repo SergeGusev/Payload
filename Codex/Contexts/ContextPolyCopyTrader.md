@@ -1,3 +1,17 @@
+## Active Update 2026-05-14 Server BTC Statistics Settlement Verification
+Goal: Verify the deployed closed-Gamma settlement fix on the new server.
+Status: Completed
+Done:
+- Confirmed PostgreSQL on `192.168.0.101:5432` is reachable and `PolyCopyTrader.Service` is running: status `Running`, mode `Live`, started `2026-05-14T17:17:08Z`, heartbeat age about `15.0s`, no last error.
+- Confirmed `btc_5m_history` is now being updated by live observations: `sum(count)=1140299`, `sum(up_count)=574496`, `sum(down_count)=565803`, deltas from import `+1319/+776/+543`.
+- Confirmed `btc_5m_history_live_observations` settlement is working: `1430` total, `1319` applied, `111` pending, `0` due pending; latest apply at `2026-05-14T18:10:33Z`.
+- Confirmed closed Gamma refresh rows exist locally, for example recent BTC 5m markets now have `closed=true`, `accepting_orders=false`, and `outcomePrices` values in `polymarket_gamma_markets`.
+- Confirmed `btc_up_down_5m_statistics_ticks` continues updating: `5674` total rows, latest sample age about `0.5s`, `87` total `would_bet` ticks.
+- Found a separate Gamma active-market ingestion issue: repeated `PolymarketGammaClient/GetActiveMarkets` API errors with HTTP `422` and message `offset exceeds maximum allowed for markets list queries`.
+Next: Fix Gamma active-market pagination to stop before/when Gamma reports max-offset overflow, then redeploy and recheck API errors.
+Notes: Used a temporary C#/.NET/Npgsql diagnostic project from `%TEMP%` without printing secrets and removed it after use. Existing old untracked deploy/artifact files were left untouched. No application source changed in this check.
+Blockers: None for the closed-market settlement fix; the separate active-market pagination issue remains.
+
 ## Active Update 2026-05-14 BTC Statistics Closed Gamma Settlement Fix
 Goal: Fix BTC Up or Down 5m Statistics live-observation settlement when local Gamma metadata is stale after market close.
 Status: Completed

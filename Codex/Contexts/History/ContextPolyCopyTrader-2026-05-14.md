@@ -197,3 +197,9 @@ Request:
 
 Result:
 Implemented a BTC Up or Down 5m Statistics settlement fix. Added `IPolymarketGammaClient.GetClosedMarketBySlugAsync` and implemented it with Gamma `GET /markets?slug=...&closed=true&limit=1`; added generic `ParseGammaMarkets`; updated `BtcUpDown5mStatisticsProcessor` to refresh and upsert closed Gamma metadata by slug when local stored metadata is missing or still unresolved, then retry Up/Down extraction before leaving the observation pending. Added tests for closed Gamma slug lookup and stale local metadata settlement. Verification passed: targeted tests 36/36, full test project 469/469, Release solution build with 0 warnings/errors, and `git diff --check` with CRLF warnings only. Server deployment/restart is still needed for pending server observations to apply.
+## 2026-05-14T18:15:25.9653376Z
+Request:
+Выложено, проверяй
+
+Result:
+Verified the deployed closed-Gamma settlement fix on server `192.168.0.101`. `PolyCopyTrader.Service` is running (`started_at_utc=2026-05-14T17:17:08Z`, heartbeat age about `15s`, no last error). The fix works: `btc_5m_history_live_observations` had `1430` rows with `1319` applied, `111` pending, and `0` due pending; `btc_5m_history` aggregates increased from import by `+1319` count, `+776` up, and `+543` down. Recent closed BTC 5m Gamma rows are now refreshed locally with `closed=true` and resolved `outcomePrices`. Statistics ticks continue (`5674` total, latest age about `0.5s`, `87` would-bet ticks). Found a separate issue: active Gamma market ingestion is repeatedly logging `PolymarketGammaClient/GetActiveMarkets` HTTP `422` errors because Gamma reports `offset exceeds maximum allowed for markets list queries`; next fix should make active-market pagination stop gracefully on that condition.
