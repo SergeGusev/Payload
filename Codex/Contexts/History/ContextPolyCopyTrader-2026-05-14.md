@@ -215,3 +215,10 @@ Request:
 
 Result:
 Implemented the Gamma active-market max-offset fix. `GammaMarketIngestionProcessor` now catches only `PolymarketGammaClient/GetActiveMarkets` HTTP 422 errors containing `offset exceeds maximum allowed`, treats that condition as the end of the active-market scan, performs normal WebSocket asset retention, and returns a completed ingestion result. Unexpected Gamma active-market errors still rethrow. `PolymarketHttpClient` now treats this expected 422 as non-persistable for `api_errors`, while HTTP logs still capture the failed request. Added tests for max-offset scan completion, unexpected error rethrowing, and no API-error persistence for the expected 422. Verification passed: targeted tests 40/40, full test project 472/472, Release solution build with 0 warnings/errors, and `git diff --check` with CRLF warnings only. Server deployment/restart is still needed.
+
+## 2026-05-14T20:10:43.0570934+00:00
+Request:
+Дай статистику по Statistics стратегии
+
+Result:
+Queried the new server database read-only for `BTC Up or Down 5m Statistics`. The strategy was enabled with `live_stakes=false`, latest tick age about `0.6s`, `11015` ticks across `50` markets, `312` would-bet ticks, `2690/2808` live observations applied, and no due-pending observations or Statistics API errors. Resolved would-bet simulations were negative overall: first-per-market `37` bets, `13` wins, one-share PnL `-0.30`; Up-only was positive but Down-only was negative, so the sample remains too small for live decisions.

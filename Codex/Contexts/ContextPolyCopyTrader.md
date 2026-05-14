@@ -1,3 +1,17 @@
+## Active Update 2026-05-14 BTC Statistics Strategy Snapshot
+Goal: Report current server-side performance/status statistics for `BTC Up or Down 5m Statistics`.
+Status: Completed
+Done:
+- Queried the server PostgreSQL database at `192.168.0.101` read-only using a temporary C#/.NET/Npgsql report and removed the temp project after use.
+- Confirmed the service is running in `Live` mode while the statistics strategy itself remains enabled with `live_stakes=false`; latest stats tick age was about `0.6s` at database time `2026-05-14T20:09:49Z`.
+- Confirmed the strategy has collected `11015` ticks across `50` markets since `2026-05-14T15:54:08Z`; `312` ticks were `would_bet`, `10588` were `insufficient_history`, `28` were `no_positive_edge`, and `87` were `start_price_missing`.
+- Confirmed live history feedback is working: `2808` observations, `2690` applied, `118` pending, `0` due pending; `btc_5m_history` totals are now `sum(count)=1141670`, `sum(up_count)=575211`, `sum(down_count)=566459`.
+- Evaluated resolved would-bet outcomes: tick-level simulation was negative (`302` priced resolved ticks, `73` wins, one-share PnL `-25.24`); first-per-5s-bucket was also negative (`111`, `32` wins, `-6.63`); first-per-market was near flat but still negative (`37`, `13` wins, one-share PnL `-0.30`).
+- Noted the most useful cautious interpretation: `Up` first-per-market had `21` bets, `9` wins, one-share PnL `+1.18`, while `Down` had `16` bets, `4` wins, `-1.48`; edge bucket `10pp+` performed worst so far, indicating model overconfidence or duplicated early regimes.
+Next: Keep this strategy observational only, collect a larger first-per-market sample, and consider adding explicit first-signal Paper tracking before considering any stake logic.
+Notes: No application source or database data was changed. No `Statistics` API errors were found in the last 24 hours. Existing old untracked deploy/artifact files were left untouched.
+Blockers: None.
+
 ## Active Update 2026-05-14 Gamma Active Market Max Offset Fix
 Goal: Stop expected Gamma `GetActiveMarkets` max-offset 422 responses from polluting API errors and failing ingestion cycles.
 Status: Completed
