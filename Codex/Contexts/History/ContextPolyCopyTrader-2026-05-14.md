@@ -229,3 +229,10 @@ Request:
 
 Result:
 Added a top Dashboard `Database` selector with `Local database` and `Remote database`. The local option uses the configured PostgreSQL connection string; the remote option rebuilds the dashboard runtime using the same connection string with host overridden to `192.168.0.1`. Switching sources recreates the repository/data service/CSV exporter, clears stale displayed rows before refresh, and updates the storage status. IPC remains on the configured dashboard IPC URL. README was updated. Verification passed: Dashboard Release build succeeded with existing Storage nullable warnings, temporary output was removed, tests passed 472/472, and `git diff --check` passed with CRLF warnings only.
+
+## 2026-05-14T20:32:07.4959475+00:00
+Request:
+В Dashboard после колонки Live с чекбосами размести колонки Settled, Won, Lost, Realized, Closed ROI
+
+Result:
+Reordered the `Strategies -> All` Dashboard grid so `Settled`, `Won`, `Lost`, `Realized`, and `Closed ROI` appear immediately after the `Live` checkbox column, and removed their old later positions from the same grid. Verification passed: Dashboard Release build succeeded with existing Storage nullable warnings, temporary build output was removed, tests passed 472/472, and `git diff --check` passed with CRLF warning only.

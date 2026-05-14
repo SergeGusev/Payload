@@ -1,3 +1,13 @@
+## Active Update 2026-05-14 Dashboard Strategy Closed Metrics Column Order
+Goal: Move key closed-position strategy metrics immediately after the Dashboard `Live` checkbox column.
+Status: Completed
+Done:
+- Updated `Strategies -> All` in `MainWindow.xaml` so the columns after `Live` are now `Settled`, `Won`, `Lost`, `Realized`, and `Closed ROI`.
+- Removed the old later duplicates of those same closed metrics from the strategy grid.
+Next: None.
+Notes: Verification passed: `dotnet build src\PolyCopyTrader.Dashboard\PolyCopyTrader.Dashboard.csproj -c Release -p:BaseOutputPath=D:\My\Business\PolyMarket\artifacts\dashboard-column-order-build\` succeeded with existing Storage nullable warnings; temporary build output was removed; `dotnet test tests\PolyCopyTrader.Tests\PolyCopyTrader.Tests.csproj -c Release --no-restore` passed 472/472; `git diff --check` passed with CRLF warning only.
+Blockers: None.
+
 ## Active Update 2026-05-14 Dashboard Database Source Selector
 Goal: Add a top-level Dashboard selector for local vs remote PostgreSQL data.
 Status: Completed

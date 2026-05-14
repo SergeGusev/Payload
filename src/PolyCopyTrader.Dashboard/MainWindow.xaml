@@ -288,6 +288,11 @@
                                 </DataTemplate>
                             </DataGridTemplateColumn.CellTemplate>
                         </DataGridTemplateColumn>
+                        <DataGridTextColumn Header="Settled" Binding="{Binding SettledPositionsCount}" Width="80" />
+                        <DataGridTextColumn Header="Won" Binding="{Binding WonPositionsCount}" Width="60" />
+                        <DataGridTextColumn Header="Lost" Binding="{Binding LostPositionsCount}" Width="60" />
+                        <DataGridTextColumn Header="Realized" Binding="{Binding RealizedPnlUsd}" Width="90" />
+                        <DataGridTextColumn Header="Closed ROI" Binding="{Binding ClosedRoiPct}" Width="95" />
                         <DataGridTemplateColumn Header="Paper $" Width="80">
                             <DataGridTemplateColumn.CellTemplate>
                                 <DataTemplate>
@@ -332,11 +337,7 @@
                         <DataGridTextColumn Header="Entered" Binding="{Binding EnteredRunsCount}" Width="70" />
                         <DataGridTextColumn Header="Skipped" Binding="{Binding SkippedRunsCount}" Width="70" />
                         <DataGridTextColumn Header="Settled runs" Binding="{Binding SettledRunsCount}" Width="90" />
-                        <DataGridTextColumn Header="Settled" Binding="{Binding SettledPositionsCount}" Width="80" />
-                        <DataGridTextColumn Header="Won" Binding="{Binding WonPositionsCount}" Width="60" />
-                        <DataGridTextColumn Header="Lost" Binding="{Binding LostPositionsCount}" Width="60" />
                         <DataGridTextColumn Header="Stake" Binding="{Binding StakeUsd}" Width="90" />
-                        <DataGridTextColumn Header="Realized" Binding="{Binding RealizedPnlUsd}" Width="90" />
                         <DataGridTextColumn Header="Open unrealized" Binding="{Binding UnrealizedPnlUsd}" Width="110" />
                         <DataGridTextColumn Header="MtM PnL" Binding="{Binding TotalPnlUsd}" Width="90" />
                         <DataGridTextColumn Header="Win %" Binding="{Binding WinRatePct}" Width="70" />
@@ -346,7 +347,6 @@
                         <DataGridTextColumn Header="Profit factor" Binding="{Binding ProfitFactor}" Width="95" />
                         <DataGridTextColumn Header="Expectancy" Binding="{Binding ExpectancyPnlUsd}" Width="90" />
                         <DataGridTextColumn Header="MtM ROI %" Binding="{Binding RoiPct}" Width="80" />
-                        <DataGridTextColumn Header="Closed ROI %" Binding="{Binding ClosedRoiPct}" Width="95" />
                         <DataGridTextColumn Header="Avg delay s" Binding="{Binding AvgEntryDelaySeconds}" Width="90" />
                         <DataGridTextColumn Header="Max delay s" Binding="{Binding MaxEntryDelaySeconds}" Width="90" />
                         <DataGridTextColumn Header="Live orders" Binding="{Binding LiveOrdersCount}" Width="90" />
