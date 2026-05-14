@@ -1,3 +1,14 @@
+## Active Update 2026-05-14 BTC History Dollar Bucket Estimate
+Goal: Estimate how many `btc_5m_history` rows would remain if cents were bucketed by whole dollars.
+Status: Completed
+Done:
+- Ran a read-only PostgreSQL aggregation over the current `btc_5m_history` table without changing data.
+- Counted unique `(seconds, cents_bucket)` rows for bucket sizes `5`, `10`, `25`, `50`, `100`, `200`, and `500` cents using truncation toward zero.
+- Confirmed a `$1` bucket (`100` cents) would reduce the table from `305,079` rows to `36,797` rows while preserving total observations `1,138,980`.
+Next: Decide whether to change the table fill bucket from `5` cents to `100` cents and rerun the backfill.
+Notes: Temporary C#/.NET/Npgsql read-only probe under `artifacts\btc-5m-bucket-probe` was removed after use. Current `$1` totals would be `sum(count)=1,138,980`, `sum(up_count)=573,720`, `sum(down_count)=565,260`.
+Blockers: None.
+
 ## Active Update 2026-05-14 BTC 5m History Real Fill
 Goal: Run the real `btc_5m_history` backfill against Polymarket Gamma API markets and Binance BTC/USDT API history.
 Status: Completed

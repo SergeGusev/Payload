@@ -109,3 +109,10 @@ Request:
 
 Result:
 Ran the real `btc_5m_history` backfill. Two early attempts were stopped before completion because the original per-market DB cache reload/write and then per-market Binance price loading were too slow for `18,983` markets. Optimized the command to aggregate rows in memory, save the final `btc_5m_history` rows once, and source BTC/USDT prices from cached Binance 1-second `klines` chunks. The successful real run used Polymarket Gamma API for the market list, performed `TRUNCATE btc_5m_history RESTART IDENTITY`, processed all `18,983` markets, saved `305,079` rows, and reported no unknown-result/no-trade/no-start/Binance-error skips. Verified table totals: `sum(count)=1,138,980`, `sum(up_count)=573,720`, `sum(down_count)=565,260`, so `up_count + down_count = count = 18,983 * 60`. Updated README/tests for the 1-second kline source and optimized write path. Verification passed: service Release build, targeted command tests 13/13, earliest-market dry-run 1/1, full test project 460/460, and `git diff --check` with CRLF warnings only.
+
+## 2026-05-14T13:21:08.1477714+00:00
+Request:
+Получилось очень много записей, хочется сократить. Сколько будет записей, если сократим промежуток до доллара?
+
+Result:
+Ran a read-only aggregation over `btc_5m_history` to estimate coarser cents buckets with truncation toward zero. Current `5` cent buckets have `305,079` rows. A `$1` bucket (`100` cents) would have `36,797` unique `(seconds, cents_bucket)` rows while preserving total observations: `sum(count)=1,138,980`, `sum(up_count)=573,720`, `sum(down_count)=565,260`. Neighbor estimates were `50` cents -> `61,453` rows, `$2` -> `21,763` rows, and `$5` -> `10,639` rows. Temporary probe was removed; no application data or source code was changed.
