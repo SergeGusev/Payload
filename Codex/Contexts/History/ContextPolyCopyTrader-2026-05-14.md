@@ -236,3 +236,10 @@ Request:
 
 Result:
 Reordered the `Strategies -> All` Dashboard grid so `Settled`, `Won`, `Lost`, `Realized`, and `Closed ROI` appear immediately after the `Live` checkbox column, and removed their old later positions from the same grid. Verification passed: Dashboard Release build succeeded with existing Storage nullable warnings, temporary build output was removed, tests passed 472/472, and `git diff --check` passed with CRLF warning only.
+
+## 2026-05-14T20:38:22.6794143Z
+Request:
+Посмотри на картинку. Подзаголовок скрывает элементы под ним
+
+Result:
+Inspected the Dashboard screenshot from the Windows clipboard and fixed the header layout. The long `Summary` subtitle now lives in a constrained left column with character ellipsis and a tooltip, while the database/mode/service controls stay in a separate right column and are no longer covered. Verification passed: Dashboard Release build succeeded with existing Storage nullable warnings, full test suite passed 472/472, and `git diff --check` passed with CRLF warning only.

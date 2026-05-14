@@ -95,19 +95,29 @@
             <RowDefinition Height="Auto" />
         </Grid.RowDefinitions>
 
-        <DockPanel Grid.Row="0" LastChildFill="True">
-            <StackPanel DockPanel.Dock="Left">
+        <Grid Grid.Row="0">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="Auto" />
+            </Grid.ColumnDefinitions>
+
+            <StackPanel Grid.Column="0"
+                        Margin="0,0,16,0">
                 <TextBlock Text="{Binding AppTitle}"
                            FontSize="24"
                            FontWeight="SemiBold" />
                 <TextBlock Text="{Binding Summary}"
                            Margin="0,4,0,0"
-                           Foreground="#4B5563" />
+                           Foreground="#4B5563"
+                           TextTrimming="CharacterEllipsis"
+                           TextWrapping="NoWrap"
+                           ToolTip="{Binding Summary}" />
             </StackPanel>
 
-            <StackPanel DockPanel.Dock="Right"
+            <StackPanel Grid.Column="1"
                         Orientation="Horizontal"
-                        HorizontalAlignment="Right">
+                        HorizontalAlignment="Right"
+                        VerticalAlignment="Center">
                 <TextBlock Text="Database"
                            VerticalAlignment="Center"
                            Foreground="#6B7280" />
@@ -131,7 +141,7 @@
                 <Button Content="Refresh"
                         Command="{Binding RefreshCommand}" />
             </StackPanel>
-        </DockPanel>
+        </Grid>
 
         <Border Grid.Row="1"
                 Background="{Binding ServiceBannerBackground}"

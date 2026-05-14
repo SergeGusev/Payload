@@ -1,3 +1,14 @@
+## Active Update 2026-05-14 Dashboard Header Summary Layout
+Goal: Prevent the Dashboard subtitle/summary from covering the top-right header controls.
+Status: Completed
+Done:
+- Extracted and inspected the screenshot from the Windows clipboard; the long `Summary` subtitle under `PolyCopyTrader Dashboard` was visually overlapping the controls on the right side of the header.
+- Replaced the top `DockPanel` layout in `MainWindow.xaml` with a two-column `Grid` so the title/summary area is constrained separately from the right-side controls.
+- Added `TextTrimming="CharacterEllipsis"`, no wrapping, and a `Summary` tooltip so the subtitle stays on one constrained line while the full text remains inspectable.
+Next: Restart or refresh the Dashboard window to see the corrected header layout.
+Notes: Verification passed: `dotnet build src\PolyCopyTrader.Dashboard\PolyCopyTrader.Dashboard.csproj -c Release -p:BaseOutputPath=D:\My\Business\PolyMarket\artifacts\dashboard-header-layout-build\` succeeded with existing Storage nullable warnings; temporary build output was removed; `dotnet test tests\PolyCopyTrader.Tests\PolyCopyTrader.Tests.csproj -c Release --no-restore` passed 472/472; `git diff --check` passed with CRLF warning only.
+Blockers: None.
+
 ## Active Update 2026-05-14 Dashboard Strategy Closed Metrics Column Order
 Goal: Move key closed-position strategy metrics immediately after the Dashboard `Live` checkbox column.
 Status: Completed
