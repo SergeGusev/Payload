@@ -1,3 +1,15 @@
+## Active Update 2026-05-14 BTC History Probability Heatmaps
+Goal: Generate image heatmaps for current `btc_5m_history` Up/Down probability distributions.
+Status: Completed
+Done:
+- Generated PNG heatmaps from the current `btc_5m_history` table with X as seconds and Y as cents.
+- Used red-to-blue probability coloring: `0` red, `1` blue, linear gradient between them.
+- Generated separate Up and Down images for the full current cents range (`-122000..256715`) and a central 98% weighted zoom (`-21500..21000`).
+- Generated combined two-panel Up/Down PNGs for both full and central zoom ranges.
+Next: Decide whether to regenerate after changing the cents bucket size or after a future history refill.
+Notes: Output files are under `artifacts\btc-5m-history-heatmaps`. Temporary C#/.NET/Npgsql/System.Drawing generator under `artifacts\btc-5m-heatmap-generator` was removed after use. `System.Drawing.Common` emitted Windows-only analyzer warnings, expected on this Windows-only local artifact generator.
+Blockers: None.
+
 ## Active Update 2026-05-14 BTC History Half Dollar Bucket Answer
 Goal: Answer how many `btc_5m_history` rows would remain with 50-cent cents buckets.
 Status: Completed

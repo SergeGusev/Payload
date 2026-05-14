@@ -123,3 +123,10 @@ Request:
 
 Result:
 Answered from the existing read-only bucket estimate: with `50` cent buckets, `btc_5m_history` would have `61,453` unique `(seconds, cents_bucket)` rows instead of the current `305,079`, preserving `sum(count)=1,138,980`. No application data or source code changed.
+
+## 2026-05-14T13:36:07.2327096+00:00
+Request:
+Сможешь сделать графическое представление в виде картинки текущего распределения. Для Up и Down отдельно. По X - секунды, по Y - центы. Цвет отображает вероятность события, которое для Up считается как up_count / count, а для Down - down-count / count. Нулевая вероятность - красный, единичная - синий, промежуточная - пропрорциональный градиент между ними.
+
+Result:
+Generated PNG heatmaps from the current `btc_5m_history` table under `artifacts\btc-5m-history-heatmaps`. Created separate Up and Down images plus combined two-panel images for the full cents range (`-122000..256715`) and for a central 98% weighted zoom (`-21500..21000`). X axis is seconds from market start, Y axis is cents move, and color is red-to-blue probability (`up_count / count` for Up, `down_count / count` for Down). Temporary C#/.NET/Npgsql/System.Drawing generator was removed after use; no database data changed.
