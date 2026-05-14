@@ -1,3 +1,18 @@
+## Active Update 2026-05-14 BTCUSDT Historical Source
+Goal: Find a BTC/USDT price source starting at the earliest BTC 5m market time.
+Status: Completed
+Done:
+- Confirmed the project already uses Binance BTC/USDT live trade WebSocket as the BTC reference source and Chainlink BTC/USD only for correlation diagnostics.
+- Verified official Binance Spot REST `/api/v3/klines` returns BTCUSDT history from `2025-12-18T04:25:00Z` without API keys.
+- Verified `GET https://api.binance.com/api/v3/klines?symbol=BTCUSDT&interval=5m&startTime=1766031900000&endTime=1766032200000&limit=5` returns the 5-minute candle starting `1766031900000` with open `86895.02000000`, high `86900.00000000`, low `86829.99000000`, close `86838.69000000`, close time `1766032199999`, and `6183` trades.
+- Verified Binance public data archive files exist for both daily and monthly historical ZIPs:
+  `https://data.binance.vision/data/spot/daily/klines/BTCUSDT/5m/BTCUSDT-5m-2025-12-18.zip`
+  and `https://data.binance.vision/data/spot/monthly/klines/BTCUSDT/5m/BTCUSDT-5m-2025-12.zip`.
+- Also verified `1m` daily/monthly archive ZIPs exist for the same date/month if finer reconstruction is needed.
+Next: Implement a read-only C# Binance historical klines importer if BTCUSDT candles need to be stored locally for all BTC 5m markets.
+Notes: Binance REST docs state kline/candlestick bars are uniquely identified by open time, timestamps are milliseconds by default, and public market-data endpoints do not require signing. Binance public data docs state klines archive data is from `/api/v3/klines` and daily/monthly files are available through `data.binance.vision`.
+Blockers: None.
+
 ## Active Update 2026-05-14 Earliest BTC 5m Gamma Rescan
 Goal: Recheck the earliest available BTC Up or Down 5m market after network/TLS access was fixed.
 Status: Completed

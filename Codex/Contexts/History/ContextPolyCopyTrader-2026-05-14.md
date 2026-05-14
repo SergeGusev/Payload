@@ -46,3 +46,10 @@ Request:
 
 Result:
 Confirmed direct Polymarket Gamma/Data API access works again and ran a temporary read-only C#/.NET Gamma probe over `btc-updown-5m-<unix>` slugs. The final expanded scan covered every 5-minute slug from `2020-01-01T00:00:00Z` through `2026-02-12T01:00:00Z` (`643,405` epochs, `3,218` batched Gamma requests) and found `11,437` closed/resolved BTC 5m markets. The earliest resolved market found is `btc-updown-5m-1766031900`: start `2025-12-18T04:25:00Z`, end `2025-12-18T04:30:00Z`, result `Down`, `outcomePrices=["0","1"]`, market id `956686`, condition `0x1f681fb16badafc1044c43d40ca63ab9587a036eb0ed5360673069ce5f627909`, volume `0`. Neighbor exact checks showed `2025-12-18T04:00Z..04:20Z` and `04:30Z..04:45Z` slugs returned `404`. The first resolved market with positive volume is `btc-updown-5m-1770856800`: start `2026-02-12T00:40:00Z`, end `2026-02-12T00:45:00Z`, result `Up`, volume `7`. Temporary probe was removed; no production code changed.
+
+## 2026-05-14T07:05:11.5138882Z
+Request:
+Теперь найди источник BTC/USDT курса начиная с 2025-12-18T04:25:00Z
+
+Result:
+Found and verified Binance as the practical BTC/USDT historical price source for the requested start time. Binance Spot REST `/api/v3/klines` returned BTCUSDT candles from `2025-12-18T04:25:00Z`; the 5-minute request for `startTime=1766031900000` returned open `86895.02000000`, high `86900.00000000`, low `86829.99000000`, close `86838.69000000`, close time `1766032199999`, and `6183` trades. Binance public data archive HEAD checks also confirmed daily and monthly ZIP files exist for `BTCUSDT/5m` and `BTCUSDT/1m` at `2025-12-18` / `2025-12`. Recommended using `data.binance.vision` ZIP archives for bulk backfill and REST `/api/v3/klines` for spot checks or short ranges. No production code changed.
