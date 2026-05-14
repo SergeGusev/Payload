@@ -28,6 +28,12 @@
             <Setter Property="Padding" Value="8,0" />
             <Setter Property="VerticalContentAlignment" Value="Center" />
         </Style>
+        <Style TargetType="ComboBox">
+            <Setter Property="Height" Value="30" />
+            <Setter Property="Margin" Value="8,0,20,0" />
+            <Setter Property="Padding" Value="8,0" />
+            <Setter Property="VerticalContentAlignment" Value="Center" />
+        </Style>
         <Style TargetType="DataGrid">
             <Setter Property="AutoGenerateColumns" Value="False" />
             <Setter Property="CanUserAddRows" Value="False" />
@@ -102,6 +108,12 @@
             <StackPanel DockPanel.Dock="Right"
                         Orientation="Horizontal"
                         HorizontalAlignment="Right">
+                <TextBlock Text="Database"
+                           VerticalAlignment="Center"
+                           Foreground="#6B7280" />
+                <ComboBox Width="150"
+                          ItemsSource="{Binding DatabaseSourceOptions}"
+                          SelectedItem="{Binding SelectedDatabaseSource, Mode=TwoWay}" />
                 <TextBlock Text="Mode"
                            VerticalAlignment="Center"
                            Foreground="#6B7280" />

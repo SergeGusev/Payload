@@ -222,3 +222,10 @@ Request:
 
 Result:
 Queried the new server database read-only for `BTC Up or Down 5m Statistics`. The strategy was enabled with `live_stakes=false`, latest tick age about `0.6s`, `11015` ticks across `50` markets, `312` would-bet ticks, `2690/2808` live observations applied, and no due-pending observations or Statistics API errors. Resolved would-bet simulations were negative overall: first-per-market `37` bets, `13` wins, one-share PnL `-0.30`; Up-only was positive but Down-only was negative, so the sample remains too small for live decisions.
+
+## 2026-05-14T20:26:56.6109148+00:00
+Request:
+Добавь в Dashboard наверху селектор - Local database | Remote database. Если выбрана Remote, то пусть обращается к данным с адреса 192.168.0.1
+
+Result:
+Added a top Dashboard `Database` selector with `Local database` and `Remote database`. The local option uses the configured PostgreSQL connection string; the remote option rebuilds the dashboard runtime using the same connection string with host overridden to `192.168.0.1`. Switching sources recreates the repository/data service/CSV exporter, clears stale displayed rows before refresh, and updates the storage status. IPC remains on the configured dashboard IPC URL. README was updated. Verification passed: Dashboard Release build succeeded with existing Storage nullable warnings, temporary output was removed, tests passed 472/472, and `git diff --check` passed with CRLF warnings only.

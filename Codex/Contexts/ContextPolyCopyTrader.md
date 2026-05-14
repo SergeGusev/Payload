@@ -1,3 +1,16 @@
+## Active Update 2026-05-14 Dashboard Database Source Selector
+Goal: Add a top-level Dashboard selector for local vs remote PostgreSQL data.
+Status: Completed
+Done:
+- Added a top `Database` selector with `Local database` and `Remote database` options in `MainWindow.xaml`.
+- Added Dashboard database source metadata and runtime switching so `Local database` uses the configured connection string, while `Remote database` reuses that same connection string with PostgreSQL host overridden to `192.168.0.1`.
+- Updated `MainViewModel` to rebuild the dashboard repository/data service/CSV exporter when the database source changes, clear stale rows before refresh, and show the selected source in `StorageStatus`/summary.
+- Kept IPC commands on the configured dashboard IPC endpoint; the selector changes database reads/writes, not the IPC base URL.
+- Documented the selector in README.
+Next: Run the Dashboard and switch to `Remote database` to verify the target host is reachable from the UI environment.
+Notes: Verification passed: `dotnet build src\PolyCopyTrader.Dashboard\PolyCopyTrader.Dashboard.csproj -c Release -p:BaseOutputPath=D:\My\Business\PolyMarket\artifacts\dashboard-db-selector-build\` succeeded with existing Storage nullable warnings; temporary build output was removed; `dotnet test tests\PolyCopyTrader.Tests\PolyCopyTrader.Tests.csproj -c Release --no-restore` passed 472/472; `git diff --check` passed with CRLF warnings only.
+Blockers: None.
+
 ## Active Update 2026-05-14 BTC Statistics Strategy Snapshot
 Goal: Report current server-side performance/status statistics for `BTC Up or Down 5m Statistics`.
 Status: Completed

@@ -15,26 +15,21 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
     private const string BtcUpDownPrefix = "BTC Up or Down ";
     private static readonly string[] BtcUpDownIntervals = ["5m", "15m", "1h", "4h"];
 
-    private readonly DashboardRuntime runtime;
-    private readonly DashboardDataService dataService;
-    private readonly LocalControlClient controlClient;
-    private readonly DashboardCsvExporter csvExporter;
+    private DashboardRuntime runtime = null!;
+    private DashboardDataService dataService = null!;
+    private LocalControlClient controlClient = null!;
+    private DashboardCsvExporter csvExporter = null!;
     private readonly DispatcherTimer refreshTimer;
     private readonly EventHandler refreshTickHandler;
     private IReadOnlyList<StrategyPerformanceRow> allStrategies = [];
     private IReadOnlyList<StrategyRecentPerformanceRow> allStrategyRecentPerformance = [];
+    private DashboardDatabaseSource currentDatabaseSource;
+    private bool isChangingDatabaseSource;
     private bool disposed;
 
     public MainViewModel()
     {
-        runtime = DashboardRepositoryFactory.Create();
-        dataService = new DashboardDataService(
-            runtime.Repository,
-            runtime.Configuration,
-            runtime.StorageConfigured,
-            runtime.AuthService);
-        controlClient = new LocalControlClient(runtime.Configuration.Ipc);
-        csvExporter = new DashboardCsvExporter(runtime.Repository, runtime.Configuration);
+        RebuildRuntime(DashboardDatabaseSource.Local);
         refreshTimer = new DispatcherTimer
         {
             Interval = TimeSpan.FromSeconds(Math.Max(1, runtime.Configuration.Dashboard.RefreshIntervalSeconds))
@@ -42,7 +37,6 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         refreshTickHandler = async (_, _) => await RefreshAsync();
         refreshTimer.Tick += refreshTickHandler;
         Summary = "Waiting for first dashboard refresh.";
-        StorageStatus = runtime.StorageConfigured ? "PostgreSQL configured" : "PostgreSQL not configured";
     }
 
     [ObservableProperty]
@@ -70,7 +64,10 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
     private string serviceBannerBorderBrush = "#F59E0B";
 
     [ObservableProperty]
-    private string storageStatus;
+    private string storageStatus = string.Empty;
+
+    [ObservableProperty]
+    private string selectedDatabaseSource = DashboardDatabaseSources.LocalDisplayName;
 
     [ObservableProperty]
     private string commandStatus = "Ready.";
@@ -79,7 +76,7 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
     private string pinnedAssetId = string.Empty;
 
     [ObservableProperty]
-    private string summary;
+    private string summary = string.Empty;
 
     [ObservableProperty]
     private DateTimeOffset lastUpdatedUtc = DateTimeOffset.UtcNow;
@@ -175,6 +172,8 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
 
     public ObservableCollection<DashboardErrorRow> DashboardErrors { get; } = [];
 
+    public IReadOnlyList<string> DatabaseSourceOptions { get; } = DashboardDatabaseSources.DisplayNames;
+
     partial void OnSelectedStrategyCategoryChanged(string value)
     {
         ApplyStrategyFilters();
@@ -193,6 +192,22 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
     partial void OnSelectedStrategy1HourCategoryChanged(string value)
     {
         ApplyStrategyFilters();
+    }
+
+    partial void OnSelectedDatabaseSourceChanged(string value)
+    {
+        if (isChangingDatabaseSource)
+        {
+            return;
+        }
+
+        var requestedSource = DashboardDatabaseSources.FromDisplayName(value);
+        if (requestedSource == currentDatabaseSource)
+        {
+            return;
+        }
+
+        _ = SwitchDatabaseSourceAsync(requestedSource);
     }
 
     public async Task StartAsync()
@@ -237,6 +252,90 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         {
             IsRefreshing = false;
         }
+    }
+
+    private async Task SwitchDatabaseSourceAsync(DashboardDatabaseSource requestedSource)
+    {
+        if (IsRefreshing)
+        {
+            CommandStatus = "Wait for the current refresh before switching database source.";
+            ResetSelectedDatabaseSource();
+            return;
+        }
+
+        var previousSource = currentDatabaseSource;
+        refreshTimer.Stop();
+        try
+        {
+            CommandStatus = $"Switching to {DashboardDatabaseSources.ToDisplayName(requestedSource)}...";
+            RebuildRuntime(requestedSource);
+            refreshTimer.Interval = TimeSpan.FromSeconds(Math.Max(1, runtime.Configuration.Dashboard.RefreshIntervalSeconds));
+            ClearLoadedData();
+            await RefreshAsync();
+            CommandStatus = $"Using {StorageStatus}.";
+        }
+        catch (Exception ex)
+        {
+            RecordDashboardError("Database source", ex);
+            try
+            {
+                RebuildRuntime(previousSource);
+            }
+            catch (Exception restoreException)
+            {
+                RecordDashboardError("Database source restore", restoreException);
+            }
+
+            ResetSelectedDatabaseSource();
+            CommandStatus = $"Database source switch failed: {ex.Message}";
+        }
+        finally
+        {
+            if (!disposed)
+            {
+                refreshTimer.Start();
+            }
+        }
+    }
+
+    private void RebuildRuntime(DashboardDatabaseSource databaseSource)
+    {
+        var nextRuntime = DashboardRepositoryFactory.Create(databaseSource);
+        var nextDataService = new DashboardDataService(
+            nextRuntime.Repository,
+            nextRuntime.Configuration,
+            nextRuntime.StorageConfigured,
+            nextRuntime.AuthService);
+        var nextControlClient = new LocalControlClient(nextRuntime.Configuration.Ipc);
+        var nextCsvExporter = new DashboardCsvExporter(nextRuntime.Repository, nextRuntime.Configuration);
+
+        runtime = nextRuntime;
+        dataService = nextDataService;
+        controlClient = nextControlClient;
+        csvExporter = nextCsvExporter;
+        currentDatabaseSource = databaseSource;
+        StorageStatus = BuildStorageStatus(nextRuntime);
+    }
+
+    private void ResetSelectedDatabaseSource()
+    {
+        isChangingDatabaseSource = true;
+        try
+        {
+            SelectedDatabaseSource = DashboardDatabaseSources.ToDisplayName(currentDatabaseSource);
+        }
+        finally
+        {
+            isChangingDatabaseSource = false;
+        }
+    }
+
+    private static string BuildStorageStatus(DashboardRuntime runtime)
+    {
+        var configured = runtime.StorageConfigured ? "PostgreSQL configured" : "PostgreSQL not configured";
+        return runtime.DatabaseSource == DashboardDatabaseSource.Remote
+            ? $"Remote database ({runtime.DatabaseHost}); {configured}"
+            : $"Local database; {configured}";
     }
 
     private void ApplyServiceBanner(ControlStatusResponse? status, string? error)
@@ -736,6 +835,42 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         var webSocketStatus = Overview.FirstOrDefault(item => item.Name == "WebSocket status")?.Value ?? "No market data status";
         var liveBlocked = LiveReadiness.Count(item => item.Status is "Blocked" or "Error");
         Summary = $"{ServiceStatus}; WS={webSocketStatus}; {StorageStatus}; live blockers={liveBlocked}; {TraderDiscovery.Count} discovery candidates; {OnChainParticipantDetails.Count} on-chain participants; {OnChainTradeDetails.Count} on-chain trades; {OnChainLeaders.Count} on-chain leaders; {OnChainPositions.Count} on-chain positions; {Signals.Count} signals; {allStrategies.Count} strategies; {PaperOrders.Count} paper orders; {PaperCopiedTraderPerformance.Count} copied ratings; {DryRunOrders.Count} dry-run orders; {LiveOrders.Count} live orders; {PaperPositions.Count} positions.";
+    }
+
+    private void ClearLoadedData()
+    {
+        Replace(Overview, Array.Empty<OverviewMetric>());
+        Replace(Watchlist, Array.Empty<WatchlistRow>());
+        Replace(TraderDiscovery, Array.Empty<TraderDiscoveryRow>());
+        Replace(OnChainLeaders, Array.Empty<OnChainLeaderRow>());
+        Replace(OnChainTraders, Array.Empty<OnChainTraderRow>());
+        Replace(OnChainPositions, Array.Empty<OnChainPositionRow>());
+        Replace(OnChainFills, Array.Empty<OnChainFillRow>());
+        Replace(OnChainTradeDetails, Array.Empty<OnChainTradeDetailRow>());
+        Replace(OnChainParticipantDetails, Array.Empty<OnChainParticipantDetailRow>());
+        Replace(LeaderTrades, Array.Empty<LeaderTradeRow>());
+        Replace(Signals, Array.Empty<SignalRow>());
+        Replace(PaperOrders, Array.Empty<PaperOrderRow>());
+        Replace(PaperPositions, Array.Empty<PaperPositionRow>());
+        allStrategies = [];
+        allStrategyRecentPerformance = [];
+        RefreshStrategyCategoryOptions();
+        ApplyStrategyFilters();
+        Replace(PaperCopiedTraderPerformance, Array.Empty<PaperCopiedTraderPerformanceRow>());
+        Replace(DryRunOrders, Array.Empty<DryRunOrderRow>());
+        Replace(LiveOrders, Array.Empty<LiveOrderRow>());
+        Replace(LiveTradingEvents, Array.Empty<LiveTradingEventRow>());
+        Replace(LiveReadiness, Array.Empty<LiveReadinessRow>());
+        Replace(MarketData, Array.Empty<MarketDataRow>());
+        Replace(DailyReports, Array.Empty<DailyReportRow>());
+        Replace(TraderPerformance, Array.Empty<TraderPerformanceRow>());
+        Replace(CategoryPerformance, Array.Empty<CategoryPerformanceRow>());
+        Replace(ExecutionQuality, Array.Empty<ExecutionQualityRow>());
+        Replace(RejectionAnalysis, Array.Empty<RejectionAnalysisRow>());
+        Replace(RiskUsage, Array.Empty<RiskUsageRow>());
+        Replace(Diagnostics, Array.Empty<DiagnosticRow>());
+        Replace(RunbookLinks, Array.Empty<RunbookLinkRow>());
+        Replace(Logs, Array.Empty<LogRow>());
     }
 
     private void RefreshStrategyCategoryOptions()
