@@ -25,3 +25,10 @@ Request:
 
 Result:
 Ran a temporary read-only C#/.NET probe against the new PostgreSQL database and public Polymarket APIs. The oldest BTC 5m Gamma metadata currently present in the new DB is `btc-updown-5m-1766162100`, slug epoch `2025-12-19T16:35:00Z`, condition `0x33f2f9edc51b2f6f92f2636b6fce7ee468770a581e6951c301b932fd7a3fd127`; public Data API `/trades` returned `0` rows for the checked December 2025 and January 2026 conditions. The earliest checked DB BTC 5m market with non-empty public Data API trade history is `btc-updown-5m-1777876500`, slug epoch `2026-05-04T06:35:00Z`, condition `0xd0d732fc516a3648f17d4e7dffea213c6bc3f3ab15d62b1b9ba7985aaad41a8f`, which returned `1000` rows with `limit=10000`. Temporary probe was removed; no production code changed.
+
+## 2026-05-14T06:30:07.7788323Z
+Request:
+Мне история сделок не нужна. Мне нужно: 1. Время начала. 2. Время окончания. 3. Результат. Это можно найти?
+
+Result:
+Confirmed the requested BTC Up or Down 5m fields can be found without trade history. Start time comes from the market slug epoch `btc-updown-5m-<unix>` or Gamma `eventStartTime`; end time is start plus 5 minutes for this market family; result is available after resolution from Gamma `closed`, `outcomes`, and `outcomePrices`, where the single outcome priced at or near `1` is the winner. A fresh direct API/DB sample was blocked by current DB connectivity and local HTTPS trust errors, but the project already implements the relevant parsing and settlement logic.

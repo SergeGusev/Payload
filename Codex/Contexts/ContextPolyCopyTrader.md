@@ -1,3 +1,15 @@
+## Active Update 2026-05-14 BTC 5m Result Fields
+Goal: Determine whether BTC Up or Down 5m market start/end/result can be found without trade history.
+Status: Completed
+Done:
+- Confirmed the needed fields can be derived from Gamma market metadata, not Data API trade history.
+- For BTC 5m slugs `btc-updown-5m-<unix>`, `<unix>` is the UTC 5-minute window start; the end is start plus 5 minutes. The strategy analyzer also falls back to `eventStartTime` and then `endDate - interval`.
+- Result is available after resolution from Gamma `closed`, `outcomes`, and `outcomePrices`: the unique outcome priced `>= 0.999` / `1` is the winner (`Up` or `Down`).
+- Latest direct live recheck could not fetch DB/Gamma due current network/SSL trust errors, but this logic is already implemented in parsing and settlement code.
+Next: Implement a read-only market-resolution exporter/importer if persistent BTC 5m start/end/winner rows are needed.
+Notes: Inspected `BtcUpDown5mMarketAnalyzer` window-start logic and `PolymarketJsonParser.GetWinningOutcome` winner parsing. Temporary C# probe was removed; no production code changed.
+Blockers: Current direct connectivity to `192.168.0.101:5432` and local HTTPS trust to Gamma API failed during the latest probe, so no fresh API sample was pulled in this turn.
+
 ## Active Update 2026-05-14 Oldest BTC 5m Market Probe
 Goal: Determine how far back BTC Up or Down 5m market history can be found.
 Status: Completed
