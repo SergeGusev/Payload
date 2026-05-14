@@ -167,3 +167,9 @@ Request:
 
 Result:
 Implemented the read-only `BTC Up or Down 5m Statistics` worker, interpolation estimator, statistics and live-observation tables, repository methods, configuration, service registration, tests, and docs. The worker records decision ticks and queues live observations, then updates `btc_5m_history` only after the market result is known. Verification passed with `dotnet test tests\PolyCopyTrader.Tests\PolyCopyTrader.Tests.csproj -c Release --no-restore` and `dotnet build PolyCopyTrader.sln -c Release --no-restore`.
+## 2026-05-14T14:51:52.9611648Z
+Request:
+Теперь давай подумаем, как это выложить на сервер. Предлагаю предварительно сделать там таблицу btc_5m_history и закачать туда данные.
+
+Result:
+Planned the server rollout: pre-create `public.btc_5m_history`, export/import local history columns without `id`, verify counts, then deploy and start the new service so schema initialization creates the statistics tables and the worker starts against preloaded history. Recommended keeping the service stopped or statistics disabled until the history table is loaded.

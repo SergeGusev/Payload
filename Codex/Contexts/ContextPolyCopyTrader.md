@@ -1,3 +1,15 @@
+## Active Update 2026-05-14 BTC 5m Statistics Deployment Plan
+Goal: Plan how to deploy the BTC 5m Statistics strategy to the server with preloaded `btc_5m_history`.
+Status: Completed
+Done:
+- Recommended pre-creating `public.btc_5m_history` on the server before starting the new code.
+- Recommended exporting local history without `id` and importing `(seconds,cents,count,up_count,down_count)` into the server table after `TRUNCATE ... RESTART IDENTITY`.
+- Recommended stopping the service or keeping the new statistics worker disabled until the history table is loaded, then deploying and starting the new code.
+- Noted that first new service startup can create the additional statistics tables and seed the strategy row without truncating the preloaded history.
+Next: Execute the deployment/import sequence against the server database when approved.
+Notes: Answer-only planning task. `git pull --ff-only` reported already up to date. Working tree before context update had only old untracked artifacts. Latest code commit is `1c1c3ad Add BTC 5m statistics strategy`.
+Blockers: None.
+
 ## Active Update 2026-05-14 BTC 5m Statistics Strategy
 Goal: Add a read-only BTC Up or Down 5m Statistics strategy that records live probability decisions from `btc_5m_history`.
 Status: Completed
