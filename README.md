@@ -155,11 +155,13 @@ Paper/Live shadow testing stores the shared BTC decision in `paper_live_shadow_d
 ### BTC 5m History Backfill
 
 The service has a one-shot PostgreSQL backfill command for `btc_5m_history`.
-It reads closed/resolved BTC Up or Down 5m rows from `polymarket_gamma_markets`,
-including markets with zero volume. If the local Gamma cache still has ended
-markets marked `closed=false`, the command resolves their final Up/Down result
-from Gamma by slug before it truncates `btc_5m_history`. It then rebuilds the
-`(seconds, cents)` counters from public Binance BTCUSDT `aggTrades`.
+It builds `btc-updown-5m-<unix>` slugs over the requested UTC range and loads
+closed/resolved BTC Up or Down 5m markets directly from Polymarket Gamma API,
+including markets with zero volume. PostgreSQL is used only for truncating,
+reading, and writing the output/cache table `btc_5m_history`; the local
+`polymarket_gamma_markets` cache is not used as the market source for this
+backfill. The command then rebuilds the `(seconds, cents)` counters from public
+Binance BTCUSDT `aggTrades`.
 
 ```powershell
 dotnet run --project src/PolyCopyTrader.Service/PolyCopyTrader.Service.csproj -- --fill-btc-5m-history
@@ -168,9 +170,12 @@ dotnet run --project src/PolyCopyTrader.Service/PolyCopyTrader.Service.csproj --
 For a non-destructive smoke check, add `--btc-5m-history-dry-run`. Useful bounds
 for testing are `--btc-5m-history-max-markets <n>`,
 `--btc-5m-history-start-utc <iso-utc>`, and
-`--btc-5m-history-end-utc <iso-utc>`. Gamma resolution can be disabled with
-`--btc-5m-history-no-gamma-resolve` for DB-only diagnostics. This command does
-not place or cancel orders and exits before the normal service host starts.
+`--btc-5m-history-end-utc <iso-utc>`. Without an explicit start, the command
+starts at `2025-12-18T04:25:00Z`, the earliest resolved BTC 5m Gamma market
+confirmed during the May 14 API scan. Gamma API batching can be tuned with
+`--btc-5m-history-gamma-batch-size <n>` and
+`--btc-5m-history-gamma-delay-ms <n>`. This command does not place or cancel
+orders and exits before the normal service host starts.
 
 ### Local PostgreSQL Debugging
 

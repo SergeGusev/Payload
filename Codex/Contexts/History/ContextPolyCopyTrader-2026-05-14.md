@@ -95,3 +95,10 @@ Request:
 
 Result:
 Clarified by code inspection that BTC/USDT price history is not read from PostgreSQL. The backfill reads BTC prices from Binance Spot REST `aggTrades` API. PostgreSQL is currently used only to get the Polymarket BTC 5m market catalog from `polymarket_gamma_markets`, to load/write the `btc_5m_history` cache/output table, and Gamma API is used to resolve missing Polymarket outcomes by slug. No code changed.
+
+## 2026-05-14T10:28:11.6371125+00:00
+Request:
+А почему мы берём список Polymarket-маркетов из базы? Я же специально спрашивал про доступность маркетов через Polymarket API. Нужно оттуда брать
+
+Result:
+Changed the `btc_5m_history` backfill so the BTC Up or Down 5m market list comes directly from Polymarket Gamma API by generated `btc-updown-5m-<unix>` slugs instead of reading `polymarket_gamma_markets`. PostgreSQL now remains only for the `btc_5m_history` truncate/cache/write path, while BTC/USDT prices continue to come from Binance Spot REST `aggTrades`. Updated command tests and README. Verification passed: service Release build, targeted BTC history command tests 13/13, full test project 460/460, `git diff --check` with CRLF warnings only, and a dry-run against `2025-12-18T04:25:00Z` loaded one resolved Gamma market from Polymarket API and computed 60 points without writing.

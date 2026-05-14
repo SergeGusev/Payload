@@ -1,3 +1,15 @@
+## Active Update 2026-05-14 BTC History Polymarket API Source
+Goal: Change the BTC 5m history backfill so the Polymarket market list comes directly from Polymarket Gamma API instead of PostgreSQL.
+Status: Completed
+Done:
+- Replaced the `btc_5m_history` backfill market catalog read from `polymarket_gamma_markets` with a Gamma API source that generates `btc-updown-5m-<unix>` slugs over the requested UTC range and requests closed markets by repeated `slug` query parameters.
+- Kept PostgreSQL usage limited to `btc_5m_history` truncate/cache load/save; BTC/USDT prices continue to come from Binance Spot REST `aggTrades`.
+- Added tests for 5-minute slug generation and for the command consuming a Polymarket API-style market source before writing.
+- Updated README to document that `polymarket_gamma_markets` is not used as the backfill market source and that the default start is `2025-12-18T04:25:00Z`.
+Next: Run the real non-dry command when ready to populate `btc_5m_history`; the verified API dry-run processed the earliest confirmed market and computed 60 inserted points.
+Notes: `dotnet build src\PolyCopyTrader.Service\PolyCopyTrader.Service.csproj -c Release --no-restore` passed with 0 warnings/errors. Targeted `Btc5mHistoryFillCommandTests` passed 13/13. Full `dotnet test tests\PolyCopyTrader.Tests\PolyCopyTrader.Tests.csproj -c Release --no-restore` passed 460/460. Dry-run `--fill-btc-5m-history --btc-5m-history-dry-run --btc-5m-history-start-utc 2025-12-18T04:25:00Z --btc-5m-history-end-utc 2025-12-18T04:25:00Z --btc-5m-history-max-markets 1` loaded one resolved Gamma market from Polymarket API and computed 60 inserted points without truncating/writing. `git diff --check` passed with CRLF warnings only.
+Blockers: None.
+
 ## Active Update 2026-05-14 BTC History API Source Clarification
 Goal: Clarify whether the BTC 5m history backfill reads BTC prices from the database or from APIs.
 Status: Completed
