@@ -1,3 +1,19 @@
+## Active Update 2026-05-14 Strategy Performance Snapshot
+Goal: Assess whether any currently running strategies look promising from server-side Paper/statistics data.
+Status: Completed
+Done:
+- Queried the server database at `192.168.0.101` read-only using a temporary C#/.NET/Npgsql report and removed the temp project after use.
+- Confirmed `1178` strategies exist, `1176` are enabled, `0` have `live_stakes=true`; `follow_leader` is disabled.
+- Confirmed overall `strategy_market_paper_runs` Paper result is negative because many broad variants are being tested: `19633` settled, `6150` wins, `13480` losses, settled stake `55972.26077706`, PnL `-16180.55986506`, ROI `-28.908176%`.
+- Identified the best family-level signal: `5m binance bps` had `290` settled, `170` wins, `120` losses, PnL `+150.00000000`, ROI `+17.241379%`.
+- Identified larger-sample positive candidates: `btc_up_down_5m_less_60_gamma` (`106` settled, ROI `+13.905639%`), `btc_up_down_5m_less_30_gamma` (`111`, `+8.213402%`), `btc_up_down_5m_more_30` (`127`, `+6.501187%`), `btc_up_down_5m_more_90` (`117`, `+4.279668%`), and `btc_up_down_5m_more_60` (`125`, `+3.477769%`).
+- Noted smaller positive candidates needing more samples: `btc_up_down_5m_more_90_below_55`, `btc_up_down_5m_less_90_gamma`, `btc_up_down_5m_less_120_gamma`, plus several `binance_bps` thresholds.
+- Confirmed many families look unsuitable so far: `5m preopen`, `15m`, `1h`, `4h`, `5m middle`, and most broad `5m gamma` variants are negative in aggregate.
+- Evaluated `BTC Up or Down 5m Statistics`: `6026` ticks, `98` would-bet ticks, only `28` resolved; resolved would-bets show positive one-share PnL `+1.63`, but the sample is too small, with `Up` positive and `Down` negative so far.
+Next: Keep live disabled, whitelist/focus reporting on promising Paper candidates, collect larger samples, add explicit Paper PnL tracking for statistics would-bet decisions, and fix the separate Gamma active-market pagination 422 issue.
+Notes: No application source or database data was changed. Existing old untracked deploy/artifact files were left untouched.
+Blockers: None.
+
 ## Active Update 2026-05-14 Server BTC Statistics Settlement Verification
 Goal: Verify the deployed closed-Gamma settlement fix on the new server.
 Status: Completed
