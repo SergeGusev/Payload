@@ -10,7 +10,7 @@ public static class DashboardDatabaseSources
 {
     public const string LocalDisplayName = "Local database";
     public const string RemoteDisplayName = "Remote database";
-    public const string RemoteHost = "192.168.0.1";
+    public const string RemoteHost = "192.168.0.101";
 
     public static readonly IReadOnlyList<string> DisplayNames =
     [

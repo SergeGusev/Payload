@@ -243,3 +243,10 @@ Request:
 
 Result:
 Inspected the Dashboard screenshot from the Windows clipboard and fixed the header layout. The long `Summary` subtitle now lives in a constrained left column with character ellipsis and a tooltip, while the database/mode/service controls stay in a separate right column and are no longer covered. Verification passed: Dashboard Release build succeeded with existing Storage nullable warnings, full test suite passed 472/472, and `git diff --check` passed with CRLF warning only.
+
+## 2026-05-14T20:42:36.2475905Z
+Request:
+Стоп. Я ошибся в задании. Remote database должна быть 192.168.0.101
+
+Result:
+Corrected the Dashboard remote database host from `192.168.0.1` to `192.168.0.101` in `DashboardDatabaseSources.RemoteHost` and updated README documentation. The selector behavior remains the same: it reuses the configured PostgreSQL connection string and overrides only the host for `Remote database`. Verification passed: Dashboard Release build succeeded with existing Storage nullable warnings, temporary build output was removed, and full tests passed 472/472.
