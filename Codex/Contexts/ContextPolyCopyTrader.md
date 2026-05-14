@@ -1,3 +1,15 @@
+## Active Update 2026-05-14 Server BTC 5m History Import
+Goal: Create and populate `public.btc_5m_history` on the new PostgreSQL server.
+Status: Completed
+Done:
+- Used the local `POLYCOPYTRADER_POSTGRES_CONNECTION` as the source and derived the server target by changing the host to `192.168.0.101`.
+- Created `public.btc_5m_history` on the server when missing, truncated it with `RESTART IDENTITY`, ensured unique `(seconds, cents)`, and imported local rows through Npgsql binary COPY.
+- Verified local and server aggregates match after import: `rows=305079`, `sum(count)=1138980`, `sum(up_count)=573720`, `sum(down_count)=565260`, `seconds=0..295`, `cents=-122000..256715`.
+- Removed the temporary C#/.NET transfer project from `%TEMP%`.
+Next: Deploy/restart the new service code on the server so schema initialization creates the statistics tables and the read-only statistics worker can start.
+Notes: No secrets were printed. `git pull --ff-only` was already up to date before the operation. Working tree had only old untracked artifacts before context/history update.
+Blockers: None.
+
 ## Active Update 2026-05-14 BTC 5m Statistics Deployment Plan
 Goal: Plan how to deploy the BTC 5m Statistics strategy to the server with preloaded `btc_5m_history`.
 Status: Completed

@@ -173,3 +173,9 @@ Request:
 
 Result:
 Planned the server rollout: pre-create `public.btc_5m_history`, export/import local history columns without `id`, verify counts, then deploy and start the new service so schema initialization creates the statistics tables and the worker starts against preloaded history. Recommended keeping the service stopped or statistics disabled until the history table is loaded.
+## 2026-05-14T15:03:07.8648880Z
+Request:
+Ок, сделай базу public.btc_5m_history на новом сервере и перекачай туда данные
+
+Result:
+Created/ensured `public.btc_5m_history` on PostgreSQL server host `192.168.0.101`, truncated it with `RESTART IDENTITY`, ensured unique `(seconds, cents)`, and transferred local history rows via temporary C#/.NET/Npgsql binary COPY. Verified matching local/server aggregates: `rows=305079`, `sum(count)=1138980`, `sum(up_count)=573720`, `sum(down_count)=565260`, `seconds=0..295`, `cents=-122000..256715`. Removed the temporary transfer project and did not print secrets.
