@@ -179,3 +179,9 @@ Request:
 
 Result:
 Created/ensured `public.btc_5m_history` on PostgreSQL server host `192.168.0.101`, truncated it with `RESTART IDENTITY`, ensured unique `(seconds, cents)`, and transferred local history rows via temporary C#/.NET/Npgsql binary COPY. Verified matching local/server aggregates: `rows=305079`, `sum(count)=1138980`, `sum(up_count)=573720`, `sum(down_count)=565260`, `seconds=0..295`, `cents=-122000..256715`. Removed the temporary transfer project and did not print secrets.
+## 2026-05-14T16:01:03.7399912Z
+Request:
+Выложил на сервер, проверь
+
+Result:
+Checked the deployed server through PostgreSQL at `192.168.0.101`. Service heartbeat is fresh (`Running`, mode `Live`, started `2026-05-14T15:54:06Z`, heartbeat age about `4.3s`, no last error). New statistics tables exist, `btc_5m_history` aggregates still match the imported local history, strategy `btc_up_down_5m_statistics` exists and is enabled with `live_stakes=false`, and statistics collection is active: `291` ticks with latest age about `0.9s`, plus `73` pending live observations. No statistics API errors were found in the last 2 hours. IPC port `5118` remains unreachable from this machine; PostgreSQL `5432` is reachable.

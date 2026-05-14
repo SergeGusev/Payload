@@ -1,3 +1,19 @@
+## Active Update 2026-05-14 Server BTC Statistics Deployment Check
+Goal: Verify the deployed server build runs the BTC Up or Down 5m Statistics strategy correctly.
+Status: Completed
+Done:
+- Confirmed PostgreSQL on `192.168.0.101:5432` is reachable; IPC `192.168.0.101:5118` remains unreachable from this machine.
+- Confirmed `PolyCopyTrader.Service` heartbeat is fresh: status `Running`, mode `Live`, started `2026-05-14T15:54:06Z`, last heartbeat age about `4.3s`, no last error.
+- Confirmed new tables exist on the server: `btc_5m_history_live_observations` and `btc_up_down_5m_statistics_ticks`.
+- Confirmed `btc_5m_history` still matches imported aggregates: `rows=305079`, `sum(count)=1138980`, `sum(up_count)=573720`, `sum(down_count)=565260`.
+- Confirmed strategy row `btc_up_down_5m_statistics` exists, is enabled, and has `live_stakes=false`.
+- Confirmed statistics are being collected: `291` ticks, latest sampled at `2026-05-14T16:00:09Z` with age about `0.9s`; last 30 minutes included `insufficient_history`, `start_price_missing`, `down_above_market`, and `up_above_market` decisions.
+- Confirmed live observations are queued: `73` rows, `0` applied yet, `73` pending.
+- Confirmed no `BtcUpDown5mStatistics` API errors in the last 2 hours.
+Next: Let the strategy run through resolved markets, then review `btc_up_down_5m_statistics_ticks` and pending/applied observation counts.
+Notes: A temporary C#/.NET/Npgsql server-check project was created under `%TEMP%`, run without printing secrets, and removed. Existing old untracked deploy/artifact files were left untouched.
+Blockers: None.
+
 ## Active Update 2026-05-14 Server BTC 5m History Import
 Goal: Create and populate `public.btc_5m_history` on the new PostgreSQL server.
 Status: Completed
