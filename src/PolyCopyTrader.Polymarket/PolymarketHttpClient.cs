@@ -90,7 +90,7 @@ internal sealed class PolymarketHttpClient(
             }
             catch (PolymarketApiException ex)
             {
-                if (!IsExpectedMissingOrderBook(ex))
+                if (!IsExpectedApiError(ex))
                 {
                     await RecordErrorAsync(operation, ex.Message, cancellationToken);
                 }
@@ -221,12 +221,25 @@ internal sealed class PolymarketHttpClient(
             cancellationToken);
     }
 
+    private bool IsExpectedApiError(PolymarketApiException ex)
+    {
+        return IsExpectedMissingOrderBook(ex) || IsExpectedGammaActiveMarketsMaxOffset(ex);
+    }
+
     private bool IsExpectedMissingOrderBook(PolymarketApiException ex)
     {
         return string.Equals(component, "PolymarketClobPublicClient", StringComparison.Ordinal) &&
             string.Equals(ex.Operation, "GetOrderBook", StringComparison.Ordinal) &&
             ex.Message.Contains("HTTP 404", StringComparison.OrdinalIgnoreCase) &&
             ex.Message.Contains("No orderbook exists", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private bool IsExpectedGammaActiveMarketsMaxOffset(PolymarketApiException ex)
+    {
+        return string.Equals(component, "PolymarketGammaClient", StringComparison.Ordinal) &&
+            string.Equals(ex.Operation, "GetActiveMarkets", StringComparison.Ordinal) &&
+            ex.Message.Contains("HTTP 422", StringComparison.OrdinalIgnoreCase) &&
+            ex.Message.Contains("offset exceeds maximum allowed", StringComparison.OrdinalIgnoreCase);
     }
 
     private Task RecordHttpLogAsync(

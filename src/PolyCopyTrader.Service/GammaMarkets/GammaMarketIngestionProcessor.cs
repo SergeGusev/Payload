@@ -25,29 +25,38 @@ public sealed class GammaMarketIngestionProcessor(
 
         while (!cancellationToken.IsCancellationRequested)
         {
-            var markets = await gammaClient.GetActiveMarketsAsync(
-                options.PageLimit,
-                offset,
-                cancellationToken);
+            IReadOnlyList<PolymarketGammaMarket> markets;
+            try
+            {
+                markets = await gammaClient.GetActiveMarketsAsync(
+                    options.PageLimit,
+                    offset,
+                    cancellationToken);
+            }
+            catch (PolymarketApiException ex) when (IsGammaActiveMarketsMaxOffset(ex))
+            {
+                logger.LogInformation(
+                    "Gamma active market ingestion reached the API maximum offset and completed the scan. Offset={Offset} PagesFetched={PagesFetched} MarketsFetched={MarketsFetched}",
+                    offset,
+                    pagesFetched,
+                    marketsFetched);
+                return CompleteFullScan(
+                    activeAssetIdsSeen,
+                    pagesFetched,
+                    marketsFetched,
+                    marketsUpserted,
+                    offset);
+            }
 
             pagesFetched++;
             marketsFetched += markets.Count;
             if (markets.Count == 0)
             {
-                var retained = activeMarketAssetSubscriptionRegistry.RetainAssets(activeAssetIdsSeen);
-                if (retained.Removed > 0)
-                {
-                    logger.LogInformation(
-                        "Gamma active market ingestion removed inactive WebSocket subscription assets after a full scan. RemovedAssets={RemovedAssets} ActiveAssets={ActiveAssets}",
-                        retained.Removed,
-                        retained.TotalAssets);
-                }
-
-                return new GammaMarketIngestionResult(
+                return CompleteFullScan(
+                    activeAssetIdsSeen,
                     pagesFetched,
                     marketsFetched,
                     marketsUpserted,
-                    ReachedEmptyPage: true,
                     offset);
             }
 
@@ -84,6 +93,38 @@ public sealed class GammaMarketIngestionProcessor(
             marketsUpserted,
             ReachedEmptyPage: false,
             offset);
+    }
+
+    private GammaMarketIngestionResult CompleteFullScan(
+        HashSet<string> activeAssetIdsSeen,
+        int pagesFetched,
+        int marketsFetched,
+        int marketsUpserted,
+        int nextOffset)
+    {
+        var retained = activeMarketAssetSubscriptionRegistry.RetainAssets(activeAssetIdsSeen);
+        if (retained.Removed > 0)
+        {
+            logger.LogInformation(
+                "Gamma active market ingestion removed inactive WebSocket subscription assets after a full scan. RemovedAssets={RemovedAssets} ActiveAssets={ActiveAssets}",
+                retained.Removed,
+                retained.TotalAssets);
+        }
+
+        return new GammaMarketIngestionResult(
+            pagesFetched,
+            marketsFetched,
+            marketsUpserted,
+            ReachedEmptyPage: true,
+            nextOffset);
+    }
+
+    private static bool IsGammaActiveMarketsMaxOffset(PolymarketApiException ex)
+    {
+        return string.Equals(ex.Component, "PolymarketGammaClient", StringComparison.Ordinal) &&
+            string.Equals(ex.Operation, "GetActiveMarkets", StringComparison.Ordinal) &&
+            ex.Message.Contains("HTTP 422", StringComparison.OrdinalIgnoreCase) &&
+            ex.Message.Contains("offset exceeds maximum allowed", StringComparison.OrdinalIgnoreCase);
     }
 
     private IReadOnlyCollection<PolymarketGammaMarket> SelectSubscriptionMarkets(

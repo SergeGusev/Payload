@@ -372,6 +372,31 @@ public sealed class PolymarketClientTests
     }
 
     [Fact]
+    public async Task GammaClient_DoesNotRecordApiErrorForActiveMarketsMaxOffset()
+    {
+        var sink = new CapturingApiErrorSink();
+        var httpLogSink = new CapturingHttpLogSink();
+        var handler = new StubHttpMessageHandler(_ => new HttpResponseMessage(HttpStatusCode.UnprocessableEntity)
+        {
+            Content = new StringContent("""{"type":"validation error","error":"offset exceeds maximum allowed for markets list queries"}""")
+        });
+        var client = new PolymarketGammaClient(
+            new HttpClient(handler),
+            TestOptions,
+            sink,
+            httpLogSink);
+
+        await Assert.ThrowsAsync<PolymarketApiException>(() => client.GetActiveMarketsAsync(offset: 10_000));
+
+        Assert.Empty(sink.Errors);
+        var log = Assert.Single(httpLogSink.Entries);
+        Assert.Equal("PolymarketGammaClient", log.Component);
+        Assert.Equal("GetActiveMarkets", log.Operation);
+        Assert.Equal(422, log.StatusCode);
+        Assert.False(log.Succeeded);
+    }
+
+    [Fact]
     public async Task GammaClient_FetchesClosedMarketBySlug()
     {
         var handler = new StubHttpMessageHandler(_ => new HttpResponseMessage(HttpStatusCode.OK)

@@ -1,3 +1,15 @@
+## Active Update 2026-05-14 Gamma Active Market Max Offset Fix
+Goal: Stop expected Gamma `GetActiveMarkets` max-offset 422 responses from polluting API errors and failing ingestion cycles.
+Status: Completed
+Done:
+- Updated `GammaMarketIngestionProcessor` to catch only `PolymarketGammaClient/GetActiveMarkets` HTTP 422 errors containing `offset exceeds maximum allowed`, treat them as the end of the active-market scan, retain/remove WebSocket subscription assets, and return a completed result instead of surfacing an exception.
+- Kept unexpected Gamma active-market errors unchanged: they still throw and are handled by the worker as failures.
+- Updated `PolymarketHttpClient` so the expected Gamma active-market max-offset 422 is not persisted as an `api_errors` row, while HTTP logs still capture the failed request.
+- Added tests covering max-offset completion, unexpected error rethrowing, and no API-error persistence for the expected Gamma 422.
+Next: Deploy/restart the service on `192.168.0.101`, then confirm new `PolymarketGammaClient/GetActiveMarkets` 422 api_errors stop appearing.
+Notes: Verification passed: targeted `GammaMarketIngestionTests|PolymarketClientTests` 40/40; full `dotnet test tests\PolyCopyTrader.Tests\PolyCopyTrader.Tests.csproj -c Release --no-restore` 472/472; `dotnet build PolyCopyTrader.sln -c Release --no-restore` succeeded with 0 warnings/errors; `git diff --check` passed with CRLF warnings only. Existing old untracked deploy/artifact files were left untouched.
+Blockers: Server deployment/restart is still needed for the fix to take effect.
+
 ## Active Update 2026-05-14 Strategy Performance Snapshot
 Goal: Assess whether any currently running strategies look promising from server-side Paper/statistics data.
 Status: Completed

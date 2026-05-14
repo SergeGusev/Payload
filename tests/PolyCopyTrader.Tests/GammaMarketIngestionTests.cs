@@ -135,6 +135,50 @@ public sealed class GammaMarketIngestionTests
         Assert.False(registry.TryGetSnapshot("token-yes-stale-market", out _));
     }
 
+    [Fact]
+    public async Task Refresh_TreatsGammaMaxOffsetAsCompletedFullScan()
+    {
+        var gammaClient = new FakeGammaClient();
+        gammaClient.Pages[0] = [CreateMarketForTests("current-market")];
+        gammaClient.Exceptions[2] = new PolymarketApiException(
+            "PolymarketGammaClient",
+            "GetActiveMarkets",
+            """GetActiveMarkets failed with HTTP 422 Unprocessable Entity. Body: {"type":"validation error","error":"offset exceeds maximum allowed for markets list queries"}""");
+        var repository = new TestAppRepository();
+        var registry = new ActiveMarketAssetSubscriptionRegistry();
+        registry.AddOrUpdateMarkets([CreateMarketForTests("stale-market")]);
+        var processor = CreateProcessor(
+            gammaClient,
+            repository,
+            pageLimit: 2,
+            activeMarketAssetSubscriptionRegistry: registry);
+
+        var result = await processor.RefreshAsync();
+
+        Assert.Equal(new[] { 0, 2 }, gammaClient.Requests.Select(request => request.Offset).ToArray());
+        Assert.Equal(1, result.PagesFetched);
+        Assert.Equal(1, result.MarketsFetched);
+        Assert.Equal(1, result.MarketsUpserted);
+        Assert.True(result.ReachedEmptyPage);
+        Assert.Equal(2, result.NextOffset);
+        Assert.Contains("token-yes-current-market", registry.GetAssetIds(), StringComparer.OrdinalIgnoreCase);
+        Assert.DoesNotContain("token-yes-stale-market", registry.GetAssetIds(), StringComparer.OrdinalIgnoreCase);
+        Assert.Contains(repository.PolymarketGammaMarkets, market => market.MarketId == "current-market");
+    }
+
+    [Fact]
+    public async Task Refresh_RethrowsUnexpectedGammaActiveMarketErrors()
+    {
+        var gammaClient = new FakeGammaClient();
+        gammaClient.Exceptions[0] = new PolymarketApiException(
+            "PolymarketGammaClient",
+            "GetActiveMarkets",
+            "GetActiveMarkets failed with HTTP 500 Internal Server Error. Body: gateway failed");
+        var processor = CreateProcessor(gammaClient, new TestAppRepository(), pageLimit: 2);
+
+        await Assert.ThrowsAsync<PolymarketApiException>(() => processor.RefreshAsync());
+    }
+
     private static GammaMarketIngestionProcessor CreateProcessor(
         FakeGammaClient gammaClient,
         TestAppRepository repository,
@@ -207,6 +251,8 @@ public sealed class GammaMarketIngestionTests
     {
         public Dictionary<int, IReadOnlyList<PolymarketGammaMarket>> Pages { get; } = [];
 
+        public Dictionary<int, Exception> Exceptions { get; } = [];
+
         public List<(int Limit, int Offset)> Requests { get; } = [];
 
         public Task<IReadOnlyList<PolymarketGammaMarket>> GetActiveMarketsAsync(
@@ -215,6 +261,11 @@ public sealed class GammaMarketIngestionTests
             CancellationToken cancellationToken = default)
         {
             Requests.Add((limit, offset));
+            if (Exceptions.TryGetValue(offset, out var exception))
+            {
+                throw exception;
+            }
+
             return Task.FromResult(Pages.TryGetValue(offset, out var markets) ? markets : []);
         }
 
