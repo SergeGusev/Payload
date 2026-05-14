@@ -1,3 +1,16 @@
+## Active Update 2026-05-14 BTC 5m History Backfill Command
+Goal: Implement a one-shot command to rebuild `btc_5m_history` from closed BTC Up or Down 5m markets and Binance BTCUSDT trades.
+Status: Completed
+Done:
+- Added `Btc5mHistoryFillCommand` with explicit `--fill-btc-5m-history` startup handling before the normal service host starts.
+- The command loads closed BTC 5m Gamma market rows including zero-volume markets, parses unique Up/Down settlement from `outcomes`/`outcomePrices`, truncates `btc_5m_history`, fetches Binance BTCUSDT `aggTrades` with a five-minute lookback, and writes updated/inserted `(seconds, cents)` counters.
+- Implemented truncation-to-zero bucketing for seconds and cents, per-market cache reload semantics, unknown-result/no-BTC-data skip handling, and optional dry-run/filter arguments.
+- Added unit tests for bucketing, sample seconds, result parsing, and cache update/up_count/down_count behavior.
+- Documented the command and non-destructive dry-run options in README.
+Next: Run the real command against a database that contains closed/resolved BTC 5m Gamma history; the currently configured local database returned zero matching closed rows during dry-run.
+Notes: `dotnet restore src\PolyCopyTrader.Service\PolyCopyTrader.Service.csproj` and test-project restore reported up to date. `dotnet test tests\PolyCopyTrader.Tests\PolyCopyTrader.Tests.csproj -c Release --no-restore` passed 457/457. `dotnet build src\PolyCopyTrader.Service\PolyCopyTrader.Service.csproj -c Release --no-restore` passed with 0 warnings and 0 errors. Non-destructive smoke run `--fill-btc-5m-history --btc-5m-history-dry-run --btc-5m-history-max-markets 1` reached PostgreSQL and reported no closed/resolved BTC 5m rows in the configured database. `git diff --check` passed with CRLF warnings only.
+Blockers: None.
+
 ## Active Update 2026-05-14 BTC 5m History Uniqueness
 Goal: Enforce uniqueness for `btc_5m_history` rows by `(seconds, cents)`.
 Status: Completed

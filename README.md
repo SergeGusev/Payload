@@ -152,6 +152,23 @@ dotnet run --project src/PolyCopyTrader.Service/PolyCopyTrader.Service.csproj
 
 Paper/Live shadow testing stores the shared BTC decision in `paper_live_shadow_decisions`, links `paper_orders` and `live_orders` by `correlation_id`, and writes fatal mismatches to `paper_live_shadow_discrepancies`.
 
+### BTC 5m History Backfill
+
+The service has a one-shot PostgreSQL backfill command for `btc_5m_history`.
+It reads closed/resolved BTC Up or Down 5m rows from `polymarket_gamma_markets`,
+including markets with zero volume, truncates `btc_5m_history`, and rebuilds
+the `(seconds, cents)` counters from public Binance BTCUSDT `aggTrades`.
+
+```powershell
+dotnet run --project src/PolyCopyTrader.Service/PolyCopyTrader.Service.csproj -- --fill-btc-5m-history
+```
+
+For a non-destructive smoke check, add `--btc-5m-history-dry-run`. Useful bounds
+for testing are `--btc-5m-history-max-markets <n>`,
+`--btc-5m-history-start-utc <iso-utc>`, and
+`--btc-5m-history-end-utc <iso-utc>`. This command does not place or cancel
+orders and exits before the normal service host starts.
+
 ### Local PostgreSQL Debugging
 
 If PostgreSQL is already installed locally, create a `polycopytrader` database and set the connection string in your shell:

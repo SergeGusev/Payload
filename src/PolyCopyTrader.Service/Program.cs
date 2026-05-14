@@ -201,6 +201,16 @@ if (args.Contains("--print-live-shadow-exchange-status", StringComparer.OrdinalI
     return;
 }
 
+if (args.Contains(Btc5mHistoryFillCommand.CommandFlag, StringComparer.OrdinalIgnoreCase))
+{
+    Environment.ExitCode = await Btc5mHistoryFillCommand.ExecuteAsync(
+        appConfiguration,
+        args,
+        Console.Out,
+        CancellationToken.None);
+    return;
+}
+
 var logsDirectory = Path.Combine(AppContext.BaseDirectory, "logs");
 Directory.CreateDirectory(logsDirectory);
 

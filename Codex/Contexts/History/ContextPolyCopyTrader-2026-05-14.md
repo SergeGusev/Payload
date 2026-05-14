@@ -74,3 +74,10 @@ Request:
 
 Result:
 Added uniqueness for `btc_5m_history` by `(seconds, cents)`. `PostgresSchema.SchemaSql` now includes `CONSTRAINT ux_btc_5m_history_seconds_cents UNIQUE (seconds, cents)` in the table definition plus a `DO $$` migration block that adds the constraint to an existing table when missing. Applied the same constraint to the local PostgreSQL database through the configured connection string without printing secrets and verified `ux_btc_5m_history_seconds_cents | UNIQUE` in metadata. Targeted schema/splitter tests passed 2/2 with existing nullable warnings.
+
+## 2026-05-14T09:56:32.0817131Z
+Request:
+Ок, приступай к реализации
+
+Result:
+Implemented the one-shot `--fill-btc-5m-history` service command. It reads closed BTC Up or Down 5m Gamma history from PostgreSQL, includes zero-volume markets, parses Up/Down settlement, fetches Binance BTCUSDT `aggTrades` with a five-minute lookback, applies the agreed seconds/cents truncation-to-zero buckets, reloads/writes the `btc_5m_history` cache per market, and exits before normal service hosting. Added command tests and README usage. Verification passed: targeted command/schema tests, full test project 457/457, service Release build, and `git diff --check` with CRLF warnings only. A non-destructive dry-run reached the configured PostgreSQL database but found no matching closed BTC 5m rows there, so no Binance fetch or table write was performed.
