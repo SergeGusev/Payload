@@ -1,3 +1,16 @@
+## Active Update 2026-05-14 Earliest Confirmed BTC 5m Resolved Market
+Goal: Find the earliest available BTC Up or Down 5m market with start, end, and result.
+Status: Completed
+Done:
+- Local direct Gamma/Data API calls are currently blocked by ISP/A1 stop-page/TLS trust behavior, and PostgreSQL `192.168.0.101:5432` timed out again, so the check used public Polymarket event pages as the available source.
+- Confirmed `btc-updown-5m-1766162100` exists as an older placeholder-style page for `2025-12-19T16:35:00Z`, but it shows `$0` volume and no resolved final outcome, so it was not counted as an available start/end/result market.
+- Found the earliest confirmed resolved BTC 5m page in the checked boundary: `btc-updown-5m-1770856800`.
+- `btc-updown-5m-1770856800` starts at `2026-02-12T00:40:00Z`, ends at `2026-02-12T00:45:00Z`, and resolved `Up`.
+- Adjacent later pages such as `btc-updown-5m-1770858000` and `btc-updown-5m-1770869100` also resolved, confirming the sequence after the boundary.
+Next: Re-run through Gamma API or PostgreSQL when network access is restored to confirm whether any `2026-02-12T00:35:00Z` or earlier slug has machine-readable resolved metadata.
+Notes: Evidence came from Polymarket event pages; direct API/DB verification was unavailable in this turn. `1770856800` corresponds to February 11, 2026 7:40-7:45 PM ET on the page.
+Blockers: Local network currently blocks/hijacks Polymarket API/site HTTP(S) calls; remote PostgreSQL is not reachable from this machine.
+
 ## Active Update 2026-05-14 BTC 5m Result Fields
 Goal: Determine whether BTC Up or Down 5m market start/end/result can be found without trade history.
 Status: Completed

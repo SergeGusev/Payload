@@ -32,3 +32,10 @@ Request:
 
 Result:
 Confirmed the requested BTC Up or Down 5m fields can be found without trade history. Start time comes from the market slug epoch `btc-updown-5m-<unix>` or Gamma `eventStartTime`; end time is start plus 5 minutes for this market family; result is available after resolution from Gamma `closed`, `outcomes`, and `outcomePrices`, where the single outcome priced at or near `1` is the winner. A fresh direct API/DB sample was blocked by current DB connectivity and local HTTPS trust errors, but the project already implements the relevant parsing and settlement logic.
+
+## 2026-05-14T06:38:42.4389085Z
+Request:
+Отлично. Найди самый ранний из доступных маркетов
+
+Result:
+Searched for the earliest available BTC Up or Down 5m market with start/end/result. Direct local Gamma/Data API calls are currently blocked by ISP/A1 stop-page/TLS trust behavior and PostgreSQL `192.168.0.101:5432` timed out, so the check used public Polymarket event pages. The oldest DB-known placeholder `btc-updown-5m-1766162100` exists for `2025-12-19T16:35:00Z` but shows no resolved result and `$0` volume, so it was not counted. The earliest confirmed resolved page found in the checked boundary is `btc-updown-5m-1770856800`: start `2026-02-12T00:40:00Z`, end `2026-02-12T00:45:00Z`, result `Up`.
