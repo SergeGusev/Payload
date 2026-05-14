@@ -1,3 +1,13 @@
+## Active Update 2026-05-14 BTC History Half Dollar Bucket Answer
+Goal: Answer how many `btc_5m_history` rows would remain with 50-cent cents buckets.
+Status: Completed
+Done:
+- Reused the read-only bucket estimate over the current `btc_5m_history` table.
+- Confirmed a `50` cent bucket would reduce the table from `305,079` rows to `61,453` rows.
+Next: Decide whether to change the fill bucket size to `50` or `100` cents and rerun the backfill.
+Notes: No application source or database data changed for this answer. Existing estimates preserve `sum(count)=1,138,980`.
+Blockers: None.
+
 ## Active Update 2026-05-14 BTC History Dollar Bucket Estimate
 Goal: Estimate how many `btc_5m_history` rows would remain if cents were bucketed by whole dollars.
 Status: Completed

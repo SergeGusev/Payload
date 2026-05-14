@@ -116,3 +116,10 @@ Request:
 
 Result:
 Ran a read-only aggregation over `btc_5m_history` to estimate coarser cents buckets with truncation toward zero. Current `5` cent buckets have `305,079` rows. A `$1` bucket (`100` cents) would have `36,797` unique `(seconds, cents_bucket)` rows while preserving total observations: `sum(count)=1,138,980`, `sum(up_count)=573,720`, `sum(down_count)=565,260`. Neighbor estimates were `50` cents -> `61,453` rows, `$2` -> `21,763` rows, and `$5` -> `10,639` rows. Temporary probe was removed; no application data or source code was changed.
+
+## 2026-05-14T13:23:20.0151798+00:00
+Request:
+А до 50 центов?
+
+Result:
+Answered from the existing read-only bucket estimate: with `50` cent buckets, `btc_5m_history` would have `61,453` unique `(seconds, cents_bucket)` rows instead of the current `305,079`, preserving `sum(count)=1,138,980`. No application data or source code changed.
