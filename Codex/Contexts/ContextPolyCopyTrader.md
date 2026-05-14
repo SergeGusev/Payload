@@ -1,3 +1,15 @@
+## Active Update 2026-05-14 BTC History Live Probability Method
+Goal: Define how to use `btc_5m_history` for live Up/Down probability analysis of the current BTC 5m market.
+Status: Completed
+Done:
+- Recommended computing live `(seconds, cents)` with the same truncation/bucketing as the backfill, then reading the matching history row.
+- Recommended treating exact row probability as an empirical signal, not a command: apply minimum sample-count gates, Bayesian smoothing toward a prior, and fallback aggregation over coarser cents or nearby seconds/cents when exact support is low.
+- Recommended comparing smoothed probabilities against current market executable prices/spread/liquidity/risk filters, using edge rather than raw probability as the trading signal.
+- Recommended precomputing a coarse bucket table such as 50-cent or multi-bucket `btc_5m_history_buckets` for live lookups instead of runtime expression aggregation.
+Next: Implement a read-only probability service/query path and backtest bucket sizes/min-count/smoothing thresholds before using it for Paper entries.
+Notes: Answer-only task. No source or database data changed. Existing unique `(seconds, cents)` index is enough for exact lookups; range fallback can use the same index when predicates start with `seconds`.
+Blockers: None.
+
 ## Active Update 2026-05-14 BTC History Key Index Review
 Goal: Decide which indexes `public.btc_5m_history` needs for full-row lookups by `(seconds, cents)`.
 Status: Completed

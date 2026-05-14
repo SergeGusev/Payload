@@ -137,3 +137,10 @@ Request:
 
 Result:
 Reviewed the existing schema and concluded that the current `CONSTRAINT ux_btc_5m_history_seconds_cents UNIQUE (seconds, cents)` is the required btree index for exact full-row lookups by `WHERE seconds = @seconds AND cents = @cents` and for `ON CONFLICT (seconds, cents)`. No additional index is needed for that query shape. Optional covering indexes with included columns would duplicate a narrow table and should only be considered after measured high-QPS need. More indexes would only be justified for different query shapes such as `cents`-only or broad range scans.
+
+## 2026-05-14T13:55:03.4235543+00:00
+Request:
+Нужна идея. Мы всё это делали для того, чтобы определить вероятность Up или Down для конкретной пары (seconds, cents) в процессе живого анализа текущего маркета. Как это правильно делать на основе таблицы btc_5m_history ?
+
+Result:
+Proposed the live probability method: compute current market `seconds` and BTC cents move from start with the same truncation/bucketing as backfill, look up `btc_5m_history`, calculate empirical `up_count/count` and `down_count/count`, then apply sample-count gates, Bayesian smoothing toward a prior, and fallback aggregation over coarser cents or nearby seconds/cents when exact support is low. Recommended using smoothed probability only as a fair-value estimate and comparing it to current executable market prices with spread/liquidity/risk filters. Suggested precomputing coarse bucket tables for live use and backtesting bucket size/min-count/smoothing thresholds before using it for Paper entries. No source or database data changed.
