@@ -1,3 +1,18 @@
+## Active Update 2026-05-14 New Database Recheck After Restart
+Goal: Recheck whether the new-server service is healthy through PostgreSQL after the stale heartbeat finding.
+Status: Completed
+Done:
+- Queried the new PostgreSQL database at `192.168.0.101` read-only with a temporary C#/.NET/Npgsql diagnostic and removed the temporary project afterward.
+- Confirmed the service is alive again: `PolyCopyTrader.Service` started at `2026-05-14T05:30:38Z`; second check showed last heartbeat `2026-05-14T05:37:38Z`, age about `28s`.
+- Confirmed active writes resumed: BTC odds latest age about `3s`, Gamma latest age about `1.5s`, Paper/latest strategy update age about `5.4s`.
+- Confirmed current WebSocket recovered after one reconnect: aggregate and `shard-001` both `Connected`, shard message age about `4.2s`, `940` subscribed assets.
+- Confirmed recent Paper activity resumed: last 30 minutes had `700` Paper orders (`415` Pending, `147` Filled, `138` Expired) and `6,014` strategy run updates.
+- Confirmed live risk remains low: `0` live orders in the last 60 minutes, `0` repository-open live order statuses, and `0` enabled strategies with `live_stakes=true`.
+- Confirmed backlog is mostly cleared compared with the stale check: remaining stale rows are `34` due `Observed` runs and `55` `Entered` runs past end, all from `2026-05-13T15:15Z..15:35Z`.
+Next: Keep monitoring entry delay after restart catch-up; inspect the server logs around the earlier stop and consider cleanup/skip handling for the old stale BTC run rows.
+Notes: Entry delay for the 30-minute window was still elevated after catch-up (`avg 18.132s`, `p95 44.419s`, `max 49.657s`). Remote IPC `192.168.0.101:5118` remained unreachable from the dev machine, although DB health is now fresh. `git diff --check` was run after context/history updates and reported only existing line-ending warnings.
+Blockers: Remote IPC is still not reachable from this machine; the earlier service stop cause has not been identified from logs.
+
 ## Active Update 2026-05-14 New Database Health Check
 Goal: Check whether the service is healthy through the new PostgreSQL database at `192.168.0.101`.
 Status: Completed
