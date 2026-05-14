@@ -1,3 +1,16 @@
+## Active Update 2026-05-14 New Database Accessibility Check
+Goal: Check whether the PostgreSQL database on the new server is accessible.
+Status: Completed
+Done:
+- Confirmed TCP connectivity to `192.168.0.101:5432` succeeds from this machine.
+- Ran a temporary read-only C#/.NET/Npgsql probe using the configured PostgreSQL connection string with only host changed to `192.168.0.101`, then removed the temporary project.
+- Confirmed authenticated PostgreSQL open succeeded against database `polycopytrader` as configured user, with `db_now_utc=2026-05-14T07:28:43.6408470`.
+- Confirmed latest service heartbeat: `PolyCopyTrader.Service`, status `Running`, mode `Live`, started `2026-05-14T05:30:38Z`, last heartbeat `2026-05-14T07:28:39.818094Z`, age about `36.9s`, last error `<none>`.
+- Confirmed fresh writes: BTC odds sample age about `33.5s`, Gamma fetch age about `34.8s`, and latest Paper order age about `46.5s`.
+Next: None.
+Notes: No secrets were printed. `git diff --check` was run after context/history updates and reported only line-ending warnings.
+Blockers: None.
+
 ## Active Update 2026-05-14 BTCUSDT Historical Source
 Goal: Find a BTC/USDT price source starting at the earliest BTC 5m market time.
 Status: Completed

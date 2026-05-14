@@ -53,3 +53,10 @@ Request:
 
 Result:
 Found and verified Binance as the practical BTC/USDT historical price source for the requested start time. Binance Spot REST `/api/v3/klines` returned BTCUSDT candles from `2025-12-18T04:25:00Z`; the 5-minute request for `startTime=1766031900000` returned open `86895.02000000`, high `86900.00000000`, low `86829.99000000`, close `86838.69000000`, close time `1766032199999`, and `6183` trades. Binance public data archive HEAD checks also confirmed daily and monthly ZIP files exist for `BTCUSDT/5m` and `BTCUSDT/1m` at `2025-12-18` / `2025-12`. Recommended using `data.binance.vision` ZIP archives for bulk backfill and REST `/api/v3/klines` for spot checks or short ranges. No production code changed.
+
+## 2026-05-14T07:29:27.9172230Z
+Request:
+База на новом сервере доступна?
+
+Result:
+Checked the new server database at `192.168.0.101:5432`. TCP connectivity succeeded and an authenticated PostgreSQL read-only probe opened database `polycopytrader` successfully, with `db_now_utc=2026-05-14T07:28:43.6408470`. `PolyCopyTrader.Service` heartbeat was fresh: status `Running`, mode `Live`, started `2026-05-14T05:30:38Z`, last heartbeat `2026-05-14T07:28:39.818094Z`, age about `36.9s`, last error `<none>`. Fresh writes were also present: BTC odds sample age about `33.5s`, Gamma fetch age about `34.8s`, and latest Paper order age about `46.5s`. Temporary probe was removed; no production code changed.
