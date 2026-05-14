@@ -31,6 +31,7 @@ public static class PostgresSchema
         "btc_usd_reference_correlation_samples",
         "btc_order_book_lag_diagnostic_events",
         "btc_up_down_5m_odds_ticks",
+        "btc_5m_history",
         "crypto_up_down_5m_odds_ticks",
         "paper_copied_leader_positions",
         "paper_copied_leader_activity_events",
@@ -2500,6 +2501,15 @@ ON btc_up_down_5m_odds_ticks(sampled_at_utc DESC);
 
 CREATE INDEX IF NOT EXISTS ix_btc_up_down_5m_odds_ticks_start
 ON btc_up_down_5m_odds_ticks(market_start_utc, sampled_at_utc);
+
+CREATE TABLE IF NOT EXISTS btc_5m_history (
+    id bigserial PRIMARY KEY,
+    seconds integer NOT NULL,
+    cents integer NOT NULL,
+    count integer NOT NULL DEFAULT 0,
+    up_count integer NOT NULL DEFAULT 0,
+    down_count integer NOT NULL DEFAULT 0
+);
 
 CREATE TABLE IF NOT EXISTS crypto_up_down_5m_odds_ticks (
     id uuid PRIMARY KEY,

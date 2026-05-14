@@ -60,3 +60,10 @@ Request:
 
 Result:
 Checked the new server database at `192.168.0.101:5432`. TCP connectivity succeeded and an authenticated PostgreSQL read-only probe opened database `polycopytrader` successfully, with `db_now_utc=2026-05-14T07:28:43.6408470`. `PolyCopyTrader.Service` heartbeat was fresh: status `Running`, mode `Live`, started `2026-05-14T05:30:38Z`, last heartbeat `2026-05-14T07:28:39.818094Z`, age about `36.9s`, last error `<none>`. Fresh writes were also present: BTC odds sample age about `33.5s`, Gamma fetch age about `34.8s`, and latest Paper order age about `46.5s`. Temporary probe was removed; no production code changed.
+
+## 2026-05-14T07:44:19.4412652Z
+Request:
+Заведи на локальном сервере таблицу btc_5m_history со следующими полями: id PK autoinc, seconds int not null, cents int not null, count int not null default 0, up_count int not null default 0, down_count int not null default 0.
+
+Result:
+Added `btc_5m_history` to the repository PostgreSQL schema and to the required-table schema test. The table DDL is `id bigserial PRIMARY KEY`, `seconds integer NOT NULL`, `cents integer NOT NULL`, `count integer NOT NULL DEFAULT 0`, `up_count integer NOT NULL DEFAULT 0`, and `down_count integer NOT NULL DEFAULT 0`. Applied the same DDL to the local PostgreSQL database using the configured `POLYCOPYTRADER_POSTGRES_CONNECTION` without printing secrets, then verified the columns through `information_schema`. Temporary C#/.NET/Npgsql runner was removed. Targeted schema test passed 1/1 with existing nullable warnings; `git diff --check` passed with line-ending warnings only.

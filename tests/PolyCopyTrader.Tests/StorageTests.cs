@@ -189,6 +189,13 @@ public sealed class StorageTests
         Assert.Contains("ix_btc_usd_reference_correlation_samples_created", PostgresSchema.SchemaSql, StringComparison.Ordinal);
         Assert.Contains("CREATE TABLE IF NOT EXISTS btc_up_down_5m_odds_ticks", PostgresSchema.SchemaSql, StringComparison.Ordinal);
         Assert.Contains("ix_btc_up_down_5m_odds_ticks_market_time", PostgresSchema.SchemaSql, StringComparison.Ordinal);
+        Assert.Contains("CREATE TABLE IF NOT EXISTS btc_5m_history", PostgresSchema.SchemaSql, StringComparison.Ordinal);
+        Assert.Contains("id bigserial PRIMARY KEY", PostgresSchema.SchemaSql, StringComparison.Ordinal);
+        Assert.Contains("seconds integer NOT NULL", PostgresSchema.SchemaSql, StringComparison.Ordinal);
+        Assert.Contains("cents integer NOT NULL", PostgresSchema.SchemaSql, StringComparison.Ordinal);
+        Assert.Contains("count integer NOT NULL DEFAULT 0", PostgresSchema.SchemaSql, StringComparison.Ordinal);
+        Assert.Contains("up_count integer NOT NULL DEFAULT 0", PostgresSchema.SchemaSql, StringComparison.Ordinal);
+        Assert.Contains("down_count integer NOT NULL DEFAULT 0", PostgresSchema.SchemaSql, StringComparison.Ordinal);
         Assert.Contains("CREATE TABLE IF NOT EXISTS crypto_up_down_5m_odds_ticks", PostgresSchema.SchemaSql, StringComparison.Ordinal);
         Assert.Contains("ix_crypto_up_down_5m_odds_ticks_asset_market_time", PostgresSchema.SchemaSql, StringComparison.Ordinal);
         Assert.Contains("up_price_proxy_kind text NOT NULL", PostgresSchema.SchemaSql, StringComparison.Ordinal);

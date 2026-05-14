@@ -1,3 +1,16 @@
+## Active Update 2026-05-14 Local BTC 5m History Table
+Goal: Create local PostgreSQL table `btc_5m_history` for BTC 5m aggregated history counters.
+Status: Completed
+Done:
+- Added `btc_5m_history` to `PostgresSchema.RequiredTables`.
+- Added `CREATE TABLE IF NOT EXISTS btc_5m_history` to `PostgresSchema.SchemaSql` with `id bigserial PRIMARY KEY`, `seconds integer NOT NULL`, `cents integer NOT NULL`, `count integer NOT NULL DEFAULT 0`, `up_count integer NOT NULL DEFAULT 0`, and `down_count integer NOT NULL DEFAULT 0`.
+- Added schema assertions in `StorageTests.PostgresSchema_ContainsRequiredTables` for the new table and requested columns/defaults.
+- Applied the DDL to the local PostgreSQL database through the configured `POLYCOPYTRADER_POSTGRES_CONNECTION` without printing the connection string.
+- Verified local database columns through `information_schema`: `id` is `bigint` with sequence default, `seconds`/`cents`/`count`/`up_count`/`down_count` are `integer NOT NULL`, and the three counters default to `0`.
+Next: Use `btc_5m_history` from a future BTC 5m backfill/importer.
+Notes: Temporary C#/.NET/Npgsql DDL runner was created outside the repository and removed after use. `dotnet test tests\PolyCopyTrader.Tests\PolyCopyTrader.Tests.csproj -c Release --no-restore --filter "FullyQualifiedName~StorageTests.PostgresSchema_ContainsRequiredTables"` passed 1/1 with existing nullable warnings from `PostgresAppRepository`. `git diff --check` passed with line-ending warnings only.
+Blockers: None.
+
 ## Active Update 2026-05-14 New Database Accessibility Check
 Goal: Check whether the PostgreSQL database on the new server is accessible.
 Status: Completed
