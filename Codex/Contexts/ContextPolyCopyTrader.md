@@ -1,3 +1,16 @@
+## Active Update 2026-05-14 BTC 5m History Uniqueness
+Goal: Enforce uniqueness for `btc_5m_history` rows by `(seconds, cents)`.
+Status: Completed
+Done:
+- Added `CONSTRAINT ux_btc_5m_history_seconds_cents UNIQUE (seconds, cents)` to the `btc_5m_history` table definition in `PostgresSchema.SchemaSql`.
+- Added a PostgreSQL `DO $$` migration block that adds the same constraint to an already existing `btc_5m_history` table when it is missing.
+- Added schema assertions for the unique constraint and migration block in `StorageTests.PostgresSchema_ContainsRequiredTables`.
+- Applied the constraint to the local PostgreSQL database through the configured `POLYCOPYTRADER_POSTGRES_CONNECTION` without printing secrets.
+- Verified local database metadata reports `ux_btc_5m_history_seconds_cents | UNIQUE`.
+Next: Implement the BTC 5m history backfill/importer using the unique `(seconds, cents)` key.
+Notes: Temporary C#/.NET/Npgsql constraint runner was created outside the repository and removed after use. `dotnet test tests\PolyCopyTrader.Tests\PolyCopyTrader.Tests.csproj -c Release --no-restore --filter "FullyQualifiedName~StorageTests.PostgresSchema_ContainsRequiredTables|FullyQualifiedName~StorageTests.PostgresSchemaInitializer_SplitsSchemaSqlIntoDebuggableStatements"` passed 2/2 with existing nullable warnings from `PostgresAppRepository`.
+Blockers: None.
+
 ## Active Update 2026-05-14 Local BTC 5m History Table
 Goal: Create local PostgreSQL table `btc_5m_history` for BTC 5m aggregated history counters.
 Status: Completed

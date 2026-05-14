@@ -196,6 +196,9 @@ public sealed class StorageTests
         Assert.Contains("count integer NOT NULL DEFAULT 0", PostgresSchema.SchemaSql, StringComparison.Ordinal);
         Assert.Contains("up_count integer NOT NULL DEFAULT 0", PostgresSchema.SchemaSql, StringComparison.Ordinal);
         Assert.Contains("down_count integer NOT NULL DEFAULT 0", PostgresSchema.SchemaSql, StringComparison.Ordinal);
+        Assert.Contains("CONSTRAINT ux_btc_5m_history_seconds_cents UNIQUE (seconds, cents)", PostgresSchema.SchemaSql, StringComparison.Ordinal);
+        Assert.Contains("ALTER TABLE btc_5m_history", PostgresSchema.SchemaSql, StringComparison.Ordinal);
+        Assert.Contains("ADD CONSTRAINT ux_btc_5m_history_seconds_cents UNIQUE (seconds, cents)", PostgresSchema.SchemaSql, StringComparison.Ordinal);
         Assert.Contains("CREATE TABLE IF NOT EXISTS crypto_up_down_5m_odds_ticks", PostgresSchema.SchemaSql, StringComparison.Ordinal);
         Assert.Contains("ix_crypto_up_down_5m_odds_ticks_asset_market_time", PostgresSchema.SchemaSql, StringComparison.Ordinal);
         Assert.Contains("up_price_proxy_kind text NOT NULL", PostgresSchema.SchemaSql, StringComparison.Ordinal);

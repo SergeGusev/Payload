@@ -2508,8 +2508,22 @@ CREATE TABLE IF NOT EXISTS btc_5m_history (
     cents integer NOT NULL,
     count integer NOT NULL DEFAULT 0,
     up_count integer NOT NULL DEFAULT 0,
-    down_count integer NOT NULL DEFAULT 0
+    down_count integer NOT NULL DEFAULT 0,
+    CONSTRAINT ux_btc_5m_history_seconds_cents UNIQUE (seconds, cents)
 );
+
+DO $$
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1
+        FROM pg_constraint
+        WHERE conrelid = 'btc_5m_history'::regclass
+          AND conname = 'ux_btc_5m_history_seconds_cents'
+    ) THEN
+        ALTER TABLE btc_5m_history
+        ADD CONSTRAINT ux_btc_5m_history_seconds_cents UNIQUE (seconds, cents);
+    END IF;
+END $$;
 
 CREATE TABLE IF NOT EXISTS crypto_up_down_5m_odds_ticks (
     id uuid PRIMARY KEY,

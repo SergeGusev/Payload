@@ -67,3 +67,10 @@ Request:
 
 Result:
 Added `btc_5m_history` to the repository PostgreSQL schema and to the required-table schema test. The table DDL is `id bigserial PRIMARY KEY`, `seconds integer NOT NULL`, `cents integer NOT NULL`, `count integer NOT NULL DEFAULT 0`, `up_count integer NOT NULL DEFAULT 0`, and `down_count integer NOT NULL DEFAULT 0`. Applied the same DDL to the local PostgreSQL database using the configured `POLYCOPYTRADER_POSTGRES_CONNECTION` without printing secrets, then verified the columns through `information_schema`. Temporary C#/.NET/Npgsql runner was removed. Targeted schema test passed 1/1 with existing nullable warnings; `git diff --check` passed with line-ending warnings only.
+
+## 2026-05-14T08:39:48.1143920Z
+Request:
+Добавь уникальность в таблицу UNIQUE(seconds, cents)
+
+Result:
+Added uniqueness for `btc_5m_history` by `(seconds, cents)`. `PostgresSchema.SchemaSql` now includes `CONSTRAINT ux_btc_5m_history_seconds_cents UNIQUE (seconds, cents)` in the table definition plus a `DO $$` migration block that adds the constraint to an existing table when missing. Applied the same constraint to the local PostgreSQL database through the configured connection string without printing secrets and verified `ux_btc_5m_history_seconds_cents | UNIQUE` in metadata. Targeted schema/splitter tests passed 2/2 with existing nullable warnings.
