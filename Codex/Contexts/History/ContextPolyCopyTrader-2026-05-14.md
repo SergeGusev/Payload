@@ -130,3 +130,10 @@ Request:
 
 Result:
 Generated PNG heatmaps from the current `btc_5m_history` table under `artifacts\btc-5m-history-heatmaps`. Created separate Up and Down images plus combined two-panel images for the full cents range (`-122000..256715`) and for a central 98% weighted zoom (`-21500..21000`). X axis is seconds from market start, Y axis is cents move, and color is red-to-blue probability (`up_count / count` for Up, `down_count / count` for Down). Temporary C#/.NET/Npgsql/System.Drawing generator was removed after use; no database data changed.
+
+## 2026-05-14T13:42:42.2490190+00:00
+Request:
+Подумай, какие индексы нужны public.btc_5m_history, если мы будем делать выборки полной записей по ключу (seconds, cents)
+
+Result:
+Reviewed the existing schema and concluded that the current `CONSTRAINT ux_btc_5m_history_seconds_cents UNIQUE (seconds, cents)` is the required btree index for exact full-row lookups by `WHERE seconds = @seconds AND cents = @cents` and for `ON CONFLICT (seconds, cents)`. No additional index is needed for that query shape. Optional covering indexes with included columns would duplicate a narrow table and should only be considered after measured high-QPS need. More indexes would only be justified for different query shapes such as `cents`-only or broad range scans.

@@ -1,3 +1,14 @@
+## Active Update 2026-05-14 BTC History Key Index Review
+Goal: Decide which indexes `public.btc_5m_history` needs for full-row lookups by `(seconds, cents)`.
+Status: Completed
+Done:
+- Confirmed the repository schema already defines `CONSTRAINT ux_btc_5m_history_seconds_cents UNIQUE (seconds, cents)`.
+- Concluded that this existing unique constraint creates the required PostgreSQL btree index for exact `WHERE seconds = @seconds AND cents = @cents` lookups and for `ON CONFLICT (seconds, cents)`.
+- Noted that no additional index is needed for exact full-row key lookups; optional covering indexes would duplicate a very narrow table and should be avoided unless measured high-QPS index-only scans become necessary.
+Next: Keep the existing unique `(seconds, cents)` constraint; only add more indexes if future query shapes use `cents` alone or broad range scans.
+Notes: Answer-only task. Inspected schema references in `PostgresSchema` and tests. `git diff --check` passed before context update.
+Blockers: None.
+
 ## Active Update 2026-05-14 BTC History Probability Heatmaps
 Goal: Generate image heatmaps for current `btc_5m_history` Up/Down probability distributions.
 Status: Completed
