@@ -11,3 +11,10 @@ Request:
 
 Result:
 Rechecked the new PostgreSQL database at `192.168.0.101` read-only. The service was healthy again: `PolyCopyTrader.Service` restarted at `2026-05-14T05:30:38Z`, heartbeat age was about `28s` on the second check, BTC/Gamma/Paper/strategy updates were fresh, and WebSocket aggregate plus `shard-001` were `Connected`. Paper activity resumed with `700` orders and `6,014` strategy updates in the 30-minute window. Live risk remained low: `0` live orders in the last 60 minutes, `0` repository-open live order statuses, and `0` enabled strategies with `live_stakes=true`. Remaining issues: remote IPC `192.168.0.101:5118` is still unreachable, entry-delay metrics are elevated during catch-up, and old stale BTC rows remain (`34` due `Observed`, `55` `Entered` past end).
+
+## 2026-05-14T05:55:22.7067930Z
+Request:
+Можешь ли ты поднять историю сделок на рынке BTC Up or Down 5m через API ?
+
+Result:
+Confirmed BTC Up or Down 5m trade history can be pulled through Polymarket's public Data API by condition id. A temporary C#/.NET read-only probe selected the latest completed BTC 5m market from the new DB (`btc-updown-5m-1778737800`, condition `0x0f0ac9e8ded27aa67945cac492b7d41e3b861f7907d6af8f11af4ea501e39b84`) and called `https://data-api.polymarket.com/trades?market=<conditionId>&takerOnly=false&limit=10000&offset=0`. The API returned `200 OK` and `457` trade rows with timestamps, side, outcome, price, size, wallet, and transaction hash. The temporary probe was removed; no production code changed.

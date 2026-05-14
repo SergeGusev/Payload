@@ -1,3 +1,17 @@
+## Active Update 2026-05-14 BTC 5m Trade API Probe
+Goal: Check whether BTC Up or Down 5m market trade history can be pulled through Polymarket API.
+Status: Completed
+Done:
+- Checked official Polymarket docs for API separation and trade endpoints.
+- Confirmed the project already has `PolymarketDataApiClient.GetMarketTradesAsync(conditionId, takerOnly, limit, offset)`, which calls public `https://data-api.polymarket.com/trades?market=<conditionId>`.
+- Ran a temporary read-only C#/.NET probe that selected the latest completed BTC 5m market from the new DB by slug epoch and then called public Data API without API keys.
+- Verified Data API returned `200 OK` for `btc-updown-5m-1778737800` / condition `0x0f0ac9e8ded27aa67945cac492b7d41e3b861f7907d6af8f11af4ea501e39b84`.
+- The API returned `457` trade rows for that market with timestamps, side, outcome, price, size, wallet, and transaction hash; range was `2026-05-14T05:26:18Z` to `2026-05-14T05:50:01Z`.
+- Removed the temporary probe project after verification.
+Next: If needed, add a reusable read-only command/export that paginates `Data API /trades` by BTC 5m condition id and writes CSV/DB rows.
+Notes: Data API `limit` supports up to `10000`; for this 5m market a single page covered the returned `457` rows. CLOB authenticated `GET /data/trades` is a separate user-trade endpoint and was not used.
+Blockers: None.
+
 ## Active Update 2026-05-14 New Database Recheck After Restart
 Goal: Recheck whether the new-server service is healthy through PostgreSQL after the stale heartbeat finding.
 Status: Completed
