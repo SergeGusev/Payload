@@ -191,3 +191,9 @@ Recheck the deployed server after the latest user prompt.
 
 Result:
 Rechecked the deployed BTC Up or Down 5m Statistics strategy through PostgreSQL at `192.168.0.101`. PostgreSQL `5432` is reachable; IPC `5118` remains unreachable from this machine. `PolyCopyTrader.Service` is running after the latest restart (`started_at_utc=2026-05-14T16:42:09Z`, heartbeat age about `29.3s`, no last error). `btc_5m_history` is intact with `305079` rows and aggregate counts `1138980/573720/565260`; `btc_up_down_5m_statistics_ticks` is receiving live rows (`1842` total, latest age about `0.8s`, `37` total `would_bet` ticks). Found a settlement issue: `btc_5m_history_live_observations` had `433` rows, `0` applied, `389` pending with `last_result_error=result_unknown`, max attempts `24`. Direct Gamma API with `closed=true` returns resolved data for a stuck slug (`closed=true`, `outcomePrices=["1","0"]`), while the local server row is stale (`active=True`, `closed=False`). Next fix should refresh closed Gamma metadata during live-observation settlement before deriving the result.
+## 2026-05-14T16:56:49.2564690Z
+Request:
+Ок, давай поправим.
+
+Result:
+Implemented a BTC Up or Down 5m Statistics settlement fix. Added `IPolymarketGammaClient.GetClosedMarketBySlugAsync` and implemented it with Gamma `GET /markets?slug=...&closed=true&limit=1`; added generic `ParseGammaMarkets`; updated `BtcUpDown5mStatisticsProcessor` to refresh and upsert closed Gamma metadata by slug when local stored metadata is missing or still unresolved, then retry Up/Down extraction before leaving the observation pending. Added tests for closed Gamma slug lookup and stale local metadata settlement. Verification passed: targeted tests 36/36, full test project 469/469, Release solution build with 0 warnings/errors, and `git diff --check` with CRLF warnings only. Server deployment/restart is still needed for pending server observations to apply.

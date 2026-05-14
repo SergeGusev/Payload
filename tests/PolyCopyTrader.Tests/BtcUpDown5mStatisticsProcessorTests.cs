@@ -120,11 +120,66 @@ public sealed class BtcUpDown5mStatisticsProcessorTests
         Assert.True(Assert.Single(repository.Btc5mHistoryLiveObservations).AppliedToHistory);
     }
 
+    [Fact]
+    public async Task ProcessAsync_RefreshesClosedGammaMetadataWhenStoredMarketIsStale()
+    {
+        var repository = new TestAppRepository();
+        var now = DateTimeOffset.UtcNow;
+        var startUtc = now.AddMinutes(-10);
+        var staleMarket = CreateMarket(startUtc);
+        var resolvedMarket = CreateMarket(
+            startUtc,
+            active: true,
+            closed: true,
+            rawJson: """{"outcomes":["Up","Down"],"outcomePrices":["1","0"]}""");
+        repository.PolymarketGammaMarkets.Add(staleMarket);
+        repository.Btc5mHistoryRows.Add(new Btc5mHistoryRow(60, 10, 2, 1, 1));
+        repository.Btc5mHistoryLiveObservations.Add(new Btc5mHistoryLiveObservation(
+            Guid.NewGuid(),
+            staleMarket.MarketId,
+            staleMarket.ConditionId,
+            staleMarket.Slug,
+            startUtc,
+            startUtc.AddMinutes(5),
+            startUtc.AddSeconds(62),
+            60,
+            10,
+            100.12m,
+            100m,
+            0.12m,
+            null,
+            false,
+            null,
+            2,
+            now.AddMinutes(-1),
+            "result_unknown",
+            now.AddMinutes(-2),
+            now.AddMinutes(-1)));
+        var gammaClient = new FakeGammaClient([resolvedMarket]);
+        var processor = CreateProcessor(
+            repository,
+            new MarketDataCache(new MarketDataWebSocketOptions()),
+            new FakeBtcUsdReferencePriceClient(100.50m),
+            gammaClient: gammaClient);
+
+        var result = await processor.ProcessAsync();
+
+        Assert.Equal(1, result.HistoryObservationsApplied);
+        Assert.Equal(1, gammaClient.ClosedMarketBySlugCalls);
+        var history = Assert.Single(repository.Btc5mHistoryRows);
+        Assert.Equal(3, history.Count);
+        Assert.Equal(2, history.UpCount);
+        Assert.Equal(1, history.DownCount);
+        Assert.True(Assert.Single(repository.Btc5mHistoryLiveObservations).AppliedToHistory);
+        Assert.True(Assert.Single(repository.PolymarketGammaMarkets).Closed);
+    }
+
     private static BtcUpDown5mStatisticsProcessor CreateProcessor(
         TestAppRepository repository,
         MarketDataCache cache,
         FakeBtcUsdReferencePriceClient btcClient,
-        FakeClobPublicClient? clobClient = null)
+        FakeClobPublicClient? clobClient = null,
+        FakeGammaClient? gammaClient = null)
     {
         return new BtcUpDown5mStatisticsProcessor(
             NullLogger<BtcUpDown5mStatisticsProcessor>.Instance,
@@ -137,6 +192,7 @@ public sealed class BtcUpDown5mStatisticsProcessorTests
             repository,
             cache,
             clobClient ?? new FakeClobPublicClient(),
+            gammaClient ?? new FakeGammaClient([]),
             btcClient,
             new StrategyStateProvider(NullLogger<StrategyStateProvider>.Instance, repository));
     }
@@ -293,6 +349,52 @@ public sealed class BtcUpDown5mStatisticsProcessorTests
         public Task<PolymarketClobMarketByToken?> GetMarketByTokenAsync(string tokenId, CancellationToken cancellationToken = default)
         {
             return Task.FromResult<PolymarketClobMarketByToken?>(null);
+        }
+    }
+
+    private sealed class FakeGammaClient(IReadOnlyList<PolymarketGammaMarket> closedMarkets) : IPolymarketGammaClient
+    {
+        public int ClosedMarketBySlugCalls { get; private set; }
+
+        public Task<IReadOnlyList<PolymarketGammaMarket>> GetActiveMarketsAsync(
+            int limit = 500,
+            int offset = 0,
+            CancellationToken cancellationToken = default)
+        {
+            return Task.FromResult<IReadOnlyList<PolymarketGammaMarket>>([]);
+        }
+
+        public Task<PolymarketGammaMarket?> GetClosedMarketBySlugAsync(
+            string slug,
+            CancellationToken cancellationToken = default)
+        {
+            ClosedMarketBySlugCalls++;
+            return Task.FromResult(closedMarkets.FirstOrDefault(market =>
+                string.Equals(market.Slug, slug, StringComparison.OrdinalIgnoreCase)));
+        }
+
+        public Task<IReadOnlyList<PolymarketOnChainTokenMetadata>> GetTokenMetadataAsync(
+            string tokenId,
+            bool closed,
+            CancellationToken cancellationToken = default)
+        {
+            return Task.FromResult<IReadOnlyList<PolymarketOnChainTokenMetadata>>([]);
+        }
+
+        public Task<IReadOnlyList<PolymarketOnChainTokenMetadata>> GetTokenMetadataByConditionIdAsync(
+            string conditionId,
+            string requestedTokenId,
+            bool closed,
+            CancellationToken cancellationToken = default)
+        {
+            return Task.FromResult<IReadOnlyList<PolymarketOnChainTokenMetadata>>([]);
+        }
+
+        public Task<string?> GetEventCategoryAsync(
+            string eventId,
+            CancellationToken cancellationToken = default)
+        {
+            return Task.FromResult<string?>(null);
         }
     }
 }

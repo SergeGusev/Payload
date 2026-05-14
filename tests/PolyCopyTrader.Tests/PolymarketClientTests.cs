@@ -372,6 +372,29 @@ public sealed class PolymarketClientTests
     }
 
     [Fact]
+    public async Task GammaClient_FetchesClosedMarketBySlug()
+    {
+        var handler = new StubHttpMessageHandler(_ => new HttpResponseMessage(HttpStatusCode.OK)
+        {
+            Content = new StringContent(SampleGammaMarketsJson)
+        });
+        var client = new PolymarketGammaClient(
+            new HttpClient(handler),
+            TestOptions,
+            new CapturingApiErrorSink());
+
+        var market = await client.GetClosedMarketBySlugAsync("will-sample-event-happen");
+
+        Assert.NotNull(market);
+        Assert.Equal("will-sample-event-happen", market.Slug);
+        Assert.True(market.Closed);
+        Assert.Contains("/markets", handler.Requests.Single().RequestUri?.AbsoluteUri);
+        Assert.Contains("slug=will-sample-event-happen", handler.Requests.Single().RequestUri?.Query);
+        Assert.Contains("closed=true", handler.Requests.Single().RequestUri?.Query);
+        Assert.Contains("limit=1", handler.Requests.Single().RequestUri?.Query);
+    }
+
+    [Fact]
     public async Task GammaClient_FetchesMarketByConditionId()
     {
         var handler = new StubHttpMessageHandler(_ => new HttpResponseMessage(HttpStatusCode.OK)

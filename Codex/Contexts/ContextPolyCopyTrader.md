@@ -1,3 +1,16 @@
+## Active Update 2026-05-14 BTC Statistics Closed Gamma Settlement Fix
+Goal: Fix BTC Up or Down 5m Statistics live-observation settlement when local Gamma metadata is stale after market close.
+Status: Completed
+Done:
+- Added `IPolymarketGammaClient.GetClosedMarketBySlugAsync` and implemented it in `PolymarketGammaClient` via `GET /markets?slug=...&closed=true&limit=1`.
+- Added generic `PolymarketJsonParser.ParseGammaMarkets` while preserving `ParseGammaActiveMarkets` as a wrapper.
+- Updated `BtcUpDown5mStatisticsProcessor` so due observations first try local Gamma metadata, then refresh closed Gamma metadata by market slug, upsert it, and retry result extraction before marking `result_unknown`.
+- Kept settlement read-only with respect to trading: the fix only resolves queued observations and applies historical counters after Up/Down is known.
+- Added tests for the closed Gamma slug lookup and for applying a pending live observation when the stored market row is stale.
+Next: Deploy/restart the service on `192.168.0.101`, then verify pending `btc_5m_history_live_observations` move to applied rows and `btc_5m_history` counters increase.
+Notes: Verification passed: targeted tests `BtcUpDown5mStatisticsProcessorTests|PolymarketClientTests` 36/36; full `dotnet test tests\PolyCopyTrader.Tests\PolyCopyTrader.Tests.csproj -c Release --no-restore` 469/469; `dotnet build PolyCopyTrader.sln -c Release --no-restore` succeeded with 0 warnings/errors; `git diff --check` passed with CRLF warnings only. Existing old untracked deploy/artifact files were left untouched.
+Blockers: Server still needs this build deployed/restarted before the pending observations can settle.
+
 ## Active Update 2026-05-14 Server BTC Statistics Recheck
 Goal: Recheck the deployed BTC Up or Down 5m Statistics strategy after the server restart/deploy.
 Status: Completed

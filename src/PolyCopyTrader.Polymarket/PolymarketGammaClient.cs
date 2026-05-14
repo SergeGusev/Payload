@@ -43,6 +43,33 @@ public sealed class PolymarketGammaClient : IPolymarketGammaClient
         return PolymarketJsonParser.ParseGammaActiveMarkets(json.RootElement);
     }
 
+    public async Task<PolymarketGammaMarket?> GetClosedMarketBySlugAsync(
+        string slug,
+        CancellationToken cancellationToken = default)
+    {
+        var normalizedSlug = slug.Trim();
+        if (string.IsNullOrWhiteSpace(normalizedSlug))
+        {
+            return null;
+        }
+
+        using var json = await client.GetJsonDocumentAsync(
+            UriBuilderExtensions.WithPathAndQuery(
+                options.GammaBaseUrl,
+                "/markets",
+                new Dictionary<string, string?>
+                {
+                    ["slug"] = normalizedSlug,
+                    ["closed"] = "true",
+                    ["limit"] = "1"
+                }),
+            "GetClosedMarketBySlug",
+            cancellationToken);
+
+        return PolymarketJsonParser.ParseGammaMarkets(json.RootElement)
+            .FirstOrDefault(market => string.Equals(market.Slug, normalizedSlug, StringComparison.OrdinalIgnoreCase));
+    }
+
     public async Task<IReadOnlyList<PolymarketOnChainTokenMetadata>> GetTokenMetadataAsync(
         string tokenId,
         bool closed,

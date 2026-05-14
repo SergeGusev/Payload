@@ -302,6 +302,11 @@ public static class PolymarketJsonParser
 
     public static IReadOnlyList<PolymarketGammaMarket> ParseGammaActiveMarkets(JsonElement root)
     {
+        return ParseGammaMarkets(root);
+    }
+
+    public static IReadOnlyList<PolymarketGammaMarket> ParseGammaMarkets(JsonElement root)
+    {
         if (root.ValueKind is JsonValueKind.Null or JsonValueKind.Undefined)
         {
             return [];
@@ -309,7 +314,7 @@ public static class PolymarketJsonParser
 
         if (root.ValueKind != JsonValueKind.Array)
         {
-            throw new JsonException("Gamma active markets response must be a JSON array.");
+            throw new JsonException("Gamma markets response must be a JSON array.");
         }
 
         var fetchedAt = DateTimeOffset.UtcNow;

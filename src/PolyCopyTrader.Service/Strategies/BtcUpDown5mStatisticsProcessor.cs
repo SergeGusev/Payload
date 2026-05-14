@@ -15,6 +15,7 @@ public sealed class BtcUpDown5mStatisticsProcessor(
     IAppRepository repository,
     IMarketDataCache marketDataCache,
     IPolymarketClobPublicClient clobClient,
+    IPolymarketGammaClient gammaClient,
     IBtcUsdReferencePriceClient btcUsdReferencePriceClient,
     IStrategyStateProvider strategyStateProvider) : IBtcUpDown5mStatisticsProcessor
 {
@@ -212,6 +213,8 @@ public sealed class BtcUpDown5mStatisticsProcessor(
             cancellationToken);
         var applied = 0;
         var pending = 0;
+        var closedMarketRefreshCache = new Dictionary<string, PolymarketGammaMarket?>(
+            StringComparer.OrdinalIgnoreCase);
 
         foreach (var observation in observations)
         {
@@ -220,6 +223,34 @@ public sealed class BtcUpDown5mStatisticsProcessor(
             var result = market is null
                 ? null
                 : Btc5mHistoryFillCommand.TryGetWinningOutcome(market.RawJson, market.Closed);
+            var pendingReason = market is null ? "market_not_found" : "result_unknown";
+            if (result is not ("Up" or "Down"))
+            {
+                try
+                {
+                    var refreshedMarket = await RefreshClosedGammaMarketAsync(
+                        observation,
+                        closedMarketRefreshCache,
+                        cancellationToken);
+                    if (refreshedMarket is not null)
+                    {
+                        result = Btc5mHistoryFillCommand.TryGetWinningOutcome(
+                            refreshedMarket.RawJson,
+                            refreshedMarket.Closed);
+                        pendingReason = "result_unknown";
+                    }
+                }
+                catch (PolymarketApiException ex)
+                {
+                    logger.LogWarning(
+                        ex,
+                        "BTC Up or Down 5m Statistics could not refresh closed Gamma market metadata during history settlement. MarketId={MarketId} MarketSlug={MarketSlug}",
+                        observation.MarketId,
+                        observation.MarketSlug);
+                    pendingReason = "gamma_refresh_failed";
+                }
+            }
+
             if (result is "Up" or "Down")
             {
                 await repository.ApplyBtc5mHistoryLiveObservationResultAsync(
@@ -234,7 +265,7 @@ public sealed class BtcUpDown5mStatisticsProcessor(
                 await repository.MarkBtc5mHistoryLiveObservationResultPendingAsync(
                     observation.Id,
                     nowUtc.AddSeconds(options.ResultRetryDelaySeconds),
-                    market is null ? "market_not_found" : "result_unknown",
+                    pendingReason,
                     nowUtc,
                     cancellationToken);
                 pending++;
@@ -242,6 +273,36 @@ public sealed class BtcUpDown5mStatisticsProcessor(
         }
 
         return (applied, pending);
+    }
+
+    private async Task<PolymarketGammaMarket?> RefreshClosedGammaMarketAsync(
+        Btc5mHistoryLiveObservation observation,
+        Dictionary<string, PolymarketGammaMarket?> closedMarketRefreshCache,
+        CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(observation.MarketSlug))
+        {
+            return null;
+        }
+
+        var slug = observation.MarketSlug.Trim();
+        if (!closedMarketRefreshCache.TryGetValue(slug, out var market))
+        {
+            market = await gammaClient.GetClosedMarketBySlugAsync(slug, cancellationToken);
+            if (market is not null)
+            {
+                await repository.UpsertPolymarketGammaMarketAsync(market, cancellationToken);
+                logger.LogInformation(
+                    "BTC Up or Down 5m Statistics refreshed closed Gamma market metadata during history settlement. MarketId={MarketId} MarketSlug={MarketSlug} Closed={Closed}",
+                    market.MarketId,
+                    market.Slug,
+                    market.Closed);
+            }
+
+            closedMarketRefreshCache[slug] = market;
+        }
+
+        return market;
     }
 
     private BtcUpDown5mStatisticsDecision Decide(
