@@ -178,6 +178,38 @@ confirmed during the May 14 API scan. Gamma API batching can be tuned with
 `--btc-5m-history-gamma-delay-ms <n>`. This command does not place or cancel
 orders and exits before the normal service host starts.
 
+### BTC 5m Statistics Strategy
+
+`BTC Up or Down 5m Statistics` is a read-only research strategy. When
+`BtcUpDown5mStatistics:Enabled=true`, the service polls the current Binance
+BTC/USDT reference while active BTC 5-minute markets are open, looks up
+`btc_5m_history` around the current `(seconds, cents)` point with four-point
+interpolation, compares the estimated Up/Down probability with the current
+Polymarket Up/Down quote, and writes one row per observation to
+`btc_up_down_5m_statistics_ticks`. It records decisions such as
+`insufficient_history`, `market_price_missing`, `no_positive_edge`,
+`up_above_market`, and `down_above_market`; it never creates Paper, dry-run, or
+live orders.
+
+Live sampled `(seconds, cents)` points are first stored in
+`btc_5m_history_live_observations`. After the market is resolved, the worker
+reads the final Up/Down result from closed Gamma metadata and only then
+increments `btc_5m_history.count`, `up_count`, and `down_count`. This keeps
+unresolved live observations out of the historical outcome counters.
+
+Useful audit queries:
+
+```sql
+select decision_code, count(*) as ticks, count(*) filter (where would_bet) as would_bet
+from btc_up_down_5m_statistics_ticks
+group by decision_code
+order by ticks desc;
+
+select applied_to_history, count(*) as observations
+from btc_5m_history_live_observations
+group by applied_to_history;
+```
+
 ### Local PostgreSQL Debugging
 
 If PostgreSQL is already installed locally, create a `polycopytrader` database and set the connection string in your shell:

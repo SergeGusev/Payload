@@ -100,6 +100,12 @@ internal sealed class TestAppRepository : IAppRepository
 
     public List<BtcUpDown5mOddsTick> BtcUpDown5mOddsTicks { get; } = [];
 
+    public List<Btc5mHistoryRow> Btc5mHistoryRows { get; } = [];
+
+    public List<Btc5mHistoryLiveObservation> Btc5mHistoryLiveObservations { get; } = [];
+
+    public List<BtcUpDown5mStatisticsTick> BtcUpDown5mStatisticsTicks { get; } = [];
+
     public List<CryptoUpDown5mOddsTick> CryptoUpDown5mOddsTicks { get; } = [];
 
     public List<ApiError> ApiErrors { get; } = [];
@@ -1035,23 +1041,27 @@ internal sealed class TestAppRepository : IAppRepository
 
     public Task<IReadOnlyList<StrategyPerformance>> GetStrategyPerformanceAsync(int limit = 2000, CancellationToken cancellationToken = default)
     {
-        var strategies = new[]
-        {
-            new
-            {
-                Id = StrategyIds.FollowLeader,
-                Code = StrategyIds.FollowLeaderCode,
-                Name = StrategyIds.FollowLeaderName,
-                Settings = GetStrategySettings(StrategyIds.FollowLeader)
-            }
-        }
-        .Concat(StrategyIds.BtcUpDown5mVariants.Select(variant => new
+        var strategies = StrategyIds.BtcUpDown5mVariants.Select(variant => new
         {
             Id = variant.Id,
             variant.Code,
             variant.Name,
             Settings = GetStrategySettings(variant.Id)
-        }));
+        }).ToList();
+        strategies.Insert(0, new
+        {
+            Id = StrategyIds.FollowLeader,
+            Code = StrategyIds.FollowLeaderCode,
+            Name = StrategyIds.FollowLeaderName,
+            Settings = GetStrategySettings(StrategyIds.FollowLeader)
+        });
+        strategies.Add(new
+        {
+            Id = StrategyIds.BtcUpDown5mStatistics,
+            Code = StrategyIds.BtcUpDown5mStatisticsCode,
+            Name = StrategyIds.BtcUpDown5mStatisticsName,
+            Settings = GetStrategySettings(StrategyIds.BtcUpDown5mStatistics)
+        });
 
         var rows = new List<StrategyPerformance>();
         foreach (var strategy in strategies)
@@ -1228,28 +1238,32 @@ internal sealed class TestAppRepository : IAppRepository
             new { Label = "6h", Hours = 6, StartUtc = now.AddHours(-6) },
             new { Label = "24h", Hours = 24, StartUtc = now.AddHours(-24) }
         };
-        var strategies = new[]
-        {
-            new
-            {
-                Id = StrategyIds.FollowLeader,
-                Code = StrategyIds.FollowLeaderCode,
-                Name = StrategyIds.FollowLeaderName
-            }
-        }
-        .Concat(StrategyIds.BtcUpDown5mVariants.Select(variant => new
+        var strategies = StrategyIds.BtcUpDown5mVariants.Select(variant => new
         {
             Id = variant.Id,
             variant.Code,
             variant.Name
-        }))
-        .OrderBy(strategy => strategy.Code == StrategyIds.FollowLeaderCode ? 0 : 1)
-        .ThenBy(strategy => strategy.Code, StringComparer.OrdinalIgnoreCase)
-        .Take(limit)
-        .ToArray();
+        }).ToList();
+        strategies.Insert(0, new
+        {
+            Id = StrategyIds.FollowLeader,
+            Code = StrategyIds.FollowLeaderCode,
+            Name = StrategyIds.FollowLeaderName
+        });
+        strategies.Add(new
+        {
+            Id = StrategyIds.BtcUpDown5mStatistics,
+            Code = StrategyIds.BtcUpDown5mStatisticsCode,
+            Name = StrategyIds.BtcUpDown5mStatisticsName
+        });
+        var orderedStrategies = strategies
+            .OrderBy(strategy => strategy.Code == StrategyIds.FollowLeaderCode ? 0 : 1)
+            .ThenBy(strategy => strategy.Code, StringComparer.OrdinalIgnoreCase)
+            .Take(limit)
+            .ToArray();
 
         var rows = new List<StrategyRecentPerformance>();
-        foreach (var strategy in strategies)
+        foreach (var strategy in orderedStrategies)
         {
             foreach (var window in windows)
             {
@@ -1754,6 +1768,135 @@ internal sealed class TestAppRepository : IAppRepository
                 .ThenBy(tick => tick.CreatedAtUtc)
                 .Take(limit)
                 .ToArray());
+    }
+
+    public Task<IReadOnlyList<Btc5mHistoryRow>> GetBtc5mHistoryRowsAsync(
+        IReadOnlyCollection<Btc5mHistoryKey> keys,
+        CancellationToken cancellationToken = default)
+    {
+        var requested = keys.ToHashSet();
+        return Task.FromResult<IReadOnlyList<Btc5mHistoryRow>>(
+            Btc5mHistoryRows
+                .Where(row => requested.Contains(new Btc5mHistoryKey(row.Seconds, row.Cents)))
+                .ToArray());
+    }
+
+    public Task AddBtcUpDown5mStatisticsTickAsync(
+        BtcUpDown5mStatisticsTick tick,
+        CancellationToken cancellationToken = default)
+    {
+        BtcUpDown5mStatisticsTicks.Add(tick);
+        return Task.CompletedTask;
+    }
+
+    public Task<bool> TryAddBtc5mHistoryLiveObservationAsync(
+        Btc5mHistoryLiveObservation observation,
+        CancellationToken cancellationToken = default)
+    {
+        if (Btc5mHistoryLiveObservations.Any(existing =>
+            string.Equals(existing.MarketId, observation.MarketId, StringComparison.OrdinalIgnoreCase) &&
+            existing.Seconds == observation.Seconds))
+        {
+            return Task.FromResult(false);
+        }
+
+        Btc5mHistoryLiveObservations.Add(observation);
+        return Task.FromResult(true);
+    }
+
+    public Task<IReadOnlyList<Btc5mHistoryLiveObservation>> GetDueBtc5mHistoryLiveObservationsAsync(
+        DateTimeOffset dueBeforeUtc,
+        int limit,
+        CancellationToken cancellationToken = default)
+    {
+        return Task.FromResult<IReadOnlyList<Btc5mHistoryLiveObservation>>(
+            Btc5mHistoryLiveObservations
+                .Where(observation => !observation.AppliedToHistory)
+                .Where(observation => observation.MarketEndUtc <= dueBeforeUtc)
+                .Where(observation => observation.NextResultCheckUtc <= dueBeforeUtc)
+                .OrderBy(observation => observation.MarketEndUtc)
+                .ThenBy(observation => observation.SampledAtUtc)
+                .Take(Math.Max(1, limit))
+                .ToArray());
+    }
+
+    public Task ApplyBtc5mHistoryLiveObservationResultAsync(
+        Guid observationId,
+        string result,
+        DateTimeOffset appliedAtUtc,
+        CancellationToken cancellationToken = default)
+    {
+        var index = Btc5mHistoryLiveObservations.FindIndex(observation => observation.Id == observationId);
+        if (index < 0 || Btc5mHistoryLiveObservations[index].AppliedToHistory)
+        {
+            return Task.CompletedTask;
+        }
+
+        var normalizedResult = string.Equals(result, "Up", StringComparison.OrdinalIgnoreCase) ? "Up" : "Down";
+        var upDelta = normalizedResult == "Up" ? 1 : 0;
+        var downDelta = normalizedResult == "Down" ? 1 : 0;
+        var observation = Btc5mHistoryLiveObservations[index];
+        var historyIndex = Btc5mHistoryRows.FindIndex(row =>
+            row.Seconds == observation.Seconds &&
+            row.Cents == observation.Cents);
+
+        if (historyIndex >= 0)
+        {
+            var row = Btc5mHistoryRows[historyIndex];
+            Btc5mHistoryRows[historyIndex] = row with
+            {
+                Count = row.Count + 1,
+                UpCount = row.UpCount + upDelta,
+                DownCount = row.DownCount + downDelta
+            };
+        }
+        else
+        {
+            Btc5mHistoryRows.Add(new Btc5mHistoryRow(
+                observation.Seconds,
+                observation.Cents,
+                1,
+                upDelta,
+                downDelta));
+        }
+
+        Btc5mHistoryLiveObservations[index] = observation with
+        {
+            Result = normalizedResult,
+            AppliedToHistory = true,
+            AppliedAtUtc = appliedAtUtc,
+            LastResultError = null,
+            UpdatedAtUtc = appliedAtUtc
+        };
+        return Task.CompletedTask;
+    }
+
+    public Task MarkBtc5mHistoryLiveObservationResultPendingAsync(
+        Guid observationId,
+        DateTimeOffset nextResultCheckUtc,
+        string? errorMessage,
+        DateTimeOffset updatedAtUtc,
+        CancellationToken cancellationToken = default)
+    {
+        var index = Btc5mHistoryLiveObservations.FindIndex(observation => observation.Id == observationId);
+        if (index < 0 || Btc5mHistoryLiveObservations[index].AppliedToHistory)
+        {
+            return Task.CompletedTask;
+        }
+
+        var observation = Btc5mHistoryLiveObservations[index];
+        Btc5mHistoryLiveObservations[index] = observation with
+        {
+            ResultCheckAttempts = observation.ResultCheckAttempts + 1,
+            NextResultCheckUtc = nextResultCheckUtc,
+            LastResultError = string.IsNullOrWhiteSpace(errorMessage)
+                ? null
+                : errorMessage.Length > 2_000
+                    ? errorMessage[..2_000]
+                    : errorMessage,
+            UpdatedAtUtc = updatedAtUtc
+        };
+        return Task.CompletedTask;
     }
 
     public Task<IReadOnlyList<PolymarketGammaMarket>> GetCryptoUpDown5mGammaMarketsAsync(

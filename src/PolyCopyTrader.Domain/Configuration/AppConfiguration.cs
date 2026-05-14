@@ -48,6 +48,8 @@ public sealed class AppConfiguration
 
     public BtcUpDown5mOddsArchiveOptions BtcUpDown5mOddsArchive { get; init; } = new();
 
+    public BtcUpDown5mStatisticsOptions BtcUpDown5mStatistics { get; init; } = new();
+
     public CryptoUpDown5mOddsArchiveOptions CryptoUpDown5mOddsArchive { get; init; } = new();
 
     public ChainlinkBtcUsdDiagnosticsOptions ChainlinkBtcUsdDiagnostics { get; init; } = new();
@@ -703,6 +705,37 @@ public sealed class BtcUpDown5mOddsArchiveOptions
     public int MaxOrderBookAgeMilliseconds { get; init; } = 15_000;
 
     public bool RestFallbackEnabled { get; init; } = true;
+}
+
+public sealed class BtcUpDown5mStatisticsOptions
+{
+    public bool Enabled { get; init; } = true;
+
+    public int PollIntervalSeconds { get; init; } = 1;
+
+    public int MaxMarketsPerCycle { get; init; } = 500;
+
+    public int MinHistorySupport { get; init; } = 20;
+
+    public decimal MinimumEdge { get; init; }
+
+    public int HistorySecondsStep { get; init; } = 5;
+
+    public int HistoryCentsStep { get; init; } = 5;
+
+    public int HistoryMaxSeconds { get; init; } = 295;
+
+    public int HistorySampleOffsetSeconds { get; init; } = 2;
+
+    public int MaxOrderBookAgeMilliseconds { get; init; } = 15_000;
+
+    public bool RestFallbackEnabled { get; init; } = true;
+
+    public int ResultSettlementDelaySeconds { get; init; } = 30;
+
+    public int ResultRetryDelaySeconds { get; init; } = 60;
+
+    public int MaxHistorySettlementsPerCycle { get; init; } = 500;
 }
 
 public sealed class CryptoUpDown5mOddsArchiveOptions

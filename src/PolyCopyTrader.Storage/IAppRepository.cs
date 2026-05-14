@@ -539,6 +539,54 @@ public interface IAppRepository
         return Task.FromResult<IReadOnlyList<BtcUpDown5mOddsTick>>([]);
     }
 
+    Task<IReadOnlyList<Btc5mHistoryRow>> GetBtc5mHistoryRowsAsync(
+        IReadOnlyCollection<Btc5mHistoryKey> keys,
+        CancellationToken cancellationToken = default)
+    {
+        return Task.FromResult<IReadOnlyList<Btc5mHistoryRow>>([]);
+    }
+
+    Task AddBtcUpDown5mStatisticsTickAsync(
+        BtcUpDown5mStatisticsTick tick,
+        CancellationToken cancellationToken = default)
+    {
+        return Task.CompletedTask;
+    }
+
+    Task<bool> TryAddBtc5mHistoryLiveObservationAsync(
+        Btc5mHistoryLiveObservation observation,
+        CancellationToken cancellationToken = default)
+    {
+        return Task.FromResult(false);
+    }
+
+    Task<IReadOnlyList<Btc5mHistoryLiveObservation>> GetDueBtc5mHistoryLiveObservationsAsync(
+        DateTimeOffset dueBeforeUtc,
+        int limit,
+        CancellationToken cancellationToken = default)
+    {
+        return Task.FromResult<IReadOnlyList<Btc5mHistoryLiveObservation>>([]);
+    }
+
+    Task ApplyBtc5mHistoryLiveObservationResultAsync(
+        Guid observationId,
+        string result,
+        DateTimeOffset appliedAtUtc,
+        CancellationToken cancellationToken = default)
+    {
+        return Task.CompletedTask;
+    }
+
+    Task MarkBtc5mHistoryLiveObservationResultPendingAsync(
+        Guid observationId,
+        DateTimeOffset nextResultCheckUtc,
+        string? errorMessage,
+        DateTimeOffset updatedAtUtc,
+        CancellationToken cancellationToken = default)
+    {
+        return Task.CompletedTask;
+    }
+
     Task AddCryptoUpDown5mOddsTickAsync(
         CryptoUpDown5mOddsTick tick,
         CancellationToken cancellationToken = default)

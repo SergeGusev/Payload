@@ -151,3 +151,19 @@ Request:
 
 Result:
 Recommended four-neighbor bilinear interpolation around the live unrounded `(seconds, cents)` point as a better estimator than a hard rounded exact lookup. The method should interpolate weighted `count`, `up_count`, and `down_count` totals rather than raw corner probabilities, then apply smoothing/confidence gates and fall back to coarser buckets or wider neighborhoods when support is low. No source or database data changed.
+
+## 2026-05-14T14:45:39.7359494Z
+Request:
+Давай заведём стратегию BTC Up or Down 5m Statistics. Пока ничего ставить не нужно, соберём данные по её работе.
+
+1. Стратегия в непрерывном режиме опрашивает BTC курс.
+2. По таблице btc_5m_history выбирает значение для данного курса и времени (аппроксимация по четырём значениям).
+3. Оценивает вероятность Up и Down. Если данных недостаточно (порог - 20 значений), то пропускает ставку.
+4. Сравнивает рассчитанную вероятность с текущим рынком и как-то фиксирует текущий статус - больше рынка, меньше, стоит ли ставить и т.д.
+5. Где-нибудь ведёт статистику своей работы, чтобы мы знали, когда мы пропустили ставку из-за недостатка информации, когда ставить было невыгодно и т.д.
+6. Обновляет по своей информации (время и курс) базу btc_5m_history, увеличивая счётчики.
+
+Потом посмотрим статистику этой стратегии и решим, стоит ли связываться.
+
+Result:
+Implemented the read-only `BTC Up or Down 5m Statistics` worker, interpolation estimator, statistics and live-observation tables, repository methods, configuration, service registration, tests, and docs. The worker records decision ticks and queues live observations, then updates `btc_5m_history` only after the market result is known. Verification passed with `dotnet test tests\PolyCopyTrader.Tests\PolyCopyTrader.Tests.csproj -c Release --no-restore` and `dotnet build PolyCopyTrader.sln -c Release --no-restore`.

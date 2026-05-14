@@ -32,6 +32,8 @@ public static class PostgresSchema
         "btc_order_book_lag_diagnostic_events",
         "btc_up_down_5m_odds_ticks",
         "btc_5m_history",
+        "btc_5m_history_live_observations",
+        "btc_up_down_5m_statistics_ticks",
         "crypto_up_down_5m_odds_ticks",
         "paper_copied_leader_positions",
         "paper_copied_leader_activity_events",
@@ -2038,6 +2040,23 @@ ON CONFLICT (id) DO UPDATE SET
     updated_at_utc = excluded.updated_at_utc;
 
 INSERT INTO strategies (id, code, name, description, enabled, paper_stake_amount, created_at_utc, updated_at_utc)
+VALUES (
+    'b7c50005-0000-4000-8050-000000000001',
+    'btc_up_down_5m_statistics',
+    'BTC Up or Down 5m Statistics',
+    'Read-only statistics strategy: estimate BTC 5m Up/Down probability from btc_5m_history, compare it with current market prices, record the decision status, and update btc_5m_history only after the observed market resolves.',
+    true,
+    1.00,
+    now(),
+    now()
+)
+ON CONFLICT (id) DO UPDATE SET
+    code = excluded.code,
+    name = excluded.name,
+    description = excluded.description,
+    updated_at_utc = excluded.updated_at_utc;
+
+INSERT INTO strategies (id, code, name, description, enabled, paper_stake_amount, created_at_utc, updated_at_utc)
 WITH depths(depth, sample_description) AS (
     VALUES
         (1, 'the latest Binance BTC/USDT trade-stream price'),
@@ -2524,6 +2543,87 @@ BEGIN
         ADD CONSTRAINT ux_btc_5m_history_seconds_cents UNIQUE (seconds, cents);
     END IF;
 END $$;
+
+CREATE TABLE IF NOT EXISTS btc_5m_history_live_observations (
+    id uuid PRIMARY KEY,
+    market_id text NOT NULL,
+    condition_id text NOT NULL,
+    market_slug text NOT NULL,
+    market_start_utc timestamptz NOT NULL,
+    market_end_utc timestamptz NOT NULL,
+    sampled_at_utc timestamptz NOT NULL,
+    seconds integer NOT NULL,
+    cents integer NOT NULL,
+    binance_price_usd numeric(28,8) NOT NULL,
+    binance_start_price_usd numeric(28,8) NOT NULL,
+    btc_move_from_start_usd numeric(28,8) NOT NULL,
+    result text NULL,
+    applied_to_history boolean NOT NULL DEFAULT false,
+    applied_at_utc timestamptz NULL,
+    result_check_attempts integer NOT NULL DEFAULT 0,
+    next_result_check_utc timestamptz NOT NULL DEFAULT now(),
+    last_result_error text NULL,
+    created_at_utc timestamptz NOT NULL,
+    updated_at_utc timestamptz NOT NULL,
+    UNIQUE (market_id, seconds)
+);
+
+CREATE INDEX IF NOT EXISTS ix_btc_5m_history_live_observations_due
+ON btc_5m_history_live_observations(applied_to_history, next_result_check_utc, market_end_utc);
+
+CREATE INDEX IF NOT EXISTS ix_btc_5m_history_live_observations_market
+ON btc_5m_history_live_observations(market_id, sampled_at_utc);
+
+CREATE TABLE IF NOT EXISTS btc_up_down_5m_statistics_ticks (
+    id uuid PRIMARY KEY,
+    market_id text NOT NULL,
+    condition_id text NOT NULL,
+    market_slug text NOT NULL,
+    market_start_utc timestamptz NOT NULL,
+    market_end_utc timestamptz NOT NULL,
+    sampled_at_utc timestamptz NOT NULL,
+    seconds_after_start numeric(18,8) NOT NULL,
+    seconds_to_close numeric(18,8) NOT NULL,
+    binance_price_usd numeric(28,8) NOT NULL,
+    binance_source_updated_at_utc timestamptz NOT NULL,
+    binance_fetched_at_utc timestamptz NOT NULL,
+    binance_start_price_usd numeric(28,8) NULL,
+    btc_move_from_start_usd numeric(28,8) NULL,
+    btc_move_from_start_cents numeric(28,8) NULL,
+    seconds_lower integer NULL,
+    seconds_upper integer NULL,
+    cents_lower integer NULL,
+    cents_upper integer NULL,
+    effective_count numeric(28,8) NULL,
+    up_probability numeric(18,8) NULL,
+    down_probability numeric(18,8) NULL,
+    support_threshold integer NOT NULL,
+    history_rows_found integer NOT NULL,
+    missing_history_corners integer NOT NULL,
+    interpolation_method text NOT NULL,
+    up_asset_id text NOT NULL,
+    up_market_price numeric(18,8) NULL,
+    up_market_price_kind text NOT NULL,
+    down_asset_id text NOT NULL,
+    down_market_price numeric(18,8) NULL,
+    down_market_price_kind text NOT NULL,
+    up_edge numeric(18,8) NULL,
+    down_edge numeric(18,8) NULL,
+    decision_code text NOT NULL,
+    recommended_outcome text NULL,
+    would_bet boolean NOT NULL,
+    diagnostics_json jsonb NOT NULL DEFAULT '{}'::jsonb,
+    created_at_utc timestamptz NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS ix_btc_up_down_5m_statistics_ticks_sampled
+ON btc_up_down_5m_statistics_ticks(sampled_at_utc DESC);
+
+CREATE INDEX IF NOT EXISTS ix_btc_up_down_5m_statistics_ticks_market_time
+ON btc_up_down_5m_statistics_ticks(market_id, sampled_at_utc DESC);
+
+CREATE INDEX IF NOT EXISTS ix_btc_up_down_5m_statistics_ticks_decision
+ON btc_up_down_5m_statistics_ticks(decision_code, sampled_at_utc DESC);
 
 CREATE TABLE IF NOT EXISTS crypto_up_down_5m_odds_ticks (
     id uuid PRIMARY KEY,

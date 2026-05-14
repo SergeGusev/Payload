@@ -87,6 +87,20 @@ public sealed class ConfigurationTests
         Assert.Equal(500, configuration.BtcUpDown5mOddsArchive.MaxMarketsPerCycle);
         Assert.Equal(15_000, configuration.BtcUpDown5mOddsArchive.MaxOrderBookAgeMilliseconds);
         Assert.True(configuration.BtcUpDown5mOddsArchive.RestFallbackEnabled);
+        Assert.True(configuration.BtcUpDown5mStatistics.Enabled);
+        Assert.Equal(1, configuration.BtcUpDown5mStatistics.PollIntervalSeconds);
+        Assert.Equal(500, configuration.BtcUpDown5mStatistics.MaxMarketsPerCycle);
+        Assert.Equal(20, configuration.BtcUpDown5mStatistics.MinHistorySupport);
+        Assert.Equal(0m, configuration.BtcUpDown5mStatistics.MinimumEdge);
+        Assert.Equal(5, configuration.BtcUpDown5mStatistics.HistorySecondsStep);
+        Assert.Equal(5, configuration.BtcUpDown5mStatistics.HistoryCentsStep);
+        Assert.Equal(295, configuration.BtcUpDown5mStatistics.HistoryMaxSeconds);
+        Assert.Equal(2, configuration.BtcUpDown5mStatistics.HistorySampleOffsetSeconds);
+        Assert.Equal(15_000, configuration.BtcUpDown5mStatistics.MaxOrderBookAgeMilliseconds);
+        Assert.True(configuration.BtcUpDown5mStatistics.RestFallbackEnabled);
+        Assert.Equal(30, configuration.BtcUpDown5mStatistics.ResultSettlementDelaySeconds);
+        Assert.Equal(60, configuration.BtcUpDown5mStatistics.ResultRetryDelaySeconds);
+        Assert.Equal(500, configuration.BtcUpDown5mStatistics.MaxHistorySettlementsPerCycle);
         Assert.True(configuration.CryptoUpDown5mOddsArchive.Enabled);
         Assert.Equal(["ETH", "SOL", "XRP"], configuration.CryptoUpDown5mOddsArchive.AssetSymbols);
         Assert.Equal(5, configuration.CryptoUpDown5mOddsArchive.PollIntervalSeconds);
@@ -379,6 +393,44 @@ public sealed class ConfigurationTests
         Assert.Contains(errors, error => error.Contains("BtcUpDown5mOddsArchive.PollIntervalSeconds", StringComparison.Ordinal));
         Assert.Contains(errors, error => error.Contains("BtcUpDown5mOddsArchive.MaxMarketsPerCycle", StringComparison.Ordinal));
         Assert.Contains(errors, error => error.Contains("BtcUpDown5mOddsArchive.MaxOrderBookAgeMilliseconds", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void BtcUpDown5mStatisticsOptions_AreValidated()
+    {
+        var configuration = new AppConfiguration
+        {
+            BtcUpDown5mStatistics = new BtcUpDown5mStatisticsOptions
+            {
+                PollIntervalSeconds = 0,
+                MaxMarketsPerCycle = 0,
+                MinHistorySupport = 0,
+                MinimumEdge = -0.01m,
+                HistorySecondsStep = 0,
+                HistoryCentsStep = 0,
+                HistoryMaxSeconds = 0,
+                HistorySampleOffsetSeconds = 5,
+                MaxOrderBookAgeMilliseconds = 0,
+                ResultSettlementDelaySeconds = -1,
+                ResultRetryDelaySeconds = 0,
+                MaxHistorySettlementsPerCycle = 0
+            }
+        };
+
+        var errors = AppOptionsValidator.Validate(configuration);
+
+        Assert.Contains(errors, error => error.Contains("BtcUpDown5mStatistics.PollIntervalSeconds", StringComparison.Ordinal));
+        Assert.Contains(errors, error => error.Contains("BtcUpDown5mStatistics.MaxMarketsPerCycle", StringComparison.Ordinal));
+        Assert.Contains(errors, error => error.Contains("BtcUpDown5mStatistics.MinHistorySupport", StringComparison.Ordinal));
+        Assert.Contains(errors, error => error.Contains("BtcUpDown5mStatistics.MinimumEdge", StringComparison.Ordinal));
+        Assert.Contains(errors, error => error.Contains("BtcUpDown5mStatistics.HistorySecondsStep", StringComparison.Ordinal));
+        Assert.Contains(errors, error => error.Contains("BtcUpDown5mStatistics.HistoryCentsStep", StringComparison.Ordinal));
+        Assert.Contains(errors, error => error.Contains("BtcUpDown5mStatistics.HistoryMaxSeconds", StringComparison.Ordinal));
+        Assert.Contains(errors, error => error.Contains("BtcUpDown5mStatistics.HistorySampleOffsetSeconds", StringComparison.Ordinal));
+        Assert.Contains(errors, error => error.Contains("BtcUpDown5mStatistics.MaxOrderBookAgeMilliseconds", StringComparison.Ordinal));
+        Assert.Contains(errors, error => error.Contains("BtcUpDown5mStatistics.ResultSettlementDelaySeconds", StringComparison.Ordinal));
+        Assert.Contains(errors, error => error.Contains("BtcUpDown5mStatistics.ResultRetryDelaySeconds", StringComparison.Ordinal));
+        Assert.Contains(errors, error => error.Contains("BtcUpDown5mStatistics.MaxHistorySettlementsPerCycle", StringComparison.Ordinal));
     }
 
     [Fact]

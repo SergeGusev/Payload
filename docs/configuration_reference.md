@@ -194,6 +194,39 @@ is for research and diagnostics; it does not place or modify orders.
 - `RestFallbackEnabled`: when true, uses CLOB `/book` if the WebSocket cache is
   missing or stale, default `true`.
 
+## BtcUpDown5mStatistics
+
+Runs the read-only `BTC Up or Down 5m Statistics` research worker. It polls the
+current BTC price during active BTC 5-minute markets, estimates Up/Down
+probability from `btc_5m_history` with four-point interpolation, stores decision
+ticks in `btc_up_down_5m_statistics_ticks`, and queues live observations for
+later application to `btc_5m_history` after the market result is known. It does
+not place Paper, dry-run, or live orders.
+
+- `Enabled`: runs the statistics worker when true; default `true`.
+- `PollIntervalSeconds`: interval between statistics cycles, default `1`.
+- `MaxMarketsPerCycle`: maximum active BTC 5m markets inspected per cycle,
+  default `500`.
+- `MinHistorySupport`: minimum interpolated historical support required before
+  a probability is considered actionable, default `20`.
+- `MinimumEdge`: required probability-minus-market-price edge, default `0`.
+- `HistorySecondsStep`: `seconds` grid step in `btc_5m_history`, default `5`.
+- `HistoryCentsStep`: `cents` grid step in `btc_5m_history`, default `5`.
+- `HistoryMaxSeconds`: maximum rounded seconds key used for live observations,
+  default `295`.
+- `HistorySampleOffsetSeconds`: offset after each rounded second before a live
+  observation can be queued, default `2`.
+- `MaxOrderBookAgeMilliseconds`: maximum accepted WebSocket cache age before
+  REST fallback is attempted, default `15000`.
+- `RestFallbackEnabled`: when true, uses CLOB `/book` if the WebSocket cache is
+  missing or stale, default `true`.
+- `ResultSettlementDelaySeconds`: delay after market end before trying to apply
+  queued observations to history, default `30`.
+- `ResultRetryDelaySeconds`: retry delay when the closed Gamma result is not
+  available yet, default `60`.
+- `MaxHistorySettlementsPerCycle`: maximum queued observations settled per
+  cycle, default `500`.
+
 ## CryptoUpDown5mOddsArchive
 
 The service can continuously store non-BTC crypto 5-minute odds in PostgreSQL

@@ -1,3 +1,16 @@
+## Active Update 2026-05-14 BTC 5m Statistics Strategy
+Goal: Add a read-only BTC Up or Down 5m Statistics strategy that records live probability decisions from `btc_5m_history`.
+Status: Completed
+Done:
+- Added the `BTC Up or Down 5m Statistics` strategy id/config/schema/runtime worker and DI registration.
+- Added four-point weighted count interpolation over `btc_5m_history` and a processor that records probability/market-edge ticks without placing Paper, dry-run, or live orders.
+- Added `btc_up_down_5m_statistics_ticks` for decision audit rows and `btc_5m_history_live_observations` for unresolved live points.
+- Live observations update `btc_5m_history` only after the corresponding market resolves to Up or Down, preserving historical counter semantics.
+- Added PostgreSQL repository methods, test repository support, schema/config/processor/interpolation tests, and README/configuration docs.
+Next: Restart the service so schema initialization creates the new tables and the enabled statistics worker starts collecting rows.
+Notes: Verification passed: `dotnet test tests\PolyCopyTrader.Tests\PolyCopyTrader.Tests.csproj -c Release --no-restore` 467/467; `dotnet build PolyCopyTrader.sln -c Release --no-restore` succeeded with 0 warnings/errors; `git diff --check` passed with line-ending warnings only. A root `dotnet build -c Release --no-restore` attempt failed because the folder has multiple solution/project files, then the explicit solution build passed.
+Blockers: None.
+
 ## Active Update 2026-05-14 BTC History Four Point Interpolation
 Goal: Decide whether live BTC 5m probability should use a four-neighbor interpolation around unrounded `(seconds, cents)`.
 Status: Completed

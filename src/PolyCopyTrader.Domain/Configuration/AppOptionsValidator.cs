@@ -41,6 +41,7 @@ public static class AppOptionsValidator
         ValidateBinanceBtcUsdReference(configuration.BinanceBtcUsdReference, errors);
         ValidateBinanceCryptoReference(configuration.BinanceCryptoReference, errors);
         ValidateBtcUpDown5mOddsArchive(configuration.BtcUpDown5mOddsArchive, errors);
+        ValidateBtcUpDown5mStatistics(configuration.BtcUpDown5mStatistics, errors);
         ValidateCryptoUpDown5mOddsArchive(configuration.CryptoUpDown5mOddsArchive, errors);
         ValidateChainlinkBtcUsdDiagnostics(configuration.ChainlinkBtcUsdDiagnostics, errors);
         ValidateOnChainIngestion(configuration.OnChainIngestion, errors);
@@ -153,6 +154,10 @@ public static class AppOptionsValidator
             $"BTC Up or Down 5m odds archive enabled: {configuration.BtcUpDown5mOddsArchive.Enabled}",
             $"BTC Up or Down 5m odds archive poll interval seconds: {configuration.BtcUpDown5mOddsArchive.PollIntervalSeconds}",
             $"BTC Up or Down 5m odds archive max book age ms: {configuration.BtcUpDown5mOddsArchive.MaxOrderBookAgeMilliseconds}",
+            $"BTC Up or Down 5m Statistics enabled: {configuration.BtcUpDown5mStatistics.Enabled}",
+            $"BTC Up or Down 5m Statistics poll interval seconds: {configuration.BtcUpDown5mStatistics.PollIntervalSeconds}",
+            $"BTC Up or Down 5m Statistics min history support: {configuration.BtcUpDown5mStatistics.MinHistorySupport}",
+            $"BTC Up or Down 5m Statistics minimum edge: {configuration.BtcUpDown5mStatistics.MinimumEdge}",
             $"Crypto Up or Down 5m odds archive enabled: {configuration.CryptoUpDown5mOddsArchive.Enabled}",
             $"Crypto Up or Down 5m odds archive assets: {string.Join(",", configuration.CryptoUpDown5mOddsArchive.AssetSymbols)}",
             $"Crypto Up or Down 5m odds archive poll interval seconds: {configuration.CryptoUpDown5mOddsArchive.PollIntervalSeconds}",
@@ -1422,6 +1427,69 @@ public static class AppOptionsValidator
         if (options.MaxOrderBookAgeMilliseconds <= 0 || options.MaxOrderBookAgeMilliseconds > 300_000)
         {
             errors.Add("BtcUpDown5mOddsArchive.MaxOrderBookAgeMilliseconds must be between 1 and 300000.");
+        }
+    }
+
+    private static void ValidateBtcUpDown5mStatistics(BtcUpDown5mStatisticsOptions options, List<string> errors)
+    {
+        if (options.PollIntervalSeconds <= 0 || options.PollIntervalSeconds > 86_400)
+        {
+            errors.Add("BtcUpDown5mStatistics.PollIntervalSeconds must be between 1 and 86400.");
+        }
+
+        if (options.MaxMarketsPerCycle <= 0 || options.MaxMarketsPerCycle > 1_000)
+        {
+            errors.Add("BtcUpDown5mStatistics.MaxMarketsPerCycle must be between 1 and 1000.");
+        }
+
+        if (options.MinHistorySupport <= 0 || options.MinHistorySupport > 1_000_000)
+        {
+            errors.Add("BtcUpDown5mStatistics.MinHistorySupport must be between 1 and 1000000.");
+        }
+
+        if (options.MinimumEdge < 0m || options.MinimumEdge > 1m)
+        {
+            errors.Add("BtcUpDown5mStatistics.MinimumEdge must be between 0 and 1.");
+        }
+
+        if (options.HistorySecondsStep <= 0 || options.HistorySecondsStep > 300)
+        {
+            errors.Add("BtcUpDown5mStatistics.HistorySecondsStep must be between 1 and 300.");
+        }
+
+        if (options.HistoryCentsStep <= 0 || options.HistoryCentsStep > 10_000)
+        {
+            errors.Add("BtcUpDown5mStatistics.HistoryCentsStep must be between 1 and 10000.");
+        }
+
+        if (options.HistoryMaxSeconds <= 0 || options.HistoryMaxSeconds > 300)
+        {
+            errors.Add("BtcUpDown5mStatistics.HistoryMaxSeconds must be between 1 and 300.");
+        }
+
+        if (options.HistorySampleOffsetSeconds < 0 || options.HistorySampleOffsetSeconds >= options.HistorySecondsStep)
+        {
+            errors.Add("BtcUpDown5mStatistics.HistorySampleOffsetSeconds must be nonnegative and less than HistorySecondsStep.");
+        }
+
+        if (options.MaxOrderBookAgeMilliseconds <= 0 || options.MaxOrderBookAgeMilliseconds > 300_000)
+        {
+            errors.Add("BtcUpDown5mStatistics.MaxOrderBookAgeMilliseconds must be between 1 and 300000.");
+        }
+
+        if (options.ResultSettlementDelaySeconds < 0 || options.ResultSettlementDelaySeconds > 86_400)
+        {
+            errors.Add("BtcUpDown5mStatistics.ResultSettlementDelaySeconds must be between 0 and 86400.");
+        }
+
+        if (options.ResultRetryDelaySeconds <= 0 || options.ResultRetryDelaySeconds > 86_400)
+        {
+            errors.Add("BtcUpDown5mStatistics.ResultRetryDelaySeconds must be between 1 and 86400.");
+        }
+
+        if (options.MaxHistorySettlementsPerCycle <= 0 || options.MaxHistorySettlementsPerCycle > 10_000)
+        {
+            errors.Add("BtcUpDown5mStatistics.MaxHistorySettlementsPerCycle must be between 1 and 10000.");
         }
     }
 

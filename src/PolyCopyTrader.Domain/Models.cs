@@ -193,6 +193,78 @@ public sealed record BtcUpDown5mOddsTick(
     string DiagnosticsJson,
     DateTimeOffset CreatedAtUtc);
 
+public sealed record Btc5mHistoryRow(
+    int Seconds,
+    int Cents,
+    int Count,
+    int UpCount,
+    int DownCount);
+
+public readonly record struct Btc5mHistoryKey(int Seconds, int Cents);
+
+public sealed record Btc5mHistoryLiveObservation(
+    Guid Id,
+    string MarketId,
+    string ConditionId,
+    string MarketSlug,
+    DateTimeOffset MarketStartUtc,
+    DateTimeOffset MarketEndUtc,
+    DateTimeOffset SampledAtUtc,
+    int Seconds,
+    int Cents,
+    decimal BinancePriceUsd,
+    decimal BinanceStartPriceUsd,
+    decimal BtcMoveFromStartUsd,
+    string? Result,
+    bool AppliedToHistory,
+    DateTimeOffset? AppliedAtUtc,
+    int ResultCheckAttempts,
+    DateTimeOffset NextResultCheckUtc,
+    string? LastResultError,
+    DateTimeOffset CreatedAtUtc,
+    DateTimeOffset UpdatedAtUtc);
+
+public sealed record BtcUpDown5mStatisticsTick(
+    Guid Id,
+    string MarketId,
+    string ConditionId,
+    string MarketSlug,
+    DateTimeOffset MarketStartUtc,
+    DateTimeOffset MarketEndUtc,
+    DateTimeOffset SampledAtUtc,
+    decimal SecondsAfterStart,
+    decimal SecondsToClose,
+    decimal BinancePriceUsd,
+    DateTimeOffset BinanceSourceUpdatedAtUtc,
+    DateTimeOffset BinanceFetchedAtUtc,
+    decimal? BinanceStartPriceUsd,
+    decimal? BtcMoveFromStartUsd,
+    decimal? BtcMoveFromStartCents,
+    int? SecondsLower,
+    int? SecondsUpper,
+    int? CentsLower,
+    int? CentsUpper,
+    decimal? EffectiveCount,
+    decimal? UpProbability,
+    decimal? DownProbability,
+    int SupportThreshold,
+    int HistoryRowsFound,
+    int MissingHistoryCorners,
+    string InterpolationMethod,
+    string UpAssetId,
+    decimal? UpMarketPrice,
+    string UpMarketPriceKind,
+    string DownAssetId,
+    decimal? DownMarketPrice,
+    string DownMarketPriceKind,
+    decimal? UpEdge,
+    decimal? DownEdge,
+    string DecisionCode,
+    string? RecommendedOutcome,
+    bool WouldBet,
+    string DiagnosticsJson,
+    DateTimeOffset CreatedAtUtc);
+
 public sealed record CryptoUpDown5mOddsTick(
     Guid Id,
     string AssetSymbol,
@@ -891,6 +963,7 @@ public static class StrategyIds
     public const string BtcUpDown5mEnsemble2Of3IdValue = "b7c50005-0000-4000-8016-000000000002";
     public const string BtcUpDown5mDynamicMarkovIdValue = "b7c50005-0000-4000-8017-000000000050";
     public const string BtcUpDown5mStrategySelectorIdValue = "b7c50005-0000-4000-8018-000000000030";
+    public const string BtcUpDown5mStatisticsIdValue = "b7c50005-0000-4000-8050-000000000001";
     public const string BtcUpDown5mAlwaysUpCode = "btc_up_down_5m_up";
     public const string BtcUpDown5mAlwaysDownCode = "btc_up_down_5m_down";
     public const string BtcUpDown5mBinanceCode = "btc_up_down_5m_binance";
@@ -943,6 +1016,8 @@ public static class StrategyIds
     public const string BtcUpDown5mEnsemble2Of3Code = "btc_up_down_5m_ensemble_2_of_3";
     public const string BtcUpDown5mDynamicMarkovCode = "btc_up_down_5m_dynamic_markov";
     public const string BtcUpDown5mStrategySelectorCode = "btc_up_down_5m_strategy_selector";
+    public const string BtcUpDown5mStatisticsCode = "btc_up_down_5m_statistics";
+    public const string BtcUpDown5mStatisticsName = "BTC Up or Down 5m Statistics";
 
     public static readonly Guid FollowLeader = Guid.Parse(FollowLeaderIdValue);
     public static readonly Guid BtcUpDown5mLess180Martin = Guid.Parse(BtcUpDown5mLess180MartinIdValue);
@@ -998,12 +1073,13 @@ public static class StrategyIds
     public static readonly Guid BtcUpDown5mEnsemble2Of3 = Guid.Parse(BtcUpDown5mEnsemble2Of3IdValue);
     public static readonly Guid BtcUpDown5mDynamicMarkov = Guid.Parse(BtcUpDown5mDynamicMarkovIdValue);
     public static readonly Guid BtcUpDown5mStrategySelector = Guid.Parse(BtcUpDown5mStrategySelectorIdValue);
+    public static readonly Guid BtcUpDown5mStatistics = Guid.Parse(BtcUpDown5mStatisticsIdValue);
 
     public static readonly IReadOnlyList<BtcUpDown5mStrategyVariant> BtcUpDown5mVariants =
         CreateBtcUpDown5mVariants();
 
     public static readonly IReadOnlyList<Guid> AllStrategyIds =
-        [FollowLeader, .. BtcUpDown5mVariants.Select(variant => variant.Id)];
+        [FollowLeader, BtcUpDown5mStatistics, .. BtcUpDown5mVariants.Select(variant => variant.Id)];
 
     public static Guid Normalize(Guid strategyId)
     {

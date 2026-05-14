@@ -99,6 +99,7 @@ public sealed class StorageTests
         Assert.Contains("'btc_up_down_5m_skip_5_revert'", PostgresSchema.SchemaSql, StringComparison.Ordinal);
         Assert.Contains("'btc_up_down_5m_up'", PostgresSchema.SchemaSql, StringComparison.Ordinal);
         Assert.Contains("'btc_up_down_5m_down'", PostgresSchema.SchemaSql, StringComparison.Ordinal);
+        Assert.Contains("'btc_up_down_5m_statistics'", PostgresSchema.SchemaSql, StringComparison.Ordinal);
         Assert.Contains("'btc_up_down_5m_prev_score_countertrend_' || prices.price_cents", PostgresSchema.SchemaSql, StringComparison.Ordinal);
         Assert.Contains("'b7c50005-0000-4000-8025-' || lpad(prices.price_cents::text, 12, '0')", PostgresSchema.SchemaSql, StringComparison.Ordinal);
         Assert.Contains("generate_series(10, 90, 5)", PostgresSchema.SchemaSql, StringComparison.Ordinal);
@@ -136,6 +137,7 @@ public sealed class StorageTests
         Assert.Contains("BTC Up or Down 5m Skip 5 Revert", PostgresSchema.SchemaSql, StringComparison.Ordinal);
         Assert.Contains("BTC Up or Down 5m Up", PostgresSchema.SchemaSql, StringComparison.Ordinal);
         Assert.Contains("BTC Up or Down 5m Down", PostgresSchema.SchemaSql, StringComparison.Ordinal);
+        Assert.Contains("BTC Up or Down 5m Statistics", PostgresSchema.SchemaSql, StringComparison.Ordinal);
         Assert.DoesNotContain("'btc_up_down_5m',", PostgresSchema.SchemaSql, StringComparison.Ordinal);
         Assert.Contains("strategy_id uuid NOT NULL DEFAULT 'f0110a0d-1ead-4c00-8b01-000000000001'", PostgresSchema.SchemaSql, StringComparison.Ordinal);
         Assert.Contains("REFERENCES strategies(id)", PostgresSchema.SchemaSql, StringComparison.Ordinal);
@@ -199,6 +201,13 @@ public sealed class StorageTests
         Assert.Contains("CONSTRAINT ux_btc_5m_history_seconds_cents UNIQUE (seconds, cents)", PostgresSchema.SchemaSql, StringComparison.Ordinal);
         Assert.Contains("ALTER TABLE btc_5m_history", PostgresSchema.SchemaSql, StringComparison.Ordinal);
         Assert.Contains("ADD CONSTRAINT ux_btc_5m_history_seconds_cents UNIQUE (seconds, cents)", PostgresSchema.SchemaSql, StringComparison.Ordinal);
+        Assert.Contains("CREATE TABLE IF NOT EXISTS btc_5m_history_live_observations", PostgresSchema.SchemaSql, StringComparison.Ordinal);
+        Assert.Contains("UNIQUE (market_id, seconds)", PostgresSchema.SchemaSql, StringComparison.Ordinal);
+        Assert.Contains("ix_btc_5m_history_live_observations_due", PostgresSchema.SchemaSql, StringComparison.Ordinal);
+        Assert.Contains("CREATE TABLE IF NOT EXISTS btc_up_down_5m_statistics_ticks", PostgresSchema.SchemaSql, StringComparison.Ordinal);
+        Assert.Contains("effective_count numeric(28,8) NULL", PostgresSchema.SchemaSql, StringComparison.Ordinal);
+        Assert.Contains("decision_code text NOT NULL", PostgresSchema.SchemaSql, StringComparison.Ordinal);
+        Assert.Contains("ix_btc_up_down_5m_statistics_ticks_decision", PostgresSchema.SchemaSql, StringComparison.Ordinal);
         Assert.Contains("CREATE TABLE IF NOT EXISTS crypto_up_down_5m_odds_ticks", PostgresSchema.SchemaSql, StringComparison.Ordinal);
         Assert.Contains("ix_crypto_up_down_5m_odds_ticks_asset_market_time", PostgresSchema.SchemaSql, StringComparison.Ordinal);
         Assert.Contains("up_price_proxy_kind text NOT NULL", PostgresSchema.SchemaSql, StringComparison.Ordinal);

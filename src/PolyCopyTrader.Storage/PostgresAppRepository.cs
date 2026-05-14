@@ -2920,6 +2920,212 @@ LIMIT @Limit;
 		return results;
 	}
 
+	public async Task<IReadOnlyList<Btc5mHistoryRow>> GetBtc5mHistoryRowsAsync(IReadOnlyCollection<Btc5mHistoryKey> keys, CancellationToken cancellationToken = default(CancellationToken))
+	{
+		if (keys.Count == 0)
+		{
+			return [];
+		}
+
+		var distinctKeys = keys.Distinct().ToArray();
+		await using NpgsqlConnection connection = await OpenConnectionAsync(cancellationToken);
+		await using NpgsqlCommand command = CreateCommand(connection, """
+WITH requested(seconds, cents) AS (
+    SELECT * FROM unnest(@Seconds::integer[], @Cents::integer[])
+)
+SELECT history.seconds, history.cents, history.count, history.up_count, history.down_count
+FROM requested
+JOIN btc_5m_history history
+  ON history.seconds = requested.seconds
+ AND history.cents = requested.cents;
+""");
+		command.Parameters.Add("Seconds", NpgsqlDbType.Array | NpgsqlDbType.Integer).Value = distinctKeys.Select(key => key.Seconds).ToArray();
+		command.Parameters.Add("Cents", NpgsqlDbType.Array | NpgsqlDbType.Integer).Value = distinctKeys.Select(key => key.Cents).ToArray();
+		await using NpgsqlDataReader reader = await command.ExecuteReaderAsync(cancellationToken);
+		List<Btc5mHistoryRow> results = [];
+		while (await reader.ReadAsync(cancellationToken))
+		{
+			results.Add(new Btc5mHistoryRow(
+				reader.GetInt32(0),
+				reader.GetInt32(1),
+				reader.GetInt32(2),
+				reader.GetInt32(3),
+				reader.GetInt32(4)));
+		}
+
+		return results;
+	}
+
+	public async Task AddBtcUpDown5mStatisticsTickAsync(BtcUpDown5mStatisticsTick tick, CancellationToken cancellationToken = default(CancellationToken))
+	{
+		await using NpgsqlConnection connection = await OpenConnectionAsync(cancellationToken);
+		await using NpgsqlCommand command = CreateCommand(connection, """
+INSERT INTO btc_up_down_5m_statistics_ticks (
+    id, market_id, condition_id, market_slug, market_start_utc, market_end_utc,
+    sampled_at_utc, seconds_after_start, seconds_to_close,
+    binance_price_usd, binance_source_updated_at_utc, binance_fetched_at_utc,
+    binance_start_price_usd, btc_move_from_start_usd, btc_move_from_start_cents,
+    seconds_lower, seconds_upper, cents_lower, cents_upper,
+    effective_count, up_probability, down_probability, support_threshold,
+    history_rows_found, missing_history_corners, interpolation_method,
+    up_asset_id, up_market_price, up_market_price_kind,
+    down_asset_id, down_market_price, down_market_price_kind,
+    up_edge, down_edge, decision_code, recommended_outcome, would_bet,
+    diagnostics_json, created_at_utc
+) VALUES (
+    @Id, @MarketId, @ConditionId, @MarketSlug, @MarketStartUtc, @MarketEndUtc,
+    @SampledAtUtc, @SecondsAfterStart, @SecondsToClose,
+    @BinancePriceUsd, @BinanceSourceUpdatedAtUtc, @BinanceFetchedAtUtc,
+    @BinanceStartPriceUsd, @BtcMoveFromStartUsd, @BtcMoveFromStartCents,
+    @SecondsLower, @SecondsUpper, @CentsLower, @CentsUpper,
+    @EffectiveCount, @UpProbability, @DownProbability, @SupportThreshold,
+    @HistoryRowsFound, @MissingHistoryCorners, @InterpolationMethod,
+    @UpAssetId, @UpMarketPrice, @UpMarketPriceKind,
+    @DownAssetId, @DownMarketPrice, @DownMarketPriceKind,
+    @UpEdge, @DownEdge, @DecisionCode, @RecommendedOutcome, @WouldBet,
+    CAST(@DiagnosticsJson AS jsonb), @CreatedAtUtc
+);
+""");
+		AddBtcUpDown5mStatisticsTickParameters(command, tick);
+		await command.ExecuteNonQueryAsync(cancellationToken);
+	}
+
+	public async Task<bool> TryAddBtc5mHistoryLiveObservationAsync(Btc5mHistoryLiveObservation observation, CancellationToken cancellationToken = default(CancellationToken))
+	{
+		await using NpgsqlConnection connection = await OpenConnectionAsync(cancellationToken);
+		await using NpgsqlCommand command = CreateCommand(connection, """
+INSERT INTO btc_5m_history_live_observations (
+    id, market_id, condition_id, market_slug, market_start_utc, market_end_utc,
+    sampled_at_utc, seconds, cents, binance_price_usd, binance_start_price_usd,
+    btc_move_from_start_usd, result, applied_to_history, applied_at_utc,
+    result_check_attempts, next_result_check_utc, last_result_error,
+    created_at_utc, updated_at_utc
+) VALUES (
+    @Id, @MarketId, @ConditionId, @MarketSlug, @MarketStartUtc, @MarketEndUtc,
+    @SampledAtUtc, @Seconds, @Cents, @BinancePriceUsd, @BinanceStartPriceUsd,
+    @BtcMoveFromStartUsd, @Result, @AppliedToHistory, @AppliedAtUtc,
+    @ResultCheckAttempts, @NextResultCheckUtc, @LastResultError,
+    @CreatedAtUtc, @UpdatedAtUtc
+)
+ON CONFLICT (market_id, seconds) DO NOTHING;
+""");
+		AddBtc5mHistoryLiveObservationParameters(command, observation);
+		return await command.ExecuteNonQueryAsync(cancellationToken) > 0;
+	}
+
+	public async Task<IReadOnlyList<Btc5mHistoryLiveObservation>> GetDueBtc5mHistoryLiveObservationsAsync(DateTimeOffset dueBeforeUtc, int limit, CancellationToken cancellationToken = default(CancellationToken))
+	{
+		await using NpgsqlConnection connection = await OpenConnectionAsync(cancellationToken);
+		await using NpgsqlCommand command = CreateCommand(connection, """
+SELECT id, market_id, condition_id, market_slug, market_start_utc, market_end_utc,
+       sampled_at_utc, seconds, cents, binance_price_usd, binance_start_price_usd,
+       btc_move_from_start_usd, result, applied_to_history, applied_at_utc,
+       result_check_attempts, next_result_check_utc, last_result_error,
+       created_at_utc, updated_at_utc
+FROM btc_5m_history_live_observations
+WHERE NOT applied_to_history
+  AND market_end_utc <= @DueBeforeUtc
+  AND next_result_check_utc <= @DueBeforeUtc
+ORDER BY market_end_utc ASC, sampled_at_utc ASC
+LIMIT @Limit;
+""");
+		command.Parameters.Add("DueBeforeUtc", NpgsqlDbType.TimestampTz).Value = UtcDateTime(dueBeforeUtc);
+		command.Parameters.AddWithValue("Limit", Math.Max(1, limit));
+		await using NpgsqlDataReader reader = await command.ExecuteReaderAsync(cancellationToken);
+		List<Btc5mHistoryLiveObservation> results = [];
+		while (await reader.ReadAsync(cancellationToken))
+		{
+			results.Add(ReadBtc5mHistoryLiveObservation(reader));
+		}
+
+		return results;
+	}
+
+	public async Task ApplyBtc5mHistoryLiveObservationResultAsync(Guid observationId, string result, DateTimeOffset appliedAtUtc, CancellationToken cancellationToken = default(CancellationToken))
+	{
+		var normalizedResult = string.Equals(result, "Up", StringComparison.OrdinalIgnoreCase) ? "Up" : "Down";
+		await using NpgsqlConnection connection = await OpenConnectionAsync(cancellationToken);
+		await using NpgsqlTransaction transaction = await connection.BeginTransactionAsync(cancellationToken);
+		Btc5mHistoryLiveObservation? observation;
+		await using (NpgsqlCommand loadCommand = CreateCommand(connection, """
+SELECT id, market_id, condition_id, market_slug, market_start_utc, market_end_utc,
+       sampled_at_utc, seconds, cents, binance_price_usd, binance_start_price_usd,
+       btc_move_from_start_usd, result, applied_to_history, applied_at_utc,
+       result_check_attempts, next_result_check_utc, last_result_error,
+       created_at_utc, updated_at_utc
+FROM btc_5m_history_live_observations
+WHERE id = @Id
+FOR UPDATE;
+"""))
+		{
+			loadCommand.Transaction = transaction;
+			loadCommand.Parameters.AddWithValue("Id", observationId);
+			await using NpgsqlDataReader reader = await loadCommand.ExecuteReaderAsync(cancellationToken);
+			observation = await reader.ReadAsync(cancellationToken) ? ReadBtc5mHistoryLiveObservation(reader) : null;
+		}
+
+		if (observation is null || observation.AppliedToHistory)
+		{
+			await transaction.CommitAsync(cancellationToken);
+			return;
+		}
+
+		await using (NpgsqlCommand historyCommand = CreateCommand(connection, """
+INSERT INTO btc_5m_history (seconds, cents, count, up_count, down_count)
+VALUES (@Seconds, @Cents, 1, @UpDelta, @DownDelta)
+ON CONFLICT (seconds, cents) DO UPDATE SET
+    count = btc_5m_history.count + 1,
+    up_count = btc_5m_history.up_count + excluded.up_count,
+    down_count = btc_5m_history.down_count + excluded.down_count;
+"""))
+		{
+			historyCommand.Transaction = transaction;
+			historyCommand.Parameters.AddWithValue("Seconds", observation.Seconds);
+			historyCommand.Parameters.AddWithValue("Cents", observation.Cents);
+			historyCommand.Parameters.AddWithValue("UpDelta", normalizedResult == "Up" ? 1 : 0);
+			historyCommand.Parameters.AddWithValue("DownDelta", normalizedResult == "Down" ? 1 : 0);
+			await historyCommand.ExecuteNonQueryAsync(cancellationToken);
+		}
+
+		await using (NpgsqlCommand markCommand = CreateCommand(connection, """
+UPDATE btc_5m_history_live_observations
+SET result = @Result,
+    applied_to_history = true,
+    applied_at_utc = @AppliedAtUtc,
+    last_result_error = NULL,
+    updated_at_utc = @AppliedAtUtc
+WHERE id = @Id;
+"""))
+		{
+			markCommand.Transaction = transaction;
+			markCommand.Parameters.AddWithValue("Id", observationId);
+			markCommand.Parameters.AddWithValue("Result", normalizedResult);
+			markCommand.Parameters.Add("AppliedAtUtc", NpgsqlDbType.TimestampTz).Value = UtcDateTime(appliedAtUtc);
+			await markCommand.ExecuteNonQueryAsync(cancellationToken);
+		}
+
+		await transaction.CommitAsync(cancellationToken);
+	}
+
+	public async Task MarkBtc5mHistoryLiveObservationResultPendingAsync(Guid observationId, DateTimeOffset nextResultCheckUtc, string? errorMessage, DateTimeOffset updatedAtUtc, CancellationToken cancellationToken = default(CancellationToken))
+	{
+		await using NpgsqlConnection connection = await OpenConnectionAsync(cancellationToken);
+		await using NpgsqlCommand command = CreateCommand(connection, """
+UPDATE btc_5m_history_live_observations
+SET result_check_attempts = result_check_attempts + 1,
+    next_result_check_utc = @NextResultCheckUtc,
+    last_result_error = @LastResultError,
+    updated_at_utc = @UpdatedAtUtc
+WHERE id = @Id
+  AND NOT applied_to_history;
+""");
+		command.Parameters.AddWithValue("Id", observationId);
+		command.Parameters.Add("NextResultCheckUtc", NpgsqlDbType.TimestampTz).Value = UtcDateTime(nextResultCheckUtc);
+		command.Parameters.AddWithValue("LastResultError", string.IsNullOrWhiteSpace(errorMessage) ? DBNull.Value : errorMessage.Length > 2_000 ? errorMessage[..2_000] : errorMessage);
+		command.Parameters.Add("UpdatedAtUtc", NpgsqlDbType.TimestampTz).Value = UtcDateTime(updatedAtUtc);
+		await command.ExecuteNonQueryAsync(cancellationToken);
+	}
+
 	public async Task AddCryptoUpDown5mOddsTickAsync(CryptoUpDown5mOddsTick tick, CancellationToken cancellationToken = default(CancellationToken))
 	{
 		await using NpgsqlConnection connection = await OpenConnectionAsync(cancellationToken);
@@ -5244,6 +5450,11 @@ LIMIT @Limit;
 		return value.HasValue ? value.Value : DBNull.Value;
 	}
 
+	private static object NullableInt32(int? value)
+	{
+		return value.HasValue ? value.Value : DBNull.Value;
+	}
+
 	private static object NullableGuid(Guid? value)
 	{
 		return value.HasValue ? value.Value : DBNull.Value;
@@ -7108,6 +7319,98 @@ LIMIT @Limit;
 			reader.IsDBNull(32) ? null : reader.GetDecimal(32),
 			reader.GetString(33),
 			DateTimeOffsetFromUtc(reader.GetDateTime(34)));
+	}
+
+	private static void AddBtcUpDown5mStatisticsTickParameters(NpgsqlCommand command, BtcUpDown5mStatisticsTick tick)
+	{
+		command.Parameters.AddWithValue("Id", tick.Id);
+		command.Parameters.AddWithValue("MarketId", tick.MarketId);
+		command.Parameters.AddWithValue("ConditionId", tick.ConditionId);
+		command.Parameters.AddWithValue("MarketSlug", tick.MarketSlug);
+		command.Parameters.Add("MarketStartUtc", NpgsqlDbType.TimestampTz).Value = UtcDateTime(tick.MarketStartUtc);
+		command.Parameters.Add("MarketEndUtc", NpgsqlDbType.TimestampTz).Value = UtcDateTime(tick.MarketEndUtc);
+		command.Parameters.Add("SampledAtUtc", NpgsqlDbType.TimestampTz).Value = UtcDateTime(tick.SampledAtUtc);
+		command.Parameters.AddWithValue("SecondsAfterStart", tick.SecondsAfterStart);
+		command.Parameters.AddWithValue("SecondsToClose", tick.SecondsToClose);
+		command.Parameters.AddWithValue("BinancePriceUsd", tick.BinancePriceUsd);
+		command.Parameters.Add("BinanceSourceUpdatedAtUtc", NpgsqlDbType.TimestampTz).Value = UtcDateTime(tick.BinanceSourceUpdatedAtUtc);
+		command.Parameters.Add("BinanceFetchedAtUtc", NpgsqlDbType.TimestampTz).Value = UtcDateTime(tick.BinanceFetchedAtUtc);
+		command.Parameters.AddWithValue("BinanceStartPriceUsd", NullableDecimal(tick.BinanceStartPriceUsd));
+		command.Parameters.AddWithValue("BtcMoveFromStartUsd", NullableDecimal(tick.BtcMoveFromStartUsd));
+		command.Parameters.AddWithValue("BtcMoveFromStartCents", NullableDecimal(tick.BtcMoveFromStartCents));
+		command.Parameters.AddWithValue("SecondsLower", NullableInt32(tick.SecondsLower));
+		command.Parameters.AddWithValue("SecondsUpper", NullableInt32(tick.SecondsUpper));
+		command.Parameters.AddWithValue("CentsLower", NullableInt32(tick.CentsLower));
+		command.Parameters.AddWithValue("CentsUpper", NullableInt32(tick.CentsUpper));
+		command.Parameters.AddWithValue("EffectiveCount", NullableDecimal(tick.EffectiveCount));
+		command.Parameters.AddWithValue("UpProbability", NullableDecimal(tick.UpProbability));
+		command.Parameters.AddWithValue("DownProbability", NullableDecimal(tick.DownProbability));
+		command.Parameters.AddWithValue("SupportThreshold", tick.SupportThreshold);
+		command.Parameters.AddWithValue("HistoryRowsFound", tick.HistoryRowsFound);
+		command.Parameters.AddWithValue("MissingHistoryCorners", tick.MissingHistoryCorners);
+		command.Parameters.AddWithValue("InterpolationMethod", tick.InterpolationMethod);
+		command.Parameters.AddWithValue("UpAssetId", tick.UpAssetId);
+		command.Parameters.AddWithValue("UpMarketPrice", NullableDecimal(tick.UpMarketPrice));
+		command.Parameters.AddWithValue("UpMarketPriceKind", tick.UpMarketPriceKind);
+		command.Parameters.AddWithValue("DownAssetId", tick.DownAssetId);
+		command.Parameters.AddWithValue("DownMarketPrice", NullableDecimal(tick.DownMarketPrice));
+		command.Parameters.AddWithValue("DownMarketPriceKind", tick.DownMarketPriceKind);
+		command.Parameters.AddWithValue("UpEdge", NullableDecimal(tick.UpEdge));
+		command.Parameters.AddWithValue("DownEdge", NullableDecimal(tick.DownEdge));
+		command.Parameters.AddWithValue("DecisionCode", tick.DecisionCode);
+		command.Parameters.AddWithValue("RecommendedOutcome", string.IsNullOrWhiteSpace(tick.RecommendedOutcome) ? DBNull.Value : tick.RecommendedOutcome);
+		command.Parameters.AddWithValue("WouldBet", tick.WouldBet);
+		command.Parameters.AddWithValue("DiagnosticsJson", string.IsNullOrWhiteSpace(tick.DiagnosticsJson) ? "{}" : tick.DiagnosticsJson);
+		command.Parameters.Add("CreatedAtUtc", NpgsqlDbType.TimestampTz).Value = UtcDateTime(tick.CreatedAtUtc);
+	}
+
+	private static void AddBtc5mHistoryLiveObservationParameters(NpgsqlCommand command, Btc5mHistoryLiveObservation observation)
+	{
+		command.Parameters.AddWithValue("Id", observation.Id);
+		command.Parameters.AddWithValue("MarketId", observation.MarketId);
+		command.Parameters.AddWithValue("ConditionId", observation.ConditionId);
+		command.Parameters.AddWithValue("MarketSlug", observation.MarketSlug);
+		command.Parameters.Add("MarketStartUtc", NpgsqlDbType.TimestampTz).Value = UtcDateTime(observation.MarketStartUtc);
+		command.Parameters.Add("MarketEndUtc", NpgsqlDbType.TimestampTz).Value = UtcDateTime(observation.MarketEndUtc);
+		command.Parameters.Add("SampledAtUtc", NpgsqlDbType.TimestampTz).Value = UtcDateTime(observation.SampledAtUtc);
+		command.Parameters.AddWithValue("Seconds", observation.Seconds);
+		command.Parameters.AddWithValue("Cents", observation.Cents);
+		command.Parameters.AddWithValue("BinancePriceUsd", observation.BinancePriceUsd);
+		command.Parameters.AddWithValue("BinanceStartPriceUsd", observation.BinanceStartPriceUsd);
+		command.Parameters.AddWithValue("BtcMoveFromStartUsd", observation.BtcMoveFromStartUsd);
+		command.Parameters.AddWithValue("Result", string.IsNullOrWhiteSpace(observation.Result) ? DBNull.Value : observation.Result);
+		command.Parameters.AddWithValue("AppliedToHistory", observation.AppliedToHistory);
+		command.Parameters.AddWithValue("AppliedAtUtc", NullableDateTime(observation.AppliedAtUtc));
+		command.Parameters.AddWithValue("ResultCheckAttempts", observation.ResultCheckAttempts);
+		command.Parameters.Add("NextResultCheckUtc", NpgsqlDbType.TimestampTz).Value = UtcDateTime(observation.NextResultCheckUtc);
+		command.Parameters.AddWithValue("LastResultError", string.IsNullOrWhiteSpace(observation.LastResultError) ? DBNull.Value : observation.LastResultError);
+		command.Parameters.Add("CreatedAtUtc", NpgsqlDbType.TimestampTz).Value = UtcDateTime(observation.CreatedAtUtc);
+		command.Parameters.Add("UpdatedAtUtc", NpgsqlDbType.TimestampTz).Value = UtcDateTime(observation.UpdatedAtUtc);
+	}
+
+	private static Btc5mHistoryLiveObservation ReadBtc5mHistoryLiveObservation(NpgsqlDataReader reader)
+	{
+		return new Btc5mHistoryLiveObservation(
+			reader.GetGuid(0),
+			reader.GetString(1),
+			reader.GetString(2),
+			reader.GetString(3),
+			DateTimeOffsetFromUtc(reader.GetDateTime(4)),
+			DateTimeOffsetFromUtc(reader.GetDateTime(5)),
+			DateTimeOffsetFromUtc(reader.GetDateTime(6)),
+			reader.GetInt32(7),
+			reader.GetInt32(8),
+			reader.GetDecimal(9),
+			reader.GetDecimal(10),
+			reader.GetDecimal(11),
+			reader.IsDBNull(12) ? null : reader.GetString(12),
+			reader.GetBoolean(13),
+			reader.IsDBNull(14) ? null : DateTimeOffsetFromUtc(reader.GetDateTime(14)),
+			reader.GetInt32(15),
+			DateTimeOffsetFromUtc(reader.GetDateTime(16)),
+			reader.IsDBNull(17) ? null : reader.GetString(17),
+			DateTimeOffsetFromUtc(reader.GetDateTime(18)),
+			DateTimeOffsetFromUtc(reader.GetDateTime(19)));
 	}
 
 	private static void AddCryptoUpDown5mOddsTickParameters(NpgsqlCommand command, CryptoUpDown5mOddsTick tick)
