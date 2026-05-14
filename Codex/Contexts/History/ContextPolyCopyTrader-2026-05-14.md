@@ -81,3 +81,10 @@ Request:
 
 Result:
 Implemented the one-shot `--fill-btc-5m-history` service command. It reads closed BTC Up or Down 5m Gamma history from PostgreSQL, includes zero-volume markets, parses Up/Down settlement, fetches Binance BTCUSDT `aggTrades` with a five-minute lookback, applies the agreed seconds/cents truncation-to-zero buckets, reloads/writes the `btc_5m_history` cache per market, and exits before normal service hosting. Added command tests and README usage. Verification passed: targeted command/schema tests, full test project 457/457, service Release build, and `git diff --check` with CRLF warnings only. A non-destructive dry-run reached the configured PostgreSQL database but found no matching closed BTC 5m rows there, so no Binance fetch or table write was performed.
+
+## 2026-05-14T10:10:04.8401157Z
+Request:
+btc_5m_history пустая. Что-то не получилось?
+
+Result:
+Diagnosed the empty `btc_5m_history`: the configured local PostgreSQL target is `127.0.0.1:5432/polycopytrader`; `btc_5m_history` had `0` rows, while `polymarket_gamma_markets` had `2997` BTC 5m rows but `0` with `closed=true` and `2935` ended rows still cached as `active=true/closed=false` without local `outcomePrices`. Updated the backfill command to load closed OR ended BTC 5m rows, resolve missing final Up/Down results from Gamma API by slug in batches, and avoid truncating when no known result can be resolved. Verified a dry-run from `2026-02-12T00:40:00Z` resolves `1/1` market and computes `60` inserted points without writing. Full tests passed 459/459 and service Release build passed. Full real backfill was not run because it truncates and can take a long time against thousands of markets.

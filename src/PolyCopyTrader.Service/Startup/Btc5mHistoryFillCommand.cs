@@ -4,6 +4,7 @@ using System.Text.RegularExpressions;
 using Npgsql;
 using NpgsqlTypes;
 using PolyCopyTrader.Domain.Configuration;
+using PolyCopyTrader.Polymarket;
 using PolyCopyTrader.Storage;
 
 namespace PolyCopyTrader.Service.Startup;
@@ -42,8 +43,13 @@ public static class Btc5mHistoryFillCommand
         using var httpClient = new HttpClient { Timeout = TimeSpan.FromSeconds(options.HttpTimeoutSeconds) };
         var database = new Btc5mHistoryDatabase(new PostgresConnectionFactory(configuration.Storage));
         var binance = new BinanceAggTradeClient(httpClient, options.BinanceBaseUrl, options.BinanceRequestDelayMilliseconds);
+        var gamma = new GammaBtc5mHistoryResolver(
+            httpClient,
+            options.GammaBaseUrl,
+            options.GammaResolutionBatchSize,
+            options.GammaResolutionRequestDelayMilliseconds);
 
-        return await ExecuteAsync(database, binance, options, output, cancellationToken);
+        return await ExecuteAsync(database, binance, gamma, options, output, cancellationToken);
     }
 
     public static async Task<int> ExecuteAsync(
@@ -53,20 +59,39 @@ public static class Btc5mHistoryFillCommand
         TextWriter output,
         CancellationToken cancellationToken)
     {
+        return await ExecuteAsync(database, binance, NullGammaBtc5mHistoryResolver.Instance, options, output, cancellationToken);
+    }
+
+    public static async Task<int> ExecuteAsync(
+        IBtc5mHistoryDatabase database,
+        IBinanceAggTradeClient binance,
+        IGammaBtc5mHistoryResolver gammaResolver,
+        Btc5mHistoryFillOptions options,
+        TextWriter output,
+        CancellationToken cancellationToken)
+    {
         ArgumentNullException.ThrowIfNull(database);
         ArgumentNullException.ThrowIfNull(binance);
+        ArgumentNullException.ThrowIfNull(gammaResolver);
         ArgumentNullException.ThrowIfNull(options);
         ArgumentNullException.ThrowIfNull(output);
 
-        await output.WriteLineAsync("Loading closed/resolved BTC Up or Down 5m markets from PostgreSQL history...");
+        await output.WriteLineAsync("Loading closed or ended BTC Up or Down 5m markets from PostgreSQL history...");
         var markets = await database.LoadClosedBtc5mMarketsAsync(options, cancellationToken);
         if (markets.Count == 0)
         {
-            await output.WriteLineAsync("No closed/resolved BTC Up or Down 5m markets found.");
+            await output.WriteLineAsync("No closed or ended BTC Up or Down 5m markets found.");
             return 1;
         }
 
         await output.WriteLineAsync($"Markets loaded: {markets.Count.ToString(CultureInfo.InvariantCulture)}");
+        markets = await ResolveMissingMarketResultsAsync(markets, gammaResolver, options, output, cancellationToken);
+        if (!markets.Any(market => IsKnownResult(market.Result)))
+        {
+            await output.WriteLineAsync("No BTC Up or Down 5m markets with known Up/Down result found. btc_5m_history was not truncated.");
+            return 1;
+        }
+
         if (options.DryRun)
         {
             await output.WriteLineAsync("Dry run: btc_5m_history will not be truncated or written.");
@@ -151,6 +176,57 @@ public static class Btc5mHistoryFillCommand
         await output.WriteLineAsync("BTC 5m history fill complete.");
         await output.WriteLineAsync(summary.ToDisplayString());
         return summary.MarketsProcessed > 0 ? 0 : 1;
+    }
+
+    private static async Task<IReadOnlyList<Btc5mHistoryMarket>> ResolveMissingMarketResultsAsync(
+        IReadOnlyList<Btc5mHistoryMarket> markets,
+        IGammaBtc5mHistoryResolver gammaResolver,
+        Btc5mHistoryFillOptions options,
+        TextWriter output,
+        CancellationToken cancellationToken)
+    {
+        if (!options.ResolveMissingResultsFromGamma)
+        {
+            return markets;
+        }
+
+        var missingResultMarkets = markets
+            .Where(market => !IsKnownResult(market.Result))
+            .ToArray();
+        if (missingResultMarkets.Length == 0)
+        {
+            return markets;
+        }
+
+        await output.WriteLineAsync(
+            "Resolving missing BTC 5m results from Gamma API: " +
+            missingResultMarkets.Length.ToString(CultureInfo.InvariantCulture) +
+            " market(s)...");
+
+        var resolvedBySlug = await gammaResolver.ResolveClosedMarketsBySlugAsync(missingResultMarkets, cancellationToken);
+        var resolvedCount = 0;
+        var updatedMarkets = new List<Btc5mHistoryMarket>(markets.Count);
+        foreach (var market in markets)
+        {
+            if (!IsKnownResult(market.Result) &&
+                resolvedBySlug.TryGetValue(market.Slug, out var resolved) &&
+                IsKnownResult(resolved.Result))
+            {
+                updatedMarkets.Add(resolved);
+                resolvedCount++;
+                continue;
+            }
+
+            updatedMarkets.Add(market);
+        }
+
+        await output.WriteLineAsync(
+            "Resolved missing BTC 5m results from Gamma API: " +
+            resolvedCount.ToString(CultureInfo.InvariantCulture) +
+            "/" +
+            missingResultMarkets.Length.ToString(CultureInfo.InvariantCulture));
+
+        return updatedMarkets;
     }
 
     public static Btc5mHistoryMarketBuildResult BuildMarketCacheUpdates(
@@ -416,7 +492,7 @@ public static class Btc5mHistoryFillCommand
             const string sql = """
 SELECT market_id, condition_id, slug, event_slug, event_start_time_utc, end_date_utc, raw_json::text
 FROM polymarket_gamma_markets
-WHERE closed
+WHERE (closed OR end_date_utc <= now())
   AND (
       lower(slug) ~ '^btc-updown-5m-[0-9]+$'
       OR lower(COALESCE(event_slug, '')) ~ '^btc-updown-5m-[0-9]+$'
@@ -696,6 +772,100 @@ ON CONFLICT (seconds, cents) DO UPDATE SET
             return trades;
         }
     }
+
+    private sealed class GammaBtc5mHistoryResolver(
+        HttpClient httpClient,
+        string gammaBaseUrl,
+        int batchSize,
+        int requestDelayMilliseconds) : IGammaBtc5mHistoryResolver
+    {
+        public async Task<IReadOnlyDictionary<string, Btc5mHistoryMarket>> ResolveClosedMarketsBySlugAsync(
+            IReadOnlyCollection<Btc5mHistoryMarket> markets,
+            CancellationToken cancellationToken)
+        {
+            if (markets.Count == 0)
+            {
+                return new Dictionary<string, Btc5mHistoryMarket>(StringComparer.OrdinalIgnoreCase);
+            }
+
+            var resolvedBySlug = new Dictionary<string, Btc5mHistoryMarket>(StringComparer.OrdinalIgnoreCase);
+            var slugs = markets
+                .Select(market => market.Slug)
+                .Where(slug => !string.IsNullOrWhiteSpace(slug))
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToArray();
+
+            for (var offset = 0; offset < slugs.Length; offset += batchSize)
+            {
+                var batch = slugs.Skip(offset).Take(batchSize).ToArray();
+                var requestUri = BuildGammaMarketsBySlugUri(batch);
+                using var response = await httpClient.GetAsync(requestUri, cancellationToken);
+                response.EnsureSuccessStatusCode();
+                await using var stream = await response.Content.ReadAsStreamAsync(cancellationToken);
+                using var document = await JsonDocument.ParseAsync(stream, cancellationToken: cancellationToken);
+
+                foreach (var gammaMarket in PolymarketJsonParser.ParseGammaActiveMarkets(document.RootElement))
+                {
+                    var result = TryGetWinningOutcome(gammaMarket.RawJson, gammaMarket.Closed);
+                    var startUtc = TryGetWindowStartUtc(
+                        gammaMarket.EventStartTimeUtc,
+                        gammaMarket.EndDateUtc,
+                        gammaMarket.Slug,
+                        gammaMarket.EventSlug);
+                    if (startUtc is null || !IsKnownResult(result))
+                    {
+                        continue;
+                    }
+
+                    resolvedBySlug[gammaMarket.Slug] = new Btc5mHistoryMarket(
+                        gammaMarket.MarketId,
+                        gammaMarket.ConditionId,
+                        gammaMarket.Slug,
+                        startUtc.Value,
+                        startUtc.Value.AddSeconds(MarketDurationSeconds),
+                        result);
+                }
+
+                if (requestDelayMilliseconds > 0 && offset + batchSize < slugs.Length)
+                {
+                    await Task.Delay(requestDelayMilliseconds, cancellationToken);
+                }
+            }
+
+            return resolvedBySlug;
+        }
+
+        private string BuildGammaMarketsBySlugUri(IReadOnlyList<string> slugs)
+        {
+            var normalizedBaseUrl = gammaBaseUrl.TrimEnd('/');
+            var uri = normalizedBaseUrl +
+                "/markets?closed=true&limit=" +
+                slugs.Count.ToString(CultureInfo.InvariantCulture);
+            foreach (var slug in slugs)
+            {
+                uri += "&slug=" + Uri.EscapeDataString(slug);
+            }
+
+            return uri;
+        }
+    }
+
+    private sealed class NullGammaBtc5mHistoryResolver : IGammaBtc5mHistoryResolver
+    {
+        public static readonly NullGammaBtc5mHistoryResolver Instance = new();
+
+        private NullGammaBtc5mHistoryResolver()
+        {
+        }
+
+        public Task<IReadOnlyDictionary<string, Btc5mHistoryMarket>> ResolveClosedMarketsBySlugAsync(
+            IReadOnlyCollection<Btc5mHistoryMarket> markets,
+            CancellationToken cancellationToken)
+        {
+            return Task.FromResult<IReadOnlyDictionary<string, Btc5mHistoryMarket>>(
+                new Dictionary<string, Btc5mHistoryMarket>(StringComparer.OrdinalIgnoreCase));
+        }
+    }
 }
 
 public interface IBtc5mHistoryDatabase
@@ -722,6 +892,13 @@ public interface IBinanceAggTradeClient
         CancellationToken cancellationToken);
 }
 
+public interface IGammaBtc5mHistoryResolver
+{
+    Task<IReadOnlyDictionary<string, Btc5mHistoryMarket>> ResolveClosedMarketsBySlugAsync(
+        IReadOnlyCollection<Btc5mHistoryMarket> markets,
+        CancellationToken cancellationToken);
+}
+
 public sealed record Btc5mHistoryFillOptions(
     DateTimeOffset? StartUtc,
     DateTimeOffset? EndUtc,
@@ -730,6 +907,10 @@ public sealed record Btc5mHistoryFillOptions(
     int HttpTimeoutSeconds,
     int BinanceRequestDelayMilliseconds,
     int ProgressEveryMarkets,
+    bool ResolveMissingResultsFromGamma,
+    string GammaBaseUrl,
+    int GammaResolutionBatchSize,
+    int GammaResolutionRequestDelayMilliseconds,
     bool DryRun)
 {
     public static Btc5mHistoryFillOptions FromArgs(string[] args)
@@ -742,6 +923,10 @@ public sealed record Btc5mHistoryFillOptions(
             ParseIntOption(args, "--btc-5m-history-http-timeout-seconds", 30, minValue: 1, maxValue: 300)!.Value,
             ParseIntOption(args, "--btc-5m-history-binance-delay-ms", 50, minValue: 0, maxValue: 60_000)!.Value,
             ParseIntOption(args, "--btc-5m-history-progress-every", 100, minValue: 0, maxValue: 1_000_000)!.Value,
+            !args.Contains("--btc-5m-history-no-gamma-resolve", StringComparer.OrdinalIgnoreCase),
+            GetOptionValue(args, "--btc-5m-history-gamma-base-url") ?? "https://gamma-api.polymarket.com",
+            ParseIntOption(args, "--btc-5m-history-gamma-batch-size", 200, minValue: 1, maxValue: 500)!.Value,
+            ParseIntOption(args, "--btc-5m-history-gamma-delay-ms", 100, minValue: 0, maxValue: 60_000)!.Value,
             args.Contains("--btc-5m-history-dry-run", StringComparer.OrdinalIgnoreCase));
     }
 

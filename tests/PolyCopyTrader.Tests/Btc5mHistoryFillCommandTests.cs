@@ -99,4 +99,153 @@ public sealed class Btc5mHistoryFillCommandTests
 
         Assert.True(cache.ContainsKey(new Btc5mHistoryPointKey(295, -10)));
     }
+
+    [Fact]
+    public async Task ExecuteAsync_ResolvesMissingResultFromGammaBeforeWriting()
+    {
+        var startUtc = new DateTimeOffset(2026, 1, 1, 0, 0, 0, TimeSpan.Zero);
+        var unresolvedMarket = new Btc5mHistoryMarket(
+            "stale-market",
+            "stale-condition",
+            "btc-updown-5m-1767225600",
+            startUtc,
+            startUtc.AddMinutes(5),
+            Result: null);
+        var resolvedMarket = unresolvedMarket with
+        {
+            MarketId = "resolved-market",
+            ConditionId = "resolved-condition",
+            Result = "Down"
+        };
+        var database = new FakeBtc5mHistoryDatabase([unresolvedMarket]);
+        var binance = new FakeBinanceAggTradeClient(
+            [
+                new BinanceAggTrade(1, 100.00m, startUtc.AddSeconds(-1)),
+                new BinanceAggTrade(2, 99.88m, startUtc.AddSeconds(2)),
+                new BinanceAggTrade(3, 99.90m, startUtc.AddSeconds(7))
+            ]);
+        var gamma = new FakeGammaBtc5mHistoryResolver(
+            new Dictionary<string, Btc5mHistoryMarket>(StringComparer.OrdinalIgnoreCase)
+            {
+                [unresolvedMarket.Slug] = resolvedMarket
+            });
+        using var output = new StringWriter();
+
+        var exitCode = await Btc5mHistoryFillCommand.ExecuteAsync(
+            database,
+            binance,
+            gamma,
+            CreateOptions(),
+            output,
+            CancellationToken.None);
+
+        Assert.Equal(0, exitCode);
+        Assert.True(database.Truncated);
+        Assert.NotEmpty(database.SavedRows);
+        Assert.Contains(database.SavedRows, row => row.State == Btc5mHistoryCacheState.Inserted && row.DownCount == 1);
+        Assert.Contains("Resolved missing BTC 5m results from Gamma API: 1/1", output.ToString());
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_DoesNotTruncateWhenNoResultsCanBeResolved()
+    {
+        var startUtc = new DateTimeOffset(2026, 1, 1, 0, 0, 0, TimeSpan.Zero);
+        var database = new FakeBtc5mHistoryDatabase(
+            [
+                new Btc5mHistoryMarket(
+                    "stale-market",
+                    "stale-condition",
+                    "btc-updown-5m-1767225600",
+                    startUtc,
+                    startUtc.AddMinutes(5),
+                    Result: null)
+            ]);
+        using var output = new StringWriter();
+
+        var exitCode = await Btc5mHistoryFillCommand.ExecuteAsync(
+            database,
+            new FakeBinanceAggTradeClient([]),
+            new FakeGammaBtc5mHistoryResolver(new Dictionary<string, Btc5mHistoryMarket>()),
+            CreateOptions(),
+            output,
+            CancellationToken.None);
+
+        Assert.Equal(1, exitCode);
+        Assert.False(database.Truncated);
+        Assert.Empty(database.SavedRows);
+        Assert.Contains("btc_5m_history was not truncated", output.ToString());
+    }
+
+    private static Btc5mHistoryFillOptions CreateOptions()
+    {
+        return new Btc5mHistoryFillOptions(
+            StartUtc: null,
+            EndUtc: null,
+            MaxMarkets: null,
+            BinanceBaseUrl: "https://api.binance.com",
+            HttpTimeoutSeconds: 30,
+            BinanceRequestDelayMilliseconds: 0,
+            ProgressEveryMarkets: 0,
+            ResolveMissingResultsFromGamma: true,
+            GammaBaseUrl: "https://gamma-api.polymarket.com",
+            GammaResolutionBatchSize: 200,
+            GammaResolutionRequestDelayMilliseconds: 0,
+            DryRun: false);
+    }
+
+    private sealed class FakeBtc5mHistoryDatabase(IReadOnlyList<Btc5mHistoryMarket> markets) : IBtc5mHistoryDatabase
+    {
+        public bool Truncated { get; private set; }
+
+        public List<Btc5mHistoryCacheRow> SavedRows { get; } = [];
+
+        public Task<IReadOnlyList<Btc5mHistoryMarket>> LoadClosedBtc5mMarketsAsync(
+            Btc5mHistoryFillOptions options,
+            CancellationToken cancellationToken)
+        {
+            return Task.FromResult(markets);
+        }
+
+        public Task TruncateHistoryAsync(CancellationToken cancellationToken)
+        {
+            Truncated = true;
+            return Task.CompletedTask;
+        }
+
+        public Task<Dictionary<Btc5mHistoryPointKey, Btc5mHistoryCacheRow>> LoadHistoryCacheAsync(
+            CancellationToken cancellationToken)
+        {
+            return Task.FromResult(new Dictionary<Btc5mHistoryPointKey, Btc5mHistoryCacheRow>());
+        }
+
+        public Task SaveHistoryCacheChangesAsync(
+            IReadOnlyCollection<Btc5mHistoryCacheRow> rows,
+            CancellationToken cancellationToken)
+        {
+            SavedRows.AddRange(rows);
+            return Task.CompletedTask;
+        }
+    }
+
+    private sealed class FakeBinanceAggTradeClient(IReadOnlyList<BinanceAggTrade> trades) : IBinanceAggTradeClient
+    {
+        public Task<IReadOnlyList<BinanceAggTrade>> GetAggTradesAsync(
+            DateTimeOffset fromUtc,
+            DateTimeOffset toUtc,
+            CancellationToken cancellationToken)
+        {
+            return Task.FromResult(trades);
+        }
+    }
+
+    private sealed class FakeGammaBtc5mHistoryResolver(
+        IReadOnlyDictionary<string, Btc5mHistoryMarket> marketsBySlug) : IGammaBtc5mHistoryResolver
+    {
+        public Task<IReadOnlyDictionary<string, Btc5mHistoryMarket>> ResolveClosedMarketsBySlugAsync(
+            IReadOnlyCollection<Btc5mHistoryMarket> markets,
+            CancellationToken cancellationToken)
+        {
+            return Task.FromResult(marketsBySlug);
+        }
+    }
 }

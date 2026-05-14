@@ -156,8 +156,10 @@ Paper/Live shadow testing stores the shared BTC decision in `paper_live_shadow_d
 
 The service has a one-shot PostgreSQL backfill command for `btc_5m_history`.
 It reads closed/resolved BTC Up or Down 5m rows from `polymarket_gamma_markets`,
-including markets with zero volume, truncates `btc_5m_history`, and rebuilds
-the `(seconds, cents)` counters from public Binance BTCUSDT `aggTrades`.
+including markets with zero volume. If the local Gamma cache still has ended
+markets marked `closed=false`, the command resolves their final Up/Down result
+from Gamma by slug before it truncates `btc_5m_history`. It then rebuilds the
+`(seconds, cents)` counters from public Binance BTCUSDT `aggTrades`.
 
 ```powershell
 dotnet run --project src/PolyCopyTrader.Service/PolyCopyTrader.Service.csproj -- --fill-btc-5m-history
@@ -166,8 +168,9 @@ dotnet run --project src/PolyCopyTrader.Service/PolyCopyTrader.Service.csproj --
 For a non-destructive smoke check, add `--btc-5m-history-dry-run`. Useful bounds
 for testing are `--btc-5m-history-max-markets <n>`,
 `--btc-5m-history-start-utc <iso-utc>`, and
-`--btc-5m-history-end-utc <iso-utc>`. This command does not place or cancel
-orders and exits before the normal service host starts.
+`--btc-5m-history-end-utc <iso-utc>`. Gamma resolution can be disabled with
+`--btc-5m-history-no-gamma-resolve` for DB-only diagnostics. This command does
+not place or cancel orders and exits before the normal service host starts.
 
 ### Local PostgreSQL Debugging
 

@@ -1,3 +1,16 @@
+## Active Update 2026-05-14 BTC 5m History Empty Diagnosis
+Goal: Diagnose why `btc_5m_history` stayed empty and make the backfill command work with the local Gamma cache shape.
+Status: Completed
+Done:
+- Confirmed the configured PostgreSQL target is local `127.0.0.1:5432/polycopytrader` and `btc_5m_history` has `0` rows.
+- Confirmed local `polymarket_gamma_markets` has `2997` BTC 5m rows, but `0` are marked `closed`; `2935` are ended but still stored as `active=true/closed=false` with no local `outcomePrices`.
+- Updated `Btc5mHistoryFillCommand` to load closed OR ended BTC 5m rows, resolve missing Up/Down results from Gamma API by slug in batches, and avoid truncating `btc_5m_history` when no known results can be resolved.
+- Added tests proving stale DB rows can be resolved through Gamma before writing and that unresolved-only input does not truncate the history table.
+- Updated README to document Gamma result resolution and the DB-only diagnostic flag.
+Next: Run the real non-dry command when ready to populate `btc_5m_history`; the verified dry-run from `2026-02-12T00:40:00Z` resolves one market and computes 60 inserted points.
+Notes: Temporary C#/.NET/Npgsql diagnostic project was created under `%TEMP%` and removed. Dry-run without a start bound still finds the earliest local Dec 19 placeholder but cannot resolve it; dry-run with `--btc-5m-history-start-utc 2026-02-12T00:40:00Z --btc-5m-history-max-markets 1` resolved `1/1`, processed `1`, and computed `60` inserted points without truncating/writing. `dotnet build src\PolyCopyTrader.Service\PolyCopyTrader.Service.csproj -c Release --no-restore` passed with 0 warnings/errors after incremental build. `dotnet test tests\PolyCopyTrader.Tests\PolyCopyTrader.Tests.csproj -c Release --no-restore` passed 459/459. `git diff --check` passed with CRLF warnings only.
+Blockers: Full real backfill was not run in this turn because it will truncate and may issue many Binance/Gamma requests; table remains empty until that command is run without `--dry-run`.
+
 ## Active Update 2026-05-14 BTC 5m History Backfill Command
 Goal: Implement a one-shot command to rebuild `btc_5m_history` from closed BTC Up or Down 5m markets and Binance BTCUSDT trades.
 Status: Completed
