@@ -39,3 +39,10 @@ Request:
 
 Result:
 Searched for the earliest available BTC Up or Down 5m market with start/end/result. Direct local Gamma/Data API calls are currently blocked by ISP/A1 stop-page/TLS trust behavior and PostgreSQL `192.168.0.101:5432` timed out, so the check used public Polymarket event pages. The oldest DB-known placeholder `btc-updown-5m-1766162100` exists for `2025-12-19T16:35:00Z` but shows no resolved result and `$0` volume, so it was not counted. The earliest confirmed resolved page found in the checked boundary is `btc-updown-5m-1770856800`: start `2026-02-12T00:40:00Z`, end `2026-02-12T00:45:00Z`, result `Up`.
+
+## 2026-05-14T06:56:43.7505199Z
+Request:
+Давай ещё раз проверим, я убрал network/TLS issue. Мне важно получить как можно более старую дату
+
+Result:
+Confirmed direct Polymarket Gamma/Data API access works again and ran a temporary read-only C#/.NET Gamma probe over `btc-updown-5m-<unix>` slugs. The final expanded scan covered every 5-minute slug from `2020-01-01T00:00:00Z` through `2026-02-12T01:00:00Z` (`643,405` epochs, `3,218` batched Gamma requests) and found `11,437` closed/resolved BTC 5m markets. The earliest resolved market found is `btc-updown-5m-1766031900`: start `2025-12-18T04:25:00Z`, end `2025-12-18T04:30:00Z`, result `Down`, `outcomePrices=["0","1"]`, market id `956686`, condition `0x1f681fb16badafc1044c43d40ca63ab9587a036eb0ed5360673069ce5f627909`, volume `0`. Neighbor exact checks showed `2025-12-18T04:00Z..04:20Z` and `04:30Z..04:45Z` slugs returned `404`. The first resolved market with positive volume is `btc-updown-5m-1770856800`: start `2026-02-12T00:40:00Z`, end `2026-02-12T00:45:00Z`, result `Up`, volume `7`. Temporary probe was removed; no production code changed.

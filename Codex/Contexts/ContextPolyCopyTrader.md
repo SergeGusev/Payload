@@ -1,3 +1,18 @@
+## Active Update 2026-05-14 Earliest BTC 5m Gamma Rescan
+Goal: Recheck the earliest available BTC Up or Down 5m market after network/TLS access was fixed.
+Status: Completed
+Done:
+- Confirmed direct `https://gamma-api.polymarket.com` and `https://data-api.polymarket.com` access works again; PostgreSQL `192.168.0.101:5432` TCP is also reachable.
+- Ran a temporary read-only C#/.NET Gamma probe over `btc-updown-5m-<unix>` slugs, then removed the temporary project.
+- Scanned `closed=true` Gamma markets for every 5-minute slug from `2020-01-01T00:00:00Z` through `2026-02-12T01:00:00Z`: `643,405` epochs in `3,218` batched requests.
+- Found `11,437` closed/resolved BTC 5m markets in that range.
+- Earliest resolved market found: `btc-updown-5m-1766031900`, market id `956686`, condition `0x1f681fb16badafc1044c43d40ca63ab9587a036eb0ed5360673069ce5f627909`, start `2025-12-18T04:25:00Z`, end `2025-12-18T04:30:00Z`, result `Down`, `outcomePrices=["0","1"]`, volume `0`.
+- Neighbor check showed `2025-12-18T04:00Z..04:20Z` and `04:30Z..04:45Z` slugs returned `404`; the exact event page for `1766031900` is closed and titled `Bitcoin Up or Down - December 17, 11:25PM-11:30PM ET`.
+- First resolved BTC 5m market with positive volume found: `btc-updown-5m-1770856800`, start `2026-02-12T00:40:00Z`, end `2026-02-12T00:45:00Z`, result `Up`, volume `7`.
+Next: If persistent analytics are needed, implement a read-only Gamma resolution importer for `btc-updown-5m-<unix>` slugs and store start/end/result/volume separately from trade history.
+Notes: Direct Gamma batch scanning hit one rate-limit during an expanded run; retry/backoff was added and the final `2020-01-01..2026-02-12T01:00Z` scan completed successfully. No production code changed.
+Blockers: None.
+
 ## Active Update 2026-05-14 Earliest Confirmed BTC 5m Resolved Market
 Goal: Find the earliest available BTC Up or Down 5m market with start, end, and result.
 Status: Completed
