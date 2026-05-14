@@ -144,3 +144,10 @@ Request:
 
 Result:
 Proposed the live probability method: compute current market `seconds` and BTC cents move from start with the same truncation/bucketing as backfill, look up `btc_5m_history`, calculate empirical `up_count/count` and `down_count/count`, then apply sample-count gates, Bayesian smoothing toward a prior, and fallback aggregation over coarser cents or nearby seconds/cents when exact support is low. Recommended using smoothed probability only as a fair-value estimate and comparing it to current executable market prices with spread/liquidity/risk filters. Suggested precomputing coarse bucket tables for live use and backtesting bucket size/min-count/smoothing thresholds before using it for Paper entries. No source or database data changed.
+
+## 2026-05-14T14:03:18.9762661Z
+Request:
+Не хочешь выбирать окно из четырёх значений вокруг неокруглённой пары (seconds, cents) и аппроксимировать вероятность конкретной точки по ним?
+
+Result:
+Recommended four-neighbor bilinear interpolation around the live unrounded `(seconds, cents)` point as a better estimator than a hard rounded exact lookup. The method should interpolate weighted `count`, `up_count`, and `down_count` totals rather than raw corner probabilities, then apply smoothing/confidence gates and fall back to coarser buckets or wider neighborhoods when support is low. No source or database data changed.

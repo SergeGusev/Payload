@@ -1,3 +1,15 @@
+## Active Update 2026-05-14 BTC History Four Point Interpolation
+Goal: Decide whether live BTC 5m probability should use a four-neighbor interpolation around unrounded `(seconds, cents)`.
+Status: Completed
+Done:
+- Recommended using four surrounding grid points around the live unrounded elapsed seconds and BTC cents move instead of a hard rounded exact lookup when estimating current Up/Down probability.
+- Recommended bilinear interpolation over weighted counts, not plain interpolation of corner probabilities: sum weighted `count`, `up_count`, and `down_count`, then compute smoothed probabilities from those totals.
+- Noted that for negative cents the interpolation neighbors should numerically bracket the actual value, for example `-15` and `-10` around `-12` with a 5-cent grid, even though earlier bucket labels used truncation toward zero.
+- Recommended returning probability together with effective sample count, missing-corner count, bucket size, method name, and confidence, and falling back to coarser buckets or wider kernels when support is low.
+Next: Implement a read-only probability estimator using bilinear four-point interpolation and backtest support thresholds against exact/coarse bucket alternatives.
+Notes: Answer-only task. No source, database data, or heatmap artifacts changed.
+Blockers: None.
+
 ## Active Update 2026-05-14 BTC History Live Probability Method
 Goal: Define how to use `btc_5m_history` for live Up/Down probability analysis of the current BTC 5m market.
 Status: Completed
