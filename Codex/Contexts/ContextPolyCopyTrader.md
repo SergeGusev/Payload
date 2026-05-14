@@ -1,3 +1,18 @@
+## Active Update 2026-05-14 Server BTC Statistics Recheck
+Goal: Recheck the deployed BTC Up or Down 5m Statistics strategy after the server restart/deploy.
+Status: Completed
+Done:
+- Confirmed PostgreSQL on `192.168.0.101:5432` is reachable; IPC `192.168.0.101:5118` remains unreachable from this machine.
+- Confirmed `PolyCopyTrader.Service` is running after the latest restart: status `Running`, mode `Live`, started `2026-05-14T16:42:09Z`, heartbeat age about `29.3s`, no last error.
+- Confirmed `btc_5m_history` remains intact with imported aggregates: `rows=305079`, `sum(count)=1138980`, `sum(up_count)=573720`, `sum(down_count)=565260`, `seconds=0..295`.
+- Confirmed `btc_up_down_5m_statistics_ticks` is receiving live rows: `1842` total ticks, latest sample age about `0.8s`, `37` total `would_bet` ticks, and recent decisions mostly `insufficient_history`.
+- Confirmed the statistics strategy row is enabled and `live_stakes=false`; no `BtcUpDown5mStatistics` API errors were found in the last 2 hours.
+- Found a real settlement issue: `btc_5m_history_live_observations` had `433` rows, `0` applied, `389` pending with `last_result_error=result_unknown`, and max retry attempts `24`.
+- Diagnosed the likely cause: local `polymarket_gamma_markets` rows for already ended BTC 5m markets are stale (`active=True`, `closed=False`), while direct Gamma API lookup for the same slug with `closed=true` returns the resolved market (`closed=true`, `outcomePrices=["1","0"]`).
+Next: Fix live-observation settlement to refresh closed Gamma metadata by slug/market id when the stored row is missing or unresolved, then re-run the server check and confirm observations move from pending to applied.
+Notes: A temporary C#/.NET/Npgsql diagnostic project was used from `%TEMP%` without printing secrets. Existing old untracked deploy/artifact files were left untouched.
+Blockers: Live `btc_5m_history` updates are currently not being applied because settlement only reads stale local Gamma metadata.
+
 ## Active Update 2026-05-14 Server BTC Statistics Deployment Check
 Goal: Verify the deployed server build runs the BTC Up or Down 5m Statistics strategy correctly.
 Status: Completed
