@@ -1,3 +1,18 @@
+## Active Update 2026-05-16 Strategy Outlook
+Goal: Assess whether any current Paper strategies look promising based on fresh production telemetry.
+Status: Completed
+Done:
+- Queried remote PostgreSQL `192.168.0.101` read-only through `out/dbprobe` without printing connection strings.
+- Confirmed production service is running build `info=1.0.0+16a032c64f151ff052264ed18273a52cd923fdd0`, started `2026-05-15T17:16:35Z`, with fresh heartbeat at `2026-05-15T21:35:39Z` and no `last_error`.
+- Used `2026-05-15T12:41:37Z` as the more reliable post-GTD-fix analysis window and `2026-05-15T17:16:35Z` as the new Binance bps grid deployment window.
+- Found the strongest family-level signal in `binance_bps`: post-fix `215` settled, `126` wins, `89` losses, `+$111.00`, `+17.21%` ROI, `+$0.5163` expectancy.
+- Found individual post-fix candidates: `btc_up_down_5m_less_210` (`95` settled, `+21.39%` ROI but all-time `-3.60%`), `btc_up_down_5m_less_180` (`96`, `+9.28%`, all-time `+5.40%`), `btc_up_down_5m_more_30` (`98`, `+8.83%`, all-time `+4.72%`), and weaker candidates `more_60`, `more_90`, `less_150_gamma`, and `binance_bps_0_5`.
+- Found new Binance bps grid sample is promising but too small: since deployment, new bps codes have `22` settled, `22` wins, `0` losses, `+$66.00`, `+100%` ROI; old bps codes in the same window have `65` settled, `45` wins, `20` losses, `+$75.00`, `+38.46%` ROI.
+- Flagged weak/avoid families post-fix: `middle` and `middle_revert` were `0` wins with `-100%` ROI; `skip_revert` was `-73.42%`; `binance_edge`, `binance_clever`, `binance_other`, `more_gamma`, `less`, and `preopen` were negative as families.
+Next: Keep live disabled; collect larger post-fix samples, prioritize a Paper watchlist around Binance bps, `more_30`, and `less_180`, and consider disabling clearly bad experimental families to reduce noise.
+Notes: No database writes, code changes, service restarts, order submissions, or cancel actions were performed. A supplementary Statistics table query used legacy column names and failed after returning the main strategy result sets, so Statistics was not included as a live-ready candidate.
+Blockers: Samples are still short after the GTD fix and new bps deployment; results are Paper-only and should not be treated as live trading evidence yet.
+
 ## Active Update 2026-05-15 Binance BPS New Orders Recheck
 Goal: Recheck whether the newly added Binance bps strategies are now running after the latest deployment.
 Status: Completed
