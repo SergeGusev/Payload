@@ -159,3 +159,10 @@ Request:
 
 Result:
 Implemented a database-visible deployment marker using the existing `service_heartbeats.version` column. Added `ServiceBuildVersion` to write `deploy=<POLYCOPYTRADER_DEPLOYMENT_VERSION>`, `info=<AssemblyInformationalVersion>`, `assembly=<AssemblyVersion>`, and `mvid=<module fingerprint>` into heartbeats; updated `BotWorker` to use it; updated the Service project and deploy script to embed the Git commit into `AssemblyInformationalVersion`; documented the PostgreSQL verification query and optional deployment-version environment variable; and added unit tests for formatting/sanitization. Verification passed: focused tests 2/2, Service Release rebuild passed with existing Storage nullable warnings, generated `AssemblyInformationalVersion` was verified as `1.0.0+<git-commit>`, full tests passed 478/478, and `git diff --check` passed with CRLF warnings only.
+
+## 2026-05-15T12:07:13.3140376+00:00
+Request:
+Проверяй
+
+Result:
+Checked remote PostgreSQL read-only after redeploy. The service heartbeat confirmed the production artifact was current for the previous commit: `service_heartbeats.version` contained `info=1.0.0+7edc96741b53fcf22536871e428e750ecbe7b029`, with service start at `2026-05-15T11:54:32Z`. Fresh Paper GTD telemetry showed the previous `Expired/Skipped/gtd_limit_not_filled` pattern for initial-executable orders was gone, but by `2026-05-15T12:02:39Z` there were still `41` initial-executable `paper_gtd_limit` BUY orders that had expired without fills and without `paper_gtd_fill_model_status`. Root cause was a second expiry path in `PaperTradingMarketDataUpdater`: the WebSocket/current-book updater still expired matching open orders before running the conservative GTD estimator. Updated that updater to run `ConservativePaperGtdFillEstimator` before expiry/default balanced fill handling, added a regression integration test for the market-data updater, and documented the shared guard. Verification passed: targeted tests 3/3, Service Release build 0 warnings/errors, full tests 479/479, and `git diff --check` passed with CRLF warnings only. New fix requires another server redeploy/restart.

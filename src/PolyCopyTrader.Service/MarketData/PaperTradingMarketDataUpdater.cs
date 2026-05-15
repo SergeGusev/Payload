@@ -10,6 +10,7 @@ public sealed class PaperTradingMarketDataUpdater(
     IPaperTradingEngine paperTradingEngine,
     IPaperSettlementProcessor paperSettlementProcessor,
     IExposureSnapshotCache exposureCache,
+    ConservativePaperGtdFillEstimator conservativeGtdFillEstimator,
     IAppRepository repository) : IPaperTradingMarketDataUpdater
 {
     private readonly SemaphoreSlim sync = new(1, 1);
@@ -48,35 +49,70 @@ public sealed class PaperTradingMarketDataUpdater(
 
             foreach (var order in matchingOrders)
             {
-                var expiredOrder = paperTradingEngine.ExpireIfNeeded(order, now);
-                if (expiredOrder.Status != order.Status)
-                {
-                    await repository.UpdatePaperOrderAsync(expiredOrder, cancellationToken);
-                    exposureCache.ApplyPaperOrder(expiredOrder);
-                    continue;
-                }
-
                 var existingFills = await repository.GetPaperFillsForOrderAsync(order.Id, cancellationToken);
                 var previouslyFilledShares = GetFilledShares(existingFills, order.SizeShares);
-                var fill = paperTradingEngine.TrySimulateFill(
+                var orderForFill = order;
+                PaperFill? fill = null;
+                var conservativeGtdEvaluation = conservativeGtdFillEstimator.Evaluate(
                     order,
                     update.OrderBookSnapshot,
-                    ToObservedTrade(order, update),
                     now,
                     previouslyFilledShares);
+
+                if (conservativeGtdEvaluation.Handled)
+                {
+                    orderForFill = conservativeGtdEvaluation.Order;
+                    fill = conservativeGtdEvaluation.Fill;
+
+                    if (fill is null)
+                    {
+                        if (conservativeGtdEvaluation.OrderChanged)
+                        {
+                            await repository.UpdatePaperOrderAsync(orderForFill, cancellationToken);
+                            exposureCache.ApplyPaperOrder(orderForFill);
+                        }
+
+                        var expiredOrder = paperTradingEngine.ExpireIfNeeded(orderForFill, now);
+                        if (expiredOrder.Status != orderForFill.Status)
+                        {
+                            await repository.UpdatePaperOrderAsync(expiredOrder, cancellationToken);
+                            exposureCache.ApplyPaperOrder(expiredOrder);
+                        }
+
+                        continue;
+                    }
+                }
+                else
+                {
+                    var expiredOrder = paperTradingEngine.ExpireIfNeeded(order, now);
+                    if (expiredOrder.Status != order.Status)
+                    {
+                        await repository.UpdatePaperOrderAsync(expiredOrder, cancellationToken);
+                        exposureCache.ApplyPaperOrder(expiredOrder);
+                        continue;
+                    }
+
+                    fill = paperTradingEngine.TrySimulateFill(
+                        order,
+                        update.OrderBookSnapshot,
+                        ToObservedTrade(order, update),
+                        now,
+                        previouslyFilledShares);
+                }
+
                 if (fill is null)
                 {
                     continue;
                 }
 
-                var currentPosition = FindPosition(positions, order);
-                if (order.Side == TradeSide.Sell && currentPosition is null)
+                var currentPosition = FindPosition(positions, orderForFill);
+                if (orderForFill.Side == TradeSide.Sell && currentPosition is null)
                 {
                     continue;
                 }
 
                 var currentBid = update.OrderBookSnapshot?.BestBid ?? currentPosition?.AveragePrice ?? 0m;
-                if (order.Side == TradeSide.Sell && currentPosition is not null)
+                if (orderForFill.Side == TradeSide.Sell && currentPosition is not null)
                 {
                     fill = fill with
                     {
@@ -84,20 +120,20 @@ public sealed class PaperTradingMarketDataUpdater(
                     };
                 }
 
-                var filledOrder = paperTradingEngine.ApplyFillStatus(order, fill, previouslyFilledShares);
+                var filledOrder = paperTradingEngine.ApplyFillStatus(orderForFill, fill, previouslyFilledShares);
                 await repository.AddPaperFillAsync(fill, cancellationToken);
                 await repository.UpdatePaperOrderAsync(filledOrder, cancellationToken);
                 exposureCache.ApplyPaperOrder(filledOrder);
 
-                var updatedPosition = order.Side == TradeSide.Buy
-                    ? paperTradingEngine.ApplyBuyFill(currentPosition, order, fill, currentBid, now)
-                    : paperTradingEngine.ApplySellFill(currentPosition!, order, fill, currentBid, now);
+                var updatedPosition = orderForFill.Side == TradeSide.Buy
+                    ? paperTradingEngine.ApplyBuyFill(currentPosition, orderForFill, fill, currentBid, now)
+                    : paperTradingEngine.ApplySellFill(currentPosition!, orderForFill, fill, currentBid, now);
                 await repository.UpsertPaperPositionAsync(updatedPosition, cancellationToken);
                 exposureCache.ApplyPaperPosition(updatedPosition);
-                if (order.Side == TradeSide.Buy)
+                if (orderForFill.Side == TradeSide.Buy)
                 {
                     await repository.ActivatePaperCopiedLeaderPositionAsync(
-                        order.Id,
+                        orderForFill.Id,
                         fill.SizeShares,
                         fill.FilledAtUtc,
                         cancellationToken);

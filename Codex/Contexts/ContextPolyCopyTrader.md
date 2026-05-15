@@ -1,3 +1,17 @@
+## Active Update 2026-05-15 Market Data GTD Expiry Race Fix
+Goal: Verify the redeployed service version and fix the remaining Paper GTD expiry race found in production telemetry.
+Status: Completed
+Done:
+- Verified remote PostgreSQL `service_heartbeats.version` showed the production service running `info=1.0.0+7edc96741b53fcf22536871e428e750ecbe7b029`, with service start at `2026-05-15T11:54:32Z`.
+- After the restart, the old `Expired/Skipped/gtd_limit_not_filled` pattern for initial-executable GTD orders was gone, but fresh DB rows showed `41` initial-executable `paper_gtd_limit` BUY orders expired without fills or fill-model diagnostics by `2026-05-15T12:02:39Z`.
+- Root-caused the remaining issue to `PaperTradingMarketDataUpdater`: the WebSocket/current-book update path still called `ExpireIfNeeded` before the conservative GTD estimator, so it could expire initial-executable GTD orders before `PaperTradingProcessor` reached them.
+- Updated `PaperTradingMarketDataUpdater` to run `ConservativePaperGtdFillEstimator` before expiry and default balanced-fill handling, matching the scheduled open-order worker.
+- Added a regression integration test proving the market-data updater fills an already-expired initial-executable GTD order through `ConservativeGtdImmediateFill`.
+- Updated README to document that both the scheduled worker and market-data updater apply the conservative submit-snapshot fill guard before opening-limit GTD expiry.
+Next: Deploy/restart commit from this fix, then recheck `service_heartbeats.version` and fresh post-start counts for `initial_executable_expired_without_fill = 0` / nonzero `ConservativeGtdImmediateFill` evidence.
+Notes: Verification passed: targeted GTD tests passed 3/3; `dotnet build src\PolyCopyTrader.Service\PolyCopyTrader.Service.csproj -c Release --no-restore` passed with 0 warnings/errors; full `dotnet test tests\PolyCopyTrader.Tests\PolyCopyTrader.Tests.csproj -c Release --no-restore` passed 479/479; `git diff --check` passed with CRLF warnings only. Remote DB checks were read-only and did not print connection strings.
+Blockers: Needs server redeploy/restart from the new commit.
+
 ## Active Update 2026-05-15 Service Heartbeat Deploy Version
 Goal: Add a database-visible service version marker so production artifact freshness can be checked after deploy.
 Status: Completed
