@@ -1,3 +1,15 @@
+## Active Update 2026-05-15 Binance BPS 0.5 Clarification
+Goal: Clarify whether the observed `0.5` in Binance bps strategies is a stake percentage.
+Status: Completed
+Done:
+- Rechecked the relevant Binance start-relative bps code paths.
+- Confirmed `0.50` is the default/capped GTD BUY limit price for Binance start-relative and bps variants, not a percentage of account balance or stake.
+- Confirmed bps thresholds compare absolute BTC move from market start as `(current - start) / start * 10000`; for example `0.5 bps` means `0.005%` BTC move, not `0.5%` stake.
+- Confirmed stake sizing remains driven by `strategies.paper_stake_amount` as a multiplier over minimum order sizing, with the formula `min_order_size * limit_price * 1.10 * stakeMultiplier`.
+Next: None.
+Notes: Answer-only clarification; no database writes, code changes, order submissions, or cancel actions were performed.
+Blockers: None.
+
 ## Active Update 2026-05-15 Binance BPS Stake Explanation
 Goal: Explain how stake is determined for Binance bps BTC 5m strategies.
 Status: Completed

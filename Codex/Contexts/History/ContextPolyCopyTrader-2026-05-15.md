@@ -222,3 +222,10 @@ Request:
 
 Result:
 Explained from code that Binance bps strategy bps values are minimum BTC move thresholds, not stake sizes. The stake multiplier comes from `strategies.paper_stake_amount` via `StrategyRuntimeSettings.PaperStakeAmount`; opening-limit sizing uses market/order-book `min_order_size * limit_price * 1.10 * stakeMultiplier`, rounds target notional up to whole USD, then rounds shares up to CLOB-compatible precision. Binance bps variants use the fixed Binance start-relative GTD limit path capped at `0.50`. A read-only production query showed all 12 `btc_up_down_5m_binance_bps%` rows currently have `paper_stake_amount = 1.00000000`, `live_stake_amount = 1.00000000`, `enabled = true`, and `live_stakes = false`. No database writes or order actions were performed.
+
+## 2026-05-15T16:00:07.1967820Z
+Request:
+Я имел в виду - какой процент ставки. Вижу, что 0.5, правильно?
+
+Result:
+Clarified that `0.50` is the Binance start-relative bps GTD BUY limit price/cap, not a stake percentage. The bps threshold itself is a BTC move threshold where `0.5 bps = 0.005%` BTC move from market start, not `0.5%` stake. Stake size is still computed from `strategies.paper_stake_amount` as a multiplier over minimum order sizing: `min_order_size * limit_price * 1.10 * stakeMultiplier`, then rounded. No database writes or order actions were performed.
