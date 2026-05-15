@@ -11,3 +11,10 @@ Request:
 
 Result:
 Changed Dashboard automatic refresh so the service banner and readiness rows derive service availability from the selected database's `service_heartbeats` row for `PolyCopyTrader.Service` instead of probing localhost IPC `/status`. Added a `ServiceAvailability` snapshot/evaluator with heartbeat age and stale detection, updated overview/diagnostics/live-readiness display, and documented that IPC remains only the command channel for control buttons. Verification passed: Dashboard Release build succeeded with a temporary output path, full tests passed 472/472, and `git diff --check` passed with CRLF warnings only.
+
+## 2026-05-15T05:34:51.9002119Z
+Request:
+Проверь доступность базы нового сервера
+
+Result:
+Checked new-server PostgreSQL availability at `192.168.0.101:5432`. TCP connectivity succeeded, and a temporary C#/.NET/Npgsql read-only diagnostic using `POLYCOPYTRADER_POSTGRES_CONNECTION` with host overridden to `192.168.0.101` opened database `polycopytrader` in about `302 ms`. The database returned `74` public tables, `service_heartbeats` exists, and `PolyCopyTrader.Service` had a fresh `Running`/`Live` heartbeat from `2026-05-15T05:33:20Z` with age about `40.4s` and no last-error flag. The temporary diagnostic project was removed.

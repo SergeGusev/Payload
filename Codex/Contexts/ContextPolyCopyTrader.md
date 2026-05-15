@@ -1,3 +1,15 @@
+## Active Update 2026-05-15 New Server Database Availability Check
+Goal: Verify PostgreSQL availability on the new server.
+Status: Completed
+Done:
+- Confirmed TCP connectivity to `192.168.0.101:5432` with `TcpTestSucceeded=True`.
+- Ran a temporary C#/.NET/Npgsql read-only diagnostic using `POLYCOPYTRADER_POSTGRES_CONNECTION` with host overridden from configured `127.0.0.1` to `192.168.0.101`.
+- Confirmed PostgreSQL login/query succeeded for database `polycopytrader` in about `302 ms`; server reported `74` public tables and `service_heartbeats` present.
+- Confirmed `PolyCopyTrader.Service` heartbeat in the new-server database is fresh: status `Running`, mode `Live`, started `2026-05-14T17:17:08Z`, last heartbeat `2026-05-15T05:33:20Z`, age about `40.4s`, no last error flag.
+Next: None.
+Notes: No source code was changed. The temporary diagnostic project under `artifacts/db-availability-check` was removed after the check. `git pull --ff-only` reported already up to date; existing unrelated untracked artifacts remain untouched.
+Blockers: None.
+
 ## Active Update 2026-05-15 Dashboard Database Heartbeat Service Availability
 Goal: Make Dashboard service availability follow the selected database heartbeat instead of localhost IPC `/status`.
 Status: Completed
