@@ -1,3 +1,5 @@
+using System.Globalization;
+using System.Text.Json;
 using PolyCopyTrader.Domain;
 using PolyCopyTrader.Domain.Configuration;
 using PolyCopyTrader.Polymarket;
@@ -22,7 +24,8 @@ public sealed class PaperTradingProcessor(
 
     public async Task<PaperTradingProcessingResult> ProcessOpenOrdersAsync(CancellationToken cancellationToken = default)
     {
-        var openOrders = await repository.GetOpenPaperOrdersAsync(cancellationToken);
+        var now = DateTimeOffset.UtcNow;
+        var openOrders = PrioritizeOpenOrders(await repository.GetOpenPaperOrdersAsync(cancellationToken), now);
         var positions = (await repository.GetPaperPositionsAsync(cancellationToken)).ToList();
         if (openOrders.Count == 0)
         {
@@ -33,7 +36,6 @@ public sealed class PaperTradingProcessor(
         var ordersFilled = 0;
         var ordersExpired = 0;
         var positionsUpdated = 0;
-        var now = DateTimeOffset.UtcNow;
         var fillSimulationCandidatesProcessed = 0;
         var maxFillSimulationCandidates = Math.Max(1, paperTradingOptions.OpenOrderFillSimulationBatchSize);
 
@@ -163,6 +165,93 @@ public sealed class PaperTradingProcessor(
 
         positionsUpdated += await UpdatePositionMarksAsync(positions, cancellationToken);
         return new PaperTradingProcessingResult(openOrders.Count, ordersFilled, ordersExpired, positionsUpdated);
+    }
+
+    private static IReadOnlyList<PaperOrder> PrioritizeOpenOrders(
+        IReadOnlyList<PaperOrder> openOrders,
+        DateTimeOffset nowUtc)
+    {
+        return openOrders
+            .OrderBy(order => order.ExpiresAtUtc <= nowUtc ? 0 : 1)
+            .ThenBy(order => IsInitialExecutableGtdBuy(order) ? 0 : 1)
+            .ThenBy(order => order.ExpiresAtUtc)
+            .ThenBy(order => order.CreatedAtUtc)
+            .ThenBy(order => order.Id)
+            .ToArray();
+    }
+
+    private static bool IsInitialExecutableGtdBuy(PaperOrder order)
+    {
+        if (order.Side != TradeSide.Buy || string.IsNullOrWhiteSpace(order.RawDecisionJson))
+        {
+            return false;
+        }
+
+        try
+        {
+            using var document = JsonDocument.Parse(order.RawDecisionJson);
+            var root = document.RootElement;
+            if (root.ValueKind != JsonValueKind.Object ||
+                !IsGtd(root) ||
+                !IsOpeningLimit(root))
+            {
+                return false;
+            }
+
+            return TryGetDecimal(root, "paper_gtd_initial_executable_ask_shares") is > 0m;
+        }
+        catch (JsonException)
+        {
+            return false;
+        }
+    }
+
+    private static bool IsGtd(JsonElement root)
+    {
+        return string.Equals(TryGetString(root, "order_type"), "GTD", StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(TryGetString(root, "order_execution_mode"), "GTD", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static bool IsOpeningLimit(JsonElement root)
+    {
+        return string.Equals(TryGetString(root, "pricing_mode"), "opening_limit", StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(TryGetString(root, "pricing_mode"), "paper_gtd_limit", StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(TryGetString(root, "converted_to_gtd_limit_order"), "True", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static string? TryGetString(JsonElement root, string propertyName)
+    {
+        if (!root.TryGetProperty(propertyName, out var value))
+        {
+            return null;
+        }
+
+        return value.ValueKind switch
+        {
+            JsonValueKind.String => value.GetString(),
+            JsonValueKind.True => bool.TrueString,
+            JsonValueKind.False => bool.FalseString,
+            JsonValueKind.Number => value.GetRawText(),
+            _ => null
+        };
+    }
+
+    private static decimal? TryGetDecimal(JsonElement root, string propertyName)
+    {
+        if (!root.TryGetProperty(propertyName, out var value))
+        {
+            return null;
+        }
+
+        if (value.ValueKind == JsonValueKind.Number && value.TryGetDecimal(out var number))
+        {
+            return number;
+        }
+
+        var text = value.ValueKind == JsonValueKind.String ? value.GetString() : value.GetRawText();
+        return decimal.TryParse(text, NumberStyles.Any, CultureInfo.InvariantCulture, out var parsed)
+            ? parsed
+            : null;
     }
 
     private async Task<OrderBookSnapshot?> GetOrderBookAsync(string assetId, CancellationToken cancellationToken)

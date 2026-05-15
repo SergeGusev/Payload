@@ -110,3 +110,10 @@ Request:
 
 Result:
 Checked remote PostgreSQL `192.168.0.101` read-only after the service restart at `2026-05-15T08:20:10Z`. The exact `BTC Up or Down 1h PreOpen Full Down 49` recent rows looked normal because both the latest pending row and previous skipped row had `0` initial executable ask shares at the `0.49` limit. The broader Skip situation is not normal yet: since restart, `paper_gtd_limit` BUY orders had `7766` `gtd_limit_not_filled` skipped runs, including `970` initial-executable orders that expired/skipped without fills. Most of that is non-PreOpen 5m variants, but PreOpen still had `26` initial-executable problem skips. No Paper worker/processor API errors were present; the likely next issue is open-order processing throughput/prioritization because open orders are read newest-first while fill simulation is capped at `100` per cycle.
+
+## 2026-05-15T09:58:31.9302743+00:00
+Request:
+Ок, давай делай следующий технический шаг
+
+Result:
+Implemented Paper open-order prioritization in `PaperTradingProcessor`: before applying the fill-simulation batch cap, open orders are ordered as expired first, then BUY GTD opening-limit orders with `paper_gtd_initial_executable_ask_shares > 0`, then earliest-expiring remaining orders. Added raw-decision JSON parsing for this priority, an integration test that proves an initial-executable GTD order is processed even with batch size `1`, and README documentation. Verification passed: targeted pipeline tests 6/6, full test project 475/475, Service Release build with 0 warnings/errors, and `git diff --check` with CRLF warnings only. Deployment/restart is still required on the remote service.

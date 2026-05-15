@@ -224,6 +224,66 @@ public sealed class PipelineIntegrationTests
     }
 
     [Fact]
+    public async Task PaperTradingProcessor_PrioritizesInitialExecutableGtdOrdersWithinBatch()
+    {
+        var repository = new TestAppRepository();
+        var now = DateTimeOffset.UtcNow;
+        await repository.AddPaperOrderAsync(PaperOrder("ordinary-active", now.AddMinutes(2)));
+
+        var variant = StrategyIds.BtcUpDown5mVariants.Single(item =>
+            item.Code == "btc_up_down_1h_preopen_full_down_49");
+        var urgentOrderId = Guid.NewGuid();
+        await repository.AddPaperOrderAsync(new PaperOrder(
+            urgentOrderId,
+            Guid.NewGuid(),
+            variant.CopiedTraderWallet,
+            PaperOrderStatus.Pending,
+            TradeSide.Buy,
+            "asset-down",
+            "condition-1",
+            "Down",
+            0.49m,
+            10m,
+            4.90m,
+            now.AddMinutes(-1),
+            now.AddMinutes(30),
+            StrategyId: variant.Id,
+            RawDecisionJson: JsonSerializer.Serialize(new Dictionary<string, object?>
+            {
+                ["pricing_mode"] = "paper_gtd_limit",
+                ["order_type"] = "GTD",
+                ["order_execution_mode"] = "GTD",
+                ["paper_gtd_initial_snapshot_at_utc"] = now.AddMinutes(-1).ToString("O"),
+                ["paper_gtd_initial_best_bid"] = 0.48m,
+                ["paper_gtd_initial_best_ask"] = 0.47m,
+                ["paper_gtd_initial_last_trade_price"] = 0.44m,
+                ["paper_gtd_initial_queue_ahead_shares"] = 0m,
+                ["paper_gtd_initial_executable_ask_shares"] = 6m,
+                ["paper_gtd_initial_executable_ask_vwap"] = 0.48m
+            })));
+
+        var paperProcessor = new PaperTradingProcessor(
+            NullLogger<PaperTradingProcessor>.Instance,
+            new DefaultPaperTradingEngine(),
+            new FakeClobClient(OrderBook(bestBid: 0.45m, bestAsk: 0.60m)),
+            new MarketDataCache(new MarketDataWebSocketOptions()),
+            new MarketDataWebSocketOptions(),
+            new PaperTradingOptions { OpenOrderFillSimulationBatchSize = 1 },
+            new ExposureSnapshotCache(repository),
+            new ConservativePaperGtdFillEstimator(new BtcUpDown5mStrategyOptions()),
+            repository);
+
+        var paperResult = await paperProcessor.ProcessOpenOrdersAsync();
+
+        Assert.Equal(1, paperResult.OrdersFilled);
+        var fill = Assert.Single(repository.PaperFills);
+        Assert.Equal(urgentOrderId, fill.PaperOrderId);
+        Assert.Contains("ConservativeGtdImmediateFill", fill.Evidence);
+        Assert.Equal(PaperOrderStatus.PartiallyFilled, repository.PaperOrders.Single(order => order.Id == urgentOrderId).Status);
+        Assert.Equal(PaperOrderStatus.Pending, repository.PaperOrders.Single(order => order.AssetId == "ordinary-active").Status);
+    }
+
+    [Fact]
     public async Task PaperTradingProcessor_PaperGtdLimitUsesInitialExecutableAskForImmediateFill()
     {
         var repository = new TestAppRepository();

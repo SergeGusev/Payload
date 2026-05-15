@@ -1,3 +1,15 @@
+## Active Update 2026-05-15 Paper Open Order Priority Fix
+Goal: Stop `paper_gtd_limit` orders with initial executable liquidity from being starved by newest-first open-order processing.
+Status: Completed
+Done:
+- Updated `PaperTradingProcessor` to prioritize open orders before applying `OpenOrderFillSimulationBatchSize`: expired orders first, then BUY GTD opening-limit orders with `paper_gtd_initial_executable_ask_shares > 0`, then earliest-expiring remaining orders.
+- Added robust raw-decision JSON priority parsing for `paper_gtd_limit` / legacy opening-limit GTD orders.
+- Added an integration test proving a batch size of `1` still processes the initial-executable GTD order ahead of an ordinary non-filling open order.
+- Updated README Paper Trading documentation with the new open-order processing priority.
+Next: Deploy/restart the service and recheck remote DB Skip metrics after at least one hour of fresh cycles.
+Notes: Verification passed: targeted `PipelineIntegrationTests` passed 6/6; full `dotnet test tests\PolyCopyTrader.Tests\PolyCopyTrader.Tests.csproj -c Release --no-restore` passed 475/475; `dotnet build src\PolyCopyTrader.Service\PolyCopyTrader.Service.csproj -c Release --no-restore` passed with 0 warnings/errors; `git diff --check` passed with CRLF warnings only.
+Blockers: Server deployment/restart is required for the running remote service to use this fix.
+
 ## Active Update 2026-05-15 Post-Deploy Skip Database Check
 Goal: Check remote PostgreSQL after the service deployment to see whether the `Skipped/gtd_limit_not_filled` situation normalized.
 Status: Completed
