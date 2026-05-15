@@ -18,7 +18,18 @@ Optional parameters:
 ```
 
 The script runs `dotnet publish`, installs `PolyCopyTrader.Service` as a Windows
-Service, and leaves configuration files in the publish directory.
+Service, and leaves configuration files in the publish directory. When the repo
+is a Git checkout, the script embeds the current short commit in the service
+informational version. The running service writes that marker to
+`service_heartbeats.version`, for example `info=1.0.0+9785ba3`.
+
+Verify the deployed artifact from PostgreSQL after restart:
+
+```sql
+SELECT service_name, version, started_at_utc, last_heartbeat_utc
+FROM service_heartbeats
+WHERE service_name = 'PolyCopyTrader.Service';
+```
 
 ## Start, Stop, Uninstall
 

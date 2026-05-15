@@ -23,9 +23,23 @@ $repoRoot = Resolve-Path (Join-Path $scriptRoot "..")
 $projectFullPath = Resolve-Path (Join-Path $scriptRoot $ProjectPath)
 $publishFullPath = Join-Path $scriptRoot $PublishDirectory
 $publishFullPath = [System.IO.Path]::GetFullPath($publishFullPath)
+$gitCommit = $null
+try {
+    $gitCommit = (& git -C $repoRoot rev-parse --short=12 HEAD 2>$null).Trim()
+}
+catch {
+    $gitCommit = $null
+}
 
 Write-Host "Publishing $projectFullPath to $publishFullPath"
-dotnet publish $projectFullPath -c $Configuration -o $publishFullPath
+$publishArgs = @("publish", $projectFullPath, "-c", $Configuration, "-o", $publishFullPath)
+if (-not [string]::IsNullOrWhiteSpace($gitCommit)) {
+    Write-Host "Embedding Git revision $gitCommit in service informational version."
+    $publishArgs += "-p:SourceRevisionId=$gitCommit"
+    $publishArgs += "-p:InformationalVersion=1.0.0+$gitCommit"
+}
+
+dotnet @publishArgs
 
 $exePath = Join-Path $publishFullPath "PolyCopyTrader.Service.exe"
 if (-not (Test-Path -LiteralPath $exePath)) {
@@ -46,6 +60,9 @@ else {
 Write-Host "Service installed."
 Write-Host "Repository root: $repoRoot"
 Write-Host "Publish directory: $publishFullPath"
+if (-not [string]::IsNullOrWhiteSpace($gitCommit)) {
+    Write-Host "Expected heartbeat version marker includes: info=1.0.0+$gitCommit"
+}
 Write-Host "Configure secrets through environment variables or Windows Credential Manager before starting."
 
 if ($Start) {

@@ -10,6 +10,7 @@ Do not commit real credentials.
 - `HeartbeatIntervalSeconds`: heartbeat cadence.
 - `UseWebSockets`: enables market WebSocket monitoring when true.
 - `EnableLiveTrading`: must be true for live trading, but is not sufficient by itself.
+- `POLYCOPYTRADER_DEPLOYMENT_VERSION`: optional service-account environment variable that is written into `service_heartbeats.version` as `deploy=<value>`; use it only when the deployment cannot embed a Git commit through `InformationalVersion`.
 
 ## LiveTrading
 

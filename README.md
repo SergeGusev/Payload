@@ -103,12 +103,26 @@ Dashboard pause/resume, kill-switch, paper-control, trader discovery, on-chain i
 Publish the service and install it with Windows Service Control Manager:
 
 ```powershell
-dotnet publish src/PolyCopyTrader.Service/PolyCopyTrader.Service.csproj -c Release -o .\publish\service
+$gitCommit = git rev-parse --short=12 HEAD
+dotnet publish src/PolyCopyTrader.Service/PolyCopyTrader.Service.csproj -c Release -o .\publish\service -p:SourceRevisionId=$gitCommit -p:InformationalVersion="1.0.0+$gitCommit"
 sc.exe create PolyCopyTrader.Service binPath= "$PWD\publish\service\PolyCopyTrader.Service.exe" start= delayed-auto
 sc.exe start PolyCopyTrader.Service
 ```
 
 Use `sc.exe stop PolyCopyTrader.Service` and `sc.exe delete PolyCopyTrader.Service` to stop/remove it. Keep `POLYCOPYTRADER_POSTGRES_CONNECTION` configured as a machine/user environment variable for the service account.
+The service writes its deployed build marker to `service_heartbeats.version`.
+After restart, verify production is running the expected commit with:
+
+```sql
+SELECT service_name, version, started_at_utc, last_heartbeat_utc
+FROM service_heartbeats
+WHERE service_name = 'PolyCopyTrader.Service';
+```
+
+For normal Git-based publishes the value includes `info=1.0.0+<short-git-commit>`.
+If a deployment pipeline cannot build from a Git checkout, set
+`POLYCOPYTRADER_DEPLOYMENT_VERSION` for the service account to an explicit
+artifact id; it will be included as `deploy=<value>`.
 
 Deployment scripts are available under `deploy/`:
 

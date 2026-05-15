@@ -1,3 +1,17 @@
+## Active Update 2026-05-15 Service Heartbeat Deploy Version
+Goal: Add a database-visible service version marker so production artifact freshness can be checked after deploy.
+Status: Completed
+Done:
+- Reused existing `service_heartbeats.version`; no PostgreSQL migration was needed because the column is already `text NOT NULL`.
+- Added `ServiceBuildVersion` so the service heartbeat writes a structured marker with optional `deploy=<POLYCOPYTRADER_DEPLOYMENT_VERSION>`, `info=<AssemblyInformationalVersion>`, `assembly=<AssemblyVersion>`, and `mvid=<module fingerprint>`.
+- Updated `BotWorker` to write `ServiceBuildVersion.GetHeartbeatVersion()` instead of the unhelpful assembly version `1.0.0.0`.
+- Updated the Service project and install script so Git-based builds/publishes embed the current commit in `AssemblyInformationalVersion`.
+- Documented the SQL check for `service_heartbeats.version` in README/deploy docs and documented the optional deployment-version environment variable.
+- Added unit tests for heartbeat version formatting and sanitization.
+Next: Redeploy/restart the service and verify production with `SELECT service_name, version, started_at_utc, last_heartbeat_utc FROM service_heartbeats WHERE service_name = 'PolyCopyTrader.Service';`.
+Notes: Verification passed: focused `ServiceBuildVersionTests` passed 2/2; `dotnet build src\PolyCopyTrader.Service\PolyCopyTrader.Service.csproj -c Release --no-restore -t:Rebuild` passed with existing Storage nullable warnings; generated `AssemblyInformationalVersion` was verified as `1.0.0+<git-commit>`; full `dotnet test tests\PolyCopyTrader.Tests\PolyCopyTrader.Tests.csproj -c Release --no-restore` passed 478/478; `git diff --check` passed with CRLF warnings only.
+Blockers: None.
+
 ## Active Update 2026-05-15 Post-Deploy Paper GTD Monitor
 Goal: Monitor the server after the user redeployed the `src` Paper GTD expiry-before-fill fix.
 Status: Completed

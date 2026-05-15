@@ -2,8 +2,10 @@
 
   <PropertyGroup>
     <TargetFramework>net10.0</TargetFramework>
+    <Version>1.0.0</Version>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
+    <IncludeSourceRevisionInInformationalVersion>false</IncludeSourceRevisionInInformationalVersion>
   </PropertyGroup>
 
   <ItemGroup>
@@ -27,4 +29,19 @@
     <ProjectReference Include="..\PolyCopyTrader.Strategy\PolyCopyTrader.Strategy.csproj" />
     <ProjectReference Include="..\PolyCopyTrader.Storage\PolyCopyTrader.Storage.csproj" />
   </ItemGroup>
+
+  <Target Name="ResolveSourceRevisionIdFromGit" BeforeTargets="GetAssemblyAttributes" Condition="'$(SourceRevisionId)' == ''">
+    <Exec Command="git -C &quot;$(MSBuildProjectDirectory)\..\..&quot; rev-parse --short=12 HEAD" ConsoleToMSBuild="true" IgnoreExitCode="true">
+      <Output TaskParameter="ConsoleOutput" ItemName="_PolyCopyTraderGitRevision" />
+    </Exec>
+    <PropertyGroup Condition="'@(_PolyCopyTraderGitRevision)' != ''">
+      <SourceRevisionId>@(_PolyCopyTraderGitRevision)</SourceRevisionId>
+    </PropertyGroup>
+  </Target>
+
+  <Target Name="SetServiceInformationalVersionFromSourceRevision" BeforeTargets="GetAssemblyAttributes" DependsOnTargets="GetAssemblyVersion;ResolveSourceRevisionIdFromGit" Condition="'$(SourceRevisionId)' != '' and ('$(InformationalVersion)' == '' or '$(InformationalVersion)' == '$(Version)')">
+    <PropertyGroup>
+      <InformationalVersion>$(Version)+$(SourceRevisionId)</InformationalVersion>
+    </PropertyGroup>
+  </Target>
 </Project>

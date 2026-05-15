@@ -1,4 +1,3 @@
-using System.Reflection;
 using PolyCopyTrader.Domain;
 using PolyCopyTrader.Domain.Configuration;
 using PolyCopyTrader.Service.Control;
@@ -84,7 +83,7 @@ public sealed class BotWorker(
                 controlState.Snapshot.RunState.ToString(),
                 startedAtUtc,
                 DateTimeOffset.UtcNow,
-                Assembly.GetExecutingAssembly().GetName().Version?.ToString() ?? "0.0.0",
+                ServiceBuildVersion.GetHeartbeatVersion(),
                 botOptions.Mode,
                 currentLoop,
                 lastError);
