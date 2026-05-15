@@ -2285,6 +2285,9 @@ ALTER TABLE paper_fills ADD COLUMN IF NOT EXISTS realized_pnl_usd numeric(28,8) 
 CREATE INDEX IF NOT EXISTS ix_paper_fills_order_time
 ON paper_fills(paper_order_id, filled_at_utc ASC);
 
+CREATE INDEX IF NOT EXISTS ix_paper_fills_filled_time_order
+ON paper_fills(filled_at_utc, paper_order_id);
+
 CREATE TABLE IF NOT EXISTS strategy_market_paper_runs (
     id uuid PRIMARY KEY,
     strategy_id uuid NOT NULL REFERENCES strategies(id),
@@ -2333,6 +2336,17 @@ ON strategy_market_paper_runs(status, market_end_utc, entered_at_utc, strategy_i
 
 CREATE INDEX IF NOT EXISTS ix_strategy_market_paper_runs_order
 ON strategy_market_paper_runs(paper_order_id);
+
+CREATE INDEX IF NOT EXISTS ix_strategy_market_paper_runs_strategy_entered
+ON strategy_market_paper_runs(strategy_id, entered_at_utc)
+WHERE entered_at_utc IS NOT NULL;
+
+CREATE INDEX IF NOT EXISTS ix_strategy_market_paper_runs_strategy_updated
+ON strategy_market_paper_runs(strategy_id, updated_at_utc);
+
+CREATE INDEX IF NOT EXISTS ix_strategy_market_paper_runs_strategy_settled
+ON strategy_market_paper_runs(strategy_id, settled_at_utc)
+WHERE settled_at_utc IS NOT NULL;
 
 CREATE TABLE IF NOT EXISTS paper_positions (
     id uuid PRIMARY KEY,

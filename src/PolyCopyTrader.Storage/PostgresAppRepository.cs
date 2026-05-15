@@ -1867,6 +1867,108 @@ strategy_windows AS (
         window_row.window_end_utc
     FROM selected_strategies strategy
     CROSS JOIN windows window_row
+),
+order_agg AS (
+    SELECT
+        paper_order.strategy_id,
+        window_row.window_label,
+        count(*)::integer AS orders_count,
+        (count(*) FILTER (WHERE paper_order.status IN ('Filled', 'PartiallyFilled', 'PartiallyFilledExpired')))::integer AS filled_orders_count,
+        (count(*) FILTER (WHERE paper_order.status IN ('Expired', 'PartiallyFilledExpired')))::integer AS expired_orders_count,
+        (count(*) FILTER (WHERE paper_order.status IN ('Pending', 'PartiallyFilled')))::integer AS open_orders_count,
+        max(paper_order.created_at_utc) AS last_order_utc
+    FROM paper_orders paper_order
+    INNER JOIN selected_strategies strategy ON strategy.id = paper_order.strategy_id
+    INNER JOIN windows window_row
+        ON paper_order.created_at_utc >= window_row.window_start_utc
+        AND paper_order.created_at_utc <= window_row.window_end_utc
+    GROUP BY paper_order.strategy_id, window_row.window_label
+),
+fill_agg AS (
+    SELECT
+        paper_order.strategy_id,
+        window_row.window_label,
+        COALESCE(sum(fill_row.price * fill_row.size_shares), 0) AS filled_cost_usd,
+        CASE
+            WHEN COALESCE(sum(fill_row.size_shares), 0) = 0 THEN 0
+            ELSE COALESCE(sum(fill_row.price * fill_row.size_shares), 0) / sum(fill_row.size_shares)
+        END AS avg_fill_price
+    FROM paper_fills fill_row
+    INNER JOIN paper_orders paper_order ON paper_order.id = fill_row.paper_order_id
+    INNER JOIN selected_strategies strategy ON strategy.id = paper_order.strategy_id
+    INNER JOIN windows window_row
+        ON fill_row.filled_at_utc >= window_row.window_start_utc
+        AND fill_row.filled_at_utc <= window_row.window_end_utc
+    GROUP BY paper_order.strategy_id, window_row.window_label
+),
+run_window_rows AS (
+    SELECT
+        run.strategy_id,
+        run.status,
+        run.stake_usd,
+        run.realized_pnl_usd,
+        run.entered_at_utc,
+        run.entry_due_at_utc,
+        run.settled_at_utc,
+        run.updated_at_utc,
+        run.skip_reason,
+        window_row.window_label,
+        window_row.window_start_utc,
+        window_row.window_end_utc
+    FROM strategy_market_paper_runs run
+    INNER JOIN selected_strategies strategy ON strategy.id = run.strategy_id
+    INNER JOIN windows window_row
+        ON (
+            run.entered_at_utc >= window_row.window_start_utc
+            AND run.entered_at_utc <= window_row.window_end_utc
+        )
+        OR (
+            run.updated_at_utc >= window_row.window_start_utc
+            AND run.updated_at_utc <= window_row.window_end_utc
+        )
+        OR (
+            run.settled_at_utc >= window_row.window_start_utc
+            AND run.settled_at_utc <= window_row.window_end_utc
+        )
+),
+run_agg AS (
+    SELECT
+        run.strategy_id,
+        run.window_label,
+        (count(*) FILTER (WHERE run.entered_at_utc >= run.window_start_utc AND run.entered_at_utc <= run.window_end_utc))::integer AS entered_runs_count,
+        (count(*) FILTER (WHERE run.status = 'Skipped' AND run.updated_at_utc >= run.window_start_utc AND run.updated_at_utc <= run.window_end_utc))::integer AS skipped_runs_count,
+        (count(*) FILTER (WHERE run.status = 'Settled' AND run.settled_at_utc >= run.window_start_utc AND run.settled_at_utc <= run.window_end_utc))::integer AS settled_runs_count,
+        (count(*) FILTER (WHERE run.status = 'Settled' AND run.settled_at_utc >= run.window_start_utc AND run.settled_at_utc <= run.window_end_utc AND COALESCE(run.realized_pnl_usd, 0) > 0))::integer AS won_runs_count,
+        (count(*) FILTER (WHERE run.status = 'Settled' AND run.settled_at_utc >= run.window_start_utc AND run.settled_at_utc <= run.window_end_utc AND COALESCE(run.realized_pnl_usd, 0) < 0))::integer AS lost_runs_count,
+        COALESCE(sum(run.stake_usd) FILTER (WHERE run.status = 'Settled' AND run.settled_at_utc >= run.window_start_utc AND run.settled_at_utc <= run.window_end_utc), 0) AS settled_stake_usd,
+        COALESCE(sum(COALESCE(run.realized_pnl_usd, 0)) FILTER (WHERE run.status = 'Settled' AND run.settled_at_utc >= run.window_start_utc AND run.settled_at_utc <= run.window_end_utc), 0) AS realized_pnl_usd,
+        COALESCE(avg(GREATEST(0, EXTRACT(EPOCH FROM (run.entered_at_utc - run.entry_due_at_utc)))) FILTER (WHERE run.entered_at_utc >= run.window_start_utc AND run.entered_at_utc <= run.window_end_utc), 0)::numeric AS avg_entry_delay_seconds,
+        COALESCE(max(GREATEST(0, EXTRACT(EPOCH FROM (run.entered_at_utc - run.entry_due_at_utc)))) FILTER (WHERE run.entered_at_utc >= run.window_start_utc AND run.entered_at_utc <= run.window_end_utc), 0)::numeric AS max_entry_delay_seconds,
+        max(run.updated_at_utc) FILTER (WHERE run.updated_at_utc >= run.window_start_utc AND run.updated_at_utc <= run.window_end_utc) AS last_run_utc
+    FROM run_window_rows run
+    GROUP BY run.strategy_id, run.window_label
+),
+top_skip_ranked AS (
+    SELECT
+        run.strategy_id,
+        run.window_label,
+        concat(run.skip_reason, ':', count(*)) AS top_skip_reason,
+        row_number() OVER (
+            PARTITION BY run.strategy_id, run.window_label
+            ORDER BY count(*) DESC, run.skip_reason
+        ) AS skip_rank
+    FROM run_window_rows run
+    WHERE run.status = 'Skipped'
+      AND run.updated_at_utc >= run.window_start_utc
+      AND run.updated_at_utc <= run.window_end_utc
+      AND run.skip_reason IS NOT NULL
+      AND run.skip_reason <> ''
+    GROUP BY run.strategy_id, run.window_label, run.skip_reason
+),
+top_skip AS (
+    SELECT strategy_id, window_label, top_skip_reason
+    FROM top_skip_ranked
+    WHERE skip_rank = 1
 )
 SELECT
     sw.strategy_id,
@@ -1903,59 +2005,18 @@ SELECT
     order_agg.last_order_utc,
     run_agg.last_run_utc
 FROM strategy_windows sw
-LEFT JOIN LATERAL (
-    SELECT
-        count(*)::integer AS orders_count,
-        (count(*) FILTER (WHERE status IN ('Filled', 'PartiallyFilled', 'PartiallyFilledExpired')))::integer AS filled_orders_count,
-        (count(*) FILTER (WHERE status IN ('Expired', 'PartiallyFilledExpired')))::integer AS expired_orders_count,
-        (count(*) FILTER (WHERE status IN ('Pending', 'PartiallyFilled')))::integer AS open_orders_count,
-        max(created_at_utc) AS last_order_utc
-    FROM paper_orders paper_order
-    WHERE paper_order.strategy_id = sw.strategy_id
-      AND paper_order.created_at_utc >= sw.window_start_utc
-      AND paper_order.created_at_utc <= sw.window_end_utc
-) order_agg ON true
-LEFT JOIN LATERAL (
-    SELECT
-        COALESCE(sum(fill_row.price * fill_row.size_shares), 0) AS filled_cost_usd,
-        CASE
-            WHEN COALESCE(sum(fill_row.size_shares), 0) = 0 THEN 0
-            ELSE COALESCE(sum(fill_row.price * fill_row.size_shares), 0) / sum(fill_row.size_shares)
-        END AS avg_fill_price
-    FROM paper_fills fill_row
-    INNER JOIN paper_orders paper_order ON paper_order.id = fill_row.paper_order_id
-    WHERE paper_order.strategy_id = sw.strategy_id
-      AND fill_row.filled_at_utc >= sw.window_start_utc
-      AND fill_row.filled_at_utc <= sw.window_end_utc
-) fill_agg ON true
-LEFT JOIN LATERAL (
-    SELECT
-        (count(*) FILTER (WHERE entered_at_utc >= sw.window_start_utc AND entered_at_utc <= sw.window_end_utc))::integer AS entered_runs_count,
-        (count(*) FILTER (WHERE status = 'Skipped' AND updated_at_utc >= sw.window_start_utc AND updated_at_utc <= sw.window_end_utc))::integer AS skipped_runs_count,
-        (count(*) FILTER (WHERE status = 'Settled' AND settled_at_utc >= sw.window_start_utc AND settled_at_utc <= sw.window_end_utc))::integer AS settled_runs_count,
-        (count(*) FILTER (WHERE status = 'Settled' AND settled_at_utc >= sw.window_start_utc AND settled_at_utc <= sw.window_end_utc AND COALESCE(realized_pnl_usd, 0) > 0))::integer AS won_runs_count,
-        (count(*) FILTER (WHERE status = 'Settled' AND settled_at_utc >= sw.window_start_utc AND settled_at_utc <= sw.window_end_utc AND COALESCE(realized_pnl_usd, 0) < 0))::integer AS lost_runs_count,
-        COALESCE(sum(stake_usd) FILTER (WHERE status = 'Settled' AND settled_at_utc >= sw.window_start_utc AND settled_at_utc <= sw.window_end_utc), 0) AS settled_stake_usd,
-        COALESCE(sum(COALESCE(realized_pnl_usd, 0)) FILTER (WHERE status = 'Settled' AND settled_at_utc >= sw.window_start_utc AND settled_at_utc <= sw.window_end_utc), 0) AS realized_pnl_usd,
-        COALESCE(avg(GREATEST(0, EXTRACT(EPOCH FROM (entered_at_utc - entry_due_at_utc)))) FILTER (WHERE entered_at_utc >= sw.window_start_utc AND entered_at_utc <= sw.window_end_utc), 0)::numeric AS avg_entry_delay_seconds,
-        COALESCE(max(GREATEST(0, EXTRACT(EPOCH FROM (entered_at_utc - entry_due_at_utc)))) FILTER (WHERE entered_at_utc >= sw.window_start_utc AND entered_at_utc <= sw.window_end_utc), 0)::numeric AS max_entry_delay_seconds,
-        max(updated_at_utc) FILTER (WHERE updated_at_utc >= sw.window_start_utc AND updated_at_utc <= sw.window_end_utc) AS last_run_utc
-    FROM strategy_market_paper_runs run
-    WHERE run.strategy_id = sw.strategy_id
-) run_agg ON true
-LEFT JOIN LATERAL (
-    SELECT concat(skip_reason, ':', count(*)) AS top_skip_reason
-    FROM strategy_market_paper_runs skipped_run
-    WHERE skipped_run.strategy_id = sw.strategy_id
-      AND skipped_run.status = 'Skipped'
-      AND skipped_run.updated_at_utc >= sw.window_start_utc
-      AND skipped_run.updated_at_utc <= sw.window_end_utc
-      AND skipped_run.skip_reason IS NOT NULL
-      AND skipped_run.skip_reason <> ''
-    GROUP BY skip_reason
-    ORDER BY count(*) DESC, skip_reason
-    LIMIT 1
-) top_skip ON true
+LEFT JOIN order_agg
+    ON order_agg.strategy_id = sw.strategy_id
+    AND order_agg.window_label = sw.window_label
+LEFT JOIN fill_agg
+    ON fill_agg.strategy_id = sw.strategy_id
+    AND fill_agg.window_label = sw.window_label
+LEFT JOIN run_agg
+    ON run_agg.strategy_id = sw.strategy_id
+    AND run_agg.window_label = sw.window_label
+LEFT JOIN top_skip
+    ON top_skip.strategy_id = sw.strategy_id
+    AND top_skip.window_label = sw.window_label
 ORDER BY
     CASE WHEN sw.code = 'follow_leader' THEN 0 ELSE 1 END,
     sw.code,

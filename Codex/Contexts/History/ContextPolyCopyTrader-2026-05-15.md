@@ -18,3 +18,10 @@ Request:
 
 Result:
 Checked new-server PostgreSQL availability at `192.168.0.101:5432`. TCP connectivity succeeded, and a temporary C#/.NET/Npgsql read-only diagnostic using `POLYCOPYTRADER_POSTGRES_CONNECTION` with host overridden to `192.168.0.101` opened database `polycopytrader` in about `302 ms`. The database returned `74` public tables, `service_heartbeats` exists, and `PolyCopyTrader.Service` had a fresh `Running`/`Live` heartbeat from `2026-05-15T05:33:20Z` with age about `40.4s` and no last-error flag. The temporary diagnostic project was removed.
+
+## 2026-05-15T05:44:30.1955417Z
+Request:
+Посмотри картинку. Dashboard не может достучаться после последних изменений.
+
+Result:
+Extracted and inspected the screenshot from the Windows clipboard. The failure was not a service availability or PostgreSQL connection failure; Dashboard timed out while reading `GetStrategyRecentPerformanceAsync`. Rewrote that repository query to aggregate recent strategy metrics in batch CTEs instead of per-strategy/window lateral scans, added supporting schema indexes and storage schema assertions, and verified the optimized method against `192.168.0.101` returned `3534` rows in about `4500 ms`. Build and full tests passed; temporary diagnostic/build artifacts were removed.

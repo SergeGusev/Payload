@@ -1,3 +1,16 @@
+## Active Update 2026-05-15 Dashboard Recent Strategy Timeout Fix
+Goal: Fix Dashboard refresh timeout shown in the screenshot after switching service availability to database heartbeat.
+Status: Completed
+Done:
+- Extracted and inspected the clipboard screenshot; the failure was `NpgsqlException`/`TimeoutException` while reading `GetStrategyRecentPerformanceAsync`, not a database connectivity or service-heartbeat failure.
+- Rewrote `PostgresAppRepository.GetStrategyRecentPerformanceAsync` so recent strategy metrics are aggregated by selected strategies and `1h`/`6h`/`24h` windows in batch CTEs instead of running lateral aggregates per strategy-window row.
+- Added PostgreSQL schema indexes for recent fill/run time lookups: `ix_paper_fills_filled_time_order`, `ix_strategy_market_paper_runs_strategy_entered`, `ix_strategy_market_paper_runs_strategy_updated`, and `ix_strategy_market_paper_runs_strategy_settled`.
+- Updated `StorageTests` to assert the new indexes are present.
+- Verified the optimized method directly against the remote database at `192.168.0.101`: `GetStrategyRecentPerformanceAsync(10000)` returned `3534` rows in about `4500 ms`.
+Next: Restart/rebuild Dashboard so it uses the optimized query; deploy/restart the service later to let schema initialization create the new indexes on the server.
+Notes: Verification passed: `dotnet build src\PolyCopyTrader.Storage\PolyCopyTrader.Storage.csproj -c Release --no-restore`; `dotnet build src\PolyCopyTrader.Dashboard\PolyCopyTrader.Dashboard.csproj -c Release -p:BaseOutputPath=D:\My\Business\PolyMarket\artifacts\dashboard-recent-performance-build\`; temporary build output removed; `dotnet test tests\PolyCopyTrader.Tests\PolyCopyTrader.Tests.csproj -c Release --no-restore` passed 472/472. Existing Storage nullable warnings remain.
+Blockers: None.
+
 ## Active Update 2026-05-15 New Server Database Availability Check
 Goal: Verify PostgreSQL availability on the new server.
 Status: Completed

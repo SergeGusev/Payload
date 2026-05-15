@@ -167,6 +167,10 @@ public sealed class StorageTests
         Assert.Contains("ix_strategy_market_paper_runs_entry_due", PostgresSchema.SchemaSql, StringComparison.Ordinal);
         Assert.Contains("ix_strategy_market_paper_runs_settlement_due", PostgresSchema.SchemaSql, StringComparison.Ordinal);
         Assert.Contains("ix_strategy_market_paper_runs_status_market_end", PostgresSchema.SchemaSql, StringComparison.Ordinal);
+        Assert.Contains("ix_strategy_market_paper_runs_strategy_entered", PostgresSchema.SchemaSql, StringComparison.Ordinal);
+        Assert.Contains("ix_strategy_market_paper_runs_strategy_updated", PostgresSchema.SchemaSql, StringComparison.Ordinal);
+        Assert.Contains("ix_strategy_market_paper_runs_strategy_settled", PostgresSchema.SchemaSql, StringComparison.Ordinal);
+        Assert.Contains("ix_paper_fills_filled_time_order", PostgresSchema.SchemaSql, StringComparison.Ordinal);
         Assert.Contains("ux_paper_positions_wallet_asset", PostgresSchema.SchemaSql, StringComparison.Ordinal);
         Assert.Contains("ix_paper_positions_wallet_updated", PostgresSchema.SchemaSql, StringComparison.Ordinal);
         Assert.Contains("polymarket_positions_total_pnl_usd numeric(28,8) NULL", PostgresSchema.SchemaSql, StringComparison.Ordinal);
