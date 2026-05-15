@@ -103,3 +103,10 @@ Request:
 
 Result:
 Updated `src/PolyCopyTrader.Dashboard/MainWindow.xaml` so `Skipped` is immediately to the right of `Settles` in the shared recent strategy grid used by the `24 hours`, `6 hours`, and `1 hour` tabs, and immediately to the right of `Settled` in the `All` strategies grid. Verification passed: Dashboard Release build with temporary `BaseOutputPath` passed with existing Storage nullable warnings, temporary output was removed, full tests passed 474/474, and `git diff --check` passed with CRLF warnings only.
+
+## 2026-05-15T09:46:42.2192436+00:00
+Request:
+Выложил час назал сервис, проверь по базе, нормально ли теперь ситуация со Skip
+
+Result:
+Checked remote PostgreSQL `192.168.0.101` read-only after the service restart at `2026-05-15T08:20:10Z`. The exact `BTC Up or Down 1h PreOpen Full Down 49` recent rows looked normal because both the latest pending row and previous skipped row had `0` initial executable ask shares at the `0.49` limit. The broader Skip situation is not normal yet: since restart, `paper_gtd_limit` BUY orders had `7766` `gtd_limit_not_filled` skipped runs, including `970` initial-executable orders that expired/skipped without fills. Most of that is non-PreOpen 5m variants, but PreOpen still had `26` initial-executable problem skips. No Paper worker/processor API errors were present; the likely next issue is open-order processing throughput/prioritization because open orders are read newest-first while fill simulation is capped at `100` per cycle.

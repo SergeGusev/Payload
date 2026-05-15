@@ -1,3 +1,17 @@
+## Active Update 2026-05-15 Post-Deploy Skip Database Check
+Goal: Check remote PostgreSQL after the service deployment to see whether the `Skipped/gtd_limit_not_filled` situation normalized.
+Status: Completed
+Done:
+- Ran a temporary read-only C#/.NET/Npgsql diagnostic against remote PostgreSQL `192.168.0.101`; removed the temporary diagnostic project afterward.
+- Confirmed `PolyCopyTrader.Service` was restarted at `2026-05-15T08:20:10Z`, was still `Running`/`Live`, had a fresh heartbeat, and reported no heartbeat error.
+- Since restart, `paper_gtd_limit` BUY orders still show high Skip pressure: `9136` matching orders, `7766` `gtd_limit_not_filled` skipped runs, and `970` orders with initial executable ask depth still ending expired/skipped without fills.
+- Confirmed the exact `BTC Up or Down 1h PreOpen Full Down 49` recent rows looked normal: the latest pending row had initial ask `0.50` with `0` initial executable ask shares at the `0.49` limit; the previous skipped row also had `0` initial executable ask shares.
+- Split the issue by strategy family: PreOpen had `6000` post-restart orders, `33` initial-executable orders, `1` conservative fill, and `26` initial-executable problem skips; non-PreOpen `paper_gtd_limit` orders had `3137` orders, `1076` initial-executable orders, and `944` initial-executable problem skips.
+- Found an operational backlog: `1203` open `paper_gtd_limit` orders remained pending at the check time, with no `PaperTradingWorker`/`PaperTradingProcessor` API errors in the last hour.
+Next: Fix/audit Paper open-order processing throughput and prioritization; current `GetOpenPaperOrdersAsync` orders open orders by newest first while `PaperTradingProcessor` simulates fills for only `OpenOrderFillSimulationBatchSize=100` per cycle, which can starve older GTD orders before settlement marks them skipped.
+Notes: Verification was read-only database diagnostics plus code inspection of open-order ordering/batch behavior. No production source code or database data changed.
+Blockers: None.
+
 ## Active Update 2026-05-15 Dashboard Strategies Skipped Column Order
 Goal: Put `Skipped` immediately to the right of `Settles` on every Dashboard Strategies tab.
 Status: Completed
