@@ -1,3 +1,16 @@
+## Active Update 2026-05-15 Production Server Alive Check
+Goal: Check whether the production server/service is currently reachable.
+Status: Blocked
+Done:
+- Confirmed repository initialization succeeded; `git pull --ff-only` reported already up to date and latest commit is `574f23b Record production connectivity failure`.
+- Checked the known production address `192.168.0.101`; ping failed, HTTP `http://192.168.0.101:5118/status` timed out, and TCP checks for ports `5118` and `5432` did not connect.
+- Checked local network configuration; the current machine is now on Wi-Fi `192.168.100.41` with gateway `192.168.100.1`, not the previous `192.168.0.*` subnet.
+- Checked ARP cache; there is no active entry for `192.168.0.101`.
+- Checked likely moved address `192.168.100.101`; ping failed, HTTP `http://192.168.100.101:5118/status` timed out, and TCP checks for ports `5118` and `5432` did not connect.
+Next: Verify the server is powered on, connected to the same network, and whether its LAN address changed from `192.168.0.101`; after network access is restored, rerun heartbeat/status checks.
+Notes: This check could not determine process-level service health because neither the known host nor the likely same-host address on the current subnet was reachable. No database writes, code changes, order actions, or cancel actions were performed.
+Blockers: Production host is unreachable from the current machine/network.
+
 ## Active Update 2026-05-15 Production Server Connectivity Check
 Goal: Check whether the production server/service is currently reachable.
 Status: Blocked

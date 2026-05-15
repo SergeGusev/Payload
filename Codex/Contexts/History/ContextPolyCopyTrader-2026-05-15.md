@@ -201,3 +201,10 @@ Request:
 
 Result:
 Could not reach the production host from the current machine. The remote PostgreSQL heartbeat query to `192.168.0.101:5432` failed with a TCP connection timeout before SQL could run. `Test-Connection` ping to `192.168.0.101` failed, `Test-NetConnection` to ports `5432` and `5118` failed, and the local ARP cache had no active `192.168.0.101` entry. This indicates the host or network path is down/unavailable from `192.168.0.100`; process-level service health could not be determined until the host/network is reachable again. No database writes or order actions were performed.
+
+## 2026-05-15T15:27:49.2812526Z
+Request:
+Сервер жив?
+
+Result:
+Could not reach the production host from the current machine. `git pull --ff-only` reported already up to date. The known production address `192.168.0.101` failed ping, HTTP `/status` on port `5118` timed out, and TCP checks for ports `5118` and `5432` did not connect. The current machine is on Wi-Fi `192.168.100.41` with gateway `192.168.100.1`, and ARP has no active `192.168.0.101` entry. The likely moved address `192.168.100.101` also failed ping, HTTP `/status`, and TCP port checks. Process-level service health could not be determined because the host/network path is unreachable. No database writes or order actions were performed.
