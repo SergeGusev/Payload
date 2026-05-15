@@ -46,11 +46,10 @@ public sealed class PaperTradingProcessor(
                 continue;
             }
 
-            var expiredOrder = paperTradingEngine.ExpireIfNeeded(order, now);
-            if (expiredOrder.Status != order.Status)
+            var canFillFromInitialGtdSnapshot = IsInitialExecutableGtdBuy(order);
+            if (!canFillFromInitialGtdSnapshot &&
+                await ExpireOrderIfNeededAsync(order, now, cancellationToken))
             {
-                await repository.UpdatePaperOrderAsync(expiredOrder, cancellationToken);
-                exposureCache.ApplyPaperOrder(expiredOrder);
                 ordersExpired++;
                 continue;
             }
@@ -64,39 +63,70 @@ public sealed class PaperTradingProcessor(
 
             try
             {
-                var orderBook = await GetOrderBookAsync(order.AssetId, cancellationToken);
                 var existingFills = await repository.GetPaperFillsForOrderAsync(order.Id, cancellationToken);
                 var previouslyFilledShares = GetFilledShares(existingFills, order.SizeShares);
                 var orderForFill = order;
-                PaperFill? fill;
-                var conservativeGtdEvaluation = conservativeGtdFillEstimator.Evaluate(
-                    order,
-                    orderBook,
-                    now,
-                    previouslyFilledShares);
-                if (conservativeGtdEvaluation.Handled)
-                {
-                    if (conservativeGtdEvaluation.OrderChanged && conservativeGtdEvaluation.Fill is null)
-                    {
-                        await repository.UpdatePaperOrderAsync(conservativeGtdEvaluation.Order, cancellationToken);
-                        exposureCache.ApplyPaperOrder(conservativeGtdEvaluation.Order);
-                    }
+                PaperFill? fill = null;
+                OrderBookSnapshot? orderBook = null;
 
-                    if (conservativeGtdEvaluation.Fill is null)
-                    {
-                        continue;
-                    }
-
-                    orderForFill = conservativeGtdEvaluation.Order;
-                    fill = conservativeGtdEvaluation.Fill;
-                }
-                else
+                if (canFillFromInitialGtdSnapshot)
                 {
-                    fill = paperTradingEngine.TrySimulateFill(order, orderBook, null, now, previouslyFilledShares);
+                    var initialSnapshotEvaluation = conservativeGtdFillEstimator.Evaluate(
+                        order,
+                        null,
+                        now,
+                        previouslyFilledShares);
+                    if (initialSnapshotEvaluation.Handled && initialSnapshotEvaluation.Fill is not null)
+                    {
+                        orderForFill = initialSnapshotEvaluation.Order;
+                        fill = initialSnapshotEvaluation.Fill;
+                    }
                 }
 
                 if (fill is null)
                 {
+                    orderBook = await GetOrderBookAsync(order.AssetId, cancellationToken);
+                    var conservativeGtdEvaluation = conservativeGtdFillEstimator.Evaluate(
+                        order,
+                        orderBook,
+                        now,
+                        previouslyFilledShares);
+                    if (conservativeGtdEvaluation.Handled)
+                    {
+                        if (conservativeGtdEvaluation.OrderChanged && conservativeGtdEvaluation.Fill is null)
+                        {
+                            await repository.UpdatePaperOrderAsync(conservativeGtdEvaluation.Order, cancellationToken);
+                            exposureCache.ApplyPaperOrder(conservativeGtdEvaluation.Order);
+                        }
+
+                        if (conservativeGtdEvaluation.Fill is null)
+                        {
+                            if (canFillFromInitialGtdSnapshot &&
+                                await ExpireOrderIfNeededAsync(conservativeGtdEvaluation.Order, now, cancellationToken))
+                            {
+                                ordersExpired++;
+                            }
+
+                            continue;
+                        }
+
+                        orderForFill = conservativeGtdEvaluation.Order;
+                        fill = conservativeGtdEvaluation.Fill;
+                    }
+                    else
+                    {
+                        fill = paperTradingEngine.TrySimulateFill(order, orderBook, null, now, previouslyFilledShares);
+                    }
+                }
+
+                if (fill is null)
+                {
+                    if (canFillFromInitialGtdSnapshot &&
+                        await ExpireOrderIfNeededAsync(order, now, cancellationToken))
+                    {
+                        ordersExpired++;
+                    }
+
                     continue;
                 }
 
@@ -106,7 +136,7 @@ public sealed class PaperTradingProcessor(
                     continue;
                 }
 
-                var currentBid = orderBook?.BestBid ?? currentPosition?.AveragePrice ?? 0m;
+                var currentBid = orderBook?.BestBid ?? currentPosition?.AveragePrice ?? fill.Price;
                 if (orderForFill.Side == TradeSide.Sell && currentPosition is not null)
                 {
                     fill = fill with
@@ -165,6 +195,22 @@ public sealed class PaperTradingProcessor(
 
         positionsUpdated += await UpdatePositionMarksAsync(positions, cancellationToken);
         return new PaperTradingProcessingResult(openOrders.Count, ordersFilled, ordersExpired, positionsUpdated);
+    }
+
+    private async Task<bool> ExpireOrderIfNeededAsync(
+        PaperOrder order,
+        DateTimeOffset nowUtc,
+        CancellationToken cancellationToken)
+    {
+        var expiredOrder = paperTradingEngine.ExpireIfNeeded(order, nowUtc);
+        if (expiredOrder.Status == order.Status)
+        {
+            return false;
+        }
+
+        await repository.UpdatePaperOrderAsync(expiredOrder, cancellationToken);
+        exposureCache.ApplyPaperOrder(expiredOrder);
+        return true;
     }
 
     private static IReadOnlyList<PaperOrder> PrioritizeOpenOrders(

@@ -284,6 +284,62 @@ public sealed class PipelineIntegrationTests
     }
 
     [Fact]
+    public async Task PaperTradingProcessor_FillsInitialExecutableGtdOrderBeforeExpiringIt()
+    {
+        var repository = new TestAppRepository();
+        var now = DateTimeOffset.UtcNow;
+        var variant = StrategyIds.BtcUpDown5mVariants.Single(item =>
+            item.Code == "btc_up_down_1h_preopen_full_down_49");
+        var order = new PaperOrder(
+            Guid.NewGuid(),
+            Guid.NewGuid(),
+            variant.CopiedTraderWallet,
+            PaperOrderStatus.Pending,
+            TradeSide.Buy,
+            "asset-down",
+            "condition-1",
+            "Down",
+            0.49m,
+            10m,
+            4.90m,
+            now.AddMinutes(-3),
+            now.AddSeconds(-1),
+            StrategyId: variant.Id,
+            RawDecisionJson: JsonSerializer.Serialize(new Dictionary<string, object?>
+            {
+                ["pricing_mode"] = "paper_gtd_limit",
+                ["order_type"] = "GTD",
+                ["order_execution_mode"] = "GTD",
+                ["paper_gtd_initial_snapshot_at_utc"] = now.AddMinutes(-3).ToString("O"),
+                ["paper_gtd_initial_best_bid"] = 0.48m,
+                ["paper_gtd_initial_best_ask"] = 0.47m,
+                ["paper_gtd_initial_last_trade_price"] = 0.44m,
+                ["paper_gtd_initial_queue_ahead_shares"] = 0m,
+                ["paper_gtd_initial_executable_ask_shares"] = 6m,
+                ["paper_gtd_initial_executable_ask_vwap"] = 0.48m
+            }));
+        await repository.AddPaperOrderAsync(order);
+
+        var paperProcessor = CreatePaperProcessor(
+            repository,
+            OrderBook(
+                "asset-down",
+                [new OrderBookLevel(0.48m, 100m)],
+                [new OrderBookLevel(0.60m, 100m)]));
+
+        var paperResult = await paperProcessor.ProcessOpenOrdersAsync();
+
+        Assert.Equal(1, paperResult.OrdersFilled);
+        Assert.Equal(0, paperResult.OrdersExpired);
+        var fill = Assert.Single(repository.PaperFills);
+        Assert.Equal(order.Id, fill.PaperOrderId);
+        Assert.Contains("ConservativeGtdImmediateFill", fill.Evidence);
+        var updatedOrder = Assert.Single(repository.PaperOrders);
+        Assert.Equal(PaperOrderStatus.PartiallyFilled, updatedOrder.Status);
+        Assert.Contains("filled_immediate_marketable", updatedOrder.RawDecisionJson);
+    }
+
+    [Fact]
     public async Task PaperTradingProcessor_PaperGtdLimitUsesInitialExecutableAskForImmediateFill()
     {
         var repository = new TestAppRepository();

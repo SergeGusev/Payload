@@ -379,7 +379,7 @@ It is diagnostic only and does not change any setting or submit live orders.
 - `InitialBankrollUsd`: paper bankroll used by bankroll-sized signal orders and risk displays.
 - `DefaultOrderTtlSeconds`: paper order lifetime before expiration.
 - `OpenOrderProcessingIntervalSeconds`: interval for the dedicated Paper open-order worker that expires pending GTD orders, simulates fills, and updates paper position marks; default `5`.
-- `OpenOrderFillSimulationBatchSize`: maximum non-expired open paper orders that perform order-book fill simulation in one worker cycle; expired orders are still closed immediately; default `100`.
+- `OpenOrderFillSimulationBatchSize`: maximum non-expired open paper orders that perform order-book fill simulation in one worker cycle; expired orders are still closed immediately, except BTC opening-limit GTD orders with initial executable ask evidence get a conservative immediate-fill check before expiration; default `100`.
 - `UseMinimumMarketOrderSize`: when true, accepted paper entry signals use the current order book `min_order_size` as the proposed order size instead of bankroll-sized test orders.
 - `SettlementEnabled`: when true while Paper runtime is enabled, the accounting worker checks open paper positions against resolved Gamma markets and writes final settlement PnL.
 - `SettlementPollIntervalSeconds`: interval between resolved-market settlement scans; default `60`.

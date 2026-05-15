@@ -1,3 +1,17 @@
+## Active Update 2026-05-15 Src Paper GTD Expiry Before Fill Fix
+Goal: Correct the Skip follow-up after confirming the running service is built from `src`, not `src4.8`.
+Status: Completed
+Done:
+- Rechecked `src` implementation and remote PostgreSQL `192.168.0.101`; after service start `2026-05-15T10:05:30Z`, the database still had fresh initial-executable `paper_gtd_limit` skips (`739` initial-executable orders, `505` initial-executable expired/skipped rows, and only `36` rows with a fill-model status at `2026-05-15T11:03:33Z`).
+- Identified the actual `src` bug: `PaperTradingProcessor` prioritized initial-executable GTD orders, but still called `ExpireIfNeeded` before the conservative fill model, so orders reached after their local deadline were marked `gtd_limit_not_filled` without evaluating the initial submit snapshot.
+- Updated `src/PolyCopyTrader.Service/PaperTrading/PaperTradingProcessor.cs` so initial-executable BUY GTD opening-limit orders get the conservative immediate-fill check before they are allowed to expire.
+- Kept ordinary non-initial-executable expired orders closing immediately, and kept the Paper fill simulation batch cap behavior.
+- Added a regression integration test for an already-expired initial-executable `paper_gtd_limit` order filling before expiration.
+- Updated README and configuration reference for the expiry-before-fill exception.
+Next: Deploy/restart the `src` service build and recheck fresh DB Skip metrics after new cycles.
+Notes: Verification passed: targeted `PipelineIntegrationTests` passed 7/7; full `dotnet test tests\PolyCopyTrader.Tests\PolyCopyTrader.Tests.csproj -c Release --no-restore` passed 476/476; `dotnet build src\PolyCopyTrader.Service\PolyCopyTrader.Service.csproj -c Release --no-restore` passed with 0 warnings/errors; `git diff --check` passed with CRLF warnings only.
+Blockers: Server deployment/restart from `src` is required before runtime metrics can improve.
+
 ## Active Update 2026-05-15 Net48 Paper GTD Priority Parity
 Goal: Monitor the redeployed service after the Skip fix and close the remaining Net48 deployment gap.
 Status: Completed
