@@ -96,6 +96,7 @@ public sealed class ConservativePaperGtdFillEstimator(BtcUpDown5mStrategyOptions
     private static bool IsOpeningLimit(JsonObject root)
     {
         return string.Equals(GetString(root, "pricing_mode"), "opening_limit", StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(GetString(root, "pricing_mode"), "paper_gtd_limit", StringComparison.OrdinalIgnoreCase) ||
             string.Equals(GetString(root, "converted_to_gtd_limit_order"), "True", StringComparison.OrdinalIgnoreCase);
     }
 

@@ -1,3 +1,16 @@
+## Active Update 2026-05-15 Net48 Paper GTD Priority Parity
+Goal: Monitor the redeployed service after the Skip fix and close the remaining Net48 deployment gap.
+Status: Completed
+Done:
+- Monitored remote PostgreSQL `192.168.0.101` after the service start at `2026-05-15T10:05:30Z`; fresh post-start `paper_gtd_limit` orders still produced `initial_exec_problem_skips` with blank conservative fill-model status.
+- Found the running deployment likely uses the `src4.8` service copy, while the previous fixes were only in `src`.
+- Synced Net48 `ConservativePaperGtdFillEstimator` to recognize `pricing_mode = "paper_gtd_limit"`.
+- Synced Net48 `PaperTradingProcessor` open-order priority so expired orders are handled first, then initial-executable BUY GTD opening-limit orders, then earliest-expiring remaining orders before the batch cap.
+- Removed the temporary read-only monitoring project.
+Next: Redeploy/restart the Net48 service and recheck remote DB Skip metrics after fresh cycles.
+Notes: Verification passed: `dotnet build src4.8\PolyCopyTrader.Net48.Service\PolyCopyTrader.Net48.Service.csproj -c Release --no-restore` passed with existing nullable warnings; targeted `PipelineIntegrationTests` passed 6/6; full `dotnet test tests\PolyCopyTrader.Tests\PolyCopyTrader.Tests.csproj -c Release --no-restore` passed 475/475; `git diff --check` passed with CRLF warnings only. No database writes were performed.
+Blockers: Server redeploy/restart is required for the Net48 fix to affect the running service.
+
 ## Active Update 2026-05-15 Paper Open Order Priority Fix
 Goal: Stop `paper_gtd_limit` orders with initial executable liquidity from being starved by newest-first open-order processing.
 Status: Completed

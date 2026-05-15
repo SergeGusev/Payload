@@ -117,3 +117,10 @@ Request:
 
 Result:
 Implemented Paper open-order prioritization in `PaperTradingProcessor`: before applying the fill-simulation batch cap, open orders are ordered as expired first, then BUY GTD opening-limit orders with `paper_gtd_initial_executable_ask_shares > 0`, then earliest-expiring remaining orders. Added raw-decision JSON parsing for this priority, an integration test that proves an initial-executable GTD order is processed even with batch size `1`, and README documentation. Verification passed: targeted pipeline tests 6/6, full test project 475/475, Service Release build with 0 warnings/errors, and `git diff --check` with CRLF warnings only. Deployment/restart is still required on the remote service.
+
+## 2026-05-15T10:22:10.2141634+00:00
+Request:
+Perevylozhil. Sledi.
+
+Result:
+Monitored remote PostgreSQL `192.168.0.101` read-only after the service start at `2026-05-15T10:05:30Z`. Fresh post-start `paper_gtd_limit` orders still showed initial-executable problem skips and blank conservative fill-model status, so the redeploy had not normalized Skip behavior. Found the likely cause: the running service uses the Net48 project under `src4.8`, while the previous conservative fill recognition and open-order priority fixes were only in `src`. Synced the Net48 `ConservativePaperGtdFillEstimator` to recognize `pricing_mode = "paper_gtd_limit"` and synced Net48 `PaperTradingProcessor` ordering so expired orders and initial-executable BUY GTD opening-limit orders are processed before the batch cap. Verification passed: Net48 Service Release build passed with existing nullable warnings, targeted pipeline tests passed 6/6, full tests passed 475/475, and `git diff --check` passed with CRLF warnings only. A new Net48 service redeploy/restart is required before DB metrics should improve.
