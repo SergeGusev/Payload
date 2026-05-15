@@ -1,3 +1,17 @@
+## Active Update 2026-05-15 Binance BPS New Orders Recheck
+Goal: Recheck whether the newly added Binance bps strategies are now running after the latest deployment.
+Status: Completed
+Done:
+- Queried remote PostgreSQL `192.168.0.101` read-only through `out/dbprobe` without printing connection strings.
+- Confirmed production now runs build `info=1.0.0+16a032c64f151ff052264ed18273a52cd923fdd0; assembly=1.0.0.0; mvid=42b8ad4e8d3e`, started `2026-05-15T17:16:35Z`, with fresh heartbeat at `2026-05-15T17:21:36Z`.
+- Confirmed remote DB still has all 50 Binance bps rows, including 38 newly added rows, all enabled, `live_stakes = false`, and all Binance bps paper/live stake amounts at `1.00000000`.
+- Confirmed since the current service start there are `240` Binance bps paper runs across all 50 bps codes, including `228` runs across all 38 newly added codes.
+- Confirmed since the current service start there are `14` Binance bps paper orders, including `4` orders across 4 newly added codes: `btc_up_down_5m_binance_bps_1_1`, `_1_2`, `_1_3`, and `_1_4`.
+- Confirmed the 4 new-code orders are currently `Expired`, while 10 old-code orders are `Pending`; there are `0` API errors and `0` live orders since the new service start.
+Next: Monitor whether later qualifying 5-minute markets produce filled/active orders for the new bps variants.
+Notes: No database writes, code changes, service restarts, order submissions, or cancel actions were performed. `dotnet run` for the first probe rebuilt the helper and emitted existing Storage nullable warnings; the second probe used the compiled helper executable.
+Blockers: None.
+
 ## Active Update 2026-05-15 Binance BPS New Order Visibility Check
 Goal: Check why bets/orders are not visible for the newly added Binance bps strategy variants.
 Status: Blocked

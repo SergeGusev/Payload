@@ -285,3 +285,10 @@ Request:
 
 Result:
 Checked remote PostgreSQL `192.168.0.101` read-only. The service is alive with a fresh heartbeat (`status=Running`, `mode=Live`, `last_heartbeat_utc=2026-05-15T17:08:48Z`, heartbeat age about `33` seconds, `last_error = null`), but production is still running old build `info=1.0.0+fa160e7265ce77332a409feb738127d699c20db7; assembly=1.0.0.0; mvid=0d1ea8174e15`, started `2026-05-15T12:41:37Z`. Remote DB has all 50 Binance bps rows, including the 38 newly added rows, all enabled, `live_stakes=false`, and all Binance bps paper/live stake amounts at `1.00000000`. Since the current service start, there are `600` Binance bps paper runs and `272` Binance bps paper orders, but `0` runs and `0` orders for the 38 newly added Binance bps codes; only the 12 old codes are being processed. Conclusion: the database is correct, but the running service binary predates the Binance bps grid commit, so the new variants cannot run until the service is redeployed/restarted from commit `432dad3` or newer. No database writes, code changes, service restarts, order submissions, or cancel actions were performed.
+
+## 2026-05-15T17:23:58Z
+Request:
+А сейчас?
+
+Result:
+Rechecked remote PostgreSQL `192.168.0.101` read-only. Production now runs build `info=1.0.0+16a032c64f151ff052264ed18273a52cd923fdd0; assembly=1.0.0.0; mvid=42b8ad4e8d3e`, started `2026-05-15T17:16:35Z`, with a fresh heartbeat at `2026-05-15T17:21:36Z`. Remote DB still has all 50 Binance bps rows, including 38 newly added rows, all enabled, `live_stakes=false`, and all Binance bps paper/live stake amounts at `1.00000000`. Since the new service start, there are `240` Binance bps paper runs across all 50 bps codes, including `228` runs across all 38 newly added codes. There are `14` Binance bps paper orders since start, including `4` orders across 4 newly added codes (`btc_up_down_5m_binance_bps_1_1`, `_1_2`, `_1_3`, `_1_4`). Those 4 new-code orders are currently `Expired`; 10 old-code orders are `Pending`. There are `0` API errors and `0` live orders since the new service start. No database writes, code changes, service restarts, order submissions, or cancel actions were performed.
