@@ -1,3 +1,18 @@
+## Active Update 2026-05-15 Production Health Check
+Goal: Check whether the production service, Live safety settings, and recent GTD behavior look normal after the latest operations.
+Status: Completed
+Done:
+- Confirmed remote `service_heartbeats` shows `PolyCopyTrader.Service` `Running`/`Live` on `info=1.0.0+fa160e7265ce77332a409feb738127d699c20db7; assembly=1.0.0.0; mvid=0d1ea8174e15`, started `2026-05-15T12:41:37Z`, with heartbeat age about `35` seconds and `last_error = null`.
+- Verified remote strategies: `1178` total, `1176` enabled, `live_stakes_enabled = 0`, `live_stake_not_1 = 0`, min/max `live_stake_amount = 1.00000000`, and no strategy with live balance below stake.
+- Verified post-start `paper_gtd_limit` BUY telemetry: `5617` total, `722` initial-executable, `704` initial-executable with fills/fill-model status, `680` immediate fills, `24` partial fills, `599` initial-executable settled runs, `0` initial-executable skipped runs, `0` initial-executable expired without fill, and `0` expired-but-still-pending initial-executable rows.
+- Confirmed remaining `gtd_limit_not_filled` rows are non-initial-executable only.
+- Checked live order DB history: no live orders in the last 24h; old May 11 `Matched` rows are already settled/balance-applied, `stale_unsettled_matched = 0`, and old `CancelFailed` rows have zero fill/cost basis.
+- Ran the read-only authenticated CLOB open-orders report; it returned HTTP 200 with `Orders summarized: 0`.
+- Saw two recent API error rows, both WebSocket close-handshake events; service heartbeat remained fresh after them.
+Next: None; continue normal monitoring.
+Notes: Verification used read-only DB probes and read-only CLOB `GET /data/orders`; no database writes, order submissions, or cancel requests were made. `dotnet run --project src\PolyCopyTrader.Service\PolyCopyTrader.Service.csproj -c Release --no-restore -- --clob-authenticated-open-orders-report` completed with existing Storage nullable warnings and reported no open orders. `git diff --check` passed before context/history updates.
+Blockers: None.
+
 ## Active Update 2026-05-15 Live Stake Amount Reset
 Goal: Set every strategy Live stake amount to `1.00` locally and on the production server.
 Status: Completed

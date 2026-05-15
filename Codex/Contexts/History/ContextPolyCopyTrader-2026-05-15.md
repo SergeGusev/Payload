@@ -187,3 +187,10 @@ Request:
 
 Result:
 Updated `strategies.live_stake_amount` to `1.00` in both local PostgreSQL and remote PostgreSQL `192.168.0.101`. Before the update, local had `1177` strategies with `1129` rows at `2.50000000`; remote had `1178` strategies with `1129` rows at `2.50000000`. The update changed `1129` rows in each database. Verification showed both databases now have `live_stake_not_1 = 0`, `min_live_stake = 1.00000000`, and `max_live_stake = 1.00000000`; both also have `live_stakes_enabled = 0`. Only `live_stake_amount` and `updated_at_utc` were changed; `paper_stake_amount`, `live_stakes`, and `live_available_balance` were not changed.
+
+## 2026-05-15T13:37:56.0131160Z
+Request:
+Проверь, всё ли сейчас нормально
+
+Result:
+Checked production health using remote PostgreSQL and a read-only authenticated CLOB open-orders report. `service_heartbeats` shows `PolyCopyTrader.Service` `Running`/`Live` on `info=1.0.0+fa160e7265ce77332a409feb738127d699c20db7; assembly=1.0.0.0; mvid=0d1ea8174e15`, started `2026-05-15T12:41:37Z`, heartbeat age about `35` seconds, and `last_error = null`. Strategies are in the expected safe state: `1178` total, `1176` enabled, `live_stakes_enabled = 0`, `live_stake_not_1 = 0`, min/max live stake both `1.00000000`, and no live balance below stake. Fresh GTD telemetry since service start shows `5617` `paper_gtd_limit` BUY orders, `722` initial-executable orders, `704` initial-executable with fills/fill-model status, `680` immediate fills, `24` partial fills, `599` initial-executable settled runs, and `0` initial-executable skipped/expired-without-fill/expired-pending rows; remaining `gtd_limit_not_filled` rows are non-initial-executable only. No live orders were created in the last 24h; old May 11 matched rows are already settled and balance-applied, with `stale_unsettled_matched = 0`. The CLOB open-orders report returned HTTP 200 with `Orders summarized: 0`. Two recent API errors were WebSocket close-handshake events; heartbeat remained fresh afterward.
