@@ -1,3 +1,14 @@
+## Active Update 2026-05-15 Dashboard Strategies Skipped Column Order
+Goal: Put `Skipped` immediately to the right of `Settles` on every Dashboard Strategies tab.
+Status: Completed
+Done:
+- Updated `src/PolyCopyTrader.Dashboard/MainWindow.xaml`.
+- Moved `Skipped` directly after `Settles` in the shared recent strategy grid template used by `24 hours`, `6 hours`, and `1 hour`.
+- Moved `Skipped` directly after `Settled` in the `All` strategies grid.
+Next: Restart or refresh Dashboard and inspect the `Strategies` tabs.
+Notes: Verification passed: `dotnet build src\PolyCopyTrader.Dashboard\PolyCopyTrader.Dashboard.csproj -c Release --no-restore -p:BaseOutputPath=D:\My\Business\PolyMarket\artifacts\dashboard-strategies-skipped-build\` passed with existing Storage nullable warnings; temporary build output was removed. `dotnet test tests\PolyCopyTrader.Tests\PolyCopyTrader.Tests.csproj -c Release --no-restore` passed 474/474. `git diff --check` passed with CRLF warnings only.
+Blockers: None.
+
 ## Active Update 2026-05-15 BTC Statistics Filtered Visual Report
 Goal: Redraw the BTC Statistics visual report using high-support points and Polymarket mid instead of ask.
 Status: Completed

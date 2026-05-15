@@ -96,3 +96,10 @@ Request:
 
 Result:
 Redrew the local BTC Statistics visual report as `artifacts/statistics-visual-report-filtered.html`. The updated one-off C# generator filters plotted Statistics points to `effective_count >= 20`, joins each tick to the nearest same-market `btc_up_down_5m_odds_ticks` row, plots Polymarket Up mid as the main market line, keeps the strategy-selected price/ask as a gray dashed line, and keeps BTC price min-max scaled inside each market window. The generated report contains 12 charts with 4 SVG lines each. Overall high-support model-vs-mid MAE was about `12.4%`; per-chart MAE ranged from about `0.9%` to `25.0%`, so filtering makes some markets much closer but does not remove all divergence. No production code changed; the report remains a local untracked artifact.
+
+## 2026-05-15T08:31:42.8850134Z
+Request:
+Во всех табах раздела Strategies справа от колонки Settles поставь колонку Skipped
+
+Result:
+Updated `src/PolyCopyTrader.Dashboard/MainWindow.xaml` so `Skipped` is immediately to the right of `Settles` in the shared recent strategy grid used by the `24 hours`, `6 hours`, and `1 hour` tabs, and immediately to the right of `Settled` in the `All` strategies grid. Verification passed: Dashboard Release build with temporary `BaseOutputPath` passed with existing Storage nullable warnings, temporary output was removed, full tests passed 474/474, and `git diff --check` passed with CRLF warnings only.
