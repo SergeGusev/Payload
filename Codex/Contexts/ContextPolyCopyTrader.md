@@ -1,3 +1,17 @@
+## Active Update 2026-05-15 Binance BPS Live Stake Reset
+Goal: Reset new Binance bps strategy Live stake amounts from `2.50000000` to `1.00000000` in both databases and prevent the old default from being reused.
+Status: Completed
+Done:
+- Confirmed local and remote PostgreSQL each had 38 new Binance bps rows with `live_stake_amount = 2.50000000`; `live_stakes` was already false.
+- Updated local PostgreSQL and remote PostgreSQL `192.168.0.101` so all 38 new Binance bps rows now have `live_stake_amount = 1.00000000`.
+- Verified all 50 Binance bps rows in both databases now have `live_stake_amount = 1.00000000`.
+- Altered the local and remote `strategies.live_stake_amount` column default to `1.00`.
+- Updated the current `src` PostgreSQL schema to force `live_stake_amount` default to `1.00` on existing databases; left `src4.8` unchanged per the maintenance-scope instruction.
+- Added a storage schema test assertion for the default migration.
+Next: Deploy/restart from this commit when convenient so future schema initialization also corrects the default.
+Notes: Verification passed: `dotnet test tests\PolyCopyTrader.Tests\PolyCopyTrader.Tests.csproj -c Release --no-restore --filter "FullyQualifiedName~StorageTests"` passed 21/21; `dotnet build src\PolyCopyTrader.Service\PolyCopyTrader.Service.csproj -c Release --no-restore` passed with 0 warnings/errors; `git diff --check` passed with CRLF warnings only. The first parallel build/test attempt hit temporary `obj` file locks from `VBCSCompiler`/Defender; after `dotnet build-server shutdown`, sequential verification passed. No order submissions, cancel actions, or live enablement changes were performed.
+Blockers: None.
+
 ## Active Update 2026-05-15 Binance BPS Deploy Check
 Goal: Verify the user's production deployment after adding the Binance bps grid.
 Status: Blocked

@@ -271,3 +271,10 @@ Request:
 
 Result:
 Checked production read-only through remote PostgreSQL `192.168.0.101`. The service is alive and heartbeat is fresh (`status=Running`, `mode=Live`, `last_heartbeat_utc=2026-05-15T16:55:48Z`, heartbeat age about `0.5` seconds, `last_error = null`), but it is still running old build `info=1.0.0+fa160e7265ce77332a409feb738127d699c20db7` with `started_at_utc=2026-05-15T12:41:37Z`, not the Binance bps grid commit. Remote DB has all 50 expected Binance bps strategy rows, all enabled, `live_stakes=false`, and paper stake `1.00000000`, but post-start `strategy_market_paper_runs` still contain only the 12 old Binance bps codes; sampled new codes `btc_up_down_5m_binance_bps_1_1`, `btc_up_down_5m_binance_bps_3`, and `btc_up_down_5m_binance_bps_4_9` have zero runs. `live_orders_24h = 0`, `live_stakes_enabled = 0`; recent API errors were CLOB order-book refresh timeouts and one WebSocket close-handshake event. HTTP `http://192.168.0.101:5118/status` still timed out. No database writes, code changes, service restarts, order submissions, or cancel actions were performed.
+
+## 2026-05-15T17:03:47.0666596Z
+Request:
+Ты в новый стратегиях в Live пишешь 2.50000000 - не нужно этого делать, пиши 1. Исправь, пожалуйста, и в новой и в старой базах
+
+Result:
+Confirmed local and remote PostgreSQL each had 38 new Binance bps rows with `live_stake_amount = 2.50000000` and `live_stakes = false`. Updated those rows in both databases to `live_stake_amount = 1.00000000`, altered the `strategies.live_stake_amount` column default to `1.00`, and verified all 50 Binance bps rows in both databases now have min/max live stake `1.00000000` with zero non-1 rows. Updated only the current `src` schema, not `src4.8`, to force the default to `1.00` on existing databases, and added a storage schema test assertion. Verification passed: targeted `StorageTests` passed 21/21, Release service build passed with 0 warnings/errors, and `git diff --check` passed with CRLF warnings only. No order submissions, cancel actions, or live enablement changes were performed.

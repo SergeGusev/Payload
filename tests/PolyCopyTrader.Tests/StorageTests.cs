@@ -66,6 +66,7 @@ public sealed class StorageTests
         Assert.Contains("ALTER TABLE public.copy_strategies RENAME TO strategies", PostgresSchema.SchemaSql, StringComparison.Ordinal);
         Assert.Contains("live_available_balance numeric(28,8) NOT NULL DEFAULT 100.00", PostgresSchema.SchemaSql, StringComparison.Ordinal);
         Assert.Contains("ALTER TABLE strategies ADD COLUMN IF NOT EXISTS live_available_balance", PostgresSchema.SchemaSql, StringComparison.Ordinal);
+        Assert.Contains("ALTER TABLE strategies ALTER COLUMN live_stake_amount SET DEFAULT 1.00", PostgresSchema.SchemaSql, StringComparison.Ordinal);
         Assert.Contains("ck_strategies_live_available_balance_nonnegative", PostgresSchema.SchemaSql, StringComparison.Ordinal);
         Assert.Contains("'follow_leader'", PostgresSchema.SchemaSql, StringComparison.Ordinal);
         Assert.Contains("'btc_up_down_5m_less_30'", PostgresSchema.SchemaSql, StringComparison.Ordinal);

@@ -919,6 +919,7 @@ ALTER TABLE strategies ADD COLUMN IF NOT EXISTS live_stakes boolean NOT NULL DEF
 ALTER TABLE strategies ADD COLUMN IF NOT EXISTS paper_stake_amount numeric(28,8) NOT NULL DEFAULT 1.00;
 ALTER TABLE strategies ADD COLUMN IF NOT EXISTS live_stake_amount numeric(28,8) NOT NULL DEFAULT 1.00;
 ALTER TABLE strategies ADD COLUMN IF NOT EXISTS live_available_balance numeric(28,8) NOT NULL DEFAULT 100.00;
+ALTER TABLE strategies ALTER COLUMN live_stake_amount SET DEFAULT 1.00;
 
 DO $$
 BEGIN
