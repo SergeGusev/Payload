@@ -1,3 +1,16 @@
+## Active Update 2026-05-15 BTC Statistics Discrepancy Explanation
+Goal: Explain why BTC 5m Statistics probabilities diverge from BTC/Polymarket chart lines and whether sparse historical points are the cause.
+Status: Completed
+Done:
+- Ran a temporary read-only C#/.NET/Npgsql diagnostic against remote PostgreSQL `192.168.0.101`; removed the temporary diagnostic project afterward.
+- Confirmed sparse support is a major cause: over the last 8h, `20688` comparable Statistics ticks across `97` markets had median `effective_count` about `5.22`, below the configured actionable threshold `20`; `20009` ticks were in the `<20` effective-count bucket.
+- Confirmed the `btc_5m_history` grid is sparse: `306138` cells, `1149723` observations, median cell count `2`, p90 cell count `8`, max cell count `9545`.
+- Confirmed high-support points are closer but still not identical: `effective_count >= 500` had Up model-vs-market MAE about `0.1195`, versus overall Up MAE about `0.1752`.
+- Noted an important chart interpretation issue: Statistics stores the market comparison price as the strategy's selected market price, usually best ask (`ask/ask` was the dominant price-kind mix), not a mid/fair Polymarket probability; spread/liquidity therefore inflate model-vs-market differences.
+Next: Regenerate the visual report with low-support points dimmed or filtered (`effective_count >= 20`) and optionally compare model probability against Polymarket mid instead of ask.
+Notes: No production code changed. Verification was read-only diagnostics plus safe removal of the temporary diagnostic project.
+Blockers: None.
+
 ## Active Update 2026-05-15 BTC Statistics Visual Report
 Goal: Graphically compare BTC 5m Statistics model probabilities against BTC price and Polymarket market prices.
 Status: Completed

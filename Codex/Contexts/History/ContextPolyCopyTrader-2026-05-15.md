@@ -82,3 +82,10 @@ Request:
 
 Result:
 Generated a local graphical report at `artifacts/statistics-visual-report.html` using a one-off C#/.NET/Npgsql read-only generator under `artifacts/statistics-visual-report`. The report reads remote PostgreSQL `192.168.0.101` and renders inline SVG charts for the latest 8 BTC 5-minute Statistics markets. Each chart has three lines: Statistics Up probability, Polymarket Up price used by the strategy, and BTC price min-max scaled to `0..1` inside that market window; black dots show would-bet ticks. The summary table includes model-vs-market MAE and correlations. On the generated sample, recent model-vs-market MAE ranged about `14.5%` to `21.9%`. No production code changed; the generated report and generator remain local untracked artifacts.
+
+## 2026-05-15T07:23:36.1184760Z
+Request:
+Такие расхождения определяются малым количеством точек для статистики? Я ожидал большей похожести
+
+Result:
+Ran a temporary read-only C#/.NET/Npgsql diagnostic against remote PostgreSQL `192.168.0.101` and removed it afterward. Sparse historical support is a major reason for the visible divergence: over the last 8h, comparable Statistics ticks had median `effective_count` about `5.22`, while the actionable threshold is `20`; `20009` of `20688` comparable ticks were in the `<20` bucket. The underlying `btc_5m_history` grid is sparse too: `306138` cells, `1149723` total observations, median cell count `2`, p90 `8`, max `9545`. Higher-support points were closer but still not market-identical: `effective_count >= 500` had Up model-vs-market MAE about `0.1195` versus overall Up MAE about `0.1752`. Also noted that the visual report compared the model to the strategy's selected market price, usually best ask, not Polymarket mid/fair probability, so spread and liquidity inflate the difference.
