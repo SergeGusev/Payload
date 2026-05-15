@@ -1,3 +1,17 @@
+## Active Update 2026-05-15 BTC Settlement GTD Fill Guard
+Goal: Verify the redeployed GTD fixes and close the remaining BTC settlement skip path.
+Status: Completed
+Done:
+- Verified remote PostgreSQL `service_heartbeats.version` showed production running `info=1.0.0+dc7b68ac7b3facd2b538322e5f1790d091fd1169; assembly=1.0.0.0; mvid=7f16e4b6d16b` after start `2026-05-15T12:13:27Z`.
+- Confirmed the scheduled worker and market-data updater fixes were active enough to produce `6` `ConservativeGtdImmediateFill` rows, but fresh post-start telemetry still had `147` initial-executable `paper_gtd_limit` BUY orders expired/skipped as `gtd_limit_not_filled` without fills or fill-model status.
+- Root-caused the remaining issue to `BtcUpDown5mPaperStrategyProcessor.GetOpeningLimitFillSummaryAsync`: the BTC settlement path could directly expire/skip an unfilled GTD order after market end without running `ConservativePaperGtdFillEstimator`.
+- Updated the BTC settlement path to run the conservative submit-snapshot fill guard before `gtd_limit_not_filled`, persist the fill/order/position updates, and settle the run from actual fill shares/cost basis when the guard produces a fill.
+- Added a regression test proving a converted standard BTC GTD order with initial executable ask depth is filled by `ConservativeGtdImmediateFill` during settlement instead of being skipped.
+- Updated README to document that the scheduled worker, market-data updater, and BTC settlement processor all run the same guard before expiry/skip.
+Next: Deploy/restart this commit and recheck `service_heartbeats.version`; then monitor fresh post-start counts for `initial_executable_expired_without_fill = 0` and explicit `ConservativeGtdImmediateFill`/fill-model evidence.
+Notes: Verification passed: targeted GTD tests passed 3/3; `dotnet build src\PolyCopyTrader.Service\PolyCopyTrader.Service.csproj -c Release --no-restore` passed with 0 warnings/errors; full `dotnet test tests\PolyCopyTrader.Tests\PolyCopyTrader.Tests.csproj -c Release --no-restore` passed 480/480; `git diff --check` passed with CRLF warnings only. Remote DB checks were read-only and did not print connection strings.
+Blockers: Needs server redeploy/restart from this commit.
+
 ## Active Update 2026-05-15 Market Data GTD Expiry Race Fix
 Goal: Verify the redeployed service version and fix the remaining Paper GTD expiry race found in production telemetry.
 Status: Completed

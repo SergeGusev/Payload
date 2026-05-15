@@ -1,4 +1,5 @@
 using System.Globalization;
+using System.Text.Json;
 using Microsoft.Extensions.Logging.Abstractions;
 using PolyCopyTrader.Domain;
 using PolyCopyTrader.Domain.Configuration;
@@ -2331,6 +2332,95 @@ public sealed class BtcUpDown5mPaperStrategyProcessorTests
         Assert.Equal(2.04m, settlement.RealizedPnlUsd);
         Assert.Equal(PaperOrderStatus.PartiallyFilledExpired, Assert.Single(repository.PaperOrders).Status);
         Assert.Equal(0m, Assert.Single(repository.PaperPositions).SizeShares);
+    }
+
+    [Fact]
+    public async Task ProcessAsync_FillsInitialExecutableOpeningLimitOrderBeforeSkippingUnfilledGtdRun()
+    {
+        var now = DateTimeOffset.UtcNow;
+        var repository = new TestAppRepository();
+        var paperOrderId = Guid.NewGuid();
+        var run = new StrategyMarketPaperRun(
+            Guid.NewGuid(),
+            Less60Variant.Id,
+            "market-1",
+            "condition-1",
+            "btc-updown-5m-1778067900",
+            "Bitcoin Up or Down - test",
+            "Crypto",
+            now.AddMinutes(-6),
+            now.AddMinutes(-1),
+            now.AddMinutes(-6),
+            now.AddMinutes(-5),
+            StrategyMarketPaperRunStatuses.Entered,
+            "asset-down",
+            "Down",
+            0.50m,
+            3m,
+            6m,
+            Guid.NewGuid(),
+            paperOrderId,
+            now.AddMinutes(-5),
+            SettlementPrice: null,
+            SettlementValueUsd: null,
+            RealizedPnlUsd: null,
+            SettledAtUtc: null,
+            SkipReason: null,
+            now.AddMinutes(-6),
+            now.AddMinutes(-5));
+        repository.StrategyMarketPaperRuns.Add(run);
+        repository.PaperOrders.Add(new PaperOrder(
+            paperOrderId,
+            run.SignalId!.Value,
+            Less60Variant.CopiedTraderWallet,
+            PaperOrderStatus.Pending,
+            TradeSide.Buy,
+            "asset-down",
+            "condition-1",
+            "Down",
+            0.50m,
+            6m,
+            3m,
+            now.AddMinutes(-5),
+            now.AddMinutes(-1),
+            StrategyId: Less60Variant.Id,
+            RawDecisionJson: JsonSerializer.Serialize(new Dictionary<string, object?>
+            {
+                ["pricing_mode"] = "paper_gtd_limit",
+                ["order_type"] = "GTD",
+                ["order_execution_mode"] = "GTD",
+                ["paper_gtd_initial_snapshot_at_utc"] = now.AddMinutes(-5).ToString("O"),
+                ["paper_gtd_initial_best_bid"] = 0.49m,
+                ["paper_gtd_initial_best_ask"] = 0.50m,
+                ["paper_gtd_initial_last_trade_price"] = 0.49m,
+                ["paper_gtd_initial_queue_ahead_shares"] = 0m,
+                ["paper_gtd_initial_executable_ask_shares"] = 6m,
+                ["paper_gtd_initial_executable_ask_vwap"] = 0.50m
+            }),
+            ExecutionSource: "btc_updown5m_gtd_limit"));
+        var metadata = new[]
+        {
+            TokenMetadata("asset-up", "Up", "Down"),
+            TokenMetadata("asset-down", "Down", "Down")
+        };
+        var processor = CreateProcessor(repository, metadata, Less60Variant.Code);
+
+        var result = await processor.ProcessAsync();
+
+        Assert.Equal(1, result.RunsSettled);
+        var fill = Assert.Single(repository.PaperFills);
+        Assert.Equal(paperOrderId, fill.PaperOrderId);
+        Assert.Contains("ConservativeGtdImmediateFill", fill.Evidence);
+        var order = Assert.Single(repository.PaperOrders);
+        Assert.Equal(PaperOrderStatus.Filled, order.Status);
+        Assert.Contains("filled_immediate_marketable", order.RawDecisionJson);
+        var updatedRun = Assert.Single(repository.StrategyMarketPaperRuns);
+        Assert.Equal(StrategyMarketPaperRunStatuses.Settled, updatedRun.Status);
+        Assert.Null(updatedRun.SkipReason);
+        Assert.Equal(6m, updatedRun.SizeShares);
+        Assert.Equal(3m, updatedRun.StakeUsd);
+        Assert.Equal(6m, updatedRun.SettlementValueUsd);
+        Assert.Equal(3m, updatedRun.RealizedPnlUsd);
     }
 
     [Fact]

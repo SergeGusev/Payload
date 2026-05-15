@@ -67,6 +67,8 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
     private static readonly TimeSpan CloseBookCaptureOrderBookTimeout = TimeSpan.FromSeconds(2);
     private static readonly TimeSpan SettlementMetadataTimeout = TimeSpan.FromSeconds(3);
 
+    private readonly ConservativePaperGtdFillEstimator conservativeGtdFillEstimator = new(options);
+    private readonly IPaperTradingEngine paperTradingEngine = new DefaultPaperTradingEngine();
     private readonly Dictionary<string, DateTimeOffset> closingOrderBookCaptureAttempts = new(StringComparer.OrdinalIgnoreCase);
 
     public async Task<BtcUpDown5mPaperStrategyResult> ProcessAsync(CancellationToken cancellationToken = default)
@@ -1890,6 +1892,16 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
             return fillSummary;
         }
 
+        var conservativeFillSummary = await TryFillOpeningLimitFromConservativeSnapshotAsync(
+            order,
+            fills,
+            nowUtc,
+            cancellationToken);
+        if (conservativeFillSummary is not null)
+        {
+            return conservativeFillSummary;
+        }
+
         if (order.Status is PaperOrderStatus.Pending or PaperOrderStatus.PartiallyFilled &&
             order.ExpiresAtUtc <= nowUtc)
         {
@@ -1900,6 +1912,62 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
 
         await SkipRunAsync(run, variant, "gtd_limit_not_filled", nowUtc, cancellationToken);
         return null;
+    }
+
+    private async Task<OpeningLimitFillSummary?> TryFillOpeningLimitFromConservativeSnapshotAsync(
+        PaperOrder order,
+        IReadOnlyList<PaperFill> existingFills,
+        DateTimeOffset nowUtc,
+        CancellationToken cancellationToken)
+    {
+        var previouslyFilledShares = GetFilledShares(existingFills, order.SizeShares);
+        var evaluation = conservativeGtdFillEstimator.Evaluate(order, null, nowUtc, previouslyFilledShares);
+        if (!evaluation.Handled)
+        {
+            return null;
+        }
+
+        if (evaluation.Fill is null)
+        {
+            if (evaluation.OrderChanged)
+            {
+                await repository.UpdatePaperOrderAsync(evaluation.Order, cancellationToken);
+                exposureCache.ApplyPaperOrder(evaluation.Order);
+            }
+
+            return null;
+        }
+
+        var filledOrder = paperTradingEngine.ApplyFillStatus(
+            evaluation.Order,
+            evaluation.Fill,
+            previouslyFilledShares);
+        await repository.AddPaperFillAsync(evaluation.Fill, cancellationToken);
+        await repository.UpdatePaperOrderAsync(filledOrder, cancellationToken);
+        exposureCache.ApplyPaperOrder(filledOrder);
+
+        if (evaluation.Order.Side == TradeSide.Buy)
+        {
+            var positions = await repository.GetPaperPositionsAsync(cancellationToken);
+            var currentPosition = FindPaperPosition(positions, evaluation.Order);
+            var updatedPosition = paperTradingEngine.ApplyBuyFill(
+                currentPosition,
+                evaluation.Order,
+                evaluation.Fill,
+                evaluation.Fill.Price,
+                nowUtc);
+            await repository.UpsertPaperPositionAsync(updatedPosition, cancellationToken);
+            exposureCache.ApplyPaperPosition(updatedPosition);
+            await repository.ActivatePaperCopiedLeaderPositionAsync(
+                evaluation.Order.Id,
+                evaluation.Fill.SizeShares,
+                evaluation.Fill.FilledAtUtc,
+                cancellationToken);
+        }
+
+        return SummarizeOpeningLimitFills(
+            filledOrder,
+            [.. existingFills, evaluation.Fill]);
     }
 
     private async Task<PreOpenSellExitSummary> GetPreOpenSellExitSummaryAsync(
@@ -2018,6 +2086,20 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
             notionalUsd / sizeShares,
             notionalUsd,
             lastFilledAtUtc);
+    }
+
+    private static decimal GetFilledShares(IReadOnlyList<PaperFill> fills, decimal maxShares)
+    {
+        return Math.Min(maxShares, fills.Sum(fill => Math.Max(0m, fill.SizeShares)));
+    }
+
+    private static PaperPosition? FindPaperPosition(
+        IEnumerable<PaperPosition> positions,
+        PaperOrder order)
+    {
+        return positions.FirstOrDefault(position =>
+            string.Equals(position.AssetId, order.AssetId, StringComparison.OrdinalIgnoreCase) &&
+            string.Equals(position.CopiedTraderWallet, order.CopiedTraderWallet, StringComparison.OrdinalIgnoreCase));
     }
 
     private async Task<Less180MartinEntryDecision> GetLess180MartinEntryDecisionAsync(
