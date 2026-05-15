@@ -278,3 +278,10 @@ Request:
 
 Result:
 Confirmed local and remote PostgreSQL each had 38 new Binance bps rows with `live_stake_amount = 2.50000000` and `live_stakes = false`. Updated those rows in both databases to `live_stake_amount = 1.00000000`, altered the `strategies.live_stake_amount` column default to `1.00`, and verified all 50 Binance bps rows in both databases now have min/max live stake `1.00000000` with zero non-1 rows. Updated only the current `src` schema, not `src4.8`, to force the default to `1.00` on existing databases, and added a storage schema test assertion. Verification passed: targeted `StorageTests` passed 21/21, Release service build passed with 0 warnings/errors, and `git diff --check` passed with CRLF warnings only. No order submissions, cancel actions, or live enablement changes were performed.
+
+## 2026-05-15T17:10:47Z
+Request:
+Не вижу ставок по новым Binance bps стратегиям. Всё в порядке?
+
+Result:
+Checked remote PostgreSQL `192.168.0.101` read-only. The service is alive with a fresh heartbeat (`status=Running`, `mode=Live`, `last_heartbeat_utc=2026-05-15T17:08:48Z`, heartbeat age about `33` seconds, `last_error = null`), but production is still running old build `info=1.0.0+fa160e7265ce77332a409feb738127d699c20db7; assembly=1.0.0.0; mvid=0d1ea8174e15`, started `2026-05-15T12:41:37Z`. Remote DB has all 50 Binance bps rows, including the 38 newly added rows, all enabled, `live_stakes=false`, and all Binance bps paper/live stake amounts at `1.00000000`. Since the current service start, there are `600` Binance bps paper runs and `272` Binance bps paper orders, but `0` runs and `0` orders for the 38 newly added Binance bps codes; only the 12 old codes are being processed. Conclusion: the database is correct, but the running service binary predates the Binance bps grid commit, so the new variants cannot run until the service is redeployed/restarted from commit `432dad3` or newer. No database writes, code changes, service restarts, order submissions, or cancel actions were performed.

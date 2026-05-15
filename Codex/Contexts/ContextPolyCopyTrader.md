@@ -1,3 +1,17 @@
+## Active Update 2026-05-15 Binance BPS New Order Visibility Check
+Goal: Check why bets/orders are not visible for the newly added Binance bps strategy variants.
+Status: Blocked
+Done:
+- Queried remote PostgreSQL `192.168.0.101` read-only through `out/dbprobe` without printing connection strings.
+- Confirmed production service heartbeat is fresh: `status=Running`, `mode=Live`, `last_heartbeat_utc=2026-05-15T17:08:48Z`, heartbeat age about `33` seconds, and `last_error = null`.
+- Confirmed production is still running old build `info=1.0.0+fa160e7265ce77332a409feb738127d699c20db7; assembly=1.0.0.0; mvid=0d1ea8174e15`, started `2026-05-15T12:41:37Z`.
+- Confirmed remote DB has all 50 Binance bps rows, including 38 newly added rows, all enabled, `live_stakes = false`, and all Binance bps `paper_stake_amount`/`live_stake_amount` values at `1.00000000`.
+- Confirmed since the current service start there are `600` Binance bps paper run rows but `0` runs for the 38 newly added Binance bps codes; only the 12 old codes are being processed.
+- Confirmed since the current service start there are `272` Binance bps paper orders but `0` orders for the 38 newly added Binance bps codes; only the 12 old codes have orders.
+Next: Redeploy/restart the production service from commit `432dad3` or newer, then recheck heartbeat version and new Binance bps run/order rows.
+Notes: No database writes, code changes, service restarts, order submissions, or cancel actions were performed.
+Blockers: Production is still running an old binary that predates the Binance bps grid commit, so it cannot execute the newly added variants yet.
+
 ## Active Update 2026-05-15 Binance BPS Live Stake Reset
 Goal: Reset new Binance bps strategy Live stake amounts from `2.50000000` to `1.00000000` in both databases and prevent the old default from being reused.
 Status: Completed
