@@ -89,3 +89,10 @@ Request:
 
 Result:
 Ran a temporary read-only C#/.NET/Npgsql diagnostic against remote PostgreSQL `192.168.0.101` and removed it afterward. Sparse historical support is a major reason for the visible divergence: over the last 8h, comparable Statistics ticks had median `effective_count` about `5.22`, while the actionable threshold is `20`; `20009` of `20688` comparable ticks were in the `<20` bucket. The underlying `btc_5m_history` grid is sparse too: `306138` cells, `1149723` total observations, median cell count `2`, p90 `8`, max `9545`. Higher-support points were closer but still not market-identical: `effective_count >= 500` had Up model-vs-market MAE about `0.1195` versus overall Up MAE about `0.1752`. Also noted that the visual report compared the model to the strategy's selected market price, usually best ask, not Polymarket mid/fair probability, so spread and liquidity inflate the difference.
+
+## 2026-05-15T07:32:07.9438652Z
+Request:
+Давай перерисуем
+
+Result:
+Redrew the local BTC Statistics visual report as `artifacts/statistics-visual-report-filtered.html`. The updated one-off C# generator filters plotted Statistics points to `effective_count >= 20`, joins each tick to the nearest same-market `btc_up_down_5m_odds_ticks` row, plots Polymarket Up mid as the main market line, keeps the strategy-selected price/ask as a gray dashed line, and keeps BTC price min-max scaled inside each market window. The generated report contains 12 charts with 4 SVG lines each. Overall high-support model-vs-mid MAE was about `12.4%`; per-chart MAE ranged from about `0.9%` to `25.0%`, so filtering makes some markets much closer but does not remove all divergence. No production code changed; the report remains a local untracked artifact.

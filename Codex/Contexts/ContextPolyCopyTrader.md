@@ -1,3 +1,16 @@
+## Active Update 2026-05-15 BTC Statistics Filtered Visual Report
+Goal: Redraw the BTC Statistics visual report using high-support points and Polymarket mid instead of ask.
+Status: Completed
+Done:
+- Updated the local one-off report generator in `artifacts/statistics-visual-report` to output `artifacts/statistics-visual-report-filtered.html`.
+- Filtered plotted Statistics points to `effective_count >= 20`.
+- Joined each Statistics tick to the nearest same-market `btc_up_down_5m_odds_ticks` row and plotted Polymarket `up_mid`/computed mid as the primary market line.
+- Kept the strategy-selected `up_market_price` (usually ask) as a gray dashed comparison line and BTC min-max scaled inside each market window.
+- Generated 12 charts with 4 SVG lines each. Overall high-support model-vs-mid MAE was about `12.4%`; individual chart MAE ranged from about `0.9%` to `25.0%`.
+Next: Inspect `artifacts/statistics-visual-report-filtered.html`; if this view is useful, promote the generator into a reusable report command or Dashboard tab.
+Notes: No production code changed. The report/generator remains an untracked local artifact; context/history was committed.
+Blockers: None.
+
 ## Active Update 2026-05-15 BTC Statistics Discrepancy Explanation
 Goal: Explain why BTC 5m Statistics probabilities diverge from BTC/Polymarket chart lines and whether sparse historical points are the cause.
 Status: Completed
