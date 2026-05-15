@@ -46,3 +46,10 @@ Request:
 
 Result:
 Adjusted the shared Dashboard hourly strategy grid template so `Name` is again the far-left column on the `24 hours`, `6 hours`, and `1 hour` strategy tabs. The result columns remain immediately after it: `Settles`, `Won`, `Lost`, `Realized`, and `ClosedRoi`. Dashboard Release build passed with a temporary output path, full tests passed 472/472, and `git diff --check` passed with CRLF warnings only.
+
+## 2026-05-15T06:36:55.6447735Z
+Request:
+Объясни такое маленькое количество Settled транзакций стратегии BTC Up or Down 1h PreOpen Full Down 49. За сутки только 6. Я рассчитывал на 24
+
+Result:
+Investigated the exact strategy with a temporary read-only C#/.NET/Npgsql diagnostic against remote PostgreSQL `192.168.0.101`. The low settlement count is due to passive maker-style GTD limit behavior, not missing hourly markets: the exact strategy created 24 orders in the last 24h, but only 11 newly created orders filled, 12 expired without fills and were marked `Skipped/gtd_limit_not_filled`, and 1 was still pending. Dashboard's 24h `Settles` is counted by `settled_at_utc`; at the check time the remote DB showed 12 Dashboard-window settlements for the exact strategy and 10 for the similar `... Down 49 Sell` strategy. The temporary diagnostic project was removed; no production code changed.

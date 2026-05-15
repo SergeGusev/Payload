@@ -1,3 +1,16 @@
+## Active Update 2026-05-15 PreOpen 1h Down 49 Settlement Count Check
+Goal: Explain why `BTC Up or Down 1h PreOpen Full Down 49` has far fewer 24h settlements than 24.
+Status: Completed
+Done:
+- Ran a temporary read-only C#/.NET/Npgsql diagnostic against the remote PostgreSQL host `192.168.0.101` and removed the temporary diagnostic project afterward.
+- Confirmed the exact strategy is enabled, Paper-only (`live_stakes=false`), with code `btc_up_down_1h_preopen_full_down_49`.
+- Confirmed the strategy did create 24 orders in the last 24h on the remote database; only 11 of those newly created orders filled, 12 expired with no fills, and 1 was still pending during the check.
+- Confirmed Dashboard's 24h `Settles` metric counts runs by `settled_at_utc`, not hourly markets started; at `2026-05-15T06:35Z` the remote DB showed 12 Dashboard-window settlements for the exact strategy, while the similar `... Down 49 Sell` strategy showed 10.
+- Confirmed the low count is expected for maker-style GTD limit entries: unfilled `Down` limit orders at `0.49` are marked `Skipped` with `gtd_limit_not_filled`, not `Settled`.
+Next: If the desired metric is "hourly attempts", use order/entered counts; if the desired behavior is near-24 settlements, strategy pricing/fill assumptions need changing from passive limit 0.49.
+Notes: No production code changed. Verification was the read-only diagnostic; local `127.0.0.1` database was stale and had 0 recent settlements/orders for this strategy, while remote `192.168.0.101` had the active data.
+Blockers: None.
+
 ## Active Update 2026-05-15 Dashboard Recent Strategy Name Column
 Goal: Keep the strategy name as the far-left column on hourly `Strategies` tabs.
 Status: Completed
