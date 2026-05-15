@@ -1,3 +1,17 @@
+## Active Update 2026-05-15 Post-Deploy Paper GTD Monitor
+Goal: Monitor the server after the user redeployed the `src` Paper GTD expiry-before-fill fix.
+Status: Completed
+Done:
+- Confirmed the remote service restarted at `2026-05-15T11:14:08Z` and had fresh heartbeats through `2026-05-15T11:34:08Z`.
+- Checked remote PostgreSQL `192.168.0.101` read-only; no database writes were performed.
+- At `2026-05-15T11:26Z`, since service start there were `118` initial-executable `paper_gtd_limit` BUY orders, `73` already `Expired/Skipped gtd_limit_not_filled`, and `0` rows with `paper_gtd_fill_model_status`.
+- Tracked five control orders created at `2026-05-15T11:27:00Z` with expiry `11:29:00Z` and initial executable shares `6.67`, `6.85`, `7.15`, `6.85`, `7.15`; by `11:31Z` all five were `Expired/Skipped gtd_limit_not_filled` with `fills=0` and blank fill-model status.
+- At `2026-05-15T11:34Z`, since start there were `198` initial-executable orders, `121` initial-executable expired skips, `0` rows with fill-model status, and no recent `PaperTradingWorker`/`PaperTradingProcessor` API errors.
+- Verified the sampled strategy ids and JSON fields satisfy local `src` conservative-fill eligibility (`StrategyIds.BtcUpDown5mVariants`, `GTD`, `paper_gtd_limit`, initial executable shares > 0).
+Next: Verify the deployed artifact really contains commit `9785ba3` and verify server runtime config does not override `BtcUpDown5mStrategy:PaperGtdConservativeFillEnabled=false`; then redeploy/restart and monitor again.
+Notes: Monitoring used the existing C#/.NET `out/dbprobe` tool against remote PostgreSQL. The observed runtime behavior does not match current local `src` logic from commit `9785ba3`.
+Blockers: Need server deployment/config verification; DB evidence indicates the fix is not active in the running service.
+
 ## Active Update 2026-05-15 Paper GTD Current Book Concern
 Goal: Address the concern that the expiry-before-fill fix may hide the real current-order-book problem.
 Status: Completed

@@ -145,3 +145,10 @@ Request:
 
 Result:
 Explained that the open-order worker still checks current order books for ordinary pending Paper orders, but the failing case is a submit-time executable Paper GTD order where the later current book cannot reconstruct whether the order should have filled immediately because no real exchange order was posted. Clarified that the fix does not suppress skips: it runs the existing conservative submit-snapshot immediate-fill model before expiry for initial-executable BUY GTD opening-limit orders, keeps current-book checks when the initial snapshot does not fill, and writes explicit `ConservativeGtdImmediateFill` evidence/diagnostics for auditability. No production source changed.
+
+## 2026-05-15T11:35:31.9823337+00:00
+Request:
+Ок, выложил, следи
+
+Result:
+Monitored remote PostgreSQL `192.168.0.101` read-only after the service restart at `2026-05-15T11:14:08Z`. The service heartbeat stayed fresh through `2026-05-15T11:34:08Z`, but the Paper GTD fix did not appear active at runtime. At `11:26Z`, since start there were `118` initial-executable `paper_gtd_limit` BUY orders, `73` already expired/skipped as `gtd_limit_not_filled`, and `0` rows with `paper_gtd_fill_model_status`. Tracked five fresh control orders created at `11:27:00Z` with initial executable shares and expiry `11:29:00Z`; by `11:31Z`, all five became `Expired/Skipped gtd_limit_not_filled` with `fills=0` and blank fill-model status. At `11:34Z`, since start there were `198` initial-executable orders, `121` initial-executable expired skips, `0` rows with fill-model status, and no recent `PaperTradingWorker`/`PaperTradingProcessor` API errors. Sampled strategy ids and JSON fields satisfy local `src` conservative-fill eligibility, so the likely blockers are a deployed artifact that does not include commit `9785ba3` or a server runtime config override disabling `BtcUpDown5mStrategy:PaperGtdConservativeFillEnabled`.
