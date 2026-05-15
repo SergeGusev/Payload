@@ -1,3 +1,17 @@
+## Active Update 2026-05-15 Binance BPS Deploy Check
+Goal: Verify the user's production deployment after adding the Binance bps grid.
+Status: Blocked
+Done:
+- Queried remote PostgreSQL `192.168.0.101` read-only through `out/dbprobe` without printing connection strings.
+- Confirmed the production service heartbeat is fresh: `status=Running`, `mode=Live`, `last_heartbeat_utc=2026-05-15T16:55:48Z`, heartbeat age about `0.5` seconds, `last_error = null`.
+- Confirmed the running production version is still `info=1.0.0+fa160e7265ce77332a409feb738127d699c20db7` with `started_at_utc=2026-05-15T12:41:37Z`, so the service did not restart onto the Binance bps grid commit.
+- Confirmed remote DB still has all 50 expected Binance bps strategy rows, all enabled, `live_stakes = false`, and `paper_stake_amount = 1.00000000`.
+- Confirmed post-start `strategy_market_paper_runs` only include the 12 old Binance bps codes; sampled new codes `btc_up_down_5m_binance_bps_1_1`, `btc_up_down_5m_binance_bps_3`, and `btc_up_down_5m_binance_bps_4_9` have zero post-start runs.
+- Confirmed `live_orders_24h = 0` and `live_stakes_enabled = 0`; recent API errors were CLOB order-book refresh timeouts and one WebSocket close-handshake event.
+Next: Redeploy/restart the production service from commit `960cff1` or newer, then recheck heartbeat version and new Binance bps run rows.
+Notes: HTTP `http://192.168.0.101:5118/status` still timed out from this machine. No database writes, code changes, service restarts, order submissions, or cancel actions were performed.
+Blockers: Production is still running the old service build and therefore cannot execute the new Binance bps variants yet.
+
 ## Active Update 2026-05-15 Src4.8 Maintenance Scope
 Goal: Record the user's instruction that future work no longer needs `src4.8` changes by default.
 Status: Completed

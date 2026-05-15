@@ -264,3 +264,10 @@ Request:
 
 Result:
 Recorded the instruction as a forward-looking maintenance scope rule: future implementation tasks should target the current `src` code path and leave `src4.8` unchanged unless the user explicitly asks for `src4.8` work. No existing commit was reverted, and no code, database, order, or service changes were made.
+
+## 2026-05-15T16:56:53.5267490Z
+Request:
+Выложил, проверяй
+
+Result:
+Checked production read-only through remote PostgreSQL `192.168.0.101`. The service is alive and heartbeat is fresh (`status=Running`, `mode=Live`, `last_heartbeat_utc=2026-05-15T16:55:48Z`, heartbeat age about `0.5` seconds, `last_error = null`), but it is still running old build `info=1.0.0+fa160e7265ce77332a409feb738127d699c20db7` with `started_at_utc=2026-05-15T12:41:37Z`, not the Binance bps grid commit. Remote DB has all 50 expected Binance bps strategy rows, all enabled, `live_stakes=false`, and paper stake `1.00000000`, but post-start `strategy_market_paper_runs` still contain only the 12 old Binance bps codes; sampled new codes `btc_up_down_5m_binance_bps_1_1`, `btc_up_down_5m_binance_bps_3`, and `btc_up_down_5m_binance_bps_4_9` have zero runs. `live_orders_24h = 0`, `live_stakes_enabled = 0`; recent API errors were CLOB order-book refresh timeouts and one WebSocket close-handshake event. HTTP `http://192.168.0.101:5118/status` still timed out. No database writes, code changes, service restarts, order submissions, or cancel actions were performed.
