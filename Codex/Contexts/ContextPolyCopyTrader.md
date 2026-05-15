@@ -1,3 +1,15 @@
+## Active Update 2026-05-15 BTC Statistics Visual Report
+Goal: Graphically compare BTC 5m Statistics model probabilities against BTC price and Polymarket market prices.
+Status: Completed
+Done:
+- Created a one-off C#/.NET report generator under `artifacts/statistics-visual-report` and ran it read-only against remote PostgreSQL `192.168.0.101`.
+- Generated `artifacts/statistics-visual-report.html` with inline SVG charts for the latest 8 BTC 5-minute Statistics markets.
+- Each chart plots three scaled lines: Statistics Up probability, Polymarket Up price used by the strategy, and BTC price min-max scaled within that 5-minute market window; black dots mark would-bet ticks.
+- Added summary metrics per market: model-vs-market MAE, model/market correlation, and model/BTC-scaled correlation. Recent model-vs-market MAE ranged roughly `14.5%` to `21.9%` on the generated report.
+Next: Open `artifacts/statistics-visual-report.html` locally; if useful, turn this report into a Dashboard tab or a reusable service startup command.
+Notes: No production code changed. Verification was generating the HTML report successfully and checking it contains 8 charts / 24 SVG paths. The report/generator artifact remains untracked as a local deliverable.
+Blockers: None.
+
 ## Active Update 2026-05-15 Paper GTD Fix Scope Answer
 Goal: Clarify whether the `paper_gtd_limit` conservative fill fix affects only one PreOpen strategy or all matching strategies.
 Status: Completed

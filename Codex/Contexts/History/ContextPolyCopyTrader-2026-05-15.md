@@ -75,3 +75,10 @@ Request:
 
 Result:
 Answered from current code inspection that the fix is not limited to `BTC Up or Down 1h PreOpen Full Down 49`. `ConservativePaperGtdFillEstimator` applies to BTC strategy ids in `StrategyIds.BtcUpDown5mVariants` when an order is BUY, GTD, opening-limit Paper, conservative GTD fills are enabled, and the raw decision JSON contains a supported opening-limit mode such as `paper_gtd_limit`. This covers all current BTC Up/Down variants that create such opening-limit orders, while excluding FollowLeader, non-BTC strategies, SELL orders, live shadow test orders, and non-GTD/non-opening-limit orders. No source code changed.
+
+## 2026-05-15T07:14:45.4831645Z
+Request:
+Ты можешь графически показать работу стратегии Statistics? Мне надо понять, насколько вычисляемые им вероятности близки к курсу BTC и рынку Polymarket. Например, масшабированный график с тремя линиями
+
+Result:
+Generated a local graphical report at `artifacts/statistics-visual-report.html` using a one-off C#/.NET/Npgsql read-only generator under `artifacts/statistics-visual-report`. The report reads remote PostgreSQL `192.168.0.101` and renders inline SVG charts for the latest 8 BTC 5-minute Statistics markets. Each chart has three lines: Statistics Up probability, Polymarket Up price used by the strategy, and BTC price min-max scaled to `0..1` inside that market window; black dots show would-bet ticks. The summary table includes model-vs-market MAE and correlations. On the generated sample, recent model-vs-market MAE ranged about `14.5%` to `21.9%`. No production code changed; the generated report and generator remain local untracked artifacts.
