@@ -229,3 +229,10 @@ Request:
 
 Result:
 Clarified that `0.50` is the Binance start-relative bps GTD BUY limit price/cap, not a stake percentage. The bps threshold itself is a BTC move threshold where `0.5 bps = 0.005%` BTC move from market start, not `0.5%` stake. Stake size is still computed from `strategies.paper_stake_amount` as a multiplier over minimum order sizing: `min_order_size * limit_price * 1.10 * stakeMultiplier`, then rounded. No database writes or order actions were performed.
+
+## 2026-05-15T16:04:33.8006577Z
+Request:
+Так. Мы, когда делаем ставку, определяем ask и bid, правильно? Вот какие мы их ставим?
+
+Result:
+Explained that Binance bps entries create a Paper `TradeSide.Buy` GTD limit order and set only one order price: `limitPrice`, effectively the bot's bid. For Binance bps this path uses `min(OpeningLimitMaxPrice, 0.50)` rounded down to tick, normally `0.50`. The bot does not set an ask for these BUY entries; market `best_bid` and `best_ask` are observed from order-book snapshots. Observed bids are used for queue-ahead/mark diagnostics, and observed asks at or below the BUY limit are used to estimate paper fill depth. No database writes or order actions were performed.

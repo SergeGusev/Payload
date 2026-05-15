@@ -1,3 +1,17 @@
+## Active Update 2026-05-15 Binance BPS Bid Ask Explanation
+Goal: Explain which bid/ask values are set or observed when Binance bps strategies create a paper bet.
+Status: Completed
+Done:
+- Rechecked the Binance bps/opening-limit order creation path and conservative GTD fill logic.
+- Confirmed Binance bps entries create a Paper `TradeSide.Buy` GTD limit order; the bot sets one order price, `limitPrice`, which is effectively our bid.
+- Confirmed Binance bps fixed-price opening-limit path uses `min(OpeningLimitMaxPrice, 0.50)` rounded down to tick; default is `0.50`.
+- Confirmed the bot does not set an ask for Binance bps BUY entries; market `best_bid` and `best_ask` are read from CLOB/WebSocket/REST order-book snapshots.
+- Confirmed observed `best_bid` is used for queue-ahead/mark diagnostics, and observed asks at or below our BUY limit are used to estimate immediate executable paper fill depth.
+- Confirmed conservative immediate paper fills use `order.Price` as fill price while storing observed ask VWAP as diagnostic evidence.
+Next: None.
+Notes: Answer-only clarification. No database writes, code changes, order submissions, or cancel actions were performed.
+Blockers: None.
+
 ## Active Update 2026-05-15 Binance BPS 0.5 Clarification
 Goal: Clarify whether the observed `0.5` in Binance bps strategies is a stake percentage.
 Status: Completed
