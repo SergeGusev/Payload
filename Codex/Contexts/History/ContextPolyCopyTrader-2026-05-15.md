@@ -180,3 +180,10 @@ Request:
 
 Result:
 Checked remote PostgreSQL read-only after the redeploy. Production is now running `service_heartbeats.version` `info=1.0.0+fa160e7265ce77332a409feb738127d699c20db7; assembly=1.0.0.0; mvid=0d1ea8174e15`, started `2026-05-15T12:41:37Z`, with fresh heartbeat and no `last_error`. At `12:43:00Z`, fresh telemetry showed `27` `paper_gtd_limit` BUY orders, `20` initial-executable, `20` with fills/fill-model status, `20` conservative immediate fills, and `0` initial-executable expired-without-fill rows. At `12:46:08Z`, after the first expiry window, there were `378` fresh GTD BUY orders, `60` initial-executable, `34` filled with fill-model status, and still `0` initial-executable expired-without-fill rows. At `12:50:25Z`, after a settlement window, there were `740` fresh GTD BUY orders, `108` initial-executable, `95` initial-executable with fills/fill-model status, `90` conservative immediate fills, `34` initial-executable runs already settled, `0` initial-executable skipped runs, and `0` initial-executable expired-without-fill rows. Remaining `gtd_limit_not_filled` skips were non-initial-executable only, and no fresh Paper/BTC API errors were present.
+
+## 2026-05-15T12:56:07.1400056Z
+Request:
+Поставь локально и на сервере все Live коэффициенты в 1, а то там 2.5 есть
+
+Result:
+Updated `strategies.live_stake_amount` to `1.00` in both local PostgreSQL and remote PostgreSQL `192.168.0.101`. Before the update, local had `1177` strategies with `1129` rows at `2.50000000`; remote had `1178` strategies with `1129` rows at `2.50000000`. The update changed `1129` rows in each database. Verification showed both databases now have `live_stake_not_1 = 0`, `min_live_stake = 1.00000000`, and `max_live_stake = 1.00000000`; both also have `live_stakes_enabled = 0`. Only `live_stake_amount` and `updated_at_utc` were changed; `paper_stake_amount`, `live_stakes`, and `live_available_balance` were not changed.

@@ -1,3 +1,17 @@
+## Active Update 2026-05-15 Live Stake Amount Reset
+Goal: Set every strategy Live stake amount to `1.00` locally and on the production server.
+Status: Completed
+Done:
+- Confirmed `strategies.live_stake_amount` is the Dashboard/strategy Live coefficient field; this is separate from `live_stakes` and `live_available_balance`.
+- Before the update, local PostgreSQL had `1177` strategies with `1129` rows at `2.50000000`; remote PostgreSQL had `1178` strategies with `1129` rows at `2.50000000`.
+- Updated local PostgreSQL `strategies.live_stake_amount` to `1.00` for all non-1 rows; `1129` rows changed.
+- Updated remote PostgreSQL `192.168.0.101` `strategies.live_stake_amount` to `1.00` for all non-1 rows; `1129` rows changed.
+- Verified both databases now have `live_stake_not_1 = 0`, `min_live_stake = 1.00000000`, and `max_live_stake = 1.00000000`.
+- Verified `live_stakes_enabled = 0` in both databases after the update; no Live strategy was enabled by this change.
+Next: None.
+Notes: Only `live_stake_amount` and `updated_at_utc` were changed; `paper_stake_amount`, `live_stakes`, and `live_available_balance` were not changed. Verification was done with DB SELECTs through the existing C#/.NET db probe without printing connection strings.
+Blockers: None.
+
 ## Active Update 2026-05-15 Post-Deploy BTC Settlement GTD Monitor
 Goal: Verify the redeployed BTC settlement GTD fill guard on production.
 Status: Completed
