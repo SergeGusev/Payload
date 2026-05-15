@@ -1,3 +1,20 @@
+## Active Update 2026-05-15 Strategy Status Check
+Goal: Check current server-side strategy status and performance.
+Status: Completed
+Done:
+- Queried the server PostgreSQL database at `192.168.0.101` read-only using a temporary C#/.NET/Npgsql report and removed the temp project after use.
+- Confirmed `PolyCopyTrader.Service` is running in `Live` mode with no last heartbeat error; it started at `2026-05-14T17:17:08Z` and the heartbeat age during the check was about `39s`.
+- Confirmed strategy safety flags remain conservative: `1178` strategies, `1176` enabled, `0` with `live_stakes=true`; `follow_leader` is disabled and `BTC Up or Down 5m Statistics` is enabled with `live_stakes=false`.
+- Confirmed overall Paper performance is still negative: `24188` settled, `7273` wins, `16911` losses, settled stake `67657.8217`, PnL `-20140.2655`, ROI `-29.7678%`; recent windows were also negative (`1h -14.4682%`, `6h -25.9427%`, `24h -34.0162%`).
+- Found current operational backlog: `680` observed rows, `1743` entered rows, `119` entered rows overdue for settlement, and `1477` pending Paper orders.
+- Family-level settled performance with 100+ samples is mostly weak: `4h` was positive (`537` settled, ROI `+4.081%`) and `5m binance bps` was slightly positive (`344`, `+1.7442%`), while `5m standard`, `skip`, `5m middle`, `5m gamma`, `1h`, `prev score`, `preopen`, and `15m` were negative.
+- Best 100+ settled individual candidates remain mostly the `Less Gamma` 5m variants: `btc_up_down_5m_less_60_gamma` (`125`, ROI `+12.0634%`), `less_90_gamma` (`116`, `+7.2596%`), `less_30_gamma` (`134`, `+6.9088%`), and `less_120_gamma` (`109`, `+3.7915%`).
+- Checked `BTC Up or Down 5m Statistics`: `36041` ticks across `159` markets, latest sample age about `3.5s`, `1345` would-bet ticks, `9310` live observations with `9202` applied, `108` pending, and `0` due pending; first-per-market resolved would-bets were still negative (`Down -1.73`, `Up -0.42` one-share PnL).
+- Confirmed the Gamma active-market max-offset issue is still present on the server: `3263` `PolymarketGammaClient/GetActiveMarkets` max-offset API errors in 24h, `173` in 1h, latest at `2026-05-15T05:13:51Z`; this matches the server still running a process started before the max-offset fix.
+Next: Deploy/restart the server build that includes the Gamma max-offset fix, then recheck `api_errors`; keep live stakes disabled and focus analysis on the few positive Paper candidates only after the API-error noise is fixed.
+Notes: `git pull --ff-only` reported already up to date. No source code or database data was changed. Existing old untracked artifact/deploy files were left untouched.
+Blockers: Server deployment/restart is required for the Gamma max-offset fix to take effect.
+
 ## Active Update 2026-05-14 Dashboard Remote Database Host Correction
 Goal: Correct the Dashboard `Remote database` selector target host.
 Status: Completed
