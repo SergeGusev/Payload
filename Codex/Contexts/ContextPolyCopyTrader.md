@@ -1,3 +1,13 @@
+## Active Update 2026-05-15 Dashboard Recent Strategy Column Order
+Goal: Move the key closed-result columns to the far left on Dashboard hourly `Strategies` tabs.
+Status: Completed
+Done:
+- Updated `StrategyRecentGridTemplate`, used by the `24 hours`, `6 hours`, and `1 hour` strategy tabs, so the first columns are `Settles`, `Won`, `Lost`, `Realized`, and `ClosedRoi`.
+- Kept the `All` strategy tab column order unchanged.
+Next: Restart or refresh Dashboard and inspect the hourly `Strategies` tabs.
+Notes: Verification passed: Dashboard Release build with a temporary `BaseOutputPath` succeeded; temporary output was removed; `dotnet test tests\PolyCopyTrader.Tests\PolyCopyTrader.Tests.csproj -c Release --no-restore` passed 472/472; `git diff --check` passed with CRLF warnings only.
+Blockers: None.
+
 ## Active Update 2026-05-15 Dashboard Only Positive Strategy Filters
 Goal: Add per-tab `Only positive` filters to Dashboard `Strategies` tabs.
 Status: Completed

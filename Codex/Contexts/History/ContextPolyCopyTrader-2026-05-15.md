@@ -32,3 +32,10 @@ Request:
 
 Result:
 Added an `Only positive` checkbox beside the category selector on each Dashboard `Strategies` tab: `All`, `24 hours`, `6 hours`, and `1 hour`. The `All` tab now filters rows by `ClosedRoiPct > 0`; the recent-window tabs filter by their window ROI (`RoiPct > 0`). Dashboard Release build passed with a temporary output path, full tests passed 472/472, and `git diff --check` passed with CRLF warnings only.
+
+## 2026-05-15T06:16:42.0008669Z
+Request:
+На всех табах Strategies по часам - 24, 6, 1 - крайними слева сделай колонки Settles, Won, Lost, Realized, ClosedRoi. На All оставь как есть
+
+Result:
+Updated the shared Dashboard hourly strategy grid template used by the `24 hours`, `6 hours`, and `1 hour` tabs so the far-left columns are now `Settles`, `Won`, `Lost`, `Realized`, and `ClosedRoi`. The `All` strategy tab was left unchanged. Dashboard Release build passed with a temporary output path, full tests passed 472/472, and `git diff --check` passed with CRLF warnings only.
