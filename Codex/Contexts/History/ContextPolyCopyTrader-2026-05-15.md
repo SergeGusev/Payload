@@ -25,3 +25,10 @@ Request:
 
 Result:
 Extracted and inspected the screenshot from the Windows clipboard. The failure was not a service availability or PostgreSQL connection failure; Dashboard timed out while reading `GetStrategyRecentPerformanceAsync`. Rewrote that repository query to aggregate recent strategy metrics in batch CTEs instead of per-strategy/window lateral scans, added supporting schema indexes and storage schema assertions, and verified the optimized method against `192.168.0.101` returned `3534` rows in about `4500 ms`. Build and full tests passed; temporary diagnostic/build artifacts were removed.
+
+## 2026-05-15T05:59:13.2737213Z
+Request:
+На Dashboard, на каждом табе вкладки Strategies, возле дроп дауна выбора категорий, добавь чекбокс - Only positive, если он выделен - показываем только те записи, где Closed ROI > 0
+
+Result:
+Added an `Only positive` checkbox beside the category selector on each Dashboard `Strategies` tab: `All`, `24 hours`, `6 hours`, and `1 hour`. The `All` tab now filters rows by `ClosedRoiPct > 0`; the recent-window tabs filter by their window ROI (`RoiPct > 0`). Dashboard Release build passed with a temporary output path, full tests passed 472/472, and `git diff --check` passed with CRLF warnings only.

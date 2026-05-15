@@ -1,3 +1,14 @@
+## Active Update 2026-05-15 Dashboard Only Positive Strategy Filters
+Goal: Add per-tab `Only positive` filters to Dashboard `Strategies` tabs.
+Status: Completed
+Done:
+- Added `Only positive` checkboxes beside each strategy category selector on `All`, `24 hours`, `6 hours`, and `1 hour`.
+- Added per-tab view-model state so each strategy tab can independently filter positive rows.
+- Applied `ClosedRoiPct > 0` on the `All` strategy grid and window `RoiPct > 0` on the recent strategy grids.
+Next: Restart or refresh Dashboard and use the `Only positive` checkbox on each `Strategies` tab as needed.
+Notes: Verification passed: Dashboard Release build with a temporary `BaseOutputPath` succeeded; temporary output was removed; `dotnet test tests\PolyCopyTrader.Tests\PolyCopyTrader.Tests.csproj -c Release --no-restore` passed 472/472; `git diff --check` passed with CRLF warnings only.
+Blockers: None.
+
 ## Active Update 2026-05-15 Dashboard Recent Strategy Timeout Fix
 Goal: Fix Dashboard refresh timeout shown in the screenshot after switching service availability to database heartbeat.
 Status: Completed

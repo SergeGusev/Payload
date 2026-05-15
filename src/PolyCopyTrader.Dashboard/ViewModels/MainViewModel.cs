@@ -102,6 +102,18 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
     [ObservableProperty]
     private string selectedStrategy1HourCategory = AllStrategyCategories;
 
+    [ObservableProperty]
+    private bool showOnlyPositiveStrategies;
+
+    [ObservableProperty]
+    private bool showOnlyPositiveStrategy24Hours;
+
+    [ObservableProperty]
+    private bool showOnlyPositiveStrategy6Hours;
+
+    [ObservableProperty]
+    private bool showOnlyPositiveStrategy1Hour;
+
     public ObservableCollection<OverviewMetric> Overview { get; } = [];
 
     public ObservableCollection<WatchlistRow> Watchlist { get; } = [];
@@ -190,6 +202,26 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
     }
 
     partial void OnSelectedStrategy1HourCategoryChanged(string value)
+    {
+        ApplyStrategyFilters();
+    }
+
+    partial void OnShowOnlyPositiveStrategiesChanged(bool value)
+    {
+        ApplyStrategyFilters();
+    }
+
+    partial void OnShowOnlyPositiveStrategy24HoursChanged(bool value)
+    {
+        ApplyStrategyFilters();
+    }
+
+    partial void OnShowOnlyPositiveStrategy6HoursChanged(bool value)
+    {
+        ApplyStrategyFilters();
+    }
+
+    partial void OnShowOnlyPositiveStrategy1HourChanged(bool value)
     {
         ApplyStrategyFilters();
     }
@@ -892,6 +924,7 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
             Strategies,
             allStrategies
                 .Where(item => IsStrategyCategoryVisible(item.Name, SelectedStrategyCategory))
+                .Where(item => IsStrategyPositiveVisible(item, ShowOnlyPositiveStrategies))
                 .ToArray());
         Replace(
             StrategyRecentPerformance,
@@ -903,18 +936,21 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
             allStrategyRecentPerformance
                 .Where(item => string.Equals(item.Window, "24h", StringComparison.OrdinalIgnoreCase))
                 .Where(item => IsStrategyCategoryVisible(item.Name, SelectedStrategy24HoursCategory))
+                .Where(item => IsStrategyRecentPositiveVisible(item, ShowOnlyPositiveStrategy24Hours))
                 .ToArray());
         Replace(
             StrategyRecent6Hours,
             allStrategyRecentPerformance
                 .Where(item => string.Equals(item.Window, "6h", StringComparison.OrdinalIgnoreCase))
                 .Where(item => IsStrategyCategoryVisible(item.Name, SelectedStrategy6HoursCategory))
+                .Where(item => IsStrategyRecentPositiveVisible(item, ShowOnlyPositiveStrategy6Hours))
                 .ToArray());
         Replace(
             StrategyRecent1Hour,
             allStrategyRecentPerformance
                 .Where(item => string.Equals(item.Window, "1h", StringComparison.OrdinalIgnoreCase))
                 .Where(item => IsStrategyCategoryVisible(item.Name, SelectedStrategy1HourCategory))
+                .Where(item => IsStrategyRecentPositiveVisible(item, ShowOnlyPositiveStrategy1Hour))
                 .ToArray());
     }
 
@@ -930,6 +966,16 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         return string.IsNullOrWhiteSpace(selectedCategory) ||
             string.Equals(selectedCategory, AllStrategyCategories, StringComparison.OrdinalIgnoreCase) ||
             string.Equals(GetStrategyCategory(strategyName), selectedCategory, StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static bool IsStrategyPositiveVisible(StrategyPerformanceRow strategy, bool onlyPositive)
+    {
+        return !onlyPositive || strategy.ClosedRoiPct > 0m;
+    }
+
+    private static bool IsStrategyRecentPositiveVisible(StrategyRecentPerformanceRow strategy, bool onlyPositive)
+    {
+        return !onlyPositive || strategy.RoiPct > 0m;
     }
 
     private static string GetStrategyCategory(string strategyName)
