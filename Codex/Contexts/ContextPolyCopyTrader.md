@@ -1,3 +1,18 @@
+## Active Update 2026-05-15 Production Server Alive Recheck
+Goal: Recheck whether the production server/service is alive after the prior connectivity failure.
+Status: Completed
+Done:
+- Confirmed `git pull --ff-only` was already up to date at `a14f18f Record production server alive check`.
+- Confirmed the current machine is back on Wi-Fi `192.168.0.100`; ARP now has an active entry for `192.168.0.101` with MAC `60-ff-9e-19-fb-8a`.
+- Ping to `192.168.0.101` still failed, but TCP `192.168.0.101:5432` succeeded.
+- HTTP `http://192.168.0.101:5118/status` still timed out; this appears to be the control endpoint not reachable from this machine, not proof that the service is down.
+- Queried remote PostgreSQL read-only via the existing .NET `out/dbprobe` without printing the connection string.
+- Confirmed `service_heartbeats` for `PolyCopyTrader.Service` is fresh: `status=Running`, `mode=Live`, `last_heartbeat_utc=2026-05-15T15:31:47Z`, heartbeat age about `28` seconds, and `last_error = null`.
+- Confirmed `api_errors_10m = 0`, `live_stakes_enabled = 0`, and `live_orders_60m = 0`.
+Next: None for reachability; if Dashboard control buttons still fail, inspect why port `5118` is not reachable externally even while the service heartbeat is fresh.
+Notes: Read-only network and database checks only. No database writes, order submissions, or cancel actions were performed. The first `out/dbprobe` run built with existing Storage nullable warnings; subsequent read-only probes used `--no-build`.
+Blockers: None.
+
 ## Active Update 2026-05-15 Production Server Alive Check
 Goal: Check whether the production server/service is currently reachable.
 Status: Blocked

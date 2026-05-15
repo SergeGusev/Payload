@@ -208,3 +208,10 @@ Request:
 
 Result:
 Could not reach the production host from the current machine. `git pull --ff-only` reported already up to date. The known production address `192.168.0.101` failed ping, HTTP `/status` on port `5118` timed out, and TCP checks for ports `5118` and `5432` did not connect. The current machine is on Wi-Fi `192.168.100.41` with gateway `192.168.100.1`, and ARP has no active `192.168.0.101` entry. The likely moved address `192.168.100.101` also failed ping, HTTP `/status`, and TCP port checks. Process-level service health could not be determined because the host/network path is unreachable. No database writes or order actions were performed.
+
+## 2026-05-15T15:32:54.0767936Z
+Request:
+А сейчас попробуй
+
+Result:
+Rechecked production reachability. The current machine is back on `192.168.0.100`, ARP has an active `192.168.0.101` entry, and TCP `192.168.0.101:5432` succeeds. Ping to `192.168.0.101` still fails and HTTP `http://192.168.0.101:5118/status` still times out, but remote PostgreSQL heartbeat is fresh: `PolyCopyTrader.Service` reports `status=Running`, `mode=Live`, `last_heartbeat_utc=2026-05-15T15:31:47Z`, heartbeat age about `28` seconds, and `last_error = null`. Additional read-only checks showed `api_errors_10m = 0`, `live_stakes_enabled = 0`, and `live_orders_60m = 0`. No database writes or order actions were performed.
