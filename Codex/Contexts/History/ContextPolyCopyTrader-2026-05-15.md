@@ -215,3 +215,10 @@ Request:
 
 Result:
 Rechecked production reachability. The current machine is back on `192.168.0.100`, ARP has an active `192.168.0.101` entry, and TCP `192.168.0.101:5432` succeeds. Ping to `192.168.0.101` still fails and HTTP `http://192.168.0.101:5118/status` still times out, but remote PostgreSQL heartbeat is fresh: `PolyCopyTrader.Service` reports `status=Running`, `mode=Live`, `last_heartbeat_utc=2026-05-15T15:31:47Z`, heartbeat age about `28` seconds, and `last_error = null`. Additional read-only checks showed `api_errors_10m = 0`, `live_stakes_enabled = 0`, and `live_orders_60m = 0`. No database writes or order actions were performed.
+
+## 2026-05-15T15:55:14.8560953Z
+Request:
+Как у нас определяется ставка в Binance bps стратегиях?
+
+Result:
+Explained from code that Binance bps strategy bps values are minimum BTC move thresholds, not stake sizes. The stake multiplier comes from `strategies.paper_stake_amount` via `StrategyRuntimeSettings.PaperStakeAmount`; opening-limit sizing uses market/order-book `min_order_size * limit_price * 1.10 * stakeMultiplier`, rounds target notional up to whole USD, then rounds shares up to CLOB-compatible precision. Binance bps variants use the fixed Binance start-relative GTD limit path capped at `0.50`. A read-only production query showed all 12 `btc_up_down_5m_binance_bps%` rows currently have `paper_stake_amount = 1.00000000`, `live_stake_amount = 1.00000000`, `enabled = true`, and `live_stakes = false`. No database writes or order actions were performed.

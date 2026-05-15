@@ -1,3 +1,17 @@
+## Active Update 2026-05-15 Binance BPS Stake Explanation
+Goal: Explain how stake is determined for Binance bps BTC 5m strategies.
+Status: Completed
+Done:
+- Re-read workflow, AGENTS, coding rules, active context, Git status/log, and relevant BTC/Binance strategy code.
+- Confirmed Binance bps variants use `BtcUpDown5mStrategyBehavior.BinanceStartRelativeBpsThreshold`; the bps value is a minimum BTC move threshold, not a stake size.
+- Confirmed entry code reads `settings.PaperStakeAmount` from `strategies.paper_stake_amount` as `stakeMultiplier` before opening-limit sizing.
+- Confirmed opening-limit stake sizing computes notional from market/order-book minimum size: `min_order_size * limit_price * 1.10 * stakeMultiplier`, rounds target notional up to whole USD, then rounds shares up to CLOB-compatible 2 decimals.
+- Confirmed Binance bps variants use the fixed Binance start-relative opening limit price path capped at `0.50`.
+- Queried production PostgreSQL read-only; all 12 `btc_up_down_5m_binance_bps%` rows currently have `paper_stake_amount = 1.00000000`, `live_stake_amount = 1.00000000`, `enabled = true`, and `live_stakes = false`.
+Next: None.
+Notes: Answer-only diagnostic. Remote DB check was read-only through `out/dbprobe` without printing connection strings. No database writes, code changes, order submissions, or cancel actions were performed.
+Blockers: None.
+
 ## Active Update 2026-05-15 Production Server Alive Recheck
 Goal: Recheck whether the production server/service is alive after the prior connectivity failure.
 Status: Completed
