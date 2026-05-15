@@ -1,3 +1,16 @@
+## Active Update 2026-05-15 PreOpen Down49 Market Low Evidence
+Goal: Verify whether the last-day BTC Up or Down 1h PreOpen Full Down 49 markets really never traded/asked below the 0.49 limit.
+Status: Completed
+Done:
+- Ran a temporary read-only C#/.NET/Npgsql diagnostic against remote PostgreSQL `192.168.0.101` for exact strategy `btc_up_down_1h_preopen_full_down_49`.
+- Confirmed the DB does not have full persisted market-history evidence for these order windows: `order_book_snapshots`, `polymarket_websocket_trade_ticks`, and `polymarket_onchain_trade_captures` had no matching rows in the checked windows for the Down asset ids.
+- Used the order `raw_decision_json` initial CLOB snapshots instead. Among 24 orders in the last 24h, `9` had initial best ask `<= 0.49`, `8` had initial best ask `< 0.49`, minimum initial best ask was `0.47`, and minimum initial last trade was `0.44`.
+- Found several orders expired with `gtd_limit_not_filled` despite initial executable ask depth at or below `0.49`; filled orders had `BalancedGtcDepth` fill evidence, while those expired rows had no conservative fill model status recorded.
+- Removed the temporary diagnostic project after use.
+Next: Investigate/fix why BTC GTD opening-limit orders with `paper_gtd_initial_executable_ask_shares > 0` can expire without a fill, or verify the server is running the conservative GTD fill model code/config.
+Notes: No production code changed. This was a read-only operational diagnostic plus context/history update.
+Blockers: None for the diagnostic; the likely follow-up is a paper-fill simulation bug/version investigation.
+
 ## Active Update 2026-05-15 PreOpen 1h Down 49 Settlement Count Check
 Goal: Explain why `BTC Up or Down 1h PreOpen Full Down 49` has far fewer 24h settlements than 24.
 Status: Completed

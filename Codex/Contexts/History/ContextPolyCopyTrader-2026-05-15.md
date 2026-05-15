@@ -53,3 +53,10 @@ Request:
 
 Result:
 Investigated the exact strategy with a temporary read-only C#/.NET/Npgsql diagnostic against remote PostgreSQL `192.168.0.101`. The low settlement count is due to passive maker-style GTD limit behavior, not missing hourly markets: the exact strategy created 24 orders in the last 24h, but only 11 newly created orders filled, 12 expired without fills and were marked `Skipped/gtd_limit_not_filled`, and 1 was still pending. Dashboard's 24h `Settles` is counted by `settled_at_utc`; at the check time the remote DB showed 12 Dashboard-window settlements for the exact strategy and 10 for the similar `... Down 49 Sell` strategy. The temporary diagnostic project was removed; no production code changed.
+
+## 2026-05-15T06:49:02.8225485Z
+Request:
+Clarify whether the past-day markets really did not go below `0.49`; the user doubted that only 10/11 fills was realistic.
+
+Result:
+Rechecked the exact strategy with a temporary read-only C#/.NET/Npgsql diagnostic against remote PostgreSQL `192.168.0.101`. The database does not contain full persisted tick/order-book history for those order windows: matching `order_book_snapshots`, `polymarket_websocket_trade_ticks`, and `polymarket_onchain_trade_captures` rows were absent for the Down asset ids, so DB history cannot prove the exact intraday minimum for every market. However, the order `raw_decision_json` initial CLOB snapshots directly showed that the market did reach the strategy limit at submission time: among 24 orders, 9 had initial best ask `<= 0.49`, 8 had initial best ask `< 0.49`, the minimum initial best ask was `0.47`, and the minimum initial last trade was `0.44`. Several orders still expired with `gtd_limit_not_filled` despite executable initial ask depth, while filled orders had `BalancedGtcDepth` evidence. This points to a paper-fill simulation/processing/version issue rather than the market never touching `0.49`. The temporary diagnostic project was removed; no production code changed.
