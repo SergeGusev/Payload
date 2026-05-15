@@ -257,3 +257,10 @@ Request:
 
 Result:
 Added Binance bps strategy variants for the full `0.1..5.0` grid in both `src` and `src4.8`, preserving existing ids/codes for `0.1..0.9`, `1`, `2`, and `5` while assigning non-conflicting ids to new `1.1..4.9`, `3`, and `4` variants. Updated both PostgreSQL seed SQL files, Strategy Selector candidates, README/configuration docs, and BTC strategy tests. Applied the idempotent insert to local PostgreSQL and remote PostgreSQL `192.168.0.101`; both now have 50 expected Binance bps rows, all enabled, Live disabled, and paper stake `1.00000000`. Verification passed for targeted catalog test 1/1, Release service build, full test project 480/480, and `git diff --check`; Net48 `dotnet build` reached Domain/Storage/Service but failed in the existing old WPF Dashboard project tooling with `InitializeComponent`/entry-point errors.
+
+## 2026-05-15T16:37:28.1272299Z
+Request:
+В ветке src4.8 можешь уже ничего не делать
+
+Result:
+Recorded the instruction as a forward-looking maintenance scope rule: future implementation tasks should target the current `src` code path and leave `src4.8` unchanged unless the user explicitly asks for `src4.8` work. No existing commit was reverted, and no code, database, order, or service changes were made.

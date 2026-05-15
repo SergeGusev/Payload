@@ -1,3 +1,13 @@
+## Active Update 2026-05-15 Src4.8 Maintenance Scope
+Goal: Record the user's instruction that future work no longer needs `src4.8` changes by default.
+Status: Completed
+Done:
+- Recorded that future implementation tasks should target the current `src` code path and leave `src4.8` unchanged unless the user explicitly asks for `src4.8` work.
+- Did not revert the already-completed Binance bps grid commit; this is a forward-looking maintenance scope instruction.
+Next: Use `src` only for future changes unless `src4.8` is explicitly requested.
+Notes: Instruction-only context update. No code, database, order, or service changes were made.
+Blockers: None.
+
 ## Active Update 2026-05-15 Binance BPS 1-5 Grid
 Goal: Add Binance bps strategy variants from 1 bps through 5 bps in 0.1 bps steps while preserving already-existing variants.
 Status: Completed
