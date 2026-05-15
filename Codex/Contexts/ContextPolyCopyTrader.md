@@ -1,3 +1,14 @@
+## Active Update 2026-05-15 Dashboard Recent Strategy Name Column
+Goal: Keep the strategy name as the far-left column on hourly `Strategies` tabs.
+Status: Completed
+Done:
+- Moved `Name` back to the first column in `StrategyRecentGridTemplate`.
+- Kept `Settles`, `Won`, `Lost`, `Realized`, and `ClosedRoi` immediately after `Name` on the `24 hours`, `6 hours`, and `1 hour` strategy tabs.
+- Kept the `All` strategy tab unchanged.
+Next: Restart or refresh Dashboard and inspect the hourly `Strategies` tabs.
+Notes: Verification passed: Dashboard Release build with a temporary `BaseOutputPath` succeeded; temporary output was removed; `dotnet test tests\PolyCopyTrader.Tests\PolyCopyTrader.Tests.csproj -c Release --no-restore` passed 472/472; `git diff --check` passed with CRLF warnings only.
+Blockers: None.
+
 ## Active Update 2026-05-15 Dashboard Recent Strategy Column Order
 Goal: Move the key closed-result columns to the far left on Dashboard hourly `Strategies` tabs.
 Status: Completed

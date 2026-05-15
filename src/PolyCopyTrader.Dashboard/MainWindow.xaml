@@ -61,12 +61,12 @@
             <DataGrid ItemsSource="{Binding}"
                       behaviors:DataGridSelectionPersistence.KeyProperties="Name">
                 <DataGrid.Columns>
+                    <DataGridTextColumn Header="Name" Binding="{Binding Name}" Width="260" />
                     <DataGridTextColumn Header="Settles" Binding="{Binding SettledRunsCount}" Width="75" />
                     <DataGridTextColumn Header="Won" Binding="{Binding WonRunsCount}" Width="60" />
                     <DataGridTextColumn Header="Lost" Binding="{Binding LostRunsCount}" Width="60" />
                     <DataGridTextColumn Header="Realized" Binding="{Binding RealizedPnlUsd}" Width="85" />
                     <DataGridTextColumn Header="ClosedRoi" Binding="{Binding RoiPct}" Width="85" />
-                    <DataGridTextColumn Header="Name" Binding="{Binding Name}" Width="260" />
                     <DataGridTextColumn Header="Orders" Binding="{Binding OrdersCount}" Width="70" />
                     <DataGridTextColumn Header="Filled" Binding="{Binding FilledOrdersCount}" Width="70" />
                     <DataGridTextColumn Header="Expired" Binding="{Binding ExpiredOrdersCount}" Width="75" />

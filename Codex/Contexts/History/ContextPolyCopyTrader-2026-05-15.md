@@ -39,3 +39,10 @@ Request:
 
 Result:
 Updated the shared Dashboard hourly strategy grid template used by the `24 hours`, `6 hours`, and `1 hour` tabs so the far-left columns are now `Settles`, `Won`, `Lost`, `Realized`, and `ClosedRoi`. The `All` strategy tab was left unchanged. Dashboard Release build passed with a temporary output path, full tests passed 472/472, and `git diff --check` passed with CRLF warnings only.
+
+## 2026-05-15T06:25:44.7791869Z
+Request:
+В последней задаче я погорячился. Самой левой колонкой оставь всё-таки название стратегия
+
+Result:
+Adjusted the shared Dashboard hourly strategy grid template so `Name` is again the far-left column on the `24 hours`, `6 hours`, and `1 hour` strategy tabs. The result columns remain immediately after it: `Settles`, `Won`, `Lost`, `Realized`, and `ClosedRoi`. Dashboard Release build passed with a temporary output path, full tests passed 472/472, and `git diff --check` passed with CRLF warnings only.
