@@ -1,3 +1,17 @@
+## Active Update 2026-05-15 Post-Deploy BTC Settlement GTD Monitor
+Goal: Verify the redeployed BTC settlement GTD fill guard on production.
+Status: Completed
+Done:
+- Confirmed remote PostgreSQL `service_heartbeats.version` shows production running `info=1.0.0+fa160e7265ce77332a409feb738127d699c20db7; assembly=1.0.0.0; mvid=0d1ea8174e15`, with service start `2026-05-15T12:41:37Z`.
+- First post-start check at `2026-05-15T12:43:00Z` showed `27` fresh `paper_gtd_limit` BUY orders, `20` initial-executable orders, `20` initial-executable orders with fills/fill-model status, `20` conservative immediate fills, and `0` initial-executable expired-without-fill rows.
+- Second check at `2026-05-15T12:46:08Z` after the first expiry window showed `378` fresh GTD BUY orders, `60` initial-executable orders, `34` filled with fill-model status, and `0` initial-executable expired-without-fill rows.
+- Settlement-window check at `2026-05-15T12:50:25Z` showed `740` fresh GTD BUY orders, `108` initial-executable orders, `95` initial-executable orders with fills/fill-model status, `90` conservative immediate fills, `34` initial-executable runs already settled, `0` initial-executable skipped runs, and `0` initial-executable expired-without-fill rows.
+- Confirmed the remaining `Expired/Skipped gtd_limit_not_filled` rows after deploy are not initial-executable (`76` with blank fill-model status and `10` with `waiting_for_orderbook`, both `initial_exec_orders = 0`).
+- Confirmed no fresh Paper/BTC `api_errors` since service start.
+Next: Continue normal monitoring after more market cycles; no code change is needed from this check.
+Notes: Monitoring used read-only DB probes against remote PostgreSQL and did not print connection strings. The expected production commit is now active and the previously observed initial-executable skip pattern did not recur through the checked expiry/settlement windows.
+Blockers: None.
+
 ## Active Update 2026-05-15 BTC Settlement GTD Fill Guard
 Goal: Verify the redeployed GTD fixes and close the remaining BTC settlement skip path.
 Status: Completed
