@@ -1,3 +1,13 @@
+## Active Update 2026-05-15 Paper GTD Fix Scope Answer
+Goal: Clarify whether the `paper_gtd_limit` conservative fill fix affects only one PreOpen strategy or all matching strategies.
+Status: Completed
+Done:
+- Rechecked `ConservativePaperGtdFillEstimator.IsEligible`: the fix applies to BTC strategy ids in `StrategyIds.BtcUpDown5mVariants` when the order is a BUY, GTD, opening-limit Paper order, conservative GTD fills are enabled, and `RawDecisionJson` has a supported opening-limit mode.
+- Confirmed this includes all current BTC Up/Down variants that create `pricing_mode = "paper_gtd_limit"` opening-limit orders, not only `BTC Up or Down 1h PreOpen Full Down 49`; it does not affect FollowLeader, non-BTC strategies, SELL orders, live shadow test orders, or non-GTD/non-opening-limit paper orders.
+Next: Deploy/restart the service to apply the fix to future eligible Paper orders.
+Notes: No source code changed for this answer; verification was code inspection after `git pull --ff-only` reported already up to date.
+Blockers: None.
+
 ## Active Update 2026-05-15 Paper GTD Fill Mode Recognition Fix
 Goal: Fix BTC PreOpen GTD Paper orders with initial executable asks expiring instead of using the conservative fill model.
 Status: Completed

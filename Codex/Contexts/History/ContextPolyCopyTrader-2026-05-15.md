@@ -68,3 +68,10 @@ Request:
 
 Result:
 Found and fixed the concrete fill-model recognition bug. PreOpen opening-limit orders are created with `pricing_mode = "paper_gtd_limit"`, but `ConservativePaperGtdFillEstimator` only recognized `"opening_limit"` and a legacy conversion flag, so current BTC PreOpen GTD orders bypassed the conservative fill path and only filled when the later ordinary `BalancedGtcDepth` check happened to cross the limit. Updated the estimator to recognize `paper_gtd_limit`, added a direct unit test for that mode, and added an integration test proving `PaperTradingProcessor` fills from `paper_gtd_initial_executable_ask_shares` even when the current book no longer crosses the limit. Verification passed: targeted tests 7/7, full tests 474/474, Service Release build passed, and `git diff --check` passed with CRLF warnings only. The remote service still needs deploy/restart to apply the fix; old expired orders will not be retroactively filled.
+
+## 2026-05-15T07:02:38.1941333Z
+Request:
+Это будет касаться всех стратегий или только BTC Up or Down 1h PreOpen Full Down 49 ?
+
+Result:
+Answered from current code inspection that the fix is not limited to `BTC Up or Down 1h PreOpen Full Down 49`. `ConservativePaperGtdFillEstimator` applies to BTC strategy ids in `StrategyIds.BtcUpDown5mVariants` when an order is BUY, GTD, opening-limit Paper, conservative GTD fills are enabled, and the raw decision JSON contains a supported opening-limit mode such as `paper_gtd_limit`. This covers all current BTC Up/Down variants that create such opening-limit orders, while excluding FollowLeader, non-BTC strategies, SELL orders, live shadow test orders, and non-GTD/non-opening-limit orders. No source code changed.
