@@ -60,3 +60,11 @@ Clarify whether the past-day markets really did not go below `0.49`; the user do
 
 Result:
 Rechecked the exact strategy with a temporary read-only C#/.NET/Npgsql diagnostic against remote PostgreSQL `192.168.0.101`. The database does not contain full persisted tick/order-book history for those order windows: matching `order_book_snapshots`, `polymarket_websocket_trade_ticks`, and `polymarket_onchain_trade_captures` rows were absent for the Down asset ids, so DB history cannot prove the exact intraday minimum for every market. However, the order `raw_decision_json` initial CLOB snapshots directly showed that the market did reach the strategy limit at submission time: among 24 orders, 9 had initial best ask `<= 0.49`, 8 had initial best ask `< 0.49`, the minimum initial best ask was `0.47`, and the minimum initial last trade was `0.44`. Several orders still expired with `gtd_limit_not_filled` despite executable initial ask depth, while filled orders had `BalancedGtcDepth` evidence. This points to a paper-fill simulation/processing/version issue rather than the market never touching `0.49`. The temporary diagnostic project was removed; no production code changed.
+
+## 2026-05-15T06:56:35.9132511Z
+Request:
+Разберись с " Это похоже на проблему в paper-fill simulation/processing или на то, что сервер фактически не применяет
+  текущую conservative GTD fill логику", это действительно похоже на проблему.
+
+Result:
+Found and fixed the concrete fill-model recognition bug. PreOpen opening-limit orders are created with `pricing_mode = "paper_gtd_limit"`, but `ConservativePaperGtdFillEstimator` only recognized `"opening_limit"` and a legacy conversion flag, so current BTC PreOpen GTD orders bypassed the conservative fill path and only filled when the later ordinary `BalancedGtcDepth` check happened to cross the limit. Updated the estimator to recognize `paper_gtd_limit`, added a direct unit test for that mode, and added an integration test proving `PaperTradingProcessor` fills from `paper_gtd_initial_executable_ask_shares` even when the current book no longer crosses the limit. Verification passed: targeted tests 7/7, full tests 474/474, Service Release build passed, and `git diff --check` passed with CRLF warnings only. The remote service still needs deploy/restart to apply the fix; old expired orders will not be retroactively filled.

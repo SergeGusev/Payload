@@ -48,6 +48,30 @@ public sealed class ConservativePaperGtdFillEstimatorTests
     }
 
     [Fact]
+    public void Evaluate_PaperGtdLimitPricingMode_CreatesImmediateFill()
+    {
+        var now = DateTimeOffset.UtcNow;
+        var estimator = CreateEstimator();
+        var order = CreateOrder(
+            now,
+            StrategyIds.BtcUpDown5mVariants[0].Id,
+            RawDecisionJson(
+                now,
+                pricingMode: "paper_gtd_limit",
+                initialExecutableAskShares: 6m,
+                initialExecutableAskVwap: 0.48m));
+
+        var result = estimator.Evaluate(order, null, now, previouslyFilledShares: 0m);
+
+        Assert.True(result.Handled);
+        Assert.NotNull(result.Fill);
+        Assert.Equal(6m, result.Fill!.SizeShares);
+        Assert.Equal(order.Price, result.Fill.Price);
+        Assert.Contains("ConservativeGtdImmediateFill", result.Fill.Evidence);
+        Assert.Contains("filled_immediate_marketable", result.Order.RawDecisionJson);
+    }
+
+    [Fact]
     public void Evaluate_LaterAskBelowLimitWithoutTradeThrough_DoesNotFill()
     {
         var now = DateTimeOffset.UtcNow;
@@ -149,13 +173,14 @@ public sealed class ConservativePaperGtdFillEstimatorTests
 
     private static string RawDecisionJson(
         DateTimeOffset snapshotAtUtc,
+        string pricingMode = "opening_limit",
         decimal initialQueueAheadShares = 5m,
         decimal initialExecutableAskShares = 0m,
         decimal? initialExecutableAskVwap = null)
     {
         return JsonSerializer.Serialize(new Dictionary<string, object?>
         {
-            ["pricing_mode"] = "opening_limit",
+            ["pricing_mode"] = pricingMode,
             ["order_type"] = "GTD",
             ["order_execution_mode"] = "GTD",
             ["paper_gtd_initial_snapshot_at_utc"] = snapshotAtUtc.ToString("O"),

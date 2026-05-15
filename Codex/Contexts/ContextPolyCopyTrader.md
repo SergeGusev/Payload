@@ -1,3 +1,15 @@
+## Active Update 2026-05-15 Paper GTD Fill Mode Recognition Fix
+Goal: Fix BTC PreOpen GTD Paper orders with initial executable asks expiring instead of using the conservative fill model.
+Status: Completed
+Done:
+- Identified the bug: `BtcUpDown5mPaperStrategyProcessor` writes PreOpen opening-limit orders with `pricing_mode = "paper_gtd_limit"`, but `ConservativePaperGtdFillEstimator.IsOpeningLimit` only accepted `"opening_limit"` or the legacy `converted_to_gtd_limit_order` flag.
+- Updated `ConservativePaperGtdFillEstimator` to recognize `paper_gtd_limit`, so current PreOpen GTD Paper orders enter the conservative immediate/late fill path instead of falling back to ordinary `BalancedGtcDepth`.
+- Added an estimator unit test for `paper_gtd_limit` immediate fills.
+- Added an integration test proving `PaperTradingProcessor` fills from `paper_gtd_initial_executable_ask_shares` even when the current order book no longer crosses the limit.
+Next: Deploy/restart the server service so new orders use this fix; previously expired orders are not retroactively filled by this code change.
+Notes: Verification passed: targeted estimator/processor tests passed 7/7; full `dotnet test tests\PolyCopyTrader.Tests\PolyCopyTrader.Tests.csproj -c Release --no-restore` passed 474/474; `dotnet build src\PolyCopyTrader.Service\PolyCopyTrader.Service.csproj -c Release --no-restore` passed with 0 warnings and 0 errors; `git diff --check` passed with CRLF warnings only.
+Blockers: Server deployment/restart is required for the running remote service to apply the fix.
+
 ## Active Update 2026-05-15 PreOpen Down49 Market Low Evidence
 Goal: Verify whether the last-day BTC Up or Down 1h PreOpen Full Down 49 markets really never traded/asked below the 0.49 limit.
 Status: Completed

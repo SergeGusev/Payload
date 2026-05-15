@@ -1,3 +1,4 @@
+using System.Text.Json;
 using Microsoft.Extensions.Logging.Abstractions;
 using PolyCopyTrader.Domain;
 using PolyCopyTrader.Domain.Configuration;
@@ -220,6 +221,62 @@ public sealed class PipelineIntegrationTests
         Assert.Equal(2, repository.PaperOrders.Count(order => order.Status == PaperOrderStatus.Expired));
         Assert.Equal(1, repository.PaperOrders.Count(order => order.Status == PaperOrderStatus.Filled));
         Assert.Equal(1, repository.PaperOrders.Count(order => order.Status == PaperOrderStatus.Pending));
+    }
+
+    [Fact]
+    public async Task PaperTradingProcessor_PaperGtdLimitUsesInitialExecutableAskForImmediateFill()
+    {
+        var repository = new TestAppRepository();
+        var now = DateTimeOffset.UtcNow;
+        var variant = StrategyIds.BtcUpDown5mVariants.Single(item =>
+            item.Code == "btc_up_down_1h_preopen_full_down_49");
+        var order = new PaperOrder(
+            Guid.NewGuid(),
+            Guid.NewGuid(),
+            variant.CopiedTraderWallet,
+            PaperOrderStatus.Pending,
+            TradeSide.Buy,
+            "asset-down",
+            "condition-1",
+            "Down",
+            0.49m,
+            10m,
+            4.90m,
+            now.AddMinutes(-1),
+            now.AddMinutes(30),
+            StrategyId: variant.Id,
+            RawDecisionJson: JsonSerializer.Serialize(new Dictionary<string, object?>
+            {
+                ["pricing_mode"] = "paper_gtd_limit",
+                ["order_type"] = "GTD",
+                ["order_execution_mode"] = "GTD",
+                ["paper_gtd_initial_snapshot_at_utc"] = now.AddMinutes(-1).ToString("O"),
+                ["paper_gtd_initial_best_bid"] = 0.48m,
+                ["paper_gtd_initial_best_ask"] = 0.47m,
+                ["paper_gtd_initial_last_trade_price"] = 0.44m,
+                ["paper_gtd_initial_queue_ahead_shares"] = 0m,
+                ["paper_gtd_initial_executable_ask_shares"] = 6m,
+                ["paper_gtd_initial_executable_ask_vwap"] = 0.48m
+            }));
+        await repository.AddPaperOrderAsync(order);
+
+        var paperProcessor = CreatePaperProcessor(
+            repository,
+            OrderBook(
+                "asset-down",
+                [new OrderBookLevel(0.48m, 100m)],
+                [new OrderBookLevel(0.51m, 100m)]));
+
+        var paperResult = await paperProcessor.ProcessOpenOrdersAsync();
+
+        Assert.Equal(1, paperResult.OrdersFilled);
+        var fill = Assert.Single(repository.PaperFills);
+        Assert.Equal(6m, fill.SizeShares);
+        Assert.Equal(0.49m, fill.Price);
+        Assert.Contains("ConservativeGtdImmediateFill", fill.Evidence);
+        var updatedOrder = Assert.Single(repository.PaperOrders);
+        Assert.Equal(PaperOrderStatus.PartiallyFilled, updatedOrder.Status);
+        Assert.Contains("filled_immediate_marketable", updatedOrder.RawDecisionJson);
     }
 
     private static PaperTradingProcessor CreatePaperProcessor(
