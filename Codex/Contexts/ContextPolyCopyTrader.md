@@ -1,3 +1,17 @@
+## Active Update 2026-05-15 Buy Bid Versus Sell Ask Clarification
+Goal: Clarify whether all bets/orders are made only as bids.
+Status: Completed
+Done:
+- Rechecked general paper order creation/fill logic, BTC strategy entry/exit logic, Follow leader live preflight, and on-chain paper signal selection.
+- Confirmed BTC strategy entry bets, including Binance bps, create `TradeSide.Buy` GTD/limit paper orders; these are bids.
+- Confirmed BUY paper fills simulate against ask depth at or below the order price.
+- Confirmed the system also has SELL paper order paths for exits, including pre-open sell exits, leader-activity copied-position exits, and Follow leader SELL signals when a copied paper position exists; these are sell limits/asks.
+- Confirmed SELL paper fills simulate against bid depth at or above the order price.
+- Confirmed current live placement paths are BUY-only/disabled-guarded; Follow leader live explicitly rejects non-BUY, and BTC live creation records `TradeSide.Buy`.
+Next: None.
+Notes: Answer-only clarification. No database writes, code changes, order submissions, or cancel actions were performed.
+Blockers: None.
+
 ## Active Update 2026-05-15 Binance BPS Bid Ask Explanation
 Goal: Explain which bid/ask values are set or observed when Binance bps strategies create a paper bet.
 Status: Completed
