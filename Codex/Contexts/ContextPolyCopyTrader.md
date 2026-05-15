@@ -1,3 +1,14 @@
+## Active Update 2026-05-15 Paper GTD Fix Explanation
+Goal: Explain in detail why fresh `Skip/gtd_limit_not_filled` rows persisted and what the `src` fix changed.
+Status: Completed
+Done:
+- Reconfirmed latest commit `9785ba3 Fill initial executable paper GTD before expiry`.
+- Summarized that the defect was operation ordering in `PaperTradingProcessor`: initial-executable GTD orders were prioritized, but expired before conservative fill evaluation if the worker reached them after local deadline.
+- Prepared the explanation of the fix: detect initial-executable BUY GTD opening-limit orders, evaluate conservative immediate fill from `RawDecisionJson` submit snapshot before expiry, and expire only if no fill is produced.
+Next: None beyond deploying/restarting `src` and monitoring fresh metrics.
+Notes: Answer-only task; no production source changes. Git pull reported already up to date; current code references inspected in `src/PolyCopyTrader.Service/PaperTrading/PaperTradingProcessor.cs` and `tests/PolyCopyTrader.Tests/PipelineIntegrationTests.cs`.
+Blockers: None.
+
 ## Active Update 2026-05-15 Src Paper GTD Expiry Before Fill Fix
 Goal: Correct the Skip follow-up after confirming the running service is built from `src`, not `src4.8`.
 Status: Completed

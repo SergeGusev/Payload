@@ -131,3 +131,10 @@ Request:
 
 Result:
 Corrected the investigation back to the `src` service. Rechecked remote PostgreSQL `192.168.0.101`: after the `2026-05-15T10:05:30Z` service start, fresh `paper_gtd_limit` BUY orders still had `739` initial-executable rows and `505` initial-executable expired/skipped rows by `2026-05-15T11:03:33Z`, with only `36` rows carrying a fill-model status. Found the `src` bug: open-order priority brought initial-executable GTD orders forward, but `PaperTradingProcessor` still called `ExpireIfNeeded` before conservative fill evaluation, so orders reached after the local deadline became `gtd_limit_not_filled` without checking the submit snapshot. Updated `src/PolyCopyTrader.Service/PaperTrading/PaperTradingProcessor.cs` to run the conservative immediate-fill check for initial-executable BUY GTD opening-limit orders before expiry, added a regression integration test for an already-expired initial-executable order, and updated README/config docs. Verification passed: targeted pipeline tests 7/7, full tests 476/476, Service Release build 0 warnings/errors, and `git diff --check` passed with CRLF warnings only. Deploy/restart from `src` is required before runtime metrics improve.
+
+## 2026-05-15T11:12:55.1667249+00:00
+Request:
+Объясни мне подробно, в чём была проблема и как ты её исправил
+
+Result:
+Explained that the remaining Skip issue in `src` was caused by operation ordering inside `PaperTradingProcessor`: initial-executable GTD orders were prioritized before the batch cap, but if the worker reached them after local expiry, `ExpireIfNeeded` ran before the conservative fill model and marked them `gtd_limit_not_filled` without evaluating the initial submit snapshot. Explained that commit `9785ba3` changes initial-executable BUY GTD opening-limit orders to run conservative immediate-fill evaluation first using `RawDecisionJson`, then expire only when that does not produce a fill; non-initial-executable expired orders still close immediately. No production source changed for this explanation.
