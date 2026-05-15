@@ -1,3 +1,16 @@
+## Active Update 2026-05-15 Binance BPS 1-5 Grid
+Goal: Add Binance bps strategy variants from 1 bps through 5 bps in 0.1 bps steps while preserving already-existing variants.
+Status: Completed
+Done:
+- Updated `src` and `src4.8` strategy catalogs to generate Binance bps variants for every threshold from `0.1` through `5.0`, preserving existing ids/codes for `0.1..0.9`, `1`, `2`, and `5`.
+- Added deterministic non-conflicting ids for the new `1.1..4.9`, `3`, and `4` variants and included all Binance bps variants in Strategy Selector candidates.
+- Updated both `src` and `src4.8` PostgreSQL seed SQL with idempotent inserts for missing `1.1..4.9`, `3`, and `4` Binance bps rows.
+- Updated README, configuration reference, and BTC strategy tests for the 50-row Binance bps grid.
+- Applied the new rows to local PostgreSQL and remote PostgreSQL `192.168.0.101`; both now have 50/50 expected Binance bps rows, all enabled, `live_stakes = false`, and `paper_stake_amount = 1.00000000`.
+Next: Deploy/restart the production service from this commit if the new variants should start running on the server immediately.
+Notes: Verification passed: targeted `StrategyIds_IncludeStandardMartinAndGammaBtcVariants` passed 1/1; `dotnet build src\PolyCopyTrader.Service\PolyCopyTrader.Service.csproj -c Release --no-restore` passed with 0 warnings/errors; full `dotnet test tests\PolyCopyTrader.Tests\PolyCopyTrader.Tests.csproj -c Release --no-restore` passed 480/480; `git diff --check` passed with CRLF warnings only. `dotnet build PolyCopyTrader.Net48.sln -c Release --no-restore` compiled the Net48 Domain/Storage/Service projects but failed in the existing old WPF Dashboard project with `InitializeComponent`/entry-point errors.
+Blockers: None.
+
 ## Active Update 2026-05-15 LimitPrice Explanation
 Goal: Explain what `limitPrice` means in the BTC/Binance bps order path.
 Status: Completed

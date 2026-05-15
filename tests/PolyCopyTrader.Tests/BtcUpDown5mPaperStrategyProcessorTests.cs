@@ -148,8 +148,17 @@ public sealed class BtcUpDown5mPaperStrategyProcessorTests
     private static readonly BtcUpDown5mStrategyVariant BinanceBps1Variant =
         StrategyIds.BtcUpDown5mVariants.Single(variant => variant.Code == "btc_up_down_5m_binance_bps_1");
 
+    private static readonly BtcUpDown5mStrategyVariant BinanceBps11Variant =
+        StrategyIds.BtcUpDown5mVariants.Single(variant => variant.Code == "btc_up_down_5m_binance_bps_1_1");
+
     private static readonly BtcUpDown5mStrategyVariant BinanceBps2Variant =
         StrategyIds.BtcUpDown5mVariants.Single(variant => variant.Code == "btc_up_down_5m_binance_bps_2");
+
+    private static readonly BtcUpDown5mStrategyVariant BinanceBps3Variant =
+        StrategyIds.BtcUpDown5mVariants.Single(variant => variant.Code == "btc_up_down_5m_binance_bps_3");
+
+    private static readonly BtcUpDown5mStrategyVariant BinanceBps49Variant =
+        StrategyIds.BtcUpDown5mVariants.Single(variant => variant.Code == "btc_up_down_5m_binance_bps_4_9");
 
     private static readonly BtcUpDown5mStrategyVariant BinanceBps5Variant =
         StrategyIds.BtcUpDown5mVariants.Single(variant => variant.Code == "btc_up_down_5m_binance_bps_5");
@@ -184,7 +193,9 @@ public sealed class BtcUpDown5mPaperStrategyProcessorTests
     [Fact]
     public void StrategyIds_IncludeStandardMartinAndGammaBtcVariants()
     {
-        Assert.Equal(1176, StrategyIds.BtcUpDown5mVariants.Count);
+        Assert.Equal(1214, StrategyIds.BtcUpDown5mVariants.Count);
+        Assert.Equal(StrategyIds.BtcUpDown5mVariants.Count, StrategyIds.BtcUpDown5mVariants.Select(variant => variant.Id).Distinct().Count());
+        Assert.Equal(StrategyIds.BtcUpDown5mVariants.Count, StrategyIds.BtcUpDown5mVariants.Select(variant => variant.Code).Distinct().Count());
         Assert.Equal(18, StrategyIds.BtcUpDown5mVariants.Count(variant => variant.Behavior == BtcUpDown5mStrategyBehavior.Standard));
         Assert.Equal(15, StrategyIds.BtcUpDown5mVariants.Count(variant => variant.Behavior == BtcUpDown5mStrategyBehavior.StandardEntryPriceCap));
         Assert.Equal(18, StrategyIds.BtcUpDown5mVariants.Count(variant => variant.Behavior == BtcUpDown5mStrategyBehavior.GammaOutcomeSelection));
@@ -198,7 +209,7 @@ public sealed class BtcUpDown5mPaperStrategyProcessorTests
         Assert.Single(StrategyIds.BtcUpDown5mVariants, variant => variant.Behavior == BtcUpDown5mStrategyBehavior.AlwaysDown);
         Assert.Single(StrategyIds.BtcUpDown5mVariants, variant => variant.Behavior == BtcUpDown5mStrategyBehavior.BinanceStartRelative);
         Assert.Equal(3, StrategyIds.BtcUpDown5mVariants.Count(variant => variant.Behavior == BtcUpDown5mStrategyBehavior.BinanceStartRelativeFixedPrice));
-        Assert.Equal(12, StrategyIds.BtcUpDown5mVariants.Count(variant => variant.Behavior == BtcUpDown5mStrategyBehavior.BinanceStartRelativeBpsThreshold));
+        Assert.Equal(50, StrategyIds.BtcUpDown5mVariants.Count(variant => variant.Behavior == BtcUpDown5mStrategyBehavior.BinanceStartRelativeBpsThreshold));
         Assert.Single(StrategyIds.BtcUpDown5mVariants, variant => variant.Behavior == BtcUpDown5mStrategyBehavior.BinanceStartRelativeClever);
         Assert.Equal(2, StrategyIds.BtcUpDown5mVariants.Count(variant => variant.Behavior == BtcUpDown5mStrategyBehavior.BinanceStartRelativeCleverMargin));
         Assert.Equal(3, StrategyIds.BtcUpDown5mVariants.Count(variant => variant.Behavior == BtcUpDown5mStrategyBehavior.BinanceStartRelativeEdge));
@@ -272,17 +283,25 @@ public sealed class BtcUpDown5mPaperStrategyProcessorTests
         Assert.Equal("BTC Up or Down 5m Binance 0.9 bps", BinanceBps09Variant.Name);
         Assert.Equal(0.9m, BinanceBps09Variant.DecisionThresholdBps);
         Assert.Equal(
-            new[] { 0.1m, 0.2m, 0.3m, 0.4m, 0.5m, 0.6m, 0.7m, 0.8m, 0.9m },
+            Enumerable.Range(1, 50).Select(thresholdTenths => thresholdTenths / 10m).ToArray(),
             StrategyIds.BtcUpDown5mVariants
-                .Where(variant => variant.Behavior == BtcUpDown5mStrategyBehavior.BinanceStartRelativeBpsThreshold &&
-                    variant.DecisionThresholdBps is > 0m and < 1m)
+                .Where(variant => variant.Behavior == BtcUpDown5mStrategyBehavior.BinanceStartRelativeBpsThreshold)
                 .Select(variant => variant.DecisionThresholdBps.GetValueOrDefault())
                 .OrderBy(threshold => threshold)
                 .ToArray());
         Assert.Equal("BTC Up or Down 5m Binance 1 bps", BinanceBps1Variant.Name);
         Assert.Equal(1, BinanceBps1Variant.DecisionDepth);
+        Assert.Equal("BTC Up or Down 5m Binance 1.1 bps", BinanceBps11Variant.Name);
+        Assert.Equal(1.1m, BinanceBps11Variant.DecisionThresholdBps);
+        Assert.Equal(0, BinanceBps11Variant.DecisionDepth);
         Assert.Equal("BTC Up or Down 5m Binance 2 bps", BinanceBps2Variant.Name);
         Assert.Equal(2, BinanceBps2Variant.DecisionDepth);
+        Assert.Equal("BTC Up or Down 5m Binance 3 bps", BinanceBps3Variant.Name);
+        Assert.Equal(3m, BinanceBps3Variant.DecisionThresholdBps);
+        Assert.Equal(3, BinanceBps3Variant.DecisionDepth);
+        Assert.Equal("BTC Up or Down 5m Binance 4.9 bps", BinanceBps49Variant.Name);
+        Assert.Equal(4.9m, BinanceBps49Variant.DecisionThresholdBps);
+        Assert.Equal(0, BinanceBps49Variant.DecisionDepth);
         Assert.Equal("BTC Up or Down 5m Binance 5 bps", BinanceBps5Variant.Name);
         Assert.Equal(5, BinanceBps5Variant.DecisionDepth);
         var preOpen15mHalfUp49 = StrategyIds.BtcUpDown5mVariants.Single(variant =>

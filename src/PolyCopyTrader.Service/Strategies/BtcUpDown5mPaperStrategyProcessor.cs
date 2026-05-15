@@ -4841,27 +4841,21 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
 
     private static IReadOnlyList<BtcUpDown5mStrategyVariant> GetStrategySelectorCandidateVariants()
     {
-        return
-        [
-            GetBtcVariantByCode(StrategyIds.BtcUpDown5mBinanceCode),
-            GetBtcVariantByCode(StrategyIds.BtcUpDown5mBinanceBps01Code),
-            GetBtcVariantByCode(StrategyIds.BtcUpDown5mBinanceBps02Code),
-            GetBtcVariantByCode(StrategyIds.BtcUpDown5mBinanceBps03Code),
-            GetBtcVariantByCode(StrategyIds.BtcUpDown5mBinanceBps04Code),
-            GetBtcVariantByCode(StrategyIds.BtcUpDown5mBinanceBps05Code),
-            GetBtcVariantByCode(StrategyIds.BtcUpDown5mBinanceBps06Code),
-            GetBtcVariantByCode(StrategyIds.BtcUpDown5mBinanceBps07Code),
-            GetBtcVariantByCode(StrategyIds.BtcUpDown5mBinanceBps08Code),
-            GetBtcVariantByCode(StrategyIds.BtcUpDown5mBinanceBps09Code),
-            GetBtcVariantByCode(StrategyIds.BtcUpDown5mBinanceBps1Code),
-            GetBtcVariantByCode(StrategyIds.BtcUpDown5mBinanceBps2Code),
-            GetBtcVariantByCode(StrategyIds.BtcUpDown5mBinanceBps5Code),
-            GetBtcVariantByCode(StrategyIds.BtcUpDown5mBinanceCleverCode),
-            GetBtcVariantByCode(StrategyIds.BtcUpDown5mBinanceCleverAggressiveCode),
-            GetBtcVariantByCode(StrategyIds.BtcUpDown5mBinanceCleverConservativeCode),
-            GetBtcVariantByCode("btc_up_down_5m_middle_1"),
-            GetBtcVariantByCode("btc_up_down_5m_skip_1")
-        ];
+        var candidates = new List<BtcUpDown5mStrategyVariant>
+        {
+            GetBtcVariantByCode(StrategyIds.BtcUpDown5mBinanceCode)
+        };
+
+        candidates.AddRange(StrategyIds.BtcUpDown5mVariants
+            .Where(variant => variant.Behavior == BtcUpDown5mStrategyBehavior.BinanceStartRelativeBpsThreshold));
+
+        candidates.Add(GetBtcVariantByCode(StrategyIds.BtcUpDown5mBinanceCleverCode));
+        candidates.Add(GetBtcVariantByCode(StrategyIds.BtcUpDown5mBinanceCleverAggressiveCode));
+        candidates.Add(GetBtcVariantByCode(StrategyIds.BtcUpDown5mBinanceCleverConservativeCode));
+        candidates.Add(GetBtcVariantByCode("btc_up_down_5m_middle_1"));
+        candidates.Add(GetBtcVariantByCode("btc_up_down_5m_skip_1"));
+
+        return candidates;
     }
 
     private static BtcUpDown5mStrategyVariant GetBtcVariantByCode(string code)

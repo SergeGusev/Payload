@@ -1123,18 +1123,14 @@ public static class StrategyIds
         variants.Add(CreateBtcUpDown5mAlwaysDirectionVariant(isUp: true));
         variants.Add(CreateBtcUpDown5mAlwaysDirectionVariant(isUp: false));
         variants.Add(CreateBtcUpDown5mBinanceVariant());
-        variants.Add(CreateBtcUpDown5mBinanceBpsThresholdVariant(BtcUpDown5mBinanceBps01, BtcUpDown5mBinanceBps01Code, 0.1m));
-        variants.Add(CreateBtcUpDown5mBinanceBpsThresholdVariant(BtcUpDown5mBinanceBps02, BtcUpDown5mBinanceBps02Code, 0.2m));
-        variants.Add(CreateBtcUpDown5mBinanceBpsThresholdVariant(BtcUpDown5mBinanceBps03, BtcUpDown5mBinanceBps03Code, 0.3m));
-        variants.Add(CreateBtcUpDown5mBinanceBpsThresholdVariant(BtcUpDown5mBinanceBps04, BtcUpDown5mBinanceBps04Code, 0.4m));
-        variants.Add(CreateBtcUpDown5mBinanceBpsThresholdVariant(BtcUpDown5mBinanceBps05, BtcUpDown5mBinanceBps05Code, 0.5m));
-        variants.Add(CreateBtcUpDown5mBinanceBpsThresholdVariant(BtcUpDown5mBinanceBps06, BtcUpDown5mBinanceBps06Code, 0.6m));
-        variants.Add(CreateBtcUpDown5mBinanceBpsThresholdVariant(BtcUpDown5mBinanceBps07, BtcUpDown5mBinanceBps07Code, 0.7m));
-        variants.Add(CreateBtcUpDown5mBinanceBpsThresholdVariant(BtcUpDown5mBinanceBps08, BtcUpDown5mBinanceBps08Code, 0.8m));
-        variants.Add(CreateBtcUpDown5mBinanceBpsThresholdVariant(BtcUpDown5mBinanceBps09, BtcUpDown5mBinanceBps09Code, 0.9m));
-        variants.Add(CreateBtcUpDown5mBinanceBpsThresholdVariant(BtcUpDown5mBinanceBps1, BtcUpDown5mBinanceBps1Code, 1));
-        variants.Add(CreateBtcUpDown5mBinanceBpsThresholdVariant(BtcUpDown5mBinanceBps2, BtcUpDown5mBinanceBps2Code, 2));
-        variants.Add(CreateBtcUpDown5mBinanceBpsThresholdVariant(BtcUpDown5mBinanceBps5, BtcUpDown5mBinanceBps5Code, 5));
+        for (var thresholdTenths = 1; thresholdTenths <= 50; thresholdTenths++)
+        {
+            variants.Add(CreateBtcUpDown5mBinanceBpsThresholdVariant(
+                GetBtcUpDown5mBinanceBpsThresholdId(thresholdTenths),
+                GetBtcUpDown5mBinanceBpsThresholdCode(thresholdTenths),
+                thresholdTenths / 10m));
+        }
+
         variants.Add(CreateBtcUpDown5mBinanceFixedPriceVariant(BtcUpDown5mBinance45, BtcUpDown5mBinance45Code, 45));
         variants.Add(CreateBtcUpDown5mBinanceFixedPriceVariant(BtcUpDown5mBinance47, BtcUpDown5mBinance47Code, 47));
         variants.Add(CreateBtcUpDown5mBinanceFixedPriceVariant(BtcUpDown5mBinance49, BtcUpDown5mBinance49Code, 49));
@@ -1340,6 +1336,37 @@ public static class StrategyIds
                 ? (int)minMoveBps
                 : 0,
             minMoveBps);
+    }
+
+    private static Guid GetBtcUpDown5mBinanceBpsThresholdId(int thresholdTenths)
+    {
+        return thresholdTenths switch
+        {
+            1 => BtcUpDown5mBinanceBps01,
+            2 => BtcUpDown5mBinanceBps02,
+            3 => BtcUpDown5mBinanceBps03,
+            4 => BtcUpDown5mBinanceBps04,
+            5 => BtcUpDown5mBinanceBps05,
+            6 => BtcUpDown5mBinanceBps06,
+            7 => BtcUpDown5mBinanceBps07,
+            8 => BtcUpDown5mBinanceBps08,
+            9 => BtcUpDown5mBinanceBps09,
+            10 => BtcUpDown5mBinanceBps1,
+            20 => BtcUpDown5mBinanceBps2,
+            50 => BtcUpDown5mBinanceBps5,
+            _ => Guid.Parse($"b7c50005-0000-4000-8013-{100 + thresholdTenths:000000000000}")
+        };
+    }
+
+    private static string GetBtcUpDown5mBinanceBpsThresholdCode(int thresholdTenths)
+    {
+        var wholeBps = thresholdTenths / 10;
+        var fractionalTenths = thresholdTenths % 10;
+        var suffix = fractionalTenths == 0
+            ? wholeBps.ToString(CultureInfo.InvariantCulture)
+            : wholeBps.ToString(CultureInfo.InvariantCulture) + "_" + fractionalTenths.ToString(CultureInfo.InvariantCulture);
+
+        return "btc_up_down_5m_binance_bps_" + suffix;
     }
 
     private static BtcUpDown5mStrategyVariant CreateBtcUpDown5mBinanceCleverVariant()

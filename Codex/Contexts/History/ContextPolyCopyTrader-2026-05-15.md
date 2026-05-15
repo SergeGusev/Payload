@@ -250,3 +250,10 @@ Request:
 
 Result:
 Explained that `limitPrice` is the per-order maximum price for a BUY limit/GTD order, stored as `PaperOrder.Price`; for BUY entries it is the bot's bid. A BUY order at `limitPrice = 0.50` can fill against asks priced `<= 0.50` and will not fill against asks above that. For Binance bps variants, `limitPrice` comes from the fixed Binance start-relative branch and is normally `RoundDownToTick(min(OpeningLimitMaxPrice, 0.50))`, defaulting to `0.50`. The bps threshold only decides whether the strategy enters; it does not set `limitPrice`. No database writes or order actions were performed.
+
+## 2026-05-15T16:32:11.1589706Z
+Request:
+Добавь Binance bps стратегий. От 1 bps до 5 bps с шагом 0.1. Те, которые уже добавлены, например 2 bps, пропускай. Добавь и в новую и в старую базы.
+
+Result:
+Added Binance bps strategy variants for the full `0.1..5.0` grid in both `src` and `src4.8`, preserving existing ids/codes for `0.1..0.9`, `1`, `2`, and `5` while assigning non-conflicting ids to new `1.1..4.9`, `3`, and `4` variants. Updated both PostgreSQL seed SQL files, Strategy Selector candidates, README/configuration docs, and BTC strategy tests. Applied the idempotent insert to local PostgreSQL and remote PostgreSQL `192.168.0.101`; both now have 50 expected Binance bps rows, all enabled, Live disabled, and paper stake `1.00000000`. Verification passed for targeted catalog test 1/1, Release service build, full test project 480/480, and `git diff --check`; Net48 `dotnet build` reached Domain/Storage/Service but failed in the existing old WPF Dashboard project tooling with `InitializeComponent`/entry-point errors.
