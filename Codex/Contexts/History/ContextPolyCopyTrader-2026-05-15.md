@@ -243,3 +243,10 @@ Request:
 
 Result:
 Clarified that BTC strategy entry bets, including Binance bps, are `TradeSide.Buy` GTD/limit paper orders and are therefore bids. The system is not globally bid-only: it also has `TradeSide.Sell` paper order paths for exits, including pre-open sell exits, leader-activity copied-position exits, and Follow leader SELL signals when a copied paper position exists. BUY paper orders fill against asks at or below the order price; SELL paper orders fill against bids at or above the order price. Current live placement paths are BUY-only/guarded and do not place live SELL orders. No database writes or order actions were performed.
+
+## 2026-05-15T16:15:50.8421460Z
+Request:
+Ты сказал -  наш выставленный bid = limitPrice. Поясни, что такое limitPrice.
+
+Result:
+Explained that `limitPrice` is the per-order maximum price for a BUY limit/GTD order, stored as `PaperOrder.Price`; for BUY entries it is the bot's bid. A BUY order at `limitPrice = 0.50` can fill against asks priced `<= 0.50` and will not fill against asks above that. For Binance bps variants, `limitPrice` comes from the fixed Binance start-relative branch and is normally `RoundDownToTick(min(OpeningLimitMaxPrice, 0.50))`, defaulting to `0.50`. The bps threshold only decides whether the strategy enters; it does not set `limitPrice`. No database writes or order actions were performed.

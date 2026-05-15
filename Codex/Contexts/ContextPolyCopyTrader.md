@@ -1,3 +1,16 @@
+## Active Update 2026-05-15 LimitPrice Explanation
+Goal: Explain what `limitPrice` means in the BTC/Binance bps order path.
+Status: Completed
+Done:
+- Rechecked `GetOpeningLimitPriceAsync`, `GetBinanceStartRelativeLimitPrice`, and `CreatePendingOpeningLimitPaperOrder`.
+- Explained that `limitPrice` is the per-order maximum price for a BUY limit/GTD order, stored as `PaperOrder.Price`; it is the bot's bid for BUY entries.
+- Confirmed a BUY order at `limitPrice = 0.50` can fill only against asks priced `<= 0.50`; asks above that do not fill the paper order.
+- Confirmed for Binance bps variants `limitPrice` uses the fixed Binance start-relative branch and is normally `RoundDownToTick(min(OpeningLimitMaxPrice, 0.50))`, defaulting to `0.50`.
+- Clarified that the bps threshold only decides whether to enter; it does not set `limitPrice`.
+Next: None.
+Notes: Answer-only clarification. No database writes, code changes, order submissions, or cancel actions were performed.
+Blockers: None.
+
 ## Active Update 2026-05-15 Buy Bid Versus Sell Ask Clarification
 Goal: Clarify whether all bets/orders are made only as bids.
 Status: Completed
