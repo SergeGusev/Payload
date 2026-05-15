@@ -1,3 +1,15 @@
+## Active Update 2026-05-15 Production Server Connectivity Check
+Goal: Check whether the production server/service is currently reachable.
+Status: Blocked
+Done:
+- Tried to read remote PostgreSQL `service_heartbeats` on `192.168.0.101:5432`; connection failed with TCP connect timeout before SQL could run.
+- Checked network reachability from the current machine `192.168.0.100`; ping to `192.168.0.101` failed.
+- Checked TCP reachability to `192.168.0.101:5432` and `192.168.0.101:5118`; both failed.
+- Checked local ARP cache; there was no active `192.168.0.101` entry, only gateway/broadcast entries for the `192.168.0.*` interface.
+Next: Verify the server is powered on, connected to the same network, and still using `192.168.0.101`; after network access is restored, rerun the heartbeat query.
+Notes: This check could not determine process-level service health because the host itself was unreachable from the current machine. No database writes, code changes, order actions, or cancel actions were performed. `git diff --check` passed before context/history updates.
+Blockers: Production host `192.168.0.101` is unreachable over the network from this machine.
+
 ## Active Update 2026-05-15 Production Health Check
 Goal: Check whether the production service, Live safety settings, and recent GTD behavior look normal after the latest operations.
 Status: Completed

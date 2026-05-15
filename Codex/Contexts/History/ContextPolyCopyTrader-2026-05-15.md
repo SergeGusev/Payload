@@ -194,3 +194,10 @@ Request:
 
 Result:
 Checked production health using remote PostgreSQL and a read-only authenticated CLOB open-orders report. `service_heartbeats` shows `PolyCopyTrader.Service` `Running`/`Live` on `info=1.0.0+fa160e7265ce77332a409feb738127d699c20db7; assembly=1.0.0.0; mvid=0d1ea8174e15`, started `2026-05-15T12:41:37Z`, heartbeat age about `35` seconds, and `last_error = null`. Strategies are in the expected safe state: `1178` total, `1176` enabled, `live_stakes_enabled = 0`, `live_stake_not_1 = 0`, min/max live stake both `1.00000000`, and no live balance below stake. Fresh GTD telemetry since service start shows `5617` `paper_gtd_limit` BUY orders, `722` initial-executable orders, `704` initial-executable with fills/fill-model status, `680` immediate fills, `24` partial fills, `599` initial-executable settled runs, and `0` initial-executable skipped/expired-without-fill/expired-pending rows; remaining `gtd_limit_not_filled` rows are non-initial-executable only. No live orders were created in the last 24h; old May 11 matched rows are already settled and balance-applied, with `stale_unsettled_matched = 0`. The CLOB open-orders report returned HTTP 200 with `Orders summarized: 0`. Two recent API errors were WebSocket close-handshake events; heartbeat remained fresh afterward.
+
+## 2026-05-15T14:03:43.8954584Z
+Request:
+Жив ли сервер?
+
+Result:
+Could not reach the production host from the current machine. The remote PostgreSQL heartbeat query to `192.168.0.101:5432` failed with a TCP connection timeout before SQL could run. `Test-Connection` ping to `192.168.0.101` failed, `Test-NetConnection` to ports `5432` and `5118` failed, and the local ARP cache had no active `192.168.0.101` entry. This indicates the host or network path is down/unavailable from `192.168.0.100`; process-level service health could not be determined until the host/network is reachable again. No database writes or order actions were performed.
