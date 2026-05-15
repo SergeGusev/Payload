@@ -52,7 +52,7 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
     private string serviceBannerTitle = "SERVICE UNKNOWN";
 
     [ObservableProperty]
-    private string serviceBannerDetail = "Waiting for first IPC status refresh.";
+    private string serviceBannerDetail = "Waiting for first database heartbeat refresh.";
 
     [ObservableProperty]
     private string serviceBannerBackground = "#FEF3C7";
@@ -233,13 +233,9 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         {
             IsRefreshing = true;
             LastError = string.Empty;
-            var controlStatus = await TryGetControlStatusAsync();
-            ApplyServiceBanner(controlStatus.Status, controlStatus.Error);
-            var snapshot = await dataService.LoadAsync(
-                controlStatus.Status,
-                controlStatus.Error);
+            var snapshot = await dataService.LoadAsync();
             Apply(snapshot);
-            ApplyServiceBanner(controlStatus.Status, controlStatus.Error);
+            ApplyServiceBanner(snapshot.ServiceAvailability);
             LastUpdatedUtc = DateTimeOffset.UtcNow;
         }
         catch (Exception ex)
@@ -338,100 +334,92 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
             : $"Local database; {configured}";
     }
 
-    private void ApplyServiceBanner(ControlStatusResponse? status, string? error)
+    private void ApplyServiceBanner(ServiceAvailability availability)
     {
-        if (status is null)
+        if (!availability.HasHeartbeat || !availability.IsFresh)
         {
             ServiceBannerTitle = "SERVICE UNAVAILABLE";
-            ServiceBannerDetail = string.IsNullOrWhiteSpace(error)
-                ? "Dashboard could not read IPC /status."
-                : "Dashboard could not read IPC /status: " + TrimForBanner(error, 240);
+            ServiceBannerDetail = BuildServiceBannerDetail(availability);
             ServiceBannerBackground = "#FEE2E2";
             ServiceBannerForeground = "#7F1D1D";
             ServiceBannerBorderBrush = "#EF4444";
             return;
         }
 
-        if (status.KillSwitchActive)
+        if (string.Equals(availability.Status, "Error", StringComparison.OrdinalIgnoreCase))
         {
-            ServiceBannerTitle = "KILL SWITCH ACTIVE";
+            ServiceBannerTitle = "SERVICE ERROR";
             ServiceBannerBackground = "#FEE2E2";
             ServiceBannerForeground = "#7F1D1D";
             ServiceBannerBorderBrush = "#EF4444";
         }
-        else if (status.ScanningPaused || status.PaperTradingPaused ||
-            string.Equals(status.State, "Paused", StringComparison.OrdinalIgnoreCase))
+        else if (string.Equals(availability.Status, "Paused", StringComparison.OrdinalIgnoreCase))
         {
             ServiceBannerTitle = "SERVICE PAUSED";
             ServiceBannerBackground = "#FEF3C7";
             ServiceBannerForeground = "#78350F";
             ServiceBannerBorderBrush = "#F59E0B";
         }
-        else if (string.Equals(status.State, "Running", StringComparison.OrdinalIgnoreCase))
+        else if (string.Equals(availability.Status, "Running", StringComparison.OrdinalIgnoreCase))
         {
             ServiceBannerTitle = "SERVICE RUNNING";
             ServiceBannerBackground = "#DCFCE7";
             ServiceBannerForeground = "#14532D";
             ServiceBannerBorderBrush = "#22C55E";
         }
+        else if (string.Equals(availability.Status, "Stopping", StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(availability.Status, "Stopped", StringComparison.OrdinalIgnoreCase))
+        {
+            ServiceBannerTitle = "SERVICE " + availability.Status.ToUpperInvariant();
+            ServiceBannerBackground = "#FEE2E2";
+            ServiceBannerForeground = "#7F1D1D";
+            ServiceBannerBorderBrush = "#EF4444";
+        }
         else
         {
-            ServiceBannerTitle = "SERVICE " + status.State.ToUpperInvariant();
+            ServiceBannerTitle = "SERVICE " + availability.Status.ToUpperInvariant();
             ServiceBannerBackground = "#E0F2FE";
             ServiceBannerForeground = "#0C4A6E";
             ServiceBannerBorderBrush = "#38BDF8";
         }
 
-        ServiceBannerDetail = BuildServiceBannerDetail(status);
+        ServiceBannerDetail = BuildServiceBannerDetail(availability);
     }
 
-    private static string BuildServiceBannerDetail(ControlStatusResponse status)
+    private static string BuildServiceBannerDetail(ServiceAvailability availability)
     {
+        if (!availability.HasHeartbeat)
+        {
+            return "No service heartbeat was found in the selected database.";
+        }
+
         var details = new List<string>
         {
-            "IPC state=" + status.State,
-            BuildPauseSummary(status)
+            "DB status=" + availability.Status,
+            "heartbeat age=" + DashboardServiceAvailabilityEvaluator.FormatHeartbeatAge(availability.HeartbeatAge)
         };
 
-        if (status.KillSwitchActive)
+        if (!string.IsNullOrWhiteSpace(availability.Mode))
         {
-            details.Add("kill switch active");
+            details.Add("mode=" + availability.Mode);
         }
 
-        if (!string.IsNullOrWhiteSpace(status.LastError))
+        if (availability.LastHeartbeatUtc is not null)
         {
-            details.Add("last error=" + TrimForBanner(status.LastError, 160));
+            details.Add("last heartbeat=" + availability.LastHeartbeatUtc.Value.UtcDateTime.ToString("yyyy-MM-dd HH:mm:ss"));
         }
 
-        if (!string.IsNullOrWhiteSpace(status.CurrentLoop))
+        if (!string.IsNullOrWhiteSpace(availability.LastError))
         {
-            details.Add("loop=" + TrimForBanner(status.CurrentLoop, 220));
+            details.Add("last error=" + TrimForBanner(availability.LastError, 160));
+        }
+
+        if (!string.IsNullOrWhiteSpace(availability.CurrentLoop))
+        {
+            details.Add("loop=" + TrimForBanner(availability.CurrentLoop, 220));
         }
 
         return string.Join("; ", details);
-    }
-
-    private static string BuildPauseSummary(ControlStatusResponse status)
-    {
-        var paused = new List<string>();
-        if (status.ScanningPaused)
-        {
-            paused.Add("scanning");
-        }
-
-        if (status.PaperTradingPaused)
-        {
-            paused.Add("paper");
-        }
-
-        if (status.LiveTradingPaused)
-        {
-            paused.Add("live");
-        }
-
-        return paused.Count == 0
-            ? "pauses clear"
-            : "paused=" + string.Join(", ", paused);
     }
 
     private static string TrimForBanner(string value, int maxLength)
@@ -1041,18 +1029,6 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         return value
             .Split(new[] { ' ' }, StringSplitOptions.RemoveEmptyEntries)
             .Any(item => string.Equals(item, word, StringComparison.OrdinalIgnoreCase));
-    }
-
-    private async Task<(ControlStatusResponse? Status, string? Error)> TryGetControlStatusAsync()
-    {
-        try
-        {
-            return (await controlClient.GetStatusAsync(), null);
-        }
-        catch (Exception ex)
-        {
-            return (null, ex.Message);
-        }
     }
 
     private static void Replace<T>(ObservableCollection<T> target, IReadOnlyList<T> source)

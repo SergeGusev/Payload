@@ -583,7 +583,27 @@ public sealed record DiagnosticRow(string Name, string Value, string Status);
 
 public sealed record RunbookLinkRow(string Document, string Path, string Purpose);
 
+public sealed record ServiceAvailability(
+    string ServiceName,
+    string Status,
+    string Mode,
+    DateTimeOffset? StartedAtUtc,
+    DateTimeOffset? LastHeartbeatUtc,
+    TimeSpan? HeartbeatAge,
+    string CurrentLoop,
+    string? LastError,
+    bool HasHeartbeat,
+    bool IsFresh)
+{
+    public bool IsAvailable =>
+        HasHeartbeat &&
+        IsFresh &&
+        !string.Equals(Status, "Stopped", StringComparison.OrdinalIgnoreCase) &&
+        !string.Equals(Status, "Stopping", StringComparison.OrdinalIgnoreCase);
+}
+
 public sealed record DashboardSnapshot(
+    ServiceAvailability ServiceAvailability,
     IReadOnlyList<OverviewMetric> Overview,
     IReadOnlyList<WatchlistRow> Watchlist,
     IReadOnlyList<TraderDiscoveryRow> TraderDiscovery,

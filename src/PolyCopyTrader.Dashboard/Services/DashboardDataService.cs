@@ -25,6 +25,10 @@ public sealed class DashboardDataService(
         CancellationToken cancellationToken = default)
     {
         var heartbeats = await repository.GetServiceHeartbeatsAsync(cancellationToken);
+        var serviceAvailability = DashboardServiceAvailabilityEvaluator.Evaluate(
+            heartbeats,
+            DateTimeOffset.UtcNow,
+            GetServiceHeartbeatStaleAfter());
         var scannerStatuses = await repository.GetScannerStatusesAsync(cancellationToken);
         var traderDiscovery = await repository.GetRecentTraderDiscoveryCandidatesAsync(
             configuration.TraderDiscovery.CandidatesPerSide * 2,
@@ -64,7 +68,7 @@ public sealed class DashboardDataService(
         var authReadiness = await authService.GetReadinessAsync(cancellationToken);
 
         var overview = BuildOverview(
-            heartbeats,
+            serviceAvailability,
             scannerStatuses,
             openPaperOrders,
             paperPositions,
@@ -75,6 +79,7 @@ public sealed class DashboardDataService(
             authReadiness);
         var riskUsage = BuildRiskUsage(openPaperOrders, paperPositions);
         var liveReadiness = BuildLiveReadiness(
+            serviceAvailability,
             authReadiness,
             strategyPerformance,
             dryRunOrders,
@@ -87,6 +92,7 @@ public sealed class DashboardDataService(
             controlStatusError);
 
         return new DashboardSnapshot(
+            serviceAvailability,
             overview,
             BuildWatchlist(scannerStatuses, leaderTrades),
             traderDiscovery.Select(ToTraderDiscoveryRow).ToArray(),
@@ -114,7 +120,7 @@ public sealed class DashboardDataService(
             executionQuality.Select(ToExecutionQualityRow).ToArray(),
             rejectionAnalysis.Select(ToRejectionAnalysisRow).ToArray(),
             riskUsage,
-            BuildDiagnostics(overview, scannerStatuses, marketDataStatuses, apiErrors, riskUsage, authReadiness),
+            BuildDiagnostics(overview, serviceAvailability, scannerStatuses, marketDataStatuses, apiErrors, riskUsage, authReadiness),
             BuildRunbookLinks(),
             BuildLogs(apiErrors, riskEvents, commandAudits, marketDataEvents, liveTradingEvents));
     }
@@ -160,7 +166,7 @@ public sealed class DashboardDataService(
     }
 
     private IReadOnlyList<OverviewMetric> BuildOverview(
-        IReadOnlyList<ServiceHeartbeat> heartbeats,
+        ServiceAvailability serviceAvailability,
         IReadOnlyList<ScannerStatusSnapshot> scannerStatuses,
         IReadOnlyList<PaperOrder> openPaperOrders,
         IReadOnlyList<PaperPosition> paperPositions,
@@ -170,8 +176,6 @@ public sealed class DashboardDataService(
         IReadOnlyList<MarketDataStatusSnapshot> marketDataStatuses,
         AuthReadinessStatus authReadiness)
     {
-        var heartbeat = heartbeats.FirstOrDefault(item => item.ServiceName == "PolyCopyTrader.Service")
-            ?? heartbeats.FirstOrDefault();
         var scanner = scannerStatuses.FirstOrDefault();
         var marketData = marketDataStatuses.FirstOrDefault(item => item.Component == "PolymarketMarketWebSocket")
             ?? marketDataStatuses.FirstOrDefault();
@@ -181,10 +185,11 @@ public sealed class DashboardDataService(
 
         return
         [
-            new OverviewMetric("Mode", heartbeat?.Mode.ToString() ?? configuration.Bot.Mode.ToString()),
-            new OverviewMetric("Service status", heartbeat?.Status ?? "No heartbeat"),
-            new OverviewMetric("Last heartbeat UTC", FormatDate(heartbeat?.LastHeartbeatUtc)),
-            new OverviewMetric("Current loop", heartbeat?.CurrentLoop ?? "Waiting for service data"),
+            new OverviewMetric("Mode", string.IsNullOrWhiteSpace(serviceAvailability.Mode) ? configuration.Bot.Mode.ToString() : serviceAvailability.Mode),
+            new OverviewMetric("Service status", FormatServiceStatus(serviceAvailability)),
+            new OverviewMetric("Last heartbeat UTC", FormatDate(serviceAvailability.LastHeartbeatUtc)),
+            new OverviewMetric("Heartbeat age", DashboardServiceAvailabilityEvaluator.FormatHeartbeatAge(serviceAvailability.HeartbeatAge)),
+            new OverviewMetric("Current loop", string.IsNullOrWhiteSpace(serviceAvailability.CurrentLoop) ? "Waiting for service data" : serviceAvailability.CurrentLoop),
             new OverviewMetric("Storage configured", storageConfigured ? "Yes" : "No"),
             new OverviewMetric("API status", apiErrors.Count == 0 ? "No recorded errors" : $"{apiErrors.Count} recent errors"),
             new OverviewMetric("Live open orders", liveOrders.Count(order => order.Status is LiveOrderStatus.Submitted or LiveOrderStatus.Live or LiveOrderStatus.Delayed or LiveOrderStatus.Unmatched).ToString()),
@@ -272,6 +277,7 @@ public sealed class DashboardDataService(
 
     private IReadOnlyList<DiagnosticRow> BuildDiagnostics(
         IReadOnlyList<OverviewMetric> overview,
+        ServiceAvailability serviceAvailability,
         IReadOnlyList<ScannerStatusSnapshot> scannerStatuses,
         IReadOnlyList<MarketDataStatusSnapshot> marketDataStatuses,
         IReadOnlyList<ApiError> apiErrors,
@@ -294,7 +300,7 @@ public sealed class DashboardDataService(
             new("Live max order notional", FormatUsd(configuration.LiveTrading.MaxOrderNotionalUsd), "Info"),
             new("Auth", authReadiness.State, AuthDiagnosticStatus(authReadiness)),
             new("Auth details", AuthDetails(authReadiness), AuthDiagnosticStatus(authReadiness)),
-            new("Service status", overview.FirstOrDefault(item => item.Name == "Service status")?.Value ?? "No heartbeat", "Info"),
+            new("Service status", overview.FirstOrDefault(item => item.Name == "Service status")?.Value ?? "No heartbeat", ServiceHeartbeatReadinessStatus(serviceAvailability)),
             new("Scanner status", scanner?.ScannerStatus ?? "No scanner status", scanner?.ScannerStatus == "Healthy" ? "OK" : "Warning"),
             new("Scanner last error", scanner?.LastErrorMessage ?? string.Empty, string.IsNullOrWhiteSpace(scanner?.LastErrorMessage) ? "OK" : "Warning"),
             new("WebSocket status", marketData?.ConnectionState.ToString() ?? "No market data status", marketData?.ConnectionState == MarketDataConnectionState.Connected ? "OK" : "Info"),
@@ -307,6 +313,7 @@ public sealed class DashboardDataService(
     }
 
     private IReadOnlyList<LiveReadinessRow> BuildLiveReadiness(
+        ServiceAvailability serviceAvailability,
         AuthReadinessStatus authReadiness,
         IReadOnlyList<StrategyPerformance> strategies,
         IReadOnlyList<DryRunOrder> dryRunOrders,
@@ -387,14 +394,25 @@ public sealed class DashboardDataService(
                 lastDryRunSigned is null ? "Warning" : "OK",
                 "Run dry-run signing before a live session and confirm a DryRunSigned row."),
             BuildGeoblockReadinessRow(latestGeoblock),
+            new(
+                "Service heartbeat",
+                FormatServiceStatus(serviceAvailability),
+                ServiceHeartbeatReadinessStatus(serviceAvailability),
+                BuildServiceHeartbeatDetails(serviceAvailability)),
             controlStatus is null
-                ? new LiveReadinessRow("IPC service status", "Unavailable", "Warning", controlStatusError ?? "Dashboard could not read /status.")
-                : new LiveReadinessRow("IPC service status", controlStatus.State, controlStatus.State is "Running" or "Paused" ? "OK" : "Warning", controlStatus.LastError ?? string.Empty),
+                ? new LiveReadinessRow(
+                    "IPC controls",
+                    "Not checked",
+                    "Info",
+                    string.IsNullOrWhiteSpace(controlStatusError)
+                        ? "Dashboard refresh uses the selected database heartbeat for service availability; command buttons still call IPC when clicked."
+                        : controlStatusError)
+                : new LiveReadinessRow("IPC controls", controlStatus.State, controlStatus.State is "Running" or "Paused" ? "OK" : "Warning", controlStatus.LastError ?? string.Empty),
             controlStatus is null
-                ? new LiveReadinessRow("Live pause", "Unknown", "Warning", "IPC status is unavailable.")
+                ? new LiveReadinessRow("Live pause", "Unknown", "Info", "Pause state is not checked during automatic refresh.")
                 : Gate("Live pause", controlStatus.LiveTradingPaused ? "paused" : "clear", !controlStatus.LiveTradingPaused, "Live trading must be unpaused for a live session."),
             controlStatus is null
-                ? new LiveReadinessRow("Kill switch", "Unknown", "Warning", "IPC status is unavailable.")
+                ? new LiveReadinessRow("Kill switch", "Unknown", "Info", "Kill-switch state is not checked during automatic refresh.")
                 : Gate("Kill switch", controlStatus.KillSwitchActive ? "active" : "clear", !controlStatus.KillSwitchActive, "Kill switch must be clear."),
             Gate(
                 "Open live order count",
@@ -958,6 +976,64 @@ public sealed class DashboardDataService(
     private static string FormatDate(DateTimeOffset? value)
     {
         return value?.UtcDateTime.ToString("yyyy-MM-dd HH:mm:ss") ?? string.Empty;
+    }
+
+    private TimeSpan GetServiceHeartbeatStaleAfter()
+    {
+        var refreshIntervalSeconds = Math.Max(1, configuration.Dashboard.RefreshIntervalSeconds);
+        return TimeSpan.FromSeconds(Math.Max(180, refreshIntervalSeconds * 3));
+    }
+
+    private static string FormatServiceStatus(ServiceAvailability availability)
+    {
+        if (!availability.HasHeartbeat)
+        {
+            return "No heartbeat";
+        }
+
+        return availability.IsFresh
+            ? availability.Status
+            : "Stale " + availability.Status;
+    }
+
+    private static string ServiceHeartbeatReadinessStatus(ServiceAvailability availability)
+    {
+        if (!availability.IsAvailable)
+        {
+            return "Warning";
+        }
+
+        return string.Equals(availability.Status, "Error", StringComparison.OrdinalIgnoreCase)
+            ? "Warning"
+            : "OK";
+    }
+
+    private static string BuildServiceHeartbeatDetails(ServiceAvailability availability)
+    {
+        if (!availability.HasHeartbeat)
+        {
+            return "No service heartbeat found in the selected database.";
+        }
+
+        var parts = new List<string>
+        {
+            "service=" + availability.ServiceName,
+            "status=" + availability.Status,
+            "age=" + DashboardServiceAvailabilityEvaluator.FormatHeartbeatAge(availability.HeartbeatAge),
+            "last=" + FormatDate(availability.LastHeartbeatUtc)
+        };
+
+        if (!string.IsNullOrWhiteSpace(availability.Mode))
+        {
+            parts.Add("mode=" + availability.Mode);
+        }
+
+        if (!string.IsNullOrWhiteSpace(availability.LastError))
+        {
+            parts.Add("last error=" + availability.LastError);
+        }
+
+        return string.Join("; ", parts);
     }
 
     private static string AuthDetails(AuthReadinessStatus status)

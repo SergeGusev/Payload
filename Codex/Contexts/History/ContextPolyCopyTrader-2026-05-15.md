@@ -4,3 +4,10 @@ Request:
 
 Result:
 Queried the server database at `192.168.0.101` read-only for strategy status. `PolyCopyTrader.Service` was running in `Live` mode with a fresh heartbeat and no heartbeat error; `1178` strategies existed, `1176` were enabled, `0` had `live_stakes=true`, `follow_leader` was disabled, and `BTC Up or Down 5m Statistics` was enabled with live stakes off. Overall Paper performance remained negative (`24188` settled, PnL `-20140.2655`, ROI `-29.7678%`), with only a few positive 100+ sample candidates led by `btc_up_down_5m_less_60_gamma`. The Statistics strategy was active (`36041` ticks, latest sample age about `3.5s`, `9202/9310` observations applied), but resolved first-per-market would-bets remained negative. Found that Gamma max-offset API errors are still being logged on the server, indicating the server process still needs the max-offset fix deployed/restarted.
+
+## 2026-05-15T05:26:18.7717546Z
+Request:
+Переделай Dashboard так, чтобы он определял доступность сервиса по базе, а не по пингу, иначе некорректно получается для удалённой базы
+
+Result:
+Changed Dashboard automatic refresh so the service banner and readiness rows derive service availability from the selected database's `service_heartbeats` row for `PolyCopyTrader.Service` instead of probing localhost IPC `/status`. Added a `ServiceAvailability` snapshot/evaluator with heartbeat age and stale detection, updated overview/diagnostics/live-readiness display, and documented that IPC remains only the command channel for control buttons. Verification passed: Dashboard Release build succeeded with a temporary output path, full tests passed 472/472, and `git diff --check` passed with CRLF warnings only.

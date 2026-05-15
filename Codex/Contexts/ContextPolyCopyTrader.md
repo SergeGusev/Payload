@@ -1,3 +1,15 @@
+## Active Update 2026-05-15 Dashboard Database Heartbeat Service Availability
+Goal: Make Dashboard service availability follow the selected database heartbeat instead of localhost IPC `/status`.
+Status: Completed
+Done:
+- Removed the automatic Dashboard refresh dependency on IPC `/status`; `RefreshAsync` now loads dashboard data and applies the service banner from the selected database's `service_heartbeats`.
+- Added `ServiceAvailability` snapshot data and `DashboardServiceAvailabilityEvaluator` with heartbeat freshness/stale detection for `PolyCopyTrader.Service`.
+- Updated overview, diagnostics, live-readiness, and README so IPC is documented/used as a command channel only, while service availability comes from the selected database heartbeat.
+- Kept Dashboard command buttons using the configured IPC endpoints for control actions.
+Next: Restart or refresh Dashboard and switch to `Remote database`; the banner should reflect the remote service heartbeat instead of local IPC reachability.
+Notes: Verification passed: Dashboard Release build with a temporary `BaseOutputPath` succeeded; temporary output was removed; `dotnet test tests\PolyCopyTrader.Tests\PolyCopyTrader.Tests.csproj -c Release --no-restore` passed 472/472; `git diff --check` passed with CRLF warnings only.
+Blockers: None.
+
 ## Active Update 2026-05-15 Strategy Status Check
 Goal: Check current server-side strategy status and performance.
 Status: Completed
