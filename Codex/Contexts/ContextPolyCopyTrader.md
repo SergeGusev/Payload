@@ -1,3 +1,15 @@
+## Active Update 2026-05-15 Paper GTD Current Book Concern
+Goal: Address the concern that the expiry-before-fill fix may hide the real current-order-book problem.
+Status: Completed
+Done:
+- Clarified that the open-order worker still checks current order books for ordinary live pending Paper orders.
+- Clarified the failing case is different: the order had initial executable ask evidence at submit time, and the later current book cannot reconstruct whether the order should have filled immediately when Paper did not actually post a real order.
+- Explained that the fix restores the intended conservative submit-snapshot path before expiry while preserving current-book checks when the initial snapshot does not produce a fill.
+- Noted the fix remains auditable because fills are written with `ConservativeGtdImmediateFill` evidence and fill-model diagnostics instead of silently suppressing skips.
+Next: After deployment, monitor fresh rows for lower initial-executable `gtd_limit_not_filled` and higher explicit conservative fill evidence.
+Notes: Answer-only task; no production source changes. Git pull reported already up to date.
+Blockers: None.
+
 ## Active Update 2026-05-15 Paper GTD Fix Explanation
 Goal: Explain in detail why fresh `Skip/gtd_limit_not_filled` rows persisted and what the `src` fix changed.
 Status: Completed

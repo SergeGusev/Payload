@@ -138,3 +138,10 @@ Request:
 
 Result:
 Explained that the remaining Skip issue in `src` was caused by operation ordering inside `PaperTradingProcessor`: initial-executable GTD orders were prioritized before the batch cap, but if the worker reached them after local expiry, `ExpireIfNeeded` ran before the conservative fill model and marked them `gtd_limit_not_filled` without evaluating the initial submit snapshot. Explained that commit `9785ba3` changes initial-executable BUY GTD opening-limit orders to run conservative immediate-fill evaluation first using `RawDecisionJson`, then expire only when that does not produce a fill; non-initial-executable expired orders still close immediately. No production source changed for this explanation.
+
+## 2026-05-15T11:18:38.8727981+00:00
+Request:
+Выгляди так, как будто ты спрятал проблему, а не решил её. Разве мы не проверяем потом постоянно стакан и не проходим по уже открытым ордерам, чтобы понять, закрываются они текущим стаканом или нет?
+
+Result:
+Explained that the open-order worker still checks current order books for ordinary pending Paper orders, but the failing case is a submit-time executable Paper GTD order where the later current book cannot reconstruct whether the order should have filled immediately because no real exchange order was posted. Clarified that the fix does not suppress skips: it runs the existing conservative submit-snapshot immediate-fill model before expiry for initial-executable BUY GTD opening-limit orders, keeps current-book checks when the initial snapshot does not fill, and writes explicit `ConservativeGtdImmediateFill` evidence/diagnostics for auditability. No production source changed.
