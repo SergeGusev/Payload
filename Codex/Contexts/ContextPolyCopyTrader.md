@@ -1,3 +1,21 @@
+## Active Update 2026-05-16 Live Stake Settlement Check
+Goal: Recheck how production is running and what happened to the Live stake.
+Status: Completed
+Done:
+- Rechecked production remote PostgreSQL read-only without printing connection strings or secrets.
+- Confirmed `PolyCopyTrader.Service` is alive in `Running`/`Live` mode on build `info=1.0.0+6a94eae...`; DB time was `2026-05-16T09:43:33Z`, heartbeat age about `23s`, no `last_error`, current loop `BTC5mOnly WatchlistScanner=CommentedOut; FollowLeaderSignals=CommentedOut`.
+- Confirmed Polymarket market WebSocket is `Connected`, not stale, with `1413` subscribed assets and last message at `2026-05-16T09:43:25Z`.
+- Confirmed the only real exchange order for `btc_up_down_5m_binance_bps_1` remains the `2026-05-16T09:15:07Z` Live-shadow order: `Up`, price `0.50`, size `6`, notional `$3.00`, exchange order id present, filled size `6`, remaining `0`.
+- Confirmed that Live order has now settled: `balance_effect_applied=true`, settled at `2026-05-16T09:22:50Z`, `won=false`, settlement value `$0.00`, realized PnL `-$3.00`; matched unsettled live orders are now `0`.
+- Confirmed no newer real exchange orders after `09:15:07Z`; open live orders count is `0`.
+- Confirmed Paper/Live shadow stayed aligned: linked Paper order was filled with matching asset/outcome/price/size/correlation and `paper_live_shadow_discrepancies` count is `0`.
+- Confirmed current target strategy remains enabled with `live_stakes=true`, current Paper/Live stake values `1`, and Live available balance `97`.
+- Confirmed no recent Polymarket API errors in the last 15 minutes and no daily-loss risk events in the last day.
+- Recent strategy activity after the settled live order is normal observation/skipping: latest skipped windows were rejected by `btc_reference_move_below_bps_threshold`, and two newer market runs were still `Observed`.
+Next: Decide whether to keep Live enabled for more qualifying 5m windows or pause/disable it after the successful smoke and losing settlement.
+Notes: Read-only DB verification only. No secrets were read or printed. No DB writes, service restarts, order submissions, cancel actions, or product code changes were performed.
+Blockers: None found in the production health check; the first Live smoke stake lost `-$3.00`.
+
 ## Active Update 2026-05-16 Live Enabled Screenshot And First Matched Order
 Goal: Inspect the user's updated live-server screenshot and verify production state.
 Status: Completed
