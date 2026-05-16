@@ -1,3 +1,14 @@
+## Active Update 2026-05-16 Production Live Setup Checklist
+Goal: Explain what remains to configure on the production server before Binance 1 bps Live-shadow can submit real orders.
+Status: Completed
+Done:
+- Confirmed from code/config that no product code change is required for the current blocker; the production runtime configuration is incomplete.
+- Identified required production gates: set `Bot__EnableLiveTrading=true` for the Windows Service process while keeping `Bot__Mode=Live` and `LiveTrading__ManualEnableCode=LIVE_TRADING_ENABLED`; make Polymarket Credential Manager secrets visible to the same service account; sync VPS time so CLOB drift is within `LiveTrading:MaxClockDriftSeconds`; and adjust or clear live exposure caps so the current `$3` shadow order passes.
+- Prepared the safe setup order: add signing key secret locally on VPS, bootstrap L2 API credentials with Live disabled, run `--auth-readiness-smoke`, `--dry-run-signing-smoke`, `--clob-authenticated-read-smoke`, fix clock drift, set explicit live env overrides, restart service, and verify with `--print-config` / `--print-live-shadow-state`.
+Next: Apply the checklist on the VPS under the actual Windows Service account, then restart and re-monitor the next qualifying `btc_up_down_5m_binance_bps_1` window.
+Notes: Answer-only task; no DB writes, service restarts, order submissions, cancel actions, or product code changes were performed. Existing repo state remains at commit `6520d30`.
+Blockers: VPS/service-account access is required to configure secrets, Windows time sync, machine environment variables, and service restart.
+
 ## Active Update 2026-05-16 Binance 1 bps Live Shadow Monitoring
 Goal: Continue monitoring the `BTC Up or Down 5m Binance 1 bps` Live-shadow strategy after production deployment.
 Status: Blocked
