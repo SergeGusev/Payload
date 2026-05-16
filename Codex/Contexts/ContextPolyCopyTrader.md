@@ -1,3 +1,19 @@
+## Active Update 2026-05-16 Live Stakes Readiness Recheck
+Goal: Answer whether the system is ready to place real Live stakes now.
+Status: Completed
+Done:
+- Rechecked both local and remote PostgreSQL sources without printing connection strings; the production/remote source is `192.168.0.101`.
+- Confirmed production service is alive and fresh: `PolyCopyTrader.Service` status `Running`, mode `Live`, heartbeat age about `56s` at DB time `2026-05-16T08:45Z`, current loop `BTC5mOnly WatchlistScanner=CommentedOut; FollowLeaderSignals=CommentedOut`.
+- Confirmed target strategy `btc_up_down_5m_binance_bps_1` is enabled with `live_stakes=true`, Paper stake `1`, Live stake `1`, Live available balance `100`; all other checked BTC live stakes such as `btc_up_down_5m_skip_1` remain off.
+- Confirmed there are `0` open/stale live orders, `0` recent Polymarket API errors, `0` daily-loss events, and no Paper/Live shadow discrepancies.
+- Latest production Live-shadow attempts at `2026-05-16T08:40Z` and `08:45Z` still ended as `PreflightRejected` before exchange submission; no exchange `order_id` was created.
+- Current latest preflight blockers are: `Live trading is not explicitly enabled`, `CLOB server time drift exceeds configured limit`, `Live market exposure would exceed configured limit`, and `Live total deployed exposure would exceed configured limit`.
+- Earlier auth-secret blockers disappeared after the latest setup; local no-money checks also passed from the current account: `--auth-readiness-smoke` can authenticate, `--dry-run-signing-smoke` produced `DryRunSigned` with local signature verification, and `--clob-authenticated-read-smoke` returned HTTP `200`.
+- Production exposure blocker is caused by Paper state being counted in the live preflight: `1213` open paper orders with `$2567.6395` notional plus `43860` paper positions worth `$511.54447846`, total Paper exposure `$3079.18397846`, above the current live total cap of `$500` and market cap of `$50`.
+Next: Do not enable real Live order placement until the explicit live flag is intentionally enabled, VPS clock drift is fixed, and the Paper exposure/risk-cap issue is resolved or the live preflight policy is changed deliberately for this BTC-only live smoke.
+Notes: No secrets were read or printed. No DB writes, service restarts, order submissions, cancel actions, or product code changes were performed by this session. Local IPC was unavailable because only Dashboard was running locally, but remote DB heartbeat confirms the production service is running.
+Blockers: Not ready for real Live stakes yet.
+
 ## Active Update 2026-05-16 Certificate Check Screenshot Review
 Goal: Interpret the user's Dashboard `Certificates` screenshot.
 Status: Completed
