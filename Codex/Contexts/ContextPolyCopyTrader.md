@@ -1,3 +1,15 @@
+## Active Update 2026-05-16 GTD Unfilled Clarification
+Goal: Clarify whether the latest `gtd_limit_not_filled` means the strategy failed to place an order despite the agreed maker-style wait-for-market behavior.
+Status: Completed
+Done:
+- Checked the BTC opening-limit code path and confirmed the service does place GTD limit orders and waits for the market to come to the order until the configured local expiration.
+- Confirmed the latest `gtd_limit_not_filled` was not a "did not place" case: Paper GTD was placed at `2026-05-16T11:00:08Z` and expired unfilled at `2026-05-16T11:04:00Z`, one minute before market end.
+- Confirmed current configuration defaults explain the local wait window: `OpeningLimitGtdTtlSeconds=120`, but for this market-relative case expiration is capped by `OpeningLimitExpireBeforeMarketEndSeconds=60`, so the order was kept until one minute before market end.
+- Noted that classifying `gtd_limit_not_filled` under `Live tech skip` is semantically misleading; a separate unfilled/cancelled maker-order bucket would be clearer.
+Next: Consider changing Dashboard metrics so unfilled GTD maker orders are not mixed with technical/preflight skips.
+Notes: Read-only code/context analysis only; no product code, DB writes, service restarts, order submissions, or cancel actions were performed.
+Blockers: None.
+
 ## Active Update 2026-05-16 Latest Live Tech Skip Reason
 Goal: Identify the latest production `Live tech skip` reason.
 Status: Completed

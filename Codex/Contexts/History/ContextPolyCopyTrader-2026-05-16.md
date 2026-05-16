@@ -164,3 +164,10 @@ Request:
 
 Result:
 Queried production PostgreSQL read-only for the latest rows feeding `Live tech skip`. The latest source was `strategy_market_paper_runs` for `btc_up_down_5m_binance_bps_1`, market `btc-updown-5m-1778929200`, market start `2026-05-16T11:00:00Z`, updated `2026-05-16T11:05:31Z`, with `skip_reason=gtd_limit_not_filled`. The linked Paper GTD BUY `Up` at `0.50`, size `6`, stake `$3`, was created `2026-05-16T11:00:08Z`, expired `2026-05-16T11:04:00Z`, and had `0` fills. Also observed a same-window Live order with exchange id and local status `CancelFailed`; cancel response said `order can't be found - already canceled or matched`, with local filled size `0` and remaining size `6`. No secrets were printed. No DB writes, service restarts, order submissions, or cancel actions were performed.
+
+## 2026-05-16T11:19:53.7185766Z
+Request:
+Мы же договаривались всё равно ставить, в рассчёте, что рынок к нам придёт.
+
+Result:
+Confirmed from code and production row context that `gtd_limit_not_filled` does not mean the service failed to place the intended maker-style GTD order. The latest case did place a Paper GTD order at `2026-05-16T11:00:08Z` and kept it until local expiration at `2026-05-16T11:04:00Z`, one minute before the market end, with zero fills. The code uses market-relative expiration for this case because `OpeningLimitExpireBeforeMarketEndSeconds=60`; therefore the behavior matches the agreement to place and wait for the market, but the Dashboard classification is misleading because `gtd_limit_not_filled` is currently counted under `Live tech skip` instead of a separate unfilled/cancelled maker-order bucket. No product code, DB writes, service restarts, order submissions, or cancel actions were performed.
