@@ -1,3 +1,14 @@
+## Active Update 2026-05-16 Service Redeploy Need Clarification
+Goal: Clarify whether the Service must be redeployed after enabling Binance 1 bps and 2 bps together.
+Status: Completed
+Done:
+- Determined that a Service redeploy is not required for the current live trading state: server DB already has both `btc_up_down_5m_binance_bps_1` and `btc_up_down_5m_binance_bps_2` live-enabled, and the running service already created/matched a `bps_2` live order at `2026-05-16T17:20:33Z`.
+- Clarified that redeploying the Service is only needed if the new convenience CLI flag `--set-live-stakes-only-codes` must exist on the server executable itself for future server-side operations.
+- Clarified that Dashboard redeploy is not needed for this state.
+Next: None for current operation. Deploy Service commit `5a8f4e9` later only if server-local access to the new multi-code admin command is desired.
+Notes: Answer-only task. No code, DB, service restart, order submission, or cancel action was performed.
+Blockers: None.
+
 ## Active Update 2026-05-16 Binance 1 And 2 Bps Live Together
 Goal: Enable `BTC Up or Down 5m Binance 1 bps` and `BTC Up or Down 5m Binance 2 bps` together on the production server.
 Status: Completed

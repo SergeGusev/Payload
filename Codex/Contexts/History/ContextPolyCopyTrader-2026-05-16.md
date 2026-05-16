@@ -226,3 +226,10 @@ Request:
 
 Result:
 Explained that `bps_1` was disabled because the previous `--set-live-stakes-only-code` admin command intentionally leaves Live enabled for exactly one code and disables all other strategies. Added a new multi-code admin flag, `--set-live-stakes-only-codes code1,code2`, with regression coverage proving it enables exactly the provided set. Applied it to remote PostgreSQL `192.168.0.101` for `btc_up_down_5m_binance_bps_1,btc_up_down_5m_binance_bps_2`; the command timed out before returning output, but follow-up server checks confirmed the DB write succeeded. Remote state now has `LiveStakes strategies: 2`: `bps_1` with `liveStake=1`, `liveBalance=180.62`, `liveOpen=0`, `liveOrders=41`, and `bps_2` with `liveStake=1`, `liveBalance=100`, `liveOpen=0`, `liveOrders=1`. The first `bps_2` live order was created at `2026-05-16T17:20:33Z` and later reconciled as `Matched`, `Down`, price `0.50`, size `6`, filled `6`, remaining `0`; settlement/balance effect is still pending. Verification passed: targeted `StrategyStakeAdminCommandTests` 6/6, Service Release build with existing Storage nullable warnings, full test project 493/493, and `git diff --check` with LF/CRLF warnings only. No cancel action was performed. Running both strategies can create two live attempts in the same qualifying >=2 bps window, so exposure can be higher than running only one strategy; global and strategy-level Live gates still apply.
+
+## 2026-05-16T17:27:59.5393867Z
+Request:
+Сервис нужно перевыложить?
+
+Result:
+Clarified that Service redeploy is not required for the current live trading state: the server DB already has both Binance 1 bps and Binance 2 bps live-enabled, and the running service already created and matched a Binance 2 bps live order at `2026-05-16T17:20:33Z`, proving the needed live strategy path is active. Service redeploy is only needed if the new convenience CLI flag `--set-live-stakes-only-codes` must be available on the server executable itself for future server-side operations. Dashboard redeploy is not needed for this state. No code, DB, service restart, order submission, or cancel action was performed.
