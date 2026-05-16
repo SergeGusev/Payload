@@ -1,3 +1,14 @@
+## Active Update 2026-05-16 Paper Calculation With Live Stakes
+Goal: Clarify whether enabling Live for a strategy changes Paper calculation methodology.
+Status: Completed
+Done:
+- Inspected `BtcUpDown5mPaperStrategyProcessor` and confirmed Paper price/size/stake calculation uses Paper settings, especially `settings.PaperStakeAmount`, and the same strategy pricing/sizing/fill model regardless of `LiveStakes`.
+- Confirmed Live-shadow placement is an additional step after Paper signal/order creation for allowed variants, using the same computed Paper limit/size/stake for correlation and comparison; Live execution result does not rewrite Paper fills or settlements.
+- Noted two caveats: Live-enabled strategies are prioritized on equal due times, which can slightly change actual processing timing; for allowed Paper/Live-shadow variants, missing live-shadow order-book snapshot can skip the run before creating the Paper order.
+Next: None.
+Notes: Read-only code inspection only. No product code, DB writes, service restarts, tests, order submissions, or cancel actions were performed.
+Blockers: None.
+
 ## Active Update 2026-05-16 Live Ignored Breakdown
 Goal: Split the Dashboard `Live ignored` metric into actionable cause buckets.
 Status: Completed

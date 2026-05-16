@@ -185,3 +185,10 @@ Request:
 
 Result:
 Split the Dashboard `Live ignored` metric into three cause columns: `Live gtd unfilled`, `Live cancel ignored`, and `Live reject/error`, while keeping `Live ignored` as the total. Updated domain models, Dashboard rows, WPF Strategy grids, CSV exports, PostgreSQL cumulative/recent Strategy aggregation, TestAppRepository, StrategyPerformanceTests, and README. Read-only production SQL smoke for `btc_up_down_5m_binance_bps_1` showed current all-time `Live ignored=169` as `GTD unfilled=166`, `Cancel ignored=3`, `Reject/error=0`, confirming the high count is not exchange rejection. Verification passed: targeted `StrategyPerformanceTests` 5/5, Dashboard Release build, Service Release build, full test project 490/490, and `git diff --check` with LF/CRLF warnings only. No DB writes, service restarts, order submissions, or cancel actions were performed.
+
+## 2026-05-16T15:46:29Z
+Request:
+Когда стратегия работает только в Paper и когда она работает в обоих режимах - Paper и Live - для Paper как-то меняются методики расчёта?
+
+Result:
+Inspected BTC 5m strategy code read-only. Answered that Paper price, sizing, order creation, fill simulation, and settlement methodology do not change just because `LiveStakes` is enabled; Paper uses `settings.PaperStakeAmount` and the same strategy pricing/sizing logic. Live-shadow is added as a separate correlated live attempt after the Paper signal/order is created for allowed variants, and Live result does not rewrite Paper fills or settlements. Caveats: Live-enabled strategies are processed first on equal due-time ties, which can slightly affect actual quote timing, and allowed Paper/Live-shadow variants require an extra live-shadow order-book snapshot before Paper order creation, so a missing snapshot can skip the run. No code, DB, service, order, or cancel changes were made.
