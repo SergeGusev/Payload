@@ -1,3 +1,16 @@
+## Active Update 2026-05-16 Server Binance 2 Bps Live Correction
+Goal: Correct the Binance 2 bps Live check to use the production server database.
+Status: Completed
+Done:
+- Identified that the prior `--print-live-shadow-state` check used the local PostgreSQL connection (`127.0.0.1`), not the server database.
+- Confirmed `192.168.0.101:5432` is reachable from this machine; `192.168.0.101:5118` remains unreachable/timed out as before.
+- Ran `--print-live-shadow-state` against remote PostgreSQL by overriding only the host to `192.168.0.101`; it showed production still had `btc_up_down_5m_binance_bps_1` live-enabled, with recent bps1 live orders through `2026-05-16T17:00:07Z`.
+- Switched the server database with `--set-live-stakes-only-code btc_up_down_5m_binance_bps_2`; result: `Strategies found: 1266`, `live-enabled: 1`, `live-disabled: 1265`, `failed: 0`.
+- Rechecked the server database and confirmed the only LiveStakes strategy is now `btc_up_down_5m_binance_bps_2`, `liveStake=1`, `liveBalance=100`, `liveOpen=0`, `liveOrders=0`.
+Next: Watch the next qualifying BTC 5m windows. The running service refreshes strategy runtime settings about once per second, so no service restart is needed for this DB flag change if the new service binary is already deployed.
+Notes: DB write was limited to strategy `live_stakes` flags on the server. No live order submission, cancel action, or code change was performed. Existing recent live orders/events in diagnostics are old `bps_1` rows from before the switch.
+Blockers: None found for the server-side LiveStakes flag; actual live placement still depends on global live gates and a qualifying >=2 bps move.
+
 ## Active Update 2026-05-16 Binance 2 Bps Live Checkbox Check
 Goal: Verify whether `BTC Up or Down 5m Binance 2 bps` still needs the Dashboard Live checkbox after deploy.
 Status: Completed
