@@ -157,3 +157,10 @@ Request:
 
 Result:
 Inspected current Storage SQL and TestAppRepository aggregation. Answered that `Live tech skip` includes skipped strategy runs for currently Live-enabled strategies when the `skip_reason` is not classified as a condition skip, plus `live_orders.status='PreflightRejected'`. Clarified that `Rejected` and `Error` live orders are counted separately as `Live reject`, while threshold/edge/no-candidate/price-cap style condition misses are counted as `Live cond skip`. No product code, DB, service, or order changes were made.
+
+## 2026-05-16T11:15:39.6514197Z
+Request:
+Дай причину последней Live tech skip
+
+Result:
+Queried production PostgreSQL read-only for the latest rows feeding `Live tech skip`. The latest source was `strategy_market_paper_runs` for `btc_up_down_5m_binance_bps_1`, market `btc-updown-5m-1778929200`, market start `2026-05-16T11:00:00Z`, updated `2026-05-16T11:05:31Z`, with `skip_reason=gtd_limit_not_filled`. The linked Paper GTD BUY `Up` at `0.50`, size `6`, stake `$3`, was created `2026-05-16T11:00:08Z`, expired `2026-05-16T11:04:00Z`, and had `0` fills. Also observed a same-window Live order with exchange id and local status `CancelFailed`; cancel response said `order can't be found - already canceled or matched`, with local filled size `0` and remaining size `6`. No secrets were printed. No DB writes, service restarts, order submissions, or cancel actions were performed.

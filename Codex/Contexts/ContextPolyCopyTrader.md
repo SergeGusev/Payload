@@ -1,3 +1,15 @@
+## Active Update 2026-05-16 Latest Live Tech Skip Reason
+Goal: Identify the latest production `Live tech skip` reason.
+Status: Completed
+Done:
+- Queried production PostgreSQL read-only for the latest rows that feed `Live tech skip`: non-condition skipped strategy runs for Live-enabled strategies plus `PreflightRejected` live orders.
+- Found the latest source is a `strategy_market_paper_runs` row for `btc_up_down_5m_binance_bps_1`, market `btc-updown-5m-1778929200`, market start `2026-05-16T11:00:00Z`, updated `2026-05-16T11:05:31Z`, `skip_reason=gtd_limit_not_filled`.
+- Confirmed linked Paper GTD BUY `Up` at `0.50`, size `6`, stake `$3`, was created `2026-05-16T11:00:08Z`, expired `2026-05-16T11:04:00Z`, had `0` fills, and the run was skipped.
+- Noted the same window has a Live order created with exchange id and local status `CancelFailed`; cancel response said `order can't be found - already canceled or matched`, local filled size `0`, remaining size `6`.
+Next: If operationally needed, verify/synchronize the `CancelFailed` live order state against CLOB before assuming it is closed.
+Notes: Production DB read-only diagnostics only; no secrets printed, no DB writes, service restarts, order submissions, or cancel actions were performed.
+Blockers: None for the diagnostic answer.
+
 ## Active Update 2026-05-16 Live Tech Skip Definition
 Goal: Explain what the Dashboard `Live tech skip` metric includes.
 Status: Completed
