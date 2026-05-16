@@ -1,3 +1,15 @@
+## Active Update 2026-05-16 BTC 5m Focused Workers
+Goal: Comment out background tasks not related to BTC Up or Down 5m strategy operation.
+Status: Completed
+Done:
+- Commented out non-BTC hosted-service registrations in `src/PolyCopyTrader.Service/Program.cs`: HTTP-log retention, Binance crypto reference stream, crypto odds archive, Data API trader ingestion/sync/rating, on-chain trade capture/paper signals, copied-trader accounting, leader activity exits, and daily analytics reports.
+- Left required BTC/infrastructure workers active: startup safety, heartbeat/control, Paper open-order processing, live maintenance, local IPC, Gamma market ingestion, BTC order-book diagnostics/reference streams, BTC order-book refresh, BTC 5m strategy, BTC odds archive/statistics, and market WebSocket.
+- Commented out `BotWorker` watchlist scanning and queued Follow leader signal processing while preserving the service heartbeat loop.
+- Documented the BTC-focused worker mode in README.
+Next: Deploy/restart the service from this commit if production should stop the non-BTC background workers.
+Notes: Verification passed: `dotnet build src\PolyCopyTrader.Service\PolyCopyTrader.Service.csproj -c Release --no-restore` passed with 0 warnings/errors; `dotnet test tests\PolyCopyTrader.Tests\PolyCopyTrader.Tests.csproj -c Release --no-restore` passed 480/480; `git diff --check` passed with CRLF warnings only. No database writes, service restarts, order submissions, or cancel actions were performed.
+Blockers: None.
+
 ## Active Update 2026-05-16 Production Server Alive Check
 Goal: Check whether the production server/service is alive.
 Status: Completed

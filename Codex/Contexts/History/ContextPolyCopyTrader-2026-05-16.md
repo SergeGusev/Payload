@@ -1,3 +1,10 @@
+## 2026-05-16T05:47:17.2160979Z
+Request:
+Закомментируй в коде все задачи, не связанные с работой стратегий BTC Up or Down 5m. Например, подброр трейдеров для Follow leader. Удалять не надо, только закомментируй
+
+Result:
+Commented out non-BTC hosted-service registrations in `src/PolyCopyTrader.Service/Program.cs` without deleting the code: HTTP-log retention, Binance crypto reference stream, crypto odds archive, Data API trader ingestion/sync/rating, on-chain trade capture/paper signals, copied-trader accounting, leader activity exits, and daily analytics reports. Also commented out the `BotWorker` watchlist scan and queued Follow leader signal-processing block while preserving service heartbeat/control. Documented the BTC-focused worker mode in README. Verification passed: Release service build had 0 warnings/errors, full test project passed 480/480, and `git diff --check` passed with CRLF warnings only. No database writes, service restarts, order submissions, or cancel actions were performed.
+
 ## 2026-05-16T05:38:49.6713355Z
 Request:
 Проверь, жив ли сервер

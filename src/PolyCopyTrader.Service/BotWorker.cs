@@ -20,6 +20,8 @@ public sealed class BotWorker(
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
         logger.LogInformation("PolyCopyTrader service started in {Mode} mode.", botOptions.Mode);
+        _ = watchlistScanner;
+        _ = signalProcessor;
         controlState.MarkRunning();
 
         while (!stoppingToken.IsCancellationRequested)
@@ -29,39 +31,44 @@ public sealed class BotWorker(
 
             try
             {
-                var scanStatus = controlState.ScanningPaused
-                    ? new ScannerStatusSnapshot(
-                        "WatchlistScanner",
-                        null,
-                        null,
-                        null,
-                        0,
-                        0,
-                        0,
-                        "Paused",
-                        DateTimeOffset.UtcNow)
-                    : await watchlistScanner.ScanOnceAsync(stoppingToken);
+                // BTC 5m focused mode: keep service heartbeat/control alive, but pause the
+                // non-BTC Follow leader watchlist scan and queued signal processing.
+                // var scanStatus = controlState.ScanningPaused
+                //     ? new ScannerStatusSnapshot(
+                //         "WatchlistScanner",
+                //         null,
+                //         null,
+                //         null,
+                //         0,
+                //         0,
+                //         0,
+                //         "Paused",
+                //         DateTimeOffset.UtcNow)
+                //     : await watchlistScanner.ScanOnceAsync(stoppingToken);
+                //
+                // var signalResult = controlState.ScanningPaused
+                //     ? new SignalProcessingResult(0, 0, 0, 0)
+                //     : await signalProcessor.ProcessQueuedAsync(stoppingToken);
+                //
+                // currentLoop =
+                //     $"Scanner={scanStatus.ScannerStatus}; TradesFetched={scanStatus.TradesFetched}; " +
+                //     $"NewTradesStored={scanStatus.NewTradesStored}; PositionsFetched={scanStatus.PositionsFetched}; " +
+                //     $"SignalsAccepted={signalResult.SignalsAccepted}; SignalsRejected={signalResult.SignalsRejected}; " +
+                //     $"PaperOrdersCreated={signalResult.PaperOrdersCreated}; LiveOrdersSubmitted={signalResult.LiveOrdersSubmitted}";
+                //
+                // logger.LogInformation(
+                //     "Watchlist scan completed. Status={ScannerStatus} TradesFetched={TradesFetched} NewTradesStored={NewTradesStored} PositionsFetched={PositionsFetched} SignalsAccepted={SignalsAccepted} SignalsRejected={SignalsRejected} PaperOrdersCreated={PaperOrdersCreated} LiveOrdersSubmitted={LiveOrdersSubmitted}",
+                //     scanStatus.ScannerStatus,
+                //     scanStatus.TradesFetched,
+                //     scanStatus.NewTradesStored,
+                //     scanStatus.PositionsFetched,
+                //     signalResult.SignalsAccepted,
+                //     signalResult.SignalsRejected,
+                //     signalResult.PaperOrdersCreated,
+                //     signalResult.LiveOrdersSubmitted);
 
-                var signalResult = controlState.ScanningPaused
-                    ? new SignalProcessingResult(0, 0, 0, 0)
-                    : await signalProcessor.ProcessQueuedAsync(stoppingToken);
-
-                currentLoop =
-                    $"Scanner={scanStatus.ScannerStatus}; TradesFetched={scanStatus.TradesFetched}; " +
-                    $"NewTradesStored={scanStatus.NewTradesStored}; PositionsFetched={scanStatus.PositionsFetched}; " +
-                    $"SignalsAccepted={signalResult.SignalsAccepted}; SignalsRejected={signalResult.SignalsRejected}; " +
-                    $"PaperOrdersCreated={signalResult.PaperOrdersCreated}; LiveOrdersSubmitted={signalResult.LiveOrdersSubmitted}";
-
-                logger.LogInformation(
-                    "Watchlist scan completed. Status={ScannerStatus} TradesFetched={TradesFetched} NewTradesStored={NewTradesStored} PositionsFetched={PositionsFetched} SignalsAccepted={SignalsAccepted} SignalsRejected={SignalsRejected} PaperOrdersCreated={PaperOrdersCreated} LiveOrdersSubmitted={LiveOrdersSubmitted}",
-                    scanStatus.ScannerStatus,
-                    scanStatus.TradesFetched,
-                    scanStatus.NewTradesStored,
-                    scanStatus.PositionsFetched,
-                    signalResult.SignalsAccepted,
-                    signalResult.SignalsRejected,
-                    signalResult.PaperOrdersCreated,
-                    signalResult.LiveOrdersSubmitted);
+                currentLoop = "BTC5mOnly WatchlistScanner=CommentedOut; FollowLeaderSignals=CommentedOut";
+                logger.LogInformation("BTC 5m focused mode heartbeat. Follow leader watchlist scan is commented out.");
             }
             catch (OperationCanceledException)
             {

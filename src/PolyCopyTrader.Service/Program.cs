@@ -336,7 +336,8 @@ builder.Services.AddSingleton<IOnChainMarketEnrichmentProcessor, OnChainMarketEn
 builder.Services.AddSingleton<IOnChainSignalCandidateProcessor, OnChainSignalCandidateProcessor>();
 builder.Services.AddSingleton<ServiceControlState>();
 builder.Services.AddHostedService<StartupSafetyCheckService>();
-builder.Services.AddHostedService<PolymarketHttpLogRetentionWorker>();
+// BTC 5m focused mode: HTTP-log retention is not part of BTC Up or Down 5m strategy execution.
+// builder.Services.AddHostedService<PolymarketHttpLogRetentionWorker>();
 builder.Services.AddHostedService<BotWorker>();
 builder.Services.AddHostedService<PaperTradingWorker>();
 builder.Services.AddHostedService<LiveTradingMaintenanceWorker>();
@@ -344,16 +345,18 @@ builder.Services.AddHostedService<LocalControlServer>();
 builder.Services.AddHostedService<GammaMarketIngestionWorker>();
 builder.Services.AddHostedService(sp => sp.GetRequiredService<BtcOrderBookLagDiagnosticService>());
 builder.Services.AddHostedService(sp => sp.GetRequiredService<BinanceBtcUsdTradeStreamService>());
-builder.Services.AddHostedService(sp => sp.GetRequiredService<BinanceCryptoReferenceTradeStreamService>());
+// BTC 5m focused mode: non-BTC crypto reference stream is paused.
+// builder.Services.AddHostedService(sp => sp.GetRequiredService<BinanceCryptoReferenceTradeStreamService>());
 builder.Services.AddHostedService<ChainlinkBtcUsdCorrelationWorker>();
 builder.Services.AddHostedService<BtcUpDown5mOrderBookRefreshWorker>();
 builder.Services.AddHostedService<BtcUpDown5mPaperStrategyWorker>();
 builder.Services.AddHostedService<BtcUpDown5mOddsArchiveWorker>();
 builder.Services.AddHostedService<BtcUpDown5mStatisticsWorker>();
-builder.Services.AddHostedService<CryptoUpDown5mOddsArchiveWorker>();
-builder.Services.AddHostedService<DataApiTraderActivityIngestionWorker>();
-builder.Services.AddHostedService<DataApiTraderActivitySyncWorker>();
-builder.Services.AddHostedService<DataApiTraderRatingRefreshWorker>();
+// BTC 5m focused mode: non-BTC crypto archive and trader research/rating workers are paused.
+// builder.Services.AddHostedService<CryptoUpDown5mOddsArchiveWorker>();
+// builder.Services.AddHostedService<DataApiTraderActivityIngestionWorker>();
+// builder.Services.AddHostedService<DataApiTraderActivitySyncWorker>();
+// builder.Services.AddHostedService<DataApiTraderRatingRefreshWorker>();
 // Temporarily paused: on-chain blockchain download and derived-data processing workers.
 // Existing PostgreSQL data is left intact; uncomment these registrations to resume.
 // builder.Services.AddHostedService<OnChainIngestionWorker>();
@@ -363,12 +366,14 @@ builder.Services.AddHostedService<DataApiTraderRatingRefreshWorker>();
 // builder.Services.AddHostedService<OnChainPerformanceRefreshWorker>();
 // builder.Services.AddHostedService<OnChainCategoryPerformanceRefreshWorker>();
 // builder.Services.AddHostedService<OnChainSignalCandidateWorker>();
-builder.Services.AddHostedService<OnChainTradeCaptureWorker>();
-builder.Services.AddHostedService<OnChainPaperSignalWorker>();
+// BTC 5m focused mode: low-latency on-chain Follow leader capture/signal tasks are paused.
+// builder.Services.AddHostedService<OnChainTradeCaptureWorker>();
+// builder.Services.AddHostedService<OnChainPaperSignalWorker>();
 builder.Services.AddHostedService<MarketDataWebSocketService>();
-builder.Services.AddHostedService<PaperAccountingWorker>();
-builder.Services.AddHostedService<LeaderActivityExitWorker>();
-builder.Services.AddHostedService<DailyReportWorker>();
+// BTC 5m focused mode: copied-trader accounting, leader exits, and daily analytics reports are paused.
+// builder.Services.AddHostedService<PaperAccountingWorker>();
+// builder.Services.AddHostedService<LeaderActivityExitWorker>();
+// builder.Services.AddHostedService<DailyReportWorker>();
 
 try
 {
