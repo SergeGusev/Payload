@@ -1,3 +1,16 @@
+## Active Update 2026-05-16 Binance 1 bps Live Shadow Monitoring
+Goal: Continue monitoring the `BTC Up or Down 5m Binance 1 bps` Live-shadow strategy after production deployment.
+Status: Blocked
+Done:
+- Confirmed production service remains alive in `Live` mode on build `info=1.0.0+7c702eada37b085eb076e77be183813bc4bf5c1c`, started `2026-05-16T06:08:18Z`, with no `last_error`.
+- Confirmed target strategy is still `enabled=true`, `live_stakes=true`, `paper_stake=1`, `live_stake=1`, `live_available_balance=100`, and no open Live-shadow orders.
+- Observed two qualifying Binance 1 bps Live-shadow attempts since service start: 06:25 UTC and 06:40 UTC, both `Down`, limit `0.50`, size `6`, notional `$3`.
+- Both attempts created matching Paper-shadow and Live-shadow records, but the Live side was stopped by local preflight as `PreflightRejected`; the Paper-shadow order was immediately `Cancelled`, no exchange `order_id` was created, and there are `0` Paper/Live discrepancy rows.
+- Non-qualifying windows skipped on `btc_reference_move_below_bps_threshold`: 06:05, 06:10, 06:15, 06:20, 06:30, and 06:35 UTC.
+Next: Fix/restart the production runtime configuration before expecting real Live-shadow order submission: `Bot:EnableLiveTrading` must be true for the service process, Polymarket API key/secret/passphrase must be available to that process, CLOB clock drift must be inside the configured limit, and live exposure caps must allow the `$3` test order.
+Notes: Read-only production DB monitoring only. Temporary C# Npgsql probe under `out/live-shadow-probe` was removed. No database writes, service restarts, order submissions, cancel actions, or product code changes were performed. Two recent non-Polymarket API errors were order-book refresh timeouts; no `paper_live_shadow_discrepancies` were recorded.
+Blockers: Production preflight rejects every qualifying Live-shadow order with `Live trading is not explicitly enabled`, missing Polymarket API credentials for the service process, `CLOB server time drift exceeds configured limit`, and live market/total exposure cap failures.
+
 ## Active Update 2026-05-16 Dashboard Strategy Live Columns
 Goal: Add Live stake outcome metrics beside Paper settled/skipped/won/lost/realized/ROI columns in each Dashboard Strategies tab.
 Status: Completed

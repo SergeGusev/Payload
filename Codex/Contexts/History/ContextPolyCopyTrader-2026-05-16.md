@@ -38,3 +38,10 @@ Request:
 
 Result:
 Added a Live outcome block immediately to the right of the Paper settled/skipped/won/lost/realized/ROI columns in every Dashboard Strategies nested tab: `All`, `24 hours`, `6 hours`, and `1 hour`. Extended domain records, dashboard row models, data mapping, CSV export, and PostgreSQL all-time/recent performance queries with Live skipped/rejected plus Live settled/won/lost/realized/ROI metrics from `live_orders`. Updated in-memory repository tests, strategy performance tests, and README. Verification passed: Dashboard Release build, targeted `StrategyPerformanceTests` 5/5, full test project 482/482, remote PostgreSQL repository probe returned `strategy_rows=5; recent_rows=15`, and `git diff --check` passed with CRLF warnings only.
+
+## 2026-05-16T06:42:22.7418112+00:00
+Request:
+Продолжай следить за Live стратегией.
+
+Result:
+Monitored production `BTC Up or Down 5m Binance 1 bps` Live-shadow read-only through remote PostgreSQL. Service stayed alive in `Live` mode on build `info=1.0.0+7c702eada37b085eb076e77be183813bc4bf5c1c`, started `2026-05-16T06:08:18Z`, with no `last_error`; target strategy remained enabled with `live_stakes=true`, Paper/Live stakes `1`, Live balance `100`, and no open live orders. Since service start there were two qualifying Live-shadow attempts, 06:25 and 06:40 UTC, both `Down` at limit `0.50`, size `6`, notional `$3`. Both created linked Paper-shadow and Live-shadow records, but local preflight rejected Live before exchange submission; Paper-shadow was immediately cancelled, Live status was `PreflightRejected`, no exchange `order_id` was created, and `paper_live_shadow_discrepancies` remained `0`. Preflight reasons were `Live trading is not explicitly enabled`, missing Polymarket API key/secret/passphrase for the service process, CLOB server time drift above the configured limit, and live market/total exposure cap failures. Non-qualifying windows skipped on `btc_reference_move_below_bps_threshold`. No database writes, service restarts, order submissions, cancel actions, or product code changes were performed.
