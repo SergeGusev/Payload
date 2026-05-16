@@ -242,14 +242,41 @@ public sealed class StrategyPerformanceTests
             string.Empty,
             now.AddMinutes(-2),
             StrategyId: strategyId));
+        await repository.AddLiveOrderAsync(new LiveOrder(
+            Guid.NewGuid(),
+            Guid.NewGuid(),
+            LiveOrderStatus.Rejected,
+            null,
+            TradeSide.Buy,
+            "asset-live-clob-rejected",
+            "condition-live",
+            "Yes",
+            0.30m,
+            10m,
+            3m,
+            "GTC",
+            now.AddMinutes(-2),
+            now.AddMinutes(5),
+            now.AddMinutes(-2),
+            "rejected",
+            0m,
+            10m,
+            "test clob rejection",
+            "{}",
+            string.Empty,
+            now.AddMinutes(-2),
+            StrategyId: strategyId));
 
         var row = (await repository.GetStrategyPerformanceAsync()).Single(item => item.StrategyId == strategyId);
 
-        Assert.Equal(4, row.LiveOrdersCount);
+        Assert.Equal(5, row.LiveOrdersCount);
         Assert.Equal(2, row.LiveFilledOrdersCount);
         Assert.Equal(1, row.LiveOpenOrdersCount);
         Assert.Equal(2, row.LiveSettledOrdersCount);
-        Assert.Equal(1, row.LiveSkippedOrdersCount);
+        Assert.Equal(2, row.LiveSkippedOrdersCount);
+        Assert.Equal(0, row.LiveConditionSkippedOrdersCount);
+        Assert.Equal(1, row.LiveTechnicalSkippedOrdersCount);
+        Assert.Equal(1, row.LiveRejectedOrdersCount);
         Assert.Equal(1, row.LiveWonOrdersCount);
         Assert.Equal(1, row.LiveLostOrdersCount);
         Assert.Equal(8m, row.LiveStakeUsd);
@@ -269,6 +296,7 @@ public sealed class StrategyPerformanceTests
         var repository = new TestAppRepository();
         var now = DateTimeOffset.UtcNow;
         var variant = StrategyIds.GetBtcUpDown5mVariant(BtcUpDown5mStrategyDirection.More, 90);
+        repository.StrategySettings[variant.Id] = StrategyRuntimeSettings.Default(variant.Id) with { LiveStakes = true };
         var filledOrder = new PaperOrder(
             Guid.NewGuid(),
             Guid.NewGuid(),
@@ -376,7 +404,7 @@ public sealed class StrategyPerformanceTests
             null,
             null,
             null,
-            "test_skip",
+            "btc_reference_move_below_bps_threshold",
             now.AddMinutes(-3),
             now.AddMinutes(-2)));
         await repository.AddLiveOrderAsync(new LiveOrder(
@@ -436,6 +464,30 @@ public sealed class StrategyPerformanceTests
             string.Empty,
             now.AddMinutes(-15),
             StrategyId: variant.Id));
+        await repository.AddLiveOrderAsync(new LiveOrder(
+            Guid.NewGuid(),
+            Guid.NewGuid(),
+            LiveOrderStatus.Rejected,
+            null,
+            TradeSide.Buy,
+            "asset-live-clob-rejected",
+            "condition-live-recent",
+            "Down",
+            0.50m,
+            8m,
+            4m,
+            "GTC",
+            now.AddMinutes(-12),
+            now.AddMinutes(5),
+            now.AddMinutes(-12),
+            "rejected",
+            0m,
+            8m,
+            "test clob rejection",
+            "{}",
+            string.Empty,
+            now.AddMinutes(-12),
+            StrategyId: variant.Id));
 
         var row = (await repository.GetStrategyRecentPerformanceAsync())
             .Single(item => item.StrategyId == variant.Id && item.Window == "1h");
@@ -457,12 +509,15 @@ public sealed class StrategyPerformanceTests
         Assert.Equal(100m, row.WinRatePct);
         Assert.Equal(100m, row.RoiPct);
         Assert.Equal(1, row.LiveSettledOrdersCount);
-        Assert.Equal(1, row.LiveSkippedOrdersCount);
+        Assert.Equal(3, row.LiveSkippedOrdersCount);
+        Assert.Equal(1, row.LiveConditionSkippedOrdersCount);
+        Assert.Equal(1, row.LiveTechnicalSkippedOrdersCount);
+        Assert.Equal(1, row.LiveRejectedOrdersCount);
         Assert.Equal(1, row.LiveWonOrdersCount);
         Assert.Equal(0, row.LiveLostOrdersCount);
         Assert.Equal(6m, row.LiveRealizedPnlUsd);
         Assert.Equal(150m, row.LiveRoiPct);
-        Assert.Equal("test_skip:1", row.TopSkipReason);
+        Assert.Equal("btc_reference_move_below_bps_threshold:1", row.TopSkipReason);
     }
 
     private static void AddSettlement(

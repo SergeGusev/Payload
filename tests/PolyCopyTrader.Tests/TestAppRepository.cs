@@ -1135,8 +1135,19 @@ internal sealed class TestAppRepository : IAppRepository
             var liveOrders = LiveOrders
                 .Where(order => StrategyIds.Normalize(order.StrategyId) == strategy.Id)
                 .ToArray();
-            var liveSkipped = liveOrders.Count(order =>
-                order.Status is LiveOrderStatus.PreflightRejected or LiveOrderStatus.Rejected or LiveOrderStatus.Error);
+            var liveConditionSkipped = strategy.Settings.LiveStakes
+                ? runs.Count(run =>
+                    string.Equals(run.Status, StrategyMarketPaperRunStatuses.Skipped, StringComparison.OrdinalIgnoreCase) &&
+                    IsLiveConditionSkipReason(run.SkipReason))
+                : 0;
+            var liveTechnicalSkipped = (strategy.Settings.LiveStakes
+                    ? runs.Count(run =>
+                        string.Equals(run.Status, StrategyMarketPaperRunStatuses.Skipped, StringComparison.OrdinalIgnoreCase) &&
+                        !IsLiveConditionSkipReason(run.SkipReason))
+                    : 0) +
+                liveOrders.Count(order => order.Status == LiveOrderStatus.PreflightRejected);
+            var liveRejected = liveOrders.Count(order => order.Status is LiveOrderStatus.Rejected or LiveOrderStatus.Error);
+            var liveSkipped = liveConditionSkipped + liveTechnicalSkipped + liveRejected;
             var liveSettled = liveOrders
                 .Where(order => order.SettledAtUtc is not null && order.RealizedPnlUsd is not null)
                 .ToArray();
@@ -1208,6 +1219,9 @@ internal sealed class TestAppRepository : IAppRepository
                     order.RemainingSize > 0m),
                 liveSettled.Length,
                 liveSkipped,
+                liveConditionSkipped,
+                liveTechnicalSkipped,
+                liveRejected,
                 liveWon,
                 liveLost,
                 liveStake,
@@ -1245,19 +1259,22 @@ internal sealed class TestAppRepository : IAppRepository
         {
             Id = variant.Id,
             variant.Code,
-            variant.Name
+            variant.Name,
+            Settings = GetStrategySettings(variant.Id)
         }).ToList();
         strategies.Insert(0, new
         {
             Id = StrategyIds.FollowLeader,
             Code = StrategyIds.FollowLeaderCode,
-            Name = StrategyIds.FollowLeaderName
+            Name = StrategyIds.FollowLeaderName,
+            Settings = GetStrategySettings(StrategyIds.FollowLeader)
         });
         strategies.Add(new
         {
             Id = StrategyIds.BtcUpDown5mStatistics,
             Code = StrategyIds.BtcUpDown5mStatisticsCode,
-            Name = StrategyIds.BtcUpDown5mStatisticsName
+            Name = StrategyIds.BtcUpDown5mStatisticsName,
+            Settings = GetStrategySettings(StrategyIds.BtcUpDown5mStatistics)
         });
         var orderedStrategies = strategies
             .OrderBy(strategy => strategy.Code == StrategyIds.FollowLeaderCode ? 0 : 1)
@@ -1306,6 +1323,15 @@ internal sealed class TestAppRepository : IAppRepository
                 var liveCreatedInWindow = liveOrders
                     .Where(order => order.CreatedAtUtc >= window.StartUtc && order.CreatedAtUtc <= now)
                     .ToArray();
+                var liveConditionSkipped = strategy.Settings.LiveStakes
+                    ? skippedRuns.Count(run => IsLiveConditionSkipReason(run.SkipReason))
+                    : 0;
+                var liveTechnicalSkipped = (strategy.Settings.LiveStakes
+                        ? skippedRuns.Count(run => !IsLiveConditionSkipReason(run.SkipReason))
+                        : 0) +
+                    liveCreatedInWindow.Count(order => order.Status == LiveOrderStatus.PreflightRejected);
+                var liveRejected = liveCreatedInWindow.Count(order => order.Status is LiveOrderStatus.Rejected or LiveOrderStatus.Error);
+                var liveSkipped = liveConditionSkipped + liveTechnicalSkipped + liveRejected;
                 var liveSettled = liveOrders
                     .Where(order => order.SettledAtUtc is not null && order.RealizedPnlUsd is not null)
                     .Where(order => order.SettledAtUtc!.Value >= window.StartUtc && order.SettledAtUtc.Value <= now)
@@ -1366,7 +1392,10 @@ internal sealed class TestAppRepository : IAppRepository
                             ? realizedPnl * 100m / filledCost
                             : 0m,
                     liveSettled.Length,
-                    liveCreatedInWindow.Count(order => order.Status is LiveOrderStatus.PreflightRejected or LiveOrderStatus.Rejected or LiveOrderStatus.Error),
+                    liveSkipped,
+                    liveConditionSkipped,
+                    liveTechnicalSkipped,
+                    liveRejected,
                     liveWon,
                     liveLost,
                     liveRealized,
@@ -3634,6 +3663,40 @@ internal sealed class TestAppRepository : IAppRepository
         {
             Enabled = StrategyEnabledStates.GetValueOrDefault(normalizedStrategyId, true)
         };
+    }
+
+    private static bool IsLiveConditionSkipReason(string? skipReason)
+    {
+        if (string.IsNullOrWhiteSpace(skipReason))
+        {
+            return false;
+        }
+
+        var reason = skipReason.Trim().ToLowerInvariant();
+        return reason is
+                "btc_reference_move_below_bps_threshold" or
+                "btc_reference_equal_market_start" or
+                "btc_reference_equal_mean" or
+                "btc_reference_mixed_around_mean" or
+                "btc_market_results_not_consecutive" or
+                "btc_previous_score_countertrend_rejected" or
+                "btc_previous_score_neutral" or
+                "btc_previous_score_down_time_share_below_threshold" or
+                "btc_previous_score_up_time_share_below_threshold" or
+                "btc_clever_fair_value_below_margin" or
+                "btc_clever_fair_value_rejected" or
+                "markov_edge_below_threshold" or
+                "martin_not_triggered" or
+                "strategy_selector_no_candidate_current_entry" or
+                "gtd_limit_decision_rejected" ||
+            reason.Contains("threshold", StringComparison.Ordinal) ||
+            reason.Contains("edge", StringComparison.Ordinal) ||
+            reason.Contains("countertrend", StringComparison.Ordinal) ||
+            reason.Contains("neutral", StringComparison.Ordinal) ||
+            reason.Contains("not_triggered", StringComparison.Ordinal) ||
+            reason.Contains("no_candidate", StringComparison.Ordinal) ||
+            reason.Contains("spread_too_wide", StringComparison.Ordinal) ||
+            reason.Contains("price_cap", StringComparison.Ordinal);
     }
 
     private static bool SameWallet(string left, string right)

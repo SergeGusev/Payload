@@ -1,3 +1,18 @@
+## Active Update 2026-05-16 Split Live Skipped Metrics
+Goal: Split Dashboard Live skipped into condition skips, technical/preflight skips, and rejected live orders.
+Status: Completed
+Done:
+- Added three new live-skip fields to domain/Dashboard models and CSV exports: `LiveConditionSkippedOrdersCount`, `LiveTechnicalSkippedOrdersCount`, and `LiveRejectedOrdersCount`.
+- Updated cumulative `Strategies` and recent `Strategies / 24h / 6h / 1h` Dashboard grids to show `Live cond skip`, `Live tech skip`, and `Live reject` instead of one visible `Live skipped` column.
+- Kept `LiveSkippedOrdersCount` as the total/sum field for compatibility and CSV continuity.
+- Updated PostgreSQL strategy-performance aggregation: condition skips come from skipped strategy runs with signal/threshold/edge/no-candidate reasons while current `live_stakes=true`; technical skips include skipped strategy runs classified as technical plus `PreflightRejected` live orders; rejects include `Rejected`/`Error` live orders after live submission was attempted.
+- Updated TestAppRepository and StrategyPerformanceTests to cover the three-way split for cumulative and recent windows.
+- Updated README Dashboard description for split live skip/reject counts.
+- Ran a read-only production SQL smoke for the target strategy; current 1h split would show `Live cond skip=11`, `Live tech skip=0`, `Live reject=0`.
+Next: Deploy the updated Dashboard to see the new columns; deploy Service is not required for this UI/aggregation change.
+Notes: Verification passed: Service Release build, Dashboard Release build, targeted `StrategyPerformanceTests` 5/5, full test project 486/486, production read-only SQL smoke, and `git diff --check` with LF/CRLF warnings only. No DB writes, service restarts, order submissions, or cancel actions were performed.
+Blockers: None.
+
 ## Active Update 2026-05-16 Live Dashboard Skipped Explanation
 Goal: Explain why Dashboard Live columns, including Live skipped, are not moving.
 Status: Completed
