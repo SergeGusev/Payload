@@ -1,3 +1,10 @@
+## 2026-05-16T05:38:49.6713355Z
+Request:
+Проверь, жив ли сервер
+
+Result:
+Checked production reachability and heartbeat read-only. TCP `192.168.0.101:5432` was reachable from local `192.168.0.100`; ping failed and `192.168.0.101:5118` was not reachable, matching prior control-port behavior. Remote PostgreSQL showed `PolyCopyTrader.Service` `Running`/`Live`, started `2026-05-15T17:16:35Z`, with heartbeat `2026-05-16T05:37:47Z`, age about `10.1` seconds, and `last_error = null`. Also confirmed `api_errors_10m = 0`, `live_stakes_enabled = 0`, `live_orders_60m = 0`, and no live orders in the last 24 hours. No database writes, service restarts, order submissions, or cancel actions were performed.
+
 ## 2026-05-15T21:38:28Z
 Request:
 Что думаешь по стратегиям? Есть перспективные?

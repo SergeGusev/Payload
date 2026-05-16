@@ -1,3 +1,16 @@
+## Active Update 2026-05-16 Production Server Alive Check
+Goal: Check whether the production server/service is alive.
+Status: Completed
+Done:
+- Ran repository initialization; `git pull --ff-only` reported already up to date at `0894743`.
+- Checked production host `192.168.0.101`: TCP `5432` succeeded from local `192.168.0.100`, ping failed, and TCP/HTTP `5118` was not reachable from this machine.
+- Queried remote PostgreSQL `192.168.0.101` read-only through `out/dbprobe` without printing connection strings.
+- Confirmed `PolyCopyTrader.Service` is alive: `status=Running`, `mode=Live`, `started_at_utc=2026-05-15T17:16:35Z`, `last_heartbeat_utc=2026-05-16T05:37:47Z`, heartbeat age about `10.1` seconds, `last_error = null`.
+- Confirmed operational safety snapshot: `api_errors_10m = 0`, `live_stakes_enabled = 0`, `live_orders_60m = 0`, and no live orders in the last 24 hours.
+Next: None.
+Notes: Read-only network and database checks only. No database writes, code changes, service restarts, order submissions, or cancel actions were performed. IPC/control port `5118` remains unreachable externally, consistent with prior checks and not by itself evidence that the service is down.
+Blockers: None.
+
 ## Active Update 2026-05-16 Strategy Outlook
 Goal: Assess whether any current Paper strategies look promising based on fresh production telemetry.
 Status: Completed
