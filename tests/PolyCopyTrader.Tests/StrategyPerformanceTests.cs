@@ -266,17 +266,41 @@ public sealed class StrategyPerformanceTests
             string.Empty,
             now.AddMinutes(-2),
             StrategyId: strategyId));
+        await repository.AddLiveOrderAsync(new LiveOrder(
+            Guid.NewGuid(),
+            Guid.NewGuid(),
+            LiveOrderStatus.CancelFailed,
+            "0xcancelfailed",
+            TradeSide.Buy,
+            "asset-live-cancel-failed",
+            "condition-live",
+            "Yes",
+            0.30m,
+            10m,
+            3m,
+            "GTC",
+            now.AddMinutes(-2),
+            now.AddMinutes(5),
+            now.AddMinutes(-2),
+            "live",
+            0m,
+            10m,
+            string.Empty,
+            "{}",
+            "order can't be found - already canceled or matched",
+            now.AddMinutes(-1),
+            StrategyId: strategyId));
 
         var row = (await repository.GetStrategyPerformanceAsync()).Single(item => item.StrategyId == strategyId);
 
-        Assert.Equal(5, row.LiveOrdersCount);
+        Assert.Equal(6, row.LiveOrdersCount);
         Assert.Equal(2, row.LiveFilledOrdersCount);
         Assert.Equal(1, row.LiveOpenOrdersCount);
         Assert.Equal(2, row.LiveSettledOrdersCount);
-        Assert.Equal(2, row.LiveSkippedOrdersCount);
+        Assert.Equal(3, row.LiveSkippedOrdersCount);
         Assert.Equal(0, row.LiveConditionSkippedOrdersCount);
         Assert.Equal(1, row.LiveTechnicalSkippedOrdersCount);
-        Assert.Equal(1, row.LiveRejectedOrdersCount);
+        Assert.Equal(2, row.LiveIgnoredOrdersCount);
         Assert.Equal(1, row.LiveWonOrdersCount);
         Assert.Equal(1, row.LiveLostOrdersCount);
         Assert.Equal(8m, row.LiveStakeUsd);
@@ -407,6 +431,34 @@ public sealed class StrategyPerformanceTests
             "btc_reference_move_below_bps_threshold",
             now.AddMinutes(-3),
             now.AddMinutes(-2)));
+        repository.StrategyMarketPaperRuns.Add(new StrategyMarketPaperRun(
+            Guid.NewGuid(),
+            variant.Id,
+            "market-unfilled",
+            "condition-unfilled",
+            "btc-updown-5m-unfilled",
+            "BTC Up or Down 5m",
+            "Crypto",
+            now.AddMinutes(-20),
+            now.AddMinutes(-15),
+            now.AddMinutes(-20),
+            now.AddMinutes(-19),
+            StrategyMarketPaperRunStatuses.Skipped,
+            "asset-unfilled",
+            "Up",
+            0.50m,
+            3m,
+            6m,
+            Guid.NewGuid(),
+            Guid.NewGuid(),
+            null,
+            null,
+            null,
+            null,
+            null,
+            "gtd_limit_not_filled",
+            now.AddMinutes(-20),
+            now.AddMinutes(-15)));
         await repository.AddLiveOrderAsync(new LiveOrder(
             Guid.NewGuid(),
             Guid.NewGuid(),
@@ -497,7 +549,7 @@ public sealed class StrategyPerformanceTests
         Assert.Equal(1, row.ExpiredOrdersCount);
         Assert.Equal(1, row.OpenOrdersCount);
         Assert.Equal(1, row.EnteredRunsCount);
-        Assert.Equal(1, row.SkippedRunsCount);
+        Assert.Equal(2, row.SkippedRunsCount);
         Assert.Equal(1, row.SettledRunsCount);
         Assert.Equal(1, row.WonRunsCount);
         Assert.Equal(0, row.LostRunsCount);
@@ -509,10 +561,10 @@ public sealed class StrategyPerformanceTests
         Assert.Equal(100m, row.WinRatePct);
         Assert.Equal(100m, row.RoiPct);
         Assert.Equal(1, row.LiveSettledOrdersCount);
-        Assert.Equal(3, row.LiveSkippedOrdersCount);
+        Assert.Equal(4, row.LiveSkippedOrdersCount);
         Assert.Equal(1, row.LiveConditionSkippedOrdersCount);
         Assert.Equal(1, row.LiveTechnicalSkippedOrdersCount);
-        Assert.Equal(1, row.LiveRejectedOrdersCount);
+        Assert.Equal(2, row.LiveIgnoredOrdersCount);
         Assert.Equal(1, row.LiveWonOrdersCount);
         Assert.Equal(0, row.LiveLostOrdersCount);
         Assert.Equal(6m, row.LiveRealizedPnlUsd);

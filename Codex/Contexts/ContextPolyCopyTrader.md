@@ -1,3 +1,16 @@
+## Active Update 2026-05-16 Live Ignored Metric
+Goal: Rename Dashboard `Live reject` to `Live ignored` and classify placed/attempted live bets that did not work there.
+Status: Completed
+Done:
+- Renamed domain, Dashboard, and CSV metric fields from `LiveRejectedOrdersCount` / `live_rejected_orders_count` to `LiveIgnoredOrdersCount` / `live_ignored_orders_count`; Dashboard Strategies headers now show `Live ignored`.
+- Updated PostgreSQL strategy-performance aggregation and `TestAppRepository` so `Live ignored` counts `Rejected`/`Error` live orders, zero-fill `Cancelled`/`CancelFailed` live orders, and Live-enabled `gtd_limit_not_filled` strategy runs.
+- Removed `gtd_limit_not_filled` rows from `Live tech skip`; kept `PreflightRejected` in `Live tech skip` because the live order was not placed before preflight failure.
+- Updated `StrategyPerformanceTests` for cumulative and recent windows, and refreshed README Dashboard metric wording.
+- Ran a read-only production SQL smoke for `btc_up_down_5m_binance_bps_1`: current 1h split showed `live_technical_runs=0`, `live_preflight=0`, `live_ignored_runs=3`, `live_ignored_orders=2`.
+Next: Deploy the updated Dashboard to see the renamed column and new aggregation; Service deploy is not required for this UI/aggregation rename.
+Notes: Verification passed: Dashboard Release build, Service Release build, targeted `StrategyPerformanceTests` 5/5, full test project 490/490, production read-only SQL smoke, and `git diff --check` with LF/CRLF warnings only. No DB writes, service restarts, order submissions, or cancel actions were performed.
+Blockers: None.
+
 ## Active Update 2026-05-16 GTD Unfilled Clarification
 Goal: Clarify whether the latest `gtd_limit_not_filled` means the strategy failed to place an order despite the agreed maker-style wait-for-market behavior.
 Status: Completed

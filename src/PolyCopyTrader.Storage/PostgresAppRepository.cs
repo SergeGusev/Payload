@@ -1607,6 +1607,7 @@ run_agg AS (
         ))::integer AS live_condition_skipped_orders_count,
         (count(*) FILTER (
             WHERE status = 'Skipped'
+              AND lower(COALESCE(skip_reason, '')) <> 'gtd_limit_not_filled'
               AND NOT (
                   lower(COALESCE(skip_reason, '')) IN (
                       'btc_reference_move_below_bps_threshold',
@@ -1635,6 +1636,10 @@ run_agg AS (
                   OR lower(COALESCE(skip_reason, '')) LIKE '%price_cap%'
               )
         ))::integer AS live_technical_skipped_orders_count,
+        (count(*) FILTER (
+            WHERE status = 'Skipped'
+              AND lower(COALESCE(skip_reason, '')) = 'gtd_limit_not_filled'
+        ))::integer AS live_ignored_orders_count,
         (count(*) FILTER (WHERE status = 'Settled'))::integer AS settled_runs_count,
         (count(*) FILTER (WHERE status = 'Settled' AND COALESCE(realized_pnl_usd, 0) > 0))::integer AS won_runs_count,
         (count(*) FILTER (WHERE status = 'Settled' AND COALESCE(realized_pnl_usd, 0) < 0))::integer AS lost_runs_count,
@@ -1659,7 +1664,10 @@ live_order_agg AS (
         (count(*) FILTER (WHERE status IN ('Submitted', 'Live', 'Delayed', 'Unmatched', 'CancelRequested') AND remaining_size > 0))::integer AS live_open_orders_count,
         (count(*) FILTER (WHERE settled_at_utc IS NOT NULL AND realized_pnl_usd IS NOT NULL))::integer AS live_settled_orders_count,
         (count(*) FILTER (WHERE status = 'PreflightRejected'))::integer AS live_technical_skipped_orders_count,
-        (count(*) FILTER (WHERE status IN ('Rejected', 'Error')))::integer AS live_rejected_orders_count,
+        (count(*) FILTER (
+            WHERE status IN ('Rejected', 'Error')
+               OR (status IN ('Cancelled', 'CancelFailed') AND filled_size <= 0)
+        ))::integer AS live_ignored_orders_count,
         (count(*) FILTER (WHERE settled_at_utc IS NOT NULL AND COALESCE(won, COALESCE(settlement_value_usd, 0) > 0)))::integer AS live_won_orders_count,
         (count(*) FILTER (WHERE settled_at_utc IS NOT NULL AND NOT COALESCE(won, COALESCE(settlement_value_usd, 0) > 0)))::integer AS live_lost_orders_count,
         COALESCE(sum(CASE
@@ -1756,11 +1764,13 @@ combined AS (
         CASE WHEN strategy.live_stakes THEN COALESCE(run_agg.live_condition_skipped_orders_count, 0) ELSE 0 END AS live_condition_skipped_orders_count,
         CASE WHEN strategy.live_stakes THEN COALESCE(run_agg.live_technical_skipped_orders_count, 0) ELSE 0 END
             + COALESCE(live_order_agg.live_technical_skipped_orders_count, 0) AS live_technical_skipped_orders_count,
-        COALESCE(live_order_agg.live_rejected_orders_count, 0) AS live_rejected_orders_count,
+        CASE WHEN strategy.live_stakes THEN COALESCE(run_agg.live_ignored_orders_count, 0) ELSE 0 END
+            + COALESCE(live_order_agg.live_ignored_orders_count, 0) AS live_ignored_orders_count,
         CASE WHEN strategy.live_stakes THEN COALESCE(run_agg.live_condition_skipped_orders_count, 0) ELSE 0 END
             + CASE WHEN strategy.live_stakes THEN COALESCE(run_agg.live_technical_skipped_orders_count, 0) ELSE 0 END
+            + CASE WHEN strategy.live_stakes THEN COALESCE(run_agg.live_ignored_orders_count, 0) ELSE 0 END
             + COALESCE(live_order_agg.live_technical_skipped_orders_count, 0)
-            + COALESCE(live_order_agg.live_rejected_orders_count, 0) AS live_skipped_orders_count,
+            + COALESCE(live_order_agg.live_ignored_orders_count, 0) AS live_skipped_orders_count,
         COALESCE(live_order_agg.live_won_orders_count, 0) AS live_won_orders_count,
         COALESCE(live_order_agg.live_lost_orders_count, 0) AS live_lost_orders_count,
         COALESCE(live_order_agg.live_stake_usd, 0) AS live_stake_usd,
@@ -1823,7 +1833,7 @@ SELECT
     live_skipped_orders_count,
     live_condition_skipped_orders_count,
     live_technical_skipped_orders_count,
-    live_rejected_orders_count,
+    live_ignored_orders_count,
     live_won_orders_count,
     live_lost_orders_count,
     live_stake_usd,
@@ -2052,6 +2062,7 @@ run_agg AS (
             WHERE run.status = 'Skipped'
               AND run.updated_at_utc >= run.window_start_utc
               AND run.updated_at_utc <= run.window_end_utc
+              AND lower(COALESCE(run.skip_reason, '')) <> 'gtd_limit_not_filled'
               AND NOT (
                   lower(COALESCE(run.skip_reason, '')) IN (
                       'btc_reference_move_below_bps_threshold',
@@ -2080,6 +2091,12 @@ run_agg AS (
                   OR lower(COALESCE(run.skip_reason, '')) LIKE '%price_cap%'
               )
         ))::integer AS live_technical_skipped_orders_count,
+        (count(*) FILTER (
+            WHERE run.status = 'Skipped'
+              AND run.updated_at_utc >= run.window_start_utc
+              AND run.updated_at_utc <= run.window_end_utc
+              AND lower(COALESCE(run.skip_reason, '')) = 'gtd_limit_not_filled'
+        ))::integer AS live_ignored_orders_count,
         (count(*) FILTER (WHERE run.status = 'Settled' AND run.settled_at_utc >= run.window_start_utc AND run.settled_at_utc <= run.window_end_utc))::integer AS settled_runs_count,
         (count(*) FILTER (WHERE run.status = 'Settled' AND run.settled_at_utc >= run.window_start_utc AND run.settled_at_utc <= run.window_end_utc AND COALESCE(run.realized_pnl_usd, 0) > 0))::integer AS won_runs_count,
         (count(*) FILTER (WHERE run.status = 'Settled' AND run.settled_at_utc >= run.window_start_utc AND run.settled_at_utc <= run.window_end_utc AND COALESCE(run.realized_pnl_usd, 0) < 0))::integer AS lost_runs_count,
@@ -2162,10 +2179,13 @@ live_order_agg AS (
               AND live_order.created_at_utc <= live_order.window_end_utc
         ))::integer AS live_technical_skipped_orders_count,
         (count(*) FILTER (
-            WHERE live_order.status IN ('Rejected', 'Error')
+            WHERE (
+                  live_order.status IN ('Rejected', 'Error')
+                  OR (live_order.status IN ('Cancelled', 'CancelFailed') AND live_order.filled_size <= 0)
+              )
               AND live_order.created_at_utc >= live_order.window_start_utc
               AND live_order.created_at_utc <= live_order.window_end_utc
-        ))::integer AS live_rejected_orders_count,
+        ))::integer AS live_ignored_orders_count,
         (count(*) FILTER (
             WHERE live_order.settled_at_utc >= live_order.window_start_utc
               AND live_order.settled_at_utc <= live_order.window_end_utc
@@ -2226,12 +2246,14 @@ SELECT
     COALESCE(live_order_agg.live_settled_orders_count, 0) AS live_settled_orders_count,
     CASE WHEN sw.live_stakes THEN COALESCE(run_agg.live_condition_skipped_orders_count, 0) ELSE 0 END
         + CASE WHEN sw.live_stakes THEN COALESCE(run_agg.live_technical_skipped_orders_count, 0) ELSE 0 END
+        + CASE WHEN sw.live_stakes THEN COALESCE(run_agg.live_ignored_orders_count, 0) ELSE 0 END
         + COALESCE(live_order_agg.live_technical_skipped_orders_count, 0)
-        + COALESCE(live_order_agg.live_rejected_orders_count, 0) AS live_skipped_orders_count,
+        + COALESCE(live_order_agg.live_ignored_orders_count, 0) AS live_skipped_orders_count,
     CASE WHEN sw.live_stakes THEN COALESCE(run_agg.live_condition_skipped_orders_count, 0) ELSE 0 END AS live_condition_skipped_orders_count,
     CASE WHEN sw.live_stakes THEN COALESCE(run_agg.live_technical_skipped_orders_count, 0) ELSE 0 END
         + COALESCE(live_order_agg.live_technical_skipped_orders_count, 0) AS live_technical_skipped_orders_count,
-    COALESCE(live_order_agg.live_rejected_orders_count, 0) AS live_rejected_orders_count,
+    CASE WHEN sw.live_stakes THEN COALESCE(run_agg.live_ignored_orders_count, 0) ELSE 0 END
+        + COALESCE(live_order_agg.live_ignored_orders_count, 0) AS live_ignored_orders_count,
     COALESCE(live_order_agg.live_won_orders_count, 0) AS live_won_orders_count,
     COALESCE(live_order_agg.live_lost_orders_count, 0) AS live_lost_orders_count,
     COALESCE(live_order_agg.live_realized_pnl_usd, 0) AS live_realized_pnl_usd,

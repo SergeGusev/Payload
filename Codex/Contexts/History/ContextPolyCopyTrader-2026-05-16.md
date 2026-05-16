@@ -171,3 +171,10 @@ Request:
 
 Result:
 Confirmed from code and production row context that `gtd_limit_not_filled` does not mean the service failed to place the intended maker-style GTD order. The latest case did place a Paper GTD order at `2026-05-16T11:00:08Z` and kept it until local expiration at `2026-05-16T11:04:00Z`, one minute before the market end, with zero fills. The code uses market-relative expiration for this case because `OpeningLimitExpireBeforeMarketEndSeconds=60`; therefore the behavior matches the agreement to place and wait for the market, but the Dashboard classification is misleading because `gtd_limit_not_filled` is currently counted under `Live tech skip` instead of a separate unfilled/cancelled maker-order bucket. No product code, DB writes, service restarts, order submissions, or cancel actions were performed.
+
+## 2026-05-16T11:33:33Z
+Request:
+Давай переименуем Live reject в Live ignored. И туда закидываем все случаи, когда мы делаем ставку, но она не сработала.
+
+Result:
+Renamed the Dashboard/CSV/domain metric from `Live reject` to `Live ignored`. `Live ignored` now counts `Rejected`/`Error` live orders, zero-fill `Cancelled`/`CancelFailed` live orders, and Live-enabled `gtd_limit_not_filled` strategy runs; those GTD-unfilled rows no longer count as `Live tech skip`. `PreflightRejected` remains `Live tech skip` because no live order was placed before preflight rejection. Updated PostgreSQL aggregation, TestAppRepository, StrategyPerformanceTests, Dashboard grids, CSV exports, domain rows, and README wording. Verification passed: Dashboard Release build, Service Release build, targeted `StrategyPerformanceTests` 5/5, full test project 490/490, `git diff --check` with LF/CRLF warnings only, and production read-only SQL smoke for `btc_up_down_5m_binance_bps_1` showing current 1h `live_technical_runs=0`, `live_preflight=0`, `live_ignored_runs=3`, `live_ignored_orders=2`. No DB writes, service restarts, order submissions, or cancel actions were performed.
