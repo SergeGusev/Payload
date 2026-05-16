@@ -1,3 +1,16 @@
+## Active Update 2026-05-16 Binance 2 Bps Live Checkbox Check
+Goal: Verify whether `BTC Up or Down 5m Binance 2 bps` still needs the Dashboard Live checkbox after deploy.
+Status: Completed
+Done:
+- Re-ran `--print-live-shadow-state` after the user's deploy and confirmed backend state currently has exactly one LiveStakes strategy: `btc_up_down_5m_binance_bps_2`.
+- Confirmed the target has `liveStake=1`, `liveBalance=100`, `liveOpen=0`, and `liveOrders=0`; no new live orders were created by the diagnostic command.
+- Inspected Dashboard checkbox binding: clicking `Live` writes the row's `LiveStakes` value via `SetStrategyLiveStakesAsync`.
+- Inspected strategy seeding SQL and confirmed `ON CONFLICT` updates code/name/description/timestamp only, so startup seeding does not reset `live_stakes`.
+- Noted the likely UI confusion after deploy: there is now also `BTC Up or Down 5m Binance 2 bps Instant`, and that Instant row is intentionally not in the Live allow-list.
+Next: In Dashboard, refresh/restart if the base `BTC Up or Down 5m Binance 2 bps` row still appears unchecked. Leave the `Instant` row unchecked unless a future task explicitly enables Instant live trading.
+Notes: Read-only diagnostics and code inspection only. Existing Storage nullable warnings appeared during the diagnostic build. No DB writes, service restarts, live order submissions, or cancel actions were performed.
+Blockers: None found for the base Binance 2 bps live flag; live placement still depends on normal global live gates and a qualifying >=2 bps market-start move.
+
 ## Active Update 2026-05-16 Binance 2 Bps Live Switch
 Goal: Move `BTC Up or Down 5m Binance 2 bps` to the controlled Paper/Live-shadow Live path.
 Status: Completed locally; production live placement requires Service deploy/restart from this commit.
