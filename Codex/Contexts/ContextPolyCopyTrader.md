@@ -1,3 +1,18 @@
+## Active Update 2026-05-16 Live Enabled Screenshot And First Matched Order
+Goal: Inspect the user's updated live-server screenshot and verify production state.
+Status: Completed
+Done:
+- Extracted the screenshot from the Windows clipboard to `C:\Users\serge\AppData\Local\Temp\polymarket-live-server-screenshot-20260516-122123.png`.
+- Screenshot shows the VPS console set `Bot__EnableLiveTrading=true` at machine and process scope, then ran `--print-config`; config now shows `Mode: Live` and `Live trading enabled: True`.
+- Screenshot also shows `Restart-Service PolyCopyTrader.Service` failed because no Windows service with that name exists in that console context.
+- Rechecked remote PostgreSQL read-only and confirmed the actual service did restart anyway: `PolyCopyTrader.Service` heartbeat fresh, started `2026-05-16T09:18:09Z`, version `info=1.0.0+6a94eae...`, mode `Live`, no `last_error`, and `StartupGeoblockCheck OK`.
+- Confirmed first real `btc_up_down_5m_binance_bps_1` Live-shadow order at `2026-05-16T09:15:07Z`: status `Matched`, exchange order id present, `Up`, price `0.50`, size `6`, notional `$3.00`, filled size `6`, remaining `0`, average fill `0.50`, cost basis `$3.00`.
+- Confirmed linked Paper order is `Filled` with matching asset/outcome/price/size/notional/correlation; `paper_live_shadow_discrepancies` count is `0`.
+- Confirmed open live orders count is `0`; matched unsettled live orders count is `1`.
+Next: Monitor settlement of the matched `$3` position. If the goal was only one live smoke order, pause live trading or disable `live_stakes`/`Bot__EnableLiveTrading` before the next qualifying 5m window.
+Notes: Read-only screenshot review and DB verification only. No secrets were read or printed. No DB writes, service restarts, order submissions, cancel actions, or product code changes were performed by this session.
+Blockers: None for the first matched live order; remaining operational decision is whether to keep live enabled for further qualifying windows.
+
 ## Active Update 2026-05-16 Live Server Smoke Screenshot Review
 Goal: Inspect the user's live-server screenshot and say whether the state is normal.
 Status: Completed
