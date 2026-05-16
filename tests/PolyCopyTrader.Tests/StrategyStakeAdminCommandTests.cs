@@ -91,6 +91,32 @@ public sealed class StrategyStakeAdminCommandTests
     }
 
     [Fact]
+    public async Task ExecuteLiveStakesOnlyAsync_EnablesOnlyRequestedStrategyCodes()
+    {
+        var repository = new TestAppRepository();
+        var first = StrategyIds.BtcUpDown5mBinanceBps1;
+        var second = StrategyIds.BtcUpDown5mBinanceBps2;
+        var other = StrategyIds.BtcUpDown5mVariants.Single(item => item.Code == "btc_up_down_5m_skip_1").Id;
+        repository.StrategySettings[first] = repository.StrategySettings[first] with { LiveStakes = false };
+        repository.StrategySettings[second] = repository.StrategySettings[second] with { LiveStakes = false };
+        repository.StrategySettings[other] = repository.StrategySettings[other] with { LiveStakes = true };
+        using var output = new StringWriter();
+
+        var exitCode = await StrategyStakeAdminCommand.ExecuteLiveStakesOnlyAsync(
+            repository,
+            [StrategyIds.BtcUpDown5mBinanceBps1Code, StrategyIds.BtcUpDown5mBinanceBps2Code],
+            output,
+            CancellationToken.None);
+
+        Assert.Equal(0, exitCode);
+        Assert.True(repository.StrategySettings[first].LiveStakes);
+        Assert.True(repository.StrategySettings[second].LiveStakes);
+        Assert.All(
+            repository.StrategySettings.Where(item => item.Key != first && item.Key != second),
+            item => Assert.False(item.Value.LiveStakes));
+    }
+
+    [Fact]
     public async Task ExecuteLiveStakesOnlyAsync_RejectsUnknownStrategyCode()
     {
         var repository = new TestAppRepository();

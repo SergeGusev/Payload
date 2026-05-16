@@ -1,3 +1,17 @@
+## Active Update 2026-05-16 Binance 1 And 2 Bps Live Together
+Goal: Enable `BTC Up or Down 5m Binance 1 bps` and `BTC Up or Down 5m Binance 2 bps` together on the production server.
+Status: Completed
+Done:
+- Explained that the prior single-code admin command intentionally disabled `bps_1` because `--set-live-stakes-only-code` leaves Live enabled for exactly one strategy.
+- Added a multi-code admin CLI flag: `--set-live-stakes-only-codes code1,code2`, which enables Live for the exact provided set and disables every other strategy.
+- Added a regression test proving the multi-code admin path leaves both Binance 1 bps and Binance 2 bps live-enabled while disabling other Live strategies.
+- Applied the new multi-code command to remote PostgreSQL `192.168.0.101` for `btc_up_down_5m_binance_bps_1,btc_up_down_5m_binance_bps_2`. The command timed out before returning output, but the follow-up server check confirmed the DB write succeeded.
+- Rechecked remote live-shadow state: `LiveStakes strategies: 2`; `bps_1` has `liveStake=1`, `liveBalance=180.62`, `liveOpen=0`, `liveOrders=41`; `bps_2` has `liveStake=1`, `liveBalance=100`, `liveOpen=0`, `liveOrders=1`.
+- Confirmed the first `bps_2` live order was created at `2026-05-16T17:20:33Z`, then reconciled as `Matched`, `Down`, price `0.50`, size `6`, filled `6`, remaining `0`; settlement/balance effect is still pending.
+Next: Watch the next BTC 5m cycles and settlement of the `bps_2` matched order.
+Notes: Verification passed: targeted `StrategyStakeAdminCommandTests` 6/6, Service Release build with existing Storage nullable warnings, full test project 493/493, and `git diff --check` with LF/CRLF warnings only. No cancel action was performed.
+Blockers: None. Running both strategies can create two live attempts in the same qualifying >=2 bps window, so exposure can be higher than running only one strategy; global and strategy-level Live gates still apply.
+
 ## Active Update 2026-05-16 Server Binance 2 Bps Live Correction
 Goal: Correct the Binance 2 bps Live check to use the production server database.
 Status: Completed

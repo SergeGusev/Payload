@@ -174,6 +174,16 @@ if (TryGetOptionValue(args, "--set-live-stakes-only-code") is { } liveStakesOnly
     return;
 }
 
+if (TryGetOptionValue(args, "--set-live-stakes-only-codes") is { } liveStakesOnlyCodes)
+{
+    Environment.ExitCode = await StrategyStakeAdminCommand.ExecuteLiveStakesOnlyAsync(
+        appConfiguration,
+        SplitOptionList(liveStakesOnlyCodes),
+        Console.Out,
+        CancellationToken.None);
+    return;
+}
+
 if (args.Contains("--disable-all-live-stakes", StringComparer.OrdinalIgnoreCase))
 {
     Environment.ExitCode = await StrategyStakeAdminCommand.DisableAllLiveStakesAsync(
@@ -436,6 +446,12 @@ static string? TryGetOptionValue(string[] args, string name)
     }
 
     return null;
+}
+
+static string[] SplitOptionList(string value)
+{
+    return value
+        .Split([',', ';'], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
 }
 
 static AppConfiguration LoadCommandConfiguration()

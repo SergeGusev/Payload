@@ -114,7 +114,18 @@ public static class StrategyStakeAdminCommand
     {
         ArgumentNullException.ThrowIfNull(configuration);
         var repository = new PostgresAppRepository(new PostgresConnectionFactory(configuration.Storage));
-        return await ExecuteLiveStakesOnlyAsync(repository, strategyCode, output, cancellationToken);
+        return await ExecuteLiveStakesOnlyAsync(repository, [strategyCode], output, cancellationToken);
+    }
+
+    public static async Task<int> ExecuteLiveStakesOnlyAsync(
+        AppConfiguration configuration,
+        IReadOnlyCollection<string> strategyCodes,
+        TextWriter output,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(configuration);
+        var repository = new PostgresAppRepository(new PostgresConnectionFactory(configuration.Storage));
+        return await ExecuteLiveStakesOnlyAsync(repository, strategyCodes, output, cancellationToken);
     }
 
     public static async Task<int> ExecuteLiveStakesOnlyAsync(
@@ -123,32 +134,56 @@ public static class StrategyStakeAdminCommand
         TextWriter output,
         CancellationToken cancellationToken)
     {
+        return await ExecuteLiveStakesOnlyAsync(repository, [strategyCode], output, cancellationToken);
+    }
+
+    public static async Task<int> ExecuteLiveStakesOnlyAsync(
+        IAppRepository repository,
+        IReadOnlyCollection<string> strategyCodes,
+        TextWriter output,
+        CancellationToken cancellationToken)
+    {
         ArgumentNullException.ThrowIfNull(repository);
         ArgumentNullException.ThrowIfNull(output);
+        ArgumentNullException.ThrowIfNull(strategyCodes);
 
-        if (string.IsNullOrWhiteSpace(strategyCode))
+        var normalizedCodes = strategyCodes
+            .Where(code => !string.IsNullOrWhiteSpace(code))
+            .Select(code => code.Trim())
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+        if (normalizedCodes.Length == 0)
         {
-            await output.WriteLineAsync("Strategy code must be provided.");
+            await output.WriteLineAsync("At least one strategy code must be provided.");
             return 1;
         }
 
-        var normalizedCode = strategyCode.Trim();
         var strategies = await repository.GetStrategyPerformanceAsync(StrategyAdminFetchLimit, cancellationToken);
-        var target = strategies.FirstOrDefault(strategy =>
-            string.Equals(strategy.Code, normalizedCode, StringComparison.OrdinalIgnoreCase));
-        if (target is null)
+        var strategyByCode = strategies.ToDictionary(
+            strategy => strategy.Code,
+            StringComparer.OrdinalIgnoreCase);
+        var missingCodes = normalizedCodes
+            .Where(code => !strategyByCode.ContainsKey(code))
+            .ToArray();
+        if (missingCodes.Length > 0)
         {
-            await output.WriteLineAsync($"Strategy code not found: {normalizedCode}");
+            await output.WriteLineAsync($"Strategy code not found: {string.Join(", ", missingCodes)}");
             return 1;
         }
 
+        var targets = normalizedCodes
+            .Select(code => strategyByCode[code])
+            .ToArray();
+        var targetIds = targets
+            .Select(target => target.StrategyId)
+            .ToHashSet();
         var updatedAtUtc = DateTimeOffset.UtcNow;
         var enabled = 0;
         var disabled = 0;
         var failed = 0;
         foreach (var strategy in strategies)
         {
-            var liveStakes = strategy.StrategyId == target.StrategyId;
+            var liveStakes = targetIds.Contains(strategy.StrategyId);
             var applied = await repository.SetStrategyLiveStakesAsync(
                 strategy.StrategyId,
                 liveStakes,
@@ -171,14 +206,14 @@ public static class StrategyStakeAdminCommand
             }
         }
 
-        await output.WriteLineAsync($"Live stakes enabled only for: {target.Code}");
-        await output.WriteLineAsync($"Target strategy id: {target.StrategyId}");
+        await output.WriteLineAsync($"Live stakes enabled only for: {string.Join(", ", targets.Select(target => target.Code))}");
+        await output.WriteLineAsync($"Target strategy ids: {string.Join(", ", targets.Select(target => target.StrategyId))}");
         await output.WriteLineAsync($"Strategies found: {strategies.Count}");
         await output.WriteLineAsync($"Strategies live-enabled: {enabled}");
         await output.WriteLineAsync($"Strategies live-disabled: {disabled}");
         await output.WriteLineAsync($"Strategies failed: {failed}");
 
-        return failed == 0 && enabled == 1 ? 0 : 1;
+        return failed == 0 && enabled == targets.Length ? 0 : 1;
     }
 
     public static async Task<int> DisableAllLiveStakesAsync(
