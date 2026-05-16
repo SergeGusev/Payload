@@ -1,3 +1,18 @@
+## Active Update 2026-05-16 Live Server Smoke Screenshot Review
+Goal: Inspect the user's live-server screenshot and say whether the state is normal.
+Status: Completed
+Done:
+- Extracted the screenshot from the Windows clipboard to `C:\Users\serge\AppData\Local\Temp\polymarket-live-server-screenshot-20260516-121004.png`.
+- Screenshot shows live-server no-money smokes from `C:\Payload\PayloadService`: `--auth-readiness-smoke`, `--dry-run-signing-smoke`, and `--clob-authenticated-read-smoke`.
+- Confirmed auth material is visible to that console process: auth enabled, signer/funder redacted addresses match expected, `Auth can authenticate=True`.
+- Confirmed dry-run signing is OK: `DryRunSigned`, signature present, local signature verified.
+- Confirmed authenticated CLOB read is OK: `GET /trades` returned HTTP `200`, response shape object count `34`, status `OK`.
+- Noted the important warning: every smoke output still says `Live trading enabled: False`, so the screenshot does not prove the explicit live gate is enabled for the service.
+- Rechecked remote PostgreSQL read-only: production service is alive, `Running`, `Mode=Live`, fresh heartbeat, startup geoblock OK at `2026-05-16T09:05:36Z`; no qualifying `btc_up_down_5m_binance_bps_1` preflight has occurred after that restart yet.
+Next: Run `--print-config` from a fresh elevated PowerShell on the VPS or check Dashboard `Live Readiness` after service restart; the required line is `Live trading enabled: True` and the next preflight must not include `Live trading is not explicitly enabled`.
+Notes: Screenshot review and read-only DB check only. No secrets were read or printed. No DB writes, service restarts, order submissions, cancel actions, or product code changes were performed.
+Blockers: The screenshot still shows `Live trading enabled: False`; this may be because the console process was not started after setting machine env vars, but it must be verified before real live order placement.
+
 ## Active Update 2026-05-16 Live Readiness Blocker Closure
 Goal: Close the three current blockers for tiny BTC Binance 1 bps Live stakes.
 Status: Blocked
