@@ -1,3 +1,15 @@
+## Active Update 2026-05-16 Live Strategy Run Ordering
+Goal: Prioritize Live-enabled BTC strategy runs when multiple strategies are due for processing at the same time without changing existing time ordering.
+Status: Completed
+Done:
+- Updated PostgreSQL multi-strategy run selection for due entries, earliest-due pre-open entries, pre-open sell exits, and settlement so existing time/priority ordering remains first and `strategy.live_stakes DESC` is used only as a tie-breaker before older detected/id ordering.
+- Left single-strategy time-sorted queries unchanged.
+- Mirrored the same ordering in `TestAppRepository`.
+- Added `StrategyRunOrderingTests` covering entry-due ties, earliest-due batches, pre-open sell-exit ties, settlement ties, and preserving an earlier due time ahead of a Live tie.
+Next: Deploy and restart the Service on the VPS for the new runtime ordering to take effect.
+Notes: Verification passed: Service Release build, targeted `StrategyRunOrderingTests` 4/4, full test project 490/490, and `git diff --check` with LF/CRLF warnings only. No DB writes, service restarts, order submissions, or cancel actions were performed.
+Blockers: None.
+
 ## Active Update 2026-05-16 Split Live Skipped Metrics
 Goal: Split Dashboard Live skipped into condition skips, technical/preflight skips, and rejected live orders.
 Status: Completed

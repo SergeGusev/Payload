@@ -631,7 +631,9 @@ internal sealed class TestAppRepository : IAppRepository
                 .Where(run => string.Equals(run.Status, status, StringComparison.OrdinalIgnoreCase))
                 .Where(run => run.EntryDueAtUtc <= dueBeforeUtc)
                 .OrderBy(run => run.EntryDueAtUtc)
+                .ThenByDescending(run => GetStrategySettings(run.StrategyId).LiveStakes)
                 .ThenBy(run => run.DetectedAtUtc)
+                .ThenBy(run => run.StrategyId)
                 .Take(limit)
                 .ToArray());
         }
@@ -662,6 +664,7 @@ internal sealed class TestAppRepository : IAppRepository
             return Task.FromResult<IReadOnlyList<StrategyMarketPaperRun>>(dueRuns
                 .Where(run => run.EntryDueAtUtc == earliestDueAtUtc)
                 .OrderBy(run => run.EntryDueAtUtc)
+                .ThenByDescending(run => GetStrategySettings(run.StrategyId).LiveStakes)
                 .ThenBy(run => run.DetectedAtUtc)
                 .ThenBy(run => run.StrategyId)
                 .ToArray());
@@ -709,7 +712,9 @@ internal sealed class TestAppRepository : IAppRepository
                 .OrderBy(run => GetSettlementPriority(run, paperOrdersById, filledPaperOrderIds))
                 .ThenBy(run => run.MarketEndUtc)
                 .ThenBy(run => run.EnteredAtUtc)
+                .ThenByDescending(run => GetStrategySettings(run.StrategyId).LiveStakes)
                 .ThenBy(run => run.DetectedAtUtc)
+                .ThenBy(run => run.StrategyId)
                 .Take(limit)
                 .ToArray());
         }
@@ -735,6 +740,7 @@ internal sealed class TestAppRepository : IAppRepository
                 .Where(run => run.MarketStartUtc!.Value.AddTicks((run.MarketEndUtc!.Value - run.MarketStartUtc.Value).Ticks * 3 / 4) <= dueBeforeUtc)
                 .OrderBy(run => run.MarketEndUtc)
                 .ThenBy(run => run.EnteredAtUtc)
+                .ThenByDescending(run => GetStrategySettings(run.StrategyId).LiveStakes)
                 .ThenBy(run => run.DetectedAtUtc)
                 .ThenBy(run => run.StrategyId)
                 .Take(limit)
