@@ -73,3 +73,10 @@ Request:
 
 Result:
 Added a Dashboard `Check certificates` button and `Certificates` tab. The button first calls the local Windows Service over loopback IPC (`GET /certificates`) so it checks the service process TLS/pin configuration; if IPC is unavailable, it writes a warning row and falls back to the Dashboard process check. Added shared Polymarket certificate checking that probes configured HTTPS/WSS endpoints, captures certificate subject/issuer/validity, computes the presented SPKI pin, compares configured host pins, reports standard TLS errors, and never reads or prints secrets. Added tests for matched pins, mismatched pins, and matched pins with standard TLS warnings; README documents the button. Verification passed: Service Release build, Dashboard Release build, targeted certificate tests 7/7, full tests 485/485, and `git diff --check` with CRLF warnings only.
+
+## 2026-05-16T08:28:38.9573673+00:00
+Request:
+Сервис не нужно выкладывать, только Dashboard?
+
+Result:
+Clarified that Dashboard-only deployment is enough to show the `Check certificates` button and run the fallback Dashboard-process TLS/pin check, but it will not verify the actual Windows Service process because the service-side `GET /certificates` IPC endpoint was also added in commit `5617f91`. To get `source=service process` in the `Certificates` tab and validate the configuration used by the 24/7 service, the Windows Service must also be deployed/restarted from the same commit.

@@ -1,3 +1,14 @@
+## Active Update 2026-05-16 Certificate Check Deployment Scope
+Goal: Clarify whether the new Dashboard certificate check requires deploying the Windows Service.
+Status: Completed
+Done:
+- Confirmed commit `5617f91` changed both Dashboard and Service: Dashboard contains the button/tab/fallback check, while Service contains the new loopback IPC endpoint `GET /certificates`.
+- Clarified that deploying only Dashboard is enough to see the button and run a Dashboard-process TLS/pin check, but not enough to verify the actual Windows Service process configuration; without the updated Service, the button will fall back and show `source=Dashboard process`.
+- Recommended deploying/restarting the Service as well when the desired result is confidence that the 24/7 service process sees the correct certificate/pin setup.
+Next: Deploy Dashboard only for local/fallback visibility, or deploy both Dashboard and Service if the `Certificates` tab must show `source=service process`.
+Notes: Answer-only clarification; no product code changes. Git status still has only the long-standing untracked artifacts.
+Blockers: None.
+
 ## Active Update 2026-05-16 Dashboard Certificate Check Button
 Goal: Add a Dashboard button to verify Polymarket TLS certificate/pin installation after the user moved certificates.
 Status: Completed
