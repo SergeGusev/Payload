@@ -1,3 +1,27 @@
+## Active Update 2026-05-16 Dashboard Strategy Live Columns
+Goal: Add Live stake outcome metrics beside Paper settled/skipped/won/lost/realized/ROI columns in each Dashboard Strategies tab.
+Status: Completed
+Done:
+- Added `Live settles`, `Live skipped`, `Live won`, `Live lost`, `Live realized`, and `Live ROI` columns to the Strategies `All`, `24 hours`, `6 hours`, and `1 hour` nested tabs immediately after the closed Paper ROI columns.
+- Extended `StrategyPerformance`, `StrategyRecentPerformance`, dashboard row models, dashboard data mapping, and CSV export with live skipped plus recent live outcome fields.
+- Updated PostgreSQL all-time and recent strategy performance queries to aggregate Live rejected/skipped statuses and Live settled/won/lost/realized/ROI metrics from `live_orders`.
+- Updated the in-memory test repository and strategy performance tests for all-time and recent Live metrics; README now documents the Live metrics block.
+Next: None.
+Notes: Verification passed: `dotnet build src\PolyCopyTrader.Dashboard\PolyCopyTrader.Dashboard.csproj -c Release --no-restore`; `dotnet test tests\PolyCopyTrader.Tests\PolyCopyTrader.Tests.csproj -c Release --no-restore --filter "FullyQualifiedName~StrategyPerformanceTests"` passed 5/5; full `dotnet test tests\PolyCopyTrader.Tests\PolyCopyTrader.Tests.csproj -c Release --no-restore` passed 482/482; remote PostgreSQL repository probe returned `strategy_rows=5; recent_rows=15`; `git diff --check` passed with CRLF warnings only.
+Blockers: None.
+
+## Active Update 2026-05-16 Binance 1 bps Production Recheck
+Goal: Verify the user-deployed production service for `BTC Up or Down 5m Binance 1 bps` Live-shadow.
+Status: Completed
+Done:
+- Confirmed production heartbeat on remote PostgreSQL is now running build `info=1.0.0+7c702eada37b085eb076e77be183813bc4bf5c1c; assembly=1.0.0.0; mvid=ed293d22502b`, `Mode=Live`, started `2026-05-16T06:08:18Z`, with no `last_error`.
+- Confirmed BTC-focused worker mode is active and only `btc_up_down_5m_binance_bps_1` has `live_stakes=true`; `btc_up_down_5m_skip_1` remains false.
+- Confirmed Live-shadow state since the current service start: no shadow decisions, no Paper-shadow orders, no Live-shadow orders, no discrepancies, no API errors, and no open live orders yet.
+- Confirmed startup geoblock check passed from BG IP and observed the target strategy's 06:10 and 06:15 UTC windows skipped because `btc_reference_move_below_bps_threshold`; later windows were still pending at the check time.
+Next: Keep monitoring until a qualifying bps move creates the first Paper/Live-shadow pair and verify exact shape match.
+Notes: Read-only database checks only after the user's deployment; no database writes, service restarts, order submissions, or cancel actions were performed by this session during the recheck.
+Blockers: None.
+
 ## Active Update 2026-05-16 Binance 1 bps Live Shadow
 Goal: Start `BTC Up or Down 5m Binance 1 bps` in Live-shadow mode with strict Paper/Live matching.
 Status: Blocked

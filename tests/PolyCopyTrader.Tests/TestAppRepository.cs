@@ -1135,6 +1135,8 @@ internal sealed class TestAppRepository : IAppRepository
             var liveOrders = LiveOrders
                 .Where(order => StrategyIds.Normalize(order.StrategyId) == strategy.Id)
                 .ToArray();
+            var liveSkipped = liveOrders.Count(order =>
+                order.Status is LiveOrderStatus.PreflightRejected or LiveOrderStatus.Rejected or LiveOrderStatus.Error);
             var liveSettled = liveOrders
                 .Where(order => order.SettledAtUtc is not null && order.RealizedPnlUsd is not null)
                 .ToArray();
@@ -1205,6 +1207,7 @@ internal sealed class TestAppRepository : IAppRepository
                      order.Status == LiveOrderStatus.CancelRequested) &&
                     order.RemainingSize > 0m),
                 liveSettled.Length,
+                liveSkipped,
                 liveWon,
                 liveLost,
                 liveStake,
@@ -1297,6 +1300,27 @@ internal sealed class TestAppRepository : IAppRepository
                 var runsUpdatedInWindow = runs
                     .Where(run => run.UpdatedAtUtc >= window.StartUtc && run.UpdatedAtUtc <= now)
                     .ToArray();
+                var liveOrders = LiveOrders
+                    .Where(order => StrategyIds.Normalize(order.StrategyId) == strategy.Id)
+                    .ToArray();
+                var liveCreatedInWindow = liveOrders
+                    .Where(order => order.CreatedAtUtc >= window.StartUtc && order.CreatedAtUtc <= now)
+                    .ToArray();
+                var liveSettled = liveOrders
+                    .Where(order => order.SettledAtUtc is not null && order.RealizedPnlUsd is not null)
+                    .Where(order => order.SettledAtUtc!.Value >= window.StartUtc && order.SettledAtUtc.Value <= now)
+                    .ToArray();
+                var liveWon = liveSettled.Count(order => order.Won ?? order.SettlementValueUsd > 0m);
+                var liveLost = liveSettled.Length - liveWon;
+                var liveStake = liveSettled.Sum(order =>
+                    order.CostBasisUsd > 0m
+                        ? order.CostBasisUsd
+                        : order.FilledNotionalUsd > 0m
+                            ? order.FilledNotionalUsd + order.FeeUsd
+                            : order.FilledSize > 0m
+                                ? order.Price * order.FilledSize + order.FeeUsd
+                                : 0m);
+                var liveRealized = liveSettled.Sum(order => order.RealizedPnlUsd ?? 0m);
                 var filledCost = fills.Sum(fill => fill.Price * fill.SizeShares);
                 var filledShares = fills.Sum(fill => fill.SizeShares);
                 var realizedPnl = settledRuns.Sum(run => run.RealizedPnlUsd ?? 0m);
@@ -1341,6 +1365,12 @@ internal sealed class TestAppRepository : IAppRepository
                         : filledCost > 0m
                             ? realizedPnl * 100m / filledCost
                             : 0m,
+                    liveSettled.Length,
+                    liveCreatedInWindow.Count(order => order.Status is LiveOrderStatus.PreflightRejected or LiveOrderStatus.Rejected or LiveOrderStatus.Error),
+                    liveWon,
+                    liveLost,
+                    liveRealized,
+                    liveStake <= 0m ? 0m : liveRealized * 100m / liveStake,
                     topSkip is null ? string.Empty : $"{topSkip.Key}:{topSkip.Count()}",
                     orders.Select(order => (DateTimeOffset?)order.CreatedAtUtc).DefaultIfEmpty(null).Max(),
                     runsUpdatedInWindow.Select(run => (DateTimeOffset?)run.UpdatedAtUtc).DefaultIfEmpty(null).Max()));

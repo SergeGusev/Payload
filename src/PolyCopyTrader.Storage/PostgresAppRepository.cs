@@ -1598,6 +1598,7 @@ live_order_agg AS (
         (count(*) FILTER (WHERE filled_size > 0))::integer AS live_filled_orders_count,
         (count(*) FILTER (WHERE status IN ('Submitted', 'Live', 'Delayed', 'Unmatched', 'CancelRequested') AND remaining_size > 0))::integer AS live_open_orders_count,
         (count(*) FILTER (WHERE settled_at_utc IS NOT NULL AND realized_pnl_usd IS NOT NULL))::integer AS live_settled_orders_count,
+        (count(*) FILTER (WHERE status IN ('PreflightRejected', 'Rejected', 'Error')))::integer AS live_skipped_orders_count,
         (count(*) FILTER (WHERE settled_at_utc IS NOT NULL AND COALESCE(won, COALESCE(settlement_value_usd, 0) > 0)))::integer AS live_won_orders_count,
         (count(*) FILTER (WHERE settled_at_utc IS NOT NULL AND NOT COALESCE(won, COALESCE(settlement_value_usd, 0) > 0)))::integer AS live_lost_orders_count,
         COALESCE(sum(CASE
@@ -1691,6 +1692,7 @@ combined AS (
         COALESCE(live_order_agg.live_filled_orders_count, 0) AS live_filled_orders_count,
         COALESCE(live_order_agg.live_open_orders_count, 0) AS live_open_orders_count,
         COALESCE(live_order_agg.live_settled_orders_count, 0) AS live_settled_orders_count,
+        COALESCE(live_order_agg.live_skipped_orders_count, 0) AS live_skipped_orders_count,
         COALESCE(live_order_agg.live_won_orders_count, 0) AS live_won_orders_count,
         COALESCE(live_order_agg.live_lost_orders_count, 0) AS live_lost_orders_count,
         COALESCE(live_order_agg.live_stake_usd, 0) AS live_stake_usd,
@@ -1750,6 +1752,7 @@ SELECT
     live_filled_orders_count,
     live_open_orders_count,
     live_settled_orders_count,
+    live_skipped_orders_count,
     live_won_orders_count,
     live_lost_orders_count,
     live_stake_usd,
@@ -1817,19 +1820,20 @@ LIMIT @Limit;
 				reader.GetInt32(36),
 				reader.GetInt32(37),
 				reader.GetInt32(38),
-				reader.GetDecimal(39),
+				reader.GetInt32(39),
 				reader.GetDecimal(40),
 				reader.GetDecimal(41),
 				reader.GetDecimal(42),
 				reader.GetDecimal(43),
 				reader.GetDecimal(44),
-				reader.IsDBNull(45) ? null : reader.GetDecimal(45),
-				reader.GetDecimal(46),
+				reader.GetDecimal(45),
+				reader.IsDBNull(46) ? null : reader.GetDecimal(46),
 				reader.GetDecimal(47),
-				reader.IsDBNull(48) ? null : DateTimeOffsetFromUtc(reader.GetDateTime(48)),
+				reader.GetDecimal(48),
 				reader.IsDBNull(49) ? null : DateTimeOffsetFromUtc(reader.GetDateTime(49)),
 				reader.IsDBNull(50) ? null : DateTimeOffsetFromUtc(reader.GetDateTime(50)),
-				reader.IsDBNull(51) ? null : DateTimeOffsetFromUtc(reader.GetDateTime(51))));
+				reader.IsDBNull(51) ? null : DateTimeOffsetFromUtc(reader.GetDateTime(51)),
+				reader.IsDBNull(52) ? null : DateTimeOffsetFromUtc(reader.GetDateTime(52))));
 		}
 
 		return results;
@@ -1969,6 +1973,80 @@ top_skip AS (
     SELECT strategy_id, window_label, top_skip_reason
     FROM top_skip_ranked
     WHERE skip_rank = 1
+),
+live_order_window_rows AS (
+    SELECT
+        live_order.strategy_id,
+        live_order.status,
+        live_order.created_at_utc,
+        live_order.updated_at_utc,
+        live_order.settled_at_utc,
+        live_order.cost_basis_usd,
+        live_order.filled_notional_usd,
+        live_order.fee_usd,
+        live_order.filled_size,
+        live_order.price,
+        live_order.settlement_value_usd,
+        live_order.realized_pnl_usd,
+        live_order.won,
+        window_row.window_label,
+        window_row.window_start_utc,
+        window_row.window_end_utc
+    FROM live_orders live_order
+    INNER JOIN selected_strategies strategy ON strategy.id = live_order.strategy_id
+    INNER JOIN windows window_row
+        ON (
+            live_order.created_at_utc >= window_row.window_start_utc
+            AND live_order.created_at_utc <= window_row.window_end_utc
+        )
+        OR (
+            live_order.updated_at_utc >= window_row.window_start_utc
+            AND live_order.updated_at_utc <= window_row.window_end_utc
+        )
+        OR (
+            live_order.settled_at_utc >= window_row.window_start_utc
+            AND live_order.settled_at_utc <= window_row.window_end_utc
+        )
+),
+live_order_agg AS (
+    SELECT
+        live_order.strategy_id,
+        live_order.window_label,
+        (count(*) FILTER (
+            WHERE live_order.settled_at_utc >= live_order.window_start_utc
+              AND live_order.settled_at_utc <= live_order.window_end_utc
+              AND live_order.realized_pnl_usd IS NOT NULL
+        ))::integer AS live_settled_orders_count,
+        (count(*) FILTER (
+            WHERE live_order.status IN ('PreflightRejected', 'Rejected', 'Error')
+              AND live_order.created_at_utc >= live_order.window_start_utc
+              AND live_order.created_at_utc <= live_order.window_end_utc
+        ))::integer AS live_skipped_orders_count,
+        (count(*) FILTER (
+            WHERE live_order.settled_at_utc >= live_order.window_start_utc
+              AND live_order.settled_at_utc <= live_order.window_end_utc
+              AND COALESCE(live_order.won, COALESCE(live_order.settlement_value_usd, 0) > 0)
+        ))::integer AS live_won_orders_count,
+        (count(*) FILTER (
+            WHERE live_order.settled_at_utc >= live_order.window_start_utc
+              AND live_order.settled_at_utc <= live_order.window_end_utc
+              AND NOT COALESCE(live_order.won, COALESCE(live_order.settlement_value_usd, 0) > 0)
+        ))::integer AS live_lost_orders_count,
+        COALESCE(sum(CASE
+            WHEN live_order.cost_basis_usd > 0 THEN live_order.cost_basis_usd
+            WHEN live_order.filled_notional_usd > 0 THEN live_order.filled_notional_usd + live_order.fee_usd
+            WHEN live_order.filled_size > 0 THEN live_order.price * live_order.filled_size + live_order.fee_usd
+            ELSE 0
+        END) FILTER (
+            WHERE live_order.settled_at_utc >= live_order.window_start_utc
+              AND live_order.settled_at_utc <= live_order.window_end_utc
+        ), 0) AS live_stake_usd,
+        COALESCE(sum(COALESCE(live_order.realized_pnl_usd, 0)) FILTER (
+            WHERE live_order.settled_at_utc >= live_order.window_start_utc
+              AND live_order.settled_at_utc <= live_order.window_end_utc
+        ), 0) AS live_realized_pnl_usd
+    FROM live_order_window_rows live_order
+    GROUP BY live_order.strategy_id, live_order.window_label
 )
 SELECT
     sw.strategy_id,
@@ -2001,6 +2079,12 @@ SELECT
         WHEN COALESCE(fill_agg.filled_cost_usd, 0) > 0 THEN COALESCE(run_agg.realized_pnl_usd, 0) * 100.0 / fill_agg.filled_cost_usd
         ELSE 0
     END AS roi_pct,
+    COALESCE(live_order_agg.live_settled_orders_count, 0) AS live_settled_orders_count,
+    COALESCE(live_order_agg.live_skipped_orders_count, 0) AS live_skipped_orders_count,
+    COALESCE(live_order_agg.live_won_orders_count, 0) AS live_won_orders_count,
+    COALESCE(live_order_agg.live_lost_orders_count, 0) AS live_lost_orders_count,
+    COALESCE(live_order_agg.live_realized_pnl_usd, 0) AS live_realized_pnl_usd,
+    CASE WHEN COALESCE(live_order_agg.live_stake_usd, 0) = 0 THEN 0 ELSE COALESCE(live_order_agg.live_realized_pnl_usd, 0) * 100.0 / live_order_agg.live_stake_usd END AS live_roi_pct,
     COALESCE(top_skip.top_skip_reason, '') AS top_skip_reason,
     order_agg.last_order_utc,
     run_agg.last_run_utc
@@ -2017,6 +2101,9 @@ LEFT JOIN run_agg
 LEFT JOIN top_skip
     ON top_skip.strategy_id = sw.strategy_id
     AND top_skip.window_label = sw.window_label
+LEFT JOIN live_order_agg
+    ON live_order_agg.strategy_id = sw.strategy_id
+    AND live_order_agg.window_label = sw.window_label
 ORDER BY
     CASE WHEN sw.code = 'follow_leader' THEN 0 ELSE 1 END,
     sw.code,
@@ -2052,9 +2139,15 @@ ORDER BY
 				reader.GetDecimal(20),
 				reader.GetDecimal(21),
 				reader.GetDecimal(22),
-				reader.GetString(23),
-				reader.IsDBNull(24) ? null : DateTimeOffsetFromUtc(reader.GetDateTime(24)),
-				reader.IsDBNull(25) ? null : DateTimeOffsetFromUtc(reader.GetDateTime(25))));
+				reader.GetInt32(23),
+				reader.GetInt32(24),
+				reader.GetInt32(25),
+				reader.GetInt32(26),
+				reader.GetDecimal(27),
+				reader.GetDecimal(28),
+				reader.GetString(29),
+				reader.IsDBNull(30) ? null : DateTimeOffsetFromUtc(reader.GetDateTime(30)),
+				reader.IsDBNull(31) ? null : DateTimeOffsetFromUtc(reader.GetDateTime(31))));
 		}
 
 		return results;

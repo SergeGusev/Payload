@@ -218,13 +218,38 @@ public sealed class StrategyPerformanceTests
             string.Empty,
             now.AddMinutes(-1),
             StrategyId: strategyId));
+        await repository.AddLiveOrderAsync(new LiveOrder(
+            Guid.NewGuid(),
+            Guid.NewGuid(),
+            LiveOrderStatus.PreflightRejected,
+            null,
+            TradeSide.Buy,
+            "asset-rejected-live",
+            "condition-live",
+            "Yes",
+            0.30m,
+            10m,
+            3m,
+            "GTC",
+            now.AddMinutes(-2),
+            now.AddMinutes(5),
+            now.AddMinutes(-2),
+            "preflight_rejected",
+            0m,
+            10m,
+            "test rejection",
+            "{}",
+            string.Empty,
+            now.AddMinutes(-2),
+            StrategyId: strategyId));
 
         var row = (await repository.GetStrategyPerformanceAsync()).Single(item => item.StrategyId == strategyId);
 
-        Assert.Equal(3, row.LiveOrdersCount);
+        Assert.Equal(4, row.LiveOrdersCount);
         Assert.Equal(2, row.LiveFilledOrdersCount);
         Assert.Equal(1, row.LiveOpenOrdersCount);
         Assert.Equal(2, row.LiveSettledOrdersCount);
+        Assert.Equal(1, row.LiveSkippedOrdersCount);
         Assert.Equal(1, row.LiveWonOrdersCount);
         Assert.Equal(1, row.LiveLostOrdersCount);
         Assert.Equal(8m, row.LiveStakeUsd);
@@ -354,6 +379,63 @@ public sealed class StrategyPerformanceTests
             "test_skip",
             now.AddMinutes(-3),
             now.AddMinutes(-2)));
+        await repository.AddLiveOrderAsync(new LiveOrder(
+            Guid.NewGuid(),
+            Guid.NewGuid(),
+            LiveOrderStatus.Matched,
+            "0xlivewin",
+            TradeSide.Buy,
+            "asset-live-win",
+            "condition-live-recent",
+            "Up",
+            0.40m,
+            10m,
+            4m,
+            "GTC",
+            now.AddMinutes(-25),
+            now.AddMinutes(5),
+            now.AddMinutes(-25),
+            "matched",
+            10m,
+            0m,
+            string.Empty,
+            "{}",
+            string.Empty,
+            now.AddMinutes(-24),
+            StrategyId: variant.Id,
+            AverageFillPrice: 0.40m,
+            FilledNotionalUsd: 4m,
+            CostBasisUsd: 4m,
+            SettlementValueUsd: 10m,
+            RealizedPnlUsd: 6m,
+            SettledAtUtc: now.AddMinutes(-4),
+            WinningOutcome: "Up",
+            Won: true,
+            SettlementSource: "test"));
+        await repository.AddLiveOrderAsync(new LiveOrder(
+            Guid.NewGuid(),
+            Guid.NewGuid(),
+            LiveOrderStatus.PreflightRejected,
+            null,
+            TradeSide.Buy,
+            "asset-live-rejected",
+            "condition-live-recent",
+            "Down",
+            0.50m,
+            8m,
+            4m,
+            "GTC",
+            now.AddMinutes(-15),
+            now.AddMinutes(5),
+            now.AddMinutes(-15),
+            "preflight_rejected",
+            0m,
+            8m,
+            "test rejection",
+            "{}",
+            string.Empty,
+            now.AddMinutes(-15),
+            StrategyId: variant.Id));
 
         var row = (await repository.GetStrategyRecentPerformanceAsync())
             .Single(item => item.StrategyId == variant.Id && item.Window == "1h");
@@ -374,6 +456,12 @@ public sealed class StrategyPerformanceTests
         Assert.Equal(60m, row.MaxEntryDelaySeconds);
         Assert.Equal(100m, row.WinRatePct);
         Assert.Equal(100m, row.RoiPct);
+        Assert.Equal(1, row.LiveSettledOrdersCount);
+        Assert.Equal(1, row.LiveSkippedOrdersCount);
+        Assert.Equal(1, row.LiveWonOrdersCount);
+        Assert.Equal(0, row.LiveLostOrdersCount);
+        Assert.Equal(6m, row.LiveRealizedPnlUsd);
+        Assert.Equal(150m, row.LiveRoiPct);
         Assert.Equal("test_skip:1", row.TopSkipReason);
     }
 

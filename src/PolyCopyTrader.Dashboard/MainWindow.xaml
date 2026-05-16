@@ -68,6 +68,12 @@
                     <DataGridTextColumn Header="Lost" Binding="{Binding LostRunsCount}" Width="60" />
                     <DataGridTextColumn Header="Realized" Binding="{Binding RealizedPnlUsd}" Width="85" />
                     <DataGridTextColumn Header="ClosedRoi" Binding="{Binding RoiPct}" Width="85" />
+                    <DataGridTextColumn Header="Live settles" Binding="{Binding LiveSettledOrdersCount}" Width="90" />
+                    <DataGridTextColumn Header="Live skipped" Binding="{Binding LiveSkippedOrdersCount}" Width="95" />
+                    <DataGridTextColumn Header="Live won" Binding="{Binding LiveWonOrdersCount}" Width="80" />
+                    <DataGridTextColumn Header="Live lost" Binding="{Binding LiveLostOrdersCount}" Width="80" />
+                    <DataGridTextColumn Header="Live realized" Binding="{Binding LiveRealizedPnlUsd}" Width="100" />
+                    <DataGridTextColumn Header="Live ROI" Binding="{Binding LiveRoiPct}" Width="80" />
                     <DataGridTextColumn Header="Orders" Binding="{Binding OrdersCount}" Width="70" />
                     <DataGridTextColumn Header="Filled" Binding="{Binding FilledOrdersCount}" Width="70" />
                     <DataGridTextColumn Header="Expired" Binding="{Binding ExpiredOrdersCount}" Width="75" />
@@ -308,6 +314,12 @@
                         <DataGridTextColumn Header="Lost" Binding="{Binding LostPositionsCount}" Width="60" />
                         <DataGridTextColumn Header="Realized" Binding="{Binding RealizedPnlUsd}" Width="90" />
                         <DataGridTextColumn Header="Closed ROI" Binding="{Binding ClosedRoiPct}" Width="95" />
+                        <DataGridTextColumn Header="Live settles" Binding="{Binding LiveSettledOrdersCount}" Width="90" />
+                        <DataGridTextColumn Header="Live skipped" Binding="{Binding LiveSkippedOrdersCount}" Width="95" />
+                        <DataGridTextColumn Header="Live won" Binding="{Binding LiveWonOrdersCount}" Width="80" />
+                        <DataGridTextColumn Header="Live lost" Binding="{Binding LiveLostOrdersCount}" Width="80" />
+                        <DataGridTextColumn Header="Live realized" Binding="{Binding LiveRealizedPnlUsd}" Width="100" />
+                        <DataGridTextColumn Header="Live ROI" Binding="{Binding LiveRoiPct}" Width="80" />
                         <DataGridTemplateColumn Header="Paper $" Width="80">
                             <DataGridTemplateColumn.CellTemplate>
                                 <DataTemplate>
@@ -366,18 +378,13 @@
                         <DataGridTextColumn Header="Live orders" Binding="{Binding LiveOrdersCount}" Width="90" />
                         <DataGridTextColumn Header="Live filled" Binding="{Binding LiveFilledOrdersCount}" Width="90" />
                         <DataGridTextColumn Header="Live open" Binding="{Binding LiveOpenOrdersCount}" Width="80" />
-                        <DataGridTextColumn Header="Live settled" Binding="{Binding LiveSettledOrdersCount}" Width="90" />
-                        <DataGridTextColumn Header="Live won" Binding="{Binding LiveWonOrdersCount}" Width="80" />
-                        <DataGridTextColumn Header="Live lost" Binding="{Binding LiveLostOrdersCount}" Width="80" />
                         <DataGridTextColumn Header="Live stake" Binding="{Binding LiveStakeUsd}" Width="90" />
-                        <DataGridTextColumn Header="Live PnL" Binding="{Binding LiveRealizedPnlUsd}" Width="90" />
                         <DataGridTextColumn Header="Live win %" Binding="{Binding LiveWinRatePct}" Width="80" />
                         <DataGridTextColumn Header="Live loss %" Binding="{Binding LiveLossRatePct}" Width="80" />
                         <DataGridTextColumn Header="Live avg win" Binding="{Binding LiveAvgWinPnlUsd}" Width="95" />
                         <DataGridTextColumn Header="Live avg loss" Binding="{Binding LiveAvgLossPnlUsd}" Width="100" />
                         <DataGridTextColumn Header="Live profit factor" Binding="{Binding LiveProfitFactor}" Width="120" />
                         <DataGridTextColumn Header="Live expectancy" Binding="{Binding LiveExpectancyPnlUsd}" Width="115" />
-                        <DataGridTextColumn Header="Live ROI %" Binding="{Binding LiveRoiPct}" Width="85" />
                         <DataGridTextColumn Header="Live last order UTC" Binding="{Binding LiveLastOrderUtc}" Width="150" />
                         <DataGridTextColumn Header="Live last settle UTC" Binding="{Binding LiveLastSettlementUtc}" Width="150" />
                         <DataGridTextColumn Header="Last order UTC" Binding="{Binding LastOrderUtc}" Width="150" />

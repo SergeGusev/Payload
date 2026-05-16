@@ -24,3 +24,17 @@ Request:
 
 Result:
 Added `btc_up_down_5m_binance_bps_1` to the explicit BTC Paper/Live-shadow allow-list and tightened Paper/Live order-shape matching to `0.000001` price/requested-size tolerance. Added tests covering Binance 1 bps Live-shadow submission and strict mismatch shutdown. Updated README/config/checklist docs. Verification passed: targeted tests 125/125, Service Release build 0 warnings/errors, full tests 482/482. Queried remote PostgreSQL `192.168.0.101` without printing connection strings; remote service is alive in `Live` mode but still running old artifact `info=1.0.0+16a032c64f151ff052264ed18273a52cd923fdd0`. Updated remote DB so only `btc_up_down_5m_binance_bps_1` has `live_stakes=true`; target live stake is `1.00000000`, live balance `100.00000000`, and open live orders remain `0`. Could not deploy/restart the Windows Service from this session because WinRM remote command authentication fails without explicit credentials and admin share access is unavailable; actual Binance 1 bps Live-shadow order submission will start only after deploying/restarting the production service from the new commit.
+
+## 2026-05-16T06:26:38.2167809+00:00
+Request:
+Запустил, проверяй
+
+Result:
+Checked production after the user's deployment. Remote PostgreSQL heartbeat showed `PolyCopyTrader.Service` running in `Live` mode on build `info=1.0.0+7c702eada37b085eb076e77be183813bc4bf5c1c; assembly=1.0.0.0; mvid=ed293d22502b`, started `2026-05-16T06:08:18Z`, with no `last_error`. Confirmed BTC-focused worker mode is active, only `btc_up_down_5m_binance_bps_1` has `live_stakes=true`, `btc_up_down_5m_skip_1` remains false, and there are no open live orders. Since service start there were no Live-shadow decisions/orders/discrepancies/API errors yet; startup geoblock check passed from BG IP. The target strategy's 06:10 and 06:15 UTC windows skipped because `btc_reference_move_below_bps_threshold`, so no Paper/Live pair had been created yet. Read-only database checks only; no database writes, service restarts, order submissions, or cancel actions were performed by this session during the recheck.
+
+## 2026-05-16T06:26:58.2946514+00:00
+Request:
+В Dashboard на каждом tab в разделе Strategies справа от колонок Settles, Skipped, Won, Lost, Realized, Roi сделай аналогичный набор для Live ставок
+
+Result:
+Added a Live outcome block immediately to the right of the Paper settled/skipped/won/lost/realized/ROI columns in every Dashboard Strategies nested tab: `All`, `24 hours`, `6 hours`, and `1 hour`. Extended domain records, dashboard row models, data mapping, CSV export, and PostgreSQL all-time/recent performance queries with Live skipped/rejected plus Live settled/won/lost/realized/ROI metrics from `live_orders`. Updated in-memory repository tests, strategy performance tests, and README. Verification passed: Dashboard Release build, targeted `StrategyPerformanceTests` 5/5, full test project 482/482, remote PostgreSQL repository probe returned `strategy_rows=5; recent_rows=15`, and `git diff --check` passed with CRLF warnings only.

@@ -253,6 +253,7 @@ public sealed partial class StrategyPerformanceRow : ObservableObject
         int liveFilledOrdersCount,
         int liveOpenOrdersCount,
         int liveSettledOrdersCount,
+        int liveSkippedOrdersCount,
         int liveWonOrdersCount,
         int liveLostOrdersCount,
         decimal liveStakeUsd,
@@ -305,6 +306,7 @@ public sealed partial class StrategyPerformanceRow : ObservableObject
         LiveFilledOrdersCount = liveFilledOrdersCount;
         LiveOpenOrdersCount = liveOpenOrdersCount;
         LiveSettledOrdersCount = liveSettledOrdersCount;
+        LiveSkippedOrdersCount = liveSkippedOrdersCount;
         LiveWonOrdersCount = liveWonOrdersCount;
         LiveLostOrdersCount = liveLostOrdersCount;
         LiveStakeUsd = liveStakeUsd;
@@ -399,6 +401,8 @@ public sealed partial class StrategyPerformanceRow : ObservableObject
 
     public int LiveSettledOrdersCount { get; }
 
+    public int LiveSkippedOrdersCount { get; }
+
     public int LiveWonOrdersCount { get; }
 
     public int LiveLostOrdersCount { get; }
@@ -445,6 +449,12 @@ public sealed record StrategyRecentPerformanceRow(
     int LostRunsCount,
     decimal WinRatePct,
     decimal RoiPct,
+    int LiveSettledOrdersCount,
+    int LiveSkippedOrdersCount,
+    int LiveWonOrdersCount,
+    int LiveLostOrdersCount,
+    decimal LiveRealizedPnlUsd,
+    decimal LiveRoiPct,
     decimal RealizedPnlUsd,
     decimal FilledCostUsd,
     decimal AvgFillPrice,
