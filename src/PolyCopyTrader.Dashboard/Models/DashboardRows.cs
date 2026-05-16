@@ -257,6 +257,9 @@ public sealed partial class StrategyPerformanceRow : ObservableObject
         int liveConditionSkippedOrdersCount,
         int liveTechnicalSkippedOrdersCount,
         int liveIgnoredOrdersCount,
+        int liveIgnoredGtdUnfilledCount,
+        int liveIgnoredCancelledOrdersCount,
+        int liveIgnoredRejectedOrdersCount,
         int liveWonOrdersCount,
         int liveLostOrdersCount,
         decimal liveStakeUsd,
@@ -313,6 +316,9 @@ public sealed partial class StrategyPerformanceRow : ObservableObject
         LiveConditionSkippedOrdersCount = liveConditionSkippedOrdersCount;
         LiveTechnicalSkippedOrdersCount = liveTechnicalSkippedOrdersCount;
         LiveIgnoredOrdersCount = liveIgnoredOrdersCount;
+        LiveIgnoredGtdUnfilledCount = liveIgnoredGtdUnfilledCount;
+        LiveIgnoredCancelledOrdersCount = liveIgnoredCancelledOrdersCount;
+        LiveIgnoredRejectedOrdersCount = liveIgnoredRejectedOrdersCount;
         LiveWonOrdersCount = liveWonOrdersCount;
         LiveLostOrdersCount = liveLostOrdersCount;
         LiveStakeUsd = liveStakeUsd;
@@ -415,6 +421,12 @@ public sealed partial class StrategyPerformanceRow : ObservableObject
 
     public int LiveIgnoredOrdersCount { get; }
 
+    public int LiveIgnoredGtdUnfilledCount { get; }
+
+    public int LiveIgnoredCancelledOrdersCount { get; }
+
+    public int LiveIgnoredRejectedOrdersCount { get; }
+
     public int LiveWonOrdersCount { get; }
 
     public int LiveLostOrdersCount { get; }
@@ -466,6 +478,9 @@ public sealed record StrategyRecentPerformanceRow(
     int LiveConditionSkippedOrdersCount,
     int LiveTechnicalSkippedOrdersCount,
     int LiveIgnoredOrdersCount,
+    int LiveIgnoredGtdUnfilledCount,
+    int LiveIgnoredCancelledOrdersCount,
+    int LiveIgnoredRejectedOrdersCount,
     int LiveWonOrdersCount,
     int LiveLostOrdersCount,
     decimal LiveRealizedPnlUsd,

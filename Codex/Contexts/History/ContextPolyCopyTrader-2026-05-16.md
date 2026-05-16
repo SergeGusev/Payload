@@ -178,3 +178,10 @@ Request:
 
 Result:
 Renamed the Dashboard/CSV/domain metric from `Live reject` to `Live ignored`. `Live ignored` now counts `Rejected`/`Error` live orders, zero-fill `Cancelled`/`CancelFailed` live orders, and Live-enabled `gtd_limit_not_filled` strategy runs; those GTD-unfilled rows no longer count as `Live tech skip`. `PreflightRejected` remains `Live tech skip` because no live order was placed before preflight rejection. Updated PostgreSQL aggregation, TestAppRepository, StrategyPerformanceTests, Dashboard grids, CSV exports, domain rows, and README wording. Verification passed: Dashboard Release build, Service Release build, targeted `StrategyPerformanceTests` 5/5, full test project 490/490, `git diff --check` with LF/CRLF warnings only, and production read-only SQL smoke for `btc_up_down_5m_binance_bps_1` showing current 1h `live_technical_runs=0`, `live_preflight=0`, `live_ignored_runs=3`, `live_ignored_orders=2`. No DB writes, service restarts, order submissions, or cancel actions were performed.
+
+## 2026-05-16T11:49:16Z
+Request:
+Ок, давай разделим.
+
+Result:
+Split the Dashboard `Live ignored` metric into three cause columns: `Live gtd unfilled`, `Live cancel ignored`, and `Live reject/error`, while keeping `Live ignored` as the total. Updated domain models, Dashboard rows, WPF Strategy grids, CSV exports, PostgreSQL cumulative/recent Strategy aggregation, TestAppRepository, StrategyPerformanceTests, and README. Read-only production SQL smoke for `btc_up_down_5m_binance_bps_1` showed current all-time `Live ignored=169` as `GTD unfilled=166`, `Cancel ignored=3`, `Reject/error=0`, confirming the high count is not exchange rejection. Verification passed: targeted `StrategyPerformanceTests` 5/5, Dashboard Release build, Service Release build, full test project 490/490, and `git diff --check` with LF/CRLF warnings only. No DB writes, service restarts, order submissions, or cancel actions were performed.

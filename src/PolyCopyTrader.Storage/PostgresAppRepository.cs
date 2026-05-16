@@ -1639,7 +1639,7 @@ run_agg AS (
         (count(*) FILTER (
             WHERE status = 'Skipped'
               AND lower(COALESCE(skip_reason, '')) = 'gtd_limit_not_filled'
-        ))::integer AS live_ignored_orders_count,
+        ))::integer AS live_ignored_gtd_unfilled_count,
         (count(*) FILTER (WHERE status = 'Settled'))::integer AS settled_runs_count,
         (count(*) FILTER (WHERE status = 'Settled' AND COALESCE(realized_pnl_usd, 0) > 0))::integer AS won_runs_count,
         (count(*) FILTER (WHERE status = 'Settled' AND COALESCE(realized_pnl_usd, 0) < 0))::integer AS lost_runs_count,
@@ -1666,8 +1666,11 @@ live_order_agg AS (
         (count(*) FILTER (WHERE status = 'PreflightRejected'))::integer AS live_technical_skipped_orders_count,
         (count(*) FILTER (
             WHERE status IN ('Rejected', 'Error')
-               OR (status IN ('Cancelled', 'CancelFailed') AND filled_size <= 0)
-        ))::integer AS live_ignored_orders_count,
+        ))::integer AS live_ignored_rejected_orders_count,
+        (count(*) FILTER (
+            WHERE status IN ('Cancelled', 'CancelFailed')
+              AND filled_size <= 0
+        ))::integer AS live_ignored_cancelled_orders_count,
         (count(*) FILTER (WHERE settled_at_utc IS NOT NULL AND COALESCE(won, COALESCE(settlement_value_usd, 0) > 0)))::integer AS live_won_orders_count,
         (count(*) FILTER (WHERE settled_at_utc IS NOT NULL AND NOT COALESCE(won, COALESCE(settlement_value_usd, 0) > 0)))::integer AS live_lost_orders_count,
         COALESCE(sum(CASE
@@ -1764,13 +1767,18 @@ combined AS (
         CASE WHEN strategy.live_stakes THEN COALESCE(run_agg.live_condition_skipped_orders_count, 0) ELSE 0 END AS live_condition_skipped_orders_count,
         CASE WHEN strategy.live_stakes THEN COALESCE(run_agg.live_technical_skipped_orders_count, 0) ELSE 0 END
             + COALESCE(live_order_agg.live_technical_skipped_orders_count, 0) AS live_technical_skipped_orders_count,
-        CASE WHEN strategy.live_stakes THEN COALESCE(run_agg.live_ignored_orders_count, 0) ELSE 0 END
-            + COALESCE(live_order_agg.live_ignored_orders_count, 0) AS live_ignored_orders_count,
+        CASE WHEN strategy.live_stakes THEN COALESCE(run_agg.live_ignored_gtd_unfilled_count, 0) ELSE 0 END
+            + COALESCE(live_order_agg.live_ignored_cancelled_orders_count, 0)
+            + COALESCE(live_order_agg.live_ignored_rejected_orders_count, 0) AS live_ignored_orders_count,
+        CASE WHEN strategy.live_stakes THEN COALESCE(run_agg.live_ignored_gtd_unfilled_count, 0) ELSE 0 END AS live_ignored_gtd_unfilled_count,
+        COALESCE(live_order_agg.live_ignored_cancelled_orders_count, 0) AS live_ignored_cancelled_orders_count,
+        COALESCE(live_order_agg.live_ignored_rejected_orders_count, 0) AS live_ignored_rejected_orders_count,
         CASE WHEN strategy.live_stakes THEN COALESCE(run_agg.live_condition_skipped_orders_count, 0) ELSE 0 END
             + CASE WHEN strategy.live_stakes THEN COALESCE(run_agg.live_technical_skipped_orders_count, 0) ELSE 0 END
-            + CASE WHEN strategy.live_stakes THEN COALESCE(run_agg.live_ignored_orders_count, 0) ELSE 0 END
+            + CASE WHEN strategy.live_stakes THEN COALESCE(run_agg.live_ignored_gtd_unfilled_count, 0) ELSE 0 END
             + COALESCE(live_order_agg.live_technical_skipped_orders_count, 0)
-            + COALESCE(live_order_agg.live_ignored_orders_count, 0) AS live_skipped_orders_count,
+            + COALESCE(live_order_agg.live_ignored_cancelled_orders_count, 0)
+            + COALESCE(live_order_agg.live_ignored_rejected_orders_count, 0) AS live_skipped_orders_count,
         COALESCE(live_order_agg.live_won_orders_count, 0) AS live_won_orders_count,
         COALESCE(live_order_agg.live_lost_orders_count, 0) AS live_lost_orders_count,
         COALESCE(live_order_agg.live_stake_usd, 0) AS live_stake_usd,
@@ -1834,6 +1842,9 @@ SELECT
     live_condition_skipped_orders_count,
     live_technical_skipped_orders_count,
     live_ignored_orders_count,
+    live_ignored_gtd_unfilled_count,
+    live_ignored_cancelled_orders_count,
+    live_ignored_rejected_orders_count,
     live_won_orders_count,
     live_lost_orders_count,
     live_stake_usd,
@@ -1905,19 +1916,22 @@ LIMIT @Limit;
 				reader.GetInt32(40),
 				reader.GetInt32(41),
 				reader.GetInt32(42),
-				reader.GetDecimal(43),
-				reader.GetDecimal(44),
-				reader.GetDecimal(45),
+				reader.GetInt32(43),
+				reader.GetInt32(44),
+				reader.GetInt32(45),
 				reader.GetDecimal(46),
 				reader.GetDecimal(47),
 				reader.GetDecimal(48),
-				reader.IsDBNull(49) ? null : reader.GetDecimal(49),
+				reader.GetDecimal(49),
 				reader.GetDecimal(50),
 				reader.GetDecimal(51),
-				reader.IsDBNull(52) ? null : DateTimeOffsetFromUtc(reader.GetDateTime(52)),
-				reader.IsDBNull(53) ? null : DateTimeOffsetFromUtc(reader.GetDateTime(53)),
-				reader.IsDBNull(54) ? null : DateTimeOffsetFromUtc(reader.GetDateTime(54)),
-				reader.IsDBNull(55) ? null : DateTimeOffsetFromUtc(reader.GetDateTime(55))));
+				reader.IsDBNull(52) ? null : reader.GetDecimal(52),
+				reader.GetDecimal(53),
+				reader.GetDecimal(54),
+				reader.IsDBNull(55) ? null : DateTimeOffsetFromUtc(reader.GetDateTime(55)),
+				reader.IsDBNull(56) ? null : DateTimeOffsetFromUtc(reader.GetDateTime(56)),
+				reader.IsDBNull(57) ? null : DateTimeOffsetFromUtc(reader.GetDateTime(57)),
+				reader.IsDBNull(58) ? null : DateTimeOffsetFromUtc(reader.GetDateTime(58))));
 		}
 
 		return results;
@@ -2096,7 +2110,7 @@ run_agg AS (
               AND run.updated_at_utc >= run.window_start_utc
               AND run.updated_at_utc <= run.window_end_utc
               AND lower(COALESCE(run.skip_reason, '')) = 'gtd_limit_not_filled'
-        ))::integer AS live_ignored_orders_count,
+        ))::integer AS live_ignored_gtd_unfilled_count,
         (count(*) FILTER (WHERE run.status = 'Settled' AND run.settled_at_utc >= run.window_start_utc AND run.settled_at_utc <= run.window_end_utc))::integer AS settled_runs_count,
         (count(*) FILTER (WHERE run.status = 'Settled' AND run.settled_at_utc >= run.window_start_utc AND run.settled_at_utc <= run.window_end_utc AND COALESCE(run.realized_pnl_usd, 0) > 0))::integer AS won_runs_count,
         (count(*) FILTER (WHERE run.status = 'Settled' AND run.settled_at_utc >= run.window_start_utc AND run.settled_at_utc <= run.window_end_utc AND COALESCE(run.realized_pnl_usd, 0) < 0))::integer AS lost_runs_count,
@@ -2179,13 +2193,16 @@ live_order_agg AS (
               AND live_order.created_at_utc <= live_order.window_end_utc
         ))::integer AS live_technical_skipped_orders_count,
         (count(*) FILTER (
-            WHERE (
-                  live_order.status IN ('Rejected', 'Error')
-                  OR (live_order.status IN ('Cancelled', 'CancelFailed') AND live_order.filled_size <= 0)
-              )
+            WHERE live_order.status IN ('Rejected', 'Error')
               AND live_order.created_at_utc >= live_order.window_start_utc
               AND live_order.created_at_utc <= live_order.window_end_utc
-        ))::integer AS live_ignored_orders_count,
+        ))::integer AS live_ignored_rejected_orders_count,
+        (count(*) FILTER (
+            WHERE live_order.status IN ('Cancelled', 'CancelFailed')
+              AND live_order.filled_size <= 0
+              AND live_order.created_at_utc >= live_order.window_start_utc
+              AND live_order.created_at_utc <= live_order.window_end_utc
+        ))::integer AS live_ignored_cancelled_orders_count,
         (count(*) FILTER (
             WHERE live_order.settled_at_utc >= live_order.window_start_utc
               AND live_order.settled_at_utc <= live_order.window_end_utc
@@ -2246,14 +2263,19 @@ SELECT
     COALESCE(live_order_agg.live_settled_orders_count, 0) AS live_settled_orders_count,
     CASE WHEN sw.live_stakes THEN COALESCE(run_agg.live_condition_skipped_orders_count, 0) ELSE 0 END
         + CASE WHEN sw.live_stakes THEN COALESCE(run_agg.live_technical_skipped_orders_count, 0) ELSE 0 END
-        + CASE WHEN sw.live_stakes THEN COALESCE(run_agg.live_ignored_orders_count, 0) ELSE 0 END
+        + CASE WHEN sw.live_stakes THEN COALESCE(run_agg.live_ignored_gtd_unfilled_count, 0) ELSE 0 END
         + COALESCE(live_order_agg.live_technical_skipped_orders_count, 0)
-        + COALESCE(live_order_agg.live_ignored_orders_count, 0) AS live_skipped_orders_count,
+        + COALESCE(live_order_agg.live_ignored_cancelled_orders_count, 0)
+        + COALESCE(live_order_agg.live_ignored_rejected_orders_count, 0) AS live_skipped_orders_count,
     CASE WHEN sw.live_stakes THEN COALESCE(run_agg.live_condition_skipped_orders_count, 0) ELSE 0 END AS live_condition_skipped_orders_count,
     CASE WHEN sw.live_stakes THEN COALESCE(run_agg.live_technical_skipped_orders_count, 0) ELSE 0 END
         + COALESCE(live_order_agg.live_technical_skipped_orders_count, 0) AS live_technical_skipped_orders_count,
-    CASE WHEN sw.live_stakes THEN COALESCE(run_agg.live_ignored_orders_count, 0) ELSE 0 END
-        + COALESCE(live_order_agg.live_ignored_orders_count, 0) AS live_ignored_orders_count,
+    CASE WHEN sw.live_stakes THEN COALESCE(run_agg.live_ignored_gtd_unfilled_count, 0) ELSE 0 END
+        + COALESCE(live_order_agg.live_ignored_cancelled_orders_count, 0)
+        + COALESCE(live_order_agg.live_ignored_rejected_orders_count, 0) AS live_ignored_orders_count,
+    CASE WHEN sw.live_stakes THEN COALESCE(run_agg.live_ignored_gtd_unfilled_count, 0) ELSE 0 END AS live_ignored_gtd_unfilled_count,
+    COALESCE(live_order_agg.live_ignored_cancelled_orders_count, 0) AS live_ignored_cancelled_orders_count,
+    COALESCE(live_order_agg.live_ignored_rejected_orders_count, 0) AS live_ignored_rejected_orders_count,
     COALESCE(live_order_agg.live_won_orders_count, 0) AS live_won_orders_count,
     COALESCE(live_order_agg.live_lost_orders_count, 0) AS live_lost_orders_count,
     COALESCE(live_order_agg.live_realized_pnl_usd, 0) AS live_realized_pnl_usd,
@@ -2319,11 +2341,14 @@ ORDER BY
 				reader.GetInt32(27),
 				reader.GetInt32(28),
 				reader.GetInt32(29),
-				reader.GetDecimal(30),
-				reader.GetDecimal(31),
-				reader.GetString(32),
-				reader.IsDBNull(33) ? null : DateTimeOffsetFromUtc(reader.GetDateTime(33)),
-				reader.IsDBNull(34) ? null : DateTimeOffsetFromUtc(reader.GetDateTime(34))));
+				reader.GetInt32(30),
+				reader.GetInt32(31),
+				reader.GetInt32(32),
+				reader.GetDecimal(33),
+				reader.GetDecimal(34),
+				reader.GetString(35),
+				reader.IsDBNull(36) ? null : DateTimeOffsetFromUtc(reader.GetDateTime(36)),
+				reader.IsDBNull(37) ? null : DateTimeOffsetFromUtc(reader.GetDateTime(37))));
 		}
 
 		return results;

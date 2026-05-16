@@ -301,6 +301,9 @@ public sealed class StrategyPerformanceTests
         Assert.Equal(0, row.LiveConditionSkippedOrdersCount);
         Assert.Equal(1, row.LiveTechnicalSkippedOrdersCount);
         Assert.Equal(2, row.LiveIgnoredOrdersCount);
+        Assert.Equal(0, row.LiveIgnoredGtdUnfilledCount);
+        Assert.Equal(1, row.LiveIgnoredCancelledOrdersCount);
+        Assert.Equal(1, row.LiveIgnoredRejectedOrdersCount);
         Assert.Equal(1, row.LiveWonOrdersCount);
         Assert.Equal(1, row.LiveLostOrdersCount);
         Assert.Equal(8m, row.LiveStakeUsd);
@@ -565,6 +568,9 @@ public sealed class StrategyPerformanceTests
         Assert.Equal(1, row.LiveConditionSkippedOrdersCount);
         Assert.Equal(1, row.LiveTechnicalSkippedOrdersCount);
         Assert.Equal(2, row.LiveIgnoredOrdersCount);
+        Assert.Equal(1, row.LiveIgnoredGtdUnfilledCount);
+        Assert.Equal(0, row.LiveIgnoredCancelledOrdersCount);
+        Assert.Equal(1, row.LiveIgnoredRejectedOrdersCount);
         Assert.Equal(1, row.LiveWonOrdersCount);
         Assert.Equal(0, row.LiveLostOrdersCount);
         Assert.Equal(6m, row.LiveRealizedPnlUsd);

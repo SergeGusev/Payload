@@ -72,6 +72,9 @@
                     <DataGridTextColumn Header="Live cond skip" Binding="{Binding LiveConditionSkippedOrdersCount}" Width="105" />
                     <DataGridTextColumn Header="Live tech skip" Binding="{Binding LiveTechnicalSkippedOrdersCount}" Width="105" />
                     <DataGridTextColumn Header="Live ignored" Binding="{Binding LiveIgnoredOrdersCount}" Width="95" />
+                    <DataGridTextColumn Header="Live gtd unfilled" Binding="{Binding LiveIgnoredGtdUnfilledCount}" Width="115" />
+                    <DataGridTextColumn Header="Live cancel ignored" Binding="{Binding LiveIgnoredCancelledOrdersCount}" Width="125" />
+                    <DataGridTextColumn Header="Live reject/error" Binding="{Binding LiveIgnoredRejectedOrdersCount}" Width="115" />
                     <DataGridTextColumn Header="Live won" Binding="{Binding LiveWonOrdersCount}" Width="80" />
                     <DataGridTextColumn Header="Live lost" Binding="{Binding LiveLostOrdersCount}" Width="80" />
                     <DataGridTextColumn Header="Live realized" Binding="{Binding LiveRealizedPnlUsd}" Width="100" />
@@ -322,6 +325,9 @@
                         <DataGridTextColumn Header="Live cond skip" Binding="{Binding LiveConditionSkippedOrdersCount}" Width="105" />
                         <DataGridTextColumn Header="Live tech skip" Binding="{Binding LiveTechnicalSkippedOrdersCount}" Width="105" />
                         <DataGridTextColumn Header="Live ignored" Binding="{Binding LiveIgnoredOrdersCount}" Width="95" />
+                        <DataGridTextColumn Header="Live gtd unfilled" Binding="{Binding LiveIgnoredGtdUnfilledCount}" Width="115" />
+                        <DataGridTextColumn Header="Live cancel ignored" Binding="{Binding LiveIgnoredCancelledOrdersCount}" Width="125" />
+                        <DataGridTextColumn Header="Live reject/error" Binding="{Binding LiveIgnoredRejectedOrdersCount}" Width="115" />
                         <DataGridTextColumn Header="Live won" Binding="{Binding LiveWonOrdersCount}" Width="80" />
                         <DataGridTextColumn Header="Live lost" Binding="{Binding LiveLostOrdersCount}" Width="80" />
                         <DataGridTextColumn Header="Live realized" Binding="{Binding LiveRealizedPnlUsd}" Width="100" />

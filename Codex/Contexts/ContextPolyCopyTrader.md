@@ -1,3 +1,16 @@
+## Active Update 2026-05-16 Live Ignored Breakdown
+Goal: Split the Dashboard `Live ignored` metric into actionable cause buckets.
+Status: Completed
+Done:
+- Added `LiveIgnoredGtdUnfilledCount`, `LiveIgnoredCancelledOrdersCount`, and `LiveIgnoredRejectedOrdersCount` to domain models, Dashboard rows, CSV exports, and both cumulative/recent Strategy grids.
+- Updated PostgreSQL Strategy aggregation so `Live ignored` remains the total while its subcolumns separate Live-enabled `gtd_limit_not_filled` runs, zero-fill `Cancelled`/`CancelFailed` live orders, and `Rejected`/`Error` live orders.
+- Mirrored the split in `TestAppRepository` and extended `StrategyPerformanceTests` assertions for all-time and recent windows.
+- Updated README Dashboard wording for the ignored-reason breakdown.
+- Ran a read-only production SQL smoke for `btc_up_down_5m_binance_bps_1`: current all-time `Live ignored=169` splits into `GTD unfilled=166`, `Cancel ignored=3`, `Reject/error=0`.
+Next: Deploy the updated Dashboard to inspect the new columns. The split shows the high count is almost entirely maker GTD orders that did not fill, not exchange rejections.
+Notes: Verification passed: targeted `StrategyPerformanceTests` 5/5, Dashboard Release build, Service Release build, full test project 490/490, production read-only SQL smoke, and `git diff --check` with LF/CRLF warnings only. No DB writes, service restarts, order submissions, or cancel actions were performed.
+Blockers: None.
+
 ## Active Update 2026-05-16 Live Ignored Metric
 Goal: Rename Dashboard `Live reject` to `Live ignored` and classify placed/attempted live bets that did not work there.
 Status: Completed

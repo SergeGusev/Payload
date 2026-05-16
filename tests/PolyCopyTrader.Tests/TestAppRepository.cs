@@ -1153,12 +1153,14 @@ internal sealed class TestAppRepository : IAppRepository
                         !IsLiveIgnoredSkipReason(run.SkipReason))
                     : 0) +
                 liveOrders.Count(order => order.Status == LiveOrderStatus.PreflightRejected);
-            var liveIgnored = (strategy.Settings.LiveStakes
+            var liveIgnoredGtdUnfilled = strategy.Settings.LiveStakes
                     ? runs.Count(run =>
                         string.Equals(run.Status, StrategyMarketPaperRunStatuses.Skipped, StringComparison.OrdinalIgnoreCase) &&
                         IsLiveIgnoredSkipReason(run.SkipReason))
-                    : 0) +
-                liveOrders.Count(IsLiveIgnoredOrder);
+                    : 0;
+            var liveIgnoredCancelled = liveOrders.Count(IsLiveIgnoredCancelledOrder);
+            var liveIgnoredRejected = liveOrders.Count(IsLiveIgnoredRejectedOrder);
+            var liveIgnored = liveIgnoredGtdUnfilled + liveIgnoredCancelled + liveIgnoredRejected;
             var liveSkipped = liveConditionSkipped + liveTechnicalSkipped + liveIgnored;
             var liveSettled = liveOrders
                 .Where(order => order.SettledAtUtc is not null && order.RealizedPnlUsd is not null)
@@ -1234,6 +1236,9 @@ internal sealed class TestAppRepository : IAppRepository
                 liveConditionSkipped,
                 liveTechnicalSkipped,
                 liveIgnored,
+                liveIgnoredGtdUnfilled,
+                liveIgnoredCancelled,
+                liveIgnoredRejected,
                 liveWon,
                 liveLost,
                 liveStake,
@@ -1342,10 +1347,12 @@ internal sealed class TestAppRepository : IAppRepository
                         ? skippedRuns.Count(run => !IsLiveConditionSkipReason(run.SkipReason) && !IsLiveIgnoredSkipReason(run.SkipReason))
                         : 0) +
                     liveCreatedInWindow.Count(order => order.Status == LiveOrderStatus.PreflightRejected);
-                var liveIgnored = (strategy.Settings.LiveStakes
+                var liveIgnoredGtdUnfilled = strategy.Settings.LiveStakes
                         ? skippedRuns.Count(run => IsLiveIgnoredSkipReason(run.SkipReason))
-                        : 0) +
-                    liveCreatedInWindow.Count(IsLiveIgnoredOrder);
+                        : 0;
+                var liveIgnoredCancelled = liveCreatedInWindow.Count(IsLiveIgnoredCancelledOrder);
+                var liveIgnoredRejected = liveCreatedInWindow.Count(IsLiveIgnoredRejectedOrder);
+                var liveIgnored = liveIgnoredGtdUnfilled + liveIgnoredCancelled + liveIgnoredRejected;
                 var liveSkipped = liveConditionSkipped + liveTechnicalSkipped + liveIgnored;
                 var liveSettled = liveOrders
                     .Where(order => order.SettledAtUtc is not null && order.RealizedPnlUsd is not null)
@@ -1411,6 +1418,9 @@ internal sealed class TestAppRepository : IAppRepository
                     liveConditionSkipped,
                     liveTechnicalSkipped,
                     liveIgnored,
+                    liveIgnoredGtdUnfilled,
+                    liveIgnoredCancelled,
+                    liveIgnoredRejected,
                     liveWon,
                     liveLost,
                     liveRealized,
@@ -3722,11 +3732,15 @@ internal sealed class TestAppRepository : IAppRepository
             StringComparison.OrdinalIgnoreCase);
     }
 
-    private static bool IsLiveIgnoredOrder(LiveOrder order)
+    private static bool IsLiveIgnoredCancelledOrder(LiveOrder order)
     {
-        return order.Status is LiveOrderStatus.Rejected or LiveOrderStatus.Error ||
-            ((order.Status == LiveOrderStatus.Cancelled || order.Status == LiveOrderStatus.CancelFailed) &&
-                order.FilledSize <= 0m);
+        return (order.Status == LiveOrderStatus.Cancelled || order.Status == LiveOrderStatus.CancelFailed) &&
+            order.FilledSize <= 0m;
+    }
+
+    private static bool IsLiveIgnoredRejectedOrder(LiveOrder order)
+    {
+        return order.Status is LiveOrderStatus.Rejected or LiveOrderStatus.Error;
     }
 
     private static bool SameWallet(string left, string right)
