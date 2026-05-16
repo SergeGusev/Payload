@@ -1,3 +1,16 @@
+## Active Update 2026-05-16 Binance 2 Bps Live Switch
+Goal: Move `BTC Up or Down 5m Binance 2 bps` to the controlled Paper/Live-shadow Live path.
+Status: Completed locally; production live placement requires Service deploy/restart from this commit.
+Done:
+- Added `btc_up_down_5m_binance_bps_2` to the explicit BTC Paper/Live-shadow allow-list in `BtcUpDown5mPaperStrategyProcessor`.
+- Added a regression test proving the Binance 2 bps variant creates a correlated Paper shadow order and GTD Live BUY order with `postOnly=false`, price `0.50`, and bps threshold `2`.
+- Updated README, live trading checklist, and configuration reference to document that `BTC Up or Down 5m Binance 2 bps` is now one of the explicitly allowed BTC Live-shadow variants.
+- Switched production DB strategy flags with `--set-live-stakes-only-code btc_up_down_5m_binance_bps_2`: `Strategies live-enabled: 1`, `live-disabled: 1214`, `failed: 0`.
+- Confirmed with `--print-live-shadow-state` that exactly one LiveStakes strategy is enabled: `btc_up_down_5m_binance_bps_2`, with live balance `100`, live open `0`, and live orders `0`.
+Next: Deploy/restart the Service from this commit before expecting real live orders for Binance 2 bps. The current production DB count (`1215`) also shows the Instant variants from the prior commit have not yet been seeded on the live server, so the Service deploy/restart remains needed.
+Notes: Verification passed: targeted `BtcUpDown5mPaperStrategyProcessorTests` 114/114, full test project 492/492, Service Release build 0 warnings/errors, and `git diff --check` with LF/CRLF warnings only. No live order submission or cancel action was performed by the switch command.
+Blockers: Production Service is not yet confirmed deployed/restarted with this allow-list change.
+
 ## Active Update 2026-05-16 Binance Bps Instant Variants
 Goal: Add an `Instant` copy for every BTC Up or Down 5m Binance bps strategy that prices from current ask depth instead of fixed `0.50`.
 Status: Completed

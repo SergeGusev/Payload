@@ -715,7 +715,7 @@ expiration mode, local cancel deadline, CLOB wire expiration, and fallback
 `OpeningLimitGtdTtlSeconds` (`120` by default). They
 do not create immediate fills and are not submitted to live trading unless
 the controlled Paper/Live-shadow path is explicitly enabled for an allowed BTC variant,
-currently `Skip 1` or `Binance 1 bps`. The
+currently `Skip 1`, `Binance 1 bps`, or `Binance 2 bps`. The
 generic Paper open-order pipeline then applies balanced GTD
 accounting: visible ask depth at or below the limit creates partial `paper_fills`
 rows with VWAP evidence, cumulative fills determine `PartiallyFilled` versus

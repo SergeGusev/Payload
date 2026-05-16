@@ -20,7 +20,7 @@ Live trading is disabled by default. Use this checklist before any live session.
 - `PaperTrading:RunInLiveMode` is `true` if this session should continue shadow Paper alongside Live.
 - `LiveTrading:ManualEnableCode` is `LIVE_TRADING_ENABLED`.
 - Follow leader live remains maker-only: `Execution:MakerOnly=true` and `Execution:AllowTaker=false`.
-- BTC 5-minute Live-shadow stakes are limited to the explicit allow-list: `BTC Up or Down 5m Skip 1` and `BTC Up or Down 5m Binance 1 bps`.
+- BTC 5-minute Live-shadow stakes are limited to the explicit allow-list: `BTC Up or Down 5m Skip 1`, `BTC Up or Down 5m Binance 1 bps`, and `BTC Up or Down 5m Binance 2 bps`.
 - BTC 5-minute Live-shadow stakes, if enabled per strategy, are intentional BUY-only `GTD` limit orders with `postOnly=false`; by default local cancellation is `OpeningLimitExpireBeforeMarketEndSeconds` (`60`) seconds before market close, while the CLOB wire expiration includes `ClobGtdExpirationSecurityBufferSeconds` (`60`). Any immediately marketable portion may fill as taker and the remainder can rest until GTD expiration/cancel/market close.
 - Paper/Live-shadow matching must keep asset, condition, outcome, order type, `postOnly=false`, limit price within `0.000001`, and requested size within `0.000001` shares; mismatch disables `LiveStakes` for that strategy and cancels correlated open live orders.
 - `LiveTrading:MaxOrderNotionalUsd` is tiny.
