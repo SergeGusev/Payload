@@ -1,3 +1,18 @@
+## Active Update 2026-05-16 Live Dashboard Skipped Explanation
+Goal: Explain why Dashboard Live columns, including Live skipped, are not moving.
+Status: Completed
+Done:
+- Rechecked production remote PostgreSQL read-only without printing connection strings or secrets.
+- Confirmed service is alive in `Running`/`Live`; DB time `2026-05-16T10:13:14Z`, heartbeat age about `3s`, no `last_error`.
+- Confirmed `btc_up_down_5m_binance_bps_1` is enabled with `live_stakes=true`, Paper/Live stake values `1`, and Live available balance `97`.
+- Confirmed ordinary Paper strategy activity is moving: in the last 2 hours the target strategy had `20` `Skipped` runs for `btc_reference_move_below_bps_threshold`, plus `2` `Observed` runs and the settled live-smoke run; latest Paper skip was `2026-05-16T10:10:17Z`.
+- Confirmed Live metrics are not moving because Dashboard Live columns are sourced from `live_orders`, and `Live skipped` counts only `live_orders.status IN ('PreflightRejected','Rejected','Error')`, not ordinary `strategy_market_paper_runs.status='Skipped'`.
+- Confirmed there were no new real Live exchange attempts after `2026-05-16T09:15:07Z`; the last hour had `0` Live skipped and `1` Live settled, while 6h/24h still show the older `12` preflight rejections and `1` settled live order.
+- Confirmed code path: Paper/Live shadow decision rows and live preflight are created only after the strategy reaches an opening-limit entry candidate and `ShouldRunPaperLiveShadowTest` is true; current `btc_reference_move_below_bps_threshold` rejects happen before that, so they update only Paper skipped metrics.
+Next: If desired, change the Dashboard definition so Live skipped for Live-shadow strategies also counts skipped Paper runs while `live_stakes=true`, or add a separate Live candidate/Live preflight column to avoid mixing strategy skips with exchange/preflight skips.
+Notes: Diagnostic only. No DB writes, service restarts, order submissions, cancel actions, or product code changes were performed.
+Blockers: None; this is a metric-definition mismatch, not a stalled service.
+
 ## Active Update 2026-05-16 Live Stake Settlement Check
 Goal: Recheck how production is running and what happened to the Live stake.
 Status: Completed
