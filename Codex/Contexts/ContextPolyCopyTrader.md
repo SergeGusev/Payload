@@ -1,3 +1,15 @@
+## Active Update 2026-05-16 Certificate Check Expected UI Behavior
+Goal: Explain what should happen after pressing Dashboard `Check certificates`.
+Status: Completed
+Done:
+- Confirmed the button starts an async certificate check, sets `CommandStatus` to `Checking Polymarket certificates...`, and then populates the `Certificates` tab.
+- Expected successful service-process result: rows for Data API, CLOB, Gamma API, Geoblock, and Market WebSocket with `Source=service process`; `Status` should be `OK` or, for pinned certificates with standard TLS issues but matching pin, `Warning`.
+- If the service endpoint is missing/unreachable, Dashboard adds a warning row saying service IPC is unavailable and falls back to `Source=Dashboard process`; that checks Dashboard networking/config only, not the 24/7 service process.
+- Errors appear either as `Status=Error` rows in `Certificates`, `CommandStatus=Certificate check failed: ...`, or a row in `Dashboard Errors`.
+Next: Inspect the `Certificates` tab and `CommandStatus`; deploy/restart Service too if the tab shows `Dashboard process` but the desired check is service-process validation.
+Notes: Answer-only clarification; no product code changes. No secrets, DB writes, service restarts, orders, or cancel actions.
+Blockers: None.
+
 ## Active Update 2026-05-16 Certificate Check Deployment Scope
 Goal: Clarify whether the new Dashboard certificate check requires deploying the Windows Service.
 Status: Completed

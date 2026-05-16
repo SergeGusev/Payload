@@ -80,3 +80,10 @@ Request:
 
 Result:
 Clarified that Dashboard-only deployment is enough to show the `Check certificates` button and run the fallback Dashboard-process TLS/pin check, but it will not verify the actual Windows Service process because the service-side `GET /certificates` IPC endpoint was also added in commit `5617f91`. To get `source=service process` in the `Certificates` tab and validate the configuration used by the 24/7 service, the Windows Service must also be deployed/restarted from the same commit.
+
+## 2026-05-16T08:33:15.0791128+00:00
+Request:
+Я нажал на Check certificates. Что должно было произойти?
+
+Result:
+Explained that the button should not open a modal or submit any orders. It starts an async TLS/pin check, updates `CommandStatus`, and fills the Dashboard `Certificates` tab with one row per Polymarket endpoint. A full service-process check shows `Source=service process`; if the updated service IPC endpoint is unavailable, Dashboard writes a warning row and falls back to `Source=Dashboard process`, which verifies only the Dashboard process networking/configuration. `Status=Error` rows, `Certificate check failed: ...`, or `Dashboard Errors` indicate a failed probe or validation issue.
