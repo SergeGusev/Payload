@@ -1,3 +1,15 @@
+## Active Update 2026-05-16 Secret Transfer Account Check
+Goal: Determine which Windows account received the previously transferred server secrets.
+Status: Completed
+Done:
+- Reviewed the old Net48 secret transfer scripts and project history.
+- `scripts/Copy-Net48-SecretsToNewServer.ps1` and `scripts/Import-Net48-SecretsPackage.ps1` write transferred secret values as machine-level environment variables, not as per-user Credential Manager entries, so those transferred values were not created under a specific Windows user account.
+- `scripts/Setup-Net48-NewServerSecrets.ps1 -SecretStore CredentialManager` and `--bootstrap-polymarket-api-credentials` create Credential Manager entries under the current Windows user running the command; historical server paths show `J:\Users\Administrator`, but the project memory does not prove that current production Credential Manager secrets were written under the service account.
+- Attempted read-only remote `sc.exe \\192.168.0.101 qc/queryex PolyCopyTrader.Service`, but both timed out from this machine.
+Next: On the VPS, run `sc.exe qc PolyCopyTrader.Service` to identify the actual service account, then test/readiness under that same account or switch current .NET 10 production config to environment-secret provider using machine-level secret variables.
+Notes: No secrets were read or printed. No DB writes, service restarts, order submissions, cancel actions, or product code changes were performed.
+Blockers: Direct confirmation requires VPS access because remote service-control query timed out from this session.
+
 ## Active Update 2026-05-16 Production Live Setup Checklist
 Goal: Explain what remains to configure on the production server before Binance 1 bps Live-shadow can submit real orders.
 Status: Completed

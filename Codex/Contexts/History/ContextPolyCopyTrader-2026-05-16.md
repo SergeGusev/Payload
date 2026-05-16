@@ -52,3 +52,10 @@ Request:
 
 Result:
 Answered that the current blocker is production runtime setup, not strategy code or an exchange rejection. The required VPS setup is to enable the live gate for the service process (`Bot__EnableLiveTrading=true` with `Bot__Mode=Live` and `LiveTrading__ManualEnableCode=LIVE_TRADING_ENABLED`), make the Polymarket Credential Manager secrets visible to the same Windows account that runs the service, bootstrap or store L2 API credentials without printing secrets, pass `--auth-readiness-smoke`, `--dry-run-signing-smoke`, and `--clob-authenticated-read-smoke`, fix Windows/CLOB clock drift, and raise or clear the relevant live exposure caps enough for the `$3` Binance 1 bps shadow order while keeping tiny order/open-order caps. No DB writes, service restarts, order submissions, cancel actions, or product code changes were performed.
+
+## 2026-05-16T07:59:43.0257906+00:00
+Request:
+Ты мне делал перенос секретов на сервер. Под каким аккаунтом они там создавались?
+
+Result:
+Reviewed the old secret-transfer scripts and project history without reading or printing secret values. The Net48 transfer path (`Copy-Net48-SecretsToNewServer.ps1` and encrypted package import) wrote secrets as machine-level environment variables, not under a per-user Credential Manager account. Credential Manager entries, when created by `Setup-Net48-NewServerSecrets.ps1 -SecretStore CredentialManager` or the bootstrap command, are created under the current Windows user running the command; historical server paths show `J:\Users\Administrator`, but the project memory does not prove that current production Credential Manager secrets were written under the Windows Service account. A read-only remote `sc.exe \\192.168.0.101 qc/queryex PolyCopyTrader.Service` attempt timed out, so direct service-account confirmation requires VPS access.
