@@ -59,3 +59,10 @@ Request:
 
 Result:
 Reviewed the old secret-transfer scripts and project history without reading or printing secret values. The Net48 transfer path (`Copy-Net48-SecretsToNewServer.ps1` and encrypted package import) wrote secrets as machine-level environment variables, not under a per-user Credential Manager account. Credential Manager entries, when created by `Setup-Net48-NewServerSecrets.ps1 -SecretStore CredentialManager` or the bootstrap command, are created under the current Windows user running the command; historical server paths show `J:\Users\Administrator`, but the project memory does not prove that current production Credential Manager secrets were written under the Windows Service account. A read-only remote `sc.exe \\192.168.0.101 qc/queryex PolyCopyTrader.Service` attempt timed out, so direct service-account confirmation requires VPS access.
+
+## 2026-05-16T08:12:40.6682588+00:00
+Request:
+Я открыл Credential Manager на сервере. Там вообще не вижу ни одного секрета, связанного с PolyMarket
+
+Result:
+Explained that an empty server Credential Manager means the current Credential Manager provider has no PolyMarket secrets to read. Rechecked the transfer scripts and current service configuration: the previous Net48 transfer/import path wrote secrets as machine-level environment variables, while the current .NET 10 service appsettings uses `PolymarketAuth:SecretProvider=CredentialManager` unless overridden by unprefixed .NET environment variables. Prepared safe VPS commands that check only the presence of machine environment variables and outlined the two valid fixes: switch the service to `PolymarketAuth__SecretProvider=Environment` if `POLYCOPYTRADER_POLYMARKET_*` machine variables exist, or recreate/import secrets under the actual Windows Service account if they do not.

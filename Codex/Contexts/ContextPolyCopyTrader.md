@@ -1,3 +1,15 @@
+## Active Update 2026-05-16 Server Credential Manager Empty Finding
+Goal: Explain why the server Credential Manager has no PolyMarket secrets and what that means for current .NET 10 Live auth.
+Status: Completed
+Done:
+- User confirmed the server Credential Manager shows no PolyMarket-related secrets.
+- Rechecked the secret-transfer scripts: the Net48 transfer/import path stored transferred secrets as machine-level environment variables, not as Credential Manager entries.
+- Confirmed the current .NET 10 service configuration loads unprefixed environment variables and has `PolymarketAuth:SecretProvider=CredentialManager` in service `appsettings.json`; it does not bind the old `POLYCOPYTRADER_` config-prefix variables used by the Net48 host.
+- Prepared safe VPS checks that only report whether machine environment secret variables exist, and the unprefixed .NET 10 overrides needed to switch the running service to the environment secret provider.
+Next: On the VPS, check machine environment booleans for `POLYCOPYTRADER_POLYMARKET_*` values, then either switch the .NET 10 service to `PolymarketAuth__SecretProvider=Environment` with unprefixed config overrides or recreate Credential Manager secrets under the actual Windows Service account.
+Notes: No secrets were read or printed. No DB writes, service restarts, order submissions, cancel actions, or product code changes were performed.
+Blockers: VPS access is required to inspect machine environment variables and apply runtime configuration.
+
 ## Active Update 2026-05-16 Secret Transfer Account Check
 Goal: Determine which Windows account received the previously transferred server secrets.
 Status: Completed
