@@ -1,3 +1,14 @@
+## Active Update 2026-05-16 Live Tech Skip Definition
+Goal: Explain what the Dashboard `Live tech skip` metric includes.
+Status: Completed
+Done:
+- Checked current Storage SQL and TestAppRepository aggregation logic for `LiveTechnicalSkippedOrdersCount`.
+- Confirmed `Live tech skip` is the sum of non-condition skipped strategy runs while the strategy currently has `live_stakes=true`, plus `live_orders.status='PreflightRejected'`.
+- Confirmed `Rejected`/`Error` live orders are counted separately as `Live reject`, not `Live tech skip`.
+Next: None.
+Notes: Read-only code inspection only; no product code, DB, service, or order changes.
+Blockers: None.
+
 ## Active Update 2026-05-16 Live Strategy Run Ordering
 Goal: Prioritize Live-enabled BTC strategy runs when multiple strategies are due for processing at the same time without changing existing time ordering.
 Status: Completed

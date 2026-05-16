@@ -150,3 +150,10 @@ Request:
 
 Result:
 Added Live-stakes tie-breaker ordering for multi-strategy BTC run processing without changing existing time and priority ordering. PostgreSQL selection now joins `strategies` and orders `strategy.live_stakes DESC` after the existing due/market-end/settlement-priority keys for due entries, earliest-due pre-open entries, pre-open sell exits, and settlements. Mirrored the same ordering in `TestAppRepository` and added `StrategyRunOrderingTests` covering entry-due ties, earliest-due batches, pre-open sell-exit ties, settlement ties, and preserving an earlier due time ahead of a Live tie. Verification passed: Service Release build, targeted `StrategyRunOrderingTests` 4/4, full test project 490/490, and `git diff --check` with LF/CRLF warnings only. No DB writes, service restarts, order submissions, or cancel actions were performed. The updated Service must be deployed/restarted on the VPS for the new runtime ordering to take effect.
+
+## 2026-05-16T10:58:24.8738168Z
+Request:
+Что включает Live tech skip ?
+
+Result:
+Inspected current Storage SQL and TestAppRepository aggregation. Answered that `Live tech skip` includes skipped strategy runs for currently Live-enabled strategies when the `skip_reason` is not classified as a condition skip, plus `live_orders.status='PreflightRejected'`. Clarified that `Rejected` and `Error` live orders are counted separately as `Live reject`, while threshold/edge/no-candidate/price-cap style condition misses are counted as `Live cond skip`. No product code, DB, service, or order changes were made.
