@@ -1,3 +1,18 @@
+## Active Update 2026-05-16 Binance 1 bps Live Shadow
+Goal: Start `BTC Up or Down 5m Binance 1 bps` in Live-shadow mode with strict Paper/Live matching.
+Status: Blocked
+Done:
+- Added `btc_up_down_5m_binance_bps_1` to the explicit BTC Paper/Live-shadow allow-list while keeping all other BTC variants outside that path except existing `btc_up_down_5m_skip_1`.
+- Tightened Paper/Live-shadow shape validation in live maintenance to `0.000001` price tolerance and `0.000001` requested-size tolerance; mismatches still record a discrepancy, disable that strategy's `LiveStakes`, and cancel correlated open live orders.
+- Added regression tests for Binance 1 bps Live-shadow order creation and strict mismatch shutdown.
+- Updated README, configuration reference, and live trading checklist to document the actual allow-list and strict matching.
+- Verified remote PostgreSQL `192.168.0.101` before enabling: `1216` strategies, `live_stakes_enabled=0`, target enabled with `live_stake_amount=1.00000000`, `live_available_balance=100.00000000`, and `open_live_orders=0`.
+- Updated remote PostgreSQL so only `btc_up_down_5m_binance_bps_1` has `live_stakes=true`; verification showed `live_stakes_enabled=1`, target live stake `1`, target live balance `100`, and `open_live_orders=0`.
+- Confirmed remote service heartbeat is alive and `Mode=Live`, but still running old artifact `info=1.0.0+16a032c64f151ff052264ed18273a52cd923fdd0`.
+Next: Deploy/restart the production service from the new commit, then recheck heartbeat version, `--print-live-shadow-state`, and fresh `paper_live_shadow_test` Paper/Live pairs.
+Notes: Verification passed: targeted tests `BtcUpDown5mPaperStrategyProcessorTests|LiveTradingGatingTests` passed 125/125; `dotnet build src\PolyCopyTrader.Service\PolyCopyTrader.Service.csproj -c Release --no-restore` passed with 0 warnings/errors; full `dotnet test tests\PolyCopyTrader.Tests\PolyCopyTrader.Tests.csproj -c Release --no-restore` passed 482/482. WinRM responds on `192.168.0.101:5985`, but `Invoke-Command` without explicit credentials fails with `0x8009030e`; `\\192.168.0.101\c$` is unavailable, so this session could not deploy or restart the Windows Service. Remote IPC `5118` remains externally unreachable as expected for loopback IPC. No order submissions or cancel actions were performed.
+Blockers: Production service deployment/restart requires user-side VPS access or credentials not available in this session; until then the DB flag is staged but the running old service will not submit Binance 1 bps Live-shadow orders.
+
 ## Active Update 2026-05-16 BTC 5m Focused Workers
 Goal: Comment out background tasks not related to BTC Up or Down 5m strategy operation.
 Status: Completed

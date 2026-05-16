@@ -45,6 +45,11 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
     private const string BtcGtdLimitExecutionSource = "btc_updown5m_gtd_limit";
     private const string BtcPreOpenSellExitExecutionSource = "btc_preopen_sell_exit";
     private const string BtcSkip1VariantCode = "btc_up_down_5m_skip_1";
+    private static readonly string[] PaperLiveShadowAllowedVariantCodes =
+    [
+        BtcSkip1VariantCode,
+        StrategyIds.BtcUpDown5mBinanceBps1Code
+    ];
     private const string OpeningLimitPricingMode = "paper_gtd_limit";
     private const string OpeningLimitOrderType = "GTD";
     private const decimal AlwaysDirectionLimitPrice = 0.45m;
@@ -2383,8 +2388,17 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
         BtcUpDown5mStrategyVariant variant,
         StrategyRuntimeSettings settings)
     {
-        return settings.LiveStakes &&
-            string.Equals(variant.Code, BtcSkip1VariantCode, StringComparison.OrdinalIgnoreCase);
+        return settings.LiveStakes && IsPaperLiveShadowAllowedVariant(variant);
+    }
+
+    private static bool IsPaperLiveShadowAllowedVariant(BtcUpDown5mStrategyVariant variant)
+    {
+        return PaperLiveShadowAllowedVariantCodes.Contains(variant.Code, StringComparer.OrdinalIgnoreCase);
+    }
+
+    private static string FormatPaperLiveShadowAllowedVariantCodes()
+    {
+        return string.Join(", ", PaperLiveShadowAllowedVariantCodes);
     }
 
     private static bool CanSubmitLegacyBtcLiveOrder(BtcUpDown5mStrategyVariant variant)
@@ -8118,9 +8132,9 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
         CancellationToken cancellationToken)
     {
         var validation = new List<string>();
-        if (!string.Equals(variant.Code, BtcSkip1VariantCode, StringComparison.OrdinalIgnoreCase))
+        if (!IsPaperLiveShadowAllowedVariant(variant))
         {
-            validation.Add("Paper/Live shadow test is allowed only for BTC Up or Down 5m Skip 1.");
+            validation.Add($"Paper/Live shadow test is allowed only for: {FormatPaperLiveShadowAllowedVariantCodes()}.");
         }
 
         if (botOptions.Mode != BotMode.Live)

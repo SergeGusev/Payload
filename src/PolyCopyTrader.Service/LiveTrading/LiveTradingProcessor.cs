@@ -24,8 +24,8 @@ public sealed class LiveTradingProcessor(
     PolymarketAuthOptions? authOptions = null) : ILiveTradingProcessor
 {
     private const string PaperLiveShadowTestSource = "paper_live_shadow_test";
-    private const decimal ShadowPriceTolerance = 0.01m;
-    private const decimal ShadowSizeTolerance = 0.01m;
+    private const decimal ShadowPriceTolerance = 0.000001m;
+    private const decimal ShadowSizeTolerance = 0.000001m;
     private const decimal FillSizeTolerance = 0.000001m;
 
     public async Task<LiveTradingProcessingResult> ProcessOpenOrdersAsync(CancellationToken cancellationToken = default)

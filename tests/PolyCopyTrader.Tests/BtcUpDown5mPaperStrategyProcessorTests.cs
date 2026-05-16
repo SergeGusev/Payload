@@ -5099,6 +5099,77 @@ public sealed class BtcUpDown5mPaperStrategyProcessorTests
     }
 
     [Fact]
+    public async Task ProcessAsync_BinanceBps1LiveStakeCreatesPaperShadowAndGtdLiveOrder()
+    {
+        var now = DateTimeOffset.UtcNow;
+        var repository = new TestAppRepository();
+        repository.StrategySettings[BinanceBps1Variant.Id] = StrategyRuntimeSettings.Default(BinanceBps1Variant.Id) with
+        {
+            LiveStakes = true,
+            LiveStakeAmount = 2.50m,
+            LiveAvailableBalance = 100m,
+            PaperStakeAmount = 2.50m
+        };
+        repository.PolymarketGammaMarkets.Add(CreateMarket(
+            now,
+            now.AddMinutes(5),
+            upPrice: 0.62m,
+            downPrice: 0.38m));
+        AddBtcOddsStartTick(repository, "market-1", now, startPriceUsd: 100m);
+        var tradingClient = new CapturingTradingClient();
+        var processor = CreateLiveProcessorWithBtcReference(
+            repository,
+            tradingClient,
+            100.02m,
+            [100m],
+            [],
+            BinanceBps1Variant.Code);
+
+        var result = await processor.ProcessAsync();
+
+        Assert.Equal(1, result.EntriesPlaced);
+        Assert.Equal(1, tradingClient.PlaceCalls);
+        Assert.NotNull(tradingClient.LastRequest);
+        var request = tradingClient.LastRequest;
+        Assert.Equal(ClobV2OrderType.GTD, request.OrderType);
+        Assert.False(request.PostOnly);
+        Assert.NotNull(request.GtdExpirationUtc);
+
+        var liveOrder = Assert.Single(repository.LiveOrders);
+        Assert.Equal(BinanceBps1Variant.Id, liveOrder.StrategyId);
+        Assert.Equal("asset-up", liveOrder.AssetId);
+        Assert.Equal("Up", liveOrder.Outcome);
+        Assert.Equal("GTD", liveOrder.OrderType);
+        Assert.Equal(LiveOrderStatus.Live, liveOrder.Status);
+        Assert.Equal(0.50m, liveOrder.Price);
+        Assert.Equal("paper_live_shadow_test", liveOrder.ExecutionSource);
+        Assert.False(liveOrder.PostOnly);
+        Assert.NotNull(liveOrder.CorrelationId);
+
+        var paperOrder = Assert.Single(repository.PaperOrders);
+        Assert.Equal(BinanceBps1Variant.Id, paperOrder.StrategyId);
+        Assert.Equal(PaperOrderStatus.Pending, paperOrder.Status);
+        Assert.Equal("paper_live_shadow_test", paperOrder.ExecutionSource);
+        Assert.Equal(liveOrder.CorrelationId, paperOrder.CorrelationId);
+        Assert.Equal(liveOrder.PaperOrderId, paperOrder.Id);
+        Assert.Equal("asset-up", paperOrder.AssetId);
+        Assert.Equal("Up", paperOrder.Outcome);
+        Assert.Equal(0.50m, paperOrder.Price);
+        Assert.Equal(liveOrder.SizeShares, paperOrder.SizeShares);
+        Assert.Contains("\"decision_source\":\"binance_trade_stream_market_start_relative\"", paperOrder.RawDecisionJson, StringComparison.Ordinal);
+        Assert.Contains("\"btc_min_move_from_start_bps\":1", paperOrder.RawDecisionJson, StringComparison.Ordinal);
+        Assert.Contains("\"selected_direction\":\"Up\"", paperOrder.RawDecisionJson, StringComparison.Ordinal);
+        Assert.Contains("\"paper_live_shadow_test\":true", paperOrder.RawDecisionJson, StringComparison.Ordinal);
+
+        var decision = Assert.Single(repository.PaperLiveShadowDecisions);
+        Assert.Equal(BinanceBps1Variant.Id, decision.StrategyId);
+        Assert.Equal(liveOrder.CorrelationId, decision.CorrelationId);
+        Assert.Equal(paperOrder.Id, decision.PaperOrderId);
+        Assert.Equal(liveOrder.Id, decision.LiveOrderId);
+        Assert.Equal("live_submitted", decision.Status);
+    }
+
+    [Fact]
     public async Task ProcessAsync_Skip1LiveStakeUsesMatchedSubmitAmountsForActualFill()
     {
         var now = DateTimeOffset.UtcNow;
@@ -5276,6 +5347,23 @@ public sealed class BtcUpDown5mPaperStrategyProcessorTests
         IReadOnlyList<OrderBookSnapshot> clobOrderBooks,
         params string[] enabledVariantCodes)
     {
+        return CreateLiveProcessorWithBtcReference(
+            repository,
+            tradingClient,
+            100m,
+            [100m],
+            clobOrderBooks,
+            enabledVariantCodes);
+    }
+
+    private static BtcUpDown5mPaperStrategyProcessor CreateLiveProcessorWithBtcReference(
+        TestAppRepository repository,
+        CapturingTradingClient tradingClient,
+        decimal currentBtcUsd,
+        IReadOnlyList<decimal> cachedBtcUsd,
+        IReadOnlyList<OrderBookSnapshot> clobOrderBooks,
+        params string[] enabledVariantCodes)
+    {
         var marketDataWebSocketOptions = new MarketDataWebSocketOptions { StaleAfterSeconds = 30 };
         var marketDataCache = new MarketDataCache(marketDataWebSocketOptions);
         var orderBooks = DefaultOrderBooks();
@@ -5333,8 +5421,8 @@ public sealed class BtcUpDown5mPaperStrategyProcessorTests
             new PassGeoClient(),
             tradingClient,
             new ReadyAuthService(),
-            new FakeBtcUsdReferencePriceClient(100m),
-            CreateBtcUsdReferenceCache(100m),
+            new FakeBtcUsdReferencePriceClient(currentBtcUsd),
+            CreateBtcUsdReferenceCache(cachedBtcUsd),
             marketDataCache,
             new ActiveMarketAssetSubscriptionRegistry(),
             new ExposureSnapshotCache(repository),
