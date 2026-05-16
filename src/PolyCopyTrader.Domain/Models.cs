@@ -1198,10 +1198,15 @@ public static class StrategyIds
         variants.Add(CreateBtcUpDown5mBinanceVariant());
         for (var thresholdTenths = 1; thresholdTenths <= 50; thresholdTenths++)
         {
+            var minMoveBps = thresholdTenths / 10m;
             variants.Add(CreateBtcUpDown5mBinanceBpsThresholdVariant(
                 GetBtcUpDown5mBinanceBpsThresholdId(thresholdTenths),
                 GetBtcUpDown5mBinanceBpsThresholdCode(thresholdTenths),
-                thresholdTenths / 10m));
+                minMoveBps));
+            variants.Add(CreateBtcUpDown5mBinanceBpsThresholdInstantVariant(
+                GetBtcUpDown5mBinanceBpsThresholdInstantId(thresholdTenths),
+                GetBtcUpDown5mBinanceBpsThresholdInstantCode(thresholdTenths),
+                minMoveBps));
         }
 
         variants.Add(CreateBtcUpDown5mBinanceFixedPriceVariant(BtcUpDown5mBinance45, BtcUpDown5mBinance45Code, 45));
@@ -1413,6 +1418,26 @@ public static class StrategyIds
             minMoveBps);
     }
 
+    private static BtcUpDown5mStrategyVariant CreateBtcUpDown5mBinanceBpsThresholdInstantVariant(
+        Guid id,
+        string code,
+        decimal minMoveBps)
+    {
+        var thresholdName = minMoveBps.ToString("0.###", CultureInfo.InvariantCulture);
+        return new BtcUpDown5mStrategyVariant(
+            id,
+            code,
+            $"BTC Up or Down 5m Binance {thresholdName} bps Instant",
+            $"After BTC 5m trading starts, compare the latest Binance BTC/USDT trade-stream price with the archived market-start reference; skip unless the absolute move from start is at least {thresholdName} bps; above start buys Up, below start buys Down. Paper entry is a GTD limit BUY priced from current executable ask depth so the order can fill immediately; settlement uses only actually filled shares.",
+            BtcUpDown5mStrategyDirection.Dynamic,
+            0,
+            BtcUpDown5mStrategyBehavior.BinanceStartRelativeBpsThresholdInstant,
+            minMoveBps >= 1m && minMoveBps == decimal.Truncate(minMoveBps)
+                ? (int)minMoveBps
+                : 0,
+            minMoveBps);
+    }
+
     private static Guid GetBtcUpDown5mBinanceBpsThresholdId(int thresholdTenths)
     {
         return thresholdTenths switch
@@ -1433,6 +1458,11 @@ public static class StrategyIds
         };
     }
 
+    private static Guid GetBtcUpDown5mBinanceBpsThresholdInstantId(int thresholdTenths)
+    {
+        return Guid.Parse($"b7c50005-0000-4000-8026-{100 + thresholdTenths:000000000000}");
+    }
+
     private static string GetBtcUpDown5mBinanceBpsThresholdCode(int thresholdTenths)
     {
         var wholeBps = thresholdTenths / 10;
@@ -1442,6 +1472,11 @@ public static class StrategyIds
             : wholeBps.ToString(CultureInfo.InvariantCulture) + "_" + fractionalTenths.ToString(CultureInfo.InvariantCulture);
 
         return "btc_up_down_5m_binance_bps_" + suffix;
+    }
+
+    private static string GetBtcUpDown5mBinanceBpsThresholdInstantCode(int thresholdTenths)
+    {
+        return GetBtcUpDown5mBinanceBpsThresholdCode(thresholdTenths) + "_instant";
     }
 
     private static BtcUpDown5mStrategyVariant CreateBtcUpDown5mBinanceCleverVariant()
@@ -1776,6 +1811,7 @@ public enum BtcUpDown5mStrategyBehavior
     BinanceStartRelative,
     BinanceStartRelativeFixedPrice,
     BinanceStartRelativeBpsThreshold,
+    BinanceStartRelativeBpsThresholdInstant,
     BinanceStartRelativeClever,
     BinanceStartRelativeCleverMargin,
     BinanceStartRelativeEdge,

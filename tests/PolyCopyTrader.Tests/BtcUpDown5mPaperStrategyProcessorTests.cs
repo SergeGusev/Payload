@@ -163,6 +163,9 @@ public sealed class BtcUpDown5mPaperStrategyProcessorTests
     private static readonly BtcUpDown5mStrategyVariant BinanceBps5Variant =
         StrategyIds.BtcUpDown5mVariants.Single(variant => variant.Code == "btc_up_down_5m_binance_bps_5");
 
+    private static readonly BtcUpDown5mStrategyVariant BinanceBps1InstantVariant =
+        StrategyIds.BtcUpDown5mVariants.Single(variant => variant.Code == "btc_up_down_5m_binance_bps_1_instant");
+
     private static readonly BtcUpDown5mStrategyVariant BinanceCleverVariant =
         StrategyIds.BtcUpDown5mVariants.Single(variant => variant.Code == "btc_up_down_5m_binance_clever");
 
@@ -193,7 +196,7 @@ public sealed class BtcUpDown5mPaperStrategyProcessorTests
     [Fact]
     public void StrategyIds_IncludeStandardMartinAndGammaBtcVariants()
     {
-        Assert.Equal(1214, StrategyIds.BtcUpDown5mVariants.Count);
+        Assert.Equal(1264, StrategyIds.BtcUpDown5mVariants.Count);
         Assert.Equal(StrategyIds.BtcUpDown5mVariants.Count, StrategyIds.BtcUpDown5mVariants.Select(variant => variant.Id).Distinct().Count());
         Assert.Equal(StrategyIds.BtcUpDown5mVariants.Count, StrategyIds.BtcUpDown5mVariants.Select(variant => variant.Code).Distinct().Count());
         Assert.Equal(18, StrategyIds.BtcUpDown5mVariants.Count(variant => variant.Behavior == BtcUpDown5mStrategyBehavior.Standard));
@@ -210,6 +213,7 @@ public sealed class BtcUpDown5mPaperStrategyProcessorTests
         Assert.Single(StrategyIds.BtcUpDown5mVariants, variant => variant.Behavior == BtcUpDown5mStrategyBehavior.BinanceStartRelative);
         Assert.Equal(3, StrategyIds.BtcUpDown5mVariants.Count(variant => variant.Behavior == BtcUpDown5mStrategyBehavior.BinanceStartRelativeFixedPrice));
         Assert.Equal(50, StrategyIds.BtcUpDown5mVariants.Count(variant => variant.Behavior == BtcUpDown5mStrategyBehavior.BinanceStartRelativeBpsThreshold));
+        Assert.Equal(50, StrategyIds.BtcUpDown5mVariants.Count(variant => variant.Behavior == BtcUpDown5mStrategyBehavior.BinanceStartRelativeBpsThresholdInstant));
         Assert.Single(StrategyIds.BtcUpDown5mVariants, variant => variant.Behavior == BtcUpDown5mStrategyBehavior.BinanceStartRelativeClever);
         Assert.Equal(2, StrategyIds.BtcUpDown5mVariants.Count(variant => variant.Behavior == BtcUpDown5mStrategyBehavior.BinanceStartRelativeCleverMargin));
         Assert.Equal(3, StrategyIds.BtcUpDown5mVariants.Count(variant => variant.Behavior == BtcUpDown5mStrategyBehavior.BinanceStartRelativeEdge));
@@ -289,8 +293,18 @@ public sealed class BtcUpDown5mPaperStrategyProcessorTests
                 .Select(variant => variant.DecisionThresholdBps.GetValueOrDefault())
                 .OrderBy(threshold => threshold)
                 .ToArray());
+        Assert.Equal(
+            Enumerable.Range(1, 50).Select(thresholdTenths => thresholdTenths / 10m).ToArray(),
+            StrategyIds.BtcUpDown5mVariants
+                .Where(variant => variant.Behavior == BtcUpDown5mStrategyBehavior.BinanceStartRelativeBpsThresholdInstant)
+                .Select(variant => variant.DecisionThresholdBps.GetValueOrDefault())
+                .OrderBy(threshold => threshold)
+                .ToArray());
         Assert.Equal("BTC Up or Down 5m Binance 1 bps", BinanceBps1Variant.Name);
         Assert.Equal(1, BinanceBps1Variant.DecisionDepth);
+        Assert.Equal("BTC Up or Down 5m Binance 1 bps Instant", BinanceBps1InstantVariant.Name);
+        Assert.Equal(1m, BinanceBps1InstantVariant.DecisionThresholdBps);
+        Assert.Equal(1, BinanceBps1InstantVariant.DecisionDepth);
         Assert.Equal("BTC Up or Down 5m Binance 1.1 bps", BinanceBps11Variant.Name);
         Assert.Equal(1.1m, BinanceBps11Variant.DecisionThresholdBps);
         Assert.Equal(0, BinanceBps11Variant.DecisionDepth);
@@ -3465,6 +3479,60 @@ public sealed class BtcUpDown5mPaperStrategyProcessorTests
         Assert.Contains("\"btc_abs_move_from_start_bps\":0.6", order.RawDecisionJson, StringComparison.Ordinal);
         Assert.Contains("\"btc_min_move_from_start_bps\":0.5", order.RawDecisionJson, StringComparison.Ordinal);
         Assert.Contains("\"selected_direction\":\"Up\"", order.RawDecisionJson, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task ProcessAsync_BinanceBpsInstantPricesOpeningLimitFromExecutableAskDepth()
+    {
+        var now = DateTimeOffset.UtcNow;
+        var repository = new TestAppRepository();
+        repository.PolymarketGammaMarkets.Add(CreateMarket(
+            now,
+            now.AddMinutes(5),
+            upPrice: 0.62m,
+            downPrice: 0.38m));
+        AddBtcOddsStartTick(repository, "market-1", now, startPriceUsd: 100m);
+        OrderBookSnapshot[] orderBooks =
+        [
+            OrderBook(
+                "asset-up",
+                [new OrderBookLevel(0.60m, 100m)],
+                [new OrderBookLevel(0.61m, 4m), new OrderBookLevel(0.64m, 20m)],
+                now,
+                minOrderSize: 5m),
+            OrderBook(
+                "asset-down",
+                [new OrderBookLevel(0.37m, 100m)],
+                [new OrderBookLevel(0.39m, 100m)],
+                now,
+                minOrderSize: 5m)
+        ];
+        var processor = CreateProcessorCoreWithOptions(
+            repository,
+            [],
+            orderBooks,
+            _ => { },
+            Array.Empty<OrderBookSnapshot>(),
+            CreateBtcOptions(paperTakerPricingEnabled: false, [BinanceBps1InstantVariant.Code]),
+            new FakeBtcUsdReferencePriceClient(100.02m),
+            CreateBtcUsdReferenceCache(100m));
+
+        var result = await processor.ProcessAsync();
+
+        Assert.Equal(1, result.EntriesPlaced);
+        var run = Assert.Single(repository.StrategyMarketPaperRuns);
+        Assert.Equal(BinanceBps1InstantVariant.Id, run.StrategyId);
+        Assert.Equal("asset-up", run.SelectedAssetId);
+        Assert.Equal("Up", run.SelectedOutcome);
+        Assert.Equal(0.64m, run.EntryPrice);
+
+        var order = Assert.Single(repository.PaperOrders);
+        Assert.Equal(BinanceBps1InstantVariant.Id, order.StrategyId);
+        Assert.Equal("asset-up", order.AssetId);
+        Assert.Equal(0.64m, order.Price);
+        Assert.Contains("\"opening_limit_price_mode\":\"instant_executable_ask_depth\"", order.RawDecisionJson, StringComparison.Ordinal);
+        Assert.Contains("\"instant_target_size_shares\":6.25", order.RawDecisionJson, StringComparison.Ordinal);
+        Assert.Contains("\"paper_gtd_initial_executable_ask_shares\":6.25", order.RawDecisionJson, StringComparison.Ordinal);
     }
 
     [Fact]

@@ -2075,6 +2075,39 @@ ON CONFLICT (id) DO UPDATE SET
     updated_at_utc = excluded.updated_at_utc;
 
 INSERT INTO strategies (id, code, name, description, enabled, paper_stake_amount, created_at_utc, updated_at_utc)
+WITH thresholds(threshold_tenths) AS (
+    SELECT generate_series(1, 50)
+),
+formatted AS (
+    SELECT
+        threshold_tenths,
+        CASE
+            WHEN threshold_tenths % 10 = 0 THEN (threshold_tenths / 10)::text
+            ELSE (threshold_tenths / 10)::text || '.' || (threshold_tenths % 10)::text
+        END AS threshold_name,
+        CASE
+            WHEN threshold_tenths % 10 = 0 THEN (threshold_tenths / 10)::text
+            ELSE (threshold_tenths / 10)::text || '_' || (threshold_tenths % 10)::text
+        END AS code_suffix
+    FROM thresholds
+)
+SELECT
+    ('b7c50005-0000-4000-8026-' || lpad((100 + threshold_tenths)::text, 12, '0'))::uuid,
+    'btc_up_down_5m_binance_bps_' || code_suffix || '_instant',
+    'BTC Up or Down 5m Binance ' || threshold_name || ' bps Instant',
+    'After BTC 5m trading starts, compare the latest Binance BTC/USDT trade-stream price with the archived market-start reference; skip unless the absolute move from start is at least ' || threshold_name || ' bps; above start buys Up, below start buys Down. Paper entry is a GTD limit BUY priced from current executable ask depth so the order can fill immediately; settlement uses only actually filled shares.',
+    true,
+    1.00,
+    now(),
+    now()
+FROM formatted
+ON CONFLICT (id) DO UPDATE SET
+    code = excluded.code,
+    name = excluded.name,
+    description = excluded.description,
+    updated_at_utc = excluded.updated_at_utc;
+
+INSERT INTO strategies (id, code, name, description, enabled, paper_stake_amount, created_at_utc, updated_at_utc)
 VALUES (
     'b7c50005-0000-4000-8050-000000000001',
     'btc_up_down_5m_statistics',

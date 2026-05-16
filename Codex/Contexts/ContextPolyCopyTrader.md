@@ -1,3 +1,16 @@
+## Active Update 2026-05-16 Binance Bps Instant Variants
+Goal: Add an `Instant` copy for every BTC Up or Down 5m Binance bps strategy that prices from current ask depth instead of fixed `0.50`.
+Status: Completed
+Done:
+- Added 50 new Binance bps strategy variants with `_instant` codes and `Instant` name suffixes, covering `0.1 bps` through `5 bps` in `0.1 bps` increments.
+- Added `BinanceStartRelativeBpsThresholdInstant` service behavior: signal direction and bps threshold match the base bps strategy, while the GTD BUY limit is rounded up to the minimum selected-outcome ask level that can immediately cover the computed order size.
+- Kept existing bps variants unchanged on fixed `0.50`; Instant variants are not added to the Paper/Live-shadow allow-list, so they do not submit live orders unless a future task explicitly enables that path.
+- Added PostgreSQL strategy seeding for the Instant rows and applied `orderMinSize` fallback to fresh opening-limit sizing when the book itself lacks `min_order_size`.
+- Updated README/configuration docs and BTC strategy tests for variant counts, thresholds, naming, and ask-depth Instant pricing.
+Next: Deploy/restart the Service so schema seeding creates the new strategy rows and the Instant pricing path is active. Dashboard deployment is optional for this change because no Dashboard UI code changed.
+Notes: Verification passed: targeted `BtcUpDown5mPaperStrategyProcessorTests` 113/113, full test project 491/491, Service Release build with existing Storage nullable warnings only, Dashboard Release build 0 warnings, and `git diff --check` with LF/CRLF warnings only. No DB writes, service restarts, order submissions, or cancel actions were performed.
+Blockers: None.
+
 ## Active Update 2026-05-16 Paper Calculation With Live Stakes
 Goal: Clarify whether enabling Live for a strategy changes Paper calculation methodology.
 Status: Completed

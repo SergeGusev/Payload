@@ -1158,6 +1158,8 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
                             limitDecision.SelectedOutcome.AssetId,
                             limitDecision.RawDecisionJson,
                             limitDecision.LimitPriceOverride,
+                            market.OrderMinSize,
+                            stakeMultiplier,
                             nowUtc,
                             cancellationToken);
                         if (!limitPricing.ShouldEnter)
@@ -2234,6 +2236,7 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
             BtcUpDown5mStrategyBehavior.BinanceStartRelative or
             BtcUpDown5mStrategyBehavior.BinanceStartRelativeFixedPrice or
             BtcUpDown5mStrategyBehavior.BinanceStartRelativeBpsThreshold or
+            BtcUpDown5mStrategyBehavior.BinanceStartRelativeBpsThresholdInstant or
             BtcUpDown5mStrategyBehavior.BinanceStartRelativeClever or
             BtcUpDown5mStrategyBehavior.BinanceStartRelativeCleverMargin or
             BtcUpDown5mStrategyBehavior.BinanceStartRelativeEdge or
@@ -2287,6 +2290,7 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
         return variant.Behavior is BtcUpDown5mStrategyBehavior.BinanceStartRelative or
             BtcUpDown5mStrategyBehavior.BinanceStartRelativeFixedPrice or
             BtcUpDown5mStrategyBehavior.BinanceStartRelativeBpsThreshold or
+            BtcUpDown5mStrategyBehavior.BinanceStartRelativeBpsThresholdInstant or
             BtcUpDown5mStrategyBehavior.BinanceStartRelativeClever or
             BtcUpDown5mStrategyBehavior.BinanceStartRelativeCleverMargin or
             BtcUpDown5mStrategyBehavior.BinanceStartRelativeEdge or
@@ -2311,6 +2315,11 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
             BtcUpDown5mStrategyBehavior.BinanceStartRelativeDelayed;
     }
 
+    private static bool IsInstantOpeningLimitEntry(BtcUpDown5mStrategyVariant variant)
+    {
+        return variant.Behavior == BtcUpDown5mStrategyBehavior.BinanceStartRelativeBpsThresholdInstant;
+    }
+
     private static decimal GetBinanceStartRelativeLimitPrice(BtcUpDown5mStrategyVariant variant)
     {
         if (variant.Behavior != BtcUpDown5mStrategyBehavior.BinanceStartRelativeFixedPrice ||
@@ -2331,7 +2340,8 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
 
     private static decimal? GetBinanceStartRelativeMinMoveBps(BtcUpDown5mStrategyVariant variant)
     {
-        if (variant.Behavior != BtcUpDown5mStrategyBehavior.BinanceStartRelativeBpsThreshold)
+        if (variant.Behavior is not BtcUpDown5mStrategyBehavior.BinanceStartRelativeBpsThreshold and
+            not BtcUpDown5mStrategyBehavior.BinanceStartRelativeBpsThresholdInstant)
         {
             return null;
         }
@@ -2446,6 +2456,7 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
             BtcUpDown5mStrategyBehavior.BinanceStartRelative or
                 BtcUpDown5mStrategyBehavior.BinanceStartRelativeFixedPrice or
                 BtcUpDown5mStrategyBehavior.BinanceStartRelativeBpsThreshold or
+                BtcUpDown5mStrategyBehavior.BinanceStartRelativeBpsThresholdInstant or
                 BtcUpDown5mStrategyBehavior.BinanceStartRelativeDelayed => await GetBinanceStartRelativeEntryDecisionAsync(
                 market,
                 variant,
@@ -2508,6 +2519,8 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
         string assetId,
         string rawDecisionJson,
         decimal? limitPriceOverride,
+        decimal? fallbackMinOrderSize,
+        decimal stakeMultiplier,
         DateTimeOffset nowUtc,
         CancellationToken cancellationToken)
     {
@@ -2563,6 +2576,17 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
                     options.OpeningLimitPriceTickSize,
                     overrideLimitPrice,
                     RejectionReason: null));
+        }
+
+        if (IsInstantOpeningLimitEntry(variant))
+        {
+            return await GetInstantOpeningLimitPriceAsync(
+                assetId,
+                rawDecisionJson,
+                fallbackMinOrderSize,
+                stakeMultiplier,
+                nowUtc,
+                cancellationToken);
         }
 
         if (IsPreviousScoreCounterTrendOpeningLimitEntry(variant))
@@ -2756,6 +2780,155 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
                 options.OpeningLimitPriceTickSize,
                 limitPrice,
                 RejectionReason: null));
+    }
+
+    private async Task<BtcOpeningLimitPriceDecision> GetInstantOpeningLimitPriceAsync(
+        string assetId,
+        string rawDecisionJson,
+        decimal? fallbackMinOrderSize,
+        decimal stakeMultiplier,
+        DateTimeOffset nowUtc,
+        CancellationToken cancellationToken)
+    {
+        var lookup = await GetFreshTakerOrderBookAsync(assetId, nowUtc, cancellationToken);
+        if (lookup.RejectionReason is not null || lookup.OrderBook is null)
+        {
+            var rejected = BtcInstantOpeningLimitPriceDecision.Reject(
+                lookup.RejectionReason ?? SignalReasonCodes.MissingOrderBook,
+                lookup.Source,
+                lookup.Age,
+                lookup.OrderBook);
+            return BtcOpeningLimitPriceDecision.Reject(
+                rejected.RejectionReason ?? "instant_opening_limit_orderbook_rejected",
+                AttachInstantOpeningLimitPricingJson(rawDecisionJson, rejected));
+        }
+
+        var orderBook = ApplyFallbackMinOrderSize(lookup.OrderBook, fallbackMinOrderSize);
+        var pricing = CreateInstantOpeningLimitPriceDecision(
+            orderBook,
+            lookup.Source,
+            lookup.Age,
+            fallbackMinOrderSize: null,
+            stakeMultiplier);
+        var pricingJson = AttachInstantOpeningLimitPricingJson(rawDecisionJson, pricing);
+        return pricing.Available
+            ? BtcOpeningLimitPriceDecision.Enter(pricing.LimitPrice, pricingJson)
+            : BtcOpeningLimitPriceDecision.Reject(
+                pricing.RejectionReason ?? "instant_opening_limit_price_rejected",
+                pricingJson);
+    }
+
+    private BtcInstantOpeningLimitPriceDecision CreateInstantOpeningLimitPriceDecision(
+        OrderBookSnapshot orderBook,
+        string source,
+        TimeSpan? age,
+        decimal? fallbackMinOrderSize,
+        decimal stakeMultiplier)
+    {
+        if (stakeMultiplier <= 0m)
+        {
+            return BtcInstantOpeningLimitPriceDecision.Reject(
+                "invalid_stake_multiplier",
+                source,
+                age,
+                orderBook);
+        }
+
+        var tickSize = orderBook.TickSize is > 0m
+            ? orderBook.TickSize.Value
+            : options.OpeningLimitPriceTickSize;
+        if (tickSize <= 0m)
+        {
+            return BtcInstantOpeningLimitPriceDecision.Reject(
+                "invalid_limit_price_tick_size",
+                source,
+                age,
+                orderBook,
+                TickSize: tickSize);
+        }
+
+        var executableAsks = orderBook.Asks
+            .Where(level => level is { Price: > 0m and < 1m, Size: > 0m })
+            .OrderBy(level => level.Price)
+            .ToArray();
+        if (executableAsks.Length == 0)
+        {
+            return BtcInstantOpeningLimitPriceDecision.Reject(
+                SignalReasonCodes.MissingBestAsk,
+                source,
+                age,
+                orderBook,
+                TickSize: tickSize);
+        }
+
+        BtcInstantOpeningLimitPriceDecision? lastCandidate = null;
+        foreach (var ask in executableAsks)
+        {
+            var limitPrice = RoundUpToTick(ask.Price, tickSize);
+            if (limitPrice <= 0m || limitPrice >= 1m)
+            {
+                lastCandidate = BtcInstantOpeningLimitPriceDecision.Reject(
+                    "instant_opening_limit_price_out_of_range",
+                    source,
+                    age,
+                    orderBook,
+                    RawLimitPrice: ask.Price,
+                    TickSize: tickSize,
+                    LimitPrice: limitPrice);
+                continue;
+            }
+
+            var sizing = CreateOpeningLimitTargetSizingEstimate(
+                orderBook.MinOrderSize ?? fallbackMinOrderSize,
+                limitPrice,
+                stakeMultiplier,
+                source);
+            if (!sizing.Available)
+            {
+                return BtcInstantOpeningLimitPriceDecision.Reject(
+                    sizing.RejectionReason ?? "instant_opening_limit_target_size_rejected",
+                    source,
+                    age,
+                    orderBook,
+                    RawLimitPrice: ask.Price,
+                    TickSize: tickSize,
+                    LimitPrice: limitPrice);
+            }
+
+            var immediateExecutableAsk = GetBuyExecutableAskSummary(orderBook, limitPrice, sizing.TargetSizeShares);
+            var levelsUsed = orderBook.Asks
+                .Count(level => level is { Price: > 0m, Size: > 0m } && level.Price <= limitPrice);
+            lastCandidate = BtcInstantOpeningLimitPriceDecision.Enter(
+                limitPrice,
+                source,
+                age,
+                orderBook,
+                ask.Price,
+                tickSize,
+                sizing.TargetNotionalUsd,
+                sizing.TargetSizeShares,
+                immediateExecutableAsk.Shares,
+                immediateExecutableAsk.Vwap,
+                levelsUsed);
+            if (immediateExecutableAsk.Shares + 0.00000001m >= sizing.TargetSizeShares)
+            {
+                return lastCandidate;
+            }
+        }
+
+        return BtcInstantOpeningLimitPriceDecision.Reject(
+            "instant_opening_limit_insufficient_executable_ask_depth",
+            source,
+            age,
+            orderBook,
+            RawLimitPrice: lastCandidate?.RawLimitPrice,
+            TickSize: lastCandidate?.TickSize,
+            LimitPrice: lastCandidate?.LimitPrice,
+            TargetNotionalUsd: lastCandidate?.TargetNotionalUsd,
+            TargetSizeShares: lastCandidate?.TargetSizeShares,
+            ExecutableAskShares: lastCandidate?.ExecutableAskShares,
+            ExecutableAskVwap: lastCandidate?.ExecutableAskVwap,
+            LevelsUsed: lastCandidate?.LevelsUsed ?? 0);
     }
 
     private async Task<BtcOpeningLimitDecision> GetStandardEntryPriceCapOpeningLimitEntryDecisionAsync(
@@ -5766,7 +5939,11 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
         var lookup = marketDataCache.GetOrderBook(assetId, maxAge);
         if (lookup is { Status: OrderBookCacheLookupStatus.Fresh, Snapshot: { } cached })
         {
-            return CreateLimitMinimumStakeSizing(cached, limitPrice, stakeMultiplier, WebSocketCacheSource);
+            return CreateLimitMinimumStakeSizing(
+                ApplyFallbackMinOrderSize(cached, fallbackMinOrderSize),
+                limitPrice,
+                stakeMultiplier,
+                WebSocketCacheSource);
         }
 
         if (options.PaperTakerRestFallbackEnabled)
@@ -5777,7 +5954,11 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
                 var fetchedAge = GetSnapshotAge(fetched.OrderBook.SnapshotAtUtc);
                 if (fetchedAge <= maxAge)
                 {
-                    return CreateLimitMinimumStakeSizing(fetched.OrderBook, limitPrice, stakeMultiplier, ClobBookSource);
+                    return CreateLimitMinimumStakeSizing(
+                        ApplyFallbackMinOrderSize(fetched.OrderBook, fallbackMinOrderSize),
+                        limitPrice,
+                        stakeMultiplier,
+                        ClobBookSource);
                 }
 
                 if ((fetched.OrderBook.MinOrderSize ?? lookup.Snapshot?.MinOrderSize ?? fallbackMinOrderSize) is { } staleMinOrderSize &&
@@ -5820,6 +6001,16 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
             Source: WebSocketCacheSource);
     }
 
+    private static OrderBookSnapshot ApplyFallbackMinOrderSize(
+        OrderBookSnapshot orderBook,
+        decimal? fallbackMinOrderSize)
+    {
+        return orderBook.MinOrderSize is > 0m ||
+            fallbackMinOrderSize is not > 0m
+            ? orderBook
+            : orderBook with { MinOrderSize = fallbackMinOrderSize };
+    }
+
     private async Task<PaperLiveShadowOrderBookSnapshotResult> GetPaperLiveShadowOrderBookSnapshotAsync(
         string assetId,
         DateTimeOffset nowUtc,
@@ -5858,6 +6049,51 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
                 ? SignalReasonCodes.MissingOrderBookCacheStale
                 : SignalReasonCodes.MissingOrderBookCacheMiss,
             WebSocketCacheSource);
+    }
+
+    private static BtcOpeningLimitTargetSizingEstimate CreateOpeningLimitTargetSizingEstimate(
+        decimal? minOrderSize,
+        decimal limitPrice,
+        decimal stakeMultiplier,
+        string source)
+    {
+        if (stakeMultiplier <= 0m)
+        {
+            return BtcOpeningLimitTargetSizingEstimate.Reject("invalid_stake_multiplier", source);
+        }
+
+        if (limitPrice <= 0m || limitPrice >= 1m)
+        {
+            return BtcOpeningLimitTargetSizingEstimate.Reject("invalid_limit_price", source);
+        }
+
+        if (minOrderSize is not > 0m)
+        {
+            return new BtcOpeningLimitTargetSizingEstimate(
+                Available: true,
+                RejectionReason: null,
+                Source: source,
+                SafetyMultiplier: 1m,
+                RoundingMode: string.Empty,
+                MinOrderSize: null,
+                RawTargetNotionalUsd: stakeMultiplier,
+                TargetNotionalUsd: stakeMultiplier,
+                TargetSizeShares: stakeMultiplier / limitPrice);
+        }
+
+        var rawTargetNotionalUsd = minOrderSize.Value * limitPrice * MinimumStakeSafetyMultiplier * stakeMultiplier;
+        var roundedTargetNotionalUsd = RoundStakeNotionalUsd(rawTargetNotionalUsd);
+        var targetSizeShares = RoundUpToClobLimitSizeShares(roundedTargetNotionalUsd, limitPrice);
+        return new BtcOpeningLimitTargetSizingEstimate(
+            Available: true,
+            RejectionReason: null,
+            Source: source,
+            SafetyMultiplier: MinimumStakeSafetyMultiplier,
+            RoundingMode: StakeNotionalRoundingMode,
+            MinOrderSize: minOrderSize,
+            RawTargetNotionalUsd: rawTargetNotionalUsd,
+            TargetNotionalUsd: targetSizeShares * limitPrice,
+            TargetSizeShares: targetSizeShares);
     }
 
     private static BtcMinimumStakeSizing CreateLimitMinimumStakeSizing(
@@ -6227,6 +6463,53 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
         if (!string.IsNullOrWhiteSpace(RejectionReason))
         {
             root["skip_reason"] = RejectionReason;
+        }
+
+        return root.ToJsonString();
+    }
+
+    private static string AttachInstantOpeningLimitPricingJson(
+        string rawDecisionJson,
+        BtcInstantOpeningLimitPriceDecision pricing)
+    {
+        JsonObject root;
+        try
+        {
+            root = JsonNode.Parse(rawDecisionJson)?.AsObject() ?? new JsonObject();
+        }
+        catch (JsonException)
+        {
+            root = new JsonObject();
+        }
+
+        root["opening_limit_price_mode"] = "instant_executable_ask_depth";
+        root["limit_pricing_mode"] = "instant_executable_ask_depth";
+        root["break_even_pricing_enabled"] = false;
+        root["limit_price_rounding"] = "ceil_to_tick";
+        root["limit_price_tick_size"] = pricing.TickSize;
+        root["limit_price"] = pricing.Available ? pricing.LimitPrice : (decimal?)null;
+        root["instant_pricing_source"] = pricing.Source;
+        root["instant_quote_age_ms"] = pricing.Age?.TotalMilliseconds;
+        root["instant_snapshot_at_utc"] = pricing.OrderBook?.SnapshotAtUtc.ToString("O", CultureInfo.InvariantCulture);
+        root["instant_asset_id"] = pricing.OrderBook?.AssetId;
+        root["instant_condition_id"] = pricing.OrderBook?.ConditionId;
+        root["instant_best_bid"] = pricing.OrderBook?.BestBid;
+        root["instant_best_ask"] = pricing.OrderBook?.BestAsk;
+        root["instant_spread"] = pricing.OrderBook?.SpreadAbs;
+        root["instant_tick_size"] = pricing.TickSize;
+        root["instant_min_order_size"] = pricing.OrderBook?.MinOrderSize;
+        root["instant_raw_limit_price"] = pricing.RawLimitPrice;
+        root["instant_limit_price"] = pricing.Available || pricing.LimitPrice > 0m ? pricing.LimitPrice : (decimal?)null;
+        root["instant_target_notional_usd"] = pricing.TargetNotionalUsd;
+        root["instant_target_size_shares"] = pricing.TargetSizeShares;
+        root["instant_executable_ask_shares"] = pricing.ExecutableAskShares;
+        root["instant_executable_ask_vwap"] = pricing.ExecutableAskVwap;
+        root["instant_levels_used"] = pricing.LevelsUsed;
+        root["opening_limit_pricing_rejection_reason"] = pricing.RejectionReason;
+        root["limit_pricing_rejection_reason"] = pricing.RejectionReason;
+        if (!string.IsNullOrWhiteSpace(pricing.RejectionReason))
+        {
+            root["skip_reason"] = pricing.RejectionReason;
         }
 
         return root.ToJsonString();
@@ -9029,6 +9312,16 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
         return Math.Floor(value / tickSize) * tickSize;
     }
 
+    private static decimal RoundUpToTick(decimal value, decimal tickSize)
+    {
+        if (value <= 0m || tickSize <= 0m)
+        {
+            return 0m;
+        }
+
+        return Math.Ceiling(value / tickSize) * tickSize;
+    }
+
     private static decimal RoundUp(decimal value, int decimals)
     {
         var factor = (decimal)Math.Pow(10, decimals);
@@ -9550,6 +9843,81 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
         }
     }
 
+    private sealed record BtcInstantOpeningLimitPriceDecision(
+        bool Available,
+        decimal LimitPrice,
+        string? RejectionReason,
+        string Source,
+        TimeSpan? Age,
+        OrderBookSnapshot? OrderBook,
+        decimal? RawLimitPrice,
+        decimal? TickSize,
+        decimal? TargetNotionalUsd,
+        decimal? TargetSizeShares,
+        decimal? ExecutableAskShares,
+        decimal? ExecutableAskVwap,
+        int LevelsUsed)
+    {
+        public static BtcInstantOpeningLimitPriceDecision Enter(
+            decimal limitPrice,
+            string source,
+            TimeSpan? age,
+            OrderBookSnapshot orderBook,
+            decimal rawLimitPrice,
+            decimal tickSize,
+            decimal targetNotionalUsd,
+            decimal targetSizeShares,
+            decimal executableAskShares,
+            decimal? executableAskVwap,
+            int levelsUsed)
+        {
+            return new BtcInstantOpeningLimitPriceDecision(
+                true,
+                limitPrice,
+                null,
+                source,
+                age,
+                orderBook,
+                rawLimitPrice,
+                tickSize,
+                targetNotionalUsd,
+                targetSizeShares,
+                executableAskShares,
+                executableAskVwap,
+                levelsUsed);
+        }
+
+        public static BtcInstantOpeningLimitPriceDecision Reject(
+            string reason,
+            string source,
+            TimeSpan? Age,
+            OrderBookSnapshot? OrderBook,
+            decimal? RawLimitPrice = null,
+            decimal? TickSize = null,
+            decimal? LimitPrice = null,
+            decimal? TargetNotionalUsd = null,
+            decimal? TargetSizeShares = null,
+            decimal? ExecutableAskShares = null,
+            decimal? ExecutableAskVwap = null,
+            int LevelsUsed = 0)
+        {
+            return new BtcInstantOpeningLimitPriceDecision(
+                false,
+                LimitPrice ?? 0m,
+                reason,
+                source,
+                Age,
+                OrderBook,
+                RawLimitPrice,
+                TickSize,
+                TargetNotionalUsd,
+                TargetSizeShares,
+                ExecutableAskShares,
+                ExecutableAskVwap,
+                LevelsUsed);
+        }
+    }
+
     private sealed record BtcCurrentPriceLookupResult(
         BtcUsdReferencePricePoint? Price,
         string? ErrorMessage)
@@ -9710,6 +10078,32 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
         DateTimeOffset? LastFilledAtUtc)
     {
         public static PreOpenSellExitSummary Empty { get; } = new(0m, 0m, null);
+    }
+
+    private sealed record BtcOpeningLimitTargetSizingEstimate(
+        bool Available,
+        string? RejectionReason,
+        string Source,
+        decimal SafetyMultiplier,
+        string RoundingMode,
+        decimal? MinOrderSize,
+        decimal RawTargetNotionalUsd,
+        decimal TargetNotionalUsd,
+        decimal TargetSizeShares)
+    {
+        public static BtcOpeningLimitTargetSizingEstimate Reject(string reason, string source)
+        {
+            return new BtcOpeningLimitTargetSizingEstimate(
+                Available: false,
+                RejectionReason: reason,
+                Source: source,
+                SafetyMultiplier: MinimumStakeSafetyMultiplier,
+                RoundingMode: string.Empty,
+                MinOrderSize: null,
+                RawTargetNotionalUsd: 0m,
+                TargetNotionalUsd: 0m,
+                TargetSizeShares: 0m);
+        }
     }
 
     private sealed record BtcMinimumStakeSizing(
