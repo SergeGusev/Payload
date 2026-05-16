@@ -87,3 +87,10 @@ Request:
 
 Result:
 Explained that the button should not open a modal or submit any orders. It starts an async TLS/pin check, updates `CommandStatus`, and fills the Dashboard `Certificates` tab with one row per Polymarket endpoint. A full service-process check shows `Source=service process`; if the updated service IPC endpoint is unavailable, Dashboard writes a warning row and falls back to `Source=Dashboard process`, which verifies only the Dashboard process networking/configuration. `Status=Error` rows, `Certificate check failed: ...`, or `Dashboard Errors` indicate a failed probe or validation issue.
+
+## 2026-05-16T08:38:32.2962683+00:00
+Request:
+Посмотри картинку. Все нужные сертификаты есть?
+
+Result:
+Extracted the screenshot from the Windows clipboard and reviewed the Dashboard `Certificates` tab. The check source is `service process`, so it validates the Windows Service process. All five required Polymarket endpoints are present: Data API, CLOB, Gamma API, Geoblock, and Market WebSocket. Every row has `TLS=OK` and `Status=OK`. `Pin=Not configured` means SPKI certificate pinning is not configured, so the current result proves normal Windows/.NET TLS validation is passing for the service process, not that configured pins are installed.

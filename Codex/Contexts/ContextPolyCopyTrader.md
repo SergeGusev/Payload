@@ -1,3 +1,15 @@
+## Active Update 2026-05-16 Certificate Check Screenshot Review
+Goal: Interpret the user's Dashboard `Certificates` screenshot.
+Status: Completed
+Done:
+- Extracted the screenshot from the Windows clipboard and inspected the Dashboard `Certificates` tab.
+- Confirmed rows are from `Source=service process`, so the updated Windows Service IPC endpoint is active and the check is validating the service process, not only the Dashboard process.
+- Confirmed all five required Polymarket endpoints are present and `Status=OK`: Data API, CLOB, Gamma API, Geoblock, and Market WebSocket.
+- Confirmed TLS status is `OK` for every row; `Pin=Not configured` means certificate pinning is not configured, so this is normal Windows/.NET TLS validation rather than pinned-SPKI validation.
+Next: If certificate pinning is desired, configure `Polymarket:CertificatePins`; otherwise the screenshot is sufficient evidence that current service-process TLS certificate validation is OK.
+Notes: Answer-only screenshot review. No secrets, DB writes, service restarts, orders, cancel actions, or product code changes.
+Blockers: None.
+
 ## Active Update 2026-05-16 Certificate Check Expected UI Behavior
 Goal: Explain what should happen after pressing Dashboard `Check certificates`.
 Status: Completed
