@@ -211,6 +211,8 @@
                         Command="{Binding ClearLogsCommand}" />
                 <Button Content="Clear errors"
                         Command="{Binding ClearDashboardErrorsCommand}" />
+                <Button Content="Check certificates"
+                        Command="{Binding CheckCertificatesCommand}" />
                 <Button Content="Export CSV"
                         Command="{Binding ExportCsvCommand}" />
             </WrapPanel>
@@ -952,6 +954,26 @@
                         <DataGridTextColumn Header="Check" Binding="{Binding Name}" Width="180" />
                         <DataGridTextColumn Header="Value" Binding="{Binding Value}" Width="*" />
                         <DataGridTextColumn Header="Status" Binding="{Binding Status}" Width="100" />
+                    </DataGrid.Columns>
+                </DataGrid>
+            </TabItem>
+
+            <TabItem Header="Certificates">
+                <DataGrid ItemsSource="{Binding CertificateChecks}"
+                          behaviors:DataGridSelectionPersistence.KeyProperties="CheckedUtc,Endpoint,Host">
+                    <DataGrid.Columns>
+                        <DataGridTextColumn Header="Checked UTC" Binding="{Binding CheckedUtc}" Width="150" />
+                        <DataGridTextColumn Header="Source" Binding="{Binding Source}" Width="130" />
+                        <DataGridTextColumn Header="Endpoint" Binding="{Binding Endpoint}" Width="130" />
+                        <DataGridTextColumn Header="Host" Binding="{Binding Host}" Width="230" />
+                        <DataGridTextColumn Header="TLS" Binding="{Binding Tls}" Width="170" />
+                        <DataGridTextColumn Header="Pin" Binding="{Binding Pin}" Width="120" />
+                        <DataGridTextColumn Header="Status" Binding="{Binding Status}" Width="90" />
+                        <DataGridTextColumn Header="Subject" Binding="{Binding Subject}" Width="300" />
+                        <DataGridTextColumn Header="Issuer" Binding="{Binding Issuer}" Width="300" />
+                        <DataGridTextColumn Header="Valid to UTC" Binding="{Binding ValidToUtc}" Width="150" />
+                        <DataGridTextColumn Header="Presented pin" Binding="{Binding PresentedPin}" Width="360" />
+                        <DataGridTextColumn Header="Details" Binding="{Binding Details}" Width="*" />
                     </DataGrid.Columns>
                 </DataGrid>
             </TabItem>

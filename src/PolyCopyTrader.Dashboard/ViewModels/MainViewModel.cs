@@ -5,6 +5,7 @@ using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using PolyCopyTrader.Dashboard.Models;
 using PolyCopyTrader.Dashboard.Services;
+using PolyCopyTrader.Polymarket;
 
 namespace PolyCopyTrader.Dashboard.ViewModels;
 
@@ -18,6 +19,7 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
     private DashboardRuntime runtime = null!;
     private DashboardDataService dataService = null!;
     private LocalControlClient controlClient = null!;
+    private PolymarketCertificateCheckService certificateCheckService = null!;
     private DashboardCsvExporter csvExporter = null!;
     private readonly DispatcherTimer refreshTimer;
     private readonly EventHandler refreshTickHandler;
@@ -178,6 +180,8 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
 
     public ObservableCollection<DiagnosticRow> Diagnostics { get; } = [];
 
+    public ObservableCollection<CertificateCheckRow> CertificateChecks { get; } = [];
+
     public ObservableCollection<RunbookLinkRow> RunbookLinks { get; } = [];
 
     public ObservableCollection<LogRow> Logs { get; } = [];
@@ -335,11 +339,15 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
             nextRuntime.StorageConfigured,
             nextRuntime.AuthService);
         var nextControlClient = new LocalControlClient(nextRuntime.Configuration.Ipc);
+        var nextCertificateCheckService = new PolymarketCertificateCheckService(
+            nextRuntime.Configuration.Polymarket,
+            nextRuntime.Configuration.MarketDataWebSocket);
         var nextCsvExporter = new DashboardCsvExporter(nextRuntime.Repository, nextRuntime.Configuration);
 
         runtime = nextRuntime;
         dataService = nextDataService;
         controlClient = nextControlClient;
+        certificateCheckService = nextCertificateCheckService;
         csvExporter = nextCsvExporter;
         currentDatabaseSource = databaseSource;
         StorageStatus = BuildStorageStatus(nextRuntime);
@@ -590,6 +598,44 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
     {
         Logs.Clear();
         CommandStatus = "Logs view cleared locally.";
+    }
+
+    [RelayCommand]
+    private async Task CheckCertificatesAsync()
+    {
+        try
+        {
+            CommandStatus = "Checking Polymarket certificates...";
+            var (source, results, warning) = await GetCertificateChecksAsync();
+            var rows = results.Select(item => ToCertificateCheckRow(source, item)).ToArray();
+            if (!string.IsNullOrWhiteSpace(warning))
+            {
+                rows = new[]
+                {
+                    new CertificateCheckRow(
+                        DateTimeOffset.UtcNow.UtcDateTime.ToString("yyyy-MM-dd HH:mm:ss"),
+                        "service IPC",
+                        "Service IPC",
+                        string.Empty,
+                        "Not checked",
+                        "Not checked",
+                        "Warning",
+                        string.Empty,
+                        string.Empty,
+                        string.Empty,
+                        string.Empty,
+                        warning)
+                }.Concat(rows).ToArray();
+            }
+
+            Replace(CertificateChecks, rows);
+            CommandStatus = BuildCertificateCheckSummary(source, results, warning);
+        }
+        catch (Exception ex)
+        {
+            CommandStatus = $"Certificate check failed: {ex.Message}";
+            RecordDashboardError("Certificate check", ex);
+        }
     }
 
     [RelayCommand]
@@ -889,6 +935,7 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         Replace(RejectionAnalysis, Array.Empty<RejectionAnalysisRow>());
         Replace(RiskUsage, Array.Empty<RiskUsageRow>());
         Replace(Diagnostics, Array.Empty<DiagnosticRow>());
+        Replace(CertificateChecks, Array.Empty<CertificateCheckRow>());
         Replace(RunbookLinks, Array.Empty<RunbookLinkRow>());
         Replace(Logs, Array.Empty<LogRow>());
     }
@@ -1124,5 +1171,66 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
             $"Source: {error.Source}{Environment.NewLine}" +
             $"Message: {error.Message}{Environment.NewLine}{Environment.NewLine}" +
             error.Details;
+    }
+
+    private async Task<(string Source, IReadOnlyList<PolymarketCertificateCheckResult> Results, string? Warning)>
+        GetCertificateChecksAsync()
+    {
+        try
+        {
+            var response = await controlClient.CheckCertificatesAsync();
+            if (string.Equals(response.Status, "Error", StringComparison.OrdinalIgnoreCase) &&
+                response.Checks.Count == 0)
+            {
+                throw new InvalidOperationException(response.Error ?? "Service IPC certificate check failed.");
+            }
+
+            return (
+                string.IsNullOrWhiteSpace(response.Source) ? "service process" : response.Source,
+                response.Checks,
+                response.Error);
+        }
+        catch (Exception ex)
+        {
+            var localResults = await certificateCheckService.CheckAsync();
+            return (
+                "Dashboard process",
+                localResults,
+                $"Service IPC certificate check was unavailable; showing Dashboard-process check instead. IPC error: {ex.Message}");
+        }
+    }
+
+    private static CertificateCheckRow ToCertificateCheckRow(
+        string source,
+        PolymarketCertificateCheckResult result)
+    {
+        return new CertificateCheckRow(
+            result.CheckedAtUtc.UtcDateTime.ToString("yyyy-MM-dd HH:mm:ss"),
+            source,
+            result.EndpointName,
+            result.Host,
+            result.TlsStatus,
+            result.PinStatus,
+            result.Status,
+            result.Subject,
+            result.Issuer,
+            result.ValidToUtc,
+            result.PresentedPin,
+            result.Details);
+    }
+
+    private static string BuildCertificateCheckSummary(
+        string source,
+        IReadOnlyList<PolymarketCertificateCheckResult> results,
+        string? warning)
+    {
+        var ok = results.Count(item => string.Equals(item.Status, "OK", StringComparison.OrdinalIgnoreCase));
+        var warnings = results.Count(item => string.Equals(item.Status, "Warning", StringComparison.OrdinalIgnoreCase));
+        var errors = results.Count(item => string.Equals(item.Status, "Error", StringComparison.OrdinalIgnoreCase));
+        var prefix = string.IsNullOrWhiteSpace(warning)
+            ? "Certificate check"
+            : "Certificate check with IPC fallback";
+
+        return $"{prefix}: {ok} OK, {warnings} warning, {errors} error; source={source}.";
     }
 }

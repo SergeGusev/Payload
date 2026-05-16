@@ -1,6 +1,7 @@
 using System.Net.Http;
 using System.Text.Json;
 using PolyCopyTrader.Domain.Configuration;
+using PolyCopyTrader.Polymarket;
 
 namespace PolyCopyTrader.Dashboard.Services;
 
@@ -108,6 +109,36 @@ public sealed class LocalControlClient(IpcOptions options)
             ?? new ControlStatusResponse("Unknown", false, false, false, false, string.Empty, null);
     }
 
+    public async Task<ControlCertificateCheckResponse> CheckCertificatesAsync(CancellationToken cancellationToken = default)
+    {
+        if (!options.Enabled)
+        {
+            return new ControlCertificateCheckResponse(
+                "dashboard",
+                "Error",
+                [],
+                "IPC is disabled in dashboard configuration.");
+        }
+
+        using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        timeout.CancelAfter(TimeSpan.FromSeconds(90));
+        using var response = await httpClient.GetAsync(BuildUri("certificates"), timeout.Token);
+        var stream = await response.Content.ReadAsStreamAsync(timeout.Token);
+        var payload = await JsonSerializer.DeserializeAsync<ControlCertificateCheckResponse>(stream, jsonOptions, timeout.Token);
+        if (payload is null)
+        {
+            return new ControlCertificateCheckResponse(
+                "dashboard",
+                "Error",
+                [],
+                $"Empty IPC response: {(int)response.StatusCode}.");
+        }
+
+        return response.IsSuccessStatusCode
+            ? payload
+            : payload with { Status = "Error" };
+    }
+
     private async Task<ControlCommandResponse> PostAsync(
         string path,
         CancellationToken cancellationToken,
@@ -156,3 +187,9 @@ public sealed record ControlStatusResponse(
     bool KillSwitchActive,
     string CurrentLoop,
     string? LastError);
+
+public sealed record ControlCertificateCheckResponse(
+    string Source,
+    string Status,
+    IReadOnlyList<PolymarketCertificateCheckResult> Checks,
+    string? Error);

@@ -85,6 +85,62 @@ public sealed class CertificatePinningTests
         Assert.Equal(32, hash.Length);
     }
 
+    [Fact]
+    public async Task CertificateCheckService_ReportsMatchedConfiguredPin()
+    {
+        using var certificate = CreateCertificate();
+        var pin = PolymarketCertificatePinning.ComputeSubjectPublicKeyInfoSha256Pin(certificate);
+        var service = new PolymarketCertificateCheckService(
+            CreatePinnedOptions(pin),
+            new MarketDataWebSocketOptions(),
+            (_, _) => Task.FromResult(new CertificateProbeResult(new X509Certificate2(certificate), SslPolicyErrors.None)));
+
+        var results = await service.CheckAsync(CancellationToken.None);
+
+        var dataApi = Assert.Single(results, item => item.EndpointName == "Data API");
+        Assert.Equal("OK", dataApi.Status);
+        Assert.Equal("Matched", dataApi.PinStatus);
+        Assert.Equal(pin, dataApi.PresentedPin);
+        Assert.DoesNotContain("BEGIN", dataApi.Details, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public async Task CertificateCheckService_ReportsMismatchedConfiguredPin()
+    {
+        using var certificate = CreateCertificate();
+        var service = new PolymarketCertificateCheckService(
+            CreatePinnedOptions("sha256/AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA="),
+            new MarketDataWebSocketOptions(),
+            (_, _) => Task.FromResult(new CertificateProbeResult(new X509Certificate2(certificate), SslPolicyErrors.None)));
+
+        var results = await service.CheckAsync(CancellationToken.None);
+
+        var dataApi = Assert.Single(results, item => item.EndpointName == "Data API");
+        Assert.Equal("Error", dataApi.Status);
+        Assert.Equal("Mismatch", dataApi.PinStatus);
+        Assert.NotEmpty(dataApi.PresentedPin);
+    }
+
+    [Fact]
+    public async Task CertificateCheckService_WarnsWhenMatchingPinHasStandardTlsErrors()
+    {
+        using var certificate = CreateCertificate();
+        var pin = PolymarketCertificatePinning.ComputeSubjectPublicKeyInfoSha256Pin(certificate);
+        var service = new PolymarketCertificateCheckService(
+            CreatePinnedOptions(pin),
+            new MarketDataWebSocketOptions(),
+            (_, _) => Task.FromResult(new CertificateProbeResult(
+                new X509Certificate2(certificate),
+                SslPolicyErrors.RemoteCertificateChainErrors)));
+
+        var results = await service.CheckAsync(CancellationToken.None);
+
+        var dataApi = Assert.Single(results, item => item.EndpointName == "Data API");
+        Assert.Equal("Warning", dataApi.Status);
+        Assert.Equal("Matched", dataApi.PinStatus);
+        Assert.Contains(nameof(SslPolicyErrors.RemoteCertificateChainErrors), dataApi.Details, StringComparison.Ordinal);
+    }
+
     private static X509Certificate2 CreateCertificate()
     {
         using var key = RSA.Create(2048);
@@ -97,5 +153,17 @@ public sealed class CertificatePinningTests
         return request.CreateSelfSigned(
             DateTimeOffset.UtcNow.AddMinutes(-5),
             DateTimeOffset.UtcNow.AddDays(1));
+    }
+
+    private static PolymarketOptions CreatePinnedOptions(string pin)
+    {
+        return new PolymarketOptions
+        {
+            DataApiBaseUrl = "https://data-api.polymarket.com",
+            CertificatePins = new Dictionary<string, List<string>>(StringComparer.OrdinalIgnoreCase)
+            {
+                ["data-api.polymarket.com"] = [pin]
+            }
+        };
     }
 }

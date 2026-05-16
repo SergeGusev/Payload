@@ -277,6 +277,7 @@ builder.Services.AddSingleton(PolymarketSecretProviderFactory.Create(appConfigur
 builder.Services.AddSingleton<PolymarketL2HmacSigner>();
 builder.Services.AddSingleton<PolymarketAuthHeaderFactory>();
 builder.Services.AddSingleton<IPolymarketAuthService, PolymarketAuthReadinessService>();
+builder.Services.AddSingleton<PolymarketCertificateCheckService>();
 builder.Services.AddSingleton<OrderAmountCalculator>();
 builder.Services.AddSingleton<ClobV2OrderBuilder>();
 builder.Services.AddSingleton<ClobV2OrderSigner>();

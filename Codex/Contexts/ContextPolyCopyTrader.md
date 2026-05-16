@@ -1,3 +1,15 @@
+## Active Update 2026-05-16 Dashboard Certificate Check Button
+Goal: Add a Dashboard button to verify Polymarket TLS certificate/pin installation after the user moved certificates.
+Status: Completed
+Done:
+- Added a shared `PolymarketCertificateCheckService` that probes configured Polymarket HTTPS/WSS endpoints, captures the presented certificate, computes the SPKI pin, checks configured host pins, reports standard TLS errors, and never reads or prints secrets.
+- Added `GET /certificates` to the local Windows Service IPC server so Dashboard can check the service process configuration over loopback first.
+- Added Dashboard `Check certificates` toolbar button, `Certificates` tab rows, and IPC fallback behavior: if service IPC is unavailable, Dashboard clearly shows a warning row and runs the same check from the Dashboard process instead.
+- Added certificate check tests for matched pins, mismatched pins, and matched pins with standard TLS warnings; README documents the button.
+Next: Deploy/restart the Windows Service and Dashboard from this commit on the VPS, then click `Check certificates` and confirm rows show `source=service process`, expected hosts, and no `Error` statuses.
+Notes: Verification passed: `dotnet build src\PolyCopyTrader.Service\PolyCopyTrader.Service.csproj -c Release --no-restore -m:1 /p:UseSharedCompilation=false`; `dotnet build src\PolyCopyTrader.Dashboard\PolyCopyTrader.Dashboard.csproj -c Release --no-restore -m:1 /p:UseSharedCompilation=false`; `dotnet test tests\PolyCopyTrader.Tests\PolyCopyTrader.Tests.csproj -c Release --no-restore --filter "FullyQualifiedName~CertificatePinningTests" -m:1 /p:UseSharedCompilation=false` passed 7/7; full `dotnet test tests\PolyCopyTrader.Tests\PolyCopyTrader.Tests.csproj -c Release --no-restore -m:1 /p:UseSharedCompilation=false` passed 485/485; `git diff --check` passed with CRLF warnings only. Initial parallel build/test attempts hit expected `obj` file locks from concurrent compiler/Defender access, then passed sequentially.
+Blockers: None.
+
 ## Active Update 2026-05-16 Server Credential Manager Empty Finding
 Goal: Explain why the server Credential Manager has no PolyMarket secrets and what that means for current .NET 10 Live auth.
 Status: Completed

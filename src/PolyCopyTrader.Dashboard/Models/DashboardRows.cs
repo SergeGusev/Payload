@@ -591,6 +591,20 @@ public sealed record DashboardErrorRow(string TimestampUtc, string Source, strin
 
 public sealed record DiagnosticRow(string Name, string Value, string Status);
 
+public sealed record CertificateCheckRow(
+    string CheckedUtc,
+    string Source,
+    string Endpoint,
+    string Host,
+    string Tls,
+    string Pin,
+    string Status,
+    string Subject,
+    string Issuer,
+    string ValidToUtc,
+    string PresentedPin,
+    string Details);
+
 public sealed record RunbookLinkRow(string Document, string Path, string Purpose);
 
 public sealed record ServiceAvailability(

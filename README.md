@@ -335,6 +335,11 @@ To print the current SPKI pins from the machine that will run the service:
 
 Review `Subject` and `Issuer` before trusting a pin. If the presented certificate is
 not a Polymarket certificate, the local network or host is intercepting TLS.
+The Dashboard toolbar also has a `Check certificates` button. It first asks the
+local Windows Service over loopback IPC to check the service process TLS/pin
+configuration; if IPC is unavailable, it clearly falls back to the Dashboard
+process check and writes rows to the `Certificates` tab. The check performs TLS
+handshakes only and never reads or prints secrets.
 
 ## Auth Research
 

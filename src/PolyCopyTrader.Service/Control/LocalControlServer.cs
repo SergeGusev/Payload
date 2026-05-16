@@ -3,6 +3,7 @@ using System.Text;
 using System.Text.Json;
 using PolyCopyTrader.Domain;
 using PolyCopyTrader.Domain.Configuration;
+using PolyCopyTrader.Polymarket;
 using PolyCopyTrader.Service.ExternalPrices;
 using PolyCopyTrader.Service.LiveTrading;
 using PolyCopyTrader.Service.OnChain;
@@ -21,6 +22,7 @@ public sealed class LocalControlServer(
     IOnChainIngestionProcessor onChainIngestionProcessor,
     IOnChainMarketEnrichmentProcessor onChainMarketEnrichmentProcessor,
     IBtcUsdReferencePriceCache btcUsdReferencePriceCache,
+    PolymarketCertificateCheckService certificateCheckService,
     IAppRepository repository) : BackgroundService
 {
     private readonly JsonSerializerOptions jsonOptions = new(JsonSerializerDefaults.Web);
@@ -124,6 +126,22 @@ public sealed class LocalControlServer(
             if (method == "GET" && path == "/btc-usd-reference")
             {
                 await WriteAsync(context.Response, HttpStatusCode.OK, btcUsdReferencePriceCache.Snapshot, cancellationToken);
+                return;
+            }
+
+            if (method == "GET" && path == "/certificates")
+            {
+                var checks = await certificateCheckService.CheckAsync(cancellationToken);
+                await WriteAsync(
+                    context.Response,
+                    HttpStatusCode.OK,
+                    new
+                    {
+                        source = "service process",
+                        status = CertificateCheckStatus(checks),
+                        checks
+                    },
+                    cancellationToken);
                 return;
             }
 
@@ -235,6 +253,18 @@ public sealed class LocalControlServer(
             startedAtUtc = snapshot.StartedAtUtc,
             snapshotAtUtc = snapshot.SnapshotAtUtc
         };
+    }
+
+    private static string CertificateCheckStatus(IReadOnlyList<PolymarketCertificateCheckResult> checks)
+    {
+        if (checks.Any(item => string.Equals(item.Status, "Error", StringComparison.OrdinalIgnoreCase)))
+        {
+            return "Error";
+        }
+
+        return checks.Any(item => string.Equals(item.Status, "Warning", StringComparison.OrdinalIgnoreCase))
+            ? "Warning"
+            : "OK";
     }
 
     private async Task<ServiceCommandResult> PinAssetAsync(string? assetId, string source, CancellationToken cancellationToken)

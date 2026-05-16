@@ -66,3 +66,10 @@ Request:
 
 Result:
 Explained that an empty server Credential Manager means the current Credential Manager provider has no PolyMarket secrets to read. Rechecked the transfer scripts and current service configuration: the previous Net48 transfer/import path wrote secrets as machine-level environment variables, while the current .NET 10 service appsettings uses `PolymarketAuth:SecretProvider=CredentialManager` unless overridden by unprefixed .NET environment variables. Prepared safe VPS commands that check only the presence of machine environment variables and outlined the two valid fixes: switch the service to `PolymarketAuth__SecretProvider=Environment` if `POLYCOPYTRADER_POLYMARKET_*` machine variables exist, or recreate/import secrets under the actual Windows Service account if they do not.
+
+## 2026-05-16T08:24:05.1717024+00:00
+Request:
+Перенёс сертификаты. Мы можем в Dashboard добавить кнопку "Check certificates", чтобы я был уверен, что всё нормально установилось?
+
+Result:
+Added a Dashboard `Check certificates` button and `Certificates` tab. The button first calls the local Windows Service over loopback IPC (`GET /certificates`) so it checks the service process TLS/pin configuration; if IPC is unavailable, it writes a warning row and falls back to the Dashboard process check. Added shared Polymarket certificate checking that probes configured HTTPS/WSS endpoints, captures certificate subject/issuer/validity, computes the presented SPKI pin, compares configured host pins, reports standard TLS errors, and never reads or prints secrets. Added tests for matched pins, mismatched pins, and matched pins with standard TLS warnings; README documents the button. Verification passed: Service Release build, Dashboard Release build, targeted certificate tests 7/7, full tests 485/485, and `git diff --check` with CRLF warnings only.
