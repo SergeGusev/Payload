@@ -20,6 +20,9 @@ Do not commit real credentials.
 - `MaxMarketBankrollPct`: live market bankroll cap.
 - `MaxDailyLossPct`: live daily loss lockout reference.
 - `MaxTotalDeployedPct`: live total deployed cap.
+- BTC 5-minute live preflight applies market/total deployed caps to open Live
+  orders only. Paper exposure is intentionally not counted against these Live
+  caps.
 - `DefaultOrderTtlSeconds`: live GTD order lifetime fallback; must be greater than Polymarket's one-minute GTD security threshold and at most 300 seconds.
 - `MaxClockDriftSeconds`: maximum allowed CLOB server-time drift.
 - `ApiErrorLockoutCount`: recent Polymarket error threshold.

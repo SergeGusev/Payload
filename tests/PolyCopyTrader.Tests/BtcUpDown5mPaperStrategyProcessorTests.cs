@@ -5170,6 +5170,77 @@ public sealed class BtcUpDown5mPaperStrategyProcessorTests
     }
 
     [Fact]
+    public async Task ProcessAsync_BinanceBps1LiveStakeIgnoresPaperExposureForLiveCaps()
+    {
+        var now = DateTimeOffset.UtcNow;
+        var repository = new TestAppRepository();
+        repository.StrategySettings[BinanceBps1Variant.Id] = StrategyRuntimeSettings.Default(BinanceBps1Variant.Id) with
+        {
+            LiveStakes = true,
+            LiveStakeAmount = 2.50m,
+            LiveAvailableBalance = 100m,
+            PaperStakeAmount = 2.50m
+        };
+        repository.PaperOrders.Add(new PaperOrder(
+            Guid.NewGuid(),
+            Guid.NewGuid(),
+            string.Empty,
+            PaperOrderStatus.Pending,
+            TradeSide.Buy,
+            "old-paper-asset",
+            "condition-1",
+            "Up",
+            0.50m,
+            2_000m,
+            1_000m,
+            now.AddMinutes(-10),
+            now.AddMinutes(5),
+            FilledAtUtc: null,
+            CancelledAtUtc: null,
+            StrategyId: Skip1Variant.Id,
+            RawDecisionJson: "{}"));
+        repository.PaperPositions.Add(new PaperPosition(
+            "old-paper-position-asset",
+            "condition-1",
+            "Up",
+            2_000m,
+            0.50m,
+            1_000m,
+            0m,
+            now.AddMinutes(-1)));
+        repository.PolymarketGammaMarkets.Add(CreateMarket(
+            now,
+            now.AddMinutes(5),
+            upPrice: 0.62m,
+            downPrice: 0.38m));
+        AddBtcOddsStartTick(repository, "market-1", now, startPriceUsd: 100m);
+        var tradingClient = new CapturingTradingClient();
+        var processor = CreateLiveProcessorWithBtcReference(
+            repository,
+            tradingClient,
+            100.02m,
+            [100m],
+            [],
+            BinanceBps1Variant.Code);
+
+        var result = await processor.ProcessAsync();
+
+        Assert.Equal(1, result.EntriesPlaced);
+        Assert.Equal(1, tradingClient.PlaceCalls);
+        var liveOrder = Assert.Single(repository.LiveOrders);
+        Assert.Equal(LiveOrderStatus.Live, liveOrder.Status);
+        Assert.Equal("paper_live_shadow_test", liveOrder.ExecutionSource);
+        Assert.DoesNotContain("Live market exposure", liveOrder.ValidationSummary, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("Live total deployed exposure", liveOrder.ValidationSummary, StringComparison.OrdinalIgnoreCase);
+
+        var shadowPaper = Assert.Single(
+            repository.PaperOrders,
+            order => order.ExecutionSource == "paper_live_shadow_test");
+        Assert.Equal(liveOrder.CorrelationId, shadowPaper.CorrelationId);
+        Assert.Equal(liveOrder.PaperOrderId, shadowPaper.Id);
+    }
+
+    [Fact]
     public async Task ProcessAsync_Skip1LiveStakeUsesMatchedSubmitAmountsForActualFill()
     {
         var now = DateTimeOffset.UtcNow;

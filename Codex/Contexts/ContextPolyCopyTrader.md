@@ -1,3 +1,18 @@
+## Active Update 2026-05-16 Live Readiness Blocker Closure
+Goal: Close the three current blockers for tiny BTC Binance 1 bps Live stakes.
+Status: Blocked
+Done:
+- Closed the code-side exposure blocker: BTC live preflight now applies `LiveTrading` market/total deployed caps to open Live orders only, so unrelated Paper backlog no longer consumes the tiny Live smoke-test cap.
+- Added regression coverage proving `btc_up_down_5m_binance_bps_1` can submit a Paper/Live-shadow order when large old Paper orders/positions exist but no open Live exposure exists.
+- Updated README, live checklist, and configuration reference to document the Live-only exposure cap semantics for BTC live preflight.
+- Verified `dotnet test tests\PolyCopyTrader.Tests\PolyCopyTrader.Tests.csproj -c Release --no-restore --filter "FullyQualifiedName~BtcUpDown5mPaperStrategyProcessorTests" -m:1 /p:UseSharedCompilation=false` passed `112/112`.
+- Verified `dotnet build src\PolyCopyTrader.Service\PolyCopyTrader.Service.csproj -c Release --no-restore -m:1 /p:UseSharedCompilation=false` passed with `0` warnings and `0` errors.
+- Verified full `dotnet test tests\PolyCopyTrader.Tests\PolyCopyTrader.Tests.csproj -c Release --no-restore -m:1 /p:UseSharedCompilation=false` passed `486/486`.
+- Tried to reach the VPS over WinRM/SMB/SCM from this session, but network/service-control checks timed out again; no remote service restart, time sync, or live environment change was applied.
+Next: Deploy the updated Service to the VPS, sync Windows time on the VPS, set the explicit `Bot__EnableLiveTrading=true` machine environment override, restart `PolyCopyTrader.Service`, and recheck the next `btc_up_down_5m_binance_bps_1` preflight.
+Notes: No secrets were read or printed. No DB writes, order submissions, cancel actions, or VPS service changes were performed by this session. Do not commit `EnableLiveTrading=true` to default appsettings.
+Blockers: VPS/RDP/admin access is required to close clock drift and explicit live enablement on the production host.
+
 ## Active Update 2026-05-16 Live Stakes Readiness Recheck
 Goal: Answer whether the system is ready to place real Live stakes now.
 Status: Completed

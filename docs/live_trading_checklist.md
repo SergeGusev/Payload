@@ -25,6 +25,9 @@ Live trading is disabled by default. Use this checklist before any live session.
 - Paper/Live-shadow matching must keep asset, condition, outcome, order type, `postOnly=false`, limit price within `0.000001`, and requested size within `0.000001` shares; mismatch disables `LiveStakes` for that strategy and cancels correlated open live orders.
 - `LiveTrading:MaxOrderNotionalUsd` is tiny.
 - `LiveTrading:MaxOpenLiveOrders` is tiny, initially `1`.
+- For BTC 5-minute Live-shadow, `LiveTrading` market/total exposure caps are
+  checked against open Live orders only; Paper backlog must still be monitored
+  separately, but it must not consume the tiny Live smoke-test cap.
 - `PolymarketAuth:SigningAddress` is the signer wallet.
 - `PolymarketAuth:FunderAddress` is the funded Polymarket wallet/proxy.
 - `PolymarketAuth:SignatureType` is explicitly chosen.
