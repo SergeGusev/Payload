@@ -1,3 +1,14 @@
+## Active Update 2026-05-17 Docker Image Purpose Clarification
+Goal: Explain what Docker image was used/defined and why it exists.
+Status: Completed
+Done:
+- Confirmed there is no application Docker image or Dockerfile for PolyCopyTrader in the current repository.
+- Confirmed `docker-compose.local.yml` defines a fallback local PostgreSQL container using `postgres:16-alpine` on `127.0.0.1:54328` for machines without installed PostgreSQL.
+- Confirmed `postgres:18-alpine` was used once as Docker-provided PostgreSQL client tools (`pg_dump`/`pg_restore`/`psql`) when copying the database to `192.168.0.101`, because local client tools were unavailable.
+Next: None.
+Notes: Answer-only task. Ran `git pull --ff-only` successfully, inspected workflow/rules/context/project memory/Docker references, `git status --porcelain=v1`, and `git log -1 --oneline`. No source behavior changed and no tests were needed.
+Blockers: None.
+
 ## Active Update 2026-05-16 Service Redeploy Need Clarification
 Goal: Clarify whether the Service must be redeployed after enabling Binance 1 bps and 2 bps together.
 Status: Completed
