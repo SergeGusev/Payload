@@ -1,3 +1,14 @@
+## Active Update 2026-05-17 Docker Removal Clarification
+Goal: Clarify whether the local Docker PostgreSQL image/container can be deleted.
+Status: Completed
+Done:
+- Confirmed the Docker setup is not part of the production bot runtime; PolyCopyTrader remains Windows/.NET Service plus WPF Dashboard.
+- Checked local Docker state: `polycopytrader-local-postgres` is currently running healthy from `postgres:16-alpine`; local images include `postgres:16-alpine` and `postgres:18-alpine`; a `polycopytrader-local_polycopytrader-local-postgres-data` volume exists.
+- Clarified that the Docker container/image/volume can be removed if the installed Windows PostgreSQL on port `5432` is the intended local database path, with the caveat that deleting the Docker volume deletes only fallback-container DB data.
+Next: None.
+Notes: Answer-only task. Ran `git pull --ff-only`, inspected workflow/rules/context/project memory/Docker compose file, Git state, and local Docker container/image/volume state. No application source behavior changed and no tests were needed.
+Blockers: None.
+
 ## Active Update 2026-05-17 Docker Image Purpose Clarification
 Goal: Explain what Docker image was used/defined and why it exists.
 Status: Completed
