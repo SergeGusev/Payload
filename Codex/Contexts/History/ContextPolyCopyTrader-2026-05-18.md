@@ -34,3 +34,10 @@ Request:
 
 Result:
 Attempted to verify the newly deployed production Service on `192.168.0.101`, but the host was unreachable from this machine: PostgreSQL `5432`, IPC `5118`, WinRM `5985`, and ping all timed out; a short TCP retry also timed out on those service ports. Because of that, `service_heartbeats.version`, BTC 5m tick freshness, API errors, live orders, and actual process memory could not be checked. Reviewed the current BTC-focused Service configuration for RAM sizing: for Service-only VPS, recommended at least `4 GB` RAM (`2 GB` is tight); for Service plus PostgreSQL on the same VPS, recommended `8 GB` minimum and `16 GB` comfortable. No source or DB data changed, and no live order/cancel action was performed.
+
+## 2026-05-18T13:43:58.7754260Z
+Request:
+Проверь текущий статус работы сервиса на удалённом сервере
+
+Result:
+Checked production server `192.168.0.101`. PostgreSQL `5432` and WinRM `5985` are reachable again; IPC `5118` remains externally unreachable as expected for loopback-only IPC. Production DB heartbeat shows `PolyCopyTrader.Service` is `Running` in `Live` mode, version `info=1.0.0+811cab58b6be9f0387cfab7497d5409a0ab01134`, heartbeat age about `15s`, and no heartbeat error. BTC 5m odds ticks are fresh (`latest_tick_utc=2026-05-18T13:43:43Z`, age about `2s`), 6-hour BTC 5m Gamma market coverage has `0` missing windows, aggregate Polymarket WebSocket is connected with fresh messages, API errors over the last 60 minutes are `0`, and PostgreSQL blocked sessions are `0`. Found one new Live order attempt at `2026-05-18T13:31:42Z` with status `CancelFailed` and zero filled size/notional; read-only authenticated CLOB open-orders report returned `Orders summarized: 0`, so no currently open CLOB orders were visible. No DB writes, service restart, live order submission, or cancel action was performed.

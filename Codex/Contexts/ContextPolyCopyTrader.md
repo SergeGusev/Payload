@@ -1,3 +1,18 @@
+## Active Update 2026-05-18 Remote Service Current Status Check
+Goal: Check the current operational status of `PolyCopyTrader.Service` on the remote server.
+Status: Completed
+Done:
+- Confirmed remote PostgreSQL `192.168.0.101:5432` and WinRM `5985` are reachable again; remote IPC `5118` remains externally unreachable, consistent with loopback-only IPC.
+- Confirmed production `PolyCopyTrader.Service` heartbeat is fresh at DB time `2026-05-18T13:43:45Z`: status `Running`, mode `Live`, heartbeat age about `15s`, no heartbeat error.
+- Confirmed deployed Service version is `info=1.0.0+811cab58b6be9f0387cfab7497d5409a0ab01134`, so the BTC 5m priority Gamma sync fix commit is running.
+- Confirmed BTC 5m pipeline is active: latest odds tick `2026-05-18T13:43:43Z`, age about `2s`; 6-hour BTC 5m Gamma market coverage had `0` missing windows.
+- Confirmed aggregate Polymarket market WebSocket is connected with fresh messages; old stale shard rows from `2026-05-07` still exist in `market_data_status`, but the current aggregate/shard-001 rows are fresh and connected.
+- Confirmed API errors in the last 60 minutes are `0` and PostgreSQL blocked sessions are `0`.
+- Found one new Live order attempt after deploy at `2026-05-18T13:31:42Z`: status `CancelFailed`, `filled_size=0`, `filled_notional_usd=0`, cancel status `order can't be found - already canceled or matched`. A read-only authenticated CLOB open-orders report returned `Orders summarized: 0`, so no currently open CLOB orders were visible.
+Next: Watch whether the `CancelFailed` row gets reconciled/settled cleanly; operationally the service is currently running and BTC 5m data is fresh.
+Notes: Read-only check only. No DB writes, service restart, live order submission, or cancel action was performed. Remote process memory could not be read because `Invoke-Command` still fails with WinRM Negotiate `0x8009030e`.
+Blockers: None for DB-based service health; WinRM authenticated command execution remains unavailable from this session.
+
 ## Active Update 2026-05-18 Service Deploy Check And VPS RAM Estimate
 Goal: Check the newly deployed production Service and estimate RAM needs for VPS hosting.
 Status: Completed with production connectivity blocked
