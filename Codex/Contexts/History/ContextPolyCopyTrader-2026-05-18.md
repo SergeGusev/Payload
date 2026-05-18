@@ -83,3 +83,10 @@ Request:
 
 Result:
 Made the Dashboard strategy `Live` state sortable. The editable `All` tab `Live` checkbox column now has `SortMemberPath=LiveStakes`; the shared recent strategy grid used by `24 hours`, `6 hours`, and `1 hour` now includes a sortable `Live` checkbox column backed by `LiveStakes`. Added `LiveStakes` to the recent strategy domain/dashboard rows, PostgreSQL recent-performance projection, and test repository projection. Updated README. Verification passed: Dashboard Release build, targeted strategy/dashboard tests 5/5, full test project 495/495, and `git diff --check` clean except LF/CRLF warnings. The earlier production service check was interrupted by this newer Dashboard request before DB diagnostics were run.
+
+## 2026-05-18T19:02:17.4818798Z
+Request:
+Проверь, всё ли в порядке с сервером и живыми ставками
+
+Result:
+Checked production server and live stakes read-only. PostgreSQL `192.168.0.101:5432` and WinRM `5985` were reachable; IPC `5118` was externally unreachable as expected for loopback-only IPC. `PolyCopyTrader.Service` is `Running` in `Live` mode on version `info=1.0.0+ab94104a5fc71a10d966b36ae22d4822b43f4039`, heartbeat age about `43s`, no heartbeat error. LiveStakes is enabled for exactly `btc_up_down_5m_binance_bps_1_9` and `btc_up_down_5m_binance_bps_2`; both are enabled with live stake amount `1`. BTC 5m ticks are fresh (`latest_tick_utc=2026-05-18T19:01:16Z`, about `3s` old), market WebSocket rows are connected and not stale, API errors in the last 60 minutes are `0`, and PostgreSQL lock/long-active/idle-in-transaction checks are `0`. Confirmed the paired live behavior: at `2026-05-18T19:00:10Z`, both `1.9` and `2.0` placed/matched `Up` GTD BUY orders at `0.50`, size `6`, cost basis `$3` each, execution source `paper_live_shadow_test`. DB has no open live orders, and the read-only authenticated CLOB open-orders report returned `Orders summarized: 0`. No DB writes, service restart, live order submission, or cancel action was performed.

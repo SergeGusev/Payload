@@ -1,3 +1,18 @@
+## Active Update 2026-05-18 Production Server And Live Stakes Check
+Goal: Check production server health and current live-stakes behavior.
+Status: Completed
+Done:
+- Confirmed production PostgreSQL `192.168.0.101:5432` and WinRM `5985` are reachable; remote IPC `5118` remains externally unreachable, consistent with loopback-only IPC.
+- Confirmed `PolyCopyTrader.Service` is running in `Live` mode with a fresh heartbeat: version `info=1.0.0+ab94104a5fc71a10d966b36ae22d4822b43f4039`, started `2026-05-18T18:41:35Z`, last heartbeat `2026-05-18T19:00:36Z`, age about `43s`, no heartbeat error.
+- Confirmed LiveStakes is enabled for exactly two strategies: `btc_up_down_5m_binance_bps_1_9` and `btc_up_down_5m_binance_bps_2`; both are enabled, with live stake amount `1`.
+- Confirmed BTC 5m data is fresh: latest odds tick `2026-05-18T19:01:16Z`, age about `3s`, `108` ticks across `3` markets in the last 10 minutes; Polymarket market WebSocket aggregate/shard rows are connected and not stale.
+- Confirmed paired live behavior after the deploy: at `2026-05-18T19:00:10Z`, both `1.9` and `2.0` placed/matched `Up` GTD BUY orders at `0.50`, size `6`, cost basis `$3` each, execution source `paper_live_shadow_test`.
+- Confirmed no DB open live orders and the read-only authenticated CLOB open-orders report returned `Orders summarized: 0`.
+- Confirmed production API errors in the last 60 minutes are `0`, and PostgreSQL lock/long-active/idle-in-transaction health checks are all `0`.
+Next: Watch the `19:00 UTC` paired live orders settle; no immediate action needed.
+Notes: Read-only operational check only. Used a temporary `.codex-temp/ProdHealthCheck` C# Npgsql probe in a `BEGIN READ ONLY` transaction and removed it afterward; ran `--clob-authenticated-open-orders-report` (`GET /data/orders` only). No DB writes, service restart, live order submission, or cancel action was performed.
+Blockers: None.
+
 ## Active Update 2026-05-18 Dashboard Sortable Live Column In Strategy Tabs
 Goal: Make the Dashboard `Live` strategy column sortable across the `Strategies` nested tabs.
 Status: Completed
