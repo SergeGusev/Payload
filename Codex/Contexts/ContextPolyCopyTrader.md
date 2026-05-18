@@ -1,3 +1,19 @@
+## Active Update 2026-05-18 Production Server Health Check
+Goal: Check current production server health on `192.168.0.101`.
+Status: Completed
+Done:
+- Confirmed production PostgreSQL `192.168.0.101:5432` is reachable; remote IPC `192.168.0.101:5118` is not reachable from this machine, consistent with the service's loopback-only IPC design.
+- Confirmed `PolyCopyTrader.Service` heartbeat is fresh in production DB: status `Running`, mode `Live`, started `2026-05-18T07:37:12Z`, last heartbeat around `2026-05-18T08:18:13Z`, age about `40s`, no heartbeat error.
+- Confirmed PostgreSQL health looked normal during the check: PostgreSQL `18.3`, database `polycopytrader`, no blocked sessions, no active sessions over 5 minutes, no idle-in-transaction sessions.
+- Confirmed market-data infrastructure is partially healthy: aggregate `PolymarketMarketWebSocket` is `Connected`, last message age about `26s`, Binance trade/book diagnostics are current, and API errors were `0` in the last 60 minutes.
+- Confirmed the service created Paper orders after restart: `240` Paper orders in the last 60 minutes, latest at `2026-05-18T07:55:01Z`, mostly BTC 1h pre-open variants.
+- Found no new Live orders in the last 24 hours; latest Live order remains the `btc_up_down_5m_binance_bps_2` matched order from `2026-05-16T17:20:33Z`, already balance-applied and settled with `-3.00` realized PnL.
+- Found production LiveStakes currently has only `btc_up_down_5m_binance_bps_2` enabled (`liveBalance=97`); `btc_up_down_5m_binance_bps_1` is currently not Live-enabled.
+- Found BTC 5m-specific activity is not currently trading because there are no current BTC 5m Gamma market rows by parsed slug time; latest parsed past BTC 5m start is `2026-05-17T17:25:00Z`, next parsed start is `2026-05-18T09:35:00Z`; `btc_up_down_5m_odds_ticks` last updated at `2026-05-16T17:43:38Z`.
+Next: Recheck after `2026-05-18T09:35:00Z` UTC to confirm BTC 5m odds ticks and bps strategy runs resume when the next parsed BTC 5m market window begins; separately decide whether `btc_up_down_5m_binance_bps_1` should be re-enabled alongside `bps_2`.
+Notes: Read-only operational check only. Ran `git pull --ff-only`, inspected workflow/rules/context/docs/code, checked Git state, tested ports, ran targeted production PostgreSQL diagnostics through the existing connection string with only host replaced, and ran `--print-live-shadow-state` once; that command listed the Live strategy but then timed out on `GetRecentPaperOrdersAsync`, so targeted SQL was used instead. No DB writes, service restart, live order submission, cancel action, or source behavior change was performed.
+Blockers: None for the check. Operational caveats: current production server binary is commit `02dd486` (older than local `HEAD` docs/admin commits), BTC 5m windows are absent until the next parsed start, and Live flags are not in the previously requested two-strategy state.
+
 ## Active Update 2026-05-17 Docker Removal Clarification
 Goal: Clarify whether the local Docker PostgreSQL image/container can be deleted.
 Status: Completed
