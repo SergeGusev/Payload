@@ -1,3 +1,18 @@
+## Active Update 2026-05-18 Continued Production Live Watch
+Goal: Continue observing production server and paired live stakes after enabling `1.9` with `2.0`.
+Status: Completed
+Done:
+- Monitored production PostgreSQL read-only across several BTC 5m cycles from about `2026-05-18T19:09Z` through `2026-05-18T19:21Z`.
+- Confirmed `PolyCopyTrader.Service` stayed `Running`/`Live` on `info=1.0.0+ab94104a5fc71a10d966b36ae22d4822b43f4039`, with fresh heartbeats and no heartbeat error.
+- Confirmed BTC 5m odds ticks and Polymarket market WebSocket stayed fresh/connected; API errors stayed `0` over the last 60 minutes; PostgreSQL lock/long-active-session checks stayed `0`.
+- Confirmed LiveStakes remained enabled for exactly `btc_up_down_5m_binance_bps_1_9` and `btc_up_down_5m_binance_bps_2`.
+- Observed paired live behavior: `19:00 UTC` both won `Up` (`+3` each), `19:05 UTC` both lost `Up` (`-3` each), `19:10 UTC` both entered `Down`, matched, and later settled as wins (`+3` each).
+- Confirmed `19:15 UTC` and `19:20 UTC` both strategies skipped together with `btc_reference_move_below_bps_threshold`.
+- Confirmed DB open live orders stayed `0` at final check and read-only authenticated CLOB open-orders report returned `Orders summarized: 0`.
+Next: Continue routine monitoring only; no immediate action needed.
+Notes: Read-only operational watch only. Used a temporary `.codex-temp/LiveWatch` C# Npgsql monitor in `BEGIN READ ONLY` transactions and removed it afterward; ran `--clob-authenticated-open-orders-report` (`GET /data/orders` only). No DB writes, service restart, live order submission, or cancel action was performed.
+Blockers: None.
+
 ## Active Update 2026-05-18 Production Server And Live Stakes Check
 Goal: Check production server health and current live-stakes behavior.
 Status: Completed
