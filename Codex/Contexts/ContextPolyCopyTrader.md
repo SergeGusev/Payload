@@ -1,3 +1,13 @@
+## Active Update 2026-05-18 Dashboard Only Positive Includes Zero
+Goal: Change Dashboard `Only positive` strategy filters to include zero-ROI rows as well as positive rows.
+Status: Completed
+Done:
+- Updated the Dashboard strategy filters so `Only positive` now keeps non-negative rows: all-time strategies use `ClosedRoiPct >= 0`, and recent strategy tabs use window `RoiPct >= 0`.
+- Negative ROI rows are still hidden when the checkbox is enabled.
+Next: Deploy/restart the Dashboard to use the updated filter behavior.
+Notes: Verification passed: `dotnet build src\PolyCopyTrader.Dashboard\PolyCopyTrader.Dashboard.csproj -c Release --no-restore` passed with existing Storage nullable warnings; `dotnet test tests\PolyCopyTrader.Tests\PolyCopyTrader.Tests.csproj -c Release --no-restore` passed 494/494.
+Blockers: None.
+
 ## Active Update 2026-05-18 BTC 5m Priority Gamma Sync Fix
 Goal: Monitor production BTC 5m windows after restart and fix the ingestion gap if current windows do not appear.
 Status: Completed locally; production DB bridged with a one-shot sync; permanent behavior requires Service deploy/restart from this commit.

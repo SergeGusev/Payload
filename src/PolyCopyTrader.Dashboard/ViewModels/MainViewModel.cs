@@ -1017,12 +1017,12 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
 
     private static bool IsStrategyPositiveVisible(StrategyPerformanceRow strategy, bool onlyPositive)
     {
-        return !onlyPositive || strategy.ClosedRoiPct > 0m;
+        return !onlyPositive || strategy.ClosedRoiPct >= 0m;
     }
 
     private static bool IsStrategyRecentPositiveVisible(StrategyRecentPerformanceRow strategy, bool onlyPositive)
     {
-        return !onlyPositive || strategy.RoiPct > 0m;
+        return !onlyPositive || strategy.RoiPct >= 0m;
     }
 
     private static string GetStrategyCategory(string strategyName)

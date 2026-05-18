@@ -18,3 +18,10 @@ Request:
 
 Result:
 Monitored production BTC 5m and fixed the ingestion gap. Found Gamma already had current BTC 5m markets, but production DB missed them because broad active-market ingestion scans Gamma by `createdAt` and current BTC 5m windows were buried after a day of downtime. Added priority slug-based BTC 5m Gamma sync before the full scan, added a one-shot `--sync-current-btc-5m-markets` command with configurable lookbehind/lookahead, and added regression coverage. Ran a production one-shot sync with `--btc-5m-sync-lookahead-windows 288`, upserting `288` BTC 5m markets. Production checks then showed fresh heartbeat, fresh BTC 5m odds ticks including the `2026-05-18T08:50:00Z` window, zero missing BTC 5m markets for the checked 6-hour and 24-hour horizons, zero API errors over the last hour, and no new Live orders in the last 60 minutes. Build and tests passed. Remote WinRM authentication prevented deploying/restarting the production Service from this session, so the permanent fix still requires deploying this commit.
+
+## 2026-05-18T09:26:57.6889288Z
+Request:
+Сделай так, чтобы при галочке Only positive показывались не только те, которые в плюсах, но и те, которые ещё в нулях
+
+Result:
+Changed the Dashboard `Only positive` strategy filters to include zero-ROI rows. All-time strategy filtering now keeps `ClosedRoiPct >= 0`, and 24h/6h/1h recent tabs keep `RoiPct >= 0`; negative rows are still hidden. Dashboard Release build passed with existing Storage nullable warnings, and the full test project passed 494/494.
