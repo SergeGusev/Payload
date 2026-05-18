@@ -504,6 +504,8 @@ public sealed class DashboardOptions
 
     public int StrategyRefreshIntervalSeconds { get; init; } = 60;
 
+    public bool StrategiesOnlyMode { get; init; } = true;
+
     public int OptionalReportTimeoutSeconds { get; init; } = 8;
 }
 

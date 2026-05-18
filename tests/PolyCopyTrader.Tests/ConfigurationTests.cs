@@ -181,6 +181,7 @@ public sealed class ConfigurationTests
         Assert.Equal(5, configuration.LiveTrading.MaintenancePollIntervalSeconds);
         Assert.Equal(60, configuration.Dashboard.RefreshIntervalSeconds);
         Assert.Equal(60, configuration.Dashboard.StrategyRefreshIntervalSeconds);
+        Assert.True(configuration.Dashboard.StrategiesOnlyMode);
         Assert.Equal(8, configuration.Dashboard.OptionalReportTimeoutSeconds);
     }
 

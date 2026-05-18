@@ -24,6 +24,11 @@ public sealed class DashboardDataService(
         string? controlStatusError = null,
         CancellationToken cancellationToken = default)
     {
+        if (configuration.Dashboard.StrategiesOnlyMode)
+        {
+            return await LoadStrategiesOnlyAsync(controlStatus, controlStatusError, cancellationToken);
+        }
+
         var heartbeats = await repository.GetServiceHeartbeatsAsync(cancellationToken);
         var serviceAvailability = DashboardServiceAvailabilityEvaluator.Evaluate(
             heartbeats,
@@ -154,6 +159,60 @@ public sealed class DashboardDataService(
             BuildLogs(apiErrors, riskEvents, commandAudits, marketDataEvents, liveTradingEvents));
     }
 
+    private async Task<DashboardSnapshot> LoadStrategiesOnlyAsync(
+        ControlStatusResponse? controlStatus,
+        string? controlStatusError,
+        CancellationToken cancellationToken)
+    {
+        var heartbeats = await repository.GetServiceHeartbeatsAsync(cancellationToken);
+        var serviceAvailability = DashboardServiceAvailabilityEvaluator.Evaluate(
+            heartbeats,
+            DateTimeOffset.UtcNow,
+            GetServiceHeartbeatStaleAfter());
+        var strategyPerformance = await GetStrategyPerformanceAsync(cancellationToken);
+        var strategyRecentPerformance = await GetStrategyRecentPerformanceAsync(cancellationToken);
+        var overview = BuildStrategyOnlyOverview(serviceAvailability, strategyPerformance, strategyRecentPerformance);
+        var diagnostics = BuildStrategyOnlyDiagnostics(
+            serviceAvailability,
+            strategyPerformance,
+            strategyRecentPerformance,
+            controlStatus,
+            controlStatusError);
+
+        return new DashboardSnapshot(
+            serviceAvailability,
+            overview,
+            [],
+            [],
+            [],
+            [],
+            [],
+            [],
+            [],
+            [],
+            [],
+            [],
+            [],
+            [],
+            strategyPerformance.Select(ToStrategyPerformanceRow).ToArray(),
+            strategyRecentPerformance.Select(ToStrategyRecentPerformanceRow).ToArray(),
+            [],
+            [],
+            [],
+            [],
+            [],
+            [],
+            [],
+            [],
+            [],
+            [],
+            [],
+            [],
+            diagnostics,
+            [],
+            []);
+    }
+
     public void InvalidateStrategyPerformanceCache()
     {
         cachedStrategyPerformance = null;
@@ -220,6 +279,62 @@ public sealed class DashboardDataService(
     private static string FormatOptionalReportException(Exception exception)
     {
         return $"{exception.GetType().Name}: {exception.Message}";
+    }
+
+    private IReadOnlyList<OverviewMetric> BuildStrategyOnlyOverview(
+        ServiceAvailability serviceAvailability,
+        IReadOnlyList<StrategyPerformance> strategies,
+        IReadOnlyList<StrategyRecentPerformance> recentStrategies)
+    {
+        return
+        [
+            new OverviewMetric("Mode", string.IsNullOrWhiteSpace(serviceAvailability.Mode) ? configuration.Bot.Mode.ToString() : serviceAvailability.Mode),
+            new OverviewMetric("Service status", FormatServiceStatus(serviceAvailability)),
+            new OverviewMetric("Last heartbeat UTC", FormatDate(serviceAvailability.LastHeartbeatUtc)),
+            new OverviewMetric("Heartbeat age", DashboardServiceAvailabilityEvaluator.FormatHeartbeatAge(serviceAvailability.HeartbeatAge)),
+            new OverviewMetric("Current loop", string.IsNullOrWhiteSpace(serviceAvailability.CurrentLoop) ? "Waiting for service data" : serviceAvailability.CurrentLoop),
+            new OverviewMetric("Storage configured", storageConfigured ? "Yes" : "No"),
+            new OverviewMetric("Dashboard scope", "Strategies only"),
+            new OverviewMetric("Strategies", strategies.Count.ToString(System.Globalization.CultureInfo.InvariantCulture)),
+            new OverviewMetric("Recent strategy rows", recentStrategies.Count.ToString(System.Globalization.CultureInfo.InvariantCulture)),
+            new OverviewMetric("Live strategies", strategies.Count(item => item.LiveStakes).ToString(System.Globalization.CultureInfo.InvariantCulture))
+        ];
+    }
+
+    private IReadOnlyList<DiagnosticRow> BuildStrategyOnlyDiagnostics(
+        ServiceAvailability serviceAvailability,
+        IReadOnlyList<StrategyPerformance> strategies,
+        IReadOnlyList<StrategyRecentPerformance> recentStrategies,
+        ControlStatusResponse? controlStatus,
+        string? controlStatusError)
+    {
+        var enabledStrategies = strategies.Count(item => item.Enabled);
+        var liveStrategies = strategies.Count(item => item.LiveStakes);
+        var windows = recentStrategies
+            .GroupBy(item => item.Window, StringComparer.OrdinalIgnoreCase)
+            .OrderBy(group => group.Key, StringComparer.OrdinalIgnoreCase)
+            .Select(group => $"{group.Key}={group.Count()}")
+            .ToArray();
+        var ipcStatus = controlStatus is null
+            ? string.IsNullOrWhiteSpace(controlStatusError) ? "Not checked during refresh" : controlStatusError
+            : $"{controlStatus.State}: {controlStatus.LastError}";
+
+        return
+        [
+            new DiagnosticRow(
+                "Dashboard scope",
+                "StrategiesOnlyMode=True; skipped watchlist, trader discovery, on-chain, signals, orders, market data, reports, risk, logs and auth readiness queries.",
+                "Info"),
+            new DiagnosticRow("Storage provider", configuration.Storage.Provider, storageConfigured ? "OK" : "Warning"),
+            new DiagnosticRow("Storage configured", storageConfigured ? "Yes" : "No", storageConfigured ? "OK" : "Warning"),
+            new DiagnosticRow("Service status", FormatServiceStatus(serviceAvailability), ServiceHeartbeatReadinessStatus(serviceAvailability)),
+            new DiagnosticRow(
+                "Strategies",
+                $"{strategies.Count} total; {enabledStrategies} enabled; {liveStrategies} live",
+                strategies.Count == 0 ? "Warning" : "OK"),
+            new DiagnosticRow("Recent strategy windows", windows.Length == 0 ? "none" : string.Join("; ", windows), recentStrategies.Count == 0 ? "Warning" : "OK"),
+            new DiagnosticRow("IPC controls", ipcStatus, "Info")
+        ];
     }
 
     private IReadOnlyList<OverviewMetric> BuildOverview(

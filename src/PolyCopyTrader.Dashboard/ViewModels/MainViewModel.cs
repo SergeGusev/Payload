@@ -202,6 +202,12 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
 
     public IReadOnlyList<string> DatabaseSourceOptions { get; } = DashboardDatabaseSources.DisplayNames;
 
+    public Visibility NonStrategyVisibility =>
+        runtime.Configuration.Dashboard.StrategiesOnlyMode ? Visibility.Collapsed : Visibility.Visible;
+
+    public int DashboardTabSelectedIndex =>
+        runtime.Configuration.Dashboard.StrategiesOnlyMode ? 1 : 0;
+
     partial void OnSelectedStrategyCategoryChanged(string value)
     {
         ApplyStrategyFilters();
@@ -383,6 +389,8 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         csvExporter = nextCsvExporter;
         currentDatabaseSource = databaseSource;
         StorageStatus = BuildStorageStatus(nextRuntime);
+        OnPropertyChanged(nameof(NonStrategyVisibility));
+        OnPropertyChanged(nameof(DashboardTabSelectedIndex));
     }
 
     private void ResetSelectedDatabaseSource()
@@ -930,6 +938,12 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
 
         Mode = Overview.FirstOrDefault(item => item.Name == "Mode")?.Value ?? "Unknown";
         ServiceStatus = Overview.FirstOrDefault(item => item.Name == "Service status")?.Value ?? "No heartbeat";
+        if (runtime.Configuration.Dashboard.StrategiesOnlyMode)
+        {
+            Summary = $"{ServiceStatus}; {StorageStatus}; {allStrategies.Count} strategies; {StrategyRecent24Hours.Count} 24h rows; {StrategyRecent6Hours.Count} 6h rows; {StrategyRecent1Hour.Count} 1h rows.";
+            return;
+        }
+
         var webSocketStatus = Overview.FirstOrDefault(item => item.Name == "WebSocket status")?.Value ?? "No market data status";
         var liveBlocked = LiveReadiness.Count(item => item.Status is "Blocked" or "Error");
         Summary = $"{ServiceStatus}; WS={webSocketStatus}; {StorageStatus}; live blockers={liveBlocked}; {TraderDiscovery.Count} discovery candidates; {OnChainParticipantDetails.Count} on-chain participants; {OnChainTradeDetails.Count} on-chain trades; {OnChainLeaders.Count} on-chain leaders; {OnChainPositions.Count} on-chain positions; {Signals.Count} signals; {allStrategies.Count} strategies; {PaperOrders.Count} paper orders; {PaperCopiedTraderPerformance.Count} copied ratings; {DryRunOrders.Count} dry-run orders; {LiveOrders.Count} live orders; {PaperPositions.Count} positions.";

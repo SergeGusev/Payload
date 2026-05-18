@@ -1,3 +1,16 @@
+## Active Update 2026-05-19 Dashboard Strategies Only Mode
+Goal: Remove Dashboard refresh/UI work that is not needed for showing strategy grids.
+Status: Completed
+Done:
+- Added `Dashboard:StrategiesOnlyMode` with default `true` in configuration and Dashboard appsettings.
+- Changed `DashboardDataService.LoadAsync` so strategies-only mode reads only `service_heartbeats`, cumulative strategy performance, and recent strategy performance; it skips watchlist, trader discovery, on-chain, signals, orders, market data, analytics reports, risk, logs, and auth-readiness queries.
+- Changed the WPF Dashboard to hide non-strategy tabs and the general IPC command toolbar while `StrategiesOnlyMode=true`, selecting the `Strategies` tab by default; setting `Dashboard:StrategiesOnlyMode=false` restores the full UI and full refresh path.
+- Updated the Dashboard summary text and docs/config reference for the strategies-only behavior.
+- Republished the fixed Dashboard to `D:\My\Business\PolyMarketPublished\PayloadDashboard` and rebuilt Debug output.
+Next: Restart Dashboard from the published folder or the freshly rebuilt Debug output to pick up the strategies-only UI/load path.
+Notes: Verification passed: remote strategies-only probe against `Remote database` loaded `Strategies=1266`, `Recent=3798`, `NonStrategyRows=0`, `ServiceAvailable=True` in about `16.8s`; `dotnet build src\PolyCopyTrader.Dashboard\PolyCopyTrader.Dashboard.csproj -c Release --no-restore`; full tests 496/496; `dotnet publish src\PolyCopyTrader.Dashboard\PolyCopyTrader.Dashboard.csproj -c Release -o D:\My\Business\PolyMarketPublished\PayloadDashboard --no-restore`; `dotnet build src\PolyCopyTrader.Dashboard\PolyCopyTrader.Dashboard.csproj -c Debug --no-restore`; `git diff --check` clean except LF/CRLF warnings.
+Blockers: None.
+
 ## Active Update 2026-05-18 Dashboard Remote Database Timeout Fix
 Goal: Diagnose and fix Dashboard failing to connect/load when switching to `Remote database`.
 Status: Completed

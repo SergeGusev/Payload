@@ -759,7 +759,8 @@ leader exits can still be tracked.
 
 - `Dashboard:RefreshIntervalSeconds`: UI refresh timer for the Dashboard; default `60`.
 - `Dashboard:StrategyRefreshIntervalSeconds`: minimum interval between Dashboard strategy-performance database refreshes; default `60`. Strategy toggle/stake commands invalidate the cache so command results are shown immediately.
-- `Dashboard:OptionalReportTimeoutSeconds`: timeout for optional Dashboard analytics report grids; default `8`. If a report times out, the Dashboard keeps the main refresh alive and shows a Diagnostics warning for the skipped report.
+- `Dashboard:StrategiesOnlyMode`: when true, the Dashboard reads and shows only service heartbeat plus strategy performance grids; default `true`.
+- `Dashboard:OptionalReportTimeoutSeconds`: timeout for optional Dashboard analytics report grids; default `8`. Used only when `Dashboard:StrategiesOnlyMode=false`. If a report times out, the Dashboard keeps the main refresh alive and shows a Diagnostics warning for the skipped report.
 
 - `Enabled`: runs the paper-only BTC 5-minute strategy worker when true; default `true`.
 - `PollIntervalSeconds`: worker loop delay; default `1` in the service config to reduce BTC entry timing drift.

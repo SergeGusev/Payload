@@ -174,7 +174,7 @@
         </Border>
 
         <DockPanel Grid.Row="2" Margin="0,14,0,12">
-            <WrapPanel DockPanel.Dock="Left">
+            <WrapPanel DockPanel.Dock="Left" Visibility="{Binding NonStrategyVisibility}">
                 <Button Content="Pause"
                         Command="{Binding PauseScanningCommand}" />
                 <Button Content="Kill switch"
@@ -234,8 +234,8 @@
             </StackPanel>
         </DockPanel>
 
-        <TabControl Grid.Row="3">
-            <TabItem Header="Overview">
+        <TabControl Grid.Row="3" SelectedIndex="{Binding DashboardTabSelectedIndex}">
+            <TabItem Header="Overview" Visibility="{Binding NonStrategyVisibility}">
                 <ScrollViewer VerticalScrollBarVisibility="Auto">
                     <ItemsControl ItemsSource="{Binding Overview}" Margin="0,12,0,0">
                         <ItemsControl.ItemsPanel>
@@ -491,7 +491,7 @@
                 </TabControl>
             </TabItem>
 
-            <TabItem Header="Watchlist">
+            <TabItem Header="Watchlist" Visibility="{Binding NonStrategyVisibility}">
                 <DataGrid ItemsSource="{Binding Watchlist}"
                           behaviors:DataGridSelectionPersistence.KeyProperties="Wallet">
                     <DataGrid.Columns>
@@ -509,7 +509,7 @@
                 </DataGrid>
             </TabItem>
 
-            <TabItem Header="Trader Discovery">
+            <TabItem Header="Trader Discovery" Visibility="{Binding NonStrategyVisibility}">
                 <DataGrid ItemsSource="{Binding TraderDiscovery}"
                           behaviors:DataGridSelectionPersistence.KeyProperties="Wallet,Type,Category,TimePeriod">
                     <DataGrid.Columns>
@@ -539,7 +539,7 @@
                 </DataGrid>
             </TabItem>
 
-            <TabItem Header="Onchain Trades">
+            <TabItem Header="Onchain Trades" Visibility="{Binding NonStrategyVisibility}">
                 <DataGrid ItemsSource="{Binding OnChainTradeDetails}"
                           behaviors:DataGridSelectionPersistence.KeyProperties="TransactionHash,TokenId,Maker,Taker">
                     <DataGrid.Columns>
@@ -564,7 +564,7 @@
                 </DataGrid>
             </TabItem>
 
-            <TabItem Header="Onchain Participants">
+            <TabItem Header="Onchain Participants" Visibility="{Binding NonStrategyVisibility}">
                 <DataGrid ItemsSource="{Binding OnChainParticipantDetails}"
                           behaviors:DataGridSelectionPersistence.KeyProperties="Wallet">
                     <DataGrid.Columns>
@@ -591,7 +591,7 @@
                 </DataGrid>
             </TabItem>
 
-            <TabItem Header="Onchain Leaders">
+            <TabItem Header="Onchain Leaders" Visibility="{Binding NonStrategyVisibility}">
                 <DataGrid ItemsSource="{Binding OnChainLeaders}"
                           behaviors:DataGridSelectionPersistence.KeyProperties="Wallet">
                     <DataGrid.Columns>
@@ -612,7 +612,7 @@
                 </DataGrid>
             </TabItem>
 
-            <TabItem Header="Onchain Rankings">
+            <TabItem Header="Onchain Rankings" Visibility="{Binding NonStrategyVisibility}">
                 <DataGrid ItemsSource="{Binding OnChainTraders}"
                           behaviors:DataGridSelectionPersistence.KeyProperties="Wallet">
                     <DataGrid.Columns>
@@ -631,7 +631,7 @@
                 </DataGrid>
             </TabItem>
 
-            <TabItem Header="Onchain Positions">
+            <TabItem Header="Onchain Positions" Visibility="{Binding NonStrategyVisibility}">
                 <DataGrid ItemsSource="{Binding OnChainPositions}"
                           behaviors:DataGridSelectionPersistence.KeyProperties="Wallet,TokenId">
                     <DataGrid.Columns>
@@ -654,7 +654,7 @@
                 </DataGrid>
             </TabItem>
 
-            <TabItem Header="Onchain Executions">
+            <TabItem Header="Onchain Executions" Visibility="{Binding NonStrategyVisibility}">
                 <DataGrid ItemsSource="{Binding OnChainFills}"
                           behaviors:DataGridSelectionPersistence.KeyProperties="TransactionHash,TokenId,Wallet">
                     <DataGrid.Columns>
@@ -672,7 +672,7 @@
                 </DataGrid>
             </TabItem>
 
-            <TabItem Header="Leader Trades">
+            <TabItem Header="Leader Trades" Visibility="{Binding NonStrategyVisibility}">
                 <DataGrid ItemsSource="{Binding LeaderTrades}"
                           behaviors:DataGridSelectionPersistence.KeyProperties="TransactionHash,Trader">
                     <DataGrid.Columns>
@@ -690,7 +690,7 @@
                 </DataGrid>
             </TabItem>
 
-            <TabItem Header="Signals">
+            <TabItem Header="Signals" Visibility="{Binding NonStrategyVisibility}">
                 <DataGrid ItemsSource="{Binding Signals}"
                           behaviors:DataGridSelectionPersistence.KeyProperties="TimestampUtc,Trader,Market,Outcome,DecisionCode">
                     <DataGrid.Columns>
@@ -715,7 +715,7 @@
                 </DataGrid>
             </TabItem>
 
-            <TabItem Header="Paper Orders">
+            <TabItem Header="Paper Orders" Visibility="{Binding NonStrategyVisibility}">
                 <DataGrid ItemsSource="{Binding PaperOrders}"
                           behaviors:DataGridSelectionPersistence.KeyProperties="SignalId,Side,Outcome">
                     <DataGrid.Columns>
@@ -736,7 +736,7 @@
                 </DataGrid>
             </TabItem>
 
-            <TabItem Header="Paper Positions">
+            <TabItem Header="Paper Positions" Visibility="{Binding NonStrategyVisibility}">
                 <DataGrid ItemsSource="{Binding PaperPositions}"
                           behaviors:DataGridSelectionPersistence.KeyProperties="SourceTrader,Market,Outcome">
                     <DataGrid.Columns>
@@ -754,7 +754,7 @@
                 </DataGrid>
             </TabItem>
 
-            <TabItem Header="Copied Ratings">
+            <TabItem Header="Copied Ratings" Visibility="{Binding NonStrategyVisibility}">
                 <DataGrid ItemsSource="{Binding PaperCopiedTraderPerformance}"
                           behaviors:DataGridSelectionPersistence.KeyProperties="Wallet,Category">
                     <DataGrid.Columns>
@@ -779,7 +779,7 @@
                 </DataGrid>
             </TabItem>
 
-            <TabItem Header="Dry Run Orders">
+            <TabItem Header="Dry Run Orders" Visibility="{Binding NonStrategyVisibility}">
                 <DataGrid ItemsSource="{Binding DryRunOrders}"
                           behaviors:DataGridSelectionPersistence.KeyProperties="SignalId,TimestampUtc">
                     <DataGrid.Columns>
@@ -798,7 +798,7 @@
                 </DataGrid>
             </TabItem>
 
-            <TabItem Header="Live Orders">
+            <TabItem Header="Live Orders" Visibility="{Binding NonStrategyVisibility}">
                 <DataGrid ItemsSource="{Binding LiveOrders}"
                           behaviors:DataGridSelectionPersistence.KeyProperties="OrderId,SignalId">
                     <DataGrid.Columns>
@@ -832,7 +832,7 @@
                 </DataGrid>
             </TabItem>
 
-            <TabItem Header="Live Events">
+            <TabItem Header="Live Events" Visibility="{Binding NonStrategyVisibility}">
                 <DataGrid ItemsSource="{Binding LiveTradingEvents}"
                           behaviors:DataGridSelectionPersistence.KeyProperties="TimestampUtc,Action,Status">
                     <DataGrid.Columns>
@@ -844,7 +844,7 @@
                 </DataGrid>
             </TabItem>
 
-            <TabItem Header="Live Readiness">
+            <TabItem Header="Live Readiness" Visibility="{Binding NonStrategyVisibility}">
                 <DataGrid ItemsSource="{Binding LiveReadiness}"
                           behaviors:DataGridSelectionPersistence.KeyProperties="Gate">
                     <DataGrid.Columns>
@@ -856,7 +856,7 @@
                 </DataGrid>
             </TabItem>
 
-            <TabItem Header="Market Data">
+            <TabItem Header="Market Data" Visibility="{Binding NonStrategyVisibility}">
                 <DataGrid ItemsSource="{Binding MarketData}"
                           behaviors:DataGridSelectionPersistence.KeyProperties="AssetId">
                     <DataGrid.Columns>
@@ -870,7 +870,7 @@
                 </DataGrid>
             </TabItem>
 
-            <TabItem Header="Analytics">
+            <TabItem Header="Analytics" Visibility="{Binding NonStrategyVisibility}">
                 <TabControl>
                     <TabItem Header="Daily">
                         <DataGrid ItemsSource="{Binding DailyReports}"
@@ -961,7 +961,7 @@
                 </TabControl>
             </TabItem>
 
-            <TabItem Header="Risk">
+            <TabItem Header="Risk" Visibility="{Binding NonStrategyVisibility}">
                 <DataGrid ItemsSource="{Binding RiskUsage}"
                           behaviors:DataGridSelectionPersistence.KeyProperties="Name">
                     <DataGrid.Columns>
@@ -974,7 +974,7 @@
                 </DataGrid>
             </TabItem>
 
-            <TabItem Header="Diagnostics">
+            <TabItem Header="Diagnostics" Visibility="{Binding NonStrategyVisibility}">
                 <DataGrid ItemsSource="{Binding Diagnostics}"
                           behaviors:DataGridSelectionPersistence.KeyProperties="Name">
                     <DataGrid.Columns>
@@ -985,7 +985,7 @@
                 </DataGrid>
             </TabItem>
 
-            <TabItem Header="Certificates">
+            <TabItem Header="Certificates" Visibility="{Binding NonStrategyVisibility}">
                 <DataGrid ItemsSource="{Binding CertificateChecks}"
                           behaviors:DataGridSelectionPersistence.KeyProperties="CheckedUtc,Endpoint,Host">
                     <DataGrid.Columns>
@@ -1005,7 +1005,7 @@
                 </DataGrid>
             </TabItem>
 
-            <TabItem Header="Runbook">
+            <TabItem Header="Runbook" Visibility="{Binding NonStrategyVisibility}">
                 <DataGrid ItemsSource="{Binding RunbookLinks}"
                           behaviors:DataGridSelectionPersistence.KeyProperties="Document,Path">
                     <DataGrid.Columns>
@@ -1016,7 +1016,7 @@
                 </DataGrid>
             </TabItem>
 
-            <TabItem Header="Logs">
+            <TabItem Header="Logs" Visibility="{Binding NonStrategyVisibility}">
                 <DataGrid ItemsSource="{Binding Logs}"
                           behaviors:DataGridSelectionPersistence.KeyProperties="TimestampUtc,Component,Message">
                     <DataGrid.Columns>
@@ -1029,7 +1029,7 @@
                 </DataGrid>
             </TabItem>
 
-            <TabItem Header="Dashboard Errors">
+            <TabItem Header="Dashboard Errors" Visibility="{Binding NonStrategyVisibility}">
                 <DockPanel>
                     <StackPanel DockPanel.Dock="Top"
                                 Orientation="Horizontal"

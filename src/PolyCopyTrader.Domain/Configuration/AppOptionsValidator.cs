@@ -106,6 +106,7 @@ public static class AppOptionsValidator
             $"Signal copied trader performance min score: {configuration.Signal.CopiedTraderPerformanceMinScore}",
             $"IPC enabled: {configuration.Ipc.Enabled}",
             $"IPC dashboard URL: {configuration.Ipc.DashboardBaseUrl}",
+            $"Dashboard strategies-only mode: {configuration.Dashboard.StrategiesOnlyMode}",
             $"Daily reports enabled: {configuration.Analytics.DailyReportGenerationEnabled}",
             $"Trader discovery enabled: {configuration.TraderDiscovery.Enabled}",
             $"Trader discovery category: {configuration.TraderDiscovery.Category}",
