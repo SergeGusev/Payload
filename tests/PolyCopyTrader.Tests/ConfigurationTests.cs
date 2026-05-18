@@ -181,6 +181,7 @@ public sealed class ConfigurationTests
         Assert.Equal(5, configuration.LiveTrading.MaintenancePollIntervalSeconds);
         Assert.Equal(60, configuration.Dashboard.RefreshIntervalSeconds);
         Assert.Equal(60, configuration.Dashboard.StrategyRefreshIntervalSeconds);
+        Assert.Equal(8, configuration.Dashboard.OptionalReportTimeoutSeconds);
     }
 
     [Fact]
@@ -212,7 +213,8 @@ public sealed class ConfigurationTests
             Dashboard = new DashboardOptions
             {
                 RefreshIntervalSeconds = 0,
-                StrategyRefreshIntervalSeconds = 0
+                StrategyRefreshIntervalSeconds = 0,
+                OptionalReportTimeoutSeconds = 0
             },
             PolymarketHttpLogging = new PolymarketHttpLoggingOptions
             {
@@ -242,6 +244,7 @@ public sealed class ConfigurationTests
         Assert.Contains(errors, error => error.Contains("MarketDataWebSocket.StatusPersistIntervalSeconds", StringComparison.Ordinal));
         Assert.Contains(errors, error => error.Contains("Dashboard.RefreshIntervalSeconds", StringComparison.Ordinal));
         Assert.Contains(errors, error => error.Contains("Dashboard.StrategyRefreshIntervalSeconds", StringComparison.Ordinal));
+        Assert.Contains(errors, error => error.Contains("Dashboard.OptionalReportTimeoutSeconds", StringComparison.Ordinal));
         Assert.Contains(errors, error => error.Contains("PolymarketHttpLogging.SuccessfulRequestSampleRate", StringComparison.Ordinal));
         Assert.Contains(errors, error => error.Contains("PolymarketHttpLogging.CleanupIntervalMinutes", StringComparison.Ordinal));
         Assert.Contains(errors, error => error.Contains("PolymarketHttpLogging.CleanupBatchSize", StringComparison.Ordinal));

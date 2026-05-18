@@ -503,6 +503,8 @@ public sealed class DashboardOptions
     public int RefreshIntervalSeconds { get; init; } = 60;
 
     public int StrategyRefreshIntervalSeconds { get; init; } = 60;
+
+    public int OptionalReportTimeoutSeconds { get; init; } = 8;
 }
 
 public sealed class AnalyticsOptions

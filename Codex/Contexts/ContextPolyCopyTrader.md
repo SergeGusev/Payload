@@ -1,3 +1,16 @@
+## Active Update 2026-05-18 Dashboard Remote Database Timeout Fix
+Goal: Diagnose and fix Dashboard failing to connect/load when switching to `Remote database`.
+Status: Completed
+Done:
+- Confirmed remote PostgreSQL `192.168.0.101:5432` is reachable and the Dashboard remote runtime can read `service_heartbeats`.
+- Reproduced the real failure in full Dashboard remote refresh: `GetTraderPerformanceReportsAsync` timed out while reading a heavy optional analytics report, causing the whole refresh to fail.
+- Changed Dashboard optional analytics reports (`Daily reports`, `Trader performance`, `Category performance`, `Execution quality`, `Rejection analysis`) to use `Dashboard:OptionalReportTimeoutSeconds` (`8` by default) and degrade to empty grids with Diagnostics warnings instead of failing the whole Dashboard refresh.
+- Added config validation/docs for `Dashboard:OptionalReportTimeoutSeconds`.
+- Republished the fixed Dashboard to `D:\My\Business\PolyMarketPublished\PayloadDashboard`.
+Next: Close the currently running Debug Dashboard/Visual Studio-locked instance and restart Dashboard from the published folder or rebuild Debug after closing it.
+Notes: Verification passed: remote full Dashboard snapshot probe now succeeds (`ServiceAvailable=True`, `Strategies=1266`, `Recent=3798`, `LiveReadiness=18`); `dotnet build src\PolyCopyTrader.Dashboard\PolyCopyTrader.Dashboard.csproj -c Release --no-restore`; targeted `ConfigurationTests` 24/24; full tests 496/496; `dotnet publish src\PolyCopyTrader.Dashboard\PolyCopyTrader.Dashboard.csproj -c Release -o D:\My\Business\PolyMarketPublished\PayloadDashboard --no-restore`; `git diff --check` clean except LF/CRLF warnings. Debug build could not overwrite files because the current Dashboard process and Visual Studio hold Debug DLL locks.
+Blockers: The running Debug Dashboard process must be restarted to pick up this fix.
+
 ## Active Update 2026-05-18 Binance 2.1 Live Add
 Goal: Make `BTC Up or Down 5m Binance 2.1 bps` available for Live stakes alongside current `1.9` and `2.0`.
 Status: Completed locally; production DB LiveStakes updated; Service deploy/restart required for 2.1 live placement.

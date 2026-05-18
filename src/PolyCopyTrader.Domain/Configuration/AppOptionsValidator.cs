@@ -1002,6 +1002,11 @@ public static class AppOptionsValidator
         {
             errors.Add("Dashboard.StrategyRefreshIntervalSeconds must be greater than zero.");
         }
+
+        if (options.OptionalReportTimeoutSeconds <= 0)
+        {
+            errors.Add("Dashboard.OptionalReportTimeoutSeconds must be greater than zero.");
+        }
     }
 
     private static void ValidateAnalytics(AnalyticsOptions options, List<string> errors)

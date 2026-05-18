@@ -104,3 +104,10 @@ Make `BTC Up or Down 5m Binance 2.1 bps` available for Live stakes.
 
 Result:
 Added `btc_up_down_5m_binance_bps_2_1` to the BTC Paper/Live-shadow allowlist, added regression coverage proving it creates a paper-shadow and GTD live order when LiveStakes and live gates are enabled, updated the live-stakes admin test to enable exactly `1.9` + `2.0` + `2.1`, and updated README live safety/docs. Updated production PostgreSQL LiveStakes flags to enable only `btc_up_down_5m_binance_bps_1_9`, `btc_up_down_5m_binance_bps_2`, and `btc_up_down_5m_binance_bps_2_1`; the command reported `3` strategies live-enabled, `1263` live-disabled, and `0` failed. Verification passed: targeted tests 2/2, Service Release build, full test project 496/496, and `git diff --check` clean except LF/CRLF warnings. No manual live order submission or cancel action was performed. Production Service still needs deploy/restart from this commit before the old running binary can live-place `2.1`.
+
+## 2026-05-18T21:04:15.3755387Z
+Request:
+У меня Dashboard не может к Remove database подключиться
+
+Result:
+Diagnosed the Dashboard `Remote database` failure. TCP/PostgreSQL connectivity to `192.168.0.101:5432` was OK, and the Dashboard remote runtime could read `service_heartbeats`; the full remote refresh failed because the heavy optional `GetTraderPerformanceReportsAsync` analytics report timed out and aborted the whole refresh. Changed Dashboard optional analytics reports to use `Dashboard:OptionalReportTimeoutSeconds` (`8` by default) and degrade to empty grids plus Diagnostics warnings instead of failing the Dashboard. Added config validation and docs, verified a full remote Dashboard snapshot now succeeds, built Dashboard Release, ran `ConfigurationTests` 24/24 and full tests 496/496, ran `git diff --check` clean except LF/CRLF warnings, and republished Dashboard to `D:\My\Business\PolyMarketPublished\PayloadDashboard`. Debug build could not overwrite files because the currently running Dashboard process and Visual Studio hold Debug DLL locks; the running Dashboard must be restarted to pick up the fix.

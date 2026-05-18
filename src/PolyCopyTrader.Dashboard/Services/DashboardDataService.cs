@@ -60,11 +60,32 @@ public sealed class DashboardDataService(
             item => item.AssetId,
             StringComparer.OrdinalIgnoreCase);
         var reportLimit = configuration.Analytics.DashboardReportLimit;
-        var dailyReports = await repository.GetDailyReportsAsync(reportLimit, cancellationToken);
-        var traderPerformance = await repository.GetTraderPerformanceReportsAsync(reportLimit, cancellationToken);
-        var categoryPerformance = await repository.GetCategoryPerformanceReportsAsync(reportLimit, cancellationToken);
-        var executionQuality = await repository.GetExecutionQualityReportsAsync(reportLimit, cancellationToken);
-        var rejectionAnalysis = await repository.GetRejectionAnalysisReportsAsync(reportLimit, cancellationToken);
+        var optionalReportDiagnostics = new List<DiagnosticRow>();
+        var dailyReports = await LoadOptionalReportAsync(
+            "Daily reports",
+            token => repository.GetDailyReportsAsync(reportLimit, token),
+            optionalReportDiagnostics,
+            cancellationToken);
+        var traderPerformance = await LoadOptionalReportAsync(
+            "Trader performance",
+            token => repository.GetTraderPerformanceReportsAsync(reportLimit, token),
+            optionalReportDiagnostics,
+            cancellationToken);
+        var categoryPerformance = await LoadOptionalReportAsync(
+            "Category performance",
+            token => repository.GetCategoryPerformanceReportsAsync(reportLimit, token),
+            optionalReportDiagnostics,
+            cancellationToken);
+        var executionQuality = await LoadOptionalReportAsync(
+            "Execution quality",
+            token => repository.GetExecutionQualityReportsAsync(reportLimit, token),
+            optionalReportDiagnostics,
+            cancellationToken);
+        var rejectionAnalysis = await LoadOptionalReportAsync(
+            "Rejection analysis",
+            token => repository.GetRejectionAnalysisReportsAsync(reportLimit, token),
+            optionalReportDiagnostics,
+            cancellationToken);
         var authReadiness = await authService.GetReadinessAsync(cancellationToken);
 
         var overview = BuildOverview(
@@ -120,7 +141,15 @@ public sealed class DashboardDataService(
             executionQuality.Select(ToExecutionQualityRow).ToArray(),
             rejectionAnalysis.Select(ToRejectionAnalysisRow).ToArray(),
             riskUsage,
-            BuildDiagnostics(overview, serviceAvailability, scannerStatuses, marketDataStatuses, apiErrors, riskUsage, authReadiness),
+            BuildDiagnostics(
+                overview,
+                serviceAvailability,
+                scannerStatuses,
+                marketDataStatuses,
+                apiErrors,
+                riskUsage,
+                authReadiness,
+                optionalReportDiagnostics),
             BuildRunbookLinks(),
             BuildLogs(apiErrors, riskEvents, commandAudits, marketDataEvents, liveTradingEvents));
     }
@@ -163,6 +192,34 @@ public sealed class DashboardDataService(
         cachedStrategyRecentPerformance = await repository.GetStrategyRecentPerformanceAsync(StrategyDashboardFetchLimit, cancellationToken);
         cachedStrategyRecentPerformanceAtUtc = nowUtc;
         return cachedStrategyRecentPerformance;
+    }
+
+    private async Task<IReadOnlyList<T>> LoadOptionalReportAsync<T>(
+        string reportName,
+        Func<CancellationToken, Task<IReadOnlyList<T>>> load,
+        List<DiagnosticRow> diagnostics,
+        CancellationToken cancellationToken)
+    {
+        using var timeoutSource = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        timeoutSource.CancelAfter(TimeSpan.FromSeconds(Math.Max(1, configuration.Dashboard.OptionalReportTimeoutSeconds)));
+
+        try
+        {
+            return await load(timeoutSource.Token);
+        }
+        catch (Exception ex) when (!cancellationToken.IsCancellationRequested)
+        {
+            diagnostics.Add(new DiagnosticRow(
+                reportName,
+                $"Skipped optional report after {configuration.Dashboard.OptionalReportTimeoutSeconds}s timeout or query failure: {FormatOptionalReportException(ex)}",
+                "Warning"));
+            return [];
+        }
+    }
+
+    private static string FormatOptionalReportException(Exception exception)
+    {
+        return $"{exception.GetType().Name}: {exception.Message}";
     }
 
     private IReadOnlyList<OverviewMetric> BuildOverview(
@@ -282,7 +339,8 @@ public sealed class DashboardDataService(
         IReadOnlyList<MarketDataStatusSnapshot> marketDataStatuses,
         IReadOnlyList<ApiError> apiErrors,
         IReadOnlyList<RiskUsageRow> riskUsage,
-        AuthReadinessStatus authReadiness)
+        AuthReadinessStatus authReadiness,
+        IReadOnlyList<DiagnosticRow> optionalReportDiagnostics)
     {
         var scanner = scannerStatuses.FirstOrDefault();
         var marketData = marketDataStatuses.FirstOrDefault(item => item.Component == "PolymarketMarketWebSocket")
@@ -308,6 +366,8 @@ public sealed class DashboardDataService(
             new("Risk usage", string.Join("; ", riskUsage.Select(row => $"{row.Name}={row.UsedUsd:0.##}/{row.LimitUsd:0.##} {row.Status}")), riskUsage.Any(row => row.Status == "Limit") ? "Warning" : "OK"),
             new("Latest API errors", string.Join(Environment.NewLine, latestApiErrors), apiErrors.Count == 0 ? "OK" : "Warning")
         };
+
+        rows.AddRange(optionalReportDiagnostics);
 
         return rows;
     }
