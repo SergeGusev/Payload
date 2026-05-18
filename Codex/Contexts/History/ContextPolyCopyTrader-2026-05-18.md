@@ -62,3 +62,10 @@ Request:
 
 Result:
 Added Dashboard `Enabled only` filters to the `Strategies` nested tabs: `All`, `24 hours`, `6 hours`, and `1 hour`. The all-time tab filters directly by `StrategyPerformanceRow.Enabled`; recent tabs resolve enabled strategy names from the current all-time strategy rows, then hide disabled strategies when the per-tab checkbox is enabled. Updated README Dashboard strategy docs. Verification passed: Dashboard Release build passed with existing Storage nullable warnings, and the full test project passed 494/494.
+
+## 2026-05-18T18:25:35.8685338Z
+Request:
+Объясни мне одну вещь. Я считал, что если ставится bps 2, то автоматически ставятся все до него - 1.9, 1.8 и т.д. Мы же пересекаем их значения. Но я сейчас вижу, что за последние несколько часов было 18 ставок bps 2, а 1.9 за всю историю только 9 и огромное количество Skipped. Почему так получилось?
+
+Result:
+Explained that bps thresholds are evaluated independently per enabled strategy; crossing `2 bps` also satisfies `1.9 bps` mathematically, but it does not make lower-threshold strategies inherit Live placement. Code inspection showed the current live allowlist includes only `skip_1`, `binance_bps_1`, and `binance_bps_2`, not `binance_bps_1_9`. Production read-only diagnostics showed `1.9` is enabled but `live_stakes=false`, while `2` is live-enabled. In the last 6 hours `1.9` created 23 paper orders but 20 expired unfilled and only 3 filled/settled; `2` created 22 live orders and had 18 settled strategy runs. Also noted `1.9` has shorter all-time history than `2` in the DB. No source, DB, service, live order, or cancel changes were made.

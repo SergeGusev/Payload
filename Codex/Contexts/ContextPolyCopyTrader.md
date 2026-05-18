@@ -1,3 +1,16 @@
+## Active Update 2026-05-18 Binance 1.9 vs 2 Bps Explanation
+Goal: Explain why `BTC Up or Down 5m Binance 2 bps` shows many recent live bets while `1.9 bps` shows only 9 all-time settled rows and many skips.
+Status: Completed
+Done:
+- Inspected BTC 5m bps strategy code: threshold logic is independent per strategy; crossing `2 bps` also satisfies `1.9 bps` only if the `1.9` strategy is enabled and evaluated, but it does not automatically inherit live placement from `2 bps`.
+- Confirmed live allowlist currently includes only `btc_up_down_5m_skip_1`, `btc_up_down_5m_binance_bps_1`, and `btc_up_down_5m_binance_bps_2`; `btc_up_down_5m_binance_bps_1_9` is not eligible for live placement without code/deploy changes.
+- Queried production PostgreSQL read-only: `1.9` is enabled but `live_stakes=false`; `2` is enabled with `live_stakes=true`.
+- Confirmed recent behavior: in the last 6 hours `1.9` created `23` paper orders and `2` created `22`, but `1.9` had `20` expired paper orders and only `3` filled, while `2` had `22` live orders and `18` settled strategy runs.
+- Confirmed all-time `1.9` has a shorter history than `2`: first `1.9` run due `2026-05-15T17:15:00Z`, first `2` run due `2026-05-13T07:30:00Z`.
+Next: If desired, decide whether to implement and deploy explicit live support for `1.9 bps`; it will not happen from the Dashboard Live checkbox alone with current code.
+Notes: Read-only diagnostic only. Temporary `.codex-temp/LiveBpsProbe` was created for Npgsql queries, then removed. No source behavior, DB data, service state, live order submission, or cancel action changed.
+Blockers: None.
+
 ## Active Update 2026-05-18 Dashboard Enabled Only Strategy Filter
 Goal: Add Dashboard `Enabled only` strategy filters for strategies.
 Status: Completed
