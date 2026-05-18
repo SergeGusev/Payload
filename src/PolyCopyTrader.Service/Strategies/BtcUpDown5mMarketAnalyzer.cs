@@ -13,11 +13,40 @@ public sealed record BtcUpDown5mOutcomeQuote(
 
 public static partial class BtcUpDown5mMarketAnalyzer
 {
+    private const long FiveMinuteWindowSeconds = 300;
+
     public static bool IsCandidate(PolymarketGammaMarket market)
     {
         return IsBtcUpDown5mSlug(market.Slug) ||
             IsBtcUpDown5mSlug(market.EventSlug) ||
             string.Equals(market.SeriesSlug, "btc-up-or-down-5m", StringComparison.OrdinalIgnoreCase);
+    }
+
+    public static IReadOnlyList<string> BuildFiveMinuteSlugs(
+        DateTimeOffset nowUtc,
+        int lookBehindWindows,
+        int lookAheadWindows)
+    {
+        if (lookBehindWindows < 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(lookBehindWindows), "Look-behind windows must be non-negative.");
+        }
+
+        if (lookAheadWindows < 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(lookAheadWindows), "Look-ahead windows must be non-negative.");
+        }
+
+        var unixSeconds = nowUtc.ToUnixTimeSeconds();
+        var floorUnixSeconds = unixSeconds - (unixSeconds % FiveMinuteWindowSeconds);
+        var slugs = new List<string>(lookBehindWindows + lookAheadWindows + 1);
+        for (var offset = -lookBehindWindows; offset <= lookAheadWindows; offset++)
+        {
+            var windowUnixSeconds = floorUnixSeconds + (offset * FiveMinuteWindowSeconds);
+            slugs.Add("btc-updown-5m-" + windowUnixSeconds.ToString(CultureInfo.InvariantCulture));
+        }
+
+        return slugs;
     }
 
     public static bool IsStrategyCandidate(PolymarketGammaMarket market)

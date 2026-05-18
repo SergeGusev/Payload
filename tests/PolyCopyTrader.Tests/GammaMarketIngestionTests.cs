@@ -118,6 +118,37 @@ public sealed class GammaMarketIngestionTests
     }
 
     [Fact]
+    public async Task Refresh_PrioritySync_UpsertsBtcFiveMinuteMarketsBeforeFullScan()
+    {
+        var gammaClient = new FakeGammaClient
+        {
+            MarketsBySlugs = [CreateBtcUpDown5mMarketForTests("priority-btc-market")]
+        };
+        gammaClient.Pages[0] = [];
+        var repository = new TestAppRepository();
+        var registry = new ActiveMarketAssetSubscriptionRegistry();
+        var processor = CreateProcessor(
+            gammaClient,
+            repository,
+            pageLimit: 2,
+            activeMarketAssetSubscriptionRegistry: registry,
+            marketDataWebSocketOptions: new MarketDataWebSocketOptions
+            {
+                SubscriptionScope = MarketDataWebSocketSubscriptionScope.BtcUpDown5mOnly
+            });
+
+        var result = await processor.RefreshAsync();
+
+        var slugRequest = Assert.Single(gammaClient.SlugRequests);
+        Assert.Contains(slugRequest, slug => slug.StartsWith("btc-updown-5m-", StringComparison.OrdinalIgnoreCase));
+        Assert.Equal(1, result.MarketsFetched);
+        Assert.Equal(1, result.MarketsUpserted);
+        Assert.Contains(repository.PolymarketGammaMarkets, market => market.MarketId == "priority-btc-market");
+        Assert.Contains("token-yes-priority-btc-market", registry.GetAssetIds(), StringComparer.OrdinalIgnoreCase);
+        Assert.Contains("token-no-priority-btc-market", registry.GetAssetIds(), StringComparer.OrdinalIgnoreCase);
+    }
+
+    [Fact]
     public async Task Refresh_RemovesAssetsMissingFromCompletedFullScan()
     {
         var gammaClient = new FakeGammaClient();
@@ -255,6 +286,10 @@ public sealed class GammaMarketIngestionTests
 
         public List<(int Limit, int Offset)> Requests { get; } = [];
 
+        public List<IReadOnlyList<string>> SlugRequests { get; } = [];
+
+        public IReadOnlyList<PolymarketGammaMarket> MarketsBySlugs { get; init; } = [];
+
         public Task<IReadOnlyList<PolymarketGammaMarket>> GetActiveMarketsAsync(
             int limit = 500,
             int offset = 0,
@@ -267,6 +302,15 @@ public sealed class GammaMarketIngestionTests
             }
 
             return Task.FromResult(Pages.TryGetValue(offset, out var markets) ? markets : []);
+        }
+
+        public Task<IReadOnlyList<PolymarketGammaMarket>> GetMarketsBySlugsAsync(
+            IReadOnlyCollection<string> slugs,
+            bool activeOnly = true,
+            CancellationToken cancellationToken = default)
+        {
+            SlugRequests.Add(slugs.ToArray());
+            return Task.FromResult(MarketsBySlugs);
         }
 
         public Task<IReadOnlyList<PolymarketOnChainTokenMetadata>> GetTokenMetadataAsync(

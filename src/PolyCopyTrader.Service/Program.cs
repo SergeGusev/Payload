@@ -65,6 +65,16 @@ if (args.Contains("--print-config", StringComparer.OrdinalIgnoreCase))
     return;
 }
 
+if (args.Contains("--sync-current-btc-5m-markets", StringComparer.OrdinalIgnoreCase))
+{
+    Environment.ExitCode = await BtcUpDown5mGammaMarketSyncCommand.ExecuteAsync(
+        appConfiguration,
+        args,
+        Console.Out,
+        CancellationToken.None);
+    return;
+}
+
 if (args.Contains("--dry-run-signing-smoke", StringComparer.OrdinalIgnoreCase))
 {
     Environment.ExitCode = await DryRunSigningSmokeCommand.ExecuteAsync(

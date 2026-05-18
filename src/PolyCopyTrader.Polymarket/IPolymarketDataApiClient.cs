@@ -98,6 +98,14 @@ public interface IPolymarketGammaClient
         int offset = 0,
         CancellationToken cancellationToken = default);
 
+    Task<IReadOnlyList<PolymarketGammaMarket>> GetMarketsBySlugsAsync(
+        IReadOnlyCollection<string> slugs,
+        bool activeOnly = true,
+        CancellationToken cancellationToken = default)
+    {
+        return Task.FromResult<IReadOnlyList<PolymarketGammaMarket>>([]);
+    }
+
     Task<PolymarketGammaMarket?> GetClosedMarketBySlugAsync(
         string slug,
         CancellationToken cancellationToken = default)

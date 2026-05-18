@@ -1,3 +1,16 @@
+## Active Update 2026-05-18 BTC 5m Priority Gamma Sync Fix
+Goal: Monitor production BTC 5m windows after restart and fix the ingestion gap if current windows do not appear.
+Status: Completed locally; production DB bridged with a one-shot sync; permanent behavior requires Service deploy/restart from this commit.
+Done:
+- Found this was not a normal "wait until it accumulates" state: Gamma already exposed current BTC 5m markets, but the production DB did not have them because the active-market ingestion scans general Gamma active markets ordered by `createdAt`; after a day of downtime, current BTC 5m windows were buried too deep in the large active set.
+- Added priority BTC 5m slug-based Gamma sync before the normal full active-market scan, registering WebSocket assets and upserting current/near BTC 5m markets even when the broad scan has not reached them yet.
+- Added `--sync-current-btc-5m-markets` with configurable `--btc-5m-sync-lookbehind-windows` / `--btc-5m-sync-lookahead-windows`, batched slug requests, and a regression test for priority ingestion.
+- Ran a production one-shot sync against `192.168.0.101` with `--btc-5m-sync-lookahead-windows 288`; it fetched/upserted `288` BTC 5m markets and closed DB coverage gaps for the next 24 hours checked from `2026-05-18T08:49:52Z`.
+- Confirmed production recovery: at `2026-05-18T08:51:21Z`, service heartbeat age was about `7s`, latest BTC 5m odds tick was `2026-05-18T08:51:17Z`, the new `2026-05-18T08:50:00Z` market had ticks, 6-hour and 24-hour BTC 5m market coverage checks had `0` missing, API errors were `0` over the last hour, and no Live orders were created in the last 60 minutes.
+Next: Deploy/restart the Service from this commit so priority BTC 5m Gamma sync runs continuously after future restarts; the one-shot production DB sync only bridged the current near-term gap.
+Notes: Verification passed: `dotnet build src\PolyCopyTrader.Service\PolyCopyTrader.Service.csproj -c Release --no-restore`; targeted `dotnet test tests\PolyCopyTrader.Tests\PolyCopyTrader.Tests.csproj -c Release --no-restore --filter "GammaMarketIngestionTests|BtcUpDown5mPaperStrategyProcessorTests|BtcUpDown5mStatisticsProcessorTests"` 126/126; full `dotnet test tests\PolyCopyTrader.Tests\PolyCopyTrader.Tests.csproj -c Release --no-restore` 494/494. No private keys/secrets were printed, and no direct live order or cancel action was performed.
+Blockers: Remote WinRM is reachable on `192.168.0.101:5985`, but `Invoke-Command` fails from this session with Negotiate credentials error `0x8009030e`; I could not deploy/restart the production Windows Service remotely from here.
+
 ## Active Update 2026-05-18 BTC 5m Gap Explanation
 Goal: Explain what the production BTC 5m inactivity after a one-day shutdown means.
 Status: Completed

@@ -15,6 +15,9 @@ public sealed class GammaMarketIngestionProcessor(
     IActiveMarketAssetSubscriptionRegistry activeMarketAssetSubscriptionRegistry,
     IAppRepository repository) : IGammaMarketIngestionProcessor
 {
+    private const int Btc5mPriorityLookBehindWindows = 1;
+    private const int Btc5mPriorityLookAheadWindows = 24;
+
     public async Task<GammaMarketIngestionResult> RefreshAsync(CancellationToken cancellationToken = default)
     {
         var offset = 0;
@@ -22,6 +25,10 @@ public sealed class GammaMarketIngestionProcessor(
         var marketsFetched = 0;
         var marketsUpserted = 0;
         var activeAssetIdsSeen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+        var priorityMarkets = await SyncPriorityBtcUpDown5mMarketsAsync(activeAssetIdsSeen, cancellationToken);
+        marketsFetched += priorityMarkets;
+        marketsUpserted += priorityMarkets;
 
         while (!cancellationToken.IsCancellationRequested)
         {
@@ -117,6 +124,46 @@ public sealed class GammaMarketIngestionProcessor(
             marketsUpserted,
             ReachedEmptyPage: true,
             nextOffset);
+    }
+
+    private async Task<int> SyncPriorityBtcUpDown5mMarketsAsync(
+        HashSet<string> activeAssetIdsSeen,
+        CancellationToken cancellationToken)
+    {
+        var slugs = BtcUpDown5mMarketAnalyzer.BuildFiveMinuteSlugs(
+            DateTimeOffset.UtcNow,
+            Btc5mPriorityLookBehindWindows,
+            Btc5mPriorityLookAheadWindows);
+        var markets = await gammaClient.GetMarketsBySlugsAsync(slugs, activeOnly: true, cancellationToken);
+        var btcMarkets = markets
+            .Where(BtcUpDown5mMarketAnalyzer.IsCandidate)
+            .ToArray();
+        if (btcMarkets.Length == 0)
+        {
+            return 0;
+        }
+
+        var subscriptionMarkets = SelectSubscriptionMarkets(btcMarkets);
+        AddSeenActiveAssetIds(activeAssetIdsSeen, subscriptionMarkets);
+        var registryUpdate = activeMarketAssetSubscriptionRegistry.AddOrUpdateMarkets(subscriptionMarkets);
+        if (registryUpdate.Added > 0)
+        {
+            logger.LogInformation(
+                "Gamma active market ingestion registered priority BTC 5m WebSocket assets before full scan. NewAssets={NewAssets}",
+                registryUpdate.Added);
+        }
+
+        foreach (var market in btcMarkets)
+        {
+            await repository.UpsertPolymarketGammaMarketAsync(market, cancellationToken);
+        }
+
+        logger.LogInformation(
+            "Gamma active market ingestion priority BTC 5m sync completed. Slugs={Slugs} Markets={Markets}",
+            slugs.Count,
+            btcMarkets.Length);
+
+        return btcMarkets.Length;
     }
 
     private static bool IsGammaActiveMarketsMaxOffset(PolymarketApiException ex)

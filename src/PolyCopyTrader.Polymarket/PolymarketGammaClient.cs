@@ -43,6 +43,28 @@ public sealed class PolymarketGammaClient : IPolymarketGammaClient
         return PolymarketJsonParser.ParseGammaActiveMarkets(json.RootElement);
     }
 
+    public async Task<IReadOnlyList<PolymarketGammaMarket>> GetMarketsBySlugsAsync(
+        IReadOnlyCollection<string> slugs,
+        bool activeOnly = true,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(slugs);
+
+        var normalizedSlugs = slugs
+            .Where(slug => !string.IsNullOrWhiteSpace(slug))
+            .Select(slug => slug.Trim())
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+        if (normalizedSlugs.Length == 0)
+        {
+            return [];
+        }
+
+        var uri = BuildMarketsBySlugsUri(normalizedSlugs, activeOnly);
+        using var json = await client.GetJsonDocumentAsync(new Uri(uri, UriKind.Absolute), "GetMarketsBySlugs", cancellationToken);
+        return PolymarketJsonParser.ParseGammaActiveMarkets(json.RootElement);
+    }
+
     public async Task<PolymarketGammaMarket?> GetClosedMarketBySlugAsync(
         string slug,
         CancellationToken cancellationToken = default)
@@ -126,5 +148,24 @@ public sealed class PolymarketGammaClient : IPolymarketGammaClient
             cancellationToken);
 
         return PolymarketJsonParser.ParseGammaEventCategory(json.RootElement);
+    }
+
+    private string BuildMarketsBySlugsUri(IReadOnlyList<string> slugs, bool activeOnly)
+    {
+        var normalizedBaseUrl = options.GammaBaseUrl.TrimEnd('/');
+        var uri = normalizedBaseUrl +
+            "/markets?limit=" +
+            slugs.Count.ToString(System.Globalization.CultureInfo.InvariantCulture);
+        if (activeOnly)
+        {
+            uri += "&active=true&closed=false";
+        }
+
+        foreach (var slug in slugs)
+        {
+            uri += "&slug=" + Uri.EscapeDataString(slug);
+        }
+
+        return uri;
     }
 }
