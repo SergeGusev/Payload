@@ -1,3 +1,14 @@
+## Active Update 2026-05-18 Binance 2 Bps Stake Check
+Goal: Check what stake/price `BTC Up or Down 5m Binance 2 bps` currently uses.
+Status: Completed
+Done:
+- Queried production DB for `btc_up_down_5m_binance_bps_2`: enabled `true`, `live_stakes=true`, `paper_stake_amount=1`, `live_stake_amount=1`, `live_available_balance=99.58`.
+- Confirmed from code and recent DB rows that the strategy uses fixed GTD BUY limit price `0.50`, `post_only=false`, and threshold `btc_min_move_from_start_bps=2`.
+- Confirmed recent Paper and Live rows are sized at `price=0.50`, `size_shares=6`, `notional_usd=3.00`; the configured stake `1` is effectively a multiplier, but the order is rounded up to the market minimum size/notional, so live attempts are currently about `$3` each.
+Next: None.
+Notes: Read-only check only. No DB writes, service restart, live order submission, cancel action, source changes, or tests were performed.
+Blockers: None.
+
 ## Active Update 2026-05-18 Remote Service Current Status Check
 Goal: Check the current operational status of `PolyCopyTrader.Service` on the remote server.
 Status: Completed

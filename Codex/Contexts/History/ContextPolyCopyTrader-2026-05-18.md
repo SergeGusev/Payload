@@ -41,3 +41,10 @@ Request:
 
 Result:
 Checked production server `192.168.0.101`. PostgreSQL `5432` and WinRM `5985` are reachable again; IPC `5118` remains externally unreachable as expected for loopback-only IPC. Production DB heartbeat shows `PolyCopyTrader.Service` is `Running` in `Live` mode, version `info=1.0.0+811cab58b6be9f0387cfab7497d5409a0ab01134`, heartbeat age about `15s`, and no heartbeat error. BTC 5m odds ticks are fresh (`latest_tick_utc=2026-05-18T13:43:43Z`, age about `2s`), 6-hour BTC 5m Gamma market coverage has `0` missing windows, aggregate Polymarket WebSocket is connected with fresh messages, API errors over the last 60 minutes are `0`, and PostgreSQL blocked sessions are `0`. Found one new Live order attempt at `2026-05-18T13:31:42Z` with status `CancelFailed` and zero filled size/notional; read-only authenticated CLOB open-orders report returned `Orders summarized: 0`, so no currently open CLOB orders were visible. No DB writes, service restart, live order submission, or cancel action was performed.
+
+## 2026-05-18T14:12:49.6862916Z
+Request:
+Посмотри, по какой ставке мы ставим BTC Up or Down 5m Binance 2 bps ?
+
+Result:
+Checked production DB and code behavior for `btc_up_down_5m_binance_bps_2`. The strategy is enabled and Live-enabled with `paper_stake_amount=1`, `live_stake_amount=1`, and `live_available_balance=99.58`. Code and recent order rows show it uses a fixed GTD BUY limit price `0.50`, `post_only=false`, and enters only when BTC move from market start is at least `2 bps`. Recent Paper/Live rows were `price=0.50`, `size_shares=6`, `notional_usd=3.00`; the configured stake `1` acts as a multiplier, but order sizing rounds up to the market minimum, so actual live attempts are about `$3` each. No DB writes, service restart, live order submission, cancel action, source changes, or tests were performed.
