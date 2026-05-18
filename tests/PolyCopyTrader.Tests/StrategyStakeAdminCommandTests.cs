@@ -94,7 +94,7 @@ public sealed class StrategyStakeAdminCommandTests
     public async Task ExecuteLiveStakesOnlyAsync_EnablesOnlyRequestedStrategyCodes()
     {
         var repository = new TestAppRepository();
-        var first = StrategyIds.BtcUpDown5mBinanceBps1;
+        var first = StrategyIds.BtcUpDown5mVariants.Single(item => item.Code == "btc_up_down_5m_binance_bps_1_9").Id;
         var second = StrategyIds.BtcUpDown5mBinanceBps2;
         var other = StrategyIds.BtcUpDown5mVariants.Single(item => item.Code == "btc_up_down_5m_skip_1").Id;
         repository.StrategySettings[first] = repository.StrategySettings[first] with { LiveStakes = false };
@@ -104,7 +104,7 @@ public sealed class StrategyStakeAdminCommandTests
 
         var exitCode = await StrategyStakeAdminCommand.ExecuteLiveStakesOnlyAsync(
             repository,
-            [StrategyIds.BtcUpDown5mBinanceBps1Code, StrategyIds.BtcUpDown5mBinanceBps2Code],
+            ["btc_up_down_5m_binance_bps_1_9", StrategyIds.BtcUpDown5mBinanceBps2Code],
             output,
             CancellationToken.None);
 

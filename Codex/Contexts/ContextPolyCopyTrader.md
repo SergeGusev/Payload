@@ -1,3 +1,16 @@
+## Active Update 2026-05-18 Binance 1.9 Live Pair With 2 Bps
+Goal: Make `BTC Up or Down 5m Binance 1.9 bps` available for Live and pair it with `2 bps`.
+Status: Completed locally; production DB LiveStakes updated; Service deploy/restart required for 1.9 live placement.
+Done:
+- Added `btc_up_down_5m_binance_bps_1_9` to the BTC Paper/Live-shadow allowlist.
+- Added regression coverage proving `1.9 bps` creates a paper-shadow and GTD live order when LiveStakes and live gates are enabled.
+- Updated the live-stakes admin test to enable exactly `1.9` + `2`.
+- Updated README live safety/docs to list `1.9 bps` as an explicitly allowed BTC live-shadow variant.
+- Updated production PostgreSQL LiveStakes flags to enable only `btc_up_down_5m_binance_bps_1_9` and `btc_up_down_5m_binance_bps_2` (`2` strategies enabled, `1264` disabled, `0` failed).
+Next: Deploy/restart `PolyCopyTrader.Service` from this commit on the production server; until then the DB flag for `1.9` is set, but the old running binary will not live-place it.
+Notes: Verification passed: targeted tests 2/2; `dotnet build src\PolyCopyTrader.Service\PolyCopyTrader.Service.csproj -c Release --no-restore`; full tests 495/495; `git diff --check` clean except LF/CRLF warnings. No manual live order submission or cancel action was performed.
+Blockers: Production Service deploy/restart was not performed from this session.
+
 ## Active Update 2026-05-18 Binance 1.9 vs 2 Bps Explanation
 Goal: Explain why `BTC Up or Down 5m Binance 2 bps` shows many recent live bets while `1.9 bps` shows only 9 all-time settled rows and many skips.
 Status: Completed
