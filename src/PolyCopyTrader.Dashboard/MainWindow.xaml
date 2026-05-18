@@ -283,6 +283,10 @@
                                           IsChecked="{Binding ShowOnlyPositiveStrategies, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
                                           VerticalAlignment="Center"
                                           Margin="4,0,0,0" />
+                                <CheckBox Content="Enabled only"
+                                          IsChecked="{Binding ShowOnlyEnabledStrategies, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                          VerticalAlignment="Center"
+                                          Margin="12,0,0,0" />
                             </StackPanel>
                             <DataGrid ItemsSource="{Binding Strategies}"
                                       behaviors:DataGridSelectionPersistence.KeyProperties="StrategyId">
@@ -422,6 +426,10 @@
                                           IsChecked="{Binding ShowOnlyPositiveStrategy24Hours, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
                                           VerticalAlignment="Center"
                                           Margin="4,0,0,0" />
+                                <CheckBox Content="Enabled only"
+                                          IsChecked="{Binding ShowOnlyEnabledStrategy24Hours, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                          VerticalAlignment="Center"
+                                          Margin="12,0,0,0" />
                             </StackPanel>
                             <ContentControl Content="{Binding StrategyRecent24Hours}"
                                             ContentTemplate="{StaticResource StrategyRecentGridTemplate}" />
@@ -444,6 +452,10 @@
                                           IsChecked="{Binding ShowOnlyPositiveStrategy6Hours, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
                                           VerticalAlignment="Center"
                                           Margin="4,0,0,0" />
+                                <CheckBox Content="Enabled only"
+                                          IsChecked="{Binding ShowOnlyEnabledStrategy6Hours, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                          VerticalAlignment="Center"
+                                          Margin="12,0,0,0" />
                             </StackPanel>
                             <ContentControl Content="{Binding StrategyRecent6Hours}"
                                             ContentTemplate="{StaticResource StrategyRecentGridTemplate}" />
@@ -466,6 +478,10 @@
                                           IsChecked="{Binding ShowOnlyPositiveStrategy1Hour, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
                                           VerticalAlignment="Center"
                                           Margin="4,0,0,0" />
+                                <CheckBox Content="Enabled only"
+                                          IsChecked="{Binding ShowOnlyEnabledStrategy1Hour, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                          VerticalAlignment="Center"
+                                          Margin="12,0,0,0" />
                             </StackPanel>
                             <ContentControl Content="{Binding StrategyRecent1Hour}"
                                             ContentTemplate="{StaticResource StrategyRecentGridTemplate}" />

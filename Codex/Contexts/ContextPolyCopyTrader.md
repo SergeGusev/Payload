@@ -1,3 +1,14 @@
+## Active Update 2026-05-18 Dashboard Enabled Only Strategy Filter
+Goal: Add Dashboard `Enabled only` strategy filters for strategies.
+Status: Completed
+Done:
+- Added `Enabled only` checkboxes to the `Strategies` nested tabs: `All`, `24 hours`, `6 hours`, and `1 hour`.
+- Added per-tab view-model state and filtering so all-time rows use `StrategyPerformanceRow.Enabled`, while recent-window rows are matched against enabled all-time strategy names.
+- Updated README Dashboard strategy docs to mention category, `Only positive`, and `Enabled only` filters.
+Next: Deploy/restart the Dashboard to use the updated filter behavior.
+Notes: Verification passed: `dotnet build src\PolyCopyTrader.Dashboard\PolyCopyTrader.Dashboard.csproj -c Release --no-restore` passed with existing Storage nullable warnings; `dotnet test tests\PolyCopyTrader.Tests\PolyCopyTrader.Tests.csproj -c Release --no-restore` passed 494/494.
+Blockers: None.
+
 ## Active Update 2026-05-18 Binance 2 Bps Minus 0.42 Explanation
 Goal: Explain why `BTC Up or Down 5m Binance 2 bps` Live shows `2` wins, `2` losses, but `-0.42` PnL instead of zero.
 Status: Completed

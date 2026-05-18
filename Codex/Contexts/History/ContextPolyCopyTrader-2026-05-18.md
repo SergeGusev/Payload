@@ -55,3 +55,10 @@ Request:
 
 Result:
 Explained from production DB rows that the `BTC Up or Down 5m Binance 2 bps` Live result is not four equal-size bets. The Live aggregate has `4` settled orders, `2` wins, `2` losses, cost basis `11.58`, settlement value `11.16`, and realized PnL `-0.42`. One winning order was only partially filled: `5.16` shares / `$2.58` cost, so it made `+2.58` instead of `+3.00`; the other win made `+3.00`, and the two full losses were `-3.00` each. Formula: `3.00 + 2.58 - 3.00 - 3.00 = -0.42`. `fee_usd=0`, so the difference is due to unequal filled size, not fees. No DB writes, service restart, live order submission, cancel action, source changes, or tests were performed.
+
+## 2026-05-18T14:55:10.2260183Z
+Request:
+Добавь в Dashboard галочку Enabled only. Чтобы показывать только неотключенные стратегии
+
+Result:
+Added Dashboard `Enabled only` filters to the `Strategies` nested tabs: `All`, `24 hours`, `6 hours`, and `1 hour`. The all-time tab filters directly by `StrategyPerformanceRow.Enabled`; recent tabs resolve enabled strategy names from the current all-time strategy rows, then hide disabled strategies when the per-tab checkbox is enabled. Updated README Dashboard strategy docs. Verification passed: Dashboard Release build passed with existing Storage nullable warnings, and the full test project passed 494/494.
