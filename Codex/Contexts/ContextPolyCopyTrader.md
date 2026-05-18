@@ -1,3 +1,15 @@
+## Active Update 2026-05-18 Binance 2 Bps Minus 0.42 Explanation
+Goal: Explain why `BTC Up or Down 5m Binance 2 bps` Live shows `2` wins, `2` losses, but `-0.42` PnL instead of zero.
+Status: Completed
+Done:
+- Queried production DB read-only for `btc_up_down_5m_binance_bps_2` Live and Paper rows.
+- Confirmed the Live aggregate has `4` settled orders, `2` wins, `2` losses, total cost basis `11.58`, settlement value `11.16`, realized PnL `-0.42`.
+- Identified the exact cause: one winning Live order was only partially filled at `5.16` shares / `$2.58` cost and produced `+2.58`, while the other win produced `+3.00` and the two full losses were `-3.00` each; `3.00 + 2.58 - 3.00 - 3.00 = -0.42`.
+- Confirmed `fee_usd=0`; the difference is from unequal filled size, not fees.
+Next: None.
+Notes: Read-only explanation only. No DB writes, service restart, live order submission, cancel action, source changes, or tests were performed.
+Blockers: None.
+
 ## Active Update 2026-05-18 Binance 2 Bps Stake Check
 Goal: Check what stake/price `BTC Up or Down 5m Binance 2 bps` currently uses.
 Status: Completed

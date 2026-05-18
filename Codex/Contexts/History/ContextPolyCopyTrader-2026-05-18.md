@@ -48,3 +48,10 @@ Request:
 
 Result:
 Checked production DB and code behavior for `btc_up_down_5m_binance_bps_2`. The strategy is enabled and Live-enabled with `paper_stake_amount=1`, `live_stake_amount=1`, and `live_available_balance=99.58`. Code and recent order rows show it uses a fixed GTD BUY limit price `0.50`, `post_only=false`, and enters only when BTC move from market start is at least `2 bps`. Recent Paper/Live rows were `price=0.50`, `size_shares=6`, `notional_usd=3.00`; the configured stake `1` acts as a multiplier, but order sizing rounds up to the market minimum, so actual live attempts are about `$3` each. No DB writes, service restart, live order submission, cancel action, source changes, or tests were performed.
+
+## 2026-05-18T14:16:13.2749163Z
+Request:
+Я не понимаю, почему при 2 выигрышах и 2 проигрышах я в минусах -0.42, а не по нулям.
+
+Result:
+Explained from production DB rows that the `BTC Up or Down 5m Binance 2 bps` Live result is not four equal-size bets. The Live aggregate has `4` settled orders, `2` wins, `2` losses, cost basis `11.58`, settlement value `11.16`, and realized PnL `-0.42`. One winning order was only partially filled: `5.16` shares / `$2.58` cost, so it made `+2.58` instead of `+3.00`; the other win made `+3.00`, and the two full losses were `-3.00` each. Formula: `3.00 + 2.58 - 3.00 - 3.00 = -0.42`. `fee_usd=0`, so the difference is due to unequal filled size, not fees. No DB writes, service restart, live order submission, cancel action, source changes, or tests were performed.
