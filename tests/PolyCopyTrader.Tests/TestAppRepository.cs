@@ -1389,6 +1389,7 @@ internal sealed class TestAppRepository : IAppRepository
                     strategy.Id,
                     strategy.Code,
                     strategy.Name,
+                    strategy.Settings.LiveStakes,
                     window.Label,
                     window.Hours,
                     window.StartUtc,

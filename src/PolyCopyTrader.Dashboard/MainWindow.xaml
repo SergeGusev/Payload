@@ -62,6 +62,7 @@
                       behaviors:DataGridSelectionPersistence.KeyProperties="Name">
                 <DataGrid.Columns>
                     <DataGridTextColumn Header="Name" Binding="{Binding Name}" Width="260" />
+                    <DataGridCheckBoxColumn Header="Live" Binding="{Binding LiveStakes}" SortMemberPath="LiveStakes" Width="60" />
                     <DataGridTextColumn Header="Settles" Binding="{Binding SettledRunsCount}" Width="75" />
                     <DataGridTextColumn Header="Skipped" Binding="{Binding SkippedRunsCount}" Width="75" />
                     <DataGridTextColumn Header="Won" Binding="{Binding WonRunsCount}" Width="60" />
@@ -309,7 +310,7 @@
                                 </DataTemplate>
                             </DataGridTemplateColumn.CellTemplate>
                         </DataGridTemplateColumn>
-                        <DataGridTemplateColumn Header="Live" Width="60">
+                        <DataGridTemplateColumn Header="Live" Width="60" SortMemberPath="LiveStakes">
                             <DataGridTemplateColumn.CellTemplate>
                                 <DataTemplate>
                                     <CheckBox IsChecked="{Binding LiveStakes, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"

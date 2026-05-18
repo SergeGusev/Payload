@@ -1,3 +1,15 @@
+## Active Update 2026-05-18 Dashboard Sortable Live Column In Strategy Tabs
+Goal: Make the Dashboard `Live` strategy column sortable across the `Strategies` nested tabs.
+Status: Completed
+Done:
+- Added `LiveStakes` to `StrategyRecentPerformance` and `StrategyRecentPerformanceRow` so the `24 hours`, `6 hours`, and `1 hour` recent strategy tabs can display current Live state.
+- Propagated `live_stakes` from PostgreSQL recent strategy performance and from the test repository.
+- Added a sortable `Live` checkbox column to the shared recent strategy grid template and set `SortMemberPath=LiveStakes` on the editable `All` tab `Live` checkbox column.
+- Updated README Dashboard strategy docs to mention sortable Live state in recent tabs and sortable `Live` in `All`.
+Next: Deploy/restart the Dashboard to use the updated sortable columns.
+Notes: Verification passed: `dotnet build src\PolyCopyTrader.Dashboard\PolyCopyTrader.Dashboard.csproj -c Release --no-restore`; targeted `dotnet test tests\PolyCopyTrader.Tests\PolyCopyTrader.Tests.csproj -c Release --no-restore --filter "StrategyPerformanceTests|Dashboard"` 5/5; full `dotnet test tests\PolyCopyTrader.Tests\PolyCopyTrader.Tests.csproj -c Release --no-restore` 495/495; `git diff --check` clean except LF/CRLF warnings. The earlier production service check was interrupted by the newer Dashboard request before DB diagnostics were run.
+Blockers: None.
+
 ## Active Update 2026-05-18 Binance 1.9 Live Pair With 2 Bps
 Goal: Make `BTC Up or Down 5m Binance 1.9 bps` available for Live and pair it with `2 bps`.
 Status: Completed locally; production DB LiveStakes updated; Service deploy/restart required for 1.9 live placement.

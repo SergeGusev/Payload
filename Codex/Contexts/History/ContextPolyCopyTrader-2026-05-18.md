@@ -76,3 +76,10 @@ Make `BTC Up or Down 5m Binance 1.9 bps` available for Live stakes and let it wo
 
 Result:
 Added `btc_up_down_5m_binance_bps_1_9` to the BTC Paper/Live-shadow allowlist, added regression coverage proving it creates a paper-shadow and GTD live order when LiveStakes and live gates are enabled, updated the live-stakes admin test to enable exactly `1.9` + `2`, and updated README live safety/docs. Updated production PostgreSQL LiveStakes flags to enable only `btc_up_down_5m_binance_bps_1_9` and `btc_up_down_5m_binance_bps_2`; the command reported `2` strategies live-enabled, `1264` live-disabled, and `0` failed. Verification passed: targeted tests 2/2, Service Release build, full test project 495/495, and `git diff --check` clean except existing LF/CRLF warnings. No manual live order submission or cancel action was performed. Production Service still needs deploy/restart from this commit before the old running binary can live-place `1.9`.
+
+## 2026-05-18T18:53:01.5759476Z
+Request:
+Сделай колонку Live во всех табах тоже доступной для сортировки. Чтобы можно было в одной строке следить
+
+Result:
+Made the Dashboard strategy `Live` state sortable. The editable `All` tab `Live` checkbox column now has `SortMemberPath=LiveStakes`; the shared recent strategy grid used by `24 hours`, `6 hours`, and `1 hour` now includes a sortable `Live` checkbox column backed by `LiveStakes`. Added `LiveStakes` to the recent strategy domain/dashboard rows, PostgreSQL recent-performance projection, and test repository projection. Updated README. Verification passed: Dashboard Release build, targeted strategy/dashboard tests 5/5, full test project 495/495, and `git diff --check` clean except LF/CRLF warnings. The earlier production service check was interrupted by this newer Dashboard request before DB diagnostics were run.

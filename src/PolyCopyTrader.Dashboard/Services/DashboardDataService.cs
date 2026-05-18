@@ -828,6 +828,7 @@ public sealed class DashboardDataService(
             performance.Window,
             performance.WindowHours,
             performance.Name,
+            performance.LiveStakes,
             performance.OrdersCount,
             performance.FilledOrdersCount,
             performance.ExpiredOrdersCount,

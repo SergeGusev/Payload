@@ -462,6 +462,7 @@ public sealed record StrategyRecentPerformanceRow(
     string Window,
     int WindowHours,
     string Name,
+    bool LiveStakes,
     int OrdersCount,
     int FilledOrdersCount,
     int ExpiredOrdersCount,

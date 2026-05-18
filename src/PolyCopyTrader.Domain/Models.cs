@@ -1948,6 +1948,7 @@ public sealed record StrategyRecentPerformance(
     Guid StrategyId,
     string Code,
     string Name,
+    bool LiveStakes,
     string Window,
     int WindowHours,
     DateTimeOffset WindowStartUtc,
