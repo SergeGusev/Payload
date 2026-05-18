@@ -1,3 +1,14 @@
+## Active Update 2026-05-18 BTC 5m Gap Explanation
+Goal: Explain what the production BTC 5m inactivity after a one-day shutdown means.
+Status: Completed
+Done:
+- Clarified that BTC 5m is not waiting to "accumulate" a day of history after downtime; live/archive processing is forward-only for currently active market windows.
+- Rechecked production DB read-only: at DB time `2026-05-18T08:28:38Z`, there was no current BTC 5m row; latest past BTC 5m start was `2026-05-17T17:25:00Z`, next BTC 5m start was `2026-05-18T09:35:00Z`, and `btc_up_down_5m_odds_ticks` still had no ticks in the last 30 minutes.
+- Explained that once the next BTC 5m window opens, `BtcUpDown5mOddsArchiveWorker` should store a start/current tick and the bps strategy can evaluate that window; missed downtime windows are not reconstructed unless a separate historical fill/backfill is run.
+Next: Recheck shortly after `2026-05-18T09:35:00Z` UTC if confirmation is needed that current BTC 5m ticks resumed.
+Notes: Answer/diagnostic task. Ran `git pull --ff-only`, read workflow/rules/context, inspected BTC 5m archive/strategy code, and queried production PostgreSQL read-only with host overridden to `192.168.0.101`. No DB writes, service restart, live order submission, cancel action, source code behavior change, or tests were performed.
+Blockers: None.
+
 ## Active Update 2026-05-18 Production Server Health Check
 Goal: Check current production server health on `192.168.0.101`.
 Status: Completed
