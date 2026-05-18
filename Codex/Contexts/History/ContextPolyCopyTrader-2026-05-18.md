@@ -117,3 +117,15 @@ Request:
 
 Result:
 Added `Dashboard:StrategiesOnlyMode` with default `true` and changed Dashboard refresh to load only service heartbeat plus cumulative/recent strategy performance while skipping watchlist, trader discovery, on-chain, signals, orders, market data, analytics reports, risk, logs, and auth readiness. The WPF Dashboard now hides non-strategy tabs and the general IPC command toolbar in strategies-only mode and opens on `Strategies`; setting `Dashboard:StrategiesOnlyMode=false` restores the full UI/load path. Updated README and configuration reference, republished Dashboard to `D:\My\Business\PolyMarketPublished\PayloadDashboard`, rebuilt Debug output, verified remote strategies-only load (`Strategies=1266`, `Recent=3798`, `NonStrategyRows=0`, `ServiceAvailable=True`), Dashboard Release build, full tests 496/496, and `git diff --check` clean except LF/CRLF warnings.
+
+## 2026-05-18T21:28:44.7596127+00:00
+Request:
+System.InvalidOperationException
+  HResult=0x80131509
+  Message=A TwoWay or OneWayToSource binding cannot work on the read-only property 'DashboardTabSelectedIndex' of type 'PolyCopyTrader.Dashboard.ViewModels.MainViewModel'.
+  Source=<Cannot evaluate the exception source>
+  StackTrace:
+<Cannot evaluate the exception stack trace>
+
+Result:
+Fixed the Dashboard startup crash by changing the `TabControl.SelectedIndex` binding for read-only `DashboardTabSelectedIndex` to `Mode=OneWay`. Republished Dashboard to `D:\My\Business\PolyMarketPublished\PayloadDashboard`. Verification passed: Dashboard Release build, full tests 496/496, publish, and `git diff --check` clean except LF/CRLF warning. Debug rebuild was blocked because current Debug Dashboard process PID 4084 holds `src\PolyCopyTrader.Dashboard\bin\Debug\net10.0-windows\PolyCopyTrader.Dashboard.exe`; the published Dashboard is updated.

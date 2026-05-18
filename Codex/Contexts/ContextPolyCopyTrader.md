@@ -1,3 +1,13 @@
+## Active Update 2026-05-19 Dashboard SelectedIndex Binding Fix
+Goal: Fix Dashboard startup crash caused by binding `SelectedIndex` to a read-only view-model property.
+Status: Completed
+Done:
+- Changed the WPF `TabControl.SelectedIndex` binding for `DashboardTabSelectedIndex` to `Mode=OneWay`.
+- Republished the fixed Dashboard to `D:\My\Business\PolyMarketPublished\PayloadDashboard`.
+Next: Restart Dashboard from the published folder to pick up the fix. If running from Debug output, close the current Debug Dashboard process first and rebuild/restart Debug.
+Notes: Verification passed: `dotnet build src\PolyCopyTrader.Dashboard\PolyCopyTrader.Dashboard.csproj -c Release --no-restore`; full tests 496/496; `dotnet publish src\PolyCopyTrader.Dashboard\PolyCopyTrader.Dashboard.csproj -c Release -o D:\My\Business\PolyMarketPublished\PayloadDashboard --no-restore`; `git diff --check` clean except LF/CRLF warning. Debug build is blocked by the currently running Debug Dashboard process PID 4084 holding `src\PolyCopyTrader.Dashboard\bin\Debug\net10.0-windows\PolyCopyTrader.Dashboard.exe`.
+Blockers: None for published Dashboard; Debug rebuild requires closing PID 4084.
+
 ## Active Update 2026-05-19 Dashboard Strategies Only Mode
 Goal: Remove Dashboard refresh/UI work that is not needed for showing strategy grids.
 Status: Completed
