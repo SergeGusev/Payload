@@ -25,3 +25,12 @@ Request:
 
 Result:
 Changed the Dashboard `Only positive` strategy filters to include zero-ROI rows. All-time strategy filtering now keeps `ClosedRoiPct >= 0`, and 24h/6h/1h recent tabs keep `RoiPct >= 0`; negative rows are still hidden. Dashboard Release build passed with existing Storage nullable warnings, and the full test project passed 494/494.
+
+## 2026-05-18T11:22:54.3365632Z
+Request:
+Выложил новый сервис, проверяй работу
+
+Если я возьму VPS хостинг, то сколько RAM памяти мне будет нужно для текущей работы проекта Serivce ?
+
+Result:
+Attempted to verify the newly deployed production Service on `192.168.0.101`, but the host was unreachable from this machine: PostgreSQL `5432`, IPC `5118`, WinRM `5985`, and ping all timed out; a short TCP retry also timed out on those service ports. Because of that, `service_heartbeats.version`, BTC 5m tick freshness, API errors, live orders, and actual process memory could not be checked. Reviewed the current BTC-focused Service configuration for RAM sizing: for Service-only VPS, recommended at least `4 GB` RAM (`2 GB` is tight); for Service plus PostgreSQL on the same VPS, recommended `8 GB` minimum and `16 GB` comfortable. No source or DB data changed, and no live order/cancel action was performed.

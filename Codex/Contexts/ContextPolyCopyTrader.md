@@ -1,3 +1,15 @@
+## Active Update 2026-05-18 Service Deploy Check And VPS RAM Estimate
+Goal: Check the newly deployed production Service and estimate RAM needs for VPS hosting.
+Status: Completed with production connectivity blocked
+Done:
+- Attempted to verify production host `192.168.0.101` after the user's Service deploy, but the host was unreachable from this machine: PostgreSQL `5432`, IPC `5118`, WinRM `5985`, and ping all timed out; a quick TCP retry also returned `closed_or_timeout` for `5432`, `5118`, and `5985`.
+- Could not read `service_heartbeats.version`, BTC 5m tick freshness, API errors, live orders, or actual process memory from the new deploy because the server/database was unreachable.
+- Reviewed current Service configuration and registrations for RAM estimation: BTC-focused mode is active, with Gamma ingestion, BTC 5m strategy/archive/statistics, BTC order-book refresh, Binance BTC stream, market WebSocket, Paper/Live maintenance, IPC, and heartbeat active; broader on-chain/trader discovery/crypto background workers are disabled or commented out.
+- Estimated RAM: Service-only VPS should use at least `4 GB` RAM for reliable 24/7 operation; `2 GB` is tight; if PostgreSQL runs on the same VPS, use `8 GB` minimum and `16 GB` comfortable for current history/queries/headroom.
+Next: Recheck production health once `192.168.0.101` is reachable again or once the VPS target IP/hostname is known.
+Notes: No source code or DB data changed. No live order or cancel action was performed. Existing unrelated untracked artifacts were left untouched.
+Blockers: Production host/network unreachable from this machine during the check.
+
 ## Active Update 2026-05-18 Dashboard Only Positive Includes Zero
 Goal: Change Dashboard `Only positive` strategy filters to include zero-ROI rows as well as positive rows.
 Status: Completed
