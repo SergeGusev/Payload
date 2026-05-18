@@ -50,7 +50,8 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
         BtcSkip1VariantCode,
         StrategyIds.BtcUpDown5mBinanceBps1Code,
         "btc_up_down_5m_binance_bps_1_9",
-        StrategyIds.BtcUpDown5mBinanceBps2Code
+        StrategyIds.BtcUpDown5mBinanceBps2Code,
+        "btc_up_down_5m_binance_bps_2_1"
     ];
     private const string OpeningLimitPricingMode = "paper_gtd_limit";
     private const string OpeningLimitOrderType = "GTD";

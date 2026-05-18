@@ -97,3 +97,10 @@ Request:
 
 Result:
 Continued production observation read-only across BTC 5m cycles from about `2026-05-18T19:09Z` through `2026-05-18T19:21Z`. The service stayed `Running`/`Live` on `info=1.0.0+ab94104a5fc71a10d966b36ae22d4822b43f4039`, heartbeats and BTC 5m ticks stayed fresh, Polymarket market WebSocket stayed connected/not stale, API errors stayed `0`, and PostgreSQL lock/long-active checks stayed `0`. LiveStakes remained enabled for exactly `btc_up_down_5m_binance_bps_1_9` and `btc_up_down_5m_binance_bps_2`. Observed paired behavior: `19:00 UTC` both won `Up` (`+3` each), `19:05 UTC` both lost `Up` (`-3` each), `19:10 UTC` both entered `Down`, matched, and later settled as wins (`+3` each). `19:15 UTC` and `19:20 UTC` both skipped together with `btc_reference_move_below_bps_threshold`. Final DB open live orders were `0`, and the read-only CLOB open-orders report returned `Orders summarized: 0`. No DB writes, service restart, live order submission, or cancel action was performed.
+
+## 2026-05-18T20:27:18.9764711Z
+Request:
+Make `BTC Up or Down 5m Binance 2.1 bps` available for Live stakes.
+
+Result:
+Added `btc_up_down_5m_binance_bps_2_1` to the BTC Paper/Live-shadow allowlist, added regression coverage proving it creates a paper-shadow and GTD live order when LiveStakes and live gates are enabled, updated the live-stakes admin test to enable exactly `1.9` + `2.0` + `2.1`, and updated README live safety/docs. Updated production PostgreSQL LiveStakes flags to enable only `btc_up_down_5m_binance_bps_1_9`, `btc_up_down_5m_binance_bps_2`, and `btc_up_down_5m_binance_bps_2_1`; the command reported `3` strategies live-enabled, `1263` live-disabled, and `0` failed. Verification passed: targeted tests 2/2, Service Release build, full test project 496/496, and `git diff --check` clean except LF/CRLF warnings. No manual live order submission or cancel action was performed. Production Service still needs deploy/restart from this commit before the old running binary can live-place `2.1`.

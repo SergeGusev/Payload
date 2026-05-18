@@ -96,23 +96,26 @@ public sealed class StrategyStakeAdminCommandTests
         var repository = new TestAppRepository();
         var first = StrategyIds.BtcUpDown5mVariants.Single(item => item.Code == "btc_up_down_5m_binance_bps_1_9").Id;
         var second = StrategyIds.BtcUpDown5mBinanceBps2;
+        var third = StrategyIds.BtcUpDown5mVariants.Single(item => item.Code == "btc_up_down_5m_binance_bps_2_1").Id;
         var other = StrategyIds.BtcUpDown5mVariants.Single(item => item.Code == "btc_up_down_5m_skip_1").Id;
         repository.StrategySettings[first] = repository.StrategySettings[first] with { LiveStakes = false };
         repository.StrategySettings[second] = repository.StrategySettings[second] with { LiveStakes = false };
+        repository.StrategySettings[third] = repository.StrategySettings[third] with { LiveStakes = false };
         repository.StrategySettings[other] = repository.StrategySettings[other] with { LiveStakes = true };
         using var output = new StringWriter();
 
         var exitCode = await StrategyStakeAdminCommand.ExecuteLiveStakesOnlyAsync(
             repository,
-            ["btc_up_down_5m_binance_bps_1_9", StrategyIds.BtcUpDown5mBinanceBps2Code],
+            ["btc_up_down_5m_binance_bps_1_9", StrategyIds.BtcUpDown5mBinanceBps2Code, "btc_up_down_5m_binance_bps_2_1"],
             output,
             CancellationToken.None);
 
         Assert.Equal(0, exitCode);
         Assert.True(repository.StrategySettings[first].LiveStakes);
         Assert.True(repository.StrategySettings[second].LiveStakes);
+        Assert.True(repository.StrategySettings[third].LiveStakes);
         Assert.All(
-            repository.StrategySettings.Where(item => item.Key != first && item.Key != second),
+            repository.StrategySettings.Where(item => item.Key != first && item.Key != second && item.Key != third),
             item => Assert.False(item.Value.LiveStakes));
     }
 
