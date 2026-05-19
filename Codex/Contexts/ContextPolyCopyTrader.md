@@ -1,3 +1,14 @@
+## Active Update 2026-05-19 Dashboard Enabled Flag Explanation
+Goal: Clarify what happens when strategy `Enabled` checkboxes are unchecked in Dashboard.
+Status: Completed
+Done:
+- Confirmed Dashboard row `Enabled` checkbox writes `strategies.enabled` through `SetStrategyEnabledAsync`.
+- Confirmed the Service refreshes strategy runtime settings from PostgreSQL through a short cache and disabled BTC variants stop creating new BTC entries; disabled `Follow leader` stops new follow-leader signal/order creation.
+- Clarified that existing paper/live orders and positions can still be processed/settled, and shared workers such as Gamma ingestion, Binance BTC stream, BTC odds archive, order-book refresh, live maintenance, and heartbeat are not turned off by per-strategy `Enabled`.
+Next: Use per-strategy `Enabled` to pause new entries for selected strategies; use config/service worker switches if the goal is to reduce shared background data loading.
+Notes: Explanation only; no source behavior changed. `git pull --ff-only` reported already up to date. Inspected `StrategyStateProvider`, Dashboard strategy toggle command, PostgreSQL strategy setting methods, BTC paper strategy processor, Follow leader processors, order-book/odds/statistics workers, and README strategy docs.
+Blockers: None.
+
 ## Active Update 2026-05-19 Dashboard SelectedIndex Binding Fix
 Goal: Fix Dashboard startup crash caused by binding `SelectedIndex` to a read-only view-model property.
 Status: Completed
