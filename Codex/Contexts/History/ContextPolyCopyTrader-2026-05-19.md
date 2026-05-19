@@ -111,3 +111,10 @@ Request:
 
 Result:
 Recommended a per-strategy maximum Instant live buy-price cap as a prudent risk-control, separate from stake-size limits. The rationale was that Instant orders use immediate executable ask-depth and current `2 bps Instant` data already shows attempts up to `0.78`, actual fills up to `0.70`, weighted average fill `0.5781`, and one real `0.45` fill; higher binary-contract entry prices require materially higher win rates to break even. Suggested starting conservatively around an observed risk band such as `0.65` for live Instant, logging skipped rows with a clear reason, and comparing skipped Paper/live-shadow outcomes before tightening or loosening. No DB writes, code changes, live order submission, cancel action, or service restart was performed.
+
+## 2026-05-19T20:42:03.3669443Z
+Request:
+Поясни, что такое поставить cap примерно 0.65
+
+Result:
+Explained that `cap 0.65` means a per-strategy maximum allowed Instant entry price per binary-contract share, not a maximum dollar stake. In live preflight, if the computed executable/limit buy price is `<= 0.65`, the order may proceed; if it is `> 0.65`, it is skipped with a clear reason. Buying at `0.65` risks `0.65` per share to win `0.35`, requiring a win rate above `65%` before fees/errors, while higher prices require even higher hit rates. No DB writes, code changes, live order submission, cancel action, or service restart was performed.

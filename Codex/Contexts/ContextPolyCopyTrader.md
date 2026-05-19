@@ -1,3 +1,15 @@
+## Active Update 2026-05-19 Instant 0.65 Cap Explanation
+Goal: Explain what "put a cap around 0.65" means for Instant strategies.
+Status: Completed
+Done:
+- Explained that `MaxInstantBuyPrice=0.65` is a maximum allowed entry price per binary-contract share, not a maximum dollar stake.
+- For Instant live, the preflight should compare the computed executable/limit buy price against the cap; if price is `<= 0.65`, the order may proceed, and if price is `> 0.65`, it should skip with a clear reason.
+- Explained payoff math: buying at `0.65` risks `0.65` per share to win `0.35` per share, so breakeven is above `65%` before fees/errors; at `0.70`, breakeven is above `70%`.
+- Noted that a cap trades execution rate for price discipline: it avoids expensive entries but will miss some winners.
+Next: If implementing, make the cap explicit per strategy and visible/logged, with Paper/shadow tracking for skipped high-price Instant entries.
+Notes: Advisory only; no DB writes, code changes, live order submission, cancel action, or service restart. Referenced FINRA order-type guidance that a buy limit executes only at or below the limit price if it executes at all.
+Blockers: None.
+
 ## Active Update 2026-05-19 Instant Max Price Cap Recommendation
 Goal: Assess whether each Instant strategy should have a maximum live buy price cap.
 Status: Completed
