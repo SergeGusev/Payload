@@ -1,3 +1,16 @@
+## Active Update 2026-05-20 BTC 1.8 vs 1.9 Bps Divergence
+Goal: Explain why `BTC Up or Down 5m Binance 1.9 bps` is positive while nearby `1.8 bps` is materially negative.
+Status: Completed
+Done:
+- Queried production PostgreSQL read-only at DB time around `2026-05-19T21:10Z` using remote host override `192.168.0.101`.
+- Confirmed current totals: `1.8 bps` is enabled Paper-only with `20` settled Paper runs, `8/12` W/L, `-12.0000` PnL, `-20.00%` ROI; `1.9 bps` is LiveStakes-enabled with `47` Paper/shadow settled, `28/19` W/L, `+27.4862` Paper/shadow PnL, and `50` live orders with `38` settled, `22/16` W/L, `+18.4862` live PnL.
+- Isolated the main cause: after `1.9 bps` went live on `2026-05-18T19:00Z`, `1.9` used `paper_live_shadow_test`/actual live-fill accounting while `1.8` remained ordinary Paper GTD at `0.50`; `32` markets settled for `1.9` but were `gtd_limit_not_filled` for `1.8`, producing `+35.4699` for `1.9`.
+- Found the pure-threshold effect was small: before live, both shared `9` settled trades for `+9.0000` each, and the extra marginal `1.8` trades below the `1.9` threshold netted `0.0000`; after live only one marginal `1.8` trade skipped by `1.9` settled, and it lost `-3.0000`.
+- Found the severe `1.8` drawdown is concentrated in Sofia days: `2026-05-19` had `6` settled, `0/6`, `-18.0000`; `2026-05-18` had `4` settled, `1/3`, `-6.0000`; earlier `2026-05-16` was positive `+9.0000`.
+Next: If comparing thresholds statistically, compare strategies under the same execution mode; either Paper-only vs Paper-only before live, or a controlled live-shadow cohort for both.
+Notes: Read-only reporting only. No DB writes, code changes, service restart, live order submission, or cancel action. No tests run because no source changed; operational SQL diagnostics were the verification.
+Blockers: None.
+
 ## Active Update 2026-05-19 Instant Global 0.65 Cap Implementation
 Goal: Apply the `0.65` maximum buy-price cap to all Instant Up/Down strategies across markets.
 Status: Completed locally; deploy/restart required for production effect
