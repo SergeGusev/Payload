@@ -1,3 +1,16 @@
+## Active Update 2026-05-20 Binance 2.3 Bps Deploy Check
+Goal: Verify production after the user deployed the `2.3 bps` live-shadow build.
+Status: Completed
+Done:
+- Confirmed production service restarted at `2026-05-19T21:30:07Z` on build `info=1.0.0+3f1669046e076bd566015afe1bbb1ef682bbe96e`, `Running`/`Live`, with fresh heartbeat and no `last_error`.
+- Confirmed LiveStakes remains exactly six enabled BTC variants: `1.9`, `2`, `2 Instant`, `2.1`, `2.2`, and `2.3`; ETH/SOL live count remains `0`.
+- Confirmed `2.3` is being processed by deployed code: post-restart `21:30Z` market rows for all six live strategies skipped with `btc_reference_move_below_bps_threshold`; the `21:40Z` market was already observed.
+- Since restart, all six live strategies had `0` live orders, `0` matched orders, and `0` open-like orders in DB; DB open live orders were `0`, and Paper/Live shadow discrepancies in the last 24h were `0`.
+- Confirmed post-restart `polymarket_http_logs` errors were `0`, startup geoblock check was OK (`blocked=False`, country `BG`), and BTC odds archive tick was fresh at the time of check.
+Next: Continue normal monitoring; first `2.3` live attempt should occur only when BTC move from market start reaches the `2.3 bps` threshold.
+Notes: Read-only production monitoring. Used remote PostgreSQL host override `192.168.0.101`; local authenticated CLOB open-orders CLI could not run because this shell session has auth disabled/not configured, so external exchange open-order verification was not available from here. No DB writes, live order submission, cancel action, or service restart.
+Blockers: None.
+
 ## Active Update 2026-05-20 Binance 2.3 Bps Live Add
 Goal: Add `BTC Up or Down 5m Binance 2.3 bps` to the controlled BTC Paper/Live-shadow live set.
 Status: Completed locally; production DB LiveStakes updated; Service deploy/restart required for 2.3 live placement.
