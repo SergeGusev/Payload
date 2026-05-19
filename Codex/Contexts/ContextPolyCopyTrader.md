@@ -1,3 +1,17 @@
+## Active Update 2026-05-19 Binance 2 Bps Instant Deploy Check
+Goal: Verify production after the user deployed the `BTC Up or Down 5m Binance 2 bps Instant` live allowlist commit.
+Status: Completed
+Done:
+- Confirmed production `PolyCopyTrader.Service` is running in `Live` mode on deployed build `info=1.0.0+a5050c2c9aa60c0f487d055e62c0b2c03cad6ccd`, started `2026-05-19T09:10:46Z`, with fresh heartbeat and no heartbeat error.
+- Confirmed production LiveStakes remains enabled only for `btc_up_down_5m_binance_bps_1_9`, `btc_up_down_5m_binance_bps_2`, `btc_up_down_5m_binance_bps_2_instant`, and `btc_up_down_5m_binance_bps_2_1`; all four are enabled with `live_stake_amount=1`.
+- Confirmed `btc_up_down_5m_binance_bps_2_instant` is now being processed by the running service: post-start windows updated through `2026-05-19T09:25:11Z`, all skipped with `btc_reference_move_below_bps_threshold`.
+- Confirmed no post-start live orders were created for the four live strategies, instant has `0` live orders total and `0` open, Paper/Live shadow discrepancies since start are `0`, and API errors in the last 60 minutes are `0`.
+- Confirmed BTC 5m odds ticks and current market WebSocket rows are fresh; older stale shard rows from `2026-05-07` remain in `market_data_status`, but current aggregate/shard-001 rows are connected and fresh.
+- Ran read-only authenticated CLOB open-orders report; `GET /data/orders` returned HTTP `200` and `Orders summarized: 0`.
+Next: Continue routine monitoring; the first actual instant live order should appear only when the market-start BTC move reaches the `2 bps` threshold.
+Notes: Read-only operational check only. Used remote PostgreSQL `192.168.0.101` with only the connection-string host overridden inside the PowerShell process. Ran `--clob-authenticated-open-orders-report` (`GET /data/orders` only). No database writes, code changes, service restart, live order submission, or cancel action was performed.
+Blockers: None.
+
 ## Active Update 2026-05-19 Binance 2 Bps Instant Live Add
 Goal: Make `BTC Up or Down 5m Binance 2 bps Instant` available for controlled Live Paper/Live-shadow placement.
 Status: Completed locally; production DB LiveStakes updated; Service deploy/restart required for instant live placement.

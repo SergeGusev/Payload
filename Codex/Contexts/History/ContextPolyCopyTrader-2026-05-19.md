@@ -28,6 +28,13 @@ Request:
 Result:
 Added disabled-by-default Paper-only ETH/SOL Binance bps and Instant bps strategy variants, wired the paper processor to ETH/SOL 5m Gamma markets with crypto Binance/archive references, enabled ETH/SOL reference/archive workers, updated Dashboard categories and README, and added tests. Verified with solution build in a separate output path plus full test run: 499/499 passed.
 
+## 2026-05-19T09:26:35.6896849+00:00
+Request:
+Выложил, проверяй
+
+Result:
+Checked production read-only after deploy. `PolyCopyTrader.Service` is running in `Live` mode on build `info=1.0.0+a5050c2c9aa60c0f487d055e62c0b2c03cad6ccd`, started `2026-05-19T09:10:46Z`, with fresh heartbeat and no heartbeat error. LiveStakes is enabled only for `btc_up_down_5m_binance_bps_1_9`, `btc_up_down_5m_binance_bps_2`, `btc_up_down_5m_binance_bps_2_instant`, and `btc_up_down_5m_binance_bps_2_1`, each with live stake `1`. The instant strategy is being processed by the new binary; post-start windows through `09:25Z` skipped with `btc_reference_move_below_bps_threshold`, so no instant live order has been created yet. Post-start live orders for the four live strategies are `0`, instant live orders total/open are `0/0`, Paper/Live shadow discrepancies since start are `0`, API errors in the last 60 minutes are `0`, current BTC odds/WebSocket data is fresh, and read-only CLOB `GET /data/orders` reported `Orders summarized: 0`. No database writes, code changes, service restart, live order submission, or cancel action was performed.
+
 ## 2026-05-19T09:05:12.7872480+00:00
 Request:
 Давай выведем в Live стратегию BTC Up or Down 5m Binance 2 bps Instant
