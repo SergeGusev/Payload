@@ -1,3 +1,15 @@
+## Active Update 2026-05-19 Instant 0.45 Fill Check
+Goal: Confirm whether `BTC Up or Down 5m Binance 2 bps Instant` actually bought at `0.45`.
+Status: Completed
+Done:
+- Queried production PostgreSQL read-only at DB time `2026-05-19T18:14:05Z` using remote host override `192.168.0.101`.
+- Confirmed exactly `1` Instant live attempt with limit price `0.45`, and it was filled with actual average fill price `0.45`.
+- The filled row was `Down`, created `2026-05-19T18:55:13+03:00` for the `18:55` Sofia market, status `Matched`, filled `6.67` shares, filled notional/cost basis `3.0015`.
+- The order settled at `2026-05-19T19:04:43+03:00` as a loss with realized PnL `-3.0015`.
+Next: None.
+Notes: Read-only reporting only. No DB writes, code changes, live order submission, cancel action, or service restart. No tests run because only operational SQL reporting was performed.
+Blockers: None.
+
 ## Active Update 2026-05-19 Instant Live Buy Price Check
 Goal: Check the actual live buy prices for `BTC Up or Down 5m Binance 2 bps Instant`.
 Status: Completed

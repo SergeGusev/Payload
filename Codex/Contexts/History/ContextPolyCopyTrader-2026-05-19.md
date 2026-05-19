@@ -97,3 +97,10 @@ Request:
 
 Result:
 Queried production PostgreSQL read-only for `btc_up_down_5m_binance_bps_2_instant` live orders. At DB time `2026-05-19T18:09:57Z`, the strategy had `21` live attempts, `14` filled, `13` settled, and `0` open-like orders. Limit prices across attempts ranged `0.45..0.78` with average `0.6395`; actual filled average prices ranged `0.45..0.70` with simple average `0.58` and weighted average fill `0.5781` over `89.4` shares / `51.6791` notional. Down fills averaged `0.5700` weighted, Up fills averaged `0.5885` weighted. No DB writes, code changes, live order submission, cancel action, or service restart was performed.
+
+## 2026-05-19T18:14:12.1159812Z
+Request:
+А по 0.45 реально покупались?
+
+Result:
+Queried production PostgreSQL read-only for `btc_up_down_5m_binance_bps_2_instant` orders at limit/actual fill price `0.45`. Confirmed exactly one real fill: `Down`, created `2026-05-19T18:55:13+03:00`, status `Matched`, limit `0.45`, actual average fill `0.45`, filled `6.67` shares, notional/cost basis `3.0015`; it settled at `2026-05-19T19:04:43+03:00` as a loss with realized PnL `-3.0015`. No DB writes, code changes, live order submission, cancel action, or service restart was performed.
