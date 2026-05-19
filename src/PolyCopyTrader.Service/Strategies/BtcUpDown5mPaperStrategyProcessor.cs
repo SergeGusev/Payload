@@ -52,6 +52,7 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
         StrategyIds.BtcUpDown5mBinanceBps1Code,
         "btc_up_down_5m_binance_bps_1_9",
         StrategyIds.BtcUpDown5mBinanceBps2Code,
+        "btc_up_down_5m_binance_bps_2_instant",
         "btc_up_down_5m_binance_bps_2_1"
     ];
     private const string OpeningLimitPricingMode = "paper_gtd_limit";

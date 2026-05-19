@@ -27,3 +27,10 @@ Request:
 
 Result:
 Added disabled-by-default Paper-only ETH/SOL Binance bps and Instant bps strategy variants, wired the paper processor to ETH/SOL 5m Gamma markets with crypto Binance/archive references, enabled ETH/SOL reference/archive workers, updated Dashboard categories and README, and added tests. Verified with solution build in a separate output path plus full test run: 499/499 passed.
+
+## 2026-05-19T09:05:12.7872480+00:00
+Request:
+Давай выведем в Live стратегию BTC Up or Down 5m Binance 2 bps Instant
+
+Result:
+Added `btc_up_down_5m_binance_bps_2_instant` to the BTC Paper/Live-shadow allowlist, added a regression test proving it creates a Paper-shadow plus GTD Live order with instant ask-depth pricing, updated the live-stakes admin test and README live safety docs, and verified targeted tests 2/2 plus full tests 500/500. Updated production PostgreSQL LiveStakes on host `192.168.0.101` to enable only `btc_up_down_5m_binance_bps_1_9`, `btc_up_down_5m_binance_bps_2`, `btc_up_down_5m_binance_bps_2_instant`, and `btc_up_down_5m_binance_bps_2_1` (`4` enabled, `1262` disabled, `0` failed), then verified the live-shadow state shows the instant strategy live-enabled with `liveStake=1`, `liveBalance=100`, `liveOpen=0`, and `liveOrders=0`. No manual live order submission, cancel action, or service restart was performed; production service redeploy/restart from the new commit is still required before this strategy can live-place orders.

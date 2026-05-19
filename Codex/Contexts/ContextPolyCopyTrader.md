@@ -1,3 +1,17 @@
+## Active Update 2026-05-19 Binance 2 Bps Instant Live Add
+Goal: Make `BTC Up or Down 5m Binance 2 bps Instant` available for controlled Live Paper/Live-shadow placement.
+Status: Completed locally; production DB LiveStakes updated; Service deploy/restart required for instant live placement.
+Done:
+- Added `btc_up_down_5m_binance_bps_2_instant` to the BTC Paper/Live-shadow allowlist.
+- Added regression coverage proving `2 bps Instant` creates a Paper-shadow and GTD Live order with `postOnly=false` and instant ask-depth pricing when LiveStakes and live gates are enabled.
+- Updated the live-stakes admin test to enable exactly `1.9` + `2.0` + `2.0 Instant` + `2.1`.
+- Updated README live safety/docs to list `2 bps Instant` as an explicitly allowed BTC live-shadow variant.
+- Updated production PostgreSQL LiveStakes flags to enable only `btc_up_down_5m_binance_bps_1_9`, `btc_up_down_5m_binance_bps_2`, `btc_up_down_5m_binance_bps_2_instant`, and `btc_up_down_5m_binance_bps_2_1` (`4` strategies enabled, `1262` disabled, `0` failed).
+- Verified production live-shadow state after the DB update: `4` LiveStakes strategies, all with `liveStake=1`; `btc_up_down_5m_binance_bps_2_instant` has `liveBalance=100`, `liveOpen=0`, and `liveOrders=0`.
+Next: Deploy/restart `PolyCopyTrader.Service` from the new commit on the production server; until then the DB flag for `2 bps Instant` is set, but the currently running binary will not live-place it.
+Notes: Verification passed: targeted tests 2/2; full tests 500/500; `git diff --check` clean except LF/CRLF warnings. Production DB commands used remote host `192.168.0.101` by overriding only the connection-string host inside the PowerShell process, without printing secrets. No manual live order submission, cancel action, or service restart was performed.
+Blockers: Production Service deploy/restart was not performed from this session.
+
 ## Active Update 2026-05-19 Remote Strategy Enabled Narrowing
 Goal: Set `Enabled=false` for every strategy except Dashboard category `BTC Up or Down 5m Binance`.
 Status: Completed
