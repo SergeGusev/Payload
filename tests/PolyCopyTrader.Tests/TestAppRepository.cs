@@ -1047,7 +1047,7 @@ internal sealed class TestAppRepository : IAppRepository
 
     public Task<IReadOnlyList<StrategyPerformance>> GetStrategyPerformanceAsync(int limit = 2000, CancellationToken cancellationToken = default)
     {
-        var strategies = StrategyIds.BtcUpDown5mVariants.Select(variant => new
+        var strategies = StrategyIds.UpDown5mStrategyVariants.Select(variant => new
         {
             Id = variant.Id,
             variant.Code,
@@ -1272,7 +1272,7 @@ internal sealed class TestAppRepository : IAppRepository
             new { Label = "6h", Hours = 6, StartUtc = now.AddHours(-6) },
             new { Label = "24h", Hours = 24, StartUtc = now.AddHours(-24) }
         };
-        var strategies = StrategyIds.BtcUpDown5mVariants.Select(variant => new
+        var strategies = StrategyIds.UpDown5mStrategyVariants.Select(variant => new
         {
             Id = variant.Id,
             variant.Code,
@@ -3663,7 +3663,7 @@ internal sealed class TestAppRepository : IAppRepository
             return StrategyIds.FollowLeader;
         }
 
-        foreach (var variant in StrategyIds.BtcUpDown5mVariants)
+        foreach (var variant in StrategyIds.UpDown5mStrategyVariants)
         {
             if (string.Equals(wallet, variant.CopiedTraderWallet, StringComparison.OrdinalIgnoreCase))
             {

@@ -32,7 +32,7 @@ public sealed class BtcUpDown5mPaperStrategyWorker(
 
         var interval = TimeSpan.FromSeconds(options.PollIntervalSeconds);
         var enabledVariantCount = options.EnabledVariantCodes is null || options.EnabledVariantCodes.Count == 0
-            ? StrategyIds.BtcUpDown5mVariants.Count
+            ? StrategyIds.UpDown5mStrategyVariants.Count
             : options.EnabledVariantCodes.Count;
         logger.LogInformation(
             "BTC Up or Down 5m paper strategy worker started. Mode={Mode} RunInLiveMode={RunInLiveMode} PollIntervalSeconds={PollIntervalSeconds} VariantCount={VariantCount} StakeUsd={StakeUsd} EntryGraceSeconds={EntryGraceSeconds} MaxConcurrentEntryDecisions={MaxConcurrentEntryDecisions}",

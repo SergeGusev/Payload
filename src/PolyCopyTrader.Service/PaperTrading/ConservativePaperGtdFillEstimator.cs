@@ -10,7 +10,7 @@ public sealed class ConservativePaperGtdFillEstimator(BtcUpDown5mStrategyOptions
 {
     private const string FillModelName = "conservative_gtd_queue_v1";
     private const string PaperLiveShadowTestSource = "paper_live_shadow_test";
-    private static readonly HashSet<Guid> BtcStrategyIds = new(StrategyIds.BtcUpDown5mVariants.Select(variant => variant.Id));
+    private static readonly HashSet<Guid> UpDownStrategyIds = new(StrategyIds.UpDown5mStrategyVariants.Select(variant => variant.Id));
 
     public ConservativePaperGtdFillEvaluation Evaluate(
         PaperOrder order,
@@ -77,7 +77,7 @@ public sealed class ConservativePaperGtdFillEstimator(BtcUpDown5mStrategyOptions
         if (!options.PaperGtdConservativeFillEnabled ||
             order.Side != TradeSide.Buy ||
             string.Equals(order.ExecutionSource, PaperLiveShadowTestSource, StringComparison.OrdinalIgnoreCase) ||
-            !BtcStrategyIds.Contains(order.StrategyId) ||
+            !UpDownStrategyIds.Contains(order.StrategyId) ||
             string.IsNullOrWhiteSpace(order.RawDecisionJson))
         {
             return false;

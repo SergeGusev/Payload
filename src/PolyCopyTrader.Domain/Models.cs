@@ -1077,9 +1077,13 @@ public static class StrategyIds
 
     public static readonly IReadOnlyList<BtcUpDown5mStrategyVariant> BtcUpDown5mVariants =
         CreateBtcUpDown5mVariants();
+    public static readonly IReadOnlyList<BtcUpDown5mStrategyVariant> CryptoUpDown5mVariants =
+        CreateCryptoUpDown5mVariants();
+    public static readonly IReadOnlyList<BtcUpDown5mStrategyVariant> UpDown5mStrategyVariants =
+        [.. BtcUpDown5mVariants, .. CryptoUpDown5mVariants];
 
     public static readonly IReadOnlyList<Guid> AllStrategyIds =
-        [FollowLeader, BtcUpDown5mStatistics, .. BtcUpDown5mVariants.Select(variant => variant.Id)];
+        [FollowLeader, BtcUpDown5mStatistics, .. UpDown5mStrategyVariants.Select(variant => variant.Id)];
 
     public static Guid Normalize(Guid strategyId)
     {
@@ -1479,6 +1483,85 @@ public static class StrategyIds
         return GetBtcUpDown5mBinanceBpsThresholdCode(thresholdTenths) + "_instant";
     }
 
+    private static IReadOnlyList<BtcUpDown5mStrategyVariant> CreateCryptoUpDown5mVariants()
+    {
+        CryptoUpDown5mAssetSpec[] assets =
+        [
+            new("ETH", 8061, 8062),
+            new("SOL", 8063, 8064)
+        ];
+        var variants = new List<BtcUpDown5mStrategyVariant>(assets.Length * 100);
+        foreach (var asset in assets)
+        {
+            for (var thresholdTenths = 1; thresholdTenths <= 50; thresholdTenths++)
+            {
+                var minMoveBps = thresholdTenths / 10m;
+                variants.Add(CreateCryptoUpDown5mBinanceBpsThresholdVariant(asset, thresholdTenths, minMoveBps));
+                variants.Add(CreateCryptoUpDown5mBinanceBpsThresholdInstantVariant(asset, thresholdTenths, minMoveBps));
+            }
+        }
+
+        return variants;
+    }
+
+    private static BtcUpDown5mStrategyVariant CreateCryptoUpDown5mBinanceBpsThresholdVariant(
+        CryptoUpDown5mAssetSpec asset,
+        int thresholdTenths,
+        decimal minMoveBps)
+    {
+        var thresholdName = minMoveBps.ToString("0.###", CultureInfo.InvariantCulture);
+        return new BtcUpDown5mStrategyVariant(
+            GetCryptoUpDown5mBinanceBpsThresholdId(asset.BpsIdGroup, thresholdTenths),
+            GetCryptoUpDown5mBinanceBpsThresholdCode(asset.Symbol, thresholdTenths),
+            $"{asset.Symbol} Up or Down 5m Binance {thresholdName} bps",
+            $"After {asset.Symbol} 5m trading starts, compare the latest Binance {asset.Symbol}/USDT trade-stream price with the archived market-start reference; skip unless the absolute move from start is at least {thresholdName} bps; above start buys Up, below start buys Down. Paper entry is a GTD limit BUY capped at 0.50 until the configured GTD deadline; settlement uses only actually filled shares.",
+            BtcUpDown5mStrategyDirection.Dynamic,
+            0,
+            BtcUpDown5mStrategyBehavior.CryptoBinanceStartRelativeBpsThreshold,
+            minMoveBps >= 1m && minMoveBps == decimal.Truncate(minMoveBps)
+                ? (int)minMoveBps
+                : 0,
+            minMoveBps,
+            ReferenceAssetSymbol: asset.Symbol);
+    }
+
+    private static BtcUpDown5mStrategyVariant CreateCryptoUpDown5mBinanceBpsThresholdInstantVariant(
+        CryptoUpDown5mAssetSpec asset,
+        int thresholdTenths,
+        decimal minMoveBps)
+    {
+        var thresholdName = minMoveBps.ToString("0.###", CultureInfo.InvariantCulture);
+        return new BtcUpDown5mStrategyVariant(
+            GetCryptoUpDown5mBinanceBpsThresholdId(asset.InstantIdGroup, thresholdTenths),
+            GetCryptoUpDown5mBinanceBpsThresholdCode(asset.Symbol, thresholdTenths) + "_instant",
+            $"{asset.Symbol} Up or Down 5m Binance {thresholdName} bps Instant",
+            $"After {asset.Symbol} 5m trading starts, compare the latest Binance {asset.Symbol}/USDT trade-stream price with the archived market-start reference; skip unless the absolute move from start is at least {thresholdName} bps; above start buys Up, below start buys Down. Paper entry is a GTD limit BUY priced from current executable ask depth so the order can fill immediately; settlement uses only actually filled shares.",
+            BtcUpDown5mStrategyDirection.Dynamic,
+            0,
+            BtcUpDown5mStrategyBehavior.CryptoBinanceStartRelativeBpsThresholdInstant,
+            minMoveBps >= 1m && minMoveBps == decimal.Truncate(minMoveBps)
+                ? (int)minMoveBps
+                : 0,
+            minMoveBps,
+            ReferenceAssetSymbol: asset.Symbol);
+    }
+
+    private static Guid GetCryptoUpDown5mBinanceBpsThresholdId(int idGroup, int thresholdTenths)
+    {
+        return Guid.Parse($"b7c50005-0000-4000-{idGroup:0000}-{100 + thresholdTenths:000000000000}");
+    }
+
+    private static string GetCryptoUpDown5mBinanceBpsThresholdCode(string assetSymbol, int thresholdTenths)
+    {
+        var wholeBps = thresholdTenths / 10;
+        var fractionalTenths = thresholdTenths % 10;
+        var suffix = fractionalTenths == 0
+            ? wholeBps.ToString(CultureInfo.InvariantCulture)
+            : wholeBps.ToString(CultureInfo.InvariantCulture) + "_" + fractionalTenths.ToString(CultureInfo.InvariantCulture);
+
+        return assetSymbol.ToLowerInvariant() + "_up_down_5m_binance_bps_" + suffix;
+    }
+
     private static BtcUpDown5mStrategyVariant CreateBtcUpDown5mBinanceCleverVariant()
     {
         return new BtcUpDown5mStrategyVariant(
@@ -1812,6 +1895,8 @@ public enum BtcUpDown5mStrategyBehavior
     BinanceStartRelativeFixedPrice,
     BinanceStartRelativeBpsThreshold,
     BinanceStartRelativeBpsThresholdInstant,
+    CryptoBinanceStartRelativeBpsThreshold,
+    CryptoBinanceStartRelativeBpsThresholdInstant,
     BinanceStartRelativeClever,
     BinanceStartRelativeCleverMargin,
     BinanceStartRelativeEdge,
@@ -1840,10 +1925,16 @@ public sealed record BtcUpDown5mStrategyVariant(
     BtcUpDownPreOpenLifetimeMode PreOpenLifetimeMode = BtcUpDownPreOpenLifetimeMode.Default,
     BtcUpDownFixedOutcome? FixedOutcome = null,
     decimal? FixedLimitPrice = null,
-    string Category = "")
+    string Category = "",
+    string ReferenceAssetSymbol = "BTC")
 {
     public string CopiedTraderWallet => "strategy:" + Code;
 }
+
+internal sealed record CryptoUpDown5mAssetSpec(
+    string Symbol,
+    int BpsIdGroup,
+    int InstantIdGroup);
 
 public sealed record TradingStrategy(
     Guid Id,

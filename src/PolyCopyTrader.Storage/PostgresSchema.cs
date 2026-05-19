@@ -2108,6 +2108,90 @@ ON CONFLICT (id) DO UPDATE SET
     updated_at_utc = excluded.updated_at_utc;
 
 INSERT INTO strategies (id, code, name, description, enabled, paper_stake_amount, created_at_utc, updated_at_utc)
+WITH assets(asset_symbol, bps_id_group, instant_id_group) AS (
+    VALUES
+        ('ETH', '8061', '8062'),
+        ('SOL', '8063', '8064')
+),
+thresholds(threshold_tenths) AS (
+    SELECT generate_series(1, 50)
+),
+formatted AS (
+    SELECT
+        asset_symbol,
+        bps_id_group,
+        instant_id_group,
+        threshold_tenths,
+        CASE
+            WHEN threshold_tenths % 10 = 0 THEN (threshold_tenths / 10)::text
+            ELSE (threshold_tenths / 10)::text || '.' || (threshold_tenths % 10)::text
+        END AS threshold_name,
+        CASE
+            WHEN threshold_tenths % 10 = 0 THEN (threshold_tenths / 10)::text
+            ELSE (threshold_tenths / 10)::text || '_' || (threshold_tenths % 10)::text
+        END AS code_suffix
+    FROM assets
+    CROSS JOIN thresholds
+)
+SELECT
+    ('b7c50005-0000-4000-' || bps_id_group || '-' || lpad((100 + threshold_tenths)::text, 12, '0'))::uuid,
+    lower(asset_symbol) || '_up_down_5m_binance_bps_' || code_suffix,
+    asset_symbol || ' Up or Down 5m Binance ' || threshold_name || ' bps',
+    'After ' || asset_symbol || ' 5m trading starts, compare the latest Binance ' || asset_symbol || '/USDT trade-stream price with the archived market-start reference; skip unless the absolute move from start is at least ' || threshold_name || ' bps; above start buys Up, below start buys Down. Paper entry is a GTD limit BUY capped at 0.50 until the configured GTD deadline; settlement uses only actually filled shares.',
+    false,
+    1.00,
+    now(),
+    now()
+FROM formatted
+ON CONFLICT (id) DO UPDATE SET
+    code = excluded.code,
+    name = excluded.name,
+    description = excluded.description,
+    updated_at_utc = excluded.updated_at_utc;
+
+INSERT INTO strategies (id, code, name, description, enabled, paper_stake_amount, created_at_utc, updated_at_utc)
+WITH assets(asset_symbol, bps_id_group, instant_id_group) AS (
+    VALUES
+        ('ETH', '8061', '8062'),
+        ('SOL', '8063', '8064')
+),
+thresholds(threshold_tenths) AS (
+    SELECT generate_series(1, 50)
+),
+formatted AS (
+    SELECT
+        asset_symbol,
+        bps_id_group,
+        instant_id_group,
+        threshold_tenths,
+        CASE
+            WHEN threshold_tenths % 10 = 0 THEN (threshold_tenths / 10)::text
+            ELSE (threshold_tenths / 10)::text || '.' || (threshold_tenths % 10)::text
+        END AS threshold_name,
+        CASE
+            WHEN threshold_tenths % 10 = 0 THEN (threshold_tenths / 10)::text
+            ELSE (threshold_tenths / 10)::text || '_' || (threshold_tenths % 10)::text
+        END AS code_suffix
+    FROM assets
+    CROSS JOIN thresholds
+)
+SELECT
+    ('b7c50005-0000-4000-' || instant_id_group || '-' || lpad((100 + threshold_tenths)::text, 12, '0'))::uuid,
+    lower(asset_symbol) || '_up_down_5m_binance_bps_' || code_suffix || '_instant',
+    asset_symbol || ' Up or Down 5m Binance ' || threshold_name || ' bps Instant',
+    'After ' || asset_symbol || ' 5m trading starts, compare the latest Binance ' || asset_symbol || '/USDT trade-stream price with the archived market-start reference; skip unless the absolute move from start is at least ' || threshold_name || ' bps; above start buys Up, below start buys Down. Paper entry is a GTD limit BUY priced from current executable ask depth so the order can fill immediately; settlement uses only actually filled shares.',
+    false,
+    1.00,
+    now(),
+    now()
+FROM formatted
+ON CONFLICT (id) DO UPDATE SET
+    code = excluded.code,
+    name = excluded.name,
+    description = excluded.description,
+    updated_at_utc = excluded.updated_at_utc;
+
+INSERT INTO strategies (id, code, name, description, enabled, paper_stake_amount, created_at_utc, updated_at_utc)
 VALUES (
     'b7c50005-0000-4000-8050-000000000001',
     'btc_up_down_5m_statistics',

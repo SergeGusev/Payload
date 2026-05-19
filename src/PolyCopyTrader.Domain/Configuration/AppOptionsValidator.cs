@@ -204,7 +204,7 @@ public static class AppOptionsValidator
     private static int GetBtcUpDown5mEnabledVariantCount(BtcUpDown5mStrategyOptions options)
     {
         return options.EnabledVariantCodes is null || options.EnabledVariantCodes.Count == 0
-            ? StrategyIds.BtcUpDown5mVariants.Count
+            ? StrategyIds.UpDown5mStrategyVariants.Count
             : options.EnabledVariantCodes.Count;
     }
 
@@ -1298,7 +1298,7 @@ public static class AppOptionsValidator
             return;
         }
 
-        var knownCodes = StrategyIds.BtcUpDown5mVariants
+        var knownCodes = StrategyIds.UpDown5mStrategyVariants
             .Select(variant => variant.Code)
             .ToHashSet(StringComparer.OrdinalIgnoreCase);
         var seenCodes = new HashSet<string>(StringComparer.OrdinalIgnoreCase);

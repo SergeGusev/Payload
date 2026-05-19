@@ -21,3 +21,9 @@ DOGE Up or Down 5m в Polymarket с двух аспектов: 1. Объём с�
 
 Result:
 Evaluated current Polymarket Gamma 5m volumes/liquidity/spreads for ETH/SOL/XRP/DOGE against BTC and checked Binance public market-data availability. ETH looked like the only reasonable non-BTC candidate for paper/research; SOL was only exploratory paper; XRP and DOGE were not recommended for live due to weak Polymarket-side volume/spread quality. Binance-side ETHUSDT/SOLUSDT/XRPUSDT/DOGEUSDT data was available, but current Service code only has disabled research plumbing for ETH/SOL/XRP and no DOGE default.
+## 2026-05-19T05:48:50.3587112Z
+Request:
+Сделай ETH и SOL стратегии, аналогичные всем BTC Up or Down 5m Binance bps стратегиям, но работающие с ETH и SOL соответственно
+
+Result:
+Added disabled-by-default Paper-only ETH/SOL Binance bps and Instant bps strategy variants, wired the paper processor to ETH/SOL 5m Gamma markets with crypto Binance/archive references, enabled ETH/SOL reference/archive workers, updated Dashboard categories and README, and added tests. Verified with solution build in a separate output path plus full test run: 499/499 passed.

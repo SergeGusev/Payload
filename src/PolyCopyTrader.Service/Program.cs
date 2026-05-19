@@ -366,15 +366,14 @@ builder.Services.AddHostedService<LocalControlServer>();
 builder.Services.AddHostedService<GammaMarketIngestionWorker>();
 builder.Services.AddHostedService(sp => sp.GetRequiredService<BtcOrderBookLagDiagnosticService>());
 builder.Services.AddHostedService(sp => sp.GetRequiredService<BinanceBtcUsdTradeStreamService>());
-// BTC 5m focused mode: non-BTC crypto reference stream is paused.
-// builder.Services.AddHostedService(sp => sp.GetRequiredService<BinanceCryptoReferenceTradeStreamService>());
+builder.Services.AddHostedService(sp => sp.GetRequiredService<BinanceCryptoReferenceTradeStreamService>());
 builder.Services.AddHostedService<ChainlinkBtcUsdCorrelationWorker>();
 builder.Services.AddHostedService<BtcUpDown5mOrderBookRefreshWorker>();
 builder.Services.AddHostedService<BtcUpDown5mPaperStrategyWorker>();
 builder.Services.AddHostedService<BtcUpDown5mOddsArchiveWorker>();
 builder.Services.AddHostedService<BtcUpDown5mStatisticsWorker>();
-// BTC 5m focused mode: non-BTC crypto archive and trader research/rating workers are paused.
-// builder.Services.AddHostedService<CryptoUpDown5mOddsArchiveWorker>();
+builder.Services.AddHostedService<CryptoUpDown5mOddsArchiveWorker>();
+// Up/Down focused mode: trader research/rating workers are paused.
 // builder.Services.AddHostedService<DataApiTraderActivityIngestionWorker>();
 // builder.Services.AddHostedService<DataApiTraderActivitySyncWorker>();
 // builder.Services.AddHostedService<DataApiTraderRatingRefreshWorker>();

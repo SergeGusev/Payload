@@ -30,6 +30,7 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
     IPolymarketAuthService authService,
     IBtcUsdReferencePriceClient btcUsdReferencePriceClient,
     IBtcUsdReferencePriceCache btcUsdReferencePriceCache,
+    ICryptoReferencePriceClient cryptoReferencePriceClient,
     IMarketDataCache marketDataCache,
     IActiveMarketAssetSubscriptionRegistry activeMarketAssetSubscriptionRegistry,
     IExposureSnapshotCache exposureCache,
@@ -96,7 +97,7 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
 
         if (entryVariants.Length == 0)
         {
-            var settledRuns = await SettleDueRunsAsync(now, StrategyIds.BtcUpDown5mVariants, cancellationToken);
+            var settledRuns = await SettleDueRunsAsync(now, StrategyIds.UpDown5mStrategyVariants, cancellationToken);
             return new BtcUpDown5mPaperStrategyResult(0, 0, 0, settledRuns);
         }
 
@@ -173,7 +174,7 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
             preOpenSellExitVariants,
             cancellationToken);
         controlState.RecordLoop("BTC5mStrategy settling due runs after entries", null);
-        var settledRunsAfterEntries = await SettleDueRunsAsync(DateTimeOffset.UtcNow, StrategyIds.BtcUpDown5mVariants, cancellationToken);
+        var settledRunsAfterEntries = await SettleDueRunsAsync(DateTimeOffset.UtcNow, StrategyIds.UpDown5mStrategyVariants, cancellationToken);
         controlState.RecordLoop("BTC5mStrategy capturing close-book snapshots", null);
         await CaptureClosingOrderBookSnapshotsAsync(DateTimeOffset.UtcNow, observeResult.Markets, cancellationToken);
         return new BtcUpDown5mPaperStrategyResult(
@@ -189,14 +190,14 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
     {
         if (options.EnabledVariantCodes is null || options.EnabledVariantCodes.Count == 0)
         {
-            return StrategyIds.BtcUpDown5mVariants;
+            return StrategyIds.UpDown5mStrategyVariants;
         }
 
         var enabledCodes = options.EnabledVariantCodes
             .Where(code => !string.IsNullOrWhiteSpace(code))
             .Select(code => code.Trim())
             .ToHashSet(StringComparer.OrdinalIgnoreCase);
-        return StrategyIds.BtcUpDown5mVariants
+        return StrategyIds.UpDown5mStrategyVariants
             .Where(variant => enabledCodes.Contains(variant.Code))
             .ToArray();
     }
@@ -217,13 +218,59 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
         IReadOnlyDictionary<Guid, StrategyRuntimeSettings> strategySettings,
         CancellationToken cancellationToken)
     {
-        var markets = await repository.GetBtcUpDownStrategyGammaMarketsAsync(
-            options.MaxMarketsPerCycle,
-            cancellationToken);
-
         var observed = 0;
         var skipped = 0;
+        var observedMarkets = new List<PolymarketGammaMarket>();
+        var btcVariants = variants
+            .Where(IsBtcReferenceVariant)
+            .ToArray();
+        if (btcVariants.Length > 0)
+        {
+            var btcMarkets = await repository.GetBtcUpDownStrategyGammaMarketsAsync(
+                options.MaxMarketsPerCycle,
+                cancellationToken);
+            observedMarkets.AddRange(btcMarkets);
+            var result = await ObserveBtcMarketsAsync(nowUtc, btcMarkets, btcVariants, strategySettings, cancellationToken);
+            observed += result.Observed;
+            skipped += result.Skipped;
+        }
 
+        var cryptoVariants = variants
+            .Where(IsCryptoReferenceVariant)
+            .ToArray();
+        if (cryptoVariants.Length > 0)
+        {
+            var assetSymbols = cryptoVariants
+                .Select(GetReferenceAssetSymbol)
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToArray();
+            var cryptoMarkets = await repository.GetCryptoUpDown5mGammaMarketsAsync(
+                assetSymbols,
+                options.MaxMarketsPerCycle,
+                cancellationToken);
+            observedMarkets.AddRange(cryptoMarkets);
+            var result = await ObserveCryptoMarketsAsync(
+                nowUtc,
+                cryptoMarkets,
+                cryptoVariants,
+                strategySettings,
+                cancellationToken);
+            observed += result.Observed;
+            skipped += result.Skipped;
+        }
+
+        return new ObserveMarketsResult(observed, skipped, observedMarkets);
+    }
+
+    private async Task<ObserveCounters> ObserveBtcMarketsAsync(
+        DateTimeOffset nowUtc,
+        IReadOnlyList<PolymarketGammaMarket> markets,
+        IReadOnlyList<BtcUpDown5mStrategyVariant> variants,
+        IReadOnlyDictionary<Guid, StrategyRuntimeSettings> strategySettings,
+        CancellationToken cancellationToken)
+    {
+        var observed = 0;
+        var skipped = 0;
         foreach (var market in markets)
         {
             var marketInterval = BtcUpDown5mMarketAnalyzer.GetMarketInterval(market);
@@ -305,7 +352,106 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
             }
         }
 
-        return new ObserveMarketsResult(observed, skipped, markets);
+        return new ObserveCounters(observed, skipped);
+    }
+
+    private async Task<ObserveCounters> ObserveCryptoMarketsAsync(
+        DateTimeOffset nowUtc,
+        IReadOnlyList<PolymarketGammaMarket> markets,
+        IReadOnlyList<BtcUpDown5mStrategyVariant> variants,
+        IReadOnlyDictionary<Guid, StrategyRuntimeSettings> strategySettings,
+        CancellationToken cancellationToken)
+    {
+        var observed = 0;
+        var skipped = 0;
+        var assetSymbols = variants
+            .Select(GetReferenceAssetSymbol)
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var variantsByAsset = variants
+            .GroupBy(GetReferenceAssetSymbol, StringComparer.OrdinalIgnoreCase)
+            .ToDictionary(group => group.Key, group => group.ToArray(), StringComparer.OrdinalIgnoreCase);
+
+        foreach (var market in markets)
+        {
+            if (!CryptoUpDown5mMarketAnalyzer.TryGetAssetSymbol(market, assetSymbols, out var assetSymbol) ||
+                !variantsByAsset.TryGetValue(assetSymbol, out var marketVariants))
+            {
+                continue;
+            }
+
+            var windowStart = CryptoUpDown5mMarketAnalyzer.GetWindowStartUtc(market);
+            if (!ShouldObserveMarketWindow(windowStart, market.EndDateUtc, nowUtc))
+            {
+                continue;
+            }
+
+            foreach (var variant in marketVariants)
+            {
+                if (!DoesVariantApplyToMarket(variant, BtcUpDownMarketInterval.FiveMinutes))
+                {
+                    continue;
+                }
+
+                var settings = GetStrategySettings(strategySettings, variant.Id);
+                var entryDueAtUtc = windowStart?.AddSeconds(variant.EntryDelaySeconds) ?? nowUtc;
+                var status = StrategyMarketPaperRunStatuses.Observed;
+                string? skipReason = null;
+                if (windowStart is null)
+                {
+                    status = StrategyMarketPaperRunStatuses.Skipped;
+                    skipReason = "market_start_unknown";
+                }
+                else if (IsEntryExpired(entryDueAtUtc, nowUtc) &&
+                    !IsOpeningLimitEntryAllowedAfterEntryGrace(variant, windowStart, nowUtc))
+                {
+                    status = StrategyMarketPaperRunStatuses.Skipped;
+                    skipReason = "entry_due_already_passed";
+                }
+
+                var run = new StrategyMarketPaperRun(
+                    Guid.NewGuid(),
+                    variant.Id,
+                    market.MarketId,
+                    market.ConditionId,
+                    market.Slug,
+                    market.Question,
+                    market.Category,
+                    windowStart,
+                    market.EndDateUtc,
+                    nowUtc,
+                    entryDueAtUtc,
+                    status,
+                    SelectedAssetId: null,
+                    SelectedOutcome: null,
+                    EntryPrice: null,
+                    settings.PaperStakeAmount,
+                    SizeShares: null,
+                    SignalId: null,
+                    PaperOrderId: null,
+                    EnteredAtUtc: null,
+                    SettlementPrice: null,
+                    SettlementValueUsd: null,
+                    RealizedPnlUsd: null,
+                    SettledAtUtc: null,
+                    skipReason,
+                    nowUtc,
+                    nowUtc);
+
+                if (await repository.TryAddStrategyMarketPaperRunAsync(run, cancellationToken))
+                {
+                    if (string.Equals(status, StrategyMarketPaperRunStatuses.Skipped, StringComparison.OrdinalIgnoreCase))
+                    {
+                        skipped++;
+                    }
+                    else
+                    {
+                        observed++;
+                    }
+                }
+            }
+        }
+
+        return new ObserveCounters(observed, skipped);
     }
 
     private async Task CaptureClosingOrderBookSnapshotsAsync(
@@ -424,6 +570,23 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
         BtcUpDownMarketInterval marketInterval)
     {
         return variant.MarketInterval == marketInterval;
+    }
+
+    private static bool IsBtcReferenceVariant(BtcUpDown5mStrategyVariant variant)
+    {
+        return string.Equals(GetReferenceAssetSymbol(variant), "BTC", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static bool IsCryptoReferenceVariant(BtcUpDown5mStrategyVariant variant)
+    {
+        return !IsBtcReferenceVariant(variant);
+    }
+
+    private static string GetReferenceAssetSymbol(BtcUpDown5mStrategyVariant variant)
+    {
+        return string.IsNullOrWhiteSpace(variant.ReferenceAssetSymbol)
+            ? "BTC"
+            : variant.ReferenceAssetSymbol.Trim().ToUpperInvariant();
     }
 
     private void CleanupClosingOrderBookCaptureAttempts(DateTimeOffset nowUtc)
@@ -2240,6 +2403,8 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
             BtcUpDown5mStrategyBehavior.BinanceStartRelativeFixedPrice or
             BtcUpDown5mStrategyBehavior.BinanceStartRelativeBpsThreshold or
             BtcUpDown5mStrategyBehavior.BinanceStartRelativeBpsThresholdInstant or
+            BtcUpDown5mStrategyBehavior.CryptoBinanceStartRelativeBpsThreshold or
+            BtcUpDown5mStrategyBehavior.CryptoBinanceStartRelativeBpsThresholdInstant or
             BtcUpDown5mStrategyBehavior.BinanceStartRelativeClever or
             BtcUpDown5mStrategyBehavior.BinanceStartRelativeCleverMargin or
             BtcUpDown5mStrategyBehavior.BinanceStartRelativeEdge or
@@ -2294,6 +2459,8 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
             BtcUpDown5mStrategyBehavior.BinanceStartRelativeFixedPrice or
             BtcUpDown5mStrategyBehavior.BinanceStartRelativeBpsThreshold or
             BtcUpDown5mStrategyBehavior.BinanceStartRelativeBpsThresholdInstant or
+            BtcUpDown5mStrategyBehavior.CryptoBinanceStartRelativeBpsThreshold or
+            BtcUpDown5mStrategyBehavior.CryptoBinanceStartRelativeBpsThresholdInstant or
             BtcUpDown5mStrategyBehavior.BinanceStartRelativeClever or
             BtcUpDown5mStrategyBehavior.BinanceStartRelativeCleverMargin or
             BtcUpDown5mStrategyBehavior.BinanceStartRelativeEdge or
@@ -2315,12 +2482,14 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
             variant.Behavior is BtcUpDown5mStrategyBehavior.BinanceStartRelative or
             BtcUpDown5mStrategyBehavior.BinanceStartRelativeFixedPrice or
             BtcUpDown5mStrategyBehavior.BinanceStartRelativeBpsThreshold or
+            BtcUpDown5mStrategyBehavior.CryptoBinanceStartRelativeBpsThreshold or
             BtcUpDown5mStrategyBehavior.BinanceStartRelativeDelayed;
     }
 
     private static bool IsInstantOpeningLimitEntry(BtcUpDown5mStrategyVariant variant)
     {
-        return variant.Behavior == BtcUpDown5mStrategyBehavior.BinanceStartRelativeBpsThresholdInstant;
+        return variant.Behavior is BtcUpDown5mStrategyBehavior.BinanceStartRelativeBpsThresholdInstant or
+            BtcUpDown5mStrategyBehavior.CryptoBinanceStartRelativeBpsThresholdInstant;
     }
 
     private static decimal GetBinanceStartRelativeLimitPrice(BtcUpDown5mStrategyVariant variant)
@@ -2344,7 +2513,9 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
     private static decimal? GetBinanceStartRelativeMinMoveBps(BtcUpDown5mStrategyVariant variant)
     {
         if (variant.Behavior is not BtcUpDown5mStrategyBehavior.BinanceStartRelativeBpsThreshold and
-            not BtcUpDown5mStrategyBehavior.BinanceStartRelativeBpsThresholdInstant)
+            not BtcUpDown5mStrategyBehavior.BinanceStartRelativeBpsThresholdInstant and
+            not BtcUpDown5mStrategyBehavior.CryptoBinanceStartRelativeBpsThreshold and
+            not BtcUpDown5mStrategyBehavior.CryptoBinanceStartRelativeBpsThresholdInstant)
         {
             return null;
         }
@@ -2460,6 +2631,8 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
                 BtcUpDown5mStrategyBehavior.BinanceStartRelativeFixedPrice or
                 BtcUpDown5mStrategyBehavior.BinanceStartRelativeBpsThreshold or
                 BtcUpDown5mStrategyBehavior.BinanceStartRelativeBpsThresholdInstant or
+                BtcUpDown5mStrategyBehavior.CryptoBinanceStartRelativeBpsThreshold or
+                BtcUpDown5mStrategyBehavior.CryptoBinanceStartRelativeBpsThresholdInstant or
                 BtcUpDown5mStrategyBehavior.BinanceStartRelativeDelayed => await GetBinanceStartRelativeEntryDecisionAsync(
                 market,
                 variant,
@@ -3382,11 +3555,26 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
         IDictionary<string, BtcCurrentPriceLookupResult> currentPrices,
         CancellationToken cancellationToken)
     {
-        var startPrice = await repository.GetBtcUpDown5mOddsStartPriceAsync(market.MarketId, cancellationToken);
+        var referenceAssetSymbol = GetReferenceAssetSymbol(variant);
+        var startPrice = IsBtcReferenceVariant(variant)
+            ? await repository.GetBtcUpDown5mOddsStartPriceAsync(market.MarketId, cancellationToken)
+            : await repository.GetCryptoUpDown5mOddsStartPriceAsync(referenceAssetSymbol, market.MarketId, cancellationToken);
+        var marketStartPriceMissingReason = IsBtcReferenceVariant(variant)
+            ? "btc_market_start_price_missing"
+            : "crypto_market_start_price_missing";
+        var referenceFetchFailedReason = IsBtcReferenceVariant(variant)
+            ? "btc_reference_fetch_failed"
+            : "crypto_reference_fetch_failed";
+        var referenceEqualStartReason = IsBtcReferenceVariant(variant)
+            ? "btc_reference_equal_market_start"
+            : "crypto_reference_equal_market_start";
+        var referenceBelowThresholdReason = IsBtcReferenceVariant(variant)
+            ? "btc_reference_move_below_bps_threshold"
+            : "crypto_reference_move_below_bps_threshold";
         if (startPrice is not > 0m)
         {
             return BtcOpeningLimitDecision.Reject(
-                "btc_market_start_price_missing",
+                marketStartPriceMissingReason,
                 BuildBinanceStartRelativeRawDecisionJson(
                     market,
                     variant,
@@ -3397,14 +3585,14 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
                     baseSelectedDirection: null,
                     selectedDirection: null,
                     selectedOutcome: null,
-                    reason: "btc_market_start_price_missing"));
+                    reason: marketStartPriceMissingReason));
         }
 
-        var currentPriceLookup = await GetBtcStartRelativeCurrentPriceAsync(market, currentPrices, cancellationToken);
+        var currentPriceLookup = await GetStartRelativeCurrentPriceAsync(market, variant, currentPrices, cancellationToken);
         if (currentPriceLookup.Price is not { } currentPrice)
         {
             return BtcOpeningLimitDecision.Reject(
-                "btc_reference_fetch_failed",
+                referenceFetchFailedReason,
                 BuildBinanceStartRelativeRawDecisionJson(
                     market,
                     variant,
@@ -3415,14 +3603,14 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
                     baseSelectedDirection: null,
                     selectedDirection: null,
                     selectedOutcome: null,
-                    reason: "btc_reference_fetch_failed"));
+                    reason: referenceFetchFailedReason));
         }
 
         var baseSelectedDirection = ResolveStartRelativeDirection(currentPrice.PriceUsd, startPrice.Value);
         if (baseSelectedDirection is null)
         {
             return BtcOpeningLimitDecision.Reject(
-                "btc_reference_equal_market_start",
+                referenceEqualStartReason,
                 BuildBinanceStartRelativeRawDecisionJson(
                     market,
                     variant,
@@ -3433,7 +3621,7 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
                     baseSelectedDirection: null,
                     selectedDirection: null,
                     selectedOutcome: null,
-                    reason: "btc_reference_equal_market_start"));
+                    reason: referenceEqualStartReason));
         }
 
         var selectedDirection = baseSelectedDirection.Value;
@@ -3443,7 +3631,7 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
             if (moveBps < minMoveBps)
             {
                 return BtcOpeningLimitDecision.Reject(
-                    "btc_reference_move_below_bps_threshold",
+                    referenceBelowThresholdReason,
                     BuildBinanceStartRelativeRawDecisionJson(
                         market,
                         variant,
@@ -3454,7 +3642,7 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
                         baseSelectedDirection,
                         selectedDirection: null,
                         selectedOutcome: null,
-                        reason: "btc_reference_move_below_bps_threshold"));
+                        reason: referenceBelowThresholdReason));
             }
         }
 
@@ -4330,6 +4518,17 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
                 reason: null));
     }
 
+    private async Task<BtcCurrentPriceLookupResult> GetStartRelativeCurrentPriceAsync(
+        PolymarketGammaMarket market,
+        BtcUpDown5mStrategyVariant variant,
+        IDictionary<string, BtcCurrentPriceLookupResult> currentPrices,
+        CancellationToken cancellationToken)
+    {
+        return IsBtcReferenceVariant(variant)
+            ? await GetBtcStartRelativeCurrentPriceAsync(market, currentPrices, cancellationToken)
+            : await GetCryptoCurrentPriceAsync(market, variant, currentPrices, cancellationToken);
+    }
+
     private async Task<BtcCurrentPriceLookupResult> GetBtcStartRelativeCurrentPriceAsync(
         PolymarketGammaMarket market,
         IDictionary<string, BtcCurrentPriceLookupResult> currentPrices,
@@ -4386,6 +4585,46 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
         }
 
         currentPrices[market.MarketId] = result;
+        return result;
+    }
+
+    private async Task<BtcCurrentPriceLookupResult> GetCryptoCurrentPriceAsync(
+        PolymarketGammaMarket market,
+        BtcUpDown5mStrategyVariant variant,
+        IDictionary<string, BtcCurrentPriceLookupResult> currentPrices,
+        CancellationToken cancellationToken)
+    {
+        var assetSymbol = GetReferenceAssetSymbol(variant);
+        var cacheKey = assetSymbol + ":" + market.MarketId;
+        if (currentPrices.TryGetValue(cacheKey, out var cached))
+        {
+            return cached;
+        }
+
+        BtcCurrentPriceLookupResult result;
+        try
+        {
+            var price = await cryptoReferencePriceClient.GetPriceAsync(assetSymbol, cancellationToken);
+            result = BtcCurrentPriceLookupResult.Success(
+                new BtcUsdReferencePricePoint(
+                    price.PriceUsd,
+                    price.SourceUpdatedAtUtc,
+                    price.FetchedAtUtc,
+                    price.Source),
+                price.AssetSymbol,
+                price.BinanceSymbol);
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            await TryRecordApiErrorAsync("GetCryptoReferencePrice", ex.Message, cancellationToken);
+            result = BtcCurrentPriceLookupResult.Failure(ex.Message, assetSymbol, assetSymbol + "USDT");
+        }
+
+        currentPrices[cacheKey] = result;
         return result;
     }
 
@@ -4942,8 +5181,7 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
     {
         if (IsBinanceStartRelativeOpeningLimitEntry(variant) &&
             !IsOpeningLimitSignalWaitExpired(run.EntryDueAtUtc, nowUtc) &&
-            (string.Equals(decision.SkipReason, "btc_market_start_price_missing", StringComparison.Ordinal) ||
-                string.Equals(decision.SkipReason, "btc_reference_equal_market_start", StringComparison.Ordinal)))
+            IsStartRelativeDeferredReason(decision.SkipReason))
         {
             return true;
         }
@@ -4958,6 +5196,14 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
         return IsSkipConsecutiveMarketResults(variant) &&
             (string.Equals(decision.SkipReason, "btc_previous_market_results_missing", StringComparison.Ordinal) ||
                 string.Equals(decision.SkipReason, "btc_previous_close_book_result_missing", StringComparison.Ordinal));
+    }
+
+    private static bool IsStartRelativeDeferredReason(string? reason)
+    {
+        return string.Equals(reason, "btc_market_start_price_missing", StringComparison.Ordinal) ||
+            string.Equals(reason, "btc_reference_equal_market_start", StringComparison.Ordinal) ||
+            string.Equals(reason, "crypto_market_start_price_missing", StringComparison.Ordinal) ||
+            string.Equals(reason, "crypto_reference_equal_market_start", StringComparison.Ordinal);
     }
 
     private static bool IsPreviousScoreCounterTrendDeferredReason(string? reason)
@@ -7193,48 +7439,81 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
         string? reason)
     {
         const decimal limitPrice = 0.50m;
+        var referenceAssetSymbol = GetReferenceAssetSymbol(variant);
+        var referenceBinanceSymbol = referenceAssetSymbol + "USDT";
         var moveUsd = currentPrice is not null && startPrice is { } start
             ? currentPrice.PriceUsd - start
             : (decimal?)null;
         var moveBps = moveUsd is { } move && startPrice is > 0m
             ? move / startPrice.Value * 10_000m
             : (decimal?)null;
+        var absMoveBps = moveBps is { } actualMoveBps ? Math.Abs(actualMoveBps) : (decimal?)null;
         var marketStartUtc = BtcUpDown5mMarketAnalyzer.GetWindowStartUtc(market);
         var entryDueAtUtc = GetEntryDueAtUtc(marketStartUtc, variant);
-        return JsonSerializer.Serialize(new
+        var root = new JsonObject
         {
-            pricing_mode = OpeningLimitPricingMode,
-            order_execution_mode = OpeningLimitOrderType,
-            post_only = false,
-            strategy_code = variant.Code,
-            decision_source = "binance_trade_stream_market_start_relative",
-            quote_received_at_utc = nowUtc,
-            condition_id = market.ConditionId,
-            market_id = market.MarketId,
-            market_slug = market.Slug,
-            market_start_utc = marketStartUtc,
-            market_end_utc = market.EndDateUtc,
-            entry_delay_seconds = variant.EntryDelaySeconds,
-            entry_due_at_utc = entryDueAtUtc,
-            decision_delay_ms = GetDecisionDelayMilliseconds(entryDueAtUtc, nowUtc),
-            btc_current_price_usd = currentPrice?.PriceUsd,
-            btc_current_source_updated_at_utc = currentPrice?.SourceUpdatedAtUtc,
-            btc_current_fetched_at_utc = currentPrice?.FetchedAtUtc,
-            btc_current_source = currentPrice?.Source,
-            btc_start_price_usd = startPrice,
-            btc_move_from_start_usd = moveUsd,
-            btc_move_from_start_bps = moveBps,
-            btc_abs_move_from_start_bps = moveBps is { } bps ? Math.Abs(bps) : (decimal?)null,
-            btc_min_move_from_start_bps = GetBinanceStartRelativeMinMoveBps(variant),
-            base_selected_direction = baseSelectedDirection?.ToString(),
-            selected_direction = selectedDirection?.ToString(),
-            asset_id = selectedOutcome?.AssetId,
-            outcome = selectedOutcome?.Outcome,
-            limit_price = limitPrice,
-            target_notional_usd = targetNotionalUsd,
-            target_size_shares = targetNotionalUsd / limitPrice,
-            skip_reason = reason
-        });
+            ["pricing_mode"] = OpeningLimitPricingMode,
+            ["order_execution_mode"] = OpeningLimitOrderType,
+            ["post_only"] = false,
+            ["strategy_code"] = variant.Code,
+            ["decision_source"] = "binance_trade_stream_market_start_relative",
+            ["reference_asset_symbol"] = referenceAssetSymbol,
+            ["reference_binance_symbol"] = referenceBinanceSymbol,
+            ["quote_received_at_utc"] = nowUtc,
+            ["condition_id"] = market.ConditionId,
+            ["market_id"] = market.MarketId,
+            ["market_slug"] = market.Slug,
+            ["market_start_utc"] = marketStartUtc,
+            ["market_end_utc"] = market.EndDateUtc,
+            ["entry_delay_seconds"] = variant.EntryDelaySeconds,
+            ["entry_due_at_utc"] = entryDueAtUtc,
+            ["decision_delay_ms"] = GetDecisionDelayMilliseconds(entryDueAtUtc, nowUtc),
+            ["reference_current_price_usd"] = currentPrice?.PriceUsd,
+            ["reference_current_source_updated_at_utc"] = currentPrice?.SourceUpdatedAtUtc,
+            ["reference_current_fetched_at_utc"] = currentPrice?.FetchedAtUtc,
+            ["reference_current_source"] = currentPrice?.Source,
+            ["reference_start_price_usd"] = startPrice,
+            ["reference_move_from_start_usd"] = moveUsd,
+            ["reference_move_from_start_bps"] = moveBps,
+            ["reference_abs_move_from_start_bps"] = absMoveBps,
+            ["reference_min_move_from_start_bps"] = GetBinanceStartRelativeMinMoveBps(variant),
+            ["base_selected_direction"] = baseSelectedDirection?.ToString(),
+            ["selected_direction"] = selectedDirection?.ToString(),
+            ["asset_id"] = selectedOutcome?.AssetId,
+            ["outcome"] = selectedOutcome?.Outcome,
+            ["limit_price"] = limitPrice,
+            ["target_notional_usd"] = targetNotionalUsd,
+            ["target_size_shares"] = targetNotionalUsd / limitPrice,
+            ["skip_reason"] = reason
+        };
+
+        if (string.Equals(referenceAssetSymbol, "BTC", StringComparison.OrdinalIgnoreCase))
+        {
+            root["btc_current_price_usd"] = currentPrice?.PriceUsd;
+            root["btc_current_source_updated_at_utc"] = currentPrice?.SourceUpdatedAtUtc;
+            root["btc_current_fetched_at_utc"] = currentPrice?.FetchedAtUtc;
+            root["btc_current_source"] = currentPrice?.Source;
+            root["btc_start_price_usd"] = startPrice;
+            root["btc_move_from_start_usd"] = moveUsd;
+            root["btc_move_from_start_bps"] = moveBps;
+            root["btc_abs_move_from_start_bps"] = absMoveBps;
+            root["btc_min_move_from_start_bps"] = GetBinanceStartRelativeMinMoveBps(variant);
+        }
+        else
+        {
+            root["crypto_asset_symbol"] = referenceAssetSymbol;
+            root["crypto_current_price_usd"] = currentPrice?.PriceUsd;
+            root["crypto_current_source_updated_at_utc"] = currentPrice?.SourceUpdatedAtUtc;
+            root["crypto_current_fetched_at_utc"] = currentPrice?.FetchedAtUtc;
+            root["crypto_current_source"] = currentPrice?.Source;
+            root["crypto_start_price_usd"] = startPrice;
+            root["crypto_move_from_start_usd"] = moveUsd;
+            root["crypto_move_from_start_bps"] = moveBps;
+            root["crypto_abs_move_from_start_bps"] = absMoveBps;
+            root["crypto_min_move_from_start_bps"] = GetBinanceStartRelativeMinMoveBps(variant);
+        }
+
+        return root.ToJsonString();
     }
 
     private static string BuildBinanceCleverRawDecisionJson(
@@ -9923,16 +10202,24 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
 
     private sealed record BtcCurrentPriceLookupResult(
         BtcUsdReferencePricePoint? Price,
-        string? ErrorMessage)
+        string? ErrorMessage,
+        string AssetSymbol = "BTC",
+        string BinanceSymbol = "BTCUSDT")
     {
-        public static BtcCurrentPriceLookupResult Success(BtcUsdReferencePricePoint price)
+        public static BtcCurrentPriceLookupResult Success(
+            BtcUsdReferencePricePoint price,
+            string assetSymbol = "BTC",
+            string binanceSymbol = "BTCUSDT")
         {
-            return new BtcCurrentPriceLookupResult(price, null);
+            return new BtcCurrentPriceLookupResult(price, null, assetSymbol, binanceSymbol);
         }
 
-        public static BtcCurrentPriceLookupResult Failure(string errorMessage)
+        public static BtcCurrentPriceLookupResult Failure(
+            string errorMessage,
+            string assetSymbol = "BTC",
+            string binanceSymbol = "BTCUSDT")
         {
-            return new BtcCurrentPriceLookupResult(null, errorMessage);
+            return new BtcCurrentPriceLookupResult(null, errorMessage, assetSymbol, binanceSymbol);
         }
     }
 
@@ -10265,6 +10552,10 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
         int Observed,
         int Skipped,
         IReadOnlyList<PolymarketGammaMarket> Markets);
+
+    private sealed record ObserveCounters(
+        int Observed,
+        int Skipped);
 
     private sealed record PaperLiveShadowOrderBookSnapshotResult(
         OrderBookSnapshot? OrderBook,

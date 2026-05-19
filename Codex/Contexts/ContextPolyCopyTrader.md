@@ -10100,6 +10100,18 @@ Next: Monitor Paper fill/expiry rates after the GTD conversion; no Live testing 
 Notes: `dotnet test tests/PolyCopyTrader.Tests/PolyCopyTrader.Tests.csproj --filter "FullyQualifiedName~BtcUpDown5mPaperStrategyProcessorTests" --no-restore` passed 90/90. `dotnet test PolyCopyTrader.sln --no-restore` passed 417/417. `git diff --check` passed with existing line-ending warnings. IPC status after restart: Running, Paper active, Live paused. Branch `master` has no upstream, so no commit/push was performed.
 Blockers: Automatic pull/push cannot run until a Git upstream is configured.
 
+## Active Update 2026-05-19 ETH SOL Binance Bps Strategies
+Goal: Add ETH and SOL 5-minute Up/Down Paper strategies analogous to all BTC Binance bps and Instant bps variants.
+Status: Completed
+Done:
+- Added 200 ETH/SOL Binance bps variants in `StrategyIds`: standard and Instant `0.1..5.0 bps` for ETH and SOL, with separate reference asset metadata and disabled-by-default PostgreSQL strategy seeds.
+- Extended `BtcUpDown5mPaperStrategyProcessor` to observe ETH/SOL 5m Gamma markets, use `CryptoUpDown5mOddsArchive` start references plus `BinanceCryptoReference` current prices, place standard GTD or Instant ask-depth Paper orders, and settle all Up/Down strategy variants.
+- Enabled ETH/SOL crypto reference and crypto odds archive workers in service config/startup, kept live allowlist BTC-only, and updated Dashboard strategy categories for BTC/ETH/SOL Up/Down Binance groups.
+- Updated README and tests for strategy generation, ETH standard bps entry, SOL Instant bps entry, config defaults, and repository strategy lookups.
+Next: Restart/deploy the service so schema initialization creates the disabled ETH/SOL strategy rows and starts ETH/SOL Binance/archive workers.
+Notes: `git pull --ff-only` passed. Initial normal `dotnet build PolyCopyTrader.sln` was blocked by the already-running Dashboard/Visual Studio locking Debug DLLs; `dotnet build PolyCopyTrader.sln -p:BaseOutputPath="$env:TEMP\polycopytrader-build-eth-sol\"` passed with existing Storage nullable warnings. `dotnet test tests/PolyCopyTrader.Tests/PolyCopyTrader.Tests.csproj --no-restore --filter "FullyQualifiedName~BtcUpDown5mPaperStrategyProcessorTests|FullyQualifiedName~ConfigurationTests"` passed 143/143. `dotnet test tests/PolyCopyTrader.Tests/PolyCopyTrader.Tests.csproj --no-restore` passed 499/499.
+Blockers: None.
+
 ## Active Update 2026-04-30 Database Table Inventory Answer
 Goal: Provide a concise inventory of PostgreSQL tables and their purpose.
 Status: Completed

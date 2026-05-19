@@ -687,7 +687,7 @@ public sealed class BinanceCryptoReferenceOptions
 
     public string CombinedStreamBaseUrl { get; init; } = "wss://data-stream.binance.vision:443/stream";
 
-    public List<string> AssetSymbols { get; init; } = ["ETH", "SOL", "XRP"];
+    public List<string> AssetSymbols { get; init; } = ["ETH", "SOL"];
 
     public int StaleAfterSeconds { get; init; } = 5;
 
@@ -746,7 +746,7 @@ public sealed class CryptoUpDown5mOddsArchiveOptions
 {
     public bool Enabled { get; init; } = true;
 
-    public List<string> AssetSymbols { get; init; } = ["ETH", "SOL", "XRP"];
+    public List<string> AssetSymbols { get; init; } = ["ETH", "SOL"];
 
     public int PollIntervalSeconds { get; init; } = 5;
 

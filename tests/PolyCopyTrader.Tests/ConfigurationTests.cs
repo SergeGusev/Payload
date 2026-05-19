@@ -80,7 +80,7 @@ public sealed class ConfigurationTests
         Assert.Equal(5, configuration.BinanceBtcUsdReference.StaleAfterSeconds);
         Assert.True(configuration.BinanceCryptoReference.Enabled);
         Assert.Equal("wss://data-stream.binance.vision:443/stream", configuration.BinanceCryptoReference.CombinedStreamBaseUrl);
-        Assert.Equal(["ETH", "SOL", "XRP"], configuration.BinanceCryptoReference.AssetSymbols);
+        Assert.Equal(["ETH", "SOL"], configuration.BinanceCryptoReference.AssetSymbols);
         Assert.Equal(5, configuration.BinanceCryptoReference.StaleAfterSeconds);
         Assert.True(configuration.BtcUpDown5mOddsArchive.Enabled);
         Assert.Equal(5, configuration.BtcUpDown5mOddsArchive.PollIntervalSeconds);
@@ -102,7 +102,7 @@ public sealed class ConfigurationTests
         Assert.Equal(60, configuration.BtcUpDown5mStatistics.ResultRetryDelaySeconds);
         Assert.Equal(500, configuration.BtcUpDown5mStatistics.MaxHistorySettlementsPerCycle);
         Assert.True(configuration.CryptoUpDown5mOddsArchive.Enabled);
-        Assert.Equal(["ETH", "SOL", "XRP"], configuration.CryptoUpDown5mOddsArchive.AssetSymbols);
+        Assert.Equal(["ETH", "SOL"], configuration.CryptoUpDown5mOddsArchive.AssetSymbols);
         Assert.Equal(5, configuration.CryptoUpDown5mOddsArchive.PollIntervalSeconds);
         Assert.Equal(500, configuration.CryptoUpDown5mOddsArchive.MaxMarketsPerCycle);
         Assert.Equal(15_000, configuration.CryptoUpDown5mOddsArchive.MaxOrderBookAgeMilliseconds);

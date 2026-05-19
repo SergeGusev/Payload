@@ -13,7 +13,7 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
 {
     private const int MaxDashboardErrors = 500;
     private const string AllStrategyCategories = "All categories";
-    private const string BtcUpDownPrefix = "BTC Up or Down ";
+    private static readonly string[] UpDownAssetSymbols = ["BTC", "ETH", "SOL"];
     private static readonly string[] BtcUpDownIntervals = ["5m", "15m", "1h", "4h"];
 
     private DashboardRuntime runtime = null!;
@@ -1097,12 +1097,15 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
     private static string GetStrategyCategory(string strategyName)
     {
         var name = strategyName.Trim();
-        if (!name.StartsWith(BtcUpDownPrefix, StringComparison.OrdinalIgnoreCase))
+        var upDownPrefix = UpDownAssetSymbols
+            .Select(asset => asset + " Up or Down ")
+            .FirstOrDefault(prefix => name.StartsWith(prefix, StringComparison.OrdinalIgnoreCase));
+        if (string.IsNullOrWhiteSpace(upDownPrefix))
         {
             return "Other";
         }
 
-        var btcSuffix = name.Substring(BtcUpDownPrefix.Length).Trim();
+        var btcSuffix = name.Substring(upDownPrefix.Length).Trim();
         var interval = BtcUpDownIntervals.FirstOrDefault(candidate =>
             btcSuffix.Equals(candidate, StringComparison.OrdinalIgnoreCase) ||
             btcSuffix.StartsWith(candidate + " ", StringComparison.OrdinalIgnoreCase));
@@ -1111,7 +1114,7 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
             return "Other";
         }
 
-        var categoryPrefix = BtcUpDownPrefix + interval + " ";
+        var categoryPrefix = upDownPrefix + interval + " ";
         var suffix = btcSuffix.Substring(interval.Length).Trim();
         if (StartsWithStrategyWord(suffix, "PreOpen"))
         {
