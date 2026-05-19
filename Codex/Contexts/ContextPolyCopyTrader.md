@@ -1,3 +1,18 @@
+## Active Update 2026-05-19 Live Lull And Paper Fill Check
+Goal: Assess whether the recent no-fill live lull is typical and whether Paper orders are also failing to execute.
+Status: Completed
+Done:
+- Queried production PostgreSQL read-only at DB time `2026-05-19T11:45:37Z`.
+- Live hourly distribution for the last 25 hour buckets: `10/25` buckets had `0` matched live orders, `7/25` had `0` live attempts, average matched live orders per hour was `2.64`, median `2`, max `14`.
+- The current rolling hour from about `2026-05-19T10:45:37Z` had live attempts but no matched fills: current live strategies showed `13` total attempts across `1.9`, `2`, `2.1`, and `2 Instant`, with `0` matched; the last matched live order for the live strategies remained `2026-05-19T07:45:09Z`.
+- Concluded that an hour with `0` matched live orders is common, but two consecutive live-attempt/no-fill hour buckets (`10:00Z` and partial `11:00Z`) are less common and worth watching if they persist.
+- Paper engine is not stalled. For enabled Paper strategies in the last rolling hour, observed hundreds of fills: `btc_binance_paper` had `208` paper fills, `eth_paper` had `152`, and `sol_paper` had `322`; latest SOL Paper fill was `2026-05-19T11:45:05Z`.
+- Paper-shadow for the four live BTC strategies also did not fill in the same window: `13` `paper_live_shadow_test` Paper orders were created and cancelled, with `0` Paper fills, matching the live no-fill behavior rather than a global Paper outage.
+- Enabled strategy snapshot: `313` enabled strategies, `4` live-stakes, `100` enabled ETH bps, and `100` enabled SOL bps.
+Next: If live no-fill attempts continue for another few windows, inspect order-book depth/cancel timing for the `CancelFailed` live rows and compare the instant ask-depth prices against actual book movement.
+Notes: Read-only production check only. Used remote PostgreSQL `192.168.0.101` by overriding only the connection-string host. No database writes, code changes, service restart, live order submission, or cancel action was performed.
+Blockers: None.
+
 ## Active Update 2026-05-19 Last Hour Live Bet Clarification
 Goal: Clarify whether there were any live bets/orders in the last hour.
 Status: Completed

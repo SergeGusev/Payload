@@ -1,3 +1,10 @@
+## 2026-05-19T11:47:45.1214210Z
+Request:
+Насколько типично это затишье? А Paper ставки тоже не выполняются?
+
+Result:
+Checked production PostgreSQL read-only. At DB time `2026-05-19T11:45:37Z`, the last 25 hourly live buckets had `10/25` buckets with `0` matched live orders and `7/25` with `0` live attempts; average matched live orders per hour was `2.64`, median `2`, max `14`. The current rolling hour had live attempts but no matched fills: `13` attempts across the four live BTC strategies and `0` matched, with the last matched live order still at `2026-05-19T07:45:09Z`. Concluded that one hour with no live fills is common, while two consecutive attempt/no-fill buckets are less common and worth watching if they continue. Paper is not globally stalled: enabled Paper-only strategies had last-hour fills (`btc_binance_paper` `208`, `eth_paper` `152`, `sol_paper` `322`, latest SOL fill `2026-05-19T11:45:05Z`). Paper-shadow for the four live BTC strategies did not fill either: `13` `paper_live_shadow_test` Paper orders were created and cancelled with `0` fills. No database writes, code changes, service restart, live order submission, or cancel action was performed.
+
 ## 2026-05-19T11:06:17.0471180Z
 Request:
 За час не было ни одной ставки?
