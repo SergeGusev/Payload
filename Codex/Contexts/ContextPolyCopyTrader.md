@@ -1,3 +1,18 @@
+## Active Update 2026-05-19 Binance 2.2 Bps Live Add
+Goal: Add `BTC Up or Down 5m Binance 2.2 bps` to the controlled BTC Paper/Live-shadow live set.
+Status: Completed locally; production DB LiveStakes updated; Service deploy/restart required for 2.2 live placement.
+Done:
+- Added `btc_up_down_5m_binance_bps_2_2` to the BTC Paper/Live-shadow allowlist in `BtcUpDown5mPaperStrategyProcessor`.
+- Added regression coverage proving `2.2 bps` creates a Paper-shadow and GTD Live order with `postOnly=false` when LiveStakes and live gates are enabled.
+- Updated the live-stakes admin test so the controlled multi-code live set is `1.9` + `2.0` + `2.0 Instant` + `2.1` + `2.2`.
+- Updated README live safety/docs to list `2.2 bps` as an explicitly allowed BTC live-shadow variant.
+- Updated production PostgreSQL LiveStakes flags to enable only `btc_up_down_5m_binance_bps_1_9`, `btc_up_down_5m_binance_bps_2`, `btc_up_down_5m_binance_bps_2_instant`, `btc_up_down_5m_binance_bps_2_1`, and `btc_up_down_5m_binance_bps_2_2` (`5` strategies enabled, `1461` disabled).
+- Verified production live-shadow state after the DB update: `5` LiveStakes strategies, all enabled, ETH/SOL live count `0`; `btc_up_down_5m_binance_bps_2_2` has `liveStake=1`, `liveBalance=100`, `liveOpen=0`, and `liveOrders=0`.
+- Verified production service is still `Running`/`Live` with fresh heartbeat on old deployed build `info=1.0.0+a5050c2c9aa60c0f487d055e62c0b2c03cad6ccd`; open live orders are `0`.
+Next: Deploy/restart `PolyCopyTrader.Service` from the new commit on the production server; until then the DB flag for `2.2 bps` is set, but the currently running binary does not include the new live allowlist entry.
+Notes: Verification passed: targeted tests 2/2; full tests 501/501; `git diff --check` clean except LF/CRLF warnings. Production DB commands used remote host `192.168.0.101` by overriding only the connection-string host inside the PowerShell process, without printing secrets. No manual live order submission, cancel action, or service restart was performed.
+Blockers: Production Service deploy/restart was not performed from this session.
+
 ## Active Update 2026-05-19 Live Lull And Paper Fill Check
 Goal: Assess whether the recent no-fill live lull is typical and whether Paper orders are also failing to execute.
 Status: Completed

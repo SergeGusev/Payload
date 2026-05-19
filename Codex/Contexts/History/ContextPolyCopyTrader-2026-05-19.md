@@ -1,3 +1,10 @@
+## 2026-05-19T16:20:18.2202855Z
+Request:
+Давай BTC Up or Down 5m Binance 2.2 bps переведём дополнительно в Live
+
+Result:
+Added `btc_up_down_5m_binance_bps_2_2` to the BTC Paper/Live-shadow allowlist, added a regression test proving `2.2 bps` creates a Paper-shadow plus GTD Live order with `postOnly=false`, updated the live-stakes admin test to include exactly `1.9`, `2.0`, `2.0 Instant`, `2.1`, and `2.2`, and updated README live safety docs. Targeted tests passed 2/2 and full tests passed 501/501. Updated production PostgreSQL LiveStakes on host `192.168.0.101` to enable only `btc_up_down_5m_binance_bps_1_9`, `btc_up_down_5m_binance_bps_2`, `btc_up_down_5m_binance_bps_2_instant`, `btc_up_down_5m_binance_bps_2_1`, and `btc_up_down_5m_binance_bps_2_2` (`5` enabled, `1461` disabled), then verified all five are enabled, ETH/SOL live count is `0`, `2.2 bps` has `liveStake=1`, `liveBalance=100`, `liveOpen=0`, and `liveOrders=0`, and production service is still running with fresh heartbeat and `0` open live orders. No manual live order submission, cancel action, or service restart was performed; production service deploy/restart from the new commit is still required before `2.2 bps` can live-place orders.
+
 ## 2026-05-19T11:47:45.1214210Z
 Request:
 Насколько типично это затишье? А Paper ставки тоже не выполняются?
