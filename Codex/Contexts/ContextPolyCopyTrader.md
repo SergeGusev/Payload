@@ -1,3 +1,16 @@
+## Active Update 2026-05-19 Live Strategy Daily PnL
+Goal: Report realized live-strategy earnings by calendar day.
+Status: Completed
+Done:
+- Queried production PostgreSQL read-only at DB time `2026-05-19T17:14:51Z` using remote host override `192.168.0.101`.
+- Confirmed current enabled LiveStakes set is five BTC strategies: `1.9`, `2`, `2.1`, `2.2`, and `2 Instant`.
+- Grouped realized live earnings by `settled_at_utc` converted to `Europe/Sofia` calendar days. Totals: `2026-05-19` `+63.3767` over `91` settled orders; `2026-05-18` `+35.7554` over `30`; `2026-05-16` `-3.0000` over `1`.
+- All-time live realized PnL by current live strategy: `2 bps` `+56.9854`, `2.1 bps` `+21.1700`, `1.9 bps` `+15.7063`, `2 bps Instant` `+2.2705`, `2.2 bps` `0.0000`.
+- Confirmed there were `0` filled-unsettled live orders for all five live strategies.
+Next: None.
+Notes: Read-only reporting only. No DB writes, code changes, live order submission, cancel action, or service restart. No tests run because only operational SQL reporting was performed.
+Blockers: None.
+
 ## Active Update 2026-05-19 Binance 2.2 Bps Deploy Monitor
 Goal: Verify and monitor production after the user deployed the 2.2 bps live-shadow build.
 Status: Completed

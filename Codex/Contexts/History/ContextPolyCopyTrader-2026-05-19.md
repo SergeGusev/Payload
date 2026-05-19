@@ -83,3 +83,10 @@ Request:
 
 Result:
 Monitored production read-only after the 2.2 bps live-shadow deploy. `PolyCopyTrader.Service` restarted at `2026-05-19T16:39:35Z` on build `info=1.0.0+1a04041365619cc35eb5c91ac2c96255e13ffa41`, is `Running` in `Live` mode, and had fresh heartbeat/no last error during checks. LiveStakes stayed limited to five enabled BTC variants (`1.9`, `2`, `2 Instant`, `2.1`, `2.2`), with ETH/SOL live count `0`. Confirmed `2.2` is being processed: post-deploy windows `16:30Z`, `16:35Z`, and `16:40Z` skipped with `btc_reference_move_below_bps_threshold`; `16:45Z` and `16:50Z` were observed. Since restart all five live strategies had `0` live orders, `0` matched, `0` open-like DB rows; DB open live orders `0`, CLOB open-orders `GET /data/orders` reported `Orders summarized: 0`, and discrepancies since start were `0`. Only API errors seen were stale SOL reference messages from ETH/SOL Paper processing, not BTC live. No DB writes, service restart, live order submission, or cancel action was performed.
+
+## 2026-05-19T17:15:45.8817607Z
+Request:
+Дай расклад по всем живым стратегиям по их заработку по суткам
+
+Result:
+Queried production PostgreSQL read-only and reported realized live-strategy PnL by `Europe/Sofia` calendar day for the five currently enabled LiveStakes BTC strategies. Totals by local day were: `2026-05-19` `+63.3767` over `91` settled orders, `2026-05-18` `+35.7554` over `30`, and `2026-05-16` `-3.0000` over `1`. All-time realized PnL by current live strategy was: `2 bps` `+56.9854`, `2.1 bps` `+21.1700`, `1.9 bps` `+15.7063`, `2 bps Instant` `+2.2705`, and `2.2 bps` `0.0000`. Confirmed `0` filled-unsettled live orders. No DB writes, code changes, live order submission, cancel action, or service restart was performed.
