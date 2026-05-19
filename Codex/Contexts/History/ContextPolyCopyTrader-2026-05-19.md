@@ -76,3 +76,10 @@ Request:
 
 Result:
 Added `btc_up_down_5m_binance_bps_2_instant` to the BTC Paper/Live-shadow allowlist, added a regression test proving it creates a Paper-shadow plus GTD Live order with instant ask-depth pricing, updated the live-stakes admin test and README live safety docs, and verified targeted tests 2/2 plus full tests 500/500. Updated production PostgreSQL LiveStakes on host `192.168.0.101` to enable only `btc_up_down_5m_binance_bps_1_9`, `btc_up_down_5m_binance_bps_2`, `btc_up_down_5m_binance_bps_2_instant`, and `btc_up_down_5m_binance_bps_2_1` (`4` enabled, `1262` disabled, `0` failed), then verified the live-shadow state shows the instant strategy live-enabled with `liveStake=1`, `liveBalance=100`, `liveOpen=0`, and `liveOrders=0`. No manual live order submission, cancel action, or service restart was performed; production service redeploy/restart from the new commit is still required before this strategy can live-place orders.
+
+## 2026-05-19T16:51:48.1757111Z
+Request:
+Выложил. Последи, пожалуйста
+
+Result:
+Monitored production read-only after the 2.2 bps live-shadow deploy. `PolyCopyTrader.Service` restarted at `2026-05-19T16:39:35Z` on build `info=1.0.0+1a04041365619cc35eb5c91ac2c96255e13ffa41`, is `Running` in `Live` mode, and had fresh heartbeat/no last error during checks. LiveStakes stayed limited to five enabled BTC variants (`1.9`, `2`, `2 Instant`, `2.1`, `2.2`), with ETH/SOL live count `0`. Confirmed `2.2` is being processed: post-deploy windows `16:30Z`, `16:35Z`, and `16:40Z` skipped with `btc_reference_move_below_bps_threshold`; `16:45Z` and `16:50Z` were observed. Since restart all five live strategies had `0` live orders, `0` matched, `0` open-like DB rows; DB open live orders `0`, CLOB open-orders `GET /data/orders` reported `Orders summarized: 0`, and discrepancies since start were `0`. Only API errors seen were stale SOL reference messages from ETH/SOL Paper processing, not BTC live. No DB writes, service restart, live order submission, or cancel action was performed.
