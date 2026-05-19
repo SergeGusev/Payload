@@ -130,6 +130,7 @@ public static class AppOptionsValidator
             $"BTC Up or Down 5m opening limit break-even min settled runs: {configuration.BtcUpDown5mStrategy.OpeningLimitBreakEvenMinSettledRuns}",
             $"BTC Up or Down 5m opening limit break-even margin: {configuration.BtcUpDown5mStrategy.OpeningLimitBreakEvenMargin}",
             $"BTC Up or Down 5m opening limit max price: {configuration.BtcUpDown5mStrategy.OpeningLimitMaxPrice}",
+            $"BTC Up or Down 5m instant opening limit max price: {configuration.BtcUpDown5mStrategy.InstantOpeningLimitMaxPrice}",
             $"BTC Up or Down 5m opening limit GTD TTL seconds: {configuration.BtcUpDown5mStrategy.OpeningLimitGtdTtlSeconds}",
             $"BTC Up or Down 5m opening limit expire before market end seconds: {configuration.BtcUpDown5mStrategy.OpeningLimitExpireBeforeMarketEndSeconds}",
             $"BTC Up or Down 5m CLOB GTD expiration security buffer seconds: {configuration.BtcUpDown5mStrategy.ClobGtdExpirationSecurityBufferSeconds}",
@@ -1186,6 +1187,11 @@ public static class AppOptionsValidator
         if (options.OpeningLimitMaxPrice <= 0m || options.OpeningLimitMaxPrice > 0.50m)
         {
             errors.Add("BtcUpDown5mStrategy.OpeningLimitMaxPrice must be greater than zero and at most 0.50.");
+        }
+
+        if (options.InstantOpeningLimitMaxPrice <= 0m || options.InstantOpeningLimitMaxPrice > 1m)
+        {
+            errors.Add("BtcUpDown5mStrategy.InstantOpeningLimitMaxPrice must be greater than zero and at most one.");
         }
 
         if (options.OpeningLimitPriceTickSize <= 0m || options.OpeningLimitPriceTickSize > 1m)

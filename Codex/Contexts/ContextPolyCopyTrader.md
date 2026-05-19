@@ -1,3 +1,16 @@
+## Active Update 2026-05-19 Instant Global 0.65 Cap Implementation
+Goal: Apply the `0.65` maximum buy-price cap to all Instant Up/Down strategies across markets.
+Status: Completed locally; deploy/restart required for production effect
+Done:
+- Added `BtcUpDown5mStrategy.InstantOpeningLimitMaxPrice` with default/config value `0.65`.
+- Applied the cap inside the shared Instant executable ask-depth pricing path, so BTC and crypto `Binance ... bps Instant` variants skip when the required BUY limit would be above the cap.
+- Added skip reason `instant_price_above_max` and diagnostics field `instant_max_buy_price`; skipped rows also retain attempted `instant_limit_price` and partial executable depth evidence.
+- Added BTC Instant and SOL crypto Instant regression tests proving ask depth requiring `0.66` is skipped and no Paper/Live-shadow order is created.
+- Updated README strategy docs and configuration validation/default tests.
+Next: Deploy/restart `PolyCopyTrader.Service` for the cap to affect production Instant decisions.
+Notes: Verification passed: targeted `dotnet test tests\PolyCopyTrader.Tests\PolyCopyTrader.Tests.csproj --no-restore --filter "FullyQualifiedName~BtcUpDown5mPaperStrategyProcessorTests|FullyQualifiedName~ConfigurationTests"` 147/147; full `dotnet test tests\PolyCopyTrader.Tests\PolyCopyTrader.Tests.csproj --no-restore` 503/503; `git diff --check` clean except LF/CRLF warnings. No production DB writes, live order submission, cancel action, or service restart.
+Blockers: Production deploy/restart not performed from this session.
+
 ## Active Update 2026-05-19 Instant 0.65 Cap Explanation
 Goal: Explain what "put a cap around 0.65" means for Instant strategies.
 Status: Completed

@@ -56,6 +56,7 @@ public sealed class ConfigurationTests
         Assert.Equal(30, configuration.BtcUpDown5mStrategy.OpeningLimitBreakEvenMinSettledRuns);
         Assert.Equal(0.10m, configuration.BtcUpDown5mStrategy.OpeningLimitBreakEvenMargin);
         Assert.Equal(0.50m, configuration.BtcUpDown5mStrategy.OpeningLimitMaxPrice);
+        Assert.Equal(0.65m, configuration.BtcUpDown5mStrategy.InstantOpeningLimitMaxPrice);
         Assert.Equal(0.01m, configuration.BtcUpDown5mStrategy.OpeningLimitPriceTickSize);
         Assert.Equal(120, configuration.BtcUpDown5mStrategy.OpeningLimitGtdTtlSeconds);
         Assert.Equal(60, configuration.BtcUpDown5mStrategy.OpeningLimitExpireBeforeMarketEndSeconds);
@@ -289,6 +290,7 @@ public sealed class ConfigurationTests
                 OpeningLimitBreakEvenMinSettledRuns = 2,
                 OpeningLimitBreakEvenMargin = -0.01m,
                 OpeningLimitMaxPrice = 0.51m,
+                InstantOpeningLimitMaxPrice = 0m,
                 OpeningLimitPriceTickSize = 0m,
                 OpeningLimitGtdTtlSeconds = 29,
                 OpeningLimitExpireBeforeMarketEndSeconds = -1,
@@ -318,6 +320,7 @@ public sealed class ConfigurationTests
         Assert.Contains(errors, error => error.Contains("BtcUpDown5mStrategy.OpeningLimitBreakEvenMinSettledRuns", StringComparison.Ordinal));
         Assert.Contains(errors, error => error.Contains("BtcUpDown5mStrategy.OpeningLimitBreakEvenMargin", StringComparison.Ordinal));
         Assert.Contains(errors, error => error.Contains("BtcUpDown5mStrategy.OpeningLimitMaxPrice", StringComparison.Ordinal));
+        Assert.Contains(errors, error => error.Contains("BtcUpDown5mStrategy.InstantOpeningLimitMaxPrice", StringComparison.Ordinal));
         Assert.Contains(errors, error => error.Contains("BtcUpDown5mStrategy.OpeningLimitPriceTickSize", StringComparison.Ordinal));
         Assert.Contains(errors, error => error.Contains("BtcUpDown5mStrategy.OpeningLimitGtdTtlSeconds", StringComparison.Ordinal));
         Assert.Contains(errors, error => error.Contains("BtcUpDown5mStrategy.OpeningLimitExpireBeforeMarketEndSeconds", StringComparison.Ordinal));

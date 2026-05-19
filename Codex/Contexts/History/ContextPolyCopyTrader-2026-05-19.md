@@ -118,3 +118,10 @@ Request:
 
 Result:
 Explained that `cap 0.65` means a per-strategy maximum allowed Instant entry price per binary-contract share, not a maximum dollar stake. In live preflight, if the computed executable/limit buy price is `<= 0.65`, the order may proceed; if it is `> 0.65`, it is skipped with a clear reason. Buying at `0.65` risks `0.65` per share to win `0.35`, requiring a win rate above `65%` before fees/errors, while higher prices require even higher hit rates. No DB writes, code changes, live order submission, cancel action, or service restart was performed.
+
+## 2026-05-19T20:53:48.3460006Z
+Request:
+Ок, давай сделаем для всех Instant стратегий так для всех рынков
+
+Result:
+Implemented a global Instant maximum buy-price cap for Up/Down strategies. Added `BtcUpDown5mStrategy.InstantOpeningLimitMaxPrice` defaulting to `0.65`, wired it into the shared Instant executable ask-depth pricing path for BTC and crypto Binance bps Instant variants, added skip reason `instant_price_above_max`, and persisted `instant_max_buy_price` diagnostics. Added BTC Instant and SOL crypto Instant tests proving that required ask depth at `0.66` is skipped without creating Paper/Live-shadow orders. Updated README and config validation/default tests. Verification passed: targeted tests 147/147, full test project 503/503, and `git diff --check` clean except LF/CRLF warnings. No production DB writes, live order submission, cancel action, or service restart was performed; production requires service deploy/restart.

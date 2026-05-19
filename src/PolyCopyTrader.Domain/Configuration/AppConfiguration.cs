@@ -600,6 +600,8 @@ public sealed class BtcUpDown5mStrategyOptions
 
     public decimal OpeningLimitMaxPrice { get; init; } = 0.50m;
 
+    public decimal InstantOpeningLimitMaxPrice { get; init; } = 0.65m;
+
     public decimal OpeningLimitPriceTickSize { get; init; } = 0.01m;
 
     public int OpeningLimitGtdTtlSeconds { get; init; } = 120;

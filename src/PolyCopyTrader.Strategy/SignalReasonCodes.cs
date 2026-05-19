@@ -24,6 +24,7 @@ public static class SignalReasonCodes
     public const string OutcomePriceDirectionMismatch = "outcome_price_direction_mismatch";
     public const string ExecutionPriceDirectionMismatch = "execution_price_direction_mismatch";
     public const string ExecutionPriceAboveStrategyCap = "execution_price_above_strategy_cap";
+    public const string InstantPriceAboveMax = "instant_price_above_max";
     public const string ClobOutcomeSelectionIncomplete = "clob_outcome_selection_incomplete";
     public const string ClobOutcomeSelectionAmbiguous = "clob_outcome_selection_ambiguous";
     public const string MissingMarketMetadata = "missing_market_metadata";

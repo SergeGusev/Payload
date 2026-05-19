@@ -3607,6 +3607,55 @@ public sealed class BtcUpDown5mPaperStrategyProcessorTests
     }
 
     [Fact]
+    public async Task ProcessAsync_BinanceBpsInstantSkipsWhenExecutableAskDepthRequiresPriceAboveCap()
+    {
+        var now = DateTimeOffset.UtcNow;
+        var repository = new TestAppRepository();
+        repository.PolymarketGammaMarkets.Add(CreateMarket(
+            now,
+            now.AddMinutes(5),
+            upPrice: 0.62m,
+            downPrice: 0.38m));
+        AddBtcOddsStartTick(repository, "market-1", now, startPriceUsd: 100m);
+        OrderBookSnapshot[] orderBooks =
+        [
+            OrderBook(
+                "asset-up",
+                [new OrderBookLevel(0.62m, 100m)],
+                [new OrderBookLevel(0.64m, 4m), new OrderBookLevel(0.66m, 20m)],
+                now,
+                minOrderSize: 5m),
+            OrderBook(
+                "asset-down",
+                [new OrderBookLevel(0.37m, 100m)],
+                [new OrderBookLevel(0.39m, 100m)],
+                now,
+                minOrderSize: 5m)
+        ];
+        var processor = CreateProcessorCoreWithOptions(
+            repository,
+            [],
+            orderBooks,
+            _ => { },
+            Array.Empty<OrderBookSnapshot>(),
+            CreateBtcOptions(paperTakerPricingEnabled: false, [BinanceBps1InstantVariant.Code]),
+            new FakeBtcUsdReferencePriceClient(100.02m),
+            CreateBtcUsdReferenceCache(100m));
+
+        var result = await processor.ProcessAsync();
+
+        Assert.Equal(0, result.EntriesPlaced);
+        Assert.Equal(1, result.RunsSkipped);
+        Assert.Empty(repository.PaperOrders);
+        var run = Assert.Single(repository.StrategyMarketPaperRuns);
+        Assert.Equal(StrategyMarketPaperRunStatuses.Skipped, run.Status);
+        Assert.Equal(SignalReasonCodes.InstantPriceAboveMax, run.SkipReason);
+        Assert.Contains("\"instant_max_buy_price\":0.65", run.SkipDiagnosticsJson, StringComparison.Ordinal);
+        Assert.Contains("\"instant_limit_price\":0.66", run.SkipDiagnosticsJson, StringComparison.Ordinal);
+        Assert.Contains("\"instant_executable_ask_shares\":4", run.SkipDiagnosticsJson, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task ProcessAsync_EthBinanceBpsThresholdEntersWhenMoveReachesThreshold()
     {
         var now = DateTimeOffset.UtcNow;
@@ -3745,6 +3794,74 @@ public sealed class BtcUpDown5mPaperStrategyProcessorTests
         Assert.Contains("\"crypto_min_move_from_start_bps\":1", order.RawDecisionJson, StringComparison.Ordinal);
         Assert.Contains("\"opening_limit_price_mode\":\"instant_executable_ask_depth\"", order.RawDecisionJson, StringComparison.Ordinal);
         Assert.Contains("\"paper_gtd_initial_executable_ask_shares\":6.25", order.RawDecisionJson, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task ProcessAsync_SolBinanceBpsInstantSkipsWhenExecutableAskDepthRequiresPriceAboveCap()
+    {
+        var now = DateTimeOffset.UtcNow;
+        var repository = new TestAppRepository();
+        repository.PolymarketGammaMarkets.Add(CreateMarket(
+            now,
+            now.AddMinutes(5),
+            upPrice: 0.62m,
+            downPrice: 0.38m,
+            slug: $"sol-updown-5m-{now.ToUnixTimeSeconds().ToString(CultureInfo.InvariantCulture)}",
+            seriesSlug: "sol-up-or-down-5m",
+            question: "SOL Up or Down - test",
+            marketId: "sol-market-1",
+            conditionId: "sol-condition-1",
+            upAssetId: "sol-asset-up",
+            downAssetId: "sol-asset-down"));
+        AddCryptoOddsStartTick(
+            repository,
+            "SOL",
+            "sol-market-1",
+            "sol-condition-1",
+            now,
+            startPriceUsd: 150m,
+            upAssetId: "sol-asset-up",
+            downAssetId: "sol-asset-down");
+        var cryptoPriceClient = new FakeCryptoReferencePriceClient();
+        cryptoPriceClient.SetPrice("SOL", 150.02m);
+        OrderBookSnapshot[] orderBooks =
+        [
+            OrderBook(
+                "sol-asset-up",
+                [new OrderBookLevel(0.62m, 100m)],
+                [new OrderBookLevel(0.64m, 4m), new OrderBookLevel(0.66m, 20m)],
+                now,
+                minOrderSize: 5m),
+            OrderBook(
+                "sol-asset-down",
+                [new OrderBookLevel(0.37m, 100m)],
+                [new OrderBookLevel(0.39m, 100m)],
+                now,
+                minOrderSize: 5m)
+        ];
+        var processor = CreateProcessorCoreWithOptions(
+            repository,
+            [],
+            orderBooks,
+            _ => { },
+            Array.Empty<OrderBookSnapshot>(),
+            CreateBtcOptions(paperTakerPricingEnabled: false, [SolBinanceBps1InstantVariant.Code]),
+            new FakeBtcUsdReferencePriceClient(100m),
+            CreateBtcUsdReferenceCache(100m),
+            cryptoReferencePriceClient: cryptoPriceClient);
+
+        var result = await processor.ProcessAsync();
+
+        Assert.Equal(0, result.EntriesPlaced);
+        Assert.Equal(1, result.RunsSkipped);
+        Assert.Empty(repository.PaperOrders);
+        var run = Assert.Single(repository.StrategyMarketPaperRuns);
+        Assert.Equal(SolBinanceBps1InstantVariant.Id, run.StrategyId);
+        Assert.Equal(StrategyMarketPaperRunStatuses.Skipped, run.Status);
+        Assert.Equal(SignalReasonCodes.InstantPriceAboveMax, run.SkipReason);
+        Assert.Contains("\"reference_asset_symbol\":\"SOL\"", run.SkipDiagnosticsJson, StringComparison.Ordinal);
+        Assert.Contains("\"instant_max_buy_price\":0.65", run.SkipDiagnosticsJson, StringComparison.Ordinal);
+        Assert.Contains("\"instant_limit_price\":0.66", run.SkipDiagnosticsJson, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -6122,6 +6239,7 @@ public sealed class BtcUpDown5mPaperStrategyProcessorTests
                 PaperTakerMaxSpreadAbs = 0.20m,
                 OpeningLimitDynamicBreakEvenPricingEnabled = false,
                 OpeningLimitMaxPrice = 0.50m,
+                InstantOpeningLimitMaxPrice = 0.65m,
                 OpeningLimitPriceTickSize = 0.01m
             },
             marketDataWebSocketOptions,
@@ -6401,6 +6519,7 @@ public sealed class BtcUpDown5mPaperStrategyProcessorTests
             OpeningLimitBreakEvenMinSettledRuns = openingLimitBreakEvenMinSettledRuns,
             OpeningLimitBreakEvenMargin = openingLimitBreakEvenMargin,
             OpeningLimitMaxPrice = 0.50m,
+            InstantOpeningLimitMaxPrice = 0.65m,
             OpeningLimitPriceTickSize = 0.01m
         };
     }

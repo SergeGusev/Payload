@@ -3056,6 +3056,24 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
                 continue;
             }
 
+            if (limitPrice > options.InstantOpeningLimitMaxPrice)
+            {
+                return BtcInstantOpeningLimitPriceDecision.Reject(
+                    SignalReasonCodes.InstantPriceAboveMax,
+                    source,
+                    age,
+                    orderBook,
+                    RawLimitPrice: ask.Price,
+                    TickSize: tickSize,
+                    LimitPrice: limitPrice,
+                    MaxAllowedPrice: options.InstantOpeningLimitMaxPrice,
+                    TargetNotionalUsd: lastCandidate?.TargetNotionalUsd,
+                    TargetSizeShares: lastCandidate?.TargetSizeShares,
+                    ExecutableAskShares: lastCandidate?.ExecutableAskShares,
+                    ExecutableAskVwap: lastCandidate?.ExecutableAskVwap,
+                    LevelsUsed: lastCandidate?.LevelsUsed ?? 0);
+            }
+
             var sizing = CreateOpeningLimitTargetSizingEstimate(
                 orderBook.MinOrderSize ?? fallbackMinOrderSize,
                 limitPrice,
@@ -3083,6 +3101,7 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
                 orderBook,
                 ask.Price,
                 tickSize,
+                options.InstantOpeningLimitMaxPrice,
                 sizing.TargetNotionalUsd,
                 sizing.TargetSizeShares,
                 immediateExecutableAsk.Shares,
@@ -3102,6 +3121,7 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
             RawLimitPrice: lastCandidate?.RawLimitPrice,
             TickSize: lastCandidate?.TickSize,
             LimitPrice: lastCandidate?.LimitPrice,
+            MaxAllowedPrice: options.InstantOpeningLimitMaxPrice,
             TargetNotionalUsd: lastCandidate?.TargetNotionalUsd,
             TargetSizeShares: lastCandidate?.TargetSizeShares,
             ExecutableAskShares: lastCandidate?.ExecutableAskShares,
@@ -6748,6 +6768,7 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
         root["instant_best_ask"] = pricing.OrderBook?.BestAsk;
         root["instant_spread"] = pricing.OrderBook?.SpreadAbs;
         root["instant_tick_size"] = pricing.TickSize;
+        root["instant_max_buy_price"] = pricing.MaxAllowedPrice;
         root["instant_min_order_size"] = pricing.OrderBook?.MinOrderSize;
         root["instant_raw_limit_price"] = pricing.RawLimitPrice;
         root["instant_limit_price"] = pricing.Available || pricing.LimitPrice > 0m ? pricing.LimitPrice : (decimal?)null;
@@ -10136,6 +10157,7 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
         OrderBookSnapshot? OrderBook,
         decimal? RawLimitPrice,
         decimal? TickSize,
+        decimal? MaxAllowedPrice,
         decimal? TargetNotionalUsd,
         decimal? TargetSizeShares,
         decimal? ExecutableAskShares,
@@ -10149,6 +10171,7 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
             OrderBookSnapshot orderBook,
             decimal rawLimitPrice,
             decimal tickSize,
+            decimal maxAllowedPrice,
             decimal targetNotionalUsd,
             decimal targetSizeShares,
             decimal executableAskShares,
@@ -10164,6 +10187,7 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
                 orderBook,
                 rawLimitPrice,
                 tickSize,
+                maxAllowedPrice,
                 targetNotionalUsd,
                 targetSizeShares,
                 executableAskShares,
@@ -10179,6 +10203,7 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
             decimal? RawLimitPrice = null,
             decimal? TickSize = null,
             decimal? LimitPrice = null,
+            decimal? MaxAllowedPrice = null,
             decimal? TargetNotionalUsd = null,
             decimal? TargetSizeShares = null,
             decimal? ExecutableAskShares = null,
@@ -10194,6 +10219,7 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
                 OrderBook,
                 RawLimitPrice,
                 TickSize,
+                MaxAllowedPrice,
                 TargetNotionalUsd,
                 TargetSizeShares,
                 ExecutableAskShares,
