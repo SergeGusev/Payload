@@ -1,3 +1,10 @@
+## 2026-05-19T09:43:27.8306190Z
+Request:
+Set SOL and ETH strategies `Enabled=true`, but Paper mode only.
+
+Result:
+Updated production PostgreSQL at `192.168.0.101` for all `eth_up_down_5m_binance_bps_%` and `sol_up_down_5m_binance_bps_%` strategies: `200` rows updated, `200` enabled, `0` live rows. Verification showed ETH `100/100` enabled with `live_stakes=0`, SOL `100/100` enabled with `live_stakes=0`, and the only LiveStakes rows remain the four BTC strategies: `btc_up_down_5m_binance_bps_1_9`, `btc_up_down_5m_binance_bps_2`, `btc_up_down_5m_binance_bps_2_instant`, and `btc_up_down_5m_binance_bps_2_1`. Service heartbeat was fresh in `Live` mode, and `PaperTrading:RunInLiveMode=true` keeps Paper runtime active. No source code change, service restart, live order submission, or cancel action was performed.
+
 ## 2026-05-19T05:18:34.5194569Z
 Request:
 Set `Enabled=false` for all strategies except the Dashboard category `BTC Up or Down 5m Binance`.

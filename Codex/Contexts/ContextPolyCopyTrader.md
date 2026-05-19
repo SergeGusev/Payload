@@ -1,3 +1,16 @@
+## Active Update 2026-05-19 ETH SOL Paper Enablement
+Goal: Enable the SOL and ETH Up/Down 5m Binance bps strategies, but keep them Paper-only.
+Status: Completed
+Done:
+- Confirmed production PostgreSQL had `100` ETH and `100` SOL Binance bps strategy rows, all disabled and all with `live_stakes=false` before the change.
+- Updated production PostgreSQL on remote host `192.168.0.101`: set `enabled=true`, `live_stakes=false`, and refreshed `updated_at_utc` for all `eth_up_down_5m_binance_bps_%` and `sol_up_down_5m_binance_bps_%` rows.
+- Verified after the update that ETH has `100/100` enabled and `0` live rows, and SOL has `100/100` enabled and `0` live rows.
+- Verified the only live-stakes strategies remain the four BTC rows: `btc_up_down_5m_binance_bps_1_9`, `btc_up_down_5m_binance_bps_2`, `btc_up_down_5m_binance_bps_2_instant`, and `btc_up_down_5m_binance_bps_2_1`.
+- Verified `PolyCopyTrader.Service` is still running in `Live` mode with fresh heartbeat and no heartbeat error; `PaperTrading:RunInLiveMode=true` keeps Paper runtime active while ETH/SOL have no live stake flags.
+Next: Watch Dashboard Paper statistics for ETH/SOL separately from BTC live-shadow rows; do not promote ETH/SOL to Live without a separate explicit allowlist and live-risk review.
+Notes: Database-only production change; no source code changed, no service restart, no live order submission, and no cancel action was performed. Verification used the configured PostgreSQL connection with only the host overridden to `192.168.0.101`, without printing secrets.
+Blockers: None.
+
 ## Active Update 2026-05-19 Binance 2 Bps Instant Deploy Check
 Goal: Verify production after the user deployed the `BTC Up or Down 5m Binance 2 bps Instant` live allowlist commit.
 Status: Completed
