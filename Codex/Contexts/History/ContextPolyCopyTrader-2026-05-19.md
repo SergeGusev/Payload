@@ -104,3 +104,10 @@ Request:
 
 Result:
 Queried production PostgreSQL read-only for `btc_up_down_5m_binance_bps_2_instant` orders at limit/actual fill price `0.45`. Confirmed exactly one real fill: `Down`, created `2026-05-19T18:55:13+03:00`, status `Matched`, limit `0.45`, actual average fill `0.45`, filled `6.67` shares, notional/cost basis `3.0015`; it settled at `2026-05-19T19:04:43+03:00` as a loss with realized PnL `-3.0015`. No DB writes, code changes, live order submission, cancel action, or service restart was performed.
+
+## 2026-05-19T18:22:06.0185941Z
+Request:
+Будет ли хорошей идеей ограничивать максимальную ставку по каждой Instans стратегии?
+
+Result:
+Recommended a per-strategy maximum Instant live buy-price cap as a prudent risk-control, separate from stake-size limits. The rationale was that Instant orders use immediate executable ask-depth and current `2 bps Instant` data already shows attempts up to `0.78`, actual fills up to `0.70`, weighted average fill `0.5781`, and one real `0.45` fill; higher binary-contract entry prices require materially higher win rates to break even. Suggested starting conservatively around an observed risk band such as `0.65` for live Instant, logging skipped rows with a clear reason, and comparing skipped Paper/live-shadow outcomes before tightening or loosening. No DB writes, code changes, live order submission, cancel action, or service restart was performed.

@@ -1,3 +1,15 @@
+## Active Update 2026-05-19 Instant Max Price Cap Recommendation
+Goal: Assess whether each Instant strategy should have a maximum live buy price cap.
+Status: Completed
+Done:
+- Recommended adding/using a per-strategy Instant maximum buy-price cap as a risk-control, especially because Instant orders use `postOnly=false` and can execute immediately at available ask-depth.
+- Reasoned from current Instant data: `btc_up_down_5m_binance_bps_2_instant` had attempts up to `0.78`, actual fills up to `0.70`, weighted average actual fill `0.5781`, and one real fill at `0.45`; high prices require high hit-rate to be profitable in binary contracts.
+- Recommended treating the cap separately from stake size: price cap controls payoff asymmetry/adverse selection, while stake cap controls per-trade loss.
+- Recommended a conservative rollout: start with a cap around the observed risk band (for example `0.65` for Instant live while still collecting Paper evidence), log skip reason such as `instant_price_above_max`, and compare skipped Paper/live-shadow outcomes before tightening/loosening.
+Next: If implementing, add a per-strategy `MaxLiveBuyPrice`/`MaxInstantBuyPrice` setting with Dashboard visibility, skip-reason logging, and tests for Instant variants.
+Notes: Advisory only; no DB writes, code changes, live order submission, cancel action, or service restart. General risk-control framing cross-checked against public FINRA/SEC/CFTC order/limit guidance.
+Blockers: None.
+
 ## Active Update 2026-05-19 Instant 0.45 Fill Check
 Goal: Confirm whether `BTC Up or Down 5m Binance 2 bps Instant` actually bought at `0.45`.
 Status: Completed
