@@ -1,3 +1,17 @@
+## Active Update 2026-05-19 Instant Live Buy Price Check
+Goal: Check the actual live buy prices for `BTC Up or Down 5m Binance 2 bps Instant`.
+Status: Completed
+Done:
+- Queried production PostgreSQL read-only at DB time `2026-05-19T18:09:57Z` using remote host override `192.168.0.101`.
+- Found `21` live attempts for `btc_up_down_5m_binance_bps_2_instant`: `14` filled, `13` settled, `0` open-like.
+- Limit prices across all attempts were `0.45` min, `0.6395` average, `0.78` max.
+- Actual filled average prices were `0.45` min, `0.58` simple average, `0.70` max; weighted average fill price was `0.5781` over `89.4` filled shares and `51.6791` filled notional.
+- By outcome, Down filled at weighted average `0.5700` and Up filled at weighted average `0.5885`.
+- Status breakdown: `11` matched directly, `3` reconciled from Data API current position, `5` preflight rejected, `2` cancel-failed with zero fill.
+Next: None.
+Notes: Read-only reporting only. No DB writes, code changes, live order submission, cancel action, or service restart. No tests run because only operational SQL reporting was performed.
+Blockers: None.
+
 ## Active Update 2026-05-19 Live Strategy Daily PnL
 Goal: Report realized live-strategy earnings by calendar day.
 Status: Completed

@@ -90,3 +90,10 @@ Request:
 
 Result:
 Queried production PostgreSQL read-only and reported realized live-strategy PnL by `Europe/Sofia` calendar day for the five currently enabled LiveStakes BTC strategies. Totals by local day were: `2026-05-19` `+63.3767` over `91` settled orders, `2026-05-18` `+35.7554` over `30`, and `2026-05-16` `-3.0000` over `1`. All-time realized PnL by current live strategy was: `2 bps` `+56.9854`, `2.1 bps` `+21.1700`, `1.9 bps` `+15.7063`, `2 bps Instant` `+2.2705`, and `2.2 bps` `0.0000`. Confirmed `0` filled-unsettled live orders. No DB writes, code changes, live order submission, cancel action, or service restart was performed.
+
+## 2026-05-19T18:10:50.9425645Z
+Request:
+Посмотри, за сколько покупает живые ставки BTC Up or Down 5m Binance 2 bps Instant
+
+Result:
+Queried production PostgreSQL read-only for `btc_up_down_5m_binance_bps_2_instant` live orders. At DB time `2026-05-19T18:09:57Z`, the strategy had `21` live attempts, `14` filled, `13` settled, and `0` open-like orders. Limit prices across attempts ranged `0.45..0.78` with average `0.6395`; actual filled average prices ranged `0.45..0.70` with simple average `0.58` and weighted average fill `0.5781` over `89.4` shares / `51.6791` notional. Down fills averaged `0.5700` weighted, Up fills averaged `0.5885` weighted. No DB writes, code changes, live order submission, cancel action, or service restart was performed.
