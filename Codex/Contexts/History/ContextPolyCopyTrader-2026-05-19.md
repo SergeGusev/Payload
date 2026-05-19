@@ -1,3 +1,10 @@
+## 2026-05-19T09:57:13.7013745Z
+Request:
+Проверь, как дела с живыми ставками
+
+Result:
+Read-only production check completed. `PolyCopyTrader.Service` is `Running` in `Live` mode on build `info=1.0.0+a5050c2c9aa60c0f487d055e62c0b2c03cad6ccd`, with fresh heartbeat and no heartbeat error. LiveStakes remains enabled only for four BTC strategies: `btc_up_down_5m_binance_bps_1_9`, `btc_up_down_5m_binance_bps_2`, `btc_up_down_5m_binance_bps_2_instant`, and `btc_up_down_5m_binance_bps_2_1`; ETH/SOL live strategy count is `0`. DB open live orders are `0`, authenticated CLOB `GET /data/orders` returned HTTP `200` and `Orders summarized: 0`, and Paper/Live discrepancies remain `0`. Last live orders were at `2026-05-19T07:45:09Z` for `1.9`, `2`, and `2.1` bps and settled by `2026-05-19T08:44:55Z`; `2 bps Instant` still has no live orders/shadow decisions. Last 24h realized PnL: `1.9 bps` `+12.12`, `2 bps` `+53.6954`, `2.1 bps` `+12.06`. Recent windows are being processed and mostly skipped by `btc_reference_move_below_bps_threshold`; latest observed rows were at `2026-05-19T09:55:06Z`. Noted API/network noise mostly around `08:18Z` and latest Binance stream reconnect errors around `09:40Z`; no database writes, code changes, service restart, live order submission, or cancel action was performed.
+
 ## 2026-05-19T09:43:27.8306190Z
 Request:
 Set SOL and ETH strategies `Enabled=true`, but Paper mode only.

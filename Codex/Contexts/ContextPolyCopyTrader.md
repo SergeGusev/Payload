@@ -1,3 +1,19 @@
+## Active Update 2026-05-19 Live Stakes Health Check
+Goal: Check current production live-stakes health and live order state.
+Status: Completed
+Done:
+- Confirmed production `PolyCopyTrader.Service` is `Running` in `Live` mode on deployed build `info=1.0.0+a5050c2c9aa60c0f487d055e62c0b2c03cad6ccd`, with fresh heartbeat and no heartbeat error.
+- Confirmed `live_stakes=true` remains limited to four enabled BTC strategies: `btc_up_down_5m_binance_bps_1_9`, `btc_up_down_5m_binance_bps_2`, `btc_up_down_5m_binance_bps_2_instant`, and `btc_up_down_5m_binance_bps_2_1`; ETH/SOL live strategy count is `0`.
+- Confirmed database open live orders are `0`, and authenticated CLOB read-only `GET /data/orders` also returned HTTP `200` with `Orders summarized: 0`.
+- Last live orders were at `2026-05-19T07:45:09Z` for `1.9`, `2`, and `2.1` bps; they settled by `2026-05-19T08:44:55Z`. `2 bps Instant` still has `0` Paper/Live shadow decisions and no live orders.
+- Last 24h live order summary: `1.9 bps` had `23` orders / `20` matched / realized PnL `+12.12`; `2 bps` had `42` orders / `36` matched / realized PnL `+53.6954`; `2.1 bps` had `11` orders / `10` matched / realized PnL `+12.06`.
+- Recent live-strategy runs are still being processed; most post-entry windows skipped with `btc_reference_move_below_bps_threshold`, and the latest observed market rows were present at `2026-05-19T09:55:06Z`.
+- Paper/Live shadow discrepancies remain `0`.
+- Noted operational noise: API/network errors in the last 24h, mostly DNS/timeouts around `2026-05-19T08:18Z`; latest API errors before the check were Binance stream reconnect issues around `2026-05-19T09:40Z`. Current Polymarket market WebSocket aggregate and shard-001 rows were connected/fresh during the check.
+Next: Continue monitoring; investigate production network/DNS stability if the `No such host` bursts recur or if Binance stream errors continue.
+Notes: Read-only production check only. Used remote PostgreSQL `192.168.0.101` by overriding only the connection-string host in the PowerShell process, and ran authenticated CLOB open-orders report (`GET /data/orders` only). No database writes, code changes, service restart, live order submission, or cancel action was performed.
+Blockers: None.
+
 ## Active Update 2026-05-19 ETH SOL Paper Enablement
 Goal: Enable the SOL and ETH Up/Down 5m Binance bps strategies, but keep them Paper-only.
 Status: Completed
