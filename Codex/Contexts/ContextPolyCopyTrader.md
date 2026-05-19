@@ -1,3 +1,16 @@
+## Active Update 2026-05-19 Remote Strategy Enabled Narrowing
+Goal: Set `Enabled=false` for every strategy except Dashboard category `BTC Up or Down 5m Binance`.
+Status: Completed
+Done:
+- Confirmed the Dashboard category is derived from strategy `name`, where `BTC Up or Down 5m Binance%` maps to `BTC Up or Down 5m Binance`.
+- Used the Dashboard remote database host `192.168.0.101` with the configured PostgreSQL connection, without printing secrets.
+- Ran a transactional update on remote PostgreSQL: `enabled=false` for all currently enabled strategies whose `name` does not match `BTC Up or Down 5m Binance%`.
+- Before update: `1266` strategies total, `1236` enabled, `113` enabled in the Binance 5m category, `1123` enabled outside it.
+- After update and verification: `113` enabled, all within the Binance 5m category; enabled outside the category is `0`. `live_stakes` flags were not changed and remain enabled for `3` strategies.
+Next: Dashboard may need a refresh to show the new `Enabled` flags. The running Service should pick up the setting through its strategy settings refresh; no service restart or order action was performed.
+Notes: Database-only change; no source behavior changed. Verification used a temporary .NET/Npgsql probe that was removed after use. `git pull --ff-only` reported already up to date.
+Blockers: None.
+
 ## Active Update 2026-05-19 Non-BTC Crypto 5m Market Assessment
 Goal: Evaluate ETH/SOL/XRP/DOGE Up or Down 5m markets by Polymarket betting volume and Binance signal availability.
 Status: Completed

@@ -1,3 +1,10 @@
+## 2026-05-19T05:18:34.5194569Z
+Request:
+Set `Enabled=false` for all strategies except the Dashboard category `BTC Up or Down 5m Binance`.
+
+Result:
+Updated the Dashboard remote PostgreSQL database at `192.168.0.101` with a transactional `strategies` update. Before the update there were `1266` strategies total, `1236` enabled, `113` enabled in `BTC Up or Down 5m Binance`, and `1123` enabled outside that category. After commit and verification there are `113` enabled strategies, all in the Binance 5m category, with `0` enabled outside it. `live_stakes` was not changed and remains enabled for `3` strategies. No service restart, live order submission, or cancel action was performed.
+
 ## 2026-05-19T04:04:43.0707448Z
 Request:
 Если я просто сниму галочки Enabled в Dashboard, то стратегия перестанет работать и загружать ресурсы, правильно?
