@@ -1,3 +1,15 @@
+## Active Update 2026-05-19 Non-BTC Crypto 5m Market Assessment
+Goal: Evaluate ETH/SOL/XRP/DOGE Up or Down 5m markets by Polymarket betting volume and Binance signal availability.
+Status: Completed
+Done:
+- Checked current code/config: non-BTC `BinanceCryptoReference` and `CryptoUpDown5mOddsArchive` exist for research, defaulting to ETH/SOL/XRP, but their hosted workers are commented out in BTC-focused Service mode; DOGE is not in the default asset lists.
+- Queried Polymarket Gamma for BTC/ETH/SOL/XRP/DOGE 5m slugs around `2026-05-19T04:28Z`. Last 12 completed windows showed average 5m volumes: BTC `$65.3k`, ETH `$6.5k`, SOL `$1.8k`, XRP `$1.3k`, DOGE `$0.4k`.
+- Queried Binance public market-data endpoints for BTCUSDT/ETHUSDT/SOLUSDT/XRPUSDT/DOGEUSDT; all returned live prices and high 24h quote volume, so Binance-side signal availability is not the bottleneck.
+- Assessment: ETH is the best non-BTC candidate for paper/research; SOL is paper-only exploratory; XRP and DOGE should not be live candidates yet due to weak Polymarket-side volume/spread quality, especially DOGE.
+Next: If expanding beyond BTC, implement/enable a paper-only ETH 5m pipeline first, then compare fills/skips/PnL before considering SOL; do not add XRP/DOGE live support yet.
+Notes: Explanation/data-gathering only; no source behavior changed. Sources checked: Polymarket Gamma `/markets`, Binance Data API ticker endpoints, `BinanceCryptoReferenceTradeStreamService`, `CryptoUpDown5mOddsArchiveProcessor`, `Program.cs`, README/config docs. `git pull --ff-only` reported already up to date.
+Blockers: None.
+
 ## Active Update 2026-05-19 Dashboard Enabled Flag Explanation
 Goal: Clarify what happens when strategy `Enabled` checkboxes are unchecked in Dashboard.
 Status: Completed
