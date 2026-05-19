@@ -1,3 +1,10 @@
+## 2026-05-19T11:06:17.0471180Z
+Request:
+За час не было ни одной ставки?
+
+Result:
+Clarified with a read-only production DB check. For the last-hour window at DB time `2026-05-19T11:05:36Z` (`2026-05-19T10:05:36Z` to `11:05:36Z`), there were `9` live order attempts and `9` Paper/Live shadow decisions, but `0` matched/fill orders, `0` open-like DB orders, `0` filled notional, and `0` realized PnL. The attempts were `CancelFailed`/`Cancelled`: `3` for `1.9 bps`, `2` for `2 bps`, `2` for `2.1 bps`, and `2` for `2 bps Instant`. Authenticated CLOB `GET /data/orders` returned HTTP `200` and `Orders summarized: 0`, so no external open live orders were found. No database writes, code changes, service restart, live order submission, or cancel action was performed.
+
 ## 2026-05-19T09:57:13.7013745Z
 Request:
 Проверь, как дела с живыми ставками

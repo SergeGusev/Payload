@@ -1,3 +1,16 @@
+## Active Update 2026-05-19 Last Hour Live Bet Clarification
+Goal: Clarify whether there were any live bets/orders in the last hour.
+Status: Completed
+Done:
+- Queried production PostgreSQL read-only at DB time `2026-05-19T11:05:36Z` for the last-hour window starting `2026-05-19T10:05:36Z`.
+- Found `9` `live_orders` created in that hour and `9` Paper/Live shadow decisions, but `0` matched/fill orders, `0` open-like DB orders, `0` filled notional, and `0` realized PnL.
+- The `9` live order attempts were: `3` for `btc_up_down_5m_binance_bps_1_9` (`CancelFailed`), `2` for `btc_up_down_5m_binance_bps_2` (`1` `Cancelled`, `1` `CancelFailed`), `2` for `btc_up_down_5m_binance_bps_2_1` (`CancelFailed`), and `2` for `btc_up_down_5m_binance_bps_2_instant` (`CancelFailed`).
+- `CancelFailed` rows had `filled_size=0` and `cancel_status="order can't be found - already canceled or matched"`; authenticated CLOB read-only open-orders report returned HTTP `200` and `Orders summarized: 0`.
+- Recent live-strategy runs in that window included `gtd_limit_not_filled` and `btc_reference_move_below_bps_threshold`, with newest observed rows still present.
+Next: Treat the last hour as live order attempts without fills; monitor whether `CancelFailed` rows should be reconciled more clearly when CLOB says the order is no longer open but no fill is recorded.
+Notes: Read-only production check only. Used remote PostgreSQL `192.168.0.101` by overriding only the connection-string host, and ran authenticated CLOB `GET /data/orders` only. No database writes, code changes, service restart, live order submission, or cancel action was performed.
+Blockers: None.
+
 ## Active Update 2026-05-19 Live Stakes Health Check
 Goal: Check current production live-stakes health and live order state.
 Status: Completed
