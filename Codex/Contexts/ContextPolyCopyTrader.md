@@ -1,3 +1,16 @@
+## Active Update 2026-05-20 Cluster Win Loss Symmetry
+Goal: Check whether same-market clustered wins offset same-market clustered losses.
+Status: Completed
+Done:
+- Confirmed the user's point: current live-set strategies do win in correlated packs as well as lose in correlated packs.
+- For current-live-set Paper, `2026-05-20` Sofia had `9` all-win 5+ clusters for `+157.3355` versus `10` all-loss 5+ clusters for `-168.4486`; at the 4+ cluster threshold, it had `10` all-win clusters for `+168.4885` versus `16` all-loss clusters for `-242.4504`.
+- For actual Live, `2026-05-20` Sofia had `9` all-win 5+ clusters for `+154.3355` versus `10` all-loss 5+ clusters for `-168.4486`; at the 4+ threshold, it had `10` all-win clusters for `+165.4885` versus `16` all-loss clusters for `-242.4504`.
+- Confirmed `2026-05-19` Live was the opposite shape at the 4+ threshold: `11` all-win clusters for `+126.4835` versus `4` all-loss clusters for `-48.5030`, explaining the large positive live day.
+- Conclusion: the issue is not that clustering only loses; clustering amplifies both edge and drawdown. Today's negative result came from the daily cluster balance shifting toward losses, especially at the 4+ strategy threshold.
+Next: If adding risk controls, cap per-market/outcome notional or number of simultaneous live variants instead of eliminating all correlated entries.
+Notes: Read-only production DB review only. Used remote PostgreSQL host override `192.168.0.101` through existing C# `out\dbprobe`; no DB writes, service restart, live order submission, or cancel action. `git pull --ff-only` was up to date. No tests were run because no source code changed.
+Blockers: None.
+
 ## Active Update 2026-05-20 Paper History Correlation Review
 Goal: Check whether the same correlated loss pattern was visible in Paper history.
 Status: Completed

@@ -122,3 +122,10 @@ Request:
 
 Result:
 Queried production `strategy_market_paper_runs` read-only. For the current LiveStakes strategy set in Paper, there were `460` settled runs from `2026-05-13T07:30:01Z` through `2026-05-20T18:14:23Z`, `272` wins, `188` losses, and total Paper PnL `+167.0393`. Current-live-set Paper daily PnL by Sofia date was `2026-05-13 +18.0000`, `2026-05-15 +18.0000`, `2026-05-16 +43.9980`, `2026-05-18 +60.9997`, `2026-05-19 +101.5490`, and `2026-05-20 -75.5074`. Same-market all-loss clusters were visible before today in Paper, including `6/6 -18.0000` on `2026-05-16`, `7/7 -21.0000` on `2026-05-18`, and several `5+` clusters on `2026-05-19`; however, today's concentration was larger with `16` all-loss clusters of 4+ strategies and `10` clusters of 5+ strategies. All-Paper history across `1443` strategies was also checked but is not directly comparable to Live because it includes many paper-only experimental variants. No DB writes, service restart, live order submission, or cancel action was performed.
+
+## 2026-05-20T18:30:51.3121117+00:00
+Request:
+Ок, но выигрывает-то тоже пачкой.
+
+Result:
+Confirmed with read-only production cluster queries that the current live-set strategies do win in correlated packs too. For current-live-set Paper on Sofia `2026-05-20`, there were `9` all-win 5+ clusters for `+157.3355` versus `10` all-loss 5+ clusters for `-168.4486`; at the 4+ threshold there were `10` all-win clusters for `+168.4885` versus `16` all-loss clusters for `-242.4504`. Actual Live showed the same shape: `9` all-win 5+ clusters for `+154.3355` versus `10` all-loss 5+ clusters for `-168.4486`; at the 4+ threshold, `10` all-win clusters for `+165.4885` versus `16` all-loss clusters for `-242.4504`. On `2026-05-19`, Live was the opposite at 4+ threshold: `11` all-win clusters for `+126.4835` versus `4` all-loss clusters for `-48.5030`. Conclusion recorded: clustering amplifies both edge and drawdown; risk controls should cap per-market/outcome exposure, not necessarily eliminate all correlated entries. No DB writes, service restart, live order submission, or cancel action was performed.
