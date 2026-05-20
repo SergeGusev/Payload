@@ -1,3 +1,18 @@
+## Active Update 2026-05-20 Live Bets Visibility Check
+Goal: Check why live bets are not visible after enabling the BTC live-shadow set.
+Status: Completed
+Done:
+- Confirmed production `PolyCopyTrader.Service` remains `Running`/`Live` on `info=1.0.0+4506ec24180677f8b7a08e4dc9b671bae8ef0a02`, with heartbeat age about `49` seconds at DB time `2026-05-20T07:52Z`.
+- Confirmed LiveStakes still has exactly seven BTC strategies enabled: `1.8`, `1.9`, `2.0`, `2.0 Instant`, `2.1`, `2.2`, and `2.3`; all have DB open-like live orders `0`.
+- Confirmed live placement is not dead: since the restart, `1.8` has `1` live order row, `1.9` has `70`, `2.0` has `85`, `2.1` has `51`, `2.2` has `22`, `2.3` has `15`, and `2.0 Instant` has `30`.
+- Found why the user does not see active live bets now: current DB open-like live orders are `0`; recent windows mostly skipped with `btc_reference_move_below_bps_threshold`, and the latest `1.8`/`1.9` orders at `2026-05-20T07:25Z` were submitted but later had `dbFilled=0`, `CancelFailed`, and exchange-status `NotFound`.
+- Found higher bps variants in the `07:25Z` window were preflight-rejected with `Maximum open live order count reached`; `2.0 Instant` had recent skips due to `instant_price_above_max`.
+- Confirmed `paper_live_shadow_discrepancies` in the last 24h is `0`; post-check Polymarket HTTP failures were `0`.
+- Noted noisy `api_errors` in the last 2h were `BtcUpDown5mPaperStrategyProcessor/GetCryptoReferencePrice` for stale Binance `SOL/USDT`, not Polymarket live preflight errors and not blocking BTC live-shadow placement.
+Next: Continue monitoring; active visible bets appear only during short GTD windows after a live strategy passes threshold/preflight, and may disappear quickly if no fill occurs.
+Notes: Read-only operational check only. Used remote PostgreSQL host override `192.168.0.101`, local C# db probe SQL diagnostics, and `--print-live-shadow-exchange-status`. No DB writes, service restart, live order submission, or cancel action.
+Blockers: None.
+
 ## Active Update 2026-05-20 Binance 1.8 Bps Deploy Check
 Goal: Verify production after the user deployed the `1.8 bps` live-shadow build.
 Status: Completed
