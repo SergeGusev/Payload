@@ -108,3 +108,10 @@ Request:
 
 Result:
 Answered that there is no current evidence of a service-health, Paper/Live-shadow, or settlement-accounting fault, but it should not be treated as fully okay or only bad luck. A fresh read-only production check at DB time `2026-05-20T18:15:26Z` showed Service `Running`/`Live`, heartbeat age `4.4s`, empty `last_error`, current open/unsettled live-like orders `0`, and Sofia-day live PnL improved to `-82.4762` over `156` settled orders (`65` wins, `91` losses). The main issue remains risk design: correlated BTC variants enter the same 5-minute market/outcome together, amplifying adverse outcomes, and no daily-loss lockout event was active. No DB writes, service restart, live order submission, or cancel action was performed.
+
+## 2026-05-20T18:19:44.2726487+00:00
+Request:
+Пройдись по всей нашей истории. Такие ситуации уже были?
+
+Result:
+Queried full production `live_orders` history read-only from `2026-05-11T07:32:32Z` through `2026-05-20T18:05:23Z`. Full history had `522` live-order rows, `318` filled/settled rows, `164` wins, `154` losses, and all-time realized live PnL `+11.3944` after today's drawdown. Sofia daily PnL was `2026-05-11 -16.3240`, `2026-05-16 -22.3800`, `2026-05-18 +35.7554`, `2026-05-19 +96.8193`, and `2026-05-20 -82.4762`. Smaller same-market all-loss clusters existed before, but today's scale was new: the worst all-time clusters were today's `7/7` BTC all-loss clusters around `-22` each, and by Sofia date `2026-05-20` had `16` all-loss clusters with at least 4 strategies and PnL <= `-10`, including `10` clusters with 5+ strategies all lost; `2026-05-19` had only `4` such smaller clusters and `0` 5+ clusters. No DB writes, service restart, live order submission, or cancel action was performed.

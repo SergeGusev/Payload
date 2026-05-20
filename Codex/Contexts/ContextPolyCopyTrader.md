@@ -1,3 +1,18 @@
+## Active Update 2026-05-20 Live History Correlation Review
+Goal: Check whether today's correlated live-loss situation had happened before in the full recorded live-order history.
+Status: Completed
+Done:
+- Queried the full production `live_orders` history read-only from first live order `2026-05-11T07:32:32Z` through latest `2026-05-20T18:05:23Z`.
+- Confirmed full history had `522` live-order rows, `318` filled/settled rows, `164` wins, `154` losses, and all-time realized live PnL `+11.3944` after today's drawdown.
+- Confirmed Sofia daily PnL: `2026-05-11 -16.3240`, `2026-05-16 -22.3800`, `2026-05-18 +35.7554`, `2026-05-19 +96.8193`, `2026-05-20 -82.4762`.
+- Confirmed today's Sofia day is the worst recorded live day by a wide margin; previous negative days were much smaller and not the same current multi-BTC live-set behavior.
+- Confirmed smaller same-market all-loss clusters existed before, including several 4-strategy clusters on `2026-05-19`, but the large 5+ strategy all-loss clusters are concentrated on `2026-05-20`.
+- Confirmed worst all-time clusters were today's `7/7` BTC all-loss clusters at `-22.0052` and `-22.0020`; the next largest was a `6/6` BTC cluster at `-19.0014` from late UTC `2026-05-19` / Sofia `2026-05-20`.
+- Confirmed by Sofia date there were `16` all-loss clusters with at least 4 strategies and PnL <= `-10` on `2026-05-20`, including `10` clusters with 5+ strategies all lost; the same query found only `4` such smaller clusters on `2026-05-19` and `0` 5+ clusters that day.
+Next: Treat today's event as a new scale of same-market correlation exposure; add same-market/outcome cap and daily live-loss lockout or reduce live strategies manually.
+Notes: Read-only production DB review only. Used remote PostgreSQL host override `192.168.0.101` through existing C# `out\dbprobe`; no DB writes, service restart, live order submission, or cancel action. `git pull --ff-only` was up to date. No tests were run because no source code changed.
+Blockers: None.
+
 ## Active Update 2026-05-20 Live Loss Interpretation
 Goal: Clarify whether the live-loss spike was just bad luck or an operational problem.
 Status: Completed
