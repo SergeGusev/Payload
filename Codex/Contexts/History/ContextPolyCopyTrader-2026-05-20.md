@@ -157,3 +157,16 @@ Request:
 
 Result:
 Implemented a global opposite-outcome open-order guard. Shared risk now rejects new Paper BUY proposals with `opposite_outcome_open_order` when the same condition already has an open BUY on a different outcome, covering Follow/on-chain Paper paths. BTC Up/Down due-entry creation now uses the same guard against open Paper and Live orders, serializes entry creation inside the worker to prevent parallel opposite-side entries in one cycle, records skip diagnostics on `strategy_market_paper_runs`, and applies the same check in BTC Paper/Live-shadow live preflight. Added focused regression tests for the shared risk engine and BTC worker skip path, updated README and configuration reference docs. Verification passed: full test project `508/508`; `git diff --check` passed with only LF/CRLF warnings. No DB writes, service restart, live order submission, or cancel action was performed.
+
+## 2026-05-20T21:02:18.0868886+00:00
+Request:
+Делаем новые стратегии BTC Up or Down 5m Up Maker и BTC Up or Down 5m Down Maker, в отдельной категории. Принцип работы следующий - сразу после начала рынка она фиксирует текущий стакан как максимальный,
+потом следит за ростом стакана, каждый раз фиксируя максимальное значение. Если стакан сдвинулся вниз - ничего не делаем, если сдвинулся вверх и стал больше максимального, запоминаем новое максимальное значение
+и делается минимальная post-only ставка, прижатая к стакану снизу, чтобы гарантированно не было покупки сразу. Если ставка не проходит - понижаем на минимальный tick и пробуем ещё раз, пока не поставим.
+
+То есть ставим только на каждый максимум.
+
+В процессе одного маркета можно делать несколько ставок. Все ставки ограничиваются по времени на одну минуту до окончания работы рынка. Стратегия запускается только в paper режиме
+
+Result:
+Added Paper-only BTC 5m Up/Down Maker strategy variants and schema seeds, implemented separate maker maximum tracking with minimum-size post-only GTD Paper orders one tick below each new best-ask maximum, excluded the strategy from Live/Paper-shadow execution, updated docs and context, and verified targeted tests `152/152`, full tests `512/512`, and diff-check with LF/CRLF warnings only.

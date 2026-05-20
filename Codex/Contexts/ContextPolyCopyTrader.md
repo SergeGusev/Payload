@@ -1,3 +1,17 @@
+## Active Update 2026-05-20 BTC 5m Maker Strategies
+Goal: Add Paper-only `BTC Up or Down 5m Up Maker` and `BTC Up or Down 5m Down Maker` strategies that place minimum-size post-only orders on new best-ask maxima.
+Status: Completed
+Done:
+- Added built-in strategy ids/codes, schema seed rows, and `FixedOutcomeMaker` behavior for `btc_up_down_5m_up_maker` and `btc_up_down_5m_down_maker` under category `BTC Up/Down 5m Maker`.
+- Added a Paper-only maker path in the BTC 5m processor: after market start it baselines selected-outcome best ask, tracks per-market maxima in memory, and on each new max creates a synthetic run plus a minimum-size GTD BUY one tick below best ask.
+- Maker orders expire at `marketEndUtc - 60s`, use `post_only=true` diagnostics and `execution_source=btc_updown5m_maker_post_only`, and are excluded from Paper/Live-shadow processing in Live mode.
+- Added maker settlement handling so multiple maker entries on the same wallet/asset do not create duplicate per-run paper position settlement rows or zero aggregate positions before the generic settlement pipeline can handle them.
+- Added regression coverage for variant registration, baseline/no-order behavior, new-max post-only placement, falling-book no-op behavior, Live-mode exclusion, and schema seeds.
+- Updated README and configuration reference docs.
+Next: Deploy/restart the service if these Paper-only Maker strategies should start running in the active environment.
+Notes: Verification passed: targeted `dotnet test tests\PolyCopyTrader.Tests\PolyCopyTrader.Tests.csproj --no-restore --filter "FullyQualifiedName~BtcUpDown5mPaperStrategyProcessorTests|FullyQualifiedName~StorageTests"` passed `152/152`; full `dotnet test tests\PolyCopyTrader.Tests\PolyCopyTrader.Tests.csproj --no-restore` passed `512/512`; `git diff --check` passed with LF/CRLF warnings only. No DB writes, service restart, live order submission, or cancel action.
+Blockers: None.
+
 ## Active Update 2026-05-20 Opposite Outcome Open Order Guard
 Goal: Add a global safety rule so strategies skip a new BUY when the same market condition already has an open BUY order on the opposite outcome.
 Status: Completed

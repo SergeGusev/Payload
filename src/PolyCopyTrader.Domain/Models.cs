@@ -914,6 +914,8 @@ public static class StrategyIds
     public const string BtcUpDown5mLess180MartinName = "BTC Less 180 Martin";
     public const string BtcUpDown5mAlwaysUpIdValue = "b7c50005-0000-4000-8010-000000000001";
     public const string BtcUpDown5mAlwaysDownIdValue = "b7c50005-0000-4000-8010-000000000002";
+    public const string BtcUpDown5mUpMakerIdValue = "b7c50005-0000-4000-8027-000000000001";
+    public const string BtcUpDown5mDownMakerIdValue = "b7c50005-0000-4000-8027-000000000002";
     public const string BtcUpDown5mBinanceIdValue = "b7c50005-0000-4000-8011-000000000001";
     public const string BtcUpDown5mBinanceCleverIdValue = "b7c50005-0000-4000-8011-000000000002";
     public const string BtcUpDown5mBinance45IdValue = "b7c50005-0000-4000-8011-000000000045";
@@ -967,6 +969,8 @@ public static class StrategyIds
     public const string BtcUpDown5mStatisticsIdValue = "b7c50005-0000-4000-8050-000000000001";
     public const string BtcUpDown5mAlwaysUpCode = "btc_up_down_5m_up";
     public const string BtcUpDown5mAlwaysDownCode = "btc_up_down_5m_down";
+    public const string BtcUpDown5mUpMakerCode = "btc_up_down_5m_up_maker";
+    public const string BtcUpDown5mDownMakerCode = "btc_up_down_5m_down_maker";
     public const string BtcUpDown5mBinanceCode = "btc_up_down_5m_binance";
     public const string BtcUpDown5mBinanceCleverCode = "btc_up_down_5m_binance_clever";
     public const string BtcUpDown5mBinance45Code = "btc_up_down_5m_binance_45";
@@ -1024,6 +1028,8 @@ public static class StrategyIds
     public static readonly Guid BtcUpDown5mLess180Martin = Guid.Parse(BtcUpDown5mLess180MartinIdValue);
     public static readonly Guid BtcUpDown5mAlwaysUp = Guid.Parse(BtcUpDown5mAlwaysUpIdValue);
     public static readonly Guid BtcUpDown5mAlwaysDown = Guid.Parse(BtcUpDown5mAlwaysDownIdValue);
+    public static readonly Guid BtcUpDown5mUpMaker = Guid.Parse(BtcUpDown5mUpMakerIdValue);
+    public static readonly Guid BtcUpDown5mDownMaker = Guid.Parse(BtcUpDown5mDownMakerIdValue);
     public static readonly Guid BtcUpDown5mBinance = Guid.Parse(BtcUpDown5mBinanceIdValue);
     public static readonly Guid BtcUpDown5mBinanceClever = Guid.Parse(BtcUpDown5mBinanceCleverIdValue);
     public static readonly Guid BtcUpDown5mBinance45 = Guid.Parse(BtcUpDown5mBinance45IdValue);
@@ -1200,6 +1206,8 @@ public static class StrategyIds
 
         variants.Add(CreateBtcUpDown5mAlwaysDirectionVariant(isUp: true));
         variants.Add(CreateBtcUpDown5mAlwaysDirectionVariant(isUp: false));
+        variants.Add(CreateBtcUpDown5mMakerVariant(isUp: true));
+        variants.Add(CreateBtcUpDown5mMakerVariant(isUp: false));
         variants.Add(CreateBtcUpDown5mBinanceVariant());
         for (var thresholdTenths = 1; thresholdTenths <= 50; thresholdTenths++)
         {
@@ -1372,6 +1380,22 @@ public static class StrategyIds
             BtcUpDown5mStrategyDirection.Dynamic,
             0,
             isUp ? BtcUpDown5mStrategyBehavior.AlwaysUp : BtcUpDown5mStrategyBehavior.AlwaysDown);
+    }
+
+    private static BtcUpDown5mStrategyVariant CreateBtcUpDown5mMakerVariant(bool isUp)
+    {
+        var outcome = isUp ? BtcUpDownFixedOutcome.Up : BtcUpDownFixedOutcome.Down;
+        var outcomeName = isUp ? "Up" : "Down";
+        return new BtcUpDown5mStrategyVariant(
+            isUp ? BtcUpDown5mUpMaker : BtcUpDown5mDownMaker,
+            isUp ? BtcUpDown5mUpMakerCode : BtcUpDown5mDownMakerCode,
+            $"BTC Up or Down 5m {outcomeName} Maker",
+            $"Paper-only maker strategy: after BTC 5m trading starts, baseline the {outcomeName} outcome order book, then place a minimum-size post-only GTD BUY just below best ask on each new best-ask maximum until one minute before market end.",
+            BtcUpDown5mStrategyDirection.Dynamic,
+            0,
+            BtcUpDown5mStrategyBehavior.FixedOutcomeMaker,
+            FixedOutcome: outcome,
+            Category: "BTC Up/Down 5m Maker");
     }
 
     private static BtcUpDown5mStrategyVariant CreateBtcUpDown5mBinanceVariant()
@@ -1909,7 +1933,8 @@ public enum BtcUpDown5mStrategyBehavior
     GammaOutcomeSelectionEntryPriceCap,
     PreviousScoreCounterTrend,
     PreOpenFixedDirection,
-    PreOpenFixedDirectionSell
+    PreOpenFixedDirectionSell,
+    FixedOutcomeMaker
 }
 
 public sealed record BtcUpDown5mStrategyVariant(

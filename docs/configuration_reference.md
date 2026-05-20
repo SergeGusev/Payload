@@ -670,6 +670,13 @@ order-book bootstrap. The
 `BTC Up or Down 5m Up` and `BTC Up or Down 5m Down` wait until the market is
 actually accepting orders with an order book, then place a GTD BUY at
 fixed price `0.45` on the corresponding outcome. The
+`BTC Up or Down 5m Up Maker` and `BTC Up or Down 5m Down Maker` variants are
+Paper-only and grouped under `BTC Up/Down 5m Maker`. After a BTC 5-minute
+market starts, each variant baselines the selected outcome best ask, updates an
+in-memory maximum whenever that best ask moves higher, and only then creates a
+minimum-size post-only GTD BUY one tick below the new best ask. These Maker
+orders can happen multiple times in one market, expire at `marketEndUtc - 60s`,
+and are not eligible for Paper/Live-shadow submission in `Bot:Mode=Live`. The
 `BTC Up or Down 5m Binance` variant also waits for the market to accept orders,
 reads the latest Binance BTC/USDT trade-stream price and the archived market
 start reference from `btc_up_down_5m_odds_ticks`, then buys `Up` when current

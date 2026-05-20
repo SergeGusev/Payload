@@ -1755,6 +1755,26 @@ VALUES (
     now()
 ),
 (
+    'b7c50005-0000-4000-8027-000000000001',
+    'btc_up_down_5m_up_maker',
+    'BTC Up or Down 5m Up Maker',
+    'Paper-only maker strategy: after BTC 5m trading starts, baseline the Up outcome order book, then place a minimum-size post-only GTD BUY just below best ask on each new best-ask maximum until one minute before market end.',
+    true,
+    1.00,
+    now(),
+    now()
+),
+(
+    'b7c50005-0000-4000-8027-000000000002',
+    'btc_up_down_5m_down_maker',
+    'BTC Up or Down 5m Down Maker',
+    'Paper-only maker strategy: after BTC 5m trading starts, baseline the Down outcome order book, then place a minimum-size post-only GTD BUY just below best ask on each new best-ask maximum until one minute before market end.',
+    true,
+    1.00,
+    now(),
+    now()
+),
+(
     'b7c50005-0000-4000-8011-000000000001',
     'btc_up_down_5m_binance',
     'BTC Up or Down 5m Binance',

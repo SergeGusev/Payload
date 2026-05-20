@@ -124,6 +124,12 @@ public sealed class BtcUpDown5mPaperStrategyProcessorTests
     private static readonly BtcUpDown5mStrategyVariant AlwaysDownVariant =
         StrategyIds.BtcUpDown5mVariants.Single(variant => variant.Code == "btc_up_down_5m_down");
 
+    private static readonly BtcUpDown5mStrategyVariant UpMakerVariant =
+        StrategyIds.BtcUpDown5mVariants.Single(variant => variant.Code == StrategyIds.BtcUpDown5mUpMakerCode);
+
+    private static readonly BtcUpDown5mStrategyVariant DownMakerVariant =
+        StrategyIds.BtcUpDown5mVariants.Single(variant => variant.Code == StrategyIds.BtcUpDown5mDownMakerCode);
+
     private static readonly BtcUpDown5mStrategyVariant BinanceVariant =
         StrategyIds.BtcUpDown5mVariants.Single(variant => variant.Code == "btc_up_down_5m_binance");
 
@@ -223,7 +229,7 @@ public sealed class BtcUpDown5mPaperStrategyProcessorTests
     [Fact]
     public void StrategyIds_IncludeStandardMartinAndGammaBtcVariants()
     {
-        Assert.Equal(1264, StrategyIds.BtcUpDown5mVariants.Count);
+        Assert.Equal(1266, StrategyIds.BtcUpDown5mVariants.Count);
         Assert.Equal(StrategyIds.BtcUpDown5mVariants.Count, StrategyIds.BtcUpDown5mVariants.Select(variant => variant.Id).Distinct().Count());
         Assert.Equal(StrategyIds.BtcUpDown5mVariants.Count, StrategyIds.BtcUpDown5mVariants.Select(variant => variant.Code).Distinct().Count());
         Assert.Equal(18, StrategyIds.BtcUpDown5mVariants.Count(variant => variant.Behavior == BtcUpDown5mStrategyBehavior.Standard));
@@ -237,6 +243,7 @@ public sealed class BtcUpDown5mPaperStrategyProcessorTests
         Assert.Equal(5, StrategyIds.BtcUpDown5mVariants.Count(variant => variant.Behavior == BtcUpDown5mStrategyBehavior.SkipConsecutiveMarketResultsRevert));
         Assert.Single(StrategyIds.BtcUpDown5mVariants, variant => variant.Behavior == BtcUpDown5mStrategyBehavior.AlwaysUp);
         Assert.Single(StrategyIds.BtcUpDown5mVariants, variant => variant.Behavior == BtcUpDown5mStrategyBehavior.AlwaysDown);
+        Assert.Equal(2, StrategyIds.BtcUpDown5mVariants.Count(variant => variant.Behavior == BtcUpDown5mStrategyBehavior.FixedOutcomeMaker));
         Assert.Single(StrategyIds.BtcUpDown5mVariants, variant => variant.Behavior == BtcUpDown5mStrategyBehavior.BinanceStartRelative);
         Assert.Equal(3, StrategyIds.BtcUpDown5mVariants.Count(variant => variant.Behavior == BtcUpDown5mStrategyBehavior.BinanceStartRelativeFixedPrice));
         Assert.Equal(50, StrategyIds.BtcUpDown5mVariants.Count(variant => variant.Behavior == BtcUpDown5mStrategyBehavior.BinanceStartRelativeBpsThreshold));
@@ -289,6 +296,9 @@ public sealed class BtcUpDown5mPaperStrategyProcessorTests
             variant => variant.Code == "btc_up_down_5m_middle_5").Name);
         Assert.Equal("BTC Up or Down 5m Middle 5 Revert", StrategyIds.BtcUpDown5mVariants.Single(
             variant => variant.Code == "btc_up_down_5m_middle_5_revert").Name);
+        Assert.Equal("BTC Up/Down 5m Maker", UpMakerVariant.Category);
+        Assert.Equal(BtcUpDownFixedOutcome.Up, UpMakerVariant.FixedOutcome);
+        Assert.Equal(BtcUpDownFixedOutcome.Down, DownMakerVariant.FixedOutcome);
         Assert.Equal("BTC Up or Down 5m Middle 5 0.9 bps", StrategyIds.BtcUpDown5mVariants.Single(
             variant => variant.Code == "btc_up_down_5m_middle_5_bps_0_9").Name);
         Assert.Equal(0.9m, StrategyIds.BtcUpDown5mVariants.Single(
@@ -449,7 +459,7 @@ public sealed class BtcUpDown5mPaperStrategyProcessorTests
     public void StrategyIds_IncludeEthAndSolBinanceBpsVariants()
     {
         Assert.Equal(200, StrategyIds.CryptoUpDown5mVariants.Count);
-        Assert.Equal(1464, StrategyIds.UpDown5mStrategyVariants.Count);
+        Assert.Equal(1466, StrategyIds.UpDown5mStrategyVariants.Count);
         Assert.Equal(
             StrategyIds.UpDown5mStrategyVariants.Count,
             StrategyIds.UpDown5mStrategyVariants.Select(variant => variant.Id).Distinct().Count());
@@ -3329,6 +3339,143 @@ public sealed class BtcUpDown5mPaperStrategyProcessorTests
         Assert.Equal("Down", order.Outcome);
         Assert.Equal(0.45m, order.Price);
         Assert.Contains("\"decision_source\":\"always_down_after_trading_started\"", order.RawDecisionJson, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task ProcessAsync_UpMakerBaselinesFirstBookWithoutOrder()
+    {
+        var now = DateTimeOffset.UtcNow;
+        var marketEndUtc = now.AddMinutes(5);
+        var repository = new TestAppRepository();
+        repository.PolymarketGammaMarkets.Add(CreateMarket(
+            now.AddSeconds(-5),
+            marketEndUtc,
+            upPrice: 0.50m,
+            downPrice: 0.50m,
+            orderMinSize: 5m));
+        var clobClient = new MutableFakeClobClient([
+            OrderBook("asset-up", [new OrderBookLevel(0.40m, 100m)], [new OrderBookLevel(0.42m, 100m)], now, 5m, 0.01m),
+            OrderBook("asset-down", [new OrderBookLevel(0.58m, 100m)], [new OrderBookLevel(0.60m, 100m)], now, 5m, 0.01m)
+        ]);
+        var processor = CreateMakerProcessor(repository, clobClient, UpMakerVariant.Code);
+
+        var result = await processor.ProcessAsync();
+
+        Assert.Equal(1, result.MarketsObserved);
+        Assert.Equal(0, result.EntriesPlaced);
+        Assert.Equal(0, result.RunsSkipped);
+        Assert.Empty(repository.StrategyMarketPaperRuns);
+        Assert.Empty(repository.PaperOrders);
+    }
+
+    [Fact]
+    public async Task ProcessAsync_UpMakerPlacesPostOnlyOrderOnNewBestAskMaximum()
+    {
+        var now = DateTimeOffset.UtcNow;
+        var marketStartUtc = now.AddSeconds(-5);
+        var marketEndUtc = now.AddMinutes(5);
+        var repository = new TestAppRepository();
+        repository.PolymarketGammaMarkets.Add(CreateMarket(
+            marketStartUtc,
+            marketEndUtc,
+            upPrice: 0.50m,
+            downPrice: 0.50m,
+            orderMinSize: 5m));
+        var clobClient = new MutableFakeClobClient([
+            OrderBook("asset-up", [new OrderBookLevel(0.40m, 100m)], [new OrderBookLevel(0.42m, 100m)], now, 5m, 0.01m),
+            OrderBook("asset-down", [new OrderBookLevel(0.58m, 100m)], [new OrderBookLevel(0.60m, 100m)], now, 5m, 0.01m)
+        ]);
+        var processor = CreateMakerProcessor(repository, clobClient, UpMakerVariant.Code);
+
+        await processor.ProcessAsync();
+        await Task.Delay(75);
+        clobClient.SetOrderBooks([
+            OrderBook("asset-up", [new OrderBookLevel(0.40m, 100m)], [new OrderBookLevel(0.45m, 100m)], DateTimeOffset.UtcNow, 5m, 0.01m),
+            OrderBook("asset-down", [new OrderBookLevel(0.55m, 100m)], [new OrderBookLevel(0.58m, 100m)], DateTimeOffset.UtcNow, 5m, 0.01m)
+        ]);
+
+        var result = await processor.ProcessAsync();
+
+        Assert.Equal(1, result.EntriesPlaced);
+        Assert.Equal(0, result.RunsSkipped);
+        var order = Assert.Single(repository.PaperOrders);
+        Assert.Equal(PaperOrderStatus.Pending, order.Status);
+        Assert.Equal(TradeSide.Buy, order.Side);
+        Assert.Equal("asset-up", order.AssetId);
+        Assert.Equal("Up", order.Outcome);
+        Assert.Equal(0.44m, order.Price);
+        Assert.True(order.Price < 0.45m);
+        Assert.Equal(marketEndUtc.AddMinutes(-1), order.ExpiresAtUtc);
+        Assert.Equal("btc_updown5m_maker_post_only", order.ExecutionSource);
+        Assert.Contains("\"post_only\":true", order.RawDecisionJson, StringComparison.Ordinal);
+        Assert.Contains("\"maker_limit_price\":0.44", order.RawDecisionJson, StringComparison.Ordinal);
+        Assert.Contains("\"pricing_mode\":\"paper_gtd_limit\"", order.RawDecisionJson, StringComparison.Ordinal);
+        Assert.Contains("\"paper_gtd_initial_executable_ask_shares\":0", order.RawDecisionJson, StringComparison.Ordinal);
+
+        var run = Assert.Single(repository.StrategyMarketPaperRuns);
+        Assert.Equal(StrategyMarketPaperRunStatuses.Entered, run.Status);
+        Assert.Equal("BTC Up/Down 5m Maker", run.Category);
+        Assert.Equal(order.Id, run.PaperOrderId);
+        Assert.Equal(order.NotionalUsd, run.StakeUsd);
+        Assert.Equal(0.44m, run.EntryPrice);
+        Assert.Contains(":maker:up:0.45", run.MarketId, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task ProcessAsync_UpMakerDoesNotOrderWhenBestAskFallsBelowMax()
+    {
+        var now = DateTimeOffset.UtcNow;
+        var repository = new TestAppRepository();
+        repository.PolymarketGammaMarkets.Add(CreateMarket(
+            now.AddSeconds(-5),
+            now.AddMinutes(5),
+            upPrice: 0.50m,
+            downPrice: 0.50m));
+        var clobClient = new MutableFakeClobClient([
+            OrderBook("asset-up", [new OrderBookLevel(0.40m, 100m)], [new OrderBookLevel(0.42m, 100m)], now, 5m, 0.01m),
+            OrderBook("asset-down", [new OrderBookLevel(0.58m, 100m)], [new OrderBookLevel(0.60m, 100m)], now, 5m, 0.01m)
+        ]);
+        var processor = CreateMakerProcessor(repository, clobClient, UpMakerVariant.Code);
+
+        await processor.ProcessAsync();
+        await Task.Delay(75);
+        clobClient.SetOrderBooks([
+            OrderBook("asset-up", [new OrderBookLevel(0.39m, 100m)], [new OrderBookLevel(0.41m, 100m)], DateTimeOffset.UtcNow, 5m, 0.01m),
+            OrderBook("asset-down", [new OrderBookLevel(0.59m, 100m)], [new OrderBookLevel(0.61m, 100m)], DateTimeOffset.UtcNow, 5m, 0.01m)
+        ]);
+
+        var result = await processor.ProcessAsync();
+
+        Assert.Equal(0, result.EntriesPlaced);
+        Assert.Equal(0, result.RunsSkipped);
+        Assert.Empty(repository.StrategyMarketPaperRuns);
+        Assert.Empty(repository.PaperOrders);
+    }
+
+    [Fact]
+    public async Task ProcessAsync_MakerVariantDoesNotRunInLiveMode()
+    {
+        var now = DateTimeOffset.UtcNow;
+        var repository = new TestAppRepository();
+        repository.PolymarketGammaMarkets.Add(CreateMarket(
+            now.AddSeconds(-5),
+            now.AddMinutes(5),
+            upPrice: 0.50m,
+            downPrice: 0.50m));
+        var tradingClient = new CapturingTradingClient();
+        var processor = CreateLiveProcessor(
+            repository,
+            tradingClient,
+            UpMakerVariant.Code);
+
+        var result = await processor.ProcessAsync();
+
+        Assert.Equal(0, result.MarketsObserved);
+        Assert.Equal(0, result.EntriesPlaced);
+        Assert.Equal(0, result.RunsSkipped);
+        Assert.Empty(repository.StrategyMarketPaperRuns);
+        Assert.Empty(repository.PaperOrders);
+        Assert.Equal(0, tradingClient.PlaceCalls);
     }
 
     [Fact]
@@ -6451,6 +6598,24 @@ public sealed class BtcUpDown5mPaperStrategyProcessorTests
             CreateBtcUsdReferenceCache(cachedBtcUsd));
     }
 
+    private static BtcUpDown5mPaperStrategyProcessor CreateMakerProcessor(
+        TestAppRepository repository,
+        MutableFakeClobClient clobClient,
+        params string[] enabledVariantCodes)
+    {
+        return CreateProcessorCoreWithOptions(
+            repository,
+            [],
+            [],
+            _ => { },
+            [],
+            CreateBtcOptions(
+                paperTakerPricingEnabled: false,
+                enabledVariantCodes,
+                paperTakerMaxQuoteAgeMilliseconds: 50),
+            clobClient: clobClient);
+    }
+
     private static BtcUpDown5mPaperStrategyProcessor CreateLiveProcessor(
         TestAppRepository repository,
         CapturingTradingClient tradingClient,
@@ -6825,7 +6990,8 @@ public sealed class BtcUpDown5mPaperStrategyProcessorTests
         int maxConcurrentEntryDecisions = 1,
         int maxSettlementsPerCycle = 50,
         int maxConcurrentSettlements = 1,
-        int maxMarketsPerCycle = 500)
+        int maxMarketsPerCycle = 500,
+        int paperTakerMaxQuoteAgeMilliseconds = 1_500)
     {
         return new BtcUpDown5mStrategyOptions
         {
@@ -6840,7 +7006,7 @@ public sealed class BtcUpDown5mPaperStrategyProcessorTests
             EnabledVariantCodes = enabledVariantCodes.ToList(),
             PaperTakerPricingEnabled = paperTakerPricingEnabled,
             PaperTakerRestFallbackEnabled = true,
-            PaperTakerMaxQuoteAgeMilliseconds = 1_500,
+            PaperTakerMaxQuoteAgeMilliseconds = paperTakerMaxQuoteAgeMilliseconds,
             PaperTakerMaxEntryPrice = 0.80m,
             PaperTakerMaxReferenceSlippage = 0.05m,
             PaperTakerMaxSpreadAbs = 0.20m,
@@ -6905,7 +7071,8 @@ public sealed class BtcUpDown5mPaperStrategyProcessorTests
         IReadOnlyList<OrderBookLevel> bids,
         IReadOnlyList<OrderBookLevel> asks,
         DateTimeOffset now,
-        decimal? minOrderSize = null)
+        decimal? minOrderSize = null,
+        decimal? tickSize = null)
     {
         return new OrderBookSnapshot(
             assetId,
@@ -6913,7 +7080,8 @@ public sealed class BtcUpDown5mPaperStrategyProcessorTests
             asks,
             now,
             "condition-1",
-            minOrderSize);
+            minOrderSize,
+            tickSize);
     }
 
     private static IReadOnlyList<OrderBookSnapshot> AddCloseBookResults(
@@ -7643,6 +7811,58 @@ public sealed class BtcUpDown5mPaperStrategyProcessorTests
         public Task<PolymarketClobMarketByToken?> GetMarketByTokenAsync(string tokenId, CancellationToken cancellationToken = default)
         {
             return Task.FromResult<PolymarketClobMarketByToken?>(null);
+        }
+    }
+
+    private sealed class MutableFakeClobClient(IReadOnlyList<OrderBookSnapshot> orderBooks) : IPolymarketClobPublicClient
+    {
+        private readonly object sync = new();
+        private Dictionary<string, OrderBookSnapshot> orderBooksByAssetId = ToDictionary(orderBooks);
+
+        public void SetOrderBooks(IReadOnlyList<OrderBookSnapshot> nextOrderBooks)
+        {
+            lock (sync)
+            {
+                orderBooksByAssetId = ToDictionary(nextOrderBooks);
+            }
+        }
+
+        public Task<OrderBookSnapshot?> GetOrderBookAsync(string assetId, CancellationToken cancellationToken = default)
+        {
+            lock (sync)
+            {
+                return Task.FromResult(
+                    orderBooksByAssetId.TryGetValue(assetId, out var orderBook)
+                        ? orderBook
+                        : null);
+            }
+        }
+
+        public Task<DateTimeOffset> GetServerTimeAsync(CancellationToken cancellationToken = default)
+        {
+            return Task.FromResult(DateTimeOffset.UtcNow);
+        }
+
+        public Task<decimal?> GetMidpointAsync(string assetId, CancellationToken cancellationToken = default)
+        {
+            return Task.FromResult<decimal?>(null);
+        }
+
+        public Task<decimal?> GetSpreadAsync(string assetId, CancellationToken cancellationToken = default)
+        {
+            return Task.FromResult<decimal?>(null);
+        }
+
+        public Task<PolymarketClobMarketByToken?> GetMarketByTokenAsync(string tokenId, CancellationToken cancellationToken = default)
+        {
+            return Task.FromResult<PolymarketClobMarketByToken?>(null);
+        }
+
+        private static Dictionary<string, OrderBookSnapshot> ToDictionary(IReadOnlyList<OrderBookSnapshot> source)
+        {
+            return source
+                .Where(orderBook => !string.IsNullOrWhiteSpace(orderBook.AssetId))
+                .ToDictionary(orderBook => orderBook.AssetId, StringComparer.OrdinalIgnoreCase);
         }
     }
 

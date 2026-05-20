@@ -100,6 +100,8 @@ public sealed class StorageTests
         Assert.Contains("'btc_up_down_5m_skip_5_revert'", PostgresSchema.SchemaSql, StringComparison.Ordinal);
         Assert.Contains("'btc_up_down_5m_up'", PostgresSchema.SchemaSql, StringComparison.Ordinal);
         Assert.Contains("'btc_up_down_5m_down'", PostgresSchema.SchemaSql, StringComparison.Ordinal);
+        Assert.Contains("'btc_up_down_5m_up_maker'", PostgresSchema.SchemaSql, StringComparison.Ordinal);
+        Assert.Contains("'btc_up_down_5m_down_maker'", PostgresSchema.SchemaSql, StringComparison.Ordinal);
         Assert.Contains("'btc_up_down_5m_statistics'", PostgresSchema.SchemaSql, StringComparison.Ordinal);
         Assert.Contains("'btc_up_down_5m_prev_score_countertrend_' || prices.price_cents", PostgresSchema.SchemaSql, StringComparison.Ordinal);
         Assert.Contains("'b7c50005-0000-4000-8025-' || lpad(prices.price_cents::text, 12, '0')", PostgresSchema.SchemaSql, StringComparison.Ordinal);
@@ -128,6 +130,8 @@ public sealed class StorageTests
         Assert.Contains("BTC Up or Down 5m Less 60 Below 20", PostgresSchema.SchemaSql, StringComparison.Ordinal);
         Assert.Contains("BTC Up or Down 5m More 90 Below 70", PostgresSchema.SchemaSql, StringComparison.Ordinal);
         Assert.Contains("BTC Up or Down 5m More 90 Below 65", PostgresSchema.SchemaSql, StringComparison.Ordinal);
+        Assert.Contains("BTC Up or Down 5m Up Maker", PostgresSchema.SchemaSql, StringComparison.Ordinal);
+        Assert.Contains("BTC Up or Down 5m Down Maker", PostgresSchema.SchemaSql, StringComparison.Ordinal);
         Assert.Contains("BTC Up or Down 5m More 60 Gamma Below 70", PostgresSchema.SchemaSql, StringComparison.Ordinal);
         Assert.Contains("BTC Up or Down 5m More 120 Gamma Below 65", PostgresSchema.SchemaSql, StringComparison.Ordinal);
         Assert.Contains("BTC Up or Down 5m More 150 Gamma Below 80", PostgresSchema.SchemaSql, StringComparison.Ordinal);
