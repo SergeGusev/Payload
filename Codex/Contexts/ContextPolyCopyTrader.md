@@ -1,3 +1,13 @@
+## Active Update 2026-05-20 Morning Daily Report Format Preference
+Goal: Record the intended default format for future morning daily live-strategy reports.
+Status: Completed
+Done:
+- Recorded that when the user asks for a morning daily report for live-strategy earnings, the expected Excel format is a matrix with dates as rows and live strategies as columns.
+- The first workbook sheet should open directly to that matrix; supporting detail/summary sheets may follow.
+Next: Use this format by default for future morning daily reports unless the user asks otherwise.
+Notes: Preference/context update only. No DB reads/writes, source code changes, service restart, live order submission, or cancel action.
+Blockers: None.
+
 ## Active Update 2026-05-20 Live Strategy Daily Matrix Excel
 Goal: Make the live-strategy daily earnings workbook open directly to a date-row/strategy-column matrix.
 Status: Completed

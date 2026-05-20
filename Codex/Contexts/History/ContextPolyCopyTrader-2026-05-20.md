@@ -39,3 +39,10 @@ Request:
 
 Result:
 Created a new workbook at `D:\My\Business\PolyMarket\outputs\019e43b9-598f-7f00-a0c9-56b43849dce6\live-strategy-daily-pnl-matrix-20260520-051846Z.xlsx` where the first sheet is `Daily Matrix`: rows are Sofia dates and columns are `Total PnL` plus the current live strategies. The previous detail, live strategy snapshot, summary, and source notes sheets were preserved. No DB writes, service restart, live order submission, or cancel action was performed.
+
+## 2026-05-20T05:26:32.2536431Z
+Request:
+Отлично. Когда я буду заказывать по утрам дневной отчёт, я именно такой формат буду иметь в виду
+
+Result:
+Recorded the user's preferred default for future morning daily live-strategy reports: the Excel workbook should open directly to a matrix where rows are dates and columns are live strategies, with supporting detail/summary sheets optional after that. No DB reads/writes, source code changes, service restart, live order submission, or cancel action was performed.
