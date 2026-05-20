@@ -1,3 +1,15 @@
+## Active Update 2026-05-20 Morning Daily Report Sum Column
+Goal: Add the final `Sum` column convention to the morning daily live-strategy report format.
+Status: Completed
+Done:
+- Created `D:\My\Business\PolyMarket\outputs\019e43b9-598f-7f00-a0c9-56b43849dce6\live-strategy-daily-pnl-matrix-sum-20260520-053445Z.xlsx`.
+- Updated the first `Daily Matrix` sheet layout so columns are `Sofia date`, current live strategies, and final `Sum`.
+- `Sum` formulas aggregate all strategy columns for each day, e.g. `SUM(B5:G5)`, and the total row includes `SUM(H5:H9)`.
+- Recorded that future morning daily reports should use this Sum-last matrix layout by default.
+Next: Use this Sum-last matrix format for future morning daily live-strategy reports unless the user asks otherwise.
+Notes: Workbook-only format update from the previous artifact; no DB reads/writes, service restart, live order submission, or cancel action. Verification passed: workbook/worksheet XML parsed successfully; first sheet remains `Daily Matrix`; headers and formulas were checked.
+Blockers: None.
+
 ## Active Update 2026-05-20 Morning Daily Report Format Preference
 Goal: Record the intended default format for future morning daily live-strategy reports.
 Status: Completed

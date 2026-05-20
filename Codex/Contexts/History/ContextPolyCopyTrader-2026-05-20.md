@@ -46,3 +46,10 @@ Request:
 
 Result:
 Recorded the user's preferred default for future morning daily live-strategy reports: the Excel workbook should open directly to a matrix where rows are dates and columns are live strategies, with supporting detail/summary sheets optional after that. No DB reads/writes, source code changes, service restart, live order submission, or cancel action was performed.
+
+## 2026-05-20T05:35:38.7869053Z
+Request:
+Давай внесём корректировку - добавим последней колонкой Sum, которая будет включать сумму всех стратегий за день.
+
+Result:
+Created `D:\My\Business\PolyMarket\outputs\019e43b9-598f-7f00-a0c9-56b43849dce6\live-strategy-daily-pnl-matrix-sum-20260520-053445Z.xlsx` from the prior matrix workbook. The first `Daily Matrix` sheet now has rows as Sofia dates, live strategies as columns, and final `Sum` column formulas aggregating all strategy columns for each day. Recorded this Sum-last layout as the default for future morning daily live-strategy reports. No DB reads/writes, service restart, live order submission, or cancel action was performed.
