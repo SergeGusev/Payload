@@ -1,3 +1,15 @@
+## Active Update 2026-05-20 Live Strategy Daily Excel
+Goal: Create an Excel workbook with live-strategy earnings grouped by Sofia calendar day.
+Status: Completed
+Done:
+- Queried production PostgreSQL read-only using remote host override `192.168.0.101`.
+- Generated `D:\My\Business\PolyMarket\outputs\019e43b9-598f-7f00-a0c9-56b43849dce6\live-strategy-daily-pnl-20260520-051206Z.xlsx`.
+- Workbook includes `Summary`, `Daily Matrix`, `Daily Detail`, `Live Strategies`, and `Source Notes` sheets.
+- At DB time `2026-05-20T05:12:06Z`, the export covered `6` current LiveStakes strategies, `30` dense daily detail rows, `184` settled live orders, and total realized live PnL `145.6835`.
+Next: None.
+Notes: No DB writes, service restart, live order submission, or cancel action. Temporary C# exporter was removed after producing the workbook. Verification passed: exporter build had 0 warnings/errors; final `.xlsx` ZIP entries and workbook/worksheet XML parsed without errors.
+Blockers: None.
+
 ## Active Update 2026-05-20 Codex CLI Global Install
 Goal: Install the OpenAI Codex CLI globally with npm.
 Status: Completed

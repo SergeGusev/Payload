@@ -25,3 +25,10 @@ npm install -g @openai/codex
 
 Result:
 Installed the OpenAI Codex CLI globally via npm. Verified `@openai/codex@0.132.0` is installed and `codex --version` reports `codex-cli 0.132.0`. npm reported a cleanup warning for an old temporary package directory, but installation and verification succeeded. No project source code changed.
+
+## 2026-05-20T05:12:58.4018875Z
+Request:
+Дай Excel с заработком живых стратегий по суткам
+
+Result:
+Created an Excel workbook at `D:\My\Business\PolyMarket\outputs\019e43b9-598f-7f00-a0c9-56b43849dce6\live-strategy-daily-pnl-20260520-051206Z.xlsx` from production PostgreSQL read-only data. The workbook covers the current `6` LiveStakes strategies, groups realized live PnL by `Europe/Sofia` calendar date, and includes summary, daily matrix, daily detail, live strategy snapshot, and source notes sheets. At DB time `2026-05-20T05:12:06Z`, totals were `184` settled live orders and `145.6835` realized live PnL. No DB writes, service restart, live order submission, or cancel action was performed.
