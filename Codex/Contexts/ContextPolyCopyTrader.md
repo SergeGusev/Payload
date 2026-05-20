@@ -1,3 +1,15 @@
+## Active Update 2026-05-20 Dashboard Live Only Strategy Filter
+Goal: Add Dashboard `Live only` filters next to existing strategy `Enabled only` filters.
+Status: Completed
+Done:
+- Added `Live only` checkboxes to the Dashboard strategy tabs `All`, `24 hours`, `6 hours`, and `1 hour`.
+- Added ViewModel state and change handlers for each new checkbox.
+- Updated strategy filtering so `Live only` keeps only rows with current `LiveStakes=true`; it combines with existing category, positive, and enabled filters.
+- Updated recent strategy window filters to use each `StrategyRecentPerformanceRow.LiveStakes` value directly.
+Next: Deploy/restart the Dashboard app to pick up the UI change if an old Dashboard instance is already running.
+Notes: Verification passed: `dotnet build src\PolyCopyTrader.Dashboard\PolyCopyTrader.Dashboard.csproj --no-restore -p:OutputPath="$env:TEMP\PolyCopyTrader.Dashboard.BuildCheck\"` succeeded with existing nullable warnings in `PolyCopyTrader.Storage`; normal Debug build was blocked by open `PolyCopyTrader.Dashboard`/Visual Studio processes locking output DLLs. `dotnet test tests\PolyCopyTrader.Tests\PolyCopyTrader.Tests.csproj --no-restore` passed `506/506`. `git diff --check` passed with only LF/CRLF warnings. No DB writes, service restart, live order submission, or cancel action.
+Blockers: None.
+
 ## Active Update 2026-05-20 More 150 Below 65 Live Source
 Goal: Explain where historical Live bets for `BTC Up or Down 5m More 150 Below 65` came from.
 Status: Completed
