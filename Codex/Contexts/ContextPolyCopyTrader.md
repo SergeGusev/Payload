@@ -1,3 +1,18 @@
+## Active Update 2026-05-20 SOL 2.4 Bps Deploy Check
+Goal: Verify production after the user deployed the SOL 2.4 bps Instant live-shadow build.
+Status: Completed
+Done:
+- Confirmed production `PolyCopyTrader.Service` is `Running`/`Live` on `info=1.0.0+4e532d1b9d2d5209fa82c008c40bdd139f03c8d8`, with fresh heartbeat and empty `last_error`.
+- Confirmed production LiveStakes is exactly eight strategies: seven BTC Binance bps live-shadow variants plus `sol_up_down_5m_binance_bps_2_4_instant`; ETH live count is `0`.
+- Confirmed `sol_up_down_5m_binance_bps_2_4_instant` has `liveStake=1`, `enabled=True`, `liveBalance=100`, `liveOpen=0`, and `liveOrders=0` in the live-shadow state output.
+- Confirmed the new SOL allowlist is active in production runtime: a SOL Paper/Live-shadow decision was created at `2026-05-20T15:25:19Z` for `Up` at limit `0.53`, size `5.67`, with a linked Paper order and Live order row.
+- Confirmed that first SOL live-shadow candidate was `live_preflight_rejected` / `PreflightRejected` with validation `API error lockout is active`; the linked Paper order was cancelled and no SOL live order was submitted.
+- Confirmed the Polymarket API-error lockout source was recent BTC live-shadow `PostOrder` HTTP `503 post_only_mode` errors around `2026-05-20T15:10Z`; by DB time `2026-05-20T15:26:04Z`, recent Polymarket API errors in the 15-minute window were `0`.
+- Confirmed `paper_live_shadow_discrepancies` in the last 24h remained `0`; aggregate market WebSocket and shard-001 were connected/fresh; latest SOL odds ticks were fresh.
+Next: Continue monitoring; the next SOL live-shadow candidate should pass the API-error-lockout gate if no new Polymarket errors appear and all other live gates pass.
+Notes: Read-only production verification. Used remote PostgreSQL host override `192.168.0.101`, `--print-live-shadow-state`, and existing C# `out\dbprobe` SQL diagnostics. Two diagnostic SQL probes initially failed on wrong column names after returning partial useful output, then passed after correction. No DB writes, service restart, live order submission, or cancel action.
+Blockers: None.
+
 ## Active Update 2026-05-20 SOL 2.4 Bps Instant Live Add
 Goal: Add `SOL Up or Down 5m Binance 2.4 bps Instant` to the controlled Paper/Live-shadow live set.
 Status: Completed
