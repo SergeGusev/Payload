@@ -190,6 +190,9 @@ public sealed class BtcUpDown5mPaperStrategyProcessorTests
     private static readonly BtcUpDown5mStrategyVariant SolBinanceBps1InstantVariant =
         StrategyIds.CryptoUpDown5mVariants.Single(variant => variant.Code == "sol_up_down_5m_binance_bps_1_instant");
 
+    private static readonly BtcUpDown5mStrategyVariant SolBinanceBps24InstantVariant =
+        StrategyIds.CryptoUpDown5mVariants.Single(variant => variant.Code == "sol_up_down_5m_binance_bps_2_4_instant");
+
     private static readonly BtcUpDown5mStrategyVariant BinanceCleverVariant =
         StrategyIds.BtcUpDown5mVariants.Single(variant => variant.Code == "btc_up_down_5m_binance_clever");
 
@@ -5860,6 +5863,106 @@ public sealed class BtcUpDown5mPaperStrategyProcessorTests
     }
 
     [Fact]
+    public async Task ProcessAsync_SolBinanceBps24InstantLiveStakeCreatesPaperShadowAndGtdLiveOrder()
+    {
+        var now = DateTimeOffset.UtcNow;
+        var repository = new TestAppRepository();
+        repository.StrategySettings[SolBinanceBps24InstantVariant.Id] = StrategyRuntimeSettings.Default(SolBinanceBps24InstantVariant.Id) with
+        {
+            LiveStakes = true,
+            LiveStakeAmount = 2.50m,
+            LiveAvailableBalance = 100m,
+            PaperStakeAmount = 2.50m
+        };
+        repository.PolymarketGammaMarkets.Add(CreateMarket(
+            now,
+            now.AddMinutes(5),
+            upPrice: 0.62m,
+            downPrice: 0.38m,
+            slug: $"sol-updown-5m-{now.ToUnixTimeSeconds().ToString(CultureInfo.InvariantCulture)}",
+            seriesSlug: "sol-up-or-down-5m",
+            question: "SOL Up or Down - test",
+            marketId: "sol-market-1",
+            conditionId: "sol-condition-1",
+            upAssetId: "sol-asset-up",
+            downAssetId: "sol-asset-down"));
+        AddCryptoOddsStartTick(
+            repository,
+            "SOL",
+            "sol-market-1",
+            "sol-condition-1",
+            now,
+            startPriceUsd: 150m,
+            upAssetId: "sol-asset-up",
+            downAssetId: "sol-asset-down");
+        var cryptoPriceClient = new FakeCryptoReferencePriceClient();
+        cryptoPriceClient.SetPrice("SOL", 150.04m);
+        OrderBookSnapshot[] orderBooks =
+        [
+            OrderBook("sol-asset-up", bestBid: 0.34m, bestAsk: 0.36m, now),
+            OrderBook("sol-asset-down", bestBid: 0.64m, bestAsk: 0.66m, now)
+        ];
+        var tradingClient = new CapturingTradingClient();
+        var processor = CreateLiveProcessorWithCryptoReference(
+            repository,
+            tradingClient,
+            cryptoPriceClient,
+            orderBooks,
+            [],
+            SolBinanceBps24InstantVariant.Code);
+
+        var result = await processor.ProcessAsync();
+
+        Assert.Equal(1, result.EntriesPlaced);
+        Assert.Equal(1, tradingClient.PlaceCalls);
+        Assert.NotNull(tradingClient.LastRequest);
+        var request = tradingClient.LastRequest;
+        Assert.Equal(ClobV2OrderType.GTD, request.OrderType);
+        Assert.False(request.PostOnly);
+        Assert.NotNull(request.GtdExpirationUtc);
+        Assert.Equal(0.36m, request.Price);
+
+        var liveOrder = Assert.Single(repository.LiveOrders);
+        Assert.Equal(SolBinanceBps24InstantVariant.Id, liveOrder.StrategyId);
+        Assert.Equal("sol-asset-up", liveOrder.AssetId);
+        Assert.Equal("Up", liveOrder.Outcome);
+        Assert.Equal("GTD", liveOrder.OrderType);
+        Assert.Equal(LiveOrderStatus.Live, liveOrder.Status);
+        Assert.Equal(0.36m, liveOrder.Price);
+        Assert.Equal("paper_live_shadow_test", liveOrder.ExecutionSource);
+        Assert.False(liveOrder.PostOnly);
+        Assert.NotNull(liveOrder.CorrelationId);
+
+        var paperOrder = Assert.Single(repository.PaperOrders);
+        Assert.Equal(SolBinanceBps24InstantVariant.Id, paperOrder.StrategyId);
+        Assert.Equal(PaperOrderStatus.Pending, paperOrder.Status);
+        Assert.Equal("paper_live_shadow_test", paperOrder.ExecutionSource);
+        Assert.Equal(liveOrder.CorrelationId, paperOrder.CorrelationId);
+        Assert.Equal(liveOrder.PaperOrderId, paperOrder.Id);
+        Assert.Equal("sol-asset-up", paperOrder.AssetId);
+        Assert.Equal("Up", paperOrder.Outcome);
+        Assert.Equal(0.36m, paperOrder.Price);
+        Assert.Equal(liveOrder.SizeShares, paperOrder.SizeShares);
+        Assert.Contains("\"decision_source\":\"binance_trade_stream_market_start_relative\"", paperOrder.RawDecisionJson, StringComparison.Ordinal);
+        Assert.Contains("\"reference_asset_symbol\":\"SOL\"", paperOrder.RawDecisionJson, StringComparison.Ordinal);
+        Assert.Contains("\"reference_binance_symbol\":\"SOLUSDT\"", paperOrder.RawDecisionJson, StringComparison.Ordinal);
+        Assert.Contains("\"crypto_current_price_usd\":150.04", paperOrder.RawDecisionJson, StringComparison.Ordinal);
+        Assert.Contains("\"crypto_start_price_usd\":150", paperOrder.RawDecisionJson, StringComparison.Ordinal);
+        Assert.Contains("\"crypto_min_move_from_start_bps\":2.4", paperOrder.RawDecisionJson, StringComparison.Ordinal);
+        Assert.Contains("\"selected_direction\":\"Up\"", paperOrder.RawDecisionJson, StringComparison.Ordinal);
+        Assert.Contains("\"opening_limit_price_mode\":\"instant_executable_ask_depth\"", paperOrder.RawDecisionJson, StringComparison.Ordinal);
+        Assert.Contains("\"instant_pricing_source\":\"websocket_cache\"", paperOrder.RawDecisionJson, StringComparison.Ordinal);
+        Assert.Contains("\"paper_live_shadow_test\":true", paperOrder.RawDecisionJson, StringComparison.Ordinal);
+
+        var decision = Assert.Single(repository.PaperLiveShadowDecisions);
+        Assert.Equal(SolBinanceBps24InstantVariant.Id, decision.StrategyId);
+        Assert.Equal(liveOrder.CorrelationId, decision.CorrelationId);
+        Assert.Equal(paperOrder.Id, decision.PaperOrderId);
+        Assert.Equal(liveOrder.Id, decision.LiveOrderId);
+        Assert.Equal("live_submitted", decision.Status);
+    }
+
+    [Fact]
     public async Task ProcessAsync_BinanceBps21LiveStakeCreatesPaperShadowAndGtdLiveOrder()
     {
         var now = DateTimeOffset.UtcNow;
@@ -6338,9 +6441,48 @@ public sealed class BtcUpDown5mPaperStrategyProcessorTests
         IReadOnlyList<OrderBookSnapshot> clobOrderBooks,
         params string[] enabledVariantCodes)
     {
+        return CreateLiveProcessorWithReferences(
+            repository,
+            tradingClient,
+            new FakeBtcUsdReferencePriceClient(currentBtcUsd),
+            CreateBtcUsdReferenceCache(cachedBtcUsd),
+            new FakeCryptoReferencePriceClient(),
+            DefaultOrderBooks(),
+            clobOrderBooks,
+            enabledVariantCodes);
+    }
+
+    private static BtcUpDown5mPaperStrategyProcessor CreateLiveProcessorWithCryptoReference(
+        TestAppRepository repository,
+        CapturingTradingClient tradingClient,
+        ICryptoReferencePriceClient cryptoReferencePriceClient,
+        IReadOnlyList<OrderBookSnapshot> orderBooks,
+        IReadOnlyList<OrderBookSnapshot> clobOrderBooks,
+        params string[] enabledVariantCodes)
+    {
+        return CreateLiveProcessorWithReferences(
+            repository,
+            tradingClient,
+            new FakeBtcUsdReferencePriceClient(100m),
+            CreateBtcUsdReferenceCache(100m),
+            cryptoReferencePriceClient,
+            orderBooks,
+            clobOrderBooks,
+            enabledVariantCodes);
+    }
+
+    private static BtcUpDown5mPaperStrategyProcessor CreateLiveProcessorWithReferences(
+        TestAppRepository repository,
+        CapturingTradingClient tradingClient,
+        IBtcUsdReferencePriceClient btcUsdReferencePriceClient,
+        IBtcUsdReferencePriceCache btcUsdReferencePriceCache,
+        ICryptoReferencePriceClient cryptoReferencePriceClient,
+        IReadOnlyList<OrderBookSnapshot> orderBooks,
+        IReadOnlyList<OrderBookSnapshot> clobOrderBooks,
+        params string[] enabledVariantCodes)
+    {
         var marketDataWebSocketOptions = new MarketDataWebSocketOptions { StaleAfterSeconds = 30 };
         var marketDataCache = new MarketDataCache(marketDataWebSocketOptions);
-        var orderBooks = DefaultOrderBooks();
         marketDataCache.ReplaceSubscribedAssets(orderBooks.Select(orderBook => orderBook.AssetId).ToArray());
         foreach (var orderBook in orderBooks)
         {
@@ -6396,9 +6538,9 @@ public sealed class BtcUpDown5mPaperStrategyProcessorTests
             new PassGeoClient(),
             tradingClient,
             new ReadyAuthService(),
-            new FakeBtcUsdReferencePriceClient(currentBtcUsd),
-            CreateBtcUsdReferenceCache(cachedBtcUsd),
-            new FakeCryptoReferencePriceClient(),
+            btcUsdReferencePriceClient,
+            btcUsdReferencePriceCache,
+            cryptoReferencePriceClient,
             marketDataCache,
             new ActiveMarketAssetSubscriptionRegistry(),
             new ExposureSnapshotCache(repository),

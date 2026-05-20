@@ -56,7 +56,8 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
         "btc_up_down_5m_binance_bps_2_instant",
         "btc_up_down_5m_binance_bps_2_1",
         "btc_up_down_5m_binance_bps_2_2",
-        "btc_up_down_5m_binance_bps_2_3"
+        "btc_up_down_5m_binance_bps_2_3",
+        "sol_up_down_5m_binance_bps_2_4_instant"
     ];
     private const string OpeningLimitPricingMode = "paper_gtd_limit";
     private const string OpeningLimitOrderType = "GTD";

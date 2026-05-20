@@ -1,3 +1,17 @@
+## Active Update 2026-05-20 SOL 2.4 Bps Instant Live Add
+Goal: Add `SOL Up or Down 5m Binance 2.4 bps Instant` to the controlled Paper/Live-shadow live set.
+Status: Completed
+Done:
+- Added `sol_up_down_5m_binance_bps_2_4_instant` to the Paper/Live-shadow allowlist in `BtcUpDown5mPaperStrategyProcessor`.
+- Added regression coverage proving the SOL 2.4 bps Instant variant creates a Paper-shadow and GTD Live order with `postOnly=false` when LiveStakes and live gates are enabled.
+- Updated the live-stakes admin test so the controlled multi-code live set is the seven current BTC strategies plus `sol_up_down_5m_binance_bps_2_4_instant`.
+- Updated README and the live trading checklist to list `SOL Up or Down 5m Binance 2.4 bps Instant` as the only ETH/SOL live-shadow exception.
+- Updated production PostgreSQL LiveStakes flags to enable exactly eight strategies: the seven BTC live-shadow strategies plus `sol_up_down_5m_binance_bps_2_4_instant`; all other strategies were disabled for LiveStakes.
+- Verified production live-shadow state after the DB update: `8` LiveStakes strategies; SOL 2.4 Instant has `liveStake=1`, `liveBalance=100`, `liveOpen=0`, and `liveOrders=0`.
+Next: Deploy/restart `PolyCopyTrader.Service` from this change or newer on the production server; until then the DB flag is set, but the currently running production binary does not include the new SOL allowlist entry.
+Notes: Verification passed: targeted `dotnet test tests\PolyCopyTrader.Tests\PolyCopyTrader.Tests.csproj --no-restore --filter "FullyQualifiedName~BtcUpDown5mPaperStrategyProcessorTests|FullyQualifiedName~StrategyStakeAdminCommandTests"` 132/132; full `dotnet test tests\PolyCopyTrader.Tests\PolyCopyTrader.Tests.csproj --no-restore` 506/506; `git diff --check` clean except LF/CRLF warnings. Production DB commands used remote host `192.168.0.101` by overriding only the connection-string host inside the PowerShell process, without printing secrets. Recent BTC live-shadow attempts seen during verification were rejected by Polymarket with HTTP 503 `post_only_mode`; this was exchange-side/live venue state, not a SOL order attempt. No manual live order submission, cancel action, or service restart was performed.
+Blockers: Production Service deploy/restart was not performed from this session.
+
 ## Active Update 2026-05-20 Current Live Status Check
 Goal: Verify whether the current production live status is healthy.
 Status: Completed
