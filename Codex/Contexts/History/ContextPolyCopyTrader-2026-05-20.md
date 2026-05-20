@@ -60,3 +60,10 @@ Request:
 
 Result:
 Added `btc_up_down_5m_binance_bps_1_8` to the BTC Paper/Live-shadow allowlist, added regression coverage proving it creates a Paper-shadow plus GTD Live order with `postOnly=false`, updated the live-stakes admin test to include exactly `1.8`, `1.9`, `2.0`, `2.0 Instant`, `2.1`, `2.2`, and `2.3`, and updated README live safety docs. Targeted tests passed 131/131 and full tests passed 505/505. Updated production PostgreSQL LiveStakes on host `192.168.0.101` to enable exactly those seven BTC strategies (`7` enabled, `1459` disabled, `0` failed); verification showed `1.8 bps` enabled with `liveStake=1`, `liveBalance=100`, `liveOpen=0`, `liveOrders=0`, and all seven live strategies with `liveOpen=0`. No manual live order submission, cancel action, or service restart was performed; production Service deploy/restart from commit `b585822` or newer is still required before `1.8 bps` can live-place orders.
+
+## 2026-05-20T06:26:48.6321989+00:00
+Request:
+Выложил, проверяй
+
+Result:
+Verified production after deploy. `PolyCopyTrader.Service` is `Running`/`Live`, restarted at `2026-05-20T06:21:28Z`, has a fresh heartbeat, empty `last_error`, and build marker `info=1.0.0+4506ec24180677f8b7a08e4dc9b671bae8ef0a02`. Production LiveStakes remains exactly seven BTC strategies (`1.8`, `1.9`, `2.0`, `2.0 Instant`, `2.1`, `2.2`, `2.3`); `1.8 bps` has `liveStake=1`, `liveBalance=100`, `liveOpen=0`, `liveOrders=0`, and all live strategies have open-like DB live orders `0`. Post-restart `1.8 bps` processing was observed: it skipped the `2026-05-20T06:25Z` market with `btc_reference_move_below_bps_threshold` and observed the `2026-05-20T06:35Z` market; no post-restart shadow live order has been created yet. Latest BTC odds tick and aggregate market WebSocket were fresh; post-restart `api_errors` and failed `polymarket_http_logs` were `0`. No DB writes, service restart, live order submission, or cancel action was performed.

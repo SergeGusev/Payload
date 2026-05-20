@@ -1,3 +1,17 @@
+## Active Update 2026-05-20 Binance 1.8 Bps Deploy Check
+Goal: Verify production after the user deployed the `1.8 bps` live-shadow build.
+Status: Completed
+Done:
+- Confirmed production `PolyCopyTrader.Service` is `Running`/`Live`, restarted at `2026-05-20T06:21:28Z`, with fresh heartbeat and empty `last_error`.
+- Confirmed deployed build marker is `info=1.0.0+4506ec24180677f8b7a08e4dc9b671bae8ef0a02`, which includes the `1.8 bps` allowlist commit.
+- Confirmed production LiveStakes set remains exactly seven BTC strategies: `1.8`, `1.9`, `2.0`, `2.0 Instant`, `2.1`, `2.2`, and `2.3`; ETH/SOL live count remains `0`.
+- Confirmed `btc_up_down_5m_binance_bps_1_8` has `liveStake=1`, `liveBalance=100`, `liveOpen=0`, and `liveOrders=0`; all live strategies have DB open-like live orders `0`.
+- Confirmed post-restart `1.8 bps` processing occurred: it observed the `2026-05-20T06:35Z` market and skipped the `2026-05-20T06:25Z` market with `btc_reference_move_below_bps_threshold`; no post-restart shadow live order has been created yet.
+- Confirmed latest BTC odds tick was fresh during the check, production aggregate market WebSocket was connected/fresh, and post-restart `api_errors`/failed `polymarket_http_logs` counts were `0`.
+Next: Continue normal monitoring; the first `1.8 bps` live order should occur only when BTC move from market start is already at or above `1.8 bps` at that strategy's entry check.
+Notes: Read-only production monitoring. Used remote PostgreSQL host override `192.168.0.101`; ran `--print-live-shadow-state` and targeted SQL diagnostics through the existing local C# db probe. No DB writes, service restart, live order submission, or cancel action.
+Blockers: None.
+
 ## Active Update 2026-05-20 Binance 1.8 Bps Live Add
 Goal: Add `BTC Up or Down 5m Binance 1.8 bps` to the controlled BTC Paper/Live-shadow live set.
 Status: Completed locally; production DB LiveStakes updated; Service deploy/restart required for 1.8 live placement.
