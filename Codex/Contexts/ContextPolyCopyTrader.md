@@ -1,3 +1,14 @@
+## Active Update 2026-05-20 Live Strategy Daily Matrix Excel
+Goal: Make the live-strategy daily earnings workbook open directly to a date-row/strategy-column matrix.
+Status: Completed
+Done:
+- Created `D:\My\Business\PolyMarket\outputs\019e43b9-598f-7f00-a0c9-56b43849dce6\live-strategy-daily-pnl-matrix-20260520-051846Z.xlsx`.
+- Reordered the workbook so the first sheet is `Daily Matrix`, with Sofia dates as rows, `Total PnL`, and current live strategies as columns.
+- Preserved the detail, live strategy snapshot, summary, and source notes sheets from the previous read-only export.
+Next: None.
+Notes: Source workbook appeared open/locked by another process, so it was read with shared read access and copied to a new file. Verification passed: workbook/worksheet XML parsed successfully and the matrix headers were present. No DB writes, service restart, live order submission, or cancel action.
+Blockers: None.
+
 ## Active Update 2026-05-20 Live Strategy Daily Excel
 Goal: Create an Excel workbook with live-strategy earnings grouped by Sofia calendar day.
 Status: Completed

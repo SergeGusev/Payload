@@ -32,3 +32,10 @@ Request:
 
 Result:
 Created an Excel workbook at `D:\My\Business\PolyMarket\outputs\019e43b9-598f-7f00-a0c9-56b43849dce6\live-strategy-daily-pnl-20260520-051206Z.xlsx` from production PostgreSQL read-only data. The workbook covers the current `6` LiveStakes strategies, groups realized live PnL by `Europe/Sofia` calendar date, and includes summary, daily matrix, daily detail, live strategy snapshot, and source notes sheets. At DB time `2026-05-20T05:12:06Z`, totals were `184` settled live orders and `145.6835` realized live PnL. No DB writes, service restart, live order submission, or cancel action was performed.
+
+## 2026-05-20T05:19:21.2186055Z
+Request:
+Сделай так, чтобы в колонках были живые стратегии, а строки - даты
+
+Result:
+Created a new workbook at `D:\My\Business\PolyMarket\outputs\019e43b9-598f-7f00-a0c9-56b43849dce6\live-strategy-daily-pnl-matrix-20260520-051846Z.xlsx` where the first sheet is `Daily Matrix`: rows are Sofia dates and columns are `Total PnL` plus the current live strategies. The previous detail, live strategy snapshot, summary, and source notes sheets were preserved. No DB writes, service restart, live order submission, or cancel action was performed.
