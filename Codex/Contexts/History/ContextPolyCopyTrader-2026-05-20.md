@@ -130,6 +130,13 @@ Request:
 Result:
 Confirmed with read-only production cluster queries that the current live-set strategies do win in correlated packs too. For current-live-set Paper on Sofia `2026-05-20`, there were `9` all-win 5+ clusters for `+157.3355` versus `10` all-loss 5+ clusters for `-168.4486`; at the 4+ threshold there were `10` all-win clusters for `+168.4885` versus `16` all-loss clusters for `-242.4504`. Actual Live showed the same shape: `9` all-win 5+ clusters for `+154.3355` versus `10` all-loss 5+ clusters for `-168.4486`; at the 4+ threshold, `10` all-win clusters for `+165.4885` versus `16` all-loss clusters for `-242.4504`. On `2026-05-19`, Live was the opposite at 4+ threshold: `11` all-win clusters for `+126.4835` versus `4` all-loss clusters for `-48.5030`. Conclusion recorded: clustering amplifies both edge and drawdown; risk controls should cap per-market/outcome exposure, not necessarily eliminate all correlated entries. No DB writes, service restart, live order submission, or cancel action was performed.
 
+## 2026-05-20T18:40:52.9592810Z
+Request:
+Where did Live bets for `BTC Up or Down 5m More 150 Below 65` come from?
+
+Result:
+Queried production PostgreSQL read-only for `btc_up_down_5m_more_150_below_65`. Confirmed the strategy is currently `enabled=false` and `live_stakes=false`, so it is not part of the current LiveStakes set. All its Live rows are historical from the controlled May 11 Live-shadow run, between `2026-05-11T07:32:32Z` and `2026-05-11T09:32:30Z`. The rows have `execution_source=paper_live_shadow_test`, `order_type=GTD`, `post_only=false`; `23/24` have exchange order ids and all have correlation ids. Run result: `24` Live rows, `11` filled/settled, `4` wins, `7` losses, settled cost basis `40.9640`, realized PnL `-16.3240`. No DB writes, service restart, live order submission, or cancel action.
+
 ## 2026-05-20T18:35:16.9341394+00:00
 Request:
 Поэтому мой вопрос звучит так - игнориря пачечность, просто посмотри по всей истории включая Paper, были ли такие длинные просадки для стратегий, которые сейчас в Live ?

@@ -1,3 +1,17 @@
+## Active Update 2026-05-20 More 150 Below 65 Live Source
+Goal: Explain where historical Live bets for `BTC Up or Down 5m More 150 Below 65` came from.
+Status: Completed
+Done:
+- Queried production PostgreSQL read-only for `btc_up_down_5m_more_150_below_65`.
+- Confirmed the strategy is not in the current LiveStakes set: current row has `enabled=false`, `live_stakes=false`, `live_stake_amount=1`, and `live_available_balance=83.676`.
+- Confirmed all its Live rows are historical and limited to the controlled Live-shadow run on `2026-05-11T07:32:32Z` through `2026-05-11T09:32:30Z`.
+- Confirmed the rows came from `execution_source=paper_live_shadow_test`, `order_type=GTD`, `post_only=false`; `23` of `24` rows have an exchange order id and all `24` have a correlation id.
+- Confirmed results for that historical run: `24` Live rows, `11` filled/settled, `4` wins, `7` losses, settled cost basis `40.9640`, realized PnL `-16.3240`; the remaining rows were one preflight rejection and unfilled/cancel-failed GTD orders.
+- Confirmed the current LiveStakes set is only the seven BTC Binance bps strategies plus `sol_up_down_5m_binance_bps_2_4_instant`.
+Next: Treat `BTC Up or Down 5m More 150 Below 65` Live rows as preserved historical May 11 controlled Live-shadow history, not current production Live activity.
+Notes: Read-only production DB review only. Used remote PostgreSQL host override `192.168.0.101` through existing C# `out\dbprobe`; no DB writes, service restart, live order submission, or cancel action. `git pull --ff-only` was already up to date. No tests were run because no source code changed.
+Blockers: None.
+
 ## Active Update 2026-05-20 Individual Drawdown Review
 Goal: Ignore clustering and check whether current Live strategies had comparable individual drawdowns in Paper/Live history.
 Status: Completed
