@@ -676,7 +676,9 @@ market starts, each variant baselines the selected outcome best ask, updates an
 in-memory maximum whenever that best ask moves higher, and only then creates a
 minimum-size post-only GTD BUY one tick below the new best ask. These Maker
 orders can happen multiple times in one market, expire at `marketEndUtc - 60s`,
-and are not eligible for Paper/Live-shadow submission in `Bot:Mode=Live`. The
+and can run whenever Paper runtime is enabled, including `Bot:Mode=Live` with
+`PaperTrading:RunInLiveMode=true`; they only create Paper orders and never
+submit Live/Paper-shadow orders. The
 `BTC Up or Down 5m Binance` variant also waits for the market to accept orders,
 reads the latest Binance BTC/USDT trade-stream price and the archived market
 start reference from `btc_up_down_5m_odds_ticks`, then buys `Up` when current

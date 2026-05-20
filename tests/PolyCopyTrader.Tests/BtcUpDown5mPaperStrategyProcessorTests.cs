@@ -3453,29 +3453,54 @@ public sealed class BtcUpDown5mPaperStrategyProcessorTests
     }
 
     [Fact]
-    public async Task ProcessAsync_MakerVariantDoesNotRunInLiveMode()
+    public async Task ProcessAsync_MakerVariantRunsInLiveModeAsPaperOnly()
     {
         var now = DateTimeOffset.UtcNow;
+        var marketStartUtc = now.AddSeconds(-5);
+        var marketEndUtc = now.AddMinutes(5);
         var repository = new TestAppRepository();
         repository.PolymarketGammaMarkets.Add(CreateMarket(
-            now.AddSeconds(-5),
-            now.AddMinutes(5),
+            marketStartUtc,
+            marketEndUtc,
             upPrice: 0.50m,
-            downPrice: 0.50m));
+            downPrice: 0.50m,
+            orderMinSize: 5m));
+        var clobClient = new MutableFakeClobClient([
+            OrderBook("asset-up", [new OrderBookLevel(0.40m, 100m)], [new OrderBookLevel(0.42m, 100m)], now, 5m, 0.01m),
+            OrderBook("asset-down", [new OrderBookLevel(0.58m, 100m)], [new OrderBookLevel(0.60m, 100m)], now, 5m, 0.01m)
+        ]);
         var tradingClient = new CapturingTradingClient();
-        var processor = CreateLiveProcessor(
+        var processor = CreateLiveMakerProcessor(
             repository,
             tradingClient,
+            clobClient,
             UpMakerVariant.Code);
+
+        var baseline = await processor.ProcessAsync();
+        await Task.Delay(75);
+        clobClient.SetOrderBooks([
+            OrderBook("asset-up", [new OrderBookLevel(0.40m, 100m)], [new OrderBookLevel(0.45m, 100m)], DateTimeOffset.UtcNow, 5m, 0.01m),
+            OrderBook("asset-down", [new OrderBookLevel(0.55m, 100m)], [new OrderBookLevel(0.58m, 100m)], DateTimeOffset.UtcNow, 5m, 0.01m)
+        ]);
 
         var result = await processor.ProcessAsync();
 
-        Assert.Equal(0, result.MarketsObserved);
-        Assert.Equal(0, result.EntriesPlaced);
+        Assert.Equal(1, baseline.MarketsObserved);
+        Assert.Equal(0, baseline.EntriesPlaced);
+        Assert.Equal(1, result.EntriesPlaced);
         Assert.Equal(0, result.RunsSkipped);
-        Assert.Empty(repository.StrategyMarketPaperRuns);
-        Assert.Empty(repository.PaperOrders);
         Assert.Equal(0, tradingClient.PlaceCalls);
+        Assert.Empty(repository.LiveOrders);
+        var order = Assert.Single(repository.PaperOrders);
+        Assert.Equal(PaperOrderStatus.Pending, order.Status);
+        Assert.Equal("asset-up", order.AssetId);
+        Assert.Equal("Up", order.Outcome);
+        Assert.Equal(0.44m, order.Price);
+        Assert.Equal("btc_updown5m_maker_post_only", order.ExecutionSource);
+        Assert.Contains("\"post_only\":true", order.RawDecisionJson, StringComparison.Ordinal);
+        var run = Assert.Single(repository.StrategyMarketPaperRuns);
+        Assert.Equal(StrategyMarketPaperRunStatuses.Entered, run.Status);
+        Assert.Equal(order.Id, run.PaperOrderId);
     }
 
     [Fact]
@@ -6616,6 +6641,28 @@ public sealed class BtcUpDown5mPaperStrategyProcessorTests
             clobClient: clobClient);
     }
 
+    private static BtcUpDown5mPaperStrategyProcessor CreateLiveMakerProcessor(
+        TestAppRepository repository,
+        CapturingTradingClient tradingClient,
+        MutableFakeClobClient clobClient,
+        params string[] enabledVariantCodes)
+    {
+        return CreateProcessorCoreWithOptions(
+            repository,
+            [],
+            [],
+            _ => { },
+            [],
+            CreateBtcOptions(
+                paperTakerPricingEnabled: false,
+                enabledVariantCodes,
+                paperTakerMaxQuoteAgeMilliseconds: 50),
+            clobClient: clobClient,
+            tradingClient: tradingClient,
+            botOptions: new BotOptions { Mode = BotMode.Live, EnableLiveTrading = true },
+            paperTradingOptions: new PaperTradingOptions { InitialBankrollUsd = 10_000m, RunInLiveMode = true });
+    }
+
     private static BtcUpDown5mPaperStrategyProcessor CreateLiveProcessor(
         TestAppRepository repository,
         CapturingTradingClient tradingClient,
@@ -6919,7 +6966,10 @@ public sealed class BtcUpDown5mPaperStrategyProcessorTests
         IBtcUsdReferencePriceCache? btcUsdReferencePriceCache = null,
         ICryptoReferencePriceClient? cryptoReferencePriceClient = null,
         IPolymarketGammaClient? gammaClient = null,
-        IPolymarketClobPublicClient? clobClient = null)
+        IPolymarketClobPublicClient? clobClient = null,
+        IPolymarketTradingClient? tradingClient = null,
+        BotOptions? botOptions = null,
+        PaperTradingOptions? paperTradingOptions = null)
     {
         var marketDataWebSocketOptions = new MarketDataWebSocketOptions { StaleAfterSeconds = 30 };
         var marketDataCache = new MarketDataCache(marketDataWebSocketOptions);
@@ -6946,7 +6996,7 @@ public sealed class BtcUpDown5mPaperStrategyProcessorTests
 
         return new BtcUpDown5mPaperStrategyProcessor(
             NullLogger<BtcUpDown5mPaperStrategyProcessor>.Instance,
-            new BotOptions { Mode = BotMode.Paper },
+            botOptions ?? new BotOptions { Mode = BotMode.Paper },
             new PolymarketAuthOptions
             {
                 Enabled = true,
@@ -6954,14 +7004,14 @@ public sealed class BtcUpDown5mPaperStrategyProcessorTests
                 FunderAddress = "0x1111111111111111111111111111111111111111",
                 SignatureType = "EOA"
             },
-            new PaperTradingOptions { InitialBankrollUsd = 10_000m },
+            paperTradingOptions ?? new PaperTradingOptions { InitialBankrollUsd = 10_000m },
             new LiveTradingOptions { ManualEnableCode = "LIVE_TRADING_ENABLED", MaxOrderNotionalUsd = 2.50m },
             strategyOptions,
             marketDataWebSocketOptions,
             gammaClient ?? new FakeGammaClient(metadata),
             clobClient ?? new FakeClobClient(clobOrderBooks),
             new PassGeoClient(),
-            new CapturingTradingClient(),
+            tradingClient ?? new CapturingTradingClient(),
             new ReadyAuthService(),
             btcUsdReferencePriceClient ?? new FakeBtcUsdReferencePriceClient(100m),
             btcUsdReferencePriceCache ?? CreateBtcUsdReferenceCache(100m),

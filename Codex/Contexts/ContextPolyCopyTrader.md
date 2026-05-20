@@ -1,3 +1,15 @@
+## Active Update 2026-05-21 BTC 5m Maker Live Paper Runtime
+Goal: Allow BTC 5m Maker strategies to run in Live service mode while still creating only Paper orders.
+Status: Completed
+Done:
+- Removed the extra `BotMode.Paper` gate from BTC 5m Maker processing; Maker variants now run whenever the Paper runtime is enabled by `RuntimeModePolicy`.
+- Kept the Maker order path paper-only: new-max entries still use `CreatePendingOpeningLimitPaperOrder` with `execution_source=btc_updown5m_maker_post_only` and do not enter the Paper/Live-shadow live submission path.
+- Replaced the Live-mode exclusion regression with coverage proving `BTC Up or Down 5m Up Maker` baselines in `Bot:Mode=Live` with `PaperTrading:RunInLiveMode=true`, then creates a Paper order on a new best-ask maximum while `PlaceLiveOrderAsync` is never called and no `live_orders` row is created.
+- Updated README and configuration reference docs to state that Maker variants can run in Live mode only as Paper orders.
+Next: Deploy/restart the service so the production Live runtime starts testing Maker Paper orders without placing live bets.
+Notes: Verification passed: targeted `dotnet test tests\PolyCopyTrader.Tests\PolyCopyTrader.Tests.csproj --no-restore --filter "FullyQualifiedName~BtcUpDown5mPaperStrategyProcessorTests|FullyQualifiedName~StorageTests"` passed `152/152`; full `dotnet test tests\PolyCopyTrader.Tests\PolyCopyTrader.Tests.csproj --no-restore` passed `512/512`; `git diff --check` passed with LF/CRLF warnings only. No DB writes, service restart, live order submission, or cancel action.
+Blockers: None.
+
 ## Active Update 2026-05-21 BTC 5m Maker Deploy Check
 Goal: Verify production after deploying the BTC 5m Maker strategies build.
 Status: Completed

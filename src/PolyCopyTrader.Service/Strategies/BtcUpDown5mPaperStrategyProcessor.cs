@@ -109,9 +109,7 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
             return new BtcUpDown5mPaperStrategyResult(0, 0, 0, settledRuns);
         }
 
-        var makerEntryVariants = botOptions.Mode == BotMode.Paper
-            ? entryVariants.Where(IsFixedOutcomeMaker).ToArray()
-            : Array.Empty<BtcUpDown5mStrategyVariant>();
+        var makerEntryVariants = entryVariants.Where(IsFixedOutcomeMaker).ToArray();
         var nonMakerEntryVariants = entryVariants
             .Where(variant => !IsFixedOutcomeMaker(variant))
             .ToArray();
@@ -482,7 +480,7 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
         IReadOnlyDictionary<Guid, StrategyRuntimeSettings> strategySettings,
         CancellationToken cancellationToken)
     {
-        if (variants.Count == 0 || botOptions.Mode != BotMode.Paper)
+        if (variants.Count == 0)
         {
             return BtcMakerProcessResult.Empty;
         }

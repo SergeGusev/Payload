@@ -4,3 +4,10 @@ Request:
 
 Result:
 Verified production after deploy read-only through remote PostgreSQL host `192.168.0.101`. `PolyCopyTrader.Service` is `Running` in `Live` mode on build `info=1.0.0+e547fcd535f2ecbbeafd7259635eda26e5503d0b`, restarted at `2026-05-20T21:13:13Z`, and has fresh heartbeat with empty `last_error`. The new Maker strategy rows exist and are enabled with `live_stakes=false`; Maker runs/orders are `0` as expected because production is in `Live` mode and the strategies are Paper-only. Normal BTC Paper processing continued after restart, Live orders since restart were `0`, Paper/Live-shadow discrepancies for 24h were `0`, market WebSocket recovered to `Connected`, and no API errors appeared after `2026-05-20T21:15:10Z`. No DB writes, service restart, live order submission, or cancel action was performed.
+
+## 2026-05-20T21:35:39.7360339+00:00
+Request:
+Ты меня не понял. Maker-стратегии должны уже работать. Просто не ставить живых ставок, а ставить только Paper ставки для теста
+
+Result:
+Corrected BTC 5m Maker behavior so the Maker variants run whenever Paper runtime is enabled, including `Bot:Mode=Live` with `PaperTrading:RunInLiveMode=true`, while still creating only Paper orders. Removed the extra `BotMode.Paper` gate, kept the order path on `CreatePendingOpeningLimitPaperOrder` with `execution_source=btc_updown5m_maker_post_only`, added a Live-mode paper-only regression that verifies no live trading client call and no `live_orders` row, and updated README/configuration docs. Verification passed: targeted BTC/storage tests `152/152`, full tests `512/512`, and `git diff --check` with LF/CRLF warnings only. No DB writes, service restart, live order submission, or cancel action was performed.
