@@ -150,3 +150,10 @@ Request:
 
 Result:
 Queried each current LiveStakes strategy independently, ignoring clustering, across production Paper (`strategy_market_paper_runs`) and Live (`live_orders`) history. By consecutive-loss length, today's current sequence is not unique for most BTC variants: current loss streak is `3` for most non-Instant BTC variants and `2` for BTC Instant, while Paper max loss streaks were `4` for most BTC variants, `8` for BTC 1.8, `3` for SOL, and `2` for BTC Instant. By equity drawdown depth, today's BTC move is significant: current Paper drawdown equals max Paper drawdown for BTC 1.8 (`43.8000`), BTC 2.0 (`26.5200`), BTC 1.9 (`23.0600`), BTC 2.1 (`20.4600`), BTC 2.3 (`18.0000`), BTC 2.2 (`17.5800`), and BTC Instant (`13.1806`); Live drawdown likewise equals current max for BTC variants. SOL was different: max Paper drawdown was `15.0637` earlier and current Paper/Live drawdown was `2.1950`. No DB writes, service restart, live order submission, or cancel action was performed.
+
+## 2026-05-20T20:20:46.2901366Z
+Request:
+Добавь во все стратегии правило - если есть открытые ордера одного направления - например, Up, то Down мы уже не ставим, даже если стратегия этого требует. Просто пропускаем ставку.
+
+Result:
+Implemented a global opposite-outcome open-order guard. Shared risk now rejects new Paper BUY proposals with `opposite_outcome_open_order` when the same condition already has an open BUY on a different outcome, covering Follow/on-chain Paper paths. BTC Up/Down due-entry creation now uses the same guard against open Paper and Live orders, serializes entry creation inside the worker to prevent parallel opposite-side entries in one cycle, records skip diagnostics on `strategy_market_paper_runs`, and applies the same check in BTC Paper/Live-shadow live preflight. Added focused regression tests for the shared risk engine and BTC worker skip path, updated README and configuration reference docs. Verification passed: full test project `508/508`; `git diff --check` passed with only LF/CRLF warnings. No DB writes, service restart, live order submission, or cancel action was performed.

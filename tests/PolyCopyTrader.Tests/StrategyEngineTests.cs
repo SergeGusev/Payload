@@ -403,6 +403,17 @@ public sealed class StrategyEngineTests
     }
 
     [Fact]
+    public void RiskEngine_RejectsOppositeOutcomeOpenOrder()
+    {
+        var decision = CreateRiskEngine().Evaluate(
+            Intent(25m),
+            Exposure(hasOppositeOutcomeOpenOrder: true));
+
+        Assert.False(decision.Allowed);
+        Assert.Contains(SignalReasonCodes.OppositeOutcomeOpenOrder, decision.ReasonCodes);
+    }
+
+    [Fact]
     public void SignalEngine_PersistsRiskReasonInDecision()
     {
         var engine = CreateSignalEngine();
@@ -582,7 +593,8 @@ public sealed class StrategyEngineTests
         decimal traderExposureUsd = 0m,
         decimal categoryExposureUsd = 0m,
         decimal totalDeployedUsd = 0m,
-        decimal dailyLossUsd = 0m)
+        decimal dailyLossUsd = 0m,
+        bool hasOppositeOutcomeOpenOrder = false)
     {
         return new ExposureSnapshot(
             marketExposureUsd,
@@ -590,7 +602,8 @@ public sealed class StrategyEngineTests
             categoryExposureUsd,
             totalDeployedUsd,
             dailyLossUsd,
-            0);
+            0,
+            HasOppositeOutcomeOpenOrder: hasOppositeOutcomeOpenOrder);
     }
 
     private static LeaderTrade Trade()

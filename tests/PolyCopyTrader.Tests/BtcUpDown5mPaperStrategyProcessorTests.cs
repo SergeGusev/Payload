@@ -607,6 +607,47 @@ public sealed class BtcUpDown5mPaperStrategyProcessorTests
     }
 
     [Fact]
+    public async Task ProcessAsync_SkipsOppositeOutcomeWhenSameMarketHasOpenBuyOrder()
+    {
+        var now = DateTimeOffset.UtcNow;
+        var repository = new TestAppRepository();
+        repository.PolymarketGammaMarkets.Add(CreateMarket(
+            now.AddSeconds(-60),
+            now.AddMinutes(3),
+            upPrice: 0.35m,
+            downPrice: 0.65m));
+        repository.PaperOrders.Add(new PaperOrder(
+            Guid.NewGuid(),
+            Guid.NewGuid(),
+            AlwaysUpVariant.CopiedTraderWallet,
+            PaperOrderStatus.Pending,
+            TradeSide.Buy,
+            "asset-up",
+            "condition-1",
+            "Up",
+            0.35m,
+            3m,
+            1.05m,
+            now.AddSeconds(-15),
+            now.AddMinutes(2),
+            StrategyId: AlwaysUpVariant.Id));
+        var processor = CreateProcessor(repository, [], More60Variant.Code);
+
+        var result = await processor.ProcessAsync();
+
+        Assert.Equal(1, result.MarketsObserved);
+        Assert.Equal(0, result.EntriesPlaced);
+        Assert.Equal(1, result.RunsSkipped);
+        Assert.Single(repository.PaperOrders);
+        var run = Assert.Single(repository.StrategyMarketPaperRuns);
+        Assert.Equal(More60Variant.Id, run.StrategyId);
+        Assert.Equal(StrategyMarketPaperRunStatuses.Skipped, run.Status);
+        Assert.Equal(SignalReasonCodes.OppositeOutcomeOpenOrder, run.SkipReason);
+        Assert.Contains("\"candidate_outcome\":\"Down\"", run.SkipDiagnosticsJson, StringComparison.Ordinal);
+        Assert.Contains("\"blocking_outcome\":\"Up\"", run.SkipDiagnosticsJson, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task ProcessAsync_UsesGammaOutcomePriceWhenOrderBookSnapshotIsUnavailable()
     {
         var now = DateTimeOffset.UtcNow;

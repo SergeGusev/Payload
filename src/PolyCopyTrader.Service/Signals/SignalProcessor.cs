@@ -685,7 +685,12 @@ public sealed class SignalProcessor(
             orderExposure + liveOrderExposure + positionExposure,
             0m,
             openOrders.Count + liveOrders.Count,
-            Math.Max(oldestPaperOrderAgeSeconds, oldestLiveOrderAgeSeconds));
+            Math.Max(oldestPaperOrderAgeSeconds, oldestLiveOrderAgeSeconds),
+            OpenOrderDirectionGuard.FindOppositeOutcomeOpenOrder(
+                trade.ConditionId,
+                trade.Outcome,
+                openOrders,
+                liveOrders) is not null);
     }
 
     private static PaperPosition? FindCopiedPosition(

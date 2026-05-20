@@ -852,7 +852,8 @@ public sealed record ExposureSnapshot(
     decimal TotalDeployedUsd,
     decimal DailyLossUsd,
     int OpenOrdersCount,
-    int OldestOpenOrderAgeSeconds = 0);
+    int OldestOpenOrderAgeSeconds = 0,
+    bool HasOppositeOutcomeOpenOrder = false);
 
 public sealed record Signal(
     Guid Id,

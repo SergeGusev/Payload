@@ -41,6 +41,7 @@ public static class SignalReasonCodes
     public const string RiskDailyLossLimit = "risk_daily_loss_limit";
     public const string RiskOpenOrdersLimit = "risk_open_orders_limit";
     public const string RiskOrderAgeLimit = "risk_order_age_limit";
+    public const string OppositeOutcomeOpenOrder = "opposite_outcome_open_order";
     public const string MarketTooCloseToEvent = "market_too_close_to_event";
     public const string MarketInactive = "market_inactive";
     public const string MarketRestricted = "market_restricted";

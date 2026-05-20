@@ -24,6 +24,11 @@ public sealed class DefaultRiskEngine(
             reasons.Add(SignalReasonCodes.RiskOrderAgeLimit);
         }
 
+        if (proposedOrder.Side == TradeSide.Buy && exposure.HasOppositeOutcomeOpenOrder)
+        {
+            reasons.Add(SignalReasonCodes.OppositeOutcomeOpenOrder);
+        }
+
         if (proposedOrder.Side == TradeSide.Sell)
         {
             return reasons.Count > 0

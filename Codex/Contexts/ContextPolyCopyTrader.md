@@ -1,3 +1,17 @@
+## Active Update 2026-05-20 Opposite Outcome Open Order Guard
+Goal: Add a global safety rule so strategies skip a new BUY when the same market condition already has an open BUY order on the opposite outcome.
+Status: Completed
+Done:
+- Added `opposite_outcome_open_order` and wired it into the shared risk engine exposure decision for Follow/on-chain Paper BUY proposals.
+- Added a shared Paper/Live open-order direction guard and used it in BTC Up/Down due-entry placement, including the Paper/Live-shadow path.
+- Serialized BTC due-entry order creation inside the worker so parallel variants for the same cycle cannot create opposite open orders concurrently.
+- Added live preflight validation so a new BTC Paper/Live-shadow BUY is rejected if the same condition already has an open Paper or Live BUY on the other outcome.
+- Added regression coverage for shared risk rejection and BTC worker skip diagnostics.
+- Documented the non-configurable safety rule in README and configuration reference docs.
+Next: Deploy/restart the service to make the guard active in production runtime.
+Notes: Verification passed: `dotnet test tests\PolyCopyTrader.Tests\PolyCopyTrader.Tests.csproj --no-restore` passed `508/508`; `git diff --check` passed with only LF/CRLF warnings. No DB writes, service restart, live order submission, or cancel action.
+Blockers: None.
+
 ## Active Update 2026-05-20 Dashboard Live Only Strategy Filter
 Goal: Add Dashboard `Live only` filters next to existing strategy `Enabled only` filters.
 Status: Completed

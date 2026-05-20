@@ -83,6 +83,7 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
 
     private readonly ConservativePaperGtdFillEstimator conservativeGtdFillEstimator = new(options);
     private readonly IPaperTradingEngine paperTradingEngine = new DefaultPaperTradingEngine();
+    private readonly SemaphoreSlim entryPlacementLock = new(1, 1);
     private readonly Dictionary<string, DateTimeOffset> closingOrderBookCaptureAttempts = new(StringComparer.OrdinalIgnoreCase);
 
     public async Task<BtcUpDown5mPaperStrategyResult> ProcessAsync(CancellationToken cancellationToken = default)
@@ -1397,10 +1398,10 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
                         var stakeUsd = limitSizing.TargetNotionalUsd;
                         var limitSizeShares = limitSizing.TargetSizeShares;
                         var isPaperLiveShadowTest = ShouldRunPaperLiveShadowTest(variant, settings);
-                        Guid? correlationId = null;
+                        PaperLiveShadowOrderBookSnapshotResult? shadowSnapshot = null;
                         if (isPaperLiveShadowTest)
                         {
-                            var shadowSnapshot = await GetPaperLiveShadowOrderBookSnapshotAsync(
+                            shadowSnapshot = await GetPaperLiveShadowOrderBookSnapshotAsync(
                                 limitSelectedOutcome.AssetId,
                                 nowUtc,
                                 cancellationToken);
@@ -1424,79 +1425,122 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
                                 runsSkipped++;
                                 continue;
                             }
-
-                            correlationId = Guid.NewGuid();
-                            var quoteAgeMs = (int)Math.Round(GetSnapshotAge(shadowSnapshot.OrderBook.SnapshotAtUtc).TotalMilliseconds);
-                            var shadowDecision = new PaperLiveShadowDecision(
-                                correlationId.Value,
-                                variant.Id,
-                                market.MarketId,
-                                market.ConditionId,
-                                limitSelectedOutcome.AssetId,
-                                limitSelectedOutcome.Outcome,
-                                TradeSide.Buy,
-                                limitPrice,
-                                stakeUsd,
-                                limitSizeShares,
-                                limitSizeShares * limitPrice,
-                                OpeningLimitOrderType,
-                                false,
-                                SerializePaperLiveShadowOrderBookSnapshot(shadowSnapshot.OrderBook, shadowSnapshot.Source, shadowSnapshot.Age),
-                                quoteAgeMs,
-                                PaperLiveShadowTestSource,
-                                shadowSnapshot.OrderBook.SnapshotAtUtc,
-                                nowUtc,
-                                BtcUpDown5mMarketAnalyzer.GetWindowStartUtc(market),
-                                market.EndDateUtc,
-                                nowUtc.AddSeconds(Math.Min(10, Math.Max(1, options.EntryGraceSeconds))),
-                                cancelDeadlineUtc,
-                                Status: "decision_created",
-                                UpdatedAtUtc: nowUtc);
-                            await repository.AddPaperLiveShadowDecisionAsync(shadowDecision, cancellationToken);
-                            limitRawDecisionJson = AttachPaperLiveShadowDecisionJson(
-                                limitRawDecisionJson,
-                                correlationId,
-                                quoteAgeMs,
-                                shadowSnapshot.OrderBook,
-                                null,
-                                PaperLiveShadowTestSource,
-                                expiration);
                         }
 
-                        var limitSignal = CreateSignal(
-                            market,
-                            limitSelectedOutcome,
-                            variant,
-                            limitPrice,
-                            limitSizeShares,
-                            stakeUsd,
-                            nowUtc);
-                        var limitOrder = CreatePendingOpeningLimitPaperOrder(
-                            limitSignal,
-                            limitSelectedOutcome,
-                            variant,
-                            limitPrice,
-                            limitSizeShares,
-                            stakeUsd,
-                            nowUtc,
-                            cancelDeadlineUtc,
-                            limitRawDecisionJson,
-                            correlationId,
-                            isPaperLiveShadowTest ? PaperLiveShadowTestSource : string.Empty);
-
-                        await repository.AddSignalAsync(limitSignal, cancellationToken);
-                        await repository.AddPaperOrderAsync(limitOrder, cancellationToken);
-                        exposureCache.ApplyPaperOrder(limitOrder);
-                        if (isPaperLiveShadowTest && correlationId is { } shadowCorrelationId)
+                        Guid? correlationId = null;
+                        Signal? limitSignal = null;
+                        PaperOrder? limitOrder = null;
+                        await entryPlacementLock.WaitAsync(cancellationToken);
+                        try
                         {
-                            await repository.UpdatePaperLiveShadowDecisionLinksAsync(
-                                shadowCorrelationId,
-                                limitSignal.Id,
-                                limitOrder.Id,
-                                null,
-                                "paper_shadow_created",
-                                nowUtc,
+                            var oppositeBlock = await FindOppositeOutcomeOpenOrderBlockAsync(
+                                market.ConditionId,
+                                limitSelectedOutcome.Outcome,
                                 cancellationToken);
+                            if (oppositeBlock is not null)
+                            {
+                                await SkipRunAsync(
+                                    run,
+                                    variant,
+                                    SignalReasonCodes.OppositeOutcomeOpenOrder,
+                                    nowUtc,
+                                    cancellationToken,
+                                    AttachOppositeOutcomeOpenOrderBlockJson(
+                                        limitRawDecisionJson,
+                                        limitSelectedOutcome.Outcome,
+                                        oppositeBlock));
+                                runsSkipped++;
+                                continue;
+                            }
+
+                            if (isPaperLiveShadowTest && shadowSnapshot?.OrderBook is { } shadowOrderBook)
+                            {
+                                correlationId = Guid.NewGuid();
+                                var quoteAgeMs = (int)Math.Round(GetSnapshotAge(shadowOrderBook.SnapshotAtUtc).TotalMilliseconds);
+                                var shadowDecision = new PaperLiveShadowDecision(
+                                    correlationId.Value,
+                                    variant.Id,
+                                    market.MarketId,
+                                    market.ConditionId,
+                                    limitSelectedOutcome.AssetId,
+                                    limitSelectedOutcome.Outcome,
+                                    TradeSide.Buy,
+                                    limitPrice,
+                                    stakeUsd,
+                                    limitSizeShares,
+                                    limitSizeShares * limitPrice,
+                                    OpeningLimitOrderType,
+                                    false,
+                                    SerializePaperLiveShadowOrderBookSnapshot(shadowOrderBook, shadowSnapshot.Source, shadowSnapshot.Age),
+                                    quoteAgeMs,
+                                    PaperLiveShadowTestSource,
+                                    shadowOrderBook.SnapshotAtUtc,
+                                    nowUtc,
+                                    BtcUpDown5mMarketAnalyzer.GetWindowStartUtc(market),
+                                    market.EndDateUtc,
+                                    nowUtc.AddSeconds(Math.Min(10, Math.Max(1, options.EntryGraceSeconds))),
+                                    cancelDeadlineUtc,
+                                    Status: "decision_created",
+                                    UpdatedAtUtc: nowUtc);
+                                await repository.AddPaperLiveShadowDecisionAsync(shadowDecision, cancellationToken);
+                                limitRawDecisionJson = AttachPaperLiveShadowDecisionJson(
+                                    limitRawDecisionJson,
+                                    correlationId,
+                                    quoteAgeMs,
+                                    shadowOrderBook,
+                                    null,
+                                    PaperLiveShadowTestSource,
+                                    expiration);
+                            }
+
+                            limitSignal = CreateSignal(
+                                market,
+                                limitSelectedOutcome,
+                                variant,
+                                limitPrice,
+                                limitSizeShares,
+                                stakeUsd,
+                                nowUtc);
+                            limitOrder = CreatePendingOpeningLimitPaperOrder(
+                                limitSignal,
+                                limitSelectedOutcome,
+                                variant,
+                                limitPrice,
+                                limitSizeShares,
+                                stakeUsd,
+                                nowUtc,
+                                cancelDeadlineUtc,
+                                limitRawDecisionJson,
+                                correlationId,
+                                isPaperLiveShadowTest ? PaperLiveShadowTestSource : string.Empty);
+
+                            await repository.AddSignalAsync(limitSignal, cancellationToken);
+                            await repository.AddPaperOrderAsync(limitOrder, cancellationToken);
+                            exposureCache.ApplyPaperOrder(limitOrder);
+                            if (isPaperLiveShadowTest && correlationId is { } shadowCorrelationId)
+                            {
+                                await repository.UpdatePaperLiveShadowDecisionLinksAsync(
+                                    shadowCorrelationId,
+                                    limitSignal.Id,
+                                    limitOrder.Id,
+                                    null,
+                                    "paper_shadow_created",
+                                    nowUtc,
+                                    cancellationToken);
+                            }
+                        }
+                        finally
+                        {
+                            entryPlacementLock.Release();
+                        }
+
+                        if (limitSignal is null || limitOrder is null)
+                        {
+                            continue;
+                        }
+
+                        if (isPaperLiveShadowTest && correlationId is { } paperLiveShadowCorrelationId)
+                        {
                             await TryPlacePaperLiveShadowOrderAsync(
                                 limitSignal,
                                 limitSelectedOutcome,
@@ -1506,7 +1550,7 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
                                 limitSizeShares,
                                 stakeUsd,
                                 expiration,
-                                shadowCorrelationId,
+                                paperLiveShadowCorrelationId,
                                 BtcUpDown5mMarketAnalyzer.GetWindowStartUtc(market),
                                 market.EndDateUtc,
                                 nowUtc,
@@ -1672,22 +1716,57 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
                         stakeMultiplier,
                         gtdSizing,
                         gtdExpiration);
-                    var signal = CreateSignal(market, selectedOutcome, variant, gtdLimitPrice, sizeShares, reservedNotionalUsd, nowUtc);
-                    var order = CreatePendingOpeningLimitPaperOrder(
-                        signal,
-                        selectedOutcome,
-                        variant,
-                        gtdLimitPrice,
-                        sizeShares,
-                        reservedNotionalUsd,
-                        nowUtc,
-                        gtdCancelDeadlineUtc,
-                        rawDecisionJson,
-                        executionSource: BtcGtdLimitExecutionSource);
+                    Signal? signal = null;
+                    PaperOrder? order = null;
+                    await entryPlacementLock.WaitAsync(cancellationToken);
+                    try
+                    {
+                        var oppositeBlock = await FindOppositeOutcomeOpenOrderBlockAsync(
+                            market.ConditionId,
+                            selectedOutcome.Outcome,
+                            cancellationToken);
+                        if (oppositeBlock is not null)
+                        {
+                            await SkipRunAsync(
+                                run,
+                                variant,
+                                SignalReasonCodes.OppositeOutcomeOpenOrder,
+                                nowUtc,
+                                cancellationToken,
+                                AttachOppositeOutcomeOpenOrderBlockJson(
+                                    rawDecisionJson,
+                                    selectedOutcome.Outcome,
+                                    oppositeBlock));
+                            runsSkipped++;
+                            continue;
+                        }
 
-                    await repository.AddSignalAsync(signal, cancellationToken);
-                    await repository.AddPaperOrderAsync(order, cancellationToken);
-                    exposureCache.ApplyPaperOrder(order);
+                        signal = CreateSignal(market, selectedOutcome, variant, gtdLimitPrice, sizeShares, reservedNotionalUsd, nowUtc);
+                        order = CreatePendingOpeningLimitPaperOrder(
+                            signal,
+                            selectedOutcome,
+                            variant,
+                            gtdLimitPrice,
+                            sizeShares,
+                            reservedNotionalUsd,
+                            nowUtc,
+                            gtdCancelDeadlineUtc,
+                            rawDecisionJson,
+                            executionSource: BtcGtdLimitExecutionSource);
+
+                        await repository.AddSignalAsync(signal, cancellationToken);
+                        await repository.AddPaperOrderAsync(order, cancellationToken);
+                        exposureCache.ApplyPaperOrder(order);
+                    }
+                    finally
+                    {
+                        entryPlacementLock.Release();
+                    }
+
+                    if (signal is null || order is null)
+                    {
+                        continue;
+                    }
 
                     await repository.UpdateStrategyMarketPaperRunAsync(
                         run with
@@ -8780,6 +8859,15 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
         var liveNotional = price * sizeShares;
         var exposureSnapshot = await exposureCache.GetSnapshotAsync(cancellationToken);
         var openLiveOrders = exposureSnapshot.OpenLiveOrders;
+        if (OpenOrderDirectionGuard.FindOppositeOutcomeOpenOrder(
+                signal.LeaderTrade.ConditionId,
+                outcome.Outcome,
+                exposureSnapshot.OpenPaperOrders,
+                openLiveOrders) is { } oppositeBlock)
+        {
+            validation.Add(OpenOrderDirectionGuard.CreateValidationMessage(outcome.Outcome, oppositeBlock));
+        }
+
         if (openLiveOrders.Count >= liveTradingOptions.MaxOpenLiveOrders)
         {
             validation.Add("Maximum open live order count reached.");
@@ -9120,6 +9208,15 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
 
         var exposureSnapshot = await exposureCache.GetSnapshotAsync(cancellationToken);
         var openLiveOrders = exposureSnapshot.OpenLiveOrders;
+        if (OpenOrderDirectionGuard.FindOppositeOutcomeOpenOrder(
+                signal.LeaderTrade.ConditionId,
+                outcome.Outcome,
+                exposureSnapshot.OpenPaperOrders,
+                openLiveOrders) is { } oppositeBlock)
+        {
+            validation.Add(OpenOrderDirectionGuard.CreateValidationMessage(outcome.Outcome, oppositeBlock));
+        }
+
         if (openLiveOrders.Count >= liveTradingOptions.MaxOpenLiveOrders)
         {
             validation.Add("Maximum open live order count reached.");
@@ -9697,6 +9794,46 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
             run.MarketSlug,
             reason,
             diagnosticsJson);
+    }
+
+    private async Task<OppositeOutcomeOpenOrderBlock?> FindOppositeOutcomeOpenOrderBlockAsync(
+        string conditionId,
+        string outcome,
+        CancellationToken cancellationToken)
+    {
+        var exposureSnapshot = await exposureCache.GetSnapshotAsync(cancellationToken);
+        return OpenOrderDirectionGuard.FindOppositeOutcomeOpenOrder(
+            conditionId,
+            outcome,
+            exposureSnapshot.OpenPaperOrders,
+            exposureSnapshot.OpenLiveOrders);
+    }
+
+    private static string AttachOppositeOutcomeOpenOrderBlockJson(
+        string? rawDecisionJson,
+        string candidateOutcome,
+        OppositeOutcomeOpenOrderBlock block)
+    {
+        JsonObject root;
+        try
+        {
+            root = string.IsNullOrWhiteSpace(rawDecisionJson)
+                ? new JsonObject()
+                : JsonNode.Parse(rawDecisionJson)?.AsObject() ?? new JsonObject();
+        }
+        catch (JsonException)
+        {
+            root = new JsonObject();
+        }
+
+        root["skip_reason"] = SignalReasonCodes.OppositeOutcomeOpenOrder;
+        root["candidate_outcome"] = candidateOutcome;
+        root["blocking_order_source"] = block.Source;
+        root["blocking_order_id"] = block.OrderId.ToString();
+        root["blocking_strategy_id"] = block.StrategyId.ToString();
+        root["blocking_condition_id"] = block.ConditionId;
+        root["blocking_outcome"] = block.Outcome;
+        return root.ToJsonString();
     }
 
     private async Task TryRecordApiErrorAsync(

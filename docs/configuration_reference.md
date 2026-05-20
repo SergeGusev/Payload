@@ -23,6 +23,8 @@ Do not commit real credentials.
 - BTC 5-minute live preflight applies market/total deployed caps to open Live
   orders only. Paper exposure is intentionally not counted against these Live
   caps.
+- BTC 5-minute live preflight also blocks a new BUY when the same condition
+  already has an open Paper or Live BUY on a different outcome.
 - `DefaultOrderTtlSeconds`: live GTD order lifetime fallback; must be greater than Polymarket's one-minute GTD security threshold and at most 300 seconds.
 - `MaxClockDriftSeconds`: maximum allowed CLOB server-time drift.
 - `ApiErrorLockoutCount`: recent Polymarket error threshold.
@@ -707,7 +709,9 @@ result from recent BTC 5-minute result transitions and enters only when the
 conditional next-outcome probability is at least `0.55`. `Strategy Selector`
 ranks selected opening-limit strategies by recent positive Paper expectancy and
 reuses the best candidate's current signal. None of these variants place both
-sides of the same Polymarket market. The
+sides of the same Polymarket market, and a new BUY is skipped with
+`opposite_outcome_open_order` if the same condition already has an open BUY on a
+different outcome. The
 order size still targets the current market minimum passing size plus a `10%`
 safety buffer times the configured Paper stake multiplier; diagnostics record
 `post_only=false` plus the selected pricing model inputs, cap, final limit, GTD
