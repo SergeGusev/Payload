@@ -1,3 +1,18 @@
+## Active Update 2026-05-21 BTC 5m Maker Deploy Check
+Goal: Verify production after deploying the BTC 5m Maker strategies build.
+Status: Completed
+Done:
+- Confirmed production `PolyCopyTrader.Service` on remote PostgreSQL host `192.168.0.101` is `Running` in `Live` mode on build `info=1.0.0+e547fcd535f2ecbbeafd7259635eda26e5503d0b`.
+- Confirmed the service restarted at `2026-05-20T21:13:13Z` and had fresh heartbeat at `2026-05-20T21:18:13Z`; `last_error` was empty.
+- Confirmed strategy rows `btc_up_down_5m_up_maker` and `btc_up_down_5m_down_maker` exist, are `enabled=true`, `live_stakes=false`, and were updated by schema initialization at restart.
+- Confirmed Maker activity is intentionally absent in the current `Live` runtime: `0` Maker runs, `0` Maker Paper orders, `0` Maker Live orders, and `0` Maker open Paper orders.
+- Confirmed normal BTC strategy processing continued after restart with new Paper rows, while Live orders since restart were `0`.
+- Confirmed market WebSocket status recovered to `Connected` after an initial stale shard; fresh status at `2026-05-20T21:18:35Z` had aggregate and shards connected.
+- Confirmed Paper/Live-shadow discrepancies for the last 24h were `0`.
+Next: Switch production to `Bot:Mode=Paper` only if the Maker strategies should actively create Paper orders; in current `Live` mode they remain correctly inert.
+Notes: Read-only production DB verification only. Used remote PostgreSQL host override `192.168.0.101` through existing C# `out\dbprobe`; no DB writes, service restart, live order submission, or cancel action. One transient post-restart SOL stale reference burst ended by `2026-05-20T21:15:08Z`; no API errors after `2026-05-20T21:15:10Z`.
+Blockers: None.
+
 ## Active Update 2026-05-20 BTC 5m Maker Strategies
 Goal: Add Paper-only `BTC Up or Down 5m Up Maker` and `BTC Up or Down 5m Down Maker` strategies that place minimum-size post-only orders on new best-ask maxima.
 Status: Completed
