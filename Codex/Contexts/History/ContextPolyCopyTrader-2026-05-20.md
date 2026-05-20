@@ -53,3 +53,10 @@ Request:
 
 Result:
 Created `D:\My\Business\PolyMarket\outputs\019e43b9-598f-7f00-a0c9-56b43849dce6\live-strategy-daily-pnl-matrix-sum-20260520-053445Z.xlsx` from the prior matrix workbook. The first `Daily Matrix` sheet now has rows as Sofia dates, live strategies as columns, and final `Sum` column formulas aggregating all strategy columns for each day. Recorded this Sum-last layout as the default for future morning daily live-strategy reports. No DB reads/writes, service restart, live order submission, or cancel action was performed.
+
+## 2026-05-20T05:47:39.1191778Z
+Request:
+Давай переведём BTC Up or Down 5m Binance 1.8 bps в live
+
+Result:
+Added `btc_up_down_5m_binance_bps_1_8` to the BTC Paper/Live-shadow allowlist, added regression coverage proving it creates a Paper-shadow plus GTD Live order with `postOnly=false`, updated the live-stakes admin test to include exactly `1.8`, `1.9`, `2.0`, `2.0 Instant`, `2.1`, `2.2`, and `2.3`, and updated README live safety docs. Targeted tests passed 131/131 and full tests passed 505/505. Updated production PostgreSQL LiveStakes on host `192.168.0.101` to enable exactly those seven BTC strategies (`7` enabled, `1459` disabled, `0` failed); verification showed `1.8 bps` enabled with `liveStake=1`, `liveBalance=100`, `liveOpen=0`, `liveOrders=0`, and all seven live strategies with `liveOpen=0`. No manual live order submission, cancel action, or service restart was performed; production Service deploy/restart from commit `b585822` or newer is still required before `1.8 bps` can live-place orders.

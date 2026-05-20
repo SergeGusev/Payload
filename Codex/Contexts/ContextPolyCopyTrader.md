@@ -1,3 +1,17 @@
+## Active Update 2026-05-20 Binance 1.8 Bps Live Add
+Goal: Add `BTC Up or Down 5m Binance 1.8 bps` to the controlled BTC Paper/Live-shadow live set.
+Status: Completed locally; production DB LiveStakes updated; Service deploy/restart required for 1.8 live placement.
+Done:
+- Added `btc_up_down_5m_binance_bps_1_8` to the BTC Paper/Live-shadow allowlist in `BtcUpDown5mPaperStrategyProcessor`.
+- Added regression coverage proving `1.8 bps` creates a Paper-shadow and GTD Live order with `postOnly=false` when LiveStakes and live gates are enabled.
+- Updated the live-stakes admin test so the controlled multi-code live set is `1.8` + `1.9` + `2.0` + `2.0 Instant` + `2.1` + `2.2` + `2.3`.
+- Updated README live safety/docs to list `1.8 bps` as an explicitly allowed BTC live-shadow variant.
+- Updated production PostgreSQL LiveStakes flags to enable exactly seven BTC strategies: `btc_up_down_5m_binance_bps_1_8`, `btc_up_down_5m_binance_bps_1_9`, `btc_up_down_5m_binance_bps_2`, `btc_up_down_5m_binance_bps_2_instant`, `btc_up_down_5m_binance_bps_2_1`, `btc_up_down_5m_binance_bps_2_2`, and `btc_up_down_5m_binance_bps_2_3`.
+- Verified production live-shadow state after the DB update: `7` LiveStakes strategies, all BTC; `1.8 bps` has `liveStake=1`, `liveBalance=100`, `liveOpen=0`, and `liveOrders=0`; all seven live strategies have `liveOpen=0`.
+Next: Deploy/restart `PolyCopyTrader.Service` from commit `b585822` or newer on the production server; until then the DB flag for `1.8 bps` is set, but the currently running production binary does not include the new live allowlist entry.
+Notes: Verification passed: targeted `dotnet test tests\PolyCopyTrader.Tests\PolyCopyTrader.Tests.csproj --no-restore --filter "FullyQualifiedName~BtcUpDown5mPaperStrategyProcessorTests|FullyQualifiedName~StrategyStakeAdminCommandTests"` 131/131; full `dotnet test tests\PolyCopyTrader.Tests\PolyCopyTrader.Tests.csproj --no-restore` 505/505; `git diff --check` clean except LF/CRLF warnings. Production DB commands used remote host `192.168.0.101` by overriding only the connection-string host inside the PowerShell process, without printing secrets. No manual live order submission, cancel action, or service restart was performed.
+Blockers: Production Service deploy/restart was not performed from this session.
+
 ## Active Update 2026-05-20 Morning Daily Report Sum Column
 Goal: Add the final `Sum` column convention to the morning daily live-strategy report format.
 Status: Completed
