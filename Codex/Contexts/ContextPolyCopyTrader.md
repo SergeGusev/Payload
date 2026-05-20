@@ -1,3 +1,20 @@
+## Active Update 2026-05-20 Live Loss Spike Check
+Goal: Check whether the current live-loss spike across enabled live strategies is operationally normal.
+Status: Completed
+Done:
+- Confirmed production `PolyCopyTrader.Service` is still `Running`/`Live` on `info=1.0.0+4e532d1b9d2d5209fa82c008c40bdd139f03c8d8`, with heartbeat age about `44s` at DB time `2026-05-20T18:09:05Z` and empty `last_error`.
+- Confirmed production LiveStakes remains exactly eight strategies: seven BTC Binance bps live-shadow variants plus `sol_up_down_5m_binance_bps_2_4_instant`; ETH live count is `0`.
+- Confirmed `paper_live_shadow_discrepancies` in the last 24h is `0`; aggregate market WebSocket plus current shards `001`/`002` were connected/fresh, though old stale shard status rows from May 7 remain in the table.
+- Confirmed the loss spike is real: in the last 6h, matched live orders showed `88` filled, `87` settled, `29` wins, `58` losses, cost basis `270.5920`, settlement value `177.4286`, and realized live PnL `-89.1618`; one latest SOL matched order was still unsettled.
+- Confirmed the Sofia-day live total at check time was `155` settled orders, `64` wins, `91` losses, cost basis `473.6332`, and realized PnL `-85.0346`.
+- Found the largest losses are correlated BTC market clusters, not independent unrelated failures: e.g. `btc-updown-5m-1779291300` lost `7/7` strategies for `-22.0052`, `btc-updown-5m-1779297000` lost `7/7` for `-22.0020`, `btc-updown-5m-1779298800` lost `6/6` for `-18.0000`, and `btc-updown-5m-1779298200` lost `5/5` for `-15.0000`.
+- Confirmed recent current loss streaks of `3` BTC losses for most BTC live variants and `2` for BTC Instant; SOL 2.4 Instant was near flat all-time at `-0.0894` before its latest unsettled matched order.
+- Confirmed all-time after the spike remains mixed: BTC 2.0 `+48.2453`, BTC 2.1 `+18.4899`, BTC 1.9 `+4.4262`, BTC 2 Instant `+2.0681`, BTC 2.2 `+0.2000`, while BTC 1.8 is `-16.8000`, BTC 2.3 `-12.0000`, and SOL 2.4 Instant `-0.0894`.
+- Confirmed `risk_events` had no daily-loss lockout event in the last 24h and recent Polymarket API errors in the 15-minute window were `0`; 6h Polymarket `PostOrder` failures were visible (`HTTP 500 order timed out` and `503 post_only_mode`) but those created rejected/preflight rows, not realized losses.
+Next: Consider pausing/reducing the correlated BTC live set or adding a portfolio-level same-market correlation cap and actual daily live-loss lockout before continuing with all eight live strategies.
+Notes: Read-only production verification only. Used remote PostgreSQL host override `192.168.0.101` through existing C# `out\dbprobe`; no DB writes, service restart, live order submission, or cancel action. `git pull --ff-only` was up to date. No tests were run because this was an operational DB/status check with no source changes.
+Blockers: None.
+
 ## Active Update 2026-05-20 SOL 2.4 Bps Deploy Check
 Goal: Verify production after the user deployed the SOL 2.4 bps Instant live-shadow build.
 Status: Completed
