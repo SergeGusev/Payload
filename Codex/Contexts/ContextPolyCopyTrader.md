@@ -1,3 +1,14 @@
+## Active Update 2026-05-20 Codex CLI Global Install
+Goal: Install the OpenAI Codex CLI globally with npm.
+Status: Completed
+Done:
+- Ran `npm install -g @openai/codex`.
+- Verified global package installation as `@openai/codex@0.132.0`.
+- Verified executable output as `codex-cli 0.132.0`.
+Next: None.
+Notes: Repository branch pulled cleanly before the task. npm reported a cleanup warning for an old temporary package directory under `C:\Users\serge\AppData\Roaming\npm\node_modules\@openai`, but the install and executable verification succeeded. No project source code changed; existing untracked artifacts were left untouched.
+Blockers: None.
+
 ## Active Update 2026-05-20 Binance 2.3 Bps Deploy Check
 Goal: Verify production after the user deployed the `2.3 bps` live-shadow build.
 Status: Completed

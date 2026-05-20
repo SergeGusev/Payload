@@ -18,3 +18,10 @@ Request:
 
 Result:
 Verified production read-only after deploy. `PolyCopyTrader.Service` restarted at `2026-05-19T21:30:07Z` on build `info=1.0.0+3f1669046e076bd566015afe1bbb1ef682bbe96e`, is `Running` in `Live` mode, and has fresh heartbeat/no last error. LiveStakes stayed limited to six enabled BTC variants (`1.9`, `2`, `2 Instant`, `2.1`, `2.2`, `2.3`), ETH/SOL live count `0`. Confirmed `2.3` is being processed: post-restart `21:30Z` rows for all six live strategies skipped with `btc_reference_move_below_bps_threshold`; `21:40Z` rows were observed. Since restart there were `0` live orders for all six strategies, `0` matched, `0` open-like DB rows, DB open live orders `0`, and Paper/Live shadow discrepancies for the last 24h `0`. Post-restart HTTP errors were `0`, startup geoblock check OK, and BTC odds archive was fresh. Local authenticated CLOB open-orders CLI could not run because this shell session has auth disabled/not configured. No DB writes, service restart, live order submission, or cancel action was performed.
+
+## 2026-05-20T04:53:03.8962449Z
+Request:
+npm install -g @openai/codex
+
+Result:
+Installed the OpenAI Codex CLI globally via npm. Verified `@openai/codex@0.132.0` is installed and `codex --version` reports `codex-cli 0.132.0`. npm reported a cleanup warning for an old temporary package directory, but installation and verification succeeded. No project source code changed.
