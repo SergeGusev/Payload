@@ -1,3 +1,19 @@
+## Active Update 2026-05-20 Current Live Status Check
+Goal: Verify whether the current production live status is healthy.
+Status: Completed
+Done:
+- Confirmed production `PolyCopyTrader.Service` is `Running`/`Live` on `info=1.0.0+4506ec24180677f8b7a08e4dc9b671bae8ef0a02`, with heartbeat age `0.5s` at DB time `2026-05-20T12:06:33Z` and empty `last_error`.
+- Confirmed LiveStakes remains exactly seven BTC strategies: `1.8`, `1.9`, `2.0`, `2.0 Instant`, `2.1`, `2.2`, and `2.3`.
+- Confirmed DB open-like live orders are `0`; current visible orderbook orders may be absent because the latest live attempts filled quickly and are now `Matched` positions rather than open orders.
+- Confirmed fresh live activity in the last 90 minutes: `1.8`, `1.9`, `2.0`, and `2.1` created matched `Down` live orders at `2026-05-20T12:00:09Z` (`15:00:09` Sofia), each filled `6` shares at average price `0.50`; settlement/PnL had not yet applied by `2026-05-20T12:06:33Z`.
+- Confirmed earlier matched winners in the same 90-minute window: `1.8`, `1.9`, `2.0`, `2.1`, `2.2`, and `2.3` all had `Up` fills at `2026-05-20T11:20:22Z` with realized `+3.00` each, plus `1.8` and `1.9` at `2026-05-20T11:15:15Z` with realized `+3.60` and `+3.42`.
+- Confirmed recent run lifecycle is normal: `Entered`, `Observed`, `Settled`, and threshold skips; latest 20-minute grouped state had `4` `Entered`, `23` `btc_reference_move_below_bps_threshold` skips, `1` `instant_price_above_max` skip, and no open-like live orders.
+- Confirmed `paper_live_shadow_discrepancies` in the last 24h is `0`; latest market WebSocket aggregate and shard-001 were connected/fresh; latest BTC odds tick was fresh during the check.
+- Noted two recent Polymarket WebSocket shard-001 errors at `2026-05-20T11:35Z` (`Query was cancelled` and remote close without complete handshake), but current market-data status recovered to connected/fresh.
+Next: Continue monitoring settlement for the `15:00` Sofia matched `Down` positions.
+Notes: Read-only operational check only. Used remote PostgreSQL host override `192.168.0.101` and local C# db probe SQL diagnostics. One diagnostic SQL block initially failed due an ambiguous `updated_at_utc` column reference after returning useful first results, then passed after correction. No DB writes, service restart, live order submission, or cancel action.
+Blockers: None.
+
 ## Active Update 2026-05-20 Live Bets Visibility Check
 Goal: Check why live bets are not visible after enabling the BTC live-shadow set.
 Status: Completed
