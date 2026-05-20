@@ -1,3 +1,15 @@
+## Active Update 2026-05-20 Live Loss Interpretation
+Goal: Clarify whether the live-loss spike was just bad luck or an operational problem.
+Status: Completed
+Done:
+- Rechecked production read-only at DB time `2026-05-20T18:15:26Z`: `PolyCopyTrader.Service` was still `Running`/`Live`, heartbeat age `4.4s`, and `last_error` empty.
+- Confirmed today's Sofia live total had improved slightly after the latest SOL settlement: `156` settled, `65` wins, `91` losses, realized PnL `-82.4762`.
+- Confirmed current open/unsettled live-like orders were `0`.
+- Concluded there is no evidence of a Paper/Live-shadow accounting mismatch or service-health failure, but this should not be treated as fully normal: same-market correlated BTC live variants amplified adverse 5-minute outcomes, and no daily-loss risk event/lockout was active.
+Next: Treat as a live risk-control issue to fix or manually reduce, not as an infrastructure incident.
+Notes: Answer-only/read-only follow-up. Used remote PostgreSQL host override `192.168.0.101` through existing C# `out\dbprobe`; no DB writes, service restart, live order submission, or cancel action. `git pull --ff-only` was up to date. No tests were run because no source code changed.
+Blockers: None.
+
 ## Active Update 2026-05-20 Live Loss Spike Check
 Goal: Check whether the current live-loss spike across enabled live strategies is operationally normal.
 Status: Completed

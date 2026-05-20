@@ -101,3 +101,10 @@ Request:
 
 Result:
 Checked production read-only. Service remained `Running`/`Live` on build `info=1.0.0+4e532d1b9d2d5209fa82c008c40bdd139f03c8d8`, heartbeat was fresh, `last_error` was empty, LiveStakes remained exactly seven BTC strategies plus `sol_up_down_5m_binance_bps_2_4_instant`, and `paper_live_shadow_discrepancies` for 24h was `0`. Confirmed a real abnormal loss spike: in the last 6h, matched live orders had `88` filled, `87` settled, `29` wins, `58` losses, and realized PnL `-89.1618`; Sofia-day live PnL was `-85.0346` over `155` settled orders. Losses were mostly correlated BTC same-market clusters where 5-7 similar live strategies entered the same outcome and lost together, including two `7/7` loss clusters around `-22` each. One latest SOL live order was still matched/unsettled. Recent 15-minute Polymarket API errors were `0`, but 6h `PostOrder` failures were present as rejected/preflight rows. No DB writes, service restart, live order submission, or cancel action was performed.
+
+## 2026-05-20T18:15:32.8989457+00:00
+Request:
+То есть всё в порядке и нам просто не везло сегодня?
+
+Result:
+Answered that there is no current evidence of a service-health, Paper/Live-shadow, or settlement-accounting fault, but it should not be treated as fully okay or only bad luck. A fresh read-only production check at DB time `2026-05-20T18:15:26Z` showed Service `Running`/`Live`, heartbeat age `4.4s`, empty `last_error`, current open/unsettled live-like orders `0`, and Sofia-day live PnL improved to `-82.4762` over `156` settled orders (`65` wins, `91` losses). The main issue remains risk design: correlated BTC variants enter the same 5-minute market/outcome together, amplifying adverse outcomes, and no daily-loss lockout event was active. No DB writes, service restart, live order submission, or cancel action was performed.
