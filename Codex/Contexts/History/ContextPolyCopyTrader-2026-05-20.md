@@ -115,3 +115,10 @@ Request:
 
 Result:
 Queried full production `live_orders` history read-only from `2026-05-11T07:32:32Z` through `2026-05-20T18:05:23Z`. Full history had `522` live-order rows, `318` filled/settled rows, `164` wins, `154` losses, and all-time realized live PnL `+11.3944` after today's drawdown. Sofia daily PnL was `2026-05-11 -16.3240`, `2026-05-16 -22.3800`, `2026-05-18 +35.7554`, `2026-05-19 +96.8193`, and `2026-05-20 -82.4762`. Smaller same-market all-loss clusters existed before, but today's scale was new: the worst all-time clusters were today's `7/7` BTC all-loss clusters around `-22` each, and by Sofia date `2026-05-20` had `16` all-loss clusters with at least 4 strategies and PnL <= `-10`, including `10` clusters with 5+ strategies all lost; `2026-05-19` had only `4` such smaller clusters and `0` 5+ clusters. No DB writes, service restart, live order submission, or cancel action was performed.
+
+## 2026-05-20T18:24:09.3756348+00:00
+Request:
+Ты смотрел по Live истории. А по Paper ?
+
+Result:
+Queried production `strategy_market_paper_runs` read-only. For the current LiveStakes strategy set in Paper, there were `460` settled runs from `2026-05-13T07:30:01Z` through `2026-05-20T18:14:23Z`, `272` wins, `188` losses, and total Paper PnL `+167.0393`. Current-live-set Paper daily PnL by Sofia date was `2026-05-13 +18.0000`, `2026-05-15 +18.0000`, `2026-05-16 +43.9980`, `2026-05-18 +60.9997`, `2026-05-19 +101.5490`, and `2026-05-20 -75.5074`. Same-market all-loss clusters were visible before today in Paper, including `6/6 -18.0000` on `2026-05-16`, `7/7 -21.0000` on `2026-05-18`, and several `5+` clusters on `2026-05-19`; however, today's concentration was larger with `16` all-loss clusters of 4+ strategies and `10` clusters of 5+ strategies. All-Paper history across `1443` strategies was also checked but is not directly comparable to Live because it includes many paper-only experimental variants. No DB writes, service restart, live order submission, or cancel action was performed.

@@ -1,3 +1,17 @@
+## Active Update 2026-05-20 Paper History Correlation Review
+Goal: Check whether the same correlated loss pattern was visible in Paper history.
+Status: Completed
+Done:
+- Queried production `strategy_market_paper_runs` read-only, first for the current LiveStakes strategy set and then for all Paper strategies.
+- For the current LiveStakes strategy set in Paper, confirmed `460` settled runs from `2026-05-13T07:30:01Z` through `2026-05-20T18:14:23Z`, with `272` wins, `188` losses, and total Paper PnL `+167.0393`.
+- Confirmed current-live-set Paper daily PnL by Sofia date: `2026-05-13 +18.0000`, `2026-05-15 +18.0000`, `2026-05-16 +43.9980`, `2026-05-18 +60.9997`, `2026-05-19 +101.5490`, `2026-05-20 -75.5074`.
+- Confirmed same-market all-loss Paper clusters for the current live set existed before today: `6/6 -18.0000` on `2026-05-16`, `7/7 -21.0000` on `2026-05-18`, and several `5+` clusters on `2026-05-19`, including `7/7 -20.3975`.
+- Confirmed today's Paper concentration is still larger: current-live-set Paper had `16` all-loss clusters with at least 4 strategies and PnL <= `-10` on `2026-05-20`, including `10` clusters with 5+ strategies all lost; `2026-05-19` had `8` such 4+ clusters and `3` 5+ clusters.
+- Confirmed all-Paper history is not directly comparable to Live because it includes `1443` strategies and many paper-only variants; it had `79,574` settled runs, total Paper PnL `-41,915.1574`, and very large all-loss clusters from earlier dates, e.g. hundreds of strategies losing the same market/outcome.
+Next: Use Paper evidence to justify a same-market/outcome correlation cap before expanding or continuing the correlated live set.
+Notes: Read-only production DB review only. Used remote PostgreSQL host override `192.168.0.101` through existing C# `out\dbprobe`; no DB writes, service restart, live order submission, or cancel action. `git pull --ff-only` was up to date. No tests were run because no source code changed.
+Blockers: None.
+
 ## Active Update 2026-05-20 Live History Correlation Review
 Goal: Check whether today's correlated live-loss situation had happened before in the full recorded live-order history.
 Status: Completed
