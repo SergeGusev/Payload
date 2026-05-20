@@ -1,3 +1,16 @@
+## Active Update 2026-05-20 Individual Drawdown Review
+Goal: Ignore clustering and check whether current Live strategies had comparable individual drawdowns in Paper/Live history.
+Status: Completed
+Done:
+- Queried each current LiveStakes strategy independently, using production `strategy_market_paper_runs` Paper history and `live_orders` Live history.
+- Confirmed by consecutive-loss length, today's current sequence is not unique for most BTC variants: current loss streak is `3` for most non-Instant BTC variants and `2` for BTC Instant, while Paper max loss streaks were `4` for most BTC variants, `8` for BTC 1.8, `3` for SOL, and `2` for BTC Instant.
+- Confirmed by equity drawdown size, today's BTC move is significant: current Paper drawdown equals max Paper drawdown for BTC 1.8 (`43.8000`), BTC 2.0 (`26.5200`), BTC 1.9 (`23.0600`), BTC 2.1 (`20.4600`), BTC 2.3 (`18.0000`), BTC 2.2 (`17.5800`), and BTC Instant (`13.1806`).
+- Confirmed Live drawdown also equals current max for BTC variants: BTC 2.0 `26.5200`, BTC 1.8 `23.4000`, BTC 1.9 `23.0600`, BTC 2.1 `20.4600`, BTC 2.3 `18.0000`, BTC 2.2 `17.5800`, and BTC Instant `13.1806`.
+- Confirmed SOL is different: Paper max drawdown was `15.0637` earlier at `2026-05-20T01:45Z`, current Paper drawdown is only `2.1950`; Live max drawdown was `10.8683`, current Live drawdown is `2.1950`.
+Next: Treat "long drawdown" by length as not unprecedented, but treat current BTC drawdown depth as a new individual max for most live BTC strategies.
+Notes: Read-only production DB review only. Used remote PostgreSQL host override `192.168.0.101` through existing C# `out\dbprobe`; no DB writes, service restart, live order submission, or cancel action. `git pull --ff-only` was up to date. No tests were run because no source code changed.
+Blockers: None.
+
 ## Active Update 2026-05-20 Cluster Win Loss Symmetry
 Goal: Check whether same-market clustered wins offset same-market clustered losses.
 Status: Completed
