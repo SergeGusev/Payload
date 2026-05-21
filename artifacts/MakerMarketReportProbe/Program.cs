@@ -291,8 +291,8 @@ ORDER BY run_rows.created_at_utc ASC, run_rows.strategy_code ASC;
             GetString(reader, 16),
             GetString(reader, 17),
             GetDateTimeOffset(reader, 18),
-            diagnostic.PreviousMaxBestAsk,
-            diagnostic.CurrentMaxBestAsk,
+            diagnostic.PreviousBestAsk,
+            diagnostic.CurrentBestAsk,
             diagnostic.MakerLimitPrice,
             diagnostic.BestBid,
             diagnostic.BestAsk,
@@ -355,8 +355,8 @@ ORDER BY paper_order.created_at_utc ASC, strategy.code ASC;
             GetDateTimeOffset(reader, 10),
             GetDateTimeOffset(reader, 11),
             reader.IsDBNull(12) ? "" : reader.GetString(12),
-            sourceEvent?.PreviousMaxBestAsk,
-            sourceEvent?.CurrentMaxBestAsk));
+            sourceEvent?.PreviousBestAsk,
+            sourceEvent?.CurrentBestAsk));
     }
 
     return results;
@@ -450,13 +450,13 @@ th { position: sticky; top: 0; background: #eef1f5; z-index: 1; }
 
     html.AppendLine("<h2>Interpretation</h2>");
     html.AppendLine("<div class=\"panel\">");
-    html.AppendLine("<p>The line chart uses <code>btc_up_down_5m_odds_ticks</code>, which is the archived book snapshot stream. Maker markers use exact <code>strategy_market_paper_runs.skip_diagnostics_json</code> / linked <code>paper_orders</code> decision data. The Maker strategy first records an in-memory baseline for each side; a marker appears only when that side's own best ask makes a new maximum after the baseline.</p>");
+    html.AppendLine("<p>The line chart uses <code>btc_up_down_5m_odds_ticks</code>, which is the archived book snapshot stream. Maker markers use exact <code>strategy_market_paper_runs.skip_diagnostics_json</code> / linked <code>paper_orders</code> decision data. The Maker strategy first records an in-memory baseline for each side; a marker appears when that side's own best ask rises above the previous observed ask.</p>");
     html.AppendLine($"<p>Skip reasons: {(events.Count == 0 ? "no Maker events for this market" : string.Join("; ", skippedByReason))}.</p>");
     html.AppendLine("</div>");
 
     html.AppendLine("<h2>Maker Events</h2>");
     html.AppendLine("<div class=\"panel\"><table><thead><tr>");
-    foreach (var header in new[] { "UTC", "t+", "Strategy", "Status", "Outcome", "Prev max ask", "New max ask", "Limit", "Skip reason", "Blocking strategy", "Blocking outcome/status", "Paper order" })
+    foreach (var header in new[] { "UTC", "t+", "Strategy", "Status", "Outcome", "Prev ask", "Current ask", "Limit", "Skip reason", "Blocking strategy", "Blocking outcome/status", "Paper order" })
     {
         html.AppendLine($"<th>{Html(header)}</th>");
     }
@@ -470,8 +470,8 @@ th { position: sticky; top: 0; background: #eef1f5; z-index: 1; }
         html.AppendLine($"<td>{Html(ShortStrategyName(item.StrategyCode))}</td>");
         html.AppendLine($"<td>{Html(item.Status)}</td>");
         html.AppendLine($"<td>{Html(item.SelectedOutcome)}</td>");
-        html.AppendLine($"<td>{FormatDecimal(item.PreviousMaxBestAsk)}</td>");
-        html.AppendLine($"<td>{FormatDecimal(item.CurrentMaxBestAsk)}</td>");
+        html.AppendLine($"<td>{FormatDecimal(item.PreviousBestAsk)}</td>");
+        html.AppendLine($"<td>{FormatDecimal(item.CurrentBestAsk)}</td>");
         html.AppendLine($"<td>{FormatDecimal(item.EntryPrice ?? item.MakerLimitPrice)}</td>");
         html.AppendLine($"<td class=\"reason\">{Html(item.SkipReason)}</td>");
         html.AppendLine($"<td>{Html(item.BlockingStrategyCode)}</td>");
@@ -483,7 +483,7 @@ th { position: sticky; top: 0; background: #eef1f5; z-index: 1; }
 
     html.AppendLine("<h2>Maker Paper Orders</h2>");
     html.AppendLine("<div class=\"panel\"><table><thead><tr>");
-    foreach (var header in new[] { "UTC", "Strategy", "Status", "Outcome", "Price", "Size", "Notional", "Expires", "Filled", "Prev max ask", "New max ask" })
+    foreach (var header in new[] { "UTC", "Strategy", "Status", "Outcome", "Price", "Size", "Notional", "Expires", "Filled", "Prev ask", "Current ask" })
     {
         html.AppendLine($"<th>{Html(header)}</th>");
     }
@@ -500,8 +500,8 @@ th { position: sticky; top: 0; background: #eef1f5; z-index: 1; }
         html.AppendLine($"<td>{FormatDecimal(order.NotionalUsd)}</td>");
         html.AppendLine($"<td>{order.ExpiresAtUtc:HH:mm:ss}</td>");
         html.AppendLine($"<td>{(order.FilledAtUtc is null ? "" : order.FilledAtUtc.Value.ToString("HH:mm:ss", CultureInfo.InvariantCulture))}</td>");
-        html.AppendLine($"<td>{FormatDecimal(order.PreviousMaxBestAsk)}</td>");
-        html.AppendLine($"<td>{FormatDecimal(order.CurrentMaxBestAsk)}</td>");
+        html.AppendLine($"<td>{FormatDecimal(order.PreviousBestAsk)}</td>");
+        html.AppendLine($"<td>{FormatDecimal(order.CurrentBestAsk)}</td>");
         html.AppendLine("</tr>");
     }
     html.AppendLine("</tbody></table></div>");
@@ -572,7 +572,7 @@ static string BuildSvg(
     foreach (var item in events)
     {
         var seconds = (decimal)(item.CreatedAtUtc - market.MarketStartUtc).TotalSeconds;
-        var price = item.CurrentMaxBestAsk ?? item.BestAsk ?? item.EntryPrice ?? item.MakerLimitPrice;
+        var price = item.CurrentBestAsk ?? item.BestAsk ?? item.EntryPrice ?? item.MakerLimitPrice;
         if (price is null)
         {
             continue;
@@ -661,8 +661,8 @@ static MakerDiagnostic ParseDiagnostics(string diagnosticsJson)
         using var document = JsonDocument.Parse(diagnosticsJson);
         var root = document.RootElement;
         return new MakerDiagnostic(
-            GetJsonDecimal(root, "previous_max_best_ask"),
-            GetJsonDecimal(root, "current_max_best_ask"),
+            GetJsonDecimal(root, "previous_best_ask") ?? GetJsonDecimal(root, "previous_max_best_ask"),
+            GetJsonDecimal(root, "current_best_ask") ?? GetJsonDecimal(root, "current_max_best_ask"),
             GetJsonDecimal(root, "maker_limit_price"),
             GetJsonDecimal(root, "best_bid"),
             GetJsonDecimal(root, "best_ask"),
@@ -708,7 +708,7 @@ static string BuildTicksCsv(IReadOnlyList<TickRow> ticks)
 static string BuildEventsCsv(IReadOnlyList<MakerEventRow> events)
 {
     var csv = new StringBuilder();
-    csv.AppendLine("created_at_utc,strategy_code,status,selected_outcome,entry_price,stake_usd,size_shares,previous_max_best_ask,current_max_best_ask,maker_limit_price,skip_reason,blocking_strategy_code,blocking_outcome,blocking_status,paper_order_id,market_id");
+    csv.AppendLine("created_at_utc,strategy_code,status,selected_outcome,entry_price,stake_usd,size_shares,previous_best_ask,current_best_ask,maker_limit_price,skip_reason,blocking_strategy_code,blocking_outcome,blocking_status,paper_order_id,market_id");
     foreach (var item in events)
     {
         csv.AppendLine(string.Join(",", [
@@ -719,8 +719,8 @@ static string BuildEventsCsv(IReadOnlyList<MakerEventRow> events)
             CsvDecimal(item.EntryPrice),
             CsvDecimal(item.StakeUsd),
             CsvDecimal(item.SizeShares),
-            CsvDecimal(item.PreviousMaxBestAsk),
-            CsvDecimal(item.CurrentMaxBestAsk),
+            CsvDecimal(item.PreviousBestAsk),
+            CsvDecimal(item.CurrentBestAsk),
             CsvDecimal(item.MakerLimitPrice),
             CsvText(item.SkipReason),
             CsvText(item.BlockingStrategyCode),
@@ -737,7 +737,7 @@ static string BuildEventsCsv(IReadOnlyList<MakerEventRow> events)
 static string BuildOrdersCsv(IReadOnlyList<MakerOrderRow> orders)
 {
     var csv = new StringBuilder();
-    csv.AppendLine("created_at_utc,strategy_code,status,outcome,price,size_shares,notional_usd,expires_at_utc,filled_at_utc,cancelled_at_utc,previous_max_best_ask,current_max_best_ask,order_id");
+    csv.AppendLine("created_at_utc,strategy_code,status,outcome,price,size_shares,notional_usd,expires_at_utc,filled_at_utc,cancelled_at_utc,previous_best_ask,current_best_ask,order_id");
     foreach (var item in orders)
     {
         csv.AppendLine(string.Join(",", [
@@ -751,8 +751,8 @@ static string BuildOrdersCsv(IReadOnlyList<MakerOrderRow> orders)
             CsvText(item.ExpiresAtUtc.ToString("O", CultureInfo.InvariantCulture)),
             CsvText(item.FilledAtUtc?.ToString("O", CultureInfo.InvariantCulture)),
             CsvText(item.CancelledAtUtc?.ToString("O", CultureInfo.InvariantCulture)),
-            CsvDecimal(item.PreviousMaxBestAsk),
-            CsvDecimal(item.CurrentMaxBestAsk),
+            CsvDecimal(item.PreviousBestAsk),
+            CsvDecimal(item.CurrentBestAsk),
             CsvText(item.Id.ToString())
         ]));
     }
@@ -934,8 +934,8 @@ sealed record MakerEventRow(
     string BlockingOutcome,
     string BlockingStatus,
     DateTimeOffset? BlockingCreatedAtUtc,
-    decimal? PreviousMaxBestAsk,
-    decimal? CurrentMaxBestAsk,
+    decimal? PreviousBestAsk,
+    decimal? CurrentBestAsk,
     decimal? MakerLimitPrice,
     decimal? BestBid,
     decimal? BestAsk,
@@ -956,12 +956,12 @@ sealed record MakerOrderRow(
     DateTimeOffset? FilledAtUtc,
     DateTimeOffset? CancelledAtUtc,
     string RawDecisionJson,
-    decimal? PreviousMaxBestAsk,
-    decimal? CurrentMaxBestAsk);
+    decimal? PreviousBestAsk,
+    decimal? CurrentBestAsk);
 
 sealed record MakerDiagnostic(
-    decimal? PreviousMaxBestAsk,
-    decimal? CurrentMaxBestAsk,
+    decimal? PreviousBestAsk,
+    decimal? CurrentBestAsk,
     decimal? MakerLimitPrice,
     decimal? BestBid,
     decimal? BestAsk,

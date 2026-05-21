@@ -3494,7 +3494,7 @@ public sealed class BtcUpDown5mPaperStrategyProcessorTests
     }
 
     [Fact]
-    public async Task ProcessAsync_UpMakerPlacesPostOnlyOrderOnNewBestAskMaximum()
+    public async Task ProcessAsync_UpMakerPlacesPostOnlyOrderWhenBestAskRises()
     {
         var now = DateTimeOffset.UtcNow;
         var marketStartUtc = now.AddSeconds(-5);
@@ -3547,7 +3547,58 @@ public sealed class BtcUpDown5mPaperStrategyProcessorTests
     }
 
     [Fact]
-    public async Task ProcessAsync_UpMakerDoesNotOrderWhenBestAskFallsBelowMax()
+    public async Task ProcessAsync_UpMakerPlacesPostOnlyOrderWhenBestAskRisesAfterFallingBelowPriorHigh()
+    {
+        var now = DateTimeOffset.UtcNow;
+        var marketStartUtc = now.AddSeconds(-5);
+        var marketEndUtc = now.AddMinutes(5);
+        var repository = new TestAppRepository();
+        repository.PolymarketGammaMarkets.Add(CreateMarket(
+            marketStartUtc,
+            marketEndUtc,
+            upPrice: 0.50m,
+            downPrice: 0.50m,
+            orderMinSize: 5m));
+        var clobClient = new MutableFakeClobClient([
+            OrderBook("asset-up", [new OrderBookLevel(0.40m, 100m)], [new OrderBookLevel(0.42m, 100m)], now, 5m, 0.01m),
+            OrderBook("asset-down", [new OrderBookLevel(0.58m, 100m)], [new OrderBookLevel(0.60m, 100m)], now, 5m, 0.01m)
+        ]);
+        var processor = CreateMakerProcessor(repository, clobClient, UpMakerVariant.Code);
+
+        await processor.ProcessAsync();
+        await Task.Delay(75);
+        clobClient.SetOrderBooks([
+            OrderBook("asset-up", [new OrderBookLevel(0.40m, 100m)], [new OrderBookLevel(0.45m, 100m)], DateTimeOffset.UtcNow, 5m, 0.01m),
+            OrderBook("asset-down", [new OrderBookLevel(0.55m, 100m)], [new OrderBookLevel(0.58m, 100m)], DateTimeOffset.UtcNow, 5m, 0.01m)
+        ]);
+        var firstRise = await processor.ProcessAsync();
+        await Task.Delay(75);
+        clobClient.SetOrderBooks([
+            OrderBook("asset-up", [new OrderBookLevel(0.37m, 100m)], [new OrderBookLevel(0.40m, 100m)], DateTimeOffset.UtcNow, 5m, 0.01m),
+            OrderBook("asset-down", [new OrderBookLevel(0.60m, 100m)], [new OrderBookLevel(0.63m, 100m)], DateTimeOffset.UtcNow, 5m, 0.01m)
+        ]);
+        var fall = await processor.ProcessAsync();
+        await Task.Delay(75);
+        clobClient.SetOrderBooks([
+            OrderBook("asset-up", [new OrderBookLevel(0.39m, 100m)], [new OrderBookLevel(0.43m, 100m)], DateTimeOffset.UtcNow, 5m, 0.01m),
+            OrderBook("asset-down", [new OrderBookLevel(0.57m, 100m)], [new OrderBookLevel(0.60m, 100m)], DateTimeOffset.UtcNow, 5m, 0.01m)
+        ]);
+
+        var secondRise = await processor.ProcessAsync();
+
+        Assert.Equal(1, firstRise.EntriesPlaced);
+        Assert.Equal(0, fall.EntriesPlaced);
+        Assert.Equal(1, secondRise.EntriesPlaced);
+        Assert.Equal(2, repository.PaperOrders.Count);
+        Assert.Equal([0.44m, 0.42m], repository.PaperOrders.Select(order => order.Price).ToArray());
+        Assert.All(repository.PaperOrders, order => Assert.Equal("btc_updown5m_maker_post_only", order.ExecutionSource));
+        Assert.Equal(2, repository.StrategyMarketPaperRuns.Count);
+        Assert.Contains(repository.StrategyMarketPaperRuns, run => run.MarketId.Contains(":maker:up:0.45", StringComparison.Ordinal));
+        Assert.Contains(repository.StrategyMarketPaperRuns, run => run.MarketId.Contains(":maker:up:0.43", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task ProcessAsync_UpMakerDoesNotOrderWhenBestAskFalls()
     {
         var now = DateTimeOffset.UtcNow;
         var repository = new TestAppRepository();
@@ -3575,6 +3626,62 @@ public sealed class BtcUpDown5mPaperStrategyProcessorTests
         Assert.Equal(0, result.RunsSkipped);
         Assert.Empty(repository.StrategyMarketPaperRuns);
         Assert.Empty(repository.PaperOrders);
+    }
+
+    [Fact]
+    public async Task ProcessAsync_UpMakerIgnoresOppositeOutcomeOpenOrderFromOtherStrategy()
+    {
+        var now = DateTimeOffset.UtcNow;
+        var marketStartUtc = now.AddSeconds(-5);
+        var marketEndUtc = now.AddMinutes(5);
+        var repository = new TestAppRepository();
+        repository.PolymarketGammaMarkets.Add(CreateMarket(
+            marketStartUtc,
+            marketEndUtc,
+            upPrice: 0.50m,
+            downPrice: 0.50m,
+            orderMinSize: 5m));
+        repository.PaperOrders.Add(new PaperOrder(
+            Guid.NewGuid(),
+            Guid.NewGuid(),
+            BinanceDelayed30Variant.CopiedTraderWallet,
+            PaperOrderStatus.Pending,
+            TradeSide.Buy,
+            "asset-down",
+            "condition-1",
+            "Down",
+            0.50m,
+            5m,
+            2.50m,
+            now.AddSeconds(-1),
+            marketEndUtc,
+            StrategyId: BinanceDelayed30Variant.Id));
+        var clobClient = new MutableFakeClobClient([
+            OrderBook("asset-up", [new OrderBookLevel(0.40m, 100m)], [new OrderBookLevel(0.42m, 100m)], now, 5m, 0.01m),
+            OrderBook("asset-down", [new OrderBookLevel(0.58m, 100m)], [new OrderBookLevel(0.60m, 100m)], now, 5m, 0.01m)
+        ]);
+        var processor = CreateMakerProcessor(repository, clobClient, UpMakerVariant.Code);
+
+        await processor.ProcessAsync();
+        await Task.Delay(75);
+        clobClient.SetOrderBooks([
+            OrderBook("asset-up", [new OrderBookLevel(0.40m, 100m)], [new OrderBookLevel(0.45m, 100m)], DateTimeOffset.UtcNow, 5m, 0.01m),
+            OrderBook("asset-down", [new OrderBookLevel(0.55m, 100m)], [new OrderBookLevel(0.58m, 100m)], DateTimeOffset.UtcNow, 5m, 0.01m)
+        ]);
+
+        var result = await processor.ProcessAsync();
+
+        Assert.Equal(1, result.EntriesPlaced);
+        Assert.Equal(0, result.RunsSkipped);
+        Assert.Equal(2, repository.PaperOrders.Count);
+        var makerOrder = repository.PaperOrders.Single(order => order.StrategyId == UpMakerVariant.Id);
+        Assert.Equal("asset-up", makerOrder.AssetId);
+        Assert.Equal("Up", makerOrder.Outcome);
+        Assert.Equal(0.44m, makerOrder.Price);
+        Assert.DoesNotContain(
+            SignalReasonCodes.OppositeOutcomeOpenOrder,
+            Assert.Single(repository.StrategyMarketPaperRuns).SkipDiagnosticsJson ?? string.Empty,
+            StringComparison.Ordinal);
     }
 
     [Fact]

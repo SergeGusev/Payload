@@ -1,3 +1,16 @@
+## Active Update 2026-05-21 BTC 5m Maker Rising Ask Trend
+Goal: Change BTC 5m Maker entries to follow rising best-ask waves instead of only all-time best-ask maxima.
+Status: Completed
+Done:
+- Changed `BTC Up or Down 5m Up Maker` / `Down Maker` to baseline the selected outcome best ask, then place Paper-only post-only GTD BUY orders one tick below the current best ask whenever it rises above the previous observed ask.
+- Flat or falling best asks now only update the in-memory trend reference, so a later rise resumes placing orders even below an older high.
+- Removed the opposite-outcome open-order block from the Maker order path while leaving the guard in place for non-Maker BTC entries.
+- Added regression coverage for resumed rising waves after a fall and for Maker ignoring an opposite open order from another BTC strategy.
+- Updated README, configuration reference, and the Maker market report probe to describe/read `previous_best_ask` and `current_best_ask` trend diagnostics.
+Next: Deploy/restart the service so the clarified Maker strategy semantics are active in production runtime.
+Notes: Verification passed: targeted `dotnet test tests\PolyCopyTrader.Tests\PolyCopyTrader.Tests.csproj --no-restore --filter "FullyQualifiedName~BtcUpDown5mPaperStrategyProcessorTests"` passed `135/135`; `dotnet build artifacts\MakerMarketReportProbe\MakerMarketReportProbe.csproj` passed after restore; full `dotnet test tests\PolyCopyTrader.Tests\PolyCopyTrader.Tests.csproj --no-restore` passed `517/517`; `git diff --check` passed with LF/CRLF warnings only. No production DB writes, service restart, live order submission, or cancel action.
+Blockers: None.
+
 ## Active Update 2026-05-21 BTC 5m Maker Market Report
 Goal: Build a visual report for the nearest BTC 5m market showing book movement and Maker strategy actions.
 Status: Completed

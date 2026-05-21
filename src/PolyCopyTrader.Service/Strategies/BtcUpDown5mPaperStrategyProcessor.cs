@@ -89,7 +89,7 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
     private readonly IPaperTradingEngine paperTradingEngine = new DefaultPaperTradingEngine();
     private readonly SemaphoreSlim entryPlacementLock = new(1, 1);
     private readonly Dictionary<string, DateTimeOffset> closingOrderBookCaptureAttempts = new(StringComparer.OrdinalIgnoreCase);
-    private readonly Dictionary<string, BtcMakerMaxState> makerMaxStates = new(StringComparer.OrdinalIgnoreCase);
+    private readonly Dictionary<string, BtcMakerTrendState> makerTrendStates = new(StringComparer.OrdinalIgnoreCase);
 
     public async Task<BtcUpDown5mPaperStrategyResult> ProcessAsync(CancellationToken cancellationToken = default)
     {
@@ -162,7 +162,7 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
         var observed = observeResult.Observed;
         var observeSkipped = observeResult.Skipped;
         controlState.RecordLoop($"BTC5mStrategy processing maker maxima. Variants={makerEntryVariants.Length}", null);
-        var makerResult = await ProcessMakerMaxOrdersAsync(
+        var makerResult = await ProcessMakerTrendOrdersAsync(
             DateTimeOffset.UtcNow,
             makerEntryVariants,
             strategySettings,
@@ -477,7 +477,7 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
         return new ObserveCounters(observed, skipped);
     }
 
-    private async Task<BtcMakerProcessResult> ProcessMakerMaxOrdersAsync(
+    private async Task<BtcMakerProcessResult> ProcessMakerTrendOrdersAsync(
         DateTimeOffset nowUtc,
         IReadOnlyList<BtcUpDown5mStrategyVariant> variants,
         IReadOnlyDictionary<Guid, StrategyRuntimeSettings> strategySettings,
@@ -488,7 +488,7 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
             return BtcMakerProcessResult.Empty;
         }
 
-        CleanupMakerMaxStates(nowUtc);
+        CleanupMakerTrendStates(nowUtc);
 
         var markets = await repository.GetBtcUpDownStrategyGammaMarketsAsync(
             options.MaxMarketsPerCycle,
@@ -565,11 +565,12 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
 
                 observed++;
                 var stateKey = GetMakerStateKey(variant, market, selectedOutcome);
-                if (!makerMaxStates.TryGetValue(stateKey, out var state) ||
+                if (!makerTrendStates.TryGetValue(stateKey, out var state) ||
                     state.MarketEndUtc != market.EndDateUtc)
                 {
-                    makerMaxStates[stateKey] = new BtcMakerMaxState(
+                    makerTrendStates[stateKey] = new BtcMakerTrendState(
                         bestAsk.Value,
+                        OrderSequence: 0,
                         nowUtc,
                         market.EndDateUtc);
                     logger.LogInformation(
@@ -581,28 +582,37 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
                     continue;
                 }
 
-                if (bestAsk.Value <= state.MaxBestAsk)
+                if (bestAsk.Value <= state.LastBestAsk)
                 {
+                    makerTrendStates[stateKey] = state with
+                    {
+                        LastBestAsk = bestAsk.Value,
+                        UpdatedAtUtc = nowUtc,
+                        MarketEndUtc = market.EndDateUtc
+                    };
                     continue;
                 }
 
-                makerMaxStates[stateKey] = state with
+                var orderSequence = state.OrderSequence + 1;
+                makerTrendStates[stateKey] = state with
                 {
-                    MaxBestAsk = bestAsk.Value,
+                    LastBestAsk = bestAsk.Value,
+                    OrderSequence = orderSequence,
                     UpdatedAtUtc = nowUtc,
                     MarketEndUtc = market.EndDateUtc
                 };
 
                 var settings = GetStrategySettings(strategySettings, variant.Id);
-                var orderResult = await TryPlaceMakerMaxOrderAsync(
+                var orderResult = await TryPlaceMakerTrendOrderAsync(
                     nowUtc,
                     market,
                     variant,
                     selectedOutcome,
                     orderBook,
                     orderBookLookup,
-                    previousMaxBestAsk: state.MaxBestAsk,
-                    currentMaxBestAsk: bestAsk.Value,
+                    previousBestAsk: state.LastBestAsk,
+                    currentBestAsk: bestAsk.Value,
+                    orderSequence,
                     settings,
                     cancellationToken);
                 entriesPlaced += orderResult.Placed ? 1 : 0;
@@ -613,27 +623,29 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
         return new BtcMakerProcessResult(observed, entriesPlaced, runsSkipped);
     }
 
-    private async Task<BtcMakerOrderResult> TryPlaceMakerMaxOrderAsync(
+    private async Task<BtcMakerOrderResult> TryPlaceMakerTrendOrderAsync(
         DateTimeOffset nowUtc,
         PolymarketGammaMarket market,
         BtcUpDown5mStrategyVariant variant,
         BtcUpDown5mOutcomeQuote selectedOutcome,
         OrderBookSnapshot orderBook,
         TakerOrderBookLookupResult orderBookLookup,
-        decimal previousMaxBestAsk,
-        decimal currentMaxBestAsk,
+        decimal previousBestAsk,
+        decimal currentBestAsk,
+        int orderSequence,
         StrategyRuntimeSettings settings,
         CancellationToken cancellationToken)
     {
-        var syntheticMarketId = GetMakerSyntheticMarketId(market, selectedOutcome, currentMaxBestAsk);
+        var syntheticMarketId = GetMakerSyntheticMarketId(market, selectedOutcome, currentBestAsk, orderSequence, nowUtc);
         var rawDecisionJson = BuildMakerRawDecisionJson(
             market,
             variant,
             selectedOutcome,
             orderBook,
             orderBookLookup,
-            previousMaxBestAsk,
-            currentMaxBestAsk,
+            previousBestAsk,
+            currentBestAsk,
+            orderSequence,
             syntheticMarketId);
         if (settings.IsPausedAt(nowUtc))
         {
@@ -650,7 +662,7 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
             return BtcMakerOrderResult.SkippedResult;
         }
 
-        var priceDecision = ResolveMakerPostOnlyLimitPrice(orderBook, currentMaxBestAsk);
+        var priceDecision = ResolveMakerPostOnlyLimitPrice(orderBook, currentBestAsk);
         rawDecisionJson = AttachMakerPostOnlyPriceJson(rawDecisionJson, priceDecision);
         if (!priceDecision.Available || priceDecision.LimitPrice is not > 0m)
         {
@@ -713,29 +725,6 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
         await entryPlacementLock.WaitAsync(cancellationToken);
         try
         {
-            var oppositeBlock = await FindOppositeOutcomeOpenOrderBlockAsync(
-                market.ConditionId,
-                selectedOutcome.Outcome,
-                cancellationToken);
-            if (oppositeBlock is not null)
-            {
-                rawDecisionJson = AttachOppositeOutcomeOpenOrderBlockJson(
-                    rawDecisionJson,
-                    selectedOutcome.Outcome,
-                    oppositeBlock);
-                await RecordSkippedMakerRunAsync(
-                    nowUtc,
-                    market,
-                    variant,
-                    selectedOutcome,
-                    syntheticMarketId,
-                    SignalReasonCodes.OppositeOutcomeOpenOrder,
-                    rawDecisionJson,
-                    settings.PaperStakeAmount,
-                    cancellationToken);
-                return BtcMakerOrderResult.SkippedResult;
-            }
-
             var signal = CreateSignal(
                 market,
                 selectedOutcome,
@@ -780,12 +769,13 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
             exposureCache.ApplyPaperOrder(order);
 
             logger.LogInformation(
-                "BTC Up or Down 5m maker paper order placed. Strategy={StrategyCode} Market={MarketSlug} Outcome={Outcome} PreviousMaxBestAsk={PreviousMaxBestAsk} CurrentMaxBestAsk={CurrentMaxBestAsk} Price={Price} NotionalUsd={NotionalUsd} SizeShares={SizeShares}",
+                "BTC Up or Down 5m maker paper order placed. Strategy={StrategyCode} Market={MarketSlug} Outcome={Outcome} PreviousBestAsk={PreviousBestAsk} CurrentBestAsk={CurrentBestAsk} OrderSequence={OrderSequence} Price={Price} NotionalUsd={NotionalUsd} SizeShares={SizeShares}",
                 variant.Code,
                 market.Slug,
                 selectedOutcome.Outcome,
-                previousMaxBestAsk,
-                currentMaxBestAsk,
+                previousBestAsk,
+                currentBestAsk,
+                orderSequence,
                 priceDecision.LimitPrice.Value,
                 sizing.TargetNotionalUsd,
                 sizing.TargetSizeShares);
@@ -994,19 +984,19 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
         return false;
     }
 
-    private void CleanupMakerMaxStates(DateTimeOffset nowUtc)
+    private void CleanupMakerTrendStates(DateTimeOffset nowUtc)
     {
-        if (makerMaxStates.Count == 0)
+        if (makerTrendStates.Count == 0)
         {
             return;
         }
 
         var cutoffUtc = nowUtc.AddHours(-1);
-        foreach (var item in makerMaxStates
+        foreach (var item in makerTrendStates
             .Where(item => item.Value.MarketEndUtc is { } marketEndUtc && marketEndUtc < cutoffUtc)
             .ToArray())
         {
-            makerMaxStates.Remove(item.Key);
+            makerTrendStates.Remove(item.Key);
         }
     }
 
@@ -1140,14 +1130,20 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
     private static string GetMakerSyntheticMarketId(
         PolymarketGammaMarket market,
         BtcUpDown5mOutcomeQuote selectedOutcome,
-        decimal bestAsk)
+        decimal bestAsk,
+        int orderSequence,
+        DateTimeOffset nowUtc)
     {
         return string.Concat(
             market.MarketId,
             ":maker:",
             selectedOutcome.Outcome.ToLowerInvariant(),
             ":",
-            bestAsk.ToString("0.########", CultureInfo.InvariantCulture));
+            bestAsk.ToString("0.########", CultureInfo.InvariantCulture),
+            ":",
+            orderSequence.ToString(CultureInfo.InvariantCulture),
+            ":",
+            nowUtc.ToUnixTimeMilliseconds().ToString(CultureInfo.InvariantCulture));
     }
 
     private static StrategyMarketPaperRun CreateMakerRun(
@@ -1205,8 +1201,9 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
         BtcUpDown5mOutcomeQuote selectedOutcome,
         OrderBookSnapshot orderBook,
         TakerOrderBookLookupResult orderBookLookup,
-        decimal previousMaxBestAsk,
-        decimal currentMaxBestAsk,
+        decimal previousBestAsk,
+        decimal currentBestAsk,
+        int orderSequence,
         string syntheticMarketId)
     {
         var bestBid = TryGetBestBidFromOrderBook(orderBook);
@@ -1222,8 +1219,12 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
             market_slug = market.Slug,
             outcome = selectedOutcome.Outcome,
             asset_id = selectedOutcome.AssetId,
-            previous_max_best_ask = previousMaxBestAsk,
-            current_max_best_ask = currentMaxBestAsk,
+            maker_trend_mode = "rising_best_ask",
+            maker_trend_order_sequence = orderSequence,
+            previous_best_ask = previousBestAsk,
+            current_best_ask = currentBestAsk,
+            previous_max_best_ask = previousBestAsk,
+            current_max_best_ask = currentBestAsk,
             order_book_source = orderBookLookup.Source,
             order_book_age_ms = orderBookLookup.Age is { } age
                 ? (int)Math.Round(age.TotalMilliseconds)
@@ -10677,8 +10678,9 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
         public static BtcMakerOrderResult SkippedResult { get; } = new(false, true);
     }
 
-    private sealed record BtcMakerMaxState(
-        decimal MaxBestAsk,
+    private sealed record BtcMakerTrendState(
+        decimal LastBestAsk,
+        int OrderSequence,
         DateTimeOffset UpdatedAtUtc,
         DateTimeOffset? MarketEndUtc);
 
