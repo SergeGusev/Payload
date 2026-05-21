@@ -676,13 +676,16 @@ market starts, each variant baselines the selected outcome best ask, tracks a
 fixed high-water best ask in memory, and evaluates entries only on 30-second
 slots (`30s` through `270s`, maximum 9 attempts per BTC 5-minute market). On a
 slot it creates a minimum-size post-only GTD BUY one tick below the current best
-ask only when that ask exceeds the previously fixed high-water value. That value
-is updated only when a Maker paper order is actually created; between-slot book
-moves and no-order slots do not raise it. Flat or falling asks do not create
-orders; after a Maker order at `0.55` and a fall to `0.52`, the next Maker order
-waits until a later 30-second slot where the ask crosses `0.55` and reaches a
-new high such as `0.56`. These Maker orders can happen multiple times in one
-market, expire at `marketEndUtc`, and can run
+ask only when that ask exceeds the previously fixed high-water value. `BTC Up or
+Down 5m Up Maker 50` and `BTC Up or Down 5m Down Maker 50` use the same
+high-water/slot rules, but place at fixed `0.50` and only when the selected
+outcome best ask is strictly above `0.50`. The high-water value is updated only
+when a Maker paper order is actually created; between-slot book moves and
+no-order slots do not raise it. Flat or falling asks do not create orders; after
+a Maker order at `0.55` and a fall to `0.52`, the next Maker order waits until a
+later 30-second slot where the ask crosses `0.55` and reaches a new high such as
+`0.56`. These Maker orders can happen multiple times in one market, expire at
+`marketEndUtc`, and can run
 whenever Paper runtime is enabled, including `Bot:Mode=Live` with
 `PaperTrading:RunInLiveMode=true`; they only create Paper orders, never submit
 Live/Paper-shadow orders, and are intentionally excluded from the

@@ -137,6 +137,8 @@ public sealed class StorageTests
         Assert.Contains("BTC Up or Down 5m More 90 Below 65", PostgresSchema.SchemaSql, StringComparison.Ordinal);
         Assert.Contains("BTC Up or Down 5m Up Maker", PostgresSchema.SchemaSql, StringComparison.Ordinal);
         Assert.Contains("BTC Up or Down 5m Down Maker", PostgresSchema.SchemaSql, StringComparison.Ordinal);
+        Assert.Contains("BTC Up or Down 5m Up Maker 50", PostgresSchema.SchemaSql, StringComparison.Ordinal);
+        Assert.Contains("BTC Up or Down 5m Down Maker 50", PostgresSchema.SchemaSql, StringComparison.Ordinal);
         Assert.Contains("BTC Up or Down 5m More 60 Gamma Below 70", PostgresSchema.SchemaSql, StringComparison.Ordinal);
         Assert.Contains("BTC Up or Down 5m More 120 Gamma Below 65", PostgresSchema.SchemaSql, StringComparison.Ordinal);
         Assert.Contains("BTC Up or Down 5m More 150 Gamma Below 80", PostgresSchema.SchemaSql, StringComparison.Ordinal);

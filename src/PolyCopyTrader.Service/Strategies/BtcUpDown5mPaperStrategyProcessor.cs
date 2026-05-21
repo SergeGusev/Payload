@@ -606,6 +606,18 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
                     continue;
                 }
 
+                if (variant.MakerMinBestAskExclusive is { } makerMinBestAskExclusive &&
+                    bestAsk.Value <= makerMinBestAskExclusive)
+                {
+                    makerHighWaterStates[stateKey] = state with
+                    {
+                        LastDecisionSlot = decisionSlot.CurrentSlot,
+                        UpdatedAtUtc = nowUtc,
+                        MarketEndUtc = market.EndDateUtc
+                    };
+                    continue;
+                }
+
                 var orderSequence = state.OrderSequence + 1;
                 var settings = GetStrategySettings(strategySettings, variant.Id);
                 var orderResult = await TryPlaceMakerHighWaterOrderAsync(
@@ -681,7 +693,10 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
             return BtcMakerOrderResult.SkippedResult;
         }
 
-        var priceDecision = ResolveMakerPostOnlyLimitPrice(orderBook, currentMaxBestAsk);
+        var priceDecision = ResolveMakerPostOnlyLimitPrice(
+            orderBook,
+            currentMaxBestAsk,
+            variant.FixedLimitPrice);
         rawDecisionJson = AttachMakerPostOnlyPriceJson(rawDecisionJson, priceDecision);
         if (!priceDecision.Available || priceDecision.LimitPrice is not > 0m)
         {
@@ -1065,7 +1080,8 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
 
     private BtcMakerPostOnlyPriceDecision ResolveMakerPostOnlyLimitPrice(
         OrderBookSnapshot orderBook,
-        decimal bestAsk)
+        decimal bestAsk,
+        decimal? fixedLimitPrice)
     {
         var tickSize = orderBook.TickSize is > 0m
             ? orderBook.TickSize.Value
@@ -1078,6 +1094,39 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
                 tickSize,
                 bestBid,
                 bestAsk);
+        }
+
+        if (fixedLimitPrice is { } limitPriceOverride)
+        {
+            if (limitPriceOverride <= 0m)
+            {
+                return BtcMakerPostOnlyPriceDecision.Reject(
+                    "maker_fixed_limit_price_non_positive",
+                    tickSize,
+                    bestBid,
+                    bestAsk,
+                    limitPriceOverride,
+                    attempts: 1);
+            }
+
+            if (limitPriceOverride >= bestAsk)
+            {
+                return BtcMakerPostOnlyPriceDecision.Reject(
+                    "maker_fixed_limit_price_crosses_best_ask",
+                    tickSize,
+                    bestBid,
+                    bestAsk,
+                    limitPriceOverride,
+                    attempts: 1);
+            }
+
+            return BtcMakerPostOnlyPriceDecision.Enter(
+                limitPriceOverride,
+                tickSize,
+                bestBid,
+                bestAsk,
+                limitPriceOverride,
+                attempts: 1);
         }
 
         if (bestAsk <= tickSize)
@@ -1270,6 +1319,8 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
             maker_decision_interval_seconds = MakerDecisionIntervalSeconds,
             maker_decision_slot = decisionSlot,
             maker_max_decision_slot = maxDecisionSlot,
+            maker_fixed_limit_price = variant.FixedLimitPrice,
+            maker_min_best_ask_exclusive = variant.MakerMinBestAskExclusive,
             previous_best_ask = previousMaxBestAsk,
             current_best_ask = currentMaxBestAsk,
             previous_max_best_ask = previousMaxBestAsk,

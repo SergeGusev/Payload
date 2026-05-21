@@ -6,6 +6,8 @@ using Npgsql;
 
 const string UpMakerCode = "btc_up_down_5m_up_maker";
 const string DownMakerCode = "btc_up_down_5m_down_maker";
+const string UpMaker50Code = "btc_up_down_5m_up_maker_50";
+const string DownMaker50Code = "btc_up_down_5m_down_maker_50";
 const int MakerDecisionIntervalSeconds = 30;
 const int MakerMaxDecisionSlot = 9;
 
@@ -94,14 +96,14 @@ ranked AS (
             SELECT count(*)::integer
             FROM strategy_market_paper_runs run
             INNER JOIN strategies strategy ON strategy.id = run.strategy_id
-            WHERE strategy.code IN ('btc_up_down_5m_up_maker', 'btc_up_down_5m_down_maker')
+            WHERE strategy.code IN ('btc_up_down_5m_up_maker', 'btc_up_down_5m_down_maker', 'btc_up_down_5m_up_maker_50', 'btc_up_down_5m_down_maker_50')
               AND run.market_slug = market_ticks.market_slug
         ) AS maker_event_count,
         (
             SELECT count(*)::integer
             FROM paper_orders paper_order
             INNER JOIN strategies strategy ON strategy.id = paper_order.strategy_id
-            WHERE strategy.code IN ('btc_up_down_5m_up_maker', 'btc_up_down_5m_down_maker')
+            WHERE strategy.code IN ('btc_up_down_5m_up_maker', 'btc_up_down_5m_down_maker', 'btc_up_down_5m_up_maker_50', 'btc_up_down_5m_down_maker_50')
               AND paper_order.condition_id = market_ticks.condition_id
               AND paper_order.execution_source = 'btc_updown5m_maker_post_only'
         ) AS maker_order_count
@@ -136,14 +138,14 @@ SELECT
         SELECT count(*)::integer
         FROM strategy_market_paper_runs run
         INNER JOIN strategies strategy ON strategy.id = run.strategy_id
-        WHERE strategy.code IN ('btc_up_down_5m_up_maker', 'btc_up_down_5m_down_maker')
+        WHERE strategy.code IN ('btc_up_down_5m_up_maker', 'btc_up_down_5m_down_maker', 'btc_up_down_5m_up_maker_50', 'btc_up_down_5m_down_maker_50')
           AND run.market_slug = tick.market_slug
     ) AS maker_event_count,
     (
         SELECT count(*)::integer
         FROM paper_orders paper_order
         INNER JOIN strategies strategy ON strategy.id = paper_order.strategy_id
-        WHERE strategy.code IN ('btc_up_down_5m_up_maker', 'btc_up_down_5m_down_maker')
+        WHERE strategy.code IN ('btc_up_down_5m_up_maker', 'btc_up_down_5m_down_maker', 'btc_up_down_5m_up_maker_50', 'btc_up_down_5m_down_maker_50')
           AND paper_order.condition_id = tick.condition_id
           AND paper_order.execution_source = 'btc_updown5m_maker_post_only'
     ) AS maker_order_count,
@@ -277,7 +279,7 @@ WITH run_rows AS (
         END AS blocking_order_id
     FROM strategy_market_paper_runs run
     INNER JOIN strategies strategy ON strategy.id = run.strategy_id
-    WHERE strategy.code IN ('btc_up_down_5m_up_maker', 'btc_up_down_5m_down_maker')
+    WHERE strategy.code IN ('btc_up_down_5m_up_maker', 'btc_up_down_5m_down_maker', 'btc_up_down_5m_up_maker_50', 'btc_up_down_5m_down_maker_50')
       AND run.market_slug = @MarketSlug
 )
 SELECT
@@ -369,7 +371,7 @@ SELECT strategy.code,
        paper_order.raw_decision_json::text
 FROM paper_orders paper_order
 INNER JOIN strategies strategy ON strategy.id = paper_order.strategy_id
-WHERE strategy.code IN ('btc_up_down_5m_up_maker', 'btc_up_down_5m_down_maker')
+WHERE strategy.code IN ('btc_up_down_5m_up_maker', 'btc_up_down_5m_down_maker', 'btc_up_down_5m_up_maker_50', 'btc_up_down_5m_down_maker_50')
   AND paper_order.condition_id = @ConditionId
   AND paper_order.execution_source = 'btc_updown5m_maker_post_only'
 ORDER BY paper_order.created_at_utc ASC, strategy.code ASC;
@@ -427,9 +429,30 @@ static List<MakerSimulationRow> BuildHighWaterSimulation(IReadOnlyList<TickRow> 
         tick => tick.DownBestAsk,
         results,
         tickSize);
+    SimulateOutcome(
+        ticks,
+        market,
+        UpMaker50Code,
+        "Up",
+        tick => tick.UpBestAsk,
+        results,
+        tickSize,
+        fixedLimitPrice: 0.50m,
+        minBestAskExclusive: 0.50m);
+    SimulateOutcome(
+        ticks,
+        market,
+        DownMaker50Code,
+        "Down",
+        tick => tick.DownBestAsk,
+        results,
+        tickSize,
+        fixedLimitPrice: 0.50m,
+        minBestAskExclusive: 0.50m);
     return results
         .OrderBy(item => item.SampledAtUtc)
         .ThenBy(item => item.Outcome, StringComparer.OrdinalIgnoreCase)
+        .ThenBy(item => item.StrategyCode, StringComparer.OrdinalIgnoreCase)
         .ToList();
 }
 
@@ -440,7 +463,9 @@ static void SimulateOutcome(
     string outcome,
     Func<TickRow, decimal?> bestAskSelector,
     List<MakerSimulationRow> results,
-    decimal tickSize)
+    decimal tickSize,
+    decimal? fixedLimitPrice = null,
+    decimal? minBestAskExclusive = null)
 {
     decimal? maxBestAsk = null;
     var orderSequence = 0;
@@ -515,6 +540,26 @@ static void SimulateOutcome(
             continue;
         }
 
+        if (minBestAskExclusive is { } minimumBestAsk &&
+            bestAsk.Value <= minimumBestAsk)
+        {
+            results.Add(new MakerSimulationRow(
+                tick.SampledAtUtc,
+                tick.SecondsAfterStart,
+                strategyCode,
+                outcome,
+                "no_order",
+                bestAsk.Value,
+                previousMax,
+                previousMax,
+                MakerLimitPrice: null,
+                PlacesOrder: false,
+                OrderSequence: orderSequence,
+                Reason: "below_or_equal_maker_min_best_ask"));
+            continue;
+        }
+
+        var makerLimitPrice = fixedLimitPrice ?? RoundDownToTick(Math.Max(0m, bestAsk.Value - tickSize), tickSize);
         maxBestAsk = bestAsk.Value;
         orderSequence++;
         results.Add(new MakerSimulationRow(
@@ -526,10 +571,10 @@ static void SimulateOutcome(
             bestAsk.Value,
             previousMax,
             bestAsk.Value,
-            RoundDownToTick(Math.Max(0m, bestAsk.Value - tickSize), tickSize),
+            makerLimitPrice,
             PlacesOrder: true,
             orderSequence,
-            "new_high_at_30s_slot"));
+            fixedLimitPrice is null ? "new_high_at_30s_slot" : "new_high_above_fixed_limit_at_30s_slot"));
     }
 }
 
@@ -563,8 +608,8 @@ static string BuildHtmlReport(
     string eventsCsvPath,
     string ordersCsvPath)
 {
-    var upEvents = events.Where(item => item.StrategyCode == UpMakerCode).ToArray();
-    var downEvents = events.Where(item => item.StrategyCode == DownMakerCode).ToArray();
+    var upEvents = events.Where(item => IsUpMakerCode(item.StrategyCode)).ToArray();
+    var downEvents = events.Where(item => IsDownMakerCode(item.StrategyCode)).ToArray();
     var enteredEvents = events.Where(item => string.Equals(item.Status, "Entered", StringComparison.OrdinalIgnoreCase)).ToArray();
     var simulatedOrders = simulatedDecisions.Where(item => item.PlacesOrder).ToArray();
     var simulatedNoOrders = simulatedDecisions
@@ -653,7 +698,7 @@ th { position: sticky; top: 0; background: #eef1f5; z-index: 1; }
 
     html.AppendLine("<h2>Interpretation</h2>");
     html.AppendLine("<div class=\"panel\">");
-    html.AppendLine("<p>The line chart uses <code>btc_up_down_5m_odds_ticks</code>, which is the archived book snapshot stream. Simulated markers apply the current high-water Maker rule locally: first usable ask is a baseline, decisions happen only on 30-second slots, and the high-water value is updated only when a simulated Maker order is placed. Between-slot moves and no-order slots do not raise the high-water value; a new order appears only when the ask exceeds the last fixed high-water value on a slot.</p>");
+    html.AppendLine("<p>The line chart uses <code>btc_up_down_5m_odds_ticks</code>, which is the archived book snapshot stream. Simulated markers apply the current high-water Maker rule locally: first usable ask is a baseline, decisions happen only on 30-second slots, and the high-water value is updated only when a simulated Maker order is placed. Between-slot moves and no-order slots do not raise the high-water value; a new order appears only when the ask exceeds the last fixed high-water value on a slot. Maker 50 variants use the same slots and high-water rule, but place fixed <code>0.50</code> orders only when best ask is strictly above <code>0.50</code>.</p>");
     html.AppendLine($"<p>Skip reasons: {(events.Count == 0 ? "no Maker events for this market" : string.Join("; ", skippedByReason))}.</p>");
     html.AppendLine("</div>");
 
@@ -804,7 +849,7 @@ static string BuildSvg(
     {
         var x = X(item.SecondsAfterStart);
         var y = Y(Clamp(item.BestAsk, 0m, 1m));
-        var isUp = item.StrategyCode == UpMakerCode;
+        var isUp = IsUpMakerCode(item.StrategyCode);
         var stroke = isUp ? "#7f1d1d" : "#1e3a8a";
         if (item.PlacesOrder)
         {
@@ -839,7 +884,7 @@ static string BuildSvg(
 
         var x = X(seconds);
         var y = Y(Clamp(price.Value, 0m, 1m));
-        var isUp = item.StrategyCode == UpMakerCode;
+        var isUp = IsUpMakerCode(item.StrategyCode);
         var stroke = isUp ? "#991b1b" : "#1e3a8a";
         var fill = item.Status.Equals("Entered", StringComparison.OrdinalIgnoreCase) ? "#16a34a" : "#fff";
         var label = $"{ShortStrategyName(item.StrategyCode)} {item.Status} {item.SelectedOutcome} ask={FormatDecimal(price)}";
@@ -1166,8 +1211,22 @@ static string ShortStrategyName(string code)
     {
         UpMakerCode => "Up Maker",
         DownMakerCode => "Down Maker",
+        UpMaker50Code => "Up Maker 50",
+        DownMaker50Code => "Down Maker 50",
         _ => code
     };
+}
+
+static bool IsUpMakerCode(string code)
+{
+    return string.Equals(code, UpMakerCode, StringComparison.OrdinalIgnoreCase) ||
+        string.Equals(code, UpMaker50Code, StringComparison.OrdinalIgnoreCase);
+}
+
+static bool IsDownMakerCode(string code)
+{
+    return string.Equals(code, DownMakerCode, StringComparison.OrdinalIgnoreCase) ||
+        string.Equals(code, DownMaker50Code, StringComparison.OrdinalIgnoreCase);
 }
 
 static string JoinNonEmpty(params string[] values)

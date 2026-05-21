@@ -130,6 +130,12 @@ public sealed class BtcUpDown5mPaperStrategyProcessorTests
     private static readonly BtcUpDown5mStrategyVariant DownMakerVariant =
         StrategyIds.BtcUpDown5mVariants.Single(variant => variant.Code == StrategyIds.BtcUpDown5mDownMakerCode);
 
+    private static readonly BtcUpDown5mStrategyVariant UpMaker50Variant =
+        StrategyIds.BtcUpDown5mVariants.Single(variant => variant.Code == StrategyIds.BtcUpDown5mUpMaker50Code);
+
+    private static readonly BtcUpDown5mStrategyVariant DownMaker50Variant =
+        StrategyIds.BtcUpDown5mVariants.Single(variant => variant.Code == StrategyIds.BtcUpDown5mDownMaker50Code);
+
     private static readonly BtcUpDown5mStrategyVariant BinanceVariant =
         StrategyIds.BtcUpDown5mVariants.Single(variant => variant.Code == "btc_up_down_5m_binance");
 
@@ -229,7 +235,7 @@ public sealed class BtcUpDown5mPaperStrategyProcessorTests
     [Fact]
     public void StrategyIds_IncludeStandardMartinAndGammaBtcVariants()
     {
-        Assert.Equal(1266, StrategyIds.BtcUpDown5mVariants.Count);
+        Assert.Equal(1268, StrategyIds.BtcUpDown5mVariants.Count);
         Assert.Equal(StrategyIds.BtcUpDown5mVariants.Count, StrategyIds.BtcUpDown5mVariants.Select(variant => variant.Id).Distinct().Count());
         Assert.Equal(StrategyIds.BtcUpDown5mVariants.Count, StrategyIds.BtcUpDown5mVariants.Select(variant => variant.Code).Distinct().Count());
         Assert.Equal(18, StrategyIds.BtcUpDown5mVariants.Count(variant => variant.Behavior == BtcUpDown5mStrategyBehavior.Standard));
@@ -243,7 +249,7 @@ public sealed class BtcUpDown5mPaperStrategyProcessorTests
         Assert.Equal(5, StrategyIds.BtcUpDown5mVariants.Count(variant => variant.Behavior == BtcUpDown5mStrategyBehavior.SkipConsecutiveMarketResultsRevert));
         Assert.Single(StrategyIds.BtcUpDown5mVariants, variant => variant.Behavior == BtcUpDown5mStrategyBehavior.AlwaysUp);
         Assert.Single(StrategyIds.BtcUpDown5mVariants, variant => variant.Behavior == BtcUpDown5mStrategyBehavior.AlwaysDown);
-        Assert.Equal(2, StrategyIds.BtcUpDown5mVariants.Count(variant => variant.Behavior == BtcUpDown5mStrategyBehavior.FixedOutcomeMaker));
+        Assert.Equal(4, StrategyIds.BtcUpDown5mVariants.Count(variant => variant.Behavior == BtcUpDown5mStrategyBehavior.FixedOutcomeMaker));
         Assert.Single(StrategyIds.BtcUpDown5mVariants, variant => variant.Behavior == BtcUpDown5mStrategyBehavior.BinanceStartRelative);
         Assert.Equal(3, StrategyIds.BtcUpDown5mVariants.Count(variant => variant.Behavior == BtcUpDown5mStrategyBehavior.BinanceStartRelativeFixedPrice));
         Assert.Equal(50, StrategyIds.BtcUpDown5mVariants.Count(variant => variant.Behavior == BtcUpDown5mStrategyBehavior.BinanceStartRelativeBpsThreshold));
@@ -299,6 +305,15 @@ public sealed class BtcUpDown5mPaperStrategyProcessorTests
         Assert.Equal("BTC Up/Down 5m Maker", UpMakerVariant.Category);
         Assert.Equal(BtcUpDownFixedOutcome.Up, UpMakerVariant.FixedOutcome);
         Assert.Equal(BtcUpDownFixedOutcome.Down, DownMakerVariant.FixedOutcome);
+        Assert.Equal("BTC Up or Down 5m Up Maker 50", UpMaker50Variant.Name);
+        Assert.Equal("BTC Up or Down 5m Down Maker 50", DownMaker50Variant.Name);
+        Assert.Equal(BtcUpDownFixedOutcome.Up, UpMaker50Variant.FixedOutcome);
+        Assert.Equal(BtcUpDownFixedOutcome.Down, DownMaker50Variant.FixedOutcome);
+        Assert.Equal(0.50m, UpMaker50Variant.FixedLimitPrice);
+        Assert.Equal(0.50m, DownMaker50Variant.FixedLimitPrice);
+        Assert.Equal(0.50m, UpMaker50Variant.MakerMinBestAskExclusive);
+        Assert.Equal(0.50m, DownMaker50Variant.MakerMinBestAskExclusive);
+        Assert.Equal("BTC Up/Down 5m Maker", UpMaker50Variant.Category);
         Assert.Equal("BTC Up or Down 5m Middle 5 0.9 bps", StrategyIds.BtcUpDown5mVariants.Single(
             variant => variant.Code == "btc_up_down_5m_middle_5_bps_0_9").Name);
         Assert.Equal(0.9m, StrategyIds.BtcUpDown5mVariants.Single(
@@ -459,7 +474,7 @@ public sealed class BtcUpDown5mPaperStrategyProcessorTests
     public void StrategyIds_IncludeEthAndSolBinanceBpsVariants()
     {
         Assert.Equal(200, StrategyIds.CryptoUpDown5mVariants.Count);
-        Assert.Equal(1466, StrategyIds.UpDown5mStrategyVariants.Count);
+        Assert.Equal(1468, StrategyIds.UpDown5mStrategyVariants.Count);
         Assert.Equal(
             StrategyIds.UpDown5mStrategyVariants.Count,
             StrategyIds.UpDown5mStrategyVariants.Select(variant => variant.Id).Distinct().Count());
@@ -3547,6 +3562,110 @@ public sealed class BtcUpDown5mPaperStrategyProcessorTests
         Assert.Equal(order.NotionalUsd, run.StakeUsd);
         Assert.Equal(0.44m, run.EntryPrice);
         Assert.Contains(":maker:up:0.45", run.MarketId, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task ProcessAsync_UpMaker50PlacesFixedHalfOrderOnlyAboveHalfBestAsk()
+    {
+        var now = DateTimeOffset.UtcNow;
+        var marketStartUtc = now.AddSeconds(-5);
+        var marketEndUtc = now.AddMinutes(5);
+        var repository = new TestAppRepository();
+        repository.PolymarketGammaMarkets.Add(CreateMarket(
+            marketStartUtc,
+            marketEndUtc,
+            upPrice: 0.50m,
+            downPrice: 0.50m,
+            orderMinSize: 5m));
+        var clobClient = new MutableFakeClobClient([
+            OrderBook("asset-up", [new OrderBookLevel(0.46m, 100m)], [new OrderBookLevel(0.48m, 100m)], now, 5m, 0.01m),
+            OrderBook("asset-down", [new OrderBookLevel(0.50m, 100m)], [new OrderBookLevel(0.52m, 100m)], now, 5m, 0.01m)
+        ]);
+        var processor = CreateMakerProcessor(repository, clobClient, UpMaker50Variant.Code);
+
+        await processor.ProcessAsync();
+        await Task.Delay(75);
+        SetFirstMarketWindowStart(repository, DateTimeOffset.UtcNow.AddSeconds(-31));
+        clobClient.SetOrderBooks([
+            OrderBook("asset-up", [new OrderBookLevel(0.48m, 100m)], [new OrderBookLevel(0.50m, 100m)], DateTimeOffset.UtcNow, 5m, 0.01m),
+            OrderBook("asset-down", [new OrderBookLevel(0.48m, 100m)], [new OrderBookLevel(0.50m, 100m)], DateTimeOffset.UtcNow, 5m, 0.01m)
+        ]);
+        var atHalf = await processor.ProcessAsync();
+        await Task.Delay(75);
+        SetFirstMarketWindowStart(repository, DateTimeOffset.UtcNow.AddSeconds(-61));
+        clobClient.SetOrderBooks([
+            OrderBook("asset-up", [new OrderBookLevel(0.49m, 100m)], [new OrderBookLevel(0.51m, 100m)], DateTimeOffset.UtcNow, 5m, 0.01m),
+            OrderBook("asset-down", [new OrderBookLevel(0.47m, 100m)], [new OrderBookLevel(0.49m, 100m)], DateTimeOffset.UtcNow, 5m, 0.01m)
+        ]);
+
+        var aboveHalf = await processor.ProcessAsync();
+
+        Assert.Equal(0, atHalf.EntriesPlaced);
+        Assert.Equal(0, atHalf.RunsSkipped);
+        Assert.Equal(1, aboveHalf.EntriesPlaced);
+        Assert.Equal(0, aboveHalf.RunsSkipped);
+        var order = Assert.Single(repository.PaperOrders);
+        Assert.Equal(UpMaker50Variant.Id, order.StrategyId);
+        Assert.Equal("asset-up", order.AssetId);
+        Assert.Equal("Up", order.Outcome);
+        Assert.Equal(0.50m, order.Price);
+        Assert.True(order.Price < 0.51m);
+        var rawDecisionJson = order.RawDecisionJson ?? throw new InvalidOperationException("Maker order raw decision JSON is missing.");
+        using var rawDecision = JsonDocument.Parse(rawDecisionJson);
+        Assert.Equal(0.50m, rawDecision.RootElement.GetProperty("maker_limit_price").GetDecimal());
+        Assert.Equal(0.50m, rawDecision.RootElement.GetProperty("maker_fixed_limit_price").GetDecimal());
+        Assert.Equal(0.50m, rawDecision.RootElement.GetProperty("maker_min_best_ask_exclusive").GetDecimal());
+        var run = Assert.Single(repository.StrategyMarketPaperRuns);
+        Assert.Equal(StrategyMarketPaperRunStatuses.Entered, run.Status);
+        Assert.Equal(0.50m, run.EntryPrice);
+        Assert.Contains(":maker:up:0.51", run.MarketId, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task ProcessAsync_DownMaker50UsesDownBookAndFixedHalfPrice()
+    {
+        var now = DateTimeOffset.UtcNow;
+        var marketStartUtc = now.AddSeconds(-5);
+        var marketEndUtc = now.AddMinutes(5);
+        var repository = new TestAppRepository();
+        repository.PolymarketGammaMarkets.Add(CreateMarket(
+            marketStartUtc,
+            marketEndUtc,
+            upPrice: 0.50m,
+            downPrice: 0.50m,
+            orderMinSize: 5m));
+        var clobClient = new MutableFakeClobClient([
+            OrderBook("asset-up", [new OrderBookLevel(0.46m, 100m)], [new OrderBookLevel(0.48m, 100m)], now, 5m, 0.01m),
+            OrderBook("asset-down", [new OrderBookLevel(0.50m, 100m)], [new OrderBookLevel(0.52m, 100m)], now, 5m, 0.01m)
+        ]);
+        var processor = CreateMakerProcessor(repository, clobClient, DownMaker50Variant.Code);
+
+        await processor.ProcessAsync();
+        await Task.Delay(75);
+        SetFirstMarketWindowStart(repository, DateTimeOffset.UtcNow.AddSeconds(-31));
+        clobClient.SetOrderBooks([
+            OrderBook("asset-up", [new OrderBookLevel(0.44m, 100m)], [new OrderBookLevel(0.46m, 100m)], DateTimeOffset.UtcNow, 5m, 0.01m),
+            OrderBook("asset-down", [new OrderBookLevel(0.52m, 100m)], [new OrderBookLevel(0.54m, 100m)], DateTimeOffset.UtcNow, 5m, 0.01m)
+        ]);
+
+        var result = await processor.ProcessAsync();
+
+        Assert.Equal(1, result.EntriesPlaced);
+        Assert.Equal(0, result.RunsSkipped);
+        var order = Assert.Single(repository.PaperOrders);
+        Assert.Equal(DownMaker50Variant.Id, order.StrategyId);
+        Assert.Equal("asset-down", order.AssetId);
+        Assert.Equal("Down", order.Outcome);
+        Assert.Equal(0.50m, order.Price);
+        Assert.True(order.Price < 0.54m);
+        var rawDecisionJson = order.RawDecisionJson ?? throw new InvalidOperationException("Maker order raw decision JSON is missing.");
+        using var rawDecision = JsonDocument.Parse(rawDecisionJson);
+        Assert.Equal(0.50m, rawDecision.RootElement.GetProperty("maker_limit_price").GetDecimal());
+        Assert.Equal(0.50m, rawDecision.RootElement.GetProperty("maker_fixed_limit_price").GetDecimal());
+        Assert.Equal(0.50m, rawDecision.RootElement.GetProperty("maker_min_best_ask_exclusive").GetDecimal());
+        var run = Assert.Single(repository.StrategyMarketPaperRuns);
+        Assert.Equal(StrategyMarketPaperRunStatuses.Entered, run.Status);
+        Assert.Contains(":maker:down:0.54", run.MarketId, StringComparison.Ordinal);
     }
 
     [Fact]

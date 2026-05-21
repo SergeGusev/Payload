@@ -916,6 +916,8 @@ public static class StrategyIds
     public const string BtcUpDown5mAlwaysDownIdValue = "b7c50005-0000-4000-8010-000000000002";
     public const string BtcUpDown5mUpMakerIdValue = "b7c50005-0000-4000-8027-000000000001";
     public const string BtcUpDown5mDownMakerIdValue = "b7c50005-0000-4000-8027-000000000002";
+    public const string BtcUpDown5mUpMaker50IdValue = "b7c50005-0000-4000-8027-000000000050";
+    public const string BtcUpDown5mDownMaker50IdValue = "b7c50005-0000-4000-8027-000000000051";
     public const string BtcUpDown5mBinanceIdValue = "b7c50005-0000-4000-8011-000000000001";
     public const string BtcUpDown5mBinanceCleverIdValue = "b7c50005-0000-4000-8011-000000000002";
     public const string BtcUpDown5mBinance45IdValue = "b7c50005-0000-4000-8011-000000000045";
@@ -971,6 +973,8 @@ public static class StrategyIds
     public const string BtcUpDown5mAlwaysDownCode = "btc_up_down_5m_down";
     public const string BtcUpDown5mUpMakerCode = "btc_up_down_5m_up_maker";
     public const string BtcUpDown5mDownMakerCode = "btc_up_down_5m_down_maker";
+    public const string BtcUpDown5mUpMaker50Code = "btc_up_down_5m_up_maker_50";
+    public const string BtcUpDown5mDownMaker50Code = "btc_up_down_5m_down_maker_50";
     public const string BtcUpDown5mBinanceCode = "btc_up_down_5m_binance";
     public const string BtcUpDown5mBinanceCleverCode = "btc_up_down_5m_binance_clever";
     public const string BtcUpDown5mBinance45Code = "btc_up_down_5m_binance_45";
@@ -1030,6 +1034,8 @@ public static class StrategyIds
     public static readonly Guid BtcUpDown5mAlwaysDown = Guid.Parse(BtcUpDown5mAlwaysDownIdValue);
     public static readonly Guid BtcUpDown5mUpMaker = Guid.Parse(BtcUpDown5mUpMakerIdValue);
     public static readonly Guid BtcUpDown5mDownMaker = Guid.Parse(BtcUpDown5mDownMakerIdValue);
+    public static readonly Guid BtcUpDown5mUpMaker50 = Guid.Parse(BtcUpDown5mUpMaker50IdValue);
+    public static readonly Guid BtcUpDown5mDownMaker50 = Guid.Parse(BtcUpDown5mDownMaker50IdValue);
     public static readonly Guid BtcUpDown5mBinance = Guid.Parse(BtcUpDown5mBinanceIdValue);
     public static readonly Guid BtcUpDown5mBinanceClever = Guid.Parse(BtcUpDown5mBinanceCleverIdValue);
     public static readonly Guid BtcUpDown5mBinance45 = Guid.Parse(BtcUpDown5mBinance45IdValue);
@@ -1231,6 +1237,8 @@ public static class StrategyIds
         variants.Add(CreateBtcUpDown5mAlwaysDirectionVariant(isUp: false));
         variants.Add(CreateBtcUpDown5mMakerVariant(isUp: true));
         variants.Add(CreateBtcUpDown5mMakerVariant(isUp: false));
+        variants.Add(CreateBtcUpDown5mMakerVariant(isUp: true, fixedHalfPrice: true));
+        variants.Add(CreateBtcUpDown5mMakerVariant(isUp: false, fixedHalfPrice: true));
         variants.Add(CreateBtcUpDown5mBinanceVariant());
         for (var thresholdTenths = 1; thresholdTenths <= 50; thresholdTenths++)
         {
@@ -1405,20 +1413,36 @@ public static class StrategyIds
             isUp ? BtcUpDown5mStrategyBehavior.AlwaysUp : BtcUpDown5mStrategyBehavior.AlwaysDown);
     }
 
-    private static BtcUpDown5mStrategyVariant CreateBtcUpDown5mMakerVariant(bool isUp)
+    private static BtcUpDown5mStrategyVariant CreateBtcUpDown5mMakerVariant(
+        bool isUp,
+        bool fixedHalfPrice = false)
     {
         var outcome = isUp ? BtcUpDownFixedOutcome.Up : BtcUpDownFixedOutcome.Down;
         var outcomeName = isUp ? "Up" : "Down";
+        var id = fixedHalfPrice
+            ? isUp ? BtcUpDown5mUpMaker50 : BtcUpDown5mDownMaker50
+            : isUp ? BtcUpDown5mUpMaker : BtcUpDown5mDownMaker;
+        var code = fixedHalfPrice
+            ? isUp ? BtcUpDown5mUpMaker50Code : BtcUpDown5mDownMaker50Code
+            : isUp ? BtcUpDown5mUpMakerCode : BtcUpDown5mDownMakerCode;
+        var name = fixedHalfPrice
+            ? $"BTC Up or Down 5m {outcomeName} Maker 50"
+            : $"BTC Up or Down 5m {outcomeName} Maker";
+        var description = fixedHalfPrice
+            ? $"Paper-only maker strategy: after BTC 5m trading starts, baseline the {outcomeName} outcome order book, then on 30-second slots place a minimum-size post-only GTD BUY at fixed 0.50 only when the current best ask is above 0.50 and exceeds the previously fixed best-ask maximum."
+            : $"Paper-only maker strategy: after BTC 5m trading starts, baseline the {outcomeName} outcome order book, then on 30-second slots place a minimum-size post-only GTD BUY just below best ask when the current best ask exceeds the previously fixed best-ask maximum.";
         return new BtcUpDown5mStrategyVariant(
-            isUp ? BtcUpDown5mUpMaker : BtcUpDown5mDownMaker,
-            isUp ? BtcUpDown5mUpMakerCode : BtcUpDown5mDownMakerCode,
-            $"BTC Up or Down 5m {outcomeName} Maker",
-            $"Paper-only maker strategy: after BTC 5m trading starts, baseline the {outcomeName} outcome order book, then place a minimum-size post-only GTD BUY just below best ask on each new best-ask maximum until one minute before market end.",
+            id,
+            code,
+            name,
+            description,
             BtcUpDown5mStrategyDirection.Dynamic,
             0,
             BtcUpDown5mStrategyBehavior.FixedOutcomeMaker,
             FixedOutcome: outcome,
-            Category: "BTC Up/Down 5m Maker");
+            FixedLimitPrice: fixedHalfPrice ? 0.50m : null,
+            Category: "BTC Up/Down 5m Maker",
+            MakerMinBestAskExclusive: fixedHalfPrice ? 0.50m : null);
     }
 
     private static BtcUpDown5mStrategyVariant CreateBtcUpDown5mBinanceVariant()
@@ -1975,7 +1999,8 @@ public sealed record BtcUpDown5mStrategyVariant(
     BtcUpDownFixedOutcome? FixedOutcome = null,
     decimal? FixedLimitPrice = null,
     string Category = "",
-    string ReferenceAssetSymbol = "BTC")
+    string ReferenceAssetSymbol = "BTC",
+    decimal? MakerMinBestAskExclusive = null)
 {
     public string CopiedTraderWallet => "strategy:" + Code;
 }

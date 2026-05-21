@@ -1,3 +1,17 @@
+## Active Update 2026-05-21 BTC 5m Maker 50 Variants
+Goal: Add fixed-0.50 copies of the BTC 5m Up/Down Maker strategies that only place when the selected order book best ask is above 0.50.
+Status: Completed
+Done:
+- Added `BTC Up or Down 5m Up Maker 50` (`btc_up_down_5m_up_maker_50`) and `BTC Up or Down 5m Down Maker 50` (`btc_up_down_5m_down_maker_50`) to `StrategyIds` and the PostgreSQL `strategies` seed.
+- Kept the same Paper-only Maker high-water behavior: baseline after market start, 30-second decision slots (`30s` through `270s`), max 9 attempts, no opposite-outcome open-order guard, and high-water updates only after an order is created.
+- Added Maker 50 policy fields so these variants place fixed `0.50` post-only GTD BUY orders and do nothing while the selected outcome best ask is `<= 0.50`.
+- Updated raw decision diagnostics with `maker_fixed_limit_price` and `maker_min_best_ask_exclusive`.
+- Updated the Maker market report probe so future graphs include and simulate the Maker 50 variants.
+- Updated README, configuration reference, and tests.
+Next: Deploy/restart the service so schema initialization inserts the new strategies and the worker starts evaluating them.
+Notes: Verification passed: targeted `dotnet test tests\PolyCopyTrader.Tests\PolyCopyTrader.Tests.csproj --no-restore --filter "FullyQualifiedName~BtcUpDown5mPaperStrategyProcessorTests|FullyQualifiedName~StorageTests"` passed `160/160`; `dotnet build artifacts\MakerMarketReportProbe\MakerMarketReportProbe.csproj --no-restore` passed; full `dotnet test tests\PolyCopyTrader.Tests\PolyCopyTrader.Tests.csproj --no-restore` passed `520/520`; `git diff --check` passed with LF/CRLF warnings only. No production DB writes, service restart, live order submission, or cancel action was performed.
+Blockers: None.
+
 ## Active Update 2026-05-21 Dashboard Big ROI Filter
 Goal: Add a Dashboard checkbox near `Live only` to show only strategies with ROI greater than 10.
 Status: Completed

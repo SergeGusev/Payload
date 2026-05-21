@@ -113,3 +113,10 @@ Request:
 
 Result:
 Added `Big ROI` checkboxes next to `Live only` in the Dashboard `Strategies` filters for `All`, `24 hours`, `6 hours`, and `1 hour`. The filter keeps rows with strict ROI greater than `10`: `ClosedRoiPct > 10` in `All`, and recent `RoiPct > 10` in the period tabs. Updated README/configuration reference. Verification passed: Dashboard build to a temporary output path completed with 0 errors because the normal Dashboard output was locked by the currently running Dashboard/Visual Studio process; full tests passed `518/518`; `git diff --check` passed with LF/CRLF warnings only.
+
+## 2026-05-21T18:24:07.3436761Z
+Request:
+Сделай копию стратегий BTC Up or Down 5m Up Maker и BTC Up or Down 5m Down Maker - BTC Up or Down 5m Up Maker 50 и BTC Up or Down 5m Down Maker 50. Логика новых стратегий будет повторять логику текущих, кроме двух исключений - они ставят ставки всегда по 0.5 и ставят только в том случае, если текущий стакан выше 0.5
+
+Result:
+Added `BTC Up or Down 5m Up Maker 50` and `BTC Up or Down 5m Down Maker 50` as Paper-only fixed-outcome Maker strategy variants. They keep the current Maker high-water/30-second-slot/max-9 behavior but use fixed `0.50` post-only GTD BUY prices and do nothing while the selected outcome best ask is `<= 0.50`. Added PostgreSQL seed rows, raw decision diagnostics, tests, README/configuration reference updates, and Maker report probe support. Verification passed: targeted BTC Maker/storage tests `160/160`, Maker report probe build, full tests `520/520`, and `git diff --check` with LF/CRLF warnings only. No production DB writes, service restart, live order submission, or cancel action was performed.
