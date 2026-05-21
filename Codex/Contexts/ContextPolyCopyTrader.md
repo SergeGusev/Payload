@@ -1,3 +1,15 @@
+## Active Update 2026-05-21 BTC 1.7 Instant Live Allowlist
+Goal: Allow `BTC Up or Down 5m Binance 1.7 bps Instant` to use the BTC Paper/Live-shadow live path.
+Status: Completed
+Done:
+- Added `btc_up_down_5m_binance_bps_1_7_instant` to `PaperLiveShadowAllowedVariantCodes` in `BtcUpDown5mPaperStrategyProcessor`.
+- Added a regression test proving `1.7 bps Instant` with `LiveStakes=true` creates a Paper-shadow order and a GTD Live order at the instant executable ask-depth price with `postOnly=false`.
+- Updated the live-stakes admin multi-code test to include `btc_up_down_5m_binance_bps_1_7_instant` in the current controlled live set.
+- Updated README and `docs/live_trading_checklist.md` live allowlist documentation.
+Next: Deploy/publish and restart the service on the server. The production DB already had `live_stakes=true` for this strategy during the prior read-only diagnosis, but the running service needs this new build before it can create Live rows for it.
+Notes: Verification passed: targeted `dotnet test tests\PolyCopyTrader.Tests\PolyCopyTrader.Tests.csproj --no-restore --filter "FullyQualifiedName~BtcUpDown5mPaperStrategyProcessorTests|FullyQualifiedName~StrategyStakeAdminCommandTests"` passed `146/146`; full `dotnet test tests\PolyCopyTrader.Tests\PolyCopyTrader.Tests.csproj --no-restore` passed `521/521`; `dotnet build src\PolyCopyTrader.Service\PolyCopyTrader.Service.csproj --no-restore` passed with 0 warnings/errors; `git diff --check` passed with LF/CRLF warnings only. No production DB write, service restart, live order submission, or cancel action was performed.
+Blockers: None.
+
 ## Active Update 2026-05-21 BTC 1.7 Instant Live Diagnosis
 Goal: Explain why `BTC Up or Down 5m Binance 1.7 bps Instant` is not producing Live orders while higher bps strategies do.
 Status: Completed

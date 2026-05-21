@@ -52,6 +52,7 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
     [
         BtcSkip1VariantCode,
         StrategyIds.BtcUpDown5mBinanceBps1Code,
+        "btc_up_down_5m_binance_bps_1_7_instant",
         "btc_up_down_5m_binance_bps_1_8",
         "btc_up_down_5m_binance_bps_1_9",
         StrategyIds.BtcUpDown5mBinanceBps2Code,

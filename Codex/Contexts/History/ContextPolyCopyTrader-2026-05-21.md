@@ -127,3 +127,10 @@ Why is `BTC Up or Down 5m Binance 1.7 bps Instant` not placing while higher bps 
 
 Result:
 Diagnosed production read-only against PostgreSQL host `192.168.0.101`. The service was fresh and running in `Live` mode on build `info=1.0.0+ddc6ac1a3359c9ac1aaa4e98b332650689856968`. `btc_up_down_5m_binance_bps_1_7_instant` was enabled, not paused, and `live_stakes=true`, but had `0` all-time Live orders and `0` paper-live-shadow decisions in the last 24h. It was still creating Paper orders: `32` filled Paper orders in the last 24h, latest `2026-05-21T18:35:18Z`. Code inspection showed the blocker is the Paper/Live-shadow allowlist: `ShouldRunPaperLiveShadowTest` requires both `LiveStakes` and membership in `PaperLiveShadowAllowedVariantCodes`, and `btc_up_down_5m_binance_bps_1_7_instant` is not allowlisted while `btc_up_down_5m_binance_bps_2` and `btc_up_down_5m_binance_bps_2_1` are. No source code change, DB write, service restart, live order submission, cancel action, or tests were performed.
+
+## 2026-05-21T18:49:40Z
+Request:
+Давай добавим
+
+Result:
+Added `btc_up_down_5m_binance_bps_1_7_instant` to the BTC Paper/Live-shadow allowlist, added a regression test proving it creates a Paper-shadow plus GTD Live order using instant executable ask-depth pricing with `postOnly=false`, updated the live-stakes admin multi-code test to include the new strategy, and updated README plus `docs/live_trading_checklist.md`. Verification passed: targeted BTC processor/admin tests `146/146`, full tests `521/521`, Service build with 0 warnings/errors, and `git diff --check` with LF/CRLF warnings only. No production DB write, service restart, live order submission, or cancel action was performed; production still needs deploy/restart from this commit before `1.7 bps Instant` can Live-place orders.
