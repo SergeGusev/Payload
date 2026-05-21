@@ -1,3 +1,13 @@
+## Active Update 2026-05-21 Dashboard Strategy Column Cleanup
+Goal: Remove low-value strategy columns from Dashboard grids.
+Status: Completed
+Done:
+- Removed the `Paused until` column from the main Strategies grid while keeping the editable `Paused` checkbox.
+- Removed `Live tech skip`, `Live ignored`, `Live gtd unfilled`, `Live cancel ignored`, and `Live reject/error` from both strategy DataGrids in `MainWindow.xaml`.
+Next: Deploy/restart Dashboard so the updated grid layout is visible.
+Notes: Verification passed: removed column headers are no longer present in `MainWindow.xaml`; Dashboard build with temp output passed; full `dotnet test tests\PolyCopyTrader.Tests\PolyCopyTrader.Tests.csproj --no-restore` passed `513/513`; `git diff --check` passed with LF/CRLF warning only. No production DB writes, service restart, live order submission, or cancel action.
+Blockers: None.
+
 ## Active Update 2026-05-21 Strategy Paused After Loss
 Goal: Add per-strategy `Paused` control that auto-pauses a losing strategy for 12 hours and can be toggled in Dashboard.
 Status: Completed

@@ -71,11 +71,6 @@
                     <DataGridTextColumn Header="ClosedRoi" Binding="{Binding RoiPct}" Width="85" />
                     <DataGridTextColumn Header="Live settles" Binding="{Binding LiveSettledOrdersCount}" Width="90" />
                     <DataGridTextColumn Header="Live cond skip" Binding="{Binding LiveConditionSkippedOrdersCount}" Width="105" />
-                    <DataGridTextColumn Header="Live tech skip" Binding="{Binding LiveTechnicalSkippedOrdersCount}" Width="105" />
-                    <DataGridTextColumn Header="Live ignored" Binding="{Binding LiveIgnoredOrdersCount}" Width="95" />
-                    <DataGridTextColumn Header="Live gtd unfilled" Binding="{Binding LiveIgnoredGtdUnfilledCount}" Width="115" />
-                    <DataGridTextColumn Header="Live cancel ignored" Binding="{Binding LiveIgnoredCancelledOrdersCount}" Width="125" />
-                    <DataGridTextColumn Header="Live reject/error" Binding="{Binding LiveIgnoredRejectedOrdersCount}" Width="115" />
                     <DataGridTextColumn Header="Live won" Binding="{Binding LiveWonOrdersCount}" Width="80" />
                     <DataGridTextColumn Header="Live lost" Binding="{Binding LiveLostOrdersCount}" Width="80" />
                     <DataGridTextColumn Header="Live realized" Binding="{Binding LiveRealizedPnlUsd}" Width="100" />
@@ -334,7 +329,6 @@
                                 </DataTemplate>
                             </DataGridTemplateColumn.CellTemplate>
                         </DataGridTemplateColumn>
-                        <DataGridTextColumn Header="Paused until" Binding="{Binding PausedUntilUtc}" Width="150" />
                         <DataGridTextColumn Header="Settled" Binding="{Binding SettledPositionsCount}" Width="80" />
                         <DataGridTextColumn Header="Skipped" Binding="{Binding SkippedRunsCount}" Width="70" />
                         <DataGridTextColumn Header="Won" Binding="{Binding WonPositionsCount}" Width="60" />
@@ -343,11 +337,6 @@
                         <DataGridTextColumn Header="Closed ROI" Binding="{Binding ClosedRoiPct}" Width="95" />
                         <DataGridTextColumn Header="Live settles" Binding="{Binding LiveSettledOrdersCount}" Width="90" />
                         <DataGridTextColumn Header="Live cond skip" Binding="{Binding LiveConditionSkippedOrdersCount}" Width="105" />
-                        <DataGridTextColumn Header="Live tech skip" Binding="{Binding LiveTechnicalSkippedOrdersCount}" Width="105" />
-                        <DataGridTextColumn Header="Live ignored" Binding="{Binding LiveIgnoredOrdersCount}" Width="95" />
-                        <DataGridTextColumn Header="Live gtd unfilled" Binding="{Binding LiveIgnoredGtdUnfilledCount}" Width="115" />
-                        <DataGridTextColumn Header="Live cancel ignored" Binding="{Binding LiveIgnoredCancelledOrdersCount}" Width="125" />
-                        <DataGridTextColumn Header="Live reject/error" Binding="{Binding LiveIgnoredRejectedOrdersCount}" Width="115" />
                         <DataGridTextColumn Header="Live won" Binding="{Binding LiveWonOrdersCount}" Width="80" />
                         <DataGridTextColumn Header="Live lost" Binding="{Binding LiveLostOrdersCount}" Width="80" />
                         <DataGridTextColumn Header="Live realized" Binding="{Binding LiveRealizedPnlUsd}" Width="100" />

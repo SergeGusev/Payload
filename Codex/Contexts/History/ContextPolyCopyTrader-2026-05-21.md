@@ -32,3 +32,10 @@ Request:
 
 Result:
 Added per-strategy `Paused`/`PausedUntilUtc` support across domain models, PostgreSQL schema/repository, runtime settings, Dashboard strategy rows/grid/CSV, Follow Leader signal processing, BTC 5m Paper entry paths, generic Paper settlement handling, and Live settlement handling. After a losing settlement, the repository now sums the strategy's realized Paper and Live PnL over the previous 12 hours and pauses it until `now + 12h` when that window is negative; paused strategies skip new Paper and Live entries. Dashboard now has an editable `Paused` checkbox immediately after `Live`, plus `Paused until`. Verification passed: targeted tests `158/158`, full tests `513/513`, Dashboard build, Service build, and `git diff --check` with LF/CRLF warnings only. No production DB writes, service restart, live order submission, or cancel action was performed.
+
+## 2026-05-21T09:32:45.2364920+00:00
+Request:
+Убери из Dashboard колонки Paused until и убери справа от Live ROI колонки Live tech skip, Live ignored, Live gtd unfilled, Live cancel ignored, Live reject/error
+
+Result:
+Removed `Paused until` from the main Dashboard Strategies grid and removed `Live tech skip`, `Live ignored`, `Live gtd unfilled`, `Live cancel ignored`, and `Live reject/error` from both Dashboard strategy DataGrids. Kept the underlying metrics and CSV export intact. Verification passed: the removed headers no longer appear in `MainWindow.xaml`, Dashboard build passed, full tests passed `513/513`, and `git diff --check` passed with LF/CRLF warning only. No production DB writes, service restart, live order submission, or cancel action was performed.
