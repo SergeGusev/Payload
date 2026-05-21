@@ -1,3 +1,17 @@
+## Active Update 2026-05-21 BTC 1.7 Instant Live Diagnosis
+Goal: Explain why `BTC Up or Down 5m Binance 1.7 bps Instant` is not producing Live orders while higher bps strategies do.
+Status: Completed
+Done:
+- Verified the local `POLYCOPYTRADER_POSTGRES_CONNECTION` points at `127.0.0.1`, then repeated the read-only diagnosis against production PostgreSQL host `192.168.0.101`.
+- Confirmed production service is fresh and running in `Live` mode on build `info=1.0.0+ddc6ac1a3359c9ac1aaa4e98b332650689856968`, started `2026-05-21T18:29:46Z`, with heartbeat at `2026-05-21T18:41:46Z`.
+- Confirmed `btc_up_down_5m_binance_bps_1_7_instant` is enabled, not paused, and `live_stakes=true`, but it has `0` all-time Live orders and `0` paper-live-shadow decisions in the last 24h.
+- Confirmed the same strategy is creating Paper orders: in the last 24h it had `32` filled Paper orders, with latest at `2026-05-21T18:35:18Z`.
+- Confirmed the visible higher-bps Live activity is from allowlisted strategies such as `btc_up_down_5m_binance_bps_2` and `btc_up_down_5m_binance_bps_2_1`; `btc_up_down_5m_binance_bps_2` has `140` all-time Live rows and recent Live rows through `2026-05-21T18:35:18Z`.
+- Code inspection showed `ShouldRunPaperLiveShadowTest` requires both `LiveStakes` and membership in `PaperLiveShadowAllowedVariantCodes`; that allowlist includes `1`, `1.8`, `1.9`, `2`, `2 Instant`, `2.1`, `2.2`, `2.3`, and `SOL 2.4 Instant`, but not `btc_up_down_5m_binance_bps_1_7_instant`.
+Next: To allow this strategy to place Live orders, add `btc_up_down_5m_binance_bps_1_7_instant` to the Paper/Live-shadow allowlist with regression tests/docs, then deploy/restart. Otherwise it will remain Paper-only even with the Dashboard Live checkbox enabled.
+Notes: Production queries were SELECT-only. No source code change, DB write, service restart, live order submission, or cancel action was performed. Tests were not run because this was a read-only diagnosis.
+Blockers: None.
+
 ## Active Update 2026-05-21 BTC 5m Maker 50 Variants
 Goal: Add fixed-0.50 copies of the BTC 5m Up/Down Maker strategies that only place when the selected order book best ask is above 0.50.
 Status: Completed

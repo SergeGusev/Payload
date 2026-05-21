@@ -120,3 +120,10 @@ Request:
 
 Result:
 Added `BTC Up or Down 5m Up Maker 50` and `BTC Up or Down 5m Down Maker 50` as Paper-only fixed-outcome Maker strategy variants. They keep the current Maker high-water/30-second-slot/max-9 behavior but use fixed `0.50` post-only GTD BUY prices and do nothing while the selected outcome best ask is `<= 0.50`. Added PostgreSQL seed rows, raw decision diagnostics, tests, README/configuration reference updates, and Maker report probe support. Verification passed: targeted BTC Maker/storage tests `160/160`, Maker report probe build, full tests `520/520`, and `git diff --check` with LF/CRLF warnings only. No production DB writes, service restart, live order submission, or cancel action was performed.
+
+## 2026-05-21T18:44:06Z
+Request:
+Why is `BTC Up or Down 5m Binance 1.7 bps Instant` not placing while higher bps strategies such as `2` are placing?
+
+Result:
+Diagnosed production read-only against PostgreSQL host `192.168.0.101`. The service was fresh and running in `Live` mode on build `info=1.0.0+ddc6ac1a3359c9ac1aaa4e98b332650689856968`. `btc_up_down_5m_binance_bps_1_7_instant` was enabled, not paused, and `live_stakes=true`, but had `0` all-time Live orders and `0` paper-live-shadow decisions in the last 24h. It was still creating Paper orders: `32` filled Paper orders in the last 24h, latest `2026-05-21T18:35:18Z`. Code inspection showed the blocker is the Paper/Live-shadow allowlist: `ShouldRunPaperLiveShadowTest` requires both `LiveStakes` and membership in `PaperLiveShadowAllowedVariantCodes`, and `btc_up_down_5m_binance_bps_1_7_instant` is not allowlisted while `btc_up_down_5m_binance_bps_2` and `btc_up_down_5m_binance_bps_2_1` are. No source code change, DB write, service restart, live order submission, cancel action, or tests were performed.
