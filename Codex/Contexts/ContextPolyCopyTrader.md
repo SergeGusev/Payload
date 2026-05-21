@@ -1,3 +1,14 @@
+## Active Update 2026-05-21 Always-Win Strategy Clarification
+Goal: Answer whether a strategy can be designed to always win.
+Status: Completed
+Done:
+- Clarified that no predictive trading strategy can guarantee winning every market; the only mathematically outcome-independent class is covered arbitrage, or skipping when a guaranteed setup is absent.
+- Proposed the closest safe design: a no-bet-unless-covered BTC 5m strategy that trades only when both outcomes can be acquired/executed for less than total payout after fees/slippage/rounding, or when the authoritative settlement source has already made the outcome effectively known and market odds lag it.
+- Noted that BTC 5m Polymarket settlement is Chainlink BTC/USD per Gamma raw metadata, while Binance-based strategies use Binance only as an entry signal, so any settlement-edge strategy must validate against Chainlink, not Binance.
+Next: If implemented, start with a read-only arbitrage/Chainlink-edge scanner and Paper-only logging before any live order path is considered.
+Notes: Conceptual answer only; no source code, database writes, service restart, live order submission, cancel action, or tests were performed.
+Blockers: A true always-winning strategy is impossible unless the bot can lock a covered arbitrage with executable liquidity and all-in cost below guaranteed payout.
+
 ## Active Update 2026-05-21 BTC 2 Bps Binance Settlement Audit
 Goal: Check whether `BTC Up or Down 5m Binance 2 bps` losses in the last 24h match Binance BTCUSDT history or are caused by Polymarket settlement criteria.
 Status: Completed

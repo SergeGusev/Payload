@@ -141,3 +141,10 @@ Request:
 
 Result:
 Audited production read-only for `btc_up_down_5m_binance_bps_2` Live rows in the last 24h and compared each market to public Binance `BTCUSDT` aggregate trades around market start/end. Found `32` Live rows over `32` markets, `13` filled/settled rows, Polymarket/Gamma result `4` wins / `9` losses / `-14.7` PnL. Binance exact boundary-trade consensus for those same settled filled rows would be `3` wins / `10` losses, so Binance does not show that the strategy should have won more often. Found one settled mismatch, but favorable to the user: `btc-updown-5m-1779390000` bought `Up`, Polymarket/Gamma settled `Up` as win, while Binance exact boundary trades indicated `Down`. Gamma raw metadata for that market lists Chainlink BTC/USD as resolution source, not Binance spot. No source code change, DB write, service restart, live order submission, cancel action, or tests were performed.
+
+## 2026-05-21T19:28:20.6672079Z
+Request:
+Придумай стратегию, которая будет всегда выигрывать
+
+Result:
+Answered conceptually that no predictive market strategy can always win. The only outcome-independent class is covered arbitrage, or skipping all markets where guaranteed execution cannot be locked: for binary BTC 5m markets, buy/cover both outcomes only when executable all-in cost is below guaranteed payout after fees, rounding, slippage, and failed-leg risk. Also noted that BTC 5m settlement uses Chainlink BTC/USD, not Binance, so any settlement-edge strategy must validate against Chainlink rather than treating Binance as authoritative. No source code, DB write, service restart, live order submission, cancel action, or tests were performed.
