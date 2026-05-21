@@ -3494,7 +3494,7 @@ public sealed class BtcUpDown5mPaperStrategyProcessorTests
     }
 
     [Fact]
-    public async Task ProcessAsync_UpMakerPlacesPostOnlyOrderWhenBestAskRises()
+    public async Task ProcessAsync_UpMakerPlacesPostOnlyOrderWhenBestAskMakesNewHigh()
     {
         var now = DateTimeOffset.UtcNow;
         var marketStartUtc = now.AddSeconds(-5);
@@ -3547,7 +3547,7 @@ public sealed class BtcUpDown5mPaperStrategyProcessorTests
     }
 
     [Fact]
-    public async Task ProcessAsync_UpMakerPlacesPostOnlyOrderWhenBestAskRisesAfterFallingBelowPriorHigh()
+    public async Task ProcessAsync_UpMakerWaitsForBestAskToExceedPriorHighAfterFalling()
     {
         var now = DateTimeOffset.UtcNow;
         var marketStartUtc = now.AddSeconds(-5);
@@ -3583,18 +3583,25 @@ public sealed class BtcUpDown5mPaperStrategyProcessorTests
             OrderBook("asset-up", [new OrderBookLevel(0.39m, 100m)], [new OrderBookLevel(0.43m, 100m)], DateTimeOffset.UtcNow, 5m, 0.01m),
             OrderBook("asset-down", [new OrderBookLevel(0.57m, 100m)], [new OrderBookLevel(0.60m, 100m)], DateTimeOffset.UtcNow, 5m, 0.01m)
         ]);
+        var belowPriorHighRise = await processor.ProcessAsync();
+        await Task.Delay(75);
+        clobClient.SetOrderBooks([
+            OrderBook("asset-up", [new OrderBookLevel(0.41m, 100m)], [new OrderBookLevel(0.46m, 100m)], DateTimeOffset.UtcNow, 5m, 0.01m),
+            OrderBook("asset-down", [new OrderBookLevel(0.54m, 100m)], [new OrderBookLevel(0.59m, 100m)], DateTimeOffset.UtcNow, 5m, 0.01m)
+        ]);
 
-        var secondRise = await processor.ProcessAsync();
+        var newHighRise = await processor.ProcessAsync();
 
         Assert.Equal(1, firstRise.EntriesPlaced);
         Assert.Equal(0, fall.EntriesPlaced);
-        Assert.Equal(1, secondRise.EntriesPlaced);
+        Assert.Equal(0, belowPriorHighRise.EntriesPlaced);
+        Assert.Equal(1, newHighRise.EntriesPlaced);
         Assert.Equal(2, repository.PaperOrders.Count);
-        Assert.Equal([0.44m, 0.42m], repository.PaperOrders.Select(order => order.Price).ToArray());
+        Assert.Equal([0.44m, 0.45m], repository.PaperOrders.Select(order => order.Price).ToArray());
         Assert.All(repository.PaperOrders, order => Assert.Equal("btc_updown5m_maker_post_only", order.ExecutionSource));
         Assert.Equal(2, repository.StrategyMarketPaperRuns.Count);
         Assert.Contains(repository.StrategyMarketPaperRuns, run => run.MarketId.Contains(":maker:up:0.45", StringComparison.Ordinal));
-        Assert.Contains(repository.StrategyMarketPaperRuns, run => run.MarketId.Contains(":maker:up:0.43", StringComparison.Ordinal));
+        Assert.Contains(repository.StrategyMarketPaperRuns, run => run.MarketId.Contains(":maker:up:0.46", StringComparison.Ordinal));
     }
 
     [Fact]

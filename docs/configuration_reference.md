@@ -673,12 +673,14 @@ fixed price `0.45` on the corresponding outcome. The
 `BTC Up or Down 5m Up Maker` and `BTC Up or Down 5m Down Maker` variants are
 Paper-only and grouped under `BTC Up/Down 5m Maker`. After a BTC 5-minute
 market starts, each variant baselines the selected outcome best ask, tracks the
-last observed best ask in memory, and creates a minimum-size post-only GTD BUY
-one tick below the current best ask whenever that ask rises above the previous
-observation. Flat or falling asks only refresh the trend reference, so a later
-rise starts placing orders again even below an older high. These Maker orders
-can happen multiple times in one market, expire at `marketEndUtc - 60s`, and can
-run whenever Paper runtime is enabled, including `Bot:Mode=Live` with
+high-water best ask in memory, and creates a minimum-size post-only GTD BUY one
+tick below the current best ask only when that ask exceeds the previous high.
+Flat or falling asks do not lower the high-water mark and do not create orders;
+after a move from `0.50` to `0.55` and a fall to `0.52`, the next Maker order
+waits until the ask crosses `0.55` and reaches a new high such as `0.56`. These
+Maker orders can happen multiple times in one market, expire at
+`marketEndUtc - 60s`, and can run whenever Paper runtime is enabled, including
+`Bot:Mode=Live` with
 `PaperTrading:RunInLiveMode=true`; they only create Paper orders, never submit
 Live/Paper-shadow orders, and are intentionally excluded from the
 opposite-outcome open-order guard. The

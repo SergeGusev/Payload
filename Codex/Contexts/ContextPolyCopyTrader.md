@@ -1,3 +1,16 @@
+## Active Update 2026-05-21 BTC 5m Maker High-Water Correction
+Goal: Correct BTC 5m Maker entries so they resume only after crossing the prior best-ask maximum.
+Status: Completed
+Done:
+- Changed Maker in-memory state from last observed best ask to high-water best ask (`MaxBestAsk`) per strategy/market/outcome.
+- Flat or falling asks no longer lower the threshold; after a move such as `0.50 -> 0.55 -> 0.52`, Maker waits for a new high above `0.55` before placing again.
+- Kept the Maker path Paper-only and still excluded from the opposite-outcome open-order guard.
+- Updated regression coverage so an ask rise below the prior high creates no order, while the next new high creates a post-only order one tick below it.
+- Updated README, configuration reference, and the Maker report probe wording/CSV headers back to previous/new max best ask.
+Next: Deploy/restart the service so production uses the high-water Maker semantics.
+Notes: Verification passed: targeted `dotnet test tests\PolyCopyTrader.Tests\PolyCopyTrader.Tests.csproj --no-restore --filter "FullyQualifiedName~BtcUpDown5mPaperStrategyProcessorTests"` passed `135/135`; `dotnet build artifacts\MakerMarketReportProbe\MakerMarketReportProbe.csproj --no-restore` passed; full `dotnet test tests\PolyCopyTrader.Tests\PolyCopyTrader.Tests.csproj --no-restore` passed `517/517`; `git diff --check` passed with LF/CRLF warnings only. No production DB writes, service restart, live order submission, or cancel action.
+Blockers: None.
+
 ## Active Update 2026-05-21 BTC 5m Maker Rising Ask Trend
 Goal: Change BTC 5m Maker entries to follow rising best-ask waves instead of only all-time best-ask maxima.
 Status: Completed

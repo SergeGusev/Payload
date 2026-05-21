@@ -89,7 +89,7 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
     private readonly IPaperTradingEngine paperTradingEngine = new DefaultPaperTradingEngine();
     private readonly SemaphoreSlim entryPlacementLock = new(1, 1);
     private readonly Dictionary<string, DateTimeOffset> closingOrderBookCaptureAttempts = new(StringComparer.OrdinalIgnoreCase);
-    private readonly Dictionary<string, BtcMakerTrendState> makerTrendStates = new(StringComparer.OrdinalIgnoreCase);
+    private readonly Dictionary<string, BtcMakerHighWaterState> makerHighWaterStates = new(StringComparer.OrdinalIgnoreCase);
 
     public async Task<BtcUpDown5mPaperStrategyResult> ProcessAsync(CancellationToken cancellationToken = default)
     {
@@ -162,7 +162,7 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
         var observed = observeResult.Observed;
         var observeSkipped = observeResult.Skipped;
         controlState.RecordLoop($"BTC5mStrategy processing maker maxima. Variants={makerEntryVariants.Length}", null);
-        var makerResult = await ProcessMakerTrendOrdersAsync(
+        var makerResult = await ProcessMakerHighWaterOrdersAsync(
             DateTimeOffset.UtcNow,
             makerEntryVariants,
             strategySettings,
@@ -477,7 +477,7 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
         return new ObserveCounters(observed, skipped);
     }
 
-    private async Task<BtcMakerProcessResult> ProcessMakerTrendOrdersAsync(
+    private async Task<BtcMakerProcessResult> ProcessMakerHighWaterOrdersAsync(
         DateTimeOffset nowUtc,
         IReadOnlyList<BtcUpDown5mStrategyVariant> variants,
         IReadOnlyDictionary<Guid, StrategyRuntimeSettings> strategySettings,
@@ -488,7 +488,7 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
             return BtcMakerProcessResult.Empty;
         }
 
-        CleanupMakerTrendStates(nowUtc);
+        CleanupMakerHighWaterStates(nowUtc);
 
         var markets = await repository.GetBtcUpDownStrategyGammaMarketsAsync(
             options.MaxMarketsPerCycle,
@@ -565,10 +565,10 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
 
                 observed++;
                 var stateKey = GetMakerStateKey(variant, market, selectedOutcome);
-                if (!makerTrendStates.TryGetValue(stateKey, out var state) ||
+                if (!makerHighWaterStates.TryGetValue(stateKey, out var state) ||
                     state.MarketEndUtc != market.EndDateUtc)
                 {
-                    makerTrendStates[stateKey] = new BtcMakerTrendState(
+                    makerHighWaterStates[stateKey] = new BtcMakerHighWaterState(
                         bestAsk.Value,
                         OrderSequence: 0,
                         nowUtc,
@@ -582,11 +582,10 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
                     continue;
                 }
 
-                if (bestAsk.Value <= state.LastBestAsk)
+                if (bestAsk.Value <= state.MaxBestAsk)
                 {
-                    makerTrendStates[stateKey] = state with
+                    makerHighWaterStates[stateKey] = state with
                     {
-                        LastBestAsk = bestAsk.Value,
                         UpdatedAtUtc = nowUtc,
                         MarketEndUtc = market.EndDateUtc
                     };
@@ -594,24 +593,24 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
                 }
 
                 var orderSequence = state.OrderSequence + 1;
-                makerTrendStates[stateKey] = state with
+                makerHighWaterStates[stateKey] = state with
                 {
-                    LastBestAsk = bestAsk.Value,
+                    MaxBestAsk = bestAsk.Value,
                     OrderSequence = orderSequence,
                     UpdatedAtUtc = nowUtc,
                     MarketEndUtc = market.EndDateUtc
                 };
 
                 var settings = GetStrategySettings(strategySettings, variant.Id);
-                var orderResult = await TryPlaceMakerTrendOrderAsync(
+                var orderResult = await TryPlaceMakerHighWaterOrderAsync(
                     nowUtc,
                     market,
                     variant,
                     selectedOutcome,
                     orderBook,
                     orderBookLookup,
-                    previousBestAsk: state.LastBestAsk,
-                    currentBestAsk: bestAsk.Value,
+                    previousMaxBestAsk: state.MaxBestAsk,
+                    currentMaxBestAsk: bestAsk.Value,
                     orderSequence,
                     settings,
                     cancellationToken);
@@ -623,28 +622,28 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
         return new BtcMakerProcessResult(observed, entriesPlaced, runsSkipped);
     }
 
-    private async Task<BtcMakerOrderResult> TryPlaceMakerTrendOrderAsync(
+    private async Task<BtcMakerOrderResult> TryPlaceMakerHighWaterOrderAsync(
         DateTimeOffset nowUtc,
         PolymarketGammaMarket market,
         BtcUpDown5mStrategyVariant variant,
         BtcUpDown5mOutcomeQuote selectedOutcome,
         OrderBookSnapshot orderBook,
         TakerOrderBookLookupResult orderBookLookup,
-        decimal previousBestAsk,
-        decimal currentBestAsk,
+        decimal previousMaxBestAsk,
+        decimal currentMaxBestAsk,
         int orderSequence,
         StrategyRuntimeSettings settings,
         CancellationToken cancellationToken)
     {
-        var syntheticMarketId = GetMakerSyntheticMarketId(market, selectedOutcome, currentBestAsk, orderSequence, nowUtc);
+        var syntheticMarketId = GetMakerSyntheticMarketId(market, selectedOutcome, currentMaxBestAsk, orderSequence, nowUtc);
         var rawDecisionJson = BuildMakerRawDecisionJson(
             market,
             variant,
             selectedOutcome,
             orderBook,
             orderBookLookup,
-            previousBestAsk,
-            currentBestAsk,
+            previousMaxBestAsk,
+            currentMaxBestAsk,
             orderSequence,
             syntheticMarketId);
         if (settings.IsPausedAt(nowUtc))
@@ -662,7 +661,7 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
             return BtcMakerOrderResult.SkippedResult;
         }
 
-        var priceDecision = ResolveMakerPostOnlyLimitPrice(orderBook, currentBestAsk);
+        var priceDecision = ResolveMakerPostOnlyLimitPrice(orderBook, currentMaxBestAsk);
         rawDecisionJson = AttachMakerPostOnlyPriceJson(rawDecisionJson, priceDecision);
         if (!priceDecision.Available || priceDecision.LimitPrice is not > 0m)
         {
@@ -769,12 +768,12 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
             exposureCache.ApplyPaperOrder(order);
 
             logger.LogInformation(
-                "BTC Up or Down 5m maker paper order placed. Strategy={StrategyCode} Market={MarketSlug} Outcome={Outcome} PreviousBestAsk={PreviousBestAsk} CurrentBestAsk={CurrentBestAsk} OrderSequence={OrderSequence} Price={Price} NotionalUsd={NotionalUsd} SizeShares={SizeShares}",
+                "BTC Up or Down 5m maker paper order placed. Strategy={StrategyCode} Market={MarketSlug} Outcome={Outcome} PreviousMaxBestAsk={PreviousMaxBestAsk} CurrentMaxBestAsk={CurrentMaxBestAsk} OrderSequence={OrderSequence} Price={Price} NotionalUsd={NotionalUsd} SizeShares={SizeShares}",
                 variant.Code,
                 market.Slug,
                 selectedOutcome.Outcome,
-                previousBestAsk,
-                currentBestAsk,
+                previousMaxBestAsk,
+                currentMaxBestAsk,
                 orderSequence,
                 priceDecision.LimitPrice.Value,
                 sizing.TargetNotionalUsd,
@@ -984,19 +983,19 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
         return false;
     }
 
-    private void CleanupMakerTrendStates(DateTimeOffset nowUtc)
+    private void CleanupMakerHighWaterStates(DateTimeOffset nowUtc)
     {
-        if (makerTrendStates.Count == 0)
+        if (makerHighWaterStates.Count == 0)
         {
             return;
         }
 
         var cutoffUtc = nowUtc.AddHours(-1);
-        foreach (var item in makerTrendStates
+        foreach (var item in makerHighWaterStates
             .Where(item => item.Value.MarketEndUtc is { } marketEndUtc && marketEndUtc < cutoffUtc)
             .ToArray())
         {
-            makerTrendStates.Remove(item.Key);
+            makerHighWaterStates.Remove(item.Key);
         }
     }
 
@@ -1201,8 +1200,8 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
         BtcUpDown5mOutcomeQuote selectedOutcome,
         OrderBookSnapshot orderBook,
         TakerOrderBookLookupResult orderBookLookup,
-        decimal previousBestAsk,
-        decimal currentBestAsk,
+        decimal previousMaxBestAsk,
+        decimal currentMaxBestAsk,
         int orderSequence,
         string syntheticMarketId)
     {
@@ -1219,12 +1218,12 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
             market_slug = market.Slug,
             outcome = selectedOutcome.Outcome,
             asset_id = selectedOutcome.AssetId,
-            maker_trend_mode = "rising_best_ask",
+            maker_trend_mode = "new_best_ask_high_water",
             maker_trend_order_sequence = orderSequence,
-            previous_best_ask = previousBestAsk,
-            current_best_ask = currentBestAsk,
-            previous_max_best_ask = previousBestAsk,
-            current_max_best_ask = currentBestAsk,
+            previous_best_ask = previousMaxBestAsk,
+            current_best_ask = currentMaxBestAsk,
+            previous_max_best_ask = previousMaxBestAsk,
+            current_max_best_ask = currentMaxBestAsk,
             order_book_source = orderBookLookup.Source,
             order_book_age_ms = orderBookLookup.Age is { } age
                 ? (int)Math.Round(age.TotalMilliseconds)
@@ -10678,8 +10677,8 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
         public static BtcMakerOrderResult SkippedResult { get; } = new(false, true);
     }
 
-    private sealed record BtcMakerTrendState(
-        decimal LastBestAsk,
+    private sealed record BtcMakerHighWaterState(
+        decimal MaxBestAsk,
         int OrderSequence,
         DateTimeOffset UpdatedAtUtc,
         DateTimeOffset? MarketEndUtc);
