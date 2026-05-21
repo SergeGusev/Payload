@@ -209,16 +209,18 @@ public sealed class PaperSettlementProcessor(
             if (!decision.Paused)
             {
                 logger.LogInformation(
-                    "Paper settlement loss did not trigger strategy pause because recent PnL is non-negative. StrategyId={StrategyId} RecentPnlUsd={RecentPnlUsd}",
+                    "Paper settlement loss did not trigger strategy pause because recent PnL is non-negative or recent settled count is too low. StrategyId={StrategyId} RecentPnlUsd={RecentPnlUsd} RecentSettledCount={RecentSettledCount}",
                     StrategyIds.Normalize(strategyId.Value),
-                    decision.RecentPnlUsd);
+                    decision.RecentPnlUsd,
+                    decision.RecentSettledCount);
                 return;
             }
 
             logger.LogWarning(
-                "Strategy paused after paper settlement loss. StrategyId={StrategyId} RecentPnlUsd={RecentPnlUsd} PausedUntilUtc={PausedUntilUtc}",
+                "Strategy paused after paper settlement loss. StrategyId={StrategyId} RecentPnlUsd={RecentPnlUsd} RecentSettledCount={RecentSettledCount} PausedUntilUtc={PausedUntilUtc}",
                 StrategyIds.Normalize(strategyId.Value),
                 decision.RecentPnlUsd,
+                decision.RecentSettledCount,
                 decision.PausedUntilUtc);
         }
         catch (OperationCanceledException)

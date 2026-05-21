@@ -773,9 +773,10 @@ reason `strategy_paused`. Existing Paper positions can still be settled, and
 copied leader exits can still be tracked.
 
 After any losing strategy settlement, the service calculates that strategy's
-realized Paper/Live PnL over the previous 12 hours. If the total is negative, it
-sets `strategies.paused=true` and `paused_until_utc=now()+12 hours`. A manual
-Dashboard pause leaves `paused_until_utc` empty and remains active until cleared.
+realized Paper/Live PnL and settled count over the previous 12 hours. If the
+total is negative and the settled count is greater than `1`, it sets
+`strategies.paused=true` and `paused_until_utc=now()+12 hours`. A manual Dashboard
+pause leaves `paused_until_utc` empty and remains active until cleared.
 
 - `Dashboard:RefreshIntervalSeconds`: UI refresh timer for the Dashboard; default `60`.
 - `Dashboard:StrategyRefreshIntervalSeconds`: minimum interval between Dashboard strategy-performance database refreshes; default `60`. Strategy toggle/stake commands invalidate the cache so command results are shown immediately.

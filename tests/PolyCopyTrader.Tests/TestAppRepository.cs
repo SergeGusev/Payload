@@ -1515,23 +1515,29 @@ internal sealed class TestAppRepository : IAppRepository
         CancellationToken cancellationToken = default)
     {
         var normalizedStrategyId = StrategyIds.Normalize(strategyId);
-        var paperRunPnl = StrategyMarketPaperRuns
+        var paperRunSettlements = StrategyMarketPaperRuns
             .Where(run => StrategyIds.Normalize(run.StrategyId) == normalizedStrategyId)
             .Where(run => string.Equals(run.Status, StrategyMarketPaperRunStatuses.Settled, StringComparison.OrdinalIgnoreCase))
             .Where(run => run.SettledAtUtc >= lookbackStartUtc && run.SettledAtUtc <= updatedAtUtc)
-            .Sum(run => run.RealizedPnlUsd ?? 0m);
-        var livePnl = LiveOrders
+            .Where(run => run.RealizedPnlUsd is not null)
+            .ToArray();
+        var liveSettlements = LiveOrders
             .Where(order => StrategyIds.Normalize(order.StrategyId) == normalizedStrategyId)
             .Where(order => order.SettledAtUtc >= lookbackStartUtc && order.SettledAtUtc <= updatedAtUtc)
-            .Sum(order => order.RealizedPnlUsd ?? 0m);
-        var followLeaderPaperPnl = normalizedStrategyId == StrategyIds.FollowLeader
+            .Where(order => order.RealizedPnlUsd is not null)
+            .ToArray();
+        var followLeaderPaperSettlements = normalizedStrategyId == StrategyIds.FollowLeader
             ? PaperPositionSettlements
                 .Where(settlement => !settlement.CopiedTraderWallet.StartsWith("strategy:", StringComparison.OrdinalIgnoreCase))
                 .Where(settlement => settlement.SettledAtUtc >= lookbackStartUtc && settlement.SettledAtUtc <= updatedAtUtc)
-                .Sum(settlement => settlement.RealizedPnlUsd)
-            : 0m;
+                .ToArray()
+            : [];
+        var paperRunPnl = paperRunSettlements.Sum(run => run.RealizedPnlUsd ?? 0m);
+        var livePnl = liveSettlements.Sum(order => order.RealizedPnlUsd ?? 0m);
+        var followLeaderPaperPnl = followLeaderPaperSettlements.Sum(settlement => settlement.RealizedPnlUsd);
         var recentPnl = paperRunPnl + livePnl + followLeaderPaperPnl;
-        if (recentPnl < 0m)
+        var recentSettledCount = paperRunSettlements.Length + liveSettlements.Length + followLeaderPaperSettlements.Length;
+        if (recentPnl < 0m && recentSettledCount > 1)
         {
             StrategySettings[normalizedStrategyId] = GetStrategySettings(normalizedStrategyId) with
             {
@@ -1539,10 +1545,10 @@ internal sealed class TestAppRepository : IAppRepository
                 PausedUntilUtc = pauseUntilUtc
             };
 
-            return Task.FromResult(new StrategyPauseDecision(true, recentPnl, lookbackStartUtc, pauseUntilUtc));
+            return Task.FromResult(new StrategyPauseDecision(true, recentPnl, recentSettledCount, lookbackStartUtc, pauseUntilUtc));
         }
 
-        return Task.FromResult(new StrategyPauseDecision(false, recentPnl, lookbackStartUtc, null));
+        return Task.FromResult(new StrategyPauseDecision(false, recentPnl, recentSettledCount, lookbackStartUtc, null));
     }
 
     public Task<bool> SetStrategyStakeAmountsAsync(

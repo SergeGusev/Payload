@@ -385,16 +385,18 @@ public sealed class LiveTradingProcessor(
             if (!decision.Paused)
             {
                 logger.LogInformation(
-                    "Live settlement loss did not trigger strategy pause because recent PnL is non-negative. StrategyId={StrategyId} RecentPnlUsd={RecentPnlUsd}",
+                    "Live settlement loss did not trigger strategy pause because recent PnL is non-negative or recent settled count is too low. StrategyId={StrategyId} RecentPnlUsd={RecentPnlUsd} RecentSettledCount={RecentSettledCount}",
                     StrategyIds.Normalize(strategyId),
-                    decision.RecentPnlUsd);
+                    decision.RecentPnlUsd,
+                    decision.RecentSettledCount);
                 return;
             }
 
             logger.LogWarning(
-                "Strategy paused after live settlement loss. StrategyId={StrategyId} RecentPnlUsd={RecentPnlUsd} PausedUntilUtc={PausedUntilUtc}",
+                "Strategy paused after live settlement loss. StrategyId={StrategyId} RecentPnlUsd={RecentPnlUsd} RecentSettledCount={RecentSettledCount} PausedUntilUtc={PausedUntilUtc}",
                 StrategyIds.Normalize(strategyId),
                 decision.RecentPnlUsd,
+                decision.RecentSettledCount,
                 decision.PausedUntilUtc);
         }
         catch (OperationCanceledException)

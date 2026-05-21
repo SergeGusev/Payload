@@ -2343,6 +2343,34 @@ public sealed class BtcUpDown5mPaperStrategyProcessorTests
     {
         var now = DateTimeOffset.UtcNow;
         var repository = new TestAppRepository();
+        repository.StrategyMarketPaperRuns.Add(new StrategyMarketPaperRun(
+            Guid.NewGuid(),
+            Less60Variant.Id,
+            "market-previous",
+            "condition-previous",
+            "btc-updown-5m-1778067600",
+            "Bitcoin Up or Down - previous",
+            "Crypto",
+            now.AddMinutes(-16),
+            now.AddMinutes(-11),
+            now.AddMinutes(-16),
+            now.AddMinutes(-15),
+            StrategyMarketPaperRunStatuses.Settled,
+            "asset-previous-up",
+            "Up",
+            0.50m,
+            1m,
+            2m,
+            Guid.NewGuid(),
+            Guid.NewGuid(),
+            now.AddMinutes(-15),
+            SettlementPrice: 0.50m,
+            SettlementValueUsd: 1m,
+            RealizedPnlUsd: 0m,
+            SettledAtUtc: now.AddMinutes(-11),
+            SkipReason: null,
+            now.AddMinutes(-16),
+            now.AddMinutes(-11)));
         var run = new StrategyMarketPaperRun(
             Guid.NewGuid(),
             Less60Variant.Id,
@@ -2393,7 +2421,7 @@ public sealed class BtcUpDown5mPaperStrategyProcessorTests
         var result = await processor.ProcessAsync();
 
         Assert.Equal(1, result.RunsSettled);
-        var updatedRun = Assert.Single(repository.StrategyMarketPaperRuns);
+        var updatedRun = repository.StrategyMarketPaperRuns.Single(item => item.Id == run.Id);
         Assert.Equal(StrategyMarketPaperRunStatuses.Settled, updatedRun.Status);
         Assert.Equal(0m, updatedRun.SettlementPrice);
         Assert.Equal(-1m, updatedRun.RealizedPnlUsd);
@@ -2406,6 +2434,68 @@ public sealed class BtcUpDown5mPaperStrategyProcessorTests
         Assert.False(settlement.Won);
         Assert.Equal(-1m, settlement.RealizedPnlUsd);
         Assert.Equal(0m, Assert.Single(repository.PaperPositions).SizeShares);
+    }
+
+    [Fact]
+    public async Task ProcessAsync_DoesNotPauseStrategyAfterSingleSettledLoss()
+    {
+        var now = DateTimeOffset.UtcNow;
+        var repository = new TestAppRepository();
+        var run = new StrategyMarketPaperRun(
+            Guid.NewGuid(),
+            Less60Variant.Id,
+            "market-1",
+            "condition-1",
+            "btc-updown-5m-1778067900",
+            "Bitcoin Up or Down - test",
+            "Crypto",
+            now.AddMinutes(-6),
+            now.AddMinutes(-1),
+            now.AddMinutes(-6),
+            now.AddMinutes(-5),
+            StrategyMarketPaperRunStatuses.Entered,
+            "asset-up",
+            "Up",
+            0.40m,
+            1m,
+            2.5m,
+            Guid.NewGuid(),
+            Guid.NewGuid(),
+            now.AddMinutes(-4),
+            SettlementPrice: null,
+            SettlementValueUsd: null,
+            RealizedPnlUsd: null,
+            SettledAtUtc: null,
+            SkipReason: null,
+            now.AddMinutes(-6),
+            now.AddMinutes(-4));
+        repository.StrategyMarketPaperRuns.Add(run);
+        repository.PaperPositions.Add(new PaperPosition(
+            "asset-up",
+            "condition-1",
+            "Up",
+            2.5m,
+            0.40m,
+            1m,
+            0m,
+            now.AddMinutes(-4),
+            Less60Variant.CopiedTraderWallet));
+        var metadata = new[]
+        {
+            TokenMetadata("asset-up", "Up", "Down"),
+            TokenMetadata("asset-down", "Down", "Down")
+        };
+        var processor = CreateProcessor(repository, metadata, Less60Variant.Code);
+
+        var result = await processor.ProcessAsync();
+
+        Assert.Equal(1, result.RunsSettled);
+        var updatedRun = Assert.Single(repository.StrategyMarketPaperRuns);
+        Assert.Equal(StrategyMarketPaperRunStatuses.Settled, updatedRun.Status);
+        Assert.Equal(-1m, updatedRun.RealizedPnlUsd);
+        var settings = repository.StrategySettings[Less60Variant.Id];
+        Assert.False(settings.Paused);
+        Assert.Null(settings.PausedUntilUtc);
     }
 
     [Fact]

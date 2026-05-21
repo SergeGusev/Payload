@@ -10620,16 +10620,18 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
             if (!decision.Paused)
             {
                 logger.LogInformation(
-                    "Strategy loss did not trigger pause because recent PnL is non-negative. Strategy={StrategyCode} RecentPnlUsd={RecentPnlUsd}",
+                    "Strategy loss did not trigger pause because recent PnL is non-negative or recent settled count is too low. Strategy={StrategyCode} RecentPnlUsd={RecentPnlUsd} RecentSettledCount={RecentSettledCount}",
                     strategyCode,
-                    decision.RecentPnlUsd);
+                    decision.RecentPnlUsd,
+                    decision.RecentSettledCount);
                 return;
             }
 
             logger.LogWarning(
-                "Strategy paused after loss. Strategy={StrategyCode} RecentPnlUsd={RecentPnlUsd} PausedUntilUtc={PausedUntilUtc}",
+                "Strategy paused after loss. Strategy={StrategyCode} RecentPnlUsd={RecentPnlUsd} RecentSettledCount={RecentSettledCount} PausedUntilUtc={PausedUntilUtc}",
                 strategyCode,
                 decision.RecentPnlUsd,
+                decision.RecentSettledCount,
                 decision.PausedUntilUtc);
         }
         catch (OperationCanceledException)

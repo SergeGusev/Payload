@@ -39,3 +39,10 @@ Request:
 
 Result:
 Removed `Paused until` from the main Dashboard Strategies grid and removed `Live tech skip`, `Live ignored`, `Live gtd unfilled`, `Live cancel ignored`, and `Live reject/error` from both Dashboard strategy DataGrids. Kept the underlying metrics and CSV export intact. Verification passed: the removed headers no longer appear in `MainWindow.xaml`, Dashboard build passed, full tests passed `513/513`, and `git diff --check` passed with LF/CRLF warning only. No production DB writes, service restart, live order submission, or cancel action was performed.
+
+## 2026-05-21T11:11:45.2765090Z
+Request:
+Давай скорректируем правило для паузы стратегии - ставим на паузу только если количество setteled ставок больше 1
+
+Result:
+Changed the shared strategy auto-pause decision so a losing settlement pauses the strategy only when the 12-hour realized Paper/Live PnL is negative and the same 12-hour settled row count is greater than `1`. Added `RecentSettledCount` to pause decisions/logs, updated BTC 5m and storage tests, and documented the new rule. Verification passed: targeted tests `155/155`, full tests `515/515`, and `git diff --check` with LF/CRLF warnings only. No production DB writes, service restart, live order submission, or cancel action was performed.

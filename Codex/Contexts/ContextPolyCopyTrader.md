@@ -1,3 +1,15 @@
+## Active Update 2026-05-21 Strategy Pause Settled Count Guard
+Goal: Pause a losing strategy only after more than one recent settled bet.
+Status: Completed
+Done:
+- Changed the shared strategy auto-pause repository decision so it now pauses only when the 12-hour realized Paper/Live PnL is negative and the same 12-hour settled row count is greater than `1`.
+- Added `RecentSettledCount` to `StrategyPauseDecision` and included it in Paper, Live, and BTC 5m pause decision logs.
+- Updated BTC 5m tests to prove a single losing settlement does not pause a strategy, while multiple recent settled rows can still trigger the pause.
+- Updated README and configuration reference documentation for the new minimum settled-count rule.
+Next: Deploy/restart the service so the new pause rule is active in production runtime.
+Notes: Verification passed: targeted `dotnet test tests\PolyCopyTrader.Tests\PolyCopyTrader.Tests.csproj --no-restore --filter "FullyQualifiedName~BtcUpDown5mPaperStrategyProcessorTests|FullyQualifiedName~StorageTests"` passed `155/155`; full `dotnet test tests\PolyCopyTrader.Tests\PolyCopyTrader.Tests.csproj --no-restore` passed `515/515`; `git diff --check` passed with LF/CRLF warnings only. No production DB writes, service restart, live order submission, or cancel action.
+Blockers: None.
+
 ## Active Update 2026-05-21 Dashboard Strategy Column Cleanup
 Goal: Remove low-value strategy columns from Dashboard grids.
 Status: Completed

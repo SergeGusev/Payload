@@ -2494,31 +2494,34 @@ WHERE id = @StrategyId;
 		var normalizedStrategyId = StrategyIds.Normalize(strategyId);
 		await using NpgsqlConnection connection = await OpenConnectionAsync(cancellationToken);
 		await using NpgsqlCommand command = CreateCommand(connection, """
-WITH recent_pnl AS (
-    SELECT COALESCE(sum(pnl_usd), 0) AS pnl_usd
-    FROM (
-        SELECT COALESCE(run.realized_pnl_usd, 0) AS pnl_usd
-        FROM strategy_market_paper_runs run
-        WHERE run.strategy_id = @StrategyId
-          AND run.status = 'Settled'
-          AND run.settled_at_utc >= @LookbackStartUtc
-          AND run.settled_at_utc <= @UpdatedAtUtc
-          AND run.realized_pnl_usd IS NOT NULL
-        UNION ALL
-        SELECT COALESCE(live_order.realized_pnl_usd, 0) AS pnl_usd
-        FROM live_orders live_order
-        WHERE live_order.strategy_id = @StrategyId
-          AND live_order.settled_at_utc >= @LookbackStartUtc
-          AND live_order.settled_at_utc <= @UpdatedAtUtc
-          AND live_order.realized_pnl_usd IS NOT NULL
-        UNION ALL
-        SELECT COALESCE(settlement.realized_pnl_usd, 0) AS pnl_usd
-        FROM paper_position_settlements settlement
-        WHERE @StrategyId = @FollowLeaderStrategyId
-          AND lower(settlement.copied_trader_wallet) NOT LIKE 'strategy:%'
-          AND settlement.settled_at_utc >= @LookbackStartUtc
-          AND settlement.settled_at_utc <= @UpdatedAtUtc
-    ) source
+WITH recent_rows AS (
+    SELECT COALESCE(run.realized_pnl_usd, 0) AS pnl_usd
+    FROM strategy_market_paper_runs run
+    WHERE run.strategy_id = @StrategyId
+      AND run.status = 'Settled'
+      AND run.settled_at_utc >= @LookbackStartUtc
+      AND run.settled_at_utc <= @UpdatedAtUtc
+      AND run.realized_pnl_usd IS NOT NULL
+    UNION ALL
+    SELECT COALESCE(live_order.realized_pnl_usd, 0) AS pnl_usd
+    FROM live_orders live_order
+    WHERE live_order.strategy_id = @StrategyId
+      AND live_order.settled_at_utc >= @LookbackStartUtc
+      AND live_order.settled_at_utc <= @UpdatedAtUtc
+      AND live_order.realized_pnl_usd IS NOT NULL
+    UNION ALL
+    SELECT COALESCE(settlement.realized_pnl_usd, 0) AS pnl_usd
+    FROM paper_position_settlements settlement
+    WHERE @StrategyId = @FollowLeaderStrategyId
+      AND lower(settlement.copied_trader_wallet) NOT LIKE 'strategy:%'
+      AND settlement.settled_at_utc >= @LookbackStartUtc
+      AND settlement.settled_at_utc <= @UpdatedAtUtc
+),
+recent_pnl AS (
+    SELECT
+        COALESCE(sum(pnl_usd), 0) AS pnl_usd,
+        count(*)::integer AS settled_count
+    FROM recent_rows
 ),
 updated AS (
     UPDATE strategies
@@ -2527,11 +2530,13 @@ updated AS (
         updated_at_utc = @UpdatedAtUtc
     WHERE id = @StrategyId
       AND (SELECT pnl_usd FROM recent_pnl) < 0
+      AND (SELECT settled_count FROM recent_pnl) > 1
     RETURNING paused, paused_until_utc
 )
 SELECT
     EXISTS(SELECT 1 FROM updated) AS paused,
     (SELECT pnl_usd FROM recent_pnl) AS recent_pnl_usd,
+    (SELECT settled_count FROM recent_pnl) AS recent_settled_count,
     (SELECT paused_until_utc FROM updated) AS paused_until_utc;
 """);
 		command.Parameters.AddWithValue("StrategyId", normalizedStrategyId);
@@ -2542,14 +2547,15 @@ SELECT
 		await using NpgsqlDataReader reader = await command.ExecuteReaderAsync(cancellationToken);
 		if (!await reader.ReadAsync(cancellationToken))
 		{
-			return new StrategyPauseDecision(false, 0m, lookbackStartUtc, null);
+			return new StrategyPauseDecision(false, 0m, 0, lookbackStartUtc, null);
 		}
 
 		return new StrategyPauseDecision(
 			reader.GetBoolean(0),
 			reader.GetDecimal(1),
+			reader.GetInt32(2),
 			lookbackStartUtc,
-			reader.IsDBNull(2) ? null : DateTimeOffsetFromUtc(reader.GetDateTime(2)));
+			reader.IsDBNull(3) ? null : DateTimeOffsetFromUtc(reader.GetDateTime(3)));
 	}
 
 	public async Task<bool> SetStrategyStakeAmountsAsync(

@@ -463,6 +463,22 @@ public sealed class StorageTests
     }
 
     [Fact]
+    public void PostgresRepository_StrategyPauseRequiresMultipleRecentSettledRows()
+    {
+        var source = ReadStorageRepositorySource();
+        var start = source.IndexOf("PauseStrategyAfterLossIfRecentPnlNegativeAsync", StringComparison.Ordinal);
+        Assert.True(start >= 0);
+
+        var end = source.IndexOf("SetStrategyStakeAmountsAsync", start, StringComparison.Ordinal);
+        Assert.True(end > start);
+
+        var method = source[start..end];
+        Assert.Contains("count(*)::integer AS settled_count", method, StringComparison.Ordinal);
+        Assert.Contains("AND (SELECT settled_count FROM recent_pnl) > 1", method, StringComparison.Ordinal);
+        Assert.Contains("AS recent_settled_count", method, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void PostgresRepository_PaperCopiedLeaderExitTracking_StoresLinksAndDedupedActivity()
     {
         var source = ReadStorageRepositorySource();

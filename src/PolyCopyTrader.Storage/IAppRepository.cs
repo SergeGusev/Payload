@@ -362,7 +362,7 @@ public interface IAppRepository
         DateTimeOffset updatedAtUtc,
         CancellationToken cancellationToken = default)
     {
-        return Task.FromResult(new StrategyPauseDecision(false, 0m, lookbackStartUtc, null));
+        return Task.FromResult(new StrategyPauseDecision(false, 0m, 0, lookbackStartUtc, null));
     }
 
     Task<bool> SetStrategyStakeAmountsAsync(

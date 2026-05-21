@@ -2032,6 +2032,7 @@ public sealed record StrategyRuntimeSettings(
 public sealed record StrategyPauseDecision(
     bool Paused,
     decimal RecentPnlUsd,
+    int RecentSettledCount,
     DateTimeOffset LookbackStartUtc,
     DateTimeOffset? PausedUntilUtc);
 

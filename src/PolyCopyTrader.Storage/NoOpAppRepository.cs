@@ -237,7 +237,7 @@ public sealed class NoOpAppRepository : IAppRepository
         DateTimeOffset updatedAtUtc,
         CancellationToken cancellationToken = default)
     {
-        return Task.FromResult(new StrategyPauseDecision(false, 0m, lookbackStartUtc, null));
+        return Task.FromResult(new StrategyPauseDecision(false, 0m, 0, lookbackStartUtc, null));
     }
 
     public Task<bool> SetStrategyStakeAmountsAsync(
