@@ -3500,6 +3500,7 @@ public sealed class BtcUpDown5mPaperStrategyProcessorTests
         var marketStartUtc = now.AddSeconds(-5);
         var marketEndUtc = now.AddMinutes(5);
         var repository = new TestAppRepository();
+        repository.EnforceStrategyRunPaperOrderForeignKey = true;
         repository.PolymarketGammaMarkets.Add(CreateMarket(
             marketStartUtc,
             marketEndUtc,

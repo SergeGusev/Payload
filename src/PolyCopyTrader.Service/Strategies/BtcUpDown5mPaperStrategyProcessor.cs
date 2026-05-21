@@ -780,13 +780,13 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
                 skipReason: null,
                 diagnosticsJson: null);
 
+            await repository.AddSignalAsync(signal, cancellationToken);
+            await repository.AddPaperOrderAsync(order, cancellationToken);
             if (!await repository.TryAddStrategyMarketPaperRunAsync(run, cancellationToken))
             {
                 return BtcMakerOrderResult.SkippedResult;
             }
 
-            await repository.AddSignalAsync(signal, cancellationToken);
-            await repository.AddPaperOrderAsync(order, cancellationToken);
             exposureCache.ApplyPaperOrder(order);
 
             logger.LogInformation(

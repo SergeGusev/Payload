@@ -1,3 +1,17 @@
+## Active Update 2026-05-21 BTC 5m Maker Post-Deploy FK Fix
+Goal: Monitor the deployed Maker strategies and fix the production blocker preventing Maker Paper orders from being persisted.
+Status: Completed
+Done:
+- Verified production service heartbeat read-only: `PolyCopyTrader.Service` was `Running` in `Live` mode on build `info=1.0.0+cbe71f3ae917d57a99f8566e74c49096c0530487`, started at `2026-05-21T15:10:49Z`.
+- Confirmed Maker strategies were enabled, not paused, Paper-only, and the regular BTC/crypto strategy worker continued creating non-Maker runs.
+- Confirmed no Maker Paper orders were created after deploy; latest post-restart BTC 5m markets had archived simulation opportunities but `MakerEvents=0`/`MakerOrders=0`.
+- Found production `api_errors` from `BtcUpDown5mPaperStrategyWorker`: PostgreSQL FK violation `strategy_market_paper_runs.paper_order_id_fkey`, because Maker code inserted the run with `paper_order_id` before inserting the referenced `paper_orders` row.
+- Fixed Maker order persistence order: save `Signal`, then `PaperOrder`, then `StrategyMarketPaperRun`; only then update exposure cache.
+- Added a test repository FK guard and enabled it on the Maker placement regression so this ordering bug is covered.
+Next: Publish/restart the service again from the new commit, then re-check the next full BTC 5m market for Maker Paper orders and fills.
+Notes: Verification passed: targeted `dotnet test tests\PolyCopyTrader.Tests\PolyCopyTrader.Tests.csproj --no-restore --filter "FullyQualifiedName~BtcUpDown5mPaperStrategyProcessorTests"` passed `137/137`; full `dotnet test tests\PolyCopyTrader.Tests\PolyCopyTrader.Tests.csproj --no-restore` passed `519/519`. Production checks were read-only except for service-created error rows; no manual DB writes, live order submission, or cancel action.
+Blockers: The currently running server build `cbe71f3` still has the FK ordering bug until the new fix commit is published and the service is restarted.
+
 ## Active Update 2026-05-21 BTC 5m Maker Fixed High-Water On Order
 Goal: Adjust 30-second Maker high-water tracking so the maximum is fixed only when a Maker order is created.
 Status: Completed

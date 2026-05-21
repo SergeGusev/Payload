@@ -12,6 +12,7 @@ internal sealed class TestAppRepository : IAppRepository
     private int maxPolymarketGammaMarketLookupsInFlight;
 
     public TimeSpan PolymarketGammaMarketLookupDelay { get; set; } = TimeSpan.Zero;
+    public bool EnforceStrategyRunPaperOrderForeignKey { get; set; }
 
     public int MaxConcurrentPolymarketGammaMarketLookups =>
         System.Threading.Volatile.Read(ref maxPolymarketGammaMarketLookupsInFlight);
@@ -587,6 +588,13 @@ internal sealed class TestAppRepository : IAppRepository
                 string.Equals(item.MarketId, run.MarketId, StringComparison.OrdinalIgnoreCase)))
             {
                 return Task.FromResult(false);
+            }
+
+            if (EnforceStrategyRunPaperOrderForeignKey &&
+                run.PaperOrderId is { } paperOrderId &&
+                PaperOrders.All(order => order.Id != paperOrderId))
+            {
+                throw new InvalidOperationException("StrategyMarketPaperRun references a missing paper order.");
             }
 
             StrategyMarketPaperRuns.Add(run);
