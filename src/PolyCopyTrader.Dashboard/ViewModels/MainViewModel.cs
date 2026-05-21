@@ -838,6 +838,49 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
     }
 
     [RelayCommand]
+    private async Task SetStrategyPausedAsync(StrategyPerformanceRow? strategy)
+    {
+        if (strategy is null)
+        {
+            return;
+        }
+
+        if (!runtime.StorageConfigured)
+        {
+            CommandStatus = "Strategy pause toggle requires PostgreSQL storage.";
+            await RefreshAsync();
+            return;
+        }
+
+        var paused = strategy.Paused;
+        try
+        {
+            var updated = await runtime.Repository.SetStrategyPausedAsync(
+                strategy.StrategyId,
+                paused,
+                pausedUntilUtc: null,
+                DateTimeOffset.UtcNow);
+            CommandStatus = updated
+                ? $"Strategy {strategy.Name} {(paused ? "paused" : "unpaused")}."
+                : $"Strategy {strategy.Name} was not found.";
+            if (!updated)
+            {
+                RecordDashboardError("Strategy pause toggle", CommandStatus, CommandStatus);
+            }
+
+            dataService.InvalidateStrategyPerformanceCache();
+            await RefreshAsync();
+        }
+        catch (Exception ex)
+        {
+            CommandStatus = $"Strategy pause toggle failed: {ex.Message}";
+            RecordDashboardError("Strategy pause toggle", ex);
+            dataService.InvalidateStrategyPerformanceCache();
+            await RefreshAsync();
+        }
+    }
+
+    [RelayCommand]
     private async Task SaveStrategyStakeAmountsAsync(StrategyPerformanceRow? strategy)
     {
         if (strategy is null)

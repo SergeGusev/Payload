@@ -761,14 +761,21 @@ It also shows decision-health entry delay metrics (`Avg delay s` and
 be compared against actual payoff size. The nested `24 hours`, `6 hours`, and
 `1 hour` tabs under `Strategies` use the same strategy refresh cache and show recent
 orders, filled/expired/open orders, entered/skipped/settled runs, wins/losses,
-realized PnL, ROI, average fill price, entry-delay health metrics, and the top skip reason. The `Strategies` tab lets `Paper $`, `Live $`,
+realized PnL, ROI, average fill price, entry-delay health metrics, and the top skip reason. The `Strategies` tab lets `Paused`, `Paper $`, `Live $`,
 and live-only `Live bal` be edited for each strategy; for BTC 5-minute
 strategies the Paper/Live stake values are interpreted as stake multipliers.
-The `Enabled` checkbox writes `strategies.enabled` immediately. The service
-refreshes enabled strategy ids through a short in-memory cache, so disabled
-strategies stop creating new Follow leader signals or BTC 5-minute entries
-without a restart. Existing Paper positions can still be settled, and copied
-leader exits can still be tracked.
+The `Enabled` checkbox writes `strategies.enabled` immediately, and the `Paused`
+checkbox writes `strategies.paused`. The service refreshes enabled and paused
+strategy state through a short in-memory cache, so disabled strategies stop
+creating new Follow leader signals or BTC 5-minute entries without a restart,
+while paused strategies stay enabled but skip new Paper and Live entries with
+reason `strategy_paused`. Existing Paper positions can still be settled, and
+copied leader exits can still be tracked.
+
+After any losing strategy settlement, the service calculates that strategy's
+realized Paper/Live PnL over the previous 12 hours. If the total is negative, it
+sets `strategies.paused=true` and `paused_until_utc=now()+12 hours`. A manual
+Dashboard pause leaves `paused_until_utc` empty and remains active until cleared.
 
 - `Dashboard:RefreshIntervalSeconds`: UI refresh timer for the Dashboard; default `60`.
 - `Dashboard:StrategyRefreshIntervalSeconds`: minimum interval between Dashboard strategy-performance database refreshes; default `60`. Strategy toggle/stake commands invalidate the cache so command results are shown immediately.

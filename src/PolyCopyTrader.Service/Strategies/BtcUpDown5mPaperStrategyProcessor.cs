@@ -46,6 +46,7 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
     private const string BtcGtdLimitExecutionSource = "btc_updown5m_gtd_limit";
     private const string BtcPreOpenSellExitExecutionSource = "btc_preopen_sell_exit";
     private const string BtcMakerExecutionSource = "btc_updown5m_maker_post_only";
+    private const string StrategyPausedSkipReason = "strategy_paused";
     private const string BtcSkip1VariantCode = "btc_up_down_5m_skip_1";
     private static readonly string[] PaperLiveShadowAllowedVariantCodes =
     [
@@ -81,6 +82,8 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
     private static readonly TimeSpan CloseBookCaptureMaxDuration = TimeSpan.FromSeconds(5);
     private static readonly TimeSpan CloseBookCaptureOrderBookTimeout = TimeSpan.FromSeconds(2);
     private static readonly TimeSpan SettlementMetadataTimeout = TimeSpan.FromSeconds(3);
+    private static readonly TimeSpan StrategyPauseLookback = TimeSpan.FromHours(12);
+    private static readonly TimeSpan StrategyPauseDuration = TimeSpan.FromHours(12);
 
     private readonly ConservativePaperGtdFillEstimator conservativeGtdFillEstimator = new(options);
     private readonly IPaperTradingEngine paperTradingEngine = new DefaultPaperTradingEngine();
@@ -632,6 +635,21 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
             previousMaxBestAsk,
             currentMaxBestAsk,
             syntheticMarketId);
+        if (settings.IsPausedAt(nowUtc))
+        {
+            await RecordSkippedMakerRunAsync(
+                nowUtc,
+                market,
+                variant,
+                selectedOutcome,
+                syntheticMarketId,
+                StrategyPausedSkipReason,
+                AttachStrategyPausedJson(rawDecisionJson, settings, nowUtc),
+                settings.PaperStakeAmount,
+                cancellationToken);
+            return BtcMakerOrderResult.SkippedResult;
+        }
+
         var priceDecision = ResolveMakerPostOnlyLimitPrice(orderBook, currentMaxBestAsk);
         rawDecisionJson = AttachMakerPostOnlyPriceJson(rawDecisionJson, priceDecision);
         if (!priceDecision.Available || priceDecision.LimitPrice is not > 0m)
@@ -1273,6 +1291,36 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
         var root = ParseJsonObject(rawDecisionJson);
         root["skip_reason"] = reason;
         return root.ToJsonString();
+    }
+
+    private static string AttachStrategyPausedJson(
+        string rawDecisionJson,
+        StrategyRuntimeSettings settings,
+        DateTimeOffset nowUtc)
+    {
+        var root = ParseJsonObject(rawDecisionJson);
+        AddStrategyPausedJson(root, settings, nowUtc);
+        return root.ToJsonString();
+    }
+
+    private static string BuildStrategyPausedDiagnosticsJson(
+        StrategyRuntimeSettings settings,
+        DateTimeOffset nowUtc)
+    {
+        var root = new JsonObject();
+        AddStrategyPausedJson(root, settings, nowUtc);
+        return root.ToJsonString();
+    }
+
+    private static void AddStrategyPausedJson(
+        JsonObject root,
+        StrategyRuntimeSettings settings,
+        DateTimeOffset nowUtc)
+    {
+        root["skip_reason"] = StrategyPausedSkipReason;
+        root["strategy_paused"] = true;
+        root["paused_until_utc"] = settings.PausedUntilUtc?.ToString("O", CultureInfo.InvariantCulture);
+        root["decision_utc"] = nowUtc.ToString("O", CultureInfo.InvariantCulture);
     }
 
     private static JsonObject ParseJsonObject(string? rawDecisionJson)
@@ -1920,6 +1968,19 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
                 try
                 {
                     var settings = GetStrategySettings(strategySettings, variant.Id);
+                    if (settings.IsPausedAt(nowUtc))
+                    {
+                        await SkipRunAsync(
+                            run,
+                            variant,
+                            StrategyPausedSkipReason,
+                            nowUtc,
+                            cancellationToken,
+                            BuildStrategyPausedDiagnosticsJson(settings, nowUtc));
+                        runsSkipped++;
+                        continue;
+                    }
+
                     if (IsEntryExpired(run.EntryDueAtUtc, nowUtc) &&
                         !IsSkipConsecutiveMarketResults(variant) &&
                         !IsOpeningLimitEntryAllowedAfterEntryGrace(variant, run.MarketStartUtc, nowUtc))
@@ -2745,6 +2806,8 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
                 run.SelectedOutcome,
                 won,
                 realizedPnl);
+
+            await PauseStrategyAfterLossIfNeededAsync(runVariant.Id, runVariant.Code, realizedPnl, nowUtc, cancellationToken);
 
             return 1;
         }
@@ -10532,6 +10595,52 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
         root["blocking_condition_id"] = block.ConditionId;
         root["blocking_outcome"] = block.Outcome;
         return root.ToJsonString();
+    }
+
+    private async Task PauseStrategyAfterLossIfNeededAsync(
+        Guid strategyId,
+        string strategyCode,
+        decimal realizedPnl,
+        DateTimeOffset nowUtc,
+        CancellationToken cancellationToken)
+    {
+        if (realizedPnl >= 0m)
+        {
+            return;
+        }
+
+        try
+        {
+            var decision = await repository.PauseStrategyAfterLossIfRecentPnlNegativeAsync(
+                strategyId,
+                nowUtc.Subtract(StrategyPauseLookback),
+                nowUtc.Add(StrategyPauseDuration),
+                nowUtc,
+                cancellationToken);
+            if (!decision.Paused)
+            {
+                logger.LogInformation(
+                    "Strategy loss did not trigger pause because recent PnL is non-negative. Strategy={StrategyCode} RecentPnlUsd={RecentPnlUsd}",
+                    strategyCode,
+                    decision.RecentPnlUsd);
+                return;
+            }
+
+            logger.LogWarning(
+                "Strategy paused after loss. Strategy={StrategyCode} RecentPnlUsd={RecentPnlUsd} PausedUntilUtc={PausedUntilUtc}",
+                strategyCode,
+                decision.RecentPnlUsd,
+                decision.PausedUntilUtc);
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "Failed to apply strategy pause after loss. Strategy={StrategyCode}", strategyCode);
+            await TryRecordApiErrorAsync("PauseStrategyAfterLoss", ex.Message, cancellationToken);
+        }
     }
 
     private async Task TryRecordApiErrorAsync(

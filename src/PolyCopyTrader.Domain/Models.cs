@@ -1097,6 +1097,29 @@ public static class StrategyIds
         return strategyId == Guid.Empty ? FollowLeader : strategyId;
     }
 
+    public static Guid? TryGetStrategyIdByCode(string? code)
+    {
+        if (string.IsNullOrWhiteSpace(code))
+        {
+            return null;
+        }
+
+        var normalizedCode = code.Trim();
+        if (string.Equals(normalizedCode, FollowLeaderCode, StringComparison.OrdinalIgnoreCase))
+        {
+            return FollowLeader;
+        }
+
+        if (string.Equals(normalizedCode, BtcUpDown5mStatisticsCode, StringComparison.OrdinalIgnoreCase))
+        {
+            return BtcUpDown5mStatistics;
+        }
+
+        return UpDown5mStrategyVariants
+            .FirstOrDefault(variant => string.Equals(variant.Code, normalizedCode, StringComparison.OrdinalIgnoreCase))
+            ?.Id;
+    }
+
     public static BtcUpDown5mStrategyVariant GetBtcUpDown5mVariant(
         BtcUpDown5mStrategyDirection direction,
         int entryDelaySeconds,
@@ -1969,6 +1992,8 @@ public sealed record TradingStrategy(
     string Description,
     bool Enabled,
     bool LiveStakes,
+    bool Paused,
+    DateTimeOffset? PausedUntilUtc,
     decimal PaperStakeAmount,
     decimal LiveStakeAmount,
     decimal LiveAvailableBalance,
@@ -1979,21 +2004,36 @@ public sealed record StrategyRuntimeSettings(
     Guid StrategyId,
     bool Enabled,
     bool LiveStakes,
+    bool Paused,
+    DateTimeOffset? PausedUntilUtc,
     decimal PaperStakeAmount,
     decimal LiveStakeAmount,
     decimal LiveAvailableBalance)
 {
+    public bool IsPausedAt(DateTimeOffset nowUtc)
+    {
+        return Paused && (PausedUntilUtc is null || PausedUntilUtc > nowUtc);
+    }
+
     public static StrategyRuntimeSettings Default(Guid strategyId)
     {
         return new StrategyRuntimeSettings(
             StrategyIds.Normalize(strategyId),
             Enabled: true,
             LiveStakes: false,
+            Paused: false,
+            PausedUntilUtc: null,
             PaperStakeAmount: 1.00m,
             LiveStakeAmount: 1.00m,
             LiveAvailableBalance: 100.00m);
     }
 }
+
+public sealed record StrategyPauseDecision(
+    bool Paused,
+    decimal RecentPnlUsd,
+    DateTimeOffset LookbackStartUtc,
+    DateTimeOffset? PausedUntilUtc);
 
 public sealed record StrategyLiveBalanceAdjustmentResult(
     bool Applied,
@@ -2006,6 +2046,8 @@ public sealed record StrategyPerformance(
     string Name,
     bool Enabled,
     bool LiveStakes,
+    bool Paused,
+    DateTimeOffset? PausedUntilUtc,
     decimal PaperStakeAmount,
     decimal LiveStakeAmount,
     decimal LiveAvailableBalance,

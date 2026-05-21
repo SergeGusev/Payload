@@ -1194,6 +1194,8 @@ internal sealed class TestAppRepository : IAppRepository
                 strategy.Name,
                 strategy.Settings.Enabled,
                 strategy.Settings.LiveStakes,
+                strategy.Settings.Paused,
+                strategy.Settings.PausedUntilUtc,
                 strategy.Settings.PaperStakeAmount,
                 strategy.Settings.LiveStakeAmount,
                 strategy.Settings.LiveAvailableBalance,
@@ -1482,6 +1484,65 @@ internal sealed class TestAppRepository : IAppRepository
             LiveStakes = liveStakes
         };
         return Task.FromResult(true);
+    }
+
+    public Task<bool> SetStrategyPausedAsync(
+        Guid strategyId,
+        bool paused,
+        DateTimeOffset? pausedUntilUtc,
+        DateTimeOffset updatedAtUtc,
+        CancellationToken cancellationToken = default)
+    {
+        var normalizedStrategyId = StrategyIds.Normalize(strategyId);
+        if (!StrategySettings.ContainsKey(normalizedStrategyId))
+        {
+            return Task.FromResult(false);
+        }
+
+        StrategySettings[normalizedStrategyId] = GetStrategySettings(normalizedStrategyId) with
+        {
+            Paused = paused,
+            PausedUntilUtc = paused ? pausedUntilUtc : null
+        };
+        return Task.FromResult(true);
+    }
+
+    public Task<StrategyPauseDecision> PauseStrategyAfterLossIfRecentPnlNegativeAsync(
+        Guid strategyId,
+        DateTimeOffset lookbackStartUtc,
+        DateTimeOffset pauseUntilUtc,
+        DateTimeOffset updatedAtUtc,
+        CancellationToken cancellationToken = default)
+    {
+        var normalizedStrategyId = StrategyIds.Normalize(strategyId);
+        var paperRunPnl = StrategyMarketPaperRuns
+            .Where(run => StrategyIds.Normalize(run.StrategyId) == normalizedStrategyId)
+            .Where(run => string.Equals(run.Status, StrategyMarketPaperRunStatuses.Settled, StringComparison.OrdinalIgnoreCase))
+            .Where(run => run.SettledAtUtc >= lookbackStartUtc && run.SettledAtUtc <= updatedAtUtc)
+            .Sum(run => run.RealizedPnlUsd ?? 0m);
+        var livePnl = LiveOrders
+            .Where(order => StrategyIds.Normalize(order.StrategyId) == normalizedStrategyId)
+            .Where(order => order.SettledAtUtc >= lookbackStartUtc && order.SettledAtUtc <= updatedAtUtc)
+            .Sum(order => order.RealizedPnlUsd ?? 0m);
+        var followLeaderPaperPnl = normalizedStrategyId == StrategyIds.FollowLeader
+            ? PaperPositionSettlements
+                .Where(settlement => !settlement.CopiedTraderWallet.StartsWith("strategy:", StringComparison.OrdinalIgnoreCase))
+                .Where(settlement => settlement.SettledAtUtc >= lookbackStartUtc && settlement.SettledAtUtc <= updatedAtUtc)
+                .Sum(settlement => settlement.RealizedPnlUsd)
+            : 0m;
+        var recentPnl = paperRunPnl + livePnl + followLeaderPaperPnl;
+        if (recentPnl < 0m)
+        {
+            StrategySettings[normalizedStrategyId] = GetStrategySettings(normalizedStrategyId) with
+            {
+                Paused = true,
+                PausedUntilUtc = pauseUntilUtc
+            };
+
+            return Task.FromResult(new StrategyPauseDecision(true, recentPnl, lookbackStartUtc, pauseUntilUtc));
+        }
+
+        return Task.FromResult(new StrategyPauseDecision(false, recentPnl, lookbackStartUtc, null));
     }
 
     public Task<bool> SetStrategyStakeAmountsAsync(

@@ -1,3 +1,16 @@
+## Active Update 2026-05-21 Strategy Paused After Loss
+Goal: Add per-strategy `Paused` control that auto-pauses a losing strategy for 12 hours and can be toggled in Dashboard.
+Status: Completed
+Done:
+- Added `Paused`/`PausedUntilUtc` to strategy domain/runtime/performance models, PostgreSQL schema, repository reads/writes, Dashboard rows, CSV export, and the Strategies grid next to `Live`.
+- Added repository logic to evaluate each strategy's Paper and Live realized PnL over the last 12 hours after a losing settlement; if the 12-hour PnL is negative, the strategy is paused until `now + 12h`.
+- Wired pause checks into Follow Leader signal processing and BTC 5m strategy entry paths so paused strategies skip new Paper and Live entries with `strategy_paused` diagnostics.
+- Wired automatic pause triggering after BTC 5m paper-run losses, generic Paper settlement losses, and Live settlement losses.
+- Added/updated tests for schema columns, paused BTC entry skipping, and auto-pause after a losing BTC settlement.
+Next: Deploy/restart the service and Dashboard so the schema columns and UI toggle are active in the running environment.
+Notes: Verification passed: targeted strategy/storage/performance tests passed `158/158`; full `dotnet test tests\PolyCopyTrader.Tests\PolyCopyTrader.Tests.csproj --no-restore` passed `513/513`; Dashboard build with temp output passed; Service build passed; `git diff --check` passed with LF/CRLF warnings only. No production DB writes, service restart, live order submission, or cancel action.
+Blockers: None.
+
 ## Active Update 2026-05-21 BTC 5m Maker Blocking Clarification
 Goal: Clarify why the opposite Maker side did not place when one Maker side was blocked by an opposite open order.
 Status: Completed

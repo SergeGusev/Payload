@@ -324,6 +324,17 @@
                                 </DataTemplate>
                             </DataGridTemplateColumn.CellTemplate>
                         </DataGridTemplateColumn>
+                        <DataGridTemplateColumn Header="Paused" Width="70" SortMemberPath="Paused">
+                            <DataGridTemplateColumn.CellTemplate>
+                                <DataTemplate>
+                                    <CheckBox IsChecked="{Binding Paused, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                              Command="{Binding DataContext.SetStrategyPausedCommand, RelativeSource={RelativeSource AncestorType=DataGrid}}"
+                                              CommandParameter="{Binding}"
+                                              HorizontalAlignment="Center" />
+                                </DataTemplate>
+                            </DataGridTemplateColumn.CellTemplate>
+                        </DataGridTemplateColumn>
+                        <DataGridTextColumn Header="Paused until" Binding="{Binding PausedUntilUtc}" Width="150" />
                         <DataGridTextColumn Header="Settled" Binding="{Binding SettledPositionsCount}" Width="80" />
                         <DataGridTextColumn Header="Skipped" Binding="{Binding SkippedRunsCount}" Width="70" />
                         <DataGridTextColumn Header="Won" Binding="{Binding WonPositionsCount}" Width="60" />

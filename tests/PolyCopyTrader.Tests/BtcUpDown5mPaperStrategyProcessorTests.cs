@@ -2397,6 +2397,10 @@ public sealed class BtcUpDown5mPaperStrategyProcessorTests
         Assert.Equal(StrategyMarketPaperRunStatuses.Settled, updatedRun.Status);
         Assert.Equal(0m, updatedRun.SettlementPrice);
         Assert.Equal(-1m, updatedRun.RealizedPnlUsd);
+        var settings = repository.StrategySettings[Less60Variant.Id];
+        Assert.True(settings.Paused);
+        Assert.NotNull(settings.PausedUntilUtc);
+        Assert.True(settings.PausedUntilUtc > DateTimeOffset.UtcNow.AddHours(11));
 
         var settlement = Assert.Single(repository.PaperPositionSettlements);
         Assert.False(settlement.Won);
@@ -3339,6 +3343,37 @@ public sealed class BtcUpDown5mPaperStrategyProcessorTests
         Assert.Equal("Down", order.Outcome);
         Assert.Equal(0.45m, order.Price);
         Assert.Contains("\"decision_source\":\"always_down_after_trading_started\"", order.RawDecisionJson, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task ProcessAsync_PausedStrategySkipsNewPaperEntry()
+    {
+        var now = DateTimeOffset.UtcNow;
+        var repository = new TestAppRepository();
+        repository.StrategySettings[AlwaysDownVariant.Id] = StrategyRuntimeSettings.Default(AlwaysDownVariant.Id) with
+        {
+            Paused = true,
+            PausedUntilUtc = now.AddHours(1)
+        };
+        repository.PolymarketGammaMarkets.Add(CreateMarket(
+            now,
+            now.AddMinutes(5),
+            upPrice: 0.50m,
+            downPrice: 0.50m));
+        var processor = CreateProcessor(repository, [], AlwaysDownVariant.Code);
+
+        var result = await processor.ProcessAsync();
+
+        Assert.Equal(1, result.MarketsObserved);
+        Assert.Equal(0, result.EntriesPlaced);
+        Assert.Equal(1, result.RunsSkipped);
+        Assert.Empty(repository.PaperOrders);
+        Assert.Empty(repository.LiveOrders);
+        var run = Assert.Single(repository.StrategyMarketPaperRuns);
+        Assert.Equal(StrategyMarketPaperRunStatuses.Skipped, run.Status);
+        Assert.Equal("strategy_paused", run.SkipReason);
+        Assert.NotNull(run.SkipDiagnosticsJson);
+        Assert.Contains("\"strategy_paused\":true", run.SkipDiagnosticsJson!, StringComparison.Ordinal);
     }
 
     [Fact]

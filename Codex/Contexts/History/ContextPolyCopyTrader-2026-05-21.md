@@ -25,3 +25,10 @@ Request:
 
 Result:
 Clarified with production DB examples that Maker sides are independently edge-triggered and do not switch to the opposite side when one side is blocked. On `btc-updown-5m-1779333600`, Up Maker had `19` new-max attempts from best ask `0.66` to `0.99`, all blocked by a Down Paper BUY from `btc_up_down_5m_binance_15s`, while Down Maker had `0` new-max events. On `btc-updown-5m-1779333300`, Up Maker was blocked by Down Paper BUY orders around `03:15-03:16Z`; Down Maker only got new maxima at `03:19:44Z`, `03:19:47Z`, and `03:19:54Z`, after the `03:19:00Z` Maker cutoff, so it skipped as `maker_expiration_elapsed`. No DB writes, service restart, live order submission, cancel action, or source-code changes were performed.
+
+## 2026-05-21T05:29:55.5053497+00:00
+Request:
+Добавь в каждую стратегию свойство Paused, которое будет работать так: 1. После каждого проигрыша стратегия делает выборку своих ставок за последние 12 часов. 2. Если за это время она оказалась в минусах, то свойство Paused устанавливается в True и следующие 12 часов стратегия не делает ставок, ни Paper, ни живых. 3. Добавь эту галочку в Dashboard справа от колонки Live, чтобы галочку можно было устанавливать или снимать.
+
+Result:
+Added per-strategy `Paused`/`PausedUntilUtc` support across domain models, PostgreSQL schema/repository, runtime settings, Dashboard strategy rows/grid/CSV, Follow Leader signal processing, BTC 5m Paper entry paths, generic Paper settlement handling, and Live settlement handling. After a losing settlement, the repository now sums the strategy's realized Paper and Live PnL over the previous 12 hours and pauses it until `now + 12h` when that window is negative; paused strategies skip new Paper and Live entries. Dashboard now has an editable `Paused` checkbox immediately after `Live`, plus `Paused until`. Verification passed: targeted tests `158/158`, full tests `513/513`, Dashboard build, Service build, and `git diff --check` with LF/CRLF warnings only. No production DB writes, service restart, live order submission, or cancel action was performed.

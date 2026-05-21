@@ -1701,6 +1701,11 @@ combined AS (
         strategy.name,
         strategy.enabled,
         strategy.live_stakes,
+        strategy.paused AND (strategy.paused_until_utc IS NULL OR strategy.paused_until_utc > @NowUtc) AS paused,
+        CASE
+            WHEN strategy.paused AND (strategy.paused_until_utc IS NULL OR strategy.paused_until_utc > @NowUtc) THEN strategy.paused_until_utc
+            ELSE NULL
+        END AS paused_until_utc,
         strategy.paper_stake_amount,
         strategy.live_stake_amount,
         strategy.live_available_balance,
@@ -1806,6 +1811,8 @@ SELECT
     name,
     enabled,
     live_stakes,
+    paused,
+    paused_until_utc,
     paper_stake_amount,
     live_stake_amount,
     live_available_balance,
@@ -1867,6 +1874,7 @@ ORDER BY
 LIMIT @Limit;
 """);
 		command.Parameters.AddWithValue("FollowLeaderStrategyId", StrategyIds.FollowLeader);
+		command.Parameters.AddWithValue("NowUtc", UtcDateTime(DateTimeOffset.UtcNow));
 		command.Parameters.AddWithValue("Limit", limit);
 		await using NpgsqlDataReader reader = await command.ExecuteReaderAsync(cancellationToken);
 		List<StrategyPerformance> results = [];
@@ -1878,11 +1886,11 @@ LIMIT @Limit;
 				reader.GetString(2),
 				reader.GetBoolean(3),
 				reader.GetBoolean(4),
-				reader.GetDecimal(5),
-				reader.GetDecimal(6),
+				reader.GetBoolean(5),
+				reader.IsDBNull(6) ? null : DateTimeOffsetFromUtc(reader.GetDateTime(6)),
 				reader.GetDecimal(7),
-				reader.GetInt32(8),
-				reader.GetInt32(9),
+				reader.GetDecimal(8),
+				reader.GetDecimal(9),
 				reader.GetInt32(10),
 				reader.GetInt32(11),
 				reader.GetInt32(12),
@@ -1892,22 +1900,22 @@ LIMIT @Limit;
 				reader.GetInt32(16),
 				reader.GetInt32(17),
 				reader.GetInt32(18),
-				reader.GetDecimal(19),
-				reader.GetDecimal(20),
+				reader.GetInt32(19),
+				reader.GetInt32(20),
 				reader.GetDecimal(21),
 				reader.GetDecimal(22),
 				reader.GetDecimal(23),
 				reader.GetDecimal(24),
 				reader.GetDecimal(25),
 				reader.GetDecimal(26),
-				reader.IsDBNull(27) ? null : reader.GetDecimal(27),
+				reader.GetDecimal(27),
 				reader.GetDecimal(28),
-				reader.GetDecimal(29),
+				reader.IsDBNull(29) ? null : reader.GetDecimal(29),
 				reader.GetDecimal(30),
 				reader.GetDecimal(31),
 				reader.GetDecimal(32),
-				reader.GetInt32(33),
-				reader.GetInt32(34),
+				reader.GetDecimal(33),
+				reader.GetDecimal(34),
 				reader.GetInt32(35),
 				reader.GetInt32(36),
 				reader.GetInt32(37),
@@ -1919,19 +1927,21 @@ LIMIT @Limit;
 				reader.GetInt32(43),
 				reader.GetInt32(44),
 				reader.GetInt32(45),
-				reader.GetDecimal(46),
-				reader.GetDecimal(47),
+				reader.GetInt32(46),
+				reader.GetInt32(47),
 				reader.GetDecimal(48),
 				reader.GetDecimal(49),
 				reader.GetDecimal(50),
 				reader.GetDecimal(51),
-				reader.IsDBNull(52) ? null : reader.GetDecimal(52),
+				reader.GetDecimal(52),
 				reader.GetDecimal(53),
-				reader.GetDecimal(54),
-				reader.IsDBNull(55) ? null : DateTimeOffsetFromUtc(reader.GetDateTime(55)),
-				reader.IsDBNull(56) ? null : DateTimeOffsetFromUtc(reader.GetDateTime(56)),
+				reader.IsDBNull(54) ? null : reader.GetDecimal(54),
+				reader.GetDecimal(55),
+				reader.GetDecimal(56),
 				reader.IsDBNull(57) ? null : DateTimeOffsetFromUtc(reader.GetDateTime(57)),
-				reader.IsDBNull(58) ? null : DateTimeOffsetFromUtc(reader.GetDateTime(58))));
+				reader.IsDBNull(58) ? null : DateTimeOffsetFromUtc(reader.GetDateTime(58)),
+				reader.IsDBNull(59) ? null : DateTimeOffsetFromUtc(reader.GetDateTime(59)),
+				reader.IsDBNull(60) ? null : DateTimeOffsetFromUtc(reader.GetDateTime(60))));
 		}
 
 		return results;
@@ -2360,9 +2370,20 @@ ORDER BY
 	{
 		await using NpgsqlConnection connection = await OpenConnectionAsync(cancellationToken);
 		await using NpgsqlCommand command = CreateCommand(connection, """
-SELECT id, enabled, live_stakes, paper_stake_amount, live_stake_amount, live_available_balance
+SELECT id,
+       enabled,
+       live_stakes,
+       paused AND (paused_until_utc IS NULL OR paused_until_utc > @NowUtc) AS paused,
+       CASE
+           WHEN paused AND (paused_until_utc IS NULL OR paused_until_utc > @NowUtc) THEN paused_until_utc
+           ELSE NULL
+       END AS paused_until_utc,
+       paper_stake_amount,
+       live_stake_amount,
+       live_available_balance
 FROM strategies;
 """);
+		command.Parameters.AddWithValue("NowUtc", UtcDateTime(DateTimeOffset.UtcNow));
 		await using NpgsqlDataReader reader = await command.ExecuteReaderAsync(cancellationToken);
 		Dictionary<Guid, StrategyRuntimeSettings> results = [];
 		while (await reader.ReadAsync(cancellationToken))
@@ -2372,9 +2393,11 @@ FROM strategies;
 				strategyId,
 				reader.GetBoolean(1),
 				reader.GetBoolean(2),
-				reader.GetDecimal(3),
-				reader.GetDecimal(4),
-				reader.GetDecimal(5));
+				reader.GetBoolean(3),
+				reader.IsDBNull(4) ? null : DateTimeOffsetFromUtc(reader.GetDateTime(4)),
+				reader.GetDecimal(5),
+				reader.GetDecimal(6),
+				reader.GetDecimal(7));
 		}
 
 		return results;
@@ -2435,6 +2458,98 @@ WHERE id = @StrategyId;
 		command.Parameters.AddWithValue("UpdatedAtUtc", updatedAtUtc.UtcDateTime);
 		var rows = await command.ExecuteNonQueryAsync(cancellationToken);
 		return rows > 0;
+	}
+
+	public async Task<bool> SetStrategyPausedAsync(
+		Guid strategyId,
+		bool paused,
+		DateTimeOffset? pausedUntilUtc,
+		DateTimeOffset updatedAtUtc,
+		CancellationToken cancellationToken = default(CancellationToken))
+	{
+		await using NpgsqlConnection connection = await OpenConnectionAsync(cancellationToken);
+		await using NpgsqlCommand command = CreateCommand(connection, """
+UPDATE strategies
+SET paused = @Paused,
+    paused_until_utc = CASE WHEN @Paused THEN @PausedUntilUtc ELSE NULL END,
+    updated_at_utc = @UpdatedAtUtc
+WHERE id = @StrategyId;
+""");
+		command.Parameters.AddWithValue("StrategyId", StrategyIds.Normalize(strategyId));
+		command.Parameters.AddWithValue("Paused", paused);
+		command.Parameters.Add("PausedUntilUtc", NpgsqlDbType.TimestampTz).Value =
+			paused && pausedUntilUtc.HasValue ? UtcDateTime(pausedUntilUtc.Value) : DBNull.Value;
+		command.Parameters.AddWithValue("UpdatedAtUtc", UtcDateTime(updatedAtUtc));
+		var rows = await command.ExecuteNonQueryAsync(cancellationToken);
+		return rows > 0;
+	}
+
+	public async Task<StrategyPauseDecision> PauseStrategyAfterLossIfRecentPnlNegativeAsync(
+		Guid strategyId,
+		DateTimeOffset lookbackStartUtc,
+		DateTimeOffset pauseUntilUtc,
+		DateTimeOffset updatedAtUtc,
+		CancellationToken cancellationToken = default(CancellationToken))
+	{
+		var normalizedStrategyId = StrategyIds.Normalize(strategyId);
+		await using NpgsqlConnection connection = await OpenConnectionAsync(cancellationToken);
+		await using NpgsqlCommand command = CreateCommand(connection, """
+WITH recent_pnl AS (
+    SELECT COALESCE(sum(pnl_usd), 0) AS pnl_usd
+    FROM (
+        SELECT COALESCE(run.realized_pnl_usd, 0) AS pnl_usd
+        FROM strategy_market_paper_runs run
+        WHERE run.strategy_id = @StrategyId
+          AND run.status = 'Settled'
+          AND run.settled_at_utc >= @LookbackStartUtc
+          AND run.settled_at_utc <= @UpdatedAtUtc
+          AND run.realized_pnl_usd IS NOT NULL
+        UNION ALL
+        SELECT COALESCE(live_order.realized_pnl_usd, 0) AS pnl_usd
+        FROM live_orders live_order
+        WHERE live_order.strategy_id = @StrategyId
+          AND live_order.settled_at_utc >= @LookbackStartUtc
+          AND live_order.settled_at_utc <= @UpdatedAtUtc
+          AND live_order.realized_pnl_usd IS NOT NULL
+        UNION ALL
+        SELECT COALESCE(settlement.realized_pnl_usd, 0) AS pnl_usd
+        FROM paper_position_settlements settlement
+        WHERE @StrategyId = @FollowLeaderStrategyId
+          AND lower(settlement.copied_trader_wallet) NOT LIKE 'strategy:%'
+          AND settlement.settled_at_utc >= @LookbackStartUtc
+          AND settlement.settled_at_utc <= @UpdatedAtUtc
+    ) source
+),
+updated AS (
+    UPDATE strategies
+    SET paused = true,
+        paused_until_utc = @PauseUntilUtc,
+        updated_at_utc = @UpdatedAtUtc
+    WHERE id = @StrategyId
+      AND (SELECT pnl_usd FROM recent_pnl) < 0
+    RETURNING paused, paused_until_utc
+)
+SELECT
+    EXISTS(SELECT 1 FROM updated) AS paused,
+    (SELECT pnl_usd FROM recent_pnl) AS recent_pnl_usd,
+    (SELECT paused_until_utc FROM updated) AS paused_until_utc;
+""");
+		command.Parameters.AddWithValue("StrategyId", normalizedStrategyId);
+		command.Parameters.AddWithValue("FollowLeaderStrategyId", StrategyIds.FollowLeader);
+		command.Parameters.AddWithValue("LookbackStartUtc", UtcDateTime(lookbackStartUtc));
+		command.Parameters.AddWithValue("PauseUntilUtc", UtcDateTime(pauseUntilUtc));
+		command.Parameters.AddWithValue("UpdatedAtUtc", UtcDateTime(updatedAtUtc));
+		await using NpgsqlDataReader reader = await command.ExecuteReaderAsync(cancellationToken);
+		if (!await reader.ReadAsync(cancellationToken))
+		{
+			return new StrategyPauseDecision(false, 0m, lookbackStartUtc, null);
+		}
+
+		return new StrategyPauseDecision(
+			reader.GetBoolean(0),
+			reader.GetDecimal(1),
+			lookbackStartUtc,
+			reader.IsDBNull(2) ? null : DateTimeOffsetFromUtc(reader.GetDateTime(2)));
 	}
 
 	public async Task<bool> SetStrategyStakeAmountsAsync(

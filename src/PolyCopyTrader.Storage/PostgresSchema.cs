@@ -905,6 +905,8 @@ CREATE TABLE IF NOT EXISTS strategies (
     description text NOT NULL DEFAULT '',
     enabled boolean NOT NULL DEFAULT true,
     live_stakes boolean NOT NULL DEFAULT false,
+    paused boolean NOT NULL DEFAULT false,
+    paused_until_utc timestamptz NULL,
     paper_stake_amount numeric(28,8) NOT NULL DEFAULT 1.00,
     live_stake_amount numeric(28,8) NOT NULL DEFAULT 1.00,
     live_available_balance numeric(28,8) NOT NULL DEFAULT 100.00,
@@ -916,6 +918,8 @@ CREATE TABLE IF NOT EXISTS strategies (
 );
 
 ALTER TABLE strategies ADD COLUMN IF NOT EXISTS live_stakes boolean NOT NULL DEFAULT false;
+ALTER TABLE strategies ADD COLUMN IF NOT EXISTS paused boolean NOT NULL DEFAULT false;
+ALTER TABLE strategies ADD COLUMN IF NOT EXISTS paused_until_utc timestamptz NULL;
 ALTER TABLE strategies ADD COLUMN IF NOT EXISTS paper_stake_amount numeric(28,8) NOT NULL DEFAULT 1.00;
 ALTER TABLE strategies ADD COLUMN IF NOT EXISTS live_stake_amount numeric(28,8) NOT NULL DEFAULT 1.00;
 ALTER TABLE strategies ADD COLUMN IF NOT EXISTS live_available_balance numeric(28,8) NOT NULL DEFAULT 100.00;

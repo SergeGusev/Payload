@@ -67,6 +67,16 @@ public sealed class SignalProcessor(
             return new SignalProcessingResult(candidates.Count, 0, candidates.Count, 0);
         }
 
+        var nowUtc = DateTimeOffset.UtcNow;
+        if (followLeaderSettings.IsPausedAt(nowUtc))
+        {
+            logger.LogInformation(
+                "Follow leader signal processing skipped because the strategy is paused. DroppedCandidates={DroppedCandidates} PausedUntilUtc={PausedUntilUtc}",
+                candidates.Count,
+                followLeaderSettings.PausedUntilUtc);
+            return new SignalProcessingResult(candidates.Count, 0, candidates.Count, 0);
+        }
+
         var accepted = 0;
         var rejected = 0;
         var paperOrdersCreated = 0;

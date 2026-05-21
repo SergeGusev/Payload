@@ -941,6 +941,8 @@ public sealed class DashboardDataService(
             performance.Name,
             performance.Enabled,
             performance.LiveStakes,
+            performance.Paused,
+            FormatDate(performance.PausedUntilUtc),
             performance.PaperStakeAmount,
             performance.LiveStakeAmount,
             performance.LiveAvailableBalance,
