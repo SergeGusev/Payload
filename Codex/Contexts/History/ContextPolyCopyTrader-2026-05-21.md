@@ -67,3 +67,10 @@ Request:
 
 Result:
 Corrected the BTC 5m Maker implementation to use high-water best ask semantics. Maker now keeps `MaxBestAsk` per strategy/market/outcome, does not lower it on flat or falling asks, and places the next Paper-only post-only order only when current best ask exceeds the previous maximum. The regression test now proves `0.45 -> 0.40 -> 0.43` creates no second order, while `0.46` creates the next order at `0.45`. The opposite-outcome guard remains bypassed for Maker and active for non-Maker entries. Updated README, configuration reference, and Maker report probe max-ask wording/CSV headers. Verification passed: targeted BTC tests `135/135`, Maker report probe build, full tests `517/517`, and `git diff --check` with LF/CRLF warnings only. No production DB writes, service restart, live order submission, or cancel action was performed.
+
+## 2026-05-21T14:01:34.4549893+00:00
+Request:
+Отлично. Ещё раз нарисуй такой же график, чтобы было понятно, где мы ставим, а где не ставим.
+
+Result:
+Extended the Maker market report probe to add a high-water simulation from archived `btc_up_down_5m_odds_ticks`: baseline markers, simulated order markers when ask crosses the previous maximum, no-order markers below/equal to the prior max, and after-cutoff new-high skips. Regenerated the same market report for `btc-updown-5m-1779369300` at `outputs/maker-market-report/btc-updown-5m-1779369300-maker-report.html` and added `outputs/maker-market-report/btc-updown-5m-1779369300-high-water-simulation.csv`. The report has `55` odds ticks, `110` simulated decision rows, and `11` simulated Maker orders. Probe build passed, full tests passed `517/517`, and the report generation used read-only production PostgreSQL SELECT queries only. No DB writes, service restart, live order submission, or cancel action was performed.

@@ -31,6 +31,7 @@ if (market is null)
 }
 
 var ticks = await LoadTicksAsync(connection, market.MarketSlug);
+var simulatedDecisions = BuildHighWaterSimulation(ticks, market);
 var events = await LoadMakerEventsAsync(connection, market.MarketSlug);
 var orders = await LoadMakerOrdersAsync(connection, market.ConditionId, events);
 
@@ -38,25 +39,30 @@ var generatedAtUtc = DateTimeOffset.UtcNow;
 var safeSlug = SafeFileName(market.MarketSlug);
 var htmlPath = Path.Combine(outputDirectory, $"{safeSlug}-maker-report.html");
 var ticksCsvPath = Path.Combine(outputDirectory, $"{safeSlug}-ticks.csv");
+var simulationCsvPath = Path.Combine(outputDirectory, $"{safeSlug}-high-water-simulation.csv");
 var eventsCsvPath = Path.Combine(outputDirectory, $"{safeSlug}-maker-events.csv");
 var ordersCsvPath = Path.Combine(outputDirectory, $"{safeSlug}-maker-orders.csv");
 
 await File.WriteAllTextAsync(ticksCsvPath, BuildTicksCsv(ticks), Encoding.UTF8);
+await File.WriteAllTextAsync(simulationCsvPath, BuildSimulationCsv(simulatedDecisions), Encoding.UTF8);
 await File.WriteAllTextAsync(eventsCsvPath, BuildEventsCsv(events), Encoding.UTF8);
 await File.WriteAllTextAsync(ordersCsvPath, BuildOrdersCsv(orders), Encoding.UTF8);
 await File.WriteAllTextAsync(
     htmlPath,
-    BuildHtmlReport(market, ticks, events, orders, generatedAtUtc, ticksCsvPath, eventsCsvPath, ordersCsvPath),
+    BuildHtmlReport(market, ticks, simulatedDecisions, events, orders, generatedAtUtc, ticksCsvPath, simulationCsvPath, eventsCsvPath, ordersCsvPath),
     Encoding.UTF8);
 
 Console.WriteLine($"Market: {market.MarketSlug}");
 Console.WriteLine($"StartUtc: {market.MarketStartUtc:O}");
 Console.WriteLine($"EndUtc: {market.MarketEndUtc:O}");
 Console.WriteLine($"Ticks: {ticks.Count}");
+Console.WriteLine($"HighWaterSimulationRows: {simulatedDecisions.Count}");
+Console.WriteLine($"HighWaterSimulatedOrders: {simulatedDecisions.Count(item => item.PlacesOrder)}");
 Console.WriteLine($"MakerEvents: {events.Count}");
 Console.WriteLine($"MakerOrders: {orders.Count}");
 Console.WriteLine($"Report: {htmlPath}");
 Console.WriteLine($"TicksCsv: {ticksCsvPath}");
+Console.WriteLine($"SimulationCsv: {simulationCsvPath}");
 Console.WriteLine($"EventsCsv: {eventsCsvPath}");
 Console.WriteLine($"OrdersCsv: {ordersCsvPath}");
 return 0;
@@ -362,19 +368,132 @@ ORDER BY paper_order.created_at_utc ASC, strategy.code ASC;
     return results;
 }
 
+static List<MakerSimulationRow> BuildHighWaterSimulation(IReadOnlyList<TickRow> ticks, MarketInfo market)
+{
+    const decimal tickSize = 0.01m;
+    var results = new List<MakerSimulationRow>();
+    SimulateOutcome(
+        ticks,
+        market,
+        UpMakerCode,
+        "Up",
+        tick => tick.UpBestAsk,
+        results,
+        tickSize);
+    SimulateOutcome(
+        ticks,
+        market,
+        DownMakerCode,
+        "Down",
+        tick => tick.DownBestAsk,
+        results,
+        tickSize);
+    return results
+        .OrderBy(item => item.SampledAtUtc)
+        .ThenBy(item => item.Outcome, StringComparer.OrdinalIgnoreCase)
+        .ToList();
+}
+
+static void SimulateOutcome(
+    IReadOnlyList<TickRow> ticks,
+    MarketInfo market,
+    string strategyCode,
+    string outcome,
+    Func<TickRow, decimal?> bestAskSelector,
+    List<MakerSimulationRow> results,
+    decimal tickSize)
+{
+    decimal? maxBestAsk = null;
+    var orderSequence = 0;
+    var cutoffSeconds = Math.Max(0m, (decimal)(market.MarketEndUtc - market.MarketStartUtc).TotalSeconds - 60m);
+
+    foreach (var tick in ticks)
+    {
+        var bestAsk = bestAskSelector(tick);
+        if (bestAsk is not > 0m)
+        {
+            continue;
+        }
+
+        if (maxBestAsk is null)
+        {
+            maxBestAsk = bestAsk.Value;
+            results.Add(new MakerSimulationRow(
+                tick.SampledAtUtc,
+                tick.SecondsAfterStart,
+                strategyCode,
+                outcome,
+                "baseline",
+                bestAsk.Value,
+                PreviousMaxBestAsk: null,
+                CurrentMaxBestAsk: bestAsk.Value,
+                MakerLimitPrice: null,
+                PlacesOrder: false,
+                OrderSequence: 0,
+                Reason: "baseline"));
+            continue;
+        }
+
+        if (bestAsk.Value <= maxBestAsk.Value)
+        {
+            results.Add(new MakerSimulationRow(
+                tick.SampledAtUtc,
+                tick.SecondsAfterStart,
+                strategyCode,
+                outcome,
+                "no_order",
+                bestAsk.Value,
+                maxBestAsk.Value,
+                maxBestAsk.Value,
+                MakerLimitPrice: null,
+                PlacesOrder: false,
+                OrderSequence: orderSequence,
+                Reason: "below_or_equal_previous_max"));
+            continue;
+        }
+
+        var previousMax = maxBestAsk.Value;
+        maxBestAsk = bestAsk.Value;
+        orderSequence++;
+        var placesOrder = tick.SecondsAfterStart <= cutoffSeconds;
+        results.Add(new MakerSimulationRow(
+            tick.SampledAtUtc,
+            tick.SecondsAfterStart,
+            strategyCode,
+            outcome,
+            placesOrder ? "place_order" : "skip_after_cutoff",
+            bestAsk.Value,
+            previousMax,
+            bestAsk.Value,
+            placesOrder ? RoundDownToTick(Math.Max(0m, bestAsk.Value - tickSize), tickSize) : null,
+            placesOrder,
+            orderSequence,
+            placesOrder ? "new_high" : "new_high_after_maker_cutoff"));
+    }
+}
+
 static string BuildHtmlReport(
     MarketInfo market,
     IReadOnlyList<TickRow> ticks,
+    IReadOnlyList<MakerSimulationRow> simulatedDecisions,
     IReadOnlyList<MakerEventRow> events,
     IReadOnlyList<MakerOrderRow> orders,
     DateTimeOffset generatedAtUtc,
     string ticksCsvPath,
+    string simulationCsvPath,
     string eventsCsvPath,
     string ordersCsvPath)
 {
     var upEvents = events.Where(item => item.StrategyCode == UpMakerCode).ToArray();
     var downEvents = events.Where(item => item.StrategyCode == DownMakerCode).ToArray();
     var enteredEvents = events.Where(item => string.Equals(item.Status, "Entered", StringComparison.OrdinalIgnoreCase)).ToArray();
+    var simulatedOrders = simulatedDecisions.Where(item => item.PlacesOrder).ToArray();
+    var simulatedNoOrders = simulatedDecisions
+        .Where(item => string.Equals(item.Action, "no_order", StringComparison.OrdinalIgnoreCase))
+        .ToArray();
+    var simulatedCutoffSkips = simulatedDecisions
+        .Where(item => string.Equals(item.Action, "skip_after_cutoff", StringComparison.OrdinalIgnoreCase))
+        .ToArray();
     var skippedByReason = events
         .Where(item => !string.IsNullOrWhiteSpace(item.SkipReason))
         .GroupBy(item => item.SkipReason)
@@ -382,12 +501,15 @@ static string BuildHtmlReport(
         .ThenBy(group => group.Key, StringComparer.Ordinal)
         .Select(group => $"{Html(group.Key)}: {group.Count()}");
 
-    var svg = BuildSvg(market, ticks, events, orders);
+    var svg = BuildSvg(market, ticks, simulatedDecisions, events, orders);
     var summaryCards = new[]
     {
         ("Market", market.MarketSlug),
         ("Window UTC", $"{market.MarketStartUtc:HH:mm:ss} - {market.MarketEndUtc:HH:mm:ss}"),
         ("Ticks", ticks.Count.ToString(CultureInfo.InvariantCulture)),
+        ("Simulated orders", simulatedOrders.Length.ToString(CultureInfo.InvariantCulture)),
+        ("No-order samples", simulatedNoOrders.Length.ToString(CultureInfo.InvariantCulture)),
+        ("Cutoff skips", simulatedCutoffSkips.Length.ToString(CultureInfo.InvariantCulture)),
         ("Maker events", events.Count.ToString(CultureInfo.InvariantCulture)),
         ("Up Maker events", upEvents.Length.ToString(CultureInfo.InvariantCulture)),
         ("Down Maker events", downEvents.Length.ToString(CultureInfo.InvariantCulture)),
@@ -441,8 +563,10 @@ th { position: sticky; top: 0; background: #eef1f5; z-index: 1; }
   <span><span class="swatch" style="background:#ff9896"></span>Up bid</span>
   <span><span class="swatch" style="background:#1f77b4"></span>Down ask</span>
   <span><span class="swatch" style="background:#aec7e8"></span>Down bid</span>
-  <span>● Maker event / placed order</span>
-  <span>× skipped Maker attempt</span>
+  <span><span class="swatch" style="background:#16a34a"></span>simulated high-water maker order</span>
+  <span><span class="swatch" style="background:#9ca3af"></span>simulated no order: below/equal previous max</span>
+  <span>actual DB Maker event / placed order</span>
+  <span>actual DB skipped Maker attempt</span>
   <span>vertical dashed line = maker expiration cutoff, market_end - 60s</span>
 </div>
 """);
@@ -450,9 +574,35 @@ th { position: sticky; top: 0; background: #eef1f5; z-index: 1; }
 
     html.AppendLine("<h2>Interpretation</h2>");
     html.AppendLine("<div class=\"panel\">");
-    html.AppendLine("<p>The line chart uses <code>btc_up_down_5m_odds_ticks</code>, which is the archived book snapshot stream. Maker markers use exact <code>strategy_market_paper_runs.skip_diagnostics_json</code> / linked <code>paper_orders</code> decision data. The Maker strategy first records an in-memory baseline for each side; a marker appears only when that side's own best ask exceeds its previous high-water best ask.</p>");
+    html.AppendLine("<p>The line chart uses <code>btc_up_down_5m_odds_ticks</code>, which is the archived book snapshot stream. Simulated markers apply the current high-water Maker rule locally: first usable ask is a baseline, asks below or equal to the previous maximum are no-order points, and a new order appears only when the ask exceeds the prior high.</p>");
     html.AppendLine($"<p>Skip reasons: {(events.Count == 0 ? "no Maker events for this market" : string.Join("; ", skippedByReason))}.</p>");
     html.AppendLine("</div>");
+
+    html.AppendLine("<h2>High-Water Simulation</h2>");
+    html.AppendLine("<div class=\"panel\"><table><thead><tr>");
+    foreach (var header in new[] { "UTC", "t+", "Strategy", "Outcome", "Action", "Ask", "Prev max", "New max", "Limit", "Reason" })
+    {
+        html.AppendLine($"<th>{Html(header)}</th>");
+    }
+
+    html.AppendLine("</tr></thead><tbody>");
+    foreach (var item in simulatedDecisions)
+    {
+        html.AppendLine("<tr>");
+        html.AppendLine($"<td>{item.SampledAtUtc:HH:mm:ss}</td>");
+        html.AppendLine($"<td>{item.SecondsAfterStart.ToString("0.0", CultureInfo.InvariantCulture)}s</td>");
+        html.AppendLine($"<td>{Html(ShortStrategyName(item.StrategyCode))}</td>");
+        html.AppendLine($"<td>{Html(item.Outcome)}</td>");
+        html.AppendLine($"<td>{Html(item.Action)}</td>");
+        html.AppendLine($"<td>{FormatDecimal(item.BestAsk)}</td>");
+        html.AppendLine($"<td>{FormatDecimal(item.PreviousMaxBestAsk)}</td>");
+        html.AppendLine($"<td>{FormatDecimal(item.CurrentMaxBestAsk)}</td>");
+        html.AppendLine($"<td>{FormatDecimal(item.MakerLimitPrice)}</td>");
+        html.AppendLine($"<td class=\"reason\">{Html(item.Reason)}</td>");
+        html.AppendLine("</tr>");
+    }
+
+    html.AppendLine("</tbody></table></div>");
 
     html.AppendLine("<h2>Maker Events</h2>");
     html.AppendLine("<div class=\"panel\"><table><thead><tr>");
@@ -509,6 +659,7 @@ th { position: sticky; top: 0; background: #eef1f5; z-index: 1; }
     html.AppendLine("<h2>Export Files</h2>");
     html.AppendLine("<div class=\"panel files\">");
     html.AppendLine($"<code>{Html(ticksCsvPath)}</code>");
+    html.AppendLine($"<code>{Html(simulationCsvPath)}</code>");
     html.AppendLine($"<code>{Html(eventsCsvPath)}</code>");
     html.AppendLine($"<code>{Html(ordersCsvPath)}</code>");
     html.AppendLine("</div>");
@@ -519,6 +670,7 @@ th { position: sticky; top: 0; background: #eef1f5; z-index: 1; }
 static string BuildSvg(
     MarketInfo market,
     IReadOnlyList<TickRow> ticks,
+    IReadOnlyList<MakerSimulationRow> simulatedDecisions,
     IReadOnlyList<MakerEventRow> events,
     IReadOnlyList<MakerOrderRow> orders)
 {
@@ -567,6 +719,36 @@ static string BuildSvg(
     AppendLine(html, ticks.Select(item => (item.SecondsAfterStart, item.UpBestBid)), "#ff9896", 1.7, X, Y, "5 4");
     AppendLine(html, ticks.Select(item => (item.SecondsAfterStart, item.DownBestAsk)), "#1f77b4", 2.2, X, Y);
     AppendLine(html, ticks.Select(item => (item.SecondsAfterStart, item.DownBestBid)), "#aec7e8", 1.7, X, Y, "5 4");
+
+    foreach (var item in simulatedDecisions)
+    {
+        var x = X(item.SecondsAfterStart);
+        var y = Y(Clamp(item.BestAsk, 0m, 1m));
+        var isUp = item.StrategyCode == UpMakerCode;
+        var stroke = isUp ? "#7f1d1d" : "#1e3a8a";
+        if (item.PlacesOrder)
+        {
+            html.AppendLine($"<circle cx=\"{Fmt(x)}\" cy=\"{Fmt(y)}\" r=\"7\" fill=\"#16a34a\" stroke=\"{stroke}\" stroke-width=\"2\"><title>{Html(ShortStrategyName(item.StrategyCode))} simulated order ask={FormatDecimal(item.BestAsk)} limit={FormatDecimal(item.MakerLimitPrice)}</title></circle>");
+            if (item.MakerLimitPrice is { } makerLimitPrice)
+            {
+                var orderY = Y(Clamp(makerLimitPrice, 0m, 1m));
+                html.AppendLine($"<line x1=\"{Fmt(x)}\" y1=\"{Fmt(y)}\" x2=\"{Fmt(x)}\" y2=\"{Fmt(orderY)}\" stroke=\"#16a34a\" stroke-width=\"1.5\"/>");
+                html.AppendLine($"<circle cx=\"{Fmt(x)}\" cy=\"{Fmt(orderY)}\" r=\"4\" fill=\"#16a34a\"><title>Simulated maker limit {FormatDecimal(makerLimitPrice)}</title></circle>");
+            }
+        }
+        else if (string.Equals(item.Action, "baseline", StringComparison.OrdinalIgnoreCase))
+        {
+            html.AppendLine($"<rect x=\"{Fmt(x - 4)}\" y=\"{Fmt(y - 4)}\" width=\"8\" height=\"8\" fill=\"#f59e0b\" stroke=\"{stroke}\" stroke-width=\"1.5\"><title>{Html(ShortStrategyName(item.StrategyCode))} baseline ask={FormatDecimal(item.BestAsk)}</title></rect>");
+        }
+        else if (string.Equals(item.Action, "skip_after_cutoff", StringComparison.OrdinalIgnoreCase))
+        {
+            html.AppendLine($"<path d=\"M {Fmt(x - 5)} {Fmt(y)} L {Fmt(x)} {Fmt(y - 6)} L {Fmt(x + 5)} {Fmt(y)} L {Fmt(x)} {Fmt(y + 6)} Z\" fill=\"#f97316\" stroke=\"{stroke}\" stroke-width=\"1.5\"><title>{Html(ShortStrategyName(item.StrategyCode))} new high after cutoff ask={FormatDecimal(item.BestAsk)}</title></path>");
+        }
+        else
+        {
+            html.AppendLine($"<circle cx=\"{Fmt(x)}\" cy=\"{Fmt(y)}\" r=\"3\" fill=\"#9ca3af\" opacity=\"0.72\"><title>{Html(ShortStrategyName(item.StrategyCode))} no order ask={FormatDecimal(item.BestAsk)} previous max={FormatDecimal(item.PreviousMaxBestAsk)}</title></circle>");
+        }
+    }
 
     var ordersById = orders.ToDictionary(item => item.Id);
     foreach (var item in events)
@@ -705,6 +887,31 @@ static string BuildTicksCsv(IReadOnlyList<TickRow> ticks)
     return csv.ToString();
 }
 
+static string BuildSimulationCsv(IReadOnlyList<MakerSimulationRow> simulatedDecisions)
+{
+    var csv = new StringBuilder();
+    csv.AppendLine("sampled_at_utc,seconds_after_start,strategy_code,outcome,action,best_ask,previous_max_best_ask,current_max_best_ask,maker_limit_price,places_order,order_sequence,reason");
+    foreach (var item in simulatedDecisions)
+    {
+        csv.AppendLine(string.Join(",", [
+            CsvText(item.SampledAtUtc.ToString("O", CultureInfo.InvariantCulture)),
+            CsvDecimal(item.SecondsAfterStart),
+            CsvText(item.StrategyCode),
+            CsvText(item.Outcome),
+            CsvText(item.Action),
+            CsvDecimal(item.BestAsk),
+            CsvDecimal(item.PreviousMaxBestAsk),
+            CsvDecimal(item.CurrentMaxBestAsk),
+            CsvDecimal(item.MakerLimitPrice),
+            CsvText(item.PlacesOrder ? "true" : "false"),
+            CsvDecimal(item.OrderSequence),
+            CsvText(item.Reason)
+        ]));
+    }
+
+    return csv.ToString();
+}
+
 static string BuildEventsCsv(IReadOnlyList<MakerEventRow> events)
 {
     var csv = new StringBuilder();
@@ -827,6 +1034,13 @@ static decimal Clamp(decimal value, decimal min, decimal max)
     return Math.Min(max, Math.Max(min, value));
 }
 
+static decimal RoundDownToTick(decimal value, decimal tickSize)
+{
+    return tickSize <= 0m
+        ? value
+        : Math.Floor(value / tickSize) * tickSize;
+}
+
 static string CsvDecimal(decimal? value)
 {
     return value is null ? "" : value.Value.ToString("0.########", CultureInfo.InvariantCulture);
@@ -913,6 +1127,20 @@ sealed record TickRow(
     decimal? DownPriceProxy,
     string DownBookSource,
     decimal? DownBookAgeMs);
+
+sealed record MakerSimulationRow(
+    DateTimeOffset SampledAtUtc,
+    decimal SecondsAfterStart,
+    string StrategyCode,
+    string Outcome,
+    string Action,
+    decimal BestAsk,
+    decimal? PreviousMaxBestAsk,
+    decimal CurrentMaxBestAsk,
+    decimal? MakerLimitPrice,
+    bool PlacesOrder,
+    int OrderSequence,
+    string Reason);
 
 sealed record MakerEventRow(
     string StrategyCode,

@@ -1,3 +1,16 @@
+## Active Update 2026-05-21 BTC 5m Maker High-Water Graph
+Goal: Regenerate the BTC 5m Maker market graph with explicit high-water place/no-place markers.
+Status: Completed
+Done:
+- Extended `artifacts/MakerMarketReportProbe` to compute a local high-water Maker simulation from archived `btc_up_down_5m_odds_ticks` without writing to PostgreSQL.
+- The report now marks baseline samples, simulated Maker order points, no-order samples below/equal to the previous max, and after-cutoff new-high skips.
+- Regenerated `outputs/maker-market-report/btc-updown-5m-1779369300-maker-report.html` for the same market used in the prior graph.
+- Added `outputs/maker-market-report/btc-updown-5m-1779369300-high-water-simulation.csv` with the simulated decisions.
+- The regenerated market report has `55` odds ticks, `110` high-water simulation rows, and `11` simulated Maker orders; actual DB Maker events remain separate from the simulation.
+Next: Review the HTML graph; deploy/restart the service separately when the production runtime should use the already-committed high-water Maker code.
+Notes: Verification passed: `dotnet build artifacts\MakerMarketReportProbe\MakerMarketReportProbe.csproj --no-restore` passed; `dotnet test tests\PolyCopyTrader.Tests\PolyCopyTrader.Tests.csproj --no-restore` passed `517/517`; report generation used read-only SELECT queries against production PostgreSQL host `192.168.0.101`. No production DB writes, service restart, live order submission, or cancel action.
+Blockers: None.
+
 ## Active Update 2026-05-21 BTC 5m Maker High-Water Correction
 Goal: Correct BTC 5m Maker entries so they resume only after crossing the prior best-ask maximum.
 Status: Completed
