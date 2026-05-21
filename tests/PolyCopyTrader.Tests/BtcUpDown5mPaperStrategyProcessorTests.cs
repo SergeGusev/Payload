@@ -3583,6 +3583,79 @@ public sealed class BtcUpDown5mPaperStrategyProcessorTests
     }
 
     [Fact]
+    public async Task ProcessAsync_UpMakerDoesNotRaiseHighWaterBetweenThirtySecondSlots()
+    {
+        var now = DateTimeOffset.UtcNow;
+        var marketStartUtc = now.AddSeconds(-5);
+        var marketEndUtc = now.AddMinutes(5);
+        var repository = new TestAppRepository();
+        repository.PolymarketGammaMarkets.Add(CreateMarket(
+            marketStartUtc,
+            marketEndUtc,
+            upPrice: 0.50m,
+            downPrice: 0.50m,
+            orderMinSize: 5m));
+        var clobClient = new MutableFakeClobClient([
+            OrderBook("asset-up", [new OrderBookLevel(0.40m, 100m)], [new OrderBookLevel(0.42m, 100m)], now, 5m, 0.01m),
+            OrderBook("asset-down", [new OrderBookLevel(0.58m, 100m)], [new OrderBookLevel(0.60m, 100m)], now, 5m, 0.01m)
+        ]);
+        var processor = CreateMakerProcessor(repository, clobClient, UpMakerVariant.Code);
+
+        await processor.ProcessAsync();
+        await Task.Delay(75);
+        SetFirstMarketWindowStart(repository, DateTimeOffset.UtcNow.AddSeconds(-15));
+        clobClient.SetOrderBooks([
+            OrderBook("asset-up", [new OrderBookLevel(0.53m, 100m)], [new OrderBookLevel(0.55m, 100m)], DateTimeOffset.UtcNow, 5m, 0.01m),
+            OrderBook("asset-down", [new OrderBookLevel(0.45m, 100m)], [new OrderBookLevel(0.47m, 100m)], DateTimeOffset.UtcNow, 5m, 0.01m)
+        ]);
+        var beforeFirstSlot = await processor.ProcessAsync();
+        await Task.Delay(75);
+        SetFirstMarketWindowStart(repository, DateTimeOffset.UtcNow.AddSeconds(-31));
+        clobClient.SetOrderBooks([
+            OrderBook("asset-up", [new OrderBookLevel(0.43m, 100m)], [new OrderBookLevel(0.45m, 100m)], DateTimeOffset.UtcNow, 5m, 0.01m),
+            OrderBook("asset-down", [new OrderBookLevel(0.55m, 100m)], [new OrderBookLevel(0.57m, 100m)], DateTimeOffset.UtcNow, 5m, 0.01m)
+        ]);
+        var firstSlot = await processor.ProcessAsync();
+        await Task.Delay(75);
+        SetFirstMarketWindowStart(repository, DateTimeOffset.UtcNow.AddSeconds(-45));
+        clobClient.SetOrderBooks([
+            OrderBook("asset-up", [new OrderBookLevel(0.58m, 100m)], [new OrderBookLevel(0.60m, 100m)], DateTimeOffset.UtcNow, 5m, 0.01m),
+            OrderBook("asset-down", [new OrderBookLevel(0.40m, 100m)], [new OrderBookLevel(0.42m, 100m)], DateTimeOffset.UtcNow, 5m, 0.01m)
+        ]);
+        var betweenSlots = await processor.ProcessAsync();
+        await Task.Delay(75);
+        SetFirstMarketWindowStart(repository, DateTimeOffset.UtcNow.AddSeconds(-61));
+        clobClient.SetOrderBooks([
+            OrderBook("asset-up", [new OrderBookLevel(0.42m, 100m)], [new OrderBookLevel(0.44m, 100m)], DateTimeOffset.UtcNow, 5m, 0.01m),
+            OrderBook("asset-down", [new OrderBookLevel(0.56m, 100m)], [new OrderBookLevel(0.58m, 100m)], DateTimeOffset.UtcNow, 5m, 0.01m)
+        ]);
+        var secondSlot = await processor.ProcessAsync();
+        await Task.Delay(75);
+        SetFirstMarketWindowStart(repository, DateTimeOffset.UtcNow.AddSeconds(-91));
+        clobClient.SetOrderBooks([
+            OrderBook("asset-up", [new OrderBookLevel(0.48m, 100m)], [new OrderBookLevel(0.50m, 100m)], DateTimeOffset.UtcNow, 5m, 0.01m),
+            OrderBook("asset-down", [new OrderBookLevel(0.50m, 100m)], [new OrderBookLevel(0.52m, 100m)], DateTimeOffset.UtcNow, 5m, 0.01m)
+        ]);
+
+        var thirdSlot = await processor.ProcessAsync();
+
+        Assert.Equal(0, beforeFirstSlot.EntriesPlaced);
+        Assert.Equal(1, firstSlot.EntriesPlaced);
+        Assert.Equal(0, betweenSlots.EntriesPlaced);
+        Assert.Equal(0, secondSlot.EntriesPlaced);
+        Assert.Equal(1, thirdSlot.EntriesPlaced);
+        Assert.Equal([0.44m, 0.49m], repository.PaperOrders.Select(order => order.Price).ToArray());
+        Assert.Contains(
+            "\"previous_max_best_ask\":0.42",
+            repository.PaperOrders[0].RawDecisionJson,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "\"previous_max_best_ask\":0.45",
+            repository.PaperOrders[1].RawDecisionJson,
+            StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task ProcessAsync_UpMakerWaitsForBestAskToExceedPriorHighAfterFalling()
     {
         var now = DateTimeOffset.UtcNow;

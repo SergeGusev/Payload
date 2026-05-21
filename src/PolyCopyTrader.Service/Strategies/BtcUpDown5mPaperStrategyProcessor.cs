@@ -586,13 +586,11 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
                     continue;
                 }
 
-                var nextMaxBestAsk = Math.Max(state.MaxBestAsk, bestAsk.Value);
                 if (!decisionSlot.Available ||
                     decisionSlot.CurrentSlot <= state.LastDecisionSlot)
                 {
                     makerHighWaterStates[stateKey] = state with
                     {
-                        MaxBestAsk = nextMaxBestAsk,
                         UpdatedAtUtc = nowUtc,
                         MarketEndUtc = market.EndDateUtc
                     };
@@ -603,7 +601,6 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
                 {
                     makerHighWaterStates[stateKey] = state with
                     {
-                        MaxBestAsk = nextMaxBestAsk,
                         LastDecisionSlot = decisionSlot.CurrentSlot,
                         UpdatedAtUtc = nowUtc,
                         MarketEndUtc = market.EndDateUtc
@@ -612,15 +609,6 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
                 }
 
                 var orderSequence = state.OrderSequence + 1;
-                makerHighWaterStates[stateKey] = state with
-                {
-                    MaxBestAsk = bestAsk.Value,
-                    OrderSequence = orderSequence,
-                    LastDecisionSlot = decisionSlot.CurrentSlot,
-                    UpdatedAtUtc = nowUtc,
-                    MarketEndUtc = market.EndDateUtc
-                };
-
                 var settings = GetStrategySettings(strategySettings, variant.Id);
                 var orderResult = await TryPlaceMakerHighWaterOrderAsync(
                     nowUtc,
@@ -636,6 +624,14 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
                     decisionSlot.MaxSlot,
                     settings,
                     cancellationToken);
+                makerHighWaterStates[stateKey] = state with
+                {
+                    MaxBestAsk = orderResult.Placed ? bestAsk.Value : state.MaxBestAsk,
+                    OrderSequence = orderResult.Placed ? orderSequence : state.OrderSequence,
+                    LastDecisionSlot = decisionSlot.CurrentSlot,
+                    UpdatedAtUtc = nowUtc,
+                    MarketEndUtc = market.EndDateUtc
+                };
                 entriesPlaced += orderResult.Placed ? 1 : 0;
                 runsSkipped += orderResult.Skipped ? 1 : 0;
             }

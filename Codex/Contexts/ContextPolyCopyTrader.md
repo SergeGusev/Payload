@@ -1,3 +1,17 @@
+## Active Update 2026-05-21 BTC 5m Maker Fixed High-Water On Order
+Goal: Adjust 30-second Maker high-water tracking so the maximum is fixed only when a Maker order is created.
+Status: Completed
+Done:
+- Changed `BTC Up or Down 5m Up Maker` / `Down Maker` state so between-slot book moves no longer raise `MaxBestAsk`.
+- No-order decision slots no longer raise `MaxBestAsk`; the slot is marked processed, but the high-water value remains the previous baseline/order value.
+- When a slot qualifies, the high-water value and order sequence now advance only after `TryPlaceMakerHighWaterOrderAsync` actually creates a Paper Maker order.
+- Added a regression test covering an intra-slot spike before `30s`, a valid order on the first slot, another intra-slot spike, a no-order slot, and a later valid order around `90s`.
+- Updated README, configuration reference, and the Maker report probe interpretation to describe "high-water updates only on order".
+- Regenerated `outputs/maker-market-report/btc-updown-5m-1779373200-maker-report.html`; the same market now shows `6` simulated Maker orders instead of `4`, including Down Maker after the `30s` slot (`34.861s`) and after the `90s` slot (`93.875s`).
+Next: Deploy/restart the service separately if the running production process should use this newest Maker high-water behavior.
+Notes: Verification passed: targeted `dotnet test tests\PolyCopyTrader.Tests\PolyCopyTrader.Tests.csproj --no-restore --filter "FullyQualifiedName~BtcUpDown5mPaperStrategyProcessorTests"` passed `137/137`; `dotnet build artifacts\MakerMarketReportProbe\MakerMarketReportProbe.csproj --no-restore` passed; full `dotnet test tests\PolyCopyTrader.Tests\PolyCopyTrader.Tests.csproj --no-restore` passed `519/519`; report generation used read-only SELECT queries against production PostgreSQL host `192.168.0.101`. No production DB writes, service restart, live order submission, or cancel action.
+Blockers: None.
+
 ## Active Update 2026-05-21 BTC 5m Maker 30 Second Slots
 Goal: Throttle BTC 5m Maker entries to one high-water decision every 30 seconds and regenerate a graph on a fresh market.
 Status: Completed

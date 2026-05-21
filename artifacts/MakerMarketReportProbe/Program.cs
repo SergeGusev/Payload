@@ -480,7 +480,6 @@ static void SimulateOutcome(
         if (!decisionSlot.Available ||
             decisionSlot.CurrentSlot <= lastDecisionSlot)
         {
-            maxBestAsk = Math.Max(maxBestAsk.Value, bestAsk.Value);
             results.Add(new MakerSimulationRow(
                 tick.SampledAtUtc,
                 tick.SecondsAfterStart,
@@ -489,11 +488,11 @@ static void SimulateOutcome(
                 decisionSlot.Available ? "between_slots" : "before_first_slot",
                 bestAsk.Value,
                 previousMax,
-                maxBestAsk.Value,
+                previousMax,
                 MakerLimitPrice: null,
                 PlacesOrder: false,
                 OrderSequence: orderSequence,
-                Reason: decisionSlot.Available ? "waiting_for_next_30s_slot" : "before_first_30s_slot"));
+                Reason: decisionSlot.Available ? "waiting_for_next_30s_slot_no_max_update" : "before_first_30s_slot_no_max_update"));
             continue;
         }
 
@@ -654,7 +653,7 @@ th { position: sticky; top: 0; background: #eef1f5; z-index: 1; }
 
     html.AppendLine("<h2>Interpretation</h2>");
     html.AppendLine("<div class=\"panel\">");
-    html.AppendLine("<p>The line chart uses <code>btc_up_down_5m_odds_ticks</code>, which is the archived book snapshot stream. Simulated markers apply the current high-water Maker rule locally: first usable ask is a baseline, decisions happen only on 30-second slots, asks below or equal to the previous maximum are no-order points, and a new order appears only when the ask exceeds the prior high on a slot.</p>");
+    html.AppendLine("<p>The line chart uses <code>btc_up_down_5m_odds_ticks</code>, which is the archived book snapshot stream. Simulated markers apply the current high-water Maker rule locally: first usable ask is a baseline, decisions happen only on 30-second slots, and the high-water value is updated only when a simulated Maker order is placed. Between-slot moves and no-order slots do not raise the high-water value; a new order appears only when the ask exceeds the last fixed high-water value on a slot.</p>");
     html.AppendLine($"<p>Skip reasons: {(events.Count == 0 ? "no Maker events for this market" : string.Join("; ", skippedByReason))}.</p>");
     html.AppendLine("</div>");
 
