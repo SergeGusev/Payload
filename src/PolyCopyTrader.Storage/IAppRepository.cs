@@ -563,6 +563,13 @@ public interface IAppRepository
         return Task.CompletedTask;
     }
 
+    Task AddBtcUpDown5mArbitrageScanAsync(
+        BtcUpDown5mArbitrageScan scan,
+        CancellationToken cancellationToken = default)
+    {
+        return Task.CompletedTask;
+    }
+
     Task<bool> TryAddBtc5mHistoryLiveObservationAsync(
         Btc5mHistoryLiveObservation observation,
         CancellationToken cancellationToken = default)

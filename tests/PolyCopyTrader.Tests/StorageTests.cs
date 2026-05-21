@@ -224,6 +224,10 @@ public sealed class StorageTests
         Assert.Contains("effective_count numeric(28,8) NULL", PostgresSchema.SchemaSql, StringComparison.Ordinal);
         Assert.Contains("decision_code text NOT NULL", PostgresSchema.SchemaSql, StringComparison.Ordinal);
         Assert.Contains("ix_btc_up_down_5m_statistics_ticks_decision", PostgresSchema.SchemaSql, StringComparison.Ordinal);
+        Assert.Contains("CREATE TABLE IF NOT EXISTS btc_up_down_5m_arbitrage_scans", PostgresSchema.SchemaSql, StringComparison.Ordinal);
+        Assert.Contains("net_profit_usd numeric(28,8) NULL", PostgresSchema.SchemaSql, StringComparison.Ordinal);
+        Assert.Contains("would_arbitrage boolean NOT NULL", PostgresSchema.SchemaSql, StringComparison.Ordinal);
+        Assert.Contains("ix_btc_up_down_5m_arbitrage_scans_decision", PostgresSchema.SchemaSql, StringComparison.Ordinal);
         Assert.Contains("CREATE TABLE IF NOT EXISTS crypto_up_down_5m_odds_ticks", PostgresSchema.SchemaSql, StringComparison.Ordinal);
         Assert.Contains("ix_crypto_up_down_5m_odds_ticks_asset_market_time", PostgresSchema.SchemaSql, StringComparison.Ordinal);
         Assert.Contains("up_price_proxy_kind text NOT NULL", PostgresSchema.SchemaSql, StringComparison.Ordinal);

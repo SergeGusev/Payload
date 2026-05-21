@@ -42,6 +42,7 @@ public static class AppOptionsValidator
         ValidateBinanceCryptoReference(configuration.BinanceCryptoReference, errors);
         ValidateBtcUpDown5mOddsArchive(configuration.BtcUpDown5mOddsArchive, errors);
         ValidateBtcUpDown5mStatistics(configuration.BtcUpDown5mStatistics, errors);
+        ValidateBtcUpDown5mArbitrageScanner(configuration.BtcUpDown5mArbitrageScanner, errors);
         ValidateCryptoUpDown5mOddsArchive(configuration.CryptoUpDown5mOddsArchive, errors);
         ValidateChainlinkBtcUsdDiagnostics(configuration.ChainlinkBtcUsdDiagnostics, errors);
         ValidateOnChainIngestion(configuration.OnChainIngestion, errors);
@@ -160,6 +161,10 @@ public static class AppOptionsValidator
             $"BTC Up or Down 5m Statistics poll interval seconds: {configuration.BtcUpDown5mStatistics.PollIntervalSeconds}",
             $"BTC Up or Down 5m Statistics min history support: {configuration.BtcUpDown5mStatistics.MinHistorySupport}",
             $"BTC Up or Down 5m Statistics minimum edge: {configuration.BtcUpDown5mStatistics.MinimumEdge}",
+            $"BTC Up or Down 5m arbitrage scanner enabled: {configuration.BtcUpDown5mArbitrageScanner.Enabled}",
+            $"BTC Up or Down 5m arbitrage scanner poll interval seconds: {configuration.BtcUpDown5mArbitrageScanner.PollIntervalSeconds}",
+            $"BTC Up or Down 5m arbitrage scanner min executable shares: {configuration.BtcUpDown5mArbitrageScanner.MinExecutableShares}",
+            $"BTC Up or Down 5m arbitrage scanner safety buffer per share: {configuration.BtcUpDown5mArbitrageScanner.SafetyBufferPerShare}",
             $"Crypto Up or Down 5m odds archive enabled: {configuration.CryptoUpDown5mOddsArchive.Enabled}",
             $"Crypto Up or Down 5m odds archive assets: {string.Join(",", configuration.CryptoUpDown5mOddsArchive.AssetSymbols)}",
             $"Crypto Up or Down 5m odds archive poll interval seconds: {configuration.CryptoUpDown5mOddsArchive.PollIntervalSeconds}",
@@ -1502,6 +1507,49 @@ public static class AppOptionsValidator
         if (options.MaxHistorySettlementsPerCycle <= 0 || options.MaxHistorySettlementsPerCycle > 10_000)
         {
             errors.Add("BtcUpDown5mStatistics.MaxHistorySettlementsPerCycle must be between 1 and 10000.");
+        }
+    }
+
+    private static void ValidateBtcUpDown5mArbitrageScanner(BtcUpDown5mArbitrageScannerOptions options, List<string> errors)
+    {
+        if (options.PollIntervalSeconds <= 0 || options.PollIntervalSeconds > 86_400)
+        {
+            errors.Add("BtcUpDown5mArbitrageScanner.PollIntervalSeconds must be between 1 and 86400.");
+        }
+
+        if (options.MaxMarketsPerCycle <= 0 || options.MaxMarketsPerCycle > 1_000)
+        {
+            errors.Add("BtcUpDown5mArbitrageScanner.MaxMarketsPerCycle must be between 1 and 1000.");
+        }
+
+        if (options.MaxOrderBookAgeMilliseconds <= 0 || options.MaxOrderBookAgeMilliseconds > 300_000)
+        {
+            errors.Add("BtcUpDown5mArbitrageScanner.MaxOrderBookAgeMilliseconds must be between 1 and 300000.");
+        }
+
+        if (options.MinExecutableShares <= 0m || options.MinExecutableShares > 1_000_000m)
+        {
+            errors.Add("BtcUpDown5mArbitrageScanner.MinExecutableShares must be positive and at most 1000000.");
+        }
+
+        if (options.MaxExecutableShares <= 0m || options.MaxExecutableShares > 1_000_000m)
+        {
+            errors.Add("BtcUpDown5mArbitrageScanner.MaxExecutableShares must be positive and at most 1000000.");
+        }
+
+        if (options.MaxExecutableShares < options.MinExecutableShares)
+        {
+            errors.Add("BtcUpDown5mArbitrageScanner.MaxExecutableShares must be greater than or equal to MinExecutableShares.");
+        }
+
+        if (options.SafetyBufferPerShare < 0m || options.SafetyBufferPerShare >= 1m)
+        {
+            errors.Add("BtcUpDown5mArbitrageScanner.SafetyBufferPerShare must be nonnegative and less than 1.");
+        }
+
+        if (options.MinNetProfitUsd < 0m || options.MinNetProfitUsd > 1_000_000m)
+        {
+            errors.Add("BtcUpDown5mArbitrageScanner.MinNetProfitUsd must be nonnegative and at most 1000000.");
         }
     }
 

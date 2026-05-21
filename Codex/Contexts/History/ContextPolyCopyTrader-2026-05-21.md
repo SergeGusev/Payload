@@ -148,3 +148,10 @@ Request:
 
 Result:
 Answered conceptually that no predictive market strategy can always win. The only outcome-independent class is covered arbitrage, or skipping all markets where guaranteed execution cannot be locked: for binary BTC 5m markets, buy/cover both outcomes only when executable all-in cost is below guaranteed payout after fees, rounding, slippage, and failed-leg risk. Also noted that BTC 5m settlement uses Chainlink BTC/USD, not Binance, so any settlement-edge strategy must validate against Chainlink rather than treating Binance as authoritative. No source code, DB write, service restart, live order submission, cancel action, or tests were performed.
+
+## 2026-05-21T19:54:43.4717946Z
+Request:
+Ок, сделай read-only scanner
+
+Result:
+Implemented a read-only `BtcUpDown5mArbitrageScanner` worker/processor for active BTC Up/Down 5m markets. It reads Up/Down ask depth from WebSocket cache or CLOB REST fallback, computes equal-share covered-arbitrage economics, and writes diagnostics to new PostgreSQL table `btc_up_down_5m_arbitrage_scans`; it does not create Paper, dry-run, or Live orders. Added config defaults/validation, schema/repository support, tests, README, and configuration docs. Verification passed: focused tests `50/50`, full test project `526/526`, Service build 0 warnings/errors, and `git diff --check` with LF/CRLF warnings only. No production DB write, service restart, live order submission, or cancel action was performed.

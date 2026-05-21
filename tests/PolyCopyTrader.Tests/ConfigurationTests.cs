@@ -102,6 +102,15 @@ public sealed class ConfigurationTests
         Assert.Equal(30, configuration.BtcUpDown5mStatistics.ResultSettlementDelaySeconds);
         Assert.Equal(60, configuration.BtcUpDown5mStatistics.ResultRetryDelaySeconds);
         Assert.Equal(500, configuration.BtcUpDown5mStatistics.MaxHistorySettlementsPerCycle);
+        Assert.True(configuration.BtcUpDown5mArbitrageScanner.Enabled);
+        Assert.Equal(1, configuration.BtcUpDown5mArbitrageScanner.PollIntervalSeconds);
+        Assert.Equal(500, configuration.BtcUpDown5mArbitrageScanner.MaxMarketsPerCycle);
+        Assert.Equal(15_000, configuration.BtcUpDown5mArbitrageScanner.MaxOrderBookAgeMilliseconds);
+        Assert.True(configuration.BtcUpDown5mArbitrageScanner.RestFallbackEnabled);
+        Assert.Equal(5m, configuration.BtcUpDown5mArbitrageScanner.MinExecutableShares);
+        Assert.Equal(100m, configuration.BtcUpDown5mArbitrageScanner.MaxExecutableShares);
+        Assert.Equal(0.001m, configuration.BtcUpDown5mArbitrageScanner.SafetyBufferPerShare);
+        Assert.Equal(0.01m, configuration.BtcUpDown5mArbitrageScanner.MinNetProfitUsd);
         Assert.True(configuration.CryptoUpDown5mOddsArchive.Enabled);
         Assert.Equal(["ETH", "SOL"], configuration.CryptoUpDown5mOddsArchive.AssetSymbols);
         Assert.Equal(5, configuration.CryptoUpDown5mOddsArchive.PollIntervalSeconds);
@@ -438,6 +447,34 @@ public sealed class ConfigurationTests
         Assert.Contains(errors, error => error.Contains("BtcUpDown5mStatistics.ResultSettlementDelaySeconds", StringComparison.Ordinal));
         Assert.Contains(errors, error => error.Contains("BtcUpDown5mStatistics.ResultRetryDelaySeconds", StringComparison.Ordinal));
         Assert.Contains(errors, error => error.Contains("BtcUpDown5mStatistics.MaxHistorySettlementsPerCycle", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void BtcUpDown5mArbitrageScannerOptions_AreValidated()
+    {
+        var configuration = new AppConfiguration
+        {
+            BtcUpDown5mArbitrageScanner = new BtcUpDown5mArbitrageScannerOptions
+            {
+                PollIntervalSeconds = 0,
+                MaxMarketsPerCycle = 0,
+                MaxOrderBookAgeMilliseconds = 0,
+                MinExecutableShares = 0m,
+                MaxExecutableShares = -1m,
+                SafetyBufferPerShare = -0.01m,
+                MinNetProfitUsd = -0.01m
+            }
+        };
+
+        var errors = AppOptionsValidator.Validate(configuration);
+
+        Assert.Contains(errors, error => error.Contains("BtcUpDown5mArbitrageScanner.PollIntervalSeconds", StringComparison.Ordinal));
+        Assert.Contains(errors, error => error.Contains("BtcUpDown5mArbitrageScanner.MaxMarketsPerCycle", StringComparison.Ordinal));
+        Assert.Contains(errors, error => error.Contains("BtcUpDown5mArbitrageScanner.MaxOrderBookAgeMilliseconds", StringComparison.Ordinal));
+        Assert.Contains(errors, error => error.Contains("BtcUpDown5mArbitrageScanner.MinExecutableShares", StringComparison.Ordinal));
+        Assert.Contains(errors, error => error.Contains("BtcUpDown5mArbitrageScanner.MaxExecutableShares", StringComparison.Ordinal));
+        Assert.Contains(errors, error => error.Contains("BtcUpDown5mArbitrageScanner.SafetyBufferPerShare", StringComparison.Ordinal));
+        Assert.Contains(errors, error => error.Contains("BtcUpDown5mArbitrageScanner.MinNetProfitUsd", StringComparison.Ordinal));
     }
 
     [Fact]

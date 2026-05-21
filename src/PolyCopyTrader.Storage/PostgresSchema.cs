@@ -34,6 +34,7 @@ public static class PostgresSchema
         "btc_5m_history",
         "btc_5m_history_live_observations",
         "btc_up_down_5m_statistics_ticks",
+        "btc_up_down_5m_arbitrage_scans",
         "crypto_up_down_5m_odds_ticks",
         "paper_copied_leader_positions",
         "paper_copied_leader_activity_events",
@@ -2840,6 +2841,57 @@ ON btc_up_down_5m_statistics_ticks(market_id, sampled_at_utc DESC);
 
 CREATE INDEX IF NOT EXISTS ix_btc_up_down_5m_statistics_ticks_decision
 ON btc_up_down_5m_statistics_ticks(decision_code, sampled_at_utc DESC);
+
+CREATE TABLE IF NOT EXISTS btc_up_down_5m_arbitrage_scans (
+    id uuid PRIMARY KEY,
+    market_id text NOT NULL,
+    condition_id text NOT NULL,
+    market_slug text NOT NULL,
+    market_start_utc timestamptz NOT NULL,
+    market_end_utc timestamptz NOT NULL,
+    sampled_at_utc timestamptz NOT NULL,
+    seconds_after_start numeric(18,8) NOT NULL,
+    seconds_to_close numeric(18,8) NOT NULL,
+    up_asset_id text NOT NULL,
+    up_best_bid numeric(18,8) NULL,
+    up_best_ask numeric(18,8) NULL,
+    up_ask_depth_shares numeric(28,8) NULL,
+    up_book_source text NOT NULL,
+    up_book_age_ms numeric(18,8) NULL,
+    down_asset_id text NOT NULL,
+    down_best_bid numeric(18,8) NULL,
+    down_best_ask numeric(18,8) NULL,
+    down_ask_depth_shares numeric(28,8) NULL,
+    down_book_source text NOT NULL,
+    down_book_age_ms numeric(18,8) NULL,
+    required_min_shares numeric(28,8) NOT NULL,
+    max_common_executable_shares numeric(28,8) NOT NULL,
+    best_executable_shares numeric(28,8) NULL,
+    up_cost_usd numeric(28,8) NULL,
+    down_cost_usd numeric(28,8) NULL,
+    total_cost_usd numeric(28,8) NULL,
+    guaranteed_payout_usd numeric(28,8) NULL,
+    gross_profit_usd numeric(28,8) NULL,
+    safety_buffer_usd numeric(28,8) NULL,
+    net_profit_usd numeric(28,8) NULL,
+    average_cost_per_share numeric(18,8) NULL,
+    edge_per_share numeric(18,8) NULL,
+    safety_buffer_per_share numeric(18,8) NOT NULL,
+    min_net_profit_usd numeric(28,8) NOT NULL,
+    decision_code text NOT NULL,
+    would_arbitrage boolean NOT NULL,
+    diagnostics_json jsonb NOT NULL DEFAULT '{}'::jsonb,
+    created_at_utc timestamptz NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS ix_btc_up_down_5m_arbitrage_scans_sampled
+ON btc_up_down_5m_arbitrage_scans(sampled_at_utc DESC);
+
+CREATE INDEX IF NOT EXISTS ix_btc_up_down_5m_arbitrage_scans_market_time
+ON btc_up_down_5m_arbitrage_scans(market_id, sampled_at_utc DESC);
+
+CREATE INDEX IF NOT EXISTS ix_btc_up_down_5m_arbitrage_scans_decision
+ON btc_up_down_5m_arbitrage_scans(would_arbitrage, decision_code, sampled_at_utc DESC);
 
 CREATE TABLE IF NOT EXISTS crypto_up_down_5m_odds_ticks (
     id uuid PRIMARY KEY,

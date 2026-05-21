@@ -3394,6 +3394,36 @@ INSERT INTO btc_up_down_5m_statistics_ticks (
 		await command.ExecuteNonQueryAsync(cancellationToken);
 	}
 
+	public async Task AddBtcUpDown5mArbitrageScanAsync(BtcUpDown5mArbitrageScan scan, CancellationToken cancellationToken = default(CancellationToken))
+	{
+		await using NpgsqlConnection connection = await OpenConnectionAsync(cancellationToken);
+		await using NpgsqlCommand command = CreateCommand(connection, """
+INSERT INTO btc_up_down_5m_arbitrage_scans (
+    id, market_id, condition_id, market_slug, market_start_utc, market_end_utc,
+    sampled_at_utc, seconds_after_start, seconds_to_close,
+    up_asset_id, up_best_bid, up_best_ask, up_ask_depth_shares, up_book_source, up_book_age_ms,
+    down_asset_id, down_best_bid, down_best_ask, down_ask_depth_shares, down_book_source, down_book_age_ms,
+    required_min_shares, max_common_executable_shares, best_executable_shares,
+    up_cost_usd, down_cost_usd, total_cost_usd, guaranteed_payout_usd,
+    gross_profit_usd, safety_buffer_usd, net_profit_usd, average_cost_per_share, edge_per_share,
+    safety_buffer_per_share, min_net_profit_usd, decision_code, would_arbitrage,
+    diagnostics_json, created_at_utc
+) VALUES (
+    @Id, @MarketId, @ConditionId, @MarketSlug, @MarketStartUtc, @MarketEndUtc,
+    @SampledAtUtc, @SecondsAfterStart, @SecondsToClose,
+    @UpAssetId, @UpBestBid, @UpBestAsk, @UpAskDepthShares, @UpBookSource, @UpBookAgeMs,
+    @DownAssetId, @DownBestBid, @DownBestAsk, @DownAskDepthShares, @DownBookSource, @DownBookAgeMs,
+    @RequiredMinShares, @MaxCommonExecutableShares, @BestExecutableShares,
+    @UpCostUsd, @DownCostUsd, @TotalCostUsd, @GuaranteedPayoutUsd,
+    @GrossProfitUsd, @SafetyBufferUsd, @NetProfitUsd, @AverageCostPerShare, @EdgePerShare,
+    @SafetyBufferPerShare, @MinNetProfitUsd, @DecisionCode, @WouldArbitrage,
+    CAST(@DiagnosticsJson AS jsonb), @CreatedAtUtc
+);
+""");
+		AddBtcUpDown5mArbitrageScanParameters(command, scan);
+		await command.ExecuteNonQueryAsync(cancellationToken);
+	}
+
 	public async Task<bool> TryAddBtc5mHistoryLiveObservationAsync(Btc5mHistoryLiveObservation observation, CancellationToken cancellationToken = default(CancellationToken))
 	{
 		await using NpgsqlConnection connection = await OpenConnectionAsync(cancellationToken);
@@ -7766,6 +7796,49 @@ LIMIT @Limit;
 		command.Parameters.AddWithValue("WouldBet", tick.WouldBet);
 		command.Parameters.AddWithValue("DiagnosticsJson", string.IsNullOrWhiteSpace(tick.DiagnosticsJson) ? "{}" : tick.DiagnosticsJson);
 		command.Parameters.Add("CreatedAtUtc", NpgsqlDbType.TimestampTz).Value = UtcDateTime(tick.CreatedAtUtc);
+	}
+
+	private static void AddBtcUpDown5mArbitrageScanParameters(NpgsqlCommand command, BtcUpDown5mArbitrageScan scan)
+	{
+		command.Parameters.AddWithValue("Id", scan.Id);
+		command.Parameters.AddWithValue("MarketId", scan.MarketId);
+		command.Parameters.AddWithValue("ConditionId", scan.ConditionId);
+		command.Parameters.AddWithValue("MarketSlug", scan.MarketSlug);
+		command.Parameters.Add("MarketStartUtc", NpgsqlDbType.TimestampTz).Value = UtcDateTime(scan.MarketStartUtc);
+		command.Parameters.Add("MarketEndUtc", NpgsqlDbType.TimestampTz).Value = UtcDateTime(scan.MarketEndUtc);
+		command.Parameters.Add("SampledAtUtc", NpgsqlDbType.TimestampTz).Value = UtcDateTime(scan.SampledAtUtc);
+		command.Parameters.AddWithValue("SecondsAfterStart", scan.SecondsAfterStart);
+		command.Parameters.AddWithValue("SecondsToClose", scan.SecondsToClose);
+		command.Parameters.AddWithValue("UpAssetId", scan.UpAssetId);
+		command.Parameters.AddWithValue("UpBestBid", NullableDecimal(scan.UpBestBid));
+		command.Parameters.AddWithValue("UpBestAsk", NullableDecimal(scan.UpBestAsk));
+		command.Parameters.AddWithValue("UpAskDepthShares", NullableDecimal(scan.UpAskDepthShares));
+		command.Parameters.AddWithValue("UpBookSource", scan.UpBookSource);
+		command.Parameters.AddWithValue("UpBookAgeMs", NullableDecimal(scan.UpBookAgeMs));
+		command.Parameters.AddWithValue("DownAssetId", scan.DownAssetId);
+		command.Parameters.AddWithValue("DownBestBid", NullableDecimal(scan.DownBestBid));
+		command.Parameters.AddWithValue("DownBestAsk", NullableDecimal(scan.DownBestAsk));
+		command.Parameters.AddWithValue("DownAskDepthShares", NullableDecimal(scan.DownAskDepthShares));
+		command.Parameters.AddWithValue("DownBookSource", scan.DownBookSource);
+		command.Parameters.AddWithValue("DownBookAgeMs", NullableDecimal(scan.DownBookAgeMs));
+		command.Parameters.AddWithValue("RequiredMinShares", scan.RequiredMinShares);
+		command.Parameters.AddWithValue("MaxCommonExecutableShares", scan.MaxCommonExecutableShares);
+		command.Parameters.AddWithValue("BestExecutableShares", NullableDecimal(scan.BestExecutableShares));
+		command.Parameters.AddWithValue("UpCostUsd", NullableDecimal(scan.UpCostUsd));
+		command.Parameters.AddWithValue("DownCostUsd", NullableDecimal(scan.DownCostUsd));
+		command.Parameters.AddWithValue("TotalCostUsd", NullableDecimal(scan.TotalCostUsd));
+		command.Parameters.AddWithValue("GuaranteedPayoutUsd", NullableDecimal(scan.GuaranteedPayoutUsd));
+		command.Parameters.AddWithValue("GrossProfitUsd", NullableDecimal(scan.GrossProfitUsd));
+		command.Parameters.AddWithValue("SafetyBufferUsd", NullableDecimal(scan.SafetyBufferUsd));
+		command.Parameters.AddWithValue("NetProfitUsd", NullableDecimal(scan.NetProfitUsd));
+		command.Parameters.AddWithValue("AverageCostPerShare", NullableDecimal(scan.AverageCostPerShare));
+		command.Parameters.AddWithValue("EdgePerShare", NullableDecimal(scan.EdgePerShare));
+		command.Parameters.AddWithValue("SafetyBufferPerShare", scan.SafetyBufferPerShare);
+		command.Parameters.AddWithValue("MinNetProfitUsd", scan.MinNetProfitUsd);
+		command.Parameters.AddWithValue("DecisionCode", scan.DecisionCode);
+		command.Parameters.AddWithValue("WouldArbitrage", scan.WouldArbitrage);
+		command.Parameters.AddWithValue("DiagnosticsJson", string.IsNullOrWhiteSpace(scan.DiagnosticsJson) ? "{}" : scan.DiagnosticsJson);
+		command.Parameters.Add("CreatedAtUtc", NpgsqlDbType.TimestampTz).Value = UtcDateTime(scan.CreatedAtUtc);
 	}
 
 	private static void AddBtc5mHistoryLiveObservationParameters(NpgsqlCommand command, Btc5mHistoryLiveObservation observation)

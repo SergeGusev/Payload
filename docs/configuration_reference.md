@@ -233,6 +233,34 @@ not place Paper, dry-run, or live orders.
 - `MaxHistorySettlementsPerCycle`: maximum queued observations settled per
   cycle, default `500`.
 
+## BtcUpDown5mArbitrageScanner
+
+Runs a read-only covered-arbitrage scanner for active BTC 5-minute binary
+markets. It does not place Paper, dry-run, or live orders. Each cycle reads Up
+and Down ask depth from the shared WebSocket cache or CLOB REST fallback,
+computes the best equal-share covered position, and writes diagnostics to
+`btc_up_down_5m_arbitrage_scans`. A row is actionable only when
+`would_arbitrage=true`; otherwise `decision_code` records why the scanner
+skipped it.
+
+- `Enabled`: runs the scanner worker when true; default `true`.
+- `PollIntervalSeconds`: interval between scanner cycles, default `1`.
+- `MaxMarketsPerCycle`: maximum BTC 5m Gamma markets inspected per cycle,
+  default `500`.
+- `MaxOrderBookAgeMilliseconds`: maximum accepted WebSocket cache age before
+  REST fallback is attempted, default `15000`.
+- `RestFallbackEnabled`: when true, uses CLOB `/book` if the WebSocket cache is
+  missing or stale, default `true`.
+- `MinExecutableShares`: minimum equal shares required on both outcomes before
+  an opportunity can be considered, default `5`.
+- `MaxExecutableShares`: maximum equal shares evaluated per side, default
+  `100`.
+- `SafetyBufferPerShare`: per-share discount from guaranteed payout used to
+  cover fees, rounding, and execution risk in the read-only calculation,
+  default `0.001`.
+- `MinNetProfitUsd`: minimum net profit after the safety buffer before
+  `would_arbitrage` becomes true, default `0.01`.
+
 ## CryptoUpDown5mOddsArchive
 
 The service can continuously store non-BTC crypto 5-minute odds in PostgreSQL

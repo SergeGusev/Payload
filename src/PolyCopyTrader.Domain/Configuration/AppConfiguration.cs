@@ -50,6 +50,8 @@ public sealed class AppConfiguration
 
     public BtcUpDown5mStatisticsOptions BtcUpDown5mStatistics { get; init; } = new();
 
+    public BtcUpDown5mArbitrageScannerOptions BtcUpDown5mArbitrageScanner { get; init; } = new();
+
     public CryptoUpDown5mOddsArchiveOptions CryptoUpDown5mOddsArchive { get; init; } = new();
 
     public ChainlinkBtcUsdDiagnosticsOptions ChainlinkBtcUsdDiagnostics { get; init; } = new();
@@ -742,6 +744,27 @@ public sealed class BtcUpDown5mStatisticsOptions
     public int ResultRetryDelaySeconds { get; init; } = 60;
 
     public int MaxHistorySettlementsPerCycle { get; init; } = 500;
+}
+
+public sealed class BtcUpDown5mArbitrageScannerOptions
+{
+    public bool Enabled { get; init; } = true;
+
+    public int PollIntervalSeconds { get; init; } = 1;
+
+    public int MaxMarketsPerCycle { get; init; } = 500;
+
+    public int MaxOrderBookAgeMilliseconds { get; init; } = 15_000;
+
+    public bool RestFallbackEnabled { get; init; } = true;
+
+    public decimal MinExecutableShares { get; init; } = 5m;
+
+    public decimal MaxExecutableShares { get; init; } = 100m;
+
+    public decimal SafetyBufferPerShare { get; init; } = 0.001m;
+
+    public decimal MinNetProfitUsd { get; init; } = 0.01m;
 }
 
 public sealed class CryptoUpDown5mOddsArchiveOptions

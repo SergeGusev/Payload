@@ -1,3 +1,16 @@
+## Active Update 2026-05-21 BTC 5m Covered Arbitrage Scanner
+Goal: Add a read-only scanner that detects covered BTC Up/Down 5m arbitrage windows without placing orders.
+Status: Completed
+Done:
+- Added `BtcUpDown5mArbitrageScanner` config and hosted worker/processor. It scans active BTC 5-minute markets, reads Up/Down ask depth from the shared WebSocket cache or CLOB REST fallback, and never creates Paper, dry-run, or Live orders.
+- Added equal-share covered-arbitrage evaluation: scanner computes executable shares, Up/Down costs, guaranteed payout, gross profit, safety buffer, net profit, average cost per share, and edge per share. `would_arbitrage=true` is emitted only when net profit after `SafetyBufferPerShare` is at least `MinNetProfitUsd`.
+- Added PostgreSQL telemetry table `btc_up_down_5m_arbitrage_scans` plus repository write support and schema indexes for sampled time, market/time, and decision lookup.
+- Added tests for positive opportunity, no opportunity, REST fallback, insufficient depth, config validation, and schema coverage.
+- Updated README and configuration reference.
+Next: Deploy/restart the service; then check `btc_up_down_5m_arbitrage_scans` for `would_arbitrage=true` rows and tune `SafetyBufferPerShare`, `MinExecutableShares`, and `MinNetProfitUsd` from observed frequency.
+Notes: Verification passed: focused scanner/config/schema tests passed `50/50`; full `dotnet test tests\PolyCopyTrader.Tests\PolyCopyTrader.Tests.csproj --no-restore` passed `526/526`; `dotnet build src\PolyCopyTrader.Service\PolyCopyTrader.Service.csproj --no-restore` passed with 0 warnings/errors; `git diff --check` passed with LF/CRLF warnings only. No production DB write, service restart, live order submission, or cancel action was performed.
+Blockers: The scanner only observes covered order-book opportunities; it does not solve all-or-none execution or Chainlink settlement-edge trading.
+
 ## Active Update 2026-05-21 Always-Win Strategy Clarification
 Goal: Answer whether a strategy can be designed to always win.
 Status: Completed

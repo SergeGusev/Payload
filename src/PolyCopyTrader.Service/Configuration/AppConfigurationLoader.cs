@@ -45,6 +45,7 @@ public static class AppConfigurationLoader
             BinanceCryptoReference = binanceCryptoReference,
             BtcUpDown5mOddsArchive = configuration.GetSection("BtcUpDown5mOddsArchive").Get<BtcUpDown5mOddsArchiveOptions>() ?? new BtcUpDown5mOddsArchiveOptions(),
             BtcUpDown5mStatistics = configuration.GetSection("BtcUpDown5mStatistics").Get<BtcUpDown5mStatisticsOptions>() ?? new BtcUpDown5mStatisticsOptions(),
+            BtcUpDown5mArbitrageScanner = configuration.GetSection("BtcUpDown5mArbitrageScanner").Get<BtcUpDown5mArbitrageScannerOptions>() ?? new BtcUpDown5mArbitrageScannerOptions(),
             CryptoUpDown5mOddsArchive = cryptoUpDown5mOddsArchive,
             ChainlinkBtcUsdDiagnostics = configuration.GetSection("ChainlinkBtcUsdDiagnostics").Get<ChainlinkBtcUsdDiagnosticsOptions>() ?? new ChainlinkBtcUsdDiagnosticsOptions(),
             OnChainIngestion = configuration.GetSection("OnChainIngestion").Get<OnChainIngestionOptions>() ?? new OnChainIngestionOptions(),
