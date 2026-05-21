@@ -13,6 +13,7 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
 {
     private const int MaxDashboardErrors = 500;
     private const string AllStrategyCategories = "All categories";
+    private const decimal BigRoiThresholdPct = 10m;
     private static readonly string[] UpDownAssetSymbols = ["BTC", "ETH", "SOL"];
     private static readonly string[] BtcUpDownIntervals = ["5m", "15m", "1h", "4h"];
 
@@ -139,6 +140,18 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
 
     [ObservableProperty]
     private bool showOnlyLiveStrategy1Hour;
+
+    [ObservableProperty]
+    private bool showOnlyBigRoiStrategies;
+
+    [ObservableProperty]
+    private bool showOnlyBigRoiStrategy24Hours;
+
+    [ObservableProperty]
+    private bool showOnlyBigRoiStrategy6Hours;
+
+    [ObservableProperty]
+    private bool showOnlyBigRoiStrategy1Hour;
 
     public ObservableCollection<OverviewMetric> Overview { get; } = [];
 
@@ -296,6 +309,26 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
     }
 
     partial void OnShowOnlyLiveStrategy1HourChanged(bool value)
+    {
+        ApplyStrategyFilters();
+    }
+
+    partial void OnShowOnlyBigRoiStrategiesChanged(bool value)
+    {
+        ApplyStrategyFilters();
+    }
+
+    partial void OnShowOnlyBigRoiStrategy24HoursChanged(bool value)
+    {
+        ApplyStrategyFilters();
+    }
+
+    partial void OnShowOnlyBigRoiStrategy6HoursChanged(bool value)
+    {
+        ApplyStrategyFilters();
+    }
+
+    partial void OnShowOnlyBigRoiStrategy1HourChanged(bool value)
     {
         ApplyStrategyFilters();
     }
@@ -1100,6 +1133,7 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
                 .Where(item => IsStrategyPositiveVisible(item, ShowOnlyPositiveStrategies))
                 .Where(item => IsStrategyEnabledVisible(item, ShowOnlyEnabledStrategies))
                 .Where(item => IsStrategyLiveVisible(item, ShowOnlyLiveStrategies))
+                .Where(item => IsStrategyBigRoiVisible(item, ShowOnlyBigRoiStrategies))
                 .ToArray());
         Replace(
             StrategyRecentPerformance,
@@ -1107,6 +1141,7 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
                 .Where(item => IsStrategyCategoryVisible(item.Name, SelectedStrategyCategory))
                 .Where(item => IsStrategyRecentEnabledVisible(item, ShowOnlyEnabledStrategies, enabledStrategyNames))
                 .Where(item => IsStrategyRecentLiveVisible(item, ShowOnlyLiveStrategies))
+                .Where(item => IsStrategyRecentBigRoiVisible(item, ShowOnlyBigRoiStrategies))
                 .ToArray());
         Replace(
             StrategyRecent24Hours,
@@ -1116,6 +1151,7 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
                 .Where(item => IsStrategyRecentPositiveVisible(item, ShowOnlyPositiveStrategy24Hours))
                 .Where(item => IsStrategyRecentEnabledVisible(item, ShowOnlyEnabledStrategy24Hours, enabledStrategyNames))
                 .Where(item => IsStrategyRecentLiveVisible(item, ShowOnlyLiveStrategy24Hours))
+                .Where(item => IsStrategyRecentBigRoiVisible(item, ShowOnlyBigRoiStrategy24Hours))
                 .ToArray());
         Replace(
             StrategyRecent6Hours,
@@ -1125,6 +1161,7 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
                 .Where(item => IsStrategyRecentPositiveVisible(item, ShowOnlyPositiveStrategy6Hours))
                 .Where(item => IsStrategyRecentEnabledVisible(item, ShowOnlyEnabledStrategy6Hours, enabledStrategyNames))
                 .Where(item => IsStrategyRecentLiveVisible(item, ShowOnlyLiveStrategy6Hours))
+                .Where(item => IsStrategyRecentBigRoiVisible(item, ShowOnlyBigRoiStrategy6Hours))
                 .ToArray());
         Replace(
             StrategyRecent1Hour,
@@ -1134,6 +1171,7 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
                 .Where(item => IsStrategyRecentPositiveVisible(item, ShowOnlyPositiveStrategy1Hour))
                 .Where(item => IsStrategyRecentEnabledVisible(item, ShowOnlyEnabledStrategy1Hour, enabledStrategyNames))
                 .Where(item => IsStrategyRecentLiveVisible(item, ShowOnlyLiveStrategy1Hour))
+                .Where(item => IsStrategyRecentBigRoiVisible(item, ShowOnlyBigRoiStrategy1Hour))
                 .ToArray());
     }
 
@@ -1166,6 +1204,11 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         return !onlyLive || strategy.LiveStakes;
     }
 
+    private static bool IsStrategyBigRoiVisible(StrategyPerformanceRow strategy, bool onlyBigRoi)
+    {
+        return !onlyBigRoi || strategy.ClosedRoiPct > BigRoiThresholdPct;
+    }
+
     private static bool IsStrategyRecentPositiveVisible(StrategyRecentPerformanceRow strategy, bool onlyPositive)
     {
         return !onlyPositive || strategy.RoiPct >= 0m;
@@ -1182,6 +1225,11 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
     private static bool IsStrategyRecentLiveVisible(StrategyRecentPerformanceRow strategy, bool onlyLive)
     {
         return !onlyLive || strategy.LiveStakes;
+    }
+
+    private static bool IsStrategyRecentBigRoiVisible(StrategyRecentPerformanceRow strategy, bool onlyBigRoi)
+    {
+        return !onlyBigRoi || strategy.RoiPct > BigRoiThresholdPct;
     }
 
     private static string GetStrategyCategory(string strategyName)

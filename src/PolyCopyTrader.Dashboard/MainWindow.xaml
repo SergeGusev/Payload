@@ -287,6 +287,10 @@
                                           IsChecked="{Binding ShowOnlyLiveStrategies, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
                                           VerticalAlignment="Center"
                                           Margin="12,0,0,0" />
+                                <CheckBox Content="Big ROI"
+                                          IsChecked="{Binding ShowOnlyBigRoiStrategies, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                          VerticalAlignment="Center"
+                                          Margin="12,0,0,0" />
                             </StackPanel>
                             <DataGrid ItemsSource="{Binding Strategies}"
                                       behaviors:DataGridSelectionPersistence.KeyProperties="StrategyId">
@@ -439,6 +443,10 @@
                                           IsChecked="{Binding ShowOnlyLiveStrategy24Hours, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
                                           VerticalAlignment="Center"
                                           Margin="12,0,0,0" />
+                                <CheckBox Content="Big ROI"
+                                          IsChecked="{Binding ShowOnlyBigRoiStrategy24Hours, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                          VerticalAlignment="Center"
+                                          Margin="12,0,0,0" />
                             </StackPanel>
                             <ContentControl Content="{Binding StrategyRecent24Hours}"
                                             ContentTemplate="{StaticResource StrategyRecentGridTemplate}" />
@@ -469,6 +477,10 @@
                                           IsChecked="{Binding ShowOnlyLiveStrategy6Hours, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
                                           VerticalAlignment="Center"
                                           Margin="12,0,0,0" />
+                                <CheckBox Content="Big ROI"
+                                          IsChecked="{Binding ShowOnlyBigRoiStrategy6Hours, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                          VerticalAlignment="Center"
+                                          Margin="12,0,0,0" />
                             </StackPanel>
                             <ContentControl Content="{Binding StrategyRecent6Hours}"
                                             ContentTemplate="{StaticResource StrategyRecentGridTemplate}" />
@@ -497,6 +509,10 @@
                                           Margin="12,0,0,0" />
                                 <CheckBox Content="Live only"
                                           IsChecked="{Binding ShowOnlyLiveStrategy1Hour, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                          VerticalAlignment="Center"
+                                          Margin="12,0,0,0" />
+                                <CheckBox Content="Big ROI"
+                                          IsChecked="{Binding ShowOnlyBigRoiStrategy1Hour, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
                                           VerticalAlignment="Center"
                                           Margin="12,0,0,0" />
                             </StackPanel>

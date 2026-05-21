@@ -106,3 +106,10 @@ Request:
 
 Result:
 Removed automatic strategy pausing after losing settlements. BTC 5m, generic Paper, and Live settlement paths now log that automatic strategy pause is disabled and no longer write `strategies.paused=true`. Removed the repository auto-pause API and `StrategyPauseDecision`, updated tests/docs, and added schema startup cleanup for legacy timed pauses (`paused=true` with `paused_until_utc IS NOT NULL`) while leaving manual Dashboard pauses intact. Production was checked read-only and currently has timed paused rows that will be cleared after deploying/restarting this build; no manual DB writes, service restart, live order submission, or cancel action was performed. Verification passed: targeted tests `158/158`, full tests `518/518`, and `git diff --check` with LF/CRLF warnings only.
+
+## 2026-05-21T16:52:39.1953662Z
+Request:
+Возле галочки Live only в Dashboard поставь калочку Big ROI, по которой показывать только стратегии с ROI > 10
+
+Result:
+Added `Big ROI` checkboxes next to `Live only` in the Dashboard `Strategies` filters for `All`, `24 hours`, `6 hours`, and `1 hour`. The filter keeps rows with strict ROI greater than `10`: `ClosedRoiPct > 10` in `All`, and recent `RoiPct > 10` in the period tabs. Updated README/configuration reference. Verification passed: Dashboard build to a temporary output path completed with 0 errors because the normal Dashboard output was locked by the currently running Dashboard/Visual Studio process; full tests passed `518/518`; `git diff --check` passed with LF/CRLF warnings only.

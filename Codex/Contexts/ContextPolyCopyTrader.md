@@ -1,3 +1,15 @@
+## Active Update 2026-05-21 Dashboard Big ROI Filter
+Goal: Add a Dashboard checkbox near `Live only` to show only strategies with ROI greater than 10.
+Status: Completed
+Done:
+- Added `Big ROI` checkboxes to the Dashboard `Strategies` filters in `All`, `24 hours`, `6 hours`, and `1 hour` tabs.
+- Added MVVM filter state and refresh handlers for the new checkboxes.
+- Implemented the filter threshold as strict `ROI > 10`: `ClosedRoiPct > 10` for the `All` tab and recent `RoiPct > 10` for the period tabs.
+- Updated README and configuration reference to document the new strategy-grid filter.
+Next: Rebuild/restart Dashboard from this commit to see the new checkbox in the running UI.
+Notes: Verification passed: `dotnet build src\PolyCopyTrader.Dashboard\PolyCopyTrader.Dashboard.csproj --no-restore -p:OutputPath=<temp>` passed with 0 errors; normal Dashboard build output was locked by the currently running `PolyCopyTrader.Dashboard`/Visual Studio process. Full `dotnet test tests\PolyCopyTrader.Tests\PolyCopyTrader.Tests.csproj --no-restore` passed `518/518`; `git diff --check` passed with LF/CRLF warnings only.
+Blockers: None.
+
 ## Active Update 2026-05-21 Disable Strategy Auto-Pause
 Goal: Stop automatically pausing strategies after losing settlements and let strategy execution continue unless paused manually.
 Status: Completed
