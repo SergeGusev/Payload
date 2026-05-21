@@ -1,3 +1,17 @@
+## Active Update 2026-05-21 BTC 5m Maker Post-Fix Deploy Check
+Goal: Verify that the restarted production service on the FK fix commit creates and fills BTC 5m Maker Paper orders.
+Status: Completed
+Done:
+- Confirmed production heartbeat read-only: `PolyCopyTrader.Service` is `Running` in `Live` mode on build `info=1.0.0+841e8aaeba363e65f6daed2615dcd80f1d880bb6`, started at `2026-05-21T15:35:20Z`.
+- Confirmed `BTC Up or Down 5m Up Maker` and `Down Maker` are enabled, not paused, Paper-only (`live_stakes=False`), with paper stake amount `1`.
+- Confirmed there are no `BtcUpDown5mPaperStrategyWorker`/Paper/Market/WebSocket API errors after the current service start.
+- Observed completed market `btc-updown-5m-1779377700`: `6` Maker Paper orders were created; `1` Down order filled at `2026-05-21T15:38:18Z`, and the other `5` orders expired at market end.
+- Observed the next market `btc-updown-5m-1779378000` already creating Up Maker orders; by `2026-05-21T15:42:21Z`, `4` Up orders existed and `1` filled at `2026-05-21T15:41:24Z`.
+- Generated the post-deploy graph/report at `outputs/maker-market-report/btc-updown-5m-1779377700-maker-report.html` with ticks, simulation, events, and orders CSV exports.
+Next: Re-check `btc-updown-5m-1779378000` after `2026-05-21T15:45:00Z` if the remaining pending orders need final statuses.
+Notes: Production checks used read-only SELECT queries against PostgreSQL host `192.168.0.101`; no manual DB writes, service restart, live order submission, or cancel action was performed. No source-code verification tests were run because this task only monitored the deployed build and generated report artifacts.
+Blockers: None.
+
 ## Active Update 2026-05-21 BTC 5m Maker Post-Deploy FK Fix
 Goal: Monitor the deployed Maker strategies and fix the production blocker preventing Maker Paper orders from being persisted.
 Status: Completed

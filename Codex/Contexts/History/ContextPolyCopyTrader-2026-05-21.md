@@ -92,3 +92,10 @@ Request:
 
 Result:
 Monitored production read-only after deploy. Confirmed the service was running on `info=1.0.0+cbe71f3ae917d57a99f8566e74c49096c0530487` from `2026-05-21T15:10:49Z`, Maker strategies were enabled/not paused/Paper-only, and regular strategy runs continued. No Maker Paper orders appeared after the restart. The latest post-restart BTC 5m markets had simulated Maker opportunities but `MakerEvents=0` and `MakerOrders=0`. Production `api_errors` showed the blocker: `BtcUpDown5mPaperStrategyWorker` hit PostgreSQL FK violations because the Maker path inserted `strategy_market_paper_runs.paper_order_id` before inserting the referenced `paper_orders` row. Fixed the ordering to insert `Signal`, then `PaperOrder`, then `StrategyMarketPaperRun`, and added a test repository FK guard to cover it. Verification passed: targeted Maker tests `137/137` and full tests `519/519`. No manual DB writes, live order submission, or cancel action was performed. The server needs a new publish/restart from the fix commit before Maker orders/fills can be observed.
+
+## 2026-05-21T15:43:26.9429934Z
+Request:
+Выложил, проверяй
+
+Result:
+Monitored production read-only after the second deploy. Confirmed `PolyCopyTrader.Service` is running on `info=1.0.0+841e8aaeba363e65f6daed2615dcd80f1d880bb6` from `2026-05-21T15:35:20Z`; both BTC 5m Maker strategies are enabled, not paused, and Paper-only. There are no matching API errors after the service start. Completed market `btc-updown-5m-1779377700` created `6` Maker Paper orders: `1` Down order filled at `2026-05-21T15:38:18Z`, and `5` orders expired. The next market `btc-updown-5m-1779378000` was already creating Up Maker orders; by `2026-05-21T15:42:21Z`, `4` Up orders existed and `1` filled at `2026-05-21T15:41:24Z`. Generated `outputs/maker-market-report/btc-updown-5m-1779377700-maker-report.html` plus CSV exports. No manual DB writes, live order submission, cancel action, or service restart was performed.
