@@ -11,3 +11,10 @@ Request:
 
 Result:
 Corrected BTC 5m Maker behavior so the Maker variants run whenever Paper runtime is enabled, including `Bot:Mode=Live` with `PaperTrading:RunInLiveMode=true`, while still creating only Paper orders. Removed the extra `BotMode.Paper` gate, kept the order path on `CreatePendingOpeningLimitPaperOrder` with `execution_source=btc_updown5m_maker_post_only`, added a Live-mode paper-only regression that verifies no live trading client call and no `live_orders` row, and updated README/configuration docs. Verification passed: targeted BTC/storage tests `152/152`, full tests `512/512`, and `git diff --check` with LF/CRLF warnings only. No DB writes, service restart, live order submission, or cancel action was performed.
+
+## 2026-05-21T03:26:49.2170645Z
+Request:
+Почему BTC Up or Down 5m Up Maker и BTC Up or Down 5m Down Maker не сделали ни одной ставки?
+
+Result:
+Checked production PostgreSQL read-only on host `192.168.0.101`. Confirmed Service is `Running`/`Live` on build `info=1.0.0+229ce8ec60e523e95fe833a3ad8071874b43229e`, both Maker strategies are enabled and actively writing skipped `strategy_market_paper_runs`, but Paper orders are `0`. Root cause: every new-maximum Maker candidate was skipped, mostly by the global `opposite_outcome_open_order` guard because other BTC 5m Paper BUY orders already existed on the opposite outcome for the same condition; remaining candidates were skipped as `maker_expiration_elapsed` because the new max arrived after `market_end_utc - 60s`. No DB writes, service restart, live order submission, cancel action, or source-code changes were performed.

@@ -1,3 +1,16 @@
+## Active Update 2026-05-21 BTC 5m Maker Zero Orders Diagnosis
+Goal: Explain why `BTC Up or Down 5m Up Maker` and `BTC Up or Down 5m Down Maker` created no Paper orders after deploy.
+Status: Completed
+Done:
+- Verified production PostgreSQL read-only on host `192.168.0.101`: `PolyCopyTrader.Service` is `Running`/`Live` on `info=1.0.0+229ce8ec60e523e95fe833a3ad8071874b43229e`, with fresh heartbeat and empty `last_error`.
+- Confirmed both Maker strategies are enabled, `live_stakes=false`, and actively producing `strategy_market_paper_runs` rows, so runtime activation is working.
+- Confirmed they created `0` Paper orders because all new-maximum candidates were skipped: Down Maker had `228` `opposite_outcome_open_order` skips and `72` `maker_expiration_elapsed` skips; Up Maker had `208` `opposite_outcome_open_order` skips and `127` `maker_expiration_elapsed` skips.
+- Confirmed the opposite-outcome guard was the main blocker: candidate Up was blocked by already-open Down Paper BUY orders, and candidate Down was blocked by already-open Up Paper BUY orders from other BTC 5m variants such as `btc_up_down_5m_binance_15s`, `btc_up_down_5m_binance_45s`, `btc_up_down_5m_binance_30s`, `btc_up_down_5m_binance_edge_6`, and bps instant variants.
+- Confirmed `maker_expiration_elapsed` means the new max arrived after the Maker GTD expiration window had already closed (`market_end_utc - 60s`), so the strategy correctly refused to place a late order.
+Next: Decide whether Maker should bypass or narrow the opposite-outcome open-order guard; otherwise no Maker orders should be expected while regular BTC 5m variants hold opposite open BUY orders in the same condition.
+Notes: Read-only DB diagnostics only. No DB writes, service restart, live order submission, cancel action, or source-code changes. `git pull --ff-only` was already up to date.
+Blockers: None.
+
 ## Active Update 2026-05-21 BTC 5m Maker Live Paper Runtime
 Goal: Allow BTC 5m Maker strategies to run in Live service mode while still creating only Paper orders.
 Status: Completed
