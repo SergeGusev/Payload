@@ -134,3 +134,10 @@ Request:
 
 Result:
 Added `btc_up_down_5m_binance_bps_1_7_instant` to the BTC Paper/Live-shadow allowlist, added a regression test proving it creates a Paper-shadow plus GTD Live order using instant executable ask-depth pricing with `postOnly=false`, updated the live-stakes admin multi-code test to include the new strategy, and updated README plus `docs/live_trading_checklist.md`. Verification passed: targeted BTC processor/admin tests `146/146`, full tests `521/521`, Service build with 0 warnings/errors, and `git diff --check` with LF/CRLF warnings only. No production DB write, service restart, live order submission, or cancel action was performed; production still needs deploy/restart from this commit before `1.7 bps Instant` can Live-place orders.
+
+## 2026-05-21T19:17:19Z
+Request:
+Ты можешь сделать проверку стратегии BTC Up or Down 5m Binance 2 bps за последние 24 часа. Как-то очень подозрительна пропроция выигрышей и проигрышей. Ты можешь по истории Binance подтвердить, что я действительно проигрывал? Или по Binance получится, что я выигрывал, а по их критериям - проигрывал
+
+Result:
+Audited production read-only for `btc_up_down_5m_binance_bps_2` Live rows in the last 24h and compared each market to public Binance `BTCUSDT` aggregate trades around market start/end. Found `32` Live rows over `32` markets, `13` filled/settled rows, Polymarket/Gamma result `4` wins / `9` losses / `-14.7` PnL. Binance exact boundary-trade consensus for those same settled filled rows would be `3` wins / `10` losses, so Binance does not show that the strategy should have won more often. Found one settled mismatch, but favorable to the user: `btc-updown-5m-1779390000` bought `Up`, Polymarket/Gamma settled `Up` as win, while Binance exact boundary trades indicated `Down`. Gamma raw metadata for that market lists Chainlink BTC/USD as resolution source, not Binance spot. No source code change, DB write, service restart, live order submission, cancel action, or tests were performed.

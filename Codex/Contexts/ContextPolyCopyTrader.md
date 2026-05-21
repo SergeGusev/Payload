@@ -1,3 +1,17 @@
+## Active Update 2026-05-21 BTC 2 Bps Binance Settlement Audit
+Goal: Check whether `BTC Up or Down 5m Binance 2 bps` losses in the last 24h match Binance BTCUSDT history or are caused by Polymarket settlement criteria.
+Status: Completed
+Done:
+- Queried production PostgreSQL read-only for all `btc_up_down_5m_binance_bps_2` Live orders in the last 24h: `32` Live rows across `32` markets, with `13` filled/settled rows.
+- Audited each market against public Binance `BTCUSDT` `aggTrades`, comparing last trade at/before and first trade at/after each market's `market_start_utc` and `market_end_utc`.
+- Settled Live result: Polymarket/Gamma had `4` wins and `9` losses, realized PnL `-14.7`.
+- Binance exact-trade consensus for the same settled filled rows would have been `3` wins and `10` losses, so Binance would not improve the suspicious win/loss ratio.
+- Found `1` settled mismatch, but in the favorable direction: market `btc-updown-5m-1779390000` (`2026-05-21T19:00Z`-`19:05Z`) bought `Up`; Polymarket/Gamma settled `Up` as a win, while Binance exact boundary trades indicated `Down`.
+- Confirmed the market's Gamma raw metadata says the resolution source is Chainlink BTC/USD (`https://data.chain.link/streams/btc-usd`), not Binance spot. Strategy entry uses Binance, but market settlement is Chainlink criteria.
+Next: If outcome accuracy is critical, build a Chainlink-source audit for settled BTC 5m markets; Binance alone cannot be treated as the authoritative settlement source for these Polymarket markets.
+Notes: Production DB queries were SELECT-only. Binance checks used public `api.binance.com/api/v3/aggTrades`; no source code change, DB write, service restart, live order submission, cancel action, or tests were performed.
+Blockers: Need accessible historical Chainlink BTC/USD stream values for exact independent verification of Polymarket's settlement source.
+
 ## Active Update 2026-05-21 BTC 1.7 Instant Live Allowlist
 Goal: Allow `BTC Up or Down 5m Binance 1.7 bps Instant` to use the BTC Paper/Live-shadow live path.
 Status: Completed
