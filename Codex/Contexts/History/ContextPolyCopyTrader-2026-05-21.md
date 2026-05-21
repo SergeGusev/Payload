@@ -46,3 +46,10 @@ Request:
 
 Result:
 Changed the shared strategy auto-pause decision so a losing settlement pauses the strategy only when the 12-hour realized Paper/Live PnL is negative and the same 12-hour settled row count is greater than `1`. Added `RecentSettledCount` to pause decisions/logs, updated BTC 5m and storage tests, and documented the new rule. Verification passed: targeted tests `155/155`, full tests `515/515`, and `git diff --check` with LF/CRLF warnings only. No production DB writes, service restart, live order submission, or cancel action was performed.
+
+## 2026-05-21T13:18:30.0344825Z
+Request:
+Давай разберёмся с BTC Up or Down 5m Down Maker / BTC Up or Down 5m Up Maker, я так и не понял ситуацию. Сделай мне график за ближайший маркет - как движется стакан, какие ставки мы при этом делаем по этой стратегии
+
+Result:
+Added and ran a .NET/Npgsql Maker market report probe. Generated `outputs/maker-market-report/btc-updown-5m-1779369300-maker-report.html` plus ticks/events/orders CSV exports from production PostgreSQL host `192.168.0.101` using read-only SELECT queries. The nearest Maker-active market had 22 archived odds ticks, 1 Up Maker skip, 0 Down Maker events, and 0 Maker paper orders. The Up Maker event moved from previous max ask `0.46` to new max ask `0.53`, computed maker limit `0.52`, and skipped as `opposite_outcome_open_order` because `btc_up_down_5m_binance_30s` already had a pending Down order. Verification passed: probe build succeeded with 0 warnings/errors and the HTML contains the expected SVG/event table. No production DB writes, service restart, live order submission, or cancel action was performed.

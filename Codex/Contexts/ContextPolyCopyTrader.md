@@ -1,3 +1,15 @@
+## Active Update 2026-05-21 BTC 5m Maker Market Report
+Goal: Build a visual report for the nearest BTC 5m market showing book movement and Maker strategy actions.
+Status: Completed
+Done:
+- Added a small .NET/Npgsql diagnostic probe `artifacts/MakerMarketReportProbe` that reads PostgreSQL with SELECT-only queries and generates a self-contained HTML/SVG report plus CSV exports.
+- Ran the probe against production PostgreSQL host `192.168.0.101` and generated `outputs/maker-market-report/btc-updown-5m-1779369300-maker-report.html`.
+- Reported the nearest Maker-active market `btc-updown-5m-1779369300`: 22 archived odds ticks, 1 Up Maker event, 0 Down Maker events, and 0 Maker paper orders.
+- Confirmed the single Up Maker attempt moved from previous max ask `0.46` to new max ask `0.53`, would have posted a post-only limit at `0.52`, but skipped as `opposite_outcome_open_order` because `btc_up_down_5m_binance_30s` already had a pending Down order.
+Next: Review the generated HTML graph; if Maker should ignore other BTC strategy open orders, change the opposite-outcome guard policy for Maker explicitly.
+Notes: Verification passed: `dotnet build artifacts\MakerMarketReportProbe\MakerMarketReportProbe.csproj --no-restore` succeeded with 0 warnings/errors; HTML contains SVG and expected Maker event table; no production DB writes, service restart, live order submission, or cancel action.
+Blockers: None.
+
 ## Active Update 2026-05-21 Strategy Pause Settled Count Guard
 Goal: Pause a losing strategy only after more than one recent settled bet.
 Status: Completed
