@@ -76,6 +76,8 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
     private const decimal MinimumStakeSafetyMultiplier = 1.10m;
     private const decimal FillSizeTolerance = 0.000001m;
     private const decimal CloseBookResultThreshold = 0.50m;
+    private const int MakerDecisionIntervalSeconds = 30;
+    private const int MakerMaxDecisionSlot = 9;
     private const string StakeNotionalRoundingMode = "ceil_usd";
     private static readonly TimeSpan MarketObserveAheadWindow = TimeSpan.FromMinutes(10);
     private static readonly TimeSpan MarketObserveBehindWindow = TimeSpan.FromMinutes(10);
@@ -565,12 +567,14 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
 
                 observed++;
                 var stateKey = GetMakerStateKey(variant, market, selectedOutcome);
+                var decisionSlot = GetMakerDecisionSlot(windowStart.Value, market.EndDateUtc, nowUtc);
                 if (!makerHighWaterStates.TryGetValue(stateKey, out var state) ||
                     state.MarketEndUtc != market.EndDateUtc)
                 {
                     makerHighWaterStates[stateKey] = new BtcMakerHighWaterState(
                         bestAsk.Value,
                         OrderSequence: 0,
+                        LastDecisionSlot: decisionSlot.CurrentSlot,
                         nowUtc,
                         market.EndDateUtc);
                     logger.LogInformation(
@@ -582,10 +586,25 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
                     continue;
                 }
 
+                var nextMaxBestAsk = Math.Max(state.MaxBestAsk, bestAsk.Value);
+                if (!decisionSlot.Available ||
+                    decisionSlot.CurrentSlot <= state.LastDecisionSlot)
+                {
+                    makerHighWaterStates[stateKey] = state with
+                    {
+                        MaxBestAsk = nextMaxBestAsk,
+                        UpdatedAtUtc = nowUtc,
+                        MarketEndUtc = market.EndDateUtc
+                    };
+                    continue;
+                }
+
                 if (bestAsk.Value <= state.MaxBestAsk)
                 {
                     makerHighWaterStates[stateKey] = state with
                     {
+                        MaxBestAsk = nextMaxBestAsk,
+                        LastDecisionSlot = decisionSlot.CurrentSlot,
                         UpdatedAtUtc = nowUtc,
                         MarketEndUtc = market.EndDateUtc
                     };
@@ -597,6 +616,7 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
                 {
                     MaxBestAsk = bestAsk.Value,
                     OrderSequence = orderSequence,
+                    LastDecisionSlot = decisionSlot.CurrentSlot,
                     UpdatedAtUtc = nowUtc,
                     MarketEndUtc = market.EndDateUtc
                 };
@@ -612,6 +632,8 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
                     previousMaxBestAsk: state.MaxBestAsk,
                     currentMaxBestAsk: bestAsk.Value,
                     orderSequence,
+                    decisionSlot.CurrentSlot,
+                    decisionSlot.MaxSlot,
                     settings,
                     cancellationToken);
                 entriesPlaced += orderResult.Placed ? 1 : 0;
@@ -632,6 +654,8 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
         decimal previousMaxBestAsk,
         decimal currentMaxBestAsk,
         int orderSequence,
+        int decisionSlot,
+        int maxDecisionSlot,
         StrategyRuntimeSettings settings,
         CancellationToken cancellationToken)
     {
@@ -645,6 +669,8 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
             previousMaxBestAsk,
             currentMaxBestAsk,
             orderSequence,
+            decisionSlot,
+            maxDecisionSlot,
             syntheticMarketId);
         if (settings.IsPausedAt(nowUtc))
         {
@@ -999,6 +1025,31 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
         }
     }
 
+    private static BtcMakerDecisionSlot GetMakerDecisionSlot(
+        DateTimeOffset marketStartUtc,
+        DateTimeOffset? marketEndUtc,
+        DateTimeOffset nowUtc)
+    {
+        if (marketEndUtc is not { } endUtc ||
+            endUtc <= marketStartUtc ||
+            nowUtc >= endUtc)
+        {
+            return new BtcMakerDecisionSlot(false, 0, 0);
+        }
+
+        var totalSlots = (int)Math.Floor((endUtc - marketStartUtc).TotalSeconds / MakerDecisionIntervalSeconds);
+        var maxSlot = Math.Min(MakerMaxDecisionSlot, Math.Max(0, totalSlots - 1));
+        if (maxSlot == 0)
+        {
+            return new BtcMakerDecisionSlot(false, 0, 0);
+        }
+
+        var elapsedSeconds = Math.Max(0d, (nowUtc - marketStartUtc).TotalSeconds);
+        var currentSlot = (int)Math.Floor(elapsedSeconds / MakerDecisionIntervalSeconds);
+        currentSlot = Math.Min(Math.Max(0, currentSlot), maxSlot);
+        return new BtcMakerDecisionSlot(currentSlot > 0, currentSlot, maxSlot);
+    }
+
     private OrderBookSnapshot ApplyMakerOrderBookFallbacks(
         OrderBookSnapshot orderBook,
         PolymarketGammaMarket market)
@@ -1078,7 +1129,7 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
         DateTimeOffset nowUtc)
     {
         var configuredTtlSeconds = Math.Max(1, options.OpeningLimitGtdTtlSeconds);
-        var marketEndExpireBeforeSeconds = 60;
+        var marketEndExpireBeforeSeconds = 0;
         var clobBufferSeconds = Math.Max(60, options.ClobGtdExpirationSecurityBufferSeconds);
         if (market.EndDateUtc is not { } marketEndUtc)
         {
@@ -1088,10 +1139,10 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
                 marketEndExpireBeforeSeconds,
                 clobBufferSeconds,
                 null,
-                "maker_market_end_minus_60");
+                "maker_market_end");
         }
 
-        var localExpiresAtUtc = marketEndUtc.AddSeconds(-marketEndExpireBeforeSeconds);
+        var localExpiresAtUtc = marketEndUtc;
         if (localExpiresAtUtc <= nowUtc)
         {
             return OpeningLimitExpirationDecision.Reject(
@@ -1100,7 +1151,7 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
                 marketEndExpireBeforeSeconds,
                 clobBufferSeconds,
                 localExpiresAtUtc,
-                "maker_market_end_minus_60");
+                "maker_market_end");
         }
 
         return OpeningLimitExpirationDecision.Enter(
@@ -1110,7 +1161,7 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
             configuredTtlSeconds,
             marketEndExpireBeforeSeconds,
             clobBufferSeconds,
-            "maker_market_end_minus_60");
+            "maker_market_end");
     }
 
     private static string GetMakerStateKey(
@@ -1203,6 +1254,8 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
         decimal previousMaxBestAsk,
         decimal currentMaxBestAsk,
         int orderSequence,
+        int decisionSlot,
+        int maxDecisionSlot,
         string syntheticMarketId)
     {
         var bestBid = TryGetBestBidFromOrderBook(orderBook);
@@ -1220,6 +1273,9 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
             asset_id = selectedOutcome.AssetId,
             maker_trend_mode = "new_best_ask_high_water",
             maker_trend_order_sequence = orderSequence,
+            maker_decision_interval_seconds = MakerDecisionIntervalSeconds,
+            maker_decision_slot = decisionSlot,
+            maker_max_decision_slot = maxDecisionSlot,
             previous_best_ask = previousMaxBestAsk,
             current_best_ask = currentMaxBestAsk,
             previous_max_best_ask = previousMaxBestAsk,
@@ -10680,8 +10736,14 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
     private sealed record BtcMakerHighWaterState(
         decimal MaxBestAsk,
         int OrderSequence,
+        int LastDecisionSlot,
         DateTimeOffset UpdatedAtUtc,
         DateTimeOffset? MarketEndUtc);
+
+    private sealed record BtcMakerDecisionSlot(
+        bool Available,
+        int CurrentSlot,
+        int MaxSlot);
 
     private sealed record BtcMakerPostOnlyPriceDecision(
         bool Available,

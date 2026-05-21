@@ -6,6 +6,8 @@ using Npgsql;
 
 const string UpMakerCode = "btc_up_down_5m_up_maker";
 const string DownMakerCode = "btc_up_down_5m_down_maker";
+const int MakerDecisionIntervalSeconds = 30;
+const int MakerMaxDecisionSlot = 9;
 
 var connectionString = Environment.GetEnvironmentVariable("POLYCOPYTRADER_POSTGRES_CONNECTION");
 if (string.IsNullOrWhiteSpace(connectionString))
@@ -14,7 +16,8 @@ if (string.IsNullOrWhiteSpace(connectionString))
     return 1;
 }
 
-var requestedMarketSlug = args.Length > 0 ? args[0] : null;
+var latestTicksMode = args.Any(arg => string.Equals(arg, "--latest-ticks", StringComparison.OrdinalIgnoreCase));
+var requestedMarketSlug = args.FirstOrDefault(arg => !arg.StartsWith("--", StringComparison.Ordinal));
 var outputDirectory = Path.GetFullPath(Path.Combine(Environment.CurrentDirectory, "outputs", "maker-market-report"));
 Directory.CreateDirectory(outputDirectory);
 
@@ -22,7 +25,9 @@ await using var connection = new NpgsqlConnection(connectionString);
 await connection.OpenAsync();
 
 var market = string.IsNullOrWhiteSpace(requestedMarketSlug)
-    ? await LoadLatestMarketWithMakerActivityAsync(connection)
+    ? latestTicksMode
+        ? await LoadLatestMarketWithTicksAsync(connection)
+        : await LoadLatestMarketWithMakerActivityAsync(connection)
     : await LoadMarketBySlugAsync(connection, requestedMarketSlug);
 if (market is null)
 {
@@ -150,6 +155,40 @@ GROUP BY tick.market_id, tick.condition_id, tick.market_slug;
 
     await using var command = new NpgsqlCommand(sql, connection);
     command.Parameters.AddWithValue("MarketSlug", marketSlug);
+    await using var reader = await command.ExecuteReaderAsync();
+    return await reader.ReadAsync() ? ReadMarket(reader) : null;
+}
+
+static async Task<MarketInfo?> LoadLatestMarketWithTicksAsync(NpgsqlConnection connection)
+{
+    const string sql = """
+WITH market_ticks AS (
+    SELECT
+        tick.market_id,
+        tick.condition_id,
+        tick.market_slug,
+        min(tick.market_start_utc) AS market_start_utc,
+        max(tick.market_end_utc) AS market_end_utc,
+        count(*)::integer AS tick_count,
+        max(tick.sampled_at_utc) AS latest_tick_utc
+    FROM btc_up_down_5m_odds_ticks tick
+    GROUP BY tick.market_id, tick.condition_id, tick.market_slug
+)
+SELECT market_id,
+       condition_id,
+       market_slug,
+       market_start_utc,
+       market_end_utc,
+       tick_count,
+       0 AS maker_event_count,
+       0 AS maker_order_count,
+       latest_tick_utc
+FROM market_ticks
+ORDER BY market_start_utc DESC, latest_tick_utc DESC
+LIMIT 1;
+""";
+
+    await using var command = new NpgsqlCommand(sql, connection);
     await using var reader = await command.ExecuteReaderAsync();
     return await reader.ReadAsync() ? ReadMarket(reader) : null;
 }
@@ -405,7 +444,8 @@ static void SimulateOutcome(
 {
     decimal? maxBestAsk = null;
     var orderSequence = 0;
-    var cutoffSeconds = Math.Max(0m, (decimal)(market.MarketEndUtc - market.MarketStartUtc).TotalSeconds - 60m);
+    var lastDecisionSlot = 0;
+    var maxDecisionSlot = GetMaxDecisionSlot(market);
 
     foreach (var tick in ticks)
     {
@@ -418,6 +458,7 @@ static void SimulateOutcome(
         if (maxBestAsk is null)
         {
             maxBestAsk = bestAsk.Value;
+            lastDecisionSlot = GetDecisionSlot(tick.SecondsAfterStart, maxDecisionSlot).CurrentSlot;
             results.Add(new MakerSimulationRow(
                 tick.SampledAtUtc,
                 tick.SecondsAfterStart,
@@ -434,7 +475,30 @@ static void SimulateOutcome(
             continue;
         }
 
-        if (bestAsk.Value <= maxBestAsk.Value)
+        var previousMax = maxBestAsk.Value;
+        var decisionSlot = GetDecisionSlot(tick.SecondsAfterStart, maxDecisionSlot);
+        if (!decisionSlot.Available ||
+            decisionSlot.CurrentSlot <= lastDecisionSlot)
+        {
+            maxBestAsk = Math.Max(maxBestAsk.Value, bestAsk.Value);
+            results.Add(new MakerSimulationRow(
+                tick.SampledAtUtc,
+                tick.SecondsAfterStart,
+                strategyCode,
+                outcome,
+                decisionSlot.Available ? "between_slots" : "before_first_slot",
+                bestAsk.Value,
+                previousMax,
+                maxBestAsk.Value,
+                MakerLimitPrice: null,
+                PlacesOrder: false,
+                OrderSequence: orderSequence,
+                Reason: decisionSlot.Available ? "waiting_for_next_30s_slot" : "before_first_30s_slot"));
+            continue;
+        }
+
+        lastDecisionSlot = decisionSlot.CurrentSlot;
+        if (bestAsk.Value <= previousMax)
         {
             results.Add(new MakerSimulationRow(
                 tick.SampledAtUtc,
@@ -443,33 +507,49 @@ static void SimulateOutcome(
                 outcome,
                 "no_order",
                 bestAsk.Value,
-                maxBestAsk.Value,
-                maxBestAsk.Value,
+                previousMax,
+                previousMax,
                 MakerLimitPrice: null,
                 PlacesOrder: false,
                 OrderSequence: orderSequence,
-                Reason: "below_or_equal_previous_max"));
+                Reason: "below_or_equal_previous_max_at_30s_slot"));
             continue;
         }
 
-        var previousMax = maxBestAsk.Value;
         maxBestAsk = bestAsk.Value;
         orderSequence++;
-        var placesOrder = tick.SecondsAfterStart <= cutoffSeconds;
         results.Add(new MakerSimulationRow(
             tick.SampledAtUtc,
             tick.SecondsAfterStart,
             strategyCode,
             outcome,
-            placesOrder ? "place_order" : "skip_after_cutoff",
+            "place_order",
             bestAsk.Value,
             previousMax,
             bestAsk.Value,
-            placesOrder ? RoundDownToTick(Math.Max(0m, bestAsk.Value - tickSize), tickSize) : null,
-            placesOrder,
+            RoundDownToTick(Math.Max(0m, bestAsk.Value - tickSize), tickSize),
+            PlacesOrder: true,
             orderSequence,
-            placesOrder ? "new_high" : "new_high_after_maker_cutoff"));
+            "new_high_at_30s_slot"));
     }
+}
+
+static int GetMaxDecisionSlot(MarketInfo market)
+{
+    var totalSeconds = Math.Max(0m, (decimal)(market.MarketEndUtc - market.MarketStartUtc).TotalSeconds);
+    return Math.Min(MakerMaxDecisionSlot, Math.Max(0, (int)Math.Floor(totalSeconds / MakerDecisionIntervalSeconds) - 1));
+}
+
+static MakerDecisionSlot GetDecisionSlot(decimal secondsAfterStart, int maxDecisionSlot)
+{
+    if (maxDecisionSlot <= 0)
+    {
+        return new MakerDecisionSlot(false, 0);
+    }
+
+    var currentSlot = (int)Math.Floor(Math.Max(0m, secondsAfterStart) / MakerDecisionIntervalSeconds);
+    currentSlot = Math.Min(Math.Max(0, currentSlot), maxDecisionSlot);
+    return new MakerDecisionSlot(currentSlot > 0, currentSlot);
 }
 
 static string BuildHtmlReport(
@@ -491,8 +571,8 @@ static string BuildHtmlReport(
     var simulatedNoOrders = simulatedDecisions
         .Where(item => string.Equals(item.Action, "no_order", StringComparison.OrdinalIgnoreCase))
         .ToArray();
-    var simulatedCutoffSkips = simulatedDecisions
-        .Where(item => string.Equals(item.Action, "skip_after_cutoff", StringComparison.OrdinalIgnoreCase))
+    var simulatedBetweenSlots = simulatedDecisions
+        .Where(item => string.Equals(item.Action, "between_slots", StringComparison.OrdinalIgnoreCase))
         .ToArray();
     var skippedByReason = events
         .Where(item => !string.IsNullOrWhiteSpace(item.SkipReason))
@@ -508,8 +588,8 @@ static string BuildHtmlReport(
         ("Window UTC", $"{market.MarketStartUtc:HH:mm:ss} - {market.MarketEndUtc:HH:mm:ss}"),
         ("Ticks", ticks.Count.ToString(CultureInfo.InvariantCulture)),
         ("Simulated orders", simulatedOrders.Length.ToString(CultureInfo.InvariantCulture)),
-        ("No-order samples", simulatedNoOrders.Length.ToString(CultureInfo.InvariantCulture)),
-        ("Cutoff skips", simulatedCutoffSkips.Length.ToString(CultureInfo.InvariantCulture)),
+        ("30s no-orders", simulatedNoOrders.Length.ToString(CultureInfo.InvariantCulture)),
+        ("Between slots", simulatedBetweenSlots.Length.ToString(CultureInfo.InvariantCulture)),
         ("Maker events", events.Count.ToString(CultureInfo.InvariantCulture)),
         ("Up Maker events", upEvents.Length.ToString(CultureInfo.InvariantCulture)),
         ("Down Maker events", downEvents.Length.ToString(CultureInfo.InvariantCulture)),
@@ -565,16 +645,16 @@ th { position: sticky; top: 0; background: #eef1f5; z-index: 1; }
   <span><span class="swatch" style="background:#aec7e8"></span>Down bid</span>
   <span><span class="swatch" style="background:#16a34a"></span>simulated high-water maker order</span>
   <span><span class="swatch" style="background:#9ca3af"></span>simulated no order: below/equal previous max</span>
+  <span>vertical light lines = 30 second decision slots</span>
   <span>actual DB Maker event / placed order</span>
   <span>actual DB skipped Maker attempt</span>
-  <span>vertical dashed line = maker expiration cutoff, market_end - 60s</span>
 </div>
 """);
     html.AppendLine("</div>");
 
     html.AppendLine("<h2>Interpretation</h2>");
     html.AppendLine("<div class=\"panel\">");
-    html.AppendLine("<p>The line chart uses <code>btc_up_down_5m_odds_ticks</code>, which is the archived book snapshot stream. Simulated markers apply the current high-water Maker rule locally: first usable ask is a baseline, asks below or equal to the previous maximum are no-order points, and a new order appears only when the ask exceeds the prior high.</p>");
+    html.AppendLine("<p>The line chart uses <code>btc_up_down_5m_odds_ticks</code>, which is the archived book snapshot stream. Simulated markers apply the current high-water Maker rule locally: first usable ask is a baseline, decisions happen only on 30-second slots, asks below or equal to the previous maximum are no-order points, and a new order appears only when the ask exceeds the prior high on a slot.</p>");
     html.AppendLine($"<p>Skip reasons: {(events.Count == 0 ? "no Maker events for this market" : string.Join("; ", skippedByReason))}.</p>");
     html.AppendLine("</div>");
 
@@ -707,12 +787,13 @@ static string BuildSvg(
         html.AppendLine($"<text x=\"{Fmt(x)}\" y=\"{height - bottom + 20}\" text-anchor=\"middle\" font-size=\"11\" fill=\"#6b7280\">{seconds:0}s</text>");
     }
 
-    var expirationSeconds = (decimal)(market.MarketEndUtc - market.MarketStartUtc).TotalSeconds - 60m;
-    if (expirationSeconds > 0m)
+    var maxDecisionSlot = GetMaxDecisionSlot(market);
+    for (var slot = 1; slot <= maxDecisionSlot; slot++)
     {
-        var x = X(expirationSeconds);
-        html.AppendLine($"<line x1=\"{Fmt(x)}\" y1=\"{top}\" x2=\"{Fmt(x)}\" y2=\"{height - bottom}\" stroke=\"#374151\" stroke-dasharray=\"6 6\" stroke-width=\"1.5\"/>");
-        html.AppendLine($"<text x=\"{Fmt(x + 4)}\" y=\"{top + 14}\" font-size=\"11\" fill=\"#374151\">maker cutoff</text>");
+        var seconds = slot * MakerDecisionIntervalSeconds;
+        var x = X(seconds);
+        html.AppendLine($"<line x1=\"{Fmt(x)}\" y1=\"{top}\" x2=\"{Fmt(x)}\" y2=\"{height - bottom}\" stroke=\"#d1d5db\" stroke-dasharray=\"4 6\" stroke-width=\"1.2\"/>");
+        html.AppendLine($"<text x=\"{Fmt(x + 4)}\" y=\"{top + 14}\" font-size=\"10\" fill=\"#6b7280\">{seconds}s</text>");
     }
 
     AppendLine(html, ticks.Select(item => (item.SecondsAfterStart, item.UpBestAsk)), "#d62728", 2.2, X, Y);
@@ -740,13 +821,10 @@ static string BuildSvg(
         {
             html.AppendLine($"<rect x=\"{Fmt(x - 4)}\" y=\"{Fmt(y - 4)}\" width=\"8\" height=\"8\" fill=\"#f59e0b\" stroke=\"{stroke}\" stroke-width=\"1.5\"><title>{Html(ShortStrategyName(item.StrategyCode))} baseline ask={FormatDecimal(item.BestAsk)}</title></rect>");
         }
-        else if (string.Equals(item.Action, "skip_after_cutoff", StringComparison.OrdinalIgnoreCase))
-        {
-            html.AppendLine($"<path d=\"M {Fmt(x - 5)} {Fmt(y)} L {Fmt(x)} {Fmt(y - 6)} L {Fmt(x + 5)} {Fmt(y)} L {Fmt(x)} {Fmt(y + 6)} Z\" fill=\"#f97316\" stroke=\"{stroke}\" stroke-width=\"1.5\"><title>{Html(ShortStrategyName(item.StrategyCode))} new high after cutoff ask={FormatDecimal(item.BestAsk)}</title></path>");
-        }
         else
         {
-            html.AppendLine($"<circle cx=\"{Fmt(x)}\" cy=\"{Fmt(y)}\" r=\"3\" fill=\"#9ca3af\" opacity=\"0.72\"><title>{Html(ShortStrategyName(item.StrategyCode))} no order ask={FormatDecimal(item.BestAsk)} previous max={FormatDecimal(item.PreviousMaxBestAsk)}</title></circle>");
+            var radius = string.Equals(item.Action, "no_order", StringComparison.OrdinalIgnoreCase) ? 4 : 2.5;
+            html.AppendLine($"<circle cx=\"{Fmt(x)}\" cy=\"{Fmt(y)}\" r=\"{Fmt(radius)}\" fill=\"#9ca3af\" opacity=\"0.72\"><title>{Html(ShortStrategyName(item.StrategyCode))} {Html(item.Action)} ask={FormatDecimal(item.BestAsk)} previous max={FormatDecimal(item.PreviousMaxBestAsk)}</title></circle>");
         }
     }
 
@@ -1141,6 +1219,10 @@ sealed record MakerSimulationRow(
     bool PlacesOrder,
     int OrderSequence,
     string Reason);
+
+sealed record MakerDecisionSlot(
+    bool Available,
+    int CurrentSlot);
 
 sealed record MakerEventRow(
     string StrategyCode,

@@ -1,3 +1,18 @@
+## Active Update 2026-05-21 BTC 5m Maker 30 Second Slots
+Goal: Throttle BTC 5m Maker entries to one high-water decision every 30 seconds and regenerate a graph on a fresh market.
+Status: Completed
+Done:
+- Changed `BTC Up or Down 5m Up Maker` / `Down Maker` to evaluate Maker entries only on 30-second slots after market start (`30s` through `270s`), capped at `9` decision slots per BTC 5-minute market.
+- Kept the strict high-water rule: a slot creates a Paper-only post-only BUY one tick below best ask only when the selected outcome best ask exceeds the previous maximum; flat/falling asks and rises below the prior maximum do not create orders.
+- Removed the old Maker `marketEndUtc - 60s` order-expiration cutoff; Maker Paper orders now expire at `marketEndUtc`.
+- Added raw decision diagnostics for `maker_decision_interval_seconds`, `maker_decision_slot`, and `maker_max_decision_slot`.
+- Updated the Maker report probe to simulate the new 30-second high-water logic, draw 30-second slot lines, and support `--latest-ticks` for the latest archived BTC market with ticks.
+- Generated a new closed-market graph for `btc-updown-5m-1779373200` (`2026-05-21T14:20:00Z`-`14:25:00Z`) at `outputs/maker-market-report/btc-updown-5m-1779373200-maker-report.html`.
+- The generated report has `56` odds ticks, `112` simulated decision rows, and `4` simulated Maker orders under the new rule: Down Maker at `61.615s`, Up Maker at `153.014s`, `211.652s`, and `270.395s`.
+Next: Deploy/restart the service separately if the running production process should use this newly committed 30-second Maker code; the generated graph's DB Maker events still reflect the old running service and show `maker_expiration_elapsed` skips.
+Notes: Verification passed: targeted `dotnet test tests\PolyCopyTrader.Tests\PolyCopyTrader.Tests.csproj --no-restore --filter "FullyQualifiedName~BtcUpDown5mPaperStrategyProcessorTests"` passed `136/136`; `dotnet build artifacts\MakerMarketReportProbe\MakerMarketReportProbe.csproj --no-restore` passed; full `dotnet test tests\PolyCopyTrader.Tests\PolyCopyTrader.Tests.csproj --no-restore` passed `518/518`; report generation used read-only SELECT queries against production PostgreSQL host `192.168.0.101`. No production DB writes, service restart, live order submission, or cancel action.
+Blockers: None.
+
 ## Active Update 2026-05-21 BTC 5m Maker High-Water Graph
 Goal: Regenerate the BTC 5m Maker market graph with explicit high-water place/no-place markers.
 Status: Completed

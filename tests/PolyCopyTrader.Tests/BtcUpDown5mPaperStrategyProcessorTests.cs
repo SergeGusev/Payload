@@ -3514,6 +3514,7 @@ public sealed class BtcUpDown5mPaperStrategyProcessorTests
 
         await processor.ProcessAsync();
         await Task.Delay(75);
+        SetFirstMarketWindowStart(repository, DateTimeOffset.UtcNow.AddSeconds(-31));
         clobClient.SetOrderBooks([
             OrderBook("asset-up", [new OrderBookLevel(0.40m, 100m)], [new OrderBookLevel(0.45m, 100m)], DateTimeOffset.UtcNow, 5m, 0.01m),
             OrderBook("asset-down", [new OrderBookLevel(0.55m, 100m)], [new OrderBookLevel(0.58m, 100m)], DateTimeOffset.UtcNow, 5m, 0.01m)
@@ -3530,10 +3531,12 @@ public sealed class BtcUpDown5mPaperStrategyProcessorTests
         Assert.Equal("Up", order.Outcome);
         Assert.Equal(0.44m, order.Price);
         Assert.True(order.Price < 0.45m);
-        Assert.Equal(marketEndUtc.AddMinutes(-1), order.ExpiresAtUtc);
+        Assert.Equal(marketEndUtc, order.ExpiresAtUtc);
         Assert.Equal("btc_updown5m_maker_post_only", order.ExecutionSource);
         Assert.Contains("\"post_only\":true", order.RawDecisionJson, StringComparison.Ordinal);
         Assert.Contains("\"maker_limit_price\":0.44", order.RawDecisionJson, StringComparison.Ordinal);
+        Assert.Contains("\"maker_decision_interval_seconds\":30", order.RawDecisionJson, StringComparison.Ordinal);
+        Assert.Contains("\"maker_decision_slot\":1", order.RawDecisionJson, StringComparison.Ordinal);
         Assert.Contains("\"pricing_mode\":\"paper_gtd_limit\"", order.RawDecisionJson, StringComparison.Ordinal);
         Assert.Contains("\"paper_gtd_initial_executable_ask_shares\":0", order.RawDecisionJson, StringComparison.Ordinal);
 
@@ -3544,6 +3547,39 @@ public sealed class BtcUpDown5mPaperStrategyProcessorTests
         Assert.Equal(order.NotionalUsd, run.StakeUsd);
         Assert.Equal(0.44m, run.EntryPrice);
         Assert.Contains(":maker:up:0.45", run.MarketId, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task ProcessAsync_UpMakerDoesNotOrderBeforeNextThirtySecondSlot()
+    {
+        var now = DateTimeOffset.UtcNow;
+        var repository = new TestAppRepository();
+        repository.PolymarketGammaMarkets.Add(CreateMarket(
+            now.AddSeconds(-5),
+            now.AddMinutes(5),
+            upPrice: 0.50m,
+            downPrice: 0.50m,
+            orderMinSize: 5m));
+        var clobClient = new MutableFakeClobClient([
+            OrderBook("asset-up", [new OrderBookLevel(0.40m, 100m)], [new OrderBookLevel(0.42m, 100m)], now, 5m, 0.01m),
+            OrderBook("asset-down", [new OrderBookLevel(0.58m, 100m)], [new OrderBookLevel(0.60m, 100m)], now, 5m, 0.01m)
+        ]);
+        var processor = CreateMakerProcessor(repository, clobClient, UpMakerVariant.Code);
+
+        await processor.ProcessAsync();
+        await Task.Delay(75);
+        clobClient.SetOrderBooks([
+            OrderBook("asset-up", [new OrderBookLevel(0.40m, 100m)], [new OrderBookLevel(0.45m, 100m)], DateTimeOffset.UtcNow, 5m, 0.01m),
+            OrderBook("asset-down", [new OrderBookLevel(0.55m, 100m)], [new OrderBookLevel(0.58m, 100m)], DateTimeOffset.UtcNow, 5m, 0.01m)
+        ]);
+
+        var result = await processor.ProcessAsync();
+
+        Assert.Equal(1, result.MarketsObserved);
+        Assert.Equal(0, result.EntriesPlaced);
+        Assert.Equal(0, result.RunsSkipped);
+        Assert.Empty(repository.StrategyMarketPaperRuns);
+        Assert.Empty(repository.PaperOrders);
     }
 
     [Fact]
@@ -3567,24 +3603,28 @@ public sealed class BtcUpDown5mPaperStrategyProcessorTests
 
         await processor.ProcessAsync();
         await Task.Delay(75);
+        SetFirstMarketWindowStart(repository, DateTimeOffset.UtcNow.AddSeconds(-31));
         clobClient.SetOrderBooks([
             OrderBook("asset-up", [new OrderBookLevel(0.40m, 100m)], [new OrderBookLevel(0.45m, 100m)], DateTimeOffset.UtcNow, 5m, 0.01m),
             OrderBook("asset-down", [new OrderBookLevel(0.55m, 100m)], [new OrderBookLevel(0.58m, 100m)], DateTimeOffset.UtcNow, 5m, 0.01m)
         ]);
         var firstRise = await processor.ProcessAsync();
         await Task.Delay(75);
+        SetFirstMarketWindowStart(repository, DateTimeOffset.UtcNow.AddSeconds(-61));
         clobClient.SetOrderBooks([
             OrderBook("asset-up", [new OrderBookLevel(0.37m, 100m)], [new OrderBookLevel(0.40m, 100m)], DateTimeOffset.UtcNow, 5m, 0.01m),
             OrderBook("asset-down", [new OrderBookLevel(0.60m, 100m)], [new OrderBookLevel(0.63m, 100m)], DateTimeOffset.UtcNow, 5m, 0.01m)
         ]);
         var fall = await processor.ProcessAsync();
         await Task.Delay(75);
+        SetFirstMarketWindowStart(repository, DateTimeOffset.UtcNow.AddSeconds(-91));
         clobClient.SetOrderBooks([
             OrderBook("asset-up", [new OrderBookLevel(0.39m, 100m)], [new OrderBookLevel(0.43m, 100m)], DateTimeOffset.UtcNow, 5m, 0.01m),
             OrderBook("asset-down", [new OrderBookLevel(0.57m, 100m)], [new OrderBookLevel(0.60m, 100m)], DateTimeOffset.UtcNow, 5m, 0.01m)
         ]);
         var belowPriorHighRise = await processor.ProcessAsync();
         await Task.Delay(75);
+        SetFirstMarketWindowStart(repository, DateTimeOffset.UtcNow.AddSeconds(-121));
         clobClient.SetOrderBooks([
             OrderBook("asset-up", [new OrderBookLevel(0.41m, 100m)], [new OrderBookLevel(0.46m, 100m)], DateTimeOffset.UtcNow, 5m, 0.01m),
             OrderBook("asset-down", [new OrderBookLevel(0.54m, 100m)], [new OrderBookLevel(0.59m, 100m)], DateTimeOffset.UtcNow, 5m, 0.01m)
@@ -3622,6 +3662,7 @@ public sealed class BtcUpDown5mPaperStrategyProcessorTests
 
         await processor.ProcessAsync();
         await Task.Delay(75);
+        SetFirstMarketWindowStart(repository, DateTimeOffset.UtcNow.AddSeconds(-31));
         clobClient.SetOrderBooks([
             OrderBook("asset-up", [new OrderBookLevel(0.39m, 100m)], [new OrderBookLevel(0.41m, 100m)], DateTimeOffset.UtcNow, 5m, 0.01m),
             OrderBook("asset-down", [new OrderBookLevel(0.59m, 100m)], [new OrderBookLevel(0.61m, 100m)], DateTimeOffset.UtcNow, 5m, 0.01m)
@@ -3671,6 +3712,7 @@ public sealed class BtcUpDown5mPaperStrategyProcessorTests
 
         await processor.ProcessAsync();
         await Task.Delay(75);
+        SetFirstMarketWindowStart(repository, DateTimeOffset.UtcNow.AddSeconds(-31));
         clobClient.SetOrderBooks([
             OrderBook("asset-up", [new OrderBookLevel(0.40m, 100m)], [new OrderBookLevel(0.45m, 100m)], DateTimeOffset.UtcNow, 5m, 0.01m),
             OrderBook("asset-down", [new OrderBookLevel(0.55m, 100m)], [new OrderBookLevel(0.58m, 100m)], DateTimeOffset.UtcNow, 5m, 0.01m)
@@ -3717,6 +3759,7 @@ public sealed class BtcUpDown5mPaperStrategyProcessorTests
 
         var baseline = await processor.ProcessAsync();
         await Task.Delay(75);
+        SetFirstMarketWindowStart(repository, DateTimeOffset.UtcNow.AddSeconds(-31));
         clobClient.SetOrderBooks([
             OrderBook("asset-up", [new OrderBookLevel(0.40m, 100m)], [new OrderBookLevel(0.45m, 100m)], DateTimeOffset.UtcNow, 5m, 0.01m),
             OrderBook("asset-down", [new OrderBookLevel(0.55m, 100m)], [new OrderBookLevel(0.58m, 100m)], DateTimeOffset.UtcNow, 5m, 0.01m)
@@ -7466,6 +7509,16 @@ public sealed class BtcUpDown5mPaperStrategyProcessorTests
                 "\\\"]\"}",
             FetchedAtUtc: DateTimeOffset.UtcNow,
             OrderMinSize: orderMinSize);
+    }
+
+    private static void SetFirstMarketWindowStart(
+        TestAppRepository repository,
+        DateTimeOffset windowStartUtc)
+    {
+        repository.PolymarketGammaMarkets[0] = repository.PolymarketGammaMarkets[0] with
+        {
+            EventStartTimeUtc = windowStartUtc
+        };
     }
 
     private static void AddSettledRun(
