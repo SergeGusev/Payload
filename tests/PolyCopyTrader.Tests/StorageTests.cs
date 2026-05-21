@@ -69,6 +69,8 @@ public sealed class StorageTests
         Assert.Contains("paused boolean NOT NULL DEFAULT false", PostgresSchema.SchemaSql, StringComparison.Ordinal);
         Assert.Contains("ALTER TABLE strategies ADD COLUMN IF NOT EXISTS paused boolean NOT NULL DEFAULT false", PostgresSchema.SchemaSql, StringComparison.Ordinal);
         Assert.Contains("ALTER TABLE strategies ADD COLUMN IF NOT EXISTS paused_until_utc timestamptz NULL", PostgresSchema.SchemaSql, StringComparison.Ordinal);
+        Assert.Contains("WHERE paused = true", PostgresSchema.SchemaSql, StringComparison.Ordinal);
+        Assert.Contains("AND paused_until_utc IS NOT NULL", PostgresSchema.SchemaSql, StringComparison.Ordinal);
         Assert.Contains("ALTER TABLE strategies ALTER COLUMN live_stake_amount SET DEFAULT 1.00", PostgresSchema.SchemaSql, StringComparison.Ordinal);
         Assert.Contains("ck_strategies_live_available_balance_nonnegative", PostgresSchema.SchemaSql, StringComparison.Ordinal);
         Assert.Contains("'follow_leader'", PostgresSchema.SchemaSql, StringComparison.Ordinal);
@@ -460,22 +462,6 @@ public sealed class StorageTests
         Assert.DoesNotContain("WITH deleted AS", source, StringComparison.Ordinal);
         Assert.Contains("FROM paper_position_settlements ps", source, StringComparison.Ordinal);
         Assert.Contains("COALESCE((SELECT sum(ps.realized_pnl_usd) FROM paper_position_settlements ps), 0) AS paper_pnl", source, StringComparison.Ordinal);
-    }
-
-    [Fact]
-    public void PostgresRepository_StrategyPauseRequiresMultipleRecentSettledRows()
-    {
-        var source = ReadStorageRepositorySource();
-        var start = source.IndexOf("PauseStrategyAfterLossIfRecentPnlNegativeAsync", StringComparison.Ordinal);
-        Assert.True(start >= 0);
-
-        var end = source.IndexOf("SetStrategyStakeAmountsAsync", start, StringComparison.Ordinal);
-        Assert.True(end > start);
-
-        var method = source[start..end];
-        Assert.Contains("count(*)::integer AS settled_count", method, StringComparison.Ordinal);
-        Assert.Contains("AND (SELECT settled_count FROM recent_pnl) > 1", method, StringComparison.Ordinal);
-        Assert.Contains("AS recent_settled_count", method, StringComparison.Ordinal);
     }
 
     [Fact]

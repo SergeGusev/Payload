@@ -84,8 +84,6 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
     private static readonly TimeSpan CloseBookCaptureMaxDuration = TimeSpan.FromSeconds(5);
     private static readonly TimeSpan CloseBookCaptureOrderBookTimeout = TimeSpan.FromSeconds(2);
     private static readonly TimeSpan SettlementMetadataTimeout = TimeSpan.FromSeconds(3);
-    private static readonly TimeSpan StrategyPauseLookback = TimeSpan.FromHours(12);
-    private static readonly TimeSpan StrategyPauseDuration = TimeSpan.FromHours(12);
 
     private readonly ConservativePaperGtdFillEstimator conservativeGtdFillEstimator = new(options);
     private readonly IPaperTradingEngine paperTradingEngine = new DefaultPaperTradingEngine();
@@ -10649,7 +10647,7 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
         return root.ToJsonString();
     }
 
-    private async Task PauseStrategyAfterLossIfNeededAsync(
+    private Task PauseStrategyAfterLossIfNeededAsync(
         Guid strategyId,
         string strategyCode,
         decimal realizedPnl,
@@ -10658,43 +10656,15 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
     {
         if (realizedPnl >= 0m)
         {
-            return;
+            return Task.CompletedTask;
         }
 
-        try
-        {
-            var decision = await repository.PauseStrategyAfterLossIfRecentPnlNegativeAsync(
-                strategyId,
-                nowUtc.Subtract(StrategyPauseLookback),
-                nowUtc.Add(StrategyPauseDuration),
-                nowUtc,
-                cancellationToken);
-            if (!decision.Paused)
-            {
-                logger.LogInformation(
-                    "Strategy loss did not trigger pause because recent PnL is non-negative or recent settled count is too low. Strategy={StrategyCode} RecentPnlUsd={RecentPnlUsd} RecentSettledCount={RecentSettledCount}",
-                    strategyCode,
-                    decision.RecentPnlUsd,
-                    decision.RecentSettledCount);
-                return;
-            }
-
-            logger.LogWarning(
-                "Strategy paused after loss. Strategy={StrategyCode} RecentPnlUsd={RecentPnlUsd} RecentSettledCount={RecentSettledCount} PausedUntilUtc={PausedUntilUtc}",
-                strategyCode,
-                decision.RecentPnlUsd,
-                decision.RecentSettledCount,
-                decision.PausedUntilUtc);
-        }
-        catch (OperationCanceledException)
-        {
-            throw;
-        }
-        catch (Exception ex)
-        {
-            logger.LogError(ex, "Failed to apply strategy pause after loss. Strategy={StrategyCode}", strategyCode);
-            await TryRecordApiErrorAsync("PauseStrategyAfterLoss", ex.Message, cancellationToken);
-        }
+        logger.LogInformation(
+            "Automatic strategy pause after loss is disabled. Strategy={StrategyCode} StrategyId={StrategyId} RealizedPnlUsd={RealizedPnlUsd}",
+            strategyCode,
+            StrategyIds.Normalize(strategyId),
+            realizedPnl);
+        return Task.CompletedTask;
     }
 
     private async Task TryRecordApiErrorAsync(

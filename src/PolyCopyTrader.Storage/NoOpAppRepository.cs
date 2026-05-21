@@ -230,16 +230,6 @@ public sealed class NoOpAppRepository : IAppRepository
         return Task.FromResult(false);
     }
 
-    public Task<StrategyPauseDecision> PauseStrategyAfterLossIfRecentPnlNegativeAsync(
-        Guid strategyId,
-        DateTimeOffset lookbackStartUtc,
-        DateTimeOffset pauseUntilUtc,
-        DateTimeOffset updatedAtUtc,
-        CancellationToken cancellationToken = default)
-    {
-        return Task.FromResult(new StrategyPauseDecision(false, 0m, 0, lookbackStartUtc, null));
-    }
-
     public Task<bool> SetStrategyStakeAmountsAsync(
         Guid strategyId,
         decimal paperStakeAmount,

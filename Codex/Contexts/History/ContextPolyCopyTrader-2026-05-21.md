@@ -99,3 +99,10 @@ Request:
 
 Result:
 Monitored production read-only after the second deploy. Confirmed `PolyCopyTrader.Service` is running on `info=1.0.0+841e8aaeba363e65f6daed2615dcd80f1d880bb6` from `2026-05-21T15:35:20Z`; both BTC 5m Maker strategies are enabled, not paused, and Paper-only. There are no matching API errors after the service start. Completed market `btc-updown-5m-1779377700` created `6` Maker Paper orders: `1` Down order filled at `2026-05-21T15:38:18Z`, and `5` orders expired. The next market `btc-updown-5m-1779378000` was already creating Up Maker orders; by `2026-05-21T15:42:21Z`, `4` Up orders existed and `1` filled at `2026-05-21T15:41:24Z`. Generated `outputs/maker-market-report/btc-updown-5m-1779377700-maker-report.html` plus CSV exports. No manual DB writes, live order submission, cancel action, or service restart was performed.
+
+## 2026-05-21T16:09:16.6115521Z
+Request:
+Отмени постановку стратегий на паузу, пусть идёт как идёт
+
+Result:
+Removed automatic strategy pausing after losing settlements. BTC 5m, generic Paper, and Live settlement paths now log that automatic strategy pause is disabled and no longer write `strategies.paused=true`. Removed the repository auto-pause API and `StrategyPauseDecision`, updated tests/docs, and added schema startup cleanup for legacy timed pauses (`paused=true` with `paused_until_utc IS NOT NULL`) while leaving manual Dashboard pauses intact. Production was checked read-only and currently has timed paused rows that will be cleared after deploying/restarting this build; no manual DB writes, service restart, live order submission, or cancel action was performed. Verification passed: targeted tests `158/158`, full tests `518/518`, and `git diff --check` with LF/CRLF warnings only.

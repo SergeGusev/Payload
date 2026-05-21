@@ -1,3 +1,16 @@
+## Active Update 2026-05-21 Disable Strategy Auto-Pause
+Goal: Stop automatically pausing strategies after losing settlements and let strategy execution continue unless paused manually.
+Status: Completed
+Done:
+- Removed the repository auto-pause API `PauseStrategyAfterLossIfRecentPnlNegativeAsync` and the unused `StrategyPauseDecision` model.
+- Changed BTC 5m strategy settlement, generic Paper settlement, and Live settlement handling so losing settlements only log that automatic strategy pause is disabled; they no longer write `strategies.paused=true`.
+- Added startup schema cleanup that clears legacy timed pauses where `paused=true` and `paused_until_utc IS NOT NULL`, while leaving manual Dashboard pauses (`paused_until_utc` null) intact.
+- Updated tests and docs to describe manual-only strategy pauses.
+- Checked production read-only and confirmed there are existing timed pauses in `strategies`; those will be cleared by schema initialization after this build is deployed/restarted.
+Next: Publish/restart the service so the no-auto-pause code and timed-pause cleanup run in production.
+Notes: Verification passed: targeted `dotnet test tests\PolyCopyTrader.Tests\PolyCopyTrader.Tests.csproj --no-restore --filter "FullyQualifiedName~BtcUpDown5mPaperStrategyProcessorTests|FullyQualifiedName~StorageTests"` passed `158/158`; full `dotnet test tests\PolyCopyTrader.Tests\PolyCopyTrader.Tests.csproj --no-restore` passed `518/518`; `git diff --check` passed with LF/CRLF warnings only. Production checks were SELECT-only; no manual DB writes, service restart, live order submission, or cancel action was performed.
+Blockers: Running production service is still on `841e8aa` until the new commit is published and restarted.
+
 ## Active Update 2026-05-21 BTC 5m Maker Post-Fix Deploy Check
 Goal: Verify that the restarted production service on the FK fix commit creates and fills BTC 5m Maker Paper orders.
 Status: Completed

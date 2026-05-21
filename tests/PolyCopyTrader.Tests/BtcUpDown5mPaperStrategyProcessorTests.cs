@@ -2426,9 +2426,8 @@ public sealed class BtcUpDown5mPaperStrategyProcessorTests
         Assert.Equal(0m, updatedRun.SettlementPrice);
         Assert.Equal(-1m, updatedRun.RealizedPnlUsd);
         var settings = repository.StrategySettings[Less60Variant.Id];
-        Assert.True(settings.Paused);
-        Assert.NotNull(settings.PausedUntilUtc);
-        Assert.True(settings.PausedUntilUtc > DateTimeOffset.UtcNow.AddHours(11));
+        Assert.False(settings.Paused);
+        Assert.Null(settings.PausedUntilUtc);
 
         var settlement = Assert.Single(repository.PaperPositionSettlements);
         Assert.False(settlement.Won);
@@ -2437,7 +2436,7 @@ public sealed class BtcUpDown5mPaperStrategyProcessorTests
     }
 
     [Fact]
-    public async Task ProcessAsync_DoesNotPauseStrategyAfterSingleSettledLoss()
+    public async Task ProcessAsync_DoesNotPauseStrategyAfterSettledLoss()
     {
         var now = DateTimeOffset.UtcNow;
         var repository = new TestAppRepository();
