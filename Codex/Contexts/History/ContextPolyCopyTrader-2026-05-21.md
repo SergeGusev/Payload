@@ -18,3 +18,10 @@ Request:
 
 Result:
 Checked production PostgreSQL read-only on host `192.168.0.101`. Confirmed Service is `Running`/`Live` on build `info=1.0.0+229ce8ec60e523e95fe833a3ad8071874b43229e`, both Maker strategies are enabled and actively writing skipped `strategy_market_paper_runs`, but Paper orders are `0`. Root cause: every new-maximum Maker candidate was skipped, mostly by the global `opposite_outcome_open_order` guard because other BTC 5m Paper BUY orders already existed on the opposite outcome for the same condition; remaining candidates were skipped as `maker_expiration_elapsed` because the new max arrived after `market_end_utc - 60s`. No DB writes, service restart, live order submission, cancel action, or source-code changes were performed.
+
+## 2026-05-21T03:32:17.0476056Z
+Request:
+Не понимаю. Если BTC Up or Down 5m Up Maker блокируется текущими ставками, значит должен ставится BTC Up or Down 5m Down Maker и наоборот.
+
+Result:
+Clarified with production DB examples that Maker sides are independently edge-triggered and do not switch to the opposite side when one side is blocked. On `btc-updown-5m-1779333600`, Up Maker had `19` new-max attempts from best ask `0.66` to `0.99`, all blocked by a Down Paper BUY from `btc_up_down_5m_binance_15s`, while Down Maker had `0` new-max events. On `btc-updown-5m-1779333300`, Up Maker was blocked by Down Paper BUY orders around `03:15-03:16Z`; Down Maker only got new maxima at `03:19:44Z`, `03:19:47Z`, and `03:19:54Z`, after the `03:19:00Z` Maker cutoff, so it skipped as `maker_expiration_elapsed`. No DB writes, service restart, live order submission, cancel action, or source-code changes were performed.

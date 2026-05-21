@@ -1,3 +1,15 @@
+## Active Update 2026-05-21 BTC 5m Maker Blocking Clarification
+Goal: Clarify why the opposite Maker side did not place when one Maker side was blocked by an opposite open order.
+Status: Completed
+Done:
+- Verified production DB examples read-only and confirmed Maker strategies are edge-triggered independently: each side only attempts an order when that side's own best ask makes a new maximum after baseline.
+- Confirmed a concrete market example `btc-updown-5m-1779333600`: Up Maker had `19` new-max attempts from best ask `0.66` through `0.99`, all blocked by an existing Down Paper BUY from `btc_up_down_5m_binance_15s`; Down Maker had `0` new-max events for that market, so there was no Down Maker order to place.
+- Confirmed a reversal example `btc-updown-5m-1779333300`: Up Maker was blocked by Down Paper BUY orders at `03:15:29Z`, `03:16:05Z`, and `03:16:08Z`; Down Maker only got its own new maxima at `03:19:44Z`, `03:19:47Z`, and `03:19:54Z`, after the Maker GTD cutoff `03:19:00Z`, so it skipped as `maker_expiration_elapsed`.
+- Clarified that current final statuses of blocker orders may now show `Filled` or `Expired`; the Maker skip decision used the exposure snapshot at the earlier decision time when the order was still blocking.
+Next: If Maker should actually test both directions regardless of other Paper strategy orders, change the guard policy for Maker instead of expecting the opposite Maker side to naturally fire.
+Notes: Read-only production DB diagnostics only. No DB writes, service restart, live order submission, cancel action, or source-code changes. `git pull --ff-only` was already up to date.
+Blockers: None.
+
 ## Active Update 2026-05-21 BTC 5m Maker Zero Orders Diagnosis
 Goal: Explain why `BTC Up or Down 5m Up Maker` and `BTC Up or Down 5m Down Maker` created no Paper orders after deploy.
 Status: Completed
