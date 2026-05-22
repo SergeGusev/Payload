@@ -1,3 +1,15 @@
+## Active Update 2026-05-22 Dashboard Recent Live Filter Auto Pause
+Goal: Make `Live only` on the `24 hours`, `6 hours`, and `1 hour` Dashboard tabs keep strategies whose raw Live flag is enabled even when Auto Live Pause is active.
+Status: Completed
+Done:
+- Changed `GetStrategyRecentPerformanceAsync` so recent strategy rows expose raw `strategies.live_stakes` to Dashboard filters instead of `live_stakes AND NOT auto_live_paused`.
+- Kept recent live skipped/ignored Paper-derived metrics gated by `effective_live_stakes`, so auto-live-paused strategies remain visible under `Live only` without counting Paper skips as active Live skips.
+- Updated `TestAppRepository` to mirror the same raw Live flag behavior for recent rows.
+- Added regression tests for the PostgreSQL query shape and for auto-live-paused recent rows keeping `LiveStakes=true` while live skip counts stay zero.
+Next: Deploy/restart Dashboard/service binaries so the recent tabs read the corrected recent performance rows.
+Notes: Verification passed: focused `StrategyPerformanceTests|StorageTests` `31/31`, full solution tests `537/537`, Release Dashboard build succeeded, and `git diff --check` passed with LF/CRLF warnings only. A Debug Dashboard build attempt failed only because the currently running Dashboard/Visual Studio locked Debug output DLLs.
+Blockers: None.
+
 ## Active Update 2026-05-22 BTC Skip Bps Streak Diagnostics
 Goal: Add persistent diagnostics for identical BTC 5m outcome streak length and maximum accumulated bps.
 Status: Completed

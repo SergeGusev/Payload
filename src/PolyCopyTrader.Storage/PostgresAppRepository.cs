@@ -1974,7 +1974,7 @@ LIMIT @Limit;
 		await using NpgsqlConnection connection = await OpenConnectionAsync(cancellationToken);
 		await using NpgsqlCommand command = CreateCommand(connection, """
 WITH selected_strategies AS (
-    SELECT id, code, name, live_stakes AND NOT auto_live_paused AS live_stakes
+    SELECT id, code, name, live_stakes, auto_live_paused, live_stakes AND NOT auto_live_paused AS effective_live_stakes
     FROM strategies
     ORDER BY
         CASE WHEN code = 'follow_leader' THEN 0 ELSE 1 END,
@@ -1995,6 +1995,7 @@ strategy_windows AS (
         strategy.code,
         strategy.name,
         strategy.live_stakes,
+        strategy.effective_live_stakes,
         window_row.window_label,
         window_row.window_hours,
         window_row.window_start_utc,
@@ -2293,19 +2294,19 @@ SELECT
         ELSE 0
     END AS roi_pct,
     COALESCE(live_order_agg.live_settled_orders_count, 0) AS live_settled_orders_count,
-    CASE WHEN sw.live_stakes THEN COALESCE(run_agg.live_condition_skipped_orders_count, 0) ELSE 0 END
-        + CASE WHEN sw.live_stakes THEN COALESCE(run_agg.live_technical_skipped_orders_count, 0) ELSE 0 END
-        + CASE WHEN sw.live_stakes THEN COALESCE(run_agg.live_ignored_gtd_unfilled_count, 0) ELSE 0 END
+    CASE WHEN sw.effective_live_stakes THEN COALESCE(run_agg.live_condition_skipped_orders_count, 0) ELSE 0 END
+        + CASE WHEN sw.effective_live_stakes THEN COALESCE(run_agg.live_technical_skipped_orders_count, 0) ELSE 0 END
+        + CASE WHEN sw.effective_live_stakes THEN COALESCE(run_agg.live_ignored_gtd_unfilled_count, 0) ELSE 0 END
         + COALESCE(live_order_agg.live_technical_skipped_orders_count, 0)
         + COALESCE(live_order_agg.live_ignored_cancelled_orders_count, 0)
         + COALESCE(live_order_agg.live_ignored_rejected_orders_count, 0) AS live_skipped_orders_count,
-    CASE WHEN sw.live_stakes THEN COALESCE(run_agg.live_condition_skipped_orders_count, 0) ELSE 0 END AS live_condition_skipped_orders_count,
-    CASE WHEN sw.live_stakes THEN COALESCE(run_agg.live_technical_skipped_orders_count, 0) ELSE 0 END
+    CASE WHEN sw.effective_live_stakes THEN COALESCE(run_agg.live_condition_skipped_orders_count, 0) ELSE 0 END AS live_condition_skipped_orders_count,
+    CASE WHEN sw.effective_live_stakes THEN COALESCE(run_agg.live_technical_skipped_orders_count, 0) ELSE 0 END
         + COALESCE(live_order_agg.live_technical_skipped_orders_count, 0) AS live_technical_skipped_orders_count,
-    CASE WHEN sw.live_stakes THEN COALESCE(run_agg.live_ignored_gtd_unfilled_count, 0) ELSE 0 END
+    CASE WHEN sw.effective_live_stakes THEN COALESCE(run_agg.live_ignored_gtd_unfilled_count, 0) ELSE 0 END
         + COALESCE(live_order_agg.live_ignored_cancelled_orders_count, 0)
         + COALESCE(live_order_agg.live_ignored_rejected_orders_count, 0) AS live_ignored_orders_count,
-    CASE WHEN sw.live_stakes THEN COALESCE(run_agg.live_ignored_gtd_unfilled_count, 0) ELSE 0 END AS live_ignored_gtd_unfilled_count,
+    CASE WHEN sw.effective_live_stakes THEN COALESCE(run_agg.live_ignored_gtd_unfilled_count, 0) ELSE 0 END AS live_ignored_gtd_unfilled_count,
     COALESCE(live_order_agg.live_ignored_cancelled_orders_count, 0) AS live_ignored_cancelled_orders_count,
     COALESCE(live_order_agg.live_ignored_rejected_orders_count, 0) AS live_ignored_rejected_orders_count,
     COALESCE(live_order_agg.live_won_orders_count, 0) AS live_won_orders_count,

@@ -497,6 +497,25 @@ public sealed class StorageTests
     }
 
     [Fact]
+    public void PostgresRepository_StrategyRecentPerformanceKeepsRawLiveFlagForDashboardFilter()
+    {
+        var source = ReadStorageRepositorySource();
+        var start = source.IndexOf("GetStrategyRecentPerformanceAsync", StringComparison.Ordinal);
+        Assert.True(start >= 0);
+
+        var end = source.IndexOf("GetStrategyEnabledStatesAsync", start, StringComparison.Ordinal);
+        Assert.True(end > start);
+
+        var method = source[start..end];
+        Assert.Contains(
+            "SELECT id, code, name, live_stakes, auto_live_paused, live_stakes AND NOT auto_live_paused AS effective_live_stakes",
+            method,
+            StringComparison.Ordinal);
+        Assert.Contains("sw.live_stakes,", method, StringComparison.Ordinal);
+        Assert.Contains("CASE WHEN sw.effective_live_stakes", method, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task TestRepository_StrategyAutoLivePauseDisablesLiveOnlyWhenRecentPnlNegative()
     {
         var now = DateTimeOffset.UtcNow;

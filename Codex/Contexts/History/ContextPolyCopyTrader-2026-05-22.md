@@ -141,3 +141,10 @@ Add diagnostics for the count of consecutive identical BTC 5m outcomes and the m
 
 Result:
 Added persistent `btc_up_down_5m_result_streak_diagnostics` rows for the shared Skip bps cumulative streak calculation. Each target market now upserts one row keyed by `market_id` with `close_book_streak_result_count`, `cumulative_move_market_count`, latest/cumulative signed and absolute bps, streak outcome, selected opposite outcome, rejection/truncation reasons, and compact JSON details. Updated repository support, test repository, schema assertions, BTC processor tests, README, and configuration reference. Verification passed: focused BTC+Storage tests `170/170`, full solution tests `535/535`, and `git diff --check` passed with LF/CRLF warnings only. No production DB write, service restart, live order submission, or cancel action was performed.
+
+## 2026-05-22T14:27:14.9343415Z
+Request:
+Галочка Live only корректно работает на вкладке All. А на 24 часа, 6 часов и час работает по-старому - прячет стратегии, которые на автопаузе
+
+Result:
+Fixed recent Dashboard strategy rows so `Live only` on `24 hours`, `6 hours`, and `1 hour` uses the raw `strategies.live_stakes` flag instead of effective `live_stakes AND NOT auto_live_paused`. Recent live skipped/ignored Paper-derived counters still use effective live stakes, so auto-live-paused strategies remain visible without being counted as active Live skipped orders. Updated the test repository and added regression tests for PostgreSQL source shape and auto-live-paused recent rows. Verification passed: focused `StrategyPerformanceTests|StorageTests` `31/31`, full solution tests `537/537`, Release Dashboard build succeeded, and `git diff --check` passed with LF/CRLF warnings only. Debug Dashboard build was blocked by the currently running Dashboard/Visual Studio locking Debug output DLLs.

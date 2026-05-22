@@ -578,6 +578,55 @@ public sealed class StrategyPerformanceTests
         Assert.Equal("btc_reference_move_below_bps_threshold:1", row.TopSkipReason);
     }
 
+    [Fact]
+    public async Task GetStrategyRecentPerformanceAsync_KeepsRawLiveFlagWhenAutoLivePaused()
+    {
+        var repository = new TestAppRepository();
+        var now = DateTimeOffset.UtcNow;
+        var variant = StrategyIds.GetBtcUpDown5mVariant(BtcUpDown5mStrategyDirection.More, 90);
+        repository.StrategySettings[variant.Id] = StrategyRuntimeSettings.Default(variant.Id) with
+        {
+            LiveStakes = true,
+            AutoLivePaused = true
+        };
+        repository.StrategyMarketPaperRuns.Add(new StrategyMarketPaperRun(
+            Guid.NewGuid(),
+            variant.Id,
+            "market-auto-live-paused",
+            "condition-auto-live-paused",
+            "btc-updown-5m-auto-live-paused",
+            "BTC Up or Down 5m",
+            "Crypto",
+            now.AddMinutes(-10),
+            now.AddMinutes(-5),
+            now.AddMinutes(-10),
+            now.AddMinutes(-9),
+            StrategyMarketPaperRunStatuses.Skipped,
+            null,
+            null,
+            null,
+            0m,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            "btc_reference_move_below_bps_threshold",
+            now.AddMinutes(-10),
+            now.AddMinutes(-9)));
+
+        var row = (await repository.GetStrategyRecentPerformanceAsync())
+            .Single(item => item.StrategyId == variant.Id && item.Window == "1h");
+
+        Assert.True(row.LiveStakes);
+        Assert.Equal(1, row.SkippedRunsCount);
+        Assert.Equal(0, row.LiveSkippedOrdersCount);
+        Assert.Equal(0, row.LiveConditionSkippedOrdersCount);
+    }
+
     private static void AddSettlement(
         TestAppRepository repository,
         DateTimeOffset settledAtUtc,
