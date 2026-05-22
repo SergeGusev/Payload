@@ -1,3 +1,10 @@
+## 2026-05-22T19:33:28.6259191Z
+Request:
+Ок, запустил ещё раз, следи
+
+Result:
+Monitored production PostgreSQL read-only after restart. The indexed retry succeeded: `20260522_rescale_updown_bps_history_reset` completed at `2026-05-22T19:30:27Z`, `20260522_rescale_middle_bps_history_reset` completed at `2026-05-22T19:31:41Z`, and service heartbeat is fresh on build `9595145` with empty `last_error`. Strategy rows are renamed/reset: updown bps has `400` rows, `400` enabled, `0` live, `0` auto-live-paused, `0` legacy codes/names; middle bps has `90` rows, `0` enabled, `0` live, `0` auto-live-paused, `0` legacy codes/names. Feeds and strategy runs resumed; no active live orders or recent API/HTTP errors were found. No production writes or order actions were performed by Codex.
+
 ## 2026-05-22T19:21:25.8503942Z
 Request:
 Ок, отмени

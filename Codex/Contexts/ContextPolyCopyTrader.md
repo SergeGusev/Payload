@@ -1,3 +1,17 @@
+## Active Update 2026-05-22 Production Rescale Migration Success
+Goal: Monitor the second production restart after adding FK-support indexes for the bps reset migration.
+Status: Completed
+Done:
+- Queried production PostgreSQL read-only while the service restarted from the new build.
+- Confirmed the heavy updown reset migration completed quickly and inserted marker `20260522_rescale_updown_bps_history_reset` at `2026-05-22T19:30:27Z` with cleanup counts: `400` strategies, `66077` paper orders, `35692` fills, `349358` strategy runs, `688` live orders, `691` shadow decisions, `69995` signals, `35752` paper positions, `35674` position settlements.
+- Confirmed the Middle reset migration completed and inserted marker `20260522_rescale_middle_bps_history_reset` at `2026-05-22T19:31:41Z` with cleanup counts: `90` strategies, `86581` paper orders, `4517` fills, `102510` strategy runs, `109133` signals, `4444` paper positions, `4444` position settlements.
+- Confirmed service is now running build `info=1.0.0+95951458e3282923a4cdbb4bd59de42cb1a416fe`, started `2026-05-22T19:31:41Z`, with fresh heartbeat and empty `last_error`.
+- Confirmed bps rows are renamed/reset: `updown_bps` has `400` total, `400` enabled, `0` live, `0` auto-live-paused, `0` legacy codes/names; `middle_bps` has `90` total, `0` enabled, `0` live, `0` auto-live-paused, `0` legacy codes/names.
+- Confirmed active feeds resumed: BTC odds, crypto odds, arbitrage scans, and strategy runs were fresh; no active live orders and no API/HTTP errors appeared in the checked recent window.
+Next: None until the user asks for further production monitoring or re-enables selected Live strategies.
+Notes: Read-only verification only. No production rows, strategy flags, orders, cancels, or source behavior were changed by Codex during monitoring. No source tests were run because no code changed in this task.
+Blockers: None.
+
 ## Active Update 2026-05-22 Cancel Stuck Production Migration
 Goal: Cancel the stuck production bps reset migration backend after the service was stopped.
 Status: Completed
