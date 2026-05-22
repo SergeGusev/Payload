@@ -355,14 +355,13 @@ public interface IAppRepository
         return Task.FromResult(false);
     }
 
-    Task<StrategyPauseDecision> PauseStrategyAfterLossIfRecentPnlNegativeAsync(
+    Task<StrategyAutoLivePauseDecision> UpdateStrategyAutoLivePauseFromRecentPnlAsync(
         Guid strategyId,
         DateTimeOffset lookbackStartUtc,
-        DateTimeOffset pauseUntilUtc,
         DateTimeOffset updatedAtUtc,
         CancellationToken cancellationToken = default)
     {
-        return Task.FromResult(new StrategyPauseDecision(false, 0m, 0, lookbackStartUtc, null));
+        return Task.FromResult(new StrategyAutoLivePauseDecision(false, false, false, 0m, 0, lookbackStartUtc));
     }
 
     Task<bool> SetStrategyStakeAmountsAsync(

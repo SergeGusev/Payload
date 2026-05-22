@@ -117,7 +117,7 @@ public sealed class SignalProcessor(
                         await repository.AddDryRunOrderAsync(ToDryRunOrder(signal, trade, dryRunPrice, dryRunSizeShares, result), cancellationToken);
                     }
 
-                    if (botOptions.Mode == BotMode.Live && followLeaderSettings.LiveStakes)
+                    if (botOptions.Mode == BotMode.Live && followLeaderSettings.EffectiveLiveStakes)
                     {
                         liveOrdersSubmitted += await TryPlaceLiveOrderAsync(signal, trade, followLeaderSettings, cancellationToken) ? 1 : 0;
                     }

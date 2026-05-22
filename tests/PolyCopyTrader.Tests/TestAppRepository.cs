@@ -1151,19 +1151,20 @@ internal sealed class TestAppRepository : IAppRepository
             var liveOrders = LiveOrders
                 .Where(order => StrategyIds.Normalize(order.StrategyId) == strategy.Id)
                 .ToArray();
-            var liveConditionSkipped = strategy.Settings.LiveStakes
+            var effectiveLiveStakes = strategy.Settings.EffectiveLiveStakes;
+            var liveConditionSkipped = effectiveLiveStakes
                 ? runs.Count(run =>
                     string.Equals(run.Status, StrategyMarketPaperRunStatuses.Skipped, StringComparison.OrdinalIgnoreCase) &&
                     IsLiveConditionSkipReason(run.SkipReason))
                 : 0;
-            var liveTechnicalSkipped = (strategy.Settings.LiveStakes
+            var liveTechnicalSkipped = (effectiveLiveStakes
                     ? runs.Count(run =>
                         string.Equals(run.Status, StrategyMarketPaperRunStatuses.Skipped, StringComparison.OrdinalIgnoreCase) &&
                         !IsLiveConditionSkipReason(run.SkipReason) &&
                         !IsLiveIgnoredSkipReason(run.SkipReason))
                     : 0) +
                 liveOrders.Count(order => order.Status == LiveOrderStatus.PreflightRejected);
-            var liveIgnoredGtdUnfilled = strategy.Settings.LiveStakes
+            var liveIgnoredGtdUnfilled = effectiveLiveStakes
                     ? runs.Count(run =>
                         string.Equals(run.Status, StrategyMarketPaperRunStatuses.Skipped, StringComparison.OrdinalIgnoreCase) &&
                         IsLiveIgnoredSkipReason(run.SkipReason))
@@ -1204,6 +1205,7 @@ internal sealed class TestAppRepository : IAppRepository
                 strategy.Name,
                 strategy.Settings.Enabled,
                 strategy.Settings.LiveStakes,
+                strategy.Settings.AutoLivePaused,
                 strategy.Settings.Paused,
                 strategy.Settings.PausedUntilUtc,
                 strategy.Settings.PaperStakeAmount,
@@ -1352,14 +1354,15 @@ internal sealed class TestAppRepository : IAppRepository
                 var liveCreatedInWindow = liveOrders
                     .Where(order => order.CreatedAtUtc >= window.StartUtc && order.CreatedAtUtc <= now)
                     .ToArray();
-                var liveConditionSkipped = strategy.Settings.LiveStakes
+                var effectiveLiveStakes = strategy.Settings.EffectiveLiveStakes;
+                var liveConditionSkipped = effectiveLiveStakes
                     ? skippedRuns.Count(run => IsLiveConditionSkipReason(run.SkipReason))
                     : 0;
-                var liveTechnicalSkipped = (strategy.Settings.LiveStakes
+                var liveTechnicalSkipped = (effectiveLiveStakes
                         ? skippedRuns.Count(run => !IsLiveConditionSkipReason(run.SkipReason) && !IsLiveIgnoredSkipReason(run.SkipReason))
                         : 0) +
                     liveCreatedInWindow.Count(order => order.Status == LiveOrderStatus.PreflightRejected);
-                var liveIgnoredGtdUnfilled = strategy.Settings.LiveStakes
+                var liveIgnoredGtdUnfilled = effectiveLiveStakes
                         ? skippedRuns.Count(run => IsLiveIgnoredSkipReason(run.SkipReason))
                         : 0;
                 var liveIgnoredCancelled = liveCreatedInWindow.Count(IsLiveIgnoredCancelledOrder);
@@ -1401,7 +1404,7 @@ internal sealed class TestAppRepository : IAppRepository
                     strategy.Id,
                     strategy.Code,
                     strategy.Name,
-                    strategy.Settings.LiveStakes,
+                    strategy.Settings.EffectiveLiveStakes,
                     window.Label,
                     window.Hours,
                     window.StartUtc,
@@ -1517,10 +1520,9 @@ internal sealed class TestAppRepository : IAppRepository
         return Task.FromResult(true);
     }
 
-    public Task<StrategyPauseDecision> PauseStrategyAfterLossIfRecentPnlNegativeAsync(
+    public Task<StrategyAutoLivePauseDecision> UpdateStrategyAutoLivePauseFromRecentPnlAsync(
         Guid strategyId,
         DateTimeOffset lookbackStartUtc,
-        DateTimeOffset pauseUntilUtc,
         DateTimeOffset updatedAtUtc,
         CancellationToken cancellationToken = default)
     {
@@ -1547,22 +1549,33 @@ internal sealed class TestAppRepository : IAppRepository
         var followLeaderPaperPnl = followLeaderPaperSettlements.Sum(settlement => settlement.RealizedPnlUsd);
         var recentPnl = paperRunPnl + livePnl + followLeaderPaperPnl;
         var recentSettledCount = paperRunSettlements.Length + liveSettlements.Length + followLeaderPaperSettlements.Length;
+        var existingSettings = GetStrategySettings(normalizedStrategyId);
+        var nextAutoLivePaused = existingSettings.AutoLivePaused;
         if (recentPnl < 0m && recentSettledCount > 1)
         {
-            var existingSettings = GetStrategySettings(normalizedStrategyId);
-            var effectivePauseUntilUtc = existingSettings.Paused && existingSettings.PausedUntilUtc is null
-                ? null
-                : Max(existingSettings.PausedUntilUtc, pauseUntilUtc);
-            StrategySettings[normalizedStrategyId] = existingSettings with
-            {
-                Paused = true,
-                PausedUntilUtc = effectivePauseUntilUtc
-            };
-
-            return Task.FromResult(new StrategyPauseDecision(true, recentPnl, recentSettledCount, lookbackStartUtc, effectivePauseUntilUtc));
+            nextAutoLivePaused = true;
+        }
+        else if (recentPnl > 0m && recentSettledCount > 0)
+        {
+            nextAutoLivePaused = false;
         }
 
-        return Task.FromResult(new StrategyPauseDecision(false, recentPnl, recentSettledCount, lookbackStartUtc, null));
+        var changed = nextAutoLivePaused != existingSettings.AutoLivePaused;
+        if (changed)
+        {
+            StrategySettings[normalizedStrategyId] = existingSettings with
+            {
+                AutoLivePaused = nextAutoLivePaused
+            };
+        }
+
+        return Task.FromResult(new StrategyAutoLivePauseDecision(
+            nextAutoLivePaused,
+            changed && !nextAutoLivePaused,
+            changed,
+            recentPnl,
+            recentSettledCount,
+            lookbackStartUtc));
     }
 
     public Task<bool> SetStrategyStakeAmountsAsync(
@@ -1586,11 +1599,6 @@ internal sealed class TestAppRepository : IAppRepository
             LiveStakeAmount = liveStakeAmount
         };
         return Task.FromResult(true);
-    }
-
-    private static DateTimeOffset? Max(DateTimeOffset? currentValue, DateTimeOffset candidate)
-    {
-        return currentValue is { } value && value > candidate ? value : candidate;
     }
 
     public Task<bool> SetStrategyLiveAvailableBalanceAsync(

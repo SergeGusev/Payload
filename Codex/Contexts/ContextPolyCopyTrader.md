@@ -1,3 +1,18 @@
+## Active Update 2026-05-22 Auto Live Pause Policy
+Goal: Change automatic strategy pausing so it pauses only Live betting indefinitely, keeps Paper running, and resumes Live when 12-hour strategy PnL turns positive.
+Status: Completed
+Done:
+- Added `strategies.auto_live_paused` and modeled it as separate from manual `strategies.paused`; manual `Paused` still skips Paper and Live, while automatic pause suppresses only effective Live entries.
+- Replaced the old 12-hour timed `PauseStrategyAfterLossIfRecentPnlNegativeAsync` flow with `UpdateStrategyAutoLivePauseFromRecentPnlAsync`.
+- Auto policy now evaluates after every Paper/Live settlement: set `auto_live_paused=true` when recent 12-hour settled count is greater than 1 and PnL is negative; clear it when recent 12-hour PnL is positive.
+- Updated BTC strategy, Follow leader signal processing, live settlement, and paper settlement paths to use `EffectiveLiveStakes = LiveStakes && !AutoLivePaused`.
+- Dashboard now shows read-only `Auto Live Pause`, uses effective Live state for Live-only filters/readiness, and exports the flag to CSV.
+- Added/updated regression tests for auto Live pause, resume, and Paper continuing without live-shadow orders while auto-paused.
+- Updated README and configuration reference.
+Next: Deploy/restart service and Dashboard so schema initialization adds `auto_live_paused` and the new runtime gate is active.
+Notes: `dotnet test tests\PolyCopyTrader.Tests\PolyCopyTrader.Tests.csproj --no-restore --filter "FullyQualifiedName~StorageTests|FullyQualifiedName~BtcUpDown5mPaperStrategyProcessorTests"` passed 165/165. `dotnet test PolyCopyTrader.sln --no-restore` passed 530/530. `dotnet build src\PolyCopyTrader.Dashboard\PolyCopyTrader.Dashboard.csproj --no-restore` passed with 0 warnings and 0 errors. `git diff --check` passed with LF/CRLF warnings only.
+Blockers: None.
+
 ## Active Update 2026-05-22 Binance Direction Behavior Answer
 Goal: Confirm whether current Binance strategies select Up when Binance is above market start and Down when below.
 Status: Completed

@@ -221,6 +221,7 @@ public sealed partial class StrategyPerformanceRow : ObservableObject
         string name,
         bool enabled,
         bool liveStakes,
+        bool autoLivePaused,
         bool paused,
         string pausedUntilUtc,
         decimal paperStakeAmount,
@@ -282,6 +283,7 @@ public sealed partial class StrategyPerformanceRow : ObservableObject
         Name = name;
         this.enabled = enabled;
         this.liveStakes = liveStakes;
+        AutoLivePaused = autoLivePaused;
         this.paused = paused;
         PausedUntilUtc = pausedUntilUtc;
         this.paperStakeAmount = paperStakeAmount;
@@ -349,6 +351,8 @@ public sealed partial class StrategyPerformanceRow : ObservableObject
 
     [ObservableProperty]
     private bool liveStakes;
+
+    public bool AutoLivePaused { get; }
 
     [ObservableProperty]
     private bool paused;

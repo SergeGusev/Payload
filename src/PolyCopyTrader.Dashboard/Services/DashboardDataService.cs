@@ -297,7 +297,7 @@ public sealed class DashboardDataService(
             new OverviewMetric("Dashboard scope", "Strategies only"),
             new OverviewMetric("Strategies", strategies.Count.ToString(System.Globalization.CultureInfo.InvariantCulture)),
             new OverviewMetric("Recent strategy rows", recentStrategies.Count.ToString(System.Globalization.CultureInfo.InvariantCulture)),
-            new OverviewMetric("Live strategies", strategies.Count(item => item.LiveStakes).ToString(System.Globalization.CultureInfo.InvariantCulture))
+            new OverviewMetric("Live strategies", strategies.Count(IsEffectiveLiveStrategy).ToString(System.Globalization.CultureInfo.InvariantCulture))
         ];
     }
 
@@ -309,7 +309,7 @@ public sealed class DashboardDataService(
         string? controlStatusError)
     {
         var enabledStrategies = strategies.Count(item => item.Enabled);
-        var liveStrategies = strategies.Count(item => item.LiveStakes);
+        var liveStrategies = strategies.Count(IsEffectiveLiveStrategy);
         var windows = recentStrategies
             .GroupBy(item => item.Window, StringComparer.OrdinalIgnoreCase)
             .OrderBy(group => group.Key, StringComparer.OrdinalIgnoreCase)
@@ -521,7 +521,7 @@ public sealed class DashboardDataService(
             item.CreatedAtUtc >= now.AddDays(-1) &&
             item.ReasonCode.Contains("daily_loss", StringComparison.OrdinalIgnoreCase));
         var latestGeoblock = LatestEvent(liveTradingEvents, "StartupGeoblockCheck");
-        var liveEnabledStrategies = strategies.Where(item => item.LiveStakes).ToArray();
+        var liveEnabledStrategies = strategies.Where(IsEffectiveLiveStrategy).ToArray();
         var fundedLiveStrategies = liveEnabledStrategies
             .Count(item => item.LiveStakeAmount > 0m && item.LiveAvailableBalance >= item.LiveStakeAmount);
         var marketData = marketDataStatuses.FirstOrDefault(item => item.Component == "PolymarketMarketWebSocket")
@@ -941,6 +941,7 @@ public sealed class DashboardDataService(
             performance.Name,
             performance.Enabled,
             performance.LiveStakes,
+            performance.AutoLivePaused,
             performance.Paused,
             FormatDate(performance.PausedUntilUtc),
             performance.PaperStakeAmount,
@@ -1259,6 +1260,11 @@ public sealed class DashboardDataService(
     private static LiveReadinessRow Gate(string gate, string value, bool passed, string details)
     {
         return new LiveReadinessRow(gate, value, passed ? "OK" : "Blocked", details);
+    }
+
+    private static bool IsEffectiveLiveStrategy(StrategyPerformance strategy)
+    {
+        return strategy.LiveStakes && !strategy.AutoLivePaused;
     }
 
     private static LiveReadinessRow BuildGeoblockReadinessRow(LiveTradingEvent? latestGeoblock)

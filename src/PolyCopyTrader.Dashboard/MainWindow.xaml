@@ -323,6 +323,7 @@
                                 </DataTemplate>
                             </DataGridTemplateColumn.CellTemplate>
                         </DataGridTemplateColumn>
+                        <DataGridCheckBoxColumn Header="Auto Live Pause" Binding="{Binding AutoLivePaused}" SortMemberPath="AutoLivePaused" IsReadOnly="True" Width="110" />
                         <DataGridTemplateColumn Header="Paused" Width="70" SortMemberPath="Paused">
                             <DataGridTemplateColumn.CellTemplate>
                                 <DataTemplate>

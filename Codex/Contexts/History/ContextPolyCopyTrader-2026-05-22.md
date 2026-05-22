@@ -1,3 +1,10 @@
+## 2026-05-22T09:45:00Z
+Request:
+Change automatic pause policy so only Live bets pause indefinitely; Paper continues and checks 12-hour PnL after later bets/settlements; when recent PnL becomes positive, resume Live and repeat the cycle.
+
+Result:
+Implemented separate automatic Live-only pause state. Added `strategies.auto_live_paused`, `StrategyRuntimeSettings.AutoLivePaused`, and `EffectiveLiveStakes = LiveStakes && !AutoLivePaused`. Replaced the old timed `PauseStrategyAfterLossIfRecentPnlNegativeAsync` with `UpdateStrategyAutoLivePauseFromRecentPnlAsync`: after every Paper/Live settlement it sets auto Live pause when 12-hour settled count is greater than 1 and recent PnL is negative, and clears auto Live pause when recent PnL is positive. Manual Dashboard `Paused` remains a full Paper+Live pause. Updated BTC strategy, Follow leader live gating, live settlement, paper settlement, Dashboard filters/readiness/CSV, README, and config docs. Added regression coverage for auto Live pause/resume and Paper continuing without live-shadow orders while auto-paused. Verification passed: targeted tests 165/165, full solution tests 530/530, Dashboard build with 0 warnings/errors, and `git diff --check` with LF/CRLF warnings only. No production DB writes, live order submissions, or cancel actions were performed.
+
 ## 2026-05-22T04:29:30.3518283Z
 Request:
 Проверь свою статистику

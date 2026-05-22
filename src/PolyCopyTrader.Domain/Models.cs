@@ -2070,12 +2070,15 @@ public sealed record StrategyRuntimeSettings(
     Guid StrategyId,
     bool Enabled,
     bool LiveStakes,
+    bool AutoLivePaused,
     bool Paused,
     DateTimeOffset? PausedUntilUtc,
     decimal PaperStakeAmount,
     decimal LiveStakeAmount,
     decimal LiveAvailableBalance)
 {
+    public bool EffectiveLiveStakes => LiveStakes && !AutoLivePaused;
+
     public bool IsPausedAt(DateTimeOffset nowUtc)
     {
         return Paused && (PausedUntilUtc is null || PausedUntilUtc > nowUtc);
@@ -2087,6 +2090,7 @@ public sealed record StrategyRuntimeSettings(
             StrategyIds.Normalize(strategyId),
             Enabled: true,
             LiveStakes: false,
+            AutoLivePaused: false,
             Paused: false,
             PausedUntilUtc: null,
             PaperStakeAmount: 1.00m,
@@ -2095,12 +2099,13 @@ public sealed record StrategyRuntimeSettings(
     }
 }
 
-public sealed record StrategyPauseDecision(
-    bool Paused,
+public sealed record StrategyAutoLivePauseDecision(
+    bool AutoLivePaused,
+    bool AutoLiveResumed,
+    bool AutoLivePauseChanged,
     decimal RecentPnlUsd,
     int RecentSettledCount,
-    DateTimeOffset LookbackStartUtc,
-    DateTimeOffset? PausedUntilUtc);
+    DateTimeOffset LookbackStartUtc);
 
 public sealed record StrategyLiveBalanceAdjustmentResult(
     bool Applied,
@@ -2113,6 +2118,7 @@ public sealed record StrategyPerformance(
     string Name,
     bool Enabled,
     bool LiveStakes,
+    bool AutoLivePaused,
     bool Paused,
     DateTimeOffset? PausedUntilUtc,
     decimal PaperStakeAmount,

@@ -2444,9 +2444,9 @@ public sealed class BtcUpDown5mPaperStrategyProcessorTests
         Assert.Equal(0m, updatedRun.SettlementPrice);
         Assert.Equal(-1m, updatedRun.RealizedPnlUsd);
         var settings = repository.StrategySettings[Less60Variant.Id];
-        Assert.True(settings.Paused);
-        Assert.NotNull(settings.PausedUntilUtc);
-        Assert.True(settings.PausedUntilUtc > DateTimeOffset.UtcNow.AddHours(11));
+        Assert.True(settings.AutoLivePaused);
+        Assert.False(settings.Paused);
+        Assert.Null(settings.PausedUntilUtc);
 
         var settlement = Assert.Single(repository.PaperPositionSettlements);
         Assert.False(settlement.Won);
@@ -2512,6 +2512,7 @@ public sealed class BtcUpDown5mPaperStrategyProcessorTests
         Assert.Equal(StrategyMarketPaperRunStatuses.Settled, updatedRun.Status);
         Assert.Equal(-1m, updatedRun.RealizedPnlUsd);
         var settings = repository.StrategySettings[Less60Variant.Id];
+        Assert.False(settings.AutoLivePaused);
         Assert.False(settings.Paused);
         Assert.Null(settings.PausedUntilUtc);
     }
@@ -6193,6 +6194,45 @@ public sealed class BtcUpDown5mPaperStrategyProcessorTests
         Assert.Equal(paperOrder.Id, decision.PaperOrderId);
         Assert.Equal(liveOrder.Id, decision.LiveOrderId);
         Assert.Equal("live_submitted", decision.Status);
+    }
+
+    [Fact]
+    public async Task ProcessAsync_AutoLivePausedStrategyStillCreatesPaperOrderWithoutLiveShadow()
+    {
+        var now = DateTimeOffset.UtcNow;
+        var repository = new TestAppRepository();
+        repository.StrategySettings[Skip1Variant.Id] = StrategyRuntimeSettings.Default(Skip1Variant.Id) with
+        {
+            LiveStakes = true,
+            AutoLivePaused = true,
+            LiveStakeAmount = 2.50m,
+            LiveAvailableBalance = 100m,
+            PaperStakeAmount = 2.50m
+        };
+        repository.PolymarketGammaMarkets.Add(CreateMarket(
+            now,
+            now.AddMinutes(5),
+            upPrice: 0.50m,
+            downPrice: 0.50m));
+        var closeBookOrderBooks = AddCloseBookResults(repository, now, "Up");
+        var tradingClient = new CapturingTradingClient();
+        var processor = CreateLiveProcessor(repository, tradingClient, closeBookOrderBooks, Skip1Variant.Code);
+
+        var result = await processor.ProcessAsync();
+
+        Assert.Equal(1, result.EntriesPlaced);
+        Assert.Equal(0, tradingClient.PlaceCalls);
+        Assert.Empty(repository.LiveOrders);
+        Assert.Empty(repository.PaperLiveShadowDecisions);
+
+        var paperOrder = Assert.Single(repository.PaperOrders);
+        Assert.Equal(Skip1Variant.Id, paperOrder.StrategyId);
+        Assert.Equal(PaperOrderStatus.Pending, paperOrder.Status);
+        Assert.Equal(string.Empty, paperOrder.ExecutionSource);
+        Assert.Null(paperOrder.CorrelationId);
+        Assert.DoesNotContain("\"paper_live_shadow_test\":true", paperOrder.RawDecisionJson, StringComparison.Ordinal);
+        Assert.True(repository.StrategySettings[Skip1Variant.Id].LiveStakes);
+        Assert.True(repository.StrategySettings[Skip1Variant.Id].AutoLivePaused);
     }
 
     [Fact]

@@ -28,7 +28,6 @@ public sealed class LiveTradingProcessor(
     private const decimal ShadowSizeTolerance = 0.000001m;
     private const decimal FillSizeTolerance = 0.000001m;
     private static readonly TimeSpan StrategyPauseLookback = TimeSpan.FromHours(12);
-    private static readonly TimeSpan StrategyPauseDuration = TimeSpan.FromHours(12);
 
     public async Task<LiveTradingProcessingResult> ProcessOpenOrdersAsync(CancellationToken cancellationToken = default)
     {
@@ -312,7 +311,7 @@ public sealed class LiveTradingProcessor(
                     realizedPnl,
                     result.AvailableBalance);
 
-                await PauseStrategyAfterLossIfNeededAsync(order.StrategyId, realizedPnl, now, cancellationToken);
+                await UpdateStrategyAutoLivePauseAsync(order.StrategyId, now, cancellationToken);
 
                 if (result.LiveStakesDisabled)
                 {
@@ -363,41 +362,45 @@ public sealed class LiveTradingProcessor(
                 string.Equals(order.Outcome, winningOutcome, StringComparison.OrdinalIgnoreCase));
     }
 
-    private async Task PauseStrategyAfterLossIfNeededAsync(
+    private async Task UpdateStrategyAutoLivePauseAsync(
         Guid strategyId,
-        decimal realizedPnl,
         DateTimeOffset nowUtc,
         CancellationToken cancellationToken)
     {
-        if (realizedPnl >= 0m)
-        {
-            return;
-        }
-
         try
         {
-            var decision = await repository.PauseStrategyAfterLossIfRecentPnlNegativeAsync(
+            var decision = await repository.UpdateStrategyAutoLivePauseFromRecentPnlAsync(
                 strategyId,
                 nowUtc.Subtract(StrategyPauseLookback),
-                nowUtc.Add(StrategyPauseDuration),
                 nowUtc,
                 cancellationToken);
-            if (!decision.Paused)
+            if (!decision.AutoLivePauseChanged)
             {
                 logger.LogInformation(
-                    "Live settlement loss did not trigger strategy pause because recent PnL is non-negative or recent settled count is too low. StrategyId={StrategyId} RecentPnlUsd={RecentPnlUsd} RecentSettledCount={RecentSettledCount}",
+                    "Live settlement left strategy auto live pause unchanged. StrategyId={StrategyId} RecentPnlUsd={RecentPnlUsd} RecentSettledCount={RecentSettledCount} AutoLivePaused={AutoLivePaused}",
                     StrategyIds.Normalize(strategyId),
                     decision.RecentPnlUsd,
-                    decision.RecentSettledCount);
+                    decision.RecentSettledCount,
+                    decision.AutoLivePaused);
                 return;
             }
 
-            logger.LogWarning(
-                "Strategy paused after live settlement loss. StrategyId={StrategyId} RecentPnlUsd={RecentPnlUsd} RecentSettledCount={RecentSettledCount} PausedUntilUtc={PausedUntilUtc}",
-                StrategyIds.Normalize(strategyId),
-                decision.RecentPnlUsd,
-                decision.RecentSettledCount,
-                decision.PausedUntilUtc);
+            if (decision.AutoLivePaused)
+            {
+                logger.LogWarning(
+                    "Strategy auto live pause enabled after recent PnL turned negative. StrategyId={StrategyId} RecentPnlUsd={RecentPnlUsd} RecentSettledCount={RecentSettledCount}",
+                    StrategyIds.Normalize(strategyId),
+                    decision.RecentPnlUsd,
+                    decision.RecentSettledCount);
+            }
+            else
+            {
+                logger.LogInformation(
+                    "Strategy auto live pause cleared after recent PnL turned positive. StrategyId={StrategyId} RecentPnlUsd={RecentPnlUsd} RecentSettledCount={RecentSettledCount}",
+                    StrategyIds.Normalize(strategyId),
+                    decision.RecentPnlUsd,
+                    decision.RecentSettledCount);
+            }
         }
         catch (OperationCanceledException)
         {
@@ -405,9 +408,9 @@ public sealed class LiveTradingProcessor(
         }
         catch (Exception ex)
         {
-            logger.LogError(ex, "Failed to apply strategy pause after live settlement loss. StrategyId={StrategyId}", StrategyIds.Normalize(strategyId));
+            logger.LogError(ex, "Failed to update strategy auto live pause after live settlement. StrategyId={StrategyId}", StrategyIds.Normalize(strategyId));
             await repository.AddLiveTradingEventAsync(
-                new LiveTradingEvent(Guid.NewGuid(), "StrategyPauseAfterLoss", "Error", ex.Message, nowUtc),
+                new LiveTradingEvent(Guid.NewGuid(), "StrategyAutoLivePause", "Error", ex.Message, nowUtc),
                 cancellationToken);
         }
     }

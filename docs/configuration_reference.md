@@ -807,20 +807,22 @@ The strategy grids include `Only positive`, `Enabled only`, `Live only`, and
 `Big ROI` filters; `Big ROI` keeps rows with ROI greater than `10` (`Closed ROI`
 in `All`, recent `ROI` in the period tabs).
 The `Enabled` checkbox writes `strategies.enabled` immediately, and the `Paused`
-checkbox writes `strategies.paused`. The service refreshes enabled and paused
-strategy state through a short in-memory cache, so disabled strategies stop
-creating new Follow leader signals or BTC 5-minute entries without a restart,
-while paused strategies stay enabled but skip new Paper and Live entries with
-reason `strategy_paused`. Existing Paper positions can still be settled, and
-copied leader exits can still be tracked.
+checkbox writes `strategies.paused`. The service refreshes enabled, manual pause,
+and auto Live pause state through a short in-memory cache, so disabled strategies
+stop creating new Follow leader signals or BTC 5-minute entries without a
+restart, while manually paused strategies stay enabled but skip new Paper and
+Live entries with reason `strategy_paused`. Existing Paper positions can still
+be settled, and copied leader exits can still be tracked.
 
-Automatic strategy pausing runs after each losing Paper/Live settlement. The
-service checks the same strategy's settled rows over the last 12 hours; if more
-than one settled bet exists and the 12-hour realized PnL is negative, it sets
-`strategies.paused=true` with `paused_until_utc=now+12h`. The Dashboard
-`Paused` checkbox remains available for manual pauses; a manual pause leaves
-`paused_until_utc` empty, is not shortened by automatic pauses, and remains
-active until cleared.
+Automatic strategy pausing is Live-only. After every Paper or Live settlement,
+the service checks the same strategy's settled rows over the last 12 hours. If
+more than one settled bet exists and the 12-hour realized PnL is negative, it
+sets `strategies.auto_live_paused=true` indefinitely. The strategy keeps creating
+Paper entries and after each later settlement checks the same 12-hour window
+again; when recent PnL becomes positive, the service clears
+`strategies.auto_live_paused` and Live entries resume if the manual `Live` flag is
+still enabled. The Dashboard `Paused` checkbox remains a manual full Paper+Live
+pause, while `Auto Live Pause` is read-only state for the automatic Live gate.
 
 - `Dashboard:RefreshIntervalSeconds`: UI refresh timer for the Dashboard; default `60`.
 - `Dashboard:StrategyRefreshIntervalSeconds`: minimum interval between Dashboard strategy-performance database refreshes; default `60`. Strategy toggle/stake commands invalidate the cache so command results are shown immediately.

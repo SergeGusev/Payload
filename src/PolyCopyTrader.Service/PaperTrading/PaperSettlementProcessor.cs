@@ -11,7 +11,6 @@ public sealed class PaperSettlementProcessor(
     IAppRepository repository) : IPaperSettlementProcessor
 {
     private static readonly TimeSpan StrategyPauseLookback = TimeSpan.FromHours(12);
-    private static readonly TimeSpan StrategyPauseDuration = TimeSpan.FromHours(12);
 
     public async Task<PaperSettlementProcessingResult> ProcessOpenPositionsAsync(CancellationToken cancellationToken = default)
     {
@@ -140,7 +139,7 @@ public sealed class PaperSettlementProcessor(
             if (await repository.TryAddPaperPositionSettlementAsync(settlement, cancellationToken))
             {
                 inserted++;
-                await PauseStrategyAfterLossIfNeededAsync(position.CopiedTraderWallet, settlement.RealizedPnlUsd, now, cancellationToken);
+                await UpdateStrategyAutoLivePauseAsync(position.CopiedTraderWallet, now, cancellationToken);
             }
 
             var settledPosition = position with
@@ -181,17 +180,11 @@ public sealed class PaperSettlementProcessor(
                 string.Equals(position.Outcome, winningOutcome, StringComparison.OrdinalIgnoreCase));
     }
 
-    private async Task PauseStrategyAfterLossIfNeededAsync(
+    private async Task UpdateStrategyAutoLivePauseAsync(
         string copiedTraderWallet,
-        decimal realizedPnl,
         DateTimeOffset nowUtc,
         CancellationToken cancellationToken)
     {
-        if (realizedPnl >= 0m)
-        {
-            return;
-        }
-
         var strategyId = ResolveStrategyId(copiedTraderWallet);
         if (strategyId is null)
         {
@@ -200,28 +193,38 @@ public sealed class PaperSettlementProcessor(
 
         try
         {
-            var decision = await repository.PauseStrategyAfterLossIfRecentPnlNegativeAsync(
+            var decision = await repository.UpdateStrategyAutoLivePauseFromRecentPnlAsync(
                 strategyId.Value,
                 nowUtc.Subtract(StrategyPauseLookback),
-                nowUtc.Add(StrategyPauseDuration),
                 nowUtc,
                 cancellationToken);
-            if (!decision.Paused)
+            if (!decision.AutoLivePauseChanged)
             {
                 logger.LogInformation(
-                    "Paper settlement loss did not trigger strategy pause because recent PnL is non-negative or recent settled count is too low. StrategyId={StrategyId} RecentPnlUsd={RecentPnlUsd} RecentSettledCount={RecentSettledCount}",
+                    "Paper settlement left strategy auto live pause unchanged. StrategyId={StrategyId} RecentPnlUsd={RecentPnlUsd} RecentSettledCount={RecentSettledCount} AutoLivePaused={AutoLivePaused}",
                     StrategyIds.Normalize(strategyId.Value),
                     decision.RecentPnlUsd,
-                    decision.RecentSettledCount);
+                    decision.RecentSettledCount,
+                    decision.AutoLivePaused);
                 return;
             }
 
-            logger.LogWarning(
-                "Strategy paused after paper settlement loss. StrategyId={StrategyId} RecentPnlUsd={RecentPnlUsd} RecentSettledCount={RecentSettledCount} PausedUntilUtc={PausedUntilUtc}",
-                StrategyIds.Normalize(strategyId.Value),
-                decision.RecentPnlUsd,
-                decision.RecentSettledCount,
-                decision.PausedUntilUtc);
+            if (decision.AutoLivePaused)
+            {
+                logger.LogWarning(
+                    "Strategy auto live pause enabled after recent PnL turned negative. StrategyId={StrategyId} RecentPnlUsd={RecentPnlUsd} RecentSettledCount={RecentSettledCount}",
+                    StrategyIds.Normalize(strategyId.Value),
+                    decision.RecentPnlUsd,
+                    decision.RecentSettledCount);
+            }
+            else
+            {
+                logger.LogInformation(
+                    "Strategy auto live pause cleared after recent PnL turned positive. StrategyId={StrategyId} RecentPnlUsd={RecentPnlUsd} RecentSettledCount={RecentSettledCount}",
+                    StrategyIds.Normalize(strategyId.Value),
+                    decision.RecentPnlUsd,
+                    decision.RecentSettledCount);
+            }
         }
         catch (OperationCanceledException)
         {
@@ -229,8 +232,8 @@ public sealed class PaperSettlementProcessor(
         }
         catch (Exception ex)
         {
-            logger.LogError(ex, "Failed to apply strategy pause after paper settlement loss. CopiedTraderWallet={CopiedTraderWallet}", copiedTraderWallet);
-            await TryRecordApiErrorAsync("PauseStrategyAfterLoss", ex.Message, cancellationToken);
+            logger.LogError(ex, "Failed to update strategy auto live pause after paper settlement. CopiedTraderWallet={CopiedTraderWallet}", copiedTraderWallet);
+            await TryRecordApiErrorAsync("UpdateStrategyAutoLivePause", ex.Message, cancellationToken);
         }
     }
 

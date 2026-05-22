@@ -49,7 +49,6 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
     private const string StrategyPausedSkipReason = "strategy_paused";
     private const string BtcSkip1VariantCode = "btc_up_down_5m_skip_1";
     private static readonly TimeSpan StrategyPauseLookback = TimeSpan.FromHours(12);
-    private static readonly TimeSpan StrategyPauseDuration = TimeSpan.FromHours(12);
     private static readonly string[] PaperLiveShadowAllowedVariantCodes =
     [
         BtcSkip1VariantCode,
@@ -2649,7 +2648,7 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
                         },
                         cancellationToken);
 
-                    if (settings.LiveStakes &&
+                    if (settings.EffectiveLiveStakes &&
                         botOptions.Mode == BotMode.Live &&
                         !UsesGammaOutcomeSelection(variant) &&
                             !UsesOpeningLimitEntry(variant) &&
@@ -2911,7 +2910,7 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
                 won,
                 realizedPnl);
 
-            await PauseStrategyAfterLossIfNeededAsync(runVariant.Id, runVariant.Code, realizedPnl, nowUtc, cancellationToken);
+            await UpdateStrategyAutoLivePauseAsync(runVariant.Id, runVariant.Code, nowUtc, cancellationToken);
 
             return 1;
         }
@@ -3521,7 +3520,7 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
         BtcUpDown5mStrategyVariant variant,
         StrategyRuntimeSettings settings)
     {
-        return settings.LiveStakes && IsPaperLiveShadowAllowedVariant(variant);
+        return settings.EffectiveLiveStakes && IsPaperLiveShadowAllowedVariant(variant);
     }
 
     private static bool IsPaperLiveShadowAllowedVariant(BtcUpDown5mStrategyVariant variant)
@@ -10701,42 +10700,46 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
         return root.ToJsonString();
     }
 
-    private async Task PauseStrategyAfterLossIfNeededAsync(
+    private async Task UpdateStrategyAutoLivePauseAsync(
         Guid strategyId,
         string strategyCode,
-        decimal realizedPnl,
         DateTimeOffset nowUtc,
         CancellationToken cancellationToken)
     {
-        if (realizedPnl >= 0m)
-        {
-            return;
-        }
-
         try
         {
-            var decision = await repository.PauseStrategyAfterLossIfRecentPnlNegativeAsync(
+            var decision = await repository.UpdateStrategyAutoLivePauseFromRecentPnlAsync(
                 strategyId,
                 nowUtc.Subtract(StrategyPauseLookback),
-                nowUtc.Add(StrategyPauseDuration),
                 nowUtc,
                 cancellationToken);
-            if (!decision.Paused)
+            if (!decision.AutoLivePauseChanged)
             {
                 logger.LogInformation(
-                    "Strategy loss did not trigger pause because recent PnL is non-negative or recent settled count is too low. Strategy={StrategyCode} RecentPnlUsd={RecentPnlUsd} RecentSettledCount={RecentSettledCount}",
+                    "Strategy auto live pause state unchanged after settlement. Strategy={StrategyCode} RecentPnlUsd={RecentPnlUsd} RecentSettledCount={RecentSettledCount} AutoLivePaused={AutoLivePaused}",
                     strategyCode,
                     decision.RecentPnlUsd,
-                    decision.RecentSettledCount);
+                    decision.RecentSettledCount,
+                    decision.AutoLivePaused);
                 return;
             }
 
-            logger.LogWarning(
-                "Strategy paused after loss. Strategy={StrategyCode} RecentPnlUsd={RecentPnlUsd} RecentSettledCount={RecentSettledCount} PausedUntilUtc={PausedUntilUtc}",
-                strategyCode,
-                decision.RecentPnlUsd,
-                decision.RecentSettledCount,
-                decision.PausedUntilUtc);
+            if (decision.AutoLivePaused)
+            {
+                logger.LogWarning(
+                    "Strategy auto live pause enabled after recent PnL turned negative. Strategy={StrategyCode} RecentPnlUsd={RecentPnlUsd} RecentSettledCount={RecentSettledCount}",
+                    strategyCode,
+                    decision.RecentPnlUsd,
+                    decision.RecentSettledCount);
+            }
+            else
+            {
+                logger.LogInformation(
+                    "Strategy auto live pause cleared after recent PnL turned positive. Strategy={StrategyCode} RecentPnlUsd={RecentPnlUsd} RecentSettledCount={RecentSettledCount}",
+                    strategyCode,
+                    decision.RecentPnlUsd,
+                    decision.RecentSettledCount);
+            }
         }
         catch (OperationCanceledException)
         {
@@ -10744,8 +10747,8 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
         }
         catch (Exception ex)
         {
-            logger.LogError(ex, "Failed to apply strategy pause after loss. Strategy={StrategyCode}", strategyCode);
-            await TryRecordApiErrorAsync("PauseStrategyAfterLoss", ex.Message, cancellationToken);
+            logger.LogError(ex, "Failed to update strategy auto live pause. Strategy={StrategyCode}", strategyCode);
+            await TryRecordApiErrorAsync("UpdateStrategyAutoLivePause", ex.Message, cancellationToken);
         }
     }
 
