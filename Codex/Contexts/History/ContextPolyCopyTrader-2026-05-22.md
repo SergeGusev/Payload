@@ -66,3 +66,10 @@ Request:
 
 Result:
 Inspected current code/docs/tests and confirmed the Binance strategy family uses start-relative direction: current reference price above archived market-start reference selects `Up`, below selects `Down`, equality gives no direction and may defer while the opening-limit wait is still active. BTC Binance, bps, Instant bps, fixed-price, delayed, Clever/Edge, and ETH/SOL crypto Binance bps variants share this base direction, with additional variant-specific filters and pricing.
+
+## 2026-05-22T10:16:53.2546298+00:00
+Request:
+Как там живёт сбор статистики для новой стратегии? Есть перспектива?
+
+Result:
+Checked production PostgreSQL read-only with `default_transaction_read_only=on`. The collection is currently not alive enough to evaluate: the service row still says `Running`/`Live`, but the heartbeat is stale by about 36 minutes with last heartbeat at `2026-05-22T09:39:30Z`, and production is running build `info=1.0.0+6822553f5fdd20a72ef46f76ea0f6c5f17818403` rather than current local `d8e1fc8`. `btc_up_down_5m_arbitrage_scans` has only 15 rows from `2026-05-22T09:39:33Z` through `09:39:55Z`, all `missing_asks`, 0 positives. Related BTC feeds stopped at the same time: statistics ticks latest `09:39:54Z`, odds ticks latest `09:39:52Z`, live observations latest `09:39:54Z`. `market_data_status` also stopped updating around `09:39:33Z`-`09:39:50Z`; no API errors were found in the last 6 hours. Conclusion: the current production statistics collection is stale, so the new strategy's perspective cannot be judged from fresh data until the current service build is restarted/deployed and allowed to collect continuous settled samples. Temporary C# read-only probe was removed; no source behavior, production DB data, service state, orders, or cancels were changed.

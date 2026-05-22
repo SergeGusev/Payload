@@ -1,3 +1,17 @@
+## Active Update 2026-05-22 Production New Strategy Statistics Health
+Goal: Check whether production statistics collection for the new BTC 5m skew/direction research strategy is alive and whether it already supports a conclusion.
+Status: Completed
+Done:
+- Queried production PostgreSQL read-only with `default_transaction_read_only=on`; no production rows were written.
+- Found the production service heartbeat stale by about 36 minutes at check time, with the service row still showing `Running`/`Live` but last heartbeat at `2026-05-22T09:39:30Z`.
+- Found production is running build `info=1.0.0+6822553f5fdd20a72ef46f76ea0f6c5f17818403`, not the current local `d8e1fc8` build.
+- Confirmed `btc_up_down_5m_arbitrage_scans` is not actively collecting: only `15` rows total in the latest run, all between `2026-05-22T09:39:33Z` and `2026-05-22T09:39:55Z`, all `decision_code=missing_asks`, `0` positives.
+- Confirmed related BTC feeds are also stale after the same moment: `btc_up_down_5m_statistics_ticks` latest sample `2026-05-22T09:39:54Z`, `btc_up_down_5m_odds_ticks` latest sample `2026-05-22T09:39:52Z`, and live observations latest sample `2026-05-22T09:39:54Z`.
+- `market_data_status` still reports connected components, but their `last_message_utc`/`updated_at_utc` stopped around `2026-05-22T09:39:33Z`-`09:39:50Z`; no API errors were recorded in the last 6 hours.
+Next: Restart/deploy the current service build, then re-check after the collector has written continuously for at least several hours and enough markets have settled.
+Notes: Verification was a temporary C#/.NET/Npgsql read-only probe outside the repo, then removed. No source code behavior change, service restart, live order submission, cancel action, or production DB write was performed.
+Blockers: Current production statistics collection is stale, so there is not enough fresh data to judge the new strategy's real perspective.
+
 ## Active Update 2026-05-22 Dashboard AutoLivePaused Binding Hotfix
 Goal: Fix Dashboard startup/runtime binding error for the read-only `AutoLivePaused` strategy row property.
 Status: Completed
