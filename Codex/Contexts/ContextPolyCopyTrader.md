@@ -1,3 +1,16 @@
+## Active Update 2026-05-22 Middle Bps Grid To 100
+Goal: Extend active BTC Middle bps strategy grids to `1..100 bps`.
+Status: Completed
+Done:
+- Expanded generated `BTC Up or Down 5m Middle 1` bps variants from `1..9` to `1..100` for both standard and Revert Middle direction logic.
+- Updated PostgreSQL seeding to insert Middle depth `1` threshold rows with `generate_series(1, 100)`; existing `1..9` row IDs are preserved and new `10..100` rows get deterministic IDs.
+- Enforced `DecisionThresholdBps` in the Middle decision path: bps variants now skip with `btc_reference_mean_deviation_below_threshold` unless the absolute deviation from the cached arithmetic mean reaches the configured threshold.
+- Added Middle bps diagnostics for signed current deviation, absolute current deviation, minimum absolute compared-price deviation, and configured threshold.
+- Updated tests and configuration docs for the larger Middle grid and threshold behavior.
+Next: Publish/restart the service when ready so schema initialization seeds the new `10..100 bps` Middle rows.
+Notes: Verification passed: focused `dotnet test tests/PolyCopyTrader.Tests/PolyCopyTrader.Tests.csproj --no-restore --filter "BtcUpDown5mPaperStrategyProcessorTests|StorageTests"` 172/172, full `dotnet test PolyCopyTrader.sln --no-restore` 539/539, and `git diff --check` passed with LF/CRLF warnings only.
+Blockers: None.
+
 ## Active Update 2026-05-22 Middle Bps History Range
 Goal: Determine from production history what Middle bps deviation range is worth tracking.
 Status: Completed

@@ -283,3 +283,9 @@ Request:
 
 Result:
 Queried production PostgreSQL read-only and parsed Middle decision JSON to compute `abs(btc_current_price_usd - reference_arithmetic_mean_usd) / reference_arithmetic_mean_usd * 10000`. After de-duplicating old standard/revert/bps/depth rows, there were `1081` unique market/reference observations from `2026-05-13T07:30:01Z` through `2026-05-22T20:10:17Z`. All-history abs bps distribution: p50 `10.8294`, p75 `21.2655`, p90 `37.3938`, p95 `48.9202`, p99 `88.3634`, max `125.0515`. Full 100-sample-window subset (`670` observations) was similar: p95 `49.5484`, p99 `83.0262`, max `125.0515`. Conclusion: `1..9 bps` is too narrow; use at least `1..50 bps`, and consider research tail coverage to `75`/`100` or `1..100` if strategy count is acceptable. No production rows or source code were changed.
+## 2026-05-22T20:35:00.4639911Z
+Request:
+Да, сделай сетку до 100 bps
+
+Result:
+Expanded BTC Middle bps strategy grids to `1..100 bps` for both `Middle 1` and `Middle 1 Revert`. PostgreSQL seeding now creates depth `1` thresholds with `generate_series(1, 100)` while preserving existing `1..9` IDs and assigning deterministic IDs to new `10..100` rows. The Middle decision path now actually applies `DecisionThresholdBps`, skipping with `btc_reference_mean_deviation_below_threshold` when the absolute deviation from the arithmetic mean is below the configured threshold, and diagnostics now include signed/absolute mean-deviation bps fields. Updated tests and docs. Verification passed: focused BTC processor/storage tests `172/172`, full solution tests `539/539`, and `git diff --check` with LF/CRLF warnings only.

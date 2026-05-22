@@ -1208,7 +1208,7 @@ public static class StrategyIds
     private static IReadOnlyList<BtcUpDown5mStrategyVariant> CreateBtcUpDown5mVariants()
     {
         int[] delays = [30, 60, 90, 120, 150, 180, 210, 240, 270];
-        var variants = new List<BtcUpDown5mStrategyVariant>(1288);
+        var variants = new List<BtcUpDown5mStrategyVariant>(1470);
 
         foreach (var delay in delays)
         {
@@ -1267,16 +1267,16 @@ public static class StrategyIds
 
         variants.Add(CreateBtcUpDown5mMiddleVariant(1));
 
-        for (var thresholdTenths = 1; thresholdTenths <= 9; thresholdTenths++)
+        for (var thresholdBps = 1; thresholdBps <= 100; thresholdBps++)
         {
-            variants.Add(CreateBtcUpDown5mMiddleBpsThresholdVariant(1, thresholdTenths));
+            variants.Add(CreateBtcUpDown5mMiddleBpsThresholdVariant(1, thresholdBps));
         }
 
         variants.Add(CreateBtcUpDown5mMiddleRevertVariant(1));
 
-        for (var thresholdTenths = 1; thresholdTenths <= 9; thresholdTenths++)
+        for (var thresholdBps = 1; thresholdBps <= 100; thresholdBps++)
         {
-            variants.Add(CreateBtcUpDown5mMiddleRevertBpsThresholdVariant(1, thresholdTenths));
+            variants.Add(CreateBtcUpDown5mMiddleRevertBpsThresholdVariant(1, thresholdBps));
         }
 
         for (var depth = 1; depth <= 5; depth++)
@@ -1387,8 +1387,9 @@ public static class StrategyIds
             : $"the latest Binance BTC/USDT trade-stream price plus the latest {cachedSamples} cached reference sample(s)";
         var thresholdName = thresholdBps.ToString("0.#", CultureInfo.InvariantCulture);
         var thresholdId = (int)thresholdBps;
+        var idSuffix = (depth * 100) + thresholdId;
         return new BtcUpDown5mStrategyVariant(
-            Guid.Parse($"b7c50005-0000-4000-8023-0000000{depth:000}{thresholdId:00}"),
+            Guid.Parse($"b7c50005-0000-4000-8023-{idSuffix:000000000000}"),
             $"btc_up_down_5m_middle_{depth}_bps_{thresholdId}",
             $"BTC Up or Down 5m Middle {depth} {thresholdName} bps",
             $"Immediately after BTC 5m market open, compare {sampleDescription} against the cached arithmetic mean; above mean buys Down, below mean buys Up, otherwise skip. Enter only when every compared price is at least {thresholdName} bps away from the mean. Paper entry is a GTD limit BUY with dynamic break-even pricing; settlement uses only actually filled shares.",
@@ -1424,8 +1425,9 @@ public static class StrategyIds
             : $"the latest Binance BTC/USDT trade-stream price plus the latest {cachedSamples} cached reference sample(s)";
         var thresholdName = thresholdBps.ToString("0.#", CultureInfo.InvariantCulture);
         var thresholdId = (int)thresholdBps;
+        var idSuffix = (depth * 100) + thresholdId;
         return new BtcUpDown5mStrategyVariant(
-            Guid.Parse($"b7c50005-0000-4000-8024-0000000{depth:000}{thresholdId:00}"),
+            Guid.Parse($"b7c50005-0000-4000-8024-{idSuffix:000000000000}"),
             $"btc_up_down_5m_middle_{depth}_revert_bps_{thresholdId}",
             $"BTC Up or Down 5m Middle {depth} Revert {thresholdName} bps",
             $"Immediately after BTC 5m market open, compare {sampleDescription} against the cached arithmetic mean, then invert the standard Middle {depth} decision; above mean buys Up, below mean buys Down, otherwise skip. Enter only when every compared price is at least {thresholdName} bps away from the mean. Paper entry is a GTD limit BUY with dynamic break-even pricing; settlement uses only actually filled shares.",

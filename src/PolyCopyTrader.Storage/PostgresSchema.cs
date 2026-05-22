@@ -2232,16 +2232,8 @@ WITH depths(depth, sample_description) AS (
         (1, 'the latest Binance BTC/USDT trade-stream price')
 ),
 thresholds(threshold_digit, threshold_name) AS (
-    VALUES
-        (1, '1'),
-        (2, '2'),
-        (3, '3'),
-        (4, '4'),
-        (5, '5'),
-        (6, '6'),
-        (7, '7'),
-        (8, '8'),
-        (9, '9')
+    SELECT value, value::text
+    FROM generate_series(1, 100) AS generated(value)
 )
 SELECT
     ('b7c50005-0000-4000-8023-' || lpad(((depths.depth * 100) + thresholds.threshold_digit)::text, 12, '0'))::uuid,
@@ -2265,16 +2257,8 @@ WITH depths(depth, sample_description) AS (
         (1, 'the latest Binance BTC/USDT trade-stream price')
 ),
 thresholds(threshold_digit, threshold_name) AS (
-    VALUES
-        (1, '1'),
-        (2, '2'),
-        (3, '3'),
-        (4, '4'),
-        (5, '5'),
-        (6, '6'),
-        (7, '7'),
-        (8, '8'),
-        (9, '9')
+    SELECT value, value::text
+    FROM generate_series(1, 100) AS generated(value)
 )
 INSERT INTO strategies (id, code, name, description, enabled, paper_stake_amount, created_at_utc, updated_at_utc)
 SELECT
