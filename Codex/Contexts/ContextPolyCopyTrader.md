@@ -1,3 +1,16 @@
+## Active Update 2026-05-23 Auto Live Pause Paper Settlement Answer
+Goal: Clarify whether `AutoLivePaused` can be set from Paper bets.
+Status: Completed
+Done:
+- Inspected the BTC Up/Down Paper settlement path, generic Paper settlement path, Live settlement path, runtime settings model, and PostgreSQL auto-live-pause update SQL.
+- Confirmed `AutoLivePaused` is updated after settlement, not when a Paper order is placed.
+- Confirmed the recent-PnL query includes settled `strategy_market_paper_runs` and settled `live_orders` for the strategy; for the FollowLeader strategy it also includes generic `paper_position_settlements`.
+- Confirmed the rule still uses the 12-hour lookback: set auto live pause when settled count is greater than `1` and recent PnL is negative; clear it when settled count is positive and recent PnL is positive.
+- Confirmed `AutoLivePaused` disables only effective Live staking through `LiveStakes && !AutoLivePaused`; Paper processing continues.
+Next: None.
+Notes: Read-only code inspection only. No source behavior or production data changed; no tests were run because this was an answer-only clarification.
+Blockers: None.
+
 ## Active Update 2026-05-23 Production Check Middle Instant Deploy
 Goal: Verify the production deploy of commit `588fb8f` with new Middle bps Instant strategies.
 Status: Completed

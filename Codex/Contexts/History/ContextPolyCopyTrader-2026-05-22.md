@@ -322,3 +322,10 @@ Request:
 
 Result:
 Queried production PostgreSQL read-only through Dashboard Remote host `192.168.0.101`. Confirmed production is running `PolyCopyTrader.Service` build `588fb8f31491b0f8c9c2fee198add402435a5635`, status `Running`, mode `Live`, fresh heartbeat, and null `last_error`. Confirmed the new Middle Instant seed rows exist: `100` `middle_bps_instant` plus `100` `middle_revert_bps_instant`, thresholds `1..100`, all enabled, none live, none auto-live-paused. Core activity was fresh for BTC odds, crypto odds, arbitrage scans, strategy runs, and paper orders. Found a functional problem: on due windows `2026-05-22T21:40:00Z` and `2026-05-22T21:45:00Z`, all `200` new Middle Instant rows skipped with `entry_due_expired`, so they created `0` Paper orders. Existing non-Instant Middle bps rows ran first, and the enlarged grid pushes Instant rows past `EntryGraceSeconds=10`; some high-threshold non-Instant Revert rows also expired. Also observed post-start `GetCryptoReferencePrice` API errors for stale ETH Binance stream samples. No source or production data was changed during this check.
+
+## 2026-05-22T21:59:58.8674221Z
+Request:
+А мы Auto live pause через Paper ставки тоже устанавливаем?
+
+Result:
+Inspected the current implementation and confirmed `AutoLivePaused` can be changed after Paper settlements. The BTC Up/Down Paper run settlement path calls `UpdateStrategyAutoLivePauseFromRecentPnlAsync`, and the SQL aggregates settled `strategy_market_paper_runs` plus settled `live_orders`; FollowLeader generic Paper settlements also feed the same update through `paper_position_settlements`. The flag is set only after settlement when the 12-hour settled count is greater than `1` and recent PnL is negative, and cleared when recent PnL becomes positive. `AutoLivePaused` suppresses only effective Live staking; Paper processing continues.
