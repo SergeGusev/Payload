@@ -1,3 +1,10 @@
+## 2026-05-22T16:57:08Z
+Request:
+Проверь, нормально ли выложилась новая версия
+
+Result:
+Checked production PostgreSQL read-only through Dashboard Remote host `192.168.0.101`. The service is alive and fresh (`Running`/`Live`, heartbeat age about `45s`, empty `last_error`, started `2026-05-22T16:52:16Z`), but the new version did not deploy/restart correctly: production is running `info=1.0.0+438c7a6d8cffbce44be27e388e4db310581dbcf4`, while current repo HEAD is `93fbc75f3f2ce88220457a72a01c86d22ae8ab48`. `438c7a6` is the older `Record skip bps streak diagnostics` commit before both rescale commits. Production does not have `schema_data_migrations`, so the new schema initializer did not run. Strategy rows are still legacy-coded: updown bps has `72` legacy `_bps_0_*`/decimal-name rows and Middle bps has `90/90` legacy rows; representative old rows like `BTC Up or Down 5m Binance 0.1 bps`, `Skip 0.1 bps`, and `Middle 5 0.9 bps` still exist. The reset also has not happened: updown bps still has `3` live rows and `160` auto-live-paused rows. Background workers are otherwise active, with fresh BTC/crypto odds, arbitrage scans, and strategy runs; no active live-order statuses or recent failed Polymarket HTTP logs were found in the queried window. No production DB writes, service restart, live order submission, cancel action, or source-code tests were performed.
+
 ## 2026-05-22T16:12:02Z
 Request:
 С  Middle 0.1..0.9 bps сделай то же самое

@@ -1,3 +1,19 @@
+## Active Update 2026-05-22 Production Rescale Deploy Check
+Goal: Check whether the latest bps rescale build deployed cleanly to production.
+Status: Completed
+Done:
+- Queried production PostgreSQL read-only through Dashboard Remote host `192.168.0.101`; no production rows were written.
+- Confirmed production `PolyCopyTrader.Service` is alive: `Running`/`Live`, fresh heartbeat age about `45s`, empty `last_error`, started `2026-05-22T16:52:16Z`.
+- Confirmed production is not running the latest pushed build: service version is `info=1.0.0+438c7a6d8cffbce44be27e388e4db310581dbcf4`, while repository HEAD is `93fbc75f3f2ce88220457a72a01c86d22ae8ab48`.
+- Confirmed `438c7a6` is the older `Record skip bps streak diagnostics` commit, before `9a5358e` (`Rescale bps strategy thresholds`) and `93fbc75` (`Rescale middle bps strategy thresholds`).
+- Confirmed `schema_data_migrations` does not exist in production, so the new schema initializer from the rescale commits has not run.
+- Confirmed strategy rows are still old: updown bps family has `72` legacy `_bps_0_*`/decimal-name rows, Middle bps has `90/90` legacy rows, and representative rows still include `BTC Up or Down 5m Binance 0.1 bps`, `Skip 0.1 bps`, and `Middle 5 0.9 bps`.
+- Confirmed reset did not happen yet: updown bps still has `3` `live_stakes=true` rows and `160` `auto_live_paused` rows; Middle bps rows are disabled/live false but still legacy-coded.
+- Confirmed background activity is otherwise fresh: BTC odds, crypto odds, arbitrage scans, and strategy runs all had rows in the last 15 minutes; no active live-order statuses or failed Polymarket HTTP logs appeared in the queried window.
+Next: Republish/restart production service from commit `93fbc75` (or newer), then re-run the read-only check for heartbeat version, `schema_data_migrations` markers, renamed strategy rows, and `Live=false` bps reset.
+Notes: Read-only operational check only. The first query failed after returning heartbeat because `schema_data_migrations` was absent; the follow-up query guarded that with `to_regclass` and completed. No tests were run because no source behavior changed. Local worktree had an unrelated modified `src/PolyCopyTrader.Domain/Configuration/AppOptionsValidator.cs`; it was not touched.
+Blockers: Production is still on old build `438c7a6`, so the latest rescale deploy did not actually reach/restart the service.
+
 ## Active Update 2026-05-22 Middle Bps Strategy Rescale Reset
 Goal: Apply the same bps rescale/reset policy to BTC Middle bps threshold strategies.
 Status: Completed
