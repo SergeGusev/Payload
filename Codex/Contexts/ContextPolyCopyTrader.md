@@ -1,3 +1,17 @@
+## Active Update 2026-05-22 Binance Bps History Check
+Goal: Check whether min/max bps for BTC Binance strategies over the last 24 hours can be recovered from stored history or needs recalculation.
+Status: Completed
+Done:
+- Confirmed no recalculation is needed for the last 24 hours when using existing production history.
+- Queried production PostgreSQL read-only through Dashboard Remote host `192.168.0.101`; no production rows were written.
+- Confirmed BTC tick archive coverage for the last 24 hours: `15877` ticks across `289` markets, with signed BTC move range `-32.57041201` to `46.41030071 bps`.
+- Confirmed actual BTC Binance strategy order decisions in the last 24 hours: `4218` orders across `107` strategies and `231` markets, with `reference_move_from_start_bps` range `-10.4191832` to `29.86060432 bps`.
+- Confirmed all evaluated BTC Binance runs with stored bps diagnostics in the last 24 hours: `26474` decisions (`4218` order, `22256` skip) across `107` strategies and `288` markets, with the same signed range `-10.4191832` to `29.86060432 bps`.
+- Split by family: fixed Binance order decisions ranged `-10.4191832` to `29.86060432 bps`; instant order decisions ranged `-4.34672309` to `5.08544865 bps`; instant evaluated runs including skips ranged `-6.99788161` to `5.89200105 bps`.
+Next: If asked for a chart or per-strategy table, use stored `btc_up_down_5m_odds_ticks`, `paper_orders.raw_decision_json`, and `strategy_market_paper_runs.skip_diagnostics_json`; only recalculate if archive gaps or older unavailable windows are required.
+Notes: Verification was the successful read-only Npgsql production probe. A follow-up UTC window probe confirmed the window as about `2026-05-21T14:54:06Z` to `2026-05-22T14:54:06Z`; its rollback printed an Npgsql reader-in-progress exception after results were already emitted, with no writes possible because the transaction was read-only.
+Blockers: None.
+
 ## Active Update 2026-05-22 Skip Bps 12 Market Visual Report
 Goal: Build a read-only visual report for the next 12 BTC 5m markets showing BTC bps movement around zero, Skip bps entries, fills, settlements, and totals.
 Status: Completed

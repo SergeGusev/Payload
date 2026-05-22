@@ -155,3 +155,9 @@ Request:
 
 Result:
 Queried production PostgreSQL read-only through Dashboard Remote host `192.168.0.101` and generated `artifacts/skip-bps-12-markets-report.html`. The report covers 12 BTC 5m markets from `2026-05-22T13:25:00Z` through `2026-05-22T14:25:00Z`, plots `btc_move_from_start_bps` with zero crossings, and marks aggregated Skip bps Paper orders/fills/settlements. Summary: `680` Skip bps Paper orders, `480` filled/settled, `22` wins, `458` losses, realized PnL `-1244.808`, notional about `1979.558`. No production rows were written and no service/order state was changed.
+## 2026-05-22T14:55:00Z
+Request:
+Can we recover the minimum and maximum bps history for our Binance strategies over the last day, or does it need to be recalculated?
+
+Result:
+Confirmed existing production history is enough for the last 24 hours; no recalculation is needed unless older windows or gap-filling are required. Queried production PostgreSQL read-only through Dashboard Remote host `192.168.0.101`. BTC tick archive coverage was `15877` ticks across `289` markets, with full-market signed BTC move range `-32.57041201` to `46.41030071 bps`. Actual BTC Binance order decisions covered `4218` orders across `107` strategies and `231` markets, with stored `reference_move_from_start_bps` range `-10.4191832` to `29.86060432 bps`; all evaluated stored Binance decisions including skips covered `26474` decisions across `288` markets with the same overall signed range. Fixed Binance order decisions ranged `-10.4191832` to `29.86060432 bps`; instant order decisions ranged `-4.34672309` to `5.08544865 bps`, while instant evaluated runs including skips ranged `-6.99788161` to `5.89200105 bps`. No production rows were written and no service/order state was changed.
