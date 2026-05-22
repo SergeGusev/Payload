@@ -1,3 +1,18 @@
+## Active Update 2026-05-22 ETH SOL Bps Range Check
+Goal: Check whether ETH/SOL Binance bps strategy grids have the same `0..5 bps` vs larger observed-move issue as BTC.
+Status: Completed
+Done:
+- Queried production PostgreSQL read-only through Dashboard Remote host `192.168.0.101`; no production rows were written.
+- Confirmed ETH and SOL each have `100` seeded Binance bps strategy rows (`50` fixed and `50` instant), with names ranging from `0.1 bps` to `5 bps`; all are enabled, ETH has `0` live-enabled rows, SOL has `1` live-enabled row.
+- ETH tick archive over the last 24 hours: `14120` ticks across `289` markets, signed move range `-43.63112041` to `54.29672809 bps`.
+- SOL tick archive over the last 24 hours: `13917` ticks across `289` markets, signed move range `-55.93607306` to `66.08695652 bps`.
+- ETH actual stored strategy decisions: fixed and instant both ranged `-6.55660377` to `8.79089883 bps`; fixed had `2410` orders and instant had `1644` orders.
+- SOL actual stored strategy decisions: fixed ranged `-8.02476212` to `16.23188406 bps`; instant orders ranged `-6.91961711` to `12.59734311 bps`, while instant evaluated runs including skips reached `-8.02476212` to `16.23188406 bps`.
+- Conclusion: yes, ETH/SOL have the same bucket-collapse issue as BTC, and SOL especially has market moves beyond `50 bps`; the `0..5` grid still triggers on large moves but cannot distinguish higher buckets.
+Next: If requested, extend ETH/SOL Binance bps research/strategy thresholds beyond `5 bps`, likely to at least `50 bps` and possibly `70 bps` for SOL-oriented analysis.
+Notes: Verification was the successful read-only Npgsql production probe for the window about `2026-05-21T15:22:26Z` to `2026-05-22T15:22:26Z`. No source behavior, production data, service state, orders, or cancels were changed.
+Blockers: None.
+
 ## Active Update 2026-05-22 Binance Bps Threshold Range Interpretation
 Goal: Clarify whether current `0..5 bps` strategy grids are too narrow compared with observed BTC Binance movements.
 Status: Completed
