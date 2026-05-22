@@ -1,3 +1,15 @@
+## Active Update 2026-05-22 Middle Reference Cache Warmup
+Goal: Warm the Middle strategy BTC reference mean from persisted history after service restart.
+Status: Completed
+Done:
+- Added a startup `BtcUsdReferencePriceCacheWarmupService` registered before the Binance BTC trade stream and BTC strategy workers.
+- Added repository support to load up to `BinanceBtcUsdReference.WindowSize` recent minute-level BTC reference samples from `btc_up_down_5m_odds_ticks`; this uses the latest archived tick per UTC minute instead of the latest raw ticks, preserving the intended roughly `100` minute mean window when `WindowSize=100`.
+- Warm-up fills the in-memory `BtcUsdReferencePriceCache` before live stream sampling continues; failures are logged and do not stop the service.
+- Updated tests, test repository support, and configuration docs.
+Next: Publish/restart the service when ready; on startup the Middle cache should be populated immediately from history if odds archive data exists.
+Notes: Verification passed: focused `dotnet test tests/PolyCopyTrader.Tests/PolyCopyTrader.Tests.csproj --no-restore --filter "BtcUsdReferencePriceCacheWarmupServiceTests|CoinbaseExchangeBtcUsdReferenceTests|StorageTests"` 30/30, full `dotnet test PolyCopyTrader.sln --no-restore` 540/540, and `git diff --check` passed with LF/CRLF warnings only. Production read-only SQL probe returned `100` recent minute samples from `btc_up_down_5m_odds_ticks` with arithmetic mean `76044.0224`.
+Blockers: None.
+
 ## Active Update 2026-05-22 Binance Bps Last Day Range Recheck
 Goal: Re-check whether the `1..50 bps` Binance bps grid is too wide based on the last 24 hours of production data.
 Status: Completed

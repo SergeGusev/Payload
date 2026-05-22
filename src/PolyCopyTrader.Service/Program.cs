@@ -367,6 +367,7 @@ builder.Services.AddHostedService<LiveTradingMaintenanceWorker>();
 builder.Services.AddHostedService<LocalControlServer>();
 builder.Services.AddHostedService<GammaMarketIngestionWorker>();
 builder.Services.AddHostedService(sp => sp.GetRequiredService<BtcOrderBookLagDiagnosticService>());
+builder.Services.AddHostedService<BtcUsdReferencePriceCacheWarmupService>();
 builder.Services.AddHostedService(sp => sp.GetRequiredService<BinanceBtcUsdTradeStreamService>());
 builder.Services.AddHostedService(sp => sp.GetRequiredService<BinanceCryptoReferenceTradeStreamService>());
 builder.Services.AddHostedService<ChainlinkBtcUsdCorrelationWorker>();

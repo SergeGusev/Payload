@@ -555,6 +555,13 @@ public interface IAppRepository
         return Task.FromResult<IReadOnlyList<BtcUpDown5mOddsTick>>([]);
     }
 
+    Task<IReadOnlyList<BtcUsdReferencePricePoint>> GetRecentBtcUsdReferencePricePointsAsync(
+        int limit = 100,
+        CancellationToken cancellationToken = default)
+    {
+        return Task.FromResult<IReadOnlyList<BtcUsdReferencePricePoint>>([]);
+    }
+
     Task<IReadOnlyList<BtcUpDown5mOddsTick>> GetBtcUpDown5mOddsTicksForMarketStartAsync(
         DateTimeOffset marketStartUtc,
         int limit = 500,

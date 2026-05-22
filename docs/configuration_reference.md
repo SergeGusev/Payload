@@ -130,8 +130,10 @@ strategies.
 - `ReceiveBufferBytes`: WebSocket receive buffer size, default `16384`.
 
 The latest cache snapshot is exposed on the local IPC endpoint
-`GET /btc-usd-reference`. The window is in memory; it is rebuilt after a service
-restart.
+`GET /btc-usd-reference`. The window is in memory, but service startup warms it
+from the latest minute-level Binance BTC samples already stored in
+`btc_up_down_5m_odds_ticks`, up to `WindowSize` records, before the live stream
+continues adding new samples.
 
 ## BtcOrderBookLagDiagnostics
 

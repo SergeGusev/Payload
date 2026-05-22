@@ -1944,6 +1944,37 @@ internal sealed class TestAppRepository : IAppRepository
                 .ToArray());
     }
 
+    public Task<IReadOnlyList<BtcUsdReferencePricePoint>> GetRecentBtcUsdReferencePricePointsAsync(
+        int limit = 100,
+        CancellationToken cancellationToken = default)
+    {
+        return Task.FromResult<IReadOnlyList<BtcUsdReferencePricePoint>>(
+            BtcUpDown5mOddsTicks
+                .Where(tick => tick.BinancePriceUsd > 0m)
+                .GroupBy(tick => new DateTime(
+                    tick.SampledAtUtc.UtcDateTime.Year,
+                    tick.SampledAtUtc.UtcDateTime.Month,
+                    tick.SampledAtUtc.UtcDateTime.Day,
+                    tick.SampledAtUtc.UtcDateTime.Hour,
+                    tick.SampledAtUtc.UtcDateTime.Minute,
+                    0,
+                    DateTimeKind.Utc))
+                .Select(group => group
+                    .OrderByDescending(tick => tick.SampledAtUtc)
+                    .ThenByDescending(tick => tick.CreatedAtUtc)
+                    .First())
+                .OrderByDescending(tick => tick.SampledAtUtc)
+                .Take(Math.Max(1, limit))
+                .OrderBy(tick => tick.SampledAtUtc)
+                .ThenBy(tick => tick.CreatedAtUtc)
+                .Select(tick => new BtcUsdReferencePricePoint(
+                    tick.BinancePriceUsd,
+                    tick.BinanceSourceUpdatedAtUtc,
+                    tick.BinanceFetchedAtUtc,
+                    "BinanceTradeWebSocketOddsArchive"))
+                .ToArray());
+    }
+
     public Task<IReadOnlyList<BtcUpDown5mOddsTick>> GetBtcUpDown5mOddsTicksForMarketStartAsync(
         DateTimeOffset marketStartUtc,
         int limit = 500,

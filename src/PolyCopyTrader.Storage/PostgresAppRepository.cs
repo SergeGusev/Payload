@@ -3427,6 +3427,52 @@ LIMIT @Limit;
 		return results;
 	}
 
+	public async Task<IReadOnlyList<BtcUsdReferencePricePoint>> GetRecentBtcUsdReferencePricePointsAsync(int limit = 100, CancellationToken cancellationToken = default(CancellationToken))
+	{
+		await using NpgsqlConnection connection = await OpenConnectionAsync(cancellationToken);
+		await using NpgsqlCommand command = CreateCommand(connection, """
+WITH source_ticks AS (
+    SELECT
+        date_trunc('minute', sampled_at_utc AT TIME ZONE 'UTC') AS sample_minute,
+        sampled_at_utc,
+        binance_price_usd,
+        binance_source_updated_at_utc,
+        binance_fetched_at_utc,
+        created_at_utc
+    FROM btc_up_down_5m_odds_ticks
+    WHERE binance_price_usd > 0
+),
+recent_minute_samples AS (
+    SELECT DISTINCT ON (sample_minute)
+        sample_minute,
+        sampled_at_utc,
+        binance_price_usd,
+        binance_source_updated_at_utc,
+        binance_fetched_at_utc,
+        created_at_utc
+    FROM source_ticks
+    ORDER BY sample_minute DESC, sampled_at_utc DESC, created_at_utc DESC
+    LIMIT @Limit
+)
+SELECT binance_price_usd, binance_source_updated_at_utc, binance_fetched_at_utc
+FROM recent_minute_samples
+ORDER BY sample_minute ASC, sampled_at_utc ASC, created_at_utc ASC;
+""");
+		command.Parameters.Add("Limit", NpgsqlDbType.Integer).Value = Math.Max(1, limit);
+		await using NpgsqlDataReader reader = await command.ExecuteReaderAsync(cancellationToken);
+		List<BtcUsdReferencePricePoint> results = [];
+		while (await reader.ReadAsync(cancellationToken))
+		{
+			results.Add(new BtcUsdReferencePricePoint(
+				reader.GetDecimal(0),
+				DateTimeOffsetFromUtc(reader.GetDateTime(1)),
+				DateTimeOffsetFromUtc(reader.GetDateTime(2)),
+				"BinanceTradeWebSocketOddsArchive"));
+		}
+
+		return results;
+	}
+
 	public async Task<IReadOnlyList<BtcUpDown5mOddsTick>> GetBtcUpDown5mOddsTicksForMarketStartAsync(DateTimeOffset marketStartUtc, int limit = 500, CancellationToken cancellationToken = default(CancellationToken))
 	{
 		await using NpgsqlConnection connection = await OpenConnectionAsync(cancellationToken);
