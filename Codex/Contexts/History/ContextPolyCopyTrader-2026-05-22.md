@@ -128,3 +128,9 @@ Request:
 
 Result:
 Changed BTC 5m Skip bps and Skip bps Instant thresholding to use cumulative archived Binance bps across the current streak of identical close-book outcomes, added shared per-cycle streak calculation cache and diagnostics, updated tests/docs, and verified focused BTC processor tests plus full solution tests.
+## 2026-05-22T13:32:06.5041659Z
+Request:
+Выложил, проверяй
+
+Result:
+Checked production read-only at `192.168.0.101`: service is fresh on build `9116d66`, BTC odds feed is live, all 100 Skip bps rows are enabled, and post-deploy cumulative Skip bps diagnostics are present. The `13:25Z` market placed 50 standard and 50 instant Paper orders and all 100 filled; no Skip bps live orders were submitted because those rows have `live_stakes=false`.

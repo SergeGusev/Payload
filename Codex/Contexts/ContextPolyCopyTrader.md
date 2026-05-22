@@ -1,3 +1,20 @@
+## Active Update 2026-05-22 Production Skip Bps Cumulative Deploy Check
+Goal: Verify production is running cumulative Skip bps build `9116d66` and that new Skip bps strategies place and fill Paper orders.
+Status: Completed
+Done:
+- Queried production PostgreSQL read-only through Dashboard Remote host `192.168.0.101`; no production rows were written.
+- Confirmed `PolyCopyTrader.Service` is fresh and running `info=1.0.0+9116d6628e99b28a34043584438a8748db92255a`, mode `Live`, with empty `last_error`.
+- Confirmed BTC odds feed is fresh: latest sample `2026-05-22T13:31:30.886Z`, with `56` rows in the last 5 minutes at the final check.
+- Confirmed strategy rows: `1570` total, `100` Skip bps rows, all `100` enabled, `0` live, `0` manual paused, `32` auto-live-paused at the final check.
+- Confirmed post-deploy Skip bps Paper behavior: at the `13:25Z` market the service created `50` standard orders at `0.50` and `50` instant orders at `0.36`; all `100` were filled by `2026-05-22T13:30:28Z`.
+- Confirmed new cumulative diagnostics on those orders: latest outcome streak `Down`, streak count `3`, latest market abs move about `9.7168 bps`, cumulative abs move about `15.6904 bps`, so thresholds up to `5 bps` entered and selected `Up`.
+- The next `13:30Z` market computed the new cumulative signal too, with streak count `4` and cumulative abs move about `22.0431 bps`, but skipped entry with `opposite_outcome_open_order` while prior orders were still open/filling.
+- Confirmed no Skip bps live orders were submitted because the new Skip bps strategy rows currently have `live_stakes=false`.
+- Removed the temporary .NET/Npgsql read-only probe.
+Next: Let production run longer and re-check settled PnL after the filled `13:25Z` Paper orders settle.
+Notes: Diagnostic only. Verification was the read-only production probe plus `git diff --check` after context updates. No source behavior change, production DB write, service restart, live order submission, or cancel action was performed.
+Blockers: None.
+
 ## Active Update 2026-05-22 BTC Skip Bps Cumulative Streak Move
 Goal: Change new BTC 5m Skip bps variants so their threshold uses cumulative bps across the current streak of identical previous outcomes.
 Status: Completed
