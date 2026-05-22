@@ -1,3 +1,18 @@
+## Active Update 2026-05-22 Skew Usage Research
+Goal: Continue BTC 5m order-book skew research and propose a one-sided use that does not buy both outcomes.
+Status: Completed
+Done:
+- Queried production PostgreSQL at `192.168.0.101` read-only with `default_transaction_read_only=on`; no production rows were written.
+- Scanner state during the check: `6792` rows from `2026-05-22T05:20:23Z` to about `2026-05-22T08:00:15Z`, across `33` markets; `60` `would_arbitrage=true` rows across `26` markets.
+- Joined scanner positives to nearest BTC odds ticks and settled paper-run outcomes. Settled/joined sample is still small: `18` eligible positive rows across `7` settled markets, `13` rows with both books age <= `2s`.
+- Buying the cheap side blindly is not a useful directional signal: on the positive-row settled sample it won `27.8%` of rows, with only `+0.07` one-share PnL despite average ask `0.274`; the sample is too small and near breakeven.
+- Using Binance direction alone on all age<=2s scanner rows with absolute move >= `2 bps` was poor in this short sample: first signal per market was `9` markets, `66.7%` wins, `-0.70` one-share PnL because the average selected ask was `0.744`.
+- Filtering that same Binance direction by real skew improved the small sample: `would_arbitrage=true`, age<=2s, absolute move >= `2 bps` gave `5` first-per-market signals, `100%` wins, `+0.95` one-share PnL, average selected ask `0.81`; `top_ask_sum<=0.99` produced the same first-per-market set. Treat this only as a hypothesis because the sample is tiny.
+- Proposed use: do not execute both sides; use skew only as a discount/confirmation gate for an independent one-sided Binance direction signal, then shadow/Paper it before any live path.
+Next: Implement a read-only `SkewDirectionalScanner`/shadow report that records independent direction, selected ask, top ask sum, book ages, move bps, and later settled one-share PnL without placing orders.
+Notes: Temporary C#/.NET/Npgsql read-only probe was created outside the repo and removed. No source-code behavior change, service restart, live order submission, cancel action, or production DB write was performed.
+Blockers: The result is based on only a few settled markets; it is not statistically strong enough for live trading.
+
 ## Active Update 2026-05-22 Arbitrage Scanner Preliminary Conclusions
 Goal: Determine whether any conclusions can be drawn from the new BTC 5m covered-arbitrage scanner output.
 Status: Completed
