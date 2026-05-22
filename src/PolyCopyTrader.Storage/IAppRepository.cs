@@ -584,6 +584,13 @@ public interface IAppRepository
         return Task.CompletedTask;
     }
 
+    Task UpsertBtcUpDown5mResultStreakDiagnosticAsync(
+        BtcUpDown5mResultStreakDiagnostic diagnostic,
+        CancellationToken cancellationToken = default)
+    {
+        return Task.CompletedTask;
+    }
+
     Task<bool> TryAddBtc5mHistoryLiveObservationAsync(
         Btc5mHistoryLiveObservation observation,
         CancellationToken cancellationToken = default)

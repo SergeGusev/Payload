@@ -3531,6 +3531,53 @@ INSERT INTO btc_up_down_5m_arbitrage_scans (
 		await command.ExecuteNonQueryAsync(cancellationToken);
 	}
 
+	public async Task UpsertBtcUpDown5mResultStreakDiagnosticAsync(BtcUpDown5mResultStreakDiagnostic diagnostic, CancellationToken cancellationToken = default(CancellationToken))
+	{
+		await using NpgsqlConnection connection = await OpenConnectionAsync(cancellationToken);
+		await using NpgsqlCommand command = CreateCommand(connection, """
+INSERT INTO btc_up_down_5m_result_streak_diagnostics (
+    id, market_id, condition_id, market_slug, market_start_utc, market_end_utc, sampled_at_utc,
+    latest_previous_market_id, latest_previous_market_slug, latest_previous_market_start_utc, latest_previous_market_end_utc,
+    streak_winning_outcome, base_selected_direction, selected_outcome,
+    close_book_streak_result_count, cumulative_move_market_count,
+    latest_move_bps, latest_abs_move_bps, cumulative_move_bps, cumulative_abs_move_bps,
+    rejection_reason, streak_truncated_reason, diagnostics_json, created_at_utc, updated_at_utc
+) VALUES (
+    @Id, @MarketId, @ConditionId, @MarketSlug, @MarketStartUtc, @MarketEndUtc, @SampledAtUtc,
+    @LatestPreviousMarketId, @LatestPreviousMarketSlug, @LatestPreviousMarketStartUtc, @LatestPreviousMarketEndUtc,
+    @StreakWinningOutcome, @BaseSelectedDirection, @SelectedOutcome,
+    @CloseBookStreakResultCount, @CumulativeMoveMarketCount,
+    @LatestMoveBps, @LatestAbsMoveBps, @CumulativeMoveBps, @CumulativeAbsMoveBps,
+    @RejectionReason, @StreakTruncatedReason, CAST(@DiagnosticsJson AS jsonb), @CreatedAtUtc, @UpdatedAtUtc
+)
+ON CONFLICT (market_id) DO UPDATE SET
+    condition_id = excluded.condition_id,
+    market_slug = excluded.market_slug,
+    market_start_utc = excluded.market_start_utc,
+    market_end_utc = excluded.market_end_utc,
+    sampled_at_utc = excluded.sampled_at_utc,
+    latest_previous_market_id = excluded.latest_previous_market_id,
+    latest_previous_market_slug = excluded.latest_previous_market_slug,
+    latest_previous_market_start_utc = excluded.latest_previous_market_start_utc,
+    latest_previous_market_end_utc = excluded.latest_previous_market_end_utc,
+    streak_winning_outcome = excluded.streak_winning_outcome,
+    base_selected_direction = excluded.base_selected_direction,
+    selected_outcome = excluded.selected_outcome,
+    close_book_streak_result_count = excluded.close_book_streak_result_count,
+    cumulative_move_market_count = excluded.cumulative_move_market_count,
+    latest_move_bps = excluded.latest_move_bps,
+    latest_abs_move_bps = excluded.latest_abs_move_bps,
+    cumulative_move_bps = excluded.cumulative_move_bps,
+    cumulative_abs_move_bps = excluded.cumulative_abs_move_bps,
+    rejection_reason = excluded.rejection_reason,
+    streak_truncated_reason = excluded.streak_truncated_reason,
+    diagnostics_json = excluded.diagnostics_json,
+    updated_at_utc = excluded.updated_at_utc;
+""");
+		AddBtcUpDown5mResultStreakDiagnosticParameters(command, diagnostic);
+		await command.ExecuteNonQueryAsync(cancellationToken);
+	}
+
 	public async Task<bool> TryAddBtc5mHistoryLiveObservationAsync(Btc5mHistoryLiveObservation observation, CancellationToken cancellationToken = default(CancellationToken))
 	{
 		await using NpgsqlConnection connection = await OpenConnectionAsync(cancellationToken);
@@ -7946,6 +7993,35 @@ LIMIT @Limit;
 		command.Parameters.AddWithValue("WouldArbitrage", scan.WouldArbitrage);
 		command.Parameters.AddWithValue("DiagnosticsJson", string.IsNullOrWhiteSpace(scan.DiagnosticsJson) ? "{}" : scan.DiagnosticsJson);
 		command.Parameters.Add("CreatedAtUtc", NpgsqlDbType.TimestampTz).Value = UtcDateTime(scan.CreatedAtUtc);
+	}
+
+	private static void AddBtcUpDown5mResultStreakDiagnosticParameters(NpgsqlCommand command, BtcUpDown5mResultStreakDiagnostic diagnostic)
+	{
+		command.Parameters.AddWithValue("Id", diagnostic.Id);
+		command.Parameters.AddWithValue("MarketId", diagnostic.MarketId);
+		command.Parameters.AddWithValue("ConditionId", diagnostic.ConditionId);
+		command.Parameters.AddWithValue("MarketSlug", diagnostic.MarketSlug);
+		command.Parameters.Add("MarketStartUtc", NpgsqlDbType.TimestampTz).Value = UtcDateTime(diagnostic.MarketStartUtc);
+		command.Parameters.Add("MarketEndUtc", NpgsqlDbType.TimestampTz).Value = NullableDateTime(diagnostic.MarketEndUtc);
+		command.Parameters.Add("SampledAtUtc", NpgsqlDbType.TimestampTz).Value = UtcDateTime(diagnostic.SampledAtUtc);
+		command.Parameters.AddWithValue("LatestPreviousMarketId", string.IsNullOrWhiteSpace(diagnostic.LatestPreviousMarketId) ? DBNull.Value : diagnostic.LatestPreviousMarketId);
+		command.Parameters.AddWithValue("LatestPreviousMarketSlug", string.IsNullOrWhiteSpace(diagnostic.LatestPreviousMarketSlug) ? DBNull.Value : diagnostic.LatestPreviousMarketSlug);
+		command.Parameters.Add("LatestPreviousMarketStartUtc", NpgsqlDbType.TimestampTz).Value = NullableDateTime(diagnostic.LatestPreviousMarketStartUtc);
+		command.Parameters.Add("LatestPreviousMarketEndUtc", NpgsqlDbType.TimestampTz).Value = NullableDateTime(diagnostic.LatestPreviousMarketEndUtc);
+		command.Parameters.AddWithValue("StreakWinningOutcome", string.IsNullOrWhiteSpace(diagnostic.StreakWinningOutcome) ? DBNull.Value : diagnostic.StreakWinningOutcome);
+		command.Parameters.AddWithValue("BaseSelectedDirection", string.IsNullOrWhiteSpace(diagnostic.BaseSelectedDirection) ? DBNull.Value : diagnostic.BaseSelectedDirection);
+		command.Parameters.AddWithValue("SelectedOutcome", string.IsNullOrWhiteSpace(diagnostic.SelectedOutcome) ? DBNull.Value : diagnostic.SelectedOutcome);
+		command.Parameters.AddWithValue("CloseBookStreakResultCount", diagnostic.CloseBookStreakResultCount);
+		command.Parameters.AddWithValue("CumulativeMoveMarketCount", diagnostic.CumulativeMoveMarketCount);
+		command.Parameters.AddWithValue("LatestMoveBps", NullableDecimal(diagnostic.LatestMoveBps));
+		command.Parameters.AddWithValue("LatestAbsMoveBps", NullableDecimal(diagnostic.LatestAbsMoveBps));
+		command.Parameters.AddWithValue("CumulativeMoveBps", NullableDecimal(diagnostic.CumulativeMoveBps));
+		command.Parameters.AddWithValue("CumulativeAbsMoveBps", NullableDecimal(diagnostic.CumulativeAbsMoveBps));
+		command.Parameters.AddWithValue("RejectionReason", string.IsNullOrWhiteSpace(diagnostic.RejectionReason) ? DBNull.Value : diagnostic.RejectionReason);
+		command.Parameters.AddWithValue("StreakTruncatedReason", string.IsNullOrWhiteSpace(diagnostic.StreakTruncatedReason) ? DBNull.Value : diagnostic.StreakTruncatedReason);
+		command.Parameters.AddWithValue("DiagnosticsJson", string.IsNullOrWhiteSpace(diagnostic.DiagnosticsJson) ? "{}" : diagnostic.DiagnosticsJson);
+		command.Parameters.Add("CreatedAtUtc", NpgsqlDbType.TimestampTz).Value = UtcDateTime(diagnostic.CreatedAtUtc);
+		command.Parameters.Add("UpdatedAtUtc", NpgsqlDbType.TimestampTz).Value = UtcDateTime(diagnostic.UpdatedAtUtc);
 	}
 
 	private static void AddBtc5mHistoryLiveObservationParameters(NpgsqlCommand command, Btc5mHistoryLiveObservation observation)

@@ -306,6 +306,33 @@ public sealed record BtcUpDown5mArbitrageScan(
     string DiagnosticsJson,
     DateTimeOffset CreatedAtUtc);
 
+public sealed record BtcUpDown5mResultStreakDiagnostic(
+    Guid Id,
+    string MarketId,
+    string ConditionId,
+    string MarketSlug,
+    DateTimeOffset MarketStartUtc,
+    DateTimeOffset? MarketEndUtc,
+    DateTimeOffset SampledAtUtc,
+    string? LatestPreviousMarketId,
+    string? LatestPreviousMarketSlug,
+    DateTimeOffset? LatestPreviousMarketStartUtc,
+    DateTimeOffset? LatestPreviousMarketEndUtc,
+    string? StreakWinningOutcome,
+    string? BaseSelectedDirection,
+    string? SelectedOutcome,
+    int CloseBookStreakResultCount,
+    int CumulativeMoveMarketCount,
+    decimal? LatestMoveBps,
+    decimal? LatestAbsMoveBps,
+    decimal? CumulativeMoveBps,
+    decimal? CumulativeAbsMoveBps,
+    string? RejectionReason,
+    string? StreakTruncatedReason,
+    string DiagnosticsJson,
+    DateTimeOffset CreatedAtUtc,
+    DateTimeOffset UpdatedAtUtc);
+
 public sealed record CryptoUpDown5mOddsTick(
     Guid Id,
     string AssetSymbol,

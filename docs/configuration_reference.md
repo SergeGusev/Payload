@@ -689,6 +689,10 @@ threshold. A completed below-threshold cumulative move skips with
 `btc_previous_market_move_below_bps_threshold`. Standard `Skip bps` variants use
 a fixed `0.50` GTD BUY, while matching `Instant` variants use the same selected
 outcome executable ask-depth pricing and sizing path as Binance instant variants.
+The shared Skip bps streak calculation also records one
+`btc_up_down_5m_result_streak_diagnostics` row per target market. Use
+`close_book_streak_result_count` to find the longest same-outcome run and
+`cumulative_abs_move_bps` to find the maximum accumulated BTC move over the run.
 `Middle`,
 `Middle Revert`, `Skip`, and `Skip Revert` create pending Paper BUY orders as
 ordinary GTD limit orders. Their limit

@@ -134,3 +134,10 @@ Request:
 
 Result:
 Checked production read-only at `192.168.0.101`: service is fresh on build `9116d66`, BTC odds feed is live, all 100 Skip bps rows are enabled, and post-deploy cumulative Skip bps diagnostics are present. The `13:25Z` market placed 50 standard and 50 instant Paper orders and all 100 filled; no Skip bps live orders were submitted because those rows have `live_stakes=false`.
+
+## 2026-05-22T13:49:25.4982193Z
+Request:
+Add diagnostics for the count of consecutive identical BTC 5m outcomes and the maximum accumulated bps over those streaks.
+
+Result:
+Added persistent `btc_up_down_5m_result_streak_diagnostics` rows for the shared Skip bps cumulative streak calculation. Each target market now upserts one row keyed by `market_id` with `close_book_streak_result_count`, `cumulative_move_market_count`, latest/cumulative signed and absolute bps, streak outcome, selected opposite outcome, rejection/truncation reasons, and compact JSON details. Updated repository support, test repository, schema assertions, BTC processor tests, README, and configuration reference. Verification passed: focused BTC+Storage tests `170/170`, full solution tests `535/535`, and `git diff --check` passed with LF/CRLF warnings only. No production DB write, service restart, live order submission, or cancel action was performed.

@@ -5881,6 +5881,7 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
         var minMoveBps = GetSkipPreviousResultMinMoveBps(variant) ?? 0m;
         var moveSignal = (await GetCachedSkipPreviousResultBpsStreakMoveSignalAsync(
                 skipBpsStreakMoveSignalTasks,
+                market,
                 marketStartUtc.Value,
                 nowUtc,
                 cancellationToken))
@@ -5966,6 +5967,7 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
 
     private Task<BtcPreviousMarketMoveSignal> GetCachedSkipPreviousResultBpsStreakMoveSignalAsync(
         System.Collections.Concurrent.ConcurrentDictionary<long, Lazy<Task<BtcPreviousMarketMoveSignal>>> signalTasks,
+        PolymarketGammaMarket market,
         DateTimeOffset marketStartUtc,
         DateTimeOffset nowUtc,
         CancellationToken cancellationToken)
@@ -5974,12 +5976,31 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
         var lazy = signalTasks.GetOrAdd(
             cacheKey,
             _ => new Lazy<Task<BtcPreviousMarketMoveSignal>>(
-                () => GetSkipPreviousResultBpsStreakMoveSignalAsync(marketStartUtc, nowUtc, cancellationToken),
+                () => GetSkipPreviousResultBpsStreakMoveSignalAsync(market, marketStartUtc, nowUtc, cancellationToken),
                 LazyThreadSafetyMode.ExecutionAndPublication));
         return lazy.Value;
     }
 
     private async Task<BtcPreviousMarketMoveSignal> GetSkipPreviousResultBpsStreakMoveSignalAsync(
+        PolymarketGammaMarket market,
+        DateTimeOffset marketStartUtc,
+        DateTimeOffset nowUtc,
+        CancellationToken cancellationToken)
+    {
+        var signal = await CalculateSkipPreviousResultBpsStreakMoveSignalAsync(
+            marketStartUtc,
+            nowUtc,
+            cancellationToken);
+        await TryRecordBtcUpDown5mResultStreakDiagnosticAsync(
+            market,
+            marketStartUtc,
+            nowUtc,
+            signal,
+            cancellationToken);
+        return signal;
+    }
+
+    private async Task<BtcPreviousMarketMoveSignal> CalculateSkipPreviousResultBpsStreakMoveSignalAsync(
         DateTimeOffset marketStartUtc,
         DateTimeOffset nowUtc,
         CancellationToken cancellationToken)
@@ -6130,6 +6151,134 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
             closeBookLookup.Diagnostics,
             truncatedReason,
             baseSelectedDirection);
+    }
+
+    private async Task TryRecordBtcUpDown5mResultStreakDiagnosticAsync(
+        PolymarketGammaMarket market,
+        DateTimeOffset marketStartUtc,
+        DateTimeOffset nowUtc,
+        BtcPreviousMarketMoveSignal signal,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            var diagnostic = BuildBtcUpDown5mResultStreakDiagnostic(
+                market,
+                marketStartUtc,
+                nowUtc,
+                signal);
+            await repository.UpsertBtcUpDown5mResultStreakDiagnosticAsync(diagnostic, cancellationToken);
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            logger.LogWarning(
+                ex,
+                "Failed to record BTC Up/Down 5m result streak diagnostic for market {MarketId} at {MarketStartUtc}.",
+                market.MarketId,
+                marketStartUtc);
+        }
+    }
+
+    private static BtcUpDown5mResultStreakDiagnostic BuildBtcUpDown5mResultStreakDiagnostic(
+        PolymarketGammaMarket market,
+        DateTimeOffset marketStartUtc,
+        DateTimeOffset nowUtc,
+        BtcPreviousMarketMoveSignal signal)
+    {
+        var baseSelectedDirection = signal.BaseSelectedDirection?.ToString();
+        var selectedOutcome = signal.BaseSelectedDirection is { } direction
+            ? TrySelectOutcomeForDirection(market, direction)?.Outcome
+            : null;
+        var diagnosticsJson = JsonSerializer.Serialize(new
+        {
+            decision_source = "skip_bps_cumulative_previous_result_streak",
+            market_id = market.MarketId,
+            market_slug = market.Slug,
+            market_start_utc = marketStartUtc,
+            sampled_at_utc = nowUtc,
+            latest_previous_market_id = signal.PreviousMarketId,
+            latest_previous_market_slug = signal.PreviousMarketSlug,
+            latest_previous_market_start_utc = signal.PreviousMarketStartUtc,
+            latest_previous_market_end_utc = signal.PreviousMarketEndUtc,
+            streak_winning_outcome = signal.StreakWinningOutcome,
+            base_selected_direction = baseSelectedDirection,
+            selected_outcome = selectedOutcome,
+            close_book_streak_result_count = signal.CloseBookStreakResultCount,
+            cumulative_move_market_count = signal.StreakResultCount,
+            latest_move_bps = signal.MoveBps,
+            latest_abs_move_bps = signal.AbsMoveBps,
+            cumulative_move_bps = signal.CumulativeMoveBps,
+            cumulative_abs_move_bps = signal.CumulativeAbsMoveBps,
+            rejection_reason = signal.RejectionReason,
+            streak_truncated_reason = signal.StreakTruncatedReason,
+            streak_moves = signal.StreakMoveComponents?.Select(component => new
+            {
+                market_id = component.MarketId,
+                market_slug = component.MarketSlug,
+                market_start_utc = component.MarketStartUtc,
+                market_end_utc = component.MarketEndUtc,
+                winning_outcome = component.WinningOutcome,
+                move_bps = component.MoveBps,
+                abs_move_bps = component.AbsMoveBps,
+                start_price_usd = component.StartPriceUsd,
+                end_price_usd = component.EndPriceUsd,
+                raw_sample_count = component.RawSampleCount,
+                valid_sample_count = component.ValidSampleCount
+            }),
+            close_book_results = signal.StreakResults?.Select(result => new
+            {
+                market_id = result.MarketId,
+                market_slug = result.MarketSlug,
+                market_start_utc = result.MarketStartUtc,
+                market_end_utc = result.MarketEndUtc,
+                winning_outcome = result.WinningOutcome,
+                result_source = result.ResultSource,
+                up_midpoint = result.UpMidpoint,
+                down_midpoint = result.DownMidpoint
+            }),
+            close_book_diagnostics = signal.CloseBookDiagnostics?.Select(diagnostic => new
+            {
+                expected_market_start_utc = diagnostic.ExpectedMarketStartUtc,
+                market_id = diagnostic.MarketId,
+                market_slug = diagnostic.MarketSlug,
+                market_end_utc = diagnostic.MarketEndUtc,
+                reason = diagnostic.Reason,
+                order_book_unavailable = diagnostic.OrderBookUnavailable,
+                up_lookup_reason = diagnostic.UpLookupReason,
+                down_lookup_reason = diagnostic.DownLookupReason
+            })
+        });
+
+        return new BtcUpDown5mResultStreakDiagnostic(
+            Guid.NewGuid(),
+            market.MarketId,
+            market.ConditionId,
+            market.Slug,
+            marketStartUtc,
+            market.EndDateUtc,
+            nowUtc,
+            signal.PreviousMarketId,
+            signal.PreviousMarketSlug,
+            signal.PreviousMarketStartUtc,
+            signal.PreviousMarketEndUtc,
+            signal.StreakWinningOutcome,
+            baseSelectedDirection,
+            selectedOutcome,
+            signal.CloseBookStreakResultCount,
+            signal.StreakResultCount,
+            signal.MoveBps,
+            signal.AbsMoveBps,
+            signal.CumulativeMoveBps,
+            signal.CumulativeAbsMoveBps,
+            signal.RejectionReason,
+            signal.StreakTruncatedReason,
+            diagnosticsJson,
+            nowUtc,
+            nowUtc);
     }
 
     private static IReadOnlyList<DateTimeOffset> GetExpectedPreviousBtc5mMarketStarts(

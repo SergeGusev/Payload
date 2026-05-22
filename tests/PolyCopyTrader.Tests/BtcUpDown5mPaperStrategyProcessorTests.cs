@@ -4518,6 +4518,17 @@ public sealed class BtcUpDown5mPaperStrategyProcessorTests
         Assert.Contains("\"previous_btc_cumulative_abs_move_from_start_bps\":0.2", order.RawDecisionJson, StringComparison.Ordinal);
         Assert.Contains("\"previous_btc_streak_result_count\":2", order.RawDecisionJson, StringComparison.Ordinal);
         Assert.Contains("\"previous_btc_min_move_from_start_bps\":0.2", order.RawDecisionJson, StringComparison.Ordinal);
+        var diagnostic = Assert.Single(repository.BtcUpDown5mResultStreakDiagnostics);
+        Assert.Equal("market-1", diagnostic.MarketId);
+        Assert.Equal("Up", diagnostic.StreakWinningOutcome);
+        Assert.Equal("Down", diagnostic.BaseSelectedDirection);
+        Assert.Equal("Down", diagnostic.SelectedOutcome);
+        Assert.Equal(2, diagnostic.CloseBookStreakResultCount);
+        Assert.Equal(2, diagnostic.CumulativeMoveMarketCount);
+        Assert.Equal(0.1m, diagnostic.LatestAbsMoveBps.GetValueOrDefault());
+        Assert.Equal(0.2m, diagnostic.CumulativeAbsMoveBps.GetValueOrDefault());
+        Assert.Contains("\"close_book_streak_result_count\":2", diagnostic.DiagnosticsJson, StringComparison.Ordinal);
+        Assert.Contains("\"cumulative_abs_move_bps\":0.2", diagnostic.DiagnosticsJson, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -4559,6 +4570,11 @@ public sealed class BtcUpDown5mPaperStrategyProcessorTests
         Assert.NotNull(run.SkipDiagnosticsJson);
         Assert.Contains("\"previous_btc_cumulative_abs_move_from_start_bps\":0.1", run.SkipDiagnosticsJson, StringComparison.Ordinal);
         Assert.Contains("\"previous_btc_streak_result_count\":1", run.SkipDiagnosticsJson, StringComparison.Ordinal);
+        var diagnostic = Assert.Single(repository.BtcUpDown5mResultStreakDiagnostics);
+        Assert.Equal("Up", diagnostic.StreakWinningOutcome);
+        Assert.Equal(1, diagnostic.CloseBookStreakResultCount);
+        Assert.Equal(1, diagnostic.CumulativeMoveMarketCount);
+        Assert.Equal(0.1m, diagnostic.CumulativeAbsMoveBps.GetValueOrDefault());
     }
 
     [Fact]

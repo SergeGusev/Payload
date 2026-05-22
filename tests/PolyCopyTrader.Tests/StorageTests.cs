@@ -229,6 +229,11 @@ public sealed class StorageTests
         Assert.Contains("net_profit_usd numeric(28,8) NULL", PostgresSchema.SchemaSql, StringComparison.Ordinal);
         Assert.Contains("would_arbitrage boolean NOT NULL", PostgresSchema.SchemaSql, StringComparison.Ordinal);
         Assert.Contains("ix_btc_up_down_5m_arbitrage_scans_decision", PostgresSchema.SchemaSql, StringComparison.Ordinal);
+        Assert.Contains("CREATE TABLE IF NOT EXISTS btc_up_down_5m_result_streak_diagnostics", PostgresSchema.SchemaSql, StringComparison.Ordinal);
+        Assert.Contains("close_book_streak_result_count integer NOT NULL", PostgresSchema.SchemaSql, StringComparison.Ordinal);
+        Assert.Contains("cumulative_abs_move_bps numeric(28,12) NULL", PostgresSchema.SchemaSql, StringComparison.Ordinal);
+        Assert.Contains("ux_btc_up_down_5m_result_streak_diagnostics_market", PostgresSchema.SchemaSql, StringComparison.Ordinal);
+        Assert.Contains("ix_btc_up_down_5m_result_streak_diagnostics_streak", PostgresSchema.SchemaSql, StringComparison.Ordinal);
         Assert.Contains("CREATE TABLE IF NOT EXISTS crypto_up_down_5m_odds_ticks", PostgresSchema.SchemaSql, StringComparison.Ordinal);
         Assert.Contains("ix_crypto_up_down_5m_odds_ticks_asset_market_time", PostgresSchema.SchemaSql, StringComparison.Ordinal);
         Assert.Contains("up_price_proxy_kind text NOT NULL", PostgresSchema.SchemaSql, StringComparison.Ordinal);

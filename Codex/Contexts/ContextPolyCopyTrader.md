@@ -1,3 +1,16 @@
+## Active Update 2026-05-22 BTC Skip Bps Streak Diagnostics
+Goal: Add persistent diagnostics for identical BTC 5m outcome streak length and maximum accumulated bps.
+Status: Completed
+Done:
+- Added `btc_up_down_5m_result_streak_diagnostics` with one upserted row per target market, keyed by `market_id`.
+- The row stores `close_book_streak_result_count` for the current identical close-book outcome run length and `cumulative_abs_move_bps` for accumulated BTC bps over streak markets with archived BTC samples.
+- Wired the write into the shared cached Skip bps cumulative calculation, so all 100 Skip bps variants in a cycle produce one diagnostic row rather than duplicate rows.
+- The diagnostic also stores latest previous market identity, streak winning outcome, selected opposite outcome, latest/cumulative signed and absolute bps, rejection/truncation reason, and compact JSON details.
+- Added repository/test repository support, schema assertions, BTC processor regression assertions for summed and reset streaks, plus README/config reference notes.
+Next: Deploy/restart the service so production creates `btc_up_down_5m_result_streak_diagnostics`; after a week, query `max(close_book_streak_result_count)` and `max(cumulative_abs_move_bps)`.
+Notes: Verification passed: focused BTC+Storage tests `170/170`, full solution tests `535/535`, and `git diff --check` passed with LF/CRLF warnings only. No production DB write, service restart, live order submission, or cancel action was performed.
+Blockers: None.
+
 ## Active Update 2026-05-22 Production Skip Bps Cumulative Deploy Check
 Goal: Verify production is running cumulative Skip bps build `9116d66` and that new Skip bps strategies place and fill Paper orders.
 Status: Completed

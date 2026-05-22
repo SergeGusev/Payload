@@ -35,6 +35,7 @@ public static class PostgresSchema
         "btc_5m_history_live_observations",
         "btc_up_down_5m_statistics_ticks",
         "btc_up_down_5m_arbitrage_scans",
+        "btc_up_down_5m_result_streak_diagnostics",
         "crypto_up_down_5m_odds_ticks",
         "paper_copied_leader_positions",
         "paper_copied_leader_activity_events",
@@ -2954,6 +2955,41 @@ ON btc_up_down_5m_arbitrage_scans(market_id, sampled_at_utc DESC);
 
 CREATE INDEX IF NOT EXISTS ix_btc_up_down_5m_arbitrage_scans_decision
 ON btc_up_down_5m_arbitrage_scans(would_arbitrage, decision_code, sampled_at_utc DESC);
+
+CREATE TABLE IF NOT EXISTS btc_up_down_5m_result_streak_diagnostics (
+    id uuid PRIMARY KEY,
+    market_id text NOT NULL,
+    condition_id text NOT NULL,
+    market_slug text NOT NULL,
+    market_start_utc timestamptz NOT NULL,
+    market_end_utc timestamptz NULL,
+    sampled_at_utc timestamptz NOT NULL,
+    latest_previous_market_id text NULL,
+    latest_previous_market_slug text NULL,
+    latest_previous_market_start_utc timestamptz NULL,
+    latest_previous_market_end_utc timestamptz NULL,
+    streak_winning_outcome text NULL,
+    base_selected_direction text NULL,
+    selected_outcome text NULL,
+    close_book_streak_result_count integer NOT NULL,
+    cumulative_move_market_count integer NOT NULL,
+    latest_move_bps numeric(28,12) NULL,
+    latest_abs_move_bps numeric(28,12) NULL,
+    cumulative_move_bps numeric(28,12) NULL,
+    cumulative_abs_move_bps numeric(28,12) NULL,
+    rejection_reason text NULL,
+    streak_truncated_reason text NULL,
+    diagnostics_json jsonb NOT NULL DEFAULT '{}'::jsonb,
+    created_at_utc timestamptz NOT NULL,
+    updated_at_utc timestamptz NOT NULL,
+    CONSTRAINT ux_btc_up_down_5m_result_streak_diagnostics_market UNIQUE (market_id)
+);
+
+CREATE INDEX IF NOT EXISTS ix_btc_up_down_5m_result_streak_diagnostics_sampled
+ON btc_up_down_5m_result_streak_diagnostics(sampled_at_utc DESC);
+
+CREATE INDEX IF NOT EXISTS ix_btc_up_down_5m_result_streak_diagnostics_streak
+ON btc_up_down_5m_result_streak_diagnostics(close_book_streak_result_count DESC, cumulative_abs_move_bps DESC);
 
 CREATE TABLE IF NOT EXISTS crypto_up_down_5m_odds_ticks (
     id uuid PRIMARY KEY,

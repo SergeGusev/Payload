@@ -109,6 +109,8 @@ internal sealed class TestAppRepository : IAppRepository
 
     public List<BtcUpDown5mArbitrageScan> BtcUpDown5mArbitrageScans { get; } = [];
 
+    public List<BtcUpDown5mResultStreakDiagnostic> BtcUpDown5mResultStreakDiagnostics { get; } = [];
+
     public List<CryptoUpDown5mOddsTick> CryptoUpDown5mOddsTicks { get; } = [];
 
     public List<ApiError> ApiErrors { get; } = [];
@@ -1973,6 +1975,16 @@ internal sealed class TestAppRepository : IAppRepository
         CancellationToken cancellationToken = default)
     {
         BtcUpDown5mArbitrageScans.Add(scan);
+        return Task.CompletedTask;
+    }
+
+    public Task UpsertBtcUpDown5mResultStreakDiagnosticAsync(
+        BtcUpDown5mResultStreakDiagnostic diagnostic,
+        CancellationToken cancellationToken = default)
+    {
+        BtcUpDown5mResultStreakDiagnostics.RemoveAll(existing =>
+            string.Equals(existing.MarketId, diagnostic.MarketId, StringComparison.OrdinalIgnoreCase));
+        BtcUpDown5mResultStreakDiagnostics.Add(diagnostic);
         return Task.CompletedTask;
     }
 
