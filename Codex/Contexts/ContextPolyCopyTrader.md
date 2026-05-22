@@ -1,3 +1,19 @@
+## Active Update 2026-05-22 Arbitrage Scanner Preliminary Conclusions
+Goal: Determine whether any conclusions can be drawn from the new BTC 5m covered-arbitrage scanner output.
+Status: Completed
+Done:
+- Queried production PostgreSQL at `192.168.0.101` read-only with `default_transaction_read_only=on`.
+- Confirmed service heartbeat is fresh: `Running`, mode `Live`, commit `d52d9d5`, last heartbeat about `2026-05-22T07:35:25Z`, `last_error` empty.
+- Scanner sample at `2026-05-22T07:36Z`: `5760` rows from `2026-05-22T05:20:23Z` to `2026-05-22T07:36:00Z`, across `28` markets.
+- Positive raw rows: `51` total `would_arbitrage=true`, across `22` markets; `22` positives in the last hour. Best observed `net_profit_usd=14.8181`; sum of positive-row net profit was `104.36838`.
+- Quality distribution for positive rows: `35/51` had both order books age <= `2s`; all `51/51` were <= `5s`; median positive net profit was `0.4772`, p90 `6.4976`.
+- Persistence is the main issue: grouped positive episodes were `46` across `22` markets, with total observed positive duration only `7.39s`, average duration `0.16s`, max duration `1.76s`, and max `2` scans in any episode.
+- Conservative raw filters still leave some rows: `22` rows with net >= `$0.10`, shares >= `10`, both book ages <= `2s`; `7` rows with net >= `$1`, shares >= `50`, both book ages <= `2s`; `7` rows with net >= `$5`, shares = `100`, both book ages <= `3s`.
+- No `BtcUpDown5mArbitrageScannerWorker` API errors in the last 6 hours.
+Next: Treat current output as evidence that covered micro-windows exist, but do not trade from it until an execution simulator/live-shadow layer checks two-leg fillability, all-or-none behavior, latency, and stale-book rejection.
+Notes: Temporary C#/.NET/Npgsql read-only probe was created outside the repo and removed. No production DB write, service restart, live order submission, cancel action, source-code change, or tests were performed.
+Blockers: Current scanner does not prove executable profit; it only records instantaneous book snapshots.
+
 ## Active Update 2026-05-22 Production Arbitrage Scanner Health
 Goal: Check how the new BTC 5m covered-arbitrage scanner is doing in production.
 Status: Completed

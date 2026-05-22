@@ -28,3 +28,9 @@ Request:
 
 Result:
 Checked production PostgreSQL read-only. The new BTC 5m covered-arbitrage scanner is actively writing: `4818` total rows from `2026-05-22T05:20:23Z` through latest sample `2026-05-22T07:13:51Z`; `213` rows in the last 5 minutes, `638` in the last 15 minutes, and `2542` in the last hour. It observed `23` `covered_arbitrage` rows in the last hour and `42` in the last 6 hours, with best observed `net_profit_usd=14.8181`. Last-hour decision mix was `2359` `no_covered_arbitrage`, `160` `missing_asks`, and `23` `covered_arbitrage`; no `BtcUpDown5mArbitrageScannerWorker` API errors were found. Temporary C# read-only probe was removed. Initial DB connection timed out, but PostgreSQL succeeded on retry; IPC port `5118` was not reachable from this machine.
+## 2026-05-22T07:36:23.4810450+00:00
+Request:
+Уже можно сделать какие-то выводы по результатам работы сканера?
+
+Result:
+Queried production scanner output read-only. Preliminary conclusion: covered micro-windows exist, but they are extremely short and not yet a live-trading signal. At `2026-05-22T07:36Z`, `btc_up_down_5m_arbitrage_scans` had `5760` rows from `05:20:23Z` to `07:36:00Z` across `28` markets, with `51` raw `would_arbitrage=true` rows across `22` markets and `22` positives in the last hour. Best observed `net_profit_usd=14.8181`, median positive net profit `0.4772`, and p90 `6.4976`; `35/51` positive rows had both order-book ages <= 2 seconds and all were <= 5 seconds. However, positives grouped into `46` episodes with total observed positive duration only `7.39s`, average duration `0.16s`, max duration `1.76s`, and max `2` scans per episode. No scanner worker API errors were found. Temporary C# read-only probe was removed.
