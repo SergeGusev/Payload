@@ -249,3 +249,9 @@ Request:
 
 Result:
 Added split Paper skipped strategy metrics for Dashboard and CSV exports. Skipped runs with no `paper_order_id` now display as condition skips; skipped runs with a `paper_order_id` display as not accepted. Updated domain rows, PostgreSQL aggregations, dashboard row models/mapping, WPF grids, CSV export, and tests. Verification passed with targeted StrategyPerformance tests, isolated Dashboard build, full solution tests, and diff check; default Dashboard output remained locked by the currently running Dashboard process.
+## 2026-05-22T19:52:54.8007530Z
+Request:
+Сделай Enabled = true для всех bps стратегий
+
+Result:
+Updated production PostgreSQL through Dashboard Remote host `192.168.0.101`. Before the update, `btc_middle_bps` had `90/90` disabled rows while other bps families were already enabled. Ran a targeted update setting `strategies.enabled=true` for disabled rows whose code contains `_bps_`; PostgreSQL updated `90` rows. Verified afterward that all `490` bps strategies are enabled, `0` are disabled, and `live_stakes` remains `0` for all bps families. No source behavior, Live flags, pause flags, orders, or strategy history were changed.

@@ -1,3 +1,15 @@
+## Active Update 2026-05-22 Enable Production Bps Strategies
+Goal: Set `Enabled=true` for all production bps strategies without changing Live flags.
+Status: Completed
+Done:
+- Queried production PostgreSQL through Dashboard Remote host `192.168.0.101` and found `490` bps strategies total.
+- Confirmed before update only `btc_middle_bps` was disabled: `90/90` disabled; BTC/ETH/SOL Binance bps and BTC Skip bps were already enabled.
+- Updated `strategies.enabled=true` for all disabled rows where `position('_bps_' in lower(code)) > 0`; PostgreSQL returned `90` updated rows.
+- Rechecked after update: all bps families are now fully enabled (`490/490` enabled, `0` disabled), and `live_stakes` remains `0` for every bps family.
+Next: None.
+Notes: Production DB write was limited to `strategies.enabled` and `updated_at_utc` for disabled bps rows. `live_stakes`, auto-live-pause, manual pause, order rows, and source code were not changed. No source tests were run because no code changed.
+Blockers: None.
+
 ## Active Update 2026-05-22 Dashboard Paper Skipped Split
 Goal: Split Dashboard Paper skipped counts into skipped before order creation and skipped after a Paper order was created but not accepted/filled.
 Status: Completed
