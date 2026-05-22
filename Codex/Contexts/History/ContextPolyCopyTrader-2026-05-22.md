@@ -1,3 +1,10 @@
+## 2026-05-22T18:09:54.9184028Z
+Request:
+Сделай произвольные ничего не значащие изменения в каждой библиотеке, чтобы Publish сделал новые версии.
+
+Result:
+Added harmless assembly metadata marker `PublishTouch=2026-05-22-rescale-republish` to the four current `src` library projects: Domain, Polymarket, Storage, and Strategy. Verified generated Debug/Release assembly info contains the marker for all four libraries, full tests passed 537/537, local Release service publish produced all four dependency DLLs in the publish output, and `git diff --check` passed. No production DB writes, service restarts, live order submissions, or cancels were performed.
+
 ## 2026-05-22T17:11:56.3697732Z
 Request:
 А сейчас?

@@ -1,3 +1,14 @@
+## Active Update 2026-05-22 Library Publish Touch
+Goal: Force current service dependency libraries to produce new publish artifacts after production showed a partial deployment with stale Storage assembly/schema code.
+Status: Completed
+Done:
+- Added harmless assembly metadata marker `PublishTouch=2026-05-22-rescale-republish` to the four current `src` library projects: `PolyCopyTrader.Domain`, `PolyCopyTrader.Polymarket`, `PolyCopyTrader.Storage`, and `PolyCopyTrader.Strategy`.
+- Confirmed generated Debug/Release assembly info for all four libraries contains the new metadata attribute, so rebuilt DLLs get changed assembly contents.
+- Confirmed local Release publish of `PolyCopyTrader.Service` emitted `PolyCopyTrader.Domain.dll`, `PolyCopyTrader.Polymarket.dll`, `PolyCopyTrader.Storage.dll`, and `PolyCopyTrader.Strategy.dll` into the publish output.
+Next: Republish/redeploy the full service publish folder and restart production, then re-run the production read-only verification for `schema_data_migrations` and renamed bps strategy rows.
+Notes: Verification passed: `dotnet test PolyCopyTrader.sln --no-restore` 537/537, `dotnet publish src\PolyCopyTrader.Service\PolyCopyTrader.Service.csproj -c Release -o %TEMP%\polycopytrader-service-publish-touch-20260522 --no-restore`, `git diff --check`. Existing Storage nullable warnings remain.
+Blockers: None.
+
 ## Active Update 2026-05-22 Production Rescale Partial Deploy Recheck
 Goal: Re-check whether the newly redeployed production version now has the bps rescale schema/data changes.
 Status: Completed

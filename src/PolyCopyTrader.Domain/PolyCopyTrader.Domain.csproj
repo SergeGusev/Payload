@@ -6,4 +6,11 @@
     <Nullable>enable</Nullable>
   </PropertyGroup>
 
+  <ItemGroup>
+    <AssemblyAttribute Include="System.Reflection.AssemblyMetadataAttribute">
+      <_Parameter1>PublishTouch</_Parameter1>
+      <_Parameter2>2026-05-22-rescale-republish</_Parameter2>
+    </AssemblyAttribute>
+  </ItemGroup>
+
 </Project>
