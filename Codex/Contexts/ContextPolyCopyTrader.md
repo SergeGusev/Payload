@@ -1,3 +1,15 @@
+## Active Update 2026-05-22 Binance Direction Behavior Answer
+Goal: Confirm whether current Binance strategies select Up when Binance is above market start and Down when below.
+Status: Completed
+Done:
+- Re-read repository workflow/rules/context and inspected `BtcUpDown5mPaperStrategyProcessor`, `StrategyIds` variant definitions, configuration docs, and regression tests.
+- Confirmed `ResolveStartRelativeDirection` returns `Up` when current reference price is above archived market-start price, `Down` when below, and `null` on equality.
+- Confirmed `TrySelectOutcomeForDirection` maps direction `Up` to outcome `"Up"` and direction `Down` to outcome `"Down"`.
+- Confirmed BTC Binance, BTC bps, BTC Instant bps, fixed-price `45/47/49`, delayed `15s/30s/45s`, Clever/Edge, and crypto ETH/SOL Binance bps variants all use this same start-relative base direction, with variant-specific filters/pricing layered on top.
+Next: None.
+Notes: No source code or production data was changed; verification was code/doc/test inspection only.
+Blockers: None.
+
 ## Active Update 2026-05-22 Binance Direction Plus Skew Research
 Goal: Continue research on using real BTC 5m order-book skew as a gate for independent Binance-direction entries.
 Status: Completed

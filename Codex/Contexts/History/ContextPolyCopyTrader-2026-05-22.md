@@ -46,3 +46,9 @@ Request:
 
 Result:
 Continued read-only production research on Binance direction gated by real skew. Scanner had `7265` rows from `2026-05-22T05:20:23Z` to about `08:11:24Z`, `61` positive `would_arbitrage=true` rows across `27` markets. Winner coverage combined live observations and paper runs: `1809` markets, `793` observation-sourced, `1016` paper-sourced, `0` mismatches; the current eligible scanner sample was `1588` rows across `9` markets. Baseline Binance direction with abs move >= `2 bps` and first signal per market was weak: `9` markets, `6` wins, `-0.70` one-share PnL, average ask `0.7444`. Adding real skew (`would_arbitrage=true` or `ask_sum<=0.99`) gave `5/5` first-per-market wins and `+0.95` one-share PnL, but all windows were extremely short: `5` episodes, `6` rows total, `1.3752s` total observed duration. Practical filters: `seconds_to_close>=30` left `3/3`, `+0.84`, avg ask `0.72`; `seconds_to_close>=60` or `ask<=0.85` left `2/2`, `+0.71`, avg ask `0.645`. Recommended only a read-only/Paper shadow strategy for now, not live.
+## 2026-05-22T09:16:18.3559147Z
+Request:
+А текущие Binance стратегии так и работают? Up, если Binance выше старта рынка и Down, если Binance ниже старта рынка ?
+
+Result:
+Inspected current code/docs/tests and confirmed the Binance strategy family uses start-relative direction: current reference price above archived market-start reference selects `Up`, below selects `Down`, equality gives no direction and may defer while the opening-limit wait is still active. BTC Binance, bps, Instant bps, fixed-price, delayed, Clever/Edge, and ETH/SOL crypto Binance bps variants share this base direction, with additional variant-specific filters and pricing.
