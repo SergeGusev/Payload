@@ -122,3 +122,9 @@ Request:
 
 Result:
 Added 50 standard `BTC Up or Down 5m Skip N bps` variants and 50 `Instant` variants for thresholds `0.1..5.0 bps`. The new signal uses the immediately previous BTC 5m close-book inferred result, buys the opposite outcome, and enters only when the previous market's archived Binance BTC start-to-close move reaches the configured absolute bps threshold. Standard variants use fixed `0.50` GTD BUY pricing; Instant variants reuse the existing Binance instant executable ask-depth sizing/pricing path. Added PostgreSQL seed rows, diagnostics, regression tests, README/configuration docs. Verification passed: targeted BTC tests 144/144, BTC+Storage tests 168/168, full solution tests 533/533, and `git diff --check` with LF/CRLF warnings only. No production DB writes, deploy, service restart, live orders, or cancels were performed.
+## 2026-05-22T13:17:21.7552463Z
+Request:
+Давай уточним подсчёт смещения для новых стратегий Skip bps. Смещения подряд идущих одинаковых исходов должны суммироваться. Например, первый маркет закончился Up + 0.1 bps, мы ставим только 0.1 bps стратегию на Down. Проиграли, опять случился Up + 0.1 bps. Тогда получается, что текущий bps будет уже 0.2, поэтому ставят стратегии 0.1 и 0.2
+
+Result:
+Changed BTC 5m Skip bps and Skip bps Instant thresholding to use cumulative archived Binance bps across the current streak of identical close-book outcomes, added shared per-cycle streak calculation cache and diagnostics, updated tests/docs, and verified focused BTC processor tests plus full solution tests.

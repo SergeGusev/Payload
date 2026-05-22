@@ -115,6 +115,15 @@ public sealed class BtcUpDown5mPaperStrategyProcessorTests
     private static readonly BtcUpDown5mStrategyVariant Skip1Variant =
         StrategyIds.BtcUpDown5mVariants.Single(variant => variant.Code == "btc_up_down_5m_skip_1");
 
+    private static readonly BtcUpDown5mStrategyVariant SkipBps01Variant =
+        StrategyIds.BtcUpDown5mVariants.Single(variant => variant.Code == "btc_up_down_5m_skip_bps_0_1");
+
+    private static readonly BtcUpDown5mStrategyVariant SkipBps02Variant =
+        StrategyIds.BtcUpDown5mVariants.Single(variant => variant.Code == "btc_up_down_5m_skip_bps_0_2");
+
+    private static readonly BtcUpDown5mStrategyVariant SkipBps03Variant =
+        StrategyIds.BtcUpDown5mVariants.Single(variant => variant.Code == "btc_up_down_5m_skip_bps_0_3");
+
     private static readonly BtcUpDown5mStrategyVariant SkipBps2Variant =
         StrategyIds.BtcUpDown5mVariants.Single(variant => variant.Code == "btc_up_down_5m_skip_bps_2");
 
@@ -4452,6 +4461,104 @@ public sealed class BtcUpDown5mPaperStrategyProcessorTests
         Assert.Contains("\"previous_btc_min_move_from_start_bps\":2", run.SkipDiagnosticsJson, StringComparison.Ordinal);
         Assert.Contains("\"base_selected_direction\":\"Up\"", run.SkipDiagnosticsJson, StringComparison.Ordinal);
         Assert.Contains("\"selected_direction\":null", run.SkipDiagnosticsJson, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task ProcessAsync_SkipBpsThresholdSumsConsecutiveSameOutcomeMoves()
+    {
+        var now = DateTimeOffset.UtcNow;
+        var previousStart = now.AddMinutes(-5);
+        var secondPreviousStart = now.AddMinutes(-10);
+        var repository = new TestAppRepository();
+        repository.PolymarketGammaMarkets.Add(CreateMarket(
+            now,
+            now.AddMinutes(5),
+            upPrice: 0.50m,
+            downPrice: 0.50m));
+        var closeBookOrderBooks = AddCloseBookResults(repository, now, "Up", "Up");
+        AddBtcOddsTick(repository, "skip-bps-prev-1", previousStart, 0, 100m, 100m, 0.50m, 0.50m);
+        AddBtcOddsTick(repository, "skip-bps-prev-1", previousStart, 299, 100.001m, 100m, 0.50m, 0.50m);
+        AddBtcOddsTick(repository, "skip-bps-prev-2", secondPreviousStart, 0, 100m, 100m, 0.50m, 0.50m);
+        AddBtcOddsTick(repository, "skip-bps-prev-2", secondPreviousStart, 299, 100.001m, 100m, 0.50m, 0.50m);
+        var enabledCodes = new[]
+        {
+            SkipBps01Variant.Code,
+            SkipBps02Variant.Code,
+            SkipBps03Variant.Code
+        };
+        var processor = CreateProcessorCoreWithOptions(
+            repository,
+            [],
+            DefaultOrderBooks(),
+            _ => { },
+            closeBookOrderBooks,
+            CreateBtcOptions(paperTakerPricingEnabled: false, enabledCodes),
+            new FakeBtcUsdReferencePriceClient(100m),
+            CreateBtcUsdReferenceCache([100m]));
+
+        var result = await processor.ProcessAsync();
+
+        Assert.Equal(2, result.EntriesPlaced);
+        Assert.Contains(repository.StrategyMarketPaperRuns, item =>
+            item.StrategyId == SkipBps01Variant.Id &&
+            item.Status == StrategyMarketPaperRunStatuses.Entered &&
+            item.SelectedOutcome == "Down");
+        Assert.Contains(repository.StrategyMarketPaperRuns, item =>
+            item.StrategyId == SkipBps02Variant.Id &&
+            item.Status == StrategyMarketPaperRunStatuses.Entered &&
+            item.SelectedOutcome == "Down");
+        var skipped = Assert.Single(repository.StrategyMarketPaperRuns, item =>
+            item.StrategyId == SkipBps03Variant.Id &&
+            item.MarketId == "market-1");
+        Assert.Equal(StrategyMarketPaperRunStatuses.Skipped, skipped.Status);
+        Assert.Equal("btc_previous_market_move_below_bps_threshold", skipped.SkipReason);
+        Assert.Equal(2, repository.PaperOrders.Count);
+        var order = Assert.Single(repository.PaperOrders, item => item.StrategyId == SkipBps02Variant.Id);
+        Assert.Contains("\"previous_btc_abs_move_from_start_bps\":0.1", order.RawDecisionJson, StringComparison.Ordinal);
+        Assert.Contains("\"previous_btc_cumulative_abs_move_from_start_bps\":0.2", order.RawDecisionJson, StringComparison.Ordinal);
+        Assert.Contains("\"previous_btc_streak_result_count\":2", order.RawDecisionJson, StringComparison.Ordinal);
+        Assert.Contains("\"previous_btc_min_move_from_start_bps\":0.2", order.RawDecisionJson, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task ProcessAsync_SkipBpsThresholdResetsCumulativeMoveWhenOutcomeChanges()
+    {
+        var now = DateTimeOffset.UtcNow;
+        var previousStart = now.AddMinutes(-5);
+        var secondPreviousStart = now.AddMinutes(-10);
+        var repository = new TestAppRepository();
+        repository.PolymarketGammaMarkets.Add(CreateMarket(
+            now,
+            now.AddMinutes(5),
+            upPrice: 0.50m,
+            downPrice: 0.50m));
+        var closeBookOrderBooks = AddCloseBookResults(repository, now, "Up", "Down");
+        AddBtcOddsTick(repository, "skip-bps-reset-prev-1", previousStart, 0, 100m, 100m, 0.50m, 0.50m);
+        AddBtcOddsTick(repository, "skip-bps-reset-prev-1", previousStart, 299, 100.001m, 100m, 0.50m, 0.50m);
+        AddBtcOddsTick(repository, "skip-bps-reset-prev-2", secondPreviousStart, 0, 100m, 100m, 0.50m, 0.50m);
+        AddBtcOddsTick(repository, "skip-bps-reset-prev-2", secondPreviousStart, 299, 99.95m, 100m, 0.50m, 0.50m);
+        var processor = CreateProcessorCoreWithOptions(
+            repository,
+            [],
+            DefaultOrderBooks(),
+            _ => { },
+            closeBookOrderBooks,
+            CreateBtcOptions(paperTakerPricingEnabled: false, [SkipBps02Variant.Code]),
+            new FakeBtcUsdReferencePriceClient(100m),
+            CreateBtcUsdReferenceCache([100m]));
+
+        var result = await processor.ProcessAsync();
+
+        Assert.Equal(0, result.EntriesPlaced);
+        Assert.Empty(repository.PaperOrders);
+        var run = Assert.Single(repository.StrategyMarketPaperRuns, item =>
+            item.StrategyId == SkipBps02Variant.Id &&
+            item.MarketId == "market-1");
+        Assert.Equal(StrategyMarketPaperRunStatuses.Skipped, run.Status);
+        Assert.Equal("btc_previous_market_move_below_bps_threshold", run.SkipReason);
+        Assert.NotNull(run.SkipDiagnosticsJson);
+        Assert.Contains("\"previous_btc_cumulative_abs_move_from_start_bps\":0.1", run.SkipDiagnosticsJson, StringComparison.Ordinal);
+        Assert.Contains("\"previous_btc_streak_result_count\":1", run.SkipDiagnosticsJson, StringComparison.Ordinal);
     }
 
     [Fact]

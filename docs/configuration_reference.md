@@ -681,10 +681,11 @@ consecutive inferred `Up` results the `Skip` variants buy `Down`; after `N`
 consecutive inferred `Down` results they buy `Up`; otherwise they skip. The `Skip Revert`
 variants inspect the same result stack and invert that final decision:
 consecutive `Up` buys `Up`, and consecutive `Down` buys `Down`. `Skip 0.1..5
-bps` variants inspect only the immediately previous close-book result, buy the
-opposite outcome, and additionally require the previous market's archived
-Binance BTC move from market start to a close-time sample to reach the configured
-absolute bps threshold; completed below-threshold moves skip with
+bps` variants inspect the immediately previous close-book result, walk backward
+through the current streak of identical inferred outcomes, sum each streak
+market's archived Binance BTC start-to-close absolute bps move, buy the opposite
+outcome, and require that cumulative streak move to reach the configured
+threshold. A completed below-threshold cumulative move skips with
 `btc_previous_market_move_below_bps_threshold`. Standard `Skip bps` variants use
 a fixed `0.50` GTD BUY, while matching `Instant` variants use the same selected
 outcome executable ask-depth pricing and sizing path as Binance instant variants.

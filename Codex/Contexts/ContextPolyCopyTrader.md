@@ -1,3 +1,17 @@
+## Active Update 2026-05-22 BTC Skip Bps Cumulative Streak Move
+Goal: Change new BTC 5m Skip bps variants so their threshold uses cumulative bps across the current streak of identical previous outcomes.
+Status: Completed
+Done:
+- Changed `SkipPreviousResultBpsThreshold` and `SkipPreviousResultBpsThresholdInstant` entry decisions to walk backward through the current close-book streak of identical inferred BTC 5m outcomes and sum each streak market's archived Binance start-to-close absolute bps move.
+- The strategy still buys the opposite of the latest streak outcome, but the threshold now compares against `previous_btc_cumulative_abs_move_from_start_bps`; a streak resets when the inferred outcome changes.
+- Added per-cycle cached streak-move calculation keyed by current market start so the 100 Skip bps variants share the same close-book/tick lookup within an entry batch.
+- Added diagnostics for streak outcome, streak counts, cumulative signed/absolute bps, optional truncation reason, and per-market streak moves.
+- Added regression tests for `0.1 + 0.1 = 0.2` triggering `0.1`/`0.2` but not `0.3`, and for cumulative reset when the older outcome differs.
+- Updated README and configuration reference.
+Next: Deploy/restart the service so production uses cumulative Skip bps thresholds.
+Notes: Verification passed: `dotnet test tests\PolyCopyTrader.Tests\PolyCopyTrader.Tests.csproj --no-restore --filter "FullyQualifiedName~BtcUpDown5mPaperStrategyProcessorTests"` passed 146/146; `dotnet test PolyCopyTrader.sln --no-restore` passed 535/535; `git diff --check` passed with LF/CRLF warnings only. The temporary read-only production probe from the prior check was removed. No production DB write, service restart, live order submission, or cancel action was performed.
+Blockers: None.
+
 ## Active Update 2026-05-22 BTC Skip Bps Strategy Set
 Goal: Add BTC 5m Skip bps and Skip bps Instant strategy variants that flip the immediately previous winner only after a previous-market BTC move threshold.
 Status: Completed
