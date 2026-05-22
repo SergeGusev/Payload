@@ -1,3 +1,18 @@
+## Active Update 2026-05-22 Production Arbitrage Scanner Health
+Goal: Check how the new BTC 5m covered-arbitrage scanner is doing in production.
+Status: Completed
+Done:
+- Queried production PostgreSQL at `192.168.0.101` read-only with `default_transaction_read_only=on`.
+- Confirmed service heartbeat is fresh: `Running`, mode `Live`, commit `d52d9d5`, started `2026-05-22T05:20:23Z`, last heartbeat about `2026-05-22T07:13:25Z`, `last_error` empty.
+- Confirmed `btc_up_down_5m_arbitrage_scans` is actively writing: `4818` total rows from first sample `2026-05-22T05:20:23Z` to latest sample `2026-05-22T07:13:51Z`.
+- Recent volume: `213` rows in the last 5 minutes, `638` in the last 15 minutes, `2542` in the last hour, and all `4818` in the last 6 hours.
+- Positive covered-arbitrage observations: `23` in the last hour, `42` in the last 6 hours; best observed `net_profit_usd=14.8181`.
+- Last-hour decision mix: `2359` `no_covered_arbitrage`, `160` `missing_asks`, `23` `covered_arbitrage`.
+- Confirmed no `BtcUpDown5mArbitrageScannerWorker` API errors in the last 6 hours.
+Next: If using these observations for trading, add execution/slippage/all-or-none handling before any live order path; scanner rows are diagnostics only.
+Notes: Temporary C#/.NET/Npgsql read-only probe was created outside the repo and removed. Initial connection attempt timed out, but PostgreSQL was reachable on retry; IPC port `5118` was not reachable from this machine during the check. No production DB write, service restart, live order submission, cancel action, source-code change, or tests were performed.
+Blockers: None for DB/scanner telemetry; IPC reachability from this machine was flaky/unavailable during the check.
+
 ## Active Update 2026-05-22 Production Statistics Collection Check
 Goal: Verify whether the deployed statistics collection is producing fresh production rows.
 Status: Completed

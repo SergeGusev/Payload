@@ -22,3 +22,9 @@ Request:
 
 Result:
 Checked production PostgreSQL read-only. The new `btc_up_down_5m_arbitrage_scans` collection is working: 522 total rows by `2026-05-22T05:32:14Z`, 210 rows in the last 5 minutes, 522 in the last hour, and 4 `would_arbitrage=true` rows in the last hour. The old `btc_up_down_5m_statistics_ticks` feed is not fresh: latest row is still `2026-05-19T05:18:12Z`, with 0 rows in the last hour, because production strategy row `btc_up_down_5m_statistics` has `enabled=false`. No scanner/statistics worker API errors were found in the last 2 hours. Temporary C# read-only probe was removed.
+## 2026-05-22T07:14:09.7585350+00:00
+Request:
+Как дела у нового сканера?
+
+Result:
+Checked production PostgreSQL read-only. The new BTC 5m covered-arbitrage scanner is actively writing: `4818` total rows from `2026-05-22T05:20:23Z` through latest sample `2026-05-22T07:13:51Z`; `213` rows in the last 5 minutes, `638` in the last 15 minutes, and `2542` in the last hour. It observed `23` `covered_arbitrage` rows in the last hour and `42` in the last 6 hours, with best observed `net_profit_usd=14.8181`. Last-hour decision mix was `2359` `no_covered_arbitrage`, `160` `missing_asks`, and `23` `covered_arbitrage`; no `BtcUpDown5mArbitrageScannerWorker` API errors were found. Temporary C# read-only probe was removed. Initial DB connection timed out, but PostgreSQL succeeded on retry; IPC port `5118` was not reachable from this machine.
