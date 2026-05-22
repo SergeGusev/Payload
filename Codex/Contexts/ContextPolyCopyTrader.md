@@ -1,3 +1,15 @@
+## Active Update 2026-05-22 Binance Bps Threshold Range Interpretation
+Goal: Clarify whether current `0..5 bps` strategy grids are too narrow compared with observed BTC Binance movements.
+Status: Completed
+Done:
+- Interpreted the previous production read-only statistics: stored BTC tick history reached about `46.41 bps` absolute move over the last 24 hours, while actual BTC Binance fixed order decisions reached about `29.86 bps`.
+- Clarified that a `0..5 bps` threshold grid does not ignore moves above `5 bps`; any move above `5` still triggers all thresholds up to `5`.
+- Clarified the real limitation: all high-move cases above `5 bps` are collapsed into the same bucket, so the system cannot compare or enable dedicated `10`, `20`, `30`, or `50 bps` variants.
+- Recommended extending research/strategy grids up to about `50 bps`, preferably with fine steps up to `5 bps` and coarser steps above that unless dense `0.1` steps are explicitly needed.
+Next: If requested, add additional BTC Binance/Skip bps thresholds beyond `5 bps` and compare performance by higher bps buckets before enabling live.
+Notes: Diagnostic/interpretation only. No source behavior, production data, service state, orders, or cancels were changed.
+Blockers: None.
+
 ## Active Update 2026-05-22 Binance Bps History Check
 Goal: Check whether min/max bps for BTC Binance strategies over the last 24 hours can be recovered from stored history or needs recalculation.
 Status: Completed

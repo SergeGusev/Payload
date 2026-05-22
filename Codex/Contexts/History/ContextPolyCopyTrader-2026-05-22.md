@@ -161,3 +161,9 @@ Can we recover the minimum and maximum bps history for our Binance strategies ov
 
 Result:
 Confirmed existing production history is enough for the last 24 hours; no recalculation is needed unless older windows or gap-filling are required. Queried production PostgreSQL read-only through Dashboard Remote host `192.168.0.101`. BTC tick archive coverage was `15877` ticks across `289` markets, with full-market signed BTC move range `-32.57041201` to `46.41030071 bps`. Actual BTC Binance order decisions covered `4218` orders across `107` strategies and `231` markets, with stored `reference_move_from_start_bps` range `-10.4191832` to `29.86060432 bps`; all evaluated stored Binance decisions including skips covered `26474` decisions across `288` markets with the same overall signed range. Fixed Binance order decisions ranged `-10.4191832` to `29.86060432 bps`; instant order decisions ranged `-4.34672309` to `5.08544865 bps`, while instant evaluated runs including skips ranged `-6.99788161` to `5.89200105 bps`. No production rows were written and no service/order state was changed.
+## 2026-05-22T15:02:00Z
+Request:
+То есть мы работаем с bps от 0 до 5, а по факту надо работать от 0 до 50 ?
+
+Result:
+Clarified that the current `0..5 bps` grids do not ignore larger moves: a `30 bps` move still passes all thresholds up to `5`. The limitation is bucketing: all movements above `5 bps` collapse into the same highest bucket, while production history showed BTC ticks up to about `46.41 bps` and actual fixed Binance order decisions up to about `29.86 bps`. Recommended extending research/strategy buckets toward `50 bps`, preferably with fine granularity up to `5 bps` and coarser thresholds above it unless dense `0.1 bps` steps are explicitly needed. No source behavior or production data was changed.
