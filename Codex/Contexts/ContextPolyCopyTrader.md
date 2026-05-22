@@ -1,3 +1,16 @@
+## Active Update 2026-05-23 Delete Production Middle Depth 2-5
+Goal: Remove old production `BTC Up or Down 5m Middle 2` through `Middle 5` strategy rows and all their bps/revert-bps variants.
+Status: Completed
+Done:
+- Queried production PostgreSQL through Dashboard Remote host `192.168.0.101` and found `80` old `btc_up_down_5m_middle_[2-5]` strategy rows; all were already `enabled=false`/`live_stakes=false`, with `0` active live orders.
+- Deleted the old strategy rows and dependent historical data in production: `80` strategies, `7582` paper orders, `505` paper fills, `9832` strategy runs, `12760` synthetic signals, `498` paper positions, and `426` paper position settlements. No live orders, dry-run orders, shadow decisions, shadow discrepancies, or signal rejections matched.
+- Inserted schema data marker `20260523_delete_middle_depth_2_5` with the deletion counts.
+- Rechecked production after deletion: target strategy/history counts are all `0`; remaining Middle family is exactly `Middle 1`, `Middle 1 1..100 bps`, `Middle 1 Revert`, and `Middle 1 Revert 1..100 bps`, all Paper-only.
+- Confirmed service stayed healthy: `PolyCopyTrader.Service` is `Running`/`Live` on build `ac1eb2d`, `last_error` is null, no post-start `api_errors`, and BTC odds/crypto odds/arbitrage/strategy activity is fresh.
+Next: None.
+Notes: Production DB write only. No source behavior changed and no source tests were run. The first delete attempt timed out in local `dbprobe` before commit and rolled back; the successful retry used a longer local probe command timeout and completed transactionally.
+Blockers: None.
+
 ## Active Update 2026-05-22 Middle Reference Cache Warmup
 Goal: Warm the Middle strategy BTC reference mean from persisted history after service restart.
 Status: Completed

@@ -301,3 +301,10 @@ Request:
 
 Result:
 Implemented startup warm-up for the Middle BTC reference cache. Added `BtcUsdReferencePriceCacheWarmupService`, registered before the Binance BTC trade stream and BTC strategy workers, so the in-memory `BtcUsdReferencePriceCache` is filled from persisted history before live stream sampling continues. Added repository support to load up to `BinanceBtcUsdReference.WindowSize` recent minute-level BTC reference samples from `btc_up_down_5m_odds_ticks`, using the latest tick per UTC minute rather than raw 5-second ticks to preserve the intended roughly 100-minute mean window. Updated tests, test repository support, and configuration docs. Verification passed: focused warm-up/reference/storage tests `30/30`, full solution tests `540/540`, `git diff --check`, and a production read-only SQL probe confirmed the query returns `100` recent minute samples.
+
+## 2026-05-22T21:18:39.6680179Z
+Request:
+Удали стратегии от BTC Up or Down 5m Middle 2 до BTC Up or Down 5m Middle 5 со всеми их bps
+
+Result:
+Deleted old production PostgreSQL strategy rows matching `btc_up_down_5m_middle_[2-5]`, including standard, revert, bps, and revert-bps variants. The target set contained `80` disabled/Paper-only strategies and `0` active live orders. Deleted dependent historical rows transactionally: `7582` paper orders, `505` paper fills, `9832` strategy runs, `12760` synthetic signals, `498` paper positions, and `426` paper position settlements; no live orders, dry-run orders, shadow rows, or signal rejections matched. Inserted schema data marker `20260523_delete_middle_depth_2_5` with deletion counts. Verified remaining Middle strategies are exactly `Middle 1`, `Middle 1 1..100 bps`, `Middle 1 Revert`, and `Middle 1 Revert 1..100 bps`, all Paper-only. Service stayed healthy on build `ac1eb2d` with no post-start API errors and fresh odds/arbitrage/strategy activity. No source behavior changed and no tests were run because this was a production data cleanup.
