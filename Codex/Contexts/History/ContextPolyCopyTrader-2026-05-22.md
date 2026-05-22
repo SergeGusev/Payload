@@ -255,3 +255,10 @@ Request:
 
 Result:
 Updated production PostgreSQL through Dashboard Remote host `192.168.0.101`. Before the update, `btc_middle_bps` had `90/90` disabled rows while other bps families were already enabled. Ran a targeted update setting `strategies.enabled=true` for disabled rows whose code contains `_bps_`; PostgreSQL updated `90` rows. Verified afterward that all `490` bps strategies are enabled, `0` are disabled, and `live_stakes` remains `0` for all bps families. No source behavior, Live flags, pause flags, orders, or strategy history were changed.
+
+## 2026-05-22T20:05:00Z
+Request:
+Напомни отличия BTC Up or Down 5m Middle 1 от BTC Up or Down 5m Middle 2 и остальных
+
+Result:
+Inspected current Middle strategy definitions, BTC 5m processor decision code, tests, README, and configuration reference. Confirmed base `Middle N` variants differ by reference depth: `Middle 1` uses only the latest Binance BTC trade-stream price, `Middle 2` uses that plus one cached one-minute reference sample, up through `Middle 5` with four cached samples. Standard Middle buys `Down` when all compared values are above the Binance cache arithmetic mean and buys `Up` when all are below; equality or mixed sides skip. Revert variants invert only direction. Also found that Middle bps variants currently store `DecisionThresholdBps` in metadata/docs, but the current Middle decision path does not apply it, so strict executable behavior does not enforce those bps thresholds yet. No source behavior or production data was changed.

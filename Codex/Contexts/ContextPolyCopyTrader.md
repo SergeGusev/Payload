@@ -1,3 +1,15 @@
+## Active Update 2026-05-22 Middle Strategy Explanation
+Goal: Remind how `BTC Up or Down 5m Middle 1`, `Middle 2`, and related Middle variants differ.
+Status: Completed
+Done:
+- Inspected `StrategyIds` Middle variant definitions, BTC 5m processor decision code, tests, README, and configuration reference.
+- Confirmed base `Middle N` variants differ by reference depth: latest Binance BTC trade-stream price plus `N-1` cached one-minute reference samples; all compared values must be on the same side of the cached arithmetic mean.
+- Confirmed standard Middle direction is mean-reversion: above mean buys `Down`, below mean buys `Up`, equality or mixed sides skip. Revert variants invert only that final direction.
+- Found a code/docs mismatch for Middle bps variants: variant metadata stores `DecisionThresholdBps`, and docs describe a bps threshold, but the current `GetMiddleReferenceEntryDecisionAsync` path does not apply `DecisionThresholdBps`; only Binance/Skip bps helpers currently read that field.
+Next: Fix Middle bps threshold enforcement if those variants should be materially different from non-bps Middle variants.
+Notes: Read-only source inspection only. No source files, production DB rows, strategy flags, orders, or history were changed.
+Blockers: None.
+
 ## Active Update 2026-05-22 Enable Production Bps Strategies
 Goal: Set `Enabled=true` for all production bps strategies without changing Live flags.
 Status: Completed
