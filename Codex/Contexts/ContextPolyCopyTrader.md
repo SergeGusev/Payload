@@ -1,3 +1,15 @@
+## Active Update 2026-05-22 Dashboard Remote Heartbeat Clock
+Goal: Make the Dashboard reliably show stale production service heartbeats when connected to Remote database.
+Status: Completed
+Done:
+- Added `IAppRepository.GetDatabaseNowUtcAsync` with PostgreSQL implementation using `SELECT clock_timestamp();`.
+- Changed Dashboard full and strategies-only refresh paths to evaluate `service_heartbeats` freshness against the selected database server clock instead of the Dashboard machine clock.
+- Updated README and configuration reference to document database-clock heartbeat staleness.
+- Republished Dashboard to `D:\My\Business\PolyMarketPublished\PayloadDashboard`.
+Next: Restart the Dashboard from the published folder to pick up the clock fix; separately restart the production service because its heartbeat/feed telemetry is stale.
+Notes: Verification passed: `dotnet build src\PolyCopyTrader.Dashboard\PolyCopyTrader.Dashboard.csproj --no-restore -p:BaseOutputPath=<temp>\`; `dotnet test tests\PolyCopyTrader.Tests\PolyCopyTrader.Tests.csproj --no-restore --filter "FullyQualifiedName~StorageTests"` passed 24/24; `dotnet test PolyCopyTrader.sln --no-restore` passed 530/530; `dotnet publish src\PolyCopyTrader.Dashboard\PolyCopyTrader.Dashboard.csproj -c Release -o D:\My\Business\PolyMarketPublished\PayloadDashboard --no-restore`; `git diff --check` passed with LF/CRLF warnings only. Builds have existing Storage nullable warnings.
+Blockers: None for Dashboard fix; production service still needs operational restart/recheck.
+
 ## Active Update 2026-05-22 Production Service Liveness Check
 Goal: Check whether the production service is alive and whether its deployed build is current.
 Status: Completed

@@ -29,10 +29,11 @@ public sealed class DashboardDataService(
             return await LoadStrategiesOnlyAsync(controlStatus, controlStatusError, cancellationToken);
         }
 
+        var databaseNowUtc = await repository.GetDatabaseNowUtcAsync(cancellationToken);
         var heartbeats = await repository.GetServiceHeartbeatsAsync(cancellationToken);
         var serviceAvailability = DashboardServiceAvailabilityEvaluator.Evaluate(
             heartbeats,
-            DateTimeOffset.UtcNow,
+            databaseNowUtc,
             GetServiceHeartbeatStaleAfter());
         var scannerStatuses = await repository.GetScannerStatusesAsync(cancellationToken);
         var traderDiscovery = await repository.GetRecentTraderDiscoveryCandidatesAsync(
@@ -164,10 +165,11 @@ public sealed class DashboardDataService(
         string? controlStatusError,
         CancellationToken cancellationToken)
     {
+        var databaseNowUtc = await repository.GetDatabaseNowUtcAsync(cancellationToken);
         var heartbeats = await repository.GetServiceHeartbeatsAsync(cancellationToken);
         var serviceAvailability = DashboardServiceAvailabilityEvaluator.Evaluate(
             heartbeats,
-            DateTimeOffset.UtcNow,
+            databaseNowUtc,
             GetServiceHeartbeatStaleAfter());
         var strategyPerformance = await GetStrategyPerformanceAsync(cancellationToken);
         var strategyRecentPerformance = await GetStrategyRecentPerformanceAsync(cancellationToken);

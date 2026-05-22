@@ -67,6 +67,13 @@ Request:
 Result:
 Inspected current code/docs/tests and confirmed the Binance strategy family uses start-relative direction: current reference price above archived market-start reference selects `Up`, below selects `Down`, equality gives no direction and may defer while the opening-limit wait is still active. BTC Binance, bps, Instant bps, fixed-price, delayed, Clever/Edge, and ETH/SOL crypto Binance bps variants share this base direction, with additional variant-specific filters and pricing.
 
+## 2026-05-22T11:03:30.7622196+00:00
+Request:
+Но Dashboard подключился к Remote database и показыват, что всё нормально. Что можем сделать?
+
+Result:
+Changed Dashboard liveness evaluation so a Remote database cannot look healthy because of Dashboard-machine clock skew. Added `IAppRepository.GetDatabaseNowUtcAsync`, implemented it for PostgreSQL with `SELECT clock_timestamp();`, and changed both full and strategies-only Dashboard refresh paths to evaluate `service_heartbeats` freshness against the selected PostgreSQL server clock. Updated README and `docs/configuration_reference.md`, republished Dashboard to `D:\My\Business\PolyMarketPublished\PayloadDashboard`, and left production DB/service state unchanged. Verification passed: Dashboard temp-output build, targeted `StorageTests` 24/24, full solution tests 530/530, publish, and `git diff --check` with LF/CRLF warnings only. Existing Storage nullable warnings remain. The next operational step is to restart the Dashboard from the published folder and restart/recheck the stale production service.
+
 ## 2026-05-22T10:21:39.3368559+00:00
 Request:
 Проверь - живой ли и актуальный ли сервис на бою

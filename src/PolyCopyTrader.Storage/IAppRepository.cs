@@ -4,6 +4,11 @@ namespace PolyCopyTrader.Storage;
 
 public interface IAppRepository
 {
+    Task<DateTimeOffset> GetDatabaseNowUtcAsync(CancellationToken cancellationToken = default)
+    {
+        return Task.FromResult(DateTimeOffset.UtcNow);
+    }
+
     Task AddLeaderTradeAsync(LeaderTrade trade, CancellationToken cancellationToken = default);
 
     Task<bool> TryAddLeaderTradeAsync(LeaderTrade trade, CancellationToken cancellationToken = default);
