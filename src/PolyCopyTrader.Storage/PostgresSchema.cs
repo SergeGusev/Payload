@@ -2155,6 +2155,72 @@ ON CONFLICT (id) DO UPDATE SET
     updated_at_utc = excluded.updated_at_utc;
 
 INSERT INTO strategies (id, code, name, description, enabled, paper_stake_amount, created_at_utc, updated_at_utc)
+WITH thresholds(threshold_tenths) AS (
+    SELECT generate_series(1, 50)
+),
+formatted AS (
+    SELECT
+        threshold_tenths,
+        CASE
+            WHEN threshold_tenths % 10 = 0 THEN (threshold_tenths / 10)::text
+            ELSE (threshold_tenths / 10)::text || '.' || (threshold_tenths % 10)::text
+        END AS threshold_name,
+        CASE
+            WHEN threshold_tenths % 10 = 0 THEN (threshold_tenths / 10)::text
+            ELSE (threshold_tenths / 10)::text || '_' || (threshold_tenths % 10)::text
+        END AS code_suffix
+    FROM thresholds
+)
+SELECT
+    ('b7c50005-0000-4000-8027-' || lpad((100 + threshold_tenths)::text, 12, '0'))::uuid,
+    'btc_up_down_5m_skip_bps_' || code_suffix,
+    'BTC Up or Down 5m Skip ' || threshold_name || ' bps',
+    'Immediately after BTC 5m market open, inspect the immediately previous BTC 5m close-book result and the previous market''s archived Binance BTC start/end move; skip unless the absolute previous-market move is at least ' || threshold_name || ' bps. After previous Up buy Down, after previous Down buy Up. Paper entry is a GTD limit BUY at fixed 0.50 until the configured BTC GTD deadline; settlement uses only actually filled shares.',
+    true,
+    1.00,
+    now(),
+    now()
+FROM formatted
+ON CONFLICT (id) DO UPDATE SET
+    code = excluded.code,
+    name = excluded.name,
+    description = excluded.description,
+    updated_at_utc = excluded.updated_at_utc;
+
+INSERT INTO strategies (id, code, name, description, enabled, paper_stake_amount, created_at_utc, updated_at_utc)
+WITH thresholds(threshold_tenths) AS (
+    SELECT generate_series(1, 50)
+),
+formatted AS (
+    SELECT
+        threshold_tenths,
+        CASE
+            WHEN threshold_tenths % 10 = 0 THEN (threshold_tenths / 10)::text
+            ELSE (threshold_tenths / 10)::text || '.' || (threshold_tenths % 10)::text
+        END AS threshold_name,
+        CASE
+            WHEN threshold_tenths % 10 = 0 THEN (threshold_tenths / 10)::text
+            ELSE (threshold_tenths / 10)::text || '_' || (threshold_tenths % 10)::text
+        END AS code_suffix
+    FROM thresholds
+)
+SELECT
+    ('b7c50005-0000-4000-8028-' || lpad((100 + threshold_tenths)::text, 12, '0'))::uuid,
+    'btc_up_down_5m_skip_bps_' || code_suffix || '_instant',
+    'BTC Up or Down 5m Skip ' || threshold_name || ' bps Instant',
+    'Immediately after BTC 5m market open, inspect the immediately previous BTC 5m close-book result and the previous market''s archived Binance BTC start/end move; skip unless the absolute previous-market move is at least ' || threshold_name || ' bps. After previous Up buy Down, after previous Down buy Up. Paper entry is a GTD limit BUY priced from current executable ask depth so the order can fill immediately; settlement uses only actually filled shares.',
+    true,
+    1.00,
+    now(),
+    now()
+FROM formatted
+ON CONFLICT (id) DO UPDATE SET
+    code = excluded.code,
+    name = excluded.name,
+    description = excluded.description,
+    updated_at_utc = excluded.updated_at_utc;
+
+INSERT INTO strategies (id, code, name, description, enabled, paper_stake_amount, created_at_utc, updated_at_utc)
 WITH assets(asset_symbol, bps_id_group, instant_id_group) AS (
     VALUES
         ('ETH', '8061', '8062'),

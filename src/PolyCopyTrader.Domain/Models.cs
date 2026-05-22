@@ -1181,7 +1181,7 @@ public static class StrategyIds
     private static IReadOnlyList<BtcUpDown5mStrategyVariant> CreateBtcUpDown5mVariants()
     {
         int[] delays = [30, 60, 90, 120, 150, 180, 210, 240, 270];
-        var variants = new List<BtcUpDown5mStrategyVariant>(540);
+        var variants = new List<BtcUpDown5mStrategyVariant>(1368);
 
         foreach (var delay in delays)
         {
@@ -1272,6 +1272,13 @@ public static class StrategyIds
         for (var depth = 1; depth <= 5; depth++)
         {
             variants.Add(CreateBtcUpDown5mSkipRevertVariant(depth));
+        }
+
+        for (var thresholdTenths = 1; thresholdTenths <= 50; thresholdTenths++)
+        {
+            var minMoveBps = thresholdTenths / 10m;
+            variants.Add(CreateBtcUpDown5mSkipBpsThresholdVariant(thresholdTenths, minMoveBps));
+            variants.Add(CreateBtcUpDown5mSkipBpsThresholdInstantVariant(thresholdTenths, minMoveBps));
         }
 
         variants.Add(CreateBtcUpDown5mAlwaysDirectionVariant(isUp: true));
@@ -1438,6 +1445,70 @@ public static class StrategyIds
             0,
             BtcUpDown5mStrategyBehavior.SkipConsecutiveMarketResultsRevert,
             depth);
+    }
+
+    private static BtcUpDown5mStrategyVariant CreateBtcUpDown5mSkipBpsThresholdVariant(
+        int thresholdTenths,
+        decimal minMoveBps)
+    {
+        var thresholdName = minMoveBps.ToString("0.###", CultureInfo.InvariantCulture);
+        return new BtcUpDown5mStrategyVariant(
+            GetBtcUpDown5mSkipBpsThresholdId(thresholdTenths),
+            GetBtcUpDown5mSkipBpsThresholdCode(thresholdTenths),
+            $"BTC Up or Down 5m Skip {thresholdName} bps",
+            $"Immediately after BTC 5m market open, inspect the immediately previous BTC 5m close-book result and the previous market's archived Binance BTC start/end move; skip unless the absolute previous-market move is at least {thresholdName} bps. After previous Up buy Down, after previous Down buy Up. Paper entry is a GTD limit BUY at fixed 0.50 until the configured BTC GTD deadline; settlement uses only actually filled shares.",
+            BtcUpDown5mStrategyDirection.Dynamic,
+            0,
+            BtcUpDown5mStrategyBehavior.SkipPreviousResultBpsThreshold,
+            minMoveBps >= 1m && minMoveBps == decimal.Truncate(minMoveBps)
+                ? (int)minMoveBps
+                : 0,
+            minMoveBps);
+    }
+
+    private static BtcUpDown5mStrategyVariant CreateBtcUpDown5mSkipBpsThresholdInstantVariant(
+        int thresholdTenths,
+        decimal minMoveBps)
+    {
+        var thresholdName = minMoveBps.ToString("0.###", CultureInfo.InvariantCulture);
+        return new BtcUpDown5mStrategyVariant(
+            GetBtcUpDown5mSkipBpsThresholdInstantId(thresholdTenths),
+            GetBtcUpDown5mSkipBpsThresholdInstantCode(thresholdTenths),
+            $"BTC Up or Down 5m Skip {thresholdName} bps Instant",
+            $"Immediately after BTC 5m market open, inspect the immediately previous BTC 5m close-book result and the previous market's archived Binance BTC start/end move; skip unless the absolute previous-market move is at least {thresholdName} bps. After previous Up buy Down, after previous Down buy Up. Paper entry is a GTD limit BUY priced from current executable ask depth so the order can fill immediately; settlement uses only actually filled shares.",
+            BtcUpDown5mStrategyDirection.Dynamic,
+            0,
+            BtcUpDown5mStrategyBehavior.SkipPreviousResultBpsThresholdInstant,
+            minMoveBps >= 1m && minMoveBps == decimal.Truncate(minMoveBps)
+                ? (int)minMoveBps
+                : 0,
+            minMoveBps);
+    }
+
+    private static Guid GetBtcUpDown5mSkipBpsThresholdId(int thresholdTenths)
+    {
+        return Guid.Parse($"b7c50005-0000-4000-8027-{100 + thresholdTenths:000000000000}");
+    }
+
+    private static Guid GetBtcUpDown5mSkipBpsThresholdInstantId(int thresholdTenths)
+    {
+        return Guid.Parse($"b7c50005-0000-4000-8028-{100 + thresholdTenths:000000000000}");
+    }
+
+    private static string GetBtcUpDown5mSkipBpsThresholdCode(int thresholdTenths)
+    {
+        var wholeBps = thresholdTenths / 10;
+        var fractionalTenths = thresholdTenths % 10;
+        var suffix = fractionalTenths == 0
+            ? wholeBps.ToString(CultureInfo.InvariantCulture)
+            : wholeBps.ToString(CultureInfo.InvariantCulture) + "_" + fractionalTenths.ToString(CultureInfo.InvariantCulture);
+
+        return "btc_up_down_5m_skip_bps_" + suffix;
+    }
+
+    private static string GetBtcUpDown5mSkipBpsThresholdInstantCode(int thresholdTenths)
+    {
+        return GetBtcUpDown5mSkipBpsThresholdCode(thresholdTenths) + "_instant";
     }
 
     private static BtcUpDown5mStrategyVariant CreateBtcUpDown5mAlwaysDirectionVariant(bool isUp)
@@ -2002,6 +2073,8 @@ public enum BtcUpDown5mStrategyBehavior
     MiddleReferenceRevert,
     SkipConsecutiveMarketResults,
     SkipConsecutiveMarketResultsRevert,
+    SkipPreviousResultBpsThreshold,
+    SkipPreviousResultBpsThresholdInstant,
     AlwaysUp,
     AlwaysDown,
     BinanceStartRelative,

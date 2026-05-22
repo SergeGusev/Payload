@@ -606,7 +606,8 @@ market and strategy variant in `strategy_market_paper_runs`. Built-in variants
 are standard `Less` and `More` plus comparison `Less Gamma` and `More Gamma` at
 30-second steps from 30 to 270 seconds after window start, plus `Middle 1..5`,
 threshold `Middle 1..5 0.1..0.9 bps`, `Middle 1..5 Revert`, `Skip 1..5`,
-`Skip 1..5 Revert`, `Binance`, threshold `Binance 0.1..5 bps` in 0.1 bps increments, matching `Binance 0.1..5 bps Instant` variants, fixed-price `Binance 45/47/49`, delayed
+`Skip 1..5 Revert`, threshold `Skip 0.1..5 bps` in 0.1 bps increments, matching
+`Skip 0.1..5 bps Instant` variants, `Binance`, threshold `Binance 0.1..5 bps` in 0.1 bps increments, matching `Binance 0.1..5 bps Instant` variants, fixed-price `Binance 45/47/49`, delayed
 `Binance 15s/30s/45s`, `Binance Clever`, fair-value `Binance Edge 2/4/6`,
 `Prev Score Countertrend 10..90`, `Ensemble 2 of 3`, `Dynamic Markov`, `Strategy Selector`, capped `Less`
 comparison variants, capped `More` comparison variants, and capped `More Gamma`
@@ -679,7 +680,15 @@ usable current or stored book skips with close-book diagnostics. After `N`
 consecutive inferred `Up` results the `Skip` variants buy `Down`; after `N`
 consecutive inferred `Down` results they buy `Up`; otherwise they skip. The `Skip Revert`
 variants inspect the same result stack and invert that final decision:
-consecutive `Up` buys `Up`, and consecutive `Down` buys `Down`. `Middle`,
+consecutive `Up` buys `Up`, and consecutive `Down` buys `Down`. `Skip 0.1..5
+bps` variants inspect only the immediately previous close-book result, buy the
+opposite outcome, and additionally require the previous market's archived
+Binance BTC move from market start to a close-time sample to reach the configured
+absolute bps threshold; completed below-threshold moves skip with
+`btc_previous_market_move_below_bps_threshold`. Standard `Skip bps` variants use
+a fixed `0.50` GTD BUY, while matching `Instant` variants use the same selected
+outcome executable ask-depth pricing and sizing path as Binance instant variants.
+`Middle`,
 `Middle Revert`, `Skip`, and `Skip Revert` create pending Paper BUY orders as
 ordinary GTD limit orders. Their limit
 price is dynamic by default: the worker reads recent settled runs for the same

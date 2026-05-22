@@ -1,3 +1,16 @@
+## Active Update 2026-05-22 BTC Skip Bps Strategy Set
+Goal: Add BTC 5m Skip bps and Skip bps Instant strategy variants that flip the immediately previous winner only after a previous-market BTC move threshold.
+Status: Completed
+Done:
+- Added 50 `BTC Up or Down 5m Skip N bps` variants for `0.1..5.0 bps` and 50 matching `BTC Up or Down 5m Skip N bps Instant` variants with deterministic ids/codes and PostgreSQL seed rows.
+- Implemented processor logic that reads the immediately previous BTC 5m close-book inferred winner, buys the opposite outcome, and gates entry on the previous market's archived Binance BTC start-to-close move meeting the configured absolute bps threshold.
+- Standard Skip bps variants use fixed `0.50` GTD BUY pricing; Skip bps Instant variants reuse the existing Binance instant executable ask-depth sizing/pricing path and `InstantOpeningLimitMaxPrice` guard.
+- Added diagnostics fields for previous BTC start/end samples, signed/absolute bps move, threshold, and skip reason `btc_previous_market_move_below_bps_threshold`.
+- Updated README and configuration reference.
+Next: Deploy/restart the service so schema initialization inserts the new strategy rows; enable/disable individual rows from Dashboard as needed.
+Notes: Verification passed: `dotnet test tests\PolyCopyTrader.Tests\PolyCopyTrader.Tests.csproj --no-restore --filter "FullyQualifiedName~BtcUpDown5mPaperStrategyProcessorTests"` passed 144/144; `dotnet test tests\PolyCopyTrader.Tests\PolyCopyTrader.Tests.csproj --no-restore --filter "FullyQualifiedName~BtcUpDown5mPaperStrategyProcessorTests|FullyQualifiedName~StorageTests"` passed 168/168; `dotnet test PolyCopyTrader.sln --no-restore` passed 533/533; `git diff --check` passed with LF/CRLF warnings only. No production DB writes, service restart, live order submission, or cancel action was performed.
+Blockers: None.
+
 ## Active Update 2026-05-22 Previous Winner Flip Strategy Check
 Goal: Check whether existing BTC 5m strategies buy the opposite outcome after the immediately previous winner.
 Status: Completed
