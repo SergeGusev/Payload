@@ -1,3 +1,10 @@
+## 2026-05-22T17:11:56.3697732Z
+Request:
+А сейчас?
+
+Result:
+Re-checked production PostgreSQL read-only. Service heartbeat now reports `PolyCopyTrader.Service` assembly `74434b4` and is fresh, but `schema_data_migrations` is absent, bps strategy rows remain legacy `0.x bps`, bps Live/auto-pause reset did not happen, and fresh Paper order JSON shows new strategy codes joined to old DB strategy rows. Concluded this is a partial deploy: service assembly updated, but the full dependent assembly/schema deployment, especially Storage, did not reach production.
+
 ## 2026-05-22T17:01:36Z
 Request:
 Проверь код - он в порядке?

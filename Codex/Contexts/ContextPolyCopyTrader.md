@@ -1,3 +1,18 @@
+## Active Update 2026-05-22 Production Rescale Partial Deploy Recheck
+Goal: Re-check whether the newly redeployed production version now has the bps rescale schema/data changes.
+Status: Completed
+Done:
+- Queried production PostgreSQL read-only through Dashboard Remote host `192.168.0.101`; no production rows, service state, orders, or cancels were changed.
+- Confirmed `PolyCopyTrader.Service` heartbeat is fresh and now reports service assembly version `info=1.0.0+74434b4515b5302e010de0642cd5de2640c92bf4`, started `2026-05-22T17:06:07Z`, `Running`/`Live`, empty `last_error`.
+- Confirmed the deploy is still not fully correct: `schema_data_migrations` is absent, so the rescale/reset schema code from Storage did not run.
+- Confirmed strategy rows are still legacy-seeded: `middle_bps` has `90` legacy code/name rows, `updown_bps` has `72` legacy code rows and `360` decimal-name rows; representative rows still include `BTC ... Binance 0.1 bps`, `Skip 0.1 bps`, `Middle 5 0.9 bps`, and `SOL ... Binance 2.4 bps Instant`.
+- Confirmed bps reset did not happen: updown bps still has `1` `live_stakes=true` row and `155` `auto_live_paused=true` rows.
+- Found evidence of a partial binary deploy: a fresh SOL Paper order joins to old DB row `sol_up_down_5m_binance_bps_0_1(_instant)`, but its `raw_decision_json.strategy_code` is new `sol_up_down_5m_binance_bps_1(_instant)` with threshold `1`.
+- Confirmed background activity is fresh: BTC odds, crypto odds, arbitrage scans, and strategy runs all had rows within seconds and nonzero rows in the last 15 minutes; no active live-order statuses or failed Polymarket HTTP logs appeared in the queried window.
+Next: Republish/restart production with all dependent assemblies, especially `PolyCopyTrader.Storage.dll` (and ideally the full publish folder), then re-run the read-only verification for `schema_data_migrations`, renamed strategy rows, and `Live=false` bps reset.
+Notes: Diagnostic only. The likely issue is that the Service assembly was updated to `74434b4`, but the Storage assembly/schema SQL in the production folder is still old or not overwritten.
+Blockers: Production is still not running the complete rescale deployment.
+
 ## Active Update 2026-05-22 Rescale Code Review
 Goal: Review whether the current bps rescale code is safe to redeploy after production was found running an older build.
 Status: Completed
