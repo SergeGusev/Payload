@@ -1,3 +1,12 @@
+## Active Update 2026-05-22 Dashboard AutoLivePaused Binding Hotfix
+Goal: Fix Dashboard startup/runtime binding error for the read-only `AutoLivePaused` strategy row property.
+Status: Completed
+Done:
+- Changed the `Auto Live Pause` Dashboard checkbox column binding to `Mode=OneWay` so WPF does not try to write back into the read-only `StrategyPerformanceRow.AutoLivePaused` property.
+Next: Restart Dashboard with the updated build.
+Notes: A normal Dashboard build was blocked by the currently running Dashboard/Visual Studio locking output DLLs. Verified with `dotnet build src\PolyCopyTrader.Dashboard\PolyCopyTrader.Dashboard.csproj --no-restore -p:BaseOutputPath=%TEMP%\polycopytrader-dashboard-autolive-binding\`, which passed with 0 errors and existing Storage nullable warnings only.
+Blockers: None.
+
 ## Active Update 2026-05-22 Auto Live Pause Policy
 Goal: Change automatic strategy pausing so it pauses only Live betting indefinitely, keeps Paper running, and resumes Live when 12-hour strategy PnL turns positive.
 Status: Completed

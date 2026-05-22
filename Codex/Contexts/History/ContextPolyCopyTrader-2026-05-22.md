@@ -1,3 +1,10 @@
+## 2026-05-22T09:55:00Z
+Request:
+Dashboard throws `System.InvalidOperationException`: a TwoWay or OneWayToSource binding cannot work on read-only property `AutoLivePaused` of `StrategyPerformanceRow`.
+
+Result:
+Fixed `src/PolyCopyTrader.Dashboard/MainWindow.xaml` by changing the `Auto Live Pause` column binding to `Binding="{Binding AutoLivePaused, Mode=OneWay}"`, keeping the column read-only. Normal Dashboard build was blocked because the running Dashboard/Visual Studio locked output DLLs; verified successfully with a temporary output path build: `dotnet build src\PolyCopyTrader.Dashboard\PolyCopyTrader.Dashboard.csproj --no-restore -p:BaseOutputPath=%TEMP%\polycopytrader-dashboard-autolive-binding\`, 0 errors and existing Storage nullable warnings only. No production DB writes, live order submissions, or cancel actions were performed.
+
 ## 2026-05-22T09:45:00Z
 Request:
 Change automatic pause policy so only Live bets pause indefinitely; Paper continues and checks 12-hour PnL after later bets/settlements; when recent PnL becomes positive, resume Live and repeat the cycle.
