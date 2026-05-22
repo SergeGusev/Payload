@@ -804,8 +804,10 @@ realized PnL, ROI, average fill price, entry-delay health metrics, and the top s
 and live-only `Live bal` be edited for each strategy; for BTC 5-minute
 strategies the Paper/Live stake values are interpreted as stake multipliers.
 The strategy grids include `Only positive`, `Enabled only`, `Live only`, and
-`Big ROI` filters; `Big ROI` keeps rows with ROI greater than `10` (`Closed ROI`
-in `All`, recent `ROI` in the period tabs).
+`Big ROI` filters. `Live only` keeps rows whose manual Live flag is enabled,
+even when `Auto Live Pause` is currently suppressing effective Live entries.
+`Big ROI` keeps rows with ROI greater than `10` (`Closed ROI` in `All`, recent
+`ROI` in the period tabs).
 The `Enabled` checkbox writes `strategies.enabled` immediately, and the `Paused`
 checkbox writes `strategies.paused`. The service refreshes enabled, manual pause,
 and auto Live pause state through a short in-memory cache, so disabled strategies

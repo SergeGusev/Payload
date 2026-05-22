@@ -1201,7 +1201,7 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
 
     private static bool IsStrategyLiveVisible(StrategyPerformanceRow strategy, bool onlyLive)
     {
-        return !onlyLive || (strategy.LiveStakes && !strategy.AutoLivePaused);
+        return !onlyLive || strategy.LiveStakes;
     }
 
     private static bool IsStrategyBigRoiVisible(StrategyPerformanceRow strategy, bool onlyBigRoi)

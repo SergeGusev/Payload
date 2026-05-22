@@ -87,3 +87,10 @@ Request:
 
 Result:
 Checked production PostgreSQL read-only with `default_transaction_read_only=on`. The collection is currently not alive enough to evaluate: the service row still says `Running`/`Live`, but the heartbeat is stale by about 36 minutes with last heartbeat at `2026-05-22T09:39:30Z`, and production is running build `info=1.0.0+6822553f5fdd20a72ef46f76ea0f6c5f17818403` rather than current local `d8e1fc8`. `btc_up_down_5m_arbitrage_scans` has only 15 rows from `2026-05-22T09:39:33Z` through `09:39:55Z`, all `missing_asks`, 0 positives. Related BTC feeds stopped at the same time: statistics ticks latest `09:39:54Z`, odds ticks latest `09:39:52Z`, live observations latest `09:39:54Z`. `market_data_status` also stopped updating around `09:39:33Z`-`09:39:50Z`; no API errors were found in the last 6 hours. Conclusion: the current production statistics collection is stale, so the new strategy's perspective cannot be judged from fresh data until the current service build is restarted/deployed and allowed to collect continuous settled samples. Temporary C# read-only probe was removed; no source behavior, production DB data, service state, orders, or cancels were changed.
+
+## 2026-05-22T11:37:51.2329543Z
+Request:
+Дашбоард всё равно показывает, что всё хорошо. Но заметил одну проблему - когда я щёлкаю на фильтр Live only, он прячет не только те, которые не Live, но и те, которые Live, но Live paused
+
+Result:
+Fixed the Dashboard `Live only` filter to keep strategies whose manual Live flag is enabled even when `Auto Live Pause` suppresses effective live entries; updated README/configuration docs and republished Dashboard to `D:\My\Business\PolyMarketPublished\PayloadDashboard`. Rechecked production PostgreSQL read-only and confirmed the service heartbeat is still stale by about 6994 seconds at DB time `2026-05-22T11:36:04Z`, so a green Dashboard likely indicates an old Dashboard process/build is still being viewed.

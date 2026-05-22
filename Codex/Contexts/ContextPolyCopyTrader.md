@@ -1,3 +1,15 @@
+## Active Update 2026-05-22 Dashboard Live Only Auto-Pause Filter
+Goal: Fix Dashboard `Live only` filtering so live-enabled strategies remain visible even when automatically live-paused.
+Status: Completed
+Done:
+- Changed the Strategies `All` tab `Live only` predicate to use the manual `Live` flag (`LiveStakes`) instead of effective live state (`LiveStakes && !AutoLivePaused`).
+- Updated README and configuration reference to document that `Live only` keeps auto-live-paused strategies visible when their Live flag is enabled.
+- Republished Dashboard to `D:\My\Business\PolyMarketPublished\PayloadDashboard`.
+- Rechecked production heartbeat read-only: at DB time `2026-05-22T11:36:04Z`, `PolyCopyTrader.Service` still showed last heartbeat `2026-05-22T09:39:30.677Z`, about `6994s` stale, so a green Dashboard likely means an old Dashboard build/process is still being viewed.
+Next: Restart Dashboard from the published folder; separately restart/recheck the production service because its heartbeat/feed telemetry remains stale.
+Notes: Normal Debug Dashboard build was blocked by the running Dashboard process locking `bin\Debug\net10.0-windows\PolyCopyTrader.Dashboard.exe`; temp-output Dashboard build passed. `dotnet test PolyCopyTrader.sln --no-restore` passed 530/530. `dotnet publish src\PolyCopyTrader.Dashboard\PolyCopyTrader.Dashboard.csproj -c Release -o D:\My\Business\PolyMarketPublished\PayloadDashboard --no-restore` passed with existing Storage nullable warnings. `git diff --check` passed with LF/CRLF warnings only.
+Blockers: None for the filter fix; production service still needs operational restart/recheck.
+
 ## Active Update 2026-05-22 Dashboard Remote Heartbeat Clock
 Goal: Make the Dashboard reliably show stale production service heartbeats when connected to Remote database.
 Status: Completed
