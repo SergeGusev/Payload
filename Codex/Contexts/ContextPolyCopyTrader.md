@@ -1,3 +1,19 @@
+## Active Update 2026-05-22 Binance Direction Plus Skew Research
+Goal: Continue research on using real BTC 5m order-book skew as a gate for independent Binance-direction entries.
+Status: Completed
+Done:
+- Queried production PostgreSQL at `192.168.0.101` read-only with `default_transaction_read_only=on`; no production rows were written.
+- Scanner state during the check: `7265` rows from `2026-05-22T05:20:23Z` to about `2026-05-22T08:11:24Z`, across `35` markets; `61` `would_arbitrage=true` rows across `27` markets.
+- Winner coverage used `btc_5m_history_live_observations` where available and `strategy_market_paper_runs` otherwise; there were `1809` winner markets, `793` observation-sourced and `1016` paper-sourced, with `0` observation/paper mismatches.
+- Settled scanner rows eligible for this analysis were still only `1588` rows across `9` markets, and all eligible rows in the current scanner window used paper-run winners.
+- Baseline Binance direction with abs move >= `2 bps`, book age <= `2s`, and first signal per market was weak: `9` markets, `6` wins (`66.67%`), one-share PnL `-0.70`, average selected ask `0.7444`.
+- Adding real skew was materially better on the tiny settled sample: `would_arbitrage=true` + abs move >= `2 bps` first signal per market gave `5/5` wins, one-share PnL `+0.95`, average selected ask `0.81`; `ask_sum<=0.99` gave the same set.
+- The skew windows remain very short: for `would_arbitrage=true` + abs move >= `2 bps`, only `5` episodes across `5` markets, `6` rows total, total observed duration `1.3752s`, average `0.275s`, max `1.3752s`.
+- Practical filters reduce late/expensive entries: adding `seconds_to_close>=30` leaves `3/3` wins, one-share PnL `+0.84`, average ask `0.72`; adding `seconds_to_close>=60` or `ask<=0.85` leaves `2/2` wins, one-share PnL `+0.71`, average ask `0.645`.
+Next: If implemented, start with a read-only/Paper shadow strategy: one entry per market, Binance direction abs move >= `2 bps`, `would_arbitrage=true` or `ask_sum<=0.99`, both books age <= `2s`, odds age <= `10s`, selected depth >= `10`, `seconds_to_close>=30`, and selected ask <= `0.90` initially; evaluate for more settled markets before live.
+Notes: Temporary C#/.NET/Npgsql read-only probe was created outside the repo and removed. No source-code behavior change, service restart, live order submission, cancel action, or production DB write was performed.
+Blockers: The positive result is based on only `5` skew-gated settled markets; it is not yet enough for live trading.
+
 ## Active Update 2026-05-22 Skew Usage Research
 Goal: Continue BTC 5m order-book skew research and propose a one-sided use that does not buy both outcomes.
 Status: Completed
