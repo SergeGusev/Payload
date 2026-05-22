@@ -364,6 +364,7 @@ public interface IAppRepository
         Guid strategyId,
         DateTimeOffset lookbackStartUtc,
         DateTimeOffset updatedAtUtc,
+        StrategyAutoLivePauseUpdateMode updateMode,
         CancellationToken cancellationToken = default)
     {
         return Task.FromResult(new StrategyAutoLivePauseDecision(false, false, false, 0m, 0, lookbackStartUtc));

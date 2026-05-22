@@ -488,7 +488,7 @@ public sealed class StorageTests
     }
 
     [Fact]
-    public void PostgresRepository_StrategyAutoLivePauseUsesRecentPnlWithoutManualPause()
+    public void PostgresRepository_StrategyAutoLivePauseSeparatesLivePauseFromPaperResume()
     {
         var source = ReadStorageRepositorySource();
         var start = source.IndexOf("UpdateStrategyAutoLivePauseFromRecentPnlAsync", StringComparison.Ordinal);
@@ -499,7 +499,12 @@ public sealed class StorageTests
 
         var method = source[start..end];
         Assert.Contains("count(*)::integer AS settled_count", method, StringComparison.Ordinal);
-        Assert.Contains("AND (SELECT settled_count FROM recent_pnl) > 1", method, StringComparison.Ordinal);
+        Assert.Contains("PauseFromLiveSettlements", method, StringComparison.Ordinal);
+        Assert.Contains("ResumeFromPaperSettlements", method, StringComparison.Ordinal);
+        Assert.Contains("FROM live_orders live_order", method, StringComparison.Ordinal);
+        Assert.Contains("FROM strategy_market_paper_runs run", method, StringComparison.Ordinal);
+        Assert.Contains("FROM paper_position_settlements settlement", method, StringComparison.Ordinal);
+        Assert.Contains("AND (SELECT settled_count FROM selected_pnl) > 1", method, StringComparison.Ordinal);
         Assert.Contains("SET auto_live_paused = CASE", method, StringComparison.Ordinal);
         Assert.Contains("THEN true", method, StringComparison.Ordinal);
         Assert.Contains("THEN false", method, StringComparison.Ordinal);
@@ -527,7 +532,38 @@ public sealed class StorageTests
     }
 
     [Fact]
-    public async Task TestRepository_StrategyAutoLivePauseDisablesLiveOnlyWhenRecentPnlNegative()
+    public async Task TestRepository_StrategyAutoLivePausePausesOnlyFromRecentLivePnlNegative()
+    {
+        var now = DateTimeOffset.UtcNow;
+        var strategyId = StrategyIds.BtcUpDown5mBinanceBps2;
+        var repository = new TestAppRepository();
+        repository.StrategySettings[strategyId] = StrategyRuntimeSettings.Default(strategyId) with
+        {
+            LiveStakes = true
+        };
+        await repository.AddLiveOrderAsync(CreateSettledLiveOrder(strategyId, now.AddMinutes(-10), -1m));
+        await repository.AddLiveOrderAsync(CreateSettledLiveOrder(strategyId, now.AddMinutes(-5), -1m));
+
+        var decision = await repository.UpdateStrategyAutoLivePauseFromRecentPnlAsync(
+            strategyId,
+            now.AddHours(-12),
+            now,
+            StrategyAutoLivePauseUpdateMode.PauseFromLiveSettlements,
+            CancellationToken.None);
+
+        Assert.True(decision.AutoLivePaused);
+        Assert.False(decision.AutoLiveResumed);
+        Assert.True(decision.AutoLivePauseChanged);
+        Assert.Equal(2, decision.RecentSettledCount);
+        Assert.Equal(-2m, decision.RecentPnlUsd);
+        Assert.True(repository.StrategySettings[strategyId].LiveStakes);
+        Assert.True(repository.StrategySettings[strategyId].AutoLivePaused);
+        Assert.False(repository.StrategySettings[strategyId].Paused);
+        Assert.Null(repository.StrategySettings[strategyId].PausedUntilUtc);
+    }
+
+    [Fact]
+    public async Task TestRepository_StrategyAutoLivePauseDoesNotPauseFromPaperLoss()
     {
         var now = DateTimeOffset.UtcNow;
         var strategyId = StrategyIds.BtcUpDown5mBinanceBps2;
@@ -543,21 +579,20 @@ public sealed class StorageTests
             strategyId,
             now.AddHours(-12),
             now,
+            StrategyAutoLivePauseUpdateMode.ResumeFromPaperSettlements,
             CancellationToken.None);
 
-        Assert.True(decision.AutoLivePaused);
+        Assert.False(decision.AutoLivePaused);
         Assert.False(decision.AutoLiveResumed);
-        Assert.True(decision.AutoLivePauseChanged);
+        Assert.False(decision.AutoLivePauseChanged);
         Assert.Equal(2, decision.RecentSettledCount);
         Assert.Equal(-2m, decision.RecentPnlUsd);
         Assert.True(repository.StrategySettings[strategyId].LiveStakes);
-        Assert.True(repository.StrategySettings[strategyId].AutoLivePaused);
-        Assert.False(repository.StrategySettings[strategyId].Paused);
-        Assert.Null(repository.StrategySettings[strategyId].PausedUntilUtc);
+        Assert.False(repository.StrategySettings[strategyId].AutoLivePaused);
     }
 
     [Fact]
-    public async Task TestRepository_StrategyAutoLivePauseClearsWhenRecentPnlPositive()
+    public async Task TestRepository_StrategyAutoLivePauseClearsOnlyFromRecentPaperPnlPositive()
     {
         var now = DateTimeOffset.UtcNow;
         var strategyId = StrategyIds.BtcUpDown5mBinanceBps2;
@@ -573,6 +608,7 @@ public sealed class StorageTests
             strategyId,
             now.AddHours(-12),
             now,
+            StrategyAutoLivePauseUpdateMode.ResumeFromPaperSettlements,
             CancellationToken.None);
 
         Assert.False(decision.AutoLivePaused);
@@ -582,6 +618,35 @@ public sealed class StorageTests
         Assert.Equal(2m, decision.RecentPnlUsd);
         Assert.True(repository.StrategySettings[strategyId].LiveStakes);
         Assert.False(repository.StrategySettings[strategyId].AutoLivePaused);
+    }
+
+    [Fact]
+    public async Task TestRepository_StrategyAutoLivePauseDoesNotClearFromLiveWin()
+    {
+        var now = DateTimeOffset.UtcNow;
+        var strategyId = StrategyIds.BtcUpDown5mBinanceBps2;
+        var repository = new TestAppRepository();
+        repository.StrategySettings[strategyId] = StrategyRuntimeSettings.Default(strategyId) with
+        {
+            LiveStakes = true,
+            AutoLivePaused = true
+        };
+        await repository.AddLiveOrderAsync(CreateSettledLiveOrder(strategyId, now.AddMinutes(-10), 2m));
+
+        var decision = await repository.UpdateStrategyAutoLivePauseFromRecentPnlAsync(
+            strategyId,
+            now.AddHours(-12),
+            now,
+            StrategyAutoLivePauseUpdateMode.PauseFromLiveSettlements,
+            CancellationToken.None);
+
+        Assert.True(decision.AutoLivePaused);
+        Assert.False(decision.AutoLiveResumed);
+        Assert.False(decision.AutoLivePauseChanged);
+        Assert.Equal(1, decision.RecentSettledCount);
+        Assert.Equal(2m, decision.RecentPnlUsd);
+        Assert.True(repository.StrategySettings[strategyId].LiveStakes);
+        Assert.True(repository.StrategySettings[strategyId].AutoLivePaused);
     }
 
     [Fact]
@@ -799,6 +864,48 @@ CREATE INDEX first_table_id_idx ON first_table(id);
             SkipReason: null,
             settledAtUtc.AddMinutes(-5),
             settledAtUtc);
+    }
+
+    private static LiveOrder CreateSettledLiveOrder(Guid strategyId, DateTimeOffset settledAtUtc, decimal realizedPnlUsd)
+    {
+        var won = realizedPnlUsd > 0m;
+        var costBasisUsd = 1m;
+        var settlementValueUsd = costBasisUsd + realizedPnlUsd;
+        return new LiveOrder(
+            Guid.NewGuid(),
+            Guid.NewGuid(),
+            LiveOrderStatus.Matched,
+            "0x" + Guid.NewGuid().ToString("N"),
+            TradeSide.Buy,
+            "asset-up",
+            "condition-" + Guid.NewGuid().ToString("N"),
+            "Up",
+            0.50m,
+            2m,
+            costBasisUsd,
+            "GTD",
+            settledAtUtc.AddMinutes(-5),
+            settledAtUtc,
+            settledAtUtc.AddMinutes(-4),
+            "matched",
+            2m,
+            0m,
+            string.Empty,
+            "{}",
+            string.Empty,
+            settledAtUtc,
+            StrategyId: strategyId,
+            BalanceEffectApplied: true,
+            SettlementValueUsd: settlementValueUsd,
+            RealizedPnlUsd: realizedPnlUsd,
+            SettledAtUtc: settledAtUtc,
+            WinningAssetId: won ? "asset-up" : "asset-down",
+            WinningOutcome: won ? "Up" : "Down",
+            AverageFillPrice: 0.50m,
+            FilledNotionalUsd: costBasisUsd,
+            CostBasisUsd: costBasisUsd,
+            Won: won,
+            SettlementSource: "test");
     }
 
     private static string ReadStorageRepositorySource()

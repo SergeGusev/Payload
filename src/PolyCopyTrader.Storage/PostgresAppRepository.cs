@@ -2537,12 +2537,13 @@ WHERE id = @StrategyId;
 		Guid strategyId,
 		DateTimeOffset lookbackStartUtc,
 		DateTimeOffset updatedAtUtc,
+		StrategyAutoLivePauseUpdateMode updateMode,
 		CancellationToken cancellationToken = default(CancellationToken))
 	{
 		var normalizedStrategyId = StrategyIds.Normalize(strategyId);
 		await using NpgsqlConnection connection = await OpenConnectionAsync(cancellationToken);
 		await using NpgsqlCommand command = CreateCommand(connection, """
-WITH recent_rows AS (
+WITH paper_rows AS (
     SELECT COALESCE(run.realized_pnl_usd, 0) AS pnl_usd
     FROM strategy_market_paper_runs run
     WHERE run.strategy_id = @StrategyId
@@ -2551,13 +2552,6 @@ WITH recent_rows AS (
       AND run.settled_at_utc <= @UpdatedAtUtc
       AND run.realized_pnl_usd IS NOT NULL
     UNION ALL
-    SELECT COALESCE(live_order.realized_pnl_usd, 0) AS pnl_usd
-    FROM live_orders live_order
-    WHERE live_order.strategy_id = @StrategyId
-      AND live_order.settled_at_utc >= @LookbackStartUtc
-      AND live_order.settled_at_utc <= @UpdatedAtUtc
-      AND live_order.realized_pnl_usd IS NOT NULL
-    UNION ALL
     SELECT COALESCE(settlement.realized_pnl_usd, 0) AS pnl_usd
     FROM paper_position_settlements settlement
     WHERE @StrategyId = @FollowLeaderStrategyId
@@ -2565,28 +2559,59 @@ WITH recent_rows AS (
       AND settlement.settled_at_utc >= @LookbackStartUtc
       AND settlement.settled_at_utc <= @UpdatedAtUtc
 ),
-recent_pnl AS (
+paper_pnl AS (
     SELECT
         COALESCE(sum(pnl_usd), 0) AS pnl_usd,
         count(*)::integer AS settled_count
-    FROM recent_rows
+    FROM paper_rows
+),
+live_rows AS (
+    SELECT COALESCE(live_order.realized_pnl_usd, 0) AS pnl_usd
+    FROM live_orders live_order
+    WHERE live_order.strategy_id = @StrategyId
+      AND live_order.settled_at_utc >= @LookbackStartUtc
+      AND live_order.settled_at_utc <= @UpdatedAtUtc
+      AND live_order.realized_pnl_usd IS NOT NULL
+),
+live_pnl AS (
+    SELECT
+        COALESCE(sum(pnl_usd), 0) AS pnl_usd,
+        count(*)::integer AS settled_count
+    FROM live_rows
+),
+selected_pnl AS (
+    SELECT
+        CASE
+            WHEN @UpdateMode = @PauseFromLiveSettlements THEN (SELECT pnl_usd FROM live_pnl)
+            WHEN @UpdateMode = @ResumeFromPaperSettlements THEN (SELECT pnl_usd FROM paper_pnl)
+            ELSE 0
+        END AS pnl_usd,
+        CASE
+            WHEN @UpdateMode = @PauseFromLiveSettlements THEN (SELECT settled_count FROM live_pnl)
+            WHEN @UpdateMode = @ResumeFromPaperSettlements THEN (SELECT settled_count FROM paper_pnl)
+            ELSE 0
+        END AS settled_count
 ),
 updated AS (
     UPDATE strategies
     SET auto_live_paused = CASE
-            WHEN (SELECT pnl_usd FROM recent_pnl) < 0
-                 AND (SELECT settled_count FROM recent_pnl) > 1 THEN true
-            WHEN (SELECT pnl_usd FROM recent_pnl) > 0
-                 AND (SELECT settled_count FROM recent_pnl) > 0 THEN false
+            WHEN @UpdateMode = @PauseFromLiveSettlements
+                 AND (SELECT pnl_usd FROM selected_pnl) < 0
+                 AND (SELECT settled_count FROM selected_pnl) > 1 THEN true
+            WHEN @UpdateMode = @ResumeFromPaperSettlements
+                 AND (SELECT pnl_usd FROM selected_pnl) > 0
+                 AND (SELECT settled_count FROM selected_pnl) > 0 THEN false
             ELSE auto_live_paused
         END,
         updated_at_utc = @UpdatedAtUtc
     WHERE id = @StrategyId
       AND auto_live_paused IS DISTINCT FROM CASE
-            WHEN (SELECT pnl_usd FROM recent_pnl) < 0
-                 AND (SELECT settled_count FROM recent_pnl) > 1 THEN true
-            WHEN (SELECT pnl_usd FROM recent_pnl) > 0
-                 AND (SELECT settled_count FROM recent_pnl) > 0 THEN false
+            WHEN @UpdateMode = @PauseFromLiveSettlements
+                 AND (SELECT pnl_usd FROM selected_pnl) < 0
+                 AND (SELECT settled_count FROM selected_pnl) > 1 THEN true
+            WHEN @UpdateMode = @ResumeFromPaperSettlements
+                 AND (SELECT pnl_usd FROM selected_pnl) > 0
+                 AND (SELECT settled_count FROM selected_pnl) > 0 THEN false
             ELSE auto_live_paused
         END
     RETURNING auto_live_paused
@@ -2595,13 +2620,20 @@ SELECT
     COALESCE((SELECT auto_live_paused FROM updated), (SELECT auto_live_paused FROM strategies WHERE id = @StrategyId), false) AS auto_live_paused,
     EXISTS(SELECT 1 FROM updated WHERE auto_live_paused = false) AS auto_live_resumed,
     EXISTS(SELECT 1 FROM updated) AS auto_live_pause_changed,
-    (SELECT pnl_usd FROM recent_pnl) AS recent_pnl_usd,
-    (SELECT settled_count FROM recent_pnl) AS recent_settled_count;
+    (SELECT pnl_usd FROM selected_pnl) AS recent_pnl_usd,
+    (SELECT settled_count FROM selected_pnl) AS recent_settled_count;
 """);
 		command.Parameters.AddWithValue("StrategyId", normalizedStrategyId);
 		command.Parameters.AddWithValue("FollowLeaderStrategyId", StrategyIds.FollowLeader);
 		command.Parameters.AddWithValue("LookbackStartUtc", UtcDateTime(lookbackStartUtc));
 		command.Parameters.AddWithValue("UpdatedAtUtc", UtcDateTime(updatedAtUtc));
+		command.Parameters.AddWithValue("UpdateMode", updateMode.ToString());
+		command.Parameters.AddWithValue(
+			"PauseFromLiveSettlements",
+			StrategyAutoLivePauseUpdateMode.PauseFromLiveSettlements.ToString());
+		command.Parameters.AddWithValue(
+			"ResumeFromPaperSettlements",
+			StrategyAutoLivePauseUpdateMode.ResumeFromPaperSettlements.ToString());
 		await using NpgsqlDataReader reader = await command.ExecuteReaderAsync(cancellationToken);
 		if (!await reader.ReadAsync(cancellationToken))
 		{

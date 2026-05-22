@@ -1533,6 +1533,7 @@ internal sealed class TestAppRepository : IAppRepository
         Guid strategyId,
         DateTimeOffset lookbackStartUtc,
         DateTimeOffset updatedAtUtc,
+        StrategyAutoLivePauseUpdateMode updateMode,
         CancellationToken cancellationToken = default)
     {
         var normalizedStrategyId = StrategyIds.Normalize(strategyId);
@@ -1556,15 +1557,31 @@ internal sealed class TestAppRepository : IAppRepository
         var paperRunPnl = paperRunSettlements.Sum(run => run.RealizedPnlUsd ?? 0m);
         var livePnl = liveSettlements.Sum(order => order.RealizedPnlUsd ?? 0m);
         var followLeaderPaperPnl = followLeaderPaperSettlements.Sum(settlement => settlement.RealizedPnlUsd);
-        var recentPnl = paperRunPnl + livePnl + followLeaderPaperPnl;
-        var recentSettledCount = paperRunSettlements.Length + liveSettlements.Length + followLeaderPaperSettlements.Length;
+        var paperPnl = paperRunPnl + followLeaderPaperPnl;
+        var paperSettledCount = paperRunSettlements.Length + followLeaderPaperSettlements.Length;
+        var recentPnl = updateMode switch
+        {
+            StrategyAutoLivePauseUpdateMode.PauseFromLiveSettlements => livePnl,
+            StrategyAutoLivePauseUpdateMode.ResumeFromPaperSettlements => paperPnl,
+            _ => throw new ArgumentOutOfRangeException(nameof(updateMode), updateMode, null)
+        };
+        var recentSettledCount = updateMode switch
+        {
+            StrategyAutoLivePauseUpdateMode.PauseFromLiveSettlements => liveSettlements.Length,
+            StrategyAutoLivePauseUpdateMode.ResumeFromPaperSettlements => paperSettledCount,
+            _ => throw new ArgumentOutOfRangeException(nameof(updateMode), updateMode, null)
+        };
         var existingSettings = GetStrategySettings(normalizedStrategyId);
         var nextAutoLivePaused = existingSettings.AutoLivePaused;
-        if (recentPnl < 0m && recentSettledCount > 1)
+        if (updateMode == StrategyAutoLivePauseUpdateMode.PauseFromLiveSettlements &&
+            recentPnl < 0m &&
+            recentSettledCount > 1)
         {
             nextAutoLivePaused = true;
         }
-        else if (recentPnl > 0m && recentSettledCount > 0)
+        else if (updateMode == StrategyAutoLivePauseUpdateMode.ResumeFromPaperSettlements &&
+            recentPnl > 0m &&
+            recentSettledCount > 0)
         {
             nextAutoLivePaused = false;
         }

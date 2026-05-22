@@ -329,3 +329,10 @@ Request:
 
 Result:
 Inspected the current implementation and confirmed `AutoLivePaused` can be changed after Paper settlements. The BTC Up/Down Paper run settlement path calls `UpdateStrategyAutoLivePauseFromRecentPnlAsync`, and the SQL aggregates settled `strategy_market_paper_runs` plus settled `live_orders`; FollowLeader generic Paper settlements also feed the same update through `paper_position_settlements`. The flag is set only after settlement when the 12-hour settled count is greater than `1` and recent PnL is negative, and cleared when recent PnL becomes positive. `AutoLivePaused` suppresses only effective Live staking; Paper processing continues.
+
+## 2026-05-22T22:08:21.1698675Z
+Request:
+Правильная логика такая - установить Live paused можно только по Live ставкам. А сбросить - только по Paper ставкам
+
+Result:
+Implemented the split automatic Live pause policy. Added explicit update modes so Live settlement processing can only set `strategies.auto_live_paused`, and BTC Up/Down Paper plus generic Paper settlement processing can only clear it. PostgreSQL now computes 12-hour Live and Paper PnL separately: Live mode sets the flag only when Live settled count is greater than `1` and Live PnL is negative; Paper mode clears only when Paper settled count is positive and Paper PnL is positive. Updated test repository behavior, regression tests, README, and configuration docs. Verification passed: focused auto-pause/service tests `191/191`, full solution tests `545/545`, and `git diff --check` with LF/CRLF warnings only.

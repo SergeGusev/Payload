@@ -373,6 +373,7 @@ public sealed class LiveTradingProcessor(
                 strategyId,
                 nowUtc.Subtract(StrategyPauseLookback),
                 nowUtc,
+                StrategyAutoLivePauseUpdateMode.PauseFromLiveSettlements,
                 cancellationToken);
             if (!decision.AutoLivePauseChanged)
             {

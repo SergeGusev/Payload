@@ -2531,7 +2531,7 @@ public sealed class BtcUpDown5mPaperStrategyProcessorTests
         Assert.Equal(0m, updatedRun.SettlementPrice);
         Assert.Equal(-1m, updatedRun.RealizedPnlUsd);
         var settings = repository.StrategySettings[Less60Variant.Id];
-        Assert.True(settings.AutoLivePaused);
+        Assert.False(settings.AutoLivePaused);
         Assert.False(settings.Paused);
         Assert.Null(settings.PausedUntilUtc);
 

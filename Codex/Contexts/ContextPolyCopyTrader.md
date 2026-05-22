@@ -1,3 +1,15 @@
+## Active Update 2026-05-23 Auto Live Pause Source Split
+Goal: Make automatic Live pause set only from Live settlements and clear only from Paper settlements.
+Status: Completed
+Done:
+- Added `StrategyAutoLivePauseUpdateMode` with explicit `PauseFromLiveSettlements` and `ResumeFromPaperSettlements` modes.
+- Updated service call sites so Live settlement processing can only set `auto_live_paused`, while BTC Up/Down Paper settlement and generic Paper settlement can only clear it.
+- Changed PostgreSQL auto-live-pause SQL to compute Live and Paper recent PnL separately over the same 12-hour lookback: Live mode sets the flag only when Live settled count is greater than `1` and Live PnL is negative; Paper mode clears the flag only when Paper settled count is positive and Paper PnL is positive.
+- Updated in-memory test repository behavior, focused tests, README, and configuration reference.
+Next: Publish/restart the service when ready so production uses the split pause/resume evidence.
+Notes: Verification passed: focused `dotnet test tests/PolyCopyTrader.Tests/PolyCopyTrader.Tests.csproj --no-restore --filter "StorageTests|BtcUpDown5mPaperStrategyProcessorTests|LiveTradingGatingTests"` 191/191, full `dotnet test PolyCopyTrader.sln --no-restore` 545/545, and `git diff --check` passed with LF/CRLF warnings only.
+Blockers: None.
+
 ## Active Update 2026-05-23 Auto Live Pause Paper Settlement Answer
 Goal: Clarify whether `AutoLivePaused` can be set from Paper bets.
 Status: Completed

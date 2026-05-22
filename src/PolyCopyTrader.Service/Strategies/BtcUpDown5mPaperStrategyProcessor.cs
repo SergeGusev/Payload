@@ -11497,6 +11497,7 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
                 strategyId,
                 nowUtc.Subtract(StrategyPauseLookback),
                 nowUtc,
+                StrategyAutoLivePauseUpdateMode.ResumeFromPaperSettlements,
                 cancellationToken);
             if (!decision.AutoLivePauseChanged)
             {

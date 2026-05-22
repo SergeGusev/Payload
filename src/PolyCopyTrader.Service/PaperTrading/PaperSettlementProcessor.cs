@@ -197,6 +197,7 @@ public sealed class PaperSettlementProcessor(
                 strategyId.Value,
                 nowUtc.Subtract(StrategyPauseLookback),
                 nowUtc,
+                StrategyAutoLivePauseUpdateMode.ResumeFromPaperSettlements,
                 cancellationToken);
             if (!decision.AutoLivePauseChanged)
             {

@@ -2217,6 +2217,12 @@ public sealed record StrategyRuntimeSettings(
     }
 }
 
+public enum StrategyAutoLivePauseUpdateMode
+{
+    PauseFromLiveSettlements,
+    ResumeFromPaperSettlements
+}
+
 public sealed record StrategyAutoLivePauseDecision(
     bool AutoLivePaused,
     bool AutoLiveResumed,

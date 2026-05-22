@@ -837,15 +837,18 @@ restart, while manually paused strategies stay enabled but skip new Paper and
 Live entries with reason `strategy_paused`. Existing Paper positions can still
 be settled, and copied leader exits can still be tracked.
 
-Automatic strategy pausing is Live-only. After every Paper or Live settlement,
-the service checks the same strategy's settled rows over the last 12 hours. If
-more than one settled bet exists and the 12-hour realized PnL is negative, it
-sets `strategies.auto_live_paused=true` indefinitely. The strategy keeps creating
-Paper entries and after each later settlement checks the same 12-hour window
-again; when recent PnL becomes positive, the service clears
-`strategies.auto_live_paused` and Live entries resume if the manual `Live` flag is
-still enabled. The Dashboard `Paused` checkbox remains a manual full Paper+Live
-pause, while `Auto Live Pause` is read-only state for the automatic Live gate.
+Automatic strategy pausing is Live-only, but pause and resume use different
+evidence. After a Live settlement, the service checks that strategy's settled
+Live orders over the last 12 hours. If more than one Live bet exists and the
+12-hour Live realized PnL is negative, it sets
+`strategies.auto_live_paused=true` indefinitely; Live settlements never clear the
+flag. The strategy keeps creating Paper entries, and after each Paper settlement
+the service checks that strategy's settled Paper rows over the last 12 hours. If
+Paper realized PnL becomes positive, it clears `strategies.auto_live_paused` and
+Live entries resume if the manual `Live` flag is still enabled; Paper settlements
+never set the flag. The Dashboard `Paused` checkbox remains a manual full
+Paper+Live pause, while `Auto Live Pause` is read-only state for the automatic
+Live gate.
 
 - `Dashboard:RefreshIntervalSeconds`: UI refresh timer for the Dashboard; default `60`.
 - `Dashboard:StrategyRefreshIntervalSeconds`: minimum interval between Dashboard strategy-performance database refreshes; default `60`. Strategy toggle/stake commands invalidate the cache so command results are shown immediately.
