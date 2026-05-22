@@ -148,3 +148,10 @@ Request:
 
 Result:
 Fixed recent Dashboard strategy rows so `Live only` on `24 hours`, `6 hours`, and `1 hour` uses the raw `strategies.live_stakes` flag instead of effective `live_stakes AND NOT auto_live_paused`. Recent live skipped/ignored Paper-derived counters still use effective live stakes, so auto-live-paused strategies remain visible without being counted as active Live skipped orders. Updated the test repository and added regression tests for PostgreSQL source shape and auto-live-paused recent rows. Verification passed: focused `StrategyPerformanceTests|StorageTests` `31/31`, full solution tests `537/537`, Release Dashboard build succeeded, and `git diff --check` passed with LF/CRLF warnings only. Debug Dashboard build was blocked by the currently running Dashboard/Visual Studio locking Debug output DLLs.
+
+## 2026-05-22T14:39:32.2873718Z
+Request:
+Сделай мне график следующих 12 маркетов - как плавал курс, как он пересекал 0, какие Skip bps ставки мы делали, какие из них сыграли и что в итоге имеем.
+
+Result:
+Queried production PostgreSQL read-only through Dashboard Remote host `192.168.0.101` and generated `artifacts/skip-bps-12-markets-report.html`. The report covers 12 BTC 5m markets from `2026-05-22T13:25:00Z` through `2026-05-22T14:25:00Z`, plots `btc_move_from_start_bps` with zero crossings, and marks aggregated Skip bps Paper orders/fills/settlements. Summary: `680` Skip bps Paper orders, `480` filled/settled, `22` wins, `458` losses, realized PnL `-1244.808`, notional about `1979.558`. No production rows were written and no service/order state was changed.

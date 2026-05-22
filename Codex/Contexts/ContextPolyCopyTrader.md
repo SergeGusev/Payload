@@ -1,3 +1,16 @@
+## Active Update 2026-05-22 Skip Bps 12 Market Visual Report
+Goal: Build a read-only visual report for the next 12 BTC 5m markets showing BTC bps movement around zero, Skip bps entries, fills, settlements, and totals.
+Status: Completed
+Done:
+- Queried production PostgreSQL read-only through Dashboard Remote host `192.168.0.101`; no production rows were written.
+- Generated local HTML/SVG report at `artifacts/skip-bps-12-markets-report.html`.
+- Report window is `2026-05-22T13:25:00Z` through `2026-05-22T14:25:00Z`, the 12 markets after the first confirmed post-deploy Skip bps market.
+- Report plots `btc_move_from_start_bps`, zero baseline and zero crossings, plus aggregated Skip bps Paper order/fill markers per market.
+- Summary: `680` Skip bps Paper orders, `480` filled/settled, `22` wins, `458` losses, realized PnL `-1244.808`, notional about `1979.558`.
+Next: Use the HTML report for visual inspection; rerun the same read-only query later if more markets are needed.
+Notes: Verification was the successful read-only report generation and local file existence check. No source behavior change, production DB write, service restart, live order submission, or cancel action was performed.
+Blockers: None.
+
 ## Active Update 2026-05-22 Dashboard Recent Live Filter Auto Pause
 Goal: Make `Live only` on the `24 hours`, `6 hours`, and `1 hour` Dashboard tabs keep strategies whose raw Live flag is enabled even when Auto Live Pause is active.
 Status: Completed
