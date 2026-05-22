@@ -1,3 +1,10 @@
+## 2026-05-22T17:01:36Z
+Request:
+Проверь код - он в порядке?
+
+Result:
+Reviewed the current bps rescale code after the production deploy check showed the server was still on an older build. No source-code defects were found in the rescale path. Checked StrategyIds, live-shadow allowlist/admin tests, PostgreSQL seed SQL, data-reset migrations, and docs/tests. Old `0.x bps` codes/names no longer remain in `src`, `tests`, `README.md`, or `docs` except the deliberate legacy-detection SQL used to detect old rows before reseeding. The migration deletion order is coherent for shadow decisions, live orders, strategy runs, paper fills/orders, signal rejections/signals, and paper position tables. Verification passed: full `dotnet test PolyCopyTrader.sln` 537/537, `git diff --check`, and `git diff --cached --check`. No source files, production DB rows, service state, live order submission, or cancel action were changed.
+
 ## 2026-05-22T16:57:08Z
 Request:
 Проверь, нормально ли выложилась новая версия

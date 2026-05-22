@@ -1,3 +1,15 @@
+## Active Update 2026-05-22 Rescale Code Review
+Goal: Review whether the current bps rescale code is safe to redeploy after production was found running an older build.
+Status: Completed
+Done:
+- Reviewed the rescale commits for StrategyIds, live-shadow allowlist/admin tests, PostgreSQL seed SQL, data-reset migrations, and docs/tests.
+- Confirmed old `0.x bps` codes/names no longer remain in `src`, `tests`, `README.md`, or `docs` except the deliberate legacy-detection SQL used before reseeding.
+- Confirmed migration FK deletion order is coherent for shadow decisions, live orders, strategy runs, paper fills/orders, signal rejections/signals, and paper position tables.
+- Confirmed `git status` has no modified tracked source files after index refresh; only unrelated untracked artifacts remain.
+Next: Redeploy/restart production from current `master` (`fc6df6b` or newer) and then re-run the production read-only verification.
+Notes: Verification passed: full `dotnet test PolyCopyTrader.sln` 537/537, `git diff --check`, and `git diff --cached --check`. Existing Storage nullable warnings remain. No source files, production DB rows, service state, orders, or cancels were changed.
+Blockers: None.
+
 ## Active Update 2026-05-22 Production Rescale Deploy Check
 Goal: Check whether the latest bps rescale build deployed cleanly to production.
 Status: Completed
