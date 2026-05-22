@@ -1,3 +1,15 @@
+## Active Update 2026-05-22 Dashboard Remote Vs Local Liveness Diagnosis
+Goal: Explain why Dashboard showed the service alive while Codex probes reported a stale heartbeat.
+Status: Completed
+Done:
+- Confirmed Dashboard Remote mode uses the same `POLYCOPYTRADER_POSTGRES_CONNECTION` but replaces the configured host with `192.168.0.101`.
+- Confirmed the configured environment connection host is `127.0.0.1`; that local PostgreSQL database has stale `PolyCopyTrader.Service` heartbeat `2026-05-22T09:39:30.677Z`, age about `8365s`, version `6822553`.
+- Confirmed the Dashboard Remote database at `192.168.0.101` has fresh `PolyCopyTrader.Service` heartbeat `2026-05-22T11:58:48.803Z`, age about `6s`, version `577ec0b`, and fresh BTC arbitrage/odds rows.
+- Removed the temporary .NET/Npgsql heartbeat probe after the read-only check.
+Next: For future production checks, always force the Dashboard Remote host (`192.168.0.101`) or use Dashboard's remote repository path; do not rely on the env connection as-is.
+Notes: Diagnostic only. No source behavior, production data, service state, orders, or cancels were changed. The initial negative heartbeat age seen in a temporary SQL query was caused by mixing `AT TIME ZONE 'UTC'` timestamp-without-time-zone values with `timestamptz`; the corrected check uses `clock_timestamp() - last_heartbeat_utc`.
+Blockers: None.
+
 ## Active Update 2026-05-22 Dashboard Live Only Auto-Pause Filter
 Goal: Fix Dashboard `Live only` filtering so live-enabled strategies remain visible even when automatically live-paused.
 Status: Completed

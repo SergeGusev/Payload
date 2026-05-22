@@ -94,3 +94,10 @@ Request:
 
 Result:
 Fixed the Dashboard `Live only` filter to keep strategies whose manual Live flag is enabled even when `Auto Live Pause` suppresses effective live entries; updated README/configuration docs and republished Dashboard to `D:\My\Business\PolyMarketPublished\PayloadDashboard`. Rechecked production PostgreSQL read-only and confirmed the service heartbeat is still stale by about 6994 seconds at DB time `2026-05-22T11:36:04Z`, so a green Dashboard likely indicates an old Dashboard process/build is still being viewed.
+
+## 2026-05-22T11:59:07.3469889Z
+Request:
+Ок, Dashboard работает как надо теперь. И показывает, что сервис жив. Давай разберёмся, почему ты его не видишь.
+
+Result:
+Diagnosed the mismatch as local-vs-remote PostgreSQL targeting. The base `POLYCOPYTRADER_POSTGRES_CONNECTION` host is `127.0.0.1`, where `service_heartbeats` is stale: `PolyCopyTrader.Service` last heartbeat `2026-05-22T09:39:30.677Z`, age about `8365s`, version `6822553`. Dashboard Remote mode replaces that host with `192.168.0.101`; on that database the service is alive: last heartbeat `2026-05-22T11:58:48.803Z`, age about `6s`, version `577ec0b`, with fresh BTC arbitrage scan and odds rows. Temporary read-only .NET/Npgsql probe was removed. No source behavior, production data, service state, orders, or cancels were changed.
