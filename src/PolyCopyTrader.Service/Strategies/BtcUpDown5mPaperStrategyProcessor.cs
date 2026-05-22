@@ -3348,6 +3348,8 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
     {
         return variant.Behavior is BtcUpDown5mStrategyBehavior.MiddleReference or
             BtcUpDown5mStrategyBehavior.MiddleReferenceRevert or
+            BtcUpDown5mStrategyBehavior.MiddleReferenceInstant or
+            BtcUpDown5mStrategyBehavior.MiddleReferenceRevertInstant or
             BtcUpDown5mStrategyBehavior.SkipConsecutiveMarketResults or
             BtcUpDown5mStrategyBehavior.SkipConsecutiveMarketResultsRevert or
             BtcUpDown5mStrategyBehavior.SkipPreviousResultBpsThreshold or
@@ -3446,6 +3448,8 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
     private static bool IsInstantOpeningLimitEntry(BtcUpDown5mStrategyVariant variant)
     {
         return variant.Behavior is BtcUpDown5mStrategyBehavior.BinanceStartRelativeBpsThresholdInstant or
+            BtcUpDown5mStrategyBehavior.MiddleReferenceInstant or
+            BtcUpDown5mStrategyBehavior.MiddleReferenceRevertInstant or
             BtcUpDown5mStrategyBehavior.SkipPreviousResultBpsThresholdInstant or
             BtcUpDown5mStrategyBehavior.CryptoBinanceStartRelativeBpsThresholdInstant;
     }
@@ -3575,7 +3579,9 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
         return variant.Behavior switch
         {
             BtcUpDown5mStrategyBehavior.MiddleReference or
-                BtcUpDown5mStrategyBehavior.MiddleReferenceRevert => await GetMiddleReferenceEntryDecisionAsync(
+                BtcUpDown5mStrategyBehavior.MiddleReferenceRevert or
+                BtcUpDown5mStrategyBehavior.MiddleReferenceInstant or
+                BtcUpDown5mStrategyBehavior.MiddleReferenceRevertInstant => await GetMiddleReferenceEntryDecisionAsync(
                 market,
                 variant,
                 stakeUsd,
@@ -6847,7 +6853,8 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
 
     private static bool IsMiddleReferenceRevert(BtcUpDown5mStrategyVariant variant)
     {
-        return variant.Behavior == BtcUpDown5mStrategyBehavior.MiddleReferenceRevert;
+        return variant.Behavior is BtcUpDown5mStrategyBehavior.MiddleReferenceRevert or
+            BtcUpDown5mStrategyBehavior.MiddleReferenceRevertInstant;
     }
 
     private static BtcUpDown5mStrategyVariant? TryGetBaseOpeningLimitVariantForRevert(BtcUpDown5mStrategyVariant variant)
@@ -6855,6 +6862,7 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
         var baseBehavior = variant.Behavior switch
         {
             BtcUpDown5mStrategyBehavior.MiddleReferenceRevert => BtcUpDown5mStrategyBehavior.MiddleReference,
+            BtcUpDown5mStrategyBehavior.MiddleReferenceRevertInstant => BtcUpDown5mStrategyBehavior.MiddleReferenceInstant,
             BtcUpDown5mStrategyBehavior.SkipConsecutiveMarketResultsRevert => BtcUpDown5mStrategyBehavior.SkipConsecutiveMarketResults,
             _ => (BtcUpDown5mStrategyBehavior?)null
         };

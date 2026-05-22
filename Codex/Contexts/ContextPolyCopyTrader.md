@@ -1,3 +1,15 @@
+## Active Update 2026-05-23 Middle Bps Instant Variants
+Goal: Add Instant counterparts for every active BTC Middle bps strategy.
+Status: Completed
+Done:
+- Added `BTC Up or Down 5m Middle 1 1..100 bps Instant` and `BTC Up or Down 5m Middle 1 Revert 1..100 bps Instant` variants to `StrategyIds`, adding `200` BTC 5m strategy variants.
+- Added new Middle Instant behaviors that reuse the existing Middle mean/deviation signal and bps threshold gates, then route entry pricing through the existing instant executable ask-depth pricing path with `InstantOpeningLimitMaxPrice`.
+- Added PostgreSQL seed rows for the two new `1..100` Middle Instant grids using deterministic id groups `8029` and `8030`; default strategy rows are enabled/Paper-only and are not added to the Paper/Live-shadow allowlist.
+- Updated Middle/Instant tests, storage SQL tests, README, and configuration reference.
+Next: Publish/restart the service when ready so schema initialization inserts the new Middle Instant strategy rows.
+Notes: Verification passed: focused `dotnet test tests/PolyCopyTrader.Tests/PolyCopyTrader.Tests.csproj --no-restore --filter "BtcUpDown5mPaperStrategyProcessorTests|StorageTests"` 175/175, full `dotnet test PolyCopyTrader.sln --no-restore` 543/543, and `git diff --check` passed with LF/CRLF warnings only.
+Blockers: None.
+
 ## Active Update 2026-05-23 Delete Production Middle Depth 2-5
 Goal: Remove old production `BTC Up or Down 5m Middle 2` through `Middle 5` strategy rows and all their bps/revert-bps variants.
 Status: Completed

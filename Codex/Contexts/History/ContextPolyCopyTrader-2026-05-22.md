@@ -308,3 +308,10 @@ Request:
 
 Result:
 Deleted old production PostgreSQL strategy rows matching `btc_up_down_5m_middle_[2-5]`, including standard, revert, bps, and revert-bps variants. The target set contained `80` disabled/Paper-only strategies and `0` active live orders. Deleted dependent historical rows transactionally: `7582` paper orders, `505` paper fills, `9832` strategy runs, `12760` synthetic signals, `498` paper positions, and `426` paper position settlements; no live orders, dry-run orders, shadow rows, or signal rejections matched. Inserted schema data marker `20260523_delete_middle_depth_2_5` with deletion counts. Verified remaining Middle strategies are exactly `Middle 1`, `Middle 1 1..100 bps`, `Middle 1 Revert`, and `Middle 1 Revert 1..100 bps`, all Paper-only. Service stayed healthy on build `ac1eb2d` with no post-start API errors and fresh odds/arbitrage/strategy activity. No source behavior changed and no tests were run because this was a production data cleanup.
+
+## 2026-05-22T21:34:12.3037081Z
+Request:
+Для каждого Middle bps добавь соответствующую Instant стратегию, принцип которой тот же, что и Binance Instant стратегий
+
+Result:
+Added `200` BTC Middle Instant bps variants: `BTC Up or Down 5m Middle 1 1..100 bps Instant` and `BTC Up or Down 5m Middle 1 Revert 1..100 bps Instant`. They reuse the existing Middle arithmetic-mean signal and bps threshold checks, then price entries from executable ask depth using the same instant sizing/pricing path and `InstantOpeningLimitMaxPrice` cap as Binance Instant variants. Added PostgreSQL seed rows with deterministic id groups `8029` and `8030`; the new strategies are enabled/Paper-only by default and not in the Paper/Live-shadow allowlist. Updated tests and docs. Verification passed: focused Middle/Storage tests `175/175`, full solution tests `543/543`, and `git diff --check` with LF/CRLF warnings only.

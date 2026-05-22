@@ -607,7 +607,8 @@ The worker observes BTC 5-minute Gamma markets and records one lifecycle row per
 market and strategy variant in `strategy_market_paper_runs`. Built-in variants
 are standard `Less` and `More` plus comparison `Less Gamma` and `More Gamma` at
 30-second steps from 30 to 270 seconds after window start, plus `Middle 1`,
-threshold `Middle 1 1..100 bps`, `Middle 1 Revert`, threshold `Middle 1 Revert 1..100 bps`, `Skip 1..5`,
+threshold `Middle 1 1..100 bps` and matching `Instant` variants, `Middle 1 Revert`,
+threshold `Middle 1 Revert 1..100 bps` and matching `Instant` variants, `Skip 1..5`,
 `Skip 1..5 Revert`, threshold `Skip 1..50 bps` in 1 bps increments, matching
 `Skip 1..50 bps Instant` variants, `Binance`, threshold `Binance 1..50 bps` in 1 bps increments, matching `Binance 1..50 bps Instant` variants, fixed-price `Binance 45/47/49`, delayed
 `Binance 15s/30s/45s`, `Binance Clever`, fair-value `Binance Edge 2/4/6`,
@@ -656,10 +657,11 @@ fresh consecutive settled losses from the standard `BTC Up or Down 5m Less 180`
 strategy, and then applies a bounded paper stake progression. It later settles
 each run from closed Gamma metadata and writes final PnL.
 
-The active `Middle` variants do not use taker pricing. At market open `Middle 1`
-reads the latest Binance BTC/USDT trade-stream price and compares it to the
-Binance cache arithmetic mean. If the latest trade is above the mean, the
-strategy buys `Down`; if it is below, it buys `Up`; equality skips the run.
+The active non-Instant `Middle` variants use opening-limit pricing rather than
+taker pricing. At market open `Middle 1` reads the latest Binance BTC/USDT
+trade-stream price and compares it to the Binance cache arithmetic mean. If the
+latest trade is above the mean, the strategy buys `Down`; if it is below, it
+buys `Up`; equality skips the run.
 `Middle 1 Revert` inspects the same reference value and inverts that final
 decision: above mean buys `Up`, and below mean buys `Down`. The old `Middle 2`
 through `Middle 5` depths, including their bps and revert-bps variants, are no
@@ -667,7 +669,10 @@ longer seeded as active strategies; existing rows are retired by schema
 initialization. The `Middle 1 1..100 bps` rows keep the same direction logic but
 skip unless the absolute latest-trade deviation from the arithmetic mean reaches
 the configured threshold; otherwise the run skips with
-`btc_reference_mean_deviation_below_threshold`. The `Skip` variants inspect the exact immediately previous BTC
+`btc_reference_mean_deviation_below_threshold`. Matching `Instant` Middle bps
+rows keep the same signal and threshold gate, then price the selected outcome
+from executable ask depth using the same instant sizing/pricing path and
+`InstantOpeningLimitMaxPrice` cap as Binance instant variants. The `Skip` variants inspect the exact immediately previous BTC
 5-minute windows without gaps, but they infer those results from close-book
 CLOB price evidence instead of waiting for Gamma settlement. The worker captures
 `/book` snapshots for active BTC 5-minute markets during the final
