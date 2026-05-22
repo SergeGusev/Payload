@@ -1,3 +1,10 @@
+## 2026-05-22T19:21:25.8503942Z
+Request:
+Ок, отмени
+
+Result:
+Sent `pg_cancel_backend(11448)` to production PostgreSQL; it returned `True`. Follow-up read-only check after 5 seconds showed backend `11448` gone from `pg_stat_activity`, `pg_locks` count `0`, and no reset migration markers in `schema_data_migrations`, confirming the stuck migration transaction was cancelled/rolled back. No production rows, strategy flags, order actions, or source behavior were changed.
+
 ## 2026-05-22T19:13:44.5575215Z
 Request:
 Ок, я остановил сервис. Как узнать, что rollback завершился?

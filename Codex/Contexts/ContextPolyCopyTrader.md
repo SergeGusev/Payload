@@ -1,3 +1,13 @@
+## Active Update 2026-05-22 Cancel Stuck Production Migration
+Goal: Cancel the stuck production bps reset migration backend after the service was stopped.
+Status: Completed
+Done:
+- Sent `pg_cancel_backend(11448)` to production PostgreSQL through Dashboard Remote host `192.168.0.101`; PostgreSQL returned `True`.
+- Rechecked after cancellation: backend `11448` no longer appears in `pg_stat_activity`, `pg_locks` count for that PID is `0`, and reset migration markers remain absent, confirming the transaction rolled back.
+Next: Deploy/restart from commit `e2cabab` or newer (`457fa86`/current `master` is fine) so the new FK-support indexes are created before the reset migration runs again.
+Notes: Operational cancellation only. No production rows, strategy flags, orders, or cancels were changed. No source tests were run for this context-only action.
+Blockers: None.
+
 ## Active Update 2026-05-22 Production Rollback Check
 Goal: Check how to tell whether stopping the service completed rollback of the stuck reset migration.
 Status: Completed
