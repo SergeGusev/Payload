@@ -1,3 +1,17 @@
+## Active Update 2026-05-22 Production Statistics Check
+Goal: Check whether the new read-only BTC 5m covered-arbitrage scanner and existing BTC 5m Statistics are producing production telemetry.
+Status: Completed
+Done:
+- Queried production PostgreSQL read-only at `192.168.0.101` without printing secrets.
+- Confirmed production service is alive: `Running`/`Live`, heartbeat age about `45s`, started `2026-05-21T18:52:23Z`.
+- Confirmed production service is still on build `info=1.0.0+aad193e9a0279d804a265a7c3c79a88c1f1d9d20`, not the new scanner commit `4c248a2`.
+- Confirmed `btc_up_down_5m_arbitrage_scans` does not exist in production yet, so the covered-arbitrage scanner has not been deployed/restarted there.
+- Checked `btc_up_down_5m_statistics_ticks`: table exists with `175660` total rows, but latest sample is `2026-05-19T05:18:12Z`; there were `0` ticks in the last hour and `0` in the last 15 minutes.
+- Checked scanner/statistics-related API errors for the last hour: no arbitrage/statistics worker errors; only `31` `BtcUpDown5mPaperStrategyProcessor/GetCryptoReferencePrice` stale Binance ETH/USDT errors, latest `2026-05-22T03:35:13Z`.
+Next: Deploy/restart the service from commit `4c248a2` or newer before expecting `btc_up_down_5m_arbitrage_scans` rows. Separately investigate why `BtcUpDown5mStatisticsWorker` is not writing fresh rows if that research feed is still needed.
+Notes: Used a temporary C#/.NET/Npgsql read-only probe outside the repo and removed it afterward. No source code change, production DB write, service restart, live order submission, cancel action, or tests were performed.
+Blockers: Production is not running the scanner build yet; the scanner table is absent until schema initialization runs from the new build.
+
 ## Active Update 2026-05-21 BTC 5m Covered Arbitrage Scanner
 Goal: Add a read-only scanner that detects covered BTC Up/Down 5m arbitrage windows without placing orders.
 Status: Completed
