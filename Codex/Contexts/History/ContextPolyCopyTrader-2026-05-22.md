@@ -101,3 +101,10 @@ Request:
 
 Result:
 Diagnosed the mismatch as local-vs-remote PostgreSQL targeting. The base `POLYCOPYTRADER_POSTGRES_CONNECTION` host is `127.0.0.1`, where `service_heartbeats` is stale: `PolyCopyTrader.Service` last heartbeat `2026-05-22T09:39:30.677Z`, age about `8365s`, version `6822553`. Dashboard Remote mode replaces that host with `192.168.0.101`; on that database the service is alive: last heartbeat `2026-05-22T11:58:48.803Z`, age about `6s`, version `577ec0b`, with fresh BTC arbitrage scan and odds rows. Temporary read-only .NET/Npgsql probe was removed. No source behavior, production data, service state, orders, or cancels were changed.
+
+## 2026-05-22T12:04:56.8778469Z
+Request:
+Сбрось на бою все Paused. Оставь только Live paused
+
+Result:
+Connected to production PostgreSQL via Dashboard Remote host `192.168.0.101` and cleared only manual strategy pauses. Before update there were `1470` strategies, `102` manual `paused`, `102` active manual paused, `102` `paused_until_utc` set, and `13` `auto_live_paused`. Updated `strategies` with `paused=false`, `paused_until_utc=NULL`, `updated_at_utc=clock_timestamp()` for rows with manual pause state. After update there are `0` manual paused rows and `13` `auto_live_paused` rows preserved. Temporary .NET/Npgsql update probe was removed. No source behavior, service restart, live order submission, or cancel action was performed.

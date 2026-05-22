@@ -1,3 +1,16 @@
+## Active Update 2026-05-22 Production Manual Pauses Cleared
+Goal: Clear all manual Dashboard `Paused` flags on production while preserving automatic Live pauses.
+Status: Completed
+Done:
+- Connected to production PostgreSQL via Dashboard Remote host `192.168.0.101`.
+- Before update: `1470` strategies total, `102` manual `paused`, `102` active manual paused, `102` `paused_until_utc` set, `13` `auto_live_paused`, `0` both paused and auto-live-paused.
+- Updated production `strategies` by setting `paused=false`, `paused_until_utc=NULL`, and `updated_at_utc=clock_timestamp()` only where `paused=true` or `paused_until_utc IS NOT NULL`.
+- After update: `0` manual `paused`, `0` active manual paused, `0` `paused_until_utc` set, `13` `auto_live_paused` preserved.
+- Removed the temporary .NET/Npgsql production update probe.
+Next: None.
+Notes: Production DB write explicitly requested by the user. No source behavior, service restart, live order submission, or cancel action was performed.
+Blockers: None.
+
 ## Active Update 2026-05-22 Dashboard Remote Vs Local Liveness Diagnosis
 Goal: Explain why Dashboard showed the service alive while Codex probes reported a stale heartbeat.
 Status: Completed
