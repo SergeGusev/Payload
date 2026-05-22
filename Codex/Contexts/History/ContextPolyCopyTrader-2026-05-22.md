@@ -67,6 +67,13 @@ Request:
 Result:
 Inspected current code/docs/tests and confirmed the Binance strategy family uses start-relative direction: current reference price above archived market-start reference selects `Up`, below selects `Down`, equality gives no direction and may defer while the opening-limit wait is still active. BTC Binance, bps, Instant bps, fixed-price, delayed, Clever/Edge, and ETH/SOL crypto Binance bps variants share this base direction, with additional variant-specific filters and pricing.
 
+## 2026-05-22T10:21:39.3368559+00:00
+Request:
+Проверь - живой ли и актуальный ли сервис на бою
+
+Result:
+Checked production PostgreSQL read-only with `default_transaction_read_only=on`. At DB time `2026-05-22T10:21:23Z`, `PolyCopyTrader.Service` still had persisted status `Running`/`Live`, but the heartbeat was stale: last heartbeat `2026-05-22T09:39:30.677Z`, about `2513s` old. BTC runtime feeds stopped at the same time: latest arbitrage scan `2026-05-22T09:39:55.932Z`, statistics tick/live observation `2026-05-22T09:39:54.884Z`, odds tick `2026-05-22T09:39:52.630Z`, and `0` rows in the last 15 minutes. Market data status also stopped updating around `09:39:33Z`-`09:39:50Z`; no API errors were recorded in the last 6 hours. Production build is `info=1.0.0+6822553f5fdd20a72ef46f76ea0f6c5f17818403`; local HEAD is `e98d97c`, while latest service/storage/domain/strategy code commit is `577ec0b`, so the production service build includes the latest service code but is not equal to repository HEAD because later commits are Dashboard/context-only. Temporary C# read-only probe was removed; no service state, production data, orders, or cancels were changed.
+
 ## 2026-05-22T10:16:53.2546298+00:00
 Request:
 Как там живёт сбор статистики для новой стратегии? Есть перспектива?

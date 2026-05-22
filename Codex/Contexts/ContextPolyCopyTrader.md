@@ -1,3 +1,17 @@
+## Active Update 2026-05-22 Production Service Liveness Check
+Goal: Check whether the production service is alive and whether its deployed build is current.
+Status: Completed
+Done:
+- Queried production PostgreSQL read-only with `default_transaction_read_only=on`; no production rows were written.
+- At DB time `2026-05-22T10:21:23Z`, `PolyCopyTrader.Service` still reported `Running`/`Live`, but its last heartbeat was `2026-05-22T09:39:30.677Z`, about `2513s` stale.
+- BTC runtime feeds stopped at the same time: latest arbitrage scan `2026-05-22T09:39:55.932Z`, latest statistics tick/live observation `2026-05-22T09:39:54.884Z`, latest odds tick `2026-05-22T09:39:52.630Z`; all had `0` rows in the last 15 minutes.
+- Recent market data status rows also stopped around `2026-05-22T09:39:33Z`-`09:39:50Z`.
+- No API errors were recorded in the last 6 hours; latest recorded API error remains `2026-05-13T15:23:32Z`.
+- Production heartbeat version is `info=1.0.0+6822553f5fdd20a72ef46f76ea0f6c5f17818403`. Local HEAD is `e98d97c`, but the latest service/storage/domain/strategy code commit is `577ec0b`; the later commits are Dashboard/context-only.
+Next: Restart the production service and re-check heartbeat/feed freshness within a few minutes.
+Notes: Verification was a temporary C#/.NET/Npgsql read-only probe outside the repo, then removed. No service restart, live order submission, cancel action, source behavior change, or production DB write was performed.
+Blockers: Production service appears stale/not operational despite the persisted `Running` status row.
+
 ## Active Update 2026-05-22 Production New Strategy Statistics Health
 Goal: Check whether production statistics collection for the new BTC 5m skew/direction research strategy is alive and whether it already supports a conclusion.
 Status: Completed
