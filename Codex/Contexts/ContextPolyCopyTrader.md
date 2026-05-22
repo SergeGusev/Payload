@@ -1,3 +1,17 @@
+## Active Update 2026-05-22 Bps Strategy Rescale Reset
+Goal: Rename/rescale current Binance/Skip bps strategy grids from `0.1..5 bps` to `1..50 bps` by multiplying thresholds by 10, reset bps Live flags, and start fresh bps Paper/Live statistics.
+Status: Completed
+Done:
+- Rescaled BTC Binance bps, BTC Skip bps, and ETH/SOL Binance bps variants (standard + Instant) to thresholds/codes/names `1..50 bps` while preserving existing GUID row IDs.
+- Kept Middle `0.1..0.9 bps` unchanged because it is a separate mean-deviation family.
+- Updated Paper/Live-shadow allowlist to the renamed `10/17/18/19/20/21/22/23` BTC bps rows and SOL `24 bps` Instant row.
+- Updated PostgreSQL strategy seeding to rename legacy bps rows without unique code/name conflicts.
+- Added one-time schema data migration `20260522_rescale_updown_bps_history_reset` that disables Live/auto-live-pause for bps families and clears their Paper/Live order/run/fill/settlement/shadow/synthetic-signal history once the new service starts; it skips deletion and retries if active bps live orders still exist.
+- Updated tests and docs for the `1..50 bps` grid.
+Next: Deploy/restart the service; on startup schema initialization applies the rename/reset/cleanup. Then verify `schema_data_migrations` marker and Dashboard strategy rows show the renamed bps grid with `Live=false`.
+Notes: Verification passed: full `dotnet test PolyCopyTrader.sln` 537/537; new schema migration SQL executed successfully on local PostgreSQL inside rollback (`Checked 3 schema migration statements with rollback`); `git diff --check` passed with LF/CRLF warnings only. No production DB write, service restart, live order submission, or cancel action was performed by Codex.
+Blockers: None.
+
 ## Active Update 2026-05-22 ETH SOL Bps Range Check
 Goal: Check whether ETH/SOL Binance bps strategy grids have the same `0..5 bps` vs larger observed-move issue as BTC.
 Status: Completed

@@ -1050,18 +1050,18 @@ public static class StrategyIds
     public const string BtcUpDown5mBinance49Code = "btc_up_down_5m_binance_49";
     public const string BtcUpDown5mBinanceCleverAggressiveCode = "btc_up_down_5m_binance_clever_aggressive";
     public const string BtcUpDown5mBinanceCleverConservativeCode = "btc_up_down_5m_binance_clever_conservative";
-    public const string BtcUpDown5mBinanceBps01Code = "btc_up_down_5m_binance_bps_0_1";
-    public const string BtcUpDown5mBinanceBps02Code = "btc_up_down_5m_binance_bps_0_2";
-    public const string BtcUpDown5mBinanceBps03Code = "btc_up_down_5m_binance_bps_0_3";
-    public const string BtcUpDown5mBinanceBps04Code = "btc_up_down_5m_binance_bps_0_4";
-    public const string BtcUpDown5mBinanceBps05Code = "btc_up_down_5m_binance_bps_0_5";
-    public const string BtcUpDown5mBinanceBps06Code = "btc_up_down_5m_binance_bps_0_6";
-    public const string BtcUpDown5mBinanceBps07Code = "btc_up_down_5m_binance_bps_0_7";
-    public const string BtcUpDown5mBinanceBps08Code = "btc_up_down_5m_binance_bps_0_8";
-    public const string BtcUpDown5mBinanceBps09Code = "btc_up_down_5m_binance_bps_0_9";
-    public const string BtcUpDown5mBinanceBps1Code = "btc_up_down_5m_binance_bps_1";
-    public const string BtcUpDown5mBinanceBps2Code = "btc_up_down_5m_binance_bps_2";
-    public const string BtcUpDown5mBinanceBps5Code = "btc_up_down_5m_binance_bps_5";
+    public const string BtcUpDown5mBinanceBps01Code = "btc_up_down_5m_binance_bps_1";
+    public const string BtcUpDown5mBinanceBps02Code = "btc_up_down_5m_binance_bps_2";
+    public const string BtcUpDown5mBinanceBps03Code = "btc_up_down_5m_binance_bps_3";
+    public const string BtcUpDown5mBinanceBps04Code = "btc_up_down_5m_binance_bps_4";
+    public const string BtcUpDown5mBinanceBps05Code = "btc_up_down_5m_binance_bps_5";
+    public const string BtcUpDown5mBinanceBps06Code = "btc_up_down_5m_binance_bps_6";
+    public const string BtcUpDown5mBinanceBps07Code = "btc_up_down_5m_binance_bps_7";
+    public const string BtcUpDown5mBinanceBps08Code = "btc_up_down_5m_binance_bps_8";
+    public const string BtcUpDown5mBinanceBps09Code = "btc_up_down_5m_binance_bps_9";
+    public const string BtcUpDown5mBinanceBps1Code = "btc_up_down_5m_binance_bps_10";
+    public const string BtcUpDown5mBinanceBps2Code = "btc_up_down_5m_binance_bps_20";
+    public const string BtcUpDown5mBinanceBps5Code = "btc_up_down_5m_binance_bps_50";
     public const string BtcUpDown5mMore90Below70Code = "btc_up_down_5m_more_90_below_70";
     public const string BtcUpDown5mMore90Below65Code = "btc_up_down_5m_more_90_below_65";
     public const string BtcUpDown5mMore90Below60Code = "btc_up_down_5m_more_90_below_60";
@@ -1303,7 +1303,7 @@ public static class StrategyIds
 
         for (var thresholdTenths = 1; thresholdTenths <= 50; thresholdTenths++)
         {
-            var minMoveBps = thresholdTenths / 10m;
+            var minMoveBps = (decimal)thresholdTenths;
             variants.Add(CreateBtcUpDown5mSkipBpsThresholdVariant(thresholdTenths, minMoveBps));
             variants.Add(CreateBtcUpDown5mSkipBpsThresholdInstantVariant(thresholdTenths, minMoveBps));
         }
@@ -1317,7 +1317,7 @@ public static class StrategyIds
         variants.Add(CreateBtcUpDown5mBinanceVariant());
         for (var thresholdTenths = 1; thresholdTenths <= 50; thresholdTenths++)
         {
-            var minMoveBps = thresholdTenths / 10m;
+            var minMoveBps = (decimal)thresholdTenths;
             variants.Add(CreateBtcUpDown5mBinanceBpsThresholdVariant(
                 GetBtcUpDown5mBinanceBpsThresholdId(thresholdTenths),
                 GetBtcUpDown5mBinanceBpsThresholdCode(thresholdTenths),
@@ -1524,13 +1524,7 @@ public static class StrategyIds
 
     private static string GetBtcUpDown5mSkipBpsThresholdCode(int thresholdTenths)
     {
-        var wholeBps = thresholdTenths / 10;
-        var fractionalTenths = thresholdTenths % 10;
-        var suffix = fractionalTenths == 0
-            ? wholeBps.ToString(CultureInfo.InvariantCulture)
-            : wholeBps.ToString(CultureInfo.InvariantCulture) + "_" + fractionalTenths.ToString(CultureInfo.InvariantCulture);
-
-        return "btc_up_down_5m_skip_bps_" + suffix;
+        return "btc_up_down_5m_skip_bps_" + thresholdTenths.ToString(CultureInfo.InvariantCulture);
     }
 
     private static string GetBtcUpDown5mSkipBpsThresholdInstantCode(int thresholdTenths)
@@ -1680,13 +1674,7 @@ public static class StrategyIds
 
     private static string GetBtcUpDown5mBinanceBpsThresholdCode(int thresholdTenths)
     {
-        var wholeBps = thresholdTenths / 10;
-        var fractionalTenths = thresholdTenths % 10;
-        var suffix = fractionalTenths == 0
-            ? wholeBps.ToString(CultureInfo.InvariantCulture)
-            : wholeBps.ToString(CultureInfo.InvariantCulture) + "_" + fractionalTenths.ToString(CultureInfo.InvariantCulture);
-
-        return "btc_up_down_5m_binance_bps_" + suffix;
+        return "btc_up_down_5m_binance_bps_" + thresholdTenths.ToString(CultureInfo.InvariantCulture);
     }
 
     private static string GetBtcUpDown5mBinanceBpsThresholdInstantCode(int thresholdTenths)
@@ -1706,7 +1694,7 @@ public static class StrategyIds
         {
             for (var thresholdTenths = 1; thresholdTenths <= 50; thresholdTenths++)
             {
-                var minMoveBps = thresholdTenths / 10m;
+                var minMoveBps = (decimal)thresholdTenths;
                 variants.Add(CreateCryptoUpDown5mBinanceBpsThresholdVariant(asset, thresholdTenths, minMoveBps));
                 variants.Add(CreateCryptoUpDown5mBinanceBpsThresholdInstantVariant(asset, thresholdTenths, minMoveBps));
             }
@@ -1764,13 +1752,7 @@ public static class StrategyIds
 
     private static string GetCryptoUpDown5mBinanceBpsThresholdCode(string assetSymbol, int thresholdTenths)
     {
-        var wholeBps = thresholdTenths / 10;
-        var fractionalTenths = thresholdTenths % 10;
-        var suffix = fractionalTenths == 0
-            ? wholeBps.ToString(CultureInfo.InvariantCulture)
-            : wholeBps.ToString(CultureInfo.InvariantCulture) + "_" + fractionalTenths.ToString(CultureInfo.InvariantCulture);
-
-        return assetSymbol.ToLowerInvariant() + "_up_down_5m_binance_bps_" + suffix;
+        return assetSymbol.ToLowerInvariant() + "_up_down_5m_binance_bps_" + thresholdTenths.ToString(CultureInfo.InvariantCulture);
     }
 
     private static BtcUpDown5mStrategyVariant CreateBtcUpDown5mBinanceCleverVariant()

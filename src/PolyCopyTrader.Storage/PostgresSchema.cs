@@ -1284,6 +1284,26 @@ ON CONFLICT (id) DO UPDATE SET
     description = excluded.description,
     updated_at_utc = excluded.updated_at_utc;
 
+UPDATE strategies
+SET
+    code = 'legacy_bps_seed_' || replace(id::text, '-', '_'),
+    name = 'Legacy bps seed ' || id::text,
+    updated_at_utc = now()
+WHERE (
+        code LIKE 'btc_up_down_5m_binance_bps_%'
+     OR code LIKE 'btc_up_down_5m_skip_bps_%'
+     OR code LIKE 'eth_up_down_5m_binance_bps_%'
+     OR code LIKE 'sol_up_down_5m_binance_bps_%'
+    )
+  AND EXISTS (
+        SELECT 1
+        FROM strategies legacy_strategy
+        WHERE legacy_strategy.code LIKE 'btc_up_down_5m_binance_bps_0_%'
+           OR legacy_strategy.code LIKE 'btc_up_down_5m_skip_bps_0_%'
+           OR legacy_strategy.code LIKE 'eth_up_down_5m_binance_bps_0_%'
+           OR legacy_strategy.code LIKE 'sol_up_down_5m_binance_bps_0_%'
+    );
+
 INSERT INTO strategies (id, code, name, description, enabled, paper_stake_amount, created_at_utc, updated_at_utc)
 VALUES (
     'b7c50005-0000-4000-8004-000000000030',
@@ -1814,96 +1834,6 @@ VALUES (
 ),
 (
     'b7c50005-0000-4000-8013-000000000010',
-    'btc_up_down_5m_binance_bps_0_1',
-    'BTC Up or Down 5m Binance 0.1 bps',
-    'After BTC 5m trading starts, compare the latest Binance BTC/USDT trade-stream price with the archived market-start reference; skip unless the absolute move from start is at least 0.1 bps; above start buys Up, below start buys Down. Paper entry is a GTD limit BUY capped at 0.50 until the configured BTC GTD deadline; settlement uses only actually filled shares.',
-    true,
-    1.00,
-    now(),
-    now()
-),
-(
-    'b7c50005-0000-4000-8013-000000000020',
-    'btc_up_down_5m_binance_bps_0_2',
-    'BTC Up or Down 5m Binance 0.2 bps',
-    'After BTC 5m trading starts, compare the latest Binance BTC/USDT trade-stream price with the archived market-start reference; skip unless the absolute move from start is at least 0.2 bps; above start buys Up, below start buys Down. Paper entry is a GTD limit BUY capped at 0.50 until the configured BTC GTD deadline; settlement uses only actually filled shares.',
-    true,
-    1.00,
-    now(),
-    now()
-),
-(
-    'b7c50005-0000-4000-8013-000000000030',
-    'btc_up_down_5m_binance_bps_0_3',
-    'BTC Up or Down 5m Binance 0.3 bps',
-    'After BTC 5m trading starts, compare the latest Binance BTC/USDT trade-stream price with the archived market-start reference; skip unless the absolute move from start is at least 0.3 bps; above start buys Up, below start buys Down. Paper entry is a GTD limit BUY capped at 0.50 until the configured BTC GTD deadline; settlement uses only actually filled shares.',
-    true,
-    1.00,
-    now(),
-    now()
-),
-(
-    'b7c50005-0000-4000-8013-000000000040',
-    'btc_up_down_5m_binance_bps_0_4',
-    'BTC Up or Down 5m Binance 0.4 bps',
-    'After BTC 5m trading starts, compare the latest Binance BTC/USDT trade-stream price with the archived market-start reference; skip unless the absolute move from start is at least 0.4 bps; above start buys Up, below start buys Down. Paper entry is a GTD limit BUY capped at 0.50 until the configured BTC GTD deadline; settlement uses only actually filled shares.',
-    true,
-    1.00,
-    now(),
-    now()
-),
-(
-    'b7c50005-0000-4000-8013-000000000050',
-    'btc_up_down_5m_binance_bps_0_5',
-    'BTC Up or Down 5m Binance 0.5 bps',
-    'After BTC 5m trading starts, compare the latest Binance BTC/USDT trade-stream price with the archived market-start reference; skip unless the absolute move from start is at least 0.5 bps; above start buys Up, below start buys Down. Paper entry is a GTD limit BUY capped at 0.50 until the configured BTC GTD deadline; settlement uses only actually filled shares.',
-    true,
-    1.00,
-    now(),
-    now()
-),
-(
-    'b7c50005-0000-4000-8013-000000000060',
-    'btc_up_down_5m_binance_bps_0_6',
-    'BTC Up or Down 5m Binance 0.6 bps',
-    'After BTC 5m trading starts, compare the latest Binance BTC/USDT trade-stream price with the archived market-start reference; skip unless the absolute move from start is at least 0.6 bps; above start buys Up, below start buys Down. Paper entry is a GTD limit BUY capped at 0.50 until the configured BTC GTD deadline; settlement uses only actually filled shares.',
-    true,
-    1.00,
-    now(),
-    now()
-),
-(
-    'b7c50005-0000-4000-8013-000000000070',
-    'btc_up_down_5m_binance_bps_0_7',
-    'BTC Up or Down 5m Binance 0.7 bps',
-    'After BTC 5m trading starts, compare the latest Binance BTC/USDT trade-stream price with the archived market-start reference; skip unless the absolute move from start is at least 0.7 bps; above start buys Up, below start buys Down. Paper entry is a GTD limit BUY capped at 0.50 until the configured BTC GTD deadline; settlement uses only actually filled shares.',
-    true,
-    1.00,
-    now(),
-    now()
-),
-(
-    'b7c50005-0000-4000-8013-000000000080',
-    'btc_up_down_5m_binance_bps_0_8',
-    'BTC Up or Down 5m Binance 0.8 bps',
-    'After BTC 5m trading starts, compare the latest Binance BTC/USDT trade-stream price with the archived market-start reference; skip unless the absolute move from start is at least 0.8 bps; above start buys Up, below start buys Down. Paper entry is a GTD limit BUY capped at 0.50 until the configured BTC GTD deadline; settlement uses only actually filled shares.',
-    true,
-    1.00,
-    now(),
-    now()
-),
-(
-    'b7c50005-0000-4000-8013-000000000090',
-    'btc_up_down_5m_binance_bps_0_9',
-    'BTC Up or Down 5m Binance 0.9 bps',
-    'After BTC 5m trading starts, compare the latest Binance BTC/USDT trade-stream price with the archived market-start reference; skip unless the absolute move from start is at least 0.9 bps; above start buys Up, below start buys Down. Paper entry is a GTD limit BUY capped at 0.50 until the configured BTC GTD deadline; settlement uses only actually filled shares.',
-    true,
-    1.00,
-    now(),
-    now()
-),
-(
-    'b7c50005-0000-4000-8013-000000000001',
     'btc_up_down_5m_binance_bps_1',
     'BTC Up or Down 5m Binance 1 bps',
     'After BTC 5m trading starts, compare the latest Binance BTC/USDT trade-stream price with the archived market-start reference; skip unless the absolute move from start is at least 1 bps; above start buys Up, below start buys Down. Paper entry is a GTD limit BUY capped at 0.50 until the configured BTC GTD deadline; settlement uses only actually filled shares.',
@@ -1913,7 +1843,7 @@ VALUES (
     now()
 ),
 (
-    'b7c50005-0000-4000-8013-000000000002',
+    'b7c50005-0000-4000-8013-000000000020',
     'btc_up_down_5m_binance_bps_2',
     'BTC Up or Down 5m Binance 2 bps',
     'After BTC 5m trading starts, compare the latest Binance BTC/USDT trade-stream price with the archived market-start reference; skip unless the absolute move from start is at least 2 bps; above start buys Up, below start buys Down. Paper entry is a GTD limit BUY capped at 0.50 until the configured BTC GTD deadline; settlement uses only actually filled shares.',
@@ -1923,10 +1853,100 @@ VALUES (
     now()
 ),
 (
-    'b7c50005-0000-4000-8013-000000000005',
+    'b7c50005-0000-4000-8013-000000000030',
+    'btc_up_down_5m_binance_bps_3',
+    'BTC Up or Down 5m Binance 3 bps',
+    'After BTC 5m trading starts, compare the latest Binance BTC/USDT trade-stream price with the archived market-start reference; skip unless the absolute move from start is at least 3 bps; above start buys Up, below start buys Down. Paper entry is a GTD limit BUY capped at 0.50 until the configured BTC GTD deadline; settlement uses only actually filled shares.',
+    true,
+    1.00,
+    now(),
+    now()
+),
+(
+    'b7c50005-0000-4000-8013-000000000040',
+    'btc_up_down_5m_binance_bps_4',
+    'BTC Up or Down 5m Binance 4 bps',
+    'After BTC 5m trading starts, compare the latest Binance BTC/USDT trade-stream price with the archived market-start reference; skip unless the absolute move from start is at least 4 bps; above start buys Up, below start buys Down. Paper entry is a GTD limit BUY capped at 0.50 until the configured BTC GTD deadline; settlement uses only actually filled shares.',
+    true,
+    1.00,
+    now(),
+    now()
+),
+(
+    'b7c50005-0000-4000-8013-000000000050',
     'btc_up_down_5m_binance_bps_5',
     'BTC Up or Down 5m Binance 5 bps',
     'After BTC 5m trading starts, compare the latest Binance BTC/USDT trade-stream price with the archived market-start reference; skip unless the absolute move from start is at least 5 bps; above start buys Up, below start buys Down. Paper entry is a GTD limit BUY capped at 0.50 until the configured BTC GTD deadline; settlement uses only actually filled shares.',
+    true,
+    1.00,
+    now(),
+    now()
+),
+(
+    'b7c50005-0000-4000-8013-000000000060',
+    'btc_up_down_5m_binance_bps_6',
+    'BTC Up or Down 5m Binance 6 bps',
+    'After BTC 5m trading starts, compare the latest Binance BTC/USDT trade-stream price with the archived market-start reference; skip unless the absolute move from start is at least 6 bps; above start buys Up, below start buys Down. Paper entry is a GTD limit BUY capped at 0.50 until the configured BTC GTD deadline; settlement uses only actually filled shares.',
+    true,
+    1.00,
+    now(),
+    now()
+),
+(
+    'b7c50005-0000-4000-8013-000000000070',
+    'btc_up_down_5m_binance_bps_7',
+    'BTC Up or Down 5m Binance 7 bps',
+    'After BTC 5m trading starts, compare the latest Binance BTC/USDT trade-stream price with the archived market-start reference; skip unless the absolute move from start is at least 7 bps; above start buys Up, below start buys Down. Paper entry is a GTD limit BUY capped at 0.50 until the configured BTC GTD deadline; settlement uses only actually filled shares.',
+    true,
+    1.00,
+    now(),
+    now()
+),
+(
+    'b7c50005-0000-4000-8013-000000000080',
+    'btc_up_down_5m_binance_bps_8',
+    'BTC Up or Down 5m Binance 8 bps',
+    'After BTC 5m trading starts, compare the latest Binance BTC/USDT trade-stream price with the archived market-start reference; skip unless the absolute move from start is at least 8 bps; above start buys Up, below start buys Down. Paper entry is a GTD limit BUY capped at 0.50 until the configured BTC GTD deadline; settlement uses only actually filled shares.',
+    true,
+    1.00,
+    now(),
+    now()
+),
+(
+    'b7c50005-0000-4000-8013-000000000090',
+    'btc_up_down_5m_binance_bps_9',
+    'BTC Up or Down 5m Binance 9 bps',
+    'After BTC 5m trading starts, compare the latest Binance BTC/USDT trade-stream price with the archived market-start reference; skip unless the absolute move from start is at least 9 bps; above start buys Up, below start buys Down. Paper entry is a GTD limit BUY capped at 0.50 until the configured BTC GTD deadline; settlement uses only actually filled shares.',
+    true,
+    1.00,
+    now(),
+    now()
+),
+(
+    'b7c50005-0000-4000-8013-000000000001',
+    'btc_up_down_5m_binance_bps_10',
+    'BTC Up or Down 5m Binance 10 bps',
+    'After BTC 5m trading starts, compare the latest Binance BTC/USDT trade-stream price with the archived market-start reference; skip unless the absolute move from start is at least 10 bps; above start buys Up, below start buys Down. Paper entry is a GTD limit BUY capped at 0.50 until the configured BTC GTD deadline; settlement uses only actually filled shares.',
+    true,
+    1.00,
+    now(),
+    now()
+),
+(
+    'b7c50005-0000-4000-8013-000000000002',
+    'btc_up_down_5m_binance_bps_20',
+    'BTC Up or Down 5m Binance 20 bps',
+    'After BTC 5m trading starts, compare the latest Binance BTC/USDT trade-stream price with the archived market-start reference; skip unless the absolute move from start is at least 20 bps; above start buys Up, below start buys Down. Paper entry is a GTD limit BUY capped at 0.50 until the configured BTC GTD deadline; settlement uses only actually filled shares.',
+    true,
+    1.00,
+    now(),
+    now()
+),
+(
+    'b7c50005-0000-4000-8013-000000000005',
+    'btc_up_down_5m_binance_bps_50',
+    'BTC Up or Down 5m Binance 50 bps',
+    'After BTC 5m trading starts, compare the latest Binance BTC/USDT trade-stream price with the archived market-start reference; skip unless the absolute move from start is at least 50 bps; above start buys Up, below start buys Down. Paper entry is a GTD limit BUY capped at 0.50 until the configured BTC GTD deadline; settlement uses only actually filled shares.',
     true,
     1.00,
     now(),
@@ -2095,14 +2115,8 @@ WITH thresholds(threshold_tenths) AS (
 formatted AS (
     SELECT
         threshold_tenths,
-        CASE
-            WHEN threshold_tenths % 10 = 0 THEN (threshold_tenths / 10)::text
-            ELSE (threshold_tenths / 10)::text || '.' || (threshold_tenths % 10)::text
-        END AS threshold_name,
-        CASE
-            WHEN threshold_tenths % 10 = 0 THEN (threshold_tenths / 10)::text
-            ELSE (threshold_tenths / 10)::text || '_' || (threshold_tenths % 10)::text
-        END AS code_suffix
+        threshold_tenths::text AS threshold_name,
+        threshold_tenths::text AS code_suffix
     FROM thresholds
     WHERE threshold_tenths NOT IN (10, 20, 50)
 )
@@ -2129,14 +2143,8 @@ WITH thresholds(threshold_tenths) AS (
 formatted AS (
     SELECT
         threshold_tenths,
-        CASE
-            WHEN threshold_tenths % 10 = 0 THEN (threshold_tenths / 10)::text
-            ELSE (threshold_tenths / 10)::text || '.' || (threshold_tenths % 10)::text
-        END AS threshold_name,
-        CASE
-            WHEN threshold_tenths % 10 = 0 THEN (threshold_tenths / 10)::text
-            ELSE (threshold_tenths / 10)::text || '_' || (threshold_tenths % 10)::text
-        END AS code_suffix
+        threshold_tenths::text AS threshold_name,
+        threshold_tenths::text AS code_suffix
     FROM thresholds
 )
 SELECT
@@ -2162,14 +2170,8 @@ WITH thresholds(threshold_tenths) AS (
 formatted AS (
     SELECT
         threshold_tenths,
-        CASE
-            WHEN threshold_tenths % 10 = 0 THEN (threshold_tenths / 10)::text
-            ELSE (threshold_tenths / 10)::text || '.' || (threshold_tenths % 10)::text
-        END AS threshold_name,
-        CASE
-            WHEN threshold_tenths % 10 = 0 THEN (threshold_tenths / 10)::text
-            ELSE (threshold_tenths / 10)::text || '_' || (threshold_tenths % 10)::text
-        END AS code_suffix
+        threshold_tenths::text AS threshold_name,
+        threshold_tenths::text AS code_suffix
     FROM thresholds
 )
 SELECT
@@ -2195,14 +2197,8 @@ WITH thresholds(threshold_tenths) AS (
 formatted AS (
     SELECT
         threshold_tenths,
-        CASE
-            WHEN threshold_tenths % 10 = 0 THEN (threshold_tenths / 10)::text
-            ELSE (threshold_tenths / 10)::text || '.' || (threshold_tenths % 10)::text
-        END AS threshold_name,
-        CASE
-            WHEN threshold_tenths % 10 = 0 THEN (threshold_tenths / 10)::text
-            ELSE (threshold_tenths / 10)::text || '_' || (threshold_tenths % 10)::text
-        END AS code_suffix
+        threshold_tenths::text AS threshold_name,
+        threshold_tenths::text AS code_suffix
     FROM thresholds
 )
 SELECT
@@ -2236,14 +2232,8 @@ formatted AS (
         bps_id_group,
         instant_id_group,
         threshold_tenths,
-        CASE
-            WHEN threshold_tenths % 10 = 0 THEN (threshold_tenths / 10)::text
-            ELSE (threshold_tenths / 10)::text || '.' || (threshold_tenths % 10)::text
-        END AS threshold_name,
-        CASE
-            WHEN threshold_tenths % 10 = 0 THEN (threshold_tenths / 10)::text
-            ELSE (threshold_tenths / 10)::text || '_' || (threshold_tenths % 10)::text
-        END AS code_suffix
+        threshold_tenths::text AS threshold_name,
+        threshold_tenths::text AS code_suffix
     FROM assets
     CROSS JOIN thresholds
 )
@@ -2278,14 +2268,8 @@ formatted AS (
         bps_id_group,
         instant_id_group,
         threshold_tenths,
-        CASE
-            WHEN threshold_tenths % 10 = 0 THEN (threshold_tenths / 10)::text
-            ELSE (threshold_tenths / 10)::text || '.' || (threshold_tenths % 10)::text
-        END AS threshold_name,
-        CASE
-            WHEN threshold_tenths % 10 = 0 THEN (threshold_tenths / 10)::text
-            ELSE (threshold_tenths / 10)::text || '_' || (threshold_tenths % 10)::text
-        END AS code_suffix
+        threshold_tenths::text AS threshold_name,
+        threshold_tenths::text AS code_suffix
     FROM assets
     CROSS JOIN thresholds
 )
@@ -4157,5 +4141,203 @@ CREATE TABLE IF NOT EXISTS service_heartbeats (
     current_loop text NOT NULL,
     last_error text NULL
 );
+
+CREATE TABLE IF NOT EXISTS schema_data_migrations (
+    migration_key text PRIMARY KEY,
+    applied_at_utc timestamptz NOT NULL,
+    details text NOT NULL
+);
+
+DO $$
+DECLARE
+    migration_key_value text := '20260522_rescale_updown_bps_history_reset';
+    target_strategy_count integer := 0;
+    deleted_shadow_discrepancies integer := 0;
+    deleted_shadow_decisions integer := 0;
+    deleted_live_orders integer := 0;
+    deleted_strategy_runs integer := 0;
+    deleted_paper_fills integer := 0;
+    deleted_paper_orders integer := 0;
+    deleted_signal_rejections integer := 0;
+    deleted_signals integer := 0;
+    deleted_paper_positions integer := 0;
+    deleted_paper_position_settlements integer := 0;
+    active_live_orders integer := 0;
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1
+        FROM schema_data_migrations migration
+        WHERE migration.migration_key = migration_key_value
+    ) THEN
+        DROP TABLE IF EXISTS tmp_bps_history_reset_strategies;
+        DROP TABLE IF EXISTS tmp_bps_history_reset_paper_orders;
+        DROP TABLE IF EXISTS tmp_bps_history_reset_live_orders;
+        DROP TABLE IF EXISTS tmp_bps_history_reset_signals;
+
+        CREATE TEMP TABLE tmp_bps_history_reset_strategies ON COMMIT DROP AS
+        SELECT strategy.id
+        FROM strategies strategy
+        WHERE strategy.code LIKE 'btc_up_down_5m_binance_bps_%'
+           OR strategy.code LIKE 'btc_up_down_5m_skip_bps_%'
+           OR strategy.code LIKE 'eth_up_down_5m_binance_bps_%'
+           OR strategy.code LIKE 'sol_up_down_5m_binance_bps_%';
+
+        SELECT count(*)::integer
+        INTO target_strategy_count
+        FROM tmp_bps_history_reset_strategies;
+
+        UPDATE strategies strategy
+        SET live_stakes = false,
+            auto_live_paused = false,
+            updated_at_utc = clock_timestamp()
+        WHERE strategy.id IN (
+            SELECT target.id
+            FROM tmp_bps_history_reset_strategies target
+        )
+          AND (strategy.live_stakes OR strategy.auto_live_paused);
+
+        CREATE TEMP TABLE tmp_bps_history_reset_paper_orders ON COMMIT DROP AS
+        SELECT paper_order.id
+        FROM paper_orders paper_order
+        WHERE paper_order.strategy_id IN (
+            SELECT target.id
+            FROM tmp_bps_history_reset_strategies target
+        );
+
+        CREATE TEMP TABLE tmp_bps_history_reset_live_orders ON COMMIT DROP AS
+        SELECT live_order.id
+        FROM live_orders live_order
+        WHERE live_order.strategy_id IN (
+            SELECT target.id
+            FROM tmp_bps_history_reset_strategies target
+        );
+
+        CREATE TEMP TABLE tmp_bps_history_reset_signals ON COMMIT DROP AS
+        SELECT signal.id
+        FROM signals signal
+        WHERE signal.trader_wallet LIKE 'strategy:btc_up_down_5m_binance_bps_%'
+           OR signal.trader_wallet LIKE 'strategy:btc_up_down_5m_skip_bps_%'
+           OR signal.trader_wallet LIKE 'strategy:eth_up_down_5m_binance_bps_%'
+           OR signal.trader_wallet LIKE 'strategy:sol_up_down_5m_binance_bps_%';
+
+        SELECT count(*)::integer
+        INTO active_live_orders
+        FROM live_orders live_order
+        WHERE live_order.id IN (
+            SELECT target.id
+            FROM tmp_bps_history_reset_live_orders target
+        )
+          AND live_order.status IN ('Submitted', 'Live', 'Delayed', 'Unmatched', 'CancelRequested');
+
+        IF active_live_orders = 0 THEN
+            DELETE FROM paper_live_shadow_discrepancies discrepancy
+            WHERE discrepancy.strategy_id IN (
+                SELECT target.id
+                FROM tmp_bps_history_reset_strategies target
+            );
+            GET DIAGNOSTICS deleted_shadow_discrepancies = ROW_COUNT;
+
+            DELETE FROM paper_live_shadow_decisions decision
+            WHERE decision.strategy_id IN (
+                    SELECT target.id
+                    FROM tmp_bps_history_reset_strategies target
+                )
+               OR decision.paper_order_id IN (
+                    SELECT target.id
+                    FROM tmp_bps_history_reset_paper_orders target
+                )
+               OR decision.live_order_id IN (
+                    SELECT target.id
+                    FROM tmp_bps_history_reset_live_orders target
+                )
+               OR decision.signal_id IN (
+                    SELECT target.id
+                    FROM tmp_bps_history_reset_signals target
+                );
+            GET DIAGNOSTICS deleted_shadow_decisions = ROW_COUNT;
+
+            DELETE FROM live_orders live_order
+            WHERE live_order.id IN (
+                SELECT target.id
+                FROM tmp_bps_history_reset_live_orders target
+            );
+            GET DIAGNOSTICS deleted_live_orders = ROW_COUNT;
+
+            DELETE FROM strategy_market_paper_runs run
+            WHERE run.strategy_id IN (
+                    SELECT target.id
+                    FROM tmp_bps_history_reset_strategies target
+                )
+               OR run.paper_order_id IN (
+                    SELECT target.id
+                    FROM tmp_bps_history_reset_paper_orders target
+                )
+               OR run.signal_id IN (
+                    SELECT target.id
+                    FROM tmp_bps_history_reset_signals target
+                );
+            GET DIAGNOSTICS deleted_strategy_runs = ROW_COUNT;
+
+            DELETE FROM paper_fills fill
+            WHERE fill.paper_order_id IN (
+                SELECT target.id
+                FROM tmp_bps_history_reset_paper_orders target
+            );
+            GET DIAGNOSTICS deleted_paper_fills = ROW_COUNT;
+
+            DELETE FROM paper_orders paper_order
+            WHERE paper_order.id IN (
+                SELECT target.id
+                FROM tmp_bps_history_reset_paper_orders target
+            );
+            GET DIAGNOSTICS deleted_paper_orders = ROW_COUNT;
+
+            DELETE FROM signal_rejections rejection
+            WHERE rejection.signal_id IN (
+                SELECT target.id
+                FROM tmp_bps_history_reset_signals target
+            );
+            GET DIAGNOSTICS deleted_signal_rejections = ROW_COUNT;
+
+            DELETE FROM signals signal
+            WHERE signal.id IN (
+                SELECT target.id
+                FROM tmp_bps_history_reset_signals target
+            );
+            GET DIAGNOSTICS deleted_signals = ROW_COUNT;
+
+            DELETE FROM paper_positions paper_position
+            WHERE paper_position.copied_trader_wallet LIKE 'strategy:btc_up_down_5m_binance_bps_%'
+               OR paper_position.copied_trader_wallet LIKE 'strategy:btc_up_down_5m_skip_bps_%'
+               OR paper_position.copied_trader_wallet LIKE 'strategy:eth_up_down_5m_binance_bps_%'
+               OR paper_position.copied_trader_wallet LIKE 'strategy:sol_up_down_5m_binance_bps_%';
+            GET DIAGNOSTICS deleted_paper_positions = ROW_COUNT;
+
+            DELETE FROM paper_position_settlements settlement
+            WHERE settlement.copied_trader_wallet LIKE 'strategy:btc_up_down_5m_binance_bps_%'
+               OR settlement.copied_trader_wallet LIKE 'strategy:btc_up_down_5m_skip_bps_%'
+               OR settlement.copied_trader_wallet LIKE 'strategy:eth_up_down_5m_binance_bps_%'
+               OR settlement.copied_trader_wallet LIKE 'strategy:sol_up_down_5m_binance_bps_%';
+            GET DIAGNOSTICS deleted_paper_position_settlements = ROW_COUNT;
+
+            INSERT INTO schema_data_migrations (migration_key, applied_at_utc, details)
+            VALUES (
+                migration_key_value,
+                clock_timestamp(),
+                'target_strategies=' || target_strategy_count::text ||
+                ';paper_orders=' || deleted_paper_orders::text ||
+                ';paper_fills=' || deleted_paper_fills::text ||
+                ';strategy_runs=' || deleted_strategy_runs::text ||
+                ';live_orders=' || deleted_live_orders::text ||
+                ';shadow_decisions=' || deleted_shadow_decisions::text ||
+                ';shadow_discrepancies=' || deleted_shadow_discrepancies::text ||
+                ';signals=' || deleted_signals::text ||
+                ';signal_rejections=' || deleted_signal_rejections::text ||
+                ';paper_positions=' || deleted_paper_positions::text ||
+                ';paper_position_settlements=' || deleted_paper_position_settlements::text
+            );
+        END IF;
+    END IF;
+END $$;
 """;
 }

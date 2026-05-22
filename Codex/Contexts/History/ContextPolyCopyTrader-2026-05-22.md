@@ -1,3 +1,10 @@
+## 2026-05-22T15:59:39Z
+Request:
+Rename all current Binance/Skip bps strategies from decimal labels such as `0.1..5` to integer bps labels such as `1..50`, multiply thresholds by 10 rather than adding 10, clear Paper/Live bet history, and reset Live flags so statistics start fresh.
+
+Result:
+Rescaled BTC Binance bps, BTC Skip bps, and ETH/SOL Binance bps variants, including Instant variants, to `1..50 bps` names/codes/thresholds while preserving existing strategy row IDs. Left the separate Middle `0.1..0.9 bps` family unchanged. Updated the Paper/Live-shadow allowlist to renamed bps rows. Added PostgreSQL seed handling for legacy row renames and a one-time schema data migration `20260522_rescale_updown_bps_history_reset` that sets bps strategies to `Live=false`, clears auto Live pause, and clears their Paper/Live order/run/fill/settlement/shadow/synthetic-signal history on service startup. The migration skips deletion and retries on the next startup if active bps live orders still exist. Updated tests and docs. Verification passed: full `dotnet test PolyCopyTrader.sln` 537/537, local PostgreSQL schema migration SQL rollback check succeeded, and `git diff --check` passed with LF/CRLF warnings only. No production DB write, service restart, live order submission, or cancel action was performed by Codex.
+
 ## 2026-05-22T09:55:00Z
 Request:
 Dashboard throws `System.InvalidOperationException`: a TwoWay or OneWayToSource binding cannot work on read-only property `AutoLivePaused` of `StrategyPerformanceRow`.

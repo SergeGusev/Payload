@@ -116,13 +116,13 @@ public sealed class BtcUpDown5mPaperStrategyProcessorTests
         StrategyIds.BtcUpDown5mVariants.Single(variant => variant.Code == "btc_up_down_5m_skip_1");
 
     private static readonly BtcUpDown5mStrategyVariant SkipBps01Variant =
-        StrategyIds.BtcUpDown5mVariants.Single(variant => variant.Code == "btc_up_down_5m_skip_bps_0_1");
+        StrategyIds.BtcUpDown5mVariants.Single(variant => variant.Code == "btc_up_down_5m_skip_bps_1");
 
     private static readonly BtcUpDown5mStrategyVariant SkipBps02Variant =
-        StrategyIds.BtcUpDown5mVariants.Single(variant => variant.Code == "btc_up_down_5m_skip_bps_0_2");
+        StrategyIds.BtcUpDown5mVariants.Single(variant => variant.Code == "btc_up_down_5m_skip_bps_2");
 
     private static readonly BtcUpDown5mStrategyVariant SkipBps03Variant =
-        StrategyIds.BtcUpDown5mVariants.Single(variant => variant.Code == "btc_up_down_5m_skip_bps_0_3");
+        StrategyIds.BtcUpDown5mVariants.Single(variant => variant.Code == "btc_up_down_5m_skip_bps_3");
 
     private static readonly BtcUpDown5mStrategyVariant SkipBps2Variant =
         StrategyIds.BtcUpDown5mVariants.Single(variant => variant.Code == "btc_up_down_5m_skip_bps_2");
@@ -164,55 +164,55 @@ public sealed class BtcUpDown5mPaperStrategyProcessorTests
         StrategyIds.BtcUpDown5mVariants.Single(variant => variant.Code == "btc_up_down_5m_binance_49");
 
     private static readonly BtcUpDown5mStrategyVariant BinanceBps01Variant =
-        StrategyIds.BtcUpDown5mVariants.Single(variant => variant.Code == "btc_up_down_5m_binance_bps_0_1");
-
-    private static readonly BtcUpDown5mStrategyVariant BinanceBps05Variant =
-        StrategyIds.BtcUpDown5mVariants.Single(variant => variant.Code == "btc_up_down_5m_binance_bps_0_5");
-
-    private static readonly BtcUpDown5mStrategyVariant BinanceBps09Variant =
-        StrategyIds.BtcUpDown5mVariants.Single(variant => variant.Code == "btc_up_down_5m_binance_bps_0_9");
-
-    private static readonly BtcUpDown5mStrategyVariant BinanceBps1Variant =
         StrategyIds.BtcUpDown5mVariants.Single(variant => variant.Code == "btc_up_down_5m_binance_bps_1");
 
-    private static readonly BtcUpDown5mStrategyVariant BinanceBps11Variant =
-        StrategyIds.BtcUpDown5mVariants.Single(variant => variant.Code == "btc_up_down_5m_binance_bps_1_1");
-
-    private static readonly BtcUpDown5mStrategyVariant BinanceBps18Variant =
-        StrategyIds.BtcUpDown5mVariants.Single(variant => variant.Code == "btc_up_down_5m_binance_bps_1_8");
-
-    private static readonly BtcUpDown5mStrategyVariant BinanceBps19Variant =
-        StrategyIds.BtcUpDown5mVariants.Single(variant => variant.Code == "btc_up_down_5m_binance_bps_1_9");
-
-    private static readonly BtcUpDown5mStrategyVariant BinanceBps2Variant =
-        StrategyIds.BtcUpDown5mVariants.Single(variant => variant.Code == "btc_up_down_5m_binance_bps_2");
-
-    private static readonly BtcUpDown5mStrategyVariant BinanceBps21Variant =
-        StrategyIds.BtcUpDown5mVariants.Single(variant => variant.Code == "btc_up_down_5m_binance_bps_2_1");
-
-    private static readonly BtcUpDown5mStrategyVariant BinanceBps22Variant =
-        StrategyIds.BtcUpDown5mVariants.Single(variant => variant.Code == "btc_up_down_5m_binance_bps_2_2");
-
-    private static readonly BtcUpDown5mStrategyVariant BinanceBps23Variant =
-        StrategyIds.BtcUpDown5mVariants.Single(variant => variant.Code == "btc_up_down_5m_binance_bps_2_3");
-
-    private static readonly BtcUpDown5mStrategyVariant BinanceBps3Variant =
-        StrategyIds.BtcUpDown5mVariants.Single(variant => variant.Code == "btc_up_down_5m_binance_bps_3");
-
-    private static readonly BtcUpDown5mStrategyVariant BinanceBps49Variant =
-        StrategyIds.BtcUpDown5mVariants.Single(variant => variant.Code == "btc_up_down_5m_binance_bps_4_9");
-
-    private static readonly BtcUpDown5mStrategyVariant BinanceBps5Variant =
+    private static readonly BtcUpDown5mStrategyVariant BinanceBps05Variant =
         StrategyIds.BtcUpDown5mVariants.Single(variant => variant.Code == "btc_up_down_5m_binance_bps_5");
 
+    private static readonly BtcUpDown5mStrategyVariant BinanceBps09Variant =
+        StrategyIds.BtcUpDown5mVariants.Single(variant => variant.Code == "btc_up_down_5m_binance_bps_9");
+
+    private static readonly BtcUpDown5mStrategyVariant BinanceBps1Variant =
+        StrategyIds.BtcUpDown5mVariants.Single(variant => variant.Code == "btc_up_down_5m_binance_bps_10");
+
+    private static readonly BtcUpDown5mStrategyVariant BinanceBps11Variant =
+        StrategyIds.BtcUpDown5mVariants.Single(variant => variant.Code == "btc_up_down_5m_binance_bps_11");
+
+    private static readonly BtcUpDown5mStrategyVariant BinanceBps18Variant =
+        StrategyIds.BtcUpDown5mVariants.Single(variant => variant.Code == "btc_up_down_5m_binance_bps_18");
+
+    private static readonly BtcUpDown5mStrategyVariant BinanceBps19Variant =
+        StrategyIds.BtcUpDown5mVariants.Single(variant => variant.Code == "btc_up_down_5m_binance_bps_19");
+
+    private static readonly BtcUpDown5mStrategyVariant BinanceBps2Variant =
+        StrategyIds.BtcUpDown5mVariants.Single(variant => variant.Code == "btc_up_down_5m_binance_bps_20");
+
+    private static readonly BtcUpDown5mStrategyVariant BinanceBps21Variant =
+        StrategyIds.BtcUpDown5mVariants.Single(variant => variant.Code == "btc_up_down_5m_binance_bps_21");
+
+    private static readonly BtcUpDown5mStrategyVariant BinanceBps22Variant =
+        StrategyIds.BtcUpDown5mVariants.Single(variant => variant.Code == "btc_up_down_5m_binance_bps_22");
+
+    private static readonly BtcUpDown5mStrategyVariant BinanceBps23Variant =
+        StrategyIds.BtcUpDown5mVariants.Single(variant => variant.Code == "btc_up_down_5m_binance_bps_23");
+
+    private static readonly BtcUpDown5mStrategyVariant BinanceBps3Variant =
+        StrategyIds.BtcUpDown5mVariants.Single(variant => variant.Code == "btc_up_down_5m_binance_bps_30");
+
+    private static readonly BtcUpDown5mStrategyVariant BinanceBps49Variant =
+        StrategyIds.BtcUpDown5mVariants.Single(variant => variant.Code == "btc_up_down_5m_binance_bps_49");
+
+    private static readonly BtcUpDown5mStrategyVariant BinanceBps5Variant =
+        StrategyIds.BtcUpDown5mVariants.Single(variant => variant.Code == "btc_up_down_5m_binance_bps_50");
+
     private static readonly BtcUpDown5mStrategyVariant BinanceBps1InstantVariant =
-        StrategyIds.BtcUpDown5mVariants.Single(variant => variant.Code == "btc_up_down_5m_binance_bps_1_instant");
+        StrategyIds.BtcUpDown5mVariants.Single(variant => variant.Code == "btc_up_down_5m_binance_bps_10_instant");
 
     private static readonly BtcUpDown5mStrategyVariant BinanceBps17InstantVariant =
-        StrategyIds.BtcUpDown5mVariants.Single(variant => variant.Code == "btc_up_down_5m_binance_bps_1_7_instant");
+        StrategyIds.BtcUpDown5mVariants.Single(variant => variant.Code == "btc_up_down_5m_binance_bps_17_instant");
 
     private static readonly BtcUpDown5mStrategyVariant BinanceBps2InstantVariant =
-        StrategyIds.BtcUpDown5mVariants.Single(variant => variant.Code == "btc_up_down_5m_binance_bps_2_instant");
+        StrategyIds.BtcUpDown5mVariants.Single(variant => variant.Code == "btc_up_down_5m_binance_bps_20_instant");
 
     private static readonly BtcUpDown5mStrategyVariant EthBinanceBps2Variant =
         StrategyIds.CryptoUpDown5mVariants.Single(variant => variant.Code == "eth_up_down_5m_binance_bps_2");
@@ -221,7 +221,7 @@ public sealed class BtcUpDown5mPaperStrategyProcessorTests
         StrategyIds.CryptoUpDown5mVariants.Single(variant => variant.Code == "sol_up_down_5m_binance_bps_1_instant");
 
     private static readonly BtcUpDown5mStrategyVariant SolBinanceBps24InstantVariant =
-        StrategyIds.CryptoUpDown5mVariants.Single(variant => variant.Code == "sol_up_down_5m_binance_bps_2_4_instant");
+        StrategyIds.CryptoUpDown5mVariants.Single(variant => variant.Code == "sol_up_down_5m_binance_bps_24_instant");
 
     private static readonly BtcUpDown5mStrategyVariant BinanceCleverVariant =
         StrategyIds.BtcUpDown5mVariants.Single(variant => variant.Code == "btc_up_down_5m_binance_clever");
@@ -356,44 +356,44 @@ public sealed class BtcUpDown5mPaperStrategyProcessorTests
         Assert.Equal("BTC Up or Down 5m Binance 45", Binance45Variant.Name);
         Assert.Equal("BTC Up or Down 5m Binance 47", Binance47Variant.Name);
         Assert.Equal("BTC Up or Down 5m Binance 49", Binance49Variant.Name);
-        Assert.Equal("BTC Up or Down 5m Binance 0.1 bps", BinanceBps01Variant.Name);
-        Assert.Equal(0.1m, BinanceBps01Variant.DecisionThresholdBps);
-        Assert.Equal("BTC Up or Down 5m Binance 0.5 bps", BinanceBps05Variant.Name);
-        Assert.Equal(0.5m, BinanceBps05Variant.DecisionThresholdBps);
-        Assert.Equal("BTC Up or Down 5m Binance 0.9 bps", BinanceBps09Variant.Name);
-        Assert.Equal(0.9m, BinanceBps09Variant.DecisionThresholdBps);
+        Assert.Equal("BTC Up or Down 5m Binance 1 bps", BinanceBps01Variant.Name);
+        Assert.Equal(1m, BinanceBps01Variant.DecisionThresholdBps);
+        Assert.Equal("BTC Up or Down 5m Binance 5 bps", BinanceBps05Variant.Name);
+        Assert.Equal(5m, BinanceBps05Variant.DecisionThresholdBps);
+        Assert.Equal("BTC Up or Down 5m Binance 9 bps", BinanceBps09Variant.Name);
+        Assert.Equal(9m, BinanceBps09Variant.DecisionThresholdBps);
         Assert.Equal(
-            Enumerable.Range(1, 50).Select(thresholdTenths => thresholdTenths / 10m).ToArray(),
+            Enumerable.Range(1, 50).Select(threshold => (decimal)threshold).ToArray(),
             StrategyIds.BtcUpDown5mVariants
                 .Where(variant => variant.Behavior == BtcUpDown5mStrategyBehavior.BinanceStartRelativeBpsThreshold)
                 .Select(variant => variant.DecisionThresholdBps.GetValueOrDefault())
                 .OrderBy(threshold => threshold)
                 .ToArray());
         Assert.Equal(
-            Enumerable.Range(1, 50).Select(thresholdTenths => thresholdTenths / 10m).ToArray(),
+            Enumerable.Range(1, 50).Select(threshold => (decimal)threshold).ToArray(),
             StrategyIds.BtcUpDown5mVariants
                 .Where(variant => variant.Behavior == BtcUpDown5mStrategyBehavior.BinanceStartRelativeBpsThresholdInstant)
                 .Select(variant => variant.DecisionThresholdBps.GetValueOrDefault())
                 .OrderBy(threshold => threshold)
                 .ToArray());
-        Assert.Equal("BTC Up or Down 5m Binance 1 bps", BinanceBps1Variant.Name);
-        Assert.Equal(1, BinanceBps1Variant.DecisionDepth);
-        Assert.Equal("BTC Up or Down 5m Binance 1 bps Instant", BinanceBps1InstantVariant.Name);
-        Assert.Equal(1m, BinanceBps1InstantVariant.DecisionThresholdBps);
-        Assert.Equal(1, BinanceBps1InstantVariant.DecisionDepth);
-        Assert.Equal("BTC Up or Down 5m Binance 1.1 bps", BinanceBps11Variant.Name);
-        Assert.Equal(1.1m, BinanceBps11Variant.DecisionThresholdBps);
-        Assert.Equal(0, BinanceBps11Variant.DecisionDepth);
-        Assert.Equal("BTC Up or Down 5m Binance 2 bps", BinanceBps2Variant.Name);
-        Assert.Equal(2, BinanceBps2Variant.DecisionDepth);
-        Assert.Equal("BTC Up or Down 5m Binance 3 bps", BinanceBps3Variant.Name);
-        Assert.Equal(3m, BinanceBps3Variant.DecisionThresholdBps);
-        Assert.Equal(3, BinanceBps3Variant.DecisionDepth);
-        Assert.Equal("BTC Up or Down 5m Binance 4.9 bps", BinanceBps49Variant.Name);
-        Assert.Equal(4.9m, BinanceBps49Variant.DecisionThresholdBps);
-        Assert.Equal(0, BinanceBps49Variant.DecisionDepth);
-        Assert.Equal("BTC Up or Down 5m Binance 5 bps", BinanceBps5Variant.Name);
-        Assert.Equal(5, BinanceBps5Variant.DecisionDepth);
+        Assert.Equal("BTC Up or Down 5m Binance 10 bps", BinanceBps1Variant.Name);
+        Assert.Equal(10, BinanceBps1Variant.DecisionDepth);
+        Assert.Equal("BTC Up or Down 5m Binance 10 bps Instant", BinanceBps1InstantVariant.Name);
+        Assert.Equal(10m, BinanceBps1InstantVariant.DecisionThresholdBps);
+        Assert.Equal(10, BinanceBps1InstantVariant.DecisionDepth);
+        Assert.Equal("BTC Up or Down 5m Binance 11 bps", BinanceBps11Variant.Name);
+        Assert.Equal(11m, BinanceBps11Variant.DecisionThresholdBps);
+        Assert.Equal(11, BinanceBps11Variant.DecisionDepth);
+        Assert.Equal("BTC Up or Down 5m Binance 20 bps", BinanceBps2Variant.Name);
+        Assert.Equal(20, BinanceBps2Variant.DecisionDepth);
+        Assert.Equal("BTC Up or Down 5m Binance 30 bps", BinanceBps3Variant.Name);
+        Assert.Equal(30m, BinanceBps3Variant.DecisionThresholdBps);
+        Assert.Equal(30, BinanceBps3Variant.DecisionDepth);
+        Assert.Equal("BTC Up or Down 5m Binance 49 bps", BinanceBps49Variant.Name);
+        Assert.Equal(49m, BinanceBps49Variant.DecisionThresholdBps);
+        Assert.Equal(49, BinanceBps49Variant.DecisionDepth);
+        Assert.Equal("BTC Up or Down 5m Binance 50 bps", BinanceBps5Variant.Name);
+        Assert.Equal(50, BinanceBps5Variant.DecisionDepth);
         var preOpen15mHalfUp49 = StrategyIds.BtcUpDown5mVariants.Single(variant =>
             variant.Code == "btc_up_down_15m_preopen_half_up_49");
         Assert.Equal("BTC Up or Down 15m PreOpen Half Up 49", preOpen15mHalfUp49.Name);
@@ -515,7 +515,7 @@ public sealed class BtcUpDown5mPaperStrategyProcessorTests
             variant.Behavior == BtcUpDown5mStrategyBehavior.CryptoBinanceStartRelativeBpsThresholdInstant));
 
         var expectedThresholds = Enumerable.Range(1, 50)
-            .Select(thresholdTenths => thresholdTenths / 10m)
+            .Select(threshold => (decimal)threshold)
             .ToArray();
         foreach (var assetSymbol in new[] { "ETH", "SOL" })
         {
@@ -4189,7 +4189,7 @@ public sealed class BtcUpDown5mPaperStrategyProcessorTests
         Assert.Contains("\"btc_current_price_usd\":100.01", run.SkipDiagnosticsJson, StringComparison.Ordinal);
         Assert.Contains("\"btc_move_from_start_bps\":1", run.SkipDiagnosticsJson, StringComparison.Ordinal);
         Assert.Contains("\"btc_abs_move_from_start_bps\":1", run.SkipDiagnosticsJson, StringComparison.Ordinal);
-        Assert.Contains("\"btc_min_move_from_start_bps\":2", run.SkipDiagnosticsJson, StringComparison.Ordinal);
+        Assert.Contains("\"btc_min_move_from_start_bps\":20", run.SkipDiagnosticsJson, StringComparison.Ordinal);
         Assert.Contains("\"base_selected_direction\":\"Up\"", run.SkipDiagnosticsJson, StringComparison.Ordinal);
         Assert.Contains("\"selected_direction\":null", run.SkipDiagnosticsJson, StringComparison.Ordinal);
     }
@@ -4212,7 +4212,7 @@ public sealed class BtcUpDown5mPaperStrategyProcessorTests
             _ => { },
             Array.Empty<OrderBookSnapshot>(),
             CreateBtcOptions(paperTakerPricingEnabled: false, [BinanceBps2Variant.Code]),
-            new FakeBtcUsdReferencePriceClient(100.03m),
+            new FakeBtcUsdReferencePriceClient(100.21m),
             CreateBtcUsdReferenceCache(100m));
 
         var result = await processor.ProcessAsync();
@@ -4228,14 +4228,14 @@ public sealed class BtcUpDown5mPaperStrategyProcessorTests
         Assert.Equal(BinanceBps2Variant.Id, order.StrategyId);
         Assert.Equal("asset-up", order.AssetId);
         Assert.Equal(0.50m, order.Price);
-        Assert.Contains("\"btc_move_from_start_bps\":3", order.RawDecisionJson, StringComparison.Ordinal);
-        Assert.Contains("\"btc_abs_move_from_start_bps\":3", order.RawDecisionJson, StringComparison.Ordinal);
-        Assert.Contains("\"btc_min_move_from_start_bps\":2", order.RawDecisionJson, StringComparison.Ordinal);
+        Assert.Contains("\"btc_move_from_start_bps\":21", order.RawDecisionJson, StringComparison.Ordinal);
+        Assert.Contains("\"btc_abs_move_from_start_bps\":21", order.RawDecisionJson, StringComparison.Ordinal);
+        Assert.Contains("\"btc_min_move_from_start_bps\":20", order.RawDecisionJson, StringComparison.Ordinal);
         Assert.Contains("\"selected_direction\":\"Up\"", order.RawDecisionJson, StringComparison.Ordinal);
     }
 
     [Fact]
-    public async Task ProcessAsync_BinanceHalfBpsThresholdUsesDecimalMoveThreshold()
+    public async Task ProcessAsync_BinanceBps5ThresholdUsesRescaledMoveThreshold()
     {
         var now = DateTimeOffset.UtcNow;
         var repository = new TestAppRepository();
@@ -4252,7 +4252,7 @@ public sealed class BtcUpDown5mPaperStrategyProcessorTests
             _ => { },
             Array.Empty<OrderBookSnapshot>(),
             CreateBtcOptions(paperTakerPricingEnabled: false, [BinanceBps05Variant.Code]),
-            new FakeBtcUsdReferencePriceClient(100.006m),
+            new FakeBtcUsdReferencePriceClient(100.06m),
             CreateBtcUsdReferenceCache(100m));
 
         var result = await processor.ProcessAsync();
@@ -4268,9 +4268,9 @@ public sealed class BtcUpDown5mPaperStrategyProcessorTests
         Assert.Equal(BinanceBps05Variant.Id, order.StrategyId);
         Assert.Equal("asset-up", order.AssetId);
         Assert.Equal(0.50m, order.Price);
-        Assert.Contains("\"btc_move_from_start_bps\":0.6", order.RawDecisionJson, StringComparison.Ordinal);
-        Assert.Contains("\"btc_abs_move_from_start_bps\":0.6", order.RawDecisionJson, StringComparison.Ordinal);
-        Assert.Contains("\"btc_min_move_from_start_bps\":0.5", order.RawDecisionJson, StringComparison.Ordinal);
+        Assert.Contains("\"btc_move_from_start_bps\":6", order.RawDecisionJson, StringComparison.Ordinal);
+        Assert.Contains("\"btc_abs_move_from_start_bps\":6", order.RawDecisionJson, StringComparison.Ordinal);
+        Assert.Contains("\"btc_min_move_from_start_bps\":5", order.RawDecisionJson, StringComparison.Ordinal);
         Assert.Contains("\"selected_direction\":\"Up\"", order.RawDecisionJson, StringComparison.Ordinal);
     }
 
@@ -4307,7 +4307,7 @@ public sealed class BtcUpDown5mPaperStrategyProcessorTests
             _ => { },
             Array.Empty<OrderBookSnapshot>(),
             CreateBtcOptions(paperTakerPricingEnabled: false, [BinanceBps1InstantVariant.Code]),
-            new FakeBtcUsdReferencePriceClient(100.02m),
+            new FakeBtcUsdReferencePriceClient(100.11m),
             CreateBtcUsdReferenceCache(100m));
 
         var result = await processor.ProcessAsync();
@@ -4361,7 +4361,7 @@ public sealed class BtcUpDown5mPaperStrategyProcessorTests
             _ => { },
             Array.Empty<OrderBookSnapshot>(),
             CreateBtcOptions(paperTakerPricingEnabled: false, [BinanceBps1InstantVariant.Code]),
-            new FakeBtcUsdReferencePriceClient(100.02m),
+            new FakeBtcUsdReferencePriceClient(100.11m),
             CreateBtcUsdReferenceCache(100m));
 
         var result = await processor.ProcessAsync();
@@ -4477,9 +4477,9 @@ public sealed class BtcUpDown5mPaperStrategyProcessorTests
             downPrice: 0.50m));
         var closeBookOrderBooks = AddCloseBookResults(repository, now, "Up", "Up");
         AddBtcOddsTick(repository, "skip-bps-prev-1", previousStart, 0, 100m, 100m, 0.50m, 0.50m);
-        AddBtcOddsTick(repository, "skip-bps-prev-1", previousStart, 299, 100.001m, 100m, 0.50m, 0.50m);
+        AddBtcOddsTick(repository, "skip-bps-prev-1", previousStart, 299, 100.01m, 100m, 0.50m, 0.50m);
         AddBtcOddsTick(repository, "skip-bps-prev-2", secondPreviousStart, 0, 100m, 100m, 0.50m, 0.50m);
-        AddBtcOddsTick(repository, "skip-bps-prev-2", secondPreviousStart, 299, 100.001m, 100m, 0.50m, 0.50m);
+        AddBtcOddsTick(repository, "skip-bps-prev-2", secondPreviousStart, 299, 100.01m, 100m, 0.50m, 0.50m);
         var enabledCodes = new[]
         {
             SkipBps01Variant.Code,
@@ -4514,10 +4514,10 @@ public sealed class BtcUpDown5mPaperStrategyProcessorTests
         Assert.Equal("btc_previous_market_move_below_bps_threshold", skipped.SkipReason);
         Assert.Equal(2, repository.PaperOrders.Count);
         var order = Assert.Single(repository.PaperOrders, item => item.StrategyId == SkipBps02Variant.Id);
-        Assert.Contains("\"previous_btc_abs_move_from_start_bps\":0.1", order.RawDecisionJson, StringComparison.Ordinal);
-        Assert.Contains("\"previous_btc_cumulative_abs_move_from_start_bps\":0.2", order.RawDecisionJson, StringComparison.Ordinal);
+        Assert.Contains("\"previous_btc_abs_move_from_start_bps\":1", order.RawDecisionJson, StringComparison.Ordinal);
+        Assert.Contains("\"previous_btc_cumulative_abs_move_from_start_bps\":2", order.RawDecisionJson, StringComparison.Ordinal);
         Assert.Contains("\"previous_btc_streak_result_count\":2", order.RawDecisionJson, StringComparison.Ordinal);
-        Assert.Contains("\"previous_btc_min_move_from_start_bps\":0.2", order.RawDecisionJson, StringComparison.Ordinal);
+        Assert.Contains("\"previous_btc_min_move_from_start_bps\":2", order.RawDecisionJson, StringComparison.Ordinal);
         var diagnostic = Assert.Single(repository.BtcUpDown5mResultStreakDiagnostics);
         Assert.Equal("market-1", diagnostic.MarketId);
         Assert.Equal("Up", diagnostic.StreakWinningOutcome);
@@ -4525,10 +4525,10 @@ public sealed class BtcUpDown5mPaperStrategyProcessorTests
         Assert.Equal("Down", diagnostic.SelectedOutcome);
         Assert.Equal(2, diagnostic.CloseBookStreakResultCount);
         Assert.Equal(2, diagnostic.CumulativeMoveMarketCount);
-        Assert.Equal(0.1m, diagnostic.LatestAbsMoveBps.GetValueOrDefault());
-        Assert.Equal(0.2m, diagnostic.CumulativeAbsMoveBps.GetValueOrDefault());
+        Assert.Equal(1m, diagnostic.LatestAbsMoveBps.GetValueOrDefault());
+        Assert.Equal(2m, diagnostic.CumulativeAbsMoveBps.GetValueOrDefault());
         Assert.Contains("\"close_book_streak_result_count\":2", diagnostic.DiagnosticsJson, StringComparison.Ordinal);
-        Assert.Contains("\"cumulative_abs_move_bps\":0.2", diagnostic.DiagnosticsJson, StringComparison.Ordinal);
+        Assert.Contains("\"cumulative_abs_move_bps\":2", diagnostic.DiagnosticsJson, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -4545,7 +4545,7 @@ public sealed class BtcUpDown5mPaperStrategyProcessorTests
             downPrice: 0.50m));
         var closeBookOrderBooks = AddCloseBookResults(repository, now, "Up", "Down");
         AddBtcOddsTick(repository, "skip-bps-reset-prev-1", previousStart, 0, 100m, 100m, 0.50m, 0.50m);
-        AddBtcOddsTick(repository, "skip-bps-reset-prev-1", previousStart, 299, 100.001m, 100m, 0.50m, 0.50m);
+        AddBtcOddsTick(repository, "skip-bps-reset-prev-1", previousStart, 299, 100.01m, 100m, 0.50m, 0.50m);
         AddBtcOddsTick(repository, "skip-bps-reset-prev-2", secondPreviousStart, 0, 100m, 100m, 0.50m, 0.50m);
         AddBtcOddsTick(repository, "skip-bps-reset-prev-2", secondPreviousStart, 299, 99.95m, 100m, 0.50m, 0.50m);
         var processor = CreateProcessorCoreWithOptions(
@@ -4568,13 +4568,13 @@ public sealed class BtcUpDown5mPaperStrategyProcessorTests
         Assert.Equal(StrategyMarketPaperRunStatuses.Skipped, run.Status);
         Assert.Equal("btc_previous_market_move_below_bps_threshold", run.SkipReason);
         Assert.NotNull(run.SkipDiagnosticsJson);
-        Assert.Contains("\"previous_btc_cumulative_abs_move_from_start_bps\":0.1", run.SkipDiagnosticsJson, StringComparison.Ordinal);
+        Assert.Contains("\"previous_btc_cumulative_abs_move_from_start_bps\":1", run.SkipDiagnosticsJson, StringComparison.Ordinal);
         Assert.Contains("\"previous_btc_streak_result_count\":1", run.SkipDiagnosticsJson, StringComparison.Ordinal);
         var diagnostic = Assert.Single(repository.BtcUpDown5mResultStreakDiagnostics);
         Assert.Equal("Up", diagnostic.StreakWinningOutcome);
         Assert.Equal(1, diagnostic.CloseBookStreakResultCount);
         Assert.Equal(1, diagnostic.CumulativeMoveMarketCount);
-        Assert.Equal(0.1m, diagnostic.CumulativeAbsMoveBps.GetValueOrDefault());
+        Assert.Equal(1m, diagnostic.CumulativeAbsMoveBps.GetValueOrDefault());
     }
 
     [Fact]
@@ -6538,7 +6538,7 @@ public sealed class BtcUpDown5mPaperStrategyProcessorTests
         var processor = CreateLiveProcessorWithBtcReference(
             repository,
             tradingClient,
-            100.02m,
+            100.11m,
             [100m],
             [],
             BinanceBps1Variant.Code);
@@ -6575,7 +6575,7 @@ public sealed class BtcUpDown5mPaperStrategyProcessorTests
         Assert.Equal(0.50m, paperOrder.Price);
         Assert.Equal(liveOrder.SizeShares, paperOrder.SizeShares);
         Assert.Contains("\"decision_source\":\"binance_trade_stream_market_start_relative\"", paperOrder.RawDecisionJson, StringComparison.Ordinal);
-        Assert.Contains("\"btc_min_move_from_start_bps\":1", paperOrder.RawDecisionJson, StringComparison.Ordinal);
+        Assert.Contains("\"btc_min_move_from_start_bps\":10", paperOrder.RawDecisionJson, StringComparison.Ordinal);
         Assert.Contains("\"selected_direction\":\"Up\"", paperOrder.RawDecisionJson, StringComparison.Ordinal);
         Assert.Contains("\"paper_live_shadow_test\":true", paperOrder.RawDecisionJson, StringComparison.Ordinal);
 
@@ -6609,7 +6609,7 @@ public sealed class BtcUpDown5mPaperStrategyProcessorTests
         var processor = CreateLiveProcessorWithBtcReference(
             repository,
             tradingClient,
-            100.02m,
+            100.19m,
             [100m],
             [],
             BinanceBps18Variant.Code);
@@ -6646,7 +6646,7 @@ public sealed class BtcUpDown5mPaperStrategyProcessorTests
         Assert.Equal(0.50m, paperOrder.Price);
         Assert.Equal(liveOrder.SizeShares, paperOrder.SizeShares);
         Assert.Contains("\"decision_source\":\"binance_trade_stream_market_start_relative\"", paperOrder.RawDecisionJson, StringComparison.Ordinal);
-        Assert.Contains("\"btc_min_move_from_start_bps\":1.8", paperOrder.RawDecisionJson, StringComparison.Ordinal);
+        Assert.Contains("\"btc_min_move_from_start_bps\":18", paperOrder.RawDecisionJson, StringComparison.Ordinal);
         Assert.Contains("\"selected_direction\":\"Up\"", paperOrder.RawDecisionJson, StringComparison.Ordinal);
         Assert.Contains("\"paper_live_shadow_test\":true", paperOrder.RawDecisionJson, StringComparison.Ordinal);
 
@@ -6680,7 +6680,7 @@ public sealed class BtcUpDown5mPaperStrategyProcessorTests
         var processor = CreateLiveProcessorWithBtcReference(
             repository,
             tradingClient,
-            100.02m,
+            100.20m,
             [100m],
             [],
             BinanceBps19Variant.Code);
@@ -6717,7 +6717,7 @@ public sealed class BtcUpDown5mPaperStrategyProcessorTests
         Assert.Equal(0.50m, paperOrder.Price);
         Assert.Equal(liveOrder.SizeShares, paperOrder.SizeShares);
         Assert.Contains("\"decision_source\":\"binance_trade_stream_market_start_relative\"", paperOrder.RawDecisionJson, StringComparison.Ordinal);
-        Assert.Contains("\"btc_min_move_from_start_bps\":1.9", paperOrder.RawDecisionJson, StringComparison.Ordinal);
+        Assert.Contains("\"btc_min_move_from_start_bps\":19", paperOrder.RawDecisionJson, StringComparison.Ordinal);
         Assert.Contains("\"selected_direction\":\"Up\"", paperOrder.RawDecisionJson, StringComparison.Ordinal);
         Assert.Contains("\"paper_live_shadow_test\":true", paperOrder.RawDecisionJson, StringComparison.Ordinal);
 
@@ -6751,7 +6751,7 @@ public sealed class BtcUpDown5mPaperStrategyProcessorTests
         var processor = CreateLiveProcessorWithBtcReference(
             repository,
             tradingClient,
-            100.03m,
+            100.21m,
             [100m],
             [],
             BinanceBps2Variant.Code);
@@ -6788,7 +6788,7 @@ public sealed class BtcUpDown5mPaperStrategyProcessorTests
         Assert.Equal(0.50m, paperOrder.Price);
         Assert.Equal(liveOrder.SizeShares, paperOrder.SizeShares);
         Assert.Contains("\"decision_source\":\"binance_trade_stream_market_start_relative\"", paperOrder.RawDecisionJson, StringComparison.Ordinal);
-        Assert.Contains("\"btc_min_move_from_start_bps\":2", paperOrder.RawDecisionJson, StringComparison.Ordinal);
+        Assert.Contains("\"btc_min_move_from_start_bps\":20", paperOrder.RawDecisionJson, StringComparison.Ordinal);
         Assert.Contains("\"selected_direction\":\"Up\"", paperOrder.RawDecisionJson, StringComparison.Ordinal);
         Assert.Contains("\"paper_live_shadow_test\":true", paperOrder.RawDecisionJson, StringComparison.Ordinal);
 
@@ -6822,7 +6822,7 @@ public sealed class BtcUpDown5mPaperStrategyProcessorTests
         var processor = CreateLiveProcessorWithBtcReference(
             repository,
             tradingClient,
-            100.018m,
+            100.18m,
             [100m],
             [],
             BinanceBps17InstantVariant.Code);
@@ -6860,7 +6860,7 @@ public sealed class BtcUpDown5mPaperStrategyProcessorTests
         Assert.Equal(0.36m, paperOrder.Price);
         Assert.Equal(liveOrder.SizeShares, paperOrder.SizeShares);
         Assert.Contains("\"decision_source\":\"binance_trade_stream_market_start_relative\"", paperOrder.RawDecisionJson, StringComparison.Ordinal);
-        Assert.Contains("\"btc_min_move_from_start_bps\":1.7", paperOrder.RawDecisionJson, StringComparison.Ordinal);
+        Assert.Contains("\"btc_min_move_from_start_bps\":17", paperOrder.RawDecisionJson, StringComparison.Ordinal);
         Assert.Contains("\"selected_direction\":\"Up\"", paperOrder.RawDecisionJson, StringComparison.Ordinal);
         Assert.Contains("\"opening_limit_price_mode\":\"instant_executable_ask_depth\"", paperOrder.RawDecisionJson, StringComparison.Ordinal);
         Assert.Contains("\"instant_pricing_source\":\"websocket_cache\"", paperOrder.RawDecisionJson, StringComparison.Ordinal);
@@ -6896,7 +6896,7 @@ public sealed class BtcUpDown5mPaperStrategyProcessorTests
         var processor = CreateLiveProcessorWithBtcReference(
             repository,
             tradingClient,
-            100.03m,
+            100.21m,
             [100m],
             [],
             BinanceBps2InstantVariant.Code);
@@ -6934,7 +6934,7 @@ public sealed class BtcUpDown5mPaperStrategyProcessorTests
         Assert.Equal(0.36m, paperOrder.Price);
         Assert.Equal(liveOrder.SizeShares, paperOrder.SizeShares);
         Assert.Contains("\"decision_source\":\"binance_trade_stream_market_start_relative\"", paperOrder.RawDecisionJson, StringComparison.Ordinal);
-        Assert.Contains("\"btc_min_move_from_start_bps\":2", paperOrder.RawDecisionJson, StringComparison.Ordinal);
+        Assert.Contains("\"btc_min_move_from_start_bps\":20", paperOrder.RawDecisionJson, StringComparison.Ordinal);
         Assert.Contains("\"selected_direction\":\"Up\"", paperOrder.RawDecisionJson, StringComparison.Ordinal);
         Assert.Contains("\"opening_limit_price_mode\":\"instant_executable_ask_depth\"", paperOrder.RawDecisionJson, StringComparison.Ordinal);
         Assert.Contains("\"instant_pricing_source\":\"websocket_cache\"", paperOrder.RawDecisionJson, StringComparison.Ordinal);
@@ -6982,7 +6982,7 @@ public sealed class BtcUpDown5mPaperStrategyProcessorTests
             upAssetId: "sol-asset-up",
             downAssetId: "sol-asset-down");
         var cryptoPriceClient = new FakeCryptoReferencePriceClient();
-        cryptoPriceClient.SetPrice("SOL", 150.04m);
+        cryptoPriceClient.SetPrice("SOL", 150.40m);
         OrderBookSnapshot[] orderBooks =
         [
             OrderBook("sol-asset-up", bestBid: 0.34m, bestAsk: 0.36m, now),
@@ -7032,9 +7032,9 @@ public sealed class BtcUpDown5mPaperStrategyProcessorTests
         Assert.Contains("\"decision_source\":\"binance_trade_stream_market_start_relative\"", paperOrder.RawDecisionJson, StringComparison.Ordinal);
         Assert.Contains("\"reference_asset_symbol\":\"SOL\"", paperOrder.RawDecisionJson, StringComparison.Ordinal);
         Assert.Contains("\"reference_binance_symbol\":\"SOLUSDT\"", paperOrder.RawDecisionJson, StringComparison.Ordinal);
-        Assert.Contains("\"crypto_current_price_usd\":150.04", paperOrder.RawDecisionJson, StringComparison.Ordinal);
+        Assert.Contains("\"crypto_current_price_usd\":150.4", paperOrder.RawDecisionJson, StringComparison.Ordinal);
         Assert.Contains("\"crypto_start_price_usd\":150", paperOrder.RawDecisionJson, StringComparison.Ordinal);
-        Assert.Contains("\"crypto_min_move_from_start_bps\":2.4", paperOrder.RawDecisionJson, StringComparison.Ordinal);
+        Assert.Contains("\"crypto_min_move_from_start_bps\":24", paperOrder.RawDecisionJson, StringComparison.Ordinal);
         Assert.Contains("\"selected_direction\":\"Up\"", paperOrder.RawDecisionJson, StringComparison.Ordinal);
         Assert.Contains("\"opening_limit_price_mode\":\"instant_executable_ask_depth\"", paperOrder.RawDecisionJson, StringComparison.Ordinal);
         Assert.Contains("\"instant_pricing_source\":\"websocket_cache\"", paperOrder.RawDecisionJson, StringComparison.Ordinal);
@@ -7070,7 +7070,7 @@ public sealed class BtcUpDown5mPaperStrategyProcessorTests
         var processor = CreateLiveProcessorWithBtcReference(
             repository,
             tradingClient,
-            100.03m,
+            100.22m,
             [100m],
             [],
             BinanceBps21Variant.Code);
@@ -7107,7 +7107,7 @@ public sealed class BtcUpDown5mPaperStrategyProcessorTests
         Assert.Equal(0.50m, paperOrder.Price);
         Assert.Equal(liveOrder.SizeShares, paperOrder.SizeShares);
         Assert.Contains("\"decision_source\":\"binance_trade_stream_market_start_relative\"", paperOrder.RawDecisionJson, StringComparison.Ordinal);
-        Assert.Contains("\"btc_min_move_from_start_bps\":2.1", paperOrder.RawDecisionJson, StringComparison.Ordinal);
+        Assert.Contains("\"btc_min_move_from_start_bps\":21", paperOrder.RawDecisionJson, StringComparison.Ordinal);
         Assert.Contains("\"selected_direction\":\"Up\"", paperOrder.RawDecisionJson, StringComparison.Ordinal);
         Assert.Contains("\"paper_live_shadow_test\":true", paperOrder.RawDecisionJson, StringComparison.Ordinal);
 
@@ -7141,7 +7141,7 @@ public sealed class BtcUpDown5mPaperStrategyProcessorTests
         var processor = CreateLiveProcessorWithBtcReference(
             repository,
             tradingClient,
-            100.03m,
+            100.23m,
             [100m],
             [],
             BinanceBps22Variant.Code);
@@ -7178,7 +7178,7 @@ public sealed class BtcUpDown5mPaperStrategyProcessorTests
         Assert.Equal(0.50m, paperOrder.Price);
         Assert.Equal(liveOrder.SizeShares, paperOrder.SizeShares);
         Assert.Contains("\"decision_source\":\"binance_trade_stream_market_start_relative\"", paperOrder.RawDecisionJson, StringComparison.Ordinal);
-        Assert.Contains("\"btc_min_move_from_start_bps\":2.2", paperOrder.RawDecisionJson, StringComparison.Ordinal);
+        Assert.Contains("\"btc_min_move_from_start_bps\":22", paperOrder.RawDecisionJson, StringComparison.Ordinal);
         Assert.Contains("\"selected_direction\":\"Up\"", paperOrder.RawDecisionJson, StringComparison.Ordinal);
         Assert.Contains("\"paper_live_shadow_test\":true", paperOrder.RawDecisionJson, StringComparison.Ordinal);
 
@@ -7212,7 +7212,7 @@ public sealed class BtcUpDown5mPaperStrategyProcessorTests
         var processor = CreateLiveProcessorWithBtcReference(
             repository,
             tradingClient,
-            100.03m,
+            100.24m,
             [100m],
             [],
             BinanceBps23Variant.Code);
@@ -7249,7 +7249,7 @@ public sealed class BtcUpDown5mPaperStrategyProcessorTests
         Assert.Equal(0.50m, paperOrder.Price);
         Assert.Equal(liveOrder.SizeShares, paperOrder.SizeShares);
         Assert.Contains("\"decision_source\":\"binance_trade_stream_market_start_relative\"", paperOrder.RawDecisionJson, StringComparison.Ordinal);
-        Assert.Contains("\"btc_min_move_from_start_bps\":2.3", paperOrder.RawDecisionJson, StringComparison.Ordinal);
+        Assert.Contains("\"btc_min_move_from_start_bps\":23", paperOrder.RawDecisionJson, StringComparison.Ordinal);
         Assert.Contains("\"selected_direction\":\"Up\"", paperOrder.RawDecisionJson, StringComparison.Ordinal);
         Assert.Contains("\"paper_live_shadow_test\":true", paperOrder.RawDecisionJson, StringComparison.Ordinal);
 
@@ -7310,7 +7310,7 @@ public sealed class BtcUpDown5mPaperStrategyProcessorTests
         var processor = CreateLiveProcessorWithBtcReference(
             repository,
             tradingClient,
-            100.02m,
+            100.11m,
             [100m],
             [],
             BinanceBps1Variant.Code);

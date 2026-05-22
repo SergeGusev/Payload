@@ -606,8 +606,8 @@ market and strategy variant in `strategy_market_paper_runs`. Built-in variants
 are standard `Less` and `More` plus comparison `Less Gamma` and `More Gamma` at
 30-second steps from 30 to 270 seconds after window start, plus `Middle 1..5`,
 threshold `Middle 1..5 0.1..0.9 bps`, `Middle 1..5 Revert`, `Skip 1..5`,
-`Skip 1..5 Revert`, threshold `Skip 0.1..5 bps` in 0.1 bps increments, matching
-`Skip 0.1..5 bps Instant` variants, `Binance`, threshold `Binance 0.1..5 bps` in 0.1 bps increments, matching `Binance 0.1..5 bps Instant` variants, fixed-price `Binance 45/47/49`, delayed
+`Skip 1..5 Revert`, threshold `Skip 1..50 bps` in 1 bps increments, matching
+`Skip 1..50 bps Instant` variants, `Binance`, threshold `Binance 1..50 bps` in 1 bps increments, matching `Binance 1..50 bps Instant` variants, fixed-price `Binance 45/47/49`, delayed
 `Binance 15s/30s/45s`, `Binance Clever`, fair-value `Binance Edge 2/4/6`,
 `Prev Score Countertrend 10..90`, `Ensemble 2 of 3`, `Dynamic Markov`, `Strategy Selector`, capped `Less`
 comparison variants, capped `More` comparison variants, and capped `More Gamma`
@@ -680,7 +680,7 @@ usable current or stored book skips with close-book diagnostics. After `N`
 consecutive inferred `Up` results the `Skip` variants buy `Down`; after `N`
 consecutive inferred `Down` results they buy `Up`; otherwise they skip. The `Skip Revert`
 variants inspect the same result stack and invert that final decision:
-consecutive `Up` buys `Up`, and consecutive `Down` buys `Down`. `Skip 0.1..5
+consecutive `Up` buys `Up`, and consecutive `Down` buys `Down`. `Skip 1..50
 bps` variants inspect the immediately previous close-book result, walk backward
 through the current streak of identical inferred outcomes, sum each streak
 market's archived Binance BTC start-to-close absolute bps move, buy the opposite
@@ -739,7 +739,7 @@ BTC is above start and `Down` when current BTC is below start. Equality skips,
 and the order is a GTD BUY capped at `0.50`. If the archived start
 reference is not available yet, the observed run waits for the next processor
 cycle instead of being permanently skipped. `BTC Up or Down 5m Binance` bps variants
-from `0.1 bps` through `5 bps` in `0.1 bps` increments use the same direction and `0.50` GTD limit, but skip with
+from `1 bps` through `50 bps` in `1 bps` increments use the same direction and `0.50` GTD limit, but skip with
 `btc_reference_move_below_bps_threshold` until the absolute BTC move from market
 start reaches the configured bps threshold. The matching `Instant` bps variants keep the same signal and bps threshold, but price the GTD BUY from the selected outcome's current executable ask depth so the initial Paper order is marketable for the computed order size. `BTC Up or Down 5m Binance 15s`,
 `30s`, and `45s` use the same start-relative signal and `0.50` cap but wait for
