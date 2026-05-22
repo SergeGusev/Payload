@@ -1,3 +1,10 @@
+## 2026-05-22T19:13:44.5575215Z
+Request:
+Ок, я остановил сервис. Как узнать, что rollback завершился?
+
+Result:
+Checked production PostgreSQL read-only. Rollback has not completed yet: backend `pid=11448` is still present in `pg_stat_activity`, still `active` on `20260522_rescale_updown_bps_history_reset`, with transaction/query age about `3492s`, and still holds `119` locks. Reset migration markers are still absent. No production rows, service state, order actions, or backend cancellation/termination were performed.
+
 ## 2026-05-22T19:08:13.2296972Z
 Request:
 Запустил на сервере новую версию сервиса. Очень долго висит на миграции. Можешь проверить, всё ли в порядке?

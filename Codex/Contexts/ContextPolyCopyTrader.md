@@ -1,3 +1,14 @@
+## Active Update 2026-05-22 Production Rollback Check
+Goal: Check how to tell whether stopping the service completed rollback of the stuck reset migration.
+Status: Completed
+Done:
+- Queried production PostgreSQL read-only after the user stopped the service.
+- Confirmed rollback has not completed yet: backend `pid=11448` is still present in `pg_stat_activity`, still `active` on `20260522_rescale_updown_bps_history_reset`, with transaction/query age about `3492s`.
+- Confirmed the backend still holds `119` locks and reset migration markers are still absent from `schema_data_migrations`.
+Next: Wait until `pid=11448` disappears from `pg_stat_activity` and `pg_locks`, or explicitly cancel/terminate the backend if the service process is confirmed stopped but the backend remains stuck.
+Notes: Read-only diagnostic only. No production rows, service state, orders, cancels, or backend cancellation/termination were performed.
+Blockers: Current production backend `pid=11448` remains active.
+
 ## Active Update 2026-05-22 Production Migration Hang Diagnosis
 Goal: Check whether the new production service is safely progressing through the bps history reset migration.
 Status: Completed
