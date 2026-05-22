@@ -315,3 +315,10 @@ Request:
 
 Result:
 Added `200` BTC Middle Instant bps variants: `BTC Up or Down 5m Middle 1 1..100 bps Instant` and `BTC Up or Down 5m Middle 1 Revert 1..100 bps Instant`. They reuse the existing Middle arithmetic-mean signal and bps threshold checks, then price entries from executable ask depth using the same instant sizing/pricing path and `InstantOpeningLimitMaxPrice` cap as Binance Instant variants. Added PostgreSQL seed rows with deterministic id groups `8029` and `8030`; the new strategies are enabled/Paper-only by default and not in the Paper/Live-shadow allowlist. Updated tests and docs. Verification passed: focused Middle/Storage tests `175/175`, full solution tests `543/543`, and `git diff --check` with LF/CRLF warnings only.
+
+## 2026-05-22T21:47:47.0624938Z
+Request:
+Выложил, проверяй
+
+Result:
+Queried production PostgreSQL read-only through Dashboard Remote host `192.168.0.101`. Confirmed production is running `PolyCopyTrader.Service` build `588fb8f31491b0f8c9c2fee198add402435a5635`, status `Running`, mode `Live`, fresh heartbeat, and null `last_error`. Confirmed the new Middle Instant seed rows exist: `100` `middle_bps_instant` plus `100` `middle_revert_bps_instant`, thresholds `1..100`, all enabled, none live, none auto-live-paused. Core activity was fresh for BTC odds, crypto odds, arbitrage scans, strategy runs, and paper orders. Found a functional problem: on due windows `2026-05-22T21:40:00Z` and `2026-05-22T21:45:00Z`, all `200` new Middle Instant rows skipped with `entry_due_expired`, so they created `0` Paper orders. Existing non-Instant Middle bps rows ran first, and the enlarged grid pushes Instant rows past `EntryGraceSeconds=10`; some high-threshold non-Instant Revert rows also expired. Also observed post-start `GetCryptoReferencePrice` API errors for stale ETH Binance stream samples. No source or production data was changed during this check.

@@ -1,3 +1,18 @@
+## Active Update 2026-05-23 Production Check Middle Instant Deploy
+Goal: Verify the production deploy of commit `588fb8f` with new Middle bps Instant strategies.
+Status: Completed
+Done:
+- Queried production PostgreSQL read-only through Dashboard Remote host `192.168.0.101`.
+- Confirmed `PolyCopyTrader.Service` is running build `info=1.0.0+588fb8f31491b0f8c9c2fee198add402435a5635`, status `Running`, mode `Live`, `last_error` null, with fresh heartbeat.
+- Confirmed schema seeding inserted the new Middle Instant rows: `100` `middle_bps_instant` and `100` `middle_revert_bps_instant`, thresholds `1..100`, all `enabled=true`, `live_stakes=false`, `auto_live_paused=false`.
+- Confirmed core activity is fresh: BTC odds ticks, crypto odds ticks, arbitrage scans, strategy runs, and paper orders were all updating within seconds.
+- Found a functional issue: on both checked due windows (`2026-05-22T21:40:00Z` and `2026-05-22T21:45:00Z`), all `200` new Middle Instant rows skipped as `entry_due_expired`; no Paper orders were created by the new Middle Instant strategies.
+- Existing non-Instant Middle bps rows did process first on those windows, but the enlarged Middle grid delays the new Instant rows past the configured `EntryGraceSeconds=10`; some non-Instant Revert high-threshold rows also expired.
+- Observed post-start API errors from `BtcUpDown5mPaperStrategyProcessor/GetCryptoReferencePrice` for stale ETH Binance trade-stream samples; BTC/strategy activity continued.
+Next: Fix or tune due-entry processing before relying on the new Middle Instant rows; likely options are increasing `EntryGraceSeconds`/`MaxEntriesPerCycle`, prioritizing Instant rows, or reducing the enabled Middle grid.
+Notes: Production read-only verification only. No source or production rows were changed during the check. No source tests were run because no implementation changed.
+Blockers: New Middle Instant strategies are seeded but not currently placing orders because they expire before processing.
+
 ## Active Update 2026-05-23 Middle Bps Instant Variants
 Goal: Add Instant counterparts for every active BTC Middle bps strategy.
 Status: Completed
