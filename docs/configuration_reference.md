@@ -654,18 +654,17 @@ fresh consecutive settled losses from the standard `BTC Up or Down 5m Less 180`
 strategy, and then applies a bounded paper stake progression. It later settles
 each run from closed Gamma metadata and writes final PnL.
 
-The `Middle` variants do not use taker pricing. At market open they read the
-latest Binance BTC/USDT trade-stream price and compare it, plus the latest cached
-one-minute reference samples, to the Binance cache arithmetic mean: `Middle 1` uses only the latest
-trade price, `Middle 2` uses the latest trade price plus the latest cached sample, up through
-`Middle 5` with four cached samples. If all compared values are above the mean,
-the strategy buys `Down`; if all are below, it buys `Up`; equality or mixed
-sides skip the run. The `Middle 1..9 bps` threshold variants keep the same
-direction logic, but every compared value must be at least the configured bps
-distance from the mean; otherwise the run skips with
-`btc_reference_mean_deviation_below_threshold`. The `Middle Revert` variants inspect the same reference
-stack and invert that final decision: above mean buys `Up`, and below mean buys
-`Down`. The `Skip` variants inspect the exact immediately previous BTC
+The active `Middle` variants do not use taker pricing. At market open `Middle 1`
+reads the latest Binance BTC/USDT trade-stream price and compares it to the
+Binance cache arithmetic mean. If the latest trade is above the mean, the
+strategy buys `Down`; if it is below, it buys `Up`; equality skips the run.
+`Middle 1 Revert` inspects the same reference value and inverts that final
+decision: above mean buys `Up`, and below mean buys `Down`. The old `Middle 2`
+through `Middle 5` depths, including their bps and revert-bps variants, are no
+longer seeded as active strategies; existing rows are retired by schema
+initialization. The remaining `Middle 1` bps rows keep their configured bps
+metadata for historical continuity, but the current Middle decision path uses
+the same latest-price side-of-mean rule as `Middle 1`. The `Skip` variants inspect the exact immediately previous BTC
 5-minute windows without gaps, but they infer those results from close-book
 CLOB price evidence instead of waiting for Gamma settlement. The worker captures
 `/book` snapshots for active BTC 5-minute markets during the final

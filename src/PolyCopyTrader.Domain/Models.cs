@@ -1208,7 +1208,7 @@ public static class StrategyIds
     private static IReadOnlyList<BtcUpDown5mStrategyVariant> CreateBtcUpDown5mVariants()
     {
         int[] delays = [30, 60, 90, 120, 150, 180, 210, 240, 270];
-        var variants = new List<BtcUpDown5mStrategyVariant>(1368);
+        var variants = new List<BtcUpDown5mStrategyVariant>(1288);
 
         foreach (var delay in delays)
         {
@@ -1265,30 +1265,18 @@ public static class StrategyIds
         variants.Add(CreateBtcUpDown5mGammaEntryPriceCapVariant(BtcUpDown5mMore150GammaBelow70, BtcUpDown5mMore150GammaBelow70Code, BtcUpDown5mStrategyDirection.More, 150, 70));
         variants.Add(CreateBtcUpDown5mGammaEntryPriceCapVariant(BtcUpDown5mMore150GammaBelow80, BtcUpDown5mMore150GammaBelow80Code, BtcUpDown5mStrategyDirection.More, 150, 80));
 
-        for (var depth = 1; depth <= 5; depth++)
+        variants.Add(CreateBtcUpDown5mMiddleVariant(1));
+
+        for (var thresholdTenths = 1; thresholdTenths <= 9; thresholdTenths++)
         {
-            variants.Add(CreateBtcUpDown5mMiddleVariant(depth));
+            variants.Add(CreateBtcUpDown5mMiddleBpsThresholdVariant(1, thresholdTenths));
         }
 
-        for (var depth = 1; depth <= 5; depth++)
-        {
-            for (var thresholdTenths = 1; thresholdTenths <= 9; thresholdTenths++)
-            {
-                variants.Add(CreateBtcUpDown5mMiddleBpsThresholdVariant(depth, thresholdTenths));
-            }
-        }
+        variants.Add(CreateBtcUpDown5mMiddleRevertVariant(1));
 
-        for (var depth = 1; depth <= 5; depth++)
+        for (var thresholdTenths = 1; thresholdTenths <= 9; thresholdTenths++)
         {
-            variants.Add(CreateBtcUpDown5mMiddleRevertVariant(depth));
-        }
-
-        for (var depth = 1; depth <= 5; depth++)
-        {
-            for (var thresholdTenths = 1; thresholdTenths <= 9; thresholdTenths++)
-            {
-                variants.Add(CreateBtcUpDown5mMiddleRevertBpsThresholdVariant(depth, thresholdTenths));
-            }
+            variants.Add(CreateBtcUpDown5mMiddleRevertBpsThresholdVariant(1, thresholdTenths));
         }
 
         for (var depth = 1; depth <= 5; depth++)

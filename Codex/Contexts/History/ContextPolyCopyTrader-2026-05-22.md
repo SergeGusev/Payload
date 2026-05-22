@@ -262,3 +262,10 @@ Request:
 
 Result:
 Inspected current Middle strategy definitions, BTC 5m processor decision code, tests, README, and configuration reference. Confirmed base `Middle N` variants differ by reference depth: `Middle 1` uses only the latest Binance BTC trade-stream price, `Middle 2` uses that plus one cached one-minute reference sample, up through `Middle 5` with four cached samples. Standard Middle buys `Down` when all compared values are above the Binance cache arithmetic mean and buys `Up` when all are below; equality or mixed sides skip. Revert variants invert only direction. Also found that Middle bps variants currently store `DecisionThresholdBps` in metadata/docs, but the current Middle decision path does not apply it, so strict executable behavior does not enforce those bps thresholds yet. No source behavior or production data was changed.
+
+## 2026-05-22T20:11:12.0707543Z
+Request:
+Убери Middle2 - Middle 5 и их bps версии.
+
+Result:
+Removed active generation and SQL seeding for BTC Middle depth `2..5` standard, revert, bps, and revert-bps variants. Left only depth `1` Middle rows (`Middle 1`, `Middle 1 1..9 bps`, `Middle 1 Revert`, and `Middle 1 Revert 1..9 bps`). Added schema migration `20260522_retire_middle_depth_2_5` to disable existing depth `2..5` rows and clear `live_stakes`/`auto_live_paused` without deleting history. Updated tests and configuration docs. Verification passed: focused BTC processor/storage tests `170/170`, full solution tests `537/537`, and `git diff --check` with LF/CRLF warnings only.

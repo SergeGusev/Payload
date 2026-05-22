@@ -1573,90 +1573,10 @@ VALUES (
     now()
 ),
 (
-    'b7c50005-0000-4000-8006-000000000002',
-    'btc_up_down_5m_middle_2',
-    'BTC Up or Down 5m Middle 2',
-    'Immediately after BTC 5m market open, compare the latest Binance BTC/USDT trade-stream price plus the latest 1 cached reference sample(s) against the cached arithmetic mean; above mean buys Down, below mean buys Up, otherwise skip. Paper entry is an ordinary GTD Paper BUY with dynamic break-even pricing.',
-    true,
-    1.00,
-    now(),
-    now()
-),
-(
-    'b7c50005-0000-4000-8006-000000000003',
-    'btc_up_down_5m_middle_3',
-    'BTC Up or Down 5m Middle 3',
-    'Immediately after BTC 5m market open, compare the latest Binance BTC/USDT trade-stream price plus the latest 2 cached reference sample(s) against the cached arithmetic mean; above mean buys Down, below mean buys Up, otherwise skip. Paper entry is an ordinary GTD Paper BUY with dynamic break-even pricing.',
-    true,
-    1.00,
-    now(),
-    now()
-),
-(
-    'b7c50005-0000-4000-8006-000000000004',
-    'btc_up_down_5m_middle_4',
-    'BTC Up or Down 5m Middle 4',
-    'Immediately after BTC 5m market open, compare the latest Binance BTC/USDT trade-stream price plus the latest 3 cached reference sample(s) against the cached arithmetic mean; above mean buys Down, below mean buys Up, otherwise skip. Paper entry is an ordinary GTD Paper BUY with dynamic break-even pricing.',
-    true,
-    1.00,
-    now(),
-    now()
-),
-(
-    'b7c50005-0000-4000-8006-000000000005',
-    'btc_up_down_5m_middle_5',
-    'BTC Up or Down 5m Middle 5',
-    'Immediately after BTC 5m market open, compare the latest Binance BTC/USDT trade-stream price plus the latest 4 cached reference sample(s) against the cached arithmetic mean; above mean buys Down, below mean buys Up, otherwise skip. Paper entry is an ordinary GTD Paper BUY with dynamic break-even pricing.',
-    true,
-    1.00,
-    now(),
-    now()
-),
-(
     'b7c50005-0000-4000-8009-000000000001',
     'btc_up_down_5m_middle_1_revert',
     'BTC Up or Down 5m Middle 1 Revert',
     'Immediately after BTC 5m market open, compare the latest Binance BTC/USDT trade-stream price against the cached arithmetic mean, then invert the standard Middle 1 decision; above mean buys Up, below mean buys Down, otherwise skip. Paper entry is an ordinary GTD Paper BUY with dynamic break-even pricing.',
-    true,
-    1.00,
-    now(),
-    now()
-),
-(
-    'b7c50005-0000-4000-8009-000000000002',
-    'btc_up_down_5m_middle_2_revert',
-    'BTC Up or Down 5m Middle 2 Revert',
-    'Immediately after BTC 5m market open, compare the latest Binance BTC/USDT trade-stream price plus the latest 1 cached reference sample(s) against the cached arithmetic mean, then invert the standard Middle 2 decision; above mean buys Up, below mean buys Down, otherwise skip. Paper entry is an ordinary GTD Paper BUY with dynamic break-even pricing.',
-    true,
-    1.00,
-    now(),
-    now()
-),
-(
-    'b7c50005-0000-4000-8009-000000000003',
-    'btc_up_down_5m_middle_3_revert',
-    'BTC Up or Down 5m Middle 3 Revert',
-    'Immediately after BTC 5m market open, compare the latest Binance BTC/USDT trade-stream price plus the latest 2 cached reference sample(s) against the cached arithmetic mean, then invert the standard Middle 3 decision; above mean buys Up, below mean buys Down, otherwise skip. Paper entry is an ordinary GTD Paper BUY with dynamic break-even pricing.',
-    true,
-    1.00,
-    now(),
-    now()
-),
-(
-    'b7c50005-0000-4000-8009-000000000004',
-    'btc_up_down_5m_middle_4_revert',
-    'BTC Up or Down 5m Middle 4 Revert',
-    'Immediately after BTC 5m market open, compare the latest Binance BTC/USDT trade-stream price plus the latest 3 cached reference sample(s) against the cached arithmetic mean, then invert the standard Middle 4 decision; above mean buys Up, below mean buys Down, otherwise skip. Paper entry is an ordinary GTD Paper BUY with dynamic break-even pricing.',
-    true,
-    1.00,
-    now(),
-    now()
-),
-(
-    'b7c50005-0000-4000-8009-000000000005',
-    'btc_up_down_5m_middle_5_revert',
-    'BTC Up or Down 5m Middle 5 Revert',
-    'Immediately after BTC 5m market open, compare the latest Binance BTC/USDT trade-stream price plus the latest 4 cached reference sample(s) against the cached arithmetic mean, then invert the standard Middle 5 decision; above mean buys Up, below mean buys Down, otherwise skip. Paper entry is an ordinary GTD Paper BUY with dynamic break-even pricing.',
     true,
     1.00,
     now(),
@@ -2309,11 +2229,7 @@ ON CONFLICT (id) DO UPDATE SET
 INSERT INTO strategies (id, code, name, description, enabled, paper_stake_amount, created_at_utc, updated_at_utc)
 WITH depths(depth, sample_description) AS (
     VALUES
-        (1, 'the latest Binance BTC/USDT trade-stream price'),
-        (2, 'the latest Binance BTC/USDT trade-stream price plus the latest 1 cached reference sample(s)'),
-        (3, 'the latest Binance BTC/USDT trade-stream price plus the latest 2 cached reference sample(s)'),
-        (4, 'the latest Binance BTC/USDT trade-stream price plus the latest 3 cached reference sample(s)'),
-        (5, 'the latest Binance BTC/USDT trade-stream price plus the latest 4 cached reference sample(s)')
+        (1, 'the latest Binance BTC/USDT trade-stream price')
 ),
 thresholds(threshold_digit, threshold_name) AS (
     VALUES
@@ -2346,11 +2262,7 @@ ON CONFLICT (id) DO UPDATE SET
 
 WITH depths(depth, sample_description) AS (
     VALUES
-        (1, 'the latest Binance BTC/USDT trade-stream price'),
-        (2, 'the latest Binance BTC/USDT trade-stream price plus the latest 1 cached reference sample(s)'),
-        (3, 'the latest Binance BTC/USDT trade-stream price plus the latest 2 cached reference sample(s)'),
-        (4, 'the latest Binance BTC/USDT trade-stream price plus the latest 3 cached reference sample(s)'),
-        (5, 'the latest Binance BTC/USDT trade-stream price plus the latest 4 cached reference sample(s)')
+        (1, 'the latest Binance BTC/USDT trade-stream price')
 ),
 thresholds(threshold_digit, threshold_name) AS (
     VALUES
@@ -4532,6 +4444,53 @@ BEGIN
                 ';paper_position_settlements=' || deleted_paper_position_settlements::text
             );
         END IF;
+    END IF;
+END $$;
+
+DO $$
+DECLARE
+    migration_key_value text := '20260522_retire_middle_depth_2_5';
+    retired_strategy_count integer := 0;
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1
+        FROM schema_data_migrations migration
+        WHERE migration.migration_key = migration_key_value
+    ) THEN
+        UPDATE strategies strategy
+        SET enabled = false,
+            live_stakes = false,
+            auto_live_paused = false,
+            updated_at_utc = clock_timestamp()
+        WHERE (
+                strategy.code IN (
+                    'btc_up_down_5m_middle_2',
+                    'btc_up_down_5m_middle_3',
+                    'btc_up_down_5m_middle_4',
+                    'btc_up_down_5m_middle_5',
+                    'btc_up_down_5m_middle_2_revert',
+                    'btc_up_down_5m_middle_3_revert',
+                    'btc_up_down_5m_middle_4_revert',
+                    'btc_up_down_5m_middle_5_revert'
+                )
+                OR strategy.code LIKE 'btc_up_down_5m_middle_2_bps_%'
+                OR strategy.code LIKE 'btc_up_down_5m_middle_3_bps_%'
+                OR strategy.code LIKE 'btc_up_down_5m_middle_4_bps_%'
+                OR strategy.code LIKE 'btc_up_down_5m_middle_5_bps_%'
+                OR strategy.code LIKE 'btc_up_down_5m_middle_2_revert_bps_%'
+                OR strategy.code LIKE 'btc_up_down_5m_middle_3_revert_bps_%'
+                OR strategy.code LIKE 'btc_up_down_5m_middle_4_revert_bps_%'
+                OR strategy.code LIKE 'btc_up_down_5m_middle_5_revert_bps_%'
+            )
+          AND (strategy.enabled OR strategy.live_stakes OR strategy.auto_live_paused);
+        GET DIAGNOSTICS retired_strategy_count = ROW_COUNT;
+
+        INSERT INTO schema_data_migrations (migration_key, applied_at_utc, details)
+        VALUES (
+            migration_key_value,
+            clock_timestamp(),
+            'retired_strategies=' || retired_strategy_count::text
+        );
     END IF;
 END $$;
 """;

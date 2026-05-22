@@ -97,12 +97,11 @@ public sealed class StorageTests
         Assert.Contains("'btc_up_down_5m_more_150_gamma_below_80'", PostgresSchema.SchemaSql, StringComparison.Ordinal);
         Assert.Contains("'btc_up_down_5m_more_270_gamma'", PostgresSchema.SchemaSql, StringComparison.Ordinal);
         Assert.Contains("'btc_up_down_5m_middle_1'", PostgresSchema.SchemaSql, StringComparison.Ordinal);
-        Assert.Contains("'btc_up_down_5m_middle_5'", PostgresSchema.SchemaSql, StringComparison.Ordinal);
         Assert.Contains("'btc_up_down_5m_middle_1_revert'", PostgresSchema.SchemaSql, StringComparison.Ordinal);
-        Assert.Contains("'btc_up_down_5m_middle_5_revert'", PostgresSchema.SchemaSql, StringComparison.Ordinal);
         Assert.Contains("'btc_up_down_5m_middle_' || depths.depth || '_bps_' || thresholds.threshold_digit", PostgresSchema.SchemaSql, StringComparison.Ordinal);
         Assert.Contains("'btc_up_down_5m_middle_' || depths.depth || '_revert_bps_' || thresholds.threshold_digit", PostgresSchema.SchemaSql, StringComparison.Ordinal);
         Assert.Contains("20260522_rescale_middle_bps_history_reset", PostgresSchema.SchemaSql, StringComparison.Ordinal);
+        Assert.Contains("20260522_retire_middle_depth_2_5", PostgresSchema.SchemaSql, StringComparison.Ordinal);
         Assert.Contains("'btc_up_down_5m_skip_1'", PostgresSchema.SchemaSql, StringComparison.Ordinal);
         Assert.Contains("'btc_up_down_5m_skip_5'", PostgresSchema.SchemaSql, StringComparison.Ordinal);
         Assert.Contains("'btc_up_down_5m_skip_1_revert'", PostgresSchema.SchemaSql, StringComparison.Ordinal);
@@ -147,8 +146,10 @@ public sealed class StorageTests
         Assert.Contains("BTC Up or Down 5m More 120 Gamma Below 65", PostgresSchema.SchemaSql, StringComparison.Ordinal);
         Assert.Contains("BTC Up or Down 5m More 150 Gamma Below 80", PostgresSchema.SchemaSql, StringComparison.Ordinal);
         Assert.Contains("BTC Up or Down 5m More 270 Gamma", PostgresSchema.SchemaSql, StringComparison.Ordinal);
-        Assert.Contains("BTC Up or Down 5m Middle 5", PostgresSchema.SchemaSql, StringComparison.Ordinal);
-        Assert.Contains("BTC Up or Down 5m Middle 5 Revert", PostgresSchema.SchemaSql, StringComparison.Ordinal);
+        Assert.Contains("BTC Up or Down 5m Middle 1", PostgresSchema.SchemaSql, StringComparison.Ordinal);
+        Assert.Contains("BTC Up or Down 5m Middle 1 Revert", PostgresSchema.SchemaSql, StringComparison.Ordinal);
+        Assert.DoesNotContain("BTC Up or Down 5m Middle 5", PostgresSchema.SchemaSql, StringComparison.Ordinal);
+        Assert.DoesNotContain("BTC Up or Down 5m Middle 5 Revert", PostgresSchema.SchemaSql, StringComparison.Ordinal);
         Assert.Contains("BTC Up or Down 5m Skip 5", PostgresSchema.SchemaSql, StringComparison.Ordinal);
         Assert.Contains("BTC Up or Down 5m Skip 5 Revert", PostgresSchema.SchemaSql, StringComparison.Ordinal);
         Assert.Contains("BTC Up or Down 5m Up", PostgresSchema.SchemaSql, StringComparison.Ordinal);

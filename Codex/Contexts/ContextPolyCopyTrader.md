@@ -1,3 +1,15 @@
+## Active Update 2026-05-22 Retire Middle Depth 2-5
+Goal: Remove `BTC Up or Down 5m Middle 2` through `Middle 5` and their bps variants from the active strategy set.
+Status: Completed
+Done:
+- Reduced the generated BTC Middle strategy set to depth `1` only: `Middle 1`, `Middle 1 1..9 bps`, `Middle 1 Revert`, and `Middle 1 Revert 1..9 bps` remain; depth `2..5` standard/revert/bps/revert-bps variants are no longer generated.
+- Removed depth `2..5` Middle standard/revert seed rows and limited Middle bps SQL seeding to depth `1`.
+- Added idempotent schema migration `20260522_retire_middle_depth_2_5` that disables existing depth `2..5` Middle rows and clears `live_stakes`/`auto_live_paused` without deleting history.
+- Updated strategy count tests, storage schema tests, and configuration docs for the smaller Middle set.
+Next: Publish/restart service when ready so production schema initialization retires the existing depth `2..5` rows.
+Notes: Verification passed: focused `dotnet test tests/PolyCopyTrader.Tests/PolyCopyTrader.Tests.csproj --no-restore --filter "BtcUpDown5mPaperStrategyProcessorTests|StorageTests"` 170/170, full `dotnet test PolyCopyTrader.sln --no-restore` 537/537, and `git diff --check` passed with LF/CRLF warnings only.
+Blockers: None.
+
 ## Active Update 2026-05-22 Middle Strategy Explanation
 Goal: Remind how `BTC Up or Down 5m Middle 1`, `Middle 2`, and related Middle variants differ.
 Status: Completed
