@@ -334,14 +334,14 @@ public sealed class BtcUpDown5mPaperStrategyProcessorTests
         Assert.Equal(0.50m, UpMaker50Variant.MakerMinBestAskExclusive);
         Assert.Equal(0.50m, DownMaker50Variant.MakerMinBestAskExclusive);
         Assert.Equal("BTC Up/Down 5m Maker", UpMaker50Variant.Category);
-        Assert.Equal("BTC Up or Down 5m Middle 5 0.9 bps", StrategyIds.BtcUpDown5mVariants.Single(
-            variant => variant.Code == "btc_up_down_5m_middle_5_bps_0_9").Name);
-        Assert.Equal(0.9m, StrategyIds.BtcUpDown5mVariants.Single(
-            variant => variant.Code == "btc_up_down_5m_middle_5_bps_0_9").DecisionThresholdBps);
-        Assert.Equal("BTC Up or Down 5m Middle 5 Revert 0.9 bps", StrategyIds.BtcUpDown5mVariants.Single(
-            variant => variant.Code == "btc_up_down_5m_middle_5_revert_bps_0_9").Name);
-        Assert.Equal(0.9m, StrategyIds.BtcUpDown5mVariants.Single(
-            variant => variant.Code == "btc_up_down_5m_middle_5_revert_bps_0_9").DecisionThresholdBps);
+        Assert.Equal("BTC Up or Down 5m Middle 5 9 bps", StrategyIds.BtcUpDown5mVariants.Single(
+            variant => variant.Code == "btc_up_down_5m_middle_5_bps_9").Name);
+        Assert.Equal(9m, StrategyIds.BtcUpDown5mVariants.Single(
+            variant => variant.Code == "btc_up_down_5m_middle_5_bps_9").DecisionThresholdBps);
+        Assert.Equal("BTC Up or Down 5m Middle 5 Revert 9 bps", StrategyIds.BtcUpDown5mVariants.Single(
+            variant => variant.Code == "btc_up_down_5m_middle_5_revert_bps_9").Name);
+        Assert.Equal(9m, StrategyIds.BtcUpDown5mVariants.Single(
+            variant => variant.Code == "btc_up_down_5m_middle_5_revert_bps_9").DecisionThresholdBps);
         Assert.Equal("BTC Up or Down 5m Skip 5", StrategyIds.BtcUpDown5mVariants.Single(
             variant => variant.Code == "btc_up_down_5m_skip_5").Name);
         Assert.Equal("BTC Up or Down 5m Skip 5 Revert", StrategyIds.BtcUpDown5mVariants.Single(

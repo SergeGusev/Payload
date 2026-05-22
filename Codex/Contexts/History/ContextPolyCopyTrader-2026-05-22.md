@@ -1,3 +1,10 @@
+## 2026-05-22T16:12:02Z
+Request:
+С  Middle 0.1..0.9 bps сделай то же самое
+
+Result:
+Rescaled the BTC Middle bps threshold variants and Middle Revert bps threshold variants from `0.1..0.9 bps` to `1..9 bps`, preserving existing GUID row IDs while renaming codes from `..._bps_0_1..0_9` to `..._bps_1..9`. Updated PostgreSQL seed SQL, docs, and tests. Added one-time schema data migration `20260522_rescale_middle_bps_history_reset` to set these Middle bps strategies to `Live=false`, clear auto Live pause, and clear their Paper/Live order/run/fill/settlement/shadow/synthetic-signal history on service startup; if active Middle bps live orders exist, it skips deletion and retries next startup. Verification passed: focused `BtcUpDown5mPaperStrategyProcessorTests|StorageTests` 171/171, full `dotnet test PolyCopyTrader.sln` 537/537, and `git diff --check` passed with LF/CRLF warnings only. A local PostgreSQL rollback SQL probe did not execute because the local server rejected the standard local password before any statement ran. No production DB write, service restart, live order submission, or cancel action was performed by Codex.
+
 ## 2026-05-22T15:59:39Z
 Request:
 Rename all current Binance/Skip bps strategies from decimal labels such as `0.1..5` to integer bps labels such as `1..50`, multiply thresholds by 10 rather than adding 10, clear Paper/Live bet history, and reset Live flags so statistics start fresh.

@@ -1,9 +1,21 @@
+## Active Update 2026-05-22 Middle Bps Strategy Rescale Reset
+Goal: Apply the same bps rescale/reset policy to BTC Middle bps threshold strategies.
+Status: Completed
+Done:
+- Rescaled `BTC Up or Down 5m Middle 1..5 0.1..0.9 bps` and `Middle 1..5 Revert 0.1..0.9 bps` variants to `1..9 bps` by multiplying thresholds by 10.
+- Preserved existing Middle bps GUID row IDs while changing codes from `..._bps_0_1..0_9` to `..._bps_1..9` and names/descriptions to integer bps thresholds.
+- Updated PostgreSQL strategy seed SQL and docs/tests for the new `Middle 1..5 1..9 bps` and `Middle 1..5 Revert 1..9 bps` grids.
+- Added one-time schema data migration `20260522_rescale_middle_bps_history_reset` that disables Live/auto-live-pause for Middle bps families and clears their Paper/Live order/run/fill/settlement/shadow/synthetic-signal history once the service starts; it skips deletion and retries if active Middle bps live orders still exist.
+Next: Deploy/restart the service; schema initialization will rename/reset Middle bps rows and apply the history cleanup. Then verify `schema_data_migrations` has the new marker and Dashboard shows Middle bps rows as `Live=false`.
+Notes: Verification passed: focused `BtcUpDown5mPaperStrategyProcessorTests|StorageTests` 171/171, full `dotnet test PolyCopyTrader.sln` 537/537, and `git diff --check` passed with LF/CRLF warnings only. A local PostgreSQL rollback SQL probe could not run because local `127.0.0.1:5432` rejected the standard local password before any statement executed. No production DB write, service restart, live order submission, or cancel action was performed by Codex.
+Blockers: None.
+
 ## Active Update 2026-05-22 Bps Strategy Rescale Reset
 Goal: Rename/rescale current Binance/Skip bps strategy grids from `0.1..5 bps` to `1..50 bps` by multiplying thresholds by 10, reset bps Live flags, and start fresh bps Paper/Live statistics.
 Status: Completed
 Done:
 - Rescaled BTC Binance bps, BTC Skip bps, and ETH/SOL Binance bps variants (standard + Instant) to thresholds/codes/names `1..50 bps` while preserving existing GUID row IDs.
-- Kept Middle `0.1..0.9 bps` unchanged because it is a separate mean-deviation family.
+- Initially kept Middle `0.1..0.9 bps` unchanged in this pass; this was superseded by the Middle bps rescale entry above.
 - Updated Paper/Live-shadow allowlist to the renamed `10/17/18/19/20/21/22/23` BTC bps rows and SOL `24 bps` Instant row.
 - Updated PostgreSQL strategy seeding to rename legacy bps rows without unique code/name conflicts.
 - Added one-time schema data migration `20260522_rescale_updown_bps_history_reset` that disables Live/auto-live-pause for bps families and clears their Paper/Live order/run/fill/settlement/shadow/synthetic-signal history once the new service starts; it skips deletion and retries if active bps live orders still exist.

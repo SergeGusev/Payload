@@ -2317,19 +2317,19 @@ WITH depths(depth, sample_description) AS (
 ),
 thresholds(threshold_digit, threshold_name) AS (
     VALUES
-        (1, '0.1'),
-        (2, '0.2'),
-        (3, '0.3'),
-        (4, '0.4'),
-        (5, '0.5'),
-        (6, '0.6'),
-        (7, '0.7'),
-        (8, '0.8'),
-        (9, '0.9')
+        (1, '1'),
+        (2, '2'),
+        (3, '3'),
+        (4, '4'),
+        (5, '5'),
+        (6, '6'),
+        (7, '7'),
+        (8, '8'),
+        (9, '9')
 )
 SELECT
     ('b7c50005-0000-4000-8023-' || lpad(((depths.depth * 100) + thresholds.threshold_digit)::text, 12, '0'))::uuid,
-    'btc_up_down_5m_middle_' || depths.depth || '_bps_0_' || thresholds.threshold_digit,
+    'btc_up_down_5m_middle_' || depths.depth || '_bps_' || thresholds.threshold_digit,
     'BTC Up or Down 5m Middle ' || depths.depth || ' ' || thresholds.threshold_name || ' bps',
     'Immediately after BTC 5m market open, compare ' || depths.sample_description || ' against the cached arithmetic mean; above mean buys Down, below mean buys Up, otherwise skip. Enter only when every compared price is at least ' || thresholds.threshold_name || ' bps away from the mean. Paper entry is a GTD limit BUY with dynamic break-even pricing; settlement uses only actually filled shares.',
     true,
@@ -2354,20 +2354,20 @@ WITH depths(depth, sample_description) AS (
 ),
 thresholds(threshold_digit, threshold_name) AS (
     VALUES
-        (1, '0.1'),
-        (2, '0.2'),
-        (3, '0.3'),
-        (4, '0.4'),
-        (5, '0.5'),
-        (6, '0.6'),
-        (7, '0.7'),
-        (8, '0.8'),
-        (9, '0.9')
+        (1, '1'),
+        (2, '2'),
+        (3, '3'),
+        (4, '4'),
+        (5, '5'),
+        (6, '6'),
+        (7, '7'),
+        (8, '8'),
+        (9, '9')
 )
 INSERT INTO strategies (id, code, name, description, enabled, paper_stake_amount, created_at_utc, updated_at_utc)
 SELECT
     ('b7c50005-0000-4000-8024-' || lpad(((depths.depth * 100) + thresholds.threshold_digit)::text, 12, '0'))::uuid,
-    'btc_up_down_5m_middle_' || depths.depth || '_revert_bps_0_' || thresholds.threshold_digit,
+    'btc_up_down_5m_middle_' || depths.depth || '_revert_bps_' || thresholds.threshold_digit,
     'BTC Up or Down 5m Middle ' || depths.depth || ' Revert ' || thresholds.threshold_name || ' bps',
     'Immediately after BTC 5m market open, compare ' || depths.sample_description || ' against the cached arithmetic mean, then invert the standard Middle ' || depths.depth || ' decision; above mean buys Up, below mean buys Down, otherwise skip. Enter only when every compared price is at least ' || thresholds.threshold_name || ' bps away from the mean. Paper entry is a GTD limit BUY with dynamic break-even pricing; settlement uses only actually filled shares.',
     true,
@@ -4318,6 +4318,186 @@ BEGIN
                OR settlement.copied_trader_wallet LIKE 'strategy:btc_up_down_5m_skip_bps_%'
                OR settlement.copied_trader_wallet LIKE 'strategy:eth_up_down_5m_binance_bps_%'
                OR settlement.copied_trader_wallet LIKE 'strategy:sol_up_down_5m_binance_bps_%';
+            GET DIAGNOSTICS deleted_paper_position_settlements = ROW_COUNT;
+
+            INSERT INTO schema_data_migrations (migration_key, applied_at_utc, details)
+            VALUES (
+                migration_key_value,
+                clock_timestamp(),
+                'target_strategies=' || target_strategy_count::text ||
+                ';paper_orders=' || deleted_paper_orders::text ||
+                ';paper_fills=' || deleted_paper_fills::text ||
+                ';strategy_runs=' || deleted_strategy_runs::text ||
+                ';live_orders=' || deleted_live_orders::text ||
+                ';shadow_decisions=' || deleted_shadow_decisions::text ||
+                ';shadow_discrepancies=' || deleted_shadow_discrepancies::text ||
+                ';signals=' || deleted_signals::text ||
+                ';signal_rejections=' || deleted_signal_rejections::text ||
+                ';paper_positions=' || deleted_paper_positions::text ||
+                ';paper_position_settlements=' || deleted_paper_position_settlements::text
+            );
+        END IF;
+    END IF;
+END $$;
+
+DO $$
+DECLARE
+    migration_key_value text := '20260522_rescale_middle_bps_history_reset';
+    target_strategy_count integer := 0;
+    deleted_shadow_discrepancies integer := 0;
+    deleted_shadow_decisions integer := 0;
+    deleted_live_orders integer := 0;
+    deleted_strategy_runs integer := 0;
+    deleted_paper_fills integer := 0;
+    deleted_paper_orders integer := 0;
+    deleted_signal_rejections integer := 0;
+    deleted_signals integer := 0;
+    deleted_paper_positions integer := 0;
+    deleted_paper_position_settlements integer := 0;
+    active_live_orders integer := 0;
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1
+        FROM schema_data_migrations migration
+        WHERE migration.migration_key = migration_key_value
+    ) THEN
+        DROP TABLE IF EXISTS tmp_middle_bps_history_reset_strategies;
+        DROP TABLE IF EXISTS tmp_middle_bps_history_reset_paper_orders;
+        DROP TABLE IF EXISTS tmp_middle_bps_history_reset_live_orders;
+        DROP TABLE IF EXISTS tmp_middle_bps_history_reset_signals;
+
+        CREATE TEMP TABLE tmp_middle_bps_history_reset_strategies ON COMMIT DROP AS
+        SELECT strategy.id
+        FROM strategies strategy
+        WHERE strategy.code LIKE 'btc_up_down_5m_middle_%_bps_%';
+
+        SELECT count(*)::integer
+        INTO target_strategy_count
+        FROM tmp_middle_bps_history_reset_strategies;
+
+        UPDATE strategies strategy
+        SET live_stakes = false,
+            auto_live_paused = false,
+            updated_at_utc = clock_timestamp()
+        WHERE strategy.id IN (
+            SELECT target.id
+            FROM tmp_middle_bps_history_reset_strategies target
+        )
+          AND (strategy.live_stakes OR strategy.auto_live_paused);
+
+        CREATE TEMP TABLE tmp_middle_bps_history_reset_paper_orders ON COMMIT DROP AS
+        SELECT paper_order.id
+        FROM paper_orders paper_order
+        WHERE paper_order.strategy_id IN (
+            SELECT target.id
+            FROM tmp_middle_bps_history_reset_strategies target
+        );
+
+        CREATE TEMP TABLE tmp_middle_bps_history_reset_live_orders ON COMMIT DROP AS
+        SELECT live_order.id
+        FROM live_orders live_order
+        WHERE live_order.strategy_id IN (
+            SELECT target.id
+            FROM tmp_middle_bps_history_reset_strategies target
+        );
+
+        CREATE TEMP TABLE tmp_middle_bps_history_reset_signals ON COMMIT DROP AS
+        SELECT signal.id
+        FROM signals signal
+        WHERE signal.trader_wallet LIKE 'strategy:btc_up_down_5m_middle_%_bps_%';
+
+        SELECT count(*)::integer
+        INTO active_live_orders
+        FROM live_orders live_order
+        WHERE live_order.id IN (
+            SELECT target.id
+            FROM tmp_middle_bps_history_reset_live_orders target
+        )
+          AND live_order.status IN ('Submitted', 'Live', 'Delayed', 'Unmatched', 'CancelRequested');
+
+        IF active_live_orders = 0 THEN
+            DELETE FROM paper_live_shadow_discrepancies discrepancy
+            WHERE discrepancy.strategy_id IN (
+                SELECT target.id
+                FROM tmp_middle_bps_history_reset_strategies target
+            );
+            GET DIAGNOSTICS deleted_shadow_discrepancies = ROW_COUNT;
+
+            DELETE FROM paper_live_shadow_decisions decision
+            WHERE decision.strategy_id IN (
+                    SELECT target.id
+                    FROM tmp_middle_bps_history_reset_strategies target
+                )
+               OR decision.paper_order_id IN (
+                    SELECT target.id
+                    FROM tmp_middle_bps_history_reset_paper_orders target
+                )
+               OR decision.live_order_id IN (
+                    SELECT target.id
+                    FROM tmp_middle_bps_history_reset_live_orders target
+                )
+               OR decision.signal_id IN (
+                    SELECT target.id
+                    FROM tmp_middle_bps_history_reset_signals target
+                );
+            GET DIAGNOSTICS deleted_shadow_decisions = ROW_COUNT;
+
+            DELETE FROM live_orders live_order
+            WHERE live_order.id IN (
+                SELECT target.id
+                FROM tmp_middle_bps_history_reset_live_orders target
+            );
+            GET DIAGNOSTICS deleted_live_orders = ROW_COUNT;
+
+            DELETE FROM strategy_market_paper_runs run
+            WHERE run.strategy_id IN (
+                    SELECT target.id
+                    FROM tmp_middle_bps_history_reset_strategies target
+                )
+               OR run.paper_order_id IN (
+                    SELECT target.id
+                    FROM tmp_middle_bps_history_reset_paper_orders target
+                )
+               OR run.signal_id IN (
+                    SELECT target.id
+                    FROM tmp_middle_bps_history_reset_signals target
+                );
+            GET DIAGNOSTICS deleted_strategy_runs = ROW_COUNT;
+
+            DELETE FROM paper_fills fill
+            WHERE fill.paper_order_id IN (
+                SELECT target.id
+                FROM tmp_middle_bps_history_reset_paper_orders target
+            );
+            GET DIAGNOSTICS deleted_paper_fills = ROW_COUNT;
+
+            DELETE FROM paper_orders paper_order
+            WHERE paper_order.id IN (
+                SELECT target.id
+                FROM tmp_middle_bps_history_reset_paper_orders target
+            );
+            GET DIAGNOSTICS deleted_paper_orders = ROW_COUNT;
+
+            DELETE FROM signal_rejections rejection
+            WHERE rejection.signal_id IN (
+                SELECT target.id
+                FROM tmp_middle_bps_history_reset_signals target
+            );
+            GET DIAGNOSTICS deleted_signal_rejections = ROW_COUNT;
+
+            DELETE FROM signals signal
+            WHERE signal.id IN (
+                SELECT target.id
+                FROM tmp_middle_bps_history_reset_signals target
+            );
+            GET DIAGNOSTICS deleted_signals = ROW_COUNT;
+
+            DELETE FROM paper_positions paper_position
+            WHERE paper_position.copied_trader_wallet LIKE 'strategy:btc_up_down_5m_middle_%_bps_%';
+            GET DIAGNOSTICS deleted_paper_positions = ROW_COUNT;
+
+            DELETE FROM paper_position_settlements settlement
+            WHERE settlement.copied_trader_wallet LIKE 'strategy:btc_up_down_5m_middle_%_bps_%';
             GET DIAGNOSTICS deleted_paper_position_settlements = ROW_COUNT;
 
             INSERT INTO schema_data_migrations (migration_key, applied_at_utc, details)
