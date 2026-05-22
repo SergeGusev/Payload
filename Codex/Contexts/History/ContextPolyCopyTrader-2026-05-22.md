@@ -343,3 +343,10 @@ Request:
 
 Result:
 Answered that the production service should be republished/restarted from commit `8f61c11` or newer because the auto-live-pause split is runtime service/storage/domain code, not only docs or Dashboard. Dashboard redeploy is not required for this change. No database schema migration is involved, and existing `auto_live_paused` flags remain as-is until future settlements or manual changes update them.
+
+## 2026-05-22T22:14:50.3815025Z
+Request:
+Проверь, всё ли сейчас нормально
+
+Result:
+Queried production PostgreSQL read-only through Dashboard Remote host `192.168.0.101`. Confirmed `PolyCopyTrader.Service` is running the expected split auto-live-pause build `info=1.0.0+8f61c111323117d7d9bc7ddce8948bda68ee6fa7`, status `Running`, mode `Live`, started `2026-05-22T22:12:09Z`, heartbeat age about `1.1` seconds, and `last_error` null. BTC odds ticks, crypto odds ticks, and BTC arbitrage scans were fresh within about `1-5` seconds; strategy runs and paper orders updated within about `69` seconds. No `api_errors` or failed Polymarket HTTP logs appeared since service start, and PostgreSQL had no long-running queries over `30` seconds. Current strategy flags were `1872` total, `804` enabled, `0` live, `25` auto-live-paused, `0` manual paused, and `0` live+auto-paused. Recent Paper activity in the last 15 minutes included `73` filled, `41` expired, and `6` pending paper orders; there were no recent live orders in the last 24 hours.

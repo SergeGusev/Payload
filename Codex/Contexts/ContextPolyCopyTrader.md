@@ -1,3 +1,18 @@
+## Active Update 2026-05-23 Production Check Auto Live Pause Deploy
+Goal: Verify the production service after publishing the split auto-live-pause behavior.
+Status: Completed
+Done:
+- Queried production PostgreSQL read-only through Dashboard Remote host `192.168.0.101`.
+- Confirmed `PolyCopyTrader.Service` is running build `info=1.0.0+8f61c111323117d7d9bc7ddce8948bda68ee6fa7`, status `Running`, mode `Live`, with heartbeat age about `1.1` seconds and `last_error` null.
+- Confirmed the service restarted at `2026-05-22T22:12:09Z`, so it is on the split auto-live-pause code commit.
+- Confirmed fresh production activity: BTC odds ticks, crypto odds ticks, and BTC arbitrage scans updated within about `1-5` seconds; strategy runs and paper orders updated within about `69` seconds.
+- Confirmed no `api_errors` or failed Polymarket HTTP logs since service start, and no long-running PostgreSQL queries over `30` seconds.
+- Observed current strategy flags: `1872` strategies total, `804` enabled, `0` live, `25` auto-live-paused, `0` manually paused, and `0` live+auto-paused.
+- Observed recent Paper activity in the last 15 minutes: `73` filled, `41` expired, and `6` pending paper orders; no recent live orders in the last 24 hours.
+Next: None for deploy health. If Live betting is expected, manually enable the intended strategies because production currently has `0` strategies with `live_stakes=true`.
+Notes: Read-only production verification only. No source or production data changed during the check.
+Blockers: None.
+
 ## Active Update 2026-05-23 Auto Live Pause Redeploy Answer
 Goal: Clarify whether the service must be republished for the split auto-live-pause behavior.
 Status: Completed
