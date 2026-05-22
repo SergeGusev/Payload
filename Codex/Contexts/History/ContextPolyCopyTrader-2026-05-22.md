@@ -336,3 +336,10 @@ Request:
 
 Result:
 Implemented the split automatic Live pause policy. Added explicit update modes so Live settlement processing can only set `strategies.auto_live_paused`, and BTC Up/Down Paper plus generic Paper settlement processing can only clear it. PostgreSQL now computes 12-hour Live and Paper PnL separately: Live mode sets the flag only when Live settled count is greater than `1` and Live PnL is negative; Paper mode clears only when Paper settled count is positive and Paper PnL is positive. Updated test repository behavior, regression tests, README, and configuration docs. Verification passed: focused auto-pause/service tests `191/191`, full solution tests `545/545`, and `git diff --check` with LF/CRLF warnings only.
+
+## 2026-05-22T22:10:32.3737042Z
+Request:
+Нужно перевыложить сервис?
+
+Result:
+Answered that the production service should be republished/restarted from commit `8f61c11` or newer because the auto-live-pause split is runtime service/storage/domain code, not only docs or Dashboard. Dashboard redeploy is not required for this change. No database schema migration is involved, and existing `auto_live_paused` flags remain as-is until future settlements or manual changes update them.

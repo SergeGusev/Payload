@@ -1,3 +1,15 @@
+## Active Update 2026-05-23 Auto Live Pause Redeploy Answer
+Goal: Clarify whether the service must be republished for the split auto-live-pause behavior.
+Status: Completed
+Done:
+- Confirmed latest commit is `8f61c11 Split auto live pause evidence`.
+- Confirmed the change affects service/runtime code (`PolyCopyTrader.Service`, `PolyCopyTrader.Storage`, and `PolyCopyTrader.Domain`), not only docs or Dashboard.
+- Answered that production needs a service publish/restart to pick up the new split behavior; Dashboard redeploy is not required for this change.
+- Noted no database schema migration is involved and existing `auto_live_paused` flags remain as-is unless changed by future settlements or manually.
+Next: Publish/restart `PolyCopyTrader.Service` from commit `8f61c11` or newer when ready.
+Notes: Answer-only clarification. No code or production data changed in this turn.
+Blockers: None.
+
 ## Active Update 2026-05-23 Auto Live Pause Source Split
 Goal: Make automatic Live pause set only from Live settlements and clear only from Paper settlements.
 Status: Completed
