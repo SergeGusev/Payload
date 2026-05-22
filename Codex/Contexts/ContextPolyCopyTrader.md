@@ -1,3 +1,15 @@
+## Active Update 2026-05-22 Middle Average Window Answer
+Goal: Clarify what time window Middle strategies use for their Binance reference arithmetic mean.
+Status: Completed
+Done:
+- Inspected `BinanceBtcUsdReferenceOptions`, service `appsettings.json`, `BtcUsdReferencePriceCache`, `BinanceBtcUsdTradeStreamService`, Middle decision code, and configuration docs.
+- Confirmed the Binance BTC reference worker samples the latest trade once per `BinanceBtcUsdReference:SampleIntervalSeconds`, default/current appsettings `60` seconds.
+- Confirmed the in-memory cache keeps `BinanceBtcUsdReference:WindowSize` samples, default/current appsettings `100`, and `ArithmeticMeanUsd` is the arithmetic mean over the retained sample count.
+- Confirmed the effective full window is therefore about `100` minutes, but after service restart or before the cache is full the mean is over the available samples only.
+Next: None.
+Notes: Read-only source/config inspection only. No code or production data changed; no tests were run because no implementation changed.
+Blockers: None.
+
 ## Active Update 2026-05-22 Retire Middle Depth 2-5
 Goal: Remove `BTC Up or Down 5m Middle 2` through `Middle 5` and their bps variants from the active strategy set.
 Status: Completed
