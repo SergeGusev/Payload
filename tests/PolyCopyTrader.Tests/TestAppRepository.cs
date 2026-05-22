@@ -1517,6 +1517,54 @@ internal sealed class TestAppRepository : IAppRepository
         return Task.FromResult(true);
     }
 
+    public Task<StrategyPauseDecision> PauseStrategyAfterLossIfRecentPnlNegativeAsync(
+        Guid strategyId,
+        DateTimeOffset lookbackStartUtc,
+        DateTimeOffset pauseUntilUtc,
+        DateTimeOffset updatedAtUtc,
+        CancellationToken cancellationToken = default)
+    {
+        var normalizedStrategyId = StrategyIds.Normalize(strategyId);
+        var paperRunSettlements = StrategyMarketPaperRuns
+            .Where(run => StrategyIds.Normalize(run.StrategyId) == normalizedStrategyId)
+            .Where(run => string.Equals(run.Status, StrategyMarketPaperRunStatuses.Settled, StringComparison.OrdinalIgnoreCase))
+            .Where(run => run.SettledAtUtc >= lookbackStartUtc && run.SettledAtUtc <= updatedAtUtc)
+            .Where(run => run.RealizedPnlUsd is not null)
+            .ToArray();
+        var liveSettlements = LiveOrders
+            .Where(order => StrategyIds.Normalize(order.StrategyId) == normalizedStrategyId)
+            .Where(order => order.SettledAtUtc >= lookbackStartUtc && order.SettledAtUtc <= updatedAtUtc)
+            .Where(order => order.RealizedPnlUsd is not null)
+            .ToArray();
+        var followLeaderPaperSettlements = normalizedStrategyId == StrategyIds.FollowLeader
+            ? PaperPositionSettlements
+                .Where(settlement => !settlement.CopiedTraderWallet.StartsWith("strategy:", StringComparison.OrdinalIgnoreCase))
+                .Where(settlement => settlement.SettledAtUtc >= lookbackStartUtc && settlement.SettledAtUtc <= updatedAtUtc)
+                .ToArray()
+            : [];
+        var paperRunPnl = paperRunSettlements.Sum(run => run.RealizedPnlUsd ?? 0m);
+        var livePnl = liveSettlements.Sum(order => order.RealizedPnlUsd ?? 0m);
+        var followLeaderPaperPnl = followLeaderPaperSettlements.Sum(settlement => settlement.RealizedPnlUsd);
+        var recentPnl = paperRunPnl + livePnl + followLeaderPaperPnl;
+        var recentSettledCount = paperRunSettlements.Length + liveSettlements.Length + followLeaderPaperSettlements.Length;
+        if (recentPnl < 0m && recentSettledCount > 1)
+        {
+            var existingSettings = GetStrategySettings(normalizedStrategyId);
+            var effectivePauseUntilUtc = existingSettings.Paused && existingSettings.PausedUntilUtc is null
+                ? null
+                : Max(existingSettings.PausedUntilUtc, pauseUntilUtc);
+            StrategySettings[normalizedStrategyId] = existingSettings with
+            {
+                Paused = true,
+                PausedUntilUtc = effectivePauseUntilUtc
+            };
+
+            return Task.FromResult(new StrategyPauseDecision(true, recentPnl, recentSettledCount, lookbackStartUtc, effectivePauseUntilUtc));
+        }
+
+        return Task.FromResult(new StrategyPauseDecision(false, recentPnl, recentSettledCount, lookbackStartUtc, null));
+    }
+
     public Task<bool> SetStrategyStakeAmountsAsync(
         Guid strategyId,
         decimal paperStakeAmount,
@@ -1538,6 +1586,11 @@ internal sealed class TestAppRepository : IAppRepository
             LiveStakeAmount = liveStakeAmount
         };
         return Task.FromResult(true);
+    }
+
+    private static DateTimeOffset? Max(DateTimeOffset? currentValue, DateTimeOffset candidate)
+    {
+        return currentValue is { } value && value > candidate ? value : candidate;
     }
 
     public Task<bool> SetStrategyLiveAvailableBalanceAsync(

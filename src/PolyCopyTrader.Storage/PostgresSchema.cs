@@ -926,12 +926,6 @@ ALTER TABLE strategies ADD COLUMN IF NOT EXISTS live_stake_amount numeric(28,8) 
 ALTER TABLE strategies ADD COLUMN IF NOT EXISTS live_available_balance numeric(28,8) NOT NULL DEFAULT 100.00;
 ALTER TABLE strategies ALTER COLUMN live_stake_amount SET DEFAULT 1.00;
 
-UPDATE strategies
-SET paused = false,
-    paused_until_utc = NULL
-WHERE paused = true
-  AND paused_until_utc IS NOT NULL;
-
 DO $$
 BEGIN
     IF NOT EXISTS (

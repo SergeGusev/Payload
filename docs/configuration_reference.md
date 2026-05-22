@@ -814,12 +814,13 @@ while paused strategies stay enabled but skip new Paper and Live entries with
 reason `strategy_paused`. Existing Paper positions can still be settled, and
 copied leader exits can still be tracked.
 
-Automatic strategy pausing after losing settlements is disabled. Losing
-Paper/Live settlements are logged, but the service does not set
-`strategies.paused=true` or `paused_until_utc` from PnL. On startup, schema
-initialization clears legacy timed pauses where `paused_until_utc` is set. The
-Dashboard `Paused` checkbox remains available for manual pauses; a manual pause
-leaves `paused_until_utc` empty and remains active until cleared.
+Automatic strategy pausing runs after each losing Paper/Live settlement. The
+service checks the same strategy's settled rows over the last 12 hours; if more
+than one settled bet exists and the 12-hour realized PnL is negative, it sets
+`strategies.paused=true` with `paused_until_utc=now+12h`. The Dashboard
+`Paused` checkbox remains available for manual pauses; a manual pause leaves
+`paused_until_utc` empty, is not shortened by automatic pauses, and remains
+active until cleared.
 
 - `Dashboard:RefreshIntervalSeconds`: UI refresh timer for the Dashboard; default `60`.
 - `Dashboard:StrategyRefreshIntervalSeconds`: minimum interval between Dashboard strategy-performance database refreshes; default `60`. Strategy toggle/stake commands invalidate the cache so command results are shown immediately.

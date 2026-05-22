@@ -1,3 +1,17 @@
+## Active Update 2026-05-22 Restore Strategy Auto-Pause
+Goal: Restore automatic strategy pauses after losing settlements while keeping manual Dashboard pause control.
+Status: Completed
+Done:
+- Restored `StrategyPauseDecision` and `PauseStrategyAfterLossIfRecentPnlNegativeAsync`.
+- Re-enabled auto-pause calls after BTC 5m Paper settlements, generic Paper settlements, and Live settlements.
+- The auto-pause rule now checks the same strategy's last 12 hours of settled Paper/Live rows; if settled count is greater than `1` and realized PnL is negative, it pauses the strategy for 12 hours.
+- Manual Dashboard pauses remain supported and indefinite: `paused_until_utc=NULL` is preserved and is not shortened by auto-pause.
+- Removed startup cleanup that cleared legacy timed pauses, so timed auto-pauses survive service restarts until expiry.
+- Updated README, configuration reference, and regression tests.
+Next: Deploy/restart the service so the restored auto-pause code and schema behavior run on the server.
+Notes: Verification passed: focused Storage/BTC processor tests `163/163`; full `dotnet test PolyCopyTrader.sln --no-restore` passed `528/528`; `git diff --check` passed with LF/CRLF warnings only. No production DB write, service restart, live order submission, or cancel action was performed.
+Blockers: None.
+
 ## Active Update 2026-05-22 Production Statistics Check
 Goal: Check whether the new read-only BTC 5m covered-arbitrage scanner and existing BTC 5m Statistics are producing production telemetry.
 Status: Completed

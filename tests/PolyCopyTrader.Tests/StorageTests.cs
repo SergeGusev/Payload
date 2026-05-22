@@ -69,8 +69,7 @@ public sealed class StorageTests
         Assert.Contains("paused boolean NOT NULL DEFAULT false", PostgresSchema.SchemaSql, StringComparison.Ordinal);
         Assert.Contains("ALTER TABLE strategies ADD COLUMN IF NOT EXISTS paused boolean NOT NULL DEFAULT false", PostgresSchema.SchemaSql, StringComparison.Ordinal);
         Assert.Contains("ALTER TABLE strategies ADD COLUMN IF NOT EXISTS paused_until_utc timestamptz NULL", PostgresSchema.SchemaSql, StringComparison.Ordinal);
-        Assert.Contains("WHERE paused = true", PostgresSchema.SchemaSql, StringComparison.Ordinal);
-        Assert.Contains("AND paused_until_utc IS NOT NULL", PostgresSchema.SchemaSql, StringComparison.Ordinal);
+        Assert.DoesNotContain("SET paused = false", PostgresSchema.SchemaSql, StringComparison.Ordinal);
         Assert.Contains("ALTER TABLE strategies ALTER COLUMN live_stake_amount SET DEFAULT 1.00", PostgresSchema.SchemaSql, StringComparison.Ordinal);
         Assert.Contains("ck_strategies_live_available_balance_nonnegative", PostgresSchema.SchemaSql, StringComparison.Ordinal);
         Assert.Contains("'follow_leader'", PostgresSchema.SchemaSql, StringComparison.Ordinal);
@@ -471,6 +470,52 @@ public sealed class StorageTests
     }
 
     [Fact]
+    public void PostgresRepository_StrategyPauseRequiresMultipleRecentSettledRowsAndPreservesManualPause()
+    {
+        var source = ReadStorageRepositorySource();
+        var start = source.IndexOf("PauseStrategyAfterLossIfRecentPnlNegativeAsync", StringComparison.Ordinal);
+        Assert.True(start >= 0);
+
+        var end = source.IndexOf("SetStrategyStakeAmountsAsync", start, StringComparison.Ordinal);
+        Assert.True(end > start);
+
+        var method = source[start..end];
+        Assert.Contains("count(*)::integer AS settled_count", method, StringComparison.Ordinal);
+        Assert.Contains("AND (SELECT settled_count FROM recent_pnl) > 1", method, StringComparison.Ordinal);
+        Assert.Contains("AS recent_settled_count", method, StringComparison.Ordinal);
+        Assert.Contains("WHEN paused = true AND paused_until_utc IS NULL THEN NULL", method, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task TestRepository_StrategyAutoPauseKeepsManualPauseIndefinite()
+    {
+        var now = DateTimeOffset.UtcNow;
+        var strategyId = StrategyIds.BtcUpDown5mBinanceBps2;
+        var repository = new TestAppRepository();
+        repository.StrategySettings[strategyId] = StrategyRuntimeSettings.Default(strategyId) with
+        {
+            Paused = true,
+            PausedUntilUtc = null
+        };
+        repository.StrategyMarketPaperRuns.Add(CreateSettledStrategyRun(strategyId, now.AddMinutes(-10), -1m));
+        repository.StrategyMarketPaperRuns.Add(CreateSettledStrategyRun(strategyId, now.AddMinutes(-5), -1m));
+
+        var decision = await repository.PauseStrategyAfterLossIfRecentPnlNegativeAsync(
+            strategyId,
+            now.AddHours(-12),
+            now.AddHours(12),
+            now,
+            CancellationToken.None);
+
+        Assert.True(decision.Paused);
+        Assert.Equal(2, decision.RecentSettledCount);
+        Assert.Equal(-2m, decision.RecentPnlUsd);
+        Assert.Null(decision.PausedUntilUtc);
+        Assert.True(repository.StrategySettings[strategyId].Paused);
+        Assert.Null(repository.StrategySettings[strategyId].PausedUntilUtc);
+    }
+
+    [Fact]
     public void PostgresRepository_PaperCopiedLeaderExitTracking_StoresLinksAndDedupedActivity()
     {
         var source = ReadStorageRepositorySource();
@@ -653,6 +698,38 @@ CREATE INDEX first_table_id_idx ON first_table(id);
 
         Assert.Contains(heartbeats, item => item.ServiceName == "PolyCopyTrader.Tests");
         Assert.Contains(httpLogs, item => item.Id == httpLog.Id);
+    }
+
+    private static StrategyMarketPaperRun CreateSettledStrategyRun(Guid strategyId, DateTimeOffset settledAtUtc, decimal realizedPnlUsd)
+    {
+        return new StrategyMarketPaperRun(
+            Guid.NewGuid(),
+            strategyId,
+            "market-" + Guid.NewGuid().ToString("N"),
+            "condition-" + Guid.NewGuid().ToString("N"),
+            "btc-updown-5m-test",
+            "Bitcoin Up or Down - test",
+            "Crypto",
+            settledAtUtc.AddMinutes(-5),
+            settledAtUtc,
+            settledAtUtc.AddMinutes(-5),
+            settledAtUtc.AddMinutes(-4),
+            StrategyMarketPaperRunStatuses.Settled,
+            "asset-up",
+            "Up",
+            0.50m,
+            1m,
+            2m,
+            Guid.NewGuid(),
+            Guid.NewGuid(),
+            settledAtUtc.AddMinutes(-3),
+            SettlementPrice: realizedPnlUsd < 0m ? 0m : 1m,
+            SettlementValueUsd: 1m + realizedPnlUsd,
+            RealizedPnlUsd: realizedPnlUsd,
+            SettledAtUtc: settledAtUtc,
+            SkipReason: null,
+            settledAtUtc.AddMinutes(-5),
+            settledAtUtc);
     }
 
     private static string ReadStorageRepositorySource()
