@@ -1,3 +1,17 @@
+## Active Update 2026-05-22 Production Migration Hang Diagnosis
+Goal: Check whether the new production service is safely progressing through the bps history reset migration.
+Status: Completed
+Done:
+- Queried production PostgreSQL read-only through Dashboard Remote host `192.168.0.101`; no production rows, service state, orders, cancels, or backend cancellations were performed.
+- Found backend `pid=11448` actively running `20260522_rescale_updown_bps_history_reset` for over `52m` with `wait_event` null and no ungranted locks/blocking backend, so this is not a lock deadlock.
+- Confirmed `schema_data_migrations` exists but has no updown/middle reset markers yet; the service heartbeat is stale at `2026-05-22T18:14:10Z`, still showing prior `74434b4`, meaning the new service is stuck in schema initialization before reaching hosted workers/heartbeat.
+- Counted target cleanup scope from committed data: `400` target strategies, `349358` strategy runs, `69995` signals, `66077` paper orders, `35692` fills, `35752` positions, `35674` position settlements, `688` live orders, `0` active target live orders.
+- Identified likely cause: expensive FK checks/scans during deletes, especially because `strategy_market_paper_runs.signal_id` and related shadow/signal FK columns lacked supporting indexes.
+- Added schema indexes before the reset migration: `ix_strategy_market_paper_runs_signal`, `ix_signal_rejections_signal`, `ix_paper_live_shadow_decisions_paper_order`, `ix_paper_live_shadow_decisions_live_order`, and `ix_paper_live_shadow_decisions_signal`.
+Next: Stop/cancel the currently stuck production migration, deploy/restart from the new commit with the index fix, then re-check migration markers and renamed strategy rows.
+Notes: Verification passed: focused `StorageTests` 25/25, full `dotnet test PolyCopyTrader.sln --no-restore` 537/537, and `git diff --check`. Existing Storage nullable warnings remain.
+Blockers: Current production backend `pid=11448` is still running the old unindexed migration until stopped/cancelled externally.
+
 ## Active Update 2026-05-22 Library Publish Touch
 Goal: Force current service dependency libraries to produce new publish artifacts after production showed a partial deployment with stale Storage assembly/schema code.
 Status: Completed

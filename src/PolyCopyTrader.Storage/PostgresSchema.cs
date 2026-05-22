@@ -4142,6 +4142,21 @@ CREATE TABLE IF NOT EXISTS service_heartbeats (
     last_error text NULL
 );
 
+CREATE INDEX IF NOT EXISTS ix_strategy_market_paper_runs_signal
+ON strategy_market_paper_runs(signal_id);
+
+CREATE INDEX IF NOT EXISTS ix_signal_rejections_signal
+ON signal_rejections(signal_id);
+
+CREATE INDEX IF NOT EXISTS ix_paper_live_shadow_decisions_paper_order
+ON paper_live_shadow_decisions(paper_order_id);
+
+CREATE INDEX IF NOT EXISTS ix_paper_live_shadow_decisions_live_order
+ON paper_live_shadow_decisions(live_order_id);
+
+CREATE INDEX IF NOT EXISTS ix_paper_live_shadow_decisions_signal
+ON paper_live_shadow_decisions(signal_id);
+
 CREATE TABLE IF NOT EXISTS schema_data_migrations (
     migration_key text PRIMARY KEY,
     applied_at_utc timestamptz NOT NULL,

@@ -1,3 +1,10 @@
+## 2026-05-22T19:08:13.2296972Z
+Request:
+Запустил на сервере новую версию сервиса. Очень долго висит на миграции. Можешь проверить, всё ли в порядке?
+
+Result:
+Checked production PostgreSQL read-only. Backend `pid=11448` is actively running `20260522_rescale_updown_bps_history_reset` for more than 52 minutes with no lock wait and no blocking backend, so it is not a deadlock but is not healthy runtime either. `schema_data_migrations` exists but has no reset marker, and the service heartbeat is stale at `2026-05-22T18:14:10Z`, meaning the new service is stuck in schema initialization. Target cleanup scope is about 349k strategy runs, 70k signals, 66k paper orders, and 35k fills/positions/settlements; active target live orders are 0. Identified likely slow FK checks due missing indexes, especially `strategy_market_paper_runs.signal_id`, and added supporting schema indexes before the reset migration. Verification passed: StorageTests 25/25, full tests 537/537, and `git diff --check`. No production writes, service restarts, order actions, or backend cancellation were performed.
+
 ## 2026-05-22T18:09:54.9184028Z
 Request:
 Сделай произвольные ничего не значащие изменения в каждой библиотеке, чтобы Publish сделал новые версии.
