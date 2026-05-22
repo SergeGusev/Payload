@@ -16,3 +16,9 @@ Request:
 
 Result:
 Verified production read-only after deploy. The service is running commit `d52d9d5` in `Live` mode with fresh heartbeat and empty `last_error`; schema initialization ran and `btc_up_down_5m_arbitrage_scans` exists. Automatic pauses are working: BTC instant bps `0.1` through `1.4` paused after post-deploy losses at about `2026-05-22T05:20:27Z` until about `2026-05-22T17:20:27Z`, then skipped later entries with `strategy_paused`; SOL non-instant bps `0.1` through `1.1` paused after losses at about `2026-05-22T05:26:51Z` until about `2026-05-22T17:26:51Z`. No pause-related API errors or live events were found. Temporary C# read-only probe was removed.
+## 2026-05-22T05:32:29.4040848+00:00
+Request:
+Твой сбор статистики работает?
+
+Result:
+Checked production PostgreSQL read-only. The new `btc_up_down_5m_arbitrage_scans` collection is working: 522 total rows by `2026-05-22T05:32:14Z`, 210 rows in the last 5 minutes, 522 in the last hour, and 4 `would_arbitrage=true` rows in the last hour. The old `btc_up_down_5m_statistics_ticks` feed is not fresh: latest row is still `2026-05-19T05:18:12Z`, with 0 rows in the last hour, because production strategy row `btc_up_down_5m_statistics` has `enabled=false`. No scanner/statistics worker API errors were found in the last 2 hours. Temporary C# read-only probe was removed.

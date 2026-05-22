@@ -1,3 +1,17 @@
+## Active Update 2026-05-22 Production Statistics Collection Check
+Goal: Verify whether the deployed statistics collection is producing fresh production rows.
+Status: Completed
+Done:
+- Queried production PostgreSQL at `192.168.0.101` read-only with `default_transaction_read_only=on`.
+- Confirmed production service is still running commit `d52d9d5`, status `Running`, mode `Live`, heartbeat fresh at about `2026-05-22T05:31:24Z`, and `last_error` empty.
+- Confirmed the new `btc_up_down_5m_arbitrage_scans` collection is working: `522` total rows by `2026-05-22T05:32:14Z`, `210` rows in the last 5 minutes, `522` in the last hour, and `4` `would_arbitrage=true` rows in the last hour.
+- Confirmed the old `btc_up_down_5m_statistics_ticks` collection is not working/fresh: latest row is still `2026-05-19T05:18:12Z`, with `0` rows in the last hour.
+- Confirmed why the old Statistics path is inactive: strategy row `btc_up_down_5m_statistics` has `enabled=false` in production.
+- Confirmed no `BtcUpDown5mArbitrageScannerWorker` or `BtcUpDown5mStatisticsWorker` API errors in the last 2 hours.
+Next: If the old `btc_up_down_5m_statistics_ticks` feed is needed again, enable `btc_up_down_5m_statistics`; otherwise use the new `btc_up_down_5m_arbitrage_scans` feed, which is live.
+Notes: Used a temporary C#/.NET/Npgsql read-only probe outside the repo and removed it. No production DB write, service restart, live order submission, cancel action, source-code change, or tests were performed.
+Blockers: Old Statistics feed is intentionally inactive while `btc_up_down_5m_statistics.enabled=false`.
+
 ## Active Update 2026-05-22 Production Auto-Pause Deploy Check
 Goal: Verify the deployed service is running the restored auto-pause build and that automatic pauses work in production.
 Status: Completed
