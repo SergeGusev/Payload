@@ -1,3 +1,15 @@
+## Active Update 2026-05-22 Dashboard Paper Skipped Split
+Goal: Split Dashboard Paper skipped counts into skipped before order creation and skipped after a Paper order was created but not accepted/filled.
+Status: Completed
+Done:
+- Added `PaperConditionSkippedRunsCount` and `PaperNotAcceptedRunsCount` to strategy performance and recent performance domain/dashboard rows.
+- Updated PostgreSQL dashboard aggregation to count skipped Paper runs with `paper_order_id IS NULL` as condition skips and skipped Paper runs with `paper_order_id IS NOT NULL` as not accepted.
+- Replaced the visible `Skipped` column in the Dashboard All and 1h/6h/24h strategy grids with `Paper cond skip` and `Paper not accepted`.
+- Added the two split columns to strategy CSV exports and updated test repository aggregation plus strategy performance tests.
+Next: Publish/restart the Dashboard build when ready; no database migration is required.
+Notes: Verification passed: `dotnet test tests/PolyCopyTrader.Tests/PolyCopyTrader.Tests.csproj --no-restore --filter StrategyPerformanceTests` 7/7, `dotnet build src/PolyCopyTrader.Dashboard/PolyCopyTrader.Dashboard.csproj --no-restore -p:BaseOutputPath=%TEMP%\polycopytrader-dashboard-split-skipped-build`, full `dotnet test PolyCopyTrader.sln --no-restore` 538/538, and `git diff --check`. A normal Dashboard build to the default output failed only because the currently running Dashboard/Visual Studio locked `src\PolyCopyTrader.Dashboard\bin\Debug\net10.0-windows` DLLs.
+Blockers: None.
+
 ## Active Update 2026-05-22 Production Rescale Migration Success
 Goal: Monitor the second production restart after adding FK-support indexes for the bps reset migration.
 Status: Completed

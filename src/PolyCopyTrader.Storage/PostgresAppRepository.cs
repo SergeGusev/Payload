@@ -1593,6 +1593,8 @@ run_agg AS (
         (count(*) FILTER (WHERE status = 'Observed'))::integer AS observed_runs_count,
         (count(*) FILTER (WHERE status = 'Entered'))::integer AS entered_runs_count,
         (count(*) FILTER (WHERE status = 'Skipped'))::integer AS skipped_runs_count,
+        (count(*) FILTER (WHERE status = 'Skipped' AND paper_order_id IS NULL))::integer AS paper_condition_skipped_runs_count,
+        (count(*) FILTER (WHERE status = 'Skipped' AND paper_order_id IS NOT NULL))::integer AS paper_not_accepted_runs_count,
         (count(*) FILTER (
             WHERE status = 'Skipped'
               AND (
@@ -1735,6 +1737,8 @@ combined AS (
         COALESCE(run_agg.observed_runs_count, 0) AS observed_runs_count,
         COALESCE(run_agg.entered_runs_count, 0) AS entered_runs_count,
         COALESCE(run_agg.skipped_runs_count, 0) AS skipped_runs_count,
+        COALESCE(run_agg.paper_condition_skipped_runs_count, 0) AS paper_condition_skipped_runs_count,
+        COALESCE(run_agg.paper_not_accepted_runs_count, 0) AS paper_not_accepted_runs_count,
         COALESCE(run_agg.settled_runs_count, 0) AS settled_runs_count,
         CASE
             WHEN COALESCE(run_agg.runs_count, 0) > 0 THEN COALESCE(run_agg.settled_runs_count, 0)
@@ -1843,6 +1847,8 @@ SELECT
     observed_runs_count,
     entered_runs_count,
     skipped_runs_count,
+    paper_condition_skipped_runs_count,
+    paper_not_accepted_runs_count,
     settled_runs_count,
     settled_positions_count,
     won_positions_count,
@@ -1923,22 +1929,22 @@ LIMIT @Limit;
 				reader.GetInt32(19),
 				reader.GetInt32(20),
 				reader.GetInt32(21),
-				reader.GetDecimal(22),
-				reader.GetDecimal(23),
+				reader.GetInt32(22),
+				reader.GetInt32(23),
 				reader.GetDecimal(24),
 				reader.GetDecimal(25),
 				reader.GetDecimal(26),
 				reader.GetDecimal(27),
 				reader.GetDecimal(28),
 				reader.GetDecimal(29),
-				reader.IsDBNull(30) ? null : reader.GetDecimal(30),
+				reader.GetDecimal(30),
 				reader.GetDecimal(31),
-				reader.GetDecimal(32),
+				reader.IsDBNull(32) ? null : reader.GetDecimal(32),
 				reader.GetDecimal(33),
 				reader.GetDecimal(34),
 				reader.GetDecimal(35),
-				reader.GetInt32(36),
-				reader.GetInt32(37),
+				reader.GetDecimal(36),
+				reader.GetDecimal(37),
 				reader.GetInt32(38),
 				reader.GetInt32(39),
 				reader.GetInt32(40),
@@ -1950,19 +1956,21 @@ LIMIT @Limit;
 				reader.GetInt32(46),
 				reader.GetInt32(47),
 				reader.GetInt32(48),
-				reader.GetDecimal(49),
-				reader.GetDecimal(50),
+				reader.GetInt32(49),
+				reader.GetInt32(50),
 				reader.GetDecimal(51),
 				reader.GetDecimal(52),
 				reader.GetDecimal(53),
 				reader.GetDecimal(54),
-				reader.IsDBNull(55) ? null : reader.GetDecimal(55),
+				reader.GetDecimal(55),
 				reader.GetDecimal(56),
-				reader.GetDecimal(57),
-				reader.IsDBNull(58) ? null : DateTimeOffsetFromUtc(reader.GetDateTime(58)),
-				reader.IsDBNull(59) ? null : DateTimeOffsetFromUtc(reader.GetDateTime(59)),
+				reader.IsDBNull(57) ? null : reader.GetDecimal(57),
+				reader.GetDecimal(58),
+				reader.GetDecimal(59),
 				reader.IsDBNull(60) ? null : DateTimeOffsetFromUtc(reader.GetDateTime(60)),
-				reader.IsDBNull(61) ? null : DateTimeOffsetFromUtc(reader.GetDateTime(61))));
+				reader.IsDBNull(61) ? null : DateTimeOffsetFromUtc(reader.GetDateTime(61)),
+				reader.IsDBNull(62) ? null : DateTimeOffsetFromUtc(reader.GetDateTime(62)),
+				reader.IsDBNull(63) ? null : DateTimeOffsetFromUtc(reader.GetDateTime(63))));
 		}
 
 		return results;
@@ -2047,6 +2055,7 @@ run_window_rows AS (
         run.settled_at_utc,
         run.updated_at_utc,
         run.skip_reason,
+        run.paper_order_id,
         window_row.window_label,
         window_row.window_start_utc,
         window_row.window_end_utc
@@ -2072,6 +2081,18 @@ run_agg AS (
         run.window_label,
         (count(*) FILTER (WHERE run.entered_at_utc >= run.window_start_utc AND run.entered_at_utc <= run.window_end_utc))::integer AS entered_runs_count,
         (count(*) FILTER (WHERE run.status = 'Skipped' AND run.updated_at_utc >= run.window_start_utc AND run.updated_at_utc <= run.window_end_utc))::integer AS skipped_runs_count,
+        (count(*) FILTER (
+            WHERE run.status = 'Skipped'
+              AND run.updated_at_utc >= run.window_start_utc
+              AND run.updated_at_utc <= run.window_end_utc
+              AND run.paper_order_id IS NULL
+        ))::integer AS paper_condition_skipped_runs_count,
+        (count(*) FILTER (
+            WHERE run.status = 'Skipped'
+              AND run.updated_at_utc >= run.window_start_utc
+              AND run.updated_at_utc <= run.window_end_utc
+              AND run.paper_order_id IS NOT NULL
+        ))::integer AS paper_not_accepted_runs_count,
         (count(*) FILTER (
             WHERE run.status = 'Skipped'
               AND run.updated_at_utc >= run.window_start_utc
@@ -2276,6 +2297,8 @@ SELECT
     COALESCE(order_agg.open_orders_count, 0) AS open_orders_count,
     COALESCE(run_agg.entered_runs_count, 0) AS entered_runs_count,
     COALESCE(run_agg.skipped_runs_count, 0) AS skipped_runs_count,
+    COALESCE(run_agg.paper_condition_skipped_runs_count, 0) AS paper_condition_skipped_runs_count,
+    COALESCE(run_agg.paper_not_accepted_runs_count, 0) AS paper_not_accepted_runs_count,
     COALESCE(run_agg.settled_runs_count, 0) AS settled_runs_count,
     COALESCE(run_agg.won_runs_count, 0) AS won_runs_count,
     COALESCE(run_agg.lost_runs_count, 0) AS lost_runs_count,
@@ -2361,15 +2384,15 @@ ORDER BY
 				reader.GetInt32(14),
 				reader.GetInt32(15),
 				reader.GetInt32(16),
-				reader.GetDecimal(17),
-				reader.GetDecimal(18),
+				reader.GetInt32(17),
+				reader.GetInt32(18),
 				reader.GetDecimal(19),
 				reader.GetDecimal(20),
 				reader.GetDecimal(21),
 				reader.GetDecimal(22),
 				reader.GetDecimal(23),
-				reader.GetInt32(24),
-				reader.GetInt32(25),
+				reader.GetDecimal(24),
+				reader.GetDecimal(25),
 				reader.GetInt32(26),
 				reader.GetInt32(27),
 				reader.GetInt32(28),
@@ -2378,11 +2401,13 @@ ORDER BY
 				reader.GetInt32(31),
 				reader.GetInt32(32),
 				reader.GetInt32(33),
-				reader.GetDecimal(34),
-				reader.GetDecimal(35),
-				reader.GetString(36),
-				reader.IsDBNull(37) ? null : DateTimeOffsetFromUtc(reader.GetDateTime(37)),
-				reader.IsDBNull(38) ? null : DateTimeOffsetFromUtc(reader.GetDateTime(38))));
+				reader.GetInt32(34),
+				reader.GetInt32(35),
+				reader.GetDecimal(36),
+				reader.GetDecimal(37),
+				reader.GetString(38),
+				reader.IsDBNull(39) ? null : DateTimeOffsetFromUtc(reader.GetDateTime(39)),
+				reader.IsDBNull(40) ? null : DateTimeOffsetFromUtc(reader.GetDateTime(40))));
 		}
 
 		return results;

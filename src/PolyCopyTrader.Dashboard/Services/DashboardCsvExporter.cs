@@ -172,7 +172,7 @@ public sealed class DashboardCsvExporter(
 
         await WriteAsync(
             Path.Combine(exportDirectory, "Strategies.csv"),
-            ["Name", "Enabled", "LiveStakes", "AutoLivePaused", "Paused", "PausedUntilUtc", "PaperStakeAmount", "LiveStakeAmount", "LiveAvailableBalance", "OrdersCount", "FilledOrdersCount", "OpenOrdersCount", "OpenPositionsCount", "ObservedRunsCount", "EnteredRunsCount", "SkippedRunsCount", "SettledRunsCount", "SettledPositionsCount", "WonPositionsCount", "LostPositionsCount", "StakeUsd", "RealizedPnlUsd", "OpenUnrealizedPnlUsd", "MarkToMarketPnlUsd", "WinRatePct", "LossRatePct", "AvgWinPnlUsd", "AvgLossPnlUsd", "ProfitFactor", "ExpectancyPnlUsd", "MarkToMarketRoiPct", "ClosedRoiPct", "AvgEntryDelaySeconds", "MaxEntryDelaySeconds", "LiveOrdersCount", "LiveFilledOrdersCount", "LiveOpenOrdersCount", "LiveSettledOrdersCount", "LiveSkippedOrdersCount", "LiveConditionSkippedOrdersCount", "LiveTechnicalSkippedOrdersCount", "LiveIgnoredOrdersCount", "LiveIgnoredGtdUnfilledCount", "LiveIgnoredCancelledOrdersCount", "LiveIgnoredRejectedOrdersCount", "LiveWonOrdersCount", "LiveLostOrdersCount", "LiveStakeUsd", "LiveRealizedPnlUsd", "LiveWinRatePct", "LiveLossRatePct", "LiveAvgWinPnlUsd", "LiveAvgLossPnlUsd", "LiveProfitFactor", "LiveExpectancyPnlUsd", "LiveRoiPct", "LiveLastOrderUtc", "LiveLastSettlementUtc", "LastOrderUtc", "LastRunUtc"],
+            ["Name", "Enabled", "LiveStakes", "AutoLivePaused", "Paused", "PausedUntilUtc", "PaperStakeAmount", "LiveStakeAmount", "LiveAvailableBalance", "OrdersCount", "FilledOrdersCount", "OpenOrdersCount", "OpenPositionsCount", "ObservedRunsCount", "EnteredRunsCount", "SkippedRunsCount", "PaperConditionSkippedRunsCount", "PaperNotAcceptedRunsCount", "SettledRunsCount", "SettledPositionsCount", "WonPositionsCount", "LostPositionsCount", "StakeUsd", "RealizedPnlUsd", "OpenUnrealizedPnlUsd", "MarkToMarketPnlUsd", "WinRatePct", "LossRatePct", "AvgWinPnlUsd", "AvgLossPnlUsd", "ProfitFactor", "ExpectancyPnlUsd", "MarkToMarketRoiPct", "ClosedRoiPct", "AvgEntryDelaySeconds", "MaxEntryDelaySeconds", "LiveOrdersCount", "LiveFilledOrdersCount", "LiveOpenOrdersCount", "LiveSettledOrdersCount", "LiveSkippedOrdersCount", "LiveConditionSkippedOrdersCount", "LiveTechnicalSkippedOrdersCount", "LiveIgnoredOrdersCount", "LiveIgnoredGtdUnfilledCount", "LiveIgnoredCancelledOrdersCount", "LiveIgnoredRejectedOrdersCount", "LiveWonOrdersCount", "LiveLostOrdersCount", "LiveStakeUsd", "LiveRealizedPnlUsd", "LiveWinRatePct", "LiveLossRatePct", "LiveAvgWinPnlUsd", "LiveAvgLossPnlUsd", "LiveProfitFactor", "LiveExpectancyPnlUsd", "LiveRoiPct", "LiveLastOrderUtc", "LiveLastSettlementUtc", "LastOrderUtc", "LastRunUtc"],
             (await repository.GetStrategyPerformanceAsync(ExportLimit, cancellationToken)).Select(strategy => new object?[]
             {
                 strategy.Name,
@@ -191,6 +191,8 @@ public sealed class DashboardCsvExporter(
                 strategy.ObservedRunsCount,
                 strategy.EnteredRunsCount,
                 strategy.SkippedRunsCount,
+                strategy.PaperConditionSkippedRunsCount,
+                strategy.PaperNotAcceptedRunsCount,
                 strategy.SettledRunsCount,
                 strategy.SettledPositionsCount,
                 strategy.WonPositionsCount,
@@ -240,7 +242,7 @@ public sealed class DashboardCsvExporter(
 
         await WriteAsync(
             Path.Combine(exportDirectory, "StrategyRecentPerformance.csv"),
-            ["Window", "Name", "OrdersCount", "FilledOrdersCount", "ExpiredOrdersCount", "OpenOrdersCount", "EnteredRunsCount", "SkippedRunsCount", "SettledRunsCount", "WonRunsCount", "LostRunsCount", "WinRatePct", "RoiPct", "LiveSettledOrdersCount", "LiveSkippedOrdersCount", "LiveConditionSkippedOrdersCount", "LiveTechnicalSkippedOrdersCount", "LiveIgnoredOrdersCount", "LiveIgnoredGtdUnfilledCount", "LiveIgnoredCancelledOrdersCount", "LiveIgnoredRejectedOrdersCount", "LiveWonOrdersCount", "LiveLostOrdersCount", "LiveRealizedPnlUsd", "LiveRoiPct", "RealizedPnlUsd", "FilledCostUsd", "AvgFillPrice", "AvgEntryDelaySeconds", "MaxEntryDelaySeconds", "TopSkipReason", "LastOrderUtc", "LastRunUtc"],
+            ["Window", "Name", "OrdersCount", "FilledOrdersCount", "ExpiredOrdersCount", "OpenOrdersCount", "EnteredRunsCount", "SkippedRunsCount", "PaperConditionSkippedRunsCount", "PaperNotAcceptedRunsCount", "SettledRunsCount", "WonRunsCount", "LostRunsCount", "WinRatePct", "RoiPct", "LiveSettledOrdersCount", "LiveSkippedOrdersCount", "LiveConditionSkippedOrdersCount", "LiveTechnicalSkippedOrdersCount", "LiveIgnoredOrdersCount", "LiveIgnoredGtdUnfilledCount", "LiveIgnoredCancelledOrdersCount", "LiveIgnoredRejectedOrdersCount", "LiveWonOrdersCount", "LiveLostOrdersCount", "LiveRealizedPnlUsd", "LiveRoiPct", "RealizedPnlUsd", "FilledCostUsd", "AvgFillPrice", "AvgEntryDelaySeconds", "MaxEntryDelaySeconds", "TopSkipReason", "LastOrderUtc", "LastRunUtc"],
             (await repository.GetStrategyRecentPerformanceAsync(ExportLimit, cancellationToken)).Select(strategy => new object?[]
             {
                 strategy.Window,
@@ -251,6 +253,8 @@ public sealed class DashboardCsvExporter(
                 strategy.OpenOrdersCount,
                 strategy.EnteredRunsCount,
                 strategy.SkippedRunsCount,
+                strategy.PaperConditionSkippedRunsCount,
+                strategy.PaperNotAcceptedRunsCount,
                 strategy.SettledRunsCount,
                 strategy.WonRunsCount,
                 strategy.LostRunsCount,

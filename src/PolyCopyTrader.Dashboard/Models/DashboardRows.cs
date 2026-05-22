@@ -234,6 +234,8 @@ public sealed partial class StrategyPerformanceRow : ObservableObject
         int observedRunsCount,
         int enteredRunsCount,
         int skippedRunsCount,
+        int paperConditionSkippedRunsCount,
+        int paperNotAcceptedRunsCount,
         int settledRunsCount,
         int settledPositionsCount,
         int wonPositionsCount,
@@ -296,6 +298,8 @@ public sealed partial class StrategyPerformanceRow : ObservableObject
         ObservedRunsCount = observedRunsCount;
         EnteredRunsCount = enteredRunsCount;
         SkippedRunsCount = skippedRunsCount;
+        PaperConditionSkippedRunsCount = paperConditionSkippedRunsCount;
+        PaperNotAcceptedRunsCount = paperNotAcceptedRunsCount;
         SettledRunsCount = settledRunsCount;
         SettledPositionsCount = settledPositionsCount;
         WonPositionsCount = wonPositionsCount;
@@ -381,6 +385,10 @@ public sealed partial class StrategyPerformanceRow : ObservableObject
     public int EnteredRunsCount { get; }
 
     public int SkippedRunsCount { get; }
+
+    public int PaperConditionSkippedRunsCount { get; }
+
+    public int PaperNotAcceptedRunsCount { get; }
 
     public int SettledRunsCount { get; }
 
@@ -482,6 +490,8 @@ public sealed record StrategyRecentPerformanceRow(
     int OpenOrdersCount,
     int EnteredRunsCount,
     int SkippedRunsCount,
+    int PaperConditionSkippedRunsCount,
+    int PaperNotAcceptedRunsCount,
     int SettledRunsCount,
     int WonRunsCount,
     int LostRunsCount,

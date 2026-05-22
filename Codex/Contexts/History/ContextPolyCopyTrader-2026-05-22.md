@@ -243,3 +243,9 @@ Request:
 
 Result:
 Queried production PostgreSQL read-only through Dashboard Remote host `192.168.0.101` for the last 24 hours. Confirmed ETH and SOL each have `100` enabled Binance bps strategy rows (`50` fixed and `50` instant) spanning `0.1..5 bps`; ETH has `0` live-enabled rows and SOL has `1`. ETH tick archive covered `14120` ticks across `289` markets with signed move range `-43.63112041` to `54.29672809 bps`; SOL covered `13917` ticks across `289` markets with range `-55.93607306` to `66.08695652 bps`. Actual stored ETH decisions ranged `-6.55660377` to `8.79089883 bps`; actual stored SOL decisions ranged up to `16.23188406 bps`. Conclusion: ETH/SOL have the same bucket-collapse issue as BTC, with SOL market moves even beyond `50 bps`; `0..5` still triggers on larger moves but cannot distinguish higher buckets. No production rows were written and no service/order state was changed.
+## 2026-05-22T19:48:54.2492298Z
+Request:
+Для Paper ставок на Dashboard раздели Skipped на 1. Когда не были соблюдены условия для ставки 2. Ставка была сделана, но не была принята
+
+Result:
+Added split Paper skipped strategy metrics for Dashboard and CSV exports. Skipped runs with no `paper_order_id` now display as condition skips; skipped runs with a `paper_order_id` display as not accepted. Updated domain rows, PostgreSQL aggregations, dashboard row models/mapping, WPF grids, CSV export, and tests. Verification passed with targeted StrategyPerformance tests, isolated Dashboard build, full solution tests, and diff check; default Dashboard output remained locked by the currently running Dashboard process.

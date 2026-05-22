@@ -1100,6 +1100,9 @@ internal sealed class TestAppRepository : IAppRepository
             var runs = StrategyMarketPaperRuns
                 .Where(run => run.StrategyId == strategy.Id)
                 .ToArray();
+            var skippedRuns = runs
+                .Where(run => string.Equals(run.Status, StrategyMarketPaperRunStatuses.Skipped, StringComparison.OrdinalIgnoreCase))
+                .ToArray();
             var useRunsForSettled = runs.Length > 0;
             var settledRuns = runs
                 .Where(run => string.Equals(run.Status, StrategyMarketPaperRunStatuses.Settled, StringComparison.OrdinalIgnoreCase))
@@ -1219,7 +1222,9 @@ internal sealed class TestAppRepository : IAppRepository
                 positions.Length,
                 runs.Count(run => string.Equals(run.Status, StrategyMarketPaperRunStatuses.Observed, StringComparison.OrdinalIgnoreCase)),
                 runs.Count(run => string.Equals(run.Status, StrategyMarketPaperRunStatuses.Entered, StringComparison.OrdinalIgnoreCase)),
-                runs.Count(run => string.Equals(run.Status, StrategyMarketPaperRunStatuses.Skipped, StringComparison.OrdinalIgnoreCase)),
+                skippedRuns.Length,
+                skippedRuns.Count(run => run.PaperOrderId is null),
+                skippedRuns.Count(run => run.PaperOrderId is not null),
                 settledRuns.Length,
                 settledCount,
                 wonCount,
@@ -1417,6 +1422,8 @@ internal sealed class TestAppRepository : IAppRepository
                     orders.Count(order => order.Status is PaperOrderStatus.Pending or PaperOrderStatus.PartiallyFilled),
                     enteredRuns.Length,
                     skippedRuns.Length,
+                    skippedRuns.Count(run => run.PaperOrderId is null),
+                    skippedRuns.Count(run => run.PaperOrderId is not null),
                     settledRuns.Length,
                     wonRuns,
                     lostRuns,
