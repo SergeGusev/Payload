@@ -1,3 +1,16 @@
+## Active Update 2026-05-22 Previous Winner Flip Strategy Check
+Goal: Check whether existing BTC 5m strategies buy the opposite outcome after the immediately previous winner.
+Status: Completed
+Done:
+- Confirmed `BTC Up or Down 5m Skip 1` is the exact previous-winner flip variant: after the immediately previous inferred `Up` result it buys `Down`, and after previous `Down` it buys `Up`.
+- Confirmed `Skip 2..5` do the same countertrend action only after the latest N strict previous BTC 5m windows are all the same outcome.
+- Confirmed `Skip Revert 1..5` invert the Skip decision, so they follow the previous result streak instead of flipping it.
+- Confirmed `Prev Score Countertrend 10..90` is similar but not exact winner-flip: it buys against the previous market's Binance deviation bias, not directly against the previous settled winner.
+- Queried production PostgreSQL read-only: `Skip 1..5`, `Prev Score Countertrend 10..90`, and `Dynamic Markov` are currently disabled; `Skip 4 Revert` and `Skip 5 Revert` are enabled but they are trend-following, not previous-winner flip.
+Next: Enable `BTC Up or Down 5m Skip 1` if the desired live/Paper experiment is exactly "previous Up -> Down, previous Down -> Up"; decide Paper vs Live separately.
+Notes: Diagnostic only. No source behavior, production data, strategy flags, service state, orders, or cancels were changed. Temporary read-only .NET/Npgsql probe was removed.
+Blockers: None.
+
 ## Active Update 2026-05-22 Production Manual Pauses Cleared
 Goal: Clear all manual Dashboard `Paused` flags on production while preserving automatic Live pauses.
 Status: Completed

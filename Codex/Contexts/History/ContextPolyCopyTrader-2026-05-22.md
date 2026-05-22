@@ -108,3 +108,10 @@ Request:
 
 Result:
 Connected to production PostgreSQL via Dashboard Remote host `192.168.0.101` and cleared only manual strategy pauses. Before update there were `1470` strategies, `102` manual `paused`, `102` active manual paused, `102` `paused_until_utc` set, and `13` `auto_live_paused`. Updated `strategies` with `paused=false`, `paused_until_utc=NULL`, `updated_at_utc=clock_timestamp()` for rows with manual pause state. After update there are `0` manual paused rows and `13` `auto_live_paused` rows preserved. Temporary .NET/Npgsql update probe was removed. No source behavior, service restart, live order submission, or cancel action was performed.
+
+## 2026-05-22T12:14:13.1961047Z
+Request:
+У нас есть стратегии, которые меняют направление на противоположное тому, которое только что выиграло? Было Up - ставим Down и наоборот.
+
+Result:
+Confirmed from code/docs and a production read-only query that `BTC Up or Down 5m Skip 1` is the exact previous-winner flip strategy: after the immediately previous inferred BTC 5m `Up` result it buys `Down`, and after previous `Down` it buys `Up`. `Skip 2..5` do the same only after N consecutive same-outcome previous results. `Skip Revert 1..5` follow the previous streak instead of flipping it. `Prev Score Countertrend 10..90` is similar but uses previous-market Binance deviation bias, not the actual previous winner. On production, `Skip 1..5`, `Prev Score Countertrend 10..90`, and `Dynamic Markov` are currently disabled; only `Skip 4 Revert` and `Skip 5 Revert` are enabled among this family, and they are not flip strategies. No source behavior, production data, strategy flags, orders, or cancels were changed.
