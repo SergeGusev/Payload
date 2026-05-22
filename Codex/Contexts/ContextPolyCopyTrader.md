@@ -1,3 +1,18 @@
+## Active Update 2026-05-22 Binance Bps Last Day Range Recheck
+Goal: Re-check whether the `1..50 bps` Binance bps grid is too wide based on the last 24 hours of production data.
+Status: Completed
+Done:
+- Queried production PostgreSQL read-only through Dashboard Remote host `192.168.0.101`; no production rows were changed.
+- Confirmed fresh Binance bps strategy-run history is short because the bps reset cleared history during the recent deploy: only about `14-15` markets per asset had new bps decisions after reset.
+- In the fresh actual bps decision rows, de-duplicated by asset/mode/market, max absolute move was small: BTC `4.9013 bps`, ETH `16.5897 bps`, SOL `13.0208 bps`.
+- Used `btc_up_down_5m_odds_ticks` and `crypto_up_down_5m_odds_ticks` for a full last-24h proxy. First 30s per-market max abs bps: BTC p95 `5.3163`, max `14.9695`; ETH p95 `7.4251`, max `18.1601`; SOL p95 `8.0560`, max `24.1019`.
+- First 60s per-market max abs bps: BTC p95 `7.5101`, max `14.9695`; ETH p95 `10.2937`, max `18.1601`; SOL p95 `12.6191`, max `24.1075`.
+- First 120s per-market max abs bps: BTC p95 `11.0483`, max `16.5963`; ETH p95 `15.0053`, max `37.3432`; SOL p95 `18.4292`, max `54.6253` with only `1` market above `50`.
+- Full 5m per-market max abs bps: BTC p95 `17.8947`, max `36.0214`; ETH p95 `22.1652`, max `39.8895`; SOL p95 `29.2731`, max `72.4380`.
+Next: If pruning is requested, consider keeping Binance bps dense only up to roughly `20` or `25` for early-entry research; retain higher SOL tail thresholds only if full-window/late-entry behavior is being studied.
+Notes: Read-only production analysis only. No source files, production data, orders, strategy flags, or service state were changed. No tests were run because no implementation changed.
+Blockers: None.
+
 ## Active Update 2026-05-22 Middle Bps Grid To 100
 Goal: Extend active BTC Middle bps strategy grids to `1..100 bps`.
 Status: Completed

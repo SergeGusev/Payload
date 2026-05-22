@@ -289,3 +289,9 @@ Request:
 
 Result:
 Expanded BTC Middle bps strategy grids to `1..100 bps` for both `Middle 1` and `Middle 1 Revert`. PostgreSQL seeding now creates depth `1` thresholds with `generate_series(1, 100)` while preserving existing `1..9` IDs and assigning deterministic IDs to new `10..100` rows. The Middle decision path now actually applies `DecisionThresholdBps`, skipping with `btc_reference_mean_deviation_below_threshold` when the absolute deviation from the arithmetic mean is below the configured threshold, and diagnostics now include signed/absolute mean-deviation bps fields. Updated tests and docs. Verification passed: focused BTC processor/storage tests `172/172`, full solution tests `539/539`, and `git diff --check` with LF/CRLF warnings only.
+## 2026-05-22T20:42:17.7921648Z
+Request:
+Я начинаю думать, что я зря такой огромный bps сделал для Binance bps стратегий. У тебя есть возможность проверить реальные значения за последние сутки, например?
+
+Result:
+Queried production PostgreSQL read-only through Dashboard Remote host `192.168.0.101`. Because the bps history reset during the recent deploy left only about `14-15` fresh bps decision markets per asset, fresh actual bps decision rows showed small max abs moves: BTC `4.9013 bps`, ETH `16.5897 bps`, SOL `13.0208 bps`. For a full last-24h proxy, used odds archive ticks. First 30s per-market max abs bps: BTC p95 `5.3163`, max `14.9695`; ETH p95 `7.4251`, max `18.1601`; SOL p95 `8.0560`, max `24.1019`. First 60s: BTC p95 `7.5101`, max `14.9695`; ETH p95 `10.2937`, max `18.1601`; SOL p95 `12.6191`, max `24.1075`. First 120s: BTC p95 `11.0483`, max `16.5963`; ETH p95 `15.0053`, max `37.3432`; SOL p95 `18.4292`, max `54.6253` with only one market above `50`. Full 5m maxima can reach SOL `72.4380`, but that is late-window behavior, not typical early Binance bps entry. No source or production data was changed.
