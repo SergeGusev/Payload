@@ -276,3 +276,10 @@ Request:
 
 Result:
 Confirmed from current code/config that Middle strategies use `btcUsdReferencePriceCache.Snapshot.ArithmeticMeanUsd`. The Binance BTC reference worker samples the latest BTC/USDT trade once per `BinanceBtcUsdReference:SampleIntervalSeconds` (`60` seconds in defaults/current appsettings) and the cache keeps `BinanceBtcUsdReference:WindowSize` latest samples (`100`). A full cache therefore averages roughly the last `100` minutes; after service restart or before the window fills, the mean is over the currently available in-memory samples. No code or production data was changed.
+
+## 2026-05-22T20:24:11.0833221Z
+Request:
+Ты сможешь сейчас по истории понять, какой диапазон bps нужно реально учитывать для Middle ?
+
+Result:
+Queried production PostgreSQL read-only and parsed Middle decision JSON to compute `abs(btc_current_price_usd - reference_arithmetic_mean_usd) / reference_arithmetic_mean_usd * 10000`. After de-duplicating old standard/revert/bps/depth rows, there were `1081` unique market/reference observations from `2026-05-13T07:30:01Z` through `2026-05-22T20:10:17Z`. All-history abs bps distribution: p50 `10.8294`, p75 `21.2655`, p90 `37.3938`, p95 `48.9202`, p99 `88.3634`, max `125.0515`. Full 100-sample-window subset (`670` observations) was similar: p95 `49.5484`, p99 `83.0262`, max `125.0515`. Conclusion: `1..9 bps` is too narrow; use at least `1..50 bps`, and consider research tail coverage to `75`/`100` or `1..100` if strategy count is acceptable. No production rows or source code were changed.

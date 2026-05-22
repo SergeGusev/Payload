@@ -1,3 +1,17 @@
+## Active Update 2026-05-22 Middle Bps History Range
+Goal: Determine from production history what Middle bps deviation range is worth tracking.
+Status: Completed
+Done:
+- Queried production PostgreSQL read-only through Dashboard Remote host `192.168.0.101`; no production rows were changed.
+- Parsed Middle decision JSON fields `btc_current_price_usd` and `reference_arithmetic_mean_usd` and computed `abs(current - mean) / mean * 10000`.
+- De-duplicated old Middle standard/revert/bps/depth rows to `1081` unique market/reference observations from `2026-05-13T07:30:01Z` through `2026-05-22T20:10:17Z`.
+- Unique all-history abs bps distribution: p50 `10.8294`, p75 `21.2655`, p90 `37.3938`, p95 `48.9202`, p99 `88.3634`, max `125.0515`.
+- Full 100-sample-window subset (`670` observations) was similar: p50 `11.4062`, p90 `37.8853`, p95 `49.5484`, p99 `83.0262`, max `125.0515`.
+- Bucket counts across unique observations: `<10` `501`, `10..20` `284`, `20..30` `144`, `30..40` `60`, `40..50` `43`, `50..75` `32`, `75..100` `12`, `100+` `5`.
+Next: If Middle bps thresholds are implemented/reintroduced, use at least `1..50 bps`; consider adding research tail buckets to `75`/`100` or `1..100` if strategy count is acceptable.
+Notes: Read-only DB analysis only. No source tests were run because no implementation changed.
+Blockers: None.
+
 ## Active Update 2026-05-22 Middle Average Window Answer
 Goal: Clarify what time window Middle strategies use for their Binance reference arithmetic mean.
 Status: Completed
