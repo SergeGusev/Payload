@@ -1,3 +1,17 @@
+## Active Update 2026-05-22 Production Auto-Pause Deploy Check
+Goal: Verify the deployed service is running the restored auto-pause build and that automatic pauses work in production.
+Status: Completed
+Done:
+- Confirmed production PostgreSQL at `192.168.0.101` is reachable read-only and the service heartbeat is fresh.
+- Confirmed production service is running commit `d52d9d5` (`info=1.0.0+d52d9d5fe62e3c3c5ee2455fd992d97f271cae34`), started `2026-05-22T05:20:23Z`, mode `Live`, status `Running`, `last_error` empty.
+- Confirmed schema initialization ran from the new build: `btc_up_down_5m_arbitrage_scans` exists.
+- Confirmed auto-pause triggered after post-deploy losses: BTC instant bps `0.1` through `1.4` paused at about `2026-05-22T05:20:27Z` until about `2026-05-22T17:20:27Z`; SOL non-instant bps `0.1` through `1.1` paused at about `2026-05-22T05:26:51Z` until about `2026-05-22T17:26:51Z`.
+- Confirmed paused BTC instant strategies immediately skipped later entries with `strategy_paused`; each had 2 recent skips by the second check.
+- Confirmed no pause-related `api_errors` or `live_trading_events` in the last 2 hours.
+Next: Continue monitoring later markets if needed; strategies with negative 12-hour totals from before this deployment are not paused retroactively until they have a new losing settlement.
+Notes: Used a temporary C#/.NET/Npgsql read-only probe outside the repo with `default_transaction_read_only=on`, then removed it. No production DB write, service restart, live order submission, cancel action, or source-code change was performed.
+Blockers: None.
+
 ## Active Update 2026-05-22 Restore Strategy Auto-Pause
 Goal: Restore automatic strategy pauses after losing settlements while keeping manual Dashboard pause control.
 Status: Completed
