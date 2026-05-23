@@ -39,3 +39,10 @@ Request:
 
 Result:
 Rechecked production read-only after the acceleration deploy. `PolyCopyTrader.Service` still runs commit `1175fae2cab0fa4cfc733f47d6054bcb5376787e`, status `Running`, mode `Live`, heartbeat age about `1` second, and `last_error` null. Active market WebSocket rows were connected/fresh, `api_errors` since service start remained `0`, and no PostgreSQL query was active over `30` seconds. Fresh BTC/crypto odds ticks, strategy runs, and paper orders were updating. There was no enabled due `Observed` backlog; due observed rows were only disabled strategies. No new `entry_due_expired` or `entry_due_already_passed` rows appeared in the last `10` minutes; older rows were restart-time or stale backlog cleanup. Middle BTC/ETH/SOL processing continued with normal threshold skips and entered/fill/settlement activity. No production rows were changed.
+
+## 2026-05-23T23:46:55.5007554Z
+Request:
+Ставки ставятся?
+
+Result:
+Checked production read-only for order placement. Paper orders are being created actively: the last `5` minutes had `71` Paper orders (`63` Pending, `8` Expired) and the last `15` minutes had `285` Paper orders (`74` Pending, `95` Filled, `116` Expired). Recent rows included BTC maker/GTD/PreOpen and SOL Middle orders, with latest created around `2026-05-23T23:46:40Z`. No real Live bets are being placed: production has `0` strategies with `live_stakes`, `0` effective live strategies, and `live_orders` returned no rows for the last `24` hours. No production rows were changed.

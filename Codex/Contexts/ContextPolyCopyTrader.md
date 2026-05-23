@@ -1,3 +1,16 @@
+## Active Update 2026-05-24 Paper Order Placement Check
+Goal: Confirm whether bets/orders are being placed after the acceleration deploy.
+Status: Completed
+Done:
+- Confirmed production strategy flags show `2886` strategies total, `1837` enabled, `0` with `live_stakes`, and `0` effective live strategies.
+- Confirmed Paper orders are being created actively: last `5` minutes had `71` Paper orders (`63` Pending, `8` Expired) with about `$200.09` notional; last `15` minutes had `285` Paper orders (`74` Pending, `95` Filled, `116` Expired) with about `$886.37` notional.
+- Confirmed recent Paper orders include BTC maker/GTD/PreOpen and SOL Middle rows, with latest rows around `2026-05-23T23:46:40Z`.
+- Confirmed `live_orders` returned no rows for the last `24` hours, so no real Live bets are being placed.
+- Confirmed strategy paper runs are entering continuously, with recent entered-run counts in multiple minutes including `57` at `23:45 UTC` and `6` at `23:46 UTC`.
+Next: None.
+Notes: Production check was read-only via `out\dbprobe` with temporary host override to `192.168.0.101`. One exploratory SQL failed due reserved alias `window`, then corrected.
+Blockers: None.
+
 ## Active Update 2026-05-24 Strategy Acceleration Follow-up Production Check
 Goal: Recheck whether production remains healthy after the acceleration deploy.
 Status: Completed
