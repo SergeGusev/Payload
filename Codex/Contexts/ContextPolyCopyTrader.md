@@ -1,3 +1,18 @@
+## Active Update 2026-05-23 Production Check ETH SOL Skip Deploy
+Goal: Verify production after deploying ETH/SOL non-Revert Skip strategies.
+Status: Completed
+Done:
+- Queried production PostgreSQL read-only through the existing `out\dbprobe` with Dashboard Remote host override `192.168.0.101`; no production rows were changed.
+- Confirmed `PolyCopyTrader.Service` is running commit `fe9b9c5` (`info=1.0.0+fe9b9c5167a735c3c6f3d268051150a1d01ebf19`), status `Running`, mode `Live`, heartbeat age about `7` seconds, and `last_error` null.
+- Confirmed schema seeding inserted all new ETH/SOL Skip rows: `5` plain Skip, `50` Skip bps, and `50` Skip bps Instant per asset, all enabled, `live_stakes=false`, not paused, and no ETH/SOL Revert rows.
+- Confirmed total production strategies increased to `2082`; `1032` enabled, `0` live, `19` auto-live-paused, and `0` manually paused.
+- Confirmed new ETH/SOL Skip lifecycle rows are being created and updated for current markets; no `entry_due_expired` issue was observed for these rows.
+- Confirmed Skip bps diagnostics use `clob_close_book_price_evidence_previous_crypto_move_threshold` with `reference_asset_symbol` `ETH`/`SOL` and crypto bps values from `crypto_up_down_5m_odds_ticks`.
+- Confirmed fresh core activity after deploy: BTC odds, crypto odds, arbitrage scans, strategy runs, and paper orders were all updating; no post-start `api_errors`; no active PostgreSQL queries over `30` seconds.
+Next: Let the ETH/SOL Skip rows accumulate Paper history. Current first-window skips are expected: missing pre-deploy close-book snapshots, below-threshold previous crypto moves, or `opposite_outcome_open_order`.
+Notes: Production read-only verification only. No source tests were run because no source behavior changed in this task. One first diagnostic SELECT failed after partial output due a wrong `order_book_snapshots.created_at_utc` column name, then corrected to `snapshot_at_utc`.
+Blockers: None.
+
 ## Active Update 2026-05-23 ETH SOL Skip Strategies
 Goal: Add ETH/SOL 5-minute Skip strategy variants analogous to BTC Skip variants, excluding Revert variants.
 Status: Completed
