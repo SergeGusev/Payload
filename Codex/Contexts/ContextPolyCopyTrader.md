@@ -1,3 +1,15 @@
+## Active Update 2026-05-23 More 270 Expiration Timestamp Answer
+Goal: State the current expiration timestamps used for `BTC Up or Down 5m More 270 Below 60/65`.
+Status: Completed
+Done:
+- Re-read workflow, project rules, active context, Git status, and confirmed `git pull --ff-only` was already up to date.
+- Rechecked `ResolveOpeningLimitExpiration` and appsettings defaults: `OpeningLimitGtdTtlSeconds=120`, `OpeningLimitExpireBeforeMarketEndSeconds=60`, and `ClobGtdExpirationSecurityBufferSeconds=60`.
+- Confirmed these `270s` default-lifetime variants enter after the 5-minute midpoint, bypass the `market_end_relative` pre-close cancel, and normally get `LocalExpiresAtUtc` / paper order `expires_at_utc` equal to `market.EndDateUtc`.
+- Confirmed any live/shadow CLOB GTD wire expiration is `LocalExpiresAtUtc + 60s`, while the local cancel deadline remains market end.
+Next: None.
+Notes: Read-only answer only. No source behavior changed and no project tests were run.
+Blockers: None.
+
 ## Active Update 2026-05-23 More 270 GTD Necessity Opinion
 Goal: Assess whether GTD is meaningful for `BTC Up or Down 5m More 270 Below 60/65` given only about `30` seconds remain.
 Status: Completed

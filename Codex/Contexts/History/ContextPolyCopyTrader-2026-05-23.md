@@ -53,3 +53,10 @@ Request:
 
 Result:
 Rechecked the opening-limit expiration and live validation paths. Concluded that the configured `120s` GTD TTL is practically irrelevant for `270s` entries because expiration is capped by market end; the only useful part of GTD there is an explicit safety boundary. Also noted that near-close live placement is borderline because live GTD validation requires enough local TTL and CLOB expiration buffer.
+
+## 2026-05-23T20:28:32.9071912Z
+Request:
+Скажи, какое сейчас мы ставим время окончания для этих стратегий?
+
+Result:
+Rechecked the current expiration path and answered that `BTC Up or Down 5m More 270 Below 60/65` normally set the local/paper order expiration to `market.EndDateUtc` because the `120s` TTL is capped by market end. For live/shadow CLOB GTD, the wire expiration would be `market.EndDateUtc + 60s`, while the local cancel deadline remains market end.
