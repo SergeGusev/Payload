@@ -1,3 +1,17 @@
+## Active Update 2026-05-23 Middle Revert 19 Plausibility Check
+Goal: Assess whether high revenue for `BTC Up or Down 5m Middle 1 Revert 19 bps` is logically plausible.
+Status: Completed
+Done:
+- Re-read workflow, project rules, active context, Git status, and confirmed `git pull --ff-only` was already up to date.
+- Queried production PostgreSQL read-only by overriding the existing probe connection host to `192.168.0.101`; no production rows were changed.
+- Confirmed target production strategy exists, enabled, Paper-only, and not auto-live-paused.
+- Checked target aggregate performance: `20` settled runs, `13` wins, `7` losses, settled stake `58.0283`, settlement value `84.9300`, realized PnL `26.9017`, settled ROI `46.36%`.
+- Confirmed all target settled entries selected `Up`, with positive BTC move-from-mean values from about `19.8540` to `52.5638` bps and `dynamic_break_even_book_bootstrap` pricing.
+- Compared neighboring `15..25 bps` Middle rows: Revert rows were broadly positive on the short sample while standard rows were mostly negative.
+Next: None.
+Notes: Read-only explanation/data check only. No source behavior changed and no project tests were run.
+Blockers: None.
+
 ## Active Update 2026-05-23 Middle Bps Logic Explanation
 Goal: Explain how `BTC Up or Down 5m Middle 1 N bps` and `BTC Up or Down 5m Middle 1 Revert N bps` work.
 Status: Completed

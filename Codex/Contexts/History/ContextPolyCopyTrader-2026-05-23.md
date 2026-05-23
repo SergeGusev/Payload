@@ -25,3 +25,10 @@ Request:
 
 Result:
 Inspected the current Middle bps strategy definitions and BTC 5m processor implementation, then prepared a detailed explanation of the standard and Revert `Middle 1 N bps` signal, threshold gate, skip reasons, and non-Instant GTD Paper limit pricing. No source behavior changed.
+
+## 2026-05-23T17:24:43.6287627Z
+Request:
+Меня удивляет такая высокая выручка для BTC Up or Down 5m Middle 1 Revert 19 bps. То есть уже на 19 выше, а мы всё равно ещё выше лезем. Тебе это кажется логичным?
+
+Result:
+Queried production read-only and assessed the target strategy. `BTC Up or Down 5m Middle 1 Revert 19 bps` had `20` settled Paper runs, `13` wins, `7` losses, `58.0283` settled stake, `84.9300` settlement value, and `26.9017` realized PnL; all settled target entries selected `Up` while BTC was above the rolling mean by about `19.8540..52.5638` bps. Explained that this is logically a momentum/continuation bet rather than mean reversion, but the sample is short and not yet robust.
