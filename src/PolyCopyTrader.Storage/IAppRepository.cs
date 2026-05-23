@@ -655,6 +655,15 @@ public interface IAppRepository
         return Task.FromResult<IReadOnlyList<CryptoUpDown5mOddsTick>>([]);
     }
 
+    Task<IReadOnlyList<CryptoUpDown5mOddsTick>> GetCryptoUpDown5mOddsTicksForMarketStartAsync(
+        string assetSymbol,
+        DateTimeOffset marketStartUtc,
+        int limit = 500,
+        CancellationToken cancellationToken = default)
+    {
+        return Task.FromResult<IReadOnlyList<CryptoUpDown5mOddsTick>>([]);
+    }
+
     Task AddApiErrorAsync(ApiError error, CancellationToken cancellationToken = default);
 
     Task<IReadOnlyList<ApiError>> GetRecentApiErrorsAsync(int limit = 100, CancellationToken cancellationToken = default);

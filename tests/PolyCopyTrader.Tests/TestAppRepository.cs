@@ -2202,6 +2202,23 @@ internal sealed class TestAppRepository : IAppRepository
                 .ToArray());
     }
 
+    public Task<IReadOnlyList<CryptoUpDown5mOddsTick>> GetCryptoUpDown5mOddsTicksForMarketStartAsync(
+        string assetSymbol,
+        DateTimeOffset marketStartUtc,
+        int limit = 500,
+        CancellationToken cancellationToken = default)
+    {
+        return Task.FromResult<IReadOnlyList<CryptoUpDown5mOddsTick>>(
+            CryptoUpDown5mOddsTicks
+                .Where(tick =>
+                    string.Equals(tick.AssetSymbol, assetSymbol, StringComparison.OrdinalIgnoreCase) &&
+                    Math.Abs((tick.MarketStartUtc - marketStartUtc).TotalSeconds) <= 2)
+                .OrderBy(tick => tick.SampledAtUtc)
+                .ThenBy(tick => tick.CreatedAtUtc)
+                .Take(limit)
+                .ToArray());
+    }
+
     public Task AddApiErrorAsync(ApiError error, CancellationToken cancellationToken = default)
     {
         if (ThrowOnAddApiError)

@@ -3893,6 +3893,40 @@ LIMIT @Limit;
 		return results;
 	}
 
+	public async Task<IReadOnlyList<CryptoUpDown5mOddsTick>> GetCryptoUpDown5mOddsTicksForMarketStartAsync(string assetSymbol, DateTimeOffset marketStartUtc, int limit = 500, CancellationToken cancellationToken = default(CancellationToken))
+	{
+		await using NpgsqlConnection connection = await OpenConnectionAsync(cancellationToken);
+		await using NpgsqlCommand command = CreateCommand(connection, """
+SELECT id, asset_symbol, binance_symbol, market_id, condition_id, market_slug, market_start_utc, market_end_utc,
+       sampled_at_utc, seconds_after_start, seconds_to_close,
+       binance_price_usd, binance_source_updated_at_utc, binance_fetched_at_utc,
+       binance_start_price_usd, asset_move_from_start_usd, asset_move_from_start_bps,
+       up_asset_id, up_best_bid, up_best_ask, up_mid, up_price_proxy,
+       up_price_proxy_kind, up_last_trade_price, up_book_source, up_book_age_ms,
+       down_asset_id, down_best_bid, down_best_ask, down_mid, down_price_proxy,
+       down_price_proxy_kind, down_last_trade_price, down_book_source, down_book_age_ms,
+       diagnostics_json::text, created_at_utc
+FROM crypto_up_down_5m_odds_ticks
+WHERE lower(asset_symbol) = lower(@AssetSymbol)
+  AND market_start_utc >= @MarketStartMinUtc
+  AND market_start_utc <= @MarketStartMaxUtc
+ORDER BY sampled_at_utc ASC, created_at_utc ASC
+LIMIT @Limit;
+""");
+		command.Parameters.AddWithValue("AssetSymbol", assetSymbol);
+		command.Parameters.AddWithValue("MarketStartMinUtc", UtcDateTime(marketStartUtc.AddSeconds(-2)));
+		command.Parameters.AddWithValue("MarketStartMaxUtc", UtcDateTime(marketStartUtc.AddSeconds(2)));
+		command.Parameters.AddWithValue("Limit", limit);
+		await using NpgsqlDataReader reader = await command.ExecuteReaderAsync(cancellationToken);
+		List<CryptoUpDown5mOddsTick> results = [];
+		while (await reader.ReadAsync(cancellationToken))
+		{
+			results.Add(ReadCryptoUpDown5mOddsTick(reader));
+		}
+
+		return results;
+	}
+
 	public async Task AddApiErrorAsync(ApiError error, CancellationToken cancellationToken = default(CancellationToken))
 	{
 		await using NpgsqlConnection connection = await OpenConnectionAsync(cancellationToken);

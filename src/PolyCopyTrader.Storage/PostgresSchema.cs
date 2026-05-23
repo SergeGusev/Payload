@@ -1293,7 +1293,9 @@ WHERE (
         code LIKE 'btc_up_down_5m_binance_bps_%'
      OR code LIKE 'btc_up_down_5m_skip_bps_%'
      OR code LIKE 'eth_up_down_5m_binance_bps_%'
+     OR code LIKE 'eth_up_down_5m_skip_bps_%'
      OR code LIKE 'sol_up_down_5m_binance_bps_%'
+     OR code LIKE 'sol_up_down_5m_skip_bps_%'
     )
   AND EXISTS (
         SELECT 1
@@ -1301,7 +1303,9 @@ WHERE (
         WHERE legacy_strategy.code LIKE 'btc_up_down_5m_binance_bps_0_%'
            OR legacy_strategy.code LIKE 'btc_up_down_5m_skip_bps_0_%'
            OR legacy_strategy.code LIKE 'eth_up_down_5m_binance_bps_0_%'
+           OR legacy_strategy.code LIKE 'eth_up_down_5m_skip_bps_0_%'
            OR legacy_strategy.code LIKE 'sol_up_down_5m_binance_bps_0_%'
+           OR legacy_strategy.code LIKE 'sol_up_down_5m_skip_bps_0_%'
     );
 
 INSERT INTO strategies (id, code, name, description, enabled, paper_stake_amount, created_at_utc, updated_at_utc)
@@ -2199,6 +2203,112 @@ SELECT
     asset_symbol || ' Up or Down 5m Binance ' || threshold_name || ' bps Instant',
     'After ' || asset_symbol || ' 5m trading starts, compare the latest Binance ' || asset_symbol || '/USDT trade-stream price with the archived market-start reference; skip unless the absolute move from start is at least ' || threshold_name || ' bps; above start buys Up, below start buys Down. Paper entry is a GTD limit BUY priced from current executable ask depth so the order can fill immediately; settlement uses only actually filled shares.',
     false,
+    1.00,
+    now(),
+    now()
+FROM formatted
+ON CONFLICT (id) DO UPDATE SET
+    code = excluded.code,
+    name = excluded.name,
+    description = excluded.description,
+    updated_at_utc = excluded.updated_at_utc;
+
+INSERT INTO strategies (id, code, name, description, enabled, paper_stake_amount, created_at_utc, updated_at_utc)
+WITH assets(asset_symbol, skip_id_group) AS (
+    VALUES
+        ('ETH', '8065'),
+        ('SOL', '8068')
+),
+depths(depth) AS (
+    SELECT generate_series(1, 5)
+),
+formatted AS (
+    SELECT
+        asset_symbol,
+        skip_id_group,
+        depth,
+        depth::text AS depth_name
+    FROM assets
+    CROSS JOIN depths
+)
+SELECT
+    ('b7c50005-0000-4000-' || skip_id_group || '-' || lpad(depth::text, 12, '0'))::uuid,
+    lower(asset_symbol) || '_up_down_5m_skip_' || depth_name,
+    asset_symbol || ' Up or Down 5m Skip ' || depth_name,
+    'Immediately after ' || asset_symbol || ' 5m market open, inspect the latest ' || depth_name || ' settled ' || asset_symbol || ' 5m market result(s); after consecutive Up results buy Down, after consecutive Down results buy Up, otherwise skip. Paper entry is a GTD limit BUY with dynamic break-even pricing; settlement uses only actually filled shares.',
+    true,
+    1.00,
+    now(),
+    now()
+FROM formatted
+ON CONFLICT (id) DO UPDATE SET
+    code = excluded.code,
+    name = excluded.name,
+    description = excluded.description,
+    updated_at_utc = excluded.updated_at_utc;
+
+INSERT INTO strategies (id, code, name, description, enabled, paper_stake_amount, created_at_utc, updated_at_utc)
+WITH assets(asset_symbol, bps_id_group, instant_id_group) AS (
+    VALUES
+        ('ETH', '8066', '8067'),
+        ('SOL', '8069', '8070')
+),
+thresholds(threshold_tenths) AS (
+    SELECT generate_series(1, 50)
+),
+formatted AS (
+    SELECT
+        asset_symbol,
+        bps_id_group,
+        instant_id_group,
+        threshold_tenths,
+        threshold_tenths::text AS threshold_name,
+        threshold_tenths::text AS code_suffix
+    FROM assets
+    CROSS JOIN thresholds
+)
+SELECT
+    ('b7c50005-0000-4000-' || bps_id_group || '-' || lpad((100 + threshold_tenths)::text, 12, '0'))::uuid,
+    lower(asset_symbol) || '_up_down_5m_skip_bps_' || code_suffix,
+    asset_symbol || ' Up or Down 5m Skip ' || threshold_name || ' bps',
+    'Immediately after ' || asset_symbol || ' 5m market open, inspect the immediately previous ' || asset_symbol || ' 5m close-book result and the previous market''s archived Binance ' || asset_symbol || ' start/end move; skip unless the absolute previous-market move is at least ' || threshold_name || ' bps. After previous Up buy Down, after previous Down buy Up. Paper entry is a GTD limit BUY at fixed 0.50 until the configured GTD deadline; settlement uses only actually filled shares.',
+    true,
+    1.00,
+    now(),
+    now()
+FROM formatted
+ON CONFLICT (id) DO UPDATE SET
+    code = excluded.code,
+    name = excluded.name,
+    description = excluded.description,
+    updated_at_utc = excluded.updated_at_utc;
+
+INSERT INTO strategies (id, code, name, description, enabled, paper_stake_amount, created_at_utc, updated_at_utc)
+WITH assets(asset_symbol, bps_id_group, instant_id_group) AS (
+    VALUES
+        ('ETH', '8066', '8067'),
+        ('SOL', '8069', '8070')
+),
+thresholds(threshold_tenths) AS (
+    SELECT generate_series(1, 50)
+),
+formatted AS (
+    SELECT
+        asset_symbol,
+        bps_id_group,
+        instant_id_group,
+        threshold_tenths,
+        threshold_tenths::text AS threshold_name,
+        threshold_tenths::text AS code_suffix
+    FROM assets
+    CROSS JOIN thresholds
+)
+SELECT
+    ('b7c50005-0000-4000-' || instant_id_group || '-' || lpad((100 + threshold_tenths)::text, 12, '0'))::uuid,
+    lower(asset_symbol) || '_up_down_5m_skip_bps_' || code_suffix || '_instant',
+    asset_symbol || ' Up or Down 5m Skip ' || threshold_name || ' bps Instant',
+    'Immediately after ' || asset_symbol || ' 5m market open, inspect the immediately previous ' || asset_symbol || ' 5m close-book result and the previous market''s archived Binance ' || asset_symbol || ' start/end move; skip unless the absolute previous-market move is at least ' || threshold_name || ' bps. After previous Up buy Down, after previous Down buy Up. Paper entry is a GTD limit BUY priced from current executable ask depth so the order can fill immediately; settlement uses only actually filled shares.',
+    true,
     1.00,
     now(),
     now()
@@ -4143,7 +4253,9 @@ BEGIN
         WHERE strategy.code LIKE 'btc_up_down_5m_binance_bps_%'
            OR strategy.code LIKE 'btc_up_down_5m_skip_bps_%'
            OR strategy.code LIKE 'eth_up_down_5m_binance_bps_%'
-           OR strategy.code LIKE 'sol_up_down_5m_binance_bps_%';
+           OR strategy.code LIKE 'eth_up_down_5m_skip_bps_%'
+           OR strategy.code LIKE 'sol_up_down_5m_binance_bps_%'
+           OR strategy.code LIKE 'sol_up_down_5m_skip_bps_%';
 
         SELECT count(*)::integer
         INTO target_strategy_count
@@ -4181,7 +4293,9 @@ BEGIN
         WHERE signal.trader_wallet LIKE 'strategy:btc_up_down_5m_binance_bps_%'
            OR signal.trader_wallet LIKE 'strategy:btc_up_down_5m_skip_bps_%'
            OR signal.trader_wallet LIKE 'strategy:eth_up_down_5m_binance_bps_%'
-           OR signal.trader_wallet LIKE 'strategy:sol_up_down_5m_binance_bps_%';
+           OR signal.trader_wallet LIKE 'strategy:eth_up_down_5m_skip_bps_%'
+           OR signal.trader_wallet LIKE 'strategy:sol_up_down_5m_binance_bps_%'
+           OR signal.trader_wallet LIKE 'strategy:sol_up_down_5m_skip_bps_%';
 
         SELECT count(*)::integer
         INTO active_live_orders
@@ -4273,14 +4387,18 @@ BEGIN
             WHERE paper_position.copied_trader_wallet LIKE 'strategy:btc_up_down_5m_binance_bps_%'
                OR paper_position.copied_trader_wallet LIKE 'strategy:btc_up_down_5m_skip_bps_%'
                OR paper_position.copied_trader_wallet LIKE 'strategy:eth_up_down_5m_binance_bps_%'
-               OR paper_position.copied_trader_wallet LIKE 'strategy:sol_up_down_5m_binance_bps_%';
+               OR paper_position.copied_trader_wallet LIKE 'strategy:eth_up_down_5m_skip_bps_%'
+               OR paper_position.copied_trader_wallet LIKE 'strategy:sol_up_down_5m_binance_bps_%'
+               OR paper_position.copied_trader_wallet LIKE 'strategy:sol_up_down_5m_skip_bps_%';
             GET DIAGNOSTICS deleted_paper_positions = ROW_COUNT;
 
             DELETE FROM paper_position_settlements settlement
             WHERE settlement.copied_trader_wallet LIKE 'strategy:btc_up_down_5m_binance_bps_%'
                OR settlement.copied_trader_wallet LIKE 'strategy:btc_up_down_5m_skip_bps_%'
                OR settlement.copied_trader_wallet LIKE 'strategy:eth_up_down_5m_binance_bps_%'
-               OR settlement.copied_trader_wallet LIKE 'strategy:sol_up_down_5m_binance_bps_%';
+               OR settlement.copied_trader_wallet LIKE 'strategy:eth_up_down_5m_skip_bps_%'
+               OR settlement.copied_trader_wallet LIKE 'strategy:sol_up_down_5m_binance_bps_%'
+               OR settlement.copied_trader_wallet LIKE 'strategy:sol_up_down_5m_skip_bps_%';
             GET DIAGNOSTICS deleted_paper_position_settlements = ROW_COUNT;
 
             INSERT INTO schema_data_migrations (migration_key, applied_at_utc, details)

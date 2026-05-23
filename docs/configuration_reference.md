@@ -602,9 +602,10 @@ spread, last trade price, `orderMinSize`, and `orderPriceMinTickSize`.
 
 ## BtcUpDown5mStrategy
 
-Runs the experimental `BTC Up or Down 5m` strategy family in `Paper` mode only.
-The worker observes BTC 5-minute Gamma markets and records one lifecycle row per
-market and strategy variant in `strategy_market_paper_runs`. Built-in variants
+Runs the experimental Up/Down strategy family in `Paper` mode only.
+The worker observes BTC 5-minute Gamma markets, plus ETH/SOL 5-minute Gamma
+markets for the crypto Binance and non-Revert Skip variants, and records one lifecycle row per
+market and strategy variant in `strategy_market_paper_runs`. Built-in BTC variants
 are standard `Less` and `More` plus comparison `Less Gamma` and `More Gamma` at
 30-second steps from 30 to 270 seconds after window start, plus `Middle 1`,
 threshold `Middle 1 1..100 bps` and matching `Instant` variants, `Middle 1 Revert`,
@@ -614,7 +615,9 @@ threshold `Middle 1 Revert 1..100 bps` and matching `Instant` variants, `Skip 1.
 `Binance 15s/30s/45s`, `Binance Clever`, fair-value `Binance Edge 2/4/6`,
 `Prev Score Countertrend 10..90`, `Ensemble 2 of 3`, `Dynamic Markov`, `Strategy Selector`, capped `Less`
 comparison variants, capped `More` comparison variants, and capped `More Gamma`
-comparison variants. When
+comparison variants. ETH/SOL variants include Binance bps `1..50`, Binance bps
+`1..50 Instant`, Skip `1..5`, Skip bps `1..50`, and Skip bps `1..50 Instant`;
+ETH/SOL Revert variants are intentionally not seeded. When
 `PaperTakerPricingEnabled=false`, `Less` selects the lower-priced Gamma
 `outcomePrices` entry, `More` selects the higher-priced entry, and that Gamma
 reference remains the Paper BUY entry price. When `PaperTakerPricingEnabled=true`,
@@ -672,10 +675,9 @@ the configured threshold; otherwise the run skips with
 `btc_reference_mean_deviation_below_threshold`. Matching `Instant` Middle bps
 rows keep the same signal and threshold gate, then price the selected outcome
 from executable ask depth using the same instant sizing/pricing path and
-`InstantOpeningLimitMaxPrice` cap as Binance instant variants. The `Skip` variants inspect the exact immediately previous BTC
-5-minute windows without gaps, but they infer those results from close-book
+`InstantOpeningLimitMaxPrice` cap as Binance instant variants. The `Skip` variants inspect the exact immediately previous 5-minute windows without gaps, but they infer those results from close-book
 CLOB price evidence instead of waiting for Gamma settlement. The worker captures
-`/book` snapshots for active BTC 5-minute markets during the final
+`/book` snapshots for active BTC and ETH/SOL 5-minute markets during the final
 `CloseBookCaptureLookbackSeconds` seconds before close, throttled by
 `CloseBookCaptureIntervalSeconds`, and can use the latest stored snapshot for a
 token if the book stops responding after close. A full `Up` midpoint still maps
@@ -700,6 +702,12 @@ The shared Skip bps streak calculation also records one
 `btc_up_down_5m_result_streak_diagnostics` row per target market. Use
 `close_book_streak_result_count` to find the longest same-outcome run and
 `cumulative_abs_move_bps` to find the maximum accumulated BTC move over the run.
+ETH/SOL Skip rows mirror the non-Revert BTC Skip behavior: plain `Skip 1..5`
+uses ETH/SOL close-book result streaks, `Skip bps` uses ETH/SOL close-book
+streaks plus archived `crypto_up_down_5m_odds_ticks` start-to-close Binance
+move, and `Skip bps Instant` uses the same executable ask-depth pricing path as
+the BTC Instant variants. ETH/SOL Skip Revert rows are not seeded, and ETH/SOL
+Skip rows are not in the live allowlist.
 `Middle`,
 `Middle Revert`, `Skip`, and `Skip Revert` create pending Paper BUY orders as
 ordinary GTD limit orders. Their limit
@@ -787,8 +795,8 @@ safety buffer times the configured Paper stake multiplier; diagnostics record
 expiration mode, local cancel deadline, CLOB wire expiration, and fallback
 `OpeningLimitGtdTtlSeconds` (`120` by default). They
 do not create immediate fills and are not submitted to live trading unless
-the controlled Paper/Live-shadow path is explicitly enabled for an allowed BTC variant,
-currently `Skip 1`, `Binance 1 bps`, or `Binance 2 bps`. The
+the controlled Paper/Live-shadow path is explicitly enabled for an allowed variant.
+ETH/SOL Skip variants are excluded from that live allowlist. The
 generic Paper open-order pipeline then applies balanced GTD
 accounting: visible ask depth at or below the limit creates partial `paper_fills`
 rows with VWAP evidence, cumulative fills determine `PartiallyFilled` versus

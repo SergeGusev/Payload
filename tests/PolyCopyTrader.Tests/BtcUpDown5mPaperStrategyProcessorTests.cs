@@ -232,6 +232,15 @@ public sealed class BtcUpDown5mPaperStrategyProcessorTests
     private static readonly BtcUpDown5mStrategyVariant EthBinanceBps2Variant =
         StrategyIds.CryptoUpDown5mVariants.Single(variant => variant.Code == "eth_up_down_5m_binance_bps_2");
 
+    private static readonly BtcUpDown5mStrategyVariant EthSkip3Variant =
+        StrategyIds.CryptoUpDown5mVariants.Single(variant => variant.Code == "eth_up_down_5m_skip_3");
+
+    private static readonly BtcUpDown5mStrategyVariant EthSkipBps2Variant =
+        StrategyIds.CryptoUpDown5mVariants.Single(variant => variant.Code == "eth_up_down_5m_skip_bps_2");
+
+    private static readonly BtcUpDown5mStrategyVariant SolSkipBps1InstantVariant =
+        StrategyIds.CryptoUpDown5mVariants.Single(variant => variant.Code == "sol_up_down_5m_skip_bps_1_instant");
+
     private static readonly BtcUpDown5mStrategyVariant SolBinanceBps1InstantVariant =
         StrategyIds.CryptoUpDown5mVariants.Single(variant => variant.Code == "sol_up_down_5m_binance_bps_1_instant");
 
@@ -563,22 +572,30 @@ public sealed class BtcUpDown5mPaperStrategyProcessorTests
     [Fact]
     public void StrategyIds_IncludeEthAndSolBinanceBpsVariants()
     {
-        Assert.Equal(200, StrategyIds.CryptoUpDown5mVariants.Count);
-        Assert.Equal(1870, StrategyIds.UpDown5mStrategyVariants.Count);
+        Assert.Equal(410, StrategyIds.CryptoUpDown5mVariants.Count);
+        Assert.Equal(2080, StrategyIds.UpDown5mStrategyVariants.Count);
         Assert.Equal(
             StrategyIds.UpDown5mStrategyVariants.Count,
             StrategyIds.UpDown5mStrategyVariants.Select(variant => variant.Id).Distinct().Count());
         Assert.Equal(
             StrategyIds.UpDown5mStrategyVariants.Count,
             StrategyIds.UpDown5mStrategyVariants.Select(variant => variant.Code).Distinct().Count());
-        Assert.Equal(100, StrategyIds.CryptoUpDown5mVariants.Count(variant =>
+        Assert.Equal(205, StrategyIds.CryptoUpDown5mVariants.Count(variant =>
             string.Equals(variant.ReferenceAssetSymbol, "ETH", StringComparison.OrdinalIgnoreCase)));
-        Assert.Equal(100, StrategyIds.CryptoUpDown5mVariants.Count(variant =>
+        Assert.Equal(205, StrategyIds.CryptoUpDown5mVariants.Count(variant =>
             string.Equals(variant.ReferenceAssetSymbol, "SOL", StringComparison.OrdinalIgnoreCase)));
         Assert.Equal(100, StrategyIds.CryptoUpDown5mVariants.Count(variant =>
             variant.Behavior == BtcUpDown5mStrategyBehavior.CryptoBinanceStartRelativeBpsThreshold));
         Assert.Equal(100, StrategyIds.CryptoUpDown5mVariants.Count(variant =>
             variant.Behavior == BtcUpDown5mStrategyBehavior.CryptoBinanceStartRelativeBpsThresholdInstant));
+        Assert.Equal(10, StrategyIds.CryptoUpDown5mVariants.Count(variant =>
+            variant.Behavior == BtcUpDown5mStrategyBehavior.SkipConsecutiveMarketResults));
+        Assert.Equal(0, StrategyIds.CryptoUpDown5mVariants.Count(variant =>
+            variant.Behavior == BtcUpDown5mStrategyBehavior.SkipConsecutiveMarketResultsRevert));
+        Assert.Equal(100, StrategyIds.CryptoUpDown5mVariants.Count(variant =>
+            variant.Behavior == BtcUpDown5mStrategyBehavior.SkipPreviousResultBpsThreshold));
+        Assert.Equal(100, StrategyIds.CryptoUpDown5mVariants.Count(variant =>
+            variant.Behavior == BtcUpDown5mStrategyBehavior.SkipPreviousResultBpsThresholdInstant));
 
         var expectedThresholds = Enumerable.Range(1, 50)
             .Select(threshold => (decimal)threshold)
@@ -603,11 +620,47 @@ public sealed class BtcUpDown5mPaperStrategyProcessorTests
                     .Select(variant => variant.DecisionThresholdBps.GetValueOrDefault())
                     .OrderBy(threshold => threshold)
                     .ToArray());
+            Assert.Equal(
+                Enumerable.Range(1, 5).ToArray(),
+                StrategyIds.CryptoUpDown5mVariants
+                    .Where(variant =>
+                        string.Equals(variant.ReferenceAssetSymbol, assetSymbol, StringComparison.OrdinalIgnoreCase) &&
+                        variant.Behavior == BtcUpDown5mStrategyBehavior.SkipConsecutiveMarketResults)
+                    .Select(variant => variant.DecisionDepth)
+                    .OrderBy(depth => depth)
+                    .ToArray());
+            Assert.Equal(
+                expectedThresholds,
+                StrategyIds.CryptoUpDown5mVariants
+                    .Where(variant =>
+                        string.Equals(variant.ReferenceAssetSymbol, assetSymbol, StringComparison.OrdinalIgnoreCase) &&
+                        variant.Behavior == BtcUpDown5mStrategyBehavior.SkipPreviousResultBpsThreshold)
+                    .Select(variant => variant.DecisionThresholdBps.GetValueOrDefault())
+                    .OrderBy(threshold => threshold)
+                    .ToArray());
+            Assert.Equal(
+                expectedThresholds,
+                StrategyIds.CryptoUpDown5mVariants
+                    .Where(variant =>
+                        string.Equals(variant.ReferenceAssetSymbol, assetSymbol, StringComparison.OrdinalIgnoreCase) &&
+                        variant.Behavior == BtcUpDown5mStrategyBehavior.SkipPreviousResultBpsThresholdInstant)
+                    .Select(variant => variant.DecisionThresholdBps.GetValueOrDefault())
+                    .OrderBy(threshold => threshold)
+                    .ToArray());
         }
 
         Assert.Equal("ETH Up or Down 5m Binance 2 bps", EthBinanceBps2Variant.Name);
         Assert.Equal(2m, EthBinanceBps2Variant.DecisionThresholdBps);
         Assert.Equal("ETH", EthBinanceBps2Variant.ReferenceAssetSymbol);
+        Assert.Equal("ETH Up or Down 5m Skip 3", EthSkip3Variant.Name);
+        Assert.Equal(3, EthSkip3Variant.DecisionDepth);
+        Assert.Equal("ETH", EthSkip3Variant.ReferenceAssetSymbol);
+        Assert.Equal("ETH Up or Down 5m Skip 2 bps", EthSkipBps2Variant.Name);
+        Assert.Equal(2m, EthSkipBps2Variant.DecisionThresholdBps);
+        Assert.Equal("ETH", EthSkipBps2Variant.ReferenceAssetSymbol);
+        Assert.Equal("SOL Up or Down 5m Skip 1 bps Instant", SolSkipBps1InstantVariant.Name);
+        Assert.Equal(1m, SolSkipBps1InstantVariant.DecisionThresholdBps);
+        Assert.Equal("SOL", SolSkipBps1InstantVariant.ReferenceAssetSymbol);
         Assert.Equal("SOL Up or Down 5m Binance 1 bps Instant", SolBinanceBps1InstantVariant.Name);
         Assert.Equal(1m, SolBinanceBps1InstantVariant.DecisionThresholdBps);
         Assert.Equal("SOL", SolBinanceBps1InstantVariant.ReferenceAssetSymbol);
@@ -4941,6 +4994,154 @@ public sealed class BtcUpDown5mPaperStrategyProcessorTests
     }
 
     [Fact]
+    public async Task ProcessAsync_EthSkipConsecutiveResultsUsesCryptoPreviousCloseBookMarkets()
+    {
+        var now = DateTimeOffset.UtcNow;
+        var repository = new TestAppRepository();
+        repository.StrategySettings[EthSkip3Variant.Id] = StrategyRuntimeSettings.Default(EthSkip3Variant.Id) with
+        {
+            PaperStakeAmount = 2.50m
+        };
+        repository.PolymarketGammaMarkets.Add(CreateMarket(
+            now,
+            now.AddMinutes(5),
+            upPrice: 0.50m,
+            downPrice: 0.50m,
+            slug: $"eth-updown-5m-{now.ToUnixTimeSeconds().ToString(CultureInfo.InvariantCulture)}",
+            seriesSlug: "eth-up-or-down-5m",
+            question: "ETH Up or Down - test",
+            marketId: "eth-market-1",
+            conditionId: "eth-condition-1",
+            upAssetId: "eth-asset-up",
+            downAssetId: "eth-asset-down"));
+        var closeBookOrderBooks = AddCryptoCloseBookResults(repository, "ETH", now, "Up", "Up", "Up");
+        OrderBookSnapshot[] orderBooks =
+        [
+            OrderBook("eth-asset-up", bestBid: 0.34m, bestAsk: 0.36m, now),
+            OrderBook("eth-asset-down", bestBid: 0.49m, bestAsk: 0.51m, now)
+        ];
+        var processor = CreateProcessorCoreWithOptions(
+            repository,
+            [],
+            orderBooks,
+            _ => { },
+            closeBookOrderBooks,
+            CreateBtcOptions(paperTakerPricingEnabled: false, [EthSkip3Variant.Code]),
+            new FakeBtcUsdReferencePriceClient(100m),
+            CreateBtcUsdReferenceCache(100m));
+
+        var result = await processor.ProcessAsync();
+
+        Assert.Equal(1, result.EntriesPlaced);
+        var run = Assert.Single(repository.StrategyMarketPaperRuns, item =>
+            item.StrategyId == EthSkip3Variant.Id &&
+            item.Status == StrategyMarketPaperRunStatuses.Entered);
+        Assert.Equal("eth-asset-down", run.SelectedAssetId);
+        Assert.Equal("Down", run.SelectedOutcome);
+        Assert.Equal(0.50m, run.EntryPrice);
+        Assert.Equal(2.50m, run.StakeUsd);
+
+        var order = Assert.Single(repository.PaperOrders);
+        Assert.Equal(EthSkip3Variant.Id, order.StrategyId);
+        Assert.Equal("eth-asset-down", order.AssetId);
+        Assert.Equal(0.50m, order.Price);
+        Assert.Contains("\"reference_asset_symbol\":\"ETH\"", order.RawDecisionJson, StringComparison.Ordinal);
+        Assert.Contains("\"reference_binance_symbol\":\"ETHUSDT\"", order.RawDecisionJson, StringComparison.Ordinal);
+        Assert.Contains("\"decision_source\":\"clob_close_book_price_evidence\"", order.RawDecisionJson, StringComparison.Ordinal);
+        Assert.Contains("\"winning_outcome\":\"Up\"", order.RawDecisionJson, StringComparison.Ordinal);
+        Assert.Contains("\"selected_direction\":\"Down\"", order.RawDecisionJson, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task ProcessAsync_SolSkipBpsInstantUsesCryptoStreakMoveAndExecutableAskDepth()
+    {
+        var now = DateTimeOffset.UtcNow;
+        var previousStart = now.AddMinutes(-5);
+        var previousSuffix = previousStart.ToUnixTimeSeconds().ToString(CultureInfo.InvariantCulture);
+        var repository = new TestAppRepository();
+        repository.PolymarketGammaMarkets.Add(CreateMarket(
+            now,
+            now.AddMinutes(5),
+            upPrice: 0.50m,
+            downPrice: 0.50m,
+            slug: $"sol-updown-5m-{now.ToUnixTimeSeconds().ToString(CultureInfo.InvariantCulture)}",
+            seriesSlug: "sol-up-or-down-5m",
+            question: "SOL Up or Down - test",
+            marketId: "sol-market-1",
+            conditionId: "sol-condition-1",
+            upAssetId: "sol-asset-up",
+            downAssetId: "sol-asset-down"));
+        var closeBookOrderBooks = AddCryptoCloseBookResults(repository, "SOL", now, "Up");
+        AddCryptoOddsTick(
+            repository,
+            "SOL",
+            "sol-close-market-" + previousSuffix,
+            "sol-close-condition-" + previousSuffix,
+            previousStart,
+            sampleOffsetSeconds: 0,
+            binancePriceUsd: 150m,
+            startPriceUsd: 150m,
+            upAssetId: "sol-close-up-" + previousSuffix,
+            downAssetId: "sol-close-down-" + previousSuffix);
+        AddCryptoOddsTick(
+            repository,
+            "SOL",
+            "sol-close-market-" + previousSuffix,
+            "sol-close-condition-" + previousSuffix,
+            previousStart,
+            sampleOffsetSeconds: 299,
+            binancePriceUsd: 150.03m,
+            startPriceUsd: 150m,
+            upAssetId: "sol-close-up-" + previousSuffix,
+            downAssetId: "sol-close-down-" + previousSuffix);
+        OrderBookSnapshot[] orderBooks =
+        [
+            OrderBook(
+                "sol-asset-up",
+                [new OrderBookLevel(0.37m, 100m)],
+                [new OrderBookLevel(0.39m, 100m)],
+                now,
+                minOrderSize: 5m),
+            OrderBook(
+                "sol-asset-down",
+                [new OrderBookLevel(0.60m, 100m)],
+                [new OrderBookLevel(0.61m, 4m), new OrderBookLevel(0.64m, 20m)],
+                now,
+                minOrderSize: 5m)
+        ];
+        var processor = CreateProcessorCoreWithOptions(
+            repository,
+            [],
+            orderBooks,
+            _ => { },
+            closeBookOrderBooks,
+            CreateBtcOptions(paperTakerPricingEnabled: false, [SolSkipBps1InstantVariant.Code]),
+            new FakeBtcUsdReferencePriceClient(100m),
+            CreateBtcUsdReferenceCache(100m));
+
+        var result = await processor.ProcessAsync();
+
+        Assert.Equal(1, result.EntriesPlaced);
+        var run = Assert.Single(repository.StrategyMarketPaperRuns, item =>
+            item.StrategyId == SolSkipBps1InstantVariant.Id &&
+            item.Status == StrategyMarketPaperRunStatuses.Entered);
+        Assert.Equal("sol-asset-down", run.SelectedAssetId);
+        Assert.Equal("Down", run.SelectedOutcome);
+        Assert.Equal(0.64m, run.EntryPrice);
+
+        var order = Assert.Single(repository.PaperOrders);
+        Assert.Equal(SolSkipBps1InstantVariant.Id, order.StrategyId);
+        Assert.Equal("sol-asset-down", order.AssetId);
+        Assert.Equal(0.64m, order.Price);
+        Assert.Contains("\"decision_source\":\"clob_close_book_price_evidence_previous_crypto_move_threshold\"", order.RawDecisionJson, StringComparison.Ordinal);
+        Assert.Contains("\"reference_asset_symbol\":\"SOL\"", order.RawDecisionJson, StringComparison.Ordinal);
+        Assert.Contains("\"reference_binance_symbol\":\"SOLUSDT\"", order.RawDecisionJson, StringComparison.Ordinal);
+        Assert.Contains("\"previous_reference_asset_abs_move_from_start_bps\":2", order.RawDecisionJson, StringComparison.Ordinal);
+        Assert.Contains("\"opening_limit_price_mode\":\"instant_executable_ask_depth\"", order.RawDecisionJson, StringComparison.Ordinal);
+        Assert.Contains("\"paper_gtd_initial_executable_ask_shares\":6.25", order.RawDecisionJson, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task ProcessAsync_EthBinanceBpsThresholdEntersWhenMoveReachesThreshold()
     {
         var now = DateTimeOffset.UtcNow;
@@ -8318,6 +8519,52 @@ public sealed class BtcUpDown5mPaperStrategyProcessorTests
         return orderBooks;
     }
 
+    private static IReadOnlyList<OrderBookSnapshot> AddCryptoCloseBookResults(
+        TestAppRepository repository,
+        string assetSymbol,
+        DateTimeOffset currentMarketStartUtc,
+        params string[] winningOutcomes)
+    {
+        var normalized = assetSymbol.ToUpperInvariant();
+        var slugPrefix = normalized.ToLowerInvariant();
+        var orderBooks = new List<OrderBookSnapshot>();
+        for (var index = 0; index < winningOutcomes.Length; index++)
+        {
+            var marketStartUtc = currentMarketStartUtc.AddMinutes(-5 * (index + 1));
+            var marketEndUtc = marketStartUtc.AddMinutes(5);
+            var suffix = marketStartUtc.ToUnixTimeSeconds().ToString(CultureInfo.InvariantCulture);
+            var upAssetId = slugPrefix + "-close-up-" + suffix;
+            var downAssetId = slugPrefix + "-close-down-" + suffix;
+            repository.PolymarketGammaMarkets.Add(CreateMarket(
+                marketStartUtc,
+                marketEndUtc,
+                upPrice: 0.50m,
+                downPrice: 0.50m,
+                slug: $"{slugPrefix}-updown-5m-{suffix}",
+                seriesSlug: $"{slugPrefix}-up-or-down-5m",
+                question: normalized + " Up or Down - test",
+                marketId: slugPrefix + "-close-market-" + suffix,
+                conditionId: slugPrefix + "-close-condition-" + suffix,
+                upAssetId: upAssetId,
+                downAssetId: downAssetId));
+
+            var tieUp = string.Equals(winningOutcomes[index], "TieUp", StringComparison.OrdinalIgnoreCase);
+            var upWon = tieUp || string.Equals(winningOutcomes[index], "Up", StringComparison.OrdinalIgnoreCase);
+            orderBooks.Add(OrderBook(
+                upAssetId,
+                bestBid: tieUp ? 0.49m : upWon ? 0.58m : 0.38m,
+                bestAsk: tieUp ? 0.51m : upWon ? 0.62m : 0.42m,
+                DateTimeOffset.UtcNow));
+            orderBooks.Add(OrderBook(
+                downAssetId,
+                bestBid: upWon ? 0.38m : 0.58m,
+                bestAsk: upWon ? 0.42m : 0.62m,
+                DateTimeOffset.UtcNow));
+        }
+
+        return orderBooks;
+    }
+
     private static PolymarketGammaMarket CreateMarket(
         DateTimeOffset windowStartUtc,
         DateTimeOffset endUtc,
@@ -8592,7 +8839,42 @@ public sealed class BtcUpDown5mPaperStrategyProcessorTests
         string upAssetId,
         string downAssetId)
     {
+        AddCryptoOddsTick(
+            repository,
+            assetSymbol,
+            marketId,
+            conditionId,
+            marketStartUtc,
+            sampleOffsetSeconds: 0,
+            binancePriceUsd: startPriceUsd,
+            startPriceUsd: startPriceUsd,
+            upAssetId: upAssetId,
+            downAssetId: downAssetId);
+    }
+
+    private static void AddCryptoOddsTick(
+        TestAppRepository repository,
+        string assetSymbol,
+        string marketId,
+        string conditionId,
+        DateTimeOffset marketStartUtc,
+        int sampleOffsetSeconds,
+        decimal binancePriceUsd,
+        decimal startPriceUsd,
+        string upAssetId,
+        string downAssetId,
+        decimal upPriceProxy = 0.50m,
+        decimal downPriceProxy = 0.50m)
+    {
         var normalized = assetSymbol.ToUpperInvariant();
+        var sampledAtUtc = marketStartUtc.AddSeconds(sampleOffsetSeconds);
+        var marketEndUtc = marketStartUtc.AddMinutes(5);
+        var moveUsd = binancePriceUsd - startPriceUsd;
+        var moveBps = startPriceUsd == 0m ? 0m : moveUsd / startPriceUsd * 10_000m;
+        var upBid = Math.Max(0.01m, upPriceProxy - 0.01m);
+        var upAsk = Math.Min(0.99m, upPriceProxy + 0.01m);
+        var downBid = Math.Max(0.01m, downPriceProxy - 0.01m);
+        var downAsk = Math.Min(0.99m, downPriceProxy + 0.01m);
         repository.CryptoUpDown5mOddsTicks.Add(new CryptoUpDown5mOddsTick(
             Guid.NewGuid(),
             normalized,
@@ -8601,36 +8883,36 @@ public sealed class BtcUpDown5mPaperStrategyProcessorTests
             conditionId,
             normalized.ToLowerInvariant() + "-updown-5m-" + marketStartUtc.ToUnixTimeSeconds().ToString(CultureInfo.InvariantCulture),
             marketStartUtc,
-            marketStartUtc.AddMinutes(5),
-            marketStartUtc,
-            0m,
-            300m,
+            marketEndUtc,
+            sampledAtUtc,
+            sampleOffsetSeconds,
+            Math.Max(0m, (decimal)(marketEndUtc - sampledAtUtc).TotalSeconds),
+            binancePriceUsd,
+            sampledAtUtc,
+            sampledAtUtc,
             startPriceUsd,
-            marketStartUtc,
-            marketStartUtc,
-            startPriceUsd,
-            0m,
-            0m,
+            moveUsd,
+            moveBps,
             upAssetId,
-            0.49m,
-            0.51m,
-            0.50m,
-            0.50m,
+            upBid,
+            upAsk,
+            upPriceProxy,
+            upPriceProxy,
             "mid",
             null,
             "test",
             0,
             downAssetId,
-            0.49m,
-            0.51m,
-            0.50m,
-            0.50m,
+            downBid,
+            downAsk,
+            downPriceProxy,
+            downPriceProxy,
             "mid",
             null,
             "test",
             0,
             "{}",
-            marketStartUtc));
+            sampledAtUtc));
     }
 
     private static void AddBtcCleverHistoricalTicks(

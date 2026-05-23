@@ -1,3 +1,16 @@
+## Active Update 2026-05-23 ETH SOL Skip Strategies
+Goal: Add ETH/SOL 5-minute Skip strategy variants analogous to BTC Skip variants, excluding Revert variants.
+Status: Completed
+Done:
+- Added ETH/SOL `Skip 1..5`, `Skip bps 1..50`, and `Skip bps 1..50 Instant` strategy IDs, names, descriptions, and deterministic PostgreSQL seed rows; ETH/SOL Revert variants were not added.
+- Extended the BTC Up/Down paper processor's close-book and Skip-bps streak logic to use the variant reference asset so ETH/SOL Skip decisions query ETH/SOL markets and `crypto_up_down_5m_odds_ticks` instead of BTC-only data.
+- Added repository support for loading crypto odds ticks by asset and market start, plus in-memory test repository coverage.
+- Added processor tests for ETH consecutive-result Skip and SOL Skip-bps Instant executable ask-depth pricing, and updated strategy/schema/docs tests.
+- Updated README and configuration reference to document ETH/SOL Skip behavior, Paper-only status, and live allowlist exclusion.
+Next: Publish/restart the service when ready so schema initialization inserts the new ETH/SOL Skip strategy rows.
+Notes: Verification passed: focused `dotnet test tests/PolyCopyTrader.Tests/PolyCopyTrader.Tests.csproj --no-restore --filter "BtcUpDown5mPaperStrategyProcessorTests|StorageTests"` 179/179, full `dotnet test PolyCopyTrader.sln --no-restore` 547/547, and `git diff --check` passed with LF/CRLF warnings only.
+Blockers: None.
+
 ## Active Update 2026-05-23 Production Check Auto Live Pause Deploy
 Goal: Verify the production service after publishing the split auto-live-pause behavior.
 Status: Completed
