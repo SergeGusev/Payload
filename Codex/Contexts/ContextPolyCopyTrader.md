@@ -1,3 +1,18 @@
+## Active Update 2026-05-24 Strategy Acceleration Follow-up Production Check
+Goal: Recheck whether production remains healthy after the acceleration deploy.
+Status: Completed
+Done:
+- Confirmed production `PolyCopyTrader.Service` is still running commit `1175fae2cab0fa4cfc733f47d6054bcb5376787e`, status `Running`, mode `Live`, heartbeat age about `1` second, and `last_error` null.
+- Confirmed current market WebSocket rows are connected and fresh, with shard message ages about `13-26` seconds and no current shard errors for active shards.
+- Confirmed `api_errors` since service start remain `0` and no PostgreSQL query is active longer than `30` seconds.
+- Confirmed fresh activity in the last `5` minutes: BTC odds `54` rows, crypto odds `96` rows, strategy run updates `3743`, and paper orders `89`.
+- Confirmed no enabled strategy has due `Observed` backlog at the check time; due observed rows were only disabled strategies.
+- Confirmed no new `entry_due_expired` or `entry_due_already_passed` rows in the last `10` minutes; older recent rows were restart-time or stale backlog cleanup.
+- Confirmed Middle processing continues after warm-up: recent BTC/ETH/SOL Middle windows had normal threshold skips plus entered/fill/settlement activity, with ETH/SOL Pending/Filled Paper orders present.
+Next: None.
+Notes: Production check was read-only via `out\dbprobe` with temporary host override to `192.168.0.101`. `dotnet run` emitted existing nullable build warnings before query output.
+Blockers: None.
+
 ## Active Update 2026-05-24 Strategy Acceleration Production Check
 Goal: Verify production after deploying the strategy acceleration changes.
 Status: Completed

@@ -32,3 +32,10 @@ Request:
 
 Result:
 Verified production read-only after deploying the strategy acceleration commit. `PolyCopyTrader.Service` is running `info=1.0.0+1175fae2cab0fa4cfc733f47d6054bcb5376787e`, status `Running`, mode `Live`, heartbeat fresh, and `last_error` null. Middle strategy coverage was not reduced: BTC `400/402` enabled, ETH `402/402`, SOL `402/402`, all Paper-only. The restart-time ETH/SOL Middle window skipped with `crypto_reference_mean_missing`, consistent with reference mean warm-up; the next `23:15 UTC` due window processed normally without mass `entry_due_expired`, creating Pending Paper orders for BTC/ETH/SOL Middle. Fresh odds ticks, strategy runs, and paper orders were updating; `api_errors` since service start were `0`; no PostgreSQL queries were active over `30` seconds. No production rows were changed.
+
+## 2026-05-23T23:34:32.7015332Z
+Request:
+Проверь - всё в порядке?
+
+Result:
+Rechecked production read-only after the acceleration deploy. `PolyCopyTrader.Service` still runs commit `1175fae2cab0fa4cfc733f47d6054bcb5376787e`, status `Running`, mode `Live`, heartbeat age about `1` second, and `last_error` null. Active market WebSocket rows were connected/fresh, `api_errors` since service start remained `0`, and no PostgreSQL query was active over `30` seconds. Fresh BTC/crypto odds ticks, strategy runs, and paper orders were updating. There was no enabled due `Observed` backlog; due observed rows were only disabled strategies. No new `entry_due_expired` or `entry_due_already_passed` rows appeared in the last `10` minutes; older rows were restart-time or stale backlog cleanup. Middle BTC/ETH/SOL processing continued with normal threshold skips and entered/fill/settlement activity. No production rows were changed.
