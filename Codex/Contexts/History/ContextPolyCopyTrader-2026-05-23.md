@@ -46,3 +46,10 @@ Request:
 
 Result:
 Inspected the current strategy definitions, BTC 5m processor exit/expiration paths, seed rows, and production paper orders. Confirmed both strategies are `StandardEntryPriceCap` GTD BUY-only variants; the pre-market-end SELL exit rule applies only to `PreOpenFixedDirectionSell` variants, not these strategies. Production read-only history showed only BUY orders for both strategies and no SELL rows.
+
+## 2026-05-23T20:22:51.6796762Z
+Request:
+Мне кажется, там GTD не нужен, всё равно только 30 секунд остаётся
+
+Result:
+Rechecked the opening-limit expiration and live validation paths. Concluded that the configured `120s` GTD TTL is practically irrelevant for `270s` entries because expiration is capped by market end; the only useful part of GTD there is an explicit safety boundary. Also noted that near-close live placement is borderline because live GTD validation requires enough local TTL and CLOB expiration buffer.

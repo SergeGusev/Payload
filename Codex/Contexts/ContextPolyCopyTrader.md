@@ -1,3 +1,15 @@
+## Active Update 2026-05-23 More 270 GTD Necessity Opinion
+Goal: Assess whether GTD is meaningful for `BTC Up or Down 5m More 270 Below 60/65` given only about `30` seconds remain.
+Status: Completed
+Done:
+- Re-read workflow, project rules, active context, Git status, and confirmed `git pull --ff-only` was already up to date.
+- Rechecked `ResolveOpeningLimitExpiration`: late default entries after market midpoint bypass the `market_end_relative` pre-close cancel and use TTL capped by market end, so the `270s` variants effectively expire at market end.
+- Noted that the `120s` GTD TTL is practically irrelevant for these variants; the only useful part is an explicit order lifetime/safety boundary.
+- Noted that live GTD validation requires at least about `30` seconds of local TTL and a wire expiration buffer, so these near-close entries are borderline or unsuitable for live placement without a deliberate rule.
+Next: If requested, special-case late-entry variants to skip when too little time remains, or model them as immediate/short-lived Paper entries instead of generic GTD-limit entries.
+Notes: Read-only strategy-design discussion only. No source behavior changed and no project tests were run.
+Blockers: None.
+
 ## Active Update 2026-05-23 More 270 Below Exit Rule Check
 Goal: Check whether `BTC Up or Down 5m More 270 Below 60` and `BTC Up or Down 5m More 270 Below 65` have a pre-market-end removal/exit rule.
 Status: Completed
