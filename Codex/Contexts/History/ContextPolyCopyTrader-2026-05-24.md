@@ -25,3 +25,10 @@ Implement all acceleration options except point 2, reducing the enabled producti
 
 Result:
 Implemented conservative strategy processing speedups without reducing strategy coverage. Raised BTC 5-minute timing/capacity defaults to `EntryGraceSeconds=60`, `MaxEntriesPerCycle=3000`, and `MaxConcurrentEntryDecisions=64`; regular due-entry selection now expands the final batch boundary to include all rows with the same `entry_due_at_utc`, while PreOpen keeps complete earliest-due processing. Added a Middle reference fast skip pass with shared reference-price/market lookup caches and batch skipped-run updates, plus transactional signal+Paper-order insertion for accepted BTC Paper entries. Updated README/config docs and added focused tests. Verification passed: focused Release tests 180/180, full Release suite 550/550, and `git diff --check`.
+
+## 2026-05-23T23:17:05.5081669Z
+Request:
+Выложил, проверяй
+
+Result:
+Verified production read-only after deploying the strategy acceleration commit. `PolyCopyTrader.Service` is running `info=1.0.0+1175fae2cab0fa4cfc733f47d6054bcb5376787e`, status `Running`, mode `Live`, heartbeat fresh, and `last_error` null. Middle strategy coverage was not reduced: BTC `400/402` enabled, ETH `402/402`, SOL `402/402`, all Paper-only. The restart-time ETH/SOL Middle window skipped with `crypto_reference_mean_missing`, consistent with reference mean warm-up; the next `23:15 UTC` due window processed normally without mass `entry_due_expired`, creating Pending Paper orders for BTC/ETH/SOL Middle. Fresh odds ticks, strategy runs, and paper orders were updating; `api_errors` since service start were `0`; no PostgreSQL queries were active over `30` seconds. No production rows were changed.

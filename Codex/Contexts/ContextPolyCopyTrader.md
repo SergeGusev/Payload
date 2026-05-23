@@ -1,3 +1,17 @@
+## Active Update 2026-05-24 Strategy Acceleration Production Check
+Goal: Verify production after deploying the strategy acceleration changes.
+Status: Completed
+Done:
+- Confirmed production PostgreSQL at `192.168.0.101` and `PolyCopyTrader.Service` heartbeat on commit `1175fae2cab0fa4cfc733f47d6054bcb5376787e`, status `Running`, mode `Live`, fresh heartbeat, and `last_error` null.
+- Confirmed Middle strategy rows remain enabled as expected without reducing coverage: BTC `400/402` enabled, ETH `402/402` enabled, SOL `402/402` enabled, all Paper-only.
+- Confirmed the first ETH/SOL Middle window at service restart skipped with `crypto_reference_mean_missing`, consistent with reference mean warm-up after restart, not the previous due-capacity expiration issue.
+- Confirmed the next `23:15 UTC` Middle due window processed without mass `entry_due_expired`: BTC had `388` threshold skips and `6` entered, ETH had `396` threshold skips and `3` entered, SOL had `392` threshold skips and `3` entered.
+- Confirmed ETH/SOL Middle Pending Paper orders were created after `23:15 UTC`, and current due backlog for Middle contains only `4` old BTC rows from disabled base Middle strategies dated `2026-05-22`.
+- Confirmed fresh production activity: BTC odds, crypto odds, strategy runs, and paper orders updated within the last few minutes; `api_errors` since service start are `0`; no active PostgreSQL query over `30` seconds.
+Next: Let ETH/SOL Middle accumulate Paper history under the new processor path; no immediate production fix required.
+Notes: Production check was read-only via `out\dbprobe` with temporary host override to `192.168.0.101`. Two exploratory read-only SELECTs initially failed due wrong diagnostic column names, then corrected.
+Blockers: None.
+
 ## Active Update 2026-05-24 Strategy Acceleration Implementation
 Goal: Implement strategy processing speedups except reducing the enabled production grid.
 Status: Completed
