@@ -185,6 +185,16 @@ public interface IAppRepository
         return Task.FromResult<IReadOnlyList<StrategyMarketPaperRun>>([]);
     }
 
+    Task<IReadOnlyList<StrategyMarketPaperRun>> GetDueStrategyMarketPaperRunsWithExpandedLastDueAsync(
+        IReadOnlyCollection<Guid> strategyIds,
+        string status,
+        DateTimeOffset dueBeforeUtc,
+        int limit,
+        CancellationToken cancellationToken = default)
+    {
+        return GetDueStrategyMarketPaperRunsAsync(strategyIds, status, dueBeforeUtc, limit, cancellationToken);
+    }
+
     Task<IReadOnlyList<StrategyMarketPaperRun>> GetDueStrategyMarketPaperRunsAtEarliestDueAsync(
         IReadOnlyCollection<Guid> strategyIds,
         string status,
@@ -244,6 +254,16 @@ public interface IAppRepository
         return Task.CompletedTask;
     }
 
+    async Task UpdateStrategyMarketPaperRunsAsync(
+        IReadOnlyList<StrategyMarketPaperRun> runs,
+        CancellationToken cancellationToken = default)
+    {
+        foreach (var run in runs)
+        {
+            await UpdateStrategyMarketPaperRunAsync(run, cancellationToken);
+        }
+    }
+
     Task AddSignalAsync(Signal signal, CancellationToken cancellationToken = default);
 
     Task<IReadOnlyList<SignalSummary>> GetRecentSignalsAsync(int limit = 100, CancellationToken cancellationToken = default);
@@ -253,6 +273,15 @@ public interface IAppRepository
     Task<IReadOnlyList<SignalRejection>> GetRecentSignalRejectionsAsync(int limit = 100, CancellationToken cancellationToken = default);
 
     Task AddPaperOrderAsync(PaperOrder order, CancellationToken cancellationToken = default);
+
+    async Task AddSignalAndPaperOrderAsync(
+        Signal signal,
+        PaperOrder paperOrder,
+        CancellationToken cancellationToken = default)
+    {
+        await AddSignalAsync(signal, cancellationToken);
+        await AddPaperOrderAsync(paperOrder, cancellationToken);
+    }
 
     Task UpdatePaperOrderAsync(PaperOrder order, CancellationToken cancellationToken = default);
 

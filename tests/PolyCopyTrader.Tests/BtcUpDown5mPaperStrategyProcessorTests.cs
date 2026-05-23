@@ -3390,6 +3390,54 @@ public sealed class BtcUpDown5mPaperStrategyProcessorTests
     }
 
     [Fact]
+    public async Task ProcessAsync_MiddleReferenceBulkSkipsEarliestDueGroupBeyondConfiguredEntryLimit()
+    {
+        var now = DateTimeOffset.UtcNow;
+        var repository = new TestAppRepository();
+        repository.PolymarketGammaMarkets.Add(CreateMarket(
+            now,
+            now.AddMinutes(5),
+            upPrice: 0.50m,
+            downPrice: 0.50m));
+        var btcReferenceClient = new FakeBtcUsdReferencePriceClient(100.05m);
+        var enabledCodes = new[]
+        {
+            Middle1Bps20Variant.Code,
+            Middle1Bps100Variant.Code
+        };
+        var processor = CreateProcessorCoreWithOptions(
+            repository,
+            [],
+            DefaultOrderBooks(),
+            _ => { },
+            [],
+            CreateBtcOptions(
+                paperTakerPricingEnabled: false,
+                enabledCodes,
+                maxEntriesPerCycle: 1,
+                maxConcurrentEntryDecisions: 1),
+            btcReferenceClient,
+            CreateBtcUsdReferenceCache(100m));
+
+        var result = await processor.ProcessAsync();
+
+        Assert.Equal(2, result.MarketsObserved);
+        Assert.Equal(0, result.EntriesPlaced);
+        Assert.Equal(2, result.RunsSkipped);
+        Assert.Equal(1, btcReferenceClient.RequestCount);
+        Assert.Equal(1, repository.BulkStrategyMarketPaperRunUpdateCalls);
+        Assert.Empty(repository.PaperOrders);
+        Assert.Equal(2, repository.StrategyMarketPaperRuns.Count);
+        Assert.All(repository.StrategyMarketPaperRuns, run =>
+        {
+            Assert.Equal(StrategyMarketPaperRunStatuses.Skipped, run.Status);
+            Assert.Equal("btc_reference_mean_deviation_below_threshold", run.SkipReason);
+            Assert.NotNull(run.SkipDiagnosticsJson);
+            Assert.Contains("\"btc_move_from_mean_bps\":5", run.SkipDiagnosticsJson!, StringComparison.Ordinal);
+        });
+    }
+
+    [Fact]
     public async Task ProcessAsync_MiddleReferenceBpsThresholdEntersWhenMeanDeviationReachesThreshold()
     {
         var now = DateTimeOffset.UtcNow;

@@ -17,6 +17,8 @@ internal sealed class TestAppRepository : IAppRepository
     public int MaxConcurrentPolymarketGammaMarketLookups =>
         System.Threading.Volatile.Read(ref maxPolymarketGammaMarketLookupsInFlight);
 
+    public int BulkStrategyMarketPaperRunUpdateCalls { get; private set; }
+
     public List<LeaderTrade> LeaderTrades { get; } = [];
 
     public List<LeaderPosition> LeaderPositions { get; } = [];
@@ -651,6 +653,45 @@ internal sealed class TestAppRepository : IAppRepository
         }
     }
 
+    public Task<IReadOnlyList<StrategyMarketPaperRun>> GetDueStrategyMarketPaperRunsWithExpandedLastDueAsync(
+        IReadOnlyCollection<Guid> strategyIds,
+        string status,
+        DateTimeOffset dueBeforeUtc,
+        int limit,
+        CancellationToken cancellationToken = default)
+    {
+        if (limit <= 0)
+        {
+            return Task.FromResult<IReadOnlyList<StrategyMarketPaperRun>>([]);
+        }
+
+        var normalizedStrategyIds = strategyIds
+            .Select(StrategyIds.Normalize)
+            .ToHashSet();
+        lock (sync)
+        {
+            var orderedRuns = StrategyMarketPaperRuns
+                .Where(run => normalizedStrategyIds.Contains(StrategyIds.Normalize(run.StrategyId)))
+                .Where(run => string.Equals(run.Status, status, StringComparison.OrdinalIgnoreCase))
+                .Where(run => run.EntryDueAtUtc <= dueBeforeUtc)
+                .OrderBy(run => run.EntryDueAtUtc)
+                .ThenByDescending(run => GetStrategySettings(run.StrategyId).EffectiveLiveStakes)
+                .ThenBy(run => run.DetectedAtUtc)
+                .ThenBy(run => run.StrategyId)
+                .ToArray();
+            if (orderedRuns.Length == 0)
+            {
+                return Task.FromResult<IReadOnlyList<StrategyMarketPaperRun>>([]);
+            }
+
+            var cappedRuns = orderedRuns.Take(limit).ToArray();
+            var cutoffDueAtUtc = cappedRuns[^1].EntryDueAtUtc;
+            return Task.FromResult<IReadOnlyList<StrategyMarketPaperRun>>(orderedRuns
+                .Where((run, index) => index < limit || run.EntryDueAtUtc == cutoffDueAtUtc)
+                .ToArray());
+        }
+    }
+
     public Task<IReadOnlyList<StrategyMarketPaperRun>> GetDueStrategyMarketPaperRunsAtEarliestDueAsync(
         IReadOnlyCollection<Guid> strategyIds,
         string status,
@@ -836,6 +877,22 @@ internal sealed class TestAppRepository : IAppRepository
         return Task.CompletedTask;
     }
 
+    public Task UpdateStrategyMarketPaperRunsAsync(
+        IReadOnlyList<StrategyMarketPaperRun> runs,
+        CancellationToken cancellationToken = default)
+    {
+        lock (sync)
+        {
+            BulkStrategyMarketPaperRunUpdateCalls++;
+            foreach (var run in runs)
+            {
+                StrategyMarketPaperRuns.RemoveAll(item => item.Id == run.Id);
+                StrategyMarketPaperRuns.Add(run);
+            }
+        }
+        return Task.CompletedTask;
+    }
+
     private static DateTimeOffset? Max(DateTimeOffset? left, DateTimeOffset? right)
     {
         if (left is null)
@@ -904,6 +961,19 @@ internal sealed class TestAppRepository : IAppRepository
         lock (sync)
         {
             PaperOrders.Add(order);
+        }
+        return Task.CompletedTask;
+    }
+
+    public Task AddSignalAndPaperOrderAsync(
+        Signal signal,
+        PaperOrder paperOrder,
+        CancellationToken cancellationToken = default)
+    {
+        lock (sync)
+        {
+            Signals.Add(signal);
+            PaperOrders.Add(paperOrder);
         }
         return Task.CompletedTask;
     }

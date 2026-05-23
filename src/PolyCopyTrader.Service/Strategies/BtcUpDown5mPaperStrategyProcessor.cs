@@ -801,8 +801,7 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
                 skipReason: null,
                 diagnosticsJson: null);
 
-            await repository.AddSignalAsync(signal, cancellationToken);
-            await repository.AddPaperOrderAsync(order, cancellationToken);
+            await repository.AddSignalAndPaperOrderAsync(signal, order, cancellationToken);
             if (!await repository.TryAddStrategyMarketPaperRunAsync(run, cancellationToken))
             {
                 return BtcMakerOrderResult.SkippedResult;
@@ -1492,7 +1491,7 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
 
         var variantsById = variants
             .ToDictionary(variant => StrategyIds.Normalize(variant.Id));
-        var runs = await repository.GetDueStrategyMarketPaperRunsAsync(
+        var runs = await repository.GetDueStrategyMarketPaperRunsWithExpandedLastDueAsync(
             variantsById.Keys.ToArray(),
             StrategyMarketPaperRunStatuses.Observed,
             nowUtc,
@@ -1698,8 +1697,7 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
             expiresAtUtc,
             sellDecision.RawDecisionJson);
 
-        await repository.AddSignalAsync(sellSignal, cancellationToken);
-        await repository.AddPaperOrderAsync(sellOrder, cancellationToken);
+        await repository.AddSignalAndPaperOrderAsync(sellSignal, sellOrder, cancellationToken);
         exposureCache.ApplyPaperOrder(sellOrder);
 
         logger.LogInformation(
@@ -2047,9 +2045,23 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
             StringComparer.OrdinalIgnoreCase);
         var skipBpsStreakMoveSignalTasks = new System.Collections.Concurrent.ConcurrentDictionary<string, Lazy<Task<BtcPreviousMarketMoveSignal>>>(
             StringComparer.OrdinalIgnoreCase);
+        var middleFastPathResult = await SkipMiddleReferenceRunsInBulkAsync(
+            runs,
+            variantsById,
+            strategySettings,
+            btcCurrentPrices,
+            marketLookupTasks,
+            cancellationToken);
+        var remainingRuns = middleFastPathResult.RemainingRuns;
+        if (remainingRuns.Count == 0)
+        {
+            return (0, middleFastPathResult.RunsSkipped);
+        }
+
+        maxConcurrency = Math.Max(1, Math.Min(options.MaxConcurrentEntryDecisions, remainingRuns.Count));
         using var throttler = new SemaphoreSlim(maxConcurrency, maxConcurrency);
 
-        var tasks = runs.Select(async run =>
+        var tasks = remainingRuns.Select(async run =>
         {
             if (!variantsById.TryGetValue(StrategyIds.Normalize(run.StrategyId), out var variant))
             {
@@ -2077,7 +2089,108 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
         }).ToArray();
 
         var results = await Task.WhenAll(tasks);
-        return (results.Sum(item => item.EntriesPlaced), results.Sum(item => item.RunsSkipped));
+        return (
+            results.Sum(item => item.EntriesPlaced),
+            middleFastPathResult.RunsSkipped + results.Sum(item => item.RunsSkipped));
+    }
+
+    private async Task<MiddleReferenceBulkSkipResult> SkipMiddleReferenceRunsInBulkAsync(
+        IReadOnlyList<StrategyMarketPaperRun> runs,
+        IReadOnlyDictionary<Guid, BtcUpDown5mStrategyVariant> variantsById,
+        IReadOnlyDictionary<Guid, StrategyRuntimeSettings> strategySettings,
+        IDictionary<string, BtcCurrentPriceLookupResult> currentPrices,
+        System.Collections.Concurrent.ConcurrentDictionary<string, Lazy<Task<PolymarketGammaMarket?>>> marketLookupTasks,
+        CancellationToken cancellationToken)
+    {
+        if (runs.Count == 0)
+        {
+            return new MiddleReferenceBulkSkipResult(runs, 0);
+        }
+
+        var skippedRuns = new List<StrategyMarketPaperRun>();
+        var remainingRuns = new List<StrategyMarketPaperRun>(runs.Count);
+        foreach (var marketGroup in runs.GroupBy(run => run.MarketId, StringComparer.OrdinalIgnoreCase))
+        {
+            var market = (PolymarketGammaMarket?)null;
+            foreach (var run in marketGroup)
+            {
+                var nowUtc = DateTimeOffset.UtcNow;
+                if (!variantsById.TryGetValue(StrategyIds.Normalize(run.StrategyId), out var variant) ||
+                    !IsMiddleReferenceOpeningLimitEntry(variant) ||
+                    GetStrategySettings(strategySettings, variant.Id).IsPausedAt(nowUtc) ||
+                    (IsEntryExpired(run.EntryDueAtUtc, nowUtc) &&
+                        !IsOpeningLimitEntryAllowedAfterEntryGrace(variant, run.MarketStartUtc, nowUtc)))
+                {
+                    remainingRuns.Add(run);
+                    continue;
+                }
+
+                market ??= await GetPolymarketGammaMarketForEntryAsync(
+                    marketLookupTasks,
+                    run.MarketId,
+                    cancellationToken);
+                nowUtc = DateTimeOffset.UtcNow;
+                if (market is null ||
+                    (market.EndDateUtc is { } endDate && endDate <= nowUtc) ||
+                    market.Closed ||
+                    market.Archived ||
+                    IsPreOpenEntryWindowElapsed(variant, GetMarketWindowStartUtc(market, variant) ?? run.MarketStartUtc, nowUtc) ||
+                    !market.AcceptingOrders ||
+                    !market.EnableOrderBook)
+                {
+                    remainingRuns.Add(run);
+                    continue;
+                }
+
+                var settings = GetStrategySettings(strategySettings, variant.Id);
+                var decision = await GetMiddleReferenceEntryDecisionAsync(
+                    market,
+                    variant,
+                    settings.PaperStakeAmount,
+                    nowUtc,
+                    currentPrices,
+                    cancellationToken);
+                if (decision.ShouldEnter && decision.SelectedOutcome is not null)
+                {
+                    remainingRuns.Add(run);
+                    continue;
+                }
+
+                var diagnosticsJson = string.IsNullOrWhiteSpace(decision.RawDecisionJson) ||
+                    string.Equals(decision.RawDecisionJson, "{}", StringComparison.Ordinal)
+                    ? null
+                    : decision.RawDecisionJson;
+                skippedRuns.Add(run with
+                {
+                    ConditionId = market.ConditionId,
+                    MarketSlug = market.Slug,
+                    MarketTitle = market.Question,
+                    Category = market.Category,
+                    MarketStartUtc = GetMarketWindowStartUtc(market, variant) ?? run.MarketStartUtc,
+                    MarketEndUtc = market.EndDateUtc,
+                    Status = StrategyMarketPaperRunStatuses.Skipped,
+                    SkipReason = decision.SkipReason ?? "gtd_limit_decision_rejected",
+                    SkipDiagnosticsJson = diagnosticsJson,
+                    UpdatedAtUtc = nowUtc
+                });
+            }
+        }
+
+        if (skippedRuns.Count == 0)
+        {
+            return new MiddleReferenceBulkSkipResult(remainingRuns, 0);
+        }
+
+        await repository.UpdateStrategyMarketPaperRunsAsync(skippedRuns, cancellationToken);
+        foreach (var group in skippedRuns.GroupBy(run => run.SkipReason ?? "unknown", StringComparer.Ordinal))
+        {
+            logger.LogInformation(
+                "BTC Up or Down 5m Middle paper runs bulk skipped. Reason={Reason} Count={Count}",
+                group.Key,
+                group.Count());
+        }
+
+        return new MiddleReferenceBulkSkipResult(remainingRuns, skippedRuns.Count);
     }
 
     private async Task<(int EntriesPlaced, int RunsSkipped)> PlaceDueEntryRunAsync(
@@ -2402,8 +2515,7 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
                                 correlationId,
                                 isPaperLiveShadowTest ? PaperLiveShadowTestSource : string.Empty);
 
-                            await repository.AddSignalAsync(limitSignal, cancellationToken);
-                            await repository.AddPaperOrderAsync(limitOrder, cancellationToken);
+                            await repository.AddSignalAndPaperOrderAsync(limitSignal, limitOrder, cancellationToken);
                             exposureCache.ApplyPaperOrder(limitOrder);
                             if (isPaperLiveShadowTest && correlationId is { } shadowCorrelationId)
                             {
@@ -2642,8 +2754,7 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
                             rawDecisionJson,
                             executionSource: BtcGtdLimitExecutionSource);
 
-                        await repository.AddSignalAsync(signal, cancellationToken);
-                        await repository.AddPaperOrderAsync(order, cancellationToken);
+                        await repository.AddSignalAndPaperOrderAsync(signal, order, cancellationToken);
                         exposureCache.ApplyPaperOrder(order);
                     }
                     finally
@@ -3399,6 +3510,14 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
             BtcUpDown5mStrategyBehavior.PreOpenFixedDirection or
             BtcUpDown5mStrategyBehavior.PreOpenFixedDirectionSell or
             BtcUpDown5mStrategyBehavior.FixedOutcomeMaker;
+    }
+
+    private static bool IsMiddleReferenceOpeningLimitEntry(BtcUpDown5mStrategyVariant variant)
+    {
+        return variant.Behavior is BtcUpDown5mStrategyBehavior.MiddleReference or
+            BtcUpDown5mStrategyBehavior.MiddleReferenceRevert or
+            BtcUpDown5mStrategyBehavior.MiddleReferenceInstant or
+            BtcUpDown5mStrategyBehavior.MiddleReferenceRevertInstant;
     }
 
     private static bool UsesConvertedTakerGtdPaperOrderSettlement(BtcUpDown5mStrategyVariant variant)
@@ -12475,6 +12594,10 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
             return new BtcCurrentPriceLookupResult(null, errorMessage, assetSymbol, binanceSymbol);
         }
     }
+
+    private sealed record MiddleReferenceBulkSkipResult(
+        IReadOnlyList<StrategyMarketPaperRun> RemainingRuns,
+        int RunsSkipped);
 
     private sealed record CloseBookMidpoint(
         decimal BestBid,

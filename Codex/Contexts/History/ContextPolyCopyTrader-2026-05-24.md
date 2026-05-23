@@ -18,3 +18,10 @@ Request:
 
 Result:
 Reviewed the current 5-minute strategy processor and config. Current limits are `PollIntervalSeconds=1`, `EntryGraceSeconds=10`, `MaxEntriesPerCycle=250`, and `MaxConcurrentEntryDecisions=32`; due selection is globally limited and per-cycle caches are recreated for each limited batch. Prepared acceleration options: config relief, narrower enabled Paper grids, earliest-due/current-window prioritization, batch DB updates/orders, and a Middle-specific vectorized decision path. No source behavior was changed.
+
+## 2026-05-24T01:54:44.6883380+03:00
+Request:
+Implement all acceleration options except point 2, reducing the enabled production grid.
+
+Result:
+Implemented conservative strategy processing speedups without reducing strategy coverage. Raised BTC 5-minute timing/capacity defaults to `EntryGraceSeconds=60`, `MaxEntriesPerCycle=3000`, and `MaxConcurrentEntryDecisions=64`; regular due-entry selection now expands the final batch boundary to include all rows with the same `entry_due_at_utc`, while PreOpen keeps complete earliest-due processing. Added a Middle reference fast skip pass with shared reference-price/market lookup caches and batch skipped-run updates, plus transactional signal+Paper-order insertion for accepted BTC Paper entries. Updated README/config docs and added focused tests. Verification passed: focused Release tests 180/180, full Release suite 550/550, and `git diff --check`.

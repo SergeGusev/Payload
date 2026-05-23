@@ -659,6 +659,37 @@ WHERE wallet = @Wallet;
 		return results;
 	}
 
+	public async Task<IReadOnlyList<StrategyMarketPaperRun>> GetDueStrategyMarketPaperRunsWithExpandedLastDueAsync(IReadOnlyCollection<Guid> strategyIds, string status, DateTimeOffset dueBeforeUtc, int limit, CancellationToken cancellationToken = default(CancellationToken))
+	{
+		if (strategyIds.Count == 0 || limit <= 0)
+		{
+			return Array.Empty<StrategyMarketPaperRun>();
+		}
+
+		Guid[] normalizedStrategyIds = strategyIds
+			.Select(StrategyIds.Normalize)
+			.Distinct()
+			.ToArray();
+		if (normalizedStrategyIds.Length == 0)
+		{
+			return Array.Empty<StrategyMarketPaperRun>();
+		}
+
+		await using NpgsqlConnection connection = await OpenConnectionAsync(cancellationToken);
+		await using NpgsqlCommand command = CreateCommand(connection, "WITH ordered_runs AS (\n    SELECT run.id, run.strategy_id, run.market_id, run.condition_id, run.market_slug, run.market_title, run.category,\n           run.market_start_utc, run.market_end_utc, run.detected_at_utc, run.entry_due_at_utc, run.status,\n           run.selected_asset_id, run.selected_outcome, run.entry_price, run.stake_usd, run.size_shares,\n           run.signal_id, run.paper_order_id, run.entered_at_utc, run.settlement_price, run.settlement_value_usd,\n           run.realized_pnl_usd, run.settled_at_utc, run.skip_reason, run.created_at_utc, run.updated_at_utc,\n           run.skip_diagnostics_json::text AS skip_diagnostics_json,\n           row_number() OVER (\n               ORDER BY run.entry_due_at_utc ASC,\n                        (strategy.live_stakes AND NOT strategy.auto_live_paused) DESC,\n                        run.detected_at_utc ASC,\n                        run.strategy_id ASC\n           ) AS due_row_number\n    FROM strategy_market_paper_runs run\n    INNER JOIN strategies strategy ON strategy.id = run.strategy_id\n    WHERE run.strategy_id = ANY(@StrategyIds)\n      AND run.status = @Status\n      AND run.entry_due_at_utc <= @DueBeforeUtc\n), cutoff AS (\n    SELECT entry_due_at_utc\n    FROM ordered_runs\n    WHERE due_row_number = @Limit\n)\nSELECT id, strategy_id, market_id, condition_id, market_slug, market_title, category,\n       market_start_utc, market_end_utc, detected_at_utc, entry_due_at_utc, status,\n       selected_asset_id, selected_outcome, entry_price, stake_usd, size_shares,\n       signal_id, paper_order_id, entered_at_utc, settlement_price, settlement_value_usd,\n       realized_pnl_usd, settled_at_utc, skip_reason, created_at_utc, updated_at_utc,\n       skip_diagnostics_json\nFROM ordered_runs\nWHERE due_row_number <= @Limit\n   OR ((SELECT entry_due_at_utc FROM cutoff) IS NOT NULL\n       AND entry_due_at_utc = (SELECT entry_due_at_utc FROM cutoff))\nORDER BY due_row_number ASC;");
+		command.Parameters.AddWithValue("StrategyIds", normalizedStrategyIds);
+		command.Parameters.AddWithValue("Status", status);
+		command.Parameters.Add("DueBeforeUtc", NpgsqlDbType.TimestampTz).Value = UtcDateTime(dueBeforeUtc);
+		command.Parameters.AddWithValue("Limit", limit);
+		List<StrategyMarketPaperRun> results = new List<StrategyMarketPaperRun>();
+		await using NpgsqlDataReader reader = await command.ExecuteReaderAsync(cancellationToken);
+		while (await reader.ReadAsync(cancellationToken))
+		{
+			results.Add(ReadStrategyMarketPaperRun(reader));
+		}
+		return results;
+	}
+
 	public async Task<IReadOnlyList<StrategyMarketPaperRun>> GetDueStrategyMarketPaperRunsAtEarliestDueAsync(IReadOnlyCollection<Guid> strategyIds, string status, DateTimeOffset dueBeforeUtc, CancellationToken cancellationToken = default(CancellationToken))
 	{
 		if (strategyIds.Count == 0)
@@ -821,6 +852,26 @@ WHERE wallet = @Wallet;
 		await command.ExecuteNonQueryAsync(cancellationToken);
 	}
 
+	public async Task UpdateStrategyMarketPaperRunsAsync(IReadOnlyList<StrategyMarketPaperRun> runs, CancellationToken cancellationToken = default(CancellationToken))
+	{
+		if (runs.Count == 0)
+		{
+			return;
+		}
+
+		await using NpgsqlConnection connection = await OpenConnectionAsync(cancellationToken);
+		await using NpgsqlTransaction transaction = await connection.BeginTransactionAsync(cancellationToken);
+		foreach (StrategyMarketPaperRun run in runs)
+		{
+			await using NpgsqlCommand command = CreateCommand(connection, "UPDATE strategy_market_paper_runs\nSET strategy_id = @StrategyId,\n    market_id = @MarketId,\n    condition_id = @ConditionId,\n    market_slug = @MarketSlug,\n    market_title = @MarketTitle,\n    category = @Category,\n    market_start_utc = @MarketStartUtc,\n    market_end_utc = @MarketEndUtc,\n    detected_at_utc = @DetectedAtUtc,\n    entry_due_at_utc = @EntryDueAtUtc,\n    status = @Status,\n    selected_asset_id = @SelectedAssetId,\n    selected_outcome = @SelectedOutcome,\n    entry_price = @EntryPrice,\n    stake_usd = @StakeUsd,\n    size_shares = @SizeShares,\n    signal_id = @SignalId,\n    paper_order_id = @PaperOrderId,\n    entered_at_utc = @EnteredAtUtc,\n    settlement_price = @SettlementPrice,\n    settlement_value_usd = @SettlementValueUsd,\n    realized_pnl_usd = @RealizedPnlUsd,\n    settled_at_utc = @SettledAtUtc,\n    skip_reason = @SkipReason,\n    skip_diagnostics_json = CAST(@SkipDiagnosticsJson AS jsonb),\n    created_at_utc = @CreatedAtUtc,\n    updated_at_utc = @UpdatedAtUtc\nWHERE id = @Id;");
+			command.Transaction = transaction;
+			AddStrategyMarketPaperRunParameters(command, run);
+			await command.ExecuteNonQueryAsync(cancellationToken);
+		}
+
+		await transaction.CommitAsync(cancellationToken);
+	}
+
 	public async Task AddSignalAsync(Signal signal, CancellationToken cancellationToken = default(CancellationToken))
 	{
 		await using NpgsqlConnection connection = await OpenConnectionAsync(cancellationToken);
@@ -960,6 +1011,27 @@ WHERE wallet = @Wallet;
 		command.Parameters.AddWithValue("CorrelationId", ((object)order.CorrelationId) ?? ((object)DBNull.Value));
 		command.Parameters.AddWithValue("ExecutionSource", order.ExecutionSource ?? string.Empty);
 		await command.ExecuteNonQueryAsync(cancellationToken);
+	}
+
+	public async Task AddSignalAndPaperOrderAsync(Signal signal, PaperOrder paperOrder, CancellationToken cancellationToken = default(CancellationToken))
+	{
+		await using NpgsqlConnection connection = await OpenConnectionAsync(cancellationToken);
+		await using NpgsqlTransaction transaction = await connection.BeginTransactionAsync(cancellationToken);
+		await using (NpgsqlCommand signalCommand = CreateCommand(connection, "INSERT INTO signals (\n    id, leader_trade_id, trader_wallet, condition_id, asset_id, outcome, leader_price,\n    best_bid, best_ask, spread_abs, spread_pct, lag_seconds, score, decision,\n    accepted, proposed_paper_price, proposed_size_shares, proposed_notional_usd, created_at_utc, raw_context_json\n) VALUES (\n    @Id, @LeaderTradeId, @TraderWallet, @ConditionId, @AssetId, @Outcome, @LeaderPrice,\n    @BestBid, @BestAsk, @SpreadAbs, @SpreadPct, @LagSeconds, @Score, @Decision,\n    @Accepted, @ProposedPaperPrice, @ProposedSizeShares, @ProposedNotionalUsd, @CreatedAtUtc, CAST(@RawContextJson AS jsonb)\n);"))
+		{
+			signalCommand.Transaction = transaction;
+			AddSignalParameters(signalCommand, signal);
+			await signalCommand.ExecuteNonQueryAsync(cancellationToken);
+		}
+
+		await using (NpgsqlCommand orderCommand = CreateCommand(connection, "INSERT INTO paper_orders (\n    id, signal_id, strategy_id, copied_trader_wallet, status, side, asset_id, condition_id, outcome, price, size_shares, notional_usd,\n    created_at_utc, expires_at_utc, filled_at_utc, cancelled_at_utc, raw_decision_json, correlation_id, execution_source\n) VALUES (\n    @Id, @SignalId, @StrategyId, @CopiedTraderWallet, @Status, @Side, @AssetId, @ConditionId, @Outcome, @Price, @SizeShares, @NotionalUsd,\n    @CreatedAtUtc, @ExpiresAtUtc, @FilledAtUtc, @CancelledAtUtc, CAST(@RawDecisionJson AS jsonb), @CorrelationId, @ExecutionSource\n);"))
+		{
+			orderCommand.Transaction = transaction;
+			AddPaperOrderParameters(orderCommand, paperOrder);
+			await orderCommand.ExecuteNonQueryAsync(cancellationToken);
+		}
+
+		await transaction.CommitAsync(cancellationToken);
 	}
 
 	public async Task UpdatePaperOrderAsync(PaperOrder order, CancellationToken cancellationToken = default(CancellationToken))

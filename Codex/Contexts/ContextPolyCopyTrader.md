@@ -1,3 +1,16 @@
+## Active Update 2026-05-24 Strategy Acceleration Implementation
+Goal: Implement strategy processing speedups except reducing the enabled production grid.
+Status: Completed
+Done:
+- Raised BTC 5-minute strategy timing/capacity defaults to `EntryGraceSeconds=60`, `MaxEntriesPerCycle=3000`, and `MaxConcurrentEntryDecisions=64`; validator upper bound for concurrent entry decisions is now `128`.
+- Changed regular due-entry selection to use a global limit that expands the final boundary to include every run with the same `entry_due_at_utc`, while keeping PreOpen on complete earliest-due group processing.
+- Added a Middle reference fast skip pass that reuses per-cycle reference-price and market lookup caches, bulk-updates rejected Middle runs, and sends only enterable runs to the generic order path.
+- Added repository helpers for transactional batch run updates and transactional signal+Paper-order inserts; BTC Paper entry paths now use the combined signal/order insert.
+- Updated README/config docs and added focused test coverage for same-due Middle bulk skip beyond `MaxEntriesPerCycle`.
+Next: Publish/restart `PolyCopyTrader.Service` when ready so production uses the new capacity defaults and processor path.
+Notes: Verification passed: focused `dotnet test tests\PolyCopyTrader.Tests\PolyCopyTrader.Tests.csproj --configuration Release --no-restore --filter "BtcUpDown5mPaperStrategyProcessorTests|ConfigurationTests"` 180/180, full `dotnet test PolyCopyTrader.sln --configuration Release --no-restore` 550/550, and `git diff --check` passed with LF/CRLF warnings only.
+Blockers: None.
+
 ## Active Update 2026-05-24 Strategy Acceleration Options
 Goal: Explain practical ways to speed up 5-minute strategy processing after the ETH/SOL Middle production check.
 Status: Completed

@@ -1119,9 +1119,9 @@ public static class AppOptionsValidator
             errors.Add("BtcUpDown5mStrategy.MaxEntriesPerCycle must be greater than zero.");
         }
 
-        if (options.MaxConcurrentEntryDecisions <= 0 || options.MaxConcurrentEntryDecisions > 32)
+        if (options.MaxConcurrentEntryDecisions <= 0 || options.MaxConcurrentEntryDecisions > 128)
         {
-            errors.Add("BtcUpDown5mStrategy.MaxConcurrentEntryDecisions must be between 1 and 32.");
+            errors.Add("BtcUpDown5mStrategy.MaxConcurrentEntryDecisions must be between 1 and 128.");
         }
 
         if (options.MaxSettlementsPerCycle <= 0)

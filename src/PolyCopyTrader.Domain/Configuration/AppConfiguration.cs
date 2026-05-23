@@ -560,13 +560,13 @@ public sealed class BtcUpDown5mStrategyOptions
 
     public decimal StakeUsd { get; init; } = 1.00m;
 
-    public int EntryGraceSeconds { get; init; } = 10;
+    public int EntryGraceSeconds { get; init; } = 60;
 
     public int MaxMarketsPerCycle { get; init; } = 500;
 
-    public int MaxEntriesPerCycle { get; init; } = 250;
+    public int MaxEntriesPerCycle { get; init; } = 3000;
 
-    public int MaxConcurrentEntryDecisions { get; init; } = 1;
+    public int MaxConcurrentEntryDecisions { get; init; } = 64;
 
     public int MaxSettlementsPerCycle { get; init; } = 250;
 
