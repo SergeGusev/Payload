@@ -1,3 +1,14 @@
+## Active Update 2026-05-23 Codex CLI Global Install
+Goal: Install the OpenAI Codex CLI globally with npm.
+Status: Completed
+Done:
+- Ran repository initialization and confirmed `git pull --ff-only` reported the branch was already up to date.
+- Ran `npm install -g @openai/codex`; npm completed successfully with exit code `0`.
+- Verified the global install with `codex --version`, which reported `codex-cli 0.133.0`, and `npm list -g @openai/codex --depth=0`, which reported `@openai/codex@0.133.0`.
+Next: None.
+Notes: No PolyCopyTrader source behavior changed and no project tests were run. npm reported a cleanup warning for an old temporary directory under `C:\Users\serge\AppData\Roaming\npm\node_modules\@openai\.codex-VTsjU5s4` because `codex.exe` was locked, but the package install and version verification succeeded.
+Blockers: None.
+
 ## Active Update 2026-05-23 Production Check ETH SOL Skip Deploy
 Goal: Verify production after deploying ETH/SOL non-Revert Skip strategies.
 Status: Completed

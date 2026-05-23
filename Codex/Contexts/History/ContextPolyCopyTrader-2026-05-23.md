@@ -11,3 +11,10 @@ Request:
 
 Result:
 Verified production read-only through remote PostgreSQL host `192.168.0.101`: service is running commit `fe9b9c5`, all `210` ETH/SOL non-Revert Skip strategy rows are seeded/enabled/Paper-only, ETH/SOL Revert count is `0`, current lifecycle runs are updating without `entry_due_expired`, diagnostics use ETH/SOL crypto reference fields, core workers are fresh, no post-start API errors were found, and no long PostgreSQL queries were active.
+
+## 2026-05-23T17:08:38.2415333Z
+Request:
+npm install -g @openai/codex
+
+Result:
+Installed `@openai/codex` globally with npm and verified `codex --version` reports `codex-cli 0.133.0`. npm emitted a cleanup warning for a locked old temporary Codex directory, but the install command exited successfully.
