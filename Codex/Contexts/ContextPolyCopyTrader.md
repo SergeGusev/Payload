@@ -1,3 +1,14 @@
+## Active Update 2026-05-23 Middle Bps Logic Explanation
+Goal: Explain how `BTC Up or Down 5m Middle 1 N bps` and `BTC Up or Down 5m Middle 1 Revert N bps` work.
+Status: Completed
+Done:
+- Inspected current Middle variant definitions, BTC 5m processor decision path, Binance reference cache, pricing path, README/configuration docs, and relevant defaults.
+- Confirmed active Middle bps grids are `1..100 bps` for standard and Revert non-Instant variants, with matching Instant variants separate from the requested strategies.
+- Prepared a detailed answer describing signal source, rolling arithmetic mean, bps threshold formula, direction/revert mapping, skip reasons, and non-Instant GTD Paper limit pricing.
+Next: None.
+Notes: Read-only explanation task. No source behavior changed and no project tests were run. `git pull --ff-only` reported the branch was already up to date.
+Blockers: None.
+
 ## Active Update 2026-05-23 Codex CLI Global Install
 Goal: Install the OpenAI Codex CLI globally with npm.
 Status: Completed

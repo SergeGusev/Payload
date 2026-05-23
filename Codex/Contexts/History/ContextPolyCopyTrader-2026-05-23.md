@@ -18,3 +18,10 @@ npm install -g @openai/codex
 
 Result:
 Installed `@openai/codex` globally with npm and verified `codex --version` reports `codex-cli 0.133.0`. npm emitted a cleanup warning for a locked old temporary Codex directory, but the install command exited successfully.
+
+## 2026-05-23T17:14:25.1665938Z
+Request:
+Объясни подробно, как работает логика BTC Up or Down 5m Middle 1 N bps и BTC Up or Down 5m Middle 1 Revert N bps
+
+Result:
+Inspected the current Middle bps strategy definitions and BTC 5m processor implementation, then prepared a detailed explanation of the standard and Revert `Middle 1 N bps` signal, threshold gate, skip reasons, and non-Instant GTD Paper limit pricing. No source behavior changed.
