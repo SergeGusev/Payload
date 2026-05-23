@@ -198,6 +198,35 @@ public sealed class CryptoUpDown5mOddsArchiveProcessorTests
             prices[assetSymbol] = priceUsd;
         }
 
+        public BtcUsdReferencePriceSnapshot GetSnapshot(string assetSymbol)
+        {
+            var normalized = assetSymbol.ToUpperInvariant();
+            if (!prices.TryGetValue(normalized, out var priceUsd))
+            {
+                return new BtcUsdReferencePriceSnapshot(
+                    "FakeBinance",
+                    100,
+                    0,
+                    false,
+                    null,
+                    null,
+                    [],
+                    DateTimeOffset.UtcNow);
+            }
+
+            var now = DateTimeOffset.UtcNow;
+            var point = new BtcUsdReferencePricePoint(priceUsd, now, now, "FakeBinance");
+            return new BtcUsdReferencePriceSnapshot(
+                "FakeBinance",
+                100,
+                1,
+                false,
+                priceUsd,
+                point,
+                [point],
+                now);
+        }
+
         public Task<CryptoReferencePricePoint> GetPriceAsync(
             string assetSymbol,
             CancellationToken cancellationToken = default)

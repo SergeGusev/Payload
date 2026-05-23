@@ -13,6 +13,10 @@ public sealed class BinanceCryptoReferenceTradeStreamService(
     private readonly object sync = new();
     private readonly HashSet<string> enabledAssetSymbols = NormalizeSymbols(options.AssetSymbols);
     private readonly Dictionary<string, CryptoReferencePricePoint> latestByAsset = new(StringComparer.OrdinalIgnoreCase);
+    private readonly Dictionary<string, List<BtcUsdReferencePricePoint>> samplesByAsset = new(StringComparer.OrdinalIgnoreCase);
+    private readonly Dictionary<string, DateTimeOffset> nextSampleAtUtcByAsset = new(StringComparer.OrdinalIgnoreCase);
+    private readonly int windowSize = Math.Max(1, options.WindowSize);
+    private readonly TimeSpan sampleInterval = TimeSpan.FromSeconds(Math.Max(1, options.SampleIntervalSeconds));
 
     public Task<CryptoReferencePricePoint> GetPriceAsync(
         string assetSymbol,
@@ -42,6 +46,16 @@ public sealed class BinanceCryptoReferenceTradeStreamService(
         return Task.FromResult(snapshot);
     }
 
+    public BtcUsdReferencePriceSnapshot GetSnapshot(string assetSymbol)
+    {
+        var normalized = NormalizeSymbol(assetSymbol);
+        lock (sync)
+        {
+            samplesByAsset.TryGetValue(normalized, out var samples);
+            return CreateSnapshot(samples ?? []);
+        }
+    }
+
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
         if (!options.Enabled)
@@ -59,9 +73,11 @@ public sealed class BinanceCryptoReferenceTradeStreamService(
         var reconnectDelay = TimeSpan.FromSeconds(options.ReconnectBaseDelaySeconds);
         var maxReconnectDelay = TimeSpan.FromSeconds(options.ReconnectMaxDelaySeconds);
         logger.LogInformation(
-            "Binance crypto trade stream reference service started. Assets={Assets} StreamUrl={StreamUrl} StaleAfterSeconds={StaleAfterSeconds}",
+            "Binance crypto trade stream reference service started. Assets={Assets} StreamUrl={StreamUrl} SampleIntervalSeconds={SampleIntervalSeconds} WindowSize={WindowSize} StaleAfterSeconds={StaleAfterSeconds}",
             string.Join(",", enabledAssetSymbols.OrderBy(symbol => symbol, StringComparer.OrdinalIgnoreCase)),
             BuildStreamUrl(),
+            options.SampleIntervalSeconds,
+            options.WindowSize,
             options.StaleAfterSeconds);
 
         while (!stoppingToken.IsCancellationRequested)
@@ -148,7 +164,63 @@ public sealed class BinanceCryptoReferenceTradeStreamService(
         lock (sync)
         {
             latestByAsset[point.AssetSymbol] = point;
+            if (!nextSampleAtUtcByAsset.TryGetValue(point.AssetSymbol, out var nextSampleAtUtc) ||
+                fetchedAtUtc >= nextSampleAtUtc)
+            {
+                AddSample(point);
+                nextSampleAtUtcByAsset[point.AssetSymbol] = fetchedAtUtc.Add(sampleInterval);
+                var snapshot = CreateSnapshot(samplesByAsset[point.AssetSymbol]);
+                logger.LogInformation(
+                    "Binance {AssetSymbol}/USDT reference price sampled. PriceUsd={PriceUsd} SourceUpdatedAtUtc={SourceUpdatedAtUtc} Samples={Samples} WindowSize={WindowSize} ArithmeticMeanUsd={ArithmeticMeanUsd}",
+                    point.AssetSymbol,
+                    point.PriceUsd,
+                    point.SourceUpdatedAtUtc,
+                    snapshot.SampleCount,
+                    snapshot.WindowSize,
+                    snapshot.ArithmeticMeanUsd);
+            }
         }
+    }
+
+    private void AddSample(CryptoReferencePricePoint point)
+    {
+        if (!samplesByAsset.TryGetValue(point.AssetSymbol, out var samples))
+        {
+            samples = [];
+            samplesByAsset[point.AssetSymbol] = samples;
+        }
+
+        samples.Add(new BtcUsdReferencePricePoint(
+            point.PriceUsd,
+            point.SourceUpdatedAtUtc,
+            point.FetchedAtUtc,
+            point.Source));
+        var extra = samples.Count - windowSize;
+        if (extra > 0)
+        {
+            samples.RemoveRange(0, extra);
+        }
+    }
+
+    private BtcUsdReferencePriceSnapshot CreateSnapshot(IReadOnlyList<BtcUsdReferencePricePoint> samples)
+    {
+        var orderedSamples = samples
+            .OrderByDescending(sample => sample.FetchedAtUtc)
+            .ToArray();
+        var latest = orderedSamples.FirstOrDefault();
+        var mean = orderedSamples.Length == 0
+            ? (decimal?)null
+            : orderedSamples.Sum(sample => sample.PriceUsd) / orderedSamples.Length;
+
+        return new BtcUsdReferencePriceSnapshot(
+            BinanceCryptoTradeParser.SourceName,
+            windowSize,
+            orderedSamples.Length,
+            orderedSamples.Length >= windowSize,
+            mean,
+            latest,
+            orderedSamples,
+            DateTimeOffset.UtcNow);
     }
 
     private string BuildStreamUrl()

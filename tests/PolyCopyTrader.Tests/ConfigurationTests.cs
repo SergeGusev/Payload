@@ -82,6 +82,8 @@ public sealed class ConfigurationTests
         Assert.True(configuration.BinanceCryptoReference.Enabled);
         Assert.Equal("wss://data-stream.binance.vision:443/stream", configuration.BinanceCryptoReference.CombinedStreamBaseUrl);
         Assert.Equal(["ETH", "SOL"], configuration.BinanceCryptoReference.AssetSymbols);
+        Assert.Equal(60, configuration.BinanceCryptoReference.SampleIntervalSeconds);
+        Assert.Equal(100, configuration.BinanceCryptoReference.WindowSize);
         Assert.Equal(5, configuration.BinanceCryptoReference.StaleAfterSeconds);
         Assert.True(configuration.BtcUpDown5mOddsArchive.Enabled);
         Assert.Equal(5, configuration.BtcUpDown5mOddsArchive.PollIntervalSeconds);
@@ -536,6 +538,8 @@ public sealed class ConfigurationTests
             {
                 CombinedStreamBaseUrl = "https://data-stream.binance.vision/stream",
                 AssetSymbols = ["ETH", "ETH"],
+                SampleIntervalSeconds = 0,
+                WindowSize = 0,
                 StaleAfterSeconds = 0,
                 ReconnectBaseDelaySeconds = 0,
                 ReconnectMaxDelaySeconds = 0,
@@ -547,6 +551,8 @@ public sealed class ConfigurationTests
 
         Assert.Contains(errors, error => error.Contains("BinanceCryptoReference.CombinedStreamBaseUrl", StringComparison.Ordinal));
         Assert.Contains(errors, error => error.Contains("BinanceCryptoReference.AssetSymbols", StringComparison.Ordinal));
+        Assert.Contains(errors, error => error.Contains("BinanceCryptoReference.SampleIntervalSeconds", StringComparison.Ordinal));
+        Assert.Contains(errors, error => error.Contains("BinanceCryptoReference.WindowSize", StringComparison.Ordinal));
         Assert.Contains(errors, error => error.Contains("BinanceCryptoReference.StaleAfterSeconds", StringComparison.Ordinal));
         Assert.Contains(errors, error => error.Contains("BinanceCryptoReference.ReconnectBaseDelaySeconds", StringComparison.Ordinal));
         Assert.Contains(errors, error => error.Contains("BinanceCryptoReference.ReconnectMaxDelaySeconds", StringComparison.Ordinal));

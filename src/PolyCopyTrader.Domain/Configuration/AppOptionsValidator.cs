@@ -153,6 +153,8 @@ public static class AppOptionsValidator
             $"Binance crypto reference enabled: {configuration.BinanceCryptoReference.Enabled}",
             $"Binance crypto reference stream base URL: {configuration.BinanceCryptoReference.CombinedStreamBaseUrl}",
             $"Binance crypto reference assets: {string.Join(",", configuration.BinanceCryptoReference.AssetSymbols)}",
+            $"Binance crypto reference sample interval seconds: {configuration.BinanceCryptoReference.SampleIntervalSeconds}",
+            $"Binance crypto reference window size: {configuration.BinanceCryptoReference.WindowSize}",
             $"Binance crypto reference stale after seconds: {configuration.BinanceCryptoReference.StaleAfterSeconds}",
             $"BTC Up or Down 5m odds archive enabled: {configuration.BtcUpDown5mOddsArchive.Enabled}",
             $"BTC Up or Down 5m odds archive poll interval seconds: {configuration.BtcUpDown5mOddsArchive.PollIntervalSeconds}",
@@ -1405,6 +1407,16 @@ public static class AppOptionsValidator
     {
         ValidateAbsoluteWebSocketUrl(options.CombinedStreamBaseUrl, "BinanceCryptoReference.CombinedStreamBaseUrl", errors);
         ValidateCryptoAssetSymbols(options.AssetSymbols, "BinanceCryptoReference.AssetSymbols", errors);
+
+        if (options.SampleIntervalSeconds <= 0 || options.SampleIntervalSeconds > 86_400)
+        {
+            errors.Add("BinanceCryptoReference.SampleIntervalSeconds must be between 1 and 86400.");
+        }
+
+        if (options.WindowSize <= 0 || options.WindowSize > 10_000)
+        {
+            errors.Add("BinanceCryptoReference.WindowSize must be between 1 and 10000.");
+        }
 
         if (options.StaleAfterSeconds <= 0 || options.StaleAfterSeconds > 3_600)
         {

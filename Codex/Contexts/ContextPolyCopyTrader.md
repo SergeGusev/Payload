@@ -1,3 +1,15 @@
+## Active Update 2026-05-24 ETH/SOL Middle Strategies
+Goal: Add ETH and SOL Middle strategy variants analogous to the BTC Middle family.
+Status: Completed
+Done:
+- Added ETH/SOL Middle 1, Middle 1 bps 1..100, Middle 1 bps Instant 1..100, Middle 1 Revert, Middle 1 Revert bps 1..100, and Middle 1 Revert bps Instant 1..100 strategy ids.
+- Extended `BinanceCryptoReference` with per-asset rolling samples and snapshots using `SampleIntervalSeconds=60` and `WindowSize=100`, so ETH/SOL Middle can compare current Binance price to the cached crypto mean.
+- Updated the BTC 5m paper processor to route Middle reference decisions through BTC or crypto reference sources, preserve BTC skip reasons, add `crypto_reference_*` reasons for crypto Middle, and record crypto move-from-mean diagnostics.
+- Seeded the new ETH/SOL Middle rows in PostgreSQL schema, updated README/config docs, and added processor/config/schema tests.
+Next: None.
+Notes: Verification passed: `dotnet test tests\PolyCopyTrader.Tests\PolyCopyTrader.Tests.csproj --no-restore --filter "BtcUpDown5mPaperStrategyProcessorTests|StorageTests|ConfigurationTests"` (206/206), `dotnet test PolyCopyTrader.sln --no-restore` (549/549), and `git diff --check`.
+Blockers: None.
+
 ## Active Update 2026-05-23 More 270 Expiration Timestamp Answer
 Goal: State the current expiration timestamps used for `BTC Up or Down 5m More 270 Below 60/65`.
 Status: Completed

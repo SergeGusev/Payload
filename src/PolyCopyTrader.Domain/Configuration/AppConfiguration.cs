@@ -693,6 +693,10 @@ public sealed class BinanceCryptoReferenceOptions
 
     public List<string> AssetSymbols { get; init; } = ["ETH", "SOL"];
 
+    public int SampleIntervalSeconds { get; init; } = 60;
+
+    public int WindowSize { get; init; } = 100;
+
     public int StaleAfterSeconds { get; init; } = 5;
 
     public int ReconnectBaseDelaySeconds { get; init; } = 2;

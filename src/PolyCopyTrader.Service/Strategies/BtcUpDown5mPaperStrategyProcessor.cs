@@ -5535,12 +5535,17 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
         IDictionary<string, BtcCurrentPriceLookupResult> currentPrices,
         CancellationToken cancellationToken)
     {
-        var snapshot = btcUsdReferencePriceCache.Snapshot;
+        var isBtcReference = IsBtcReferenceVariant(variant);
+        var referenceReasonPrefix = isBtcReference ? "btc_reference" : "crypto_reference";
+        var snapshot = isBtcReference
+            ? btcUsdReferencePriceCache.Snapshot
+            : cryptoReferencePriceClient.GetSnapshot(GetReferenceAssetSymbol(variant));
         var requiredCachedSamples = Math.Max(0, variant.DecisionDepth - 1);
         if (snapshot.ArithmeticMeanUsd is not { } meanUsd)
         {
+            var reason = referenceReasonPrefix + "_mean_missing";
             return BtcOpeningLimitDecision.Reject(
-                "btc_reference_mean_missing",
+                reason,
                 BuildMiddleReferenceRawDecisionJson(
                     market,
                     variant,
@@ -5553,13 +5558,14 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
                     baseSelectedDirection: null,
                     selectedDirection: null,
                     selectedOutcome: null,
-                    reason: "btc_reference_mean_missing"));
+                    reason));
         }
 
         if (snapshot.Samples.Count < requiredCachedSamples)
         {
+            var reason = referenceReasonPrefix + "_samples_insufficient";
             return BtcOpeningLimitDecision.Reject(
-                "btc_reference_samples_insufficient",
+                reason,
                 BuildMiddleReferenceRawDecisionJson(
                     market,
                     variant,
@@ -5572,14 +5578,17 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
                     baseSelectedDirection: null,
                     selectedDirection: null,
                     selectedOutcome: null,
-                    reason: "btc_reference_samples_insufficient"));
+                    reason));
         }
 
-        var currentPriceLookup = await GetBtcCurrentPriceAsync(market, currentPrices, cancellationToken);
+        var currentPriceLookup = isBtcReference
+            ? await GetBtcCurrentPriceAsync(market, currentPrices, cancellationToken)
+            : await GetCryptoCurrentPriceAsync(market, variant, currentPrices, cancellationToken);
         if (currentPriceLookup.Price is not { } currentPrice)
         {
+            var reason = referenceReasonPrefix + "_fetch_failed";
             return BtcOpeningLimitDecision.Reject(
-                "btc_reference_fetch_failed",
+                reason,
                 BuildMiddleReferenceRawDecisionJson(
                     market,
                     variant,
@@ -5592,7 +5601,7 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
                     baseSelectedDirection: null,
                     selectedDirection: null,
                     selectedOutcome: null,
-                    reason: "btc_reference_fetch_failed"));
+                    reason));
         }
 
         var cachedSamples = snapshot.Samples.Take(requiredCachedSamples).ToArray();
@@ -5604,8 +5613,8 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
         if (baseSelectedDirection is null)
         {
             var reason = comparedPrices.Any(price => price == meanUsd)
-                ? "btc_reference_equal_mean"
-                : "btc_reference_mixed_around_mean";
+                ? referenceReasonPrefix + "_equal_mean"
+                : referenceReasonPrefix + "_mixed_around_mean";
             return BtcOpeningLimitDecision.Reject(
                 reason,
                 BuildMiddleReferenceRawDecisionJson(
@@ -5628,8 +5637,9 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
             var minAbsMoveFromMeanBps = GetMinimumAbsMeanDeviationBps(comparedPrices, meanUsd);
             if (minAbsMoveFromMeanBps < variant.DecisionThresholdBps.Value)
             {
+                var reason = referenceReasonPrefix + "_mean_deviation_below_threshold";
                 return BtcOpeningLimitDecision.Reject(
-                    "btc_reference_mean_deviation_below_threshold",
+                    reason,
                     BuildMiddleReferenceRawDecisionJson(
                         market,
                         variant,
@@ -5642,7 +5652,7 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
                         baseSelectedDirection,
                         selectedDirection: null,
                         selectedOutcome: null,
-                        reason: "btc_reference_mean_deviation_below_threshold"));
+                        reason));
             }
         }
 
@@ -6994,11 +7004,13 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
             return null;
         }
 
-        return StrategyIds.BtcUpDown5mVariants.SingleOrDefault(candidate =>
+        var referenceAssetSymbol = GetReferenceAssetSymbol(variant);
+        return StrategyIds.UpDown5mStrategyVariants.SingleOrDefault(candidate =>
             candidate.Behavior == baseBehavior.Value &&
             candidate.DecisionDepth == variant.DecisionDepth &&
             candidate.EntryDelaySeconds == variant.EntryDelaySeconds &&
-            candidate.DecisionThresholdBps == variant.DecisionThresholdBps);
+            candidate.DecisionThresholdBps == variant.DecisionThresholdBps &&
+            string.Equals(GetReferenceAssetSymbol(candidate), referenceAssetSymbol, StringComparison.OrdinalIgnoreCase));
     }
 
     private static IReadOnlyList<BtcUpDown5mStrategyVariant> GetEnsembleVoteCandidateVariants()
@@ -8997,8 +9009,11 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
         string? reason)
     {
         var limitPrice = GetBinanceStartRelativeLimitPrice(variant);
-        var marketStartUtc = BtcUpDown5mMarketAnalyzer.GetWindowStartUtc(market);
+        var marketStartUtc = GetMarketWindowStartUtc(market, variant);
         var entryDueAtUtc = GetEntryDueAtUtc(marketStartUtc, variant);
+        var referenceAssetSymbol = GetReferenceAssetSymbol(variant);
+        var referenceBinanceSymbol = referenceAssetSymbol + "USDT";
+        var isBtcReference = IsBtcReferenceVariant(variant);
         var comparedPrices = currentPrice is null
             ? cachedSamples.Select(sample => sample.PriceUsd).ToArray()
             : cachedSamples
@@ -9020,6 +9035,8 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
             order_execution_mode = OpeningLimitOrderType,
             post_only = false,
             strategy_code = variant.Code,
+            reference_asset_symbol = referenceAssetSymbol,
+            reference_binance_symbol = referenceBinanceSymbol,
             decision_source = IsMiddleReferenceRevert(variant)
                 ? "binance_trade_stream_middle_reference_revert"
                 : "binance_trade_stream_middle_reference",
@@ -9034,18 +9051,26 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
             entry_delay_seconds = variant.EntryDelaySeconds,
             entry_due_at_utc = entryDueAtUtc,
             decision_delay_ms = GetDecisionDelayMilliseconds(entryDueAtUtc, nowUtc),
-            btc_current_price_usd = currentPrice?.PriceUsd,
-            btc_current_source_updated_at_utc = currentPrice?.SourceUpdatedAtUtc,
-            btc_current_fetched_at_utc = currentPrice?.FetchedAtUtc,
+            btc_current_price_usd = isBtcReference ? currentPrice?.PriceUsd : null,
+            btc_current_source_updated_at_utc = isBtcReference ? currentPrice?.SourceUpdatedAtUtc : null,
+            btc_current_fetched_at_utc = isBtcReference ? currentPrice?.FetchedAtUtc : null,
+            crypto_asset_symbol = isBtcReference ? null : referenceAssetSymbol,
+            crypto_current_price_usd = isBtcReference ? null : currentPrice?.PriceUsd,
+            crypto_current_source_updated_at_utc = isBtcReference ? null : currentPrice?.SourceUpdatedAtUtc,
+            crypto_current_fetched_at_utc = isBtcReference ? null : currentPrice?.FetchedAtUtc,
             reference_source = snapshot.Source,
             reference_window_size = snapshot.WindowSize,
             reference_sample_count = snapshot.SampleCount,
             reference_is_full_window = snapshot.IsFullWindow,
             reference_arithmetic_mean_usd = snapshot.ArithmeticMeanUsd,
-            btc_move_from_mean_bps = currentMoveFromMeanBps,
-            btc_abs_move_from_mean_bps = currentAbsMoveFromMeanBps,
-            btc_min_abs_move_from_mean_bps = minAbsMoveFromMeanBps,
-            btc_min_move_from_mean_bps = variant.DecisionThresholdBps,
+            btc_move_from_mean_bps = isBtcReference ? currentMoveFromMeanBps : null,
+            btc_abs_move_from_mean_bps = isBtcReference ? currentAbsMoveFromMeanBps : null,
+            btc_min_abs_move_from_mean_bps = isBtcReference ? minAbsMoveFromMeanBps : null,
+            btc_min_move_from_mean_bps = isBtcReference ? variant.DecisionThresholdBps : null,
+            crypto_move_from_mean_bps = isBtcReference ? null : currentMoveFromMeanBps,
+            crypto_abs_move_from_mean_bps = isBtcReference ? null : currentAbsMoveFromMeanBps,
+            crypto_min_abs_move_from_mean_bps = isBtcReference ? null : minAbsMoveFromMeanBps,
+            crypto_min_move_from_mean_bps = isBtcReference ? null : variant.DecisionThresholdBps,
             required_cached_samples = requiredCachedSamples,
             cached_samples_used = cachedSamples
                 .Select(sample => new

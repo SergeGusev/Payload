@@ -2440,6 +2440,106 @@ ON CONFLICT (id) DO UPDATE SET
     description = excluded.description,
     updated_at_utc = excluded.updated_at_utc;
 
+INSERT INTO strategies (id, code, name, description, enabled, paper_stake_amount, created_at_utc, updated_at_utc)
+WITH assets(asset_symbol, middle_id_group, middle_revert_id_group) AS (
+    VALUES
+        ('ETH', '8071', '8073'),
+        ('SOL', '8075', '8077')
+)
+SELECT
+    ('b7c50005-0000-4000-' || middle_id_group || '-000000000001')::uuid,
+    lower(asset_symbol) || '_up_down_5m_middle_1',
+    asset_symbol || ' Up or Down 5m Middle 1',
+    'Immediately after ' || asset_symbol || ' 5m market open, compare the latest Binance ' || asset_symbol || '/USDT trade-stream price against the cached arithmetic mean; above mean buys Down, below mean buys Up, otherwise skip. Paper entry is a GTD limit BUY with dynamic break-even pricing; settlement uses only actually filled shares.',
+    true,
+    1.00,
+    now(),
+    now()
+FROM assets
+UNION ALL
+SELECT
+    ('b7c50005-0000-4000-' || middle_revert_id_group || '-000000000001')::uuid,
+    lower(asset_symbol) || '_up_down_5m_middle_1_revert',
+    asset_symbol || ' Up or Down 5m Middle 1 Revert',
+    'Immediately after ' || asset_symbol || ' 5m market open, compare the latest Binance ' || asset_symbol || '/USDT trade-stream price against the cached arithmetic mean, then invert the standard Middle 1 decision; above mean buys Up, below mean buys Down, otherwise skip. Paper entry is a GTD limit BUY with dynamic break-even pricing; settlement uses only actually filled shares.',
+    true,
+    1.00,
+    now(),
+    now()
+FROM assets
+ON CONFLICT (id) DO UPDATE SET
+    code = excluded.code,
+    name = excluded.name,
+    description = excluded.description,
+    updated_at_utc = excluded.updated_at_utc;
+
+INSERT INTO strategies (id, code, name, description, enabled, paper_stake_amount, created_at_utc, updated_at_utc)
+WITH assets(asset_symbol, middle_id_group, middle_instant_id_group, middle_revert_id_group, middle_revert_instant_id_group) AS (
+    VALUES
+        ('ETH', '8071', '8072', '8073', '8074'),
+        ('SOL', '8075', '8076', '8077', '8078')
+),
+thresholds(threshold_digit, threshold_name) AS (
+    SELECT value, value::text
+    FROM generate_series(1, 100) AS generated(value)
+),
+variants AS (
+    SELECT
+        asset_symbol,
+        middle_id_group AS id_group,
+        lower(asset_symbol) || '_up_down_5m_middle_1_bps_' || thresholds.threshold_digit AS code,
+        asset_symbol || ' Up or Down 5m Middle 1 ' || thresholds.threshold_name || ' bps' AS name,
+        'Immediately after ' || asset_symbol || ' 5m market open, compare the latest Binance ' || asset_symbol || '/USDT trade-stream price against the cached arithmetic mean; above mean buys Down, below mean buys Up, otherwise skip. Enter only when every compared price is at least ' || thresholds.threshold_name || ' bps away from the mean. Paper entry is a GTD limit BUY with dynamic break-even pricing; settlement uses only actually filled shares.' AS description,
+        thresholds.threshold_digit
+    FROM assets
+    CROSS JOIN thresholds
+    UNION ALL
+    SELECT
+        asset_symbol,
+        middle_instant_id_group AS id_group,
+        lower(asset_symbol) || '_up_down_5m_middle_1_bps_' || thresholds.threshold_digit || '_instant' AS code,
+        asset_symbol || ' Up or Down 5m Middle 1 ' || thresholds.threshold_name || ' bps Instant' AS name,
+        'Immediately after ' || asset_symbol || ' 5m market open, compare the latest Binance ' || asset_symbol || '/USDT trade-stream price against the cached arithmetic mean; above mean buys Down, below mean buys Up, otherwise skip. Enter only when every compared price is at least ' || thresholds.threshold_name || ' bps away from the mean. Paper entry is a GTD limit BUY priced from current executable ask depth so the order can fill immediately; settlement uses only actually filled shares.' AS description,
+        thresholds.threshold_digit
+    FROM assets
+    CROSS JOIN thresholds
+    UNION ALL
+    SELECT
+        asset_symbol,
+        middle_revert_id_group AS id_group,
+        lower(asset_symbol) || '_up_down_5m_middle_1_revert_bps_' || thresholds.threshold_digit AS code,
+        asset_symbol || ' Up or Down 5m Middle 1 Revert ' || thresholds.threshold_name || ' bps' AS name,
+        'Immediately after ' || asset_symbol || ' 5m market open, compare the latest Binance ' || asset_symbol || '/USDT trade-stream price against the cached arithmetic mean, then invert the standard Middle 1 decision; above mean buys Up, below mean buys Down, otherwise skip. Enter only when every compared price is at least ' || thresholds.threshold_name || ' bps away from the mean. Paper entry is a GTD limit BUY with dynamic break-even pricing; settlement uses only actually filled shares.' AS description,
+        thresholds.threshold_digit
+    FROM assets
+    CROSS JOIN thresholds
+    UNION ALL
+    SELECT
+        asset_symbol,
+        middle_revert_instant_id_group AS id_group,
+        lower(asset_symbol) || '_up_down_5m_middle_1_revert_bps_' || thresholds.threshold_digit || '_instant' AS code,
+        asset_symbol || ' Up or Down 5m Middle 1 Revert ' || thresholds.threshold_name || ' bps Instant' AS name,
+        'Immediately after ' || asset_symbol || ' 5m market open, compare the latest Binance ' || asset_symbol || '/USDT trade-stream price against the cached arithmetic mean, then invert the standard Middle 1 decision; above mean buys Up, below mean buys Down, otherwise skip. Enter only when every compared price is at least ' || thresholds.threshold_name || ' bps away from the mean. Paper entry is a GTD limit BUY priced from current executable ask depth so the order can fill immediately; settlement uses only actually filled shares.' AS description,
+        thresholds.threshold_digit
+    FROM assets
+    CROSS JOIN thresholds
+)
+SELECT
+    ('b7c50005-0000-4000-' || id_group || '-' || lpad((100 + threshold_digit)::text, 12, '0'))::uuid,
+    code,
+    name,
+    description,
+    true,
+    1.00,
+    now(),
+    now()
+FROM variants
+ON CONFLICT (id) DO UPDATE SET
+    code = excluded.code,
+    name = excluded.name,
+    description = excluded.description,
+    updated_at_utc = excluded.updated_at_utc;
+
 WITH prices(price_cents) AS (
     SELECT generate_series(10, 90, 5)
 )

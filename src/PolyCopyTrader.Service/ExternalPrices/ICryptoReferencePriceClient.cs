@@ -7,4 +7,6 @@ public interface ICryptoReferencePriceClient
     Task<CryptoReferencePricePoint> GetPriceAsync(
         string assetSymbol,
         CancellationToken cancellationToken = default);
+
+    BtcUsdReferencePriceSnapshot GetSnapshot(string assetSymbol);
 }

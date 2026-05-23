@@ -105,6 +105,14 @@ public sealed class StorageTests
         Assert.Contains("'b7c50005-0000-4000-8029-' || lpad(((depths.depth * 100) + thresholds.threshold_digit)::text, 12, '0')", PostgresSchema.SchemaSql, StringComparison.Ordinal);
         Assert.Contains("'b7c50005-0000-4000-8030-' || lpad(((depths.depth * 100) + thresholds.threshold_digit)::text, 12, '0')", PostgresSchema.SchemaSql, StringComparison.Ordinal);
         Assert.Contains("generate_series(1, 100)", PostgresSchema.SchemaSql, StringComparison.Ordinal);
+        Assert.Contains("lower(asset_symbol) || '_up_down_5m_middle_1'", PostgresSchema.SchemaSql, StringComparison.Ordinal);
+        Assert.Contains("lower(asset_symbol) || '_up_down_5m_middle_1_revert'", PostgresSchema.SchemaSql, StringComparison.Ordinal);
+        Assert.Contains("lower(asset_symbol) || '_up_down_5m_middle_1_bps_' || thresholds.threshold_digit", PostgresSchema.SchemaSql, StringComparison.Ordinal);
+        Assert.Contains("lower(asset_symbol) || '_up_down_5m_middle_1_bps_' || thresholds.threshold_digit || '_instant'", PostgresSchema.SchemaSql, StringComparison.Ordinal);
+        Assert.Contains("lower(asset_symbol) || '_up_down_5m_middle_1_revert_bps_' || thresholds.threshold_digit", PostgresSchema.SchemaSql, StringComparison.Ordinal);
+        Assert.Contains("lower(asset_symbol) || '_up_down_5m_middle_1_revert_bps_' || thresholds.threshold_digit || '_instant'", PostgresSchema.SchemaSql, StringComparison.Ordinal);
+        Assert.Contains("('ETH', '8071', '8072', '8073', '8074')", PostgresSchema.SchemaSql, StringComparison.Ordinal);
+        Assert.Contains("('SOL', '8075', '8076', '8077', '8078')", PostgresSchema.SchemaSql, StringComparison.Ordinal);
         Assert.Contains("20260522_rescale_middle_bps_history_reset", PostgresSchema.SchemaSql, StringComparison.Ordinal);
         Assert.Contains("20260522_retire_middle_depth_2_5", PostgresSchema.SchemaSql, StringComparison.Ordinal);
         Assert.Contains("'btc_up_down_5m_skip_1'", PostgresSchema.SchemaSql, StringComparison.Ordinal);
