@@ -1,3 +1,16 @@
+## Active Update 2026-05-24 ETH/SOL Middle Production Check
+Goal: Verify production after deploying ETH/SOL Middle strategies.
+Status: Completed
+Done:
+- Confirmed production `PolyCopyTrader.Service` is running commit `e12f1fed595d0bfb3a2aabb491304f9461fc700f`, status `Running`, mode `Live`, heartbeat fresh, and `last_error` null.
+- Confirmed production strategy seeding inserted the ETH/SOL Middle families: 402 rows per asset, 804 total, all enabled, Paper-only, not paused, and with no live stakes.
+- Found an operational issue: ETH/SOL Middle runs are being observed, but due rows through the checked windows were skipped with `entry_due_expired`; no ETH/SOL Middle paper orders existed.
+- Identified the likely cause as the large immediate-entry due set exceeding the 10-second entry grace window with `MaxEntriesPerCycle=250`; Middle variants are not in the after-grace opening-limit allowlist.
+- Checked surrounding production health: no long active PostgreSQL queries; only a small number of recent API errors, mostly startup reference warm-up plus one order book timeout.
+Next: Fix ETH/SOL Middle entry scheduling/default enabled set before relying on their Paper results.
+Notes: Production checks were read-only via `out\dbprobe` with a temporary host override to `192.168.0.101`; no production rows were changed.
+Blockers: None.
+
 ## Active Update 2026-05-24 ETH/SOL Middle Strategies
 Goal: Add ETH and SOL Middle strategy variants analogous to the BTC Middle family.
 Status: Completed
