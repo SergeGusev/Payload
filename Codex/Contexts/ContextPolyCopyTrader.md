@@ -1,3 +1,14 @@
+## Active Update 2026-05-23 Middle Mean Window Opinion
+Goal: Assess whether using a 100-minute arithmetic mean as the Middle strategy reference is reasonable.
+Status: Completed
+Done:
+- Re-read workflow, project rules, active context, Git status, and confirmed `git pull --ff-only` was already up to date.
+- Assessed the current `BinanceBtcUsdReference` design: one sample per minute, `WindowSize=100`, so Middle uses roughly a 100-minute rolling arithmetic mean when the cache is full.
+- Concluded that 100 minutes is reasonable as a slow regime/trend anchor, but not ideal if the intent is a local fair "mid" for a 5-minute market; it naturally makes Revert behave like a momentum/continuation strategy in trending regimes.
+Next: If requested, add parallel Middle window variants rather than changing the existing 100-minute baseline in place.
+Notes: Read-only strategy-design discussion only. No source behavior changed and no project tests were run.
+Blockers: None.
+
 ## Active Update 2026-05-23 Middle Revert 19 Plausibility Check
 Goal: Assess whether high revenue for `BTC Up or Down 5m Middle 1 Revert 19 bps` is logically plausible.
 Status: Completed

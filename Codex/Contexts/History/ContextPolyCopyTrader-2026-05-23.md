@@ -32,3 +32,10 @@ Request:
 
 Result:
 Queried production read-only and assessed the target strategy. `BTC Up or Down 5m Middle 1 Revert 19 bps` had `20` settled Paper runs, `13` wins, `7` losses, `58.0283` settled stake, `84.9300` settlement value, and `26.9017` realized PnL; all settled target entries selected `Up` while BTC was above the rolling mean by about `19.8540..52.5638` bps. Explained that this is logically a momentum/continuation bet rather than mean reversion, but the sample is short and not yet robust.
+
+## 2026-05-23T17:31:14.2557921Z
+Request:
+Как ты думаешь, считать mid за 100 минут - это нормально?
+
+Result:
+Explained that the current 100-minute arithmetic mean is reasonable as a slow regime/trend anchor, but too slow to be treated as a local fair mid for a 5-minute prediction. Recommended preserving the existing baseline and testing parallel shorter/multi-window Middle variants if the goal is to distinguish mean reversion from momentum.
