@@ -1,3 +1,15 @@
+## Active Update 2026-05-24 Strategy Acceleration Options
+Goal: Explain practical ways to speed up 5-minute strategy processing after the ETH/SOL Middle production check.
+Status: Completed
+Done:
+- Re-read workflow, project rules, active context, Git status, and current strategy processor/config limits.
+- Confirmed current strategy config remains `PollIntervalSeconds=1`, `EntryGraceSeconds=10`, `MaxEntriesPerCycle=250`, and `MaxConcurrentEntryDecisions=32`.
+- Confirmed due entry selection is globally limited and ordered by due time, live priority, detected time, and strategy id; per-cycle caches are recreated each limited batch.
+- Identified acceleration options: immediate config relief, reducing enabled Paper-grid width, prioritizing earliest due/current-window work, batching DB updates/orders, and adding a Middle-specific vectorized decision path.
+Next: If implementation is requested, start with a conservative fix that processes all earliest-due rows or raises due capacity, then add a Middle vector fast path.
+Notes: Read-only code/config analysis only. No source behavior changed and no tests were run.
+Blockers: None.
+
 ## Active Update 2026-05-24 ETH/SOL Middle Production Check
 Goal: Verify production after deploying ETH/SOL Middle strategies.
 Status: Completed
