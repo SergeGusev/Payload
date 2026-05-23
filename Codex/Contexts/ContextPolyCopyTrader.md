@@ -1,3 +1,16 @@
+## Active Update 2026-05-23 More 270 Below Exit Rule Check
+Goal: Check whether `BTC Up or Down 5m More 270 Below 60` and `BTC Up or Down 5m More 270 Below 65` have a pre-market-end removal/exit rule.
+Status: Completed
+Done:
+- Re-read workflow, project rules, active context, Git status, and confirmed `git pull --ff-only` was already up to date.
+- Inspected source definitions and confirmed both strategies are `StandardEntryPriceCap` GTD BUY-only variants (`btc_up_down_5m_more_270_below_60` / `btc_up_down_5m_more_270_below_65`).
+- Confirmed the pre-market-end SELL exit path is limited to `PreOpenFixedDirectionSell` variants, not these two `More 270 Below` strategies.
+- Confirmed generic opening-limit expiration for entry-after-midpoint variants uses TTL/market-end cap; at `270` seconds into a `5m` market, the default config lets unfilled BUY orders live until market end rather than canceling them `60` seconds before market end.
+- Queried production read-only at `192.168.0.101`: both strategies are enabled, Paper-only, and historical paper orders for them are BUY orders only, with no SELL rows.
+Next: None.
+Notes: Read-only code and production DB check only. No source behavior changed and no project tests were run. `dotnet run --project out/dbprobe` emitted existing nullable warnings before query results.
+Blockers: None.
+
 ## Active Update 2026-05-23 Middle Mean Window Opinion
 Goal: Assess whether using a 100-minute arithmetic mean as the Middle strategy reference is reasonable.
 Status: Completed

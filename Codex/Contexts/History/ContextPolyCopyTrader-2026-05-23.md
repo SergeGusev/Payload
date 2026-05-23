@@ -39,3 +39,10 @@ Request:
 
 Result:
 Explained that the current 100-minute arithmetic mean is reasonable as a slow regime/trend anchor, but too slow to be treated as a local fair mid for a 5-minute prediction. Recommended preserving the existing baseline and testing parallel shorter/multi-window Middle variants if the goal is to distinguish mean reversion from momentum.
+
+## 2026-05-23T19:45:41.7042554Z
+Request:
+Посмотри, есть ли для стратегий BTC Up or Down 5m More 270 Below 60 и BTC Up or Down 5m More 270 Below 65 правило снимать их до окончания маркета
+
+Result:
+Inspected the current strategy definitions, BTC 5m processor exit/expiration paths, seed rows, and production paper orders. Confirmed both strategies are `StandardEntryPriceCap` GTD BUY-only variants; the pre-market-end SELL exit rule applies only to `PreOpenFixedDirectionSell` variants, not these strategies. Production read-only history showed only BUY orders for both strategies and no SELL rows.
