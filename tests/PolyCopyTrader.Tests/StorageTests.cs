@@ -179,6 +179,8 @@ public sealed class StorageTests
         Assert.Contains("strategy_id uuid NOT NULL DEFAULT 'f0110a0d-1ead-4c00-8b01-000000000001'", PostgresSchema.SchemaSql, StringComparison.Ordinal);
         Assert.Contains("REFERENCES strategies(id)", PostgresSchema.SchemaSql, StringComparison.Ordinal);
         Assert.Contains("ix_paper_orders_strategy_time", PostgresSchema.SchemaSql, StringComparison.Ordinal);
+        Assert.Contains("ix_paper_orders_strategy_perf_cover", PostgresSchema.SchemaSql, StringComparison.Ordinal);
+        Assert.Contains("ix_paper_orders_id_strategy_side_cover", PostgresSchema.SchemaSql, StringComparison.Ordinal);
         Assert.Contains("ix_paper_orders_copied_wallet_time", PostgresSchema.SchemaSql, StringComparison.Ordinal);
         Assert.Contains("realized_pnl_usd numeric(28,8) NOT NULL DEFAULT 0", PostgresSchema.SchemaSql, StringComparison.Ordinal);
         Assert.Contains("ix_paper_fills_order_time", PostgresSchema.SchemaSql, StringComparison.Ordinal);
@@ -208,6 +210,10 @@ public sealed class StorageTests
         Assert.Contains("ix_strategy_market_paper_runs_strategy_updated", PostgresSchema.SchemaSql, StringComparison.Ordinal);
         Assert.Contains("ix_strategy_market_paper_runs_strategy_settled", PostgresSchema.SchemaSql, StringComparison.Ordinal);
         Assert.Contains("ix_paper_fills_filled_time_order", PostgresSchema.SchemaSql, StringComparison.Ordinal);
+        Assert.Contains("ix_paper_fills_filled_perf_cover", PostgresSchema.SchemaSql, StringComparison.Ordinal);
+        Assert.Contains("ix_strategy_market_paper_runs_updated_time_strategy", PostgresSchema.SchemaSql, StringComparison.Ordinal);
+        Assert.Contains("ix_strategy_market_paper_runs_entered_time_strategy", PostgresSchema.SchemaSql, StringComparison.Ordinal);
+        Assert.Contains("ix_strategy_market_paper_runs_settled_time_strategy", PostgresSchema.SchemaSql, StringComparison.Ordinal);
         Assert.Contains("ux_paper_positions_wallet_asset", PostgresSchema.SchemaSql, StringComparison.Ordinal);
         Assert.Contains("ix_paper_positions_wallet_updated", PostgresSchema.SchemaSql, StringComparison.Ordinal);
         Assert.Contains("polymarket_positions_total_pnl_usd numeric(28,8) NULL", PostgresSchema.SchemaSql, StringComparison.Ordinal);
@@ -716,7 +722,9 @@ CREATE INDEX first_table_id_idx ON first_table(id);
 
     [Theory]
     [InlineData("CREATE INDEX IF NOT EXISTS ix_demo ON demo_table(id)", "ix_demo")]
+    [InlineData("CREATE INDEX CONCURRENTLY IF NOT EXISTS ix_demo_concurrent ON demo_table(id)", "ix_demo_concurrent")]
     [InlineData("CREATE UNIQUE INDEX IF NOT EXISTS ux_demo ON demo_table(id)", "ux_demo")]
+    [InlineData("CREATE UNIQUE INDEX CONCURRENTLY IF NOT EXISTS ux_demo_concurrent ON demo_table(id)", "ux_demo_concurrent")]
     [InlineData("  create index if not exists ix_lower ON demo_table(id)", "ix_lower")]
     [InlineData("CREATE TABLE demo_table (id integer)", null)]
     public void PostgresSchemaInitializer_ReadsCreateIndexIfNotExistsName(string statement, string? expected)

@@ -2674,6 +2674,14 @@ ON paper_orders(copied_trader_wallet, created_at_utc DESC);
 CREATE INDEX IF NOT EXISTS ix_paper_orders_strategy_time
 ON paper_orders(strategy_id, created_at_utc DESC);
 
+CREATE INDEX CONCURRENTLY IF NOT EXISTS ix_paper_orders_strategy_perf_cover
+ON paper_orders(strategy_id, created_at_utc DESC)
+INCLUDE (status, side, notional_usd);
+
+CREATE INDEX CONCURRENTLY IF NOT EXISTS ix_paper_orders_id_strategy_side_cover
+ON paper_orders(id)
+INCLUDE (strategy_id, side);
+
 CREATE INDEX IF NOT EXISTS ix_paper_orders_correlation
 ON paper_orders(correlation_id)
 WHERE correlation_id IS NOT NULL;
@@ -2695,6 +2703,10 @@ ON paper_fills(paper_order_id, filled_at_utc ASC);
 
 CREATE INDEX IF NOT EXISTS ix_paper_fills_filled_time_order
 ON paper_fills(filled_at_utc, paper_order_id);
+
+CREATE INDEX CONCURRENTLY IF NOT EXISTS ix_paper_fills_filled_perf_cover
+ON paper_fills(filled_at_utc, paper_order_id)
+INCLUDE (price, size_shares, realized_pnl_usd);
 
 CREATE TABLE IF NOT EXISTS strategy_market_paper_runs (
     id uuid PRIMARY KEY,
@@ -2754,6 +2766,17 @@ ON strategy_market_paper_runs(strategy_id, updated_at_utc);
 
 CREATE INDEX IF NOT EXISTS ix_strategy_market_paper_runs_strategy_settled
 ON strategy_market_paper_runs(strategy_id, settled_at_utc)
+WHERE settled_at_utc IS NOT NULL;
+
+CREATE INDEX CONCURRENTLY IF NOT EXISTS ix_strategy_market_paper_runs_updated_time_strategy
+ON strategy_market_paper_runs(updated_at_utc, strategy_id);
+
+CREATE INDEX CONCURRENTLY IF NOT EXISTS ix_strategy_market_paper_runs_entered_time_strategy
+ON strategy_market_paper_runs(entered_at_utc, strategy_id)
+WHERE entered_at_utc IS NOT NULL;
+
+CREATE INDEX CONCURRENTLY IF NOT EXISTS ix_strategy_market_paper_runs_settled_time_strategy
+ON strategy_market_paper_runs(settled_at_utc, strategy_id)
 WHERE settled_at_utc IS NOT NULL;
 
 CREATE TABLE IF NOT EXISTS paper_positions (

@@ -154,7 +154,7 @@ public sealed class PostgresSchemaInitializer(PostgresConnectionFactory connecti
     {
         var match = Regex.Match(
             statement,
-            @"^\s*CREATE\s+(?:UNIQUE\s+)?INDEX\s+IF\s+NOT\s+EXISTS\s+([a-zA-Z_][a-zA-Z0-9_]*)\b",
+            @"^\s*CREATE\s+(?:UNIQUE\s+)?INDEX\s+(?:CONCURRENTLY\s+)?IF\s+NOT\s+EXISTS\s+([a-zA-Z_][a-zA-Z0-9_]*)\b",
             RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
 
         return match.Success ? match.Groups[1].Value : null;

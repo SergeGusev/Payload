@@ -1,3 +1,17 @@
+## Active Update 2026-06-02 Dashboard Strategy Query Indexes
+Goal: Add conservative PostgreSQL indexes for long Dashboard strategy-performance queries.
+Status: Completed
+Done:
+- Added concurrent Dashboard support indexes for `paper_orders` strategy performance aggregation, including covering payload columns used by order counts/notional and a covered `id -> strategy_id/side` lookup for fill joins.
+- Added a concurrent covered `paper_fills(filled_at_utc, paper_order_id)` index for recent fill-window aggregation.
+- Added concurrent timestamp-first `strategy_market_paper_runs` indexes on `updated_at_utc`, `entered_at_utc`, and `settled_at_utc` so recent Dashboard windows can use time-selective scans even when many strategies are selected.
+- Kept the existing indexes in place and avoided `DROP INDEX`, so existing production startup does not rebuild old indexes destructively.
+- Updated `PostgresSchemaInitializer` so it recognizes `CREATE INDEX CONCURRENTLY IF NOT EXISTS` names before executing schema statements.
+- Updated README troubleshooting to clarify that these indexes support recent windows and paper fill/order joins, while very slow all-time grids still need precomputed/materialized strategy-performance aggregation.
+Next: Restart/deploy the service so PostgreSQL schema initialization creates the new indexes; if the all-time Dashboard grid still times out after the 180-second command timeout, implement a precomputed strategy-performance cache.
+Notes: Verification passed: focused `dotnet test tests\PolyCopyTrader.Tests\PolyCopyTrader.Tests.csproj --no-restore --filter "StorageTests|StrategyPerformanceTests"` 36/36, full `dotnet test tests\PolyCopyTrader.Tests\PolyCopyTrader.Tests.csproj --no-restore` 552/552, and `git diff --check` passed with LF/CRLF warnings only.
+Blockers: None.
+
 ## Active Update 2026-06-01 Dashboard Strategy Timeout Screenshot
 Goal: Diagnose and mitigate the Dashboard screenshot error showing Npgsql timeout during strategy refresh.
 Status: Completed
