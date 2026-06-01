@@ -1,3 +1,15 @@
+## Active Update 2026-06-01 Live Candidate Strategy Check
+Goal: Check whether new strategies have become candidates for Live.
+Status: Completed
+Done:
+- Confirmed production still has `0` manual Live strategies and `0` effective Live strategies; `1837/2886` strategies are enabled, `11` are auto-live-paused, and `0` are manually paused.
+- Checked the current Paper/Live-shadow allowlist (`BTC Skip 1`, BTC Binance 10/17i/18/19/20/20i/21/22/23 bps, `SOL Binance 24 bps Instant`) and found no currently allowlisted strategy has recent qualifying settled Paper results; most have `0` settled rows in the last `7d`, and `BTC Skip 1` is disabled and negative all-time.
+- Found broad Paper-only candidates outside the current live allowlist: `304` enabled/non-live/non-paused strategies are positive over `7d` with at least `30` settled rows and positive all-time PnL; `187` are also positive over `24h`; `122` are positive over `7d`, `24h`, and `12h`.
+- Top strict Paper candidates were mostly BTC Middle Instant and SOL Middle/Skip Instant variants, led by `BTC Up or Down 5m Middle 1 35 bps Instant`, `32 bps Instant`, `37 bps Instant`, `SOL Up or Down 5m Skip 38 bps Instant`, and `BTC Up or Down 5m Middle 1 36 bps Instant`.
+Next: If Live expansion is desired, decide whether to modify the explicit live allowlist and start with one tiny-size candidate after rechecking recent 12h/24h results.
+Notes: Read-only production check via `out\dbprobe` with temporary host override to `192.168.0.101`. No source behavior changed and no tests were run.
+Blockers: None.
+
 ## Active Update 2026-06-01 Weekly Statistics Production Check
 Goal: Check whether the production server collected statistics correctly during the user's one-week absence.
 Status: Completed

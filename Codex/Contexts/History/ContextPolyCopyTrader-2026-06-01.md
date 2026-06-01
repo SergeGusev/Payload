@@ -4,3 +4,10 @@ Request:
 
 Result:
 Checked production PostgreSQL read-only through `out\dbprobe` with host override `192.168.0.101`. Service is running and fresh, Paper activity continued, and Live remained disabled. Found that `btc_up_down_5m_statistics_ticks` has collected no rows since `2026-05-19T05:18:12Z` because `btc_up_down_5m_statistics` is disabled in the production `strategies` table. Also found a `2026-05-27T10:47Z` to `2026-05-28T07:04Z` external connectivity incident where BTC/ETH/SOL odds archives stopped for about `20h17m`, with many Polymarket/Binance DNS/connectivity/timeout errors.
+
+## 2026-06-01T20:40:55.1488211+00:00
+Request:
+Появились стратегии - кандидаты на Live ?
+
+Result:
+Checked production PostgreSQL read-only through `out\dbprobe` with host override `192.168.0.101`. Confirmed there are still `0` manual/effective Live strategies. Current explicit Paper/Live-shadow allowlist has no recent qualifying settled Paper candidates. Outside the allowlist, found `304` positive 7d Paper-only candidates with at least `30` settled rows and positive all-time PnL; `187` also positive over 24h; `122` strict candidates positive over 7d, 24h, and 12h. Top strict candidates were mostly BTC Middle Instant and SOL Middle/Skip Instant variants.
