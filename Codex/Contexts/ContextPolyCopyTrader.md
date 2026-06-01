@@ -1,3 +1,17 @@
+## Active Update 2026-06-01 Weekly Statistics Production Check
+Goal: Check whether the production server collected statistics correctly during the user's one-week absence.
+Status: Completed
+Done:
+- Confirmed production `PolyCopyTrader.Service` at `192.168.0.101` is running commit `1175fae2cab0fa4cfc733f47d6054bcb5376787e`, mode `Live`, started `2026-05-23T23:10:54Z`, with fresh heartbeat and `last_error` null.
+- Found `btc_up_down_5m_statistics_ticks` collected `0` rows from `2026-05-25T00:00:00Z` through the check time; the table's latest row is `2026-05-19T05:18:12Z`.
+- Confirmed the `btc_up_down_5m_statistics` strategy row is `enabled=false`, `paused=false`, `live_stakes=false`, and has no Statistics worker errors for the checked period.
+- Confirmed other BTC/crypto data streams continued and are fresh: last BTC odds, BTC arbitrage, and crypto odds rows were within seconds of the check; daily Paper orders/fills/settlements continued throughout the week.
+- Found a major external connectivity incident around `2026-05-27T10:47Z` to `2026-05-28T07:04Z` where BTC/ETH/SOL odds archives had about a `20h17m` gap; API errors show DNS/connection/timeout failures against Polymarket/Binance endpoints during that window.
+- Confirmed no real Live orders were placed and no effective live strategies are enabled.
+Next: Decide whether to re-enable `btc_up_down_5m_statistics` and whether to add monitoring/alerting for disabled statistics and long odds-archive gaps.
+Notes: Read-only production check via `out\dbprobe` with temporary host override to `192.168.0.101`. One large aggregate timed out and was replaced with smaller indexed queries; two exploratory SELECTs failed due ambiguous/wrong column names, then corrected. No source behavior changed and no tests were run.
+Blockers: None.
+
 ## Active Update 2026-05-24 Paper Order Placement Check
 Goal: Confirm whether bets/orders are being placed after the acceleration deploy.
 Status: Completed
