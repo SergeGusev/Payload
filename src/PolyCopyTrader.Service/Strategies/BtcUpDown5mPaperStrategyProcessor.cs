@@ -11772,6 +11772,14 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
         DateTimeOffset nowUtc,
         CancellationToken cancellationToken)
     {
+        if (!StrategyAutoLivePausePolicy.IsEnabledForStrategy(liveTradingOptions, strategyId))
+        {
+            logger.LogInformation(
+                "Strategy auto live pause update skipped because it is not enabled for this strategy. Strategy={StrategyCode}",
+                strategyCode);
+            return;
+        }
+
         try
         {
             var decision = await repository.UpdateStrategyAutoLivePauseFromRecentPnlAsync(

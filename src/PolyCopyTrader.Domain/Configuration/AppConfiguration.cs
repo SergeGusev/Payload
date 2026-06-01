@@ -498,6 +498,8 @@ public sealed class LiveTradingOptions
     public int MaxOpenLiveOrders { get; init; } = 1;
 
     public bool CancelAllOnKillSwitch { get; init; } = true;
+
+    public List<string> AutoLivePauseStrategies { get; init; } = [];
 }
 
 public sealed class DashboardOptions

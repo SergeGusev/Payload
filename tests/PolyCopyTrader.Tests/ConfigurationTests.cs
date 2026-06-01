@@ -194,6 +194,7 @@ public sealed class ConfigurationTests
         Assert.Equal(1_000, configuration.PaperTrading.LeaderActivityExitTrackingErrorDelayMilliseconds);
         Assert.Equal(30_000, configuration.PaperTrading.LeaderActivityExitTrackingMaxErrorDelayMilliseconds);
         Assert.Equal(5, configuration.LiveTrading.MaintenancePollIntervalSeconds);
+        Assert.Empty(configuration.LiveTrading.AutoLivePauseStrategies);
         Assert.Equal(60, configuration.Dashboard.RefreshIntervalSeconds);
         Assert.Equal(60, configuration.Dashboard.StrategyRefreshIntervalSeconds);
         Assert.True(configuration.Dashboard.StrategiesOnlyMode);
@@ -809,6 +810,43 @@ public sealed class ConfigurationTests
         var errors = AppOptionsValidator.Validate(configuration);
 
         Assert.Empty(errors);
+    }
+
+    [Fact]
+    public void LiveTrading_AutoLivePauseStrategiesAreOptInByStrategy()
+    {
+        var options = new LiveTradingOptions();
+
+        Assert.False(StrategyAutoLivePausePolicy.IsEnabledForStrategy(options, StrategyIds.FollowLeader));
+
+        options = new LiveTradingOptions
+        {
+            AutoLivePauseStrategies =
+            [
+                StrategyIds.FollowLeaderCode,
+                StrategyIds.BtcUpDown5mBinanceBps1.ToString("D")
+            ]
+        };
+
+        Assert.True(StrategyAutoLivePausePolicy.IsEnabledForStrategy(options, StrategyIds.FollowLeader));
+        Assert.True(StrategyAutoLivePausePolicy.IsEnabledForStrategy(options, StrategyIds.BtcUpDown5mBinanceBps1));
+        Assert.False(StrategyAutoLivePausePolicy.IsEnabledForStrategy(options, StrategyIds.BtcUpDown5mBinanceBps2));
+    }
+
+    [Fact]
+    public void LiveTrading_RejectsUnknownAutoLivePauseStrategies()
+    {
+        var configuration = new AppConfiguration
+        {
+            LiveTrading = new LiveTradingOptions
+            {
+                AutoLivePauseStrategies = ["not_a_strategy"]
+            }
+        };
+
+        var errors = AppOptionsValidator.Validate(configuration);
+
+        Assert.Contains(errors, error => error.Contains("LiveTrading.AutoLivePauseStrategies", StringComparison.Ordinal));
     }
 
     [Fact]

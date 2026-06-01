@@ -367,6 +367,14 @@ public sealed class LiveTradingProcessor(
         DateTimeOffset nowUtc,
         CancellationToken cancellationToken)
     {
+        if (!StrategyAutoLivePausePolicy.IsEnabledForStrategy(liveTradingOptions, strategyId))
+        {
+            logger.LogInformation(
+                "Strategy auto live pause skipped because it is not enabled for this strategy. StrategyId={StrategyId}",
+                StrategyIds.Normalize(strategyId));
+            return;
+        }
+
         try
         {
             var decision = await repository.UpdateStrategyAutoLivePauseFromRecentPnlAsync(

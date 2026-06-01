@@ -1,4 +1,5 @@
 using PolyCopyTrader.Domain;
+using PolyCopyTrader.Domain.Configuration;
 using PolyCopyTrader.Polymarket;
 using PolyCopyTrader.Storage;
 
@@ -6,6 +7,7 @@ namespace PolyCopyTrader.Service.PaperTrading;
 
 public sealed class PaperSettlementProcessor(
     ILogger<PaperSettlementProcessor> logger,
+    LiveTradingOptions liveTradingOptions,
     IPolymarketGammaClient gammaClient,
     IExposureSnapshotCache exposureCache,
     IAppRepository repository) : IPaperSettlementProcessor
@@ -188,6 +190,14 @@ public sealed class PaperSettlementProcessor(
         var strategyId = ResolveStrategyId(copiedTraderWallet);
         if (strategyId is null)
         {
+            return;
+        }
+
+        if (!StrategyAutoLivePausePolicy.IsEnabledForStrategy(liveTradingOptions, strategyId.Value))
+        {
+            logger.LogInformation(
+                "Paper settlement auto live pause update skipped because it is not enabled for this strategy. StrategyId={StrategyId}",
+                StrategyIds.Normalize(strategyId.Value));
             return;
         }
 

@@ -4346,6 +4346,31 @@ CREATE TABLE IF NOT EXISTS schema_data_migrations (
 
 DO $$
 DECLARE
+    migration_key_value text := '20260602_clear_auto_live_pause_by_default';
+    cleared_strategy_count integer := 0;
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1
+        FROM schema_data_migrations migration
+        WHERE migration.migration_key = migration_key_value
+    ) THEN
+        UPDATE strategies
+        SET auto_live_paused = false,
+            updated_at_utc = clock_timestamp()
+        WHERE auto_live_paused;
+        GET DIAGNOSTICS cleared_strategy_count = ROW_COUNT;
+
+        INSERT INTO schema_data_migrations (migration_key, applied_at_utc, details)
+        VALUES (
+            migration_key_value,
+            clock_timestamp(),
+            'cleared_strategies=' || cleared_strategy_count::text
+        );
+    END IF;
+END $$;
+
+DO $$
+DECLARE
     migration_key_value text := '20260522_rescale_updown_bps_history_reset';
     target_strategy_count integer := 0;
     deleted_shadow_discrepancies integer := 0;

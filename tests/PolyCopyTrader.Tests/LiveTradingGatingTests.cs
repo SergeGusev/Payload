@@ -662,6 +662,52 @@ public sealed class LiveTradingGatingTests
         Assert.Single(repository.LiveTradingEvents, item => item.Action == "StrategyLiveBalance");
     }
 
+    [Fact]
+    public async Task LiveProcessorDoesNotAutoPauseStrategyWhenAutoPauseAllowlistIsEmpty()
+    {
+        var repository = new TestAppRepository();
+        repository.StrategySettings[StrategyIds.FollowLeader] = StrategyRuntimeSettings.Default(StrategyIds.FollowLeader) with
+        {
+            LiveStakes = true,
+            LiveAvailableBalance = 100m,
+            LiveStakeAmount = 2.50m
+        };
+        var now = DateTimeOffset.UtcNow;
+        await repository.AddLiveOrderAsync(CreateMatchedLiveOrder(now.AddMinutes(-10), "0xorder-1"));
+        await repository.AddLiveOrderAsync(CreateMatchedLiveOrder(now.AddMinutes(-5), "0xorder-2"));
+        var processor = CreateLiveSettlementProcessor(repository, new LiveTradingOptions());
+
+        var result = await processor.ProcessOpenOrdersAsync();
+
+        Assert.Equal(2, result.BalanceSettlementsApplied);
+        Assert.False(repository.StrategySettings[StrategyIds.FollowLeader].AutoLivePaused);
+        Assert.True(repository.StrategySettings[StrategyIds.FollowLeader].LiveStakes);
+    }
+
+    [Fact]
+    public async Task LiveProcessorAutoPausesAllowlistedStrategyAfterRecentLiveLosses()
+    {
+        var repository = new TestAppRepository();
+        repository.StrategySettings[StrategyIds.FollowLeader] = StrategyRuntimeSettings.Default(StrategyIds.FollowLeader) with
+        {
+            LiveStakes = true,
+            LiveAvailableBalance = 100m,
+            LiveStakeAmount = 2.50m
+        };
+        var now = DateTimeOffset.UtcNow;
+        await repository.AddLiveOrderAsync(CreateMatchedLiveOrder(now.AddMinutes(-10), "0xorder-1"));
+        await repository.AddLiveOrderAsync(CreateMatchedLiveOrder(now.AddMinutes(-5), "0xorder-2"));
+        var processor = CreateLiveSettlementProcessor(
+            repository,
+            new LiveTradingOptions { AutoLivePauseStrategies = [StrategyIds.FollowLeaderCode] });
+
+        var result = await processor.ProcessOpenOrdersAsync();
+
+        Assert.Equal(2, result.BalanceSettlementsApplied);
+        Assert.True(repository.StrategySettings[StrategyIds.FollowLeader].AutoLivePaused);
+        Assert.True(repository.StrategySettings[StrategyIds.FollowLeader].LiveStakes);
+    }
+
     private sealed class CapturingLiveTradingProcessor : ILiveTradingProcessor
     {
         private readonly TaskCompletionSource processCalled = new(TaskCreationOptions.RunContinuationsAsynchronously);
@@ -737,6 +783,53 @@ public sealed class LiveTradingGatingTests
     private static BotOptions LiveEnabledBot()
     {
         return new BotOptions { Mode = BotMode.Live, EnableLiveTrading = true };
+    }
+
+    private static LiveTradingProcessor CreateLiveSettlementProcessor(
+        TestAppRepository repository,
+        LiveTradingOptions liveTradingOptions)
+    {
+        return new LiveTradingProcessor(
+            NullLogger<LiveTradingProcessor>.Instance,
+            liveTradingOptions,
+            new RiskOptions(),
+            new FakeGammaClient([
+                TokenMetadata("asset-yes", "Yes", "No"),
+                TokenMetadata("asset-no", "No", "No")
+            ]),
+            new CapturingTradingClient(),
+            repository,
+            new ExposureSnapshotCache(repository),
+            new DefaultPaperTradingEngine(),
+            new ServiceControlState());
+    }
+
+    private static LiveOrder CreateMatchedLiveOrder(DateTimeOffset createdAtUtc, string orderId)
+    {
+        return new LiveOrder(
+            Guid.NewGuid(),
+            Guid.NewGuid(),
+            LiveOrderStatus.Matched,
+            orderId,
+            TradeSide.Buy,
+            "asset-yes",
+            "condition-1",
+            "Yes",
+            0.40m,
+            10m,
+            4m,
+            "GTD",
+            createdAtUtc,
+            createdAtUtc.AddMinutes(5),
+            createdAtUtc,
+            "matched",
+            10m,
+            0m,
+            string.Empty,
+            "{}",
+            string.Empty,
+            createdAtUtc,
+            StrategyId: StrategyIds.FollowLeader);
     }
 
     private static WatchlistOptions Watchlist()

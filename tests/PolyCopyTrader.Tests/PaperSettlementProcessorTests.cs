@@ -1,5 +1,6 @@
 using Microsoft.Extensions.Logging.Abstractions;
 using PolyCopyTrader.Domain;
+using PolyCopyTrader.Domain.Configuration;
 using PolyCopyTrader.Polymarket;
 using PolyCopyTrader.Service.PaperTrading;
 
@@ -33,6 +34,7 @@ public sealed class PaperSettlementProcessorTests
             "0xleader"));
         var processor = new PaperSettlementProcessor(
             NullLogger<PaperSettlementProcessor>.Instance,
+            new LiveTradingOptions(),
             new FakeGammaClient([]),
             new ExposureSnapshotCache(repository),
             repository);
@@ -103,6 +105,7 @@ public sealed class PaperSettlementProcessorTests
         };
         var processor = new PaperSettlementProcessor(
             NullLogger<PaperSettlementProcessor>.Instance,
+            new LiveTradingOptions(),
             new FakeGammaClient(metadata),
             new ExposureSnapshotCache(repository),
             repository);

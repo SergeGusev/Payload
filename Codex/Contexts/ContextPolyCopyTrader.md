@@ -1,3 +1,17 @@
+## Active Update 2026-06-02 Auto Live Pause Opt-In
+Goal: Disable automatic Live pause globally and make it opt-in for explicitly configured strategies.
+Status: Completed
+Done:
+- Added `LiveTrading:AutoLivePauseStrategies` as an empty-by-default list of strategy codes/ids; empty means no strategy can be automatically auto-live-paused by recent PnL.
+- Added `StrategyAutoLivePausePolicy` to normalize configured strategy codes/ids and validate unknown entries.
+- Guarded automatic pause/resume updates in `LiveTradingProcessor`, shared `PaperSettlementProcessor`, and `BtcUpDown5mPaperStrategyProcessor` so they call `UpdateStrategyAutoLivePauseFromRecentPnlAsync` only for allowlisted strategies.
+- Added one-time schema data migration `20260602_clear_auto_live_pause_by_default` to clear existing `strategies.auto_live_paused=true` rows on deploy.
+- Updated service/dashboard appsettings, README, and configuration reference for the new opt-in behavior.
+- Added tests for the opt-in policy, invalid config, schema migration presence, and Live settlement behavior with empty vs explicit allowlist.
+Next: Deploy/restart `PolyCopyTrader.Service` so schema initialization clears existing auto-live-paused rows; add strategy codes/ids to `LiveTrading:AutoLivePauseStrategies` only when that strategy should use automatic Live pause.
+Notes: Verification passed: focused `dotnet test tests\PolyCopyTrader.Tests\PolyCopyTrader.Tests.csproj --no-restore --filter "ConfigurationTests|StorageTests|LiveTradingGatingTests|PaperSettlementProcessorTests"` 74/74, full `dotnet test tests\PolyCopyTrader.Tests\PolyCopyTrader.Tests.csproj --no-restore` 556/556, Dashboard temp-output build passed with 0 errors and existing Storage nullable warnings, and `git diff --check` passed with LF/CRLF warnings only.
+Blockers: None.
+
 ## Active Update 2026-06-02 Dashboard Strategy Query Indexes
 Goal: Add conservative PostgreSQL indexes for long Dashboard strategy-performance queries.
 Status: Completed
