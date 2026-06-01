@@ -710,7 +710,8 @@ uses ETH/SOL close-book result streaks, `Skip bps` uses ETH/SOL close-book
 streaks plus archived `crypto_up_down_5m_odds_ticks` start-to-close Binance
 move, and `Skip bps Instant` uses the same executable ask-depth pricing path as
 the BTC Instant variants. ETH/SOL Skip Revert rows are not seeded, and ETH/SOL
-Skip rows are not in the live allowlist.
+Skip rows are not in the live allowlist except `ETH Up or Down 5m Skip 7 bps
+Instant`.
 `Middle`,
 `Middle Revert`, `Skip`, and `Skip Revert` create pending Paper BUY orders as
 ordinary GTD limit orders. Their limit
@@ -799,7 +800,8 @@ expiration mode, local cancel deadline, CLOB wire expiration, and fallback
 `OpeningLimitGtdTtlSeconds` (`120` by default). They
 do not create immediate fills and are not submitted to live trading unless
 the controlled Paper/Live-shadow path is explicitly enabled for an allowed variant.
-ETH/SOL Skip variants are excluded from that live allowlist. The
+Only `ETH Up or Down 5m Skip 7 bps Instant` is currently allowlisted from the
+ETH/SOL Skip family. The
 generic Paper open-order pipeline then applies balanced GTD
 accounting: visible ask depth at or below the limit creates partial `paper_fills`
 rows with VWAP evidence, cumulative fills determine `PartiallyFilled` versus

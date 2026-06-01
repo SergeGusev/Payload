@@ -11,3 +11,9 @@ Request:
 
 Result:
 Made automatic Live pause opt-in through `LiveTrading:AutoLivePauseStrategies`, defaulting to an empty list so runtime pause/resume updates are skipped for every strategy unless its code/id is explicitly configured. Added config validation and a policy helper, guarded the Live settlement, shared Paper settlement, and BTC strategy settlement auto-pause update paths, and added one-time schema data migration `20260602_clear_auto_live_pause_by_default` to clear existing `strategies.auto_live_paused=true` rows on deploy. Updated appsettings, README, configuration reference, and tests. Verification passed: focused config/storage/live/paper settlement tests 74/74, full test project 556/556, Dashboard temp-output build 0 errors, and `git diff --check`.
+## 2026-06-01T22:01:38.8974388Z
+Request:
+Давай переведём в Live ETH Up or Down 5m Skip 7 bps Instant
+
+Result:
+Added `eth_up_down_5m_skip_bps_7_instant` to the explicit Paper/Live-shadow allowlist, added a regression test covering linked Paper-shadow and live GTD order creation for that strategy when `LiveStakes=true`, and updated README/configuration/live-checklist documentation. Verification passed: targeted ETH test 1/1, focused BTC processor/admin tests 162/162, full test project 557/557, and `git diff --check`. Production `LiveStakes` was not toggled before deploy because the running service must first be restarted on this allowlist commit.

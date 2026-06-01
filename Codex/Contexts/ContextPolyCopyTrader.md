@@ -1,3 +1,15 @@
+## Active Update 2026-06-02 ETH Skip 7 bps Instant Live Allowlist
+Goal: Allow `ETH Up or Down 5m Skip 7 bps Instant` to run through the existing tiny-size Paper/Live-shadow path.
+Status: Completed
+Done:
+- Added `eth_up_down_5m_skip_bps_7_instant` to the explicit `PaperLiveShadowAllowedVariantCodes` allowlist.
+- Added a processor regression test proving the ETH Skip 7 bps Instant strategy creates the linked Paper-shadow row, live GTD BUY request, live order row, and shadow decision when `LiveStakes=true` and all existing live gates pass.
+- Updated README, configuration reference, and live trading checklist so the documented allowlist includes `ETH Up or Down 5m Skip 7 bps Instant` while other ETH/SOL Skip variants remain Paper-only.
+- Kept `LiveTrading:AutoLivePauseStrategies` unchanged; Auto Live Pause remains opt-in and empty by default.
+Next: Deploy/restart `PolyCopyTrader.Service` on the VPS, then enable only this strategy with `--set-live-stakes-only-code eth_up_down_5m_skip_bps_7_instant` if the production readiness checks are still clean.
+Notes: Verification passed: targeted `dotnet test tests\PolyCopyTrader.Tests\PolyCopyTrader.Tests.csproj --no-restore --filter "FullyQualifiedName~ProcessAsync_EthSkipBps7InstantLiveStakeCreatesPaperShadowAndGtdLiveOrder"` 1/1, focused `dotnet test tests\PolyCopyTrader.Tests\PolyCopyTrader.Tests.csproj --no-restore --filter "BtcUpDown5mPaperStrategyProcessorTests|StrategyStakeAdminCommandTests"` 162/162, full `dotnet test tests\PolyCopyTrader.Tests\PolyCopyTrader.Tests.csproj --no-restore` 557/557, and `git diff --check` passed with LF/CRLF warnings only. The production DB `LiveStakes` flag was not changed before deploy because the currently running service would still have the old live allowlist.
+Blockers: None.
+
 ## Active Update 2026-06-02 Auto Live Pause Opt-In
 Goal: Disable automatic Live pause globally and make it opt-in for explicitly configured strategies.
 Status: Completed
