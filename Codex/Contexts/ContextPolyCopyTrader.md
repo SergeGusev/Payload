@@ -1,3 +1,15 @@
+## Active Update 2026-06-01 Dashboard Strategy Timeout Screenshot
+Goal: Diagnose and mitigate the Dashboard screenshot error showing Npgsql timeout during strategy refresh.
+Status: Completed
+Done:
+- Extracted the clipboard image and identified `Npgsql.NpgsqlException: Exception while reading from stream` with inner `Timeout during reading attempt`.
+- Traced the stack to `PostgresAppRepository.GetStrategyPerformanceAsync` called by `DashboardDataService.LoadStrategiesOnlyAsync`; this is the heavy strategy-performance PostgreSQL aggregate, not a WPF rendering fault.
+- Added an explicit 180-second `CommandTimeout` to both all-time and recent strategy-performance repository queries so they do not fail at Npgsql's default 30-second read timeout.
+- Added README troubleshooting guidance that persistent timeouts after 180 seconds indicate PostgreSQL load/table-bloat or the need for precomputed strategy-performance cache/materialization.
+Next: Restart Dashboard so it loads the new build; if the error still appears after 180 seconds, inspect PostgreSQL load and implement materialized/cached strategy-performance aggregation.
+Notes: Verification passed: focused `dotnet test tests\PolyCopyTrader.Tests\PolyCopyTrader.Tests.csproj --no-restore --filter StrategyPerformanceTests` 7/7, full `dotnet test tests\PolyCopyTrader.Tests\PolyCopyTrader.Tests.csproj --no-restore` 550/550, Dashboard temp-output build passed with 0 errors and existing Storage nullable warnings, and `git diff --check` passed with LF/CRLF warnings only.
+Blockers: None.
+
 ## Active Update 2026-06-01 Dashboard Errors Tab Restore
 Goal: Restore the Dashboard error-catching tab so failures can be copied and saved while the Dashboard is in strategies-only mode.
 Status: Completed

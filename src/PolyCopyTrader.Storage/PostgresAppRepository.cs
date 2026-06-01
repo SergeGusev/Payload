@@ -20,6 +20,8 @@ public sealed class PostgresAppRepository(PostgresConnectionFactory connectionFa
 
 	private const int PaperCopiedTraderPerformanceRefreshLockKey2 = 1329812039;
 
+	private const int StrategyPerformanceCommandTimeoutSeconds = 180;
+
 	private const string PolymarketGammaMarketSelectColumns = "market_id, condition_id, question_id, slug, question, event_id, event_slug, event_title,\n       series_slug, category, active, closed, archived, restricted, accepting_orders, enable_order_book,\n       negative_risk, liquidity, liquidity_clob, volume, volume_24hr, best_bid, best_ask, spread,\n       created_at_utc, updated_at_utc, start_date_utc, end_date_utc, event_start_time_utc,\n       outcomes_json, clob_token_ids_json, raw_json, fetched_at_utc, last_trade_price, order_min_size,\n       order_price_min_tick_size";
 
 	private const string PaperOrderSelectColumns = "id, signal_id, strategy_id, copied_trader_wallet, status, side, asset_id, condition_id, outcome, price, size_shares, notional_usd,\n       created_at_utc, expires_at_utc, filled_at_utc, cancelled_at_utc, raw_decision_json::text, correlation_id, execution_source";
@@ -1971,6 +1973,7 @@ ORDER BY
     code
 LIMIT @Limit;
 """);
+		command.CommandTimeout = StrategyPerformanceCommandTimeoutSeconds;
 		command.Parameters.AddWithValue("FollowLeaderStrategyId", StrategyIds.FollowLeader);
 		command.Parameters.AddWithValue("NowUtc", UtcDateTime(DateTimeOffset.UtcNow));
 		command.Parameters.AddWithValue("Limit", limit);
@@ -2432,6 +2435,7 @@ ORDER BY
     sw.code,
     sw.window_hours;
 """);
+		command.CommandTimeout = StrategyPerformanceCommandTimeoutSeconds;
 		command.Parameters.AddWithValue("NowUtc", UtcDateTime(nowUtc));
 		command.Parameters.AddWithValue("Limit", limit);
 		await using NpgsqlDataReader reader = await command.ExecuteReaderAsync(cancellationToken);

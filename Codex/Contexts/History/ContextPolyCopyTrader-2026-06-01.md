@@ -18,3 +18,10 @@ Restore the Dashboard errors tab so errors can be caught and saved.
 
 Result:
 Restored `Dashboard Errors` visibility in the default strategies-only Dashboard, added `Save errors`, and added `DashboardErrors.csv` export under a timestamped `*-dashboard-errors` folder in `Analytics:CsvExportDirectory`. Updated README/config docs. Verification passed: full test project 550/550, Dashboard build to a temporary output directory with 0 errors, and `git diff --check`; normal Debug output build was blocked by the currently running Dashboard/Visual Studio DLL locks.
+
+## 2026-06-01T21:01:45+00:00
+Request:
+Посмотри картинку. Как победить эту ошибку?
+
+Result:
+Extracted the screenshot from the Windows clipboard. Diagnosed the error as `NpgsqlException: Exception while reading from stream` with inner `Timeout during reading attempt` during Dashboard `GetStrategyPerformanceAsync`, meaning PostgreSQL did not finish the strategy-performance aggregate within Npgsql's default 30-second command timeout. Added an explicit 180-second command timeout to all-time and recent strategy-performance queries and documented the troubleshooting path. Verification passed: focused StrategyPerformance tests 7/7, full test project 550/550, Dashboard temp-output build 0 errors, and `git diff --check`.

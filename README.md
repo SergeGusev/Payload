@@ -626,6 +626,7 @@ Interpret paper results conservatively. Paper fills are approximate, long positi
 
 - PostgreSQL not configured: set `POLYCOPYTRADER_POSTGRES_CONNECTION` and restart the service. The service does not run with no-op storage.
 - Invalid watchlist wallet: the scanner skips placeholder/invalid wallets, records a warning status, and keeps the service running.
+- Dashboard `NpgsqlException: Exception while reading from stream` during strategy refresh means PostgreSQL did not finish the strategy-performance aggregate before the query timeout. Strategy Dashboard queries use an explicit 180-second command timeout; if this still appears, inspect PostgreSQL load/table bloat and move strategy-performance aggregation to a precomputed cache before relying on remote full-grid refreshes.
 - Polymarket TLS certificate errors: configure `Polymarket:CertificatePins` only after verifying the current endpoint certificate pin out of band. Do not use an accept-any certificate callback in production.
 - HTTP 429/5xx from Polymarket: public clients retry transient failures according to `Polymarket:MaxRetries` with exponential backoff from `Polymarket:RetryBaseDelayMilliseconds`, default `1000`, and record API errors when retries are exhausted.
 - Malformed API response: the failing operation is recorded as an API error; scanner/signal/paper loops continue on later cycles.
