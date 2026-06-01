@@ -11,3 +11,10 @@ Request:
 
 Result:
 Checked production PostgreSQL read-only through `out\dbprobe` with host override `192.168.0.101`. Confirmed there are still `0` manual/effective Live strategies. Current explicit Paper/Live-shadow allowlist has no recent qualifying settled Paper candidates. Outside the allowlist, found `304` positive 7d Paper-only candidates with at least `30` settled rows and positive all-time PnL; `187` also positive over 24h; `122` strict candidates positive over 7d, 24h, and 12h. Top strict candidates were mostly BTC Middle Instant and SOL Middle/Skip Instant variants.
+
+## 2026-06-01T20:50:10+00:00
+Request:
+Restore the Dashboard errors tab so errors can be caught and saved.
+
+Result:
+Restored `Dashboard Errors` visibility in the default strategies-only Dashboard, added `Save errors`, and added `DashboardErrors.csv` export under a timestamped `*-dashboard-errors` folder in `Analytics:CsvExportDirectory`. Updated README/config docs. Verification passed: full test project 550/550, Dashboard build to a temporary output directory with 0 errors, and `git diff --check`; normal Debug output build was blocked by the currently running Dashboard/Visual Studio DLL locks.

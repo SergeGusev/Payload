@@ -772,6 +772,21 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
     }
 
     [RelayCommand]
+    private async Task SaveDashboardErrorsAsync()
+    {
+        try
+        {
+            var path = await csvExporter.ExportDashboardErrorsAsync(DashboardErrors.ToArray());
+            CommandStatus = $"Dashboard errors saved to {path}.";
+        }
+        catch (Exception ex)
+        {
+            CommandStatus = $"Dashboard error save failed: {ex.Message}";
+            RecordDashboardError("Dashboard error export", ex);
+        }
+    }
+
+    [RelayCommand]
     private async Task ExportCsvAsync()
     {
         try

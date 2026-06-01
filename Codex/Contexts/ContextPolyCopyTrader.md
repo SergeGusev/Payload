@@ -1,3 +1,15 @@
+## Active Update 2026-06-01 Dashboard Errors Tab Restore
+Goal: Restore the Dashboard error-catching tab so failures can be copied and saved while the Dashboard is in strategies-only mode.
+Status: Completed
+Done:
+- Made the `Dashboard Errors` tab visible independently of `NonStrategyVisibility`, so the default `Dashboard:StrategiesOnlyMode=true` screen still exposes local refresh, IPC, CSV export, and strategy edit failures.
+- Added `Save errors` to the tab and a `SaveDashboardErrorsCommand` that snapshots the in-memory `DashboardErrors` buffer.
+- Added `DashboardCsvExporter.ExportDashboardErrorsAsync`, writing `DashboardErrors.csv` under a timestamped `*-dashboard-errors` folder beneath `Analytics:CsvExportDirectory`.
+- Updated README and `docs/configuration_reference.md` so strategies-only mode documents the visible local errors tab and separate error export.
+Next: Restart the Dashboard to load the updated UI, reproduce the failure, then use `Dashboard Errors` -> `Save errors` or `Copy selected`.
+Notes: Verification passed: `dotnet test tests\PolyCopyTrader.Tests\PolyCopyTrader.Tests.csproj --no-restore` 550/550, `dotnet build src\PolyCopyTrader.Dashboard\PolyCopyTrader.Dashboard.csproj --no-restore /p:UseSharedCompilation=false /p:OutDir="%TEMP%\PolyCopyTraderDashboardVerify\"` passed with 0 errors and existing Storage nullable warnings, and `git diff --check` passed with LF/CRLF warnings only. A normal Debug output build was blocked because the currently running Dashboard and Visual Studio held DLL locks.
+Blockers: None.
+
 ## Active Update 2026-06-01 Live Candidate Strategy Check
 Goal: Check whether new strategies have become candidates for Live.
 Status: Completed

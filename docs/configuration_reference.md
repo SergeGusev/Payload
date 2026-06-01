@@ -860,7 +860,7 @@ Live gate.
 
 - `Dashboard:RefreshIntervalSeconds`: UI refresh timer for the Dashboard; default `60`.
 - `Dashboard:StrategyRefreshIntervalSeconds`: minimum interval between Dashboard strategy-performance database refreshes; default `60`. Strategy toggle/stake commands invalidate the cache so command results are shown immediately.
-- `Dashboard:StrategiesOnlyMode`: when true, the Dashboard reads and shows only service heartbeat plus strategy performance grids; default `true`. Heartbeat staleness is evaluated against the selected PostgreSQL server clock, not the Dashboard machine clock.
+- `Dashboard:StrategiesOnlyMode`: when true, the Dashboard reads service heartbeat plus strategy performance grids and still shows the local `Dashboard Errors` tab for copied/saved refresh, command, export, and strategy edit failures; default `true`. Heartbeat staleness is evaluated against the selected PostgreSQL server clock, not the Dashboard machine clock.
 - `Dashboard:OptionalReportTimeoutSeconds`: timeout for optional Dashboard analytics report grids; default `8`. Used only when `Dashboard:StrategiesOnlyMode=false`. If a report times out, the Dashboard keeps the main refresh alive and shows a Diagnostics warning for the skipped report.
 
 - `Enabled`: runs the paper-only BTC 5-minute strategy worker when true; default `true`.

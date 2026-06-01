@@ -1,5 +1,6 @@
 using System.IO;
 using System.Text;
+using PolyCopyTrader.Dashboard.Models;
 using PolyCopyTrader.Domain;
 using PolyCopyTrader.Domain.Configuration;
 using PolyCopyTrader.Storage;
@@ -358,6 +359,30 @@ public sealed class DashboardCsvExporter(
             cancellationToken);
 
         return exportDirectory;
+    }
+
+    public async Task<string> ExportDashboardErrorsAsync(
+        IReadOnlyList<DashboardErrorRow> errors,
+        CancellationToken cancellationToken = default)
+    {
+        var exportRoot = ResolveExportRoot(configuration.Analytics.CsvExportDirectory);
+        var exportDirectory = Path.Combine(exportRoot, DateTime.UtcNow.ToString("yyyyMMdd-HHmmss") + "-dashboard-errors");
+        Directory.CreateDirectory(exportDirectory);
+
+        var path = Path.Combine(exportDirectory, "DashboardErrors.csv");
+        await WriteAsync(
+            path,
+            ["TimestampUtc", "Source", "Message", "Details"],
+            errors.Select(error => new object?[]
+            {
+                error.TimestampUtc,
+                error.Source,
+                error.Message,
+                error.Details
+            }),
+            cancellationToken);
+
+        return path;
     }
 
     private static async Task WriteAsync(

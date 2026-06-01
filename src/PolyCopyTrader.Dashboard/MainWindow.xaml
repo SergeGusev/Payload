@@ -1064,7 +1064,7 @@
                 </DataGrid>
             </TabItem>
 
-            <TabItem Header="Dashboard Errors" Visibility="{Binding NonStrategyVisibility}">
+            <TabItem Header="Dashboard Errors">
                 <DockPanel>
                     <StackPanel DockPanel.Dock="Top"
                                 Orientation="Horizontal"
@@ -1073,6 +1073,8 @@
                                 Command="{Binding ClearDashboardErrorsCommand}" />
                         <Button Content="Copy selected"
                                 Command="{Binding CopySelectedDashboardErrorCommand}" />
+                        <Button Content="Save errors"
+                                Command="{Binding SaveDashboardErrorsCommand}" />
                     </StackPanel>
                     <DataGrid ItemsSource="{Binding DashboardErrors}"
                               behaviors:DataGridSelectionPersistence.KeyProperties="TimestampUtc,Source,Message"
