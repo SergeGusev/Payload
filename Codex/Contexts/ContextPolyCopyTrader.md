@@ -1,3 +1,16 @@
+## Active Update 2026-06-02 Gamma Lockout Fix Production Restart Check
+Goal: Verify production after restarting on the Gamma max-offset lockout fix.
+Status: Completed
+Done:
+- Confirmed production `PolyCopyTrader.Service` restarted on commit `f1a136ab3385186b7d34e4c299c13dc8b4ccfe99`, mode `Live`, started `2026-06-01T22:44:07Z`, with fresh heartbeat and `last_error=null`.
+- Confirmed startup geoblock check remained `OK` for BG and the target strategy `eth_up_down_5m_skip_bps_7_instant` stayed `enabled=true`, `paused=false`, `live_stakes=true`, `auto_live_paused=false`, and `effective_live_stakes=true`.
+- Confirmed the fix stopped the Gamma max-offset error stream: `api_errors` since the `f1a136a` restart remained `0`, and by `2026-06-01T23:01:54Z` the 15-minute Polymarket API-error lockout window also had `0` errors.
+- Observed old pre-restart errors still caused expected live-shadow preflight rejections at `22:45Z` and `22:50Z`; after those errors aged out, the `23:00Z` and `23:05Z` target windows skipped because the strategy filter `btc_previous_market_move_below_bps_threshold` did not pass, not because of API lockout.
+- Confirmed no real target live order was submitted yet after the fix; latest target live rows remain four `PreflightRejected/paper_live_shadow_test` rows from the old lockout window, and the linked Paper-shadow rows are `Cancelled`.
+Next: Keep monitoring the next qualifying ETH Skip 7 bps Instant window; infrastructure lockout is clear, so the next valid entry should reach the normal live placement gates.
+Notes: Read-only production validation used `out\dbprobe` with a temporary host override to `192.168.0.101`. No source code changed; verification is the production DB state after restart.
+Blockers: None.
+
 ## Active Update 2026-06-02 ETH Live Deploy Check and Gamma Lockout Fix
 Goal: Verify the deployed `ETH Up or Down 5m Skip 7 bps Instant` Live rollout and clear the blocker found during production validation.
 Status: Completed
