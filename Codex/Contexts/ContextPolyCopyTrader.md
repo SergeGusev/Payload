@@ -1,3 +1,14 @@
+## Active Update 2026-06-02 ETH Live Waiting Status
+Goal: Clarify whether the current production state is healthy and only waiting for valid live entries.
+Status: Completed
+Done:
+- Confirmed from the latest production restart check that `ETH Up or Down 5m Skip 7 bps Instant` remains the only effective Live strategy and infrastructure gates are healthy.
+- Confirmed Gamma max-offset API errors stopped after `f1a136a`, the Polymarket API-error lockout window cleared, and subsequent skipped windows were normal strategy-filter skips rather than infrastructure/preflight lockout.
+- Answered that the system is currently in the expected waiting state: live placement should happen only when the strategy gets a qualifying entry and all normal live gates pass.
+Next: Monitor future qualifying ETH Skip 7 bps Instant windows for an actual live order.
+Notes: No production write or code change; answer based on the `2026-06-01T23:06Z` production DB validation already recorded above.
+Blockers: None.
+
 ## Active Update 2026-06-02 Gamma Lockout Fix Production Restart Check
 Goal: Verify production after restarting on the Gamma max-offset lockout fix.
 Status: Completed

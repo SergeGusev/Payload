@@ -31,3 +31,10 @@ Request:
 
 Result:
 Verified production after restart on `f1a136a`. Service heartbeat was fresh, mode `Live`, started `2026-06-01T22:44:07Z`, `last_error=null`, and startup geoblock was OK. The target strategy `eth_up_down_5m_skip_bps_7_instant` remained the only effective Live strategy with `LiveStakes=true` and `auto_live_paused=false`. `api_errors` since restart stayed `0`; after the old pre-restart rows aged out, the 15-minute Polymarket API-error lockout window also reached `0` errors. Old errors still caused expected live-shadow preflight rejections at 22:45 and 22:50 UTC; after the lockout cleared, 23:00 and 23:05 target windows skipped on normal strategy filter `btc_previous_market_move_below_bps_threshold`, not infrastructure lockout. No real target live order has been submitted yet after the fix.
+
+## 2026-06-01T23:14:19.8924021Z
+Request:
+То есть сейчас всё в порядке, просто ждём живых ставок?
+
+Result:
+Confirmed yes: production is healthy from the latest check, the target strategy is Live-enabled, Gamma/API lockout is clear, and the system is now waiting for a qualifying ETH Skip 7 bps Instant entry that passes the normal live gates. No code or production writes were performed.
