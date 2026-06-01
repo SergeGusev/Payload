@@ -1,3 +1,18 @@
+## Active Update 2026-06-02 ETH Live Deploy Check and Gamma Lockout Fix
+Goal: Verify the deployed `ETH Up or Down 5m Skip 7 bps Instant` Live rollout and clear the blocker found during production validation.
+Status: Completed
+Done:
+- Confirmed production `PolyCopyTrader.Service` at `192.168.0.101` was running commit `2cd45f0dbe571b5b5a8e8d8c8f6aef2e3132ed69`, mode `Live`, with fresh heartbeat, `last_error=null`, and startup geoblock `OK`.
+- Confirmed deploy-time schema migration `20260602_clear_auto_live_pause_by_default` ran and current `strategies.auto_live_paused=true` count is `0`.
+- Enabled `LiveStakes` only for `eth_up_down_5m_skip_bps_7_instant` through the official `--set-live-stakes-only-code` admin path; production now has exactly `1` live/effective-live strategy, with the target `enabled=true`, `paused=false`, `live_stakes=true`, `auto_live_paused=false`, `live_stake_amount=1`, and `live_available_balance=100`.
+- Compared production to the default local environment: production `192.168.0.101` has the target Live flag on, while the default `127.0.0.1` database has no matching target row and `0` Live strategies. If Dashboard shows the target unchecked, it is likely connected to the local/default environment or a stale view, not the production DB used by the service.
+- Observed the first post-enable live-shadow attempt at `2026-06-01T22:35:07Z`: a `paper_live_shadow_test` live order was created as `PreflightRejected` and the linked Paper-shadow row was `Cancelled` because validation reported `API error lockout is active.`
+- Root-caused the lockout to repeated production `PolymarketGammaClient/GetActiveMarkets` `HTTP 422` max-offset responses using the newer text `offset too large, use /markets/keyset for deeper pagination`; the code only treated the older text `offset exceeds maximum allowed` as expected.
+- Updated `PolymarketHttpClient` and `GammaMarketIngestionProcessor` to treat both Gamma max-offset messages as expected active-market scan completion instead of API errors, expanded the Gamma ingestion and Polymarket client tests, and documented the behavior in README troubleshooting.
+Next: Deploy/restart `PolyCopyTrader.Service` on this fix. After deploy, no new Gamma max-offset API errors should be recorded; the existing API-error lockout can still last until old production errors age out of the configured 15-minute window.
+Notes: Verification passed: focused `dotnet test tests\PolyCopyTrader.Tests\PolyCopyTrader.Tests.csproj --filter "GammaMarketIngestionTests|PolymarketClientTests"` 43/43 and full `dotnet test tests\PolyCopyTrader.Tests\PolyCopyTrader.Tests.csproj` 559/559. Production validation before the fix showed one target live-shadow preflight rejection and continuing Gamma 422 API errors on the deployed `2cd45f0` build.
+Blockers: Production needs redeploy of this new fix before the API-error lockout stops being refreshed by Gamma active-market ingestion.
+
 ## Active Update 2026-06-02 ETH Skip 7 bps Instant Live Allowlist
 Goal: Allow `ETH Up or Down 5m Skip 7 bps Instant` to run through the existing tiny-size Paper/Live-shadow path.
 Status: Completed

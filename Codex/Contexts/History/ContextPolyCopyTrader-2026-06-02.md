@@ -17,3 +17,10 @@ Request:
 
 Result:
 Added `eth_up_down_5m_skip_bps_7_instant` to the explicit Paper/Live-shadow allowlist, added a regression test covering linked Paper-shadow and live GTD order creation for that strategy when `LiveStakes=true`, and updated README/configuration/live-checklist documentation. Verification passed: targeted ETH test 1/1, focused BTC processor/admin tests 162/162, full test project 557/557, and `git diff --check`. Production `LiveStakes` was not toggled before deploy because the running service must first be restarted on this allowlist commit.
+
+## 2026-06-01T22:39:03.6739631Z
+Request:
+Выложил. Проверь
+
+Result:
+Verified production after the `ETH Up or Down 5m Skip 7 bps Instant` Live allowlist deploy. Production was running `2cd45f0`, mode `Live`, heartbeat fresh, geoblock OK, and the auto-live-pause clearing migration had run. Enabled `LiveStakes` only for `eth_up_down_5m_skip_bps_7_instant`; production then had exactly one effective Live strategy. Confirmed the Dashboard discrepancy: production `192.168.0.101` has the target Live flag on, while the default local `127.0.0.1` environment has zero Live strategies and no matching target row, so an unchecked Dashboard row indicates the wrong/stale connection rather than the production flag. Observed a 22:35 UTC live-shadow attempt for the target, but it was `PreflightRejected` and the paper-shadow order was cancelled because `API error lockout is active`. Root-caused the lockout to repeated Gamma active-market `HTTP 422` max-offset responses using the newer `offset too large, use /markets/keyset` text; fixed expected-error recognition in `PolymarketHttpClient` and `GammaMarketIngestionProcessor`, added tests for both old/new max-offset messages, and documented the behavior in README. Verification passed: focused Gamma/Polymarket client tests 43/43 and full test project 559/559. Production still needs redeploy of this fix, then the old API-error lockout can clear after the configured 15-minute window.

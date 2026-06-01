@@ -166,15 +166,18 @@ public sealed class GammaMarketIngestionTests
         Assert.False(registry.TryGetSnapshot("token-yes-stale-market", out _));
     }
 
-    [Fact]
-    public async Task Refresh_TreatsGammaMaxOffsetAsCompletedFullScan()
+    [Theory]
+    [InlineData("offset exceeds maximum allowed for markets list queries")]
+    [InlineData("offset too large, use /markets/keyset for deeper pagination")]
+    public async Task Refresh_TreatsGammaMaxOffsetAsCompletedFullScan(string errorText)
     {
         var gammaClient = new FakeGammaClient();
         gammaClient.Pages[0] = [CreateMarketForTests("current-market")];
         gammaClient.Exceptions[2] = new PolymarketApiException(
             "PolymarketGammaClient",
             "GetActiveMarkets",
-            """GetActiveMarkets failed with HTTP 422 Unprocessable Entity. Body: {"type":"validation error","error":"offset exceeds maximum allowed for markets list queries"}""");
+            "GetActiveMarkets failed with HTTP 422 Unprocessable Entity. Body: " +
+                "{\"type\":\"validation error\",\"error\":\"" + errorText + "\"}");
         var repository = new TestAppRepository();
         var registry = new ActiveMarketAssetSubscriptionRegistry();
         registry.AddOrUpdateMarkets([CreateMarketForTests("stale-market")]);

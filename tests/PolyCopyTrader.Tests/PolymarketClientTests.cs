@@ -371,14 +371,16 @@ public sealed class PolymarketClientTests
         Assert.Contains("offset=200", handler.Requests.Single().RequestUri?.Query);
     }
 
-    [Fact]
-    public async Task GammaClient_DoesNotRecordApiErrorForActiveMarketsMaxOffset()
+    [Theory]
+    [InlineData("offset exceeds maximum allowed for markets list queries")]
+    [InlineData("offset too large, use /markets/keyset for deeper pagination")]
+    public async Task GammaClient_DoesNotRecordApiErrorForActiveMarketsMaxOffset(string errorText)
     {
         var sink = new CapturingApiErrorSink();
         var httpLogSink = new CapturingHttpLogSink();
         var handler = new StubHttpMessageHandler(_ => new HttpResponseMessage(HttpStatusCode.UnprocessableEntity)
         {
-            Content = new StringContent("""{"type":"validation error","error":"offset exceeds maximum allowed for markets list queries"}""")
+            Content = new StringContent("{\"type\":\"validation error\",\"error\":\"" + errorText + "\"}")
         });
         var client = new PolymarketGammaClient(
             new HttpClient(handler),

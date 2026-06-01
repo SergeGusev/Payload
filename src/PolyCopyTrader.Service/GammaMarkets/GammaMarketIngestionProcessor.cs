@@ -171,7 +171,8 @@ public sealed class GammaMarketIngestionProcessor(
         return string.Equals(ex.Component, "PolymarketGammaClient", StringComparison.Ordinal) &&
             string.Equals(ex.Operation, "GetActiveMarkets", StringComparison.Ordinal) &&
             ex.Message.Contains("HTTP 422", StringComparison.OrdinalIgnoreCase) &&
-            ex.Message.Contains("offset exceeds maximum allowed", StringComparison.OrdinalIgnoreCase);
+            (ex.Message.Contains("offset exceeds maximum allowed", StringComparison.OrdinalIgnoreCase) ||
+                ex.Message.Contains("offset too large", StringComparison.OrdinalIgnoreCase));
     }
 
     private IReadOnlyCollection<PolymarketGammaMarket> SelectSubscriptionMarkets(

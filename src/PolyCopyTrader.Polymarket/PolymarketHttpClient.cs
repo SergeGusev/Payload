@@ -239,7 +239,8 @@ internal sealed class PolymarketHttpClient(
         return string.Equals(component, "PolymarketGammaClient", StringComparison.Ordinal) &&
             string.Equals(ex.Operation, "GetActiveMarkets", StringComparison.Ordinal) &&
             ex.Message.Contains("HTTP 422", StringComparison.OrdinalIgnoreCase) &&
-            ex.Message.Contains("offset exceeds maximum allowed", StringComparison.OrdinalIgnoreCase);
+            (ex.Message.Contains("offset exceeds maximum allowed", StringComparison.OrdinalIgnoreCase) ||
+                ex.Message.Contains("offset too large", StringComparison.OrdinalIgnoreCase));
     }
 
     private Task RecordHttpLogAsync(
