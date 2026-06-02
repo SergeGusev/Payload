@@ -1,3 +1,16 @@
+## Active Update 2026-06-02 Two Live Strategies Correction
+Goal: Restore the intended two-strategy Live flag set after `ETH Up or Down 5m Skip 7 bps Instant` was unintentionally disabled by a single-code admin command.
+Status: Completed
+Done:
+- Identified that `--set-live-stakes-only-code btc_up_down_5m_middle_1_bps_47_instant` intentionally enabled only one strategy and disabled Live for every other strategy, including ETH Skip 7 bps Instant.
+- Corrected production with the official plural admin command: `--set-live-stakes-only-codes eth_up_down_5m_skip_bps_7_instant,btc_up_down_5m_middle_1_bps_47_instant`; it found `2886` strategies, live-enabled `2`, live-disabled `2884`, and failed `0`.
+- Confirmed production now has `live_stakes_count=2`, `effective_live_stakes_count=1`, and `auto_live_paused_count=1`.
+- Confirmed `btc_up_down_5m_middle_1_bps_47_instant` is `live_stakes=true`, `auto_live_paused=false`, and `effective_live_stakes=true`.
+- Confirmed `eth_up_down_5m_skip_bps_7_instant` is restored to `live_stakes=true`, but remains `auto_live_paused=true`, so `effective_live_stakes=false` until the automatic Paper-based resume condition clears it.
+Next: Monitor both Live-flagged strategies; BTC can place Live-shadow orders now when all gates pass, while ETH remains Live-flagged but auto-paused.
+Notes: Production service remained healthy on commit `17c0cee01d560ee09af5be11f12d207427d02f10`, mode `Live`, fresh heartbeat, `last_error=null`, and `0` recent API errors.
+Blockers: None.
+
 ## Active Update 2026-06-02 BTC Middle 47 Production Enable
 Goal: Verify the deployed service and enable `BTC Up or Down 5m Middle 1 47 bps Instant` as the only Live strategy.
 Status: Completed

@@ -94,3 +94,10 @@ Request:
 
 Result:
 Verified production after deploy and enabled the target Live strategy. `PolyCopyTrader.Service` is running in `Live` mode on commit `17c0cee01d560ee09af5be11f12d207427d02f10`, started `2026-06-02T08:39:49Z`, with fresh heartbeat, `last_error=null`, startup geoblock `OK` from BG, and `0` recent API errors. Ran the official admin command `--set-live-stakes-only-code btc_up_down_5m_middle_1_bps_47_instant`; it found `2886` strategies, live-enabled `1`, live-disabled `2885`, failed `0`. Production now has exactly one effective-live strategy: `btc_up_down_5m_middle_1_bps_47_instant` with `live_stakes=true`, `auto_live_paused=false`, `effective_live_stakes=true`, `live_stake_amount=1`, and `live_available_balance=100`. The old ETH strategy now has `live_stakes=false`; its prior `auto_live_paused=true` remains historical and ineffective.
+
+## 2026-06-02T08:49:18.9986328Z
+Request:
+А почему только одна стратегия Live ? Должно быть 2 / Куда делся ETH Up or Down 5m Skip 7 bps Instant ?
+
+Result:
+Acknowledged the mistake: the single-code admin command `--set-live-stakes-only-code btc_up_down_5m_middle_1_bps_47_instant` intentionally enabled only BTC Middle 47 and disabled Live for all other strategies, including ETH Skip 7 bps Instant. Corrected production with the plural command `--set-live-stakes-only-codes eth_up_down_5m_skip_bps_7_instant,btc_up_down_5m_middle_1_bps_47_instant`; it found `2886` strategies, live-enabled `2`, live-disabled `2884`, failed `0`. Verified production now has `live_stakes_count=2`, `effective_live_stakes_count=1`, and `auto_live_paused_count=1`: BTC Middle 47 is `live_stakes=true`, `auto_live_paused=false`, `effective_live_stakes=true`; ETH Skip 7 is restored to `live_stakes=true` but remains `auto_live_paused=true`, so it is not effective-live until automatic resume clears the pause.
