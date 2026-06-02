@@ -59,3 +59,10 @@ Request:
 
 Result:
 Added `Big settles` checkboxes to all four nested Dashboard `Strategies` tabs: `All`, `24 hours`, `6 hours`, and `1 hour`. The filters are independent per tab and use strict `> 100`: `All` checks `SettledPositionsCount`, while recent tabs check `SettledRunsCount`. Updated README and `docs/configuration_reference.md`. Verification passed: `git diff --check` with LF/CRLF warnings only, Dashboard temp-output build passed with 0 errors and existing Storage nullable warnings, and `dotnet test tests\PolyCopyTrader.Tests\PolyCopyTrader.Tests.csproj --no-restore` passed 559/559.
+
+## 2026-06-02T07:57:32.6884964Z
+Request:
+Давай переведём ETH Up or Down 5m Skip 7 bps Instant в режим с включением Auto live pause
+
+Result:
+Added `eth_up_down_5m_skip_bps_7_instant` to `LiveTrading:AutoLivePauseStrategies` in Service and Dashboard appsettings, without manually changing `strategies.auto_live_paused`. Updated the Auto Live Pause policy test and docs/checklist to document that `ETH Up or Down 5m Skip 7 bps Instant` participates in automatic Live pause/resume. Verification passed: Service/Dashboard appsettings parse as JSON, focused `ConfigurationTests` 27/27, full test project 559/559, Service build 0 warnings/errors, Dashboard temp-output build 0 errors with existing Storage nullable warnings, and `git diff --check` passed with LF/CRLF warnings only. Production needs redeploy/restart before this config affects runtime behavior.

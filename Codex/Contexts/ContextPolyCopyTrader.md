@@ -1,3 +1,15 @@
+## Active Update 2026-06-02 ETH Auto Live Pause Allowlist
+Goal: Enable automatic Live pause/resume participation for `ETH Up or Down 5m Skip 7 bps Instant`.
+Status: Completed
+Done:
+- Added `eth_up_down_5m_skip_bps_7_instant` to `LiveTrading:AutoLivePauseStrategies` in the Service and Dashboard appsettings.
+- Left `strategies.auto_live_paused` untouched; the runtime Auto Live Pause logic should set/clear that state based on settled Live/Paper evidence.
+- Updated `ConfigurationTests` so `StrategyAutoLivePausePolicy` proves the ETH Skip 7 bps Instant code enables the target strategy.
+- Updated README, configuration reference, and live trading checklist to document the target strategy's Auto Live Pause allowlist entry and behavior.
+Next: Deploy/restart `PolyCopyTrader.Service` so the new config is loaded; then monitor the Dashboard `Auto Live Pause` column for the target strategy after Live/Paper settlements.
+Notes: Verification passed: JSON parsing for Service/Dashboard appsettings; focused `dotnet test tests\PolyCopyTrader.Tests\PolyCopyTrader.Tests.csproj --no-restore --filter ConfigurationTests` 27/27; full `dotnet test tests\PolyCopyTrader.Tests\PolyCopyTrader.Tests.csproj --no-restore` 559/559; Service build passed with 0 warnings/errors; Dashboard temp-output build passed with 0 errors and existing Storage nullable warnings; `git diff --check` passed with LF/CRLF warnings only.
+Blockers: Production service must be redeployed/restarted before this allowlist change affects runtime behavior.
+
 ## Active Update 2026-06-02 Dashboard Big Settles Filter
 Goal: Add a per-strategy-tab Dashboard filter that shows only strategies with more than 100 settled rows.
 Status: Completed

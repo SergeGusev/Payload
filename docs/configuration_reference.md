@@ -33,7 +33,9 @@ Do not commit real credentials.
 - `CancelAllOnKillSwitch`: documents intended kill-switch behavior.
 - `AutoLivePauseStrategies`: strategy codes or ids where automatic Live-only
   pause is enabled. Default `[]`, meaning no strategy is auto-live-paused by
-  recent PnL unless it is explicitly listed.
+  recent PnL unless it is explicitly listed. The service config currently lists
+  `eth_up_down_5m_skip_bps_7_instant` so `ETH Up or Down 5m Skip 7 bps Instant`
+  participates in automatic Live pause/resume.
 
 ## Polymarket
 
@@ -854,11 +856,13 @@ be settled, and copied leader exits can still be tracked.
 
 Automatic strategy pausing is Live-only and opt-in per strategy through
 `LiveTrading:AutoLivePauseStrategies`; the default empty list disables automatic
-Live pause for every strategy. Entries may be strategy codes such as
-`follow_leader` or strategy ids. For allowlisted strategies, pause and resume use
-different evidence. After a Live settlement, the service checks that strategy's
-settled Live orders over the last 12 hours. If more than one Live bet exists and
-the 12-hour Live realized PnL is negative, it sets
+Live pause for every strategy. The service config currently includes
+`eth_up_down_5m_skip_bps_7_instant`, so `ETH Up or Down 5m Skip 7 bps Instant`
+is allowlisted. Entries may be strategy codes such as `follow_leader` or
+strategy ids. For allowlisted strategies, pause and resume use different
+evidence. After a Live settlement, the service checks that strategy's settled
+Live orders over the last 12 hours. If more than one Live bet exists and the
+12-hour Live realized PnL is negative, it sets
 `strategies.auto_live_paused=true` indefinitely; Live settlements never clear the
 flag. The strategy keeps creating Paper entries, and after each Paper settlement
 the service checks that strategy's settled Paper rows over the last 12 hours. If

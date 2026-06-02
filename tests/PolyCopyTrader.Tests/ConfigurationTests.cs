@@ -816,20 +816,26 @@ public sealed class ConfigurationTests
     public void LiveTrading_AutoLivePauseStrategiesAreOptInByStrategy()
     {
         var options = new LiveTradingOptions();
+        var ethSkipBps7InstantStrategyId = StrategyIds.CryptoUpDown5mVariants
+            .Single(variant => variant.Code == "eth_up_down_5m_skip_bps_7_instant")
+            .Id;
 
         Assert.False(StrategyAutoLivePausePolicy.IsEnabledForStrategy(options, StrategyIds.FollowLeader));
+        Assert.False(StrategyAutoLivePausePolicy.IsEnabledForStrategy(options, ethSkipBps7InstantStrategyId));
 
         options = new LiveTradingOptions
         {
             AutoLivePauseStrategies =
             [
                 StrategyIds.FollowLeaderCode,
-                StrategyIds.BtcUpDown5mBinanceBps1.ToString("D")
+                StrategyIds.BtcUpDown5mBinanceBps1.ToString("D"),
+                "eth_up_down_5m_skip_bps_7_instant"
             ]
         };
 
         Assert.True(StrategyAutoLivePausePolicy.IsEnabledForStrategy(options, StrategyIds.FollowLeader));
         Assert.True(StrategyAutoLivePausePolicy.IsEnabledForStrategy(options, StrategyIds.BtcUpDown5mBinanceBps1));
+        Assert.True(StrategyAutoLivePausePolicy.IsEnabledForStrategy(options, ethSkipBps7InstantStrategyId));
         Assert.False(StrategyAutoLivePausePolicy.IsEnabledForStrategy(options, StrategyIds.BtcUpDown5mBinanceBps2));
     }
 
