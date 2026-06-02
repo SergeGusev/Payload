@@ -832,14 +832,13 @@ public sealed class ConfigurationTests
             AutoLivePauseStrategies =
             [
                 StrategyIds.FollowLeaderCode,
-                StrategyIds.BtcUpDown5mBinanceBps1.ToString("D"),
-                "eth_up_down_5m_skip_bps_7_instant"
+                StrategyIds.BtcUpDown5mBinanceBps1.ToString("D")
             ]
         };
 
         Assert.True(StrategyAutoLivePausePolicy.IsEnabledForStrategy(options, StrategyIds.FollowLeader));
         Assert.True(StrategyAutoLivePausePolicy.IsEnabledForStrategy(options, StrategyIds.BtcUpDown5mBinanceBps1));
-        Assert.True(StrategyAutoLivePausePolicy.IsEnabledForStrategy(options, ethSkipBps7InstantStrategyId));
+        Assert.False(StrategyAutoLivePausePolicy.IsEnabledForStrategy(options, ethSkipBps7InstantStrategyId));
         Assert.False(StrategyAutoLivePausePolicy.IsEnabledForStrategy(options, btcMiddle1Bps47InstantStrategyId));
         Assert.False(StrategyAutoLivePausePolicy.IsEnabledForStrategy(options, StrategyIds.BtcUpDown5mBinanceBps2));
     }

@@ -108,3 +108,10 @@ Request:
 
 Result:
 Removed `btc_up_down_5m_middle_1_bps_47_instant` from `LiveTrading:AutoLivePauseStrategies` in Service and Dashboard appsettings while keeping it in the Paper/Live-shadow allowlist. Updated `ConfigurationTests` so BTC Middle 1 47 bps Instant is explicitly not enabled by Auto Live Pause policy, and updated README, configuration reference, and live trading checklist so Auto Live Pause is documented as enabled only for `ETH Up or Down 5m Skip 7 bps Instant`. Verification passed: appsettings JSON parse, focused `ConfigurationTests` 27/27, full test project 560/560, Service build 0 warnings/errors, Dashboard temp-output build 0 errors with existing Storage nullable warnings, and `git diff --check`. Production needs redeploy/restart before this config change affects runtime behavior.
+
+## 2026-06-02T18:20:50.5086363Z
+Request:
+Remove Auto Live Pause from `ETH Up or Down 5m Skip 7 bps Instant`.
+
+Result:
+Removed `eth_up_down_5m_skip_bps_7_instant` from `LiveTrading:AutoLivePauseStrategies` in Service and Dashboard appsettings, leaving the Auto Live Pause allowlist empty. Left Paper/Live-shadow allowlists unchanged, so ETH Skip 7 bps Instant and BTC Middle 1 47 bps Instant remain Live-eligible when their DB `LiveStakes` flags are enabled. Updated `ConfigurationTests`, README, configuration reference, and live trading checklist so ETH and BTC Middle 47 are not Auto Live Pause participants and no strategy is currently allowlisted. Verification passed: appsettings JSON parse, focused `ConfigurationTests` 27/27, full test project 560/560, Service build 0 warnings/errors, and Dashboard temp-output build 0 errors with existing Storage nullable warnings. Production needs redeploy/restart before the empty allowlist is loaded; an existing production `strategies.auto_live_paused=true` flag for ETH must be cleared separately if ETH should become effective-live immediately.
