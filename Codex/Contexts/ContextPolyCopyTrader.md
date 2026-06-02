@@ -1,3 +1,17 @@
+## Active Update 2026-06-03 Live Skip Boundary Deploy Verification
+Goal: Verify production after the user deployed the separate Live condition skip boundary change.
+Status: Completed
+Done:
+- Queried production PostgreSQL via `out\dbprobe` with a temporary host override to `192.168.0.101` and without printing the connection string.
+- Confirmed `PolyCopyTrader.Service` is running in `Live` mode on service-code commit `ad88ae97f6411b30cd1130ca21f2d29b629aa5e1`, started `2026-06-02T20:58:11Z`, with heartbeat age `0s` and `last_error` empty.
+- Confirmed `strategies.live_enabled_at_utc` exists, all `3` Live strategies have a non-null boundary, and no non-Live strategy has a stale boundary.
+- Confirmed all `3` Live strategies remain effective-live with `auto_live_paused=false`: BTC Middle 47, ETH Skip 7, and SOL Skip 42.
+- Confirmed the Dashboard Live condition skip boundary is active: BTC old all-paper condition skip `2530` vs Live condition skip `97`; ETH `1040` vs `47`; SOL `2462` vs `2`.
+- Confirmed recent production API errors in the last 15 minutes are `0`.
+Next: Monitor natural Live counter increments; SOL Skip 42 has started from its Live enable boundary and is no longer inheriting thousands of old Paper skips.
+Notes: Read-only production check only; no application source code changed. Repository HEAD has an additional context-only commit after `ad88ae9`, so the service version correctly shows the code commit that contains the fix.
+Blockers: None.
+
 ## Active Update 2026-06-02 Live Skip Boundary Production Verification
 Goal: Verify production after deploying the separate Live condition skip boundary change.
 Status: Completed
