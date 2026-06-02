@@ -1,3 +1,14 @@
+## Active Update 2026-06-02 Codex CLI Install
+Goal: Install the OpenAI Codex CLI globally through npm.
+Status: Completed
+Done:
+- Ran `npm install -g @openai/codex`; npm reported `changed 2 packages in 1m`.
+- Verified the global package resolves to `@openai/codex@0.136.0`.
+- Verified `codex --version` reports `codex-cli 0.136.0`.
+Next: None.
+Notes: npm emitted a cleanup warning for an old temporary directory under `C:\Users\serge\AppData\Roaming\npm\node_modules\@openai\.codex-VTsjU5s4` because Windows could not unlink a stale `codex.exe`; the installed CLI is usable. No project source files were changed.
+Blockers: None.
+
 ## Active Update 2026-06-02 ETH Live Waiting Status
 Goal: Clarify whether the current production state is healthy and only waiting for valid live entries.
 Status: Completed

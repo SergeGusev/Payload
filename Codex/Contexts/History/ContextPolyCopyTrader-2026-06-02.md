@@ -38,3 +38,10 @@ Request:
 
 Result:
 Confirmed yes: production is healthy from the latest check, the target strategy is Live-enabled, Gamma/API lockout is clear, and the system is now waiting for a qualifying ETH Skip 7 bps Instant entry that passes the normal live gates. No code or production writes were performed.
+
+## 2026-06-02T07:30:24.8060164Z
+Request:
+npm install -g @openai/codex
+
+Result:
+Installed the global npm package `@openai/codex`; npm reported `changed 2 packages in 1m`. Verified `npm ls -g @openai/codex --depth=0` shows `@openai/codex@0.136.0` and `codex --version` reports `codex-cli 0.136.0`. npm emitted a cleanup warning for an old temporary Codex directory that Windows could not unlink, but the installed CLI is usable. No project source files were changed.
