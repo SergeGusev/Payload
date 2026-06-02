@@ -115,3 +115,10 @@ Remove Auto Live Pause from `ETH Up or Down 5m Skip 7 bps Instant`.
 
 Result:
 Removed `eth_up_down_5m_skip_bps_7_instant` from `LiveTrading:AutoLivePauseStrategies` in Service and Dashboard appsettings, leaving the Auto Live Pause allowlist empty. Left Paper/Live-shadow allowlists unchanged, so ETH Skip 7 bps Instant and BTC Middle 1 47 bps Instant remain Live-eligible when their DB `LiveStakes` flags are enabled. Updated `ConfigurationTests`, README, configuration reference, and live trading checklist so ETH and BTC Middle 47 are not Auto Live Pause participants and no strategy is currently allowlisted. Verification passed: appsettings JSON parse, focused `ConfigurationTests` 27/27, full test project 560/560, Service build 0 warnings/errors, and Dashboard temp-output build 0 errors with existing Storage nullable warnings. Production needs redeploy/restart before the empty allowlist is loaded; an existing production `strategies.auto_live_paused=true` flag for ETH must be cleared separately if ETH should become effective-live immediately.
+
+## 2026-06-02T18:26:41.2220397Z
+Request:
+Complete removal of Auto Live Pause from `ETH Up or Down 5m Skip 7 bps Instant` without leaving the old DB pause flag stranded.
+
+Result:
+Added `StrategyAutoLivePauseAllowlistSynchronizer`, registered it at service startup after schema initialization, and added repository support to clear `strategies.auto_live_paused=true` for strategies outside the current `LiveTrading:AutoLivePauseStrategies` allowlist. With the allowlist empty, deploy/restart clears ETH's stored Auto Live Pause flag through the service instead of requiring a manual DB update. Added TestAppRepository support, focused synchronizer tests, and a storage-source test for the PostgreSQL cleanup SQL. Updated README/configuration reference/live checklist to document startup stale-pause cleanup. Verification passed: appsettings JSON parse, focused AutoLivePause tests 12/12, focused `ConfigurationTests` 27/27, full test project 563/563, Service build 0 warnings/errors, Dashboard temp-output build 0 errors with existing Storage nullable warnings, and `git diff --check` with LF/CRLF warnings only.

@@ -2725,6 +2725,28 @@ SELECT
 			lookbackStartUtc);
 	}
 
+	public async Task<int> ClearStrategyAutoLivePauseExceptAsync(
+		IReadOnlyCollection<Guid> allowlistedStrategyIds,
+		DateTimeOffset updatedAtUtc,
+		CancellationToken cancellationToken = default(CancellationToken))
+	{
+		var normalizedAllowlist = allowlistedStrategyIds
+			.Select(StrategyIds.Normalize)
+			.Distinct()
+			.ToArray();
+		await using NpgsqlConnection connection = await OpenConnectionAsync(cancellationToken);
+		await using NpgsqlCommand command = CreateCommand(connection, """
+UPDATE strategies
+SET auto_live_paused = false,
+    updated_at_utc = @UpdatedAtUtc
+WHERE auto_live_paused
+  AND id <> ALL(@AllowlistedStrategyIds);
+""");
+		command.Parameters.Add("AllowlistedStrategyIds", NpgsqlDbType.Array | NpgsqlDbType.Uuid).Value = normalizedAllowlist;
+		command.Parameters.AddWithValue("UpdatedAtUtc", UtcDateTime(updatedAtUtc));
+		return await command.ExecuteNonQueryAsync(cancellationToken);
+	}
+
 	public async Task<bool> SetStrategyStakeAmountsAsync(
 		Guid strategyId,
 		decimal paperStakeAmount,

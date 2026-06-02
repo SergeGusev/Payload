@@ -346,6 +346,7 @@ builder.Services.AddSingleton<ILiveTradingProcessor, LiveTradingProcessor>();
 builder.Services.AddSingleton<ITraderDiscoveryProcessor, TraderDiscoveryProcessor>();
 builder.Services.AddSingleton<IGammaMarketIngestionProcessor, GammaMarketIngestionProcessor>();
 builder.Services.AddSingleton<IStrategyStateProvider, StrategyStateProvider>();
+builder.Services.AddSingleton<StrategyAutoLivePauseAllowlistSynchronizer>();
 builder.Services.AddSingleton<IBtcUpDown5mPaperStrategyProcessor, BtcUpDown5mPaperStrategyProcessor>();
 builder.Services.AddSingleton<IBtcUpDown5mOddsArchiveProcessor, BtcUpDown5mOddsArchiveProcessor>();
 builder.Services.AddSingleton<IBtcUpDown5mStatisticsProcessor, BtcUpDown5mStatisticsProcessor>();
@@ -405,6 +406,8 @@ try
     Log.Information("Configuration summary:{NewLine}{ConfigSummary}", Environment.NewLine, AppOptionsValidator.ToSanitizedSummary(appConfiguration));
     var host = builder.Build();
     await host.Services.GetRequiredService<IStorageSchemaInitializer>().InitializeAsync();
+    await host.Services.GetRequiredService<StrategyAutoLivePauseAllowlistSynchronizer>()
+        .SynchronizeAsync(DateTimeOffset.UtcNow, CancellationToken.None);
     await host.RunAsync();
 }
 catch (Exception ex)

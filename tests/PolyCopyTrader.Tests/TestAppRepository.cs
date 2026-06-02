@@ -1674,6 +1674,33 @@ internal sealed class TestAppRepository : IAppRepository
             lookbackStartUtc));
     }
 
+    public Task<int> ClearStrategyAutoLivePauseExceptAsync(
+        IReadOnlyCollection<Guid> allowlistedStrategyIds,
+        DateTimeOffset updatedAtUtc,
+        CancellationToken cancellationToken = default)
+    {
+        var allowlist = allowlistedStrategyIds
+            .Select(StrategyIds.Normalize)
+            .ToHashSet();
+        var cleared = 0;
+        foreach (var item in StrategySettings.ToArray())
+        {
+            var normalizedStrategyId = StrategyIds.Normalize(item.Key);
+            if (!item.Value.AutoLivePaused || allowlist.Contains(normalizedStrategyId))
+            {
+                continue;
+            }
+
+            StrategySettings[normalizedStrategyId] = item.Value with
+            {
+                AutoLivePaused = false
+            };
+            cleared++;
+        }
+
+        return Task.FromResult(cleared);
+    }
+
     public Task<bool> SetStrategyStakeAmountsAsync(
         Guid strategyId,
         decimal paperStakeAmount,

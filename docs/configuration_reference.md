@@ -856,9 +856,11 @@ be settled, and copied leader exits can still be tracked.
 Automatic strategy pausing is Live-only and opt-in per strategy through
 `LiveTrading:AutoLivePauseStrategies`; the default empty list disables automatic
 Live pause for every strategy. The service config currently leaves the list
-empty, so no strategy is allowlisted. Entries may be strategy codes such as
-`follow_leader` or strategy ids. For allowlisted strategies, pause and resume use different
-evidence. After a Live settlement, the service checks that strategy's settled
+empty, so no strategy is allowlisted. On startup, the service clears stored
+`auto_live_paused=true` rows for strategies outside the current allowlist, so
+removed entries do not remain suppressed by old Auto Live Pause state. Entries
+may be strategy codes such as `follow_leader` or strategy ids. For allowlisted
+strategies, pause and resume use different evidence. After a Live settlement, the service checks that strategy's settled
 Live orders over the last 12 hours. If more than one Live bet exists and the
 12-hour Live realized PnL is negative, it sets
 `strategies.auto_live_paused=true` indefinitely; Live settlements never clear the

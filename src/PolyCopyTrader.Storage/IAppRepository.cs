@@ -399,6 +399,14 @@ public interface IAppRepository
         return Task.FromResult(new StrategyAutoLivePauseDecision(false, false, false, 0m, 0, lookbackStartUtc));
     }
 
+    Task<int> ClearStrategyAutoLivePauseExceptAsync(
+        IReadOnlyCollection<Guid> allowlistedStrategyIds,
+        DateTimeOffset updatedAtUtc,
+        CancellationToken cancellationToken = default)
+    {
+        return Task.FromResult(0);
+    }
+
     Task<bool> SetStrategyStakeAmountsAsync(
         Guid strategyId,
         decimal paperStakeAmount,

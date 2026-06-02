@@ -4,11 +4,12 @@ Status: Completed
 Done:
 - Removed `eth_up_down_5m_skip_bps_7_instant` from `LiveTrading:AutoLivePauseStrategies` in Service and Dashboard appsettings; the list is now empty.
 - Kept the Paper/Live-shadow allowlist unchanged, so ETH Skip 7 bps Instant and BTC Middle 1 47 bps Instant remain Live-eligible when their DB `LiveStakes` flags are enabled.
+- Added startup synchronization that clears stored `strategies.auto_live_paused=true` rows for strategies outside the current `AutoLivePauseStrategies` allowlist, so the removed ETH pause is cleared on deploy/restart.
 - Updated `ConfigurationTests` so ETH Skip 7 bps Instant and BTC Middle 1 47 bps Instant are explicitly not enabled by the Auto Live Pause policy.
-- Updated README, `docs/configuration_reference.md`, and `docs/live_trading_checklist.md` to document that no strategy currently participates in Auto Live Pause until explicitly listed.
-Next: Deploy/restart `PolyCopyTrader.Service` so production loads the empty `AutoLivePauseStrategies` list; separately clear the stored ETH `strategies.auto_live_paused` flag if ETH should become effective-live immediately.
-Notes: Verification passed: Service/Dashboard appsettings JSON parse; focused `ConfigurationTests` 27/27; full test project 560/560; Service build 0 warnings/errors; Dashboard temp-output build 0 errors with existing Storage nullable warnings.
-Blockers: Removing ETH from config stops future Auto Live Pause processing after deploy/restart, but it does not by itself clear an existing production `auto_live_paused=true` database flag.
+- Updated README, `docs/configuration_reference.md`, and `docs/live_trading_checklist.md` to document the empty allowlist and startup stale-pause cleanup.
+Next: Deploy/restart `PolyCopyTrader.Service` so production loads the empty `AutoLivePauseStrategies` list and startup cleanup clears ETH's stored Auto Live Pause state.
+Notes: Verification passed: Service/Dashboard appsettings JSON parse; focused `ConfigurationTests` 27/27; focused AutoLivePause tests 12/12; full test project 563/563; Service build 0 warnings/errors; Dashboard temp-output build 0 errors with existing Storage nullable warnings; `git diff --check` passed with LF/CRLF warnings only.
+Blockers: None.
 
 ## Active Update 2026-06-02 Remove BTC Middle 47 Auto Live Pause
 Goal: Remove Auto Live Pause participation for `BTC Up or Down 5m Middle 1 47 bps Instant` while keeping it Live-shadow allowlisted.

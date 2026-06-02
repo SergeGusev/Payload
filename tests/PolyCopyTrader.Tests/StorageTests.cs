@@ -553,6 +553,22 @@ public sealed class StorageTests
     }
 
     [Fact]
+    public void PostgresRepository_StrategyAutoLivePauseClearKeepsAllowlistedStrategiesPaused()
+    {
+        var source = ReadStorageRepositorySource();
+        var start = source.IndexOf("ClearStrategyAutoLivePauseExceptAsync", StringComparison.Ordinal);
+        Assert.True(start >= 0);
+
+        var end = source.IndexOf("SetStrategyStakeAmountsAsync", start, StringComparison.Ordinal);
+        Assert.True(end > start);
+
+        var method = source[start..end];
+        Assert.Contains("SET auto_live_paused = false", method, StringComparison.Ordinal);
+        Assert.Contains("WHERE auto_live_paused", method, StringComparison.Ordinal);
+        Assert.Contains("id <> ALL(@AllowlistedStrategyIds)", method, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task TestRepository_StrategyAutoLivePausePausesOnlyFromRecentLivePnlNegative()
     {
         var now = DateTimeOffset.UtcNow;

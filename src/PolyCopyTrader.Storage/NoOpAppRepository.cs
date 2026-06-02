@@ -240,6 +240,14 @@ public sealed class NoOpAppRepository : IAppRepository
         return Task.FromResult(new StrategyAutoLivePauseDecision(false, false, false, 0m, 0, lookbackStartUtc));
     }
 
+    public Task<int> ClearStrategyAutoLivePauseExceptAsync(
+        IReadOnlyCollection<Guid> allowlistedStrategyIds,
+        DateTimeOffset updatedAtUtc,
+        CancellationToken cancellationToken = default)
+    {
+        return Task.FromResult(0);
+    }
+
     public Task<bool> SetStrategyStakeAmountsAsync(
         Guid strategyId,
         decimal paperStakeAmount,

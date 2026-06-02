@@ -28,6 +28,8 @@ Live trading is disabled by default. Use this checklist before any live session.
 - `LiveTrading:AutoLivePauseStrategies` may be left empty. Add specific
   strategy codes only when those strategies should auto-pause Live after recent
   Live losses and resume from positive recent Paper evidence.
+- On service startup, stored `auto_live_paused=true` rows are cleared for
+  strategies outside the current `AutoLivePauseStrategies` list.
 - For Paper/Live-shadow, `LiveTrading` market/total exposure caps are
   checked against open Live orders only; Paper backlog must still be monitored
   separately, but it must not consume the tiny Live smoke-test cap.
