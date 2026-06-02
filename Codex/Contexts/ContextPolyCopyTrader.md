@@ -1,3 +1,15 @@
+## Active Update 2026-06-02 ETH Auto Live Pause Live Status
+Goal: Clarify whether any manual Dashboard action is needed after restarting Live with Auto Live Pause enabled for `ETH Up or Down 5m Skip 7 bps Instant`.
+Status: Completed
+Done:
+- Confirmed production `PolyCopyTrader.Service` is running in `Live` mode on commit `d458c6507363f2fd02e4a6012338763f1b6bd27e`, started `2026-06-02T08:07:15Z`, with fresh heartbeat and `last_error=null`.
+- Confirmed `eth_up_down_5m_skip_bps_7_instant` remains `enabled=true`, `paused=false`, and `live_stakes=true`, but is currently `auto_live_paused=true`, so `effective_live_stakes=false`.
+- Confirmed the auto pause condition is satisfied by recent Live settlements: `66` settled Live orders in the last 12 hours with total realized PnL `-27.374986`.
+- Verified the target strategy is present in `LiveTrading:AutoLivePauseStrategies`; no manual Dashboard click is required to enable or apply Auto Live Pause.
+Next: Keep `LiveStakes` enabled if the target should remain eligible; wait for the runtime Paper-settlement resume condition to clear `auto_live_paused` automatically after positive Paper evidence.
+Notes: Read-only production validation used `out\dbprobe` with a temporary host override to `192.168.0.101`. An exploratory query first used the wrong table/column names (`strategy_configs`, `filled_at_utc`); corrected validation used `strategies` and `live_orders.settled_at_utc`.
+Blockers: None.
+
 ## Active Update 2026-06-02 ETH Auto Live Pause Allowlist
 Goal: Enable automatic Live pause/resume participation for `ETH Up or Down 5m Skip 7 bps Instant`.
 Status: Completed
