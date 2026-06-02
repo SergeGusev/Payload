@@ -913,6 +913,7 @@ CREATE TABLE IF NOT EXISTS strategies (
     paper_stake_amount numeric(28,8) NOT NULL DEFAULT 1.00,
     live_stake_amount numeric(28,8) NOT NULL DEFAULT 1.00,
     live_available_balance numeric(28,8) NOT NULL DEFAULT 100.00,
+    live_enabled_at_utc timestamptz NULL,
     created_at_utc timestamptz NOT NULL,
     updated_at_utc timestamptz NOT NULL,
     CONSTRAINT ck_strategies_paper_stake_amount_positive CHECK (paper_stake_amount > 0),
@@ -927,6 +928,7 @@ ALTER TABLE strategies ADD COLUMN IF NOT EXISTS paused_until_utc timestamptz NUL
 ALTER TABLE strategies ADD COLUMN IF NOT EXISTS paper_stake_amount numeric(28,8) NOT NULL DEFAULT 1.00;
 ALTER TABLE strategies ADD COLUMN IF NOT EXISTS live_stake_amount numeric(28,8) NOT NULL DEFAULT 1.00;
 ALTER TABLE strategies ADD COLUMN IF NOT EXISTS live_available_balance numeric(28,8) NOT NULL DEFAULT 100.00;
+ALTER TABLE strategies ADD COLUMN IF NOT EXISTS live_enabled_at_utc timestamptz NULL;
 ALTER TABLE strategies ALTER COLUMN live_stake_amount SET DEFAULT 1.00;
 
 DO $$
@@ -4338,6 +4340,36 @@ ON paper_live_shadow_decisions(live_order_id);
 CREATE INDEX IF NOT EXISTS ix_paper_live_shadow_decisions_signal
 ON paper_live_shadow_decisions(signal_id);
 
+WITH first_live_events AS (
+    SELECT
+        event_row.strategy_id,
+        min(event_row.event_at_utc) AS first_live_event_at_utc
+    FROM (
+        SELECT live_order.strategy_id, live_order.created_at_utc AS event_at_utc
+        FROM live_orders live_order
+        UNION ALL
+        SELECT decision.strategy_id, decision.decision_created_at_utc AS event_at_utc
+        FROM paper_live_shadow_decisions decision
+    ) event_row
+    GROUP BY event_row.strategy_id
+)
+UPDATE strategies strategy
+SET live_enabled_at_utc = COALESCE(first_live_events.first_live_event_at_utc, clock_timestamp())
+FROM first_live_events
+WHERE strategy.id = first_live_events.strategy_id
+  AND strategy.live_stakes
+  AND strategy.live_enabled_at_utc IS NULL;
+
+UPDATE strategies
+SET live_enabled_at_utc = clock_timestamp()
+WHERE live_stakes
+  AND live_enabled_at_utc IS NULL;
+
+UPDATE strategies
+SET live_enabled_at_utc = NULL
+WHERE NOT live_stakes
+  AND live_enabled_at_utc IS NOT NULL;
+
 CREATE TABLE IF NOT EXISTS schema_data_migrations (
     migration_key text PRIMARY KEY,
     applied_at_utc timestamptz NOT NULL,
@@ -4412,6 +4444,7 @@ BEGIN
         UPDATE strategies strategy
         SET live_stakes = false,
             auto_live_paused = false,
+            live_enabled_at_utc = NULL,
             updated_at_utc = clock_timestamp()
         WHERE strategy.id IN (
             SELECT target.id
@@ -4607,6 +4640,7 @@ BEGIN
         UPDATE strategies strategy
         SET live_stakes = false,
             auto_live_paused = false,
+            live_enabled_at_utc = NULL,
             updated_at_utc = clock_timestamp()
         WHERE strategy.id IN (
             SELECT target.id
@@ -4763,6 +4797,7 @@ BEGIN
         SET enabled = false,
             live_stakes = false,
             auto_live_paused = false,
+            live_enabled_at_utc = NULL,
             updated_at_utc = clock_timestamp()
         WHERE (
                 strategy.code IN (

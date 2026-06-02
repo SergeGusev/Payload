@@ -1,3 +1,15 @@
+## Active Update 2026-06-02 Separate Live Condition Skip Boundary
+Goal: Prevent Dashboard `Live cond skip` from inheriting old Paper skipped runs when a strategy is switched to Live.
+Status: Completed
+Done:
+- Added nullable `strategies.live_enabled_at_utc` and schema backfill for already-live strategies from the first live order or paper/live-shadow decision, falling back to migration time when no live evidence exists.
+- Updated `SetStrategyLiveStakesAsync` so `live_enabled_at_utc` is set on `false -> true`, preserved while Live remains on, and cleared when Live is turned off.
+- Limited run-based Dashboard Live condition, technical, and GTD-unfilled skip aggregations to `strategy_market_paper_runs.updated_at_utc >= strategies.live_enabled_at_utc` in both all-time and recent `1h/6h/24h` strategy grids.
+- Updated `StrategyRuntimeSettings`, `TestAppRepository`, regression tests, README, and `docs/configuration_reference.md`.
+Next: Deploy/restart the service so schema initialization adds/backfills `live_enabled_at_utc`; after that, newly enabled Live strategies should start their run-based live skip counters from the enable moment instead of old Paper history.
+Notes: Verification passed: focused `StrategyPerformanceTests|StorageTests` 40/40; full test project 567/567; Service build passed with 0 warnings/errors; Dashboard normal build was blocked by the currently running Dashboard/Visual Studio locking `bin\Debug\net10.0-windows`, but Dashboard temp-output build passed with 0 errors and existing Storage nullable warnings; `git diff --check` passed with LF/CRLF warnings only.
+Blockers: Production needs deploy/restart before the new schema column and aggregation semantics are active.
+
 ## Active Update 2026-06-02 SOL Skip 42 Production Verification
 Goal: Verify production after enabling `SOL Up or Down 5m Skip 42 bps Instant` in Live.
 Status: Completed

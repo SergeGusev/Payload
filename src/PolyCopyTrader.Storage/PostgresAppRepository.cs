@@ -1660,6 +1660,13 @@ settlement_agg AS (
     WHERE strategy_id IS NOT NULL
     GROUP BY strategy_id
 ),
+run_rows AS (
+    SELECT
+        run.*,
+        strategy.live_enabled_at_utc
+    FROM strategy_market_paper_runs run
+    INNER JOIN strategies strategy ON strategy.id = run.strategy_id
+),
 run_agg AS (
     SELECT
         strategy_id,
@@ -1671,6 +1678,8 @@ run_agg AS (
         (count(*) FILTER (WHERE status = 'Skipped' AND paper_order_id IS NOT NULL))::integer AS paper_not_accepted_runs_count,
         (count(*) FILTER (
             WHERE status = 'Skipped'
+              AND live_enabled_at_utc IS NOT NULL
+              AND updated_at_utc >= live_enabled_at_utc
               AND (
                   lower(COALESCE(skip_reason, '')) IN (
                       'btc_reference_move_below_bps_threshold',
@@ -1701,6 +1710,8 @@ run_agg AS (
         ))::integer AS live_condition_skipped_orders_count,
         (count(*) FILTER (
             WHERE status = 'Skipped'
+              AND live_enabled_at_utc IS NOT NULL
+              AND updated_at_utc >= live_enabled_at_utc
               AND lower(COALESCE(skip_reason, '')) <> 'gtd_limit_not_filled'
               AND NOT (
                   lower(COALESCE(skip_reason, '')) IN (
@@ -1732,6 +1743,8 @@ run_agg AS (
         ))::integer AS live_technical_skipped_orders_count,
         (count(*) FILTER (
             WHERE status = 'Skipped'
+              AND live_enabled_at_utc IS NOT NULL
+              AND updated_at_utc >= live_enabled_at_utc
               AND lower(COALESCE(skip_reason, '')) = 'gtd_limit_not_filled'
         ))::integer AS live_ignored_gtd_unfilled_count,
         (count(*) FILTER (WHERE status = 'Settled'))::integer AS settled_runs_count,
@@ -1747,7 +1760,7 @@ run_agg AS (
         COALESCE(avg(GREATEST(0, EXTRACT(EPOCH FROM (entered_at_utc - entry_due_at_utc)))) FILTER (WHERE entered_at_utc IS NOT NULL), 0)::numeric AS avg_entry_delay_seconds,
         COALESCE(max(GREATEST(0, EXTRACT(EPOCH FROM (entered_at_utc - entry_due_at_utc)))) FILTER (WHERE entered_at_utc IS NOT NULL), 0)::numeric AS max_entry_delay_seconds,
         max(updated_at_utc) AS last_run_utc
-    FROM strategy_market_paper_runs
+    FROM run_rows
     GROUP BY strategy_id
 ),
 live_order_agg AS (
@@ -2057,7 +2070,7 @@ LIMIT @Limit;
 		await using NpgsqlConnection connection = await OpenConnectionAsync(cancellationToken);
 		await using NpgsqlCommand command = CreateCommand(connection, """
 WITH selected_strategies AS (
-    SELECT id, code, name, live_stakes, auto_live_paused, live_stakes AND NOT auto_live_paused AS effective_live_stakes
+    SELECT id, code, name, live_stakes, auto_live_paused, live_enabled_at_utc, live_stakes AND NOT auto_live_paused AS effective_live_stakes
     FROM strategies
     ORDER BY
         CASE WHEN code = 'follow_leader' THEN 0 ELSE 1 END,
@@ -2131,6 +2144,7 @@ run_window_rows AS (
         run.updated_at_utc,
         run.skip_reason,
         run.paper_order_id,
+        strategy.live_enabled_at_utc,
         window_row.window_label,
         window_row.window_start_utc,
         window_row.window_end_utc
@@ -2172,6 +2186,8 @@ run_agg AS (
             WHERE run.status = 'Skipped'
               AND run.updated_at_utc >= run.window_start_utc
               AND run.updated_at_utc <= run.window_end_utc
+              AND run.live_enabled_at_utc IS NOT NULL
+              AND run.updated_at_utc >= run.live_enabled_at_utc
               AND (
                   lower(COALESCE(run.skip_reason, '')) IN (
                       'btc_reference_move_below_bps_threshold',
@@ -2204,6 +2220,8 @@ run_agg AS (
             WHERE run.status = 'Skipped'
               AND run.updated_at_utc >= run.window_start_utc
               AND run.updated_at_utc <= run.window_end_utc
+              AND run.live_enabled_at_utc IS NOT NULL
+              AND run.updated_at_utc >= run.live_enabled_at_utc
               AND lower(COALESCE(run.skip_reason, '')) <> 'gtd_limit_not_filled'
               AND NOT (
                   lower(COALESCE(run.skip_reason, '')) IN (
@@ -2237,6 +2255,8 @@ run_agg AS (
             WHERE run.status = 'Skipped'
               AND run.updated_at_utc >= run.window_start_utc
               AND run.updated_at_utc <= run.window_end_utc
+              AND run.live_enabled_at_utc IS NOT NULL
+              AND run.updated_at_utc >= run.live_enabled_at_utc
               AND lower(COALESCE(run.skip_reason, '')) = 'gtd_limit_not_filled'
         ))::integer AS live_ignored_gtd_unfilled_count,
         (count(*) FILTER (WHERE run.status = 'Settled' AND run.settled_at_utc >= run.window_start_utc AND run.settled_at_utc <= run.window_end_utc))::integer AS settled_runs_count,
@@ -2504,7 +2524,8 @@ SELECT id,
        END AS paused_until_utc,
        paper_stake_amount,
        live_stake_amount,
-       live_available_balance
+       live_available_balance,
+       live_enabled_at_utc
 FROM strategies;
 """);
 		command.Parameters.AddWithValue("NowUtc", UtcDateTime(DateTimeOffset.UtcNow));
@@ -2522,7 +2543,8 @@ FROM strategies;
 				reader.IsDBNull(5) ? null : DateTimeOffsetFromUtc(reader.GetDateTime(5)),
 				reader.GetDecimal(6),
 				reader.GetDecimal(7),
-				reader.GetDecimal(8));
+				reader.GetDecimal(8),
+				reader.IsDBNull(9) ? null : DateTimeOffsetFromUtc(reader.GetDateTime(9)));
 		}
 
 		return results;
@@ -2575,6 +2597,12 @@ WHERE id = @StrategyId;
 		await using NpgsqlCommand command = CreateCommand(connection, """
 UPDATE strategies
 SET live_stakes = @LiveStakes,
+    live_enabled_at_utc = CASE
+        WHEN @LiveStakes AND NOT live_stakes THEN @UpdatedAtUtc
+        WHEN @LiveStakes AND live_enabled_at_utc IS NULL THEN @UpdatedAtUtc
+        WHEN NOT @LiveStakes THEN NULL
+        ELSE live_enabled_at_utc
+    END,
     updated_at_utc = @UpdatedAtUtc
 WHERE id = @StrategyId;
 """);

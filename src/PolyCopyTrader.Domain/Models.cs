@@ -2416,7 +2416,8 @@ public sealed record StrategyRuntimeSettings(
     DateTimeOffset? PausedUntilUtc,
     decimal PaperStakeAmount,
     decimal LiveStakeAmount,
-    decimal LiveAvailableBalance)
+    decimal LiveAvailableBalance,
+    DateTimeOffset? LiveEnabledAtUtc)
 {
     public bool EffectiveLiveStakes => LiveStakes && !AutoLivePaused;
 
@@ -2436,7 +2437,8 @@ public sealed record StrategyRuntimeSettings(
             PausedUntilUtc: null,
             PaperStakeAmount: 1.00m,
             LiveStakeAmount: 1.00m,
-            LiveAvailableBalance: 100.00m);
+            LiveAvailableBalance: 100.00m,
+            LiveEnabledAtUtc: null);
     }
 }
 

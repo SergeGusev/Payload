@@ -71,6 +71,9 @@ public sealed class StorageTests
         Assert.Contains("ALTER TABLE strategies ADD COLUMN IF NOT EXISTS paused_until_utc timestamptz NULL", PostgresSchema.SchemaSql, StringComparison.Ordinal);
         Assert.Contains("auto_live_paused boolean NOT NULL DEFAULT false", PostgresSchema.SchemaSql, StringComparison.Ordinal);
         Assert.Contains("ALTER TABLE strategies ADD COLUMN IF NOT EXISTS auto_live_paused boolean NOT NULL DEFAULT false", PostgresSchema.SchemaSql, StringComparison.Ordinal);
+        Assert.Contains("live_enabled_at_utc timestamptz NULL", PostgresSchema.SchemaSql, StringComparison.Ordinal);
+        Assert.Contains("ALTER TABLE strategies ADD COLUMN IF NOT EXISTS live_enabled_at_utc timestamptz NULL", PostgresSchema.SchemaSql, StringComparison.Ordinal);
+        Assert.Contains("first_live_events AS", PostgresSchema.SchemaSql, StringComparison.Ordinal);
         Assert.Contains("20260602_clear_auto_live_pause_by_default", PostgresSchema.SchemaSql, StringComparison.Ordinal);
         Assert.Contains("WHERE auto_live_paused", PostgresSchema.SchemaSql, StringComparison.Ordinal);
         Assert.DoesNotContain("SET paused = false", PostgresSchema.SchemaSql, StringComparison.Ordinal);
@@ -545,11 +548,30 @@ public sealed class StorageTests
 
         var method = source[start..end];
         Assert.Contains(
-            "SELECT id, code, name, live_stakes, auto_live_paused, live_stakes AND NOT auto_live_paused AS effective_live_stakes",
+            "SELECT id, code, name, live_stakes, auto_live_paused, live_enabled_at_utc, live_stakes AND NOT auto_live_paused AS effective_live_stakes",
             method,
             StringComparison.Ordinal);
         Assert.Contains("sw.live_stakes,", method, StringComparison.Ordinal);
         Assert.Contains("CASE WHEN sw.effective_live_stakes", method, StringComparison.Ordinal);
+        Assert.Contains("run.live_enabled_at_utc IS NOT NULL", method, StringComparison.Ordinal);
+        Assert.Contains("run.updated_at_utc >= run.live_enabled_at_utc", method, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void PostgresRepository_SetStrategyLiveStakesMaintainsLiveEnabledBoundary()
+    {
+        var source = ReadStorageRepositorySource();
+        var start = source.IndexOf("SetStrategyLiveStakesAsync", StringComparison.Ordinal);
+        Assert.True(start >= 0);
+
+        var end = source.IndexOf("SetStrategyPausedAsync", start, StringComparison.Ordinal);
+        Assert.True(end > start);
+
+        var method = source[start..end];
+        Assert.Contains("live_enabled_at_utc = CASE", method, StringComparison.Ordinal);
+        Assert.Contains("WHEN @LiveStakes AND NOT live_stakes THEN @UpdatedAtUtc", method, StringComparison.Ordinal);
+        Assert.Contains("WHEN @LiveStakes AND live_enabled_at_utc IS NULL THEN @UpdatedAtUtc", method, StringComparison.Ordinal);
+        Assert.Contains("WHEN NOT @LiveStakes THEN NULL", method, StringComparison.Ordinal);
     }
 
     [Fact]

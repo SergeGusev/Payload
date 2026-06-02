@@ -1227,23 +1227,15 @@ internal sealed class TestAppRepository : IAppRepository
                 .Where(order => StrategyIds.Normalize(order.StrategyId) == strategy.Id)
                 .ToArray();
             var effectiveLiveStakes = strategy.Settings.EffectiveLiveStakes;
-            var liveConditionSkipped = effectiveLiveStakes
-                ? runs.Count(run =>
-                    string.Equals(run.Status, StrategyMarketPaperRunStatuses.Skipped, StringComparison.OrdinalIgnoreCase) &&
-                    IsLiveConditionSkipReason(run.SkipReason))
-                : 0;
-            var liveTechnicalSkipped = (effectiveLiveStakes
-                    ? runs.Count(run =>
-                        string.Equals(run.Status, StrategyMarketPaperRunStatuses.Skipped, StringComparison.OrdinalIgnoreCase) &&
-                        !IsLiveConditionSkipReason(run.SkipReason) &&
-                        !IsLiveIgnoredSkipReason(run.SkipReason))
-                    : 0) +
+            var liveSkippedRuns = effectiveLiveStakes && strategy.Settings.LiveEnabledAtUtc is { } liveEnabledAtUtc
+                ? skippedRuns.Where(run => run.UpdatedAtUtc >= liveEnabledAtUtc).ToArray()
+                : [];
+            var liveConditionSkipped = liveSkippedRuns.Count(run => IsLiveConditionSkipReason(run.SkipReason));
+            var liveTechnicalSkipped = liveSkippedRuns.Count(run =>
+                    !IsLiveConditionSkipReason(run.SkipReason) &&
+                    !IsLiveIgnoredSkipReason(run.SkipReason)) +
                 liveOrders.Count(order => order.Status == LiveOrderStatus.PreflightRejected);
-            var liveIgnoredGtdUnfilled = effectiveLiveStakes
-                    ? runs.Count(run =>
-                        string.Equals(run.Status, StrategyMarketPaperRunStatuses.Skipped, StringComparison.OrdinalIgnoreCase) &&
-                        IsLiveIgnoredSkipReason(run.SkipReason))
-                    : 0;
+            var liveIgnoredGtdUnfilled = liveSkippedRuns.Count(run => IsLiveIgnoredSkipReason(run.SkipReason));
             var liveIgnoredCancelled = liveOrders.Count(IsLiveIgnoredCancelledOrder);
             var liveIgnoredRejected = liveOrders.Count(IsLiveIgnoredRejectedOrder);
             var liveIgnored = liveIgnoredGtdUnfilled + liveIgnoredCancelled + liveIgnoredRejected;
@@ -1432,16 +1424,15 @@ internal sealed class TestAppRepository : IAppRepository
                     .Where(order => order.CreatedAtUtc >= window.StartUtc && order.CreatedAtUtc <= now)
                     .ToArray();
                 var effectiveLiveStakes = strategy.Settings.EffectiveLiveStakes;
-                var liveConditionSkipped = effectiveLiveStakes
-                    ? skippedRuns.Count(run => IsLiveConditionSkipReason(run.SkipReason))
-                    : 0;
-                var liveTechnicalSkipped = (effectiveLiveStakes
-                        ? skippedRuns.Count(run => !IsLiveConditionSkipReason(run.SkipReason) && !IsLiveIgnoredSkipReason(run.SkipReason))
-                        : 0) +
+                var liveSkippedRuns = effectiveLiveStakes && strategy.Settings.LiveEnabledAtUtc is { } liveEnabledAtUtc
+                    ? skippedRuns.Where(run => run.UpdatedAtUtc >= liveEnabledAtUtc).ToArray()
+                    : [];
+                var liveConditionSkipped = liveSkippedRuns.Count(run => IsLiveConditionSkipReason(run.SkipReason));
+                var liveTechnicalSkipped = liveSkippedRuns.Count(run =>
+                        !IsLiveConditionSkipReason(run.SkipReason) &&
+                        !IsLiveIgnoredSkipReason(run.SkipReason)) +
                     liveCreatedInWindow.Count(order => order.Status == LiveOrderStatus.PreflightRejected);
-                var liveIgnoredGtdUnfilled = effectiveLiveStakes
-                        ? skippedRuns.Count(run => IsLiveIgnoredSkipReason(run.SkipReason))
-                        : 0;
+                var liveIgnoredGtdUnfilled = liveSkippedRuns.Count(run => IsLiveIgnoredSkipReason(run.SkipReason));
                 var liveIgnoredCancelled = liveCreatedInWindow.Count(IsLiveIgnoredCancelledOrder);
                 var liveIgnoredRejected = liveCreatedInWindow.Count(IsLiveIgnoredRejectedOrder);
                 var liveIgnored = liveIgnoredGtdUnfilled + liveIgnoredCancelled + liveIgnoredRejected;
@@ -1571,9 +1562,15 @@ internal sealed class TestAppRepository : IAppRepository
             return Task.FromResult(false);
         }
 
-        StrategySettings[normalizedStrategyId] = GetStrategySettings(normalizedStrategyId) with
+        var settings = GetStrategySettings(normalizedStrategyId);
+        StrategySettings[normalizedStrategyId] = settings with
         {
-            LiveStakes = liveStakes
+            LiveStakes = liveStakes,
+            LiveEnabledAtUtc = liveStakes
+                ? settings.LiveStakes
+                    ? settings.LiveEnabledAtUtc ?? updatedAtUtc
+                    : updatedAtUtc
+                : null
         };
         return Task.FromResult(true);
     }

@@ -1,3 +1,10 @@
+## 2026-06-02T20:53:10.2155058Z
+Request:
+Пользователь заметил, что при переводе стратегии в Live колонка Dashboard `Live cond skip` сразу показывает большое число, вероятно унаследованное от Paper, и спросил, можно ли вести Live Cond Skip отдельно.
+
+Result:
+Added nullable `strategies.live_enabled_at_utc` and schema backfill for already-live strategies from the first live order or paper/live-shadow decision, falling back to migration time when no live evidence exists. `SetStrategyLiveStakesAsync` now sets this boundary on `false -> true`, preserves it while Live remains enabled, and clears it when Live is turned off. Dashboard all-time and recent `1h/6h/24h` strategy aggregations now count run-based Live condition, technical, and GTD-unfilled skips only when `strategy_market_paper_runs.updated_at_utc >= strategies.live_enabled_at_utc`, so old Paper skipped runs do not appear as Live skips immediately after enabling Live. Updated runtime settings, TestAppRepository, regression tests, README, and configuration reference. Verification passed: focused `StrategyPerformanceTests|StorageTests` 40/40, full test project 567/567, Service build 0 errors, Dashboard temp-output build 0 errors with existing Storage nullable warnings, and `git diff --check` with LF/CRLF warnings only. A normal Dashboard build failed only because the running Dashboard/Visual Studio locked the existing `bin\Debug\net10.0-windows` DLLs. Production needs deploy/restart before the schema/aggregation change is active.
+
 ## 2026-06-01T21:36:33Z
 Request:
 Maybe add indexes for long Dashboard queries?

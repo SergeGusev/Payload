@@ -833,7 +833,10 @@ It also shows decision-health entry delay metrics (`Avg delay s` and
 `Max delay s`) computed as actual `entered_at_utc` minus planned
 `entry_due_at_utc` for runs that placed a stake. Closed-outcome quality metrics (`Avg win`, `Avg loss`,
 `Profit factor`, and `Expectancy`) next to `Win %` so count-based hit rate can
-be compared against actual payoff size. The nested `24 hours`, `6 hours`, and
+be compared against actual payoff size. Run-based Live condition, technical, and
+GTD-unfilled skip counters start at `strategies.live_enabled_at_utc`, so turning
+on the manual `Live` flag does not move older Paper-only skipped runs into the
+Live skip columns. The nested `24 hours`, `6 hours`, and
 `1 hour` tabs under `Strategies` use the same strategy refresh cache and show recent
 orders, filled/expired/open orders, entered/skipped/settled runs, wins/losses,
 realized PnL, ROI, average fill price, entry-delay health metrics, and the top skip reason. The `Strategies` tab lets `Paused`, `Paper $`, `Live $`,

@@ -149,6 +149,33 @@ public sealed class StrategyPerformanceTests
     }
 
     [Fact]
+    public async Task GetStrategyPerformanceAsync_CountsRunBasedLiveSkipsAfterLiveEnabledAtOnly()
+    {
+        var repository = new TestAppRepository();
+        var now = DateTimeOffset.UtcNow;
+        var variant = StrategyIds.GetBtcUpDown5mVariant(BtcUpDown5mStrategyDirection.More, 90);
+        repository.StrategyMarketPaperRuns.Add(CreateSkippedRun(
+            variant.Id,
+            now.AddMinutes(-20),
+            "market-paper-before-live",
+            paperOrderId: null,
+            "btc_reference_move_below_bps_threshold"));
+        await repository.SetStrategyLiveStakesAsync(variant.Id, liveStakes: true, updatedAtUtc: now.AddMinutes(-10));
+        repository.StrategyMarketPaperRuns.Add(CreateSkippedRun(
+            variant.Id,
+            now.AddMinutes(-5),
+            "market-live-after-enable",
+            paperOrderId: null,
+            "btc_reference_move_below_bps_threshold"));
+
+        var row = (await repository.GetStrategyPerformanceAsync()).Single(item => item.StrategyId == variant.Id);
+
+        Assert.Equal(2, row.PaperConditionSkippedRunsCount);
+        Assert.Equal(1, row.LiveSkippedOrdersCount);
+        Assert.Equal(1, row.LiveConditionSkippedOrdersCount);
+    }
+
+    [Fact]
     public async Task GetStrategyPerformanceAsync_ComputesLiveOutcomeMetricsSeparatelyFromPaper()
     {
         var repository = new TestAppRepository();
@@ -349,7 +376,11 @@ public sealed class StrategyPerformanceTests
         var repository = new TestAppRepository();
         var now = DateTimeOffset.UtcNow;
         var variant = StrategyIds.GetBtcUpDown5mVariant(BtcUpDown5mStrategyDirection.More, 90);
-        repository.StrategySettings[variant.Id] = StrategyRuntimeSettings.Default(variant.Id) with { LiveStakes = true };
+        repository.StrategySettings[variant.Id] = StrategyRuntimeSettings.Default(variant.Id) with
+        {
+            LiveStakes = true,
+            LiveEnabledAtUtc = now.AddHours(-1)
+        };
         var filledOrder = new PaperOrder(
             Guid.NewGuid(),
             Guid.NewGuid(),
@@ -604,6 +635,34 @@ public sealed class StrategyPerformanceTests
         Assert.Equal(6m, row.LiveRealizedPnlUsd);
         Assert.Equal(150m, row.LiveRoiPct);
         Assert.Equal("btc_reference_move_below_bps_threshold:1", row.TopSkipReason);
+    }
+
+    [Fact]
+    public async Task GetStrategyRecentPerformanceAsync_CountsRunBasedLiveSkipsAfterLiveEnabledAtOnly()
+    {
+        var repository = new TestAppRepository();
+        var now = DateTimeOffset.UtcNow;
+        var variant = StrategyIds.GetBtcUpDown5mVariant(BtcUpDown5mStrategyDirection.More, 90);
+        repository.StrategyMarketPaperRuns.Add(CreateSkippedRun(
+            variant.Id,
+            now.AddMinutes(-40),
+            "market-recent-paper-before-live",
+            paperOrderId: null,
+            "btc_reference_move_below_bps_threshold"));
+        await repository.SetStrategyLiveStakesAsync(variant.Id, liveStakes: true, updatedAtUtc: now.AddMinutes(-10));
+        repository.StrategyMarketPaperRuns.Add(CreateSkippedRun(
+            variant.Id,
+            now.AddMinutes(-5),
+            "market-recent-live-after-enable",
+            paperOrderId: null,
+            "btc_reference_move_below_bps_threshold"));
+
+        var row = (await repository.GetStrategyRecentPerformanceAsync())
+            .Single(item => item.StrategyId == variant.Id && item.Window == "1h");
+
+        Assert.Equal(2, row.PaperConditionSkippedRunsCount);
+        Assert.Equal(1, row.LiveSkippedOrdersCount);
+        Assert.Equal(1, row.LiveConditionSkippedOrdersCount);
     }
 
     [Fact]
