@@ -1,3 +1,16 @@
+## Active Update 2026-06-02 BTC Middle 47 Instant Live Auto Pause
+Goal: Allow `BTC Up or Down 5m Middle 1 47 bps Instant` to run through the tiny Paper/Live-shadow path and participate in Auto Live Pause.
+Status: Completed
+Done:
+- Added `btc_up_down_5m_middle_1_bps_47_instant` to the `PaperLiveShadowAllowedVariantCodes` allowlist.
+- Added `btc_up_down_5m_middle_1_bps_47_instant` to `LiveTrading:AutoLivePauseStrategies` in Service and Dashboard appsettings.
+- Added a processor regression test proving the BTC Middle 1 47 bps Instant strategy creates the linked Paper-shadow row, live GTD BUY request, live order row, and shadow decision when `LiveStakes=true` and all existing live gates pass.
+- Updated `ConfigurationTests` so `StrategyAutoLivePausePolicy` proves the BTC Middle 1 47 bps Instant code enables the target strategy.
+- Updated README, configuration reference, and live trading checklist to document the new Live-shadow allowlist entry and Auto Live Pause participation.
+Next: Deploy/restart `PolyCopyTrader.Service`, then enable only this strategy with `--set-live-stakes-only-code btc_up_down_5m_middle_1_bps_47_instant` if production readiness checks are clean.
+Notes: Verification passed: Service/Dashboard appsettings JSON parse; targeted `dotnet test tests\PolyCopyTrader.Tests\PolyCopyTrader.Tests.csproj --no-restore --filter FullyQualifiedName~ProcessAsync_MiddleBps47InstantLiveStakeCreatesPaperShadowAndGtdLiveOrder` 1/1; focused `ConfigurationTests` 27/27; full test project 560/560; Service build passed with 0 warnings/errors; Dashboard temp-output build passed with 0 errors and existing Storage nullable warnings; `git diff --check` passed with LF/CRLF warnings only.
+Blockers: Production service must be redeployed/restarted before this allowlist/config change affects runtime behavior.
+
 ## Active Update 2026-06-02 ETH Auto Live Pause Live Status
 Goal: Clarify whether any manual Dashboard action is needed after restarting Live with Auto Live Pause enabled for `ETH Up or Down 5m Skip 7 bps Instant`.
 Status: Completed

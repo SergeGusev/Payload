@@ -52,6 +52,7 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
     private static readonly string[] PaperLiveShadowAllowedVariantCodes =
     [
         BtcSkip1VariantCode,
+        "btc_up_down_5m_middle_1_bps_47_instant",
         StrategyIds.BtcUpDown5mBinanceBps1Code,
         "btc_up_down_5m_binance_bps_17_instant",
         "btc_up_down_5m_binance_bps_18",

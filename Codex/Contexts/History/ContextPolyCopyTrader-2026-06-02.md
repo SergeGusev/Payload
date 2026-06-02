@@ -73,3 +73,10 @@ User started Live and asked whether anything needs to be pressed manually or whe
 
 Result:
 Verified production read-only after the Live restart. `PolyCopyTrader.Service` is running in `Live` mode on commit `d458c6507363f2fd02e4a6012338763f1b6bd27e`, started `2026-06-02T08:07:15Z`, with fresh heartbeat and `last_error=null`. The target `eth_up_down_5m_skip_bps_7_instant` strategy is `enabled=true`, `paused=false`, `live_stakes=true`, and currently `auto_live_paused=true`, so `effective_live_stakes=false`. Recent Live evidence explains the pause: `66` settled Live orders in the last 12 hours with total realized PnL `-27.374986`. No manual Dashboard click is needed; Auto Live Pause is allowlisted and has already applied itself. No code or production writes were performed.
+
+## 2026-06-02T08:25:39.7432305Z
+Request:
+Переведи BTC Up or Down 5m Middle 1 47 bps Instant в Live режим c установленным Auto live pause
+
+Result:
+Added `btc_up_down_5m_middle_1_bps_47_instant` to the explicit Paper/Live-shadow allowlist and to `LiveTrading:AutoLivePauseStrategies` in Service and Dashboard appsettings. Added a processor regression test proving the strategy creates linked Paper-shadow and live GTD BUY rows when `LiveStakes=true`, added Auto Live Pause policy coverage, and updated README, configuration reference, and live trading checklist. Verification passed: appsettings JSON parse, targeted BTC Middle 47 live-shadow test 1/1, focused `ConfigurationTests` 27/27, full test project 560/560, Service build 0 warnings/errors, Dashboard temp-output build 0 errors with existing Storage nullable warnings, and `git diff --check`. Production still needs deploy/restart before the new allowlists are loaded; the production `LiveStakes` flag was not changed in this code-change turn.

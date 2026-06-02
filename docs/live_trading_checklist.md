@@ -20,15 +20,16 @@ Live trading is disabled by default. Use this checklist before any live session.
 - `PaperTrading:RunInLiveMode` is `true` if this session should continue shadow Paper alongside Live.
 - `LiveTrading:ManualEnableCode` is `LIVE_TRADING_ENABLED`.
 - Follow leader live remains maker-only: `Execution:MakerOnly=true` and `Execution:AllowTaker=false`.
-- Paper/Live-shadow stakes are limited to the explicit allow-list: `BTC Up or Down 5m Skip 1`, `BTC Up or Down 5m Binance 10 bps`, `BTC Up or Down 5m Binance 17 bps Instant`, `BTC Up or Down 5m Binance 18 bps`, `BTC Up or Down 5m Binance 19 bps`, `BTC Up or Down 5m Binance 20 bps`, `BTC Up or Down 5m Binance 20 bps Instant`, `BTC Up or Down 5m Binance 21 bps`, `BTC Up or Down 5m Binance 22 bps`, `BTC Up or Down 5m Binance 23 bps`, `ETH Up or Down 5m Skip 7 bps Instant`, and `SOL Up or Down 5m Binance 24 bps Instant`.
+- Paper/Live-shadow stakes are limited to the explicit allow-list: `BTC Up or Down 5m Skip 1`, `BTC Up or Down 5m Middle 1 47 bps Instant`, `BTC Up or Down 5m Binance 10 bps`, `BTC Up or Down 5m Binance 17 bps Instant`, `BTC Up or Down 5m Binance 18 bps`, `BTC Up or Down 5m Binance 19 bps`, `BTC Up or Down 5m Binance 20 bps`, `BTC Up or Down 5m Binance 20 bps Instant`, `BTC Up or Down 5m Binance 21 bps`, `BTC Up or Down 5m Binance 22 bps`, `BTC Up or Down 5m Binance 23 bps`, `ETH Up or Down 5m Skip 7 bps Instant`, and `SOL Up or Down 5m Binance 24 bps Instant`.
 - Paper/Live-shadow stakes, if enabled per strategy, are intentional BUY-only `GTD` limit orders with `postOnly=false`; by default local cancellation is `OpeningLimitExpireBeforeMarketEndSeconds` (`60`) seconds before market close, while the CLOB wire expiration includes `ClobGtdExpirationSecurityBufferSeconds` (`60`). Any immediately marketable portion may fill as taker and the remainder can rest until GTD expiration/cancel/market close.
 - Paper/Live-shadow matching must keep asset, condition, outcome, order type, `postOnly=false`, limit price within `0.000001`, and requested size within `0.000001` shares; mismatch disables `LiveStakes` for that strategy and cancels correlated open live orders.
 - `LiveTrading:MaxOrderNotionalUsd` is tiny.
 - `LiveTrading:MaxOpenLiveOrders` is tiny, initially `1`.
 - `LiveTrading:AutoLivePauseStrategies` includes
-  `eth_up_down_5m_skip_bps_7_instant` when `ETH Up or Down 5m Skip 7 bps
-  Instant` should auto-pause Live after recent Live losses and resume from
-  positive recent Paper evidence.
+  `eth_up_down_5m_skip_bps_7_instant` and
+  `btc_up_down_5m_middle_1_bps_47_instant` when those strategies should
+  auto-pause Live after recent Live losses and resume from positive recent Paper
+  evidence.
 - For Paper/Live-shadow, `LiveTrading` market/total exposure caps are
   checked against open Live orders only; Paper backlog must still be monitored
   separately, but it must not consume the tiny Live smoke-test cap.

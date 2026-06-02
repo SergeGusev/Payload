@@ -112,6 +112,9 @@ public sealed class BtcUpDown5mPaperStrategyProcessorTests
     private static readonly BtcUpDown5mStrategyVariant Middle1Bps20InstantVariant =
         StrategyIds.BtcUpDown5mVariants.Single(variant => variant.Code == "btc_up_down_5m_middle_1_bps_20_instant");
 
+    private static readonly BtcUpDown5mStrategyVariant Middle1Bps47InstantVariant =
+        StrategyIds.BtcUpDown5mVariants.Single(variant => variant.Code == "btc_up_down_5m_middle_1_bps_47_instant");
+
     private static readonly BtcUpDown5mStrategyVariant Middle1Bps100Variant =
         StrategyIds.BtcUpDown5mVariants.Single(variant => variant.Code == "btc_up_down_5m_middle_1_bps_100");
 
@@ -7893,6 +7896,79 @@ public sealed class BtcUpDown5mPaperStrategyProcessorTests
 
         var decision = Assert.Single(repository.PaperLiveShadowDecisions);
         Assert.Equal(EthSkipBps7InstantVariant.Id, decision.StrategyId);
+        Assert.Equal(liveOrder.CorrelationId, decision.CorrelationId);
+        Assert.Equal(paperOrder.Id, decision.PaperOrderId);
+        Assert.Equal(liveOrder.Id, decision.LiveOrderId);
+        Assert.Equal("live_submitted", decision.Status);
+    }
+
+    [Fact]
+    public async Task ProcessAsync_MiddleBps47InstantLiveStakeCreatesPaperShadowAndGtdLiveOrder()
+    {
+        var now = DateTimeOffset.UtcNow;
+        var repository = new TestAppRepository();
+        repository.StrategySettings[Middle1Bps47InstantVariant.Id] = StrategyRuntimeSettings.Default(Middle1Bps47InstantVariant.Id) with
+        {
+            LiveStakes = true,
+            LiveStakeAmount = 2.50m,
+            LiveAvailableBalance = 100m,
+            PaperStakeAmount = 2.50m
+        };
+        repository.PolymarketGammaMarkets.Add(CreateMarket(
+            now,
+            now.AddMinutes(5),
+            upPrice: 0.38m,
+            downPrice: 0.62m));
+        var tradingClient = new CapturingTradingClient();
+        var processor = CreateLiveProcessorWithBtcReference(
+            repository,
+            tradingClient,
+            99.52m,
+            [100m],
+            [],
+            Middle1Bps47InstantVariant.Code);
+
+        var result = await processor.ProcessAsync();
+
+        Assert.Equal(1, result.EntriesPlaced);
+        Assert.Equal(1, tradingClient.PlaceCalls);
+        Assert.NotNull(tradingClient.LastRequest);
+        var request = tradingClient.LastRequest;
+        Assert.Equal(ClobV2OrderType.GTD, request.OrderType);
+        Assert.False(request.PostOnly);
+        Assert.NotNull(request.GtdExpirationUtc);
+        Assert.Equal(0.36m, request.Price);
+
+        var liveOrder = Assert.Single(repository.LiveOrders);
+        Assert.Equal(Middle1Bps47InstantVariant.Id, liveOrder.StrategyId);
+        Assert.Equal("asset-up", liveOrder.AssetId);
+        Assert.Equal("Up", liveOrder.Outcome);
+        Assert.Equal("GTD", liveOrder.OrderType);
+        Assert.Equal(LiveOrderStatus.Live, liveOrder.Status);
+        Assert.Equal(0.36m, liveOrder.Price);
+        Assert.Equal("paper_live_shadow_test", liveOrder.ExecutionSource);
+        Assert.False(liveOrder.PostOnly);
+        Assert.NotNull(liveOrder.CorrelationId);
+
+        var paperOrder = Assert.Single(repository.PaperOrders);
+        Assert.Equal(Middle1Bps47InstantVariant.Id, paperOrder.StrategyId);
+        Assert.Equal(PaperOrderStatus.Pending, paperOrder.Status);
+        Assert.Equal("paper_live_shadow_test", paperOrder.ExecutionSource);
+        Assert.Equal(liveOrder.CorrelationId, paperOrder.CorrelationId);
+        Assert.Equal(liveOrder.PaperOrderId, paperOrder.Id);
+        Assert.Equal("asset-up", paperOrder.AssetId);
+        Assert.Equal("Up", paperOrder.Outcome);
+        Assert.Equal(0.36m, paperOrder.Price);
+        Assert.Equal(liveOrder.SizeShares, paperOrder.SizeShares);
+        Assert.Contains("\"decision_source\":\"binance_trade_stream_middle_reference\"", paperOrder.RawDecisionJson, StringComparison.Ordinal);
+        Assert.Contains("\"btc_min_move_from_mean_bps\":47", paperOrder.RawDecisionJson, StringComparison.Ordinal);
+        Assert.Contains("\"selected_direction\":\"Up\"", paperOrder.RawDecisionJson, StringComparison.Ordinal);
+        Assert.Contains("\"opening_limit_price_mode\":\"instant_executable_ask_depth\"", paperOrder.RawDecisionJson, StringComparison.Ordinal);
+        Assert.Contains("\"instant_pricing_source\":\"websocket_cache\"", paperOrder.RawDecisionJson, StringComparison.Ordinal);
+        Assert.Contains("\"paper_live_shadow_test\":true", paperOrder.RawDecisionJson, StringComparison.Ordinal);
+
+        var decision = Assert.Single(repository.PaperLiveShadowDecisions);
+        Assert.Equal(Middle1Bps47InstantVariant.Id, decision.StrategyId);
         Assert.Equal(liveOrder.CorrelationId, decision.CorrelationId);
         Assert.Equal(paperOrder.Id, decision.PaperOrderId);
         Assert.Equal(liveOrder.Id, decision.LiveOrderId);
