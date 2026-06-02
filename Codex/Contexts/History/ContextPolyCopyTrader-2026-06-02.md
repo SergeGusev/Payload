@@ -87,3 +87,10 @@ Request:
 
 Result:
 Answered yes: production `PolyCopyTrader.Service` must be redeployed/restarted on commit `e532b4d` because the BTC Middle 1 47 bps Instant Paper/Live-shadow allowlist entry is compiled into the service and `LiveTrading:AutoLivePauseStrategies` is loaded from Service appsettings. A DB `LiveStakes` toggle alone is not enough on the old running build. No code or production state changed.
+
+## 2026-06-02T08:44:16.1001209Z
+Request:
+Выложил, проверяй
+
+Result:
+Verified production after deploy and enabled the target Live strategy. `PolyCopyTrader.Service` is running in `Live` mode on commit `17c0cee01d560ee09af5be11f12d207427d02f10`, started `2026-06-02T08:39:49Z`, with fresh heartbeat, `last_error=null`, startup geoblock `OK` from BG, and `0` recent API errors. Ran the official admin command `--set-live-stakes-only-code btc_up_down_5m_middle_1_bps_47_instant`; it found `2886` strategies, live-enabled `1`, live-disabled `2885`, failed `0`. Production now has exactly one effective-live strategy: `btc_up_down_5m_middle_1_bps_47_instant` with `live_stakes=true`, `auto_live_paused=false`, `effective_live_stakes=true`, `live_stake_amount=1`, and `live_available_balance=100`. The old ETH strategy now has `live_stakes=false`; its prior `auto_live_paused=true` remains historical and ineffective.

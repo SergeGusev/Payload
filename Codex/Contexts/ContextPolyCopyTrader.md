@@ -1,3 +1,16 @@
+## Active Update 2026-06-02 BTC Middle 47 Production Enable
+Goal: Verify the deployed service and enable `BTC Up or Down 5m Middle 1 47 bps Instant` as the only Live strategy.
+Status: Completed
+Done:
+- Confirmed production `PolyCopyTrader.Service` is running in `Live` mode on commit `17c0cee01d560ee09af5be11f12d207427d02f10`, started `2026-06-02T08:39:49Z`, with fresh heartbeat and `last_error=null`.
+- Confirmed startup geoblock check is `OK` from BG and the last 15 minutes had `0` `api_errors`.
+- Ran the official admin command against production DB: `--set-live-stakes-only-code btc_up_down_5m_middle_1_bps_47_instant`; it found `2886` strategies, enabled `1`, disabled `2885`, and failed `0`.
+- Confirmed production now has exactly `1` `live_stakes` strategy and exactly `1` effective-live strategy: `btc_up_down_5m_middle_1_bps_47_instant` with `enabled=true`, `paused=false`, `live_stakes=true`, `auto_live_paused=false`, `effective_live_stakes=true`, `live_stake_amount=1`, and `live_available_balance=100`.
+- Confirmed `eth_up_down_5m_skip_bps_7_instant` now has `live_stakes=false`, while its prior `auto_live_paused=true` state remains historical and ineffective.
+Next: Monitor the next qualifying BTC Middle 1 47 bps Instant windows for Paper/Live-shadow order creation; Auto Live Pause should set the BTC strategy's `auto_live_paused=true` automatically if recent settled Live PnL turns negative with more than one settled Live order.
+Notes: Read-only/write validation used production PostgreSQL via `out\dbprobe`/Service admin command with a temporary host override to `192.168.0.101`. A diagnostic `live_trading_events` query first used a wrong column (`event_type`); corrected validation used `action/status/details`.
+Blockers: None.
+
 ## Active Update 2026-06-02 BTC Middle 47 Deploy Clarification
 Goal: Clarify whether the service must be redeployed for `BTC Up or Down 5m Middle 1 47 bps Instant` Live + Auto Live Pause changes.
 Status: Completed
