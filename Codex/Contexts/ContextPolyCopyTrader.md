@@ -1,3 +1,14 @@
+## Active Update 2026-06-02 Codex CLI Start Command
+Goal: Run the Codex CLI with the `start` prompt from this repository.
+Status: Completed
+Done:
+- Ran `codex "start"`; it failed in this tool shell with `Error: stdin is not a terminal`.
+- Checked CLI help and reran the supported non-interactive equivalent: `codex exec --sandbox read-only "start"`.
+- Confirmed the non-interactive run completed and returned `Current context file: Codex/Contexts/ContextPolyCopyTrader.md`.
+Next: Use `codex exec "start"` for non-interactive shell runs, or run `codex "start"` from a real terminal when the interactive TUI is required.
+Notes: The `codex exec` run also emitted CLI/plugin diagnostic noise for missing temporary `superpowers` skill directories and one MCP upstream connection error, but exited successfully. No project source files were changed and no tests were applicable.
+Blockers: None.
+
 ## Active Update 2026-06-02 Codex CLI Install
 Goal: Install the OpenAI Codex CLI globally through npm.
 Status: Completed

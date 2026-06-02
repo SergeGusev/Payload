@@ -45,3 +45,10 @@ npm install -g @openai/codex
 
 Result:
 Installed the global npm package `@openai/codex`; npm reported `changed 2 packages in 1m`. Verified `npm ls -g @openai/codex --depth=0` shows `@openai/codex@0.136.0` and `codex --version` reports `codex-cli 0.136.0`. npm emitted a cleanup warning for an old temporary Codex directory that Windows could not unlink, but the installed CLI is usable. No project source files were changed.
+
+## 2026-06-02T07:38:01.5670964Z
+Request:
+codex "start"
+
+Result:
+Ran `codex "start"`, which failed in the tool shell with `Error: stdin is not a terminal` because the interactive CLI requires terminal-backed stdin. Checked CLI help and ran the supported non-interactive equivalent `codex exec --sandbox read-only "start"`; it completed successfully and returned `Current context file: Codex/Contexts/ContextPolyCopyTrader.md`. The exec run also emitted CLI/plugin diagnostic noise for missing temporary `superpowers` skill directories and one MCP upstream connection error, but exited successfully. No project source files were changed.
