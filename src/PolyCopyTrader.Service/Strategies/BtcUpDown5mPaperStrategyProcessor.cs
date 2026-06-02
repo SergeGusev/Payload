@@ -63,7 +63,8 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
         "btc_up_down_5m_binance_bps_22",
         "btc_up_down_5m_binance_bps_23",
         "eth_up_down_5m_skip_bps_7_instant",
-        "sol_up_down_5m_binance_bps_24_instant"
+        "sol_up_down_5m_binance_bps_24_instant",
+        "sol_up_down_5m_skip_bps_42_instant"
     ];
     private static readonly IReadOnlySet<string> CryptoReferenceAssetSymbols = StrategyIds.CryptoUpDown5mVariants
         .Select(GetReferenceAssetSymbol)

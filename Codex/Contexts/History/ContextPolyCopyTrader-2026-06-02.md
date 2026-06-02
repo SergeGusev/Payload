@@ -122,3 +122,10 @@ Complete removal of Auto Live Pause from `ETH Up or Down 5m Skip 7 bps Instant` 
 
 Result:
 Added `StrategyAutoLivePauseAllowlistSynchronizer`, registered it at service startup after schema initialization, and added repository support to clear `strategies.auto_live_paused=true` for strategies outside the current `LiveTrading:AutoLivePauseStrategies` allowlist. With the allowlist empty, deploy/restart clears ETH's stored Auto Live Pause flag through the service instead of requiring a manual DB update. Added TestAppRepository support, focused synchronizer tests, and a storage-source test for the PostgreSQL cleanup SQL. Updated README/configuration reference/live checklist to document startup stale-pause cleanup. Verification passed: appsettings JSON parse, focused AutoLivePause tests 12/12, focused `ConfigurationTests` 27/27, full test project 563/563, Service build 0 warnings/errors, Dashboard temp-output build 0 errors with existing Storage nullable warnings, and `git diff --check` with LF/CRLF warnings only.
+
+## 2026-06-02T20:16:58.9239432Z
+Request:
+Давай переведём в Live SOL Up or Down 5m Skip 42 bps Instant
+
+Result:
+Added `sol_up_down_5m_skip_bps_42_instant` to the explicit Paper/Live-shadow allowlist so `SOL Up or Down 5m Skip 42 bps Instant` can submit linked Paper-shadow and Live GTD BUY orders when its DB `LiveStakes` flag is enabled and normal live gates pass. Added a regression test for the SOL Skip 42 live-shadow path and updated README, configuration reference, and live trading checklist. Left Auto Live Pause disabled because `LiveTrading:AutoLivePauseStrategies` remains empty. Verification passed: appsettings JSON parse, targeted SOL Skip 42 live-shadow test 1/1, focused `ConfigurationTests` 27/27, full test project 564/564, Service build 0 warnings/errors, Dashboard temp-output build 0 errors with existing Storage nullable warnings, and `git diff --check` with LF/CRLF warnings only. Production needs redeploy/restart before the allowlist change is active; production DB `LiveStakes` was not changed in this code-change turn.

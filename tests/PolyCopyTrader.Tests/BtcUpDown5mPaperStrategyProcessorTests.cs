@@ -253,6 +253,9 @@ public sealed class BtcUpDown5mPaperStrategyProcessorTests
     private static readonly BtcUpDown5mStrategyVariant SolSkipBps1InstantVariant =
         StrategyIds.CryptoUpDown5mVariants.Single(variant => variant.Code == "sol_up_down_5m_skip_bps_1_instant");
 
+    private static readonly BtcUpDown5mStrategyVariant SolSkipBps42InstantVariant =
+        StrategyIds.CryptoUpDown5mVariants.Single(variant => variant.Code == "sol_up_down_5m_skip_bps_42_instant");
+
     private static readonly BtcUpDown5mStrategyVariant SolMiddleRevertBps100InstantVariant =
         StrategyIds.CryptoUpDown5mVariants.Single(variant => variant.Code == "sol_up_down_5m_middle_1_revert_bps_100_instant");
 
@@ -7896,6 +7899,118 @@ public sealed class BtcUpDown5mPaperStrategyProcessorTests
 
         var decision = Assert.Single(repository.PaperLiveShadowDecisions);
         Assert.Equal(EthSkipBps7InstantVariant.Id, decision.StrategyId);
+        Assert.Equal(liveOrder.CorrelationId, decision.CorrelationId);
+        Assert.Equal(paperOrder.Id, decision.PaperOrderId);
+        Assert.Equal(liveOrder.Id, decision.LiveOrderId);
+        Assert.Equal("live_submitted", decision.Status);
+    }
+
+    [Fact]
+    public async Task ProcessAsync_SolSkipBps42InstantLiveStakeCreatesPaperShadowAndGtdLiveOrder()
+    {
+        var now = DateTimeOffset.UtcNow;
+        var previousStart = now.AddMinutes(-5);
+        var previousSuffix = previousStart.ToUnixTimeSeconds().ToString(CultureInfo.InvariantCulture);
+        var repository = new TestAppRepository();
+        repository.StrategySettings[SolSkipBps42InstantVariant.Id] = StrategyRuntimeSettings.Default(SolSkipBps42InstantVariant.Id) with
+        {
+            LiveStakes = true,
+            LiveStakeAmount = 2.50m,
+            LiveAvailableBalance = 100m,
+            PaperStakeAmount = 2.50m
+        };
+        repository.PolymarketGammaMarkets.Add(CreateMarket(
+            now,
+            now.AddMinutes(5),
+            upPrice: 0.50m,
+            downPrice: 0.50m,
+            slug: $"sol-updown-5m-{now.ToUnixTimeSeconds().ToString(CultureInfo.InvariantCulture)}",
+            seriesSlug: "sol-up-or-down-5m",
+            question: "SOL Up or Down - test",
+            marketId: "sol-market-1",
+            conditionId: "sol-condition-1",
+            upAssetId: "sol-asset-up",
+            downAssetId: "sol-asset-down"));
+        var closeBookOrderBooks = AddCryptoCloseBookResults(repository, "SOL", now, "Down");
+        AddCryptoOddsTick(
+            repository,
+            "SOL",
+            "sol-close-market-" + previousSuffix,
+            "sol-close-condition-" + previousSuffix,
+            previousStart,
+            sampleOffsetSeconds: 0,
+            binancePriceUsd: 150m,
+            startPriceUsd: 150m,
+            upAssetId: "sol-close-up-" + previousSuffix,
+            downAssetId: "sol-close-down-" + previousSuffix);
+        AddCryptoOddsTick(
+            repository,
+            "SOL",
+            "sol-close-market-" + previousSuffix,
+            "sol-close-condition-" + previousSuffix,
+            previousStart,
+            sampleOffsetSeconds: 299,
+            binancePriceUsd: 150.75m,
+            startPriceUsd: 150m,
+            upAssetId: "sol-close-up-" + previousSuffix,
+            downAssetId: "sol-close-down-" + previousSuffix);
+        OrderBookSnapshot[] orderBooks =
+        [
+            OrderBook("sol-asset-up", bestBid: 0.34m, bestAsk: 0.36m, now),
+            OrderBook("sol-asset-down", bestBid: 0.64m, bestAsk: 0.66m, now)
+        ];
+        var tradingClient = new CapturingTradingClient();
+        var processor = CreateLiveProcessorWithCryptoReference(
+            repository,
+            tradingClient,
+            new FakeCryptoReferencePriceClient(),
+            orderBooks,
+            closeBookOrderBooks,
+            SolSkipBps42InstantVariant.Code);
+
+        var result = await processor.ProcessAsync();
+
+        Assert.Equal(1, result.EntriesPlaced);
+        Assert.Equal(1, tradingClient.PlaceCalls);
+        Assert.NotNull(tradingClient.LastRequest);
+        var request = tradingClient.LastRequest;
+        Assert.Equal(ClobV2OrderType.GTD, request.OrderType);
+        Assert.False(request.PostOnly);
+        Assert.NotNull(request.GtdExpirationUtc);
+        Assert.Equal(0.36m, request.Price);
+
+        var liveOrder = Assert.Single(repository.LiveOrders);
+        Assert.Equal(SolSkipBps42InstantVariant.Id, liveOrder.StrategyId);
+        Assert.Equal("sol-asset-up", liveOrder.AssetId);
+        Assert.Equal("Up", liveOrder.Outcome);
+        Assert.Equal("GTD", liveOrder.OrderType);
+        Assert.Equal(LiveOrderStatus.Live, liveOrder.Status);
+        Assert.Equal(0.36m, liveOrder.Price);
+        Assert.Equal("paper_live_shadow_test", liveOrder.ExecutionSource);
+        Assert.False(liveOrder.PostOnly);
+        Assert.NotNull(liveOrder.CorrelationId);
+
+        var paperOrder = Assert.Single(repository.PaperOrders);
+        Assert.Equal(SolSkipBps42InstantVariant.Id, paperOrder.StrategyId);
+        Assert.Equal(PaperOrderStatus.Pending, paperOrder.Status);
+        Assert.Equal("paper_live_shadow_test", paperOrder.ExecutionSource);
+        Assert.Equal(liveOrder.CorrelationId, paperOrder.CorrelationId);
+        Assert.Equal(liveOrder.PaperOrderId, paperOrder.Id);
+        Assert.Equal("sol-asset-up", paperOrder.AssetId);
+        Assert.Equal("Up", paperOrder.Outcome);
+        Assert.Equal(0.36m, paperOrder.Price);
+        Assert.Equal(liveOrder.SizeShares, paperOrder.SizeShares);
+        Assert.Contains("\"decision_source\":\"clob_close_book_price_evidence_previous_crypto_move_threshold\"", paperOrder.RawDecisionJson, StringComparison.Ordinal);
+        Assert.Contains("\"reference_asset_symbol\":\"SOL\"", paperOrder.RawDecisionJson, StringComparison.Ordinal);
+        Assert.Contains("\"reference_binance_symbol\":\"SOLUSDT\"", paperOrder.RawDecisionJson, StringComparison.Ordinal);
+        Assert.Contains("\"previous_reference_asset_abs_move_from_start_bps\":50", paperOrder.RawDecisionJson, StringComparison.Ordinal);
+        Assert.Contains("\"selected_direction\":\"Up\"", paperOrder.RawDecisionJson, StringComparison.Ordinal);
+        Assert.Contains("\"opening_limit_price_mode\":\"instant_executable_ask_depth\"", paperOrder.RawDecisionJson, StringComparison.Ordinal);
+        Assert.Contains("\"instant_pricing_source\":\"websocket_cache\"", paperOrder.RawDecisionJson, StringComparison.Ordinal);
+        Assert.Contains("\"paper_live_shadow_test\":true", paperOrder.RawDecisionJson, StringComparison.Ordinal);
+
+        var decision = Assert.Single(repository.PaperLiveShadowDecisions);
+        Assert.Equal(SolSkipBps42InstantVariant.Id, decision.StrategyId);
         Assert.Equal(liveOrder.CorrelationId, decision.CorrelationId);
         Assert.Equal(paperOrder.Id, decision.PaperOrderId);
         Assert.Equal(liveOrder.Id, decision.LiveOrderId);

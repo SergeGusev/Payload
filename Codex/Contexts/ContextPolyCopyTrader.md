@@ -1,3 +1,15 @@
+## Active Update 2026-06-02 SOL Skip 42 Live Allowlist
+Goal: Allow `SOL Up or Down 5m Skip 42 bps Instant` to run through the tiny Paper/Live-shadow Live path.
+Status: Completed
+Done:
+- Added `sol_up_down_5m_skip_bps_42_instant` to `BtcUpDown5mPaperStrategyProcessor` `PaperLiveShadowAllowedVariantCodes`.
+- Added a processor regression test proving SOL Skip 42 bps Instant creates the linked Paper-shadow row, live GTD BUY request, live order row, and shadow decision when `LiveStakes=true` and all existing live gates pass.
+- Left `LiveTrading:AutoLivePauseStrategies` empty, so SOL Skip 42 does not participate in Auto Live Pause.
+- Updated README, `docs/configuration_reference.md`, and `docs/live_trading_checklist.md` to document SOL Skip 42 as an explicit Paper/Live-shadow allowlist entry.
+Next: Deploy/restart `PolyCopyTrader.Service`, then enable the SOL strategy's DB `LiveStakes` flag without disabling any existing Live strategies unless that is intended.
+Notes: Target code is `sol_up_down_5m_skip_bps_42_instant`. Verification passed: appsettings JSON parse; targeted SOL Skip 42 live-shadow test 1/1; focused `ConfigurationTests` 27/27; full test project 564/564; Service build 0 warnings/errors; Dashboard temp-output build 0 errors with existing Storage nullable warnings; `git diff --check` passed with LF/CRLF warnings only.
+Blockers: Production service must be redeployed/restarted before this allowlist change affects runtime behavior; production `LiveStakes` was not changed in this code-change turn.
+
 ## Active Update 2026-06-02 Remove ETH Auto Live Pause
 Goal: Remove Auto Live Pause participation for `ETH Up or Down 5m Skip 7 bps Instant`.
 Status: Completed

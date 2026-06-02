@@ -801,7 +801,8 @@ expiration mode, local cancel deadline, CLOB wire expiration, and fallback
 `OpeningLimitGtdTtlSeconds` (`120` by default). They
 do not create immediate fills and are not submitted to live trading unless
 the controlled Paper/Live-shadow path is explicitly enabled for an allowed variant.
-Only `ETH Up or Down 5m Skip 7 bps Instant` is currently allowlisted from the
+`ETH Up or Down 5m Skip 7 bps Instant` and
+`SOL Up or Down 5m Skip 42 bps Instant` are currently allowlisted from the
 ETH/SOL Skip family. The
 generic Paper open-order pipeline then applies balanced GTD
 accounting: visible ask depth at or below the limit creates partial `paper_fills`
