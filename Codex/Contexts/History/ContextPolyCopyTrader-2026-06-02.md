@@ -80,3 +80,10 @@ Request:
 
 Result:
 Added `btc_up_down_5m_middle_1_bps_47_instant` to the explicit Paper/Live-shadow allowlist and to `LiveTrading:AutoLivePauseStrategies` in Service and Dashboard appsettings. Added a processor regression test proving the strategy creates linked Paper-shadow and live GTD BUY rows when `LiveStakes=true`, added Auto Live Pause policy coverage, and updated README, configuration reference, and live trading checklist. Verification passed: appsettings JSON parse, targeted BTC Middle 47 live-shadow test 1/1, focused `ConfigurationTests` 27/27, full test project 560/560, Service build 0 warnings/errors, Dashboard temp-output build 0 errors with existing Storage nullable warnings, and `git diff --check`. Production still needs deploy/restart before the new allowlists are loaded; the production `LiveStakes` flag was not changed in this code-change turn.
+
+## 2026-06-02T08:32:37.5614902Z
+Request:
+Нужно перевыложить сервис?
+
+Result:
+Answered yes: production `PolyCopyTrader.Service` must be redeployed/restarted on commit `e532b4d` because the BTC Middle 1 47 bps Instant Paper/Live-shadow allowlist entry is compiled into the service and `LiveTrading:AutoLivePauseStrategies` is loaded from Service appsettings. A DB `LiveStakes` toggle alone is not enough on the old running build. No code or production state changed.

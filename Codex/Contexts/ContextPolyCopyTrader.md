@@ -1,3 +1,13 @@
+## Active Update 2026-06-02 BTC Middle 47 Deploy Clarification
+Goal: Clarify whether the service must be redeployed for `BTC Up or Down 5m Middle 1 47 bps Instant` Live + Auto Live Pause changes.
+Status: Completed
+Done:
+- Confirmed the service must be redeployed/restarted because the target Live-shadow allowlist entry is compiled into `BtcUpDown5mPaperStrategyProcessor` and the Auto Live Pause allowlist is loaded from Service appsettings.
+- Clarified that a DB `LiveStakes` toggle alone is not enough on the currently running old production build.
+Next: Deploy/restart production `PolyCopyTrader.Service` on commit `e532b4d`, then enable the target strategy with `--set-live-stakes-only-code btc_up_down_5m_middle_1_bps_47_instant` after readiness checks.
+Notes: No code or production state changed in this clarification turn.
+Blockers: Production service still needs redeploy/restart to load commit `e532b4d`.
+
 ## Active Update 2026-06-02 BTC Middle 47 Instant Live Auto Pause
 Goal: Allow `BTC Up or Down 5m Middle 1 47 bps Instant` to run through the tiny Paper/Live-shadow path and participate in Auto Live Pause.
 Status: Completed
