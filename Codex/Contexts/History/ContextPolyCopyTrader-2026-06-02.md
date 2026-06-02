@@ -5,6 +5,13 @@ Request:
 Result:
 Added nullable `strategies.live_enabled_at_utc` and schema backfill for already-live strategies from the first live order or paper/live-shadow decision, falling back to migration time when no live evidence exists. `SetStrategyLiveStakesAsync` now sets this boundary on `false -> true`, preserves it while Live remains enabled, and clears it when Live is turned off. Dashboard all-time and recent `1h/6h/24h` strategy aggregations now count run-based Live condition, technical, and GTD-unfilled skips only when `strategy_market_paper_runs.updated_at_utc >= strategies.live_enabled_at_utc`, so old Paper skipped runs do not appear as Live skips immediately after enabling Live. Updated runtime settings, TestAppRepository, regression tests, README, and configuration reference. Verification passed: focused `StrategyPerformanceTests|StorageTests` 40/40, full test project 567/567, Service build 0 errors, Dashboard temp-output build 0 errors with existing Storage nullable warnings, and `git diff --check` with LF/CRLF warnings only. A normal Dashboard build failed only because the running Dashboard/Visual Studio locked the existing `bin\Debug\net10.0-windows` DLLs. Production needs deploy/restart before the schema/aggregation change is active.
 
+## 2026-06-02T21:00:21.2468418Z
+Request:
+Выложил, проверяй
+
+Result:
+Verified production read-only after deploying the Live skip boundary fix. `PolyCopyTrader.Service` is running in `Live` mode on commit `ad88ae97f6411b30cd1130ca21f2d29b629aa5e1`, started `2026-06-02T20:58:11Z`, with fresh heartbeat and empty `last_error`. Confirmed `strategies.live_enabled_at_utc` exists, all 3 Live strategies have a boundary, and no non-Live strategy has a stale boundary. BTC Middle 47, ETH Skip 7, and SOL Skip 42 are all effective-live with `auto_live_paused=false`. Confirmed the boundary fix is active: SOL Skip 42 old all-paper condition skip count would be `2460`, but new live condition skip count is `0`; BTC changed from `2530` to `97`; ETH changed from `1039` to `46`. Recent production API errors in the last 15 minutes are `0`. No production writes or application source changes were performed.
+
 ## 2026-06-01T21:36:33Z
 Request:
 Maybe add indexes for long Dashboard queries?
