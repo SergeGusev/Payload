@@ -1,3 +1,15 @@
+## Active Update 2026-06-02 Remove BTC Middle 47 Auto Live Pause
+Goal: Remove Auto Live Pause participation for `BTC Up or Down 5m Middle 1 47 bps Instant` while keeping it Live-shadow allowlisted.
+Status: Completed
+Done:
+- Removed `btc_up_down_5m_middle_1_bps_47_instant` from `LiveTrading:AutoLivePauseStrategies` in Service and Dashboard appsettings.
+- Kept `btc_up_down_5m_middle_1_bps_47_instant` in `PaperLiveShadowAllowedVariantCodes`, so it remains eligible for the tiny Paper/Live-shadow path when `LiveStakes=true`.
+- Updated `ConfigurationTests` so BTC Middle 1 47 bps Instant is explicitly not enabled by the Auto Live Pause policy while ETH Skip 7 bps Instant remains enabled.
+- Updated README, `docs/configuration_reference.md`, and `docs/live_trading_checklist.md` so Auto Live Pause is documented as enabled only for `ETH Up or Down 5m Skip 7 bps Instant`.
+Next: Deploy/restart `PolyCopyTrader.Service` so the Service appsettings change is loaded in production; keep the production Live flags as two strategies if both should remain Live-enabled.
+Notes: Verification passed: Service/Dashboard appsettings JSON parse; focused `ConfigurationTests` 27/27; full test project 560/560; Service build 0 warnings/errors; Dashboard temp-output build 0 errors with existing Storage nullable warnings; `git diff --check` passed with LF/CRLF warnings only.
+Blockers: Production service must be redeployed/restarted before BTC Middle 47 stops participating in Auto Live Pause at runtime.
+
 ## Active Update 2026-06-02 Two Live Strategies Correction
 Goal: Restore the intended two-strategy Live flag set after `ETH Up or Down 5m Skip 7 bps Instant` was unintentionally disabled by a single-code admin command.
 Status: Completed

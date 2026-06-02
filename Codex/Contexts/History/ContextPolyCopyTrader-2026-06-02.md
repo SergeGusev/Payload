@@ -101,3 +101,10 @@ Request:
 
 Result:
 Acknowledged the mistake: the single-code admin command `--set-live-stakes-only-code btc_up_down_5m_middle_1_bps_47_instant` intentionally enabled only BTC Middle 47 and disabled Live for all other strategies, including ETH Skip 7 bps Instant. Corrected production with the plural command `--set-live-stakes-only-codes eth_up_down_5m_skip_bps_7_instant,btc_up_down_5m_middle_1_bps_47_instant`; it found `2886` strategies, live-enabled `2`, live-disabled `2884`, failed `0`. Verified production now has `live_stakes_count=2`, `effective_live_stakes_count=1`, and `auto_live_paused_count=1`: BTC Middle 47 is `live_stakes=true`, `auto_live_paused=false`, `effective_live_stakes=true`; ETH Skip 7 is restored to `live_stakes=true` but remains `auto_live_paused=true`, so it is not effective-live until automatic resume clears the pause.
+
+## 2026-06-02T08:59:52.6960353Z
+Request:
+Сними проверку на Auto live pause c BTC Up or Down 5m Middle 1 47 bps Instant
+
+Result:
+Removed `btc_up_down_5m_middle_1_bps_47_instant` from `LiveTrading:AutoLivePauseStrategies` in Service and Dashboard appsettings while keeping it in the Paper/Live-shadow allowlist. Updated `ConfigurationTests` so BTC Middle 1 47 bps Instant is explicitly not enabled by Auto Live Pause policy, and updated README, configuration reference, and live trading checklist so Auto Live Pause is documented as enabled only for `ETH Up or Down 5m Skip 7 bps Instant`. Verification passed: appsettings JSON parse, focused `ConfigurationTests` 27/27, full test project 560/560, Service build 0 warnings/errors, Dashboard temp-output build 0 errors with existing Storage nullable warnings, and `git diff --check`. Production needs redeploy/restart before this config change affects runtime behavior.

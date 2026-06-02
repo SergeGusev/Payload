@@ -26,10 +26,9 @@ Live trading is disabled by default. Use this checklist before any live session.
 - `LiveTrading:MaxOrderNotionalUsd` is tiny.
 - `LiveTrading:MaxOpenLiveOrders` is tiny, initially `1`.
 - `LiveTrading:AutoLivePauseStrategies` includes
-  `eth_up_down_5m_skip_bps_7_instant` and
-  `btc_up_down_5m_middle_1_bps_47_instant` when those strategies should
-  auto-pause Live after recent Live losses and resume from positive recent Paper
-  evidence.
+  `eth_up_down_5m_skip_bps_7_instant` when `ETH Up or Down 5m Skip 7 bps
+  Instant` should auto-pause Live after recent Live losses and resume from
+  positive recent Paper evidence.
 - For Paper/Live-shadow, `LiveTrading` market/total exposure caps are
   checked against open Live orders only; Paper backlog must still be monitored
   separately, but it must not consume the tiny Live smoke-test cap.
