@@ -837,11 +837,13 @@ orders, filled/expired/open orders, entered/skipped/settled runs, wins/losses,
 realized PnL, ROI, average fill price, entry-delay health metrics, and the top skip reason. The `Strategies` tab lets `Paused`, `Paper $`, `Live $`,
 and live-only `Live bal` be edited for each strategy; for BTC 5-minute
 strategies the Paper/Live stake values are interpreted as stake multipliers.
-The strategy grids include `Only positive`, `Enabled only`, `Live only`, and
-`Big ROI` filters. `Live only` keeps rows whose manual Live flag is enabled,
-even when `Auto Live Pause` is currently suppressing effective Live entries.
-`Big ROI` keeps rows with ROI greater than `10` (`Closed ROI` in `All`, recent
-`ROI` in the period tabs).
+The strategy grids include `Only positive`, `Enabled only`, `Live only`,
+`Big ROI`, and `Big settles` filters. `Live only` keeps rows whose manual Live
+flag is enabled, even when `Auto Live Pause` is currently suppressing effective
+Live entries. `Big ROI` keeps rows with ROI greater than `10` (`Closed ROI` in
+`All`, recent `ROI` in the period tabs). `Big settles` keeps rows whose settled
+count is greater than `100` (`Settled` positions in `All`, recent `Settles`
+runs in the period tabs).
 The `Enabled` checkbox writes `strategies.enabled` immediately, and the `Paused`
 checkbox writes `strategies.paused`. The service refreshes enabled, manual pause,
 and auto Live pause state through a short in-memory cache, so disabled strategies

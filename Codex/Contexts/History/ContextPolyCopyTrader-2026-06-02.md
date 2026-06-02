@@ -52,3 +52,10 @@ codex "start"
 
 Result:
 Ran `codex "start"`, which failed in the tool shell with `Error: stdin is not a terminal` because the interactive CLI requires terminal-backed stdin. Checked CLI help and ran the supported non-interactive equivalent `codex exec --sandbox read-only "start"`; it completed successfully and returned `Current context file: Codex/Contexts/ContextPolyCopyTrader.md`. The exec run also emitted CLI/plugin diagnostic noise for missing temporary `superpowers` skill directories and one MCP upstream connection error, but exited successfully. No project source files were changed.
+
+## 2026-06-02T07:49:27.1736278Z
+Request:
+Давай добавим в Dashboard галочку на каждый tab в стратегиях: Big settles, по которой будем показывать только записи, где Settled больше 100
+
+Result:
+Added `Big settles` checkboxes to all four nested Dashboard `Strategies` tabs: `All`, `24 hours`, `6 hours`, and `1 hour`. The filters are independent per tab and use strict `> 100`: `All` checks `SettledPositionsCount`, while recent tabs check `SettledRunsCount`. Updated README and `docs/configuration_reference.md`. Verification passed: `git diff --check` with LF/CRLF warnings only, Dashboard temp-output build passed with 0 errors and existing Storage nullable warnings, and `dotnet test tests\PolyCopyTrader.Tests\PolyCopyTrader.Tests.csproj --no-restore` passed 559/559.

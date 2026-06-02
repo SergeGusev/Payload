@@ -1,3 +1,15 @@
+## Active Update 2026-06-02 Dashboard Big Settles Filter
+Goal: Add a per-strategy-tab Dashboard filter that shows only strategies with more than 100 settled rows.
+Status: Completed
+Done:
+- Added `Big settles` checkboxes to all four nested Dashboard `Strategies` tabs: `All`, `24 hours`, `6 hours`, and `1 hour`.
+- Added independent MVVM filter state for each tab and wired checkbox changes through the existing `ApplyStrategyFilters` path.
+- Implemented strict `> 100` filtering: `All` uses `SettledPositionsCount`, and recent tabs use `SettledRunsCount`.
+- Updated README and `docs/configuration_reference.md` to document the new filter behavior.
+Next: Restart/reopen the Dashboard so the new checkbox appears in the strategy tabs.
+Notes: Verification passed: `git diff --check` with LF/CRLF warnings only; Dashboard temp-output build passed with 0 errors and existing Storage nullable warnings; `dotnet test tests\PolyCopyTrader.Tests\PolyCopyTrader.Tests.csproj --no-restore` passed 559/559.
+Blockers: None.
+
 ## Active Update 2026-06-02 Codex CLI Start Command
 Goal: Run the Codex CLI with the `start` prompt from this repository.
 Status: Completed
