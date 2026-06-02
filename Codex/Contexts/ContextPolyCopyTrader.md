@@ -1,3 +1,17 @@
+## Active Update 2026-06-02 SOL Skip 42 Production Verification
+Goal: Verify production after enabling `SOL Up or Down 5m Skip 42 bps Instant` in Live.
+Status: Completed
+Done:
+- Queried production PostgreSQL via `out\dbprobe` with a temporary host override to `192.168.0.101` and without printing the connection string.
+- Confirmed `PolyCopyTrader.Service` is running in `Live` mode on commit `3ccb2dbbaa78173ad2049229694e6c7ebf08921e`, started `2026-06-02T20:21:46Z`, with fresh heartbeat age about `44s` and `last_error=null`.
+- Confirmed production now has `live_stakes_count=3`, `effective_live_stakes_count=3`, and `auto_live_paused_count=0`.
+- Confirmed `sol_up_down_5m_skip_bps_42_instant` is `enabled=true`, `paused=false`, `live_stakes=true`, `auto_live_paused=false`, `effective_live_stakes=true`, `live_stake_amount=1`, and `live_available_balance=100`.
+- Confirmed BTC Middle 47 and ETH Skip 7 remain effective-live; `sol_up_down_5m_binance_bps_24_instant` remains not live.
+- Confirmed SOL Skip 42 has no live orders yet after enabling; it is waiting for a qualifying signal and normal live gates.
+Next: Monitor the next qualifying SOL Skip 42 window for linked Paper-shadow and Live GTD BUY order creation.
+Notes: Recent API errors are minor WebSocket/order-book timeout events; count in the last 15 minutes was `1`, below the configured lockout threshold previously used by the service. No code changed.
+Blockers: None.
+
 ## Active Update 2026-06-02 SOL Skip 42 Live Allowlist
 Goal: Allow `SOL Up or Down 5m Skip 42 bps Instant` to run through the tiny Paper/Live-shadow Live path.
 Status: Completed

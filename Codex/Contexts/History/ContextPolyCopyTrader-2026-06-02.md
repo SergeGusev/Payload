@@ -129,3 +129,10 @@ Request:
 
 Result:
 Added `sol_up_down_5m_skip_bps_42_instant` to the explicit Paper/Live-shadow allowlist so `SOL Up or Down 5m Skip 42 bps Instant` can submit linked Paper-shadow and Live GTD BUY orders when its DB `LiveStakes` flag is enabled and normal live gates pass. Added a regression test for the SOL Skip 42 live-shadow path and updated README, configuration reference, and live trading checklist. Left Auto Live Pause disabled because `LiveTrading:AutoLivePauseStrategies` remains empty. Verification passed: appsettings JSON parse, targeted SOL Skip 42 live-shadow test 1/1, focused `ConfigurationTests` 27/27, full test project 564/564, Service build 0 warnings/errors, Dashboard temp-output build 0 errors with existing Storage nullable warnings, and `git diff --check` with LF/CRLF warnings only. Production needs redeploy/restart before the allowlist change is active; production DB `LiveStakes` was not changed in this code-change turn.
+
+## 2026-06-02T20:33:10.8197732Z
+Request:
+Включил, проверяй
+
+Result:
+Verified production read-only after the user enabled `SOL Up or Down 5m Skip 42 bps Instant`. Production `PolyCopyTrader.Service` is running in `Live` mode on commit `3ccb2dbbaa78173ad2049229694e6c7ebf08921e`, started `2026-06-02T20:21:46Z`, with fresh heartbeat and `last_error=null`. Production now has `live_stakes_count=3`, `effective_live_stakes_count=3`, and `auto_live_paused_count=0`. `sol_up_down_5m_skip_bps_42_instant` is `enabled=true`, `paused=false`, `live_stakes=true`, `auto_live_paused=false`, `effective_live_stakes=true`, `live_stake_amount=1`, and `live_available_balance=100`. BTC Middle 47 and ETH Skip 7 remain effective-live; SOL Binance 24 remains not live. No SOL Skip 42 live orders have been created yet, so it is waiting for a qualifying window and normal live gates. Recent API errors were minor WebSocket/order-book timeout events; last 15 minutes had `1` API error, below lockout threshold. No production writes or code changes were performed.
