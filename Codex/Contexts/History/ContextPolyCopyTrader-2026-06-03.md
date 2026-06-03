@@ -196,3 +196,10 @@ Request:
 
 Result:
 Clarified by code inspection that the implemented LostCounter stake add-on currently applies only to Paper sizing. `Live Lost` and `Live Cnt` are stored and updated from matched Live settlements, but Live stake sizing still uses configured `Live $` / `LiveStakeAmount` and does not apply a Live LostCounter add-on yet. No source behavior change, production write, service restart, live submission, or cancel was performed.
+
+## 2026-06-03T19:55:00.5868426+00:00
+Request:
+Да, сделай полностью одинаковое поведение для Paper и Live, только каждый со своими данными, конечно. И давай ограничим не 3, а 2, чтобы итоговая ставка не превышала трёх ставок изначальных
+
+Result:
+Implemented shared lost-counter stake sizing with cap `2`, so both Paper and Live apply `Stake * min(Cnt, 2)` only when that mode's `Lost` value is above `1` and that mode's counter is positive. Paper uses `Paper Lost` / `Paper Cnt`; Live uses `Live Lost` / `Live Cnt`. Applied Live add-on to Paper/Live-shadow live stake sizing and general `SignalProcessor` live preflight sizing. Updated docs and tests, including separate Paper vs Live sizing and Follow leader live preflight boosted notional. Verification passed: focused tests 181/181, full test project 578/578, Service Verify build 0 warnings/errors, and `git diff --check` clean except LF/CRLF warnings.

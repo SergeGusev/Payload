@@ -1,3 +1,17 @@
+## Active Update 2026-06-03 Paper Live LostCoeff Cap 2
+Goal: Make Paper and Live lost-counter stake add-ons behave the same with separate counters and a cap of two extra base stakes.
+Status: Completed
+Done:
+- Added shared `LostCounterStakeSizer` with `MaxLostCounterStakeCoeff = 2`, so final stake is capped at `Stake + Stake * 2`.
+- Updated BTC/ETH/SOL 5m Paper sizing to use the shared cap and changed the existing Paper cap regression from total `4x` to total `3x`.
+- Applied the same Live LostCoeff/Live Cnt add-on to both Paper/Live-shadow live stake sizing and the general `SignalProcessor` live preflight sizing path, using `Live $` as the base when configured.
+- Kept Paper and Live data independent: Paper uses `Paper Lost` / `Paper Cnt`; Live uses `Live Lost` / `Live Cnt`.
+- Updated README, configuration reference, and live trading checklist to document `Stake * min(Cnt, 2)` for both modes.
+- Added regression coverage for separate Paper vs Live lost-counter sizing and Follow leader live preflight boosted notional.
+Next: Deploy/restart the service for the new Live and Paper stake-sizing behavior to affect runtime.
+Notes: Verification passed: focused `dotnet test tests\PolyCopyTrader.Tests\PolyCopyTrader.Tests.csproj --configuration Verify --no-restore /p:UseSharedCompilation=false --filter "BtcUpDown5mPaperStrategyProcessorTests|LiveTradingGatingTests"` passed 181/181; full test project passed 578/578; `dotnet build src\PolyCopyTrader.Service\PolyCopyTrader.Service.csproj --configuration Verify --no-restore /p:UseSharedCompilation=false` succeeded with 0 warnings/errors; `git diff --check` clean except LF/CRLF warnings.
+Blockers: None.
+
 ## Active Update 2026-06-03 Live LostCoeff Clarification
 Goal: Clarify whether the LostCoeff cap change applies to Live stake sizing.
 Status: Completed

@@ -89,6 +89,35 @@ public sealed class LiveTradingGatingTests
     }
 
     [Fact]
+    public async Task LiveModeWithLiveLostCounterBoostsFollowLeaderPreflightNotional()
+    {
+        var repository = new TestAppRepository();
+        var queue = new InMemoryLeaderTradeCandidateQueue();
+        await queue.EnqueueAsync(Trade());
+        var tradingClient = new CapturingTradingClient();
+        var processor = CreateProcessor(
+            queue,
+            repository,
+            tradingClient,
+            LiveEnabledBot(),
+            new PassGeoClient(),
+            liveStakeAmount: 0.74m,
+            liveLostCoeff: 2m,
+            liveLostCounter: 6,
+            maxOrderNotionalUsd: 100m);
+
+        var result = await processor.ProcessQueuedAsync();
+
+        Assert.Equal(0, result.LiveOrdersSubmitted);
+        Assert.Equal(0, tradingClient.PlaceCalls);
+        var order = Assert.Single(repository.LiveOrders);
+        Assert.Equal(LiveOrderStatus.PreflightRejected, order.Status);
+        Assert.Contains("leader-price Follow leader signals is disabled", order.ValidationSummary, StringComparison.OrdinalIgnoreCase);
+        Assert.Equal(3m, order.SizeShares);
+        Assert.Equal(2.22m, order.NotionalUsd);
+    }
+
+    [Fact]
     public async Task LiveModeWithStrategyLiveStakesDisabledDoesNotCreateLiveOrder()
     {
         var repository = new TestAppRepository();
@@ -745,14 +774,21 @@ public sealed class LiveTradingGatingTests
         IPolymarketGeoClient geoClient,
         bool liveStakes = true,
         decimal liveAvailableBalance = 100m,
-        bool runPaperInLiveMode = false)
+        bool runPaperInLiveMode = false,
+        decimal liveStakeAmount = 1m,
+        decimal liveLostCoeff = 1m,
+        int liveLostCounter = 0,
+        decimal maxOrderNotionalUsd = 1m)
     {
         var riskOptions = new RiskOptions();
         var paperOptions = new PaperTradingOptions { InitialBankrollUsd = 10_000m, RunInLiveMode = runPaperInLiveMode };
         repository.StrategySettings[StrategyIds.FollowLeader] = StrategyRuntimeSettings.Default(StrategyIds.FollowLeader) with
         {
             LiveStakes = liveStakes,
-            LiveAvailableBalance = liveAvailableBalance
+            LiveAvailableBalance = liveAvailableBalance,
+            LiveStakeAmount = liveStakeAmount,
+            LiveLostCoeff = liveLostCoeff,
+            LiveLostCounter = liveLostCounter
         };
         return new SignalProcessor(
             NullLogger<SignalProcessor>.Instance,
@@ -765,7 +801,7 @@ public sealed class LiveTradingGatingTests
                 SignatureType = "EOA"
             },
             paperOptions,
-            new LiveTradingOptions { ManualEnableCode = "LIVE_TRADING_ENABLED", MaxOrderNotionalUsd = 1m },
+            new LiveTradingOptions { ManualEnableCode = "LIVE_TRADING_ENABLED", MaxOrderNotionalUsd = maxOrderNotionalUsd },
             Watchlist(),
             queue,
             new StaticClobClient(),

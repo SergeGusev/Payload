@@ -3439,19 +3439,19 @@ public sealed class BtcUpDown5mPaperStrategyProcessorTests
             item.StrategyId == Middle1Variant.Id &&
             string.Equals(item.MarketId, "market-1", StringComparison.OrdinalIgnoreCase));
         Assert.Equal(StrategyMarketPaperRunStatuses.Entered, run.Status);
-        Assert.Equal(4m, run.StakeUsd);
-        Assert.Equal(8m, run.SizeShares);
+        Assert.Equal(3m, run.StakeUsd);
+        Assert.Equal(6m, run.SizeShares);
 
         var order = Assert.Single(repository.PaperOrders, item =>
             string.Equals(item.AssetId, "asset-down", StringComparison.OrdinalIgnoreCase));
-        Assert.Equal(4m, order.NotionalUsd);
-        Assert.Equal(8m, order.SizeShares);
+        Assert.Equal(3m, order.NotionalUsd);
+        Assert.Equal(6m, order.SizeShares);
         Assert.Contains("\"paper_lost_coeff_configured\":2", order.RawDecisionJson, StringComparison.Ordinal);
         Assert.Contains("\"paper_lost_counter\":6", order.RawDecisionJson, StringComparison.Ordinal);
-        Assert.Contains("\"paper_lost_counter_coeff\":3", order.RawDecisionJson, StringComparison.Ordinal);
+        Assert.Contains("\"paper_lost_counter_coeff\":2", order.RawDecisionJson, StringComparison.Ordinal);
         Assert.Contains("\"paper_lost_base_stake_usd\":1", order.RawDecisionJson, StringComparison.Ordinal);
-        Assert.Contains("\"paper_lost_add_stake_usd\":3", order.RawDecisionJson, StringComparison.Ordinal);
-        Assert.Contains("\"paper_lost_effective_stake_usd\":4", order.RawDecisionJson, StringComparison.Ordinal);
+        Assert.Contains("\"paper_lost_add_stake_usd\":2", order.RawDecisionJson, StringComparison.Ordinal);
+        Assert.Contains("\"paper_lost_effective_stake_usd\":3", order.RawDecisionJson, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -8108,7 +8108,7 @@ public sealed class BtcUpDown5mPaperStrategyProcessorTests
     }
 
     [Fact]
-    public async Task ProcessAsync_LiveShadowUsesPaperLostCounterOnlyForPaperSizing()
+    public async Task ProcessAsync_LiveShadowUsesSeparatePaperAndLiveLostCountersForSizing()
     {
         var now = DateTimeOffset.UtcNow;
         var previousStart = now.AddMinutes(-5);
@@ -8117,10 +8117,12 @@ public sealed class BtcUpDown5mPaperStrategyProcessorTests
         repository.StrategySettings[EthSkipBps7InstantVariant.Id] = StrategyRuntimeSettings.Default(EthSkipBps7InstantVariant.Id) with
         {
             LiveStakes = true,
-            LiveStakeAmount = 2.50m,
+            LiveStakeAmount = 0.80m,
             LiveAvailableBalance = 100m,
             PaperStakeAmount = 2.50m,
-            PaperLostCoeff = 2m
+            PaperLostCoeff = 2m,
+            LiveLostCoeff = 2m,
+            LiveLostCounter = 6
         };
         var previousLossRun = AddEnteredRun(
             repository,
@@ -8208,6 +8210,7 @@ public sealed class BtcUpDown5mPaperStrategyProcessorTests
         Assert.Equal(0, settleResult.EntriesPlaced);
         Assert.Equal(0, tradingClient.PlaceCalls);
         Assert.Equal(1, repository.StrategySettings[EthSkipBps7InstantVariant.Id].PaperLostCounter);
+        Assert.Equal(6, repository.StrategySettings[EthSkipBps7InstantVariant.Id].LiveLostCounter);
 
         repository.PolymarketGammaMarkets.Add(CreateMarket(
             now,
@@ -8228,7 +8231,7 @@ public sealed class BtcUpDown5mPaperStrategyProcessorTests
         Assert.Equal(1, tradingClient.PlaceCalls);
         var liveOrder = Assert.Single(repository.LiveOrders);
         Assert.Equal(LiveOrderStatus.Live, liveOrder.Status);
-        Assert.Equal(2.50m, liveOrder.NotionalUsd);
+        Assert.Equal(2.40m, liveOrder.NotionalUsd);
         Assert.Equal("paper_live_shadow_test", liveOrder.ExecutionSource);
         Assert.Empty(liveOrder.ValidationSummary);
 

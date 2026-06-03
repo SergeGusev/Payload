@@ -326,7 +326,23 @@ public sealed class SignalProcessor(
         var desiredNotional = strategySettings.LiveStakeAmount > 0m
             ? strategySettings.LiveStakeAmount
             : freshDecision.ProposedNotionalUsd ?? 0m;
-        var notional = Math.Min(desiredNotional, maxNotional);
+        var liveLostCounterAdjustment = LostCounterStakeSizer.Calculate(
+            strategySettings.LiveLostCoeff,
+            strategySettings.LiveLostCounter,
+            desiredNotional);
+        if (liveLostCounterAdjustment.LostCounterCoeff > 0)
+        {
+            logger.LogInformation(
+                "Live LostCounter stake adjustment applied. StrategyId={StrategyId} Counter={LostCounter} Coeff={LostCounterCoeff} BaseStakeUsd={BaseStakeUsd} AddStakeUsd={AddStakeUsd} EffectiveStakeUsd={EffectiveStakeUsd}",
+                strategySettings.StrategyId,
+                liveLostCounterAdjustment.LostCounter,
+                liveLostCounterAdjustment.LostCounterCoeff,
+                liveLostCounterAdjustment.BaseStakeUsd,
+                liveLostCounterAdjustment.AddStakeUsd,
+                liveLostCounterAdjustment.EffectiveStakeUsd);
+        }
+
+        var notional = Math.Min(liveLostCounterAdjustment.EffectiveStakeUsd, maxNotional);
         if (notional > 0m)
         {
             await ValidateStrategyLiveBalanceAsync(
