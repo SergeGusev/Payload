@@ -50,3 +50,10 @@ Request:
 
 Result:
 Diagnosed production read-only and confirmed the service was running in `Live` mode with a fresh heartbeat, but post-restart ETH Skip 7 Paper/Live-shadow attempts were being `PreflightRejected`: `PaperLostCoeff=2` plus a positive in-memory Paper lost counter doubled the shadow notional and pushed required notional over `LiveTrading.MaxOrderNotionalUsd`. Updated `BtcUpDown5mPaperStrategyProcessor` so Paper/Live-shadow entries do not apply the Paper lost-counter stake boost; this keeps `PaperLostCoeff` Paper-only and leaves `LiveLostCoeff` stored/editable but unused until an explicit live-risk policy is requested. Added regression coverage proving an ETH live-shadow entry with `PaperLostCoeff=2` and a positive Paper lost counter still submits at base notional. Verification passed: targeted processor tests 3/3, full test project 570/570, and `git diff --check` with LF/CRLF warnings only. Production needs deploy/restart before the fix affects live runtime.
+
+## 2026-06-03T10:35:43.5125030+00:00
+Request:
+А когда мы начнём работать с LiveLostCoeff, Live preflight будет что-то резать по лимиту? А что это за лимит, по которому мы режем?
+
+Result:
+Inspected current code/config and clarified that BTC/ETH/SOL Paper/Live-shadow preflight currently rejects the whole Live order when computed notional exceeds the effective cap; it does not silently trim the order down to the cap. The effective per-order cap is `min(LiveTrading.MaxOrderNotionalUsd, LiveTrading.MaxTradeBankrollPct / 100 * PaperTrading.InitialBankrollUsd)`, and service config currently sets `LiveTrading.MaxOrderNotionalUsd=5.0`, which matched production `Cap=5` rejects. Also noted the separate strategy `LiveAvailableBalance`, max open live order count, per-market exposure, and total deployed exposure checks. Recommended keeping hard preflight caps when LiveLostCoeff is implemented unless a future explicit policy chooses capped/saturated sizing.

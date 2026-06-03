@@ -1,3 +1,15 @@
+## Active Update 2026-06-03 Live Lost Coeff Cap Clarification
+Goal: Clarify how LiveLostCoeff should interact with Live preflight risk caps.
+Status: Completed
+Done:
+- Inspected the current live-shadow preflight path and confirmed BTC/ETH/SOL Paper/Live-shadow orders reject the whole Live order when computed notional exceeds the effective cap; they do not silently trim to the cap.
+- Confirmed the effective per-order cap is `min(LiveTrading.MaxOrderNotionalUsd, LiveTrading.MaxTradeBankrollPct / 100 * PaperTrading.InitialBankrollUsd)`, plus separate strategy balance, open-order, market exposure, and total deployed exposure checks.
+- Confirmed service config sets `LiveTrading.MaxOrderNotionalUsd=5.0`; this is an internal bot risk/smoke-test cap, not a Polymarket exchange limit.
+- Recommended keeping these hard caps active if LiveLostCoeff is later implemented; if LiveLostCoeff increases notional above cap, preflight should reject unless a future explicit policy chooses to cap/saturate the computed notional instead.
+Next: None.
+Notes: Answer-only code/config inspection. No production writes, source behavior changes, tests, or live order actions were performed.
+Blockers: None.
+
 ## Active Update 2026-06-03 Live Shadow Paper Lost Cap Fix
 Goal: Diagnose why Live stakes were not appearing after the Paper/Live lost coefficient deployment and fix the sizing path.
 Status: Completed
