@@ -1,3 +1,18 @@
+## Active Update 2026-06-03 Paper Lost Coeff Production Verification
+Goal: Verify production after deploying the Paper/Live lost coefficient change.
+Status: Completed
+Done:
+- Queried production PostgreSQL through `out\dbprobe` with a temporary host override to `192.168.0.101` and without printing the connection string.
+- Confirmed `PolyCopyTrader.Service` is running in `Live` mode on deployed commit `3ed77b1a8ab2187d7dd29fabc1070f1abee2f5ef`, started `2026-06-03T08:50:10Z`, with fresh heartbeat and empty `last_error`.
+- Confirmed production `strategies` has `paper_lost_coeff` and `live_lost_coeff` columns, both `numeric NOT NULL DEFAULT 1.00`, with minimum-`1` constraints.
+- Confirmed all `2886` strategies have valid lost coefficients; `2883` have `PaperLostCoeff=1`, and the three Live strategies BTC Middle 47, ETH Skip 7, and SOL Skip 42 have `PaperLostCoeff=2` and `LiveLostCoeff=1`.
+- Confirmed all three Live strategies remain effective-live and not auto-live-paused. Since service restart, no Live orders have been created yet.
+- Confirmed fresh paper order decision JSON is using the new diagnostics: post-start paper orders include `paper_lost_coeff_configured`, `paper_lost_counter`, and related stake fields; current sampled diagnostics are `configured_coeff=1`, `counter=0`.
+- Confirmed the three `PaperLostCoeff=2` strategies have not placed a new Paper entry since restart; ETH Skip 7 did settle one post-restart Paper loss, so its in-memory counter should be positive before the next qualifying entry.
+Next: Watch the next qualifying entry for a `PaperLostCoeff=2` strategy; ETH Skip 7 should show a boosted Paper stake if its in-memory counter remains positive.
+Notes: Read-only production verification only. A startup Binance-reference error occurred at `2026-06-03T08:50:11Z`; the current 15-minute window later contained one WebSocket close error from `PolymarketMarketWebSocket:shard-004`. No source code changed and no tests were run for this read-only verification.
+Blockers: None.
+
 ## Active Update 2026-06-03 Paper Lost Coeff
 Goal: Add per-strategy Paper/Live lost coefficient fields and use the Paper field to increase Paper stake after a loss streak.
 Status: Completed
