@@ -1,3 +1,4 @@
+using System.Text.Json;
 using PolyCopyTrader.Domain;
 using PolyCopyTrader.Domain.Configuration;
 using PolyCopyTrader.Storage;
@@ -6,6 +7,22 @@ namespace PolyCopyTrader.Tests;
 
 public sealed class StorageTests
 {
+    [Fact]
+    public void NormalizeLiveOrderRawResponseJson_WrapsPlainTextBody()
+    {
+        var normalized = PostgresAppRepository.NormalizeLiveOrderRawResponseJson("service not ready");
+
+        using var document = JsonDocument.Parse(normalized);
+        Assert.Equal("service not ready", document.RootElement.GetProperty("raw").GetString());
+    }
+
+    [Fact]
+    public void NormalizeLiveOrderRawResponseJson_PreservesJsonBody()
+    {
+        Assert.Equal("""{"status":"matched"}""", PostgresAppRepository.NormalizeLiveOrderRawResponseJson(""" {"status":"matched"} """));
+        Assert.Equal("{}", PostgresAppRepository.NormalizeLiveOrderRawResponseJson(""));
+    }
+
     [Fact]
     public void PostgresSchema_ContainsRequiredTables()
     {

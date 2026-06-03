@@ -1,3 +1,16 @@
+## Active Update 2026-06-03 Live Shadow JSON Persistence Fix
+Goal: Prevent plain-text CLOB error bodies from breaking live-order persistence and stop persistence-path errors from clearing strategy Live flags.
+Status: Completed
+Done:
+- Added `PostgresAppRepository.NormalizeLiveOrderRawResponseJson`, used by live-order insert/update parameters before `CAST(@RawResponseJson AS jsonb)`: empty values become `{}`, valid JSON is preserved, and non-JSON text such as `service not ready` is wrapped as JSON `{ "raw": ... }`.
+- Removed automatic `SetStrategyLiveStakesAsync(..., false, ...)` from `BtcUpDown5mPaperLiveShadowIntent` and `BtcUpDown5mPaperLiveShadowPersistSubmit` exception paths; those paths still log live events and cancel the affected Paper shadow order or submitted live order where applicable.
+- Kept explicit risk-disabling behavior intact for insufficient strategy live balance and critical Paper/Live shadow shape mismatch.
+- Added regression coverage for plain-text raw response normalization and for live-shadow intent/persist-submit failures keeping the strategy Live flag enabled.
+- Updated `docs/configuration_reference.md` and `docs/live_trading_checklist.md` with the new persistence behavior and retained risk-disabling behavior.
+Next: Deploy/restart `PolyCopyTrader.Service`; if the intended production set is again BTC/ETH/SOL Live, restore BTC Middle 47 Live after deploy or via Dashboard/admin.
+Notes: Verification passed: focused `StorageTests|BtcUpDown5mPaperStrategyProcessorTests` 199/199; full test project 577/577; `dotnet build src\PolyCopyTrader.Service\PolyCopyTrader.Service.csproj --no-restore` 0 warnings/errors; `git diff --check` clean except LF/CRLF warnings. No production writes, service restarts, live submissions, or cancels were performed.
+Blockers: Production still needs deploy/restart for the fix to affect runtime.
+
 ## Active Update 2026-06-03 BTC Live Disabled Persist Submit Diagnosis
 Goal: Explain why one strategy stopped being Live again after the signed-counter deploy.
 Status: Completed

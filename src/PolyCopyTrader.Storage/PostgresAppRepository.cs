@@ -8016,6 +8016,25 @@ LIMIT @Limit;
 		command.Parameters.AddWithValue("UpdatedAtUtc", UtcDateTime(tradeTick.UpdatedAtUtc));
 	}
 
+	internal static string NormalizeLiveOrderRawResponseJson(string? rawResponseJson)
+	{
+		if (string.IsNullOrWhiteSpace(rawResponseJson))
+		{
+			return "{}";
+		}
+
+		var trimmed = rawResponseJson.Trim();
+		try
+		{
+			using var document = JsonDocument.Parse(trimmed);
+			return trimmed;
+		}
+		catch (JsonException)
+		{
+			return JsonSerializer.Serialize(new { raw = rawResponseJson });
+		}
+	}
+
 	private static void AddLiveOrderParameters(NpgsqlCommand command, LiveOrder order)
 	{
 		command.Parameters.AddWithValue("Id", order.Id);
@@ -8054,7 +8073,7 @@ LIMIT @Limit;
 		command.Parameters.AddWithValue("CostBasisUsd", order.CostBasisUsd);
 		command.Parameters.AddWithValue("FeeUsd", order.FeeUsd);
 		command.Parameters.AddWithValue("CancelStatus", order.CancelStatus);
-		command.Parameters.AddWithValue("RawResponseJson", string.IsNullOrWhiteSpace(order.RawResponseJson) ? "{}" : order.RawResponseJson);
+		command.Parameters.AddWithValue("RawResponseJson", NormalizeLiveOrderRawResponseJson(order.RawResponseJson));
 		command.Parameters.AddWithValue("ValidationSummary", order.ValidationSummary);
 		command.Parameters.AddWithValue("BalanceEffectApplied", order.BalanceEffectApplied);
 		command.Parameters.AddWithValue("SettlementValueUsd", ((object)order.SettlementValueUsd) ?? ((object)DBNull.Value));

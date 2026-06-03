@@ -409,6 +409,14 @@ orders adjust this balance only after closed Gamma metadata identifies the
 winner: realized live PnL is added for wins and subtracted for losses. Paper
 trading does not use this balance.
 
+Live order response bodies are stored in PostgreSQL `jsonb`. Plain-text CLOB
+error bodies, such as temporary service-unavailable messages, are wrapped before
+storage so they are still persisted without causing a JSON cast failure.
+Paper/Live-shadow persistence failures are logged and cancel the affected
+submitted order when possible, but they do not clear the strategy Live flag;
+strategy Live is still disabled by explicit risk failures such as insufficient
+live balance and critical Paper/Live shadow shape mismatch.
+
 The Dashboard `Live Readiness` tab combines these config values with current
 runtime evidence: auth readiness, recent dry-run signing, startup geoblock
 event, IPC pause/kill-switch status, open/stale live orders, API-error and

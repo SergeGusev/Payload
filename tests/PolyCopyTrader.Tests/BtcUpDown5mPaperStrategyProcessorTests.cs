@@ -8432,6 +8432,93 @@ public sealed class BtcUpDown5mPaperStrategyProcessorTests
     }
 
     [Fact]
+    public async Task ProcessAsync_PaperLiveShadowPersistSubmitFailureKeepsStrategyLive()
+    {
+        var now = DateTimeOffset.UtcNow;
+        var repository = new TestAppRepository
+        {
+            ThrowOnNextLiveOrderUpdate = true
+        };
+        repository.StrategySettings[Middle1Bps47InstantVariant.Id] = StrategyRuntimeSettings.Default(Middle1Bps47InstantVariant.Id) with
+        {
+            LiveStakes = true,
+            LiveStakeAmount = 2.50m,
+            LiveAvailableBalance = 100m,
+            PaperStakeAmount = 2.50m
+        };
+        repository.PolymarketGammaMarkets.Add(CreateMarket(
+            now,
+            now.AddMinutes(5),
+            upPrice: 0.38m,
+            downPrice: 0.62m));
+        var tradingClient = new CapturingTradingClient();
+        var processor = CreateLiveProcessorWithBtcReference(
+            repository,
+            tradingClient,
+            99.52m,
+            [100m],
+            [],
+            Middle1Bps47InstantVariant.Code);
+
+        var result = await processor.ProcessAsync();
+
+        Assert.Equal(1, result.EntriesPlaced);
+        Assert.Equal(1, tradingClient.PlaceCalls);
+        Assert.Equal(1, tradingClient.CancelOrderCalls);
+        Assert.Empty(repository.StrategyLiveStakeUpdates);
+        Assert.True(repository.StrategySettings[Middle1Bps47InstantVariant.Id].LiveStakes);
+        Assert.Contains(
+            repository.LiveTradingEvents,
+            item => item.Action == "BtcUpDown5mPaperLiveShadowPersistSubmit" &&
+                item.Status == "Error" &&
+                item.Details.Contains("Simulated live order update failure", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task ProcessAsync_PaperLiveShadowIntentFailureKeepsStrategyLive()
+    {
+        var now = DateTimeOffset.UtcNow;
+        var repository = new TestAppRepository
+        {
+            ThrowOnNextLiveOrderAdd = true
+        };
+        repository.StrategySettings[Middle1Bps47InstantVariant.Id] = StrategyRuntimeSettings.Default(Middle1Bps47InstantVariant.Id) with
+        {
+            LiveStakes = true,
+            LiveStakeAmount = 2.50m,
+            LiveAvailableBalance = 100m,
+            PaperStakeAmount = 2.50m
+        };
+        repository.PolymarketGammaMarkets.Add(CreateMarket(
+            now,
+            now.AddMinutes(5),
+            upPrice: 0.38m,
+            downPrice: 0.62m));
+        var tradingClient = new CapturingTradingClient();
+        var processor = CreateLiveProcessorWithBtcReference(
+            repository,
+            tradingClient,
+            99.52m,
+            [100m],
+            [],
+            Middle1Bps47InstantVariant.Code);
+
+        var result = await processor.ProcessAsync();
+
+        Assert.Equal(1, result.EntriesPlaced);
+        Assert.Equal(0, tradingClient.PlaceCalls);
+        Assert.Empty(repository.StrategyLiveStakeUpdates);
+        Assert.True(repository.StrategySettings[Middle1Bps47InstantVariant.Id].LiveStakes);
+        var paperOrder = Assert.Single(repository.PaperOrders);
+        Assert.Equal(PaperOrderStatus.Cancelled, paperOrder.Status);
+        Assert.Contains(
+            repository.LiveTradingEvents,
+            item => item.Action == "BtcUpDown5mPaperLiveShadowIntent" &&
+                item.Status == "Error" &&
+                item.Details.Contains("Simulated live order add failure", StringComparison.Ordinal));
+    }
+
+    [Fact]
     public async Task ProcessAsync_BinanceBps21LiveStakeCreatesPaperShadowAndGtdLiveOrder()
     {
         var now = DateTimeOffset.UtcNow;
@@ -10324,6 +10411,10 @@ public sealed class BtcUpDown5mPaperStrategyProcessorTests
     {
         public int PlaceCalls { get; private set; }
 
+        public int CancelOrderCalls { get; private set; }
+
+        public int CancelAllOrdersCalls { get; private set; }
+
         public ClobV2OrderRequest? LastRequest { get; private set; }
 
         public LiveOrderPlacementResult PlacementResult { get; init; } =
@@ -10343,11 +10434,13 @@ public sealed class BtcUpDown5mPaperStrategyProcessorTests
 
         public Task<LiveOrderCancellationResult> CancelOrderAsync(string orderId, CancellationToken ct)
         {
+            CancelOrderCalls++;
             return Task.FromResult(new LiveOrderCancellationResult(true, [orderId], new Dictionary<string, string>(), "{}"));
         }
 
         public Task<LiveOrderCancellationResult> CancelAllOrdersAsync(CancellationToken ct)
         {
+            CancelAllOrdersCalls++;
             return Task.FromResult(new LiveOrderCancellationResult(true, [], new Dictionary<string, string>(), "{}"));
         }
 

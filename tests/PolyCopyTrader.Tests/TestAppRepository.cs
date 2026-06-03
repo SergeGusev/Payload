@@ -73,6 +73,12 @@ internal sealed class TestAppRepository : IAppRepository
     public Dictionary<Guid, StrategyRuntimeSettings> StrategySettings { get; } =
         StrategyIds.AllStrategyIds.ToDictionary(StrategyIds.Normalize, StrategyRuntimeSettings.Default);
 
+    public bool ThrowOnNextLiveOrderAdd { get; set; }
+
+    public bool ThrowOnNextLiveOrderUpdate { get; set; }
+
+    public List<(Guid StrategyId, bool LiveStakes)> StrategyLiveStakeUpdates { get; } = [];
+
     public List<Signal> Signals { get; } = [];
 
     public List<SignalRejection> SignalRejections { get; } = [];
@@ -1561,6 +1567,7 @@ internal sealed class TestAppRepository : IAppRepository
         CancellationToken cancellationToken = default)
     {
         var normalizedStrategyId = StrategyIds.Normalize(strategyId);
+        StrategyLiveStakeUpdates.Add((normalizedStrategyId, liveStakes));
         if (!StrategySettings.ContainsKey(normalizedStrategyId))
         {
             return Task.FromResult(false);
@@ -1924,12 +1931,24 @@ internal sealed class TestAppRepository : IAppRepository
 
     public Task AddLiveOrderAsync(LiveOrder order, CancellationToken cancellationToken = default)
     {
+        if (ThrowOnNextLiveOrderAdd)
+        {
+            ThrowOnNextLiveOrderAdd = false;
+            throw new InvalidOperationException("Simulated live order add failure.");
+        }
+
         LiveOrders.Add(order);
         return Task.CompletedTask;
     }
 
     public Task UpdateLiveOrderAsync(LiveOrder order, CancellationToken cancellationToken = default)
     {
+        if (ThrowOnNextLiveOrderUpdate)
+        {
+            ThrowOnNextLiveOrderUpdate = false;
+            throw new InvalidOperationException("Simulated live order update failure.");
+        }
+
         LiveOrders.RemoveAll(item => item.Id == order.Id);
         LiveOrders.Add(order);
         return Task.CompletedTask;

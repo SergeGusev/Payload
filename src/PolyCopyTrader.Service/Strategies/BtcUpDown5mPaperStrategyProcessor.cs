@@ -11091,7 +11091,6 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
             await CancelPaperShadowOrderAsync(paperOrder, nowUtc, cancellationToken);
-            await repository.SetStrategyLiveStakesAsync(variant.Id, false, nowUtc, cancellationToken);
             await repository.AddLiveTradingEventAsync(
                 new LiveTradingEvent(Guid.NewGuid(), "BtcUpDown5mPaperLiveShadowIntent", "Error", ex.Message, nowUtc),
                 cancellationToken);
@@ -11172,7 +11171,6 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
                 await tradingClient.CancelAllOrdersAsync(cancellationToken);
             }
 
-            await repository.SetStrategyLiveStakesAsync(variant.Id, false, nowUtc, cancellationToken);
             await repository.AddLiveTradingEventAsync(
                 new LiveTradingEvent(Guid.NewGuid(), "BtcUpDown5mPaperLiveShadowPersistSubmit", "Error", ex.Message, DateTimeOffset.UtcNow),
                 cancellationToken);
