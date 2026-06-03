@@ -168,3 +168,10 @@ Request:
 
 Result:
 Answered that redeploying the service is not needed for this Live-flag change. Rechecked production and confirmed BTC Middle 47, ETH Skip 7, ETH Skip 32, and SOL Skip 42 are all effective Live, with `live_count=4`, `effective_live_count=4`, and `auto_paused_live_count=0`. No production writes, service restart, source code changes, live submissions, or cancels were performed.
+
+## 2026-06-03T19:00:48.9467168+00:00
+Request:
+То есть мы теперь каждый раз можем переводить стратегию в Live без перевыкладки сервиса?
+
+Result:
+Answered that routine Live toggles do not require redeploying the service. Code inspection confirmed the Dashboard writes `strategies.live_stakes` through `SetStrategyLiveStakesAsync`, `StrategyStateProvider` refreshes PostgreSQL runtime settings with a one-second cache interval, and 5m Paper/Live-shadow logic uses `StrategyRuntimeSettings.EffectiveLiveStakes` (`LiveStakes && !AutoLivePaused`). Noted limits: redeploy/restart is still needed for code changes, schema migrations, new or changed configured strategy definitions, a service not running in `Live` mode, or intentional startup admin commands such as `--set-live-stakes-only-code(s)`. No production writes, service restart, source code changes, live submissions, or cancels were performed.

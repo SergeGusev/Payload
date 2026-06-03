@@ -1,3 +1,15 @@
+## Active Update 2026-06-03 Runtime Live Toggle Clarification
+Goal: Clarify whether strategies can be moved to Live without redeploying the service.
+Status: Completed
+Done:
+- Inspected the runtime Live-toggle path: Dashboard calls `SetStrategyLiveStakesAsync`, which updates `strategies.live_stakes` and `live_enabled_at_utc` directly in PostgreSQL.
+- Confirmed `StrategyStateProvider` refreshes strategy runtime settings from PostgreSQL with a one-second cache interval.
+- Confirmed BTC/ETH/SOL 5m Paper/Live-shadow logic uses `StrategyRuntimeSettings.EffectiveLiveStakes`, defined as `LiveStakes && !AutoLivePaused`, so a persisted Live flag becomes visible to the running service without redeploy.
+- Noted the limits: redeploy/restart is still needed for source-code changes, schema migrations, new/changed configured strategy definitions, a service not running in `Live` mode, or if an admin command such as `--set-live-stakes-only-code(s)` is intentionally run during startup.
+Next: Use Dashboard or a targeted single-row DB update for routine Live toggles; avoid mass `--set-live-stakes-only-*` commands unless the intended complete Live set is passed.
+Notes: Answer/code-inspection task only. No production writes, service restart, source code changes, live submissions, or cancels were performed.
+Blockers: None.
+
 ## Active Update 2026-06-03 ETH Skip 32 Redeploy Check
 Goal: Determine whether enabling `ETH Up or Down 5m Skip 32 bps Instant` requires redeploying the service.
 Status: Completed
