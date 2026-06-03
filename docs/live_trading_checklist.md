@@ -24,8 +24,10 @@ Live trading is disabled by default. Use this checklist before any live session.
 - Paper/Live-shadow stakes, if enabled per strategy, are intentional BUY-only `GTD` limit orders with `postOnly=false`; by default local cancellation is `OpeningLimitExpireBeforeMarketEndSeconds` (`60`) seconds before market close, while the CLOB wire expiration includes `ClobGtdExpirationSecurityBufferSeconds` (`60`). Any immediately marketable portion may fill as taker and the remainder can rest until GTD expiration/cancel/market close.
 - The Dashboard `Live Lost` strategy field is stored for future policy work but does not increase live stake sizing. Only `Paper Lost` applies the in-memory loss-counter add-on, and only to Paper entries.
 - Paper/Live-shadow matching must keep asset, condition, outcome, order type, `postOnly=false`, limit price within `0.000001`, and requested size within `0.000001` shares; mismatch disables `LiveStakes` for that strategy and cancels correlated open live orders.
-- `LiveTrading:MaxOrderNotionalUsd` is tiny.
-- `LiveTrading:MaxOpenLiveOrders` is tiny, initially `1`.
+- `LiveTrading:MaxOrderNotionalUsd` is a hard emergency ceiling, not the normal
+  stake-sizing control. Intended stake sizing is set per strategy through
+  Dashboard `Live $` and `Live bal`.
+- `LiveTrading:MaxOpenLiveOrders` remains conservative, initially `1`.
 - `LiveTrading:AutoLivePauseStrategies` may be left empty. Add specific
   strategy codes only when those strategies should auto-pause Live after recent
   Live losses and resume from positive recent Paper evidence.
@@ -33,7 +35,7 @@ Live trading is disabled by default. Use this checklist before any live session.
   strategies outside the current `AutoLivePauseStrategies` list.
 - For Paper/Live-shadow, `LiveTrading` market/total exposure caps are
   checked against open Live orders only; Paper backlog must still be monitored
-  separately, but it must not consume the tiny Live smoke-test cap.
+  separately, but it must not consume Live safety ceilings.
 - `PolymarketAuth:SigningAddress` is the signer wallet.
 - `PolymarketAuth:FunderAddress` is the funded Polymarket wallet/proxy.
 - `PolymarketAuth:SignatureType` is explicitly chosen.

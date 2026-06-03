@@ -558,8 +558,8 @@ public sealed class DashboardDataService(
             new(
                 "Max live order size",
                 FormatUsd(configuration.LiveTrading.MaxOrderNotionalUsd),
-                configuration.LiveTrading.MaxOrderNotionalUsd <= 1m ? "OK" : "Warning",
-                "Keep the first live session at a tiny order cap."),
+                configuration.LiveTrading.MaxOrderNotionalUsd > 0m ? "OK" : "Error",
+                "Hard per-order safety ceiling; strategy Live $ and Live bal still define intended stake sizing."),
             Gate(
                 "Auth readiness",
                 authReadiness.State,

@@ -15,9 +15,11 @@ Do not commit real credentials.
 ## LiveTrading
 
 - `ManualEnableCode`: must equal `LIVE_TRADING_ENABLED` for live trading.
-- `MaxOrderNotionalUsd`: hard tiny-size cap per live order.
-- `MaxTradeBankrollPct`: live trade bankroll cap.
-- `MaxMarketBankrollPct`: live market bankroll cap.
+- `MaxOrderNotionalUsd`: hard per-order safety ceiling. The service config keeps
+  this high enough not to act as the old tiny smoke-test cap; intended stake
+  sizing is controlled by each strategy's `Live $` and `Live bal` values.
+- `MaxTradeBankrollPct`: per-live-order bankroll safety ceiling.
+- `MaxMarketBankrollPct`: per-market live exposure safety ceiling.
 - `MaxDailyLossPct`: live daily loss lockout reference.
 - `MaxTotalDeployedPct`: live total deployed cap.
 - BTC 5-minute live preflight applies market/total deployed caps to open Live

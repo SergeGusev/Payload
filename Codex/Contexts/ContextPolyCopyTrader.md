@@ -1,3 +1,15 @@
+## Active Update 2026-06-03 Remove Tiny Live Order Cap
+Goal: Remove the old tiny Live max-order cap as a practical limiter while preserving explicit Live risk controls.
+Status: Completed
+Done:
+- Traced `LiveTrading:MaxOrderNotionalUsd`: it was introduced with the first gated maker-only live trading config at `1.0` and later raised to `5.0` in commit `7b715ae9`; it was an internal smoke-test/safety cap, not a Polymarket or user-requested limit.
+- Updated Service and Dashboard configs so `LiveTrading:MaxOrderNotionalUsd=100.0`, `MaxTradeBankrollPct=1.00`, and `MaxMarketBankrollPct=1.00`; intended stake sizing remains controlled by per-strategy Dashboard `Live $` and `Live bal`.
+- Kept live risk controls in place: explicit Live enable gates, kill switch/live pause, strategy balance, max open live orders, market/total exposure caps, clock/geoblock/API-error checks, and opposite-outcome open-order guard.
+- Updated Dashboard readiness text and docs to describe `MaxOrderNotionalUsd` as a hard emergency ceiling rather than a tiny normal stake cap.
+Next: Deploy/restart Service and Dashboard so the new config values replace the deployed `$5` cap.
+Notes: Verification passed: focused `ConfigurationTests` 27/27, Service build passed with 0 warnings/errors, Dashboard temp-output build passed with existing Storage nullable warnings after normal Dashboard build was blocked by the running Dashboard/Visual Studio lock, full test project passed 570/570, and `git diff --check` passed with LF/CRLF warnings only.
+Blockers: Production still needs deploy/restart for the config change to affect live runtime.
+
 ## Active Update 2026-06-03 Live Lost Coeff Cap Clarification
 Goal: Clarify how LiveLostCoeff should interact with Live preflight risk caps.
 Status: Completed
