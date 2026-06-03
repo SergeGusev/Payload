@@ -39,6 +39,7 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
     private DashboardDatabaseSource currentDatabaseSource;
     private bool isChangingDatabaseSource;
     private bool suppressOrderRefresh;
+    private bool pendingOrderRefresh;
     private int orderRefreshVersion;
     private bool disposed;
 
@@ -290,19 +291,13 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
     partial void OnSelectedPaperOrdersStrategyChanged(StrategyOrderFilterOption? value)
     {
         ApplyOrderFilters();
-        if (!suppressOrderRefresh && !IsRefreshing)
-        {
-            _ = RefreshOrdersAsync();
-        }
+        RequestOrderRefresh();
     }
 
     partial void OnSelectedLiveOrdersStrategyChanged(StrategyOrderFilterOption? value)
     {
         ApplyOrderFilters();
-        if (!suppressOrderRefresh && !IsRefreshing)
-        {
-            _ = RefreshOrdersAsync();
-        }
+        RequestOrderRefresh();
     }
 
     partial void OnShowOnlyPositiveStrategiesChanged(bool value)
@@ -460,6 +455,11 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         finally
         {
             IsRefreshing = false;
+            if (pendingOrderRefresh && !disposed)
+            {
+                pendingOrderRefresh = false;
+                _ = RefreshOrdersAsync();
+            }
         }
     }
 
@@ -1421,6 +1421,22 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
             CommandStatus = $"Orders refresh failed: {ex.Message}";
             RecordDashboardError("Orders refresh", ex);
         }
+    }
+
+    private void RequestOrderRefresh()
+    {
+        if (suppressOrderRefresh)
+        {
+            return;
+        }
+
+        if (IsRefreshing)
+        {
+            pendingOrderRefresh = true;
+            return;
+        }
+
+        _ = RefreshOrdersAsync();
     }
 
     private string NormalizeSelectedStrategyCategory(string selected)

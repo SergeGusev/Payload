@@ -1,3 +1,15 @@
+## Active Update 2026-06-04 Dashboard Orders Strategy Refresh Race
+Goal: Fix orders tabs still showing empty rows for a selected strategy after server-side strategy paging was deployed.
+Status: Completed
+Done:
+- Verified PostgreSQL strategy-filtered recent-order queries against both Dashboard database sources: the local database currently has 0 Paper/Live rows for BTC Middle 47, ETH Skip 7, ETH Skip 32, and SOL Skip 42, while remote `192.168.0.101` has rows for those strategies.
+- Confirmed the server-side SQL filter is returning remote rows, including 208 Paper / 47 Live for `SOL Up or Down 5m Skip 42 bps Instant`, 1458 Paper / 254 Live for `ETH Up or Down 5m Skip 7 bps Instant`, and 166 Paper / 58 Live for `BTC Up or Down 5m Middle 1 47 bps Instant`.
+- Fixed a Dashboard ViewModel race where changing the Paper/Live orders strategy during a full refresh could leave the grid client-filtering the stale first global page and never request the selected strategy page.
+- Added a pending orders refresh flag so selector changes during a full refresh are replayed immediately after the full refresh completes.
+Next: Deploy/reopen Dashboard and select `Remote database` when checking remote service orders for the Live strategies.
+Notes: Verification passed: Dashboard Verify build succeeded with existing Storage nullable warnings and no errors; focused `StorageTests` passed 38/38; full test project passed 585/585.
+Blockers: None.
+
 ## Active Update 2026-06-04 Dashboard Orders Server-Side Strategy Paging
 Goal: Replace the 10,000-row Dashboard order preload with first-page server-side strategy filtering.
 Status: Completed
