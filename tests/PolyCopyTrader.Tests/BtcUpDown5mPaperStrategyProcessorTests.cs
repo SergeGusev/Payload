@@ -7425,6 +7425,84 @@ public sealed class BtcUpDown5mPaperStrategyProcessorTests
     }
 
     [Fact]
+    public async Task ProcessAsync_LiveStakeAllowsOpenLiveOrderInDifferentMarket()
+    {
+        var now = DateTimeOffset.UtcNow;
+        var repository = new TestAppRepository();
+        repository.StrategySettings[Skip1Variant.Id] = StrategyRuntimeSettings.Default(Skip1Variant.Id) with
+        {
+            LiveStakes = true,
+            LiveStakeAmount = 2.50m,
+            LiveAvailableBalance = 100m,
+            PaperStakeAmount = 2.50m
+        };
+        repository.LiveOrders.Add(CreateOpenLiveOrder(
+            now,
+            "other-asset",
+            "other-condition",
+            "Up",
+            AlwaysUpVariant.Id));
+        repository.PolymarketGammaMarkets.Add(CreateMarket(
+            now,
+            now.AddMinutes(5),
+            upPrice: 0.50m,
+            downPrice: 0.50m));
+        var closeBookOrderBooks = AddCloseBookResults(repository, now, "Up");
+        var tradingClient = new CapturingTradingClient();
+        var processor = CreateLiveProcessor(repository, tradingClient, closeBookOrderBooks, Skip1Variant.Code);
+
+        var result = await processor.ProcessAsync();
+
+        Assert.Equal(1, result.EntriesPlaced);
+        Assert.Equal(1, tradingClient.PlaceCalls);
+        Assert.Equal(2, repository.LiveOrders.Count);
+        var candidateOrder = repository.LiveOrders.Single(order =>
+            string.Equals(order.ConditionId, "condition-1", StringComparison.OrdinalIgnoreCase));
+        Assert.Equal(LiveOrderStatus.Live, candidateOrder.Status);
+        Assert.Empty(candidateOrder.ValidationSummary);
+    }
+
+    [Fact]
+    public async Task ProcessAsync_LiveStakeSkipsOppositeLiveOrderInSameMarket()
+    {
+        var now = DateTimeOffset.UtcNow;
+        var repository = new TestAppRepository();
+        repository.StrategySettings[Skip1Variant.Id] = StrategyRuntimeSettings.Default(Skip1Variant.Id) with
+        {
+            LiveStakes = true,
+            LiveStakeAmount = 2.50m,
+            LiveAvailableBalance = 100m,
+            PaperStakeAmount = 2.50m
+        };
+        repository.LiveOrders.Add(CreateOpenLiveOrder(
+            now,
+            "asset-up",
+            "condition-1",
+            "Up",
+            AlwaysUpVariant.Id));
+        repository.PolymarketGammaMarkets.Add(CreateMarket(
+            now,
+            now.AddMinutes(5),
+            upPrice: 0.50m,
+            downPrice: 0.50m));
+        var closeBookOrderBooks = AddCloseBookResults(repository, now, "Up");
+        var tradingClient = new CapturingTradingClient();
+        var processor = CreateLiveProcessor(repository, tradingClient, closeBookOrderBooks, Skip1Variant.Code);
+
+        var result = await processor.ProcessAsync();
+
+        Assert.Equal(0, result.EntriesPlaced);
+        Assert.True(result.RunsSkipped >= 1);
+        Assert.Equal(0, tradingClient.PlaceCalls);
+        Assert.Single(repository.LiveOrders);
+        var run = Assert.Single(
+            repository.StrategyMarketPaperRuns,
+            item => item.SkipReason == SignalReasonCodes.OppositeOutcomeOpenOrder);
+        Assert.Equal(StrategyMarketPaperRunStatuses.Skipped, run.Status);
+        Assert.Contains("\"blocking_order_source\":\"Live\"", run.SkipDiagnosticsJson, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task ProcessAsync_AutoLivePausedStrategyStillCreatesPaperOrderWithoutLiveShadow()
     {
         var now = DateTimeOffset.UtcNow;
@@ -9007,6 +9085,39 @@ public sealed class BtcUpDown5mPaperStrategyProcessorTests
             tradingClient: tradingClient,
             botOptions: new BotOptions { Mode = BotMode.Live, EnableLiveTrading = true },
             paperTradingOptions: new PaperTradingOptions { InitialBankrollUsd = 10_000m, RunInLiveMode = true });
+    }
+
+    private static LiveOrder CreateOpenLiveOrder(
+        DateTimeOffset createdAtUtc,
+        string assetId,
+        string conditionId,
+        string outcome,
+        Guid strategyId)
+    {
+        return new LiveOrder(
+            Guid.NewGuid(),
+            Guid.NewGuid(),
+            LiveOrderStatus.Live,
+            "0xopen-" + Guid.NewGuid().ToString("N"),
+            TradeSide.Buy,
+            assetId,
+            conditionId,
+            outcome,
+            0.50m,
+            5m,
+            2.50m,
+            "GTD",
+            createdAtUtc,
+            createdAtUtc.AddMinutes(5),
+            createdAtUtc,
+            "live",
+            0m,
+            5m,
+            string.Empty,
+            "{}",
+            string.Empty,
+            createdAtUtc,
+            StrategyId: strategyId);
     }
 
     private static BtcUpDown5mPaperStrategyProcessor CreateLiveProcessor(

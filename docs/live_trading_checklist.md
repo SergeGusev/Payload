@@ -28,7 +28,9 @@ Live trading is disabled by default. Use this checklist before any live session.
 - `LiveTrading:MaxOrderNotionalUsd` is a hard emergency ceiling, not the normal
   stake-sizing control. Intended stake sizing is set per strategy through
   Dashboard `Live $`, optional `Live Lost` add-on, and `Live bal`.
-- `LiveTrading:MaxOpenLiveOrders` remains conservative, initially `1`.
+- Candidate Live BUY placement is blocked only when an open Paper/Live BUY
+  already exists for the opposite outcome in the same market, or when a stale
+  Live order still needs maintenance cancellation.
 - `LiveTrading:AutoLivePauseStrategies` may be left empty. Add specific
   strategy codes only when those strategies should auto-pause Live after recent
   Live losses and resume from positive recent Paper evidence.

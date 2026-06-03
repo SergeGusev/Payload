@@ -118,6 +118,63 @@ public sealed class LiveTradingGatingTests
     }
 
     [Fact]
+    public async Task LivePreflightAllowsOpenLiveOrderInDifferentMarket()
+    {
+        var repository = new TestAppRepository();
+        await repository.AddLiveOrderAsync(CreateOpenLiveOrder(
+            DateTimeOffset.UtcNow,
+            "other-asset",
+            "other-condition",
+            "No"));
+        var queue = new InMemoryLeaderTradeCandidateQueue();
+        await queue.EnqueueAsync(Trade());
+        var tradingClient = new CapturingTradingClient();
+        var processor = CreateProcessor(
+            queue,
+            repository,
+            tradingClient,
+            LiveEnabledBot(),
+            new PassGeoClient());
+
+        await processor.ProcessQueuedAsync();
+
+        var candidateOrder = repository.LiveOrders.Single(order =>
+            string.Equals(order.ConditionId, "condition-1", StringComparison.OrdinalIgnoreCase));
+        Assert.Equal(LiveOrderStatus.PreflightRejected, candidateOrder.Status);
+        Assert.Contains("leader-price Follow leader signals is disabled", candidateOrder.ValidationSummary, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("Maximum open live order count reached", candidateOrder.ValidationSummary, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public async Task SignalEvaluationRejectsOppositeLiveOrderInSameMarket()
+    {
+        var repository = new TestAppRepository();
+        await repository.AddLiveOrderAsync(CreateOpenLiveOrder(
+            DateTimeOffset.UtcNow,
+            "asset-no",
+            "condition-1",
+            "No"));
+        var queue = new InMemoryLeaderTradeCandidateQueue();
+        await queue.EnqueueAsync(Trade());
+        var tradingClient = new CapturingTradingClient();
+        var processor = CreateProcessor(
+            queue,
+            repository,
+            tradingClient,
+            LiveEnabledBot(),
+            new PassGeoClient());
+
+        var result = await processor.ProcessQueuedAsync();
+
+        Assert.Equal(0, result.SignalsAccepted);
+        Assert.Equal(1, result.SignalsRejected);
+        Assert.Equal(0, tradingClient.PlaceCalls);
+        Assert.Single(repository.LiveOrders);
+        Assert.Single(repository.SignalRejections, rejection =>
+            rejection.ReasonCode == SignalReasonCodes.OppositeOutcomeOpenOrder);
+    }
+
+    [Fact]
     public async Task LiveModeWithStrategyLiveStakesDisabledDoesNotCreateLiveOrder()
     {
         var repository = new TestAppRepository();
@@ -866,6 +923,38 @@ public sealed class LiveTradingGatingTests
             "matched",
             10m,
             0m,
+            string.Empty,
+            "{}",
+            string.Empty,
+            createdAtUtc,
+            StrategyId: StrategyIds.FollowLeader);
+    }
+
+    private static LiveOrder CreateOpenLiveOrder(
+        DateTimeOffset createdAtUtc,
+        string assetId,
+        string conditionId,
+        string outcome)
+    {
+        return new LiveOrder(
+            Guid.NewGuid(),
+            Guid.NewGuid(),
+            LiveOrderStatus.Live,
+            "0xopen-" + Guid.NewGuid().ToString("N"),
+            TradeSide.Buy,
+            assetId,
+            conditionId,
+            outcome,
+            0.50m,
+            5m,
+            2.50m,
+            "GTD",
+            createdAtUtc,
+            createdAtUtc.AddMinutes(5),
+            createdAtUtc,
+            "live",
+            0m,
+            5m,
             string.Empty,
             "{}",
             string.Empty,

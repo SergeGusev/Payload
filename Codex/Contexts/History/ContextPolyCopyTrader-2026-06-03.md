@@ -230,3 +230,10 @@ Request:
 
 Result:
 Extracted the screenshot from the Windows clipboard and identified the visible Dashboard validation as `Maximum open live order count reached.`. Traced the message to service-side live preflight validation, not Polymarket or WPF. Current config has `LiveTrading:MaxOpenLiveOrders = 1`, and the code checks global open Live orders, so one open Live order blocks the next Live placement. No source behavior changes, production writes, live submissions, cancels, builds, or tests were performed.
+
+## 2026-06-03T20:40:10.7484293+00:00
+Request:
+А откуда вообще взялось это ограничение? Я этого не заказывал. Я заказывал только, чтобы мы сами против себя не ставили в одном рынке.
+
+Result:
+Traced `LiveTrading:MaxOpenLiveOrders = 1` to the old `b1fcc83 Add gated maker-only live trading` safety scaffold rather than a specific strategy requirement. Removed the unintended global open Live order cap from Follow leader and BTC/SOL/ETH 5m live-shadow live preflight, config, validation, appsettings, Dashboard readiness, and docs. Kept same-market opposite-outcome protection through `OpenOrderDirectionGuard`. Added tests that a different-market open Live order does not block placement and an opposite same-market Live order still blocks/skips. Verification passed: focused live/BTC tests 185/185, Service Verify build 0 warnings/errors, Dashboard Verify build 0 warnings/errors, full test project 583/583, and `git diff --check` clean except LF/CRLF warnings. No production writes, service restarts, live submissions, or cancels were performed.

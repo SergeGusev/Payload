@@ -964,11 +964,6 @@ public static class AppOptionsValidator
             errors.Add("LiveTrading.ApiErrorLockoutWindowMinutes must be greater than zero.");
         }
 
-        if (options.MaxOpenLiveOrders <= 0)
-        {
-            errors.Add("LiveTrading.MaxOpenLiveOrders must be greater than zero.");
-        }
-
         foreach (var strategy in options.AutoLivePauseStrategies)
         {
             if (!StrategyAutoLivePausePolicy.TryNormalizeStrategyIdentifier(strategy, out _))

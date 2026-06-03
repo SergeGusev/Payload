@@ -495,8 +495,6 @@ public sealed class LiveTradingOptions
 
     public int ApiErrorLockoutWindowMinutes { get; init; } = 15;
 
-    public int MaxOpenLiveOrders { get; init; } = 1;
-
     public bool CancelAllOnKillSwitch { get; init; } = true;
 
     public List<string> AutoLivePauseStrategies { get; init; } = [];

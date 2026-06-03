@@ -599,11 +599,11 @@ public sealed class DashboardDataService(
             controlStatus is null
                 ? new LiveReadinessRow("Kill switch", "Unknown", "Info", "Kill-switch state is not checked during automatic refresh.")
                 : Gate("Kill switch", controlStatus.KillSwitchActive ? "active" : "clear", !controlStatus.KillSwitchActive, "Kill switch must be clear."),
-            Gate(
-                "Open live order count",
-                $"{openLiveOrders.Length}/{configuration.LiveTrading.MaxOpenLiveOrders}",
-                openLiveOrders.Length < configuration.LiveTrading.MaxOpenLiveOrders,
-                "The live preflight blocks when the open live-order cap is reached."),
+            new LiveReadinessRow(
+                "Open live orders",
+                openLiveOrders.Length.ToString(System.Globalization.CultureInfo.InvariantCulture),
+                "Info",
+                "Live preflight allows multiple open Live orders; opposite outcomes in the same market and stale orders are checked separately."),
             Gate(
                 "Stale live orders",
                 staleLiveOrders.ToString(System.Globalization.CultureInfo.InvariantCulture),

@@ -10936,11 +10936,6 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
             validation.Add(OpenOrderDirectionGuard.CreateValidationMessage(outcome.Outcome, oppositeBlock));
         }
 
-        if (openLiveOrders.Count >= liveTradingOptions.MaxOpenLiveOrders)
-        {
-            validation.Add("Maximum open live order count reached.");
-        }
-
         if (openLiveOrders.Any(order => nowUtc - order.CreatedAtUtc > TimeSpan.FromSeconds(liveTradingOptions.DefaultOrderTtlSeconds)))
         {
             validation.Add("A stale live order exists; live placement is locked until maintenance cancels it.");
@@ -11294,11 +11289,6 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
                 openLiveOrders) is { } oppositeBlock)
         {
             validation.Add(OpenOrderDirectionGuard.CreateValidationMessage(outcome.Outcome, oppositeBlock));
-        }
-
-        if (openLiveOrders.Count >= liveTradingOptions.MaxOpenLiveOrders)
-        {
-            validation.Add("Maximum open live order count reached.");
         }
 
         if (openLiveOrders.Any(order => nowUtc - order.CreatedAtUtc > TimeSpan.FromSeconds(liveTradingOptions.DefaultOrderTtlSeconds)))

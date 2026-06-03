@@ -31,7 +31,6 @@ Do not commit real credentials.
 - `MaxClockDriftSeconds`: maximum allowed CLOB server-time drift.
 - `ApiErrorLockoutCount`: recent Polymarket error threshold.
 - `ApiErrorLockoutWindowMinutes`: lockout lookback window.
-- `MaxOpenLiveOrders`: open live order cap.
 - `CancelAllOnKillSwitch`: documents intended kill-switch behavior.
 - `AutoLivePauseStrategies`: strategy codes or ids where automatic Live-only
   pause is enabled. Default `[]`, meaning no strategy is auto-live-paused by

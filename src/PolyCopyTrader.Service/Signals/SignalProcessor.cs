@@ -219,11 +219,6 @@ public sealed class SignalProcessor(
 
         var exposureSnapshot = await exposureCache.GetSnapshotAsync(cancellationToken);
         var openLiveOrders = exposureSnapshot.OpenLiveOrders;
-        if (openLiveOrders.Count >= liveTradingOptions.MaxOpenLiveOrders)
-        {
-            validation.Add("Maximum open live order count reached.");
-        }
-
         if (openLiveOrders.Any(order => now - order.CreatedAtUtc > TimeSpan.FromSeconds(liveTradingOptions.DefaultOrderTtlSeconds)))
         {
             validation.Add("A stale live order exists; live placement is locked until maintenance cancels it.");

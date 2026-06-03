@@ -1,3 +1,17 @@
+## Active Update 2026-06-03 Remove Global Live Order Count Cap
+Goal: Remove the unintended global open Live order cap while keeping same-market opposite-outcome protection.
+Status: Completed
+Done:
+- Traced `LiveTrading:MaxOpenLiveOrders = 1` back to the old `b1fcc83 Add gated maker-only live trading` safety scaffold; it was not a specific strategy requirement.
+- Removed the global `openLiveOrders.Count >= MaxOpenLiveOrders` live-preflight rejection from Follow leader and BTC/SOL/ETH 5m live-shadow paths.
+- Removed `MaxOpenLiveOrders` from `LiveTradingOptions`, validation, Service/Dashboard appsettings, and docs.
+- Changed Dashboard readiness from a blocking `Open live order count` gate to an informational `Open live orders` row.
+- Kept same-market protection intact: open Paper/Live BUY orders on the opposite outcome for the same `condition_id` still block candidates through `OpenOrderDirectionGuard`.
+- Added regressions proving an open Live order in a different market does not block placement, while an opposite Live order in the same market still blocks/skips.
+Next: Deploy/restart Service and Dashboard for the removed cap and updated readiness display to take effect.
+Notes: Verification passed: focused `dotnet test tests\PolyCopyTrader.Tests\PolyCopyTrader.Tests.csproj --configuration Verify --no-restore /p:UseSharedCompilation=false --filter "LiveTradingGatingTests|BtcUpDown5mPaperStrategyProcessorTests"` passed 185/185; Service Verify build passed 0 warnings/errors; Dashboard Verify build passed 0 warnings/errors; full test project passed 583/583; `git diff --check` clean except LF/CRLF warnings. A first parallel Dashboard build failed with a transient shared `Storage.dll` file lock while focused tests were building; rerun sequentially passed cleanly.
+Blockers: None.
+
 ## Active Update 2026-06-03 Open Live Order Count Validation
 Goal: Identify the source of the Dashboard validation screenshot.
 Status: Completed
