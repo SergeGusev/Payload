@@ -1,3 +1,15 @@
+## Active Update 2026-06-03 Paper Live LostCoeff Semantics Clarification
+Goal: Clarify whether PaperLostCoeff should still boost Paper rows while Live rows remain controlled by LiveLostCoeff/base sizing.
+Status: Completed
+Done:
+- Inspected the current Paper/Live-shadow sizing path in `BtcUpDown5mPaperStrategyProcessor`.
+- Confirmed the user's intended semantics are correct: `PaperLostCoeff` should affect Paper stake sizing, while Live sizing should be separate and controlled by `LiveLostCoeff` or base Live stake.
+- Confirmed the current deployed implementation does not match that intended split for Paper/Live-shadow strategies: after the previous safety fix, `paper_live_shadow_test` forces `PaperLostCounterStakeAdjustment.Disabled(...)`, so SOL/ETH/BTC Live-shadow Paper rows no longer receive PaperLostCoeff add-on even when the Paper lost counter is positive.
+- Identified this as a behavior mismatch introduced to prevent PaperLostCoeff from leaking into Live preflight/order notional. The proper fix is to split Paper and Live sizing in the Paper/Live-shadow path rather than disabling the Paper add-on entirely.
+Next: Implement separate Paper-shadow and Live-shadow sizing so Paper orders can use `PaperLostCoeff` while Live orders continue to use base/`LiveLostCoeff` sizing and their own risk checks.
+Notes: Explanation/code-inspection task only. No production writes, service restarts, source behavior changes, tests, live submissions, or cancels were performed.
+Blockers: None.
+
 ## Active Update 2026-06-03 SOL Skip 42 Next Paper Stake Check
 Goal: Determine the next Paper stake sizing for `SOL Up or Down 5m Skip 42 bps Instant`.
 Status: Completed
