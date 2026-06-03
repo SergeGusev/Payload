@@ -874,6 +874,9 @@ stop creating new Follow leader signals or BTC 5-minute entries without a
 restart, while manually paused strategies stay enabled but skip new Paper and
 Live entries with reason `strategy_paused`. Existing Paper positions can still
 be settled, and copied leader exits can still be tracked.
+The Dashboard `Paper orders` and `Live orders` tabs load only the first recent
+orders page; when a strategy is selected, PostgreSQL applies that strategy filter
+before the page limit.
 
 Automatic strategy pausing is Live-only and opt-in per strategy through
 `LiveTrading:AutoLivePauseStrategies`; the default empty list disables automatic

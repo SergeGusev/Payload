@@ -13,7 +13,7 @@ public sealed class DashboardDataService(
     IPolymarketAuthService authService)
 {
     private const int StrategyDashboardFetchLimit = 10_000;
-    private const int OrderDashboardFetchLimit = 10_000;
+    private const int OrderDashboardFetchLimit = 100;
 
     private IReadOnlyList<StrategyPerformance>? cachedStrategyPerformance;
     private DateTimeOffset cachedStrategyPerformanceAtUtc = DateTimeOffset.MinValue;
@@ -21,13 +21,20 @@ public sealed class DashboardDataService(
     private DateTimeOffset cachedStrategyRecentPerformanceAtUtc = DateTimeOffset.MinValue;
 
     public async Task<DashboardSnapshot> LoadAsync(
+        Guid? paperOrdersStrategyId = null,
+        Guid? liveOrdersStrategyId = null,
         ControlStatusResponse? controlStatus = null,
         string? controlStatusError = null,
         CancellationToken cancellationToken = default)
     {
         if (configuration.Dashboard.StrategiesOnlyMode)
         {
-            return await LoadStrategiesOnlyAsync(controlStatus, controlStatusError, cancellationToken);
+            return await LoadStrategiesOnlyAsync(
+                paperOrdersStrategyId,
+                liveOrdersStrategyId,
+                controlStatus,
+                controlStatusError,
+                cancellationToken);
         }
 
         var databaseNowUtc = await repository.GetDatabaseNowUtcAsync(cancellationToken);
@@ -48,7 +55,10 @@ public sealed class DashboardDataService(
         var onChainParticipantDetails = await repository.GetPolymarketOnChainParticipantDetailsAsync(250, cancellationToken);
         var leaderTrades = await repository.GetRecentLeaderTradesAsync(cancellationToken: cancellationToken);
         var signals = await repository.GetRecentSignalsAsync(cancellationToken: cancellationToken);
-        var recentPaperOrders = await repository.GetRecentPaperOrdersAsync(OrderDashboardFetchLimit, cancellationToken);
+        var recentPaperOrders = await repository.GetRecentPaperOrdersAsync(
+            OrderDashboardFetchLimit,
+            cancellationToken,
+            NormalizeStrategyId(paperOrdersStrategyId));
         var openPaperOrders = await repository.GetOpenPaperOrdersAsync(cancellationToken);
         var paperPositions = await repository.GetPaperPositionsAsync(cancellationToken);
         var paperCopiedTraderPerformance = await repository.GetPaperCopiedTraderPerformanceAsync(250, cancellationToken);
@@ -58,7 +68,10 @@ public sealed class DashboardDataService(
             item => StrategyIds.Normalize(item.StrategyId),
             item => item.Name);
         var dryRunOrders = await repository.GetRecentDryRunOrdersAsync(cancellationToken: cancellationToken);
-        var liveOrders = await repository.GetRecentLiveOrdersAsync(OrderDashboardFetchLimit, cancellationToken);
+        var liveOrders = await repository.GetRecentLiveOrdersAsync(
+            OrderDashboardFetchLimit,
+            cancellationToken,
+            NormalizeStrategyId(liveOrdersStrategyId));
         var liveTradingEvents = await repository.GetRecentLiveTradingEventsAsync(cancellationToken: cancellationToken);
         var apiErrors = await repository.GetRecentApiErrorsAsync(cancellationToken: cancellationToken);
         var riskEvents = await repository.GetRecentRiskEventsAsync(cancellationToken: cancellationToken);
@@ -165,6 +178,8 @@ public sealed class DashboardDataService(
     }
 
     private async Task<DashboardSnapshot> LoadStrategiesOnlyAsync(
+        Guid? paperOrdersStrategyId,
+        Guid? liveOrdersStrategyId,
         ControlStatusResponse? controlStatus,
         string? controlStatusError,
         CancellationToken cancellationToken)
@@ -180,8 +195,14 @@ public sealed class DashboardDataService(
         var strategyNamesById = strategyPerformance.ToDictionary(
             item => StrategyIds.Normalize(item.StrategyId),
             item => item.Name);
-        var recentPaperOrders = await repository.GetRecentPaperOrdersAsync(OrderDashboardFetchLimit, cancellationToken);
-        var liveOrders = await repository.GetRecentLiveOrdersAsync(OrderDashboardFetchLimit, cancellationToken);
+        var recentPaperOrders = await repository.GetRecentPaperOrdersAsync(
+            OrderDashboardFetchLimit,
+            cancellationToken,
+            NormalizeStrategyId(paperOrdersStrategyId));
+        var liveOrders = await repository.GetRecentLiveOrdersAsync(
+            OrderDashboardFetchLimit,
+            cancellationToken,
+            NormalizeStrategyId(liveOrdersStrategyId));
         var overview = BuildStrategyOnlyOverview(serviceAvailability, strategyPerformance, strategyRecentPerformance);
         var diagnostics = BuildStrategyOnlyDiagnostics(
             serviceAvailability,
@@ -222,6 +243,29 @@ public sealed class DashboardDataService(
             diagnostics,
             [],
             []);
+    }
+
+    public async Task<DashboardOrderSnapshot> LoadOrderRowsAsync(
+        Guid? paperOrdersStrategyId,
+        Guid? liveOrdersStrategyId,
+        CancellationToken cancellationToken = default)
+    {
+        var strategyPerformance = await GetStrategyPerformanceAsync(cancellationToken);
+        var strategyNamesById = strategyPerformance.ToDictionary(
+            item => StrategyIds.Normalize(item.StrategyId),
+            item => item.Name);
+        var recentPaperOrders = await repository.GetRecentPaperOrdersAsync(
+            OrderDashboardFetchLimit,
+            cancellationToken,
+            NormalizeStrategyId(paperOrdersStrategyId));
+        var liveOrders = await repository.GetRecentLiveOrdersAsync(
+            OrderDashboardFetchLimit,
+            cancellationToken,
+            NormalizeStrategyId(liveOrdersStrategyId));
+
+        return new DashboardOrderSnapshot(
+            recentPaperOrders.Select(order => ToPaperOrderRow(order, strategyNamesById)).ToArray(),
+            liveOrders.Select(order => ToLiveOrderRow(order, strategyNamesById)).ToArray());
     }
 
     public void InvalidateStrategyPerformanceCache()
@@ -1334,6 +1378,11 @@ public sealed class DashboardDataService(
             .Where(item => string.Equals(item.Action, action, StringComparison.OrdinalIgnoreCase))
             .OrderByDescending(item => item.CreatedAtUtc)
             .FirstOrDefault();
+    }
+
+    private static Guid? NormalizeStrategyId(Guid? strategyId)
+    {
+        return strategyId.HasValue ? StrategyIds.Normalize(strategyId.Value) : null;
     }
 
     private static string FormatGeoblockOverview(IReadOnlyList<LiveTradingEvent> liveTradingEvents)

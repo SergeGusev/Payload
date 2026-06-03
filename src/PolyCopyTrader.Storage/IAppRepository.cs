@@ -308,7 +308,10 @@ public interface IAppRepository
         return Task.FromResult<IReadOnlyList<PaperOrder>>([]);
     }
 
-    Task<IReadOnlyList<PaperOrder>> GetRecentPaperOrdersAsync(int limit = 100, CancellationToken cancellationToken = default);
+    Task<IReadOnlyList<PaperOrder>> GetRecentPaperOrdersAsync(
+        int limit = 100,
+        CancellationToken cancellationToken = default,
+        Guid? strategyId = null);
 
     Task AddPaperFillAsync(PaperFill fill, CancellationToken cancellationToken = default);
 
@@ -509,7 +512,10 @@ public interface IAppRepository
         return Task.FromResult<IReadOnlyList<LiveOrder>>([]);
     }
 
-    Task<IReadOnlyList<LiveOrder>> GetRecentLiveOrdersAsync(int limit = 100, CancellationToken cancellationToken = default);
+    Task<IReadOnlyList<LiveOrder>> GetRecentLiveOrdersAsync(
+        int limit = 100,
+        CancellationToken cancellationToken = default,
+        Guid? strategyId = null);
 
     Task<StrategyLiveBalanceAdjustmentResult> ApplyLiveOrderSettlementToStrategyBalanceAsync(
         Guid liveOrderId,

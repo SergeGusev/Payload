@@ -1035,9 +1035,17 @@ internal sealed class TestAppRepository : IAppRepository
         }
     }
 
-    public Task<IReadOnlyList<PaperOrder>> GetRecentPaperOrdersAsync(int limit = 100, CancellationToken cancellationToken = default)
+    public Task<IReadOnlyList<PaperOrder>> GetRecentPaperOrdersAsync(
+        int limit = 100,
+        CancellationToken cancellationToken = default,
+        Guid? strategyId = null)
     {
-        return Task.FromResult<IReadOnlyList<PaperOrder>>(PaperOrders.OrderByDescending(item => item.CreatedAtUtc).Take(limit).ToArray());
+        var normalizedStrategyId = strategyId.HasValue ? StrategyIds.Normalize(strategyId.Value) : (Guid?)null;
+        return Task.FromResult<IReadOnlyList<PaperOrder>>(PaperOrders
+            .Where(item => normalizedStrategyId is null || StrategyIds.Normalize(item.StrategyId) == normalizedStrategyId)
+            .OrderByDescending(item => item.CreatedAtUtc)
+            .Take(limit)
+            .ToArray());
     }
 
     public Task AddPaperFillAsync(PaperFill fill, CancellationToken cancellationToken = default)
@@ -2034,9 +2042,17 @@ internal sealed class TestAppRepository : IAppRepository
             !liveStakes && availableBalance < settings.LiveStakeAmount));
     }
 
-    public Task<IReadOnlyList<LiveOrder>> GetRecentLiveOrdersAsync(int limit = 100, CancellationToken cancellationToken = default)
+    public Task<IReadOnlyList<LiveOrder>> GetRecentLiveOrdersAsync(
+        int limit = 100,
+        CancellationToken cancellationToken = default,
+        Guid? strategyId = null)
     {
-        return Task.FromResult<IReadOnlyList<LiveOrder>>(LiveOrders.OrderByDescending(item => item.CreatedAtUtc).Take(limit).ToArray());
+        var normalizedStrategyId = strategyId.HasValue ? StrategyIds.Normalize(strategyId.Value) : (Guid?)null;
+        return Task.FromResult<IReadOnlyList<LiveOrder>>(LiveOrders
+            .Where(item => normalizedStrategyId is null || StrategyIds.Normalize(item.StrategyId) == normalizedStrategyId)
+            .OrderByDescending(item => item.CreatedAtUtc)
+            .Take(limit)
+            .ToArray());
     }
 
     public Task AddLiveTradingEventAsync(LiveTradingEvent liveEvent, CancellationToken cancellationToken = default)

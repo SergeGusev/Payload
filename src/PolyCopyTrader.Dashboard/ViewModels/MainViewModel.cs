@@ -38,6 +38,8 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
     private IReadOnlyList<StrategyRecentPerformanceRow> allStrategyRecentPerformance = [];
     private DashboardDatabaseSource currentDatabaseSource;
     private bool isChangingDatabaseSource;
+    private bool suppressOrderRefresh;
+    private int orderRefreshVersion;
     private bool disposed;
 
     public MainViewModel()
@@ -288,11 +290,19 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
     partial void OnSelectedPaperOrdersStrategyChanged(StrategyOrderFilterOption? value)
     {
         ApplyOrderFilters();
+        if (!suppressOrderRefresh && !IsRefreshing)
+        {
+            _ = RefreshOrdersAsync();
+        }
     }
 
     partial void OnSelectedLiveOrdersStrategyChanged(StrategyOrderFilterOption? value)
     {
         ApplyOrderFilters();
+        if (!suppressOrderRefresh && !IsRefreshing)
+        {
+            _ = RefreshOrdersAsync();
+        }
     }
 
     partial void OnShowOnlyPositiveStrategiesChanged(bool value)
@@ -434,7 +444,9 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         {
             IsRefreshing = true;
             LastError = string.Empty;
-            var snapshot = await dataService.LoadAsync();
+            var snapshot = await dataService.LoadAsync(
+                SelectedPaperOrdersStrategy?.StrategyId,
+                SelectedLiveOrdersStrategy?.StrategyId);
             Apply(snapshot);
             ApplyServiceBanner(snapshot.ServiceAvailability);
             LastUpdatedUtc = DateTimeOffset.UtcNow;
@@ -1164,7 +1176,15 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         allStrategies = snapshot.Strategies;
         allStrategyRecentPerformance = snapshot.StrategyRecentPerformance;
         RefreshStrategyCategoryOptions();
-        RefreshStrategyOrderOptions();
+        suppressOrderRefresh = true;
+        try
+        {
+            RefreshStrategyOrderOptions();
+        }
+        finally
+        {
+            suppressOrderRefresh = false;
+        }
         ApplyStrategyFilters();
         ApplyOrderFilters();
         Replace(PaperCopiedTraderPerformance, snapshot.PaperCopiedTraderPerformance);
@@ -1214,7 +1234,15 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         allStrategies = [];
         allStrategyRecentPerformance = [];
         RefreshStrategyCategoryOptions();
-        RefreshStrategyOrderOptions();
+        suppressOrderRefresh = true;
+        try
+        {
+            RefreshStrategyOrderOptions();
+        }
+        finally
+        {
+            suppressOrderRefresh = false;
+        }
         ApplyStrategyFilters();
         Replace(PaperCopiedTraderPerformance, Array.Empty<PaperCopiedTraderPerformanceRow>());
         Replace(DryRunOrders, Array.Empty<DryRunOrderRow>());
@@ -1359,6 +1387,40 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
             allLiveOrders
                 .Where(item => IsOrderStrategyVisible(item.StrategyId, SelectedLiveOrdersStrategy))
                 .ToArray());
+    }
+
+    private async Task RefreshOrdersAsync()
+    {
+        var refreshVersion = Interlocked.Increment(ref orderRefreshVersion);
+        var paperStrategyId = SelectedPaperOrdersStrategy?.StrategyId;
+        var liveStrategyId = SelectedLiveOrdersStrategy?.StrategyId;
+
+        try
+        {
+            CommandStatus = $"Loading orders for {SelectedPaperOrdersStrategy?.Name ?? AllOrderStrategies} / {SelectedLiveOrdersStrategy?.Name ?? AllOrderStrategies}.";
+            var snapshot = await dataService.LoadOrderRowsAsync(paperStrategyId, liveStrategyId);
+            if (refreshVersion != Volatile.Read(ref orderRefreshVersion))
+            {
+                return;
+            }
+
+            allPaperOrders = snapshot.PaperOrders;
+            allLiveOrders = snapshot.LiveOrders;
+            ApplyOrderFilters();
+            LastUpdatedUtc = DateTimeOffset.UtcNow;
+            CommandStatus = $"Loaded {PaperOrders.Count} paper orders and {LiveOrders.Count} live orders.";
+        }
+        catch (Exception ex)
+        {
+            if (refreshVersion != Volatile.Read(ref orderRefreshVersion))
+            {
+                return;
+            }
+
+            LastError = ex.Message;
+            CommandStatus = $"Orders refresh failed: {ex.Message}";
+            RecordDashboardError("Orders refresh", ex);
+        }
     }
 
     private string NormalizeSelectedStrategyCategory(string selected)

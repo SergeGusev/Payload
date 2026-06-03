@@ -1,3 +1,16 @@
+## Active Update 2026-06-04 Dashboard Orders Server-Side Strategy Paging
+Goal: Replace the 10,000-row Dashboard order preload with first-page server-side strategy filtering.
+Status: Completed
+Done:
+- Changed Dashboard order page size back to `100` rows instead of loading `10_000` recent Paper/Live orders.
+- Added optional `strategyId` filtering to `GetRecentPaperOrdersAsync` and `GetRecentLiveOrdersAsync`; PostgreSQL now applies `WHERE strategy_id = @StrategyId` before `ORDER BY created_at_utc DESC LIMIT @Limit`.
+- Kept `All strategies` as the first global recent-orders page, while selected strategies load the first recent-orders page for that strategy.
+- Made Dashboard pass the selected Paper/Live strategy filters into full refreshes and reload only order rows when either orders-tab selector changes.
+- Updated README/configuration docs and added storage/test-repository regressions proving strategy filtering happens before the page limit.
+Next: Deploy/reopen Dashboard for the corrected orders-tab paging to take effect.
+Notes: Verification passed: Dashboard Verify build succeeded with existing Storage nullable warnings and no errors; focused `StorageTests` passed 38/38; full test project passed 585/585; `git diff --check` clean except LF/CRLF warnings.
+Blockers: None.
+
 ## Active Update 2026-06-03 Dashboard Paper Orders Strategy Filter
 Goal: Fix `Paper orders` tab showing rows only when `All strategies` is selected.
 Status: Completed

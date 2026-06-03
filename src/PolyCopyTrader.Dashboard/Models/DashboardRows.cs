@@ -738,3 +738,7 @@ public sealed record DashboardSnapshot(
     IReadOnlyList<DiagnosticRow> Diagnostics,
     IReadOnlyList<RunbookLinkRow> RunbookLinks,
     IReadOnlyList<LogRow> Logs);
+
+public sealed record DashboardOrderSnapshot(
+    IReadOnlyList<PaperOrderRow> PaperOrders,
+    IReadOnlyList<LiveOrderRow> LiveOrders);

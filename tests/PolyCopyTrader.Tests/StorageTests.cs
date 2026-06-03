@@ -343,9 +343,51 @@ public sealed class StorageTests
 
         var method = source[start..end];
         Assert.Contains("RecentPaperOrderSelectColumns", method, StringComparison.Ordinal);
+        Assert.Contains("WHERE strategy_id = @StrategyId", method, StringComparison.Ordinal);
         Assert.Contains("ORDER BY created_at_utc DESC", method, StringComparison.Ordinal);
         Assert.DoesNotContain("\"SELECT \" + PaperOrderSelectColumns", method, StringComparison.Ordinal);
         Assert.Contains("NULL::text", source, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void PostgresRepository_GetRecentLiveOrders_SupportsStrategyFilteredFirstPage()
+    {
+        var source = ReadStorageRepositorySource();
+        var start = source.IndexOf("GetRecentLiveOrdersAsync", StringComparison.Ordinal);
+        Assert.True(start >= 0);
+
+        var end = source.IndexOf("AddLiveTradingEventAsync", start, StringComparison.Ordinal);
+        Assert.True(end > start);
+
+        var method = source[start..end];
+        Assert.Contains("WHERE strategy_id = @StrategyId", method, StringComparison.Ordinal);
+        Assert.Contains("ORDER BY created_at_utc DESC", method, StringComparison.Ordinal);
+        Assert.Contains("LIMIT @Limit", method, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task TestRepository_GetRecentOrders_FiltersByStrategyBeforeLimit()
+    {
+        var repository = new TestAppRepository();
+        var now = DateTimeOffset.UtcNow;
+        var firstStrategy = StrategyIds.FollowLeader;
+        var secondStrategy = StrategyIds.BtcUpDown5mBinanceBps2;
+        repository.PaperOrders.Add(CreatePaperOrder(secondStrategy, now.AddMinutes(-1)));
+        repository.PaperOrders.Add(CreatePaperOrder(firstStrategy, now.AddMinutes(-2)));
+        repository.PaperOrders.Add(CreatePaperOrder(firstStrategy, now.AddMinutes(-3)));
+        repository.LiveOrders.Add(CreateLiveOrder(secondStrategy, now.AddMinutes(-1)));
+        repository.LiveOrders.Add(CreateLiveOrder(firstStrategy, now.AddMinutes(-2)));
+        repository.LiveOrders.Add(CreateLiveOrder(firstStrategy, now.AddMinutes(-3)));
+
+        var paperAll = await repository.GetRecentPaperOrdersAsync(1);
+        var paperFiltered = await repository.GetRecentPaperOrdersAsync(1, strategyId: firstStrategy);
+        var liveAll = await repository.GetRecentLiveOrdersAsync(1);
+        var liveFiltered = await repository.GetRecentLiveOrdersAsync(1, strategyId: firstStrategy);
+
+        Assert.Equal(secondStrategy, Assert.Single(paperAll).StrategyId);
+        Assert.Equal(firstStrategy, Assert.Single(paperFiltered).StrategyId);
+        Assert.Equal(secondStrategy, Assert.Single(liveAll).StrategyId);
+        Assert.Equal(firstStrategy, Assert.Single(liveFiltered).StrategyId);
     }
 
     [Fact]
@@ -1022,6 +1064,53 @@ CREATE INDEX first_table_id_idx ON first_table(id);
             SkipReason: null,
             settledAtUtc.AddMinutes(-5),
             settledAtUtc);
+    }
+
+    private static PaperOrder CreatePaperOrder(Guid strategyId, DateTimeOffset createdAtUtc)
+    {
+        return new PaperOrder(
+            Guid.NewGuid(),
+            Guid.NewGuid(),
+            "0xleader",
+            PaperOrderStatus.Pending,
+            TradeSide.Buy,
+            "asset-" + Guid.NewGuid().ToString("N"),
+            "condition-" + Guid.NewGuid().ToString("N"),
+            "Up",
+            0.50m,
+            2m,
+            1m,
+            createdAtUtc,
+            createdAtUtc.AddMinutes(10),
+            StrategyId: strategyId);
+    }
+
+    private static LiveOrder CreateLiveOrder(Guid strategyId, DateTimeOffset createdAtUtc)
+    {
+        return new LiveOrder(
+            Guid.NewGuid(),
+            Guid.NewGuid(),
+            LiveOrderStatus.Submitted,
+            "0x" + Guid.NewGuid().ToString("N"),
+            TradeSide.Buy,
+            "asset-" + Guid.NewGuid().ToString("N"),
+            "condition-" + Guid.NewGuid().ToString("N"),
+            "Up",
+            0.50m,
+            2m,
+            1m,
+            "GTD",
+            createdAtUtc,
+            createdAtUtc.AddMinutes(10),
+            createdAtUtc,
+            "submitted",
+            0m,
+            2m,
+            string.Empty,
+            "{}",
+            string.Empty,
+            createdAtUtc,
+            StrategyId: strategyId);
     }
 
     private static LiveOrder CreateSettledLiveOrder(Guid strategyId, DateTimeOffset settledAtUtc, decimal realizedPnlUsd)

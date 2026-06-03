@@ -1143,14 +1143,25 @@ WHERE wallet = @Wallet;
 		return results;
 	}
 
-	public async Task<IReadOnlyList<PaperOrder>> GetRecentPaperOrdersAsync(int limit = 100, CancellationToken cancellationToken = default(CancellationToken))
+	public async Task<IReadOnlyList<PaperOrder>> GetRecentPaperOrdersAsync(int limit = 100, CancellationToken cancellationToken = default(CancellationToken), Guid? strategyId = null)
 	{
+		if (limit <= 0)
+		{
+			return Array.Empty<PaperOrder>();
+		}
+
+		Guid? normalizedStrategyId = strategyId.HasValue ? StrategyIds.Normalize(strategyId.GetValueOrDefault()) : null;
+		string filterSql = normalizedStrategyId.HasValue ? "\nWHERE strategy_id = @StrategyId" : string.Empty;
 		IReadOnlyList<PaperOrder> result;
 		await using (NpgsqlConnection connection = await OpenConnectionAsync(cancellationToken))
 		{
 			IReadOnlyList<PaperOrder> readOnlyList2;
-			await using (NpgsqlCommand command = CreateCommand(connection, "SELECT " + RecentPaperOrderSelectColumns + "\nFROM paper_orders\nORDER BY created_at_utc DESC\nLIMIT @Limit;"))
+			await using (NpgsqlCommand command = CreateCommand(connection, "SELECT " + RecentPaperOrderSelectColumns + "\nFROM paper_orders" + filterSql + "\nORDER BY created_at_utc DESC\nLIMIT @Limit;"))
 			{
+				if (normalizedStrategyId.HasValue)
+				{
+					command.Parameters.AddWithValue("StrategyId", normalizedStrategyId.GetValueOrDefault());
+				}
 				command.Parameters.AddWithValue("Limit", limit);
 				IReadOnlyList<PaperOrder> readOnlyList;
 				await using (NpgsqlDataReader reader = await command.ExecuteReaderAsync(cancellationToken))
@@ -3332,14 +3343,25 @@ RETURNING live_available_balance, live_stakes, live_stake_amount;
 		}
 	}
 
-	public async Task<IReadOnlyList<LiveOrder>> GetRecentLiveOrdersAsync(int limit = 100, CancellationToken cancellationToken = default(CancellationToken))
+	public async Task<IReadOnlyList<LiveOrder>> GetRecentLiveOrdersAsync(int limit = 100, CancellationToken cancellationToken = default(CancellationToken), Guid? strategyId = null)
 	{
+		if (limit <= 0)
+		{
+			return Array.Empty<LiveOrder>();
+		}
+
+		Guid? normalizedStrategyId = strategyId.HasValue ? StrategyIds.Normalize(strategyId.GetValueOrDefault()) : null;
+		string filterSql = normalizedStrategyId.HasValue ? "\nWHERE strategy_id = @StrategyId" : string.Empty;
 		IReadOnlyList<LiveOrder> result;
 		await using (NpgsqlConnection connection = await OpenConnectionAsync(cancellationToken))
 		{
 			IReadOnlyList<LiveOrder> readOnlyList2;
-			await using (NpgsqlCommand command = CreateCommand(connection, "SELECT " + LiveOrderSelectColumns + "\nFROM live_orders\nORDER BY created_at_utc DESC\nLIMIT @Limit;"))
+			await using (NpgsqlCommand command = CreateCommand(connection, "SELECT " + LiveOrderSelectColumns + "\nFROM live_orders" + filterSql + "\nORDER BY created_at_utc DESC\nLIMIT @Limit;"))
 			{
+				if (normalizedStrategyId.HasValue)
+				{
+					command.Parameters.AddWithValue("StrategyId", normalizedStrategyId.GetValueOrDefault());
+				}
 				command.Parameters.AddWithValue("Limit", limit);
 				IReadOnlyList<LiveOrder> readOnlyList;
 				await using (NpgsqlDataReader reader = await command.ExecuteReaderAsync(cancellationToken))

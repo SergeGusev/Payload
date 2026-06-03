@@ -127,7 +127,10 @@ public sealed class NoOpAppRepository : IAppRepository
         return Task.FromResult<IReadOnlyList<PaperOrder>>([]);
     }
 
-    public Task<IReadOnlyList<PaperOrder>> GetRecentPaperOrdersAsync(int limit = 100, CancellationToken cancellationToken = default)
+    public Task<IReadOnlyList<PaperOrder>> GetRecentPaperOrdersAsync(
+        int limit = 100,
+        CancellationToken cancellationToken = default,
+        Guid? strategyId = null)
     {
         return Task.FromResult<IReadOnlyList<PaperOrder>>([]);
     }
@@ -314,7 +317,10 @@ public sealed class NoOpAppRepository : IAppRepository
         return Task.FromResult<IReadOnlyList<LiveOrder>>([]);
     }
 
-    public Task<IReadOnlyList<LiveOrder>> GetRecentLiveOrdersAsync(int limit = 100, CancellationToken cancellationToken = default)
+    public Task<IReadOnlyList<LiveOrder>> GetRecentLiveOrdersAsync(
+        int limit = 100,
+        CancellationToken cancellationToken = default,
+        Guid? strategyId = null)
     {
         return Task.FromResult<IReadOnlyList<LiveOrder>>([]);
     }
