@@ -26,6 +26,8 @@ public sealed class PostgresAppRepository(PostgresConnectionFactory connectionFa
 
 	private const string PaperOrderSelectColumns = "id, signal_id, strategy_id, copied_trader_wallet, status, side, asset_id, condition_id, outcome, price, size_shares, notional_usd,\n       created_at_utc, expires_at_utc, filled_at_utc, cancelled_at_utc, raw_decision_json::text, correlation_id, execution_source";
 
+	private const string RecentPaperOrderSelectColumns = "id, signal_id, strategy_id, copied_trader_wallet, status, side, asset_id, condition_id, outcome, price, size_shares, notional_usd,\n       created_at_utc, expires_at_utc, filled_at_utc, cancelled_at_utc, NULL::text, correlation_id, execution_source";
+
 	private const string LiveOrderSelectColumns = "id, signal_id, strategy_id, status, order_id, side, asset_id, condition_id, outcome, price, size_shares,\n       notional_usd, order_type, created_at_utc, expires_at_utc, submitted_at_utc, response_status,\n       filled_size, remaining_size, average_fill_price, filled_notional_usd, cost_basis_usd, fee_usd,\n       cancel_status, raw_response_json::text, validation_summary, updated_at_utc,\n       balance_effect_applied, settlement_value_usd, realized_pnl_usd, settled_at_utc, winning_asset_id, winning_outcome,\n       won, settlement_source, correlation_id, execution_source, post_only, paper_order_id";
 
 	public async Task<DateTimeOffset> GetDatabaseNowUtcAsync(CancellationToken cancellationToken = default(CancellationToken))
@@ -1147,7 +1149,7 @@ WHERE wallet = @Wallet;
 		await using (NpgsqlConnection connection = await OpenConnectionAsync(cancellationToken))
 		{
 			IReadOnlyList<PaperOrder> readOnlyList2;
-			await using (NpgsqlCommand command = CreateCommand(connection, "SELECT " + PaperOrderSelectColumns + "\nFROM paper_orders\nORDER BY created_at_utc DESC\nLIMIT @Limit;"))
+			await using (NpgsqlCommand command = CreateCommand(connection, "SELECT " + RecentPaperOrderSelectColumns + "\nFROM paper_orders\nORDER BY created_at_utc DESC\nLIMIT @Limit;"))
 			{
 				command.Parameters.AddWithValue("Limit", limit);
 				IReadOnlyList<PaperOrder> readOnlyList;

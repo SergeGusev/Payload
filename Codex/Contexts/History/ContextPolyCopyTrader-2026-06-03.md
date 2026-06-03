@@ -203,3 +203,23 @@ Request:
 
 Result:
 Implemented shared lost-counter stake sizing with cap `2`, so both Paper and Live apply `Stake * min(Cnt, 2)` only when that mode's `Lost` value is above `1` and that mode's counter is positive. Paper uses `Paper Lost` / `Paper Cnt`; Live uses `Live Lost` / `Live Cnt`. Applied Live add-on to Paper/Live-shadow live stake sizing and general `SignalProcessor` live preflight sizing. Updated docs and tests, including separate Paper vs Live sizing and Follow leader live preflight boosted notional. Verification passed: focused tests 181/181, full test project 578/578, Service Verify build 0 warnings/errors, and `git diff --check` clean except LF/CRLF warnings.
+
+## 2026-06-03T20:09:44.0408444+00:00
+Request:
+Npgsql.NpgsqlException (0x80004005): Exception while reading from stream
+ ---> System.TimeoutException: Timeout during reading attempt
+   at Npgsql.Internal.NpgsqlConnector.ReadMessageLong(Boolean async, DataRowLoadingMode dataRowLoadingMode, Boolean readingNotifications, Boolean isReadingPrependedMessage)
+   at System.Runtime.CompilerServices.PoolingAsyncValueTaskMethodBuilder`1.StateMachineBox`1.System.Threading.Tasks.Sources.IValueTaskSource<TResult>.GetResult(Int16 token)
+   at Npgsql.NpgsqlDataReader.NextResult(Boolean async, Boolean isConsuming, CancellationToken cancellationToken)
+   at Npgsql.NpgsqlDataReader.NextResult(Boolean async, Boolean isConsuming, CancellationToken cancellationToken)
+   at Npgsql.NpgsqlCommand.ExecuteReader(Boolean async, CommandBehavior behavior, CancellationToken cancellationToken)
+   at Npgsql.NpgsqlCommand.ExecuteReader(Boolean async, CommandBehavior behavior, CancellationToken cancellationToken)
+   at PolyCopyTrader.Storage.PostgresAppRepository.GetRecentPaperOrdersAsync(Int32 limit, CancellationToken cancellationToken) in D:\My\Business\PolyMarket\src\PolyCopyTrader.Storage\PostgresAppRepository.cs:line 1154
+   at PolyCopyTrader.Storage.PostgresAppRepository.GetRecentPaperOrdersAsync(Int32 limit, CancellationToken cancellationToken) in D:\My\Business\PolyMarket\src\PolyCopyTrader.Storage\PostgresAppRepository.cs:line 1164
+   at PolyCopyTrader.Storage.PostgresAppRepository.GetRecentPaperOrdersAsync(Int32 limit, CancellationToken cancellationToken) in D:\My\Business\PolyMarket\src\PolyCopyTrader.Storage\PostgresAppRepository.cs:line 1166
+   at PolyCopyTrader.Dashboard.Services.DashboardDataService.LoadStrategiesOnlyAsync(ControlStatusResponse controlStatus, String controlStatusError, CancellationToken cancellationToken) in D:\My\Business\PolyMarket\src\PolyCopyTrader.Dashboard\Services\DashboardDataService.cs:line 182
+   at PolyCopyTrader.Dashboard.Services.DashboardDataService.LoadAsync(ControlStatusResponse controlStatus, String controlStatusError, CancellationToken cancellationToken) in D:\My\Business\PolyMarket\src\PolyCopyTrader.Dashboard\Services\DashboardDataService.cs:line 29
+   at PolyCopyTrader.Dashboard.ViewModels.MainViewModel.RefreshAsync() in D:\My\Business\PolyMarket\src\PolyCopyTrader.Dashboard\ViewModels\MainViewModel.cs:line 436
+
+Result:
+Diagnosed Dashboard timeout as the new strategies-only recent Paper orders load using `ORDER BY created_at_utc DESC LIMIT 100` without a global `paper_orders.created_at_utc` index. Added concurrent schema index `ix_paper_orders_created_time` on `paper_orders(created_at_utc DESC)` and made `GetRecentPaperOrdersAsync` use a lightweight projection that does not read `raw_decision_json::text`. Added storage regression checks. Verification passed: StorageTests 36/36, Dashboard Verify build 0 warnings/errors, full test project 579/579, and `git diff --check` clean except LF/CRLF warnings. No production writes or service/Dashboard restarts were performed.

@@ -1,3 +1,15 @@
+## Active Update 2026-06-03 Recent Paper Orders Timeout
+Goal: Fix Dashboard refresh timeout in `GetRecentPaperOrdersAsync`.
+Status: Completed
+Done:
+- Diagnosed the pasted Dashboard error as `LoadStrategiesOnlyAsync` timing out while reading `GetRecentPaperOrdersAsync`.
+- Added `ix_paper_orders_created_time` on `paper_orders(created_at_utc DESC)` so `ORDER BY created_at_utc DESC LIMIT 100` can use an index instead of sorting the full `paper_orders` table.
+- Changed `GetRecentPaperOrdersAsync` to use a lightweight projection with `NULL::text` for `raw_decision_json`, since Dashboard order rows do not display the heavy JSON payload.
+- Added storage regression checks for the new index and lightweight recent Paper orders projection.
+Next: Deploy/restart Dashboard or service startup schema initialization so PostgreSQL creates the new index; while the concurrent index is building, Dashboard refresh may still be slow.
+Notes: Verification passed: focused `dotnet test tests\PolyCopyTrader.Tests\PolyCopyTrader.Tests.csproj --configuration Verify --no-restore /p:UseSharedCompilation=false --filter "StorageTests"` passed 36/36; Dashboard Verify build succeeded with 0 warnings/errors; full test project passed 579/579; `git diff --check` clean except LF/CRLF warnings. First parallel Dashboard build overlapped with focused tests and logged a transient `Storage.dll` file-copy retry warning, then the sequential Dashboard build passed cleanly.
+Blockers: Production still needs deploy/restart or a manual concurrent index creation for this to affect the live database.
+
 ## Active Update 2026-06-03 Paper Live LostCoeff Cap 2
 Goal: Make Paper and Live lost-counter stake add-ons behave the same with separate counters and a cap of two extra base stakes.
 Status: Completed

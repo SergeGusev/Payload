@@ -218,6 +218,7 @@ public sealed class StorageTests
         Assert.Contains("ix_paper_orders_strategy_perf_cover", PostgresSchema.SchemaSql, StringComparison.Ordinal);
         Assert.Contains("ix_paper_orders_id_strategy_side_cover", PostgresSchema.SchemaSql, StringComparison.Ordinal);
         Assert.Contains("ix_paper_orders_copied_wallet_time", PostgresSchema.SchemaSql, StringComparison.Ordinal);
+        Assert.Contains("ix_paper_orders_created_time", PostgresSchema.SchemaSql, StringComparison.Ordinal);
         Assert.Contains("realized_pnl_usd numeric(28,8) NOT NULL DEFAULT 0", PostgresSchema.SchemaSql, StringComparison.Ordinal);
         Assert.Contains("ix_paper_fills_order_time", PostgresSchema.SchemaSql, StringComparison.Ordinal);
         Assert.Contains("balance_effect_applied boolean NOT NULL DEFAULT false", PostgresSchema.SchemaSql, StringComparison.Ordinal);
@@ -328,6 +329,23 @@ public sealed class StorageTests
         Assert.Contains("maker_processed.participant_role = 'Maker'", pendingQuery, StringComparison.Ordinal);
         Assert.Contains("taker_processed.participant_role = 'Taker'", pendingQuery, StringComparison.Ordinal);
         Assert.DoesNotContain("WHERE processed.id IS NULL", pendingQuery, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void PostgresRepository_GetRecentPaperOrders_UsesCreatedTimeIndexAndLightweightProjection()
+    {
+        var source = ReadStorageRepositorySource();
+        var start = source.IndexOf("GetRecentPaperOrdersAsync", StringComparison.Ordinal);
+        Assert.True(start >= 0);
+
+        var end = source.IndexOf("AddPaperFillAsync", start, StringComparison.Ordinal);
+        Assert.True(end > start);
+
+        var method = source[start..end];
+        Assert.Contains("RecentPaperOrderSelectColumns", method, StringComparison.Ordinal);
+        Assert.Contains("ORDER BY created_at_utc DESC", method, StringComparison.Ordinal);
+        Assert.DoesNotContain("\"SELECT \" + PaperOrderSelectColumns", method, StringComparison.Ordinal);
+        Assert.Contains("NULL::text", source, StringComparison.Ordinal);
     }
 
     [Fact]

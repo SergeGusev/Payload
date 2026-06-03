@@ -2712,6 +2712,9 @@ ON paper_orders(copied_trader_wallet, created_at_utc DESC);
 CREATE INDEX IF NOT EXISTS ix_paper_orders_strategy_time
 ON paper_orders(strategy_id, created_at_utc DESC);
 
+CREATE INDEX CONCURRENTLY IF NOT EXISTS ix_paper_orders_created_time
+ON paper_orders(created_at_utc DESC);
+
 CREATE INDEX CONCURRENTLY IF NOT EXISTS ix_paper_orders_strategy_perf_cover
 ON paper_orders(strategy_id, created_at_utc DESC)
 INCLUDE (status, side, notional_usd);
