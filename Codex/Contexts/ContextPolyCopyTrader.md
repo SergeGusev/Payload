@@ -1,3 +1,15 @@
+## Active Update 2026-06-04 PreflightRejected Screenshot Diagnosis
+Goal: Explain the Dashboard `PreflightRejected` status visible in the user's screenshot.
+Status: Completed
+Done:
+- Extracted the screenshot from the Windows clipboard and confirmed the selected Dashboard row shows `PreflightRejected` between nearby `Matched` Live order rows.
+- Queried the matching remote production `live_orders` row at `2026-06-03 20:45:13 UTC`; strategy was `ETH Up or Down 5m Skip 7 bps Instant`, `order_id` was null, `response_status` was `preflight_rejected`, and `validation_summary` was `Maximum open live order count reached.`
+- Confirmed this was a local service preflight rejection before sending anything to Polymarket, not an exchange-side rejection.
+- Confirmed the row predates the service restart on build `fbee408 Remove global live order count cap`; the running service started at `2026-06-03 20:48:57 UTC`, and the next visible Live row at `20:50:08 UTC` was `Matched`.
+Next: Treat this specific row as historical from the old global open-Live-order cap; if the same reason appears on rows created after the `fbee408` restart, inspect deployment/version drift.
+Notes: Diagnostic only. No source behavior changes, production writes, live submissions, cancels, builds, or tests were performed.
+Blockers: None.
+
 ## Active Update 2026-06-04 Live/Paper Order Placement Check
 Goal: Check whether the service is currently placing Paper/Live bets.
 Status: Completed

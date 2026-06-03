@@ -32,3 +32,10 @@ Request:
 
 Result:
 Checked the remote production database read-only. `PolyCopyTrader.Service` is running in `Live` mode with a fresh heartbeat. Paper orders are actively being created: latest Paper order was about 0.5 minutes old, with 277 Paper orders in the last 5 minutes and 404 in the last 15 minutes. Live orders are also being placed/matched, but only recently for `ETH Up or Down 5m Skip 7 bps Instant`: latest Live order was at `2026-06-03 22:36:02 UTC`, status `Matched`, response `matched`; there were 3 Live orders in the last 60 minutes. BTC Middle 47, ETH Skip 32, ETH Skip 7, and SOL Skip 42 are all still `live_stakes = true`, not paused, and not auto-live-paused. No API errors were recorded in the last 15 minutes.
+
+## 2026-06-03T22:55:42.7649382+00:00
+Request:
+Посмотри картинку. Что означает ошибка Prelight rejected ?
+
+Result:
+Extracted the screenshot from the Windows clipboard and confirmed the selected row is `PreflightRejected`. Queried the matching remote `live_orders` row at `2026-06-03 20:45:13 UTC`: strategy `ETH Up or Down 5m Skip 7 bps Instant`, no `order_id`, `response_status = preflight_rejected`, and `validation_summary = Maximum open live order count reached.` Explained that this is a local service preflight rejection before sending anything to Polymarket, not an exchange rejection. The row was historical from before the restart/deploy on `fbee408 Remove global live order count cap`; the running service started at `2026-06-03 20:48:57 UTC`, and the next visible Live row at `20:50:08 UTC` was `Matched`. No code or production state was changed.
