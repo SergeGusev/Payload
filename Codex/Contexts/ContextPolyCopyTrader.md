@@ -1,3 +1,18 @@
+## Active Update 2026-06-03 BTC Live Disabled Persist Submit Diagnosis
+Goal: Explain why one strategy stopped being Live again after the signed-counter deploy.
+Status: Completed
+Done:
+- Queried production PostgreSQL read-only through `out\dbprobe` with the temporary host override to `192.168.0.101` and without printing the connection string.
+- Confirmed current production state is `live_count=2`, `effective_live_count=2`: ETH Skip 7 and SOL Skip 42 are Live; `btc_up_down_5m_middle_1_bps_47_instant` has `live_stakes=false`, `auto_live_paused=false`, and `live_enabled_at_utc=null`.
+- Ruled out deploy data migrations for this incident: `20260522_rescale_updown_bps_history_reset`, `20260522_rescale_middle_bps_history_reset`, `20260522_retire_middle_depth_2_5`, and `20260602_clear_auto_live_pause_by_default` were already applied before today.
+- Found the direct production event at `2026-06-03T15:40:30Z`: `BtcUpDown5mPaperLiveShadowPersistSubmit` with `Error` and PostgreSQL `22P02 invalid input syntax for type json`, `DETAIL: Token "service" is invalid`.
+- Matched the same second in `api_errors`: `PolymarketTradingClient` `PostOrder` returned `service not ready`, and the follow-up `CancelAllOrders` returned `{"error":"order manager not ready, please retry"}`.
+- Confirmed code behavior in `BtcUpDown5mPaperStrategyProcessor`: when `repository.UpdateLiveOrderAsync(updatedLiveOrder)` fails after a live-shadow submit, the fail-closed path cancels by order id or cancel-all, calls `SetStrategyLiveStakesAsync(variant.Id, false, nowUtc, ...)`, and records `BtcUpDown5mPaperLiveShadowPersistSubmit`.
+- Confirmed BTC had a live-shadow order created at `2026-06-03T15:40:29Z`, later marked `Cancelled`, and no further BTC live orders after this; ETH/SOL later handled `HTTP 503` as normal rejected live orders and remained Live.
+Next: Fix live-order response persistence so non-JSON CLOB error bodies are wrapped or normalized before writing to `live_orders.raw_response_json jsonb`; then restore BTC Live only after confirming the intended state.
+Notes: Diagnosis only. No production writes, service restarts, source behavior changes, tests, live submissions, or cancels were performed. A local `dotnet run --print-live-shadow-state` was not used as evidence because the local connection/profile hit an older schema.
+Blockers: None.
+
 ## Active Update 2026-06-03 Signed Counter Deploy Live Risk Check
 Goal: Answer whether deploying the signed lost-counter build can reset current strategy Live flags.
 Status: Completed

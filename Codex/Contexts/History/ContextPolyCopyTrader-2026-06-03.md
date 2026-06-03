@@ -133,3 +133,10 @@ Request:
 
 Result:
 Diagnosed production state read-only. Service was running commit `802710209aee0c0241090fc73d3a123696214445` from `2026-06-03T13:23:16Z`; exactly one strategy remained Live (`sol_up_down_5m_skip_bps_42_instant`). `2729` strategy rows were updated at the service start second with only SOL Live, matching the admin command semantics that enable only listed strategies and disables all others. No post-start live preflight/balance/placement errors or data migrations explained the BTC/ETH flag clearing. No production writes or source changes were made.
+
+## 2026-06-03T17:31:00.8594548+00:00
+Request:
+Почему опять одна стратегия перестала быть Live ?
+
+Result:
+Diagnosed production read-only through `out\dbprobe` with a temporary host override to `192.168.0.101` and without printing the connection string. Current production has `live_count=2`, `effective_live_count=2`: ETH Skip 7 and SOL Skip 42 remain Live, while `btc_up_down_5m_middle_1_bps_47_instant` is no longer Live. The direct cause was a fail-closed persistence error at `2026-06-03T15:40:30Z`: `BtcUpDown5mPaperLiveShadowPersistSubmit` failed with PostgreSQL `22P02 invalid input syntax for type json`, `DETAIL: Token "service" is invalid`. At the same second, `PolymarketTradingClient` logged `PostOrder` body `service not ready`, then `CancelAllOrders` returned `{"error":"order manager not ready, please retry"}`. The code path catches `UpdateLiveOrderAsync` failure after live-shadow submit, tries to cancel, and calls `SetStrategyLiveStakesAsync(..., false, ...)`, which disabled BTC Live. Old schema data migrations were already applied and did not rerun, and no service command audit entry was present. No production writes, service restarts, source changes, live submissions, or cancels were performed.
