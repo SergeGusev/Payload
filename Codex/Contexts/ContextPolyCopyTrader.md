@@ -1,3 +1,16 @@
+## Active Update 2026-06-03 Restore BTC ETH Live Flags
+Goal: Restore Live mode for BTC Middle 47 and ETH Skip 7 while keeping SOL Skip 42 Live.
+Status: Completed
+Done:
+- Applied a targeted production PostgreSQL update only for `btc_up_down_5m_middle_1_bps_47_instant` and `eth_up_down_5m_skip_bps_7_instant`, setting `live_stakes=true`, `auto_live_paused=false`, and `live_enabled_at_utc` to the update time because both were previously disabled.
+- Did not use the `--set-live-stakes-only-code` admin command, avoiding another mass rewrite of all strategy Live flags.
+- Verified production now has `live_count=3`, `effective_live_count=3`, `auto_paused_live_count=0`.
+- Verified current Live strategies are BTC Middle 47, ETH Skip 7, and SOL Skip 42; all have `auto_live_paused=false`.
+- Confirmed `StrategyStateProvider` refreshes runtime settings from PostgreSQL every 1 second, so the running service should pick up the restored flags without restart.
+Next: Investigate the deployment/startup path if Live flags reset again after a future publish; the direct cause of the reset remains unproven because the user did not run the only-code admin command.
+Notes: Production write was limited to the two requested `strategies` rows. No live orders, cancels, service restarts, or source code changes were performed.
+Blockers: None.
+
 ## Active Update 2026-06-03 Live Flags Reset Diagnosis
 Goal: Explain why BTC Middle 47 and ETH Skip 7 Live flags were cleared after the latest deployment.
 Status: Completed

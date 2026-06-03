@@ -106,6 +106,13 @@ Request:
 
 Result:
 Added persisted per-strategy `paper_lost_counter` and `live_lost_counter` database fields, runtime/performance/Dashboard/CSV plumbing, editable Dashboard `Paper Cnt` and `Live Cnt` columns, atomic repository counter updates after Paper/Live settlements, service cache updates plus forced DB refresh after settlement batches for immediate Paper sizing, docs updates, and regression coverage. Verification passed: focused tests 209/209, full tests 571/571, Service build 0 warnings/errors, Dashboard build succeeded with existing Storage nullable warnings, and `git diff --check` was clean except LF/CRLF warnings. Production still needs deploy/restart before the new schema columns and persisted counter behavior are active.
+## 2026-06-03T13:43:36.9780253Z
+Request:
+Никакой такой команды не было. Я только выложил новую версию. Верни предыдущие две стратегии обратно в Live
+
+Result:
+Restored production Live flags with a targeted PostgreSQL update only for `btc_up_down_5m_middle_1_bps_47_instant` and `eth_up_down_5m_skip_bps_7_instant`, setting `live_stakes=true`, `auto_live_paused=false`, and new `live_enabled_at_utc` values. Verified `live_count=3`, `effective_live_count=3`, `auto_paused_live_count=0`; current Live strategies are BTC Middle 47, ETH Skip 7, and SOL Skip 42. No service restart, live order action, cancel, or source code change was performed. Noted that the reset cause remains unproven because the user did not run the only-code admin command.
+
 ## 2026-06-03T13:37:09.2543686Z
 Request:
 А почему у двух стратегий сбросились Live флаги?
