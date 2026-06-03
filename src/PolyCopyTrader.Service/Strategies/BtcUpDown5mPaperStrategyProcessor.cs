@@ -2304,10 +2304,14 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
                         stakeMultiplier = martinDecision.StakeUsd;
                     }
 
-                    var paperLostCounterAdjustment = ApplyPaperLostCounterStakeAdjustment(
-                        variant,
-                        settings,
-                        stakeMultiplier);
+                    var isPaperLiveShadowTest = UsesOpeningLimitEntry(variant) &&
+                        ShouldRunPaperLiveShadowTest(variant, settings);
+                    var paperLostCounterAdjustment = isPaperLiveShadowTest
+                        ? PaperLostCounterStakeAdjustment.Disabled(Math.Max(1m, settings.PaperLostCoeff), stakeMultiplier)
+                        : ApplyPaperLostCounterStakeAdjustment(
+                            variant,
+                            settings,
+                            stakeMultiplier);
                     stakeMultiplier = paperLostCounterAdjustment.EffectiveStakeUsd;
 
                     if (UsesOpeningLimitEntry(variant))
@@ -2411,7 +2415,6 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
 
                         var stakeUsd = limitSizing.TargetNotionalUsd;
                         var limitSizeShares = limitSizing.TargetSizeShares;
-                        var isPaperLiveShadowTest = ShouldRunPaperLiveShadowTest(variant, settings);
                         PaperLiveShadowOrderBookSnapshotResult? shadowSnapshot = null;
                         if (isPaperLiveShadowTest)
                         {

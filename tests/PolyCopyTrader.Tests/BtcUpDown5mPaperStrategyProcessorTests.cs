@@ -8000,6 +8000,142 @@ public sealed class BtcUpDown5mPaperStrategyProcessorTests
     }
 
     [Fact]
+    public async Task ProcessAsync_LiveShadowIgnoresPaperLostCounterStakeBoost()
+    {
+        var now = DateTimeOffset.UtcNow;
+        var previousStart = now.AddMinutes(-5);
+        var previousSuffix = previousStart.ToUnixTimeSeconds().ToString(CultureInfo.InvariantCulture);
+        var repository = new TestAppRepository();
+        repository.StrategySettings[EthSkipBps7InstantVariant.Id] = StrategyRuntimeSettings.Default(EthSkipBps7InstantVariant.Id) with
+        {
+            LiveStakes = true,
+            LiveStakeAmount = 2.50m,
+            LiveAvailableBalance = 100m,
+            PaperStakeAmount = 2.50m,
+            PaperLostCoeff = 2m
+        };
+        var previousLossRun = AddEnteredRun(
+            repository,
+            EthSkipBps7InstantVariant,
+            "previous-eth-loss",
+            now.AddMinutes(-10),
+            selectedAssetId: "eth-loss-up",
+            selectedOutcome: "Up",
+            stakeUsd: 1m);
+        repository.PaperOrders.Add(new PaperOrder(
+            previousLossRun.PaperOrderId!.Value,
+            previousLossRun.SignalId!.Value,
+            EthSkipBps7InstantVariant.CopiedTraderWallet,
+            PaperOrderStatus.Filled,
+            TradeSide.Buy,
+            "eth-loss-up",
+            previousLossRun.ConditionId,
+            "Up",
+            0.50m,
+            2m,
+            1m,
+            previousLossRun.EnteredAtUtc!.Value,
+            previousLossRun.MarketEndUtc!.Value,
+            FilledAtUtc: previousLossRun.EnteredAtUtc.Value.AddSeconds(1),
+            StrategyId: EthSkipBps7InstantVariant.Id));
+        repository.PaperFills.Add(new PaperFill(
+            Guid.NewGuid(),
+            previousLossRun.PaperOrderId.Value,
+            0.50m,
+            2m,
+            previousLossRun.EnteredAtUtc.Value.AddSeconds(1),
+            "TestOpeningLimitFill"));
+        var metadata = new[]
+        {
+            TokenMetadata("eth-loss-up", "Up", "Down"),
+            TokenMetadata("eth-loss-down", "Down", "Down")
+        };
+        var closeBookOrderBooks = AddCryptoCloseBookResults(repository, "ETH", now, "Down");
+        AddCryptoOddsTick(
+            repository,
+            "ETH",
+            "eth-close-market-" + previousSuffix,
+            "eth-close-condition-" + previousSuffix,
+            previousStart,
+            sampleOffsetSeconds: 0,
+            binancePriceUsd: 3_200m,
+            startPriceUsd: 3_200m,
+            upAssetId: "eth-close-up-" + previousSuffix,
+            downAssetId: "eth-close-down-" + previousSuffix);
+        AddCryptoOddsTick(
+            repository,
+            "ETH",
+            "eth-close-market-" + previousSuffix,
+            "eth-close-condition-" + previousSuffix,
+            previousStart,
+            sampleOffsetSeconds: 299,
+            binancePriceUsd: 3_202.56m,
+            startPriceUsd: 3_200m,
+            upAssetId: "eth-close-up-" + previousSuffix,
+            downAssetId: "eth-close-down-" + previousSuffix);
+        OrderBookSnapshot[] orderBooks =
+        [
+            OrderBook("eth-asset-up", bestBid: 0.34m, bestAsk: 0.36m, now),
+            OrderBook("eth-asset-down", bestBid: 0.64m, bestAsk: 0.66m, now)
+        ];
+        var tradingClient = new CapturingTradingClient();
+        var processor = CreateProcessorCoreWithOptions(
+            repository,
+            metadata,
+            orderBooks,
+            _ => { },
+            orderBooks.Concat(closeBookOrderBooks).ToArray(),
+            CreateBtcOptions(paperTakerPricingEnabled: true, [EthSkipBps7InstantVariant.Code]),
+            btcUsdReferencePriceClient: new FakeBtcUsdReferencePriceClient(100m),
+            btcUsdReferencePriceCache: CreateBtcUsdReferenceCache(100m),
+            cryptoReferencePriceClient: new FakeCryptoReferencePriceClient(),
+            gammaClient: new FakeGammaClient(metadata),
+            tradingClient: tradingClient,
+            botOptions: new BotOptions { Mode = BotMode.Live, EnableLiveTrading = true },
+            paperTradingOptions: new PaperTradingOptions { InitialBankrollUsd = 10_000m, RunInLiveMode = true });
+
+        var settleResult = await processor.ProcessAsync();
+
+        Assert.Equal(1, settleResult.RunsSettled);
+        Assert.Equal(0, settleResult.EntriesPlaced);
+        Assert.Equal(0, tradingClient.PlaceCalls);
+
+        repository.PolymarketGammaMarkets.Add(CreateMarket(
+            now,
+            now.AddMinutes(5),
+            upPrice: 0.50m,
+            downPrice: 0.50m,
+            slug: $"eth-updown-5m-{now.ToUnixTimeSeconds().ToString(CultureInfo.InvariantCulture)}",
+            seriesSlug: "eth-up-or-down-5m",
+            question: "ETH Up or Down - test",
+            marketId: "eth-market-1",
+            conditionId: "eth-condition-1",
+            upAssetId: "eth-asset-up",
+            downAssetId: "eth-asset-down"));
+
+        var entryResult = await processor.ProcessAsync();
+
+        Assert.Equal(1, entryResult.EntriesPlaced);
+        Assert.Equal(1, tradingClient.PlaceCalls);
+        var liveOrder = Assert.Single(repository.LiveOrders);
+        Assert.Equal(LiveOrderStatus.Live, liveOrder.Status);
+        Assert.Equal(2.50m, liveOrder.NotionalUsd);
+        Assert.Equal("paper_live_shadow_test", liveOrder.ExecutionSource);
+        Assert.Empty(liveOrder.ValidationSummary);
+
+        var paperOrder = repository.PaperOrders.Single(order =>
+            order.StrategyId == EthSkipBps7InstantVariant.Id &&
+            string.Equals(order.ExecutionSource, "paper_live_shadow_test", StringComparison.OrdinalIgnoreCase) &&
+            string.Equals(order.AssetId, "eth-asset-up", StringComparison.OrdinalIgnoreCase));
+        Assert.Equal(2.50m, paperOrder.NotionalUsd);
+        Assert.Contains("\"paper_lost_coeff_configured\":2", paperOrder.RawDecisionJson, StringComparison.Ordinal);
+        Assert.Contains("\"paper_lost_counter\":0", paperOrder.RawDecisionJson, StringComparison.Ordinal);
+        Assert.Contains("\"paper_lost_add_stake_usd\":0", paperOrder.RawDecisionJson, StringComparison.Ordinal);
+        using var rawDecision = JsonDocument.Parse(paperOrder.RawDecisionJson ?? throw new InvalidOperationException("Paper order raw decision JSON is missing."));
+        Assert.Equal(2.50m, rawDecision.RootElement.GetProperty("paper_lost_effective_stake_usd").GetDecimal());
+    }
+
+    [Fact]
     public async Task ProcessAsync_SolSkipBps42InstantLiveStakeCreatesPaperShadowAndGtdLiveOrder()
     {
         var now = DateTimeOffset.UtcNow;

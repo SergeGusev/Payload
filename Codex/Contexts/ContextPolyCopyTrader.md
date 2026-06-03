@@ -1,3 +1,15 @@
+## Active Update 2026-06-03 Live Shadow Paper Lost Cap Fix
+Goal: Diagnose why Live stakes were not appearing after the Paper/Live lost coefficient deployment and fix the sizing path.
+Status: Completed
+Done:
+- Verified production read-only: `PolyCopyTrader.Service` was alive in `Live` mode on commit `3ed77b1a8ab2187d7dd29fabc1070f1abee2f5ef`, with fresh heartbeat and empty `last_error`.
+- Found post-restart ETH Skip 7 Paper/Live-shadow attempts were being `PreflightRejected` because `PaperLostCoeff=2` plus a positive in-memory Paper lost counter doubled the shadow notional and pushed required notional over `LiveTrading.MaxOrderNotionalUsd`.
+- Updated `BtcUpDown5mPaperStrategyProcessor` so Paper/Live-shadow entries do not apply the Paper lost-counter stake boost; `PaperLostCoeff` remains a Paper-only adjustment, and `LiveLostCoeff` is still stored/editable but not applied until an explicit live-risk policy is requested.
+- Added a regression test covering an ETH live-shadow entry with `PaperLostCoeff=2` and a positive Paper lost counter; the live order stays at the base notional and is submitted instead of preflight-rejected.
+Next: Deploy/restart `PolyCopyTrader.Service`, then verify the next qualifying ETH/BTC/SOL live-shadow entry is submitted at base notional instead of being rejected by the cap.
+Notes: Verification passed: targeted processor tests 3/3, full `dotnet test tests\PolyCopyTrader.Tests\PolyCopyTrader.Tests.csproj --no-restore` 570/570, and `git diff --check` passed with LF/CRLF warnings only. Production diagnosis was read-only; no production writes or live order actions were performed.
+Blockers: Production still needs deploy/restart before this source fix affects runtime behavior.
+
 ## Active Update 2026-06-03 Paper Lost Coeff Production Verification
 Goal: Verify production after deploying the Paper/Live lost coefficient change.
 Status: Completed
