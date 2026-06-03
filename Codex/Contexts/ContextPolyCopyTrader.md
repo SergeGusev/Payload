@@ -1,3 +1,16 @@
+## Active Update 2026-06-03 Enable ETH Skip 32 Live
+Goal: Enable Live for `ETH Up or Down 5m Skip 32 bps Instant` without resetting other Live strategies.
+Status: Completed
+Done:
+- Confirmed before the change production had `live_count=3`, `effective_live_count=3`: BTC Middle 47, ETH Skip 7, and SOL Skip 42 were Live; `eth_up_down_5m_skip_bps_32_instant` was enabled/not paused but `live_stakes=false`.
+- Applied a targeted production PostgreSQL update only for `eth_up_down_5m_skip_bps_32_instant`, setting `live_stakes=true`, `auto_live_paused=false`, and `live_enabled_at_utc=2026-06-03T18:44:39Z`.
+- Verified after the update and a short service refresh window that BTC Middle 47, ETH Skip 7, ETH Skip 32, and SOL Skip 42 are all `live_stakes=true`, `auto_live_paused=false`, enabled, and not paused.
+- Verified production now has `live_count=4`, `effective_live_count=4`, `auto_paused_live_count=0`.
+- Checked `live_trading_events` after `2026-06-03T18:44:39Z`: the latest post-change live event was `BtcUpDown5mPaperLiveShadowPlaceOrder OK` at `2026-06-03T18:45:27Z`, with no non-OK live events after the update timestamp.
+Next: Monitor the next ETH Skip 32 qualifying live-shadow candidate in Dashboard/production events.
+Notes: Production write was limited to the one `strategies` row. No service restart, source code change, live order submission, or live cancel was performed by Codex.
+Blockers: None.
+
 ## Active Update 2026-06-03 Restore BTC Live After Persistence Fix
 Goal: Restore Live status for the previously disabled BTC Middle 47 strategy after the persistence fix was deployed.
 Status: Completed

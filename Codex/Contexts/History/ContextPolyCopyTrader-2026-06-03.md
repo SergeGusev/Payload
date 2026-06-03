@@ -154,3 +154,10 @@ Request:
 
 Result:
 Interpreted the request as restoring Live for `BTC Up or Down 5m Middle 1 47 bps Instant`, the strategy disabled by the previous persistence incident. Confirmed production service was already running deployed commit `009abd7c1f99bb1934ae96e15708d21e810d2f2a` in `Live` mode with `last_error=null`. Before the update, production had `live_count=2`, `effective_live_count=2`: ETH Skip 7 and SOL Skip 42 were Live, BTC Middle 47 was not. Applied a targeted PostgreSQL update only to `btc_up_down_5m_middle_1_bps_47_instant`, setting `live_stakes=true`, `auto_live_paused=false`, and `live_enabled_at_utc=2026-06-03T18:37:11Z`. Verified afterwards that BTC Middle 47, ETH Skip 7, and SOL Skip 42 are all effective Live, with `live_count=3`, `effective_live_count=3`, `auto_paused_live_count=0`, and no fresh `Error`/`Rejected` live events in the immediate verification window. No service restart, source code change, live order submission, or live cancel was performed.
+
+## 2026-06-03T18:48:17.3851226+00:00
+Request:
+Переведи в Live ETH Up or Down 5m Skip 32 bps Instant. Остальные стратегии не должны сброситься
+
+Result:
+Enabled Live for `ETH Up or Down 5m Skip 32 bps Instant` with a targeted production PostgreSQL update only to `eth_up_down_5m_skip_bps_32_instant`, setting `live_stakes=true`, `auto_live_paused=false`, and `live_enabled_at_utc=2026-06-03T18:44:39Z`. Verified after the update and a short service refresh window that BTC Middle 47, ETH Skip 7, ETH Skip 32, and SOL Skip 42 are all effective Live, with `live_count=4`, `effective_live_count=4`, and `auto_paused_live_count=0`. Checked `live_trading_events` after the update timestamp: the latest post-change live event was OK and there were no non-OK live events after `2026-06-03T18:44:39Z`. No service restart, source code change, live order submission, or live cancel was performed.
