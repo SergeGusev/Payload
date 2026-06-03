@@ -1,3 +1,16 @@
+## Active Update 2026-06-03 Restore BTC Live After Persistence Fix
+Goal: Restore Live status for the previously disabled BTC Middle 47 strategy after the persistence fix was deployed.
+Status: Completed
+Done:
+- Confirmed production `PolyCopyTrader.Service` is running in `Live` mode on deployed commit `009abd7c1f99bb1934ae96e15708d21e810d2f2a`, started `2026-06-03T18:24:50Z`, with `last_error=null`.
+- Confirmed before the change production had `live_count=2`, `effective_live_count=2`: ETH Skip 7 and SOL Skip 42 were Live, while `btc_up_down_5m_middle_1_bps_47_instant` was not Live.
+- Applied a targeted production PostgreSQL update only for `btc_up_down_5m_middle_1_bps_47_instant`, setting `live_stakes=true`, `auto_live_paused=false`, and `live_enabled_at_utc=2026-06-03T18:37:11Z`.
+- Verified after the update that BTC Middle 47, ETH Skip 7, and SOL Skip 42 are all `live_stakes=true`, `auto_live_paused=false`, enabled, and not paused.
+- Verified production now has `live_count=3`, `effective_live_count=3`, `auto_paused_live_count=0`, and no fresh `Error`/`Rejected` live events in the immediate 5-minute verification window.
+Next: Monitor the next BTC live-shadow candidate under deployed commit `009abd7` to confirm plain-text CLOB errors no longer clear the Live flag.
+Notes: Production write was limited to the one `strategies` row. No service restart, source code change, live order submission, or live cancel was performed by Codex.
+Blockers: None.
+
 ## Active Update 2026-06-03 Live Shadow JSON Persistence Fix
 Goal: Prevent plain-text CLOB error bodies from breaking live-order persistence and stop persistence-path errors from clearing strategy Live flags.
 Status: Completed
