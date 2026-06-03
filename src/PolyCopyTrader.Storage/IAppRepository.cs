@@ -411,6 +411,8 @@ public interface IAppRepository
         Guid strategyId,
         decimal paperStakeAmount,
         decimal liveStakeAmount,
+        decimal paperLostCoeff,
+        decimal liveLostCoeff,
         DateTimeOffset updatedAtUtc,
         CancellationToken cancellationToken = default)
     {

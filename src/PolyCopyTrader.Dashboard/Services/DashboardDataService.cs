@@ -948,6 +948,8 @@ public sealed class DashboardDataService(
             FormatDate(performance.PausedUntilUtc),
             performance.PaperStakeAmount,
             performance.LiveStakeAmount,
+            performance.PaperLostCoeff,
+            performance.LiveLostCoeff,
             performance.LiveAvailableBalance,
             performance.OrdersCount,
             performance.FilledOrdersCount,

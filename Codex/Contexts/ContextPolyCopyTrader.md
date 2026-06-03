@@ -1,3 +1,18 @@
+## Active Update 2026-06-03 Paper Lost Coeff
+Goal: Add per-strategy Paper/Live lost coefficient fields and use the Paper field to increase Paper stake after a loss streak.
+Status: Completed
+Done:
+- Added `strategies.paper_lost_coeff` and `strategies.live_lost_coeff`, both defaulting to `1.00` with minimum-`1` constraints, plus repository/domain/runtime/dashboard mapping.
+- Added editable Dashboard `Paper Lost` and `Live Lost` columns, validation, save plumbing, and CSV export.
+- Implemented an in-memory per-strategy Paper `LostCounter` in the Up/Down strategy worker: Paper losses increment, Paper wins decrement down to zero, service restart clears the counters, and a positive counter adds `Stake * min(LostCounter, 5)` to the already computed Paper stake when `PaperLostCoeff > 1`.
+- Added Paper lost-counter diagnostics to paper order decision JSON for GTD/opening-limit entries.
+- Kept `LiveLostCoeff` stored/editable but intentionally unused for live stake sizing until an explicit live-risk policy is requested.
+- Updated README, configuration reference, and live trading checklist.
+- Added regression coverage for schema/repository storage and Paper lost-counter stake cap behavior.
+Next: Deploy/restart `PolyCopyTrader.Service` so schema initialization adds the new columns; then set `Paper Lost` above `1` per strategy in Dashboard where the Paper stake add-on should be active.
+Notes: Verification passed: full `dotnet test tests\PolyCopyTrader.Tests\PolyCopyTrader.Tests.csproj --no-restore` 569/569; Dashboard build to temp output passed with existing Storage nullable warnings; Service build passed with existing Storage nullable warnings; `git diff --check` passed with LF/CRLF warnings only.
+Blockers: Production needs deploy/restart before new DB columns and service in-memory counter logic are active.
+
 ## Active Update 2026-06-03 Partial Fill Semantics
 Goal: Clarify whether a larger Polymarket order partially fills when the book has less liquidity than the order amount.
 Status: Completed

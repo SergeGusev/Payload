@@ -3360,6 +3360,100 @@ public sealed class BtcUpDown5mPaperStrategyProcessorTests
     }
 
     [Fact]
+    public async Task ProcessAsync_PaperLostCounterBoostsNextPaperStakeAndCapsCoeff()
+    {
+        var now = DateTimeOffset.UtcNow;
+        var repository = new TestAppRepository();
+        repository.StrategySettings[Middle1Variant.Id] = StrategyRuntimeSettings.Default(Middle1Variant.Id) with
+        {
+            PaperStakeAmount = 1m,
+            PaperLostCoeff = 2m
+        };
+        var metadata = new List<PolymarketOnChainTokenMetadata>();
+        for (var index = 1; index <= 6; index++)
+        {
+            var upAssetId = "asset-up-previous-loss-" + index.ToString(CultureInfo.InvariantCulture);
+            var downAssetId = "asset-down-previous-loss-" + index.ToString(CultureInfo.InvariantCulture);
+            var previousLossRun = AddEnteredRun(
+                repository,
+                Middle1Variant,
+                "previous-loss-" + index.ToString(CultureInfo.InvariantCulture),
+                now.AddMinutes(-10 - (index * 5)),
+                selectedAssetId: upAssetId,
+                selectedOutcome: "Up",
+                stakeUsd: 1m);
+            repository.PaperOrders.Add(new PaperOrder(
+                previousLossRun.PaperOrderId!.Value,
+                previousLossRun.SignalId!.Value,
+                Middle1Variant.CopiedTraderWallet,
+                PaperOrderStatus.Filled,
+                TradeSide.Buy,
+                upAssetId,
+                previousLossRun.ConditionId,
+                "Up",
+                0.50m,
+                2m,
+                1m,
+                previousLossRun.EnteredAtUtc!.Value,
+                previousLossRun.MarketEndUtc!.Value,
+                FilledAtUtc: previousLossRun.EnteredAtUtc!.Value.AddSeconds(1),
+                StrategyId: Middle1Variant.Id));
+            repository.PaperFills.Add(new PaperFill(
+                Guid.NewGuid(),
+                previousLossRun.PaperOrderId.Value,
+                0.50m,
+                2m,
+                previousLossRun.EnteredAtUtc.Value.AddSeconds(1),
+                "TestOpeningLimitFill"));
+            metadata.Add(TokenMetadata(upAssetId, "Up", "Down"));
+            metadata.Add(TokenMetadata(downAssetId, "Down", "Down"));
+        }
+
+        var processor = CreateProcessorCoreWithOptions(
+            repository,
+            metadata,
+            DefaultOrderBooks(),
+            _ => { },
+            [],
+            CreateBtcOptions(paperTakerPricingEnabled: false, [Middle1Variant.Code]),
+            btcUsdReferencePriceClient: new FakeBtcUsdReferencePriceClient(103m),
+            btcUsdReferencePriceCache: CreateBtcUsdReferenceCache(99m, 101m));
+
+        var settleResult = await processor.ProcessAsync();
+
+        Assert.Equal(6, settleResult.RunsSettled);
+        Assert.Equal(0, settleResult.EntriesPlaced);
+        Assert.Equal(6, repository.PaperOrders.Count);
+
+        repository.PolymarketGammaMarkets.Add(CreateMarket(
+            now,
+            now.AddMinutes(5),
+            upPrice: 0.50m,
+            downPrice: 0.50m));
+
+        var entryResult = await processor.ProcessAsync();
+
+        Assert.Equal(1, entryResult.EntriesPlaced);
+        var run = repository.StrategyMarketPaperRuns.Single(item =>
+            item.StrategyId == Middle1Variant.Id &&
+            string.Equals(item.MarketId, "market-1", StringComparison.OrdinalIgnoreCase));
+        Assert.Equal(StrategyMarketPaperRunStatuses.Entered, run.Status);
+        Assert.Equal(6m, run.StakeUsd);
+        Assert.Equal(12m, run.SizeShares);
+
+        var order = Assert.Single(repository.PaperOrders, item =>
+            string.Equals(item.AssetId, "asset-down", StringComparison.OrdinalIgnoreCase));
+        Assert.Equal(6m, order.NotionalUsd);
+        Assert.Equal(12m, order.SizeShares);
+        Assert.Contains("\"paper_lost_coeff_configured\":2", order.RawDecisionJson, StringComparison.Ordinal);
+        Assert.Contains("\"paper_lost_counter\":6", order.RawDecisionJson, StringComparison.Ordinal);
+        Assert.Contains("\"paper_lost_counter_coeff\":5", order.RawDecisionJson, StringComparison.Ordinal);
+        Assert.Contains("\"paper_lost_base_stake_usd\":1", order.RawDecisionJson, StringComparison.Ordinal);
+        Assert.Contains("\"paper_lost_add_stake_usd\":5", order.RawDecisionJson, StringComparison.Ordinal);
+        Assert.Contains("\"paper_lost_effective_stake_usd\":6", order.RawDecisionJson, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task ProcessAsync_MiddleReferenceBpsThresholdSkipsSmallMeanDeviation()
     {
         var now = DateTimeOffset.UtcNow;
@@ -9603,7 +9697,7 @@ public sealed class BtcUpDown5mPaperStrategyProcessorTests
         }
     }
 
-    private static void AddEnteredRun(
+    private static StrategyMarketPaperRun AddEnteredRun(
         TestAppRepository repository,
         BtcUpDown5mStrategyVariant variant,
         string marketId,
@@ -9614,7 +9708,7 @@ public sealed class BtcUpDown5mPaperStrategyProcessorTests
     {
         var entryPrice = 0.50m;
         var sizeShares = stakeUsd / entryPrice;
-        repository.StrategyMarketPaperRuns.Add(new StrategyMarketPaperRun(
+        var run = new StrategyMarketPaperRun(
             Guid.NewGuid(),
             variant.Id,
             marketId,
@@ -9641,7 +9735,9 @@ public sealed class BtcUpDown5mPaperStrategyProcessorTests
             SettledAtUtc: null,
             SkipReason: null,
             marketStartUtc,
-            marketStartUtc.AddSeconds(variant.EntryDelaySeconds)));
+            marketStartUtc.AddSeconds(variant.EntryDelaySeconds));
+        repository.StrategyMarketPaperRuns.Add(run);
+        return run;
     }
 
     private static PolymarketOnChainTokenMetadata TokenMetadata(

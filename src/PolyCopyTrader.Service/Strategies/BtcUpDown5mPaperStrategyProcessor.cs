@@ -84,6 +84,7 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
     private const decimal MinimumStakeSafetyMultiplier = 1.10m;
     private const decimal FillSizeTolerance = 0.000001m;
     private const decimal CloseBookResultThreshold = 0.50m;
+    private const int MaxPaperLostCounterStakeCoeff = 5;
     private const int SkipPreviousResultEndPriceMaxAgeSeconds = 15;
     private const int SkipPreviousResultBpsMaxStreakMarkets = 100;
     private const int MakerDecisionIntervalSeconds = 30;
@@ -100,6 +101,8 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
     private readonly SemaphoreSlim entryPlacementLock = new(1, 1);
     private readonly Dictionary<string, DateTimeOffset> closingOrderBookCaptureAttempts = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<string, BtcMakerHighWaterState> makerHighWaterStates = new(StringComparer.OrdinalIgnoreCase);
+    private readonly object paperLostCounterLock = new();
+    private readonly Dictionary<Guid, int> paperLostCounters = [];
 
     public async Task<BtcUpDown5mPaperStrategyResult> ProcessAsync(CancellationToken cancellationToken = default)
     {
@@ -2301,6 +2304,12 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
                         stakeMultiplier = martinDecision.StakeUsd;
                     }
 
+                    var paperLostCounterAdjustment = ApplyPaperLostCounterStakeAdjustment(
+                        variant,
+                        settings,
+                        stakeMultiplier);
+                    stakeMultiplier = paperLostCounterAdjustment.EffectiveStakeUsd;
+
                     if (UsesOpeningLimitEntry(variant))
                     {
                         var limitDecision = await GetOpeningLimitEntryDecisionAsync(
@@ -2380,7 +2389,8 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
                             limitPricing.RawDecisionJson,
                             stakeMultiplier,
                             limitSizing,
-                            expiration);
+                            expiration,
+                            paperLostCounterAdjustment);
                         if (!limitSizing.Available)
                         {
                             if (ShouldDeferOpeningLimitStakeSizing(run, variant, limitSizing, nowUtc))
@@ -2718,7 +2728,8 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
                         rawDecisionJson,
                         stakeMultiplier,
                         gtdSizing,
-                        gtdExpiration);
+                        gtdExpiration,
+                        paperLostCounterAdjustment);
                     Signal? signal = null;
                     PaperOrder? order = null;
                     await entryPlacementLock.WaitAsync(cancellationToken);
@@ -3054,6 +3065,8 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
                 won,
                 realizedPnl);
 
+            var settings = await strategyStateProvider.GetStrategySettingsAsync(runVariant.Id, cancellationToken);
+            UpdatePaperLostCounterAfterSettlement(runVariant, settings, won);
             await UpdateStrategyAutoLivePauseAsync(runVariant.Id, runVariant.Code, nowUtc, cancellationToken);
 
             return 1;
@@ -8361,11 +8374,100 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
         return CreateLimitMinimumStakeSizing(orderBook, limitPrice, stakeMultiplier, ClobBookSource);
     }
 
+    private PaperLostCounterStakeAdjustment ApplyPaperLostCounterStakeAdjustment(
+        BtcUpDown5mStrategyVariant variant,
+        StrategyRuntimeSettings settings,
+        decimal baseStakeUsd)
+    {
+        var configuredCoeff = Math.Max(1m, settings.PaperLostCoeff);
+        var normalizedStrategyId = StrategyIds.Normalize(variant.Id);
+        if (configuredCoeff <= 1m || baseStakeUsd <= 0m)
+        {
+            ResetPaperLostCounter(normalizedStrategyId);
+            return PaperLostCounterStakeAdjustment.Disabled(configuredCoeff, baseStakeUsd);
+        }
+
+        int lostCounter;
+        lock (paperLostCounterLock)
+        {
+            paperLostCounters.TryGetValue(normalizedStrategyId, out lostCounter);
+        }
+
+        if (lostCounter <= 0)
+        {
+            return PaperLostCounterStakeAdjustment.Disabled(configuredCoeff, baseStakeUsd);
+        }
+
+        var lostCounterCoeff = Math.Min(lostCounter, MaxPaperLostCounterStakeCoeff);
+        var addStakeUsd = baseStakeUsd * lostCounterCoeff;
+        var effectiveStakeUsd = baseStakeUsd + addStakeUsd;
+        logger.LogInformation(
+            "Paper LostCounter stake adjustment applied. Strategy={StrategyCode} Counter={LostCounter} Coeff={LostCounterCoeff} BaseStakeUsd={BaseStakeUsd} AddStakeUsd={AddStakeUsd} EffectiveStakeUsd={EffectiveStakeUsd}",
+            variant.Code,
+            lostCounter,
+            lostCounterCoeff,
+            baseStakeUsd,
+            addStakeUsd,
+            effectiveStakeUsd);
+        return new PaperLostCounterStakeAdjustment(
+            configuredCoeff,
+            lostCounter,
+            lostCounterCoeff,
+            baseStakeUsd,
+            addStakeUsd,
+            effectiveStakeUsd);
+    }
+
+    private void UpdatePaperLostCounterAfterSettlement(
+        BtcUpDown5mStrategyVariant variant,
+        StrategyRuntimeSettings settings,
+        bool won)
+    {
+        var normalizedStrategyId = StrategyIds.Normalize(variant.Id);
+        if (settings.PaperLostCoeff <= 1m)
+        {
+            ResetPaperLostCounter(normalizedStrategyId);
+            return;
+        }
+
+        int updatedCounter;
+        lock (paperLostCounterLock)
+        {
+            paperLostCounters.TryGetValue(normalizedStrategyId, out var currentCounter);
+            updatedCounter = won
+                ? Math.Max(0, currentCounter - 1)
+                : currentCounter + 1;
+            if (updatedCounter <= 0)
+            {
+                paperLostCounters.Remove(normalizedStrategyId);
+            }
+            else
+            {
+                paperLostCounters[normalizedStrategyId] = updatedCounter;
+            }
+        }
+
+        logger.LogInformation(
+            "Paper LostCounter updated after settlement. Strategy={StrategyCode} Won={Won} Counter={LostCounter}",
+            variant.Code,
+            won,
+            updatedCounter);
+    }
+
+    private void ResetPaperLostCounter(Guid strategyId)
+    {
+        lock (paperLostCounterLock)
+        {
+            paperLostCounters.Remove(strategyId);
+        }
+    }
+
     private static string AttachOpeningLimitStakeSizingJson(
         string rawDecisionJson,
         decimal stakeMultiplier,
         BtcMinimumStakeSizing sizing,
-        OpeningLimitExpirationDecision expiration)
+        OpeningLimitExpirationDecision expiration,
+        PaperLostCounterStakeAdjustment? lostCounterAdjustment = null)
     {
         JsonObject root;
         try
@@ -8390,6 +8492,16 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
         root["cancel_deadline_utc"] = expiration.LocalExpiresAtUtc?.ToString("O", CultureInfo.InvariantCulture);
         root["clob_wire_gtd_expiration_utc"] = expiration.ClobGtdExpirationUtc?.ToString("O", CultureInfo.InvariantCulture);
         root["stake_multiplier"] = stakeMultiplier;
+        if (lostCounterAdjustment is { } adjustment)
+        {
+            root["paper_lost_coeff_configured"] = adjustment.ConfiguredCoeff;
+            root["paper_lost_counter"] = adjustment.LostCounter;
+            root["paper_lost_counter_coeff"] = adjustment.LostCounterCoeff;
+            root["paper_lost_base_stake_usd"] = adjustment.BaseStakeUsd;
+            root["paper_lost_add_stake_usd"] = adjustment.AddStakeUsd;
+            root["paper_lost_effective_stake_usd"] = adjustment.EffectiveStakeUsd;
+        }
+
         root["minimum_stake_safety_multiplier"] = MinimumStakeSafetyMultiplier;
         root["stake_sizing_source"] = sizing.Source;
         root["min_order_size"] = sizing.MinOrderSize;
@@ -12845,6 +12957,26 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
                 TargetSizeShares: referencePrice > 0m ? stakeMultiplier / referencePrice : 0m,
                 ReferencePrice: referencePrice,
                 LevelsUsed: 0);
+        }
+    }
+
+    private sealed record PaperLostCounterStakeAdjustment(
+        decimal ConfiguredCoeff,
+        int LostCounter,
+        int LostCounterCoeff,
+        decimal BaseStakeUsd,
+        decimal AddStakeUsd,
+        decimal EffectiveStakeUsd)
+    {
+        public static PaperLostCounterStakeAdjustment Disabled(decimal configuredCoeff, decimal baseStakeUsd)
+        {
+            return new PaperLostCounterStakeAdjustment(
+                configuredCoeff,
+                LostCounter: 0,
+                LostCounterCoeff: 0,
+                baseStakeUsd,
+                AddStakeUsd: 0m,
+                EffectiveStakeUsd: baseStakeUsd);
         }
     }
 

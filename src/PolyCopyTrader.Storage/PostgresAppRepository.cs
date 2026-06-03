@@ -1816,6 +1816,8 @@ combined AS (
         END AS paused_until_utc,
         strategy.paper_stake_amount,
         strategy.live_stake_amount,
+        strategy.paper_lost_coeff,
+        strategy.live_lost_coeff,
         strategy.live_available_balance,
         COALESCE(order_agg.orders_count, 0) AS orders_count,
         COALESCE(order_agg.filled_orders_count, 0) AS filled_orders_count,
@@ -1926,6 +1928,8 @@ SELECT
     paused_until_utc,
     paper_stake_amount,
     live_stake_amount,
+    paper_lost_coeff,
+    live_lost_coeff,
     live_available_balance,
     orders_count,
     filled_orders_count,
@@ -2006,8 +2010,8 @@ LIMIT @Limit;
 				reader.GetDecimal(8),
 				reader.GetDecimal(9),
 				reader.GetDecimal(10),
-				reader.GetInt32(11),
-				reader.GetInt32(12),
+				reader.GetDecimal(11),
+				reader.GetDecimal(12),
 				reader.GetInt32(13),
 				reader.GetInt32(14),
 				reader.GetInt32(15),
@@ -2019,22 +2023,22 @@ LIMIT @Limit;
 				reader.GetInt32(21),
 				reader.GetInt32(22),
 				reader.GetInt32(23),
-				reader.GetDecimal(24),
-				reader.GetDecimal(25),
+				reader.GetInt32(24),
+				reader.GetInt32(25),
 				reader.GetDecimal(26),
 				reader.GetDecimal(27),
 				reader.GetDecimal(28),
 				reader.GetDecimal(29),
 				reader.GetDecimal(30),
 				reader.GetDecimal(31),
-				reader.IsDBNull(32) ? null : reader.GetDecimal(32),
+				reader.GetDecimal(32),
 				reader.GetDecimal(33),
-				reader.GetDecimal(34),
+				reader.IsDBNull(34) ? null : reader.GetDecimal(34),
 				reader.GetDecimal(35),
 				reader.GetDecimal(36),
 				reader.GetDecimal(37),
-				reader.GetInt32(38),
-				reader.GetInt32(39),
+				reader.GetDecimal(38),
+				reader.GetDecimal(39),
 				reader.GetInt32(40),
 				reader.GetInt32(41),
 				reader.GetInt32(42),
@@ -2046,19 +2050,21 @@ LIMIT @Limit;
 				reader.GetInt32(48),
 				reader.GetInt32(49),
 				reader.GetInt32(50),
-				reader.GetDecimal(51),
-				reader.GetDecimal(52),
+				reader.GetInt32(51),
+				reader.GetInt32(52),
 				reader.GetDecimal(53),
 				reader.GetDecimal(54),
 				reader.GetDecimal(55),
 				reader.GetDecimal(56),
-				reader.IsDBNull(57) ? null : reader.GetDecimal(57),
+				reader.GetDecimal(57),
 				reader.GetDecimal(58),
-				reader.GetDecimal(59),
-				reader.IsDBNull(60) ? null : DateTimeOffsetFromUtc(reader.GetDateTime(60)),
-				reader.IsDBNull(61) ? null : DateTimeOffsetFromUtc(reader.GetDateTime(61)),
+				reader.IsDBNull(59) ? null : reader.GetDecimal(59),
+				reader.GetDecimal(60),
+				reader.GetDecimal(61),
 				reader.IsDBNull(62) ? null : DateTimeOffsetFromUtc(reader.GetDateTime(62)),
-				reader.IsDBNull(63) ? null : DateTimeOffsetFromUtc(reader.GetDateTime(63))));
+				reader.IsDBNull(63) ? null : DateTimeOffsetFromUtc(reader.GetDateTime(63)),
+				reader.IsDBNull(64) ? null : DateTimeOffsetFromUtc(reader.GetDateTime(64)),
+				reader.IsDBNull(65) ? null : DateTimeOffsetFromUtc(reader.GetDateTime(65))));
 		}
 
 		return results;
@@ -2524,6 +2530,8 @@ SELECT id,
        END AS paused_until_utc,
        paper_stake_amount,
        live_stake_amount,
+       paper_lost_coeff,
+       live_lost_coeff,
        live_available_balance,
        live_enabled_at_utc
 FROM strategies;
@@ -2544,7 +2552,9 @@ FROM strategies;
 				reader.GetDecimal(6),
 				reader.GetDecimal(7),
 				reader.GetDecimal(8),
-				reader.IsDBNull(9) ? null : DateTimeOffsetFromUtc(reader.GetDateTime(9)));
+				reader.GetDecimal(9),
+				reader.GetDecimal(10),
+				reader.IsDBNull(11) ? null : DateTimeOffsetFromUtc(reader.GetDateTime(11)));
 		}
 
 		return results;
@@ -2779,6 +2789,8 @@ WHERE auto_live_paused
 		Guid strategyId,
 		decimal paperStakeAmount,
 		decimal liveStakeAmount,
+		decimal paperLostCoeff,
+		decimal liveLostCoeff,
 		DateTimeOffset updatedAtUtc,
 		CancellationToken cancellationToken = default(CancellationToken))
 	{
@@ -2787,14 +2799,20 @@ WHERE auto_live_paused
 UPDATE strategies
 SET paper_stake_amount = @PaperStakeAmount,
     live_stake_amount = @LiveStakeAmount,
+    paper_lost_coeff = @PaperLostCoeff,
+    live_lost_coeff = @LiveLostCoeff,
     updated_at_utc = @UpdatedAtUtc
 WHERE id = @StrategyId
   AND @PaperStakeAmount > 0
-  AND @LiveStakeAmount > 0;
+  AND @LiveStakeAmount > 0
+  AND @PaperLostCoeff >= 1
+  AND @LiveLostCoeff >= 1;
 """);
 		command.Parameters.AddWithValue("StrategyId", StrategyIds.Normalize(strategyId));
 		command.Parameters.AddWithValue("PaperStakeAmount", paperStakeAmount);
 		command.Parameters.AddWithValue("LiveStakeAmount", liveStakeAmount);
+		command.Parameters.AddWithValue("PaperLostCoeff", paperLostCoeff);
+		command.Parameters.AddWithValue("LiveLostCoeff", liveLostCoeff);
 		command.Parameters.AddWithValue("UpdatedAtUtc", updatedAtUtc.UtcDateTime);
 		var rows = await command.ExecuteNonQueryAsync(cancellationToken);
 		return rows > 0;

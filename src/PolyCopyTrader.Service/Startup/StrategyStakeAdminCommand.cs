@@ -80,6 +80,8 @@ public static class StrategyStakeAdminCommand
                 strategy.StrategyId,
                 paperStakeAmount,
                 liveStakeAmount ?? strategy.LiveStakeAmount,
+                strategy.PaperLostCoeff,
+                strategy.LiveLostCoeff,
                 updatedAtUtc,
                 cancellationToken);
 

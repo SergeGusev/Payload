@@ -984,6 +984,14 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
             return;
         }
 
+        if (strategy.PaperLostCoeff < 1m || strategy.LiveLostCoeff < 1m)
+        {
+            CommandStatus = "Strategy lost coefficients must be at least one.";
+            RecordDashboardError("Strategy stakes", CommandStatus, CommandStatus);
+            await RefreshAsync();
+            return;
+        }
+
         if (strategy.LiveAvailableBalance < 0m)
         {
             CommandStatus = "Strategy live available balance must be zero or greater.";
@@ -999,6 +1007,8 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
                 strategy.StrategyId,
                 strategy.PaperStakeAmount,
                 strategy.LiveStakeAmount,
+                strategy.PaperLostCoeff,
+                strategy.LiveLostCoeff,
                 updatedAtUtc);
             var balanceUpdated = await runtime.Repository.SetStrategyLiveAvailableBalanceAsync(
                 strategy.StrategyId,

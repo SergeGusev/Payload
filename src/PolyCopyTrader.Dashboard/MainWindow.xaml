@@ -370,6 +370,24 @@
                                 </DataTemplate>
                             </DataGridTemplateColumn.CellTemplate>
                         </DataGridTemplateColumn>
+                        <DataGridTemplateColumn Header="Paper Lost" Width="85">
+                            <DataGridTemplateColumn.CellTemplate>
+                                <DataTemplate>
+                                    <TextBox Text="{Binding PaperLostCoeff, Mode=TwoWay, UpdateSourceTrigger=LostFocus}"
+                                             HorizontalContentAlignment="Right"
+                                             Padding="4,2" />
+                                </DataTemplate>
+                            </DataGridTemplateColumn.CellTemplate>
+                        </DataGridTemplateColumn>
+                        <DataGridTemplateColumn Header="Live Lost" Width="80">
+                            <DataGridTemplateColumn.CellTemplate>
+                                <DataTemplate>
+                                    <TextBox Text="{Binding LiveLostCoeff, Mode=TwoWay, UpdateSourceTrigger=LostFocus}"
+                                             HorizontalContentAlignment="Right"
+                                             Padding="4,2" />
+                                </DataTemplate>
+                            </DataGridTemplateColumn.CellTemplate>
+                        </DataGridTemplateColumn>
                         <DataGridTemplateColumn Header="Live bal" Width="90">
                             <DataGridTemplateColumn.CellTemplate>
                                 <DataTemplate>

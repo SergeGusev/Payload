@@ -66,6 +66,12 @@ public sealed class StorageTests
         Assert.Contains("ALTER TABLE public.copy_strategies RENAME TO strategies", PostgresSchema.SchemaSql, StringComparison.Ordinal);
         Assert.Contains("live_available_balance numeric(28,8) NOT NULL DEFAULT 100.00", PostgresSchema.SchemaSql, StringComparison.Ordinal);
         Assert.Contains("ALTER TABLE strategies ADD COLUMN IF NOT EXISTS live_available_balance", PostgresSchema.SchemaSql, StringComparison.Ordinal);
+        Assert.Contains("paper_lost_coeff numeric(28,8) NOT NULL DEFAULT 1.00", PostgresSchema.SchemaSql, StringComparison.Ordinal);
+        Assert.Contains("live_lost_coeff numeric(28,8) NOT NULL DEFAULT 1.00", PostgresSchema.SchemaSql, StringComparison.Ordinal);
+        Assert.Contains("ALTER TABLE strategies ADD COLUMN IF NOT EXISTS paper_lost_coeff", PostgresSchema.SchemaSql, StringComparison.Ordinal);
+        Assert.Contains("ALTER TABLE strategies ADD COLUMN IF NOT EXISTS live_lost_coeff", PostgresSchema.SchemaSql, StringComparison.Ordinal);
+        Assert.Contains("ck_strategies_paper_lost_coeff_minimum", PostgresSchema.SchemaSql, StringComparison.Ordinal);
+        Assert.Contains("ck_strategies_live_lost_coeff_minimum", PostgresSchema.SchemaSql, StringComparison.Ordinal);
         Assert.Contains("paused boolean NOT NULL DEFAULT false", PostgresSchema.SchemaSql, StringComparison.Ordinal);
         Assert.Contains("ALTER TABLE strategies ADD COLUMN IF NOT EXISTS paused boolean NOT NULL DEFAULT false", PostgresSchema.SchemaSql, StringComparison.Ordinal);
         Assert.Contains("ALTER TABLE strategies ADD COLUMN IF NOT EXISTS paused_until_utc timestamptz NULL", PostgresSchema.SchemaSql, StringComparison.Ordinal);
@@ -588,6 +594,25 @@ public sealed class StorageTests
         Assert.Contains("SET auto_live_paused = false", method, StringComparison.Ordinal);
         Assert.Contains("WHERE auto_live_paused", method, StringComparison.Ordinal);
         Assert.Contains("id <> ALL(@AllowlistedStrategyIds)", method, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void PostgresRepository_SetStrategyStakeAmountsSavesLostCoefficients()
+    {
+        var source = ReadStorageRepositorySource();
+        var start = source.IndexOf("SetStrategyStakeAmountsAsync", StringComparison.Ordinal);
+        Assert.True(start >= 0);
+
+        var end = source.IndexOf("SetStrategyLiveAvailableBalanceAsync", start, StringComparison.Ordinal);
+        Assert.True(end > start);
+
+        var method = source[start..end];
+        Assert.Contains("paper_lost_coeff = @PaperLostCoeff", method, StringComparison.Ordinal);
+        Assert.Contains("live_lost_coeff = @LiveLostCoeff", method, StringComparison.Ordinal);
+        Assert.Contains("AND @PaperLostCoeff >= 1", method, StringComparison.Ordinal);
+        Assert.Contains("AND @LiveLostCoeff >= 1", method, StringComparison.Ordinal);
+        Assert.Contains("command.Parameters.AddWithValue(\"PaperLostCoeff\", paperLostCoeff)", method, StringComparison.Ordinal);
+        Assert.Contains("command.Parameters.AddWithValue(\"LiveLostCoeff\", liveLostCoeff)", method, StringComparison.Ordinal);
     }
 
     [Fact]

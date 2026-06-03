@@ -226,6 +226,8 @@ public sealed partial class StrategyPerformanceRow : ObservableObject
         string pausedUntilUtc,
         decimal paperStakeAmount,
         decimal liveStakeAmount,
+        decimal paperLostCoeff,
+        decimal liveLostCoeff,
         decimal liveAvailableBalance,
         int ordersCount,
         int filledOrdersCount,
@@ -290,6 +292,8 @@ public sealed partial class StrategyPerformanceRow : ObservableObject
         PausedUntilUtc = pausedUntilUtc;
         this.paperStakeAmount = paperStakeAmount;
         this.liveStakeAmount = liveStakeAmount;
+        this.paperLostCoeff = paperLostCoeff;
+        this.liveLostCoeff = liveLostCoeff;
         this.liveAvailableBalance = liveAvailableBalance;
         OrdersCount = ordersCount;
         FilledOrdersCount = filledOrdersCount;
@@ -368,6 +372,12 @@ public sealed partial class StrategyPerformanceRow : ObservableObject
 
     [ObservableProperty]
     private decimal liveStakeAmount;
+
+    [ObservableProperty]
+    private decimal paperLostCoeff;
+
+    [ObservableProperty]
+    private decimal liveLostCoeff;
 
     [ObservableProperty]
     private decimal liveAvailableBalance;

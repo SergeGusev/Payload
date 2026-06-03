@@ -1277,6 +1277,8 @@ internal sealed class TestAppRepository : IAppRepository
                 strategy.Settings.PausedUntilUtc,
                 strategy.Settings.PaperStakeAmount,
                 strategy.Settings.LiveStakeAmount,
+                strategy.Settings.PaperLostCoeff,
+                strategy.Settings.LiveLostCoeff,
                 strategy.Settings.LiveAvailableBalance,
                 orders.Length,
                 orders.Count(order => order.Status is PaperOrderStatus.Filled or PaperOrderStatus.PartiallyFilled or PaperOrderStatus.PartiallyFilledExpired),
@@ -1702,13 +1704,17 @@ internal sealed class TestAppRepository : IAppRepository
         Guid strategyId,
         decimal paperStakeAmount,
         decimal liveStakeAmount,
+        decimal paperLostCoeff,
+        decimal liveLostCoeff,
         DateTimeOffset updatedAtUtc,
         CancellationToken cancellationToken = default)
     {
         var normalizedStrategyId = StrategyIds.Normalize(strategyId);
         if (!StrategySettings.ContainsKey(normalizedStrategyId) ||
             paperStakeAmount <= 0m ||
-            liveStakeAmount <= 0m)
+            liveStakeAmount <= 0m ||
+            paperLostCoeff < 1m ||
+            liveLostCoeff < 1m)
         {
             return Task.FromResult(false);
         }
@@ -1716,7 +1722,9 @@ internal sealed class TestAppRepository : IAppRepository
         StrategySettings[normalizedStrategyId] = GetStrategySettings(normalizedStrategyId) with
         {
             PaperStakeAmount = paperStakeAmount,
-            LiveStakeAmount = liveStakeAmount
+            LiveStakeAmount = liveStakeAmount,
+            PaperLostCoeff = paperLostCoeff,
+            LiveLostCoeff = liveLostCoeff
         };
         return Task.FromResult(true);
     }

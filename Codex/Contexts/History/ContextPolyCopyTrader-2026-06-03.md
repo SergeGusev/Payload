@@ -20,3 +20,19 @@ Request:
 
 Result:
 Answered that partial fill behavior depends on order type. FOK will not fill at all unless the whole 6 can fill immediately. FAK will fill the available 3 immediately and cancel the rest. A marketable GTC/GTD limit order can take the available 3 and leave the unfilled remainder live until expiration/cancel; if the order is not marketable, it simply rests until someone crosses it. Inspected current live-shadow code and noted BTC/ETH/SOL 5m live requests are `GTD` limit BUY with `PostOnly=false`, so they are not all-or-nothing FOK orders. No source code or production state changed.
+
+## 2026-06-03T10:52:47.6689622+03:00
+Request:
+Для каждой стратегии заводим 2 поля - PaperLostCoeff, LiveLostCoeff, по умолчанию везде 1, одно для Paper режима, другое - для Live
+
+Нужно иметь возможность менять через Dashboard эти значения. Если значение PaperLostCoeff больше 1, то работает счётчик перекосов LostCounter в сторону поражений. Работает он так:
+
+1. Значение хранится в памяти и обнуляется каждый раз при рестарте сервиса.
+2. Поражение увеличивает LostCounter на 1, выигрыш - уменьшает. При достижении счётчика 0 уменьшение останавливается.
+3. Если в момент ставки по стратегии счётчик больше 0, то определяем дополнительную сумму ставки:
+3.1  Множитель LostCoeff определяется как LostCounter, но не превышает 5. То есть для LostCounter = 4 LostCoeff будет 4, а для LostCounter = 10 LostCoeff будет 5.
+3.2. Берём текущую вычисленную ставку Stake и вычисляем добавление AddStake = Stake * LostCoeff.
+3.3 Итоговая ставка будет State + AddStake
+
+Result:
+Added persisted per-strategy `paper_lost_coeff` and `live_lost_coeff` columns with default `1.00` and minimum-`1` constraints. Exposed them in the Dashboard `Strategies` grid as editable `Paper Lost` and `Live Lost`, wired validation/save/CSV export, and preserved values in the service stake admin command. Implemented the requested in-memory Paper `LostCounter` in the Up/Down paper strategy processor: losses increment, wins decrement down to zero, restart clears the dictionary, and when `PaperLostCoeff > 1` a positive counter adds `Stake * min(LostCounter, 5)` to the computed Paper stake. Added decision JSON diagnostics for the adjustment and regression tests for schema/repository storage plus the capped stake behavior. `LiveLostCoeff` is stored/editable but intentionally not applied to live sizing yet because the request specified the Paper counter behavior and changing real live notional needs an explicit live-risk policy. Verification passed: full test project 569/569, Dashboard temp-output build passed with existing Storage nullable warnings, Service build passed with existing Storage nullable warnings, and `git diff --check` passed with LF/CRLF warnings only.

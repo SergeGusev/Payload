@@ -2403,6 +2403,8 @@ public sealed record TradingStrategy(
     DateTimeOffset? PausedUntilUtc,
     decimal PaperStakeAmount,
     decimal LiveStakeAmount,
+    decimal PaperLostCoeff,
+    decimal LiveLostCoeff,
     decimal LiveAvailableBalance,
     DateTimeOffset CreatedAtUtc,
     DateTimeOffset UpdatedAtUtc);
@@ -2416,6 +2418,8 @@ public sealed record StrategyRuntimeSettings(
     DateTimeOffset? PausedUntilUtc,
     decimal PaperStakeAmount,
     decimal LiveStakeAmount,
+    decimal PaperLostCoeff,
+    decimal LiveLostCoeff,
     decimal LiveAvailableBalance,
     DateTimeOffset? LiveEnabledAtUtc)
 {
@@ -2437,6 +2441,8 @@ public sealed record StrategyRuntimeSettings(
             PausedUntilUtc: null,
             PaperStakeAmount: 1.00m,
             LiveStakeAmount: 1.00m,
+            PaperLostCoeff: 1.00m,
+            LiveLostCoeff: 1.00m,
             LiveAvailableBalance: 100.00m,
             LiveEnabledAtUtc: null);
     }
@@ -2472,6 +2478,8 @@ public sealed record StrategyPerformance(
     DateTimeOffset? PausedUntilUtc,
     decimal PaperStakeAmount,
     decimal LiveStakeAmount,
+    decimal PaperLostCoeff,
+    decimal LiveLostCoeff,
     decimal LiveAvailableBalance,
     int OrdersCount,
     int FilledOrdersCount,
