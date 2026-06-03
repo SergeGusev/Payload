@@ -25,3 +25,10 @@ Request:
 
 Result:
 Checked remote PostgreSQL indexes and query plans for the Dashboard orders tabs. No new index was needed: `paper_orders` already has strategy/time indexes and the selected Paper query uses `ix_paper_orders_strategy_perf_cover`; selected order queries were fast on the remote database. The slow path was Dashboard order-only reload calling `GetStrategyPerformanceAsync(10_000)` only to resolve strategy names. Updated `DashboardDataService.LoadOrderRowsAsync` to use cached strategy names or static configured names instead, and added a regression that prevents the heavy strategy-performance reload from returning to the order-only path. Verification passed: focused StorageTests 39/39, Dashboard Verify build, and full tests 586/586.
+
+## 2026-06-03T22:45:30.5169645+00:00
+Request:
+Проверь - ставки ставятся?
+
+Result:
+Checked the remote production database read-only. `PolyCopyTrader.Service` is running in `Live` mode with a fresh heartbeat. Paper orders are actively being created: latest Paper order was about 0.5 minutes old, with 277 Paper orders in the last 5 minutes and 404 in the last 15 minutes. Live orders are also being placed/matched, but only recently for `ETH Up or Down 5m Skip 7 bps Instant`: latest Live order was at `2026-06-03 22:36:02 UTC`, status `Matched`, response `matched`; there were 3 Live orders in the last 60 minutes. BTC Middle 47, ETH Skip 32, ETH Skip 7, and SOL Skip 42 are all still `live_stakes = true`, not paused, and not auto-live-paused. No API errors were recorded in the last 15 minutes.

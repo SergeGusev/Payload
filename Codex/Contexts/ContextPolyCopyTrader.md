@@ -1,3 +1,17 @@
+## Active Update 2026-06-04 Live/Paper Order Placement Check
+Goal: Check whether the service is currently placing Paper/Live bets.
+Status: Completed
+Done:
+- Queried the remote PostgreSQL database at `192.168.0.101` using the existing C# `out/dbprobe` helper without printing connection strings or secrets.
+- Confirmed `PolyCopyTrader.Service` heartbeat is fresh: mode `Live`, status `Running`, last heartbeat about 0.2 minutes old at database time `2026-06-03 22:44 UTC`.
+- Confirmed Paper orders are actively being created: latest Paper order was about 0.5 minutes old, with 277 Paper orders in the last 5 minutes, 404 in the last 15 minutes, and 3393 in the last 60 minutes.
+- Confirmed Live orders are being placed/matched, but not for every enabled Live strategy: latest Live order was `ETH Up or Down 5m Skip 7 bps Instant` at `2026-06-03 22:36:02 UTC`, with status `Matched` / response `matched`; Live orders in the last 60 minutes were 3 total, all for ETH Skip 7.
+- Confirmed active Live strategy flags are still set for BTC Middle 47, ETH Skip 32, ETH Skip 7, and SOL Skip 42; all have `live_stakes = true`, `auto_live_paused = false`, and `paused = false`.
+- Confirmed no API errors in the last 15 minutes; latest API error was a WebSocket close at `2026-06-03 22:11:41 UTC`.
+Next: If expected Live orders for BTC/SOL/ETH Skip 32 are missing, inspect recent strategy decision diagnostics/rejection reasons for those specific strategies.
+Notes: Diagnostic only. No source behavior changes, production writes, live submissions, cancels, builds, or tests were performed.
+Blockers: None.
+
 ## Active Update 2026-06-04 Dashboard Orders Fast Reload
 Goal: Speed up Dashboard Paper/Live orders tabs after selected-strategy filtering started working.
 Status: Completed
