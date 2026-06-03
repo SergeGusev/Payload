@@ -1,3 +1,14 @@
+## Active Update 2026-06-03 Partial Fill Semantics
+Goal: Clarify whether a larger Polymarket order partially fills when the book has less liquidity than the order amount.
+Status: Completed
+Done:
+- Checked current official Polymarket CLOB documentation for GTC/GTD/FOK/FAK order behavior.
+- Inspected the current live-shadow code path and confirmed BTC/ETH/SOL 5m live-shadow requests are `GTD` limit BUY orders with `PostOnly=false`.
+- Answered that FOK requires full immediate fill or cancels, FAK fills available immediate liquidity and cancels the remainder, and a marketable GTC/GTD limit order can take available resting liquidity while the unfilled remainder remains live until expiration/cancel.
+Next: If the bot needs guaranteed partial-immediate semantics, consider an explicit FAK mode; current live-shadow mode remains GTD limit.
+Notes: Advisory answer only; no source code changed. Used official Polymarket docs and local code references.
+Blockers: None.
+
 ## Active Update 2026-06-03 Order Size Liquidity Guidance
 Goal: Explain whether doubling stake should use one larger order or two equal batch orders for easier matching.
 Status: Completed

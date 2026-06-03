@@ -13,3 +13,10 @@ Request:
 
 Result:
 Answered using current official Polymarket documentation. For same side, same token, same limit price, and ordinary passive GTC/GTD placement, two equal orders do not create extra available liquidity or make matching easier versus one doubled order; they still face the same order book and price/time priority. Recommended one doubled order for simpler accounting and cancellation unless there is a specific need for independent slices. For immediate execution, recommended using order book depth and FAK/partial-fill behavior when partial execution is acceptable; two smaller FOK orders are only useful when each slice must be all-or-nothing and one slice may fit available depth while a single doubled FOK would fail. No source code or production state changed.
+
+## 2026-06-03T06:49:40.9069264Z
+Request:
+Если я ставлю ордер на 6 евро, а в стакане есть только 3, он на эти 3 евро закроется?
+
+Result:
+Answered that partial fill behavior depends on order type. FOK will not fill at all unless the whole 6 can fill immediately. FAK will fill the available 3 immediately and cancel the rest. A marketable GTC/GTD limit order can take the available 3 and leave the unfilled remainder live until expiration/cancel; if the order is not marketable, it simply rests until someone crosses it. Inspected current live-shadow code and noted BTC/ETH/SOL 5m live requests are `GTD` limit BUY with `PostOnly=false`, so they are not all-or-nothing FOK orders. No source code or production state changed.
