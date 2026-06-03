@@ -106,6 +106,13 @@ Request:
 
 Result:
 Added persisted per-strategy `paper_lost_counter` and `live_lost_counter` database fields, runtime/performance/Dashboard/CSV plumbing, editable Dashboard `Paper Cnt` and `Live Cnt` columns, atomic repository counter updates after Paper/Live settlements, service cache updates plus forced DB refresh after settlement batches for immediate Paper sizing, docs updates, and regression coverage. Verification passed: focused tests 209/209, full tests 571/571, Service build 0 warnings/errors, Dashboard build succeeded with existing Storage nullable warnings, and `git diff --check` was clean except LF/CRLF warnings. Production still needs deploy/restart before the new schema columns and persisted counter behavior are active.
+## 2026-06-03T14:20:03.1957971Z
+Request:
+Сразу вопрос - эта выкладка не скинет Live статус с текущих стратегий?
+
+Result:
+Checked commit `49e2364` and startup/schema paths. The signed-counter deploy only drops lost-counter nonnegative constraints and changes counter persistence/update arithmetic; it does not write `live_stakes`. Startup auto-live-pause synchronization only clears `auto_live_paused`, not Live flags. Production read-only verification showed old data migrations that can clear Live flags are already applied and current state is `live_count=3`, `effective_live_count=3` for BTC Middle 47, ETH Skip 7, and SOL Skip 42. No production writes or source changes were made.
+
 ## 2026-06-03T14:13:48.7932661Z
 Request:
 Давай внесём корректировку в нашу логику подсчёта Paper Cnt и Live Cnt. Пусть они могут быть отрицательными - каждый Win уменьшает их на единицу. Но добавляем сумму к ставке только тогда, когда значение положительное.

@@ -1,3 +1,16 @@
+## Active Update 2026-06-03 Signed Counter Deploy Live Risk Check
+Goal: Answer whether deploying the signed lost-counter build can reset current strategy Live flags.
+Status: Completed
+Done:
+- Inspected commit `49e2364 Allow signed lost counters`; the source changes touch counter constraints, counter persistence/update arithmetic, Dashboard validation, docs, and tests, not service startup Live enablement logic.
+- Confirmed the new schema change only drops `ck_strategies_paper_lost_counter_nonnegative` and `ck_strategies_live_lost_counter_nonnegative`; it does not write `live_stakes`.
+- Rechecked startup path: `StrategyAutoLivePauseAllowlistSynchronizer` only calls `ClearStrategyAutoLivePauseExceptAsync`, which clears `auto_live_paused`, not `live_stakes`.
+- Queried production read-only and confirmed old data migrations that can set `live_stakes=false` were already applied (`20260522_rescale_*`, `20260522_retire_middle_depth_2_5`, `20260602_clear_auto_live_pause_by_default`), so they should not rerun on this deploy.
+- Verified production currently has `live_count=3`, `effective_live_count=3`: BTC Middle 47, ETH Skip 7, and SOL Skip 42.
+Next: After deploy, verify the same three Live strategies remain enabled.
+Notes: Answer/inspection task only. No production writes, service restarts, source changes, tests, live submissions, or cancels were performed.
+Blockers: None.
+
 ## Active Update 2026-06-03 Signed Lost Counters
 Goal: Allow Paper Cnt and Live Cnt to go negative while applying LostCoeff stake add-ons only for positive counters.
 Status: Completed
