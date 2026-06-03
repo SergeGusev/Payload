@@ -2405,6 +2405,8 @@ public sealed record TradingStrategy(
     decimal LiveStakeAmount,
     decimal PaperLostCoeff,
     decimal LiveLostCoeff,
+    int PaperLostCounter,
+    int LiveLostCounter,
     decimal LiveAvailableBalance,
     DateTimeOffset CreatedAtUtc,
     DateTimeOffset UpdatedAtUtc);
@@ -2420,6 +2422,8 @@ public sealed record StrategyRuntimeSettings(
     decimal LiveStakeAmount,
     decimal PaperLostCoeff,
     decimal LiveLostCoeff,
+    int PaperLostCounter,
+    int LiveLostCounter,
     decimal LiveAvailableBalance,
     DateTimeOffset? LiveEnabledAtUtc)
 {
@@ -2443,6 +2447,8 @@ public sealed record StrategyRuntimeSettings(
             LiveStakeAmount: 1.00m,
             PaperLostCoeff: 1.00m,
             LiveLostCoeff: 1.00m,
+            PaperLostCounter: 0,
+            LiveLostCounter: 0,
             LiveAvailableBalance: 100.00m,
             LiveEnabledAtUtc: null);
     }
@@ -2467,6 +2473,11 @@ public sealed record StrategyLiveBalanceAdjustmentResult(
     decimal AvailableBalance,
     bool LiveStakesDisabled);
 
+public sealed record StrategyLostCounterUpdateResult(
+    bool Applied,
+    int PaperLostCounter,
+    int LiveLostCounter);
+
 public sealed record StrategyPerformance(
     Guid StrategyId,
     string Code,
@@ -2480,6 +2491,8 @@ public sealed record StrategyPerformance(
     decimal LiveStakeAmount,
     decimal PaperLostCoeff,
     decimal LiveLostCoeff,
+    int PaperLostCounter,
+    int LiveLostCounter,
     decimal LiveAvailableBalance,
     int OrdersCount,
     int FilledOrdersCount,

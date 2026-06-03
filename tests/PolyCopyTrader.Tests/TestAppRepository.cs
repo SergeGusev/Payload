@@ -1279,6 +1279,8 @@ internal sealed class TestAppRepository : IAppRepository
                 strategy.Settings.LiveStakeAmount,
                 strategy.Settings.PaperLostCoeff,
                 strategy.Settings.LiveLostCoeff,
+                strategy.Settings.PaperLostCounter,
+                strategy.Settings.LiveLostCounter,
                 strategy.Settings.LiveAvailableBalance,
                 orders.Length,
                 orders.Count(order => order.Status is PaperOrderStatus.Filled or PaperOrderStatus.PartiallyFilled or PaperOrderStatus.PartiallyFilledExpired),
@@ -1706,6 +1708,8 @@ internal sealed class TestAppRepository : IAppRepository
         decimal liveStakeAmount,
         decimal paperLostCoeff,
         decimal liveLostCoeff,
+        int paperLostCounter,
+        int liveLostCounter,
         DateTimeOffset updatedAtUtc,
         CancellationToken cancellationToken = default)
     {
@@ -1714,7 +1718,9 @@ internal sealed class TestAppRepository : IAppRepository
             paperStakeAmount <= 0m ||
             liveStakeAmount <= 0m ||
             paperLostCoeff < 1m ||
-            liveLostCoeff < 1m)
+            liveLostCoeff < 1m ||
+            paperLostCounter < 0 ||
+            liveLostCounter < 0)
         {
             return Task.FromResult(false);
         }
@@ -1724,7 +1730,9 @@ internal sealed class TestAppRepository : IAppRepository
             PaperStakeAmount = paperStakeAmount,
             LiveStakeAmount = liveStakeAmount,
             PaperLostCoeff = paperLostCoeff,
-            LiveLostCoeff = liveLostCoeff
+            LiveLostCoeff = liveLostCoeff,
+            PaperLostCounter = paperLostCounter,
+            LiveLostCounter = liveLostCounter
         };
         return Task.FromResult(true);
     }
@@ -1747,6 +1755,45 @@ internal sealed class TestAppRepository : IAppRepository
             LiveAvailableBalance = liveAvailableBalance
         };
         return Task.FromResult(true);
+    }
+
+    public Task<StrategyLostCounterUpdateResult> UpdateStrategyLostCounterAfterSettlementAsync(
+        Guid strategyId,
+        bool isLive,
+        bool won,
+        bool counterEnabled,
+        DateTimeOffset updatedAtUtc,
+        CancellationToken cancellationToken = default)
+    {
+        var normalizedStrategyId = StrategyIds.Normalize(strategyId);
+        if (!StrategySettings.ContainsKey(normalizedStrategyId))
+        {
+            return Task.FromResult(new StrategyLostCounterUpdateResult(false, 0, 0));
+        }
+
+        var settings = GetStrategySettings(normalizedStrategyId);
+        var paperLostCounter = settings.PaperLostCounter;
+        var liveLostCounter = settings.LiveLostCounter;
+        if (isLive)
+        {
+            liveLostCounter = counterEnabled
+                ? (won ? Math.Max(0, liveLostCounter - 1) : liveLostCounter + 1)
+                : 0;
+        }
+        else
+        {
+            paperLostCounter = counterEnabled
+                ? (won ? Math.Max(0, paperLostCounter - 1) : paperLostCounter + 1)
+                : 0;
+        }
+
+        StrategySettings[normalizedStrategyId] = settings with
+        {
+            PaperLostCounter = paperLostCounter,
+            LiveLostCounter = liveLostCounter
+        };
+
+        return Task.FromResult(new StrategyLostCounterUpdateResult(true, paperLostCounter, liveLostCounter));
     }
 
     public Task<bool> TryAddPaperCopiedLeaderPositionAsync(

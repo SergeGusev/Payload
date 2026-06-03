@@ -8,6 +8,20 @@ public interface IStrategyStateProvider
 
     Task<IReadOnlySet<Guid>> GetEnabledStrategyIdsAsync(CancellationToken cancellationToken = default);
 
+    Task ForceRefreshAsync(CancellationToken cancellationToken = default)
+    {
+        return Task.CompletedTask;
+    }
+
+    Task UpdateStrategyLostCountersAsync(
+        Guid strategyId,
+        int paperLostCounter,
+        int liveLostCounter,
+        CancellationToken cancellationToken = default)
+    {
+        return Task.CompletedTask;
+    }
+
     async Task<bool> IsStrategyEnabledAsync(Guid strategyId, CancellationToken cancellationToken = default)
     {
         var enabledStrategyIds = await GetEnabledStrategyIdsAsync(cancellationToken);

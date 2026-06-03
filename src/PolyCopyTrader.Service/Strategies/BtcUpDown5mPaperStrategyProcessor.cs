@@ -101,8 +101,6 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
     private readonly SemaphoreSlim entryPlacementLock = new(1, 1);
     private readonly Dictionary<string, DateTimeOffset> closingOrderBookCaptureAttempts = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<string, BtcMakerHighWaterState> makerHighWaterStates = new(StringComparer.OrdinalIgnoreCase);
-    private readonly object paperLostCounterLock = new();
-    private readonly Dictionary<Guid, int> paperLostCounters = [];
 
     public async Task<BtcUpDown5mPaperStrategyResult> ProcessAsync(CancellationToken cancellationToken = default)
     {
@@ -122,6 +120,11 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
         if (entryVariants.Length == 0)
         {
             var settledRuns = await SettleDueRunsAsync(now, StrategyIds.UpDown5mStrategyVariants, cancellationToken);
+            if (settledRuns > 0)
+            {
+                await strategyStateProvider.ForceRefreshAsync(cancellationToken);
+            }
+
             return new BtcUpDown5mPaperStrategyResult(0, 0, 0, settledRuns);
         }
 
@@ -153,6 +156,11 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
         var settledRunsBeforeMartinEntries = martinEntryVariants.Length == 0
             ? 0
             : await SettleDueRunsAsync(DateTimeOffset.UtcNow, martinEntryVariants, cancellationToken);
+        if (settledRunsBeforeMartinEntries > 0)
+        {
+            await strategyStateProvider.ForceRefreshAsync(cancellationToken);
+            strategySettings = await strategyStateProvider.GetStrategySettingsAsync(cancellationToken);
+        }
 
         controlState.RecordLoop($"BTC5mStrategy placing Martin due entries before observe. Variants={martinEntryVariants.Length}", null);
         var (martinEntriesPlacedBeforeObserve, martinEntrySkippedBeforeObserve) = await PlaceDueEntriesAsync(
@@ -190,6 +198,12 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
         var settledRunsBeforeMartinEntriesAfterObserve = martinEntryVariants.Length == 0
             ? 0
             : await SettleDueRunsAsync(DateTimeOffset.UtcNow, martinEntryVariants, cancellationToken);
+        if (settledRunsBeforeMartinEntriesAfterObserve > 0)
+        {
+            await strategyStateProvider.ForceRefreshAsync(cancellationToken);
+            strategySettings = await strategyStateProvider.GetStrategySettingsAsync(cancellationToken);
+        }
+
         controlState.RecordLoop($"BTC5mStrategy placing Martin due entries after observe. Variants={martinEntryVariants.Length}", null);
         var (martinEntriesPlacedAfterObserve, martinEntrySkippedAfterObserve) = await PlaceDueEntriesAsync(
             DateTimeOffset.UtcNow,
@@ -209,6 +223,11 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
             cancellationToken);
         controlState.RecordLoop("BTC5mStrategy settling due runs after entries", null);
         var settledRunsAfterEntries = await SettleDueRunsAsync(DateTimeOffset.UtcNow, StrategyIds.UpDown5mStrategyVariants, cancellationToken);
+        if (settledRunsAfterEntries > 0)
+        {
+            await strategyStateProvider.ForceRefreshAsync(cancellationToken);
+        }
+
         controlState.RecordLoop("BTC5mStrategy capturing close-book snapshots", null);
         await CaptureClosingOrderBookSnapshotsAsync(DateTimeOffset.UtcNow, observeResult.Markets, cancellationToken);
         return new BtcUpDown5mPaperStrategyResult(
@@ -3066,7 +3085,7 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
                 realizedPnl);
 
             var settings = await strategyStateProvider.GetStrategySettingsAsync(runVariant.Id, cancellationToken);
-            UpdatePaperLostCounterAfterSettlement(runVariant, settings, won);
+            await UpdatePaperLostCounterAfterSettlementAsync(runVariant, settings, won, nowUtc, cancellationToken);
             await UpdateStrategyAutoLivePauseAsync(runVariant.Id, runVariant.Code, nowUtc, cancellationToken);
 
             return 1;
@@ -8380,19 +8399,12 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
         decimal baseStakeUsd)
     {
         var configuredCoeff = Math.Max(1m, settings.PaperLostCoeff);
-        var normalizedStrategyId = StrategyIds.Normalize(variant.Id);
         if (configuredCoeff <= 1m || baseStakeUsd <= 0m)
         {
-            ResetPaperLostCounter(normalizedStrategyId);
             return PaperLostCounterStakeAdjustment.Disabled(configuredCoeff, baseStakeUsd);
         }
 
-        int lostCounter;
-        lock (paperLostCounterLock)
-        {
-            paperLostCounters.TryGetValue(normalizedStrategyId, out lostCounter);
-        }
-
+        var lostCounter = Math.Max(0, settings.PaperLostCounter);
         if (lostCounter <= 0)
         {
             return PaperLostCounterStakeAdjustment.Disabled(configuredCoeff, baseStakeUsd);
@@ -8418,48 +8430,40 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
             effectiveStakeUsd);
     }
 
-    private void UpdatePaperLostCounterAfterSettlement(
+    private async Task UpdatePaperLostCounterAfterSettlementAsync(
         BtcUpDown5mStrategyVariant variant,
         StrategyRuntimeSettings settings,
-        bool won)
+        bool won,
+        DateTimeOffset updatedAtUtc,
+        CancellationToken cancellationToken)
     {
         var normalizedStrategyId = StrategyIds.Normalize(variant.Id);
-        if (settings.PaperLostCoeff <= 1m)
+        var result = await repository.UpdateStrategyLostCounterAfterSettlementAsync(
+            normalizedStrategyId,
+            isLive: false,
+            won,
+            counterEnabled: settings.PaperLostCoeff > 1m,
+            updatedAtUtc,
+            cancellationToken);
+        if (!result.Applied)
         {
-            ResetPaperLostCounter(normalizedStrategyId);
+            logger.LogWarning(
+                "Paper LostCounter update skipped because strategy was not found. Strategy={StrategyCode}",
+                variant.Code);
             return;
         }
 
-        int updatedCounter;
-        lock (paperLostCounterLock)
-        {
-            paperLostCounters.TryGetValue(normalizedStrategyId, out var currentCounter);
-            updatedCounter = won
-                ? Math.Max(0, currentCounter - 1)
-                : currentCounter + 1;
-            if (updatedCounter <= 0)
-            {
-                paperLostCounters.Remove(normalizedStrategyId);
-            }
-            else
-            {
-                paperLostCounters[normalizedStrategyId] = updatedCounter;
-            }
-        }
+        await strategyStateProvider.UpdateStrategyLostCountersAsync(
+            normalizedStrategyId,
+            result.PaperLostCounter,
+            result.LiveLostCounter,
+            cancellationToken);
 
         logger.LogInformation(
             "Paper LostCounter updated after settlement. Strategy={StrategyCode} Won={Won} Counter={LostCounter}",
             variant.Code,
             won,
-            updatedCounter);
-    }
-
-    private void ResetPaperLostCounter(Guid strategyId)
-    {
-        lock (paperLostCounterLock)
-        {
-            paperLostCounters.Remove(strategyId);
-        }
+            result.PaperLostCounter);
     }
 
     private static string AttachOpeningLimitStakeSizingJson(

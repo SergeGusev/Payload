@@ -950,6 +950,8 @@ public sealed class DashboardDataService(
             performance.LiveStakeAmount,
             performance.PaperLostCoeff,
             performance.LiveLostCoeff,
+            performance.PaperLostCounter,
+            performance.LiveLostCounter,
             performance.LiveAvailableBalance,
             performance.OrdersCount,
             performance.FilledOrdersCount,

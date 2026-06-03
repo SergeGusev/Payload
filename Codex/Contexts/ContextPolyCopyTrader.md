@@ -1,3 +1,17 @@
+## Active Update 2026-06-03 Persist Strategy Lost Counters
+Goal: Persist per-strategy Paper and Live LostCounter values in PostgreSQL and expose them for Dashboard viewing/editing.
+Status: Completed
+Done:
+- Added `strategies.paper_lost_counter` and `strategies.live_lost_counter` integer columns with default `0`, non-negative constraints, runtime/performance/domain mapping, CSV export, and Dashboard editable `Paper Cnt` / `Live Cnt` columns.
+- Added repository APIs to save counters with stake/coeff settings and to atomically update the selected Paper/Live counter after settlement with win decrement and loss increment semantics.
+- Replaced the BTC/ETH/SOL 5m processor's in-memory Paper lost-counter dictionary with the persisted `StrategyRuntimeSettings.PaperLostCounter`, while updating `StrategyStateProvider` cache immediately after settlement and forcing a DB refresh after settlement batches so the next entry sees the final persisted counter.
+- Updated Live settlement maintenance to update `Live Cnt` from matched Live outcomes when `Live Lost > 1`; live stake sizing still does not use `Live Lost`/`Live Cnt`.
+- Updated README, configuration reference, and live trading checklist to remove the old restart-reset/in-memory wording.
+- Added/updated tests for schema/repository SQL, Paper persisted counter stake boost, Paper/Live-shadow Paper-only boost, and Live counter update after matched loss.
+Next: Deploy/restart `PolyCopyTrader.Service` so schema initialization adds the two counter columns and runtime starts using persisted counters; then verify Dashboard shows `Paper Cnt` / `Live Cnt` and existing Paper loss streaks survive restart.
+Notes: Verification passed: focused `dotnet test tests\PolyCopyTrader.Tests\PolyCopyTrader.Tests.csproj --filter "FullyQualifiedName~StorageTests|FullyQualifiedName~BtcUpDown5mPaperStrategyProcessorTests|FullyQualifiedName~LiveTradingGatingTests" --no-restore` 209/209; full test project 571/571; Service build passed with 0 warnings/errors; Dashboard temp-output build passed with existing Storage nullable warnings; `git diff --check` clean except LF/CRLF warnings.
+Blockers: Production service still needs deploy/restart for the new schema columns and persisted counter behavior to take effect.
+
 ## Active Update 2026-06-03 Split Paper Live Shadow LostCoeff Sizing
 Goal: Let Paper/Live-shadow Paper orders use PaperLostCoeff while Live orders remain sized independently from Live $.
 Status: Completed

@@ -82,6 +82,8 @@ public static class StrategyStakeAdminCommand
                 liveStakeAmount ?? strategy.LiveStakeAmount,
                 strategy.PaperLostCoeff,
                 strategy.LiveLostCoeff,
+                strategy.PaperLostCounter,
+                strategy.LiveLostCounter,
                 updatedAtUtc,
                 cancellationToken);
 

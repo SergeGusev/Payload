@@ -25,6 +25,62 @@ public sealed class StrategyStateProvider(
         return enabledStrategyIds ?? new HashSet<Guid>();
     }
 
+    public async Task ForceRefreshAsync(CancellationToken cancellationToken = default)
+    {
+        await refreshLock.WaitAsync(cancellationToken);
+        try
+        {
+            strategySettings = null;
+            enabledStrategyIds = null;
+            refreshedAtUtc = default;
+        }
+        finally
+        {
+            refreshLock.Release();
+        }
+
+        await EnsureRefreshedAsync(cancellationToken);
+    }
+
+    public async Task UpdateStrategyLostCountersAsync(
+        Guid strategyId,
+        int paperLostCounter,
+        int liveLostCounter,
+        CancellationToken cancellationToken = default)
+    {
+        var normalizedStrategyId = StrategyIds.Normalize(strategyId);
+        await refreshLock.WaitAsync(cancellationToken);
+        try
+        {
+            if (strategySettings is null)
+            {
+                return;
+            }
+
+            var updatedSettings = strategySettings.ToDictionary(
+                item => StrategyIds.Normalize(item.Key),
+                item => item.Value);
+            var settings = updatedSettings.TryGetValue(normalizedStrategyId, out var value)
+                ? value
+                : StrategyRuntimeSettings.Default(normalizedStrategyId);
+            updatedSettings[normalizedStrategyId] = settings with
+            {
+                StrategyId = normalizedStrategyId,
+                PaperLostCounter = Math.Max(0, paperLostCounter),
+                LiveLostCounter = Math.Max(0, liveLostCounter)
+            };
+            strategySettings = updatedSettings;
+            enabledStrategyIds = updatedSettings
+                .Where(item => item.Value.Enabled)
+                .Select(item => StrategyIds.Normalize(item.Key))
+                .ToHashSet();
+        }
+        finally
+        {
+            refreshLock.Release();
+        }
+    }
+
     private async Task EnsureRefreshedAsync(CancellationToken cancellationToken)
     {
         var now = DateTimeOffset.UtcNow;

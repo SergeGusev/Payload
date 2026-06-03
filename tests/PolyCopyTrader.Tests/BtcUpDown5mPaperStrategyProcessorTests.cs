@@ -3424,6 +3424,7 @@ public sealed class BtcUpDown5mPaperStrategyProcessorTests
         Assert.Equal(6, settleResult.RunsSettled);
         Assert.Equal(0, settleResult.EntriesPlaced);
         Assert.Equal(6, repository.PaperOrders.Count);
+        Assert.Equal(6, repository.StrategySettings[Middle1Variant.Id].PaperLostCounter);
 
         repository.PolymarketGammaMarkets.Add(CreateMarket(
             now,
@@ -8099,6 +8100,7 @@ public sealed class BtcUpDown5mPaperStrategyProcessorTests
         Assert.Equal(1, settleResult.RunsSettled);
         Assert.Equal(0, settleResult.EntriesPlaced);
         Assert.Equal(0, tradingClient.PlaceCalls);
+        Assert.Equal(1, repository.StrategySettings[EthSkipBps7InstantVariant.Id].PaperLostCounter);
 
         repository.PolymarketGammaMarkets.Add(CreateMarket(
             now,

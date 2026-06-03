@@ -254,6 +254,8 @@ public sealed class NoOpAppRepository : IAppRepository
         decimal liveStakeAmount,
         decimal paperLostCoeff,
         decimal liveLostCoeff,
+        int paperLostCounter,
+        int liveLostCounter,
         DateTimeOffset updatedAtUtc,
         CancellationToken cancellationToken = default)
     {
@@ -267,6 +269,17 @@ public sealed class NoOpAppRepository : IAppRepository
         CancellationToken cancellationToken = default)
     {
         return Task.FromResult(false);
+    }
+
+    public Task<StrategyLostCounterUpdateResult> UpdateStrategyLostCounterAfterSettlementAsync(
+        Guid strategyId,
+        bool isLive,
+        bool won,
+        bool counterEnabled,
+        DateTimeOffset updatedAtUtc,
+        CancellationToken cancellationToken = default)
+    {
+        return Task.FromResult(new StrategyLostCounterUpdateResult(false, 0, 0));
     }
 
     public Task AddDryRunOrderAsync(DryRunOrder order, CancellationToken cancellationToken = default)

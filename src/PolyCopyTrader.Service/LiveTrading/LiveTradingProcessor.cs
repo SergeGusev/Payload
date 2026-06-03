@@ -310,6 +310,7 @@ public sealed class LiveTradingProcessor(
                     realizedPnl,
                     result.AvailableBalance);
 
+                await UpdateStrategyLiveLostCounterAfterSettlementAsync(order.StrategyId, settlementValue > 0m, now, cancellationToken);
                 await UpdateStrategyAutoLivePauseAsync(order.StrategyId, now, cancellationToken);
 
                 if (result.LiveStakesDisabled)
@@ -337,6 +338,39 @@ public sealed class LiveTradingProcessor(
         }
 
         return applied;
+    }
+
+    private async Task UpdateStrategyLiveLostCounterAfterSettlementAsync(
+        Guid strategyId,
+        bool won,
+        DateTimeOffset updatedAtUtc,
+        CancellationToken cancellationToken)
+    {
+        var normalizedStrategyId = StrategyIds.Normalize(strategyId);
+        var runtimeSettings = await repository.GetStrategyRuntimeSettingsAsync(cancellationToken);
+        var settings = runtimeSettings.TryGetValue(normalizedStrategyId, out var value)
+            ? value
+            : StrategyRuntimeSettings.Default(normalizedStrategyId);
+        var result = await repository.UpdateStrategyLostCounterAfterSettlementAsync(
+            normalizedStrategyId,
+            isLive: true,
+            won,
+            counterEnabled: settings.LiveLostCoeff > 1m,
+            updatedAtUtc,
+            cancellationToken);
+        if (!result.Applied)
+        {
+            logger.LogWarning(
+                "Live LostCounter update skipped because strategy was not found. StrategyId={StrategyId}",
+                normalizedStrategyId);
+            return;
+        }
+
+        logger.LogInformation(
+            "Live LostCounter updated after settlement. StrategyId={StrategyId} Won={Won} Counter={LostCounter}",
+            normalizedStrategyId,
+            won,
+            result.LiveLostCounter);
     }
 
     private async Task<IReadOnlyList<PolymarketOnChainTokenMetadata>> GetResolvedMetadataAsync(

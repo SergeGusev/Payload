@@ -379,10 +379,28 @@
                                 </DataTemplate>
                             </DataGridTemplateColumn.CellTemplate>
                         </DataGridTemplateColumn>
+                        <DataGridTemplateColumn Header="Paper Cnt" Width="85">
+                            <DataGridTemplateColumn.CellTemplate>
+                                <DataTemplate>
+                                    <TextBox Text="{Binding PaperLostCounter, Mode=TwoWay, UpdateSourceTrigger=LostFocus}"
+                                             HorizontalContentAlignment="Right"
+                                             Padding="4,2" />
+                                </DataTemplate>
+                            </DataGridTemplateColumn.CellTemplate>
+                        </DataGridTemplateColumn>
                         <DataGridTemplateColumn Header="Live Lost" Width="80">
                             <DataGridTemplateColumn.CellTemplate>
                                 <DataTemplate>
                                     <TextBox Text="{Binding LiveLostCoeff, Mode=TwoWay, UpdateSourceTrigger=LostFocus}"
+                                             HorizontalContentAlignment="Right"
+                                             Padding="4,2" />
+                                </DataTemplate>
+                            </DataGridTemplateColumn.CellTemplate>
+                        </DataGridTemplateColumn>
+                        <DataGridTemplateColumn Header="Live Cnt" Width="80">
+                            <DataGridTemplateColumn.CellTemplate>
+                                <DataTemplate>
+                                    <TextBox Text="{Binding LiveLostCounter, Mode=TwoWay, UpdateSourceTrigger=LostFocus}"
                                              HorizontalContentAlignment="Right"
                                              Padding="4,2" />
                                 </DataTemplate>

@@ -610,7 +610,8 @@ public sealed class LiveTradingGatingTests
         {
             LiveStakes = true,
             LiveAvailableBalance = 3m,
-            LiveStakeAmount = 2.50m
+            LiveStakeAmount = 2.50m,
+            LiveLostCoeff = 2m
         };
         var now = DateTimeOffset.UtcNow;
         await repository.AddLiveOrderAsync(new LiveOrder(
@@ -659,6 +660,7 @@ public sealed class LiveTradingGatingTests
         Assert.Equal(0m, order.SettlementValueUsd);
         Assert.Equal(-4m, order.RealizedPnlUsd);
         Assert.Equal(0m, repository.StrategySettings[StrategyIds.FollowLeader].LiveAvailableBalance);
+        Assert.Equal(1, repository.StrategySettings[StrategyIds.FollowLeader].LiveLostCounter);
         Assert.False(repository.StrategySettings[StrategyIds.FollowLeader].LiveStakes);
         Assert.Single(repository.LiveTradingEvents, item => item.Action == "StrategyLiveBalance");
     }
