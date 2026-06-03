@@ -1108,21 +1108,32 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
     {
         if (paperOrders)
         {
+            var previousSelection = SelectedPaperOrdersStrategy;
             SelectedPaperOrdersStrategy = ResolveStrategyOrderFilterOption(
                 strategyId,
                 strategyName,
                 PaperOrderStrategyOptions);
             DashboardTabSelectedIndex = PaperOrdersTabIndex;
             CommandStatus = $"Showing paper orders for {SelectedPaperOrdersStrategy?.Name ?? AllOrderStrategies}.";
+            if (Equals(previousSelection, SelectedPaperOrdersStrategy))
+            {
+                RequestOrderRefresh();
+            }
+
             return;
         }
 
+        var previousLiveSelection = SelectedLiveOrdersStrategy;
         SelectedLiveOrdersStrategy = ResolveStrategyOrderFilterOption(
             strategyId,
             strategyName,
             LiveOrderStrategyOptions);
         DashboardTabSelectedIndex = LiveOrdersTabIndex;
         CommandStatus = $"Showing live orders for {SelectedLiveOrdersStrategy?.Name ?? AllOrderStrategies}.";
+        if (Equals(previousLiveSelection, SelectedLiveOrdersStrategy))
+        {
+            RequestOrderRefresh();
+        }
     }
 
     private async Task SendCommandAsync(Func<Task<ControlCommandResponse>> send)
@@ -1397,7 +1408,7 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
 
         try
         {
-            CommandStatus = $"Loading orders for {SelectedPaperOrdersStrategy?.Name ?? AllOrderStrategies} / {SelectedLiveOrdersStrategy?.Name ?? AllOrderStrategies}.";
+            CommandStatus = $"Loading orders for {SelectedPaperOrdersStrategy?.Name ?? AllOrderStrategies} / {SelectedLiveOrdersStrategy?.Name ?? AllOrderStrategies} from {StorageStatus}.";
             var snapshot = await dataService.LoadOrderRowsAsync(paperStrategyId, liveStrategyId);
             if (refreshVersion != Volatile.Read(ref orderRefreshVersion))
             {
@@ -1408,7 +1419,7 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
             allLiveOrders = snapshot.LiveOrders;
             ApplyOrderFilters();
             LastUpdatedUtc = DateTimeOffset.UtcNow;
-            CommandStatus = $"Loaded {PaperOrders.Count} paper orders and {LiveOrders.Count} live orders.";
+            CommandStatus = $"Loaded {PaperOrders.Count} paper orders and {LiveOrders.Count} live orders from {StorageStatus}.";
         }
         catch (Exception ex)
         {

@@ -11,3 +11,10 @@ Request:
 
 Result:
 Diagnosed the remaining empty selected-strategy orders view. Direct database checks showed that the local Dashboard database has 0 Paper/Live rows for the checked Instant strategies, while remote `192.168.0.101` has matching rows, including SOL Skip 42, ETH Skip 7, and BTC Middle 47. Fixed a Dashboard ViewModel race where selecting a Paper/Live orders strategy during a full refresh could leave the grid filtering the stale first global orders page without scheduling the server-side selected-strategy reload. Dashboard now queues a pending orders refresh and runs it immediately after the full refresh finishes. Verification passed: Dashboard Verify build succeeded with existing Storage nullable warnings and no errors, StorageTests 38/38, and full tests 585/585.
+
+## 2026-06-03T22:00:55.7940721+00:00
+Request:
+Не работает
+
+Result:
+Found another Dashboard orders reload gap: if `Paper orders` / `Live orders` was clicked for the strategy that was already selected, the selected item value did not change, so the selector change handler did not run and the strategy-specific server reload was not requested. Updated row-button navigation to explicitly request an orders refresh when the resolved selection equals the previous selection, and added the current storage source to the orders loading/loaded status message so the UI shows whether it loaded from `Local database` or `Remote database`. Verification passed: Dashboard Verify build succeeded with existing Storage nullable warnings and no errors, StorageTests 38/38, and full tests 585/585.

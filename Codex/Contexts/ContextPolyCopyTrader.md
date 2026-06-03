@@ -1,3 +1,14 @@
+## Active Update 2026-06-04 Dashboard Orders Repeat Strategy Reload
+Goal: Make strategy order buttons reload rows even when the same strategy is already selected.
+Status: Completed
+Done:
+- Found that clicking `Paper orders` / `Live orders` for the already selected strategy did not change the bound selected item, so the selector change handler did not fire and no server-side order reload was requested.
+- Changed `NavigateToOrderTab` to explicitly request an orders refresh when the resolved Paper/Live strategy selection equals the previous selection.
+- Updated order loading status text to include `StorageStatus`, making it visible whether the rows came from `Local database` or `Remote database`.
+Next: Deploy/reopen Dashboard, then click the strategy order button again; the status line should say which database loaded the orders.
+Notes: Verification passed: Dashboard Verify build succeeded with existing Storage nullable warnings and no errors; focused `StorageTests` passed 38/38; full test project passed 585/585.
+Blockers: None.
+
 ## Active Update 2026-06-04 Dashboard Orders Strategy Refresh Race
 Goal: Fix orders tabs still showing empty rows for a selected strategy after server-side strategy paging was deployed.
 Status: Completed
