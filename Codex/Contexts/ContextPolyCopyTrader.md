@@ -1,3 +1,13 @@
+## Active Update 2026-06-03 ETH Skip 32 Redeploy Check
+Goal: Determine whether enabling `ETH Up or Down 5m Skip 32 bps Instant` requires redeploying the service.
+Status: Completed
+Done:
+- Rechecked production after the targeted DB update and confirmed BTC Middle 47, ETH Skip 7, ETH Skip 32, and SOL Skip 42 are all `live_stakes=true`, `auto_live_paused=false`, enabled, and not paused.
+- Confirmed production still has `live_count=4`, `effective_live_count=4`, and `auto_paused_live_count=0`, so the running service has the desired runtime-visible Live state without a redeploy.
+Next: None.
+Notes: Answer/check task only. No production writes, service restart, source code changes, live submissions, or cancels were performed.
+Blockers: None.
+
 ## Active Update 2026-06-03 Enable ETH Skip 32 Live
 Goal: Enable Live for `ETH Up or Down 5m Skip 32 bps Instant` without resetting other Live strategies.
 Status: Completed
