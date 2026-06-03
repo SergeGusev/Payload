@@ -5,6 +5,7 @@ using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using PolyCopyTrader.Dashboard.Models;
 using PolyCopyTrader.Dashboard.Services;
+using PolyCopyTrader.Domain;
 using PolyCopyTrader.Polymarket;
 
 namespace PolyCopyTrader.Dashboard.ViewModels;
@@ -1270,7 +1271,7 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
             .Concat(
                 allStrategies
                     .OrderBy(item => item.Name, StringComparer.OrdinalIgnoreCase)
-                    .Select(item => new StrategyOrderFilterOption(item.StrategyId, item.Name)))
+                    .Select(item => new StrategyOrderFilterOption(StrategyIds.Normalize(item.StrategyId), item.Name)))
             .ToArray();
 
         Replace(PaperOrderStrategyOptions, strategyOptions);
@@ -1374,7 +1375,10 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
     {
         if (strategyId is { } id)
         {
-            var byId = options.FirstOrDefault(item => item.StrategyId == id);
+            var normalizedId = StrategyIds.Normalize(id);
+            var byId = options.FirstOrDefault(item =>
+                item.StrategyId is { } optionId &&
+                StrategyIds.Normalize(optionId) == normalizedId);
             if (byId is not null)
             {
                 return byId;
@@ -1428,7 +1432,8 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
 
     private static bool IsOrderStrategyVisible(Guid strategyId, StrategyOrderFilterOption? selectedStrategy)
     {
-        return selectedStrategy?.StrategyId is not { } selectedStrategyId || strategyId == selectedStrategyId;
+        return selectedStrategy?.StrategyId is not { } selectedStrategyId ||
+            StrategyIds.Normalize(strategyId) == StrategyIds.Normalize(selectedStrategyId);
     }
 
     private static bool IsStrategyRecentPositiveVisible(StrategyRecentPerformanceRow strategy, bool onlyPositive)

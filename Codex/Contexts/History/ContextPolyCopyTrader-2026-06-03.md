@@ -237,3 +237,10 @@ Request:
 
 Result:
 Traced `LiveTrading:MaxOpenLiveOrders = 1` to the old `b1fcc83 Add gated maker-only live trading` safety scaffold rather than a specific strategy requirement. Removed the unintended global open Live order cap from Follow leader and BTC/SOL/ETH 5m live-shadow live preflight, config, validation, appsettings, Dashboard readiness, and docs. Kept same-market opposite-outcome protection through `OpenOrderDirectionGuard`. Added tests that a different-market open Live order does not block placement and an opposite same-market Live order still blocks/skips. Verification passed: focused live/BTC tests 185/185, Service Verify build 0 warnings/errors, Dashboard Verify build 0 warnings/errors, full test project 583/583, and `git diff --check` clean except LF/CRLF warnings. No production writes, service restarts, live submissions, or cancels were performed.
+
+## 2026-06-03T20:59:25.0875268+00:00
+Request:
+Вкладка Paper orders показывает записи только в режиме All strategies
+
+Result:
+Fixed Dashboard order-tab strategy filtering. The tabs were filtering client-side over only the latest 100 global Paper/Live orders, so a selected strategy could appear empty when its rows were outside that short window. Dashboard now loads up to 10,000 recent Paper and Live orders for both full and strategies-only snapshots, normalizes strategy IDs in order filter options and visibility checks, and updates the strategies-only diagnostic text to reflect that order rows are loaded. Verification passed: Dashboard Verify build 0 warnings/errors, focused StorageTests 36/36, full test project 583/583, and `git diff --check` clean except LF/CRLF warnings.

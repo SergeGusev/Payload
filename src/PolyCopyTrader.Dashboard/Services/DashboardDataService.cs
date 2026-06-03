@@ -13,6 +13,7 @@ public sealed class DashboardDataService(
     IPolymarketAuthService authService)
 {
     private const int StrategyDashboardFetchLimit = 10_000;
+    private const int OrderDashboardFetchLimit = 10_000;
 
     private IReadOnlyList<StrategyPerformance>? cachedStrategyPerformance;
     private DateTimeOffset cachedStrategyPerformanceAtUtc = DateTimeOffset.MinValue;
@@ -47,7 +48,7 @@ public sealed class DashboardDataService(
         var onChainParticipantDetails = await repository.GetPolymarketOnChainParticipantDetailsAsync(250, cancellationToken);
         var leaderTrades = await repository.GetRecentLeaderTradesAsync(cancellationToken: cancellationToken);
         var signals = await repository.GetRecentSignalsAsync(cancellationToken: cancellationToken);
-        var recentPaperOrders = await repository.GetRecentPaperOrdersAsync(cancellationToken: cancellationToken);
+        var recentPaperOrders = await repository.GetRecentPaperOrdersAsync(OrderDashboardFetchLimit, cancellationToken);
         var openPaperOrders = await repository.GetOpenPaperOrdersAsync(cancellationToken);
         var paperPositions = await repository.GetPaperPositionsAsync(cancellationToken);
         var paperCopiedTraderPerformance = await repository.GetPaperCopiedTraderPerformanceAsync(250, cancellationToken);
@@ -57,7 +58,7 @@ public sealed class DashboardDataService(
             item => StrategyIds.Normalize(item.StrategyId),
             item => item.Name);
         var dryRunOrders = await repository.GetRecentDryRunOrdersAsync(cancellationToken: cancellationToken);
-        var liveOrders = await repository.GetRecentLiveOrdersAsync(cancellationToken: cancellationToken);
+        var liveOrders = await repository.GetRecentLiveOrdersAsync(OrderDashboardFetchLimit, cancellationToken);
         var liveTradingEvents = await repository.GetRecentLiveTradingEventsAsync(cancellationToken: cancellationToken);
         var apiErrors = await repository.GetRecentApiErrorsAsync(cancellationToken: cancellationToken);
         var riskEvents = await repository.GetRecentRiskEventsAsync(cancellationToken: cancellationToken);
@@ -179,8 +180,8 @@ public sealed class DashboardDataService(
         var strategyNamesById = strategyPerformance.ToDictionary(
             item => StrategyIds.Normalize(item.StrategyId),
             item => item.Name);
-        var recentPaperOrders = await repository.GetRecentPaperOrdersAsync(cancellationToken: cancellationToken);
-        var liveOrders = await repository.GetRecentLiveOrdersAsync(cancellationToken: cancellationToken);
+        var recentPaperOrders = await repository.GetRecentPaperOrdersAsync(OrderDashboardFetchLimit, cancellationToken);
+        var liveOrders = await repository.GetRecentLiveOrdersAsync(OrderDashboardFetchLimit, cancellationToken);
         var overview = BuildStrategyOnlyOverview(serviceAvailability, strategyPerformance, strategyRecentPerformance);
         var diagnostics = BuildStrategyOnlyDiagnostics(
             serviceAvailability,
@@ -333,7 +334,7 @@ public sealed class DashboardDataService(
         [
             new DiagnosticRow(
                 "Dashboard scope",
-                "StrategiesOnlyMode=True; skipped watchlist, trader discovery, on-chain, signals, orders, market data, reports, risk, logs and auth readiness queries.",
+                "StrategiesOnlyMode=True; loaded strategies plus recent Paper/Live orders; skipped watchlist, trader discovery, on-chain, signals, market data, reports, risk, logs and auth readiness queries.",
                 "Info"),
             new DiagnosticRow("Storage provider", configuration.Storage.Provider, storageConfigured ? "OK" : "Warning"),
             new DiagnosticRow("Storage configured", storageConfigured ? "Yes" : "No", storageConfigured ? "OK" : "Warning"),

@@ -1,3 +1,15 @@
+## Active Update 2026-06-03 Dashboard Paper Orders Strategy Filter
+Goal: Fix `Paper orders` tab showing rows only when `All strategies` is selected.
+Status: Completed
+Done:
+- Found that the order tabs filtered client-side over only the latest 100 global Paper/Live orders, so a selected strategy could show no rows when its orders were outside that short global window.
+- Increased Dashboard Paper/Live order fetch depth to `10_000` rows for both full and strategies-only loads.
+- Normalized strategy IDs in order filter options, selected filter restoration, and row visibility checks so configured strategy IDs and order-row strategy IDs compare consistently.
+- Updated strategies-only diagnostics to state that recent Paper/Live orders are loaded.
+Next: Deploy/reopen Dashboard for the corrected order-tab filtering to take effect.
+Notes: Verification passed: Dashboard Verify build succeeded with 0 warnings/errors; focused `StorageTests` passed 36/36; full test project passed 583/583; `git diff --check` clean except LF/CRLF warnings.
+Blockers: None.
+
 ## Active Update 2026-06-03 Remove Global Live Order Count Cap
 Goal: Remove the unintended global open Live order cap while keeping same-market opposite-outcome protection.
 Status: Completed
