@@ -106,3 +106,9 @@ Request:
 
 Result:
 Added persisted per-strategy `paper_lost_counter` and `live_lost_counter` database fields, runtime/performance/Dashboard/CSV plumbing, editable Dashboard `Paper Cnt` and `Live Cnt` columns, atomic repository counter updates after Paper/Live settlements, service cache updates plus forced DB refresh after settlement batches for immediate Paper sizing, docs updates, and regression coverage. Verification passed: focused tests 209/209, full tests 571/571, Service build 0 warnings/errors, Dashboard build succeeded with existing Storage nullable warnings, and `git diff --check` was clean except LF/CRLF warnings. Production still needs deploy/restart before the new schema columns and persisted counter behavior are active.
+## 2026-06-03T13:37:09.2543686Z
+Request:
+А почему у двух стратегий сбросились Live флаги?
+
+Result:
+Diagnosed production state read-only. Service was running commit `802710209aee0c0241090fc73d3a123696214445` from `2026-06-03T13:23:16Z`; exactly one strategy remained Live (`sol_up_down_5m_skip_bps_42_instant`). `2729` strategy rows were updated at the service start second with only SOL Live, matching the admin command semantics that enable only listed strategies and disables all others. No post-start live preflight/balance/placement errors or data migrations explained the BTC/ETH flag clearing. No production writes or source changes were made.

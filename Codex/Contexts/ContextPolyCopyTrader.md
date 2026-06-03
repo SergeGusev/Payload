@@ -1,3 +1,16 @@
+## Active Update 2026-06-03 Live Flags Reset Diagnosis
+Goal: Explain why BTC Middle 47 and ETH Skip 7 Live flags were cleared after the latest deployment.
+Status: Completed
+Done:
+- Queried production PostgreSQL read-only through `out\dbprobe` with a temporary host override to `192.168.0.101` and without printing the connection string.
+- Confirmed `PolyCopyTrader.Service` is running in `Live` mode on commit `802710209aee0c0241090fc73d3a123696214445`, started `2026-06-03T13:23:16Z`, with a fresh heartbeat and `last_error=null`.
+- Confirmed current Live state has exactly one Live strategy: `sol_up_down_5m_skip_bps_42_instant`; BTC Middle 47 and ETH Skip 7 both have `live_stakes=false`, `auto_live_paused=false`, and `live_enabled_at_utc=null`.
+- Confirmed `2729` strategy rows were updated at exactly `2026-06-03T13:23:16Z`, with only SOL left Live, matching the `--set-live-stakes-only-code` / `--set-live-stakes-only-codes` admin-command semantics that enables only listed codes and disables all others.
+- Ruled out other likely causes: `service_command_audit` was empty, no post-start live preflight/balance/placement errors existed, `live_trading_events` after start only had `StartupGeoblockCheck OK`, and old data migrations that clear Live flags were already applied on `2026-05-22`/`2026-06-01`, not today.
+Next: Re-enable the intended BTC/ETH/SOL Live set explicitly, preferably using the multi-code admin path or Dashboard, if the intended production state is three Live strategies.
+Notes: Read-only diagnosis only. No production writes, service restarts, source changes, tests, live submissions, or cancels were performed.
+Blockers: None.
+
 ## Active Update 2026-06-03 Persist Strategy Lost Counters
 Goal: Persist per-strategy Paper and Live LostCounter values in PostgreSQL and expose them for Dashboard viewing/editing.
 Status: Completed
