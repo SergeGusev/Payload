@@ -1,3 +1,14 @@
+## Active Update 2026-06-03 Live LostCoeff Clarification
+Goal: Clarify whether the LostCoeff cap change applies to Live stake sizing.
+Status: Completed
+Done:
+- Confirmed the cap changed in the currently implemented stake add-on path only: Paper LostCounter sizing in `BtcUpDown5mPaperStrategyProcessor`.
+- Confirmed `Live Lost` / `Live Cnt` are stored and updated from matched Live settlements when `Live Lost > 1`, but Live stake sizing still uses `Live $` / `LiveStakeAmount` and does not apply a Live LostCounter add-on yet.
+- Confirmed existing docs/tests explicitly cover that Paper/Live-shadow uses Paper LostCounter only for Paper sizing while the Live order stays at the configured Live stake.
+Next: If Live LostCoeff should also increase Live stake sizing, implement that as a separate explicit live-sizing change and use the same cap of `3`.
+Notes: Answer/code-inspection task only. `git pull --ff-only` reported already up to date. No production writes, service restart, live submissions, or source behavior changes were performed.
+Blockers: None.
+
 ## Active Update 2026-06-03 Paper LostCoeff Cap 3
 Goal: Change the Paper LostCounter stake add-on cap from 5 to 3.
 Status: Completed

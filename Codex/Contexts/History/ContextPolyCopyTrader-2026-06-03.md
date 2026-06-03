@@ -189,3 +189,10 @@ Request:
 
 Result:
 Changed the Paper LostCounter stake add-on cap from 5 to 3 in `BtcUpDown5mPaperStrategyProcessor`, updated the cap regression test expectations, and updated README/configuration docs to describe `min(Paper Cnt, 3)`. Verification passed: focused processor tests 164/164, full test project 577/577, Service Verify build 0 warnings/errors, and `git diff --check` clean except LF/CRLF warnings.
+
+## 2026-06-03T19:39:07.1953173+00:00
+Request:
+Не понял. Только для Paper? А для Live то же самое?
+
+Result:
+Clarified by code inspection that the implemented LostCounter stake add-on currently applies only to Paper sizing. `Live Lost` and `Live Cnt` are stored and updated from matched Live settlements, but Live stake sizing still uses configured `Live $` / `LiveStakeAmount` and does not apply a Live LostCounter add-on yet. No source behavior change, production write, service restart, live submission, or cancel was performed.
