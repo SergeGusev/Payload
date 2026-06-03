@@ -223,3 +223,10 @@ Npgsql.NpgsqlException (0x80004005): Exception while reading from stream
 
 Result:
 Diagnosed Dashboard timeout as the new strategies-only recent Paper orders load using `ORDER BY created_at_utc DESC LIMIT 100` without a global `paper_orders.created_at_utc` index. Added concurrent schema index `ix_paper_orders_created_time` on `paper_orders(created_at_utc DESC)` and made `GetRecentPaperOrdersAsync` use a lightweight projection that does not read `raw_decision_json::text`. Added storage regression checks. Verification passed: StorageTests 36/36, Dashboard Verify build 0 warnings/errors, full test project 579/579, and `git diff --check` clean except LF/CRLF warnings. No production writes or service/Dashboard restarts were performed.
+
+## 2026-06-03T20:23:10.3147572+00:00
+Request:
+Посмотри картинку. Чья это ошибка?
+
+Result:
+Extracted the screenshot from the Windows clipboard and identified the visible Dashboard validation as `Maximum open live order count reached.`. Traced the message to service-side live preflight validation, not Polymarket or WPF. Current config has `LiveTrading:MaxOpenLiveOrders = 1`, and the code checks global open Live orders, so one open Live order blocks the next Live placement. No source behavior changes, production writes, live submissions, cancels, builds, or tests were performed.

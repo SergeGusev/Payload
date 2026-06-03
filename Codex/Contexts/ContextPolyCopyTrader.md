@@ -1,3 +1,15 @@
+## Active Update 2026-06-03 Open Live Order Count Validation
+Goal: Identify the source of the Dashboard validation screenshot.
+Status: Completed
+Done:
+- Extracted the screenshot from the Windows clipboard and inspected it.
+- Confirmed the visible validation is `Maximum open live order count reached.`.
+- Traced the message to service-side live preflight validation in `SignalProcessor` and `BtcUpDown5mPaperStrategyProcessor`, not to Polymarket or WPF rendering.
+- Confirmed current service config has `LiveTrading:MaxOpenLiveOrders = 1`, and the guard uses the global `openLiveOrders.Count`, so one open Live order blocks additional Live placements.
+Next: If this behavior is too restrictive for multiple Live strategies, change `MaxOpenLiveOrders` or make the limit per strategy/market instead of global.
+Notes: Diagnosis only. No source behavior changes, production writes, live submissions, cancels, builds, or tests were performed.
+Blockers: None.
+
 ## Active Update 2026-06-03 Recent Paper Orders Timeout
 Goal: Fix Dashboard refresh timeout in `GetRecentPaperOrdersAsync`.
 Status: Completed
