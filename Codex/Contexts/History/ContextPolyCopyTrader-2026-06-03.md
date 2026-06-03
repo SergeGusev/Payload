@@ -182,3 +182,10 @@ Request:
 
 Result:
 Implemented strategy-linked Dashboard order tabs and navigation. `Paper orders` and `Live orders` now show `Strategy` per row and have a strategy selector defaulting to `All strategies`. The tabs remain visible in `Dashboard:StrategiesOnlyMode=true`, whose snapshot now loads recent Paper and Live orders while still skipping heavy non-strategy/on-chain/analytics tabs. Every row in `Strategies` `All`, `24 hours`, `6 hours`, and `1 hour` has `Paper orders` and `Live orders` buttons that switch to the matching order tab with the clicked strategy preselected. Updated README. Verification passed: Dashboard Verify build succeeded with 0 warnings/errors; full test project passed 577/577; `git diff --check` was clean except LF/CRLF warnings.
+
+## 2026-06-03T19:32:05.0712620+00:00
+Request:
+Когда я давал задачу по Lost coeff, я попросил, чтобы он не превышал 5. Давай переделаем на 3
+
+Result:
+Changed the Paper LostCounter stake add-on cap from 5 to 3 in `BtcUpDown5mPaperStrategyProcessor`, updated the cap regression test expectations, and updated README/configuration docs to describe `min(Paper Cnt, 3)`. Verification passed: focused processor tests 164/164, full test project 577/577, Service Verify build 0 warnings/errors, and `git diff --check` clean except LF/CRLF warnings.

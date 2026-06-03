@@ -3439,19 +3439,19 @@ public sealed class BtcUpDown5mPaperStrategyProcessorTests
             item.StrategyId == Middle1Variant.Id &&
             string.Equals(item.MarketId, "market-1", StringComparison.OrdinalIgnoreCase));
         Assert.Equal(StrategyMarketPaperRunStatuses.Entered, run.Status);
-        Assert.Equal(6m, run.StakeUsd);
-        Assert.Equal(12m, run.SizeShares);
+        Assert.Equal(4m, run.StakeUsd);
+        Assert.Equal(8m, run.SizeShares);
 
         var order = Assert.Single(repository.PaperOrders, item =>
             string.Equals(item.AssetId, "asset-down", StringComparison.OrdinalIgnoreCase));
-        Assert.Equal(6m, order.NotionalUsd);
-        Assert.Equal(12m, order.SizeShares);
+        Assert.Equal(4m, order.NotionalUsd);
+        Assert.Equal(8m, order.SizeShares);
         Assert.Contains("\"paper_lost_coeff_configured\":2", order.RawDecisionJson, StringComparison.Ordinal);
         Assert.Contains("\"paper_lost_counter\":6", order.RawDecisionJson, StringComparison.Ordinal);
-        Assert.Contains("\"paper_lost_counter_coeff\":5", order.RawDecisionJson, StringComparison.Ordinal);
+        Assert.Contains("\"paper_lost_counter_coeff\":3", order.RawDecisionJson, StringComparison.Ordinal);
         Assert.Contains("\"paper_lost_base_stake_usd\":1", order.RawDecisionJson, StringComparison.Ordinal);
-        Assert.Contains("\"paper_lost_add_stake_usd\":5", order.RawDecisionJson, StringComparison.Ordinal);
-        Assert.Contains("\"paper_lost_effective_stake_usd\":6", order.RawDecisionJson, StringComparison.Ordinal);
+        Assert.Contains("\"paper_lost_add_stake_usd\":3", order.RawDecisionJson, StringComparison.Ordinal);
+        Assert.Contains("\"paper_lost_effective_stake_usd\":4", order.RawDecisionJson, StringComparison.Ordinal);
     }
 
     [Fact]

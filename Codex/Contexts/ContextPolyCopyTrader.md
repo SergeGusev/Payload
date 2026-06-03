@@ -1,3 +1,14 @@
+## Active Update 2026-06-03 Paper LostCoeff Cap 3
+Goal: Change the Paper LostCounter stake add-on cap from 5 to 3.
+Status: Completed
+Done:
+- Changed `MaxPaperLostCounterStakeCoeff` in `BtcUpDown5mPaperStrategyProcessor` from `5` to `3`.
+- Updated the regression test with `Paper Cnt = 6` so expected stake sizing is now base `1` plus add-on `3`, total `4`, with `8` shares at price `0.50`.
+- Updated README and configuration reference docs from `min(Paper Cnt, 5)` to `min(Paper Cnt, 3)`.
+Next: Deploy/restart the service for the new cap to affect runtime Paper entries.
+Notes: Verification passed: focused `dotnet test tests\PolyCopyTrader.Tests\PolyCopyTrader.Tests.csproj --configuration Verify --no-restore /p:UseSharedCompilation=false --filter "BtcUpDown5mPaperStrategyProcessorTests"` passed 164/164; full test project passed 577/577; `dotnet build src\PolyCopyTrader.Service\PolyCopyTrader.Service.csproj --configuration Verify --no-restore /p:UseSharedCompilation=false` succeeded with 0 warnings/errors; `git diff --check` clean except LF/CRLF warnings.
+Blockers: None.
+
 ## Active Update 2026-06-03 Dashboard Strategy Order Tabs
 Goal: Add Dashboard Paper/Live order tabs with strategy filtering and per-strategy navigation buttons.
 Status: Completed

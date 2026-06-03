@@ -858,7 +858,7 @@ least `1`. `Paper Cnt` and `Live Cnt` are persisted signed counters in
 `strategies.paper_lost_counter` and `strategies.live_lost_counter`, both
 defaulting to `0`. When `Paper Lost` is greater than `1`, Paper losses increment
 `Paper Cnt`, Paper wins decrement it by `1` even below zero, and the stake
-add-on applies only while `Paper Cnt` is positive: `Stake * min(Paper Cnt, 5)`
+add-on applies only while `Paper Cnt` is positive: `Stake * min(Paper Cnt, 3)`
 is added to the already computed Paper stake at entry time. When `Live Lost` is
 greater than `1`, matched Live settlements update `Live Cnt` with the same signed
 counter rule, but it is not applied to live stake sizing yet.

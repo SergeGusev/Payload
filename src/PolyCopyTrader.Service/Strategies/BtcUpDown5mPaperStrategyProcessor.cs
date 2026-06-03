@@ -84,7 +84,7 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
     private const decimal MinimumStakeSafetyMultiplier = 1.10m;
     private const decimal FillSizeTolerance = 0.000001m;
     private const decimal CloseBookResultThreshold = 0.50m;
-    private const int MaxPaperLostCounterStakeCoeff = 5;
+    private const int MaxPaperLostCounterStakeCoeff = 3;
     private const int SkipPreviousResultEndPriceMaxAgeSeconds = 15;
     private const int SkipPreviousResultBpsMaxStreakMarkets = 100;
     private const int MakerDecisionIntervalSeconds = 30;
