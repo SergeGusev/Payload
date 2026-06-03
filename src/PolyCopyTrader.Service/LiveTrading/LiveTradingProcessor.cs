@@ -25,7 +25,6 @@ public sealed class LiveTradingProcessor(
 {
     private const string PaperLiveShadowTestSource = "paper_live_shadow_test";
     private const decimal ShadowPriceTolerance = 0.000001m;
-    private const decimal ShadowSizeTolerance = 0.000001m;
     private const decimal FillSizeTolerance = 0.000001m;
     private static readonly TimeSpan StrategyPauseLookback = TimeSpan.FromHours(12);
 
@@ -642,11 +641,6 @@ public sealed class LiveTradingProcessor(
         if (Math.Abs(paperOrder.Price - liveOrder.Price) > ShadowPriceTolerance)
         {
             mismatches.Add($"limit_price mismatch: paper={paperOrder.Price:0.########}; live={liveOrder.Price:0.########}");
-        }
-
-        if (Math.Abs(paperOrder.SizeShares - liveOrder.SizeShares) > ShadowSizeTolerance)
-        {
-            mismatches.Add($"requested_size mismatch: paper={paperOrder.SizeShares:0.########}; live={liveOrder.SizeShares:0.########}");
         }
 
         if (!string.Equals(liveOrder.OrderType, "GTD", StringComparison.OrdinalIgnoreCase))

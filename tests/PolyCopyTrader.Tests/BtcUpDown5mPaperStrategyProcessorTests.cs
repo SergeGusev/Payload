@@ -8000,7 +8000,7 @@ public sealed class BtcUpDown5mPaperStrategyProcessorTests
     }
 
     [Fact]
-    public async Task ProcessAsync_LiveShadowIgnoresPaperLostCounterStakeBoost()
+    public async Task ProcessAsync_LiveShadowUsesPaperLostCounterOnlyForPaperSizing()
     {
         var now = DateTimeOffset.UtcNow;
         var previousStart = now.AddMinutes(-5);
@@ -8127,12 +8127,14 @@ public sealed class BtcUpDown5mPaperStrategyProcessorTests
             order.StrategyId == EthSkipBps7InstantVariant.Id &&
             string.Equals(order.ExecutionSource, "paper_live_shadow_test", StringComparison.OrdinalIgnoreCase) &&
             string.Equals(order.AssetId, "eth-asset-up", StringComparison.OrdinalIgnoreCase));
-        Assert.Equal(2.50m, paperOrder.NotionalUsd);
+        Assert.Equal(5.00m, paperOrder.NotionalUsd);
+        Assert.NotEqual(liveOrder.SizeShares, paperOrder.SizeShares);
         Assert.Contains("\"paper_lost_coeff_configured\":2", paperOrder.RawDecisionJson, StringComparison.Ordinal);
-        Assert.Contains("\"paper_lost_counter\":0", paperOrder.RawDecisionJson, StringComparison.Ordinal);
-        Assert.Contains("\"paper_lost_add_stake_usd\":0", paperOrder.RawDecisionJson, StringComparison.Ordinal);
+        Assert.Contains("\"paper_lost_counter\":1", paperOrder.RawDecisionJson, StringComparison.Ordinal);
         using var rawDecision = JsonDocument.Parse(paperOrder.RawDecisionJson ?? throw new InvalidOperationException("Paper order raw decision JSON is missing."));
-        Assert.Equal(2.50m, rawDecision.RootElement.GetProperty("paper_lost_effective_stake_usd").GetDecimal());
+        Assert.Equal(2.50m, rawDecision.RootElement.GetProperty("paper_lost_base_stake_usd").GetDecimal());
+        Assert.Equal(2.50m, rawDecision.RootElement.GetProperty("paper_lost_add_stake_usd").GetDecimal());
+        Assert.Equal(5.00m, rawDecision.RootElement.GetProperty("paper_lost_effective_stake_usd").GetDecimal());
     }
 
     [Fact]

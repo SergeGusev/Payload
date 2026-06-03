@@ -1,3 +1,16 @@
+## Active Update 2026-06-03 Split Paper Live Shadow LostCoeff Sizing
+Goal: Let Paper/Live-shadow Paper orders use PaperLostCoeff while Live orders remain sized independently from Live $.
+Status: Completed
+Done:
+- Updated `BtcUpDown5mPaperStrategyProcessor` so Paper/Live-shadow entries apply `ApplyPaperLostCounterStakeAdjustment` to the Paper sizing path again instead of disabling it for `paper_live_shadow_test`.
+- Changed Paper/Live-shadow Live placement to pass `settings.LiveStakeAmount` into `TryPlacePaperLiveShadowOrderAsync`; the method now computes Live size/notional separately with `CreateLiveMinimumStakeSizing` from the refetched CLOB book and no longer reuses the Paper order size/notional.
+- Updated `LiveTradingProcessor` Paper/Live-shadow shape validation so requested size may differ between linked Paper and Live orders; asset, condition, outcome, price, order type, and `postOnly=false` remain strict.
+- Updated regression coverage: Paper/Live-shadow with a positive Paper lost counter now creates a boosted Paper order while keeping the linked Live order at base Live sizing; live maintenance now accepts different Paper/Live sizes without recording a discrepancy.
+- Updated README and `docs/live_trading_checklist.md` to document separate Paper/Live-shadow sizing and the relaxed requested-size shape rule.
+Next: Deploy/restart `PolyCopyTrader.Service`, then verify the next qualifying SOL/ETH/BTC Paper/Live-shadow entry shows `paper_lost_add_stake_usd > 0` on Paper when its Paper lost counter is positive while the linked Live order stays at Live $ sizing.
+Notes: Verification passed: focused `dotnet test tests\PolyCopyTrader.Tests\PolyCopyTrader.Tests.csproj --no-restore --filter "BtcUpDown5mPaperStrategyProcessorTests|LiveTradingGatingTests"` 176/176; full test project 570/570; `dotnet build src\PolyCopyTrader.Service\PolyCopyTrader.Service.csproj --no-restore` 0 warnings/errors; `git diff --check` clean except LF/CRLF warnings.
+Blockers: Production service still needs deploy/restart before this fix affects runtime behavior.
+
 ## Active Update 2026-06-03 Paper Live LostCoeff Semantics Clarification
 Goal: Clarify whether PaperLostCoeff should still boost Paper rows while Live rows remain controlled by LiveLostCoeff/base sizing.
 Status: Completed

@@ -2306,12 +2306,10 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
 
                     var isPaperLiveShadowTest = UsesOpeningLimitEntry(variant) &&
                         ShouldRunPaperLiveShadowTest(variant, settings);
-                    var paperLostCounterAdjustment = isPaperLiveShadowTest
-                        ? PaperLostCounterStakeAdjustment.Disabled(Math.Max(1m, settings.PaperLostCoeff), stakeMultiplier)
-                        : ApplyPaperLostCounterStakeAdjustment(
-                            variant,
-                            settings,
-                            stakeMultiplier);
+                    var paperLostCounterAdjustment = ApplyPaperLostCounterStakeAdjustment(
+                        variant,
+                        settings,
+                        stakeMultiplier);
                     stakeMultiplier = paperLostCounterAdjustment.EffectiveStakeUsd;
 
                     if (UsesOpeningLimitEntry(variant))
@@ -2563,8 +2561,7 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
                                 variant,
                                 limitOrder,
                                 limitPrice,
-                                limitSizeShares,
-                                stakeUsd,
+                                settings.LiveStakeAmount,
                                 expiration,
                                 paperLiveShadowCorrelationId,
                                 BtcUpDown5mMarketAnalyzer.GetWindowStartUtc(market),
@@ -10840,8 +10837,7 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
         BtcUpDown5mStrategyVariant variant,
         PaperOrder paperOrder,
         decimal price,
-        decimal sizeShares,
-        decimal stakeUsd,
+        decimal liveStakeMultiplier,
         OpeningLimitExpirationDecision expiration,
         Guid correlationId,
         DateTimeOffset? marketStartUtc,
@@ -10882,9 +10878,9 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
             validation.Add("Live GTD BUY limit price is invalid.");
         }
 
-        if (sizeShares <= 0m)
+        if (liveStakeMultiplier <= 0m)
         {
-            validation.Add("Live GTD BUY size must be greater than zero.");
+            validation.Add("Strategy live stake multiplier must be greater than zero.");
         }
 
         var cancelDeadlineUtc = expiration.LocalExpiresAtUtc ?? nowUtc;
@@ -10904,7 +10900,6 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
             validation.Add("Live GTD wire expiration is too soon for CLOB placement.");
         }
 
-        var liveNotional = price * sizeShares;
         var exposureSnapshot = await exposureCache.GetSnapshotAsync(cancellationToken);
         var openLiveOrders = exposureSnapshot.OpenLiveOrders;
         if (OpenOrderDirectionGuard.FindOppositeOutcomeOpenOrder(
@@ -10979,15 +10974,28 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
             validation.Add("Live preflight market-data check failed: " + ex.Message);
         }
 
+        var maxTradeNotional = liveTradingOptions.MaxTradeBankrollPct / 100m * paperTradingOptions.InitialBankrollUsd;
+        var maxTotalDeployed = liveTradingOptions.MaxTotalDeployedPct / 100m * paperTradingOptions.InitialBankrollUsd;
+        var maxMarketNotional = liveTradingOptions.MaxMarketBankrollPct / 100m * paperTradingOptions.InitialBankrollUsd;
+        var maxNotional = Math.Min(liveTradingOptions.MaxOrderNotionalUsd, maxTradeNotional);
+        var liveSizing = CreateLiveMinimumStakeSizing(orderBook, price, liveStakeMultiplier);
+        if (!liveSizing.Available)
+        {
+            validation.Add("Live minimum stake sizing failed: " + (liveSizing.RejectionReason ?? "unknown"));
+        }
+
+        var sizeShares = liveSizing.TargetSizeShares;
+        var liveNotional = liveSizing.TargetNotionalUsd;
+        if (sizeShares <= 0m)
+        {
+            validation.Add("Live GTD BUY size must be greater than zero.");
+        }
+
         if (orderBook?.MinOrderSize is { } minOrderSize && sizeShares > 0m && sizeShares < minOrderSize)
         {
             validation.Add("Live order size is below the market minimum order size.");
         }
 
-        var maxTradeNotional = liveTradingOptions.MaxTradeBankrollPct / 100m * paperTradingOptions.InitialBankrollUsd;
-        var maxTotalDeployed = liveTradingOptions.MaxTotalDeployedPct / 100m * paperTradingOptions.InitialBankrollUsd;
-        var maxMarketNotional = liveTradingOptions.MaxMarketBankrollPct / 100m * paperTradingOptions.InitialBankrollUsd;
-        var maxNotional = Math.Min(liveTradingOptions.MaxOrderNotionalUsd, maxTradeNotional);
         if (liveNotional > maxNotional)
         {
             validation.Add(

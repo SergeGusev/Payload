@@ -312,15 +312,15 @@ public sealed class LiveTradingGatingTests
             "condition-1",
             "Yes",
             0.40m,
-            10m,
-            4m,
+            5m,
+            2m,
             "GTD",
             now.AddMinutes(-1),
             now.AddMinutes(4),
             now.AddMinutes(-1),
             "live",
             0m,
-            10m,
+            5m,
             string.Empty,
             "{}",
             string.Empty,
@@ -332,7 +332,7 @@ public sealed class LiveTradingGatingTests
             PaperOrderId: paperOrderId));
         var tradingClient = new CapturingTradingClient
         {
-            StatusResult = new LiveOrderStatusResult("0xorder", "LIVE", "10000000", "3000000", "0.40", "{}")
+            StatusResult = new LiveOrderStatusResult("0xorder", "LIVE", "5000000", "3000000", "0.40", "{}")
         };
         var processor = new LiveTradingProcessor(
             NullLogger<LiveTradingProcessor>.Instance,
@@ -350,13 +350,14 @@ public sealed class LiveTradingGatingTests
         Assert.Equal(1, result.OrdersPolled);
         var liveOrder = Assert.Single(repository.LiveOrders);
         Assert.Equal(3m, liveOrder.FilledSize);
-        Assert.Equal(7m, liveOrder.RemainingSize);
+        Assert.Equal(2m, liveOrder.RemainingSize);
         var paperFill = Assert.Single(repository.PaperFills);
         Assert.Equal(3m, paperFill.SizeShares);
         Assert.Equal(0.40m, paperFill.Price);
         var paperOrder = Assert.Single(repository.PaperOrders);
         Assert.Equal(PaperOrderStatus.PartiallyFilled, paperOrder.Status);
         Assert.Equal(3m, Assert.Single(repository.PaperPositions).SizeShares);
+        Assert.Empty(repository.PaperLiveShadowDiscrepancies);
     }
 
     [Fact]
