@@ -66,8 +66,8 @@ public sealed class StrategyStateProvider(
             updatedSettings[normalizedStrategyId] = settings with
             {
                 StrategyId = normalizedStrategyId,
-                PaperLostCounter = Math.Max(0, paperLostCounter),
-                LiveLostCounter = Math.Max(0, liveLostCounter)
+                PaperLostCounter = paperLostCounter,
+                LiveLostCounter = liveLostCounter
             };
             strategySettings = updatedSettings;
             enabledStrategyIds = updatedSettings

@@ -1,3 +1,17 @@
+## Active Update 2026-06-03 Signed Lost Counters
+Goal: Allow Paper Cnt and Live Cnt to go negative while applying LostCoeff stake add-ons only for positive counters.
+Status: Completed
+Done:
+- Removed PostgreSQL non-negative check constraints for `strategies.paper_lost_counter` and `strategies.live_lost_counter`; schema initialization now drops the old constraints on deploy.
+- Updated strategy settings persistence and Dashboard validation to allow negative `Paper Cnt` / `Live Cnt` values.
+- Changed `UpdateStrategyLostCounterAfterSettlementAsync` so, when the existing `LostCoeff > 1` gate is active, losses increment the selected counter and wins decrement it by `1` without a zero floor.
+- Removed the `StrategyStateProvider` cache clamp so negative counters are preserved immediately after settlement.
+- Kept Paper stake add-on positive-only: `Paper Cnt <= 0` records diagnostics but adds `0`; `Paper Cnt > 0` still uses `min(Paper Cnt, 5)`. `Live Cnt` uses the same signed settlement counter rule, while `Live Lost` remains stored/editable and not yet applied to live stake sizing.
+- Updated README/configuration docs and regression tests for negative Paper/Live counters and no boost from negative Paper Cnt.
+Next: Deploy/restart Service and Dashboard so PostgreSQL drops the old counter constraints and runtime/UI accept negative counter values.
+Notes: Verification passed: focused tests `StorageTests|BtcUpDown5mPaperStrategyProcessorTests|LiveTradingGatingTests` 211/211; full test project 573/573; Service build 0 warnings/errors; Dashboard temp-output build succeeded with existing Storage nullable warnings; `git diff --check` clean except LF/CRLF warnings.
+Blockers: Production still needs deploy/restart before the schema/drop-constraint and runtime behavior takes effect.
+
 ## Active Update 2026-06-03 Restore BTC ETH Live Flags
 Goal: Restore Live mode for BTC Middle 47 and ETH Skip 7 while keeping SOL Skip 42 Live.
 Status: Completed

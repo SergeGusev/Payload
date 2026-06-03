@@ -992,14 +992,6 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
             return;
         }
 
-        if (strategy.PaperLostCounter < 0 || strategy.LiveLostCounter < 0)
-        {
-            CommandStatus = "Strategy lost counters must be zero or greater.";
-            RecordDashboardError("Strategy stakes", CommandStatus, CommandStatus);
-            await RefreshAsync();
-            return;
-        }
-
         if (strategy.LiveAvailableBalance < 0m)
         {
             CommandStatus = "Strategy live available balance must be zero or greater.";

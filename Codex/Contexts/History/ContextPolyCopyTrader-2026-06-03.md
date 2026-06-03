@@ -106,6 +106,13 @@ Request:
 
 Result:
 Added persisted per-strategy `paper_lost_counter` and `live_lost_counter` database fields, runtime/performance/Dashboard/CSV plumbing, editable Dashboard `Paper Cnt` and `Live Cnt` columns, atomic repository counter updates after Paper/Live settlements, service cache updates plus forced DB refresh after settlement batches for immediate Paper sizing, docs updates, and regression coverage. Verification passed: focused tests 209/209, full tests 571/571, Service build 0 warnings/errors, Dashboard build succeeded with existing Storage nullable warnings, and `git diff --check` was clean except LF/CRLF warnings. Production still needs deploy/restart before the new schema columns and persisted counter behavior are active.
+## 2026-06-03T14:13:48.7932661Z
+Request:
+Давай внесём корректировку в нашу логику подсчёта Paper Cnt и Live Cnt. Пусть они могут быть отрицательными - каждый Win уменьшает их на единицу. Но добавляем сумму к ставке только тогда, когда значение положительное.
+
+Result:
+Implemented signed Paper/Live lost counters. PostgreSQL schema now drops the old non-negative counter constraints, Dashboard/repository saves accept negative counters, settlement counter updates decrement by `1` on wins without a zero floor, runtime cache preserves negative values, and Paper stake add-on remains positive-only (`Paper Cnt <= 0` adds zero, `Paper Cnt > 0` uses `min(Paper Cnt, 5)`). Live counters use the same signed settlement rule while LiveLostCoeff remains not applied to live stake sizing. Updated docs and tests. Verification passed: focused tests 211/211, full tests 573/573, Service build clean, Dashboard temp-output build succeeded with existing Storage nullable warnings, and `git diff --check` was clean except LF/CRLF warnings.
+
 ## 2026-06-03T13:43:36.9780253Z
 Request:
 Никакой такой команды не было. Я только выложил новую версию. Верни предыдущие две стратегии обратно в Live

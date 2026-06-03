@@ -924,8 +924,6 @@ CREATE TABLE IF NOT EXISTS strategies (
     CONSTRAINT ck_strategies_live_stake_amount_positive CHECK (live_stake_amount > 0),
     CONSTRAINT ck_strategies_paper_lost_coeff_minimum CHECK (paper_lost_coeff >= 1),
     CONSTRAINT ck_strategies_live_lost_coeff_minimum CHECK (live_lost_coeff >= 1),
-    CONSTRAINT ck_strategies_paper_lost_counter_nonnegative CHECK (paper_lost_counter >= 0),
-    CONSTRAINT ck_strategies_live_lost_counter_nonnegative CHECK (live_lost_counter >= 0),
     CONSTRAINT ck_strategies_live_available_balance_nonnegative CHECK (live_available_balance >= 0)
 );
 
@@ -946,6 +944,8 @@ ALTER TABLE strategies ALTER COLUMN paper_lost_coeff SET DEFAULT 1.00;
 ALTER TABLE strategies ALTER COLUMN live_lost_coeff SET DEFAULT 1.00;
 ALTER TABLE strategies ALTER COLUMN paper_lost_counter SET DEFAULT 0;
 ALTER TABLE strategies ALTER COLUMN live_lost_counter SET DEFAULT 0;
+ALTER TABLE strategies DROP CONSTRAINT IF EXISTS ck_strategies_paper_lost_counter_nonnegative;
+ALTER TABLE strategies DROP CONSTRAINT IF EXISTS ck_strategies_live_lost_counter_nonnegative;
 
 DO $$
 BEGIN
@@ -987,26 +987,6 @@ BEGIN
     ) THEN
         ALTER TABLE strategies
             ADD CONSTRAINT ck_strategies_live_lost_coeff_minimum CHECK (live_lost_coeff >= 1);
-    END IF;
-
-    IF NOT EXISTS (
-        SELECT 1
-        FROM pg_constraint
-        WHERE conname = 'ck_strategies_paper_lost_counter_nonnegative'
-          AND conrelid = 'public.strategies'::regclass
-    ) THEN
-        ALTER TABLE strategies
-            ADD CONSTRAINT ck_strategies_paper_lost_counter_nonnegative CHECK (paper_lost_counter >= 0);
-    END IF;
-
-    IF NOT EXISTS (
-        SELECT 1
-        FROM pg_constraint
-        WHERE conname = 'ck_strategies_live_lost_counter_nonnegative'
-          AND conrelid = 'public.strategies'::regclass
-    ) THEN
-        ALTER TABLE strategies
-            ADD CONSTRAINT ck_strategies_live_lost_counter_nonnegative CHECK (live_lost_counter >= 0);
     END IF;
 
     IF NOT EXISTS (

@@ -76,8 +76,10 @@ public sealed class StorageTests
         Assert.Contains("ALTER TABLE strategies ADD COLUMN IF NOT EXISTS live_lost_counter", PostgresSchema.SchemaSql, StringComparison.Ordinal);
         Assert.Contains("ck_strategies_paper_lost_coeff_minimum", PostgresSchema.SchemaSql, StringComparison.Ordinal);
         Assert.Contains("ck_strategies_live_lost_coeff_minimum", PostgresSchema.SchemaSql, StringComparison.Ordinal);
-        Assert.Contains("ck_strategies_paper_lost_counter_nonnegative", PostgresSchema.SchemaSql, StringComparison.Ordinal);
-        Assert.Contains("ck_strategies_live_lost_counter_nonnegative", PostgresSchema.SchemaSql, StringComparison.Ordinal);
+        Assert.Contains("DROP CONSTRAINT IF EXISTS ck_strategies_paper_lost_counter_nonnegative", PostgresSchema.SchemaSql, StringComparison.Ordinal);
+        Assert.Contains("DROP CONSTRAINT IF EXISTS ck_strategies_live_lost_counter_nonnegative", PostgresSchema.SchemaSql, StringComparison.Ordinal);
+        Assert.DoesNotContain("CHECK (paper_lost_counter >= 0)", PostgresSchema.SchemaSql, StringComparison.Ordinal);
+        Assert.DoesNotContain("CHECK (live_lost_counter >= 0)", PostgresSchema.SchemaSql, StringComparison.Ordinal);
         Assert.Contains("paused boolean NOT NULL DEFAULT false", PostgresSchema.SchemaSql, StringComparison.Ordinal);
         Assert.Contains("ALTER TABLE strategies ADD COLUMN IF NOT EXISTS paused boolean NOT NULL DEFAULT false", PostgresSchema.SchemaSql, StringComparison.Ordinal);
         Assert.Contains("ALTER TABLE strategies ADD COLUMN IF NOT EXISTS paused_until_utc timestamptz NULL", PostgresSchema.SchemaSql, StringComparison.Ordinal);
@@ -619,8 +621,8 @@ public sealed class StorageTests
         Assert.Contains("live_lost_counter = @LiveLostCounter", method, StringComparison.Ordinal);
         Assert.Contains("AND @PaperLostCoeff >= 1", method, StringComparison.Ordinal);
         Assert.Contains("AND @LiveLostCoeff >= 1", method, StringComparison.Ordinal);
-        Assert.Contains("AND @PaperLostCounter >= 0", method, StringComparison.Ordinal);
-        Assert.Contains("AND @LiveLostCounter >= 0", method, StringComparison.Ordinal);
+        Assert.DoesNotContain("AND @PaperLostCounter >= 0", method, StringComparison.Ordinal);
+        Assert.DoesNotContain("AND @LiveLostCounter >= 0", method, StringComparison.Ordinal);
         Assert.Contains("command.Parameters.AddWithValue(\"PaperLostCoeff\", paperLostCoeff)", method, StringComparison.Ordinal);
         Assert.Contains("command.Parameters.AddWithValue(\"LiveLostCoeff\", liveLostCoeff)", method, StringComparison.Ordinal);
         Assert.Contains("command.Parameters.AddWithValue(\"PaperLostCounter\", paperLostCounter)", method, StringComparison.Ordinal);
@@ -641,11 +643,11 @@ public sealed class StorageTests
         Assert.Contains("paper_lost_counter = CASE", method, StringComparison.Ordinal);
         Assert.Contains("WHEN @IsLive THEN paper_lost_counter", method, StringComparison.Ordinal);
         Assert.Contains("WHEN NOT @CounterEnabled THEN 0", method, StringComparison.Ordinal);
-        Assert.Contains("WHEN @Won THEN GREATEST(0, paper_lost_counter - 1)", method, StringComparison.Ordinal);
+        Assert.Contains("WHEN @Won THEN paper_lost_counter - 1", method, StringComparison.Ordinal);
         Assert.Contains("ELSE paper_lost_counter + 1", method, StringComparison.Ordinal);
         Assert.Contains("live_lost_counter = CASE", method, StringComparison.Ordinal);
         Assert.Contains("WHEN NOT @IsLive THEN live_lost_counter", method, StringComparison.Ordinal);
-        Assert.Contains("WHEN @Won THEN GREATEST(0, live_lost_counter - 1)", method, StringComparison.Ordinal);
+        Assert.Contains("WHEN @Won THEN live_lost_counter - 1", method, StringComparison.Ordinal);
         Assert.Contains("ELSE live_lost_counter + 1", method, StringComparison.Ordinal);
         Assert.Contains("RETURNING paper_lost_counter, live_lost_counter", method, StringComparison.Ordinal);
     }

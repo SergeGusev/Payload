@@ -2820,9 +2820,7 @@ WHERE id = @StrategyId
   AND @PaperStakeAmount > 0
   AND @LiveStakeAmount > 0
   AND @PaperLostCoeff >= 1
-  AND @LiveLostCoeff >= 1
-  AND @PaperLostCounter >= 0
-  AND @LiveLostCounter >= 0;
+  AND @LiveLostCoeff >= 1;
 """);
 		command.Parameters.AddWithValue("StrategyId", StrategyIds.Normalize(strategyId));
 		command.Parameters.AddWithValue("PaperStakeAmount", paperStakeAmount);
@@ -2871,13 +2869,13 @@ UPDATE strategies
 SET paper_lost_counter = CASE
         WHEN @IsLive THEN paper_lost_counter
         WHEN NOT @CounterEnabled THEN 0
-        WHEN @Won THEN GREATEST(0, paper_lost_counter - 1)
+        WHEN @Won THEN paper_lost_counter - 1
         ELSE paper_lost_counter + 1
     END,
     live_lost_counter = CASE
         WHEN NOT @IsLive THEN live_lost_counter
         WHEN NOT @CounterEnabled THEN 0
-        WHEN @Won THEN GREATEST(0, live_lost_counter - 1)
+        WHEN @Won THEN live_lost_counter - 1
         ELSE live_lost_counter + 1
     END,
     updated_at_utc = @UpdatedAtUtc

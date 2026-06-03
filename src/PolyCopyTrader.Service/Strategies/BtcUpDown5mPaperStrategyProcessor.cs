@@ -8404,10 +8404,10 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
             return PaperLostCounterStakeAdjustment.Disabled(configuredCoeff, baseStakeUsd);
         }
 
-        var lostCounter = Math.Max(0, settings.PaperLostCounter);
+        var lostCounter = settings.PaperLostCounter;
         if (lostCounter <= 0)
         {
-            return PaperLostCounterStakeAdjustment.Disabled(configuredCoeff, baseStakeUsd);
+            return PaperLostCounterStakeAdjustment.Disabled(configuredCoeff, baseStakeUsd, lostCounter);
         }
 
         var lostCounterCoeff = Math.Min(lostCounter, MaxPaperLostCounterStakeCoeff);
@@ -12983,11 +12983,14 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
         decimal AddStakeUsd,
         decimal EffectiveStakeUsd)
     {
-        public static PaperLostCounterStakeAdjustment Disabled(decimal configuredCoeff, decimal baseStakeUsd)
+        public static PaperLostCounterStakeAdjustment Disabled(
+            decimal configuredCoeff,
+            decimal baseStakeUsd,
+            int lostCounter = 0)
         {
             return new PaperLostCounterStakeAdjustment(
                 configuredCoeff,
-                LostCounter: 0,
+                LostCounter: lostCounter,
                 LostCounterCoeff: 0,
                 baseStakeUsd,
                 AddStakeUsd: 0m,

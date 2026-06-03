@@ -846,14 +846,14 @@ realized PnL, ROI, average fill price, entry-delay health metrics, and the top s
 strategies the Paper/Live stake values are interpreted as stake multipliers.
 `Paper Lost` and `Live Lost` are persisted as `strategies.paper_lost_coeff` and
 `strategies.live_lost_coeff`, both defaulting to `1.00` and constrained to at
-least `1`. `Paper Cnt` and `Live Cnt` are persisted as
+least `1`. `Paper Cnt` and `Live Cnt` are persisted signed counters in
 `strategies.paper_lost_counter` and `strategies.live_lost_counter`, both
-defaulting to `0` and constrained to non-negative values. When `Paper Lost` is
-greater than `1`, Paper losses increment `Paper Cnt`, Paper wins decrement it
-down to zero, and a positive counter adds `Stake * min(Paper Cnt, 5)` to the
-already computed Paper stake at entry time. When `Live Lost` is greater than
-`1`, matched Live settlements update `Live Cnt`, but it is not applied to live
-stake sizing yet.
+defaulting to `0`. When `Paper Lost` is greater than `1`, Paper losses increment
+`Paper Cnt`, Paper wins decrement it by `1` even below zero, and the stake
+add-on applies only while `Paper Cnt` is positive: `Stake * min(Paper Cnt, 5)`
+is added to the already computed Paper stake at entry time. When `Live Lost` is
+greater than `1`, matched Live settlements update `Live Cnt` with the same signed
+counter rule, but it is not applied to live stake sizing yet.
 The strategy grids include `Only positive`, `Enabled only`, `Live only`,
 `Big ROI`, and `Big settles` filters. `Live only` keeps rows whose manual Live
 flag is enabled, even when `Auto Live Pause` is currently suppressing effective

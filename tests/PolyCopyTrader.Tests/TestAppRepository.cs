@@ -1718,9 +1718,7 @@ internal sealed class TestAppRepository : IAppRepository
             paperStakeAmount <= 0m ||
             liveStakeAmount <= 0m ||
             paperLostCoeff < 1m ||
-            liveLostCoeff < 1m ||
-            paperLostCounter < 0 ||
-            liveLostCounter < 0)
+            liveLostCoeff < 1m)
         {
             return Task.FromResult(false);
         }
@@ -1777,13 +1775,13 @@ internal sealed class TestAppRepository : IAppRepository
         if (isLive)
         {
             liveLostCounter = counterEnabled
-                ? (won ? Math.Max(0, liveLostCounter - 1) : liveLostCounter + 1)
+                ? (won ? liveLostCounter - 1 : liveLostCounter + 1)
                 : 0;
         }
         else
         {
             paperLostCounter = counterEnabled
-                ? (won ? Math.Max(0, paperLostCounter - 1) : paperLostCounter + 1)
+                ? (won ? paperLostCounter - 1 : paperLostCounter + 1)
                 : 0;
         }
 
