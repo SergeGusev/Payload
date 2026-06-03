@@ -1,3 +1,16 @@
+## Active Update 2026-06-03 Raised Live Cap Production Verification
+Goal: Verify production after deploying the raised Live order safety ceiling and Paper/Live-shadow sizing fix.
+Status: Completed
+Done:
+- Queried production PostgreSQL read-only through `out\dbprobe` with a temporary host override to `192.168.0.101` and without printing the connection string.
+- Confirmed `PolyCopyTrader.Service` is running in `Live` mode on commit `527a4624695ab10bbc028ec61347e40e1fbb97b2`, started `2026-06-03T11:11:10Z`, with fresh heartbeat age `17s` in the snapshot and `last_error=null`.
+- Confirmed BTC Middle 47, ETH Skip 7, and SOL Skip 42 remain enabled, unpaused, effective-live, and not auto-live-paused; all three have `PaperLostCoeff=2` and `LiveLostCoeff=1`.
+- Confirmed after the restart there were `0` preflight rejects and `0` `Cap=5` rejects. One post-restart ETH Skip 7 Paper/Live-shadow order was submitted and matched at `2026-06-03T11:15:06Z` for `$4.00` notional (`Down`, price `0.64`, size `6.25`), with live event `BtcUpDown5mPaperLiveShadowPlaceOrder OK`.
+- Confirmed startup geoblock check was OK (`blocked=False`, country `BG`). The only post-start API errors in the snapshot were transient SOL Binance reference warmup messages immediately after startup.
+Next: Monitor the next BTC/SOL qualifying Live entries; the old `$5` cap is no longer blocking ETH after deploy.
+Notes: Read-only production verification only. No production writes, service restarts, source changes, tests, live submissions, or cancels were performed by Codex.
+Blockers: None.
+
 ## Active Update 2026-06-03 Remove Tiny Live Order Cap
 Goal: Remove the old tiny Live max-order cap as a practical limiter while preserving explicit Live risk controls.
 Status: Completed
