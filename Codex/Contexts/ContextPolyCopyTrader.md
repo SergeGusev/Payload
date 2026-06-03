@@ -1,3 +1,17 @@
+## Active Update 2026-06-03 LostCoeff Order Usage Check
+Goal: Check whether production already had orders that actually used LostCoeff stake add-on sizing.
+Status: Completed
+Done:
+- Queried production PostgreSQL read-only through `out\dbprobe` with a temporary host override to `192.168.0.101` and without printing the connection string.
+- Confirmed `PolyCopyTrader.Service` is running in `Live` mode on commit `527a4624695ab10bbc028ec61347e40e1fbb97b2`, started `2026-06-03T11:11:10Z`.
+- Confirmed since the LostCoeff deploy window there were `6606` paper orders with lost diagnostics, `18` with configured coefficient above `1`, and `11` with actual `paper_lost_add_stake_usd > 0`.
+- Confirmed all `11` actual add-on rows were `ETH Up or Down 5m Skip 7 bps Instant` Paper/Live-shadow candidates from `2026-06-03T09:15:16Z` through `2026-06-03T10:45:09Z`; each had `PaperLostCoeff=2`, `LostCounter=1`, base stake `$1`, add stake `$1`, effective stake `$2`.
+- Confirmed all `11` linked Live rows were `PreflightRejected` with `filled_notional_usd=0` because the old deployed `Cap=5` rejected required notional around `$5.00-$7.01`; no exchange-filled Live order used the add-on.
+- Confirmed after the latest restart at `2026-06-03T11:11:10Z` there were `1082` paper orders with diagnostics, `5` with configured coefficient above `1`, and `0` with `paper_lost_add_stake_usd > 0`; the `6` post-start Live rows had `0` linked add-on usage, with matched ETH/SOL orders using base sizing diagnostics (`paper_lost_add_stake_usd=0`, effective stake `$1`).
+Next: None.
+Notes: Read-only production verification only. No production writes, service restarts, source changes, tests, live submissions, or cancels were performed by Codex. `LiveLostCoeff` remains stored/editable but not applied to live stake sizing.
+Blockers: None.
+
 ## Active Update 2026-06-03 Raised Live Cap Production Verification
 Goal: Verify production after deploying the raised Live order safety ceiling and Paper/Live-shadow sizing fix.
 Status: Completed
