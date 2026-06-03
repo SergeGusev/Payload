@@ -53,6 +53,9 @@ public sealed class DashboardDataService(
         var paperCopiedTraderPerformance = await repository.GetPaperCopiedTraderPerformanceAsync(250, cancellationToken);
         var strategyPerformance = await GetStrategyPerformanceAsync(cancellationToken);
         var strategyRecentPerformance = await GetStrategyRecentPerformanceAsync(cancellationToken);
+        var strategyNamesById = strategyPerformance.ToDictionary(
+            item => StrategyIds.Normalize(item.StrategyId),
+            item => item.Name);
         var dryRunOrders = await repository.GetRecentDryRunOrdersAsync(cancellationToken: cancellationToken);
         var liveOrders = await repository.GetRecentLiveOrdersAsync(cancellationToken: cancellationToken);
         var liveTradingEvents = await repository.GetRecentLiveTradingEventsAsync(cancellationToken: cancellationToken);
@@ -131,13 +134,13 @@ public sealed class DashboardDataService(
             onChainParticipantDetails.Select(ToOnChainParticipantDetailRow).ToArray(),
             leaderTrades.Select(ToLeaderTradeRow).ToArray(),
             signals.Select(ToSignalRow).ToArray(),
-            recentPaperOrders.Select(ToPaperOrderRow).ToArray(),
+            recentPaperOrders.Select(order => ToPaperOrderRow(order, strategyNamesById)).ToArray(),
             paperPositions.Select(position => ToPaperPositionRow(position, orderBooksByAsset)).ToArray(),
             strategyPerformance.Select(ToStrategyPerformanceRow).ToArray(),
             strategyRecentPerformance.Select(ToStrategyRecentPerformanceRow).ToArray(),
             paperCopiedTraderPerformance.Select(ToPaperCopiedTraderPerformanceRow).ToArray(),
             dryRunOrders.Select(ToDryRunOrderRow).ToArray(),
-            liveOrders.Select(ToLiveOrderRow).ToArray(),
+            liveOrders.Select(order => ToLiveOrderRow(order, strategyNamesById)).ToArray(),
             liveTradingEvents.Select(ToLiveTradingEventRow).ToArray(),
             liveReadiness,
             orderBookSnapshots.Select(ToMarketDataRow).ToArray(),
@@ -173,6 +176,11 @@ public sealed class DashboardDataService(
             GetServiceHeartbeatStaleAfter());
         var strategyPerformance = await GetStrategyPerformanceAsync(cancellationToken);
         var strategyRecentPerformance = await GetStrategyRecentPerformanceAsync(cancellationToken);
+        var strategyNamesById = strategyPerformance.ToDictionary(
+            item => StrategyIds.Normalize(item.StrategyId),
+            item => item.Name);
+        var recentPaperOrders = await repository.GetRecentPaperOrdersAsync(cancellationToken: cancellationToken);
+        var liveOrders = await repository.GetRecentLiveOrdersAsync(cancellationToken: cancellationToken);
         var overview = BuildStrategyOnlyOverview(serviceAvailability, strategyPerformance, strategyRecentPerformance);
         var diagnostics = BuildStrategyOnlyDiagnostics(
             serviceAvailability,
@@ -194,13 +202,13 @@ public sealed class DashboardDataService(
             [],
             [],
             [],
-            [],
+            recentPaperOrders.Select(order => ToPaperOrderRow(order, strategyNamesById)).ToArray(),
             [],
             strategyPerformance.Select(ToStrategyPerformanceRow).ToArray(),
             strategyRecentPerformance.Select(ToStrategyRecentPerformanceRow).ToArray(),
             [],
             [],
-            [],
+            liveOrders.Select(order => ToLiveOrderRow(order, strategyNamesById)).ToArray(),
             [],
             [],
             [],
@@ -862,9 +870,14 @@ public sealed class DashboardDataService(
             signal.ProposedNotionalUsd);
     }
 
-    private static PaperOrderRow ToPaperOrderRow(PaperOrder order)
+    private static PaperOrderRow ToPaperOrderRow(
+        PaperOrder order,
+        IReadOnlyDictionary<Guid, string> strategyNamesById)
     {
+        var strategyId = StrategyIds.Normalize(order.StrategyId);
         return new PaperOrderRow(
+            strategyId,
+            GetStrategyName(strategyId, strategyNamesById),
             order.Status.ToString(),
             order.Side.ToString(),
             order.CopiedTraderWallet,
@@ -1050,9 +1063,14 @@ public sealed class DashboardDataService(
             FormatDate(performance.LastRunUtc));
     }
 
-    private static LiveOrderRow ToLiveOrderRow(LiveOrder order)
+    private static LiveOrderRow ToLiveOrderRow(
+        LiveOrder order,
+        IReadOnlyDictionary<Guid, string> strategyNamesById)
     {
+        var strategyId = StrategyIds.Normalize(order.StrategyId);
         return new LiveOrderRow(
+            strategyId,
+            GetStrategyName(strategyId, strategyNamesById),
             FormatDate(order.CreatedAtUtc),
             order.Status.ToString(),
             order.OrderId ?? string.Empty,
@@ -1080,6 +1098,13 @@ public sealed class DashboardDataService(
             order.CancelStatus,
             order.ValidationSummary,
             order.SignalId.ToString());
+    }
+
+    private static string GetStrategyName(Guid strategyId, IReadOnlyDictionary<Guid, string> strategyNamesById)
+    {
+        return strategyNamesById.TryGetValue(StrategyIds.Normalize(strategyId), out var strategyName)
+            ? strategyName
+            : "Unknown strategy";
     }
 
     private static LiveTradingEventRow ToLiveTradingEventRow(LiveTradingEvent liveEvent)

@@ -13,8 +13,14 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
 {
     private const int MaxDashboardErrors = 500;
     private const string AllStrategyCategories = "All categories";
+    private const string AllOrderStrategies = "All strategies";
+    private const int OverviewTabIndex = 0;
+    private const int StrategiesTabIndex = 1;
+    private const int PaperOrdersTabIndex = 12;
+    private const int LiveOrdersTabIndex = 16;
     private const decimal BigRoiThresholdPct = 10m;
     private const int BigSettlesThreshold = 100;
+    private static readonly StrategyOrderFilterOption AllOrderStrategiesOption = new(null, AllOrderStrategies);
     private static readonly string[] UpDownAssetSymbols = ["BTC", "ETH", "SOL"];
     private static readonly string[] BtcUpDownIntervals = ["5m", "15m", "1h", "4h"];
 
@@ -25,6 +31,8 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
     private DashboardCsvExporter csvExporter = null!;
     private readonly DispatcherTimer refreshTimer;
     private readonly EventHandler refreshTickHandler;
+    private IReadOnlyList<PaperOrderRow> allPaperOrders = [];
+    private IReadOnlyList<LiveOrderRow> allLiveOrders = [];
     private IReadOnlyList<StrategyPerformanceRow> allStrategies = [];
     private IReadOnlyList<StrategyRecentPerformanceRow> allStrategyRecentPerformance = [];
     private DashboardDatabaseSource currentDatabaseSource;
@@ -105,6 +113,15 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
 
     [ObservableProperty]
     private string selectedStrategy1HourCategory = AllStrategyCategories;
+
+    [ObservableProperty]
+    private StrategyOrderFilterOption? selectedPaperOrdersStrategy = AllOrderStrategiesOption;
+
+    [ObservableProperty]
+    private StrategyOrderFilterOption? selectedLiveOrdersStrategy = AllOrderStrategiesOption;
+
+    [ObservableProperty]
+    private int dashboardTabSelectedIndex;
 
     [ObservableProperty]
     private bool showOnlyPositiveStrategies;
@@ -190,6 +207,8 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
 
     public ObservableCollection<PaperOrderRow> PaperOrders { get; } = [];
 
+    public ObservableCollection<StrategyOrderFilterOption> PaperOrderStrategyOptions { get; } = [AllOrderStrategiesOption];
+
     public ObservableCollection<PaperPositionRow> PaperPositions { get; } = [];
 
     public ObservableCollection<StrategyPerformanceRow> Strategies { get; } = [];
@@ -209,6 +228,8 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
     public ObservableCollection<DryRunOrderRow> DryRunOrders { get; } = [];
 
     public ObservableCollection<LiveOrderRow> LiveOrders { get; } = [];
+
+    public ObservableCollection<StrategyOrderFilterOption> LiveOrderStrategyOptions { get; } = [AllOrderStrategiesOption];
 
     public ObservableCollection<LiveTradingEventRow> LiveTradingEvents { get; } = [];
 
@@ -243,9 +264,6 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
     public Visibility NonStrategyVisibility =>
         runtime.Configuration.Dashboard.StrategiesOnlyMode ? Visibility.Collapsed : Visibility.Visible;
 
-    public int DashboardTabSelectedIndex =>
-        runtime.Configuration.Dashboard.StrategiesOnlyMode ? 1 : 0;
-
     partial void OnSelectedStrategyCategoryChanged(string value)
     {
         ApplyStrategyFilters();
@@ -264,6 +282,16 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
     partial void OnSelectedStrategy1HourCategoryChanged(string value)
     {
         ApplyStrategyFilters();
+    }
+
+    partial void OnSelectedPaperOrdersStrategyChanged(StrategyOrderFilterOption? value)
+    {
+        ApplyOrderFilters();
+    }
+
+    partial void OnSelectedLiveOrdersStrategyChanged(StrategyOrderFilterOption? value)
+    {
+        ApplyOrderFilters();
     }
 
     partial void OnShowOnlyPositiveStrategiesChanged(bool value)
@@ -487,8 +515,10 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         csvExporter = nextCsvExporter;
         currentDatabaseSource = databaseSource;
         StorageStatus = BuildStorageStatus(nextRuntime);
+        DashboardTabSelectedIndex = nextRuntime.Configuration.Dashboard.StrategiesOnlyMode
+            ? StrategiesTabIndex
+            : OverviewTabIndex;
         OnPropertyChanged(nameof(NonStrategyVisibility));
-        OnPropertyChanged(nameof(DashboardTabSelectedIndex));
     }
 
     private void ResetSelectedDatabaseSource()
@@ -1037,6 +1067,51 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         }
     }
 
+    [RelayCommand]
+    private void ShowPaperOrdersForStrategy(StrategyPerformanceRow? strategy)
+    {
+        NavigateToOrderTab(strategy?.StrategyId, strategy?.Name, paperOrders: true);
+    }
+
+    [RelayCommand]
+    private void ShowLiveOrdersForStrategy(StrategyPerformanceRow? strategy)
+    {
+        NavigateToOrderTab(strategy?.StrategyId, strategy?.Name, paperOrders: false);
+    }
+
+    [RelayCommand]
+    private void ShowPaperOrdersForRecentStrategy(StrategyRecentPerformanceRow? strategy)
+    {
+        NavigateToOrderTab(null, strategy?.Name, paperOrders: true);
+    }
+
+    [RelayCommand]
+    private void ShowLiveOrdersForRecentStrategy(StrategyRecentPerformanceRow? strategy)
+    {
+        NavigateToOrderTab(null, strategy?.Name, paperOrders: false);
+    }
+
+    private void NavigateToOrderTab(Guid? strategyId, string? strategyName, bool paperOrders)
+    {
+        if (paperOrders)
+        {
+            SelectedPaperOrdersStrategy = ResolveStrategyOrderFilterOption(
+                strategyId,
+                strategyName,
+                PaperOrderStrategyOptions);
+            DashboardTabSelectedIndex = PaperOrdersTabIndex;
+            CommandStatus = $"Showing paper orders for {SelectedPaperOrdersStrategy?.Name ?? AllOrderStrategies}.";
+            return;
+        }
+
+        SelectedLiveOrdersStrategy = ResolveStrategyOrderFilterOption(
+            strategyId,
+            strategyName,
+            LiveOrderStrategyOptions);
+        DashboardTabSelectedIndex = LiveOrdersTabIndex;
+        CommandStatus = $"Showing live orders for {SelectedLiveOrdersStrategy?.Name ?? AllOrderStrategies}.";
+    }
+
     private async Task SendCommandAsync(Func<Task<ControlCommandResponse>> send)
     {
         try
@@ -1082,15 +1157,17 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         Replace(OnChainParticipantDetails, snapshot.OnChainParticipantDetails);
         Replace(LeaderTrades, snapshot.LeaderTrades);
         Replace(Signals, snapshot.Signals);
-        Replace(PaperOrders, snapshot.PaperOrders);
+        allPaperOrders = snapshot.PaperOrders;
+        allLiveOrders = snapshot.LiveOrders;
         Replace(PaperPositions, snapshot.PaperPositions);
         allStrategies = snapshot.Strategies;
         allStrategyRecentPerformance = snapshot.StrategyRecentPerformance;
         RefreshStrategyCategoryOptions();
+        RefreshStrategyOrderOptions();
         ApplyStrategyFilters();
+        ApplyOrderFilters();
         Replace(PaperCopiedTraderPerformance, snapshot.PaperCopiedTraderPerformance);
         Replace(DryRunOrders, snapshot.DryRunOrders);
-        Replace(LiveOrders, snapshot.LiveOrders);
         Replace(LiveTradingEvents, snapshot.LiveTradingEvents);
         Replace(LiveReadiness, snapshot.LiveReadiness);
         Replace(MarketData, snapshot.MarketData);
@@ -1114,7 +1191,7 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
 
         var webSocketStatus = Overview.FirstOrDefault(item => item.Name == "WebSocket status")?.Value ?? "No market data status";
         var liveBlocked = LiveReadiness.Count(item => item.Status is "Blocked" or "Error");
-        Summary = $"{ServiceStatus}; WS={webSocketStatus}; {StorageStatus}; live blockers={liveBlocked}; {TraderDiscovery.Count} discovery candidates; {OnChainParticipantDetails.Count} on-chain participants; {OnChainTradeDetails.Count} on-chain trades; {OnChainLeaders.Count} on-chain leaders; {OnChainPositions.Count} on-chain positions; {Signals.Count} signals; {allStrategies.Count} strategies; {PaperOrders.Count} paper orders; {PaperCopiedTraderPerformance.Count} copied ratings; {DryRunOrders.Count} dry-run orders; {LiveOrders.Count} live orders; {PaperPositions.Count} positions.";
+        Summary = $"{ServiceStatus}; WS={webSocketStatus}; {StorageStatus}; live blockers={liveBlocked}; {TraderDiscovery.Count} discovery candidates; {OnChainParticipantDetails.Count} on-chain participants; {OnChainTradeDetails.Count} on-chain trades; {OnChainLeaders.Count} on-chain leaders; {OnChainPositions.Count} on-chain positions; {Signals.Count} signals; {allStrategies.Count} strategies; {allPaperOrders.Count} paper orders; {PaperCopiedTraderPerformance.Count} copied ratings; {DryRunOrders.Count} dry-run orders; {allLiveOrders.Count} live orders; {PaperPositions.Count} positions.";
     }
 
     private void ClearLoadedData()
@@ -1130,15 +1207,18 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         Replace(OnChainParticipantDetails, Array.Empty<OnChainParticipantDetailRow>());
         Replace(LeaderTrades, Array.Empty<LeaderTradeRow>());
         Replace(Signals, Array.Empty<SignalRow>());
+        allPaperOrders = [];
         Replace(PaperOrders, Array.Empty<PaperOrderRow>());
         Replace(PaperPositions, Array.Empty<PaperPositionRow>());
         allStrategies = [];
         allStrategyRecentPerformance = [];
         RefreshStrategyCategoryOptions();
+        RefreshStrategyOrderOptions();
         ApplyStrategyFilters();
         Replace(PaperCopiedTraderPerformance, Array.Empty<PaperCopiedTraderPerformanceRow>());
         Replace(DryRunOrders, Array.Empty<DryRunOrderRow>());
-        Replace(LiveOrders, Array.Empty<LiveOrderRow>());
+        allLiveOrders = [];
+        ApplyOrderFilters();
         Replace(LiveTradingEvents, Array.Empty<LiveTradingEventRow>());
         Replace(LiveReadiness, Array.Empty<LiveReadinessRow>());
         Replace(MarketData, Array.Empty<MarketDataRow>());
@@ -1177,6 +1257,32 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         SelectedStrategy24HoursCategory = NormalizeSelectedStrategyCategory(selected[1]);
         SelectedStrategy6HoursCategory = NormalizeSelectedStrategyCategory(selected[2]);
         SelectedStrategy1HourCategory = NormalizeSelectedStrategyCategory(selected[3]);
+    }
+
+    private void RefreshStrategyOrderOptions()
+    {
+        var selectedPaperStrategyId = SelectedPaperOrdersStrategy?.StrategyId;
+        var selectedPaperStrategyName = SelectedPaperOrdersStrategy?.Name;
+        var selectedLiveStrategyId = SelectedLiveOrdersStrategy?.StrategyId;
+        var selectedLiveStrategyName = SelectedLiveOrdersStrategy?.Name;
+
+        var strategyOptions = new[] { AllOrderStrategiesOption }
+            .Concat(
+                allStrategies
+                    .OrderBy(item => item.Name, StringComparer.OrdinalIgnoreCase)
+                    .Select(item => new StrategyOrderFilterOption(item.StrategyId, item.Name)))
+            .ToArray();
+
+        Replace(PaperOrderStrategyOptions, strategyOptions);
+        Replace(LiveOrderStrategyOptions, strategyOptions);
+        SelectedPaperOrdersStrategy = ResolveStrategyOrderFilterOption(
+            selectedPaperStrategyId,
+            selectedPaperStrategyName,
+            PaperOrderStrategyOptions);
+        SelectedLiveOrdersStrategy = ResolveStrategyOrderFilterOption(
+            selectedLiveStrategyId,
+            selectedLiveStrategyName,
+            LiveOrderStrategyOptions);
     }
 
     private void ApplyStrategyFilters()
@@ -1240,11 +1346,52 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
                 .ToArray());
     }
 
+    private void ApplyOrderFilters()
+    {
+        Replace(
+            PaperOrders,
+            allPaperOrders
+                .Where(item => IsOrderStrategyVisible(item.StrategyId, SelectedPaperOrdersStrategy))
+                .ToArray());
+        Replace(
+            LiveOrders,
+            allLiveOrders
+                .Where(item => IsOrderStrategyVisible(item.StrategyId, SelectedLiveOrdersStrategy))
+                .ToArray());
+    }
+
     private string NormalizeSelectedStrategyCategory(string selected)
     {
         return StrategyCategoryOptions.Contains(selected, StringComparer.OrdinalIgnoreCase)
             ? selected
             : AllStrategyCategories;
+    }
+
+    private static StrategyOrderFilterOption ResolveStrategyOrderFilterOption(
+        Guid? strategyId,
+        string? strategyName,
+        IEnumerable<StrategyOrderFilterOption> options)
+    {
+        if (strategyId is { } id)
+        {
+            var byId = options.FirstOrDefault(item => item.StrategyId == id);
+            if (byId is not null)
+            {
+                return byId;
+            }
+        }
+
+        if (!string.IsNullOrWhiteSpace(strategyName))
+        {
+            var byName = options.FirstOrDefault(item =>
+                string.Equals(item.Name, strategyName, StringComparison.OrdinalIgnoreCase));
+            if (byName is not null)
+            {
+                return byName;
+            }
+        }
+
+        return AllOrderStrategiesOption;
     }
 
     private static bool IsStrategyCategoryVisible(string strategyName, string selectedCategory)
@@ -1277,6 +1424,11 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
     private static bool IsStrategyBigSettlesVisible(StrategyPerformanceRow strategy, bool onlyBigSettles)
     {
         return !onlyBigSettles || strategy.SettledPositionsCount > BigSettlesThreshold;
+    }
+
+    private static bool IsOrderStrategyVisible(Guid strategyId, StrategyOrderFilterOption? selectedStrategy)
+    {
+        return selectedStrategy?.StrategyId is not { } selectedStrategyId || strategyId == selectedStrategyId;
     }
 
     private static bool IsStrategyRecentPositiveVisible(StrategyRecentPerformanceRow strategy, bool onlyPositive)

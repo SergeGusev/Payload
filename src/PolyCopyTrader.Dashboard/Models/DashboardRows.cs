@@ -4,6 +4,8 @@ namespace PolyCopyTrader.Dashboard.Models;
 
 public sealed record OverviewMetric(string Name, string Value);
 
+public sealed record StrategyOrderFilterOption(Guid? StrategyId, string Name);
+
 public sealed record WatchlistRow(
     string TraderName,
     string Wallet,
@@ -169,6 +171,8 @@ public sealed record SignalRow(
     decimal? ProposedNotionalUsd);
 
 public sealed record PaperOrderRow(
+    Guid StrategyId,
+    string StrategyName,
     string Status,
     string Side,
     string CopiedTraderWallet,
@@ -552,6 +556,8 @@ public sealed record DryRunOrderRow(
     string SignalId);
 
 public sealed record LiveOrderRow(
+    Guid StrategyId,
+    string StrategyName,
     string CreatedUtc,
     string Status,
     string OrderId,

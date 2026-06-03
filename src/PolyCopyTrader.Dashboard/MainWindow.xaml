@@ -46,6 +46,12 @@
             <Setter Property="BorderBrush" Value="#D1D5DB" />
             <Setter Property="BorderThickness" Value="1" />
         </Style>
+        <Style x:Key="GridActionButton" TargetType="Button">
+            <Setter Property="MinWidth" Value="0" />
+            <Setter Property="Height" Value="24" />
+            <Setter Property="Margin" Value="0" />
+            <Setter Property="Padding" Value="6,0" />
+        </Style>
         <Style x:Key="CopyableGridTextBox" TargetType="TextBox">
             <Setter Property="IsReadOnly" Value="True" />
             <Setter Property="TextWrapping" Value="Wrap" />
@@ -62,6 +68,26 @@
                       behaviors:DataGridSelectionPersistence.KeyProperties="Name">
                 <DataGrid.Columns>
                     <DataGridTextColumn Header="Name" Binding="{Binding Name}" Width="260" />
+                    <DataGridTemplateColumn Header="Paper orders" Width="95">
+                        <DataGridTemplateColumn.CellTemplate>
+                            <DataTemplate>
+                                <Button Content="Paper orders"
+                                        Style="{StaticResource GridActionButton}"
+                                        Command="{Binding DataContext.ShowPaperOrdersForRecentStrategyCommand, RelativeSource={RelativeSource AncestorType=Window}}"
+                                        CommandParameter="{Binding}" />
+                            </DataTemplate>
+                        </DataGridTemplateColumn.CellTemplate>
+                    </DataGridTemplateColumn>
+                    <DataGridTemplateColumn Header="Live orders" Width="90">
+                        <DataGridTemplateColumn.CellTemplate>
+                            <DataTemplate>
+                                <Button Content="Live orders"
+                                        Style="{StaticResource GridActionButton}"
+                                        Command="{Binding DataContext.ShowLiveOrdersForRecentStrategyCommand, RelativeSource={RelativeSource AncestorType=Window}}"
+                                        CommandParameter="{Binding}" />
+                            </DataTemplate>
+                        </DataGridTemplateColumn.CellTemplate>
+                    </DataGridTemplateColumn>
                     <DataGridCheckBoxColumn Header="Live" Binding="{Binding LiveStakes}" SortMemberPath="LiveStakes" Width="60" />
                     <DataGridTextColumn Header="Settles" Binding="{Binding SettledRunsCount}" Width="75" />
                     <DataGridTextColumn Header="Paper cond skip" Binding="{Binding PaperConditionSkippedRunsCount}" Width="115" />
@@ -230,7 +256,7 @@
             </StackPanel>
         </DockPanel>
 
-        <TabControl Grid.Row="3" SelectedIndex="{Binding DashboardTabSelectedIndex, Mode=OneWay}">
+        <TabControl Grid.Row="3" SelectedIndex="{Binding DashboardTabSelectedIndex, Mode=TwoWay}">
             <TabItem Header="Overview" Visibility="{Binding NonStrategyVisibility}">
                 <ScrollViewer VerticalScrollBarVisibility="Auto">
                     <ItemsControl ItemsSource="{Binding Overview}" Margin="0,12,0,0">
@@ -305,6 +331,26 @@
                                 <DataTemplate>
                                     <TextBox Text="{Binding Name, Mode=OneWay}"
                                              Style="{StaticResource CopyableGridTextBox}" />
+                                </DataTemplate>
+                            </DataGridTemplateColumn.CellTemplate>
+                        </DataGridTemplateColumn>
+                        <DataGridTemplateColumn Header="Paper orders" Width="95">
+                            <DataGridTemplateColumn.CellTemplate>
+                                <DataTemplate>
+                                    <Button Content="Paper orders"
+                                            Style="{StaticResource GridActionButton}"
+                                            Command="{Binding DataContext.ShowPaperOrdersForStrategyCommand, RelativeSource={RelativeSource AncestorType=DataGrid}}"
+                                            CommandParameter="{Binding}" />
+                                </DataTemplate>
+                            </DataGridTemplateColumn.CellTemplate>
+                        </DataGridTemplateColumn>
+                        <DataGridTemplateColumn Header="Live orders" Width="90">
+                            <DataGridTemplateColumn.CellTemplate>
+                                <DataTemplate>
+                                    <Button Content="Live orders"
+                                            Style="{StaticResource GridActionButton}"
+                                            Command="{Binding DataContext.ShowLiveOrdersForStrategyCommand, RelativeSource={RelativeSource AncestorType=DataGrid}}"
+                                            CommandParameter="{Binding}" />
                                 </DataTemplate>
                             </DataGridTemplateColumn.CellTemplate>
                         </DataGridTemplateColumn>
@@ -802,25 +848,39 @@
                 </DataGrid>
             </TabItem>
 
-            <TabItem Header="Paper Orders" Visibility="{Binding NonStrategyVisibility}">
-                <DataGrid ItemsSource="{Binding PaperOrders}"
-                          behaviors:DataGridSelectionPersistence.KeyProperties="SignalId,Side,Outcome">
-                    <DataGrid.Columns>
-                        <DataGridTextColumn Header="Status" Binding="{Binding Status}" Width="100" />
-                        <DataGridTextColumn Header="Side" Binding="{Binding Side}" Width="70" />
-                        <DataGridTextColumn Header="Copied wallet" Binding="{Binding CopiedTraderWallet}" Width="180" />
-                        <DataGridTextColumn Header="Market" Binding="{Binding Market}" Width="220" />
-                        <DataGridTextColumn Header="Outcome" Binding="{Binding Outcome}" Width="90" />
-                        <DataGridTextColumn Header="Price" Binding="{Binding Price}" Width="80" />
-                        <DataGridTextColumn Header="Shares" Binding="{Binding SizeShares}" Width="90" />
-                        <DataGridTextColumn Header="Notional" Binding="{Binding NotionalUsd}" Width="90" />
-                        <DataGridTextColumn Header="Created UTC" Binding="{Binding CreatedUtc}" Width="150" />
-                        <DataGridTextColumn Header="Expires UTC" Binding="{Binding ExpiresUtc}" Width="150" />
-                        <DataGridTextColumn Header="Filled UTC" Binding="{Binding FilledUtc}" Width="150" />
-                        <DataGridTextColumn Header="TTL" Binding="{Binding TtlRemaining}" Width="80" />
-                        <DataGridTextColumn Header="Signal id" Binding="{Binding SignalId}" Width="260" />
-                    </DataGrid.Columns>
-                </DataGrid>
+            <TabItem Header="Paper orders">
+                <DockPanel>
+                    <StackPanel DockPanel.Dock="Top"
+                                Orientation="Horizontal"
+                                Margin="0,0,0,8">
+                        <TextBlock Text="Strategy"
+                                   VerticalAlignment="Center"
+                                   Foreground="#6B7280" />
+                        <ComboBox Width="360"
+                                  ItemsSource="{Binding PaperOrderStrategyOptions}"
+                                  SelectedItem="{Binding SelectedPaperOrdersStrategy, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                  DisplayMemberPath="Name" />
+                    </StackPanel>
+                    <DataGrid ItemsSource="{Binding PaperOrders}"
+                              behaviors:DataGridSelectionPersistence.KeyProperties="StrategyId,SignalId,Side,Outcome">
+                        <DataGrid.Columns>
+                            <DataGridTextColumn Header="Strategy" Binding="{Binding StrategyName}" Width="260" />
+                            <DataGridTextColumn Header="Status" Binding="{Binding Status}" Width="100" />
+                            <DataGridTextColumn Header="Side" Binding="{Binding Side}" Width="70" />
+                            <DataGridTextColumn Header="Copied wallet" Binding="{Binding CopiedTraderWallet}" Width="180" />
+                            <DataGridTextColumn Header="Market" Binding="{Binding Market}" Width="220" />
+                            <DataGridTextColumn Header="Outcome" Binding="{Binding Outcome}" Width="90" />
+                            <DataGridTextColumn Header="Price" Binding="{Binding Price}" Width="80" />
+                            <DataGridTextColumn Header="Shares" Binding="{Binding SizeShares}" Width="90" />
+                            <DataGridTextColumn Header="Notional" Binding="{Binding NotionalUsd}" Width="90" />
+                            <DataGridTextColumn Header="Created UTC" Binding="{Binding CreatedUtc}" Width="150" />
+                            <DataGridTextColumn Header="Expires UTC" Binding="{Binding ExpiresUtc}" Width="150" />
+                            <DataGridTextColumn Header="Filled UTC" Binding="{Binding FilledUtc}" Width="150" />
+                            <DataGridTextColumn Header="TTL" Binding="{Binding TtlRemaining}" Width="80" />
+                            <DataGridTextColumn Header="Signal id" Binding="{Binding SignalId}" Width="260" />
+                        </DataGrid.Columns>
+                    </DataGrid>
+                </DockPanel>
             </TabItem>
 
             <TabItem Header="Paper Positions" Visibility="{Binding NonStrategyVisibility}">
@@ -885,38 +945,52 @@
                 </DataGrid>
             </TabItem>
 
-            <TabItem Header="Live Orders" Visibility="{Binding NonStrategyVisibility}">
-                <DataGrid ItemsSource="{Binding LiveOrders}"
-                          behaviors:DataGridSelectionPersistence.KeyProperties="OrderId,SignalId">
-                    <DataGrid.Columns>
-                        <DataGridTextColumn Header="Created UTC" Binding="{Binding CreatedUtc}" Width="150" />
-                        <DataGridTextColumn Header="Status" Binding="{Binding Status}" Width="110" />
-                        <DataGridTextColumn Header="Order id" Binding="{Binding OrderId}" Width="230" />
-                        <DataGridTextColumn Header="Side" Binding="{Binding Side}" Width="70" />
-                        <DataGridTextColumn Header="Asset" Binding="{Binding Asset}" Width="240" />
-                        <DataGridTextColumn Header="Outcome" Binding="{Binding Outcome}" Width="90" />
-                        <DataGridTextColumn Header="Price" Binding="{Binding Price}" Width="80" />
-                        <DataGridTextColumn Header="Shares" Binding="{Binding SizeShares}" Width="90" />
-                        <DataGridTextColumn Header="Notional" Binding="{Binding NotionalUsd}" Width="90" />
-                        <DataGridTextColumn Header="Type" Binding="{Binding OrderType}" Width="70" />
-                        <DataGridTextColumn Header="Expires UTC" Binding="{Binding ExpiresUtc}" Width="150" />
-                        <DataGridTextColumn Header="Response" Binding="{Binding ResponseStatus}" Width="110" />
-                        <DataGridTextColumn Header="Filled" Binding="{Binding FilledSize}" Width="90" />
-                        <DataGridTextColumn Header="Remaining" Binding="{Binding RemainingSize}" Width="90" />
-                        <DataGridTextColumn Header="Avg fill" Binding="{Binding AverageFillPrice}" Width="80" />
-                        <DataGridTextColumn Header="Filled $" Binding="{Binding FilledNotionalUsd}" Width="90" />
-                        <DataGridTextColumn Header="Cost basis" Binding="{Binding CostBasisUsd}" Width="90" />
-                        <DataGridTextColumn Header="Fee" Binding="{Binding FeeUsd}" Width="70" />
-                        <DataGridTextColumn Header="Settlement" Binding="{Binding SettlementValueUsd}" Width="90" />
-                        <DataGridTextColumn Header="Realized" Binding="{Binding RealizedPnlUsd}" Width="90" />
-                        <DataGridTextColumn Header="Settled UTC" Binding="{Binding SettledUtc}" Width="150" />
-                        <DataGridTextColumn Header="Winning" Binding="{Binding WinningOutcome}" Width="90" />
-                        <DataGridTextColumn Header="Won" Binding="{Binding Won}" Width="60" />
-                        <DataGridTextColumn Header="Settle source" Binding="{Binding SettlementSource}" Width="150" />
-                        <DataGridTextColumn Header="Cancel" Binding="{Binding CancelStatus}" Width="130" />
-                        <DataGridTextColumn Header="Validation" Binding="{Binding ValidationSummary}" Width="260" />
-                    </DataGrid.Columns>
-                </DataGrid>
+            <TabItem Header="Live orders">
+                <DockPanel>
+                    <StackPanel DockPanel.Dock="Top"
+                                Orientation="Horizontal"
+                                Margin="0,0,0,8">
+                        <TextBlock Text="Strategy"
+                                   VerticalAlignment="Center"
+                                   Foreground="#6B7280" />
+                        <ComboBox Width="360"
+                                  ItemsSource="{Binding LiveOrderStrategyOptions}"
+                                  SelectedItem="{Binding SelectedLiveOrdersStrategy, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                  DisplayMemberPath="Name" />
+                    </StackPanel>
+                    <DataGrid ItemsSource="{Binding LiveOrders}"
+                              behaviors:DataGridSelectionPersistence.KeyProperties="StrategyId,OrderId,SignalId">
+                        <DataGrid.Columns>
+                            <DataGridTextColumn Header="Strategy" Binding="{Binding StrategyName}" Width="260" />
+                            <DataGridTextColumn Header="Created UTC" Binding="{Binding CreatedUtc}" Width="150" />
+                            <DataGridTextColumn Header="Status" Binding="{Binding Status}" Width="110" />
+                            <DataGridTextColumn Header="Order id" Binding="{Binding OrderId}" Width="230" />
+                            <DataGridTextColumn Header="Side" Binding="{Binding Side}" Width="70" />
+                            <DataGridTextColumn Header="Asset" Binding="{Binding Asset}" Width="240" />
+                            <DataGridTextColumn Header="Outcome" Binding="{Binding Outcome}" Width="90" />
+                            <DataGridTextColumn Header="Price" Binding="{Binding Price}" Width="80" />
+                            <DataGridTextColumn Header="Shares" Binding="{Binding SizeShares}" Width="90" />
+                            <DataGridTextColumn Header="Notional" Binding="{Binding NotionalUsd}" Width="90" />
+                            <DataGridTextColumn Header="Type" Binding="{Binding OrderType}" Width="70" />
+                            <DataGridTextColumn Header="Expires UTC" Binding="{Binding ExpiresUtc}" Width="150" />
+                            <DataGridTextColumn Header="Response" Binding="{Binding ResponseStatus}" Width="110" />
+                            <DataGridTextColumn Header="Filled" Binding="{Binding FilledSize}" Width="90" />
+                            <DataGridTextColumn Header="Remaining" Binding="{Binding RemainingSize}" Width="90" />
+                            <DataGridTextColumn Header="Avg fill" Binding="{Binding AverageFillPrice}" Width="80" />
+                            <DataGridTextColumn Header="Filled $" Binding="{Binding FilledNotionalUsd}" Width="90" />
+                            <DataGridTextColumn Header="Cost basis" Binding="{Binding CostBasisUsd}" Width="90" />
+                            <DataGridTextColumn Header="Fee" Binding="{Binding FeeUsd}" Width="70" />
+                            <DataGridTextColumn Header="Settlement" Binding="{Binding SettlementValueUsd}" Width="90" />
+                            <DataGridTextColumn Header="Realized" Binding="{Binding RealizedPnlUsd}" Width="90" />
+                            <DataGridTextColumn Header="Settled UTC" Binding="{Binding SettledUtc}" Width="150" />
+                            <DataGridTextColumn Header="Winning" Binding="{Binding WinningOutcome}" Width="90" />
+                            <DataGridTextColumn Header="Won" Binding="{Binding Won}" Width="60" />
+                            <DataGridTextColumn Header="Settle source" Binding="{Binding SettlementSource}" Width="150" />
+                            <DataGridTextColumn Header="Cancel" Binding="{Binding CancelStatus}" Width="130" />
+                            <DataGridTextColumn Header="Validation" Binding="{Binding ValidationSummary}" Width="260" />
+                        </DataGrid.Columns>
+                    </DataGrid>
+                </DockPanel>
             </TabItem>
 
             <TabItem Header="Live Events" Visibility="{Binding NonStrategyVisibility}">

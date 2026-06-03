@@ -175,3 +175,10 @@ Request:
 
 Result:
 Answered that routine Live toggles do not require redeploying the service. Code inspection confirmed the Dashboard writes `strategies.live_stakes` through `SetStrategyLiveStakesAsync`, `StrategyStateProvider` refreshes PostgreSQL runtime settings with a one-second cache interval, and 5m Paper/Live-shadow logic uses `StrategyRuntimeSettings.EffectiveLiveStakes` (`LiveStakes && !AutoLivePaused`). Noted limits: redeploy/restart is still needed for code changes, schema migrations, new or changed configured strategy definitions, a service not running in `Live` mode, or intentional startup admin commands such as `--set-live-stakes-only-code(s)`. No production writes, service restart, source code changes, live submissions, or cancels were performed.
+
+## 2026-06-03T19:19:28.5195950+00:00
+Request:
+Сделай две новые вкладки в Dashboard: Paper orders и Live orders. Внутри каждой вкладки возможность выбора стратегии (по умолчанию - все). В каждой строке каждой вкладки Strategies добавь две кнопки - Paper orders и Live orders. При клике на кнопках переходим на соответствующую вкладку orders и данная стратегия по умолчанию выделена.
+
+Result:
+Implemented strategy-linked Dashboard order tabs and navigation. `Paper orders` and `Live orders` now show `Strategy` per row and have a strategy selector defaulting to `All strategies`. The tabs remain visible in `Dashboard:StrategiesOnlyMode=true`, whose snapshot now loads recent Paper and Live orders while still skipping heavy non-strategy/on-chain/analytics tabs. Every row in `Strategies` `All`, `24 hours`, `6 hours`, and `1 hour` has `Paper orders` and `Live orders` buttons that switch to the matching order tab with the clicked strategy preselected. Updated README. Verification passed: Dashboard Verify build succeeded with 0 warnings/errors; full test project passed 577/577; `git diff --check` was clean except LF/CRLF warnings.

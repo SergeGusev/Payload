@@ -1,3 +1,16 @@
+## Active Update 2026-06-03 Dashboard Strategy Order Tabs
+Goal: Add Dashboard Paper/Live order tabs with strategy filtering and per-strategy navigation buttons.
+Status: Completed
+Done:
+- Added strategy-aware `Paper orders` and `Live orders` dashboard grids: each order row now carries `StrategyId` and `StrategyName`, each tab has a strategy selector defaulting to `All strategies`, and both tabs show a `Strategy` column.
+- Kept the order tabs visible in `Dashboard:StrategiesOnlyMode=true`; the strategies-only snapshot now also loads recent Paper and Live orders while still skipping heavy non-strategy/on-chain/analytics tabs.
+- Added compact `Paper orders` and `Live orders` buttons to every row in the `Strategies` `All`, `24 hours`, `6 hours`, and `1 hour` grids; clicking selects the matching order tab and preselects that strategy.
+- Made the top-level Dashboard tab selection two-way so ViewModel commands can navigate to the order tabs.
+- Updated README with the strategy-linked order-tab behavior.
+Next: Deploy/reopen Dashboard to use the new tabs and row navigation.
+Notes: Verification passed: `dotnet build src\PolyCopyTrader.Dashboard\PolyCopyTrader.Dashboard.csproj --configuration Verify --no-restore /p:UseSharedCompilation=false` succeeded with 0 warnings/errors; full `dotnet test tests\PolyCopyTrader.Tests\PolyCopyTrader.Tests.csproj --configuration Verify --no-restore /p:UseSharedCompilation=false` passed 577/577; `git diff --check` clean except LF/CRLF warnings.
+Blockers: None.
+
 ## Active Update 2026-06-03 Runtime Live Toggle Clarification
 Goal: Clarify whether strategies can be moved to Live without redeploying the service.
 Status: Completed
