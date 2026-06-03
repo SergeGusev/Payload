@@ -1,3 +1,17 @@
+## Active Update 2026-06-03 SOL Skip 42 Next Paper Stake Check
+Goal: Determine the next Paper stake sizing for `SOL Up or Down 5m Skip 42 bps Instant`.
+Status: Completed
+Done:
+- Queried production PostgreSQL read-only through `out\dbprobe` with a temporary host override to `192.168.0.101` and without printing the connection string.
+- Confirmed `PolyCopyTrader.Service` is running in `Live` mode on commit `527a4624695ab10bbc028ec61347e40e1fbb97b2`, started `2026-06-03T11:11:10Z`.
+- Confirmed `sol_up_down_5m_skip_bps_42_instant` is enabled, not paused, Live-enabled, not auto-live-paused, with `PaperStakeAmount=1`, `LiveStakeAmount=1`, `PaperLostCoeff=2`, and `LiveLostCoeff=1`.
+- Confirmed this strategy is currently using the Paper/Live-shadow path, where the Paper lost-counter add-on is intentionally disabled; recent SOL rows at `2026-06-03T11:40:20Z`, `11:45:24Z`, and `11:55:19Z` all had `paper_lost_add_stake_usd=0` and `paper_lost_effective_stake_usd=1`.
+- Confirmed the latest settled SOL Skip 42 Paper run after restart was a loss at `2026-06-03T11:54:03Z`, and the next entry at `2026-06-03T11:55:19Z` still used base Live-shadow sizing (`stake_multiplier=1`, `effective_stake=1`, no LostCoeff add-on).
+- Confirmed actual Paper `notional_usd` is not equal to the configured `$1` multiplier because opening-limit sizing uses CLOB `min_order_size=5`, a safety multiplier of `1.10`, and rounding; recent target notionals were about `$3.0051` and `$4.0040` depending on entry price.
+Next: None.
+Notes: Read-only production verification only. No production writes, service restarts, source changes, tests, live submissions, or cancels were performed by Codex.
+Blockers: None.
+
 ## Active Update 2026-06-03 LostCoeff Order Usage Check
 Goal: Check whether production already had orders that actually used LostCoeff stake add-on sizing.
 Status: Completed
