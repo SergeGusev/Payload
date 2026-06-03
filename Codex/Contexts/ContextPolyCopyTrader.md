@@ -1,3 +1,14 @@
+## Active Update 2026-06-03 Order Size Liquidity Guidance
+Goal: Explain whether doubling stake should use one larger order or two equal batch orders for easier matching.
+Status: Completed
+Done:
+- Checked current official Polymarket documentation for CLOB order behavior, batch orders, and FOK/FAK/GTC/GTD semantics.
+- Answered that two equal same-price orders do not create extra liquidity or materially improve passive matching; same price and side still compete by price/time priority against the same order book.
+- Recommended one doubled order for normal GTC/GTD maker-style placement, or FAK/partial-fill semantics if immediate partial execution matters; two smaller FOK orders can be useful only when all-or-nothing is required per slice and one slice may fit available depth while one doubled FOK would fail.
+Next: If changing bot behavior, inspect current Live order submission path and choose size/time-in-force semantics explicitly.
+Notes: Advisory answer only; no source code changed. Used official Polymarket docs as current external references.
+Blockers: None.
+
 ## Active Update 2026-06-03 Live Skip Boundary Deploy Verification
 Goal: Verify production after the user deployed the separate Live condition skip boundary change.
 Status: Completed
