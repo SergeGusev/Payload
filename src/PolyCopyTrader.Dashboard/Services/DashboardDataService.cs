@@ -14,6 +14,7 @@ public sealed class DashboardDataService(
 {
     private const int StrategyDashboardFetchLimit = 10_000;
     private const int OrderDashboardFetchLimit = 100;
+    private static readonly IReadOnlyDictionary<Guid, string> ConfiguredStrategyNamesById = BuildConfiguredStrategyNamesById();
 
     private IReadOnlyList<StrategyPerformance>? cachedStrategyPerformance;
     private DateTimeOffset cachedStrategyPerformanceAtUtc = DateTimeOffset.MinValue;
@@ -250,10 +251,7 @@ public sealed class DashboardDataService(
         Guid? liveOrdersStrategyId,
         CancellationToken cancellationToken = default)
     {
-        var strategyPerformance = await GetStrategyPerformanceAsync(cancellationToken);
-        var strategyNamesById = strategyPerformance.ToDictionary(
-            item => StrategyIds.Normalize(item.StrategyId),
-            item => item.Name);
+        var strategyNamesById = GetOrderStrategyNamesById();
         var recentPaperOrders = await repository.GetRecentPaperOrdersAsync(
             OrderDashboardFetchLimit,
             cancellationToken,
@@ -274,6 +272,31 @@ public sealed class DashboardDataService(
         cachedStrategyPerformanceAtUtc = DateTimeOffset.MinValue;
         cachedStrategyRecentPerformance = null;
         cachedStrategyRecentPerformanceAtUtc = DateTimeOffset.MinValue;
+    }
+
+    private IReadOnlyDictionary<Guid, string> GetOrderStrategyNamesById()
+    {
+        return cachedStrategyPerformance is { Count: > 0 } strategyPerformance
+            ? strategyPerformance.ToDictionary(
+                item => StrategyIds.Normalize(item.StrategyId),
+                item => item.Name)
+            : ConfiguredStrategyNamesById;
+    }
+
+    private static IReadOnlyDictionary<Guid, string> BuildConfiguredStrategyNamesById()
+    {
+        var namesById = new Dictionary<Guid, string>
+        {
+            [StrategyIds.FollowLeader] = StrategyIds.FollowLeaderName,
+            [StrategyIds.BtcUpDown5mStatistics] = StrategyIds.BtcUpDown5mStatisticsName
+        };
+
+        foreach (var variant in StrategyIds.UpDown5mStrategyVariants)
+        {
+            namesById[StrategyIds.Normalize(variant.Id)] = variant.Name;
+        }
+
+        return namesById;
     }
 
     private async Task<IReadOnlyList<StrategyPerformance>> GetStrategyPerformanceAsync(

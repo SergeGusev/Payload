@@ -18,3 +18,10 @@ Request:
 
 Result:
 Found another Dashboard orders reload gap: if `Paper orders` / `Live orders` was clicked for the strategy that was already selected, the selected item value did not change, so the selector change handler did not run and the strategy-specific server reload was not requested. Updated row-button navigation to explicitly request an orders refresh when the resolved selection equals the previous selection, and added the current storage source to the orders loading/loaded status message so the UI shows whether it loaded from `Local database` or `Remote database`. Verification passed: Dashboard Verify build succeeded with existing Storage nullable warnings and no errors, StorageTests 38/38, and full tests 585/585.
+
+## 2026-06-03T22:32:38.0234660+00:00
+Request:
+Теперь показывает нормально, но очень долго. Может, индекс какой-нибудь добавить?
+
+Result:
+Checked remote PostgreSQL indexes and query plans for the Dashboard orders tabs. No new index was needed: `paper_orders` already has strategy/time indexes and the selected Paper query uses `ix_paper_orders_strategy_perf_cover`; selected order queries were fast on the remote database. The slow path was Dashboard order-only reload calling `GetStrategyPerformanceAsync(10_000)` only to resolve strategy names. Updated `DashboardDataService.LoadOrderRowsAsync` to use cached strategy names or static configured names instead, and added a regression that prevents the heavy strategy-performance reload from returning to the order-only path. Verification passed: focused StorageTests 39/39, Dashboard Verify build, and full tests 586/586.

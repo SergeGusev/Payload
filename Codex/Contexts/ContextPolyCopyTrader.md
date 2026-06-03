@@ -1,3 +1,16 @@
+## Active Update 2026-06-04 Dashboard Orders Fast Reload
+Goal: Speed up Dashboard Paper/Live orders tabs after selected-strategy filtering started working.
+Status: Completed
+Done:
+- Checked the remote PostgreSQL indexes for `paper_orders` and `live_orders`; the strategy/time indexes are present, valid, and ready.
+- Verified remote query plans: selected Paper orders use `ix_paper_orders_strategy_perf_cover` and run in about 27 ms; selected Live orders are about 1 ms on the current small table.
+- Found the slow path in Dashboard: `LoadOrderRowsAsync` called `GetStrategyPerformanceAsync(10_000)` only to build `strategyNamesById` before loading the orders page.
+- Changed order-only reloads to use cached strategy performance names when available, otherwise static configured strategy names from `StrategyIds`, avoiding the heavy performance query.
+- Added a regression test proving `LoadOrderRowsAsync` no longer calls `GetStrategyPerformanceAsync`.
+Next: Deploy/reopen Dashboard; Service redeploy is not required for this UI-side performance fix.
+Notes: Verification passed: focused `StorageTests` passed 39/39; Dashboard Verify build succeeded with 0 warnings/errors; full test project passed 586/586.
+Blockers: None.
+
 ## Active Update 2026-06-04 Dashboard Orders Repeat Strategy Reload
 Goal: Make strategy order buttons reload rows even when the same strategy is already selected.
 Status: Completed

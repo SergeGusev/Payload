@@ -366,6 +366,21 @@ public sealed class StorageTests
     }
 
     [Fact]
+    public void DashboardDataService_LoadOrderRows_DoesNotRefreshStrategyPerformance()
+    {
+        var source = ReadDashboardDataServiceSource();
+        var start = source.IndexOf("LoadOrderRowsAsync", StringComparison.Ordinal);
+        Assert.True(start >= 0);
+
+        var end = source.IndexOf("InvalidateStrategyPerformanceCache", start, StringComparison.Ordinal);
+        Assert.True(end > start);
+
+        var method = source[start..end];
+        Assert.Contains("GetOrderStrategyNamesById", method, StringComparison.Ordinal);
+        Assert.DoesNotContain("GetStrategyPerformanceAsync", method, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task TestRepository_GetRecentOrders_FiltersByStrategyBeforeLimit()
     {
         var repository = new TestAppRepository();
@@ -1157,14 +1172,23 @@ CREATE INDEX first_table_id_idx ON first_table(id);
 
     private static string ReadStorageRepositorySource()
     {
+        return ReadRepositorySource("src", "PolyCopyTrader.Storage", "PostgresAppRepository.cs");
+    }
+
+    private static string ReadDashboardDataServiceSource()
+    {
+        return ReadRepositorySource("src", "PolyCopyTrader.Dashboard", "Services", "DashboardDataService.cs");
+    }
+
+    private static string ReadRepositorySource(params string[] pathParts)
+    {
         var directory = new DirectoryInfo(AppContext.BaseDirectory);
         while (directory is not null)
         {
-            var candidate = Path.Combine(
-                directory.FullName,
-                "src",
-                "PolyCopyTrader.Storage",
-                "PostgresAppRepository.cs");
+            var candidateParts = new string[pathParts.Length + 1];
+            candidateParts[0] = directory.FullName;
+            Array.Copy(pathParts, 0, candidateParts, 1, pathParts.Length);
+            var candidate = Path.Combine(candidateParts);
             if (File.Exists(candidate))
             {
                 return File.ReadAllText(candidate);
@@ -1173,6 +1197,6 @@ CREATE INDEX first_table_id_idx ON first_table(id);
             directory = directory.Parent;
         }
 
-        throw new FileNotFoundException("Could not locate PostgresAppRepository.cs from the test output directory.");
+        throw new FileNotFoundException("Could not locate repository source file from the test output directory.");
     }
 }
