@@ -1,3 +1,16 @@
+## Active Update 2026-06-04 PreflightRejected Meaning
+Goal: Explain what the Live order status `PreflightRejected` means.
+Status: Completed
+Done:
+- Confirmed the status is `LiveOrderStatus.PreflightRejected` in the domain model, not `PrelightRejqcted`; the user spelling appears to be a typo.
+- Confirmed from the Live-shadow strategy path that `PreflightRejected` is persisted before `PlaceLiveOrder` is called, with `response_status = preflight_rejected` and a `validation_summary` describing the local gate that failed.
+- Explained that no Polymarket order is submitted for a preflight-rejected row, so `order_id` is normally null and real spent/fill amounts are zero even if target notional/size columns show the intended order shape.
+- Listed the relevant preflight gates: auth readiness, geoblock, CLOB market-data/server-time check, live sizing/min-size, live notional/risk caps, strategy live balance, existing live exposure/open-order constraints, daily-loss or API lockout, and opposite open Live outcome guard.
+- Noted that in Paper/Live-shadow mode a preflight rejection cancels the linked Paper-shadow order and can later show up as `Paper not accepted`/`gtd_limit_not_filled`.
+Next: When diagnosing a concrete row, read its `validation_summary`; that field is the reason.
+Notes: Answer/code-reading only. No production queries, source changes, builds, tests, live submissions, or cancels were performed for this prompt.
+Blockers: None.
+
 ## Active Update 2026-06-04 Paper Not Accepted Live Explanation
 Goal: Explain in more detail why Dashboard `Paper not accepted` can increase after a strategy is enabled for Live.
 Status: Completed

@@ -214,3 +214,10 @@ Request:
 
 Result:
 Explained that `Paper not accepted` can increase after Live enablement because the Paper row stops being an independent ordinary Paper simulation and becomes a Live-shadow row. Ordinary non-Live Paper orders are filled by the Paper fill simulator, but Live-enabled strategies create `paper_live_shadow_test` Paper rows that are excluded from ordinary Paper fill processing and are filled/cancelled only from the linked real Live order state. Therefore preflight rejects, API lockouts/errors, live risk/open-order limits, zero-fill GTD/cancel outcomes, post-only non-fills, and real CLOB queue/latency/liquidity can turn the linked Paper row into `gtd_limit_not_filled`, which Dashboard counts as `Paper not accepted`. Reiterated the prior evidence: ETH Skip 7 had `11` post-Live not-accepted rows tied to zero-fill/reject/cancel Live outcomes while ordinary Paper siblings could settle comparable markets; ETH Skip 9 after enablement had two Live-shadow rows and both matched, so the mechanism is active but not currently failing there. No production queries, source changes, builds, tests, live submissions, or cancels were performed.
+
+## 2026-06-04T19:52:23.9705332Z
+Request:
+Что означает PrelightRejqcted ?
+
+Result:
+Explained that the intended status is `PreflightRejected`: a local service preflight rejection before an order is submitted to Polymarket. In this state `response_status` is normally `preflight_rejected`, `order_id` is null, and real spent/fill amounts are zero even if the intended notional/size is recorded. The cause should be read from `validation_summary`; possible causes include auth not ready, geoblock, CLOB market-data/server-time failure, live sizing/min-size failure, live notional/risk caps, strategy live balance, open live exposure/order constraints, daily-loss or API lockout, and opposite open Live outcome guard. Also noted that for Paper/Live-shadow a preflight rejection cancels the linked Paper-shadow order and can later appear as `Paper not accepted` / `gtd_limit_not_filled`. No production queries, source changes, builds, tests, live submissions, or cancels were performed.
