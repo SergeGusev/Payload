@@ -1,3 +1,18 @@
+## Active Update 2026-06-04 BTC Fixed Down No Orders Diagnosis
+Goal: Explain why `BTC Up or Down 5m Down N bps Instant` has no orders while the matching Up variants are active.
+Status: Completed
+Done:
+- Queried production PostgreSQL read-only through `out\dbprobe` with host override `192.168.0.101`; no production rows, service state, orders, or cancels were changed.
+- Confirmed service is running in `Live` mode on deployed commit `e2576dc6bd7fcb46850d6266996b713ea204edac` with fresh heartbeat and `0` `api_errors` in the last 30 minutes.
+- Confirmed both BTC fixed-outcome families exist and are enabled: `50` Up and `50` Down rows, none live.
+- Confirmed actual Paper order counts: BTC fixed Up has `624` Paper orders total, including `24` for `Up 1 bps`; BTC fixed Down has `0` Paper orders total, including `0` for `Down 1 bps`.
+- Checked runs since restart and focused `Down 1 bps`: it had no Entered/Settled rows; latest reasons were `29` fixed-outcome mismatches, `20` `opposite_outcome_open_order`, `2` order-book unavailable, `2` instant price cap, and `2` market-already-ended skips plus one observed current market row.
+- Confirmed concrete `Down 1 bps` skipped windows had selected `Down` with executable prices such as `0.58`, `0.31`, `0.44`, `0.57`, etc., but were blocked because existing same-market `Up` Paper orders were already present.
+- Found the blockers were not only fixed Up variants: same-market `Up` orders came from PreOpen, Middle, Binance, and other BTC strategies. This is the existing global “do not bet against ourselves in one market” guard.
+Next: If the goal is to compare fixed Up/Down families independently, decide whether to narrow the opposite-outcome guard scope; otherwise the current result is expected under the global guard.
+Notes: Diagnostic only. No source behavior changes, production writes, builds, or tests were performed. Existing untracked artifacts were left untouched.
+Blockers: None.
+
 ## Active Update 2026-06-04 Fixed Outcome Strategy Dashboard Categories
 Goal: Move newly added fixed-outcome `Up/Down N bps Instant` strategies into dedicated Dashboard strategy categories.
 Status: Completed

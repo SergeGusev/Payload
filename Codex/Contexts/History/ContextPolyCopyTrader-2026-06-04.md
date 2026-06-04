@@ -130,3 +130,10 @@ Request:
 
 Result:
 Moved Dashboard category parsing into a shared domain helper and changed the fixed-outcome `Up/Down N bps Instant` strategy names so they appear under dedicated per-asset `Up Bps` and `Down Bps` categories instead of `Other`. Added regression tests verifying all `300` fixed-outcome bps Instant variants split into six categories (BTC/ETH/SOL Up/Down, `50` each) while existing Skip/Middle/Binance/plain Up/Down/Maker categories remain unchanged. Updated README. Verification passed: focused category tests 7/7, Dashboard Verify build 0 warnings/errors, full test project 600/600, and `git diff --check` clean except LF/CRLF warnings. No database, strategy seeding, or trading logic changed.
+
+## 2026-06-04T15:56:08.7103499Z
+Request:
+BTC Up or Down 5m Down N bps instant подозрительно нет ни одной ставки. Прямо даже 1 bps не было? Up уже работает вовсю
+
+Result:
+Checked production PostgreSQL read-only. Confirmed the suspicion: BTC fixed Down has `0` Paper orders total and `Down 1 bps` also has `0`; BTC fixed Up has `624` Paper orders total and `Up 1 bps` has `24`. Both fixed Up/Down families have `50` enabled strategies and none are Live. Focused `Down 1 bps` runs show it did receive qualifying Down selections, but those rows skipped with `opposite_outcome_open_order`: there were `20` such skips versus `29` fixed-outcome mismatches, `2` order-book-unavailable skips, `2` instant price-cap skips, and `2` market-already-ended skips. Concrete same-market blockers were existing `Up` Paper orders from PreOpen, Middle, Binance, and other BTC strategies, not only fixed Up variants. Root cause is the existing global “do not bet against ourselves in one market” guard, not missing 1 bps signals or API errors. No production writes, code changes, builds, tests, live submissions, or cancels were performed.
