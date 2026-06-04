@@ -1,3 +1,14 @@
+## Active Update 2026-06-04 Live Orders Filled Field Explanation
+Goal: Explain what the Dashboard `Filled` column means in the Live orders tab.
+Status: Completed
+Done:
+- Verified the Dashboard XAML binds the Live orders `Filled` column to `LiveOrderRow.FilledSize`.
+- Verified `DashboardDataService.ToLiveOrderRow` maps `FilledSize` directly from `LiveOrder.FilledSize`, which is stored in `live_orders.filled_size`.
+- Confirmed the adjacent `Filled $` column is the separate dollar/notional value `FilledNotionalUsd`; `Filled` itself is the number of matched outcome shares/contracts.
+Next: None.
+Notes: Diagnostic/code-reading only. No source behavior changes, production writes, builds, or tests were performed.
+Blockers: None.
+
 ## Active Update 2026-06-04 PreflightRejected Screenshot Diagnosis
 Goal: Explain the Dashboard `PreflightRejected` status visible in the user's screenshot.
 Status: Completed

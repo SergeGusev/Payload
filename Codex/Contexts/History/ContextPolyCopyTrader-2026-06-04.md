@@ -39,3 +39,10 @@ Request:
 
 Result:
 Extracted the screenshot from the Windows clipboard and confirmed the selected row is `PreflightRejected`. Queried the matching remote `live_orders` row at `2026-06-03 20:45:13 UTC`: strategy `ETH Up or Down 5m Skip 7 bps Instant`, no `order_id`, `response_status = preflight_rejected`, and `validation_summary = Maximum open live order count reached.` Explained that this is a local service preflight rejection before sending anything to Polymarket, not an exchange rejection. The row was historical from before the restart/deploy on `fbee408 Remove global live order count cap`; the running service started at `2026-06-03 20:48:57 UTC`, and the next visible Live row at `20:50:08 UTC` was `Matched`. No code or production state was changed.
+
+## 2026-06-04T05:42:03.9677476+00:00
+Request:
+Что означает поле Filled в Live orders ?
+
+Result:
+Read the Dashboard Live orders bindings and model mapping. The `Filled` column is bound to `LiveOrderRow.FilledSize`, mapped from `LiveOrder.FilledSize` / `live_orders.filled_size`. It is the number of outcome shares/contracts that have actually matched on Polymarket, not a dollar amount. The dollar value is shown separately as `Filled $` / `FilledNotionalUsd`, and the unfilled share quantity is shown as `Remaining`.
