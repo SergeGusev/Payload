@@ -116,3 +116,10 @@ Request:
 
 Result:
 Added 200 ETH/SOL fixed-outcome bps Instant variants: `eth_up_down_5m_up_bps_1..50_instant`, `eth_up_down_5m_down_bps_1..50_instant`, `sol_up_down_5m_up_bps_1..50_instant`, and `sol_up_down_5m_down_bps_1..50_instant`. They reuse the existing crypto Skip bps previous close-book streak and cumulative archived Binance `<asset>USDT` start-to-close bps gate, then enter only when the fixed Up/Down side matches the countertrend decision. Seeded the rows in `PostgresSchema`, updated README/configuration docs, and added catalog/runtime regression tests for ETH Up and SOL Down. Verification passed: focused `BtcUpDown5mPaperStrategyProcessorTests` 173/173, full tests 593/593, and `git diff --check` clean except existing LF/CRLF warnings.
+
+## 2026-06-04T11:43:04.1750400Z
+Request:
+Vylozhil, proveryay.
+
+Result:
+Checked production PostgreSQL read-only through `out\dbprobe` with host override `192.168.0.101` after deploy. `PolyCopyTrader.Service` is running in `Live` mode on deployed commit `e2576dc6bd7fcb46850d6266996b713ea204edac`, started `2026-06-04 11:37:14` database time, with fresh heartbeat at `11:42:14` and empty `last_error`. Confirmed all fixed-outcome BTC/ETH/SOL bps Instant rows were seeded: BTC/ETH/SOL each have `50` Up and `50` Down rows, all enabled and none live/paused/auto-paused. Existing Live strategies remained unchanged: BTC Middle 47 Instant, ETH Skip 7 Instant, ETH Skip 32 Instant, and SOL Skip 42 Instant are enabled/live/not paused. Since restart there were `254` Paper orders and `1` Live order, with `0` `api_errors` in the last 30 minutes. New fixed-outcome Paper activity appeared for BTC Up (`39` orders), ETH Up (`27`), and SOL Up (`19`); Down variants had zero entries on the current move and skipped on expected gates. No production writes, service changes, live submissions, or cancels were performed.

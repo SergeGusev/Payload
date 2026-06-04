@@ -1,3 +1,19 @@
+## Active Update 2026-06-04 Post Deploy Fixed Outcome Strategies Verification
+Goal: Verify production after deploying commit `e2576dc` with BTC/ETH/SOL fixed-outcome bps Instant strategies.
+Status: Completed
+Done:
+- Queried production PostgreSQL read-only through `out\dbprobe` with host override `192.168.0.101`; no production rows, service state, orders, or cancels were changed.
+- Confirmed `PolyCopyTrader.Service` is running in `Live` mode on `info=1.0.0+e2576dc6bd7fcb46850d6266996b713ea204edac`, started `2026-06-04 11:37:14` database time, with fresh heartbeat at `2026-06-04 11:42:14` and empty `last_error`.
+- Confirmed fixed-outcome strategy seeding: BTC/ETH/SOL each have `50` Up and `50` Down bps Instant rows; all `300` rows are enabled, not live, not paused, and not auto-live-paused.
+- Confirmed the existing four Live strategies remain enabled/live and not paused: BTC Middle 47 Instant, ETH Skip 7 Instant, ETH Skip 32 Instant, and SOL Skip 42 Instant.
+- Confirmed post-restart activity: `254` Paper orders and `1` Live order by the check window, with `0` `api_errors` in the last 30 minutes.
+- Confirmed new fixed-outcome Paper entries since restart: BTC Up `39` orders / `$117.12870000`, ETH Up `27` orders / `$81.08910000`, SOL Up `19` orders / `$57.02660000`; Down variants had zero orders on the current move.
+- Checked fixed-outcome run statuses and skip reasons; current Down variants skipped on expected gates such as fixed-outcome mismatch, below-threshold movement, and price cap, while a new observed row exists for the next market.
+- Checked database activity after the verification queries; no active PostgreSQL session was older than 1 minute.
+Next: Continue monitoring the next cycles in Dashboard or read-only SQL; no additional deploy is required for this verification.
+Notes: Operational read-only verification only. Two broad exploratory aggregate queries over `strategy_market_paper_runs.detected_at_utc` timed out because that column is not separately indexed; optimized checks using indexed strategy/time paths completed successfully.
+Blockers: None.
+
 ## Active Update 2026-06-04 ETH SOL Fixed Outcome Bps Instant Strategies
 Goal: Add ETH/SOL equivalents of the fixed-outcome `Up/Down N bps Instant` strategies for N = 1..50.
 Status: Completed
