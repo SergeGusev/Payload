@@ -1,3 +1,16 @@
+## Active Update 2026-06-04 Bulk Disable Negative Paper Strategies
+Goal: Disable all currently enabled strategies whose Dashboard Paper Settled count is above 100 and realized Paper PnL is negative.
+Status: Completed
+Done:
+- Queried production PostgreSQL through `out\dbprobe` with host override `192.168.0.101`.
+- Matched the Dashboard paper performance logic for `Paper Settle`/`Realized` and confirmed the faster `strategy_market_paper_runs` aggregation returned the same target count.
+- Disabled `383` currently enabled strategies by setting `strategies.enabled = false` and `updated_at_utc = clock_timestamp()` inside one transaction.
+- Confirmed none of the disabled targets had `live_stakes = true`; the four current Live strategies remained enabled and not auto-paused.
+- Verified after the update that both the paper-runs query and the full Dashboard-style query return `0` remaining enabled strategies with `Paper Settle > 100` and negative `Realized`.
+Next: None.
+Notes: Production DB write only. No source code changes, live orders, cancels, service restarts, builds, or unit tests were performed.
+Blockers: None.
+
 ## Active Update 2026-06-04 ETH/SOL Bps Reference Explanation
 Goal: Explain which price feed ETH/SOL Up or Down 5m bps strategies use.
 Status: Completed

@@ -88,3 +88,10 @@ Request:
 
 Result:
 Read the strategy processor, crypto odds archive, Binance crypto reference stream, and strategy catalog. Confirmed ETH/SOL variants use their own Binance `<asset>USDT` feed, not BTC: ETH uses `ETHUSDT`, SOL uses `SOLUSDT`. Binance bps compare latest Binance `<asset>USDT` price to the archived market-start reference; Skip bps use the previous ETH/SOL 5m close-book result plus that asset's archived start-to-close Binance move; Middle variants compare latest `<asset>USDT` price to that asset's cached arithmetic mean. No code or production state was changed.
+
+## 2026-06-04T10:35:15.5634339Z
+Request:
+Поставь Enabled = False для всех стратегий, у которых сейчас стоит Enabled = true, Paper Settle больше 100 и Realized < 0
+
+Result:
+Queried production PostgreSQL through `out\dbprobe` with host override `192.168.0.101`, matching the Dashboard paper performance logic for `Paper Settle` and `Realized`. Disabled `383` currently enabled strategies in one transaction by setting `strategies.enabled = false` and updating `updated_at_utc`; no Live strategies were among the targets. Verified afterward that both the paper-runs aggregation and the full Dashboard-style aggregation return `0` remaining enabled strategies with `Paper Settle > 100` and negative `Realized`. Confirmed the four current Live strategies remain enabled and not auto-paused: BTC Middle 47 Instant, ETH Skip 7 Instant, ETH Skip 32 Instant, and SOL Skip 42 Instant. No source code, live orders, cancels, service restarts, builds, or unit tests were involved.
