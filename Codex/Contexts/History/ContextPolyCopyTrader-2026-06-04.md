@@ -186,3 +186,10 @@ Request:
 
 Result:
 Queried production PostgreSQL read-only to test whether post-Live not-accepted Live-shadow rows remove would-have-won trades. For `ETH Up or Down 5m Skip 7 bps Instant`, its `11` post-Live `gtd_limit_not_filled` rows had linked Live orders with zero fill and no realized Live PnL; on the same markets ordinary Paper siblings Skip 8/9 settled with a counterfactual `7W/4L` and estimated missed PnL about `+5.7092` / `15.42%` ROI. Extending the nearest-sibling check to all current Live strategies showed the same bias for several: BTC Middle 47 missed `2W/0L` / `+7.0540`, ETH Skip 32 missed `3W/1L` / `+5.7928`, and SOL Skip 42 was nearly neutral at `8W/10L` / `+0.4688`. Concluded that Live-shadow failures can indeed remove net-positive Paper opportunities from post-Live settled stats, because ordinary Paper would be fill-simulated while `paper_live_shadow_test` Paper rows are filled/cancelled only from real Live order state. No source changes, production writes, builds, tests, live submissions, or cancels were performed.
+
+## 2026-06-04T19:04:14.1353917Z
+Request:
+То есть вся накопленная статистика недействительна и по ней нельзя выбирать стратегии?
+
+Result:
+Clarified that not all accumulated Paper statistics are invalid, but the Dashboard aggregate must be split by regime before it can be used for Live selection. Ordinary non-Live Paper, especially before any Live enablement, remains useful as an estimate of signal plus Paper fill-model quality, but it is not a guarantee of real Live execution. Post-Live Paper/Live-shadow rows are not directly comparable with ordinary Paper rows because Live preflight/API/cancel/fill behavior can remove a biased subset of trades, including would-have-won Paper opportunities. Mixed all-time Dashboard totals should not be the sole basis for choosing Live strategies; use ordinary Paper-only/pre-Live/independent Paper-control metrics for selection and evaluate Live separately by fill rate, rejection/cancel rate, missed-winner counterfactuals, and post-enable probation. No production queries, source changes, builds, tests, live submissions, or cancels were performed.

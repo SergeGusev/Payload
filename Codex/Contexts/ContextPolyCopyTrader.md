@@ -1,3 +1,15 @@
+## Active Update 2026-06-04 Paper Statistics Validity Clarification
+Goal: Clarify whether accumulated Paper statistics are invalid for selecting strategies after discovering Live-shadow selection bias.
+Status: Completed
+Done:
+- Concluded that not all accumulated Paper statistics are invalid, but Dashboard aggregates must be split by regime before they are used for Live selection.
+- Ordinary non-Live Paper remains useful for estimating signal plus Paper fill-model quality, especially before any Live enablement, but it is still not a guarantee of real Live execution.
+- Post-Live Paper/Live-shadow rows are not directly comparable with ordinary Paper rows because Live preflight/API/cancel/fill behavior can remove a biased set of trades, including net-positive would-have-won Paper opportunities.
+- Mixed all-time Dashboard totals that combine ordinary Paper and Paper/Live-shadow should not be used as the sole basis for choosing Live strategies.
+Next: Select Live candidates from ordinary Paper-only / pre-Live / independent Paper-control metrics, then evaluate Live separately with fill rate, rejection/cancel rate, missed-winner counterfactuals, and post-enable probation.
+Notes: Answer-only clarification. No production queries, source changes, builds, or tests were run for this prompt.
+Blockers: None.
+
 ## Active Update 2026-06-04 Live Shadow Missed Winners Check
 Goal: Check whether Live-shadow not-accepted rows may remove bets that would have won in ordinary Paper and thereby make Live/post-Live performance look worse.
 Status: Completed
