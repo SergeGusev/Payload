@@ -46,3 +46,10 @@ Request:
 
 Result:
 Read the Dashboard Live orders bindings and model mapping. The `Filled` column is bound to `LiveOrderRow.FilledSize`, mapped from `LiveOrder.FilledSize` / `live_orders.filled_size`. It is the number of outcome shares/contracts that have actually matched on Polymarket, not a dollar amount. The dollar value is shown separately as `Filled $` / `FilledNotionalUsd`, and the unfilled share quantity is shown as `Remaining`.
+
+## 2026-06-04T06:26:34.2812397+00:00
+Request:
+Объясни по стратегии ETH Up or Down 5m Skip 7 bps Instant. Почему при Live won и Live lost одинаковых, по 124, стратегия всё равно в плюсах?
+
+Result:
+Read the Dashboard/Storage live-performance aggregation and checked the remote production database read-only. `Live won/lost` are simple counts of settled Live orders, while `Live PnL` sums `live_orders.realized_pnl_usd`, so equal counts can still be profitable when average winning PnL is larger than average losing PnL. For the user's 124/124 snapshot, `ETH Up or Down 5m Skip 7 bps Instant` had total win PnL `+384.920863`, total loss PnL `-372.909386`, and net `+12.011477`; average win was about `+3.1042`, average loss about `-3.0073`. Current data had moved to 124/125 after a later `-4.00` settlement at `2026-06-04 06:21:26 UTC`, leaving net PnL about `+8.011477`.

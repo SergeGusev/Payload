@@ -1,3 +1,15 @@
+## Active Update 2026-06-04 ETH Skip 7 Live PnL Explanation
+Goal: Explain why `ETH Up or Down 5m Skip 7 bps Instant` can be positive when Live won/lost counts are equal.
+Status: Completed
+Done:
+- Read the Dashboard/Storage aggregation logic: `Live won/lost` are counts of settled Live orders, while `Live PnL` is the sum of `live_orders.realized_pnl_usd`.
+- Queried remote production read-only for `ETH Up or Down 5m Skip 7 bps Instant`.
+- Confirmed the user's 124/124 snapshot had total win PnL `+384.920863`, total loss PnL `-372.909386`, and net Live PnL `+12.011477`; avg win was about `+3.1042`, avg loss about `-3.0073`.
+- Confirmed current database has since moved to 124 won / 125 lost after a later `-4.00` settlement at `2026-06-04 06:21:26 UTC`; current net was still about `+8.011477`.
+Next: None.
+Notes: Diagnostic only. No source behavior changes, production writes, live submissions, cancels, builds, or tests were performed.
+Blockers: None.
+
 ## Active Update 2026-06-04 Live Orders Filled Field Explanation
 Goal: Explain what the Dashboard `Filled` column means in the Live orders tab.
 Status: Completed
