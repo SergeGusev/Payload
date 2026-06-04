@@ -1,3 +1,18 @@
+## Active Update 2026-06-04 ETH Skip 7 Live Rejection Breakdown
+Goal: Break down `PreflightRejected` and related Live-shadow failure reasons for `ETH Up or Down 5m Skip 7 bps Instant`.
+Status: Completed
+Done:
+- Queried production PostgreSQL read-only through `out\dbprobe` with host override `192.168.0.101`; no production rows, service state, orders, cancels, or strategy flags were changed.
+- Confirmed service is running in `Live` on `info=1.0.0+a3b2675dbb01714727c6789e1b7ca56a0e2e5788`, with fresh heartbeat and empty `last_error`; `eth_up_down_5m_skip_bps_7_instant` remains live/enabled/not paused, `live_enabled_at_utc = 2026-06-03 13:42:17 UTC`, `Live $ = 1`, and `live_available_balance = 194.24728200`.
+- Since Live enablement, Skip 7 had `163` Live rows: `152` matched (`97` `matched`, `55` `data_api_current_position_reconciled`) and `11` zero-fill/failed rows that linked to cancelled Paper-shadow orders and `strategy_market_paper_runs.status = Skipped`, `skip_reason = gtd_limit_not_filled`.
+- The `5` `PreflightRejected` rows split into `3` `API error lockout is active.` rows and `2` `Maximum open live order count reached.` rows. All had `order_id = null`, `filled_size = 0`, linked Paper status `Cancelled`, and run `Skipped/gtd_limit_not_filled`.
+- API error lockout rows occurred at `2026-06-03 15:30:16 UTC`, `2026-06-04 18:20:12 UTC`, and `2026-06-04 18:30:34 UTC`; preceding 15-minute windows contained Polymarket WebSocket close/cancel events, order-book refresh timeouts, and worker/mark-timeout HTTP cancellations.
+- Maximum-open-live-order rows occurred only at `2026-06-03 20:00:09 UTC` and `2026-06-03 20:45:13 UTC`; no such Skip 7 rows appeared after that in the checked data, so this looks historical rather than the current dominant reason.
+- The remaining `6` not-accepted Live-shadow rows were not preflight: `4` `CancelFailed` rows with cancel status `order can't be found - already canceled or matched`, `1` `Cancelled` row, and `1` `Rejected` row with `response_status = ServiceUnavailable`, `validation_summary = HTTP 503`. All had zero fill and became Paper `Cancelled` / run `Skipped/gtd_limit_not_filled`.
+Next: Treat Skip 7 `Paper not accepted` as a mix of local preflight safety rejections and real CLOB/API/cancel zero-fill outcomes; use `validation_summary`, `response_status`, `cancel_status`, and `filled_size` to classify each row.
+Notes: Diagnostic only. No source builds/tests were run because no code changed.
+Blockers: None.
+
 ## Active Update 2026-06-04 PreflightRejected Meaning
 Goal: Explain what the Live order status `PreflightRejected` means.
 Status: Completed
