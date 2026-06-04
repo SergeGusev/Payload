@@ -1,3 +1,20 @@
+## Active Update 2026-06-04 ETH Skip 9 Live Enable Verification
+Goal: Verify production after the user manually checked the Dashboard Live box for `ETH Up or Down 5m Skip 9 bps Instant`.
+Status: Completed
+Done:
+- Queried production PostgreSQL read-only through `out\dbprobe` with host override `192.168.0.101`; no production rows, service state, orders, cancels, or strategy flags were changed.
+- Confirmed `PolyCopyTrader.Service` is running in `Live` mode on `info=1.0.0+a3b2675dbb01714727c6789e1b7ca56a0e2e5788`, started `2026-06-04 16:45:23 UTC`, with heartbeat at `2026-06-04 19:24:11 UTC` and empty `last_error`.
+- Confirmed `eth_up_down_5m_skip_bps_9_instant` is now enabled/live/not paused/not auto-live-paused, with `Live $ = 1`, `live_available_balance = 98.41540000`, `live_enabled_at_utc = 2026-06-04 19:15:42 UTC`, and `updated_at_utc = 2026-06-04 19:22:50 UTC`.
+- Confirmed current Live strategies include BTC Middle 47 Instant, ETH Skip 7 Instant, ETH Skip 9 Instant, ETH Skip 32 Instant, and SOL Skip 42 Instant.
+- Found two Skip 9 Live-shadow entries after enablement: both linked Paper rows are `Filled` with `execution_source = paper_live_shadow_test`, both shadow decisions are `live_status_synced`, and both Live orders are `Matched` with no validation summary.
+- The two matched Skip 9 Live orders were ETH `Buy Down`: `2026-06-04 19:16:41 UTC` at `0.24000000` for `8.34000000` shares / `$2.00160000`, and `2026-06-04 19:21:02 UTC` at `0.45000000` for `6.67000000` shares / `$3.00150000`.
+- Confirmed there were no currently open/submitted/partially-filled Live orders at the check time.
+- Checked the same condition IDs as Skip 9's Live orders and found no opposite Live outcome; other Live orders on those conditions were also `Buy Down` from ETH Skip 7 and, for the later market, ETH Skip 32.
+- Recent `api_errors` in the last 30 minutes were order-book refresh timeouts and market WebSocket close-handshake errors; they did not prevent the two observed Skip 9 Live orders from matching.
+Next: Monitor the next settlements and probation metrics for Skip 9 separately from ordinary Paper statistics.
+Notes: Answer/diagnostic only. One exploratory read-only SELECT referenced a non-existent `paper_live_shadow_decisions.rejection_reason` column after returning earlier result sets; it was replaced by schema-aware SELECTs. No source builds/tests were run because no code changed.
+Blockers: None.
+
 ## Active Update 2026-06-04 ETH Skip 9 Live Checkbox Guidance
 Goal: Answer whether enabling `ETH Up or Down 5m Skip 9 bps Instant` for Live requires only ticking the Dashboard Live checkbox.
 Status: Completed
