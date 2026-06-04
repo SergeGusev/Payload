@@ -95,3 +95,10 @@ Request:
 
 Result:
 Queried production PostgreSQL through `out\dbprobe` with host override `192.168.0.101`, matching the Dashboard paper performance logic for `Paper Settle` and `Realized`. Disabled `383` currently enabled strategies in one transaction by setting `strategies.enabled = false` and updating `updated_at_utc`; no Live strategies were among the targets. Verified afterward that both the paper-runs aggregation and the full Dashboard-style aggregation return `0` remaining enabled strategies with `Paper Settle > 100` and negative `Realized`. Confirmed the four current Live strategies remain enabled and not auto-paused: BTC Middle 47 Instant, ETH Skip 7 Instant, ETH Skip 32 Instant, and SOL Skip 42 Instant. No source code, live orders, cancels, service restarts, builds, or unit tests were involved.
+
+## 2026-06-04T10:52:08.5411939Z
+Request:
+Расскажи подробнее, как работает BTC Up or Down 5m Skip N bps
+
+Result:
+Read the BTC 5m strategy catalog definitions, `BtcUpDown5mPaperStrategyProcessor`, and README/configuration documentation for `BTC Up or Down 5m Skip 1..50 bps` and matching `Instant` variants. Explained that the strategy infers the previous BTC 5m close-book outcome, walks backward through the current streak of identical outcomes, sums archived Binance BTC start-to-close absolute bps movement across the usable streak, and buys the opposite outcome only when the cumulative move reaches the variant threshold. Also explained standard fixed `0.50` GTD pricing versus Instant executable ask-depth pricing and the key skip/defer reasons. No source behavior changes, production writes, builds, or tests were performed.

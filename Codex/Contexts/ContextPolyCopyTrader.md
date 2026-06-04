@@ -1,3 +1,14 @@
+## Active Update 2026-06-04 BTC Skip Bps Strategy Explanation
+Goal: Explain how `BTC Up or Down 5m Skip N bps` works.
+Status: Completed
+Done:
+- Read the BTC 5m strategy catalog definitions for `Skip 1..50 bps` and matching `Instant` variants.
+- Read `BtcUpDown5mPaperStrategyProcessor` decision logic for previous close-book result lookup, same-outcome streak construction, archived BTC start-to-close bps move calculation, threshold gating, selected outcome inversion, fixed-price pricing, and Instant pricing.
+- Confirmed current behavior: the strategy buys the opposite outcome after a previous close-book streak, but only when the cumulative absolute archived BTC move across the usable same-result streak reaches the variant threshold.
+Next: None.
+Notes: Answer-only code/documentation read. No source behavior changes, production writes, builds, or tests were performed.
+Blockers: None.
+
 ## Active Update 2026-06-04 Bulk Disable Negative Paper Strategies
 Goal: Disable all currently enabled strategies whose Dashboard Paper Settled count is above 100 and realized Paper PnL is negative.
 Status: Completed
