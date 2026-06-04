@@ -3513,6 +3513,7 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
             BtcUpDown5mStrategyBehavior.SkipConsecutiveMarketResultsRevert or
             BtcUpDown5mStrategyBehavior.SkipPreviousResultBpsThreshold or
             BtcUpDown5mStrategyBehavior.SkipPreviousResultBpsThresholdInstant or
+            BtcUpDown5mStrategyBehavior.FixedOutcomePreviousResultBpsThresholdInstant or
             BtcUpDown5mStrategyBehavior.AlwaysUp or
             BtcUpDown5mStrategyBehavior.AlwaysDown or
             BtcUpDown5mStrategyBehavior.BinanceStartRelative or
@@ -3618,6 +3619,7 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
             BtcUpDown5mStrategyBehavior.MiddleReferenceInstant or
             BtcUpDown5mStrategyBehavior.MiddleReferenceRevertInstant or
             BtcUpDown5mStrategyBehavior.SkipPreviousResultBpsThresholdInstant or
+            BtcUpDown5mStrategyBehavior.FixedOutcomePreviousResultBpsThresholdInstant or
             BtcUpDown5mStrategyBehavior.CryptoBinanceStartRelativeBpsThresholdInstant;
     }
 
@@ -3751,7 +3753,8 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
                 nowUtc,
                 cancellationToken),
             BtcUpDown5mStrategyBehavior.SkipPreviousResultBpsThreshold or
-                BtcUpDown5mStrategyBehavior.SkipPreviousResultBpsThresholdInstant => await GetSkipPreviousResultBpsThresholdEntryDecisionAsync(
+                BtcUpDown5mStrategyBehavior.SkipPreviousResultBpsThresholdInstant or
+                BtcUpDown5mStrategyBehavior.FixedOutcomePreviousResultBpsThresholdInstant => await GetSkipPreviousResultBpsThresholdEntryDecisionAsync(
                     market,
                     variant,
                     stakeUsd,
@@ -6188,7 +6191,29 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
                     closeBookDiagnostics: moveSignal.CloseBookDiagnostics));
         }
 
-        var selectedDirection = baseSelectedDirection.Value;
+        var fixedSelectedDirection = GetFixedOutcomePreviousResultBpsDirection(variant);
+        if (fixedSelectedDirection is { } requiredDirection &&
+            baseSelectedDirection.Value != requiredDirection)
+        {
+            const string reason = "btc_previous_market_move_fixed_outcome_mismatch";
+            return BtcOpeningLimitDecision.Reject(
+                reason,
+                BuildSkipBpsThresholdRawDecisionJson(
+                    market,
+                    variant,
+                    stakeUsd,
+                    nowUtc,
+                    requiredResults,
+                    considered,
+                    baseSelectedDirection,
+                    selectedDirection: null,
+                    selectedOutcome: null,
+                    moveSignal,
+                    reason,
+                    closeBookDiagnostics: moveSignal.CloseBookDiagnostics));
+        }
+
+        var selectedDirection = fixedSelectedDirection ?? baseSelectedDirection.Value;
         var selectedOutcome = TrySelectOutcomeForDirection(market, selectedDirection);
         if (selectedOutcome is null)
         {
@@ -7021,12 +7046,28 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
     private static bool IsSkipPreviousResultBpsThreshold(BtcUpDown5mStrategyVariant variant)
     {
         return variant.Behavior is BtcUpDown5mStrategyBehavior.SkipPreviousResultBpsThreshold or
-            BtcUpDown5mStrategyBehavior.SkipPreviousResultBpsThresholdInstant;
+            BtcUpDown5mStrategyBehavior.SkipPreviousResultBpsThresholdInstant or
+            BtcUpDown5mStrategyBehavior.FixedOutcomePreviousResultBpsThresholdInstant;
     }
 
     private static bool UsesPreviousCloseBookMarketResult(BtcUpDown5mStrategyVariant variant)
     {
         return IsSkipConsecutiveMarketResults(variant) || IsSkipPreviousResultBpsThreshold(variant);
+    }
+
+    private static BtcPriceDirection? GetFixedOutcomePreviousResultBpsDirection(BtcUpDown5mStrategyVariant variant)
+    {
+        if (variant.Behavior != BtcUpDown5mStrategyBehavior.FixedOutcomePreviousResultBpsThresholdInstant)
+        {
+            return null;
+        }
+
+        return variant.FixedOutcome switch
+        {
+            BtcUpDownFixedOutcome.Up => BtcPriceDirection.Up,
+            BtcUpDownFixedOutcome.Down => BtcPriceDirection.Down,
+            _ => null
+        };
     }
 
     private static bool IsCloseBookOrderBookUnavailableReason(string? reason)
@@ -10026,6 +10067,9 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
         root["reference_binance_symbol"] = referenceAssetSymbol + "USDT";
         root["previous_btc_move_threshold_enabled"] = true;
         root["previous_btc_min_move_from_start_bps"] = GetSkipPreviousResultMinMoveBps(variant);
+        root["fixed_outcome_previous_result_bps_enabled"] =
+            variant.Behavior == BtcUpDown5mStrategyBehavior.FixedOutcomePreviousResultBpsThresholdInstant;
+        root["fixed_outcome"] = variant.FixedOutcome?.ToString();
         root["previous_btc_move_rejection_reason"] = moveSignal?.RejectionReason;
         root["previous_btc_market_id"] = moveSignal?.PreviousMarketId;
         root["previous_btc_market_slug"] = moveSignal?.PreviousMarketSlug;

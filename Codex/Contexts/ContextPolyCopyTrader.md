@@ -1,3 +1,17 @@
+## Active Update 2026-06-04 BTC Fixed Outcome Bps Instant Strategies
+Goal: Add `BTC Up or Down 5m Up N bps Instant` and `BTC Up or Down 5m Down N bps Instant` strategies for N = 1..50.
+Status: Completed
+Done:
+- Added 100 BTC 5m strategy variants: `btc_up_down_5m_up_bps_1..50_instant` and `btc_up_down_5m_down_bps_1..50_instant`.
+- Reused the existing Skip bps previous close-book streak and cumulative archived Binance BTC start-to-close bps gate.
+- Added fixed-outcome filtering: `Up` variants enter only when the Skip bps countertrend direction is `Up`; `Down` variants enter only when it is `Down`; mismatches skip with `btc_previous_market_move_fixed_outcome_mismatch`.
+- Routed the new behavior through opening-limit Instant pricing, including executable ask-depth sizing and existing `InstantOpeningLimitMaxPrice` rejection.
+- Seeded the new strategy rows in PostgreSQL schema initialization and documented the behavior in README/configuration/live checklist.
+- Added regression coverage for variant counts, fixed outcomes, Up enter, Up mismatch skip, and Down enter.
+Next: Deploy/restart `PolyCopyTrader.Service` so schema initialization seeds the new strategies and the running processor can create their runs/orders.
+Notes: Verification passed: focused `BtcUpDown5mPaperStrategyProcessorTests` 171/171, full test project 591/591, and `git diff --check` clean except existing LF/CRLF warnings.
+Blockers: None.
+
 ## Active Update 2026-06-04 BTC Skip Bps Strategy Explanation
 Goal: Explain how `BTC Up or Down 5m Skip N bps` works.
 Status: Completed

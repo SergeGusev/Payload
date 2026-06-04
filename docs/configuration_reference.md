@@ -624,7 +624,8 @@ are standard `Less` and `More` plus comparison `Less Gamma` and `More Gamma` at
 threshold `Middle 1 1..100 bps` and matching `Instant` variants, `Middle 1 Revert`,
 threshold `Middle 1 Revert 1..100 bps` and matching `Instant` variants, `Skip 1..5`,
 `Skip 1..5 Revert`, threshold `Skip 1..50 bps` in 1 bps increments, matching
-`Skip 1..50 bps Instant` variants, `Binance`, threshold `Binance 1..50 bps` in 1 bps increments, matching `Binance 1..50 bps Instant` variants, fixed-price `Binance 45/47/49`, delayed
+`Skip 1..50 bps Instant` variants, fixed `Up 1..50 bps Instant` and
+`Down 1..50 bps Instant` variants, `Binance`, threshold `Binance 1..50 bps` in 1 bps increments, matching `Binance 1..50 bps Instant` variants, fixed-price `Binance 45/47/49`, delayed
 `Binance 15s/30s/45s`, `Binance Clever`, fair-value `Binance Edge 2/4/6`,
 `Prev Score Countertrend 10..90`, `Ensemble 2 of 3`, `Dynamic Markov`, `Strategy Selector`, capped `Less`
 comparison variants, capped `More` comparison variants, and capped `More Gamma`
@@ -715,6 +716,14 @@ The shared Skip bps streak calculation also records one
 `btc_up_down_5m_result_streak_diagnostics` row per target market. Use
 `close_book_streak_result_count` to find the longest same-outcome run and
 `cumulative_abs_move_bps` to find the maximum accumulated BTC move over the run.
+`BTC Up or Down 5m Up 1..50 bps Instant` and `BTC Up or Down 5m Down 1..50 bps
+Instant` reuse that same previous-result streak and cumulative BTC move gate,
+but keep only one fixed countertrend side. `Up` enters only when the Skip bps
+countertrend decision is `Up` after a `Down` streak; `Down` enters only when the
+countertrend decision is `Down` after an `Up` streak. The opposite side skips
+with `btc_previous_market_move_fixed_outcome_mismatch`, and accepted entries use
+the same executable ask-depth Instant pricing and `InstantOpeningLimitMaxPrice`
+cap as other Instant opening-limit variants.
 ETH/SOL Skip rows mirror the non-Revert BTC Skip behavior: plain `Skip 1..5`
 uses ETH/SOL close-book result streaks, `Skip bps` uses ETH/SOL close-book
 streaks plus archived `crypto_up_down_5m_odds_ticks` start-to-close Binance

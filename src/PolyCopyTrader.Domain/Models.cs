@@ -1208,7 +1208,7 @@ public static class StrategyIds
     private static IReadOnlyList<BtcUpDown5mStrategyVariant> CreateBtcUpDown5mVariants()
     {
         int[] delays = [30, 60, 90, 120, 150, 180, 210, 240, 270];
-        var variants = new List<BtcUpDown5mStrategyVariant>(1670);
+        var variants = new List<BtcUpDown5mStrategyVariant>(1770);
 
         foreach (var delay in delays)
         {
@@ -1296,6 +1296,8 @@ public static class StrategyIds
             var minMoveBps = (decimal)thresholdTenths;
             variants.Add(CreateBtcUpDown5mSkipBpsThresholdVariant(thresholdTenths, minMoveBps));
             variants.Add(CreateBtcUpDown5mSkipBpsThresholdInstantVariant(thresholdTenths, minMoveBps));
+            variants.Add(CreateBtcUpDown5mFixedOutcomeBpsThresholdInstantVariant(thresholdTenths, minMoveBps, isUp: true));
+            variants.Add(CreateBtcUpDown5mFixedOutcomeBpsThresholdInstantVariant(thresholdTenths, minMoveBps, isUp: false));
         }
 
         variants.Add(CreateBtcUpDown5mAlwaysDirectionVariant(isUp: true));
@@ -1564,6 +1566,41 @@ public static class StrategyIds
     private static string GetBtcUpDown5mSkipBpsThresholdInstantCode(int thresholdTenths)
     {
         return GetBtcUpDown5mSkipBpsThresholdCode(thresholdTenths) + "_instant";
+    }
+
+    private static BtcUpDown5mStrategyVariant CreateBtcUpDown5mFixedOutcomeBpsThresholdInstantVariant(
+        int thresholdTenths,
+        decimal minMoveBps,
+        bool isUp)
+    {
+        var thresholdName = minMoveBps.ToString("0.###", CultureInfo.InvariantCulture);
+        var directionName = isUp ? "Up" : "Down";
+        var oppositeDirectionName = isUp ? "Down" : "Up";
+        return new BtcUpDown5mStrategyVariant(
+            GetBtcUpDown5mFixedOutcomeBpsThresholdInstantId(thresholdTenths, isUp),
+            GetBtcUpDown5mFixedOutcomeBpsThresholdInstantCode(thresholdTenths, isUp),
+            $"BTC Up or Down 5m {directionName} {thresholdName} bps Instant",
+            $"Immediately after BTC 5m market open, use the same previous close-book result streak and archived Binance BTC start/end move gate as Skip {thresholdName} bps Instant; enter only when the cumulative streak move is at least {thresholdName} bps and the countertrend direction is {directionName}. If the countertrend direction is {oppositeDirectionName}, skip. Paper entry is a GTD limit BUY priced from current executable ask depth so the order can fill immediately; settlement uses only actually filled shares.",
+            BtcUpDown5mStrategyDirection.Dynamic,
+            0,
+            BtcUpDown5mStrategyBehavior.FixedOutcomePreviousResultBpsThresholdInstant,
+            minMoveBps >= 1m && minMoveBps == decimal.Truncate(minMoveBps)
+                ? (int)minMoveBps
+                : 0,
+            minMoveBps,
+            FixedOutcome: isUp ? BtcUpDownFixedOutcome.Up : BtcUpDownFixedOutcome.Down);
+    }
+
+    private static Guid GetBtcUpDown5mFixedOutcomeBpsThresholdInstantId(int thresholdTenths, bool isUp)
+    {
+        var idGroup = isUp ? 8031 : 8032;
+        return Guid.Parse($"b7c50005-0000-4000-{idGroup:0000}-{100 + thresholdTenths:000000000000}");
+    }
+
+    private static string GetBtcUpDown5mFixedOutcomeBpsThresholdInstantCode(int thresholdTenths, bool isUp)
+    {
+        var directionCode = isUp ? "up" : "down";
+        return "btc_up_down_5m_" + directionCode + "_bps_" + thresholdTenths.ToString(CultureInfo.InvariantCulture) + "_instant";
     }
 
     private static BtcUpDown5mStrategyVariant CreateBtcUpDown5mAlwaysDirectionVariant(bool isUp)
@@ -2356,6 +2393,7 @@ public enum BtcUpDown5mStrategyBehavior
     PreviousScoreCounterTrend,
     PreOpenFixedDirection,
     PreOpenFixedDirectionSell,
+    FixedOutcomePreviousResultBpsThresholdInstant,
     FixedOutcomeMaker
 }
 

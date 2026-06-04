@@ -102,3 +102,10 @@ Request:
 
 Result:
 Read the BTC 5m strategy catalog definitions, `BtcUpDown5mPaperStrategyProcessor`, and README/configuration documentation for `BTC Up or Down 5m Skip 1..50 bps` and matching `Instant` variants. Explained that the strategy infers the previous BTC 5m close-book outcome, walks backward through the current streak of identical outcomes, sums archived Binance BTC start-to-close absolute bps movement across the usable streak, and buys the opposite outcome only when the cumulative move reaches the variant threshold. Also explained standard fixed `0.50` GTD pricing versus Instant executable ask-depth pricing and the key skip/defer reasons. No source behavior changes, production writes, builds, or tests were performed.
+
+## 2026-06-04T11:10:05.5759415Z
+Request:
+Add new BTC fixed-outcome bps Instant strategies: `BTC Up or Down 5m Up N bps Instant` and `BTC Up or Down 5m Down N bps Instant`, where N is 1..50. They should work like `BTC Up or Down 5m Skip N bps Instant`, but `Up` only places `Up` when the displacement points Down and skips when it points Up; `Down` mirrors that behavior.
+
+Result:
+Added 100 BTC 5m variants (`btc_up_down_5m_up_bps_1..50_instant` and `btc_up_down_5m_down_bps_1..50_instant`) to `StrategyIds`, seeded them in `PostgresSchema`, and routed them through the existing Skip bps previous close-book streak plus cumulative archived Binance BTC start-to-close bps gate. Added fixed-outcome filtering with skip reason `btc_previous_market_move_fixed_outcome_mismatch`, while accepted entries use the same executable ask-depth Instant opening-limit pricing and `InstantOpeningLimitMaxPrice` cap as other Instant variants. Updated README/configuration/live checklist docs and added regression coverage for variant inventory plus Up enter, Up mismatch skip, and Down enter. Verification passed: focused `BtcUpDown5mPaperStrategyProcessorTests` 171/171, full tests 591/591, and `git diff --check` clean except existing LF/CRLF warnings.
