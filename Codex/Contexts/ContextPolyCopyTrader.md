@@ -1,3 +1,16 @@
+## Active Update 2026-06-04 Live Shadow Missed Winners Check
+Goal: Check whether Live-shadow not-accepted rows may remove bets that would have won in ordinary Paper and thereby make Live/post-Live performance look worse.
+Status: Completed
+Done:
+- Queried production PostgreSQL read-only through `out\dbprobe` with host override `192.168.0.101`; no production rows, service state, orders, cancels, or strategy flags were changed.
+- Focused on `ETH Up or Down 5m Skip 7 bps Instant` post-Live not-accepted rows and compared the same markets with ordinary Paper siblings Skip 8/9. Its `11` post-Live `gtd_limit_not_filled` rows had sibling counterfactual `7` wins / `4` losses and estimated missed PnL about `+5.7092` / `15.42%` ROI.
+- Confirmed these `11` rows had linked Live orders with `0` filled size and no realized Live PnL; they were not direct Live losses, but were net-positive opportunities that Live-shadow did not fill.
+- Extended the same nearest-sibling check to current Live strategies: BTC Middle 47 had `2` post-Live not-accepted markets, sibling-estimated `2W/0L`, missed `+7.0540`; ETH Skip 32 had `4` markets, `3W/1L`, missed `+5.7928`; SOL Skip 42 had `18` markets, `8W/10L`, missed `+0.4688`.
+- Found the likely mechanism: ordinary Paper orders can be filled by the Paper GTD/conservative estimator, while Live-shadow Paper orders are skipped by the ordinary Paper fill processor and are filled/cancelled only from real Live order state. Live preflight/API/cancel failures therefore can remove trades from the winning Paper sample before they ever become settled Live/Paper-shadow rows.
+Next: Consider changing reporting and/or simulation so every Live-shadow entry also keeps an independent ordinary Paper-control outcome; otherwise post-Live Paper/Live-shadow metrics are selection-biased by Live execution/preflight failures.
+Notes: Answer/diagnostic only. No source builds/tests were run because no code changed.
+Blockers: None.
+
 ## Active Update 2026-06-04 ETH Skip 7 Paper Not Accepted Live Link
 Goal: Explain why `ETH Up or Down 5m Skip 7 bps Instant` has many more `Paper not accepted` rows than nearby Skip 8/9 variants and whether this is related to Live mode.
 Status: Completed
