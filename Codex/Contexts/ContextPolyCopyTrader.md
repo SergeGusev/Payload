@@ -1,3 +1,16 @@
+## Active Update 2026-06-04 Paper Not Accepted Live Explanation
+Goal: Explain in more detail why Dashboard `Paper not accepted` can increase after a strategy is enabled for Live.
+Status: Completed
+Done:
+- Explained that `Paper not accepted` is a Dashboard aggregate for `strategy_market_paper_runs.status = 'Skipped'` with a `paper_order_id`, commonly with `skip_reason = gtd_limit_not_filled`.
+- Clarified the core semantic switch: ordinary non-Live Paper orders are filled by the Paper fill simulator, while Live-enabled strategies create `paper_live_shadow_test` Paper rows that are excluded from the ordinary Paper fill processor and instead mirror the real Live order state.
+- Clarified that after Live enablement a Paper row can become not accepted when the linked Live order is preflight rejected, API/error-lockout rejected, blocked by live risk/open-order limits, not filled before cancel deadline, cancelled with zero fill, or otherwise not matched on the real CLOB.
+- Noted that this can increase `Paper not accepted` and bias post-Live Paper metrics because ordinary Paper siblings may settle the same market through simulation while the Live-shadow row records the real zero-fill outcome.
+- Reused prior production evidence: ETH Skip 7 had `11` post-Live `gtd_limit_not_filled` rows tied to Live zero-fill/reject/cancel outcomes, while ordinary Paper siblings Skip 8/9 settled comparable markets; ETH Skip 9 after manual Live enablement had two observed Live-shadow rows and both were `Matched`, so the mechanism is active but not failing there yet.
+Next: Split reporting between ordinary Paper and Live-shadow Paper, or add an independent Paper-control row for Live strategies if comparable Paper statistics are needed after Live enablement.
+Notes: Answer-only clarification. No production queries, source changes, builds, tests, live submissions, or cancels were performed for this prompt.
+Blockers: None.
+
 ## Active Update 2026-06-04 ETH Skip 9 Live Enable Verification
 Goal: Verify production after the user manually checked the Dashboard Live box for `ETH Up or Down 5m Skip 9 bps Instant`.
 Status: Completed
