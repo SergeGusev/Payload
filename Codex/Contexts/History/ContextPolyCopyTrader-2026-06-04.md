@@ -151,3 +151,10 @@ Request:
 
 Result:
 Changed the opposite-outcome open-order guard so Paper entries are no longer skipped by open opposite Paper/Live orders, while Live preflight still rejects a new Live BUY when the same condition already has an opposite open Live BUY. Updated BTC 5m Paper worker, Follow leader exposure evaluation, on-chain Paper exposure evaluation, the live-only guard helper, README, configuration reference, live checklist, and regression tests. Verification passed: focused BTC/Live gating tests 193/193, full test project 601/601, Service Verify build passed with existing nullable warnings in `PostgresAppRepository`, and `git diff --check` was clean except LF/CRLF warnings. One parallel full-test attempt failed only due to a temporary test DLL file lock and passed when rerun alone. No production DB writes, live submissions, cancels, or service restarts were performed.
+
+## 2026-06-04T16:51:25.4031981Z
+Request:
+Выложил, проверяй
+
+Result:
+Checked production PostgreSQL read-only through `out\dbprobe` with host override `192.168.0.101`. Confirmed `PolyCopyTrader.Service` is running in `Live` mode on deployed commit `a3b2675dbb01714727c6789e1b7ca56a0e2e5788`, started `2026-06-04 16:45:23 UTC`, with fresh heartbeat and empty `last_error`. By the check window production had `286` Paper orders and `2` Live orders since restart, with `0` API errors in the last 30 minutes and the four expected Live strategies still enabled/live/not paused. The requested behavior is visible: fixed-outcome Paper entries include BTC Down `50` orders / `$150.00000000`, ETH Down `50` / `$150.10000000`, and SOL Up `10` / `$40.01600000`; `opposite_outcome_open_order` Paper run skips since restart are `0`; multiple same-condition Paper BUY groups now contain both `Down,Up`. Post-start Live statuses were `1` Live and `2` Matched. One broad read-only aggregate timed out locally and was replaced by narrower indexed read-only checks. No production writes, source changes, service restarts, live submissions, or cancels were performed.

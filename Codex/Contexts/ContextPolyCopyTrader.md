@@ -1,3 +1,19 @@
+## Active Update 2026-06-04 Post Deploy Live Only Opposite Guard Verification
+Goal: Verify production after deploying commit `a3b2675` with the Live-only opposite-outcome guard.
+Status: Completed
+Done:
+- Queried production PostgreSQL read-only through `out\dbprobe` with host override `192.168.0.101`; no production rows, service state, orders, or cancels were changed.
+- Confirmed `PolyCopyTrader.Service` is running in `Live` mode on `info=1.0.0+a3b2675dbb01714727c6789e1b7ca56a0e2e5788`, started `2026-06-04 16:45:23 UTC`, with fresh heartbeat and empty `last_error`.
+- Confirmed post-start activity by `2026-06-04 16:47:18 UTC`: `286` Paper orders, `2` Live orders, `0` API errors in the last 30 minutes, and the four expected Live strategies still live/enabled/not paused.
+- Confirmed fixed-outcome Paper orders since restart: BTC Down `50` orders / `$150.00000000`, ETH Down `50` / `$150.10000000`, and SOL Up `10` / `$40.01600000`.
+- Confirmed `opposite_outcome_open_order` Paper run skips since restart are `0`.
+- Confirmed multiple same-condition Paper BUY groups now contain both outcomes, including BTC condition `0x5c6036fc24396b8078aee2317ee45c505549d7ad9bd3e408266f6862b9d77f6a` with `129` Paper orders across `Down,Up`, including BTC fixed Down bps Instant strategies.
+- Confirmed post-start Live order statuses were `1` Live and `2` Matched; no API errors were present in the last 30 minutes.
+- Checked PostgreSQL activity after diagnostics; `0` active sessions were older than 1 minute.
+Next: Continue monitoring Dashboard/Paper orders; the production behavior now matches the requested Paper-independent guard. No further deploy is required for this change.
+Notes: One broad read-only aggregate over `strategy_market_paper_runs.updated_at_utc` timed out at the local probe timeout after returning its first result set; it was replaced with narrower indexed read-only queries that completed successfully. No source builds/tests were run for this operational verification.
+Blockers: None.
+
 ## Active Update 2026-06-04 Live Only Opposite Outcome Guard
 Goal: Make the same-market opposite-outcome open-order guard apply only to Live orders, while Paper entries can be recorded independently.
 Status: Completed
