@@ -4,28 +4,14 @@ namespace PolyCopyTrader.Service.PaperTrading;
 
 public static class OpenOrderDirectionGuard
 {
-    public static OppositeOutcomeOpenOrderBlock? FindOppositeOutcomeOpenOrder(
+    public static OppositeOutcomeOpenOrderBlock? FindOppositeLiveOutcomeOpenOrder(
         string conditionId,
         string outcome,
-        IEnumerable<PaperOrder> openPaperOrders,
         IEnumerable<LiveOrder> openLiveOrders)
     {
         if (string.IsNullOrWhiteSpace(conditionId) || string.IsNullOrWhiteSpace(outcome))
         {
             return null;
-        }
-
-        var paperBlock = openPaperOrders
-            .Where(order => order.Side == TradeSide.Buy)
-            .FirstOrDefault(order => IsOppositeOutcome(conditionId, outcome, order.ConditionId, order.Outcome));
-        if (paperBlock is not null)
-        {
-            return new OppositeOutcomeOpenOrderBlock(
-                "Paper",
-                paperBlock.Id,
-                paperBlock.StrategyId,
-                paperBlock.ConditionId,
-                paperBlock.Outcome);
         }
 
         var liveBlock = openLiveOrders

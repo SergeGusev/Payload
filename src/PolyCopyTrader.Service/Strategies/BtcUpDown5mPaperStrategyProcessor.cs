@@ -2448,26 +2448,6 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
                         await entryPlacementLock.WaitAsync(cancellationToken);
                         try
                         {
-                            var oppositeBlock = await FindOppositeOutcomeOpenOrderBlockAsync(
-                                market.ConditionId,
-                                limitSelectedOutcome.Outcome,
-                                cancellationToken);
-                            if (oppositeBlock is not null)
-                            {
-                                await SkipRunAsync(
-                                    run,
-                                    variant,
-                                    SignalReasonCodes.OppositeOutcomeOpenOrder,
-                                    nowUtc,
-                                    cancellationToken,
-                                    AttachOppositeOutcomeOpenOrderBlockJson(
-                                        limitRawDecisionJson,
-                                        limitSelectedOutcome.Outcome,
-                                        oppositeBlock));
-                                runsSkipped++;
-                                continue;
-                            }
-
                             if (isPaperLiveShadowTest && shadowSnapshot?.OrderBook is { } shadowOrderBook)
                             {
                                 correlationId = Guid.NewGuid();
@@ -2739,26 +2719,6 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
                     await entryPlacementLock.WaitAsync(cancellationToken);
                     try
                     {
-                        var oppositeBlock = await FindOppositeOutcomeOpenOrderBlockAsync(
-                            market.ConditionId,
-                            selectedOutcome.Outcome,
-                            cancellationToken);
-                        if (oppositeBlock is not null)
-                        {
-                            await SkipRunAsync(
-                                run,
-                                variant,
-                                SignalReasonCodes.OppositeOutcomeOpenOrder,
-                                nowUtc,
-                                cancellationToken,
-                                AttachOppositeOutcomeOpenOrderBlockJson(
-                                    rawDecisionJson,
-                                    selectedOutcome.Outcome,
-                                    oppositeBlock));
-                            runsSkipped++;
-                            continue;
-                        }
-
                         signal = CreateSignal(market, selectedOutcome, variant, gtdLimitPrice, sizeShares, reservedNotionalUsd, nowUtc);
                         order = CreatePendingOpeningLimitPaperOrder(
                             signal,
@@ -10936,10 +10896,9 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
 
         var exposureSnapshot = await exposureCache.GetSnapshotAsync(cancellationToken);
         var openLiveOrders = exposureSnapshot.OpenLiveOrders;
-        if (OpenOrderDirectionGuard.FindOppositeOutcomeOpenOrder(
+        if (OpenOrderDirectionGuard.FindOppositeLiveOutcomeOpenOrder(
                 signal.LeaderTrade.ConditionId,
                 outcome.Outcome,
-                exposureSnapshot.OpenPaperOrders,
                 openLiveOrders) is { } oppositeBlock)
         {
             validation.Add(OpenOrderDirectionGuard.CreateValidationMessage(outcome.Outcome, oppositeBlock));
@@ -11291,10 +11250,9 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
 
         var exposureSnapshot = await exposureCache.GetSnapshotAsync(cancellationToken);
         var openLiveOrders = exposureSnapshot.OpenLiveOrders;
-        if (OpenOrderDirectionGuard.FindOppositeOutcomeOpenOrder(
+        if (OpenOrderDirectionGuard.FindOppositeLiveOutcomeOpenOrder(
                 signal.LeaderTrade.ConditionId,
                 outcome.Outcome,
-                exposureSnapshot.OpenPaperOrders,
                 openLiveOrders) is { } oppositeBlock)
         {
             validation.Add(OpenOrderDirectionGuard.CreateValidationMessage(outcome.Outcome, oppositeBlock));
@@ -11872,46 +11830,6 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
             run.MarketSlug,
             reason,
             diagnosticsJson);
-    }
-
-    private async Task<OppositeOutcomeOpenOrderBlock?> FindOppositeOutcomeOpenOrderBlockAsync(
-        string conditionId,
-        string outcome,
-        CancellationToken cancellationToken)
-    {
-        var exposureSnapshot = await exposureCache.GetSnapshotAsync(cancellationToken);
-        return OpenOrderDirectionGuard.FindOppositeOutcomeOpenOrder(
-            conditionId,
-            outcome,
-            exposureSnapshot.OpenPaperOrders,
-            exposureSnapshot.OpenLiveOrders);
-    }
-
-    private static string AttachOppositeOutcomeOpenOrderBlockJson(
-        string? rawDecisionJson,
-        string candidateOutcome,
-        OppositeOutcomeOpenOrderBlock block)
-    {
-        JsonObject root;
-        try
-        {
-            root = string.IsNullOrWhiteSpace(rawDecisionJson)
-                ? new JsonObject()
-                : JsonNode.Parse(rawDecisionJson)?.AsObject() ?? new JsonObject();
-        }
-        catch (JsonException)
-        {
-            root = new JsonObject();
-        }
-
-        root["skip_reason"] = SignalReasonCodes.OppositeOutcomeOpenOrder;
-        root["candidate_outcome"] = candidateOutcome;
-        root["blocking_order_source"] = block.Source;
-        root["blocking_order_id"] = block.OrderId.ToString();
-        root["blocking_strategy_id"] = block.StrategyId.ToString();
-        root["blocking_condition_id"] = block.ConditionId;
-        root["blocking_outcome"] = block.Outcome;
-        return root.ToJsonString();
     }
 
     private async Task UpdateStrategyAutoLivePauseAsync(

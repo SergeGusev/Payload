@@ -1,3 +1,16 @@
+## Active Update 2026-06-04 Live Only Opposite Outcome Guard
+Goal: Make the same-market opposite-outcome open-order guard apply only to Live orders, while Paper entries can be recorded independently.
+Status: Completed
+Done:
+- Removed BTC 5m Paper entry skips caused by opposite-outcome Paper/Live open orders; Paper opening-limit runs now proceed independently for strategy-effectiveness measurement.
+- Changed Follow leader and low-latency on-chain Paper exposure construction so `HasOppositeOutcomeOpenOrder` is false for Paper evaluation.
+- Reworked `OpenOrderDirectionGuard` to explicitly find only opposite open Live BUY orders and used it in Live preflight paths.
+- Preserved Live protection: BTC Paper/Live-shadow and Follow leader Live preflight reject a new Live BUY when an opposite open Live BUY already exists in the same condition.
+- Updated README, configuration reference, live checklist, and regression tests for Paper-vs-Live behavior.
+Next: Deploy/restart `PolyCopyTrader.Service` so production stops suppressing Paper Down/Up entries due to opposite Paper orders; no database migration is required.
+Notes: Verification passed: focused BTC/Live gating tests 193/193, full test project 601/601, Service Verify build passed with existing nullable warnings in `PostgresAppRepository`, and `git diff --check` was clean except LF/CRLF warnings. One parallel full-test attempt failed only because the test DLL was locked during concurrent focused test/build, then passed when rerun alone.
+Blockers: None.
+
 ## Active Update 2026-06-04 Last Task Context Answer
 Goal: Answer which task was last recorded before the current prompt.
 Status: Completed

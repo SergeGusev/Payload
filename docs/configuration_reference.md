@@ -813,10 +813,10 @@ votes agree on the same single outcome. `Dynamic Markov` estimates the next
 result from recent BTC 5-minute result transitions and enters only when the
 conditional next-outcome probability is at least `0.55`. `Strategy Selector`
 ranks selected opening-limit strategies by recent positive Paper expectancy and
-reuses the best candidate's current signal. None of these non-Maker variants
-place both sides of the same Polymarket market, and a new BUY is skipped with
-`opposite_outcome_open_order` if the same condition already has an open BUY on a
-different outcome. The
+reuses the best candidate's current signal. These non-Maker variants can record
+both sides of the same Polymarket market in Paper; the opposite-outcome guard is
+enforced only by Live preflight against open Live BUY orders in the same
+condition. The
 order size still targets the current market minimum passing size plus a `10%`
 safety buffer times the configured Paper stake multiplier; diagnostics record
 `post_only=false` plus the selected pricing model inputs, cap, final limit, GTD

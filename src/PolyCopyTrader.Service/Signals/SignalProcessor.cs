@@ -163,7 +163,8 @@ public sealed class SignalProcessor(
             trade,
             exposureSnapshot.OpenPaperOrders,
             exposureSnapshot.PaperPositions,
-            exposureSnapshot.OpenLiveOrders);
+            exposureSnapshot.OpenLiveOrders,
+            enforceLiveOppositeOutcomeGuard: false);
         var availablePositionSize = FindCopiedPosition(exposureSnapshot.PaperPositions, trade)?.SizeShares;
 
         var decision = signalEngine.Evaluate(
@@ -286,7 +287,8 @@ public sealed class SignalProcessor(
             trade,
             exposureSnapshot.OpenPaperOrders,
             exposureSnapshot.PaperPositions,
-            openLiveOrders);
+            openLiveOrders,
+            enforceLiveOppositeOutcomeGuard: true);
         var availablePositionSize = FindCopiedPosition(exposureSnapshot.PaperPositions, trade)?.SizeShares;
         var freshDecision = signalEngine.Evaluate(new SignalEvaluationContext(
             trade,
@@ -674,7 +676,8 @@ public sealed class SignalProcessor(
         LeaderTrade trade,
         IReadOnlyList<PaperOrder> openOrders,
         IReadOnlyList<PaperPosition> positions,
-        IReadOnlyList<LiveOrder> liveOrders)
+        IReadOnlyList<LiveOrder> liveOrders,
+        bool enforceLiveOppositeOutcomeGuard)
     {
         var orderExposure = openOrders.Sum(order => order.NotionalUsd);
         var liveOrderExposure = liveOrders.Sum(order => order.NotionalUsd);
@@ -707,10 +710,10 @@ public sealed class SignalProcessor(
             0m,
             openOrders.Count + liveOrders.Count,
             Math.Max(oldestPaperOrderAgeSeconds, oldestLiveOrderAgeSeconds),
-            OpenOrderDirectionGuard.FindOppositeOutcomeOpenOrder(
+            enforceLiveOppositeOutcomeGuard &&
+            OpenOrderDirectionGuard.FindOppositeLiveOutcomeOpenOrder(
                 trade.ConditionId,
                 trade.Outcome,
-                openOrders,
                 liveOrders) is not null);
     }
 

@@ -20,7 +20,7 @@ Live trading is disabled by default. Use this checklist before any live session.
 - `PaperTrading:RunInLiveMode` is `true` if this session should continue shadow Paper alongside Live.
 - `LiveTrading:ManualEnableCode` is `LIVE_TRADING_ENABLED`.
 - Follow leader live remains maker-only: `Execution:MakerOnly=true` and `Execution:AllowTaker=false`.
-- Paper/Live-shadow stakes are enabled per opening-limit strategy by the Dashboard `Live` checkbox (`strategies.live_stakes`) and remain subject to the normal live readiness, risk, balance, and opposite-outcome guards.
+- Paper/Live-shadow stakes are enabled per opening-limit strategy by the Dashboard `Live` checkbox (`strategies.live_stakes`) and remain subject to the normal live readiness, risk, balance, and Live-side opposite-outcome guards.
 - Paper/Live-shadow stakes, if enabled per strategy, are intentional BUY-only `GTD` limit orders with `postOnly=false`; by default local cancellation is `OpeningLimitExpireBeforeMarketEndSeconds` (`60`) seconds before market close, while the CLOB wire expiration includes `ClobGtdExpirationSecurityBufferSeconds` (`60`). Any immediately marketable portion may fill as taker and the remainder can rest until GTD expiration/cancel/market close.
 - Dashboard `Paper Lost` / `Paper Cnt` and `Live Lost` / `Live Cnt` are stored separately per strategy. Both modes apply the same loss-counter stake add-on from their own data: while the matching counter is positive, add `Stake * min(Cnt, 2)`, so the final stake is capped at three original stakes.
 - Paper/Live-shadow matching must keep asset, condition, outcome, order type, `postOnly=false`, and limit price within `0.000001`; Paper and Live requested sizes may differ because Paper and Live stake/add-on sizing use separate base stake and counter fields. Shape mismatch disables `LiveStakes` for that strategy and cancels correlated open live orders.
@@ -28,9 +28,10 @@ Live trading is disabled by default. Use this checklist before any live session.
 - `LiveTrading:MaxOrderNotionalUsd` is a hard emergency ceiling, not the normal
   stake-sizing control. Intended stake sizing is set per strategy through
   Dashboard `Live $`, optional `Live Lost` add-on, and `Live bal`.
-- Candidate Live BUY placement is blocked only when an open Paper/Live BUY
-  already exists for the opposite outcome in the same market, or when a stale
-  Live order still needs maintenance cancellation.
+- Candidate Live BUY placement is blocked only when an open Live BUY already
+  exists for the opposite outcome in the same market, or when a stale Live order
+  still needs maintenance cancellation. Paper orders do not trigger this
+  opposite-outcome Live block.
 - `LiveTrading:AutoLivePauseStrategies` may be left empty. Add specific
   strategy codes only when those strategies should auto-pause Live after recent
   Live losses and resume from positive recent Paper evidence.

@@ -953,7 +953,7 @@ public sealed class BtcUpDown5mPaperStrategyProcessorTests
     }
 
     [Fact]
-    public async Task ProcessAsync_SkipsOppositeOutcomeWhenSameMarketHasOpenBuyOrder()
+    public async Task ProcessAsync_AllowsPaperOppositeOutcomeWhenSameMarketHasOpenBuyOrder()
     {
         var now = DateTimeOffset.UtcNow;
         var repository = new TestAppRepository();
@@ -982,15 +982,26 @@ public sealed class BtcUpDown5mPaperStrategyProcessorTests
         var result = await processor.ProcessAsync();
 
         Assert.Equal(1, result.MarketsObserved);
-        Assert.Equal(0, result.EntriesPlaced);
-        Assert.Equal(1, result.RunsSkipped);
-        Assert.Single(repository.PaperOrders);
-        var run = Assert.Single(repository.StrategyMarketPaperRuns);
+        Assert.Equal(1, result.EntriesPlaced);
+        Assert.Equal(0, result.RunsSkipped);
+        Assert.Equal(2, repository.PaperOrders.Count);
+        Assert.DoesNotContain(
+            repository.StrategyMarketPaperRuns,
+            item => item.SkipReason == SignalReasonCodes.OppositeOutcomeOpenOrder);
+        var run = Assert.Single(
+            repository.StrategyMarketPaperRuns,
+            item => item.Status == StrategyMarketPaperRunStatuses.Entered);
         Assert.Equal(More60Variant.Id, run.StrategyId);
-        Assert.Equal(StrategyMarketPaperRunStatuses.Skipped, run.Status);
-        Assert.Equal(SignalReasonCodes.OppositeOutcomeOpenOrder, run.SkipReason);
-        Assert.Contains("\"candidate_outcome\":\"Down\"", run.SkipDiagnosticsJson, StringComparison.Ordinal);
-        Assert.Contains("\"blocking_outcome\":\"Up\"", run.SkipDiagnosticsJson, StringComparison.Ordinal);
+        Assert.Equal(StrategyMarketPaperRunStatuses.Entered, run.Status);
+        Assert.Equal("Down", run.SelectedOutcome);
+        Assert.Null(run.SkipReason);
+        Assert.DoesNotContain(
+            SignalReasonCodes.OppositeOutcomeOpenOrder,
+            run.SkipDiagnosticsJson ?? string.Empty,
+            StringComparison.Ordinal);
+        var order = repository.PaperOrders.Single(item => item.StrategyId == More60Variant.Id);
+        Assert.Equal("asset-down", order.AssetId);
+        Assert.Equal("Down", order.Outcome);
     }
 
     [Fact]
@@ -1302,7 +1313,12 @@ public sealed class BtcUpDown5mPaperStrategyProcessorTests
 
         Assert.Equal(1, result.EntriesPlaced);
         Assert.Equal(0, result.RunsSkipped);
-        var run = Assert.Single(repository.StrategyMarketPaperRuns);
+        Assert.DoesNotContain(
+            repository.StrategyMarketPaperRuns,
+            item => item.SkipReason == SignalReasonCodes.OppositeOutcomeOpenOrder);
+        var run = Assert.Single(
+            repository.StrategyMarketPaperRuns,
+            item => item.Status == StrategyMarketPaperRunStatuses.Entered);
         Assert.Equal(StrategyMarketPaperRunStatuses.Entered, run.Status);
         Assert.Equal(More90Below70Variant.Id, run.StrategyId);
         Assert.Equal("asset-up", run.SelectedAssetId);
@@ -7893,7 +7909,7 @@ public sealed class BtcUpDown5mPaperStrategyProcessorTests
     }
 
     [Fact]
-    public async Task ProcessAsync_LiveStakeSkipsOppositeLiveOrderInSameMarket()
+    public async Task ProcessAsync_LiveStakePreflightRejectsOppositeLiveOrderInSameMarket()
     {
         var now = DateTimeOffset.UtcNow;
         var repository = new TestAppRepository();
@@ -7921,15 +7937,74 @@ public sealed class BtcUpDown5mPaperStrategyProcessorTests
 
         var result = await processor.ProcessAsync();
 
-        Assert.Equal(0, result.EntriesPlaced);
-        Assert.True(result.RunsSkipped >= 1);
+        Assert.Equal(1, result.EntriesPlaced);
         Assert.Equal(0, tradingClient.PlaceCalls);
-        Assert.Single(repository.LiveOrders);
+        Assert.Equal(2, repository.LiveOrders.Count);
+        var candidateOrder = repository.LiveOrders.Single(order =>
+            string.Equals(order.ConditionId, "condition-1", StringComparison.OrdinalIgnoreCase) &&
+            order.StrategyId == Skip1Variant.Id);
+        Assert.Equal(LiveOrderStatus.PreflightRejected, candidateOrder.Status);
+        Assert.Contains("Opposite outcome open order exists", candidateOrder.ValidationSummary, StringComparison.Ordinal);
+        Assert.Contains("BlockingSource=Live", candidateOrder.ValidationSummary, StringComparison.Ordinal);
+
         var run = Assert.Single(
             repository.StrategyMarketPaperRuns,
-            item => item.SkipReason == SignalReasonCodes.OppositeOutcomeOpenOrder);
-        Assert.Equal(StrategyMarketPaperRunStatuses.Skipped, run.Status);
-        Assert.Contains("\"blocking_order_source\":\"Live\"", run.SkipDiagnosticsJson, StringComparison.Ordinal);
+            item => string.Equals(item.ConditionId, "condition-1", StringComparison.OrdinalIgnoreCase));
+        Assert.Equal(StrategyMarketPaperRunStatuses.Entered, run.Status);
+        Assert.Null(run.SkipReason);
+        var paperOrder = Assert.Single(repository.PaperOrders);
+        Assert.Equal(PaperOrderStatus.Cancelled, paperOrder.Status);
+        var decision = Assert.Single(repository.PaperLiveShadowDecisions);
+        Assert.Equal("live_preflight_rejected", decision.Status);
+    }
+
+    [Fact]
+    public async Task ProcessAsync_LiveStakeIgnoresOppositePaperOrderInSameMarket()
+    {
+        var now = DateTimeOffset.UtcNow;
+        var repository = new TestAppRepository();
+        repository.StrategySettings[Skip1Variant.Id] = StrategyRuntimeSettings.Default(Skip1Variant.Id) with
+        {
+            LiveStakes = true,
+            LiveStakeAmount = 2.50m,
+            LiveAvailableBalance = 100m,
+            PaperStakeAmount = 2.50m
+        };
+        repository.PaperOrders.Add(new PaperOrder(
+            Guid.NewGuid(),
+            Guid.NewGuid(),
+            AlwaysUpVariant.CopiedTraderWallet,
+            PaperOrderStatus.Pending,
+            TradeSide.Buy,
+            "asset-up",
+            "condition-1",
+            "Up",
+            0.50m,
+            5m,
+            2.50m,
+            now.AddSeconds(-15),
+            now.AddMinutes(5),
+            StrategyId: AlwaysUpVariant.Id));
+        repository.PolymarketGammaMarkets.Add(CreateMarket(
+            now,
+            now.AddMinutes(5),
+            upPrice: 0.50m,
+            downPrice: 0.50m));
+        var closeBookOrderBooks = AddCloseBookResults(repository, now, "Up");
+        var tradingClient = new CapturingTradingClient();
+        var processor = CreateLiveProcessor(repository, tradingClient, closeBookOrderBooks, Skip1Variant.Code);
+
+        var result = await processor.ProcessAsync();
+
+        Assert.Equal(1, result.EntriesPlaced);
+        Assert.Equal(1, tradingClient.PlaceCalls);
+        var liveOrder = Assert.Single(repository.LiveOrders);
+        Assert.Equal(LiveOrderStatus.Live, liveOrder.Status);
+        Assert.Empty(liveOrder.ValidationSummary);
+        Assert.Equal(2, repository.PaperOrders.Count);
+        var paperOrder = repository.PaperOrders.Single(order => order.StrategyId == Skip1Variant.Id);
+        Assert.Equal(PaperOrderStatus.Pending, paperOrder.Status);
+        Assert.Equal("asset-down", paperOrder.AssetId);
     }
 
     [Fact]

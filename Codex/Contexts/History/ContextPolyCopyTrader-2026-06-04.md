@@ -144,3 +144,10 @@ Request:
 
 Result:
 Answered from the active context that the previous latest recorded task was `BTC Fixed Down No Orders Diagnosis`: explaining why `BTC Up or Down 5m Down N bps Instant` had no orders while matching Up variants were active. No code, production DB, service state, builds, tests, live submissions, or cancels were changed.
+
+## 2026-06-04T16:38:59.5591008Z
+Request:
+Давай сделаем защиту "не ставить против себя в одном рынке" только для Live ставок. Paper ордера пусть ставятся независимо друг от друга.
+
+Result:
+Changed the opposite-outcome open-order guard so Paper entries are no longer skipped by open opposite Paper/Live orders, while Live preflight still rejects a new Live BUY when the same condition already has an opposite open Live BUY. Updated BTC 5m Paper worker, Follow leader exposure evaluation, on-chain Paper exposure evaluation, the live-only guard helper, README, configuration reference, live checklist, and regression tests. Verification passed: focused BTC/Live gating tests 193/193, full test project 601/601, Service Verify build passed with existing nullable warnings in `PostgresAppRepository`, and `git diff --check` was clean except LF/CRLF warnings. One parallel full-test attempt failed only due to a temporary test DLL file lock and passed when rerun alone. No production DB writes, live submissions, cancels, or service restarts were performed.

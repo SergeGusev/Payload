@@ -1059,11 +1059,7 @@ public sealed class OnChainPaperSignalProcessor(
             0m,
             openOrders.Count + liveOrders.Count,
             Math.Max(oldestPaperOrderAgeSeconds, oldestLiveOrderAgeSeconds),
-            OpenOrderDirectionGuard.FindOppositeOutcomeOpenOrder(
-                trade.ConditionId,
-                trade.Outcome,
-                openOrders,
-                liveOrders) is not null);
+            false);
     }
 
     private static PaperPosition? FindCopiedPosition(

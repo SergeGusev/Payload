@@ -146,7 +146,7 @@ public sealed class LiveTradingGatingTests
     }
 
     [Fact]
-    public async Task SignalEvaluationRejectsOppositeLiveOrderInSameMarket()
+    public async Task LivePreflightRejectsOppositeLiveOrderInSameMarket()
     {
         var repository = new TestAppRepository();
         await repository.AddLiveOrderAsync(CreateOpenLiveOrder(
@@ -166,12 +166,17 @@ public sealed class LiveTradingGatingTests
 
         var result = await processor.ProcessQueuedAsync();
 
-        Assert.Equal(0, result.SignalsAccepted);
-        Assert.Equal(1, result.SignalsRejected);
+        Assert.Equal(1, result.SignalsAccepted);
+        Assert.Equal(0, result.SignalsRejected);
+        Assert.Equal(0, result.LiveOrdersSubmitted);
         Assert.Equal(0, tradingClient.PlaceCalls);
-        Assert.Single(repository.LiveOrders);
-        Assert.Single(repository.SignalRejections, rejection =>
-            rejection.ReasonCode == SignalReasonCodes.OppositeOutcomeOpenOrder);
+        Assert.Equal(2, repository.LiveOrders.Count);
+        var candidateOrder = repository.LiveOrders.Single(order =>
+            string.Equals(order.ConditionId, "condition-1", StringComparison.OrdinalIgnoreCase) &&
+            string.Equals(order.Outcome, "Yes", StringComparison.OrdinalIgnoreCase));
+        Assert.Equal(LiveOrderStatus.PreflightRejected, candidateOrder.Status);
+        Assert.Contains(SignalReasonCodes.OppositeOutcomeOpenOrder, candidateOrder.ValidationSummary, StringComparison.Ordinal);
+        Assert.Empty(repository.SignalRejections);
     }
 
     [Fact]
