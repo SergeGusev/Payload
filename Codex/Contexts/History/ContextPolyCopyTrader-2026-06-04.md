@@ -137,3 +137,10 @@ BTC Up or Down 5m Down N bps instant подозрительно нет ни од
 
 Result:
 Checked production PostgreSQL read-only. Confirmed the suspicion: BTC fixed Down has `0` Paper orders total and `Down 1 bps` also has `0`; BTC fixed Up has `624` Paper orders total and `Up 1 bps` has `24`. Both fixed Up/Down families have `50` enabled strategies and none are Live. Focused `Down 1 bps` runs show it did receive qualifying Down selections, but those rows skipped with `opposite_outcome_open_order`: there were `20` such skips versus `29` fixed-outcome mismatches, `2` order-book-unavailable skips, `2` instant price-cap skips, and `2` market-already-ended skips. Concrete same-market blockers were existing `Up` Paper orders from PreOpen, Middle, Binance, and other BTC strategies, not only fixed Up variants. Root cause is the existing global “do not bet against ourselves in one market” guard, not missing 1 bps signals or API errors. No production writes, code changes, builds, tests, live submissions, or cancels were performed.
+
+## 2026-06-04T16:26:35.0851157Z
+Request:
+Какая была последняя задача?
+
+Result:
+Answered from the active context that the previous latest recorded task was `BTC Fixed Down No Orders Diagnosis`: explaining why `BTC Up or Down 5m Down N bps Instant` had no orders while matching Up variants were active. No code, production DB, service state, builds, tests, live submissions, or cancels were changed.
