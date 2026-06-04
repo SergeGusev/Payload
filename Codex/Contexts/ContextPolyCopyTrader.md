@@ -1,3 +1,17 @@
+## Active Update 2026-06-04 ETH Skip 9 Live Checkbox Guidance
+Goal: Answer whether enabling `ETH Up or Down 5m Skip 9 bps Instant` for Live requires only ticking the Dashboard Live checkbox.
+Status: Completed
+Done:
+- Queried production PostgreSQL read-only through `out\dbprobe` with host override `192.168.0.101`; no production rows, service state, orders, cancels, or strategy flags were changed.
+- Confirmed production `PolyCopyTrader.Service` is running in `Live` mode on `info=1.0.0+a3b2675dbb01714727c6789e1b7ca56a0e2e5788`, with fresh heartbeat and empty `last_error`.
+- Confirmed `eth_up_down_5m_skip_bps_9_instant` is enabled, not live, not auto-live-paused, not paused, with `Live $ = 1`, `Live bal = 100`, and `live_enabled_at_utc = null`.
+- Confirmed no open Live orders and no stale open Live orders at the check time; latest Live order existed but was no longer open.
+- Checked recent API errors: `3` in the last 15 minutes, only one explicitly `Polymarket*`; local config threshold is `LiveTrading:ApiErrorLockoutCount = 5` over `15` minutes, so current data did not prove an active lockout, but fresh errors could still affect upcoming preflight.
+- Reconfirmed from README/code behavior that checking Dashboard `Live` sets `strategies.live_stakes=true` and makes any opening-limit BTC/ETH/SOL strategy eligible for Paper/Live-shadow orders when normal live gates pass; it does not guarantee immediate placement and does not bypass preflight.
+Next: If enabling manually, ensure Dashboard is connected to the production database, tick only this row's `Live` checkbox, keep `Live $ = 1`, and monitor Live orders/ignored/rejected rows after the next qualifying signal.
+Notes: Answer/diagnostic only. No source builds/tests were run because no code changed.
+Blockers: None.
+
 ## Active Update 2026-06-04 Paper Statistics Validity Clarification
 Goal: Clarify whether accumulated Paper statistics are invalid for selecting strategies after discovering Live-shadow selection bias.
 Status: Completed

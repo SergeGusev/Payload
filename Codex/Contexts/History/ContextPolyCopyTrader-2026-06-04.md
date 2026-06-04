@@ -193,3 +193,10 @@ Request:
 
 Result:
 Clarified that not all accumulated Paper statistics are invalid, but the Dashboard aggregate must be split by regime before it can be used for Live selection. Ordinary non-Live Paper, especially before any Live enablement, remains useful as an estimate of signal plus Paper fill-model quality, but it is not a guarantee of real Live execution. Post-Live Paper/Live-shadow rows are not directly comparable with ordinary Paper rows because Live preflight/API/cancel/fill behavior can remove a biased subset of trades, including would-have-won Paper opportunities. Mixed all-time Dashboard totals should not be the sole basis for choosing Live strategies; use ordinary Paper-only/pre-Live/independent Paper-control metrics for selection and evaluate Live separately by fill rate, rejection/cancel rate, missed-winner counterfactuals, and post-enable probation. No production queries, source changes, builds, tests, live submissions, or cancels were performed.
+
+## 2026-06-04T19:13:03.6727488Z
+Request:
+Я хочу включить в Live ETH Up or Down 5m Skip 9 bps Instant. Достаточно галочку нажать?
+
+Result:
+Queried production PostgreSQL read-only and confirmed `eth_up_down_5m_skip_bps_9_instant` is currently enabled, not Live, not auto-live-paused, not paused, with `Live $ = 1`, `Live bal = 100`, and `live_enabled_at_utc = null`. Confirmed `PolyCopyTrader.Service` is running in `Live` mode on commit `a3b2675` with fresh heartbeat and empty `last_error`; no open or stale open Live orders were present at the check time. Explained that for this opening-limit Instant strategy, the Dashboard `Live` checkbox is the correct runtime switch: checking it sets `strategies.live_stakes=true` and makes future qualifying entries eligible for Paper/Live-shadow orders without a service redeploy. Also clarified that the checkbox does not guarantee immediate order placement or bypass normal live preflight gates; recent API errors existed but did not by themselves prove an active 5-errors/15-minute lockout. No production writes, source changes, builds, tests, live submissions, or cancels were performed.
