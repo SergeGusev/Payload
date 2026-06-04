@@ -60,3 +60,10 @@ Request:
 
 Result:
 Read the Dashboard Live orders bindings and service accounting code. `Notional` in the Live orders grid is `live_orders.notional_usd`: the intended/submitted order amount, effectively `price * requested shares` after strategy sizing and rounding. It is not always the real spent amount. The actual executed value is `Filled $` / `FilledNotionalUsd`; with fees included it is `Cost basis`. For fully matched orders these values are usually close to `Notional`, while for unfilled, cancelled, partial, or preflight-rejected rows `Notional` can be nonzero even though the actual executed stake is lower or zero.
+
+## 2026-06-04T06:51:53.0434979+00:00
+Request:
+Почему по ETH Up or Down 5m Skip 32 bps Instant за последний час было 2 paper ордера, но ни одного живого?
+
+Result:
+Checked the remote production database read-only and the live-shadow allowlist in code. At database time `2026-06-04 06:51:35 UTC`, `ETH Up or Down 5m Skip 32 bps Instant` had `live_stakes = true`, `auto_live_paused = false`, and `paused = false`. The database showed three Paper orders in the last 60 minutes by then (`05:55:08`, `06:11:04`, `06:40:18 UTC`), but all had null `correlation_id`, empty `execution_source`, and no shadow metadata; there were zero `paper_live_shadow_decisions` and zero `live_orders` for that strategy in the same window. The cause is code-side gating: `BtcUpDown5mPaperStrategyProcessor.ShouldRunPaperLiveShadowTest` requires the variant to be in `PaperLiveShadowAllowedVariantCodes`, and that list includes `eth_up_down_5m_skip_bps_7_instant` but not `eth_up_down_5m_skip_bps_32_instant`. Live placement therefore was not attempted; it was not a preflight rejection or auto-pause.

@@ -1,3 +1,16 @@
+## Active Update 2026-06-04 ETH Skip 32 Missing Live Orders Diagnosis
+Goal: Explain why `ETH Up or Down 5m Skip 32 bps Instant` created Paper orders but no Live orders in the last hour.
+Status: Completed
+Done:
+- Queried remote production read-only at database time `2026-06-04 06:51:35 UTC`.
+- Confirmed the strategy row has `live_stakes = true`, `auto_live_paused = false`, `paused = false`, `live_stake_amount = 1`, and `live_available_balance = 100`.
+- Found three Paper orders in the last 60 minutes for this strategy at `05:55:08`, `06:11:04`, and `06:40:18 UTC`; all had null `correlation_id`, empty `execution_source`, and no paper/live shadow metadata in `raw_decision_json`.
+- Confirmed there were zero `paper_live_shadow_decisions` and zero `live_orders` for this strategy in the same window, so Live placement was not attempted and no preflight rejection occurred.
+- Read `BtcUpDown5mPaperStrategyProcessor`: `ShouldRunPaperLiveShadowTest` requires both effective live stakes and `IsPaperLiveShadowAllowedVariant`; the hardcoded `PaperLiveShadowAllowedVariantCodes` includes `eth_up_down_5m_skip_bps_7_instant` but not `eth_up_down_5m_skip_bps_32_instant`.
+Next: To make ETH Skip 32 actually place Live shadow orders, add `eth_up_down_5m_skip_bps_32_instant` to the allowed variant list, add regression coverage, build/test, and deploy the service.
+Notes: Diagnostic only. No source behavior changes, production writes, live submissions, cancels, builds, or tests were performed.
+Blockers: None.
+
 ## Active Update 2026-06-04 Live Orders Notional Field Explanation
 Goal: Explain whether the Dashboard Live orders `Notional` column is the real Live stake amount.
 Status: Completed
