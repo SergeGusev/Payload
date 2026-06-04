@@ -1,3 +1,15 @@
+## Active Update 2026-06-04 Live Orders Notional Field Explanation
+Goal: Explain whether the Dashboard Live orders `Notional` column is the real Live stake amount.
+Status: Completed
+Done:
+- Verified the Live orders grid binds `Notional` to `LiveOrderRow.NotionalUsd`, mapped directly from `live_orders.notional_usd`.
+- Verified `Filled $` is the separate `FilledNotionalUsd` value, and `Cost basis` is the filled notional plus any fee when reconciliation/status updates provide fee data.
+- Confirmed `Notional` is the intended/submitted order notional (`price * requested shares`) after sizing/rounding, not necessarily the actual executed/spent amount.
+- Clarified that actual executed exposure should be read from `Filled $` without fee or `Cost basis` with fee; for `PreflightRejected`/unfilled rows the real spent amount is zero even if `Notional` is nonzero.
+Next: None.
+Notes: Diagnostic/code-reading only. No source behavior changes, production writes, builds, or tests were performed.
+Blockers: None.
+
 ## Active Update 2026-06-04 ETH Skip 7 Live PnL Explanation
 Goal: Explain why `ETH Up or Down 5m Skip 7 bps Instant` can be positive when Live won/lost counts are equal.
 Status: Completed

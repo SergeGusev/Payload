@@ -53,3 +53,10 @@ Request:
 
 Result:
 Read the Dashboard/Storage live-performance aggregation and checked the remote production database read-only. `Live won/lost` are simple counts of settled Live orders, while `Live PnL` sums `live_orders.realized_pnl_usd`, so equal counts can still be profitable when average winning PnL is larger than average losing PnL. For the user's 124/124 snapshot, `ETH Up or Down 5m Skip 7 bps Instant` had total win PnL `+384.920863`, total loss PnL `-372.909386`, and net `+12.011477`; average win was about `+3.1042`, average loss about `-3.0073`. Current data had moved to 124/125 after a later `-4.00` settlement at `2026-06-04 06:21:26 UTC`, leaving net PnL about `+8.011477`.
+
+## 2026-06-04T06:32:12.6368186+00:00
+Request:
+Реальная сумма ставки в Live stakes в поле Notional ?
+
+Result:
+Read the Dashboard Live orders bindings and service accounting code. `Notional` in the Live orders grid is `live_orders.notional_usd`: the intended/submitted order amount, effectively `price * requested shares` after strategy sizing and rounding. It is not always the real spent amount. The actual executed value is `Filled $` / `FilledNotionalUsd`; with fees included it is `Cost basis`. For fully matched orders these values are usually close to `Notional`, while for unfilled, cancelled, partial, or preflight-rejected rows `Notional` can be nonzero even though the actual executed stake is lower or zero.
