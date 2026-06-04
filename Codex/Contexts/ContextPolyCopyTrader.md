@@ -1,3 +1,16 @@
+## Active Update 2026-06-04 ETH SOL Fixed Outcome Bps Instant Strategies
+Goal: Add ETH/SOL equivalents of the fixed-outcome `Up/Down N bps Instant` strategies for N = 1..50.
+Status: Completed
+Done:
+- Added 200 ETH/SOL 5m strategy variants: `eth_up_down_5m_up/down_bps_1..50_instant` and `sol_up_down_5m_up/down_bps_1..50_instant`.
+- Reused the existing crypto Skip bps previous close-book streak and cumulative archived Binance `<asset>USDT` start-to-close bps gate through the already-supported fixed-outcome behavior.
+- Added PostgreSQL schema seeding with id groups `8079/8080` for ETH Up/Down and `8081/8082` for SOL Up/Down.
+- Updated README and configuration reference to include the new ETH/SOL fixed Up/Down bps Instant rows.
+- Added regression coverage for crypto variant counts/thresholds/fixed outcomes and runtime ETH Up / SOL Down entries using crypto odds ticks and close-book evidence.
+Next: Deploy/restart `PolyCopyTrader.Service` so schema initialization seeds the new ETH/SOL strategies and the running service can create their runs/orders.
+Notes: Verification passed: focused `BtcUpDown5mPaperStrategyProcessorTests` 173/173, full test project 593/593, and `git diff --check` clean except existing LF/CRLF warnings.
+Blockers: None.
+
 ## Active Update 2026-06-04 BTC Fixed Outcome Bps Instant Strategies
 Goal: Add `BTC Up or Down 5m Up N bps Instant` and `BTC Up or Down 5m Down N bps Instant` strategies for N = 1..50.
 Status: Completed

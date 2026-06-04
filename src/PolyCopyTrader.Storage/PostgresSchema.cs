@@ -2395,6 +2395,53 @@ ON CONFLICT (id) DO UPDATE SET
     updated_at_utc = excluded.updated_at_utc;
 
 INSERT INTO strategies (id, code, name, description, enabled, paper_stake_amount, created_at_utc, updated_at_utc)
+WITH assets(asset_symbol, up_id_group, down_id_group) AS (
+    VALUES
+        ('ETH', '8079', '8080'),
+        ('SOL', '8081', '8082')
+),
+variants(direction_code, direction_name, opposite_direction_name) AS (
+    VALUES
+        ('up', 'Up', 'Down'),
+        ('down', 'Down', 'Up')
+),
+thresholds(threshold_tenths) AS (
+    SELECT generate_series(1, 50)
+),
+formatted AS (
+    SELECT
+        assets.asset_symbol,
+        variants.direction_code,
+        variants.direction_name,
+        variants.opposite_direction_name,
+        CASE
+            WHEN variants.direction_code = 'up' THEN assets.up_id_group
+            ELSE assets.down_id_group
+        END AS id_group,
+        thresholds.threshold_tenths,
+        thresholds.threshold_tenths::text AS threshold_name,
+        thresholds.threshold_tenths::text AS code_suffix
+    FROM assets
+    CROSS JOIN variants
+    CROSS JOIN thresholds
+)
+SELECT
+    ('b7c50005-0000-4000-' || id_group || '-' || lpad((100 + threshold_tenths)::text, 12, '0'))::uuid,
+    lower(asset_symbol) || '_up_down_5m_' || direction_code || '_bps_' || code_suffix || '_instant',
+    asset_symbol || ' Up or Down 5m ' || direction_name || ' ' || threshold_name || ' bps Instant',
+    'Immediately after ' || asset_symbol || ' 5m market open, use the same previous close-book result streak and archived Binance ' || asset_symbol || ' start/end move gate as Skip ' || threshold_name || ' bps Instant; enter only when the cumulative streak move is at least ' || threshold_name || ' bps and the countertrend direction is ' || direction_name || '. If the countertrend direction is ' || opposite_direction_name || ', skip. Paper entry is a GTD limit BUY priced from current executable ask depth so the order can fill immediately; settlement uses only actually filled shares.',
+    true,
+    1.00,
+    now(),
+    now()
+FROM formatted
+ON CONFLICT (id) DO UPDATE SET
+    code = excluded.code,
+    name = excluded.name,
+    description = excluded.description,
+    updated_at_utc = excluded.updated_at_utc;
+
+INSERT INTO strategies (id, code, name, description, enabled, paper_stake_amount, created_at_utc, updated_at_utc)
 VALUES (
     'b7c50005-0000-4000-8050-000000000001',
     'btc_up_down_5m_statistics',

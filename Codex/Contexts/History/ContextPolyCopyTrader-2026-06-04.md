@@ -109,3 +109,10 @@ Add new BTC fixed-outcome bps Instant strategies: `BTC Up or Down 5m Up N bps In
 
 Result:
 Added 100 BTC 5m variants (`btc_up_down_5m_up_bps_1..50_instant` and `btc_up_down_5m_down_bps_1..50_instant`) to `StrategyIds`, seeded them in `PostgresSchema`, and routed them through the existing Skip bps previous close-book streak plus cumulative archived Binance BTC start-to-close bps gate. Added fixed-outcome filtering with skip reason `btc_previous_market_move_fixed_outcome_mismatch`, while accepted entries use the same executable ask-depth Instant opening-limit pricing and `InstantOpeningLimitMaxPrice` cap as other Instant variants. Updated README/configuration/live checklist docs and added regression coverage for variant inventory plus Up enter, Up mismatch skip, and Down enter. Verification passed: focused `BtcUpDown5mPaperStrategyProcessorTests` 171/171, full tests 591/591, and `git diff --check` clean except existing LF/CRLF warnings.
+
+## 2026-06-04T11:25:12.6892739Z
+Request:
+Добавь аналогичные стратегии для ETH и SOL
+
+Result:
+Added 200 ETH/SOL fixed-outcome bps Instant variants: `eth_up_down_5m_up_bps_1..50_instant`, `eth_up_down_5m_down_bps_1..50_instant`, `sol_up_down_5m_up_bps_1..50_instant`, and `sol_up_down_5m_down_bps_1..50_instant`. They reuse the existing crypto Skip bps previous close-book streak and cumulative archived Binance `<asset>USDT` start-to-close bps gate, then enter only when the fixed Up/Down side matches the countertrend decision. Seeded the rows in `PostgresSchema`, updated README/configuration docs, and added catalog/runtime regression tests for ETH Up and SOL Down. Verification passed: focused `BtcUpDown5mPaperStrategyProcessorTests` 173/173, full tests 593/593, and `git diff --check` clean except existing LF/CRLF warnings.

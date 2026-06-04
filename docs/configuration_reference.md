@@ -630,7 +630,8 @@ threshold `Middle 1 Revert 1..100 bps` and matching `Instant` variants, `Skip 1.
 `Prev Score Countertrend 10..90`, `Ensemble 2 of 3`, `Dynamic Markov`, `Strategy Selector`, capped `Less`
 comparison variants, capped `More` comparison variants, and capped `More Gamma`
 comparison variants. ETH/SOL variants include Binance bps `1..50`, Binance bps
-`1..50 Instant`, Skip `1..5`, Skip bps `1..50`, and Skip bps `1..50 Instant`;
+`1..50 Instant`, Skip `1..5`, Skip bps `1..50`, Skip bps `1..50 Instant`,
+and fixed `Up 1..50 bps Instant` / `Down 1..50 bps Instant` rows;
 ETH/SOL Revert variants are intentionally not seeded. When
 `PaperTakerPricingEnabled=false`, `Less` selects the lower-priced Gamma
 `outcomePrices` entry, `More` selects the higher-priced entry, and that Gamma
@@ -728,9 +729,13 @@ ETH/SOL Skip rows mirror the non-Revert BTC Skip behavior: plain `Skip 1..5`
 uses ETH/SOL close-book result streaks, `Skip bps` uses ETH/SOL close-book
 streaks plus archived `crypto_up_down_5m_odds_ticks` start-to-close Binance
 move, and `Skip bps Instant` uses the same executable ask-depth pricing path as
-the BTC Instant variants. ETH/SOL Skip Revert rows are not seeded. Seeded
-ETH/SOL Skip rows can enter the Paper/Live-shadow path when their Dashboard
-`Live` flag is enabled and normal live gates pass.
+the BTC Instant variants. `ETH/SOL Up 1..50 bps Instant` and `ETH/SOL Down
+1..50 bps Instant` reuse that same crypto streak/move gate but enter only when
+the Skip bps countertrend decision matches the fixed side; the opposite side
+skips with `btc_previous_market_move_fixed_outcome_mismatch`. ETH/SOL Skip
+Revert rows are not seeded. Seeded ETH/SOL Skip/fixed rows can enter the
+Paper/Live-shadow path when their Dashboard `Live` flag is enabled and normal
+live gates pass.
 `Middle`,
 `Middle Revert`, `Skip`, and `Skip Revert` create pending Paper BUY orders as
 ordinary GTD limit orders. Their limit
