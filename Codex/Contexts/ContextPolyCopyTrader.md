@@ -1,3 +1,16 @@
+## Active Update 2026-06-04 Paper Winners Live Loss Explanation
+Goal: Explain why strategies selected for Live from top Paper PnL/ROI can become unprofitable immediately after Live enablement.
+Status: Completed
+Done:
+- Queried production PostgreSQL read-only through `out\dbprobe` with host override `192.168.0.101`; no production rows, service state, orders, or cancels were changed.
+- Compared current Live strategies by Paper performance before `live_enabled_at_utc`, Paper performance after `live_enabled_at_utc`, and Live performance after enablement.
+- Found the degradation is visible in Paper after Live too, not only in Live: BTC Middle 47 went from Paper pre `+46.200700` / `9.73%` ROI to Paper post `-16.894849` / `-8.31%`; SOL Skip 42 from `+89.839400` / `17.20%` to `-23.032625` / `-10.90%`; ETH Skip 32 from `+154.429500` / `18.20%` to `-0.892800` / `-0.34%`; ETH Skip 7 stayed positive but weakened from `+209.032021` / `4.67%` to `+5.667161` / `1.29%`.
+- Checked short Paper windows before Live: BTC Middle 47 was already negative in the 24h and 6h before enabling; ETH/SOL examples had strong recent pre-Live windows but reverted sharply after.
+- Checked linked Paper/Live-shadow pairs: Live execution was generally at lower/better average price than Paper limit, and matched Live PnL was equal to Paper-shadow PnL for ETH/SOL and better by about `$10.000100` for BTC Middle 47.
+Next: Use out-of-sample Paper validation gates before Live: require positive recent Paper after selection, minimum settled sample, confidence bounds/profit factor/expectancy, and a probation period with automatic Live disable after negative post-enable Paper/Live performance.
+Notes: Answer/diagnostic only. One exploratory SELECT reused a CTE across statements and failed after returning the useful aggregate; no DB state changed. PostgreSQL activity check after diagnostics showed `0` active sessions older than 1 minute. No source builds/tests were run.
+Blockers: None.
+
 ## Active Update 2026-06-04 Post Deploy Live Only Opposite Guard Verification
 Goal: Verify production after deploying commit `a3b2675` with the Live-only opposite-outcome guard.
 Status: Completed
