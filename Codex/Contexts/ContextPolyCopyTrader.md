@@ -1,3 +1,16 @@
+## Active Update 2026-06-04 Post Deploy Live Checkbox Verification
+Goal: Verify the production service after deploying the Dashboard Live-checkbox runtime switch.
+Status: Completed
+Done:
+- Queried production PostgreSQL read-only through `out\dbprobe` with host override `192.168.0.101`; no production rows, service state, orders, or cancels were changed.
+- Confirmed `PolyCopyTrader.Service` is running in `Live` mode on `info=1.0.0+d949993374e6f1e0cc77ccd6692c150d41521953`, started `2026-06-04 10:28:40 +03`, with fresh heartbeat and empty `last_error`.
+- Confirmed the expected four Live strategies are all enabled, `live_stakes=true`, `auto_live_paused=false`, and `paused=false`: BTC Middle 47 Instant, ETH Skip 7 Instant, ETH Skip 32 Instant, and SOL Skip 42 Instant.
+- Confirmed service activity after restart: Paper orders are being created (`434` by `2026-06-04 10:41:46 +03`) and API errors since restart are `0`.
+- Confirmed no post-restart Live/Paper-shadow rows yet because the target strategy runs after restart all skipped before entry: 10:35 and 10:40 due runs were rejected by ordinary strategy gates such as `btc_reference_mean_deviation_below_threshold`, `btc_previous_market_move_below_bps_threshold`, and `opposite_outcome_open_order`.
+Next: Wait for the next qualifying target-strategy entry; it should create linked Paper/Live-shadow rows now that the service is running commit `d949993`.
+Notes: Operational read-only verification only. Two exploratory SQL batches initially reused CTEs across separate SELECT statements and failed after returning partial useful output; corrected read-only polls passed.
+Blockers: None.
+
 ## Active Update 2026-06-04 Dashboard Live Checkbox Runtime Switch
 Goal: Make the Dashboard `Live` checkbox sufficient to enable or disable Paper/Live-shadow placement for opening-limit strategies.
 Status: Completed

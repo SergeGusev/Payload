@@ -74,3 +74,10 @@ Request:
 
 Result:
 Removed the hardcoded Paper/Live-shadow strategy allowlist from `BtcUpDown5mPaperStrategyProcessor`. Opening-limit strategies now enter the live-shadow path when their Dashboard/DB `Live` flag is enabled and all normal live gates pass; unchecking `Live` or Auto Live Pause suppresses new live-shadow entries. Added tests for ETH Skip 32 live enablement and unchecked-Live paper-only behavior, updated README/configuration docs, and verified Service build 0 warnings/errors, focused tests 22/22, and full tests 588/588.
+
+## 2026-06-04T07:42:08.2708069Z
+Request:
+Выложил, проверь, всё ли в порядке
+
+Result:
+Checked production PostgreSQL read-only through `out\dbprobe` with host override `192.168.0.101`. `PolyCopyTrader.Service` is running in `Live` mode on deployed commit `d949993374e6f1e0cc77ccd6692c150d41521953`, started `2026-06-04 10:28:40 +03`, with fresh heartbeat and empty `last_error`. The expected four Live strategies are all enabled/effective-live and not paused: BTC Middle 47 Instant, ETH Skip 7 Instant, ETH Skip 32 Instant, and SOL Skip 42 Instant. Since restart, Paper orders are being created and API errors are `0`; no Live/Paper-shadow rows have appeared yet because target due runs at 10:35 and 10:40 skipped before entry on ordinary strategy gates. No production writes, service changes, live submissions, or cancels were performed.
