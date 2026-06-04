@@ -1,3 +1,16 @@
+## Active Update 2026-06-04 Paper Live Candidate Selection
+Goal: Review current Paper strategies and choose one candidate for possible manual Live enablement.
+Status: Completed
+Done:
+- Queried production PostgreSQL read-only through `out\dbprobe` with host override `192.168.0.101`; no production rows, service state, orders, cancels, or strategy flags were changed.
+- Confirmed `PolyCopyTrader.Service` is running in `Live` mode on `info=1.0.0+a3b2675dbb01714727c6789e1b7ca56a0e2e5788`, with a fresh heartbeat and empty `last_error`; current Live strategies remain BTC Middle 47 Instant, ETH Skip 7 Instant, ETH Skip 32 Instant, and SOL Skip 42 Instant.
+- Filtered enabled, non-Live, non-paused, non-auto-paused BTC/ETH/SOL 5m `Instant` opening-limit strategies by Paper performance, requiring positive all-time performance plus positive recent 24h/12h/6h windows and non-negative 1h performance.
+- Selected `ETH Up or Down 5m Skip 42 bps Instant` (`eth_up_down_5m_skip_bps_42_instant`) as the best current candidate: all-time `197` settled / `114W` / `83L` / `+91.3738` PnL / `14.20%` ROI / profit factor `1.342`; 7d `+79.8581`, 48h `+53.9348`, 24h `+14.9033`, 12h `+26.1801`, 6h `+18.6839`, 3h `+14.1030`, and 1h `+7.2266`.
+- Noted nearest comparable candidates: ETH Skip 44/43/46 also strong but lower all-time PnL; BTC Middle 52/58 have enough sample and positive recent windows but weaker fresh momentum; BTC Middle Revert leaders had strong 24h but sample under 100 and a negative last hour; SOL Binance leaders had sample under 100.
+Next: If the user decides to enable it, do so manually with the existing Dashboard `Live` switch, small `Live $`, and a probation rule that disables Live if post-enable Paper/Live turns negative.
+Notes: Answer/diagnostic only. One broad all-time candidate aggregate timed out after returning service/live-strategy rows; two exploratory multi-SELECT batches failed because CTEs were reused across statements, then were replaced by narrower indexed read-only SELECTs. No source builds/tests were run because no code changed.
+Blockers: None.
+
 ## Active Update 2026-06-04 Paper Winners Live Loss Explanation
 Goal: Explain why strategies selected for Live from top Paper PnL/ROI can become unprofitable immediately after Live enablement.
 Status: Completed
