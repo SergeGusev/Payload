@@ -719,9 +719,9 @@ ETH/SOL Skip rows mirror the non-Revert BTC Skip behavior: plain `Skip 1..5`
 uses ETH/SOL close-book result streaks, `Skip bps` uses ETH/SOL close-book
 streaks plus archived `crypto_up_down_5m_odds_ticks` start-to-close Binance
 move, and `Skip bps Instant` uses the same executable ask-depth pricing path as
-the BTC Instant variants. ETH/SOL Skip Revert rows are not seeded, and ETH/SOL
-Skip rows are not in the live allowlist except `ETH Up or Down 5m Skip 7 bps
-Instant`.
+the BTC Instant variants. ETH/SOL Skip Revert rows are not seeded. Seeded
+ETH/SOL Skip rows can enter the Paper/Live-shadow path when their Dashboard
+`Live` flag is enabled and normal live gates pass.
 `Middle`,
 `Middle Revert`, `Skip`, and `Skip Revert` create pending Paper BUY orders as
 ordinary GTD limit orders. Their limit
@@ -741,8 +741,8 @@ order-book bootstrap. The
 `BTC Up or Down 5m Up` and `BTC Up or Down 5m Down` wait until the market is
 actually accepting orders with an order book, then place a GTD BUY at
 fixed price `0.45` on the corresponding outcome. The
-`BTC Up or Down 5m Up Maker` and `BTC Up or Down 5m Down Maker` variants are
-Paper-only and grouped under `BTC Up/Down 5m Maker`. After a BTC 5-minute
+`BTC Up or Down 5m Up Maker` and `BTC Up or Down 5m Down Maker` variants use a
+maker-style paper decision path and are grouped under `BTC Up/Down 5m Maker`. After a BTC 5-minute
 market starts, each variant baselines the selected outcome best ask, tracks a
 fixed high-water best ask in memory, and evaluates entries only on 30-second
 slots (`30s` through `270s`, maximum 9 attempts per BTC 5-minute market). On a
@@ -808,11 +808,9 @@ safety buffer times the configured Paper stake multiplier; diagnostics record
 `post_only=false` plus the selected pricing model inputs, cap, final limit, GTD
 expiration mode, local cancel deadline, CLOB wire expiration, and fallback
 `OpeningLimitGtdTtlSeconds` (`120` by default). They
-do not create immediate fills and are not submitted to live trading unless
-the controlled Paper/Live-shadow path is explicitly enabled for an allowed variant.
-`ETH Up or Down 5m Skip 7 bps Instant` and
-`SOL Up or Down 5m Skip 42 bps Instant` are currently allowlisted from the
-ETH/SOL Skip family. The
+do not create immediate fills. When the strategy's Dashboard `Live` flag is
+enabled, opening-limit entries can create linked live-shadow orders through the
+controlled Paper/Live-shadow path if all normal live gates pass. The
 generic Paper open-order pipeline then applies balanced GTD
 accounting: visible ask depth at or below the limit creates partial `paper_fills`
 rows with VWAP evidence, cumulative fills determine `PartiallyFilled` versus
@@ -844,7 +842,7 @@ It also shows decision-health entry delay metrics (`Avg delay s` and
 `Profit factor`, and `Expectancy`) next to `Win %` so count-based hit rate can
 be compared against actual payoff size. Run-based Live condition, technical, and
 GTD-unfilled skip counters start at `strategies.live_enabled_at_utc`, so turning
-on the manual `Live` flag does not move older Paper-only skipped runs into the
+on the manual `Live` flag does not move older pre-Live skipped runs into the
 Live skip columns. The nested `24 hours`, `6 hours`, and
 `1 hour` tabs under `Strategies` use the same strategy refresh cache and show recent
 orders, filled/expired/open orders, entered/skipped/settled runs, wins/losses,

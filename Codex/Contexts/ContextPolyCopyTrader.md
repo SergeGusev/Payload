@@ -1,3 +1,15 @@
+## Active Update 2026-06-04 Dashboard Live Checkbox Runtime Switch
+Goal: Make the Dashboard `Live` checkbox sufficient to enable or disable Paper/Live-shadow placement for opening-limit strategies.
+Status: Completed
+Done:
+- Removed the hardcoded `PaperLiveShadowAllowedVariantCodes` list and its validation from `BtcUpDown5mPaperStrategyProcessor`.
+- Changed Paper/Live-shadow eligibility to depend on `UsesOpeningLimitEntry(variant)` plus `settings.EffectiveLiveStakes`; checked `Live` enables new live-shadow eligibility, while unchecked `Live` or `Auto Live Pause` suppresses it.
+- Added regression coverage that `ETH Up or Down 5m Skip 32 bps Instant` creates a linked Paper/Live-shadow order when `LiveStakes=true`, and that an unchecked Live flag still creates only Paper with no shadow decision or live order.
+- Updated README and configuration reference so they no longer describe the removed live-shadow allowlist; `LiveTrading:AutoLivePauseStrategies` remains a separate opt-in allowlist only for automatic pausing.
+Next: Deploy/restart `PolyCopyTrader.Service` so the running service uses the new runtime Live checkbox behavior. Dashboard already writes `strategies.live_stakes`.
+Notes: Verification passed: Service Verify build 0 warnings/errors, focused live-stake tests 22/22, full test project 588/588, `git diff --check` clean except existing LF/CRLF warnings, and `rg` found no stale live-shadow allowlist symbols or docs wording.
+Blockers: None.
+
 ## Active Update 2026-06-04 ETH Skip 32 Missing Live Orders Diagnosis
 Goal: Explain why `ETH Up or Down 5m Skip 32 bps Instant` created Paper orders but no Live orders in the last hour.
 Status: Completed

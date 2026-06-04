@@ -47,25 +47,7 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
     private const string BtcPreOpenSellExitExecutionSource = "btc_preopen_sell_exit";
     private const string BtcMakerExecutionSource = "btc_updown5m_maker_post_only";
     private const string StrategyPausedSkipReason = "strategy_paused";
-    private const string BtcSkip1VariantCode = "btc_up_down_5m_skip_1";
     private static readonly TimeSpan StrategyPauseLookback = TimeSpan.FromHours(12);
-    private static readonly string[] PaperLiveShadowAllowedVariantCodes =
-    [
-        BtcSkip1VariantCode,
-        "btc_up_down_5m_middle_1_bps_47_instant",
-        StrategyIds.BtcUpDown5mBinanceBps1Code,
-        "btc_up_down_5m_binance_bps_17_instant",
-        "btc_up_down_5m_binance_bps_18",
-        "btc_up_down_5m_binance_bps_19",
-        StrategyIds.BtcUpDown5mBinanceBps2Code,
-        "btc_up_down_5m_binance_bps_20_instant",
-        "btc_up_down_5m_binance_bps_21",
-        "btc_up_down_5m_binance_bps_22",
-        "btc_up_down_5m_binance_bps_23",
-        "eth_up_down_5m_skip_bps_7_instant",
-        "sol_up_down_5m_binance_bps_24_instant",
-        "sol_up_down_5m_skip_bps_42_instant"
-    ];
     private static readonly IReadOnlySet<string> CryptoReferenceAssetSymbols = StrategyIds.CryptoUpDown5mVariants
         .Select(GetReferenceAssetSymbol)
         .ToHashSet(StringComparer.OrdinalIgnoreCase);
@@ -2323,7 +2305,7 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
                     }
 
                     var isPaperLiveShadowTest = UsesOpeningLimitEntry(variant) &&
-                        ShouldRunPaperLiveShadowTest(variant, settings);
+                        ShouldRunPaperLiveShadowTest(settings);
                     var paperLostCounterAdjustment = ApplyPaperLostCounterStakeAdjustment(
                         variant,
                         settings,
@@ -3730,21 +3712,9 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
             nowUtc >= startUtc;
     }
 
-    private static bool ShouldRunPaperLiveShadowTest(
-        BtcUpDown5mStrategyVariant variant,
-        StrategyRuntimeSettings settings)
+    private static bool ShouldRunPaperLiveShadowTest(StrategyRuntimeSettings settings)
     {
-        return settings.EffectiveLiveStakes && IsPaperLiveShadowAllowedVariant(variant);
-    }
-
-    private static bool IsPaperLiveShadowAllowedVariant(BtcUpDown5mStrategyVariant variant)
-    {
-        return PaperLiveShadowAllowedVariantCodes.Contains(variant.Code, StringComparer.OrdinalIgnoreCase);
-    }
-
-    private static string FormatPaperLiveShadowAllowedVariantCodes()
-    {
-        return string.Join(", ", PaperLiveShadowAllowedVariantCodes);
+        return settings.EffectiveLiveStakes;
     }
 
     private static bool CanSubmitLegacyBtcLiveOrder(BtcUpDown5mStrategyVariant variant)
@@ -10871,11 +10841,6 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
         CancellationToken cancellationToken)
     {
         var validation = new List<string>();
-        if (!IsPaperLiveShadowAllowedVariant(variant))
-        {
-            validation.Add($"Paper/Live shadow test is allowed only for: {FormatPaperLiveShadowAllowedVariantCodes()}.");
-        }
-
         if (botOptions.Mode != BotMode.Live)
         {
             validation.Add("Bot mode is not Live.");

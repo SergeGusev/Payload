@@ -67,3 +67,10 @@ Request:
 
 Result:
 Checked the remote production database read-only and the live-shadow allowlist in code. At database time `2026-06-04 06:51:35 UTC`, `ETH Up or Down 5m Skip 32 bps Instant` had `live_stakes = true`, `auto_live_paused = false`, and `paused = false`. The database showed three Paper orders in the last 60 minutes by then (`05:55:08`, `06:11:04`, `06:40:18 UTC`), but all had null `correlation_id`, empty `execution_source`, and no shadow metadata; there were zero `paper_live_shadow_decisions` and zero `live_orders` for that strategy in the same window. The cause is code-side gating: `BtcUpDown5mPaperStrategyProcessor.ShouldRunPaperLiveShadowTest` requires the variant to be in `PaperLiveShadowAllowedVariantCodes`, and that list includes `eth_up_down_5m_skip_bps_7_instant` but not `eth_up_down_5m_skip_bps_32_instant`. Live placement therefore was not attempted; it was not a preflight rejection or auto-pause.
+
+## 2026-06-04T07:10:30.7453444Z
+Request:
+А мы можем сделать так, чтобы достаточно было галочку поставить на стратегии, чтобы она перешла в Live ? И снять галочку, чтобы убрать её оттуда?
+
+Result:
+Removed the hardcoded Paper/Live-shadow strategy allowlist from `BtcUpDown5mPaperStrategyProcessor`. Opening-limit strategies now enter the live-shadow path when their Dashboard/DB `Live` flag is enabled and all normal live gates pass; unchecking `Live` or Auto Live Pause suppresses new live-shadow entries. Added tests for ETH Skip 32 live enablement and unchecked-Live paper-only behavior, updated README/configuration docs, and verified Service build 0 warnings/errors, focused tests 22/22, and full tests 588/588.
