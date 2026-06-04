@@ -1,3 +1,16 @@
+## Active Update 2026-06-04 ETH/SOL Bps Reference Explanation
+Goal: Explain which price feed ETH/SOL Up or Down 5m bps strategies use.
+Status: Completed
+Done:
+- Read `BtcUpDown5mPaperStrategyProcessor`, `CryptoUpDown5mOddsArchiveProcessor`, `BinanceCryptoReferenceTradeStreamService`, and strategy catalog definitions.
+- Confirmed crypto variants set `ReferenceAssetSymbol` to `ETH` or `SOL`; `GetReferenceAssetSymbol` defaults only missing values to `BTC`.
+- Confirmed ETH/SOL Binance bps compare latest Binance `<asset>USDT` trade-stream price with the archived market-start reference from `crypto_up_down_5m_odds_ticks`.
+- Confirmed ETH/SOL Skip bps use ETH/SOL close-book result streaks plus the previous market's archived Binance `<asset>USDT` start-to-close move from `crypto_up_down_5m_odds_ticks`.
+- Confirmed ETH/SOL Middle variants compare latest Binance `<asset>USDT` trade-stream price to that asset's cached arithmetic mean from `BinanceCryptoReference`.
+Next: None.
+Notes: Answer-only code/documentation read. No source behavior changes, production writes, builds, or tests were performed.
+Blockers: None.
+
 ## Active Update 2026-06-04 Post Deploy Live Checkbox Verification
 Goal: Verify the production service after deploying the Dashboard Live-checkbox runtime switch.
 Status: Completed

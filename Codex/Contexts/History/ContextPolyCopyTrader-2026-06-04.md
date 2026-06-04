@@ -81,3 +81,10 @@ Request:
 
 Result:
 Checked production PostgreSQL read-only through `out\dbprobe` with host override `192.168.0.101`. `PolyCopyTrader.Service` is running in `Live` mode on deployed commit `d949993374e6f1e0cc77ccd6692c150d41521953`, started `2026-06-04 10:28:40 +03`, with fresh heartbeat and empty `last_error`. The expected four Live strategies are all enabled/effective-live and not paused: BTC Middle 47 Instant, ETH Skip 7 Instant, ETH Skip 32 Instant, and SOL Skip 42 Instant. Since restart, Paper orders are being created and API errors are `0`; no Live/Paper-shadow rows have appeared yet because target due runs at 10:35 and 10:40 skipped before entry on ordinary strategy gates. No production writes, service changes, live submissions, or cancels were performed.
+
+## 2026-06-04T10:23:11.7406290Z
+Request:
+Хочу уточнить один момент. BTC Up or Down 5m для определения bps используют текущий курс BTC. А курс чего используют аналогичные стратегии ETH Up or Down 5m и SOL Up or Down 5m  ?
+
+Result:
+Read the strategy processor, crypto odds archive, Binance crypto reference stream, and strategy catalog. Confirmed ETH/SOL variants use their own Binance `<asset>USDT` feed, not BTC: ETH uses `ETHUSDT`, SOL uses `SOLUSDT`. Binance bps compare latest Binance `<asset>USDT` price to the archived market-start reference; Skip bps use the previous ETH/SOL 5m close-book result plus that asset's archived start-to-close Binance move; Middle variants compare latest `<asset>USDT` price to that asset's cached arithmetic mean. No code or production state was changed.
