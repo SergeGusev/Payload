@@ -1,3 +1,19 @@
+## Active Update 2026-06-04 ETH Skip 7 Paper Not Accepted Live Link
+Goal: Explain why `ETH Up or Down 5m Skip 7 bps Instant` has many more `Paper not accepted` rows than nearby Skip 8/9 variants and whether this is related to Live mode.
+Status: Completed
+Done:
+- Queried production PostgreSQL read-only through `out\dbprobe` with host override `192.168.0.101`; no production rows, service state, orders, cancels, or strategy flags were changed.
+- Confirmed Dashboard `Paper not accepted` is counted as `strategy_market_paper_runs.status = 'Skipped'` with `paper_order_id IS NOT NULL`; for these strategies the reason is `gtd_limit_not_filled`.
+- Confirmed current flags: `eth_up_down_5m_skip_bps_7_instant` is `live_stakes=true` with `live_enabled_at_utc = 2026-06-03 13:42:17 UTC`, while Skip 8 and Skip 9 are not Live.
+- Found Skip 7 total `Paper not accepted = 42`, all `gtd_limit_not_filled`; `31` occurred before Live enablement and `11` after. Skip 8 and Skip 9 each have `3` total.
+- In the equal post-Live window starting `2026-06-03 13:42:17 UTC`, Skip 7 had `11` `Paper not accepted`, while Skip 8 and Skip 9 had `2` each.
+- Read code and confirmed Live-shadow Paper orders use `execution_source = 'paper_live_shadow_test'`; `PaperTradingProcessor` skips those orders, and `LiveTradingProcessor.SyncPaperShadowAsync` fills/cancels them based on the real Live order. If the Live order is preflight rejected, rejected, cancelled, or cancel-failed with zero fill, the linked Paper order is cancelled and later the run becomes `gtd_limit_not_filled`.
+- Confirmed post-Live Skip 7 Paper orders are all `paper_live_shadow_test`: `100` Filled, `41` PartiallyFilledExpired, and `11` Cancelled. The `11` cancelled rows mapped to Live statuses/reasons including API error lockout, maximum open live order count, HTTP 503, CLOB cancel/cancel-failed, and zero filled size.
+- Confirmed the same markets are not comparable with non-Live siblings: for the 42 Skip 7 `gtd_limit_not_filled` markets, Skip 8 settled on all 42 and Skip 9 settled on 40, because they stayed ordinary Paper and could be filled by the Paper GTD estimator.
+Next: Consider separating Dashboard metrics for ordinary Paper versus Paper/Live-shadow, or keeping an independent Paper simulation row for Live strategies if Paper performance should remain comparable after Live enablement.
+Notes: Answer/diagnostic only. One exploratory multi-SELECT reused a CTE across statements and failed after returning the useful aggregate; it was replaced by narrower read-only SELECTs. No source builds/tests were run because no code changed.
+Blockers: None.
+
 ## Active Update 2026-06-04 Paper Live Candidate Selection
 Goal: Review current Paper strategies and choose one candidate for possible manual Live enablement.
 Status: Completed
