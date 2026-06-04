@@ -1,3 +1,16 @@
+## Active Update 2026-06-04 Fixed Outcome Strategy Dashboard Categories
+Goal: Move newly added fixed-outcome `Up/Down N bps Instant` strategies into dedicated Dashboard strategy categories.
+Status: Completed
+Done:
+- Added `StrategyDisplayCategories` in `PolyCopyTrader.Domain` and moved Dashboard strategy-category parsing into that shared helper.
+- Updated Dashboard category filtering so fixed-outcome `Up/Down N bps Instant` names are categorized as per-asset `Up Bps` or `Down Bps` instead of `Other`.
+- Preserved existing category behavior for Skip, Middle, Binance, plain Up/Down, Maker, and Follow leader rows.
+- Added regression tests confirming all `300` fixed-outcome bps Instant variants split into six categories: BTC/ETH/SOL `Up Bps` and `Down Bps`, `50` strategies each.
+- Updated README to document the dedicated categories.
+Next: Redeploy/restart Dashboard to see the new category options; no database migration or service restart is required for the categorization itself.
+Notes: Verification passed: focused `StrategyDisplayCategoryTests` 7/7, Dashboard Verify build 0 warnings/errors, full test project 600/600, and `git diff --check` clean except existing LF/CRLF warnings. The focused test run surfaced existing nullable warnings in `PostgresAppRepository`; the later Dashboard build was clean.
+Blockers: None.
+
 ## Active Update 2026-06-04 Post Deploy Fixed Outcome Strategies Verification
 Goal: Verify production after deploying commit `e2576dc` with BTC/ETH/SOL fixed-outcome bps Instant strategies.
 Status: Completed

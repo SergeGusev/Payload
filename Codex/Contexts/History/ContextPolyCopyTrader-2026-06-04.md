@@ -123,3 +123,10 @@ Vylozhil, proveryay.
 
 Result:
 Checked production PostgreSQL read-only through `out\dbprobe` with host override `192.168.0.101` after deploy. `PolyCopyTrader.Service` is running in `Live` mode on deployed commit `e2576dc6bd7fcb46850d6266996b713ea204edac`, started `2026-06-04 11:37:14` database time, with fresh heartbeat at `11:42:14` and empty `last_error`. Confirmed all fixed-outcome BTC/ETH/SOL bps Instant rows were seeded: BTC/ETH/SOL each have `50` Up and `50` Down rows, all enabled and none live/paused/auto-paused. Existing Live strategies remained unchanged: BTC Middle 47 Instant, ETH Skip 7 Instant, ETH Skip 32 Instant, and SOL Skip 42 Instant are enabled/live/not paused. Since restart there were `254` Paper orders and `1` Live order, with `0` `api_errors` in the last 30 minutes. New fixed-outcome Paper activity appeared for BTC Up (`39` orders), ETH Up (`27`), and SOL Up (`19`); Down variants had zero entries on the current move and skipped on expected gates. No production writes, service changes, live submissions, or cancels were performed.
+
+## 2026-06-04T11:59:58.0365154Z
+Request:
+Перенеси вновь созданные стратегии в отдельные категории
+
+Result:
+Moved Dashboard category parsing into a shared domain helper and changed the fixed-outcome `Up/Down N bps Instant` strategy names so they appear under dedicated per-asset `Up Bps` and `Down Bps` categories instead of `Other`. Added regression tests verifying all `300` fixed-outcome bps Instant variants split into six categories (BTC/ETH/SOL Up/Down, `50` each) while existing Skip/Middle/Binance/plain Up/Down/Maker categories remain unchanged. Updated README. Verification passed: focused category tests 7/7, Dashboard Verify build 0 warnings/errors, full test project 600/600, and `git diff --check` clean except LF/CRLF warnings. No database, strategy seeding, or trading logic changed.

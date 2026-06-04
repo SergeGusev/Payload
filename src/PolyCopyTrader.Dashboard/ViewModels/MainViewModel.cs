@@ -22,8 +22,6 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
     private const decimal BigRoiThresholdPct = 10m;
     private const int BigSettlesThreshold = 100;
     private static readonly StrategyOrderFilterOption AllOrderStrategiesOption = new(null, AllOrderStrategies);
-    private static readonly string[] UpDownAssetSymbols = ["BTC", "ETH", "SOL"];
-    private static readonly string[] BtcUpDownIntervals = ["5m", "15m", "1h", "4h"];
 
     private DashboardRuntime runtime = null!;
     private DashboardDataService dataService = null!;
@@ -1286,7 +1284,7 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         var categories = allStrategies
             .Select(item => item.Name)
             .Concat(allStrategyRecentPerformance.Select(item => item.Name))
-            .Select(GetStrategyCategory)
+            .Select(StrategyDisplayCategories.GetCategory)
             .Where(item => !string.IsNullOrWhiteSpace(item))
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .OrderBy(item => item, StringComparer.OrdinalIgnoreCase)
@@ -1491,7 +1489,7 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
     {
         return string.IsNullOrWhiteSpace(selectedCategory) ||
             string.Equals(selectedCategory, AllStrategyCategories, StringComparison.OrdinalIgnoreCase) ||
-            string.Equals(GetStrategyCategory(strategyName), selectedCategory, StringComparison.OrdinalIgnoreCase);
+            string.Equals(StrategyDisplayCategories.GetCategory(strategyName), selectedCategory, StringComparison.OrdinalIgnoreCase);
     }
 
     private static bool IsStrategyPositiveVisible(StrategyPerformanceRow strategy, bool onlyPositive)
@@ -1553,108 +1551,6 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         bool onlyBigSettles)
     {
         return !onlyBigSettles || strategy.SettledRunsCount > BigSettlesThreshold;
-    }
-
-    private static string GetStrategyCategory(string strategyName)
-    {
-        var name = strategyName.Trim();
-        var upDownPrefix = UpDownAssetSymbols
-            .Select(asset => asset + " Up or Down ")
-            .FirstOrDefault(prefix => name.StartsWith(prefix, StringComparison.OrdinalIgnoreCase));
-        if (string.IsNullOrWhiteSpace(upDownPrefix))
-        {
-            return "Other";
-        }
-
-        var btcSuffix = name.Substring(upDownPrefix.Length).Trim();
-        var interval = BtcUpDownIntervals.FirstOrDefault(candidate =>
-            btcSuffix.Equals(candidate, StringComparison.OrdinalIgnoreCase) ||
-            btcSuffix.StartsWith(candidate + " ", StringComparison.OrdinalIgnoreCase));
-        if (string.IsNullOrWhiteSpace(interval))
-        {
-            return "Other";
-        }
-
-        var categoryPrefix = upDownPrefix + interval + " ";
-        var suffix = btcSuffix.Substring(interval.Length).Trim();
-        if (StartsWithStrategyWord(suffix, "PreOpen"))
-        {
-            var parts = suffix.Split(new[] { ' ' }, StringSplitOptions.RemoveEmptyEntries);
-            if (parts.Length >= 2 &&
-                (string.Equals(parts[1], "Half", StringComparison.OrdinalIgnoreCase) ||
-                    string.Equals(parts[1], "Full", StringComparison.OrdinalIgnoreCase)))
-            {
-                return categoryPrefix + "PreOpen " + parts[1];
-            }
-
-            return categoryPrefix + "PreOpen";
-        }
-
-        if (!string.Equals(interval, "5m", StringComparison.OrdinalIgnoreCase))
-        {
-            return categoryPrefix + "Other";
-        }
-
-        if (StartsWithStrategyWord(suffix, "More"))
-        {
-            return ContainsStrategyWord(suffix, "Gamma")
-                ? categoryPrefix + "More Gamma"
-                : categoryPrefix + "More";
-        }
-
-        if (StartsWithStrategyWord(suffix, "Less"))
-        {
-            return ContainsStrategyWord(suffix, "Gamma")
-                ? categoryPrefix + "Less Gamma"
-                : categoryPrefix + "Less";
-        }
-
-        if (StartsWithStrategyWord(suffix, "Binance"))
-        {
-            return categoryPrefix + "Binance";
-        }
-
-        if (StartsWithStrategyWord(suffix, "Middle"))
-        {
-            return ContainsStrategyWord(suffix, "Revert")
-                ? categoryPrefix + "Middle Revert"
-                : categoryPrefix + "Middle";
-        }
-
-        if (StartsWithStrategyWord(suffix, "Skip"))
-        {
-            return categoryPrefix + "Skip";
-        }
-
-        if (ContainsStrategyWord(suffix, "Countertrend"))
-        {
-            return categoryPrefix + "Countertrend";
-        }
-
-        if (StartsWithStrategyWord(suffix, "Up"))
-        {
-            return categoryPrefix + "Other";
-        }
-
-        if (StartsWithStrategyWord(suffix, "Down"))
-        {
-            return categoryPrefix + "Other";
-        }
-
-        return categoryPrefix + "Other";
-    }
-
-    private static bool StartsWithStrategyWord(string value, string word)
-    {
-        return value.Equals(word, StringComparison.OrdinalIgnoreCase) ||
-            value.StartsWith(word + " ", StringComparison.OrdinalIgnoreCase);
-    }
-
-    private static bool ContainsStrategyWord(string value, string word)
-    {
-        return value
-            .Split(new[] { ' ' }, StringSplitOptions.RemoveEmptyEntries)
-            .Any(item => string.Equals(item, word, StringComparison.OrdinalIgnoreCase));
     }
 
     private static void Replace<T>(ObservableCollection<T> target, IReadOnlyList<T> source)
