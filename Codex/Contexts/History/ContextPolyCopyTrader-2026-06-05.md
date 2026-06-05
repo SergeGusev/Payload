@@ -85,3 +85,10 @@ Request:
 
 Result:
 Cleared `auto_live_paused=false` in production PostgreSQL for the requested BTC/ETH/SOL fixed `Up/Down 50 bps Instant` strategies that still had Auto Live Pause active. One row, `SOL Up or Down 5m Down 50 bps Instant`, was already cleared before the update. Verified all six requested strategies now have `live_stakes=true`, `auto_live_paused=false`, `effective_live_stakes=true`, `paused=false`, and `live_stake_amount=1`; service heartbeat was fresh in `Live`/`Running` mode with `last_error=null`. The Auto Live Pause allowlist remains unchanged so future Live settlements can set the pause again if the rule triggers.
+
+## 2026-06-05T09:15:40.1497967Z
+Request:
+Поставь Auto Live Pause в True стратегиям BTC Up or Down 5m Up 50 bps Instant, ETH Up or Down 5m Up 50 bps Instant, SOL Up or Down 5m Up 50 bps Instant
+
+Result:
+Set `auto_live_paused=true` in production PostgreSQL for `btc_up_down_5m_up_bps_50_instant`, `eth_up_down_5m_up_bps_50_instant`, and `sol_up_down_5m_up_bps_50_instant`. Verified all three still have `live_stakes=true` but now have `effective_live_stakes=false`; the paired `Down 50 bps Instant` strategies remain `auto_live_paused=false` and `effective_live_stakes=true`. Service heartbeat was fresh in `Live`/`Running` mode with `last_error=null`.

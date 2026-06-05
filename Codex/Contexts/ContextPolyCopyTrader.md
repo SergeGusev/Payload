@@ -1,3 +1,15 @@
+## Active Update 2026-06-05 Pause Fixed Up 50 bps Live
+Goal: Set Auto Live Pause to true for BTC/ETH/SOL fixed `Up 50 bps Instant` strategies only.
+Status: Completed
+Done:
+- Updated production PostgreSQL rows for `btc_up_down_5m_up_bps_50_instant`, `eth_up_down_5m_up_bps_50_instant`, and `sol_up_down_5m_up_bps_50_instant` to `auto_live_paused=true`.
+- Left their manual `live_stakes=true` flags unchanged, so their current `effective_live_stakes=false` is caused only by Auto Live Pause.
+- Verified the paired `Down 50 bps Instant` strategies remain `auto_live_paused=false` and `effective_live_stakes=true`.
+- Verified `PolyCopyTrader.Service` heartbeat is fresh in `Live` mode with `status=Running` and `last_error=null`.
+Next: None.
+Notes: `git pull --ff-only` reported already up to date. DB update used `out\dbprobe` with host override `192.168.0.101` and did not print secrets. No source behavior changed and no code tests were needed. Existing unrelated untracked artifact/config files were left untouched.
+Blockers: None.
+
 ## Active Update 2026-06-05 Clear Fixed 50 bps Auto Live Pause
 Goal: Clear Auto Live Pause for the six BTC/ETH/SOL fixed `Up/Down 50 bps Instant` strategies so they can run Live again.
 Status: Completed
