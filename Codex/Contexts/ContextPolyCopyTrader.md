@@ -1,3 +1,17 @@
+## Active Update 2026-06-06 Auto Live Pause Disabled Runtime Check
+Goal: Verify current production state after disabling Auto Live Pause globally.
+Status: Completed
+Done:
+- Queried production PostgreSQL read-only through `out\dbprobe` with host override `192.168.0.101`; no production rows, strategy flags, source files, or configs were changed.
+- Confirmed production DB has `0` `auto_live_paused` rows and `0` rows with `auto_live_paused_at_utc` or `auto_live_pause_window_start_utc`.
+- Confirmed all six manually Live-enabled fixed `Up/Down 50 bps Instant` strategies are effective live: `live_stakes=true`, `auto_live_paused=false`, `effective_live_stakes=true`.
+- Confirmed `PolyCopyTrader.Service` is now running commit `d51a8f9` in Live mode, started at `2026-06-05T20:43:53Z`, heartbeat fresh at `2026-06-05T21:10:26Z`, and `last_error=null`.
+- Confirmed repository config has `LiveTrading:AutoLivePauseStrategies` as an empty list.
+- Observed one Live order after Auto Live Pause disablement: `BTC Up or Down 5m Down 50 bps Instant`, created `2026-06-05T20:51:37Z`, settled `2026-06-05T20:57:21Z`, realized PnL `-1.417800`, and Auto Live Pause remained disabled.
+Next: None.
+Notes: Read-only runtime diagnostic; no tests were run and no production rows were changed. Existing unrelated untracked artifact/config files were left untouched.
+Blockers: None.
+
 ## Active Update 2026-06-05 Disable Auto Live Pause Globally
 Goal: Clear all current Auto Live Pause state and disable automatic Auto Live Pause for every strategy.
 Status: Completed
