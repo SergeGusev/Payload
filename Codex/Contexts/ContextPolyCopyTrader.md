@@ -1,3 +1,17 @@
+## Active Update 2026-06-05 SOL Skip 42 Direction Analysis
+Goal: Analyze `SOL Up or Down 5m Skip 42 bps Instant` success/failure by selected `Up` versus `Down`, separately for ordinary Paper and current Live.
+Status: Completed
+Done:
+- Queried production PostgreSQL read-only through `out\dbprobe` with host override `192.168.0.101`; no production rows, service state, orders, cancels, strategy flags, source files, or configs were changed.
+- Confirmed `sol_up_down_5m_skip_bps_42_instant` is enabled, Live-enabled, not paused, not auto-Live-paused, with `live_enabled_at_utc = 2026-06-02T20:58:11Z`, Paper stake `$1`, Live stake `$1`, and Live balance about `$152.716691`.
+- Ordinary Paper, excluding `paper_live_shadow_test`, was positive on both directions: Down `82` settled / `46W` / `36L` / `+25.729800` / `9.4881%` ROI; Up `79` / `49W` / `30L` / `+64.109600` / `25.5233%` ROI.
+- Current Live after `live_enabled_at_utc` reversed strongly by direction: Down `45` settled / `24W` / `21L` / `+14.353504` / `9.8512%` ROI; Up `62` / `18W` / `44L` / `-61.636813` / `-34.9512%` ROI.
+- Live-mode Paper-shadow settled rows matched the current Live direction split and PnL exactly: Down `+14.353504`; Up `-61.636813`.
+- Current Live non-realized/zero-fill rows were Up `12` (`11` PreflightRejected, `1` CancelFailed) versus Down `7` (`6` PreflightRejected, `1` ServiceUnavailable rejected), so zero-fill did not explain the realized Up drawdown.
+Next: Treat SOL Skip 42 as another candidate for temporary/probationary `Up` suppression in Live, but note that ordinary Paper historically favored `Up`; any change should be explicitly requested and monitored as a Live-regime guard.
+Notes: Diagnostic only. No source builds/tests were run because no code changed. `git pull --ff-only` reported already up to date. Existing unrelated untracked artifact/config files were left untouched.
+Blockers: None.
+
 ## Active Update 2026-06-05 Temporary ETH Skip Up Guard
 Goal: Temporarily skip `Up` entries for all ETH Skip strategies in both Paper and Live/Paper-shadow modes.
 Status: Completed

@@ -46,3 +46,10 @@ Request:
 
 Result:
 Added a temporary ETH Skip guard in `BtcUpDown5mPaperStrategyProcessor` that rejects selected `Up` entries for ETH `Skip`, `Skip bps`, and `Skip bps Instant` before Paper, Live-shadow, or Live order creation with skip reason `eth_skip_up_direction_temporarily_disabled`. Added/updated strategy processor tests for Paper skip, Live skip before order placement, and allowed Down Live-shadow behavior. Updated README, configuration reference, project memory, active context, and ran targeted tests plus full `dotnet test` successfully.
+
+## 2026-06-05T08:06:18.4120969Z
+Request:
+Сделай аналогичный анализ по Up и Down для стратегии SOL Up or Down 5m Skip 42 bps Instant
+
+Result:
+Queried production PostgreSQL read-only for `SOL Up or Down 5m Skip 42 bps Instant` by selected direction. Ordinary Paper excluding Paper/Live-shadow was profitable on both sides, with `Up` better: Down `82` settled / `46W` / `36L` / `+25.729800` / `9.4881%` ROI, Up `79` / `49W` / `30L` / `+64.109600` / `25.5233%` ROI. Current Live after `2026-06-02T20:58:11Z` reversed sharply: Down `45` / `24W` / `21L` / `+14.353504` / `9.8512%` ROI, Up `62` / `18W` / `44L` / `-61.636813` / `-34.9512%` ROI. Live-mode Paper-shadow matched the Live settled split, and zero-fill counts did not explain the Up drawdown.
