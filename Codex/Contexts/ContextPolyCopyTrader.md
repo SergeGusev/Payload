@@ -1,3 +1,18 @@
+## Active Update 2026-06-05 ETH Skip Live Drawdown Explanation
+Goal: Explain why ETH Skip 7/9/32 collapsed after Live despite strong pre-Live Paper performance.
+Status: Completed
+Done:
+- Queried production PostgreSQL read-only through `out\dbprobe` with host override `192.168.0.101`; no production rows, service state, orders, cancels, or strategy flags were changed.
+- Confirmed all three strategies are enabled/live/not paused: Skip 7 live since `2026-06-03 13:42:17 UTC`, Skip 32 since `2026-06-03 18:44:39 UTC`, and Skip 9 since `2026-06-04 19:15:42 UTC`; service heartbeat was fresh and `last_error` empty.
+- Compared pre-Live Paper to the overnight window `2026-06-04 18:26:49 UTC` through `2026-06-05 06:43:40 UTC`. Pre-Live settled PnL was positive: Skip 7 `+206.029021` / `4.5997%`, Skip 9 `+224.540100` / `5.0778%`, Skip 32 `+154.429500` / `18.1977%`.
+- Overnight settled PnL was sharply negative: Skip 7 `75` settled / `28W` / `47L` / `-31.216504` / `-14.7333%`; Skip 9 `76` / `29W` / `47L` / `-31.301648` / `-14.5635%`; Skip 32 `35` / `11W` / `24L` / `-40.348812` / `-36.9837%`.
+- All ETH Skip Instant variants also broadly failed overnight: among `48` variants with at least `20` settled rows, only `3` were positive and `45` were negative; average PnL was about `-25.8083`.
+- Confirmed the three strategies are highly correlated, not independent: Skip 7 and Skip 9 had `72` common settled markets overnight, with `45` both losing and `27` both winning; all three lost together on `23` common markets and won together on `11`.
+- Live execution/zero-fill contributed missed wins but did not cause the main collapse: zero-fill counterfactuals were Skip 7 `+6.2688`, Skip 9 `+6.2564`, and Skip 32 `+4.1193` on known outcomes, far smaller than the matched/settled losses.
+Next: Treat these ETH Skip variants as a correlated strategy family and add probation/auto-disable gates based on post-enable live-shadow PnL, fill/error rate, and family-level exposure rather than enabling several nearby variants at once.
+Notes: Diagnostic only. No source builds/tests were run because no code changed. Counterfactual PnL assumes full fill at intended limit price/size and is not proof the orders would actually have filled.
+Blockers: None.
+
 ## Active Update 2026-06-05 ETH Skip 7 Live Errors 12h
 Goal: Inspect `ETH Up or Down 5m Skip 7 bps Instant` Live orders from the last 12 hours and classify Internal Error outcomes.
 Status: Completed
