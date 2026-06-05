@@ -1,3 +1,15 @@
+## Active Update 2026-06-05 Codex CLI Global Install
+Goal: Install the OpenAI Codex CLI globally with npm.
+Status: Completed
+Done:
+- Ran `git pull --ff-only`; repository was already up to date.
+- Ran `npm install -g @openai/codex`; npm changed 2 global packages.
+- Verified `codex --version` reports `codex-cli 0.137.0`.
+- Verified `npm list -g @openai/codex --depth=0` reports `@openai/codex@0.137.0` under `C:\Users\serge\AppData\Roaming\npm`.
+Next: None
+Notes: npm emitted a cleanup warning because one old temporary Codex executable path was locked and could not be removed. No project source changed and no project tests were required for this global tool install.
+Blockers: None.
+
 ## Active Update 2026-06-04 ETH Skip 7 Live Rejection Breakdown
 Goal: Break down `PreflightRejected` and related Live-shadow failure reasons for `ETH Up or Down 5m Skip 7 bps Instant`.
 Status: Completed
