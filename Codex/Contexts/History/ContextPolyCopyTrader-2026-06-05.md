@@ -106,3 +106,10 @@ Request:
 
 Result:
 Checked the Auto Live Pause resume path read-only. The strategy is allowlisted and service is `Live`/`Running`; `eth_up_down_5m_up_bps_50_instant` currently has `live_stakes=true`, `auto_live_paused=true`, and `effective_live_stakes=false`. The code clears Auto Live Pause only after a Paper settlement when the settled Paper PnL over the full last 12 hours is positive. There was one Paper settlement after the manual pause timestamp, at `2026-06-05T10:19:12Z`, with Paper PnL `+2.779800`, but the full 12-hour Paper window had `10` settled rows and total PnL `-3.237400`, so the resume condition was not met. No Live orders for this strategy were found in the last 12 hours. No production rows or source files were changed.
+
+## 2026-06-05T18:10:38.6142263Z
+Request:
+Расскажи, по какой логике мы снимаем галочку Auto Live Pause
+
+Result:
+Explained the current Auto Live Pause policy from source code. Auto Live Pause is allowlist-only through `LiveTrading:AutoLivePauseStrategies`; `EffectiveLiveStakes = LiveStakes && !AutoLivePaused`. The service sets `auto_live_paused=true` only after Live settlements when the strategy's settled Live PnL over the last 12 hours is negative and settled Live count is greater than `1`. The service clears `auto_live_paused=false` only after Paper settlements when the strategy's settled Paper PnL over the last 12 hours is positive and settled Paper count is greater than `0`. Live settlements never clear the flag, and Paper settlements never set it. No production rows or source files were changed.

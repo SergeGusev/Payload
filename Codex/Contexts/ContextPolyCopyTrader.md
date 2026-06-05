@@ -1,3 +1,18 @@
+## Active Update 2026-06-05 Auto Live Pause Logic Explanation
+Goal: Explain the exact logic used to set and clear the Auto Live Pause flag.
+Status: Completed
+Done:
+- Confirmed `EffectiveLiveStakes` is computed as `LiveStakes && !AutoLivePaused`, so Auto Live Pause suppresses Live placement without clearing the manual Live flag.
+- Confirmed Auto Live Pause is opt-in through `LiveTrading:AutoLivePauseStrategies`; strategies outside the allowlist skip automatic pause/resume updates, and startup clears stale `auto_live_paused=true` outside the allowlist.
+- Confirmed the service uses a 12-hour lookback for both directions.
+- Confirmed Live settlements call `UpdateStrategyAutoLivePauseFromRecentPnlAsync` in `PauseFromLiveSettlements` mode: if the strategy's 12-hour settled Live PnL is negative and settled Live count is greater than `1`, `auto_live_paused=true`.
+- Confirmed Live settlements do not clear Auto Live Pause when Live PnL becomes positive.
+- Confirmed Paper settlements call the same repository method in `ResumeFromPaperSettlements` mode: if the strategy's 12-hour settled Paper PnL is positive and settled Paper count is greater than `0`, `auto_live_paused=false`.
+- Confirmed Paper settlements do not set Auto Live Pause when Paper PnL becomes negative.
+Next: None.
+Notes: `git pull --ff-only` reported already up to date. Explanation was based on current source inspection only; no production rows, source files, or configs were changed. No code tests were needed. Existing unrelated untracked artifact/config files were left untouched.
+Blockers: None.
+
 ## Active Update 2026-06-05 ETH Up 50 Auto Live Pause Resume Check
 Goal: Explain why `ETH Up or Down 5m Up 50 bps Instant` did not clear Auto Live Pause automatically.
 Status: Completed
