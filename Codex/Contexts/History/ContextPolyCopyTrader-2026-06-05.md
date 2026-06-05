@@ -127,3 +127,10 @@ Request:
 
 Result:
 Checked production PostgreSQL read-only. The strategy currently has `live_stakes=true`, `auto_live_paused=false`, `effective_live_stakes=true`, and `updated_at_utc=2026-06-05T18:36:55Z`. It likely did enter Auto Live Pause after the `2026-06-05T18:35:58Z` Live settlement because 12-hour Live evidence was `6` settled rows, `4L/2W`, total Live PnL `-3.785200`, which satisfies the Live pause rule. It was then cleared by the Paper resume rule at `2026-06-05T18:36:55Z`: 12-hour Paper evidence had `12` settled rows and total Paper PnL `+10.505400`, matching the strategy row update time. The running service still reports version `1.0.0+6a0de7e`, so it has not picked up the newer last-12-Paper commit yet; however, the newest 12 Paper settlements are also positive, so the new rule would clear it too. No production rows or source files were changed.
+
+## 2026-06-05T18:57:33.0481961Z
+Request:
+Как нам сделать так, чтобы логика установки Auto Live Pause и логика её снятия не противоречили друг другу?
+
+Result:
+Explained that the remaining contradiction is caused by independent evidence windows: Live settlements can set Auto Live Pause from recent Live losses, while Paper settlements can clear it from Paper wins that are not tied to the pause moment. Recommended turning Auto Live Pause into a small state machine with persisted pause metadata such as `auto_live_paused_at_utc`, reason, source, and evidence; resume should consider only Paper settlements after the pause timestamp, require at least 12 post-pause Paper settlements and positive aggregate PnL, and optionally enforce a cooldown or ROI buffer. No production rows or source behavior were changed.

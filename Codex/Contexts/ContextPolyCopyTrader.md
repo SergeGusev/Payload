@@ -1,3 +1,16 @@
+## Active Update 2026-06-05 Auto Live Pause State Machine Recommendation
+Goal: Define how Auto Live Pause set and clear rules should avoid contradicting each other.
+Status: Completed
+Done:
+- Reviewed the current source-backed policy: Live settlements can set `auto_live_paused=true` from negative 12-hour Live PnL, while Paper settlements can clear it from the most recent 12 settled Paper rows with positive aggregate PnL.
+- Identified the remaining contradiction: Paper resume evidence is not tied to the moment Auto Live Pause was set, so older or overlapping Paper wins can clear a fresh Live-loss pause almost immediately.
+- Recommended converting Auto Live Pause into a small state machine with persisted pause metadata, especially `auto_live_paused_at_utc` and pause reason/evidence, instead of treating set and clear as independent aggregate checks.
+- Recommended that resume evidence use only Paper settlements after `auto_live_paused_at_utc`, require at least 12 post-pause Paper settlements, require positive aggregate PnL, and optionally enforce a minimum cooldown or minimum ROI buffer.
+- Recommended keeping the pause rule faster/stricter on Live loss and the clear rule slower on post-pause Paper recovery, so Live risk protection wins until new Paper evidence proves the strategy recovered.
+Next: If requested, implement the state-machine schema and repository update so resume checks are post-pause-only.
+Notes: No production rows or strategy flags were changed. No source code was changed for this design-only task. Existing unrelated untracked artifact/config files were left untouched.
+Blockers: None.
+
 ## Active Update 2026-06-05 BTC Up 50 Auto Live Pause Investigation
 Goal: Explain why `BTC Up or Down 5m Up 50 bps Instant` is not currently in Auto Live Pause.
 Status: Completed
