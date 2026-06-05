@@ -155,3 +155,10 @@ Request:
 
 Result:
 Implemented anchored Auto Live Pause resume. Added nullable `strategies.auto_live_paused_at_utc` and `strategies.auto_live_pause_window_start_utc`, stores them when Live-loss Auto Live Pause is set, and clears them when the automatic pause is cleared. Paper resume now evaluates all settled Paper rows from the stored Live-loss window start through the current settlement, clears only when that anchored Paper PnL is positive, and requires at least one Paper settlement after `auto_live_paused_at_utc`; the previous last-12-Paper-settlements requirement was removed. Updated `StrategyRuntimeSettings`, PostgreSQL schema/repository SQL, test repository, storage tests, README, and configuration reference. Targeted Auto Live Pause tests passed 13/13, full test project passed 604/604, and `git diff --check` passed with LF/CRLF warnings only.
+
+## 2026-06-05T19:52:09.2103560Z
+Request:
+А BTC Up or Down 5m Up 50 bps Instant не должен убежать в Auto live pause ?
+
+Result:
+Checked production PostgreSQL read-only. The schema and service are now on the anchored Auto Live Pause implementation (`4cf5681`, service started `2026-06-05T19:33:28Z`). `btc_up_down_5m_up_bps_50_instant` currently has `live_stakes=true`, `auto_live_paused=false`, `effective_live_stakes=true`, and null pause anchors. Latest Live settlement evidence still satisfies the pause condition: latest Live settlement `2026-06-05T18:35:58Z`, 12-hour Live window `6` settled / `2W` / `4L` / `-3.785200`. That settlement occurred before the new service start, so the new service did not replay the pause check. If the latest Live settlement had set Auto Live Pause, the anchored Paper resume would also have cleared it after the `2026-06-05T18:36:55Z` Paper settlement: Paper from `2026-06-05T06:35:58Z` had `12` settled rows, `1` post-pause row, and `+10.505400` PnL. No production rows or source files were changed.

@@ -1,3 +1,18 @@
+## Active Update 2026-06-05 BTC Up 50 Anchored Auto Pause Check
+Goal: Check whether `BTC Up or Down 5m Up 50 bps Instant` should currently be in Auto Live Pause.
+Status: Completed
+Done:
+- Queried production PostgreSQL read-only through `out\dbprobe` with host override `192.168.0.101`; no production rows, strategy flags, source files, or configs were changed.
+- Verified production schema now has `auto_live_paused_at_utc` and `auto_live_pause_window_start_utc`, and migration `20260605_backfill_auto_live_pause_anchors` applied at `2026-06-05T19:33:28Z`.
+- Verified `PolyCopyTrader.Service` is running commit `4cf5681` in Live mode, started at `2026-06-05T19:33:28Z`, heartbeat fresh, `last_error=null`.
+- Verified `btc_up_down_5m_up_bps_50_instant` is currently `live_stakes=true`, `auto_live_paused=false`, `effective_live_stakes=true`, with both pause anchor columns null.
+- Found latest settled Live window still satisfies the pause condition: latest Live settlement `2026-06-05T18:35:58Z`, 12-hour Live evidence `6` settled / `2W` / `4L` / `-3.785200`.
+- Noted that this Live settlement happened before the new `4cf5681` service start, so the new service did not replay that settlement-triggered pause update.
+- Evaluated the anchored Paper resume that would have followed if the latest Live settlement had set Auto Live Pause: Paper evidence from `2026-06-05T06:35:58Z` through now has `12` settled rows, `1` post-pause row, and `+10.505400` PnL, so the new resume rule would have cleared the pause after the `2026-06-05T18:36:55Z` Paper settlement.
+Next: If the strategy should be suppressed immediately despite anchored Paper resume being positive, manually set `auto_live_paused=true` or tighten the policy; otherwise let the next Live settlement trigger the automatic pause check.
+Notes: Existing unrelated untracked artifact/config files were left untouched. No code tests were run because this was read-only DB diagnostics.
+Blockers: None.
+
 ## Active Update 2026-06-05 Anchored Auto Live Pause Resume Implementation
 Goal: Implement Auto Live Pause resume using the same 12-hour anchor window that caused the Live pause.
 Status: Completed
