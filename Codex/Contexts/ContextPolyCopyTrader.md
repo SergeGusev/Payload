@@ -1,3 +1,19 @@
+## Active Update 2026-06-05 ETH Skip Direction Correlation
+Goal: Analyze ETH Skip 7/9/32 success/failure correlation by selected direction `Up` versus `Down`, separately for ordinary Paper and current Live.
+Status: Completed
+Done:
+- Queried production PostgreSQL read-only through `out\dbprobe` with host override `192.168.0.101`; no production rows, service state, orders, cancels, strategy flags, source files, or configs were changed.
+- Defined ordinary Paper as settled `strategy_market_paper_runs` linked to `paper_orders` where `execution_source <> 'paper_live_shadow_test'`; defined current Live as `live_orders` with `realized_pnl_usd IS NOT NULL` and `created_at_utc >= strategies.live_enabled_at_utc`.
+- Ordinary Paper direction split was positive on both sides, with `Up` slightly/clearly better: Skip 7 Down `598` settled / `308W` / `290L` / `+46.147500` / `2.3771%` ROI, Up `602` / `330W` / `272L` / `+174.635700` / `8.8508%`; Skip 9 Down `655` / `346W` / `309L` / `+88.390200` / `4.1333%`, Up `697` / `372W` / `325L` / `+136.149900` / `5.9623%`; Skip 32 Down `146` / `83W` / `63L` / `+75.013000` / `14.9629%`, Up `144` / `84W` / `60L` / `+80.196500` / `16.0280%`.
+- Current Live direction split reversed: Skip 7 Down `101` settled / `52W` / `49L` / `+25.998215` / `8.3353%`, Up `116` / `46W` / `70L` / `-47.997358` / `-14.1134%`; Skip 9 Down `35` / `17W` / `18L` / `+11.613398` / `12.0952%`, Up `36` / `9W` / `27L` / `-52.910746` / `-48.6130%`; Skip 32 Down `31` / `15W` / `16L` / `-3.741000` / `-3.7723%`, Up `40` / `13W` / `27L` / `-38.280612` / `-32.1630%`.
+- Pairwise common settled markets had perfect same-direction/same-result correlation in both ordinary Paper and current Live: for pairs `7-9`, `7-32`, and `9-32`, all common rows were `Down/Down` or `Up/Up`, `mixed = 0`, same-result `100%`, and `corr(win flags) = 1.0000`.
+- Ordinary Paper all-three overlap: `102` common Down markets had `56` all-win / `46` all-loss, and `86` common Up markets had `50` all-win / `36` all-loss; all three chose the same direction and there were no mixed outcomes.
+- Current Live all-three overlap: `16` common Down markets had `6` all-win / `10` all-loss with about `-10.64` PnL per strategy; `18` common Up markets had `5` all-win / `13` all-loss with about `-27.8` PnL per strategy; all three chose the same direction and there were no mixed outcomes.
+- Current Live non-realized/zero-fill counts were also somewhat worse on `Up`: Skip 7 Up `15` zero-fill vs Down `11`; Skip 9 Up `9` vs Down `4`; Skip 32 Up `5` vs Down `3`.
+Next: Treat these three ETH Skip variants as one correlated family; if a direction filter is considered, test disabling or reducing Live `Up` entries first in Paper/live-shadow analysis before changing production behavior.
+Notes: Diagnostic only. No source builds/tests were run because no code changed. Live rows before the current `live_enabled_at_utc` were excluded from the current Live direction tables to avoid mixing prior activation history.
+Blockers: None.
+
 ## Active Update 2026-06-05 Up Down Bps 100 Range Evaluation
 Goal: Evaluate whether fixed `Up bps` and `Down bps` strategies should expand from `1..50` to `1..100` without changing implementation.
 Status: Completed
