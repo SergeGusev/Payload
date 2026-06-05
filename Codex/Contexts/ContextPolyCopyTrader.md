@@ -1,3 +1,18 @@
+## Active Update 2026-06-05 ETH Skip Time Of Day Statistics
+Goal: Check whether ETH Skip 7/9/32 success/failure correlates with time of day.
+Status: Completed
+Done:
+- Queried production PostgreSQL read-only through `out\dbprobe` with host override `192.168.0.101`; no production rows, service state, orders, cancels, or strategy flags were changed.
+- Grouped settled `strategy_market_paper_runs` for Skip 7/9/32 by `entered_at_utc` converted to `Europe/Sofia` local time.
+- Pre-Live combined data did not support "night is bad/day is good": local `00-07` had `951` settled / `526W` / `425L` / `+300.828943` / `9.6748%` ROI; `08-19` had `1520` / `803W` / `717L` / `+236.867564` / `4.7706%`; `20-23` had `522` / `268W` / `254L` / `+47.302114` / `2.8236%`.
+- Pre-Live strongest combined local hours were `03` (`+131.235883`, `30.9224%` ROI), `12` (`+97.821700`, `27.2318%`), `05` (`+89.834090`, `24.2765%`), `20` (`+56.529691`, `12.4728%`), and `14` (`+50.500920`, `13.5052%`).
+- Pre-Live weakest combined local hours were `09` (`-42.611896`, `-10.0770%` ROI), `19` (`-39.141300`, `-7.7455%`), `22` (`-36.597440`, `-9.0409%`), and `06` (`-21.983110`, `-5.5952%`).
+- By individual strategy, Skip 7/9 shared similar weak hours around `09`, `19`, `22`, and `06`; Skip 32 had less pre-Live hourly sample and a different profile, with weak local `04`/`13` and strong `16`/`17`/`18`/`05`.
+- Post-Live sample remained too small and was dominated by the recent drawdown: combined post-Live `00-07` was `-30.733415`, `08-19` was `-53.266842`, and `20-23` was `-26.657846`.
+Next: Consider adding a configurable trading-session filter/probation report, but do not disable all nights; if filtering is used, first test excluding weak local hours `06`, `09`, `19`, and `22` on pre-Live data and validate out-of-sample.
+Notes: Diagnostic only. No source builds/tests were run because no code changed. Time buckets are Europe/Sofia local time; settled rows only.
+Blockers: None.
+
 ## Active Update 2026-06-05 ETH Skip Live Drawdown Explanation
 Goal: Explain why ETH Skip 7/9/32 collapsed after Live despite strong pre-Live Paper performance.
 Status: Completed
