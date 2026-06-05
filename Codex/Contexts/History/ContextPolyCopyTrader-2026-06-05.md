@@ -141,3 +141,10 @@ Request:
 
 Result:
 Assessed the alternative Paper resume window of all settlements from `auto_live_paused_at_utc - 12h`. Concluded it should not be the sole clear condition because it still includes pre-pause Paper evidence, so old Paper wins can cancel a fresh Live-loss pause. Recommended using that broader window only as diagnostic context or as an additional weak condition, while the hard resume condition should require positive post-pause Paper evidence with enough post-pause settlements or elapsed markets. No production rows or source behavior were changed.
+
+## 2026-06-05T19:07:17.0601967Z
+Request:
+Но ведь мы уходим в Auto live pause считая странзакции с настоящего времени минут 12 часов (пусть это будет время X). Не логично ли будет и выходить из этой паузы с учётом всех транзакций начиная с времени X ? Просто если мы будем набирать 12 транзакций с текущего момента, это может занять неделю.
+
+Result:
+Refined the recommendation: if Auto Live Pause is set from a Live-loss window starting at `X = pause_time - 12h`, then Paper resume can logically use the same anchored window from `X` rather than requiring 12 fully post-pause Paper transactions. Recommended storing both `auto_live_paused_at_utc` and `auto_live_pause_window_start_utc`, then clearing only when aggregate Paper PnL from the stored `X` through the current Paper settlement is positive, with enough Paper rows and at least one fresh Paper settlement after `auto_live_paused_at_utc` so the flag is not cleared from purely stale pre-pause evidence. No production rows or source behavior were changed.

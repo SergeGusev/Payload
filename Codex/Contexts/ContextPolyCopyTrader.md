@@ -1,3 +1,16 @@
+## Active Update 2026-06-05 Auto Live Pause Anchored Resume Policy
+Goal: Refine Auto Live Pause resume logic around the same 12-hour anchor that caused the Live pause.
+Status: Completed
+Done:
+- Reassessed the user's proposal that if Live pause is triggered from a window starting at `X = pause_time - 12h`, Paper resume should evaluate Paper settlements starting from the same `X`.
+- Concluded this is a more practical policy than requiring 12 entirely post-pause Paper settlements, because some strategies may take days or a week to collect that many post-pause rows.
+- Recommended storing both `auto_live_paused_at_utc` and `auto_live_pause_window_start_utc`; the latter is the anchor `X` used by the Live-loss decision.
+- Recommended clearing Auto Live Pause from Paper only when the aggregate Paper PnL from `auto_live_pause_window_start_utc` through the current Paper settlement is positive, with enough Paper rows for evidence, and at least one fresh Paper settlement after `auto_live_paused_at_utc` to avoid clearing from purely stale pre-pause evidence.
+- Suggested not requiring exactly 12 post-pause Paper transactions; use a smaller new-evidence gate after pause while the main aggregate uses the anchored window from `X`.
+Next: If requested, implement the schema-backed anchored policy in storage, tests, README, and configuration reference.
+Notes: No production rows or source behavior were changed. Existing unrelated untracked artifact/config files were left untouched.
+Blockers: None.
+
 ## Active Update 2026-06-05 Auto Live Pause Pre Pause Window Assessment
 Goal: Assess whether Paper resume should use all Paper transactions from `auto_live_paused_at_utc - 12h`.
 Status: Completed
