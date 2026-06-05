@@ -738,8 +738,12 @@ Paper/Live-shadow path when their Dashboard `Live` flag is enabled and normal
 live gates pass.
 Temporary ETH Skip guard: if an ETH `Skip`, `Skip bps`, or `Skip bps Instant`
 row selects countertrend `Up`, the run is skipped before Paper, Live-shadow, or
-Live order creation with `eth_skip_up_direction_temporarily_disabled`. SOL Skip
-rows and fixed ETH `Up/Down bps Instant` rows are not affected by this guard.
+Live order creation with `eth_skip_up_direction_temporarily_disabled`. Temporary
+SOL Skip 42 guard: if `SOL Up or Down 5m Skip 42 bps Instant` selects
+countertrend `Up`, the run is skipped before Paper, Live-shadow, or Live order
+creation with `sol_skip_42_up_direction_temporarily_disabled`. Other SOL Skip
+rows and fixed ETH/SOL `Up/Down bps Instant` rows are not affected by these
+guards.
 `Middle`,
 `Middle Revert`, `Skip`, and `Skip Revert` create pending Paper BUY orders as
 ordinary GTD limit orders. Their limit

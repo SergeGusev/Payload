@@ -1,3 +1,16 @@
+## Active Update 2026-06-05 Temporary SOL Skip 42 Up Guard
+Goal: Temporarily skip `Up` entries for `SOL Up or Down 5m Skip 42 bps Instant` in both Paper and Live/Paper-shadow modes.
+Status: Completed
+Done:
+- Extended the temporary opening-decision guard in `BtcUpDown5mPaperStrategyProcessor` so `sol_up_down_5m_skip_bps_42_instant` rejects selected `Up` entries with `sol_skip_42_up_direction_temporarily_disabled`.
+- Kept the existing ETH Skip `Up` guard and its `eth_skip_up_direction_temporarily_disabled` reason unchanged.
+- The SOL 42 guard runs before selected outcome resolution, Paper order creation, Live-shadow creation, or Live order placement; selected `Down` remains allowed.
+- Updated tests so SOL 42 `Up` Live/Paper-shadow skips before orders and SOL 42 `Down` still creates the expected Paper-shadow/Live GTD order.
+- Updated README, configuration reference, and project memory to document the temporary SOL 42 guard.
+Next: Monitor SOL 42 Down-only behavior; remove or replace the temporary guard after enough Live/Paper evidence shows whether Up can be re-enabled safely.
+Notes: `git pull --ff-only` reported already up to date. Targeted ETH/SOL guard test filter passed 4/4. Full `dotnet test tests/PolyCopyTrader.Tests/PolyCopyTrader.Tests.csproj` passed 603/603. `git diff --check` passed. Existing unrelated untracked artifact/config files were left untouched.
+Blockers: None.
+
 ## Active Update 2026-06-05 SOL Skip 42 Direction Analysis
 Goal: Analyze `SOL Up or Down 5m Skip 42 bps Instant` success/failure by selected `Up` versus `Down`, separately for ordinary Paper and current Live.
 Status: Completed

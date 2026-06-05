@@ -42,7 +42,11 @@ Recent runtime note:
   temporarily skipped in both Paper and Live/Paper-shadow paths before order
   creation with skip reason `eth_skip_up_direction_temporarily_disabled`.
   This guard applies only to ETH `Skip`, `Skip bps`, and `Skip bps Instant`
-  rows; SOL Skip and fixed ETH `Up/Down bps Instant` rows keep their normal
+  rows.
+- `SOL Up or Down 5m Skip 42 bps Instant` also temporarily skips selected
+  `Up` entries in both Paper and Live/Paper-shadow paths before order creation
+  with skip reason `sol_skip_42_up_direction_temporarily_disabled`. Other SOL
+  Skip rows and fixed ETH/SOL `Up/Down bps Instant` rows keep their normal
   behavior.
 
 Latest verified code state on 2026-04-30:
