@@ -1,3 +1,17 @@
+## Active Update 2026-06-05 ETH Up 50 Auto Live Pause Resume Check
+Goal: Explain why `ETH Up or Down 5m Up 50 bps Instant` did not clear Auto Live Pause automatically.
+Status: Completed
+Done:
+- Verified `PolyCopyTrader.Service` is `Live`/`Running`, heartbeat fresh at `2026-06-05T10:44:06Z`, and `last_error=null`.
+- Verified `eth_up_down_5m_up_bps_50_instant` currently has `live_stakes=true`, `auto_live_paused=true`, `effective_live_stakes=false`, `paused=false`, and `updated_at_utc=2026-06-05T10:19:12Z`.
+- Confirmed the resume rule in code clears Auto Live Pause only after a Paper settlement when the strategy's settled Paper PnL over the last 12 hours is positive and settled count is greater than zero.
+- Computed the current 12-hour Paper resume window for the strategy: `10` settled rows, total Paper PnL `-3.237400`, first settled `2026-06-04T23:32:06Z`, last settled `2026-06-05T10:19:12Z`.
+- Confirmed there was one Paper settlement after the manual pause timestamp `2026-06-05T09:14:39Z`: `2026-06-05T10:19:12Z`, selected `Up`, entry `0.59`, Paper PnL `+2.779800`; this alone was positive but the 12-hour aggregate remained negative.
+- Confirmed there were no Live orders for this strategy in the last 12 hours.
+Next: Auto Live Pause should clear only after a later Paper settlement makes the full 12-hour Paper PnL positive, or if the flag is manually cleared.
+Notes: `git pull --ff-only` reported already up to date. Diagnostics were read-only through `out\dbprobe` with host override `192.168.0.101`; no production rows, strategy flags, source files, or configs were changed. No code tests were needed. Existing unrelated untracked artifact/config files were left untouched.
+Blockers: None.
+
 ## Active Update 2026-06-05 Live Stakes Health Check
 Goal: Check whether current Live staking is operating normally after fixed 50 bps pause changes.
 Status: Completed

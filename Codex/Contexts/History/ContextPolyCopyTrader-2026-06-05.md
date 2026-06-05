@@ -99,3 +99,10 @@ Request:
 
 Result:
 Checked production PostgreSQL read-only. `PolyCopyTrader.Service` was `Live`/`Running` with fresh heartbeat and `last_error=null`. Strategy flags were as intended: six `live_stakes=true`, three `Down 50 bps Instant` effective Live, and three `Up 50 bps Instant` suppressed by Auto Live Pause. In the last 90 minutes there was one fixed 50 Live attempt after the changes: `ETH Up or Down 5m Down 50 bps Instant` at `2026-06-05T09:15:11Z`, `PreflightRejected` with `API error lockout is active`, zero fill and not sent to CLOB. By `2026-06-05T09:31:55Z`, Polymarket-component API errors were `3` in the last 15 minutes, below the configured lockout threshold `5`, so lockout had cleared. No current open/stuck Live orders were found. Recent logs still show network/data instability through API errors and timeouts, so monitor the next valid `Down 50` entry for a successful placement.
+
+## 2026-06-05T10:45:33.8858121Z
+Request:
+Посмотри, почему ETH Up or Down 5m Up 50 bps Instant не снял галку Auto live pause
+
+Result:
+Checked the Auto Live Pause resume path read-only. The strategy is allowlisted and service is `Live`/`Running`; `eth_up_down_5m_up_bps_50_instant` currently has `live_stakes=true`, `auto_live_paused=true`, and `effective_live_stakes=false`. The code clears Auto Live Pause only after a Paper settlement when the settled Paper PnL over the full last 12 hours is positive. There was one Paper settlement after the manual pause timestamp, at `2026-06-05T10:19:12Z`, with Paper PnL `+2.779800`, but the full 12-hour Paper window had `10` settled rows and total PnL `-3.237400`, so the resume condition was not met. No Live orders for this strategy were found in the last 12 hours. No production rows or source files were changed.
