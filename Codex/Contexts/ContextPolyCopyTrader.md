@@ -1,3 +1,17 @@
+## Active Update 2026-06-05 Live Stakes Health Check
+Goal: Check whether current Live staking is operating normally after fixed 50 bps pause changes.
+Status: Completed
+Done:
+- Verified `PolyCopyTrader.Service` is `Live`/`Running`, heartbeat age about `13` seconds at `2026-06-05T09:28:54Z`, and `last_error=null`.
+- Verified strategy flags are as intended: six strategies have `live_stakes=true`; three `Down 50 bps Instant` rows have `auto_live_paused=false`/`effective_live_stakes=true`; three `Up 50 bps Instant` rows have `auto_live_paused=true`/`effective_live_stakes=false`; none are manually paused.
+- Checked `live_orders` over the last 90 minutes: one fixed 50 attempt occurred after the changes, `ETH Up or Down 5m Down 50 bps Instant` at `2026-06-05T09:15:11Z`, and it was `PreflightRejected` with `API error lockout is active`; it was not sent to CLOB and had zero fill.
+- Confirmed the API lockout condition had cleared by `2026-06-05T09:31:55Z`: Polymarket-component API errors were `3` in the last 15 minutes, below the configured lockout threshold of `5`.
+- Verified there are no current open/stuck Live orders; nonterminal/open query returned no rows.
+- Observed ongoing network/data instability in recent `api_errors` (`GammaMarketIngestionWorker` timeouts, order-book refresh timeouts, Binance stream staleness, Polymarket WebSocket disconnects), but service heartbeat remains healthy.
+Next: Monitor the next valid fixed `Down 50` entry; a successful placement has not yet occurred after the `Up 50` Auto Pause change because subsequent due runs mostly skipped on threshold/order-book/market-ended conditions.
+Notes: `git pull --ff-only` reported already up to date. Diagnostics were read-only through `out\dbprobe` with host override `192.168.0.101`; no production rows, strategy flags, source files, or configs were changed. No code tests were needed. Existing unrelated untracked artifact/config files were left untouched.
+Blockers: None.
+
 ## Active Update 2026-06-05 Pause Fixed Up 50 bps Live
 Goal: Set Auto Live Pause to true for BTC/ETH/SOL fixed `Up 50 bps Instant` strategies only.
 Status: Completed

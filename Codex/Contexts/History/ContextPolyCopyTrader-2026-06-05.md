@@ -92,3 +92,10 @@ Request:
 
 Result:
 Set `auto_live_paused=true` in production PostgreSQL for `btc_up_down_5m_up_bps_50_instant`, `eth_up_down_5m_up_bps_50_instant`, and `sol_up_down_5m_up_bps_50_instant`. Verified all three still have `live_stakes=true` but now have `effective_live_stakes=false`; the paired `Down 50 bps Instant` strategies remain `auto_live_paused=false` and `effective_live_stakes=true`. Service heartbeat was fresh in `Live`/`Running` mode with `last_error=null`.
+
+## 2026-06-05T09:33:26.5424366Z
+Request:
+Проверь, нормально ли с живыми ставками
+
+Result:
+Checked production PostgreSQL read-only. `PolyCopyTrader.Service` was `Live`/`Running` with fresh heartbeat and `last_error=null`. Strategy flags were as intended: six `live_stakes=true`, three `Down 50 bps Instant` effective Live, and three `Up 50 bps Instant` suppressed by Auto Live Pause. In the last 90 minutes there was one fixed 50 Live attempt after the changes: `ETH Up or Down 5m Down 50 bps Instant` at `2026-06-05T09:15:11Z`, `PreflightRejected` with `API error lockout is active`, zero fill and not sent to CLOB. By `2026-06-05T09:31:55Z`, Polymarket-component API errors were `3` in the last 15 minutes, below the configured lockout threshold `5`, so lockout had cleared. No current open/stuck Live orders were found. Recent logs still show network/data instability through API errors and timeouts, so monitor the next valid `Down 50` entry for a successful placement.
