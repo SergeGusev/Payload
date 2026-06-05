@@ -78,3 +78,10 @@ Request:
 
 Result:
 Answered that yes, if the manual `Live` checkbox remains enabled, clearing `Auto Live Pause` makes these six strategies Live-eligible because `EffectiveLiveStakes = LiveStakes && !AutoLivePaused`. Live orders can then be placed on the next valid strategy entry only if the service is in Live mode and all normal gates pass: not manually paused, no kill switch/API lockout, risk/balance/exposure/preflight/order-book checks pass. Noted that because these strategies are allowlisted for Auto Live Pause, the flag may be set again after a later Live settlement if the last 12 hours of Live realized PnL are negative with more than one settled Live bet.
+
+## 2026-06-05T09:01:47.1354221Z
+Request:
+Что-то не снимается галочка, или Dashboard тормозит. Сними их сам - пусть стратегия сама переведёт, если нужно
+
+Result:
+Cleared `auto_live_paused=false` in production PostgreSQL for the requested BTC/ETH/SOL fixed `Up/Down 50 bps Instant` strategies that still had Auto Live Pause active. One row, `SOL Up or Down 5m Down 50 bps Instant`, was already cleared before the update. Verified all six requested strategies now have `live_stakes=true`, `auto_live_paused=false`, `effective_live_stakes=true`, `paused=false`, and `live_stake_amount=1`; service heartbeat was fresh in `Live`/`Running` mode with `last_error=null`. The Auto Live Pause allowlist remains unchanged so future Live settlements can set the pause again if the rule triggers.
