@@ -6,8 +6,6 @@ namespace PolyCopyTrader.Tests;
 
 internal sealed class TestAppRepository : IAppRepository
 {
-    private const int AutoLivePausePaperResumeSettlementCount = 12;
-
     private readonly object sync = new();
     private readonly HashSet<string> leaderTradeKeys = [];
     private int polymarketGammaMarketLookupsInFlight;
@@ -1644,14 +1642,17 @@ internal sealed class TestAppRepository : IAppRepository
                 .Select(settlement => (settlement.SettledAtUtc, PnlUsd: settlement.RealizedPnlUsd))
                 .ToArray()
             : [];
+        var existingSettings = GetStrategySettings(normalizedStrategyId);
+        var resumeWindowStartUtc = existingSettings.AutoLivePauseWindowStartUtc ?? lookbackStartUtc;
+        var autoLivePausedAtUtc = existingSettings.AutoLivePausedAtUtc ?? lookbackStartUtc;
         var paperResumeSettlements = paperRunSettlements
             .Concat(followLeaderPaperSettlements)
-            .OrderByDescending(settlement => settlement.SettledAtUtc)
-            .Take(AutoLivePausePaperResumeSettlementCount)
+            .Where(settlement => settlement.SettledAtUtc >= resumeWindowStartUtc)
             .ToArray();
         var livePnl = liveSettlements.Sum(order => order.RealizedPnlUsd ?? 0m);
         var paperPnl = paperResumeSettlements.Sum(settlement => settlement.PnlUsd);
         var paperSettledCount = paperResumeSettlements.Length;
+        var postPausePaperSettledCount = paperResumeSettlements.Count(settlement => settlement.SettledAtUtc > autoLivePausedAtUtc);
         var recentPnl = updateMode switch
         {
             StrategyAutoLivePauseUpdateMode.PauseFromLiveSettlements => livePnl,
@@ -1664,27 +1665,38 @@ internal sealed class TestAppRepository : IAppRepository
             StrategyAutoLivePauseUpdateMode.ResumeFromPaperSettlements => paperSettledCount,
             _ => throw new ArgumentOutOfRangeException(nameof(updateMode), updateMode, null)
         };
-        var existingSettings = GetStrategySettings(normalizedStrategyId);
         var nextAutoLivePaused = existingSettings.AutoLivePaused;
+        var nextAutoLivePausedAtUtc = existingSettings.AutoLivePausedAtUtc;
+        var nextAutoLivePauseWindowStartUtc = existingSettings.AutoLivePauseWindowStartUtc;
         if (updateMode == StrategyAutoLivePauseUpdateMode.PauseFromLiveSettlements &&
             recentPnl < 0m &&
             recentSettledCount > 1)
         {
             nextAutoLivePaused = true;
+            nextAutoLivePausedAtUtc = updatedAtUtc;
+            nextAutoLivePauseWindowStartUtc = lookbackStartUtc;
         }
         else if (updateMode == StrategyAutoLivePauseUpdateMode.ResumeFromPaperSettlements &&
+            existingSettings.AutoLivePaused &&
             recentPnl > 0m &&
-            recentSettledCount >= AutoLivePausePaperResumeSettlementCount)
+            recentSettledCount > 0 &&
+            postPausePaperSettledCount > 0)
         {
             nextAutoLivePaused = false;
+            nextAutoLivePausedAtUtc = null;
+            nextAutoLivePauseWindowStartUtc = null;
         }
 
-        var changed = nextAutoLivePaused != existingSettings.AutoLivePaused;
+        var changed = nextAutoLivePaused != existingSettings.AutoLivePaused ||
+            nextAutoLivePausedAtUtc != existingSettings.AutoLivePausedAtUtc ||
+            nextAutoLivePauseWindowStartUtc != existingSettings.AutoLivePauseWindowStartUtc;
         if (changed)
         {
             StrategySettings[normalizedStrategyId] = existingSettings with
             {
-                AutoLivePaused = nextAutoLivePaused
+                AutoLivePaused = nextAutoLivePaused,
+                AutoLivePausedAtUtc = nextAutoLivePausedAtUtc,
+                AutoLivePauseWindowStartUtc = nextAutoLivePauseWindowStartUtc
             };
         }
 
@@ -1716,7 +1728,9 @@ internal sealed class TestAppRepository : IAppRepository
 
             StrategySettings[normalizedStrategyId] = item.Value with
             {
-                AutoLivePaused = false
+                AutoLivePaused = false,
+                AutoLivePausedAtUtc = null,
+                AutoLivePauseWindowStartUtc = null
             };
             cleared++;
         }

@@ -1,3 +1,17 @@
+## Active Update 2026-06-05 Anchored Auto Live Pause Resume Implementation
+Goal: Implement Auto Live Pause resume using the same 12-hour anchor window that caused the Live pause.
+Status: Completed
+Done:
+- Added nullable strategy metadata `auto_live_paused_at_utc` and `auto_live_pause_window_start_utc` to the PostgreSQL schema and `StrategyRuntimeSettings`.
+- Updated Auto Live Pause setting so a Live-loss pause stores the pause timestamp and the `lookbackStartUtc` anchor used by the 12-hour Live-loss decision.
+- Updated Paper resume so it sums all settled Paper rows from the stored `auto_live_pause_window_start_utc` through the current Paper settlement, clears only when that anchored Paper PnL is positive, and requires at least one Paper settlement after `auto_live_paused_at_utc`.
+- Removed the previous "last 12 Paper settlements" resume requirement from production SQL and `TestAppRepository`.
+- Cleared pause anchor metadata whenever automatic pause is cleared by resume or startup allowlist cleanup, and added schema migration backfill for existing paused rows.
+- Updated storage tests plus README and configuration reference for the anchored policy.
+Next: Restart/redeploy the service so the running process applies the schema migration and new resume logic.
+Notes: `dotnet test tests/PolyCopyTrader.Tests/PolyCopyTrader.Tests.csproj --filter "StrategyAutoLivePause|AutoLivePause"` passed 13/13. Full `dotnet test tests/PolyCopyTrader.Tests/PolyCopyTrader.Tests.csproj` passed 604/604. `git diff --check` passed with LF/CRLF warnings only. Existing unrelated untracked artifact/config files were left untouched.
+Blockers: None.
+
 ## Active Update 2026-06-05 Auto Live Pause Anchored Resume Policy
 Goal: Refine Auto Live Pause resume logic around the same 12-hour anchor that caused the Live pause.
 Status: Completed

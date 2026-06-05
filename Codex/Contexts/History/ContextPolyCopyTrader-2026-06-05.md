@@ -148,3 +148,10 @@ Request:
 
 Result:
 Refined the recommendation: if Auto Live Pause is set from a Live-loss window starting at `X = pause_time - 12h`, then Paper resume can logically use the same anchored window from `X` rather than requiring 12 fully post-pause Paper transactions. Recommended storing both `auto_live_paused_at_utc` and `auto_live_pause_window_start_utc`, then clearing only when aggregate Paper PnL from the stored `X` through the current Paper settlement is positive, with enough Paper rows and at least one fresh Paper settlement after `auto_live_paused_at_utc` so the flag is not cleared from purely stale pre-pause evidence. No production rows or source behavior were changed.
+
+## 2026-06-05T19:28:23.5797384Z
+Request:
+Ок, сделай так
+
+Result:
+Implemented anchored Auto Live Pause resume. Added nullable `strategies.auto_live_paused_at_utc` and `strategies.auto_live_pause_window_start_utc`, stores them when Live-loss Auto Live Pause is set, and clears them when the automatic pause is cleared. Paper resume now evaluates all settled Paper rows from the stored Live-loss window start through the current settlement, clears only when that anchored Paper PnL is positive, and requires at least one Paper settlement after `auto_live_paused_at_utc`; the previous last-12-Paper-settlements requirement was removed. Updated `StrategyRuntimeSettings`, PostgreSQL schema/repository SQL, test repository, storage tests, README, and configuration reference. Targeted Auto Live Pause tests passed 13/13, full test project passed 604/604, and `git diff --check` passed with LF/CRLF warnings only.

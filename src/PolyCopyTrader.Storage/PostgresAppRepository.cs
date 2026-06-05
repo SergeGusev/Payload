@@ -2542,6 +2542,8 @@ SELECT id,
        enabled,
        live_stakes,
        auto_live_paused,
+       auto_live_paused_at_utc,
+       auto_live_pause_window_start_utc,
        paused AND (paused_until_utc IS NULL OR paused_until_utc > @NowUtc) AS paused,
        CASE
            WHEN paused AND (paused_until_utc IS NULL OR paused_until_utc > @NowUtc) THEN paused_until_utc
@@ -2568,16 +2570,18 @@ FROM strategies;
 				reader.GetBoolean(1),
 				reader.GetBoolean(2),
 				reader.GetBoolean(3),
-				reader.GetBoolean(4),
+				reader.IsDBNull(4) ? null : DateTimeOffsetFromUtc(reader.GetDateTime(4)),
 				reader.IsDBNull(5) ? null : DateTimeOffsetFromUtc(reader.GetDateTime(5)),
-				reader.GetDecimal(6),
-				reader.GetDecimal(7),
+				reader.GetBoolean(6),
+				reader.IsDBNull(7) ? null : DateTimeOffsetFromUtc(reader.GetDateTime(7)),
 				reader.GetDecimal(8),
 				reader.GetDecimal(9),
-				reader.GetInt32(10),
-				reader.GetInt32(11),
-				reader.GetDecimal(12),
-				reader.IsDBNull(13) ? null : DateTimeOffsetFromUtc(reader.GetDateTime(13)));
+				reader.GetDecimal(10),
+				reader.GetDecimal(11),
+				reader.GetInt32(12),
+				reader.GetInt32(13),
+				reader.GetDecimal(14),
+				reader.IsDBNull(15) ? null : DateTimeOffsetFromUtc(reader.GetDateTime(15)));
 		}
 
 		return results;
@@ -2698,16 +2702,28 @@ WITH paper_rows AS (
       AND lower(settlement.copied_trader_wallet) NOT LIKE 'strategy:%'
       AND settlement.settled_at_utc <= @UpdatedAtUtc
 ),
+strategy_state AS (
+    SELECT
+        auto_live_paused,
+        auto_live_paused_at_utc,
+        auto_live_pause_window_start_utc,
+        COALESCE(auto_live_paused_at_utc, @LookbackStartUtc) AS resume_auto_live_paused_at_utc,
+        COALESCE(auto_live_pause_window_start_utc, @LookbackStartUtc) AS resume_window_start_utc
+    FROM strategies
+    WHERE id = @StrategyId
+),
 paper_resume_rows AS (
-    SELECT pnl_usd
+    SELECT pnl_usd, settled_at_utc
     FROM paper_rows
-    ORDER BY settled_at_utc DESC
-    LIMIT @PaperResumeSettlementCount
+    WHERE settled_at_utc >= (SELECT resume_window_start_utc FROM strategy_state)
 ),
 paper_pnl AS (
     SELECT
         COALESCE(sum(pnl_usd), 0) AS pnl_usd,
-        count(*)::integer AS settled_count
+        count(*)::integer AS settled_count,
+        count(*) FILTER (
+            WHERE settled_at_utc > (SELECT resume_auto_live_paused_at_utc FROM strategy_state)
+        )::integer AS post_pause_settled_count
     FROM paper_resume_rows
 ),
 live_rows AS (
@@ -2737,28 +2753,55 @@ selected_pnl AS (
             ELSE 0
         END AS settled_count
 ),
+transition AS (
+    SELECT
+        CASE
+            WHEN @UpdateMode = @PauseFromLiveSettlements
+                 AND (SELECT pnl_usd FROM live_pnl) < 0
+                 AND (SELECT settled_count FROM live_pnl) > 1 THEN true
+            WHEN @UpdateMode = @ResumeFromPaperSettlements
+                 AND (SELECT auto_live_paused FROM strategy_state)
+                 AND (SELECT pnl_usd FROM paper_pnl) > 0
+                 AND (SELECT settled_count FROM paper_pnl) > 0
+                 AND (SELECT post_pause_settled_count FROM paper_pnl) > 0 THEN false
+            ELSE (SELECT auto_live_paused FROM strategy_state)
+        END AS auto_live_paused,
+        CASE
+            WHEN @UpdateMode = @PauseFromLiveSettlements
+                 AND (SELECT pnl_usd FROM live_pnl) < 0
+                 AND (SELECT settled_count FROM live_pnl) > 1 THEN @UpdatedAtUtc
+            WHEN @UpdateMode = @ResumeFromPaperSettlements
+                 AND (SELECT auto_live_paused FROM strategy_state)
+                 AND (SELECT pnl_usd FROM paper_pnl) > 0
+                 AND (SELECT settled_count FROM paper_pnl) > 0
+                 AND (SELECT post_pause_settled_count FROM paper_pnl) > 0 THEN NULL
+            ELSE (SELECT auto_live_paused_at_utc FROM strategy_state)
+        END AS auto_live_paused_at_utc,
+        CASE
+            WHEN @UpdateMode = @PauseFromLiveSettlements
+                 AND (SELECT pnl_usd FROM live_pnl) < 0
+                 AND (SELECT settled_count FROM live_pnl) > 1 THEN @LookbackStartUtc
+            WHEN @UpdateMode = @ResumeFromPaperSettlements
+                 AND (SELECT auto_live_paused FROM strategy_state)
+                 AND (SELECT pnl_usd FROM paper_pnl) > 0
+                 AND (SELECT settled_count FROM paper_pnl) > 0
+                 AND (SELECT post_pause_settled_count FROM paper_pnl) > 0 THEN NULL
+            ELSE (SELECT auto_live_pause_window_start_utc FROM strategy_state)
+        END AS auto_live_pause_window_start_utc
+),
 updated AS (
     UPDATE strategies
-    SET auto_live_paused = CASE
-            WHEN @UpdateMode = @PauseFromLiveSettlements
-                 AND (SELECT pnl_usd FROM selected_pnl) < 0
-                 AND (SELECT settled_count FROM selected_pnl) > 1 THEN true
-            WHEN @UpdateMode = @ResumeFromPaperSettlements
-                 AND (SELECT pnl_usd FROM selected_pnl) > 0
-                 AND (SELECT settled_count FROM selected_pnl) >= @PaperResumeSettlementCount THEN false
-            ELSE auto_live_paused
-        END,
+    SET auto_live_paused = transition.auto_live_paused,
+        auto_live_paused_at_utc = transition.auto_live_paused_at_utc,
+        auto_live_pause_window_start_utc = transition.auto_live_pause_window_start_utc,
         updated_at_utc = @UpdatedAtUtc
+    FROM transition
     WHERE id = @StrategyId
-      AND auto_live_paused IS DISTINCT FROM CASE
-            WHEN @UpdateMode = @PauseFromLiveSettlements
-                 AND (SELECT pnl_usd FROM selected_pnl) < 0
-                 AND (SELECT settled_count FROM selected_pnl) > 1 THEN true
-            WHEN @UpdateMode = @ResumeFromPaperSettlements
-                 AND (SELECT pnl_usd FROM selected_pnl) > 0
-                 AND (SELECT settled_count FROM selected_pnl) >= @PaperResumeSettlementCount THEN false
-            ELSE auto_live_paused
-        END
+      AND (
+          strategies.auto_live_paused IS DISTINCT FROM transition.auto_live_paused
+          OR strategies.auto_live_paused_at_utc IS DISTINCT FROM transition.auto_live_paused_at_utc
+          OR strategies.auto_live_pause_window_start_utc IS DISTINCT FROM transition.auto_live_pause_window_start_utc
+      )
     RETURNING auto_live_paused
 )
 SELECT
@@ -2770,7 +2813,6 @@ SELECT
 """);
 		command.Parameters.AddWithValue("StrategyId", normalizedStrategyId);
 		command.Parameters.AddWithValue("FollowLeaderStrategyId", StrategyIds.FollowLeader);
-		command.Parameters.AddWithValue("PaperResumeSettlementCount", 12);
 		command.Parameters.AddWithValue("LookbackStartUtc", UtcDateTime(lookbackStartUtc));
 		command.Parameters.AddWithValue("UpdatedAtUtc", UtcDateTime(updatedAtUtc));
 		command.Parameters.AddWithValue("UpdateMode", updateMode.ToString());
@@ -2808,6 +2850,8 @@ SELECT
 		await using NpgsqlCommand command = CreateCommand(connection, """
 UPDATE strategies
 SET auto_live_paused = false,
+    auto_live_paused_at_utc = NULL,
+    auto_live_pause_window_start_utc = NULL,
     updated_at_utc = @UpdatedAtUtc
 WHERE auto_live_paused
   AND id <> ALL(@AllowlistedStrategyIds);

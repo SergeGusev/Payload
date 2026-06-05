@@ -102,10 +102,15 @@ public sealed class StorageTests
         Assert.Contains("ALTER TABLE strategies ADD COLUMN IF NOT EXISTS paused_until_utc timestamptz NULL", PostgresSchema.SchemaSql, StringComparison.Ordinal);
         Assert.Contains("auto_live_paused boolean NOT NULL DEFAULT false", PostgresSchema.SchemaSql, StringComparison.Ordinal);
         Assert.Contains("ALTER TABLE strategies ADD COLUMN IF NOT EXISTS auto_live_paused boolean NOT NULL DEFAULT false", PostgresSchema.SchemaSql, StringComparison.Ordinal);
+        Assert.Contains("auto_live_paused_at_utc timestamptz NULL", PostgresSchema.SchemaSql, StringComparison.Ordinal);
+        Assert.Contains("ALTER TABLE strategies ADD COLUMN IF NOT EXISTS auto_live_paused_at_utc timestamptz NULL", PostgresSchema.SchemaSql, StringComparison.Ordinal);
+        Assert.Contains("auto_live_pause_window_start_utc timestamptz NULL", PostgresSchema.SchemaSql, StringComparison.Ordinal);
+        Assert.Contains("ALTER TABLE strategies ADD COLUMN IF NOT EXISTS auto_live_pause_window_start_utc timestamptz NULL", PostgresSchema.SchemaSql, StringComparison.Ordinal);
         Assert.Contains("live_enabled_at_utc timestamptz NULL", PostgresSchema.SchemaSql, StringComparison.Ordinal);
         Assert.Contains("ALTER TABLE strategies ADD COLUMN IF NOT EXISTS live_enabled_at_utc timestamptz NULL", PostgresSchema.SchemaSql, StringComparison.Ordinal);
         Assert.Contains("first_live_events AS", PostgresSchema.SchemaSql, StringComparison.Ordinal);
         Assert.Contains("20260602_clear_auto_live_pause_by_default", PostgresSchema.SchemaSql, StringComparison.Ordinal);
+        Assert.Contains("20260605_backfill_auto_live_pause_anchors", PostgresSchema.SchemaSql, StringComparison.Ordinal);
         Assert.Contains("WHERE auto_live_paused", PostgresSchema.SchemaSql, StringComparison.Ordinal);
         Assert.DoesNotContain("SET paused = false", PostgresSchema.SchemaSql, StringComparison.Ordinal);
         Assert.Contains("ALTER TABLE strategies ALTER COLUMN live_stake_amount SET DEFAULT 1.00", PostgresSchema.SchemaSql, StringComparison.Ordinal);
@@ -634,13 +639,15 @@ public sealed class StorageTests
         Assert.Contains("FROM live_orders live_order", method, StringComparison.Ordinal);
         Assert.Contains("FROM strategy_market_paper_runs run", method, StringComparison.Ordinal);
         Assert.Contains("FROM paper_position_settlements settlement", method, StringComparison.Ordinal);
-        Assert.Contains("AND (SELECT settled_count FROM selected_pnl) > 1", method, StringComparison.Ordinal);
-        Assert.Contains("ORDER BY settled_at_utc DESC", method, StringComparison.Ordinal);
-        Assert.Contains("LIMIT @PaperResumeSettlementCount", method, StringComparison.Ordinal);
-        Assert.Contains("AND (SELECT settled_count FROM selected_pnl) >= @PaperResumeSettlementCount", method, StringComparison.Ordinal);
-        Assert.Contains("SET auto_live_paused = CASE", method, StringComparison.Ordinal);
-        Assert.Contains("THEN true", method, StringComparison.Ordinal);
-        Assert.Contains("THEN false", method, StringComparison.Ordinal);
+        Assert.Contains("AND (SELECT settled_count FROM live_pnl) > 1", method, StringComparison.Ordinal);
+        Assert.Contains("strategy_state AS", method, StringComparison.Ordinal);
+        Assert.Contains("resume_window_start_utc", method, StringComparison.Ordinal);
+        Assert.Contains("post_pause_settled_count", method, StringComparison.Ordinal);
+        Assert.Contains("WHERE settled_at_utc >= (SELECT resume_window_start_utc FROM strategy_state)", method, StringComparison.Ordinal);
+        Assert.Contains("AND (SELECT post_pause_settled_count FROM paper_pnl) > 0 THEN false", method, StringComparison.Ordinal);
+        Assert.Contains("SET auto_live_paused = transition.auto_live_paused", method, StringComparison.Ordinal);
+        Assert.Contains("auto_live_paused_at_utc = transition.auto_live_paused_at_utc", method, StringComparison.Ordinal);
+        Assert.Contains("auto_live_pause_window_start_utc = transition.auto_live_pause_window_start_utc", method, StringComparison.Ordinal);
         Assert.Contains("AS recent_settled_count", method, StringComparison.Ordinal);
         Assert.DoesNotContain("paused_until_utc", method, StringComparison.Ordinal);
     }
@@ -695,6 +702,8 @@ public sealed class StorageTests
 
         var method = source[start..end];
         Assert.Contains("SET auto_live_paused = false", method, StringComparison.Ordinal);
+        Assert.Contains("auto_live_paused_at_utc = NULL", method, StringComparison.Ordinal);
+        Assert.Contains("auto_live_pause_window_start_utc = NULL", method, StringComparison.Ordinal);
         Assert.Contains("WHERE auto_live_paused", method, StringComparison.Ordinal);
         Assert.Contains("id <> ALL(@AllowlistedStrategyIds)", method, StringComparison.Ordinal);
     }
@@ -774,6 +783,8 @@ public sealed class StorageTests
         Assert.Equal(-2m, decision.RecentPnlUsd);
         Assert.True(repository.StrategySettings[strategyId].LiveStakes);
         Assert.True(repository.StrategySettings[strategyId].AutoLivePaused);
+        Assert.Equal(now, repository.StrategySettings[strategyId].AutoLivePausedAtUtc);
+        Assert.Equal(now.AddHours(-12), repository.StrategySettings[strategyId].AutoLivePauseWindowStartUtc);
         Assert.False(repository.StrategySettings[strategyId].Paused);
         Assert.Null(repository.StrategySettings[strategyId].PausedUntilUtc);
     }
@@ -808,24 +819,26 @@ public sealed class StorageTests
     }
 
     [Fact]
-    public async Task TestRepository_StrategyAutoLivePauseDoesNotClearBeforeTwelvePaperSettlements()
+    public async Task TestRepository_StrategyAutoLivePauseDoesNotClearWithoutPostPausePaperSettlement()
     {
         var now = DateTimeOffset.UtcNow;
+        var pausedAt = now.AddMinutes(-10);
+        var windowStart = pausedAt.AddHours(-12);
         var strategyId = StrategyIds.BtcUpDown5mBinanceBps2;
         var repository = new TestAppRepository();
         repository.StrategySettings[strategyId] = StrategyRuntimeSettings.Default(strategyId) with
         {
             LiveStakes = true,
-            AutoLivePaused = true
+            AutoLivePaused = true,
+            AutoLivePausedAtUtc = pausedAt,
+            AutoLivePauseWindowStartUtc = windowStart
         };
-        for (var i = 0; i < 11; i++)
-        {
-            repository.StrategyMarketPaperRuns.Add(CreateSettledStrategyRun(strategyId, now.AddMinutes(-20 + i), 1m));
-        }
+        repository.StrategyMarketPaperRuns.Add(CreateSettledStrategyRun(strategyId, pausedAt.AddMinutes(-5), 2m));
+        repository.StrategyMarketPaperRuns.Add(CreateSettledStrategyRun(strategyId, pausedAt.AddMinutes(-1), 2m));
 
         var decision = await repository.UpdateStrategyAutoLivePauseFromRecentPnlAsync(
             strategyId,
-            now.AddHours(-12),
+            windowStart,
             now,
             StrategyAutoLivePauseUpdateMode.ResumeFromPaperSettlements,
             CancellationToken.None);
@@ -833,32 +846,34 @@ public sealed class StorageTests
         Assert.True(decision.AutoLivePaused);
         Assert.False(decision.AutoLiveResumed);
         Assert.False(decision.AutoLivePauseChanged);
-        Assert.Equal(11, decision.RecentSettledCount);
-        Assert.Equal(11m, decision.RecentPnlUsd);
+        Assert.Equal(2, decision.RecentSettledCount);
+        Assert.Equal(4m, decision.RecentPnlUsd);
         Assert.True(repository.StrategySettings[strategyId].LiveStakes);
         Assert.True(repository.StrategySettings[strategyId].AutoLivePaused);
     }
 
     [Fact]
-    public async Task TestRepository_StrategyAutoLivePauseClearsFromLastTwelvePaperPnlPositive()
+    public async Task TestRepository_StrategyAutoLivePauseClearsFromAnchoredPaperPnlPositive()
     {
         var now = DateTimeOffset.UtcNow;
+        var pausedAt = now.AddMinutes(-10);
+        var windowStart = pausedAt.AddHours(-12);
         var strategyId = StrategyIds.BtcUpDown5mBinanceBps2;
         var repository = new TestAppRepository();
         repository.StrategySettings[strategyId] = StrategyRuntimeSettings.Default(strategyId) with
         {
             LiveStakes = true,
-            AutoLivePaused = true
+            AutoLivePaused = true,
+            AutoLivePausedAtUtc = pausedAt,
+            AutoLivePauseWindowStartUtc = windowStart
         };
-        repository.StrategyMarketPaperRuns.Add(CreateSettledStrategyRun(strategyId, now.AddMinutes(-60), -100m));
-        for (var i = 0; i < 12; i++)
-        {
-            repository.StrategyMarketPaperRuns.Add(CreateSettledStrategyRun(strategyId, now.AddMinutes(-12 + i), 1m));
-        }
+        repository.StrategyMarketPaperRuns.Add(CreateSettledStrategyRun(strategyId, windowStart.AddMinutes(-1), -100m));
+        repository.StrategyMarketPaperRuns.Add(CreateSettledStrategyRun(strategyId, pausedAt.AddMinutes(-5), 2m));
+        repository.StrategyMarketPaperRuns.Add(CreateSettledStrategyRun(strategyId, pausedAt.AddMinutes(1), 1m));
 
         var decision = await repository.UpdateStrategyAutoLivePauseFromRecentPnlAsync(
             strategyId,
-            now.AddHours(-12),
+            windowStart,
             now,
             StrategyAutoLivePauseUpdateMode.ResumeFromPaperSettlements,
             CancellationToken.None);
@@ -866,10 +881,12 @@ public sealed class StorageTests
         Assert.False(decision.AutoLivePaused);
         Assert.True(decision.AutoLiveResumed);
         Assert.True(decision.AutoLivePauseChanged);
-        Assert.Equal(12, decision.RecentSettledCount);
-        Assert.Equal(12m, decision.RecentPnlUsd);
+        Assert.Equal(2, decision.RecentSettledCount);
+        Assert.Equal(3m, decision.RecentPnlUsd);
         Assert.True(repository.StrategySettings[strategyId].LiveStakes);
         Assert.False(repository.StrategySettings[strategyId].AutoLivePaused);
+        Assert.Null(repository.StrategySettings[strategyId].AutoLivePausedAtUtc);
+        Assert.Null(repository.StrategySettings[strategyId].AutoLivePauseWindowStartUtc);
     }
 
     [Fact]

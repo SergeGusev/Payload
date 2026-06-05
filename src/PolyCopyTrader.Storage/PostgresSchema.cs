@@ -908,6 +908,8 @@ CREATE TABLE IF NOT EXISTS strategies (
     enabled boolean NOT NULL DEFAULT true,
     live_stakes boolean NOT NULL DEFAULT false,
     auto_live_paused boolean NOT NULL DEFAULT false,
+    auto_live_paused_at_utc timestamptz NULL,
+    auto_live_pause_window_start_utc timestamptz NULL,
     paused boolean NOT NULL DEFAULT false,
     paused_until_utc timestamptz NULL,
     paper_stake_amount numeric(28,8) NOT NULL DEFAULT 1.00,
@@ -929,6 +931,8 @@ CREATE TABLE IF NOT EXISTS strategies (
 
 ALTER TABLE strategies ADD COLUMN IF NOT EXISTS live_stakes boolean NOT NULL DEFAULT false;
 ALTER TABLE strategies ADD COLUMN IF NOT EXISTS auto_live_paused boolean NOT NULL DEFAULT false;
+ALTER TABLE strategies ADD COLUMN IF NOT EXISTS auto_live_paused_at_utc timestamptz NULL;
+ALTER TABLE strategies ADD COLUMN IF NOT EXISTS auto_live_pause_window_start_utc timestamptz NULL;
 ALTER TABLE strategies ADD COLUMN IF NOT EXISTS paused boolean NOT NULL DEFAULT false;
 ALTER TABLE strategies ADD COLUMN IF NOT EXISTS paused_until_utc timestamptz NULL;
 ALTER TABLE strategies ADD COLUMN IF NOT EXISTS paper_stake_amount numeric(28,8) NOT NULL DEFAULT 1.00;
@@ -4511,6 +4515,8 @@ BEGIN
     ) THEN
         UPDATE strategies
         SET auto_live_paused = false,
+            auto_live_paused_at_utc = NULL,
+            auto_live_pause_window_start_utc = NULL,
             updated_at_utc = clock_timestamp()
         WHERE auto_live_paused;
         GET DIAGNOSTICS cleared_strategy_count = ROW_COUNT;
@@ -4520,6 +4526,35 @@ BEGIN
             migration_key_value,
             clock_timestamp(),
             'cleared_strategies=' || cleared_strategy_count::text
+        );
+    END IF;
+END $$;
+
+DO $$
+DECLARE
+    migration_key_value text := '20260605_backfill_auto_live_pause_anchors';
+    updated_strategy_count integer := 0;
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1
+        FROM schema_data_migrations migration
+        WHERE migration.migration_key = migration_key_value
+    ) THEN
+        UPDATE strategies
+        SET auto_live_paused_at_utc = COALESCE(auto_live_paused_at_utc, updated_at_utc),
+            auto_live_pause_window_start_utc = COALESCE(auto_live_pause_window_start_utc, updated_at_utc - interval '12 hours')
+        WHERE auto_live_paused
+          AND (
+              auto_live_paused_at_utc IS NULL
+              OR auto_live_pause_window_start_utc IS NULL
+          );
+        GET DIAGNOSTICS updated_strategy_count = ROW_COUNT;
+
+        INSERT INTO schema_data_migrations (migration_key, applied_at_utc, details)
+        VALUES (
+            migration_key_value,
+            clock_timestamp(),
+            'updated_strategies=' || updated_strategy_count::text
         );
     END IF;
 END $$;
@@ -4567,6 +4602,8 @@ BEGIN
         UPDATE strategies strategy
         SET live_stakes = false,
             auto_live_paused = false,
+            auto_live_paused_at_utc = NULL,
+            auto_live_pause_window_start_utc = NULL,
             live_enabled_at_utc = NULL,
             updated_at_utc = clock_timestamp()
         WHERE strategy.id IN (
@@ -4763,6 +4800,8 @@ BEGIN
         UPDATE strategies strategy
         SET live_stakes = false,
             auto_live_paused = false,
+            auto_live_paused_at_utc = NULL,
+            auto_live_pause_window_start_utc = NULL,
             live_enabled_at_utc = NULL,
             updated_at_utc = clock_timestamp()
         WHERE strategy.id IN (
@@ -4920,6 +4959,8 @@ BEGIN
         SET enabled = false,
             live_stakes = false,
             auto_live_paused = false,
+            auto_live_paused_at_utc = NULL,
+            auto_live_pause_window_start_utc = NULL,
             live_enabled_at_utc = NULL,
             updated_at_utc = clock_timestamp()
         WHERE (
