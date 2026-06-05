@@ -71,3 +71,10 @@ BTC Up or Down 5m Down 50 bps Instant, BTC Up or Down 5m Up 50 bps Instant, ETH 
 
 Result:
 Updated the six requested production strategy rows to `live_stakes=true`, `auto_live_paused=true`, `paused=false`, and `paused_until_utc=null`; all six verified with `effective_live_stakes=false` because Auto Live Pause is active. Added their codes to `LiveTrading:AutoLivePauseStrategies` in service config so startup retains the Auto Live Pause state, and updated README/configuration reference. Verified service heartbeat was fresh in `Live` mode with empty `last_error`; full `dotnet test` passed 603/603 and `git diff --check` passed with LF/CRLF warnings only.
+
+## 2026-06-05T08:53:26.5264558Z
+Request:
+Если я сейчас сам галочки Auto Live Pause сниму, то пойдут живые ставки, правильно?
+
+Result:
+Answered that yes, if the manual `Live` checkbox remains enabled, clearing `Auto Live Pause` makes these six strategies Live-eligible because `EffectiveLiveStakes = LiveStakes && !AutoLivePaused`. Live orders can then be placed on the next valid strategy entry only if the service is in Live mode and all normal gates pass: not manually paused, no kill switch/API lockout, risk/balance/exposure/preflight/order-book checks pass. Noted that because these strategies are allowlisted for Auto Live Pause, the flag may be set again after a later Live settlement if the last 12 hours of Live realized PnL are negative with more than one settled Live bet.

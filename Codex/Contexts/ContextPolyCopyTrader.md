@@ -1,3 +1,14 @@
+## Active Update 2026-06-05 Auto Live Pause Manual Clear Explanation
+Goal: Clarify whether manually clearing Auto Live Pause on the fixed 50 bps strategies will allow Live orders.
+Status: Completed
+Done:
+- Confirmed from current context and code that the six fixed BTC/ETH/SOL `Up/Down 50 bps Instant` strategies currently have `live_stakes=true` and are suppressed only by `auto_live_paused=true`.
+- Confirmed `StrategyRuntimeSettings.EffectiveLiveStakes` is computed as `LiveStakes && !AutoLivePaused`, and the strategy/live paths use the effective flag for Live eligibility.
+- Answered that manually clearing the Auto Live Pause checkbox makes these strategies Live-eligible if the manual Live flag remains enabled and normal Live gates pass.
+Next: None.
+Notes: `git pull --ff-only` reported already up to date. No source behavior changed and no tests were needed for this explanation-only task. Existing unrelated untracked artifact/config files were left untouched.
+Blockers: None.
+
 ## Active Update 2026-06-05 Fixed 50 bps Auto Live Pause
 Goal: Put BTC/ETH/SOL fixed `Up/Down 50 bps Instant` strategies into Auto Live Pause mode while enabling their Live flag.
 Status: Completed
