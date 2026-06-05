@@ -1,3 +1,18 @@
+## Active Update 2026-06-05 ETH Skip 7 Live Errors 12h
+Goal: Inspect `ETH Up or Down 5m Skip 7 bps Instant` Live orders from the last 12 hours and classify Internal Error outcomes.
+Status: Completed
+Done:
+- Queried production PostgreSQL read-only through `out\dbprobe` with host override `192.168.0.101`; no production rows, service state, orders, cancels, or strategy flags were changed.
+- Fixed the analysis window at `2026-06-04 18:26:49 UTC` through `2026-06-05 06:26:49 UTC` to avoid moving-window drift during diagnostics.
+- Confirmed `PolyCopyTrader.Service` is running in `Live`, heartbeat fresh at `2026-06-05 06:26:38 UTC`, empty `last_error`, and no currently open Live orders.
+- Found `88` Skip 7 Live rows in the window: `75` matched/filled rows with realized PnL `-31.216504`, plus `13` non-matched/zero-fill rows.
+- The `13` zero-fill rows split into `5` `Rejected/InternalServerError/HTTP 500`, `5` `CancelFailed` with cancel status `order can't be found - already canceled or matched`, `1` `Cancelled`, `1` `Rejected/BadRequest/HTTP 400`, and `1` local `PreflightRejected` for API error lockout.
+- The `5` HTTP 500 rows had no exchange `order_id`, zero fill, and raw responses `order timed out` four times plus `internal error during signer validation` once. Code inspection confirmed these are persisted from failed Polymarket `POST /order` HTTP responses, not local exceptions; a local signing/placement exception would be stored as `Status=Error`, `response_status=error`.
+- Market-outcome counterfactual for the `5` HTTP 500 rows was `2W/3L`, estimated full-fill PnL `-3.781700`. Across all `13` zero-fill rows the market-outcome counterfactual was `8W/5L`, estimated full-fill PnL `+6.268800`.
+Next: If this keeps recurring, add Dashboard/reporting columns that separate server HTTP 500, HTTP 400 signature rejection, cancel-not-found zero-fill, and local preflight lockout; consider capturing a redacted per-order diagnostic envelope for CLOB support/debugging.
+Notes: Diagnostic only. No source builds/tests were run because no code changed. Counterfactual PnL assumes full fill at intended limit price/size and does not prove the order would actually have filled.
+Blockers: None.
+
 ## Active Update 2026-06-05 Codex CLI Global Install
 Goal: Install the OpenAI Codex CLI globally with npm.
 Status: Completed
