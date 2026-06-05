@@ -120,3 +120,10 @@ Request:
 
 Result:
 Changed Auto Live Pause clearing logic so `ResumeFromPaperSettlements` now uses the strategy's most recent 12 settled Paper rows ordered by settlement time, not a 12-hour Paper window. The flag clears only when all 12 Paper settlements are available and their total realized PnL is positive; fewer than 12 Paper settlements leave Auto Live Pause unchanged. The Live-side pause rule remains unchanged: Live settlements still use the last 12 hours, require more than one settled Live bet, and require negative Live PnL. Updated `PostgresAppRepository`, `TestAppRepository`, storage tests, README, and configuration reference. Targeted Auto Live Pause tests passed 13/13, full `dotnet test` passed 604/604, and `git diff --check` passed with LF/CRLF warnings only.
+
+## 2026-06-05T18:49:44.5297485Z
+Request:
+А почему BTC Up or Down 5m Up 50 bps Instant не перешёл в Auto Live Pause ?
+
+Result:
+Checked production PostgreSQL read-only. The strategy currently has `live_stakes=true`, `auto_live_paused=false`, `effective_live_stakes=true`, and `updated_at_utc=2026-06-05T18:36:55Z`. It likely did enter Auto Live Pause after the `2026-06-05T18:35:58Z` Live settlement because 12-hour Live evidence was `6` settled rows, `4L/2W`, total Live PnL `-3.785200`, which satisfies the Live pause rule. It was then cleared by the Paper resume rule at `2026-06-05T18:36:55Z`: 12-hour Paper evidence had `12` settled rows and total Paper PnL `+10.505400`, matching the strategy row update time. The running service still reports version `1.0.0+6a0de7e`, so it has not picked up the newer last-12-Paper commit yet; however, the newest 12 Paper settlements are also positive, so the new rule would clear it too. No production rows or source files were changed.

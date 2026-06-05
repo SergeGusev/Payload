@@ -1,3 +1,17 @@
+## Active Update 2026-06-05 BTC Up 50 Auto Live Pause Investigation
+Goal: Explain why `BTC Up or Down 5m Up 50 bps Instant` is not currently in Auto Live Pause.
+Status: Completed
+Done:
+- Queried production PostgreSQL read-only through `out\dbprobe` with host override `192.168.0.101`; no production rows, strategy flags, source files, or configs were changed.
+- Verified `PolyCopyTrader.Service` is `Live`/`Running`, heartbeat fresh, `last_error=null`, and still running version `1.0.0+6a0de7e`, so the deployed process has not picked up commit `8d0768f`.
+- Verified `btc_up_down_5m_up_bps_50_instant` currently has `live_stakes=true`, `auto_live_paused=false`, `effective_live_stakes=true`, and `updated_at_utc=2026-06-05T18:36:55Z`.
+- Found 12-hour Live evidence was enough to set Auto Live Pause: `6` settled Live rows, `4L/2W`, total Live PnL `-3.785200`, last Live settlement `2026-06-05T18:35:58Z`.
+- Found Paper resume evidence immediately cleared it under the currently deployed old rule: `12` settled Paper rows in the last 12 hours, total Paper PnL `+10.505400`, last Paper settlement `2026-06-05T18:36:55Z`, matching the strategy row `updated_at_utc`.
+- Noted the new last-12-Paper-settlements rule would also clear this strategy right now because the latest 12 Paper settlements are available and positive in aggregate.
+Next: If this strategy should stay paused despite positive Paper evidence, change the resume rule further; otherwise restart/redeploy service to pick up commit `8d0768f` and keep current policy.
+Notes: No local log files were found for the 2026-06-05 window, so the conclusion is based on repository logic and database timestamps. Existing unrelated untracked artifact/config files were left untouched.
+Blockers: None.
+
 ## Active Update 2026-06-05 Auto Live Pause Resume Last 12 Paper Settlements
 Goal: Change Auto Live Pause clearing from a 12-hour Paper PnL window to the last 12 settled Paper transactions.
 Status: Completed
