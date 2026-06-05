@@ -25,3 +25,10 @@ Request:
 
 Result:
 Queried production PostgreSQL read-only for settled Skip 7/9/32 runs grouped by `Europe/Sofia` local entry hour. Pre-Live combined data did not show "night bad/day good": local `00-07` was `951` settled, `526W/425L`, `+300.828943`, `9.6748%` ROI; `08-19` was `1520`, `803W/717L`, `+236.867564`, `4.7706%`; `20-23` was `522`, `268W/254L`, `+47.302114`, `2.8236%`. Best pre-Live local hours were `03`, `12`, `05`, `20`, `14`; weakest were `09`, `19`, `22`, `06`. Post-Live sample was small and drawdown-dominated, so it should not be used alone for a time filter.
+
+## 2026-06-05T07:22:30.0000000Z
+Request:
+Наши новые стратегии Up bps  и Down bps используют bps от 1 до 50. Имеет ли смысл увеличивать до 100 ? Делать не надо, просто давай оценим.
+
+Result:
+Queried production PostgreSQL read-only for fixed BTC/ETH/SOL `Up bps` and `Down bps` strategies. Current rows are `1..50`, enabled and Paper-only. In the available short window from about `2026-06-04 11:37 UTC` to `2026-06-05 07:08 UTC`, all `Down` families were positive across `1..50` (BTC `+728.534800`, ETH `+484.222600`, SOL `+244.486100`), while all `Up` families were strongly negative (BTC `-1642.302400`, ETH `-1512.281100`, SOL `-2928.236400`). The `41..50` tail also favored only `Down`. Counterfactual filtering of `bps=1` diagnostics for hypothetical integer thresholds `51..100` suggested `Down` could be worth Paper-only sparse research, but `Up` should not be expanded; adding dense `51..100` would mostly duplicate rare high-move markets and increase correlated exposure.

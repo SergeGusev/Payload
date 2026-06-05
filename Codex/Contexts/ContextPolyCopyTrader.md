@@ -1,3 +1,19 @@
+## Active Update 2026-06-05 Up Down Bps 100 Range Evaluation
+Goal: Evaluate whether fixed `Up bps` and `Down bps` strategies should expand from `1..50` to `1..100` without changing implementation.
+Status: Completed
+Done:
+- Queried production PostgreSQL read-only through `out\dbprobe` with host override `192.168.0.101`; no production rows, service state, orders, cancels, strategy flags, source files, or configs were changed.
+- Confirmed fixed BTC/ETH/SOL `Up bps` and `Down bps` families currently have `50` enabled Paper-only rows per asset/side (`1..50`), with `live_stakes = false` for all.
+- Current available run window for these new rows is short: roughly `2026-06-04 11:37 UTC` through `2026-06-05 07:08 UTC`, so confidence is limited.
+- Across current `1..50`, all `Down` families are positive: BTC `1163` settled / `676W` / `487L` / `+728.534800` / `20.4629%` ROI; ETH `1763` / `882W` / `881L` / `+484.222600` / `8.6503%`; SOL `1818` / `906W` / `912L` / `+244.486100` / `4.4091%`.
+- Across current `1..50`, all `Up` families are negative: BTC `2540` settled / `951W` / `1589L` / `-1642.302400` / `-20.6154%` ROI; ETH `2463` / `973W` / `1490L` / `-1512.281100` / `-19.5870%`; SOL `2326` / `655W` / `1671L` / `-2928.236400` / `-41.8803%`.
+- Existing upper tail `41..50` supports only the `Down` side: BTC Down `+137.424200` / `75.8932%` ROI, ETH Down `+168.981500` / `32.6044%`, SOL Down `+142.465800` / `22.2129%`; BTC Up `-233.929300` / `-32.4258%`, ETH Up `-3.993000` / `-0.7139%`, SOL Up `-365.274400` / `-45.9711%`.
+- Counterfactual filtering of `bps=1` diagnostics for added integer thresholds `51..100` suggests added slots would mostly duplicate rare high-move markets: BTC Down `300` added slots / approx `+440.180000` / `139.7086%` ROI, ETH Down `519` / `+328.461400` / `31.6767%`, SOL Down `1051` / `+277.310700` / `15.6224%`; BTC Up `460` / `-338.607600` / `-29.5297%`, ETH Up `419` / `-264.433400` / `-24.8611%`, SOL Up `869` / `-811.681500` / `-46.6194%`.
+- Assessment: expanding the whole `Up + Down` grid to `1..100` is not justified. If tested later, use Paper-only sparse/probation thresholds on `Down` first, not all `Up` rows and not Live.
+Next: If implementation is requested later, consider a small Paper-only research set such as Down `55/60/75/90/100` with family-level exposure reporting before adding dense `51..100` rows.
+Notes: Diagnostic only. No source builds/tests were run because no code changed. Counterfactual PnL uses existing `bps=1` executed rows filtered by stored cumulative move, so stake/lost-counter behavior is approximate for hypothetical new strategies.
+Blockers: None.
+
 ## Active Update 2026-06-05 ETH Skip Time Of Day Statistics
 Goal: Check whether ETH Skip 7/9/32 success/failure correlates with time of day.
 Status: Completed
