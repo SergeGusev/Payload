@@ -162,3 +162,10 @@ Request:
 
 Result:
 Checked production PostgreSQL read-only. The schema and service are now on the anchored Auto Live Pause implementation (`4cf5681`, service started `2026-06-05T19:33:28Z`). `btc_up_down_5m_up_bps_50_instant` currently has `live_stakes=true`, `auto_live_paused=false`, `effective_live_stakes=true`, and null pause anchors. Latest Live settlement evidence still satisfies the pause condition: latest Live settlement `2026-06-05T18:35:58Z`, 12-hour Live window `6` settled / `2W` / `4L` / `-3.785200`. That settlement occurred before the new service start, so the new service did not replay the pause check. If the latest Live settlement had set Auto Live Pause, the anchored Paper resume would also have cleared it after the `2026-06-05T18:36:55Z` Paper settlement: Paper from `2026-06-05T06:35:58Z` had `12` settled rows, `1` post-pause row, and `+10.505400` PnL. No production rows or source files were changed.
+
+## 2026-06-05T20:27:11.7473975Z
+Request:
+Нет, давай всё-таки отменим. Пусть всё идёт как идёт, без Auto Live Pause
+
+Result:
+Cleared all current Auto Live Pause state in production PostgreSQL: before the update there were `2` paused rows and `2` anchor rows; after the update there are `0` paused rows, `0` anchor rows, `6` live-enabled strategies, and `6` effective-live strategies. The cleared rows were `eth_up_down_5m_up_bps_50_instant` and `sol_up_down_5m_up_bps_50_instant`; manual `live_stakes` remained unchanged. Changed `src/PolyCopyTrader.Service/appsettings.json` to `AutoLivePauseStrategies: []` and updated README/configuration reference to document global Auto Live Pause disablement. Full test project passed 604/604 and `git diff --check` passed with LF/CRLF warnings only. The running service heartbeat still reports commit `4cf5681`; no local service process was visible to restart from this shell, so the empty allowlist requires a service restart/deploy to take effect in the running process.

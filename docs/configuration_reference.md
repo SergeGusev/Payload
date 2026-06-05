@@ -900,14 +900,11 @@ before the page limit.
 
 Automatic strategy pausing is Live-only and opt-in per strategy through
 `LiveTrading:AutoLivePauseStrategies`; an empty list disables automatic Live
-pause for every strategy. The service config currently allowlists the BTC/ETH/SOL
-fixed `Up/Down 50 bps Instant` variants, so their stored `auto_live_paused=true`
-state is retained across startup and can later be cleared by the automatic
-Paper-profit resume rule. On startup, the service clears stored
-`auto_live_paused=true` rows for strategies outside the current allowlist, so
-removed entries do not remain suppressed by old Auto Live Pause state. Entries
-may be strategy codes such as `follow_leader` or strategy ids. For allowlisted
-strategies, pause and resume use different evidence. After a Live settlement,
+pause for every strategy. The service config currently leaves this list empty,
+so automatic Live pause is disabled globally and startup clears any stored
+`auto_live_paused=true` rows. Entries may be strategy codes such as
+`follow_leader` or strategy ids. If strategies are later allowlisted again,
+pause and resume use different evidence. After a Live settlement,
 the service checks that strategy's settled Live orders over the last 12 hours.
 If more than one Live bet exists and the 12-hour Live realized PnL is negative,
 it sets `strategies.auto_live_paused=true`, stores
@@ -919,9 +916,7 @@ through the current settlement. If that anchored Paper realized PnL is positive
 and at least one of those Paper settlements happened after
 `auto_live_paused_at_utc`, it clears `strategies.auto_live_paused` and Live
 entries resume if the manual `Live` flag is still enabled. Paper settlements
-never set the flag. A one-time schema data migration clears existing
-`auto_live_paused=true` rows when this default opt-in policy is deployed, and
-another migration backfills pause anchors for any already-paused strategy. The
+never set the flag. The
 Dashboard `Paused` checkbox remains a manual full Paper+Live pause, while
 `Auto Live Pause` is read-only state for the automatic Live gate.
 

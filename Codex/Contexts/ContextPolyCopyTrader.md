@@ -1,3 +1,17 @@
+## Active Update 2026-06-05 Disable Auto Live Pause Globally
+Goal: Clear all current Auto Live Pause state and disable automatic Auto Live Pause for every strategy.
+Status: Completed
+Done:
+- Updated production PostgreSQL rows through `out\dbprobe` with host override `192.168.0.101`: cleared `auto_live_paused`, `auto_live_paused_at_utc`, and `auto_live_pause_window_start_utc` for all rows that had automatic pause state.
+- Verified production DB after the update has `0` `auto_live_paused` rows, `0` pause-anchor rows, `6` `live_stakes=true` rows, and `6` effective-live rows.
+- The rows cleared were `eth_up_down_5m_up_bps_50_instant` and `sol_up_down_5m_up_bps_50_instant`; their manual `live_stakes=true` flags were left unchanged.
+- Changed `src/PolyCopyTrader.Service/appsettings.json` so `LiveTrading:AutoLivePauseStrategies` is an empty list, disabling automatic Auto Live Pause globally after the service uses this config.
+- Updated README and configuration reference to document that the current service config leaves Auto Live Pause disabled globally.
+- Confirmed the local Debug output `src/PolyCopyTrader.Service/bin/Debug/net10.0/appsettings.json` also has `AutoLivePauseStrategies: []` after the test build.
+Next: Restart/redeploy `PolyCopyTrader.Service` so the running process picks up the empty Auto Live Pause allowlist; current heartbeat still reports commit `4cf5681`.
+Notes: Full `dotnet test tests/PolyCopyTrader.Tests/PolyCopyTrader.Tests.csproj` passed 604/604. `git diff --check` passed with LF/CRLF warnings only. No local `PolyCopyTrader.Service` process or Windows service was visible to restart from this shell. Existing unrelated untracked artifact/config files were left untouched.
+Blockers: None.
+
 ## Active Update 2026-06-05 BTC Up 50 Anchored Auto Pause Check
 Goal: Check whether `BTC Up or Down 5m Up 50 bps Instant` should currently be in Auto Live Pause.
 Status: Completed
