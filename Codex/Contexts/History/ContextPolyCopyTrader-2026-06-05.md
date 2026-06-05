@@ -60,3 +60,14 @@ Request:
 
 Result:
 Extended the temporary opening-decision guard so `SOL Up or Down 5m Skip 42 bps Instant` skips selected `Up` entries before Paper, Live-shadow, or Live order creation with `sol_skip_42_up_direction_temporarily_disabled`, while selected `Down` remains allowed. Kept the existing ETH Skip guard unchanged. Updated tests, README, configuration reference, project memory, and active context. Targeted guard tests passed 4/4, full `dotnet test` passed 603/603, and `git diff --check` passed.
+
+## 2026-06-05T08:44:07.2024995Z
+Request:
+Переведи стратегии
+
+BTC Up or Down 5m Down 50 bps Instant, BTC Up or Down 5m Up 50 bps Instant, ETH Up or Down 5m Down 50 bps Instant, ETH Up or Down 5m Up 50 bps Instant, SOL Up or Down 5m Down 50 bps Instant, SOL Up or Down 5m Up 50 bps Instant
+
+В Auto live pause режим и включи им Live режим.
+
+Result:
+Updated the six requested production strategy rows to `live_stakes=true`, `auto_live_paused=true`, `paused=false`, and `paused_until_utc=null`; all six verified with `effective_live_stakes=false` because Auto Live Pause is active. Added their codes to `LiveTrading:AutoLivePauseStrategies` in service config so startup retains the Auto Live Pause state, and updated README/configuration reference. Verified service heartbeat was fresh in `Live` mode with empty `last_error`; full `dotnet test` passed 603/603 and `git diff --check` passed with LF/CRLF warnings only.

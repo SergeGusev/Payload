@@ -1,3 +1,16 @@
+## Active Update 2026-06-05 Fixed 50 bps Auto Live Pause
+Goal: Put BTC/ETH/SOL fixed `Up/Down 50 bps Instant` strategies into Auto Live Pause mode while enabling their Live flag.
+Status: Completed
+Done:
+- Updated production PostgreSQL rows for `btc_up_down_5m_down_bps_50_instant`, `btc_up_down_5m_up_bps_50_instant`, `eth_up_down_5m_down_bps_50_instant`, `eth_up_down_5m_up_bps_50_instant`, `sol_up_down_5m_down_bps_50_instant`, and `sol_up_down_5m_up_bps_50_instant`.
+- Set each requested strategy to `live_stakes=true`, `auto_live_paused=true`, `paused=false`, and `paused_until_utc=null`; each received `live_enabled_at_utc = 2026-06-05T08:39:47Z`.
+- Verified all six rows have `effective_live_stakes=false` because Auto Live Pause is active, while the manual Live flag is enabled.
+- Added all six strategy codes to `LiveTrading:AutoLivePauseStrategies` in `src/PolyCopyTrader.Service/appsettings.json` so startup retains their stored Auto Live Pause state.
+- Updated README and configuration reference to document the current fixed `Up/Down 50 bps Instant` Auto Live Pause allowlist.
+Next: Restart/redeploy the service with the updated config if automatic pause/resume allowlist behavior must be active in the running process; the database Live/AutoPause state is already active immediately.
+Notes: `git pull --ff-only` reported already up to date. Production DB update used `out\dbprobe` with host override `192.168.0.101` and did not print secrets. Service heartbeat after the DB update was fresh in `Live` mode with `last_error` empty. `dotnet test tests/PolyCopyTrader.Tests/PolyCopyTrader.Tests.csproj` passed 603/603. `git diff --check` passed with LF/CRLF warnings only. Existing unrelated untracked artifact/config files were left untouched.
+Blockers: None.
+
 ## Active Update 2026-06-05 Temporary SOL Skip 42 Up Guard
 Goal: Temporarily skip `Up` entries for `SOL Up or Down 5m Skip 42 bps Instant` in both Paper and Live/Paper-shadow modes.
 Status: Completed

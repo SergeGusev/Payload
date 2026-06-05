@@ -899,9 +899,11 @@ orders page; when a strategy is selected, PostgreSQL applies that strategy filte
 before the page limit.
 
 Automatic strategy pausing is Live-only and opt-in per strategy through
-`LiveTrading:AutoLivePauseStrategies`; the default empty list disables automatic
-Live pause for every strategy. The service config currently leaves the list
-empty, so no strategy is allowlisted. On startup, the service clears stored
+`LiveTrading:AutoLivePauseStrategies`; an empty list disables automatic Live
+pause for every strategy. The service config currently allowlists the BTC/ETH/SOL
+fixed `Up/Down 50 bps Instant` variants, so their stored `auto_live_paused=true`
+state is retained across startup and can later be cleared by the automatic
+Paper-profit resume rule. On startup, the service clears stored
 `auto_live_paused=true` rows for strategies outside the current allowlist, so
 removed entries do not remain suppressed by old Auto Live Pause state. Entries
 may be strategy codes such as `follow_leader` or strategy ids. For allowlisted
