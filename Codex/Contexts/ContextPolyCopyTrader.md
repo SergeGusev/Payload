@@ -1,3 +1,16 @@
+## Active Update 2026-06-05 Temporary ETH Skip Up Guard
+Goal: Temporarily skip `Up` entries for all ETH Skip strategies in both Paper and Live/Paper-shadow modes.
+Status: Completed
+Done:
+- Added a temporary opening-decision guard in `BtcUpDown5mPaperStrategyProcessor` that rejects ETH `Skip`, `Skip bps`, and `Skip bps Instant` entries when the selected countertrend direction is `Up`.
+- The guard returns skip reason `eth_skip_up_direction_temporarily_disabled` before selected outcome resolution, Paper order creation, Live-shadow creation, or Live order placement.
+- Left SOL Skip rows and fixed ETH `Up/Down bps Instant` rows outside the guard.
+- Added tests for Paper ETH Skip Up suppression, Live ETH Skip bps Instant Up suppression before Paper/Live orders, and allowed Down Live-shadow behavior.
+- Updated README, configuration reference, and project memory to document the temporary guard.
+Next: Monitor ETH Skip Down-only behavior; remove or replace the temporary guard after enough Live/Paper evidence shows whether Up can be re-enabled safely.
+Notes: `git pull --ff-only` reported already up to date. Targeted test filter for the changed ETH Skip scenarios passed 4/4. Full `dotnet test tests/PolyCopyTrader.Tests/PolyCopyTrader.Tests.csproj` passed 602/602. `git diff --check` passed. Existing unrelated untracked artifact/config files were left untouched.
+Blockers: None.
+
 ## Active Update 2026-06-05 ETH Skip Direction Correlation
 Goal: Analyze ETH Skip 7/9/32 success/failure correlation by selected direction `Up` versus `Down`, separately for ordinary Paper and current Live.
 Status: Completed

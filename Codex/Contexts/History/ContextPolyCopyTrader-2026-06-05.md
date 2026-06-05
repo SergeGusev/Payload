@@ -39,3 +39,10 @@ Request:
 
 Result:
 Queried production PostgreSQL read-only and split the three ETH Skip strategies by selected direction and mode. Ordinary Paper was defined as settled non-`paper_live_shadow_test` runs; current Live was defined as realized `live_orders` created after each strategy's current `live_enabled_at_utc`. In ordinary Paper both directions were profitable and `Up` was slightly/clearly better: Skip 7 Up `+174.635700` vs Down `+46.147500`, Skip 9 Up `+136.149900` vs Down `+88.390200`, Skip 32 Up `+80.196500` vs Down `+75.013000`. In current Live the pattern reversed: Skip 7 Down `+25.998215` while Up `-47.997358`; Skip 9 Down `+11.613398` while Up `-52.910746`; Skip 32 Down `-3.741000` while Up `-38.280612`. Pairwise common settled markets for `7-9`, `7-32`, and `9-32` had same direction and same win/loss result `100%` of the time in both Paper and Live (`corr(win flags)=1.0000`), so these variants are not independent when they overlap. Current Live all-three overlap was negative on both directions, worse on Up: Down `16` common markets with `6` all-win / `10` all-loss; Up `18` common markets with `5` all-win / `13` all-loss.
+
+## 2026-06-05T07:50:56.5249627Z
+Request:
+Сделай как временное решенине для всех  ETH Skip стратегий пропускать Up ставки, как в Paper, так и в Live режиме
+
+Result:
+Added a temporary ETH Skip guard in `BtcUpDown5mPaperStrategyProcessor` that rejects selected `Up` entries for ETH `Skip`, `Skip bps`, and `Skip bps Instant` before Paper, Live-shadow, or Live order creation with skip reason `eth_skip_up_direction_temporarily_disabled`. Added/updated strategy processor tests for Paper skip, Live skip before order placement, and allowed Down Live-shadow behavior. Updated README, configuration reference, project memory, active context, and ran targeted tests plus full `dotnet test` successfully.

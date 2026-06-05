@@ -47,6 +47,7 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
     private const string BtcPreOpenSellExitExecutionSource = "btc_preopen_sell_exit";
     private const string BtcMakerExecutionSource = "btc_updown5m_maker_post_only";
     private const string StrategyPausedSkipReason = "strategy_paused";
+    private const string EthSkipUpDirectionTemporarilyDisabledReason = "eth_skip_up_direction_temporarily_disabled";
     private static readonly TimeSpan StrategyPauseLookback = TimeSpan.FromHours(12);
     private static readonly IReadOnlySet<string> CryptoReferenceAssetSymbols = StrategyIds.CryptoUpDown5mVariants
         .Select(GetReferenceAssetSymbol)
@@ -6040,6 +6041,23 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
         var selectedDirection = IsSkipConsecutiveMarketResultsRevert(variant)
             ? InvertDirection(baseSelectedDirection.Value)
             : baseSelectedDirection.Value;
+        if (ShouldSkipTemporaryEthSkipUpEntry(variant, selectedDirection))
+        {
+            return BtcOpeningLimitDecision.Reject(
+                EthSkipUpDirectionTemporarilyDisabledReason,
+                BuildSkipConsecutiveResultsRawDecisionJson(
+                    market,
+                    variant,
+                    stakeUsd,
+                    nowUtc,
+                    requiredResults,
+                    considered,
+                    baseSelectedDirection,
+                    selectedDirection,
+                    selectedOutcome: null,
+                    reason: EthSkipUpDirectionTemporarilyDisabledReason));
+        }
+
         var selectedOutcome = TrySelectOutcomeForDirection(market, selectedDirection);
         if (selectedOutcome is null)
         {
@@ -6174,6 +6192,25 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
         }
 
         var selectedDirection = fixedSelectedDirection ?? baseSelectedDirection.Value;
+        if (ShouldSkipTemporaryEthSkipUpEntry(variant, selectedDirection))
+        {
+            return BtcOpeningLimitDecision.Reject(
+                EthSkipUpDirectionTemporarilyDisabledReason,
+                BuildSkipBpsThresholdRawDecisionJson(
+                    market,
+                    variant,
+                    stakeUsd,
+                    nowUtc,
+                    requiredResults,
+                    considered,
+                    baseSelectedDirection,
+                    selectedDirection,
+                    selectedOutcome: null,
+                    moveSignal,
+                    EthSkipUpDirectionTemporarilyDisabledReason,
+                    closeBookDiagnostics: moveSignal.CloseBookDiagnostics));
+        }
+
         var selectedOutcome = TrySelectOutcomeForDirection(market, selectedDirection);
         if (selectedOutcome is null)
         {
@@ -7008,6 +7045,18 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
         return variant.Behavior is BtcUpDown5mStrategyBehavior.SkipPreviousResultBpsThreshold or
             BtcUpDown5mStrategyBehavior.SkipPreviousResultBpsThresholdInstant or
             BtcUpDown5mStrategyBehavior.FixedOutcomePreviousResultBpsThresholdInstant;
+    }
+
+    private static bool ShouldSkipTemporaryEthSkipUpEntry(
+        BtcUpDown5mStrategyVariant variant,
+        BtcPriceDirection selectedDirection)
+    {
+        return selectedDirection == BtcPriceDirection.Up &&
+            string.Equals(GetReferenceAssetSymbol(variant), "ETH", StringComparison.OrdinalIgnoreCase) &&
+            (variant.Behavior is BtcUpDown5mStrategyBehavior.SkipConsecutiveMarketResults or
+                BtcUpDown5mStrategyBehavior.SkipConsecutiveMarketResultsRevert or
+                BtcUpDown5mStrategyBehavior.SkipPreviousResultBpsThreshold or
+                BtcUpDown5mStrategyBehavior.SkipPreviousResultBpsThresholdInstant);
     }
 
     private static bool UsesPreviousCloseBookMarketResult(BtcUpDown5mStrategyVariant variant)

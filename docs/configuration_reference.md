@@ -736,6 +736,10 @@ skips with `btc_previous_market_move_fixed_outcome_mismatch`. ETH/SOL Skip
 Revert rows are not seeded. Seeded ETH/SOL Skip/fixed rows can enter the
 Paper/Live-shadow path when their Dashboard `Live` flag is enabled and normal
 live gates pass.
+Temporary ETH Skip guard: if an ETH `Skip`, `Skip bps`, or `Skip bps Instant`
+row selects countertrend `Up`, the run is skipped before Paper, Live-shadow, or
+Live order creation with `eth_skip_up_direction_temporarily_disabled`. SOL Skip
+rows and fixed ETH `Up/Down bps Instant` rows are not affected by this guard.
 `Middle`,
 `Middle Revert`, `Skip`, and `Skip Revert` create pending Paper BUY orders as
 ordinary GTD limit orders. Their limit

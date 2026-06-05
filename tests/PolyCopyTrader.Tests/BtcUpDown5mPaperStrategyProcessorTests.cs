@@ -5661,6 +5661,62 @@ public sealed class BtcUpDown5mPaperStrategyProcessorTests
     }
 
     [Fact]
+    public async Task ProcessAsync_EthSkipConsecutiveResultsSkipsTemporaryUpEntriesInPaper()
+    {
+        var now = DateTimeOffset.UtcNow;
+        var repository = new TestAppRepository();
+        repository.StrategySettings[EthSkip3Variant.Id] = StrategyRuntimeSettings.Default(EthSkip3Variant.Id) with
+        {
+            PaperStakeAmount = 2.50m
+        };
+        repository.PolymarketGammaMarkets.Add(CreateMarket(
+            now,
+            now.AddMinutes(5),
+            upPrice: 0.50m,
+            downPrice: 0.50m,
+            slug: $"eth-updown-5m-{now.ToUnixTimeSeconds().ToString(CultureInfo.InvariantCulture)}",
+            seriesSlug: "eth-up-or-down-5m",
+            question: "ETH Up or Down - test",
+            marketId: "eth-market-1",
+            conditionId: "eth-condition-1",
+            upAssetId: "eth-asset-up",
+            downAssetId: "eth-asset-down"));
+        var closeBookOrderBooks = AddCryptoCloseBookResults(repository, "ETH", now, "Down", "Down", "Down");
+        OrderBookSnapshot[] orderBooks =
+        [
+            OrderBook("eth-asset-up", bestBid: 0.34m, bestAsk: 0.36m, now),
+            OrderBook("eth-asset-down", bestBid: 0.49m, bestAsk: 0.51m, now)
+        ];
+        var processor = CreateProcessorCoreWithOptions(
+            repository,
+            [],
+            orderBooks,
+            _ => { },
+            closeBookOrderBooks,
+            CreateBtcOptions(paperTakerPricingEnabled: false, [EthSkip3Variant.Code]),
+            new FakeBtcUsdReferencePriceClient(100m),
+            CreateBtcUsdReferenceCache(100m));
+
+        var result = await processor.ProcessAsync();
+
+        Assert.Equal(0, result.EntriesPlaced);
+        Assert.True(result.RunsSkipped >= 1);
+        Assert.Empty(repository.PaperOrders);
+        Assert.Empty(repository.LiveOrders);
+
+        var run = Assert.Single(repository.StrategyMarketPaperRuns, item =>
+            item.StrategyId == EthSkip3Variant.Id &&
+            item.Status == StrategyMarketPaperRunStatuses.Skipped &&
+            string.Equals(item.SkipReason, "eth_skip_up_direction_temporarily_disabled", StringComparison.Ordinal));
+        Assert.Null(run.SelectedOutcome);
+        Assert.Equal("eth_skip_up_direction_temporarily_disabled", run.SkipReason);
+        Assert.Contains("\"reference_asset_symbol\":\"ETH\"", run.SkipDiagnosticsJson, StringComparison.Ordinal);
+        Assert.Contains("\"base_selected_direction\":\"Up\"", run.SkipDiagnosticsJson, StringComparison.Ordinal);
+        Assert.Contains("\"selected_direction\":\"Up\"", run.SkipDiagnosticsJson, StringComparison.Ordinal);
+        Assert.Contains("\"skip_reason\":\"eth_skip_up_direction_temporarily_disabled\"", run.SkipDiagnosticsJson, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task ProcessAsync_SolSkipBpsInstantUsesCryptoStreakMoveAndExecutableAskDepth()
     {
         var now = DateTimeOffset.UtcNow;
@@ -8616,7 +8672,7 @@ public sealed class BtcUpDown5mPaperStrategyProcessorTests
     }
 
     [Fact]
-    public async Task ProcessAsync_EthSkipBps7InstantLiveStakeCreatesPaperShadowAndGtdLiveOrder()
+    public async Task ProcessAsync_EthSkipBps7InstantLiveStakeSkipsTemporaryUpEntryBeforePaperAndLiveOrders()
     {
         var now = DateTimeOffset.UtcNow;
         var previousStart = now.AddMinutes(-5);
@@ -8680,51 +8736,27 @@ public sealed class BtcUpDown5mPaperStrategyProcessorTests
 
         var result = await processor.ProcessAsync();
 
-        Assert.Equal(1, result.EntriesPlaced);
-        Assert.Equal(1, tradingClient.PlaceCalls);
-        Assert.NotNull(tradingClient.LastRequest);
-        var request = tradingClient.LastRequest;
-        Assert.Equal(ClobV2OrderType.GTD, request.OrderType);
-        Assert.False(request.PostOnly);
-        Assert.NotNull(request.GtdExpirationUtc);
-        Assert.Equal(0.36m, request.Price);
+        Assert.Equal(0, result.EntriesPlaced);
+        Assert.True(result.RunsSkipped >= 1);
+        Assert.Equal(0, tradingClient.PlaceCalls);
+        Assert.Null(tradingClient.LastRequest);
+        Assert.Empty(repository.PaperOrders);
+        Assert.Empty(repository.LiveOrders);
+        Assert.Empty(repository.PaperLiveShadowDecisions);
 
-        var liveOrder = Assert.Single(repository.LiveOrders);
-        Assert.Equal(EthSkipBps7InstantVariant.Id, liveOrder.StrategyId);
-        Assert.Equal("eth-asset-up", liveOrder.AssetId);
-        Assert.Equal("Up", liveOrder.Outcome);
-        Assert.Equal("GTD", liveOrder.OrderType);
-        Assert.Equal(LiveOrderStatus.Live, liveOrder.Status);
-        Assert.Equal(0.36m, liveOrder.Price);
-        Assert.Equal("paper_live_shadow_test", liveOrder.ExecutionSource);
-        Assert.False(liveOrder.PostOnly);
-        Assert.NotNull(liveOrder.CorrelationId);
-
-        var paperOrder = Assert.Single(repository.PaperOrders);
-        Assert.Equal(EthSkipBps7InstantVariant.Id, paperOrder.StrategyId);
-        Assert.Equal(PaperOrderStatus.Pending, paperOrder.Status);
-        Assert.Equal("paper_live_shadow_test", paperOrder.ExecutionSource);
-        Assert.Equal(liveOrder.CorrelationId, paperOrder.CorrelationId);
-        Assert.Equal(liveOrder.PaperOrderId, paperOrder.Id);
-        Assert.Equal("eth-asset-up", paperOrder.AssetId);
-        Assert.Equal("Up", paperOrder.Outcome);
-        Assert.Equal(0.36m, paperOrder.Price);
-        Assert.Equal(liveOrder.SizeShares, paperOrder.SizeShares);
-        Assert.Contains("\"decision_source\":\"clob_close_book_price_evidence_previous_crypto_move_threshold\"", paperOrder.RawDecisionJson, StringComparison.Ordinal);
-        Assert.Contains("\"reference_asset_symbol\":\"ETH\"", paperOrder.RawDecisionJson, StringComparison.Ordinal);
-        Assert.Contains("\"reference_binance_symbol\":\"ETHUSDT\"", paperOrder.RawDecisionJson, StringComparison.Ordinal);
-        Assert.Contains("\"previous_reference_asset_abs_move_from_start_bps\":8", paperOrder.RawDecisionJson, StringComparison.Ordinal);
-        Assert.Contains("\"selected_direction\":\"Up\"", paperOrder.RawDecisionJson, StringComparison.Ordinal);
-        Assert.Contains("\"opening_limit_price_mode\":\"instant_executable_ask_depth\"", paperOrder.RawDecisionJson, StringComparison.Ordinal);
-        Assert.Contains("\"instant_pricing_source\":\"websocket_cache\"", paperOrder.RawDecisionJson, StringComparison.Ordinal);
-        Assert.Contains("\"paper_live_shadow_test\":true", paperOrder.RawDecisionJson, StringComparison.Ordinal);
-
-        var decision = Assert.Single(repository.PaperLiveShadowDecisions);
-        Assert.Equal(EthSkipBps7InstantVariant.Id, decision.StrategyId);
-        Assert.Equal(liveOrder.CorrelationId, decision.CorrelationId);
-        Assert.Equal(paperOrder.Id, decision.PaperOrderId);
-        Assert.Equal(liveOrder.Id, decision.LiveOrderId);
-        Assert.Equal("live_submitted", decision.Status);
+        var run = Assert.Single(repository.StrategyMarketPaperRuns, item =>
+            item.StrategyId == EthSkipBps7InstantVariant.Id &&
+            item.Status == StrategyMarketPaperRunStatuses.Skipped &&
+            string.Equals(item.SkipReason, "eth_skip_up_direction_temporarily_disabled", StringComparison.Ordinal));
+        Assert.Null(run.SelectedOutcome);
+        Assert.Equal("eth_skip_up_direction_temporarily_disabled", run.SkipReason);
+        Assert.Contains("\"decision_source\":\"clob_close_book_price_evidence_previous_crypto_move_threshold\"", run.SkipDiagnosticsJson, StringComparison.Ordinal);
+        Assert.Contains("\"reference_asset_symbol\":\"ETH\"", run.SkipDiagnosticsJson, StringComparison.Ordinal);
+        Assert.Contains("\"reference_binance_symbol\":\"ETHUSDT\"", run.SkipDiagnosticsJson, StringComparison.Ordinal);
+        Assert.Contains("\"previous_reference_asset_abs_move_from_start_bps\":8", run.SkipDiagnosticsJson, StringComparison.Ordinal);
+        Assert.Contains("\"base_selected_direction\":\"Up\"", run.SkipDiagnosticsJson, StringComparison.Ordinal);
+        Assert.Contains("\"selected_direction\":\"Up\"", run.SkipDiagnosticsJson, StringComparison.Ordinal);
+        Assert.Contains("\"skip_reason\":\"eth_skip_up_direction_temporarily_disabled\"", run.SkipDiagnosticsJson, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -8753,7 +8785,7 @@ public sealed class BtcUpDown5mPaperStrategyProcessorTests
             conditionId: "eth-condition-1",
             upAssetId: "eth-asset-up",
             downAssetId: "eth-asset-down"));
-        var closeBookOrderBooks = AddCryptoCloseBookResults(repository, "ETH", now, "Down");
+        var closeBookOrderBooks = AddCryptoCloseBookResults(repository, "ETH", now, "Up");
         AddCryptoOddsTick(
             repository,
             "ETH",
@@ -8779,7 +8811,7 @@ public sealed class BtcUpDown5mPaperStrategyProcessorTests
         OrderBookSnapshot[] orderBooks =
         [
             OrderBook("eth-asset-up", bestBid: 0.34m, bestAsk: 0.36m, now),
-            OrderBook("eth-asset-down", bestBid: 0.64m, bestAsk: 0.66m, now)
+            OrderBook("eth-asset-down", bestBid: 0.62m, bestAsk: 0.64m, now)
         ];
         var tradingClient = new CapturingTradingClient();
         var processor = CreateLiveProcessorWithCryptoReference(
@@ -8797,15 +8829,20 @@ public sealed class BtcUpDown5mPaperStrategyProcessorTests
 
         var liveOrder = Assert.Single(repository.LiveOrders);
         Assert.Equal(EthSkipBps32InstantVariant.Id, liveOrder.StrategyId);
+        Assert.Equal("eth-asset-down", liveOrder.AssetId);
+        Assert.Equal("Down", liveOrder.Outcome);
         Assert.Equal("paper_live_shadow_test", liveOrder.ExecutionSource);
         Assert.Equal(LiveOrderStatus.Live, liveOrder.Status);
         Assert.NotNull(liveOrder.CorrelationId);
 
         var paperOrder = Assert.Single(repository.PaperOrders);
         Assert.Equal(EthSkipBps32InstantVariant.Id, paperOrder.StrategyId);
+        Assert.Equal("eth-asset-down", paperOrder.AssetId);
+        Assert.Equal("Down", paperOrder.Outcome);
         Assert.Equal("paper_live_shadow_test", paperOrder.ExecutionSource);
         Assert.Equal(liveOrder.CorrelationId, paperOrder.CorrelationId);
         Assert.Equal(liveOrder.PaperOrderId, paperOrder.Id);
+        Assert.Contains("\"selected_direction\":\"Down\"", paperOrder.RawDecisionJson, StringComparison.Ordinal);
         Assert.Contains("\"paper_live_shadow_test\":true", paperOrder.RawDecisionJson, StringComparison.Ordinal);
 
         var decision = Assert.Single(repository.PaperLiveShadowDecisions);
@@ -8869,7 +8906,7 @@ public sealed class BtcUpDown5mPaperStrategyProcessorTests
             TokenMetadata("eth-loss-up", "Up", "Down"),
             TokenMetadata("eth-loss-down", "Down", "Down")
         };
-        var closeBookOrderBooks = AddCryptoCloseBookResults(repository, "ETH", now, "Down");
+        var closeBookOrderBooks = AddCryptoCloseBookResults(repository, "ETH", now, "Up");
         AddCryptoOddsTick(
             repository,
             "ETH",
@@ -8895,7 +8932,7 @@ public sealed class BtcUpDown5mPaperStrategyProcessorTests
         OrderBookSnapshot[] orderBooks =
         [
             OrderBook("eth-asset-up", bestBid: 0.34m, bestAsk: 0.36m, now),
-            OrderBook("eth-asset-down", bestBid: 0.64m, bestAsk: 0.66m, now)
+            OrderBook("eth-asset-down", bestBid: 0.62m, bestAsk: 0.64m, now)
         ];
         var tradingClient = new CapturingTradingClient();
         var processor = CreateProcessorCoreWithOptions(
@@ -8947,11 +8984,15 @@ public sealed class BtcUpDown5mPaperStrategyProcessorTests
         var paperOrder = repository.PaperOrders.Single(order =>
             order.StrategyId == EthSkipBps7InstantVariant.Id &&
             string.Equals(order.ExecutionSource, "paper_live_shadow_test", StringComparison.OrdinalIgnoreCase) &&
-            string.Equals(order.AssetId, "eth-asset-up", StringComparison.OrdinalIgnoreCase));
+            string.Equals(order.AssetId, "eth-asset-down", StringComparison.OrdinalIgnoreCase));
         Assert.Equal(5.00m, paperOrder.NotionalUsd);
+        Assert.Equal("Down", paperOrder.Outcome);
         Assert.NotEqual(liveOrder.SizeShares, paperOrder.SizeShares);
+        Assert.Equal("eth-asset-down", liveOrder.AssetId);
+        Assert.Equal("Down", liveOrder.Outcome);
         Assert.Contains("\"paper_lost_coeff_configured\":2", paperOrder.RawDecisionJson, StringComparison.Ordinal);
         Assert.Contains("\"paper_lost_counter\":1", paperOrder.RawDecisionJson, StringComparison.Ordinal);
+        Assert.Contains("\"selected_direction\":\"Down\"", paperOrder.RawDecisionJson, StringComparison.Ordinal);
         using var rawDecision = JsonDocument.Parse(paperOrder.RawDecisionJson ?? throw new InvalidOperationException("Paper order raw decision JSON is missing."));
         Assert.Equal(2.50m, rawDecision.RootElement.GetProperty("paper_lost_base_stake_usd").GetDecimal());
         Assert.Equal(2.50m, rawDecision.RootElement.GetProperty("paper_lost_add_stake_usd").GetDecimal());

@@ -1,6 +1,6 @@
 # PolyCopyTrader Project Memory
 
-Last updated: 2026-04-30, Europe/Sofia.
+Last updated: 2026-06-05, Europe/Sofia.
 
 This file is the high-context memory note for a future Codex session. If the user asks
 "what did we build?" or "continue the PolyCopyTrader project", read this file first,
@@ -35,6 +35,15 @@ The repository also has local debugging and trader discovery support after task 
 - Polymarket HTTP request/response audit table;
 - background on-chain ingestion, market enrichment, activity refresh, position
   refresh, and wallet performance workers.
+
+Recent runtime note:
+
+- ETH Skip strategy entries whose selected countertrend direction is `Up` are
+  temporarily skipped in both Paper and Live/Paper-shadow paths before order
+  creation with skip reason `eth_skip_up_direction_temporarily_disabled`.
+  This guard applies only to ETH `Skip`, `Skip bps`, and `Skip bps Instant`
+  rows; SOL Skip and fixed ETH `Up/Down bps Instant` rows keep their normal
+  behavior.
 
 Latest verified code state on 2026-04-30:
 
