@@ -134,3 +134,10 @@ Request:
 
 Result:
 Explained that the remaining contradiction is caused by independent evidence windows: Live settlements can set Auto Live Pause from recent Live losses, while Paper settlements can clear it from Paper wins that are not tied to the pause moment. Recommended turning Auto Live Pause into a small state machine with persisted pause metadata such as `auto_live_paused_at_utc`, reason, source, and evidence; resume should consider only Paper settlements after the pause timestamp, require at least 12 post-pause Paper settlements and positive aggregate PnL, and optionally enforce a cooldown or ROI buffer. No production rows or source behavior were changed.
+
+## 2026-06-05T19:03:10.9101737Z
+Request:
+А если чуть иначе: 1. Paper логика снятия считает не по 12 транзакциям, а по всем транзакциям с момента auto_live_paused_at_utc - 12 часов ?
+
+Result:
+Assessed the alternative Paper resume window of all settlements from `auto_live_paused_at_utc - 12h`. Concluded it should not be the sole clear condition because it still includes pre-pause Paper evidence, so old Paper wins can cancel a fresh Live-loss pause. Recommended using that broader window only as diagnostic context or as an additional weak condition, while the hard resume condition should require positive post-pause Paper evidence with enough post-pause settlements or elapsed markets. No production rows or source behavior were changed.

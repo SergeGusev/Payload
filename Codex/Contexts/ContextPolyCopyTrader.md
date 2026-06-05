@@ -1,3 +1,15 @@
+## Active Update 2026-06-05 Auto Live Pause Pre Pause Window Assessment
+Goal: Assess whether Paper resume should use all Paper transactions from `auto_live_paused_at_utc - 12h`.
+Status: Completed
+Done:
+- Evaluated the alternative resume window of all Paper settlements from 12 hours before the Auto Live Pause timestamp through the current Paper settlement.
+- Concluded this should not be the sole clear condition because it still includes pre-pause Paper evidence, so old Paper wins can still cancel a fresh Live-loss pause.
+- Recommended using the 12-hour pre-pause window only as diagnostic context or as an additional weak condition, while the hard clear condition should still require new post-pause evidence.
+- Suggested a safer combined policy: clear only when post-pause Paper PnL is positive with enough post-pause settlements or elapsed markets, optionally also requiring the broader `auto_live_paused_at_utc - 12h` aggregate not to be negative.
+Next: If requested, implement a schema-backed policy with `auto_live_paused_at_utc`, post-pause resume evidence, and optional pre-pause diagnostic aggregate.
+Notes: No production rows or source behavior were changed. Existing unrelated untracked artifact/config files were left untouched.
+Blockers: None.
+
 ## Active Update 2026-06-05 Auto Live Pause State Machine Recommendation
 Goal: Define how Auto Live Pause set and clear rules should avoid contradicting each other.
 Status: Completed
