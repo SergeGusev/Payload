@@ -113,3 +113,10 @@ Request:
 
 Result:
 Explained the current Auto Live Pause policy from source code. Auto Live Pause is allowlist-only through `LiveTrading:AutoLivePauseStrategies`; `EffectiveLiveStakes = LiveStakes && !AutoLivePaused`. The service sets `auto_live_paused=true` only after Live settlements when the strategy's settled Live PnL over the last 12 hours is negative and settled Live count is greater than `1`. The service clears `auto_live_paused=false` only after Paper settlements when the strategy's settled Paper PnL over the last 12 hours is positive and settled Paper count is greater than `0`. Live settlements never clear the flag, and Paper settlements never set it. No production rows or source files were changed.
+
+## 2026-06-05T18:21:40.8865235Z
+Request:
+Давай скорректируем логику снятия Auto Live Pause - будем считать не за последние 12 часов, а за последние 12 Paper транзакций (если наберём)
+
+Result:
+Changed Auto Live Pause clearing logic so `ResumeFromPaperSettlements` now uses the strategy's most recent 12 settled Paper rows ordered by settlement time, not a 12-hour Paper window. The flag clears only when all 12 Paper settlements are available and their total realized PnL is positive; fewer than 12 Paper settlements leave Auto Live Pause unchanged. The Live-side pause rule remains unchanged: Live settlements still use the last 12 hours, require more than one settled Live bet, and require negative Live PnL. Updated `PostgresAppRepository`, `TestAppRepository`, storage tests, README, and configuration reference. Targeted Auto Live Pause tests passed 13/13, full `dotnet test` passed 604/604, and `git diff --check` passed with LF/CRLF warnings only.

@@ -912,10 +912,12 @@ Live orders over the last 12 hours. If more than one Live bet exists and the
 12-hour Live realized PnL is negative, it sets
 `strategies.auto_live_paused=true` indefinitely; Live settlements never clear the
 flag. The strategy keeps creating Paper entries, and after each Paper settlement
-the service checks that strategy's settled Paper rows over the last 12 hours. If
-Paper realized PnL becomes positive, it clears `strategies.auto_live_paused` and
-Live entries resume if the manual `Live` flag is still enabled; Paper settlements
-never set the flag. A one-time schema data migration clears existing
+the service checks that strategy's most recent 12 settled Paper rows, regardless
+of wall-clock age. If all 12 rows are available and their total Paper realized
+PnL is positive, it clears `strategies.auto_live_paused` and Live entries resume
+if the manual `Live` flag is still enabled. Fewer than 12 settled Paper rows are
+not enough to clear the flag. Paper settlements never set the flag. A one-time
+schema data migration clears existing
 `auto_live_paused=true` rows when this default opt-in policy is deployed. The
 Dashboard `Paused` checkbox remains a manual full Paper+Live pause, while
 `Auto Live Pause` is read-only state for the automatic Live gate.

@@ -1,3 +1,17 @@
+## Active Update 2026-06-05 Auto Live Pause Resume Last 12 Paper Settlements
+Goal: Change Auto Live Pause clearing from a 12-hour Paper PnL window to the last 12 settled Paper transactions.
+Status: Completed
+Done:
+- Updated `PostgresAppRepository.UpdateStrategyAutoLivePauseFromRecentPnlAsync` so `ResumeFromPaperSettlements` uses the strategy's most recent 12 settled Paper rows up to the current settlement time, ordered by `settled_at_utc DESC`, instead of filtering Paper rows by a 12-hour lookback.
+- Required all 12 Paper settlements to be present before clearing `auto_live_paused`; fewer than 12 settled Paper rows now leave Auto Live Pause unchanged even if their PnL is positive.
+- Kept the Live-side pause rule unchanged: `PauseFromLiveSettlements` still uses settled Live PnL over the last 12 hours and requires more than one Live settlement plus negative PnL.
+- Updated `TestAppRepository` to match the new Paper resume logic.
+- Updated storage tests to cover both "11 positive Paper settlements do not clear" and "last 12 positive Paper settlements clear while older losses are ignored".
+- Updated README and configuration reference to document the new last-12-Paper-settlements resume rule.
+Next: Deploy/restart the service for the running process to use this new Auto Live Pause resume rule.
+Notes: `git pull --ff-only` reported already up to date. Targeted Auto Live Pause test filter passed 13/13. Full `dotnet test tests/PolyCopyTrader.Tests/PolyCopyTrader.Tests.csproj` passed 604/604. `git diff --check` passed with LF/CRLF warnings only. Existing unrelated untracked artifact/config files were left untouched.
+Blockers: None.
+
 ## Active Update 2026-06-05 Auto Live Pause Logic Explanation
 Goal: Explain the exact logic used to set and clear the Auto Live Pause flag.
 Status: Completed

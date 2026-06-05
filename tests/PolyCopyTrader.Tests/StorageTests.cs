@@ -635,6 +635,9 @@ public sealed class StorageTests
         Assert.Contains("FROM strategy_market_paper_runs run", method, StringComparison.Ordinal);
         Assert.Contains("FROM paper_position_settlements settlement", method, StringComparison.Ordinal);
         Assert.Contains("AND (SELECT settled_count FROM selected_pnl) > 1", method, StringComparison.Ordinal);
+        Assert.Contains("ORDER BY settled_at_utc DESC", method, StringComparison.Ordinal);
+        Assert.Contains("LIMIT @PaperResumeSettlementCount", method, StringComparison.Ordinal);
+        Assert.Contains("AND (SELECT settled_count FROM selected_pnl) >= @PaperResumeSettlementCount", method, StringComparison.Ordinal);
         Assert.Contains("SET auto_live_paused = CASE", method, StringComparison.Ordinal);
         Assert.Contains("THEN true", method, StringComparison.Ordinal);
         Assert.Contains("THEN false", method, StringComparison.Ordinal);
@@ -805,7 +808,7 @@ public sealed class StorageTests
     }
 
     [Fact]
-    public async Task TestRepository_StrategyAutoLivePauseClearsOnlyFromRecentPaperPnlPositive()
+    public async Task TestRepository_StrategyAutoLivePauseDoesNotClearBeforeTwelvePaperSettlements()
     {
         var now = DateTimeOffset.UtcNow;
         var strategyId = StrategyIds.BtcUpDown5mBinanceBps2;
@@ -815,7 +818,43 @@ public sealed class StorageTests
             LiveStakes = true,
             AutoLivePaused = true
         };
-        repository.StrategyMarketPaperRuns.Add(CreateSettledStrategyRun(strategyId, now.AddMinutes(-10), 2m));
+        for (var i = 0; i < 11; i++)
+        {
+            repository.StrategyMarketPaperRuns.Add(CreateSettledStrategyRun(strategyId, now.AddMinutes(-20 + i), 1m));
+        }
+
+        var decision = await repository.UpdateStrategyAutoLivePauseFromRecentPnlAsync(
+            strategyId,
+            now.AddHours(-12),
+            now,
+            StrategyAutoLivePauseUpdateMode.ResumeFromPaperSettlements,
+            CancellationToken.None);
+
+        Assert.True(decision.AutoLivePaused);
+        Assert.False(decision.AutoLiveResumed);
+        Assert.False(decision.AutoLivePauseChanged);
+        Assert.Equal(11, decision.RecentSettledCount);
+        Assert.Equal(11m, decision.RecentPnlUsd);
+        Assert.True(repository.StrategySettings[strategyId].LiveStakes);
+        Assert.True(repository.StrategySettings[strategyId].AutoLivePaused);
+    }
+
+    [Fact]
+    public async Task TestRepository_StrategyAutoLivePauseClearsFromLastTwelvePaperPnlPositive()
+    {
+        var now = DateTimeOffset.UtcNow;
+        var strategyId = StrategyIds.BtcUpDown5mBinanceBps2;
+        var repository = new TestAppRepository();
+        repository.StrategySettings[strategyId] = StrategyRuntimeSettings.Default(strategyId) with
+        {
+            LiveStakes = true,
+            AutoLivePaused = true
+        };
+        repository.StrategyMarketPaperRuns.Add(CreateSettledStrategyRun(strategyId, now.AddMinutes(-60), -100m));
+        for (var i = 0; i < 12; i++)
+        {
+            repository.StrategyMarketPaperRuns.Add(CreateSettledStrategyRun(strategyId, now.AddMinutes(-12 + i), 1m));
+        }
 
         var decision = await repository.UpdateStrategyAutoLivePauseFromRecentPnlAsync(
             strategyId,
@@ -827,8 +866,8 @@ public sealed class StorageTests
         Assert.False(decision.AutoLivePaused);
         Assert.True(decision.AutoLiveResumed);
         Assert.True(decision.AutoLivePauseChanged);
-        Assert.Equal(1, decision.RecentSettledCount);
-        Assert.Equal(2m, decision.RecentPnlUsd);
+        Assert.Equal(12, decision.RecentSettledCount);
+        Assert.Equal(12m, decision.RecentPnlUsd);
         Assert.True(repository.StrategySettings[strategyId].LiveStakes);
         Assert.False(repository.StrategySettings[strategyId].AutoLivePaused);
     }

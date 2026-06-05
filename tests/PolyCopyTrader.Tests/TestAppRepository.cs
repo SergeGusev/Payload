@@ -6,6 +6,8 @@ namespace PolyCopyTrader.Tests;
 
 internal sealed class TestAppRepository : IAppRepository
 {
+    private const int AutoLivePausePaperResumeSettlementCount = 12;
+
     private readonly object sync = new();
     private readonly HashSet<string> leaderTradeKeys = [];
     private int polymarketGammaMarketLookupsInFlight;
@@ -1626,8 +1628,9 @@ internal sealed class TestAppRepository : IAppRepository
         var paperRunSettlements = StrategyMarketPaperRuns
             .Where(run => StrategyIds.Normalize(run.StrategyId) == normalizedStrategyId)
             .Where(run => string.Equals(run.Status, StrategyMarketPaperRunStatuses.Settled, StringComparison.OrdinalIgnoreCase))
-            .Where(run => run.SettledAtUtc >= lookbackStartUtc && run.SettledAtUtc <= updatedAtUtc)
+            .Where(run => run.SettledAtUtc <= updatedAtUtc)
             .Where(run => run.RealizedPnlUsd is not null)
+            .Select(run => (SettledAtUtc: run.SettledAtUtc.GetValueOrDefault(), PnlUsd: run.RealizedPnlUsd ?? 0m))
             .ToArray();
         var liveSettlements = LiveOrders
             .Where(order => StrategyIds.Normalize(order.StrategyId) == normalizedStrategyId)
@@ -1637,14 +1640,18 @@ internal sealed class TestAppRepository : IAppRepository
         var followLeaderPaperSettlements = normalizedStrategyId == StrategyIds.FollowLeader
             ? PaperPositionSettlements
                 .Where(settlement => !settlement.CopiedTraderWallet.StartsWith("strategy:", StringComparison.OrdinalIgnoreCase))
-                .Where(settlement => settlement.SettledAtUtc >= lookbackStartUtc && settlement.SettledAtUtc <= updatedAtUtc)
+                .Where(settlement => settlement.SettledAtUtc <= updatedAtUtc)
+                .Select(settlement => (settlement.SettledAtUtc, PnlUsd: settlement.RealizedPnlUsd))
                 .ToArray()
             : [];
-        var paperRunPnl = paperRunSettlements.Sum(run => run.RealizedPnlUsd ?? 0m);
+        var paperResumeSettlements = paperRunSettlements
+            .Concat(followLeaderPaperSettlements)
+            .OrderByDescending(settlement => settlement.SettledAtUtc)
+            .Take(AutoLivePausePaperResumeSettlementCount)
+            .ToArray();
         var livePnl = liveSettlements.Sum(order => order.RealizedPnlUsd ?? 0m);
-        var followLeaderPaperPnl = followLeaderPaperSettlements.Sum(settlement => settlement.RealizedPnlUsd);
-        var paperPnl = paperRunPnl + followLeaderPaperPnl;
-        var paperSettledCount = paperRunSettlements.Length + followLeaderPaperSettlements.Length;
+        var paperPnl = paperResumeSettlements.Sum(settlement => settlement.PnlUsd);
+        var paperSettledCount = paperResumeSettlements.Length;
         var recentPnl = updateMode switch
         {
             StrategyAutoLivePauseUpdateMode.PauseFromLiveSettlements => livePnl,
@@ -1667,7 +1674,7 @@ internal sealed class TestAppRepository : IAppRepository
         }
         else if (updateMode == StrategyAutoLivePauseUpdateMode.ResumeFromPaperSettlements &&
             recentPnl > 0m &&
-            recentSettledCount > 0)
+            recentSettledCount >= AutoLivePausePaperResumeSettlementCount)
         {
             nextAutoLivePaused = false;
         }

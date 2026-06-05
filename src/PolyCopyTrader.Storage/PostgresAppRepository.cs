@@ -2681,26 +2681,34 @@ WHERE id = @StrategyId;
 		await using NpgsqlConnection connection = await OpenConnectionAsync(cancellationToken);
 		await using NpgsqlCommand command = CreateCommand(connection, """
 WITH paper_rows AS (
-    SELECT COALESCE(run.realized_pnl_usd, 0) AS pnl_usd
+    SELECT
+        COALESCE(run.realized_pnl_usd, 0) AS pnl_usd,
+        run.settled_at_utc
     FROM strategy_market_paper_runs run
     WHERE run.strategy_id = @StrategyId
       AND run.status = 'Settled'
-      AND run.settled_at_utc >= @LookbackStartUtc
       AND run.settled_at_utc <= @UpdatedAtUtc
       AND run.realized_pnl_usd IS NOT NULL
     UNION ALL
-    SELECT COALESCE(settlement.realized_pnl_usd, 0) AS pnl_usd
+    SELECT
+        COALESCE(settlement.realized_pnl_usd, 0) AS pnl_usd,
+        settlement.settled_at_utc
     FROM paper_position_settlements settlement
     WHERE @StrategyId = @FollowLeaderStrategyId
       AND lower(settlement.copied_trader_wallet) NOT LIKE 'strategy:%'
-      AND settlement.settled_at_utc >= @LookbackStartUtc
       AND settlement.settled_at_utc <= @UpdatedAtUtc
+),
+paper_resume_rows AS (
+    SELECT pnl_usd
+    FROM paper_rows
+    ORDER BY settled_at_utc DESC
+    LIMIT @PaperResumeSettlementCount
 ),
 paper_pnl AS (
     SELECT
         COALESCE(sum(pnl_usd), 0) AS pnl_usd,
         count(*)::integer AS settled_count
-    FROM paper_rows
+    FROM paper_resume_rows
 ),
 live_rows AS (
     SELECT COALESCE(live_order.realized_pnl_usd, 0) AS pnl_usd
@@ -2737,7 +2745,7 @@ updated AS (
                  AND (SELECT settled_count FROM selected_pnl) > 1 THEN true
             WHEN @UpdateMode = @ResumeFromPaperSettlements
                  AND (SELECT pnl_usd FROM selected_pnl) > 0
-                 AND (SELECT settled_count FROM selected_pnl) > 0 THEN false
+                 AND (SELECT settled_count FROM selected_pnl) >= @PaperResumeSettlementCount THEN false
             ELSE auto_live_paused
         END,
         updated_at_utc = @UpdatedAtUtc
@@ -2748,7 +2756,7 @@ updated AS (
                  AND (SELECT settled_count FROM selected_pnl) > 1 THEN true
             WHEN @UpdateMode = @ResumeFromPaperSettlements
                  AND (SELECT pnl_usd FROM selected_pnl) > 0
-                 AND (SELECT settled_count FROM selected_pnl) > 0 THEN false
+                 AND (SELECT settled_count FROM selected_pnl) >= @PaperResumeSettlementCount THEN false
             ELSE auto_live_paused
         END
     RETURNING auto_live_paused
@@ -2762,6 +2770,7 @@ SELECT
 """);
 		command.Parameters.AddWithValue("StrategyId", normalizedStrategyId);
 		command.Parameters.AddWithValue("FollowLeaderStrategyId", StrategyIds.FollowLeader);
+		command.Parameters.AddWithValue("PaperResumeSettlementCount", 12);
 		command.Parameters.AddWithValue("LookbackStartUtc", UtcDateTime(lookbackStartUtc));
 		command.Parameters.AddWithValue("UpdatedAtUtc", UtcDateTime(updatedAtUtc));
 		command.Parameters.AddWithValue("UpdateMode", updateMode.ToString());
