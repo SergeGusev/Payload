@@ -1,3 +1,19 @@
+## Active Update 2026-06-06 Current Live Strategy Assessment
+Goal: Assess current Live-enabled strategies and their prospects from production data.
+Status: Completed
+Done:
+- Queried production PostgreSQL read-only through `out\dbprobe` with host override `192.168.0.101`; no production rows, strategy flags, source files, or configs were changed.
+- Confirmed `PolyCopyTrader.Service` is `Running` in Live mode on commit `d51a8f9`, heartbeat fresh at `2026-06-06T08:05:26Z`, `last_error=null`, and Auto Live Pause remains disabled (`0` paused rows / `0` pause-anchor rows).
+- Confirmed six fixed `Up/Down 50 bps Instant` strategies are manually Live-enabled and effective live.
+- Current Live aggregate since each strategy's `live_enabled_at_utc`: `80` Live orders, `59` settled/matched, `29W/30L`, settled cost basis `168.807177`, realized PnL `+23.383723`, ROI `13.8523%`.
+- Live status mix: `59` `Matched`, `10` `PreflightRejected`, `8` `CancelFailed`, `3` `Rejected`, and no current nonterminal Live orders.
+- Same-strategy Paper aggregate since `live_enabled_at_utc`: `94` settled, `50W/44L`, stake `278.882177`, PnL `+51.328723`, ROI `18.4052%`.
+- Post Auto Live Pause disablement Live aggregate from `2026-06-05T20:27:11Z`: `46` orders, `33` settled, `19W/14L`, cost basis `96.288574`, PnL `+30.845526`, ROI `32.0345%`.
+- Per-strategy Live PnL/ROI: BTC Down `-4.257200` / `-18.2734%`; BTC Up `+0.679600` / `2.6546%`; ETH Down `+13.920443` / `42.9916%`; ETH Up `-1.399100` / `-4.3371%`; SOL Down `+3.991545` / `13.4871%`; SOL Up `+10.448435` / `40.6939%`.
+Next: Keep stakes small and continue monitoring until each Live strategy has materially larger settled sample; strongest current candidates are ETH Down and SOL Up, weakest current candidate is BTC Down.
+Notes: No tests were run because this was read-only diagnostics. Existing unrelated untracked artifact/config files were left untouched.
+Blockers: None.
+
 ## Active Update 2026-06-06 Auto Live Pause Disabled Runtime Check
 Goal: Verify current production state after disabling Auto Live Pause globally.
 Status: Completed
