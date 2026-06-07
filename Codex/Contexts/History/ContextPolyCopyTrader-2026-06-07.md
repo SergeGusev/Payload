@@ -55,3 +55,10 @@ Request:
 
 Result:
 Disabled all production 15-minute strategy rows through `out\dbprobe` with host override `192.168.0.101`: `540` total 15m rows now have `0` enabled, `0` Live, and `0` effective Live, with Live timestamps cleared. Verified the six BTC/ETH/SOL 5m 50 bps Live strategies remained enabled/effective Live. Updated seeds and documentation so BTC/ETH/SOL 15m fixed bps Instant rows and BTC 15m pre-open rows are disabled by default. Two 15m Live orders were created before the disable; ETH 15m Up 50 bps settled at `-3.00330000` realized PnL and SOL 15m Up 50 bps settled at `-3.00370000` realized PnL.
+
+## 2026-06-07T13:14:05.4839153Z
+Request:
+Фифизчески убери из базы данных все 15-м стратегии и объединяющие их категории.
+
+Result:
+Physically deleted production 15m strategy rows and dependent strategy data through `out\dbprobe` with host override `192.168.0.101`: `540` strategies, `89,451` paper orders, `92,062` strategy runs, `7,136` paper fills, `2` live orders, `2` live-shadow decisions, `99,179` signals, and 15m synthetic-wallet paper aggregate rows. Verified `0` remaining 15m strategy rows, `0` 15m strategy-wallet signals/orders/positions/settlements/performance rows, and `0` 15m run rows; 5m fixed rows and six 5m Live 50 bps strategies remained intact. Added a production guard trigger for the currently deployed old binary so missing 15m strategy IDs no longer create FK errors, and updated source schema/processor/docs so 15m rows are no longer seeded and missing strategy rows are treated as disabled. Verification passed: focused tests `224/224` and full tests `605/605`.

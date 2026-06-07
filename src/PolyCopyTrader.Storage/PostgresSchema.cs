@@ -2221,43 +2221,6 @@ ON CONFLICT (id) DO UPDATE SET
     updated_at_utc = excluded.updated_at_utc;
 
 INSERT INTO strategies (id, code, name, description, enabled, paper_stake_amount, created_at_utc, updated_at_utc)
-WITH variants(direction_code, direction_name, opposite_direction_name, id_group) AS (
-    VALUES
-        ('up', 'Up', 'Down', '8051'),
-        ('down', 'Down', 'Up', '8052')
-),
-thresholds(threshold_tenths) AS (
-    SELECT generate_series(1, 50)
-),
-formatted AS (
-    SELECT
-        variants.direction_code,
-        variants.direction_name,
-        variants.opposite_direction_name,
-        variants.id_group,
-        thresholds.threshold_tenths,
-        thresholds.threshold_tenths::text AS threshold_name,
-        thresholds.threshold_tenths::text AS code_suffix
-    FROM variants
-    CROSS JOIN thresholds
-)
-SELECT
-    ('b7c50005-0000-4000-' || id_group || '-' || lpad((100 + threshold_tenths)::text, 12, '0'))::uuid,
-    'btc_up_down_15m_' || direction_code || '_bps_' || code_suffix || '_instant',
-    'BTC Up or Down 15m ' || direction_name || ' ' || threshold_name || ' bps Instant',
-    'Immediately after BTC 15m market open, use the previous BTC 15m close-book result streak and archived Binance BTC start/end move gate; enter only when the cumulative streak move is at least ' || threshold_name || ' bps and the countertrend direction is ' || direction_name || '. If the countertrend direction is ' || opposite_direction_name || ', skip. Paper entry is a GTD limit BUY priced from current executable ask depth so the order can fill immediately; settlement uses only actually filled shares.',
-    false,
-    1.00,
-    now(),
-    now()
-FROM formatted
-ON CONFLICT (id) DO UPDATE SET
-    code = excluded.code,
-    name = excluded.name,
-    description = excluded.description,
-    updated_at_utc = excluded.updated_at_utc;
-
-INSERT INTO strategies (id, code, name, description, enabled, paper_stake_amount, created_at_utc, updated_at_utc)
 WITH assets(asset_symbol, bps_id_group, instant_id_group) AS (
     VALUES
         ('ETH', '8061', '8062'),
@@ -2472,53 +2435,6 @@ SELECT
     asset_symbol || ' Up or Down 5m ' || direction_name || ' ' || threshold_name || ' bps Instant',
     'Immediately after ' || asset_symbol || ' 5m market open, use the same previous close-book result streak and archived Binance ' || asset_symbol || ' start/end move gate as Skip ' || threshold_name || ' bps Instant; enter only when the cumulative streak move is at least ' || threshold_name || ' bps and the countertrend direction is ' || direction_name || '. If the countertrend direction is ' || opposite_direction_name || ', skip. Paper entry is a GTD limit BUY priced from current executable ask depth so the order can fill immediately; settlement uses only actually filled shares.',
     true,
-    1.00,
-    now(),
-    now()
-FROM formatted
-ON CONFLICT (id) DO UPDATE SET
-    code = excluded.code,
-    name = excluded.name,
-    description = excluded.description,
-    updated_at_utc = excluded.updated_at_utc;
-
-INSERT INTO strategies (id, code, name, description, enabled, paper_stake_amount, created_at_utc, updated_at_utc)
-WITH assets(asset_symbol, up_id_group, down_id_group) AS (
-    VALUES
-        ('ETH', '8083', '8084'),
-        ('SOL', '8085', '8086')
-),
-variants(direction_code, direction_name, opposite_direction_name) AS (
-    VALUES
-        ('up', 'Up', 'Down'),
-        ('down', 'Down', 'Up')
-),
-thresholds(threshold_tenths) AS (
-    SELECT generate_series(1, 50)
-),
-formatted AS (
-    SELECT
-        assets.asset_symbol,
-        variants.direction_code,
-        variants.direction_name,
-        variants.opposite_direction_name,
-        CASE
-            WHEN variants.direction_code = 'up' THEN assets.up_id_group
-            ELSE assets.down_id_group
-        END AS id_group,
-        thresholds.threshold_tenths,
-        thresholds.threshold_tenths::text AS threshold_name,
-        thresholds.threshold_tenths::text AS code_suffix
-    FROM assets
-    CROSS JOIN variants
-    CROSS JOIN thresholds
-)
-SELECT
-    ('b7c50005-0000-4000-' || id_group || '-' || lpad((100 + threshold_tenths)::text, 12, '0'))::uuid,
-    lower(asset_symbol) || '_up_down_15m_' || direction_code || '_bps_' || code_suffix || '_instant',
-    asset_symbol || ' Up or Down 15m ' || direction_name || ' ' || threshold_name || ' bps Instant',
-    'Immediately after ' || asset_symbol || ' 15m market open, use the previous ' || asset_symbol || ' 15m close-book result streak and archived Binance ' || asset_symbol || ' start/end move gate; enter only when the cumulative streak move is at least ' || threshold_name || ' bps and the countertrend direction is ' || direction_name || '. If the countertrend direction is ' || opposite_direction_name || ', skip. Paper entry is a GTD limit BUY priced from current executable ask depth so the order can fill immediately; settlement uses only actually filled shares.',
-    false,
     1.00,
     now(),
     now()
@@ -2773,7 +2689,6 @@ ON CONFLICT (id) DO UPDATE SET
 WITH intervals(interval_id, interval_code, interval_name, interval_description) AS (
     VALUES
         (1, '5m', '5m', '5-minute'),
-        (2, '15m', '15m', '15-minute'),
         (3, '1h', '1h', 'hourly'),
         (4, '4h', '4h', '4-hour')
 ),
@@ -2813,7 +2728,6 @@ ON CONFLICT (id) DO UPDATE SET
 WITH intervals(interval_id, interval_code, interval_name, interval_description) AS (
     VALUES
         (1, '5m', '5m', '5-minute'),
-        (2, '15m', '15m', '15-minute'),
         (3, '1h', '1h', 'hourly'),
         (4, '4h', '4h', '4-hour')
 ),
@@ -2991,6 +2905,30 @@ WHERE entered_at_utc IS NOT NULL;
 CREATE INDEX CONCURRENTLY IF NOT EXISTS ix_strategy_market_paper_runs_settled_time_strategy
 ON strategy_market_paper_runs(settled_at_utc, strategy_id)
 WHERE settled_at_utc IS NOT NULL;
+
+CREATE OR REPLACE FUNCTION public.skip_deleted_15m_strategy_market_paper_run()
+RETURNS trigger
+LANGUAGE plpgsql
+AS $$
+BEGIN
+    IF NOT EXISTS (SELECT 1 FROM public.strategies strategy WHERE strategy.id = NEW.strategy_id)
+       AND (
+           lower(COALESCE(NEW.market_slug, '')) LIKE '%updown-15m%'
+           OR lower(COALESCE(NEW.market_title, '')) LIKE '% up or down 15m %'
+       ) THEN
+        RETURN NULL;
+    END IF;
+
+    RETURN NEW;
+END;
+$$;
+
+DROP TRIGGER IF EXISTS trg_skip_deleted_15m_strategy_market_paper_run ON public.strategy_market_paper_runs;
+
+CREATE TRIGGER trg_skip_deleted_15m_strategy_market_paper_run
+BEFORE INSERT ON public.strategy_market_paper_runs
+FOR EACH ROW
+EXECUTE FUNCTION public.skip_deleted_15m_strategy_market_paper_run();
 
 CREATE TABLE IF NOT EXISTS paper_positions (
     id uuid PRIMARY KEY,

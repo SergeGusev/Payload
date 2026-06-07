@@ -248,7 +248,7 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
         var normalizedStrategyId = StrategyIds.Normalize(strategyId);
         return settings.TryGetValue(normalizedStrategyId, out var value)
             ? value
-            : StrategyRuntimeSettings.Default(normalizedStrategyId);
+            : StrategyRuntimeSettings.Default(normalizedStrategyId) with { Enabled = false };
     }
 
     private async Task<ObserveMarketsResult> ObserveMarketsAsync(

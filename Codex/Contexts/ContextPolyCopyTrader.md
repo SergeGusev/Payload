@@ -1,3 +1,18 @@
+## Active Update 2026-06-07 Physically Remove 15m Strategies
+Goal: Physically remove all 15-minute strategy rows and their Dashboard grouping remnants from production PostgreSQL, and prevent reseeding.
+Status: Completed
+Done:
+- Deleted production 15m strategy data transactionally through `out\dbprobe` with host override `192.168.0.101`: `540` `strategies`, `89,451` `paper_orders`, `92,062` `strategy_market_paper_runs`, `7,136` `paper_fills`, `2` `live_orders`, `2` `paper_live_shadow_decisions`, `99,179` `signals`, plus 15m synthetic-wallet paper aggregates (`5,763` positions, `5,310` settlements, `480` performance rows, then `554`/`270`/`160` legacy `_sell` aggregate rows).
+- Verified at DB time `2026-06-07T13:13:06Z`: `0` 15m strategy rows, `0` 15m strategy-wallet signals/orders/positions/settlements/performance rows, `0` 15m strategy run rows, `300` enabled fixed 5m rows, and `6` effective Live 5m 50 bps rows.
+- Confirmed production has no separate strategy-category table; Dashboard grouping categories are derived from strategy names and disappeared with the 15m rows.
+- Installed production guard trigger `trg_skip_deleted_15m_strategy_market_paper_run` so the currently deployed old binary skips insert attempts for missing 15m strategy IDs instead of generating FK errors; no FK errors were recorded after `2026-06-07T13:06:20Z`.
+- Updated `PostgresSchema` to stop seeding BTC/ETH/SOL 15m fixed bps Instant rows and BTC 15m pre-open rows, and to include the 15m-missing-strategy guard trigger.
+- Updated `BtcUpDown5mPaperStrategyProcessor` so missing strategy rows are treated as disabled instead of default-enabled.
+- Updated README and configuration reference to state that 15m strategy rows/categories were removed and are no longer seeded.
+Next: Deploy/restart `PolyCopyTrader.Service` from the new commit so the running binary also has the fail-closed missing-strategy behavior; the production DB guard already prevents current 15m FK spam until then.
+Notes: Verification passed: focused changed tests `224/224`, full `dotnet test tests\PolyCopyTrader.Tests\PolyCopyTrader.Tests.csproj --no-restore` `605/605`, production heartbeat fresh in `Live` with `last_error=null`, and 5m Live strategies unchanged. Existing unrelated untracked artifact/config files were left untouched.
+Blockers: None.
+
 ## Active Update 2026-06-07 Disable 15m Strategies
 Goal: Remove all 15-minute strategies from active production use and make 15m strategy seeds disabled by default.
 Status: Completed
