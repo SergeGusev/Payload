@@ -1,3 +1,18 @@
+## Active Update 2026-06-07 XRP DOGE 5m Volume Check
+Goal: Assess XRP and DOGE Up or Down 5m market volumes/liquidity before deciding whether to add them.
+Status: Completed
+Done:
+- Queried production PostgreSQL read-only through `out\dbprobe` with host override `192.168.0.101`; no production rows, strategy flags, source files, or configs were changed.
+- Cross-checked current/next XRP/DOGE/BTC/ETH/SOL 5m slugs through public Polymarket Gamma API and public CLOB `/book`; no authenticated/trading endpoints were used.
+- Production DB snapshot at `2026-06-07T08:13:58Z`: XRP 6h volume `83.93` across `72` markets with only `3` nonzero-volume markets, 24h volume `3653.45` with `30/288` nonzero-volume markets, median 5m volume `0`; average 6h `liquidity_clob` `2474.64`, average spread `0.0206`.
+- DOGE 6h volume `15.89` across `72` markets with only `1` nonzero-volume market, 24h volume `1050.07` with `15/288` nonzero-volume markets, median 5m volume `0`; average 6h `liquidity_clob` `2410.43`, average spread `0.0213`.
+- Comparison: BTC 6h volume `373593.53`, 24h volume `3061185.68`, nonzero `72/72` and `288/288`; ETH/SOL are also thin by median-volume standards but materially more integrated in existing code/config.
+- CLOB `/book` checks on current/next XRP/DOGE markets showed XRP often has around `$65..$97` executable ask notional at `<=0.55` near balanced markets and about `$440..$778` at `<=0.65`; DOGE had about `$49..$84` at `<=0.55` near balanced markets and `$258..$819` at `<=0.65`, with several `0.06` spreads.
+- Verified production `strategies` currently has `0` XRP and `0` DOGE strategy rows; current code seeds ETH/SOL crypto variants but not XRP/DOGE.
+Next: Do not add DOGE Live; if XRP is explored, do it as Paper-only diagnostics with tiny stakes and strict per-market volume/depth gates.
+Notes: No tests were run because this was read-only market diagnostics. Existing unrelated untracked artifact/config files were left untouched.
+Blockers: None.
+
 ## Active Update 2026-06-07 Disable Non Fixed Bps Instant Strategies
 Goal: Disable every strategy except BTC/ETH/SOL fixed `Up/Down N bps Instant` strategy groups.
 Status: Completed
