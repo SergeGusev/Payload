@@ -1,3 +1,17 @@
+## Active Update 2026-06-07 15m Fixed Bps Instant Strategies
+Goal: Add BTC/ETH/SOL 15-minute analogs of fixed `Up/Down N bps Instant` strategies and make their 50 bps variants Live.
+Status: Completed
+Done:
+- Added BTC 15m fixed `Up/Down 1..50 bps Instant` StrategyIds with interval-aware ids/codes/names/categories.
+- Added ETH/SOL 15m fixed `Up/Down 1..50 bps Instant` StrategyIds and PostgreSQL seed rows; total fixed bps Instant display categories now split by asset and interval.
+- Extended BTC/crypto Up/Down market discovery, odds archive selection, previous-result streak lookup, and close-book capture so 15m markets use 15-minute intervals and market-id filtered odds ticks instead of mixing with 5m rows that share a start timestamp.
+- Updated repository interfaces/PostgreSQL/test repository with market-id odds tick lookups for BTC and crypto.
+- Updated README and `docs/configuration_reference.md` to document the 15m fixed-bps rows and crypto 15m odds archive coverage.
+- Updated production PostgreSQL through `out\dbprobe` with host override `192.168.0.101`: inserted/upserted `300` new 15m fixed-bps strategy rows, verified `300/300 enabled`, and set exactly six `50 bps` rows Live (`target_live_rows=6`, `non_target_live_rows=0`).
+Next: Deploy/restart `PolyCopyTrader.Service` from the new commit so the running Live service recognizes and processes the new 15m StrategyIds.
+Notes: Verification passed: focused changed tests `224/224`, full `dotnet test tests\PolyCopyTrader.Tests\PolyCopyTrader.Tests.csproj --no-restore` `605/605`, and `git diff --check` with LF/CRLF warnings only. Production heartbeat after DB update still reports `PolyCopyTrader.Service` running old commit `d51a8f9c1dca...` in Live mode with fresh heartbeat; no local service process was visible to restart from this shell.
+Blockers: None.
+
 ## Active Update 2026-06-07 SOL Live Suitability Check
 Goal: Answer whether enabling SOL Up or Down 5m Live was a mistake after seeing XRP/DOGE volume concerns.
 Status: Completed

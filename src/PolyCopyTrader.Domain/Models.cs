@@ -1208,7 +1208,7 @@ public static class StrategyIds
     private static IReadOnlyList<BtcUpDown5mStrategyVariant> CreateBtcUpDown5mVariants()
     {
         int[] delays = [30, 60, 90, 120, 150, 180, 210, 240, 270];
-        var variants = new List<BtcUpDown5mStrategyVariant>(1770);
+        var variants = new List<BtcUpDown5mStrategyVariant>(1870);
 
         foreach (var delay in delays)
         {
@@ -1298,6 +1298,21 @@ public static class StrategyIds
             variants.Add(CreateBtcUpDown5mSkipBpsThresholdInstantVariant(thresholdTenths, minMoveBps));
             variants.Add(CreateBtcUpDown5mFixedOutcomeBpsThresholdInstantVariant(thresholdTenths, minMoveBps, isUp: true));
             variants.Add(CreateBtcUpDown5mFixedOutcomeBpsThresholdInstantVariant(thresholdTenths, minMoveBps, isUp: false));
+        }
+
+        for (var thresholdTenths = 1; thresholdTenths <= 50; thresholdTenths++)
+        {
+            var minMoveBps = (decimal)thresholdTenths;
+            variants.Add(CreateBtcUpDown5mFixedOutcomeBpsThresholdInstantVariant(
+                thresholdTenths,
+                minMoveBps,
+                isUp: true,
+                BtcUpDownMarketInterval.FifteenMinutes));
+            variants.Add(CreateBtcUpDown5mFixedOutcomeBpsThresholdInstantVariant(
+                thresholdTenths,
+                minMoveBps,
+                isUp: false,
+                BtcUpDownMarketInterval.FifteenMinutes));
         }
 
         variants.Add(CreateBtcUpDown5mAlwaysDirectionVariant(isUp: true));
@@ -1571,16 +1586,19 @@ public static class StrategyIds
     private static BtcUpDown5mStrategyVariant CreateBtcUpDown5mFixedOutcomeBpsThresholdInstantVariant(
         int thresholdTenths,
         decimal minMoveBps,
-        bool isUp)
+        bool isUp,
+        BtcUpDownMarketInterval marketInterval = BtcUpDownMarketInterval.FiveMinutes)
     {
         var thresholdName = minMoveBps.ToString("0.###", CultureInfo.InvariantCulture);
         var directionName = isUp ? "Up" : "Down";
         var oppositeDirectionName = isUp ? "Down" : "Up";
+        var intervalCode = GetUpDownIntervalCode(marketInterval);
+        var intervalName = GetUpDownIntervalName(marketInterval);
         return new BtcUpDown5mStrategyVariant(
-            GetBtcUpDown5mFixedOutcomeBpsThresholdInstantId(thresholdTenths, isUp),
-            GetBtcUpDown5mFixedOutcomeBpsThresholdInstantCode(thresholdTenths, isUp),
-            $"BTC Up or Down 5m {directionName} {thresholdName} bps Instant",
-            $"Immediately after BTC 5m market open, use the same previous close-book result streak and archived Binance BTC start/end move gate as Skip {thresholdName} bps Instant; enter only when the cumulative streak move is at least {thresholdName} bps and the countertrend direction is {directionName}. If the countertrend direction is {oppositeDirectionName}, skip. Paper entry is a GTD limit BUY priced from current executable ask depth so the order can fill immediately; settlement uses only actually filled shares.",
+            GetBtcUpDownFixedOutcomeBpsThresholdInstantId(thresholdTenths, isUp, marketInterval),
+            GetBtcUpDownFixedOutcomeBpsThresholdInstantCode(thresholdTenths, isUp, marketInterval),
+            $"BTC Up or Down {intervalName} {directionName} {thresholdName} bps Instant",
+            $"Immediately after BTC {intervalName} market open, use the previous BTC {intervalName} close-book result streak and archived Binance BTC start/end move gate; enter only when the cumulative streak move is at least {thresholdName} bps and the countertrend direction is {directionName}. If the countertrend direction is {oppositeDirectionName}, skip. Paper entry is a GTD limit BUY priced from current executable ask depth so the order can fill immediately; settlement uses only actually filled shares.",
             BtcUpDown5mStrategyDirection.Dynamic,
             0,
             BtcUpDown5mStrategyBehavior.FixedOutcomePreviousResultBpsThresholdInstant,
@@ -1588,19 +1606,48 @@ public static class StrategyIds
                 ? (int)minMoveBps
                 : 0,
             minMoveBps,
+            MarketInterval: marketInterval,
             FixedOutcome: isUp ? BtcUpDownFixedOutcome.Up : BtcUpDownFixedOutcome.Down);
     }
 
-    private static Guid GetBtcUpDown5mFixedOutcomeBpsThresholdInstantId(int thresholdTenths, bool isUp)
+    private static Guid GetBtcUpDownFixedOutcomeBpsThresholdInstantId(
+        int thresholdTenths,
+        bool isUp,
+        BtcUpDownMarketInterval marketInterval)
     {
-        var idGroup = isUp ? 8031 : 8032;
+        var idGroup = marketInterval switch
+        {
+            BtcUpDownMarketInterval.FiveMinutes => isUp ? 8031 : 8032,
+            BtcUpDownMarketInterval.FifteenMinutes => isUp ? 8051 : 8052,
+            _ => throw new ArgumentOutOfRangeException(nameof(marketInterval), marketInterval, "Unsupported fixed bps Instant interval.")
+        };
         return Guid.Parse($"b7c50005-0000-4000-{idGroup:0000}-{100 + thresholdTenths:000000000000}");
     }
 
-    private static string GetBtcUpDown5mFixedOutcomeBpsThresholdInstantCode(int thresholdTenths, bool isUp)
+    private static string GetBtcUpDownFixedOutcomeBpsThresholdInstantCode(
+        int thresholdTenths,
+        bool isUp,
+        BtcUpDownMarketInterval marketInterval)
     {
         var directionCode = isUp ? "up" : "down";
-        return "btc_up_down_5m_" + directionCode + "_bps_" + thresholdTenths.ToString(CultureInfo.InvariantCulture) + "_instant";
+        return "btc_up_down_" + GetUpDownIntervalCode(marketInterval) + "_" + directionCode + "_bps_" + thresholdTenths.ToString(CultureInfo.InvariantCulture) + "_instant";
+    }
+
+    private static string GetUpDownIntervalCode(BtcUpDownMarketInterval marketInterval)
+    {
+        return marketInterval switch
+        {
+            BtcUpDownMarketInterval.FiveMinutes => "5m",
+            BtcUpDownMarketInterval.FifteenMinutes => "15m",
+            BtcUpDownMarketInterval.OneHour => "1h",
+            BtcUpDownMarketInterval.FourHours => "4h",
+            _ => throw new ArgumentOutOfRangeException(nameof(marketInterval), marketInterval, "Unsupported Up/Down interval.")
+        };
+    }
+
+    private static string GetUpDownIntervalName(BtcUpDownMarketInterval marketInterval)
+    {
+        return GetUpDownIntervalCode(marketInterval);
     }
 
     private static BtcUpDown5mStrategyVariant CreateBtcUpDown5mAlwaysDirectionVariant(bool isUp)
@@ -1757,10 +1804,10 @@ public static class StrategyIds
     {
         CryptoUpDown5mAssetSpec[] assets =
         [
-            new("ETH", 8061, 8062, 8065, 8066, 8067, 8071, 8072, 8073, 8074, 8079, 8080),
-            new("SOL", 8063, 8064, 8068, 8069, 8070, 8075, 8076, 8077, 8078, 8081, 8082)
+            new("ETH", 8061, 8062, 8065, 8066, 8067, 8071, 8072, 8073, 8074, 8079, 8080, 8083, 8084),
+            new("SOL", 8063, 8064, 8068, 8069, 8070, 8075, 8076, 8077, 8078, 8081, 8082, 8085, 8086)
         ];
-        var variants = new List<BtcUpDown5mStrategyVariant>(assets.Length * 707);
+        var variants = new List<BtcUpDown5mStrategyVariant>(assets.Length * 807);
         foreach (var asset in assets)
         {
             for (var depth = 1; depth <= 5; depth++)
@@ -1793,6 +1840,18 @@ public static class StrategyIds
                 variants.Add(CreateCryptoUpDown5mSkipBpsThresholdInstantVariant(asset, thresholdTenths, minMoveBps));
                 variants.Add(CreateCryptoUpDown5mFixedOutcomeBpsThresholdInstantVariant(asset, thresholdTenths, minMoveBps, isUp: true));
                 variants.Add(CreateCryptoUpDown5mFixedOutcomeBpsThresholdInstantVariant(asset, thresholdTenths, minMoveBps, isUp: false));
+                variants.Add(CreateCryptoUpDown5mFixedOutcomeBpsThresholdInstantVariant(
+                    asset,
+                    thresholdTenths,
+                    minMoveBps,
+                    isUp: true,
+                    BtcUpDownMarketInterval.FifteenMinutes));
+                variants.Add(CreateCryptoUpDown5mFixedOutcomeBpsThresholdInstantVariant(
+                    asset,
+                    thresholdTenths,
+                    minMoveBps,
+                    isUp: false,
+                    BtcUpDownMarketInterval.FifteenMinutes));
             }
         }
 
@@ -2033,19 +2092,28 @@ public static class StrategyIds
         CryptoUpDown5mAssetSpec asset,
         int thresholdTenths,
         decimal minMoveBps,
-        bool isUp)
+        bool isUp,
+        BtcUpDownMarketInterval marketInterval = BtcUpDownMarketInterval.FiveMinutes)
     {
         var thresholdName = minMoveBps.ToString("0.###", CultureInfo.InvariantCulture);
         var directionName = isUp ? "Up" : "Down";
         var oppositeDirectionName = isUp ? "Down" : "Up";
-        var idGroup = isUp
-            ? asset.FixedOutcomeUpBpsInstantIdGroup
-            : asset.FixedOutcomeDownBpsInstantIdGroup;
+        var intervalName = GetUpDownIntervalName(marketInterval);
+        var idGroup = marketInterval switch
+        {
+            BtcUpDownMarketInterval.FiveMinutes => isUp
+                ? asset.FixedOutcomeUpBpsInstantIdGroup
+                : asset.FixedOutcomeDownBpsInstantIdGroup,
+            BtcUpDownMarketInterval.FifteenMinutes => isUp
+                ? asset.FifteenMinuteFixedOutcomeUpBpsInstantIdGroup
+                : asset.FifteenMinuteFixedOutcomeDownBpsInstantIdGroup,
+            _ => throw new ArgumentOutOfRangeException(nameof(marketInterval), marketInterval, "Unsupported crypto fixed bps Instant interval.")
+        };
         return new BtcUpDown5mStrategyVariant(
             GetCryptoUpDown5mBinanceBpsThresholdId(idGroup, thresholdTenths),
-            GetCryptoUpDown5mFixedOutcomeBpsThresholdInstantCode(asset.Symbol, thresholdTenths, isUp),
-            $"{asset.Symbol} Up or Down 5m {directionName} {thresholdName} bps Instant",
-            $"Immediately after {asset.Symbol} 5m market open, use the same previous close-book result streak and archived Binance {asset.Symbol} start/end move gate as Skip {thresholdName} bps Instant; enter only when the cumulative streak move is at least {thresholdName} bps and the countertrend direction is {directionName}. If the countertrend direction is {oppositeDirectionName}, skip. Paper entry is a GTD limit BUY priced from current executable ask depth so the order can fill immediately; settlement uses only actually filled shares.",
+            GetCryptoUpDown5mFixedOutcomeBpsThresholdInstantCode(asset.Symbol, thresholdTenths, isUp, marketInterval),
+            $"{asset.Symbol} Up or Down {intervalName} {directionName} {thresholdName} bps Instant",
+            $"Immediately after {asset.Symbol} {intervalName} market open, use the previous {asset.Symbol} {intervalName} close-book result streak and archived Binance {asset.Symbol} start/end move gate; enter only when the cumulative streak move is at least {thresholdName} bps and the countertrend direction is {directionName}. If the countertrend direction is {oppositeDirectionName}, skip. Paper entry is a GTD limit BUY priced from current executable ask depth so the order can fill immediately; settlement uses only actually filled shares.",
             BtcUpDown5mStrategyDirection.Dynamic,
             0,
             BtcUpDown5mStrategyBehavior.FixedOutcomePreviousResultBpsThresholdInstant,
@@ -2053,6 +2121,7 @@ public static class StrategyIds
                 ? (int)minMoveBps
                 : 0,
             minMoveBps,
+            MarketInterval: marketInterval,
             ReferenceAssetSymbol: asset.Symbol,
             FixedOutcome: isUp ? BtcUpDownFixedOutcome.Up : BtcUpDownFixedOutcome.Down);
     }
@@ -2075,10 +2144,11 @@ public static class StrategyIds
     private static string GetCryptoUpDown5mFixedOutcomeBpsThresholdInstantCode(
         string assetSymbol,
         int thresholdTenths,
-        bool isUp)
+        bool isUp,
+        BtcUpDownMarketInterval marketInterval = BtcUpDownMarketInterval.FiveMinutes)
     {
         var directionCode = isUp ? "up" : "down";
-        return assetSymbol.ToLowerInvariant() + "_up_down_5m_" + directionCode + "_bps_" + thresholdTenths.ToString(CultureInfo.InvariantCulture) + "_instant";
+        return assetSymbol.ToLowerInvariant() + "_up_down_" + GetUpDownIntervalCode(marketInterval) + "_" + directionCode + "_bps_" + thresholdTenths.ToString(CultureInfo.InvariantCulture) + "_instant";
     }
 
     private static BtcUpDown5mStrategyVariant CreateBtcUpDown5mBinanceCleverVariant()
@@ -2469,7 +2539,9 @@ internal sealed record CryptoUpDown5mAssetSpec(
     int MiddleRevertIdGroup,
     int MiddleRevertInstantIdGroup,
     int FixedOutcomeUpBpsInstantIdGroup,
-    int FixedOutcomeDownBpsInstantIdGroup);
+    int FixedOutcomeDownBpsInstantIdGroup,
+    int FifteenMinuteFixedOutcomeUpBpsInstantIdGroup,
+    int FifteenMinuteFixedOutcomeDownBpsInstantIdGroup);
 
 public sealed record TradingStrategy(
     Guid Id,

@@ -25,6 +25,29 @@ public static partial class CryptoUpDown5mMarketAnalyzer
         return false;
     }
 
+    public static BtcUpDownMarketInterval? GetMarketInterval(PolymarketGammaMarket market)
+    {
+        foreach (var candidate in new[] { market.Slug, market.EventSlug, market.SeriesSlug })
+        {
+            if (TryGetMarketInterval(candidate, out var interval))
+            {
+                return interval;
+            }
+        }
+
+        return null;
+    }
+
+    public static TimeSpan GetIntervalDuration(BtcUpDownMarketInterval interval)
+    {
+        return interval switch
+        {
+            BtcUpDownMarketInterval.FiveMinutes => TimeSpan.FromMinutes(5),
+            BtcUpDownMarketInterval.FifteenMinutes => TimeSpan.FromMinutes(15),
+            _ => TimeSpan.FromMinutes(5)
+        };
+    }
+
     public static DateTimeOffset? GetWindowStartUtc(PolymarketGammaMarket market)
     {
         if (market.EventStartTimeUtc is { } eventStart)
@@ -36,7 +59,7 @@ public static partial class CryptoUpDown5mMarketAnalyzer
         {
             if (!string.IsNullOrWhiteSpace(candidate))
             {
-                var match = UpDown5mSlugRegex().Match(candidate);
+                var match = UpDownSlugRegex().Match(candidate);
                 if (match.Success &&
                     long.TryParse(match.Groups["unix"].Value, NumberStyles.None, CultureInfo.InvariantCulture, out var unixSeconds))
                 {
@@ -45,7 +68,8 @@ public static partial class CryptoUpDown5mMarketAnalyzer
             }
         }
 
-        return market.EndDateUtc?.AddMinutes(-5);
+        var interval = GetMarketInterval(market) ?? BtcUpDownMarketInterval.FiveMinutes;
+        return market.EndDateUtc?.Subtract(GetIntervalDuration(interval));
     }
 
     private static bool TryGetAssetSymbol(string? value, out string assetSymbol)
@@ -56,14 +80,14 @@ public static partial class CryptoUpDown5mMarketAnalyzer
             return false;
         }
 
-        var slugMatch = UpDown5mSlugRegex().Match(value);
+        var slugMatch = UpDownSlugRegex().Match(value);
         if (slugMatch.Success)
         {
             assetSymbol = slugMatch.Groups["asset"].Value.ToUpperInvariant();
             return true;
         }
 
-        var seriesMatch = UpDown5mSeriesRegex().Match(value);
+        var seriesMatch = UpDownSeriesRegex().Match(value);
         if (seriesMatch.Success)
         {
             assetSymbol = seriesMatch.Groups["asset"].Value.ToUpperInvariant();
@@ -73,9 +97,39 @@ public static partial class CryptoUpDown5mMarketAnalyzer
         return false;
     }
 
-    [GeneratedRegex("^(?<asset>[a-z0-9]+)-updown-5m-(?<unix>\\d+)$", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
-    private static partial Regex UpDown5mSlugRegex();
+    private static bool TryGetMarketInterval(string? value, out BtcUpDownMarketInterval interval)
+    {
+        interval = default;
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            return false;
+        }
 
-    [GeneratedRegex("^(?<asset>[a-z0-9]+)-up-or-down-5m$", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
-    private static partial Regex UpDown5mSeriesRegex();
+        var slugMatch = UpDownSlugRegex().Match(value);
+        if (slugMatch.Success)
+        {
+            return TryParseInterval(slugMatch.Groups["interval"].Value, out interval);
+        }
+
+        var seriesMatch = UpDownSeriesRegex().Match(value);
+        return seriesMatch.Success && TryParseInterval(seriesMatch.Groups["interval"].Value, out interval);
+    }
+
+    private static bool TryParseInterval(string value, out BtcUpDownMarketInterval interval)
+    {
+        interval = value.ToLowerInvariant() switch
+        {
+            "5m" => BtcUpDownMarketInterval.FiveMinutes,
+            "15m" => BtcUpDownMarketInterval.FifteenMinutes,
+            _ => default
+        };
+
+        return interval is BtcUpDownMarketInterval.FiveMinutes or BtcUpDownMarketInterval.FifteenMinutes;
+    }
+
+    [GeneratedRegex("^(?<asset>[a-z0-9]+)-updown-(?<interval>5m|15m)-(?<unix>\\d+)$", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
+    private static partial Regex UpDownSlugRegex();
+
+    [GeneratedRegex("^(?<asset>[a-z0-9]+)-up-or-down-(?<interval>5m|15m)$", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
+    private static partial Regex UpDownSeriesRegex();
 }

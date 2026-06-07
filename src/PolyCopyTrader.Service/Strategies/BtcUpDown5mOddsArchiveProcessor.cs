@@ -39,7 +39,7 @@ public sealed class BtcUpDown5mOddsArchiveProcessor(
             return new BtcUpDown5mOddsArchiveCycleResult(0, 0, 1, 0, 0);
         }
 
-        var markets = await repository.GetBtcUpDown5mGammaMarketsAsync(options.MaxMarketsPerCycle, cancellationToken);
+        var markets = await repository.GetBtcUpDownStrategyGammaMarketsAsync(options.MaxMarketsPerCycle, cancellationToken);
         var ticksStored = 0;
         var skippedNoOutcomeTokens = 0;
         var missingBothBooks = 0;
@@ -188,7 +188,7 @@ public sealed class BtcUpDown5mOddsArchiveProcessor(
         marketStartUtc = default;
         marketEndUtc = default;
 
-        if (!BtcUpDown5mMarketAnalyzer.IsCandidate(market) ||
+        if (!BtcUpDown5mMarketAnalyzer.IsStrategyCandidate(market) ||
             !market.Active ||
             market.Closed ||
             market.Archived)
@@ -202,7 +202,8 @@ public sealed class BtcUpDown5mOddsArchiveProcessor(
             return false;
         }
 
-        var end = market.EndDateUtc ?? start.Value.AddMinutes(5);
+        var interval = BtcUpDown5mMarketAnalyzer.GetMarketInterval(market) ?? BtcUpDownMarketInterval.FiveMinutes;
+        var end = market.EndDateUtc ?? start.Value.Add(BtcUpDown5mMarketAnalyzer.GetIntervalDuration(interval));
         if (nowUtc < start.Value || nowUtc > end)
         {
             return false;

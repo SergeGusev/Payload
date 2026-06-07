@@ -47,6 +47,16 @@ public static class StrategyDisplayCategories
             return categoryPrefix + "PreOpen";
         }
 
+        if (StartsWithBpsThreshold(suffix, "Up"))
+        {
+            return categoryPrefix + "Up Bps";
+        }
+
+        if (StartsWithBpsThreshold(suffix, "Down"))
+        {
+            return categoryPrefix + "Down Bps";
+        }
+
         if (!string.Equals(interval, "5m", StringComparison.OrdinalIgnoreCase))
         {
             return categoryPrefix + "Other";
@@ -86,16 +96,6 @@ public static class StrategyDisplayCategories
         if (ContainsStrategyWord(suffix, "Countertrend"))
         {
             return categoryPrefix + "Countertrend";
-        }
-
-        if (StartsWithBpsThreshold(suffix, "Up"))
-        {
-            return categoryPrefix + "Up Bps";
-        }
-
-        if (StartsWithBpsThreshold(suffix, "Down"))
-        {
-            return categoryPrefix + "Down Bps";
         }
 
         return categoryPrefix + "Other";

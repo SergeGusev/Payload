@@ -2209,6 +2209,20 @@ internal sealed class TestAppRepository : IAppRepository
                 .ToArray());
     }
 
+    public Task<IReadOnlyList<BtcUpDown5mOddsTick>> GetBtcUpDown5mOddsTicksForMarketAsync(
+        string marketId,
+        int limit = 500,
+        CancellationToken cancellationToken = default)
+    {
+        return Task.FromResult<IReadOnlyList<BtcUpDown5mOddsTick>>(
+            BtcUpDown5mOddsTicks
+                .Where(tick => string.Equals(tick.MarketId, marketId, StringComparison.OrdinalIgnoreCase))
+                .OrderBy(tick => tick.SampledAtUtc)
+                .ThenBy(tick => tick.CreatedAtUtc)
+                .Take(limit)
+                .ToArray());
+    }
+
     public Task<IReadOnlyList<Btc5mHistoryRow>> GetBtc5mHistoryRowsAsync(
         IReadOnlyCollection<Btc5mHistoryKey> keys,
         CancellationToken cancellationToken = default)
@@ -2416,6 +2430,23 @@ internal sealed class TestAppRepository : IAppRepository
                 .Where(tick =>
                     string.Equals(tick.AssetSymbol, assetSymbol, StringComparison.OrdinalIgnoreCase) &&
                     Math.Abs((tick.MarketStartUtc - marketStartUtc).TotalSeconds) <= 2)
+                .OrderBy(tick => tick.SampledAtUtc)
+                .ThenBy(tick => tick.CreatedAtUtc)
+                .Take(limit)
+                .ToArray());
+    }
+
+    public Task<IReadOnlyList<CryptoUpDown5mOddsTick>> GetCryptoUpDown5mOddsTicksForMarketAsync(
+        string assetSymbol,
+        string marketId,
+        int limit = 500,
+        CancellationToken cancellationToken = default)
+    {
+        return Task.FromResult<IReadOnlyList<CryptoUpDown5mOddsTick>>(
+            CryptoUpDown5mOddsTicks
+                .Where(tick =>
+                    string.Equals(tick.AssetSymbol, assetSymbol, StringComparison.OrdinalIgnoreCase) &&
+                    string.Equals(tick.MarketId, marketId, StringComparison.OrdinalIgnoreCase))
                 .OrderBy(tick => tick.SampledAtUtc)
                 .ThenBy(tick => tick.CreatedAtUtc)
                 .Take(limit)

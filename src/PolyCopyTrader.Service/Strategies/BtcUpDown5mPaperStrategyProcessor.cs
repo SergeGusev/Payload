@@ -418,6 +418,12 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
                 continue;
             }
 
+            var marketInterval = CryptoUpDown5mMarketAnalyzer.GetMarketInterval(market);
+            if (marketInterval is null)
+            {
+                continue;
+            }
+
             var windowStart = CryptoUpDown5mMarketAnalyzer.GetWindowStartUtc(market);
             if (!ShouldObserveMarketWindow(windowStart, market.EndDateUtc, nowUtc))
             {
@@ -426,7 +432,7 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
 
             foreach (var variant in marketVariants)
             {
-                if (!DoesVariantApplyToMarket(variant, BtcUpDownMarketInterval.FiveMinutes))
+                if (!DoesVariantApplyToMarket(variant, marketInterval.Value))
                 {
                     continue;
                 }
@@ -1020,7 +1026,7 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
 
     private static bool IsCloseBookCaptureCandidate(PolymarketGammaMarket market)
     {
-        if (BtcUpDown5mMarketAnalyzer.IsCandidate(market))
+        if (BtcUpDown5mMarketAnalyzer.IsStrategyCandidate(market))
         {
             return true;
         }
@@ -5928,6 +5934,31 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
             .ToArray();
     }
 
+    private async Task<IReadOnlyList<BtcUpDown5mOddsTick>> GetReferenceOddsTicksForMarketAsync(
+        BtcUpDown5mStrategyVariant variant,
+        string marketId,
+        int limit,
+        CancellationToken cancellationToken)
+    {
+        if (IsBtcReferenceVariant(variant))
+        {
+            return await repository.GetBtcUpDown5mOddsTicksForMarketAsync(
+                marketId,
+                limit,
+                cancellationToken);
+        }
+
+        var assetSymbol = GetReferenceAssetSymbol(variant);
+        var ticks = await repository.GetCryptoUpDown5mOddsTicksForMarketAsync(
+            assetSymbol,
+            marketId,
+            limit,
+            cancellationToken);
+        return ticks
+            .Select(ToReferenceOddsTick)
+            .ToArray();
+    }
+
     private static BtcUpDown5mOddsTick ToReferenceOddsTick(CryptoUpDown5mOddsTick tick)
     {
         return new BtcUpDown5mOddsTick(
@@ -5994,7 +6025,10 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
                     reason: "btc_market_start_missing"));
         }
 
-        var expectedMarketStarts = GetExpectedPreviousBtc5mMarketStarts(marketStartUtc.Value, requiredResults);
+        var expectedMarketStarts = GetExpectedPreviousMarketStarts(
+            marketStartUtc.Value,
+            variant.MarketInterval,
+            requiredResults);
         var closeBookLookup = await GetStrictPreviousCloseBookMarketResultsAsync(
             variant,
             expectedMarketStarts,
@@ -6261,6 +6295,8 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
         var cacheKey = string.Concat(
             GetReferenceAssetSymbol(variant),
             ":",
+            variant.MarketInterval,
+            ":",
             marketStartUtc.ToUnixTimeSeconds().ToString(CultureInfo.InvariantCulture));
         var lazy = signalTasks.GetOrAdd(
             cacheKey,
@@ -6297,8 +6333,9 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
         DateTimeOffset nowUtc,
         CancellationToken cancellationToken)
     {
-        var expectedMarketStarts = GetExpectedPreviousBtc5mMarketStarts(
+        var expectedMarketStarts = GetExpectedPreviousMarketStarts(
             marketStartUtc,
+            variant.MarketInterval,
             SkipPreviousResultBpsMaxStreakMarkets);
         var previousMarketStartUtc = expectedMarketStarts[0];
         var previousMarketEndUtc = marketStartUtc;
@@ -6341,10 +6378,11 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
         foreach (var result in streakResults)
         {
             var componentStartUtc = result.MarketStartUtc ?? previousMarketStartUtc;
-            var componentEndUtc = result.MarketEndUtc ?? componentStartUtc.AddMinutes(5);
-            var ticks = await GetReferenceOddsTicksForMarketStartAsync(
+            var componentEndUtc = result.MarketEndUtc ??
+                componentStartUtc.Add(BtcUpDown5mMarketAnalyzer.GetIntervalDuration(variant.MarketInterval));
+            var ticks = await GetReferenceOddsTicksForMarketAsync(
                 variant,
-                componentStartUtc,
+                result.MarketId,
                 limit: 1_000,
                 cancellationToken);
             if (ticks.Count == 0)
@@ -6575,13 +6613,15 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
             nowUtc);
     }
 
-    private static IReadOnlyList<DateTimeOffset> GetExpectedPreviousBtc5mMarketStarts(
+    private static IReadOnlyList<DateTimeOffset> GetExpectedPreviousMarketStarts(
         DateTimeOffset marketStartUtc,
+        BtcUpDownMarketInterval marketInterval,
         int requiredResults)
     {
+        var intervalDuration = BtcUpDown5mMarketAnalyzer.GetIntervalDuration(marketInterval);
         return Enumerable
             .Range(1, Math.Max(0, requiredResults))
-            .Select(index => marketStartUtc.AddMinutes(-5 * index))
+            .Select(index => marketStartUtc.Subtract(TimeSpan.FromTicks(intervalDuration.Ticks * index)))
             .ToArray();
     }
 
@@ -6599,7 +6639,7 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
         var referenceAssetSymbol = GetReferenceAssetSymbol(variant);
         var marketLimit = Math.Max(options.MaxMarketsPerCycle, expectedMarketStarts.Count * 4);
         var markets = IsBtcReferenceVariant(variant)
-            ? await repository.GetBtcUpDown5mGammaMarketsAsync(
+            ? await repository.GetBtcUpDownStrategyGammaMarketsAsync(
                 marketLimit,
                 cancellationToken)
             : await repository.GetCryptoUpDown5mGammaMarketsAsync(
@@ -6607,7 +6647,7 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
                 marketLimit,
                 cancellationToken);
         var marketsByStart = markets
-            .Where(market => IsReferenceMarketCandidate(market, referenceAssetSymbol))
+            .Where(market => IsReferenceMarketCandidate(market, referenceAssetSymbol, variant.MarketInterval))
             .Select(market => new
             {
                 Market = market,
@@ -6694,14 +6734,18 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
         return new BtcSkipCloseBookLookupResult(selected, diagnostics);
     }
 
-    private static bool IsReferenceMarketCandidate(PolymarketGammaMarket market, string referenceAssetSymbol)
+    private static bool IsReferenceMarketCandidate(
+        PolymarketGammaMarket market,
+        string referenceAssetSymbol,
+        BtcUpDownMarketInterval marketInterval)
     {
         if (string.Equals(referenceAssetSymbol, "BTC", StringComparison.OrdinalIgnoreCase))
         {
-            return BtcUpDown5mMarketAnalyzer.IsCandidate(market);
+            return BtcUpDown5mMarketAnalyzer.GetMarketInterval(market) == marketInterval;
         }
 
-        return CryptoUpDown5mMarketAnalyzer.TryGetAssetSymbol(
+        return CryptoUpDown5mMarketAnalyzer.GetMarketInterval(market) == marketInterval &&
+            CryptoUpDown5mMarketAnalyzer.TryGetAssetSymbol(
             market,
             new HashSet<string>(StringComparer.OrdinalIgnoreCase) { referenceAssetSymbol },
             out _);
@@ -9890,11 +9934,14 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
     {
         const decimal limitPrice = 0.50m;
         var diagnostics = closeBookDiagnostics ?? [];
-        var marketStartUtc = BtcUpDown5mMarketAnalyzer.GetWindowStartUtc(market);
+        var marketStartUtc = GetMarketWindowStartUtc(market, variant);
         var entryDueAtUtc = GetEntryDueAtUtc(marketStartUtc, variant);
         var expectedPreviousMarketStarts = marketStartUtc is null
             ? Array.Empty<DateTimeOffset>()
-            : GetExpectedPreviousBtc5mMarketStarts(marketStartUtc.Value, requiredResults);
+            : GetExpectedPreviousMarketStarts(
+                marketStartUtc.Value,
+                variant.MarketInterval,
+                requiredResults);
         var usedMarketStartUnixTimes = results
             .Where(result => result.MarketStartUtc is not null)
             .Select(result => result.MarketStartUtc!.Value.ToUnixTimeSeconds())

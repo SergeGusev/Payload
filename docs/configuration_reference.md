@@ -270,7 +270,7 @@ skipped it.
 
 ## CryptoUpDown5mOddsArchive
 
-The service can continuously store non-BTC crypto 5-minute odds in PostgreSQL
+The service can continuously store non-BTC crypto 5-minute and 15-minute odds in PostgreSQL
 table `crypto_up_down_5m_odds_ticks`. Each row contains the asset symbol, Binance
 USDT reference price, first archived market-start reference, asset move from
 market start, and Up/Down top-of-book proxy from WebSocket cache or CLOB REST.
@@ -692,7 +692,7 @@ rows keep the same signal and threshold gate, then price the selected outcome
 from executable ask depth using the same instant sizing/pricing path and
 `InstantOpeningLimitMaxPrice` cap as Binance instant variants. The `Skip` variants inspect the exact immediately previous 5-minute windows without gaps, but they infer those results from close-book
 CLOB price evidence instead of waiting for Gamma settlement. The worker captures
-`/book` snapshots for active BTC and ETH/SOL 5-minute markets during the final
+`/book` snapshots for active BTC strategy markets and ETH/SOL 5-minute or 15-minute markets during the final
 `CloseBookCaptureLookbackSeconds` seconds before close, throttled by
 `CloseBookCaptureIntervalSeconds`, and can use the latest stored snapshot for a
 token if the book stops responding after close. A full `Up` midpoint still maps
@@ -719,7 +719,9 @@ The shared Skip bps streak calculation also records one
 `cumulative_abs_move_bps` to find the maximum accumulated BTC move over the run.
 `BTC Up or Down 5m Up 1..50 bps Instant` and `BTC Up or Down 5m Down 1..50 bps
 Instant` reuse that same previous-result streak and cumulative BTC move gate,
-but keep only one fixed countertrend side. `Up` enters only when the Skip bps
+but keep only one fixed countertrend side. Matching `BTC Up or Down 15m Up/Down
+1..50 bps Instant` rows run the same fixed-side gate on BTC 15-minute markets
+and previous 15-minute streaks. `Up` enters only when the Skip bps
 countertrend decision is `Up` after a `Down` streak; `Down` enters only when the
 countertrend decision is `Down` after an `Up` streak. The opposite side skips
 with `btc_previous_market_move_fixed_outcome_mismatch`, and accepted entries use
@@ -732,7 +734,10 @@ move, and `Skip bps Instant` uses the same executable ask-depth pricing path as
 the BTC Instant variants. `ETH/SOL Up 1..50 bps Instant` and `ETH/SOL Down
 1..50 bps Instant` reuse that same crypto streak/move gate but enter only when
 the Skip bps countertrend decision matches the fixed side; the opposite side
-skips with `btc_previous_market_move_fixed_outcome_mismatch`. ETH/SOL Skip
+skips with `btc_previous_market_move_fixed_outcome_mismatch`. Matching ETH/SOL
+15-minute fixed Up/Down bps Instant rows use ETH/SOL 15-minute markets, previous
+15-minute close-book streaks, and market-id filtered crypto odds ticks so
+5-minute samples with the same start timestamp are not mixed in. ETH/SOL Skip
 Revert rows are not seeded. Seeded ETH/SOL Skip/fixed rows can enter the
 Paper/Live-shadow path when their Dashboard `Live` flag is enabled and normal
 live gates pass.

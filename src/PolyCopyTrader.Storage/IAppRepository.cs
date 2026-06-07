@@ -629,6 +629,14 @@ public interface IAppRepository
         return Task.FromResult<IReadOnlyList<BtcUpDown5mOddsTick>>([]);
     }
 
+    Task<IReadOnlyList<BtcUpDown5mOddsTick>> GetBtcUpDown5mOddsTicksForMarketAsync(
+        string marketId,
+        int limit = 500,
+        CancellationToken cancellationToken = default)
+    {
+        return Task.FromResult<IReadOnlyList<BtcUpDown5mOddsTick>>([]);
+    }
+
     Task<IReadOnlyList<Btc5mHistoryRow>> GetBtc5mHistoryRowsAsync(
         IReadOnlyCollection<Btc5mHistoryKey> keys,
         CancellationToken cancellationToken = default)
@@ -716,6 +724,15 @@ public interface IAppRepository
     Task<IReadOnlyList<CryptoUpDown5mOddsTick>> GetCryptoUpDown5mOddsTicksForMarketStartAsync(
         string assetSymbol,
         DateTimeOffset marketStartUtc,
+        int limit = 500,
+        CancellationToken cancellationToken = default)
+    {
+        return Task.FromResult<IReadOnlyList<CryptoUpDown5mOddsTick>>([]);
+    }
+
+    Task<IReadOnlyList<CryptoUpDown5mOddsTick>> GetCryptoUpDown5mOddsTicksForMarketAsync(
+        string assetSymbol,
+        string marketId,
         int limit = 500,
         CancellationToken cancellationToken = default)
     {

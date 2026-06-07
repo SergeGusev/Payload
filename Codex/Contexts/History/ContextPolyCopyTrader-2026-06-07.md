@@ -26,3 +26,11 @@ Assess whether SOL Up or Down 5m was also a bad Live inclusion after the XRP/DOG
 
 Result:
 Checked production read-only. Both SOL fixed 50 bps Instant strategies remain enabled/live and unpaused with `$1` live stake. Since Live enablement, SOL has `65` Live rows, `54` settled, `23W/31L`, cost `158.819707`, PnL `+0.600893`, ROI `0.3783%`; SOL Down is negative and SOL Up is positive. Paper over the same window is mildly positive (`+6.239793`, ROI `2.9593%`) but weaker than BTC/ETH. Recent SOL market volume remains thin: 6h volume `243.93`, only `11/72` nonzero markets, median 5m volume `0`; 24h volume `10289.74`, `33/288` nonzero, median `0`. Public CLOB book check showed `$1` entries are feasible in a balanced next SOL market, but SOL should be treated as marginal and not scaled without better volume/Live ROI evidence.
+
+## 2026-06-07T09:15:34.1381706+00:00
+Request:
+Сделай аналоги ETH Up or Down 5m Down N bps Instant, ETH Up or Down 5m Up N bps Instant, BTC Up or Down 5m Down N bps Instant, SOL Up or Down 5m Down N bps Instant, SOL Up or Down 5m Down N bps Instant,
+BTC Up or Down 5m Up N bps Instant, SOL Up or Down 5m Up N bps Instant для 15-минутных рынков. И переведи их значения для 50 bps сразу в Live аналогично тому, как сейчас работаем с 5-ти минутными рынками.
+
+Result:
+Added BTC/ETH/SOL 15-minute fixed `Up/Down 1..50 bps Instant` strategy variants, interval-aware market discovery/streak/odds lookup support, PostgreSQL seeds, tests, and documentation. Production PostgreSQL now has 300 new 15m fixed-bps rows enabled and exactly the six 50 bps target rows set to Live; current production service heartbeat is still old commit `d51a8f9c1dca...`, so deploy/restart of the new commit is needed before the running service can process the new 15m StrategyIds. Verification passed: full tests 605/605 and `git diff --check`.

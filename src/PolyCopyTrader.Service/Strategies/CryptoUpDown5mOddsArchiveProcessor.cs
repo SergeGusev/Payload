@@ -232,7 +232,8 @@ public sealed class CryptoUpDown5mOddsArchiveProcessor(
             return false;
         }
 
-        var end = market.EndDateUtc ?? start.Value.AddMinutes(5);
+        var interval = CryptoUpDown5mMarketAnalyzer.GetMarketInterval(market) ?? BtcUpDownMarketInterval.FiveMinutes;
+        var end = market.EndDateUtc ?? start.Value.Add(CryptoUpDown5mMarketAnalyzer.GetIntervalDuration(interval));
         if (nowUtc < start.Value || nowUtc > end)
         {
             return false;

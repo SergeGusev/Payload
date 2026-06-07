@@ -11,7 +11,7 @@ public sealed class StrategyDisplayCategoryTests
             .Where(variant => variant.Behavior == BtcUpDown5mStrategyBehavior.FixedOutcomePreviousResultBpsThresholdInstant)
             .ToArray();
 
-        Assert.Equal(300, variants.Length);
+        Assert.Equal(600, variants.Length);
 
         var categoryCounts = variants
             .GroupBy(variant => StrategyDisplayCategories.GetCategory(variant.Name))
@@ -19,11 +19,17 @@ public sealed class StrategyDisplayCategoryTests
 
         AssertFixedOutcomeCategory(categoryCounts, "BTC Up or Down 5m Up Bps");
         AssertFixedOutcomeCategory(categoryCounts, "BTC Up or Down 5m Down Bps");
+        AssertFixedOutcomeCategory(categoryCounts, "BTC Up or Down 15m Up Bps");
+        AssertFixedOutcomeCategory(categoryCounts, "BTC Up or Down 15m Down Bps");
         AssertFixedOutcomeCategory(categoryCounts, "ETH Up or Down 5m Up Bps");
         AssertFixedOutcomeCategory(categoryCounts, "ETH Up or Down 5m Down Bps");
+        AssertFixedOutcomeCategory(categoryCounts, "ETH Up or Down 15m Up Bps");
+        AssertFixedOutcomeCategory(categoryCounts, "ETH Up or Down 15m Down Bps");
         AssertFixedOutcomeCategory(categoryCounts, "SOL Up or Down 5m Up Bps");
         AssertFixedOutcomeCategory(categoryCounts, "SOL Up or Down 5m Down Bps");
-        Assert.Equal(6, categoryCounts.Count);
+        AssertFixedOutcomeCategory(categoryCounts, "SOL Up or Down 15m Up Bps");
+        AssertFixedOutcomeCategory(categoryCounts, "SOL Up or Down 15m Down Bps");
+        Assert.Equal(12, categoryCounts.Count);
     }
 
     [Theory]
