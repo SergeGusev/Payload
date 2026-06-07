@@ -1,3 +1,16 @@
+## Active Update 2026-06-07 Live Strategies Excel Report
+Goal: Create an Excel daily results report for currently Live-enabled strategies.
+Status: Completed
+Done:
+- Queried production PostgreSQL read-only through `out\dbprobe` with host override `192.168.0.101`; no production rows, strategy flags, source files, or configs were changed.
+- Generated `outputs/live-strategies-report-20260607/LiveStrategiesDailyReport.xlsx`.
+- Workbook sheets: `Summary`, `PnL by Day`, `Counts by Day`, `Daily Detail`, `Status`, and `Source Orders`.
+- Included the six current `live_stakes=true` strategies with UTC settlement-day columns from `2026-06-05` through `2026-06-07`, using settled `live_orders` since each strategy's `live_enabled_at_utc`.
+- Settled Live totals in the workbook: `119` settled orders, `58W/61L`, cost basis `353.082274`, realized PnL `+34.077726`, ROI `9.6515%`.
+Next: None.
+Notes: `git pull --ff-only` reported already up to date. Verification passed: `.xlsx` OpenXML package has 6 sheets, no `#REF!`/`#DIV/0!`/`#VALUE!` markers, required totals are present, and Excel COM opened the workbook read-only and read the key summary values. No project tests were run because this was a read-only report-generation task. Existing unrelated untracked artifact/config files were left untouched.
+Blockers: None.
+
 ## Active Update 2026-06-06 Current Live Strategy Assessment
 Goal: Assess current Live-enabled strategies and their prospects from production data.
 Status: Completed
