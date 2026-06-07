@@ -34,3 +34,10 @@ BTC Up or Down 5m Up N bps Instant, SOL Up or Down 5m Up N bps Instant для 15
 
 Result:
 Added BTC/ETH/SOL 15-minute fixed `Up/Down 1..50 bps Instant` strategy variants, interval-aware market discovery/streak/odds lookup support, PostgreSQL seeds, tests, and documentation. Production PostgreSQL now has 300 new 15m fixed-bps rows enabled and exactly the six 50 bps target rows set to Live; current production service heartbeat is still old commit `d51a8f9c1dca...`, so deploy/restart of the new commit is needed before the running service can process the new 15m StrategyIds. Verification passed: full tests 605/605 and `git diff --check`.
+
+## 2026-06-07T09:34:21.0199370+00:00
+Request:
+Выложил, проверяй
+
+Result:
+Verified production deployment read-only through `out\dbprobe` with host override `192.168.0.101`. `PolyCopyTrader.Service` is running commit `7d474f7f22a66f9...` in Live mode with fresh heartbeat and `last_error=null`. Production has 300 BTC/ETH/SOL 15m fixed-bps rows enabled and exactly six 50 bps target rows effective Live. 15m Gamma discovery and odds ticks are active after deploy; the first due 15m market created runs for all six Live strategies and skipped them because the previous 15m move was only about `5.6632 bps`, below the `50 bps` threshold. No target 15m Live orders have been created yet and no post-deploy `api_errors` were found.

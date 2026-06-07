@@ -1,3 +1,18 @@
+## Active Update 2026-06-07 15m Fixed Bps Deployment Check
+Goal: Verify the deployed service picked up the new BTC/ETH/SOL 15m fixed-bps Instant strategies and their Live flags.
+Status: Completed
+Done:
+- Queried production PostgreSQL read-only through `out\dbprobe` with host override `192.168.0.101`; no production rows, strategy flags, source files, configs, or service processes were changed.
+- Confirmed `PolyCopyTrader.Service` is running commit `7d474f7f22a66f9...` in `Live` mode, started at `2026-06-07T09:24:50Z`, heartbeat fresh at `2026-06-07T09:31:50Z`, and `last_error=null`.
+- Confirmed production `strategies` has `300` BTC/ETH/SOL 15m fixed `Up/Down 1..50 bps Instant` rows, all `enabled=true`, and exactly the six `50 bps` rows are effective Live with `$1` stake.
+- Confirmed 15m Gamma discovery and odds archive are active after deploy: BTC15 `56` odds ticks, ETH15 `50`, SOL15 `50` in the first post-deploy window, covering the current and previous 15m markets.
+- Confirmed the first due 15m market after deploy created runs for all six Live strategies and then skipped them intentionally with `btc_previous_market_move_below_bps_threshold`; BTC diagnostic showed previous 15m absolute move about `5.6632 bps`, below the `50 bps` threshold.
+- Confirmed no Live orders were created for the six 15m target strategies yet, which matches the threshold skip rather than a deployment failure.
+- Checked post-deploy `api_errors`; no errors after `2026-06-07T09:24:50Z`.
+Next: Let the service run; the six 15m Live strategies should place orders only when a previous 15m market move reaches the configured `50 bps` threshold and the usual Live preflight passes.
+Notes: No tests were run because this was read-only production deployment verification. One initial DB probe without host override hit a non-production/old instance, so all production conclusions use the explicit `192.168.0.101` host override. Existing unrelated untracked artifact/config files were left untouched.
+Blockers: None.
+
 ## Active Update 2026-06-07 15m Fixed Bps Instant Strategies
 Goal: Add BTC/ETH/SOL 15-minute analogs of fixed `Up/Down N bps Instant` strategies and make their 50 bps variants Live.
 Status: Completed
