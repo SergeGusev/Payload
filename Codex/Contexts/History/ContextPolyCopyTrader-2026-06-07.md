@@ -48,3 +48,10 @@ Request:
 
 Result:
 Assessed BTC/ETH/SOL 15m Up/Down market volume read-only from production PostgreSQL Gamma-derived rows, grouping markets by slug timestamp. At DB time `2026-06-07T09:45:45Z`, BTC 15m had 6h volume `467.76` across `19/24` nonzero markets and 24h volume `85831.74` across `64/96`; ETH 15m had 6h `249.86` across `4/24` and 24h `21610.11` across `33/96`; SOL 15m had 6h `451.38` across `1/24` and 24h `5299.83` across `14/96`. Conclusion: BTC 15m is the only semi-usable 15m market by continuity, ETH 15m is sporadic/experimental, and SOL 15m should not be scaled.
+
+## 2026-06-07T10:07:52.4521039Z
+Request:
+Ясно. Я погорячился. Давай убирать все 15 мин стратегии
+
+Result:
+Disabled all production 15-minute strategy rows through `out\dbprobe` with host override `192.168.0.101`: `540` total 15m rows now have `0` enabled, `0` Live, and `0` effective Live, with Live timestamps cleared. Verified the six BTC/ETH/SOL 5m 50 bps Live strategies remained enabled/effective Live. Updated seeds and documentation so BTC/ETH/SOL 15m fixed bps Instant rows and BTC 15m pre-open rows are disabled by default. Two 15m Live orders were created before the disable; ETH 15m Up 50 bps settled at `-3.00330000` realized PnL and SOL 15m Up 50 bps settled at `-3.00370000` realized PnL.

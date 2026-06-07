@@ -1,3 +1,17 @@
+## Active Update 2026-06-07 Disable 15m Strategies
+Goal: Remove all 15-minute strategies from active production use and make 15m strategy seeds disabled by default.
+Status: Completed
+Done:
+- Updated production PostgreSQL `strategies` through `out\dbprobe` with host override `192.168.0.101`: all `*_up_down_15m_*` strategy rows now have `enabled=false`, `live_stakes=false`, `auto_live_paused=false`, and cleared `live_enabled_at_utc`.
+- Verified production counts after the update: `540` total 15m rows, `0` enabled, `0` Live, `0` effective Live, and no new post-disable 15m Live orders or API errors.
+- Verified 5m fixed-bps strategies were not changed: `300` enabled fixed 5m rows remain, and the six BTC/ETH/SOL 5m `50 bps` strategies remain effective Live.
+- Updated `PostgresSchema` so BTC/ETH/SOL 15m fixed bps Instant rows and BTC 15m pre-open rows seed disabled by default.
+- Updated README and configuration reference to document that 15-minute strategy rows are disabled by default until volume/liquidity is re-evaluated.
+- Observed two 15m Live orders created before the disable: ETH 15m Up 50 bps settled at `-3.00330000` realized PnL, and SOL 15m Up 50 bps settled at `-3.00370000` realized PnL.
+Next: None.
+Notes: Verification passed: focused changed tests `224/224`, full `dotnet test tests\PolyCopyTrader.Tests\PolyCopyTrader.Tests.csproj --no-restore` `605/605`, production DB read at `2026-06-07T10:10:24Z` showed `0` 15m enabled/Live/effective Live and `0` post-disable API errors, and `git diff --check` passed with LF/CRLF warnings only. Existing unrelated untracked artifact/config files were left untouched.
+Blockers: None.
+
 ## Active Update 2026-06-07 BTC ETH SOL 15m Volume Assessment
 Goal: Assess 15-minute Up/Down market volume for BTC, ETH, and SOL.
 Status: Completed

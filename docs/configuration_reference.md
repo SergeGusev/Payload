@@ -721,7 +721,8 @@ The shared Skip bps streak calculation also records one
 Instant` reuse that same previous-result streak and cumulative BTC move gate,
 but keep only one fixed countertrend side. Matching `BTC Up or Down 15m Up/Down
 1..50 bps Instant` rows run the same fixed-side gate on BTC 15-minute markets
-and previous 15-minute streaks. `Up` enters only when the Skip bps
+and previous 15-minute streaks, but are disabled by default because current
+15-minute liquidity/volume is too thin for Live use. `Up` enters only when the Skip bps
 countertrend decision is `Up` after a `Down` streak; `Down` enters only when the
 countertrend decision is `Down` after an `Up` streak. The opposite side skips
 with `btc_previous_market_move_fixed_outcome_mismatch`, and accepted entries use
@@ -737,7 +738,8 @@ the Skip bps countertrend decision matches the fixed side; the opposite side
 skips with `btc_previous_market_move_fixed_outcome_mismatch`. Matching ETH/SOL
 15-minute fixed Up/Down bps Instant rows use ETH/SOL 15-minute markets, previous
 15-minute close-book streaks, and market-id filtered crypto odds ticks so
-5-minute samples with the same start timestamp are not mixed in. ETH/SOL Skip
+5-minute samples with the same start timestamp are not mixed in, but those
+15-minute rows are disabled by default. ETH/SOL Skip
 Revert rows are not seeded. Seeded ETH/SOL Skip/fixed rows can enter the
 Paper/Live-shadow path when their Dashboard `Live` flag is enabled and normal
 live gates pass.

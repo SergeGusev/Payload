@@ -2246,7 +2246,7 @@ SELECT
     'btc_up_down_15m_' || direction_code || '_bps_' || code_suffix || '_instant',
     'BTC Up or Down 15m ' || direction_name || ' ' || threshold_name || ' bps Instant',
     'Immediately after BTC 15m market open, use the previous BTC 15m close-book result streak and archived Binance BTC start/end move gate; enter only when the cumulative streak move is at least ' || threshold_name || ' bps and the countertrend direction is ' || direction_name || '. If the countertrend direction is ' || opposite_direction_name || ', skip. Paper entry is a GTD limit BUY priced from current executable ask depth so the order can fill immediately; settlement uses only actually filled shares.',
-    true,
+    false,
     1.00,
     now(),
     now()
@@ -2518,7 +2518,7 @@ SELECT
     lower(asset_symbol) || '_up_down_15m_' || direction_code || '_bps_' || code_suffix || '_instant',
     asset_symbol || ' Up or Down 15m ' || direction_name || ' ' || threshold_name || ' bps Instant',
     'Immediately after ' || asset_symbol || ' 15m market open, use the previous ' || asset_symbol || ' 15m close-book result streak and archived Binance ' || asset_symbol || ' start/end move gate; enter only when the cumulative streak move is at least ' || threshold_name || ' bps and the countertrend direction is ' || direction_name || '. If the countertrend direction is ' || opposite_direction_name || ', skip. Paper entry is a GTD limit BUY priced from current executable ask depth so the order can fill immediately; settlement uses only actually filled shares.',
-    true,
+    false,
     1.00,
     now(),
     now()
@@ -2796,7 +2796,7 @@ SELECT
     'btc_up_down_' || intervals.interval_code || '_preopen_' || lifetimes.lifetime_code || '_' || outcomes.outcome_code || '_' || prices.price_cents,
     'BTC Up or Down ' || intervals.interval_name || ' PreOpen ' || lifetimes.lifetime_name || ' ' || outcomes.outcome_name || ' ' || prices.price_cents,
     'Five minutes before the BTC ' || intervals.interval_description || ' market opens, always place a Paper GTD limit BUY on ' || outcomes.outcome_name || ' at ' || to_char((prices.price_cents::numeric / 100), 'FM0.00') || ' and keep it ' || lifetimes.lifetime_description || '; settlement uses only actually filled shares.',
-    true,
+    intervals.interval_code <> '15m',
     1.00,
     now(),
     now()
@@ -2831,7 +2831,7 @@ SELECT
     'btc_up_down_' || intervals.interval_code || '_preopen_full_' || outcomes.outcome_code || '_' || prices.price_cents || '_sell',
     'BTC Up or Down ' || intervals.interval_name || ' PreOpen Full ' || outcomes.outcome_name || ' ' || prices.price_cents || ' Sell',
     'Five minutes before the BTC ' || intervals.interval_description || ' market opens, always place a Paper GTD limit BUY on ' || outcomes.outcome_name || ' at ' || to_char((prices.price_cents::numeric / 100), 'FM0.00') || ' and keep it without a pre-close local cancel deadline; during the final quarter of the market, place a Paper SELL on filled shares if the current market direction no longer matches ' || outcomes.outcome_name || '.',
-    true,
+    intervals.interval_code <> '15m',
     1.00,
     now(),
     now()
