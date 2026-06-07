@@ -1,3 +1,17 @@
+## Active Update 2026-06-07 Disable Non Fixed Bps Instant Strategies
+Goal: Disable every strategy except BTC/ETH/SOL fixed `Up/Down N bps Instant` strategy groups.
+Status: Completed
+Done:
+- Updated production PostgreSQL `strategies.enabled` through `out\dbprobe` with host override `192.168.0.101`.
+- Set `enabled=false` for `1454` currently enabled strategies whose names did not match `^(BTC|ETH|SOL) Up or Down 5m (Up|Down) [0-9]+ bps Instant$`.
+- Left the exception groups unchanged: `300` enabled strategies remain, split as `BTC Down 50`, `BTC Up 50`, `ETH Down 50`, `ETH Up 50`, `SOL Down 50`, and `SOL Up 50`.
+- Verified `0` enabled strategies remain outside the exception regex.
+- Verified all six current `live_stakes=true` strategies are inside the exception groups and remain `enabled=true`, `live_stakes=true`, `auto_live_paused=false`, and effective Live.
+- Verified `PolyCopyTrader.Service` heartbeat is `Running` in `Live` mode with `last_error=null`.
+Next: None.
+Notes: `git pull --ff-only` reported already up to date. No source files, configs, live flags, Auto Live Pause flags, live orders, or service process state were changed. No tests were run because this was a production DB runtime-flag update plus read-only verification. Existing unrelated untracked artifact/config files were left untouched.
+Blockers: None.
+
 ## Active Update 2026-06-07 Live Strategies Excel Report
 Goal: Create an Excel daily results report for currently Live-enabled strategies.
 Status: Completed

@@ -4,3 +4,11 @@ Request:
 
 Result:
 Created `outputs/live-strategies-report-20260607/LiveStrategiesDailyReport.xlsx` from read-only production PostgreSQL queries against current `live_stakes=true` strategies. The workbook contains daily UTC settlement columns, strategy rows, strategy totals, day totals, status context, and source settled Live orders. Verified the `.xlsx` package structure and opened it read-only through Excel COM.
+
+## 2026-06-07T08:05:40.0078873Z
+Request:
+Поставь False в Enabled всем стратегиям, кроме ETH Up or Down 5m Down N bps Instant, ETH Up or Down 5m Up N bps Instant, BTC Up or Down 5m Down N bps Instant, SOL Up or Down 5m Down N bps Instant, SOL Up or Down 5m Down N bps Instant,
+BTC Up or Down 5m Up N bps Instant, SOL Up or Down 5m Up N bps Instant
+
+Result:
+Updated production PostgreSQL `strategies.enabled` so every currently enabled strategy outside `BTC/ETH/SOL Up or Down 5m Up/Down N bps Instant` groups is now disabled. `1454` rows were changed to `enabled=false`; `300` exception rows remain enabled and `0` enabled rows remain outside the exception regex. Verified the six current Live strategies are still enabled and effective Live.
