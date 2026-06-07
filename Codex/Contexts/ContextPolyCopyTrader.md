@@ -1,3 +1,19 @@
+## Active Update 2026-06-07 SOL Live Suitability Check
+Goal: Answer whether enabling SOL Up or Down 5m Live was a mistake after seeing XRP/DOGE volume concerns.
+Status: Completed
+Done:
+- Queried production PostgreSQL read-only through `out\dbprobe` with host override `192.168.0.101`; no production rows, strategy flags, orders, service state, source files, or configs were changed.
+- Confirmed `PolyCopyTrader.Service` is `Running` in `Live` mode, heartbeat fresh at `2026-06-07T08:31:01Z`, `last_error=null`; SOL Gamma ingestion was fresh with latest `fetched_at_utc=2026-06-07T08:30:04Z`.
+- Confirmed both SOL fixed 50 bps Instant strategies remain `enabled=true`, `live_stakes=true`, `auto_live_paused=false`, with `$1` live stake; balances are `96.493074` for SOL Down and `104.107819` for SOL Up.
+- Live since enablement (`2026-06-05T08:39:47Z`): SOL aggregate `65` Live rows, `54` settled, `23W/31L`, cost `158.819707`, PnL `+0.600893`, ROI `0.3783%`; SOL Down `-3.506926` / `-3.7245%`, SOL Up `+4.107819` / `6.3529%`.
+- Same-window comparison: BTC Live `24` settled, `12W/12L`, PnL `+5.421100`, ROI `7.3537%`; ETH Live `41` settled, `23W/18L`, PnL `+28.055733`, ROI `23.2743%`.
+- Paper since Live enablement: SOL `70` settled, `32W/38L`, stake `210.850807`, PnL `+6.239793`, ROI `2.9593%`; weaker than BTC Paper `21.4869%` ROI and ETH Paper `22.4647%` ROI.
+- Recent market volume snapshot: SOL 6h volume `243.93` with `11/72` nonzero markets and median 5m volume `0`; 24h volume `10289.74` with `33/288` nonzero and median `0`. BTC remains materially stronger (`378825.11` 6h, `72/72` nonzero, median `639.35`), while ETH is also thin but performing better in current Live.
+- Public CLOB `/book` check at `2026-06-07T08:33:06Z` for current/next SOL markets showed the next balanced market had executable ask notional around `$143/$189` at `<=0.55` and around `$617/$623` at `<=0.65`, so `$1` entries are feasible but scaling would rely on a thin, sporadically traded market.
+Next: Treat SOL Live as marginal rather than proven: keep only tiny stakes or move SOL back to Paper/paused if prioritizing capital quality; do not scale SOL until nonzero-volume frequency and Live ROI improve.
+Notes: No tests were run because this was read-only operational diagnostics. Existing unrelated untracked artifact/config files were left untouched.
+Blockers: None.
+
 ## Active Update 2026-06-07 XRP DOGE 5m Volume Check
 Goal: Assess XRP and DOGE Up or Down 5m market volumes/liquidity before deciding whether to add them.
 Status: Completed
