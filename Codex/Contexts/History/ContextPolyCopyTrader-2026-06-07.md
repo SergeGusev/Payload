@@ -41,3 +41,10 @@ Request:
 
 Result:
 Verified production deployment read-only through `out\dbprobe` with host override `192.168.0.101`. `PolyCopyTrader.Service` is running commit `7d474f7f22a66f9...` in Live mode with fresh heartbeat and `last_error=null`. Production has 300 BTC/ETH/SOL 15m fixed-bps rows enabled and exactly six 50 bps target rows effective Live. 15m Gamma discovery and odds ticks are active after deploy; the first due 15m market created runs for all six Live strategies and skipped them because the previous 15m move was only about `5.6632 bps`, below the `50 bps` threshold. No target 15m Live orders have been created yet and no post-deploy `api_errors` were found.
+
+## 2026-06-07T09:46:34.1797093+00:00
+Request:
+Оцени по объёму 15-ти минутные рынки для всех трёх валют, с которыми мы сейчас работаем.
+
+Result:
+Assessed BTC/ETH/SOL 15m Up/Down market volume read-only from production PostgreSQL Gamma-derived rows, grouping markets by slug timestamp. At DB time `2026-06-07T09:45:45Z`, BTC 15m had 6h volume `467.76` across `19/24` nonzero markets and 24h volume `85831.74` across `64/96`; ETH 15m had 6h `249.86` across `4/24` and 24h `21610.11` across `33/96`; SOL 15m had 6h `451.38` across `1/24` and 24h `5299.83` across `14/96`. Conclusion: BTC 15m is the only semi-usable 15m market by continuity, ETH 15m is sporadic/experimental, and SOL 15m should not be scaled.

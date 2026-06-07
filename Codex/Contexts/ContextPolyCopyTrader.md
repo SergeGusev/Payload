@@ -1,3 +1,17 @@
+## Active Update 2026-06-07 BTC ETH SOL 15m Volume Assessment
+Goal: Assess 15-minute Up/Down market volume for BTC, ETH, and SOL.
+Status: Completed
+Done:
+- Queried production PostgreSQL read-only through `out\dbprobe` with host override `192.168.0.101`; no production rows, strategy flags, source files, configs, or service processes were changed.
+- Used Polymarket Gamma-derived `volume`, `liquidity_clob`, and `spread` rows from `polymarket_gamma_markets`, grouping 15m markets by slug timestamp so future pre-created Gamma markets did not distort rolling windows.
+- Snapshot at DB time `2026-06-07T09:45:45Z`: BTC 15m had 1h `27.56` volume across `4/4` nonzero markets, 6h `467.76` across `19/24`, and 24h `85831.74` across `64/96`; median 24h market volume `5.49`, p90 `256.93`, average spread `0.0106`.
+- ETH 15m had 1h `0` volume across `0/4`, 6h `249.86` across `4/24`, and 24h `21610.11` across `33/96`; median 24h market volume `0`, p90 `201.49`, average spread `0.0202`.
+- SOL 15m had 1h `0` volume across `0/4`, 6h `451.38` across `1/24`, and 24h `5299.83` across `14/96`; median 24h market volume `0`, p90 `18.79`, average spread `0.0227`.
+- Same-method comparison with 5m showed BTC 15m is much thinner than BTC 5m (`467.76` vs `318922.87` 6h), while ETH/SOL 15m are sporadic and not reliably traded despite occasional 24h spikes.
+Next: Keep 15m Live stakes tiny; BTC 15m is the only semi-usable 15m market by continuity, ETH 15m should remain cautious/experimental, and SOL 15m should not be scaled.
+Notes: Polymarket docs were checked for Gamma API context; Gamma is the market discovery/data API and market rows expose `volume`. No tests were run because this was read-only market diagnostics. Existing unrelated untracked artifact/config files were left untouched.
+Blockers: None.
+
 ## Active Update 2026-06-07 15m Fixed Bps Deployment Check
 Goal: Verify the deployed service picked up the new BTC/ETH/SOL 15m fixed-bps Instant strategies and their Live flags.
 Status: Completed
