@@ -1,0 +1,59 @@
+Betting throughput snapshot captured at 2026-06-16T07:29:47.8973884+00:00
+Host: 192.168.0.101
+Database: polycopytrader
+Server address: 192.168.0.101/32
+Server time UTC: 2026-06-16T07:29:47Z
+
+## Service heartbeat
+service_name	status	mode	started_utc	heartbeat_utc	heartbeat_age_seconds	version	current_loop	last_error
+PolyCopyTrader.Service	Running	Live	2026-06-15T19:11:47Z	2026-06-16T07:29:29Z	18.1	info=1.0.0+3b63e1384625a3ebbff5a779b115f317a3d7ff72; assembly=1.0.0.0; mvid=cad789ce19dd	BTC5mOnly WatchlistScanner=CommentedOut; FollowLeaderSignals=CommentedOut	<none>
+PolyCopyTrader.Tests	Running	ReadOnly	2026-05-04T14:02:41Z	2026-05-04T14:02:41Z	3691626.2	1.0.0	IntegrationTest	<none>
+
+## Enabled strategy inventory
+strategy_group	enabled_count	live_stakes_count	auto_live_paused_count	paused_count
+diff_paper	1464	0	0	0
+up_down_bps_paper	293	0	0	0
+live	8	8	0	0
+simple_paper	5	0	0	0
+
+## Current due backlog
+strategy_group	due_observed_runs	expired_by_60s_grace	max_overdue_seconds	earliest_due_utc	latest_due_utc
+<no rows>
+
+## Observed future queue next 10 minutes
+strategy_group	future_observed_runs	earliest_due_utc	latest_due_utc
+diff_paper	2928	2026-06-16T07:30:00Z	2026-06-16T07:35:00Z
+up_down_bps_paper	586	2026-06-16T07:30:00Z	2026-06-16T07:35:00Z
+live	16	2026-06-16T07:30:00Z	2026-06-16T07:35:00Z
+simple_paper	10	2026-06-16T07:30:00Z	2026-06-16T07:35:00Z
+
+## Entry due expired by recent window
+window_label	strategy_group	entry_due_expired	latest_updated_utc
+15m	simple_paper	5	2026-06-16T07:21:05Z
+60m	simple_paper	5	2026-06-16T07:21:05Z
+60m	live	4	2026-06-16T07:12:56Z
+6h	live	29	2026-06-16T07:12:56Z
+6h	simple_paper	5	2026-06-16T07:21:05Z
+since_bps_enable	live	5	2026-06-16T07:12:56Z
+since_bps_enable	simple_paper	5	2026-06-16T07:21:05Z
+
+## Entry delays by recent window
+window_label	strategy_group	entered_runs	avg_delay_seconds	p95_delay_seconds	max_delay_seconds	latest_entered_utc
+15m	diff_paper	304	18.73	31.33	31.49	2026-06-16T07:25:31Z
+15m	live	5	4.74	9.68	9.68	2026-06-16T07:25:01Z
+15m	simple_paper	10	50.10	52.45	52.45	2026-06-16T07:25:47Z
+15m	up_down_bps_paper	111	33.19	44.89	57.36	2026-06-16T07:25:36Z
+60m	diff_paper	1212	16.94	41.27	42.86	2026-06-16T07:25:31Z
+60m	live	13	17.96	85.09	198.20	2026-06-16T07:25:01Z
+60m	simple_paper	55	42.49	52.45	52.45	2026-06-16T07:25:47Z
+60m	up_down_bps_paper	531	24.87	44.90	57.36	2026-06-16T07:25:36Z
+6h	diff_paper	9926	33.56	101.81	124.92	2026-06-16T07:25:31Z
+6h	live	75	18.41	144.49	203.52	2026-06-16T07:25:01Z
+6h	simple_paper	355	15.12	47.74	52.45	2026-06-16T07:25:47Z
+6h	up_down_bps_paper	645	32.13	130.45	154.44	2026-06-16T07:25:36Z
+since_bps_enable	diff_paper	1529	16.40	31.81	92.29	2026-06-16T07:25:31Z
+since_bps_enable	live	16	14.68	56.81	198.20	2026-06-16T07:25:01Z
+since_bps_enable	simple_paper	65	38.80	52.45	52.45	2026-06-16T07:25:47Z
+since_bps_enable	up_down_bps_paper	645	32.13	130.45	154.44	2026-06-16T07:25:36Z
+
+## Run status by recent window

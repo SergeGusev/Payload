@@ -14,16 +14,22 @@ public static class LiveOrderPlacementAccounting
         decimal limitPrice,
         decimal requestedSizeShares,
         LiveOrderStatus status,
-        LiveOrderPlacementResult result)
+        LiveOrderPlacementResult result,
+        bool allowFilledSizeAboveRequested = false)
     {
         if (!result.Success || status != LiveOrderStatus.Matched || requestedSizeShares <= 0m)
         {
             return Empty(requestedSizeShares);
         }
 
-        if (TryCreateFillSummary(side, requestedSizeShares, result, out var summary))
+        if (TryCreateFillSummary(side, requestedSizeShares, result, allowFilledSizeAboveRequested, out var summary))
         {
             return summary;
+        }
+
+        if (allowFilledSizeAboveRequested)
+        {
+            return Empty(requestedSizeShares);
         }
 
         var fallbackNotional = limitPrice * requestedSizeShares;
@@ -49,6 +55,7 @@ public static class LiveOrderPlacementAccounting
         TradeSide side,
         decimal requestedSizeShares,
         LiveOrderPlacementResult result,
+        bool allowFilledSizeAboveRequested,
         out LiveOrderFillSummary summary)
     {
         summary = Empty(requestedSizeShares);
@@ -58,7 +65,7 @@ public static class LiveOrderPlacementAccounting
             return false;
         }
 
-        if (TryCreateCandidate(side, requestedSizeShares, makingAmount, takingAmount, out summary))
+        if (TryCreateCandidate(side, requestedSizeShares, makingAmount, takingAmount, allowFilledSizeAboveRequested, out summary))
         {
             return true;
         }
@@ -68,6 +75,7 @@ public static class LiveOrderPlacementAccounting
             requestedSizeShares,
             makingAmount / TokenScale,
             takingAmount / TokenScale,
+            allowFilledSizeAboveRequested,
             out summary);
     }
 
@@ -76,6 +84,7 @@ public static class LiveOrderPlacementAccounting
         decimal requestedSizeShares,
         decimal makingAmount,
         decimal takingAmount,
+        bool allowFilledSizeAboveRequested,
         out LiveOrderFillSummary summary)
     {
         summary = Empty(requestedSizeShares);
@@ -86,12 +95,12 @@ public static class LiveOrderPlacementAccounting
             return false;
         }
 
-        if (filledSize > requestedSizeShares + SizeTolerance)
+        if (!allowFilledSizeAboveRequested && filledSize > requestedSizeShares + SizeTolerance)
         {
             return false;
         }
 
-        if (filledSize > requestedSizeShares)
+        if (!allowFilledSizeAboveRequested && filledSize > requestedSizeShares)
         {
             filledSize = requestedSizeShares;
         }
@@ -102,7 +111,9 @@ public static class LiveOrderPlacementAccounting
             return false;
         }
 
-        var remainingSize = Math.Max(0m, requestedSizeShares - filledSize);
+        var remainingSize = allowFilledSizeAboveRequested
+            ? 0m
+            : Math.Max(0m, requestedSizeShares - filledSize);
         summary = new LiveOrderFillSummary(
             filledSize,
             remainingSize,

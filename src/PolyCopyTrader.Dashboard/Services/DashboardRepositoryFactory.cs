@@ -10,11 +10,7 @@ public static class DashboardRepositoryFactory
 {
     public static DashboardRuntime Create(DashboardDatabaseSource databaseSource = DashboardDatabaseSource.Local)
     {
-        var configuration = new ConfigurationBuilder()
-            .SetBasePath(AppContext.BaseDirectory)
-            .AddJsonFile("appsettings.json", optional: true, reloadOnChange: true)
-            .AddEnvironmentVariables()
-            .Build();
+        var configuration = BuildConfiguration();
 
         var appConfiguration = new AppConfiguration
         {
@@ -80,6 +76,22 @@ public static class DashboardRepositoryFactory
             databaseSource,
             DashboardDatabaseSources.ToDisplayName(databaseSource),
             databaseSource == DashboardDatabaseSource.Remote ? DashboardDatabaseSources.RemoteHost : null);
+    }
+
+    public static DashboardDatabaseSource GetDefaultDatabaseSource()
+    {
+        var configuration = BuildConfiguration();
+        var dashboardOptions = configuration.GetSection("Dashboard").Get<DashboardOptions>() ?? new DashboardOptions();
+        return DashboardDatabaseSources.FromConfiguredValue(dashboardOptions.DefaultDatabaseSource);
+    }
+
+    private static IConfigurationRoot BuildConfiguration()
+    {
+        return new ConfigurationBuilder()
+            .SetBasePath(AppContext.BaseDirectory)
+            .AddJsonFile("appsettings.json", optional: true, reloadOnChange: true)
+            .AddEnvironmentVariables()
+            .Build();
     }
 
     private static StorageOptions WithRemoteDatabaseHost(StorageOptions options, string host)

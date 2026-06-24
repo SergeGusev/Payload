@@ -1,0 +1,879 @@
+[     0.0s] Revert strategy cleanup started at 2026-06-16T18:19:29.1621213+00:00
+[     0.0s] Target strategy code/name regex: revert
+[     0.0s] Dry run: False
+[     0.0s] Execute: True
+[     0.0s] Verify only: False
+[     0.0s] Diagnose live orders only: False
+[     0.0s] Strategy limit: 100
+[     0.0s] Batch size: 100
+[     0.0s] Batch pause ms: 150
+[     0.0s] Batch lock timeout ms: 300
+[     0.0s] Batch statement timeout ms: 8000
+[     0.0s] Residual signal scan timeout ms: 100
+[     0.5s] Database: polycopytrader
+[     0.5s] Server address: 192.168.0.101/32
+[     0.6s] Server time UTC: 6/16/2026 6:19:31 PM
+[     0.6s] Last heartbeat UTC: 2026-06-16T18:18:47Z
+[     0.6s] Preparing target strategy ids...
+[     0.7s] Preparing target paper order ids...
+[     8.3s] Preparing target paper fill ids...
+[    10.2s] Preparing target run ids...
+[    65.7s] Preparing target signal ids...
+[    72.3s] Preparing target live order ids...
+[    72.4s] Preparing target correlation ids...
+[    73.8s] Preparing safe synthetic wallet ids...
+[    81.3s] Foreign keys touching cleanup parents:
+[    81.3s]   paper_live_shadow_decisions -> live_orders (paper_live_shadow_decisions_live_order_id_fkey)
+[    81.3s]   live_orders -> paper_orders (live_orders_paper_order_id_fkey)
+[    81.3s]   paper_fills -> paper_orders (paper_fills_paper_order_id_fkey)
+[    81.3s]   paper_live_shadow_decisions -> paper_orders (paper_live_shadow_decisions_paper_order_id_fkey)
+[    81.3s]   strategy_market_paper_runs -> paper_orders (strategy_market_paper_runs_paper_order_id_fkey)
+[    81.3s]   paper_live_shadow_decisions -> signals (paper_live_shadow_decisions_signal_id_fkey)
+[    81.3s]   signal_rejections -> signals (signal_rejections_signal_id_fkey)
+[    81.3s]   strategy_market_paper_runs -> signals (strategy_market_paper_runs_signal_id_fkey)
+[    81.3s]   dry_run_orders -> strategies (dry_run_orders_strategy_id_fkey)
+[    81.3s]   live_orders -> strategies (live_orders_strategy_id_fkey)
+[    81.3s]   paper_live_shadow_decisions -> strategies (paper_live_shadow_decisions_strategy_id_fkey)
+[    81.3s]   paper_live_shadow_discrepancies -> strategies (paper_live_shadow_discrepancies_strategy_id_fkey)
+[    81.3s]   paper_orders -> strategies (paper_orders_strategy_id_fkey)
+[    81.3s]   strategy_market_paper_runs -> strategies (strategy_market_paper_runs_strategy_id_fkey)
+[    81.3s] Target strategy rows sample:
+[    81.3s]   target strategy rows selected: 100
+[    81.3s]   btc_up_down_5m_up_shift_diff_2_10_revert_instant | enabled=False | live_stakes=False | BTC Up or Down 5m Up 2 10 ShiftDiff Revert Instant
+[    81.3s]   btc_up_down_5m_up_shift_diff_2_11_revert_instant | enabled=False | live_stakes=False | BTC Up or Down 5m Up 2 11 ShiftDiff Revert Instant
+[    81.3s]   btc_up_down_5m_up_shift_diff_2_12_revert_instant | enabled=False | live_stakes=False | BTC Up or Down 5m Up 2 12 ShiftDiff Revert Instant
+[    81.3s]   btc_up_down_5m_up_shift_diff_2_2_revert_instant | enabled=False | live_stakes=False | BTC Up or Down 5m Up 2 2 ShiftDiff Revert Instant
+[    81.3s]   btc_up_down_5m_up_shift_diff_2_3_revert_instant | enabled=False | live_stakes=False | BTC Up or Down 5m Up 2 3 ShiftDiff Revert Instant
+[    81.3s]   btc_up_down_5m_up_shift_diff_2_4_revert_instant | enabled=False | live_stakes=False | BTC Up or Down 5m Up 2 4 ShiftDiff Revert Instant
+[    81.3s]   btc_up_down_5m_up_shift_diff_2_5_revert_instant | enabled=False | live_stakes=False | BTC Up or Down 5m Up 2 5 ShiftDiff Revert Instant
+[    81.3s]   btc_up_down_5m_up_shift_diff_2_6_revert_instant | enabled=False | live_stakes=False | BTC Up or Down 5m Up 2 6 ShiftDiff Revert Instant
+[    81.3s]   btc_up_down_5m_up_shift_diff_2_7_revert_instant | enabled=False | live_stakes=False | BTC Up or Down 5m Up 2 7 ShiftDiff Revert Instant
+[    81.3s]   btc_up_down_5m_up_shift_diff_2_8_revert_instant | enabled=False | live_stakes=False | BTC Up or Down 5m Up 2 8 ShiftDiff Revert Instant
+[    81.3s]   btc_up_down_5m_up_shift_diff_2_9_revert_instant | enabled=False | live_stakes=False | BTC Up or Down 5m Up 2 9 ShiftDiff Revert Instant
+[    81.3s]   btc_up_down_5m_up_shift_diff_3_1_revert_instant | enabled=False | live_stakes=False | BTC Up or Down 5m Up 3 1 ShiftDiff Revert Instant
+[    81.3s]   btc_up_down_5m_up_shift_diff_3_10_revert_instant | enabled=False | live_stakes=False | BTC Up or Down 5m Up 3 10 ShiftDiff Revert Instant
+[    81.3s]   btc_up_down_5m_up_shift_diff_3_11_revert_instant | enabled=False | live_stakes=False | BTC Up or Down 5m Up 3 11 ShiftDiff Revert Instant
+[    81.3s]   btc_up_down_5m_up_shift_diff_3_12_revert_instant | enabled=False | live_stakes=False | BTC Up or Down 5m Up 3 12 ShiftDiff Revert Instant
+[    81.3s]   btc_up_down_5m_up_shift_diff_3_2_revert_instant | enabled=False | live_stakes=False | BTC Up or Down 5m Up 3 2 ShiftDiff Revert Instant
+[    81.3s]   btc_up_down_5m_up_shift_diff_3_3_revert_instant | enabled=False | live_stakes=False | BTC Up or Down 5m Up 3 3 ShiftDiff Revert Instant
+[    81.3s]   btc_up_down_5m_up_shift_diff_3_4_revert_instant | enabled=False | live_stakes=False | BTC Up or Down 5m Up 3 4 ShiftDiff Revert Instant
+[    81.3s]   btc_up_down_5m_up_shift_diff_3_5_revert_instant | enabled=False | live_stakes=False | BTC Up or Down 5m Up 3 5 ShiftDiff Revert Instant
+[    81.3s]   btc_up_down_5m_up_shift_diff_3_6_revert_instant | enabled=False | live_stakes=False | BTC Up or Down 5m Up 3 6 ShiftDiff Revert Instant
+[    81.3s]   btc_up_down_5m_up_shift_diff_3_7_revert_instant | enabled=False | live_stakes=False | BTC Up or Down 5m Up 3 7 ShiftDiff Revert Instant
+[    81.3s]   btc_up_down_5m_up_shift_diff_3_8_revert_instant | enabled=False | live_stakes=False | BTC Up or Down 5m Up 3 8 ShiftDiff Revert Instant
+[    81.3s]   btc_up_down_5m_up_shift_diff_3_9_revert_instant | enabled=False | live_stakes=False | BTC Up or Down 5m Up 3 9 ShiftDiff Revert Instant
+[    81.3s]   btc_up_down_5m_up_shift_diff_4_1_revert_instant | enabled=False | live_stakes=False | BTC Up or Down 5m Up 4 1 ShiftDiff Revert Instant
+[    81.3s]   btc_up_down_5m_up_shift_diff_4_10_revert_instant | enabled=False | live_stakes=False | BTC Up or Down 5m Up 4 10 ShiftDiff Revert Instant
+[    81.3s]   btc_up_down_5m_up_shift_diff_4_11_revert_instant | enabled=False | live_stakes=False | BTC Up or Down 5m Up 4 11 ShiftDiff Revert Instant
+[    81.3s]   btc_up_down_5m_up_shift_diff_4_12_revert_instant | enabled=False | live_stakes=False | BTC Up or Down 5m Up 4 12 ShiftDiff Revert Instant
+[    81.3s]   btc_up_down_5m_up_shift_diff_4_2_revert_instant | enabled=False | live_stakes=False | BTC Up or Down 5m Up 4 2 ShiftDiff Revert Instant
+[    81.3s]   btc_up_down_5m_up_shift_diff_4_3_revert_instant | enabled=False | live_stakes=False | BTC Up or Down 5m Up 4 3 ShiftDiff Revert Instant
+[    81.3s]   btc_up_down_5m_up_shift_diff_4_4_revert_instant | enabled=False | live_stakes=False | BTC Up or Down 5m Up 4 4 ShiftDiff Revert Instant
+[    81.3s]   btc_up_down_5m_up_shift_diff_4_5_revert_instant | enabled=False | live_stakes=False | BTC Up or Down 5m Up 4 5 ShiftDiff Revert Instant
+[    81.3s]   btc_up_down_5m_up_shift_diff_4_6_revert_instant | enabled=False | live_stakes=False | BTC Up or Down 5m Up 4 6 ShiftDiff Revert Instant
+[    81.3s]   btc_up_down_5m_up_shift_diff_4_7_revert_instant | enabled=False | live_stakes=False | BTC Up or Down 5m Up 4 7 ShiftDiff Revert Instant
+[    81.3s]   btc_up_down_5m_up_shift_diff_4_8_revert_instant | enabled=False | live_stakes=False | BTC Up or Down 5m Up 4 8 ShiftDiff Revert Instant
+[    81.3s]   btc_up_down_5m_up_shift_diff_4_9_revert_instant | enabled=False | live_stakes=False | BTC Up or Down 5m Up 4 9 ShiftDiff Revert Instant
+[    81.3s]   btc_up_down_5m_up_shift_diff_5_1_revert_instant | enabled=False | live_stakes=False | BTC Up or Down 5m Up 5 1 ShiftDiff Revert Instant
+[    81.3s]   btc_up_down_5m_up_shift_diff_5_10_revert_instant | enabled=False | live_stakes=False | BTC Up or Down 5m Up 5 10 ShiftDiff Revert Instant
+[    81.3s]   btc_up_down_5m_up_shift_diff_5_11_revert_instant | enabled=False | live_stakes=False | BTC Up or Down 5m Up 5 11 ShiftDiff Revert Instant
+[    81.3s]   btc_up_down_5m_up_shift_diff_5_12_revert_instant | enabled=False | live_stakes=False | BTC Up or Down 5m Up 5 12 ShiftDiff Revert Instant
+[    81.3s]   btc_up_down_5m_up_shift_diff_5_2_revert_instant | enabled=False | live_stakes=False | BTC Up or Down 5m Up 5 2 ShiftDiff Revert Instant
+[    81.3s]   btc_up_down_5m_up_shift_diff_5_3_revert_instant | enabled=False | live_stakes=False | BTC Up or Down 5m Up 5 3 ShiftDiff Revert Instant
+[    81.3s]   btc_up_down_5m_up_shift_diff_5_4_revert_instant | enabled=False | live_stakes=False | BTC Up or Down 5m Up 5 4 ShiftDiff Revert Instant
+[    81.3s]   btc_up_down_5m_up_shift_diff_5_5_revert_instant | enabled=False | live_stakes=False | BTC Up or Down 5m Up 5 5 ShiftDiff Revert Instant
+[    81.3s]   btc_up_down_5m_up_shift_diff_5_6_revert_instant | enabled=False | live_stakes=False | BTC Up or Down 5m Up 5 6 ShiftDiff Revert Instant
+[    81.3s]   btc_up_down_5m_up_shift_diff_5_7_revert_instant | enabled=False | live_stakes=False | BTC Up or Down 5m Up 5 7 ShiftDiff Revert Instant
+[    81.3s]   btc_up_down_5m_up_shift_diff_5_8_revert_instant | enabled=False | live_stakes=False | BTC Up or Down 5m Up 5 8 ShiftDiff Revert Instant
+[    81.3s]   btc_up_down_5m_up_shift_diff_5_9_revert_instant | enabled=False | live_stakes=False | BTC Up or Down 5m Up 5 9 ShiftDiff Revert Instant
+[    81.3s]   btc_up_down_5m_up_shift_diff_6_1_revert_instant | enabled=False | live_stakes=False | BTC Up or Down 5m Up 6 1 ShiftDiff Revert Instant
+[    81.3s]   btc_up_down_5m_up_shift_diff_6_10_revert_instant | enabled=False | live_stakes=False | BTC Up or Down 5m Up 6 10 ShiftDiff Revert Instant
+[    81.3s]   btc_up_down_5m_up_shift_diff_6_11_revert_instant | enabled=False | live_stakes=False | BTC Up or Down 5m Up 6 11 ShiftDiff Revert Instant
+[    81.3s]   ...sample limited to 50 rows.
+[    81.4s] Target summary (before):
+[    81.4s]   target strategies in temp: 100
+[    81.4s]   remaining strategies by code/name regex: 4567
+[    81.4s]   target wallet candidates: 100
+[    81.4s]   safe wallets: 100
+[    81.4s]   target paper_orders in temp: 19823
+[    81.9s]   remaining target paper_orders: 19823
+[    81.9s]   target paper_fills in temp: 20
+[    82.6s]   remaining target paper_fills: 20
+[    82.6s]   target run ids in temp: 0
+[    82.6s]   remaining target runs: 0
+[    82.6s]   target signal ids in temp: 19823
+[    85.1s]   remaining target signals: 19823
+[    85.1s]   remaining target signal_rejections: 0
+[    85.1s]   remaining target dry_run_orders: 0
+[    85.2s]   target live_orders in temp: 0
+[    85.2s]   remaining target live_orders: 0
+[    85.2s]   remaining target shadow decisions: 0
+[    85.2s]   remaining target shadow discrepancies: 0
+[    85.7s]   remaining safe-wallet paper_positions: 12679
+[    86.0s]   remaining safe-wallet settlements: 9279
+[    86.1s]   remaining safe-wallet performance rows: 0
+[    86.1s]   target settlement ids in temp: 9279
+[    86.1s]   target position ids in temp: 12679
+[    86.1s]   target performance keys in temp: 0
+[    86.1s] Wallet candidate safety sample:
+[    87.2s]   wallet=strategy:btc_up_down_5m_up_shift_diff_6_1_revert_instant, target_orders=1023
+[    87.2s]   wallet=strategy:btc_up_down_5m_up_shift_diff_6_2_revert_instant, target_orders=911
+[    87.2s]   wallet=strategy:btc_up_down_5m_up_shift_diff_5_1_revert_instant, target_orders=894
+[    87.2s]   wallet=strategy:btc_up_down_5m_up_shift_diff_4_1_revert_instant, target_orders=872
+[    87.2s]   wallet=strategy:btc_up_down_5m_up_shift_diff_3_1_revert_instant, target_orders=820
+[    87.2s]   wallet=strategy:btc_up_down_5m_up_shift_diff_6_3_revert_instant, target_orders=793
+[    87.2s]   wallet=strategy:btc_up_down_5m_up_shift_diff_5_2_revert_instant, target_orders=731
+[    87.2s]   wallet=strategy:btc_up_down_5m_up_shift_diff_4_2_revert_instant, target_orders=725
+[    87.2s]   wallet=strategy:btc_up_down_5m_up_shift_diff_6_4_revert_instant, target_orders=687
+[    87.2s]   wallet=strategy:eth_up_down_5m_down_diff_1_revert_instant, target_orders=637
+[    87.2s]   wallet=strategy:eth_up_down_5m_down_adjusted_diff_1_revert_instant, target_orders=622
+[    87.2s]   wallet=strategy:btc_up_down_5m_up_shift_diff_3_2_revert_instant, target_orders=620
+[    87.2s]   wallet=strategy:btc_up_down_5m_up_shift_diff_6_5_revert_instant, target_orders=587
+[    87.2s]   wallet=strategy:eth_up_down_5m_down_diff_2_revert_instant, target_orders=580
+[    87.2s]   wallet=strategy:btc_up_down_5m_up_shift_diff_4_3_revert_instant, target_orders=579
+[    87.2s]   wallet=strategy:btc_up_down_5m_up_shift_diff_5_3_revert_instant, target_orders=568
+[    87.2s]   wallet=strategy:eth_up_down_5m_down_diff_3_revert_instant, target_orders=533
+[    87.2s]   wallet=strategy:eth_up_down_5m_down_diff_4_revert_instant, target_orders=487
+[    87.2s]   wallet=strategy:btc_up_down_5m_up_shift_diff_2_2_revert_instant, target_orders=484
+[    87.2s]   wallet=strategy:btc_up_down_5m_up_shift_diff_6_6_revert_instant, target_orders=481
+[    87.3s] Open/unsettled target live_orders guard count: 0
+[    87.3s] Disabled/de-live-updated target strategies: 0
+[    87.3s] paper_live_shadow_discrepancies: complete, deleted 0
+[    87.4s] paper_live_shadow_decisions: complete, deleted 0
+[    87.5s] strategy_market_paper_runs: complete, deleted 0
+[    87.5s] dry_run_orders: complete, deleted 0
+[    87.6s] live_orders: complete, deleted 0
+[    87.6s] paper_fills: batch 1 deleted 20, total 20
+[    87.8s] paper_fills: complete, deleted 20
+[    87.9s] paper_position_settlements: batch 1 deleted 100, total 100
+[    88.1s] paper_position_settlements: batch 2 deleted 100, total 200
+[    88.3s] paper_position_settlements: batch 3 deleted 100, total 300
+[    88.5s] paper_position_settlements: batch 4 deleted 100, total 400
+[    88.8s] paper_position_settlements: batch 5 deleted 100, total 500
+[    89.0s] paper_position_settlements: batch 6 deleted 100, total 600
+[    89.2s] paper_position_settlements: batch 7 deleted 100, total 700
+[    89.5s] paper_position_settlements: batch 8 deleted 100, total 800
+[    89.7s] paper_position_settlements: batch 9 deleted 100, total 900
+[    89.9s] paper_position_settlements: batch 10 deleted 100, total 1000
+[    90.1s] paper_position_settlements: batch 11 deleted 100, total 1100
+[    90.3s] paper_position_settlements: batch 12 deleted 100, total 1200
+[    90.5s] paper_position_settlements: batch 13 deleted 100, total 1300
+[    90.7s] paper_position_settlements: batch 14 deleted 100, total 1400
+[    90.9s] paper_position_settlements: batch 15 deleted 100, total 1500
+[    91.1s] paper_position_settlements: batch 16 deleted 100, total 1600
+[    91.3s] paper_position_settlements: batch 17 deleted 100, total 1700
+[    91.5s] paper_position_settlements: batch 18 deleted 100, total 1800
+[    91.7s] paper_position_settlements: batch 19 deleted 100, total 1900
+[    91.9s] paper_position_settlements: batch 20 deleted 100, total 2000
+[    92.1s] paper_position_settlements: batch 21 deleted 100, total 2100
+[    92.4s] paper_position_settlements: batch 22 deleted 100, total 2200
+[    92.7s] paper_position_settlements: batch 23 deleted 100, total 2300
+[    92.9s] paper_position_settlements: batch 24 deleted 100, total 2400
+[    93.1s] paper_position_settlements: batch 25 deleted 100, total 2500
+[    93.5s] paper_position_settlements: batch 26 deleted 100, total 2600
+[    93.9s] paper_position_settlements: batch 27 deleted 100, total 2700
+[    94.2s] paper_position_settlements: batch 28 deleted 100, total 2800
+[    94.7s] paper_position_settlements: batch 29 deleted 100, total 2900
+[    95.1s] paper_position_settlements: batch 30 deleted 100, total 3000
+[    95.5s] paper_position_settlements: batch 31 deleted 100, total 3100
+[    95.8s] paper_position_settlements: batch 32 deleted 100, total 3200
+[    96.3s] paper_position_settlements: batch 33 deleted 100, total 3300
+[    96.6s] paper_position_settlements: batch 34 deleted 100, total 3400
+[    97.0s] paper_position_settlements: batch 35 deleted 100, total 3500
+[    97.4s] paper_position_settlements: batch 36 deleted 100, total 3600
+[    97.7s] paper_position_settlements: batch 37 deleted 100, total 3700
+[    98.1s] paper_position_settlements: batch 38 deleted 100, total 3800
+[    98.3s] paper_position_settlements: batch 39 deleted 100, total 3900
+[    98.6s] paper_position_settlements: batch 40 deleted 100, total 4000
+[    98.8s] paper_position_settlements: batch 41 deleted 100, total 4100
+[    99.0s] paper_position_settlements: batch 42 deleted 100, total 4200
+[    99.4s] paper_position_settlements: batch 43 deleted 100, total 4300
+[    99.6s] paper_position_settlements: batch 44 deleted 100, total 4400
+[    99.8s] paper_position_settlements: batch 45 deleted 100, total 4500
+[   100.0s] paper_position_settlements: batch 46 deleted 100, total 4600
+[   100.2s] paper_position_settlements: batch 47 deleted 100, total 4700
+[   100.4s] paper_position_settlements: batch 48 deleted 100, total 4800
+[   100.6s] paper_position_settlements: batch 49 deleted 100, total 4900
+[   100.8s] paper_position_settlements: batch 50 deleted 100, total 5000
+[   101.0s] paper_position_settlements: batch 51 deleted 100, total 5100
+[   101.2s] paper_position_settlements: batch 52 deleted 100, total 5200
+[   101.4s] paper_position_settlements: batch 53 deleted 100, total 5300
+[   101.6s] paper_position_settlements: batch 54 deleted 100, total 5400
+[   101.8s] paper_position_settlements: batch 55 deleted 100, total 5500
+[   102.0s] paper_position_settlements: batch 56 deleted 100, total 5600
+[   102.2s] paper_position_settlements: batch 57 deleted 100, total 5700
+[   102.4s] paper_position_settlements: batch 58 deleted 100, total 5800
+[   102.6s] paper_position_settlements: batch 59 deleted 100, total 5900
+[   102.8s] paper_position_settlements: batch 60 deleted 100, total 6000
+[   103.0s] paper_position_settlements: batch 61 deleted 100, total 6100
+[   103.2s] paper_position_settlements: batch 62 deleted 100, total 6200
+[   103.4s] paper_position_settlements: batch 63 deleted 100, total 6300
+[   103.5s] paper_position_settlements: batch 64 deleted 100, total 6400
+[   103.7s] paper_position_settlements: batch 65 deleted 100, total 6500
+[   103.9s] paper_position_settlements: batch 66 deleted 100, total 6600
+[   104.1s] paper_position_settlements: batch 67 deleted 100, total 6700
+[   104.4s] paper_position_settlements: batch 68 deleted 100, total 6800
+[   104.6s] paper_position_settlements: batch 69 deleted 100, total 6900
+[   104.7s] paper_position_settlements: batch 70 deleted 100, total 7000
+[   104.9s] paper_position_settlements: batch 71 deleted 100, total 7100
+[   105.1s] paper_position_settlements: batch 72 deleted 100, total 7200
+[   105.4s] paper_position_settlements: batch 73 deleted 100, total 7300
+[   105.5s] paper_position_settlements: batch 74 deleted 100, total 7400
+[   105.7s] paper_position_settlements: batch 75 deleted 100, total 7500
+[   105.9s] paper_position_settlements: batch 76 deleted 100, total 7600
+[   106.1s] paper_position_settlements: batch 77 deleted 100, total 7700
+[   106.3s] paper_position_settlements: batch 78 deleted 100, total 7800
+[   106.5s] paper_position_settlements: batch 79 deleted 100, total 7900
+[   106.7s] paper_position_settlements: batch 80 deleted 100, total 8000
+[   106.9s] paper_position_settlements: batch 81 deleted 100, total 8100
+[   107.1s] paper_position_settlements: batch 82 deleted 100, total 8200
+[   107.3s] paper_position_settlements: batch 83 deleted 100, total 8300
+[   107.5s] paper_position_settlements: batch 84 deleted 100, total 8400
+[   107.7s] paper_position_settlements: batch 85 deleted 100, total 8500
+[   107.9s] paper_position_settlements: batch 86 deleted 100, total 8600
+[   108.1s] paper_position_settlements: batch 87 deleted 100, total 8700
+[   108.3s] paper_position_settlements: batch 88 deleted 100, total 8800
+[   108.4s] paper_position_settlements: batch 89 deleted 100, total 8900
+[   108.7s] paper_position_settlements: batch 90 deleted 100, total 9000
+[   109.0s] paper_position_settlements: batch 91 deleted 100, total 9100
+[   109.2s] paper_position_settlements: batch 92 deleted 100, total 9200
+[   109.4s] paper_position_settlements: batch 93 deleted 79, total 9279
+[   109.6s] paper_position_settlements: complete, deleted 9279
+[   109.6s] paper_positions: batch 1 deleted 100, total 100
+[   109.8s] paper_positions: batch 2 deleted 100, total 200
+[   110.1s] paper_positions: batch 3 deleted 100, total 300
+[   110.3s] paper_positions: batch 4 deleted 100, total 400
+[   110.5s] paper_positions: batch 5 deleted 100, total 500
+[   110.7s] paper_positions: batch 6 deleted 100, total 600
+[   110.9s] paper_positions: batch 7 deleted 100, total 700
+[   111.2s] paper_positions: batch 8 deleted 100, total 800
+[   111.4s] paper_positions: batch 9 deleted 100, total 900
+[   111.7s] paper_positions: batch 10 deleted 100, total 1000
+[   111.9s] paper_positions: batch 11 deleted 100, total 1100
+[   112.2s] paper_positions: batch 12 deleted 100, total 1200
+[   112.4s] paper_positions: batch 13 deleted 100, total 1300
+[   112.6s] paper_positions: batch 14 deleted 100, total 1400
+[   112.9s] paper_positions: batch 15 deleted 100, total 1500
+[   113.1s] paper_positions: batch 16 deleted 100, total 1600
+[   113.4s] paper_positions: batch 17 deleted 100, total 1700
+[   113.6s] paper_positions: batch 18 deleted 100, total 1800
+[   113.8s] paper_positions: batch 19 deleted 100, total 1900
+[   114.1s] paper_positions: batch 20 deleted 100, total 2000
+[   114.3s] paper_positions: batch 21 deleted 100, total 2100
+[   114.5s] paper_positions: batch 22 deleted 100, total 2200
+[   114.7s] paper_positions: batch 23 deleted 100, total 2300
+[   114.9s] paper_positions: batch 24 deleted 100, total 2400
+[   115.1s] paper_positions: batch 25 deleted 100, total 2500
+[   115.4s] paper_positions: batch 26 deleted 100, total 2600
+[   115.6s] paper_positions: batch 27 deleted 100, total 2700
+[   115.8s] paper_positions: batch 28 deleted 100, total 2800
+[   116.0s] paper_positions: batch 29 deleted 100, total 2900
+[   116.2s] paper_positions: batch 30 deleted 100, total 3000
+[   116.4s] paper_positions: batch 31 deleted 100, total 3100
+[   116.6s] paper_positions: batch 32 deleted 100, total 3200
+[   116.8s] paper_positions: batch 33 deleted 100, total 3300
+[   117.0s] paper_positions: batch 34 deleted 100, total 3400
+[   117.3s] paper_positions: batch 35 deleted 100, total 3500
+[   117.4s] paper_positions: batch 36 deleted 100, total 3600
+[   117.6s] paper_positions: batch 37 deleted 100, total 3700
+[   117.9s] paper_positions: batch 38 deleted 100, total 3800
+[   118.1s] paper_positions: batch 39 deleted 100, total 3900
+[   118.3s] paper_positions: batch 40 deleted 100, total 4000
+[   118.5s] paper_positions: batch 41 deleted 100, total 4100
+[   118.7s] paper_positions: batch 42 deleted 100, total 4200
+[   118.9s] paper_positions: batch 43 deleted 100, total 4300
+[   119.1s] paper_positions: batch 44 deleted 100, total 4400
+[   119.3s] paper_positions: batch 45 deleted 100, total 4500
+[   119.6s] paper_positions: batch 46 deleted 100, total 4600
+[   119.8s] paper_positions: batch 47 deleted 100, total 4700
+[   120.0s] paper_positions: batch 48 deleted 100, total 4800
+[   120.2s] paper_positions: batch 49 deleted 100, total 4900
+[   120.4s] paper_positions: batch 50 deleted 100, total 5000
+[   120.6s] paper_positions: batch 51 deleted 100, total 5100
+[   120.8s] paper_positions: batch 52 deleted 100, total 5200
+[   121.1s] paper_positions: batch 53 deleted 100, total 5300
+[   121.4s] paper_positions: batch 54 deleted 100, total 5400
+[   121.6s] paper_positions: batch 55 deleted 100, total 5500
+[   121.9s] paper_positions: batch 56 deleted 100, total 5600
+[   122.1s] paper_positions: batch 57 deleted 100, total 5700
+[   122.3s] paper_positions: batch 58 deleted 100, total 5800
+[   122.5s] paper_positions: batch 59 deleted 100, total 5900
+[   122.7s] paper_positions: batch 60 deleted 100, total 6000
+[   122.9s] paper_positions: batch 61 deleted 100, total 6100
+[   123.1s] paper_positions: batch 62 deleted 100, total 6200
+[   123.2s] paper_positions: batch 63 deleted 100, total 6300
+[   123.5s] paper_positions: batch 64 deleted 100, total 6400
+[   123.7s] paper_positions: batch 65 deleted 100, total 6500
+[   123.9s] paper_positions: batch 66 deleted 100, total 6600
+[   124.1s] paper_positions: batch 67 deleted 100, total 6700
+[   124.3s] paper_positions: batch 68 deleted 100, total 6800
+[   124.6s] paper_positions: batch 69 deleted 100, total 6900
+[   124.8s] paper_positions: batch 70 deleted 100, total 7000
+[   124.9s] paper_positions: batch 71 deleted 100, total 7100
+[   125.1s] paper_positions: batch 72 deleted 100, total 7200
+[   125.3s] paper_positions: batch 73 deleted 100, total 7300
+[   125.5s] paper_positions: batch 74 deleted 100, total 7400
+[   125.7s] paper_positions: batch 75 deleted 100, total 7500
+[   125.9s] paper_positions: batch 76 deleted 100, total 7600
+[   126.1s] paper_positions: batch 77 deleted 100, total 7700
+[   126.3s] paper_positions: batch 78 deleted 100, total 7800
+[   126.5s] paper_positions: batch 79 deleted 100, total 7900
+[   126.7s] paper_positions: batch 80 deleted 100, total 8000
+[   126.9s] paper_positions: batch 81 deleted 100, total 8100
+[   127.1s] paper_positions: batch 82 deleted 100, total 8200
+[   127.3s] paper_positions: batch 83 deleted 100, total 8300
+[   127.5s] paper_positions: batch 84 deleted 100, total 8400
+[   127.7s] paper_positions: batch 85 deleted 100, total 8500
+[   127.9s] paper_positions: batch 86 deleted 100, total 8600
+[   128.1s] paper_positions: batch 87 deleted 100, total 8700
+[   128.3s] paper_positions: batch 88 deleted 100, total 8800
+[   128.5s] paper_positions: batch 89 deleted 100, total 8900
+[   128.7s] paper_positions: batch 90 deleted 100, total 9000
+[   128.9s] paper_positions: batch 91 deleted 100, total 9100
+[   129.1s] paper_positions: batch 92 deleted 100, total 9200
+[   129.4s] paper_positions: batch 93 deleted 100, total 9300
+[   129.7s] paper_positions: batch 94 deleted 100, total 9400
+[   129.9s] paper_positions: batch 95 deleted 100, total 9500
+[   130.1s] paper_positions: batch 96 deleted 100, total 9600
+[   130.4s] paper_positions: batch 97 deleted 100, total 9700
+[   130.6s] paper_positions: batch 98 deleted 100, total 9800
+[   130.8s] paper_positions: batch 99 deleted 100, total 9900
+[   131.0s] paper_positions: batch 100 deleted 100, total 10000
+[   131.2s] paper_positions: batch 101 deleted 100, total 10100
+[   131.4s] paper_positions: batch 102 deleted 100, total 10200
+[   131.5s] paper_positions: batch 103 deleted 100, total 10300
+[   131.7s] paper_positions: batch 104 deleted 100, total 10400
+[   132.0s] paper_positions: batch 105 deleted 100, total 10500
+[   132.2s] paper_positions: batch 106 deleted 100, total 10600
+[   132.3s] paper_positions: batch 107 deleted 100, total 10700
+[   132.5s] paper_positions: batch 108 deleted 100, total 10800
+[   132.7s] paper_positions: batch 109 deleted 100, total 10900
+[   132.9s] paper_positions: batch 110 deleted 100, total 11000
+[   133.1s] paper_positions: batch 111 deleted 100, total 11100
+[   133.3s] paper_positions: batch 112 deleted 100, total 11200
+[   133.5s] paper_positions: batch 113 deleted 100, total 11300
+[   133.7s] paper_positions: batch 114 deleted 100, total 11400
+[   133.9s] paper_positions: batch 115 deleted 100, total 11500
+[   134.1s] paper_positions: batch 116 deleted 100, total 11600
+[   134.3s] paper_positions: batch 117 deleted 100, total 11700
+[   134.5s] paper_positions: batch 118 deleted 100, total 11800
+[   134.7s] paper_positions: batch 119 deleted 100, total 11900
+[   134.9s] paper_positions: batch 120 deleted 100, total 12000
+[   135.1s] paper_positions: batch 121 deleted 100, total 12100
+[   135.3s] paper_positions: batch 122 deleted 100, total 12200
+[   135.5s] paper_positions: batch 123 deleted 100, total 12300
+[   135.7s] paper_positions: batch 124 deleted 100, total 12400
+[   135.9s] paper_positions: batch 125 deleted 100, total 12500
+[   136.1s] paper_positions: batch 126 deleted 100, total 12600
+[   136.3s] paper_positions: batch 127 deleted 79, total 12679
+[   136.5s] paper_positions: complete, deleted 12679
+[   136.5s] paper_copied_trader_performance: complete, deleted 0
+[   136.5s] Refreshing target signal ids from current target rows before deleting paper orders...
+[   141.2s] strategy_market_paper_runs late strategy: complete, deleted 0
+[   143.1s] strategy_market_paper_runs late paper_order: complete, deleted 0
+[   144.7s] paper_fills late: complete, deleted 0
+[   144.9s] paper_orders: batch 1 deleted 100, total 100
+[   145.1s] paper_orders: batch 2 deleted 100, total 200
+[   145.4s] paper_orders: batch 3 deleted 100, total 300
+[   145.7s] paper_orders: batch 4 deleted 100, total 400
+[   146.0s] paper_orders: batch 5 deleted 100, total 500
+[   146.3s] paper_orders: batch 6 deleted 100, total 600
+[   146.6s] paper_orders: batch 7 deleted 100, total 700
+[   146.9s] paper_orders: batch 8 deleted 100, total 800
+[   147.2s] paper_orders: batch 9 deleted 100, total 900
+[   147.5s] paper_orders: batch 10 deleted 100, total 1000
+[   147.8s] paper_orders: batch 11 deleted 100, total 1100
+[   148.1s] paper_orders: batch 12 deleted 100, total 1200
+[   148.3s] paper_orders: batch 13 deleted 100, total 1300
+[   148.6s] paper_orders: batch 14 deleted 100, total 1400
+[   148.8s] paper_orders: batch 15 deleted 100, total 1500
+[   149.1s] paper_orders: batch 16 deleted 100, total 1600
+[   149.3s] paper_orders: batch 17 deleted 100, total 1700
+[   149.5s] paper_orders: batch 18 deleted 100, total 1800
+[   149.8s] paper_orders: batch 19 deleted 100, total 1900
+[   150.1s] paper_orders: batch 20 deleted 100, total 2000
+[   150.4s] paper_orders: batch 21 deleted 100, total 2100
+[   150.7s] paper_orders: batch 22 deleted 100, total 2200
+[   151.0s] paper_orders: batch 23 deleted 100, total 2300
+[   151.3s] paper_orders: batch 24 deleted 100, total 2400
+[   151.5s] paper_orders: batch 25 deleted 100, total 2500
+[   151.8s] paper_orders: batch 26 deleted 100, total 2600
+[   152.1s] paper_orders: batch 27 deleted 100, total 2700
+[   152.4s] paper_orders: batch 28 deleted 100, total 2800
+[   152.7s] paper_orders: batch 29 deleted 100, total 2900
+[   152.9s] paper_orders: batch 30 deleted 100, total 3000
+[   153.2s] paper_orders: batch 31 deleted 100, total 3100
+[   153.5s] paper_orders: batch 32 deleted 100, total 3200
+[   153.8s] paper_orders: batch 33 deleted 100, total 3300
+[   154.1s] paper_orders: batch 34 deleted 100, total 3400
+[   154.5s] paper_orders: batch 35 deleted 100, total 3500
+[   154.7s] paper_orders: batch 36 deleted 100, total 3600
+[   155.1s] paper_orders: batch 37 deleted 100, total 3700
+[   155.4s] paper_orders: batch 38 deleted 100, total 3800
+[   155.6s] paper_orders: batch 39 deleted 100, total 3900
+[   155.9s] paper_orders: batch 40 deleted 100, total 4000
+[   156.2s] paper_orders: batch 41 deleted 100, total 4100
+[   156.5s] paper_orders: batch 42 deleted 100, total 4200
+[   156.8s] paper_orders: batch 43 deleted 100, total 4300
+[   157.1s] paper_orders: batch 44 deleted 100, total 4400
+[   157.4s] paper_orders: batch 45 deleted 100, total 4500
+[   157.7s] paper_orders: batch 46 deleted 100, total 4600
+[   158.0s] paper_orders: batch 47 deleted 100, total 4700
+[   158.3s] paper_orders: batch 48 deleted 100, total 4800
+[   158.6s] paper_orders: batch 49 deleted 100, total 4900
+[   158.8s] paper_orders: batch 50 deleted 100, total 5000
+[   159.2s] paper_orders: batch 51 deleted 100, total 5100
+[   159.5s] paper_orders: batch 52 deleted 100, total 5200
+[   160.0s] paper_orders: batch 53 deleted 100, total 5300
+[   160.3s] paper_orders: batch 54 deleted 100, total 5400
+[   160.5s] paper_orders: batch 55 deleted 100, total 5500
+[   160.8s] paper_orders: batch 56 deleted 100, total 5600
+[   161.1s] paper_orders: batch 57 deleted 100, total 5700
+[   161.4s] paper_orders: batch 58 deleted 100, total 5800
+[   161.6s] paper_orders: batch 59 deleted 100, total 5900
+[   161.9s] paper_orders: batch 60 deleted 100, total 6000
+[   162.2s] paper_orders: batch 61 deleted 100, total 6100
+[   162.4s] paper_orders: batch 62 deleted 100, total 6200
+[   162.6s] paper_orders: batch 63 deleted 100, total 6300
+[   162.9s] paper_orders: batch 64 deleted 100, total 6400
+[   163.2s] paper_orders: batch 65 deleted 100, total 6500
+[   163.5s] paper_orders: batch 66 deleted 100, total 6600
+[   163.7s] paper_orders: batch 67 deleted 100, total 6700
+[   164.0s] paper_orders: batch 68 deleted 100, total 6800
+[   164.2s] paper_orders: batch 69 deleted 100, total 6900
+[   164.5s] paper_orders: batch 70 deleted 100, total 7000
+[   164.8s] paper_orders: batch 71 deleted 100, total 7100
+[   165.0s] paper_orders: batch 72 deleted 100, total 7200
+[   165.3s] paper_orders: batch 73 deleted 100, total 7300
+[   165.6s] paper_orders: batch 74 deleted 100, total 7400
+[   165.9s] paper_orders: batch 75 deleted 100, total 7500
+[   166.1s] paper_orders: batch 76 deleted 100, total 7600
+[   166.5s] paper_orders: batch 77 deleted 100, total 7700
+[   166.7s] paper_orders: batch 78 deleted 100, total 7800
+[   167.0s] paper_orders: batch 79 deleted 100, total 7900
+[   167.3s] paper_orders: batch 80 deleted 100, total 8000
+[   167.6s] paper_orders: batch 81 deleted 100, total 8100
+[   167.8s] paper_orders: batch 82 deleted 100, total 8200
+[   168.1s] paper_orders: batch 83 deleted 100, total 8300
+[   168.3s] paper_orders: batch 84 deleted 100, total 8400
+[   168.7s] paper_orders: batch 85 deleted 100, total 8500
+[   169.0s] paper_orders: batch 86 deleted 100, total 8600
+[   169.4s] paper_orders: batch 87 deleted 100, total 8700
+[   169.8s] paper_orders: batch 88 deleted 100, total 8800
+[   170.1s] paper_orders: batch 89 deleted 100, total 8900
+[   170.3s] paper_orders: batch 90 deleted 100, total 9000
+[   170.6s] paper_orders: batch 91 deleted 100, total 9100
+[   170.9s] paper_orders: batch 92 deleted 100, total 9200
+[   171.1s] paper_orders: batch 93 deleted 100, total 9300
+[   171.4s] paper_orders: batch 94 deleted 100, total 9400
+[   171.6s] paper_orders: batch 95 deleted 100, total 9500
+[   171.8s] paper_orders: batch 96 deleted 100, total 9600
+[   172.1s] paper_orders: batch 97 deleted 100, total 9700
+[   172.4s] paper_orders: batch 98 deleted 100, total 9800
+[   172.6s] paper_orders: batch 99 deleted 100, total 9900
+[   172.8s] paper_orders: batch 100 deleted 100, total 10000
+[   173.1s] paper_orders: batch 101 deleted 100, total 10100
+[   173.3s] paper_orders: batch 102 deleted 100, total 10200
+[   173.6s] paper_orders: batch 103 deleted 100, total 10300
+[   173.9s] paper_orders: batch 104 deleted 100, total 10400
+[   174.2s] paper_orders: batch 105 deleted 100, total 10500
+[   174.5s] paper_orders: batch 106 deleted 100, total 10600
+[   174.8s] paper_orders: batch 107 deleted 100, total 10700
+[   175.1s] paper_orders: batch 108 deleted 100, total 10800
+[   175.3s] paper_orders: batch 109 deleted 100, total 10900
+[   175.6s] paper_orders: batch 110 deleted 100, total 11000
+[   175.9s] paper_orders: batch 111 deleted 100, total 11100
+[   176.2s] paper_orders: batch 112 deleted 100, total 11200
+[   176.4s] paper_orders: batch 113 deleted 100, total 11300
+[   176.7s] paper_orders: batch 114 deleted 100, total 11400
+[   177.0s] paper_orders: batch 115 deleted 100, total 11500
+[   177.3s] paper_orders: batch 116 deleted 100, total 11600
+[   177.6s] paper_orders: batch 117 deleted 100, total 11700
+[   177.9s] paper_orders: batch 118 deleted 100, total 11800
+[   178.2s] paper_orders: batch 119 deleted 100, total 11900
+[   178.4s] paper_orders: batch 120 deleted 100, total 12000
+[   178.7s] paper_orders: batch 121 deleted 100, total 12100
+[   178.9s] paper_orders: batch 122 deleted 100, total 12200
+[   179.2s] paper_orders: batch 123 deleted 100, total 12300
+[   179.5s] paper_orders: batch 124 deleted 100, total 12400
+[   179.8s] paper_orders: batch 125 deleted 100, total 12500
+[   180.1s] paper_orders: batch 126 deleted 100, total 12600
+[   180.4s] paper_orders: batch 127 deleted 100, total 12700
+[   180.7s] paper_orders: batch 128 deleted 100, total 12800
+[   181.0s] paper_orders: batch 129 deleted 100, total 12900
+[   181.2s] paper_orders: batch 130 deleted 100, total 13000
+[   181.5s] paper_orders: batch 131 deleted 100, total 13100
+[   181.7s] paper_orders: batch 132 deleted 100, total 13200
+[   182.0s] paper_orders: batch 133 deleted 100, total 13300
+[   182.2s] paper_orders: batch 134 deleted 100, total 13400
+[   182.5s] paper_orders: batch 135 deleted 100, total 13500
+[   182.7s] paper_orders: batch 136 deleted 100, total 13600
+[   183.0s] paper_orders: batch 137 deleted 100, total 13700
+[   183.3s] paper_orders: batch 138 deleted 100, total 13800
+[   183.5s] paper_orders: batch 139 deleted 100, total 13900
+[   183.8s] paper_orders: batch 140 deleted 100, total 14000
+[   184.1s] paper_orders: batch 141 deleted 100, total 14100
+[   184.3s] paper_orders: batch 142 deleted 100, total 14200
+[   184.7s] paper_orders: batch 143 deleted 100, total 14300
+[   185.0s] paper_orders: batch 144 deleted 100, total 14400
+[   185.3s] paper_orders: batch 145 deleted 100, total 14500
+[   185.6s] paper_orders: batch 146 deleted 100, total 14600
+[   186.0s] paper_orders: batch 147 deleted 100, total 14700
+[   186.3s] paper_orders: batch 148 deleted 100, total 14800
+[   186.7s] paper_orders: batch 149 deleted 100, total 14900
+[   187.1s] paper_orders: batch 150 deleted 100, total 15000
+[   187.5s] paper_orders: batch 151 deleted 100, total 15100
+[   187.9s] paper_orders: batch 152 deleted 100, total 15200
+[   188.3s] paper_orders: batch 153 deleted 100, total 15300
+[   188.7s] paper_orders: batch 154 deleted 100, total 15400
+[   189.1s] paper_orders: batch 155 deleted 100, total 15500
+[   189.5s] paper_orders: batch 156 deleted 100, total 15600
+[   189.9s] paper_orders: batch 157 deleted 100, total 15700
+[   190.2s] paper_orders: batch 158 deleted 100, total 15800
+[   190.6s] paper_orders: batch 159 deleted 100, total 15900
+[   191.0s] paper_orders: batch 160 deleted 100, total 16000
+[   191.3s] paper_orders: batch 161 deleted 100, total 16100
+[   191.7s] paper_orders: batch 162 deleted 100, total 16200
+[   192.1s] paper_orders: batch 163 deleted 100, total 16300
+[   192.4s] paper_orders: batch 164 deleted 100, total 16400
+[   192.7s] paper_orders: batch 165 deleted 100, total 16500
+[   193.0s] paper_orders: batch 166 deleted 100, total 16600
+[   193.3s] paper_orders: batch 167 deleted 100, total 16700
+[   193.6s] paper_orders: batch 168 deleted 100, total 16800
+[   194.0s] paper_orders: batch 169 deleted 100, total 16900
+[   194.3s] paper_orders: batch 170 deleted 100, total 17000
+[   194.7s] paper_orders: batch 171 deleted 100, total 17100
+[   195.0s] paper_orders: batch 172 deleted 100, total 17200
+[   195.4s] paper_orders: batch 173 deleted 100, total 17300
+[   195.7s] paper_orders: batch 174 deleted 100, total 17400
+[   196.0s] paper_orders: batch 175 deleted 100, total 17500
+[   196.3s] paper_orders: batch 176 deleted 100, total 17600
+[   196.6s] paper_orders: batch 177 deleted 100, total 17700
+[   196.9s] paper_orders: batch 178 deleted 100, total 17800
+[   197.2s] paper_orders: batch 179 deleted 100, total 17900
+[   197.5s] paper_orders: batch 180 deleted 100, total 18000
+[   197.8s] paper_orders: batch 181 deleted 100, total 18100
+[   198.1s] paper_orders: batch 182 deleted 100, total 18200
+[   198.4s] paper_orders: batch 183 deleted 100, total 18300
+[   198.6s] paper_orders: batch 184 deleted 100, total 18400
+[   198.9s] paper_orders: batch 185 deleted 100, total 18500
+[   199.3s] paper_orders: batch 186 deleted 100, total 18600
+[   199.6s] paper_orders: batch 187 deleted 100, total 18700
+[   200.0s] paper_orders: batch 188 deleted 100, total 18800
+[   200.3s] paper_orders: batch 189 deleted 100, total 18900
+[   200.6s] paper_orders: batch 190 deleted 100, total 19000
+[   200.9s] paper_orders: batch 191 deleted 100, total 19100
+[   201.2s] paper_orders: batch 192 deleted 100, total 19200
+[   201.5s] paper_orders: batch 193 deleted 100, total 19300
+[   201.8s] paper_orders: batch 194 deleted 100, total 19400
+[   202.2s] paper_orders: batch 195 deleted 100, total 19500
+[   202.5s] paper_orders: batch 196 deleted 100, total 19600
+[   202.8s] paper_orders: batch 197 deleted 100, total 19700
+[   203.1s] paper_orders: batch 198 deleted 100, total 19800
+[   203.3s] paper_orders: batch 199 deleted 23, total 19823
+[   203.5s] paper_orders: complete, deleted 19823
+[   260.2s] Target summary (after dependent deletes before signal delete):
+[   260.2s]   target strategies in temp: 100
+[   260.2s]   remaining strategies by code/name regex: 4567
+[   260.2s]   target wallet candidates: 100
+[   260.3s]   safe wallets: 100
+[   260.3s]   target paper_orders in temp: 0
+[   260.3s]   remaining target paper_orders: 0
+[   260.3s]   target paper_fills in temp: 0
+[   260.3s]   remaining target paper_fills: 0
+[   260.3s]   target run ids in temp: 0
+[   260.3s]   remaining target runs: 0
+[   260.3s]   target signal ids in temp: 19823
+[   261.4s]   remaining target signals: 19823
+[   261.4s]   remaining target signal_rejections: 0
+[   261.4s]   remaining target dry_run_orders: 0
+[   261.4s]   target live_orders in temp: 0
+[   261.4s]   remaining target live_orders: 0
+[   261.5s]   remaining target shadow decisions: 0
+[   261.5s]   remaining target shadow discrepancies: 0
+[   262.4s]   remaining safe-wallet paper_positions: 0
+[   263.9s]   remaining safe-wallet settlements: 0
+[   263.9s]   remaining safe-wallet performance rows: 0
+[   263.9s]   target settlement ids in temp: 0
+[   263.9s]   target position ids in temp: 0
+[   263.9s]   target performance keys in temp: 0
+[   264.0s]   deletable signals: 19823
+[   264.0s] Wallet candidate safety sample:
+[   264.1s]   wallet=strategy:btc_up_down_5m_up_shift_diff_2_10_revert_instant, target_orders=0
+[   264.1s]   wallet=strategy:btc_up_down_5m_up_shift_diff_2_11_revert_instant, target_orders=0
+[   264.1s]   wallet=strategy:btc_up_down_5m_up_shift_diff_2_12_revert_instant, target_orders=0
+[   264.1s]   wallet=strategy:btc_up_down_5m_up_shift_diff_2_2_revert_instant, target_orders=0
+[   264.1s]   wallet=strategy:btc_up_down_5m_up_shift_diff_2_3_revert_instant, target_orders=0
+[   264.1s]   wallet=strategy:btc_up_down_5m_up_shift_diff_2_4_revert_instant, target_orders=0
+[   264.1s]   wallet=strategy:btc_up_down_5m_up_shift_diff_2_5_revert_instant, target_orders=0
+[   264.1s]   wallet=strategy:btc_up_down_5m_up_shift_diff_2_6_revert_instant, target_orders=0
+[   264.1s]   wallet=strategy:btc_up_down_5m_up_shift_diff_2_7_revert_instant, target_orders=0
+[   264.1s]   wallet=strategy:btc_up_down_5m_up_shift_diff_2_8_revert_instant, target_orders=0
+[   264.1s]   wallet=strategy:btc_up_down_5m_up_shift_diff_2_9_revert_instant, target_orders=0
+[   264.1s]   wallet=strategy:btc_up_down_5m_up_shift_diff_3_1_revert_instant, target_orders=0
+[   264.1s]   wallet=strategy:btc_up_down_5m_up_shift_diff_3_10_revert_instant, target_orders=0
+[   264.1s]   wallet=strategy:btc_up_down_5m_up_shift_diff_3_11_revert_instant, target_orders=0
+[   264.1s]   wallet=strategy:btc_up_down_5m_up_shift_diff_3_12_revert_instant, target_orders=0
+[   264.1s]   wallet=strategy:btc_up_down_5m_up_shift_diff_3_2_revert_instant, target_orders=0
+[   264.1s]   wallet=strategy:btc_up_down_5m_up_shift_diff_3_3_revert_instant, target_orders=0
+[   264.1s]   wallet=strategy:btc_up_down_5m_up_shift_diff_3_4_revert_instant, target_orders=0
+[   264.1s]   wallet=strategy:btc_up_down_5m_up_shift_diff_3_5_revert_instant, target_orders=0
+[   264.1s]   wallet=strategy:btc_up_down_5m_up_shift_diff_3_6_revert_instant, target_orders=0
+[   264.1s] signal_rejections: complete, deleted 0
+[   264.2s] signals: batch 1 deleted 100, total 100
+[   264.4s] signals: batch 2 deleted 100, total 200
+[   264.6s] signals: batch 3 deleted 100, total 300
+[   264.9s] signals: batch 4 deleted 100, total 400
+[   265.2s] signals: batch 5 deleted 100, total 500
+[   265.4s] signals: batch 6 deleted 100, total 600
+[   265.6s] signals: batch 7 deleted 100, total 700
+[   265.9s] signals: batch 8 deleted 100, total 800
+[   266.1s] signals: batch 9 deleted 100, total 900
+[   266.3s] signals: batch 10 deleted 100, total 1000
+[   266.5s] signals: batch 11 deleted 100, total 1100
+[   266.7s] signals: batch 12 deleted 100, total 1200
+[   267.0s] signals: batch 13 deleted 100, total 1300
+[   267.2s] signals: batch 14 deleted 100, total 1400
+[   267.4s] signals: batch 15 deleted 100, total 1500
+[   267.6s] signals: batch 16 deleted 100, total 1600
+[   267.9s] signals: batch 17 deleted 100, total 1700
+[   268.1s] signals: batch 18 deleted 100, total 1800
+[   268.3s] signals: batch 19 deleted 100, total 1900
+[   268.6s] signals: batch 20 deleted 100, total 2000
+[   268.8s] signals: batch 21 deleted 100, total 2100
+[   269.0s] signals: batch 22 deleted 100, total 2200
+[   269.3s] signals: batch 23 deleted 100, total 2300
+[   269.5s] signals: batch 24 deleted 100, total 2400
+[   269.8s] signals: batch 25 deleted 100, total 2500
+[   270.1s] signals: batch 26 deleted 100, total 2600
+[   270.3s] signals: batch 27 deleted 100, total 2700
+[   270.6s] signals: batch 28 deleted 100, total 2800
+[   270.8s] signals: batch 29 deleted 100, total 2900
+[   271.1s] signals: batch 30 deleted 100, total 3000
+[   271.3s] signals: batch 31 deleted 100, total 3100
+[   271.5s] signals: batch 32 deleted 100, total 3200
+[   271.8s] signals: batch 33 deleted 100, total 3300
+[   272.1s] signals: batch 34 deleted 100, total 3400
+[   272.4s] signals: batch 35 deleted 100, total 3500
+[   272.6s] signals: batch 36 deleted 100, total 3600
+[   272.8s] signals: batch 37 deleted 100, total 3700
+[   273.1s] signals: batch 38 deleted 100, total 3800
+[   273.3s] signals: batch 39 deleted 100, total 3900
+[   273.6s] signals: batch 40 deleted 100, total 4000
+[   273.8s] signals: batch 41 deleted 100, total 4100
+[   274.1s] signals: batch 42 deleted 100, total 4200
+[   274.4s] signals: batch 43 deleted 100, total 4300
+[   274.6s] signals: batch 44 deleted 100, total 4400
+[   275.0s] signals: batch 45 deleted 100, total 4500
+[   275.3s] signals: batch 46 deleted 100, total 4600
+[   275.5s] signals: batch 47 deleted 100, total 4700
+[   275.8s] signals: batch 48 deleted 100, total 4800
+[   276.0s] signals: batch 49 deleted 100, total 4900
+[   276.3s] signals: batch 50 deleted 100, total 5000
+[   276.5s] signals: batch 51 deleted 100, total 5100
+[   276.8s] signals: batch 52 deleted 100, total 5200
+[   277.0s] signals: batch 53 deleted 100, total 5300
+[   277.3s] signals: batch 54 deleted 100, total 5400
+[   277.6s] signals: batch 55 deleted 100, total 5500
+[   277.9s] signals: batch 56 deleted 100, total 5600
+[   278.2s] signals: batch 57 deleted 100, total 5700
+[   278.5s] signals: batch 58 deleted 100, total 5800
+[   278.8s] signals: batch 59 deleted 100, total 5900
+[   279.0s] signals: batch 60 deleted 100, total 6000
+[   279.3s] signals: batch 61 deleted 100, total 6100
+[   279.6s] signals: batch 62 deleted 100, total 6200
+[   279.9s] signals: batch 63 deleted 100, total 6300
+[   280.2s] signals: batch 64 deleted 100, total 6400
+[   280.4s] signals: batch 65 deleted 100, total 6500
+[   280.7s] signals: batch 66 deleted 100, total 6600
+[   281.1s] signals: batch 67 deleted 100, total 6700
+[   281.4s] signals: batch 68 deleted 100, total 6800
+[   281.6s] signals: batch 69 deleted 100, total 6900
+[   282.0s] signals: batch 70 deleted 100, total 7000
+[   282.3s] signals: batch 71 deleted 100, total 7100
+[   282.6s] signals: batch 72 deleted 100, total 7200
+[   282.9s] signals: batch 73 deleted 100, total 7300
+[   283.2s] signals: batch 74 deleted 100, total 7400
+[   283.5s] signals: batch 75 deleted 100, total 7500
+[   283.8s] signals: batch 76 deleted 100, total 7600
+[   284.0s] signals: batch 77 deleted 100, total 7700
+[   284.3s] signals: batch 78 deleted 100, total 7800
+[   284.7s] signals: batch 79 deleted 100, total 7900
+[   285.0s] signals: batch 80 deleted 100, total 8000
+[   285.3s] signals: batch 81 deleted 100, total 8100
+[   285.6s] signals: batch 82 deleted 100, total 8200
+[   286.0s] signals: batch 83 deleted 100, total 8300
+[   286.3s] signals: batch 84 deleted 100, total 8400
+[   286.5s] signals: batch 85 deleted 100, total 8500
+[   286.9s] signals: batch 86 deleted 100, total 8600
+[   287.2s] signals: batch 87 deleted 100, total 8700
+[   287.5s] signals: batch 88 deleted 100, total 8800
+[   287.8s] signals: batch 89 deleted 100, total 8900
+[   288.2s] signals: batch 90 deleted 100, total 9000
+[   288.5s] signals: batch 91 deleted 100, total 9100
+[   288.8s] signals: batch 92 deleted 100, total 9200
+[   289.1s] signals: batch 93 deleted 100, total 9300
+[   289.3s] signals: batch 94 deleted 100, total 9400
+[   289.6s] signals: batch 95 deleted 100, total 9500
+[   289.8s] signals: batch 96 deleted 100, total 9600
+[   290.1s] signals: batch 97 deleted 100, total 9700
+[   290.4s] signals: batch 98 deleted 100, total 9800
+[   290.6s] signals: batch 99 deleted 100, total 9900
+[   290.9s] signals: batch 100 deleted 100, total 10000
+[   291.2s] signals: batch 101 deleted 100, total 10100
+[   291.4s] signals: batch 102 deleted 100, total 10200
+[   291.7s] signals: batch 103 deleted 100, total 10300
+[   292.0s] signals: batch 104 deleted 100, total 10400
+[   292.2s] signals: batch 105 deleted 100, total 10500
+[   292.5s] signals: batch 106 deleted 100, total 10600
+[   292.8s] signals: batch 107 deleted 100, total 10700
+[   293.0s] signals: batch 108 deleted 100, total 10800
+[   293.3s] signals: batch 109 deleted 100, total 10900
+[   293.6s] signals: batch 110 deleted 100, total 11000
+[   293.9s] signals: batch 111 deleted 100, total 11100
+[   294.2s] signals: batch 112 deleted 100, total 11200
+[   294.5s] signals: batch 113 deleted 100, total 11300
+[   294.8s] signals: batch 114 deleted 100, total 11400
+[   295.1s] signals: batch 115 deleted 100, total 11500
+[   295.4s] signals: batch 116 deleted 100, total 11600
+[   295.8s] signals: batch 117 deleted 100, total 11700
+[   296.1s] signals: batch 118 deleted 100, total 11800
+[   296.4s] signals: batch 119 deleted 100, total 11900
+[   296.8s] signals: batch 120 deleted 100, total 12000
+[   297.1s] signals: batch 121 deleted 100, total 12100
+[   297.5s] signals: batch 122 deleted 100, total 12200
+[   297.9s] signals: batch 123 deleted 100, total 12300
+[   298.2s] signals: batch 124 deleted 100, total 12400
+[   298.5s] signals: batch 125 deleted 100, total 12500
+[   298.7s] signals: batch 126 deleted 100, total 12600
+[   299.0s] signals: batch 127 deleted 100, total 12700
+[   299.3s] signals: batch 128 deleted 100, total 12800
+[   299.6s] signals: batch 129 deleted 100, total 12900
+[   299.9s] signals: batch 130 deleted 100, total 13000
+[   300.2s] signals: batch 131 deleted 100, total 13100
+[   300.6s] signals: batch 132 deleted 100, total 13200
+[   300.9s] signals: batch 133 deleted 100, total 13300
+[   301.2s] signals: batch 134 deleted 100, total 13400
+[   301.5s] signals: batch 135 deleted 100, total 13500
+[   301.8s] signals: batch 136 deleted 100, total 13600
+[   302.1s] signals: batch 137 deleted 100, total 13700
+[   302.5s] signals: batch 138 deleted 100, total 13800
+[   302.8s] signals: batch 139 deleted 100, total 13900
+[   303.2s] signals: batch 140 deleted 100, total 14000
+[   303.4s] signals: batch 141 deleted 100, total 14100
+[   303.7s] signals: batch 142 deleted 100, total 14200
+[   304.0s] signals: batch 143 deleted 100, total 14300
+[   304.2s] signals: batch 144 deleted 100, total 14400
+[   304.5s] signals: batch 145 deleted 100, total 14500
+[   304.8s] signals: batch 146 deleted 100, total 14600
+[   305.1s] signals: batch 147 deleted 100, total 14700
+[   305.3s] signals: batch 148 deleted 100, total 14800
+[   305.5s] signals: batch 149 deleted 100, total 14900
+[   305.8s] signals: batch 150 deleted 100, total 15000
+[   306.0s] signals: batch 151 deleted 100, total 15100
+[   306.2s] signals: batch 152 deleted 100, total 15200
+[   306.5s] signals: batch 153 deleted 100, total 15300
+[   306.7s] signals: batch 154 deleted 100, total 15400
+[   306.9s] signals: batch 155 deleted 100, total 15500
+[   307.2s] signals: batch 156 deleted 100, total 15600
+[   307.4s] signals: batch 157 deleted 100, total 15700
+[   307.7s] signals: batch 158 deleted 100, total 15800
+[   308.0s] signals: batch 159 deleted 100, total 15900
+[   308.3s] signals: batch 160 deleted 100, total 16000
+[   308.5s] signals: batch 161 deleted 100, total 16100
+[   308.9s] signals: batch 162 deleted 100, total 16200
+[   309.2s] signals: batch 163 deleted 100, total 16300
+[   309.5s] signals: batch 164 deleted 100, total 16400
+[   309.8s] signals: batch 165 deleted 100, total 16500
+[   310.2s] signals: batch 166 deleted 100, total 16600
+[   310.5s] signals: batch 167 deleted 100, total 16700
+[   310.7s] signals: batch 168 deleted 100, total 16800
+[   311.1s] signals: batch 169 deleted 100, total 16900
+[   311.4s] signals: batch 170 deleted 100, total 17000
+[   311.7s] signals: batch 171 deleted 100, total 17100
+[   312.0s] signals: batch 172 deleted 100, total 17200
+[   312.3s] signals: batch 173 deleted 100, total 17300
+[   312.6s] signals: batch 174 deleted 100, total 17400
+[   312.9s] signals: batch 175 deleted 100, total 17500
+[   313.4s] signals: batch 176 deleted 100, total 17600
+[   314.2s] signals: batch 177 deleted 100, total 17700
+[   314.6s] signals: batch 178 deleted 100, total 17800
+[   314.9s] signals: batch 179 deleted 100, total 17900
+[   315.2s] signals: batch 180 deleted 100, total 18000
+[   315.5s] signals: batch 181 deleted 100, total 18100
+[   315.9s] signals: batch 182 deleted 100, total 18200
+[   316.2s] signals: batch 183 deleted 100, total 18300
+[   316.5s] signals: batch 184 deleted 100, total 18400
+[   316.8s] signals: batch 185 deleted 100, total 18500
+[   317.1s] signals: batch 186 deleted 100, total 18600
+[   317.4s] signals: batch 187 deleted 100, total 18700
+[   317.7s] signals: batch 188 deleted 100, total 18800
+[   318.0s] signals: batch 189 deleted 100, total 18900
+[   318.3s] signals: batch 190 deleted 100, total 19000
+[   318.5s] signals: batch 191 deleted 100, total 19100
+[   318.8s] signals: batch 192 deleted 100, total 19200
+[   319.0s] signals: batch 193 deleted 100, total 19300
+[   319.4s] signals: batch 194 deleted 100, total 19400
+[   319.7s] signals: batch 195 deleted 100, total 19500
+[   320.1s] signals: batch 196 deleted 100, total 19600
+[   320.4s] signals: batch 197 deleted 100, total 19700
+[   320.7s] signals: batch 198 deleted 100, total 19800
+[   320.9s] signals: batch 199 deleted 23, total 19823
+[   321.1s] signals: complete, deleted 19823
+[   322.8s] strategies: batch 1 deleted 100, total 100
+[   322.9s] strategies: complete, deleted 100
+[   322.9s] Target summary (after):
+[   323.0s]   target strategies in temp: 100
+[   323.0s]   remaining strategies by code/name regex: 4467
+[   323.0s]   target wallet candidates: 100
+[   323.0s]   safe wallets: 100
+[   323.0s]   target paper_orders in temp: 0
+[   323.1s]   remaining target paper_orders: 0
+[   323.1s]   target paper_fills in temp: 0
+[   323.1s]   remaining target paper_fills: 0
+[   323.1s]   target run ids in temp: 0
+[   323.1s]   remaining target runs: 0
+[   323.1s]   target signal ids in temp: 19823
+[   326.2s]   remaining target signals: 0
+[   326.2s]   remaining target signal_rejections: 0
+[   326.2s]   remaining target dry_run_orders: 0
+[   326.2s]   target live_orders in temp: 0
+[   326.3s]   remaining target live_orders: 0
+[   326.4s]   remaining target shadow decisions: 0
+[   326.4s]   remaining target shadow discrepancies: 0
+[   328.5s]   remaining safe-wallet paper_positions: 0
+[   331.4s]   remaining safe-wallet settlements: 0
+[   331.5s]   remaining safe-wallet performance rows: 0
+[   331.5s]   target settlement ids in temp: 0
+[   331.5s]   target position ids in temp: 0
+[   331.5s]   target performance keys in temp: 0
+[   331.5s]   deletable signals: 0
+[   331.5s] Wallet candidate safety sample:
+[   331.6s]   wallet=strategy:btc_up_down_5m_up_shift_diff_2_10_revert_instant, target_orders=0
+[   331.6s]   wallet=strategy:btc_up_down_5m_up_shift_diff_2_11_revert_instant, target_orders=0
+[   331.6s]   wallet=strategy:btc_up_down_5m_up_shift_diff_2_12_revert_instant, target_orders=0
+[   331.6s]   wallet=strategy:btc_up_down_5m_up_shift_diff_2_2_revert_instant, target_orders=0
+[   331.6s]   wallet=strategy:btc_up_down_5m_up_shift_diff_2_3_revert_instant, target_orders=0
+[   331.6s]   wallet=strategy:btc_up_down_5m_up_shift_diff_2_4_revert_instant, target_orders=0
+[   331.6s]   wallet=strategy:btc_up_down_5m_up_shift_diff_2_5_revert_instant, target_orders=0
+[   331.6s]   wallet=strategy:btc_up_down_5m_up_shift_diff_2_6_revert_instant, target_orders=0
+[   331.6s]   wallet=strategy:btc_up_down_5m_up_shift_diff_2_7_revert_instant, target_orders=0
+[   331.6s]   wallet=strategy:btc_up_down_5m_up_shift_diff_2_8_revert_instant, target_orders=0
+[   331.6s]   wallet=strategy:btc_up_down_5m_up_shift_diff_2_9_revert_instant, target_orders=0
+[   331.6s]   wallet=strategy:btc_up_down_5m_up_shift_diff_3_1_revert_instant, target_orders=0
+[   331.6s]   wallet=strategy:btc_up_down_5m_up_shift_diff_3_10_revert_instant, target_orders=0
+[   331.6s]   wallet=strategy:btc_up_down_5m_up_shift_diff_3_11_revert_instant, target_orders=0
+[   331.6s]   wallet=strategy:btc_up_down_5m_up_shift_diff_3_12_revert_instant, target_orders=0
+[   331.6s]   wallet=strategy:btc_up_down_5m_up_shift_diff_3_2_revert_instant, target_orders=0
+[   331.6s]   wallet=strategy:btc_up_down_5m_up_shift_diff_3_3_revert_instant, target_orders=0
+[   331.6s]   wallet=strategy:btc_up_down_5m_up_shift_diff_3_4_revert_instant, target_orders=0
+[   331.6s]   wallet=strategy:btc_up_down_5m_up_shift_diff_3_5_revert_instant, target_orders=0
+[   331.6s]   wallet=strategy:btc_up_down_5m_up_shift_diff_3_6_revert_instant, target_orders=0
+[   331.6s] Residual Revert pattern scan:
+[   331.7s]   strategies by code/name regex: 4467
+[   332.6s]   paper_orders synthetic wallets: 0
+[   333.3s]   paper_positions synthetic wallets: 0
+[   333.8s]   paper_position_settlements synthetic wallets: 0
+[   333.9s]   paper_copied_trader_performance synthetic wallets: 0
+[   334.1s]   signals synthetic wallets (best-effort; no trader_wallet index): <timed out after 100ms>
+[   334.1s] Revert strategy cleanup finished at 2026-06-16T18:25:03.2833622+00:00

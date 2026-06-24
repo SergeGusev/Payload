@@ -677,17 +677,62 @@ public sealed class LiveTradingProcessor(
             mismatches.Add($"limit_price mismatch: paper={paperOrder.Price:0.########}; live={liveOrder.Price:0.########}");
         }
 
-        if (!string.Equals(liveOrder.OrderType, "GTD", StringComparison.OrdinalIgnoreCase))
+        var expectedOrderType = GetExpectedShadowOrderType(paperOrder);
+        if (!string.Equals(liveOrder.OrderType, expectedOrderType, StringComparison.OrdinalIgnoreCase))
         {
-            mismatches.Add($"order_type mismatch: live={liveOrder.OrderType}");
+            mismatches.Add($"order_type mismatch: expected={expectedOrderType}; live={liveOrder.OrderType}");
         }
 
-        if (liveOrder.PostOnly != false)
+        var expectedPostOnly = GetExpectedShadowPostOnly(paperOrder);
+        if (liveOrder.PostOnly.GetValueOrDefault(false) != expectedPostOnly)
         {
-            mismatches.Add("post_only mismatch: live is not false");
+            mismatches.Add(
+                $"post_only mismatch: expected={expectedPostOnly.ToString().ToLowerInvariant()}; live={(liveOrder.PostOnly is { } livePostOnly ? livePostOnly.ToString().ToLowerInvariant() : "null")}");
         }
 
         return mismatches;
+    }
+
+    private static bool GetExpectedShadowPostOnly(PaperOrder _)
+    {
+        return false;
+    }
+
+    private static string GetExpectedShadowOrderType(PaperOrder paperOrder)
+    {
+        if (TryReadStringFromRawDecisionJson(paperOrder.RawDecisionJson, "live_order_type", out var liveOrderType))
+        {
+            return liveOrderType;
+        }
+
+        return "FAK";
+    }
+
+    private static bool TryReadStringFromRawDecisionJson(string? rawDecisionJson, string propertyName, out string value)
+    {
+        value = string.Empty;
+        if (string.IsNullOrWhiteSpace(rawDecisionJson))
+        {
+            return false;
+        }
+
+        try
+        {
+            using var document = JsonDocument.Parse(rawDecisionJson);
+            if (document.RootElement.ValueKind == JsonValueKind.Object &&
+                document.RootElement.TryGetProperty(propertyName, out var element) &&
+                element.ValueKind == JsonValueKind.String)
+            {
+                value = element.GetString() ?? string.Empty;
+                return !string.IsNullOrWhiteSpace(value);
+            }
+        }
+        catch (JsonException)
+        {
+            return false;
+        }
+
+        return false;
     }
 
     private async Task RecordShadowDiscrepancyAndDisableLiveAsync(

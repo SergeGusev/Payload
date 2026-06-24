@@ -1,0 +1,4 @@
+﻿"Asset","WindowStartUtc","WindowEndUtc","EventsFetched","EventsUsed","UnknownEvents","UpCount","DownCount","FinalDiff","BestStrategy","BestBets","BestWins","BestLosses","BestWinRatePct","BestPnlUsd","BestRoiPct","WorstStrategy","WorstBets","WorstWins","WorstLosses","WorstWinRatePct","WorstPnlUsd","WorstRoiPct"
+"BTC","2026-04-07T18:35:00.0000000Z","2026-06-07T18:35:00.0000000Z","17564","17564","0","8797","8767","30","BTC Up 148 Diff","1","1","0","100","1","100","BTC Up 2 Diff","17490","8734","8756","49.9371","-22","-0.1258"
+"ETH","2026-04-07T18:35:00.0000000Z","2026-06-07T18:35:00.0000000Z","17562","17562","0","8722","8840","-118","ETH Down 140 Diff","4","4","0","100","4","100","ETH Down 31 Diff","1570","742","828","47.2611","-86","-5.4777"
+"SOL","2026-04-07T18:35:00.0000000Z","2026-06-07T18:35:00.0000000Z","17563","17563","0","8783","8780","3","SOL Down 16 Diff","1","1","0","100","1","100","SOL Up 32 Diff","15136","7569","7567","50.0066","2","0.0132"

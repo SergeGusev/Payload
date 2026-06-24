@@ -1,0 +1,114 @@
+AdjustedDiff strategy diagnostic captured at 2026-06-15T12:36:36.2036454+00:00
+StrategyCode: btc_up_down_5m_down_adjusted_diff_1_instant
+Database: polycopytrader
+Server address: 192.168.0.101/32
+Server time UTC: 2026-06-15T12:36:34Z
+
+## Strategy row
+code	name	enabled	live_stakes	auto_live_paused	paused	paper_stake_amount	created_at_utc	updated_at_utc	description
+btc_up_down_5m_down_adjusted_diff_1_instant	BTC Up or Down 5m Down 1 AdjustedDiff Instant	True	False	False	False	1.00000000	06/09/2026 20:29:46	06/15/2026 12:36:08	AdjustedDiff countertrend strategy: after the BTC 5m market opens, use the in-memory continuous raw Diff counter without the 00:00 UTC reset, compute a slow EMA trend zero, then evaluate AdjustedDiff = trend zero - raw Diff. If the adjusted Diff side is at least 1, place a GTD limit BUY on Up priced from current executable ask depth when it is at or below the configured Diff instant max price; when current depth is above the cap, place a resting GTD BUY at the cap instead. Otherwise skip. Settlement uses only actually filled shares.
+
+## Run summary
+window_name	runs	markets	observed	entered	settled	skipped	paper_condition_skipped	paper_not_accepted	paper_orders_linked	first_run_utc	latest_run_update_utc
+all_time	1592	1592	2	1	269	1320	1013	307	577	06/09/2026 20:29:48	06/15/2026 12:36:08
+last_24h	291	291	2	1	65	223	145	78	144	06/14/2026 12:26:10	06/15/2026 12:36:08
+last_6h	74	74	2	1	19	52	31	21	41	06/15/2026 06:30:06	06/15/2026 12:36:08
+
+## Skip reasons
+age_bucket	skip_reason	dashboard_bucket	runs	first_market_start_utc	latest_market_start_utc	latest_update_utc
+older	diff_counter_threshold_not_reached	condition_skip_no_order	859	06/09/2026 20:25:00	06/14/2026 11:35:00	06/14/2026 11:37:12
+older	gtd_limit_not_filled	not_accepted_order_linked	229	06/09/2026 22:50:00	06/14/2026 12:30:00	06/14/2026 12:35:02
+older	market_already_ended	condition_skip_no_order	9	06/09/2026 20:15:00	06/14/2026 11:30:00	06/14/2026 11:37:12
+last_24h	diff_counter_threshold_not_reached	condition_skip_no_order	145	06/14/2026 13:15:00	06/15/2026 11:35:00	06/15/2026 11:35:25
+last_24h	gtd_limit_not_filled	not_accepted_order_linked	78	06/14/2026 12:40:00	06/15/2026 12:30:00	06/15/2026 12:35:02
+
+## Threshold skip diagnostics
+age_bucket	skips	min_threshold	max_threshold	min_effective_diff	max_effective_diff	avg_effective_diff	effective_lt_1	effective_gte_1	min_raw_diff	max_raw_diff	avg_raw_diff	min_trend_zero	max_trend_zero	avg_trend_zero	min_adjusted_diff	max_adjusted_diff	avg_adjusted_diff	trigger_side_down	trigger_outcome_down	target_received_true	target_received_false	counter_initialized_true	counter_initialized_false
+older	859	1	1	-7	0.5	-1.8317811408614668	859	0	-9	30	7.6623981373690338	-8.5	25.5	5.8306169965075669	-0.5	7	1.8317811408614668	859	663	856	3	859	0
+last_24h	145	1	1	-7	0.5	-1.7724137931034483	145	0	-12	8	0.88965517241379310345	-11.5	4.5	-0.88275862068965517241	-0.5	7	1.7724137931034483	145	145	144	1	145	0
+
+## Latest condition skips
+market_start_utc	updated_at_utc	skip_reason	counter_mode	trigger_side	threshold	raw_diff	trend_zero	adjusted_diff	effective_diff	up_count	down_count	target_received
+06/15/2026 11:35:00	06/15/2026 11:35:25	diff_counter_threshold_not_reached	continuous_trend_zero	Down	1	0	0	0	0	2	2	true
+06/15/2026 11:30:00	06/15/2026 11:31:16	diff_counter_threshold_not_reached	continuous_trend_zero	Down	1	1	0	1	-1	2	1	true
+06/15/2026 11:25:00	06/15/2026 11:25:50	diff_counter_threshold_not_reached	continuous_trend_zero	Down	1	2	0	2	-2	2	0	true
+06/15/2026 11:20:00	06/15/2026 11:20:08	diff_counter_threshold_not_reached	continuous_trend_zero	Down	1	1	0	1	-1	1	0	true
+06/15/2026 11:15:00	06/15/2026 11:15:18	diff_counter_threshold_not_reached	continuous_trend_zero	Down	1	1	-1.5	2.5	-2.5	31	30	true
+06/15/2026 11:10:00	06/15/2026 11:10:39	diff_counter_threshold_not_reached	continuous_trend_zero	Down	1	2	-1.5	3.5	-3.5	31	29	true
+06/15/2026 11:05:00	06/15/2026 11:05:17	diff_counter_threshold_not_reached	continuous_trend_zero	Down	1	1	-2	3	-3	30	29	true
+06/15/2026 11:00:00	06/15/2026 11:00:40	diff_counter_threshold_not_reached	continuous_trend_zero	Down	1	2	-2	4	-4	30	28	true
+06/15/2026 10:55:00	06/15/2026 10:56:40	diff_counter_threshold_not_reached	continuous_trend_zero	Down	1	1	-2.5	3.5	-3.5	29	28	true
+06/15/2026 10:50:00	06/15/2026 10:50:53	diff_counter_threshold_not_reached	continuous_trend_zero	Down	1	0	-2.5	2.5	-2.5	28	28	true
+06/15/2026 10:45:00	06/15/2026 10:45:34	diff_counter_threshold_not_reached	continuous_trend_zero	Down	1	1	-2.5	3.5	-3.5	28	27	true
+06/15/2026 10:40:00	06/15/2026 10:40:13	diff_counter_threshold_not_reached	continuous_trend_zero	Down	1	0	-2.5	2.5	-2.5	27	27	true
+06/15/2026 10:35:00	06/15/2026 10:35:12	diff_counter_threshold_not_reached	continuous_trend_zero	Down	1	-1	-2.5	1.5	-1.5	26	27	true
+06/15/2026 10:30:00	06/15/2026 10:30:30	diff_counter_threshold_not_reached	continuous_trend_zero	Down	1	-2	-2.5	0.5	-0.5	25	27	true
+06/15/2026 10:25:00	06/15/2026 10:25:45	diff_counter_threshold_not_reached	continuous_trend_zero	Down	1	-1	-2.5	1.5	-1.5	25	26	true
+06/15/2026 10:20:00	06/15/2026 10:20:50	diff_counter_threshold_not_reached	continuous_trend_zero	Down	1	-2	-2.5	0.5	-0.5	24	26	true
+06/15/2026 10:15:00	06/15/2026 10:15:16	diff_counter_threshold_not_reached	continuous_trend_zero	Down	1	-1	-2.5	1.5	-1.5	24	25	true
+06/15/2026 10:10:00	06/15/2026 10:10:31	diff_counter_threshold_not_reached	continuous_trend_zero	Down	1	-2	-2.5	0.5	-0.5	23	25	true
+06/15/2026 10:05:00	06/15/2026 10:05:08	diff_counter_threshold_not_reached	continuous_trend_zero	Down	1	-3	-2.5	-0.5	0.5	22	25	true
+06/15/2026 07:40:00	06/15/2026 07:40:49	diff_counter_threshold_not_reached	continuous_trend_zero	Down	1	0	0.5	-0.5	0.5	9	9	true
+06/15/2026 07:35:00	06/15/2026 07:35:57	diff_counter_threshold_not_reached	continuous_trend_zero	Down	1	1	0.5	0.5	-0.5	9	8	true
+06/15/2026 07:30:00	06/15/2026 07:30:06	diff_counter_threshold_not_reached	continuous_trend_zero	Down	1	2	0.5	1.5	-1.5	9	7	true
+06/15/2026 07:25:00	06/15/2026 07:25:42	diff_counter_threshold_not_reached	continuous_trend_zero	Down	1	3	0.5	2.5	-2.5	9	6	true
+06/15/2026 07:20:00	06/15/2026 07:20:21	diff_counter_threshold_not_reached	continuous_trend_zero	Down	1	2	0	2	-2	8	6	true
+06/15/2026 07:15:00	06/15/2026 07:15:15	diff_counter_threshold_not_reached	continuous_trend_zero	Down	1	1	0	1	-1	7	6	true
+06/15/2026 07:10:00	06/15/2026 07:10:20	diff_counter_threshold_not_reached	continuous_trend_zero	Down	1	0	0	0	0	6	6	true
+06/15/2026 07:00:00	06/15/2026 07:00:26	diff_counter_threshold_not_reached	continuous_trend_zero	Down	1	0	0	0	0	5	5	true
+06/15/2026 06:55:00	06/15/2026 06:55:17	diff_counter_threshold_not_reached	continuous_trend_zero	Down	1	1	0	1	-1	5	4	true
+06/15/2026 06:50:00	06/15/2026 06:50:59	diff_counter_threshold_not_reached	continuous_trend_zero	Down	1	2	0	2	-2	5	3	true
+06/15/2026 06:45:00	06/15/2026 06:45:13	diff_counter_threshold_not_reached	continuous_trend_zero	Down	1	1	0	1	-1	4	3	true
+
+## Linked paper order summary
+age_bucket	run_status	skip_reason	order_status	resting_at_max	orders	first_order_utc	latest_order_utc	min_order_price	max_order_price	avg_order_price	min_raw_limit_price	max_raw_limit_price	avg_raw_limit_price	min_instant_limit_price	max_instant_limit_price	min_best_ask	max_best_ask	avg_best_ask	min_executable_ask_shares	max_executable_ask_shares	avg_executable_ask_shares	min_target_size_shares	max_target_size_shares	avg_target_size_shares
+older	Skipped	gtd_limit_not_filled	Expired	true	229	06/09/2026 22:50:04	06/14/2026 12:30:47	0.50000000	0.50000000	0.50000000000000000000	0.51	0.94	0.59475982532751091703	0.50	0.50	0.51	0.94	0.59475982532751091703	0	0	0.00000000000000000000	6	6	6.0000000000000000
+older	Settled	<none>	Filled	false	204	06/09/2026 23:05:21	06/14/2026 12:10:42	0.09000000	0.50000000	0.41392156862745098039	0.09	0.5	0.41392156862745098039	0.09	0.50	0.09	0.5	0.41382352941176470588	5.56	11.12	6.7158823529411765	5.56	11.12	6.7158823529411765
+last_24h	Skipped	gtd_limit_not_filled	Expired	true	78	06/14/2026 12:40:09	06/15/2026 12:30:16	0.50000000	0.50000000	0.50000000000000000000	0.51	0.97	0.61551282051282051282	0.50	0.50	0.51	0.97	0.61551282051282051282	0	0	0.00000000000000000000	6	6	6.0000000000000000
+last_24h	Settled	<none>	Filled	false	65	06/14/2026 12:36:22	06/15/2026 12:25:49	0.05000000	0.50000000	0.41984615384615384615	0.05	0.5	0.41984615384615384615	0.05	0.50	0.05	0.5	0.41969230769230769231	5.56	20	6.9347692307692308	5.56	20	6.9347692307692308
+last_24h	Entered	<none>	Pending	true	1	06/15/2026 12:35:46	06/15/2026 12:35:46	0.50000000	0.50000000	0.50000000000000000000	0.57	0.57	0.57000000000000000000	0.50	0.50	0.57	0.57	0.57000000000000000000	0	0	0.00000000000000000000	6	6	6.0000000000000000
+
+## Latest linked paper orders
+market_start_utc	run_status	skip_reason	order_status	price	notional_usd	created_at_utc	expires_at_utc	filled_at_utc	resting_at_max	raw_limit_price	instant_limit_price	best_ask	executable_ask_shares	target_size_shares	executable_ask_vwap	effective_diff	raw_diff	trend_zero	adjusted_diff
+06/15/2026 12:35:00	Entered	<none>	Pending	0.50000000	3.00000000	06/15/2026 12:35:46	06/15/2026 12:39:00	<null>	true	0.57	0.50	0.57	0	6	<null>	3.5	-4	-0.5	-3.5
+06/15/2026 12:30:00	Skipped	gtd_limit_not_filled	Expired	0.50000000	3.00000000	06/15/2026 12:30:16	06/15/2026 12:34:00	<null>	true	0.53	0.50	0.53	0	6	<null>	2.5	-3	-0.5	-2.5
+06/15/2026 12:25:00	Settled	<none>	Filled	0.47000000	3.00330000	06/15/2026 12:25:49	06/15/2026 12:29:00	06/15/2026 12:30:15	false	0.47	0.47	0.47	6.39	6.39	0.47	2	-2	0	-2
+06/15/2026 12:20:00	Settled	<none>	Filled	0.39000000	3.00300000	06/15/2026 12:20:35	06/15/2026 12:24:00	06/15/2026 12:25:05	false	0.39	0.39	0.39	7.7	7.7	0.39	1	-1	0	-1
+06/15/2026 12:15:00	Skipped	gtd_limit_not_filled	Expired	0.50000000	3.00000000	06/15/2026 12:15:30	06/15/2026 12:19:00	<null>	true	0.64	0.50	0.64	0	6	<null>	2	-2	0	-2
+06/15/2026 12:10:00	Skipped	gtd_limit_not_filled	Expired	0.50000000	3.00000000	06/15/2026 12:10:11	06/15/2026 12:14:00	<null>	true	0.54	0.50	0.54	0	6	<null>	3	-3	0	-3
+06/15/2026 12:05:00	Settled	<none>	Filled	0.40000000	3.00000000	06/15/2026 12:05:38	06/15/2026 12:09:00	06/15/2026 12:10:19	false	0.4	0.40	0.4	7.5	7.5	0.4	4	-4	0	-4
+06/15/2026 12:00:00	Skipped	gtd_limit_not_filled	Expired	0.50000000	3.00000000	06/15/2026 12:00:17	06/15/2026 12:04:00	<null>	true	0.53	0.50	0.53	0	6	<null>	3	-3	0	-3
+06/15/2026 11:55:00	Settled	<none>	Filled	0.33000000	2.00310000	06/15/2026 11:55:13	06/15/2026 11:59:00	06/15/2026 12:00:21	false	0.33	0.33	0.33	6.07	6.07	0.33	2	-2	0	-2
+06/15/2026 11:50:00	Skipped	gtd_limit_not_filled	Expired	0.50000000	3.00000000	06/15/2026 11:50:15	06/15/2026 11:54:00	<null>	true	0.65	0.50	0.65	0	6	<null>	3	-3	0	-3
+06/15/2026 11:45:00	Skipped	gtd_limit_not_filled	Expired	0.50000000	3.00000000	06/15/2026 11:46:00	06/15/2026 11:49:00	<null>	true	0.61	0.50	0.61	0	6	<null>	2	-2	0	-2
+06/15/2026 11:40:00	Settled	<none>	Filled	0.46000000	3.00380000	06/15/2026 11:40:58	06/15/2026 11:44:00	06/15/2026 11:45:05	false	0.46	0.46	0.46	6.53	6.53	0.46	1	-1	0	-1
+06/15/2026 10:00:00	Settled	<none>	Filled	0.46000000	3.00380000	06/15/2026 10:00:06	06/15/2026 10:04:00	06/15/2026 10:05:05	false	0.46	0.46	0.46	6.53	6.53	0.46	1.5	-4	-2.5	-1.5
+06/15/2026 09:55:00	Settled	<none>	Filled	0.49000000	3.00370000	06/15/2026 09:55:17	06/15/2026 09:59:00	06/15/2026 10:03:35	false	0.49	0.49	0.49	6.13	6.13	0.49	2.5	-5	-2.5	-2.5
+06/15/2026 09:50:00	Skipped	gtd_limit_not_filled	Expired	0.50000000	3.00000000	06/15/2026 09:50:32	06/15/2026 09:54:00	<null>	true	0.67	0.50	0.67	0	6	<null>	4	-6	-2	-4
+06/15/2026 09:45:00	Settled	<none>	Filled	0.36000000	2.00160000	06/15/2026 09:45:27	06/15/2026 09:49:00	06/15/2026 09:50:01	false	0.36	0.36	0.36	5.56	5.56	0.36	3	-5	-2	-3
+06/15/2026 09:40:00	Skipped	gtd_limit_not_filled	Expired	0.50000000	3.00000000	06/15/2026 09:40:21	06/15/2026 09:44:00	<null>	true	0.71	0.50	0.71	0	6	<null>	4.5	-6	-1.5	-4.5
+06/15/2026 09:35:00	Skipped	gtd_limit_not_filled	Expired	0.50000000	3.00000000	06/15/2026 09:36:14	06/15/2026 09:39:00	<null>	true	0.58	0.50	0.58	0	6	<null>	3.5	-5	-1.5	-3.5
+06/15/2026 09:30:00	Skipped	gtd_limit_not_filled	Expired	0.50000000	3.00000000	06/15/2026 09:30:17	06/15/2026 09:34:00	<null>	true	0.52	0.50	0.52	0	6	<null>	3	-4	-1	-3
+06/15/2026 09:25:00	Settled	<none>	Filled	0.42000000	3.00300000	06/15/2026 09:25:06	06/15/2026 09:29:00	06/15/2026 09:32:05	false	0.42	0.42	0.42	7.15	7.15	0.42	2	-3	-1	-2
+06/15/2026 09:20:00	Settled	<none>	Filled	0.19000000	2.00070000	06/15/2026 09:20:30	06/15/2026 09:24:00	06/15/2026 09:26:02	false	0.19	0.19	0.19	10.53	10.53	0.19	1	-2	-1	-1
+06/15/2026 09:15:00	Skipped	gtd_limit_not_filled	Expired	0.50000000	3.00000000	06/15/2026 09:15:42	06/15/2026 09:19:00	<null>	true	0.8	0.50	0.8	0	6	<null>	2	-3	-1	-2
+06/15/2026 09:10:00	Skipped	gtd_limit_not_filled	Expired	0.50000000	3.00000000	06/15/2026 09:10:11	06/15/2026 09:14:00	<null>	true	0.51	0.50	0.51	0	6	<null>	1.5	-2	-0.5	-1.5
+06/15/2026 09:05:00	Skipped	gtd_limit_not_filled	Expired	0.50000000	3.00000000	06/15/2026 09:05:25	06/15/2026 09:09:00	<null>	true	0.59	0.50	0.59	0	6	<null>	2.5	-3	-0.5	-2.5
+06/15/2026 09:00:00	Skipped	gtd_limit_not_filled	Expired	0.50000000	3.00000000	06/15/2026 09:00:10	06/15/2026 09:04:00	<null>	true	0.53	0.50	0.53	0	6	<null>	3.5	-4	-0.5	-3.5
+06/15/2026 08:55:00	Skipped	gtd_limit_not_filled	Expired	0.50000000	3.00000000	06/15/2026 08:55:10	06/15/2026 08:59:00	<null>	true	0.55	0.50	0.55	0	6	<null>	2.5	-3	-0.5	-2.5
+06/15/2026 08:50:00	Skipped	gtd_limit_not_filled	Expired	0.50000000	3.00000000	06/15/2026 08:50:10	06/15/2026 08:54:00	<null>	true	0.51	0.50	0.51	0	6	<null>	2	-2	0	-2
+06/15/2026 08:45:00	Skipped	gtd_limit_not_filled	Expired	0.50000000	3.00000000	06/15/2026 08:45:11	06/15/2026 08:49:00	<null>	true	0.54	0.50	0.54	0	6	<null>	1	-1	0	-1
+06/15/2026 08:40:00	Skipped	gtd_limit_not_filled	Expired	0.50000000	3.00000000	06/15/2026 08:40:10	06/15/2026 08:44:00	<null>	true	0.52	0.50	0.52	0	6	<null>	2	-2	0	-2
+06/15/2026 08:35:00	Settled	<none>	Filled	0.45000000	3.00150000	06/15/2026 08:35:06	06/15/2026 08:39:00	06/15/2026 08:40:20	false	0.45	0.45	0.45	6.67	6.67	0.45	1	-1	0	-1
+06/15/2026 08:30:00	Settled	<none>	Filled	0.44000000	3.00080000	06/15/2026 08:30:07	06/15/2026 08:34:00	06/15/2026 08:35:16	false	0.44	0.44	0.44	6.82	6.82	0.44	2	-2	0	-2
+06/15/2026 08:25:00	Settled	<none>	Filled	0.34000000	2.00260000	06/15/2026 08:26:08	06/15/2026 08:29:00	06/15/2026 08:30:33	false	0.34	0.34	0.34	5.89	5.89	0.34	3.5	-3	0.5	-3.5
+06/15/2026 08:20:00	Settled	<none>	Filled	0.37000000	3.00070000	06/15/2026 08:20:10	06/15/2026 08:24:00	06/15/2026 08:25:07	false	0.37	0.37	0.37	8.11	8.11	0.37	2.5	-2	0.5	-2.5
+06/15/2026 08:15:00	Skipped	gtd_limit_not_filled	Expired	0.50000000	3.00000000	06/15/2026 08:15:43	06/15/2026 08:19:00	<null>	true	0.62	0.50	0.62	0	6	<null>	1.5	-1	0.5	-1.5
+06/15/2026 08:10:00	Skipped	gtd_limit_not_filled	Expired	0.50000000	3.00000000	06/15/2026 08:10:37	06/15/2026 08:14:00	<null>	true	0.62	0.50	0.62	0	6	<null>	2.5	-2	0.5	-2.5
+06/15/2026 08:05:00	Settled	<none>	Filled	0.48000000	3.00000000	06/15/2026 08:06:06	06/15/2026 08:09:00	06/15/2026 08:10:40	false	0.48	0.48	0.48	6.25	6.25	0.48	1.5	-1	0.5	-1.5
+06/15/2026 08:00:00	Settled	<none>	Filled	0.35000000	2.00200000	06/15/2026 08:00:56	06/15/2026 08:04:00	06/15/2026 08:05:15	false	0.35	0.35	0.35	5.72	5.72	0.35	2.5	-2	0.5	-2.5
+06/15/2026 07:55:00	Settled	<none>	Filled	0.05000000	1.00000000	06/15/2026 07:56:36	06/15/2026 07:59:00	06/15/2026 08:00:23	false	0.05	0.05	0.05	20	20	0.05	1.5	-1	0.5	-1.5
+06/15/2026 07:50:00	Settled	<none>	Filled	0.42000000	3.00300000	06/15/2026 07:51:04	06/15/2026 07:54:00	06/15/2026 07:55:14	false	0.42	0.42	0.42	7.15	7.15	0.42	2.5	-2	0.5	-2.5
+06/15/2026 07:45:00	Settled	<none>	Filled	0.40000000	3.00000000	06/15/2026 07:45:32	06/15/2026 07:49:00	06/15/2026 07:50:14	false	0.4	0.40	0.4	7.5	7.5	0.4	1.5	-1	0.5	-1.5
+
+AdjustedDiff strategy diagnostic finished at 2026-06-15T12:36:38.0185480+00:00

@@ -1,0 +1,14 @@
+Enabled strategy count captured at 2026-06-17T18:18:12.1700962+00:00
+total	enabled	disabled	live_stakes	enabled_live_stakes	enabled_paused	enabled_auto_live_paused
+7353	1015	6338	4	4	0	0
+
+## Enabled by group
+strategy_group	enabled_count	live_stakes_count
+other_up_down_5m	712	0
+up_down_bps	300	4
+simple	3	0
+
+## Service heartbeat
+service_name	status	mode	started_utc	heartbeat_utc	heartbeat_age_seconds	last_error
+PolyCopyTrader.Service	Running	Live	2026-06-16T21:15:48Z	2026-06-17T18:18:01Z	10.5	<none>
+PolyCopyTrader.Tests	Running	ReadOnly	2026-05-04T14:02:41Z	2026-05-04T14:02:41Z	3816930.3	<none>

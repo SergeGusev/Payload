@@ -1,0 +1,90 @@
+ETH Down 9 FAK monitor snapshot captured at 2026-06-17T23:53:14.9812816+00:00
+Since UTC: 2026-06-17T21:53:14.4444924+00:00
+database: polycopytrader
+server_address: 192.168.0.101/32
+server_time_utc: 2026-06-17T23:53:14Z
+
+== Service heartbeat ==
+service_name	status	mode	started_utc	heartbeat_utc	heartbeat_age_seconds	version	current_loop	last_error
+PolyCopyTrader.Service	Running	Live	2026-06-17T23:18:50Z	2026-06-17T23:52:51Z	22.7	info=1.0.0+3b63e1384625a3ebbff5a779b115f317a3d7ff72; assembly=1.0.0.0; mvid=3833b428eb78	BTC5mOnly WatchlistScanner=CommentedOut; FollowLeaderSignals=CommentedOut	<none>
+PolyCopyTrader.Tests	Running	ReadOnly	2026-05-04T14:02:41Z	2026-05-04T14:02:41Z	3837032.9	1.0.0	IntegrationTest	<none>
+
+== Target strategy ==
+id	code	name	enabled	live_stakes	auto_live_paused	paused	paper_stake_amount	live_stake_amount	live_available_balance	live_enabled_utc	updated_utc
+b7c50005-0000-4000-8130-000000000109	eth_up_down_5m_down_bps_9_fak	ETH Up or Down 5m Down 9 bps FAK	True	False	False	False	1.00000000	1.00000000	100.00000000	<null>	2026-06-17T23:51:40Z
+
+== Target summary since window ==
+runs	observed	entered	skipped	settled	paper_won	paper_lost	paper_realized	latest_run_utc	latest_run_update_utc	live_orders	live_filled_orders	live_matched_orders	live_rejected_orders	live_preflight_rejected_orders	live_settled_orders	live_filled_size	live_filled_notional	live_realized	latest_live_order_utc	latest_live_update_utc	shadow_decisions	fak_decisions	live_submitted_decisions	live_rejected_decisions	live_preflight_rejected_decisions	latest_decision_utc
+12	2	0	7	3	1	2	-11.95790000	2026-06-17T23:51:04Z	2026-06-17T23:51:04Z	0	0	0	0	0	0	0	0	0	<null>	<null>	0	0	0	0	0	<null>
+
+== Run statuses since window ==
+status	skip_reason	count	latest_created_utc	latest_updated_utc
+Settled	<none>	3	2026-06-17T23:20:16Z	2026-06-17T23:37:49Z
+Skipped	btc_previous_market_move_below_bps_threshold	3	2026-06-17T23:40:38Z	2026-06-17T23:51:01Z
+Observed	<none>	2	2026-06-17T23:51:04Z	2026-06-17T23:51:04Z
+Skipped	btc_previous_market_move_fixed_outcome_mismatch	2	2026-06-17T23:35:00Z	2026-06-17T23:45:34Z
+Skipped	market_already_ended	2	2026-06-17T23:18:57Z	2026-06-17T23:19:00Z
+
+== Live order statuses since window ==
+status	order_type	post_only	response_status	cancel_status	count	filled_size	remaining_size	filled_notional_usd	cost_basis_usd	realized_pnl_usd	latest_created_utc	latest_updated_utc
+
+== Shadow decisions since window ==
+status	order_type	post_only	count	latest_decision_utc	latest_updated_utc
+
+== Recent runs ==
+created_utc	updated_utc	market_slug	status	selected_outcome	entry_price	stake_usd	size_shares	skip_reason	paper_order_status	live_order_status	live_order_type	live_response_status	live_filled_size	live_remaining_size	live_avg_fill_price	live_validation
+2026-06-17T23:51:04Z	2026-06-17T23:51:04Z	eth-updown-5m-1781740800	Observed	<none>	<none>	1.00000000	<none>	<none>	<none>	<none>	<none>	<none>	<none>	<none>	<none>	<none>
+2026-06-17T23:45:37Z	2026-06-17T23:45:37Z	eth-updown-5m-1781740500	Observed	<none>	<none>	1.00000000	<none>	<none>	<none>	<none>	<none>	<none>	<none>	<none>	<none>	<none>
+2026-06-17T23:40:38Z	2026-06-17T23:51:01Z	eth-updown-5m-1781740200	Skipped	<none>	<none>	1.00000000	<none>	btc_previous_market_move_below_bps_threshold	<none>	<none>	<none>	<none>	<none>	<none>	<none>	<none>
+2026-06-17T23:35:00Z	2026-06-17T23:45:34Z	eth-updown-5m-1781739900	Skipped	<none>	<none>	1.00000000	<none>	btc_previous_market_move_fixed_outcome_mismatch	<none>	<none>	<none>	<none>	<none>	<none>	<none>	<none>
+2026-06-17T23:30:27Z	2026-06-17T23:40:37Z	eth-updown-5m-1781739600	Skipped	<none>	<none>	1.00000000	<none>	btc_previous_market_move_below_bps_threshold	<none>	<none>	<none>	<none>	<none>	<none>	<none>	<none>
+2026-06-17T23:25:01Z	2026-06-17T23:35:51Z	eth-updown-5m-1781739300	Skipped	<none>	<none>	1.00000000	<none>	btc_previous_market_move_below_bps_threshold	<none>	<none>	<none>	<none>	<none>	<none>	<none>	<none>
+2026-06-17T23:20:16Z	2026-06-17T23:37:49Z	eth-updown-5m-1781739000	Settled	Down	0.99000000	6.00930000	6.07000000	<none>	Filled	<none>	<none>	<none>	<none>	<none>	<none>	<none>
+2026-06-17T23:18:57Z	2026-06-17T23:19:00Z	eth-updown-5m-1781738100	Skipped	<none>	<none>	1.00000000	<none>	btc_previous_market_move_fixed_outcome_mismatch	<none>	<none>	<none>	<none>	<none>	<none>	<none>	<none>
+2026-06-17T23:18:57Z	2026-06-17T23:29:22Z	eth-updown-5m-1781738400	Settled	Down	0.99000000	6.00930000	6.07000000	<none>	Filled	<none>	<none>	<none>	<none>	<none>	<none>	<none>
+2026-06-17T23:18:57Z	2026-06-17T23:19:00Z	eth-updown-5m-1781737800	Skipped	<none>	<none>	1.00000000	<none>	market_already_ended	<none>	<none>	<none>	<none>	<none>	<none>	<none>	<none>
+2026-06-17T23:18:57Z	2026-06-17T23:32:06Z	eth-updown-5m-1781738700	Settled	Down	0.99000000	6.00930000	6.07000000	<none>	Filled	<none>	<none>	<none>	<none>	<none>	<none>	<none>
+2026-06-17T23:18:57Z	2026-06-17T23:19:00Z	eth-updown-5m-1781737500	Skipped	<none>	<none>	1.00000000	<none>	market_already_ended	<none>	<none>	<none>	<none>	<none>	<none>	<none>	<none>
+
+== Recent live orders ==
+created_utc	submitted_utc	updated_utc	status	order_type	post_only	response_status	outcome	price	size_shares	notional_usd	filled_size	remaining_size	average_fill_price	filled_notional_usd	cost_basis_usd	realized_pnl_usd	validation_summary	live_order_id
+
+== Recent shadow decisions ==
+decision_utc	updated_utc	market_id	outcome	side	limit_price	target_notional_usd	requested_size_shares	max_reserved_notional_usd	order_type	post_only	status	live_order_id	paper_order_id
+
+== Recent target API errors ==
+created_utc	component	operation	message
+2026-06-17T23:41:33Z	BtcUpDown5mOrderBookRefreshWorker	RefreshOrderBook	Asset 89318690408905347641833591921013336086859527191443687543923244407568143705137: request timed out.
+2026-06-17T22:56:24Z	BtcUpDown5mOrderBookRefreshWorker	RefreshOrderBook	Asset 47324464582239550155348876567038260999341540606735942489030892975543380160472: request timed out.
+
+== Recent live trading events ==
+created_utc	action	status	details
+2026-06-17T23:32:34Z	LiveDataApiPositionReconciliation	OK	LiveOrderId=c184a09b-2bed-4eaf-bbf3-54360e151a0a; status=Open; filled=5; avg=0.6.
+2026-06-17T23:32:01Z	BtcUpDown5mPaperLiveShadowPlaceOrder	OK	live
+2026-06-17T23:26:53Z	BtcUpDown5mPaperLiveShadowPlaceOrder	OK	matched
+2026-06-17T23:24:03Z	LiveDataApiPositionReconciliation	OK	LiveOrderId=70a5ad26-b0e6-4cf6-b749-0ec2c3db845e; status=Open; filled=7.32; avg=0.41.
+2026-06-17T23:20:59Z	BtcUpDown5mPaperLiveShadowPlaceOrder	OK	live
+2026-06-17T23:18:50Z	StartupGeoblockCheck	OK	blocked=False; ip=94.190.179.211; country=BG; region=03
+2026-06-17T23:05:28Z	BtcUpDown5mPaperLiveShadowPlaceOrder	OK	matched
+2026-06-17T22:51:35Z	BtcUpDown5mPaperLiveShadowPlaceOrder	OK	matched
+2026-06-17T22:32:57Z	BtcUpDown5mPaperLiveShadowPlaceOrder	OK	matched
+2026-06-17T22:27:04Z	LiveDataApiPositionReconciliation	OK	LiveOrderId=0c94a3f0-f9a4-471d-994d-bb8265fb9fb3; status=Open; filled=5.5599; avg=0.36.
+2026-06-17T22:26:54Z	BtcUpDown5mPaperLiveShadowPlaceOrder	OK	live
+2026-06-17T22:16:27Z	StartupGeoblockCheck	OK	blocked=False; ip=94.190.179.211; country=BG; region=03
+2026-06-17T22:16:06Z	StartupGeoblockCheck	OK	blocked=False; ip=94.190.179.211; country=BG; region=03
+2026-06-17T22:13:29Z	BtcUpDown5mPaperLiveShadowPlaceOrder	OK	
+2026-06-17T22:06:31Z	BtcUpDown5mPaperLiveShadowPlaceOrder	OK	
+2026-06-17T22:06:31Z	BtcUpDown5mPaperLiveShadowPlaceOrder	OK	
+
+== Market data status ==
+component	connection_state	subscribed_assets_count	last_message_utc	last_message_age_seconds	stale	last_error	updated_utc
+PolymarketMarketWebSocket:shard-003	Connected	3000	2026-06-17T23:53:12Z	2.3	False	<none>	2026-06-17T23:53:13Z
+PolymarketMarketWebSocket:crypto-updown-5m-critical	Stale	428	2026-06-17T23:51:08Z	125.6	True	<none>	2026-06-17T23:53:08Z
+PolymarketMarketWebSocket:shard-006	Stale	1615	2026-06-17T23:52:13Z	61.2	True	<none>	2026-06-17T23:52:47Z
+PolymarketMarketWebSocket:shard-001	Connected	3000	2026-06-17T23:52:30Z	44.3	False	<none>	2026-06-17T23:52:31Z
+PolymarketMarketWebSocket:shard-002	Stale	3000	2026-06-17T23:52:00Z	73.6	True	<none>	2026-06-17T23:52:31Z
+PolymarketMarketWebSocket:shard-005	Stale	3000	2026-06-17T23:52:00Z	73.6	True	<none>	2026-06-17T23:52:31Z
+PolymarketMarketWebSocket:shard-004	Stale	3000	2026-06-17T23:52:00Z	73.6	True	<none>	2026-06-17T23:52:31Z
+PolymarketMarketWebSocket	Stale	17043	2026-06-17T23:51:59Z	74.4	True	healthy_shards=2/7; missing_status_shards=0; reconnecting_shards=0; stale_shards=2; disconnected_shards=1; error_shards=0	2026-06-17T23:52:00Z
+PolymarketMarketWebSocket:shard-007	Stale	1663	2026-06-17T22:14:40Z	5913.9	True	<none>	2026-06-17T22:15:12Z
+PolymarketMarketWebSocket:shard-009	Disconnected	0	<null>	<null>	False	Shard removed from current subscription plan.	2026-06-11T05:12:22Z

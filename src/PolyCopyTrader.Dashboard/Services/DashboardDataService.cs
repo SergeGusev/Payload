@@ -12,7 +12,7 @@ public sealed class DashboardDataService(
     bool storageConfigured,
     IPolymarketAuthService authService)
 {
-    private const int StrategyDashboardFetchLimit = 10_000;
+    private const int StrategyDashboardFetchLimit = 25_000;
     private const int OrderDashboardFetchLimit = 100;
     private static readonly IReadOnlyDictionary<Guid, string> ConfiguredStrategyNamesById = BuildConfiguredStrategyNamesById();
 
@@ -24,6 +24,9 @@ public sealed class DashboardDataService(
     public async Task<DashboardSnapshot> LoadAsync(
         Guid? paperOrdersStrategyId = null,
         Guid? liveOrdersStrategyId = null,
+        int liveOrdersOffset = 0,
+        DateTimeOffset? paperOrdersCreatedAfterUtc = null,
+        DateTimeOffset? liveOrdersCreatedAfterUtc = null,
         ControlStatusResponse? controlStatus = null,
         string? controlStatusError = null,
         CancellationToken cancellationToken = default)
@@ -33,6 +36,9 @@ public sealed class DashboardDataService(
             return await LoadStrategiesOnlyAsync(
                 paperOrdersStrategyId,
                 liveOrdersStrategyId,
+                liveOrdersOffset,
+                paperOrdersCreatedAfterUtc,
+                liveOrdersCreatedAfterUtc,
                 controlStatus,
                 controlStatusError,
                 cancellationToken);
@@ -59,7 +65,9 @@ public sealed class DashboardDataService(
         var recentPaperOrders = await repository.GetRecentPaperOrdersAsync(
             OrderDashboardFetchLimit,
             cancellationToken,
-            NormalizeStrategyId(paperOrdersStrategyId));
+            NormalizeStrategyId(paperOrdersStrategyId),
+            paperOrdersCreatedAfterUtc);
+        var paperRunsByOrderId = await GetPaperRunsByOrderIdAsync(recentPaperOrders, cancellationToken);
         var openPaperOrders = await repository.GetOpenPaperOrdersAsync(cancellationToken);
         var paperPositions = await repository.GetPaperPositionsAsync(cancellationToken);
         var paperCopiedTraderPerformance = await repository.GetPaperCopiedTraderPerformanceAsync(250, cancellationToken);
@@ -69,10 +77,11 @@ public sealed class DashboardDataService(
             item => StrategyIds.Normalize(item.StrategyId),
             item => item.Name);
         var dryRunOrders = await repository.GetRecentDryRunOrdersAsync(cancellationToken: cancellationToken);
-        var liveOrders = await repository.GetRecentLiveOrdersAsync(
-            OrderDashboardFetchLimit,
-            cancellationToken,
-            NormalizeStrategyId(liveOrdersStrategyId));
+        var (liveOrders, hasNextLiveOrdersPage) = await GetRecentLiveOrderPageAsync(
+            liveOrdersStrategyId,
+            liveOrdersOffset,
+            liveOrdersCreatedAfterUtc,
+            cancellationToken);
         var liveTradingEvents = await repository.GetRecentLiveTradingEventsAsync(cancellationToken: cancellationToken);
         var apiErrors = await repository.GetRecentApiErrorsAsync(cancellationToken: cancellationToken);
         var riskEvents = await repository.GetRecentRiskEventsAsync(cancellationToken: cancellationToken);
@@ -149,7 +158,7 @@ public sealed class DashboardDataService(
             onChainParticipantDetails.Select(ToOnChainParticipantDetailRow).ToArray(),
             leaderTrades.Select(ToLeaderTradeRow).ToArray(),
             signals.Select(ToSignalRow).ToArray(),
-            recentPaperOrders.Select(order => ToPaperOrderRow(order, strategyNamesById)).ToArray(),
+            recentPaperOrders.Select(order => ToPaperOrderRow(order, strategyNamesById, paperRunsByOrderId)).ToArray(),
             paperPositions.Select(position => ToPaperPositionRow(position, orderBooksByAsset)).ToArray(),
             strategyPerformance.Select(ToStrategyPerformanceRow).ToArray(),
             strategyRecentPerformance.Select(ToStrategyRecentPerformanceRow).ToArray(),
@@ -175,12 +184,16 @@ public sealed class DashboardDataService(
                 authReadiness,
                 optionalReportDiagnostics),
             BuildRunbookLinks(),
-            BuildLogs(apiErrors, riskEvents, commandAudits, marketDataEvents, liveTradingEvents));
+            BuildLogs(apiErrors, riskEvents, commandAudits, marketDataEvents, liveTradingEvents),
+            hasNextLiveOrdersPage);
     }
 
     private async Task<DashboardSnapshot> LoadStrategiesOnlyAsync(
         Guid? paperOrdersStrategyId,
         Guid? liveOrdersStrategyId,
+        int liveOrdersOffset,
+        DateTimeOffset? paperOrdersCreatedAfterUtc,
+        DateTimeOffset? liveOrdersCreatedAfterUtc,
         ControlStatusResponse? controlStatus,
         string? controlStatusError,
         CancellationToken cancellationToken)
@@ -199,11 +212,14 @@ public sealed class DashboardDataService(
         var recentPaperOrders = await repository.GetRecentPaperOrdersAsync(
             OrderDashboardFetchLimit,
             cancellationToken,
-            NormalizeStrategyId(paperOrdersStrategyId));
-        var liveOrders = await repository.GetRecentLiveOrdersAsync(
-            OrderDashboardFetchLimit,
-            cancellationToken,
-            NormalizeStrategyId(liveOrdersStrategyId));
+            NormalizeStrategyId(paperOrdersStrategyId),
+            paperOrdersCreatedAfterUtc);
+        var paperRunsByOrderId = await GetPaperRunsByOrderIdAsync(recentPaperOrders, cancellationToken);
+        var (liveOrders, hasNextLiveOrdersPage) = await GetRecentLiveOrderPageAsync(
+            liveOrdersStrategyId,
+            liveOrdersOffset,
+            liveOrdersCreatedAfterUtc,
+            cancellationToken);
         var overview = BuildStrategyOnlyOverview(serviceAvailability, strategyPerformance, strategyRecentPerformance);
         var diagnostics = BuildStrategyOnlyDiagnostics(
             serviceAvailability,
@@ -225,7 +241,7 @@ public sealed class DashboardDataService(
             [],
             [],
             [],
-            recentPaperOrders.Select(order => ToPaperOrderRow(order, strategyNamesById)).ToArray(),
+            recentPaperOrders.Select(order => ToPaperOrderRow(order, strategyNamesById, paperRunsByOrderId)).ToArray(),
             [],
             strategyPerformance.Select(ToStrategyPerformanceRow).ToArray(),
             strategyRecentPerformance.Select(ToStrategyRecentPerformanceRow).ToArray(),
@@ -243,27 +259,82 @@ public sealed class DashboardDataService(
             [],
             diagnostics,
             [],
-            []);
+            [],
+            hasNextLiveOrdersPage);
     }
 
     public async Task<DashboardOrderSnapshot> LoadOrderRowsAsync(
         Guid? paperOrdersStrategyId,
         Guid? liveOrdersStrategyId,
+        int liveOrdersOffset = 0,
+        DateTimeOffset? paperOrdersCreatedAfterUtc = null,
+        DateTimeOffset? liveOrdersCreatedAfterUtc = null,
+        CancellationToken cancellationToken = default)
+    {
+        var paperSnapshot = await LoadPaperOrderRowsAsync(
+            paperOrdersStrategyId,
+            paperOrdersCreatedAfterUtc,
+            cancellationToken);
+        var liveSnapshot = await LoadLiveOrderRowsAsync(
+            liveOrdersStrategyId,
+            liveOrdersOffset,
+            liveOrdersCreatedAfterUtc,
+            cancellationToken);
+
+        return new DashboardOrderSnapshot(
+            paperSnapshot.PaperOrders,
+            liveSnapshot.LiveOrders,
+            liveSnapshot.HasNextLiveOrdersPage);
+    }
+
+    public async Task<DashboardPaperOrderSnapshot> LoadPaperOrderRowsAsync(
+        Guid? paperOrdersStrategyId,
+        DateTimeOffset? createdAfterUtc = null,
         CancellationToken cancellationToken = default)
     {
         var strategyNamesById = GetOrderStrategyNamesById();
         var recentPaperOrders = await repository.GetRecentPaperOrdersAsync(
             OrderDashboardFetchLimit,
             cancellationToken,
-            NormalizeStrategyId(paperOrdersStrategyId));
-        var liveOrders = await repository.GetRecentLiveOrdersAsync(
-            OrderDashboardFetchLimit,
-            cancellationToken,
-            NormalizeStrategyId(liveOrdersStrategyId));
+            NormalizeStrategyId(paperOrdersStrategyId),
+            createdAfterUtc);
+        var paperRunsByOrderId = await GetPaperRunsByOrderIdAsync(recentPaperOrders, cancellationToken);
 
-        return new DashboardOrderSnapshot(
-            recentPaperOrders.Select(order => ToPaperOrderRow(order, strategyNamesById)).ToArray(),
-            liveOrders.Select(order => ToLiveOrderRow(order, strategyNamesById)).ToArray());
+        return new DashboardPaperOrderSnapshot(
+            recentPaperOrders.Select(order => ToPaperOrderRow(order, strategyNamesById, paperRunsByOrderId)).ToArray());
+    }
+
+    public async Task<DashboardLiveOrderSnapshot> LoadLiveOrderRowsAsync(
+        Guid? liveOrdersStrategyId,
+        int liveOrdersOffset = 0,
+        DateTimeOffset? createdAfterUtc = null,
+        CancellationToken cancellationToken = default)
+    {
+        var strategyNamesById = GetOrderStrategyNamesById();
+        var (liveOrders, hasNextLiveOrdersPage) = await GetRecentLiveOrderPageAsync(
+            liveOrdersStrategyId,
+            liveOrdersOffset,
+            createdAfterUtc,
+            cancellationToken);
+
+        return new DashboardLiveOrderSnapshot(
+            liveOrders.Select(order => ToLiveOrderRow(order, strategyNamesById)).ToArray(),
+            hasNextLiveOrdersPage);
+    }
+
+    private async Task<(IReadOnlyList<LiveOrder> Orders, bool HasNextPage)> GetRecentLiveOrderPageAsync(
+        Guid? liveOrdersStrategyId,
+        int offset,
+        DateTimeOffset? createdAfterUtc,
+        CancellationToken cancellationToken)
+    {
+        var requestedRows = await repository.GetRecentLiveOrdersAsync(
+            OrderDashboardFetchLimit + 1,
+            cancellationToken,
+            NormalizeStrategyId(liveOrdersStrategyId),
+            Math.Max(0, offset),
+            createdAfterUtc);
+        return (requestedRows.Take(OrderDashboardFetchLimit).ToArray(), requestedRows.Count > OrderDashboardFetchLimit);
     }
 
     public void InvalidateStrategyPerformanceCache()
@@ -594,7 +665,7 @@ public sealed class DashboardDataService(
             now - order.CreatedAtUtc > TimeSpan.FromSeconds(configuration.LiveTrading.DefaultOrderTtlSeconds));
         var recentPolymarketErrors = apiErrors.Count(error =>
             error.CreatedAtUtc >= now.AddMinutes(-configuration.LiveTrading.ApiErrorLockoutWindowMinutes) &&
-            error.Component.Contains("Polymarket", StringComparison.OrdinalIgnoreCase));
+            LiveApiErrorLockoutPolicy.CountsForLiveOrderLockout(error));
         var dailyLossLockout = riskEvents.Any(item =>
             item.CreatedAtUtc >= now.AddDays(-1) &&
             item.ReasonCode.Contains("daily_loss", StringComparison.OrdinalIgnoreCase));
@@ -681,7 +752,7 @@ public sealed class DashboardDataService(
                 "API error lockout",
                 $"{recentPolymarketErrors}/{configuration.LiveTrading.ApiErrorLockoutCount}",
                 recentPolymarketErrors < configuration.LiveTrading.ApiErrorLockoutCount,
-                $"Window: {configuration.LiveTrading.ApiErrorLockoutWindowMinutes} minutes."),
+                $"Window: {configuration.LiveTrading.ApiErrorLockoutWindowMinutes} minutes. Market-data websocket reconnects are excluded."),
             Gate(
                 "Daily loss lockout",
                 dailyLossLockout ? "active" : "clear",
@@ -938,11 +1009,39 @@ public sealed class DashboardDataService(
             signal.ProposedNotionalUsd);
     }
 
+    private async Task<IReadOnlyDictionary<Guid, StrategyMarketPaperRun>> GetPaperRunsByOrderIdAsync(
+        IReadOnlyList<PaperOrder> paperOrders,
+        CancellationToken cancellationToken)
+    {
+        Guid[] orderIds = paperOrders
+            .Select(order => order.Id)
+            .Where(id => id != Guid.Empty)
+            .Distinct()
+            .ToArray();
+        if (orderIds.Length == 0)
+        {
+            return new Dictionary<Guid, StrategyMarketPaperRun>();
+        }
+
+        var runs = await repository.GetStrategyMarketPaperRunsByPaperOrderIdsAsync(orderIds, cancellationToken);
+        return runs
+            .Where(run => run.PaperOrderId.HasValue)
+            .GroupBy(run => run.PaperOrderId!.Value)
+            .ToDictionary(
+                group => group.Key,
+                group => group
+                    .OrderByDescending(run => string.Equals(run.Status, StrategyMarketPaperRunStatuses.Settled, StringComparison.OrdinalIgnoreCase))
+                    .ThenByDescending(run => run.SettledAtUtc ?? run.EnteredAtUtc ?? run.UpdatedAtUtc)
+                    .First());
+    }
+
     private static PaperOrderRow ToPaperOrderRow(
         PaperOrder order,
-        IReadOnlyDictionary<Guid, string> strategyNamesById)
+        IReadOnlyDictionary<Guid, string> strategyNamesById,
+        IReadOnlyDictionary<Guid, StrategyMarketPaperRun> paperRunsByOrderId)
     {
         var strategyId = StrategyIds.Normalize(order.StrategyId);
+        paperRunsByOrderId.TryGetValue(order.Id, out var paperRun);
         return new PaperOrderRow(
             strategyId,
             GetStrategyName(strategyId, strategyNamesById),
@@ -957,8 +1056,76 @@ public sealed class DashboardDataService(
             FormatDate(order.CreatedAtUtc),
             FormatDate(order.ExpiresAtUtc),
             FormatDate(order.FilledAtUtc),
+            paperRun?.SettlementValueUsd,
+            paperRun?.RealizedPnlUsd,
+            FormatDate(paperRun?.SettledAtUtc),
+            InferPaperWinningOutcome(order.Outcome, paperRun),
+            InferPaperWon(paperRun),
             TtlRemaining(order),
             order.SignalId.ToString());
+    }
+
+    private static bool? InferPaperWon(StrategyMarketPaperRun? paperRun)
+    {
+        if (paperRun?.RealizedPnlUsd is not { } realizedPnlUsd)
+        {
+            return null;
+        }
+
+        return realizedPnlUsd > 0m;
+    }
+
+    private static string InferPaperWinningOutcome(string selectedOutcome, StrategyMarketPaperRun? paperRun)
+    {
+        if (paperRun?.SettledAtUtc is null || paperRun.RealizedPnlUsd is null)
+        {
+            return string.Empty;
+        }
+
+        var runOutcome = string.IsNullOrWhiteSpace(paperRun.SelectedOutcome)
+            ? selectedOutcome
+            : paperRun.SelectedOutcome;
+        if (string.IsNullOrWhiteSpace(runOutcome))
+        {
+            return string.Empty;
+        }
+
+        if (paperRun.RealizedPnlUsd > 0m)
+        {
+            return runOutcome;
+        }
+
+        if (paperRun.RealizedPnlUsd == 0m)
+        {
+            return string.Empty;
+        }
+
+        return OppositeOutcome(runOutcome);
+    }
+
+    private static string OppositeOutcome(string outcome)
+    {
+        if (string.Equals(outcome, "Up", StringComparison.OrdinalIgnoreCase))
+        {
+            return "Down";
+        }
+
+        if (string.Equals(outcome, "Down", StringComparison.OrdinalIgnoreCase))
+        {
+            return "Up";
+        }
+
+        if (string.Equals(outcome, "Yes", StringComparison.OrdinalIgnoreCase))
+        {
+            return "No";
+        }
+
+        if (string.Equals(outcome, "No", StringComparison.OrdinalIgnoreCase))
+        {
+            return "Yes";
+        }
+
+        return "Not " + outcome;
     }
 
     private static PaperPositionRow ToPaperPositionRow(
@@ -1061,6 +1228,9 @@ public sealed class DashboardDataService(
             performance.ClosedRoiPct,
             performance.AvgEntryDelaySeconds,
             performance.MaxEntryDelaySeconds,
+            performance.AvgCountertrendScoreBps,
+            performance.AvgCountertrendSignalBps,
+            performance.LastCountertrendSignalBps,
             performance.LiveOrdersCount,
             performance.LiveFilledOrdersCount,
             performance.LiveOpenOrdersCount,
@@ -1094,6 +1264,7 @@ public sealed class DashboardDataService(
         return new StrategyRecentPerformanceRow(
             performance.Window,
             performance.WindowHours,
+            StrategyIds.Normalize(performance.StrategyId),
             performance.Name,
             performance.LiveStakes,
             performance.OrdersCount,

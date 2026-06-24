@@ -1,0 +1,4 @@
+Revert cleanup resume loop started 2026-06-16T18:07:43.4638352+03:00; startIteration=23
+[2026-06-16T18:07:43.4638352+03:00] iteration=23 attempt=1 start
+[2026-06-16T18:50:38.9714589+03:00] iteration=23 attempt=1 exit=0 selected=100 remaining=4567 finished=yes stdout=outputs\delete-revert-strategies-2026-06-16\execute-loop-023-attempt-1.stdout.txt stderr=outputs\delete-revert-strategies-2026-06-16\execute-loop-023-attempt-1.stderr.txt
+[2026-06-16T18:50:38.9754507+03:00] iteration=24 attempt=1 start

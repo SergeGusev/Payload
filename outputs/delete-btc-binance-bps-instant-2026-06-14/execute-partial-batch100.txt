@@ -1,0 +1,401 @@
+[     0.0s] BTC Binance bps Instant strategy cleanup started at 2026-06-14T11:48:24.2565171+00:00
+[     0.0s] Target strategy code regex: ^btc_up_down_5m_binance_bps_[0-9]+_instant$
+[     0.0s] Dry run: False
+[     0.0s] Execute: True
+[     0.0s] Verify only: False
+[     0.0s] Batch size: 100
+[     0.0s] Batch pause ms: 150
+[     0.0s] Batch lock timeout ms: 300
+[     0.0s] Batch statement timeout ms: 8000
+[     0.4s] Database: polycopytrader
+[     0.4s] Server address: 192.168.0.101/32
+[     0.5s] Server time UTC: 6/14/2026 11:48:24 AM
+[     0.5s] Last heartbeat UTC: 2026-06-14T11:47:50Z
+[     0.5s] Preparing target strategy ids...
+[     0.6s] Preparing target paper order ids...
+[    13.5s] Preparing target run ids...
+[   109.6s] Preparing target signal ids...
+[   193.6s] Preparing target live order ids...
+[   193.6s] Preparing target correlation ids...
+[   194.0s] Preparing safe synthetic wallet ids...
+[   195.1s] Foreign keys touching cleanup parents:
+[   195.1s]   paper_live_shadow_decisions -> live_orders (paper_live_shadow_decisions_live_order_id_fkey)
+[   195.1s]   live_orders -> paper_orders (live_orders_paper_order_id_fkey)
+[   195.1s]   paper_fills -> paper_orders (paper_fills_paper_order_id_fkey)
+[   195.1s]   paper_live_shadow_decisions -> paper_orders (paper_live_shadow_decisions_paper_order_id_fkey)
+[   195.1s]   strategy_market_paper_runs -> paper_orders (strategy_market_paper_runs_paper_order_id_fkey)
+[   195.1s]   paper_live_shadow_decisions -> signals (paper_live_shadow_decisions_signal_id_fkey)
+[   195.1s]   signal_rejections -> signals (signal_rejections_signal_id_fkey)
+[   195.1s]   strategy_market_paper_runs -> signals (strategy_market_paper_runs_signal_id_fkey)
+[   195.1s]   dry_run_orders -> strategies (dry_run_orders_strategy_id_fkey)
+[   195.1s]   live_orders -> strategies (live_orders_strategy_id_fkey)
+[   195.1s]   paper_live_shadow_decisions -> strategies (paper_live_shadow_decisions_strategy_id_fkey)
+[   195.1s]   paper_live_shadow_discrepancies -> strategies (paper_live_shadow_discrepancies_strategy_id_fkey)
+[   195.1s]   paper_orders -> strategies (paper_orders_strategy_id_fkey)
+[   195.1s]   strategy_market_paper_runs -> strategies (strategy_market_paper_runs_strategy_id_fkey)
+[   195.1s] Target strategy rows:
+[   195.1s]   btc_up_down_5m_binance_bps_1_instant | enabled=False | live_stakes=False | BTC Up or Down 5m Binance 1 bps Instant
+[   195.1s]   btc_up_down_5m_binance_bps_2_instant | enabled=False | live_stakes=False | BTC Up or Down 5m Binance 2 bps Instant
+[   195.1s]   btc_up_down_5m_binance_bps_3_instant | enabled=False | live_stakes=False | BTC Up or Down 5m Binance 3 bps Instant
+[   195.1s]   btc_up_down_5m_binance_bps_4_instant | enabled=False | live_stakes=False | BTC Up or Down 5m Binance 4 bps Instant
+[   195.1s]   btc_up_down_5m_binance_bps_5_instant | enabled=False | live_stakes=False | BTC Up or Down 5m Binance 5 bps Instant
+[   195.1s]   btc_up_down_5m_binance_bps_6_instant | enabled=False | live_stakes=False | BTC Up or Down 5m Binance 6 bps Instant
+[   195.1s]   btc_up_down_5m_binance_bps_7_instant | enabled=False | live_stakes=False | BTC Up or Down 5m Binance 7 bps Instant
+[   195.1s]   btc_up_down_5m_binance_bps_8_instant | enabled=False | live_stakes=False | BTC Up or Down 5m Binance 8 bps Instant
+[   195.1s]   btc_up_down_5m_binance_bps_9_instant | enabled=False | live_stakes=False | BTC Up or Down 5m Binance 9 bps Instant
+[   195.1s]   btc_up_down_5m_binance_bps_10_instant | enabled=False | live_stakes=False | BTC Up or Down 5m Binance 10 bps Instant
+[   195.1s]   btc_up_down_5m_binance_bps_11_instant | enabled=False | live_stakes=False | BTC Up or Down 5m Binance 11 bps Instant
+[   195.1s]   btc_up_down_5m_binance_bps_12_instant | enabled=False | live_stakes=False | BTC Up or Down 5m Binance 12 bps Instant
+[   195.1s]   btc_up_down_5m_binance_bps_13_instant | enabled=False | live_stakes=False | BTC Up or Down 5m Binance 13 bps Instant
+[   195.1s]   btc_up_down_5m_binance_bps_14_instant | enabled=False | live_stakes=False | BTC Up or Down 5m Binance 14 bps Instant
+[   195.1s]   btc_up_down_5m_binance_bps_15_instant | enabled=False | live_stakes=False | BTC Up or Down 5m Binance 15 bps Instant
+[   195.1s]   btc_up_down_5m_binance_bps_16_instant | enabled=False | live_stakes=False | BTC Up or Down 5m Binance 16 bps Instant
+[   195.1s]   btc_up_down_5m_binance_bps_17_instant | enabled=False | live_stakes=False | BTC Up or Down 5m Binance 17 bps Instant
+[   195.1s]   btc_up_down_5m_binance_bps_18_instant | enabled=False | live_stakes=False | BTC Up or Down 5m Binance 18 bps Instant
+[   195.1s]   btc_up_down_5m_binance_bps_19_instant | enabled=False | live_stakes=False | BTC Up or Down 5m Binance 19 bps Instant
+[   195.1s]   btc_up_down_5m_binance_bps_20_instant | enabled=False | live_stakes=False | BTC Up or Down 5m Binance 20 bps Instant
+[   195.1s]   btc_up_down_5m_binance_bps_21_instant | enabled=False | live_stakes=False | BTC Up or Down 5m Binance 21 bps Instant
+[   195.1s]   btc_up_down_5m_binance_bps_22_instant | enabled=False | live_stakes=False | BTC Up or Down 5m Binance 22 bps Instant
+[   195.1s]   btc_up_down_5m_binance_bps_23_instant | enabled=False | live_stakes=False | BTC Up or Down 5m Binance 23 bps Instant
+[   195.1s]   btc_up_down_5m_binance_bps_24_instant | enabled=False | live_stakes=False | BTC Up or Down 5m Binance 24 bps Instant
+[   195.1s]   btc_up_down_5m_binance_bps_25_instant | enabled=False | live_stakes=False | BTC Up or Down 5m Binance 25 bps Instant
+[   195.1s]   btc_up_down_5m_binance_bps_26_instant | enabled=False | live_stakes=False | BTC Up or Down 5m Binance 26 bps Instant
+[   195.1s]   btc_up_down_5m_binance_bps_27_instant | enabled=False | live_stakes=False | BTC Up or Down 5m Binance 27 bps Instant
+[   195.1s]   btc_up_down_5m_binance_bps_28_instant | enabled=False | live_stakes=False | BTC Up or Down 5m Binance 28 bps Instant
+[   195.1s]   btc_up_down_5m_binance_bps_29_instant | enabled=False | live_stakes=False | BTC Up or Down 5m Binance 29 bps Instant
+[   195.1s]   btc_up_down_5m_binance_bps_30_instant | enabled=False | live_stakes=False | BTC Up or Down 5m Binance 30 bps Instant
+[   195.1s]   btc_up_down_5m_binance_bps_31_instant | enabled=False | live_stakes=False | BTC Up or Down 5m Binance 31 bps Instant
+[   195.1s]   btc_up_down_5m_binance_bps_32_instant | enabled=False | live_stakes=False | BTC Up or Down 5m Binance 32 bps Instant
+[   195.1s]   btc_up_down_5m_binance_bps_33_instant | enabled=False | live_stakes=False | BTC Up or Down 5m Binance 33 bps Instant
+[   195.1s]   btc_up_down_5m_binance_bps_34_instant | enabled=False | live_stakes=False | BTC Up or Down 5m Binance 34 bps Instant
+[   195.1s]   btc_up_down_5m_binance_bps_35_instant | enabled=False | live_stakes=False | BTC Up or Down 5m Binance 35 bps Instant
+[   195.1s]   btc_up_down_5m_binance_bps_36_instant | enabled=False | live_stakes=False | BTC Up or Down 5m Binance 36 bps Instant
+[   195.1s]   btc_up_down_5m_binance_bps_37_instant | enabled=False | live_stakes=False | BTC Up or Down 5m Binance 37 bps Instant
+[   195.1s]   btc_up_down_5m_binance_bps_38_instant | enabled=False | live_stakes=False | BTC Up or Down 5m Binance 38 bps Instant
+[   195.1s]   btc_up_down_5m_binance_bps_39_instant | enabled=False | live_stakes=False | BTC Up or Down 5m Binance 39 bps Instant
+[   195.1s]   btc_up_down_5m_binance_bps_40_instant | enabled=False | live_stakes=False | BTC Up or Down 5m Binance 40 bps Instant
+[   195.1s]   btc_up_down_5m_binance_bps_41_instant | enabled=False | live_stakes=False | BTC Up or Down 5m Binance 41 bps Instant
+[   195.1s]   btc_up_down_5m_binance_bps_42_instant | enabled=False | live_stakes=False | BTC Up or Down 5m Binance 42 bps Instant
+[   195.1s]   btc_up_down_5m_binance_bps_43_instant | enabled=False | live_stakes=False | BTC Up or Down 5m Binance 43 bps Instant
+[   195.1s]   btc_up_down_5m_binance_bps_44_instant | enabled=False | live_stakes=False | BTC Up or Down 5m Binance 44 bps Instant
+[   195.1s]   btc_up_down_5m_binance_bps_45_instant | enabled=False | live_stakes=False | BTC Up or Down 5m Binance 45 bps Instant
+[   195.1s]   btc_up_down_5m_binance_bps_46_instant | enabled=False | live_stakes=False | BTC Up or Down 5m Binance 46 bps Instant
+[   195.1s]   btc_up_down_5m_binance_bps_47_instant | enabled=False | live_stakes=False | BTC Up or Down 5m Binance 47 bps Instant
+[   195.1s]   btc_up_down_5m_binance_bps_48_instant | enabled=False | live_stakes=False | BTC Up or Down 5m Binance 48 bps Instant
+[   195.1s]   btc_up_down_5m_binance_bps_49_instant | enabled=False | live_stakes=False | BTC Up or Down 5m Binance 49 bps Instant
+[   195.1s]   btc_up_down_5m_binance_bps_50_instant | enabled=False | live_stakes=False | BTC Up or Down 5m Binance 50 bps Instant
+[   195.1s] Target summary (before):
+[   195.2s]   target strategies in temp: 50
+[   195.2s]   remaining strategies by exact code regex: 50
+[   195.2s]   target wallet candidates: 50
+[   195.2s]   safe wallets: 50
+[   195.2s]   target paper_orders in temp: 1662
+[   195.6s]   remaining target paper_orders: 1662
+[   196.2s]   remaining target paper_fills: 1662
+[   196.4s]   target run ids in temp: 222082
+[   247.1s]   remaining target runs: 222082
+[   247.1s]   target signal ids in temp: 1662
+[   247.6s]   remaining target signals: 1662
+[   247.7s]   remaining target signal_rejections: 0
+[   247.7s]   remaining target dry_run_orders: 0
+[   247.7s]   target live_orders in temp: 0
+[   247.8s]   remaining target live_orders: 0
+[   247.8s]   remaining target shadow decisions: 0
+[   247.8s]   remaining target shadow discrepancies: 0
+[   248.3s]   remaining safe-wallet paper_positions: 1662
+[   248.4s]   remaining safe-wallet settlements: 1662
+[   248.5s]   remaining safe-wallet performance rows: 0
+[   248.5s] Wallet candidate safety sample:
+[   248.6s]   wallet=strategy:btc_up_down_5m_binance_bps_1_instant, target_orders=481, other_orders=0, safe=True
+[   248.6s]   wallet=strategy:btc_up_down_5m_binance_bps_2_instant, target_orders=444, other_orders=0, safe=True
+[   248.6s]   wallet=strategy:btc_up_down_5m_binance_bps_4_instant, target_orders=173, other_orders=0, safe=True
+[   248.6s]   wallet=strategy:btc_up_down_5m_binance_bps_3_instant, target_orders=125, other_orders=0, safe=True
+[   248.6s]   wallet=strategy:btc_up_down_5m_binance_bps_5_instant, target_orders=114, other_orders=0, safe=True
+[   248.6s]   wallet=strategy:btc_up_down_5m_binance_bps_6_instant, target_orders=75, other_orders=0, safe=True
+[   248.6s]   wallet=strategy:btc_up_down_5m_binance_bps_7_instant, target_orders=50, other_orders=0, safe=True
+[   248.6s]   wallet=strategy:btc_up_down_5m_binance_bps_8_instant, target_orders=27, other_orders=0, safe=True
+[   248.6s]   wallet=strategy:btc_up_down_5m_binance_bps_9_instant, target_orders=24, other_orders=0, safe=True
+[   248.6s]   wallet=strategy:btc_up_down_5m_binance_bps_10_instant, target_orders=19, other_orders=0, safe=True
+[   248.6s]   wallet=strategy:btc_up_down_5m_binance_bps_11_instant, target_orders=16, other_orders=0, safe=True
+[   248.6s]   wallet=strategy:btc_up_down_5m_binance_bps_12_instant, target_orders=11, other_orders=0, safe=True
+[   248.6s]   wallet=strategy:btc_up_down_5m_binance_bps_13_instant, target_orders=10, other_orders=0, safe=True
+[   248.6s]   wallet=strategy:btc_up_down_5m_binance_bps_14_instant, target_orders=8, other_orders=0, safe=True
+[   248.6s]   wallet=strategy:btc_up_down_5m_binance_bps_15_instant, target_orders=6, other_orders=0, safe=True
+[   248.6s]   wallet=strategy:btc_up_down_5m_binance_bps_16_instant, target_orders=5, other_orders=0, safe=True
+[   248.6s]   wallet=strategy:btc_up_down_5m_binance_bps_17_instant, target_orders=5, other_orders=0, safe=True
+[   248.6s]   wallet=strategy:btc_up_down_5m_binance_bps_18_instant, target_orders=5, other_orders=0, safe=True
+[   248.6s]   wallet=strategy:btc_up_down_5m_binance_bps_19_instant, target_orders=4, other_orders=0, safe=True
+[   248.6s]   wallet=strategy:btc_up_down_5m_binance_bps_20_instant, target_orders=3, other_orders=0, safe=True
+[   248.6s] Open/unsettled target live_orders guard count: 0
+[   248.6s] Disabled/de-live-updated target strategies: 0
+[   248.9s] paper_live_shadow_discrepancies: complete, deleted 0
+[   249.1s] paper_live_shadow_decisions: complete, deleted 0
+[   249.3s] strategy_market_paper_runs: batch 1 deleted 100, total 100
+[   249.6s] strategy_market_paper_runs: batch 2 deleted 100, total 200
+[   249.8s] strategy_market_paper_runs: batch 3 deleted 100, total 300
+[   250.2s] strategy_market_paper_runs: batch 4 deleted 100, total 400
+[   250.4s] strategy_market_paper_runs: batch 5 deleted 100, total 500
+[   250.6s] strategy_market_paper_runs: batch 6 deleted 100, total 600
+[   250.9s] strategy_market_paper_runs: batch 7 deleted 100, total 700
+[   251.1s] strategy_market_paper_runs: batch 8 deleted 100, total 800
+[   251.4s] strategy_market_paper_runs: batch 9 deleted 100, total 900
+[   251.6s] strategy_market_paper_runs: batch 10 deleted 100, total 1000
+[   251.8s] strategy_market_paper_runs: batch 11 deleted 100, total 1100
+[   252.0s] strategy_market_paper_runs: batch 12 deleted 100, total 1200
+[   252.3s] strategy_market_paper_runs: batch 13 deleted 100, total 1300
+[   252.5s] strategy_market_paper_runs: batch 14 deleted 100, total 1400
+[   252.7s] strategy_market_paper_runs: batch 15 deleted 100, total 1500
+[   253.0s] strategy_market_paper_runs: batch 16 deleted 100, total 1600
+[   253.2s] strategy_market_paper_runs: batch 17 deleted 100, total 1700
+[   253.4s] strategy_market_paper_runs: batch 18 deleted 100, total 1800
+[   253.7s] strategy_market_paper_runs: batch 19 deleted 100, total 1900
+[   253.9s] strategy_market_paper_runs: batch 20 deleted 100, total 2000
+[   254.1s] strategy_market_paper_runs: batch 21 deleted 100, total 2100
+[   254.4s] strategy_market_paper_runs: batch 22 deleted 100, total 2200
+[   254.6s] strategy_market_paper_runs: batch 23 deleted 100, total 2300
+[   254.9s] strategy_market_paper_runs: batch 24 deleted 100, total 2400
+[   255.1s] strategy_market_paper_runs: batch 25 deleted 100, total 2500
+[   255.4s] strategy_market_paper_runs: batch 26 deleted 100, total 2600
+[   255.6s] strategy_market_paper_runs: batch 27 deleted 100, total 2700
+[   255.9s] strategy_market_paper_runs: batch 28 deleted 100, total 2800
+[   256.1s] strategy_market_paper_runs: batch 29 deleted 100, total 2900
+[   256.4s] strategy_market_paper_runs: batch 30 deleted 100, total 3000
+[   256.6s] strategy_market_paper_runs: batch 31 deleted 100, total 3100
+[   256.8s] strategy_market_paper_runs: batch 32 deleted 100, total 3200
+[   257.0s] strategy_market_paper_runs: batch 33 deleted 100, total 3300
+[   257.2s] strategy_market_paper_runs: batch 34 deleted 100, total 3400
+[   257.4s] strategy_market_paper_runs: batch 35 deleted 100, total 3500
+[   257.6s] strategy_market_paper_runs: batch 36 deleted 100, total 3600
+[   258.0s] strategy_market_paper_runs: batch 37 deleted 100, total 3700
+[   258.2s] strategy_market_paper_runs: batch 38 deleted 100, total 3800
+[   258.5s] strategy_market_paper_runs: batch 39 deleted 100, total 3900
+[   258.7s] strategy_market_paper_runs: batch 40 deleted 100, total 4000
+[   259.0s] strategy_market_paper_runs: batch 41 deleted 100, total 4100
+[   259.2s] strategy_market_paper_runs: batch 42 deleted 100, total 4200
+[   259.5s] strategy_market_paper_runs: batch 43 deleted 100, total 4300
+[   259.7s] strategy_market_paper_runs: batch 44 deleted 100, total 4400
+[   260.0s] strategy_market_paper_runs: batch 45 deleted 100, total 4500
+[   260.2s] strategy_market_paper_runs: batch 46 deleted 100, total 4600
+[   260.5s] strategy_market_paper_runs: batch 47 deleted 100, total 4700
+[   260.8s] strategy_market_paper_runs: batch 48 deleted 100, total 4800
+[   261.1s] strategy_market_paper_runs: batch 49 deleted 100, total 4900
+[   261.3s] strategy_market_paper_runs: batch 50 deleted 100, total 5000
+[   261.6s] strategy_market_paper_runs: batch 51 deleted 100, total 5100
+[   261.9s] strategy_market_paper_runs: batch 52 deleted 100, total 5200
+[   262.2s] strategy_market_paper_runs: batch 53 deleted 100, total 5300
+[   262.4s] strategy_market_paper_runs: batch 54 deleted 100, total 5400
+[   262.7s] strategy_market_paper_runs: batch 55 deleted 100, total 5500
+[   263.0s] strategy_market_paper_runs: batch 56 deleted 100, total 5600
+[   263.2s] strategy_market_paper_runs: batch 57 deleted 100, total 5700
+[   263.5s] strategy_market_paper_runs: batch 58 deleted 100, total 5800
+[   263.8s] strategy_market_paper_runs: batch 59 deleted 100, total 5900
+[   264.1s] strategy_market_paper_runs: batch 60 deleted 100, total 6000
+[   264.3s] strategy_market_paper_runs: batch 61 deleted 100, total 6100
+[   264.6s] strategy_market_paper_runs: batch 62 deleted 100, total 6200
+[   264.9s] strategy_market_paper_runs: batch 63 deleted 100, total 6300
+[   265.2s] strategy_market_paper_runs: batch 64 deleted 100, total 6400
+[   265.6s] strategy_market_paper_runs: batch 65 deleted 100, total 6500
+[   266.0s] strategy_market_paper_runs: batch 66 deleted 100, total 6600
+[   266.2s] strategy_market_paper_runs: batch 67 deleted 100, total 6700
+[   266.8s] strategy_market_paper_runs: batch 68 deleted 100, total 6800
+[   267.1s] strategy_market_paper_runs: batch 69 deleted 100, total 6900
+[   267.4s] strategy_market_paper_runs: batch 70 deleted 100, total 7000
+[   267.8s] strategy_market_paper_runs: batch 71 deleted 100, total 7100
+[   268.1s] strategy_market_paper_runs: batch 72 deleted 100, total 7200
+[   268.4s] strategy_market_paper_runs: batch 73 deleted 100, total 7300
+[   268.7s] strategy_market_paper_runs: batch 74 deleted 100, total 7400
+[   269.0s] strategy_market_paper_runs: batch 75 deleted 100, total 7500
+[   269.6s] strategy_market_paper_runs: batch 76 deleted 100, total 7600
+[   270.2s] strategy_market_paper_runs: batch 77 deleted 100, total 7700
+[   270.4s] strategy_market_paper_runs: batch 78 deleted 100, total 7800
+[   271.2s] strategy_market_paper_runs: batch 79 deleted 100, total 7900
+[   271.9s] strategy_market_paper_runs: batch 80 deleted 100, total 8000
+[   272.6s] strategy_market_paper_runs: batch 81 deleted 100, total 8100
+[   273.5s] strategy_market_paper_runs: batch 82 deleted 100, total 8200
+[   274.5s] strategy_market_paper_runs: batch 83 deleted 100, total 8300
+[   275.4s] strategy_market_paper_runs: batch 84 deleted 100, total 8400
+[   276.3s] strategy_market_paper_runs: batch 85 deleted 100, total 8500
+[   277.2s] strategy_market_paper_runs: batch 86 deleted 100, total 8600
+[   278.1s] strategy_market_paper_runs: batch 87 deleted 100, total 8700
+[   279.0s] strategy_market_paper_runs: batch 88 deleted 100, total 8800
+[   279.8s] strategy_market_paper_runs: batch 89 deleted 100, total 8900
+[   280.5s] strategy_market_paper_runs: batch 90 deleted 100, total 9000
+[   281.3s] strategy_market_paper_runs: batch 91 deleted 100, total 9100
+[   282.2s] strategy_market_paper_runs: batch 92 deleted 100, total 9200
+[   282.9s] strategy_market_paper_runs: batch 93 deleted 100, total 9300
+[   283.7s] strategy_market_paper_runs: batch 94 deleted 100, total 9400
+[   284.5s] strategy_market_paper_runs: batch 95 deleted 100, total 9500
+[   285.4s] strategy_market_paper_runs: batch 96 deleted 100, total 9600
+[   286.3s] strategy_market_paper_runs: batch 97 deleted 100, total 9700
+[   287.2s] strategy_market_paper_runs: batch 98 deleted 100, total 9800
+[   288.4s] strategy_market_paper_runs: batch 99 deleted 100, total 9900
+[   289.7s] strategy_market_paper_runs: batch 100 deleted 100, total 10000
+[   290.9s] strategy_market_paper_runs: batch 101 deleted 100, total 10100
+[   292.2s] strategy_market_paper_runs: batch 102 deleted 100, total 10200
+[   293.3s] strategy_market_paper_runs: batch 103 deleted 100, total 10300
+[   294.5s] strategy_market_paper_runs: batch 104 deleted 100, total 10400
+[   295.4s] strategy_market_paper_runs: batch 105 deleted 100, total 10500
+[   296.7s] strategy_market_paper_runs: batch 106 deleted 100, total 10600
+[   297.8s] strategy_market_paper_runs: batch 107 deleted 100, total 10700
+[   298.9s] strategy_market_paper_runs: batch 108 deleted 100, total 10800
+[   299.9s] strategy_market_paper_runs: batch 109 deleted 100, total 10900
+[   301.1s] strategy_market_paper_runs: batch 110 deleted 100, total 11000
+[   302.5s] strategy_market_paper_runs: batch 111 deleted 100, total 11100
+[   303.7s] strategy_market_paper_runs: batch 112 deleted 100, total 11200
+[   305.0s] strategy_market_paper_runs: batch 113 deleted 100, total 11300
+[   306.3s] strategy_market_paper_runs: batch 114 deleted 100, total 11400
+[   308.2s] strategy_market_paper_runs: batch 115 deleted 100, total 11500
+[   309.0s] strategy_market_paper_runs: batch 116 deleted 100, total 11600
+[   310.0s] strategy_market_paper_runs: batch 117 deleted 100, total 11700
+[   310.8s] strategy_market_paper_runs: batch 118 deleted 100, total 11800
+[   311.2s] strategy_market_paper_runs: batch 119 deleted 100, total 11900
+[   311.5s] strategy_market_paper_runs: batch 120 deleted 100, total 12000
+[   311.8s] strategy_market_paper_runs: batch 121 deleted 100, total 12100
+[   312.1s] strategy_market_paper_runs: batch 122 deleted 100, total 12200
+[   312.4s] strategy_market_paper_runs: batch 123 deleted 100, total 12300
+[   312.8s] strategy_market_paper_runs: batch 124 deleted 100, total 12400
+[   313.1s] strategy_market_paper_runs: batch 125 deleted 100, total 12500
+[   313.4s] strategy_market_paper_runs: batch 126 deleted 100, total 12600
+[   313.7s] strategy_market_paper_runs: batch 127 deleted 100, total 12700
+[   314.1s] strategy_market_paper_runs: batch 128 deleted 100, total 12800
+[   314.4s] strategy_market_paper_runs: batch 129 deleted 100, total 12900
+[   314.8s] strategy_market_paper_runs: batch 130 deleted 100, total 13000
+[   315.1s] strategy_market_paper_runs: batch 131 deleted 100, total 13100
+[   315.5s] strategy_market_paper_runs: batch 132 deleted 100, total 13200
+[   315.9s] strategy_market_paper_runs: batch 133 deleted 100, total 13300
+[   316.3s] strategy_market_paper_runs: batch 134 deleted 100, total 13400
+[   316.9s] strategy_market_paper_runs: batch 135 deleted 100, total 13500
+[   317.5s] strategy_market_paper_runs: batch 136 deleted 100, total 13600
+[   318.3s] strategy_market_paper_runs: batch 137 deleted 100, total 13700
+[   318.9s] strategy_market_paper_runs: batch 138 deleted 100, total 13800
+[   319.9s] strategy_market_paper_runs: batch 139 deleted 100, total 13900
+[   321.0s] strategy_market_paper_runs: batch 140 deleted 100, total 14000
+[   322.0s] strategy_market_paper_runs: batch 141 deleted 100, total 14100
+[   322.8s] strategy_market_paper_runs: batch 142 deleted 100, total 14200
+[   323.7s] strategy_market_paper_runs: batch 143 deleted 100, total 14300
+[   324.4s] strategy_market_paper_runs: batch 144 deleted 100, total 14400
+[   325.2s] strategy_market_paper_runs: batch 145 deleted 100, total 14500
+[   326.2s] strategy_market_paper_runs: batch 146 deleted 100, total 14600
+[   327.3s] strategy_market_paper_runs: batch 147 deleted 100, total 14700
+[   328.3s] strategy_market_paper_runs: batch 148 deleted 100, total 14800
+[   329.5s] strategy_market_paper_runs: batch 149 deleted 100, total 14900
+[   330.8s] strategy_market_paper_runs: batch 150 deleted 100, total 15000
+[   332.0s] strategy_market_paper_runs: batch 151 deleted 100, total 15100
+[   333.0s] strategy_market_paper_runs: batch 152 deleted 100, total 15200
+[   333.9s] strategy_market_paper_runs: batch 153 deleted 100, total 15300
+[   334.9s] strategy_market_paper_runs: batch 154 deleted 100, total 15400
+[   335.9s] strategy_market_paper_runs: batch 155 deleted 100, total 15500
+[   336.8s] strategy_market_paper_runs: batch 156 deleted 100, total 15600
+[   337.8s] strategy_market_paper_runs: batch 157 deleted 100, total 15700
+[   338.9s] strategy_market_paper_runs: batch 158 deleted 100, total 15800
+[   340.0s] strategy_market_paper_runs: batch 159 deleted 100, total 15900
+[   341.5s] strategy_market_paper_runs: batch 160 deleted 100, total 16000
+[   342.7s] strategy_market_paper_runs: batch 161 deleted 100, total 16100
+[   343.8s] strategy_market_paper_runs: batch 162 deleted 100, total 16200
+[   345.0s] strategy_market_paper_runs: batch 163 deleted 100, total 16300
+[   346.2s] strategy_market_paper_runs: batch 164 deleted 100, total 16400
+[   347.3s] strategy_market_paper_runs: batch 165 deleted 100, total 16500
+[   348.4s] strategy_market_paper_runs: batch 166 deleted 100, total 16600
+[   349.7s] strategy_market_paper_runs: batch 167 deleted 100, total 16700
+[   350.7s] strategy_market_paper_runs: batch 168 deleted 100, total 16800
+[   351.9s] strategy_market_paper_runs: batch 169 deleted 100, total 16900
+[   353.1s] strategy_market_paper_runs: batch 170 deleted 100, total 17000
+[   354.5s] strategy_market_paper_runs: batch 171 deleted 100, total 17100
+[   355.8s] strategy_market_paper_runs: batch 172 deleted 100, total 17200
+[   357.1s] strategy_market_paper_runs: batch 173 deleted 100, total 17300
+[   358.5s] strategy_market_paper_runs: batch 174 deleted 100, total 17400
+[   359.9s] strategy_market_paper_runs: batch 175 deleted 100, total 17500
+[   361.2s] strategy_market_paper_runs: batch 176 deleted 100, total 17600
+[   362.4s] strategy_market_paper_runs: batch 177 deleted 100, total 17700
+[   363.6s] strategy_market_paper_runs: batch 178 deleted 100, total 17800
+[   364.8s] strategy_market_paper_runs: batch 179 deleted 100, total 17900
+[   366.1s] strategy_market_paper_runs: batch 180 deleted 100, total 18000
+[   367.6s] strategy_market_paper_runs: batch 181 deleted 100, total 18100
+[   369.0s] strategy_market_paper_runs: batch 182 deleted 100, total 18200
+[   370.3s] strategy_market_paper_runs: batch 183 deleted 100, total 18300
+[   371.6s] strategy_market_paper_runs: batch 184 deleted 100, total 18400
+[   373.0s] strategy_market_paper_runs: batch 185 deleted 100, total 18500
+[   374.4s] strategy_market_paper_runs: batch 186 deleted 100, total 18600
+[   376.1s] strategy_market_paper_runs: batch 187 deleted 100, total 18700
+[   377.5s] strategy_market_paper_runs: batch 188 deleted 100, total 18800
+[   378.8s] strategy_market_paper_runs: batch 189 deleted 100, total 18900
+[   380.2s] strategy_market_paper_runs: batch 190 deleted 100, total 19000
+[   381.6s] strategy_market_paper_runs: batch 191 deleted 100, total 19100
+[   383.1s] strategy_market_paper_runs: batch 192 deleted 100, total 19200
+[   384.7s] strategy_market_paper_runs: batch 193 deleted 100, total 19300
+[   386.2s] strategy_market_paper_runs: batch 194 deleted 100, total 19400
+[   387.6s] strategy_market_paper_runs: batch 195 deleted 100, total 19500
+[   388.9s] strategy_market_paper_runs: batch 196 deleted 100, total 19600
+[   390.1s] strategy_market_paper_runs: batch 197 deleted 100, total 19700
+[   391.3s] strategy_market_paper_runs: batch 198 deleted 100, total 19800
+[   393.0s] strategy_market_paper_runs: batch 199 deleted 100, total 19900
+[   394.7s] strategy_market_paper_runs: batch 200 deleted 100, total 20000
+[   396.4s] strategy_market_paper_runs: batch 201 deleted 100, total 20100
+[   398.3s] strategy_market_paper_runs: batch 202 deleted 100, total 20200
+[   400.0s] strategy_market_paper_runs: batch 203 deleted 100, total 20300
+[   401.4s] strategy_market_paper_runs: batch 204 deleted 100, total 20400
+[   403.0s] strategy_market_paper_runs: batch 205 deleted 100, total 20500
+[   404.4s] strategy_market_paper_runs: batch 206 deleted 100, total 20600
+[   406.9s] strategy_market_paper_runs: batch 207 deleted 100, total 20700
+[   409.7s] strategy_market_paper_runs: batch 208 deleted 100, total 20800
+[   412.8s] strategy_market_paper_runs: batch 209 deleted 100, total 20900
+[   416.8s] strategy_market_paper_runs: batch 210 deleted 100, total 21000
+[   419.7s] strategy_market_paper_runs: batch 211 deleted 100, total 21100
+[   421.6s] strategy_market_paper_runs: batch 212 deleted 100, total 21200
+[   423.3s] strategy_market_paper_runs: batch 213 deleted 100, total 21300
+[   425.1s] strategy_market_paper_runs: batch 214 deleted 100, total 21400
+[   427.5s] strategy_market_paper_runs: batch 215 deleted 100, total 21500
+[   429.2s] strategy_market_paper_runs: batch 216 deleted 100, total 21600
+[   432.3s] strategy_market_paper_runs: batch 217 deleted 100, total 21700
+[   435.8s] strategy_market_paper_runs: batch 218 deleted 100, total 21800
+[   437.9s] strategy_market_paper_runs: batch 219 deleted 100, total 21900
+[   439.5s] strategy_market_paper_runs: batch 220 deleted 100, total 22000
+[   441.0s] strategy_market_paper_runs: batch 221 deleted 100, total 22100
+[   442.3s] strategy_market_paper_runs: batch 222 deleted 100, total 22200
+[   443.8s] strategy_market_paper_runs: batch 223 deleted 100, total 22300
+[   445.1s] strategy_market_paper_runs: batch 224 deleted 100, total 22400
+[   446.6s] strategy_market_paper_runs: batch 225 deleted 100, total 22500
+[   448.3s] strategy_market_paper_runs: batch 226 deleted 100, total 22600
+[   449.1s] strategy_market_paper_runs: batch 227 deleted 100, total 22700
+[   450.0s] strategy_market_paper_runs: batch 228 deleted 100, total 22800
+[   450.7s] strategy_market_paper_runs: batch 229 deleted 100, total 22900
+[   451.5s] strategy_market_paper_runs: batch 230 deleted 100, total 23000
+[   452.6s] strategy_market_paper_runs: batch 231 deleted 100, total 23100
+[   453.7s] strategy_market_paper_runs: batch 232 deleted 100, total 23200
+[   454.9s] strategy_market_paper_runs: batch 233 deleted 100, total 23300
+[   456.1s] strategy_market_paper_runs: batch 234 deleted 100, total 23400
+[   457.8s] strategy_market_paper_runs: batch 235 deleted 100, total 23500
+[   459.4s] strategy_market_paper_runs: batch 236 deleted 100, total 23600
+[   461.1s] strategy_market_paper_runs: batch 237 deleted 100, total 23700
+[   462.9s] strategy_market_paper_runs: batch 238 deleted 100, total 23800
+[   464.7s] strategy_market_paper_runs: batch 239 deleted 100, total 23900
+[   466.3s] strategy_market_paper_runs: batch 240 deleted 100, total 24000
+[   468.4s] strategy_market_paper_runs: batch 241 deleted 100, total 24100
+[   470.3s] strategy_market_paper_runs: batch 242 deleted 100, total 24200
+[   471.8s] strategy_market_paper_runs: batch 243 deleted 100, total 24300
+[   473.3s] strategy_market_paper_runs: batch 244 deleted 100, total 24400
+[   474.8s] strategy_market_paper_runs: batch 245 deleted 100, total 24500
+[   476.3s] strategy_market_paper_runs: batch 246 deleted 100, total 24600
+[   477.8s] strategy_market_paper_runs: batch 247 deleted 100, total 24700
+[   478.9s] strategy_market_paper_runs: batch 248 deleted 100, total 24800
+[   480.0s] strategy_market_paper_runs: batch 249 deleted 100, total 24900
+[   481.1s] strategy_market_paper_runs: batch 250 deleted 100, total 25000
+[   482.3s] strategy_market_paper_runs: batch 251 deleted 100, total 25100
+[   484.1s] strategy_market_paper_runs: batch 252 deleted 100, total 25200
+[   487.7s] strategy_market_paper_runs: batch 253 deleted 100, total 25300
+[   491.2s] strategy_market_paper_runs: batch 254 deleted 100, total 25400
+[   494.9s] strategy_market_paper_runs: batch 255 deleted 100, total 25500
+[   497.8s] strategy_market_paper_runs: batch 256 deleted 100, total 25600
+[   500.5s] strategy_market_paper_runs: batch 257 deleted 100, total 25700
+[   502.8s] strategy_market_paper_runs: batch 258 deleted 100, total 25800
+[   504.5s] strategy_market_paper_runs: batch 259 deleted 100, total 25900
+[   506.1s] strategy_market_paper_runs: batch 260 deleted 100, total 26000
+[   507.6s] strategy_market_paper_runs: batch 261 deleted 100, total 26100
+[   509.0s] strategy_market_paper_runs: batch 262 deleted 100, total 26200
+[   510.4s] strategy_market_paper_runs: batch 263 deleted 100, total 26300
+[   512.2s] strategy_market_paper_runs: batch 264 deleted 100, total 26400
+[   514.2s] strategy_market_paper_runs: batch 265 deleted 100, total 26500
+[   517.5s] strategy_market_paper_runs: batch 266 deleted 100, total 26600
+[   521.1s] strategy_market_paper_runs: batch 267 deleted 100, total 26700
+[   524.1s] strategy_market_paper_runs: batch 268 deleted 100, total 26800
+[   526.9s] strategy_market_paper_runs: batch 269 deleted 100, total 26900

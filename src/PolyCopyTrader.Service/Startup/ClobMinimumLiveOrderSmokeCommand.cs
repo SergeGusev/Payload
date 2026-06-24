@@ -3,6 +3,7 @@ using PolyCopyTrader.Domain;
 using PolyCopyTrader.Domain.Configuration;
 using PolyCopyTrader.Polymarket;
 using PolyCopyTrader.Polymarket.Auth;
+using PolyCopyTrader.Service.LiveTrading;
 using PolyCopyTrader.Service.Strategies;
 
 namespace PolyCopyTrader.Service.Startup;
@@ -12,6 +13,7 @@ public static class ClobMinimumLiveOrderSmokeCommand
     private const string SubmitFlag = "--submit";
     private const int PageLimit = 100;
     private const int MaxPages = 5;
+    private const int Tempt = 5;
 
     public static async Task<int> ExecuteAsync(
         AppConfiguration configuration,
@@ -268,7 +270,10 @@ public static class ClobMinimumLiveOrderSmokeCommand
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
-            validation.Add("Geoblock check failed: " + ex.Message);
+            if (configuration.LiveTrading.BlockOnGeoblockCheckFailure)
+            {
+                validation.Add(LiveGeoblockPreflight.FailurePrefix + ex.Message);
+            }
         }
 
         try

@@ -1,0 +1,54 @@
+Order-book lag stop check captured at 2026-06-15T19:30:09.4068599+00:00
+Delay seconds between snapshots: 30
+
+
+## snapshot_1
+database	polycopytrader
+server_address	192.168.0.101/32
+server_time_utc	2026-06-15T19:30:07Z
+
+# service_heartbeat
+service_name	status	mode	version	started_utc	heartbeat_utc	heartbeat_age_seconds	current_loop	last_error
+PolyCopyTrader.Service	Running	Live	info=1.0.0+3b63e1384625a3ebbff5a779b115f317a3d7ff72; assembly=1.0.0.0; mvid=cad789ce19dd	2026-06-15T19:11:47Z	2026-06-15T19:29:49Z	19	BTC5mOnly WatchlistScanner=CommentedOut; FollowLeaderSignals=CommentedOut	<none>
+PolyCopyTrader.Tests	Running	ReadOnly	1.0.0	2026-05-04T14:02:41Z	2026-05-04T14:02:41Z	3648446	IntegrationTest	<none>
+
+# lag_table_summary
+total_rows	rows_last_1m	rows_last_5m	rows_last_15m	rows_last_60m	rows_since_service_start	service_started_utc	earliest_received_utc	latest_received_utc	latest_age_seconds
+0	0	0	0	0	0	2026-06-15T19:11:47Z			
+
+# lag_sources_last_24h
+source	raw_event_type	rows_last_1m	rows_last_5m	rows_last_15m	rows_last_60m	rows_last_24h	latest_received_utc
+
+# latest_lag_rows
+received_utc	source	raw_event_type	asset_id	condition_id	binance_symbol
+
+## snapshot_2
+database	polycopytrader
+server_address	192.168.0.101/32
+server_time_utc	2026-06-15T19:30:39Z
+
+# service_heartbeat
+service_name	status	mode	version	started_utc	heartbeat_utc	heartbeat_age_seconds	current_loop	last_error
+PolyCopyTrader.Service	Running	Live	info=1.0.0+3b63e1384625a3ebbff5a779b115f317a3d7ff72; assembly=1.0.0.0; mvid=cad789ce19dd	2026-06-15T19:11:47Z	2026-06-15T19:29:49Z	51	BTC5mOnly WatchlistScanner=CommentedOut; FollowLeaderSignals=CommentedOut	<none>
+PolyCopyTrader.Tests	Running	ReadOnly	1.0.0	2026-05-04T14:02:41Z	2026-05-04T14:02:41Z	3648478	IntegrationTest	<none>
+
+# lag_table_summary
+total_rows	rows_last_1m	rows_last_5m	rows_last_15m	rows_last_60m	rows_since_service_start	service_started_utc	earliest_received_utc	latest_received_utc	latest_age_seconds
+0	0	0	0	0	0	2026-06-15T19:11:47Z			
+
+# lag_sources_last_24h
+source	raw_event_type	rows_last_1m	rows_last_5m	rows_last_15m	rows_last_60m	rows_last_24h	latest_received_utc
+
+# latest_lag_rows
+received_utc	source	raw_event_type	asset_id	condition_id	binance_symbol
+
+## Comparison
+total_delta	0
+rows_since_service_start_delta	0
+latest_received_changed	False
+snapshot_1_latest_received_utc	
+snapshot_2_latest_received_utc	
+snapshot_2_service_started_utc	2026-06-15T19:11:47.9546530Z
+snapshot_2_rows_since_service_start	0
+
+verdict	STOPPED

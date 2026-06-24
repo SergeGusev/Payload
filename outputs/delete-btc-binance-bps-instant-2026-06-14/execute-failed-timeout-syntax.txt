@@ -1,0 +1,130 @@
+[     0.0s] BTC Binance bps Instant strategy cleanup started at 2026-06-14T11:42:52.7497303+00:00
+[     0.0s] Target strategy code regex: ^btc_up_down_5m_binance_bps_[0-9]+_instant$
+[     0.0s] Dry run: False
+[     0.0s] Execute: True
+[     0.0s] Verify only: False
+[     0.0s] Batch size: 100
+[     0.0s] Batch pause ms: 150
+[     0.0s] Batch lock timeout ms: 300
+[     0.0s] Batch statement timeout ms: 8000
+[     0.3s] Database: polycopytrader
+[     0.3s] Server address: 192.168.0.101/32
+[     0.3s] Server time UTC: 6/14/2026 11:42:53 AM
+[     0.4s] Last heartbeat UTC: 2026-06-14T11:42:50Z
+[     0.4s] Preparing target strategy ids...
+[     0.4s] Preparing target paper order ids...
+[     7.2s] Preparing target run ids...
+[    89.4s] Preparing target signal ids...
+[   146.8s] Preparing target live order ids...
+[   146.8s] Preparing target correlation ids...
+[   146.9s] Preparing safe synthetic wallet ids...
+[   147.5s] Foreign keys touching cleanup parents:
+[   147.5s]   paper_live_shadow_decisions -> live_orders (paper_live_shadow_decisions_live_order_id_fkey)
+[   147.5s]   live_orders -> paper_orders (live_orders_paper_order_id_fkey)
+[   147.5s]   paper_fills -> paper_orders (paper_fills_paper_order_id_fkey)
+[   147.5s]   paper_live_shadow_decisions -> paper_orders (paper_live_shadow_decisions_paper_order_id_fkey)
+[   147.5s]   strategy_market_paper_runs -> paper_orders (strategy_market_paper_runs_paper_order_id_fkey)
+[   147.5s]   paper_live_shadow_decisions -> signals (paper_live_shadow_decisions_signal_id_fkey)
+[   147.5s]   signal_rejections -> signals (signal_rejections_signal_id_fkey)
+[   147.5s]   strategy_market_paper_runs -> signals (strategy_market_paper_runs_signal_id_fkey)
+[   147.5s]   dry_run_orders -> strategies (dry_run_orders_strategy_id_fkey)
+[   147.5s]   live_orders -> strategies (live_orders_strategy_id_fkey)
+[   147.5s]   paper_live_shadow_decisions -> strategies (paper_live_shadow_decisions_strategy_id_fkey)
+[   147.5s]   paper_live_shadow_discrepancies -> strategies (paper_live_shadow_discrepancies_strategy_id_fkey)
+[   147.5s]   paper_orders -> strategies (paper_orders_strategy_id_fkey)
+[   147.5s]   strategy_market_paper_runs -> strategies (strategy_market_paper_runs_strategy_id_fkey)
+[   147.5s] Target strategy rows:
+[   147.5s]   btc_up_down_5m_binance_bps_1_instant | enabled=False | live_stakes=False | BTC Up or Down 5m Binance 1 bps Instant
+[   147.5s]   btc_up_down_5m_binance_bps_2_instant | enabled=False | live_stakes=False | BTC Up or Down 5m Binance 2 bps Instant
+[   147.5s]   btc_up_down_5m_binance_bps_3_instant | enabled=False | live_stakes=False | BTC Up or Down 5m Binance 3 bps Instant
+[   147.5s]   btc_up_down_5m_binance_bps_4_instant | enabled=False | live_stakes=False | BTC Up or Down 5m Binance 4 bps Instant
+[   147.5s]   btc_up_down_5m_binance_bps_5_instant | enabled=False | live_stakes=False | BTC Up or Down 5m Binance 5 bps Instant
+[   147.5s]   btc_up_down_5m_binance_bps_6_instant | enabled=False | live_stakes=False | BTC Up or Down 5m Binance 6 bps Instant
+[   147.5s]   btc_up_down_5m_binance_bps_7_instant | enabled=False | live_stakes=False | BTC Up or Down 5m Binance 7 bps Instant
+[   147.5s]   btc_up_down_5m_binance_bps_8_instant | enabled=False | live_stakes=False | BTC Up or Down 5m Binance 8 bps Instant
+[   147.5s]   btc_up_down_5m_binance_bps_9_instant | enabled=False | live_stakes=False | BTC Up or Down 5m Binance 9 bps Instant
+[   147.5s]   btc_up_down_5m_binance_bps_10_instant | enabled=False | live_stakes=False | BTC Up or Down 5m Binance 10 bps Instant
+[   147.5s]   btc_up_down_5m_binance_bps_11_instant | enabled=False | live_stakes=False | BTC Up or Down 5m Binance 11 bps Instant
+[   147.5s]   btc_up_down_5m_binance_bps_12_instant | enabled=False | live_stakes=False | BTC Up or Down 5m Binance 12 bps Instant
+[   147.5s]   btc_up_down_5m_binance_bps_13_instant | enabled=False | live_stakes=False | BTC Up or Down 5m Binance 13 bps Instant
+[   147.5s]   btc_up_down_5m_binance_bps_14_instant | enabled=False | live_stakes=False | BTC Up or Down 5m Binance 14 bps Instant
+[   147.5s]   btc_up_down_5m_binance_bps_15_instant | enabled=False | live_stakes=False | BTC Up or Down 5m Binance 15 bps Instant
+[   147.5s]   btc_up_down_5m_binance_bps_16_instant | enabled=False | live_stakes=False | BTC Up or Down 5m Binance 16 bps Instant
+[   147.5s]   btc_up_down_5m_binance_bps_17_instant | enabled=False | live_stakes=False | BTC Up or Down 5m Binance 17 bps Instant
+[   147.5s]   btc_up_down_5m_binance_bps_18_instant | enabled=False | live_stakes=False | BTC Up or Down 5m Binance 18 bps Instant
+[   147.5s]   btc_up_down_5m_binance_bps_19_instant | enabled=False | live_stakes=False | BTC Up or Down 5m Binance 19 bps Instant
+[   147.5s]   btc_up_down_5m_binance_bps_20_instant | enabled=False | live_stakes=False | BTC Up or Down 5m Binance 20 bps Instant
+[   147.5s]   btc_up_down_5m_binance_bps_21_instant | enabled=False | live_stakes=False | BTC Up or Down 5m Binance 21 bps Instant
+[   147.5s]   btc_up_down_5m_binance_bps_22_instant | enabled=False | live_stakes=False | BTC Up or Down 5m Binance 22 bps Instant
+[   147.5s]   btc_up_down_5m_binance_bps_23_instant | enabled=False | live_stakes=False | BTC Up or Down 5m Binance 23 bps Instant
+[   147.5s]   btc_up_down_5m_binance_bps_24_instant | enabled=False | live_stakes=False | BTC Up or Down 5m Binance 24 bps Instant
+[   147.5s]   btc_up_down_5m_binance_bps_25_instant | enabled=False | live_stakes=False | BTC Up or Down 5m Binance 25 bps Instant
+[   147.5s]   btc_up_down_5m_binance_bps_26_instant | enabled=False | live_stakes=False | BTC Up or Down 5m Binance 26 bps Instant
+[   147.5s]   btc_up_down_5m_binance_bps_27_instant | enabled=False | live_stakes=False | BTC Up or Down 5m Binance 27 bps Instant
+[   147.5s]   btc_up_down_5m_binance_bps_28_instant | enabled=False | live_stakes=False | BTC Up or Down 5m Binance 28 bps Instant
+[   147.5s]   btc_up_down_5m_binance_bps_29_instant | enabled=False | live_stakes=False | BTC Up or Down 5m Binance 29 bps Instant
+[   147.5s]   btc_up_down_5m_binance_bps_30_instant | enabled=False | live_stakes=False | BTC Up or Down 5m Binance 30 bps Instant
+[   147.5s]   btc_up_down_5m_binance_bps_31_instant | enabled=False | live_stakes=False | BTC Up or Down 5m Binance 31 bps Instant
+[   147.5s]   btc_up_down_5m_binance_bps_32_instant | enabled=False | live_stakes=False | BTC Up or Down 5m Binance 32 bps Instant
+[   147.5s]   btc_up_down_5m_binance_bps_33_instant | enabled=False | live_stakes=False | BTC Up or Down 5m Binance 33 bps Instant
+[   147.5s]   btc_up_down_5m_binance_bps_34_instant | enabled=False | live_stakes=False | BTC Up or Down 5m Binance 34 bps Instant
+[   147.5s]   btc_up_down_5m_binance_bps_35_instant | enabled=False | live_stakes=False | BTC Up or Down 5m Binance 35 bps Instant
+[   147.5s]   btc_up_down_5m_binance_bps_36_instant | enabled=False | live_stakes=False | BTC Up or Down 5m Binance 36 bps Instant
+[   147.5s]   btc_up_down_5m_binance_bps_37_instant | enabled=False | live_stakes=False | BTC Up or Down 5m Binance 37 bps Instant
+[   147.5s]   btc_up_down_5m_binance_bps_38_instant | enabled=False | live_stakes=False | BTC Up or Down 5m Binance 38 bps Instant
+[   147.5s]   btc_up_down_5m_binance_bps_39_instant | enabled=False | live_stakes=False | BTC Up or Down 5m Binance 39 bps Instant
+[   147.5s]   btc_up_down_5m_binance_bps_40_instant | enabled=False | live_stakes=False | BTC Up or Down 5m Binance 40 bps Instant
+[   147.5s]   btc_up_down_5m_binance_bps_41_instant | enabled=False | live_stakes=False | BTC Up or Down 5m Binance 41 bps Instant
+[   147.5s]   btc_up_down_5m_binance_bps_42_instant | enabled=False | live_stakes=False | BTC Up or Down 5m Binance 42 bps Instant
+[   147.5s]   btc_up_down_5m_binance_bps_43_instant | enabled=False | live_stakes=False | BTC Up or Down 5m Binance 43 bps Instant
+[   147.5s]   btc_up_down_5m_binance_bps_44_instant | enabled=False | live_stakes=False | BTC Up or Down 5m Binance 44 bps Instant
+[   147.5s]   btc_up_down_5m_binance_bps_45_instant | enabled=False | live_stakes=False | BTC Up or Down 5m Binance 45 bps Instant
+[   147.5s]   btc_up_down_5m_binance_bps_46_instant | enabled=False | live_stakes=False | BTC Up or Down 5m Binance 46 bps Instant
+[   147.5s]   btc_up_down_5m_binance_bps_47_instant | enabled=False | live_stakes=False | BTC Up or Down 5m Binance 47 bps Instant
+[   147.5s]   btc_up_down_5m_binance_bps_48_instant | enabled=False | live_stakes=False | BTC Up or Down 5m Binance 48 bps Instant
+[   147.5s]   btc_up_down_5m_binance_bps_49_instant | enabled=False | live_stakes=False | BTC Up or Down 5m Binance 49 bps Instant
+[   147.5s]   btc_up_down_5m_binance_bps_50_instant | enabled=False | live_stakes=False | BTC Up or Down 5m Binance 50 bps Instant
+[   147.5s] Target summary (before):
+[   147.5s]   target strategies in temp: 50
+[   147.5s]   remaining strategies by exact code regex: 50
+[   147.5s]   target wallet candidates: 50
+[   147.6s]   safe wallets: 50
+[   147.6s]   target paper_orders in temp: 1662
+[   148.1s]   remaining target paper_orders: 1662
+[   148.5s]   remaining target paper_fills: 1662
+[   148.6s]   target run ids in temp: 222082
+[   201.5s]   remaining target runs: 222082
+[   201.5s]   target signal ids in temp: 1662
+[   202.2s]   remaining target signals: 1662
+[   202.2s]   remaining target signal_rejections: 0
+[   202.2s]   remaining target dry_run_orders: 0
+[   202.2s]   target live_orders in temp: 0
+[   202.2s]   remaining target live_orders: 0
+[   202.3s]   remaining target shadow decisions: 0
+[   202.4s]   remaining target shadow discrepancies: 0
+[   205.3s]   remaining safe-wallet paper_positions: 1662
+[   205.3s]   remaining safe-wallet settlements: 1662
+[   205.4s]   remaining safe-wallet performance rows: 0
+[   205.4s] Wallet candidate safety sample:
+[   206.6s]   wallet=strategy:btc_up_down_5m_binance_bps_1_instant, target_orders=481, other_orders=0, safe=True
+[   206.6s]   wallet=strategy:btc_up_down_5m_binance_bps_2_instant, target_orders=444, other_orders=0, safe=True
+[   206.6s]   wallet=strategy:btc_up_down_5m_binance_bps_4_instant, target_orders=173, other_orders=0, safe=True
+[   206.6s]   wallet=strategy:btc_up_down_5m_binance_bps_3_instant, target_orders=125, other_orders=0, safe=True
+[   206.6s]   wallet=strategy:btc_up_down_5m_binance_bps_5_instant, target_orders=114, other_orders=0, safe=True
+[   206.6s]   wallet=strategy:btc_up_down_5m_binance_bps_6_instant, target_orders=75, other_orders=0, safe=True
+[   206.6s]   wallet=strategy:btc_up_down_5m_binance_bps_7_instant, target_orders=50, other_orders=0, safe=True
+[   206.6s]   wallet=strategy:btc_up_down_5m_binance_bps_8_instant, target_orders=27, other_orders=0, safe=True
+[   206.6s]   wallet=strategy:btc_up_down_5m_binance_bps_9_instant, target_orders=24, other_orders=0, safe=True
+[   206.6s]   wallet=strategy:btc_up_down_5m_binance_bps_10_instant, target_orders=19, other_orders=0, safe=True
+[   206.6s]   wallet=strategy:btc_up_down_5m_binance_bps_11_instant, target_orders=16, other_orders=0, safe=True
+[   206.6s]   wallet=strategy:btc_up_down_5m_binance_bps_12_instant, target_orders=11, other_orders=0, safe=True
+[   206.6s]   wallet=strategy:btc_up_down_5m_binance_bps_13_instant, target_orders=10, other_orders=0, safe=True
+[   206.6s]   wallet=strategy:btc_up_down_5m_binance_bps_14_instant, target_orders=8, other_orders=0, safe=True
+[   206.6s]   wallet=strategy:btc_up_down_5m_binance_bps_15_instant, target_orders=6, other_orders=0, safe=True
+[   206.6s]   wallet=strategy:btc_up_down_5m_binance_bps_16_instant, target_orders=5, other_orders=0, safe=True
+[   206.6s]   wallet=strategy:btc_up_down_5m_binance_bps_17_instant, target_orders=5, other_orders=0, safe=True
+[   206.6s]   wallet=strategy:btc_up_down_5m_binance_bps_18_instant, target_orders=5, other_orders=0, safe=True
+[   206.6s]   wallet=strategy:btc_up_down_5m_binance_bps_19_instant, target_orders=4, other_orders=0, safe=True
+[   206.6s]   wallet=strategy:btc_up_down_5m_binance_bps_20_instant, target_orders=3, other_orders=0, safe=True
+[   206.6s] Open/unsettled target live_orders guard count: 0
+[   206.6s] Disabled/de-live-updated target strategies: 0

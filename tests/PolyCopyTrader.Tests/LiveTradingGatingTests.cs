@@ -8,6 +8,7 @@ using PolyCopyTrader.Service.LiveTrading;
 using PolyCopyTrader.Service.PaperTrading;
 using PolyCopyTrader.Service.Scanning;
 using PolyCopyTrader.Service.Signals;
+using PolyCopyTrader.Service.Startup;
 using PolyCopyTrader.Service.Strategies;
 using PolyCopyTrader.Strategy;
 
@@ -62,6 +63,76 @@ public sealed class LiveTradingGatingTests
         var order = Assert.Single(repository.LiveOrders);
         Assert.Equal(LiveOrderStatus.PreflightRejected, order.Status);
         Assert.Contains("Geoblock", order.ValidationSummary, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public async Task GeoblockCheckFailureCanBeConfiguredAsWarning()
+    {
+        var repository = new TestAppRepository();
+        var queue = new InMemoryLeaderTradeCandidateQueue();
+        await queue.EnqueueAsync(Trade());
+        var tradingClient = new CapturingTradingClient();
+        var processor = CreateProcessor(
+            queue,
+            repository,
+            tradingClient,
+            LiveEnabledBot(),
+            new ThrowingGeoClient(),
+            blockOnGeoblockCheckFailure: false);
+
+        await processor.ProcessQueuedAsync();
+
+        Assert.Equal(0, tradingClient.PlaceCalls);
+        var order = Assert.Single(repository.LiveOrders);
+        Assert.Equal(LiveOrderStatus.PreflightRejected, order.Status);
+        Assert.DoesNotContain("Geoblock check failed", order.ValidationSummary, StringComparison.OrdinalIgnoreCase);
+        var warning = Assert.Single(repository.LiveTradingEvents, item => item.Action == "GeoblockCheck");
+        Assert.Equal("Warning", warning.Status);
+        Assert.Contains("geoblock endpoint unavailable", warning.Details, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("BlockOnGeoblockCheckFailure is false", warning.Details, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task StartupGeoblockCheckFailureCanBeConfiguredAsWarning()
+    {
+        var repository = new TestAppRepository();
+        var controlState = new ServiceControlState();
+        var service = new StartupSafetyCheckService(
+            NullLogger<StartupSafetyCheckService>.Instance,
+            new ThrowingGeoClient(),
+            new LiveTradingOptions { BlockOnGeoblockCheckFailure = false },
+            controlState,
+            repository);
+
+        await service.StartAsync(CancellationToken.None);
+        await WaitForLiveTradingEventAsync(repository, "StartupGeoblockCheck");
+
+        Assert.False(controlState.LiveTradingPaused);
+        var liveEvent = Assert.Single(repository.LiveTradingEvents, item => item.Action == "StartupGeoblockCheck");
+        Assert.Equal("Warning", liveEvent.Status);
+        Assert.Contains("geoblock endpoint unavailable", liveEvent.Details, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("BlockOnGeoblockCheckFailure is false", liveEvent.Details, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task StartupGeoblockCheckFailurePausesLiveByDefault()
+    {
+        var repository = new TestAppRepository();
+        var controlState = new ServiceControlState();
+        var service = new StartupSafetyCheckService(
+            NullLogger<StartupSafetyCheckService>.Instance,
+            new ThrowingGeoClient(),
+            new LiveTradingOptions(),
+            controlState,
+            repository);
+
+        await service.StartAsync(CancellationToken.None);
+        await WaitForLiveTradingEventAsync(repository, "StartupGeoblockCheck");
+
+        Assert.True(controlState.LiveTradingPaused);
+        var liveEvent = Assert.Single(repository.LiveTradingEvents, item => item.Action == "StartupGeoblockCheck");
+        Assert.Equal("Error", liveEvent.Status);
+        Assert.Contains("geoblock endpoint unavailable", liveEvent.Details, StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]
@@ -405,7 +476,7 @@ public sealed class LiveTradingGatingTests
             0.40m,
             5m,
             2m,
-            "GTD",
+            "FAK",
             now.AddMinutes(-1),
             now.AddMinutes(4),
             now.AddMinutes(-1),
@@ -452,6 +523,83 @@ public sealed class LiveTradingGatingTests
     }
 
     [Fact]
+    public async Task LiveProcessorAllowsShadowFakWhenPaperDecisionExpectsNonPostOnly()
+    {
+        var repository = new TestAppRepository();
+        var now = DateTimeOffset.UtcNow;
+        var correlationId = Guid.NewGuid();
+        var signalId = Guid.NewGuid();
+        var paperOrderId = Guid.NewGuid();
+        var strategyId = StrategyIds.BtcUpDown5mVariants.Single(variant => variant.Code == "btc_up_down_5m_up_maker").Id;
+        await repository.AddPaperOrderAsync(new PaperOrder(
+            paperOrderId,
+            signalId,
+            "btc_up_down_5m_up_maker",
+            PaperOrderStatus.Pending,
+            TradeSide.Buy,
+            "asset-up",
+            "condition-1",
+            "Up",
+            0.44m,
+            10m,
+            4.40m,
+            now.AddMinutes(-1),
+            now.AddMinutes(4),
+            StrategyId: strategyId,
+            RawDecisionJson: "{\"paper_live_shadow_test\":true,\"post_only\":false}",
+            CorrelationId: correlationId,
+            ExecutionSource: "paper_live_shadow_test"));
+        await repository.AddLiveOrderAsync(new LiveOrder(
+            Guid.NewGuid(),
+            signalId,
+            LiveOrderStatus.Live,
+            "0xorder",
+            TradeSide.Buy,
+            "asset-up",
+            "condition-1",
+            "Up",
+            0.44m,
+            5m,
+            2.20m,
+            "FAK",
+            now.AddMinutes(-1),
+            now.AddMinutes(4),
+            now.AddMinutes(-1),
+            "live",
+            0m,
+            5m,
+            string.Empty,
+            "{}",
+            string.Empty,
+            now.AddMinutes(-1),
+            StrategyId: strategyId,
+            CorrelationId: correlationId,
+            ExecutionSource: "paper_live_shadow_test",
+            PostOnly: false,
+            PaperOrderId: paperOrderId));
+        var tradingClient = new CapturingTradingClient
+        {
+            StatusResult = new LiveOrderStatusResult("0xorder", "LIVE", "5000000", "3000000", "0.44", "{}")
+        };
+        var processor = new LiveTradingProcessor(
+            NullLogger<LiveTradingProcessor>.Instance,
+            new LiveTradingOptions(),
+            new RiskOptions(),
+            new FakeGammaClient([]),
+            tradingClient,
+            repository,
+            new ExposureSnapshotCache(repository),
+            new DefaultPaperTradingEngine(),
+            new ServiceControlState());
+
+        var result = await processor.ProcessOpenOrdersAsync();
+
+        Assert.Equal(1, result.OrdersPolled);
+        Assert.Empty(repository.PaperLiveShadowDiscrepancies);
+        Assert.False(Assert.Single(repository.LiveOrders).PostOnly);
+    }
+
+    [Fact]
     public async Task LiveProcessorDisablesShadowLiveWhenPaperAndLivePriceDifferByMoreThanMicroTolerance()
     {
         var repository = new TestAppRepository();
@@ -493,7 +641,7 @@ public sealed class LiveTradingGatingTests
             0.400002m,
             10m,
             4.00002m,
-            "GTD",
+            "FAK",
             now.AddMinutes(-1),
             now.AddMinutes(4),
             now.AddMinutes(-1),
@@ -577,7 +725,7 @@ public sealed class LiveTradingGatingTests
             0.29m,
             6.9m,
             2.001m,
-            "GTD",
+            "FAK",
             now.AddMinutes(-10),
             now.AddMinutes(-5),
             now.AddMinutes(-10),
@@ -840,7 +988,8 @@ public sealed class LiveTradingGatingTests
         decimal liveStakeAmount = 1m,
         decimal liveLostCoeff = 1m,
         int liveLostCounter = 0,
-        decimal maxOrderNotionalUsd = 1m)
+        decimal maxOrderNotionalUsd = 1m,
+        bool blockOnGeoblockCheckFailure = true)
     {
         var riskOptions = new RiskOptions();
         var paperOptions = new PaperTradingOptions { InitialBankrollUsd = 10_000m, RunInLiveMode = runPaperInLiveMode };
@@ -863,7 +1012,12 @@ public sealed class LiveTradingGatingTests
                 SignatureType = "EOA"
             },
             paperOptions,
-            new LiveTradingOptions { ManualEnableCode = "LIVE_TRADING_ENABLED", MaxOrderNotionalUsd = maxOrderNotionalUsd },
+            new LiveTradingOptions
+            {
+                ManualEnableCode = "LIVE_TRADING_ENABLED",
+                MaxOrderNotionalUsd = maxOrderNotionalUsd,
+                BlockOnGeoblockCheckFailure = blockOnGeoblockCheckFailure
+            },
             Watchlist(),
             queue,
             new StaticClobClient(),
@@ -886,6 +1040,21 @@ public sealed class LiveTradingGatingTests
     private static BotOptions LiveEnabledBot()
     {
         return new BotOptions { Mode = BotMode.Live, EnableLiveTrading = true };
+    }
+
+    private static async Task WaitForLiveTradingEventAsync(TestAppRepository repository, string action)
+    {
+        for (var attempt = 0; attempt < 50; attempt++)
+        {
+            if (repository.LiveTradingEvents.Any(item => item.Action == action))
+            {
+                return;
+            }
+
+            await Task.Delay(10);
+        }
+
+        Assert.Fail($"Timed out waiting for live trading event '{action}'.");
     }
 
     private static LiveTradingProcessor CreateLiveSettlementProcessor(
@@ -1159,6 +1328,14 @@ public sealed class LiveTradingGatingTests
         public Task<GeoblockStatus> GetGeoblockStatusAsync(CancellationToken cancellationToken = default)
         {
             return Task.FromResult(new GeoblockStatus(true, "203.0.113.1", "XX", null));
+        }
+    }
+
+    private sealed class ThrowingGeoClient : IPolymarketGeoClient
+    {
+        public Task<GeoblockStatus> GetGeoblockStatusAsync(CancellationToken cancellationToken = default)
+        {
+            throw new InvalidOperationException("geoblock endpoint unavailable");
         }
     }
 

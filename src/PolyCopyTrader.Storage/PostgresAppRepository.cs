@@ -1038,6 +1038,79 @@ WHERE wallet = @Wallet;
 		await transaction.CommitAsync(cancellationToken);
 	}
 
+	public async Task AddPaperEntryPersistenceBatchAsync(PaperEntryPersistenceBatch batch, CancellationToken cancellationToken = default(CancellationToken))
+	{
+		if (batch.IsEmpty)
+		{
+			return;
+		}
+
+		await using NpgsqlConnection connection = await OpenConnectionAsync(cancellationToken);
+		await using NpgsqlTransaction transaction = await connection.BeginTransactionAsync(cancellationToken);
+		foreach (Signal signal in batch.Signals)
+		{
+			await using NpgsqlCommand signalCommand = CreateCommand(connection, "INSERT INTO signals (\n    id, leader_trade_id, trader_wallet, condition_id, asset_id, outcome, leader_price,\n    best_bid, best_ask, spread_abs, spread_pct, lag_seconds, score, decision,\n    accepted, proposed_paper_price, proposed_size_shares, proposed_notional_usd, created_at_utc, raw_context_json\n) VALUES (\n    @Id, @LeaderTradeId, @TraderWallet, @ConditionId, @AssetId, @Outcome, @LeaderPrice,\n    @BestBid, @BestAsk, @SpreadAbs, @SpreadPct, @LagSeconds, @Score, @Decision,\n    @Accepted, @ProposedPaperPrice, @ProposedSizeShares, @ProposedNotionalUsd, @CreatedAtUtc, CAST(@RawContextJson AS jsonb)\n);");
+			signalCommand.Transaction = transaction;
+			AddSignalParameters(signalCommand, signal);
+			await signalCommand.ExecuteNonQueryAsync(cancellationToken);
+		}
+
+		foreach (PaperOrder order in batch.PaperOrders)
+		{
+			await using NpgsqlCommand orderCommand = CreateCommand(connection, "INSERT INTO paper_orders (\n    id, signal_id, strategy_id, copied_trader_wallet, status, side, asset_id, condition_id, outcome, price, size_shares, notional_usd,\n    created_at_utc, expires_at_utc, filled_at_utc, cancelled_at_utc, raw_decision_json, correlation_id, execution_source\n) VALUES (\n    @Id, @SignalId, @StrategyId, @CopiedTraderWallet, @Status, @Side, @AssetId, @ConditionId, @Outcome, @Price, @SizeShares, @NotionalUsd,\n    @CreatedAtUtc, @ExpiresAtUtc, @FilledAtUtc, @CancelledAtUtc, CAST(@RawDecisionJson AS jsonb), @CorrelationId, @ExecutionSource\n);");
+			orderCommand.Transaction = transaction;
+			AddPaperOrderParameters(orderCommand, order);
+			await orderCommand.ExecuteNonQueryAsync(cancellationToken);
+		}
+
+		foreach (PaperFill fill in batch.PaperFills)
+		{
+			await using NpgsqlCommand fillCommand = CreateCommand(connection, "INSERT INTO paper_fills (id, paper_order_id, price, size_shares, filled_at_utc, evidence, realized_pnl_usd)\nVALUES (@Id, @PaperOrderId, @Price, @SizeShares, @FilledAtUtc, @Evidence, @RealizedPnlUsd);");
+			fillCommand.Transaction = transaction;
+			AddPaperFillParameters(fillCommand, fill);
+			await fillCommand.ExecuteNonQueryAsync(cancellationToken);
+		}
+
+		foreach (PaperPosition position in batch.PaperPositions)
+		{
+			await using NpgsqlCommand positionCommand = CreateCommand(connection, "INSERT INTO paper_positions (\n    id, copied_trader_wallet, asset_id, condition_id, outcome, size_shares, average_price,\n    estimated_value_usd, unrealized_pnl_usd, updated_at_utc\n) VALUES (\n    @Id, @CopiedTraderWallet, @AssetId, @ConditionId, @Outcome, @SizeShares, @AveragePrice,\n    @EstimatedValueUsd, @UnrealizedPnlUsd, @UpdatedAtUtc\n)\nON CONFLICT (copied_trader_wallet, asset_id) DO UPDATE SET\n    condition_id = excluded.condition_id,\n    outcome = excluded.outcome,\n    size_shares = excluded.size_shares,\n    average_price = excluded.average_price,\n    estimated_value_usd = excluded.estimated_value_usd,\n    unrealized_pnl_usd = excluded.unrealized_pnl_usd,\n    updated_at_utc = excluded.updated_at_utc;");
+			positionCommand.Transaction = transaction;
+			AddPaperPositionParameters(positionCommand, position);
+			await positionCommand.ExecuteNonQueryAsync(cancellationToken);
+		}
+
+		foreach (PaperCopiedLeaderPositionActivation activation in batch.CopiedLeaderPositionActivations)
+		{
+			await using NpgsqlCommand activationCommand = CreateCommand(connection, """
+UPDATE paper_copied_leader_positions
+SET status = 'Active',
+    copied_initial_size_shares = CASE
+        WHEN status = 'Active' THEN copied_initial_size_shares + @CopiedInitialSizeShares
+        ELSE @CopiedInitialSizeShares
+    END,
+    next_activity_sync_at_utc = LEAST(next_activity_sync_at_utc, @FilledAtUtc),
+    updated_at_utc = @FilledAtUtc
+WHERE entry_paper_order_id = @EntryPaperOrderId
+  AND status IN ('PendingEntry', 'Active');
+""");
+			activationCommand.Transaction = transaction;
+			activationCommand.Parameters.AddWithValue("EntryPaperOrderId", activation.EntryPaperOrderId);
+			activationCommand.Parameters.AddWithValue("CopiedInitialSizeShares", activation.CopiedInitialSizeShares);
+			activationCommand.Parameters.AddWithValue("FilledAtUtc", UtcDateTime(activation.FilledAtUtc));
+			await activationCommand.ExecuteNonQueryAsync(cancellationToken);
+		}
+
+		foreach (StrategyMarketPaperRun run in batch.StrategyRuns)
+		{
+			await using NpgsqlCommand runCommand = CreateCommand(connection, "UPDATE strategy_market_paper_runs\nSET strategy_id = @StrategyId,\n    market_id = @MarketId,\n    condition_id = @ConditionId,\n    market_slug = @MarketSlug,\n    market_title = @MarketTitle,\n    category = @Category,\n    market_start_utc = @MarketStartUtc,\n    market_end_utc = @MarketEndUtc,\n    detected_at_utc = @DetectedAtUtc,\n    entry_due_at_utc = @EntryDueAtUtc,\n    status = @Status,\n    selected_asset_id = @SelectedAssetId,\n    selected_outcome = @SelectedOutcome,\n    entry_price = @EntryPrice,\n    stake_usd = @StakeUsd,\n    size_shares = @SizeShares,\n    signal_id = @SignalId,\n    paper_order_id = @PaperOrderId,\n    entered_at_utc = @EnteredAtUtc,\n    settlement_price = @SettlementPrice,\n    settlement_value_usd = @SettlementValueUsd,\n    realized_pnl_usd = @RealizedPnlUsd,\n    settled_at_utc = @SettledAtUtc,\n    skip_reason = @SkipReason,\n    skip_diagnostics_json = CAST(@SkipDiagnosticsJson AS jsonb),\n    created_at_utc = @CreatedAtUtc,\n    updated_at_utc = @UpdatedAtUtc\nWHERE id = @Id;");
+			runCommand.Transaction = transaction;
+			AddStrategyMarketPaperRunParameters(runCommand, run);
+			await runCommand.ExecuteNonQueryAsync(cancellationToken);
+		}
+
+		await transaction.CommitAsync(cancellationToken);
+	}
+
 	public async Task UpdatePaperOrderAsync(PaperOrder order, CancellationToken cancellationToken = default(CancellationToken))
 	{
 		await using NpgsqlConnection connection = await OpenConnectionAsync(cancellationToken);
@@ -1143,7 +1216,7 @@ WHERE wallet = @Wallet;
 		return results;
 	}
 
-	public async Task<IReadOnlyList<PaperOrder>> GetRecentPaperOrdersAsync(int limit = 100, CancellationToken cancellationToken = default(CancellationToken), Guid? strategyId = null)
+	public async Task<IReadOnlyList<PaperOrder>> GetRecentPaperOrdersAsync(int limit = 100, CancellationToken cancellationToken = default(CancellationToken), Guid? strategyId = null, DateTimeOffset? createdAfterUtc = null)
 	{
 		if (limit <= 0)
 		{
@@ -1151,7 +1224,16 @@ WHERE wallet = @Wallet;
 		}
 
 		Guid? normalizedStrategyId = strategyId.HasValue ? StrategyIds.Normalize(strategyId.GetValueOrDefault()) : null;
-		string filterSql = normalizedStrategyId.HasValue ? "\nWHERE strategy_id = @StrategyId" : string.Empty;
+		List<string> filters = new List<string>();
+		if (normalizedStrategyId.HasValue)
+		{
+			filters.Add("strategy_id = @StrategyId");
+		}
+		if (createdAfterUtc.HasValue)
+		{
+			filters.Add("created_at_utc >= @CreatedAfterUtc");
+		}
+		string filterSql = filters.Count > 0 ? "\nWHERE " + string.Join("\n  AND ", filters) : string.Empty;
 		IReadOnlyList<PaperOrder> result;
 		await using (NpgsqlConnection connection = await OpenConnectionAsync(cancellationToken))
 		{
@@ -1161,6 +1243,10 @@ WHERE wallet = @Wallet;
 				if (normalizedStrategyId.HasValue)
 				{
 					command.Parameters.AddWithValue("StrategyId", normalizedStrategyId.GetValueOrDefault());
+				}
+				if (createdAfterUtc.HasValue)
+				{
+					command.Parameters.Add("CreatedAfterUtc", NpgsqlDbType.TimestampTz).Value = UtcDateTime(createdAfterUtc.GetValueOrDefault());
 				}
 				command.Parameters.AddWithValue("Limit", limit);
 				IReadOnlyList<PaperOrder> readOnlyList;
@@ -1178,6 +1264,30 @@ WHERE wallet = @Wallet;
 			result = readOnlyList2;
 		}
 		return result;
+	}
+
+	public async Task<IReadOnlyList<StrategyMarketPaperRun>> GetStrategyMarketPaperRunsByPaperOrderIdsAsync(IReadOnlyCollection<Guid> paperOrderIds, CancellationToken cancellationToken = default(CancellationToken))
+	{
+		Guid[] normalizedPaperOrderIds = paperOrderIds
+			.Where(id => id != Guid.Empty)
+			.Distinct()
+			.ToArray();
+		if (normalizedPaperOrderIds.Length == 0)
+		{
+			return Array.Empty<StrategyMarketPaperRun>();
+		}
+
+		await using NpgsqlConnection connection = await OpenConnectionAsync(cancellationToken);
+		await using NpgsqlCommand command = CreateCommand(connection, "SELECT id, strategy_id, market_id, condition_id, market_slug, market_title, category,\n       market_start_utc, market_end_utc, detected_at_utc, entry_due_at_utc, status,\n       selected_asset_id, selected_outcome, entry_price, stake_usd, size_shares,\n       signal_id, paper_order_id, entered_at_utc, settlement_price, settlement_value_usd,\n       realized_pnl_usd, settled_at_utc, skip_reason, created_at_utc, updated_at_utc,\n       skip_diagnostics_json::text\nFROM strategy_market_paper_runs\nWHERE paper_order_id = ANY(@PaperOrderIds)\nORDER BY COALESCE(settled_at_utc, entered_at_utc, updated_at_utc) DESC,\n         updated_at_utc DESC;");
+		command.Parameters.AddWithValue("PaperOrderIds", NpgsqlDbType.Array | NpgsqlDbType.Uuid, normalizedPaperOrderIds);
+		await using NpgsqlDataReader reader = await command.ExecuteReaderAsync(cancellationToken);
+		List<StrategyMarketPaperRun> results = [];
+		while (await reader.ReadAsync(cancellationToken))
+		{
+			results.Add(ReadStrategyMarketPaperRun(reader));
+		}
+
+		return results;
 	}
 
 	public async Task AddPaperFillAsync(PaperFill fill, CancellationToken cancellationToken = default(CancellationToken))
@@ -1598,7 +1708,7 @@ LIMIT 1;
 		return await reader.ReadAsync(cancellationToken) ? ReadPaperCopiedTraderPerformance(reader) : null;
 	}
 
-	public async Task<IReadOnlyList<StrategyPerformance>> GetStrategyPerformanceAsync(int limit = 2000, CancellationToken cancellationToken = default(CancellationToken))
+	public async Task<IReadOnlyList<StrategyPerformance>> GetStrategyPerformanceAsync(int limit = 25_000, CancellationToken cancellationToken = default(CancellationToken))
 	{
 		await using NpgsqlConnection connection = await OpenConnectionAsync(cancellationToken);
 		await using NpgsqlCommand command = CreateCommand(connection, """
@@ -1611,6 +1721,49 @@ WITH order_agg AS (
         COALESCE(sum(notional_usd) FILTER (WHERE side = 'Buy' AND status IN ('Filled', 'PartiallyFilled', 'PartiallyFilledExpired')), 0) AS buy_notional_usd,
         max(created_at_utc) AS last_order_utc
     FROM paper_orders
+    GROUP BY strategy_id
+),
+countertrend_score_rows AS (
+    SELECT
+        strategy_id,
+        created_at_utc,
+        COALESCE(
+            CASE
+                WHEN jsonb_typeof(raw_decision_json -> 'previous_score_bps') = 'number'
+                THEN (raw_decision_json ->> 'previous_score_bps')::numeric
+                ELSE NULL
+            END,
+            CASE
+                WHEN jsonb_typeof(raw_decision_json -> 'previous_score') = 'number'
+                THEN (raw_decision_json ->> 'previous_score')::numeric * 10000.0
+                ELSE NULL
+            END
+        ) AS previous_score_bps,
+        CASE
+            WHEN jsonb_typeof(raw_decision_json -> 'selected_signal_bps') = 'number'
+            THEN (raw_decision_json ->> 'selected_signal_bps')::numeric
+            ELSE NULL
+        END AS selected_signal_bps
+    FROM paper_orders
+    WHERE raw_decision_json IS NOT NULL
+      AND (raw_decision_json ? 'previous_score' OR raw_decision_json ? 'previous_score_bps')
+),
+countertrend_signal_rows AS (
+    SELECT
+        strategy_id,
+        created_at_utc,
+        previous_score_bps,
+        COALESCE(selected_signal_bps, abs(previous_score_bps)) AS signal_bps
+    FROM countertrend_score_rows
+    WHERE previous_score_bps IS NOT NULL
+),
+countertrend_signal_agg AS (
+    SELECT
+        strategy_id,
+        COALESCE(avg(previous_score_bps), 0) AS avg_countertrend_score_bps,
+        COALESCE(avg(signal_bps), 0) AS avg_countertrend_signal_bps,
+        (array_agg(signal_bps ORDER BY created_at_utc DESC) FILTER (WHERE signal_bps IS NOT NULL))[1] AS last_countertrend_signal_bps
+    FROM countertrend_signal_rows
     GROUP BY strategy_id
 ),
 fill_agg AS (
@@ -1892,6 +2045,9 @@ combined AS (
         COALESCE(position_agg.unrealized_pnl_usd, 0) AS unrealized_pnl_usd,
         COALESCE(run_agg.avg_entry_delay_seconds, 0) AS avg_entry_delay_seconds,
         COALESCE(run_agg.max_entry_delay_seconds, 0) AS max_entry_delay_seconds,
+        COALESCE(countertrend_signal_agg.avg_countertrend_score_bps, 0) AS avg_countertrend_score_bps,
+        COALESCE(countertrend_signal_agg.avg_countertrend_signal_bps, 0) AS avg_countertrend_signal_bps,
+        countertrend_signal_agg.last_countertrend_signal_bps,
         COALESCE(live_order_agg.live_orders_count, 0) AS live_orders_count,
         COALESCE(live_order_agg.live_filled_orders_count, 0) AS live_filled_orders_count,
         COALESCE(live_order_agg.live_open_orders_count, 0) AS live_open_orders_count,
@@ -1931,6 +2087,7 @@ combined AS (
     LEFT JOIN settlement_agg ON settlement_agg.strategy_id = strategy.id
     LEFT JOIN run_agg ON run_agg.strategy_id = strategy.id
     LEFT JOIN live_order_agg ON live_order_agg.strategy_id = strategy.id
+    LEFT JOIN countertrend_signal_agg ON countertrend_signal_agg.strategy_id = strategy.id
 )
 SELECT
     strategy_id,
@@ -1975,6 +2132,9 @@ SELECT
     CASE WHEN closed_stake_usd = 0 THEN 0 ELSE realized_pnl_usd * 100.0 / closed_stake_usd END AS closed_roi_pct,
     avg_entry_delay_seconds,
     max_entry_delay_seconds,
+    avg_countertrend_score_bps,
+    avg_countertrend_signal_bps,
+    last_countertrend_signal_bps,
     live_orders_count,
     live_filled_orders_count,
     live_open_orders_count,
@@ -2058,9 +2218,9 @@ LIMIT @Limit;
 				reader.GetDecimal(39),
 				reader.GetDecimal(40),
 				reader.GetDecimal(41),
-				reader.GetInt32(42),
-				reader.GetInt32(43),
-				reader.GetInt32(44),
+				reader.GetDecimal(42),
+				reader.GetDecimal(43),
+				reader.IsDBNull(44) ? null : reader.GetDecimal(44),
 				reader.GetInt32(45),
 				reader.GetInt32(46),
 				reader.GetInt32(47),
@@ -2071,25 +2231,60 @@ LIMIT @Limit;
 				reader.GetInt32(52),
 				reader.GetInt32(53),
 				reader.GetInt32(54),
-				reader.GetDecimal(55),
-				reader.GetDecimal(56),
-				reader.GetDecimal(57),
+				reader.GetInt32(55),
+				reader.GetInt32(56),
+				reader.GetInt32(57),
 				reader.GetDecimal(58),
 				reader.GetDecimal(59),
 				reader.GetDecimal(60),
-				reader.IsDBNull(61) ? null : reader.GetDecimal(61),
+				reader.GetDecimal(61),
 				reader.GetDecimal(62),
 				reader.GetDecimal(63),
-				reader.IsDBNull(64) ? null : DateTimeOffsetFromUtc(reader.GetDateTime(64)),
-				reader.IsDBNull(65) ? null : DateTimeOffsetFromUtc(reader.GetDateTime(65)),
-				reader.IsDBNull(66) ? null : DateTimeOffsetFromUtc(reader.GetDateTime(66)),
-				reader.IsDBNull(67) ? null : DateTimeOffsetFromUtc(reader.GetDateTime(67))));
+				reader.IsDBNull(64) ? null : reader.GetDecimal(64),
+				reader.GetDecimal(65),
+				reader.GetDecimal(66),
+				reader.IsDBNull(67) ? null : DateTimeOffsetFromUtc(reader.GetDateTime(67)),
+				reader.IsDBNull(68) ? null : DateTimeOffsetFromUtc(reader.GetDateTime(68)),
+				reader.IsDBNull(69) ? null : DateTimeOffsetFromUtc(reader.GetDateTime(69)),
+				reader.IsDBNull(70) ? null : DateTimeOffsetFromUtc(reader.GetDateTime(70))));
 		}
 
 		return results;
 	}
 
-	public async Task<IReadOnlyList<StrategyRecentPerformance>> GetStrategyRecentPerformanceAsync(int limit = 3000, CancellationToken cancellationToken = default(CancellationToken))
+	public async Task<IReadOnlyDictionary<Guid, decimal>> GetLiveRealizedPnlByStrategyAsync(IReadOnlyCollection<Guid> strategyIds, CancellationToken cancellationToken = default(CancellationToken))
+	{
+		Guid[] normalizedStrategyIds = strategyIds
+			.Select(StrategyIds.Normalize)
+			.Distinct()
+			.ToArray();
+		Dictionary<Guid, decimal> results = normalizedStrategyIds.ToDictionary(strategyId => strategyId, _ => 0m);
+		if (normalizedStrategyIds.Length == 0)
+		{
+			return results;
+		}
+
+		await using NpgsqlConnection connection = await OpenConnectionAsync(cancellationToken);
+		await using NpgsqlCommand command = CreateCommand(connection, """
+SELECT strategy_id,
+       COALESCE(sum(realized_pnl_usd), 0) AS live_realized_pnl_usd
+FROM live_orders
+WHERE strategy_id = ANY(@StrategyIds)
+  AND settled_at_utc IS NOT NULL
+  AND realized_pnl_usd IS NOT NULL
+GROUP BY strategy_id;
+""");
+		command.Parameters.AddWithValue("StrategyIds", normalizedStrategyIds);
+		await using NpgsqlDataReader reader = await command.ExecuteReaderAsync(cancellationToken);
+		while (await reader.ReadAsync(cancellationToken))
+		{
+			results[StrategyIds.Normalize(reader.GetGuid(0))] = reader.GetDecimal(1);
+		}
+
+		return results;
+	}
+
+	public async Task<IReadOnlyList<StrategyRecentPerformance>> GetStrategyRecentPerformanceAsync(int limit = 25_000, CancellationToken cancellationToken = default(CancellationToken))
 	{
 		DateTimeOffset nowUtc = DateTimeOffset.UtcNow;
 		await using NpgsqlConnection connection = await OpenConnectionAsync(cancellationToken);
@@ -3396,7 +3591,7 @@ RETURNING live_available_balance, live_stakes, live_stake_amount;
 		}
 	}
 
-	public async Task<IReadOnlyList<LiveOrder>> GetRecentLiveOrdersAsync(int limit = 100, CancellationToken cancellationToken = default(CancellationToken), Guid? strategyId = null)
+	public async Task<IReadOnlyList<LiveOrder>> GetRecentLiveOrdersAsync(int limit = 100, CancellationToken cancellationToken = default(CancellationToken), Guid? strategyId = null, int offset = 0, DateTimeOffset? createdAfterUtc = null)
 	{
 		if (limit <= 0)
 		{
@@ -3404,18 +3599,33 @@ RETURNING live_available_balance, live_stakes, live_stake_amount;
 		}
 
 		Guid? normalizedStrategyId = strategyId.HasValue ? StrategyIds.Normalize(strategyId.GetValueOrDefault()) : null;
-		string filterSql = normalizedStrategyId.HasValue ? "\nWHERE strategy_id = @StrategyId" : string.Empty;
+		int normalizedOffset = Math.Max(0, offset);
+		List<string> filters = new List<string>();
+		if (normalizedStrategyId.HasValue)
+		{
+			filters.Add("strategy_id = @StrategyId");
+		}
+		if (createdAfterUtc.HasValue)
+		{
+			filters.Add("created_at_utc >= @CreatedAfterUtc");
+		}
+		string filterSql = filters.Count > 0 ? "\nWHERE " + string.Join("\n  AND ", filters) : string.Empty;
 		IReadOnlyList<LiveOrder> result;
 		await using (NpgsqlConnection connection = await OpenConnectionAsync(cancellationToken))
 		{
 			IReadOnlyList<LiveOrder> readOnlyList2;
-			await using (NpgsqlCommand command = CreateCommand(connection, "SELECT " + LiveOrderSelectColumns + "\nFROM live_orders" + filterSql + "\nORDER BY created_at_utc DESC\nLIMIT @Limit;"))
+			await using (NpgsqlCommand command = CreateCommand(connection, "SELECT " + LiveOrderSelectColumns + "\nFROM live_orders" + filterSql + "\nORDER BY created_at_utc DESC\nLIMIT @Limit OFFSET @Offset;"))
 			{
 				if (normalizedStrategyId.HasValue)
 				{
 					command.Parameters.AddWithValue("StrategyId", normalizedStrategyId.GetValueOrDefault());
 				}
+				if (createdAfterUtc.HasValue)
+				{
+					command.Parameters.Add("CreatedAfterUtc", NpgsqlDbType.TimestampTz).Value = UtcDateTime(createdAfterUtc.GetValueOrDefault());
+				}
 				command.Parameters.AddWithValue("Limit", limit);
+				command.Parameters.AddWithValue("Offset", normalizedOffset);
 				IReadOnlyList<LiveOrder> readOnlyList;
 				await using (NpgsqlDataReader reader = await command.ExecuteReaderAsync(cancellationToken))
 				{
@@ -3586,6 +3796,70 @@ LIMIT @Limit;
 		}
 
 		return result;
+	}
+
+	public async Task UpsertCryptoReferencePriceTickAsync(CryptoReferencePriceTick tick, CancellationToken cancellationToken = default(CancellationToken))
+	{
+		await using NpgsqlConnection connection = await OpenConnectionAsync(cancellationToken);
+		await using NpgsqlCommand command = CreateCommand(connection, """
+INSERT INTO crypto_reference_price_ticks (
+    id, asset_symbol, binance_symbol, sampled_at_utc, bucket_start_utc,
+    price_usd, source_updated_at_utc, fetched_at_utc, source, created_at_utc
+) VALUES (
+    @Id, @AssetSymbol, @BinanceSymbol, @SampledAtUtc, @BucketStartUtc,
+    @PriceUsd, @SourceUpdatedAtUtc, @FetchedAtUtc, @Source, @CreatedAtUtc
+)
+ON CONFLICT (asset_symbol, bucket_start_utc) DO UPDATE SET
+    id = excluded.id,
+    binance_symbol = excluded.binance_symbol,
+    sampled_at_utc = excluded.sampled_at_utc,
+    price_usd = excluded.price_usd,
+    source_updated_at_utc = excluded.source_updated_at_utc,
+    fetched_at_utc = excluded.fetched_at_utc,
+    source = excluded.source,
+    created_at_utc = excluded.created_at_utc;
+""");
+		AddCryptoReferencePriceTickParameters(command, tick);
+		await command.ExecuteNonQueryAsync(cancellationToken);
+	}
+
+	public async Task<IReadOnlyList<CryptoReferencePriceTick>> GetCryptoReferencePriceTicksAsync(
+		IReadOnlyCollection<string> assetSymbols,
+		DateTimeOffset startUtc,
+		DateTimeOffset endUtc,
+		CancellationToken cancellationToken = default(CancellationToken))
+	{
+		var normalizedAssetSymbols = assetSymbols
+			.Select(symbol => symbol.Trim().ToUpperInvariant())
+			.Where(symbol => !string.IsNullOrWhiteSpace(symbol))
+			.Distinct(StringComparer.OrdinalIgnoreCase)
+			.ToArray();
+		if (normalizedAssetSymbols.Length == 0)
+		{
+			return [];
+		}
+
+		await using NpgsqlConnection connection = await OpenConnectionAsync(cancellationToken);
+		await using NpgsqlCommand command = CreateCommand(connection, """
+SELECT id, asset_symbol, binance_symbol, sampled_at_utc, bucket_start_utc,
+       price_usd, source_updated_at_utc, fetched_at_utc, source, created_at_utc
+FROM crypto_reference_price_ticks
+WHERE asset_symbol = ANY(@AssetSymbols)
+  AND sampled_at_utc >= @StartUtc
+  AND sampled_at_utc <= @EndUtc
+ORDER BY sampled_at_utc ASC, asset_symbol ASC;
+""");
+		command.Parameters.Add("AssetSymbols", NpgsqlDbType.Array | NpgsqlDbType.Text).Value = normalizedAssetSymbols;
+		command.Parameters.Add("StartUtc", NpgsqlDbType.TimestampTz).Value = UtcDateTime(startUtc);
+		command.Parameters.Add("EndUtc", NpgsqlDbType.TimestampTz).Value = UtcDateTime(endUtc);
+		await using NpgsqlDataReader reader = await command.ExecuteReaderAsync(cancellationToken);
+		List<CryptoReferencePriceTick> results = [];
+		while (await reader.ReadAsync(cancellationToken))
+		{
+			results.Add(ReadCryptoReferencePriceTick(reader));
+		}
+
+		return results;
 	}
 
 	public async Task AddBtcOrderBookLagDiagnosticEventsAsync(IReadOnlyList<BtcOrderBookLagDiagnosticEvent> events, CancellationToken cancellationToken = default(CancellationToken))
@@ -4268,6 +4542,275 @@ LIMIT @Limit;
 		}
 
 		return results;
+	}
+
+	public async Task UpsertCryptoUpDown5mDiffSnapshotAsync(CryptoUpDown5mDiffSnapshot snapshot, CancellationToken cancellationToken = default(CancellationToken))
+	{
+		await using NpgsqlConnection connection = await OpenConnectionAsync(cancellationToken);
+		await using NpgsqlCommand command = CreateCommand(connection, """
+INSERT INTO crypto_up_down_5m_diff_snapshots (
+    id, asset_symbol, market_start_utc, sampled_at_utc,
+    counter_start_market_start_utc, last_included_market_start_utc, high_water_market_start_utc,
+    counter_initialized, up_count, down_count, diff_count, diff, processed_market_count,
+    history_fetch_failed_at_utc, history_fetch_retry_after_utc, history_fetch_error,
+    created_at_utc, updated_at_utc
+) VALUES (
+    @Id, @AssetSymbol, @MarketStartUtc, @SampledAtUtc,
+    @CounterStartMarketStartUtc, @LastIncludedMarketStartUtc, @HighWaterMarketStartUtc,
+    @CounterInitialized, @UpCount, @DownCount, @DiffCount, @Diff, @ProcessedMarketCount,
+    @HistoryFetchFailedAtUtc, @HistoryFetchRetryAfterUtc, @HistoryFetchError,
+    @CreatedAtUtc, @UpdatedAtUtc
+)
+ON CONFLICT (asset_symbol, market_start_utc) DO UPDATE SET
+    sampled_at_utc = excluded.sampled_at_utc,
+    counter_start_market_start_utc = excluded.counter_start_market_start_utc,
+    last_included_market_start_utc = excluded.last_included_market_start_utc,
+    high_water_market_start_utc = excluded.high_water_market_start_utc,
+    counter_initialized = excluded.counter_initialized,
+    up_count = excluded.up_count,
+    down_count = excluded.down_count,
+    diff_count = excluded.diff_count,
+    diff = excluded.diff,
+    processed_market_count = excluded.processed_market_count,
+    history_fetch_failed_at_utc = excluded.history_fetch_failed_at_utc,
+    history_fetch_retry_after_utc = excluded.history_fetch_retry_after_utc,
+    history_fetch_error = excluded.history_fetch_error,
+    updated_at_utc = excluded.updated_at_utc;
+""");
+		AddCryptoUpDown5mDiffSnapshotParameters(command, snapshot);
+		await command.ExecuteNonQueryAsync(cancellationToken);
+	}
+
+	public async Task<IReadOnlyList<CryptoUpDown5mDiffSnapshot>> GetCryptoUpDown5mDiffSnapshotsAsync(IReadOnlyCollection<string> assetSymbols, DateTimeOffset startUtc, DateTimeOffset endUtc, CancellationToken cancellationToken = default(CancellationToken))
+	{
+		var normalizedAssetSymbols = assetSymbols
+			.Select(symbol => symbol.Trim().ToUpperInvariant())
+			.Where(symbol => !string.IsNullOrWhiteSpace(symbol))
+			.Distinct(StringComparer.OrdinalIgnoreCase)
+			.ToArray();
+		if (normalizedAssetSymbols.Length == 0 || endUtc <= startUtc)
+		{
+			return [];
+		}
+
+		await using NpgsqlConnection connection = await OpenConnectionAsync(cancellationToken);
+		await using NpgsqlCommand command = CreateCommand(connection, """
+SELECT id, asset_symbol, market_start_utc, sampled_at_utc,
+       counter_start_market_start_utc, last_included_market_start_utc, high_water_market_start_utc,
+       counter_initialized, up_count, down_count, diff_count, diff, processed_market_count,
+       history_fetch_failed_at_utc, history_fetch_retry_after_utc, history_fetch_error,
+       created_at_utc, updated_at_utc
+FROM crypto_up_down_5m_diff_snapshots
+WHERE upper(asset_symbol) = ANY(@AssetSymbols)
+  AND market_start_utc >= @StartUtc
+  AND market_start_utc < @EndUtc
+ORDER BY asset_symbol, market_start_utc;
+""");
+		command.Parameters.AddWithValue("AssetSymbols", normalizedAssetSymbols);
+		command.Parameters.Add("StartUtc", NpgsqlDbType.TimestampTz).Value = UtcDateTime(startUtc);
+		command.Parameters.Add("EndUtc", NpgsqlDbType.TimestampTz).Value = UtcDateTime(endUtc);
+		await using NpgsqlDataReader reader = await command.ExecuteReaderAsync(cancellationToken);
+		List<CryptoUpDown5mDiffSnapshot> results = [];
+		while (await reader.ReadAsync(cancellationToken))
+		{
+			results.Add(ReadCryptoUpDown5mDiffSnapshot(reader));
+		}
+
+		return results;
+	}
+
+	public async Task UpsertCryptoUpDown5mResultPollingObservationAsync(CryptoUpDown5mResultPollingObservation observation, CancellationToken cancellationToken = default(CancellationToken))
+	{
+		await using NpgsqlConnection connection = await OpenConnectionAsync(cancellationToken);
+		await using NpgsqlCommand command = CreateCommand(connection, """
+INSERT INTO crypto_up_down_5m_result_polling_observations (
+    id, asset_symbol, market_id, condition_id, market_slug, market_start_utc, market_end_utc,
+    first_observed_ended_at_utc, polling_started_at_utc, last_poll_at_utc, poll_attempts,
+    first_closed_at_utc, first_winner_at_utc, winning_outcome,
+    closed_delay_seconds, result_delay_seconds, status, last_response_status, last_error,
+    created_at_utc, updated_at_utc
+) VALUES (
+    @Id, @AssetSymbol, @MarketId, @ConditionId, @MarketSlug, @MarketStartUtc, @MarketEndUtc,
+    @FirstObservedEndedAtUtc, @PollingStartedAtUtc, @LastPollAtUtc, @PollAttempts,
+    @FirstClosedAtUtc, @FirstWinnerAtUtc, @WinningOutcome,
+    @ClosedDelaySeconds, @ResultDelaySeconds, @Status, @LastResponseStatus, @LastError,
+    @CreatedAtUtc, @UpdatedAtUtc
+)
+ON CONFLICT (market_id) DO UPDATE SET
+    asset_symbol = excluded.asset_symbol,
+    condition_id = excluded.condition_id,
+    market_slug = excluded.market_slug,
+    market_start_utc = excluded.market_start_utc,
+    market_end_utc = excluded.market_end_utc,
+    first_observed_ended_at_utc = LEAST(crypto_up_down_5m_result_polling_observations.first_observed_ended_at_utc, excluded.first_observed_ended_at_utc),
+    polling_started_at_utc = LEAST(crypto_up_down_5m_result_polling_observations.polling_started_at_utc, excluded.polling_started_at_utc),
+    last_poll_at_utc = excluded.last_poll_at_utc,
+    poll_attempts = excluded.poll_attempts,
+    first_closed_at_utc = COALESCE(crypto_up_down_5m_result_polling_observations.first_closed_at_utc, excluded.first_closed_at_utc),
+    first_winner_at_utc = COALESCE(crypto_up_down_5m_result_polling_observations.first_winner_at_utc, excluded.first_winner_at_utc),
+    winning_outcome = COALESCE(crypto_up_down_5m_result_polling_observations.winning_outcome, excluded.winning_outcome),
+    closed_delay_seconds = COALESCE(crypto_up_down_5m_result_polling_observations.closed_delay_seconds, excluded.closed_delay_seconds),
+    result_delay_seconds = COALESCE(crypto_up_down_5m_result_polling_observations.result_delay_seconds, excluded.result_delay_seconds),
+    status = excluded.status,
+    last_response_status = excluded.last_response_status,
+    last_error = excluded.last_error,
+    updated_at_utc = excluded.updated_at_utc;
+""");
+		AddCryptoUpDown5mResultPollingObservationParameters(command, observation);
+		await command.ExecuteNonQueryAsync(cancellationToken);
+	}
+
+	public async Task<IReadOnlyList<CryptoUpDown5mResultPollingObservation>> GetCryptoUpDown5mResultPollingObservationsAsync(IReadOnlyCollection<string> assetSymbols, DateTimeOffset startUtc, DateTimeOffset endUtc, CancellationToken cancellationToken = default(CancellationToken))
+	{
+		var normalizedAssetSymbols = assetSymbols
+			.Select(symbol => symbol.Trim().ToUpperInvariant())
+			.Where(symbol => !string.IsNullOrWhiteSpace(symbol))
+			.Distinct(StringComparer.OrdinalIgnoreCase)
+			.ToArray();
+		if (normalizedAssetSymbols.Length == 0 || endUtc <= startUtc)
+		{
+			return [];
+		}
+
+		await using NpgsqlConnection connection = await OpenConnectionAsync(cancellationToken);
+		await using NpgsqlCommand command = CreateCommand(connection, """
+SELECT id, asset_symbol, market_id, condition_id, market_slug, market_start_utc, market_end_utc,
+       first_observed_ended_at_utc, polling_started_at_utc, last_poll_at_utc, poll_attempts,
+       first_closed_at_utc, first_winner_at_utc, winning_outcome,
+       closed_delay_seconds, result_delay_seconds, status, last_response_status, last_error,
+       created_at_utc, updated_at_utc
+FROM crypto_up_down_5m_result_polling_observations
+WHERE upper(asset_symbol) = ANY(@AssetSymbols)
+  AND market_start_utc >= @StartUtc
+  AND market_start_utc < @EndUtc
+ORDER BY asset_symbol, market_start_utc;
+""");
+		command.Parameters.AddWithValue("AssetSymbols", normalizedAssetSymbols);
+		command.Parameters.Add("StartUtc", NpgsqlDbType.TimestampTz).Value = UtcDateTime(startUtc);
+		command.Parameters.Add("EndUtc", NpgsqlDbType.TimestampTz).Value = UtcDateTime(endUtc);
+		await using NpgsqlDataReader reader = await command.ExecuteReaderAsync(cancellationToken);
+		List<CryptoUpDown5mResultPollingObservation> results = [];
+		while (await reader.ReadAsync(cancellationToken))
+		{
+			results.Add(ReadCryptoUpDown5mResultPollingObservation(reader));
+		}
+
+		return results;
+	}
+
+	public async Task UpsertCryptoUpDown5mWebSocketResolvedMarketAsync(CryptoUpDown5mWebSocketResolvedMarket resolvedMarket, CancellationToken cancellationToken = default(CancellationToken))
+	{
+		await using NpgsqlConnection connection = await OpenConnectionAsync(cancellationToken);
+		await using NpgsqlCommand command = CreateCommand(connection, """
+INSERT INTO crypto_up_down_5m_websocket_resolved_markets (
+    id, asset_symbol, market_id, condition_id, market_slug, market_start_utc, market_end_utc,
+    winning_outcome, winning_asset_id, event_timestamp_utc,
+    first_received_at_utc, last_received_at_utc, event_count, result_delay_seconds,
+    source, raw_event_type, raw_json, created_at_utc, updated_at_utc
+) VALUES (
+    @Id, @AssetSymbol, @MarketId, @ConditionId, @MarketSlug, @MarketStartUtc, @MarketEndUtc,
+    @WinningOutcome, @WinningAssetId, @EventTimestampUtc,
+    @FirstReceivedAtUtc, @LastReceivedAtUtc, @EventCount, @ResultDelaySeconds,
+    @Source, @RawEventType, CAST(@RawJson AS jsonb), @CreatedAtUtc, @UpdatedAtUtc
+)
+ON CONFLICT (asset_symbol, market_start_utc) DO UPDATE SET
+    market_id = excluded.market_id,
+    condition_id = excluded.condition_id,
+    market_slug = excluded.market_slug,
+    market_end_utc = excluded.market_end_utc,
+    winning_outcome = excluded.winning_outcome,
+    winning_asset_id = COALESCE(crypto_up_down_5m_websocket_resolved_markets.winning_asset_id, excluded.winning_asset_id),
+    event_timestamp_utc = LEAST(crypto_up_down_5m_websocket_resolved_markets.event_timestamp_utc, excluded.event_timestamp_utc),
+    first_received_at_utc = LEAST(crypto_up_down_5m_websocket_resolved_markets.first_received_at_utc, excluded.first_received_at_utc),
+    last_received_at_utc = GREATEST(crypto_up_down_5m_websocket_resolved_markets.last_received_at_utc, excluded.last_received_at_utc),
+    event_count = crypto_up_down_5m_websocket_resolved_markets.event_count + GREATEST(1, excluded.event_count),
+    result_delay_seconds = LEAST(crypto_up_down_5m_websocket_resolved_markets.result_delay_seconds, excluded.result_delay_seconds),
+    source = excluded.source,
+    raw_event_type = excluded.raw_event_type,
+    raw_json = excluded.raw_json,
+    updated_at_utc = excluded.updated_at_utc;
+""");
+		AddCryptoUpDown5mWebSocketResolvedMarketParameters(command, resolvedMarket);
+		await command.ExecuteNonQueryAsync(cancellationToken);
+	}
+
+	public async Task<IReadOnlyList<CryptoUpDown5mWebSocketResolvedMarket>> GetCryptoUpDown5mWebSocketResolvedMarketsAsync(IReadOnlyCollection<string> assetSymbols, DateTimeOffset startUtc, DateTimeOffset endUtc, CancellationToken cancellationToken = default(CancellationToken))
+	{
+		var normalizedAssetSymbols = assetSymbols
+			.Select(symbol => symbol.Trim().ToUpperInvariant())
+			.Where(symbol => !string.IsNullOrWhiteSpace(symbol))
+			.Distinct(StringComparer.OrdinalIgnoreCase)
+			.ToArray();
+		if (normalizedAssetSymbols.Length == 0 || endUtc < startUtc)
+		{
+			return [];
+		}
+
+		await using NpgsqlConnection connection = await OpenConnectionAsync(cancellationToken);
+		await using NpgsqlCommand command = CreateCommand(connection, """
+SELECT id, asset_symbol, market_id, condition_id, market_slug, market_start_utc, market_end_utc,
+       winning_outcome, winning_asset_id, event_timestamp_utc,
+       first_received_at_utc, last_received_at_utc, event_count, result_delay_seconds,
+       source, raw_event_type, raw_json::text, created_at_utc, updated_at_utc
+FROM crypto_up_down_5m_websocket_resolved_markets
+WHERE upper(asset_symbol) = ANY(@AssetSymbols)
+  AND market_start_utc >= @StartUtc
+  AND market_start_utc <= @EndUtc
+ORDER BY asset_symbol, market_start_utc;
+""");
+		command.Parameters.AddWithValue("AssetSymbols", normalizedAssetSymbols);
+		command.Parameters.Add("StartUtc", NpgsqlDbType.TimestampTz).Value = UtcDateTime(startUtc);
+		command.Parameters.Add("EndUtc", NpgsqlDbType.TimestampTz).Value = UtcDateTime(endUtc);
+		await using NpgsqlDataReader reader = await command.ExecuteReaderAsync(cancellationToken);
+		List<CryptoUpDown5mWebSocketResolvedMarket> results = [];
+		while (await reader.ReadAsync(cancellationToken))
+		{
+			results.Add(ReadCryptoUpDown5mWebSocketResolvedMarket(reader));
+		}
+
+		return results;
+	}
+
+	public async Task AddMarketResolvedEventDiagnosticAsync(MarketResolvedEventDiagnostic diagnostic, CancellationToken cancellationToken = default(CancellationToken))
+	{
+		await using NpgsqlConnection connection = await OpenConnectionAsync(cancellationToken);
+		await using NpgsqlCommand command = CreateCommand(connection, """
+INSERT INTO market_resolved_event_diagnostics (
+    id, component, raw_event_type, asset_id, condition_id,
+    winning_asset_id, winning_outcome, event_timestamp_utc, received_at_utc,
+    active_snapshot_found, snapshot_market_id, snapshot_condition_id, snapshot_market_slug,
+    snapshot_asset_symbol, snapshot_market_start_utc, snapshot_is_crypto_up_down_5m,
+    recorder_action, raw_json, created_at_utc
+) VALUES (
+    @Id, @Component, @RawEventType, @AssetId, @ConditionId,
+    @WinningAssetId, @WinningOutcome, @EventTimestampUtc, @ReceivedAtUtc,
+    @ActiveSnapshotFound, @SnapshotMarketId, @SnapshotConditionId, @SnapshotMarketSlug,
+    @SnapshotAssetSymbol, @SnapshotMarketStartUtc, @SnapshotIsCryptoUpDown5m,
+    @RecorderAction, CAST(@RawJson AS jsonb), @CreatedAtUtc
+);
+""");
+		AddMarketResolvedEventDiagnosticParameters(command, diagnostic);
+		await command.ExecuteNonQueryAsync(cancellationToken);
+	}
+
+	public async Task AddMarketWebSocketFrameDiagnosticAsync(MarketWebSocketFrameDiagnostic diagnostic, CancellationToken cancellationToken = default(CancellationToken))
+	{
+		await using NpgsqlConnection connection = await OpenConnectionAsync(cancellationToken);
+		await using NpgsqlCommand command = CreateCommand(connection, """
+INSERT INTO market_websocket_frame_diagnostics (
+    id, component, received_at_utc, frame_kind, payload_length_chars, payload_sha256,
+    event_count, event_types_json, asset_ids_json, market_ids_json,
+    contains_market_resolved_text, contains_resolved_text, parse_succeeded,
+    parsed_update_count, parse_error, raw_payload, raw_payload_truncated, created_at_utc
+) VALUES (
+    @Id, @Component, @ReceivedAtUtc, @FrameKind, @PayloadLengthChars, @PayloadSha256,
+    @EventCount, CAST(@EventTypesJson AS jsonb), CAST(@AssetIdsJson AS jsonb), CAST(@MarketIdsJson AS jsonb),
+    @ContainsMarketResolvedText, @ContainsResolvedText, @ParseSucceeded,
+    @ParsedUpdateCount, @ParseError, @RawPayload, @RawPayloadTruncated, @CreatedAtUtc
+);
+""");
+		AddMarketWebSocketFrameDiagnosticParameters(command, diagnostic);
+		await command.ExecuteNonQueryAsync(cancellationToken);
 	}
 
 	public async Task AddApiErrorAsync(ApiError error, CancellationToken cancellationToken = default(CancellationToken))
@@ -6733,6 +7276,31 @@ LIMIT @Limit;
 		command.Parameters.AddWithValue("ExecutionSource", order.ExecutionSource ?? string.Empty);
 	}
 
+	private static void AddPaperFillParameters(NpgsqlCommand command, PaperFill fill)
+	{
+		command.Parameters.AddWithValue("Id", fill.Id);
+		command.Parameters.AddWithValue("PaperOrderId", fill.PaperOrderId);
+		command.Parameters.AddWithValue("Price", fill.Price);
+		command.Parameters.AddWithValue("SizeShares", fill.SizeShares);
+		command.Parameters.AddWithValue("FilledAtUtc", UtcDateTime(fill.FilledAtUtc));
+		command.Parameters.AddWithValue("Evidence", fill.Evidence);
+		command.Parameters.AddWithValue("RealizedPnlUsd", fill.RealizedPnlUsd);
+	}
+
+	private static void AddPaperPositionParameters(NpgsqlCommand command, PaperPosition position)
+	{
+		command.Parameters.AddWithValue("Id", Guid.NewGuid());
+		command.Parameters.AddWithValue("CopiedTraderWallet", position.CopiedTraderWallet);
+		command.Parameters.AddWithValue("AssetId", position.AssetId);
+		command.Parameters.AddWithValue("ConditionId", position.ConditionId);
+		command.Parameters.AddWithValue("Outcome", position.Outcome);
+		command.Parameters.AddWithValue("SizeShares", position.SizeShares);
+		command.Parameters.AddWithValue("AveragePrice", position.AveragePrice);
+		command.Parameters.AddWithValue("EstimatedValueUsd", position.EstimatedValueUsd);
+		command.Parameters.AddWithValue("UnrealizedPnlUsd", position.UnrealizedPnlUsd);
+		command.Parameters.AddWithValue("UpdatedAtUtc", UtcDateTime(position.UpdatedAtUtc));
+	}
+
 	private static PaperOrder NormalizePaperOrderStrategy(PaperOrder order)
 	{
 		return order.StrategyId == Guid.Empty
@@ -8307,6 +8875,35 @@ LIMIT @Limit;
 			DateTimeOffsetFromUtc(reader.GetDateTime(12)));
 	}
 
+	private static void AddCryptoReferencePriceTickParameters(NpgsqlCommand command, CryptoReferencePriceTick tick)
+	{
+		command.Parameters.AddWithValue("Id", tick.Id);
+		command.Parameters.AddWithValue("AssetSymbol", tick.AssetSymbol.Trim().ToUpperInvariant());
+		command.Parameters.AddWithValue("BinanceSymbol", tick.BinanceSymbol.Trim().ToUpperInvariant());
+		command.Parameters.Add("SampledAtUtc", NpgsqlDbType.TimestampTz).Value = UtcDateTime(tick.SampledAtUtc);
+		command.Parameters.Add("BucketStartUtc", NpgsqlDbType.TimestampTz).Value = UtcDateTime(tick.BucketStartUtc);
+		command.Parameters.AddWithValue("PriceUsd", tick.PriceUsd);
+		command.Parameters.Add("SourceUpdatedAtUtc", NpgsqlDbType.TimestampTz).Value = UtcDateTime(tick.SourceUpdatedAtUtc);
+		command.Parameters.Add("FetchedAtUtc", NpgsqlDbType.TimestampTz).Value = UtcDateTime(tick.FetchedAtUtc);
+		command.Parameters.AddWithValue("Source", tick.Source);
+		command.Parameters.Add("CreatedAtUtc", NpgsqlDbType.TimestampTz).Value = UtcDateTime(tick.CreatedAtUtc);
+	}
+
+	private static CryptoReferencePriceTick ReadCryptoReferencePriceTick(NpgsqlDataReader reader)
+	{
+		return new CryptoReferencePriceTick(
+			reader.GetGuid(0),
+			reader.GetString(1),
+			reader.GetString(2),
+			DateTimeOffsetFromUtc(reader.GetDateTime(3)),
+			DateTimeOffsetFromUtc(reader.GetDateTime(4)),
+			reader.GetDecimal(5),
+			DateTimeOffsetFromUtc(reader.GetDateTime(6)),
+			DateTimeOffsetFromUtc(reader.GetDateTime(7)),
+			reader.GetString(8),
+			DateTimeOffsetFromUtc(reader.GetDateTime(9)));
+	}
+
 	private static void AddBtcOrderBookLagDiagnosticEventParameters(NpgsqlCommand command, BtcOrderBookLagDiagnosticEvent diagnosticEvent)
 	{
 		command.Parameters.AddWithValue("Id", diagnosticEvent.Id);
@@ -8654,6 +9251,196 @@ LIMIT @Limit;
 			reader.IsDBNull(34) ? null : reader.GetDecimal(34),
 			reader.GetString(35),
 			DateTimeOffsetFromUtc(reader.GetDateTime(36)));
+	}
+
+	private static void AddCryptoUpDown5mDiffSnapshotParameters(NpgsqlCommand command, CryptoUpDown5mDiffSnapshot snapshot)
+	{
+		command.Parameters.AddWithValue("Id", snapshot.Id);
+		command.Parameters.AddWithValue("AssetSymbol", snapshot.AssetSymbol.Trim().ToUpperInvariant());
+		command.Parameters.Add("MarketStartUtc", NpgsqlDbType.TimestampTz).Value = UtcDateTime(snapshot.MarketStartUtc);
+		command.Parameters.Add("SampledAtUtc", NpgsqlDbType.TimestampTz).Value = UtcDateTime(snapshot.SampledAtUtc);
+		command.Parameters.Add("CounterStartMarketStartUtc", NpgsqlDbType.TimestampTz).Value = NullableDateTime(snapshot.CounterStartMarketStartUtc);
+		command.Parameters.Add("LastIncludedMarketStartUtc", NpgsqlDbType.TimestampTz).Value = NullableDateTime(snapshot.LastIncludedMarketStartUtc);
+		command.Parameters.Add("HighWaterMarketStartUtc", NpgsqlDbType.TimestampTz).Value = NullableDateTime(snapshot.HighWaterMarketStartUtc);
+		command.Parameters.AddWithValue("CounterInitialized", snapshot.CounterInitialized);
+		command.Parameters.AddWithValue("UpCount", snapshot.UpCount);
+		command.Parameters.AddWithValue("DownCount", snapshot.DownCount);
+		command.Parameters.AddWithValue("DiffCount", snapshot.DiffCount);
+		command.Parameters.AddWithValue("Diff", snapshot.Diff);
+		command.Parameters.AddWithValue("ProcessedMarketCount", snapshot.ProcessedMarketCount);
+		command.Parameters.Add("HistoryFetchFailedAtUtc", NpgsqlDbType.TimestampTz).Value = NullableDateTime(snapshot.HistoryFetchFailedAtUtc);
+		command.Parameters.Add("HistoryFetchRetryAfterUtc", NpgsqlDbType.TimestampTz).Value = NullableDateTime(snapshot.HistoryFetchRetryAfterUtc);
+		command.Parameters.AddWithValue("HistoryFetchError", string.IsNullOrWhiteSpace(snapshot.HistoryFetchError) ? DBNull.Value : snapshot.HistoryFetchError);
+		command.Parameters.Add("CreatedAtUtc", NpgsqlDbType.TimestampTz).Value = UtcDateTime(snapshot.CreatedAtUtc);
+		command.Parameters.Add("UpdatedAtUtc", NpgsqlDbType.TimestampTz).Value = UtcDateTime(snapshot.UpdatedAtUtc);
+	}
+
+	private static CryptoUpDown5mDiffSnapshot ReadCryptoUpDown5mDiffSnapshot(NpgsqlDataReader reader)
+	{
+		return new CryptoUpDown5mDiffSnapshot(
+			reader.GetGuid(0),
+			reader.GetString(1),
+			DateTimeOffsetFromUtc(reader.GetDateTime(2)),
+			DateTimeOffsetFromUtc(reader.GetDateTime(3)),
+			reader.IsDBNull(4) ? null : DateTimeOffsetFromUtc(reader.GetDateTime(4)),
+			reader.IsDBNull(5) ? null : DateTimeOffsetFromUtc(reader.GetDateTime(5)),
+			reader.IsDBNull(6) ? null : DateTimeOffsetFromUtc(reader.GetDateTime(6)),
+			reader.GetBoolean(7),
+			reader.GetInt32(8),
+			reader.GetInt32(9),
+			reader.GetInt32(10),
+			reader.GetInt32(11),
+			reader.GetInt32(12),
+			reader.IsDBNull(13) ? null : DateTimeOffsetFromUtc(reader.GetDateTime(13)),
+			reader.IsDBNull(14) ? null : DateTimeOffsetFromUtc(reader.GetDateTime(14)),
+			reader.IsDBNull(15) ? null : reader.GetString(15),
+			DateTimeOffsetFromUtc(reader.GetDateTime(16)),
+			DateTimeOffsetFromUtc(reader.GetDateTime(17)));
+	}
+
+	private static void AddCryptoUpDown5mResultPollingObservationParameters(NpgsqlCommand command, CryptoUpDown5mResultPollingObservation observation)
+	{
+		command.Parameters.AddWithValue("Id", observation.Id);
+		command.Parameters.AddWithValue("AssetSymbol", observation.AssetSymbol.Trim().ToUpperInvariant());
+		command.Parameters.AddWithValue("MarketId", observation.MarketId);
+		command.Parameters.AddWithValue("ConditionId", observation.ConditionId);
+		command.Parameters.AddWithValue("MarketSlug", observation.MarketSlug);
+		command.Parameters.Add("MarketStartUtc", NpgsqlDbType.TimestampTz).Value = UtcDateTime(observation.MarketStartUtc);
+		command.Parameters.Add("MarketEndUtc", NpgsqlDbType.TimestampTz).Value = UtcDateTime(observation.MarketEndUtc);
+		command.Parameters.Add("FirstObservedEndedAtUtc", NpgsqlDbType.TimestampTz).Value = UtcDateTime(observation.FirstObservedEndedAtUtc);
+		command.Parameters.Add("PollingStartedAtUtc", NpgsqlDbType.TimestampTz).Value = UtcDateTime(observation.PollingStartedAtUtc);
+		command.Parameters.Add("LastPollAtUtc", NpgsqlDbType.TimestampTz).Value = NullableDateTime(observation.LastPollAtUtc);
+		command.Parameters.AddWithValue("PollAttempts", observation.PollAttempts);
+		command.Parameters.Add("FirstClosedAtUtc", NpgsqlDbType.TimestampTz).Value = NullableDateTime(observation.FirstClosedAtUtc);
+		command.Parameters.Add("FirstWinnerAtUtc", NpgsqlDbType.TimestampTz).Value = NullableDateTime(observation.FirstWinnerAtUtc);
+		command.Parameters.AddWithValue("WinningOutcome", string.IsNullOrWhiteSpace(observation.WinningOutcome) ? DBNull.Value : observation.WinningOutcome);
+		command.Parameters.AddWithValue("ClosedDelaySeconds", observation.ClosedDelaySeconds.HasValue ? observation.ClosedDelaySeconds.Value : DBNull.Value);
+		command.Parameters.AddWithValue("ResultDelaySeconds", observation.ResultDelaySeconds.HasValue ? observation.ResultDelaySeconds.Value : DBNull.Value);
+		command.Parameters.AddWithValue("Status", observation.Status);
+		command.Parameters.AddWithValue("LastResponseStatus", observation.LastResponseStatus);
+		command.Parameters.AddWithValue("LastError", string.IsNullOrWhiteSpace(observation.LastError) ? DBNull.Value : observation.LastError);
+		command.Parameters.Add("CreatedAtUtc", NpgsqlDbType.TimestampTz).Value = UtcDateTime(observation.CreatedAtUtc);
+		command.Parameters.Add("UpdatedAtUtc", NpgsqlDbType.TimestampTz).Value = UtcDateTime(observation.UpdatedAtUtc);
+	}
+
+	private static CryptoUpDown5mResultPollingObservation ReadCryptoUpDown5mResultPollingObservation(NpgsqlDataReader reader)
+	{
+		return new CryptoUpDown5mResultPollingObservation(
+			reader.GetGuid(0),
+			reader.GetString(1),
+			reader.GetString(2),
+			reader.GetString(3),
+			reader.GetString(4),
+			DateTimeOffsetFromUtc(reader.GetDateTime(5)),
+			DateTimeOffsetFromUtc(reader.GetDateTime(6)),
+			DateTimeOffsetFromUtc(reader.GetDateTime(7)),
+			DateTimeOffsetFromUtc(reader.GetDateTime(8)),
+			reader.IsDBNull(9) ? null : DateTimeOffsetFromUtc(reader.GetDateTime(9)),
+			reader.GetInt32(10),
+			reader.IsDBNull(11) ? null : DateTimeOffsetFromUtc(reader.GetDateTime(11)),
+			reader.IsDBNull(12) ? null : DateTimeOffsetFromUtc(reader.GetDateTime(12)),
+			reader.IsDBNull(13) ? null : reader.GetString(13),
+			reader.IsDBNull(14) ? null : reader.GetDecimal(14),
+			reader.IsDBNull(15) ? null : reader.GetDecimal(15),
+			reader.GetString(16),
+			reader.GetString(17),
+			reader.IsDBNull(18) ? null : reader.GetString(18),
+			DateTimeOffsetFromUtc(reader.GetDateTime(19)),
+			DateTimeOffsetFromUtc(reader.GetDateTime(20)));
+	}
+
+	private static void AddCryptoUpDown5mWebSocketResolvedMarketParameters(NpgsqlCommand command, CryptoUpDown5mWebSocketResolvedMarket resolvedMarket)
+	{
+		command.Parameters.AddWithValue("Id", resolvedMarket.Id);
+		command.Parameters.AddWithValue("AssetSymbol", resolvedMarket.AssetSymbol.Trim().ToUpperInvariant());
+		command.Parameters.AddWithValue("MarketId", resolvedMarket.MarketId);
+		command.Parameters.AddWithValue("ConditionId", resolvedMarket.ConditionId);
+		command.Parameters.AddWithValue("MarketSlug", resolvedMarket.MarketSlug);
+		command.Parameters.Add("MarketStartUtc", NpgsqlDbType.TimestampTz).Value = UtcDateTime(resolvedMarket.MarketStartUtc);
+		command.Parameters.Add("MarketEndUtc", NpgsqlDbType.TimestampTz).Value = UtcDateTime(resolvedMarket.MarketEndUtc);
+		command.Parameters.AddWithValue("WinningOutcome", resolvedMarket.WinningOutcome);
+		command.Parameters.AddWithValue("WinningAssetId", string.IsNullOrWhiteSpace(resolvedMarket.WinningAssetId) ? DBNull.Value : resolvedMarket.WinningAssetId);
+		command.Parameters.Add("EventTimestampUtc", NpgsqlDbType.TimestampTz).Value = UtcDateTime(resolvedMarket.EventTimestampUtc);
+		command.Parameters.Add("FirstReceivedAtUtc", NpgsqlDbType.TimestampTz).Value = UtcDateTime(resolvedMarket.FirstReceivedAtUtc);
+		command.Parameters.Add("LastReceivedAtUtc", NpgsqlDbType.TimestampTz).Value = UtcDateTime(resolvedMarket.LastReceivedAtUtc);
+		command.Parameters.AddWithValue("EventCount", Math.Max(1, resolvedMarket.EventCount));
+		command.Parameters.AddWithValue("ResultDelaySeconds", resolvedMarket.ResultDelaySeconds);
+		command.Parameters.AddWithValue("Source", resolvedMarket.Source);
+		command.Parameters.AddWithValue("RawEventType", resolvedMarket.RawEventType);
+		command.Parameters.AddWithValue("RawJson", string.IsNullOrWhiteSpace(resolvedMarket.RawJson) ? "{}" : resolvedMarket.RawJson);
+		command.Parameters.Add("CreatedAtUtc", NpgsqlDbType.TimestampTz).Value = UtcDateTime(resolvedMarket.CreatedAtUtc);
+		command.Parameters.Add("UpdatedAtUtc", NpgsqlDbType.TimestampTz).Value = UtcDateTime(resolvedMarket.UpdatedAtUtc);
+	}
+
+	private static CryptoUpDown5mWebSocketResolvedMarket ReadCryptoUpDown5mWebSocketResolvedMarket(NpgsqlDataReader reader)
+	{
+		return new CryptoUpDown5mWebSocketResolvedMarket(
+			reader.GetGuid(0),
+			reader.GetString(1),
+			reader.GetString(2),
+			reader.GetString(3),
+			reader.GetString(4),
+			DateTimeOffsetFromUtc(reader.GetDateTime(5)),
+			DateTimeOffsetFromUtc(reader.GetDateTime(6)),
+			reader.GetString(7),
+			reader.IsDBNull(8) ? null : reader.GetString(8),
+			DateTimeOffsetFromUtc(reader.GetDateTime(9)),
+			DateTimeOffsetFromUtc(reader.GetDateTime(10)),
+			DateTimeOffsetFromUtc(reader.GetDateTime(11)),
+			reader.GetInt32(12),
+			reader.GetDecimal(13),
+			reader.GetString(14),
+			reader.GetString(15),
+			reader.GetString(16),
+			DateTimeOffsetFromUtc(reader.GetDateTime(17)),
+			DateTimeOffsetFromUtc(reader.GetDateTime(18)));
+	}
+
+	private static void AddMarketResolvedEventDiagnosticParameters(NpgsqlCommand command, MarketResolvedEventDiagnostic diagnostic)
+	{
+		command.Parameters.AddWithValue("Id", diagnostic.Id);
+		command.Parameters.AddWithValue("Component", diagnostic.Component);
+		command.Parameters.AddWithValue("RawEventType", diagnostic.RawEventType);
+		command.Parameters.AddWithValue("AssetId", string.IsNullOrWhiteSpace(diagnostic.AssetId) ? DBNull.Value : diagnostic.AssetId);
+		command.Parameters.AddWithValue("ConditionId", string.IsNullOrWhiteSpace(diagnostic.ConditionId) ? DBNull.Value : diagnostic.ConditionId);
+		command.Parameters.AddWithValue("WinningAssetId", string.IsNullOrWhiteSpace(diagnostic.WinningAssetId) ? DBNull.Value : diagnostic.WinningAssetId);
+		command.Parameters.AddWithValue("WinningOutcome", string.IsNullOrWhiteSpace(diagnostic.WinningOutcome) ? DBNull.Value : diagnostic.WinningOutcome);
+		command.Parameters.Add("EventTimestampUtc", NpgsqlDbType.TimestampTz).Value = UtcDateTime(diagnostic.EventTimestampUtc);
+		command.Parameters.Add("ReceivedAtUtc", NpgsqlDbType.TimestampTz).Value = UtcDateTime(diagnostic.ReceivedAtUtc);
+		command.Parameters.AddWithValue("ActiveSnapshotFound", diagnostic.ActiveSnapshotFound);
+		command.Parameters.AddWithValue("SnapshotMarketId", string.IsNullOrWhiteSpace(diagnostic.SnapshotMarketId) ? DBNull.Value : diagnostic.SnapshotMarketId);
+		command.Parameters.AddWithValue("SnapshotConditionId", string.IsNullOrWhiteSpace(diagnostic.SnapshotConditionId) ? DBNull.Value : diagnostic.SnapshotConditionId);
+		command.Parameters.AddWithValue("SnapshotMarketSlug", string.IsNullOrWhiteSpace(diagnostic.SnapshotMarketSlug) ? DBNull.Value : diagnostic.SnapshotMarketSlug);
+		command.Parameters.AddWithValue("SnapshotAssetSymbol", string.IsNullOrWhiteSpace(diagnostic.SnapshotAssetSymbol) ? DBNull.Value : diagnostic.SnapshotAssetSymbol);
+		command.Parameters.Add("SnapshotMarketStartUtc", NpgsqlDbType.TimestampTz).Value = diagnostic.SnapshotMarketStartUtc is { } snapshotMarketStartUtc
+			? UtcDateTime(snapshotMarketStartUtc)
+			: DBNull.Value;
+		command.Parameters.AddWithValue("SnapshotIsCryptoUpDown5m", diagnostic.SnapshotIsCryptoUpDown5m);
+		command.Parameters.AddWithValue("RecorderAction", diagnostic.RecorderAction);
+		command.Parameters.AddWithValue("RawJson", string.IsNullOrWhiteSpace(diagnostic.RawJson) ? "{}" : diagnostic.RawJson);
+		command.Parameters.Add("CreatedAtUtc", NpgsqlDbType.TimestampTz).Value = UtcDateTime(diagnostic.CreatedAtUtc);
+	}
+
+	private static void AddMarketWebSocketFrameDiagnosticParameters(NpgsqlCommand command, MarketWebSocketFrameDiagnostic diagnostic)
+	{
+		command.Parameters.AddWithValue("Id", diagnostic.Id);
+		command.Parameters.AddWithValue("Component", diagnostic.Component);
+		command.Parameters.Add("ReceivedAtUtc", NpgsqlDbType.TimestampTz).Value = UtcDateTime(diagnostic.ReceivedAtUtc);
+		command.Parameters.AddWithValue("FrameKind", diagnostic.FrameKind);
+		command.Parameters.AddWithValue("PayloadLengthChars", diagnostic.PayloadLengthChars);
+		command.Parameters.AddWithValue("PayloadSha256", diagnostic.PayloadSha256);
+		command.Parameters.AddWithValue("EventCount", diagnostic.EventCount);
+		command.Parameters.AddWithValue("EventTypesJson", string.IsNullOrWhiteSpace(diagnostic.EventTypesJson) ? "[]" : diagnostic.EventTypesJson);
+		command.Parameters.AddWithValue("AssetIdsJson", string.IsNullOrWhiteSpace(diagnostic.AssetIdsJson) ? "[]" : diagnostic.AssetIdsJson);
+		command.Parameters.AddWithValue("MarketIdsJson", string.IsNullOrWhiteSpace(diagnostic.MarketIdsJson) ? "[]" : diagnostic.MarketIdsJson);
+		command.Parameters.AddWithValue("ContainsMarketResolvedText", diagnostic.ContainsMarketResolvedText);
+		command.Parameters.AddWithValue("ContainsResolvedText", diagnostic.ContainsResolvedText);
+		command.Parameters.AddWithValue("ParseSucceeded", diagnostic.ParseSucceeded);
+		command.Parameters.AddWithValue("ParsedUpdateCount", Math.Max(0, diagnostic.ParsedUpdateCount));
+		command.Parameters.AddWithValue("ParseError", string.IsNullOrWhiteSpace(diagnostic.ParseError) ? DBNull.Value : diagnostic.ParseError);
+		command.Parameters.AddWithValue("RawPayload", diagnostic.RawPayload);
+		command.Parameters.AddWithValue("RawPayloadTruncated", diagnostic.RawPayloadTruncated);
+		command.Parameters.Add("CreatedAtUtc", NpgsqlDbType.TimestampTz).Value = UtcDateTime(diagnostic.CreatedAtUtc);
 	}
 
 	private static void AddPolymarketDataApiTraderParameters(NpgsqlCommand command, PolymarketDataApiTrader trader)

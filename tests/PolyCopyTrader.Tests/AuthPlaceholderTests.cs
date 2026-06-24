@@ -5,6 +5,7 @@ using PolyCopyTrader.Domain;
 using PolyCopyTrader.Domain.Configuration;
 using PolyCopyTrader.Polymarket;
 using PolyCopyTrader.Polymarket.Auth;
+using PolyCopyTrader.Service.LiveTrading;
 using PolyCopyTrader.Service.Startup;
 
 namespace PolyCopyTrader.Tests;
@@ -356,6 +357,28 @@ public sealed class AuthPlaceholderTests
     }
 
     [Fact]
+    public void OrderAmountCalculator_ConvertsMarketBuyAmount()
+    {
+        var calculator = new OrderAmountCalculator();
+
+        var buy = calculator.CalculateMarketBuy(0.99m, 5m);
+
+        Assert.Equal("5000000", buy.MakerAmount.ToString());
+        Assert.Equal("5050600", buy.TakerAmount.ToString());
+    }
+
+    [Fact]
+    public void OrderAmountCalculator_RoundsMarketBuyAmountToClobPrecision()
+    {
+        var calculator = new OrderAmountCalculator();
+
+        var buy = calculator.CalculateMarketBuy(0.99m, 6.0093m);
+
+        Assert.Equal("6000000", buy.MakerAmount.ToString());
+        Assert.Equal("6060700", buy.TakerAmount.ToString());
+    }
+
+    [Fact]
     public void OrderBuilder_ValidatesTickSizeAndMinimumSize()
     {
         var builder = new ClobV2OrderBuilder(new OrderAmountCalculator());
@@ -439,6 +462,78 @@ public sealed class AuthPlaceholderTests
         Assert.Equal(expiration.ToUnixTimeSeconds().ToString(), order.Expiration);
         Assert.Equal("GTD", json.RootElement.GetProperty("orderType").GetString());
         Assert.Equal(expiration.ToUnixTimeSeconds().ToString(), json.RootElement.GetProperty("order").GetProperty("expiration").GetString());
+    }
+
+    [Fact]
+    public void OrderBuilder_BuildsFakMarketBuyAmountOrder()
+    {
+        var builder = new ClobV2OrderBuilder(new OrderAmountCalculator());
+        var request = FixedOrderRequest() with
+        {
+            OrderType = ClobV2OrderType.FAK,
+            Price = 0.99m,
+            SizeShares = 5.06m,
+            MinOrderSize = 1m,
+            PostOnly = false,
+            MarketBuyAmountUsd = 5m
+        };
+
+        var errors = builder.Validate(request);
+        var order = builder.Build(request);
+        var payload = new ClobV2OrderPayloadSerializer().Serialize(order, null);
+        using var json = JsonDocument.Parse(payload);
+
+        Assert.Empty(errors);
+        Assert.Equal("5000000", order.MakerAmount);
+        Assert.Equal("5050600", order.TakerAmount);
+        Assert.Equal("0", order.Expiration);
+        Assert.Equal(ClobV2OrderType.FAK, order.OrderType);
+        Assert.False(order.PostOnly);
+        Assert.Equal("FAK", json.RootElement.GetProperty("orderType").GetString());
+    }
+
+    [Fact]
+    public void OrderBuilder_RejectsMarketBuyAmountWithoutFokOrFak()
+    {
+        var builder = new ClobV2OrderBuilder(new OrderAmountCalculator());
+
+        var errors = builder.Validate(FixedOrderRequest() with
+        {
+            OrderType = ClobV2OrderType.GTC,
+            Price = 0.99m,
+            SizeShares = 5.06m,
+            MarketBuyAmountUsd = 5m
+        });
+
+        Assert.Contains(errors, error => error.Contains("FOK or FAK", StringComparison.OrdinalIgnoreCase));
+    }
+
+    [Fact]
+    public void LiveOrderPlacementAccounting_FakWithoutAmountsDoesNotFallbackToFullFill()
+    {
+        var result = new LiveOrderPlacementResult(
+            true,
+            "0xfak",
+            "matched",
+            null,
+            null,
+            null,
+            """{"status":"matched"}""",
+            "{}");
+
+        var summary = LiveOrderPlacementAccounting.FromPlacementResult(
+            TradeSide.Buy,
+            0.99m,
+            1.02m,
+            LiveOrderStatus.Matched,
+            result,
+            allowFilledSizeAboveRequested: true);
+
+        Assert.Equal(0m, summary.FilledSize);
+        Assert.Equal(1.02m, summary.RemainingSize);
+        Assert.Null(summary.AverageFillPrice);
+        Assert.Equal(0m, summary.FilledNotionalUsd);
+        Assert.Equal(0m, summary.CostBasisUsd);
     }
 
     [Fact]

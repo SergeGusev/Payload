@@ -31,7 +31,7 @@ public sealed class LocalControlServer(
     {
         if (!ipcOptions.Enabled)
         {
-            logger.LogInformation("Local IPC control server is disabled.");
+            logger.LogInformation("Local IPC control server is disabled by options.");
             return;
         }
 

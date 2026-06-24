@@ -40,10 +40,12 @@ public static class AppOptionsValidator
         ValidateCoinbaseExchange(configuration.CoinbaseExchange, errors);
         ValidateBinanceBtcUsdReference(configuration.BinanceBtcUsdReference, errors);
         ValidateBinanceCryptoReference(configuration.BinanceCryptoReference, errors);
+        ValidateCryptoReferencePriceHistory(configuration.CryptoReferencePriceHistory, errors);
         ValidateBtcUpDown5mOddsArchive(configuration.BtcUpDown5mOddsArchive, errors);
         ValidateBtcUpDown5mStatistics(configuration.BtcUpDown5mStatistics, errors);
         ValidateBtcUpDown5mArbitrageScanner(configuration.BtcUpDown5mArbitrageScanner, errors);
         ValidateCryptoUpDown5mOddsArchive(configuration.CryptoUpDown5mOddsArchive, errors);
+        ValidateCryptoUpDown5mResultPolling(configuration.CryptoUpDown5mResultPolling, errors);
         ValidateChainlinkBtcUsdDiagnostics(configuration.ChainlinkBtcUsdDiagnostics, errors);
         ValidateOnChainIngestion(configuration.OnChainIngestion, errors);
         ValidateIpc(configuration.Ipc, errors);
@@ -117,6 +119,7 @@ public static class AppOptionsValidator
             $"Gamma market ingestion page limit: {configuration.GammaMarketIngestion.PageLimit}",
             $"BTC Up or Down 5m strategy enabled: {configuration.BtcUpDown5mStrategy.Enabled}",
             $"BTC Up or Down 5m strategy poll interval seconds: {configuration.BtcUpDown5mStrategy.PollIntervalSeconds}",
+            $"BTC Up or Down 5m Diff fast poll interval ms: {configuration.BtcUpDown5mStrategy.DiffCounterFastPollIntervalMilliseconds}",
             $"BTC Up or Down 5m strategy stake multiplier: {configuration.BtcUpDown5mStrategy.StakeUsd}",
             $"BTC Up or Down 5m strategy entry grace seconds: {configuration.BtcUpDown5mStrategy.EntryGraceSeconds}",
             $"BTC Up or Down 5m strategy max concurrent entry decisions: {configuration.BtcUpDown5mStrategy.MaxConcurrentEntryDecisions}",
@@ -132,6 +135,7 @@ public static class AppOptionsValidator
             $"BTC Up or Down 5m opening limit break-even margin: {configuration.BtcUpDown5mStrategy.OpeningLimitBreakEvenMargin}",
             $"BTC Up or Down 5m opening limit max price: {configuration.BtcUpDown5mStrategy.OpeningLimitMaxPrice}",
             $"BTC Up or Down 5m instant opening limit max price: {configuration.BtcUpDown5mStrategy.InstantOpeningLimitMaxPrice}",
+            $"BTC Up or Down 5m Diff instant max price: {configuration.BtcUpDown5mStrategy.DiffCounterInstantMaxPrice}",
             $"BTC Up or Down 5m opening limit GTD TTL seconds: {configuration.BtcUpDown5mStrategy.OpeningLimitGtdTtlSeconds}",
             $"BTC Up or Down 5m opening limit expire before market end seconds: {configuration.BtcUpDown5mStrategy.OpeningLimitExpireBeforeMarketEndSeconds}",
             $"BTC Up or Down 5m CLOB GTD expiration security buffer seconds: {configuration.BtcUpDown5mStrategy.ClobGtdExpirationSecurityBufferSeconds}",
@@ -156,6 +160,12 @@ public static class AppOptionsValidator
             $"Binance crypto reference sample interval seconds: {configuration.BinanceCryptoReference.SampleIntervalSeconds}",
             $"Binance crypto reference window size: {configuration.BinanceCryptoReference.WindowSize}",
             $"Binance crypto reference stale after seconds: {configuration.BinanceCryptoReference.StaleAfterSeconds}",
+            $"Crypto reference price history enabled: {configuration.CryptoReferencePriceHistory.Enabled}",
+            $"Crypto reference price history assets: {string.Join(",", configuration.CryptoReferencePriceHistory.AssetSymbols)}",
+            $"Crypto reference price history write interval seconds: {configuration.CryptoReferencePriceHistory.WriteIntervalSeconds}",
+            $"Crypto reference price history startup lookback hours: {configuration.CryptoReferencePriceHistory.StartupLookbackHours}",
+            $"Crypto reference price history target samples per window: {configuration.CryptoReferencePriceHistory.TargetSamplesPerWindow}",
+            $"Crypto reference price history windows minutes: {string.Join(",", configuration.CryptoReferencePriceHistory.WindowMinutes)}",
             $"BTC Up or Down 5m odds archive enabled: {configuration.BtcUpDown5mOddsArchive.Enabled}",
             $"BTC Up or Down 5m odds archive poll interval seconds: {configuration.BtcUpDown5mOddsArchive.PollIntervalSeconds}",
             $"BTC Up or Down 5m odds archive max book age ms: {configuration.BtcUpDown5mOddsArchive.MaxOrderBookAgeMilliseconds}",
@@ -171,6 +181,13 @@ public static class AppOptionsValidator
             $"Crypto Up or Down 5m odds archive assets: {string.Join(",", configuration.CryptoUpDown5mOddsArchive.AssetSymbols)}",
             $"Crypto Up or Down 5m odds archive poll interval seconds: {configuration.CryptoUpDown5mOddsArchive.PollIntervalSeconds}",
             $"Crypto Up or Down 5m odds archive max book age ms: {configuration.CryptoUpDown5mOddsArchive.MaxOrderBookAgeMilliseconds}",
+            $"Crypto Up or Down 5m result polling enabled: {configuration.CryptoUpDown5mResultPolling.Enabled}",
+            $"Crypto Up or Down 5m result polling assets: {string.Join(",", configuration.CryptoUpDown5mResultPolling.AssetSymbols)}",
+            $"Crypto Up or Down 5m result polling interval seconds: {configuration.CryptoUpDown5mResultPolling.PollIntervalSeconds}",
+            $"Crypto Up or Down 5m result polling max wait minutes: {configuration.CryptoUpDown5mResultPolling.MaxResultWaitMinutes}",
+            $"Crypto Up or Down 5m provisional order-book result enabled: {configuration.CryptoUpDown5mResultPolling.ProvisionalOrderBookResultEnabled}",
+            $"Crypto Up or Down 5m provisional winner bid min: {configuration.CryptoUpDown5mResultPolling.ProvisionalWinnerBidMin}",
+            $"Crypto Up or Down 5m provisional loser ask max: {configuration.CryptoUpDown5mResultPolling.ProvisionalLoserAskMax}",
             $"Chainlink BTC/USD diagnostics enabled: {configuration.ChainlinkBtcUsdDiagnostics.Enabled}",
             $"Chainlink BTC/USD diagnostics base URL: {configuration.ChainlinkBtcUsdDiagnostics.BaseUrl}",
             $"Chainlink BTC/USD diagnostics poll interval seconds: {configuration.ChainlinkBtcUsdDiagnostics.PollIntervalSeconds}",
@@ -410,7 +427,7 @@ public static class AppOptionsValidator
     {
         if (!Enum.IsDefined(options.SubscriptionScope))
         {
-            errors.Add("MarketDataWebSocket.SubscriptionScope must be AllActiveMarkets or BtcUpDown5mOnly.");
+            errors.Add("MarketDataWebSocket.SubscriptionScope must be AllActiveMarkets, BtcUpDown5mOnly, or CryptoUpDown5mOnly.");
         }
 
         if (!Uri.TryCreate(options.MarketEndpointUrl, UriKind.Absolute, out var uri) ||
@@ -1102,6 +1119,12 @@ public static class AppOptionsValidator
             errors.Add("BtcUpDown5mStrategy.PollIntervalSeconds must be between 1 and 86400.");
         }
 
+        if (options.DiffCounterFastPollIntervalMilliseconds < 100 ||
+            options.DiffCounterFastPollIntervalMilliseconds > 60_000)
+        {
+            errors.Add("BtcUpDown5mStrategy.DiffCounterFastPollIntervalMilliseconds must be between 100 and 60000.");
+        }
+
         if (options.StakeUsd <= 0m)
         {
             errors.Add("BtcUpDown5mStrategy.StakeUsd multiplier must be greater than zero.");
@@ -1202,6 +1225,11 @@ public static class AppOptionsValidator
         if (options.InstantOpeningLimitMaxPrice <= 0m || options.InstantOpeningLimitMaxPrice > 1m)
         {
             errors.Add("BtcUpDown5mStrategy.InstantOpeningLimitMaxPrice must be greater than zero and at most one.");
+        }
+
+        if (options.DiffCounterInstantMaxPrice <= 0m || options.DiffCounterInstantMaxPrice > 1m)
+        {
+            errors.Add("BtcUpDown5mStrategy.DiffCounterInstantMaxPrice must be greater than zero and at most one.");
         }
 
         if (options.OpeningLimitPriceTickSize <= 0m || options.OpeningLimitPriceTickSize > 1m)
@@ -1444,6 +1472,53 @@ public static class AppOptionsValidator
         }
     }
 
+    private static void ValidateCryptoReferencePriceHistory(CryptoReferencePriceHistoryOptions options, List<string> errors)
+    {
+        ValidateCryptoAssetSymbols(options.AssetSymbols, "CryptoReferencePriceHistory.AssetSymbols", errors);
+
+        if (options.WriteIntervalSeconds <= 0 || options.WriteIntervalSeconds > 86_400)
+        {
+            errors.Add("CryptoReferencePriceHistory.WriteIntervalSeconds must be between 1 and 86400.");
+        }
+
+        if (options.StartupLookbackHours <= 0 || options.StartupLookbackHours > 168)
+        {
+            errors.Add("CryptoReferencePriceHistory.StartupLookbackHours must be between 1 and 168.");
+        }
+
+        if (options.TargetSamplesPerWindow <= 0 || options.TargetSamplesPerWindow > 10_000)
+        {
+            errors.Add("CryptoReferencePriceHistory.TargetSamplesPerWindow must be between 1 and 10000.");
+        }
+
+        if (options.WindowMinutes.Count == 0)
+        {
+            errors.Add("CryptoReferencePriceHistory.WindowMinutes must include at least one window.");
+            return;
+        }
+
+        var seen = new HashSet<int>();
+        foreach (var windowMinutes in options.WindowMinutes)
+        {
+            if (windowMinutes <= 0 || windowMinutes > 10_080)
+            {
+                errors.Add("CryptoReferencePriceHistory.WindowMinutes values must be between 1 and 10080.");
+                continue;
+            }
+
+            if (!seen.Add(windowMinutes))
+            {
+                errors.Add("CryptoReferencePriceHistory.WindowMinutes must not contain duplicate values.");
+            }
+        }
+
+        var maxWindowMinutes = options.WindowMinutes.Count == 0 ? 0 : options.WindowMinutes.Max();
+        if (options.StartupLookbackHours * 60 < maxWindowMinutes)
+        {
+            errors.Add("CryptoReferencePriceHistory.StartupLookbackHours must cover the largest configured window.");
+        }
+    }
+
     private static void ValidateBtcUpDown5mOddsArchive(BtcUpDown5mOddsArchiveOptions options, List<string> errors)
     {
         if (options.PollIntervalSeconds <= 0 || options.PollIntervalSeconds > 86_400)
@@ -1585,6 +1660,75 @@ public static class AppOptionsValidator
         if (options.MaxOrderBookAgeMilliseconds <= 0 || options.MaxOrderBookAgeMilliseconds > 300_000)
         {
             errors.Add("CryptoUpDown5mOddsArchive.MaxOrderBookAgeMilliseconds must be between 1 and 300000.");
+        }
+    }
+
+    private static void ValidateCryptoUpDown5mResultPolling(CryptoUpDown5mResultPollingOptions options, List<string> errors)
+    {
+        ValidateCryptoAssetSymbols(options.AssetSymbols, "CryptoUpDown5mResultPolling.AssetSymbols", errors);
+
+        if (options.PollIntervalSeconds <= 0 || options.PollIntervalSeconds > 86_400)
+        {
+            errors.Add("CryptoUpDown5mResultPolling.PollIntervalSeconds must be between 1 and 86400.");
+        }
+
+        if (options.MaxMarketsPerCycle <= 0 || options.MaxMarketsPerCycle > 1_000)
+        {
+            errors.Add("CryptoUpDown5mResultPolling.MaxMarketsPerCycle must be between 1 and 1000.");
+        }
+
+        if (options.MaxMarketAgeMinutes <= 0 || options.MaxMarketAgeMinutes > 1_440)
+        {
+            errors.Add("CryptoUpDown5mResultPolling.MaxMarketAgeMinutes must be between 1 and 1440.");
+        }
+
+        if (options.MaxResultWaitMinutes <= 0 || options.MaxResultWaitMinutes > 1_440)
+        {
+            errors.Add("CryptoUpDown5mResultPolling.MaxResultWaitMinutes must be between 1 and 1440.");
+        }
+
+        if (options.MaxResultWaitMinutes > options.MaxMarketAgeMinutes)
+        {
+            errors.Add("CryptoUpDown5mResultPolling.MaxResultWaitMinutes must be less than or equal to MaxMarketAgeMinutes.");
+        }
+
+        if (options.ReferencePriceResultMaxEndAgeMilliseconds <= 0 ||
+            options.ReferencePriceResultMaxEndAgeMilliseconds > 300_000)
+        {
+            errors.Add("CryptoUpDown5mResultPolling.ReferencePriceResultMaxEndAgeMilliseconds must be between 1 and 300000.");
+        }
+
+        if (options.ReferencePriceResultMinSamples <= 0 ||
+            options.ReferencePriceResultMinSamples > 500)
+        {
+            errors.Add("CryptoUpDown5mResultPolling.ReferencePriceResultMinSamples must be between 1 and 500.");
+        }
+
+        if (options.ProvisionalWinnerBidMin <= 0m || options.ProvisionalWinnerBidMin >= 1m)
+        {
+            errors.Add("CryptoUpDown5mResultPolling.ProvisionalWinnerBidMin must be greater than 0 and less than 1.");
+        }
+
+        if (options.ProvisionalLoserAskMax <= 0m || options.ProvisionalLoserAskMax >= 1m)
+        {
+            errors.Add("CryptoUpDown5mResultPolling.ProvisionalLoserAskMax must be greater than 0 and less than 1.");
+        }
+
+        if (options.ProvisionalWinnerBidMin <= options.ProvisionalLoserAskMax)
+        {
+            errors.Add("CryptoUpDown5mResultPolling.ProvisionalWinnerBidMin must be greater than ProvisionalLoserAskMax.");
+        }
+
+        if (options.ProvisionalMaxOrderBookAgeMilliseconds <= 0 ||
+            options.ProvisionalMaxOrderBookAgeMilliseconds > 300_000)
+        {
+            errors.Add("CryptoUpDown5mResultPolling.ProvisionalMaxOrderBookAgeMilliseconds must be between 1 and 300000.");
+        }
+
+        if (options.ProvisionalRestRequestTimeoutSeconds <= 0 ||
+            options.ProvisionalRestRequestTimeoutSeconds > 30)
+        {
+            errors.Add("CryptoUpDown5mResultPolling.ProvisionalRestRequestTimeoutSeconds must be between 1 and 30.");
         }
     }
 

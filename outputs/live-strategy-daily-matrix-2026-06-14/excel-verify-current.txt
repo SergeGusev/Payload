@@ -1,0 +1,15 @@
+
+
+Path                    : D:\My\Business\PolyMarket\outputs\live-strategy-daily-matrix-2026-06-14\live-strategy-daily-matrix-2026-06-14-current.xlsx
+SheetCount              : 1
+SheetName               : Live Daily PnL
+Rows                    : 12
+Columns                 : 9
+GrandTotal              : 116.51378186
+StrategyTotalsAscending : True
+Headers                 : BTC Up or Down 5m Up Simple | BTC Up or Down 5m Up 50 bps Instant | ETH Up or Down 5m Down 50 bps Instant | SOL Up or Down 5m Up 50 bps 
+                          Instant | SOL Up or Down 5m Down 50 bps Instant | BTC Up or Down 5m Down 50 bps Instant | ETH Up or Down 5m Up 50 bps Instant
+
+
+
+

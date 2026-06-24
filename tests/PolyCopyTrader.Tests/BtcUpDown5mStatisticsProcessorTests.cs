@@ -185,6 +185,7 @@ public sealed class BtcUpDown5mStatisticsProcessorTests
             NullLogger<BtcUpDown5mStatisticsProcessor>.Instance,
             new BtcUpDown5mStatisticsOptions
             {
+                Enabled = true,
                 RestFallbackEnabled = false,
                 MinHistorySupport = 20,
                 MinimumEdge = 0m

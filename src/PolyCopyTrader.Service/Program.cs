@@ -277,10 +277,12 @@ builder.Services.AddSingleton(appConfiguration.Analytics);
     builder.Services.AddSingleton(appConfiguration.CoinbaseExchange);
     builder.Services.AddSingleton(appConfiguration.BinanceBtcUsdReference);
     builder.Services.AddSingleton(appConfiguration.BinanceCryptoReference);
+    builder.Services.AddSingleton(appConfiguration.CryptoReferencePriceHistory);
     builder.Services.AddSingleton(appConfiguration.BtcUpDown5mOddsArchive);
     builder.Services.AddSingleton(appConfiguration.BtcUpDown5mStatistics);
     builder.Services.AddSingleton(appConfiguration.BtcUpDown5mArbitrageScanner);
     builder.Services.AddSingleton(appConfiguration.CryptoUpDown5mOddsArchive);
+    builder.Services.AddSingleton(appConfiguration.CryptoUpDown5mResultPolling);
     builder.Services.AddSingleton(appConfiguration.ChainlinkBtcUsdDiagnostics);
     builder.Services.AddSingleton(appConfiguration.MarketTradeDiagnostics);
 builder.Services.AddSingleton(appConfiguration.DataApiTraderIngestion);
@@ -331,11 +333,23 @@ builder.Services.AddSingleton<BinanceBtcUsdTradeStreamService>();
 builder.Services.AddSingleton<IBtcUsdReferencePriceClient>(sp => sp.GetRequiredService<BinanceBtcUsdTradeStreamService>());
 builder.Services.AddSingleton<BinanceCryptoReferenceTradeStreamService>();
 builder.Services.AddSingleton<ICryptoReferencePriceClient>(sp => sp.GetRequiredService<BinanceCryptoReferenceTradeStreamService>());
+builder.Services.AddSingleton<CryptoReferencePriceAverageCache>();
+builder.Services.AddSingleton<ICryptoReferencePriceAverageCache>(sp => sp.GetRequiredService<CryptoReferencePriceAverageCache>());
+builder.Services.AddSingleton<ICryptoReferencePriceAverageProvider>(sp => sp.GetRequiredService<CryptoReferencePriceAverageCache>());
 builder.Services.AddHttpClient<ChainlinkBtcUsdCorrelationWorker>();
-builder.Services.AddSingleton<BtcOrderBookLagDiagnosticService>();
-builder.Services.AddSingleton<IBtcOrderBookLagDiagnosticService>(sp => sp.GetRequiredService<BtcOrderBookLagDiagnosticService>());
+if (appConfiguration.BtcOrderBookLagDiagnostics.Enabled)
+{
+    builder.Services.AddSingleton<BtcOrderBookLagDiagnosticService>();
+    builder.Services.AddSingleton<IBtcOrderBookLagDiagnosticService>(sp => sp.GetRequiredService<BtcOrderBookLagDiagnosticService>());
+}
+else
+{
+    builder.Services.AddSingleton<IBtcOrderBookLagDiagnosticService, NoOpBtcOrderBookLagDiagnosticService>();
+}
+
 builder.Services.AddSingleton<MarketTradeTickDiagnosticService>();
 builder.Services.AddSingleton<IMarketTradeTickDiagnosticService>(sp => sp.GetRequiredService<MarketTradeTickDiagnosticService>());
+builder.Services.AddSingleton<ICryptoUpDown5mMarketResolvedEventRecorder, CryptoUpDown5mMarketResolvedEventRecorder>();
 builder.Services.AddSingleton<IExposureSnapshotCache, ExposureSnapshotCache>();
 builder.Services.AddSingleton<IPaperTradingMarketDataUpdater, PaperTradingMarketDataUpdater>();
 builder.Services.AddSingleton<ConservativePaperGtdFillEstimator>();
@@ -352,6 +366,7 @@ builder.Services.AddSingleton<IBtcUpDown5mOddsArchiveProcessor, BtcUpDown5mOddsA
 builder.Services.AddSingleton<IBtcUpDown5mStatisticsProcessor, BtcUpDown5mStatisticsProcessor>();
 builder.Services.AddSingleton<IBtcUpDown5mArbitrageScannerProcessor, BtcUpDown5mArbitrageScannerProcessor>();
 builder.Services.AddSingleton<ICryptoUpDown5mOddsArchiveProcessor, CryptoUpDown5mOddsArchiveProcessor>();
+builder.Services.AddSingleton<ICryptoUpDown5mResultPollingProcessor, CryptoUpDown5mResultPollingProcessor>();
 builder.Services.AddSingleton<IDataApiTraderActivityIngestionProcessor, DataApiTraderActivityIngestionProcessor>();
 builder.Services.AddSingleton<IOnChainIngestionProcessor, OnChainIngestionProcessor>();
 builder.Services.AddSingleton<IOnChainTradeCaptureProcessor, OnChainTradeCaptureProcessor>();
@@ -367,17 +382,25 @@ builder.Services.AddHostedService<PaperTradingWorker>();
 builder.Services.AddHostedService<LiveTradingMaintenanceWorker>();
 builder.Services.AddHostedService<LocalControlServer>();
 builder.Services.AddHostedService<GammaMarketIngestionWorker>();
-builder.Services.AddHostedService(sp => sp.GetRequiredService<BtcOrderBookLagDiagnosticService>());
+if (appConfiguration.BtcOrderBookLagDiagnostics.Enabled)
+{
+    builder.Services.AddHostedService(sp => sp.GetRequiredService<BtcOrderBookLagDiagnosticService>());
+}
+
 builder.Services.AddHostedService<BtcUsdReferencePriceCacheWarmupService>();
 builder.Services.AddHostedService(sp => sp.GetRequiredService<BinanceBtcUsdTradeStreamService>());
 builder.Services.AddHostedService(sp => sp.GetRequiredService<BinanceCryptoReferenceTradeStreamService>());
+builder.Services.AddHostedService<CryptoReferencePriceHistoryWorker>();
 builder.Services.AddHostedService<ChainlinkBtcUsdCorrelationWorker>();
 builder.Services.AddHostedService<BtcUpDown5mOrderBookRefreshWorker>();
 builder.Services.AddHostedService<BtcUpDown5mPaperStrategyWorker>();
+builder.Services.AddHostedService<BtcUpDown5mPreviousResultPaperStrategyWorker>();
+builder.Services.AddHostedService<BtcUpDown5mDiffCounterPaperStrategyWorker>();
 builder.Services.AddHostedService<BtcUpDown5mOddsArchiveWorker>();
 builder.Services.AddHostedService<BtcUpDown5mStatisticsWorker>();
 builder.Services.AddHostedService<BtcUpDown5mArbitrageScannerWorker>();
 builder.Services.AddHostedService<CryptoUpDown5mOddsArchiveWorker>();
+builder.Services.AddHostedService<CryptoUpDown5mResultPollingWorker>();
 // Up/Down focused mode: trader research/rating workers are paused.
 // builder.Services.AddHostedService<DataApiTraderActivityIngestionWorker>();
 // builder.Services.AddHostedService<DataApiTraderActivitySyncWorker>();

@@ -184,6 +184,11 @@ public sealed record PaperOrderRow(
     string CreatedUtc,
     string ExpiresUtc,
     string FilledUtc,
+    decimal? SettlementValueUsd,
+    decimal? RealizedPnlUsd,
+    string SettledUtc,
+    string WinningOutcome,
+    bool? Won,
     string TtlRemaining,
     string SignalId);
 
@@ -262,6 +267,9 @@ public sealed partial class StrategyPerformanceRow : ObservableObject
         decimal closedRoiPct,
         decimal avgEntryDelaySeconds,
         decimal maxEntryDelaySeconds,
+        decimal avgCountertrendScoreBps,
+        decimal avgCountertrendSignalBps,
+        decimal? lastCountertrendSignalBps,
         int liveOrdersCount,
         int liveFilledOrdersCount,
         int liveOpenOrdersCount,
@@ -330,6 +338,9 @@ public sealed partial class StrategyPerformanceRow : ObservableObject
         ClosedRoiPct = closedRoiPct;
         AvgEntryDelaySeconds = avgEntryDelaySeconds;
         MaxEntryDelaySeconds = maxEntryDelaySeconds;
+        AvgCountertrendScoreBps = avgCountertrendScoreBps;
+        AvgCountertrendSignalBps = avgCountertrendSignalBps;
+        LastCountertrendSignalBps = lastCountertrendSignalBps;
         LiveOrdersCount = liveOrdersCount;
         LiveFilledOrdersCount = liveFilledOrdersCount;
         LiveOpenOrdersCount = liveOpenOrdersCount;
@@ -450,6 +461,12 @@ public sealed partial class StrategyPerformanceRow : ObservableObject
 
     public decimal MaxEntryDelaySeconds { get; }
 
+    public decimal AvgCountertrendScoreBps { get; }
+
+    public decimal AvgCountertrendSignalBps { get; }
+
+    public decimal? LastCountertrendSignalBps { get; }
+
     public int LiveOrdersCount { get; }
 
     public int LiveFilledOrdersCount { get; }
@@ -506,6 +523,7 @@ public sealed partial class StrategyPerformanceRow : ObservableObject
 public sealed record StrategyRecentPerformanceRow(
     string Window,
     int WindowHours,
+    Guid StrategyId,
     string Name,
     bool LiveStakes,
     int OrdersCount,
@@ -737,8 +755,17 @@ public sealed record DashboardSnapshot(
     IReadOnlyList<RiskUsageRow> RiskUsage,
     IReadOnlyList<DiagnosticRow> Diagnostics,
     IReadOnlyList<RunbookLinkRow> RunbookLinks,
-    IReadOnlyList<LogRow> Logs);
+    IReadOnlyList<LogRow> Logs,
+    bool HasNextLiveOrdersPage = false);
 
 public sealed record DashboardOrderSnapshot(
     IReadOnlyList<PaperOrderRow> PaperOrders,
-    IReadOnlyList<LiveOrderRow> LiveOrders);
+    IReadOnlyList<LiveOrderRow> LiveOrders,
+    bool HasNextLiveOrdersPage = false);
+
+public sealed record DashboardPaperOrderSnapshot(
+    IReadOnlyList<PaperOrderRow> PaperOrders);
+
+public sealed record DashboardLiveOrderSnapshot(
+    IReadOnlyList<LiveOrderRow> LiveOrders,
+    bool HasNextLiveOrdersPage = false);

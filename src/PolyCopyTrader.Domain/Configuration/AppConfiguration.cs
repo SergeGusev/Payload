@@ -46,6 +46,8 @@ public sealed class AppConfiguration
 
     public BinanceCryptoReferenceOptions BinanceCryptoReference { get; init; } = new();
 
+    public CryptoReferencePriceHistoryOptions CryptoReferencePriceHistory { get; init; } = new();
+
     public BtcUpDown5mOddsArchiveOptions BtcUpDown5mOddsArchive { get; init; } = new();
 
     public BtcUpDown5mStatisticsOptions BtcUpDown5mStatistics { get; init; } = new();
@@ -53,6 +55,8 @@ public sealed class AppConfiguration
     public BtcUpDown5mArbitrageScannerOptions BtcUpDown5mArbitrageScanner { get; init; } = new();
 
     public CryptoUpDown5mOddsArchiveOptions CryptoUpDown5mOddsArchive { get; init; } = new();
+
+    public CryptoUpDown5mResultPollingOptions CryptoUpDown5mResultPolling { get; init; } = new();
 
     public ChainlinkBtcUsdDiagnosticsOptions ChainlinkBtcUsdDiagnostics { get; init; } = new();
 
@@ -304,7 +308,8 @@ public sealed class MarketDataWebSocketOptions
 public enum MarketDataWebSocketSubscriptionScope
 {
     AllActiveMarkets,
-    BtcUpDown5mOnly
+    BtcUpDown5mOnly,
+    CryptoUpDown5mOnly
 }
 
 public sealed class MarketTradeDiagnosticsOptions
@@ -495,6 +500,8 @@ public sealed class LiveTradingOptions
 
     public int ApiErrorLockoutWindowMinutes { get; init; } = 15;
 
+    public bool BlockOnGeoblockCheckFailure { get; init; } = true;
+
     public bool CancelAllOnKillSwitch { get; init; } = true;
 
     public List<string> AutoLivePauseStrategies { get; init; } = [];
@@ -509,6 +516,8 @@ public sealed class DashboardOptions
     public bool StrategiesOnlyMode { get; init; } = true;
 
     public int OptionalReportTimeoutSeconds { get; init; } = 8;
+
+    public string DefaultDatabaseSource { get; init; } = "Local database";
 }
 
 public sealed class AnalyticsOptions
@@ -558,6 +567,8 @@ public sealed class BtcUpDown5mStrategyOptions
 
     public int PollIntervalSeconds { get; init; } = 5;
 
+    public int DiffCounterFastPollIntervalMilliseconds { get; init; } = 500;
+
     public decimal StakeUsd { get; init; } = 1.00m;
 
     public int EntryGraceSeconds { get; init; } = 60;
@@ -603,6 +614,8 @@ public sealed class BtcUpDown5mStrategyOptions
     public decimal OpeningLimitMaxPrice { get; init; } = 0.50m;
 
     public decimal InstantOpeningLimitMaxPrice { get; init; } = 0.65m;
+
+    public decimal DiffCounterInstantMaxPrice { get; init; } = 1.00m;
 
     public decimal OpeningLimitPriceTickSize { get; init; } = 0.01m;
 
@@ -706,6 +719,21 @@ public sealed class BinanceCryptoReferenceOptions
     public int ReceiveBufferBytes { get; init; } = 16_384;
 }
 
+public sealed class CryptoReferencePriceHistoryOptions
+{
+    public bool Enabled { get; init; } = true;
+
+    public List<string> AssetSymbols { get; init; } = ["BTC", "ETH", "SOL"];
+
+    public int WriteIntervalSeconds { get; init; } = 10;
+
+    public int StartupLookbackHours { get; init; } = 24;
+
+    public int TargetSamplesPerWindow { get; init; } = 60;
+
+    public List<int> WindowMinutes { get; init; } = [1_440, 720, 360, 180, 90, 45, 20, 10];
+}
+
 public sealed class BtcUpDown5mOddsArchiveOptions
 {
     public bool Enabled { get; init; } = true;
@@ -721,7 +749,7 @@ public sealed class BtcUpDown5mOddsArchiveOptions
 
 public sealed class BtcUpDown5mStatisticsOptions
 {
-    public bool Enabled { get; init; } = true;
+    public bool Enabled { get; init; }
 
     public int PollIntervalSeconds { get; init; } = 1;
 
@@ -784,6 +812,39 @@ public sealed class CryptoUpDown5mOddsArchiveOptions
     public int MaxOrderBookAgeMilliseconds { get; init; } = 15_000;
 
     public bool RestFallbackEnabled { get; init; } = true;
+}
+
+public sealed class CryptoUpDown5mResultPollingOptions
+{
+    public bool Enabled { get; init; } = true;
+
+    public List<string> AssetSymbols { get; init; } = ["BTC", "ETH", "SOL"];
+
+    public int PollIntervalSeconds { get; init; } = 5;
+
+    public int MaxMarketsPerCycle { get; init; } = 500;
+
+    public int MaxMarketAgeMinutes { get; init; } = 60;
+
+    public int MaxResultWaitMinutes { get; init; } = 20;
+
+    public bool ReferencePriceResultEnabled { get; init; } = true;
+
+    public int ReferencePriceResultMaxEndAgeMilliseconds { get; init; } = 15_000;
+
+    public int ReferencePriceResultMinSamples { get; init; } = 2;
+
+    public bool ProvisionalOrderBookResultEnabled { get; init; } = true;
+
+    public decimal ProvisionalWinnerBidMin { get; init; } = 0.60m;
+
+    public decimal ProvisionalLoserAskMax { get; init; } = 0.40m;
+
+    public int ProvisionalMaxOrderBookAgeMilliseconds { get; init; } = 15_000;
+
+    public bool ProvisionalRestFallbackEnabled { get; init; } = true;
+
+    public int ProvisionalRestRequestTimeoutSeconds { get; init; } = 3;
 }
 
 public sealed class ChainlinkBtcUsdDiagnosticsOptions

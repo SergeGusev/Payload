@@ -67,6 +67,55 @@ public sealed class StrategyPerformanceTests
     }
 
     [Fact]
+    public async Task GetStrategyPerformanceAsync_ComputesCountertrendSignalBpsMetrics()
+    {
+        var repository = new TestAppRepository();
+        var now = DateTimeOffset.UtcNow;
+        var variant = StrategyIds.BtcUpDown5mVariants.Single(item =>
+            item.Code == "btc_up_down_5m_prev_score_countertrend_fak");
+        repository.PaperOrders.Add(new PaperOrder(
+            Guid.NewGuid(),
+            Guid.NewGuid(),
+            "strategy:" + variant.Code,
+            PaperOrderStatus.Filled,
+            TradeSide.Buy,
+            "asset-down-1",
+            "condition-1",
+            "Down",
+            0.50m,
+            2m,
+            1m,
+            now.AddMinutes(-2),
+            now.AddMinutes(3),
+            now.AddMinutes(-2),
+            StrategyId: variant.Id,
+            RawDecisionJson: """{"previous_score":0.001}"""));
+        repository.PaperOrders.Add(new PaperOrder(
+            Guid.NewGuid(),
+            Guid.NewGuid(),
+            "strategy:" + variant.Code,
+            PaperOrderStatus.Filled,
+            TradeSide.Buy,
+            "asset-up-2",
+            "condition-2",
+            "Up",
+            0.50m,
+            2m,
+            1m,
+            now.AddMinutes(-1),
+            now.AddMinutes(4),
+            now.AddMinutes(-1),
+            StrategyId: variant.Id,
+            RawDecisionJson: """{"previous_score_bps":-25,"selected_signal_bps":25}"""));
+
+        var row = (await repository.GetStrategyPerformanceAsync()).Single(item => item.StrategyId == variant.Id);
+
+        Assert.Equal(-7.5m, row.AvgCountertrendScoreBps);
+        Assert.Equal(17.5m, row.AvgCountertrendSignalBps);
+        Assert.Equal(25m, row.LastCountertrendSignalBps);
+    }
+
+    [Fact]
     public async Task GetStrategyPerformanceAsync_KeepsClosedRoiSeparateFromOpenUnrealizedPnl()
     {
         var repository = new TestAppRepository();

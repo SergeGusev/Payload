@@ -1,0 +1,37 @@
+CapturedAtUtc	2026-06-17T20:31:58.1237920+00:00
+Database	polycopytrader
+ServerAddress	192.168.0.101/32
+ServerTimeUtc	2026-06-17T20:31:57Z
+StrategyCode	eth_up_down_5m_down_bps_9_instant
+StrategyName	ETH Up or Down 5m Down 9 bps Instant
+StrategyId	b7c50005-0000-4000-8080-000000000109
+Enabled	True
+LiveStakes	True
+LiveStakeAmount	1
+CurrentLiveAvailableBalance	100.717664
+CancelledOrCancelFailedOrders	12
+ResolvedOrders	12
+UnresolvedOrders	0
+WouldWinOrders	11
+WouldLoseOrders	1
+HypotheticalMatchedCostUsd	43.0215
+HypotheticalMatchedSettlementValueUsd	78.75
+HypotheticalMatchedRealizedPnlUsd	35.7285
+HypotheticalLiveAvailableBalance	136.446164
+BalanceDeltaUsd	35.7285
+OrdersTsv	D:\My\Business\PolyMarket\outputs\eth-down-9-cancelled-live-hypothetical-2026-06-17\orders.tsv
+StatusDetailsTsv	D:\My\Business\PolyMarket\outputs\eth-down-9-cancelled-live-hypothetical-2026-06-17\status-details.tsv
+DataApiTradeMatchesTsv	D:\My\Business\PolyMarket\outputs\eth-down-9-cancelled-live-hypothetical-2026-06-17\data-api-trade-matches.tsv
+DataApiMatchedTargetRows	0
+DataApiTargetRowsCoveredByTradeSize	0
+MatchedTimingTsv	D:\My\Business\PolyMarket\outputs\eth-down-9-cancelled-live-hypothetical-2026-06-17\matched-timing.tsv
+MatchedOrders	125
+MatchedImmediatelyByPlacement	0
+MatchedByDataApiReconciliation	40
+MatchedByLaterStatusPolling	85
+
+Notes
+- Hypothesis assumes each cancelled/cancel-failed order was fully matched at its stored limit price.
+- Hypothetical balance is current strategies.live_available_balance plus hypothetical realized PnL for resolved target orders.
+- Unresolved orders are excluded from the balance delta.
+- The query is read-only and does not change live_orders or strategy balances.

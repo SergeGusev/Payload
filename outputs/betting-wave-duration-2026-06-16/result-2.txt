@@ -1,0 +1,207 @@
+Betting wave duration snapshot captured at 2026-06-16T09:34:12.2343264+00:00
+Host: 192.168.0.101
+Database: polycopytrader
+Server address: 192.168.0.101/32
+Server time UTC: 2026-06-16T09:34:11Z
+
+## Service heartbeat
+service_name	status	mode	heartbeat_utc	heartbeat_age_seconds	last_error
+PolyCopyTrader.Service	Running	Live	2026-06-16T09:34:01Z	10.5	<none>
+PolyCopyTrader.Tests	Running	ReadOnly	2026-05-04T14:02:41Z	3699090.5	<none>
+
+## Recent all-enabled waves
+entry_due_utc	runs	still_observed	processed	entered_or_settled	skipped	entry_due_expired	full_wave_seconds	max_actual_entry_seconds	last_processed_utc
+2026-06-16T09:30:00Z	1770	0	1770	225	1545	0	28.25	28.11	2026-06-16T09:30:28Z
+2026-06-16T09:25:00Z	1770	0	1770	225	1546	0	19.19	19.19	2026-06-16T09:25:19Z
+2026-06-16T09:20:00Z	1770	0	1770	216	1557	0	16.92	16.92	2026-06-16T09:20:16Z
+2026-06-16T09:15:00Z	1770	0	1770	136	1634	6	132.12	98.05	2026-06-16T09:17:12Z
+2026-06-16T09:10:00Z	1770	0	1770	132	1638	6	155.71	37.46	2026-06-16T09:12:35Z
+2026-06-16T09:05:00Z	1770	0	1770	207	1563	6	144.93	142.50	2026-06-16T09:07:24Z
+2026-06-16T09:00:00Z	1770	0	1770	255	1515	6	83.97	82.19	2026-06-16T09:01:23Z
+2026-06-16T08:55:00Z	1770	0	1770	260	1513	0	23.63	23.63	2026-06-16T08:55:23Z
+2026-06-16T08:50:00Z	1770	0	1770	280	1493	0	58.94	58.94	2026-06-16T08:50:58Z
+2026-06-16T08:45:00Z	1770	0	1770	228	1542	6	133.63	62.82	2026-06-16T08:47:13Z
+2026-06-16T08:40:00Z	1770	0	1770	184	1586	6	140.01	34.56	2026-06-16T08:42:20Z
+2026-06-16T08:35:00Z	1770	0	1770	228	1542	6	138.96	76.67	2026-06-16T08:37:18Z
+2026-06-16T08:30:00Z	1770	0	1770	268	1502	6	155.99	146.43	2026-06-16T08:32:35Z
+2026-06-16T08:25:00Z	1770	0	1770	219	1551	6	117.08	106.87	2026-06-16T08:26:57Z
+2026-06-16T08:20:00Z	1770	0	1770	198	1572	6	90.97	81.69	2026-06-16T08:21:30Z
+2026-06-16T08:15:00Z	1770	0	1770	258	1512	6	63.85	63.84	2026-06-16T08:16:03Z
+2026-06-16T08:10:00Z	1770	0	1770	198	1575	0	168.43	50.63	2026-06-16T08:12:48Z
+2026-06-16T08:05:00Z	1770	0	1770	148	1625	0	55.75	55.75	2026-06-16T08:05:55Z
+
+## Recent waves by group
+entry_due_utc	strategy_group	runs	still_observed	processed	entered_or_settled	skipped	entry_due_expired	full_group_seconds	max_actual_entry_seconds	last_processed_utc
+2026-06-16T09:30:00Z	live	4	0	4	0	4	0	0.42	<null>	2026-06-16T09:30:00Z
+2026-06-16T09:30:00Z	simple_paper	6	0	6	6	0	0	19.81	19.81	2026-06-16T09:30:19Z
+2026-06-16T09:30:00Z	up_down_bps_paper	296	0	296	93	203	0	19.80	16.71	2026-06-16T09:30:19Z
+2026-06-16T09:30:00Z	diff_paper	1464	0	1464	126	1338	0	28.25	28.11	2026-06-16T09:30:28Z
+2026-06-16T09:25:00Z	live	4	0	4	0	4	0	1.19	<null>	2026-06-16T09:25:01Z
+2026-06-16T09:25:00Z	simple_paper	6	0	6	6	1	0	19.19	19.19	2026-06-16T09:25:19Z
+2026-06-16T09:25:00Z	up_down_bps_paper	296	0	296	93	203	0	19.19	17.13	2026-06-16T09:25:19Z
+2026-06-16T09:25:00Z	diff_paper	1464	0	1464	126	1338	0	13.31	13.18	2026-06-16T09:25:13Z
+2026-06-16T09:20:00Z	live	4	0	4	0	4	0	1.25	<null>	2026-06-16T09:20:01Z
+2026-06-16T09:20:00Z	simple_paper	6	0	6	6	3	0	16.92	16.92	2026-06-16T09:20:16Z
+2026-06-16T09:20:00Z	up_down_bps_paper	296	0	296	96	200	0	16.91	14.31	2026-06-16T09:20:16Z
+2026-06-16T09:20:00Z	diff_paper	1464	0	1464	114	1350	0	13.39	13.27	2026-06-16T09:20:13Z
+2026-06-16T09:15:00Z	live	4	0	4	0	4	0	117.29	<null>	2026-06-16T09:16:57Z
+2026-06-16T09:15:00Z	simple_paper	6	0	6	0	6	6	132.12	<null>	2026-06-16T09:17:12Z
+2026-06-16T09:15:00Z	up_down_bps_paper	296	0	296	0	296	0	132.12	<null>	2026-06-16T09:17:12Z
+2026-06-16T09:15:00Z	diff_paper	1464	0	1464	136	1328	0	98.10	98.05	2026-06-16T09:16:38Z
+2026-06-16T09:10:00Z	live	4	0	4	0	4	0	141.43	<null>	2026-06-16T09:12:21Z
+2026-06-16T09:10:00Z	simple_paper	6	0	6	0	6	6	155.71	<null>	2026-06-16T09:12:35Z
+2026-06-16T09:10:00Z	up_down_bps_paper	296	0	296	0	296	0	155.71	<null>	2026-06-16T09:12:35Z
+2026-06-16T09:10:00Z	diff_paper	1464	0	1464	132	1332	0	37.68	37.46	2026-06-16T09:10:37Z
+2026-06-16T09:05:00Z	live	4	0	4	0	4	0	128.85	<null>	2026-06-16T09:07:08Z
+2026-06-16T09:05:00Z	simple_paper	6	0	6	0	6	6	144.93	<null>	2026-06-16T09:07:24Z
+2026-06-16T09:05:00Z	up_down_bps_paper	296	0	296	43	253	0	144.93	142.50	2026-06-16T09:07:24Z
+2026-06-16T09:05:00Z	diff_paper	1464	0	1464	164	1300	0	80.94	79.40	2026-06-16T09:06:20Z
+2026-06-16T09:00:00Z	live	4	0	4	0	4	0	68.35	<null>	2026-06-16T09:01:08Z
+2026-06-16T09:00:00Z	simple_paper	6	0	6	0	6	6	83.97	<null>	2026-06-16T09:01:23Z
+2026-06-16T09:00:00Z	up_down_bps_paper	296	0	296	45	251	0	83.97	82.19	2026-06-16T09:01:23Z
+2026-06-16T09:00:00Z	diff_paper	1464	0	1464	210	1254	0	38.13	37.11	2026-06-16T09:00:38Z
+2026-06-16T08:55:00Z	live	4	0	4	0	4	0	8.67	<null>	2026-06-16T08:55:08Z
+2026-06-16T08:55:00Z	simple_paper	6	0	6	6	3	0	23.63	23.63	2026-06-16T08:55:23Z
+2026-06-16T08:55:00Z	up_down_bps_paper	296	0	296	0	296	0	23.63	<null>	2026-06-16T08:55:23Z
+2026-06-16T08:55:00Z	diff_paper	1464	0	1464	254	1210	0	14.45	14.22	2026-06-16T08:55:14Z
+2026-06-16T08:50:00Z	live	4	0	4	0	4	0	42.66	<null>	2026-06-16T08:50:42Z
+2026-06-16T08:50:00Z	simple_paper	6	0	6	6	3	0	58.94	58.94	2026-06-16T08:50:58Z
+2026-06-16T08:50:00Z	up_down_bps_paper	296	0	296	24	272	0	58.94	58.88	2026-06-16T08:50:58Z
+2026-06-16T08:50:00Z	diff_paper	1464	0	1464	250	1214	0	47.53	47.29	2026-06-16T08:50:47Z
+2026-06-16T08:45:00Z	live	4	0	4	0	4	0	124.74	<null>	2026-06-16T08:47:04Z
+2026-06-16T08:45:00Z	simple_paper	6	0	6	0	6	6	133.63	<null>	2026-06-16T08:47:13Z
+2026-06-16T08:45:00Z	up_down_bps_paper	296	0	296	0	296	0	133.63	<null>	2026-06-16T08:47:13Z
+2026-06-16T08:45:00Z	diff_paper	1464	0	1464	228	1236	0	63.09	62.82	2026-06-16T08:46:03Z
+2026-06-16T08:40:00Z	live	4	0	4	0	4	0	128.32	<null>	2026-06-16T08:42:08Z
+2026-06-16T08:40:00Z	simple_paper	6	0	6	0	6	6	140.01	<null>	2026-06-16T08:42:20Z
+2026-06-16T08:40:00Z	up_down_bps_paper	296	0	296	0	296	0	140.01	<null>	2026-06-16T08:42:20Z
+2026-06-16T08:40:00Z	diff_paper	1464	0	1464	184	1280	0	35.57	34.56	2026-06-16T08:40:35Z
+2026-06-16T08:35:00Z	live	4	0	4	0	4	0	122.84	<null>	2026-06-16T08:37:02Z
+2026-06-16T08:35:00Z	simple_paper	6	0	6	0	6	6	138.96	<null>	2026-06-16T08:37:18Z
+2026-06-16T08:35:00Z	up_down_bps_paper	296	0	296	0	296	0	138.95	<null>	2026-06-16T08:37:18Z
+2026-06-16T08:35:00Z	diff_paper	1464	0	1464	228	1236	0	77.51	76.67	2026-06-16T08:36:17Z
+2026-06-16T08:30:00Z	live	4	0	4	1	3	0	110.09	110.09	2026-06-16T08:31:50Z
+2026-06-16T08:30:00Z	simple_paper	6	0	6	0	6	6	155.99	<null>	2026-06-16T08:32:35Z
+2026-06-16T08:30:00Z	up_down_bps_paper	296	0	296	59	237	0	155.99	146.43	2026-06-16T08:32:35Z
+2026-06-16T08:30:00Z	diff_paper	1464	0	1464	208	1256	0	68.18	57.63	2026-06-16T08:31:08Z
+2026-06-16T08:25:00Z	live	4	0	4	0	4	0	64.12	<null>	2026-06-16T08:26:04Z
+2026-06-16T08:25:00Z	simple_paper	6	0	6	0	6	6	117.08	<null>	2026-06-16T08:26:57Z
+2026-06-16T08:25:00Z	up_down_bps_paper	296	0	296	47	249	0	117.08	106.87	2026-06-16T08:26:57Z
+2026-06-16T08:25:00Z	diff_paper	1464	0	1464	172	1292	0	37.05	36.52	2026-06-16T08:25:37Z
+2026-06-16T08:20:00Z	live	4	0	4	0	4	0	39.44	<null>	2026-06-16T08:20:39Z
+2026-06-16T08:20:00Z	simple_paper	6	0	6	0	6	6	90.97	<null>	2026-06-16T08:21:30Z
+2026-06-16T08:20:00Z	up_down_bps_paper	296	0	296	4	292	0	90.95	81.69	2026-06-16T08:21:30Z
+2026-06-16T08:20:00Z	diff_paper	1464	0	1464	194	1270	0	39.00	38.83	2026-06-16T08:20:39Z
+2026-06-16T08:15:00Z	live	4	0	4	1	3	0	3.78	3.78	2026-06-16T08:15:03Z
+2026-06-16T08:15:00Z	simple_paper	6	0	6	0	6	6	63.85	<null>	2026-06-16T08:16:03Z
+2026-06-16T08:15:00Z	up_down_bps_paper	296	0	296	67	229	0	63.84	63.84	2026-06-16T08:16:03Z
+2026-06-16T08:15:00Z	diff_paper	1464	0	1464	190	1274	0	28.77	28.69	2026-06-16T08:15:28Z
+2026-06-16T08:10:00Z	live	4	0	4	0	4	0	168.43	<null>	2026-06-16T08:12:48Z
+2026-06-16T08:10:00Z	simple_paper	6	0	6	6	3	0	25.55	25.55	2026-06-16T08:10:25Z
+2026-06-16T08:10:00Z	up_down_bps_paper	296	0	296	30	266	0	168.43	25.50	2026-06-16T08:12:48Z
+2026-06-16T08:10:00Z	diff_paper	1464	0	1464	162	1302	0	50.64	50.63	2026-06-16T08:10:50Z
+2026-06-16T08:05:00Z	live	4	0	4	0	4	0	19.21	<null>	2026-06-16T08:05:19Z
+2026-06-16T08:05:00Z	simple_paper	6	0	6	6	3	0	55.75	55.75	2026-06-16T08:05:55Z
+2026-06-16T08:05:00Z	up_down_bps_paper	296	0	296	6	290	0	55.74	45.62	2026-06-16T08:05:55Z
+2026-06-16T08:05:00Z	diff_paper	1464	0	1464	136	1328	0	38.84	38.81	2026-06-16T08:05:38Z
+
+## Completed wave duration summary
+rollup_group	completed_waves	min_runs_per_wave	max_runs_per_wave	avg_full_wave_seconds	p50_full_wave_seconds	p95_full_wave_seconds	max_full_wave_seconds	avg_max_actual_entry_seconds	max_actual_entry_seconds	entry_due_expired
+all_enabled	18	1770	1770	96.02	104.02	157.86	168.43	65.90	146.43	66
+live	18	4	4	71.73	66.24	145.48	168.43	56.94	110.09	0
+simple_paper	18	6	6	87.61	87.47	155.75	155.99	31.40	58.94	66
+up_down_bps_paper	18	296	296	95.55	104.02	157.86	168.43	66.81	146.43	0
+diff_paper	18	1464	1464	45.02	38.49	83.52	98.10	44.07	98.05	0
+
+## Completed wave duration summary without entry_due_expired
+rollup_group	completed_clean_waves	min_runs_per_wave	max_runs_per_wave	avg_full_wave_seconds	p50_full_wave_seconds	p95_full_wave_seconds	max_full_wave_seconds	avg_max_actual_entry_seconds	max_actual_entry_seconds
+all_enabled	7	1770	1770	53.02	28.25	135.59	168.43	36.17	58.94
+live	18	4	4	71.73	66.24	145.48	168.43	56.94	110.09
+simple_paper	7	6	6	31.40	23.63	57.98	58.94	31.40	58.94
+up_down_bps_paper	18	296	296	95.55	104.02	157.86	168.43	66.81	146.43
+diff_paper	18	1464	1464	45.02	38.49	83.52	98.10	44.07	98.05
+
+## Outlier wave details
+entry_due_utc	strategy_group	code	status	skip_reason	count	max_processed_after_due_seconds	max_entered_after_due_seconds	latest_processed_utc
+2026-06-16T09:15:00Z	simple_paper	btc_up_down_5m_down_simple	Skipped	entry_due_expired	1	132.12	<null>	2026-06-16T09:17:12Z
+2026-06-16T09:15:00Z	simple_paper	btc_up_down_5m_up_simple	Skipped	entry_due_expired	1	132.12	<null>	2026-06-16T09:17:12Z
+2026-06-16T09:15:00Z	simple_paper	eth_up_down_5m_down_simple	Skipped	entry_due_expired	1	132.12	<null>	2026-06-16T09:17:12Z
+2026-06-16T09:15:00Z	simple_paper	eth_up_down_5m_up_simple	Skipped	entry_due_expired	1	132.12	<null>	2026-06-16T09:17:12Z
+2026-06-16T09:15:00Z	up_down_bps_paper	sol_up_down_5m_down_bps_41_instant	Skipped	btc_previous_close_book_orderbook_unavailable	1	132.12	<null>	2026-06-16T09:17:12Z
+2026-06-16T09:15:00Z	up_down_bps_paper	sol_up_down_5m_down_bps_42_instant	Skipped	btc_previous_close_book_orderbook_unavailable	1	132.12	<null>	2026-06-16T09:17:12Z
+2026-06-16T09:15:00Z	up_down_bps_paper	sol_up_down_5m_down_bps_43_instant	Skipped	btc_previous_close_book_orderbook_unavailable	1	132.12	<null>	2026-06-16T09:17:12Z
+2026-06-16T09:15:00Z	up_down_bps_paper	sol_up_down_5m_down_bps_44_instant	Skipped	btc_previous_close_book_orderbook_unavailable	1	132.12	<null>	2026-06-16T09:17:12Z
+2026-06-16T09:15:00Z	up_down_bps_paper	sol_up_down_5m_down_bps_45_instant	Skipped	btc_previous_close_book_orderbook_unavailable	1	132.12	<null>	2026-06-16T09:17:12Z
+2026-06-16T09:15:00Z	up_down_bps_paper	sol_up_down_5m_down_bps_46_instant	Skipped	btc_previous_close_book_orderbook_unavailable	1	132.12	<null>	2026-06-16T09:17:12Z
+2026-06-16T09:15:00Z	up_down_bps_paper	sol_up_down_5m_down_bps_47_instant	Skipped	btc_previous_close_book_orderbook_unavailable	1	132.12	<null>	2026-06-16T09:17:12Z
+2026-06-16T09:15:00Z	up_down_bps_paper	sol_up_down_5m_down_bps_48_instant	Skipped	btc_previous_close_book_orderbook_unavailable	1	132.12	<null>	2026-06-16T09:17:12Z
+2026-06-16T09:15:00Z	up_down_bps_paper	sol_up_down_5m_down_bps_49_instant	Skipped	btc_previous_close_book_orderbook_unavailable	1	132.12	<null>	2026-06-16T09:17:12Z
+2026-06-16T09:15:00Z	up_down_bps_paper	sol_up_down_5m_down_bps_50_instant	Skipped	btc_previous_close_book_orderbook_unavailable	1	132.12	<null>	2026-06-16T09:17:12Z
+2026-06-16T09:15:00Z	simple_paper	sol_up_down_5m_down_simple	Skipped	entry_due_expired	1	132.12	<null>	2026-06-16T09:17:12Z
+2026-06-16T09:15:00Z	simple_paper	sol_up_down_5m_up_simple	Skipped	entry_due_expired	1	132.12	<null>	2026-06-16T09:17:12Z
+2026-06-16T09:15:00Z	up_down_bps_paper	sol_up_down_5m_down_bps_27_instant	Skipped	btc_previous_close_book_orderbook_unavailable	1	132.11	<null>	2026-06-16T09:17:12Z
+2026-06-16T09:15:00Z	up_down_bps_paper	sol_up_down_5m_down_bps_28_instant	Skipped	btc_previous_close_book_orderbook_unavailable	1	132.11	<null>	2026-06-16T09:17:12Z
+2026-06-16T09:15:00Z	up_down_bps_paper	sol_up_down_5m_down_bps_29_instant	Skipped	btc_previous_close_book_orderbook_unavailable	1	132.11	<null>	2026-06-16T09:17:12Z
+2026-06-16T09:15:00Z	up_down_bps_paper	sol_up_down_5m_down_bps_30_instant	Skipped	btc_previous_close_book_orderbook_unavailable	1	132.11	<null>	2026-06-16T09:17:12Z
+2026-06-16T09:15:00Z	up_down_bps_paper	sol_up_down_5m_down_bps_31_instant	Skipped	btc_previous_close_book_orderbook_unavailable	1	132.11	<null>	2026-06-16T09:17:12Z
+2026-06-16T09:15:00Z	up_down_bps_paper	sol_up_down_5m_down_bps_32_instant	Skipped	btc_previous_close_book_orderbook_unavailable	1	132.11	<null>	2026-06-16T09:17:12Z
+2026-06-16T09:15:00Z	up_down_bps_paper	sol_up_down_5m_down_bps_33_instant	Skipped	btc_previous_close_book_orderbook_unavailable	1	132.11	<null>	2026-06-16T09:17:12Z
+2026-06-16T09:15:00Z	up_down_bps_paper	sol_up_down_5m_down_bps_34_instant	Skipped	btc_previous_close_book_orderbook_unavailable	1	132.11	<null>	2026-06-16T09:17:12Z
+2026-06-16T09:15:00Z	up_down_bps_paper	sol_up_down_5m_down_bps_35_instant	Skipped	btc_previous_close_book_orderbook_unavailable	1	132.11	<null>	2026-06-16T09:17:12Z
+2026-06-16T09:15:00Z	up_down_bps_paper	sol_up_down_5m_down_bps_36_instant	Skipped	btc_previous_close_book_orderbook_unavailable	1	132.11	<null>	2026-06-16T09:17:12Z
+2026-06-16T09:15:00Z	up_down_bps_paper	sol_up_down_5m_down_bps_37_instant	Skipped	btc_previous_close_book_orderbook_unavailable	1	132.11	<null>	2026-06-16T09:17:12Z
+2026-06-16T09:15:00Z	up_down_bps_paper	sol_up_down_5m_down_bps_38_instant	Skipped	btc_previous_close_book_orderbook_unavailable	1	132.11	<null>	2026-06-16T09:17:12Z
+2026-06-16T09:15:00Z	up_down_bps_paper	sol_up_down_5m_down_bps_39_instant	Skipped	btc_previous_close_book_orderbook_unavailable	1	132.11	<null>	2026-06-16T09:17:12Z
+2026-06-16T09:15:00Z	up_down_bps_paper	sol_up_down_5m_down_bps_40_instant	Skipped	btc_previous_close_book_orderbook_unavailable	1	132.11	<null>	2026-06-16T09:17:12Z
+2026-06-16T09:15:00Z	up_down_bps_paper	sol_up_down_5m_down_bps_19_instant	Skipped	btc_previous_close_book_orderbook_unavailable	1	132.10	<null>	2026-06-16T09:17:12Z
+2026-06-16T09:15:00Z	up_down_bps_paper	sol_up_down_5m_down_bps_20_instant	Skipped	btc_previous_close_book_orderbook_unavailable	1	132.10	<null>	2026-06-16T09:17:12Z
+2026-06-16T09:15:00Z	up_down_bps_paper	sol_up_down_5m_down_bps_21_instant	Skipped	btc_previous_close_book_orderbook_unavailable	1	132.10	<null>	2026-06-16T09:17:12Z
+2026-06-16T09:15:00Z	up_down_bps_paper	sol_up_down_5m_down_bps_22_instant	Skipped	btc_previous_close_book_orderbook_unavailable	1	132.10	<null>	2026-06-16T09:17:12Z
+2026-06-16T09:15:00Z	up_down_bps_paper	sol_up_down_5m_down_bps_23_instant	Skipped	btc_previous_close_book_orderbook_unavailable	1	132.10	<null>	2026-06-16T09:17:12Z
+2026-06-16T09:15:00Z	up_down_bps_paper	sol_up_down_5m_down_bps_24_instant	Skipped	btc_previous_close_book_orderbook_unavailable	1	132.10	<null>	2026-06-16T09:17:12Z
+2026-06-16T09:15:00Z	up_down_bps_paper	sol_up_down_5m_down_bps_25_instant	Skipped	btc_previous_close_book_orderbook_unavailable	1	132.10	<null>	2026-06-16T09:17:12Z
+2026-06-16T09:15:00Z	up_down_bps_paper	sol_up_down_5m_down_bps_26_instant	Skipped	btc_previous_close_book_orderbook_unavailable	1	132.10	<null>	2026-06-16T09:17:12Z
+2026-06-16T09:15:00Z	up_down_bps_paper	sol_up_down_5m_down_bps_16_instant	Skipped	btc_previous_close_book_orderbook_unavailable	1	132.09	<null>	2026-06-16T09:17:12Z
+2026-06-16T09:15:00Z	up_down_bps_paper	sol_up_down_5m_down_bps_17_instant	Skipped	btc_previous_close_book_orderbook_unavailable	1	132.09	<null>	2026-06-16T09:17:12Z
+2026-06-16T09:15:00Z	up_down_bps_paper	sol_up_down_5m_down_bps_18_instant	Skipped	btc_previous_close_book_orderbook_unavailable	1	132.09	<null>	2026-06-16T09:17:12Z
+2026-06-16T09:15:00Z	up_down_bps_paper	sol_up_down_5m_down_bps_15_instant	Skipped	btc_previous_close_book_orderbook_unavailable	1	130.94	<null>	2026-06-16T09:17:10Z
+2026-06-16T09:15:00Z	up_down_bps_paper	sol_up_down_5m_down_bps_14_instant	Skipped	btc_previous_close_book_orderbook_unavailable	1	130.89	<null>	2026-06-16T09:17:10Z
+2026-06-16T09:15:00Z	up_down_bps_paper	sol_up_down_5m_down_bps_10_instant	Skipped	btc_previous_close_book_orderbook_unavailable	1	130.78	<null>	2026-06-16T09:17:10Z
+2026-06-16T09:15:00Z	up_down_bps_paper	sol_up_down_5m_down_bps_11_instant	Skipped	btc_previous_close_book_orderbook_unavailable	1	130.78	<null>	2026-06-16T09:17:10Z
+2026-06-16T09:15:00Z	up_down_bps_paper	sol_up_down_5m_down_bps_12_instant	Skipped	btc_previous_close_book_orderbook_unavailable	1	130.78	<null>	2026-06-16T09:17:10Z
+2026-06-16T09:15:00Z	up_down_bps_paper	sol_up_down_5m_down_bps_13_instant	Skipped	btc_previous_close_book_orderbook_unavailable	1	130.78	<null>	2026-06-16T09:17:10Z
+2026-06-16T09:15:00Z	up_down_bps_paper	sol_up_down_5m_down_bps_4_instant	Skipped	btc_previous_close_book_orderbook_unavailable	1	130.78	<null>	2026-06-16T09:17:10Z
+2026-06-16T09:15:00Z	up_down_bps_paper	sol_up_down_5m_down_bps_5_instant	Skipped	btc_previous_close_book_orderbook_unavailable	1	130.78	<null>	2026-06-16T09:17:10Z
+2026-06-16T09:15:00Z	up_down_bps_paper	sol_up_down_5m_down_bps_6_instant	Skipped	btc_previous_close_book_orderbook_unavailable	1	130.78	<null>	2026-06-16T09:17:10Z
+2026-06-16T09:15:00Z	up_down_bps_paper	sol_up_down_5m_down_bps_7_instant	Skipped	btc_previous_close_book_orderbook_unavailable	1	130.78	<null>	2026-06-16T09:17:10Z
+2026-06-16T09:15:00Z	up_down_bps_paper	sol_up_down_5m_down_bps_8_instant	Skipped	btc_previous_close_book_orderbook_unavailable	1	130.78	<null>	2026-06-16T09:17:10Z
+2026-06-16T09:15:00Z	up_down_bps_paper	sol_up_down_5m_down_bps_9_instant	Skipped	btc_previous_close_book_orderbook_unavailable	1	130.78	<null>	2026-06-16T09:17:10Z
+2026-06-16T09:15:00Z	up_down_bps_paper	sol_up_down_5m_down_bps_1_instant	Skipped	btc_previous_close_book_orderbook_unavailable	1	130.77	<null>	2026-06-16T09:17:10Z
+2026-06-16T09:15:00Z	up_down_bps_paper	sol_up_down_5m_down_bps_2_instant	Skipped	btc_previous_close_book_orderbook_unavailable	1	130.77	<null>	2026-06-16T09:17:10Z
+2026-06-16T09:15:00Z	up_down_bps_paper	sol_up_down_5m_down_bps_3_instant	Skipped	btc_previous_close_book_orderbook_unavailable	1	130.77	<null>	2026-06-16T09:17:10Z
+2026-06-16T09:15:00Z	up_down_bps_paper	sol_up_down_5m_up_bps_10_instant	Skipped	btc_previous_close_book_orderbook_unavailable	1	130.77	<null>	2026-06-16T09:17:10Z
+2026-06-16T09:15:00Z	up_down_bps_paper	sol_up_down_5m_up_bps_11_instant	Skipped	btc_previous_close_book_orderbook_unavailable	1	130.77	<null>	2026-06-16T09:17:10Z
+2026-06-16T09:15:00Z	up_down_bps_paper	sol_up_down_5m_up_bps_12_instant	Skipped	btc_previous_close_book_orderbook_unavailable	1	130.77	<null>	2026-06-16T09:17:10Z
+2026-06-16T09:15:00Z	up_down_bps_paper	sol_up_down_5m_up_bps_13_instant	Skipped	btc_previous_close_book_orderbook_unavailable	1	130.77	<null>	2026-06-16T09:17:10Z
+2026-06-16T09:15:00Z	up_down_bps_paper	sol_up_down_5m_up_bps_14_instant	Skipped	btc_previous_close_book_orderbook_unavailable	1	130.77	<null>	2026-06-16T09:17:10Z
+2026-06-16T09:15:00Z	up_down_bps_paper	sol_up_down_5m_up_bps_15_instant	Skipped	btc_previous_close_book_orderbook_unavailable	1	130.77	<null>	2026-06-16T09:17:10Z
+2026-06-16T09:15:00Z	up_down_bps_paper	sol_up_down_5m_up_bps_16_instant	Skipped	btc_previous_close_book_orderbook_unavailable	1	130.77	<null>	2026-06-16T09:17:10Z
+2026-06-16T09:15:00Z	up_down_bps_paper	sol_up_down_5m_up_bps_17_instant	Skipped	btc_previous_close_book_orderbook_unavailable	1	130.77	<null>	2026-06-16T09:17:10Z
+2026-06-16T09:15:00Z	up_down_bps_paper	sol_up_down_5m_up_bps_18_instant	Skipped	btc_previous_close_book_orderbook_unavailable	1	130.77	<null>	2026-06-16T09:17:10Z
+2026-06-16T09:15:00Z	up_down_bps_paper	sol_up_down_5m_up_bps_19_instant	Skipped	btc_previous_close_book_orderbook_unavailable	1	130.77	<null>	2026-06-16T09:17:10Z
+2026-06-16T09:15:00Z	up_down_bps_paper	sol_up_down_5m_up_bps_20_instant	Skipped	btc_previous_close_book_orderbook_unavailable	1	130.77	<null>	2026-06-16T09:17:10Z
+2026-06-16T09:15:00Z	up_down_bps_paper	sol_up_down_5m_up_bps_21_instant	Skipped	btc_previous_close_book_orderbook_unavailable	1	130.77	<null>	2026-06-16T09:17:10Z
+2026-06-16T09:15:00Z	up_down_bps_paper	sol_up_down_5m_up_bps_22_instant	Skipped	btc_previous_close_book_orderbook_unavailable	1	130.77	<null>	2026-06-16T09:17:10Z
+2026-06-16T09:15:00Z	up_down_bps_paper	sol_up_down_5m_up_bps_23_instant	Skipped	btc_previous_close_book_orderbook_unavailable	1	130.77	<null>	2026-06-16T09:17:10Z
+2026-06-16T09:15:00Z	up_down_bps_paper	sol_up_down_5m_up_bps_24_instant	Skipped	btc_previous_close_book_orderbook_unavailable	1	130.77	<null>	2026-06-16T09:17:10Z
+2026-06-16T09:15:00Z	up_down_bps_paper	sol_up_down_5m_up_bps_25_instant	Skipped	btc_previous_close_book_orderbook_unavailable	1	130.77	<null>	2026-06-16T09:17:10Z
+2026-06-16T09:15:00Z	up_down_bps_paper	sol_up_down_5m_up_bps_26_instant	Skipped	btc_previous_close_book_orderbook_unavailable	1	130.77	<null>	2026-06-16T09:17:10Z
+2026-06-16T09:15:00Z	up_down_bps_paper	sol_up_down_5m_up_bps_27_instant	Skipped	btc_previous_close_book_orderbook_unavailable	1	130.77	<null>	2026-06-16T09:17:10Z
+2026-06-16T09:15:00Z	up_down_bps_paper	sol_up_down_5m_up_bps_28_instant	Skipped	btc_previous_close_book_orderbook_unavailable	1	130.77	<null>	2026-06-16T09:17:10Z
+2026-06-16T09:15:00Z	up_down_bps_paper	sol_up_down_5m_up_bps_29_instant	Skipped	btc_previous_close_book_orderbook_unavailable	1	130.77	<null>	2026-06-16T09:17:10Z
+2026-06-16T09:15:00Z	up_down_bps_paper	sol_up_down_5m_up_bps_30_instant	Skipped	btc_previous_close_book_orderbook_unavailable	1	130.77	<null>	2026-06-16T09:17:10Z
+2026-06-16T09:15:00Z	up_down_bps_paper	sol_up_down_5m_up_bps_31_instant	Skipped	btc_previous_close_book_orderbook_unavailable	1	130.77	<null>	2026-06-16T09:17:10Z
+2026-06-16T09:15:00Z	up_down_bps_paper	sol_up_down_5m_up_bps_32_instant	Skipped	btc_previous_close_book_orderbook_unavailable	1	130.77	<null>	2026-06-16T09:17:10Z
+2026-06-16T09:15:00Z	up_down_bps_paper	sol_up_down_5m_up_bps_33_instant	Skipped	btc_previous_close_book_orderbook_unavailable	1	130.77	<null>	2026-06-16T09:17:10Z
+
+Betting wave duration snapshot finished at 2026-06-16T09:34:26.1500796+00:00

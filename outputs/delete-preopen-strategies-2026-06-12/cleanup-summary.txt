@@ -1,0 +1,55 @@
+PreOpen strategy cleanup summary
+Generated: 2026-06-12
+
+Target database:
+- Database: polycopytrader
+- Server address: 192.168.0.101
+
+Dry-run target counts before deletion:
+- PreOpen strategies: 720
+- PreOpen paper_orders: 128903
+- PreOpen paper_fills: 2816
+- PreOpen strategy_market_paper_runs: 133353
+- PreOpen dry_run_orders: 0
+- PreOpen live_orders: 0
+- PreOpen paper_live_shadow_decisions: 0
+- PreOpen paper_live_shadow_discrepancies: 0
+- PreOpen synthetic wallets: 800
+- PreOpen paper_positions: 3720
+- PreOpen paper_position_settlements: 3280
+- PreOpen paper_copied_trader_performance rows: 960
+
+Deleted in small batches:
+- strategy_market_paper_runs: 133353
+- paper_fills: 2816
+- paper_position_settlements: 3280
+- paper_positions: 3720
+- paper_copied_trader_performance: 960
+- paper_orders: 128903
+- signals with PreOpen synthetic trader_wallet: 144767
+- strategies: 720
+- dry_run_orders: 0
+- live_orders: 0
+- paper_live_shadow_decisions: 0
+- paper_live_shadow_discrepancies: 0
+- signal_rejections: 0
+
+Safety notes:
+- Open/unsettled target live_orders guard count was 0.
+- The production missing-strategy guard was installed successfully before deleting rows.
+- Later continuation runs used --skip-guard to avoid repeated DDL locks after the guard was already installed.
+- Source schema no longer seeds PreOpen strategy rows.
+- Source schema guard now skips missing strategy_market_paper_runs for deleted 15m and PreOpen rows.
+
+Final verify-only residual scan:
+- strategies by PreOpen code/name/description: 0
+- paper_orders synthetic PreOpen wallets: 0
+- signals synthetic PreOpen wallets: 0
+- paper_positions synthetic PreOpen wallets: 0
+- paper_position_settlements synthetic PreOpen wallets: 0
+- paper_copied_trader_performance synthetic PreOpen wallets: 0
+- strategy_market_paper_runs PreOpen categories: 0
+
+Verification:
+- dotnet build outputs\delete-preopen-strategies-2026-06-12\DeletePreOpenStrategies.csproj passed.
+- dotnet test PolyCopyTrader.sln --no-restore passed: 655 tests.

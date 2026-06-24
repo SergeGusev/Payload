@@ -1,5 +1,6 @@
 using System.Globalization;
 using System.Text.Json;
+using System.Text.Json.Nodes;
 using PolyCopyTrader.Domain;
 using PolyCopyTrader.Domain.Configuration;
 using PolyCopyTrader.Polymarket;
@@ -21,6 +22,7 @@ public sealed class PaperTradingProcessor(
     IAppRepository repository) : IPaperTradingProcessor
 {
     private const string PaperLiveShadowTestSource = "paper_live_shadow_test";
+    private const string BtcFakTakerPaperExecutionSource = "btc_updown5m_fak_taker_paper";
 
     public async Task<PaperTradingProcessingResult> ProcessOpenOrdersAsync(CancellationToken cancellationToken = default)
     {
@@ -43,6 +45,32 @@ public sealed class PaperTradingProcessor(
         {
             if (string.Equals(order.ExecutionSource, PaperLiveShadowTestSource, StringComparison.OrdinalIgnoreCase))
             {
+                continue;
+            }
+
+            if (IsFakTakerPaperOrder(order))
+            {
+                if (fillSimulationCandidatesProcessed >= maxFillSimulationCandidates)
+                {
+                    continue;
+                }
+
+                fillSimulationCandidatesProcessed++;
+                var fakResult = await ProcessFakTakerPaperOrderAsync(order, now, positions, cancellationToken);
+                if (fakResult.OrderFilled)
+                {
+                    ordersFilled++;
+                }
+                else if (fakResult.OrderFinalized)
+                {
+                    ordersExpired++;
+                }
+
+                if (fakResult.PositionUpdated)
+                {
+                    positionsUpdated++;
+                }
+
                 continue;
             }
 
@@ -195,6 +223,269 @@ public sealed class PaperTradingProcessor(
 
         positionsUpdated += await UpdatePositionMarksAsync(positions, cancellationToken);
         return new PaperTradingProcessingResult(openOrders.Count, ordersFilled, ordersExpired, positionsUpdated);
+    }
+
+    private static bool IsFakTakerPaperOrder(PaperOrder order)
+    {
+        if (order.Side != TradeSide.Buy)
+        {
+            return false;
+        }
+
+        if (string.Equals(order.ExecutionSource, BtcFakTakerPaperExecutionSource, StringComparison.OrdinalIgnoreCase))
+        {
+            return true;
+        }
+
+        if (string.IsNullOrWhiteSpace(order.RawDecisionJson))
+        {
+            return false;
+        }
+
+        try
+        {
+            using var document = JsonDocument.Parse(order.RawDecisionJson);
+            var root = document.RootElement;
+            if (root.ValueKind != JsonValueKind.Object)
+            {
+                return false;
+            }
+
+            return string.Equals(TryGetString(root, "fak_stats_probe"), bool.TrueString, StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(TryGetString(root, "paper_order_type"), "FAK", StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(TryGetString(root, "paper_order_execution_mode"), "FAK", StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(TryGetString(root, "live_order_type"), "FAK", StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(TryGetString(root, "live_order_execution_mode"), "FAK", StringComparison.OrdinalIgnoreCase);
+        }
+        catch (JsonException)
+        {
+            return false;
+        }
+    }
+
+    private async Task<FakPaperOrderProcessingResult> ProcessFakTakerPaperOrderAsync(
+        PaperOrder order,
+        DateTimeOffset nowUtc,
+        List<PaperPosition> positions,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            var existingFills = await repository.GetPaperFillsForOrderAsync(order.Id, cancellationToken);
+            if (existingFills.Count > 0)
+            {
+                return new FakPaperOrderProcessingResult(false, false, false);
+            }
+
+            var orderBook = await GetOrderBookAsync(order.AssetId, cancellationToken);
+            if (orderBook is null)
+            {
+                var rejectedOrder = order with
+                {
+                    Status = PaperOrderStatus.Rejected,
+                    CancelledAtUtc = nowUtc,
+                    RawDecisionJson = AttachFakPaperProcessorJson(
+                        order.RawDecisionJson,
+                        null,
+                        null,
+                        order.NotionalUsd,
+                        order.Price,
+                        "paper_fak_orderbook_missing",
+                        nowUtc),
+                    ExecutionSource = BtcFakTakerPaperExecutionSource
+                };
+                await repository.UpdatePaperOrderAsync(rejectedOrder, cancellationToken);
+                exposureCache.ApplyPaperOrder(rejectedOrder);
+                return new FakPaperOrderProcessingResult(false, true, false);
+            }
+
+            var estimate = TakerBuyFillEstimator.Estimate(
+                orderBook,
+                order.NotionalUsd,
+                order.Price,
+                orderBook.MinOrderSize);
+            if (!estimate.Filled)
+            {
+                var rejectedOrder = order with
+                {
+                    Status = PaperOrderStatus.Rejected,
+                    CancelledAtUtc = nowUtc,
+                    RawDecisionJson = AttachFakPaperProcessorJson(
+                        order.RawDecisionJson,
+                        orderBook,
+                        estimate,
+                        order.NotionalUsd,
+                        order.Price,
+                        estimate.RejectionReason ?? "paper_fak_not_filled",
+                        nowUtc),
+                    ExecutionSource = BtcFakTakerPaperExecutionSource
+                };
+                await repository.UpdatePaperOrderAsync(rejectedOrder, cancellationToken);
+                exposureCache.ApplyPaperOrder(rejectedOrder);
+                return new FakPaperOrderProcessingResult(false, true, false);
+            }
+
+            var currentPosition = FindPosition(positions, order);
+            var fill = new PaperFill(
+                Guid.NewGuid(),
+                order.Id,
+                estimate.AverageFillPrice,
+                estimate.SizeShares,
+                nowUtc,
+                string.Format(
+                    CultureInfo.InvariantCulture,
+                    "FakTakerPaperFill bestAsk={0} avgFillPrice={1} shares={2} notionalUsd={3} levelsUsed={4}",
+                    estimate.BestAsk,
+                    estimate.AverageFillPrice,
+                    estimate.SizeShares,
+                    estimate.NotionalUsd,
+                    estimate.LevelsUsed));
+            var filledOrder = order with
+            {
+                Status = PaperOrderStatus.Filled,
+                Price = estimate.AverageFillPrice,
+                SizeShares = estimate.SizeShares,
+                NotionalUsd = estimate.NotionalUsd,
+                FilledAtUtc = nowUtc,
+                CancelledAtUtc = estimate.NotionalUsd < order.NotionalUsd ? nowUtc : null,
+                RawDecisionJson = AttachFakPaperProcessorJson(
+                    order.RawDecisionJson,
+                    orderBook,
+                    estimate,
+                    order.NotionalUsd,
+                    order.Price,
+                    null,
+                    nowUtc),
+                ExecutionSource = BtcFakTakerPaperExecutionSource
+            };
+
+            await repository.AddPaperFillAsync(fill, cancellationToken);
+            await repository.UpdatePaperOrderAsync(filledOrder, cancellationToken);
+            exposureCache.ApplyPaperOrder(filledOrder);
+
+            var currentBid = orderBook.BestBid ?? estimate.AverageFillPrice;
+            var updatedPosition = paperTradingEngine.ApplyBuyFill(currentPosition, filledOrder, fill, currentBid, nowUtc);
+            await repository.UpsertPaperPositionAsync(updatedPosition, cancellationToken);
+            exposureCache.ApplyPaperPosition(updatedPosition);
+            await repository.ActivatePaperCopiedLeaderPositionAsync(
+                filledOrder.Id,
+                fill.SizeShares,
+                fill.FilledAtUtc,
+                cancellationToken);
+
+            RemovePosition(positions, updatedPosition);
+            positions.Add(updatedPosition);
+
+            logger.LogInformation(
+                "Paper FAK BUY simulated from taker depth. PaperOrderId={PaperOrderId} AssetId={AssetId} WorstPrice={WorstPrice} AverageFillPrice={AverageFillPrice} Shares={Shares} NotionalUsd={NotionalUsd} LevelsUsed={LevelsUsed}",
+                order.Id,
+                order.AssetId,
+                order.Price,
+                estimate.AverageFillPrice,
+                estimate.SizeShares,
+                estimate.NotionalUsd,
+                estimate.LevelsUsed);
+            return new FakPaperOrderProcessingResult(true, true, true);
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (OperationCanceledException ex)
+        {
+            logger.LogError(ex, "Paper FAK order processing timed out for order {PaperOrderId}.", order.Id);
+            await TryRecordApiErrorAsync("ProcessFakTakerPaperOrderTimeout", ex.Message, cancellationToken);
+            return new FakPaperOrderProcessingResult(false, false, false);
+        }
+        catch (PolymarketApiException ex) when (IsMissingOrderBook(ex))
+        {
+            logger.LogDebug(
+                "Paper FAK order rejected because CLOB has no order book for asset {AssetId}. PaperOrderId={PaperOrderId} Message={Message}",
+                order.AssetId,
+                order.Id,
+                ex.Message);
+
+            var rejectedOrder = order with
+            {
+                Status = PaperOrderStatus.Rejected,
+                CancelledAtUtc = nowUtc,
+                RawDecisionJson = AttachFakPaperProcessorJson(
+                    order.RawDecisionJson,
+                    null,
+                    null,
+                    order.NotionalUsd,
+                    order.Price,
+                    "paper_fak_orderbook_missing",
+                    nowUtc),
+                ExecutionSource = BtcFakTakerPaperExecutionSource
+            };
+            await repository.UpdatePaperOrderAsync(rejectedOrder, cancellationToken);
+            exposureCache.ApplyPaperOrder(rejectedOrder);
+            return new FakPaperOrderProcessingResult(false, true, false);
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "Paper FAK order processing failed for order {PaperOrderId}.", order.Id);
+            await TryRecordApiErrorAsync("ProcessFakTakerPaperOrder", ex.Message, cancellationToken);
+            return new FakPaperOrderProcessingResult(false, false, false);
+        }
+    }
+
+    private static string AttachFakPaperProcessorJson(
+        string? rawDecisionJson,
+        OrderBookSnapshot? orderBook,
+        TakerBuyFillEstimate? estimate,
+        decimal requestedNotionalUsd,
+        decimal worstPrice,
+        string? rejectionReason,
+        DateTimeOffset nowUtc)
+    {
+        JsonObject root;
+        try
+        {
+            root = string.IsNullOrWhiteSpace(rawDecisionJson)
+                ? new JsonObject()
+                : JsonNode.Parse(rawDecisionJson)?.AsObject() ?? new JsonObject();
+        }
+        catch (JsonException)
+        {
+            root = new JsonObject();
+        }
+        catch (InvalidOperationException)
+        {
+            root = new JsonObject();
+        }
+
+        root["paper_order_type"] = "FAK";
+        root["paper_order_execution_mode"] = "FAK";
+        root["paper_execution_source"] = BtcFakTakerPaperExecutionSource;
+        root["paper_fak_fill_model"] = "fak_taker_depth_vwap_v1";
+        root["paper_fak_processed_at_utc"] = nowUtc.ToString("O", CultureInfo.InvariantCulture);
+        root["paper_fak_snapshot_at_utc"] = orderBook?.SnapshotAtUtc.ToString("O", CultureInfo.InvariantCulture);
+        root["paper_fak_best_bid"] = orderBook?.BestBid;
+        root["paper_fak_best_ask"] = orderBook?.BestAsk;
+        root["paper_fak_spread"] = orderBook?.SpreadAbs;
+        root["paper_fak_requested_notional_usd"] = requestedNotionalUsd;
+        root["paper_fak_worst_price"] = estimate?.MaxAllowedPrice ?? worstPrice;
+        root["paper_fak_average_fill_price"] = estimate?.Filled == true
+            ? estimate.AverageFillPrice
+            : null;
+        root["paper_fak_filled_size_shares"] = estimate?.Filled == true
+            ? estimate.SizeShares
+            : 0m;
+        root["paper_fak_filled_notional_usd"] = estimate?.Filled == true
+            ? estimate.NotionalUsd
+            : 0m;
+        root["paper_fak_target_size_shares"] = estimate?.TargetSizeShares;
+        root["paper_fak_levels_used"] = estimate?.LevelsUsed;
+        root["paper_fak_partial_fill"] = estimate?.Filled == true && estimate.NotionalUsd < requestedNotionalUsd;
+        root["paper_fak_rejection_reason"] = rejectionReason;
+        if (!string.IsNullOrWhiteSpace(rejectionReason))
+        {
+            root["skip_reason"] = rejectionReason;
+        }
+
+        return root.ToJsonString();
     }
 
     private async Task<bool> ExpireOrderIfNeededAsync(
@@ -420,4 +711,6 @@ public sealed class PaperTradingProcessor(
             logger.LogError(ex, "Failed to persist paper trading API error for {Operation}.", operation);
         }
     }
+
+    private sealed record FakPaperOrderProcessingResult(bool OrderFilled, bool OrderFinalized, bool PositionUpdated);
 }

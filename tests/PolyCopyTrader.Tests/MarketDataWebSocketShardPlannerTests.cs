@@ -5,6 +5,32 @@ namespace PolyCopyTrader.Tests;
 public sealed class MarketDataWebSocketShardPlannerTests
 {
     [Fact]
+    public void CriticalCryptoUpDown5mSelector_IncludesOnlyBtcEthSolFiveMinuteMarkets()
+    {
+        var registry = new ActiveMarketAssetSubscriptionRegistry();
+        registry.AddOrUpdateMarkets(
+        [
+            GammaMarketIngestionTests.CreateCryptoUpDown5mMarketForTests("BTC", "btc-market"),
+            GammaMarketIngestionTests.CreateCryptoUpDown5mMarketForTests("ETH", "eth-market"),
+            GammaMarketIngestionTests.CreateCryptoUpDown5mMarketForTests("SOL", "sol-market"),
+            GammaMarketIngestionTests.CreateCryptoUpDown5mMarketForTests("DOGE", "doge-market"),
+            GammaMarketIngestionTests.CreateMarketForTests("regular-market")
+        ]);
+
+        var assetIds = CriticalCryptoUpDown5mAssetSelector.SelectAssetIds(registry.GetSnapshots());
+
+        Assert.Equal(6, assetIds.Count);
+        Assert.Contains("token-yes-btc-market", assetIds, StringComparer.OrdinalIgnoreCase);
+        Assert.Contains("token-no-btc-market", assetIds, StringComparer.OrdinalIgnoreCase);
+        Assert.Contains("token-yes-eth-market", assetIds, StringComparer.OrdinalIgnoreCase);
+        Assert.Contains("token-no-eth-market", assetIds, StringComparer.OrdinalIgnoreCase);
+        Assert.Contains("token-yes-sol-market", assetIds, StringComparer.OrdinalIgnoreCase);
+        Assert.Contains("token-no-sol-market", assetIds, StringComparer.OrdinalIgnoreCase);
+        Assert.DoesNotContain("token-yes-doge-market", assetIds, StringComparer.OrdinalIgnoreCase);
+        Assert.DoesNotContain("token-yes-regular-market", assetIds, StringComparer.OrdinalIgnoreCase);
+    }
+
+    [Fact]
     public void BuildPlans_KeepsMarketOutcomesOnSameShard()
     {
         var registry = new ActiveMarketAssetSubscriptionRegistry();

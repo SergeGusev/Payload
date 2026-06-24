@@ -1,0 +1,356 @@
+[     0.0s] Revert strategy cleanup started at 2026-06-16T20:09:07.4853737+00:00
+[     0.0s] Target strategy code/name regex: revert
+[     0.0s] Dry run: False
+[     0.0s] Execute: True
+[     0.0s] Verify only: False
+[     0.0s] Diagnose live orders only: False
+[     0.0s] Strategy limit: 100
+[     0.0s] Batch size: 100
+[     0.0s] Batch pause ms: 150
+[     0.0s] Batch lock timeout ms: 300
+[     0.0s] Batch statement timeout ms: 8000
+[     0.0s] Residual signal scan timeout ms: 100
+[     0.4s] Database: polycopytrader
+[     0.4s] Server address: 192.168.0.101/32
+[     0.4s] Server time UTC: 6/16/2026 8:09:10 PM
+[     0.4s] Last heartbeat UTC: 2026-06-16T20:08:11Z
+[     0.4s] Preparing target strategy ids...
+[     0.6s] Preparing target paper order ids...
+[     0.6s] Preparing target paper fill ids...
+[     0.6s] Preparing target run ids...
+[     1.6s] Preparing target signal ids...
+[     4.0s] Preparing target live order ids...
+[     4.0s] Preparing target correlation ids...
+[     4.0s] Preparing safe synthetic wallet ids...
+[     7.0s] Foreign keys touching cleanup parents:
+[     7.0s]   paper_live_shadow_decisions -> live_orders (paper_live_shadow_decisions_live_order_id_fkey)
+[     7.0s]   live_orders -> paper_orders (live_orders_paper_order_id_fkey)
+[     7.0s]   paper_fills -> paper_orders (paper_fills_paper_order_id_fkey)
+[     7.1s]   paper_live_shadow_decisions -> paper_orders (paper_live_shadow_decisions_paper_order_id_fkey)
+[     7.1s]   strategy_market_paper_runs -> paper_orders (strategy_market_paper_runs_paper_order_id_fkey)
+[     7.1s]   paper_live_shadow_decisions -> signals (paper_live_shadow_decisions_signal_id_fkey)
+[     7.1s]   signal_rejections -> signals (signal_rejections_signal_id_fkey)
+[     7.1s]   strategy_market_paper_runs -> signals (strategy_market_paper_runs_signal_id_fkey)
+[     7.1s]   dry_run_orders -> strategies (dry_run_orders_strategy_id_fkey)
+[     7.1s]   live_orders -> strategies (live_orders_strategy_id_fkey)
+[     7.1s]   paper_live_shadow_decisions -> strategies (paper_live_shadow_decisions_strategy_id_fkey)
+[     7.1s]   paper_live_shadow_discrepancies -> strategies (paper_live_shadow_discrepancies_strategy_id_fkey)
+[     7.1s]   paper_orders -> strategies (paper_orders_strategy_id_fkey)
+[     7.1s]   strategy_market_paper_runs -> strategies (strategy_market_paper_runs_strategy_id_fkey)
+[     7.1s] Target strategy rows sample:
+[     7.1s]   target strategy rows selected: 100
+[     7.1s]   sol_up_down_5m_middle_20_revert_bps_37 | enabled=False | live_stakes=False | SOL Up or Down 5m Middle 20 Revert 37 bps
+[     7.1s]   sol_up_down_5m_middle_20_revert_bps_37_instant | enabled=False | live_stakes=False | SOL Up or Down 5m Middle 20 Revert 37 bps Instant
+[     7.1s]   sol_up_down_5m_middle_20_revert_bps_38 | enabled=False | live_stakes=False | SOL Up or Down 5m Middle 20 Revert 38 bps
+[     7.1s]   sol_up_down_5m_middle_20_revert_bps_38_instant | enabled=False | live_stakes=False | SOL Up or Down 5m Middle 20 Revert 38 bps Instant
+[     7.1s]   sol_up_down_5m_middle_20_revert_bps_39 | enabled=False | live_stakes=False | SOL Up or Down 5m Middle 20 Revert 39 bps
+[     7.1s]   sol_up_down_5m_middle_20_revert_bps_39_instant | enabled=False | live_stakes=False | SOL Up or Down 5m Middle 20 Revert 39 bps Instant
+[     7.1s]   sol_up_down_5m_middle_20_revert_bps_4 | enabled=False | live_stakes=False | SOL Up or Down 5m Middle 20 Revert 4 bps
+[     7.1s]   sol_up_down_5m_middle_20_revert_bps_4_instant | enabled=False | live_stakes=False | SOL Up or Down 5m Middle 20 Revert 4 bps Instant
+[     7.1s]   sol_up_down_5m_middle_20_revert_bps_40 | enabled=False | live_stakes=False | SOL Up or Down 5m Middle 20 Revert 40 bps
+[     7.1s]   sol_up_down_5m_middle_20_revert_bps_40_instant | enabled=False | live_stakes=False | SOL Up or Down 5m Middle 20 Revert 40 bps Instant
+[     7.1s]   sol_up_down_5m_middle_20_revert_bps_41 | enabled=False | live_stakes=False | SOL Up or Down 5m Middle 20 Revert 41 bps
+[     7.1s]   sol_up_down_5m_middle_20_revert_bps_41_instant | enabled=False | live_stakes=False | SOL Up or Down 5m Middle 20 Revert 41 bps Instant
+[     7.1s]   sol_up_down_5m_middle_20_revert_bps_42 | enabled=False | live_stakes=False | SOL Up or Down 5m Middle 20 Revert 42 bps
+[     7.1s]   sol_up_down_5m_middle_20_revert_bps_42_instant | enabled=False | live_stakes=False | SOL Up or Down 5m Middle 20 Revert 42 bps Instant
+[     7.1s]   sol_up_down_5m_middle_20_revert_bps_43 | enabled=False | live_stakes=False | SOL Up or Down 5m Middle 20 Revert 43 bps
+[     7.1s]   sol_up_down_5m_middle_20_revert_bps_43_instant | enabled=False | live_stakes=False | SOL Up or Down 5m Middle 20 Revert 43 bps Instant
+[     7.1s]   sol_up_down_5m_middle_20_revert_bps_44 | enabled=False | live_stakes=False | SOL Up or Down 5m Middle 20 Revert 44 bps
+[     7.1s]   sol_up_down_5m_middle_20_revert_bps_44_instant | enabled=False | live_stakes=False | SOL Up or Down 5m Middle 20 Revert 44 bps Instant
+[     7.1s]   sol_up_down_5m_middle_20_revert_bps_45 | enabled=False | live_stakes=False | SOL Up or Down 5m Middle 20 Revert 45 bps
+[     7.1s]   sol_up_down_5m_middle_20_revert_bps_45_instant | enabled=False | live_stakes=False | SOL Up or Down 5m Middle 20 Revert 45 bps Instant
+[     7.1s]   sol_up_down_5m_middle_20_revert_bps_46 | enabled=False | live_stakes=False | SOL Up or Down 5m Middle 20 Revert 46 bps
+[     7.1s]   sol_up_down_5m_middle_20_revert_bps_46_instant | enabled=False | live_stakes=False | SOL Up or Down 5m Middle 20 Revert 46 bps Instant
+[     7.1s]   sol_up_down_5m_middle_20_revert_bps_47 | enabled=False | live_stakes=False | SOL Up or Down 5m Middle 20 Revert 47 bps
+[     7.1s]   sol_up_down_5m_middle_20_revert_bps_47_instant | enabled=False | live_stakes=False | SOL Up or Down 5m Middle 20 Revert 47 bps Instant
+[     7.1s]   sol_up_down_5m_middle_20_revert_bps_48 | enabled=False | live_stakes=False | SOL Up or Down 5m Middle 20 Revert 48 bps
+[     7.1s]   sol_up_down_5m_middle_20_revert_bps_48_instant | enabled=False | live_stakes=False | SOL Up or Down 5m Middle 20 Revert 48 bps Instant
+[     7.1s]   sol_up_down_5m_middle_20_revert_bps_49 | enabled=False | live_stakes=False | SOL Up or Down 5m Middle 20 Revert 49 bps
+[     7.1s]   sol_up_down_5m_middle_20_revert_bps_49_instant | enabled=False | live_stakes=False | SOL Up or Down 5m Middle 20 Revert 49 bps Instant
+[     7.1s]   sol_up_down_5m_middle_20_revert_bps_5 | enabled=False | live_stakes=False | SOL Up or Down 5m Middle 20 Revert 5 bps
+[     7.1s]   sol_up_down_5m_middle_20_revert_bps_5_instant | enabled=False | live_stakes=False | SOL Up or Down 5m Middle 20 Revert 5 bps Instant
+[     7.1s]   sol_up_down_5m_middle_20_revert_bps_50 | enabled=False | live_stakes=False | SOL Up or Down 5m Middle 20 Revert 50 bps
+[     7.1s]   sol_up_down_5m_middle_20_revert_bps_50_instant | enabled=False | live_stakes=False | SOL Up or Down 5m Middle 20 Revert 50 bps Instant
+[     7.1s]   sol_up_down_5m_middle_20_revert_bps_51 | enabled=False | live_stakes=False | SOL Up or Down 5m Middle 20 Revert 51 bps
+[     7.1s]   sol_up_down_5m_middle_20_revert_bps_51_instant | enabled=False | live_stakes=False | SOL Up or Down 5m Middle 20 Revert 51 bps Instant
+[     7.1s]   sol_up_down_5m_middle_20_revert_bps_52 | enabled=False | live_stakes=False | SOL Up or Down 5m Middle 20 Revert 52 bps
+[     7.1s]   sol_up_down_5m_middle_20_revert_bps_52_instant | enabled=False | live_stakes=False | SOL Up or Down 5m Middle 20 Revert 52 bps Instant
+[     7.1s]   sol_up_down_5m_middle_20_revert_bps_53 | enabled=False | live_stakes=False | SOL Up or Down 5m Middle 20 Revert 53 bps
+[     7.1s]   sol_up_down_5m_middle_20_revert_bps_53_instant | enabled=False | live_stakes=False | SOL Up or Down 5m Middle 20 Revert 53 bps Instant
+[     7.1s]   sol_up_down_5m_middle_20_revert_bps_54 | enabled=False | live_stakes=False | SOL Up or Down 5m Middle 20 Revert 54 bps
+[     7.1s]   sol_up_down_5m_middle_20_revert_bps_54_instant | enabled=False | live_stakes=False | SOL Up or Down 5m Middle 20 Revert 54 bps Instant
+[     7.1s]   sol_up_down_5m_middle_20_revert_bps_55 | enabled=False | live_stakes=False | SOL Up or Down 5m Middle 20 Revert 55 bps
+[     7.1s]   sol_up_down_5m_middle_20_revert_bps_55_instant | enabled=False | live_stakes=False | SOL Up or Down 5m Middle 20 Revert 55 bps Instant
+[     7.1s]   sol_up_down_5m_middle_20_revert_bps_56 | enabled=False | live_stakes=False | SOL Up or Down 5m Middle 20 Revert 56 bps
+[     7.1s]   sol_up_down_5m_middle_20_revert_bps_56_instant | enabled=False | live_stakes=False | SOL Up or Down 5m Middle 20 Revert 56 bps Instant
+[     7.1s]   sol_up_down_5m_middle_20_revert_bps_57 | enabled=False | live_stakes=False | SOL Up or Down 5m Middle 20 Revert 57 bps
+[     7.1s]   sol_up_down_5m_middle_20_revert_bps_57_instant | enabled=False | live_stakes=False | SOL Up or Down 5m Middle 20 Revert 57 bps Instant
+[     7.1s]   sol_up_down_5m_middle_20_revert_bps_58 | enabled=False | live_stakes=False | SOL Up or Down 5m Middle 20 Revert 58 bps
+[     7.1s]   sol_up_down_5m_middle_20_revert_bps_58_instant | enabled=False | live_stakes=False | SOL Up or Down 5m Middle 20 Revert 58 bps Instant
+[     7.1s]   sol_up_down_5m_middle_20_revert_bps_59 | enabled=False | live_stakes=False | SOL Up or Down 5m Middle 20 Revert 59 bps
+[     7.1s]   sol_up_down_5m_middle_20_revert_bps_59_instant | enabled=False | live_stakes=False | SOL Up or Down 5m Middle 20 Revert 59 bps Instant
+[     7.1s]   ...sample limited to 50 rows.
+[     7.1s] Target summary (before):
+[     7.2s]   target strategies in temp: 100
+[     7.2s]   remaining strategies by code/name regex: 1667
+[     7.3s]   target wallet candidates: 100
+[     7.3s]   safe wallets: 100
+[     7.3s]   target paper_orders in temp: 0
+[     7.3s]   remaining target paper_orders: 0
+[     7.4s]   target paper_fills in temp: 0
+[     7.5s]   remaining target paper_fills: 0
+[     7.5s]   target run ids in temp: 9600
+[     8.1s]   remaining target runs: 9600
+[     8.1s]   target signal ids in temp: 0
+[     8.1s]   remaining target signals: 0
+[     8.1s]   remaining target signal_rejections: 0
+[     8.1s]   remaining target dry_run_orders: 0
+[     8.1s]   target live_orders in temp: 0
+[     8.2s]   remaining target live_orders: 0
+[     8.2s]   remaining target shadow decisions: 0
+[     8.3s]   remaining target shadow discrepancies: 0
+[    10.1s]   remaining safe-wallet paper_positions: 0
+[    12.4s]   remaining safe-wallet settlements: 0
+[    12.4s]   remaining safe-wallet performance rows: 0
+[    12.4s]   target settlement ids in temp: 0
+[    12.4s]   target position ids in temp: 0
+[    12.5s]   target performance keys in temp: 0
+[    12.5s] Wallet candidate safety sample:
+[    12.5s]   wallet=strategy:sol_up_down_5m_middle_20_revert_bps_37, target_orders=0
+[    12.5s]   wallet=strategy:sol_up_down_5m_middle_20_revert_bps_37_instant, target_orders=0
+[    12.5s]   wallet=strategy:sol_up_down_5m_middle_20_revert_bps_38, target_orders=0
+[    12.5s]   wallet=strategy:sol_up_down_5m_middle_20_revert_bps_38_instant, target_orders=0
+[    12.5s]   wallet=strategy:sol_up_down_5m_middle_20_revert_bps_39, target_orders=0
+[    12.5s]   wallet=strategy:sol_up_down_5m_middle_20_revert_bps_39_instant, target_orders=0
+[    12.5s]   wallet=strategy:sol_up_down_5m_middle_20_revert_bps_4, target_orders=0
+[    12.5s]   wallet=strategy:sol_up_down_5m_middle_20_revert_bps_4_instant, target_orders=0
+[    12.5s]   wallet=strategy:sol_up_down_5m_middle_20_revert_bps_40, target_orders=0
+[    12.5s]   wallet=strategy:sol_up_down_5m_middle_20_revert_bps_40_instant, target_orders=0
+[    12.5s]   wallet=strategy:sol_up_down_5m_middle_20_revert_bps_41, target_orders=0
+[    12.5s]   wallet=strategy:sol_up_down_5m_middle_20_revert_bps_41_instant, target_orders=0
+[    12.5s]   wallet=strategy:sol_up_down_5m_middle_20_revert_bps_42, target_orders=0
+[    12.5s]   wallet=strategy:sol_up_down_5m_middle_20_revert_bps_42_instant, target_orders=0
+[    12.5s]   wallet=strategy:sol_up_down_5m_middle_20_revert_bps_43, target_orders=0
+[    12.5s]   wallet=strategy:sol_up_down_5m_middle_20_revert_bps_43_instant, target_orders=0
+[    12.5s]   wallet=strategy:sol_up_down_5m_middle_20_revert_bps_44, target_orders=0
+[    12.5s]   wallet=strategy:sol_up_down_5m_middle_20_revert_bps_44_instant, target_orders=0
+[    12.5s]   wallet=strategy:sol_up_down_5m_middle_20_revert_bps_45, target_orders=0
+[    12.5s]   wallet=strategy:sol_up_down_5m_middle_20_revert_bps_45_instant, target_orders=0
+[    12.6s] Open/unsettled target live_orders guard count: 0
+[    13.0s] Disabled/de-live-updated target strategies: 0
+[    13.1s] paper_live_shadow_discrepancies: complete, deleted 0
+[    13.2s] paper_live_shadow_decisions: complete, deleted 0
+[    13.3s] strategy_market_paper_runs: batch 1 deleted 100, total 100
+[    13.6s] strategy_market_paper_runs: batch 2 deleted 100, total 200
+[    13.8s] strategy_market_paper_runs: batch 3 deleted 100, total 300
+[    14.0s] strategy_market_paper_runs: batch 4 deleted 100, total 400
+[    14.2s] strategy_market_paper_runs: batch 5 deleted 100, total 500
+[    14.4s] strategy_market_paper_runs: batch 6 deleted 100, total 600
+[    14.6s] strategy_market_paper_runs: batch 7 deleted 100, total 700
+[    14.8s] strategy_market_paper_runs: batch 8 deleted 100, total 800
+[    15.0s] strategy_market_paper_runs: batch 9 deleted 100, total 900
+[    15.3s] strategy_market_paper_runs: batch 10 deleted 100, total 1000
+[    15.5s] strategy_market_paper_runs: batch 11 deleted 100, total 1100
+[    15.7s] strategy_market_paper_runs: batch 12 deleted 100, total 1200
+[    16.0s] strategy_market_paper_runs: batch 13 deleted 100, total 1300
+[    16.3s] strategy_market_paper_runs: batch 14 deleted 100, total 1400
+[    16.4s] strategy_market_paper_runs: batch 15 deleted 100, total 1500
+[    16.7s] strategy_market_paper_runs: batch 16 deleted 100, total 1600
+[    16.9s] strategy_market_paper_runs: batch 17 deleted 100, total 1700
+[    17.2s] strategy_market_paper_runs: batch 18 deleted 100, total 1800
+[    17.5s] strategy_market_paper_runs: batch 19 deleted 100, total 1900
+[    17.8s] strategy_market_paper_runs: batch 20 deleted 100, total 2000
+[    17.9s] strategy_market_paper_runs: batch 21 deleted 100, total 2100
+[    18.1s] strategy_market_paper_runs: batch 22 deleted 100, total 2200
+[    18.3s] strategy_market_paper_runs: batch 23 deleted 100, total 2300
+[    18.5s] strategy_market_paper_runs: batch 24 deleted 100, total 2400
+[    18.8s] strategy_market_paper_runs: batch 25 deleted 100, total 2500
+[    19.0s] strategy_market_paper_runs: batch 26 deleted 100, total 2600
+[    19.3s] strategy_market_paper_runs: batch 27 deleted 100, total 2700
+[    19.5s] strategy_market_paper_runs: batch 28 deleted 100, total 2800
+[    19.8s] strategy_market_paper_runs: batch 29 deleted 100, total 2900
+[    20.0s] strategy_market_paper_runs: batch 30 deleted 100, total 3000
+[    20.3s] strategy_market_paper_runs: batch 31 deleted 100, total 3100
+[    20.5s] strategy_market_paper_runs: batch 32 deleted 100, total 3200
+[    20.8s] strategy_market_paper_runs: batch 33 deleted 100, total 3300
+[    21.0s] strategy_market_paper_runs: batch 34 deleted 100, total 3400
+[    21.2s] strategy_market_paper_runs: batch 35 deleted 100, total 3500
+[    21.5s] strategy_market_paper_runs: batch 36 deleted 100, total 3600
+[    21.7s] strategy_market_paper_runs: batch 37 deleted 100, total 3700
+[    21.9s] strategy_market_paper_runs: batch 38 deleted 100, total 3800
+[    22.2s] strategy_market_paper_runs: batch 39 deleted 100, total 3900
+[    22.4s] strategy_market_paper_runs: batch 40 deleted 100, total 4000
+[    22.6s] strategy_market_paper_runs: batch 41 deleted 100, total 4100
+[    22.8s] strategy_market_paper_runs: batch 42 deleted 100, total 4200
+[    23.0s] strategy_market_paper_runs: batch 43 deleted 100, total 4300
+[    23.2s] strategy_market_paper_runs: batch 44 deleted 100, total 4400
+[    23.4s] strategy_market_paper_runs: batch 45 deleted 100, total 4500
+[    23.6s] strategy_market_paper_runs: batch 46 deleted 100, total 4600
+[    23.8s] strategy_market_paper_runs: batch 47 deleted 100, total 4700
+[    24.0s] strategy_market_paper_runs: batch 48 deleted 100, total 4800
+[    24.2s] strategy_market_paper_runs: batch 49 deleted 100, total 4900
+[    24.4s] strategy_market_paper_runs: batch 50 deleted 100, total 5000
+[    24.6s] strategy_market_paper_runs: batch 51 deleted 100, total 5100
+[    24.8s] strategy_market_paper_runs: batch 52 deleted 100, total 5200
+[    25.0s] strategy_market_paper_runs: batch 53 deleted 100, total 5300
+[    25.2s] strategy_market_paper_runs: batch 54 deleted 100, total 5400
+[    25.4s] strategy_market_paper_runs: batch 55 deleted 100, total 5500
+[    25.7s] strategy_market_paper_runs: batch 56 deleted 100, total 5600
+[    25.9s] strategy_market_paper_runs: batch 57 deleted 100, total 5700
+[    26.1s] strategy_market_paper_runs: batch 58 deleted 100, total 5800
+[    26.4s] strategy_market_paper_runs: batch 59 deleted 100, total 5900
+[    26.6s] strategy_market_paper_runs: batch 60 deleted 100, total 6000
+[    26.8s] strategy_market_paper_runs: batch 61 deleted 100, total 6100
+[    27.0s] strategy_market_paper_runs: batch 62 deleted 100, total 6200
+[    27.2s] strategy_market_paper_runs: batch 63 deleted 100, total 6300
+[    27.5s] strategy_market_paper_runs: batch 64 deleted 100, total 6400
+[    27.7s] strategy_market_paper_runs: batch 65 deleted 100, total 6500
+[    27.9s] strategy_market_paper_runs: batch 66 deleted 100, total 6600
+[    28.0s] strategy_market_paper_runs: batch 67 deleted 100, total 6700
+[    28.2s] strategy_market_paper_runs: batch 68 deleted 100, total 6800
+[    28.4s] strategy_market_paper_runs: batch 69 deleted 100, total 6900
+[    28.6s] strategy_market_paper_runs: batch 70 deleted 100, total 7000
+[    28.8s] strategy_market_paper_runs: batch 71 deleted 100, total 7100
+[    29.0s] strategy_market_paper_runs: batch 72 deleted 100, total 7200
+[    29.2s] strategy_market_paper_runs: batch 73 deleted 100, total 7300
+[    29.5s] strategy_market_paper_runs: batch 74 deleted 100, total 7400
+[    29.6s] strategy_market_paper_runs: batch 75 deleted 100, total 7500
+[    29.9s] strategy_market_paper_runs: batch 76 deleted 100, total 7600
+[    30.1s] strategy_market_paper_runs: batch 77 deleted 100, total 7700
+[    30.3s] strategy_market_paper_runs: batch 78 deleted 100, total 7800
+[    30.5s] strategy_market_paper_runs: batch 79 deleted 100, total 7900
+[    30.7s] strategy_market_paper_runs: batch 80 deleted 100, total 8000
+[    30.9s] strategy_market_paper_runs: batch 81 deleted 100, total 8100
+[    31.1s] strategy_market_paper_runs: batch 82 deleted 100, total 8200
+[    31.4s] strategy_market_paper_runs: batch 83 deleted 100, total 8300
+[    31.6s] strategy_market_paper_runs: batch 84 deleted 100, total 8400
+[    31.8s] strategy_market_paper_runs: batch 85 deleted 100, total 8500
+[    32.0s] strategy_market_paper_runs: batch 86 deleted 100, total 8600
+[    32.2s] strategy_market_paper_runs: batch 87 deleted 100, total 8700
+[    32.4s] strategy_market_paper_runs: batch 88 deleted 100, total 8800
+[    32.6s] strategy_market_paper_runs: batch 89 deleted 100, total 8900
+[    32.8s] strategy_market_paper_runs: batch 90 deleted 100, total 9000
+[    33.0s] strategy_market_paper_runs: batch 91 deleted 100, total 9100
+[    33.2s] strategy_market_paper_runs: batch 92 deleted 100, total 9200
+[    33.5s] strategy_market_paper_runs: batch 93 deleted 100, total 9300
+[    33.7s] strategy_market_paper_runs: batch 94 deleted 100, total 9400
+[    33.9s] strategy_market_paper_runs: batch 95 deleted 100, total 9500
+[    34.2s] strategy_market_paper_runs: batch 96 deleted 100, total 9600
+[    34.4s] strategy_market_paper_runs: complete, deleted 9600
+[    34.4s] dry_run_orders: complete, deleted 0
+[    34.5s] live_orders: complete, deleted 0
+[    34.5s] paper_fills: complete, deleted 0
+[    34.5s] paper_position_settlements: complete, deleted 0
+[    34.6s] paper_positions: complete, deleted 0
+[    34.6s] paper_copied_trader_performance: complete, deleted 0
+[    34.6s] Refreshing target signal ids from current target rows before deleting paper orders...
+[    35.0s] strategy_market_paper_runs late strategy: complete, deleted 0
+[    35.0s] strategy_market_paper_runs late paper_order: complete, deleted 0
+[    35.0s] paper_fills late: complete, deleted 0
+[    35.1s] paper_orders: complete, deleted 0
+[    35.1s] Target summary (after dependent deletes before signal delete):
+[    35.1s]   target strategies in temp: 100
+[    35.2s]   remaining strategies by code/name regex: 1667
+[    35.2s]   target wallet candidates: 100
+[    35.2s]   safe wallets: 100
+[    35.2s]   target paper_orders in temp: 0
+[    35.2s]   remaining target paper_orders: 0
+[    35.2s]   target paper_fills in temp: 0
+[    35.2s]   remaining target paper_fills: 0
+[    35.2s]   target run ids in temp: 0
+[    35.2s]   remaining target runs: 0
+[    35.2s]   target signal ids in temp: 0
+[    35.2s]   remaining target signals: 0
+[    35.2s]   remaining target signal_rejections: 0
+[    35.2s]   remaining target dry_run_orders: 0
+[    35.2s]   target live_orders in temp: 0
+[    35.2s]   remaining target live_orders: 0
+[    35.2s]   remaining target shadow decisions: 0
+[    35.2s]   remaining target shadow discrepancies: 0
+[    36.9s]   remaining safe-wallet paper_positions: 0
+[    38.6s]   remaining safe-wallet settlements: 0
+[    38.7s]   remaining safe-wallet performance rows: 0
+[    38.7s]   target settlement ids in temp: 0
+[    38.7s]   target position ids in temp: 0
+[    38.7s]   target performance keys in temp: 0
+[    38.7s]   deletable signals: 0
+[    38.7s] Wallet candidate safety sample:
+[    38.8s]   wallet=strategy:sol_up_down_5m_middle_20_revert_bps_37, target_orders=0
+[    38.8s]   wallet=strategy:sol_up_down_5m_middle_20_revert_bps_37_instant, target_orders=0
+[    38.8s]   wallet=strategy:sol_up_down_5m_middle_20_revert_bps_38, target_orders=0
+[    38.8s]   wallet=strategy:sol_up_down_5m_middle_20_revert_bps_38_instant, target_orders=0
+[    38.8s]   wallet=strategy:sol_up_down_5m_middle_20_revert_bps_39, target_orders=0
+[    38.8s]   wallet=strategy:sol_up_down_5m_middle_20_revert_bps_39_instant, target_orders=0
+[    38.8s]   wallet=strategy:sol_up_down_5m_middle_20_revert_bps_4, target_orders=0
+[    38.8s]   wallet=strategy:sol_up_down_5m_middle_20_revert_bps_4_instant, target_orders=0
+[    38.8s]   wallet=strategy:sol_up_down_5m_middle_20_revert_bps_40, target_orders=0
+[    38.8s]   wallet=strategy:sol_up_down_5m_middle_20_revert_bps_40_instant, target_orders=0
+[    38.8s]   wallet=strategy:sol_up_down_5m_middle_20_revert_bps_41, target_orders=0
+[    38.8s]   wallet=strategy:sol_up_down_5m_middle_20_revert_bps_41_instant, target_orders=0
+[    38.8s]   wallet=strategy:sol_up_down_5m_middle_20_revert_bps_42, target_orders=0
+[    38.8s]   wallet=strategy:sol_up_down_5m_middle_20_revert_bps_42_instant, target_orders=0
+[    38.8s]   wallet=strategy:sol_up_down_5m_middle_20_revert_bps_43, target_orders=0
+[    38.8s]   wallet=strategy:sol_up_down_5m_middle_20_revert_bps_43_instant, target_orders=0
+[    38.8s]   wallet=strategy:sol_up_down_5m_middle_20_revert_bps_44, target_orders=0
+[    38.8s]   wallet=strategy:sol_up_down_5m_middle_20_revert_bps_44_instant, target_orders=0
+[    38.8s]   wallet=strategy:sol_up_down_5m_middle_20_revert_bps_45, target_orders=0
+[    38.8s]   wallet=strategy:sol_up_down_5m_middle_20_revert_bps_45_instant, target_orders=0
+[    38.8s] signal_rejections: complete, deleted 0
+[    38.9s] signals: complete, deleted 0
+[    39.1s] strategies: batch 1 deleted 100, total 100
+[    39.3s] strategies: complete, deleted 100
+[    39.3s] Target summary (after):
+[    39.3s]   target strategies in temp: 100
+[    39.4s]   remaining strategies by code/name regex: 1567
+[    39.4s]   target wallet candidates: 100
+[    39.4s]   safe wallets: 100
+[    39.4s]   target paper_orders in temp: 0
+[    39.4s]   remaining target paper_orders: 0
+[    39.4s]   target paper_fills in temp: 0
+[    39.4s]   remaining target paper_fills: 0
+[    39.4s]   target run ids in temp: 0
+[    39.4s]   remaining target runs: 0
+[    39.4s]   target signal ids in temp: 0
+[    39.4s]   remaining target signals: 0
+[    39.4s]   remaining target signal_rejections: 0
+[    39.4s]   remaining target dry_run_orders: 0
+[    39.4s]   target live_orders in temp: 0
+[    39.4s]   remaining target live_orders: 0
+[    39.5s]   remaining target shadow decisions: 0
+[    39.5s]   remaining target shadow discrepancies: 0
+[    40.4s]   remaining safe-wallet paper_positions: 0
+[    41.3s]   remaining safe-wallet settlements: 0
+[    41.4s]   remaining safe-wallet performance rows: 0
+[    41.4s]   target settlement ids in temp: 0
+[    41.4s]   target position ids in temp: 0
+[    41.5s]   target performance keys in temp: 0
+[    41.5s]   deletable signals: 0
+[    41.5s] Wallet candidate safety sample:
+[    41.5s]   wallet=strategy:sol_up_down_5m_middle_20_revert_bps_37, target_orders=0
+[    41.5s]   wallet=strategy:sol_up_down_5m_middle_20_revert_bps_37_instant, target_orders=0
+[    41.5s]   wallet=strategy:sol_up_down_5m_middle_20_revert_bps_38, target_orders=0
+[    41.5s]   wallet=strategy:sol_up_down_5m_middle_20_revert_bps_38_instant, target_orders=0
+[    41.5s]   wallet=strategy:sol_up_down_5m_middle_20_revert_bps_39, target_orders=0
+[    41.5s]   wallet=strategy:sol_up_down_5m_middle_20_revert_bps_39_instant, target_orders=0
+[    41.5s]   wallet=strategy:sol_up_down_5m_middle_20_revert_bps_4, target_orders=0
+[    41.5s]   wallet=strategy:sol_up_down_5m_middle_20_revert_bps_4_instant, target_orders=0
+[    41.5s]   wallet=strategy:sol_up_down_5m_middle_20_revert_bps_40, target_orders=0
+[    41.5s]   wallet=strategy:sol_up_down_5m_middle_20_revert_bps_40_instant, target_orders=0
+[    41.5s]   wallet=strategy:sol_up_down_5m_middle_20_revert_bps_41, target_orders=0
+[    41.5s]   wallet=strategy:sol_up_down_5m_middle_20_revert_bps_41_instant, target_orders=0
+[    41.5s]   wallet=strategy:sol_up_down_5m_middle_20_revert_bps_42, target_orders=0
+[    41.5s]   wallet=strategy:sol_up_down_5m_middle_20_revert_bps_42_instant, target_orders=0
+[    41.5s]   wallet=strategy:sol_up_down_5m_middle_20_revert_bps_43, target_orders=0
+[    41.5s]   wallet=strategy:sol_up_down_5m_middle_20_revert_bps_43_instant, target_orders=0
+[    41.5s]   wallet=strategy:sol_up_down_5m_middle_20_revert_bps_44, target_orders=0
+[    41.5s]   wallet=strategy:sol_up_down_5m_middle_20_revert_bps_44_instant, target_orders=0
+[    41.5s]   wallet=strategy:sol_up_down_5m_middle_20_revert_bps_45, target_orders=0
+[    41.5s]   wallet=strategy:sol_up_down_5m_middle_20_revert_bps_45_instant, target_orders=0
+[    41.5s] Residual Revert pattern scan:
+[    41.6s]   strategies by code/name regex: 1567
+[    41.6s]   paper_orders synthetic wallets: 0
+[    41.6s]   paper_positions synthetic wallets: 0
+[    41.7s]   paper_position_settlements synthetic wallets: 0
+[    41.7s]   paper_copied_trader_performance synthetic wallets: 0
+[    41.8s]   signals synthetic wallets (best-effort; no trader_wallet index): <timed out after 100ms>
+[    41.8s] Revert strategy cleanup finished at 2026-06-16T20:09:49.2881635+00:00

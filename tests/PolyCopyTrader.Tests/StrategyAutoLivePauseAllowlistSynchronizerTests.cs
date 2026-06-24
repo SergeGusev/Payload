@@ -13,7 +13,7 @@ public sealed class StrategyAutoLivePauseAllowlistSynchronizerTests
         var repository = new TestAppRepository();
         var keepStrategyId = StrategyIds.FollowLeader;
         var clearStrategyId = StrategyIds.CryptoUpDown5mVariants
-            .Single(variant => variant.Code == "eth_up_down_5m_skip_bps_7_instant")
+            .Single(variant => variant.Code == "eth_up_down_5m_up_bps_2_instant")
             .Id;
         repository.StrategySettings[keepStrategyId] = repository.StrategySettings[keepStrategyId] with
         {
@@ -43,7 +43,7 @@ public sealed class StrategyAutoLivePauseAllowlistSynchronizerTests
         var repository = new TestAppRepository();
         var firstStrategyId = StrategyIds.FollowLeader;
         var secondStrategyId = StrategyIds.CryptoUpDown5mVariants
-            .Single(variant => variant.Code == "eth_up_down_5m_skip_bps_7_instant")
+            .Single(variant => variant.Code == "eth_up_down_5m_up_bps_2_instant")
             .Id;
         repository.StrategySettings[firstStrategyId] = repository.StrategySettings[firstStrategyId] with
         {

@@ -31,6 +31,10 @@ Do not commit real credentials.
 - `MaxClockDriftSeconds`: maximum allowed CLOB server-time drift.
 - `ApiErrorLockoutCount`: recent Polymarket error threshold.
 - `ApiErrorLockoutWindowMinutes`: lockout lookback window.
+- `BlockOnGeoblockCheckFailure`: when `true`, a failed geoblock endpoint
+  check blocks live placement. When `false`, only a successful geoblock
+  response with `blocked=true` blocks live placement; endpoint failures are
+  recorded as `GeoblockCheck` warnings.
 - `CancelAllOnKillSwitch`: documents intended kill-switch behavior.
 - `AutoLivePauseStrategies`: strategy codes or ids where automatic Live-only
   pause is enabled. Default `[]`, meaning no strategy is auto-live-paused by
@@ -142,7 +146,8 @@ continues adding new samples.
 
 ## BtcOrderBookLagDiagnostics
 
-When enabled, the service stores event-level lag diagnostics in
+The service config keeps this worker disabled by default. When enabled, the
+service stores event-level lag diagnostics in
 `btc_order_book_lag_diagnostic_events`: every received Binance BTC/USDT trade,
 Binance REST `bookTicker` snapshot, and Polymarket top-of-book WebSocket update
 gets a local receive timestamp, source event timestamp where available, best
@@ -180,8 +185,7 @@ it does not place orders.
 - `Enabled`: runs the combined trade stream service when true; default `true`.
 - `CombinedStreamBaseUrl`: Binance combined stream base URL, default
   `wss://data-stream.binance.vision:443/stream`.
-- `AssetSymbols`: base assets tracked against USDT, default `ETH`, `SOL`,
-  `XRP`.
+- `AssetSymbols`: base assets tracked against USDT, default `ETH`, `SOL`.
 - `StaleAfterSeconds`: maximum latest-trade age accepted by the archive worker,
   default `5`.
 - `ReconnectBaseDelaySeconds`: initial reconnect delay after stream failure,
@@ -189,6 +193,29 @@ it does not place orders.
 - `ReconnectMaxDelaySeconds`: maximum reconnect delay after repeated stream
   failures, default `60`.
 - `ReceiveBufferBytes`: WebSocket receive buffer size, default `16384`.
+
+## CryptoReferencePriceHistory
+
+Stores a clean market-independent BTC/ETH/SOL reference-price history in
+`crypto_reference_price_ticks` and maintains fast in-memory rolling averages for
+strategy use. It reads current prices from the existing Binance BTC and crypto
+trade-stream services, not from Polymarket odds tables.
+
+- `Enabled`: runs the reference-price history worker when true; default `true`.
+- `AssetSymbols`: assets persisted and averaged, default `BTC`, `ETH`, `SOL`.
+- `WriteIntervalSeconds`: write cadence and minimum averaging step, default
+  `10`.
+- `StartupLookbackHours`: history loaded from PostgreSQL into memory at service
+  start, default `24`.
+- `TargetSamplesPerWindow`: target number of downsampled buckets per averaging
+  window, default `60`.
+- `WindowMinutes`: rolling-average windows in minutes, default `1440`, `720`,
+  `360`, `180`, `90`, `45`, `20`, `10`.
+
+The default proportional steps are therefore `24h=1440s`, `12h=720s`,
+`6h=360s`, `3h=180s`, `90m=90s`, `45m=45s`, `20m=20s`, and `10m=10s`. Each
+window average is computed over bucket averages in memory; after startup the
+worker updates only the affected bucket and trims expired buckets.
 
 ## BtcUpDown5mOddsArchive
 
@@ -216,7 +243,8 @@ ticks in `btc_up_down_5m_statistics_ticks`, and queues live observations for
 later application to `btc_5m_history` after the market result is known. It does
 not place Paper, dry-run, or live orders.
 
-- `Enabled`: runs the statistics worker when true; default `true`.
+- `Enabled`: runs the statistics worker when true; default `false`. Keep it
+  disabled during normal live operation to avoid writing research-only ticks.
 - `PollIntervalSeconds`: interval between statistics cycles, default `1`.
 - `MaxMarketsPerCycle`: maximum active BTC 5m markets inspected per cycle,
   default `500`.
@@ -286,6 +314,52 @@ This archive is for ETH/SOL/XRP research and diagnostics only.
   REST fallback is attempted, default `15000`.
 - `RestFallbackEnabled`: when true, uses CLOB `/book` if the WebSocket cache is
   missing or stale, default `true`.
+
+## CryptoUpDown5mResultPolling
+
+Runs the BTC/ETH/SOL 5-minute result collector and latency diagnostic. Every
+cycle selects local Gamma markets whose 5-minute window has ended. When
+provisional order-book results are enabled, the worker first tries to infer the
+winner from fresh WebSocket/CLOB `/book` top-of-book evidence and writes a
+ledger row with source `TerminalOrderBook`. It then polls the closed-market
+Gamma lookup for that concrete slug and writes a confirming or correcting ledger
+row with source `GammaClosedMarket` once Gamma returns an unambiguous winner.
+The same cycle also upserts one row per market into
+`crypto_up_down_5m_result_polling_observations`. The observation row records
+poll attempts, first `closed` observation time, first unambiguous Up/Down winner
+time, `winning_outcome`, and delay seconds from `market_end_utc`.
+
+- `Enabled`: runs the result polling statistics worker when true; default
+  `true`.
+- `AssetSymbols`: Up/Down base symbols to track, default `BTC`, `ETH`, `SOL`.
+- `PollIntervalSeconds`: interval between polling cycles, default `5`.
+- `MaxMarketsPerCycle`: maximum local Gamma markets scanned per cycle, default
+  `500`.
+- `MaxMarketAgeMinutes`: maximum age since 5-minute market end for selecting a
+  candidate, default `60`.
+- `MaxResultWaitMinutes`: maximum time after market end before a pending row is
+  marked `TimedOut`, default `20`.
+- `ReferencePriceResultEnabled`: when true, infers BTC/ETH/SOL 5-minute
+  outcomes from archived Binance start/end reference ticks before waiting for
+  Gamma, default `true`.
+- `ReferencePriceResultMaxEndAgeMilliseconds`: maximum age of the latest
+  archived tick before market close for reference-price result inference,
+  default `15000`.
+- `ReferencePriceResultMinSamples`: minimum archived ticks required before
+  comparing start and end reference prices, default `2`.
+- `ProvisionalOrderBookResultEnabled`: when true, writes provisional result
+  ledger rows from terminal order-book evidence before Gamma confirmation,
+  default `true`.
+- `ProvisionalWinnerBidMin`: minimum best bid for the inferred winning outcome,
+  default `0.60`.
+- `ProvisionalLoserAskMax`: maximum accepted opposite-outcome top-book evidence
+  for provisional inference, default `0.40`.
+- `ProvisionalMaxOrderBookAgeMilliseconds`: maximum WebSocket cache age for
+  provisional inference before REST fallback is considered, default `15000`.
+- `ProvisionalRestFallbackEnabled`: when true, uses CLOB `/book` for provisional
+  inference if cached order-book depth is missing or stale, default `true`.
+- `ProvisionalRestRequestTimeoutSeconds`: CLOB `/book` timeout for provisional
+  fallback requests, default `3`.
 
 ## ChainlinkBtcUsdDiagnostics
 
@@ -461,11 +535,21 @@ size, and relevant timestamps. It does not keep the full Gamma raw JSON or long
 description in memory.
 WebSocket book/price/best-bid-ask/last-trade messages update cached pricing
 fields on the fly. `market_resolved` removes resolved assets from the active
-subscription cache. A completed Gamma full scan removes assets that no longer
-appear in the `active=true&closed=false` result set.
+subscription cache and writes BTC/ETH/SOL 5-minute Up/Down results to
+`crypto_up_down_5m_websocket_resolved_markets`. Every raw WebSocket
+`market_resolved` event is also appended to
+`market_resolved_event_diagnostics` with the source component, raw asset ids,
+snapshot-match status, recorder action, and raw JSON. A completed Gamma full
+scan removes assets that no longer appear in the `active=true&closed=false`
+result set.
+The dedicated BTC/ETH/SOL 5-minute critical shard additionally records every
+raw protocol frame into `market_websocket_frame_diagnostics`, including ping/pong
+frames, invalid JSON, parsed event types, asset ids, market ids, resolved-text
+flags, parser status, payload hash, and raw payload truncated to 64KB. This is a
+diagnostic path only; it does not change strategy entry or settlement behavior.
 
-- `SubscriptionScope`: semantic market filter for Gamma-discovered WebSocket assets. `AllActiveMarkets` preserves broad active-market monitoring; `BtcUpDown5mOnly` registers only BTC Up/Down 5m markets while still keeping pinned/open order/open position assets subscribed separately.
-- `MaxSubscribedAssets`: maximum local subscription count; `0` means unlimited. Prefer `SubscriptionScope` for strategy-specific narrowing because a numeric cap can arbitrarily exclude required BTC assets.
+- `SubscriptionScope`: semantic market filter for Gamma-discovered WebSocket assets. `AllActiveMarkets` preserves broad active-market monitoring; `BtcUpDown5mOnly` registers only BTC Up/Down 5m markets; `CryptoUpDown5mOnly` registers BTC/ETH/SOL Up/Down 5m markets while still keeping pinned/open order/open position assets subscribed separately.
+- `MaxSubscribedAssets`: maximum local subscription count; `0` means unlimited. Prefer `SubscriptionScope` for strategy-specific narrowing because a numeric cap can arbitrarily exclude required BTC/ETH/SOL assets.
 - `SubscriptionRefreshSeconds`: fallback refresh cadence. New active Gamma assets also signal the WebSocket loop immediately.
 - `SubscriptionBatchSize`: number of asset ids per WebSocket subscribe/unsubscribe payload; default `1000`.
 - `ShardMaxAssets`: target maximum asset ids per market WebSocket shard; default `3000`.
@@ -481,8 +565,14 @@ instead of using one huge all-active subscription. Outcomes belonging to the
 same market/condition are kept on the same shard. Shard assignment is stable
 while the Gamma full scan discovers later pages: new token ids are dynamically
 subscribed into existing shards when capacity is available, instead of
-restarting all shards on every page. The supervisor stores the aggregate status
-in `market_data_status.component='PolymarketMarketWebSocket'` and stores
+restarting all shards on every page. Active BTC/ETH/SOL 5-minute Up/Down
+assets are isolated into
+`PolymarketMarketWebSocket:crypto-updown-5m-critical` before operational
+assets are allocated, so Diff result capture does not depend on the much larger
+position/order/signal subscription set. Raw frames from this critical component
+are persisted to `market_websocket_frame_diagnostics` for event-type delivery
+auditing. The supervisor stores the aggregate
+status in `market_data_status.component='PolymarketMarketWebSocket'` and stores
 individual shard rows as `PolymarketMarketWebSocket:shard-001`,
 `...:shard-002`, etc. If a shard closes, fails heartbeat/send/receive, or stays
 protocol-stale past `WatchdogStaleSeconds`, only that shard is reopened.
@@ -617,22 +707,24 @@ spread, last trade price, `orderMinSize`, and `orderPriceMinTickSize`.
 
 Runs the experimental Up/Down strategy family in `Paper` mode only.
 The worker observes BTC 5-minute Gamma markets, plus ETH/SOL 5-minute Gamma
-markets for the crypto Binance and non-Revert Skip variants, and records one lifecycle row per
+markets for the crypto Binance, non-Revert Skip, and Diff-family variants, and records one lifecycle row per
 market and strategy variant in `strategy_market_paper_runs`. Built-in BTC variants
 are standard `Less` and `More` plus comparison `Less Gamma` and `More Gamma` at
-30-second steps from 30 to 270 seconds after window start, plus `Middle 1`,
-threshold `Middle 1 1..100 bps` and matching `Instant` variants, `Middle 1 Revert`,
-threshold `Middle 1 Revert 1..100 bps` and matching `Instant` variants, `Skip 1..5`,
+30-second steps from 30 to 270 seconds after window start, plus `Middle N`
+for `N=100,90,80,...,10`, threshold `Middle N 1..100 bps` and matching
+`Instant` variants, `Middle N Revert`, threshold `Middle N Revert 1..100 bps`
+and matching `Instant` variants, `Skip 1..5`,
 `Skip 1..5 Revert`, threshold `Skip 1..50 bps` in 1 bps increments, matching
 `Skip 1..50 bps Instant` variants, fixed `Up 1..50 bps Instant` and
-`Down 1..50 bps Instant` variants, `Binance`, threshold `Binance 1..50 bps` in 1 bps increments, matching `Binance 1..50 bps Instant` variants, fixed-price `Binance 45/47/49`, delayed
+`Down 1..50 bps Instant` variants, `Up Simple` / `Down Simple`, `Binance`, threshold `Binance 1..50 bps` in 1 bps increments, matching `Binance 1..50 bps Instant` variants, fixed-price `Binance 45/47/49`, delayed
 `Binance 15s/30s/45s`, `Binance Clever`, fair-value `Binance Edge 2/4/6`,
-`Prev Score Countertrend 10..90`, `Ensemble 2 of 3`, `Dynamic Markov`, `Strategy Selector`, capped `Less`
+`Prev Score Countertrend 10..90`, singular immediate ask-depth `Prev Score Countertrend`, `Prev Score Countertrend Revert`, `Ensemble 2 of 3`, `Dynamic Markov`, `Strategy Selector`, Diff `Up/Down N Instant` thresholds `1..10` in steps of 1 and `15..150` in steps of 5 plus matching Revert rows, AdjustedDiff `Up/Down N Instant` thresholds `1..10`, `15`, and `20` plus matching Revert rows, ShiftDiff `Up/Down S N Instant` rows for shift `1..6` and thresholds `1..12` plus matching Revert rows, capped `Less`
 comparison variants, capped `More` comparison variants, and capped `More Gamma`
 comparison variants. ETH/SOL variants include Binance bps `1..50`, Binance bps
 `1..50 Instant`, Skip `1..5`, Skip bps `1..50`, Skip bps `1..50 Instant`,
-and fixed `Up 1..50 bps Instant` / `Down 1..50 bps Instant` rows;
-ETH/SOL Revert variants are intentionally not seeded. When
+fixed `Up 1..50 bps Instant` / `Down 1..50 bps Instant` rows, `Up Simple` / `Down Simple`, Diff
+`Up/Down N Instant` rows with thresholds `1..10` in steps of 1 and `15..150` in steps of 5 plus matching Revert rows, AdjustedDiff `Up/Down N Instant` rows plus matching Revert rows, and ShiftDiff `Up/Down S N Instant` rows plus matching Revert rows;
+ETH/SOL Skip Revert variants are intentionally not seeded. When
 `PaperTakerPricingEnabled=false`, `Less` selects the lower-priced Gamma
 `outcomePrices` entry, `More` selects the higher-priced entry, and that Gamma
 reference remains the Paper BUY entry price. When `PaperTakerPricingEnabled=true`,
@@ -675,21 +767,70 @@ fresh consecutive settled losses from the standard `BTC Up or Down 5m Less 180`
 strategy, and then applies a bounded paper stake progression. It later settles
 each run from closed Gamma metadata and writes final PnL.
 
+Diff Instant variants use the fast Diff worker. The service keeps in-memory BTC/ETH/SOL
+counters for the current UTC day, resets them to zero at `00:00 UTC`, and
+updates them from accepted result-ledger rows in the existing
+`crypto_up_down_5m_websocket_resolved_markets` table. Accepted sources are
+`MarketWebSocket`, `TerminalOrderBook`, and `GammaClosedMarket`. Parent `Up N
+Diff Instant` rows use `UpCount - DownCount`; when that value is at least `N`,
+they BUY FAK `Down` from current executable ask depth. Parent `Down N Diff
+Instant` rows use `DownCount - UpCount`; when that value is at least `N`, they
+BUY FAK `Up`. Diff thresholds are `1..10` in steps of 1 and `15..150` in steps
+of 5. Each Diff Revert row uses the same trigger side and threshold as its parent
+but buys the opposite parent outcome.
+
+AdjustedDiff Instant variants are parallel copies. They use the same
+accepted result rows, but keep a separate continuous in-memory counter that does
+not reset at `00:00 UTC`. They compute a slow trend zero from an EMA of raw
+`Diff = UpCount - DownCount` (`24` points, `12` point warmup, `0.5` max step,
+`1` deadband), then compare thresholds against `AdjustedDiff = raw Diff -
+trend_zero` for Up-Diff groups and the opposite value for Down-Diff groups.
+AdjustedDiff thresholds are capped at `20`: `1..10`, `15`, and `20`. Revert
+copies use the same adjusted trigger-side comparison and invert only the
+purchased outcome.
+
+ShiftDiff Instant variants are copies with per-strategy continuous
+counters. They apply their configured shift value before comparing the trigger
+side to thresholds `1..12`; shift values are `1..6`. ShiftDiff Revert copies use
+the same shift, trigger side, threshold, pricing, and freshness checks as the
+parent row, then buy the opposite parent outcome.
+
+All Diff-family variants use the dedicated fast Diff worker. A strategy for market `T`
+requires the previous 5-minute market `T-5m` to have an accepted result row; if
+that row is missing long enough, the run skips with
+`diff_counter_previous_market_resolved_event_missing` and creates no Paper
+order. The first `00:00 UTC` raw Diff market starts from zero and does not
+require the previous day's `23:55 UTC` result. They use the same Instant FAK
+execution and sizing path as bps Instant variants. `DiffCounterInstantMaxPrice` defaults
+to `1.00`, so current Diff-family entries are effectively uncapped by the old
+`0.50` price limit and take current executable ask depth immediately instead of
+placing resting BUYs at `0.50`. Raw Diff
+counters are not restored from PostgreSQL, but each fast cycle writes compact
+BTC/ETH/SOL snapshots to `crypto_up_down_5m_diff_snapshots` with `up_count`,
+`down_count`, `diff`, `market_start_utc`, `sampled_at_utc`, and high-water
+metadata so daily Diff charts can be generated later. Diff/AdjustedDiff/ShiftDiff
+rows and their Revert copies can enter the Paper/Live-shadow order path when
+their Dashboard `Live` flag is enabled and all live gates pass. Dashboard categories split them into
+`Diff Up`/`Diff Down`, `AdjustedDiff Up`/`AdjustedDiff Down`, ShiftDiff-by-shift,
+and matching `... Revert` categories per asset.
+
 The active non-Instant `Middle` variants use opening-limit pricing rather than
-taker pricing. At market open `Middle 1` reads the latest Binance BTC/USDT
-trade-stream price and compares it to the Binance cache arithmetic mean. If the
-latest trade is above the mean, the strategy buys `Down`; if it is below, it
-buys `Up`; equality skips the run.
-`Middle 1 Revert` inspects the same reference value and inverts that final
+taker pricing. At market open `Middle N` reads the latest Binance BTC/USDT
+trade-stream price and compares it to the arithmetic mean of the latest `N`
+sampled Binance reference prices. The seeded N values are `100,90,80,...,10`;
+a strategy skips with `btc_reference_samples_insufficient` until at least `N`
+samples are available. If the latest trade is above the N-sample mean, standard
+Middle buys `Down`; if it is below, it buys `Up`; equality skips the run.
+`Middle N Revert` inspects the same reference value and inverts that final
 decision: above mean buys `Up`, and below mean buys `Down`. The old `Middle 2`
 through `Middle 5` depths, including their bps and revert-bps variants, are no
 longer seeded as active strategies; existing rows are retired by schema
-initialization. The `Middle 1 1..100 bps` rows keep the same direction logic but
-skip unless the absolute latest-trade deviation from the arithmetic mean reaches
+initialization. The `Middle N 1..100 bps` rows keep the same direction logic but
+skip unless the absolute latest-trade deviation from the N-sample mean reaches
 the configured threshold; otherwise the run skips with
 `btc_reference_mean_deviation_below_threshold`. Matching `Instant` Middle bps
-rows keep the same signal and threshold gate, then price the selected outcome
-from executable ask depth using the same instant sizing/pricing path and
+rows keep the same signal and threshold gate, then submit BUY FAK taker entries
+from executable ask depth using the same instant sizing path and
 `InstantOpeningLimitMaxPrice` cap as Binance instant variants. The `Skip` variants inspect the exact immediately previous 5-minute windows without gaps, but they infer those results from close-book
 CLOB price evidence instead of waiting for Gamma settlement. The worker captures
 `/book` snapshots for active BTC strategy markets and ETH/SOL 5-minute or 15-minute markets during the final
@@ -712,7 +853,7 @@ outcome, and require that cumulative streak move to reach the configured
 threshold. A completed below-threshold cumulative move skips with
 `btc_previous_market_move_below_bps_threshold`. Standard `Skip bps` variants use
 a fixed `0.50` GTD BUY, while matching `Instant` variants use the same selected
-outcome executable ask-depth pricing and sizing path as Binance instant variants.
+outcome executable ask-depth FAK sizing path as Binance instant variants.
 The shared Skip bps streak calculation also records one
 `btc_up_down_5m_result_streak_diagnostics` row per target market. Use
 `close_book_streak_result_count` to find the longest same-outcome run and
@@ -725,12 +866,13 @@ seeded because current 15-minute liquidity/volume is too thin for Live use. `Up`
 countertrend decision is `Up` after a `Down` streak; `Down` enters only when the
 countertrend decision is `Down` after an `Up` streak. The opposite side skips
 with `btc_previous_market_move_fixed_outcome_mismatch`, and accepted entries use
-the same executable ask-depth Instant pricing and `InstantOpeningLimitMaxPrice`
-cap as other Instant opening-limit variants.
+the executable ask-depth FAK path with an effective max BUY price of
+`1.00`, so `InstantOpeningLimitMaxPrice` no longer blocks fixed Up/Down bps
+entries.
 ETH/SOL Skip rows mirror the non-Revert BTC Skip behavior: plain `Skip 1..5`
 uses ETH/SOL close-book result streaks, `Skip bps` uses ETH/SOL close-book
 streaks plus archived `crypto_up_down_5m_odds_ticks` start-to-close Binance
-move, and `Skip bps Instant` uses the same executable ask-depth pricing path as
+move, and `Skip bps Instant` uses the same executable ask-depth FAK path as
 the BTC Instant variants. `ETH/SOL Up 1..50 bps Instant` and `ETH/SOL Down
 1..50 bps Instant` reuse that same crypto streak/move gate but enter only when
 the Skip bps countertrend decision matches the fixed side; the opposite side
@@ -796,7 +938,7 @@ reference is not available yet, the observed run waits for the next processor
 cycle instead of being permanently skipped. `BTC Up or Down 5m Binance` bps variants
 from `1 bps` through `50 bps` in `1 bps` increments use the same direction and `0.50` GTD limit, but skip with
 `btc_reference_move_below_bps_threshold` until the absolute BTC move from market
-start reaches the configured bps threshold. The matching `Instant` bps variants keep the same signal and bps threshold, but price the GTD BUY from the selected outcome's current executable ask depth so the initial Paper order is marketable for the computed order size. `BTC Up or Down 5m Binance 15s`,
+start reaches the configured bps threshold. The matching `Instant` bps variants keep the same signal and bps threshold, but submit BUY FAK taker entries from the selected outcome's current executable ask depth, taking only immediately available liquidity up to the computed order size and cap. `BTC Up or Down 5m Binance 15s`,
 `30s`, and `45s` use the same start-relative signal and `0.50` cap but wait for
 the configured delay after market open before reading the current Binance
 reference. `BTC Up or Down 5m Binance Clever`
@@ -819,8 +961,23 @@ start price, winsorizes deviations before averaging, and then enters the next
 market against the previous bias: previous `Up` buys `Down`, previous `Down`
 buys `Up`, and neutral or insufficient samples skip. Each `10..90` variant uses
 the same previous-market score but its own fixed GTD BUY limit price from
-`0.10` to `0.90` in `0.05` steps. `Ensemble 2 of 3` votes between Binance
-start-relative, Middle 1, and Skip 1 and enters only when at least two available
+`0.10` to `0.90` in `0.05` steps. The singular `BTC/ETH/SOL Prev Score
+Countertrend` variants keep the same countertrend signal but enter from
+immediate executable ask depth instead of a fixed price; ETH/SOL read
+`crypto_up_down_5m_odds_ticks` for their own asset. Decision JSON stores the
+same score as signed bps (`previous_score_bps = previous_score * 10000`),
+absolute bps, and selected signal bps; the Dashboard all-time Strategies grid
+also shows average signed score bps, average signal bps, and latest signal bps.
+`BTC/ETH/SOL Prev Score Countertrend Premarket` variants enter 30 seconds before the target market
+opens and score a synthetic 5.5-minute window ending at that entry time: the
+last minute of the market before the currently running market plus the first 4
+minutes 30 seconds of the currently running market. The first valid sample in
+that synthetic window is used as the score start price; positive score buys
+`Down`, negative score buys `Up`, and neutral or insufficient samples skip.
+`Prev Score Countertrend Revert` keeps the BTC previous bias direction and uses
+the same immediate ask-depth entry model.
+`Ensemble 2 of 3` votes between Binance
+start-relative, Middle 100, and Skip 1 and enters only when at least two available
 votes agree on the same single outcome. `Dynamic Markov` estimates the next
 result from recent BTC 5-minute result transitions and enters only when the
 conditional next-outcome probability is at least `0.55`. `Strategy Selector`
@@ -830,26 +987,24 @@ both sides of the same Polymarket market in Paper; the opposite-outcome guard is
 enforced only by Live preflight against open Live BUY orders in the same
 condition. The
 order size still targets the current market minimum passing size plus a `10%`
-safety buffer times the configured Paper stake multiplier; diagnostics record
-`post_only=false` plus the selected pricing model inputs, cap, final limit, GTD
-expiration mode, local cancel deadline, CLOB wire expiration, and fallback
-`OpeningLimitGtdTtlSeconds` (`120` by default). They
-do not create immediate fills. When the strategy's Dashboard `Live` flag is
-enabled, opening-limit entries can create linked live-shadow orders through the
-controlled Paper/Live-shadow path if all normal live gates pass. The
-generic Paper open-order pipeline then applies balanced GTD
-accounting: visible ask depth at or below the limit creates partial `paper_fills`
-rows with VWAP evidence, cumulative fills determine `PartiallyFilled` versus
-`Filled`, and settlement uses only actually filled shares/cost basis. GTD limit
-orders that never fill before expiration are marked `gtd_limit_not_filled` instead of being
-counted as won or lost.
+safety buffer times the configured Paper stake multiplier. Non-Instant GTD
+diagnostics record `post_only=false` plus the selected pricing model inputs, cap,
+final limit, expiration mode, local cancel deadline, CLOB wire expiration, and
+fallback `OpeningLimitGtdTtlSeconds` (`120` by default). Instant diagnostics
+record `order_execution_mode=FAK`, the selected ask-depth VWAP/limit cap, filled
+notional, partial-fill state, and zero-fill skips/rejections. When the strategy's
+Dashboard `Live` flag is enabled, opening-limit entries can create linked
+live-shadow orders through the controlled Paper/Live-shadow path if all normal
+live gates pass. Non-Instant orders then use the generic Paper open-order
+pipeline for balanced GTD accounting; Instant entries fill immediately from
+visible ask depth and cancel any remainder. GTD limit orders that never fill
+before expiration are marked `gtd_limit_not_filled` instead of being counted as
+won or lost.
 
-`PreOpen Full ... Sell` variants use a fixed-price Full BUY entry without the
-pre-close local cancel deadline used by ordinary Full variants. During the final
-quarter of the market they compare current Up/Down order-book direction with
-the fixed entry outcome; if it differs, they submit a Paper SELL for the filled
-shares at a marketable bid-side limit. The exit is still paper-only and is
-filled by the ordinary Paper open-order pipeline.
+PreOpen fixed-direction BTC strategy rows were physically removed from
+production and are no longer seeded. Missing PreOpen strategy rows are treated
+as deleted/disabled by the strategy-market-run insert guard, so their Dashboard
+grouping categories disappear with the deleted strategy rows.
 
 The dashboard `Strategies` tab reads all rows from `strategies`, including
 `follow_leader`, and aggregates Paper orders, positions, settlements, and
@@ -898,9 +1053,13 @@ stop creating new Follow leader signals or BTC 5-minute entries without a
 restart, while manually paused strategies stay enabled but skip new Paper and
 Live entries with reason `strategy_paused`. Existing Paper positions can still
 be settled, and copied leader exits can still be tracked.
-The Dashboard `Paper orders` and `Live orders` tabs load only the first recent
-orders page; when a strategy is selected, PostgreSQL applies that strategy filter
-before the page limit.
+The Dashboard `Paper orders` tab loads the first recent orders page; when a
+strategy is selected, PostgreSQL applies that strategy filter before the page
+limit. The `Live orders` tab uses the same server-side strategy filter but
+supports `Prev`/`Next` paging through persisted history in 100-row pages. When
+opened from a recent performance period tab (`24 hours`, `6 hours`, or
+`1 hour`), both order tabs also pass the same rolling window to storage as
+`created_at_utc >= now - window`, and Live paging stays inside that window.
 
 Automatic strategy pausing is Live-only and opt-in per strategy through
 `LiveTrading:AutoLivePauseStrategies`; an empty list disables automatic Live
@@ -929,12 +1088,16 @@ Dashboard `Paused` checkbox remains a manual full Paper+Live pause, while
 - `Dashboard:StrategiesOnlyMode`: when true, the Dashboard reads service heartbeat plus strategy performance grids and still shows the local `Dashboard Errors` tab for copied/saved refresh, command, export, and strategy edit failures; default `true`. Heartbeat staleness is evaluated against the selected PostgreSQL server clock, not the Dashboard machine clock.
 - `Dashboard:OptionalReportTimeoutSeconds`: timeout for optional Dashboard analytics report grids; default `8`. Used only when `Dashboard:StrategiesOnlyMode=false`. If a report times out, the Dashboard keeps the main refresh alive and shows a Diagnostics warning for the skipped report.
 
-- `Enabled`: runs the paper-only BTC 5-minute strategy worker when true; default `true`.
+- `Enabled`: runs the BTC 5-minute strategy worker when true; default `true`.
 - `PollIntervalSeconds`: worker loop delay; default `1` in the service config to reduce BTC entry timing drift.
+- `DiffCounterFastPollIntervalMilliseconds`: dedicated Diff-family worker loop delay; default `500`. The fast worker observes Diff/AdjustedDiff/ShiftDiff markets and their Revert copies and processes only their due entries, while the main BTC strategy worker no longer places those entries.
+- Diff Countertrend uses raw UTC-day counts reset at `00:00 UTC`: after each accepted BTC/ETH/SOL 5-minute result in the current UTC day, the processor updates `UpCount` or `DownCount`, computes `Diff = UpCount - DownCount`, and stores `DiffCount` as a diagnostic cumulative sum of observed Diff values. Strategy thresholds compare against raw `Diff`; `DiffCount` no longer shifts either side of the counter. AdjustedDiff Countertrend keeps a separate continuous in-memory counter, does not reset it at `00:00 UTC`, and compares thresholds against raw `Diff` adjusted by its slow EMA trend zero. ShiftDiff keeps per-strategy continuous counters and applies the configured shift before comparison. Revert copies use the same trigger-side comparison as the parent and invert only the purchased outcome. When the immediately previous result is still missing, a Diff-family run stays pending until four minutes after its own market start; only then it is skipped with `diff_counter_previous_market_resolved_event_missing`.
+- `DiffCounterInstantMaxPrice`: maximum BUY price cap for Diff/AdjustedDiff/ShiftDiff Instant entries and their Revert copies; default `1.00`, which effectively removes the old `0.50` Diff-family cap because valid BUY prices are below `1.00`. Diff-family entries submit BUY FAK taker fills from current executable ask depth and no longer place resting BUYs at `0.50` when current executable ask depth is above half. Fixed Up/Down bps Instant variants also use an effective max BUY price of `1.00`, independent of `InstantOpeningLimitMaxPrice`. Simple Up/Down variants still use an explicit `0.50` cap but skip above the cap instead of placing a resting order. Other Instant strategy families continue to use `InstantOpeningLimitMaxPrice` and still skip above their cap with `instant_price_above_max`.
+- `ETH Up or Down 5m Down 9 bps`: targeted stats-entry variant that reuses the fixed Down previous-result bps signal from the matching Instant strategy. The ordinary `BTC/ETH/SOL Up or Down 5m Up/Down N bps Reference Average Premarket` rows now use the in-memory crypto reference averages, not the previous market result. They run 30 seconds before open; `N` covers `1..10` in steps of `1`, then `15..100` in steps of `5`. `Up` trigger rows select the largest full `middle` average across `24h`, `12h`, `6h`, `3h`, `90m`, `45m`, `20m`, and `10m`; when the current Binance reference price is at least `N` bps above that average they buy `Down`. `Down` trigger rows mirror the rule and buy `Up` when current price is at least `N` bps below the selected average. ETH Down reference-average rows use the distinct `...down_reference_average_bps...` code/id family, so they do not share the legacy ETH Down previous-result Premarket Dashboard category. Legacy selected ETH previous-result Premarket rows remain at `-10s` for `40..42 bps` and `-5s` for `30..38 bps`; old `-30s` previous-result rows remain catalogued for history/settlement but are disabled by schema initialization. These variants simulate BUY `FAK` taker entry from executable ask depth at worst price `1 - tick`, record fills at ask-depth VWAP, keep only actually filled partial notional, and reject/skip zero-fill cases. Live-shadow submits a BUY `FAK` market amount with `postOnly=false`, no GTD expiration, and no Live Lost counter multiplier. A zero-fill FAK response is stored as a rejected live entry instead of an open order.
 - `StakeUsd`: fallback/default BTC stake multiplier; default `1.00`. When fresh market `min_order_size` is available, BTC Paper and Live stake notional is computed as the minimum passing order notional plus `10%`, multiplied by the strategy's Paper or Live stake value, then rounded up to the next whole USD.
 - `EntryGraceSeconds`: maximum late-entry grace after a variant's due time before the run is skipped; default `60`. Strict `Skip` / `Skip Revert` decisions no longer wait for Gamma settlement: they infer each immediately previous BTC 5-minute result from close-book CLOB price evidence. Full `Up` midpoint maps `>= 0.5` to `Up` and `< 0.5` to `Down`; single-sided `Up best_bid >= 0.5`, `Up best_ask < 0.5`, `Down best_ask <= 0.5`, and `Down best_bid > 0.5` are also decisive. If current close-book fetch stops responding, the worker uses the latest stored snapshot for that token when available. Missing or conflicting evidence is skipped with diagnostics in `skip_diagnostics_json`.
 - `MaxMarketsPerCycle`: maximum BTC 5-minute Gamma markets observed per cycle; default `500`.
-- `MaxEntriesPerCycle`: maximum due entries processed per cycle across variants; default `3000`. Regular due-entry selection expands the final batch boundary to include every run with the same `entry_due_at_utc`, so a single market-open timestamp is not split across cycles. Middle reference opening-limit variants also get a shared fast skip pass before generic order placement, skipped runs are batch-updated through one repository call, and accepted BTC Paper signal/order rows are inserted through one transactional repository call.
+- `MaxEntriesPerCycle`: maximum due entries processed per cycle across variants; default `3000`. Regular due-entry selection expands the final batch boundary to include every run with the same `entry_due_at_utc`, so a single market-open timestamp is not split across cycles. Within the same due timestamp, Live-enabled strategies are processed first and then ordered by a prepared in-memory Live realized PnL snapshot, with the highest Live realized strategies first. Middle reference opening-limit variants also get a shared fast skip pass before generic order placement, skipped runs are batch-updated through one repository call, and accepted BTC Paper signal/order rows are inserted through one transactional repository call.
 - `MaxConcurrentEntryDecisions`: maximum due-entry decision work items processed concurrently after the shared fast paths; default `64` in the service config.
 - `MaxSettlementsPerCycle`: maximum due settlements selected per cycle from the global settlement queue across variants; default `250`.
 - `MaxConcurrentSettlements`: maximum due settlement work items processed concurrently; default `16` in the service config.
@@ -957,8 +1120,8 @@ Dashboard `Paused` checkbox remains a manual full Paper+Live pause, while
 - `OpeningLimitGtdTtlSeconds`: fallback lifetime for BTC opening-limit GTD Paper and Paper/Live-shadow orders when market-relative expiration is disabled or market end is unavailable; default `120`, valid range `30..300`.
 - `OpeningLimitExpireBeforeMarketEndSeconds`: local BTC opening-limit GTD cancel deadline offset from market close; default `60`, valid range `0..300`, with `0` disabling the market-relative deadline and falling back to `OpeningLimitGtdTtlSeconds`.
 - `ClobGtdExpirationSecurityBufferSeconds`: extra seconds added to the CLOB wire `expiration` for GTD orders so the local effective deadline honors Polymarket's GTD security threshold; default `60`, valid range `60..300`.
-- `PreviousScoreCounterTrendEpsilonScore`: minimum absolute previous-market time-weighted score required before `Prev Score Countertrend` enters; default `0.0001`.
-- `PreviousScoreCounterTrendMinSamples`: minimum archived BTC samples required from the immediately previous 5-minute market; default `10`.
+- `PreviousScoreCounterTrendEpsilonScore`: minimum absolute previous-market time-weighted score required before `Prev Score Countertrend` fixed-price, immediate ask-depth, Premarket, or Revert variants enter; default `0.0001`.
+- `PreviousScoreCounterTrendMinSamples`: minimum archived BTC/ETH/SOL reference samples required from the immediately previous 5-minute market, or from the synthetic 5.5-minute Premarket score window; default `10`.
 - `PreviousScoreCounterTrendWinsorPercent`: lower/upper tail percentage used to winsorize previous-market deviations before averaging; default `0.10`, valid range `0..<0.50`.
 - `PreviousScoreCounterTrendEnableTimeShareFilter`: when true, requires the previous-market bias to also meet the configured positive/negative duration share before entering; default `false`.
 - `PreviousScoreCounterTrendMinUpTimeShare`: minimum positive-deviation duration share for a previous `Up` bias when the time-share filter is enabled; default `0.50`.

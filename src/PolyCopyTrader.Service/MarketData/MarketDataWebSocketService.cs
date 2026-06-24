@@ -20,9 +20,12 @@ public sealed class MarketDataWebSocketService(
     IMarketTradeTickDiagnosticService tradeTickDiagnosticService,
     IMarketDataCache marketDataCache,
     IPaperTradingMarketDataUpdater paperTradingUpdater,
-    IAppRepository repository) : BackgroundService
+    IAppRepository repository,
+    ICryptoUpDown5mMarketResolvedEventRecorder? cryptoUpDown5mMarketResolvedEventRecorder = null) : BackgroundService
 {
     private const string ComponentName = "PolymarketMarketWebSocket";
+    private readonly ICryptoUpDown5mMarketResolvedEventRecorder cryptoResolvedEventRecorder =
+        cryptoUpDown5mMarketResolvedEventRecorder ?? NoOpCryptoUpDown5mMarketResolvedEventRecorder.Instance;
     private readonly ConcurrentDictionary<string, MarketDataWebSocketShardRunner> shardRunners = new(StringComparer.OrdinalIgnoreCase);
     private readonly MarketDataWebSocketShardAllocator shardAllocator = new(new MarketDataWebSocketOptionsAdapter(
         options.ShardMaxAssets,
@@ -110,7 +113,9 @@ public sealed class MarketDataWebSocketService(
     private async Task ReconcileShardsAsync(CancellationToken cancellationToken)
     {
         var desiredAssetIds = await assetProvider.GetRelevantAssetIdsAsync(cancellationToken);
-        if (desiredAssetIds.Count == 0)
+        var snapshots = activeMarketAssetSubscriptionRegistry.GetSnapshots();
+        var criticalCryptoUpDown5mAssetIds = CriticalCryptoUpDown5mAssetSelector.SelectAssetIds(snapshots);
+        if (desiredAssetIds.Count == 0 && criticalCryptoUpDown5mAssetIds.Count == 0)
         {
             marketDataCache.ReplaceSubscribedAssets([]);
             await StopAllShardsAsync(cancellationToken);
@@ -118,9 +123,13 @@ public sealed class MarketDataWebSocketService(
             return;
         }
 
-        var plans = shardAllocator.Reconcile(
-            desiredAssetIds,
-            activeMarketAssetSubscriptionRegistry.GetSnapshots());
+        var operationalDesiredAssetIds = desiredAssetIds
+            .Except(criticalCryptoUpDown5mAssetIds, StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+        var operationalPlans = shardAllocator.Reconcile(
+            operationalDesiredAssetIds,
+            snapshots);
+        var plans = BuildSubscriptionPlans(criticalCryptoUpDown5mAssetIds, operationalPlans);
         var plannedAssetIds = plans.SelectMany(plan => plan.AssetIds).ToArray();
         marketDataCache.ReplaceSubscribedAssets(plannedAssetIds);
 
@@ -252,10 +261,27 @@ public sealed class MarketDataWebSocketService(
         }
         catch (JsonException ex)
         {
+            await TryRecordCriticalFrameDiagnosticAsync(
+                component,
+                message,
+                receivedAtUtc,
+                null,
+                parseSucceeded: false,
+                parseError: ex.Message,
+                cancellationToken);
             logger.LogWarning(ex, "Market WebSocket shard {Component} message parsing failed.", component);
             await TryRecordApiErrorAsync(component, "ParseMarketMessage", ex.Message, cancellationToken);
             return;
         }
+
+        await TryRecordCriticalFrameDiagnosticAsync(
+            component,
+            message,
+            receivedAtUtc,
+            updates,
+            parseSucceeded: true,
+            parseError: null,
+            cancellationToken);
 
         if (updates.Count == 0)
         {
@@ -266,6 +292,15 @@ public sealed class MarketDataWebSocketService(
         {
             try
             {
+                ActiveMarketAssetSnapshot? activeMarketSnapshot = null;
+                if (update.MarketResolved &&
+                    !string.IsNullOrWhiteSpace(update.AssetId) &&
+                    activeMarketAssetSubscriptionRegistry.TryGetSnapshot(update.AssetId, out var snapshot))
+                {
+                    activeMarketSnapshot = snapshot;
+                }
+
+                await cryptoResolvedEventRecorder.RecordAsync(component, update, activeMarketSnapshot, receivedAtUtc, cancellationToken);
                 activeMarketAssetSubscriptionRegistry.ApplyMarketDataUpdate(update);
                 marketDataCache.ApplyUpdate(update);
                 btcOrderBookLagDiagnosticService.RecordPolymarketTopOfBook(update, receivedAtUtc);
@@ -292,6 +327,66 @@ public sealed class MarketDataWebSocketService(
                 await TryRecordApiErrorAsync(component, "ProcessMarketDataUpdate", ex.Message, cancellationToken);
             }
         }
+    }
+
+    private async Task TryRecordCriticalFrameDiagnosticAsync(
+        string component,
+        string message,
+        DateTimeOffset receivedAtUtc,
+        IReadOnlyCollection<MarketDataUpdate>? updates,
+        bool parseSucceeded,
+        string? parseError,
+        CancellationToken cancellationToken)
+    {
+        if (!string.Equals(component, CriticalCryptoUpDown5mAssetSelector.ComponentName, StringComparison.OrdinalIgnoreCase))
+        {
+            return;
+        }
+
+        try
+        {
+            await repository.AddMarketWebSocketFrameDiagnosticAsync(
+                MarketWebSocketFrameDiagnosticBuilder.Build(
+                    component,
+                    message,
+                    receivedAtUtc,
+                    updates,
+                    parseSucceeded,
+                    parseError),
+                cancellationToken);
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "Failed to persist critical market WebSocket frame diagnostic.");
+            await TryRecordApiErrorAsync(component, "RecordFrameDiagnostic", ex.Message, cancellationToken);
+        }
+    }
+
+    private static IReadOnlyList<MarketDataWebSocketShardPlan> BuildSubscriptionPlans(
+        IReadOnlyCollection<string> criticalCryptoUpDown5mAssetIds,
+        IReadOnlyList<MarketDataWebSocketShardPlan> operationalPlans)
+    {
+        if (criticalCryptoUpDown5mAssetIds.Count == 0)
+        {
+            return operationalPlans;
+        }
+
+        var plans = new List<MarketDataWebSocketShardPlan>
+        {
+            new(
+                -1,
+                CriticalCryptoUpDown5mAssetSelector.ComponentName,
+                criticalCryptoUpDown5mAssetIds
+                    .Distinct(StringComparer.OrdinalIgnoreCase)
+                    .OrderBy(assetId => assetId, StringComparer.OrdinalIgnoreCase)
+                    .ToArray())
+        };
+        plans.AddRange(operationalPlans);
+        return plans;
     }
 
     private void OnShardStatus(MarketDataStatusSnapshot status)

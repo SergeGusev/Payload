@@ -229,7 +229,7 @@ public sealed class SignalProcessor(
         var lockoutStart = now.AddMinutes(-liveTradingOptions.ApiErrorLockoutWindowMinutes);
         var recentPolymarketErrors = apiErrors.Count(error =>
             error.CreatedAtUtc >= lockoutStart &&
-            error.Component.Contains("Polymarket", StringComparison.OrdinalIgnoreCase));
+            LiveApiErrorLockoutPolicy.CountsForLiveOrderLockout(error));
         if (recentPolymarketErrors >= liveTradingOptions.ApiErrorLockoutCount)
         {
             validation.Add("API error lockout is active.");
@@ -249,18 +249,12 @@ public sealed class SignalProcessor(
             validation.Add("Polymarket auth is not ready: " + string.Join(", ", authReadiness.MissingRequirements));
         }
 
-        try
-        {
-            var geoblock = await geoClient.GetGeoblockStatusAsync(cancellationToken);
-            if (geoblock.Blocked)
-            {
-                validation.Add($"Geoblock is active for VPS IP {geoblock.Ip ?? "unknown"}.");
-            }
-        }
-        catch (Exception ex) when (ex is not OperationCanceledException)
-        {
-            validation.Add("Geoblock check failed: " + ex.Message);
-        }
+        await LiveGeoblockPreflight.ValidateAsync(
+            geoClient,
+            liveTradingOptions,
+            repository,
+            validation,
+            cancellationToken);
 
         OrderBookSnapshot? orderBook = null;
         try
@@ -312,9 +306,9 @@ public sealed class SignalProcessor(
             proposedSizeShares = 0m;
         }
 
-        if (orderBook?.BestAsk is not { } bestAsk || price <= 0m || price >= bestAsk)
+        if (orderBook?.BestAsk is not { } bestAsk || price <= 0m || price > 1m || price < bestAsk)
         {
-            validation.Add("Live maker BUY price would cross/use best ask, or lacks a fresh best ask; live taker execution is not enabled.");
+            validation.Add("Live FAK BUY requires a fresh best ask and a worst price at or above it.");
         }
 
         var maxNotional = Math.Min(
@@ -368,7 +362,7 @@ public sealed class SignalProcessor(
             return false;
         }
 
-        var request = CreateLiveRequest(trade, price, liveSizeShares, orderBook, now);
+        var request = CreateLiveRequest(trade, price, liveSizeShares, notional, orderBook, now);
         LiveOrderPlacementResult result;
         try
         {
@@ -388,16 +382,7 @@ public sealed class SignalProcessor(
             return false;
         }
 
-        var liveOrder = ToLiveOrder(signal, trade, price, liveSizeShares, request.GtdExpirationUtc!.Value, result);
-        if (string.Equals(result.ResponseStatus, "matched", StringComparison.OrdinalIgnoreCase))
-        {
-            liveOrder = liveOrder with
-            {
-                Status = LiveOrderStatus.Error,
-                ValidationSummary = "Maker-only live order returned matched status; live trading paused."
-            };
-            controlState.PauseLiveTrading("SignalProcessor");
-        }
+        var liveOrder = ToLiveOrder(signal, trade, price, liveSizeShares, notional, now, result);
 
         await PersistLiveOrderAsync(
             liveOrder,
@@ -405,7 +390,7 @@ public sealed class SignalProcessor(
             result.Success ? "OK" : "Rejected",
             result.ErrorMessage ?? result.ResponseStatus,
             cancellationToken);
-        return result.Success && (liveOrder.Status is LiveOrderStatus.Live or LiveOrderStatus.Delayed);
+        return result.Success && liveOrder.Status == LiveOrderStatus.Matched;
     }
 
     private async Task ValidateStrategyLiveBalanceAsync(
@@ -474,6 +459,7 @@ public sealed class SignalProcessor(
         LeaderTrade trade,
         decimal price,
         decimal sizeShares,
+        decimal marketBuyAmountUsd,
         OrderBookSnapshot? orderBook,
         DateTimeOffset createdAtUtc)
     {
@@ -487,11 +473,11 @@ public sealed class SignalProcessor(
             authOptions.FunderAddress,
             authOptions.SigningAddress,
             ParseSignatureType(authOptions.SignatureType),
-            ClobV2OrderType.GTD,
+            ClobV2OrderType.FAK,
             createdAtUtc,
-            createdAtUtc.AddSeconds(liveTradingOptions.DefaultOrderTtlSeconds),
             NegativeRisk: orderBook?.NegativeRisk ?? false,
-            PostOnly: true);
+            PostOnly: false,
+            MarketBuyAmountUsd: marketBuyAmountUsd);
     }
 
     private static DryRunOrder ToDryRunOrder(
@@ -553,7 +539,7 @@ public sealed class SignalProcessor(
             price,
             sizeShares,
             price * sizeShares,
-            "GTD",
+            "FAK",
             createdAtUtc,
             createdAtUtc,
             null,
@@ -572,16 +558,33 @@ public sealed class SignalProcessor(
         LeaderTrade trade,
         decimal price,
         decimal sizeShares,
+        decimal notionalUsd,
         DateTimeOffset expiresAtUtc,
         LiveOrderPlacementResult result)
     {
-        var status = MapPlacementStatus(result);
+        var placementStatus = MapPlacementStatus(result);
         var fillSummary = LiveOrderPlacementAccounting.FromPlacementResult(
             trade.Side,
             price,
             sizeShares,
-            status,
-            result);
+            LiveOrderStatus.Matched,
+            result,
+            allowFilledSizeAboveRequested: true);
+        var status = placementStatus;
+        var validationSummary = result.ErrorMessage ?? string.Empty;
+        if (fillSummary.FilledSize > 0m)
+        {
+            status = LiveOrderStatus.Matched;
+        }
+        else if (result.Success)
+        {
+            status = LiveOrderStatus.Rejected;
+            validationSummary = "FAK order reported no immediate fill.";
+        }
+
+        var persistedSizeShares = fillSummary.FilledSize > sizeShares
+            ? fillSummary.FilledSize
+            : sizeShares;
         return new LiveOrder(
             Guid.NewGuid(),
             signal.Id,
@@ -592,18 +595,18 @@ public sealed class SignalProcessor(
             trade.ConditionId,
             trade.Outcome,
             price,
-            sizeShares,
-            price * sizeShares,
-            "GTD",
+            persistedSizeShares,
+            notionalUsd,
+            "FAK",
             signal.CreatedAtUtc,
             expiresAtUtc,
-            result.Success ? DateTimeOffset.UtcNow : null,
+            result.Success && status == LiveOrderStatus.Matched ? DateTimeOffset.UtcNow : null,
             result.ResponseStatus,
             fillSummary.FilledSize,
-            fillSummary.RemainingSize,
+            0m,
             string.Empty,
             string.IsNullOrWhiteSpace(result.RawResponseJson) ? "{}" : result.RawResponseJson,
-            result.ErrorMessage ?? string.Empty,
+            validationSummary,
             DateTimeOffset.UtcNow,
             StrategyId: StrategyIds.FollowLeader,
             AverageFillPrice: fillSummary.AverageFillPrice,

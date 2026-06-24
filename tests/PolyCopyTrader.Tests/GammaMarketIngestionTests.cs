@@ -118,6 +118,50 @@ public sealed class GammaMarketIngestionTests
     }
 
     [Fact]
+    public async Task Refresh_CryptoOnlyScope_RegistersBtcEthSolWebSocketAssetsButUpsertsAllMarkets()
+    {
+        var gammaClient = new FakeGammaClient();
+        gammaClient.Pages[0] =
+        [
+            CreateMarketForTests("regular-market"),
+            CreateCryptoUpDown5mMarketForTests("BTC", "btc-market"),
+            CreateCryptoUpDown5mMarketForTests("ETH", "eth-market"),
+            CreateCryptoUpDown5mMarketForTests("SOL", "sol-market"),
+            CreateCryptoUpDown5mMarketForTests("DOGE", "doge-market")
+        ];
+        gammaClient.Pages[5] = [];
+        var repository = new TestAppRepository();
+        var registry = new ActiveMarketAssetSubscriptionRegistry();
+        registry.AddOrUpdateMarkets([CreateMarketForTests("stale-regular-market")]);
+        var processor = CreateProcessor(
+            gammaClient,
+            repository,
+            pageLimit: 5,
+            activeMarketAssetSubscriptionRegistry: registry,
+            marketDataWebSocketOptions: new MarketDataWebSocketOptions
+            {
+                SubscriptionScope = MarketDataWebSocketSubscriptionScope.CryptoUpDown5mOnly
+            });
+
+        await processor.RefreshAsync();
+
+        Assert.Contains(repository.PolymarketGammaMarkets, market => market.MarketId == "regular-market");
+        Assert.Contains(repository.PolymarketGammaMarkets, market => market.MarketId == "btc-market");
+        Assert.Contains(repository.PolymarketGammaMarkets, market => market.MarketId == "eth-market");
+        Assert.Contains(repository.PolymarketGammaMarkets, market => market.MarketId == "sol-market");
+        Assert.Contains(repository.PolymarketGammaMarkets, market => market.MarketId == "doge-market");
+        Assert.DoesNotContain("token-yes-regular-market", registry.GetAssetIds(), StringComparer.OrdinalIgnoreCase);
+        Assert.DoesNotContain("token-yes-stale-regular-market", registry.GetAssetIds(), StringComparer.OrdinalIgnoreCase);
+        Assert.DoesNotContain("token-yes-doge-market", registry.GetAssetIds(), StringComparer.OrdinalIgnoreCase);
+        Assert.Contains("token-yes-btc-market", registry.GetAssetIds(), StringComparer.OrdinalIgnoreCase);
+        Assert.Contains("token-no-btc-market", registry.GetAssetIds(), StringComparer.OrdinalIgnoreCase);
+        Assert.Contains("token-yes-eth-market", registry.GetAssetIds(), StringComparer.OrdinalIgnoreCase);
+        Assert.Contains("token-no-eth-market", registry.GetAssetIds(), StringComparer.OrdinalIgnoreCase);
+        Assert.Contains("token-yes-sol-market", registry.GetAssetIds(), StringComparer.OrdinalIgnoreCase);
+        Assert.Contains("token-no-sol-market", registry.GetAssetIds(), StringComparer.OrdinalIgnoreCase);
+    }
+
+    [Fact]
     public async Task Refresh_PrioritySync_UpsertsBtcFiveMinuteMarketsBeforeFullScan()
     {
         var gammaClient = new FakeGammaClient
@@ -141,11 +185,57 @@ public sealed class GammaMarketIngestionTests
 
         var slugRequest = Assert.Single(gammaClient.SlugRequests);
         Assert.Contains(slugRequest, slug => slug.StartsWith("btc-updown-5m-", StringComparison.OrdinalIgnoreCase));
+        Assert.DoesNotContain(slugRequest, slug => slug.StartsWith("eth-updown-5m-", StringComparison.OrdinalIgnoreCase));
+        Assert.DoesNotContain(slugRequest, slug => slug.StartsWith("sol-updown-5m-", StringComparison.OrdinalIgnoreCase));
         Assert.Equal(1, result.MarketsFetched);
         Assert.Equal(1, result.MarketsUpserted);
         Assert.Contains(repository.PolymarketGammaMarkets, market => market.MarketId == "priority-btc-market");
         Assert.Contains("token-yes-priority-btc-market", registry.GetAssetIds(), StringComparer.OrdinalIgnoreCase);
         Assert.Contains("token-no-priority-btc-market", registry.GetAssetIds(), StringComparer.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public async Task Refresh_PrioritySync_UpsertsCryptoFiveMinuteMarketsBeforeFullScan()
+    {
+        var gammaClient = new FakeGammaClient
+        {
+            MarketsBySlugs =
+            [
+                CreateCryptoUpDown5mMarketForTests("BTC", "priority-btc-market"),
+                CreateCryptoUpDown5mMarketForTests("ETH", "priority-eth-market"),
+                CreateCryptoUpDown5mMarketForTests("SOL", "priority-sol-market"),
+                CreateCryptoUpDown5mMarketForTests("DOGE", "priority-doge-market")
+            ]
+        };
+        gammaClient.Pages[0] = [];
+        var repository = new TestAppRepository();
+        var registry = new ActiveMarketAssetSubscriptionRegistry();
+        var processor = CreateProcessor(
+            gammaClient,
+            repository,
+            pageLimit: 2,
+            activeMarketAssetSubscriptionRegistry: registry,
+            marketDataWebSocketOptions: new MarketDataWebSocketOptions
+            {
+                SubscriptionScope = MarketDataWebSocketSubscriptionScope.CryptoUpDown5mOnly
+            });
+
+        var result = await processor.RefreshAsync();
+
+        var slugRequest = Assert.Single(gammaClient.SlugRequests);
+        Assert.Contains(slugRequest, slug => slug.StartsWith("btc-updown-5m-", StringComparison.OrdinalIgnoreCase));
+        Assert.Contains(slugRequest, slug => slug.StartsWith("eth-updown-5m-", StringComparison.OrdinalIgnoreCase));
+        Assert.Contains(slugRequest, slug => slug.StartsWith("sol-updown-5m-", StringComparison.OrdinalIgnoreCase));
+        Assert.Equal(3, result.MarketsFetched);
+        Assert.Equal(3, result.MarketsUpserted);
+        Assert.Contains(repository.PolymarketGammaMarkets, market => market.MarketId == "priority-btc-market");
+        Assert.Contains(repository.PolymarketGammaMarkets, market => market.MarketId == "priority-eth-market");
+        Assert.Contains(repository.PolymarketGammaMarkets, market => market.MarketId == "priority-sol-market");
+        Assert.DoesNotContain(repository.PolymarketGammaMarkets, market => market.MarketId == "priority-doge-market");
+        Assert.Contains("token-yes-priority-btc-market", registry.GetAssetIds(), StringComparer.OrdinalIgnoreCase);
+        Assert.Contains("token-yes-priority-eth-market", registry.GetAssetIds(), StringComparer.OrdinalIgnoreCase);
+        Assert.Contains("token-yes-priority-sol-market", registry.GetAssetIds(), StringComparer.OrdinalIgnoreCase);
+        Assert.DoesNotContain("token-yes-priority-doge-market", registry.GetAssetIds(), StringComparer.OrdinalIgnoreCase);
     }
 
     [Fact]
@@ -272,11 +362,17 @@ public sealed class GammaMarketIngestionTests
 
     public static PolymarketGammaMarket CreateBtcUpDown5mMarketForTests(string id)
     {
+        return CreateCryptoUpDown5mMarketForTests("BTC", id);
+    }
+
+    public static PolymarketGammaMarket CreateCryptoUpDown5mMarketForTests(string assetSymbol, string id)
+    {
+        var normalizedAssetSymbol = assetSymbol.ToLowerInvariant();
         return CreateMarketForTests(id) with
         {
-            Slug = "btc-updown-5m-1778130600",
-            EventSlug = "btc-updown-5m-1778130600",
-            SeriesSlug = "btc-up-or-down-5m",
+            Slug = normalizedAssetSymbol + "-updown-5m-1778130600",
+            EventSlug = normalizedAssetSymbol + "-updown-5m-1778130600",
+            SeriesSlug = normalizedAssetSymbol + "-up-or-down-5m",
             Category = "Crypto"
         };
     }

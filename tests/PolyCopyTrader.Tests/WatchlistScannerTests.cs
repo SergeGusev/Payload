@@ -347,7 +347,8 @@ public sealed class WatchlistScannerTests
         public Task<IReadOnlyList<PaperOrder>> GetRecentPaperOrdersAsync(
             int limit = 100,
             CancellationToken cancellationToken = default,
-            Guid? strategyId = null)
+            Guid? strategyId = null,
+            DateTimeOffset? createdAfterUtc = null)
         {
             return Task.FromResult<IReadOnlyList<PaperOrder>>([]);
         }
@@ -420,7 +421,9 @@ public sealed class WatchlistScannerTests
         public Task<IReadOnlyList<LiveOrder>> GetRecentLiveOrdersAsync(
             int limit = 100,
             CancellationToken cancellationToken = default,
-            Guid? strategyId = null)
+            Guid? strategyId = null,
+            int offset = 0,
+            DateTimeOffset? createdAfterUtc = null)
         {
             return Task.FromResult<IReadOnlyList<LiveOrder>>([]);
         }

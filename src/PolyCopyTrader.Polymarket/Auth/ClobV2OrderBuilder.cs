@@ -21,7 +21,9 @@ public sealed class ClobV2OrderBuilder(OrderAmountCalculator amountCalculator)
             throw new ArgumentException(string.Join("; ", validationErrors), nameof(request));
         }
 
-        var amounts = amountCalculator.Calculate(request.Side, request.Price, request.SizeShares, request.TickSize);
+        var amounts = request.MarketBuyAmountUsd is { } marketBuyAmountUsd
+            ? amountCalculator.CalculateMarketBuy(request.Price, marketBuyAmountUsd, request.TickSize)
+            : amountCalculator.Calculate(request.Side, request.Price, request.SizeShares, request.TickSize);
 
         var signerAddress = request.SignatureType == ClobV2SignatureType.POLY_1271
             ? request.MakerAddress
@@ -48,12 +50,19 @@ public sealed class ClobV2OrderBuilder(OrderAmountCalculator amountCalculator)
 
     public IReadOnlyList<string> Validate(ClobV2OrderRequest request)
     {
-        var errors = amountCalculator.ValidateLimitOrder(
-            request.Side,
-            request.Price,
-            request.SizeShares,
-            request.TickSize,
-            request.MinOrderSize).ToList();
+        var errors = request.MarketBuyAmountUsd is { } marketBuyAmountUsd
+            ? amountCalculator.ValidateMarketBuyOrder(
+                request.Side,
+                request.Price,
+                marketBuyAmountUsd,
+                request.TickSize,
+                request.MinOrderSize).ToList()
+            : amountCalculator.ValidateLimitOrder(
+                request.Side,
+                request.Price,
+                request.SizeShares,
+                request.TickSize,
+                request.MinOrderSize).ToList();
 
         if (!IsAddressLike(request.MakerAddress))
         {
@@ -104,6 +113,19 @@ public sealed class ClobV2OrderBuilder(OrderAmountCalculator amountCalculator)
         if (request.PostOnly && request.OrderType is ClobV2OrderType.FOK or ClobV2OrderType.FAK)
         {
             errors.Add("Post-only dry-run orders cannot use FOK or FAK.");
+        }
+
+        if (request.MarketBuyAmountUsd is not null)
+        {
+            if (request.OrderType is not (ClobV2OrderType.FOK or ClobV2OrderType.FAK))
+            {
+                errors.Add("Market BUY amount orders must use FOK or FAK.");
+            }
+
+            if (request.Side != TradeSide.Buy)
+            {
+                errors.Add("Market BUY amount orders must use BUY side.");
+            }
         }
 
         return errors;

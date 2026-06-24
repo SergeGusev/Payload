@@ -231,7 +231,7 @@ public sealed class PipelineIntegrationTests
         await repository.AddPaperOrderAsync(PaperOrder("ordinary-active", now.AddMinutes(2)));
 
         var variant = StrategyIds.BtcUpDown5mVariants.Single(item =>
-            item.Code == "btc_up_down_1h_preopen_full_down_49");
+            item.Code == "btc_up_down_1h_preopen_half_down_49");
         var urgentOrderId = Guid.NewGuid();
         await repository.AddPaperOrderAsync(new PaperOrder(
             urgentOrderId,
@@ -289,7 +289,7 @@ public sealed class PipelineIntegrationTests
         var repository = new TestAppRepository();
         var now = DateTimeOffset.UtcNow;
         var variant = StrategyIds.BtcUpDown5mVariants.Single(item =>
-            item.Code == "btc_up_down_1h_preopen_full_down_49");
+            item.Code == "btc_up_down_1h_preopen_half_down_49");
         var order = new PaperOrder(
             Guid.NewGuid(),
             Guid.NewGuid(),
@@ -345,7 +345,7 @@ public sealed class PipelineIntegrationTests
         var repository = new TestAppRepository();
         var now = DateTimeOffset.UtcNow;
         var variant = StrategyIds.BtcUpDown5mVariants.Single(item =>
-            item.Code == "btc_up_down_1h_preopen_full_down_49");
+            item.Code == "btc_up_down_1h_preopen_half_down_49");
         var order = new PaperOrder(
             Guid.NewGuid(),
             Guid.NewGuid(),
@@ -415,7 +415,7 @@ public sealed class PipelineIntegrationTests
         var repository = new TestAppRepository();
         var now = DateTimeOffset.UtcNow;
         var variant = StrategyIds.BtcUpDown5mVariants.Single(item =>
-            item.Code == "btc_up_down_1h_preopen_full_down_49");
+            item.Code == "btc_up_down_1h_preopen_half_down_49");
         var order = new PaperOrder(
             Guid.NewGuid(),
             Guid.NewGuid(),
@@ -463,6 +463,110 @@ public sealed class PipelineIntegrationTests
         var updatedOrder = Assert.Single(repository.PaperOrders);
         Assert.Equal(PaperOrderStatus.PartiallyFilled, updatedOrder.Status);
         Assert.Contains("filled_immediate_marketable", updatedOrder.RawDecisionJson);
+    }
+
+    [Fact]
+    public async Task PaperTradingProcessor_FakPaperOrderUsesExecutableAskVwapInsteadOfWorstPrice()
+    {
+        var repository = new TestAppRepository();
+        var now = DateTimeOffset.UtcNow;
+        var order = new PaperOrder(
+            Guid.NewGuid(),
+            Guid.NewGuid(),
+            Wallet,
+            PaperOrderStatus.Pending,
+            TradeSide.Buy,
+            "asset-down",
+            "condition-1",
+            "Down",
+            0.99m,
+            5.05050505m,
+            5m,
+            now,
+            now.AddMinutes(5),
+            RawDecisionJson: JsonSerializer.Serialize(new Dictionary<string, object?>
+            {
+                ["fak_stats_probe"] = true,
+                ["live_order_type"] = "FAK"
+            }));
+        await repository.AddPaperOrderAsync(order);
+
+        var paperProcessor = CreatePaperProcessor(
+            repository,
+            OrderBook(
+                "asset-down",
+                [new OrderBookLevel(0.19m, 100m)],
+                [
+                    new OrderBookLevel(0.20m, 10m),
+                    new OrderBookLevel(0.30m, 10m)
+                ]));
+
+        var paperResult = await paperProcessor.ProcessOpenOrdersAsync();
+
+        Assert.Equal(1, paperResult.OrdersFilled);
+        var fill = Assert.Single(repository.PaperFills);
+        Assert.Equal(0.25m, fill.Price);
+        Assert.Equal(20m, fill.SizeShares);
+        Assert.Contains("FakTakerPaperFill", fill.Evidence);
+
+        var updatedOrder = Assert.Single(repository.PaperOrders);
+        Assert.Equal(PaperOrderStatus.Filled, updatedOrder.Status);
+        Assert.Equal(0.25m, updatedOrder.Price);
+        Assert.Equal(20m, updatedOrder.SizeShares);
+        Assert.Equal(5m, updatedOrder.NotionalUsd);
+        Assert.Contains("fak_taker_depth_vwap_v1", updatedOrder.RawDecisionJson);
+        Assert.Contains("\"paper_fak_worst_price\":0.99", updatedOrder.RawDecisionJson);
+        Assert.Contains("\"paper_fak_average_fill_price\":0.25", updatedOrder.RawDecisionJson);
+
+        var position = Assert.Single(repository.PaperPositions);
+        Assert.Equal(20m, position.SizeShares);
+        Assert.Equal(0.25m, position.AveragePrice);
+    }
+
+    [Fact]
+    public async Task PaperTradingProcessor_FakPaperOrderRejectsWhenNoAskWithinWorstPrice()
+    {
+        var repository = new TestAppRepository();
+        var now = DateTimeOffset.UtcNow;
+        var order = new PaperOrder(
+            Guid.NewGuid(),
+            Guid.NewGuid(),
+            Wallet,
+            PaperOrderStatus.Pending,
+            TradeSide.Buy,
+            "asset-down",
+            "condition-1",
+            "Down",
+            0.50m,
+            10m,
+            5m,
+            now,
+            now.AddMinutes(5),
+            RawDecisionJson: JsonSerializer.Serialize(new Dictionary<string, object?>
+            {
+                ["paper_order_type"] = "FAK"
+            }));
+        await repository.AddPaperOrderAsync(order);
+
+        var paperProcessor = CreatePaperProcessor(
+            repository,
+            OrderBook(
+                "asset-down",
+                [new OrderBookLevel(0.49m, 100m)],
+                [new OrderBookLevel(0.60m, 100m)]));
+
+        var paperResult = await paperProcessor.ProcessOpenOrdersAsync();
+
+        Assert.Equal(0, paperResult.OrdersFilled);
+        Assert.Equal(1, paperResult.OrdersExpired);
+        Assert.Empty(repository.PaperFills);
+        Assert.Empty(repository.PaperPositions);
+
+        var updatedOrder = Assert.Single(repository.PaperOrders);
+        Assert.Equal(PaperOrderStatus.Rejected, updatedOrder.Status);
+        Assert.NotNull(updatedOrder.CancelledAtUtc);
+        Assert.Contains("best_ask_above_max_entry", updatedOrder.RawDecisionJson);
+        Assert.Contains("fak_taker_depth_vwap_v1", updatedOrder.RawDecisionJson);
     }
 
     private static PaperTradingProcessor CreatePaperProcessor(

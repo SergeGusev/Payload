@@ -1,0 +1,52 @@
+BTC Binance bps Instant strategy cleanup
+Captured UTC: 2026-06-14T12:35:00Z
+
+Status:
+- Completed against the working PostgreSQL database at 192.168.0.101.
+- Final verification was run in verify-only mode.
+
+Target:
+- Strategy code regex: ^btc_up_down_5m_binance_bps_[0-9]+_instant$
+- Removed seeded range: btc_up_down_5m_binance_bps_1_instant through btc_up_down_5m_binance_bps_50_instant
+
+Deleted:
+- strategies: 50
+- strategy_market_paper_runs: 222082 total
+- paper_orders: 1662
+- paper_fills: 1662
+- paper_position_settlements: 1662 total
+- paper_positions: 1662
+- signals: 1662
+- signal_rejections: 0
+- live_orders: 0
+- dry_run_orders: 0
+- paper_live_shadow_decisions: 0
+- paper_live_shadow_discrepancies: 0
+- paper_copied_trader_performance: 0
+
+Safety:
+- Checked fresh service heartbeat before execute.
+- Open/unsettled target live_orders guard count was 0.
+- Target strategies were already enabled=false and live_stakes=false before deletion.
+- Deletion was done in small transactions with short lock_timeout and statement_timeout retry handling.
+- Initial batch size 100 was used, then 500 after confirming the row-level delete overhead was too high.
+
+Verification:
+- verify-only heartbeat: 2026-06-14T12:28:00Z
+- remaining strategies by exact regex: 0
+- remaining target paper_orders: 0
+- remaining target paper_fills: 0
+- remaining target runs: 0
+- remaining target signals reachable through target rows: 0
+- remaining dry_run_orders/live_orders/shadow rows: 0
+- remaining safe-wallet paper_positions/settlements/performance rows: 0
+- residual synthetic wallets in paper_orders/paper_positions/paper_position_settlements/paper_copied_trader_performance: 0
+- best-effort direct scan of signals.trader_wallet timed out after 5s because that column is not indexed.
+
+Artifacts:
+- final execute stdout: outputs/delete-btc-binance-bps-instant-2026-06-14/final-execute-stdout.txt
+- verify-only result: outputs/delete-btc-binance-bps-instant-2026-06-14/verify-result.txt
+- partial/failed run logs were retained for auditability.
+
+Known limitation:
+- This is a production DB cleanup. The source schema still contains seeding SQL for these strategy codes, so a future schema initialization with current code may recreate empty strategy rows unless seeding is removed separately.

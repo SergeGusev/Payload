@@ -1,10 +1,14 @@
 using PolyCopyTrader.Domain;
 using PolyCopyTrader.Domain.Configuration;
+using System.Globalization;
+using System.Text.Json;
 
 namespace PolyCopyTrader.Polymarket;
 
 public sealed class PolymarketGammaClient : IPolymarketGammaClient
 {
+    private const int ClosedMarketsBySeriesPageLimit = 100;
+    private const int ClosedMarketsBySeriesMaxPages = 500;
     private readonly PolymarketOptions options;
     private readonly PolymarketHttpClient client;
 
@@ -92,6 +96,63 @@ public sealed class PolymarketGammaClient : IPolymarketGammaClient
             .FirstOrDefault(market => string.Equals(market.Slug, normalizedSlug, StringComparison.OrdinalIgnoreCase));
     }
 
+    public async Task<IReadOnlyList<PolymarketGammaMarket>> GetClosedMarketsBySeriesSlugAsync(
+        string seriesSlug,
+        DateTimeOffset startTimeMinUtc,
+        DateTimeOffset startTimeMaxUtc,
+        CancellationToken cancellationToken = default)
+    {
+        var normalizedSeriesSlug = seriesSlug.Trim();
+        if (string.IsNullOrWhiteSpace(normalizedSeriesSlug) ||
+            startTimeMaxUtc < startTimeMinUtc)
+        {
+            return [];
+        }
+
+        var markets = new List<PolymarketGammaMarket>();
+        string? afterCursor = null;
+        for (var page = 0; page < ClosedMarketsBySeriesMaxPages; page++)
+        {
+            var query = new Dictionary<string, string?>
+            {
+                ["series_slug"] = normalizedSeriesSlug,
+                ["closed"] = "true",
+                ["limit"] = ClosedMarketsBySeriesPageLimit.ToString(CultureInfo.InvariantCulture),
+                ["order"] = "startTime",
+                ["ascending"] = "true",
+                ["start_time_min"] = FormatGammaUtc(startTimeMinUtc),
+                ["start_time_max"] = FormatGammaUtc(startTimeMaxUtc)
+            };
+            if (!string.IsNullOrWhiteSpace(afterCursor))
+            {
+                query["after_cursor"] = afterCursor;
+            }
+
+            using var json = await client.GetJsonDocumentAsync(
+                UriBuilderExtensions.WithPathAndQuery(
+                    options.GammaBaseUrl,
+                    "/events/keyset",
+                    query),
+                "GetClosedMarketsBySeriesSlug",
+                cancellationToken);
+
+            var pageMarkets = PolymarketJsonParser.ParseGammaEventMarkets(json.RootElement);
+            if (pageMarkets.Count == 0)
+            {
+                break;
+            }
+
+            markets.AddRange(pageMarkets);
+            afterCursor = TryGetNextCursor(json.RootElement);
+            if (string.IsNullOrWhiteSpace(afterCursor))
+            {
+                break;
+            }
+        }
+
+        return markets;
+    }
+
     public async Task<IReadOnlyList<PolymarketOnChainTokenMetadata>> GetTokenMetadataAsync(
         string tokenId,
         bool closed,
@@ -167,5 +228,22 @@ public sealed class PolymarketGammaClient : IPolymarketGammaClient
         }
 
         return uri;
+    }
+
+    private static string FormatGammaUtc(DateTimeOffset value)
+    {
+        return value.UtcDateTime.ToString("yyyy-MM-ddTHH:mm:ssZ", CultureInfo.InvariantCulture);
+    }
+
+    private static string? TryGetNextCursor(JsonElement root)
+    {
+        if (root.ValueKind != JsonValueKind.Object ||
+            !root.TryGetProperty("next_cursor", out var nextCursor) ||
+            nextCursor.ValueKind != JsonValueKind.String)
+        {
+            return null;
+        }
+
+        return nextCursor.GetString();
     }
 }

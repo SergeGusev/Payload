@@ -1,0 +1,4 @@
+﻿asset,markets,first_market_utc,last_market_utc,strong_odds_markets,binance_sign_markets,signal_markets,strategy_signal_orders,instant_bets,instant_pnl_per_1usd,instant_roi_pct,fixed05_strong_bets,fixed05_strong_pnl_per_1usd,fixed05_strong_roi_pct,instant_price_above_cap_orders,instant_missing_price_orders,strong_unsettled_orders,binance_unsettled_orders
+"BTC",7799,"2026-05-08 21:45:00","2026-06-08 20:20:00",7211,7781,6264,15488,13997,-455.53087996,-3.25448939,14494,44,0.30357389,496,1,1988,39
+"ETH",5861,"2026-05-09 10:15:00","2026-06-08 20:20:00",5515,5842,4798,11222,10354,-381.58132682,-3.68535181,10576,26,0.24583964,222,0,1292,46
+"SOL",5856,"2026-05-09 10:15:00","2026-06-08 20:20:00",5569,5617,4802,13426,12322,-814.43146346,-6.60957201,12798,-358,-2.79731208,476,0,1256,509

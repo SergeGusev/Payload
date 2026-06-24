@@ -14,6 +14,17 @@ public interface IBtcOrderBookLagDiagnosticService
     void RecordPolymarketTopOfBook(MarketDataUpdate update, DateTimeOffset receivedAtUtc);
 }
 
+public sealed class NoOpBtcOrderBookLagDiagnosticService : IBtcOrderBookLagDiagnosticService
+{
+    public void RecordBinanceTrade(BtcUsdReferencePricePoint point)
+    {
+    }
+
+    public void RecordPolymarketTopOfBook(MarketDataUpdate update, DateTimeOffset receivedAtUtc)
+    {
+    }
+}
+
 public sealed class BtcOrderBookLagDiagnosticService(
     ILogger<BtcOrderBookLagDiagnosticService> logger,
     BtcOrderBookLagDiagnosticsOptions options,

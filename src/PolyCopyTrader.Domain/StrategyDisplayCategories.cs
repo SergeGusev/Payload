@@ -47,9 +47,65 @@ public static class StrategyDisplayCategories
             return categoryPrefix + "PreOpen";
         }
 
+        if (StartsWithSimpleFixedOutcome(suffix))
+        {
+            return "Simple";
+        }
+
+        if (StartsWithAdjustedDiffThreshold(suffix, "Up", out var adjustedDiffUpRevert))
+        {
+            return categoryPrefix + "AdjustedDiff Up" + (adjustedDiffUpRevert ? " Revert" : string.Empty);
+        }
+
+        if (StartsWithAdjustedDiffThreshold(suffix, "Down", out var adjustedDiffDownRevert))
+        {
+            return categoryPrefix + "AdjustedDiff Down" + (adjustedDiffDownRevert ? " Revert" : string.Empty);
+        }
+
+        if (TryGetShiftDiffCategory(suffix, "Up", out var shiftDiffUpCategory))
+        {
+            return categoryPrefix + shiftDiffUpCategory;
+        }
+
+        if (TryGetShiftDiffCategory(suffix, "Down", out var shiftDiffDownCategory))
+        {
+            return categoryPrefix + shiftDiffDownCategory;
+        }
+
+        if (StartsWithDiffThreshold(suffix, "Up", out var diffUpRevert))
+        {
+            return categoryPrefix + "Diff Up" + GetDiffCategorySuffix(suffix, diffUpRevert);
+        }
+
+        if (StartsWithDiffThreshold(suffix, "Down", out var diffDownRevert))
+        {
+            return categoryPrefix + "Diff Down" + GetDiffCategorySuffix(suffix, diffDownRevert);
+        }
+
+        if (IsPremarketBpsThreshold(suffix))
+        {
+            if (string.Equals(upDownPrefix, "ETH Up or Down ", StringComparison.OrdinalIgnoreCase) &&
+                string.Equals(interval, "5m", StringComparison.OrdinalIgnoreCase) &&
+                StartsWithBpsThreshold(suffix, "Down") &&
+                !HasReferenceAverageMarker(suffix))
+            {
+                return categoryPrefix + "Down Bps Premarket";
+            }
+
+            return categoryPrefix + "Reference Average Bps Premarket";
+        }
+
         if (StartsWithBpsThreshold(suffix, "Up"))
         {
             return categoryPrefix + "Up Bps";
+        }
+
+        if (string.Equals(upDownPrefix, "ETH Up or Down ", StringComparison.OrdinalIgnoreCase) &&
+            string.Equals(interval, "5m", StringComparison.OrdinalIgnoreCase) &&
+            StartsWithBpsThreshold(suffix, "Down") &&
+            ContainsStrategyWord(suffix, "Premarket"))
+        {
+            return categoryPrefix + "Down Bps Premarket";
         }
 
         if (StartsWithBpsThreshold(suffix, "Down"))
@@ -95,7 +151,9 @@ public static class StrategyDisplayCategories
 
         if (ContainsStrategyWord(suffix, "Countertrend"))
         {
-            return categoryPrefix + "Countertrend";
+            return ContainsStrategyWord(suffix, "Premarket")
+                ? categoryPrefix + "Countertrend Premarket"
+                : categoryPrefix + "Countertrend";
         }
 
         return categoryPrefix + "Other";
@@ -121,5 +179,96 @@ public static class StrategyDisplayCategories
             string.Equals(parts[0], word, StringComparison.OrdinalIgnoreCase) &&
             decimal.TryParse(parts[1], NumberStyles.Number, CultureInfo.InvariantCulture, out _) &&
             string.Equals(parts[2], "bps", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static bool IsPremarketBpsThreshold(string value)
+    {
+        return (StartsWithBpsThreshold(value, "Up") || StartsWithBpsThreshold(value, "Down")) &&
+            ContainsStrategyWord(value, "Premarket") &&
+            !HasPremarketTimingSuffix(value);
+    }
+
+    private static bool HasPremarketTimingSuffix(string value)
+    {
+        var parts = value.Split(new[] { ' ' }, StringSplitOptions.RemoveEmptyEntries);
+        return parts.Any(part =>
+            part.Length > 2 &&
+            part[0] == '-' &&
+            part.EndsWith("s", StringComparison.OrdinalIgnoreCase) &&
+            int.TryParse(part[1..^1], NumberStyles.Integer, CultureInfo.InvariantCulture, out _));
+    }
+
+    private static bool HasReferenceAverageMarker(string value)
+    {
+        return ContainsStrategyWord(value, "Reference") &&
+            ContainsStrategyWord(value, "Average");
+    }
+
+    private static bool StartsWithSimpleFixedOutcome(string value)
+    {
+        var parts = value.Split(new[] { ' ' }, StringSplitOptions.RemoveEmptyEntries);
+        return parts.Length >= 2 &&
+            (string.Equals(parts[0], "Up", StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(parts[0], "Down", StringComparison.OrdinalIgnoreCase)) &&
+            string.Equals(parts[1], "Simple", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static string GetDiffCategorySuffix(string value, bool isRevert)
+    {
+        var suffix = isRevert ? " Revert" : string.Empty;
+        return ContainsStrategyWord(value, "Premarket")
+            ? suffix + " Premarket"
+            : suffix;
+    }
+
+    private static bool StartsWithDiffThreshold(string value, string word, out bool isRevert)
+    {
+        isRevert = false;
+        var parts = value.Split(new[] { ' ' }, StringSplitOptions.RemoveEmptyEntries);
+        var matches = parts.Length >= 3 &&
+            string.Equals(parts[0], word, StringComparison.OrdinalIgnoreCase) &&
+            int.TryParse(parts[1], NumberStyles.Number, CultureInfo.InvariantCulture, out _) &&
+            string.Equals(parts[2], "Diff", StringComparison.OrdinalIgnoreCase);
+        isRevert = matches &&
+            parts.Length >= 4 &&
+            string.Equals(parts[3], "Revert", StringComparison.OrdinalIgnoreCase);
+        return matches;
+    }
+
+    private static bool TryGetShiftDiffCategory(string value, string word, out string category)
+    {
+        category = string.Empty;
+        var parts = value.Split(new[] { ' ' }, StringSplitOptions.RemoveEmptyEntries);
+        if (parts.Length < 4 ||
+            !string.Equals(parts[0], word, StringComparison.OrdinalIgnoreCase) ||
+            !int.TryParse(parts[1], NumberStyles.Number, CultureInfo.InvariantCulture, out var shift) ||
+            !int.TryParse(parts[2], NumberStyles.Number, CultureInfo.InvariantCulture, out var threshold) ||
+            !string.Equals(parts[3], "ShiftDiff", StringComparison.OrdinalIgnoreCase))
+        {
+            return false;
+        }
+
+        category = "ShiftDiff " + shift.ToString(CultureInfo.InvariantCulture);
+        if (parts.Length >= 5 &&
+            string.Equals(parts[4], "Revert", StringComparison.OrdinalIgnoreCase))
+        {
+            category += " Revert";
+        }
+
+        return true;
+    }
+
+    private static bool StartsWithAdjustedDiffThreshold(string value, string word, out bool isRevert)
+    {
+        isRevert = false;
+        var parts = value.Split(new[] { ' ' }, StringSplitOptions.RemoveEmptyEntries);
+        var matches = parts.Length >= 3 &&
+            string.Equals(parts[0], word, StringComparison.OrdinalIgnoreCase) &&
+            int.TryParse(parts[1], NumberStyles.Number, CultureInfo.InvariantCulture, out _) &&
+            string.Equals(parts[2], "AdjustedDiff", StringComparison.OrdinalIgnoreCase);
+        isRevert = matches &&
+            parts.Length >= 4 &&
+            string.Equals(parts[3], "Revert", StringComparison.OrdinalIgnoreCase);
+        return matches;
     }
 }

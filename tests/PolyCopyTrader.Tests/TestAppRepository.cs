@@ -1,3 +1,4 @@
+using System.Text.Json;
 using PolyCopyTrader.Domain;
 using PolyCopyTrader.Service.Strategies;
 using PolyCopyTrader.Storage;
@@ -18,6 +19,8 @@ internal sealed class TestAppRepository : IAppRepository
         System.Threading.Volatile.Read(ref maxPolymarketGammaMarketLookupsInFlight);
 
     public int BulkStrategyMarketPaperRunUpdateCalls { get; private set; }
+
+    public int PaperEntryPersistenceBatchCalls { get; private set; }
 
     public List<LeaderTrade> LeaderTrades { get; } = [];
 
@@ -121,6 +124,16 @@ internal sealed class TestAppRepository : IAppRepository
 
     public List<CryptoUpDown5mOddsTick> CryptoUpDown5mOddsTicks { get; } = [];
 
+    public List<CryptoUpDown5mDiffSnapshot> CryptoUpDown5mDiffSnapshots { get; } = [];
+
+    public List<CryptoUpDown5mResultPollingObservation> CryptoUpDown5mResultPollingObservations { get; } = [];
+
+    public List<CryptoUpDown5mWebSocketResolvedMarket> CryptoUpDown5mWebSocketResolvedMarkets { get; } = [];
+
+    public List<MarketResolvedEventDiagnostic> MarketResolvedEventDiagnostics { get; } = [];
+
+    public List<MarketWebSocketFrameDiagnostic> MarketWebSocketFrameDiagnostics { get; } = [];
+
     public List<ApiError> ApiErrors { get; } = [];
 
     public List<PolymarketHttpLogEntry> PolymarketHttpLogs { get; } = [];
@@ -182,6 +195,8 @@ internal sealed class TestAppRepository : IAppRepository
     public bool ThrowOnTryAddLeaderTrade { get; set; }
 
     public bool ThrowOnAddApiError { get; set; }
+
+    public bool ThrowOnGetCryptoUpDown5mWebSocketResolvedMarkets { get; set; }
 
     public bool ThrowOnUpsertServiceHeartbeat { get; set; }
 
@@ -984,6 +999,62 @@ internal sealed class TestAppRepository : IAppRepository
         return Task.CompletedTask;
     }
 
+    public Task AddPaperEntryPersistenceBatchAsync(
+        PaperEntryPersistenceBatch batch,
+        CancellationToken cancellationToken = default)
+    {
+        if (batch.IsEmpty)
+        {
+            return Task.CompletedTask;
+        }
+
+        lock (sync)
+        {
+            PaperEntryPersistenceBatchCalls++;
+            Signals.AddRange(batch.Signals);
+            PaperOrders.AddRange(batch.PaperOrders);
+            PaperFills.AddRange(batch.PaperFills);
+            foreach (var position in batch.PaperPositions)
+            {
+                PaperPositions.RemoveAll(item =>
+                    string.Equals(item.AssetId, position.AssetId, StringComparison.OrdinalIgnoreCase) &&
+                    string.Equals(item.CopiedTraderWallet, position.CopiedTraderWallet, StringComparison.OrdinalIgnoreCase));
+                PaperPositions.Add(position);
+            }
+
+            foreach (var activation in batch.CopiedLeaderPositionActivations)
+            {
+                var existing = PaperCopiedLeaderPositions.FirstOrDefault(item => item.EntryPaperOrderId == activation.EntryPaperOrderId);
+                if (existing is null ||
+                    existing.Status is not (PaperCopiedLeaderPositionStatus.PendingEntry or PaperCopiedLeaderPositionStatus.Active))
+                {
+                    continue;
+                }
+
+                PaperCopiedLeaderPositions.Remove(existing);
+                PaperCopiedLeaderPositions.Add(existing with
+                {
+                    Status = PaperCopiedLeaderPositionStatus.Active,
+                    CopiedInitialSizeShares = existing.Status == PaperCopiedLeaderPositionStatus.Active
+                        ? existing.CopiedInitialSizeShares + activation.CopiedInitialSizeShares
+                        : activation.CopiedInitialSizeShares,
+                    NextActivitySyncAtUtc = existing.NextActivitySyncAtUtc < activation.FilledAtUtc
+                        ? existing.NextActivitySyncAtUtc
+                        : activation.FilledAtUtc,
+                    UpdatedAtUtc = activation.FilledAtUtc
+                });
+            }
+
+            foreach (var run in batch.StrategyRuns)
+            {
+                StrategyMarketPaperRuns.RemoveAll(item => item.Id == run.Id);
+                StrategyMarketPaperRuns.Add(run);
+            }
+        }
+
+        return Task.CompletedTask;
+    }
+
     public Task UpdatePaperOrderAsync(PaperOrder order, CancellationToken cancellationToken = default)
     {
         lock (sync)
@@ -1038,13 +1109,27 @@ internal sealed class TestAppRepository : IAppRepository
     public Task<IReadOnlyList<PaperOrder>> GetRecentPaperOrdersAsync(
         int limit = 100,
         CancellationToken cancellationToken = default,
-        Guid? strategyId = null)
+        Guid? strategyId = null,
+        DateTimeOffset? createdAfterUtc = null)
     {
         var normalizedStrategyId = strategyId.HasValue ? StrategyIds.Normalize(strategyId.Value) : (Guid?)null;
         return Task.FromResult<IReadOnlyList<PaperOrder>>(PaperOrders
             .Where(item => normalizedStrategyId is null || StrategyIds.Normalize(item.StrategyId) == normalizedStrategyId)
+            .Where(item => createdAfterUtc is null || item.CreatedAtUtc >= createdAfterUtc.Value)
             .OrderByDescending(item => item.CreatedAtUtc)
             .Take(limit)
+            .ToArray());
+    }
+
+    public Task<IReadOnlyList<StrategyMarketPaperRun>> GetStrategyMarketPaperRunsByPaperOrderIdsAsync(
+        IReadOnlyCollection<Guid> paperOrderIds,
+        CancellationToken cancellationToken = default)
+    {
+        var orderIds = paperOrderIds.ToHashSet();
+        return Task.FromResult<IReadOnlyList<StrategyMarketPaperRun>>(StrategyMarketPaperRuns
+            .Where(item => item.PaperOrderId is { } paperOrderId && orderIds.Contains(paperOrderId))
+            .OrderByDescending(item => item.SettledAtUtc ?? item.EnteredAtUtc ?? item.UpdatedAtUtc)
+            .ThenByDescending(item => item.UpdatedAtUtc)
             .ToArray());
     }
 
@@ -1141,7 +1226,7 @@ internal sealed class TestAppRepository : IAppRepository
         return Task.FromResult(performance);
     }
 
-    public Task<IReadOnlyList<StrategyPerformance>> GetStrategyPerformanceAsync(int limit = 2000, CancellationToken cancellationToken = default)
+    public Task<IReadOnlyList<StrategyPerformance>> GetStrategyPerformanceAsync(int limit = 25_000, CancellationToken cancellationToken = default)
     {
         var strategies = StrategyIds.UpDown5mStrategyVariants.Select(variant => new
         {
@@ -1237,6 +1322,19 @@ internal sealed class TestAppRepository : IAppRepository
                 .Where(run => run.EnteredAtUtc.HasValue)
                 .Select(run => Math.Max(0m, (decimal)(run.EnteredAtUtc!.Value - run.EntryDueAtUtc).TotalSeconds))
                 .ToArray();
+            var countertrendSignalRows = orders
+                .Select(order => new
+                {
+                    order.CreatedAtUtc,
+                    ScoreBps = GetCountertrendScoreBps(order.RawDecisionJson),
+                    SignalBps = GetCountertrendSignalBps(order.RawDecisionJson)
+                })
+                .Where(row => row.ScoreBps is not null)
+                .ToArray();
+            decimal? lastCountertrendSignalBps = countertrendSignalRows
+                .OrderByDescending(row => row.CreatedAtUtc)
+                .Select(row => row.SignalBps)
+                .FirstOrDefault();
             var liveOrders = LiveOrders
                 .Where(order => StrategyIds.Normalize(order.StrategyId) == strategy.Id)
                 .ToArray();
@@ -1323,6 +1421,9 @@ internal sealed class TestAppRepository : IAppRepository
                 closedStake <= 0m ? 0m : realized * 100m / closedStake,
                 entryDelaySeconds.Length == 0 ? 0m : entryDelaySeconds.Average(),
                 entryDelaySeconds.Length == 0 ? 0m : entryDelaySeconds.Max(),
+                countertrendSignalRows.Length == 0 ? 0m : countertrendSignalRows.Average(row => row.ScoreBps!.Value),
+                countertrendSignalRows.Length == 0 ? 0m : countertrendSignalRows.Average(row => row.SignalBps ?? Math.Abs(row.ScoreBps!.Value)),
+                lastCountertrendSignalBps,
                 liveOrders.Length,
                 liveOrders.Count(order => order.FilledSize > 0m),
                 liveOrders.Count(order =>
@@ -1364,7 +1465,72 @@ internal sealed class TestAppRepository : IAppRepository
             .ToArray());
     }
 
-    public Task<IReadOnlyList<StrategyRecentPerformance>> GetStrategyRecentPerformanceAsync(int limit = 3000, CancellationToken cancellationToken = default)
+    private static decimal? GetCountertrendScoreBps(string? rawDecisionJson)
+    {
+        if (TryReadRawDecisionDecimal(rawDecisionJson, "previous_score_bps", out var previousScoreBps))
+        {
+            return previousScoreBps;
+        }
+
+        return TryReadRawDecisionDecimal(rawDecisionJson, "previous_score", out var previousScore)
+            ? previousScore * 10_000m
+            : null;
+    }
+
+    private static decimal? GetCountertrendSignalBps(string? rawDecisionJson)
+    {
+        if (TryReadRawDecisionDecimal(rawDecisionJson, "selected_signal_bps", out var selectedSignalBps))
+        {
+            return selectedSignalBps;
+        }
+
+        var scoreBps = GetCountertrendScoreBps(rawDecisionJson);
+        return scoreBps is null ? null : Math.Abs(scoreBps.Value);
+    }
+
+    private static bool TryReadRawDecisionDecimal(string? rawDecisionJson, string propertyName, out decimal value)
+    {
+        value = 0m;
+        if (string.IsNullOrWhiteSpace(rawDecisionJson))
+        {
+            return false;
+        }
+
+        try
+        {
+            using var document = JsonDocument.Parse(rawDecisionJson);
+            if (!document.RootElement.TryGetProperty(propertyName, out var property))
+            {
+                return false;
+            }
+
+            return property.ValueKind == JsonValueKind.Number &&
+                property.TryGetDecimal(out value);
+        }
+        catch (JsonException)
+        {
+            return false;
+        }
+    }
+
+    public Task<IReadOnlyDictionary<Guid, decimal>> GetLiveRealizedPnlByStrategyAsync(
+        IReadOnlyCollection<Guid> strategyIds,
+        CancellationToken cancellationToken = default)
+    {
+        var normalizedStrategyIds = strategyIds
+            .Select(StrategyIds.Normalize)
+            .Distinct()
+            .ToArray();
+        IReadOnlyDictionary<Guid, decimal> results = normalizedStrategyIds.ToDictionary(
+            strategyId => strategyId,
+            strategyId => LiveOrders
+                .Where(order => StrategyIds.Normalize(order.StrategyId) == strategyId)
+                .Where(order => order.SettledAtUtc is not null && order.RealizedPnlUsd is not null)
+                .Sum(order => order.RealizedPnlUsd ?? 0m));
+        return Task.FromResult(results);
+    }
+
+    public Task<IReadOnlyList<StrategyRecentPerformance>> GetStrategyRecentPerformanceAsync(int limit = 25_000, CancellationToken cancellationToken = default)
     {
         var now = DateTimeOffset.UtcNow;
         var windows = new[]
@@ -2066,12 +2232,16 @@ internal sealed class TestAppRepository : IAppRepository
     public Task<IReadOnlyList<LiveOrder>> GetRecentLiveOrdersAsync(
         int limit = 100,
         CancellationToken cancellationToken = default,
-        Guid? strategyId = null)
+        Guid? strategyId = null,
+        int offset = 0,
+        DateTimeOffset? createdAfterUtc = null)
     {
         var normalizedStrategyId = strategyId.HasValue ? StrategyIds.Normalize(strategyId.Value) : (Guid?)null;
         return Task.FromResult<IReadOnlyList<LiveOrder>>(LiveOrders
             .Where(item => normalizedStrategyId is null || StrategyIds.Normalize(item.StrategyId) == normalizedStrategyId)
+            .Where(item => createdAfterUtc is null || item.CreatedAtUtc >= createdAfterUtc.Value)
             .OrderByDescending(item => item.CreatedAtUtc)
+            .Skip(Math.Max(0, offset))
             .Take(limit)
             .ToArray());
     }
@@ -2451,6 +2621,143 @@ internal sealed class TestAppRepository : IAppRepository
                 .ThenBy(tick => tick.CreatedAtUtc)
                 .Take(limit)
                 .ToArray());
+    }
+
+    public Task UpsertCryptoUpDown5mDiffSnapshotAsync(
+        CryptoUpDown5mDiffSnapshot snapshot,
+        CancellationToken cancellationToken = default)
+    {
+        var normalizedAssetSymbol = snapshot.AssetSymbol.Trim().ToUpperInvariant();
+        CryptoUpDown5mDiffSnapshots.RemoveAll(existing =>
+            string.Equals(existing.AssetSymbol, normalizedAssetSymbol, StringComparison.OrdinalIgnoreCase) &&
+            existing.MarketStartUtc == snapshot.MarketStartUtc);
+        CryptoUpDown5mDiffSnapshots.Add(snapshot with
+        {
+            AssetSymbol = normalizedAssetSymbol
+        });
+        return Task.CompletedTask;
+    }
+
+    public Task<IReadOnlyList<CryptoUpDown5mDiffSnapshot>> GetCryptoUpDown5mDiffSnapshotsAsync(
+        IReadOnlyCollection<string> assetSymbols,
+        DateTimeOffset startUtc,
+        DateTimeOffset endUtc,
+        CancellationToken cancellationToken = default)
+    {
+        var normalizedAssetSymbols = assetSymbols
+            .Select(symbol => symbol.Trim().ToUpperInvariant())
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+        return Task.FromResult<IReadOnlyList<CryptoUpDown5mDiffSnapshot>>(
+            CryptoUpDown5mDiffSnapshots
+                .Where(snapshot => normalizedAssetSymbols.Contains(snapshot.AssetSymbol))
+                .Where(snapshot => snapshot.MarketStartUtc >= startUtc && snapshot.MarketStartUtc < endUtc)
+                .OrderBy(snapshot => snapshot.AssetSymbol, StringComparer.OrdinalIgnoreCase)
+                .ThenBy(snapshot => snapshot.MarketStartUtc)
+                .ToArray());
+    }
+
+    public Task UpsertCryptoUpDown5mResultPollingObservationAsync(
+        CryptoUpDown5mResultPollingObservation observation,
+        CancellationToken cancellationToken = default)
+    {
+        var normalizedAssetSymbol = observation.AssetSymbol.Trim().ToUpperInvariant();
+        CryptoUpDown5mResultPollingObservations.RemoveAll(existing =>
+            string.Equals(existing.MarketId, observation.MarketId, StringComparison.OrdinalIgnoreCase));
+        CryptoUpDown5mResultPollingObservations.Add(observation with
+        {
+            AssetSymbol = normalizedAssetSymbol
+        });
+        return Task.CompletedTask;
+    }
+
+    public Task<IReadOnlyList<CryptoUpDown5mResultPollingObservation>> GetCryptoUpDown5mResultPollingObservationsAsync(
+        IReadOnlyCollection<string> assetSymbols,
+        DateTimeOffset startUtc,
+        DateTimeOffset endUtc,
+        CancellationToken cancellationToken = default)
+    {
+        var normalizedAssetSymbols = assetSymbols
+            .Select(symbol => symbol.Trim().ToUpperInvariant())
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+        return Task.FromResult<IReadOnlyList<CryptoUpDown5mResultPollingObservation>>(
+            CryptoUpDown5mResultPollingObservations
+                .Where(observation => normalizedAssetSymbols.Contains(observation.AssetSymbol))
+                .Where(observation => observation.MarketStartUtc >= startUtc && observation.MarketStartUtc < endUtc)
+                .OrderBy(observation => observation.AssetSymbol, StringComparer.OrdinalIgnoreCase)
+                .ThenBy(observation => observation.MarketStartUtc)
+                .ToArray());
+    }
+
+    public Task UpsertCryptoUpDown5mWebSocketResolvedMarketAsync(
+        CryptoUpDown5mWebSocketResolvedMarket resolvedMarket,
+        CancellationToken cancellationToken = default)
+    {
+        var normalizedAssetSymbol = resolvedMarket.AssetSymbol.Trim().ToUpperInvariant();
+        var existing = CryptoUpDown5mWebSocketResolvedMarkets.FirstOrDefault(item =>
+            string.Equals(item.AssetSymbol, normalizedAssetSymbol, StringComparison.OrdinalIgnoreCase) &&
+            item.MarketStartUtc == resolvedMarket.MarketStartUtc);
+        CryptoUpDown5mWebSocketResolvedMarkets.RemoveAll(item =>
+            string.Equals(item.AssetSymbol, normalizedAssetSymbol, StringComparison.OrdinalIgnoreCase) &&
+            item.MarketStartUtc == resolvedMarket.MarketStartUtc);
+        CryptoUpDown5mWebSocketResolvedMarkets.Add(existing is null
+            ? resolvedMarket with
+            {
+                AssetSymbol = normalizedAssetSymbol,
+                EventCount = Math.Max(1, resolvedMarket.EventCount)
+            }
+            : resolvedMarket with
+            {
+                AssetSymbol = normalizedAssetSymbol,
+                FirstReceivedAtUtc = existing.FirstReceivedAtUtc <= resolvedMarket.FirstReceivedAtUtc
+                    ? existing.FirstReceivedAtUtc
+                    : resolvedMarket.FirstReceivedAtUtc,
+                LastReceivedAtUtc = existing.LastReceivedAtUtc >= resolvedMarket.LastReceivedAtUtc
+                    ? existing.LastReceivedAtUtc
+                    : resolvedMarket.LastReceivedAtUtc,
+                EventCount = existing.EventCount + Math.Max(1, resolvedMarket.EventCount),
+                ResultDelaySeconds = Math.Min(existing.ResultDelaySeconds, resolvedMarket.ResultDelaySeconds),
+                CreatedAtUtc = existing.CreatedAtUtc
+            });
+        return Task.CompletedTask;
+    }
+
+    public Task<IReadOnlyList<CryptoUpDown5mWebSocketResolvedMarket>> GetCryptoUpDown5mWebSocketResolvedMarketsAsync(
+        IReadOnlyCollection<string> assetSymbols,
+        DateTimeOffset startUtc,
+        DateTimeOffset endUtc,
+        CancellationToken cancellationToken = default)
+    {
+        if (ThrowOnGetCryptoUpDown5mWebSocketResolvedMarkets)
+        {
+            throw new InvalidOperationException("temporary websocket result storage failure");
+        }
+
+        var normalizedAssetSymbols = assetSymbols
+            .Select(symbol => symbol.Trim().ToUpperInvariant())
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+        return Task.FromResult<IReadOnlyList<CryptoUpDown5mWebSocketResolvedMarket>>(
+            CryptoUpDown5mWebSocketResolvedMarkets
+                .Where(result => normalizedAssetSymbols.Contains(result.AssetSymbol))
+                .Where(result => result.MarketStartUtc >= startUtc && result.MarketStartUtc <= endUtc)
+                .OrderBy(result => result.AssetSymbol, StringComparer.OrdinalIgnoreCase)
+                .ThenBy(result => result.MarketStartUtc)
+                .ToArray());
+    }
+
+    public Task AddMarketResolvedEventDiagnosticAsync(
+        MarketResolvedEventDiagnostic diagnostic,
+        CancellationToken cancellationToken = default)
+    {
+        MarketResolvedEventDiagnostics.Add(diagnostic);
+        return Task.CompletedTask;
+    }
+
+    public Task AddMarketWebSocketFrameDiagnosticAsync(
+        MarketWebSocketFrameDiagnostic diagnostic,
+        CancellationToken cancellationToken = default)
+    {
+        MarketWebSocketFrameDiagnostics.Add(diagnostic);
+        return Task.CompletedTask;
     }
 
     public Task AddApiErrorAsync(ApiError error, CancellationToken cancellationToken = default)

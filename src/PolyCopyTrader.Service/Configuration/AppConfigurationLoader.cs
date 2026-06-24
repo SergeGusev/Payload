@@ -18,6 +18,8 @@ public static class AppConfigurationLoader
             configuration.GetSection("BinanceCryptoReference").Get<BinanceCryptoReferenceOptions>() ?? new BinanceCryptoReferenceOptions());
         var cryptoUpDown5mOddsArchive = NormalizeCryptoUpDown5mOddsArchiveOptions(
             configuration.GetSection("CryptoUpDown5mOddsArchive").Get<CryptoUpDown5mOddsArchiveOptions>() ?? new CryptoUpDown5mOddsArchiveOptions());
+        var cryptoUpDown5mResultPolling = NormalizeCryptoUpDown5mResultPollingOptions(
+            configuration.GetSection("CryptoUpDown5mResultPolling").Get<CryptoUpDown5mResultPollingOptions>() ?? new CryptoUpDown5mResultPollingOptions());
 
         return new AppConfiguration
         {
@@ -47,6 +49,7 @@ public static class AppConfigurationLoader
             BtcUpDown5mStatistics = configuration.GetSection("BtcUpDown5mStatistics").Get<BtcUpDown5mStatisticsOptions>() ?? new BtcUpDown5mStatisticsOptions(),
             BtcUpDown5mArbitrageScanner = configuration.GetSection("BtcUpDown5mArbitrageScanner").Get<BtcUpDown5mArbitrageScannerOptions>() ?? new BtcUpDown5mArbitrageScannerOptions(),
             CryptoUpDown5mOddsArchive = cryptoUpDown5mOddsArchive,
+            CryptoUpDown5mResultPolling = cryptoUpDown5mResultPolling,
             ChainlinkBtcUsdDiagnostics = configuration.GetSection("ChainlinkBtcUsdDiagnostics").Get<ChainlinkBtcUsdDiagnosticsOptions>() ?? new ChainlinkBtcUsdDiagnosticsOptions(),
             OnChainIngestion = configuration.GetSection("OnChainIngestion").Get<OnChainIngestionOptions>() ?? new OnChainIngestionOptions(),
             Ipc = configuration.GetSection("Ipc").Get<IpcOptions>() ?? new IpcOptions(),
@@ -78,6 +81,28 @@ public static class AppConfigurationLoader
             MaxMarketsPerCycle = options.MaxMarketsPerCycle,
             MaxOrderBookAgeMilliseconds = options.MaxOrderBookAgeMilliseconds,
             RestFallbackEnabled = options.RestFallbackEnabled
+        };
+    }
+
+    private static CryptoUpDown5mResultPollingOptions NormalizeCryptoUpDown5mResultPollingOptions(CryptoUpDown5mResultPollingOptions options)
+    {
+        return new CryptoUpDown5mResultPollingOptions
+        {
+            Enabled = options.Enabled,
+            AssetSymbols = NormalizeAssetSymbols(options.AssetSymbols),
+            PollIntervalSeconds = options.PollIntervalSeconds,
+            MaxMarketsPerCycle = options.MaxMarketsPerCycle,
+            MaxMarketAgeMinutes = options.MaxMarketAgeMinutes,
+            MaxResultWaitMinutes = options.MaxResultWaitMinutes,
+            ReferencePriceResultEnabled = options.ReferencePriceResultEnabled,
+            ReferencePriceResultMaxEndAgeMilliseconds = options.ReferencePriceResultMaxEndAgeMilliseconds,
+            ReferencePriceResultMinSamples = options.ReferencePriceResultMinSamples,
+            ProvisionalOrderBookResultEnabled = options.ProvisionalOrderBookResultEnabled,
+            ProvisionalWinnerBidMin = options.ProvisionalWinnerBidMin,
+            ProvisionalLoserAskMax = options.ProvisionalLoserAskMax,
+            ProvisionalMaxOrderBookAgeMilliseconds = options.ProvisionalMaxOrderBookAgeMilliseconds,
+            ProvisionalRestFallbackEnabled = options.ProvisionalRestFallbackEnabled,
+            ProvisionalRestRequestTimeoutSeconds = options.ProvisionalRestRequestTimeoutSeconds
         };
     }
 

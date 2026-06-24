@@ -1,0 +1,84 @@
+Order-book lag stop check captured at 2026-06-15T19:14:59.3957426+00:00
+Delay seconds between snapshots: 75
+
+
+## snapshot_1
+database	polycopytrader
+server_address	192.168.0.101/32
+server_time_utc	2026-06-15T19:14:58Z
+
+# service_heartbeat
+service_name	status	mode	version	started_utc	heartbeat_utc	heartbeat_age_seconds	current_loop	last_error
+PolyCopyTrader.Service	Running	Live	info=1.0.0+3b63e1384625a3ebbff5a779b115f317a3d7ff72; assembly=1.0.0.0; mvid=cad789ce19dd	2026-06-15T19:11:47Z	2026-06-15T19:14:48Z	10	BTC5mOnly WatchlistScanner=CommentedOut; FollowLeaderSignals=CommentedOut	<none>
+PolyCopyTrader.Tests	Running	ReadOnly	1.0.0	2026-05-04T14:02:41Z	2026-05-04T14:02:41Z	3647537	IntegrationTest	<none>
+
+# lag_table_summary
+total_rows	rows_last_1m	rows_last_5m	rows_last_15m	rows_last_60m	rows_since_service_start	service_started_utc	earliest_received_utc	latest_received_utc	latest_age_seconds
+509046	0	2015	23828	110479	0	2026-06-15T19:11:47Z	2026-06-15T15:58:44Z	2026-06-15T19:11:28Z	209
+
+# lag_sources_last_24h
+source	raw_event_type	rows_last_1m	rows_last_5m	rows_last_15m	rows_last_60m	rows_last_24h	latest_received_utc
+BinanceTrade	BinanceTradeWebSocket	0	1953	23248	107799	499231	2026-06-15T19:11:28Z
+BinanceBookTicker	REST	0	57	460	2363	8252	2026-06-15T19:11:28Z
+PolymarketTopOfBook	book	0	0	59	94	832	2026-06-15T19:09:29Z
+PolymarketTopOfBook	price_change	0	5	61	223	725	2026-06-15T19:11:27Z
+PolymarketTopOfBook	best_bid_ask	0	0	0	0	6	2026-06-15T17:42:54Z
+
+# latest_lag_rows
+received_utc	source	raw_event_type	asset_id	condition_id	binance_symbol
+2026-06-15T19:11:28.765Z	BinanceTrade	BinanceTradeWebSocket			BTCUSDT
+2026-06-15T19:11:28.696Z	BinanceTrade	BinanceTradeWebSocket			BTCUSDT
+2026-06-15T19:11:28.468Z	BinanceTrade	BinanceTradeWebSocket			BTCUSDT
+2026-06-15T19:11:28.460Z	BinanceBookTicker	REST			BTCUSDT
+2026-06-15T19:11:27.852Z	BinanceTrade	BinanceTradeWebSocket			BTCUSDT
+2026-06-15T19:11:27.637Z	BinanceTrade	BinanceTradeWebSocket			BTCUSDT
+2026-06-15T19:11:27.460Z	BinanceTrade	BinanceTradeWebSocket			BTCUSDT
+2026-06-15T19:11:27.460Z	BinanceTrade	BinanceTradeWebSocket			BTCUSDT
+2026-06-15T19:11:27.103Z	BinanceBookTicker	REST			BTCUSDT
+2026-06-15T19:11:27.102Z	PolymarketTopOfBook	price_change	2777579914245062860575260813826573156514755635155183962587765433604471363212	0xefe9e5d4bcb69c4ba033a5169e6abae7a64687bcec9c1f67f31049c9fa70441b	
+
+## snapshot_2
+database	polycopytrader
+server_address	192.168.0.101/32
+server_time_utc	2026-06-15T19:16:14Z
+
+# service_heartbeat
+service_name	status	mode	version	started_utc	heartbeat_utc	heartbeat_age_seconds	current_loop	last_error
+PolyCopyTrader.Service	Running	Live	info=1.0.0+3b63e1384625a3ebbff5a779b115f317a3d7ff72; assembly=1.0.0.0; mvid=cad789ce19dd	2026-06-15T19:11:47Z	2026-06-15T19:15:48Z	26	BTC5mOnly WatchlistScanner=CommentedOut; FollowLeaderSignals=CommentedOut	<none>
+PolyCopyTrader.Tests	Running	ReadOnly	1.0.0	2026-05-04T14:02:41Z	2026-05-04T14:02:41Z	3647613	IntegrationTest	<none>
+
+# lag_table_summary
+total_rows	rows_last_1m	rows_last_5m	rows_last_15m	rows_last_60m	rows_since_service_start	service_started_utc	earliest_received_utc	latest_received_utc	latest_age_seconds
+509046	0	416	19477	107941	0	2026-06-15T19:11:47Z	2026-06-15T15:58:44Z	2026-06-15T19:11:28Z	286
+
+# lag_sources_last_24h
+source	raw_event_type	rows_last_1m	rows_last_5m	rows_last_15m	rows_last_60m	rows_last_24h	latest_received_utc
+BinanceTrade	BinanceTradeWebSocket	0	405	18960	105311	499231	2026-06-15T19:11:28Z
+BinanceBookTicker	REST	0	10	411	2317	8252	2026-06-15T19:11:28Z
+PolymarketTopOfBook	book	0	0	49	94	832	2026-06-15T19:09:29Z
+PolymarketTopOfBook	price_change	0	1	57	219	725	2026-06-15T19:11:27Z
+PolymarketTopOfBook	best_bid_ask	0	0	0	0	6	2026-06-15T17:42:54Z
+
+# latest_lag_rows
+received_utc	source	raw_event_type	asset_id	condition_id	binance_symbol
+2026-06-15T19:11:28.765Z	BinanceTrade	BinanceTradeWebSocket			BTCUSDT
+2026-06-15T19:11:28.696Z	BinanceTrade	BinanceTradeWebSocket			BTCUSDT
+2026-06-15T19:11:28.468Z	BinanceTrade	BinanceTradeWebSocket			BTCUSDT
+2026-06-15T19:11:28.460Z	BinanceBookTicker	REST			BTCUSDT
+2026-06-15T19:11:27.852Z	BinanceTrade	BinanceTradeWebSocket			BTCUSDT
+2026-06-15T19:11:27.637Z	BinanceTrade	BinanceTradeWebSocket			BTCUSDT
+2026-06-15T19:11:27.460Z	BinanceTrade	BinanceTradeWebSocket			BTCUSDT
+2026-06-15T19:11:27.460Z	BinanceTrade	BinanceTradeWebSocket			BTCUSDT
+2026-06-15T19:11:27.103Z	BinanceBookTicker	REST			BTCUSDT
+2026-06-15T19:11:27.102Z	PolymarketTopOfBook	price_change	2777579914245062860575260813826573156514755635155183962587765433604471363212	0xefe9e5d4bcb69c4ba033a5169e6abae7a64687bcec9c1f67f31049c9fa70441b	
+
+## Comparison
+total_delta	0
+rows_since_service_start_delta	0
+latest_received_changed	False
+snapshot_1_latest_received_utc	2026-06-15T19:11:28.7657130Z
+snapshot_2_latest_received_utc	2026-06-15T19:11:28.7657130Z
+snapshot_2_service_started_utc	2026-06-15T19:11:47.9546530Z
+snapshot_2_rows_since_service_start	0
+
+verdict	STOPPED

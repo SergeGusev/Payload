@@ -1,0 +1,61 @@
+Disable Middle strategies started at 2026-06-15T05:25:00.5132365+00:00
+Mode: DRY-RUN
+Host: 192.168.0.101
+Pattern: ^(btc|eth|sol)_up_down_5m_middle_[0-9]+(_revert)?(_bps_[0-9]+)?(_instant)?$
+
+Database: polycopytrader
+Server address: 192.168.0.101/32
+Server time UTC: 2026-06-15T05:24:59Z
+
+## Service heartbeat before
+service_name	status	mode	started_utc	heartbeat_utc	heartbeat_age_seconds	last_error
+PolyCopyTrader.Service	Running	Live	2026-06-14T21:48:22Z	2026-06-15T05:24:09Z	49.9	<none>
+PolyCopyTrader.Tests	Running	ReadOnly	2026-05-04T14:02:41Z	2026-05-04T14:02:41Z	3597738.5	<none>
+
+## Middle strategy counts before
+total	enabled	disabled	live_stakes	auto_live_paused
+12060	12060	0	0	0
+n	total	enabled	disabled
+100	1206	1206	0
+90	1206	1206	0
+80	1206	1206	0
+70	1206	1206	0
+60	1206	1206	0
+50	1206	1206	0
+40	1206	1206	0
+30	1206	1206	0
+20	1206	1206	0
+10	1206	1206	0
+
+Enabled Middle strategies targeted: 12060
+Dry-run only; no rows were updated.
+
+## Middle strategy counts after
+total	enabled	disabled	live_stakes	auto_live_paused
+12060	12060	0	0	0
+n	total	enabled	disabled
+100	1206	1206	0
+90	1206	1206	0
+80	1206	1206	0
+70	1206	1206	0
+60	1206	1206	0
+50	1206	1206	0
+40	1206	1206	0
+30	1206	1206	0
+20	1206	1206	0
+10	1206	1206	0
+
+## Enabled strategy groups after
+strategy_group	enabled_count	live_stakes_count
+middle_n	12060	0
+other_up_down_5m	1464	0
+simple	6	1
+up_down_bps	6	6
+
+## Service heartbeat after
+service_name	status	mode	started_utc	heartbeat_utc	heartbeat_age_seconds	last_error
+PolyCopyTrader.Service	Running	Live	2026-06-14T21:48:22Z	2026-06-15T05:24:09Z	52.4	<none>
+PolyCopyTrader.Tests	Running	ReadOnly	2026-05-04T14:02:41Z	2026-05-04T14:02:41Z	3597740.9	<none>
+
+Rows updated: 0
+Disable Middle strategies finished at 2026-06-15T05:25:03.5249114+00:00

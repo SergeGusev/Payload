@@ -240,6 +240,13 @@ public interface IAppRepository
         return Task.FromResult<IReadOnlyList<StrategyMarketPaperRun>>([]);
     }
 
+    Task<IReadOnlyList<StrategyMarketPaperRun>> GetStrategyMarketPaperRunsByPaperOrderIdsAsync(
+        IReadOnlyCollection<Guid> paperOrderIds,
+        CancellationToken cancellationToken = default)
+    {
+        return Task.FromResult<IReadOnlyList<StrategyMarketPaperRun>>([]);
+    }
+
     Task<IReadOnlyList<BtcUpDown5mMarketResult>> GetRecentBtcUpDown5mMarketResultsAsync(
         int limit,
         CancellationToken cancellationToken = default)
@@ -283,6 +290,42 @@ public interface IAppRepository
         await AddPaperOrderAsync(paperOrder, cancellationToken);
     }
 
+    async Task AddPaperEntryPersistenceBatchAsync(
+        PaperEntryPersistenceBatch batch,
+        CancellationToken cancellationToken = default)
+    {
+        foreach (var signal in batch.Signals)
+        {
+            await AddSignalAsync(signal, cancellationToken);
+        }
+
+        foreach (var order in batch.PaperOrders)
+        {
+            await AddPaperOrderAsync(order, cancellationToken);
+        }
+
+        foreach (var fill in batch.PaperFills)
+        {
+            await AddPaperFillAsync(fill, cancellationToken);
+        }
+
+        foreach (var position in batch.PaperPositions)
+        {
+            await UpsertPaperPositionAsync(position, cancellationToken);
+        }
+
+        foreach (var activation in batch.CopiedLeaderPositionActivations)
+        {
+            await ActivatePaperCopiedLeaderPositionAsync(
+                activation.EntryPaperOrderId,
+                activation.CopiedInitialSizeShares,
+                activation.FilledAtUtc,
+                cancellationToken);
+        }
+
+        await UpdateStrategyMarketPaperRunsAsync(batch.StrategyRuns, cancellationToken);
+    }
+
     Task UpdatePaperOrderAsync(PaperOrder order, CancellationToken cancellationToken = default);
 
     Task<IReadOnlyList<PaperOrder>> GetOpenPaperOrdersAsync(CancellationToken cancellationToken = default);
@@ -311,7 +354,8 @@ public interface IAppRepository
     Task<IReadOnlyList<PaperOrder>> GetRecentPaperOrdersAsync(
         int limit = 100,
         CancellationToken cancellationToken = default,
-        Guid? strategyId = null);
+        Guid? strategyId = null,
+        DateTimeOffset? createdAfterUtc = null);
 
     Task AddPaperFillAsync(PaperFill fill, CancellationToken cancellationToken = default);
 
@@ -342,12 +386,23 @@ public interface IAppRepository
         return Task.FromResult<PaperCopiedTraderPerformance?>(null);
     }
 
-    Task<IReadOnlyList<StrategyPerformance>> GetStrategyPerformanceAsync(int limit = 2000, CancellationToken cancellationToken = default)
+    Task<IReadOnlyList<StrategyPerformance>> GetStrategyPerformanceAsync(int limit = 25_000, CancellationToken cancellationToken = default)
     {
         return Task.FromResult<IReadOnlyList<StrategyPerformance>>([]);
     }
 
-    Task<IReadOnlyList<StrategyRecentPerformance>> GetStrategyRecentPerformanceAsync(int limit = 3000, CancellationToken cancellationToken = default)
+    Task<IReadOnlyDictionary<Guid, decimal>> GetLiveRealizedPnlByStrategyAsync(
+        IReadOnlyCollection<Guid> strategyIds,
+        CancellationToken cancellationToken = default)
+    {
+        return Task.FromResult<IReadOnlyDictionary<Guid, decimal>>(
+            strategyIds
+                .Select(StrategyIds.Normalize)
+                .Distinct()
+                .ToDictionary(strategyId => strategyId, _ => 0m));
+    }
+
+    Task<IReadOnlyList<StrategyRecentPerformance>> GetStrategyRecentPerformanceAsync(int limit = 25_000, CancellationToken cancellationToken = default)
     {
         return Task.FromResult<IReadOnlyList<StrategyRecentPerformance>>([]);
     }
@@ -515,7 +570,9 @@ public interface IAppRepository
     Task<IReadOnlyList<LiveOrder>> GetRecentLiveOrdersAsync(
         int limit = 100,
         CancellationToken cancellationToken = default,
-        Guid? strategyId = null);
+        Guid? strategyId = null,
+        int offset = 0,
+        DateTimeOffset? createdAfterUtc = null);
 
     Task<StrategyLiveBalanceAdjustmentResult> ApplyLiveOrderSettlementToStrategyBalanceAsync(
         Guid liveOrderId,
@@ -569,6 +626,22 @@ public interface IAppRepository
         CancellationToken cancellationToken = default)
     {
         return Task.FromResult<IReadOnlyList<BtcUsdReferenceCorrelationSample>>([]);
+    }
+
+    Task UpsertCryptoReferencePriceTickAsync(
+        CryptoReferencePriceTick tick,
+        CancellationToken cancellationToken = default)
+    {
+        return Task.CompletedTask;
+    }
+
+    Task<IReadOnlyList<CryptoReferencePriceTick>> GetCryptoReferencePriceTicksAsync(
+        IReadOnlyCollection<string> assetSymbols,
+        DateTimeOffset startUtc,
+        DateTimeOffset endUtc,
+        CancellationToken cancellationToken = default)
+    {
+        return Task.FromResult<IReadOnlyList<CryptoReferencePriceTick>>([]);
     }
 
     Task AddBtcOrderBookLagDiagnosticEventsAsync(
@@ -737,6 +810,68 @@ public interface IAppRepository
         CancellationToken cancellationToken = default)
     {
         return Task.FromResult<IReadOnlyList<CryptoUpDown5mOddsTick>>([]);
+    }
+
+    Task UpsertCryptoUpDown5mDiffSnapshotAsync(
+        CryptoUpDown5mDiffSnapshot snapshot,
+        CancellationToken cancellationToken = default)
+    {
+        return Task.CompletedTask;
+    }
+
+    Task<IReadOnlyList<CryptoUpDown5mDiffSnapshot>> GetCryptoUpDown5mDiffSnapshotsAsync(
+        IReadOnlyCollection<string> assetSymbols,
+        DateTimeOffset startUtc,
+        DateTimeOffset endUtc,
+        CancellationToken cancellationToken = default)
+    {
+        return Task.FromResult<IReadOnlyList<CryptoUpDown5mDiffSnapshot>>([]);
+    }
+
+    Task UpsertCryptoUpDown5mResultPollingObservationAsync(
+        CryptoUpDown5mResultPollingObservation observation,
+        CancellationToken cancellationToken = default)
+    {
+        return Task.CompletedTask;
+    }
+
+    Task<IReadOnlyList<CryptoUpDown5mResultPollingObservation>> GetCryptoUpDown5mResultPollingObservationsAsync(
+        IReadOnlyCollection<string> assetSymbols,
+        DateTimeOffset startUtc,
+        DateTimeOffset endUtc,
+        CancellationToken cancellationToken = default)
+    {
+        return Task.FromResult<IReadOnlyList<CryptoUpDown5mResultPollingObservation>>([]);
+    }
+
+    Task UpsertCryptoUpDown5mWebSocketResolvedMarketAsync(
+        CryptoUpDown5mWebSocketResolvedMarket resolvedMarket,
+        CancellationToken cancellationToken = default)
+    {
+        return Task.CompletedTask;
+    }
+
+    Task<IReadOnlyList<CryptoUpDown5mWebSocketResolvedMarket>> GetCryptoUpDown5mWebSocketResolvedMarketsAsync(
+        IReadOnlyCollection<string> assetSymbols,
+        DateTimeOffset startUtc,
+        DateTimeOffset endUtc,
+        CancellationToken cancellationToken = default)
+    {
+        return Task.FromResult<IReadOnlyList<CryptoUpDown5mWebSocketResolvedMarket>>([]);
+    }
+
+    Task AddMarketResolvedEventDiagnosticAsync(
+        MarketResolvedEventDiagnostic diagnostic,
+        CancellationToken cancellationToken = default)
+    {
+        return Task.CompletedTask;
+    }
+
+    Task AddMarketWebSocketFrameDiagnosticAsync(
+        MarketWebSocketFrameDiagnostic diagnostic,
+        CancellationToken cancellationToken = default)
+    {
+        return Task.CompletedTask;
     }
 
     Task AddApiErrorAsync(ApiError error, CancellationToken cancellationToken = default);
@@ -946,3 +1081,27 @@ public interface IAppRepository
 
     Task<IReadOnlyList<ServiceHeartbeat>> GetServiceHeartbeatsAsync(CancellationToken cancellationToken = default);
 }
+
+public sealed record PaperEntryPersistenceBatch(
+    IReadOnlyList<Signal> Signals,
+    IReadOnlyList<PaperOrder> PaperOrders,
+    IReadOnlyList<PaperFill> PaperFills,
+    IReadOnlyList<PaperPosition> PaperPositions,
+    IReadOnlyList<PaperCopiedLeaderPositionActivation> CopiedLeaderPositionActivations,
+    IReadOnlyList<StrategyMarketPaperRun> StrategyRuns)
+{
+    public static PaperEntryPersistenceBatch Empty { get; } = new([], [], [], [], [], []);
+
+    public bool IsEmpty =>
+        Signals.Count == 0 &&
+        PaperOrders.Count == 0 &&
+        PaperFills.Count == 0 &&
+        PaperPositions.Count == 0 &&
+        CopiedLeaderPositionActivations.Count == 0 &&
+        StrategyRuns.Count == 0;
+}
+
+public sealed record PaperCopiedLeaderPositionActivation(
+    Guid EntryPaperOrderId,
+    decimal CopiedInitialSizeShares,
+    DateTimeOffset FilledAtUtc);

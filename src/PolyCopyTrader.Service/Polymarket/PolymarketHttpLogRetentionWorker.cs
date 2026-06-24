@@ -13,7 +13,7 @@ public sealed class PolymarketHttpLogRetentionWorker(
     {
         if (!options.CleanupEnabled)
         {
-            logger.LogInformation("Polymarket HTTP log retention cleanup is disabled.");
+            logger.LogInformation("Polymarket HTTP log retention cleanup is disabled.1");
             return;
         }
 

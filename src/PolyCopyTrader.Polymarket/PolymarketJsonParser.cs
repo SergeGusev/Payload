@@ -367,6 +367,71 @@ public static class PolymarketJsonParser
         return markets;
     }
 
+    public static IReadOnlyList<PolymarketGammaMarket> ParseGammaEventMarkets(JsonElement root)
+    {
+        if (root.ValueKind is JsonValueKind.Null or JsonValueKind.Undefined)
+        {
+            return [];
+        }
+
+        if (root.ValueKind == JsonValueKind.Array)
+        {
+            return ParseGammaMarkets(root);
+        }
+
+        if (root.ValueKind != JsonValueKind.Object)
+        {
+            throw new JsonException("Gamma events response must be a JSON object.");
+        }
+
+        if (!root.TryGetProperty("events", out var events) ||
+            events.ValueKind is JsonValueKind.Null or JsonValueKind.Undefined)
+        {
+            return [];
+        }
+
+        if (events.ValueKind != JsonValueKind.Array)
+        {
+            throw new JsonException("Gamma events response events property must be a JSON array.");
+        }
+
+        var markets = new List<PolymarketGammaMarket>();
+        foreach (var gammaEvent in events.EnumerateArray())
+        {
+            if (!gammaEvent.TryGetProperty("markets", out var eventMarkets) ||
+                eventMarkets.ValueKind is JsonValueKind.Null or JsonValueKind.Undefined)
+            {
+                continue;
+            }
+
+            var eventId = GetString(gammaEvent, "id");
+            var eventSlug = GetString(gammaEvent, "slug");
+            var eventTitle = GetString(gammaEvent, "title");
+            var eventSeriesSlug = FirstNonEmpty(
+                GetString(gammaEvent, "seriesSlug"),
+                GetFirstArrayString(gammaEvent, "series", "slug"));
+            var eventCategory = FirstNonEmpty(
+                GetString(gammaEvent, "category"),
+                GetFirstArrayString(gammaEvent, "tags", "label", "slug"));
+            var eventStartTime = ParseDateTimeOffsetOrNull(GetString(gammaEvent, "startTime"));
+
+            foreach (var market in ParseGammaMarkets(eventMarkets))
+            {
+                markets.Add(market with
+                {
+                    EventId = FirstNonEmpty(market.EventId, eventId),
+                    EventSlug = FirstNonEmpty(market.EventSlug, eventSlug),
+                    EventTitle = FirstNonEmpty(market.EventTitle, eventTitle),
+                    SeriesSlug = FirstNonEmpty(market.SeriesSlug, eventSeriesSlug),
+                    Category = FirstNonEmpty(market.Category, eventCategory),
+                    EventStartTimeUtc = market.EventStartTimeUtc ?? eventStartTime
+                });
+            }
+        }
+
+        return markets;
+    }
+
     public static IReadOnlyList<PolymarketOnChainTokenMetadata> ParseGammaMarketTokenMetadata(
         JsonElement root,
         string requestedTokenId)

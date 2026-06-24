@@ -174,12 +174,10 @@ maker-only authenticated trading endpoints behind explicit service gates.
     Follow leader Paper signal prices use the leader's historical trade price, so
     the live path must reject them unless a separate live execution policy is
     explicitly added.
-    BTC 5-minute live-shadow tests use BUY-only GTD limit orders with
-    `postOnly: false`, a local market-relative cancel deadline
-    (`OpeningLimitExpireBeforeMarketEndSeconds`, `60` seconds by default), a CLOB
-    GTD wire expiration with the configured security buffer, a shared
-    Paper-shadow/Live decision, and the same live/manual/risk/strategy-balance gates
-    before signing.
+    BTC/ETH/SOL 5-minute live-shadow tests use BUY-only FAK market-amount orders
+    with `postOnly: false`, no GTD expiration, a shared Paper-shadow/Live
+    decision, and the same live/manual/risk/strategy-balance gates before
+    signing. Strategy names must not encode FAK.
 
 15. Cancel one order or all orders:
     Cancel one order with L2 headers:
@@ -244,7 +242,7 @@ Task 16 added live maker-only trading only if all prior gates pass:
 - Done in task 16: cancel-one, cancel-all, and order-status polling.
 - Done in task 16: kill switch pauses live trading and requests cancel-all.
 - Done in task 16: geoblock, CLOB server-time drift, API-error lockout, stale order,
-  maker-only spread, BUY-only, GTD-only, and blocked crypto/sports text checks.
+  BUY-only, FAK-only live submission, and blocked crypto/sports text checks.
 - Still required operationally: start with tiny production orders only after VPS
   deployment, geoblock verification from the actual host, dry-run validation, and
   manual cancel-all testing.

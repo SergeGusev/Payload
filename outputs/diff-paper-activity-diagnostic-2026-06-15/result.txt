@@ -1,0 +1,230 @@
+Diff Paper activity diagnostic captured at 2026-06-15T11:37:48.7860598+00:00
+Database: polycopytrader
+Server address: 192.168.0.101/32
+Server time UTC: 2026-06-15T11:37:47Z
+
+## Service heartbeat
+service_name	status	mode	version	started_utc	heartbeat_utc	heartbeat_age_seconds	current_loop	last_error
+PolyCopyTrader.Service	Running	Live	info=1.0.0+3b63e1384625a3ebbff5a779b115f317a3d7ff72; assembly=1.0.0.0; mvid=559442907f10	2026-06-15T11:19:10Z	2026-06-15T11:37:13Z	34	BTC5mOnly WatchlistScanner=CommentedOut; FollowLeaderSignals=CommentedOut	<none>
+PolyCopyTrader.Tests	Running	ReadOnly	1.0.0	2026-05-04T14:02:41Z	2026-05-04T14:02:41Z	3620106	IntegrationTest	<none>
+
+## Diff strategy inventory
+diff_type	asset	is_revert	strategies	enabled	live_stakes	auto_live_paused	paused	min_paper_stake	max_paper_stake
+adjusted_diff	BTC	False	24	24	0	0	0	1.00000000	1.00000000
+adjusted_diff	BTC	True	24	24	0	0	0	1.00000000	1.00000000
+adjusted_diff	ETH	False	24	24	0	0	0	1.00000000	1.00000000
+adjusted_diff	ETH	True	24	24	0	0	0	1.00000000	1.00000000
+adjusted_diff	SOL	False	24	24	0	0	0	1.00000000	1.00000000
+adjusted_diff	SOL	True	24	24	0	0	0	1.00000000	1.00000000
+regular_diff	BTC	False	76	76	0	0	0	1.00000000	1.00000000
+regular_diff	BTC	True	76	76	0	0	0	1.00000000	1.00000000
+regular_diff	ETH	False	76	76	0	0	0	1.00000000	1.00000000
+regular_diff	ETH	True	76	76	0	0	0	1.00000000	1.00000000
+regular_diff	SOL	False	76	76	0	0	0	1.00000000	1.00000000
+regular_diff	SOL	True	76	76	0	0	0	1.00000000	1.00000000
+shift_diff	BTC	False	144	144	0	0	0	1.00000000	1.00000000
+shift_diff	BTC	True	144	144	0	0	0	1.00000000	1.00000000
+shift_diff	ETH	False	144	144	0	0	0	1.00000000	1.00000000
+shift_diff	ETH	True	144	144	0	0	0	1.00000000	1.00000000
+shift_diff	SOL	False	144	144	0	0	0	1.00000000	1.00000000
+shift_diff	SOL	True	144	144	0	0	0	1.00000000	1.00000000
+
+## Diff paper orders by UTC day
+utc_day	orders	strategies_with_orders	filled	partially_filled	expired	pending	notional_usd	first_order_utc	last_order_utc
+2026-06-08	875	43	874	0	1	0	2838.79990000	06/08/2026 07:20:17	06/08/2026 23:55:10
+2026-06-09	4375	82	2398	8	1935	0	13214.34010000	06/09/2026 00:00:08	06/09/2026 23:55:06
+2026-06-10	8750	193	4194	3	4538	0	25210.55770000	06/10/2026 00:00:13	06/10/2026 23:55:13
+2026-06-11	35276	522	16627	37	18449	0	103174.37190000	06/11/2026 00:00:06	06/11/2026 23:55:16
+2026-06-12	38428	602	18968	62	19239	0	110740.08880000	06/12/2026 00:00:12	06/12/2026 23:55:10
+2026-06-13	51950	600	25435	25	26409	0	148566.79680000	06/13/2026 00:00:09	06/13/2026 23:55:16
+2026-06-14	44684	642	21544	42	22903	0	126570.98640000	06/14/2026 00:01:58	06/14/2026 23:55:12
+2026-06-15	16372	544	8223	0	8025	104	46569.60570000	06/15/2026 00:00:18	06/15/2026 11:35:27
+
+## Diff paper orders by UTC day and type
+utc_day	diff_type	orders	strategies_with_orders	filled	expired	pending	notional_usd	last_order_utc
+2026-06-08	regular_diff	875	43	874	1	0	2838.79990000	06/08/2026 23:55:10
+2026-06-09	adjusted_diff	259	24	114	141	0	768.16800000	06/09/2026 23:55:06
+2026-06-09	regular_diff	4116	58	2284	1794	0	12446.17210000	06/09/2026 23:55:06
+2026-06-10	adjusted_diff	1450	36	661	784	0	4209.13260000	06/10/2026 23:55:13
+2026-06-10	regular_diff	4444	41	2343	2088	0	12832.92210000	06/10/2026 23:55:13
+2026-06-10	shift_diff	2856	116	1190	1666	0	8168.50300000	06/10/2026 23:55:13
+2026-06-11	adjusted_diff	2159	57	986	1161	0	6325.77700000	06/11/2026 23:55:16
+2026-06-11	regular_diff	11151	68	5314	5804	0	32548.39540000	06/11/2026 23:55:16
+2026-06-11	shift_diff	21966	397	10327	11484	0	64300.19950000	06/11/2026 23:55:16
+2026-06-12	adjusted_diff	3232	70	1590	1627	0	9345.69300000	06/12/2026 23:55:10
+2026-06-12	regular_diff	6588	94	3255	3277	0	18929.61610000	06/12/2026 23:55:10
+2026-06-12	shift_diff	28608	438	14123	14335	0	82464.77970000	06/12/2026 23:55:10
+2026-06-13	adjusted_diff	3750	70	1826	1920	0	10726.97180000	06/13/2026 23:55:14
+2026-06-13	regular_diff	11896	92	5901	5968	0	33915.17080000	06/13/2026 23:55:14
+2026-06-13	shift_diff	36304	438	17708	18521	0	103924.65420000	06/13/2026 23:55:16
+2026-06-14	adjusted_diff	3186	76	1529	1642	0	8969.49410000	06/14/2026 23:55:12
+2026-06-14	regular_diff	12624	84	6094	6412	0	35823.81170000	06/14/2026 23:55:12
+2026-06-14	shift_diff	28874	482	13921	14849	0	81777.68060000	06/14/2026 23:55:12
+2026-06-15	adjusted_diff	1416	62	702	700	12	4000.21370000	06/15/2026 11:35:27
+2026-06-15	regular_diff	4004	70	1987	1987	26	11339.36330000	06/15/2026 11:35:27
+2026-06-15	shift_diff	10952	412	5534	5338	66	31230.02870000	06/15/2026 11:35:27
+
+## Last 72h versus previous 72h paper orders
+period_name	orders	strategies_with_orders	filled	expired	pending	notional_usd	first_order_utc	last_order_utc
+last_72h	134058	732	65606	67872	104	382216.64330000	06/12/2026 11:40:05	06/15/2026 11:35:27
+previous_72h	64467	653	30682	33426	0	187705.90710000	06/09/2026 11:40:06	06/12/2026 11:35:08
+
+## Diff snapshots by UTC day and asset
+utc_day	asset_symbol	snapshots	distinct_markets	latest_sampled_utc	latest_included_market_utc	initialized	history_fetch_failed
+2026-06-08	BTC	193	193	06/08/2026 23:59:59	06/08/2026 23:50:00	193	0
+2026-06-08	ETH	193	193	06/08/2026 23:59:59	06/08/2026 23:50:00	193	0
+2026-06-08	SOL	193	193	06/08/2026 23:59:59	06/08/2026 23:50:00	193	0
+2026-06-09	BTC	288	288	06/09/2026 23:59:59	06/09/2026 23:50:00	288	0
+2026-06-09	ETH	288	288	06/09/2026 23:59:59	06/09/2026 23:50:00	288	0
+2026-06-09	SOL	288	288	06/09/2026 23:59:59	06/09/2026 23:50:00	288	0
+2026-06-10	BTC	237	237	06/10/2026 23:59:58	06/10/2026 23:50:00	237	0
+2026-06-10	ETH	237	237	06/10/2026 23:59:58	06/10/2026 23:50:00	237	0
+2026-06-10	SOL	237	237	06/10/2026 23:59:58	06/10/2026 23:50:00	237	0
+2026-06-11	BTC	288	288	06/11/2026 23:59:59	06/11/2026 23:50:00	288	0
+2026-06-11	ETH	288	288	06/11/2026 23:59:59	06/11/2026 23:50:00	288	0
+2026-06-11	SOL	288	288	06/11/2026 23:59:59	06/11/2026 23:50:00	288	0
+2026-06-12	BTC	288	288	06/12/2026 23:59:54	06/12/2026 23:50:00	288	0
+2026-06-12	ETH	288	288	06/12/2026 23:59:54	06/12/2026 23:50:00	288	0
+2026-06-12	SOL	288	288	06/12/2026 23:59:54	06/12/2026 23:50:00	288	0
+2026-06-13	BTC	288	288	06/13/2026 23:59:53	06/13/2026 23:50:00	288	0
+2026-06-13	ETH	288	288	06/13/2026 23:59:53	06/13/2026 23:50:00	288	0
+2026-06-13	SOL	288	288	06/13/2026 23:59:53	06/13/2026 23:50:00	288	0
+2026-06-14	BTC	285	285	06/14/2026 23:59:34	06/14/2026 23:50:00	285	0
+2026-06-14	ETH	285	285	06/14/2026 23:59:34	06/14/2026 23:50:00	285	0
+2026-06-14	SOL	285	285	06/14/2026 23:59:34	06/14/2026 23:50:00	285	0
+2026-06-15	BTC	140	140	06/15/2026 11:37:47	06/15/2026 11:30:00	140	0
+2026-06-15	ETH	140	140	06/15/2026 11:37:47	06/15/2026 11:30:00	140	0
+2026-06-15	SOL	140	140	06/15/2026 11:37:47	06/15/2026 11:30:00	140	0
+
+## Result polling observations by market UTC day and asset
+utc_day	asset_symbol	status	observations	with_winner	latest_updated_utc	latest_winner_utc
+2026-06-08	BTC	Resolved	183	183	06/09/2026 00:05:30	06/09/2026 00:05:30
+2026-06-08	ETH	Resolved	183	183	06/09/2026 00:05:55	06/09/2026 00:05:55
+2026-06-08	SOL	Resolved	183	183	06/09/2026 00:05:03	06/09/2026 00:05:03
+2026-06-09	BTC	Resolved	288	288	06/10/2026 00:05:34	06/10/2026 00:05:34
+2026-06-09	ETH	Resolved	288	288	06/10/2026 00:05:02	06/10/2026 00:05:02
+2026-06-09	SOL	Resolved	288	288	06/10/2026 00:05:02	06/10/2026 00:05:02
+2026-06-10	BTC	Pending	1	0	06/10/2026 00:59:31	<null>
+2026-06-10	BTC	Resolved	247	247	06/11/2026 00:05:13	06/11/2026 00:05:13
+2026-06-10	ETH	Pending	1	0	06/10/2026 00:59:31	<null>
+2026-06-10	ETH	Resolved	247	247	06/11/2026 00:06:02	06/11/2026 00:06:02
+2026-06-10	SOL	Pending	1	0	06/10/2026 00:59:31	<null>
+2026-06-10	SOL	Resolved	247	247	06/11/2026 00:05:06	06/11/2026 00:05:06
+2026-06-11	BTC	Resolved	288	288	06/12/2026 00:05:44	06/12/2026 00:05:44
+2026-06-11	ETH	Resolved	288	288	06/12/2026 00:04:42	06/12/2026 00:04:42
+2026-06-11	SOL	Resolved	288	288	06/12/2026 00:05:06	06/12/2026 00:05:06
+2026-06-12	BTC	Resolved	288	288	06/13/2026 00:05:58	06/13/2026 00:05:58
+2026-06-12	ETH	Resolved	288	288	06/13/2026 00:01:51	06/13/2026 00:01:51
+2026-06-12	SOL	Resolved	288	288	06/13/2026 00:04:35	06/13/2026 00:04:35
+2026-06-13	BTC	Resolved	288	288	06/14/2026 00:05:17	06/14/2026 00:05:17
+2026-06-13	ETH	Resolved	288	288	06/14/2026 00:05:17	06/14/2026 00:05:17
+2026-06-13	SOL	Resolved	288	288	06/14/2026 00:04:42	06/14/2026 00:04:42
+2026-06-14	BTC	Resolved	288	288	06/15/2026 00:05:12	06/15/2026 00:05:12
+2026-06-14	ETH	Resolved	288	288	06/15/2026 00:05:20	06/15/2026 00:05:20
+2026-06-14	SOL	Resolved	288	288	06/15/2026 00:05:20	06/15/2026 00:05:20
+2026-06-15	BTC	Pending	1	0	06/15/2026 11:37:43	<null>
+2026-06-15	BTC	Resolved	138	138	06/15/2026 11:35:29	06/15/2026 11:35:29
+2026-06-15	ETH	Pending	1	0	06/15/2026 11:37:43	<null>
+2026-06-15	ETH	Resolved	138	138	06/15/2026 11:35:19	06/15/2026 11:35:19
+2026-06-15	SOL	Pending	1	0	06/15/2026 11:37:43	<null>
+2026-06-15	SOL	Resolved	138	138	06/15/2026 11:35:19	06/15/2026 11:35:19
+
+## Active Diff observed due backlog
+diff_type	enabled	live_stakes	observed_due_runs	already_expired_by_60s	earliest_due_utc	latest_due_utc
+<no rows>
+
+## Recent Diff worker and result errors
+component	operation	errors	first_error_utc	latest_error_utc	sample_message
+PolymarketMarketWebSocket:crypto-updown-5m-critical	ConnectionLoop	79	06/12/2026 18:52:55	06/15/2026 11:09:02	Unable to connect to the remote server
+PolymarketMarketWebSocket:crypto-updown-5m-critical	Heartbeat	50	06/12/2026 18:52:55	06/15/2026 11:09:02	The remote party closed the WebSocket connection without completing the close handshake.
+BtcUpDown5mDiffCounterPaperStrategyWorker	Cycle	18	06/12/2026 20:10:05	06/15/2026 10:57:12	The request was canceled due to the configured HttpClient.Timeout of 30 seconds elapsing.
+PolymarketMarketWebSocket:shard-004	ConnectionLoop	14	06/12/2026 13:03:02	06/15/2026 10:50:44	Unable to connect to the remote server
+PolymarketMarketWebSocket:shard-005	ConnectionLoop	14	06/12/2026 12:55:55	06/15/2026 10:36:36	Unable to connect to the remote server
+PolymarketMarketWebSocket:shard-006	ConnectionLoop	19	06/12/2026 13:02:59	06/15/2026 10:33:57	Unable to connect to the remote server
+PolymarketMarketWebSocket:shard-006	Heartbeat	12	06/14/2026 11:35:36	06/15/2026 10:33:57	The remote party closed the WebSocket connection without completing the close handshake.
+PolymarketMarketWebSocket:shard-001	ConnectionLoop	10	06/14/2026 11:35:33	06/15/2026 10:33:54	Unable to connect to the remote server
+PolymarketMarketWebSocket:shard-002	ConnectionLoop	12	06/12/2026 13:04:38	06/15/2026 10:33:49	Unable to connect to the remote server
+PolymarketMarketWebSocket:shard-003	ConnectionLoop	14	06/12/2026 12:55:17	06/15/2026 10:33:49	Unable to connect to the remote server
+PolymarketMarketWebSocket:shard-002	Heartbeat	1	06/15/2026 10:16:12	06/15/2026 10:16:12	The remote party closed the WebSocket connection without completing the close handshake.
+PolymarketMarketWebSocket:crypto-updown-5m-critical	SubscriptionUpdate	2	06/13/2026 15:05:23	06/15/2026 07:26:58	The remote party closed the WebSocket connection without completing the close handshake.
+PolymarketMarketWebSocket:shard-005	Heartbeat	1	06/14/2026 11:35:46	06/14/2026 11:35:46	The remote party closed the WebSocket connection without completing the close handshake.
+PolymarketMarketWebSocket:shard-007	ConnectionLoop	3	06/14/2026 04:29:50	06/14/2026 11:35:42	The operation was canceled.
+PolymarketMarketWebSocket:shard-007	Heartbeat	3	06/14/2026 04:29:50	06/14/2026 11:35:42	The remote party closed the WebSocket connection without completing the close handshake.
+
+## Latest Diff paper orders
+code	status	outcome	price	notional_usd	created_at_utc	expires_at_utc	filled_at_utc
+sol_up_down_5m_up_shift_diff_6_2_revert_instant	Pending	Up	0.29000000	2.00100000	06/15/2026 11:35:27	06/15/2026 11:39:00	<null>
+sol_up_down_5m_up_shift_diff_6_1_revert_instant	Pending	Up	0.29000000	2.00100000	06/15/2026 11:35:27	06/15/2026 11:39:00	<null>
+sol_up_down_5m_up_shift_diff_5_2_revert_instant	Pending	Up	0.29000000	2.00100000	06/15/2026 11:35:27	06/15/2026 11:39:00	<null>
+sol_up_down_5m_up_shift_diff_5_1_revert_instant	Pending	Up	0.29000000	2.00100000	06/15/2026 11:35:27	06/15/2026 11:39:00	<null>
+sol_up_down_5m_up_shift_diff_4_2_revert_instant	Pending	Up	0.29000000	2.00100000	06/15/2026 11:35:27	06/15/2026 11:39:00	<null>
+sol_up_down_5m_up_shift_diff_4_1_revert_instant	Pending	Up	0.29000000	2.00100000	06/15/2026 11:35:27	06/15/2026 11:39:00	<null>
+sol_up_down_5m_up_shift_diff_3_2_revert_instant	Pending	Up	0.29000000	2.00100000	06/15/2026 11:35:27	06/15/2026 11:39:00	<null>
+sol_up_down_5m_up_shift_diff_3_1_revert_instant	Pending	Up	0.29000000	2.00100000	06/15/2026 11:35:27	06/15/2026 11:39:00	<null>
+sol_up_down_5m_up_shift_diff_2_2_revert_instant	Pending	Up	0.29000000	2.00100000	06/15/2026 11:35:27	06/15/2026 11:39:00	<null>
+sol_up_down_5m_up_shift_diff_2_1_revert_instant	Pending	Up	0.29000000	2.00100000	06/15/2026 11:35:27	06/15/2026 11:39:00	<null>
+sol_up_down_5m_up_shift_diff_1_1_revert_instant	Pending	Up	0.29000000	2.00100000	06/15/2026 11:35:27	06/15/2026 11:39:00	<null>
+eth_up_down_5m_up_shift_diff_6_4_revert_instant	Pending	Up	0.31000000	2.00260000	06/15/2026 11:35:27	06/15/2026 11:39:00	<null>
+eth_up_down_5m_up_shift_diff_6_3_revert_instant	Pending	Up	0.31000000	2.00260000	06/15/2026 11:35:27	06/15/2026 11:39:00	<null>
+eth_up_down_5m_up_shift_diff_6_2_revert_instant	Pending	Up	0.31000000	2.00260000	06/15/2026 11:35:27	06/15/2026 11:39:00	<null>
+eth_up_down_5m_up_shift_diff_6_1_revert_instant	Pending	Up	0.31000000	2.00260000	06/15/2026 11:35:27	06/15/2026 11:39:00	<null>
+eth_up_down_5m_up_shift_diff_5_4_revert_instant	Pending	Up	0.31000000	2.00260000	06/15/2026 11:35:27	06/15/2026 11:39:00	<null>
+eth_up_down_5m_up_shift_diff_5_3_revert_instant	Pending	Up	0.31000000	2.00260000	06/15/2026 11:35:27	06/15/2026 11:39:00	<null>
+eth_up_down_5m_up_shift_diff_5_2_revert_instant	Pending	Up	0.31000000	2.00260000	06/15/2026 11:35:27	06/15/2026 11:39:00	<null>
+eth_up_down_5m_up_shift_diff_5_1_revert_instant	Pending	Up	0.31000000	2.00260000	06/15/2026 11:35:27	06/15/2026 11:39:00	<null>
+eth_up_down_5m_up_shift_diff_4_4_revert_instant	Pending	Up	0.31000000	2.00260000	06/15/2026 11:35:27	06/15/2026 11:39:00	<null>
+eth_up_down_5m_up_shift_diff_4_3_revert_instant	Pending	Up	0.31000000	2.00260000	06/15/2026 11:35:27	06/15/2026 11:39:00	<null>
+eth_up_down_5m_up_shift_diff_4_2_revert_instant	Pending	Up	0.31000000	2.00260000	06/15/2026 11:35:27	06/15/2026 11:39:00	<null>
+eth_up_down_5m_up_shift_diff_4_1_revert_instant	Pending	Up	0.31000000	2.00260000	06/15/2026 11:35:27	06/15/2026 11:39:00	<null>
+eth_up_down_5m_up_shift_diff_3_4_revert_instant	Pending	Up	0.31000000	2.00260000	06/15/2026 11:35:27	06/15/2026 11:39:00	<null>
+eth_up_down_5m_up_shift_diff_3_3_revert_instant	Pending	Up	0.31000000	2.00260000	06/15/2026 11:35:27	06/15/2026 11:39:00	<null>
+eth_up_down_5m_up_shift_diff_3_2_revert_instant	Pending	Up	0.31000000	2.00260000	06/15/2026 11:35:27	06/15/2026 11:39:00	<null>
+eth_up_down_5m_up_shift_diff_3_1_revert_instant	Pending	Up	0.31000000	2.00260000	06/15/2026 11:35:27	06/15/2026 11:39:00	<null>
+eth_up_down_5m_up_shift_diff_2_4_revert_instant	Pending	Up	0.31000000	2.00260000	06/15/2026 11:35:27	06/15/2026 11:39:00	<null>
+eth_up_down_5m_up_shift_diff_2_3_revert_instant	Pending	Up	0.31000000	2.00260000	06/15/2026 11:35:27	06/15/2026 11:39:00	<null>
+eth_up_down_5m_up_shift_diff_2_2_revert_instant	Pending	Up	0.31000000	2.00260000	06/15/2026 11:35:27	06/15/2026 11:39:00	<null>
+
+## Latest Diff skipped runs
+code	market_start_utc	updated_at_utc	skip_reason	counter_mode	counter_initialized	target_received	raw_diff	adjusted_diff	effective_diff	threshold	shift_n
+sol_up_down_5m_up_shift_diff_6_3_revert_instant	06/15/2026 11:30:00	06/15/2026 11:36:22	gtd_limit_not_filled	<null>	<null>	<null>	<null>	<null>	<null>	<null>	<null>
+sol_up_down_5m_up_shift_diff_6_2_revert_instant	06/15/2026 11:30:00	06/15/2026 11:36:22	gtd_limit_not_filled	<null>	<null>	<null>	<null>	<null>	<null>	<null>	<null>
+sol_up_down_5m_up_shift_diff_6_1_revert_instant	06/15/2026 11:30:00	06/15/2026 11:36:22	gtd_limit_not_filled	<null>	<null>	<null>	<null>	<null>	<null>	<null>	<null>
+sol_up_down_5m_up_shift_diff_5_3_revert_instant	06/15/2026 11:30:00	06/15/2026 11:36:22	gtd_limit_not_filled	<null>	<null>	<null>	<null>	<null>	<null>	<null>	<null>
+sol_up_down_5m_up_shift_diff_5_2_revert_instant	06/15/2026 11:30:00	06/15/2026 11:36:22	gtd_limit_not_filled	<null>	<null>	<null>	<null>	<null>	<null>	<null>	<null>
+sol_up_down_5m_up_shift_diff_5_1_revert_instant	06/15/2026 11:30:00	06/15/2026 11:36:22	gtd_limit_not_filled	<null>	<null>	<null>	<null>	<null>	<null>	<null>	<null>
+sol_up_down_5m_up_shift_diff_4_3_revert_instant	06/15/2026 11:30:00	06/15/2026 11:36:22	gtd_limit_not_filled	<null>	<null>	<null>	<null>	<null>	<null>	<null>	<null>
+sol_up_down_5m_up_shift_diff_4_2_revert_instant	06/15/2026 11:30:00	06/15/2026 11:36:22	gtd_limit_not_filled	<null>	<null>	<null>	<null>	<null>	<null>	<null>	<null>
+sol_up_down_5m_up_shift_diff_4_1_revert_instant	06/15/2026 11:30:00	06/15/2026 11:36:22	gtd_limit_not_filled	<null>	<null>	<null>	<null>	<null>	<null>	<null>	<null>
+sol_up_down_5m_up_shift_diff_3_3_revert_instant	06/15/2026 11:30:00	06/15/2026 11:36:22	gtd_limit_not_filled	<null>	<null>	<null>	<null>	<null>	<null>	<null>	<null>
+sol_up_down_5m_up_shift_diff_3_2_revert_instant	06/15/2026 11:30:00	06/15/2026 11:36:22	gtd_limit_not_filled	<null>	<null>	<null>	<null>	<null>	<null>	<null>	<null>
+sol_up_down_5m_up_shift_diff_3_1_revert_instant	06/15/2026 11:30:00	06/15/2026 11:36:22	gtd_limit_not_filled	<null>	<null>	<null>	<null>	<null>	<null>	<null>	<null>
+sol_up_down_5m_up_shift_diff_2_3_revert_instant	06/15/2026 11:30:00	06/15/2026 11:36:22	gtd_limit_not_filled	<null>	<null>	<null>	<null>	<null>	<null>	<null>	<null>
+sol_up_down_5m_up_shift_diff_2_2_revert_instant	06/15/2026 11:30:00	06/15/2026 11:36:22	gtd_limit_not_filled	<null>	<null>	<null>	<null>	<null>	<null>	<null>	<null>
+sol_up_down_5m_up_shift_diff_2_1_revert_instant	06/15/2026 11:30:00	06/15/2026 11:36:22	gtd_limit_not_filled	<null>	<null>	<null>	<null>	<null>	<null>	<null>	<null>
+sol_up_down_5m_up_shift_diff_1_2_revert_instant	06/15/2026 11:30:00	06/15/2026 11:36:22	gtd_limit_not_filled	<null>	<null>	<null>	<null>	<null>	<null>	<null>	<null>
+sol_up_down_5m_up_shift_diff_1_1_revert_instant	06/15/2026 11:30:00	06/15/2026 11:36:22	gtd_limit_not_filled	<null>	<null>	<null>	<null>	<null>	<null>	<null>	<null>
+eth_up_down_5m_up_shift_diff_6_3_revert_instant	06/15/2026 11:30:00	06/15/2026 11:36:22	gtd_limit_not_filled	<null>	<null>	<null>	<null>	<null>	<null>	<null>	<null>
+eth_up_down_5m_up_shift_diff_6_2_revert_instant	06/15/2026 11:30:00	06/15/2026 11:36:22	gtd_limit_not_filled	<null>	<null>	<null>	<null>	<null>	<null>	<null>	<null>
+eth_up_down_5m_up_shift_diff_6_1_revert_instant	06/15/2026 11:30:00	06/15/2026 11:36:22	gtd_limit_not_filled	<null>	<null>	<null>	<null>	<null>	<null>	<null>	<null>
+eth_up_down_5m_up_shift_diff_5_3_revert_instant	06/15/2026 11:30:00	06/15/2026 11:36:22	gtd_limit_not_filled	<null>	<null>	<null>	<null>	<null>	<null>	<null>	<null>
+eth_up_down_5m_up_shift_diff_5_2_revert_instant	06/15/2026 11:30:00	06/15/2026 11:36:22	gtd_limit_not_filled	<null>	<null>	<null>	<null>	<null>	<null>	<null>	<null>
+eth_up_down_5m_up_shift_diff_5_1_revert_instant	06/15/2026 11:30:00	06/15/2026 11:36:22	gtd_limit_not_filled	<null>	<null>	<null>	<null>	<null>	<null>	<null>	<null>
+eth_up_down_5m_up_shift_diff_4_3_revert_instant	06/15/2026 11:30:00	06/15/2026 11:36:22	gtd_limit_not_filled	<null>	<null>	<null>	<null>	<null>	<null>	<null>	<null>
+eth_up_down_5m_up_shift_diff_4_2_revert_instant	06/15/2026 11:30:00	06/15/2026 11:36:22	gtd_limit_not_filled	<null>	<null>	<null>	<null>	<null>	<null>	<null>	<null>
+eth_up_down_5m_up_shift_diff_4_1_revert_instant	06/15/2026 11:30:00	06/15/2026 11:36:22	gtd_limit_not_filled	<null>	<null>	<null>	<null>	<null>	<null>	<null>	<null>
+eth_up_down_5m_up_shift_diff_3_3_revert_instant	06/15/2026 11:30:00	06/15/2026 11:36:22	gtd_limit_not_filled	<null>	<null>	<null>	<null>	<null>	<null>	<null>	<null>
+eth_up_down_5m_up_shift_diff_3_2_revert_instant	06/15/2026 11:30:00	06/15/2026 11:36:22	gtd_limit_not_filled	<null>	<null>	<null>	<null>	<null>	<null>	<null>	<null>
+eth_up_down_5m_up_shift_diff_3_1_revert_instant	06/15/2026 11:30:00	06/15/2026 11:36:22	gtd_limit_not_filled	<null>	<null>	<null>	<null>	<null>	<null>	<null>	<null>
+eth_up_down_5m_up_shift_diff_2_3_revert_instant	06/15/2026 11:30:00	06/15/2026 11:36:22	gtd_limit_not_filled	<null>	<null>	<null>	<null>	<null>	<null>	<null>	<null>
+eth_up_down_5m_up_shift_diff_2_2_revert_instant	06/15/2026 11:30:00	06/15/2026 11:36:22	gtd_limit_not_filled	<null>	<null>	<null>	<null>	<null>	<null>	<null>	<null>
+eth_up_down_5m_up_shift_diff_2_1_revert_instant	06/15/2026 11:30:00	06/15/2026 11:36:22	gtd_limit_not_filled	<null>	<null>	<null>	<null>	<null>	<null>	<null>	<null>
+eth_up_down_5m_up_shift_diff_1_2_revert_instant	06/15/2026 11:30:00	06/15/2026 11:36:22	gtd_limit_not_filled	<null>	<null>	<null>	<null>	<null>	<null>	<null>	<null>
+eth_up_down_5m_up_shift_diff_1_1_revert_instant	06/15/2026 11:30:00	06/15/2026 11:36:22	gtd_limit_not_filled	<null>	<null>	<null>	<null>	<null>	<null>	<null>	<null>
+btc_up_down_5m_up_shift_diff_6_1_revert_instant	06/15/2026 11:30:00	06/15/2026 11:36:22	gtd_limit_not_filled	<null>	<null>	<null>	<null>	<null>	<null>	<null>	<null>
+btc_up_down_5m_up_shift_diff_5_1_revert_instant	06/15/2026 11:30:00	06/15/2026 11:36:22	gtd_limit_not_filled	<null>	<null>	<null>	<null>	<null>	<null>	<null>	<null>
+btc_up_down_5m_up_shift_diff_4_1_revert_instant	06/15/2026 11:30:00	06/15/2026 11:36:21	gtd_limit_not_filled	<null>	<null>	<null>	<null>	<null>	<null>	<null>	<null>
+btc_up_down_5m_up_shift_diff_3_1_revert_instant	06/15/2026 11:30:00	06/15/2026 11:36:21	gtd_limit_not_filled	<null>	<null>	<null>	<null>	<null>	<null>	<null>	<null>
+btc_up_down_5m_up_shift_diff_2_1_revert_instant	06/15/2026 11:30:00	06/15/2026 11:36:21	gtd_limit_not_filled	<null>	<null>	<null>	<null>	<null>	<null>	<null>	<null>
+btc_up_down_5m_up_shift_diff_1_1_revert_instant	06/15/2026 11:30:00	06/15/2026 11:36:21	gtd_limit_not_filled	<null>	<null>	<null>	<null>	<null>	<null>	<null>	<null>
+
+Diff Paper activity diagnostic finished at 2026-06-15T11:38:08.5447158+00:00

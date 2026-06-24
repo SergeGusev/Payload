@@ -1,3 +1,4 @@
+using System.Globalization;
 using PolyCopyTrader.Domain;
 using PolyCopyTrader.Domain.Configuration;
 using PolyCopyTrader.Polymarket;
@@ -15,8 +16,13 @@ public sealed class GammaMarketIngestionProcessor(
     IActiveMarketAssetSubscriptionRegistry activeMarketAssetSubscriptionRegistry,
     IAppRepository repository) : IGammaMarketIngestionProcessor
 {
-    private const int Btc5mPriorityLookBehindWindows = 1;
-    private const int Btc5mPriorityLookAheadWindows = 24;
+    private const int Crypto5mPriorityLookBehindWindows = 1;
+    private const int Crypto5mPriorityLookAheadWindows = 24;
+    private const long FiveMinuteWindowSeconds = 300;
+    private static readonly string[] Crypto5mPriorityAssetSymbols = ["BTC", "ETH", "SOL"];
+    private static readonly IReadOnlySet<string> Crypto5mSubscriptionAssetSymbols = new HashSet<string>(
+        Crypto5mPriorityAssetSymbols,
+        StringComparer.OrdinalIgnoreCase);
 
     public async Task<GammaMarketIngestionResult> RefreshAsync(CancellationToken cancellationToken = default)
     {
@@ -26,7 +32,7 @@ public sealed class GammaMarketIngestionProcessor(
         var marketsUpserted = 0;
         var activeAssetIdsSeen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
-        var priorityMarkets = await SyncPriorityBtcUpDown5mMarketsAsync(activeAssetIdsSeen, cancellationToken);
+        var priorityMarkets = await SyncPriorityCryptoUpDown5mMarketsAsync(activeAssetIdsSeen, cancellationToken);
         marketsFetched += priorityMarkets;
         marketsUpserted += priorityMarkets;
 
@@ -126,44 +132,115 @@ public sealed class GammaMarketIngestionProcessor(
             nextOffset);
     }
 
-    private async Task<int> SyncPriorityBtcUpDown5mMarketsAsync(
+    private async Task<int> SyncPriorityCryptoUpDown5mMarketsAsync(
         HashSet<string> activeAssetIdsSeen,
         CancellationToken cancellationToken)
     {
-        var slugs = BtcUpDown5mMarketAnalyzer.BuildFiveMinuteSlugs(
+        var assetSymbols = GetPriorityCryptoUpDown5mAssetSymbols();
+        var slugs = BuildCryptoUpDown5mSlugs(
             DateTimeOffset.UtcNow,
-            Btc5mPriorityLookBehindWindows,
-            Btc5mPriorityLookAheadWindows);
+            assetSymbols,
+            Crypto5mPriorityLookBehindWindows,
+            Crypto5mPriorityLookAheadWindows);
         var markets = await gammaClient.GetMarketsBySlugsAsync(slugs, activeOnly: true, cancellationToken);
-        var btcMarkets = markets
-            .Where(BtcUpDown5mMarketAnalyzer.IsCandidate)
+        var cryptoMarkets = markets
+            .Where(market => IsCryptoUpDown5mSubscriptionCandidate(market, assetSymbols))
             .ToArray();
-        if (btcMarkets.Length == 0)
+        if (cryptoMarkets.Length == 0)
         {
             return 0;
         }
 
-        var subscriptionMarkets = SelectSubscriptionMarkets(btcMarkets);
+        var subscriptionMarkets = SelectSubscriptionMarkets(cryptoMarkets);
         AddSeenActiveAssetIds(activeAssetIdsSeen, subscriptionMarkets);
         var registryUpdate = activeMarketAssetSubscriptionRegistry.AddOrUpdateMarkets(subscriptionMarkets);
         if (registryUpdate.Added > 0)
         {
             logger.LogInformation(
-                "Gamma active market ingestion registered priority BTC 5m WebSocket assets before full scan. NewAssets={NewAssets}",
-                registryUpdate.Added);
+                "Gamma active market ingestion registered priority crypto 5m WebSocket assets before full scan. NewAssets={NewAssets} SubscriptionScope={SubscriptionScope}",
+                registryUpdate.Added,
+                marketDataWebSocketOptions.SubscriptionScope);
         }
 
-        foreach (var market in btcMarkets)
+        foreach (var market in cryptoMarkets)
         {
             await repository.UpsertPolymarketGammaMarketAsync(market, cancellationToken);
         }
 
         logger.LogInformation(
-            "Gamma active market ingestion priority BTC 5m sync completed. Slugs={Slugs} Markets={Markets}",
+            "Gamma active market ingestion priority crypto 5m sync completed. Assets={Assets} Slugs={Slugs} Markets={Markets}",
+            string.Join(",", assetSymbols),
             slugs.Count,
-            btcMarkets.Length);
+            cryptoMarkets.Length);
 
-        return btcMarkets.Length;
+        return cryptoMarkets.Length;
+    }
+
+    private static IReadOnlyList<string> BuildCryptoUpDown5mSlugs(
+        DateTimeOffset nowUtc,
+        IReadOnlyCollection<string> assetSymbols,
+        int lookBehindWindows,
+        int lookAheadWindows)
+    {
+        if (lookBehindWindows < 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(lookBehindWindows), "Look-behind windows must be non-negative.");
+        }
+
+        if (lookAheadWindows < 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(lookAheadWindows), "Look-ahead windows must be non-negative.");
+        }
+
+        var unixSeconds = nowUtc.ToUnixTimeSeconds();
+        var floorUnixSeconds = unixSeconds - (unixSeconds % FiveMinuteWindowSeconds);
+        var slugs = new List<string>(assetSymbols.Count * (lookBehindWindows + lookAheadWindows + 1));
+        foreach (var assetSymbol in assetSymbols)
+        {
+            var assetSlugPrefix = assetSymbol.Trim().ToLowerInvariant();
+            for (var offset = -lookBehindWindows; offset <= lookAheadWindows; offset++)
+            {
+                var windowUnixSeconds = floorUnixSeconds + (offset * FiveMinuteWindowSeconds);
+                slugs.Add(assetSlugPrefix + "-updown-5m-" + windowUnixSeconds.ToString(CultureInfo.InvariantCulture));
+            }
+        }
+
+        return slugs;
+    }
+
+    private IReadOnlyList<string> GetPriorityCryptoUpDown5mAssetSymbols()
+    {
+        return marketDataWebSocketOptions.SubscriptionScope == MarketDataWebSocketSubscriptionScope.BtcUpDown5mOnly
+            ? ["BTC"]
+            : Crypto5mPriorityAssetSymbols;
+    }
+
+    private static bool IsCryptoUpDown5mSubscriptionCandidate(
+        PolymarketGammaMarket market,
+        IReadOnlyCollection<string>? assetSymbols = null)
+    {
+        return CryptoUpDown5mMarketAnalyzer.TryGetAssetSymbol(
+                market,
+                ToAssetSymbolSet(assetSymbols),
+                out _) &&
+            CryptoUpDown5mMarketAnalyzer.GetMarketInterval(market) == BtcUpDownMarketInterval.FiveMinutes;
+    }
+
+    private static IReadOnlySet<string> ToAssetSymbolSet(IReadOnlyCollection<string>? assetSymbols)
+    {
+        if (assetSymbols is IReadOnlySet<string> assetSymbolSet)
+        {
+            return assetSymbolSet;
+        }
+
+        return assetSymbols is null
+            ? Crypto5mSubscriptionAssetSymbols
+            : new HashSet<string>(assetSymbols, StringComparer.OrdinalIgnoreCase);
+    }
+
+    private static bool IsBtcUpDown5mSubscriptionCandidate(PolymarketGammaMarket market)
+    {
+        return BtcUpDown5mMarketAnalyzer.IsCandidate(market);
     }
 
     private static bool IsGammaActiveMarketsMaxOffset(PolymarketApiException ex)
@@ -178,14 +255,17 @@ public sealed class GammaMarketIngestionProcessor(
     private IReadOnlyCollection<PolymarketGammaMarket> SelectSubscriptionMarkets(
         IReadOnlyCollection<PolymarketGammaMarket> markets)
     {
-        if (marketDataWebSocketOptions.SubscriptionScope != MarketDataWebSocketSubscriptionScope.BtcUpDown5mOnly)
+        return marketDataWebSocketOptions.SubscriptionScope switch
         {
-            return markets;
-        }
-
-        return markets
-            .Where(BtcUpDown5mMarketAnalyzer.IsCandidate)
-            .ToArray();
+            MarketDataWebSocketSubscriptionScope.AllActiveMarkets => markets,
+            MarketDataWebSocketSubscriptionScope.BtcUpDown5mOnly => markets
+                .Where(IsBtcUpDown5mSubscriptionCandidate)
+                .ToArray(),
+            MarketDataWebSocketSubscriptionScope.CryptoUpDown5mOnly => markets
+                .Where(market => IsCryptoUpDown5mSubscriptionCandidate(market))
+                .ToArray(),
+            _ => []
+        };
     }
 
     private static void AddSeenActiveAssetIds(HashSet<string> assetIds, IReadOnlyCollection<PolymarketGammaMarket> markets)

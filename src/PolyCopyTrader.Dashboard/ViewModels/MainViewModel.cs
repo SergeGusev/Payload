@@ -12,6 +12,15 @@ namespace PolyCopyTrader.Dashboard.ViewModels;
 
 public sealed partial class MainViewModel : ObservableObject, IDisposable
 {
+    [Flags]
+    private enum OrderRefreshScope
+    {
+        None = 0,
+        Paper = 1,
+        Live = 2,
+        Both = Paper | Live
+    }
+
     private const int MaxDashboardErrors = 500;
     private const string AllStrategyCategories = "All categories";
     private const string AllOrderStrategies = "All strategies";
@@ -19,6 +28,7 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
     private const int StrategiesTabIndex = 1;
     private const int PaperOrdersTabIndex = 12;
     private const int LiveOrdersTabIndex = 16;
+    private const int LiveOrdersPageSize = 100;
     private const decimal BigRoiThresholdPct = 10m;
     private const int BigSettlesThreshold = 100;
     private static readonly StrategyOrderFilterOption AllOrderStrategiesOption = new(null, AllOrderStrategies);
@@ -37,13 +47,19 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
     private DashboardDatabaseSource currentDatabaseSource;
     private bool isChangingDatabaseSource;
     private bool suppressOrderRefresh;
-    private bool pendingOrderRefresh;
+    private OrderRefreshScope pendingOrderRefreshScope;
     private int orderRefreshVersion;
+    private int liveOrdersPageIndex;
+    private bool liveOrdersHasNextPage;
+    private int? paperOrdersWindowHours;
+    private int? liveOrdersWindowHours;
     private bool disposed;
 
     public MainViewModel()
     {
-        RebuildRuntime(DashboardDatabaseSource.Local);
+        var initialDatabaseSource = DashboardRepositoryFactory.GetDefaultDatabaseSource();
+        RebuildRuntime(initialDatabaseSource);
+        SelectedDatabaseSource = DashboardDatabaseSources.ToDisplayName(initialDatabaseSource);
         refreshTimer = new DispatcherTimer
         {
             Interval = TimeSpan.FromSeconds(Math.Max(1, runtime.Configuration.Dashboard.RefreshIntervalSeconds))
@@ -121,6 +137,21 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
 
     [ObservableProperty]
     private StrategyOrderFilterOption? selectedLiveOrdersStrategy = AllOrderStrategiesOption;
+
+    [ObservableProperty]
+    private string paperOrdersWindowStatus = "Window: all history";
+
+    [ObservableProperty]
+    private string liveOrdersWindowStatus = "Window: all history";
+
+    [ObservableProperty]
+    private string liveOrdersPageStatus = "Page 1: 0 rows";
+
+    [ObservableProperty]
+    private bool canLoadPreviousLiveOrdersPage;
+
+    [ObservableProperty]
+    private bool canLoadNextLiveOrdersPage;
 
     [ObservableProperty]
     private int dashboardTabSelectedIndex;
@@ -263,6 +294,12 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
 
     public IReadOnlyList<string> DatabaseSourceOptions { get; } = DashboardDatabaseSources.DisplayNames;
 
+    private int LiveOrdersOffset => liveOrdersPageIndex * LiveOrdersPageSize;
+
+    private DateTimeOffset? PaperOrdersCreatedAfterUtc => CreatedAfterUtcForWindowHours(paperOrdersWindowHours);
+
+    private DateTimeOffset? LiveOrdersCreatedAfterUtc => CreatedAfterUtcForWindowHours(liveOrdersWindowHours);
+
     public Visibility NonStrategyVisibility =>
         runtime.Configuration.Dashboard.StrategiesOnlyMode ? Visibility.Collapsed : Visibility.Visible;
 
@@ -289,13 +326,18 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
     partial void OnSelectedPaperOrdersStrategyChanged(StrategyOrderFilterOption? value)
     {
         ApplyOrderFilters();
-        RequestOrderRefresh();
+        RequestOrderRefresh(OrderRefreshScope.Paper);
     }
 
     partial void OnSelectedLiveOrdersStrategyChanged(StrategyOrderFilterOption? value)
     {
-        ApplyOrderFilters();
-        RequestOrderRefresh();
+        ResetLiveOrdersPage(clearRows: true);
+        RequestOrderRefresh(OrderRefreshScope.Live);
+    }
+
+    partial void OnIsRefreshingChanged(bool value)
+    {
+        UpdateLiveOrdersPageState();
     }
 
     partial void OnShowOnlyPositiveStrategiesChanged(bool value)
@@ -439,7 +481,10 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
             LastError = string.Empty;
             var snapshot = await dataService.LoadAsync(
                 SelectedPaperOrdersStrategy?.StrategyId,
-                SelectedLiveOrdersStrategy?.StrategyId);
+                SelectedLiveOrdersStrategy?.StrategyId,
+                LiveOrdersOffset,
+                PaperOrdersCreatedAfterUtc,
+                LiveOrdersCreatedAfterUtc);
             Apply(snapshot);
             ApplyServiceBanner(snapshot.ServiceAvailability);
             LastUpdatedUtc = DateTimeOffset.UtcNow;
@@ -453,10 +498,11 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         finally
         {
             IsRefreshing = false;
-            if (pendingOrderRefresh && !disposed)
+            if (pendingOrderRefreshScope != OrderRefreshScope.None && !disposed)
             {
-                pendingOrderRefresh = false;
-                _ = RefreshOrdersAsync();
+                var pendingScope = pendingOrderRefreshScope;
+                pendingOrderRefreshScope = OrderRefreshScope.None;
+                _ = RefreshOrdersAsync(pendingScope);
             }
         }
     }
@@ -846,6 +892,26 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
     }
 
     [RelayCommand]
+    private void CopyStrategyName(string? strategyName)
+    {
+        if (string.IsNullOrWhiteSpace(strategyName))
+        {
+            return;
+        }
+
+        try
+        {
+            Clipboard.SetText(strategyName);
+            CommandStatus = $"Strategy name copied: {strategyName}";
+        }
+        catch (Exception ex)
+        {
+            CommandStatus = $"Strategy name copy failed: {ex.Message}";
+            RecordDashboardError("Clipboard", ex);
+        }
+    }
+
+    [RelayCommand]
     private async Task SaveDashboardErrorsAsync()
     {
         try
@@ -1081,57 +1147,98 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
     [RelayCommand]
     private void ShowPaperOrdersForStrategy(StrategyPerformanceRow? strategy)
     {
-        NavigateToOrderTab(strategy?.StrategyId, strategy?.Name, paperOrders: true);
+        NavigateToOrderTab(strategy?.StrategyId, strategy?.Name, paperOrders: true, windowHours: null);
     }
 
     [RelayCommand]
     private void ShowLiveOrdersForStrategy(StrategyPerformanceRow? strategy)
     {
-        NavigateToOrderTab(strategy?.StrategyId, strategy?.Name, paperOrders: false);
+        NavigateToOrderTab(strategy?.StrategyId, strategy?.Name, paperOrders: false, windowHours: null);
     }
 
     [RelayCommand]
     private void ShowPaperOrdersForRecentStrategy(StrategyRecentPerformanceRow? strategy)
     {
-        NavigateToOrderTab(null, strategy?.Name, paperOrders: true);
+        NavigateToOrderTab(strategy?.StrategyId, strategy?.Name, paperOrders: true, windowHours: strategy?.WindowHours);
     }
 
     [RelayCommand]
     private void ShowLiveOrdersForRecentStrategy(StrategyRecentPerformanceRow? strategy)
     {
-        NavigateToOrderTab(null, strategy?.Name, paperOrders: false);
+        NavigateToOrderTab(strategy?.StrategyId, strategy?.Name, paperOrders: false, windowHours: strategy?.WindowHours);
     }
 
-    private void NavigateToOrderTab(Guid? strategyId, string? strategyName, bool paperOrders)
+    private void NavigateToOrderTab(Guid? strategyId, string? strategyName, bool paperOrders, int? windowHours)
     {
         if (paperOrders)
         {
             var previousSelection = SelectedPaperOrdersStrategy;
+            var previousWindowHours = paperOrdersWindowHours;
+            SetPaperOrdersWindow(windowHours);
+            if (previousWindowHours != paperOrdersWindowHours)
+            {
+                allPaperOrders = [];
+                Replace(PaperOrders, Array.Empty<PaperOrderRow>());
+            }
+
             SelectedPaperOrdersStrategy = ResolveStrategyOrderFilterOption(
                 strategyId,
                 strategyName,
                 PaperOrderStrategyOptions);
             DashboardTabSelectedIndex = PaperOrdersTabIndex;
-            CommandStatus = $"Showing paper orders for {SelectedPaperOrdersStrategy?.Name ?? AllOrderStrategies}.";
+            CommandStatus = $"Showing paper orders for {SelectedPaperOrdersStrategy?.Name ?? AllOrderStrategies} ({PaperOrdersWindowStatus}).";
             if (Equals(previousSelection, SelectedPaperOrdersStrategy))
             {
-                RequestOrderRefresh();
+                RequestOrderRefresh(OrderRefreshScope.Paper);
             }
 
             return;
         }
 
         var previousLiveSelection = SelectedLiveOrdersStrategy;
+        var previousLiveWindowHours = liveOrdersWindowHours;
+        SetLiveOrdersWindow(windowHours);
+        if (previousLiveWindowHours != liveOrdersWindowHours)
+        {
+            ResetLiveOrdersPage(clearRows: true);
+        }
+
         SelectedLiveOrdersStrategy = ResolveStrategyOrderFilterOption(
             strategyId,
             strategyName,
             LiveOrderStrategyOptions);
         DashboardTabSelectedIndex = LiveOrdersTabIndex;
-        CommandStatus = $"Showing live orders for {SelectedLiveOrdersStrategy?.Name ?? AllOrderStrategies}.";
+        CommandStatus = $"Showing live orders for {SelectedLiveOrdersStrategy?.Name ?? AllOrderStrategies} ({LiveOrdersWindowStatus}).";
         if (Equals(previousLiveSelection, SelectedLiveOrdersStrategy))
         {
-            RequestOrderRefresh();
+            RequestOrderRefresh(OrderRefreshScope.Live);
         }
+    }
+
+    [RelayCommand]
+    private void PreviousLiveOrdersPage()
+    {
+        if (liveOrdersPageIndex <= 0 || IsRefreshing)
+        {
+            return;
+        }
+
+        liveOrdersPageIndex--;
+        ClearLoadedLiveOrdersPage();
+        RequestOrderRefresh(OrderRefreshScope.Live);
+    }
+
+    [RelayCommand]
+    private void NextLiveOrdersPage()
+    {
+        if (!liveOrdersHasNextPage || IsRefreshing)
+        {
+            return;
+        }
+
+        liveOrdersPageIndex++;
+        ClearLoadedLiveOrdersPage();
+        RequestOrderRefresh(OrderRefreshScope.Live);
     }
 
     private async Task SendCommandAsync(Func<Task<ControlCommandResponse>> send)
@@ -1196,6 +1303,7 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         }
         ApplyStrategyFilters();
         ApplyOrderFilters();
+        SetLiveOrdersPageState(snapshot.HasNextLiveOrdersPage);
         Replace(PaperCopiedTraderPerformance, snapshot.PaperCopiedTraderPerformance);
         Replace(DryRunOrders, snapshot.DryRunOrders);
         Replace(LiveTradingEvents, snapshot.LiveTradingEvents);
@@ -1256,7 +1364,7 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         Replace(PaperCopiedTraderPerformance, Array.Empty<PaperCopiedTraderPerformanceRow>());
         Replace(DryRunOrders, Array.Empty<DryRunOrderRow>());
         allLiveOrders = [];
-        ApplyOrderFilters();
+        ResetLiveOrdersPage(clearRows: true);
         Replace(LiveTradingEvents, Array.Empty<LiveTradingEventRow>());
         Replace(LiveReadiness, Array.Empty<LiveReadinessRow>());
         Replace(MarketData, Array.Empty<MarketDataRow>());
@@ -1398,26 +1506,51 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
                 .ToArray());
     }
 
-    private async Task RefreshOrdersAsync()
+    private async Task RefreshOrdersAsync(OrderRefreshScope scope)
     {
+        if (scope == OrderRefreshScope.None)
+        {
+            return;
+        }
+
         var refreshVersion = Interlocked.Increment(ref orderRefreshVersion);
         var paperStrategyId = SelectedPaperOrdersStrategy?.StrategyId;
         var liveStrategyId = SelectedLiveOrdersStrategy?.StrategyId;
 
         try
         {
-            CommandStatus = $"Loading orders for {SelectedPaperOrdersStrategy?.Name ?? AllOrderStrategies} / {SelectedLiveOrdersStrategy?.Name ?? AllOrderStrategies} from {StorageStatus}.";
-            var snapshot = await dataService.LoadOrderRowsAsync(paperStrategyId, liveStrategyId);
-            if (refreshVersion != Volatile.Read(ref orderRefreshVersion))
+            CommandStatus = FormatOrderLoadingStatus(scope);
+            if ((scope & OrderRefreshScope.Paper) != 0)
             {
-                return;
+                var paperSnapshot = await dataService.LoadPaperOrderRowsAsync(
+                    paperStrategyId,
+                    PaperOrdersCreatedAfterUtc);
+                if (refreshVersion != Volatile.Read(ref orderRefreshVersion))
+                {
+                    return;
+                }
+
+                allPaperOrders = paperSnapshot.PaperOrders;
             }
 
-            allPaperOrders = snapshot.PaperOrders;
-            allLiveOrders = snapshot.LiveOrders;
+            if ((scope & OrderRefreshScope.Live) != 0)
+            {
+                var liveSnapshot = await dataService.LoadLiveOrderRowsAsync(
+                    liveStrategyId,
+                    LiveOrdersOffset,
+                    LiveOrdersCreatedAfterUtc);
+                if (refreshVersion != Volatile.Read(ref orderRefreshVersion))
+                {
+                    return;
+                }
+
+                allLiveOrders = liveSnapshot.LiveOrders;
+                SetLiveOrdersPageState(liveSnapshot.HasNextLiveOrdersPage);
+            }
+
             ApplyOrderFilters();
             LastUpdatedUtc = DateTimeOffset.UtcNow;
-            CommandStatus = $"Loaded {PaperOrders.Count} paper orders and {LiveOrders.Count} live orders from {StorageStatus}.";
+            CommandStatus = FormatOrderLoadedStatus(scope);
         }
         catch (Exception ex)
         {
@@ -1429,10 +1562,11 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
             LastError = ex.Message;
             CommandStatus = $"Orders refresh failed: {ex.Message}";
             RecordDashboardError("Orders refresh", ex);
+            UpdateLiveOrdersPageState();
         }
     }
 
-    private void RequestOrderRefresh()
+    private void RequestOrderRefresh(OrderRefreshScope scope)
     {
         if (suppressOrderRefresh)
         {
@@ -1441,11 +1575,101 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
 
         if (IsRefreshing)
         {
-            pendingOrderRefresh = true;
+            pendingOrderRefreshScope |= scope;
             return;
         }
 
-        _ = RefreshOrdersAsync();
+        _ = RefreshOrdersAsync(scope);
+    }
+
+    private string FormatOrderLoadingStatus(OrderRefreshScope scope)
+    {
+        return scope switch
+        {
+            OrderRefreshScope.Paper => $"Loading paper orders for {SelectedPaperOrdersStrategy?.Name ?? AllOrderStrategies} ({PaperOrdersWindowStatus}) from {StorageStatus}.",
+            OrderRefreshScope.Live => $"Loading live orders for {SelectedLiveOrdersStrategy?.Name ?? AllOrderStrategies} ({LiveOrdersWindowStatus}; {LiveOrdersPageStatus}) from {StorageStatus}.",
+            _ => $"Loading orders for {SelectedPaperOrdersStrategy?.Name ?? AllOrderStrategies} / {SelectedLiveOrdersStrategy?.Name ?? AllOrderStrategies} ({PaperOrdersWindowStatus}; {LiveOrdersWindowStatus}) from {StorageStatus}."
+        };
+    }
+
+    private string FormatOrderLoadedStatus(OrderRefreshScope scope)
+    {
+        return scope switch
+        {
+            OrderRefreshScope.Paper => $"Loaded {PaperOrders.Count} paper orders ({PaperOrdersWindowStatus}) from {StorageStatus}.",
+            OrderRefreshScope.Live => $"Loaded {LiveOrders.Count} live orders ({LiveOrdersWindowStatus}; {LiveOrdersPageStatus}) from {StorageStatus}.",
+            _ => $"Loaded {PaperOrders.Count} paper orders and {LiveOrders.Count} live orders ({PaperOrdersWindowStatus}; {LiveOrdersWindowStatus}; {LiveOrdersPageStatus}) from {StorageStatus}."
+        };
+    }
+
+    private void SetPaperOrdersWindow(int? windowHours)
+    {
+        paperOrdersWindowHours = NormalizeWindowHours(windowHours);
+        PaperOrdersWindowStatus = FormatOrderWindowStatus(paperOrdersWindowHours);
+    }
+
+    private void SetLiveOrdersWindow(int? windowHours)
+    {
+        liveOrdersWindowHours = NormalizeWindowHours(windowHours);
+        LiveOrdersWindowStatus = FormatOrderWindowStatus(liveOrdersWindowHours);
+        UpdateLiveOrdersPageState();
+    }
+
+    private static int? NormalizeWindowHours(int? windowHours)
+    {
+        return windowHours is > 0 ? windowHours : null;
+    }
+
+    private static DateTimeOffset? CreatedAfterUtcForWindowHours(int? windowHours)
+    {
+        return windowHours is > 0 ? DateTimeOffset.UtcNow.AddHours(-windowHours.Value) : null;
+    }
+
+    private static string FormatOrderWindowStatus(int? windowHours)
+    {
+        return windowHours is > 0
+            ? $"Window: last {windowHours.Value} {(windowHours.Value == 1 ? "hour" : "hours")}"
+            : "Window: all history";
+    }
+
+    private void ResetLiveOrdersPage(bool clearRows)
+    {
+        liveOrdersPageIndex = 0;
+        liveOrdersHasNextPage = false;
+        if (clearRows)
+        {
+            allLiveOrders = [];
+            Replace(LiveOrders, Array.Empty<LiveOrderRow>());
+        }
+        else
+        {
+            ApplyOrderFilters();
+        }
+
+        UpdateLiveOrdersPageState();
+    }
+
+    private void ClearLoadedLiveOrdersPage()
+    {
+        liveOrdersHasNextPage = false;
+        allLiveOrders = [];
+        Replace(LiveOrders, Array.Empty<LiveOrderRow>());
+        UpdateLiveOrdersPageState();
+    }
+
+    private void SetLiveOrdersPageState(bool hasNextPage)
+    {
+        liveOrdersHasNextPage = hasNextPage;
+        UpdateLiveOrdersPageState();
+    }
+
+    private void UpdateLiveOrdersPageState()
+    {
+        CanLoadPreviousLiveOrdersPage = liveOrdersPageIndex > 0 && !IsRefreshing;
+        CanLoadNextLiveOrdersPage = liveOrdersHasNextPage && !IsRefreshing;
+        var firstRow = LiveOrders.Count == 0 ? 0 : LiveOrdersOffset + 1;
+        var lastRow = LiveOrdersOffset + LiveOrders.Count;
+        LiveOrdersPageStatus = $"Page {liveOrdersPageIndex + 1}: rows {firstRow}-{lastRow}, {LiveOrdersPageSize} per page";
     }
 
     private string NormalizeSelectedStrategyCategory(string selected)

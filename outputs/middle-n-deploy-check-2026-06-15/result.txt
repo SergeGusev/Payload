@@ -1,0 +1,80 @@
+Middle N deploy check started at 2026-06-14T21:55:09.8276989+00:00
+Database: polycopytrader
+Server address: 192.168.0.101/32
+Server time UTC: 2026-06-14T21:55:08Z
+
+## Service Heartbeats
+service_name	status	mode	started_utc	heartbeat_utc	heartbeat_age_seconds	version	current_loop	last_error
+PolyCopyTrader.Service	Running	Live	2026-06-14T21:48:22Z	2026-06-14T21:54:25Z	43.4	info=1.0.0+3b63e1384625a3ebbff5a779b115f317a3d7ff72; assembly=1.0.0.0; mvid=39c5a6669050	BTC5mOnly WatchlistScanner=CommentedOut; FollowLeaderSignals=CommentedOut	<none>
+PolyCopyTrader.Tests	Running	ReadOnly	2026-05-04T14:02:41Z	2026-05-04T14:02:41Z	3570747.5	1.0.0	IntegrationTest	<none>
+
+## Middle Strategy Catalog
+total	enabled	disabled	live_stakes	min_created_utc	max_updated_utc
+12060	12060	0	0	2026-05-07T12:26:07Z	2026-06-14T21:54:58Z
+n	total	enabled	disabled
+100	1206	1206	0
+90	1206	1206	0
+80	1206	1206	0
+70	1206	1206	0
+60	1206	1206	0
+50	1206	1206	0
+40	1206	1206	0
+30	1206	1206	0
+20	1206	1206	0
+10	1206	1206	0
+
+## Removed Strategy Guards
+check_name	count
+btc_binance_bps_instant_codes	0
+old_middle_1_codes	0
+skip_bps_codes	0
+
+## Sample Middle Runs After Cleanup/Deploy
+n	code	enabled	total_runs_for_sample_strategy	runs_since_service_start	latest_run_created_utc
+100	btc_up_down_5m_middle_100	True	8	1	2026-06-14T21:50:53Z
+90	btc_up_down_5m_middle_90	True	6	6	2026-06-14T21:50:53Z
+80	btc_up_down_5m_middle_80	True	6	6	2026-06-14T21:50:53Z
+70	btc_up_down_5m_middle_70	True	6	6	2026-06-14T21:50:53Z
+60	btc_up_down_5m_middle_60	True	6	6	2026-06-14T21:50:53Z
+50	btc_up_down_5m_middle_50	True	6	6	2026-06-14T21:50:53Z
+40	btc_up_down_5m_middle_40	True	6	6	2026-06-14T21:50:53Z
+30	btc_up_down_5m_middle_30	True	6	6	2026-06-14T21:50:53Z
+20	btc_up_down_5m_middle_20	True	6	6	2026-06-14T21:50:53Z
+10	btc_up_down_5m_middle_10	True	6	6	2026-06-14T21:50:53Z
+created_utc	code	market_slug	status	skip_reason	selected_outcome
+2026-06-14T21:50:53Z	btc_up_down_5m_middle_100	btc-updown-5m-1781474400	Observed	<none>	<none>
+2026-06-14T21:50:53Z	btc_up_down_5m_middle_40	btc-updown-5m-1781474400	Observed	<none>	<none>
+2026-06-14T21:50:53Z	btc_up_down_5m_middle_80	btc-updown-5m-1781474400	Observed	<none>	<none>
+2026-06-14T21:50:53Z	btc_up_down_5m_middle_50	btc-updown-5m-1781474400	Observed	<none>	<none>
+2026-06-14T21:50:53Z	btc_up_down_5m_middle_20	btc-updown-5m-1781474400	Observed	<none>	<none>
+2026-06-14T21:50:53Z	btc_up_down_5m_middle_70	btc-updown-5m-1781474400	Observed	<none>	<none>
+2026-06-14T21:50:53Z	btc_up_down_5m_middle_10	btc-updown-5m-1781474400	Observed	<none>	<none>
+2026-06-14T21:50:53Z	btc_up_down_5m_middle_60	btc-updown-5m-1781474400	Observed	<none>	<none>
+2026-06-14T21:50:53Z	btc_up_down_5m_middle_30	btc-updown-5m-1781474400	Observed	<none>	<none>
+2026-06-14T21:50:53Z	btc_up_down_5m_middle_90	btc-updown-5m-1781474400	Observed	<none>	<none>
+2026-06-14T21:48:24Z	btc_up_down_5m_middle_80	btc-updown-5m-1781472900	Skipped	entry_due_already_passed	<none>
+2026-06-14T21:48:24Z	btc_up_down_5m_middle_80	btc-updown-5m-1781473200	Skipped	entry_due_already_passed	<none>
+2026-06-14T21:48:24Z	btc_up_down_5m_middle_80	btc-updown-5m-1781473500	Skipped	entry_due_already_passed	<none>
+2026-06-14T21:48:24Z	btc_up_down_5m_middle_80	btc-updown-5m-1781474100	Observed	<none>	<none>
+2026-06-14T21:48:24Z	btc_up_down_5m_middle_80	btc-updown-5m-1781473800	Entered	<none>	Down
+2026-06-14T21:48:24Z	btc_up_down_5m_middle_70	btc-updown-5m-1781472900	Skipped	entry_due_already_passed	<none>
+2026-06-14T21:48:24Z	btc_up_down_5m_middle_70	btc-updown-5m-1781473200	Skipped	entry_due_already_passed	<none>
+2026-06-14T21:48:24Z	btc_up_down_5m_middle_70	btc-updown-5m-1781473500	Skipped	entry_due_already_passed	<none>
+2026-06-14T21:48:24Z	btc_up_down_5m_middle_70	btc-updown-5m-1781474100	Observed	<none>	<none>
+2026-06-14T21:48:24Z	btc_up_down_5m_middle_70	btc-updown-5m-1781473800	Entered	<none>	Down
+2026-06-14T21:48:24Z	btc_up_down_5m_middle_50	btc-updown-5m-1781472900	Skipped	entry_due_already_passed	<none>
+2026-06-14T21:48:24Z	btc_up_down_5m_middle_50	btc-updown-5m-1781473200	Skipped	entry_due_already_passed	<none>
+2026-06-14T21:48:24Z	btc_up_down_5m_middle_50	btc-updown-5m-1781473500	Skipped	entry_due_already_passed	<none>
+2026-06-14T21:48:24Z	btc_up_down_5m_middle_50	btc-updown-5m-1781474100	Observed	<none>	<none>
+2026-06-14T21:48:24Z	btc_up_down_5m_middle_50	btc-updown-5m-1781473800	Entered	<none>	Down
+2026-06-14T21:48:24Z	btc_up_down_5m_middle_40	btc-updown-5m-1781472900	Skipped	entry_due_already_passed	<none>
+2026-06-14T21:48:24Z	btc_up_down_5m_middle_40	btc-updown-5m-1781473200	Skipped	entry_due_already_passed	<none>
+2026-06-14T21:48:24Z	btc_up_down_5m_middle_40	btc-updown-5m-1781473500	Skipped	entry_due_already_passed	<none>
+2026-06-14T21:48:24Z	btc_up_down_5m_middle_40	btc-updown-5m-1781474100	Observed	<none>	<none>
+2026-06-14T21:48:24Z	btc_up_down_5m_middle_40	btc-updown-5m-1781473800	Entered	<none>	Down
+
+## Recent API Errors
+component	operation	count	latest_utc
+PolymarketMarketWebSocket:crypto-updown-5m-critical	ConnectionLoop	1	2026-06-14T21:48:52Z
+PolymarketMarketWebSocket:crypto-updown-5m-critical	Heartbeat	1	2026-06-14T21:48:52Z
+Middle N deploy check finished at 2026-06-14T21:55:12.3066931+00:00

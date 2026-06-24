@@ -1,0 +1,162 @@
+[     0.0s] Revert strategy cleanup started at 2026-06-16T14:02:42.1258464+00:00
+[     0.0s] Target strategy code/name regex: revert
+[     0.0s] Dry run: False
+[     0.0s] Execute: True
+[     0.0s] Verify only: False
+[     0.0s] Diagnose live orders only: False
+[     0.0s] Strategy limit: 100
+[     0.0s] Batch size: 100
+[     0.0s] Batch pause ms: 150
+[     0.0s] Batch lock timeout ms: 300
+[     0.0s] Batch statement timeout ms: 8000
+[     0.0s] Residual signal scan timeout ms: 5000
+[     0.6s] Database: polycopytrader
+[     0.6s] Server address: 192.168.0.101/32
+[     0.6s] Server time UTC: 6/16/2026 2:02:42 PM
+[     0.7s] Last heartbeat UTC: 2026-06-16T14:02:02Z
+[     0.7s] Preparing target strategy ids...
+[     0.7s] Preparing target paper order ids...
+[    10.0s] Preparing target paper fill ids...
+[    11.7s] Preparing target run ids...
+[    44.6s] Preparing target signal ids...
+[    46.6s] Preparing target live order ids...
+[    46.8s] Preparing target correlation ids...
+[    47.0s] Preparing safe synthetic wallet ids...
+[    50.5s] Foreign keys touching cleanup parents:
+[    50.5s]   paper_live_shadow_decisions -> live_orders (paper_live_shadow_decisions_live_order_id_fkey)
+[    50.5s]   live_orders -> paper_orders (live_orders_paper_order_id_fkey)
+[    50.5s]   paper_fills -> paper_orders (paper_fills_paper_order_id_fkey)
+[    50.5s]   paper_live_shadow_decisions -> paper_orders (paper_live_shadow_decisions_paper_order_id_fkey)
+[    50.5s]   strategy_market_paper_runs -> paper_orders (strategy_market_paper_runs_paper_order_id_fkey)
+[    50.5s]   paper_live_shadow_decisions -> signals (paper_live_shadow_decisions_signal_id_fkey)
+[    50.5s]   signal_rejections -> signals (signal_rejections_signal_id_fkey)
+[    50.5s]   strategy_market_paper_runs -> signals (strategy_market_paper_runs_signal_id_fkey)
+[    50.5s]   dry_run_orders -> strategies (dry_run_orders_strategy_id_fkey)
+[    50.5s]   live_orders -> strategies (live_orders_strategy_id_fkey)
+[    50.5s]   paper_live_shadow_decisions -> strategies (paper_live_shadow_decisions_strategy_id_fkey)
+[    50.5s]   paper_live_shadow_discrepancies -> strategies (paper_live_shadow_discrepancies_strategy_id_fkey)
+[    50.5s]   paper_orders -> strategies (paper_orders_strategy_id_fkey)
+[    50.5s]   strategy_market_paper_runs -> strategies (strategy_market_paper_runs_strategy_id_fkey)
+[    50.5s] Target strategy rows sample:
+[    50.6s]   target strategy rows selected: 100
+[    50.7s]   btc_up_down_5m_down_adjusted_diff_1_revert_instant | enabled=False | live_stakes=False | BTC Up or Down 5m Down 1 AdjustedDiff Revert Instant
+[    50.7s]   btc_up_down_5m_down_adjusted_diff_10_revert_instant | enabled=False | live_stakes=False | BTC Up or Down 5m Down 10 AdjustedDiff Revert Instant
+[    50.7s]   btc_up_down_5m_down_adjusted_diff_15_revert_instant | enabled=False | live_stakes=False | BTC Up or Down 5m Down 15 AdjustedDiff Revert Instant
+[    50.7s]   btc_up_down_5m_down_adjusted_diff_2_revert_instant | enabled=False | live_stakes=False | BTC Up or Down 5m Down 2 AdjustedDiff Revert Instant
+[    50.7s]   btc_up_down_5m_down_adjusted_diff_20_revert_instant | enabled=False | live_stakes=False | BTC Up or Down 5m Down 20 AdjustedDiff Revert Instant
+[    50.7s]   btc_up_down_5m_down_adjusted_diff_3_revert_instant | enabled=False | live_stakes=False | BTC Up or Down 5m Down 3 AdjustedDiff Revert Instant
+[    50.7s]   btc_up_down_5m_down_adjusted_diff_4_revert_instant | enabled=False | live_stakes=False | BTC Up or Down 5m Down 4 AdjustedDiff Revert Instant
+[    50.7s]   btc_up_down_5m_down_adjusted_diff_5_revert_instant | enabled=False | live_stakes=False | BTC Up or Down 5m Down 5 AdjustedDiff Revert Instant
+[    50.7s]   btc_up_down_5m_down_adjusted_diff_6_revert_instant | enabled=False | live_stakes=False | BTC Up or Down 5m Down 6 AdjustedDiff Revert Instant
+[    50.7s]   btc_up_down_5m_down_adjusted_diff_7_revert_instant | enabled=False | live_stakes=False | BTC Up or Down 5m Down 7 AdjustedDiff Revert Instant
+[    50.7s]   btc_up_down_5m_down_adjusted_diff_8_revert_instant | enabled=False | live_stakes=False | BTC Up or Down 5m Down 8 AdjustedDiff Revert Instant
+[    50.7s]   btc_up_down_5m_down_adjusted_diff_9_revert_instant | enabled=False | live_stakes=False | BTC Up or Down 5m Down 9 AdjustedDiff Revert Instant
+[    50.7s]   btc_up_down_5m_down_diff_1_revert_instant | enabled=False | live_stakes=False | BTC Up or Down 5m Down 1 Diff Revert Instant
+[    50.7s]   btc_up_down_5m_down_diff_10_revert_instant | enabled=False | live_stakes=False | BTC Up or Down 5m Down 10 Diff Revert Instant
+[    50.7s]   btc_up_down_5m_down_diff_100_revert_instant | enabled=False | live_stakes=False | BTC Up or Down 5m Down 100 Diff Revert Instant
+[    50.7s]   btc_up_down_5m_down_diff_105_revert_instant | enabled=False | live_stakes=False | BTC Up or Down 5m Down 105 Diff Revert Instant
+[    50.7s]   btc_up_down_5m_down_diff_110_revert_instant | enabled=False | live_stakes=False | BTC Up or Down 5m Down 110 Diff Revert Instant
+[    50.7s]   btc_up_down_5m_down_diff_115_revert_instant | enabled=False | live_stakes=False | BTC Up or Down 5m Down 115 Diff Revert Instant
+[    50.7s]   btc_up_down_5m_down_diff_120_revert_instant | enabled=False | live_stakes=False | BTC Up or Down 5m Down 120 Diff Revert Instant
+[    50.7s]   btc_up_down_5m_down_diff_125_revert_instant | enabled=False | live_stakes=False | BTC Up or Down 5m Down 125 Diff Revert Instant
+[    50.7s]   btc_up_down_5m_down_diff_130_revert_instant | enabled=False | live_stakes=False | BTC Up or Down 5m Down 130 Diff Revert Instant
+[    50.7s]   btc_up_down_5m_down_diff_135_revert_instant | enabled=False | live_stakes=False | BTC Up or Down 5m Down 135 Diff Revert Instant
+[    50.7s]   btc_up_down_5m_down_diff_140_revert_instant | enabled=False | live_stakes=False | BTC Up or Down 5m Down 140 Diff Revert Instant
+[    50.7s]   btc_up_down_5m_down_diff_145_revert_instant | enabled=False | live_stakes=False | BTC Up or Down 5m Down 145 Diff Revert Instant
+[    50.7s]   btc_up_down_5m_down_diff_15_revert_instant | enabled=False | live_stakes=False | BTC Up or Down 5m Down 15 Diff Revert Instant
+[    50.7s]   btc_up_down_5m_down_diff_150_revert_instant | enabled=False | live_stakes=False | BTC Up or Down 5m Down 150 Diff Revert Instant
+[    50.7s]   btc_up_down_5m_down_diff_2_revert_instant | enabled=False | live_stakes=False | BTC Up or Down 5m Down 2 Diff Revert Instant
+[    50.7s]   btc_up_down_5m_down_diff_20_revert_instant | enabled=False | live_stakes=False | BTC Up or Down 5m Down 20 Diff Revert Instant
+[    50.7s]   btc_up_down_5m_down_diff_25_revert_instant | enabled=False | live_stakes=False | BTC Up or Down 5m Down 25 Diff Revert Instant
+[    50.7s]   btc_up_down_5m_down_diff_3_revert_instant | enabled=False | live_stakes=False | BTC Up or Down 5m Down 3 Diff Revert Instant
+[    50.7s]   btc_up_down_5m_down_diff_30_revert_instant | enabled=False | live_stakes=False | BTC Up or Down 5m Down 30 Diff Revert Instant
+[    50.7s]   btc_up_down_5m_down_diff_35_revert_instant | enabled=False | live_stakes=False | BTC Up or Down 5m Down 35 Diff Revert Instant
+[    50.7s]   btc_up_down_5m_down_diff_4_revert_instant | enabled=False | live_stakes=False | BTC Up or Down 5m Down 4 Diff Revert Instant
+[    50.7s]   btc_up_down_5m_down_diff_40_revert_instant | enabled=False | live_stakes=False | BTC Up or Down 5m Down 40 Diff Revert Instant
+[    50.7s]   btc_up_down_5m_down_diff_45_revert_instant | enabled=False | live_stakes=False | BTC Up or Down 5m Down 45 Diff Revert Instant
+[    50.7s]   btc_up_down_5m_down_diff_5_revert_instant | enabled=False | live_stakes=False | BTC Up or Down 5m Down 5 Diff Revert Instant
+[    50.7s]   btc_up_down_5m_down_diff_50_revert_instant | enabled=False | live_stakes=False | BTC Up or Down 5m Down 50 Diff Revert Instant
+[    50.7s]   btc_up_down_5m_down_diff_55_revert_instant | enabled=False | live_stakes=False | BTC Up or Down 5m Down 55 Diff Revert Instant
+[    50.7s]   btc_up_down_5m_down_diff_6_revert_instant | enabled=False | live_stakes=False | BTC Up or Down 5m Down 6 Diff Revert Instant
+[    50.7s]   btc_up_down_5m_down_diff_60_revert_instant | enabled=False | live_stakes=False | BTC Up or Down 5m Down 60 Diff Revert Instant
+[    50.7s]   btc_up_down_5m_down_diff_65_revert_instant | enabled=False | live_stakes=False | BTC Up or Down 5m Down 65 Diff Revert Instant
+[    50.7s]   btc_up_down_5m_down_diff_7_revert_instant | enabled=False | live_stakes=False | BTC Up or Down 5m Down 7 Diff Revert Instant
+[    50.7s]   btc_up_down_5m_down_diff_70_revert_instant | enabled=False | live_stakes=False | BTC Up or Down 5m Down 70 Diff Revert Instant
+[    50.7s]   btc_up_down_5m_down_diff_75_revert_instant | enabled=False | live_stakes=False | BTC Up or Down 5m Down 75 Diff Revert Instant
+[    50.7s]   btc_up_down_5m_down_diff_8_revert_instant | enabled=False | live_stakes=False | BTC Up or Down 5m Down 8 Diff Revert Instant
+[    50.7s]   btc_up_down_5m_down_diff_80_revert_instant | enabled=False | live_stakes=False | BTC Up or Down 5m Down 80 Diff Revert Instant
+[    50.7s]   btc_up_down_5m_down_diff_85_revert_instant | enabled=False | live_stakes=False | BTC Up or Down 5m Down 85 Diff Revert Instant
+[    50.7s]   btc_up_down_5m_down_diff_9_revert_instant | enabled=False | live_stakes=False | BTC Up or Down 5m Down 9 Diff Revert Instant
+[    50.7s]   btc_up_down_5m_down_diff_90_revert_instant | enabled=False | live_stakes=False | BTC Up or Down 5m Down 90 Diff Revert Instant
+[    50.7s]   btc_up_down_5m_down_diff_95_revert_instant | enabled=False | live_stakes=False | BTC Up or Down 5m Down 95 Diff Revert Instant
+[    50.7s]   ...sample limited to 50 rows.
+[    50.7s] Target summary (before):
+[    50.9s]   target strategies in temp: 100
+[    50.9s]   remaining strategies by code/name regex: 6767
+[    51.0s]   target wallet candidates: 100
+[    51.0s]   safe wallets: 100
+[    51.0s]   target paper_orders in temp: 6852
+[    51.2s]   remaining target paper_orders: 6852
+[    51.2s]   target paper_fills in temp: 1
+[    53.3s]   remaining target paper_fills: 1
+[    53.3s]   target run ids in temp: 101
+[    53.3s]   remaining target runs: 101
+[    53.3s]   target signal ids in temp: 6852
+[    55.1s]   remaining target signals: 6852
+[    55.1s]   remaining target signal_rejections: 0
+[    55.1s]   remaining target dry_run_orders: 0
+[    55.1s]   target live_orders in temp: 0
+[    55.1s]   remaining target live_orders: 0
+[    55.2s]   remaining target shadow decisions: 0
+[    55.2s]   remaining target shadow discrepancies: 0
+[    57.5s]   remaining safe-wallet paper_positions: 1
+[    57.7s]   remaining safe-wallet settlements: 0
+[    57.8s]   remaining safe-wallet performance rows: 0
+[    57.8s]   target settlement ids in temp: 0
+[    57.8s]   target position ids in temp: 1
+[    57.8s]   target performance keys in temp: 0
+[    57.9s] Wallet candidate safety sample:
+[    58.3s]   wallet=strategy:btc_up_down_5m_down_shift_diff_2_1_revert_instant, target_orders=465
+[    58.3s]   wallet=strategy:btc_up_down_5m_down_shift_diff_3_1_revert_instant, target_orders=399
+[    58.3s]   wallet=strategy:btc_up_down_5m_down_shift_diff_1_1_revert_instant, target_orders=391
+[    58.3s]   wallet=strategy:btc_up_down_5m_down_shift_diff_5_1_revert_instant, target_orders=373
+[    58.3s]   wallet=strategy:btc_up_down_5m_down_shift_diff_4_1_revert_instant, target_orders=366
+[    58.3s]   wallet=strategy:btc_up_down_5m_down_adjusted_diff_1_revert_instant, target_orders=354
+[    58.3s]   wallet=strategy:btc_up_down_5m_down_shift_diff_2_2_revert_instant, target_orders=316
+[    58.3s]   wallet=strategy:btc_up_down_5m_down_diff_1_revert_instant, target_orders=308
+[    58.3s]   wallet=strategy:btc_up_down_5m_down_shift_diff_3_2_revert_instant, target_orders=291
+[    58.3s]   wallet=strategy:btc_up_down_5m_down_shift_diff_4_2_revert_instant, target_orders=287
+[    58.3s]   wallet=strategy:btc_up_down_5m_down_diff_2_revert_instant, target_orders=266
+[    58.3s]   wallet=strategy:btc_up_down_5m_down_diff_3_revert_instant, target_orders=247
+[    58.3s]   wallet=strategy:btc_up_down_5m_down_adjusted_diff_2_revert_instant, target_orders=219
+[    58.3s]   wallet=strategy:btc_up_down_5m_down_shift_diff_4_3_revert_instant, target_orders=215
+[    58.3s]   wallet=strategy:btc_up_down_5m_down_diff_4_revert_instant, target_orders=196
+[    58.3s]   wallet=strategy:btc_up_down_5m_down_shift_diff_3_3_revert_instant, target_orders=187
+[    58.3s]   wallet=strategy:btc_up_down_5m_down_shift_diff_1_2_revert_instant, target_orders=183
+[    58.3s]   wallet=strategy:btc_up_down_5m_down_shift_diff_2_3_revert_instant, target_orders=179
+[    58.3s]   wallet=strategy:btc_up_down_5m_down_diff_5_revert_instant, target_orders=175
+[    58.3s]   wallet=strategy:btc_up_down_5m_down_shift_diff_4_4_revert_instant, target_orders=151
+[    58.4s] Open/unsettled target live_orders guard count: 0
+[    58.4s] Disabled/de-live-updated target strategies: 0
+[    58.4s] paper_live_shadow_discrepancies: complete, deleted 0
+[    58.5s] paper_live_shadow_decisions: complete, deleted 0
+[    58.5s] strategy_market_paper_runs: batch 1 deleted 100, total 100
+[    58.7s] strategy_market_paper_runs: batch 2 deleted 1, total 101
+[    58.9s] strategy_market_paper_runs: complete, deleted 101
+[    58.9s] dry_run_orders: complete, deleted 0
+[    59.0s] live_orders: complete, deleted 0
+[    59.0s] paper_fills: batch 1 deleted 1, total 1
+[    59.2s] paper_fills: complete, deleted 1
+[    59.3s] paper_position_settlements: complete, deleted 0
+[    59.3s] paper_positions: batch 1 deleted 1, total 1
+[    59.5s] paper_positions: complete, deleted 1
+[    59.6s] paper_copied_trader_performance: complete, deleted 0
+[    59.6s] Refreshing target signal ids from current target rows before deleting paper orders...
+[    68.3s] strategy_market_paper_runs late: lock/statement timeout 1/20; retrying after pause. SqlState=57014
+[    76.9s] strategy_market_paper_runs late: lock/statement timeout 2/20; retrying after pause. SqlState=57014
+[    85.4s] strategy_market_paper_runs late: lock/statement timeout 3/20; retrying after pause. SqlState=57014
+[    94.0s] strategy_market_paper_runs late: lock/statement timeout 4/20; retrying after pause. SqlState=57014
+[   102.5s] strategy_market_paper_runs late: lock/statement timeout 5/20; retrying after pause. SqlState=57014
+[   111.2s] strategy_market_paper_runs late: lock/statement timeout 6/20; retrying after pause. SqlState=57014
+[   119.7s] strategy_market_paper_runs late: lock/statement timeout 7/20; retrying after pause. SqlState=57014
+[   128.3s] strategy_market_paper_runs late: lock/statement timeout 8/20; retrying after pause. SqlState=57014

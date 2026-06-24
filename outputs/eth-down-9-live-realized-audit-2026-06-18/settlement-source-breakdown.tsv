@@ -1,0 +1,3 @@
+bucket	orders_count	settled_count	won_count	lost_count	positive_pnl_usd	loss_abs_pnl_usd	realized_pnl_usd	first_settlement_utc	last_settlement_utc	last_updated_utc
+gamma_resolved_metadata	130	130	63	67	227.98203	181.92486	46.05717	2026-06-16T02:49:00.9056920+00:00	2026-06-17T22:32:19.4964000+00:00	2026-06-17T22:32:19.4964000+00:00
+<null>	15	0	0	0	0	0	0			2026-06-17T22:32:57.9859220+00:00

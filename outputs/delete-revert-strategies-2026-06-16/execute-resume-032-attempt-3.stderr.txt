@@ -1,0 +1,13 @@
+Unhandled exception. Npgsql.NpgsqlException (0x80004005): Failed to connect to 192.168.0.101:5432
+ ---> System.TimeoutException: Timeout during connection attempt
+   at Npgsql.Internal.NpgsqlConnector.ConnectAsync(NpgsqlTimeout timeout, CancellationToken cancellationToken)
+   at Npgsql.Internal.NpgsqlConnector.RawOpen(NpgsqlTimeout timeout, Boolean async, CancellationToken cancellationToken)
+   at Npgsql.Internal.NpgsqlConnector.<Open>g__OpenCore|209_0(NpgsqlConnector conn, String username, SslMode sslMode, GssEncryptionMode gssEncMode, NpgsqlTimeout timeout, Boolean async, CancellationToken cancellationToken)
+   at Npgsql.Internal.NpgsqlConnector.Open(NpgsqlTimeout timeout, Boolean async, CancellationToken cancellationToken)
+   at Npgsql.PoolingDataSource.OpenNewConnector(NpgsqlConnection conn, NpgsqlTimeout timeout, Boolean async, CancellationToken cancellationToken)
+   at Npgsql.PoolingDataSource.<Get>g__RentAsync|33_0(NpgsqlConnection conn, NpgsqlTimeout timeout, Boolean async, CancellationToken cancellationToken)
+   at Npgsql.NpgsqlConnection.<Open>g__OpenAsync|42_0(Boolean async, CancellationToken cancellationToken)
+   at Program.<Main>$(String[] args) in D:\My\Business\PolyMarket\outputs\delete-revert-strategies-2026-06-16\Program.cs:line 80
+   at Program.<Main>$(String[] args) in D:\My\Business\PolyMarket\outputs\delete-revert-strategies-2026-06-16\Program.cs:line 444
+   at Program.<Main>$(String[] args) in D:\My\Business\PolyMarket\outputs\delete-revert-strategies-2026-06-16\Program.cs:line 444
+   at Program.<Main>(String[] args)

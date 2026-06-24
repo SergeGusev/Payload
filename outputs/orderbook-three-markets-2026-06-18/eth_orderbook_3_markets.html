@@ -1,0 +1,157 @@
+﻿<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>ETH order book top-of-book, 3 consecutive markets</title>
+<style>
+body { margin: 0; font-family: Segoe UI, Arial, sans-serif; color: #0f172a; background: #f8fafc; }
+main { max-width: 1280px; margin: 0 auto; padding: 24px; }
+a { color: #0369a1; }
+.note { color: #475569; font-size: 14px; line-height: 1.45; margin: 8px 0 18px; }
+.chart { overflow-x: auto; background: white; border: 1px solid #cbd5e1; border-radius: 8px; }
+.chart svg { display: block; min-width: 1220px; }
+table { border-collapse: collapse; width: 100%; margin-top: 20px; background: white; border: 1px solid #cbd5e1; }
+th, td { border-bottom: 1px solid #e2e8f0; padding: 8px 10px; text-align: left; font-size: 13px; }
+th { background: #f1f5f9; font-weight: 700; }
+</style>
+</head>
+<body>
+<main>
+<h1>ETH order book top-of-book</h1>
+<p class="note">Three consecutive 5-minute markets: 2026-05-10 08:50, 08:55, 09:00 Europe/Sofia. The report uses <code>orderbook_ticks.csv</code> from <code>btc_up_down_5m_odds_ticks</code> and <code>crypto_up_down_5m_odds_ticks</code>. These archives contain best bid/ask/mid snapshots, not full price-level depth. The x-axis includes -60 seconds to show the requested window; there were no archived ticks before market start for this data block.</p>
+<p class="note"><a href="eth_orderbook_3_markets.svg">Open raw SVG</a> | <a href="orderbook_ticks.csv">CSV ticks</a> | <a href="market_summary.csv">CSV summary</a> | <a href="index.html">Index</a></p>
+<div class="chart">
+<svg xmlns='http://www.w3.org/2000/svg' width='1220' height='1240' viewBox='0 0 1220 1240' role='img' aria-label='ETH order book top of book for three consecutive 5 minute markets'>
+<rect width='100%' height='100%' fill='#f8fafc'/>
+<text x='34' y='38' font-family='Segoe UI, Arial, sans-serif' font-size='24' font-weight='700' fill='#0f172a'>ETH Up/Down 5m order book top-of-book</text>
+<text x='34' y='64' font-family='Segoe UI, Arial, sans-serif' font-size='13' fill='#475569'>Window per panel: -60s before market start to market end (+300s). Lines show archived bid/ask top-of-book; no synthetic pre-start data is filled.</text>
+<line x1='34' y1='84' x2='80' y2='84' stroke='#047857' stroke-width='3'/>
+<text x='86' y='88' font-family='Segoe UI, Arial, sans-serif' font-size='12' fill='#334155'>Up bid</text>
+<line x1='124' y1='84' x2='170' y2='84' stroke='#14b8a6' stroke-width='3' stroke-dasharray='6 5'/>
+<text x='176' y='88' font-family='Segoe UI, Arial, sans-serif' font-size='12' fill='#334155'>Up ask</text>
+<line x1='214' y1='84' x2='260' y2='84' stroke='#b91c1c' stroke-width='3'/>
+<text x='266' y='88' font-family='Segoe UI, Arial, sans-serif' font-size='12' fill='#334155'>Down bid</text>
+<line x1='324' y1='84' x2='370' y2='84' stroke='#f97316' stroke-width='3' stroke-dasharray='6 5'/>
+<text x='376' y='88' font-family='Segoe UI, Arial, sans-serif' font-size='12' fill='#334155'>Down ask</text>
+<g>
+<rect x='24' y='96' width='1172' height='300' fill='#ffffff' stroke='#cbd5e1' rx='6'/>
+<text x='44' y='124' font-family='Segoe UI, Arial, sans-serif' font-size='15' font-weight='700' fill='#0f172a'>eth-updown-5m-1778392200 | start 2026-05-10 08:50:00+03 | ticks 47 | result Down | move -7.09 bps</text>
+<text x='44' y='144' font-family='Segoe UI, Arial, sans-serif' font-size='12' fill='#64748b'>first tick 2.6s, last tick 298.9s; ref 2,328.2200 -&gt; 2,326.5700</text>
+<line x1='82' y1='370' x2='1186' y2='370' stroke='#e2e8f0' stroke-width='1'/>
+<text x='68' y='374' text-anchor='end' font-family='Segoe UI, Arial, sans-serif' font-size='11' fill='#64748b'>0.00</text>
+<line x1='82' y1='315' x2='1186' y2='315' stroke='#e2e8f0' stroke-width='1'/>
+<text x='68' y='319' text-anchor='end' font-family='Segoe UI, Arial, sans-serif' font-size='11' fill='#64748b'>0.25</text>
+<line x1='82' y1='260' x2='1186' y2='260' stroke='#94a3b8' stroke-width='1.4'/>
+<text x='68' y='264' text-anchor='end' font-family='Segoe UI, Arial, sans-serif' font-size='11' fill='#64748b'>0.50</text>
+<line x1='82' y1='205' x2='1186' y2='205' stroke='#e2e8f0' stroke-width='1'/>
+<text x='68' y='209' text-anchor='end' font-family='Segoe UI, Arial, sans-serif' font-size='11' fill='#64748b'>0.75</text>
+<line x1='82' y1='150' x2='1186' y2='150' stroke='#e2e8f0' stroke-width='1'/>
+<text x='68' y='154' text-anchor='end' font-family='Segoe UI, Arial, sans-serif' font-size='11' fill='#64748b'>1.00</text>
+<line x1='82' y1='150' x2='82' y2='370' stroke='#e2e8f0' stroke-width='1'/>
+<text x='82' y='388' text-anchor='middle' font-family='Segoe UI, Arial, sans-serif' font-size='11' fill='#64748b'>-60s</text>
+<line x1='266' y1='150' x2='266' y2='370' stroke='#64748b' stroke-width='1.3'/>
+<text x='266' y='388' text-anchor='middle' font-family='Segoe UI, Arial, sans-serif' font-size='11' fill='#64748b'>start</text>
+<line x1='450' y1='150' x2='450' y2='370' stroke='#e2e8f0' stroke-width='1'/>
+<text x='450' y='388' text-anchor='middle' font-family='Segoe UI, Arial, sans-serif' font-size='11' fill='#64748b'>60s</text>
+<line x1='634' y1='150' x2='634' y2='370' stroke='#e2e8f0' stroke-width='1'/>
+<text x='634' y='388' text-anchor='middle' font-family='Segoe UI, Arial, sans-serif' font-size='11' fill='#64748b'>120s</text>
+<line x1='818' y1='150' x2='818' y2='370' stroke='#e2e8f0' stroke-width='1'/>
+<text x='818' y='388' text-anchor='middle' font-family='Segoe UI, Arial, sans-serif' font-size='11' fill='#64748b'>180s</text>
+<line x1='1002' y1='150' x2='1002' y2='370' stroke='#e2e8f0' stroke-width='1'/>
+<text x='1002' y='388' text-anchor='middle' font-family='Segoe UI, Arial, sans-serif' font-size='11' fill='#64748b'>240s</text>
+<line x1='1186' y1='150' x2='1186' y2='370' stroke='#64748b' stroke-width='1.3'/>
+<text x='1186' y='388' text-anchor='middle' font-family='Segoe UI, Arial, sans-serif' font-size='11' fill='#64748b'>end</text>
+<rect x='82' y='150' width='1104' height='220' fill='none' stroke='#94a3b8'/>
+<polyline points='273.866,262.2 292.355,268.8 310.154,268.8 327.723,268.8 344.921,290.8 363.311,290.8 380.914,293 398.474,328.2 416.451,328.2 434.443,339.2 453.005,326 471.148,332.6 489.161,332.6 586.188,352.4 603.971,354.6 622.199,354.6 640.802,354.6 658.693,354.6 676.872,348 695.496,350.2 713.979,348 732.115,350.2 749.908,352.4 767.989,352.4 785.785,352.4 803.838,352.4 821.655,361.2 840.12,363.4 858.278,363.4 876,363.4 894.323,363.4 912.312,365.6 930.531,365.6 948.37,365.6 966.292,365.6 984.072,367.8 1001.289,367.8 1018.744,365.6 1036.92,365.6 1054.836,367.8 1072.852,367.8 1090.676,367.8' fill='none' stroke='#047857' stroke-width='2.6' stroke-linecap='round' stroke-linejoin='round'/>
+<polyline points='273.866,260 292.355,266.6 310.154,266.6 327.723,266.6 344.921,268.8 363.311,286.4 380.914,290.8 398.474,326 416.451,326 434.443,337 453.005,323.8 471.148,330.4 489.161,330.4 586.188,350.2 603.971,352.4 622.199,352.4 640.802,352.4 658.693,352.4 676.872,343.6 695.496,345.8 713.979,345.8 732.115,348 749.908,350.2 767.989,350.2 785.785,350.2 803.838,350.2 821.655,359 840.12,361.2 858.278,361.2 876,361.2 894.323,361.2 912.312,363.4 930.531,363.4 948.37,363.4 966.292,363.4 984.072,365.6 1001.289,365.6 1018.744,363.4 1036.92,363.4 1054.836,361.2 1072.852,365.6 1090.676,365.6 1108.916,367.8 1127.399,367.8 1145.876,367.8 1164.49,367.8 1182.627,367.8' fill='none' stroke='#14b8a6' stroke-width='2.3' stroke-linecap='round' stroke-linejoin='round' stroke-dasharray='6 5'/>
+<polyline points='273.866,260 292.355,255.6 310.154,253.4 327.723,253.4 344.921,251.2 363.311,233.6 380.914,229.2 398.474,194 416.451,194 434.443,183 453.005,196.2 471.148,189.6 489.161,189.6 586.188,169.8 603.971,167.6 622.199,167.6 640.802,167.6 658.693,167.6 676.872,176.4 695.496,174.2 713.979,174.2 732.115,172 749.908,169.8 767.989,169.8 785.785,169.8 803.838,169.8 821.655,161 840.12,158.8 858.278,158.8 876,158.8 894.323,158.8 912.312,156.6 930.531,156.6 948.37,156.6 966.292,156.6 984.072,154.4 1001.289,154.4 1018.744,156.6 1036.92,156.6 1054.836,158.8 1072.852,154.4 1090.676,154.4 1108.916,152.2 1127.399,152.2 1145.876,152.2 1164.49,152.2 1182.627,152.2' fill='none' stroke='#b91c1c' stroke-width='2.6' stroke-linecap='round' stroke-linejoin='round'/>
+<polyline points='273.866,257.8 292.355,251.2 310.154,251.2 327.723,251.2 344.921,229.2 363.311,229.2 380.914,227 398.474,187.4 416.451,191.8 434.443,180.8 453.005,194 471.148,187.4 489.161,187.4 586.188,167.6 603.971,165.4 622.199,165.4 640.802,165.4 658.693,165.4 676.872,172 695.496,169.8 713.979,172 732.115,169.8 749.908,167.6 767.989,167.6 785.785,167.6 803.838,167.6 821.655,158.8 840.12,156.6 858.278,156.6 876,156.6 894.323,156.6 912.312,154.4 930.531,154.4 948.37,154.4 966.292,154.4 984.072,152.2 1001.289,152.2 1018.744,154.4 1036.92,154.4 1054.836,152.2 1072.852,152.2 1090.676,152.2' fill='none' stroke='#f97316' stroke-width='2.3' stroke-linecap='round' stroke-linejoin='round' stroke-dasharray='6 5'/>
+<text x='634' y='410' text-anchor='middle' font-family='Segoe UI, Arial, sans-serif' font-size='12' fill='#475569'>seconds from market start</text>
+<text x='30' y='260' transform='rotate(-90 30 260)' text-anchor='middle' font-family='Segoe UI, Arial, sans-serif' font-size='12' fill='#475569'>price</text>
+</g>
+<g>
+<rect x='24' y='460' width='1172' height='300' fill='#ffffff' stroke='#cbd5e1' rx='6'/>
+<text x='44' y='488' font-family='Segoe UI, Arial, sans-serif' font-size='15' font-weight='700' fill='#0f172a'>eth-updown-5m-1778392500 | start 2026-05-10 08:55:00+03 | ticks 51 | result Up | move 3.14 bps</text>
+<text x='44' y='508' font-family='Segoe UI, Arial, sans-serif' font-size='12' fill='#64748b'>first tick 4.8s, last tick 299.1s; ref 2,326.5700 -&gt; 2,327.3000</text>
+<line x1='82' y1='734' x2='1186' y2='734' stroke='#e2e8f0' stroke-width='1'/>
+<text x='68' y='738' text-anchor='end' font-family='Segoe UI, Arial, sans-serif' font-size='11' fill='#64748b'>0.00</text>
+<line x1='82' y1='679' x2='1186' y2='679' stroke='#e2e8f0' stroke-width='1'/>
+<text x='68' y='683' text-anchor='end' font-family='Segoe UI, Arial, sans-serif' font-size='11' fill='#64748b'>0.25</text>
+<line x1='82' y1='624' x2='1186' y2='624' stroke='#94a3b8' stroke-width='1.4'/>
+<text x='68' y='628' text-anchor='end' font-family='Segoe UI, Arial, sans-serif' font-size='11' fill='#64748b'>0.50</text>
+<line x1='82' y1='569' x2='1186' y2='569' stroke='#e2e8f0' stroke-width='1'/>
+<text x='68' y='573' text-anchor='end' font-family='Segoe UI, Arial, sans-serif' font-size='11' fill='#64748b'>0.75</text>
+<line x1='82' y1='514' x2='1186' y2='514' stroke='#e2e8f0' stroke-width='1'/>
+<text x='68' y='518' text-anchor='end' font-family='Segoe UI, Arial, sans-serif' font-size='11' fill='#64748b'>1.00</text>
+<line x1='82' y1='514' x2='82' y2='734' stroke='#e2e8f0' stroke-width='1'/>
+<text x='82' y='752' text-anchor='middle' font-family='Segoe UI, Arial, sans-serif' font-size='11' fill='#64748b'>-60s</text>
+<line x1='266' y1='514' x2='266' y2='734' stroke='#64748b' stroke-width='1.3'/>
+<text x='266' y='752' text-anchor='middle' font-family='Segoe UI, Arial, sans-serif' font-size='11' fill='#64748b'>start</text>
+<line x1='450' y1='514' x2='450' y2='734' stroke='#e2e8f0' stroke-width='1'/>
+<text x='450' y='752' text-anchor='middle' font-family='Segoe UI, Arial, sans-serif' font-size='11' fill='#64748b'>60s</text>
+<line x1='634' y1='514' x2='634' y2='734' stroke='#e2e8f0' stroke-width='1'/>
+<text x='634' y='752' text-anchor='middle' font-family='Segoe UI, Arial, sans-serif' font-size='11' fill='#64748b'>120s</text>
+<line x1='818' y1='514' x2='818' y2='734' stroke='#e2e8f0' stroke-width='1'/>
+<text x='818' y='752' text-anchor='middle' font-family='Segoe UI, Arial, sans-serif' font-size='11' fill='#64748b'>180s</text>
+<line x1='1002' y1='514' x2='1002' y2='734' stroke='#e2e8f0' stroke-width='1'/>
+<text x='1002' y='752' text-anchor='middle' font-family='Segoe UI, Arial, sans-serif' font-size='11' fill='#64748b'>240s</text>
+<line x1='1186' y1='514' x2='1186' y2='734' stroke='#64748b' stroke-width='1.3'/>
+<text x='1186' y='752' text-anchor='middle' font-family='Segoe UI, Arial, sans-serif' font-size='11' fill='#64748b'>end</text>
+<rect x='82' y='514' width='1104' height='220' fill='none' stroke='#94a3b8'/>
+<polyline points='280.567,608.6 298.712,599.8 316.855,599.8 334.951,591 352.689,580 370.392,599.8 388.645,595.4 406.616,597.6 424.519,597.6 443.213,593.2 461.233,593.2 479.406,575.6 497.239,575.6 515.026,582.2 532.993,580 551.031,566.8 569.165,566.8 587.098,560.2 604.75,538.2 622.574,536 641.262,538.2 659.371,569 677.795,571.2 695.806,577.8 714.525,582.2 733.047,582.2 751.122,573.4 769.258,564.6 787.125,564.6 805.279,549.2 823.962,544.8 841.803,533.8 859.829,533.8 877.598,533.8 895.424,531.6 913.245,531.6 931.188,531.6 949.588,531.6 968.141,531.6 986.081,525 1004.006,525 1022.197,525 1039.941,525 1057.645,516.2 1074.824,516.2 1093.169,516.2 1111.235,516.2 1129.42,516.2 1147.243,516.2 1165.19,516.2 1183.268,516.2' fill='none' stroke='#047857' stroke-width='2.6' stroke-linecap='round' stroke-linejoin='round'/>
+<polyline points='280.567,606.4 298.712,595.4 316.855,595.4 334.951,588.8 352.689,569 370.392,580 388.645,588.8 406.616,593.2 424.519,593.2 443.213,591 461.233,591 479.406,573.4 497.239,573.4 515.026,580 532.993,577.8 551.031,564.6 569.165,564.6 587.098,555.8 604.75,536 622.574,533.8 641.262,536 659.371,562.4 677.795,569 695.806,575.6 714.525,580 733.047,580 751.122,562.4 769.258,562.4 787.125,562.4 805.279,547 823.962,540.4 841.803,531.6 859.829,529.4 877.598,529.4 895.424,529.4 913.245,529.4 931.188,529.4 949.588,529.4 968.141,529.4 986.081,522.8 1004.006,522.8 1022.197,522.8 1039.941,522.8' fill='none' stroke='#14b8a6' stroke-width='2.3' stroke-linecap='round' stroke-linejoin='round' stroke-dasharray='6 5'/>
+<polyline points='280.567,641.6 298.712,652.6 316.855,652.6 334.951,659.2 352.689,679 370.392,668 388.645,659.2 406.616,654.8 424.519,654.8 443.213,657 461.233,657 479.406,674.6 497.239,674.6 515.026,668 532.993,670.2 551.031,683.4 569.165,683.4 587.098,692.2 604.75,712 622.574,714.2 641.262,712 659.371,694.4 677.795,679 695.806,672.4 714.525,668 733.047,668 751.122,685.6 769.258,685.6 787.125,685.6 805.279,705.4 823.962,709.8 841.803,716.4 859.829,718.6 877.598,718.6 895.424,718.6 913.245,718.6 931.188,718.6 949.588,718.6 968.141,718.6 986.081,725.2 1004.006,725.2 1022.197,725.2 1039.941,725.2' fill='none' stroke='#b91c1c' stroke-width='2.6' stroke-linecap='round' stroke-linejoin='round'/>
+<polyline points='280.567,637.2 298.712,648.2 316.855,648.2 334.951,657 352.689,668 370.392,648.2 388.645,652.6 406.616,650.4 424.519,650.4 443.213,654.8 461.233,654.8 479.406,672.4 497.239,665.8 515.026,665.8 532.993,668 551.031,681.2 569.165,681.2 587.098,687.8 604.75,709.8 622.574,712 641.262,709.8 659.371,679 677.795,676.8 695.806,670.2 714.525,665.8 733.047,665.8 751.122,674.6 769.258,683.4 787.125,683.4 805.279,698.8 823.962,705.4 841.803,714.2 859.829,714.2 877.598,714.2 895.424,716.4 913.245,716.4 931.188,716.4 949.588,716.4 968.141,716.4 986.081,723 1004.006,723 1022.197,723 1039.941,723 1057.645,731.8 1074.824,731.8 1093.169,731.8 1111.235,731.8 1129.42,731.8 1147.243,731.8 1165.19,731.8 1183.268,731.8' fill='none' stroke='#f97316' stroke-width='2.3' stroke-linecap='round' stroke-linejoin='round' stroke-dasharray='6 5'/>
+<text x='634' y='774' text-anchor='middle' font-family='Segoe UI, Arial, sans-serif' font-size='12' fill='#475569'>seconds from market start</text>
+<text x='30' y='624' transform='rotate(-90 30 624)' text-anchor='middle' font-family='Segoe UI, Arial, sans-serif' font-size='12' fill='#475569'>price</text>
+</g>
+<g>
+<rect x='24' y='824' width='1172' height='300' fill='#ffffff' stroke='#cbd5e1' rx='6'/>
+<text x='44' y='852' font-family='Segoe UI, Arial, sans-serif' font-size='15' font-weight='700' fill='#0f172a'>eth-updown-5m-1778392800 | start 2026-05-10 09:00:00+03 | ticks 51 | result Up | move 4.30 bps</text>
+<text x='44' y='872' font-family='Segoe UI, Arial, sans-serif' font-size='12' fill='#64748b'>first tick 4.8s, last tick 297.0s; ref 2,327.3100 -&gt; 2,328.3100</text>
+<line x1='82' y1='1098' x2='1186' y2='1098' stroke='#e2e8f0' stroke-width='1'/>
+<text x='68' y='1102' text-anchor='end' font-family='Segoe UI, Arial, sans-serif' font-size='11' fill='#64748b'>0.00</text>
+<line x1='82' y1='1043' x2='1186' y2='1043' stroke='#e2e8f0' stroke-width='1'/>
+<text x='68' y='1047' text-anchor='end' font-family='Segoe UI, Arial, sans-serif' font-size='11' fill='#64748b'>0.25</text>
+<line x1='82' y1='988' x2='1186' y2='988' stroke='#94a3b8' stroke-width='1.4'/>
+<text x='68' y='992' text-anchor='end' font-family='Segoe UI, Arial, sans-serif' font-size='11' fill='#64748b'>0.50</text>
+<line x1='82' y1='933' x2='1186' y2='933' stroke='#e2e8f0' stroke-width='1'/>
+<text x='68' y='937' text-anchor='end' font-family='Segoe UI, Arial, sans-serif' font-size='11' fill='#64748b'>0.75</text>
+<line x1='82' y1='878' x2='1186' y2='878' stroke='#e2e8f0' stroke-width='1'/>
+<text x='68' y='882' text-anchor='end' font-family='Segoe UI, Arial, sans-serif' font-size='11' fill='#64748b'>1.00</text>
+<line x1='82' y1='878' x2='82' y2='1098' stroke='#e2e8f0' stroke-width='1'/>
+<text x='82' y='1116' text-anchor='middle' font-family='Segoe UI, Arial, sans-serif' font-size='11' fill='#64748b'>-60s</text>
+<line x1='266' y1='878' x2='266' y2='1098' stroke='#64748b' stroke-width='1.3'/>
+<text x='266' y='1116' text-anchor='middle' font-family='Segoe UI, Arial, sans-serif' font-size='11' fill='#64748b'>start</text>
+<line x1='450' y1='878' x2='450' y2='1098' stroke='#e2e8f0' stroke-width='1'/>
+<text x='450' y='1116' text-anchor='middle' font-family='Segoe UI, Arial, sans-serif' font-size='11' fill='#64748b'>60s</text>
+<line x1='634' y1='878' x2='634' y2='1098' stroke='#e2e8f0' stroke-width='1'/>
+<text x='634' y='1116' text-anchor='middle' font-family='Segoe UI, Arial, sans-serif' font-size='11' fill='#64748b'>120s</text>
+<line x1='818' y1='878' x2='818' y2='1098' stroke='#e2e8f0' stroke-width='1'/>
+<text x='818' y='1116' text-anchor='middle' font-family='Segoe UI, Arial, sans-serif' font-size='11' fill='#64748b'>180s</text>
+<line x1='1002' y1='878' x2='1002' y2='1098' stroke='#e2e8f0' stroke-width='1'/>
+<text x='1002' y='1116' text-anchor='middle' font-family='Segoe UI, Arial, sans-serif' font-size='11' fill='#64748b'>240s</text>
+<line x1='1186' y1='878' x2='1186' y2='1098' stroke='#64748b' stroke-width='1.3'/>
+<text x='1186' y='1116' text-anchor='middle' font-family='Segoe UI, Arial, sans-serif' font-size='11' fill='#64748b'>end</text>
+<rect x='82' y='878' width='1104' height='220' fill='none' stroke='#94a3b8'/>
+<polyline points='280.591,977 298.568,985.8 316.901,990.2 334.954,983.6 352.695,948.4 370.693,937.4 388.559,946.2 406.601,915.4 424.562,915.4 442.459,915.4 460.375,917.6 478.284,902.2 495.96,902.2 513.452,915.4 531.457,915.4 549.648,915.4 567.932,895.6 585.639,895.6 603.778,897.8 621.595,897.8 639.407,897.8 657.626,891.2 675.743,891.2 693.285,891.2 710.492,891.2 728.088,891.2 745.55,889 763.18,889 781.556,884.6 798.987,884.6 816.816,884.6 835.446,884.6 853.322,884.6 871.25,884.6 888.671,884.6 906.792,884.6 924.478,884.6 942.237,884.6 960.103,884.6 978.141,884.6 996.094,889 1014.57,886.8 1032.243,884.6 1050.239,880.2 1068.418,880.2 1086.217,880.2 1104.654,880.2 1123.078,880.2 1140.957,880.2 1158.839,880.2 1176.898,880.2' fill='none' stroke='#047857' stroke-width='2.6' stroke-linecap='round' stroke-linejoin='round'/>
+<polyline points='280.591,974.8 298.568,977 316.901,981.4 334.954,979.2 352.695,939.6 370.693,935.2 388.559,937.4 406.601,913.2 424.562,913.2 442.459,913.2 460.375,915.4 478.284,900 495.96,900 513.452,913.2 531.457,913.2 549.648,913.2 567.932,893.4 585.639,893.4 603.778,895.6 621.595,895.6 639.407,895.6 657.626,889 675.743,889 693.285,889 710.492,889 728.088,889 745.55,886.8 763.18,886.8 781.556,882.4 798.987,882.4 816.816,882.4 835.446,882.4 853.322,882.4 871.25,882.4 888.671,882.4 906.792,882.4 924.478,882.4 942.237,882.4 960.103,882.4 978.141,882.4 996.094,886.8 1014.57,884.6 1032.243,882.4' fill='none' stroke='#14b8a6' stroke-width='2.3' stroke-linecap='round' stroke-linejoin='round' stroke-dasharray='6 5'/>
+<polyline points='280.591,1001.2 298.568,999 316.901,994.6 334.954,996.8 352.695,1036.4 370.693,1040.8 388.559,1038.6 406.601,1062.8 424.562,1062.8 442.459,1062.8 460.375,1060.6 478.284,1076 495.96,1076 513.452,1062.8 531.457,1062.8 549.648,1062.8 567.932,1082.6 585.639,1082.6 603.778,1080.4 621.595,1080.4 639.407,1080.4 657.626,1087 675.743,1087 693.285,1087 710.492,1087 728.088,1087 745.55,1089.2 763.18,1089.2 781.556,1093.6 798.987,1093.6 816.816,1093.6 835.446,1093.6 853.322,1093.6 871.25,1093.6 888.671,1093.6 906.792,1093.6 924.478,1093.6 942.237,1093.6 960.103,1093.6 978.141,1093.6 996.094,1089.2 1014.57,1091.4 1032.243,1093.6' fill='none' stroke='#b91c1c' stroke-width='2.6' stroke-linecap='round' stroke-linejoin='round'/>
+<polyline points='280.591,999 298.568,990.2 316.901,985.8 334.954,990.2 352.695,1027.6 370.693,1038.6 388.559,1029.8 406.601,1060.6 424.562,1060.6 442.459,1060.6 460.375,1058.4 478.284,1073.8 495.96,1073.8 513.452,1060.6 531.457,1060.6 549.648,1060.6 567.932,1080.4 585.639,1080.4 603.778,1078.2 621.595,1078.2 639.407,1078.2 657.626,1084.8 675.743,1084.8 693.285,1084.8 710.492,1084.8 728.088,1084.8 745.55,1087 763.18,1087 781.556,1091.4 798.987,1091.4 816.816,1091.4 835.446,1091.4 853.322,1091.4 871.25,1091.4 888.671,1091.4 906.792,1091.4 924.478,1091.4 942.237,1091.4 960.103,1091.4 978.141,1091.4 996.094,1087 1014.57,1089.2 1032.243,1091.4 1050.239,1095.8 1068.418,1095.8 1086.217,1095.8 1104.654,1095.8 1123.078,1095.8 1140.957,1095.8 1158.839,1095.8 1176.898,1095.8' fill='none' stroke='#f97316' stroke-width='2.3' stroke-linecap='round' stroke-linejoin='round' stroke-dasharray='6 5'/>
+<text x='634' y='1138' text-anchor='middle' font-family='Segoe UI, Arial, sans-serif' font-size='12' fill='#475569'>seconds from market start</text>
+<text x='30' y='988' transform='rotate(-90 30 988)' text-anchor='middle' font-family='Segoe UI, Arial, sans-serif' font-size='12' fill='#475569'>price</text>
+</g>
+</svg>
+
+</div>
+<h2>Market summary</h2>
+<table>
+<thead><tr><th>Market</th><th>Start</th><th>Ticks</th><th>First tick</th><th>Last tick</th><th>Reference</th><th>Result</th></tr></thead><tbody>
+<tr><td>eth-updown-5m-1778392200</td><td>2026-05-10 08:50:00+03</td><td>47</td><td>2.6s</td><td>298.9s</td><td>2,328.2200 -&gt; 2,326.5700 (-7.09 bps)</td><td>Down</td></tr>
+<tr><td>eth-updown-5m-1778392500</td><td>2026-05-10 08:55:00+03</td><td>51</td><td>4.8s</td><td>299.1s</td><td>2,326.5700 -&gt; 2,327.3000 (3.14 bps)</td><td>Up</td></tr>
+<tr><td>eth-updown-5m-1778392800</td><td>2026-05-10 09:00:00+03</td><td>51</td><td>4.8s</td><td>297.0s</td><td>2,327.3100 -&gt; 2,328.3100 (4.30 bps)</td><td>Up</td></tr>
+</tbody></table>
+
+</main>
+</body>
+</html>

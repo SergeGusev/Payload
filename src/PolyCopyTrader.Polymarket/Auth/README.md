@@ -1,8 +1,9 @@
 # Polymarket Auth
 
 Current status: authenticated header infrastructure, safe CLOB L2 API credential
-bootstrap, dry-run CLOB V2 order signing, gated live maker-only Follow leader
-scaffolding, and gated BTC 5-minute GTD order submission.
+bootstrap, dry-run CLOB V2 order signing, gated live Follow leader scaffolding,
+gated BTC/ETH/SOL 5-minute BUY FAK live-shadow submission, and explicit FAK/FOK
+BUY amount construction.
 
 Task 14 implemented secure secret lookup, L2 HMAC signing, L2 header
 construction, and auth readiness reporting. A later bootstrap command added L1
@@ -19,10 +20,10 @@ Implementation must follow `docs/auth_signing_plan.md`:
 - L2 auth signs requests with HMAC-SHA256 using the API secret. The HMAC message is
   `timestamp + method + requestPath + serializedBodyIfPresent`.
 - CLOB V2 order signing uses the `Polymarket CTF Exchange` domain version `2`.
-- Follow leader live order posting must remain BUY-only, GTD-only, post-only,
-  tiny-size, and manually enabled; current leader-price Paper signals are rejected
-  by live maker-only preflight. BTC 5-minute live stakes use BUY-only `GTD`
-  orders with `postOnly=false` after the separate BTC live gates pass.
+- Follow leader live order posting must remain BUY-only, FAK-only, tiny-size,
+  and manually enabled. BTC/ETH/SOL 5-minute live stakes use BUY `FAK` market
+  amounts after the live gates pass, always with `postOnly=false` and no GTD
+  expiration. Strategy display names do not encode FAK.
 
 Configured secret providers:
 

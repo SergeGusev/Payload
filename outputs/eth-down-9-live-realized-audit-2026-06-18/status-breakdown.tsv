@@ -1,0 +1,5 @@
+bucket	orders_count	settled_count	won_count	lost_count	positive_pnl_usd	loss_abs_pnl_usd	realized_pnl_usd	first_settlement_utc	last_settlement_utc	last_updated_utc
+Matched	131	130	63	67	227.98203	181.92486	46.05717	2026-06-16T02:49:00.9056920+00:00	2026-06-17T22:32:19.4964000+00:00	2026-06-17T22:32:57.9859220+00:00
+CancelFailed	11	0	0	0	0	0	0			2026-06-17T21:04:05.4261830+00:00
+Cancelled	2	0	0	0	0	0	0			2026-06-17T18:24:00.2069540+00:00
+PreflightRejected	1	0	0	0	0	0	0			2026-06-17T19:48:39.4419500+00:00

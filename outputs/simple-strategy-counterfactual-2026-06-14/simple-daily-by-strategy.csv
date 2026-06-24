@@ -1,0 +1,25 @@
+﻿DateUtc,StrategyCode,StrategyName,CurrentPnl,SkipOver0.50Pnl,AlwaysMarketPnl,SkipVsCurrent,AlwaysMarketVsCurrent,Decisions,CurrentSettled,GtdLimitNotFilled,CappedOver0.50,CappedOver0.50Settled,CappedOver0.50Unfilled,AlwaysMarketComputable,AlwaysMarketNotComputable
+2026-06-11,btc_up_down_5m_down_simple,BTC Up or Down 5m Down Simple,5.7747,4.7747,-39.4351,-1,-45.2098,44,16,28,29,1,28,44,0
+2026-06-11,btc_up_down_5m_up_simple,BTC Up or Down 5m Up Simple,20.2468,20.2468,24.5022,0,4.2554,44,29,15,15,0,15,44,0
+2026-06-11,eth_up_down_5m_down_simple,ETH Up or Down 5m Down Simple,-9.6708,-6.6708,21.58,3,31.2508,44,24,20,21,1,20,44,0
+2026-06-11,eth_up_down_5m_up_simple,ETH Up or Down 5m Up Simple,-19.4254,-21.2504,-36.6312,-1.825,-17.2058,44,21,23,24,1,23,44,0
+2026-06-11,sol_up_down_5m_down_simple,SOL Up or Down 5m Down Simple,7.8848,-1.1252,-65.8281,-9.01,-73.7129,44,19,25,35,10,25,44,0
+2026-06-11,sol_up_down_5m_up_simple,SOL Up or Down 5m Up Simple,20.3873,15.2873,27.6611,-5.1,7.2738,44,18,26,30,4,26,44,0
+2026-06-12,btc_up_down_5m_down_simple,BTC Up or Down 5m Down Simple,5.8701,4.3701,-150.5733,-1.5,-156.4434,279,132,147,148,1,147,279,0
+2026-06-12,btc_up_down_5m_up_simple,BTC Up or Down 5m Up Simple,48.5121,46.2371,102.3166,-2.275,53.8045,279,147,132,133,1,132,279,0
+2026-06-12,eth_up_down_5m_down_simple,ETH Up or Down 5m Down Simple,-15.2413,-15.6513,-191.5292,-0.41,-176.2879,279,149,130,136,6,130,279,0
+2026-06-12,eth_up_down_5m_up_simple,ETH Up or Down 5m Up Simple,19.0599,21.1199,137.6755,2.06,118.6156,279,121,158,162,4,158,279,0
+2026-06-12,sol_up_down_5m_down_simple,SOL Up or Down 5m Down Simple,-1.1375,-19.7775,-210.5054,-18.64,-209.3679,279,140,139,163,24,139,279,0
+2026-06-12,sol_up_down_5m_up_simple,SOL Up or Down 5m Up Simple,26.2984,24.0584,34.2856,-2.24,7.9872,279,96,183,201,18,183,279,0
+2026-06-13,btc_up_down_5m_down_simple,BTC Up or Down 5m Down Simple,-68.6591,-65.6591,-428.5324,3,-359.8733,246,103,143,144,1,143,246,0
+2026-06-13,btc_up_down_5m_up_simple,BTC Up or Down 5m Up Simple,106.129691,68.029691,384.0488,-38.1,277.919109,246,176,70,102,36,66,246,0
+2026-06-13,eth_up_down_5m_down_simple,ETH Up or Down 5m Down Simple,-54.4197,-51.8947,-171.1614,2.525,-116.7417,246,111,135,136,1,135,246,0
+2026-06-13,eth_up_down_5m_up_simple,ETH Up or Down 5m Up Simple,-21.8576,-18.5076,115.1867,3.35,137.0443,246,129,117,120,3,117,246,0
+2026-06-13,sol_up_down_5m_down_simple,SOL Up or Down 5m Down Simple,-63.0681,-59.0931,-343.2017,3.975,-280.1336,246,101,145,154,9,145,246,0
+2026-06-13,sol_up_down_5m_up_simple,SOL Up or Down 5m Up Simple,-2.1608,-5.4808,229.4233,-3.32,231.5841,246,116,130,147,17,130,246,0
+2026-06-14,btc_up_down_5m_down_simple,BTC Up or Down 5m Down Simple,-2.9436,-2.9436,61.2726,0,64.2162,91,47,44,44,0,44,91,0
+2026-06-14,btc_up_down_5m_up_simple,BTC Up or Down 5m Up Simple,-41.206148,-36.827548,-69.4106,4.3786,-28.204452,89,77,12,46,36,10,89,0
+2026-06-14,eth_up_down_5m_down_simple,ETH Up or Down 5m Down Simple,8.4179,4.0079,42.9332,-4.41,34.5153,91,46,45,48,3,45,91,0
+2026-06-14,eth_up_down_5m_up_simple,ETH Up or Down 5m Up Simple,-6.8801,-6.8801,-51.3791,0,-44.499,90,35,55,55,0,55,90,0
+2026-06-14,sol_up_down_5m_down_simple,SOL Up or Down 5m Down Simple,-4.3276,-11.9476,32.4142,-7.62,36.7418,91,51,40,52,12,40,91,0
+2026-06-14,sol_up_down_5m_up_simple,SOL Up or Down 5m Up Simple,-19.1527,-19.5277,-113.9067,-0.375,-94.754,91,23,68,73,5,68,91,0

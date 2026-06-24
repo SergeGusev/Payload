@@ -7,6 +7,8 @@ namespace PolyCopyTrader.Polymarket.Auth;
 public sealed class OrderAmountCalculator
 {
     private const decimal TokenScale = 1_000_000m;
+    private const int MarketBuyMakerAmountDecimals = 2;
+    private const int MarketBuyTakerAmountDecimals = 4;
 
     public ClobV2OrderAmounts Calculate(TradeSide side, decimal price, decimal sizeShares, decimal tickSize = 0.01m)
     {
@@ -34,6 +36,22 @@ public sealed class OrderAmountCalculator
             side,
             ToTokenUnitsRounded(sellRawMakerAmount),
             ToTokenUnitsRounded(sellRawTakerAmount));
+    }
+
+    public ClobV2OrderAmounts CalculateMarketBuy(decimal price, decimal amountUsd, decimal tickSize = 0.01m)
+    {
+        ValidatePositive(price, nameof(price));
+        ValidatePositive(amountUsd, nameof(amountUsd));
+
+        var roundConfig = GetLimitRoundConfig(tickSize) ??
+            throw new ArgumentOutOfRangeException(nameof(tickSize), "Unsupported CLOB tick size.");
+        var rawPrice = RoundNormal(price, roundConfig.PriceDecimals);
+        var rawMakerAmount = RoundLimitAmount(amountUsd, MarketBuyMakerAmountDecimals);
+        var rawTakerAmount = RoundUp(rawMakerAmount / rawPrice, MarketBuyTakerAmountDecimals);
+        return new ClobV2OrderAmounts(
+            TradeSide.Buy,
+            ToTokenUnitsRounded(rawMakerAmount),
+            ToTokenUnitsRounded(rawTakerAmount));
     }
 
     public IReadOnlyList<string> ValidateLimitOrder(
@@ -106,6 +124,81 @@ public sealed class OrderAmountCalculator
             {
                 AddTokenUnitValidationError(errors, sizeShares, "Size");
                 AddTokenUnitValidationError(errors, sizeShares * price, "Notional");
+            }
+        }
+
+        return errors;
+    }
+
+    public IReadOnlyList<string> ValidateMarketBuyOrder(
+        TradeSide side,
+        decimal price,
+        decimal amountUsd,
+        decimal tickSize,
+        decimal minOrderSize)
+    {
+        var errors = new List<string>();
+        if (side != TradeSide.Buy)
+        {
+            errors.Add("Market amount orders are supported only for BUY.");
+        }
+
+        if (price <= 0m || price >= 1m)
+        {
+            errors.Add("Price must be greater than 0 and less than 1.");
+        }
+
+        if (amountUsd <= 0m)
+        {
+            errors.Add("Market BUY amount must be greater than 0.");
+        }
+
+        if (tickSize <= 0m)
+        {
+            errors.Add("Tick size must be greater than 0.");
+        }
+        else if (price > 0m && !IsMultiple(price, tickSize))
+        {
+            errors.Add("Price must align to the configured tick size.");
+        }
+
+        if (minOrderSize <= 0m)
+        {
+            errors.Add("Minimum order size must be greater than 0.");
+        }
+
+        if (price > 0m && amountUsd > 0m)
+        {
+            var roundConfig = GetLimitRoundConfig(tickSize);
+            if (roundConfig is { } config)
+            {
+                var rawPrice = RoundNormal(price, config.PriceDecimals);
+                var rawMakerAmount = RoundLimitAmount(amountUsd, MarketBuyMakerAmountDecimals);
+                var rawTakerAmount = rawMakerAmount <= 0m
+                    ? 0m
+                    : RoundUp(rawMakerAmount / rawPrice, MarketBuyTakerAmountDecimals);
+                if (rawTakerAmount <= 0m)
+                {
+                    errors.Add("Market BUY amount rounds to zero at the CLOB precision for the configured tick size.");
+                }
+
+                if (minOrderSize > 0m && rawTakerAmount < minOrderSize)
+                {
+                    errors.Add("Market BUY amount must buy at least the configured minimum order size at the worst price.");
+                }
+
+                if (side == TradeSide.Buy)
+                {
+                    var amounts = CalculateMarketBuy(price, amountUsd, tickSize);
+                    if (amounts.MakerAmount <= BigInteger.Zero || amounts.TakerAmount <= BigInteger.Zero)
+                    {
+                        errors.Add("Rounded CLOB maker and taker amounts must be greater than zero.");
+                    }
+                }
+            }
+            else
+            {
+                AddTokenUnitValidationError(errors, amountUsd, "Market BUY amount");
             }
         }
 

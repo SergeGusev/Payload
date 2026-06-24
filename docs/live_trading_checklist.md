@@ -8,7 +8,10 @@ Live trading is disabled by default. Use this checklist before any live session.
 - Dry-run signing produced expected `DryRunSigned` records.
 - `dotnet build`, `dotnet test`, `--print-config`, and runtime IPC smoke pass.
 - The service runs on the intended VPS.
-- Startup geoblock check is OK from the VPS IP.
+- Startup geoblock check is OK from the VPS IP, or
+  `LiveTrading:BlockOnGeoblockCheckFailure=false` is an explicit operational
+  decision and recent `GeoblockCheck` warnings have been reviewed. A successful
+  geoblock response with `blocked=true` must still stop live trading.
 - PostgreSQL backup was taken and restore path is understood.
 - A separate trading wallet is funded with a tiny bankroll only.
 - Polymarket UI access is available for manual verification.
@@ -19,11 +22,11 @@ Live trading is disabled by default. Use this checklist before any live session.
 - `Bot:EnableLiveTrading` is `true`.
 - `PaperTrading:RunInLiveMode` is `true` if this session should continue shadow Paper alongside Live.
 - `LiveTrading:ManualEnableCode` is `LIVE_TRADING_ENABLED`.
-- Follow leader live remains maker-only: `Execution:MakerOnly=true` and `Execution:AllowTaker=false`.
+- Follow leader live remains gated and BUY-only; if it reaches submission it uses BUY `FAK` with `postOnly=false`.
 - Paper/Live-shadow stakes are enabled per opening-limit strategy by the Dashboard `Live` checkbox (`strategies.live_stakes`) and remain subject to the normal live readiness, risk, balance, and Live-side opposite-outcome guards.
-- Paper/Live-shadow stakes, if enabled per strategy, are intentional BUY-only `GTD` limit orders with `postOnly=false`; by default local cancellation is `OpeningLimitExpireBeforeMarketEndSeconds` (`60`) seconds before market close, while the CLOB wire expiration includes `ClobGtdExpirationSecurityBufferSeconds` (`60`). Any immediately marketable portion may fill as taker and the remainder can rest until GTD expiration/cancel/market close.
+- Paper/Live-shadow Paper rows may still use their strategy-specific Paper model, including GTD simulation. Every live-shadow submission is BUY-only `FAK`, uses `postOnly=false`, has no GTD expiration, and stores zero-fill successful responses as rejected live entries rather than open orders.
 - Dashboard `Paper Lost` / `Paper Cnt` and `Live Lost` / `Live Cnt` are stored separately per strategy. Both modes apply the same loss-counter stake add-on from their own data: while the matching counter is positive, add `Stake * min(Cnt, 2)`, so the final stake is capped at three original stakes.
-- Paper/Live-shadow matching must keep asset, condition, outcome, order type, `postOnly=false`, and limit price within `0.000001`; Paper and Live requested sizes may differ because Paper and Live stake/add-on sizing use separate base stake and counter fields. Shape mismatch disables `LiveStakes` for that strategy and cancels correlated open live orders.
+- Paper/Live-shadow matching must keep asset, condition, outcome, expected live order type `FAK`, expected `postOnly=false`, and limit/worst price within `0.000001`; Paper and Live requested sizes may differ because Paper and Live stake/add-on sizing use separate base stake and counter fields. Shape mismatch disables `LiveStakes` for that strategy and cancels correlated open live orders.
 - Plain-text CLOB error bodies are normalized before storage in `live_orders.raw_response_json`; Paper/Live-shadow persistence failures are logged and trigger cancellation of the affected submitted order when possible, but they no longer clear the strategy `Live` flag. Risk failures such as insufficient strategy live balance and critical Paper/Live shape mismatch still disable `LiveStakes`.
 - `LiveTrading:MaxOrderNotionalUsd` is a hard emergency ceiling, not the normal
   stake-sizing control. Intended stake sizing is set per strategy through

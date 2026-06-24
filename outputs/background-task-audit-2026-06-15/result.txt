@@ -1,0 +1,64 @@
+Background task audit captured at 2026-06-15T17:14:04.6870730+00:00
+Database: polycopytrader
+Server address: 192.168.0.101/32
+Server time UTC: 2026-06-15T17:14:02Z
+
+== Service heartbeat ==
+service_name	status	mode	version	started_utc	heartbeat_utc	heartbeat_age_seconds	current_loop	last_error
+PolyCopyTrader.Service	Running	Live	info=1.0.0+3b63e1384625a3ebbff5a779b115f317a3d7ff72; assembly=1.0.0.0; mvid=559442907f10	2026-06-15T11:19:10Z	2026-06-15T17:13:49Z	14	BTC5mOnly WatchlistScanner=CommentedOut; FollowLeaderSignals=CommentedOut	<none>
+PolyCopyTrader.Tests	Running	ReadOnly	1.0.0	2026-05-04T14:02:41Z	2026-05-04T14:02:41Z	3640282	IntegrationTest	<none>
+
+== Current strategy inventory ==
+strategy_group	total	enabled	enabled_not_paused	live_stakes	auto_live_paused	paused
+adjusted_diff	144	144	144	0	0	0
+bps	300	6	6	6	0	0
+legacy_statistics	1	0	0	0	0	0
+middle	12060	0	0	0	0	0
+other	369	0	0	0	0	0
+regular_diff	456	456	456	0	0	0
+shift_diff	864	864	864	0	0	0
+simple	6	6	6	1	0	0
+
+== Live strategies ==
+code	enabled	live_stakes	auto_live_paused	paused	live_stake_amount	live_available_balance
+btc_up_down_5m_down_bps_50_instant	True	True	False	False	1	125.708209
+btc_up_down_5m_up_bps_50_instant	True	True	False	False	1	103.849653
+btc_up_down_5m_up_simple	True	True	False	False	1	108.119367
+eth_up_down_5m_down_bps_50_instant	True	True	False	False	1	86.553654
+eth_up_down_5m_up_bps_50_instant	True	True	False	False	1	145.3687
+sol_up_down_5m_down_bps_50_instant	True	True	False	False	1	94.852282
+sol_up_down_5m_up_bps_50_instant	True	True	False	False	1	124.21912486
+
+== Rows written or updated recently by background candidates ==
+worker	table_name	last_1h	last_6h	last_24h	latest_utc
+BtcUpDown5mPaperStrategyWorker	strategy_market_paper_runs	20864	109455	1588467	2026-06-15T17:12:31Z
+BtcOrderBookLagDiagnosticService	btc_order_book_lag_diagnostic_events	184248	556761	556761	2026-06-15T17:14:01Z
+PaperTradingWorker	paper_orders	2409	10477	47562	2026-06-15T17:10:19Z
+BtcUpDown5mOddsArchiveWorker	btc_up_down_5m_odds_ticks	1760	10976	41367	2026-06-15T17:13:51Z
+CryptoUpDown5mOddsArchiveWorker	crypto_up_down_5m_odds_ticks	1512	9574	34225	2026-06-15T17:13:58Z
+BtcUpDown5mArbitrageScannerWorker	btc_up_down_5m_arbitrage_scans	1080	6753	26116	2026-06-15T17:13:58Z
+GammaMarketIngestionWorker	polymarket_gamma_markets	10697	12580	19676	2026-06-15T17:14:02Z
+BtcUpDown5mDiffCounterPaperStrategyWorker	crypto_up_down_5m_diff_snapshots	39	219	867	2026-06-15T17:14:01Z
+CryptoUpDown5mResultPollingWorker	crypto_up_down_5m_result_polling_observations	39	218	867	2026-06-15T17:14:01Z
+LiveTradingMaintenanceWorker	live_orders	10	92	234	2026-06-15T17:12:28Z
+BtcUpDown5mStatisticsWorker	btc_up_down_5m_statistics_ticks	0	0	0	
+
+== Lag diagnostic event sources ==
+source	raw_event_type	last_1h	last_6h	last_24h	latest_utc
+BinanceTrade	BinanceTradeWebSocket	181240	547663	547663	2026-06-15T17:14:01Z
+BinanceBookTicker	REST	2558	7876	7876	2026-06-15T17:14:01Z
+PolymarketTopOfBook	price_change	201	701	701	2026-06-15T17:14:00Z
+PolymarketTopOfBook	book	245	513	513	2026-06-15T17:09:09Z
+PolymarketTopOfBook	best_bid_ask	4	8	8	2026-06-15T17:01:47Z
+
+== Odds/statistics/arbitrage tables latest rows ==
+table_name	estimated_total_rows	latest_utc
+btc_up_down_5m_arbitrage_scans	1021338	2026-06-15T17:13:58Z
+crypto_up_down_5m_odds_ticks	775754	2026-06-15T17:13:58Z
+btc_up_down_5m_odds_ticks	716561	2026-06-15T17:13:51Z
+btc_order_book_lag_diagnostic_events	544636	2026-06-15T17:14:01Z
+btc_up_down_5m_statistics_ticks	175699	2026-05-19T05:18:12Z
+
+== Legacy statistics strategy state ==
+id	code	name	enabled	live_stakes	auto_live_paused	paused	updated_at_utc
+b7c50005-0000-4000-8050-000000000001	btc_up_down_5m_statistics	BTC Up or Down 5m Statistics	False	False	False	False	2026-06-15T11:19:08.9358360Z

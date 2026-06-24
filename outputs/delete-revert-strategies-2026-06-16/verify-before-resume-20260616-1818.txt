@@ -1,0 +1,78 @@
+[     0.0s] Revert strategy cleanup started at 2026-06-16T18:09:04.3227680+00:00
+[     0.0s] Target strategy code/name regex: revert
+[     0.0s] Dry run: True
+[     0.0s] Execute: False
+[     0.0s] Verify only: True
+[     0.0s] Diagnose live orders only: False
+[     0.0s] Strategy limit: all
+[     0.0s] Batch size: 100
+[     0.0s] Batch pause ms: 150
+[     0.0s] Batch lock timeout ms: 300
+[     0.0s] Batch statement timeout ms: 8000
+[     0.0s] Residual signal scan timeout ms: 5000
+[     0.7s] Database: polycopytrader
+[     0.7s] Server address: 192.168.0.101/32
+[     0.7s] Server time UTC: 6/16/2026 6:09:07 PM
+[     0.7s] Last heartbeat UTC: 2026-06-16T18:08:39Z
+[     0.7s] Preparing target strategy ids...
+[     1.2s] Preparing target paper order ids...
+[    16.8s] Preparing target paper fill ids...
+[    21.9s] Preparing target run ids...
+[   249.5s] Preparing target signal ids...
+[   355.4s] Preparing target live order ids...
+[   355.4s] Preparing target correlation ids...
+[   356.9s] Preparing safe synthetic wallet ids...
+[   364.3s] Target summary (verify):
+[   364.3s]   target strategies in temp: 4567
+[   364.3s]   remaining strategies by code/name regex: 4567
+[   364.4s]   target wallet candidates: 4567
+[   364.4s]   safe wallets: 4567
+[   364.4s]   target paper_orders in temp: 91506
+[   368.6s]   remaining target paper_orders: 91506
+[   368.6s]   target paper_fills in temp: 43262
+[   370.3s]   remaining target paper_fills: 43363
+[   370.6s]   target run ids in temp: 1095666
+[   485.2s]   remaining target runs: 1095666
+[   485.3s]   target signal ids in temp: 91571
+[   490.0s]   remaining target signals: 91571
+[   490.0s]   remaining target signal_rejections: 0
+[   490.0s]   remaining target dry_run_orders: 0
+[   490.0s]   target live_orders in temp: 0
+[   490.0s]   remaining target live_orders: 0
+[   490.2s]   remaining target shadow decisions: 0
+[   490.3s]   remaining target shadow discrepancies: 0
+[   491.8s]   remaining safe-wallet paper_positions: 56022
+[   494.5s]   remaining safe-wallet settlements: 52622
+[   494.6s]   remaining safe-wallet performance rows: 0
+[   494.6s]   target settlement ids in temp: 52597
+[   494.6s]   target position ids in temp: 56020
+[   494.6s]   target performance keys in temp: 0
+[   494.7s] Wallet candidate safety sample:
+[   517.0s]   wallet=strategy:sol_up_down_5m_up_shift_diff_6_1_revert_instant, target_orders=1039
+[   517.0s]   wallet=strategy:btc_up_down_5m_up_shift_diff_6_1_revert_instant, target_orders=1023
+[   517.0s]   wallet=strategy:sol_up_down_5m_up_shift_diff_5_1_revert_instant, target_orders=992
+[   517.0s]   wallet=strategy:sol_up_down_5m_up_shift_diff_4_1_revert_instant, target_orders=936
+[   517.0s]   wallet=strategy:sol_up_down_5m_up_shift_diff_6_2_revert_instant, target_orders=917
+[   517.0s]   wallet=strategy:btc_up_down_5m_up_shift_diff_6_2_revert_instant, target_orders=911
+[   517.0s]   wallet=strategy:sol_up_down_5m_up_diff_1_revert_instant, target_orders=899
+[   517.0s]   wallet=strategy:btc_up_down_5m_up_shift_diff_5_1_revert_instant, target_orders=894
+[   517.0s]   wallet=strategy:btc_up_down_5m_up_shift_diff_4_1_revert_instant, target_orders=872
+[   517.0s]   wallet=strategy:sol_up_down_5m_up_shift_diff_5_2_revert_instant, target_orders=858
+[   517.0s]   wallet=strategy:sol_up_down_5m_up_shift_diff_3_1_revert_instant, target_orders=848
+[   517.0s]   wallet=strategy:sol_up_down_5m_up_diff_2_revert_instant, target_orders=843
+[   517.0s]   wallet=strategy:eth_up_down_5m_up_diff_1_revert_instant, target_orders=836
+[   517.0s]   wallet=strategy:btc_up_down_5m_up_shift_diff_3_1_revert_instant, target_orders=820
+[   517.0s]   wallet=strategy:btc_up_down_5m_up_shift_diff_6_3_revert_instant, target_orders=793
+[   517.0s]   wallet=strategy:sol_up_down_5m_up_shift_diff_4_2_revert_instant, target_orders=791
+[   517.0s]   wallet=strategy:sol_up_down_5m_up_shift_diff_6_3_revert_instant, target_orders=785
+[   517.0s]   wallet=strategy:sol_up_down_5m_up_diff_3_revert_instant, target_orders=765
+[   517.0s]   wallet=strategy:eth_up_down_5m_up_diff_2_revert_instant, target_orders=759
+[   517.0s]   wallet=strategy:eth_up_down_5m_up_shift_diff_6_1_revert_instant, target_orders=759
+[   517.0s] Residual Revert pattern scan:
+[   517.1s]   strategies by code/name regex: 4567
+[   524.7s]   paper_orders synthetic wallets: 91009
+[   528.9s]   paper_positions synthetic wallets: 56022
+[   532.4s]   paper_position_settlements synthetic wallets: 52622
+[   532.5s]   paper_copied_trader_performance synthetic wallets: 0
+[   537.5s]   signals synthetic wallets (best-effort; no trader_wallet index): <timed out after 5000ms>
+[   537.5s] Revert residual verification finished at 2026-06-16T18:18:01.8725832+00:00

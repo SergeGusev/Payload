@@ -1,6 +1,8 @@
 using PolyCopyTrader.Domain;
+using PolyCopyTrader.Domain.Configuration;
 using PolyCopyTrader.Polymarket;
 using PolyCopyTrader.Service.Control;
+using PolyCopyTrader.Service.LiveTrading;
 using PolyCopyTrader.Storage;
 
 namespace PolyCopyTrader.Service.Startup;
@@ -8,6 +10,7 @@ namespace PolyCopyTrader.Service.Startup;
 public sealed class StartupSafetyCheckService(
     ILogger<StartupSafetyCheckService> logger,
     IPolymarketGeoClient geoClient,
+    LiveTradingOptions liveTradingOptions,
     ServiceControlState controlState,
     IAppRepository repository) : BackgroundService
 {
@@ -40,18 +43,30 @@ public sealed class StartupSafetyCheckService(
         }
         catch (Exception ex)
         {
-            controlState.PauseLiveTrading("StartupSafetyCheck");
-            logger.LogError(ex, "Startup geoblock check failed. Live trading paused.");
-            await TryRecordAsync(ex.Message, stoppingToken);
+            var message = LiveGeoblockPreflight.FailurePrefix + ex.Message;
+            if (liveTradingOptions.BlockOnGeoblockCheckFailure)
+            {
+                controlState.PauseLiveTrading("StartupSafetyCheck");
+                logger.LogError(ex, "Startup geoblock check failed. Live trading paused.");
+                await TryRecordAsync("Error", message, stoppingToken);
+            }
+            else
+            {
+                logger.LogWarning(ex, "Startup geoblock check failed. Live trading was not paused because failures are configured as warnings.");
+                await TryRecordAsync(
+                    "Warning",
+                    message + " Live trading was not paused because LiveTrading.BlockOnGeoblockCheckFailure is false.",
+                    stoppingToken);
+            }
         }
     }
 
-    private async Task TryRecordAsync(string message, CancellationToken cancellationToken)
+    private async Task TryRecordAsync(string status, string message, CancellationToken cancellationToken)
     {
         try
         {
             await repository.AddLiveTradingEventAsync(
-                new LiveTradingEvent(Guid.NewGuid(), "StartupGeoblockCheck", "Error", message, DateTimeOffset.UtcNow),
+                new LiveTradingEvent(Guid.NewGuid(), "StartupGeoblockCheck", status, message, DateTimeOffset.UtcNow),
                 cancellationToken);
         }
         catch (Exception ex)

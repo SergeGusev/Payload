@@ -41,6 +41,7 @@ public sealed class ConfigurationTests
         Assert.Equal(14, configuration.PolymarketHttpLogging.FailedRetentionDays);
         Assert.Equal(0, configuration.GammaMarketIngestion.PollIntervalSeconds);
         Assert.Equal(500, configuration.GammaMarketIngestion.PageLimit);
+        Assert.Equal(500, configuration.BtcUpDown5mStrategy.DiffCounterFastPollIntervalMilliseconds);
         Assert.Equal(1.00m, configuration.BtcUpDown5mStrategy.StakeUsd);
         Assert.Equal(60, configuration.BtcUpDown5mStrategy.EntryGraceSeconds);
         Assert.Equal(3_000, configuration.BtcUpDown5mStrategy.MaxEntriesPerCycle);
@@ -60,6 +61,7 @@ public sealed class ConfigurationTests
         Assert.Equal(0.10m, configuration.BtcUpDown5mStrategy.OpeningLimitBreakEvenMargin);
         Assert.Equal(0.50m, configuration.BtcUpDown5mStrategy.OpeningLimitMaxPrice);
         Assert.Equal(0.65m, configuration.BtcUpDown5mStrategy.InstantOpeningLimitMaxPrice);
+        Assert.Equal(1.00m, configuration.BtcUpDown5mStrategy.DiffCounterInstantMaxPrice);
         Assert.Equal(0.01m, configuration.BtcUpDown5mStrategy.OpeningLimitPriceTickSize);
         Assert.Equal(120, configuration.BtcUpDown5mStrategy.OpeningLimitGtdTtlSeconds);
         Assert.Equal(60, configuration.BtcUpDown5mStrategy.OpeningLimitExpireBeforeMarketEndSeconds);
@@ -88,12 +90,18 @@ public sealed class ConfigurationTests
         Assert.Equal(60, configuration.BinanceCryptoReference.SampleIntervalSeconds);
         Assert.Equal(100, configuration.BinanceCryptoReference.WindowSize);
         Assert.Equal(5, configuration.BinanceCryptoReference.StaleAfterSeconds);
+        Assert.True(configuration.CryptoReferencePriceHistory.Enabled);
+        Assert.Equal(["BTC", "ETH", "SOL"], configuration.CryptoReferencePriceHistory.AssetSymbols);
+        Assert.Equal(10, configuration.CryptoReferencePriceHistory.WriteIntervalSeconds);
+        Assert.Equal(24, configuration.CryptoReferencePriceHistory.StartupLookbackHours);
+        Assert.Equal(60, configuration.CryptoReferencePriceHistory.TargetSamplesPerWindow);
+        Assert.Equal([1440, 720, 360, 180, 90, 45, 20, 10], configuration.CryptoReferencePriceHistory.WindowMinutes);
         Assert.True(configuration.BtcUpDown5mOddsArchive.Enabled);
         Assert.Equal(5, configuration.BtcUpDown5mOddsArchive.PollIntervalSeconds);
         Assert.Equal(500, configuration.BtcUpDown5mOddsArchive.MaxMarketsPerCycle);
         Assert.Equal(15_000, configuration.BtcUpDown5mOddsArchive.MaxOrderBookAgeMilliseconds);
         Assert.True(configuration.BtcUpDown5mOddsArchive.RestFallbackEnabled);
-        Assert.True(configuration.BtcUpDown5mStatistics.Enabled);
+        Assert.False(configuration.BtcUpDown5mStatistics.Enabled);
         Assert.Equal(1, configuration.BtcUpDown5mStatistics.PollIntervalSeconds);
         Assert.Equal(500, configuration.BtcUpDown5mStatistics.MaxMarketsPerCycle);
         Assert.Equal(20, configuration.BtcUpDown5mStatistics.MinHistorySupport);
@@ -122,6 +130,21 @@ public sealed class ConfigurationTests
         Assert.Equal(500, configuration.CryptoUpDown5mOddsArchive.MaxMarketsPerCycle);
         Assert.Equal(15_000, configuration.CryptoUpDown5mOddsArchive.MaxOrderBookAgeMilliseconds);
         Assert.True(configuration.CryptoUpDown5mOddsArchive.RestFallbackEnabled);
+        Assert.True(configuration.CryptoUpDown5mResultPolling.Enabled);
+        Assert.Equal(["BTC", "ETH", "SOL"], configuration.CryptoUpDown5mResultPolling.AssetSymbols);
+        Assert.Equal(5, configuration.CryptoUpDown5mResultPolling.PollIntervalSeconds);
+        Assert.Equal(500, configuration.CryptoUpDown5mResultPolling.MaxMarketsPerCycle);
+        Assert.Equal(60, configuration.CryptoUpDown5mResultPolling.MaxMarketAgeMinutes);
+        Assert.Equal(20, configuration.CryptoUpDown5mResultPolling.MaxResultWaitMinutes);
+        Assert.True(configuration.CryptoUpDown5mResultPolling.ReferencePriceResultEnabled);
+        Assert.Equal(15_000, configuration.CryptoUpDown5mResultPolling.ReferencePriceResultMaxEndAgeMilliseconds);
+        Assert.Equal(2, configuration.CryptoUpDown5mResultPolling.ReferencePriceResultMinSamples);
+        Assert.True(configuration.CryptoUpDown5mResultPolling.ProvisionalOrderBookResultEnabled);
+        Assert.Equal(0.60m, configuration.CryptoUpDown5mResultPolling.ProvisionalWinnerBidMin);
+        Assert.Equal(0.40m, configuration.CryptoUpDown5mResultPolling.ProvisionalLoserAskMax);
+        Assert.Equal(15_000, configuration.CryptoUpDown5mResultPolling.ProvisionalMaxOrderBookAgeMilliseconds);
+        Assert.True(configuration.CryptoUpDown5mResultPolling.ProvisionalRestFallbackEnabled);
+        Assert.Equal(3, configuration.CryptoUpDown5mResultPolling.ProvisionalRestRequestTimeoutSeconds);
         Assert.True(configuration.ChainlinkBtcUsdDiagnostics.Enabled);
         Assert.Equal("https://data.chain.link", configuration.ChainlinkBtcUsdDiagnostics.BaseUrl);
         Assert.Equal("0x00039d9e45394f473ab1f050a1b963e6b05351e52d71e507509ada0c95ed75b8", configuration.ChainlinkBtcUsdDiagnostics.FeedId);
@@ -151,6 +174,7 @@ public sealed class ConfigurationTests
         Assert.False(configuration.MarketTradeDiagnostics.Enabled);
         Assert.Equal(1_000, configuration.MarketTradeDiagnostics.MarketTradesLimit);
         Assert.Equal(5, configuration.MarketTradeDiagnostics.MatchTimestampToleranceSeconds);
+        Assert.False(configuration.BtcOrderBookLagDiagnostics.Enabled);
         Assert.True(configuration.DataApiTraderIngestion.Enabled);
         Assert.Equal(1_000, configuration.DataApiTraderIngestion.GlobalTradesLimit);
         Assert.Equal(0, configuration.DataApiTraderIngestion.PollDelayMilliseconds);
@@ -301,11 +325,13 @@ public sealed class ConfigurationTests
                 PaperTakerMaxReferenceSlippage = -0.01m,
                 PaperTakerMaxSpreadAbs = -0.01m,
                 PaperTakerMaxGammaClobDiff = -0.01m,
+                DiffCounterFastPollIntervalMilliseconds = 99,
                 OpeningLimitBreakEvenLookbackRuns = 0,
                 OpeningLimitBreakEvenMinSettledRuns = 2,
                 OpeningLimitBreakEvenMargin = -0.01m,
                 OpeningLimitMaxPrice = 0.51m,
                 InstantOpeningLimitMaxPrice = 0m,
+                DiffCounterInstantMaxPrice = 0m,
                 OpeningLimitPriceTickSize = 0m,
                 OpeningLimitGtdTtlSeconds = 29,
                 OpeningLimitExpireBeforeMarketEndSeconds = -1,
@@ -331,11 +357,13 @@ public sealed class ConfigurationTests
         Assert.Contains(errors, error => error.Contains("BtcUpDown5mStrategy.PaperTakerMaxReferenceSlippage", StringComparison.Ordinal));
         Assert.Contains(errors, error => error.Contains("BtcUpDown5mStrategy.PaperTakerMaxSpreadAbs", StringComparison.Ordinal));
         Assert.Contains(errors, error => error.Contains("BtcUpDown5mStrategy.PaperTakerMaxGammaClobDiff", StringComparison.Ordinal));
+        Assert.Contains(errors, error => error.Contains("BtcUpDown5mStrategy.DiffCounterFastPollIntervalMilliseconds", StringComparison.Ordinal));
         Assert.Contains(errors, error => error.Contains("BtcUpDown5mStrategy.OpeningLimitBreakEvenLookbackRuns", StringComparison.Ordinal));
         Assert.Contains(errors, error => error.Contains("BtcUpDown5mStrategy.OpeningLimitBreakEvenMinSettledRuns", StringComparison.Ordinal));
         Assert.Contains(errors, error => error.Contains("BtcUpDown5mStrategy.OpeningLimitBreakEvenMargin", StringComparison.Ordinal));
         Assert.Contains(errors, error => error.Contains("BtcUpDown5mStrategy.OpeningLimitMaxPrice", StringComparison.Ordinal));
         Assert.Contains(errors, error => error.Contains("BtcUpDown5mStrategy.InstantOpeningLimitMaxPrice", StringComparison.Ordinal));
+        Assert.Contains(errors, error => error.Contains("BtcUpDown5mStrategy.DiffCounterInstantMaxPrice", StringComparison.Ordinal));
         Assert.Contains(errors, error => error.Contains("BtcUpDown5mStrategy.OpeningLimitPriceTickSize", StringComparison.Ordinal));
         Assert.Contains(errors, error => error.Contains("BtcUpDown5mStrategy.OpeningLimitGtdTtlSeconds", StringComparison.Ordinal));
         Assert.Contains(errors, error => error.Contains("BtcUpDown5mStrategy.OpeningLimitExpireBeforeMarketEndSeconds", StringComparison.Ordinal));
@@ -506,6 +534,40 @@ public sealed class ConfigurationTests
     }
 
     [Fact]
+    public void CryptoUpDown5mResultPollingOptions_AreValidated()
+    {
+        var configuration = new AppConfiguration
+        {
+            CryptoUpDown5mResultPolling = new CryptoUpDown5mResultPollingOptions
+            {
+                AssetSymbols = [],
+                PollIntervalSeconds = 0,
+                MaxMarketsPerCycle = 0,
+                MaxMarketAgeMinutes = 5,
+                MaxResultWaitMinutes = 6,
+                ReferencePriceResultMaxEndAgeMilliseconds = 0,
+                ReferencePriceResultMinSamples = 0,
+                ProvisionalWinnerBidMin = 0.40m,
+                ProvisionalLoserAskMax = 0.60m,
+                ProvisionalMaxOrderBookAgeMilliseconds = 0,
+                ProvisionalRestRequestTimeoutSeconds = 0
+            }
+        };
+
+        var errors = AppOptionsValidator.Validate(configuration);
+
+        Assert.Contains(errors, error => error.Contains("CryptoUpDown5mResultPolling.AssetSymbols", StringComparison.Ordinal));
+        Assert.Contains(errors, error => error.Contains("CryptoUpDown5mResultPolling.PollIntervalSeconds", StringComparison.Ordinal));
+        Assert.Contains(errors, error => error.Contains("CryptoUpDown5mResultPolling.MaxMarketsPerCycle", StringComparison.Ordinal));
+        Assert.Contains(errors, error => error.Contains("CryptoUpDown5mResultPolling.MaxResultWaitMinutes", StringComparison.Ordinal));
+        Assert.Contains(errors, error => error.Contains("CryptoUpDown5mResultPolling.ReferencePriceResultMaxEndAgeMilliseconds", StringComparison.Ordinal));
+        Assert.Contains(errors, error => error.Contains("CryptoUpDown5mResultPolling.ReferencePriceResultMinSamples", StringComparison.Ordinal));
+        Assert.Contains(errors, error => error.Contains("CryptoUpDown5mResultPolling.ProvisionalWinnerBidMin", StringComparison.Ordinal));
+        Assert.Contains(errors, error => error.Contains("CryptoUpDown5mResultPolling.ProvisionalMaxOrderBookAgeMilliseconds", StringComparison.Ordinal));
+        Assert.Contains(errors, error => error.Contains("CryptoUpDown5mResultPolling.ProvisionalRestRequestTimeoutSeconds", StringComparison.Ordinal));
+    }
+
+    [Fact]
     public void BinanceBtcUsdReferenceOptions_AreValidated()
     {
         var configuration = new AppConfiguration
@@ -561,6 +623,30 @@ public sealed class ConfigurationTests
         Assert.Contains(errors, error => error.Contains("BinanceCryptoReference.ReconnectBaseDelaySeconds", StringComparison.Ordinal));
         Assert.Contains(errors, error => error.Contains("BinanceCryptoReference.ReconnectMaxDelaySeconds", StringComparison.Ordinal));
         Assert.Contains(errors, error => error.Contains("BinanceCryptoReference.ReceiveBufferBytes", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void CryptoReferencePriceHistoryOptions_AreValidated()
+    {
+        var configuration = new AppConfiguration
+        {
+            CryptoReferencePriceHistory = new CryptoReferencePriceHistoryOptions
+            {
+                AssetSymbols = ["BTC", "BTC"],
+                WriteIntervalSeconds = 0,
+                StartupLookbackHours = 1,
+                TargetSamplesPerWindow = 0,
+                WindowMinutes = [1440, 1440]
+            }
+        };
+
+        var errors = AppOptionsValidator.Validate(configuration);
+
+        Assert.Contains(errors, error => error.Contains("CryptoReferencePriceHistory.AssetSymbols", StringComparison.Ordinal));
+        Assert.Contains(errors, error => error.Contains("CryptoReferencePriceHistory.WriteIntervalSeconds", StringComparison.Ordinal));
+        Assert.Contains(errors, error => error.Contains("CryptoReferencePriceHistory.TargetSamplesPerWindow", StringComparison.Ordinal));
+        Assert.Contains(errors, error => error.Contains("CryptoReferencePriceHistory.WindowMinutes", StringComparison.Ordinal));
+        Assert.Contains(errors, error => error.Contains("CryptoReferencePriceHistory.StartupLookbackHours", StringComparison.Ordinal));
     }
 
     [Fact]
@@ -816,16 +902,16 @@ public sealed class ConfigurationTests
     public void LiveTrading_AutoLivePauseStrategiesAreOptInByStrategy()
     {
         var options = new LiveTradingOptions();
-        var ethSkipBps7InstantStrategyId = StrategyIds.CryptoUpDown5mVariants
-            .Single(variant => variant.Code == "eth_up_down_5m_skip_bps_7_instant")
+        var ethUpBps2InstantStrategyId = StrategyIds.CryptoUpDown5mVariants
+            .Single(variant => variant.Code == "eth_up_down_5m_up_bps_2_instant")
             .Id;
-        var btcMiddle1Bps47InstantStrategyId = StrategyIds.BtcUpDown5mVariants
-            .Single(variant => variant.Code == "btc_up_down_5m_middle_1_bps_47_instant")
+        var btcMiddle1Bps45InstantStrategyId = StrategyIds.BtcUpDown5mVariants
+            .Single(variant => variant.Code == "btc_up_down_5m_middle_100_bps_45_instant")
             .Id;
 
         Assert.False(StrategyAutoLivePausePolicy.IsEnabledForStrategy(options, StrategyIds.FollowLeader));
-        Assert.False(StrategyAutoLivePausePolicy.IsEnabledForStrategy(options, ethSkipBps7InstantStrategyId));
-        Assert.False(StrategyAutoLivePausePolicy.IsEnabledForStrategy(options, btcMiddle1Bps47InstantStrategyId));
+        Assert.False(StrategyAutoLivePausePolicy.IsEnabledForStrategy(options, ethUpBps2InstantStrategyId));
+        Assert.False(StrategyAutoLivePausePolicy.IsEnabledForStrategy(options, btcMiddle1Bps45InstantStrategyId));
 
         options = new LiveTradingOptions
         {
@@ -838,8 +924,8 @@ public sealed class ConfigurationTests
 
         Assert.True(StrategyAutoLivePausePolicy.IsEnabledForStrategy(options, StrategyIds.FollowLeader));
         Assert.True(StrategyAutoLivePausePolicy.IsEnabledForStrategy(options, StrategyIds.BtcUpDown5mBinanceBps1));
-        Assert.False(StrategyAutoLivePausePolicy.IsEnabledForStrategy(options, ethSkipBps7InstantStrategyId));
-        Assert.False(StrategyAutoLivePausePolicy.IsEnabledForStrategy(options, btcMiddle1Bps47InstantStrategyId));
+        Assert.False(StrategyAutoLivePausePolicy.IsEnabledForStrategy(options, ethUpBps2InstantStrategyId));
+        Assert.False(StrategyAutoLivePausePolicy.IsEnabledForStrategy(options, btcMiddle1Bps45InstantStrategyId));
         Assert.False(StrategyAutoLivePausePolicy.IsEnabledForStrategy(options, StrategyIds.BtcUpDown5mBinanceBps2));
     }
 
@@ -857,6 +943,30 @@ public sealed class ConfigurationTests
         var errors = AppOptionsValidator.Validate(configuration);
 
         Assert.Contains(errors, error => error.Contains("LiveTrading.AutoLivePauseStrategies", StringComparison.Ordinal));
+    }
+
+    [Theory]
+    [InlineData("PolymarketClobPublicClient", true)]
+    [InlineData("PolymarketTradingClient", true)]
+    [InlineData("PolymarketGeoClient", true)]
+    [InlineData("PolymarketMarketWebSocket", false)]
+    [InlineData("PolymarketMarketWebSocket:crypto-updown-5m-critical", false)]
+    [InlineData("PolymarketMarketWebSocket:shard-004", false)]
+    [InlineData("PolymarketGammaClient", false)]
+    [InlineData("PolymarketDataApiClient", false)]
+    [InlineData("PaperTradingWorker", false)]
+    public void LiveApiErrorLockoutPolicy_CountsOnlyLiveOrderApiErrors(
+        string component,
+        bool expected)
+    {
+        var error = new ApiError(
+            Guid.NewGuid(),
+            component,
+            "TestOperation",
+            "Test message",
+            DateTimeOffset.UtcNow);
+
+        Assert.Equal(expected, LiveApiErrorLockoutPolicy.CountsForLiveOrderLockout(error));
     }
 
     [Fact]

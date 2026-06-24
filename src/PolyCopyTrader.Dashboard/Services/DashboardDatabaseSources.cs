@@ -10,6 +10,8 @@ public static class DashboardDatabaseSources
 {
     public const string LocalDisplayName = "Local database";
     public const string RemoteDisplayName = "Remote database";
+    public const string LocalKey = "Local";
+    public const string RemoteKey = "Remote";
     public const string RemoteHost = "192.168.0.101";
 
     public static readonly IReadOnlyList<string> DisplayNames =
@@ -21,6 +23,14 @@ public static class DashboardDatabaseSources
     public static DashboardDatabaseSource FromDisplayName(string? displayName)
     {
         return string.Equals(displayName, RemoteDisplayName, StringComparison.Ordinal)
+            ? DashboardDatabaseSource.Remote
+            : DashboardDatabaseSource.Local;
+    }
+
+    public static DashboardDatabaseSource FromConfiguredValue(string? value)
+    {
+        return string.Equals(value, RemoteDisplayName, StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(value, RemoteKey, StringComparison.OrdinalIgnoreCase)
             ? DashboardDatabaseSource.Remote
             : DashboardDatabaseSource.Local;
     }

@@ -37,7 +37,8 @@ public sealed record ClobV2OrderRequest(
     string? Metadata = null,
     string? Builder = null,
     bool PostOnly = true,
-    bool DeferExec = false);
+    bool DeferExec = false,
+    decimal? MarketBuyAmountUsd = null);
 
 public sealed record ClobV2OrderAmounts(
     TradeSide Side,

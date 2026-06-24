@@ -113,6 +113,15 @@ public interface IPolymarketGammaClient
         return Task.FromResult<PolymarketGammaMarket?>(null);
     }
 
+    Task<IReadOnlyList<PolymarketGammaMarket>> GetClosedMarketsBySeriesSlugAsync(
+        string seriesSlug,
+        DateTimeOffset startTimeMinUtc,
+        DateTimeOffset startTimeMaxUtc,
+        CancellationToken cancellationToken = default)
+    {
+        return Task.FromResult<IReadOnlyList<PolymarketGammaMarket>>([]);
+    }
+
     Task<IReadOnlyList<PolymarketOnChainTokenMetadata>> GetTokenMetadataAsync(
         string tokenId,
         bool closed,

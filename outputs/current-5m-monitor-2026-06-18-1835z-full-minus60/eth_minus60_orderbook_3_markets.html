@@ -1,0 +1,155 @@
+﻿<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>ETH monitored order book from -60s, 3 markets</title>
+<style>
+body { margin: 0; font-family: Segoe UI, Arial, sans-serif; color: #0f172a; background: #f8fafc; }
+main { max-width: 1280px; margin: 0 auto; padding: 24px; }
+a { color: #0369a1; }
+.note { color: #475569; font-size: 14px; line-height: 1.45; margin: 8px 0 18px; }
+.chart { overflow-x: auto; background: white; border: 1px solid #cbd5e1; border-radius: 8px; }
+.chart svg { display: block; min-width: 1220px; }
+table { border-collapse: collapse; width: 100%; margin-top: 20px; background: white; border: 1px solid #cbd5e1; }
+th, td { border-bottom: 1px solid #e2e8f0; padding: 8px 10px; text-align: left; font-size: 13px; }
+th { background: #f1f5f9; font-weight: 700; }
+</style>
+</head>
+<body>
+<main>
+<h1>ETH monitored order book from -60s</h1>
+<p class="note">Three consecutive 5-minute markets: 2026-06-18 18:35Z, 18:40Z, 18:45Z. Lines use valid CLOB top-of-book rows; nearest actual samples just outside -60s/+300s are clamped to graph boundaries.</p>
+<p class="note"><a href="eth_minus60_orderbook_3_markets.svg">Open raw SVG</a> | <a href="index_graphs.html">Graph index</a> | <a href="samples.csv">samples.csv</a> | <a href="summary_requested_window.csv">summary_requested_window.csv</a></p>
+<div class="chart"><svg xmlns='http://www.w3.org/2000/svg' width='1220' height='1276' viewBox='0 0 1220 1276' role='img' aria-label='ETH monitored order book top of book from minus 60 seconds through market end'>
+<rect width='100%' height='100%' fill='#f8fafc'/>
+<text x='34' y='38' font-family='Segoe UI, Arial, sans-serif' font-size='24' font-weight='700' fill='#0f172a'>ETH monitored Up/Down 5m top-of-book</text>
+<text x='34' y='64' font-family='Segoe UI, Arial, sans-serif' font-size='13' fill='#475569'>Three consecutive markets: 18:35Z, 18:40Z, 18:45Z. Source: public Gamma + CLOB /book monitor, sampled about every 15s.</text>
+<text x='34' y='84' font-family='Segoe UI, Arial, sans-serif' font-size='13' fill='#475569'>The x-axis is fixed at -60s..+300s. Nearest real boundary samples just outside the window are clamped to the boundary when needed.</text>
+<line x1='34' y1='104' x2='80' y2='104' stroke='#047857' stroke-width='3'/>
+<text x='86' y='108' font-family='Segoe UI, Arial, sans-serif' font-size='12' fill='#334155'>Up bid</text>
+<line x1='124' y1='104' x2='170' y2='104' stroke='#14b8a6' stroke-width='3' stroke-dasharray='6 5'/>
+<text x='176' y='108' font-family='Segoe UI, Arial, sans-serif' font-size='12' fill='#334155'>Up ask</text>
+<line x1='214' y1='104' x2='260' y2='104' stroke='#b91c1c' stroke-width='3'/>
+<text x='266' y='108' font-family='Segoe UI, Arial, sans-serif' font-size='12' fill='#334155'>Down bid</text>
+<line x1='324' y1='104' x2='370' y2='104' stroke='#f97316' stroke-width='3' stroke-dasharray='6 5'/>
+<text x='376' y='108' font-family='Segoe UI, Arial, sans-serif' font-size='12' fill='#334155'>Down ask</text>
+<g>
+<rect x='24' y='112' width='1172' height='306' fill='#ffffff' stroke='#cbd5e1' rx='6'/>
+<text x='44' y='140' font-family='Segoe UI, Arial, sans-serif' font-size='15' font-weight='700' fill='#0f172a'>eth-updown-5m-1781807700 | samples 18 | result Down | move -15.9097 bps</text>
+<text x='44' y='161' font-family='Segoe UI, Arial, sans-serif' font-size='12' fill='#64748b'>valid window rows -44.7s..289.0s; boundary samples: left -64.2s, right 309.2s; ref 1,684.5100 -&gt; 1,681.8300</text>
+<line x1='82' y1='392' x2='1186' y2='392' stroke='#e2e8f0' stroke-width='1'/>
+<text x='68' y='396' text-anchor='end' font-family='Segoe UI, Arial, sans-serif' font-size='11' fill='#64748b'>0.00</text>
+<line x1='82' y1='337' x2='1186' y2='337' stroke='#e2e8f0' stroke-width='1'/>
+<text x='68' y='341' text-anchor='end' font-family='Segoe UI, Arial, sans-serif' font-size='11' fill='#64748b'>0.25</text>
+<line x1='82' y1='282' x2='1186' y2='282' stroke='#94a3b8' stroke-width='1.4'/>
+<text x='68' y='286' text-anchor='end' font-family='Segoe UI, Arial, sans-serif' font-size='11' fill='#64748b'>0.50</text>
+<line x1='82' y1='227' x2='1186' y2='227' stroke='#e2e8f0' stroke-width='1'/>
+<text x='68' y='231' text-anchor='end' font-family='Segoe UI, Arial, sans-serif' font-size='11' fill='#64748b'>0.75</text>
+<line x1='82' y1='172' x2='1186' y2='172' stroke='#e2e8f0' stroke-width='1'/>
+<text x='68' y='176' text-anchor='end' font-family='Segoe UI, Arial, sans-serif' font-size='11' fill='#64748b'>1.00</text>
+<line x1='82' y1='172' x2='82' y2='392' stroke='#e2e8f0' stroke-width='1'/>
+<text x='82' y='410' text-anchor='middle' font-family='Segoe UI, Arial, sans-serif' font-size='11' fill='#64748b'>-60s</text>
+<line x1='266' y1='172' x2='266' y2='392' stroke='#64748b' stroke-width='1.3'/>
+<text x='266' y='410' text-anchor='middle' font-family='Segoe UI, Arial, sans-serif' font-size='11' fill='#64748b'>start</text>
+<line x1='450' y1='172' x2='450' y2='392' stroke='#e2e8f0' stroke-width='1'/>
+<text x='450' y='410' text-anchor='middle' font-family='Segoe UI, Arial, sans-serif' font-size='11' fill='#64748b'>60s</text>
+<line x1='634' y1='172' x2='634' y2='392' stroke='#e2e8f0' stroke-width='1'/>
+<text x='634' y='410' text-anchor='middle' font-family='Segoe UI, Arial, sans-serif' font-size='11' fill='#64748b'>120s</text>
+<line x1='818' y1='172' x2='818' y2='392' stroke='#e2e8f0' stroke-width='1'/>
+<text x='818' y='410' text-anchor='middle' font-family='Segoe UI, Arial, sans-serif' font-size='11' fill='#64748b'>180s</text>
+<line x1='1002' y1='172' x2='1002' y2='392' stroke='#e2e8f0' stroke-width='1'/>
+<text x='1002' y='410' text-anchor='middle' font-family='Segoe UI, Arial, sans-serif' font-size='11' fill='#64748b'>240s</text>
+<line x1='1186' y1='172' x2='1186' y2='392' stroke='#64748b' stroke-width='1.3'/>
+<text x='1186' y='410' text-anchor='middle' font-family='Segoe UI, Arial, sans-serif' font-size='11' fill='#64748b'>end</text>
+<rect x='82' y='172' width='1104' height='220' fill='none' stroke='#94a3b8'/>
+<polyline points='82,286.4 128,286.4 186.267,286.4 244.533,286.4 302.8,286.4 361.067,273.2 419.333,332.6 480.667,299.6 538.933,323.8 600.267,372.2 664.667,352.4 722.933,330.4 778.133,332.6 839.467,345.8 903.867,376.6 962.133,385.4' fill='none' stroke='#047857' stroke-width='2.6' stroke-linecap='round' stroke-linejoin='round'/>
+<polyline points='82,284.2 128,284.2 186.267,284.2 244.533,284.2 302.8,284.2 361.067,271 419.333,330.4 480.667,297.4 538.933,321.6 600.267,370 664.667,350.2 722.933,328.2 778.133,330.4 839.467,341.4 903.867,374.4 962.133,383.2 1020.4,389.8 1084.8,389.8 1152.267,389.8 1186,389.8' fill='none' stroke='#14b8a6' stroke-width='2.3' stroke-linecap='round' stroke-linejoin='round' stroke-dasharray='6 5'/>
+<polyline points='82,279.8 128,279.8 186.267,279.8 244.533,279.8 302.8,279.8 361.067,293 419.333,233.6 480.667,266.6 538.933,235.8 600.267,194 664.667,213.8 722.933,235.8 778.133,233.6 839.467,222.6 903.867,189.6 962.133,180.8 1020.4,174.2 1084.8,174.2 1152.267,174.2 1186,174.2' fill='none' stroke='#b91c1c' stroke-width='2.6' stroke-linecap='round' stroke-linejoin='round'/>
+<polyline points='82,277.6 128,277.6 186.267,277.6 244.533,277.6 302.8,277.6 361.067,290.8 419.333,231.4 480.667,264.4 538.933,233.6 600.267,191.8 664.667,211.6 722.933,233.6 778.133,231.4 839.467,220.4 903.867,187.4 962.133,178.6' fill='none' stroke='#f97316' stroke-width='2.3' stroke-linecap='round' stroke-linejoin='round' stroke-dasharray='6 5'/>
+<text x='634' y='432' text-anchor='middle' font-family='Segoe UI, Arial, sans-serif' font-size='12' fill='#475569'>seconds from market start</text>
+<text x='30' y='282' transform='rotate(-90 30 282)' text-anchor='middle' font-family='Segoe UI, Arial, sans-serif' font-size='12' fill='#475569'>price</text>
+</g>
+<g>
+<rect x='24' y='482' width='1172' height='306' fill='#ffffff' stroke='#cbd5e1' rx='6'/>
+<text x='44' y='510' font-family='Segoe UI, Arial, sans-serif' font-size='15' font-weight='700' fill='#0f172a'>eth-updown-5m-1781808000 | samples 18 | result Up | move 19.7361 bps</text>
+<text x='44' y='531' font-family='Segoe UI, Arial, sans-serif' font-size='12' fill='#64748b'>valid window rows -53.7s..282.3s; boundary samples: left -72.9s, right 300.8s; ref 1,682.2000 -&gt; 1,685.5200</text>
+<line x1='82' y1='762' x2='1186' y2='762' stroke='#e2e8f0' stroke-width='1'/>
+<text x='68' y='766' text-anchor='end' font-family='Segoe UI, Arial, sans-serif' font-size='11' fill='#64748b'>0.00</text>
+<line x1='82' y1='707' x2='1186' y2='707' stroke='#e2e8f0' stroke-width='1'/>
+<text x='68' y='711' text-anchor='end' font-family='Segoe UI, Arial, sans-serif' font-size='11' fill='#64748b'>0.25</text>
+<line x1='82' y1='652' x2='1186' y2='652' stroke='#94a3b8' stroke-width='1.4'/>
+<text x='68' y='656' text-anchor='end' font-family='Segoe UI, Arial, sans-serif' font-size='11' fill='#64748b'>0.50</text>
+<line x1='82' y1='597' x2='1186' y2='597' stroke='#e2e8f0' stroke-width='1'/>
+<text x='68' y='601' text-anchor='end' font-family='Segoe UI, Arial, sans-serif' font-size='11' fill='#64748b'>0.75</text>
+<line x1='82' y1='542' x2='1186' y2='542' stroke='#e2e8f0' stroke-width='1'/>
+<text x='68' y='546' text-anchor='end' font-family='Segoe UI, Arial, sans-serif' font-size='11' fill='#64748b'>1.00</text>
+<line x1='82' y1='542' x2='82' y2='762' stroke='#e2e8f0' stroke-width='1'/>
+<text x='82' y='780' text-anchor='middle' font-family='Segoe UI, Arial, sans-serif' font-size='11' fill='#64748b'>-60s</text>
+<line x1='266' y1='542' x2='266' y2='762' stroke='#64748b' stroke-width='1.3'/>
+<text x='266' y='780' text-anchor='middle' font-family='Segoe UI, Arial, sans-serif' font-size='11' fill='#64748b'>start</text>
+<line x1='450' y1='542' x2='450' y2='762' stroke='#e2e8f0' stroke-width='1'/>
+<text x='450' y='780' text-anchor='middle' font-family='Segoe UI, Arial, sans-serif' font-size='11' fill='#64748b'>60s</text>
+<line x1='634' y1='542' x2='634' y2='762' stroke='#e2e8f0' stroke-width='1'/>
+<text x='634' y='780' text-anchor='middle' font-family='Segoe UI, Arial, sans-serif' font-size='11' fill='#64748b'>120s</text>
+<line x1='818' y1='542' x2='818' y2='762' stroke='#e2e8f0' stroke-width='1'/>
+<text x='818' y='780' text-anchor='middle' font-family='Segoe UI, Arial, sans-serif' font-size='11' fill='#64748b'>180s</text>
+<line x1='1002' y1='542' x2='1002' y2='762' stroke='#e2e8f0' stroke-width='1'/>
+<text x='1002' y='780' text-anchor='middle' font-family='Segoe UI, Arial, sans-serif' font-size='11' fill='#64748b'>240s</text>
+<line x1='1186' y1='542' x2='1186' y2='762' stroke='#64748b' stroke-width='1.3'/>
+<text x='1186' y='780' text-anchor='middle' font-family='Segoe UI, Arial, sans-serif' font-size='11' fill='#64748b'>end</text>
+<rect x='82' y='542' width='1104' height='220' fill='none' stroke='#94a3b8'/>
+<polyline points='82,654.2 100.4,654.2 164.8,652 232.267,652 293.6,654.2 354.933,632.2 413.2,623.4 471.467,619 529.733,608 591.067,601.4 649.333,616.8 707.6,590.4 765.867,586 824.133,561.8 885.467,548.6 943.733,546.4 1005.067,544.2 1069.467,544.2 1130.8,544.2 1186,544.2' fill='none' stroke='#047857' stroke-width='2.6' stroke-linecap='round' stroke-linejoin='round'/>
+<polyline points='82,652 100.4,652 164.8,649.8 232.267,649.8 293.6,652 354.933,630 413.2,621.2 471.467,616.8 529.733,605.8 591.067,597 649.333,614.6 707.6,588.2 765.867,583.8 824.133,559.6 885.467,546.4 943.733,544.2' fill='none' stroke='#14b8a6' stroke-width='2.3' stroke-linecap='round' stroke-linejoin='round' stroke-dasharray='6 5'/>
+<polyline points='82,652 100.4,652 164.8,654.2 232.267,654.2 293.6,652 354.933,674 413.2,682.8 471.467,687.2 529.733,698.2 591.067,698.2 649.333,689.4 707.6,715.8 765.867,720.2 824.133,744.4 885.467,757.6 943.733,759.8' fill='none' stroke='#b91c1c' stroke-width='2.6' stroke-linecap='round' stroke-linejoin='round'/>
+<polyline points='82,649.8 100.4,649.8 164.8,652 232.267,652 293.6,649.8 354.933,671.8 413.2,680.6 471.467,685 529.733,696 591.067,696 649.333,687.2 707.6,713.6 765.867,718 824.133,742.2 885.467,755.4 943.733,757.6 1005.067,759.8 1069.467,759.8 1130.8,759.8 1186,759.8' fill='none' stroke='#f97316' stroke-width='2.3' stroke-linecap='round' stroke-linejoin='round' stroke-dasharray='6 5'/>
+<text x='634' y='802' text-anchor='middle' font-family='Segoe UI, Arial, sans-serif' font-size='12' fill='#475569'>seconds from market start</text>
+<text x='30' y='652' transform='rotate(-90 30 652)' text-anchor='middle' font-family='Segoe UI, Arial, sans-serif' font-size='12' fill='#475569'>price</text>
+</g>
+<g>
+<rect x='24' y='852' width='1172' height='306' fill='#ffffff' stroke='#cbd5e1' rx='6'/>
+<text x='44' y='880' font-family='Segoe UI, Arial, sans-serif' font-size='15' font-weight='700' fill='#0f172a'>eth-updown-5m-1781808300 | samples 19 | result Up | move 1.3053 bps</text>
+<text x='44' y='901' font-family='Segoe UI, Arial, sans-serif' font-size='12' fill='#64748b'>valid window rows -59.4s..283.0s; boundary samples: left -79.1s, right 301.2s; ref 1,685.4000 -&gt; 1,685.6200</text>
+<line x1='82' y1='1132' x2='1186' y2='1132' stroke='#e2e8f0' stroke-width='1'/>
+<text x='68' y='1136' text-anchor='end' font-family='Segoe UI, Arial, sans-serif' font-size='11' fill='#64748b'>0.00</text>
+<line x1='82' y1='1077' x2='1186' y2='1077' stroke='#e2e8f0' stroke-width='1'/>
+<text x='68' y='1081' text-anchor='end' font-family='Segoe UI, Arial, sans-serif' font-size='11' fill='#64748b'>0.25</text>
+<line x1='82' y1='1022' x2='1186' y2='1022' stroke='#94a3b8' stroke-width='1.4'/>
+<text x='68' y='1026' text-anchor='end' font-family='Segoe UI, Arial, sans-serif' font-size='11' fill='#64748b'>0.50</text>
+<line x1='82' y1='967' x2='1186' y2='967' stroke='#e2e8f0' stroke-width='1'/>
+<text x='68' y='971' text-anchor='end' font-family='Segoe UI, Arial, sans-serif' font-size='11' fill='#64748b'>0.75</text>
+<line x1='82' y1='912' x2='1186' y2='912' stroke='#e2e8f0' stroke-width='1'/>
+<text x='68' y='916' text-anchor='end' font-family='Segoe UI, Arial, sans-serif' font-size='11' fill='#64748b'>1.00</text>
+<line x1='82' y1='912' x2='82' y2='1132' stroke='#e2e8f0' stroke-width='1'/>
+<text x='82' y='1150' text-anchor='middle' font-family='Segoe UI, Arial, sans-serif' font-size='11' fill='#64748b'>-60s</text>
+<line x1='266' y1='912' x2='266' y2='1132' stroke='#64748b' stroke-width='1.3'/>
+<text x='266' y='1150' text-anchor='middle' font-family='Segoe UI, Arial, sans-serif' font-size='11' fill='#64748b'>start</text>
+<line x1='450' y1='912' x2='450' y2='1132' stroke='#e2e8f0' stroke-width='1'/>
+<text x='450' y='1150' text-anchor='middle' font-family='Segoe UI, Arial, sans-serif' font-size='11' fill='#64748b'>60s</text>
+<line x1='634' y1='912' x2='634' y2='1132' stroke='#e2e8f0' stroke-width='1'/>
+<text x='634' y='1150' text-anchor='middle' font-family='Segoe UI, Arial, sans-serif' font-size='11' fill='#64748b'>120s</text>
+<line x1='818' y1='912' x2='818' y2='1132' stroke='#e2e8f0' stroke-width='1'/>
+<text x='818' y='1150' text-anchor='middle' font-family='Segoe UI, Arial, sans-serif' font-size='11' fill='#64748b'>180s</text>
+<line x1='1002' y1='912' x2='1002' y2='1132' stroke='#e2e8f0' stroke-width='1'/>
+<text x='1002' y='1150' text-anchor='middle' font-family='Segoe UI, Arial, sans-serif' font-size='11' fill='#64748b'>240s</text>
+<line x1='1186' y1='912' x2='1186' y2='1132' stroke='#64748b' stroke-width='1.3'/>
+<text x='1186' y='1150' text-anchor='middle' font-family='Segoe UI, Arial, sans-serif' font-size='11' fill='#64748b'>end</text>
+<rect x='82' y='912' width='1104' height='220' fill='none' stroke='#94a3b8'/>
+<polyline points='82,1022 85.067,1026.4 149.467,1026.4 210.8,1024.2 269.067,1008.8 327.333,1015.4 382.533,1015.4 440.8,1006.6 496,1000 560.4,1037.4 615.6,1046.2 670.8,1002.2 726,997.8 781.2,1041.8 836.4,1055 894.667,1008.8 952.933,1011 1020.4,991.2 1078.667,1041.8 1133.867,958.2 1186,914.2' fill='none' stroke='#047857' stroke-width='2.6' stroke-linecap='round' stroke-linejoin='round'/>
+<polyline points='82,1019.8 85.067,1019.8 149.467,1024.2 210.8,1022 269.067,1006.6 327.333,1013.2 382.533,1013.2 440.8,1004.4 496,997.8 560.4,1035.2 615.6,1044 670.8,1000 726,995.6 781.2,1039.6 836.4,1052.8 894.667,1006.6 952.933,1008.8 1020.4,989 1078.667,1039.6 1133.867,956' fill='none' stroke='#14b8a6' stroke-width='2.3' stroke-linecap='round' stroke-linejoin='round' stroke-dasharray='6 5'/>
+<polyline points='82,1024.2 85.067,1024.2 149.467,1019.8 210.8,1022 269.067,1037.4 327.333,1030.8 382.533,1030.8 440.8,1041.8 496,1046.2 560.4,1008.8 615.6,1000 670.8,1044 726,1048.4 781.2,1004.4 836.4,991.2 894.667,1035.2 952.933,1035.2 1020.4,1055 1078.667,1004.4 1133.867,1088' fill='none' stroke='#b91c1c' stroke-width='2.6' stroke-linecap='round' stroke-linejoin='round'/>
+<polyline points='82,1022 85.067,1017.6 149.467,1017.6 210.8,1019.8 269.067,1035.2 327.333,1028.6 382.533,1028.6 440.8,1039.6 496,1044 560.4,1006.6 615.6,997.8 670.8,1041.8 726,1046.2 781.2,1002.2 836.4,989 894.667,1033 952.933,1033 1020.4,1052.8 1078.667,1002.2 1133.867,1085.8 1186,1129.8' fill='none' stroke='#f97316' stroke-width='2.3' stroke-linecap='round' stroke-linejoin='round' stroke-dasharray='6 5'/>
+<text x='634' y='1172' text-anchor='middle' font-family='Segoe UI, Arial, sans-serif' font-size='12' fill='#475569'>seconds from market start</text>
+<text x='30' y='1022' transform='rotate(-90 30 1022)' text-anchor='middle' font-family='Segoe UI, Arial, sans-serif' font-size='12' fill='#475569'>price</text>
+</g>
+</svg>
+</div>
+<h2>Summary</h2>
+<table><thead><tr><th>Market</th><th>Samples</th><th>Valid window</th><th>Move</th><th>Result</th><th>Last Up bid/ask</th><th>Last Down bid/ask</th></tr></thead><tbody>
+<tr><td>eth-updown-5m-1781807700</td><td>18</td><td>-44.7s..289.0s</td><td>-15.9097 bps</td><td>Down</td><td>/0.01</td><td>0.99/</td></tr>
+<tr><td>eth-updown-5m-1781808000</td><td>18</td><td>-53.7s..282.3s</td><td>19.7361 bps</td><td>Up</td><td>0.99/</td><td>/0.01</td></tr>
+<tr><td>eth-updown-5m-1781808300</td><td>19</td><td>-59.4s..283.0s</td><td>1.3053 bps</td><td>Up</td><td>0.79/0.8</td><td>0.2/0.21</td></tr>
+</tbody></table>
+
+</main>
+</body>
+</html>
