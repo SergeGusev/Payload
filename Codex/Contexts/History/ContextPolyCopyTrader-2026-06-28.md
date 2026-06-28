@@ -99,3 +99,10 @@ Request:
 
 Result:
 Added a standalone C# backtest analyzer under `outputs/diff-progress-waiting-reset-zero-backtest-2026-06-28/` and regenerated the six-month Binance 5m Diff Progress results with per-strategy counters. In this model `Waiting` resets at `00:00 UTC`, `Betting` carries counters across midnight and keeps placing opposite-side entries until side-specific `Diff <= 0`, with multiplier `min(max(Diff - N, 1), 10)`. Aggregate fixed-0.50 model results: BTC PnL `432` units and ROI `0.0013%`; ETH PnL `310` and ROI `0.0011%`; SOL PnL `39790` and ROI `0.1609%`. At the end of the data window, `83` BTC, `58` ETH, and `66` SOL strategies were still in betting mode.
+
+## 2026-06-28T10:49:09.5605447+00:00
+Request:
+Ок, вернёмя к предыдущему режиму, к сбросу без условий. Где там теряются деньги?
+
+Result:
+Analyzed the existing unconditional-midnight-reset Diff Progress backtest CSVs. Net-negative strategies are only `BTC Diff Up Progress N=10..22`, totaling `-461` units. The real drawdown source is not those final-negative strategies but capped trend-continuation days: negative strategy-day rows with capped entries account for `-164910` units of gross losses, versus `-2697` in uncapped negative rows. Worst asset-days include BTC `2026-06-02` `-6912`, BTC `2026-04-17` `-5529`, BTC `2026-03-14` `-4472`, ETH `2026-06-02` `-3483`, and SOL `2026-06-02` `-3063`.

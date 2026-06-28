@@ -1,3 +1,16 @@
+## Active Update 2026-06-28 Diff Progress Loss Attribution
+Goal: Explain where the unconditional-midnight-reset Diff Progress backtest loses money.
+Status: Completed
+Done:
+- Analyzed existing `outputs/diff-progress-backtest-2026-06-28/` CSV results without rerunning or changing production strategy code.
+- Found only 13 net-negative strategies, all `BTC Diff Up Progress` thresholds `N=10..22`, totaling `-461` units; every ETH and SOL strategy, and every BTC Down strategy, remained net-positive.
+- Gross daily losses are much larger than net-negative strategy totals: BTC strategy-day losses `-73315` units, ETH `-48872`, SOL `-45420`, mostly offset by positive days.
+- Losses concentrate in capped trend-continuation days: negative strategy-day rows with at least one capped entry account for `-164910` units versus only `-2697` in uncapped negative rows.
+- Worst asset-days include BTC `2026-06-02` `-6912`, BTC `2026-04-17` `-5529`, BTC `2026-03-14` `-4472`, ETH `2026-06-02` `-3483`, and SOL `2026-06-02` `-3063`.
+Next: If reducing drawdown is more important than maximum gross profit, evaluate filters for capped-entry continuation days, for example stop after multiplier reaches 10, lower cap, or skip entries when intraday Diff has already moved too far.
+Notes: Verification was CSV inspection with PowerShell over `diff-progress-backtest-strategies.csv` and `diff-progress-backtest-daily-by-strategy.csv`; no build/tests required because no runtime code changed.
+Blockers: None.
+
 ## Active Update 2026-06-28 Diff Progress Waiting-Reset-Zero Backtest
 Goal: Recalculate the Diff Progress six-month Binance backtest using waiting-only midnight resets and betting until Diff zero.
 Status: Completed
