@@ -6898,11 +6898,11 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
         }
 
         var effectiveDiff = GetDiffShiftProgressEffectiveDiff(state, triggerDirection.Value);
-        if (effectiveDiff < 0)
+        if (effectiveDiff <= 0)
         {
             await repository.UpsertCryptoUpDown5mDiffShiftProgressStateAsync(state, cancellationToken);
             return BtcOpeningLimitDecision.Reject(
-                "diff_shift_progress_negative_diff",
+                "diff_shift_progress_non_positive_diff",
                 BuildDiffShiftProgressRawDecisionJson(
                     market,
                     variant,
@@ -6919,7 +6919,7 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
                     shift.ShiftCount,
                     stakeMultiplier: null,
                     stakeUsd: null,
-                    reason: "diff_shift_progress_negative_diff"));
+                    reason: "diff_shift_progress_non_positive_diff"));
         }
 
         var selectedOutcome = TrySelectOutcomeForDirection(market, selectedDirection.Value);

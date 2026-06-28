@@ -2559,7 +2559,7 @@ SELECT
     ('b7c50005-0000-4000-' || id_group || '-000000000001')::uuid,
     lower(asset_symbol) || '_up_down_5m_diff_' || diff_code || '_shift_progress',
     asset_symbol || ' Up or Down 5m Diff ' || diff_name || ' Shift Progress',
-    'Diff Shift Progress strategy: use the persistent raw ' || diff_expression || ' counter and persistent Sum. Unit is this strategy paper_stake_amount. Each FAK Paper BUY on ' || target_outcome || ' uses multiplier Diff + 1 with the Diff instant max price cap. When a previous bet wins, Sum increases by the filled stake; when it loses, Sum decreases by the filled stake. After each processed result, while Sum is greater than Unit and Diff is greater than 1, reduce Diff by 1 and subtract Unit from Sum.',
+    'Diff Shift Progress strategy: use the persistent raw ' || diff_expression || ' counter and persistent Sum. Unit is this strategy paper_stake_amount. When Diff is greater than 0, each FAK Paper BUY on ' || target_outcome || ' uses multiplier Diff + 1 with the Diff instant max price cap; Diff 0 or below skips. When a previous bet wins, Sum increases by the filled stake; when it loses, Sum decreases by the filled stake. After each processed result, while Sum is greater than Unit and Diff is greater than 1, reduce Diff by 1 and subtract Unit from Sum.',
     true,
     false,
     1.00,

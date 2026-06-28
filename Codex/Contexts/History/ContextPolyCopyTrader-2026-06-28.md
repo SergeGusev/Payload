@@ -1,3 +1,10 @@
+## 2026-06-28T12:33:52.6041961Z
+Request:
+Diff Shift Progress must also skip the market when `Diff = 0`.
+
+Result:
+Changed Diff Shift Progress entry gate from `Diff >= 0` to `Diff > 0`, renamed the skip reason for zero/negative Diff to `diff_shift_progress_non_positive_diff`, and updated strategy descriptions, SQL seed text, README, and focused processor coverage. Targeted verification passed 65 tests.
+
 ## 2026-06-28T12:26:43.9455088Z
 Request:
 Add six BTC/ETH/SOL `Diff Up/Down Shift Progress` strategies with persistent `UpCount`, `DownCount`, `Sum`, Unit-based FAK sizing, and one shared category.

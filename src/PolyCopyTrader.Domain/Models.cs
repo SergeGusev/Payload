@@ -2397,7 +2397,7 @@ public static class StrategyIds
             Guid.Parse($"b7c50005-0000-4000-{idGroup:0000}-000000000001"),
             $"{assetCode}_up_down_5m_diff_{diffGroupCode}_shift_progress",
             $"{normalizedAsset} Up or Down 5m Diff {diffGroupName} Shift Progress",
-            $"Diff Shift Progress strategy: use the persistent raw {diffExpression} counter and persistent Sum. Unit is this strategy's Paper stake amount. Each FAK Paper BUY on {targetOutcomeName} uses multiplier Diff + 1 at the Diff instant max price cap. When a previous bet wins, Sum increases by the filled stake; when it loses, Sum decreases by the filled stake. After each processed result, while Sum is greater than Unit and Diff is greater than 1, reduce Diff by 1 and subtract Unit from Sum.",
+            $"Diff Shift Progress strategy: use the persistent raw {diffExpression} counter and persistent Sum. Unit is this strategy's Paper stake amount. When Diff is greater than 0, each FAK Paper BUY on {targetOutcomeName} uses multiplier Diff + 1 at the Diff instant max price cap; Diff 0 or below skips. When a previous bet wins, Sum increases by the filled stake; when it loses, Sum decreases by the filled stake. After each processed result, while Sum is greater than Unit and Diff is greater than 1, reduce Diff by 1 and subtract Unit from Sum.",
             BtcUpDown5mStrategyDirection.Dynamic,
             0,
             BtcUpDown5mStrategyBehavior.DiffShiftProgress,

@@ -580,7 +580,8 @@ each resolved 5-minute result, a pending winning bet adds its filled notional to
 `Sum`; a losing bet subtracts its filled notional. While `Sum > Unit` and
 side-specific `Diff > 1`, the strategy reduces that side's count by one and
 subtracts `Unit` from `Sum`. It then buys the opposite outcome with BUY FAK
-Paper sizing `Unit * (Diff + 1)` whenever `Diff >= 0`; negative Diff skips.
+Paper sizing `Unit * (Diff + 1)` only when `Diff > 0`; `Diff = 0` or negative
+Diff skips.
 
 A dedicated fast Diff worker observes Diff, Diff Progress, AdjustedDiff, ShiftDiff, and their
 Revert copies, then evaluates market `T` only after the previous 5-minute market

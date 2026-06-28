@@ -5365,6 +5365,66 @@ public sealed class BtcUpDown5mPaperStrategyProcessorTests
     }
 
     [Fact]
+    public async Task ProcessDiffCounterDueEntriesAsync_DiffShiftProgressSkipsWhenDiffIsZero()
+    {
+        var entryMarketStartUtc = new DateTimeOffset(2026, 6, 8, 14, 35, 0, TimeSpan.Zero);
+        var entryNow = entryMarketStartUtc.AddMinutes(2);
+        var timeProvider = new ManualTimeProvider(entryNow);
+        var variant = StrategyIds.UpDown5mStrategyVariants.Single(item =>
+            item.Code == "btc_up_down_5m_diff_up_shift_progress");
+        var repository = new TestAppRepository();
+        AddWebSocketDiffResults(
+            repository,
+            "BTC",
+            entryMarketStartUtc.AddMinutes(-5),
+            "Up",
+            "Down");
+        var orderBooks = new[]
+        {
+            OrderBook("asset-up", bestBid: 0.54m, bestAsk: 0.55m, entryNow),
+            OrderBook("asset-down", bestBid: 0.44m, bestAsk: 0.45m, entryNow)
+        };
+        var processor = CreateProcessorCoreWithOptions(
+            repository,
+            [],
+            orderBooks,
+            _ => { },
+            orderBooks,
+            CreateBtcOptions(paperTakerPricingEnabled: false, [variant.Code]),
+            gammaClient: new FakeGammaClient([]),
+            timeProvider: timeProvider);
+
+        repository.PolymarketGammaMarkets.Add(CreateMarket(
+            entryMarketStartUtc,
+            entryMarketStartUtc.AddMinutes(5),
+            upPrice: 0.50m,
+            downPrice: 0.50m,
+            marketId: "diff-shift-progress-zero-market",
+            conditionId: "diff-shift-progress-zero-condition"));
+
+        var result = await processor.ProcessDiffCounterDueEntriesAsync();
+
+        Assert.Equal(0, result.EntriesPlaced);
+        Assert.Equal(1, result.RunsSkipped);
+        var run = repository.StrategyMarketPaperRuns.Single(item =>
+            item.MarketStartUtc == entryMarketStartUtc &&
+            item.StrategyId == variant.Id);
+        Assert.Equal(StrategyMarketPaperRunStatuses.Skipped, run.Status);
+        Assert.Equal("diff_shift_progress_non_positive_diff", run.SkipReason);
+        Assert.NotNull(run.SkipDiagnosticsJson);
+        Assert.Contains("\"up_count\":1", run.SkipDiagnosticsJson, StringComparison.Ordinal);
+        Assert.Contains("\"down_count\":1", run.SkipDiagnosticsJson, StringComparison.Ordinal);
+        Assert.Contains("\"effective_diff\":0", run.SkipDiagnosticsJson, StringComparison.Ordinal);
+        Assert.Empty(repository.PaperOrders);
+
+        var state = Assert.Single(repository.CryptoUpDown5mDiffShiftProgressStates);
+        Assert.Equal(1, state.UpCount);
+        Assert.Equal(1, state.DownCount);
+        Assert.Equal(0m, state.SumAmount);
+        Assert.Null(state.PendingMarketStartUtc);
+    }
+
+    [Fact]
     public async Task ProcessDiffCounterDueEntriesAsync_DiffShiftProgressShiftsDiffWhenSumExceedsUnit()
     {
         var entryMarketStartUtc = new DateTimeOffset(2026, 6, 8, 15, 35, 0, TimeSpan.Zero);

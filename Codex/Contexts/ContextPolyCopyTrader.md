@@ -1,3 +1,14 @@
+## Active Update 2026-06-28 Diff Shift Progress Zero Skip
+Goal: Make Diff Shift Progress skip markets when side-specific `Diff = 0`.
+Status: Completed
+Done:
+- Changed Diff Shift Progress entry gate from `Diff >= 0` to `Diff > 0`.
+- Renamed the skip reason for zero/negative Diff to `diff_shift_progress_non_positive_diff`.
+- Updated strategy descriptions, SQL seed text, README, and added a focused processor test proving `UpCount == DownCount` creates a skipped run and no Paper order.
+Next: None.
+Notes: Verification passed: `dotnet test tests\PolyCopyTrader.Tests\PolyCopyTrader.Tests.csproj --no-restore /p:UseSharedCompilation=false --filter "FullyQualifiedName~StrategyDisplayCategoryTests|FullyQualifiedName~StrategyIds_IncludeStandardMartinAndGammaBtcVariants|FullyQualifiedName~StrategyIds_IncludeEthAndSolBinanceBpsVariants|FullyQualifiedName~ProcessDiffCounterDueEntriesAsync_DiffShiftProgress"` passed 65 tests.
+Blockers: None.
+
 ## Active Update 2026-06-28 Diff Shift Progress Strategies
 Goal: Add six BTC/ETH/SOL `Diff Up/Down Shift Progress` strategies with persistent `UpCount`, `DownCount`, `Sum`, and Unit-based FAK sizing.
 Status: Completed
