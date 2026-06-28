@@ -1,3 +1,15 @@
+## Active Update 2026-06-29 FAK 0.99 Paper Live Enforcement
+Goal: Ensure current Up/Down FAK strategies submit Paper and Live bets with worst price `0.99`.
+Status: Completed
+Done:
+- Added a single `FakGuaranteedWorstPrice = 0.99m` path in `BtcUpDown5mPaperStrategyProcessor` and applied it to FAK stake sizing, Paper orders, Paper live-shadow decisions, Live preflight/order persistence, and `CreateFakMarketBuyRequest`.
+- Kept the old executable-ask decision price as diagnostics (`instant_limit_price`) while persisting explicit `fak_worst_price`, `paper_fak_worst_price`, and `live_fak_worst_price`.
+- Changed `PaperTradingProcessor` so background FAK Paper fills/rejections also use order `Price=0.99`; the actual VWAP fill remains in `PaperFill.Price` and position accounting.
+- Updated focused Paper/Live FAK tests for the new semantics.
+Next: None.
+Notes: Verification passed with `dotnet test tests\PolyCopyTrader.Tests\PolyCopyTrader.Tests.csproj --no-restore --filter "FullyQualifiedName=PolyCopyTrader.Tests.BtcUpDown5mPaperStrategyProcessorTests.ProcessAsync_EthDown9FakLiveStakeSubmitsFakMarketBuyAmount|FullyQualifiedName=PolyCopyTrader.Tests.BtcUpDown5mPaperStrategyProcessorTests.ProcessAsync_Skip1LiveStakeCreatesPaperShadowAndFakLiveOrder|FullyQualifiedName~PipelineIntegrationTests.PaperTradingProcessor_FakPaperOrder"` (4/4). Full `dotnet build PolyCopyTrader.sln --no-restore` was blocked by locked Dashboard DLLs held by Visual Studio PID 54532 and running `PolyCopyTrader.Dashboard` PID 13036. Broad `BtcUpDown5mPaperStrategyProcessorTests` compiled but still has many stale assertions for old executable-ask order prices plus existing missing-variant failures.
+Blockers: None.
+
 ## Active Update 2026-06-28 Paper Live 0.99 Semantics Check
 Goal: Explain why Paper appeared expected to use `0.99` but Live rows for `ETH Up or Down 5m Up 50 bps Instant` used lower prices.
 Status: Completed

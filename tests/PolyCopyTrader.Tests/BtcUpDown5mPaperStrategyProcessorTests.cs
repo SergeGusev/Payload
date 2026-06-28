@@ -11903,12 +11903,13 @@ public sealed class BtcUpDown5mPaperStrategyProcessorTests
         Assert.Equal(ClobV2OrderType.FAK, request.OrderType);
         Assert.False(request.PostOnly);
         Assert.Null(request.GtdExpirationUtc);
+        Assert.Equal(0.99m, request.Price);
         Assert.Equal(2.50m, request.MarketBuyAmountUsd);
 
         var liveOrder = Assert.Single(repository.LiveOrders);
         Assert.Equal("FAK", liveOrder.OrderType);
         Assert.Equal(LiveOrderStatus.Matched, liveOrder.Status);
-        Assert.Equal(0.50m, liveOrder.Price);
+        Assert.Equal(0.99m, liveOrder.Price);
         Assert.Equal(liveOrder.CreatedAtUtc, liveOrder.ExpiresAtUtc);
         Assert.Equal("paper_live_shadow_test", liveOrder.ExecutionSource);
         Assert.False(liveOrder.PostOnly);
@@ -13400,7 +13401,7 @@ public sealed class BtcUpDown5mPaperStrategyProcessorTests
                 SignatureType = "EOA"
             },
             new PaperTradingOptions { InitialBankrollUsd = 10_000m, RunInLiveMode = true },
-            new LiveTradingOptions { ManualEnableCode = "LIVE_TRADING_ENABLED", MaxOrderNotionalUsd = 2.50m },
+            new LiveTradingOptions { ManualEnableCode = "LIVE_TRADING_ENABLED", MaxOrderNotionalUsd = 25m },
             new BtcUpDown5mStrategyOptions
             {
                 StakeUsd = 1m,
@@ -13646,7 +13647,7 @@ public sealed class BtcUpDown5mPaperStrategyProcessorTests
                 SignatureType = "EOA"
             },
             paperTradingOptions ?? new PaperTradingOptions { InitialBankrollUsd = 10_000m },
-            liveTradingOptions ?? new LiveTradingOptions { ManualEnableCode = "LIVE_TRADING_ENABLED", MaxOrderNotionalUsd = 2.50m },
+            liveTradingOptions ?? new LiveTradingOptions { ManualEnableCode = "LIVE_TRADING_ENABLED", MaxOrderNotionalUsd = 25m },
             strategyOptions,
             marketDataWebSocketOptions,
             gammaClient ?? new FakeGammaClient(metadata),

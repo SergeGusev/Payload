@@ -511,7 +511,7 @@ public sealed class PipelineIntegrationTests
 
         var updatedOrder = Assert.Single(repository.PaperOrders);
         Assert.Equal(PaperOrderStatus.Filled, updatedOrder.Status);
-        Assert.Equal(0.25m, updatedOrder.Price);
+        Assert.Equal(0.99m, updatedOrder.Price);
         Assert.Equal(20m, updatedOrder.SizeShares);
         Assert.Equal(5m, updatedOrder.NotionalUsd);
         Assert.Contains("fak_taker_depth_vwap_v1", updatedOrder.RawDecisionJson);
@@ -553,7 +553,7 @@ public sealed class PipelineIntegrationTests
             OrderBook(
                 "asset-down",
                 [new OrderBookLevel(0.49m, 100m)],
-                [new OrderBookLevel(0.60m, 100m)]));
+                [new OrderBookLevel(1.00m, 100m)]));
 
         var paperResult = await paperProcessor.ProcessOpenOrdersAsync();
 
@@ -564,6 +564,7 @@ public sealed class PipelineIntegrationTests
 
         var updatedOrder = Assert.Single(repository.PaperOrders);
         Assert.Equal(PaperOrderStatus.Rejected, updatedOrder.Status);
+        Assert.Equal(0.99m, updatedOrder.Price);
         Assert.NotNull(updatedOrder.CancelledAtUtc);
         Assert.Contains("best_ask_above_max_entry", updatedOrder.RawDecisionJson);
         Assert.Contains("fak_taker_depth_vwap_v1", updatedOrder.RawDecisionJson);

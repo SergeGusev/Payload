@@ -58,6 +58,7 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
     private const string OpeningLimitPricingMode = "paper_gtd_limit";
     private const string OpeningLimitOrderType = "GTD";
     private const string FakOrderType = "FAK";
+    private const decimal FakGuaranteedWorstPrice = 0.99m;
     private const decimal AlwaysDirectionLimitPrice = 0.45m;
     private const decimal BinanceStartRelativeDefaultLimitPrice = 0.50m;
     private const int BinanceCleverFairValueLookbackTicks = 2_000;
@@ -3242,10 +3243,13 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
                         }
 
                         var limitPrice = limitPricing.LimitPrice;
+                        var orderPrice = IsFakOrderEntry(variant)
+                            ? ResolveFakGuaranteedWorstPrice(limitPricing.OrderBookLookup?.OrderBook)
+                            : limitPrice;
                         var limitSelectedOutcome = limitDecision.SelectedOutcome;
                         var limitSizing = await GetOpeningLimitStakeSizingAsync(
                             limitSelectedOutcome.AssetId,
-                            limitPrice,
+                            orderPrice,
                             stakeMultiplier,
                             market.OrderMinSize,
                             nowUtc,
@@ -3319,7 +3323,7 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
                             var fakEstimate = TakerBuyFillEstimator.Estimate(
                                 fakOrderBook,
                                 stakeUsd,
-                                limitPrice,
+                                orderPrice,
                                 fakOrderBook.MinOrderSize);
                             var fakRawDecisionJson = AttachFakPaperFillSimulationJson(
                                 limitRawDecisionJson,
@@ -3348,7 +3352,7 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
                                 ": FAK taker paper fill from ",
                                 limitPricing.OrderBookLookup.Source,
                                 " ask depth. WorstPrice=",
-                                limitPrice.ToString("0.########", CultureInfo.InvariantCulture),
+                                orderPrice.ToString("0.########", CultureInfo.InvariantCulture),
                                 " AvgFillPrice=",
                                 fakEstimate.AverageFillPrice.ToString("0.########", CultureInfo.InvariantCulture),
                                 " FilledSize=",
@@ -3380,7 +3384,7 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
                                     fakSignal,
                                     limitSelectedOutcome,
                                     variant,
-                                    fakEstimate.AverageFillPrice,
+                                    orderPrice,
                                     fakEstimate.SizeShares,
                                     fakEstimate.NotionalUsd,
                                     nowUtc,
@@ -3435,7 +3439,7 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
                                 fakEstimate.AverageFillPrice,
                                 fakEstimate.NotionalUsd,
                                 fakEstimate.SizeShares,
-                                limitPrice);
+                                orderPrice);
                             await RecordDiffShiftProgressPendingBetAsync(
                                 limitDecision.DiffShiftProgressPendingBet,
                                 fakEstimate.NotionalUsd,
@@ -3479,7 +3483,7 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
                         Guid? correlationId = null;
                         Signal? limitSignal = null;
                         PaperOrder? limitOrder = null;
-                        var entryPrice = limitPrice;
+                        var entryPrice = orderPrice;
                         var entryStakeUsd = stakeUsd;
                         var entrySizeShares = limitSizeShares;
                         var orderPersistedDeferred = false;
@@ -3498,10 +3502,10 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
                                     limitSelectedOutcome.AssetId,
                                     limitSelectedOutcome.Outcome,
                                     TradeSide.Buy,
-                                    limitPrice,
+                                    orderPrice,
                                     stakeUsd,
                                     limitSizeShares,
-                                    limitSizeShares * limitPrice,
+                                    limitSizeShares * orderPrice,
                                     GetPaperLiveShadowLiveOrderType(variant),
                                     false,
                                     SerializePaperLiveShadowOrderBookSnapshot(shadowOrderBook, shadowSnapshot.Source, shadowSnapshot.Age),
@@ -3532,7 +3536,7 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
                                 market,
                                 limitSelectedOutcome,
                                 variant,
-                                limitPrice,
+                                orderPrice,
                                 limitSizeShares,
                                 stakeUsd,
                                 nowUtc);
@@ -3540,7 +3544,7 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
                                 limitSignal,
                                 limitSelectedOutcome,
                                 variant,
-                                limitPrice,
+                                orderPrice,
                                 limitSizeShares,
                                 stakeUsd,
                                 nowUtc,
@@ -3601,7 +3605,7 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
                                 variant.Code,
                                 market.Slug,
                                 limitSelectedOutcome.Outcome,
-                                limitPrice,
+                                orderPrice,
                                 stakeUsd,
                                 limitSizeShares);
                             continue;
@@ -3624,7 +3628,7 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
                                 limitSelectedOutcome,
                                 variant,
                                 limitOrder,
-                                limitPrice,
+                                orderPrice,
                                 liveStakeMultiplier,
                                 expiration,
                                 paperLiveShadowCorrelationId,
@@ -3639,7 +3643,7 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
                                 var fakEstimate = TakerBuyFillEstimator.Estimate(
                                     shadowFakOrderBook,
                                     stakeUsd,
-                                    limitPrice,
+                                    orderPrice,
                                     shadowFakOrderBook.MinOrderSize);
                                 var shadowFakLookup = TakerOrderBookLookupResult.Found(
                                     shadowFakOrderBook,
@@ -3660,7 +3664,7 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
                                         ": FAK taker paper live-shadow fill from ",
                                         shadowFakLookup.Source,
                                         " ask depth. WorstPrice=",
-                                        limitPrice.ToString("0.########", CultureInfo.InvariantCulture),
+                                        orderPrice.ToString("0.########", CultureInfo.InvariantCulture),
                                         " AvgFillPrice=",
                                         fakEstimate.AverageFillPrice.ToString("0.########", CultureInfo.InvariantCulture),
                                         " FilledSize=",
@@ -3682,7 +3686,7 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
                                     var filledOrder = limitOrder with
                                     {
                                         Status = PaperOrderStatus.Filled,
-                                        Price = fakEstimate.AverageFillPrice,
+                                        Price = orderPrice,
                                         SizeShares = fakEstimate.SizeShares,
                                         NotionalUsd = fakEstimate.NotionalUsd,
                                         ExpiresAtUtc = nowUtc,
@@ -5626,7 +5630,7 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
                     RejectionReason: "invalid_limit_price_tick_size"));
         }
 
-        var worstPrice = RoundDownToTick(1m - tickSize, tickSize);
+        var worstPrice = ResolveFakGuaranteedWorstPrice(orderBook);
         if (worstPrice <= 0m || worstPrice >= 1m)
         {
             return BtcOpeningLimitPriceDecision.Reject(
@@ -12816,6 +12820,9 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
         root["paper_order_execution_mode"] = FakOrderType;
         root["instant_fak_enabled"] = true;
         root["fak_market_buy_amount_mode"] = "usd_amount";
+        root["fak_worst_price"] = FakGuaranteedWorstPrice;
+        root["paper_fak_worst_price"] = FakGuaranteedWorstPrice;
+        root["live_fak_worst_price"] = FakGuaranteedWorstPrice;
         root["break_even_pricing_enabled"] = false;
         root["limit_price_rounding"] = "ceil_to_tick";
         root["limit_price_tick_size"] = pricing.TickSize;
@@ -15552,6 +15559,7 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
     {
         var isFakOrder = true;
         var liveOrderType = FakOrderType;
+        price = ResolveFakGuaranteedWorstPrice();
         var validation = new List<string>();
         if (botOptions.Mode != BotMode.Live)
         {
@@ -15944,6 +15952,7 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
         DateTimeOffset nowUtc,
         CancellationToken cancellationToken)
     {
+        price = ResolveFakGuaranteedWorstPrice();
         var validation = new List<string>();
         if (botOptions.Mode != BotMode.Live)
         {
@@ -16273,6 +16282,7 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
         OrderBookSnapshot? orderBook,
         DateTimeOffset createdAtUtc)
     {
+        worstPrice = ResolveFakGuaranteedWorstPrice(orderBook);
         return new ClobV2OrderRequest(
             outcome.AssetId,
             TradeSide.Buy,
@@ -16453,6 +16463,11 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
             "unmatched" => LiveOrderStatus.Unmatched,
             _ => LiveOrderStatus.Submitted
         };
+    }
+
+    private static decimal ResolveFakGuaranteedWorstPrice(OrderBookSnapshot? _ = null)
+    {
+        return FakGuaranteedWorstPrice;
     }
 
     private static decimal RoundDown(decimal value, int decimals)

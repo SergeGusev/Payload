@@ -23,6 +23,7 @@ public sealed class PaperTradingProcessor(
 {
     private const string PaperLiveShadowTestSource = "paper_live_shadow_test";
     private const string BtcFakTakerPaperExecutionSource = "btc_updown5m_fak_taker_paper";
+    private const decimal FakGuaranteedWorstPrice = 0.99m;
 
     public async Task<PaperTradingProcessingResult> ProcessOpenOrdersAsync(CancellationToken cancellationToken = default)
     {
@@ -277,19 +278,21 @@ public sealed class PaperTradingProcessor(
                 return new FakPaperOrderProcessingResult(false, false, false);
             }
 
+            var worstPrice = FakGuaranteedWorstPrice;
             var orderBook = await GetOrderBookAsync(order.AssetId, cancellationToken);
             if (orderBook is null)
             {
                 var rejectedOrder = order with
                 {
                     Status = PaperOrderStatus.Rejected,
+                    Price = worstPrice,
                     CancelledAtUtc = nowUtc,
                     RawDecisionJson = AttachFakPaperProcessorJson(
                         order.RawDecisionJson,
                         null,
                         null,
                         order.NotionalUsd,
-                        order.Price,
+                        worstPrice,
                         "paper_fak_orderbook_missing",
                         nowUtc),
                     ExecutionSource = BtcFakTakerPaperExecutionSource
@@ -302,20 +305,21 @@ public sealed class PaperTradingProcessor(
             var estimate = TakerBuyFillEstimator.Estimate(
                 orderBook,
                 order.NotionalUsd,
-                order.Price,
+                worstPrice,
                 orderBook.MinOrderSize);
             if (!estimate.Filled)
             {
                 var rejectedOrder = order with
                 {
                     Status = PaperOrderStatus.Rejected,
+                    Price = worstPrice,
                     CancelledAtUtc = nowUtc,
                     RawDecisionJson = AttachFakPaperProcessorJson(
                         order.RawDecisionJson,
                         orderBook,
                         estimate,
                         order.NotionalUsd,
-                        order.Price,
+                        worstPrice,
                         estimate.RejectionReason ?? "paper_fak_not_filled",
                         nowUtc),
                     ExecutionSource = BtcFakTakerPaperExecutionSource
@@ -343,7 +347,7 @@ public sealed class PaperTradingProcessor(
             var filledOrder = order with
             {
                 Status = PaperOrderStatus.Filled,
-                Price = estimate.AverageFillPrice,
+                Price = worstPrice,
                 SizeShares = estimate.SizeShares,
                 NotionalUsd = estimate.NotionalUsd,
                 FilledAtUtc = nowUtc,
@@ -353,7 +357,7 @@ public sealed class PaperTradingProcessor(
                     orderBook,
                     estimate,
                     order.NotionalUsd,
-                    order.Price,
+                    worstPrice,
                     null,
                     nowUtc),
                 ExecutionSource = BtcFakTakerPaperExecutionSource
@@ -380,7 +384,7 @@ public sealed class PaperTradingProcessor(
                 "Paper FAK BUY simulated from taker depth. PaperOrderId={PaperOrderId} AssetId={AssetId} WorstPrice={WorstPrice} AverageFillPrice={AverageFillPrice} Shares={Shares} NotionalUsd={NotionalUsd} LevelsUsed={LevelsUsed}",
                 order.Id,
                 order.AssetId,
-                order.Price,
+                worstPrice,
                 estimate.AverageFillPrice,
                 estimate.SizeShares,
                 estimate.NotionalUsd,
@@ -408,13 +412,14 @@ public sealed class PaperTradingProcessor(
             var rejectedOrder = order with
             {
                 Status = PaperOrderStatus.Rejected,
+                Price = FakGuaranteedWorstPrice,
                 CancelledAtUtc = nowUtc,
                 RawDecisionJson = AttachFakPaperProcessorJson(
                     order.RawDecisionJson,
                     null,
                     null,
                     order.NotionalUsd,
-                    order.Price,
+                    FakGuaranteedWorstPrice,
                     "paper_fak_orderbook_missing",
                     nowUtc),
                 ExecutionSource = BtcFakTakerPaperExecutionSource
