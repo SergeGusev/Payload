@@ -1504,6 +1504,7 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
             allLiveOrders
                 .Where(item => IsOrderStrategyVisible(item.StrategyId, SelectedLiveOrdersStrategy))
                 .ToArray());
+        UpdateLiveOrdersPageState();
     }
 
     private async Task RefreshOrdersAsync(OrderRefreshScope scope)

@@ -1,3 +1,15 @@
+## Active Update 2026-06-28 Live Orders Tab Empty Screenshot
+Goal: Inspect the Dashboard screenshot where the `Live orders` tab appears empty and fix the stale UI state if needed.
+Status: Completed
+Done:
+- Extracted the screenshot from the Windows clipboard and confirmed Dashboard is connected to `Remote database (192.168.0.101)`, mode `Live`, service `Running`, with `Live orders` selected.
+- The screenshot showed contradictory UI state: `Loaded 100 live orders` while the page status still said `Page 1: rows 0-0, 100 per page`.
+- Queried the same Dashboard remote database host override and confirmed data exists: `1751` total `live_orders`, `236` for selected `ETH Up or Down 5m Up 50 bps Instant`, and `43` for `SOL Up or Down 5m Up 5 Diff Revert Premarket`.
+- Fixed `src/PolyCopyTrader.Dashboard/ViewModels/MainViewModel.cs` so `ApplyOrderFilters()` recalculates live-orders page state after the `LiveOrders` collection is replaced; this removes the stale `rows 0-0` state after a successful load/filter.
+Next: Restart Dashboard so the running process loads the updated binary; the selected strategy should show `rows 1-100` for the first page when `Window: all history`.
+Notes: Standard Debug build failed only because currently running `PolyCopyTrader.Dashboard`/Visual Studio locked the output DLLs. Verification passed with `dotnet build src\PolyCopyTrader.Dashboard\PolyCopyTrader.Dashboard.csproj --no-restore -p:OutDir=D:\My\Business\PolyMarket\artifacts\dashboard-live-orders-fix\out\` (119 existing nullable warnings in storage, 0 errors).
+Blockers: None.
+
 ## Active Update 2026-06-28 SOL Up 5 Revert Premarket Live Orders Inspection
 Goal: Check why `SOL Up or Down 5m Up 5 Diff Revert Premarket` appears to show only Paper orders and no Live orders.
 Status: Completed

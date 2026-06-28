@@ -1,3 +1,10 @@
+## 2026-06-28T19:56:00Z
+Request:
+Inspect the screenshot where the Dashboard `Live orders` tab appears empty.
+
+Result:
+Extracted the screenshot from the Windows clipboard. The Dashboard was on `Remote database (192.168.0.101)`, mode `Live`, with `Live orders` selected. The UI showed `Loaded 100 live orders` but stale page text `rows 0-0`. A read-only SQL check against the same remote host found `1751` total live orders, including `236` for the selected `ETH Up or Down 5m Up 50 bps Instant` strategy and `43` for `SOL Up or Down 5m Up 5 Diff Revert Premarket`. Fixed `MainViewModel.ApplyOrderFilters()` to recalculate live-orders page state after replacing the filtered `LiveOrders` collection. Standard Debug build was blocked by the currently running Dashboard locking DLLs; isolated `OutDir` build passed with 0 errors.
+
 ## 2026-06-28T12:33:52.6041961Z
 Request:
 Diff Shift Progress must also skip the market when `Diff = 0`.
