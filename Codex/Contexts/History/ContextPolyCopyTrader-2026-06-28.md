@@ -169,3 +169,10 @@ Request:
 
 Result:
 Inspected the Diff Shift Progress backtest CSVs and reconstructed per-entry equity for `ETH Up or Down 5m Diff Up Shift Progress`. In the fixed-0.50 Binance proxy it is not net-negative: `1310` entries, `1304` settled, `652` wins, `652` losses, gross wins `+4764` units, gross losses `-4509` units, net `+255` units, ROI `2.75%`, max drawdown `197` units. The weak economics come from countertrend Down bets after positive ETH Up Diff; upward continuation clusters create high-multiplier losses, especially `2026-04-16T19:30:00Z` through `2026-04-17T19:40:00Z` with `113` entries, `46` wins, `67` losses, and `-197` units. Under actual fills near `0.99`, the same 50% hit rate would be sharply negative, approximately `-4461` units, because a 0.99 buy needs a win rate above 99%.
+
+## 2026-06-28T18:19:05.3742051+00:00
+Request:
+Я сейчас говорю про уже запущенную Paper стратегию, посмотри на неё
+
+Result:
+Inspected the already running Paper `ETH Up or Down 5m Diff Up Shift Progress` strategy in the Dashboard remote PostgreSQL database at host `192.168.0.101`. The local configured database did not contain the new Diff Shift schema/strategy, so the Dashboard default remote source was used. At database time `2026-06-28 21:18:37+03`, the strategy was enabled, not paused, live stakes off, with state `UpCount=104`, `DownCount=103`, `Diff=1`, `Sum=7.437`, and one pending/entered Down paper bet for `2026-06-28 21:15+03` with stake `$8.0017`. Actual Paper results showed `62` settled bets, `25` wins, `37` losses, stake `$1534.69600080`, PnL `-$223.90676155`, gross wins `+$586.73213846`, gross losses `-$810.63890001`, average entry price `0.52991891`, min equity `-$253.95237580`, and max drawdown `$232.94957580`. Losses came from high-stake Down entries while ETH markets kept resolving Up.

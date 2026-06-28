@@ -1,3 +1,16 @@
+## Active Update 2026-06-28 Live Paper ETH Up Shift Progress Inspection
+Goal: Inspect the already running Paper `ETH Up or Down 5m Diff Up Shift Progress` strategy in the current remote PostgreSQL database.
+Status: Completed
+Done:
+- Confirmed the local configured PostgreSQL target did not contain the new Diff Shift schema/strategy, then matched Dashboard default source to Remote database host `192.168.0.101` and queried that remote database read-only.
+- Found strategy `eth_up_down_5m_diff_up_shift_progress` enabled, not paused, live stakes off, paper stake amount `1.00`.
+- Current state at DB time `2026-06-28 21:18:37+03`: `UpCount=104`, `DownCount=103`, `Diff=1`, `Sum=7.437`, one pending/entered Down paper bet for market `2026-06-28 21:15+03` with stake `$8.0017`.
+- Actual Paper result was `62` settled bets, `25` wins, `37` losses, stake `$1534.69600080`, PnL `-$223.90676155`, gross wins `+$586.73213846`, gross losses `-$810.63890001`, average entry price `0.52991891`, max stake `$49.00720027`, min equity `-$253.95237580`, max drawdown `$232.94957580`.
+- Loss attribution: the strategy always selected `Down`; losing `Down` entries settle at `0` and lose the full stake. The largest losing cluster came while ETH kept resolving Up during high-Diff/high-stake Down entries, including `-$41.00399976` at `18:30+03`, `-$41.00220000` at `16:40+03`, `-$35.00520000` at `19:15+03`, and multiple `-$34..-$35` entries.
+Next: Consider adding a Paper/live guard for Diff Shift Progress based on actual entry price, max stake/multiplier, or minimum required hit rate before enabling further live-shadow exposure.
+Notes: Verification was read-only SQL via `psql` against the Dashboard remote database; no source code or database rows were modified.
+Blockers: None.
+
 ## Active Update 2026-06-28 ETH Up Shift Progress Loss Attribution
 Goal: Explain where ETH Up or Down 5m Diff Up Shift Progress weak or negative economics come from.
 Status: Completed
