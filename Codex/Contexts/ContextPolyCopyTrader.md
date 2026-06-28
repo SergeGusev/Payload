@@ -1,3 +1,17 @@
+## Active Update 2026-06-28 SOL Up 5 Revert Premarket Live Orders Inspection
+Goal: Check why `SOL Up or Down 5m Up 5 Diff Revert Premarket` appears to show only Paper orders and no Live orders.
+Status: Completed
+Done:
+- Queried the Dashboard remote PostgreSQL database at `192.168.0.101` read-only for `SOL Up or Down 5m Up 5 Diff Revert Premarket`.
+- Confirmed the strategy is enabled, not paused, `live_stakes=true`, `auto_live_paused=false`, `live_enabled_at_utc=2026-06-28 19:13:46+03`, `Live $=1`, and `live_available_balance=104.91810100`.
+- Found `499` Paper orders total, all `Filled`; after Live was enabled there are `42` Paper orders and all have `correlation_id`.
+- Found `42` matching `live_orders` for the same strategy, all `Matched`, all `execution_source=paper_live_shadow_test`, total live notional `$252.39060000`, filled notional `$251.99996200`, last Live order `2026-06-28 22:39:48+03`.
+- Found `42` `paper_live_shadow_decisions`, all linked to both Paper and Live orders with status `live_status_synced`; no shadow discrepancies.
+- Explained the apparent mismatch: the linked Paper FAK orders are updated with `execution_source=btc_updown5m_fak_taker_paper` after Paper FAK fill simulation, while the Live rows use `paper_live_shadow_test`; the link is through `correlation_id`/`paper_order_id`, not Paper `execution_source`.
+Next: If Dashboard still does not show them, refresh/select `Remote database`, open the `Live Orders` tab or the strategy row's `Live orders` drilldown, and ensure the Live-orders strategy filter is set to this strategy and the window includes the last hour/all history.
+Notes: Verification was read-only SQL via `psql`; no source code or database rows were modified.
+Blockers: None.
+
 ## Active Update 2026-06-28 Live Paper ETH Up Shift Progress Inspection
 Goal: Inspect the already running Paper `ETH Up or Down 5m Diff Up Shift Progress` strategy in the current remote PostgreSQL database.
 Status: Completed

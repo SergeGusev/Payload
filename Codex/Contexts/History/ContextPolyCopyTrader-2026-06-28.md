@@ -176,3 +176,10 @@ Request:
 
 Result:
 Inspected the already running Paper `ETH Up or Down 5m Diff Up Shift Progress` strategy in the Dashboard remote PostgreSQL database at host `192.168.0.101`. The local configured database did not contain the new Diff Shift schema/strategy, so the Dashboard default remote source was used. At database time `2026-06-28 21:18:37+03`, the strategy was enabled, not paused, live stakes off, with state `UpCount=104`, `DownCount=103`, `Diff=1`, `Sum=7.437`, and one pending/entered Down paper bet for `2026-06-28 21:15+03` with stake `$8.0017`. Actual Paper results showed `62` settled bets, `25` wins, `37` losses, stake `$1534.69600080`, PnL `-$223.90676155`, gross wins `+$586.73213846`, gross losses `-$810.63890001`, average entry price `0.52991891`, min equity `-$253.95237580`, and max drawdown `$232.94957580`. Losses came from high-stake Down entries while ETH markets kept resolving Up.
+
+## 2026-06-28T19:43:08.8689032+00:00
+Request:
+Я не вижу Live orders для стратегии SOL Up or Down 5m Up 5 Diff Revert Premarket, только Paper
+
+Result:
+Inspected `SOL Up or Down 5m Up 5 Diff Revert Premarket` in the Dashboard remote PostgreSQL database at `192.168.0.101`. The strategy is enabled, not paused, `live_stakes=true`, `auto_live_paused=false`, with Live enabled at `2026-06-28 19:13:46+03`. Found `499` Paper orders total and `42` Paper orders after Live enablement, all with `correlation_id`. Found `42` matching `live_orders`, all `Matched`, all `execution_source=paper_live_shadow_test`, total live notional `$252.39060000`, filled notional `$251.99996200`, latest Live order at `2026-06-28 22:39:48+03`. Also found `42` `paper_live_shadow_decisions`, all linked to both Paper and Live with status `live_status_synced`, and no shadow discrepancies. The apparent mismatch is that linked Paper FAK orders are updated with `execution_source=btc_updown5m_fak_taker_paper` after Paper FAK fill simulation, while the Live rows use `paper_live_shadow_test`; the durable link is `correlation_id`/`paper_order_id`.
