@@ -71,3 +71,10 @@ Request:
 
 Result:
 Clarified that this is an operational rule rather than a required persistence feature: planned restarts should wait until all Diff Progress strategies have exited betting mode and returned to waiting mode, so the midnight postponed-reset edge case is not expected in normal operation.
+
+## 2026-06-28T10:13:14.6682550Z
+Request:
+Доработай стратегии таким образом, чтобы максимальный множитель не превышал 10. При этом UpCount, DownCount и Diff будут считаться по-прежнему, просто во время резких пиков у нас будет идти несколько ставок с одинаковым множителем.
+
+Result:
+Capped Diff Progress stake sizing at `min(Diff - N, 10)` while leaving UpCount, DownCount, and Diff counters unchanged. Added raw/capped multiplier diagnostics, updated README and seed descriptions, and added a focused processor test for a sharp peak where uncapped multiplier 11 is applied as capped multiplier 10.

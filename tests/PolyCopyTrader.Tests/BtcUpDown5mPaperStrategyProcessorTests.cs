@@ -5151,6 +5151,64 @@ public sealed class BtcUpDown5mPaperStrategyProcessorTests
     }
 
     [Fact]
+    public async Task ProcessDiffCounterDueEntriesAsync_DiffProgressCapsStakeMultiplierAtTen()
+    {
+        var entryMarketStartUtc = new DateTimeOffset(2026, 6, 8, 14, 35, 0, TimeSpan.Zero);
+        var entryNow = entryMarketStartUtc.AddMinutes(2);
+        var timeProvider = new ManualTimeProvider(entryNow);
+        var variant = StrategyIds.UpDown5mStrategyVariants.Single(item => item.Code == "btc_up_down_5m_diff_2_up_progress");
+        var repository = new TestAppRepository();
+        AddWebSocketDiffResults(
+            repository,
+            "BTC",
+            entryMarketStartUtc.AddMinutes(-5),
+            Enumerable.Repeat("Up", 13).ToArray());
+        var orderBooks = new[]
+        {
+            OrderBook("asset-up", bestBid: 0.54m, bestAsk: 0.55m, entryNow),
+            OrderBook("asset-down", bestBid: 0.44m, bestAsk: 0.45m, entryNow)
+        };
+        var processor = CreateProcessorCoreWithOptions(
+            repository,
+            [],
+            orderBooks,
+            _ => { },
+            orderBooks,
+            CreateBtcOptions(paperTakerPricingEnabled: false, [variant.Code]),
+            gammaClient: new FakeGammaClient([]),
+            timeProvider: timeProvider);
+
+        repository.PolymarketGammaMarkets.Add(CreateMarket(
+            entryMarketStartUtc,
+            entryMarketStartUtc.AddMinutes(5),
+            upPrice: 0.50m,
+            downPrice: 0.50m,
+            marketId: "diff-progress-capped-entry-market",
+            conditionId: "diff-progress-capped-entry-condition"));
+
+        var result = await processor.ProcessDiffCounterDueEntriesAsync();
+
+        Assert.Equal(1, result.EntriesPlaced);
+        var run = repository.StrategyMarketPaperRuns.Single(item =>
+            item.MarketStartUtc == entryMarketStartUtc &&
+            item.StrategyId == variant.Id);
+        Assert.Equal(StrategyMarketPaperRunStatuses.Entered, run.Status);
+        Assert.Equal(10m, run.StakeUsd);
+
+        var order = Assert.Single(repository.PaperOrders);
+        Assert.Equal("asset-down", order.AssetId);
+        Assert.Equal("Down", order.Outcome);
+        Assert.Equal(10m, order.NotionalUsd);
+        Assert.Contains("\"effective_diff\":13", order.RawDecisionJson, StringComparison.Ordinal);
+        Assert.Contains("\"threshold\":2", order.RawDecisionJson, StringComparison.Ordinal);
+        Assert.Contains("\"uncapped_progress_stake_multiplier\":11", order.RawDecisionJson, StringComparison.Ordinal);
+        Assert.Contains("\"progress_stake_multiplier_cap\":10", order.RawDecisionJson, StringComparison.Ordinal);
+        Assert.Contains("\"progress_stake_multiplier\":10", order.RawDecisionJson, StringComparison.Ordinal);
+        Assert.Contains("\"progress_stake_multiplier_capped\":true", order.RawDecisionJson, StringComparison.Ordinal);
+        Assert.Contains("\"progress_stake_usd\":10", order.RawDecisionJson, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task ProcessDiffCounterDueEntriesAsync_DiffProgressPostponesUtcMidnightResetWhileBetting()
     {
         var previousDayMarketStartUtc = new DateTimeOffset(2026, 6, 8, 23, 55, 0, TimeSpan.Zero);

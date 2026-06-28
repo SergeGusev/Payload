@@ -1,3 +1,15 @@
+## Active Update 2026-06-28 Diff Progress Multiplier Cap
+Goal: Cap Diff Progress betting stake multipliers at 10 while leaving UpCount, DownCount, and Diff counters uncapped.
+Status: Completed
+Done:
+- Added `DiffProgressMaxStakeMultiplier = 10` and changed Progress stake sizing to `PaperStake * min(Diff - N, 10)`.
+- Kept raw `effective_diff` and counter values unchanged; diagnostic JSON now includes `uncapped_progress_stake_multiplier`, `progress_stake_multiplier_cap`, and `progress_stake_multiplier_capped`.
+- Updated README and PostgreSQL seed description to document the capped multiplier.
+- Added a processor test proving `Diff=13`, `N=2` uses stake multiplier `10` while reporting uncapped multiplier `11`.
+Next: None.
+Notes: Verification passed: `dotnet build src\PolyCopyTrader.Service\PolyCopyTrader.Service.csproj --no-restore /p:UseSharedCompilation=false`; `dotnet build src\PolyCopyTrader.Storage\PolyCopyTrader.Storage.csproj --no-restore`; targeted `dotnet test tests\PolyCopyTrader.Tests\PolyCopyTrader.Tests.csproj --no-restore /p:UseSharedCompilation=false --filter "FullyQualifiedName~StrategyDisplayCategoryTests|FullyQualifiedName~ProcessDiffCounterDueEntriesAsync_DiffProgress|FullyQualifiedName~StrategyIds_IncludeStandardMartinAndGammaBtcVariants|FullyQualifiedName~StrategyIds_IncludeEthAndSolBinanceBpsVariants"` passed with 62 tests. Full `dotnet test tests\PolyCopyTrader.Tests\PolyCopyTrader.Tests.csproj --no-restore /p:UseSharedCompilation=false` still fails 16 pre-existing/unrelated tests around removed Revert variants and old instant pricing/cap expectations. `git diff --check` passed with LF/CRLF warnings only.
+Blockers: None.
+
 ## Active Update 2026-06-28 Diff Progress Restart Rule
 Goal: Clarify the operational restart rule for Diff Progress strategies while betting mode is active.
 Status: Completed

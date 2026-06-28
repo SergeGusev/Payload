@@ -84,6 +84,7 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
     private const string DiffCounterTerminalOrderBookResultSource = "TerminalOrderBook";
     private const string DiffCounterGammaClosedMarketResultSource = "GammaClosedMarket";
     private const string PremarketPreviousResultSourcePrefix = "ReferencePricePremarketEndMinus";
+    private const decimal DiffProgressMaxStakeMultiplier = 10m;
     private const int AdjustedDiffTrendZeroEmaPeriodPoints = 24;
     private const int AdjustedDiffTrendZeroWarmupPoints = 12;
     private const decimal AdjustedDiffTrendZeroDeadband = 1m;
@@ -6627,7 +6628,7 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
                     reason: "target_outcome_not_available"));
         }
 
-        var progressStakeMultiplier = effectiveDiff - threshold;
+        var progressStakeMultiplier = Math.Min(effectiveDiff - threshold, DiffProgressMaxStakeMultiplier);
         var progressStakeUsd = baseStakeUsd * progressStakeMultiplier;
         return BtcOpeningLimitDecision.Enter(
             selectedOutcome,
@@ -12839,6 +12840,9 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
         var entryDueAtUtc = GetEntryDueAtUtc(marketStartUtc, variant);
         var threshold = Math.Max(1, variant.DecisionDepth);
         var effectiveDiff = GetDiffCounterEffectiveDiff(snapshot, triggerDirection, useAdjustedDiff: false);
+        var uncappedProgressStakeMultiplier = effectiveDiff.HasValue && effectiveDiff.Value > threshold
+            ? effectiveDiff.Value - threshold
+            : (decimal?)null;
         return JsonSerializer.Serialize(new
         {
             pricing_mode = OpeningLimitPricingMode,
@@ -12890,7 +12894,12 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
             asset_id = selectedOutcome?.AssetId,
             outcome = selectedOutcome?.Outcome,
             base_stake_usd = baseStakeUsd,
+            uncapped_progress_stake_multiplier = uncappedProgressStakeMultiplier,
+            progress_stake_multiplier_cap = DiffProgressMaxStakeMultiplier,
             progress_stake_multiplier = progressStakeMultiplier,
+            progress_stake_multiplier_capped = progressStakeMultiplier is not null &&
+                uncappedProgressStakeMultiplier is not null &&
+                progressStakeMultiplier < uncappedProgressStakeMultiplier,
             progress_stake_usd = progressStakeUsd,
             target_notional_usd = progressStakeUsd ?? baseStakeUsd,
             skip_reason = reason

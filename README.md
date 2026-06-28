@@ -560,7 +560,7 @@ Diff Progress variants add an in-memory strategy mode on top of the same raw
 UTC-day counter. In waiting mode they only count Up/Down/Diff and reset at
 `00:00 UTC`. When the side-specific Diff becomes greater than `N`, they switch
 to betting mode, buy the opposite outcome with a Paper BUY FAK entry, and use
-effective stake `Paper $ * (Diff - N)`. While betting, the `00:00 UTC` reset is
+effective stake `Paper $ * min(Diff - N, 10)`. While betting, the `00:00 UTC` reset is
 postponed until Diff returns to `N` or below; then the strategy returns to
 waiting mode and the next counter start is the current UTC day. Restart during a
 day rebuilds the waiting counter from `00:00 UTC`; the betting/waiting mode is
@@ -580,7 +580,7 @@ require the `23:55 UTC` result from the previous day. Raw Diff snapshots are
 still written to `crypto_up_down_5m_diff_snapshots`. Successful Diff-family
 entries simulate BUY FAK taker fills from current executable ask depth. Diff
 Progress entries reuse the same FAK path, but override the effective Paper stake
-with `Paper $ * (Diff - N)` while the strategy is in betting mode. The
+with `Paper $ * min(Diff - N, 10)` while the strategy is in betting mode. The
 `BtcUpDown5mStrategy:DiffCounterInstantMaxPrice` setting defaults to `1.00`, so
 current Diff-family entries are effectively uncapped by the old `0.50` price
 limit and no longer place resting BUYs at `0.50` when the market is above
