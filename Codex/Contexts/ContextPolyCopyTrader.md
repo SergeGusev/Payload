@@ -1,3 +1,12 @@
+## Active Update 2026-06-28 Diff Shift Progress Category Name
+Goal: Confirm the display category name for the six Diff Shift Progress strategies.
+Status: Completed
+Done:
+- Confirmed from `StrategyDisplayCategories`, strategy model seed data, README, tests, and active context that all six BTC/ETH/SOL Up/Down Diff Shift Progress strategies are grouped under `Up Or Down 5 min Diff Shift Progress`.
+Next: None.
+Notes: Verification was repository inspection with `rg -n "Up Or Down 5 min Diff Shift Progress|Diff Shift Progress" src tests README.md Codex outputs\diff-shift-progress-backtest-2026-06-28 -S`; no build/tests required because no runtime code changed.
+Blockers: None.
+
 ## Active Update 2026-06-28 Diff Shift Progress Historical Backtest
 Goal: Check the six BTC/ETH/SOL Diff Shift Progress strategies on the six-month Binance 5m historical dataset.
 Status: Completed

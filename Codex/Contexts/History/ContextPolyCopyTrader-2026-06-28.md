@@ -155,3 +155,10 @@ Request:
 
 Result:
 Added and ran a standalone C# Binance proxy backtest for the six BTC/ETH/SOL Diff Shift Progress strategies under `outputs/diff-shift-progress-backtest-2026-06-28/`. The analyzer used the existing six-month 5m Binance CSV, skipped the first partial UTC day, used continuous persistent counters and `Sum`, entered only when side-specific `Diff > 0`, and used fixed 0.50 binary odds with `Unit = 1`. Over `2025-12-29T00:00:00Z` through `2026-06-28T08:25:00Z`, results were BTC `+260` units, ETH `+306`, SOL `+219`, all six combined `+785` units, `4.47%` ROI, max drawdown `317` units, max multiplier `25`; worst combined calendar day was `2026-02-05` at `-187` units.
+
+## 2026-06-28T12:55:38.3378532+00:00
+Request:
+Как называется категория для этих шести стратегий?
+
+Result:
+Confirmed from `StrategyDisplayCategories`, strategy model seed data, README, tests, and active context that all six BTC/ETH/SOL Up/Down Diff Shift Progress strategies are grouped under `Up Or Down 5 min Diff Shift Progress`.
