@@ -113,3 +113,10 @@ Request:
 
 Result:
 Interpreted "without capped" as removing the max multiplier cap, so stake multiplier is uncapped `Diff - N` while keeping the unconditional UTC-midnight reset mode. Added a standalone C# analyzer under `outputs/diff-progress-uncapped-backtest-2026-06-28/` and generated strategy, daily, asset, and Markdown summaries. Aggregate fixed-0.50 model results improved versus capped: BTC PnL `23789` units and ROI `0.80%`; ETH PnL `61709` and ROI `2.47%`; SOL PnL `62731` and ROI `2.79%`. Risk increased in tails: max multipliers were BTC `49`, ETH `38`, SOL `40`.
+
+## 2026-06-28T10:58:15.2496826+00:00
+Request:
+Какой получился максимальный уход в минус?
+
+Result:
+Checked the uncapped Diff Progress CSV outputs. Maximum single-strategy drawdown was `1571` units on `BTC Up or Down 5m 1 Diff Down Progress`. Worst single asset-day was BTC `2026-06-02` with `-11921` units. Aggregate daily equity drawdown by asset was BTC `16571` units on `2026-06-05`, ETH `6723` on `2026-06-05`, and SOL `6307` on `2026-06-04`; BTC minimum cumulative equity was `-917` on `2026-01-01`.

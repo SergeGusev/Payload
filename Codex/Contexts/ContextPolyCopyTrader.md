@@ -1,3 +1,15 @@
+## Active Update 2026-06-28 Diff Progress Uncapped Drawdown Check
+Goal: Answer the maximum negative excursion for the uncapped Diff Progress backtest.
+Status: Completed
+Done:
+- Inspected `outputs/diff-progress-uncapped-backtest-2026-06-28/diff-progress-uncapped-strategies.csv` and `diff-progress-uncapped-daily-by-strategy.csv`.
+- Maximum single-strategy drawdown was `1571` units on `BTC Up or Down 5m 1 Diff Down Progress`.
+- Worst single asset-day was BTC on `2026-06-02` with `-11921` units, `7387` entries, `125603` settled stake units, and max multiplier `49`.
+- Aggregate daily equity drawdown by asset was BTC `16571` units on `2026-06-05`, ETH `6723` on `2026-06-05`, and SOL `6307` on `2026-06-04`; BTC also dipped to minimum cumulative equity `-917` on `2026-01-01`.
+Next: If risk should be measured intraday rather than daily, extend the analyzer to emit per-entry equity curves instead of daily/strategy summaries.
+Notes: Verification was PowerShell CSV inspection only; no build/tests required because no code or output artifacts changed.
+Blockers: None.
+
 ## Active Update 2026-06-28 Diff Progress Uncapped Backtest
 Goal: Recalculate the unconditional-midnight-reset Diff Progress backtest without the max multiplier cap.
 Status: Completed
