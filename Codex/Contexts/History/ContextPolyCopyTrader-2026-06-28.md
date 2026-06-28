@@ -148,3 +148,10 @@ Request:
 
 Result:
 Clarified that `-$82855` at `Paper $ = 5` is not a one-calendar-day loss, but BTC aggregate daily equity drawdown from a prior peak to a later trough. Worst BTC single asset-day at `Paper $ = 5` is `-$59605` on `2026-06-02`. Worst combined BTC+ETH+SOL calendar day at `Paper $ = 5`, assuming all 300 strategies run simultaneously, is `-$104855` on `2026-06-02` with `17684` entries and `$1246535` settled stake.
+
+## 2026-06-28T12:41:33.2422786+00:00
+Request:
+Проверь на исторических данных
+
+Result:
+Added and ran a standalone C# Binance proxy backtest for the six BTC/ETH/SOL Diff Shift Progress strategies under `outputs/diff-shift-progress-backtest-2026-06-28/`. The analyzer used the existing six-month 5m Binance CSV, skipped the first partial UTC day, used continuous persistent counters and `Sum`, entered only when side-specific `Diff > 0`, and used fixed 0.50 binary odds with `Unit = 1`. Over `2025-12-29T00:00:00Z` through `2026-06-28T08:25:00Z`, results were BTC `+260` units, ETH `+306`, SOL `+219`, all six combined `+785` units, `4.47%` ROI, max drawdown `317` units, max multiplier `25`; worst combined calendar day was `2026-02-05` at `-187` units.

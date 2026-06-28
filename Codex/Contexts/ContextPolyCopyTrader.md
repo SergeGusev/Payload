@@ -1,3 +1,15 @@
+## Active Update 2026-06-28 Diff Shift Progress Historical Backtest
+Goal: Check the six BTC/ETH/SOL Diff Shift Progress strategies on the six-month Binance 5m historical dataset.
+Status: Completed
+Done:
+- Added and ran a standalone C# analyzer in `outputs/diff-shift-progress-backtest-2026-06-28/` over `outputs/binance-diff-time-chart-2026-06-28/binance-diff-timeseries.csv`.
+- Simulated BTC/ETH/SOL Up/Down Diff Shift Progress with persistent continuous counters after the first full UTC day, `Unit = 1`, fixed 0.50 binary odds, stake multiplier `Diff + 1`, shift loop `while Sum > Unit && Diff > 1`, and entry only when side-specific `Diff > 0`.
+- Generated `diff-shift-progress-strategies.csv`, `diff-shift-progress-daily-by-strategy.csv`, `diff-shift-progress-asset-summary.csv`, and `diff-shift-progress-summary.md`.
+- Result over `2025-12-29T00:00:00Z` through `2026-06-28T08:25:00Z`: BTC `+260` units, ETH `+306`, SOL `+219`, all six combined `+785` units with `4.47%` ROI, max drawdown `317` units, and max multiplier `25`.
+Next: Use real Polymarket order/price/liquidity history instead of fixed 0.50 Binance-direction proxy before treating the result as deployable trading evidence.
+Notes: Verification passed: `dotnet build outputs\diff-shift-progress-backtest-2026-06-28\DiffShiftProgressBacktest.csproj -c Release --nologo` and analyzer `dotnet run` completed locally. Worst combined calendar day was `2026-02-05` at `-187` units, driven mostly by SOL Down Shift Progress `-176` units.
+Blockers: None for the Binance-data proxy backtest.
+
 ## Active Update 2026-06-28 Diff Shift Progress Zero Skip
 Goal: Make Diff Shift Progress skip markets when side-specific `Diff = 0`.
 Status: Completed
