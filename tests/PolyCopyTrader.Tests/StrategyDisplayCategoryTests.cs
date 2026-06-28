@@ -91,7 +91,7 @@ public sealed class StrategyDisplayCategoryTests
             .Where(variant => variant.Behavior == BtcUpDown5mStrategyBehavior.DiffCounterTrend)
             .ToArray();
 
-        Assert.Equal(456, variants.Length);
+        Assert.Equal(228, variants.Length);
 
         var categoryCounts = variants
             .GroupBy(variant => StrategyDisplayCategories.GetCategory(variant.Name))
@@ -103,13 +103,7 @@ public sealed class StrategyDisplayCategoryTests
         AssertDiffCategory(categoryCounts, "ETH Up or Down 5m Diff Down");
         AssertDiffCategory(categoryCounts, "SOL Up or Down 5m Diff Up");
         AssertDiffCategory(categoryCounts, "SOL Up or Down 5m Diff Down");
-        AssertDiffCategory(categoryCounts, "BTC Up or Down 5m Diff Up Revert");
-        AssertDiffCategory(categoryCounts, "BTC Up or Down 5m Diff Down Revert");
-        AssertDiffCategory(categoryCounts, "ETH Up or Down 5m Diff Up Revert");
-        AssertDiffCategory(categoryCounts, "ETH Up or Down 5m Diff Down Revert");
-        AssertDiffCategory(categoryCounts, "SOL Up or Down 5m Diff Up Revert");
-        AssertDiffCategory(categoryCounts, "SOL Up or Down 5m Diff Down Revert");
-        Assert.Equal(12, categoryCounts.Count);
+        Assert.Equal(6, categoryCounts.Count);
     }
 
     [Fact]
@@ -119,12 +113,60 @@ public sealed class StrategyDisplayCategoryTests
             .Where(variant => variant.Behavior == BtcUpDown5mStrategyBehavior.DiffCounterTrendFakPremarket)
             .ToArray();
 
-        var variant = Assert.Single(variants);
+        Assert.Equal(120, variants.Length);
+        Assert.Contains(variants, variant =>
+            variant.Name == "BTC Up or Down 5m Up 3 Diff Premarket");
+        Assert.Contains(variants, variant =>
+            variant.Name == "BTC Up or Down 5m Down 3 Diff Revert Premarket");
+        Assert.Contains(variants, variant =>
+            variant.Name == "ETH Up or Down 5m Up 3 Diff Premarket");
+        Assert.Contains(variants, variant =>
+            variant.Name == "ETH Up or Down 5m Up 3 Diff Revert Premarket");
+        Assert.Contains(variants, variant =>
+            variant.Name == "ETH Up or Down 5m Down 3 Diff Premarket");
+        Assert.Contains(variants, variant =>
+            variant.Name == "ETH Up or Down 5m Down 3 Diff Revert Premarket");
+        Assert.Contains(variants, variant =>
+            variant.Name == "SOL Up or Down 5m Up 3 Diff Premarket");
+        Assert.Contains(variants, variant =>
+            variant.Name == "SOL Up or Down 5m Down 3 Diff Revert Premarket");
 
-        Assert.Equal("ETH Up or Down 5m Down 3 Diff Premarket", variant.Name);
-        Assert.Equal(
-            "ETH Up or Down 5m Diff Down Premarket",
-            StrategyDisplayCategories.GetCategory(variant.Name));
+        var categoryCounts = variants
+            .GroupBy(variant => StrategyDisplayCategories.GetCategory(variant.Name))
+            .ToDictionary(group => group.Key, group => group.Count(), StringComparer.OrdinalIgnoreCase);
+
+        Assert.Equal(10, categoryCounts["BTC Up or Down 5m Diff Up Premarket"]);
+        Assert.Equal(10, categoryCounts["BTC Up or Down 5m Diff Up Revert Premarket"]);
+        Assert.Equal(10, categoryCounts["BTC Up or Down 5m Diff Down Premarket"]);
+        Assert.Equal(10, categoryCounts["BTC Up or Down 5m Diff Down Revert Premarket"]);
+        Assert.Equal(10, categoryCounts["ETH Up or Down 5m Diff Up Premarket"]);
+        Assert.Equal(10, categoryCounts["ETH Up or Down 5m Diff Up Revert Premarket"]);
+        Assert.Equal(10, categoryCounts["ETH Up or Down 5m Diff Down Premarket"]);
+        Assert.Equal(10, categoryCounts["ETH Up or Down 5m Diff Down Revert Premarket"]);
+        Assert.Equal(10, categoryCounts["SOL Up or Down 5m Diff Up Premarket"]);
+        Assert.Equal(10, categoryCounts["SOL Up or Down 5m Diff Up Revert Premarket"]);
+        Assert.Equal(10, categoryCounts["SOL Up or Down 5m Diff Down Premarket"]);
+        Assert.Equal(10, categoryCounts["SOL Up or Down 5m Diff Down Revert Premarket"]);
+        Assert.Equal(12, categoryCounts.Count);
+    }
+
+    [Fact]
+    public void DiffProgressStrategiesShareCurrencyDisplayCategories()
+    {
+        var variants = StrategyIds.UpDown5mStrategyVariants
+            .Where(variant => variant.Behavior == BtcUpDown5mStrategyBehavior.DiffProgress)
+            .ToArray();
+
+        Assert.Equal(300, variants.Length);
+
+        var categoryCounts = variants
+            .GroupBy(variant => StrategyDisplayCategories.GetCategory(variant.Name))
+            .ToDictionary(group => group.Key, group => group.Count(), StringComparer.OrdinalIgnoreCase);
+
+        Assert.Equal(100, categoryCounts["BTC Up or Down 5m Diff Progress"]);
+        Assert.Equal(100, categoryCounts["ETH Up or Down 5m Diff Progress"]);
+        Assert.Equal(100, categoryCounts["SOL Up or Down 5m Diff Progress"]);
+        Assert.Equal(3, categoryCounts.Count);
     }
 
     [Fact]
@@ -134,7 +176,7 @@ public sealed class StrategyDisplayCategoryTests
             .Where(variant => variant.Behavior == BtcUpDown5mStrategyBehavior.AdjustedDiffCounterTrend)
             .ToArray();
 
-        Assert.Equal(144, variants.Length);
+        Assert.Equal(72, variants.Length);
 
         var categoryCounts = variants
             .GroupBy(variant => StrategyDisplayCategories.GetCategory(variant.Name))
@@ -146,13 +188,7 @@ public sealed class StrategyDisplayCategoryTests
         AssertAdjustedDiffCategory(categoryCounts, "ETH Up or Down 5m AdjustedDiff Down");
         AssertAdjustedDiffCategory(categoryCounts, "SOL Up or Down 5m AdjustedDiff Up");
         AssertAdjustedDiffCategory(categoryCounts, "SOL Up or Down 5m AdjustedDiff Down");
-        AssertAdjustedDiffCategory(categoryCounts, "BTC Up or Down 5m AdjustedDiff Up Revert");
-        AssertAdjustedDiffCategory(categoryCounts, "BTC Up or Down 5m AdjustedDiff Down Revert");
-        AssertAdjustedDiffCategory(categoryCounts, "ETH Up or Down 5m AdjustedDiff Up Revert");
-        AssertAdjustedDiffCategory(categoryCounts, "ETH Up or Down 5m AdjustedDiff Down Revert");
-        AssertAdjustedDiffCategory(categoryCounts, "SOL Up or Down 5m AdjustedDiff Up Revert");
-        AssertAdjustedDiffCategory(categoryCounts, "SOL Up or Down 5m AdjustedDiff Down Revert");
-        Assert.Equal(12, categoryCounts.Count);
+        Assert.Equal(6, categoryCounts.Count);
     }
 
     [Fact]
@@ -162,7 +198,7 @@ public sealed class StrategyDisplayCategoryTests
             .Where(variant => variant.Behavior == BtcUpDown5mStrategyBehavior.ShiftDiffCounterTrend)
             .ToArray();
 
-        Assert.Equal(864, variants.Length);
+        Assert.Equal(432, variants.Length);
 
         var categoryCounts = variants
             .GroupBy(variant => StrategyDisplayCategories.GetCategory(variant.Name))
@@ -174,13 +210,7 @@ public sealed class StrategyDisplayCategoryTests
         AssertShiftDiffCategory(categoryCounts, "ETH Up or Down 5m ShiftDiff 2");
         AssertShiftDiffCategory(categoryCounts, "SOL Up or Down 5m ShiftDiff 2");
         AssertShiftDiffCategory(categoryCounts, "SOL Up or Down 5m ShiftDiff 6");
-        AssertShiftDiffCategory(categoryCounts, "BTC Up or Down 5m ShiftDiff 1 Revert");
-        AssertShiftDiffCategory(categoryCounts, "BTC Up or Down 5m ShiftDiff 2 Revert");
-        AssertShiftDiffCategory(categoryCounts, "BTC Up or Down 5m ShiftDiff 6 Revert");
-        AssertShiftDiffCategory(categoryCounts, "ETH Up or Down 5m ShiftDiff 2 Revert");
-        AssertShiftDiffCategory(categoryCounts, "SOL Up or Down 5m ShiftDiff 2 Revert");
-        AssertShiftDiffCategory(categoryCounts, "SOL Up or Down 5m ShiftDiff 6 Revert");
-        Assert.Equal(36, categoryCounts.Count);
+        Assert.Equal(18, categoryCounts.Count);
     }
 
     [Theory]
@@ -209,13 +239,28 @@ public sealed class StrategyDisplayCategoryTests
     [InlineData("ETH Up or Down 5m Down 9 bps Reference Average Premarket", "ETH Up or Down 5m Reference Average Bps Premarket")]
     [InlineData("SOL Up or Down 5m Down 15 bps Reference Average Premarket", "SOL Up or Down 5m Reference Average Bps Premarket")]
     [InlineData("ETH Up or Down 5m Prev Score Countertrend", "ETH Up or Down 5m Countertrend")]
+    [InlineData("ETH Up or Down 5m Prev Score Countertrend Revert", "ETH Up or Down 5m Countertrend")]
     [InlineData("SOL Up or Down 5m Prev Score Countertrend", "SOL Up or Down 5m Countertrend")]
+    [InlineData("SOL Up or Down 5m Prev Score Countertrend Revert", "SOL Up or Down 5m Countertrend")]
     [InlineData("BTC Up or Down 5m Prev Score Countertrend Premarket", "BTC Up or Down 5m Countertrend Premarket")]
+    [InlineData("BTC Up or Down 5m Prev Score Countertrend Premarket Revert", "BTC Up or Down 5m Countertrend Premarket")]
     [InlineData("ETH Up or Down 5m Prev Score Countertrend Premarket", "ETH Up or Down 5m Countertrend Premarket")]
+    [InlineData("ETH Up or Down 5m Prev Score Countertrend Premarket Revert", "ETH Up or Down 5m Countertrend Premarket")]
     [InlineData("SOL Up or Down 5m Prev Score Countertrend Premarket", "SOL Up or Down 5m Countertrend Premarket")]
+    [InlineData("SOL Up or Down 5m Prev Score Countertrend Premarket Revert", "SOL Up or Down 5m Countertrend Premarket")]
     [InlineData("ETH Up or Down 5m Down 40 bps Premarket -10s", "ETH Up or Down 5m Down Bps Premarket")]
     [InlineData("ETH Up or Down 5m Down 35 bps Premarket -5s", "ETH Up or Down 5m Down Bps Premarket")]
+    [InlineData("ETH Up or Down 5m Up 3 Diff Premarket", "ETH Up or Down 5m Diff Up Premarket")]
+    [InlineData("ETH Up or Down 5m Up 3 Diff Revert Premarket", "ETH Up or Down 5m Diff Up Revert Premarket")]
     [InlineData("ETH Up or Down 5m Down 3 Diff Premarket", "ETH Up or Down 5m Diff Down Premarket")]
+    [InlineData("ETH Up or Down 5m Down 3 Diff Revert Premarket", "ETH Up or Down 5m Diff Down Revert Premarket")]
+    [InlineData("BTC Up or Down 5m Up 3 Diff Premarket", "BTC Up or Down 5m Diff Up Premarket")]
+    [InlineData("BTC Up or Down 5m Down 3 Diff Revert Premarket", "BTC Up or Down 5m Diff Down Revert Premarket")]
+    [InlineData("SOL Up or Down 5m Up 3 Diff Premarket", "SOL Up or Down 5m Diff Up Premarket")]
+    [InlineData("SOL Up or Down 5m Down 3 Diff Revert Premarket", "SOL Up or Down 5m Diff Down Revert Premarket")]
+    [InlineData("BTC Up or Down 5m 17 Diff Up Progress", "BTC Up or Down 5m Diff Progress")]
+    [InlineData("ETH Up or Down 5m 50 Diff Down Progress", "ETH Up or Down 5m Diff Progress")]
+    [InlineData("SOL Up or Down 5m 1 Diff Up Progress", "SOL Up or Down 5m Diff Progress")]
     [InlineData("Follow leader", "Other")]
     public void PreservesExistingDisplayCategories(string strategyName, string expectedCategory)
     {

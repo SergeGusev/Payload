@@ -1,3 +1,489 @@
+## Active Update 2026-06-28 Diff Progress Strategies
+Goal: Add BTC/ETH/SOL Up/Down 5m N Diff Progress strategy variants with waiting/betting modes and FAK opposite-side staking.
+Status: Completed
+Done:
+- Added 300 `DiffProgress` catalog variants for BTC, ETH, and SOL: Up/Down Progress strategies for `N=1..50`, grouped into one display category per currency.
+- Seeded the new strategies in PostgreSQL with `enabled=true`, `live_stakes=false`, Paper BUY FAK defaults, and no new direct live order placement path.
+- Implemented runtime waiting/betting state, UTC-day counter reset in waiting mode, postponed midnight reset while betting, same-day restart backfill from `00:00 UTC`, opposite-outcome entries, and stake override `PaperStake * (Diff - N)`.
+- Added focused processor/category/catalog tests and updated README behavior notes.
+Next: Decide whether betting-mode state should be persisted to survive a service restart after midnight while a Progress strategy is still betting.
+Notes: Verification passed: `dotnet build src\PolyCopyTrader.Service\PolyCopyTrader.Service.csproj --no-restore /p:UseSharedCompilation=false`; `dotnet build src\PolyCopyTrader.Storage\PolyCopyTrader.Storage.csproj --no-restore`; targeted `dotnet test ... --filter "FullyQualifiedName~StrategyDisplayCategoryTests|FullyQualifiedName~ProcessDiffCounterDueEntriesAsync_DiffProgress|FullyQualifiedName~StrategyIds_IncludeStandardMartinAndGammaBtcVariants|FullyQualifiedName~StrategyIds_IncludeEthAndSolBinanceBpsVariants"` passed with 61 tests. Full `dotnet test tests\PolyCopyTrader.Tests\PolyCopyTrader.Tests.csproj --no-restore /p:UseSharedCompilation=false` still fails 17 pre-existing/unrelated tests around removed Revert variants and old instant price/cap expectations. `git diff --check` passed before context/history updates with LF/CRLF warnings only. Commit/push not attempted because the worktree already had unrelated dirty tracked/untracked files.
+Blockers: None.
+
+## Active Update 2026-06-28 FOK Mode Explanation
+Goal: Explain the Polymarket CLOB `FOK` order mode and how it differs from the project's current `FAK` live-shadow path.
+Status: Completed
+Done:
+- Reviewed local references to `FAK`/`FOK` in README, `src/PolyCopyTrader.Polymarket/Auth`, and BTC/ETH/SOL strategy processor code.
+- Checked current official Polymarket order documentation: `FOK` and `FAK` are immediate market-order types; `FOK` requires complete immediate fill or full cancel, while `FAK` allows partial immediate fill and cancels only the remainder.
+- Confirmed project live-shadow BTC/ETH/SOL strategy submissions currently use BUY `FAK` with `postOnly=false` and no GTD expiration; no code or live configuration was changed.
+Next: None.
+Notes: Answer-only task. Verification was repository/context inspection plus official Polymarket docs review; no build/tests needed because no source behavior changed.
+Blockers: None.
+
+## Active Update 2026-06-28 Binance Rolling 1h Diff Chart
+Goal: Recalculate BTC/ETH/SOL Binance Diff on the same six-month data using a rolling one-hour window.
+Status: Completed
+Done:
+- Added a standalone C# analyzer under `outputs/binance-rolling-1h-diff-chart-2026-06-28/` that reuses `outputs/binance-diff-time-chart-2026-06-28/binance-diff-timeseries.csv`.
+- Computed `Diff1h = UpCount - DownCount` over the latest `12` five-minute candles for each asset, using only full one-hour windows.
+- Generated `binance-rolling-1h-diff-chart.svg`, `binance-rolling-1h-diff-timeseries.csv`, `binance-rolling-1h-diff-daily-summary.csv`, and `binance-rolling-1h-diff-asset-summary.csv`.
+- Result summary: BTC `52,406` windows, min `-12` for `2026-03-09T06:00:00Z`-`06:59:59.999Z`, max `12` for `2026-01-08T07:05:00Z`-`08:04:59.999Z`, max daily range `22` on `2026-02-09`; ETH `52,406` windows, min `-12` for `2026-02-02T04:30:00Z`-`05:29:59.999Z`, max `12` for `2026-02-25T12:40:00Z`-`13:39:59.999Z`, max daily range `22` on `2026-06-24`; SOL `52,406` windows, min `-12` for `2025-12-31T19:10:00Z`-`20:09:59.999Z`, max `12` for `2026-03-24T06:30:00Z`-`07:29:59.999Z`, max daily range `21` on `2026-01-12`.
+Next: If the desired interpretation was fixed UTC hour buckets rather than a rolling one-hour window, generate the fixed-hour-bucket variant separately.
+Notes: Same Binance 5m candle source window as previous tasks: `2025-12-28T08:25:00Z` through `2026-06-28T08:25:00Z`; the first `11` candles per asset are skipped because they do not form a full one-hour window. Verification passed: `dotnet build outputs\binance-rolling-1h-diff-chart-2026-06-28\BinanceRolling1hDiffChart.csproj -c Release --nologo`; analyzer `dotnet run` completed locally; `git diff --check` passed with existing LF/CRLF warnings only. No production data or trading behavior was changed. Commit/push not attempted because the worktree already contains unrelated dirty tracked/untracked changes.
+Blockers: None.
+
+## Active Update 2026-06-28 Binance Daily Reset Diff Chart
+Goal: Build the same BTC/ETH/SOL Binance 5m Diff chart, but reset `Diff` to zero at every UTC day boundary.
+Status: Completed
+Done:
+- Added a standalone C# analyzer under `outputs/binance-daily-reset-diff-chart-2026-06-28/` that reuses the previously downloaded Binance six-month `binance-diff-timeseries.csv` candle direction data.
+- Recomputed per-candle `DailyDiff = daily UpCount - daily DownCount`, resetting counts at `00:00 UTC` for each UTC calendar day.
+- Generated `binance-daily-reset-diff-chart.svg`, `binance-daily-reset-diff-timeseries.csv`, `binance-daily-reset-diff-daily-summary.csv`, and `binance-daily-reset-diff-asset-summary.csv`.
+- Marked global per-asset daily-reset min/max points on the SVG and split line segments by day so resets are not connected across midnight.
+- Result summary: BTC global min `-50` at `2026-06-02T23:25:00Z`, global max `47` at `2026-04-17T22:30:00Z`, max intraday range `54` on `2026-04-17`; ETH global min `-39` at `2026-01-07T19:20:00Z`, global max `39` at `2026-01-11T21:50:00Z`, max intraday range `42` on `2026-01-17`; SOL global min `-41` at `2026-06-02T23:25:00Z`, global max `40` at `2026-04-16T20:00:00Z`, max intraday range `44` on `2026-04-16`.
+Next: Use `binance-daily-reset-diff-daily-summary.csv` to inspect the worst individual days or derive percentile bands for expected intraday Diff swings.
+Notes: Same Binance 5m candle window as the previous task: `2025-12-28T08:25:00Z` through `2026-06-28T08:25:00Z`; first and last UTC days are partial because the six-month window starts/ends at `08:25 UTC`. Verification passed: `dotnet build outputs\binance-daily-reset-diff-chart-2026-06-28\BinanceDailyResetDiffChart.csproj -c Release --nologo`; `git diff --check` passed with existing LF/CRLF warnings only. No production data or trading behavior was changed. Commit/push not attempted because the worktree already contains unrelated dirty tracked/untracked changes.
+Blockers: None.
+
+## Active Update 2026-06-28 Binance Six Month Diff Chart
+Goal: Fetch six months of BTC/ETH/SOL Binance 5m klines and build cumulative Diff charts.
+Status: Completed
+Done:
+- Added a standalone C# analyzer under `outputs/binance-diff-time-chart-2026-06-28/` that calls Binance public Spot REST endpoints `/api/v3/time` and `/api/v3/klines` for `BTCUSDT`, `ETHUSDT`, and `SOLUSDT` with `interval=5m`.
+- Generated `binance-diff-timeseries.csv`, `binance-diff-summary.csv`, and `binance-diff-chart.svg`.
+- Used Binance server time to set a closed-candle window from `2025-12-28T08:25:00Z` through `2026-06-28T08:25:00Z`; each symbol returned `52,417` 5-minute candles.
+- Count rule: `Up` when kline close price is greater than open price, `Down` when close is less than open, `Flat` when unchanged; `Diff = UpCount - DownCount`.
+- Binance summary: BTC `Up=26121`, `Down=26191`, `Flat=105`, last Diff `-70`, min `-127` at `2026-02-06T03:50:00Z`, max `119` at `2026-01-14T21:30:00Z`; ETH `Up=26146`, `Down=26136`, `Flat=135`, last Diff `10`, min `-29` at `2026-06-26T03:00:00Z`, max `273` at `2026-04-17T19:40:00Z`; SOL `Up=25209`, `Down=25263`, `Flat=1945`, last Diff `-54`, min `-119` at `2026-02-24T04:10:00Z`, max `85` at `2026-06-01T05:45:00Z`.
+Next: Compare Binance-derived Diff against production Polymarket resolved ledger only for the overlapping period if exact Polymarket-vs-Binance divergence matters.
+Notes: Verification passed: `dotnet build outputs\binance-diff-time-chart-2026-06-28\BinanceDiffTimeChart.csproj -c Release --nologo`; analyzer `dotnet run` completed against Binance public API; `git diff --check` passed with existing LF/CRLF warnings only. No production data or trading behavior was changed. Commit/push not attempted because the worktree already contains unrelated dirty tracked/untracked changes.
+Blockers: None.
+
+## Active Update 2026-06-28 Crypto Diff Time Chart
+Goal: Build cumulative `UpCount - DownCount` time charts for BTC, ETH, and SOL 5m market outcomes.
+Status: Completed
+Done:
+- Added a read-only C# analyzer under `outputs/crypto-diff-time-chart-2026-06-28/` that queries `crypto_up_down_5m_websocket_resolved_markets` in a read-only PostgreSQL transaction and accepts `MarketWebSocket`, `ReferenceStartEnd`, `TerminalOrderBook`, and `GammaClosedMarket` result sources.
+- Treated the user's `UTC` asset as a likely typo for `BTC`, matching the project's BTC/ETH/SOL 5m markets.
+- Generated `diff-timeseries.csv`, `diff-summary.csv`, `diff-chart.svg` for the requested six-month UTC window, and `diff-chart-data-range.svg` zoomed to the actual available accepted-result data range.
+- Requested window was `2025-12-28T08:25:00Z` through `2026-06-28T08:25:00Z`; accepted BTC/ETH/SOL result rows in production currently start at `2026-06-08T14:00:00Z` and run through `2026-06-28T08:20:00Z`.
+- Latest summary from production remote DB `192.168.0.101`: BTC `5647` points, `Up=2819`, `Down=2828`, last Diff `-9`, min `-45` at `2026-06-26T21:00:00Z`, max `47` at `2026-06-22T01:50:00Z`; ETH `5648` points, `Up=2829`, `Down=2819`, last Diff `10`, min `-44` at `2026-06-25T20:50:00Z`, max `45` at `2026-06-21T03:45:00Z`; SOL `5648` points, `Up=2810`, `Down=2838`, last Diff `-28`, min `-60` at `2026-06-25T15:40:00Z`, max `30` at `2026-06-20T22:30:00Z`.
+Next: If a true calendar six-month chart is required rather than the available production ledger slice, backfill/fetch closed BTC/ETH/SOL 5m outcomes for the missing pre-`2026-06-08` period before plotting.
+Notes: Verification passed: `dotnet build outputs\crypto-diff-time-chart-2026-06-28\CryptoDiffTimeChart.csproj -c Release --nologo`; read-only `dotnet run` against host override `192.168.0.101`; `git diff --check` passed with existing LF/CRLF warnings only. No production data or trading behavior was changed. Commit/push not attempted because the worktree already contains unrelated dirty tracked/untracked changes.
+Blockers: None for plotting available accepted ledger data.
+
+## Active Update 2026-06-28 Codex Npm Install
+Goal: Install the global OpenAI Codex npm package.
+Status: Completed
+Done:
+- Ran `npm install -g @openai/codex`; npm reported `changed 2 packages in 1m`.
+- npm also reported a cleanup warning for an old temporary `@openai\.codex-...` directory because `codex.exe` was locked.
+Next: None.
+Notes: `git pull --ff-only` reported already up to date. No source code changes or project tests were needed for this global tool installation.
+Blockers: None.
+
+## Active Update 2026-06-25 Countertrend Bps Threshold Analysis
+Goal: Determine whether Countertrend bps metrics support creating `N bps` threshold strategies.
+Status: Completed
+Done:
+- Added and ran a read-only C# analyzer under `outputs/countertrend-bps-threshold-analysis-2026-06-25/` to evaluate settled Countertrend paper runs by `signal_bps` threshold, asset, family, and recent/all-time windows.
+- Production all-time Countertrend settled sample was `2070` runs, win rate `47.00%`, PnL `-859.5503`, ROI `-6.91%`; global thresholds did not fix it: all-time `N10` ROI `-13.85%`, `N15` ROI `-11.34%`, `N20` ROI `-6.52%`, `N25` ROI `-4.85%`.
+- Since current service start the aggregate sample was balanced/near flat: `848` settled, `50.00%` win rate, PnL `-8.4709`, ROI `-0.17%`; high thresholds looked mildly positive but sample shrinks quickly (`N20` kept `26`, ROI `3.20%`; `N25` kept `6`, ROI `9.78%`), so global N is not robust.
+- Main useful signal is family-specific, not global. Since service start, regular non-Premarket Countertrend is positive across BTC/ETH/SOL: BTC `65` settled, ROI `28.72%`; ETH `70`, ROI `27.67%`; SOL `74`, ROI `16.19%`. `N3`/`N5` filters kept the edge or improved it on recent data: BTC `N3` ROI `30.80%`, `N5` ROI `27.30%`; ETH `N5` ROI `32.46%`; SOL `N5` ROI `34.83%`.
+- All-time contradicts the recent regular Countertrend result: BTC regular Countertrend is roughly breakeven (`329`, ROI `0.07%`), while ETH/SOL regular Countertrend are negative (`-4.15%` and `-6.24%`), and thresholds mostly worsen them. Treat the recent edge as regime/sample-dependent until more post-deploy rows accumulate.
+- Regular Revert since service start is consistently bad across BTC/ETH/SOL (`-25.97%`, `-26.02%`, `-15.46%` ROI), and higher N generally worsened ETH/SOL. Do not create regular Revert N-bps variants from this evidence.
+- Premarket Countertrend is poor all-time for BTC/ETH/SOL (`-20.21%`, `-20.36%`, `-14.57%` ROI). Premarket Revert has some all-time positives for BTC/ETH, especially BTC `N5/N8` and ETH `N3/N5/N12`, but recent sample is mixed and SOL Premarket Revert is negative.
+Next: If implementing N-bps variants, start only as Paper experiments, preferably regular Countertrend `N3` and/or `N5` for BTC/ETH/SOL; avoid a global N-bps rule and avoid enabling Revert/Premarket variants based solely on current evidence.
+Notes: Verification passed: `dotnet build outputs\countertrend-bps-threshold-analysis-2026-06-25\CountertrendBpsThresholdAnalysis.csproj -c Release --nologo`; focused metric tests `2/2`; production analyzer read-only against `192.168.0.101`; `git diff --check` passed with LF/CRLF warnings only. No production data or live flags were changed. Commit/push not attempted because the worktree already contains unrelated dirty tracked/untracked changes.
+Blockers: None.
+
+## Active Update 2026-06-25 Countertrend Metrics Readiness Check
+Goal: Check whether the newly added Countertrend bps metrics are already usable.
+Status: Completed
+Done:
+- Confirmed source/UI support is present: Countertrend decisions write `previous_score_bps`, `previous_score_abs_bps`, and `selected_signal_bps`; Storage aggregates expose `AvgCountertrendScoreBps`, `AvgCountertrendSignalBps`, and `LastCountertrendSignalBps`; Dashboard grid/CSV include the columns.
+- Ran production read-only checks against remote PostgreSQL `192.168.0.101`, database `polycopytrader`; service heartbeat was fresh and running build `25d7ec512d00891edb6f48eb340461f1a555be2f`.
+- Full Countertrend strategy snapshot showed `21` strategy rows, `12` enabled, `0` live-enabled. Enabled rows cover BTC/ETH/SOL regular, Premarket, Revert, and Premarket Revert variants; the BTC fixed-price `10..50` rows are disabled.
+- Since service start there were `832` Countertrend paper orders and all `832` had both `previous_score_bps` and `selected_signal_bps`; last hour had `126/126` with both fields. All-time rows were `2078`, with `1645` new bps rows plus `433` legacy rows derivable from `previous_score`.
+- Dashboard repository read probe against production returned `7791` strategy-performance rows and `21` Countertrend rows with populated avg/latest bps aggregates, without decimal overflow.
+- Local running Dashboard process is from `src\PolyCopyTrader.Dashboard\bin\Debug\net10.0-windows` with DLL timestamps from `2026-06-25 01:09`, so the currently running Debug Dashboard should include the new columns. The published folder `D:\My\Business\PolyMarketPublished\PayloadDashboard` is still older (`2026-05-22`) and should not be used if these columns are needed.
+Next: Use the currently running Debug Dashboard or republish/restart the published Dashboard payload before using the published shortcut/folder.
+Notes: Verification passed: `dotnet build outputs\countertrend-metrics-current-check-2026-06-25\CountertrendMetricsCurrentCheck.csproj -c Release --nologo`; targeted `dotnet test tests\PolyCopyTrader.Tests\PolyCopyTrader.Tests.csproj --no-restore --filter "FullyQualifiedName~StrategyPerformanceTests.GetStrategyPerformanceAsync_ComputesCountertrendSignalBpsMetrics|FullyQualifiedName~StorageTests.PostgresRepository_StrategyPerformanceRoundsCountertrendBpsForDecimalReader|FullyQualifiedName~BtcUpDown5mPaperStrategyProcessorTests.ProcessAsync_PreviousScoreCounterTrendFak"` passed `8/8` with existing nullable warnings; production read-only `CountertrendMetricsCurrentCheck`; existing `CountertrendBpsMonitor`; existing `StrategyPerformanceReadProbe`; `git diff --check` passed with LF/CRLF warnings only. No production data or live flags were changed. Commit/push not attempted because the worktree already contains unrelated dirty tracked/untracked changes.
+Blockers: None.
+
+## Active Update 2026-06-25 Remote Strategy Entry Delay Check
+Goal: Recheck current strategy entry placement against the remote PostgreSQL database instead of the local `127.0.0.1` target.
+Status: Completed
+Done:
+- Re-ran the read-only entry delay monitor with `POLYCOPYTRADER_POSTGRES_HOST_OVERRIDE=192.168.0.101`, targeting remote database `polycopytrader`.
+- Remote service heartbeat was fresh: `last_heartbeat_utc=2026-06-25 01:28:21 +03`, age about `16` seconds at sample start.
+- Remote activity was live: last run update `2026-06-25 01:28:34 +03`, last paper order `2026-06-25 01:28:34 +03`, and last entered run `2026-06-25 01:29:04 +03`.
+- Entry-delay aggregates showed no entered rows beyond 30 seconds: last 15m `1067` entered, avg `7.407s`, p95 `18.657s`, max `18.950s`; last 120m `7153` entered, avg `8.972s`, p95 `20.148s`, max `26.802s`; `over30=0`, `over60=0`, `premarket_after_start=0`, `after_market_end=0`.
+- Worst recent normal entry wave was due `2026-06-25 00:45:00 +03`, `229` rows, span `22.215s`, max delay `26.802s`, still inside the 5m market.
+- Observed backlog was healthy: overdue `Observed` rows `0`; upcoming 10m rows about `2867`.
+- Window-skip summary showed `251` `preopen_entry_window_elapsed` rows in the last 120m. Top affected rows were ETH `Down bps 30..38 Premarket -5s` variants, each with `14` skips and max skip delay about `26.575s`; latest examples had due `01:24:55 +03`, market start `01:25:00 +03`, update `01:25:03.956 +03`, so these missed the premarket-only window by about `8.956s` from due and about `3.956s` after market start.
+- One recent older window skip was `SOL Up or Down 5m Down 10 Diff Revert Premarket`, due `01:04:30 +03`, updated `01:09:47 +03`, skip delay `317.032s`, after the 5m market had effectively ended.
+Next: If premarket `-5s` entries should be used live, move them earlier or prioritize premarket due processing; otherwise normal entered strategy placement is not currently missing the 5m window.
+Notes: Verification was `dotnet build outputs\strategy-entry-delay-monitor-2026-06-25\StrategyEntryDelayMonitor.csproj --nologo` and remote read-only monitor runs. The first remote full rerun hit a 30s read timeout on a heavy aggregate, so the diagnostic timeout was increased to 120s; subsequent remote run passed. `git diff --check` pending at finalization. No production data was changed. Commit/push not attempted because the worktree already has unrelated dirty changes from prior tasks.
+Blockers: None.
+
+## Active Update 2026-06-25 Strategy Entry Delay Recheck
+Goal: Recheck current production strategy entry placement after the previous stale-heartbeat finding.
+Status: Completed
+Done:
+- Re-ran the read-only entry delay monitor against the configured `POLYCOPYTRADER_POSTGRES_CONNECTION` database `polycopytrader`.
+- Fresh sample at `2026-06-24T22:24:23Z` still showed `PolyCopyTrader.Service` heartbeat stale: `last_heartbeat_utc=2026-06-24 13:26:29 +03`, age about `43,074` seconds.
+- There were still `0` entered runs in the last 15/30/60/120 minutes, `0` new run rows in the last 120 minutes, `0` paper orders in the last 120 minutes, and `0` live orders in the last 120 minutes.
+- Last run creation/update remained `2026-06-24 13:26:30 +03`; last entered run and last paper order remained `2026-06-23 19:48:01 +03`.
+- Recent window-related skips and recent overdue `Observed` rows remained `0`.
+Next: Inspect/restart the actual production `PolyCopyTrader.Service` process or verify that the DB/tunnel target is the active production database, then rerun the monitor.
+Notes: Verification was the read-only monitor run: `dotnet run --project outputs\strategy-entry-delay-monitor-2026-06-25\StrategyEntryDelayMonitor.csproj --no-build`; no production data was changed and no implementation tests were needed.
+Blockers: None.
+
+## Active Update 2026-06-25 Strategy Entry Delay Monitor
+Goal: Monitor current strategy entry placement and check for serious delays that would miss the betting window.
+Status: Completed
+Done:
+- Added a read-only Npgsql diagnostic utility under `outputs/strategy-entry-delay-monitor-2026-06-25/` to sample production entry timing without printing secrets or mutating data.
+- Built the utility successfully with `dotnet build outputs\strategy-entry-delay-monitor-2026-06-25\StrategyEntryDelayMonitor.csproj --nologo`.
+- Ran two live samples one minute apart plus one follow-up activity sample against the configured `POLYCOPYTRADER_POSTGRES_CONNECTION` database `polycopytrader`.
+- The configured DB showed `PolyCopyTrader.Service` heartbeat stale: `last_heartbeat_utc=2026-06-24 13:26:29 +03` while monitoring at about `2026-06-25 01:19 +03`, age about `42,752` seconds.
+- Recent activity was absent: `strategy_market_paper_runs` had `0` rows created in the last 120 minutes, `0` entries in the last 120 minutes, `0` paper orders in the last 120 minutes, and `0` live orders in the last 120 minutes.
+- Last run creation/update was `2026-06-24 13:26:30 +03`; last entered run and last paper order were `2026-06-23 19:48:01 +03`; last live order was `2026-05-11 12:32:30 +03`.
+- Recent window-related skips were `0`, and recent `Observed` overdue rows within 120 minutes were `0`; the problem is no current placement activity rather than measurable late placements.
+- Checked local Windows services/processes: no local `PolyCopyTrader.Service` service/process was visible, only the dashboard and MSBuild `dotnet` nodes were present.
+Next: Restart or inspect the production `PolyCopyTrader.Service` process/deployment and then rerun the monitor; if this DB is only a stale local/tunnel target, repoint `POLYCOPYTRADER_POSTGRES_CONNECTION`/host override to the actual production database and rerun.
+Notes: This task did not change production data. The monitor uses read-only transactions with statement/lock timeouts. No full test suite was run because no production code was changed; diagnostic project build passed.
+Blockers: None.
+
+## Active Update 2026-06-25 BTC SOL Diff Premarket Grids
+Goal: Add BTC and SOL `Up/Down N Diff Premarket` strategy sets for `N = 1..10`, including Revert versions.
+Status: Completed
+Done:
+- Generalized the Diff Premarket generator from ETH-only to BTC/ETH/SOL and wired BTC into the BTC strategy catalog plus SOL into the crypto catalog.
+- Added BTC id groups `8146`/`8147`/`8148`/`8149` for Up, Up Revert, Down, and Down Revert; added SOL id groups `8150`/`8151`/`8152`/`8153`; existing ETH id groups remain `8144`/`8145`/`8134`/`8143`.
+- Updated PostgreSQL seed SQL so one `assets` CTE plus `generate_series(1, 10)` emits BTC/ETH/SOL Up/Down Diff Premarket and Revert rows.
+- Updated README, storage/category/catalog tests, and added catalog grid assertions proving each asset has 40 Diff Premarket rows with direct countertrend outcomes and matching Revert trigger-side outcomes.
+Next: Deploy/restart from this working tree or a clean subset commit if these rows should be inserted into production by schema initialization.
+Notes: Focused verification passed: `dotnet test tests\PolyCopyTrader.Tests\PolyCopyTrader.Tests.csproj --filter "FullyQualifiedName~StrategyIds_IncludeStandardMartinAndGammaBtcVariants|FullyQualifiedName~StrategyIds_IncludeEthAndSolBinanceBpsVariants|FullyQualifiedName~DiffCounterTrendFakPremarketStrategiesHaveDedicatedDisplayCategories|FullyQualifiedName~PreservesExistingDisplayCategories|FullyQualifiedName~PostgresSchema_ContainsRequiredTables|FullyQualifiedName~ProcessDiffCounterDueEntriesAsync_EthDown3FakPremarketBuysUpFromPremarketOrderBook|FullyQualifiedName~ProcessDiffCounterDueEntriesAsync_EthDown4RevertFakPremarketBuysDownFromPremarketOrderBook|FullyQualifiedName~ProcessDiffCounterDueEntriesAsync_EthUp4FakPremarketBuysDownFromPremarketOrderBook|FullyQualifiedName~ProcessDiffCounterDueEntriesAsync_EthUp4RevertFakPremarketBuysUpFromPremarketOrderBook"` passed 53/53 with existing nullable warnings; `dotnet build src\PolyCopyTrader.Service\PolyCopyTrader.Service.csproj --no-restore /p:UseSharedCompilation=false` passed with 0 warnings/errors; `git diff --check` passed with CRLF warnings only. Full `dotnet test tests\PolyCopyTrader.Tests\PolyCopyTrader.Tests.csproj` currently fails 19 existing/unrelated tests around old Revert catalog expectations and executable-ask price/cap assertions. Commit/push was not attempted because the worktree already contains unrelated dirty tracked/untracked changes from previous tasks.
+Blockers: None.
+
+## Active Update 2026-06-25 ETH Up Diff Premarket Grid
+Goal: Add ETH `Up N Diff Premarket` analogs for `N = 1..10` and Revert versions for the same thresholds.
+Status: Completed
+Done:
+- Expanded the ETH Diff Premarket generator from Down-only to Up/Down families: `Up 1..10 Diff Premarket`, `Up 1..10 Diff Revert Premarket`, `Down 1..10 Diff Premarket`, and `Down 1..10 Diff Revert Premarket`.
+- Added id groups `8144` for ETH Up Diff Premarket and `8145` for ETH Up Diff Revert Premarket; existing Down id groups `8134` and `8143` remain unchanged.
+- Updated PostgreSQL seed generation to include `diff_code`, `diff_name`, and `diff_expression`, so `generate_series(1, 10)` now emits both `up` and `down` code/name families and both Revert modes.
+- Updated README, storage/category/catalog tests, and added processor regressions proving `eth_up_down_5m_up_diff_4_fak_premarket` buys `Down` and `eth_up_down_5m_up_diff_4_revert_fak_premarket` buys `Up` from the premarket order book.
+Next: Deploy/restart from this working tree or a clean subset commit if these rows should be inserted into production by schema initialization.
+Notes: Focused verification passed: `dotnet test tests\PolyCopyTrader.Tests\PolyCopyTrader.Tests.csproj --filter "FullyQualifiedName~StrategyIds_IncludeEthAndSolBinanceBpsVariants|FullyQualifiedName~DiffCounterTrendFakPremarketStrategiesHaveDedicatedDisplayCategories|FullyQualifiedName~PreservesExistingDisplayCategories|FullyQualifiedName~PostgresSchema_ContainsRequiredTables|FullyQualifiedName~ProcessDiffCounterDueEntriesAsync_EthDown3FakPremarketBuysUpFromPremarketOrderBook|FullyQualifiedName~ProcessDiffCounterDueEntriesAsync_EthDown4RevertFakPremarketBuysDownFromPremarketOrderBook|FullyQualifiedName~ProcessDiffCounterDueEntriesAsync_EthUp4FakPremarketBuysDownFromPremarketOrderBook|FullyQualifiedName~ProcessDiffCounterDueEntriesAsync_EthUp4RevertFakPremarketBuysUpFromPremarketOrderBook"` passed 48/48 with existing nullable warnings; `dotnet build src\PolyCopyTrader.Service\PolyCopyTrader.Service.csproj --no-restore /p:UseSharedCompilation=false` passed with 0 warnings/errors; `git diff --check` passed with CRLF warnings only. Full `dotnet test tests\PolyCopyTrader.Tests\PolyCopyTrader.Tests.csproj` currently fails 19 existing/unrelated tests around old Revert catalog expectations and executable-ask price/cap assertions. Commit/push was not attempted because the worktree already contains unrelated dirty tracked/untracked changes from previous tasks.
+Blockers: None.
+
+## Active Update 2026-06-25 ETH Down Diff Premarket Grid
+Goal: Add ETH `Down N Diff Premarket` analogs for `N = 1..10` and Revert versions for the same thresholds.
+Status: Completed
+Done:
+- Replaced the single ETH `Down 3 Diff Premarket` catalog registration with a generated `Down 1..10 Diff Premarket` family and a matching `Down 1..10 Diff Revert Premarket` family; the existing non-Revert `3` keeps id group `8134`, while Revert uses id group `8143`.
+- Updated `CreateDiffCounterTrendFakPremarketVariant` so Revert rows keep the same `DownCount - UpCount` trigger but buy `Down` instead of the countertrend `Up`.
+- Replaced the single PostgreSQL seed row with a `generate_series(1, 10)` CTE that seeds both non-Revert and Revert ETH Down Diff Premarket rows, preserving `b7c50005-0000-4000-8134-000000000003` for the existing `Down 3` row.
+- Updated README, storage/category/catalog tests, and added a processor regression for `eth_up_down_5m_down_diff_4_revert_fak_premarket` proving it buys `Down` from the premarket order book.
+Next: Deploy/restart from this working tree or a clean subset commit if these rows should be inserted into production by schema initialization.
+Notes: Focused verification passed: `dotnet test tests\PolyCopyTrader.Tests\PolyCopyTrader.Tests.csproj --filter "FullyQualifiedName~StrategyIds_IncludeEthAndSolBinanceBpsVariants|FullyQualifiedName~DiffCounterTrendFakPremarketStrategiesHaveDedicatedDisplayCategories|FullyQualifiedName~PreservesExistingDisplayCategories|FullyQualifiedName~PostgresSchema_ContainsRequiredTables|FullyQualifiedName~ProcessDiffCounterDueEntriesAsync_EthDown3FakPremarketBuysUpFromPremarketOrderBook|FullyQualifiedName~ProcessDiffCounterDueEntriesAsync_EthDown4RevertFakPremarketBuysDownFromPremarketOrderBook"` passed 44/44 with an existing nullable test warning; `dotnet build src\PolyCopyTrader.Service\PolyCopyTrader.Service.csproj --no-restore /p:UseSharedCompilation=false` passed with 0 warnings/errors; `git diff --check` passed with CRLF warnings only. Full `dotnet test tests\PolyCopyTrader.Tests\PolyCopyTrader.Tests.csproj` currently fails 20 existing/unrelated tests around old Revert catalog expectations and executable-ask price/cap assertions; the new ETH Diff Premarket focused tests passed. Commit/push was not attempted because the worktree already contains unrelated dirty tracked/untracked changes from previous tasks.
+Blockers: None.
+
+## Active Update 2026-06-25 Delete BTC Prev Score Countertrend 55-65
+Goal: Remove `BTC Up or Down 5m Prev Score Countertrend 65`, `60`, and `55`, plus their production histories.
+Status: Completed
+Done:
+- Removed the numbered `65`, `60`, and `55` fixed-price BTC previous-score Countertrend variants from the source catalog by changing the BTC generator from `10..65` to `10..50`; the remaining fixed GTD BUY variants now cover `0.10..0.50`.
+- Removed the PostgreSQL seed generation for these rows by changing `generate_series(10, 65, 5)` to `generate_series(10, 50, 5)`, so schema initialization from updated binaries will not recreate them.
+- Updated README and focused storage/catalog tests to document/assert 9 numbered BTC variants and explicit absence of ids `b7c50005-0000-4000-8025-000000000065`, `...000060`, and `...000055`, codes `btc_up_down_5m_prev_score_countertrend_65/60/55`, and matching names. Prior `70`/`75`/`80`/`85`/`90` absence checks remain in place.
+- Changed the previous `0.65` behavior test to cover the new top remaining fixed price `0.50`.
+- Added three C# Npgsql cleanup utilities: `outputs/delete-prev-score-countertrend-65-2026-06-25/`, `outputs/delete-prev-score-countertrend-60-2026-06-25/`, and `outputs/delete-prev-score-countertrend-55-2026-06-25/`, each with dry-run/execute/verify-only modes, exact id/code/name checks, late paper-order refresh, report writing, and an open-live-order guard.
+- Ran production dry-runs against PostgreSQL host `192.168.0.101`; all target rows existed and all live guards were `0`. Dry-run histories: `65` had `330` paper orders/signals, `405` runs, `324` fills/positions, `322` settlements; `60` had `330` paper orders/signals, `406` remaining runs, `313` fills/positions, `312` settlements; `55` had `330` paper orders/signals, `406` runs, `268` fills/positions, `267` settlements.
+- Executed the cleanups. `65` deleted `406` runs, `324` fills, `323` settlements, `324` positions, `330` paper orders, `330` signals, and the `1` strategy row. `60` deleted `406` runs, `313` fills, `312` settlements, `313` positions, `330` paper orders, `330` signals, and the `1` strategy row. `55` deleted `406` runs, `268` fills, `267` settlements, `268` positions, `330` paper orders, `330` signals, and the `1` strategy row. No live/shadow/copied-leader/onchain rows were present and no late target rows remained after refresh.
+- Ran fresh verify-only production checks after each cleanup; all target counts were `0`: strategy row, paper orders, runs, fills, live orders, shadow rows, positions, settlements, copied-leader rows, onchain paper signal results, signals, and signal rejections.
+- Wrote per-target summaries to each output folder; `error.txt` was not created for any target.
+Next: Deploy/restart from this working tree or a clean subset commit before restarting schema initialization, so the removed seed rows cannot be reinserted by older binaries.
+Notes: Verification passed: restore/build for all three cleanup utilities; production dry-run/execute/verify-only for `65`, `60`, and `55`; focused `dotnet test tests\PolyCopyTrader.Tests\PolyCopyTrader.Tests.csproj --no-restore --filter "FullyQualifiedName~StorageTests.PostgresSchema_ContainsRequiredTables|FullyQualifiedName~BtcUpDown5mPaperStrategyProcessorTests.StrategyIds_IncludeStandardMartinAndGammaBtcVariants|FullyQualifiedName~BtcUpDown5mPaperStrategyProcessorTests.StrategyIds_ExcludeDeletedPreviousScoreCounterTrend55AndAboveVariants|FullyQualifiedName~BtcUpDown5mPaperStrategyProcessorTests.StrategyIds_IncludeEthAndSolBinanceBpsVariants|FullyQualifiedName~BtcUpDown5mPaperStrategyProcessorTests.ProcessAsync_PreviousScoreCounterTrendBuysUpAfterPreviousDownBiasAtFiftyCents"` passed 5/5 with existing nullable warnings in `PostgresAppRepository` and one test nullable warning; `dotnet build src\PolyCopyTrader.Service\PolyCopyTrader.Service.csproj --no-restore /p:UseSharedCompilation=false` passed with 0 warnings/errors; `rg` found no target references in `src`/`README.md` and only absence tests plus cleanup artifacts elsewhere. Commit/push was not attempted because the worktree already contains unrelated dirty tracked/untracked changes from previous tasks, including `PostgresAppRepository`, context/history, and other output folders.
+Blockers: None.
+
+## Active Update 2026-06-25 Delete BTC Prev Score Countertrend 70
+Goal: Remove `BTC Up or Down 5m Prev Score Countertrend 70` and its production history.
+Status: Completed
+Done:
+- Removed the numbered `70` fixed-price BTC previous-score Countertrend variant from the source catalog by changing the BTC generator from `10..70` to `10..65`; the remaining fixed GTD BUY variants now cover `0.10..0.65`.
+- Removed the PostgreSQL seed generation for the `70` row by changing the seed `generate_series(10, 70, 5)` to `generate_series(10, 65, 5)`, so schema initialization from updated binaries will not recreate it.
+- Updated README and focused storage/catalog tests to document/assert 12 numbered BTC variants and explicit absence of id `b7c50005-0000-4000-8025-000000000070`, code `btc_up_down_5m_prev_score_countertrend_70`, and name `BTC Up or Down 5m Prev Score Countertrend 70`; prior `75`/`80`/`85`/`90` absence checks remain in place.
+- Changed the previous `0.70` behavior test to cover the new top remaining fixed price `0.65`.
+- Added `outputs/delete-prev-score-countertrend-70-2026-06-25/`, a C# Npgsql cleanup utility with dry-run/execute/verify-only modes, exact id/code/name checks, late paper-order refresh, report writing, and an open-live-order guard.
+- Ran production dry-run against PostgreSQL host `192.168.0.101`: target row existed, live guard was `0`, and target history was `329` paper orders/signals, `404` strategy runs, `327` fills, `327` positions, and `326` settlements.
+- Executed the cleanup. It disabled/de-live-updated the strategy, then deleted `404` runs, `327` fills, `326` settlements, `327` positions, `329` paper orders, `329` signals, and the `1` strategy row; no late rows and no live/shadow/copied-leader/onchain rows were present.
+- Ran a fresh verify-only production check after cleanup; all target counts were `0`: strategy row, paper orders, runs, fills, live orders, shadow rows, positions, settlements, copied-leader rows, onchain paper signal results, signals, and signal rejections.
+- Wrote the run summary to `outputs/delete-prev-score-countertrend-70-2026-06-25/execution-summary.md`; `error.txt` was not created.
+Next: Deploy/restart from this working tree or a clean subset commit before restarting schema initialization, so the removed seed row cannot be reinserted by older binaries.
+Notes: Verification passed: `dotnet restore outputs\delete-prev-score-countertrend-70-2026-06-25\DeletePrevScoreCountertrend70.csproj`; `dotnet build outputs\delete-prev-score-countertrend-70-2026-06-25\DeletePrevScoreCountertrend70.csproj --no-restore`; production dry-run/execute/verify-only; focused `dotnet test tests\PolyCopyTrader.Tests\PolyCopyTrader.Tests.csproj --no-restore --filter "FullyQualifiedName~StorageTests.PostgresSchema_ContainsRequiredTables|FullyQualifiedName~BtcUpDown5mPaperStrategyProcessorTests.StrategyIds_IncludeStandardMartinAndGammaBtcVariants|FullyQualifiedName~BtcUpDown5mPaperStrategyProcessorTests.StrategyIds_ExcludeDeletedPreviousScoreCounterTrend70AndAboveVariants|FullyQualifiedName~BtcUpDown5mPaperStrategyProcessorTests.StrategyIds_IncludeEthAndSolBinanceBpsVariants|FullyQualifiedName~BtcUpDown5mPaperStrategyProcessorTests.ProcessAsync_PreviousScoreCounterTrendBuysUpAfterPreviousDownBiasAtSixtyFiveCents"` passed 5/5 with existing nullable warnings in `PostgresAppRepository` and one test nullable warning; `dotnet build src\PolyCopyTrader.Service\PolyCopyTrader.Service.csproj --no-restore /p:UseSharedCompilation=false` passed with 0 warnings/errors; `git diff --check` passed with CRLF warnings only; `rg` found no target references in `src`/`README.md` and confirmed the new cleanup utility has no stale `75` target references. Commit/push was not attempted because the worktree already contains unrelated dirty tracked/untracked changes from previous tasks, including `PostgresAppRepository`, context/history, and other output folders.
+Blockers: None.
+
+## Active Update 2026-06-25 Delete BTC More 120 Gamma Below 65
+Goal: Remove `BTC Up or Down 5m More 120 Gamma Below 65` and its production history.
+Status: Completed
+Done:
+- Removed the strategy from the source catalog by deleting `BtcUpDown5mMore120GammaBelow65` id/code/static variant and its `CreateBtcUpDown5mGammaEntryPriceCapVariant(...120, 65)` registration. No capped Gamma comparison variants remain in the active seed set.
+- Removed the PostgreSQL seed row for id `b7c50005-0000-4000-8022-000000120065` / code `btc_up_down_5m_more_120_gamma_below_65`, so future schema initialization from updated binaries will not recreate it.
+- Updated README and focused storage/catalog tests: capped Gamma comparison rows are documented as removed from the active seed set, `GammaOutcomeSelectionEntryPriceCap` catalog count is now `0`, and explicit absence checks cover the deleted id/code/name.
+- Removed the obsolete capped Gamma behavior regression test because there are no remaining active variants using `GammaOutcomeSelectionEntryPriceCap`.
+- Added `outputs/delete-more120-gamma-below65-2026-06-25/`, a C# Npgsql cleanup utility with dry-run/execute/verify-only modes, exact id/code/name checks, late paper-order refresh, report writing, and an open-live-order guard.
+- Ran production dry-run against PostgreSQL host `192.168.0.101`: target row existed, live guard was `0`, and target history was `391` paper orders/signals, `402` strategy runs, `262` fills, `262` positions, and `262` settlements.
+- Executed the cleanup. It disabled/de-live-updated the strategy, then deleted `403` runs including `1` late run, `262` fills, `262` settlements, `262` positions, `391` paper orders, `391` signals, and the `1` strategy row; no live/shadow/copied-leader/onchain rows were present.
+- Ran a fresh verify-only production check after cleanup; all target counts were `0`: strategy row, paper orders, runs, fills, live orders, shadow rows, positions, settlements, copied-leader rows, onchain paper signal results, signals, and signal rejections.
+- Wrote the run summary to `outputs/delete-more120-gamma-below65-2026-06-25/execution-summary.md`; `error.txt` was not created.
+Next: Deploy/restart from this working tree or a clean subset commit before restarting schema initialization, so the removed seed row cannot be reinserted by older binaries.
+Notes: Verification passed: `dotnet restore outputs\delete-more120-gamma-below65-2026-06-25\DeleteMore120GammaBelow65.csproj`; `dotnet build outputs\delete-more120-gamma-below65-2026-06-25\DeleteMore120GammaBelow65.csproj --no-restore`; production dry-run/execute/verify-only; focused `dotnet test tests\PolyCopyTrader.Tests\PolyCopyTrader.Tests.csproj --no-restore --filter "FullyQualifiedName~StorageTests.PostgresSchema_ContainsRequiredTables|FullyQualifiedName~BtcUpDown5mPaperStrategyProcessorTests.StrategyIds_IncludeStandardMartinAndGammaBtcVariants|FullyQualifiedName~BtcUpDown5mPaperStrategyProcessorTests.StrategyIds_IncludeEthAndSolBinanceBpsVariants"` passed 3/3; `dotnet build src\PolyCopyTrader.Service\PolyCopyTrader.Service.csproj --no-restore /p:UseSharedCompilation=false` passed with 0 warnings/errors; `git diff --check` passed with CRLF warnings only; `rg` found no target references in `src`/`README.md` and only absence tests plus cleanup artifacts elsewhere. Commit/push was not attempted because the worktree already contains unrelated dirty tracked/untracked changes from previous tasks, including `PostgresAppRepository`, context/history, and other output folders.
+Blockers: None.
+
+## Active Update 2026-06-24 Delete BTC More 60 Gamma Below 70
+Goal: Remove `BTC Up or Down 5m More 60 Gamma Below 70` and its production history.
+Status: Completed
+Done:
+- Removed the strategy from the source catalog by deleting `BtcUpDown5mMore60GammaBelow70` id/code/static variant and its `CreateBtcUpDown5mGammaEntryPriceCapVariant(...60, 70)` registration. The only remaining capped Gamma comparison variant is `BTC Up or Down 5m More 120 Gamma Below 65`.
+- Removed the PostgreSQL seed row for id `b7c50005-0000-4000-8022-000000060070` / code `btc_up_down_5m_more_60_gamma_below_70`, so future schema initialization from updated binaries will not recreate it.
+- Updated README and focused storage/catalog tests: remaining capped Gamma comparison docs now mention only `More 120 Gamma Below 65`; added explicit absence checks for the deleted id/code/name and adjusted BTC/all-variant counts.
+- Retargeted the capped Gamma behavior regression test to the remaining `More 120 Gamma Below 65` variant so the `GammaOutcomeSelectionEntryPriceCap` behavior remains covered.
+- Added `outputs/delete-more60-gamma-below70-2026-06-24/`, a C# Npgsql cleanup utility with dry-run/execute/verify-only modes, exact id/code/name checks, late paper-order refresh, report writing, and an open-live-order guard.
+- Ran production dry-run against PostgreSQL host `192.168.0.101`: target row existed, live guard was `0`, and target history was `387` paper orders/signals, `398` strategy runs, `335` fills, `335` positions, and `334` settlements.
+- Executed the cleanup. It disabled/de-live-updated the strategy, then deleted `398` runs, `335` fills, `334` settlements, `335` positions, `387` paper orders, `387` signals, and the `1` strategy row; no live/shadow/copied-leader/onchain rows were present.
+- Ran a fresh verify-only production check after cleanup; all target counts were `0`: strategy row, paper orders, runs, fills, live orders, shadow rows, positions, settlements, copied-leader rows, onchain paper signal results, signals, and signal rejections.
+- Wrote the run summary to `outputs/delete-more60-gamma-below70-2026-06-24/execution-summary.md`; `error.txt` was not created.
+Next: Deploy/restart from this working tree or a clean subset commit before restarting schema initialization, so the removed seed row cannot be reinserted by older binaries.
+Notes: Verification passed: `dotnet restore outputs\delete-more60-gamma-below70-2026-06-24\DeleteMore60GammaBelow70.csproj`; `dotnet build outputs\delete-more60-gamma-below70-2026-06-24\DeleteMore60GammaBelow70.csproj --no-restore`; production dry-run/execute/verify-only; focused `dotnet test tests\PolyCopyTrader.Tests\PolyCopyTrader.Tests.csproj --no-restore --filter "FullyQualifiedName~StorageTests.PostgresSchema_ContainsRequiredTables|FullyQualifiedName~BtcUpDown5mPaperStrategyProcessorTests.StrategyIds_IncludeStandardMartinAndGammaBtcVariants|FullyQualifiedName~BtcUpDown5mPaperStrategyProcessorTests.StrategyIds_IncludeEthAndSolBinanceBpsVariants|FullyQualifiedName~BtcUpDown5mPaperStrategyProcessorTests.ProcessAsync_GammaBelowVariantUsesGammaSelectionAndPlacesGtdAtCap"` passed 4/4 with an existing test nullable warning; `dotnet build src\PolyCopyTrader.Service\PolyCopyTrader.Service.csproj --no-restore /p:UseSharedCompilation=false` passed with 0 warnings/errors; `git diff --check` passed with CRLF warnings only; `rg` found no removed-code references in `src`/`README.md` and confirmed the remaining `More 120 Gamma Below 65` row still exists. Commit/push was not attempted because the worktree already contains unrelated dirty tracked/untracked changes from previous tasks, including `PostgresAppRepository`, context/history, and other output folders.
+Blockers: None.
+
+## Active Update 2026-06-24 SOL Prev Score Countertrend Reverts
+Goal: Add SOL Revert versions for `SOL Up or Down 5m Prev Score Countertrend` and `SOL Up or Down 5m Prev Score Countertrend Premarket`.
+Status: Completed
+Done:
+- Added `SOL Up or Down 5m Prev Score Countertrend Revert` to the crypto strategy catalog with id `b7c50005-0000-4000-8142-000000000999`, code `sol_up_down_5m_prev_score_countertrend_fak_revert`, behavior `PreviousScoreCounterTrendFakRevert`, category `SOL Up/Down 5m Previous Score Countertrend`, and `ReferenceAssetSymbol = SOL`.
+- Added `SOL Up or Down 5m Prev Score Countertrend Premarket Revert` with id `b7c50005-0000-4000-8142-000000000996`, code `sol_up_down_5m_prev_score_countertrend_fak_premarket_revert`, behavior `PreviousScoreCounterTrendFakPremarketRevert`, `EntryDelaySeconds = -30`, category `SOL Up/Down 5m Previous Score Countertrend Premarket`, and `ReferenceAssetSymbol = SOL`.
+- Added PostgreSQL seed rows for both SOL strategies and updated README/category/catalog/storage tests.
+- Reused the existing processor paths: regular SOL Revert buys in the same direction as the previous SOL score bias, and SOL Premarket Revert buys in the same direction as the synthetic 5.5-minute premarket SOL bias.
+- Added processor regression tests proving previous SOL `Down` bias buys `Down` for regular Revert and synthetic SOL `Down` bias buys `Down` for Premarket Revert.
+Next: Deploy/restart from this working tree or a clean subset commit if these strategies should be inserted into production and start running; production DB was not changed during this task.
+Notes: Verification passed: focused `dotnet test tests\PolyCopyTrader.Tests\PolyCopyTrader.Tests.csproj --no-restore --filter "FullyQualifiedName~StorageTests.PostgresSchema_ContainsRequiredTables|FullyQualifiedName~BtcUpDown5mPaperStrategyProcessorTests.StrategyIds_IncludeEthAndSolBinanceBpsVariants|FullyQualifiedName~BtcUpDown5mPaperStrategyProcessorTests.ProcessAsync_CryptoPreviousScoreCounterTrendFakRevertBuysDownAfterPreviousSolDownBias|FullyQualifiedName~BtcUpDown5mPaperStrategyProcessorTests.ProcessAsync_CryptoPreviousScoreCounterTrendFakPremarketRevertBuysDownFromSyntheticSolDownBias|FullyQualifiedName~StrategyDisplayCategoryTests.PreservesExistingDisplayCategories"` passed 42/42 with existing nullable warnings in `PostgresAppRepository` and a test nullable warning; `dotnet build src\PolyCopyTrader.Service\PolyCopyTrader.Service.csproj --no-restore /p:UseSharedCompilation=false` passed with 0 warnings/errors; `git diff --check` passed with CRLF warnings only; targeted `rg` found both SOL Revert rows in source/tests/docs. Commit/push was not attempted because the worktree already contains unrelated dirty tracked/untracked changes from previous tasks, including `PostgresAppRepository`, context/history, and output folders.
+Blockers: None.
+
+## Active Update 2026-06-24 ETH Prev Score Countertrend Premarket Revert
+Goal: Add an ETH-only `Prev Score Countertrend Premarket Revert` strategy that uses the Premarket 5.5-minute score window but buys in the same direction as the synthetic ETH bias.
+Status: Completed
+Done:
+- Added `ETH Up or Down 5m Prev Score Countertrend Premarket Revert` to the crypto strategy catalog with id `b7c50005-0000-4000-8141-000000000996`, code `eth_up_down_5m_prev_score_countertrend_fak_premarket_revert`, behavior `PreviousScoreCounterTrendFakPremarketRevert`, `EntryDelaySeconds = -30`, category `ETH Up/Down 5m Previous Score Countertrend Premarket`, and `ReferenceAssetSymbol = ETH`.
+- Added the PostgreSQL seed row for the new ETH strategy; no SOL Premarket Revert variant was added.
+- Reused the existing combined Premarket/Revert processor path, so ETH synthetic 5.5-minute `Up` buys `Up`, synthetic `Down` buys `Down`, and Paper entry takes current premarket executable ask depth immediately as FAK.
+- Updated README, storage/catalog/category tests, and added a processor regression test proving synthetic ETH premarket `Up` bias buys `Up` for the Premarket Revert strategy.
+Next: Deploy/restart from this working tree or a clean subset commit if this strategy should be inserted into production and start running; production DB was not changed during this task.
+Notes: Verification passed: focused `dotnet test tests\PolyCopyTrader.Tests\PolyCopyTrader.Tests.csproj --no-restore --filter "FullyQualifiedName~StorageTests.PostgresSchema_ContainsRequiredTables|FullyQualifiedName~BtcUpDown5mPaperStrategyProcessorTests.StrategyIds_IncludeEthAndSolBinanceBpsVariants|FullyQualifiedName~BtcUpDown5mPaperStrategyProcessorTests.ProcessAsync_CryptoPreviousScoreCounterTrendFakPremarketRevertBuysUpFromSyntheticEthUpBias|FullyQualifiedName~StrategyDisplayCategoryTests.PreservesExistingDisplayCategories"` passed 39/39 with existing nullable warnings in `PostgresAppRepository` and a test nullable warning; `dotnet build src\PolyCopyTrader.Service\PolyCopyTrader.Service.csproj --no-restore /p:UseSharedCompilation=false` passed with 0 warnings/errors; `git diff --check` passed with CRLF warnings only; targeted `rg` found the ETH Premarket Revert row in source/tests/docs and no SOL Premarket Revert runtime row. Commit/push was not attempted because the worktree already contains unrelated dirty tracked/untracked changes from previous tasks, including `PostgresAppRepository`, context/history, and output folders.
+Blockers: None.
+
+## Active Update 2026-06-24 ETH Prev Score Countertrend Revert
+Goal: Add an ETH-only `Prev Score Countertrend Revert` strategy that buys in the same direction as the previous ETH 5m score bias.
+Status: Completed
+Done:
+- Added `ETH Up or Down 5m Prev Score Countertrend Revert` to the crypto strategy catalog with id `b7c50005-0000-4000-8141-000000000999`, code `eth_up_down_5m_prev_score_countertrend_fak_revert`, behavior `PreviousScoreCounterTrendFakRevert`, category `ETH Up/Down 5m Previous Score Countertrend`, and `ReferenceAssetSymbol = ETH`.
+- Added the PostgreSQL seed row for the new ETH strategy; no SOL Revert variant was added.
+- Reused the existing previous-score Revert processor path, so ETH previous `Up` buys `Up`, previous `Down` buys `Down`, and Paper entry takes executable ask depth immediately as FAK.
+- Updated README, storage/catalog/category tests, and added a processor regression test proving previous ETH `Up` bias buys `Up` for the Revert strategy.
+Next: Deploy/restart from this working tree or a clean subset commit if this strategy should be inserted into production and start running; production DB was not changed during this task.
+Notes: Verification passed: focused `dotnet test tests\PolyCopyTrader.Tests\PolyCopyTrader.Tests.csproj --no-restore --filter "FullyQualifiedName~StorageTests.PostgresSchema_ContainsRequiredTables|FullyQualifiedName~BtcUpDown5mPaperStrategyProcessorTests.StrategyIds_IncludeEthAndSolBinanceBpsVariants|FullyQualifiedName~BtcUpDown5mPaperStrategyProcessorTests.ProcessAsync_CryptoPreviousScoreCounterTrendFakRevertBuysUpAfterPreviousEthUpBias|FullyQualifiedName~StrategyDisplayCategoryTests.PreservesExistingDisplayCategories"` passed 38/38 with existing nullable warnings in `PostgresAppRepository` and a test nullable warning; `dotnet build src\PolyCopyTrader.Service\PolyCopyTrader.Service.csproj --no-restore /p:UseSharedCompilation=false` passed with 0 warnings/errors; `git diff --check` passed with CRLF warnings only; targeted `rg` found the ETH Revert row in source/tests/docs and no SOL Revert runtime row. Commit/push was not attempted because the worktree already contains unrelated dirty tracked/untracked changes from previous tasks, including `PostgresAppRepository`, context/history, and output folders.
+Blockers: None.
+
+## Active Update 2026-06-24 BTC Prev Score Countertrend Premarket Revert
+Goal: Add a BTC-only `Prev Score Countertrend Premarket Revert` strategy that uses the Premarket 5.5-minute score window but buys in the same direction as the synthetic bias.
+Status: Completed
+Done:
+- Added `BTC Up or Down 5m Prev Score Countertrend Premarket Revert` to the BTC strategy catalog with id `b7c50005-0000-4000-8025-000000000996`, code `btc_up_down_5m_prev_score_countertrend_fak_premarket_revert`, `EntryDelaySeconds = -30`, category `BTC Up/Down 5m Previous Score Countertrend Premarket`, and a new behavior `PreviousScoreCounterTrendFakPremarketRevert`.
+- Added the PostgreSQL seed row for the new BTC strategy; no ETH/SOL Premarket Revert variants were added.
+- Extended the service processor so the new behavior is both a pre-open timed FAK entry and a previous-score Revert entry: it scores the synthetic 5.5-minute premarket window and passes `useCounterTrend: false`, so synthetic `Up` buys `Up` and synthetic `Down` buys `Down`.
+- Updated raw decision JSON for this mode with `decision_source = previous_btc_5_5m_time_weighted_winsor_score_same_direction_premarket_fak`, `previous_score_direction_mode = previous_bias_same_direction_premarket_5_5m`, `previous_score_countertrend_premarket_enabled = false`, and `previous_score_same_direction_premarket_revert_enabled = true`.
+- Updated README, storage/catalog/category tests, and added a processor regression test proving synthetic premarket `Up` bias buys `Up` for the Revert Premarket strategy.
+Next: Deploy/restart from this working tree or a clean subset commit if this strategy should be inserted into production and start running; production DB was not changed during this task.
+Notes: Verification passed: focused `dotnet test tests\PolyCopyTrader.Tests\PolyCopyTrader.Tests.csproj --no-restore --filter "FullyQualifiedName~StorageTests.PostgresSchema_ContainsRequiredTables|FullyQualifiedName~BtcUpDown5mPaperStrategyProcessorTests.StrategyIds_IncludeStandardMartinAndGammaBtcVariants|FullyQualifiedName~BtcUpDown5mPaperStrategyProcessorTests.StrategyIds_IncludeEthAndSolBinanceBpsVariants|FullyQualifiedName~BtcUpDown5mPaperStrategyProcessorTests.ProcessAsync_PreviousScoreCounterTrendFakPremarketRevertBuysUpFromSyntheticUpBias|FullyQualifiedName~StrategyDisplayCategoryTests.PreservesExistingDisplayCategories"` passed 38/38 with existing nullable warnings in `PostgresAppRepository` and a test nullable warning; `dotnet build src\PolyCopyTrader.Service\PolyCopyTrader.Service.csproj --no-restore /p:UseSharedCompilation=false` passed with 0 warnings/errors; `git diff --check` passed with CRLF warnings only. Commit/push was not attempted because the worktree already contains unrelated dirty tracked/untracked changes from previous tasks, including `PostgresAppRepository`, context/history, and output folders.
+Blockers: None.
+
+## Active Update 2026-06-24 Delete BTC More 90 Gamma Below 70
+Goal: Remove `BTC Up or Down 5m More 90 Gamma Below 70` and its production history.
+Status: Completed
+Done:
+- Removed the strategy from the source catalog by deleting `BtcUpDown5mMore90GammaBelow70` id/code/static variant and its `CreateBtcUpDown5mGammaEntryPriceCapVariant(...90, 70)` registration.
+- Removed the PostgreSQL seed row for id `b7c50005-0000-4000-8022-000000090070` / code `btc_up_down_5m_more_90_gamma_below_70`, so future schema initialization from updated binaries will not recreate it. The standard non-Gamma `BTC Up or Down 5m More 90 Below 70` row remains intact.
+- Updated README and focused storage/catalog tests: remaining capped Gamma comparison variants now include `More 60 Gamma Below 70` and `More 120 Gamma Below 65`; added explicit absence checks for the deleted id/code/name and adjusted BTC/all-variant counts.
+- Added `outputs/delete-more90-gamma-below70-2026-06-24/`, a C# Npgsql cleanup utility with dry-run/execute/verify-only modes, exact id/code/name checks, late paper-order refresh, report writing, and an open-live-order guard.
+- Ran production dry-run against PostgreSQL host `192.168.0.101`: target row existed, live guard was `0`, and target history was `365` paper orders, `280` fills, `377` runs, `280` positions, `279` settlements, and `365` signals.
+- Executed the cleanup. It disabled/de-live-updated the strategy, then deleted `377` runs, `280` fills, `279` settlements, `280` positions, `366` paper orders, `366` signals, and the `1` strategy row; no live/shadow/copied-leader/onchain rows were present. One extra target order/signal appeared between dry-run and execute and was removed after the utility refreshed target ids.
+- Ran a fresh verify-only production check after cleanup; all target counts were `0`: strategy row, paper orders, runs, fills, live orders, shadow rows, positions, settlements, copied-leader rows, onchain paper signal results, signals, and signal rejections.
+- Wrote the run summary to `outputs/delete-more90-gamma-below70-2026-06-24/execution-summary.md`; `error.txt` was not created.
+Next: Deploy/restart from this working tree or a clean subset commit before restarting schema initialization, so the removed seed row cannot be reinserted by older binaries.
+Notes: Verification passed: `dotnet restore outputs\delete-more90-gamma-below70-2026-06-24\DeleteMore90GammaBelow70.csproj`; `dotnet build outputs\delete-more90-gamma-below70-2026-06-24\DeleteMore90GammaBelow70.csproj --no-restore`; production dry-run/execute/verify-only; focused `dotnet test tests\PolyCopyTrader.Tests\PolyCopyTrader.Tests.csproj --no-restore --filter "FullyQualifiedName~StorageTests.PostgresSchema_ContainsRequiredTables|FullyQualifiedName~BtcUpDown5mPaperStrategyProcessorTests.StrategyIds_ExcludeDeletedGammaVariants|FullyQualifiedName~BtcUpDown5mPaperStrategyProcessorTests.StrategyIds_IncludeEthAndSolBinanceBpsVariants|FullyQualifiedName~BtcUpDown5mPaperStrategyProcessorTests.StrategyIds_IncludeStandardMartinAndGammaBtcVariants"` passed 4/4 with existing nullable warnings in `PostgresAppRepository` and a test nullable warning; `dotnet build src\PolyCopyTrader.Service\PolyCopyTrader.Service.csproj --no-restore /p:UseSharedCompilation=false` passed with 0 warnings/errors; `rg` found no removed-code references in `src`/`README.md` and confirmed the non-Gamma `More 90 Below 70` row still exists. Commit/push was not attempted because the worktree already contains unrelated dirty tracked/untracked changes from previous tasks, including `PostgresAppRepository`, context/history, and other output folders.
+Blockers: None.
+
+## Active Update 2026-06-24 Delete BTC More 120 Gamma Below 70
+Goal: Remove `BTC Up or Down 5m More 120 Gamma Below 70` and its production history.
+Status: Completed
+Done:
+- Removed the strategy from the source catalog by deleting `BtcUpDown5mMore120GammaBelow70` id/code/static variant and its `CreateBtcUpDown5mGammaEntryPriceCapVariant(...120, 70)` registration.
+- Removed the PostgreSQL seed row for id `b7c50005-0000-4000-8022-000000120070` / code `btc_up_down_5m_more_120_gamma_below_70`, so future schema initialization from updated binaries will not recreate it.
+- Updated README and focused storage/catalog tests: remaining capped Gamma comparison variants now include `More 60 Gamma Below 70`, `More 90 Gamma Below 70`, and `More 120 Gamma Below 65`; added explicit absence checks for the deleted id/code/name and adjusted BTC/all-variant counts.
+- Added `outputs/delete-more120-gamma-below70-2026-06-24/`, a C# Npgsql cleanup utility with dry-run/execute/verify-only modes, exact id/code/name checks, late paper-order refresh, report writing, and an open-live-order guard.
+- Ran production dry-run against PostgreSQL host `192.168.0.101`: target row existed, live guard was `0`, and target history was `363` paper orders, `269` fills, `374` runs, `269` positions, `268` settlements, and `363` signals.
+- Executed the cleanup. It disabled/de-live-updated the strategy, then deleted `374` runs, `269` fills, `268` settlements, `269` positions, `363` paper orders, `363` signals, and the `1` strategy row; no live/shadow/copied-leader/onchain rows were present.
+- Ran a fresh verify-only production check after cleanup; all target counts were `0`: strategy row, paper orders, runs, fills, live orders, shadow rows, positions, settlements, copied-leader rows, onchain paper signal results, signals, and signal rejections.
+- Wrote the run summary to `outputs/delete-more120-gamma-below70-2026-06-24/execution-summary.md`; `error.txt` was not created.
+Next: Deploy/restart from this working tree or a clean subset commit before restarting schema initialization, so the removed seed row cannot be reinserted by older binaries.
+Notes: Verification passed: `dotnet restore outputs\delete-more120-gamma-below70-2026-06-24\DeleteMore120GammaBelow70.csproj`; `dotnet build outputs\delete-more120-gamma-below70-2026-06-24\DeleteMore120GammaBelow70.csproj --no-restore`; production dry-run/execute/verify-only; focused `dotnet test tests\PolyCopyTrader.Tests\PolyCopyTrader.Tests.csproj --no-restore --filter "FullyQualifiedName~StorageTests.PostgresSchema_ContainsRequiredTables|FullyQualifiedName~BtcUpDown5mPaperStrategyProcessorTests.StrategyIds_ExcludeDeletedGammaVariants|FullyQualifiedName~BtcUpDown5mPaperStrategyProcessorTests.StrategyIds_IncludeEthAndSolBinanceBpsVariants|FullyQualifiedName~BtcUpDown5mPaperStrategyProcessorTests.StrategyIds_IncludeStandardMartinAndGammaBtcVariants"` passed 4/4 with existing nullable warnings in `PostgresAppRepository` and a test nullable warning; `dotnet build src\PolyCopyTrader.Service\PolyCopyTrader.Service.csproj --no-restore /p:UseSharedCompilation=false` passed with 0 warnings/errors; `git diff --check` passed with CRLF warnings only; `rg` found no removed-code references in `src`/`README.md`. Commit/push was not attempted because the worktree already contains unrelated dirty tracked/untracked changes from previous tasks, including `PostgresAppRepository`, context/history, and other output folders.
+Blockers: None.
+
+## Active Update 2026-06-24 Delete BTC Prev Score Countertrend 75
+Goal: Remove `BTC Up or Down 5m Prev Score Countertrend 75` and its production history.
+Status: Completed
+Done:
+- Removed the numbered `75` fixed-price BTC previous-score Countertrend variant from the source catalog by changing the BTC generator from `10..75` to `10..70`; the remaining fixed GTD BUY variants now cover `0.10..0.70`.
+- Removed the PostgreSQL seed generation for the `75` row by changing the seed `generate_series(10, 75, 5)` to `generate_series(10, 70, 5)`, so schema initialization from updated binaries will not recreate it.
+- Updated README and focused storage/catalog tests to document/assert 13 numbered BTC variants and explicit absence of id `b7c50005-0000-4000-8025-000000000075`, code `btc_up_down_5m_prev_score_countertrend_75`, and name `BTC Up or Down 5m Prev Score Countertrend 75`; the previously removed `80`/`85`/`90` absence checks remain in place.
+- Changed the previous `0.75` behavior test to cover the new top remaining fixed price `0.70`.
+- Added `outputs/delete-prev-score-countertrend-75-2026-06-24/`, a C# Npgsql cleanup utility with dry-run/execute/verify-only modes, exact id/code/name checks, late paper-order refresh, report writing, and an open-live-order guard.
+- Ran production dry-run against PostgreSQL host `192.168.0.101`: target row existed, live guard was `0`, and target history was `302` paper orders, `300` fills, `372` runs, `300` positions, `299` settlements, and `302` signals.
+- Executed the cleanup. It disabled/de-live-updated the strategy, then deleted `373` runs including `1` late run, `301` fills, `300` settlements, `301` positions, `303` paper orders, `303` signals, and the `1` strategy row; no live/shadow/copied-leader/onchain rows were present.
+- Ran a fresh verify-only production check after cleanup; all target counts were `0`: strategy row, paper orders, runs, fills, live orders, shadow rows, positions, settlements, copied-leader rows, onchain paper signal results, signals, and signal rejections.
+- Wrote the run summary to `outputs/delete-prev-score-countertrend-75-2026-06-24/execution-summary.md`; `error.txt` was not created.
+Next: Deploy/restart from this working tree or a clean subset commit before restarting schema initialization, so the removed seed row cannot be reinserted by older binaries.
+Notes: Verification passed: `dotnet restore outputs\delete-prev-score-countertrend-75-2026-06-24\DeletePrevScoreCountertrend75.csproj`; `dotnet build outputs\delete-prev-score-countertrend-75-2026-06-24\DeletePrevScoreCountertrend75.csproj --no-restore`; production dry-run/execute/verify-only; focused `dotnet test tests\PolyCopyTrader.Tests\PolyCopyTrader.Tests.csproj --no-restore --filter "FullyQualifiedName~StorageTests.PostgresSchema_ContainsRequiredTables|FullyQualifiedName~BtcUpDown5mPaperStrategyProcessorTests.StrategyIds_ExcludeDeletedPreviousScoreCounterTrend75AndAboveVariants|FullyQualifiedName~BtcUpDown5mPaperStrategyProcessorTests.StrategyIds_IncludeEthAndSolBinanceBpsVariants|FullyQualifiedName~BtcUpDown5mPaperStrategyProcessorTests.StrategyIds_IncludeStandardMartinAndGammaBtcVariants|FullyQualifiedName~BtcUpDown5mPaperStrategyProcessorTests.ProcessAsync_PreviousScoreCounterTrendBuysUpAfterPreviousDownBiasAtSeventyCents"` passed 5/5 with existing nullable warnings in `PostgresAppRepository`; `dotnet build src\PolyCopyTrader.Service\PolyCopyTrader.Service.csproj --no-restore /p:UseSharedCompilation=false` passed with 0 warnings/errors; `git diff --check` passed with CRLF warnings only; `rg` found no removed-code references in `src`/`README.md`. Commit/push was not attempted because the worktree already contains unrelated dirty tracked/untracked changes from previous tasks, including `PostgresAppRepository`, context/history, and other output folders.
+Blockers: None.
+
+## Active Update 2026-06-24 Delete BTC More 150 Gamma Below 70
+Goal: Remove `BTC Up or Down 5m More 150 Gamma Below 70` and its production history.
+Status: Completed
+Done:
+- Removed the strategy from the source catalog by deleting `BtcUpDown5mMore150GammaBelow70` id/code/static variant and its `CreateBtcUpDown5mGammaEntryPriceCapVariant(...150, 70)` registration.
+- Removed the PostgreSQL seed row for id `b7c50005-0000-4000-8022-000000150070` / code `btc_up_down_5m_more_150_gamma_below_70`, so future schema initialization from updated binaries will not recreate it.
+- Updated README and focused storage/catalog tests to keep remaining capped Gamma comparison variants at `More 60 Gamma Below 70`, `More 90 Gamma Below 70`, and `More 120 Gamma Below 65/70`; added explicit absence checks for the deleted id/code/name and adjusted BTC/all-variant counts.
+- Corrected stale BTC Diff/AdjustedDiff/ShiftDiff Revert expectations inside the broad BTC catalog test to match the current non-revert-only source/seed model, allowing the updated count assertions to run.
+- Added `outputs/delete-more150-gamma-below70-2026-06-24/`, a C# Npgsql cleanup utility with dry-run/execute/verify-only modes, exact id/code/name checks, late paper-order refresh, report writing, and an open-live-order guard.
+- Ran production dry-run against PostgreSQL host `192.168.0.101`: target row existed, live guard was `0`, and target history was `354` paper orders, `242` fills, `366` runs, `242` positions, `241` settlements, and `354` signals.
+- Executed the cleanup. The first execute pass disabled/de-live-updated the strategy and deleted `366` runs, `242` fills, `241` settlements, `242` positions, `355` paper orders, `355` signals, and the `1` strategy row; no live/shadow/copied-leader/onchain rows were present. A late settlement row remained after the initial snapshot, so a second execute pass deleted that remaining `1` paper position settlement.
+- Ran a fresh verify-only production check after cleanup; all target counts were `0`: strategy row, paper orders, runs, fills, live orders, shadow rows, positions, settlements, copied-leader rows, onchain paper signal results, signals, and signal rejections.
+- Wrote the run summary to `outputs/delete-more150-gamma-below70-2026-06-24/execution-summary.md`; `error.txt` was not created.
+Next: Deploy/restart from this working tree or a clean subset commit before restarting schema initialization, so the removed seed row cannot be reinserted by older binaries.
+Notes: Verification passed: `dotnet restore outputs\delete-more150-gamma-below70-2026-06-24\DeleteMore150GammaBelow70.csproj`; `dotnet build outputs\delete-more150-gamma-below70-2026-06-24\DeleteMore150GammaBelow70.csproj --no-restore`; production dry-run/execute/execute/verify-only; focused `dotnet test tests\PolyCopyTrader.Tests\PolyCopyTrader.Tests.csproj --no-restore --filter "FullyQualifiedName~StorageTests.PostgresSchema_ContainsRequiredTables|FullyQualifiedName~BtcUpDown5mPaperStrategyProcessorTests.StrategyIds_ExcludeDeletedGammaVariants|FullyQualifiedName~BtcUpDown5mPaperStrategyProcessorTests.StrategyIds_IncludeEthAndSolBinanceBpsVariants|FullyQualifiedName~BtcUpDown5mPaperStrategyProcessorTests.StrategyIds_IncludeStandardMartinAndGammaBtcVariants"` passed 4/4; `dotnet build src\PolyCopyTrader.Service\PolyCopyTrader.Service.csproj --no-restore /p:UseSharedCompilation=false` passed with 0 warnings/errors; `git diff --check` passed with CRLF warnings only; `rg` found no removed-code references in `src`/`README.md`. Commit/push was not attempted because the worktree already contains unrelated dirty tracked/untracked changes from previous tasks, including `PostgresAppRepository`, context/history, and other output folders.
+Blockers: None.
+
+## Active Update 2026-06-24 Delete BTC Prev Score Countertrend 80
+Goal: Remove `BTC Up or Down 5m Prev Score Countertrend 80` and its production history.
+Status: Completed
+Done:
+- Removed the numbered `80` fixed-price BTC previous-score Countertrend variant from the source catalog by changing the BTC generator from `10..80` to `10..75`; the remaining fixed GTD BUY variants now cover `0.10..0.75`.
+- Removed the PostgreSQL seed generation for the `80` row by changing the seed `generate_series(10, 80, 5)` to `generate_series(10, 75, 5)`, so schema initialization from updated binaries will not recreate it.
+- Updated README and focused storage/catalog tests to document/assert 14 numbered BTC variants and explicit absence of id `b7c50005-0000-4000-8025-000000000080`, code `btc_up_down_5m_prev_score_countertrend_80`, and name `BTC Up or Down 5m Prev Score Countertrend 80`; the previously removed `85`/`90` absence checks remain in place.
+- Changed the previous `0.80` behavior test to cover the new top remaining fixed price `0.75`.
+- Added `outputs/delete-prev-score-countertrend-80-2026-06-24/`, a C# Npgsql cleanup utility with dry-run/execute/verify-only modes, exact id/code/name checks, report writing, late paper-order refresh, and an open-live-order guard.
+- Ran production dry-run against PostgreSQL host `192.168.0.101`: target row existed, live guard was `0`, and target history was `288` paper orders, `288` fills, `357` runs, `288` positions, `286` settlements, and `288` signals.
+- Executed the cleanup. It disabled/de-live-updated the strategy, then deleted `357` runs, `288` fills, `287` settlements, `288` positions, `288` paper orders, `288` signals, and the `1` strategy row; no live/shadow/copied-leader/onchain rows were present.
+- Ran a fresh verify-only production check after cleanup; all target counts were `0`: strategy row, paper orders, runs, fills, live orders, shadow rows, positions, settlements, copied-leader rows, onchain paper signal results, signals, and signal rejections.
+Next: Deploy/restart from this working tree or a clean subset commit before restarting schema initialization, so an older binary cannot recreate the removed seed row.
+Notes: Verification passed: `dotnet restore outputs\delete-prev-score-countertrend-80-2026-06-24\DeletePrevScoreCountertrend80.csproj`; `dotnet build outputs\delete-prev-score-countertrend-80-2026-06-24\DeletePrevScoreCountertrend80.csproj --no-restore`; production dry-run/execute/verify-only; focused `dotnet test tests\PolyCopyTrader.Tests\PolyCopyTrader.Tests.csproj --no-restore --filter "FullyQualifiedName~StorageTests.PostgresSchema_ContainsRequiredTables|FullyQualifiedName~BtcUpDown5mPaperStrategyProcessorTests.StrategyIds_ExcludeDeletedPreviousScoreCounterTrend80AndAboveVariants|FullyQualifiedName~BtcUpDown5mPaperStrategyProcessorTests.StrategyIds_IncludeEthAndSolBinanceBpsVariants|FullyQualifiedName~BtcUpDown5mPaperStrategyProcessorTests.ProcessAsync_PreviousScoreCounterTrendBuysUpAfterPreviousDownBiasAtSeventyFiveCents"` passed 4/4; first parallel service build hit a temporary `VBCSCompiler` lock on `PolyCopyTrader.Domain.dll`, then `dotnet build src\PolyCopyTrader.Service\PolyCopyTrader.Service.csproj --no-restore /p:UseSharedCompilation=false` passed with 0 warnings/errors; `git diff --check` passed with CRLF warnings only; `rg` found no removed-code references in `src`/`README.md`. Commit/push was not attempted because the worktree already contains unrelated dirty tracked/untracked changes from previous tasks, including `PostgresAppRepository`, context/history, and other output folders.
+Blockers: None.
+
+## Active Update 2026-06-24 Delete BTC Prev Score Countertrend 85
+Goal: Remove `BTC Up or Down 5m Prev Score Countertrend 85` and its production history.
+Status: Completed
+Done:
+- Removed the numbered `85` fixed-price BTC previous-score Countertrend variant from the source catalog by changing the BTC generator from `10..85` to `10..80`; the remaining fixed GTD BUY variants now cover `0.10..0.80`.
+- Removed the PostgreSQL seed generation for the `85` row by changing the seed `generate_series(10, 85, 5)` to `generate_series(10, 80, 5)`, so schema initialization from updated binaries will not recreate it.
+- Updated README and focused storage/catalog tests to document/assert 15 numbered BTC variants and explicit absence of id `b7c50005-0000-4000-8025-000000000085`, code `btc_up_down_5m_prev_score_countertrend_85`, and name `BTC Up or Down 5m Prev Score Countertrend 85`; the previously removed `90` absence checks remain in place.
+- Changed the previous `0.85` behavior test to cover the new top remaining fixed price `0.80`.
+- Added `outputs/delete-prev-score-countertrend-85-2026-06-24/`, a C# Npgsql cleanup utility with dry-run/execute/verify-only modes, exact id/code/name checks, report writing, late paper-order refresh, and an open-live-order guard.
+- Ran production dry-run against PostgreSQL host `192.168.0.101`: target row existed, live guard was `0`, and target history was `287` paper orders, `286` fills, `356` runs, `286` positions, `285` settlements, and `287` signals.
+- Executed the cleanup. It disabled/de-live-updated the strategy, then deleted `356` runs, `286` fills, `285` settlements, `286` positions, `287` paper orders, `287` signals, and the `1` strategy row; no live/shadow/copied-leader/onchain rows were present.
+- Ran a fresh verify-only production check after cleanup; all target counts were `0`: strategy row, paper orders, runs, fills, live orders, shadow rows, positions, settlements, copied-leader rows, onchain paper signal results, signals, and signal rejections.
+Next: Deploy/restart from this working tree or a clean subset commit before restarting schema initialization, so an older binary cannot recreate the removed seed row.
+Notes: Verification passed: `dotnet restore outputs\delete-prev-score-countertrend-85-2026-06-24\DeletePrevScoreCountertrend85.csproj`; `dotnet build outputs\delete-prev-score-countertrend-85-2026-06-24\DeletePrevScoreCountertrend85.csproj --no-restore`; production dry-run/execute/verify-only; focused `dotnet test tests\PolyCopyTrader.Tests\PolyCopyTrader.Tests.csproj --no-restore --filter "FullyQualifiedName~StorageTests.PostgresSchema_ContainsRequiredTables|FullyQualifiedName~BtcUpDown5mPaperStrategyProcessorTests.StrategyIds_ExcludeDeletedPreviousScoreCounterTrend85And90Variants|FullyQualifiedName~BtcUpDown5mPaperStrategyProcessorTests.StrategyIds_IncludeEthAndSolBinanceBpsVariants|FullyQualifiedName~BtcUpDown5mPaperStrategyProcessorTests.ProcessAsync_PreviousScoreCounterTrendBuysUpAfterPreviousDownBiasAtEightyCents"` passed 4/4; `dotnet build src\PolyCopyTrader.Service\PolyCopyTrader.Service.csproj --no-restore` passed with 0 errors and existing nullable warnings in `PostgresAppRepository`; `git diff --check` passed with CRLF warnings only; `rg` found no removed-code references in `src`/`README.md`. Commit/push was not attempted because the worktree already contains unrelated dirty tracked/untracked changes from previous tasks, including `PostgresAppRepository`, context/history, and other output folders.
+Blockers: None.
+
+## Active Update 2026-06-24 Delete BTC Prev Score Countertrend 90
+Goal: Remove `BTC Up or Down 5m Prev Score Countertrend 90` and its production history.
+Status: Completed
+Done:
+- Removed the numbered `90` fixed-price BTC previous-score Countertrend variant from the source catalog by changing the BTC generator from `10..90` to `10..85`; the remaining fixed GTD BUY variants now cover `0.10..0.85`.
+- Removed the PostgreSQL seed generation for the `90` row by changing the seed `generate_series(10, 90, 5)` to `generate_series(10, 85, 5)`, so schema initialization from updated binaries will not recreate it.
+- Updated README and focused storage/catalog tests to document/assert 16 numbered BTC variants and explicit absence of id `b7c50005-0000-4000-8025-000000000090`, code `btc_up_down_5m_prev_score_countertrend_90`, and name `BTC Up or Down 5m Prev Score Countertrend 90`.
+- Changed the previous `0.90` behavior test to cover the new top remaining fixed price `0.85`.
+- Added `outputs/delete-prev-score-countertrend-90-2026-06-24/`, a C# Npgsql cleanup utility with dry-run/execute/verify-only modes, exact id/code/name checks, report writing, late paper-order refresh, and an open-live-order guard.
+- Ran production dry-run against PostgreSQL host `192.168.0.101`: target row existed, live guard was `0`, and target history was `285` paper orders, `284` fills, `354` runs, `284` positions, `284` settlements, and `285` signals.
+- Executed the cleanup. It disabled/de-live-updated the strategy, then deleted `354` runs, `285` fills, `284` settlements, `285` positions, `285` paper orders, `285` signals, and the `1` strategy row; no live/shadow/copied-leader/onchain rows were present.
+- Ran a fresh verify-only production check after cleanup; all target counts were `0`: strategy row, paper orders, runs, fills, live orders, shadow rows, positions, settlements, copied-leader rows, onchain paper signal results, signals, and signal rejections.
+Next: Deploy/restart from this working tree or a clean subset commit before restarting schema initialization, so an older binary cannot recreate the removed seed row.
+Notes: Verification passed: `dotnet restore outputs\delete-prev-score-countertrend-90-2026-06-24\DeletePrevScoreCountertrend90.csproj`; `dotnet build outputs\delete-prev-score-countertrend-90-2026-06-24\DeletePrevScoreCountertrend90.csproj --no-restore`; production dry-run/execute/verify-only; focused `dotnet test tests\PolyCopyTrader.Tests\PolyCopyTrader.Tests.csproj --no-restore --filter "FullyQualifiedName~StorageTests.PostgresSchema_ContainsRequiredTables|FullyQualifiedName~BtcUpDown5mPaperStrategyProcessorTests.StrategyIds_ExcludeDeletedPreviousScoreCounterTrend90Variant|FullyQualifiedName~BtcUpDown5mPaperStrategyProcessorTests.StrategyIds_IncludeEthAndSolBinanceBpsVariants|FullyQualifiedName~BtcUpDown5mPaperStrategyProcessorTests.ProcessAsync_PreviousScoreCounterTrendBuysUpAfterPreviousDownBiasAtEightyFiveCents"` passed 4/4; `dotnet build src\PolyCopyTrader.Service\PolyCopyTrader.Service.csproj --no-restore` passed with 0 warnings/errors; `git diff --check` passed with CRLF warnings only; `rg` found no removed-code references in `src`/`README.md`. A broader filtered test including `StrategyIds_IncludeStandardMartinAndGammaBtcVariants` still fails on the pre-existing unrelated DiffCounter threshold assertion at line 682 (`ExpectedDiffCounterThresholds()` vs empty non-revert set). Commit/push was not attempted because the worktree already contains unrelated dirty tracked/untracked changes from previous tasks, including `PostgresAppRepository`, context/history, and other output folders.
+Blockers: None.
+
+## Active Update 2026-06-24 Delete BTC More 60 Gamma Below 80
+Goal: Remove `BTC Up or Down 5m More 60 Gamma Below 80` and its production history.
+Status: Completed
+Done:
+- Removed the strategy from the source catalog by deleting `BtcUpDown5mMore60GammaBelow80` id/code/static variant and its `CreateBtcUpDown5mGammaEntryPriceCapVariant(...60, 80)` registration.
+- Removed the PostgreSQL seed row for id `b7c50005-0000-4000-8022-000000060080` / code `btc_up_down_5m_more_60_gamma_below_80`, so future schema initialization will not recreate it.
+- Updated storage/catalog tests to assert the removed `More 60 Gamma Below 80` and previously removed `More 150 Gamma Below 80` variants are absent, and adjusted BTC/all-variant counts by one more.
+- Added `outputs/delete-more60-gamma-below80-2026-06-24/`, a C# Npgsql cleanup utility with dry-run/execute/verify-only modes, exact id/code/name checks, report writing, late paper-order refresh, and an open-live-order guard.
+- Ran production dry-run against PostgreSQL host `192.168.0.101`: target row existed, live guard was `0`, and target history was `319` paper orders, `301` fills, `331` runs, `301` positions, `300` settlements, and `319` signals.
+- Executed the cleanup. The first execute pass deleted `331` runs, `301` fills, `300` settlements, `301` positions, `319` paper orders, and `319` signals, but strategy-row deletion hit a FK because one target paper order was created or remained after the temp-table snapshot.
+- Patched the cleanup utility to refresh target paper-order ids before final deletes and run an extra late paper-orders pass; resume execute removed the remaining `1` paper fill, `1` paper position, `1` paper order, `1` signal, and the strategy row.
+- Ran a fresh verify-only production check after cleanup; all target counts were `0`: strategy row, paper orders, runs, fills, live orders, shadow rows, positions, settlements, performance rows, copied-leader rows, onchain paper signal results, signals, and signal rejections.
+Next: Deploy/restart from this working tree or a clean subset commit before restarting schema initialization, so the removed seed row cannot be reinserted by older binaries.
+Notes: Verification passed: `dotnet build outputs\delete-more60-gamma-below80-2026-06-24\DeleteMore60GammaBelow80.csproj --no-restore`; focused `dotnet test tests\PolyCopyTrader.Tests\PolyCopyTrader.Tests.csproj --no-restore --filter "FullyQualifiedName~StorageTests.PostgresSchema_ContainsRequiredTables|FullyQualifiedName~BtcUpDown5mPaperStrategyProcessorTests.StrategyIds_ExcludeDeletedGammaBelow80Variants|FullyQualifiedName~BtcUpDown5mPaperStrategyProcessorTests.StrategyIds_IncludeEthAndSolBinanceBpsVariants"` passed 3/3 after an initial parallel build/test lock on `PolyCopyTrader.Domain.dll`; `dotnet build src\PolyCopyTrader.Service\PolyCopyTrader.Service.csproj --no-restore` passed with existing nullable warnings; targeted `git diff --check` passed with CRLF warnings only. The broader `StrategyIds_IncludeStandardMartinAndGammaBtcVariants` test still fails on the pre-existing unrelated DiffCounter threshold assertion at line 678 (`ExpectedDiffCounterThresholds()` vs empty non-revert set). Commit/push was not attempted because the worktree already contains unrelated dirty tracked/untracked changes from previous tasks, including `PostgresAppRepository`, context/history, and other output folders.
+Blockers: None.
+
+## Active Update 2026-06-24 Delete BTC More 150 Gamma Below 80
+Goal: Remove `BTC Up or Down 5m More 150 Gamma Below 80` and its production history.
+Status: Completed
+Done:
+- Removed the strategy from the source catalog by deleting `BtcUpDown5mMore150GammaBelow80` id/code/static variant and its `CreateBtcUpDown5mGammaEntryPriceCapVariant(...150, 80)` registration.
+- Removed the PostgreSQL seed row for id `b7c50005-0000-4000-8022-000000150080` / code `btc_up_down_5m_more_150_gamma_below_80`, so future schema initialization will not recreate it.
+- Updated storage/catalog tests to assert the removed strategy is absent and adjusted BTC/all-variant counts by one.
+- Added `outputs/delete-more150-gamma-below80-2026-06-24/`, a C# Npgsql cleanup utility with dry-run/execute/verify-only modes, exact id/code/name checks, report writing, and an open-live-order guard.
+- Ran production dry-run against PostgreSQL host `192.168.0.101`: target row existed, live guard was `0`, and target history was `312` paper orders, `246` fills, `323` runs, `246` positions, `245` settlements, and `312` signals.
+- Executed the cleanup. The first execute pass deleted runs/fills/positions/settlements and was stopped after the shell timeout while retrying a heavy late-run scan; the utility was patched, the stale process was stopped, and a resume execute removed the remaining `312` paper orders, `312` signals, one late run, one late settlement, and the strategy row.
+- Ran a fresh verify-only production check after cleanup; all target counts were `0`: strategy row, paper orders, runs, fills, live orders, shadow rows, positions, settlements, performance rows, copied-leader rows, onchain paper signal results, signals, and signal rejections.
+Next: Deploy/restart from this working tree or a clean subset commit before restarting schema initialization, so the removed seed row cannot be reinserted by older binaries.
+Notes: Verification passed: `dotnet build outputs\delete-more150-gamma-below80-2026-06-24\DeleteMore150GammaBelow80.csproj --no-restore`; `dotnet test tests\PolyCopyTrader.Tests\PolyCopyTrader.Tests.csproj --no-restore --filter "FullyQualifiedName~StorageTests.PostgresSchema_ContainsRequiredTables|FullyQualifiedName~BtcUpDown5mPaperStrategyProcessorTests.StrategyIds_ExcludeDeletedMore150GammaBelow80Variant|FullyQualifiedName~BtcUpDown5mPaperStrategyProcessorTests.StrategyIds_IncludeEthAndSolBinanceBpsVariants"` passed 3/3; `dotnet build src\PolyCopyTrader.Service\PolyCopyTrader.Service.csproj --no-restore` passed; targeted `git diff --check` passed with CRLF warnings only. The broader `StrategyIds_IncludeStandardMartinAndGammaBtcVariants` test still fails on the pre-existing unrelated DiffCounter threshold assertion at line 678 (`ExpectedDiffCounterThresholds()` vs empty non-revert set). Commit/push was not attempted because the worktree already contains unrelated dirty tracked/untracked changes from previous tasks, including `PostgresAppRepository`, context/history, and other output folders.
+Blockers: None.
+
+## Active Update 2026-06-24 Countertrend Bps Production Check
+Goal: Verify that Countertrend bps metrics are collecting on the production server after the Dashboard decimal fix.
+Status: Completed
+Done:
+- Ran read-only production probes against PostgreSQL host `192.168.0.101`; no DB writes or runtime changes were made.
+- Confirmed service heartbeat is fresh: version `info=1.0.0+25d7ec512d00891edb6f48eb340461f1a555be2f`, started `2026-06-24 16:19:43+03`, latest heartbeat `2026-06-24 16:43:43+03`, age about `7.6s`.
+- Confirmed Countertrend strategy rows: `24` rows total, `15` enabled, `0` live-enabled.
+- Confirmed bps collection since the service start: `75` Countertrend paper orders, all `75` include both `previous_score_bps` and `selected_signal_bps`, with `0` legacy-derived rows in that post-start window.
+- Confirmed bps all-time/last-hour views: all-time `2428` Countertrend orders, `75` with new bps fields and `2353` legacy-derived; last hour `180` orders, `75` with new bps fields.
+- Confirmed Dashboard aggregate path reads successfully with the fixed Storage code: `GetStrategyPerformanceAsync` returned `7682` performance rows and `24` Countertrend rows without decimal overflow.
+- Noted safety state: `all_live_orders_since_start=1`, but `target_prev_score_live_orders_since_start=0` and `target_open_live=0`.
+Next: Continue watching Dashboard; no action needed unless new `Dashboard Errors` entries appear.
+Notes: Production checks used `outputs/countertrend-bps-monitor-2026-06-24/` and `outputs/strategy-performance-read-probe-2026-06-24/` with read-only transaction/session settings. Recent API errors were one WebSocket close/cancel pair and startup Binance price-not-yet-received messages; no Countertrend live orders were created.
+Blockers: None.
+
+## Active Update 2026-06-24 Dashboard Countertrend Bps Decimal Overflow
+Goal: Diagnose and fix the production Dashboard error shown in the screenshot: `Numeric value does not fit in a System.Decimal`.
+Status: Completed
+Done:
+- Extracted the screenshot from the Windows clipboard and confirmed the Dashboard `Refresh` error occurs in `PostgresAppRepository.GetStrategyPerformanceAsync` while Npgsql reads a PostgreSQL `numeric` into .NET `decimal`.
+- Identified the cause as the new Countertrend bps aggregates and JSON numeric casts returning high-scale PostgreSQL `numeric` values from `avg()`/raw JSON arithmetic.
+- Updated `GetStrategyPerformanceAsync` to round/cast Countertrend bps source values and aggregates to `numeric(28,8)` before Dashboard reads them with `GetDecimal`.
+- Added `StorageTests.PostgresRepository_StrategyPerformanceRoundsCountertrendBpsForDecimalReader` to lock the SQL guard in place.
+- Created read-only helper probes under `outputs/countertrend-bps-monitor-2026-06-24/` and `outputs/strategy-performance-read-probe-2026-06-24/`; stopped the previously interrupted monitor processes.
+- Verified the fixed repository code against production PostgreSQL `192.168.0.101` in a read-only session: `GetStrategyPerformanceAsync` returned `7682` rows and `24` Countertrend rows without the decimal overflow.
+Next: Rebuild/redeploy the Dashboard/Storage binaries and reopen Dashboard; no production database data migration is required for this issue.
+Notes: Verification passed: focused `dotnet test tests\PolyCopyTrader.Tests\PolyCopyTrader.Tests.csproj --no-restore --filter "FullyQualifiedName~StorageTests.PostgresRepository_StrategyPerformanceRoundsCountertrendBpsForDecimalReader|FullyQualifiedName~StrategyPerformanceTests.GetStrategyPerformanceAsync_ComputesCountertrendSignalBpsMetrics"` passed 2/2; `dotnet build src\PolyCopyTrader.Dashboard\PolyCopyTrader.Dashboard.csproj -c Release --no-restore` passed with existing nullable warnings in `PostgresAppRepository`; `dotnet build outputs\strategy-performance-read-probe-2026-06-24\StrategyPerformanceReadProbe.csproj -c Release` passed; targeted `git diff --check` passed with CRLF warnings only. The production read was read-only and did not change DB rows, live flags, orders, balances, or secrets.
+Blockers: The currently running Dashboard binary will keep showing the error until it is restarted from a build containing this Storage fix.
+
 ## Active Update 2026-06-24 Service Deploy Recommendation
 Goal: Decide whether to deploy/restart the service after adding Countertrend bps metrics.
 Status: Completed

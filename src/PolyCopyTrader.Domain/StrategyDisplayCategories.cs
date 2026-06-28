@@ -72,6 +72,11 @@ public static class StrategyDisplayCategories
             return categoryPrefix + shiftDiffDownCategory;
         }
 
+        if (StartsWithDiffProgressThreshold(suffix))
+        {
+            return categoryPrefix + "Diff Progress";
+        }
+
         if (StartsWithDiffThreshold(suffix, "Up", out var diffUpRevert))
         {
             return categoryPrefix + "Diff Up" + GetDiffCategorySuffix(suffix, diffUpRevert);
@@ -233,6 +238,17 @@ public static class StrategyDisplayCategories
             parts.Length >= 4 &&
             string.Equals(parts[3], "Revert", StringComparison.OrdinalIgnoreCase);
         return matches;
+    }
+
+    private static bool StartsWithDiffProgressThreshold(string value)
+    {
+        var parts = value.Split(new[] { ' ' }, StringSplitOptions.RemoveEmptyEntries);
+        return parts.Length >= 4 &&
+            int.TryParse(parts[0], NumberStyles.Number, CultureInfo.InvariantCulture, out _) &&
+            string.Equals(parts[1], "Diff", StringComparison.OrdinalIgnoreCase) &&
+            (string.Equals(parts[2], "Up", StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(parts[2], "Down", StringComparison.OrdinalIgnoreCase)) &&
+            string.Equals(parts[3], "Progress", StringComparison.OrdinalIgnoreCase);
     }
 
     private static bool TryGetShiftDiffCategory(string value, string word, out string category)

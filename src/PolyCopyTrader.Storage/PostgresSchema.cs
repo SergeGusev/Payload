@@ -1536,76 +1536,6 @@ VALUES (
     1.00,
     now(),
     now()
-),
-(
-    'b7c50005-0000-4000-8022-000000060070',
-    'btc_up_down_5m_more_60_gamma_below_70',
-    'BTC Up or Down 5m More 60 Gamma Below 70',
-    'Experimental Paper-only comparison strategy: choose the higher-priced BTC 5m outcome from Gamma outcomePrices 60 seconds after window start, then place a GTD limit BUY at 0.70.',
-    true,
-    1.00,
-    now(),
-    now()
-),
-(
-    'b7c50005-0000-4000-8022-000000060080',
-    'btc_up_down_5m_more_60_gamma_below_80',
-    'BTC Up or Down 5m More 60 Gamma Below 80',
-    'Experimental Paper-only comparison strategy: choose the higher-priced BTC 5m outcome from Gamma outcomePrices 60 seconds after window start, then place a GTD limit BUY at 0.80.',
-    true,
-    1.00,
-    now(),
-    now()
-),
-(
-    'b7c50005-0000-4000-8022-000000090070',
-    'btc_up_down_5m_more_90_gamma_below_70',
-    'BTC Up or Down 5m More 90 Gamma Below 70',
-    'Experimental Paper-only comparison strategy: choose the higher-priced BTC 5m outcome from Gamma outcomePrices 90 seconds after window start, then place a GTD limit BUY at 0.70.',
-    true,
-    1.00,
-    now(),
-    now()
-),
-(
-    'b7c50005-0000-4000-8022-000000120065',
-    'btc_up_down_5m_more_120_gamma_below_65',
-    'BTC Up or Down 5m More 120 Gamma Below 65',
-    'Experimental Paper-only comparison strategy: choose the higher-priced BTC 5m outcome from Gamma outcomePrices 120 seconds after window start, then place a GTD limit BUY at 0.65.',
-    true,
-    1.00,
-    now(),
-    now()
-),
-(
-    'b7c50005-0000-4000-8022-000000120070',
-    'btc_up_down_5m_more_120_gamma_below_70',
-    'BTC Up or Down 5m More 120 Gamma Below 70',
-    'Experimental Paper-only comparison strategy: choose the higher-priced BTC 5m outcome from Gamma outcomePrices 120 seconds after window start, then place a GTD limit BUY at 0.70.',
-    true,
-    1.00,
-    now(),
-    now()
-),
-(
-    'b7c50005-0000-4000-8022-000000150070',
-    'btc_up_down_5m_more_150_gamma_below_70',
-    'BTC Up or Down 5m More 150 Gamma Below 70',
-    'Experimental Paper-only comparison strategy: choose the higher-priced BTC 5m outcome from Gamma outcomePrices 150 seconds after window start, then place a GTD limit BUY at 0.70.',
-    true,
-    1.00,
-    now(),
-    now()
-),
-(
-    'b7c50005-0000-4000-8022-000000150080',
-    'btc_up_down_5m_more_150_gamma_below_80',
-    'BTC Up or Down 5m More 150 Gamma Below 80',
-    'Experimental Paper-only comparison strategy: choose the higher-priced BTC 5m outcome from Gamma outcomePrices 150 seconds after window start, then place a GTD limit BUY at 0.80.',
-    true,
-    1.00,
-    now(),
-    now()
 )
 ON CONFLICT (id) DO UPDATE SET
     code = excluded.code,
@@ -2494,17 +2424,104 @@ ON CONFLICT (id) DO UPDATE SET
     updated_at_utc = excluded.updated_at_utc;
 
 INSERT INTO strategies (id, code, name, description, enabled, live_stakes, paper_stake_amount, created_at_utc, updated_at_utc)
-VALUES (
-    'b7c50005-0000-4000-8134-000000000003',
-    'eth_up_down_5m_down_diff_3_fak_premarket',
-    'ETH Up or Down 5m Down 3 Diff Premarket',
-    'Thirty seconds before ETH 5m market open, use the in-memory UTC-day raw DownCount - UpCount counter reset at 00:00 UTC. If the absolute Diff side is at least 3, BUY Up from the current premarket executable ask depth using the worst-price cap. Otherwise skip. Paper entry simulates the same taker BUY, while Live-shadow submits a market BUY amount so available liquidity is taken immediately and any remainder is cancelled.',
+WITH thresholds(threshold_value) AS (
+    SELECT value
+    FROM generate_series(1, 10) AS generated(value)
+),
+assets(asset_symbol, up_id_group, up_revert_id_group, down_id_group, down_revert_id_group) AS (
+    VALUES
+        ('BTC', '8146', '8147', '8148', '8149'),
+        ('ETH', '8144', '8145', '8134', '8143'),
+        ('SOL', '8150', '8151', '8152', '8153')
+),
+variants(diff_code, diff_name, diff_expression, target_outcome, is_revert, revert_code_suffix, revert_name_suffix, strategy_kind) AS (
+    VALUES
+        ('up', 'Up', 'UpCount - DownCount', 'Down', false, '', '', 'countertrend'),
+        ('up', 'Up', 'UpCount - DownCount', 'Up', true, '_revert', ' Revert', 'revert'),
+        ('down', 'Down', 'DownCount - UpCount', 'Up', false, '', '', 'countertrend'),
+        ('down', 'Down', 'DownCount - UpCount', 'Down', true, '_revert', ' Revert', 'revert')
+),
+formatted AS (
+    SELECT
+        assets.asset_symbol,
+        variants.diff_code,
+        variants.diff_name,
+        variants.diff_expression,
+        variants.target_outcome,
+        variants.revert_code_suffix,
+        variants.revert_name_suffix,
+        variants.strategy_kind,
+        CASE
+            WHEN variants.diff_code = 'up' AND variants.is_revert THEN assets.up_revert_id_group
+            WHEN variants.diff_code = 'up' THEN assets.up_id_group
+            WHEN variants.is_revert THEN assets.down_revert_id_group
+            ELSE assets.down_id_group
+        END AS id_group,
+        thresholds.threshold_value
+    FROM assets
+    CROSS JOIN variants
+    CROSS JOIN thresholds
+)
+SELECT
+    ('b7c50005-0000-4000-' || id_group || '-' || lpad(threshold_value::text, 12, '0'))::uuid,
+    lower(asset_symbol) || '_up_down_5m_' || diff_code || '_diff_' || threshold_value::text || revert_code_suffix || '_fak_premarket',
+    asset_symbol || ' Up or Down 5m ' || diff_name || ' ' || threshold_value::text || ' Diff' || revert_name_suffix || ' Premarket',
+    '30 seconds before ' || asset_symbol || ' 5m market open, use the in-memory UTC-day raw ' || diff_expression || ' counter reset at 00:00 UTC. Diff ' || strategy_kind || ' strategy: if the absolute Diff side is at least ' || threshold_value::text || ', BUY ' || target_outcome || ' from the current premarket executable ask depth using the worst-price cap. Otherwise skip. Paper entry simulates the same taker BUY, while Live-shadow submits a market BUY amount so available liquidity is taken immediately and any remainder is cancelled.',
     true,
     false,
     1.00,
     now(),
     now()
+FROM formatted
+ON CONFLICT (id) DO UPDATE SET
+    code = excluded.code,
+    name = excluded.name,
+    description = excluded.description,
+    updated_at_utc = excluded.updated_at_utc;
+
+INSERT INTO strategies (id, code, name, description, enabled, live_stakes, paper_stake_amount, created_at_utc, updated_at_utc)
+WITH thresholds(threshold_value) AS (
+    SELECT value
+    FROM generate_series(1, 50) AS generated(value)
+),
+assets(asset_symbol, up_id_group, down_id_group) AS (
+    VALUES
+        ('BTC', '8154', '8155'),
+        ('ETH', '8156', '8157'),
+        ('SOL', '8158', '8159')
+),
+variants(diff_code, diff_name, diff_expression, target_outcome) AS (
+    VALUES
+        ('up', 'Up', 'UpCount - DownCount', 'Down'),
+        ('down', 'Down', 'DownCount - UpCount', 'Up')
+),
+formatted AS (
+    SELECT
+        assets.asset_symbol,
+        variants.diff_code,
+        variants.diff_name,
+        variants.diff_expression,
+        variants.target_outcome,
+        CASE
+            WHEN variants.diff_code = 'up' THEN assets.up_id_group
+            ELSE assets.down_id_group
+        END AS id_group,
+        thresholds.threshold_value
+    FROM assets
+    CROSS JOIN variants
+    CROSS JOIN thresholds
 )
+SELECT
+    ('b7c50005-0000-4000-' || id_group || '-' || lpad(threshold_value::text, 12, '0'))::uuid,
+    lower(asset_symbol) || '_up_down_5m_diff_' || threshold_value::text || '_' || diff_code || '_progress',
+    asset_symbol || ' Up or Down 5m ' || threshold_value::text || ' Diff ' || diff_name || ' Progress',
+    'Diff Progress strategy: in waiting mode, count the in-memory UTC-day raw ' || diff_expression || ' counter reset at 00:00 UTC and backfilled from the current UTC day on service restart. When Diff is greater than ' || threshold_value::text || ', switch to betting mode and submit BUY FAK Paper entries on ' || target_outcome || '; the effective stake multiplier is Diff minus ' || threshold_value::text || '. While betting, the 00:00 UTC reset is postponed until Diff returns to the threshold and the strategy switches back to waiting mode.',
+    true,
+    false,
+    1.00,
+    now(),
+    now()
+FROM formatted
 ON CONFLICT (id) DO UPDATE SET
     code = excluded.code,
     name = excluded.name,
@@ -2862,7 +2879,7 @@ ON CONFLICT (id) DO UPDATE SET
     updated_at_utc = excluded.updated_at_utc;
 
 WITH prices(price_cents) AS (
-    SELECT generate_series(10, 90, 5)
+    SELECT generate_series(10, 50, 5)
 )
 INSERT INTO strategies (id, code, name, description, enabled, paper_stake_amount, created_at_utc, updated_at_utc)
 SELECT
@@ -2933,6 +2950,57 @@ ON CONFLICT (id) DO UPDATE SET
     updated_at_utc = excluded.updated_at_utc;
 
 INSERT INTO strategies (id, code, name, description, enabled, paper_stake_amount, created_at_utc, updated_at_utc)
+VALUES (
+    'b7c50005-0000-4000-8025-000000000996',
+    'btc_up_down_5m_prev_score_countertrend_fak_premarket_revert',
+    'BTC Up or Down 5m Prev Score Countertrend Premarket Revert',
+    '30 seconds before BTC 5m market open, score the synthetic BTC 5.5-minute window ending at the entry time from archived Binance BTC samples: the last minute of the market before the currently running market plus the first 4 minutes 30 seconds of the currently running market. Positive score buys Up, negative score buys Down, neutral or insufficient samples skip. Paper entry takes current premarket executable ask depth immediately and cancels any unfilled remainder.',
+    true,
+    1.00,
+    now(),
+    now()
+)
+ON CONFLICT (id) DO UPDATE SET
+    code = excluded.code,
+    name = excluded.name,
+    description = excluded.description,
+    updated_at_utc = excluded.updated_at_utc;
+
+INSERT INTO strategies (id, code, name, description, enabled, paper_stake_amount, created_at_utc, updated_at_utc)
+VALUES (
+    'b7c50005-0000-4000-8141-000000000996',
+    'eth_up_down_5m_prev_score_countertrend_fak_premarket_revert',
+    'ETH Up or Down 5m Prev Score Countertrend Premarket Revert',
+    '30 seconds before ETH 5m market open, score the synthetic ETH 5.5-minute window ending at the entry time from archived Binance ETH samples: the last minute of the market before the currently running market plus the first 4 minutes 30 seconds of the currently running market. Positive score buys Up, negative score buys Down, neutral or insufficient samples skip. Paper entry takes current premarket executable ask depth immediately and cancels any unfilled remainder.',
+    true,
+    1.00,
+    now(),
+    now()
+)
+ON CONFLICT (id) DO UPDATE SET
+    code = excluded.code,
+    name = excluded.name,
+    description = excluded.description,
+    updated_at_utc = excluded.updated_at_utc;
+
+INSERT INTO strategies (id, code, name, description, enabled, paper_stake_amount, created_at_utc, updated_at_utc)
+VALUES (
+    'b7c50005-0000-4000-8142-000000000996',
+    'sol_up_down_5m_prev_score_countertrend_fak_premarket_revert',
+    'SOL Up or Down 5m Prev Score Countertrend Premarket Revert',
+    '30 seconds before SOL 5m market open, score the synthetic SOL 5.5-minute window ending at the entry time from archived Binance SOL samples: the last minute of the market before the currently running market plus the first 4 minutes 30 seconds of the currently running market. Positive score buys Up, negative score buys Down, neutral or insufficient samples skip. Paper entry takes current premarket executable ask depth immediately and cancels any unfilled remainder.',
+    true,
+    1.00,
+    now(),
+    now()
+)
+ON CONFLICT (id) DO UPDATE SET
+    code = excluded.code,
+    name = excluded.name,
+    description = excluded.description,
+    updated_at_utc = excluded.updated_at_utc;
+
+INSERT INTO strategies (id, code, name, description, enabled, paper_stake_amount, created_at_utc, updated_at_utc)
 WITH assets(asset_symbol, id_group) AS (
     VALUES
         ('ETH', '8141'),
@@ -2948,6 +3016,40 @@ SELECT
     now(),
     now()
 FROM assets
+ON CONFLICT (id) DO UPDATE SET
+    code = excluded.code,
+    name = excluded.name,
+    description = excluded.description,
+    updated_at_utc = excluded.updated_at_utc;
+
+INSERT INTO strategies (id, code, name, description, enabled, paper_stake_amount, created_at_utc, updated_at_utc)
+VALUES (
+    'b7c50005-0000-4000-8141-000000000999',
+    'eth_up_down_5m_prev_score_countertrend_fak_revert',
+    'ETH Up or Down 5m Prev Score Countertrend Revert',
+    'At ETH 5m market open, score the immediately previous ETH 5m market from archived Binance ETH samples using a time-weighted winsorized average deviation from market start; previous Up buys Up, previous Down buys Down, neutral or insufficient samples skip. Paper entry takes current executable ask depth immediately and cancels any unfilled remainder.',
+    true,
+    1.00,
+    now(),
+    now()
+)
+ON CONFLICT (id) DO UPDATE SET
+    code = excluded.code,
+    name = excluded.name,
+    description = excluded.description,
+    updated_at_utc = excluded.updated_at_utc;
+
+INSERT INTO strategies (id, code, name, description, enabled, paper_stake_amount, created_at_utc, updated_at_utc)
+VALUES (
+    'b7c50005-0000-4000-8142-000000000999',
+    'sol_up_down_5m_prev_score_countertrend_fak_revert',
+    'SOL Up or Down 5m Prev Score Countertrend Revert',
+    'At SOL 5m market open, score the immediately previous SOL 5m market from archived Binance SOL samples using a time-weighted winsorized average deviation from market start; previous Up buys Up, previous Down buys Down, neutral or insufficient samples skip. Paper entry takes current executable ask depth immediately and cancels any unfilled remainder.',
+    true,
+    1.00,
+    now(),
+    now()
+)
 ON CONFLICT (id) DO UPDATE SET
     code = excluded.code,
     name = excluded.name,
