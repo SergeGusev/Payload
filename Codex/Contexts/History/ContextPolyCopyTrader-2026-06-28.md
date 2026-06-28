@@ -217,3 +217,10 @@ Request:
 
 Result:
 Inspected `ETH Up or Down 5m Up 50 bps Instant` live orders in the Dashboard remote PostgreSQL database at `192.168.0.101` read-only and source paths for FAK live placement. The strategy has `236` live orders; after switching to FAK live-shadow placement there are `47` matched FAK orders and `46` FAK orders rejected as `BadRequest`, all with the same Polymarket CLOB zero-fill/no-match response: `no orders found to match with FAK order. FAK orders are partially filled or killed if no match is found.` These rows have zero fill/cost and are best explained as FAK liquidity disappearing or not matching between the book/preflight check and CLOB matching, not signing/auth/risk failures. No source code or database rows were modified.
+
+## 2026-06-28T20:55:38.2164624Z
+Request:
+Это не решение. Я специально делаю FAK ставки 0.99 чтобы они гарантированно срабатывали. И не понимаю ситуацию. В стакане нет несчастных 6 долларов?
+
+Result:
+Re-checked the same strategy's FAK live rows and source path. The key finding is that current live rows are generally not `0.99` worst-price buys: among `46` BadRequest FAK rows only `1` had `price=0.99`, and the rejected median price was `0.56`; among `47` matched FAK rows none had `price=0.99`, and the matched median price was `0.53`. Source inspection confirmed `CreateFakMarketBuyRequest` uses the strategy decision `price` as CLOB `worstPrice`, and `CalculateMarketBuy` sizes the market buy at that price, so liquidity above that price is not eligible. The single `0.99` BadRequest row had a saved shadow snapshot with `best_ask=0.99` and `78.98` ask shares, so it remains a separate no-match/race anomaly. No source code or database rows were modified.

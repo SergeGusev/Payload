@@ -1,3 +1,16 @@
+## Active Update 2026-06-28 ETH Up 50 bps FAK 0.99 Mismatch
+Goal: Re-check why `ETH Up or Down 5m Up 50 bps Instant` BadRequest FAK orders are not behaving like guaranteed `0.99` buys.
+Status: Completed
+Done:
+- Re-ran read-only SQL against the Dashboard remote PostgreSQL database at `192.168.0.101` for `eth_up_down_5m_up_bps_50_instant`.
+- Confirmed the main issue: the FAK live rows are not generally submitted with `price=0.99`; among `46` BadRequest FAK orders only `1` had `price=0.99`, while the rejected median price was `0.56`.
+- Confirmed the same for successful FAK orders: `47` matched FAK rows had zero `price=0.99` orders and median price `0.53`.
+- Inspected source and confirmed `CreateFakMarketBuyRequest` receives the current strategy `price` as `worstPrice`; `OrderAmountCalculator.CalculateMarketBuy` uses that price to calculate the market-buy taker amount, so liquidity above that price is not eligible for matching.
+- Inspected the single `price=0.99` BadRequest row separately: its saved shadow snapshot had `best_ask=0.99` and `78.98` ask shares, so that one row remains a true no-match anomaly/race rather than the general explanation.
+Next: Decide whether live FAK market buys for these instant strategies should force `worstPrice=0.99` and persist the fresh preflight book/request diagnostics before POST.
+Notes: Verification was read-only SQL plus source inspection of FAK request construction/accounting; no source code or database rows were modified.
+Blockers: None.
+
 ## Active Update 2026-06-28 ETH Up 50 bps FAK BadRequest Inspection
 Goal: Explain why live orders for `ETH Up or Down 5m Up 50 bps Instant` contain many `BadRequest` rows.
 Status: Completed
