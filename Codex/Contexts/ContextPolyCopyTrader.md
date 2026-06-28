@@ -1,3 +1,14 @@
+## Active Update 2026-06-28 Diff Progress Dollar Conversion
+Goal: Clarify how Diff Progress backtest units convert to USD.
+Status: Completed
+Done:
+- Confirmed from `PostgresSchema.cs` that seeded Diff Progress strategies use `paper_stake_amount = 1.00`.
+- Clarified that the backtest `unit` is one configured `Paper $` base stake; with default `Paper $ = 1`, `1 unit = $1`.
+- Converted the uncapped drawdown figures at default stake: max single-strategy drawdown `$1571`, worst single asset-day `$11921`, max aggregate daily BTC equity drawdown `$16571`, and BTC minimum cumulative equity `-$917`.
+Next: If Dashboard `Paper $` is changed from `1`, multiply every reported unit amount by that configured value.
+Notes: Verification was repository inspection only; no build/tests required because no code or output artifacts changed.
+Blockers: None.
+
 ## Active Update 2026-06-28 Diff Progress Uncapped Drawdown Check
 Goal: Answer the maximum negative excursion for the uncapped Diff Progress backtest.
 Status: Completed
