@@ -340,7 +340,7 @@ public sealed class BtcUpDown5mPaperStrategyProcessorTests
     [Fact]
     public void StrategyIds_IncludeStandardMartinAndGammaBtcVariants()
     {
-        Assert.Equal(1514, StrategyIds.BtcUpDown5mVariants.Count);
+        Assert.Equal(1516, StrategyIds.BtcUpDown5mVariants.Count);
         Assert.Equal(StrategyIds.BtcUpDown5mVariants.Count, StrategyIds.BtcUpDown5mVariants.Select(variant => variant.Id).Distinct().Count());
         Assert.Equal(StrategyIds.BtcUpDown5mVariants.Count, StrategyIds.BtcUpDown5mVariants.Select(variant => variant.Code).Distinct().Count());
         Assert.Equal(18, StrategyIds.BtcUpDown5mVariants.Count(variant => variant.Behavior == BtcUpDown5mStrategyBehavior.Standard));
@@ -383,6 +383,7 @@ public sealed class BtcUpDown5mPaperStrategyProcessorTests
         Assert.Equal(24, StrategyIds.BtcUpDown5mVariants.Count(variant => variant.Behavior == BtcUpDown5mStrategyBehavior.AdjustedDiffCounterTrend));
         Assert.Equal(144, StrategyIds.BtcUpDown5mVariants.Count(variant => variant.Behavior == BtcUpDown5mStrategyBehavior.ShiftDiffCounterTrend));
         Assert.Equal(100, StrategyIds.BtcUpDown5mVariants.Count(variant => variant.Behavior == BtcUpDown5mStrategyBehavior.DiffProgress));
+        Assert.Equal(2, StrategyIds.BtcUpDown5mVariants.Count(variant => variant.Behavior == BtcUpDown5mStrategyBehavior.DiffShiftProgress));
         Assert.Equal(9, StrategyIds.BtcUpDown5mVariants.Count(variant => variant.Behavior == BtcUpDown5mStrategyBehavior.PreviousScoreCounterTrend));
         Assert.Single(StrategyIds.BtcUpDown5mVariants, variant => variant.Behavior == BtcUpDown5mStrategyBehavior.PreviousScoreCounterTrendFak);
         Assert.Single(StrategyIds.BtcUpDown5mVariants, variant => variant.Behavior == BtcUpDown5mStrategyBehavior.PreviousScoreCounterTrendFakPremarket);
@@ -424,6 +425,7 @@ public sealed class BtcUpDown5mPaperStrategyProcessorTests
             variant.Behavior == BtcUpDown5mStrategyBehavior.PreOpenFixedDirectionSell));
         AssertDiffCounterTrendFakPremarketGrid(StrategyIds.BtcUpDown5mVariants, "BTC");
         AssertDiffProgressGrid(StrategyIds.BtcUpDown5mVariants, "BTC");
+        AssertDiffShiftProgressGrid(StrategyIds.BtcUpDown5mVariants, "BTC");
         Assert.Equal("BTC Up or Down 5m Less 180 Gamma", StrategyIds.GetBtcUpDown5mVariant(
             BtcUpDown5mStrategyDirection.Less,
             180,
@@ -904,17 +906,17 @@ public sealed class BtcUpDown5mPaperStrategyProcessorTests
     [Fact]
     public void StrategyIds_IncludeEthAndSolBinanceBpsVariants()
     {
-        Assert.Equal(2385, StrategyIds.CryptoUpDown5mVariants.Count);
-        Assert.Equal(3899, StrategyIds.UpDown5mStrategyVariants.Count);
+        Assert.Equal(2389, StrategyIds.CryptoUpDown5mVariants.Count);
+        Assert.Equal(3905, StrategyIds.UpDown5mStrategyVariants.Count);
         Assert.Equal(
             StrategyIds.UpDown5mStrategyVariants.Count,
             StrategyIds.UpDown5mStrategyVariants.Select(variant => variant.Id).Distinct().Count());
         Assert.Equal(
             StrategyIds.UpDown5mStrategyVariants.Count,
             StrategyIds.UpDown5mStrategyVariants.Select(variant => variant.Code).Distinct().Count());
-        Assert.Equal(1224, StrategyIds.CryptoUpDown5mVariants.Count(variant =>
+        Assert.Equal(1226, StrategyIds.CryptoUpDown5mVariants.Count(variant =>
             string.Equals(variant.ReferenceAssetSymbol, "ETH", StringComparison.OrdinalIgnoreCase)));
-        Assert.Equal(1161, StrategyIds.CryptoUpDown5mVariants.Count(variant =>
+        Assert.Equal(1163, StrategyIds.CryptoUpDown5mVariants.Count(variant =>
             string.Equals(variant.ReferenceAssetSymbol, "SOL", StringComparison.OrdinalIgnoreCase)));
         Assert.Equal(100, StrategyIds.CryptoUpDown5mVariants.Count(variant =>
             variant.Behavior == BtcUpDown5mStrategyBehavior.CryptoBinanceStartRelativeBpsThreshold));
@@ -966,6 +968,8 @@ public sealed class BtcUpDown5mPaperStrategyProcessorTests
             variant.Behavior == BtcUpDown5mStrategyBehavior.ShiftDiffCounterTrend));
         Assert.Equal(200, StrategyIds.CryptoUpDown5mVariants.Count(variant =>
             variant.Behavior == BtcUpDown5mStrategyBehavior.DiffProgress));
+        Assert.Equal(4, StrategyIds.CryptoUpDown5mVariants.Count(variant =>
+            variant.Behavior == BtcUpDown5mStrategyBehavior.DiffShiftProgress));
         Assert.Equal("ETH Up or Down 5m Up Simple", EthUpSimpleVariant.Name);
         Assert.Equal("ETH Up or Down 5m Down Simple", EthDownSimpleVariant.Name);
         Assert.Equal("SOL Up or Down 5m Up Simple", SolUpSimpleVariant.Name);
@@ -978,6 +982,8 @@ public sealed class BtcUpDown5mPaperStrategyProcessorTests
         AssertDiffCounterTrendFakPremarketGrid(StrategyIds.CryptoUpDown5mVariants, "SOL");
         AssertDiffProgressGrid(StrategyIds.CryptoUpDown5mVariants, "ETH");
         AssertDiffProgressGrid(StrategyIds.CryptoUpDown5mVariants, "SOL");
+        AssertDiffShiftProgressGrid(StrategyIds.CryptoUpDown5mVariants, "ETH");
+        AssertDiffShiftProgressGrid(StrategyIds.CryptoUpDown5mVariants, "SOL");
         Assert.Equal("ETH Up or Down 5m Prev Score Countertrend", EthPreviousScoreCounterTrendFakVariant.Name);
         Assert.Equal("ETH Up/Down 5m Previous Score Countertrend", EthPreviousScoreCounterTrendFakVariant.Category);
         Assert.Equal("ETH", EthPreviousScoreCounterTrendFakVariant.ReferenceAssetSymbol);
@@ -5282,6 +5288,148 @@ public sealed class BtcUpDown5mPaperStrategyProcessorTests
         Assert.DoesNotContain(
             repository.PaperOrders,
             order => string.Equals(order.ConditionId, "next-day-progress-condition", StringComparison.OrdinalIgnoreCase));
+    }
+
+    [Fact]
+    public async Task ProcessDiffCounterDueEntriesAsync_DiffShiftProgressPersistsPendingBetWithDiffPlusOneStake()
+    {
+        var entryMarketStartUtc = new DateTimeOffset(2026, 6, 8, 14, 35, 0, TimeSpan.Zero);
+        var entryNow = entryMarketStartUtc.AddMinutes(2);
+        var timeProvider = new ManualTimeProvider(entryNow);
+        var variant = StrategyIds.UpDown5mStrategyVariants.Single(item =>
+            item.Code == "btc_up_down_5m_diff_up_shift_progress");
+        var repository = new TestAppRepository();
+        AddWebSocketDiffResults(
+            repository,
+            "BTC",
+            entryMarketStartUtc.AddMinutes(-5),
+            "Up",
+            "Up");
+        var orderBooks = new[]
+        {
+            OrderBook("asset-up", bestBid: 0.54m, bestAsk: 0.55m, entryNow),
+            OrderBook("asset-down", bestBid: 0.44m, bestAsk: 0.45m, entryNow)
+        };
+        var processor = CreateProcessorCoreWithOptions(
+            repository,
+            [],
+            orderBooks,
+            _ => { },
+            orderBooks,
+            CreateBtcOptions(paperTakerPricingEnabled: false, [variant.Code]),
+            gammaClient: new FakeGammaClient([]),
+            timeProvider: timeProvider);
+
+        repository.PolymarketGammaMarkets.Add(CreateMarket(
+            entryMarketStartUtc,
+            entryMarketStartUtc.AddMinutes(5),
+            upPrice: 0.50m,
+            downPrice: 0.50m,
+            marketId: "diff-shift-progress-entry-market",
+            conditionId: "diff-shift-progress-entry-condition"));
+
+        var result = await processor.ProcessDiffCounterDueEntriesAsync();
+
+        Assert.Equal(1, result.EntriesPlaced);
+        var run = repository.StrategyMarketPaperRuns.Single(item =>
+            item.MarketStartUtc == entryMarketStartUtc &&
+            item.StrategyId == variant.Id);
+        Assert.Equal(StrategyMarketPaperRunStatuses.Entered, run.Status);
+        Assert.Equal("asset-down", run.SelectedAssetId);
+        Assert.Equal("Down", run.SelectedOutcome);
+        Assert.Equal(3m, run.StakeUsd);
+
+        var order = Assert.Single(repository.PaperOrders);
+        Assert.Equal("asset-down", order.AssetId);
+        Assert.Equal("Down", order.Outcome);
+        Assert.Equal(3m, order.NotionalUsd);
+        Assert.Equal("btc_updown5m_fak_taker_paper", order.ExecutionSource);
+        Assert.Contains("\"decision_source\":\"persistent_diff_shift_progress\"", order.RawDecisionJson, StringComparison.Ordinal);
+        Assert.Contains("\"up_count\":2", order.RawDecisionJson, StringComparison.Ordinal);
+        Assert.Contains("\"down_count\":0", order.RawDecisionJson, StringComparison.Ordinal);
+        Assert.Contains("\"effective_diff\":2", order.RawDecisionJson, StringComparison.Ordinal);
+        Assert.Contains("\"stake_multiplier\":3", order.RawDecisionJson, StringComparison.Ordinal);
+        Assert.Contains("\"stake_usd\":3", order.RawDecisionJson, StringComparison.Ordinal);
+
+        var state = Assert.Single(repository.CryptoUpDown5mDiffShiftProgressStates);
+        Assert.Equal(variant.Id, state.StrategyId);
+        Assert.Equal("BTC", state.AssetSymbol);
+        Assert.Equal("Up", state.TriggerOutcome);
+        Assert.Equal(2, state.UpCount);
+        Assert.Equal(0, state.DownCount);
+        Assert.Equal(0m, state.SumAmount);
+        Assert.Equal(entryMarketStartUtc.AddMinutes(-5), state.LastProcessedMarketStartUtc);
+        Assert.Equal(entryMarketStartUtc, state.PendingMarketStartUtc);
+        Assert.Equal("Down", state.PendingTargetOutcome);
+        Assert.Equal(3m, state.PendingStakeUsd);
+    }
+
+    [Fact]
+    public async Task ProcessDiffCounterDueEntriesAsync_DiffShiftProgressShiftsDiffWhenSumExceedsUnit()
+    {
+        var entryMarketStartUtc = new DateTimeOffset(2026, 6, 8, 15, 35, 0, TimeSpan.Zero);
+        var entryNow = entryMarketStartUtc.AddMinutes(2);
+        var timeProvider = new ManualTimeProvider(entryNow);
+        var variant = StrategyIds.UpDown5mStrategyVariants.Single(item =>
+            item.Code == "btc_up_down_5m_diff_up_shift_progress");
+        var repository = new TestAppRepository();
+        repository.CryptoUpDown5mDiffShiftProgressStates.Add(new CryptoUpDown5mDiffShiftProgressState(
+            variant.Id,
+            "BTC",
+            "Up",
+            UpCount: 2,
+            DownCount: 0,
+            SumAmount: 2.50m,
+            LastProcessedMarketStartUtc: entryMarketStartUtc.AddMinutes(-5),
+            PendingMarketStartUtc: null,
+            PendingTargetOutcome: null,
+            PendingStakeUsd: null,
+            PendingCreatedAtUtc: null,
+            CreatedAtUtc: entryNow.AddMinutes(-10),
+            UpdatedAtUtc: entryNow.AddMinutes(-10)));
+        var orderBooks = new[]
+        {
+            OrderBook("asset-up", bestBid: 0.54m, bestAsk: 0.55m, entryNow),
+            OrderBook("asset-down", bestBid: 0.44m, bestAsk: 0.45m, entryNow)
+        };
+        var processor = CreateProcessorCoreWithOptions(
+            repository,
+            [],
+            orderBooks,
+            _ => { },
+            orderBooks,
+            CreateBtcOptions(paperTakerPricingEnabled: false, [variant.Code]),
+            gammaClient: new FakeGammaClient([]),
+            timeProvider: timeProvider);
+
+        repository.PolymarketGammaMarkets.Add(CreateMarket(
+            entryMarketStartUtc,
+            entryMarketStartUtc.AddMinutes(5),
+            upPrice: 0.50m,
+            downPrice: 0.50m,
+            marketId: "diff-shift-progress-shift-market",
+            conditionId: "diff-shift-progress-shift-condition"));
+
+        var result = await processor.ProcessDiffCounterDueEntriesAsync();
+
+        Assert.Equal(1, result.EntriesPlaced);
+        var run = repository.StrategyMarketPaperRuns.Single(item =>
+            item.MarketStartUtc == entryMarketStartUtc &&
+            item.StrategyId == variant.Id);
+        Assert.Equal(2m, run.StakeUsd);
+        var order = Assert.Single(repository.PaperOrders);
+        Assert.Equal(2m, order.NotionalUsd);
+        Assert.Contains("\"shift_count\":1", order.RawDecisionJson, StringComparison.Ordinal);
+        Assert.Contains("\"effective_diff\":1", order.RawDecisionJson, StringComparison.Ordinal);
+        Assert.Contains("\"stake_multiplier\":2", order.RawDecisionJson, StringComparison.Ordinal);
+
+        var state = Assert.Single(repository.CryptoUpDown5mDiffShiftProgressStates);
+        Assert.Equal(1, state.UpCount);
+        Assert.Equal(0, state.DownCount);
+        Assert.Equal(1.50m, state.SumAmount);
+        Assert.Equal(entryMarketStartUtc, state.PendingMarketStartUtc);
+        Assert.Equal("Down", state.PendingTargetOutcome);
+        Assert.Equal(2m, state.PendingStakeUsd);
     }
 
     [Fact]
@@ -13449,6 +13597,36 @@ public sealed class BtcUpDown5mPaperStrategyProcessorTests
             variant.Code == $"{assetCode}_up_down_5m_diff_17_{triggerCode}_progress" &&
             variant.Name == $"{assetSymbol} Up or Down 5m 17 Diff {triggerName} Progress" &&
             variant.FixedOutcome == targetOutcome);
+    }
+
+    private static void AssertDiffShiftProgressGrid(
+        IEnumerable<BtcUpDown5mStrategyVariant> variants,
+        string assetSymbol)
+    {
+        var assetCode = assetSymbol.ToLowerInvariant();
+        var assetVariants = variants
+            .Where(variant =>
+                variant.Behavior == BtcUpDown5mStrategyBehavior.DiffShiftProgress &&
+                string.Equals(variant.ReferenceAssetSymbol, assetSymbol, StringComparison.OrdinalIgnoreCase))
+            .ToArray();
+
+        Assert.Equal(2, assetVariants.Length);
+        Assert.All(assetVariants, variant =>
+        {
+            Assert.Equal("Up Or Down 5 min Diff Shift Progress", variant.Category);
+            Assert.Equal(0, variant.DecisionDepth);
+        });
+
+        Assert.Contains(assetVariants, variant =>
+            variant.Code == $"{assetCode}_up_down_5m_diff_up_shift_progress" &&
+            variant.Name == $"{assetSymbol} Up or Down 5m Diff Up Shift Progress" &&
+            variant.FixedOutcome == BtcUpDownFixedOutcome.Down &&
+            variant.DiffCounterTriggerOutcome == BtcUpDownFixedOutcome.Up);
+        Assert.Contains(assetVariants, variant =>
+            variant.Code == $"{assetCode}_up_down_5m_diff_down_shift_progress" &&
+            variant.Name == $"{assetSymbol} Up or Down 5m Diff Down Shift Progress" &&
+            variant.FixedOutcome == BtcUpDownFixedOutcome.Up &&
+            variant.DiffCounterTriggerOutcome == BtcUpDownFixedOutcome.Down);
     }
 
     private static int[] ExpectedDiffCounterThresholds()

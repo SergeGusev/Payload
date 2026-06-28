@@ -828,6 +828,20 @@ public interface IAppRepository
         return Task.FromResult<IReadOnlyList<CryptoUpDown5mDiffSnapshot>>([]);
     }
 
+    Task<CryptoUpDown5mDiffShiftProgressState?> GetCryptoUpDown5mDiffShiftProgressStateAsync(
+        Guid strategyId,
+        CancellationToken cancellationToken = default)
+    {
+        return Task.FromResult<CryptoUpDown5mDiffShiftProgressState?>(null);
+    }
+
+    Task UpsertCryptoUpDown5mDiffShiftProgressStateAsync(
+        CryptoUpDown5mDiffShiftProgressState state,
+        CancellationToken cancellationToken = default)
+    {
+        return Task.CompletedTask;
+    }
+
     Task UpsertCryptoUpDown5mResultPollingObservationAsync(
         CryptoUpDown5mResultPollingObservation observation,
         CancellationToken cancellationToken = default)

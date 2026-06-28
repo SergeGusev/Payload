@@ -1,3 +1,16 @@
+## Active Update 2026-06-28 Diff Shift Progress Strategies
+Goal: Add six BTC/ETH/SOL `Diff Up/Down Shift Progress` strategies with persistent `UpCount`, `DownCount`, `Sum`, and Unit-based FAK sizing.
+Status: Completed
+Done:
+- Added BTC/ETH/SOL Up/Down variants named `CURR Up or Down 5m Diff Up Shift Progress` and `CURR Up or Down 5m Diff Down Shift Progress`, all grouped under `Up Or Down 5 min Diff Shift Progress`.
+- Added persistent state model/table `crypto_up_down_5m_diff_shift_progress_states` and repository get/upsert methods for `UpCount`, `DownCount`, `Sum`, last processed market, and one pending bet.
+- Implemented processor logic: apply resolved 5m results from the ledger, settle pending bet into `Sum`, shift side-specific Diff while `Sum > Unit && Diff > 1`, then submit opposite-side BUY FAK Paper with stake `Unit * (Diff + 1)` when `Diff >= 0`.
+- Pending bet state is written only after an actual FAK paper fill, using actual filled notional as the Sum delta basis.
+- Updated README and focused tests for catalog counts, display category, pending persistence, and Sum-driven Diff shift.
+Next: If this strategy is enabled live later, add a live-shadow specific pending-state confirmation path; current implementation is safe for default Paper/live-stakes-off operation.
+Notes: Verification passed: `dotnet test tests\PolyCopyTrader.Tests\PolyCopyTrader.Tests.csproj --no-restore /p:UseSharedCompilation=false --filter "FullyQualifiedName~StrategyDisplayCategoryTests|FullyQualifiedName~StrategyIds_IncludeStandardMartinAndGammaBtcVariants|FullyQualifiedName~StrategyIds_IncludeEthAndSolBinanceBpsVariants|FullyQualifiedName~ProcessDiffCounterDueEntriesAsync_DiffShiftProgress"` passed 64 tests. A prior run including `StorageTests` also passed, but my added StorageTests smoke asserts were removed afterward to avoid staging unrelated pre-existing edits in that already-dirty file.
+Blockers: None.
+
 ## Active Update 2026-06-28 Diff Progress Dollar Drawdown Clarification
 Goal: Clarify whether the `-$82855` figure is a one-day loss.
 Status: Completed

@@ -1,3 +1,10 @@
+## 2026-06-28T12:26:43.9455088Z
+Request:
+Add six BTC/ETH/SOL `Diff Up/Down Shift Progress` strategies with persistent `UpCount`, `DownCount`, `Sum`, Unit-based FAK sizing, and one shared category.
+
+Result:
+Added BTC/ETH/SOL Up/Down variants named `CURR Up or Down 5m Diff Up Shift Progress` and `CURR Up or Down 5m Diff Down Shift Progress`, grouped under `Up Or Down 5 min Diff Shift Progress`. Added persistent state model/table `crypto_up_down_5m_diff_shift_progress_states` and repository get/upsert methods for `UpCount`, `DownCount`, `Sum`, last processed market, and one pending bet. Implemented processor logic that applies resolved 5m results from the ledger, settles pending bets into `Sum`, shifts side-specific Diff while `Sum > Unit && Diff > 1`, then submits opposite-side BUY FAK Paper with stake `Unit * (Diff + 1)` when `Diff >= 0`. Pending bet state is written only after an actual FAK paper fill using actual filled notional as the Sum delta basis. Updated README and focused tests; targeted verification passed 64 tests.
+
 ## 2026-06-28T08:15:15.4244106Z
 Request:
 npm install -g @openai/codex

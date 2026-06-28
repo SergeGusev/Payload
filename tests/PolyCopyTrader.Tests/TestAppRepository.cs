@@ -126,6 +126,8 @@ internal sealed class TestAppRepository : IAppRepository
 
     public List<CryptoUpDown5mDiffSnapshot> CryptoUpDown5mDiffSnapshots { get; } = [];
 
+    public List<CryptoUpDown5mDiffShiftProgressState> CryptoUpDown5mDiffShiftProgressStates { get; } = [];
+
     public List<CryptoUpDown5mResultPollingObservation> CryptoUpDown5mResultPollingObservations { get; } = [];
 
     public List<CryptoUpDown5mWebSocketResolvedMarket> CryptoUpDown5mWebSocketResolvedMarkets { get; } = [];
@@ -2656,6 +2658,35 @@ internal sealed class TestAppRepository : IAppRepository
                 .ToArray());
     }
 
+    public Task<CryptoUpDown5mDiffShiftProgressState?> GetCryptoUpDown5mDiffShiftProgressStateAsync(
+        Guid strategyId,
+        CancellationToken cancellationToken = default)
+    {
+        var normalizedStrategyId = StrategyIds.Normalize(strategyId);
+        return Task.FromResult(
+            CryptoUpDown5mDiffShiftProgressStates.FirstOrDefault(state =>
+                StrategyIds.Normalize(state.StrategyId) == normalizedStrategyId));
+    }
+
+    public Task UpsertCryptoUpDown5mDiffShiftProgressStateAsync(
+        CryptoUpDown5mDiffShiftProgressState state,
+        CancellationToken cancellationToken = default)
+    {
+        var normalizedStrategyId = StrategyIds.Normalize(state.StrategyId);
+        CryptoUpDown5mDiffShiftProgressStates.RemoveAll(existing =>
+            StrategyIds.Normalize(existing.StrategyId) == normalizedStrategyId);
+        CryptoUpDown5mDiffShiftProgressStates.Add(state with
+        {
+            StrategyId = normalizedStrategyId,
+            AssetSymbol = state.AssetSymbol.Trim().ToUpperInvariant(),
+            TriggerOutcome = NormalizeUpDownOutcome(state.TriggerOutcome),
+            PendingTargetOutcome = string.IsNullOrWhiteSpace(state.PendingTargetOutcome)
+                ? null
+                : NormalizeUpDownOutcome(state.PendingTargetOutcome)
+        });
+        return Task.CompletedTask;
+    }
+
     public Task UpsertCryptoUpDown5mResultPollingObservationAsync(
         CryptoUpDown5mResultPollingObservation observation,
         CancellationToken cancellationToken = default)
@@ -4474,6 +4505,11 @@ internal sealed class TestAppRepository : IAppRepository
     private static bool SameWallet(string left, string right)
     {
         return string.Equals(left, right, StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static string NormalizeUpDownOutcome(string outcome)
+    {
+        return string.Equals(outcome, "Up", StringComparison.OrdinalIgnoreCase) ? "Up" : "Down";
     }
 
     public Task UpsertDailyReportAsync(DailyReport report, CancellationToken cancellationToken = default)

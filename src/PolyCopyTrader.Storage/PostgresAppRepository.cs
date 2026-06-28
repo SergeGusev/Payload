@@ -4619,6 +4619,53 @@ ORDER BY asset_symbol, market_start_utc;
 		return results;
 	}
 
+	public async Task<CryptoUpDown5mDiffShiftProgressState?> GetCryptoUpDown5mDiffShiftProgressStateAsync(Guid strategyId, CancellationToken cancellationToken = default(CancellationToken))
+	{
+		await using NpgsqlConnection connection = await OpenConnectionAsync(cancellationToken);
+		await using NpgsqlCommand command = CreateCommand(connection, """
+SELECT strategy_id, asset_symbol, trigger_outcome, up_count, down_count, sum_amount,
+       last_processed_market_start_utc, pending_market_start_utc, pending_target_outcome,
+       pending_stake_usd, pending_created_at_utc, created_at_utc, updated_at_utc
+FROM crypto_up_down_5m_diff_shift_progress_states
+WHERE strategy_id = @StrategyId;
+""");
+		command.Parameters.AddWithValue("StrategyId", StrategyIds.Normalize(strategyId));
+		await using NpgsqlDataReader reader = await command.ExecuteReaderAsync(cancellationToken);
+		return await reader.ReadAsync(cancellationToken)
+			? ReadCryptoUpDown5mDiffShiftProgressState(reader)
+			: null;
+	}
+
+	public async Task UpsertCryptoUpDown5mDiffShiftProgressStateAsync(CryptoUpDown5mDiffShiftProgressState state, CancellationToken cancellationToken = default(CancellationToken))
+	{
+		await using NpgsqlConnection connection = await OpenConnectionAsync(cancellationToken);
+		await using NpgsqlCommand command = CreateCommand(connection, """
+INSERT INTO crypto_up_down_5m_diff_shift_progress_states (
+    strategy_id, asset_symbol, trigger_outcome, up_count, down_count, sum_amount,
+    last_processed_market_start_utc, pending_market_start_utc, pending_target_outcome,
+    pending_stake_usd, pending_created_at_utc, created_at_utc, updated_at_utc
+) VALUES (
+    @StrategyId, @AssetSymbol, @TriggerOutcome, @UpCount, @DownCount, @SumAmount,
+    @LastProcessedMarketStartUtc, @PendingMarketStartUtc, @PendingTargetOutcome,
+    @PendingStakeUsd, @PendingCreatedAtUtc, @CreatedAtUtc, @UpdatedAtUtc
+)
+ON CONFLICT (strategy_id) DO UPDATE SET
+    asset_symbol = excluded.asset_symbol,
+    trigger_outcome = excluded.trigger_outcome,
+    up_count = excluded.up_count,
+    down_count = excluded.down_count,
+    sum_amount = excluded.sum_amount,
+    last_processed_market_start_utc = excluded.last_processed_market_start_utc,
+    pending_market_start_utc = excluded.pending_market_start_utc,
+    pending_target_outcome = excluded.pending_target_outcome,
+    pending_stake_usd = excluded.pending_stake_usd,
+    pending_created_at_utc = excluded.pending_created_at_utc,
+    updated_at_utc = excluded.updated_at_utc;
+""");
+		AddCryptoUpDown5mDiffShiftProgressStateParameters(command, state);
+		await command.ExecuteNonQueryAsync(cancellationToken);
+	}
+
 	public async Task UpsertCryptoUpDown5mResultPollingObservationAsync(CryptoUpDown5mResultPollingObservation observation, CancellationToken cancellationToken = default(CancellationToken))
 	{
 		await using NpgsqlConnection connection = await OpenConnectionAsync(cancellationToken);
@@ -9296,6 +9343,43 @@ LIMIT @Limit;
 			reader.IsDBNull(15) ? null : reader.GetString(15),
 			DateTimeOffsetFromUtc(reader.GetDateTime(16)),
 			DateTimeOffsetFromUtc(reader.GetDateTime(17)));
+	}
+
+	private static void AddCryptoUpDown5mDiffShiftProgressStateParameters(NpgsqlCommand command, CryptoUpDown5mDiffShiftProgressState state)
+	{
+		command.Parameters.AddWithValue("StrategyId", StrategyIds.Normalize(state.StrategyId));
+		command.Parameters.AddWithValue("AssetSymbol", state.AssetSymbol.Trim().ToUpperInvariant());
+		command.Parameters.AddWithValue("TriggerOutcome", NormalizeBtcOutcome(state.TriggerOutcome) ?? state.TriggerOutcome.Trim());
+		command.Parameters.AddWithValue("UpCount", state.UpCount);
+		command.Parameters.AddWithValue("DownCount", state.DownCount);
+		command.Parameters.AddWithValue("SumAmount", state.SumAmount);
+		command.Parameters.Add("LastProcessedMarketStartUtc", NpgsqlDbType.TimestampTz).Value = NullableDateTime(state.LastProcessedMarketStartUtc);
+		command.Parameters.Add("PendingMarketStartUtc", NpgsqlDbType.TimestampTz).Value = NullableDateTime(state.PendingMarketStartUtc);
+		command.Parameters.AddWithValue("PendingTargetOutcome", string.IsNullOrWhiteSpace(state.PendingTargetOutcome)
+			? DBNull.Value
+			: NormalizeBtcOutcome(state.PendingTargetOutcome) ?? state.PendingTargetOutcome.Trim());
+		command.Parameters.AddWithValue("PendingStakeUsd", state.PendingStakeUsd.HasValue ? state.PendingStakeUsd.Value : DBNull.Value);
+		command.Parameters.Add("PendingCreatedAtUtc", NpgsqlDbType.TimestampTz).Value = NullableDateTime(state.PendingCreatedAtUtc);
+		command.Parameters.Add("CreatedAtUtc", NpgsqlDbType.TimestampTz).Value = UtcDateTime(state.CreatedAtUtc);
+		command.Parameters.Add("UpdatedAtUtc", NpgsqlDbType.TimestampTz).Value = UtcDateTime(state.UpdatedAtUtc);
+	}
+
+	private static CryptoUpDown5mDiffShiftProgressState ReadCryptoUpDown5mDiffShiftProgressState(NpgsqlDataReader reader)
+	{
+		return new CryptoUpDown5mDiffShiftProgressState(
+			reader.GetGuid(0),
+			reader.GetString(1),
+			reader.GetString(2),
+			reader.GetInt32(3),
+			reader.GetInt32(4),
+			reader.GetDecimal(5),
+			reader.IsDBNull(6) ? null : DateTimeOffsetFromUtc(reader.GetDateTime(6)),
+			reader.IsDBNull(7) ? null : DateTimeOffsetFromUtc(reader.GetDateTime(7)),
+			reader.IsDBNull(8) ? null : reader.GetString(8),
+			reader.IsDBNull(9) ? null : reader.GetDecimal(9),
+			reader.IsDBNull(10) ? null : DateTimeOffsetFromUtc(reader.GetDateTime(10)),
+			DateTimeOffsetFromUtc(reader.GetDateTime(11)),
+			DateTimeOffsetFromUtc(reader.GetDateTime(12)));
 	}
 
 	private static void AddCryptoUpDown5mResultPollingObservationParameters(NpgsqlCommand command, CryptoUpDown5mResultPollingObservation observation)

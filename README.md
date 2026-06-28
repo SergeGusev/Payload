@@ -570,6 +570,18 @@ apply their configured shift adjustment before threshold evaluation. Every
 Diff/AdjustedDiff/ShiftDiff parent row has a Revert copy that uses the same
 trigger side and threshold, but buys the opposite parent outcome.
 
+`CURR Up or Down 5m Diff Up Shift Progress` and `CURR Up or Down 5m Diff Down
+Shift Progress` exist for BTC, ETH, and SOL and share the dashboard category
+`Up Or Down 5 min Diff Shift Progress`. They store `UpCount`, `DownCount`,
+`Sum`, and one pending bet in `crypto_up_down_5m_diff_shift_progress_states`.
+The Up side evaluates `Diff = UpCount - DownCount`; the Down side evaluates
+`Diff = DownCount - UpCount`. `Unit` is the strategy Paper stake amount. After
+each resolved 5-minute result, a pending winning bet adds its filled notional to
+`Sum`; a losing bet subtracts its filled notional. While `Sum > Unit` and
+side-specific `Diff > 1`, the strategy reduces that side's count by one and
+subtracts `Unit` from `Sum`. It then buys the opposite outcome with BUY FAK
+Paper sizing `Unit * (Diff + 1)` whenever `Diff >= 0`; negative Diff skips.
+
 A dedicated fast Diff worker observes Diff, Diff Progress, AdjustedDiff, ShiftDiff, and their
 Revert copies, then evaluates market `T` only after the previous 5-minute market
 `T-5m` has one of the accepted result rows; if that previous result is missing
@@ -581,6 +593,9 @@ still written to `crypto_up_down_5m_diff_snapshots`. Successful Diff-family
 entries simulate BUY FAK taker fills from current executable ask depth. Diff
 Progress entries reuse the same FAK path, but override the effective Paper stake
 with `Paper $ * min(Diff - N, 10)` while the strategy is in betting mode. The
+Diff Shift Progress rows use their persistent state table rather than the
+in-memory Diff counters, but they share the same immediate FAK ask-depth
+execution path and `DiffCounterInstantMaxPrice` cap.
 `BtcUpDown5mStrategy:DiffCounterInstantMaxPrice` setting defaults to `1.00`, so
 current Diff-family entries are effectively uncapped by the old `0.50` price
 limit and no longer place resting BUYs at `0.50` when the market is above

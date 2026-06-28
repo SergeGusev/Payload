@@ -77,6 +77,11 @@ public static class StrategyDisplayCategories
             return categoryPrefix + "Diff Progress";
         }
 
+        if (IsDiffShiftProgress(suffix))
+        {
+            return "Up Or Down 5 min Diff Shift Progress";
+        }
+
         if (StartsWithDiffThreshold(suffix, "Up", out var diffUpRevert))
         {
             return categoryPrefix + "Diff Up" + GetDiffCategorySuffix(suffix, diffUpRevert);
@@ -248,6 +253,17 @@ public static class StrategyDisplayCategories
             string.Equals(parts[1], "Diff", StringComparison.OrdinalIgnoreCase) &&
             (string.Equals(parts[2], "Up", StringComparison.OrdinalIgnoreCase) ||
                 string.Equals(parts[2], "Down", StringComparison.OrdinalIgnoreCase)) &&
+            string.Equals(parts[3], "Progress", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static bool IsDiffShiftProgress(string value)
+    {
+        var parts = value.Split(new[] { ' ' }, StringSplitOptions.RemoveEmptyEntries);
+        return parts.Length >= 4 &&
+            string.Equals(parts[0], "Diff", StringComparison.OrdinalIgnoreCase) &&
+            (string.Equals(parts[1], "Up", StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(parts[1], "Down", StringComparison.OrdinalIgnoreCase)) &&
+            string.Equals(parts[2], "Shift", StringComparison.OrdinalIgnoreCase) &&
             string.Equals(parts[3], "Progress", StringComparison.OrdinalIgnoreCase);
     }
 

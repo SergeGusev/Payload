@@ -39,6 +39,7 @@ public static class PostgresSchema
         "btc_up_down_5m_result_streak_diagnostics",
         "crypto_up_down_5m_odds_ticks",
         "crypto_up_down_5m_diff_snapshots",
+        "crypto_up_down_5m_diff_shift_progress_states",
         "crypto_up_down_5m_result_polling_observations",
         "crypto_up_down_5m_websocket_resolved_markets",
         "market_resolved_event_diagnostics",
@@ -2529,6 +2530,49 @@ ON CONFLICT (id) DO UPDATE SET
     updated_at_utc = excluded.updated_at_utc;
 
 INSERT INTO strategies (id, code, name, description, enabled, live_stakes, paper_stake_amount, created_at_utc, updated_at_utc)
+WITH assets(asset_symbol, up_id_group, down_id_group) AS (
+    VALUES
+        ('BTC', '8160', '8161'),
+        ('ETH', '8162', '8163'),
+        ('SOL', '8164', '8165')
+),
+variants(diff_code, diff_name, diff_expression, target_outcome) AS (
+    VALUES
+        ('up', 'Up', 'UpCount - DownCount', 'Down'),
+        ('down', 'Down', 'DownCount - UpCount', 'Up')
+),
+formatted AS (
+    SELECT
+        assets.asset_symbol,
+        variants.diff_code,
+        variants.diff_name,
+        variants.diff_expression,
+        variants.target_outcome,
+        CASE
+            WHEN variants.diff_code = 'up' THEN assets.up_id_group
+            ELSE assets.down_id_group
+        END AS id_group
+    FROM assets
+    CROSS JOIN variants
+)
+SELECT
+    ('b7c50005-0000-4000-' || id_group || '-000000000001')::uuid,
+    lower(asset_symbol) || '_up_down_5m_diff_' || diff_code || '_shift_progress',
+    asset_symbol || ' Up or Down 5m Diff ' || diff_name || ' Shift Progress',
+    'Diff Shift Progress strategy: use the persistent raw ' || diff_expression || ' counter and persistent Sum. Unit is this strategy paper_stake_amount. Each FAK Paper BUY on ' || target_outcome || ' uses multiplier Diff + 1 with the Diff instant max price cap. When a previous bet wins, Sum increases by the filled stake; when it loses, Sum decreases by the filled stake. After each processed result, while Sum is greater than Unit and Diff is greater than 1, reduce Diff by 1 and subtract Unit from Sum.',
+    true,
+    false,
+    1.00,
+    now(),
+    now()
+FROM formatted
+ON CONFLICT (id) DO UPDATE SET
+    code = excluded.code,
+    name = excluded.name,
+    description = excluded.description,
+    updated_at_utc = excluded.updated_at_utc;
+
+INSERT INTO strategies (id, code, name, description, enabled, live_stakes, paper_stake_amount, created_at_utc, updated_at_utc)
 WITH assets(asset_symbol, up_id_group, down_id_group, up_revert_id_group, down_revert_id_group) AS (
     VALUES
         ('BTC', '8053', '8054', '8103', '8104'),
@@ -3733,6 +3777,29 @@ ON crypto_up_down_5m_diff_snapshots(asset_symbol, sampled_at_utc);
 
 ALTER TABLE crypto_up_down_5m_diff_snapshots
     ADD COLUMN IF NOT EXISTS diff_count integer NOT NULL DEFAULT 0;
+
+CREATE TABLE IF NOT EXISTS crypto_up_down_5m_diff_shift_progress_states (
+    strategy_id uuid PRIMARY KEY,
+    asset_symbol text NOT NULL,
+    trigger_outcome text NOT NULL,
+    up_count integer NOT NULL DEFAULT 0,
+    down_count integer NOT NULL DEFAULT 0,
+    sum_amount numeric(28,8) NOT NULL DEFAULT 0,
+    last_processed_market_start_utc timestamptz NULL,
+    pending_market_start_utc timestamptz NULL,
+    pending_target_outcome text NULL,
+    pending_stake_usd numeric(28,8) NULL,
+    pending_created_at_utc timestamptz NULL,
+    created_at_utc timestamptz NOT NULL,
+    updated_at_utc timestamptz NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS ix_crypto_up_down_5m_diff_shift_progress_states_asset
+ON crypto_up_down_5m_diff_shift_progress_states(asset_symbol, trigger_outcome);
+
+CREATE INDEX IF NOT EXISTS ix_crypto_up_down_5m_diff_shift_progress_states_pending
+ON crypto_up_down_5m_diff_shift_progress_states(pending_market_start_utc)
+WHERE pending_market_start_utc IS NOT NULL;
 
 CREATE TABLE IF NOT EXISTS crypto_up_down_5m_result_polling_observations (
     id uuid PRIMARY KEY,

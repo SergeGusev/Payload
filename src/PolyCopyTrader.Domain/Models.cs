@@ -383,6 +383,21 @@ public sealed record CryptoUpDown5mDiffSnapshot(
     DateTimeOffset CreatedAtUtc,
     DateTimeOffset UpdatedAtUtc);
 
+public sealed record CryptoUpDown5mDiffShiftProgressState(
+    Guid StrategyId,
+    string AssetSymbol,
+    string TriggerOutcome,
+    int UpCount,
+    int DownCount,
+    decimal SumAmount,
+    DateTimeOffset? LastProcessedMarketStartUtc,
+    DateTimeOffset? PendingMarketStartUtc,
+    string? PendingTargetOutcome,
+    decimal? PendingStakeUsd,
+    DateTimeOffset? PendingCreatedAtUtc,
+    DateTimeOffset CreatedAtUtc,
+    DateTimeOffset UpdatedAtUtc);
+
 public sealed record CryptoUpDown5mResultPollingObservation(
     Guid Id,
     string AssetSymbol,
@@ -1458,6 +1473,7 @@ public static class StrategyIds
         variants.AddRange(CreateBtcDiffCounterTrendVariants());
         variants.AddRange(CreateDiffCounterTrendFakPremarketVariants("BTC"));
         variants.AddRange(CreateDiffProgressVariants("BTC"));
+        variants.AddRange(CreateDiffShiftProgressVariants("BTC"));
         variants.AddRange(CreateBtcAdjustedDiffCounterTrendVariants());
         variants.AddRange(CreateBtcShiftDiffCounterTrendVariants());
         variants.AddRange(CreateBtcPreviousScoreCounterTrendVariants());
@@ -1960,6 +1976,7 @@ public static class StrategyIds
             variants.AddRange(CreateCryptoDiffCounterTrendVariants(asset));
             variants.AddRange(CreateDiffCounterTrendFakPremarketVariants(asset.Symbol));
             variants.AddRange(CreateDiffProgressVariants(asset.Symbol));
+            variants.AddRange(CreateDiffShiftProgressVariants(asset.Symbol));
 
             variants.AddRange(CreateCryptoAdjustedDiffCounterTrendVariants(asset));
             variants.AddRange(CreateCryptoShiftDiffCounterTrendVariants(asset));
@@ -2169,6 +2186,29 @@ public static class StrategyIds
         };
     }
 
+    private static IReadOnlyList<BtcUpDown5mStrategyVariant> CreateDiffShiftProgressVariants(
+        string assetSymbol)
+    {
+        var idGroups = GetDiffShiftProgressIdGroups(assetSymbol);
+        return
+        [
+            CreateDiffShiftProgressVariant(assetSymbol, idGroups.Up, isUpDiffGroup: true),
+            CreateDiffShiftProgressVariant(assetSymbol, idGroups.Down, isUpDiffGroup: false)
+        ];
+    }
+
+    private static (int Up, int Down) GetDiffShiftProgressIdGroups(
+        string assetSymbol)
+    {
+        return assetSymbol.ToUpperInvariant() switch
+        {
+            "BTC" => (8160, 8161),
+            "ETH" => (8162, 8163),
+            "SOL" => (8164, 8165),
+            _ => throw new ArgumentOutOfRangeException(nameof(assetSymbol), assetSymbol, "Unsupported Diff Shift Progress asset.")
+        };
+    }
+
     private static IReadOnlyList<BtcUpDown5mStrategyVariant> CreateCryptoAdjustedDiffCounterTrendVariants(CryptoUpDown5mAssetSpec asset)
     {
         var variants = new List<BtcUpDown5mStrategyVariant>(48);
@@ -2333,6 +2373,37 @@ public static class StrategyIds
             threshold,
             FixedOutcome: targetOutcome,
             Category: $"{normalizedAsset} Up/Down 5m Diff Progress",
+            ReferenceAssetSymbol: normalizedAsset,
+            DiffCounterTriggerOutcome: triggerOutcome);
+    }
+
+    private static BtcUpDown5mStrategyVariant CreateDiffShiftProgressVariant(
+        string assetSymbol,
+        int idGroup,
+        bool isUpDiffGroup)
+    {
+        var normalizedAsset = assetSymbol.ToUpperInvariant();
+        var assetCode = normalizedAsset.ToLowerInvariant();
+        var diffGroupName = isUpDiffGroup ? "Up" : "Down";
+        var diffGroupCode = isUpDiffGroup ? "up" : "down";
+        var triggerOutcome = isUpDiffGroup ? BtcUpDownFixedOutcome.Up : BtcUpDownFixedOutcome.Down;
+        var targetOutcome = GetOppositeFixedOutcome(triggerOutcome);
+        var targetOutcomeName = targetOutcome.ToString();
+        var diffExpression = isUpDiffGroup
+            ? "UpCount - DownCount"
+            : "DownCount - UpCount";
+
+        return new BtcUpDown5mStrategyVariant(
+            Guid.Parse($"b7c50005-0000-4000-{idGroup:0000}-000000000001"),
+            $"{assetCode}_up_down_5m_diff_{diffGroupCode}_shift_progress",
+            $"{normalizedAsset} Up or Down 5m Diff {diffGroupName} Shift Progress",
+            $"Diff Shift Progress strategy: use the persistent raw {diffExpression} counter and persistent Sum. Unit is this strategy's Paper stake amount. Each FAK Paper BUY on {targetOutcomeName} uses multiplier Diff + 1 at the Diff instant max price cap. When a previous bet wins, Sum increases by the filled stake; when it loses, Sum decreases by the filled stake. After each processed result, while Sum is greater than Unit and Diff is greater than 1, reduce Diff by 1 and subtract Unit from Sum.",
+            BtcUpDown5mStrategyDirection.Dynamic,
+            0,
+            BtcUpDown5mStrategyBehavior.DiffShiftProgress,
+            0,
+            FixedOutcome: targetOutcome,
+            Category: "Up Or Down 5 min Diff Shift Progress",
             ReferenceAssetSymbol: normalizedAsset,
             DiffCounterTriggerOutcome: triggerOutcome);
     }
@@ -3237,7 +3308,8 @@ public enum BtcUpDown5mStrategyBehavior
     AdjustedDiffCounterTrend,
     ShiftDiffCounterTrend,
     DiffCounterTrendFakPremarket,
-    DiffProgress
+    DiffProgress,
+    DiffShiftProgress
 }
 
 public sealed record BtcUpDown5mStrategyVariant(
