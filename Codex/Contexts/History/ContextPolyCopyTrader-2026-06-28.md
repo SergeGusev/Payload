@@ -224,3 +224,10 @@ Request:
 
 Result:
 Re-checked the same strategy's FAK live rows and source path. The key finding is that current live rows are generally not `0.99` worst-price buys: among `46` BadRequest FAK rows only `1` had `price=0.99`, and the rejected median price was `0.56`; among `47` matched FAK rows none had `price=0.99`, and the matched median price was `0.53`. Source inspection confirmed `CreateFakMarketBuyRequest` uses the strategy decision `price` as CLOB `worstPrice`, and `CalculateMarketBuy` sizes the market buy at that price, so liquidity above that price is not eligible. The single `0.99` BadRequest row had a saved shadow snapshot with `best_ask=0.99` and `78.98` ask shares, so it remains a separate no-match/race anomaly. No source code or database rows were modified.
+
+## 2026-06-28T21:01:03.3893561Z
+Request:
+Так я и был уверен, что мы отправляем каждый раз с 0.99. Когда я вижу Paper ставки, там все стоят с 0.99 сначала. Почему в Live появились другие ставки?
+
+Result:
+Compared linked Paper, paper-live-shadow decision, and Live rows for `ETH Up or Down 5m Up 50 bps Instant`. The linked Paper and Live prices generally match; they are not Paper `0.99` rows diverging to lower Live prices. Source inspection showed why: fixed outcome previous-result bps Instant strategies use `0.99/1.00` only as the maximum cap, then `CreateInstantOpeningLimitPriceDecision` selects the cheapest executable ask-depth `limitPrice` such as `0.58` or `0.62`. `TryPlacePaperLiveShadowOrderAsync` passes that same selected `limitPrice` to `CreateFakMarketBuyRequest`, so Live inherits the lower decision price. The separate FAK stats probe path does force `worstPrice=0.99`, but this strategy does not use that path. No source code or database rows were modified.

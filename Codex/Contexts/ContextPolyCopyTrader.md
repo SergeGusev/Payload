@@ -1,3 +1,16 @@
+## Active Update 2026-06-28 Paper Live 0.99 Semantics Check
+Goal: Explain why Paper appeared expected to use `0.99` but Live rows for `ETH Up or Down 5m Up 50 bps Instant` used lower prices.
+Status: Completed
+Done:
+- Compared linked `paper_orders`, `paper_live_shadow_decisions`, and `live_orders` for the same ETH Up 50 bps Instant FAK live-shadow entries.
+- Confirmed linked Paper and Live prices generally match each other; recent rows show Paper/Live/shadow limit prices such as `0.58`, `0.62`, `0.50`, `0.72`, not Paper `0.99` with divergent Live lower prices.
+- Inspected `GetEffectiveInstantOpeningLimitMaxPrice`, `GetInstantOpeningLimitPriceAsync`, and `CreateInstantOpeningLimitPriceDecision`; for fixed outcome previous-result bps Instant strategies the effective max cap is `1.00`, but the selected `limitPrice` is the cheapest executable ask-depth price, not forced `0.99`.
+- Confirmed `TryPlacePaperLiveShadowOrderAsync` passes that selected `limitPrice` into `CreateFakMarketBuyRequest`, so Live inherits the Paper/shadow decision price.
+- Noted that the separate FAK stats probe path does force `worstPrice = 1 - tick = 0.99`, but ETH Up 50 bps Instant does not use that path.
+Next: If intended behavior is guaranteed live FAK sweep, change the instant live-shadow path to send `worstPrice=0.99` while preserving the decision/fill price separately for Paper diagnostics.
+Notes: Verification was read-only SQL plus source inspection; no source code or database rows were modified.
+Blockers: None.
+
 ## Active Update 2026-06-28 ETH Up 50 bps FAK 0.99 Mismatch
 Goal: Re-check why `ETH Up or Down 5m Up 50 bps Instant` BadRequest FAK orders are not behaving like guaranteed `0.99` buys.
 Status: Completed
