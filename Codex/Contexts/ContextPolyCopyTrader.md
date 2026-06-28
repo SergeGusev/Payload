@@ -1,3 +1,16 @@
+## Active Update 2026-06-28 Diff Progress Uncapped Backtest
+Goal: Recalculate the unconditional-midnight-reset Diff Progress backtest without the max multiplier cap.
+Status: Completed
+Done:
+- Added a standalone C# analyzer under `outputs/diff-progress-uncapped-backtest-2026-06-28/` that reuses `outputs/binance-diff-time-chart-2026-06-28/binance-diff-timeseries.csv`.
+- Simulated the same 300 BTC/ETH/SOL Diff Progress strategies with UTC midnight reset in both waiting and betting modes, but stake multiplier is uncapped `Diff - N` instead of `min(Diff - N, 10)`.
+- Replaced capped diagnostics with `above_10_multiplier_entries`, counting entries that would have exceeded the old cap of `10`.
+- Generated `diff-progress-uncapped-strategies.csv`, `diff-progress-uncapped-daily-by-strategy.csv`, `diff-progress-uncapped-asset-summary.csv`, and `diff-progress-uncapped-summary.md`.
+- Result summary over `2025-12-29T00:00:00Z` through `2026-06-28T08:25:00Z`: BTC PnL `23789` units, ROI `0.80%`, max multiplier `49`; ETH PnL `61709`, ROI `2.47%`, max multiplier `38`; SOL PnL `62731`, ROI `2.79%`, max multiplier `40`.
+Next: Compare this to a third interpretation, "skip entries that would exceed multiplier 10", if the intended meaning of "without capped" was to remove those high-multiplier bets rather than remove the cap.
+Notes: Verification passed: `dotnet build outputs\diff-progress-uncapped-backtest-2026-06-28\DiffProgressUncappedBacktest.csproj -c Release --nologo`; analyzer `dotnet run` completed locally; no production runtime code changed.
+Blockers: None for the Binance-data backtest.
+
 ## Active Update 2026-06-28 Diff Progress Loss Attribution
 Goal: Explain where the unconditional-midnight-reset Diff Progress backtest loses money.
 Status: Completed

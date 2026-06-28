@@ -106,3 +106,10 @@ Request:
 
 Result:
 Analyzed the existing unconditional-midnight-reset Diff Progress backtest CSVs. Net-negative strategies are only `BTC Diff Up Progress N=10..22`, totaling `-461` units. The real drawdown source is not those final-negative strategies but capped trend-continuation days: negative strategy-day rows with capped entries account for `-164910` units of gross losses, versus `-2697` in uncapped negative rows. Worst asset-days include BTC `2026-06-02` `-6912`, BTC `2026-04-17` `-5529`, BTC `2026-03-14` `-4472`, ETH `2026-06-02` `-3483`, and SOL `2026-06-02` `-3063`.
+
+## 2026-06-28T10:52:46.8048995+00:00
+Request:
+Ок, давай сделаем тест вообще без capped
+
+Result:
+Interpreted "without capped" as removing the max multiplier cap, so stake multiplier is uncapped `Diff - N` while keeping the unconditional UTC-midnight reset mode. Added a standalone C# analyzer under `outputs/diff-progress-uncapped-backtest-2026-06-28/` and generated strategy, daily, asset, and Markdown summaries. Aggregate fixed-0.50 model results improved versus capped: BTC PnL `23789` units and ROI `0.80%`; ETH PnL `61709` and ROI `2.47%`; SOL PnL `62731` and ROI `2.79%`. Risk increased in tails: max multipliers were BTC `49`, ETH `38`, SOL `40`.
