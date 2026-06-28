@@ -85,3 +85,10 @@ Request:
 
 Result:
 Changed Diff Progress UTC midnight behavior so counters reset in both waiting and betting modes. Removed the old postponed-reset path, updated README and seed descriptions, and changed the midnight test to verify that after reset the strategy exits betting when new-day Diff is at or below the threshold and does not stake using previous-day counts.
+
+## 2026-06-28T10:43:00Z
+Request:
+Backtest the new Diff Progress strategies on six months of market data.
+
+Result:
+Added a standalone C# backtest analyzer under `outputs/diff-progress-backtest-2026-06-28/` that reuses the six-month Binance 5m candle CSV. Simulated BTC/ETH/SOL Up/Down Progress strategies for `N=1..50` with UTC midnight resets in both modes, opposite-side entries, and capped multiplier `min(Diff - N, 10)`. Generated strategy, daily, asset summary, and Markdown report artifacts. Aggregate fixed-0.50 model results: BTC PnL `16849` units and ROI `0.74%`; ETH PnL `40626` and ROI `2.03%`; SOL PnL `47400` and ROI `2.57%`. The analyzer build and run passed; full `dotnet test PolyCopyTrader.sln --no-restore --nologo` still fails 16 pre-existing/unrelated tests around removed Revert variants and old instant pricing/cap expectations.

@@ -1,3 +1,16 @@
+## Active Update 2026-06-28 Diff Progress Six Month Backtest
+Goal: Backtest the new BTC/ETH/SOL Diff Progress strategies on six months of market data.
+Status: Completed
+Done:
+- Added a standalone C# backtest analyzer under `outputs/diff-progress-backtest-2026-06-28/` that reuses `outputs/binance-diff-time-chart-2026-06-28/binance-diff-timeseries.csv`.
+- Simulated 300 strategies: BTC/ETH/SOL, Up/Down Progress, `N=1..50`; counters reset at every `00:00 UTC` in both waiting and betting modes; entries use previous resolved 5m outcomes before the current market; multiplier is capped at `min(Diff - N, 10)`.
+- Used a fixed `0.50` binary odds PnL model because the Binance candle source has no Polymarket order book prices; flat Binance candles are counted as flat entries and excluded from settled PnL/ROI.
+- Generated `diff-progress-backtest-strategies.csv`, `diff-progress-backtest-daily-by-strategy.csv`, `diff-progress-backtest-asset-summary.csv`, and `diff-progress-backtest-summary.md`.
+- Result summary over `2025-12-29T00:00:00Z` through `2026-06-28T08:25:00Z`: BTC PnL `16849` units, ROI `0.74%`; ETH PnL `40626`, ROI `2.03%`; SOL PnL `47400`, ROI `2.57%`.
+Next: If exact execution economics matter, repeat this using resolved Polymarket outcomes plus real order book/executable price snapshots instead of Binance 0.50 assumptions.
+Notes: Verification passed: `dotnet build outputs\diff-progress-backtest-2026-06-28\DiffProgressBacktest.csproj -c Release --nologo`; analyzer `dotnet run` completed locally; `dotnet test PolyCopyTrader.sln --no-restore --nologo` still fails 16 pre-existing/unrelated tests around removed Revert variants and old instant pricing/cap expectations.
+Blockers: None for the Binance-data backtest.
+
 ## Active Update 2026-06-28 Diff Progress Midnight Reset
 Goal: Change Diff Progress UTC midnight counter reset to run in both waiting and betting modes.
 Status: Completed
