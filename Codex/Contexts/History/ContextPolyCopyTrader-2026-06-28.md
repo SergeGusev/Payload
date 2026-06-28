@@ -63,3 +63,11 @@ Request:
 
 Result:
 Added 300 BTC/ETH/SOL Diff Progress strategy variants, grouped them into three currency-level display categories, seeded them disabled for live stakes, implemented waiting/betting mode processing with UTC-day counter reset/backfill and postponed reset while betting, and added focused tests plus README notes. Targeted tests passed; the full test suite still has unrelated pre-existing failures around removed Revert variants and old instant-entry expectations.
+
+## 2026-06-28T10:00:47.3391962Z
+Request:
+Я не понял фразу "рестарт после полуночи во время
+  активного betting mode не сохранит “postponed reset” состояние без отдельной персистентности". У нас не должно быть рестарта после полуночи во время активного betting mode, нужно дождаться его окончания и только тогда делать рестарт
+
+Result:
+Clarified that this is an operational rule rather than a required persistence feature: planned restarts should wait until all Diff Progress strategies have exited betting mode and returned to waiting mode, so the midnight postponed-reset edge case is not expected in normal operation.
