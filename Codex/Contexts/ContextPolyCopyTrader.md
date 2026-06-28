@@ -1,3 +1,15 @@
+## Active Update 2026-06-28 ETH Up Shift Progress Loss Attribution
+Goal: Explain where ETH Up or Down 5m Diff Up Shift Progress weak or negative economics come from.
+Status: Completed
+Done:
+- Inspected `diff-shift-progress-strategies.csv` and `diff-shift-progress-daily-by-strategy.csv`, then reconstructed per-entry equity for the ETH Up Shift Progress strategy from the Binance 5m CSV.
+- Confirmed the fixed-0.50 proxy backtest is not net-negative: `1310` entries, `1304` settled, `652` wins, `652` losses, gross wins `+4764` units, gross losses `-4509` units, net `+255` units, ROI `2.75%`, max drawdown `197` units, min equity `-153` units.
+- Identified the worst drawdown window: `2026-04-16T19:30:00Z` through `2026-04-17T19:40:00Z`, `113` entries, `46` wins, `67` losses, `1407` stake units, net `-197` units, max multiplier `21`.
+- Noted that if the same stake distribution is priced as actual buy fills near `0.99`, the strategy is strongly negative because `0.99` requires a win rate above `99%`; with the observed `50%` hit rate the approximate PnL would be around `-4461` units.
+Next: Run a price-aware Polymarket backtest if the strategy should be judged under real FAK fill prices instead of the fixed-0.50 Binance-direction proxy.
+Notes: Verification was PowerShell CSV reconstruction over `outputs/binance-diff-time-chart-2026-06-28/binance-diff-timeseries.csv`; no build/tests required because no runtime code changed.
+Blockers: None.
+
 ## Active Update 2026-06-28 Diff Shift Progress Category Name
 Goal: Confirm the display category name for the six Diff Shift Progress strategies.
 Status: Completed

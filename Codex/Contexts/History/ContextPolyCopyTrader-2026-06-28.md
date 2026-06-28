@@ -162,3 +162,10 @@ Request:
 
 Result:
 Confirmed from `StrategyDisplayCategories`, strategy model seed data, README, tests, and active context that all six BTC/ETH/SOL Up/Down Diff Shift Progress strategies are grouped under `Up Or Down 5 min Diff Shift Progress`.
+
+## 2026-06-28T18:10:19.4709344+00:00
+Request:
+Объясни мне по стратегии ETH Up or Down 5m Diff Up Shift Progress. За счёт чего получается такая убыточность?
+
+Result:
+Inspected the Diff Shift Progress backtest CSVs and reconstructed per-entry equity for `ETH Up or Down 5m Diff Up Shift Progress`. In the fixed-0.50 Binance proxy it is not net-negative: `1310` entries, `1304` settled, `652` wins, `652` losses, gross wins `+4764` units, gross losses `-4509` units, net `+255` units, ROI `2.75%`, max drawdown `197` units. The weak economics come from countertrend Down bets after positive ETH Up Diff; upward continuation clusters create high-multiplier losses, especially `2026-04-16T19:30:00Z` through `2026-04-17T19:40:00Z` with `113` entries, `46` wins, `67` losses, and `-197` units. Under actual fills near `0.99`, the same 50% hit rate would be sharply negative, approximately `-4461` units, because a 0.99 buy needs a win rate above 99%.
