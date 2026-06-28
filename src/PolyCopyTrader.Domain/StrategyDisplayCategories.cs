@@ -259,10 +259,19 @@ public static class StrategyDisplayCategories
     private static bool IsDiffShiftProgress(string value)
     {
         var parts = value.Split(new[] { ' ' }, StringSplitOptions.RemoveEmptyEntries);
-        return parts.Length >= 4 &&
+        if (parts.Length >= 4 &&
             string.Equals(parts[0], "Diff", StringComparison.OrdinalIgnoreCase) &&
             (string.Equals(parts[1], "Up", StringComparison.OrdinalIgnoreCase) ||
                 string.Equals(parts[1], "Down", StringComparison.OrdinalIgnoreCase)) &&
+            string.Equals(parts[2], "Shift", StringComparison.OrdinalIgnoreCase) &&
+            string.Equals(parts[3], "Progress", StringComparison.OrdinalIgnoreCase))
+        {
+            return true;
+        }
+
+        return parts.Length >= 4 &&
+            int.TryParse(parts[0], NumberStyles.Number, CultureInfo.InvariantCulture, out _) &&
+            string.Equals(parts[1], "Diff", StringComparison.OrdinalIgnoreCase) &&
             string.Equals(parts[2], "Shift", StringComparison.OrdinalIgnoreCase) &&
             string.Equals(parts[3], "Progress", StringComparison.OrdinalIgnoreCase);
     }

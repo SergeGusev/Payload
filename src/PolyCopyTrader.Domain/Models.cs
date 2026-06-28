@@ -390,6 +390,8 @@ public sealed record CryptoUpDown5mDiffShiftProgressState(
     int UpCount,
     int DownCount,
     decimal SumAmount,
+    bool DampingActive,
+    string? DampingDirection,
     DateTimeOffset? LastProcessedMarketStartUtc,
     DateTimeOffset? PendingMarketStartUtc,
     string? PendingTargetOutcome,
@@ -1474,6 +1476,7 @@ public static class StrategyIds
         variants.AddRange(CreateDiffCounterTrendFakPremarketVariants("BTC"));
         variants.AddRange(CreateDiffProgressVariants("BTC"));
         variants.AddRange(CreateDiffShiftProgressVariants("BTC"));
+        variants.AddRange(CreateDiffShiftProgressPremarketVariants("BTC"));
         variants.AddRange(CreateBtcAdjustedDiffCounterTrendVariants());
         variants.AddRange(CreateBtcShiftDiffCounterTrendVariants());
         variants.AddRange(CreateBtcPreviousScoreCounterTrendVariants());
@@ -1977,6 +1980,7 @@ public static class StrategyIds
             variants.AddRange(CreateDiffCounterTrendFakPremarketVariants(asset.Symbol));
             variants.AddRange(CreateDiffProgressVariants(asset.Symbol));
             variants.AddRange(CreateDiffShiftProgressVariants(asset.Symbol));
+            variants.AddRange(CreateDiffShiftProgressPremarketVariants(asset.Symbol));
 
             variants.AddRange(CreateCryptoAdjustedDiffCounterTrendVariants(asset));
             variants.AddRange(CreateCryptoShiftDiffCounterTrendVariants(asset));
@@ -2209,6 +2213,30 @@ public static class StrategyIds
         };
     }
 
+    private static IReadOnlyList<BtcUpDown5mStrategyVariant> CreateDiffShiftProgressPremarketVariants(
+        string assetSymbol)
+    {
+        var variants = new List<BtcUpDown5mStrategyVariant>(5);
+        var idGroup = GetDiffShiftProgressPremarketIdGroup(assetSymbol);
+        for (var threshold = 1; threshold <= 5; threshold++)
+        {
+            variants.Add(CreateDiffShiftProgressPremarketVariant(assetSymbol, idGroup, threshold));
+        }
+
+        return variants;
+    }
+
+    private static int GetDiffShiftProgressPremarketIdGroup(string assetSymbol)
+    {
+        return assetSymbol.ToUpperInvariant() switch
+        {
+            "BTC" => 8166,
+            "ETH" => 8167,
+            "SOL" => 8168,
+            _ => throw new ArgumentOutOfRangeException(nameof(assetSymbol), assetSymbol, "Unsupported Diff Shift Progress Premarket asset.")
+        };
+    }
+
     private static IReadOnlyList<BtcUpDown5mStrategyVariant> CreateCryptoAdjustedDiffCounterTrendVariants(CryptoUpDown5mAssetSpec asset)
     {
         var variants = new List<BtcUpDown5mStrategyVariant>(48);
@@ -2406,6 +2434,27 @@ public static class StrategyIds
             Category: "Up Or Down 5 min Diff Shift Progress",
             ReferenceAssetSymbol: normalizedAsset,
             DiffCounterTriggerOutcome: triggerOutcome);
+    }
+
+    private static BtcUpDown5mStrategyVariant CreateDiffShiftProgressPremarketVariant(
+        string assetSymbol,
+        int idGroup,
+        int threshold)
+    {
+        var normalizedAsset = assetSymbol.ToUpperInvariant();
+        var assetCode = normalizedAsset.ToLowerInvariant();
+
+        return new BtcUpDown5mStrategyVariant(
+            Guid.Parse($"b7c50005-0000-4000-{idGroup:0000}-{threshold:000000000000}"),
+            $"{assetCode}_up_down_5m_{threshold}_diff_shift_progress_premarket",
+            $"{normalizedAsset} Up or Down 5m {threshold} Diff Shift Progress Premarket",
+            $"30 seconds before {normalizedAsset} 5m market open, use the persistent raw UpCount - DownCount counter and persistent Sum. Results before the latest 5-minute market use resolved market results; the latest market result is synthesized from the current {normalizedAsset} reference price. When Diff is greater than 0, BUY Down; when Diff is less than 0, BUY Up; Diff 0 skips. Unit is this strategy's Paper stake amount, and each FAK Paper BUY uses multiplier abs(Diff) at the Diff instant max price cap. When abs(Diff) reaches {threshold.ToString(CultureInfo.InvariantCulture)}, enter damping mode, reset Sum, then move Diff one step toward 0 each time Sum becomes greater than Unit. When Diff returns to 0, return to simple mode.",
+            BtcUpDown5mStrategyDirection.Dynamic,
+            -30,
+            BtcUpDown5mStrategyBehavior.DiffShiftProgress,
+            threshold,
+            Category: "Up Or Down 5 min Diff Shift Progress",
+            ReferenceAssetSymbol: normalizedAsset);
     }
 
     private static BtcUpDown5mStrategyVariant CreateDiffCounterTrendFakPremarketVariant(

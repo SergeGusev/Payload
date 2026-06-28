@@ -1,3 +1,16 @@
+## Active Update 2026-06-28 Diff Shift Progress Premarket Strategies
+Goal: Add BTC/ETH/SOL `CURR Up or Down 5m N Diff Shift Progress Premarket` strategies for `N=1..5` in category `Up Or Down 5 min Diff Shift Progress`.
+Status: Completed
+Done:
+- Added 15 new `DiffShiftProgress` catalog variants: BTC/ETH/SOL, thresholds `1..5`, `EntryDelaySeconds=-30`, dynamic direction, shared display category `Up Or Down 5 min Diff Shift Progress`.
+- Implemented a premarket Diff Shift Progress decision path that persists `DampingActive`/`DampingDirection`, uses raw `Diff = UpCount - DownCount`, buys Down for positive Diff and Up for negative Diff, skips Diff 0, and sizes FAK Paper entries as `Unit * abs(Diff)`.
+- The premarket path backfills older resolved results from the ledger and synthesizes the latest market result from the current reference price 30 seconds before open.
+- Added PostgreSQL schema migration/seed data for the new strategy rows and state columns, plus repository read/write support and test repository support.
+- Updated README/config docs and catalog/category/processor tests.
+Next: None.
+Notes: Targeted verification passed: `dotnet test tests\PolyCopyTrader.Tests\PolyCopyTrader.Tests.csproj --filter "DiffShiftProgress|StrategyIds_IncludeBtcUpDownVariants|StrategyIds_IncludeEthAndSolBinanceBpsVariants|PreservesExistingDisplayCategories" --no-restore` (59/59). Full `dotnet test tests\PolyCopyTrader.Tests\PolyCopyTrader.Tests.csproj --no-restore` compiled but failed 16 pre-existing unrelated tests around missing Revert variants, older due-entry expectations, and stale executable-ask price assertions.
+Blockers: None.
+
 ## Active Update 2026-06-28 Live Orders Tab Empty Screenshot
 Goal: Inspect the Dashboard screenshot where the `Live orders` tab appears empty and fix the stale UI state if needed.
 Status: Completed

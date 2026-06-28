@@ -4772,7 +4772,8 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
             IsFixedOutcomePreviousResultBpsFakPremarketEntry(variant) ||
             IsReferenceAverageBpsFakPremarketEntry(variant) ||
             IsPreviousScoreCounterTrendFakPremarketEntry(variant) ||
-            IsDiffCounterTrendFakPremarketEntry(variant);
+            IsDiffCounterTrendFakPremarketEntry(variant) ||
+            IsDiffShiftProgressPremarketEntry(variant);
     }
 
     private static bool IsPreOpenFixedDirectionSellExit(BtcUpDown5mStrategyVariant variant)
@@ -4864,6 +4865,13 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
     private static bool IsDiffShiftProgressEntry(BtcUpDown5mStrategyVariant variant)
     {
         return variant.Behavior == BtcUpDown5mStrategyBehavior.DiffShiftProgress;
+    }
+
+    private static bool IsDiffShiftProgressPremarketEntry(BtcUpDown5mStrategyVariant variant)
+    {
+        return IsDiffShiftProgressEntry(variant) &&
+            variant.EntryDelaySeconds < 0 &&
+            variant.DecisionDepth > 0;
     }
 
     private static bool IsFakStatsProbeEntry(BtcUpDown5mStrategyVariant variant)
@@ -6673,6 +6681,16 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
         DateTimeOffset nowUtc,
         CancellationToken cancellationToken)
     {
+        if (IsDiffShiftProgressPremarketEntry(variant))
+        {
+            return await GetDiffShiftProgressPremarketEntryDecisionAsync(
+                market,
+                variant,
+                unitStakeUsd,
+                nowUtc,
+                cancellationToken);
+        }
+
         var marketStartUtc = GetMarketWindowStartUtc(market, variant);
         if (marketStartUtc is null)
         {
@@ -6977,6 +6995,349 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
                 stakeUsd));
     }
 
+    private async Task<BtcOpeningLimitDecision> GetDiffShiftProgressPremarketEntryDecisionAsync(
+        PolymarketGammaMarket market,
+        BtcUpDown5mStrategyVariant variant,
+        decimal unitStakeUsd,
+        DateTimeOffset nowUtc,
+        CancellationToken cancellationToken)
+    {
+        var threshold = Math.Max(1, variant.DecisionDepth);
+        var marketStartUtc = GetMarketWindowStartUtc(market, variant);
+        if (marketStartUtc is null)
+        {
+            return BtcOpeningLimitDecision.Reject(
+                "diff_shift_progress_current_market_start_missing",
+                BuildDiffShiftProgressRawDecisionJson(
+                    market,
+                    variant,
+                    unitStakeUsd,
+                    nowUtc,
+                    state: null,
+                    triggerDirection: null,
+                    selectedDirection: null,
+                    selectedOutcome: null,
+                    targetMarketStartUtc: null,
+                    resultFetchStartUtc: null,
+                    appliedResultCount: 0,
+                    pendingSumDeltaUsd: null,
+                    shiftCount: 0,
+                    stakeMultiplier: null,
+                    stakeUsd: null,
+                    reason: "diff_shift_progress_current_market_start_missing",
+                    threshold: threshold,
+                    progressMode: "Premarket"));
+        }
+
+        if (unitStakeUsd <= 0m)
+        {
+            return BtcOpeningLimitDecision.Reject(
+                "diff_shift_progress_unit_stake_non_positive",
+                BuildDiffShiftProgressRawDecisionJson(
+                    market,
+                    variant,
+                    unitStakeUsd,
+                    nowUtc,
+                    state: null,
+                    triggerDirection: null,
+                    selectedDirection: null,
+                    selectedOutcome: null,
+                    targetMarketStartUtc: null,
+                    resultFetchStartUtc: null,
+                    appliedResultCount: 0,
+                    pendingSumDeltaUsd: null,
+                    shiftCount: 0,
+                    stakeMultiplier: null,
+                    stakeUsd: null,
+                    reason: "diff_shift_progress_unit_stake_non_positive",
+                    threshold: threshold,
+                    progressMode: "Premarket"));
+        }
+
+        var assetSymbol = GetReferenceAssetSymbol(variant);
+        var intervalDuration = BtcUpDown5mMarketAnalyzer.GetIntervalDuration(variant.MarketInterval);
+        var previousMarketStartUtc = marketStartUtc.Value.Subtract(intervalDuration);
+        var historicalTargetMarketStartUtc = previousMarketStartUtc.Subtract(intervalDuration);
+        var premarketResultSource = GetPremarketPreviousResultSource(variant);
+        var state = await GetOrCreateDiffShiftProgressStateAsync(
+            variant,
+            assetSymbol,
+            "Up",
+            nowUtc,
+            cancellationToken);
+
+        var resultFetchStartUtc = GetDiffShiftProgressFetchStartUtc(state, marketStartUtc.Value, historicalTargetMarketStartUtc);
+        IReadOnlyList<DiffCounterMarketResult> results = [];
+        if (resultFetchStartUtc is { } fetchStartUtc && fetchStartUtc <= historicalTargetMarketStartUtc)
+        {
+            try
+            {
+                results = await FetchDiffCounterMarketResultsAsync(
+                    assetSymbol,
+                    fetchStartUtc,
+                    historicalTargetMarketStartUtc,
+                    cancellationToken);
+            }
+            catch (OperationCanceledException)
+            {
+                throw;
+            }
+            catch (Exception ex)
+            {
+                logger.LogWarning(
+                    ex,
+                    "BTC Up or Down 5m Diff Shift Progress Premarket result fetch failed. Strategy={StrategyCode} Asset={AssetSymbol} StartUtc={StartUtc} EndUtc={EndUtc}",
+                    variant.Code,
+                    assetSymbol,
+                    fetchStartUtc,
+                    historicalTargetMarketStartUtc);
+                await TryRecordApiErrorAsync("GetDiffShiftProgressPremarketResults", ex.Message, cancellationToken);
+                return BtcOpeningLimitDecision.Reject(
+                    "diff_shift_progress_history_fetch_failed",
+                    BuildDiffShiftProgressRawDecisionJson(
+                        market,
+                        variant,
+                        unitStakeUsd,
+                        nowUtc,
+                        state,
+                        triggerDirection: null,
+                        selectedDirection: null,
+                        selectedOutcome: null,
+                        historicalTargetMarketStartUtc,
+                        resultFetchStartUtc,
+                        appliedResultCount: 0,
+                        pendingSumDeltaUsd: null,
+                        shiftCount: 0,
+                        stakeMultiplier: null,
+                        stakeUsd: null,
+                        reason: "diff_shift_progress_history_fetch_failed",
+                        threshold: threshold,
+                        progressMode: GetDiffShiftProgressPremarketMode(state)));
+            }
+        }
+
+        var applied = ApplyDiffShiftProgressResults(state, results);
+        state = applied.State with { UpdatedAtUtc = nowUtc };
+        var appliedResultCount = applied.AppliedResultCount;
+        var pendingSumDeltaUsd = applied.PendingSumDeltaUsd;
+
+        var requiresHistoricalTargetResult = resultFetchStartUtc is { } requiredStartUtc &&
+            requiredStartUtc <= historicalTargetMarketStartUtc &&
+            (state.LastProcessedMarketStartUtc is null ||
+                state.LastProcessedMarketStartUtc < historicalTargetMarketStartUtc);
+        if (requiresHistoricalTargetResult)
+        {
+            await repository.UpsertCryptoUpDown5mDiffShiftProgressStateAsync(state, cancellationToken);
+            return BtcOpeningLimitDecision.Reject(
+                "diff_shift_progress_previous_market_resolved_event_missing",
+                BuildDiffShiftProgressRawDecisionJson(
+                    market,
+                    variant,
+                    unitStakeUsd,
+                    nowUtc,
+                    state,
+                    triggerDirection: null,
+                    selectedDirection: null,
+                    selectedOutcome: null,
+                    historicalTargetMarketStartUtc,
+                    resultFetchStartUtc,
+                    appliedResultCount,
+                    pendingSumDeltaUsd,
+                    shiftCount: 0,
+                    stakeMultiplier: null,
+                    stakeUsd: null,
+                    reason: "diff_shift_progress_previous_market_resolved_event_missing",
+                    threshold: threshold,
+                    progressMode: GetDiffShiftProgressPremarketMode(state)));
+        }
+
+        BtcPreviousMarketMoveSignal? premarketSignal = null;
+        string? premarketResultOutcome = null;
+        if (state.LastProcessedMarketStartUtc is null ||
+            state.LastProcessedMarketStartUtc < previousMarketStartUtc ||
+            state.PendingMarketStartUtc == previousMarketStartUtc)
+        {
+            premarketSignal = await CalculatePremarketPreviousResultBpsMoveSignalAsync(
+                variant,
+                marketStartUtc.Value,
+                cancellationToken);
+            premarketResultOutcome = NormalizeNullableUpDownOutcome(premarketSignal.StreakWinningOutcome);
+            if (!premarketSignal.ShouldEnter || premarketResultOutcome is null)
+            {
+                await repository.UpsertCryptoUpDown5mDiffShiftProgressStateAsync(state, cancellationToken);
+                var reason = premarketSignal.RejectionReason ?? "diff_shift_progress_premarket_result_missing";
+                return BtcOpeningLimitDecision.Reject(
+                    reason,
+                    BuildDiffShiftProgressRawDecisionJson(
+                        market,
+                        variant,
+                        unitStakeUsd,
+                        nowUtc,
+                        state,
+                        triggerDirection: null,
+                        selectedDirection: null,
+                        selectedOutcome: null,
+                        previousMarketStartUtc,
+                        resultFetchStartUtc,
+                        appliedResultCount,
+                        pendingSumDeltaUsd,
+                        shiftCount: 0,
+                        stakeMultiplier: null,
+                        stakeUsd: null,
+                        reason,
+                        threshold: threshold,
+                        progressMode: GetDiffShiftProgressPremarketMode(state),
+                        counterResultSource: premarketResultSource,
+                        premarketResultOutcome: null,
+                        premarketMoveBps: premarketSignal.MoveBps,
+                        premarketSignalReason: reason));
+            }
+
+            var premarketResult = CreateDiffShiftProgressPremarketResult(
+                premarketSignal,
+                premarketResultOutcome,
+                premarketResultSource);
+            var premarketApplied = ApplyDiffShiftProgressResults(state, [premarketResult]);
+            state = premarketApplied.State with { UpdatedAtUtc = nowUtc };
+            appliedResultCount += premarketApplied.AppliedResultCount;
+            pendingSumDeltaUsd = premarketApplied.PendingSumDeltaUsd ?? pendingSumDeltaUsd;
+        }
+
+        var shift = ApplyDiffShiftProgressPremarketDamping(state, threshold, unitStakeUsd);
+        state = shift.State with { UpdatedAtUtc = nowUtc };
+
+        if (state.PendingMarketStartUtc is { } pendingMarketStartUtc && pendingMarketStartUtc > previousMarketStartUtc)
+        {
+            await repository.UpsertCryptoUpDown5mDiffShiftProgressStateAsync(state, cancellationToken);
+            var reason = pendingMarketStartUtc == marketStartUtc.Value
+                ? "diff_shift_progress_current_market_already_pending"
+                : "diff_shift_progress_pending_bet_unresolved";
+            return BtcOpeningLimitDecision.Reject(
+                reason,
+                BuildDiffShiftProgressRawDecisionJson(
+                    market,
+                    variant,
+                    unitStakeUsd,
+                    nowUtc,
+                    state,
+                    triggerDirection: null,
+                    selectedDirection: null,
+                    selectedOutcome: null,
+                    previousMarketStartUtc,
+                    resultFetchStartUtc,
+                    appliedResultCount,
+                    pendingSumDeltaUsd,
+                    shift.ShiftCount,
+                    stakeMultiplier: null,
+                    stakeUsd: null,
+                    reason,
+                    threshold: threshold,
+                    progressMode: GetDiffShiftProgressPremarketMode(state),
+                    counterResultSource: premarketResultSource,
+                    premarketResultOutcome: premarketResultOutcome,
+                    premarketMoveBps: premarketSignal?.MoveBps,
+                    premarketSignalReason: premarketSignal?.RejectionReason));
+        }
+
+        var rawDiff = state.UpCount - state.DownCount;
+        if (rawDiff == 0)
+        {
+            await repository.UpsertCryptoUpDown5mDiffShiftProgressStateAsync(state, cancellationToken);
+            return BtcOpeningLimitDecision.Reject(
+                "diff_shift_progress_zero_diff",
+                BuildDiffShiftProgressRawDecisionJson(
+                    market,
+                    variant,
+                    unitStakeUsd,
+                    nowUtc,
+                    state,
+                    triggerDirection: null,
+                    selectedDirection: null,
+                    selectedOutcome: null,
+                    previousMarketStartUtc,
+                    resultFetchStartUtc,
+                    appliedResultCount,
+                    pendingSumDeltaUsd,
+                    shift.ShiftCount,
+                    stakeMultiplier: null,
+                    stakeUsd: null,
+                    reason: "diff_shift_progress_zero_diff",
+                    threshold: threshold,
+                    progressMode: GetDiffShiftProgressPremarketMode(state),
+                    counterResultSource: premarketResultSource,
+                    premarketResultOutcome: premarketResultOutcome,
+                    premarketMoveBps: premarketSignal?.MoveBps,
+                    premarketSignalReason: premarketSignal?.RejectionReason));
+        }
+
+        var selectedDirection = rawDiff > 0 ? BtcPriceDirection.Down : BtcPriceDirection.Up;
+        var selectedOutcome = TrySelectOutcomeForDirection(market, selectedDirection);
+        if (selectedOutcome is null)
+        {
+            await repository.UpsertCryptoUpDown5mDiffShiftProgressStateAsync(state, cancellationToken);
+            return BtcOpeningLimitDecision.Reject(
+                "target_outcome_not_available",
+                BuildDiffShiftProgressRawDecisionJson(
+                    market,
+                    variant,
+                    unitStakeUsd,
+                    nowUtc,
+                    state,
+                    triggerDirection: null,
+                    selectedDirection,
+                    selectedOutcome: null,
+                    previousMarketStartUtc,
+                    resultFetchStartUtc,
+                    appliedResultCount,
+                    pendingSumDeltaUsd,
+                    shift.ShiftCount,
+                    stakeMultiplier: null,
+                    stakeUsd: null,
+                    reason: "target_outcome_not_available",
+                    threshold: threshold,
+                    progressMode: GetDiffShiftProgressPremarketMode(state),
+                    counterResultSource: premarketResultSource,
+                    premarketResultOutcome: premarketResultOutcome,
+                    premarketMoveBps: premarketSignal?.MoveBps,
+                    premarketSignalReason: premarketSignal?.RejectionReason));
+        }
+
+        var stakeMultiplier = Math.Abs(rawDiff);
+        var stakeUsd = unitStakeUsd * stakeMultiplier;
+        await repository.UpsertCryptoUpDown5mDiffShiftProgressStateAsync(state, cancellationToken);
+        return BtcOpeningLimitDecision.Enter(
+            selectedOutcome,
+            BuildDiffShiftProgressRawDecisionJson(
+                market,
+                variant,
+                unitStakeUsd,
+                nowUtc,
+                state,
+                triggerDirection: null,
+                selectedDirection,
+                selectedOutcome,
+                previousMarketStartUtc,
+                resultFetchStartUtc,
+                appliedResultCount,
+                pendingSumDeltaUsd,
+                shift.ShiftCount,
+                stakeMultiplier,
+                stakeUsd,
+                reason: null,
+                threshold: threshold,
+                progressMode: GetDiffShiftProgressPremarketMode(state),
+                counterResultSource: premarketResultSource,
+                premarketResultOutcome: premarketResultOutcome,
+                premarketMoveBps: premarketSignal?.MoveBps,
+                premarketSignalReason: premarketSignal?.RejectionReason),
+            stakeUsdOverride: stakeUsd,
+            diffShiftProgressPendingBet: new DiffShiftProgressPendingBet(
+                state,
+                marketStartUtc.Value,
+                selectedOutcome.Outcome,
+                stakeUsd));
+    }
+
     private async Task<CryptoUpDown5mDiffShiftProgressState> GetOrCreateDiffShiftProgressStateAsync(
         BtcUpDown5mStrategyVariant variant,
         string assetSymbol,
@@ -6993,7 +7354,8 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
                 AssetSymbol = assetSymbol.Trim().ToUpperInvariant(),
                 TriggerOutcome = NormalizeUpDownOutcome(triggerOutcome),
                 UpCount = Math.Max(0, existing.UpCount),
-                DownCount = Math.Max(0, existing.DownCount)
+                DownCount = Math.Max(0, existing.DownCount),
+                DampingDirection = NormalizeNullableUpDownOutcome(existing.DampingDirection)
             };
         }
 
@@ -7004,6 +7366,8 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
             UpCount: 0,
             DownCount: 0,
             SumAmount: 0m,
+            DampingActive: false,
+            DampingDirection: null,
             LastProcessedMarketStartUtc: null,
             PendingMarketStartUtc: null,
             PendingTargetOutcome: null,
@@ -7131,6 +7495,85 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
                 UpCount = upCount,
                 DownCount = downCount,
                 SumAmount = sumAmount
+            },
+            shiftCount);
+    }
+
+    private static DiffCounterMarketResult CreateDiffShiftProgressPremarketResult(
+        BtcPreviousMarketMoveSignal signal,
+        string winningOutcome,
+        string source)
+    {
+        return new DiffCounterMarketResult(
+            signal.PreviousMarketId ?? string.Empty,
+            string.Empty,
+            signal.PreviousMarketSlug ?? string.Empty,
+            signal.PreviousMarketStartUtc,
+            signal.PreviousMarketEndUtc,
+            NormalizeUpDownOutcome(winningOutcome),
+            source);
+    }
+
+    private static string GetDiffShiftProgressPremarketMode(CryptoUpDown5mDiffShiftProgressState state)
+    {
+        return state.DampingActive ? "Damping" : "Simple";
+    }
+
+    private static DiffShiftProgressShiftResult ApplyDiffShiftProgressPremarketDamping(
+        CryptoUpDown5mDiffShiftProgressState state,
+        int threshold,
+        decimal unitStakeUsd)
+    {
+        var boundedThreshold = Math.Max(1, threshold);
+        var upCount = Math.Max(0, state.UpCount);
+        var downCount = Math.Max(0, state.DownCount);
+        var sumAmount = state.SumAmount;
+        var dampingActive = state.DampingActive;
+        var dampingDirection = NormalizeNullableUpDownOutcome(state.DampingDirection);
+        var rawDiff = upCount - downCount;
+        if (!dampingActive && Math.Abs(rawDiff) >= boundedThreshold)
+        {
+            dampingActive = true;
+            dampingDirection = rawDiff > 0 ? "Up" : "Down";
+            sumAmount = 0m;
+        }
+
+        var shiftCount = 0;
+        while (dampingActive && unitStakeUsd > 0m && sumAmount > unitStakeUsd && rawDiff != 0)
+        {
+            if (rawDiff > 0)
+            {
+                upCount = Math.Max(0, upCount - 1);
+            }
+            else
+            {
+                downCount = Math.Max(0, downCount - 1);
+            }
+
+            sumAmount -= unitStakeUsd;
+            shiftCount++;
+            rawDiff = upCount - downCount;
+        }
+
+        if (dampingActive && rawDiff == 0)
+        {
+            dampingActive = false;
+            dampingDirection = null;
+            sumAmount = 0m;
+        }
+        else if (dampingActive && dampingDirection is null)
+        {
+            dampingDirection = rawDiff > 0 ? "Up" : "Down";
+        }
+
+        return new DiffShiftProgressShiftResult(
+            state with
+            {
+                UpCount = upCount,
+                DownCount = downCount,
+                SumAmount = sumAmount,
+                DampingActive = dampingActive,
+                DampingDirection = dampingDirection
             },
             shiftCount);
     }
@@ -13460,7 +13903,13 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
         int shiftCount,
         decimal? stakeMultiplier,
         decimal? stakeUsd,
-        string? reason)
+        string? reason,
+        int? threshold = null,
+        string? progressMode = null,
+        string? counterResultSource = null,
+        string? premarketResultOutcome = null,
+        decimal? premarketMoveBps = null,
+        string? premarketSignalReason = null)
     {
         var marketStartUtc = GetMarketWindowStartUtc(market, variant);
         var entryDueAtUtc = GetEntryDueAtUtc(marketStartUtc, variant);
@@ -13488,7 +13937,7 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
             entry_due_at_utc = entryDueAtUtc,
             decision_delay_ms = GetDecisionDelayMilliseconds(entryDueAtUtc, nowUtc),
             counter_mode = "persistent_diff_shift_progress",
-            counter_result_source = "ResolvedMarketLedger",
+            counter_result_source = counterResultSource ?? "ResolvedMarketLedger",
             counter_target_market_start_utc = targetMarketStartUtc,
             result_fetch_start_utc = resultFetchStartUtc,
             applied_result_count = appliedResultCount,
@@ -13496,6 +13945,10 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
             down_count = state?.DownCount,
             diff = state is null ? (int?)null : state.UpCount - state.DownCount,
             effective_diff = effectiveDiff,
+            threshold = threshold,
+            progress_mode = progressMode,
+            damping_active = state?.DampingActive,
+            damping_direction = state?.DampingDirection,
             sum_amount = state?.SumAmount,
             unit_stake_usd = unitStakeUsd,
             pending_market_start_utc = state?.PendingMarketStartUtc,
@@ -13503,6 +13956,9 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
             pending_stake_usd = state?.PendingStakeUsd,
             pending_sum_delta_usd = pendingSumDeltaUsd,
             shift_count = shiftCount,
+            premarket_result_outcome = premarketResultOutcome,
+            premarket_move_bps = premarketMoveBps,
+            premarket_signal_rejection_reason = premarketSignalReason,
             trigger_side = triggerDirection?.ToString(),
             diff_counter_trigger_outcome = variant.DiffCounterTriggerOutcome?.ToString(),
             selected_direction = selectedDirection?.ToString(),

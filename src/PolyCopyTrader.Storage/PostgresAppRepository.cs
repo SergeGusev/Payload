@@ -4624,6 +4624,7 @@ ORDER BY asset_symbol, market_start_utc;
 		await using NpgsqlConnection connection = await OpenConnectionAsync(cancellationToken);
 		await using NpgsqlCommand command = CreateCommand(connection, """
 SELECT strategy_id, asset_symbol, trigger_outcome, up_count, down_count, sum_amount,
+       damping_active, damping_direction,
        last_processed_market_start_utc, pending_market_start_utc, pending_target_outcome,
        pending_stake_usd, pending_created_at_utc, created_at_utc, updated_at_utc
 FROM crypto_up_down_5m_diff_shift_progress_states
@@ -4642,10 +4643,12 @@ WHERE strategy_id = @StrategyId;
 		await using NpgsqlCommand command = CreateCommand(connection, """
 INSERT INTO crypto_up_down_5m_diff_shift_progress_states (
     strategy_id, asset_symbol, trigger_outcome, up_count, down_count, sum_amount,
+    damping_active, damping_direction,
     last_processed_market_start_utc, pending_market_start_utc, pending_target_outcome,
     pending_stake_usd, pending_created_at_utc, created_at_utc, updated_at_utc
 ) VALUES (
     @StrategyId, @AssetSymbol, @TriggerOutcome, @UpCount, @DownCount, @SumAmount,
+    @DampingActive, @DampingDirection,
     @LastProcessedMarketStartUtc, @PendingMarketStartUtc, @PendingTargetOutcome,
     @PendingStakeUsd, @PendingCreatedAtUtc, @CreatedAtUtc, @UpdatedAtUtc
 )
@@ -4655,6 +4658,8 @@ ON CONFLICT (strategy_id) DO UPDATE SET
     up_count = excluded.up_count,
     down_count = excluded.down_count,
     sum_amount = excluded.sum_amount,
+    damping_active = excluded.damping_active,
+    damping_direction = excluded.damping_direction,
     last_processed_market_start_utc = excluded.last_processed_market_start_utc,
     pending_market_start_utc = excluded.pending_market_start_utc,
     pending_target_outcome = excluded.pending_target_outcome,
@@ -9353,6 +9358,10 @@ LIMIT @Limit;
 		command.Parameters.AddWithValue("UpCount", state.UpCount);
 		command.Parameters.AddWithValue("DownCount", state.DownCount);
 		command.Parameters.AddWithValue("SumAmount", state.SumAmount);
+		command.Parameters.AddWithValue("DampingActive", state.DampingActive);
+		command.Parameters.AddWithValue("DampingDirection", string.IsNullOrWhiteSpace(state.DampingDirection)
+			? DBNull.Value
+			: NormalizeBtcOutcome(state.DampingDirection) ?? state.DampingDirection.Trim());
 		command.Parameters.Add("LastProcessedMarketStartUtc", NpgsqlDbType.TimestampTz).Value = NullableDateTime(state.LastProcessedMarketStartUtc);
 		command.Parameters.Add("PendingMarketStartUtc", NpgsqlDbType.TimestampTz).Value = NullableDateTime(state.PendingMarketStartUtc);
 		command.Parameters.AddWithValue("PendingTargetOutcome", string.IsNullOrWhiteSpace(state.PendingTargetOutcome)
@@ -9373,13 +9382,15 @@ LIMIT @Limit;
 			reader.GetInt32(3),
 			reader.GetInt32(4),
 			reader.GetDecimal(5),
-			reader.IsDBNull(6) ? null : DateTimeOffsetFromUtc(reader.GetDateTime(6)),
-			reader.IsDBNull(7) ? null : DateTimeOffsetFromUtc(reader.GetDateTime(7)),
-			reader.IsDBNull(8) ? null : reader.GetString(8),
-			reader.IsDBNull(9) ? null : reader.GetDecimal(9),
-			reader.IsDBNull(10) ? null : DateTimeOffsetFromUtc(reader.GetDateTime(10)),
-			DateTimeOffsetFromUtc(reader.GetDateTime(11)),
-			DateTimeOffsetFromUtc(reader.GetDateTime(12)));
+			reader.GetBoolean(6),
+			reader.IsDBNull(7) ? null : reader.GetString(7),
+			reader.IsDBNull(8) ? null : DateTimeOffsetFromUtc(reader.GetDateTime(8)),
+			reader.IsDBNull(9) ? null : DateTimeOffsetFromUtc(reader.GetDateTime(9)),
+			reader.IsDBNull(10) ? null : reader.GetString(10),
+			reader.IsDBNull(11) ? null : reader.GetDecimal(11),
+			reader.IsDBNull(12) ? null : DateTimeOffsetFromUtc(reader.GetDateTime(12)),
+			DateTimeOffsetFromUtc(reader.GetDateTime(13)),
+			DateTimeOffsetFromUtc(reader.GetDateTime(14)));
 	}
 
 	private static void AddCryptoUpDown5mResultPollingObservationParameters(NpgsqlCommand command, CryptoUpDown5mResultPollingObservation observation)

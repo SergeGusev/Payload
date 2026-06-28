@@ -583,6 +583,17 @@ subtracts `Unit` from `Sum`. It then buys the opposite outcome with BUY FAK
 Paper sizing `Unit * (Diff + 1)` only when `Diff > 0`; `Diff = 0` or negative
 Diff skips.
 
+`CURR Up or Down 5m N Diff Shift Progress Premarket` variants also share
+`Up Or Down 5 min Diff Shift Progress`; they exist for BTC, ETH, and SOL with
+`N=1..5`. They evaluate 30 seconds before the 5-minute market opens and use the
+persistent raw `Diff = UpCount - DownCount`. Resolved older markets come from
+the result ledger; the latest market is synthesized from the current reference
+price at the premarket sample point. Positive Diff buys Down, negative Diff buys
+Up, and Diff 0 skips because both direction and `abs(Diff)` multiplier are zero.
+Each entry uses BUY FAK sizing `Unit * abs(Diff)`. When `abs(Diff)` reaches
+`N`, the strategy enters persistent damping mode, resets `Sum`, then moves Diff
+one step toward zero each time `Sum > Unit`; reaching Diff 0 exits damping.
+
 A dedicated fast Diff worker observes Diff, Diff Progress, AdjustedDiff, ShiftDiff, and their
 Revert copies, then evaluates market `T` only after the previous 5-minute market
 `T-5m` has one of the accepted result rows; if that previous result is missing

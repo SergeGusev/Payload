@@ -176,13 +176,13 @@ public sealed class StrategyDisplayCategoryTests
             .Where(variant => variant.Behavior == BtcUpDown5mStrategyBehavior.DiffShiftProgress)
             .ToArray();
 
-        Assert.Equal(6, variants.Length);
+        Assert.Equal(21, variants.Length);
 
         var categoryCounts = variants
             .GroupBy(variant => StrategyDisplayCategories.GetCategory(variant.Name))
             .ToDictionary(group => group.Key, group => group.Count(), StringComparer.OrdinalIgnoreCase);
 
-        Assert.Equal(6, categoryCounts["Up Or Down 5 min Diff Shift Progress"]);
+        Assert.Equal(21, categoryCounts["Up Or Down 5 min Diff Shift Progress"]);
         Assert.Single(categoryCounts);
     }
 
@@ -280,6 +280,8 @@ public sealed class StrategyDisplayCategoryTests
     [InlineData("SOL Up or Down 5m 1 Diff Up Progress", "SOL Up or Down 5m Diff Progress")]
     [InlineData("BTC Up or Down 5m Diff Up Shift Progress", "Up Or Down 5 min Diff Shift Progress")]
     [InlineData("ETH Up or Down 5m Diff Down Shift Progress", "Up Or Down 5 min Diff Shift Progress")]
+    [InlineData("BTC Up or Down 5m 1 Diff Shift Progress Premarket", "Up Or Down 5 min Diff Shift Progress")]
+    [InlineData("SOL Up or Down 5m 5 Diff Shift Progress Premarket", "Up Or Down 5 min Diff Shift Progress")]
     [InlineData("Follow leader", "Other")]
     public void PreservesExistingDisplayCategories(string strategyName, string expectedCategory)
     {

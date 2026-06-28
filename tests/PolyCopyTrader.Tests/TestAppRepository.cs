@@ -2680,6 +2680,9 @@ internal sealed class TestAppRepository : IAppRepository
             StrategyId = normalizedStrategyId,
             AssetSymbol = state.AssetSymbol.Trim().ToUpperInvariant(),
             TriggerOutcome = NormalizeUpDownOutcome(state.TriggerOutcome),
+            DampingDirection = string.IsNullOrWhiteSpace(state.DampingDirection)
+                ? null
+                : NormalizeUpDownOutcome(state.DampingDirection),
             PendingTargetOutcome = string.IsNullOrWhiteSpace(state.PendingTargetOutcome)
                 ? null
                 : NormalizeUpDownOutcome(state.PendingTargetOutcome)

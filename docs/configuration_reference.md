@@ -813,6 +813,12 @@ rows and their Revert copies can enter the Paper/Live-shadow order path when
 their Dashboard `Live` flag is enabled and all live gates pass. Dashboard categories split them into
 `Diff Up`/`Diff Down`, `AdjustedDiff Up`/`AdjustedDiff Down`, ShiftDiff-by-shift,
 and matching `... Revert` categories per asset.
+Diff Shift Progress rows keep their own persistent counters and Sum in
+`crypto_up_down_5m_diff_shift_progress_states`. The `N Diff Shift Progress
+Premarket` rows run 30 seconds before open, synthesize the latest market result
+from the reference price, buy Down for positive raw Diff and Up for negative raw
+Diff, skip Diff 0, and use `Unit * abs(Diff)` FAK sizing while damping Diff back
+to zero after `abs(Diff)` reaches `N`.
 
 The active non-Instant `Middle` variants use opening-limit pricing rather than
 taker pricing. At market open `Middle N` reads the latest Binance BTC/USDT

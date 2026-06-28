@@ -190,3 +190,23 @@ Request:
 
 Result:
 Inspected `SOL Up or Down 5m Up 5 Diff Revert Premarket` in the Dashboard remote PostgreSQL database at `192.168.0.101`. The strategy is enabled, not paused, `live_stakes=true`, `auto_live_paused=false`, with Live enabled at `2026-06-28 19:13:46+03`. Found `499` Paper orders total and `42` Paper orders after Live enablement, all with `correlation_id`. Found `42` matching `live_orders`, all `Matched`, all `execution_source=paper_live_shadow_test`, total live notional `$252.39060000`, filled notional `$251.99996200`, latest Live order at `2026-06-28 22:39:48+03`. Also found `42` `paper_live_shadow_decisions`, all linked to both Paper and Live with status `live_status_synced`, and no shadow discrepancies. The apparent mismatch is that linked Paper FAK orders are updated with `execution_source=btc_updown5m_fak_taker_paper` after Paper FAK fill simulation, while the Live rows use `paper_live_shadow_test`; the durable link is `correlation_id`/`paper_order_id`.
+## 2026-06-28T20:36:32.4453581+00:00
+Request:
+Делаем три типа стратегий, по одной для каждой из валют - CURR Up Or Down 5 min N Diff Shift Progress Premarket, где N меняется от 1 до 5. Diff считается как UpCount - DownCount, при Diff > 0 ставим Down, при Diff < 0 ставим Up
+
+Логика работы стратегий следующая:
+
+1. Вводим понятие Unit, который определяет минимальную ставку в режиме FAK со ставкой 0.99.
+2. Вводим счётчик текущей суммы Sum, по умолчанию - 0. При выигрыше счётчик увеличивается на сумму выигрыша, при проигрыше - уменьшается на сумму выигрыша.
+3. Значения UpCount, DownCount и Sum - персистентны, хранятся в базе и читаются после рестарта сервиса.
+4. Каждая ставка имеет множитель, равный модулю Diff
+5. При Diff, равном 0, стратегия переходит в режим простых ставок, когда просто ставим в нужном направлении ставку с учётом множителя.
+6. Когда Diff достигает по модулю N, стратегия переходит в режим затухания - Sum обнуляется и начинает увеличиваться и уменьшаться в зависимости от результатов ставок. Каждый раз, когда Sum превышает Unit, она уменьшается на Unit,
+в Diff либо уменьшается на 1, если он был положительным либо увеличивается на 1, если он был отрицательным. Так происходит до достижения Dif значения 0, тогда стратегия опять перехходит в режим простых ставок.
+7. Стратегия работает в режиме премаркета и начинает считаться за 30 секунд до его начала. Результаты последнего маркета определяются по текущему курсу валюты, результаты предыдущих - по реальным результатам рынка.
+8. Ставки - в FAK режиме с гарантированной выборкой стека.
+
+Добавляем все новые стратегии в категорию - Up Or Down 5 min Diff Shift Progress
+
+Result:
+Added 15 BTC/ETH/SOL `N Diff Shift Progress Premarket` variants (`N=1..5`) to the shared category `Up Or Down 5 min Diff Shift Progress`. Implemented persistent damping state in `crypto_up_down_5m_diff_shift_progress_states`, dynamic premarket decision logic using raw `Diff = UpCount - DownCount`, Down entries for positive Diff, Up entries for negative Diff, Diff 0 skip, `Unit * abs(Diff)` FAK sizing, historical result backfill, and synthetic latest-market result from reference price 30 seconds before open. Updated PostgreSQL seed/schema, repository persistence, docs, and focused tests. Targeted tests passed 59/59; the full test project still has 16 unrelated existing failures around old Revert catalog assumptions and stale pricing expectations.
