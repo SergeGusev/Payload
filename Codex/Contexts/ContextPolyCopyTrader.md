@@ -1,3 +1,16 @@
+## Active Update 2026-06-28 ETH Up 50 bps FAK BadRequest Inspection
+Goal: Explain why live orders for `ETH Up or Down 5m Up 50 bps Instant` contain many `BadRequest` rows.
+Status: Completed
+Done:
+- Queried the Dashboard remote PostgreSQL database at `192.168.0.101` read-only for `eth_up_down_5m_up_bps_50_instant`.
+- Confirmed the strategy is enabled, not paused, `live_stakes=true`, `auto_live_paused=false`, and has `236` live orders.
+- Found `46` submitted FAK live orders rejected with `response_status=BadRequest`; all have the same Polymarket CLOB response: `no orders found to match with FAK order. FAK orders are partially filled or killed if no match is found.`
+- Confirmed these BadRequest rows have zero fill/cost and started only after the strategy moved from GTD live-shadow orders to FAK live-shadow orders.
+- Compared recent shadow decision snapshots: local cached quotes generally had `best_ask <= limit_price`, so the BadRequest rows are best explained as FAK no-liquidity/no-match responses between preflight/book snapshot and CLOB matching, not signing/auth/risk failures.
+Next: Consider persisting the fresh live preflight order-book snapshot and classifying this exact CLOB error as a zero-fill FAK outcome instead of an alarming API BadRequest.
+Notes: Verification was read-only SQL plus source inspection of `TryPlaceLiveOrderAsync`, `CreateFakMarketBuyRequest`, and CLOB order placement/accounting paths; no source code or database rows were modified.
+Blockers: None.
+
 ## Active Update 2026-06-28 Diff Shift Progress Premarket Strategies
 Goal: Add BTC/ETH/SOL `CURR Up or Down 5m N Diff Shift Progress Premarket` strategies for `N=1..5` in category `Up Or Down 5 min Diff Shift Progress`.
 Status: Completed

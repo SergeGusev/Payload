@@ -210,3 +210,10 @@ Request:
 
 Result:
 Added 15 BTC/ETH/SOL `N Diff Shift Progress Premarket` variants (`N=1..5`) to the shared category `Up Or Down 5 min Diff Shift Progress`. Implemented persistent damping state in `crypto_up_down_5m_diff_shift_progress_states`, dynamic premarket decision logic using raw `Diff = UpCount - DownCount`, Down entries for positive Diff, Up entries for negative Diff, Diff 0 skip, `Unit * abs(Diff)` FAK sizing, historical result backfill, and synthetic latest-market result from reference price 30 seconds before open. Updated PostgreSQL seed/schema, repository persistence, docs, and focused tests. Targeted tests passed 59/59; the full test project still has 16 unrelated existing failures around old Revert catalog assumptions and stale pricing expectations.
+
+## 2026-06-28T20:49:50.1505626Z
+Request:
+Посмотри живые ставки ETH Up or Down 5m Up 50 bps Instant. Откуда там такое огромное ставок BadRequest ?
+
+Result:
+Inspected `ETH Up or Down 5m Up 50 bps Instant` live orders in the Dashboard remote PostgreSQL database at `192.168.0.101` read-only and source paths for FAK live placement. The strategy has `236` live orders; after switching to FAK live-shadow placement there are `47` matched FAK orders and `46` FAK orders rejected as `BadRequest`, all with the same Polymarket CLOB zero-fill/no-match response: `no orders found to match with FAK order. FAK orders are partially filled or killed if no match is found.` These rows have zero fill/cost and are best explained as FAK liquidity disappearing or not matching between the book/preflight check and CLOB matching, not signing/auth/risk failures. No source code or database rows were modified.
