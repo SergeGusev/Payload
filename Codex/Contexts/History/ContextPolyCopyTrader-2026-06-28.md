@@ -127,3 +127,10 @@ Request:
 
 Result:
 Clarified that Diff Progress seed rows use `paper_stake_amount = 1.00`, so with default `Paper $ = 1`, one backtest unit equals one dollar. Converted the uncapped drawdown values: maximum single-strategy drawdown `$1571`, worst single asset-day `$11921`, maximum aggregate daily BTC equity drawdown `$16571`, and BTC minimum cumulative equity `-$917`. If Dashboard `Paper $` is changed, all amounts scale linearly by that configured base stake.
+
+## 2026-06-28T11:10:05.6883400+00:00
+Request:
+За один день уйдём вниз на -$82,855 ?
+
+Result:
+Clarified that `-$82855` at `Paper $ = 5` is not a one-calendar-day loss, but BTC aggregate daily equity drawdown from a prior peak to a later trough. Worst BTC single asset-day at `Paper $ = 5` is `-$59605` on `2026-06-02`. Worst combined BTC+ETH+SOL calendar day at `Paper $ = 5`, assuming all 300 strategies run simultaneously, is `-$104855` on `2026-06-02` with `17684` entries and `$1246535` settled stake.

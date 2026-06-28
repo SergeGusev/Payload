@@ -1,3 +1,15 @@
+## Active Update 2026-06-28 Diff Progress Dollar Drawdown Clarification
+Goal: Clarify whether the `-$82855` figure is a one-day loss.
+Status: Completed
+Done:
+- Recomputed uncapped Diff Progress daily PnL at `Paper $ = 5`.
+- Clarified that `-$82855` is not a single calendar-day loss; it is BTC aggregate daily equity drawdown from a prior peak to a later trough (`16571` units times `5`).
+- Worst BTC single asset-day at `Paper $ = 5` is `-$59605` on `2026-06-02`.
+- Worst combined BTC+ETH+SOL calendar day at `Paper $ = 5`, assuming all 300 strategies run simultaneously, is `-$104855` on `2026-06-02` with `17684` entries and `$1246535` settled stake.
+Next: Add per-entry equity output if intraday peak-to-trough drawdown is needed instead of day-close drawdown.
+Notes: Verification was PowerShell CSV inspection over `outputs/diff-progress-uncapped-backtest-2026-06-28/diff-progress-uncapped-daily-by-strategy.csv`; no build/tests required because no code or output artifacts changed.
+Blockers: None.
+
 ## Active Update 2026-06-28 Diff Progress Dollar Conversion
 Goal: Clarify how Diff Progress backtest units convert to USD.
 Status: Completed
