@@ -1,3 +1,16 @@
+## Active Update 2026-06-28 Diff Progress Waiting-Reset-Zero Backtest
+Goal: Recalculate the Diff Progress six-month Binance backtest using waiting-only midnight resets and betting until Diff zero.
+Status: Completed
+Done:
+- Added a standalone C# analyzer under `outputs/diff-progress-waiting-reset-zero-backtest-2026-06-28/` that reuses `outputs/binance-diff-time-chart-2026-06-28/binance-diff-timeseries.csv`.
+- Simulated 300 BTC/ETH/SOL Diff Progress strategies with per-strategy counters because reset behavior depends on each strategy's mode.
+- Model: while `Waiting`, counters reset at every `00:00 UTC`; while `Betting`, counters carry across midnight and entries continue until side-specific `Diff <= 0`; entry trigger remains `Diff > N`; stake multiplier is `min(max(Diff - N, 1), 10)` so bets continue below `N` down to zero.
+- Generated `diff-progress-waiting-reset-zero-strategies.csv`, `diff-progress-waiting-reset-zero-daily-by-strategy.csv`, `diff-progress-waiting-reset-zero-asset-summary.csv`, and `diff-progress-waiting-reset-zero-summary.md`.
+- Result summary over `2025-12-29T00:00:00Z` through `2026-06-28T08:25:00Z`: BTC PnL `432` units, ROI `0.0013%`, `83` strategies open at end; ETH PnL `310`, ROI `0.0011%`, `58` open; SOL PnL `39790`, ROI `0.1609%`, `66` open.
+Next: Prefer the prior daily-reset-in-both-modes model unless the extra exposure and near-zero BTC/ETH ROI are acceptable; if this mode is still interesting, rerun with real Polymarket executable prices instead of fixed `0.50`.
+Notes: Verification passed: `dotnet build outputs\diff-progress-waiting-reset-zero-backtest-2026-06-28\DiffProgressWaitingResetZeroBacktest.csproj -c Release --nologo`; analyzer `dotnet run` completed locally. This task changed only standalone output-analysis files, not production strategy runtime code.
+Blockers: None for the Binance-data backtest.
+
 ## Active Update 2026-06-28 Diff Progress Six Month Backtest
 Goal: Backtest the new BTC/ETH/SOL Diff Progress strategies on six months of market data.
 Status: Completed

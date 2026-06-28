@@ -92,3 +92,10 @@ Backtest the new Diff Progress strategies on six months of market data.
 
 Result:
 Added a standalone C# backtest analyzer under `outputs/diff-progress-backtest-2026-06-28/` that reuses the six-month Binance 5m candle CSV. Simulated BTC/ETH/SOL Up/Down Progress strategies for `N=1..50` with UTC midnight resets in both modes, opposite-side entries, and capped multiplier `min(Diff - N, 10)`. Generated strategy, daily, asset summary, and Markdown report artifacts. Aggregate fixed-0.50 model results: BTC PnL `16849` units and ROI `0.74%`; ETH PnL `40626` and ROI `2.03%`; SOL PnL `47400` and ROI `2.57%`. The analyzer build and run passed; full `dotnet test PolyCopyTrader.sln --no-restore --nologo` still fails 16 pre-existing/unrelated tests around removed Revert variants and old instant pricing/cap expectations.
+
+## 2026-06-28T10:44:28.0248272+00:00
+Request:
+Пересчитай ещё раз, но уже в режиме, когда мы сбрасываем счётчики только в waiting режиме, а в betting режиме ставим до обнуления
+
+Result:
+Added a standalone C# backtest analyzer under `outputs/diff-progress-waiting-reset-zero-backtest-2026-06-28/` and regenerated the six-month Binance 5m Diff Progress results with per-strategy counters. In this model `Waiting` resets at `00:00 UTC`, `Betting` carries counters across midnight and keeps placing opposite-side entries until side-specific `Diff <= 0`, with multiplier `min(max(Diff - N, 1), 10)`. Aggregate fixed-0.50 model results: BTC PnL `432` units and ROI `0.0013%`; ETH PnL `310` and ROI `0.0011%`; SOL PnL `39790` and ROI `0.1609%`. At the end of the data window, `83` BTC, `58` ETH, and `66` SOL strategies were still in betting mode.
