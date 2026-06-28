@@ -78,3 +78,10 @@ Request:
 
 Result:
 Capped Diff Progress stake sizing at `min(Diff - N, 10)` while leaving UpCount, DownCount, and Diff counters unchanged. Added raw/capped multiplier diagnostics, updated README and seed descriptions, and added a focused processor test for a sharp peak where uncapped multiplier 11 is applied as capped multiplier 10.
+
+## 2026-06-28T10:22:24.1055802Z
+Request:
+Измени логику очистки счётчиков в 0 часов - пусть они чистятся в обоих режимах
+
+Result:
+Changed Diff Progress UTC midnight behavior so counters reset in both waiting and betting modes. Removed the old postponed-reset path, updated README and seed descriptions, and changed the midnight test to verify that after reset the strategy exits betting when new-day Diff is at or below the threshold and does not stake using previous-day counts.

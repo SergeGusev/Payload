@@ -2515,7 +2515,7 @@ SELECT
     ('b7c50005-0000-4000-' || id_group || '-' || lpad(threshold_value::text, 12, '0'))::uuid,
     lower(asset_symbol) || '_up_down_5m_diff_' || threshold_value::text || '_' || diff_code || '_progress',
     asset_symbol || ' Up or Down 5m ' || threshold_value::text || ' Diff ' || diff_name || ' Progress',
-    'Diff Progress strategy: in waiting mode, count the in-memory UTC-day raw ' || diff_expression || ' counter reset at 00:00 UTC and backfilled from the current UTC day on service restart. When Diff is greater than ' || threshold_value::text || ', switch to betting mode and submit BUY FAK Paper entries on ' || target_outcome || '; the effective stake multiplier is min(Diff minus ' || threshold_value::text || ', 10). While betting, the 00:00 UTC reset is postponed until Diff returns to the threshold and the strategy switches back to waiting mode.',
+    'Diff Progress strategy: count the in-memory UTC-day raw ' || diff_expression || ' counter reset at 00:00 UTC in both waiting and betting modes and backfilled from the current UTC day on service restart. When Diff is greater than ' || threshold_value::text || ', switch to betting mode and submit BUY FAK Paper entries on ' || target_outcome || '; the effective stake multiplier is min(Diff minus ' || threshold_value::text || ', 10). If the reset or later results return Diff to the threshold or below, the strategy switches back to waiting mode.',
     true,
     false,
     1.00,

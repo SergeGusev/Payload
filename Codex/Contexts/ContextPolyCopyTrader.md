@@ -1,3 +1,15 @@
+## Active Update 2026-06-28 Diff Progress Midnight Reset
+Goal: Change Diff Progress UTC midnight counter reset to run in both waiting and betting modes.
+Status: Completed
+Done:
+- Removed postponed midnight reset behavior for Diff Progress; runtime counter start now advances to the current UTC day even while mode is `Betting`.
+- Progress snapshots now use the normal asset/day Diff counter after midnight instead of a variant-specific old-day override.
+- If the post-reset `Diff` is `N` or below, the existing threshold return path moves the strategy from `Betting` to `Waiting` and skips the new entry.
+- Updated README, PostgreSQL seed description, and the midnight processor test to assert reset in betting mode with no next-day stake from the previous day.
+Next: None.
+Notes: Verification passed: `dotnet build src\PolyCopyTrader.Service\PolyCopyTrader.Service.csproj --no-restore /p:UseSharedCompilation=false`; `dotnet build src\PolyCopyTrader.Storage\PolyCopyTrader.Storage.csproj --no-restore`; targeted `dotnet test tests\PolyCopyTrader.Tests\PolyCopyTrader.Tests.csproj --no-restore /p:UseSharedCompilation=false --filter "FullyQualifiedName~StrategyDisplayCategoryTests|FullyQualifiedName~ProcessDiffCounterDueEntriesAsync_DiffProgress|FullyQualifiedName~StrategyIds_IncludeStandardMartinAndGammaBtcVariants|FullyQualifiedName~StrategyIds_IncludeEthAndSolBinanceBpsVariants"` passed with 62 tests. Full `dotnet test tests\PolyCopyTrader.Tests\PolyCopyTrader.Tests.csproj --no-restore /p:UseSharedCompilation=false` still fails 16 pre-existing/unrelated tests around removed Revert variants and old instant pricing/cap expectations. `git diff --check` passed with LF/CRLF warnings only.
+Blockers: None.
+
 ## Active Update 2026-06-28 Diff Progress Multiplier Cap
 Goal: Cap Diff Progress betting stake multipliers at 10 while leaving UpCount, DownCount, and Diff counters uncapped.
 Status: Completed
@@ -15,8 +27,8 @@ Goal: Clarify the operational restart rule for Diff Progress strategies while be
 Status: Completed
 Done:
 - Confirmed the intended operating rule: do not restart the service after midnight while any Diff Progress strategy is still in betting mode.
-- Under that rule, the previously noted in-memory postponed-reset edge case is not expected during planned operations; wait for the strategy to exit betting mode and return to waiting mode before restarting.
-Next: None.
+- This operational note was later superseded by the code rule that UTC midnight resets Diff Progress counters in both waiting and betting modes.
+Next: Superseded by the later rule that UTC midnight resets counters in both waiting and betting modes.
 Notes: Answer-only clarification; no source behavior changed and no build/tests were required.
 Blockers: None.
 
@@ -26,9 +38,9 @@ Status: Completed
 Done:
 - Added 300 `DiffProgress` catalog variants for BTC, ETH, and SOL: Up/Down Progress strategies for `N=1..50`, grouped into one display category per currency.
 - Seeded the new strategies in PostgreSQL with `enabled=true`, `live_stakes=false`, Paper BUY FAK defaults, and no new direct live order placement path.
-- Implemented runtime waiting/betting state, UTC-day counter reset in waiting mode, postponed midnight reset while betting, same-day restart backfill from `00:00 UTC`, opposite-outcome entries, and stake override `PaperStake * (Diff - N)`.
+- Implemented runtime waiting/betting state, same-day restart backfill from `00:00 UTC`, opposite-outcome entries, and stake override; the original postponed midnight reset behavior was later superseded by always resetting counters at `00:00 UTC`.
 - Added focused processor/category/catalog tests and updated README behavior notes.
-Next: None under the operational rule that planned restarts wait until all Diff Progress strategies are back in waiting mode.
+Next: Superseded by the later rule that UTC midnight resets counters in both waiting and betting modes.
 Notes: Verification passed: `dotnet build src\PolyCopyTrader.Service\PolyCopyTrader.Service.csproj --no-restore /p:UseSharedCompilation=false`; `dotnet build src\PolyCopyTrader.Storage\PolyCopyTrader.Storage.csproj --no-restore`; targeted `dotnet test ... --filter "FullyQualifiedName~StrategyDisplayCategoryTests|FullyQualifiedName~ProcessDiffCounterDueEntriesAsync_DiffProgress|FullyQualifiedName~StrategyIds_IncludeStandardMartinAndGammaBtcVariants|FullyQualifiedName~StrategyIds_IncludeEthAndSolBinanceBpsVariants"` passed with 61 tests. Full `dotnet test tests\PolyCopyTrader.Tests\PolyCopyTrader.Tests.csproj --no-restore /p:UseSharedCompilation=false` still fails 17 pre-existing/unrelated tests around removed Revert variants and old instant price/cap expectations. `git diff --check` passed with LF/CRLF warnings only. Committed and pushed `38d2730 Add diff progress strategies` to `origin/master`; unrelated dirty tracked/untracked files remain in the worktree.
 Blockers: None.
 

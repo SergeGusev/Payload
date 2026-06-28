@@ -5209,7 +5209,7 @@ public sealed class BtcUpDown5mPaperStrategyProcessorTests
     }
 
     [Fact]
-    public async Task ProcessDiffCounterDueEntriesAsync_DiffProgressPostponesUtcMidnightResetWhileBetting()
+    public async Task ProcessDiffCounterDueEntriesAsync_DiffProgressResetsUtcMidnightWhileBetting()
     {
         var previousDayMarketStartUtc = new DateTimeOffset(2026, 6, 8, 23, 55, 0, TimeSpan.Zero);
         var previousDayNow = previousDayMarketStartUtc.AddMinutes(3);
@@ -5264,23 +5264,24 @@ public sealed class BtcUpDown5mPaperStrategyProcessorTests
 
         var nextDayResult = await processor.ProcessDiffCounterDueEntriesAsync();
 
-        Assert.Equal(1, nextDayResult.EntriesPlaced);
+        Assert.Equal(0, nextDayResult.EntriesPlaced);
+        Assert.Equal(1, nextDayResult.RunsSkipped);
         var nextRun = repository.StrategyMarketPaperRuns.Single(item =>
             item.MarketStartUtc == nextDayMarketStartUtc &&
             item.StrategyId == variant.Id);
-        Assert.Equal(StrategyMarketPaperRunStatuses.Entered, nextRun.Status);
-        Assert.Equal(2m, nextRun.StakeUsd);
-
-        var nextOrder = repository.PaperOrders.Single(order =>
-            string.Equals(order.ConditionId, "next-day-progress-condition", StringComparison.OrdinalIgnoreCase));
-        Assert.Contains("\"progress_mode_before\":\"Betting\"", nextOrder.RawDecisionJson, StringComparison.Ordinal);
-        Assert.Contains("\"progress_mode_after\":\"Betting\"", nextOrder.RawDecisionJson, StringComparison.Ordinal);
-        Assert.Contains("\"reset_postponed\":true", nextOrder.RawDecisionJson, StringComparison.Ordinal);
-        Assert.Contains("\"counter_start_market_start_utc\":\"2026-06-08T00:00:00", nextOrder.RawDecisionJson, StringComparison.Ordinal);
-        Assert.Contains("\"up_count\":5", nextOrder.RawDecisionJson, StringComparison.Ordinal);
-        Assert.Contains("\"down_count\":1", nextOrder.RawDecisionJson, StringComparison.Ordinal);
-        Assert.Contains("\"effective_diff\":4", nextOrder.RawDecisionJson, StringComparison.Ordinal);
-        Assert.Contains("\"progress_stake_multiplier\":2", nextOrder.RawDecisionJson, StringComparison.Ordinal);
+        Assert.Equal(StrategyMarketPaperRunStatuses.Skipped, nextRun.Status);
+        Assert.Equal("diff_progress_returned_to_threshold", nextRun.SkipReason);
+        Assert.NotNull(nextRun.SkipDiagnosticsJson);
+        Assert.Contains("\"progress_mode_before\":\"Betting\"", nextRun.SkipDiagnosticsJson, StringComparison.Ordinal);
+        Assert.Contains("\"progress_mode_after\":\"Waiting\"", nextRun.SkipDiagnosticsJson, StringComparison.Ordinal);
+        Assert.Contains("\"reset_postponed\":false", nextRun.SkipDiagnosticsJson, StringComparison.Ordinal);
+        Assert.Contains("\"counter_start_market_start_utc\":\"2026-06-09T00:00:00", nextRun.SkipDiagnosticsJson, StringComparison.Ordinal);
+        Assert.Contains("\"up_count\":0", nextRun.SkipDiagnosticsJson, StringComparison.Ordinal);
+        Assert.Contains("\"down_count\":1", nextRun.SkipDiagnosticsJson, StringComparison.Ordinal);
+        Assert.Contains("\"effective_diff\":-1", nextRun.SkipDiagnosticsJson, StringComparison.Ordinal);
+        Assert.DoesNotContain(
+            repository.PaperOrders,
+            order => string.Equals(order.ConditionId, "next-day-progress-condition", StringComparison.OrdinalIgnoreCase));
     }
 
     [Fact]

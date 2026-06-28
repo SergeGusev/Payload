@@ -560,10 +560,10 @@ Diff Progress variants add an in-memory strategy mode on top of the same raw
 UTC-day counter. In waiting mode they only count Up/Down/Diff and reset at
 `00:00 UTC`. When the side-specific Diff becomes greater than `N`, they switch
 to betting mode, buy the opposite outcome with a Paper BUY FAK entry, and use
-effective stake `Paper $ * min(Diff - N, 10)`. While betting, the `00:00 UTC` reset is
-postponed until Diff returns to `N` or below; then the strategy returns to
-waiting mode and the next counter start is the current UTC day. Restart during a
-day rebuilds the waiting counter from `00:00 UTC`; the betting/waiting mode is
+effective stake `Paper $ * min(Diff - N, 10)`. The `00:00 UTC` counter reset
+applies in both waiting and betting mode; if the reset leaves Diff at `N` or
+below, the strategy returns to waiting mode. Restart during a
+day rebuilds the current-day counter from `00:00 UTC`; the betting/waiting mode is
 currently in-memory. AdjustedDiff thresholds are capped at `20`: `1..10`, `15`, and `20`. ShiftDiff
 variants keep per-strategy continuous counters, do not reset at `00:00 UTC`, and
 apply their configured shift adjustment before threshold evaluation. Every

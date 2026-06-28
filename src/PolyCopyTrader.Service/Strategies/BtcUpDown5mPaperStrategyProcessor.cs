@@ -6483,7 +6483,6 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
         var threshold = Math.Max(1, variant.DecisionDepth);
         var currentDayCounterStartUtc = GetDiffCounterUtcDayStartMarketStartUtc(marketStartUtc.Value);
         DiffProgressMode modeBefore;
-        DateTimeOffset requestedCounterStartUtc;
         lock (diffProgressStateSync)
         {
             if (!diffProgressStates.TryGetValue(variant.Code, out var runtimeState))
@@ -6492,28 +6491,24 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
                 diffProgressStates[variant.Code] = runtimeState;
             }
 
-            if (runtimeState.Mode == DiffProgressMode.Waiting &&
-                runtimeState.CounterStartMarketStartUtc < currentDayCounterStartUtc)
+            if (runtimeState.CounterStartMarketStartUtc < currentDayCounterStartUtc)
             {
-                runtimeState.ResetWaitingCounter(currentDayCounterStartUtc, nowUtc);
+                runtimeState.ResetCounter(currentDayCounterStartUtc, nowUtc);
             }
 
             modeBefore = runtimeState.Mode;
-            requestedCounterStartUtc = runtimeState.CounterStartMarketStartUtc;
         }
 
-        var resetPostponed = modeBefore == DiffProgressMode.Betting &&
-            requestedCounterStartUtc < currentDayCounterStartUtc;
+        const bool resetPostponed = false;
         var assetSymbol = GetReferenceAssetSymbol(variant);
         var snapshot = await GetDiffCounterStateAsync(
             assetSymbol,
             marketStartUtc.Value,
             nowUtc,
             resetAtUtcDayStart: true,
-            stateKey: resetPostponed ? variant.Code : GetDiffCounterStateKey(variant),
+            stateKey: GetDiffCounterStateKey(variant),
             shiftDiffCount: 0,
-            cancellationToken,
-            counterStartOverrideUtc: resetPostponed ? requestedCounterStartUtc : null);
+            cancellationToken);
         var historyUnavailableReason = GetDiffCounterHistoryUnavailableReason(snapshot, nowUtc);
         if (historyUnavailableReason is not null)
         {
@@ -16191,15 +16186,10 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
 
         public DateTimeOffset UpdatedAtUtc { get; private set; } = updatedAtUtc;
 
-        public void ResetWaitingCounter(
+        public void ResetCounter(
             DateTimeOffset counterStartMarketStartUtc,
             DateTimeOffset updatedAtUtc)
         {
-            if (Mode != DiffProgressMode.Waiting)
-            {
-                return;
-            }
-
             CounterStartMarketStartUtc = counterStartMarketStartUtc;
             UpdatedAtUtc = updatedAtUtc;
         }
