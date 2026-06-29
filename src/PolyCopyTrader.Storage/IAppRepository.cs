@@ -1113,14 +1113,23 @@ public sealed record PaperEntryPersistenceBatch(
 {
     public static PaperEntryPersistenceBatch Empty { get; } = new([], [], [], [], [], []);
 
+    public IReadOnlyList<PaperPositionMaterialization> PaperPositionMaterializations { get; init; } = [];
+
     public bool IsEmpty =>
         Signals.Count == 0 &&
         PaperOrders.Count == 0 &&
         PaperFills.Count == 0 &&
         PaperPositions.Count == 0 &&
+        PaperPositionMaterializations.Count == 0 &&
         CopiedLeaderPositionActivations.Count == 0 &&
         StrategyRuns.Count == 0;
 }
+
+public sealed record PaperPositionMaterialization(
+    PaperOrder Order,
+    PaperFill Fill,
+    decimal CurrentBid,
+    DateTimeOffset UpdatedAtUtc);
 
 public sealed record PaperCopiedLeaderPositionActivation(
     Guid EntryPaperOrderId,

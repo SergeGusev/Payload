@@ -11263,8 +11263,11 @@ public sealed class BtcUpDown5mPaperStrategyProcessorTests
         Assert.Equal(0, repository.PaperEntryPersistenceBatchCalls);
         var batch = Assert.Single(queue.Batches);
         Assert.Single(batch.PaperOrders);
+        Assert.Empty(batch.PaperPositions);
+        Assert.Empty(batch.PaperPositionMaterializations);
         Assert.Single(batch.StrategyRuns);
         Assert.Single(exposureCache.AppliedPaperOrders);
+        Assert.Empty(exposureCache.AppliedPaperPositions);
     }
 
     [Fact]

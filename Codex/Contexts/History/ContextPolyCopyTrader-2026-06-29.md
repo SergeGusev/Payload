@@ -157,3 +157,10 @@ Request:
 
 Result:
 Explained that paper position materialization can be moved after the entry burst in principle. The current code couples simulated fill creation with immediate materialized `paper_positions` updates so average price, size, PnL, exposure, and settlement state are consistent for subsequent reads. A better latency-oriented design would treat fills as the source of truth, record entries/fills/runs first, and let a background/projector phase update `paper_positions` after the burst, with safeguards for same-asset multiple fills, next-cycle risk/exposure, crash recovery, and settlement reads.
+
+## 2026-06-29T14:20:00Z
+Request:
+Implement deferred paper-position accounting after all entry bets are made.
+
+Result:
+Moved simulated-fill `paper_positions` materialization out of the queued entry hot path. BTC/ETH/SOL Up/Down deferred entry persistence now records fills and lightweight `PaperPositionMaterialization` work items during decision placement, while `PaperEntryPersistenceQueue` materializes positions in its background writer immediately before repository persistence and applies the materialized positions to the exposure cache only after a successful write. The no-queue fallback still materializes positions before its synchronous repository write, but only after the current due-entry burst. Added `PaperEntryPositionMaterializer` and focused tests for queue materialization plus queued processor behavior. Verification: service build passed with `0` warnings/errors; focused tests passed `6/6` with one existing nullable warning in the test project; diff check passed with line-ending warnings only. Existing unrelated dirty files and output folders were left untouched. The production latency goal remains open until this patch is deployed and the fresh 3-second gate passes.

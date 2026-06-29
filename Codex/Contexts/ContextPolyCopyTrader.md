@@ -1,3 +1,21 @@
+## Active Update 2026-06-29 Deferred Paper Position Materialization
+Goal: Reduce every BTC/ETH/SOL Up/Down strategy entry delay to no more than 3 seconds and verify the deployed service.
+Status: In Progress
+Done:
+- Moved simulated-fill `paper_positions` materialization out of the queued entry hot path.
+- `DeferredPaperEntryPersistence` now records signals, paper orders, fills, copied-position activations, runs, and lightweight `PaperPositionMaterialization` work items; it no longer loads the exposure snapshot or computes `PaperPosition` while decisions are being placed.
+- Added `PaperEntryPositionMaterializer` to replay queued fill materializations after the burst, using current batch positions first and then the indexed exposure cache, preserving same-wallet/same-asset aggregation.
+- `PaperEntryPersistenceQueue` now materializes positions in the background writer immediately before repository persistence and applies the materialized positions to the exposure cache after successful write.
+- The no-queue fallback still materializes positions before its synchronous repository write, but only after all due-entry decisions in the burst have completed.
+- Added queue coverage proving the writer materializes positions after enqueue, plus processor assertions that queued entry persistence does not apply positions on the hot path.
+Verification:
+- `dotnet build src/PolyCopyTrader.Service/PolyCopyTrader.Service.csproj --no-restore` passed with `0` warnings/errors.
+- `dotnet test tests/PolyCopyTrader.Tests/PolyCopyTrader.Tests.csproj --no-restore --filter "FullyQualifiedName~PaperEntryPersistenceQueueTests|FullyQualifiedName~ProcessDiffCounterFastDueEntriesAsync_UsesExposureCacheForDeferredPaperPositions|FullyQualifiedName~ProcessAsync_QueuesDeferredPaperEntryPersistenceWhenQueueConfigured"` passed `6/6`; the test project still prints an existing nullable warning at `BtcUpDown5mPaperStrategyProcessorTests.cs(7022,52)`.
+- `git diff --check` passed for the edited source/test files with line-ending warnings only.
+Next: Commit/push this patch, deploy the new service build, then rerun the production latency gate on fresh post-deploy rows with the new expected commit.
+Notes: Existing unrelated dirty files and output folders were left untouched. A broader exploratory run including `ProcessDiffCounterDueEntriesAsync_DiffInstantFakFillsAvailablePartialAskDepth` hit an existing batch-call expectation mismatch (`expected 1`, `actual 2`) and was not used as the focused verification gate.
+Blockers: Final goal cannot be marked complete until this patch is deployed and a fresh production gate proves every checked strategy entry delay is <= 3 seconds.
+
 ## Active Update 2026-06-29 Deferred Position Accounting Clarification
 Goal: Explain whether paper position accounting can happen after all bets are made.
 Status: Completed

@@ -1,5 +1,6 @@
 using System.Threading.Channels;
 using PolyCopyTrader.Storage;
+using PolyCopyTrader.Strategy;
 
 namespace PolyCopyTrader.Service.PaperTrading;
 
@@ -14,7 +15,9 @@ public interface IPaperEntryPersistenceQueue
 
 public sealed class PaperEntryPersistenceQueue(
     ILogger<PaperEntryPersistenceQueue> logger,
-    IAppRepository repository) : IHostedService, IPaperEntryPersistenceQueue
+    IAppRepository repository,
+    IPaperTradingEngine paperTradingEngine,
+    IExposureSnapshotCache exposureCache) : IHostedService, IPaperEntryPersistenceQueue
 {
     private const int MaxBatchesPerFlush = 64;
     private static readonly TimeSpan FailureRetryDelay = TimeSpan.FromSeconds(1);
@@ -145,7 +148,13 @@ public sealed class PaperEntryPersistenceQueue(
         {
             try
             {
-                await repository.AddPaperEntryPersistenceBatchAsync(workItem.Batch, CancellationToken.None).ConfigureAwait(false);
+                var materializedBatch = await PaperEntryPositionMaterializer.MaterializeAsync(
+                    workItem.Batch,
+                    paperTradingEngine,
+                    exposureCache,
+                    CancellationToken.None).ConfigureAwait(false);
+                await repository.AddPaperEntryPersistenceBatchAsync(materializedBatch, CancellationToken.None).ConfigureAwait(false);
+                exposureCache.ApplyPaperPositions(materializedBatch.PaperPositions);
                 if (failureCount > 0)
                 {
                     logger.LogInformation(
@@ -179,7 +188,12 @@ public sealed class PaperEntryPersistenceQueue(
             batches.SelectMany(batch => batch.PaperFills).ToArray(),
             batches.SelectMany(batch => batch.PaperPositions).ToArray(),
             batches.SelectMany(batch => batch.CopiedLeaderPositionActivations).ToArray(),
-            batches.SelectMany(batch => batch.StrategyRuns).ToArray());
+            batches.SelectMany(batch => batch.StrategyRuns).ToArray())
+        {
+            PaperPositionMaterializations = batches
+                .SelectMany(batch => batch.PaperPositionMaterializations)
+                .ToArray()
+        };
     }
 
     private sealed record PersistenceWorkItem(

@@ -3679,24 +3679,13 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
         await Task.WhenAll(tasks);
     }
 
-    private async Task<DeferredPaperEntryPersistence> CreateDeferredPaperEntryPersistenceAsync(
+    private Task<DeferredPaperEntryPersistence> CreateDeferredPaperEntryPersistenceAsync(
         IReadOnlyList<StrategyMarketPaperRun> runs,
         IReadOnlyDictionary<Guid, BtcUpDown5mStrategyVariant> variantsById,
         IReadOnlyDictionary<Guid, StrategyRuntimeSettings> strategySettings,
         CancellationToken cancellationToken)
     {
-        var needsPositionState = runs.Any(run =>
-            variantsById.TryGetValue(StrategyIds.Normalize(run.StrategyId), out var variant) &&
-            UsesOpeningLimitEntry(variant) &&
-            IsFakOrderEntry(variant) &&
-            !ShouldRunPaperLiveShadowTest(GetStrategySettings(strategySettings, variant.Id)));
-        if (!needsPositionState)
-        {
-            return new DeferredPaperEntryPersistence(initialPaperPositionLookup: null);
-        }
-
-        await exposureCache.GetSnapshotAsync(cancellationToken);
-        return new DeferredPaperEntryPersistence(exposureCache.GetPaperPosition);
+        return Task.FromResult(new DeferredPaperEntryPersistence());
     }
 
     private async Task PersistDeferredPaperEntryPersistenceAsync(
@@ -3715,27 +3704,33 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
             {
                 await paperEntryPersistenceQueue.EnqueueAsync(batch, cancellationToken);
                 exposureCache.ApplyPaperOrders(batch.PaperOrders);
-                exposureCache.ApplyPaperPositions(batch.PaperPositions);
                 logger.LogInformation(
-                    "BTC Up or Down 5m deferred paper entry persistence queued. Signals={Signals} Orders={Orders} Fills={Fills} Positions={Positions} Runs={Runs}",
+                    "BTC Up or Down 5m deferred paper entry persistence queued. Signals={Signals} Orders={Orders} Fills={Fills} PositionMaterializations={PositionMaterializations} Positions={Positions} Runs={Runs}",
                     batch.Signals.Count,
                     batch.PaperOrders.Count,
                     batch.PaperFills.Count,
+                    batch.PaperPositionMaterializations.Count,
                     batch.PaperPositions.Count,
                     batch.StrategyRuns.Count);
                 return;
             }
 
-            await repository.AddPaperEntryPersistenceBatchAsync(batch, cancellationToken);
-            exposureCache.ApplyPaperOrders(batch.PaperOrders);
-            exposureCache.ApplyPaperPositions(batch.PaperPositions);
+            var materializedBatch = await PaperEntryPositionMaterializer.MaterializeAsync(
+                batch,
+                paperTradingEngine,
+                exposureCache,
+                cancellationToken);
+            await repository.AddPaperEntryPersistenceBatchAsync(materializedBatch, cancellationToken);
+            exposureCache.ApplyPaperOrders(materializedBatch.PaperOrders);
+            exposureCache.ApplyPaperPositions(materializedBatch.PaperPositions);
             logger.LogInformation(
-                "BTC Up or Down 5m deferred paper entry persistence flushed. Signals={Signals} Orders={Orders} Fills={Fills} Positions={Positions} Runs={Runs}",
-                batch.Signals.Count,
-                batch.PaperOrders.Count,
-                batch.PaperFills.Count,
-                batch.PaperPositions.Count,
-                batch.StrategyRuns.Count);
+                "BTC Up or Down 5m deferred paper entry persistence flushed. Signals={Signals} Orders={Orders} Fills={Fills} PositionMaterializations={PositionMaterializations} Positions={Positions} Runs={Runs}",
+                materializedBatch.Signals.Count,
+                materializedBatch.PaperOrders.Count,
+                materializedBatch.PaperFills.Count,
+                batch.PaperPositionMaterializations.Count,
+                materializedBatch.PaperPositions.Count,
+                materializedBatch.StrategyRuns.Count);
         }
         catch (OperationCanceledException)
         {
@@ -4184,7 +4179,6 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
                             Signal? fakSignal = null;
                             PaperOrder? fakOrder = null;
                             PaperFill? fakFill = null;
-                            PaperPosition? updatedPosition = null;
                             await entryPlacementLock.WaitAsync(cancellationToken);
                             try
                             {
@@ -4224,13 +4218,12 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
                                     fakOrder.Id,
                                     nowUtc);
                                 var currentBid = fakOrderBook.BestBid ?? fakEstimate.AverageFillPrice;
-                                updatedPosition = deferredPersistence.AddFilledPaperEntry(
+                                deferredPersistence.AddFilledPaperEntry(
                                     fakSignal,
                                     fakOrder,
                                     fakFill,
                                     enteredRun,
                                     currentBid,
-                                    paperTradingEngine,
                                     nowUtc);
                             }
                             finally
@@ -4238,7 +4231,7 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
                                 entryPlacementLock.Release();
                             }
 
-                            if (fakSignal is null || fakOrder is null || fakFill is null || updatedPosition is null)
+                            if (fakSignal is null || fakOrder is null || fakFill is null)
                             {
                                 continue;
                             }
@@ -19024,20 +19017,16 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
 
     private sealed class DeferredPaperEntryPersistence
     {
-        private readonly Func<string, string, PaperPosition?>? initialPaperPositionLookup;
         private readonly object sync = new();
         private readonly List<Signal> signals = [];
         private readonly List<PaperOrder> paperOrders = [];
         private readonly List<PaperFill> paperFills = [];
+        private readonly List<PaperPositionMaterialization> paperPositionMaterializations = [];
         private readonly List<PaperCopiedLeaderPositionActivation> copiedLeaderPositionActivations = [];
         private readonly List<StrategyMarketPaperRun> strategyRuns = [];
-        private readonly Dictionary<PaperPositionKey, PaperPosition> paperPositionsByKey = [];
-        private readonly HashSet<PaperPositionKey> missingInitialPaperPositionKeys = [];
-        private readonly Dictionary<PaperPositionKey, PaperPosition> paperPositionsToPersistByKey = [];
 
-        public DeferredPaperEntryPersistence(Func<string, string, PaperPosition?>? initialPaperPositionLookup)
+        public DeferredPaperEntryPersistence()
         {
-            this.initialPaperPositionLookup = initialPaperPositionLookup;
         }
 
         public void AddPendingPaperEntry(
@@ -19053,13 +19042,12 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
             }
         }
 
-        public PaperPosition AddFilledPaperEntry(
+        public void AddFilledPaperEntry(
             Signal signal,
             PaperOrder order,
             PaperFill fill,
             StrategyMarketPaperRun run,
             decimal currentBid,
-            IPaperTradingEngine paperTradingEngine,
             DateTimeOffset nowUtc)
         {
             lock (sync)
@@ -19072,43 +19060,12 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
                     order.Id,
                     fill.SizeShares,
                     fill.FilledAtUtc));
-
-                var key = PaperPositionKey.From(order.CopiedTraderWallet, order.AssetId);
-                var currentPosition = GetInitialPaperPosition(key, order);
-                var updatedPosition = paperTradingEngine.ApplyBuyFill(
-                    currentPosition,
+                paperPositionMaterializations.Add(new PaperPositionMaterialization(
                     order,
                     fill,
                     currentBid,
-                    nowUtc);
-                paperPositionsByKey[key] = updatedPosition;
-                paperPositionsToPersistByKey[key] = updatedPosition;
-                return updatedPosition;
+                    nowUtc));
             }
-        }
-
-        private PaperPosition? GetInitialPaperPosition(PaperPositionKey key, PaperOrder order)
-        {
-            if (paperPositionsByKey.TryGetValue(key, out var currentPosition))
-            {
-                return currentPosition;
-            }
-
-            if (initialPaperPositionLookup is null ||
-                missingInitialPaperPositionKeys.Contains(key))
-            {
-                return null;
-            }
-
-            currentPosition = initialPaperPositionLookup(order.CopiedTraderWallet, order.AssetId);
-            if (currentPosition is null)
-            {
-                missingInitialPaperPositionKeys.Add(key);
-                return null;
-            }
-
-            paperPositionsByKey[key] = currentPosition;
-            return currentPosition;
         }
 
         public void AddStrategyRun(StrategyMarketPaperRun run)
@@ -19127,24 +19084,12 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
                     signals.ToArray(),
                     paperOrders.ToArray(),
                     paperFills.ToArray(),
-                    paperPositionsToPersistByKey.Values.ToArray(),
+                    [],
                     copiedLeaderPositionActivations.ToArray(),
-                    strategyRuns.ToArray());
-            }
-        }
-
-        private readonly record struct PaperPositionKey(string CopiedTraderWallet, string AssetId)
-        {
-            public static PaperPositionKey From(string copiedTraderWallet, string assetId)
-            {
-                return new PaperPositionKey(
-                    Normalize(copiedTraderWallet),
-                    Normalize(assetId));
-            }
-
-            private static string Normalize(string value)
-            {
-                return value.Trim().ToUpperInvariant();
+                    strategyRuns.ToArray())
+                {
+                    PaperPositionMaterializations = paperPositionMaterializations.ToArray()
+                };
             }
         }
     }
