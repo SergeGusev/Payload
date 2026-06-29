@@ -830,6 +830,13 @@ Up when it is negative, skips Diff 0, and sizes BUY FAK entries as
 `Unit * min(abs(Diff), N)`. Diff itself can grow past `N`; only the stake
 multiplier is capped.
 
+Diff Real Limit Progress Premarket rows are clones with a saturated real Diff
+counter. BTC, ETH, and SOL each seed `N=1..5`. The worker uses the same
+premarket timing, persistence, direction rule, and BUY FAK sizing, but
+`UpCount` does not increase when `Diff` is already `N` and the next result is
+Up, and `DownCount` does not increase when `Diff` is already `-N` and the next
+result is Down. Opposite results still move Diff back inside `[-N, N]`.
+
 The active non-Instant `Middle` variants use opening-limit pricing rather than
 taker pricing. At market open `Middle N` reads the latest Binance BTC/USDT
 trade-stream price and compares it to the arithmetic mean of the latest `N`

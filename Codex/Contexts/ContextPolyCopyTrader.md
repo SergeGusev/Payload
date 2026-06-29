@@ -1,3 +1,16 @@
+## Active Update 2026-06-29 Diff Real Limit Progress Premarket Strategies
+Goal: Add BTC/ETH/SOL `N Diff Real Limit Progress Premarket` strategy clones whose real Diff counters stay inside `[-N, N]`.
+Status: Completed
+Done:
+- Added BTC, ETH, and SOL `CURR Up or Down 5m N Diff Real Limit Progress Premarket` variants for `N=1..5`, with IDs in groups `8172`, `8173`, and `8174`.
+- Added PostgreSQL schema seeding for the 15 new strategy rows and a Dashboard category `Up Or Down 5 min Diff Real Limit Progress`.
+- Reused the existing Diff Limit Progress premarket pipeline with a new `DiffRealLimitProgressPremarket` behavior that applies a saturated counter: at `Diff=N`, another Up result does not increment `UpCount`; at `Diff=-N`, another Down result does not increment `DownCount`; opposite results can move Diff back inside the range.
+- Kept the base `Diff Limit Progress Premarket` semantics unchanged: raw Diff can still grow beyond `N`, while only the stake multiplier is capped.
+- Updated README and `docs/configuration_reference.md`.
+Next: Deploy/restart the service so schema initialization inserts/enables the new strategies.
+Notes: Verification passed: focused `dotnet test tests/PolyCopyTrader.Tests/PolyCopyTrader.Tests.csproj --no-restore --filter "FullyQualifiedName~DiffRealLimitProgressPremarket|FullyQualifiedName~DiffLimitProgressPremarket|FullyQualifiedName~StrategyIds_IncludeStandardMartinAndGammaBtcVariants|FullyQualifiedName~StrategyIds_IncludeEthAndSolBinanceBpsVariants|FullyQualifiedName~StrategyDisplayCategoryTests" -p:UseSharedCompilation=false` passed `75/75`; `dotnet build src/PolyCopyTrader.Service/PolyCopyTrader.Service.csproj --no-restore -p:UseSharedCompilation=false` passed with `0` warnings/errors; `git diff --check` passed with line-ending warnings only. Existing unrelated dirty files and output folders were left untouched.
+Blockers: None.
+
 ## Active Update 2026-06-29 Paper Positions Paging Index
 Goal: Add a paging-oriented index for Dashboard paper-position reads and apply it safely in production.
 Status: Completed

@@ -5597,7 +5597,8 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
             BtcUpDown5mStrategyBehavior.DiffCounterTrendFakPremarket or
             BtcUpDown5mStrategyBehavior.DiffProgress or
             BtcUpDown5mStrategyBehavior.DiffShiftProgress or
-            BtcUpDown5mStrategyBehavior.DiffLimitProgressPremarket;
+            BtcUpDown5mStrategyBehavior.DiffLimitProgressPremarket or
+            BtcUpDown5mStrategyBehavior.DiffRealLimitProgressPremarket;
     }
 
     private static bool IsMiddleReferenceOpeningLimitEntry(BtcUpDown5mStrategyVariant variant)
@@ -5724,7 +5725,8 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
             BtcUpDown5mStrategyBehavior.DiffCounterTrendFakPremarket or
             BtcUpDown5mStrategyBehavior.DiffProgress or
             BtcUpDown5mStrategyBehavior.DiffShiftProgress or
-            BtcUpDown5mStrategyBehavior.DiffLimitProgressPremarket;
+            BtcUpDown5mStrategyBehavior.DiffLimitProgressPremarket or
+            BtcUpDown5mStrategyBehavior.DiffRealLimitProgressPremarket;
     }
 
     private static bool IsSimpleFixedOutcomeInstantEntry(BtcUpDown5mStrategyVariant variant)
@@ -5760,7 +5762,8 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
 
     private static bool IsDiffLimitProgressPremarketEntry(BtcUpDown5mStrategyVariant variant)
     {
-        return variant.Behavior == BtcUpDown5mStrategyBehavior.DiffLimitProgressPremarket;
+        return variant.Behavior is BtcUpDown5mStrategyBehavior.DiffLimitProgressPremarket or
+            BtcUpDown5mStrategyBehavior.DiffRealLimitProgressPremarket;
     }
 
     private static bool IsPersistentDiffProgressStateEntry(BtcUpDown5mStrategyVariant variant)
@@ -5868,7 +5871,8 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
             BtcUpDown5mStrategyBehavior.DiffCounterTrendFakPremarket or
             BtcUpDown5mStrategyBehavior.DiffProgress or
             BtcUpDown5mStrategyBehavior.DiffShiftProgress or
-            BtcUpDown5mStrategyBehavior.DiffLimitProgressPremarket;
+            BtcUpDown5mStrategyBehavior.DiffLimitProgressPremarket or
+            BtcUpDown5mStrategyBehavior.DiffRealLimitProgressPremarket;
     }
 
     internal static decimal GetEffectiveInstantOpeningLimitMaxPrice(
@@ -6140,6 +6144,14 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
                 variant,
                 stakeUsd,
                 nowUtc,
+                freezeCountersAtLimit: false,
+                cancellationToken),
+            BtcUpDown5mStrategyBehavior.DiffRealLimitProgressPremarket => await GetDiffLimitProgressPremarketEntryDecisionAsync(
+                market,
+                variant,
+                stakeUsd,
+                nowUtc,
+                freezeCountersAtLimit: true,
                 cancellationToken),
             BtcUpDown5mStrategyBehavior.DiffCounterTrend or
                 BtcUpDown5mStrategyBehavior.AdjustedDiffCounterTrend or
@@ -8265,9 +8277,11 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
         BtcUpDown5mStrategyVariant variant,
         decimal unitStakeUsd,
         DateTimeOffset nowUtc,
+        bool freezeCountersAtLimit,
         CancellationToken cancellationToken)
     {
         var multiplierLimit = Math.Max(1, variant.DecisionDepth);
+        var counterDiffLimit = freezeCountersAtLimit ? multiplierLimit : (int?)null;
         var marketStartUtc = GetMarketWindowStartUtc(market, variant);
         if (marketStartUtc is null)
         {
@@ -8390,7 +8404,7 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
             }
         }
 
-        var applied = ApplyDiffShiftProgressResults(state, results);
+        var applied = ApplyDiffShiftProgressResults(state, results, counterDiffLimit);
         state = applied.State with { UpdatedAtUtc = nowUtc };
         var appliedResultCount = applied.AppliedResultCount;
         var pendingSumDeltaUsd = applied.PendingSumDeltaUsd;
@@ -8473,7 +8487,7 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
                 premarketSignal,
                 premarketResultOutcome,
                 premarketResultSource);
-            var premarketApplied = ApplyDiffShiftProgressResults(state, [premarketResult]);
+            var premarketApplied = ApplyDiffShiftProgressResults(state, [premarketResult], counterDiffLimit);
             state = premarketApplied.State with { UpdatedAtUtc = nowUtc };
             appliedResultCount += premarketApplied.AppliedResultCount;
             pendingSumDeltaUsd = premarketApplied.PendingSumDeltaUsd ?? pendingSumDeltaUsd;
@@ -8692,7 +8706,8 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
 
     private static DiffShiftProgressApplyResult ApplyDiffShiftProgressResults(
         CryptoUpDown5mDiffShiftProgressState state,
-        IReadOnlyList<DiffCounterMarketResult> results)
+        IReadOnlyList<DiffCounterMarketResult> results,
+        int? diffCounterLimit = null)
     {
         var upCount = Math.Max(0, state.UpCount);
         var downCount = Math.Max(0, state.DownCount);
@@ -8727,11 +8742,17 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
 
             if (string.Equals(winningOutcome, "Up", StringComparison.OrdinalIgnoreCase))
             {
-                upCount++;
+                if (diffCounterLimit is null || upCount - downCount < diffCounterLimit.Value)
+                {
+                    upCount++;
+                }
             }
             else
             {
-                downCount++;
+                if (diffCounterLimit is null || downCount - upCount < diffCounterLimit.Value)
+                {
+                    downCount++;
+                }
             }
 
             lastProcessedMarketStartUtc = result.MarketStartUtc;
@@ -15351,6 +15372,7 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
         var uncappedStakeMultiplier = rawDiff.HasValue && rawDiff.Value != 0
             ? Math.Abs(rawDiff.Value)
             : (int?)null;
+        var realLimitProgress = variant.Behavior == BtcUpDown5mStrategyBehavior.DiffRealLimitProgressPremarket;
         return JsonSerializer.Serialize(new
         {
             pricing_mode = OpeningLimitPricingMode,
@@ -15358,9 +15380,12 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
             order_type = FakOrderType,
             post_only = false,
             diff_limit_progress_premarket_enabled = true,
+            diff_real_limit_progress_premarket_enabled = realLimitProgress,
             strategy_code = variant.Code,
             strategy_category = variant.Category,
-            decision_source = "persistent_utc_day_diff_limit_progress_premarket",
+            decision_source = realLimitProgress
+                ? "persistent_utc_day_diff_real_limit_progress_premarket"
+                : "persistent_utc_day_diff_limit_progress_premarket",
             reference_asset_symbol = GetReferenceAssetSymbol(variant),
             quote_received_at_utc = nowUtc,
             condition_id = market.ConditionId,
@@ -15371,7 +15396,11 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
             entry_delay_seconds = variant.EntryDelaySeconds,
             entry_due_at_utc = entryDueAtUtc,
             decision_delay_ms = GetDecisionDelayMilliseconds(entryDueAtUtc, nowUtc),
-            counter_mode = "persistent_utc_day_diff_limit_progress",
+            counter_mode = realLimitProgress
+                ? "persistent_utc_day_diff_real_limit_progress"
+                : "persistent_utc_day_diff_limit_progress",
+            counter_real_limit_enabled = realLimitProgress,
+            counter_real_limit = realLimitProgress ? multiplierLimit : (int?)null,
             counter_result_source = counterResultSource ?? "ResolvedMarketLedger",
             counter_day_start_utc = marketStartUtc is { } startUtc
                 ? GetDiffCounterUtcDayStartMarketStartUtc(startUtc)

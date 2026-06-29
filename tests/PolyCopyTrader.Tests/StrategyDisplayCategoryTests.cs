@@ -204,6 +204,23 @@ public sealed class StrategyDisplayCategoryTests
     }
 
     [Fact]
+    public void DiffRealLimitProgressPremarketStrategiesShareOneDisplayCategory()
+    {
+        var variants = StrategyIds.UpDown5mStrategyVariants
+            .Where(variant => variant.Behavior == BtcUpDown5mStrategyBehavior.DiffRealLimitProgressPremarket)
+            .ToArray();
+
+        Assert.Equal(15, variants.Length);
+
+        var categoryCounts = variants
+            .GroupBy(variant => StrategyDisplayCategories.GetCategory(variant.Name))
+            .ToDictionary(group => group.Key, group => group.Count(), StringComparer.OrdinalIgnoreCase);
+
+        Assert.Equal(15, categoryCounts["Up Or Down 5 min Diff Real Limit Progress"]);
+        Assert.Single(categoryCounts);
+    }
+
+    [Fact]
     public void AdjustedDiffCounterTrendStrategiesHaveDedicatedDisplayCategories()
     {
         var variants = StrategyIds.UpDown5mStrategyVariants
@@ -301,6 +318,8 @@ public sealed class StrategyDisplayCategoryTests
     [InlineData("SOL Up or Down 5m 5 Diff Shift Progress Premarket", "Up Or Down 5 min Diff Shift Progress")]
     [InlineData("BTC Up or Down 5m 1 Diff Limit Progress Premarket", "Up Or Down 5 min Diff Limit Progress")]
     [InlineData("SOL Up or Down 5m 5 Diff Limit Progress Premarket", "Up Or Down 5 min Diff Limit Progress")]
+    [InlineData("BTC Up or Down 5m 1 Diff Real Limit Progress Premarket", "Up Or Down 5 min Diff Real Limit Progress")]
+    [InlineData("SOL Up or Down 5m 5 Diff Real Limit Progress Premarket", "Up Or Down 5 min Diff Real Limit Progress")]
     [InlineData("Follow leader", "Other")]
     public void PreservesExistingDisplayCategories(string strategyName, string expectedCategory)
     {

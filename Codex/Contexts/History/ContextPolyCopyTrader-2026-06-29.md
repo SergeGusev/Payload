@@ -252,3 +252,11 @@ Request:
 
 Result:
 Added a paging-oriented paper-position index in code and production. The Dashboard code check showed `PaperPositions` still loads through `GetPaperPositionsAsync` without repository-level `LIMIT/OFFSET`, while `LiveOrders` is server-side paged. Added `ix_paper_positions_updated_page_cover` on `(updated_at_utc DESC, copied_trader_wallet, asset_id)` with included grid columns, changed `GetPaperPositionsAsync` to use deterministic `ORDER BY updated_at_utc DESC, copied_trader_wallet ASC, asset_id ASC`, and added focused storage tests. Applied the production index with `CREATE INDEX CONCURRENTLY IF NOT EXISTS`; `EXPLAIN` for the first page now uses `Index Only Scan`. Post-DDL sanity check found the service `Running`/`Live`, `last_error=null`, no stale due observed rows, and recent actual entries within `3s`. No service restart, live orders, cancels, or data-row writes were performed.
+
+## 2026-06-29T21:03:43.6399467Z
+Request:
+Делаем клоны стратегий CURR Up Or Down 5 min N Diff Limit Progress Premarket - CURR Up Or Down 5 min N Diff Real Limit Progress Premarket. Отличие от базовых стратегий будет в том,
+что при достижении модуля Diff значения N счётчики UpCount, DownCount, Diff перестают меняться. То есть они меняются только в диапазоне от -N до N.
+
+Result:
+Added BTC/ETH/SOL `N Diff Real Limit Progress Premarket` strategy clones for `N=1..5`, with catalog IDs in groups `8172/8173/8174`, schema seed rows, Dashboard category `Up Or Down 5 min Diff Real Limit Progress`, docs, and tests. Implemented the new behavior by reusing the Diff Limit Progress premarket pipeline with saturated counter updates: at `Diff=N`, another Up result is marked processed but does not increment `UpCount`; at `Diff=-N`, another Down result is marked processed but does not increment `DownCount`; opposite results can move Diff back inside `[-N, N]`. Base Diff Limit Progress behavior remains unchanged. Focused tests passed `75/75`; service build passed with `0` warnings/errors; `git diff --check` passed with line-ending warnings only.
