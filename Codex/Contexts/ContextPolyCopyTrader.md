@@ -1,3 +1,18 @@
+## Active Update 2026-06-29 Diff Limit Progress Deployment Check
+Goal: Verify the deployed `675ee33` service and the new Diff Limit Progress Premarket strategies in production.
+Status: Completed
+Done:
+- Confirmed production heartbeat on `192.168.0.101` is `Running`/`Live` on `info=1.0.0+675ee33aee033775aa58e0fca2228efda577465b`; service started at `2026-06-29T21:37:53.51154+03:00`.
+- Ran the production latency gate with expected commit `675ee33`: `1758` entry rows across `1756` strategies, `over_3s=0`, and max checked delay under the `3s` budget.
+- Confirmed the 15 new `btc/eth/sol_up_down_5m_[1..5]_diff_limit_progress_premarket` rows exist in production: all `15` enabled, `0` live-enabled, `5` per asset.
+- Confirmed the new strategies are active after deployment: `15` filled Paper FAK orders were created after service start at `2026-06-29T21:39:30+03:00`, and all 15 latest strategy rows are observing the next market due at `2026-06-29T21:49:30+03:00`.
+- Confirmed `crypto_up_down_5m_diff_shift_progress_states` has all 15 persistent rows, all with non-zero Diff and pending state for market `2026-06-29T21:40:00+03:00`.
+- Verified raw decision JSON shows capped strategy multipliers as expected (`stake_multiplier=min(abs(Diff), N)`), while the larger filled notional comes from existing FAK guaranteed/min-order sizing.
+- Confirmed no `Diff Limit Progress`/`diff_limit_progress` API errors were recorded after service start.
+Next: Monitor settlements after the pending `21:40` market resolves to confirm `Sum` updates from pending wins/losses.
+Notes: Production checks were read-only SELECT queries plus the existing read-only latency script. No production DB writes, live orders, service restart, or cancel action was performed.
+Blockers: None.
+
 ## Active Update 2026-06-29 Diff Limit Progress Premarket Strategies
 Goal: Add BTC/ETH/SOL `N Diff Limit Progress Premarket` strategy families with persistent UTC-day counters and capped Diff stake multipliers.
 Status: Completed

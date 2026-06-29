@@ -192,6 +192,13 @@ Request:
 
 Result:
 Retried production access read-only. PostgreSQL at `192.168.0.101:5432` is available again and `Test-NetConnection` reported `TcpTestSucceeded=True` from `192.168.0.100` while ICMP ping still failed. The service heartbeat showed `Running`/`Live`, version `1.0.0+ab41de91ec23f3c30a9d0fcfc16a418aaca12b05`, with heartbeat age about `37s`. Recent activity was present in the last 5 minutes: `142` entered strategy rows, `142` paper orders, fresh run updates, and all expected stage cycle kinds. Entry latency was clean for that window: `142` checked entries, `over_3s=0`, max delay `0.566s`. No production writes, live orders, service restart, or cancel action was performed.
+## 2026-06-29T18:50:13.8521851+00:00
+Request:
+Выложил, проверяй
+
+Result:
+Verified production read-only after deployment. The service heartbeat on `192.168.0.101` is `Running`/`Live` on `info=1.0.0+675ee33aee033775aa58e0fca2228efda577465b`. The latency gate passed with `1758` entry rows, `1756` strategies, and `over_3s=0`. Production has all `15` new Diff Limit Progress Premarket strategy rows enabled and paper-only; all 15 created filled Paper FAK orders after the service start and have persistent state rows with pending bets. No Diff Limit Progress API errors were found. No production writes, live orders, restart, or cancel action were performed.
+
 ## 2026-06-29T18:06:57.8589197+00:00
 Request:
 Делаем три типа стратегий, по одной для каждой из валют - CURR Up Or Down 5 min N Diff Limit Progress Premarket, где N меняется от 1 до 5. Diff считается как UpCount - DownCount, при Diff > 0 ставим Down, при Diff < 0 ставим Up
