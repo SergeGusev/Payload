@@ -1,3 +1,23 @@
+## Active Update 2026-06-29 BTC Strategy Due Fast Lanes
+Goal: Reduce every BTC/ETH/SOL Up/Down strategy entry delay to no more than 3 seconds and verify the deployed service.
+Status: In Progress
+Done:
+- Checked production PostgreSQL read-only after the deployed service update; the service was running commit `936dd71` with `btc_up_down_5m_strategy_stage_timings` active.
+- Confirmed the 3-second goal is not yet met: fresh entry batches had delays up to about 8.2 seconds, with `fast_diff` blocked by `observe_markets` and main preopen batches delayed by observe/maker work plus deferred persistence prepare/flush.
+- Added `ProcessDueEntriesAsync` for a main due-only fast lane that processes Live variants before NonLive variants without observe/maker/settlement work.
+- Split Diff processing into `ProcessDiffCounterObserveAsync` and `ProcessDiffCounterFastDueEntriesAsync`; kept the existing `ProcessDiffCounterDueEntriesAsync` as a compatibility wrapper for tests and direct callers.
+- Added `BtcUpDown5mDueEntryPaperStrategyWorker` and `BtcUpDown5mDiffCounterObserveWorker`; changed the existing fast Diff worker to call due-only processing.
+- Added a main due-entry semaphore so the new fast due worker and existing full main worker cannot select/update the same Observed run concurrently; included PreOpen sell exits in the same guard.
+- Added a focused test proving fast Diff due does not perform market observe and that observe is handled by the separate method.
+Verification:
+- `dotnet build PolyCopyTrader.sln --no-restore` passed with existing nullable warnings.
+- `dotnet test tests/PolyCopyTrader.Tests/PolyCopyTrader.Tests.csproj --no-build --filter "FullyQualifiedName~ProcessDiffCounterFastDueEntriesAsync_DoesNotObserveMarkets"` passed 1/1.
+- `dotnet test tests/PolyCopyTrader.Tests/PolyCopyTrader.Tests.csproj --no-restore --filter "FullyQualifiedName~ProcessDiffCounterDueEntriesAsync_DiffCounterRecordsSnapshotsForEachEnabledAsset"` passed 1/1.
+- A pre-existing/stale diff FAK expectation still fails: `ProcessDiffCounterDueEntriesAsync_DiffUpThresholdBuysDownAtInstantExecutableAskPrice` expects `0.45` while the current FAK path uses guaranteed worst price `0.99`.
+Next: Commit/push the fast-lane change, deploy it, then re-query production stage timings and entry delays for fresh due batches. If any batch still exceeds 3 seconds, optimize the remaining `deferred_persistence_prepare`/flush path or split large due batches further.
+Notes: No production DB writes, live orders, service restart, or cancel action was performed by Codex. Existing unrelated dirty files and output folders were left untouched.
+Blockers: Final 3-second objective cannot be marked complete until the new service build is deployed and fresh production timings confirm the limit.
+
 ## Active Update 2026-06-29 BTC Strategy Stage Timing Instrumentation
 Goal: Add production timestamp breakdown for BTC/ETH/SOL Up/Down strategy processing delays and explain why not to use one raw thread per strategy.
 Status: Completed

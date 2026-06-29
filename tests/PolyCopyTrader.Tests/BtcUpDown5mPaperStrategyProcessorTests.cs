@@ -4696,6 +4696,42 @@ public sealed class BtcUpDown5mPaperStrategyProcessorTests
     }
 
     [Fact]
+    public async Task ProcessDiffCounterFastDueEntriesAsync_DoesNotObserveMarkets()
+    {
+        var startupMarketStartUtc = new DateTimeOffset(2026, 6, 8, 12, 0, 0, TimeSpan.Zero);
+        var startupNow = startupMarketStartUtc.AddMinutes(3);
+        var timeProvider = new ManualTimeProvider(startupNow);
+        var variant = StrategyIds.UpDown5mStrategyVariants.Single(item => item.Code == "btc_up_down_5m_up_diff_2_instant");
+        var repository = new TestAppRepository();
+        repository.PolymarketGammaMarkets.Add(CreateMarket(
+            startupMarketStartUtc,
+            startupMarketStartUtc.AddMinutes(5),
+            upPrice: 0.50m,
+            downPrice: 0.50m));
+        var processor = CreateProcessorCoreWithOptions(
+            repository,
+            [],
+            [],
+            _ => { },
+            [],
+            CreateBtcOptions(paperTakerPricingEnabled: false, [variant.Code]),
+            gammaClient: new FakeGammaClient([]),
+            timeProvider: timeProvider);
+
+        var dueResult = await processor.ProcessDiffCounterFastDueEntriesAsync();
+
+        Assert.Equal(0, dueResult.MarketsObserved);
+        Assert.Empty(repository.StrategyMarketPaperRuns);
+
+        var observeResult = await processor.ProcessDiffCounterObserveAsync();
+
+        Assert.Equal(1, observeResult.MarketsObserved);
+        var run = Assert.Single(repository.StrategyMarketPaperRuns);
+        Assert.Equal(StrategyMarketPaperRunStatuses.Observed, run.Status);
+        Assert.Equal(variant.Id, run.StrategyId);
+    }
+
+    [Fact]
     public async Task ProcessDiffCounterDueEntriesAsync_DiffUpThresholdBuysDownAtInstantExecutableAskPrice()
     {
         var startupMarketStartUtc = new DateTimeOffset(2026, 6, 8, 12, 0, 0, TimeSpan.Zero);

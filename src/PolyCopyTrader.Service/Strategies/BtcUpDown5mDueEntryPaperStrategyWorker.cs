@@ -5,8 +5,8 @@ using PolyCopyTrader.Storage;
 
 namespace PolyCopyTrader.Service.Strategies;
 
-public sealed class BtcUpDown5mDiffCounterPaperStrategyWorker(
-    ILogger<BtcUpDown5mDiffCounterPaperStrategyWorker> logger,
+public sealed class BtcUpDown5mDueEntryPaperStrategyWorker(
+    ILogger<BtcUpDown5mDueEntryPaperStrategyWorker> logger,
     BotOptions botOptions,
     PaperTradingOptions paperTradingOptions,
     BtcUpDown5mStrategyOptions options,
@@ -18,21 +18,21 @@ public sealed class BtcUpDown5mDiffCounterPaperStrategyWorker(
     {
         if (!options.Enabled)
         {
-            logger.LogInformation("BTC Up or Down 5m fast Diff due-entry paper strategy worker is disabled.");
+            logger.LogInformation("BTC Up or Down 5m fast due-entry paper strategy worker is disabled.");
             return;
         }
 
         if (!RuntimeModePolicy.IsPaperTradingEnabled(botOptions, paperTradingOptions))
         {
             logger.LogInformation(
-                "BTC Up or Down 5m fast Diff due-entry paper strategy worker will not start. {Reason}",
+                "BTC Up or Down 5m fast due-entry paper strategy worker will not start. {Reason}",
                 RuntimeModePolicy.PaperTradingDisabledReason(botOptions, paperTradingOptions));
             return;
         }
 
         var interval = TimeSpan.FromMilliseconds(options.DiffCounterFastPollIntervalMilliseconds);
         logger.LogInformation(
-            "BTC Up or Down 5m fast Diff due-entry paper strategy worker started. Mode={Mode} RunInLiveMode={RunInLiveMode} PollIntervalMilliseconds={PollIntervalMilliseconds}",
+            "BTC Up or Down 5m fast due-entry paper strategy worker started. Mode={Mode} RunInLiveMode={RunInLiveMode} PollIntervalMilliseconds={PollIntervalMilliseconds}",
             botOptions.Mode,
             paperTradingOptions.RunInLiveMode,
             options.DiffCounterFastPollIntervalMilliseconds);
@@ -41,17 +41,20 @@ public sealed class BtcUpDown5mDiffCounterPaperStrategyWorker(
         {
             try
             {
-                controlState.RecordLoop("BTC5mStrategy fast Diff due-entry cycle pending", null);
-                var result = await processor.ProcessDiffCounterFastDueEntriesAsync(stoppingToken);
+                controlState.RecordLoop("BTC5mStrategy fast due-entry cycle pending", null);
+                var result = await processor.ProcessDueEntriesAsync(stoppingToken);
                 controlState.RecordLoop(
-                    $"BTC5mStrategyFastDiffDue Entries={result.EntriesPlaced}; Skipped={result.RunsSkipped}",
+                    $"BTC5mStrategyFastDue Entries={result.EntriesPlaced}; Skipped={result.RunsSkipped}; Settled={result.RunsSettled}",
                     null);
-                if (result.EntriesPlaced > 0 || result.RunsSkipped > 0)
+                if (result.EntriesPlaced > 0 ||
+                    result.RunsSkipped > 0 ||
+                    result.RunsSettled > 0)
                 {
                     logger.LogInformation(
-                        "BTC Up or Down 5m fast Diff due-entry paper strategy cycle completed. Entries={Entries} Skipped={Skipped}",
+                        "BTC Up or Down 5m fast due-entry paper strategy cycle completed. Entries={Entries} Skipped={Skipped} Settled={Settled}",
                         result.EntriesPlaced,
-                        result.RunsSkipped);
+                        result.RunsSkipped,
+                        result.RunsSettled);
                 }
             }
             catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
@@ -60,15 +63,15 @@ public sealed class BtcUpDown5mDiffCounterPaperStrategyWorker(
             }
             catch (Exception ex)
             {
-                controlState.RecordLoop("BTC Up or Down 5m fast Diff due-entry paper strategy cycle failed", ex.Message);
-                logger.LogError(ex, "BTC Up or Down 5m fast Diff due-entry paper strategy cycle failed.");
+                controlState.RecordLoop("BTC Up or Down 5m fast due-entry paper strategy cycle failed", ex.Message);
+                logger.LogError(ex, "BTC Up or Down 5m fast due-entry paper strategy cycle failed.");
                 await TryRecordApiErrorAsync(ex.Message, stoppingToken);
             }
 
             await Task.Delay(interval, stoppingToken);
         }
 
-        logger.LogInformation("BTC Up or Down 5m fast Diff due-entry paper strategy worker stopped.");
+        logger.LogInformation("BTC Up or Down 5m fast due-entry paper strategy worker stopped.");
     }
 
     private async Task TryRecordApiErrorAsync(string message, CancellationToken cancellationToken)
@@ -78,7 +81,7 @@ public sealed class BtcUpDown5mDiffCounterPaperStrategyWorker(
             await repository.AddApiErrorAsync(
                 new ApiError(
                     Guid.NewGuid(),
-                    nameof(BtcUpDown5mDiffCounterPaperStrategyWorker),
+                    nameof(BtcUpDown5mDueEntryPaperStrategyWorker),
                     "Cycle",
                     message,
                     DateTimeOffset.UtcNow),
@@ -86,7 +89,7 @@ public sealed class BtcUpDown5mDiffCounterPaperStrategyWorker(
         }
         catch (Exception ex)
         {
-            logger.LogError(ex, "Failed to persist BTC Up or Down 5m fast Diff due-entry paper strategy worker error.");
+            logger.LogError(ex, "Failed to persist BTC Up or Down 5m fast due-entry paper strategy worker error.");
         }
     }
 }

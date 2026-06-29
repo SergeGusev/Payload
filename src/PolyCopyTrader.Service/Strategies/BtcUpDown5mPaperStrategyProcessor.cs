@@ -105,6 +105,7 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
     private readonly ConservativePaperGtdFillEstimator conservativeGtdFillEstimator = new(options);
     private readonly IPaperTradingEngine paperTradingEngine = new DefaultPaperTradingEngine();
     private readonly SemaphoreSlim entryPlacementLock = new(1, 1);
+    private readonly SemaphoreSlim mainDueEntryProcessingLock = new(1, 1);
     private readonly SemaphoreSlim diffCounterStateLock = new(1, 1);
     private readonly SemaphoreSlim liveStrategyPriorityRefreshLock = new(1, 1);
     private readonly object diffProgressStateSync = new();
@@ -171,7 +172,8 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
                 liveEntryVariants,
                 strategySettings,
                 previousResultReadyOnly: false,
-                token),
+                token,
+                dueEntryLock: mainDueEntryProcessingLock),
             CreateStageOutcome,
             cancellationToken);
         strategySettings = liveFlow.StrategySettings;
@@ -193,7 +195,8 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
                 nonLiveEntryVariants,
                 strategySettings,
                 previousResultReadyOnly: false,
-                token),
+                token,
+                dueEntryLock: mainDueEntryProcessingLock),
             CreateStageOutcome,
             cancellationToken);
         strategySettings = nonLiveFlow.StrategySettings;
@@ -230,6 +233,92 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
             liveFlow.Result.RunsSettled + nonLiveFlow.Result.RunsSettled + settledRemainingRuns);
     }
 
+    public async Task<BtcUpDown5mPaperStrategyResult> ProcessDueEntriesAsync(
+        CancellationToken cancellationToken = default)
+    {
+        if (!RuntimeModePolicy.IsPaperTradingEnabled(botOptions, paperTradingOptions))
+        {
+            return new BtcUpDown5mPaperStrategyResult(0, 0, 0, 0);
+        }
+
+        var cycleId = Guid.NewGuid();
+        const string cycleKind = "main_due";
+        controlState.RecordLoop("BTC5mStrategy due-entry cycle loading runtime settings", null);
+        var configuredVariants = GetConfiguredVariants();
+        var strategySettings = await strategyStateProvider.GetStrategySettingsAsync(cancellationToken);
+        var entryVariants = configuredVariants
+            .Where(variant => GetStrategySettings(strategySettings, variant.Id).Enabled)
+            .Where(variant => !UsesPreviousResultEntryFlow(variant))
+            .Where(variant => !IsDiffCounterTrendOpeningLimitEntry(variant))
+            .ToArray();
+        entryVariants = OrderEntryVariantsForPlacement(entryVariants, strategySettings);
+
+        if (entryVariants.Length == 0)
+        {
+            return new BtcUpDown5mPaperStrategyResult(0, 0, 0, 0);
+        }
+
+        var liveEntryVariants = entryVariants
+            .Where(variant => GetStrategySettings(strategySettings, variant.Id).EffectiveLiveStakes)
+            .ToArray();
+        var nonLiveEntryVariants = entryVariants
+            .Where(variant => !GetStrategySettings(strategySettings, variant.Id).EffectiveLiveStakes)
+            .ToArray();
+
+        var liveFlow = await TrackStrategyStageAsync(
+            cycleId,
+            cycleKind,
+            "LiveDue",
+            "due_entry_flow",
+            detail: null,
+            liveEntryVariants.Length,
+            runCount: null,
+            earliestEntryDueAtUtc: null,
+            latestEntryDueAtUtc: null,
+            async token => await ProcessDueEntryVariantFlowAsync(
+                cycleId,
+                cycleKind,
+                "LiveDue",
+                liveEntryVariants,
+                strategySettings,
+                previousResultReadyOnly: false,
+                token,
+                mainDueEntryProcessingLock),
+            CreateStageOutcome,
+            cancellationToken);
+        strategySettings = liveFlow.StrategySettings;
+
+        var nonLiveFlow = await TrackStrategyStageAsync(
+            cycleId,
+            cycleKind,
+            "NonLiveDue",
+            "due_entry_flow",
+            detail: null,
+            nonLiveEntryVariants.Length,
+            runCount: null,
+            earliestEntryDueAtUtc: null,
+            latestEntryDueAtUtc: null,
+            async token => await ProcessDueEntryVariantFlowAsync(
+                cycleId,
+                cycleKind,
+                "NonLiveDue",
+                nonLiveEntryVariants,
+                strategySettings,
+                previousResultReadyOnly: false,
+                token,
+                mainDueEntryProcessingLock),
+            CreateStageOutcome,
+            cancellationToken);
+        strategySettings = nonLiveFlow.StrategySettings;
+
+        await RefreshLiveStrategyPrioritySnapshotIfDueAsync(entryVariants, strategySettings, cancellationToken);
+        return new BtcUpDown5mPaperStrategyResult(
+            liveFlow.Result.MarketsObserved + nonLiveFlow.Result.MarketsObserved,
+            liveFlow.Result.EntriesPlaced + nonLiveFlow.Result.EntriesPlaced,
+            liveFlow.Result.RunsSkipped + nonLiveFlow.Result.RunsSkipped,
+            liveFlow.Result.RunsSettled + nonLiveFlow.Result.RunsSettled);
+    }
+
     private async Task<EntryVariantFlowResult> ProcessEntryVariantFlowAsync(
         Guid cycleId,
         string cycleKind,
@@ -237,7 +326,8 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
         IReadOnlyList<BtcUpDown5mStrategyVariant> entryVariants,
         IReadOnlyDictionary<Guid, StrategyRuntimeSettings> strategySettings,
         bool previousResultReadyOnly,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        SemaphoreSlim? dueEntryLock = null)
     {
         if (entryVariants.Count == 0)
         {
@@ -283,7 +373,8 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
             cycleKind,
             flowName,
             "regular_due_entries_before_observe",
-            cancellationToken);
+            cancellationToken,
+            dueEntryLock);
         controlState.RecordLoop($"BTC5mStrategy {flowName} settling Martin runs before entry. Variants={martinEntryVariants.Length}", null);
         var settledRunsBeforeMartinEntries = martinEntryVariants.Length == 0
             ? 0
@@ -316,7 +407,8 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
             cycleKind,
             flowName,
             "martin_due_entries_before_observe",
-            cancellationToken);
+            cancellationToken,
+            dueEntryLock);
         controlState.RecordLoop($"BTC5mStrategy {flowName} placing PreOpen due entries before observe. Variants={preOpenEntryVariants.Length}", null);
         var (preOpenEntriesPlacedBeforeObserve, preOpenEntrySkippedBeforeObserve) = await PlaceDuePreOpenEntriesAsync(
             GetUtcNow(),
@@ -326,7 +418,8 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
             cycleKind,
             flowName,
             "preopen_due_entries_before_observe",
-            cancellationToken);
+            cancellationToken,
+            dueEntryLock);
         controlState.RecordLoop($"BTC5mStrategy {flowName} observing markets", null);
         var observeResult = await TrackStrategyStageAsync(
             cycleId,
@@ -375,7 +468,8 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
             cycleKind,
             flowName,
             "regular_due_entries_after_observe",
-            cancellationToken);
+            cancellationToken,
+            dueEntryLock);
         controlState.RecordLoop($"BTC5mStrategy {flowName} settling Martin runs after observe. Variants={martinEntryVariants.Length}", null);
         var settledRunsBeforeMartinEntriesAfterObserve = martinEntryVariants.Length == 0
             ? 0
@@ -408,7 +502,8 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
             cycleKind,
             flowName,
             "martin_due_entries_after_observe",
-            cancellationToken);
+            cancellationToken,
+            dueEntryLock);
         controlState.RecordLoop($"BTC5mStrategy {flowName} placing PreOpen due entries after observe. Variants={preOpenEntryVariants.Length}", null);
         var (preOpenEntriesPlacedAfterObserve, preOpenEntrySkippedAfterObserve) = await PlaceDuePreOpenEntriesAsync(
             GetUtcNow(),
@@ -418,7 +513,8 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
             cycleKind,
             flowName,
             "preopen_due_entries_after_observe",
-            cancellationToken);
+            cancellationToken,
+            dueEntryLock);
         controlState.RecordLoop($"BTC5mStrategy {flowName} checking PreOpen Sell exits. Variants={preOpenSellExitVariants.Length}", null);
         await TrackStrategyStageAsync(
             cycleId,
@@ -433,7 +529,8 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
             async token => await PlaceDuePreOpenSellExitsAsync(
                 GetUtcNow(),
                 preOpenSellExitVariants,
-                token),
+                token,
+                dueEntryLock),
             cancellationToken);
         controlState.RecordLoop($"BTC5mStrategy {flowName} settling due runs after entries. Variants={entryVariants.Count}", null);
         var settledRunsAfterEntries = await TrackStrategyStageAsync(
@@ -467,7 +564,138 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
         return new EntryVariantFlowResult(result, observeResult.Markets, strategySettings);
     }
 
+    private async Task<EntryVariantFlowResult> ProcessDueEntryVariantFlowAsync(
+        Guid cycleId,
+        string cycleKind,
+        string flowName,
+        IReadOnlyList<BtcUpDown5mStrategyVariant> entryVariants,
+        IReadOnlyDictionary<Guid, StrategyRuntimeSettings> strategySettings,
+        bool previousResultReadyOnly,
+        CancellationToken cancellationToken,
+        SemaphoreSlim? dueEntryLock = null)
+    {
+        if (entryVariants.Count == 0)
+        {
+            return EntryVariantFlowResult.Empty(strategySettings);
+        }
+
+        var nonMakerEntryVariants = entryVariants
+            .Where(variant => !IsFixedOutcomeMaker(variant))
+            .Where(variant => !IsDiffCounterTrendOpeningLimitEntry(variant))
+            .ToArray();
+        var martinEntryVariants = nonMakerEntryVariants
+            .Where(variant => variant.Behavior == BtcUpDown5mStrategyBehavior.Less180Martin)
+            .ToArray();
+        var preOpenEntryVariants = nonMakerEntryVariants
+            .Where(IsPreOpenTimedOpeningLimitEntry)
+            .ToArray();
+        var preOpenSellExitVariants = nonMakerEntryVariants
+            .Where(IsPreOpenFixedDirectionSellExit)
+            .ToArray();
+        var regularEntryVariants = nonMakerEntryVariants
+            .Where(variant => variant.Behavior != BtcUpDown5mStrategyBehavior.Less180Martin)
+            .Where(variant => !IsPreOpenTimedOpeningLimitEntry(variant))
+            .ToArray();
+
+        controlState.RecordLoop($"BTC5mStrategy {flowName} fast placing regular due entries. Variants={regularEntryVariants.Length}", null);
+        var (regularEntriesPlaced, regularRunsSkipped) = await PlaceDueEntriesAsync(
+            GetUtcNow(),
+            regularEntryVariants,
+            strategySettings,
+            previousResultReadyOnly,
+            cycleId,
+            cycleKind,
+            flowName,
+            "regular_due_entries",
+            cancellationToken,
+            dueEntryLock);
+
+        controlState.RecordLoop($"BTC5mStrategy {flowName} fast settling Martin runs before entry. Variants={martinEntryVariants.Length}", null);
+        var settledRunsBeforeMartinEntries = martinEntryVariants.Length == 0
+            ? 0
+            : await TrackStrategyStageAsync(
+                cycleId,
+                cycleKind,
+                flowName,
+                "martin_settle_before_entry",
+                detail: null,
+                martinEntryVariants.Length,
+                runCount: null,
+                earliestEntryDueAtUtc: null,
+                latestEntryDueAtUtc: null,
+                async token => await SettleDueRunsAsync(GetUtcNow(), martinEntryVariants, token),
+                result => new StrategyStageOutcome(RunsSettled: result),
+                cancellationToken);
+        if (settledRunsBeforeMartinEntries > 0)
+        {
+            await strategyStateProvider.ForceRefreshAsync(cancellationToken);
+            strategySettings = await strategyStateProvider.GetStrategySettingsAsync(cancellationToken);
+        }
+
+        controlState.RecordLoop($"BTC5mStrategy {flowName} fast placing Martin due entries. Variants={martinEntryVariants.Length}", null);
+        var (martinEntriesPlaced, martinRunsSkipped) = await PlaceDueEntriesAsync(
+            GetUtcNow(),
+            martinEntryVariants,
+            strategySettings,
+            previousResultReadyOnly: false,
+            cycleId,
+            cycleKind,
+            flowName,
+            "martin_due_entries",
+            cancellationToken,
+            dueEntryLock);
+
+        controlState.RecordLoop($"BTC5mStrategy {flowName} fast placing PreOpen due entries. Variants={preOpenEntryVariants.Length}", null);
+        var (preOpenEntriesPlaced, preOpenRunsSkipped) = await PlaceDuePreOpenEntriesAsync(
+            GetUtcNow(),
+            preOpenEntryVariants,
+            strategySettings,
+            cycleId,
+            cycleKind,
+            flowName,
+            "preopen_due_entries",
+            cancellationToken,
+            dueEntryLock);
+
+        controlState.RecordLoop($"BTC5mStrategy {flowName} fast checking PreOpen Sell exits. Variants={preOpenSellExitVariants.Length}", null);
+        await TrackStrategyStageAsync(
+            cycleId,
+            cycleKind,
+            flowName,
+            "preopen_sell_exits",
+            detail: null,
+            preOpenSellExitVariants.Length,
+            runCount: null,
+            earliestEntryDueAtUtc: null,
+            latestEntryDueAtUtc: null,
+            async token => await PlaceDuePreOpenSellExitsAsync(
+                GetUtcNow(),
+                preOpenSellExitVariants,
+                token,
+                dueEntryLock),
+            cancellationToken);
+
+        var result = new BtcUpDown5mPaperStrategyResult(
+            MarketsObserved: 0,
+            EntriesPlaced: regularEntriesPlaced + martinEntriesPlaced + preOpenEntriesPlaced,
+            RunsSkipped: regularRunsSkipped + martinRunsSkipped + preOpenRunsSkipped,
+            RunsSettled: settledRunsBeforeMartinEntries);
+        return new EntryVariantFlowResult(result, [], strategySettings);
+    }
+
     public async Task<BtcUpDown5mPaperStrategyResult> ProcessDiffCounterDueEntriesAsync(
+        CancellationToken cancellationToken = default)
+    {
+        var observeResult = await ProcessDiffCounterObserveAsync(cancellationToken);
+        var dueResult = await ProcessDiffCounterFastDueEntriesAsync(cancellationToken);
+        return new BtcUpDown5mPaperStrategyResult(
+            observeResult.MarketsObserved + dueResult.MarketsObserved,
+            observeResult.EntriesPlaced + dueResult.EntriesPlaced,
+            observeResult.RunsSkipped + dueResult.RunsSkipped,
+            observeResult.RunsSettled + dueResult.RunsSettled);
+    }
+
+    public async Task<BtcUpDown5mPaperStrategyResult> ProcessDiffCounterObserveAsync(
         CancellationToken cancellationToken = default)
     {
         if (!RuntimeModePolicy.IsPaperTradingEnabled(botOptions, paperTradingOptions))
@@ -476,16 +704,10 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
         }
 
         var cycleId = Guid.NewGuid();
-        const string cycleKind = "fast_diff";
+        const string cycleKind = "fast_diff_observe";
         var now = GetUtcNow();
-        controlState.RecordLoop("BTC5mStrategy fast Diff due-entry cycle loading runtime settings", null);
-        var configuredVariants = GetConfiguredVariants();
-        var strategySettings = await strategyStateProvider.GetStrategySettingsAsync(cancellationToken);
-        var diffCounterEntryVariants = configuredVariants
-            .Where(variant => GetStrategySettings(strategySettings, variant.Id).Enabled)
-            .Where(IsDiffCounterTrendOpeningLimitEntry)
-            .ToArray();
-        diffCounterEntryVariants = OrderEntryVariantsForPlacement(diffCounterEntryVariants, strategySettings);
+        controlState.RecordLoop("BTC5mStrategy fast Diff observe cycle loading runtime settings", null);
+        var (diffCounterEntryVariants, strategySettings) = await GetEnabledDiffCounterEntryVariantsAsync(cancellationToken);
         if (diffCounterEntryVariants.Length == 0)
         {
             return new BtcUpDown5mPaperStrategyResult(0, 0, 0, 0);
@@ -498,7 +720,7 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
         var observeResult = await TrackStrategyStageAsync(
             cycleId,
             cycleKind,
-            "FastDiff",
+            "FastDiffObserve",
             "observe_markets",
             detail: null,
             diffCounterEntryVariants.Length,
@@ -512,6 +734,34 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
                 token),
             CreateStageOutcome,
             cancellationToken);
+        return new BtcUpDown5mPaperStrategyResult(
+            observeResult.Observed,
+            0,
+            observeResult.Skipped,
+            0);
+    }
+
+    public async Task<BtcUpDown5mPaperStrategyResult> ProcessDiffCounterFastDueEntriesAsync(
+        CancellationToken cancellationToken = default)
+    {
+        if (!RuntimeModePolicy.IsPaperTradingEnabled(botOptions, paperTradingOptions))
+        {
+            return new BtcUpDown5mPaperStrategyResult(0, 0, 0, 0);
+        }
+
+        var cycleId = Guid.NewGuid();
+        const string cycleKind = "fast_diff_due";
+        var now = GetUtcNow();
+        controlState.RecordLoop("BTC5mStrategy fast Diff due-entry cycle loading runtime settings", null);
+        var (diffCounterEntryVariants, strategySettings) = await GetEnabledDiffCounterEntryVariantsAsync(cancellationToken);
+        if (diffCounterEntryVariants.Length == 0)
+        {
+            return new BtcUpDown5mPaperStrategyResult(0, 0, 0, 0);
+        }
+
+        controlState.RecordLoop($"BTC5mStrategy fast Diff initializing counters. Variants={diffCounterEntryVariants.Length}", null);
+        await EnsureDiffCounterStatesInitializedAsync(diffCounterEntryVariants, now, cancellationToken);
+
         controlState.RecordLoop($"BTC5mStrategy fast Diff placing due entries. Variants={diffCounterEntryVariants.Length}", null);
         var regularDiffCounterEntryVariants = diffCounterEntryVariants
             .Where(variant => !IsPreOpenTimedOpeningLimitEntry(variant))
@@ -526,7 +776,7 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
             previousResultReadyOnly: false,
             cycleId,
             cycleKind,
-            "FastDiff",
+            "FastDiffDue",
             "regular_due_entries",
             cancellationToken);
         var (preOpenEntriesPlaced, preOpenRunsSkipped) = await PlaceDuePreOpenEntriesAsync(
@@ -535,15 +785,27 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
             strategySettings,
             cycleId,
             cycleKind,
-            "FastDiff",
+            "FastDiffDue",
             "preopen_due_entries",
             cancellationToken);
         await RefreshLiveStrategyPrioritySnapshotIfDueAsync(diffCounterEntryVariants, strategySettings, cancellationToken);
         return new BtcUpDown5mPaperStrategyResult(
-            observeResult.Observed,
+            0,
             regularEntriesPlaced + preOpenEntriesPlaced,
-            observeResult.Skipped + regularRunsSkipped + preOpenRunsSkipped,
+            regularRunsSkipped + preOpenRunsSkipped,
             0);
+    }
+
+    private async Task<(BtcUpDown5mStrategyVariant[] EntryVariants, IReadOnlyDictionary<Guid, StrategyRuntimeSettings> StrategySettings)> GetEnabledDiffCounterEntryVariantsAsync(
+        CancellationToken cancellationToken)
+    {
+        var configuredVariants = GetConfiguredVariants();
+        var strategySettings = await strategyStateProvider.GetStrategySettingsAsync(cancellationToken);
+        var diffCounterEntryVariants = configuredVariants
+            .Where(variant => GetStrategySettings(strategySettings, variant.Id).Enabled)
+            .Where(IsDiffCounterTrendOpeningLimitEntry)
+            .ToArray();
+        return (OrderEntryVariantsForPlacement(diffCounterEntryVariants, strategySettings), strategySettings);
     }
 
     public async Task<BtcUpDown5mPaperStrategyResult> ProcessPreviousResultDueEntriesAsync(
@@ -2202,11 +2464,34 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
         string cycleKind,
         string flowName,
         string stageName,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        SemaphoreSlim? dueEntryLock = null)
     {
         if (variants.Count == 0)
         {
             return (0, 0);
+        }
+
+        if (dueEntryLock is not null)
+        {
+            await dueEntryLock.WaitAsync(cancellationToken);
+            try
+            {
+                return await PlaceDueEntriesAsync(
+                    nowUtc,
+                    variants,
+                    strategySettings,
+                    previousResultReadyOnly,
+                    cycleId,
+                    cycleKind,
+                    flowName,
+                    stageName,
+                    cancellationToken);
+            }
+            finally
+            {
+                dueEntryLock.Release();
+            }
         }
 
         var variantsById = variants
@@ -2477,11 +2762,33 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
         string cycleKind,
         string flowName,
         string stageName,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        SemaphoreSlim? dueEntryLock = null)
     {
         if (variants.Count == 0)
         {
             return (0, 0);
+        }
+
+        if (dueEntryLock is not null)
+        {
+            await dueEntryLock.WaitAsync(cancellationToken);
+            try
+            {
+                return await PlaceDuePreOpenEntriesAsync(
+                    nowUtc,
+                    variants,
+                    strategySettings,
+                    cycleId,
+                    cycleKind,
+                    flowName,
+                    stageName,
+                    cancellationToken);
+            }
+            finally
+            {
+                dueEntryLock.Release();
+            }
         }
 
         var variantsById = variants
@@ -2524,11 +2831,28 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
     private async Task<int> PlaceDuePreOpenSellExitsAsync(
         DateTimeOffset nowUtc,
         IReadOnlyList<BtcUpDown5mStrategyVariant> variants,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        SemaphoreSlim? dueEntryLock = null)
     {
         if (variants.Count == 0)
         {
             return 0;
+        }
+
+        if (dueEntryLock is not null)
+        {
+            await dueEntryLock.WaitAsync(cancellationToken);
+            try
+            {
+                return await PlaceDuePreOpenSellExitsAsync(
+                    nowUtc,
+                    variants,
+                    cancellationToken);
+            }
+            finally
+            {
+                dueEntryLock.Release();
+            }
         }
 
         var variantsById = variants

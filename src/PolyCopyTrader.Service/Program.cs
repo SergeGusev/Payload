@@ -393,8 +393,10 @@ builder.Services.AddHostedService(sp => sp.GetRequiredService<BinanceCryptoRefer
 builder.Services.AddHostedService<CryptoReferencePriceHistoryWorker>();
 builder.Services.AddHostedService<ChainlinkBtcUsdCorrelationWorker>();
 builder.Services.AddHostedService<BtcUpDown5mOrderBookRefreshWorker>();
+builder.Services.AddHostedService<BtcUpDown5mDueEntryPaperStrategyWorker>();
 builder.Services.AddHostedService<BtcUpDown5mPaperStrategyWorker>();
 builder.Services.AddHostedService<BtcUpDown5mPreviousResultPaperStrategyWorker>();
+builder.Services.AddHostedService<BtcUpDown5mDiffCounterObserveWorker>();
 builder.Services.AddHostedService<BtcUpDown5mDiffCounterPaperStrategyWorker>();
 builder.Services.AddHostedService<BtcUpDown5mOddsArchiveWorker>();
 builder.Services.AddHostedService<BtcUpDown5mStatisticsWorker>();
