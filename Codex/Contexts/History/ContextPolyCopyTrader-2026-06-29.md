@@ -178,3 +178,10 @@ User deployed commit `ab41de9` and asked to verify production.
 
 Result:
 Checked production PostgreSQL read-only and confirmed the service is running `ab41de9` in Live mode with a fresh heartbeat. The initial post-restart check had no `>3s` entry delays but was too early to include all split due cycle kinds. After the next due slot, the standard latency gate passed with `1772` checked rows across `1758` strategies, `over_3s=0`, max delay `2.800s`, and all required cycle kinds present: `fast_diff_due`, `fast_diff_observe`, `main`, `main_due`, `previous_result_due`, and `previous_result_observe`. The active 3-second latency objective is complete for the checked production window. No production DB writes, live orders, service restart, or cancel action was performed.
+
+## 2026-06-29T17:05:38.1478049Z
+Request:
+Проверь, идёт ли сейчас работа
+
+Result:
+Attempted to check current production activity read-only through PostgreSQL at `192.168.0.101:5432`, including service heartbeat, recent stage cycles, run updates, entries, and paper orders. Both PostgreSQL attempts timed out, including a retry with `PGCONNECT_TIMEOUT=15`. Network probing also showed the host is unreachable from this machine: `ping -n 2 192.168.0.101` returned a timeout and `Destination host unreachable` from `192.168.0.100`. Current service activity could not be verified from this machine. No production rows were read, and no DB writes, live orders, service restart, or cancel action was performed.

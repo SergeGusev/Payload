@@ -1,3 +1,15 @@
+## Active Update 2026-06-29 Current Production Work Check
+Goal: Check whether the deployed PolyCopyTrader service is currently running and processing work.
+Status: Blocked
+Done:
+- Initialized repository context, pulled latest `master`, and confirmed local `HEAD` is `4a30b5d`.
+- Attempted read-only production PostgreSQL telemetry against `192.168.0.101:5432` to inspect service heartbeat, stage cycles, run updates, entries, and paper orders.
+- Production PostgreSQL connection failed with `timeout expired` twice, including a retry with `PGCONNECT_TIMEOUT=15`.
+- `ping -n 2 192.168.0.101` also showed network failure from this machine (`Destination host unreachable` from `192.168.0.100`).
+Next: Retry the production telemetry check once network access to `192.168.0.101:5432` is restored, or run the same read-only check directly on the VPS.
+Notes: No production data was read successfully in this task. No DB writes, live orders, service restart, or cancel action was performed.
+Blockers: The production host/database is currently unreachable from this machine, so current service activity cannot be verified here.
+
 ## Active Update 2026-06-29 Queued Entry Reprocessing Guard
 Goal: Reduce every BTC/ETH/SOL Up/Down strategy entry delay to no more than 3 seconds and verify the deployed service.
 Status: Completed
