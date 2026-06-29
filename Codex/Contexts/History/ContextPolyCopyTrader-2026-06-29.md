@@ -18,3 +18,10 @@ Request:
 
 Result:
 Inspected Dashboard/PostgreSQL aggregation for `LiveConditionSkippedOrdersCount`. Confirmed `Live cond skip` increases for post-Live skipped runs with condition-like reasons such as `reference_average_move_below_bps_threshold`, but not for technical reasons. Production read-only classification for `sol_up_down_5m_down_bps_90_fak_premarket` currently shows `live_technical` skips only: `crypto_reference_fetch_failed=1`, `entry_due_expired=3`, `preopen_entry_window_elapsed=1`; no `live_condition` rows. No source code, DB writes, service restart, live order submission, or cancel action was performed.
+
+## 2026-06-29T06:10:27.4582227+00:00
+Request:
+Объясни мне подробнее все возникшие technical skips
+
+Result:
+Rechecked production PostgreSQL `192.168.0.101` read-only and explained all technical skips for `sol_up_down_5m_down_bps_90_fak_premarket`: `entry_due_expired=4`, `preopen_entry_window_elapsed=1`, and `crypto_reference_fetch_failed=1`. `entry_due_expired` means due processing happened more than `EntryGraceSeconds=60` after `entry_due_at_utc`; for the `-30s` premarket strategy this means after `market_start + 30s`. `preopen_entry_window_elapsed` means processing happened after market start but before the expired threshold. `crypto_reference_fetch_failed` means the current SOL reference price was unavailable, so the 90 bps condition could not be evaluated. No source code, DB writes, service restart, live order submission, or cancel action was performed.

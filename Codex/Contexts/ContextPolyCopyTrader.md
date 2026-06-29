@@ -1,3 +1,16 @@
+## Active Update 2026-06-29 SOL Down 90 Technical Skips Explained
+Goal: Explain all technical skips seen for `SOL Up or Down 5m Down 90 bps Reference Average Premarket`.
+Status: Completed
+Done:
+- Rechecked production PostgreSQL at `192.168.0.101` read-only with `psql` because Npgsql intermittently timed out during handshake.
+- Confirmed post-Live-enable technical skips for `sol_up_down_5m_down_bps_90_fak_premarket`: `entry_due_expired=4`, `preopen_entry_window_elapsed=1`, `crypto_reference_fetch_failed=1`.
+- Mapped `entry_due_expired` to processing more than `EntryGraceSeconds=60` after `entry_due_at_utc`, which for `-30s` premarket means after `market_start + 30s`.
+- Mapped `preopen_entry_window_elapsed` to processing after market start but before the expired threshold; the specific row was processed `47.4s` after due and `17.4s` after market start.
+- Mapped `crypto_reference_fetch_failed` to failure to fetch current SOL reference price; that row had selected 3h average `72.2018929077`, threshold `90`, and null current price, so the actual 90 bps condition was not evaluated.
+Next: If these late skips continue, inspect due-entry scheduling/backlog rather than Live placement or Polymarket rejection.
+Notes: Read-only source/SQL inspection and production read-only SQL only; no source code, DB writes, service restart, live submission, or cancel action.
+Blockers: None.
+
 ## Active Update 2026-06-29 Live Cond Skip Classification Check
 Goal: Clarify whether failed Live conditions should increase `Live cond skip` for `SOL Up or Down 5m Down 90 bps Reference Average Premarket`.
 Status: Completed
