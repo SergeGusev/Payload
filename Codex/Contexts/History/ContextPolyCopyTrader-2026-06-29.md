@@ -129,3 +129,10 @@ Request:
 
 Result:
 Checked production PostgreSQL read-only and confirmed the deployed service was running `ae0ae68`. The first 30-minute latency gate was polluted by rows due before service startup, but a fresh post-start check still failed: `4898` checked rows, `1591` above 3 seconds, and the `15:35:00` Sofia due slot had `520/1363` rows above 3 seconds with worst delay about `22.105s`. Stage timings showed the new bottleneck is not decision computation: `fast_diff_due regular_due_entries.decision_tasks` was about `2069ms` max, while `fast_diff_due regular_due_entries.deferred_persistence_flush` spent about `20235ms` flushing `1038` strategy run updates. Implemented a new patch that changes `PostgresAppRepository.AddPaperEntryPersistenceBatchAsync` from per-row DB commands to set-based JSON `jsonb_to_recordset` insert/update statements for signals, paper orders, fills, positions, copied-leader activations, and strategy runs within the same transaction. Verification: `dotnet test PolyCopyTrader.sln --filter "FullyQualifiedName~StorageTests"` passed `48/48`; a PostgreSQL syntax smoke with empty JSON arrays inside `BEGIN`/`ROLLBACK` parsed and executed all six bulk statements as zero-row operations. No production data writes, live orders, service restart, or cancel action was performed.
+
+## 2026-06-29T13:39:33.8686714Z
+Request:
+npm install -g @openai/codex
+
+Result:
+Ran the requested global npm install. The first shell command timed out after package contents were installed; a retry failed with `EBUSY` because this active Codex session is running from the same global `@openai/codex` package and Windows has the native `codex.exe` locked. Verified `npm list -g @openai/codex --depth=0` reports `@openai/codex@0.142.4`, and verified the `codex`, `codex.cmd`, and `codex.ps1` global shims exist and are discoverable on PATH. No project source code was changed.

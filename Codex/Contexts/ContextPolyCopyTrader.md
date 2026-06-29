@@ -1,3 +1,15 @@
+## Active Update 2026-06-29 Codex CLI Global Install
+Goal: Install the OpenAI Codex CLI globally through npm.
+Status: Completed
+Done:
+- Ran `npm install -g @openai/codex`; the first run timed out from the shell after installing package contents.
+- Verified npm now reports global `@openai/codex@0.142.4` under `C:\Users\serge\AppData\Roaming\npm`.
+- Verified the global shims `codex`, `codex.cmd`, and `codex.ps1` exist in the npm prefix and are discoverable by PowerShell.
+- A retry could not replace the native executable because this active Codex session is running from the same global package and Windows has `codex.exe` locked.
+Next: Restart Codex/terminal before attempting another global upgrade so npm can replace the locked executable.
+Notes: No project source code was changed. Verification used `npm list -g @openai/codex --depth=0`, `Get-Command codex -All`, and `package.json` version inspection. Running `codex --version` from this same live session hit the expected Windows file lock.
+Blockers: None for the installed package; future upgrades require closing the active Codex process first.
+
 ## Active Update 2026-06-29 Previous Result Hot Path Trim
 Goal: Reduce every BTC/ETH/SOL Up/Down strategy entry delay to no more than 3 seconds and verify the deployed service.
 Status: In Progress
