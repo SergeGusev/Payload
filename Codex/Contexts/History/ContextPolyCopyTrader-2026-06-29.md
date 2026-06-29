@@ -185,3 +185,10 @@ Request:
 
 Result:
 Attempted to check current production activity read-only through PostgreSQL at `192.168.0.101:5432`, including service heartbeat, recent stage cycles, run updates, entries, and paper orders. Both PostgreSQL attempts timed out, including a retry with `PGCONNECT_TIMEOUT=15`. Network probing also showed the host is unreachable from this machine: `ping -n 2 192.168.0.101` returned a timeout and `Destination host unreachable` from `192.168.0.100`. Current service activity could not be verified from this machine. No production rows were read, and no DB writes, live orders, service restart, or cancel action was performed.
+
+## 2026-06-29T17:20:19.0140795Z
+Request:
+А сейчас доступна?
+
+Result:
+Retried production access read-only. PostgreSQL at `192.168.0.101:5432` is available again and `Test-NetConnection` reported `TcpTestSucceeded=True` from `192.168.0.100` while ICMP ping still failed. The service heartbeat showed `Running`/`Live`, version `1.0.0+ab41de91ec23f3c30a9d0fcfc16a418aaca12b05`, with heartbeat age about `37s`. Recent activity was present in the last 5 minutes: `142` entered strategy rows, `142` paper orders, fresh run updates, and all expected stage cycle kinds. Entry latency was clean for that window: `142` checked entries, `over_3s=0`, max delay `0.566s`. No production writes, live orders, service restart, or cancel action was performed.

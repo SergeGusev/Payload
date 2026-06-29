@@ -1,14 +1,18 @@
 ## Active Update 2026-06-29 Current Production Work Check
 Goal: Check whether the deployed PolyCopyTrader service is currently running and processing work.
-Status: Blocked
+Status: Completed
 Done:
 - Initialized repository context, pulled latest `master`, and confirmed local `HEAD` is `4a30b5d`.
 - Attempted read-only production PostgreSQL telemetry against `192.168.0.101:5432` to inspect service heartbeat, stage cycles, run updates, entries, and paper orders.
 - Production PostgreSQL connection failed with `timeout expired` twice, including a retry with `PGCONNECT_TIMEOUT=15`.
 - `ping -n 2 192.168.0.101` also showed network failure from this machine (`Destination host unreachable` from `192.168.0.100`).
-Next: Retry the production telemetry check once network access to `192.168.0.101:5432` is restored, or run the same read-only check directly on the VPS.
-Notes: No production data was read successfully in this task. No DB writes, live orders, service restart, or cancel action was performed.
-Blockers: The production host/database is currently unreachable from this machine, so current service activity cannot be verified here.
+- Retried after the user asked if it was available now. PostgreSQL at `192.168.0.101:5432` responded successfully and `Test-NetConnection` reported `TcpTestSucceeded=True` from `192.168.0.100`.
+- Confirmed the service heartbeat is `Running`/`Live` on version `1.0.0+ab41de91ec23f3c30a9d0fcfc16a418aaca12b05`; heartbeat age was about `37s` during the telemetry query.
+- Confirmed active work in the last 5 minutes: `142` entered strategy rows, `142` paper orders, fresh run updates across `Entered`, `Observed`, `Settled`, and `Skipped`, and all expected stage cycle kinds.
+- Entry latency for the last 5 minutes remained clean: `142` checked entries, `over_3s=0`, max delay `0.566s`.
+Next: Continue normal monitoring.
+Notes: Production checks were read-only. No DB writes, live orders, service restart, or cancel action was performed.
+Blockers: None.
 
 ## Active Update 2026-06-29 Queued Entry Reprocessing Guard
 Goal: Reduce every BTC/ETH/SOL Up/Down strategy entry delay to no more than 3 seconds and verify the deployed service.
