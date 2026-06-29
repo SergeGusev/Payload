@@ -1,0 +1,6 @@
+## 2026-06-29T21:16:04.5071095Z
+Request:
+Выложил, проверяй
+
+Result:
+Verified the production deployment read-only. Service heartbeat on `192.168.0.101` is `Running`/`Live` on `info=1.0.0+6a563792d489d578d1d5602c8bca887804a108a8`, started `2026-06-30T00:11:07.231916+03:00`, with no heartbeat error. All 15 new `btc/eth/sol_up_down_5m_[1..5]_diff_real_limit_progress_premarket` rows exist, are enabled, have `live_stakes=false`, and Paper stake `1.00`. The first stale due window after restart was skipped as `preopen_entry_window_elapsed`; the first valid fresh window at `2026-06-30T00:14:30+03:00` produced `12` Entered runs and `3` `diff_limit_progress_zero_diff` skips. The 12 fresh Paper orders all carry raw decision source `persistent_utc_day_diff_real_limit_progress_premarket` and `counter_real_limit_enabled=true`; all 15 state rows are present and in-range for their `[-N, N]` limits; no Diff Real/Limit Progress API errors were recorded after service start. The normal 10-minute latency gate passed with `1788` entry rows, `0` over `3s`, and max delay `2.904s`. No production DB writes, live orders, service restart, cancel action, source-code changes, build, or tests were performed.

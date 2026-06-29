@@ -1,3 +1,17 @@
+## Active Update 2026-06-30 Diff Real Limit Progress Deployment Check
+Goal: Verify the deployed `6a56379` service and the new Diff Real Limit Progress Premarket strategies in production.
+Status: Completed
+Done:
+- Confirmed production service on `192.168.0.101` is `Running`/`Live` with version `info=1.0.0+6a563792d489d578d1d5602c8bca887804a108a8`, started `2026-06-30T00:11:07.231916+03:00`, and no heartbeat `last_error`.
+- Confirmed all 15 `btc/eth/sol_up_down_5m_[1..5]_diff_real_limit_progress_premarket` strategy rows exist in production, all enabled, all `live_stakes=false`, all with Paper stake `1.00`.
+- Confirmed the first post-restart stale due window was correctly skipped as `preopen_entry_window_elapsed`; the first valid fresh due window at `2026-06-30T00:14:30+03:00` produced `12` Entered runs and `3` `diff_limit_progress_zero_diff` skips.
+- Confirmed the `12` fresh Paper orders all have raw decision source `persistent_utc_day_diff_real_limit_progress_premarket` and `counter_real_limit_enabled=true`.
+- Confirmed all 15 persistent state rows were created and all current Diffs are inside each strategy's `[-N, N]` range; BTC Diff range was `0..3`, ETH `-2..1`, SOL `-2..1`, with `0` out-of-range rows.
+- Confirmed no Diff Real/Limit Progress API errors were recorded after service start.
+Next: Continue normal monitoring after the pending markets settle so pending state and `Sum` transitions can be observed.
+Notes: Production checks were read-only SELECT queries plus `scripts/check-strategy-entry-latency.ps1`. The initial strict split-cycle gate at `00:12+03` failed only because `previous_result_due` had not yet appeared in the very short post-restart window. After the first valid due window, the normal 10-minute latency gate passed: `1788` entry rows across `1785` strategies, `over_3s=0`, max checked delay `2.904s`, with stage timings including `fast_diff_due`, `fast_diff_observe`, `main`, `main_due`, `previous_result_due`, and `previous_result_observe`. No production DB writes, live orders, service restart, cancel action, source-code changes, build, or tests were performed.
+Blockers: None.
+
 ## Active Update 2026-06-29 Diff Real Limit Progress Premarket Strategies
 Goal: Add BTC/ETH/SOL `N Diff Real Limit Progress Premarket` strategy clones whose real Diff counters stay inside `[-N, N]`.
 Status: Completed
