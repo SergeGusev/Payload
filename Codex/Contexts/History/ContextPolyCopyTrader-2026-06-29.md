@@ -32,3 +32,10 @@ Request:
 
 Result:
 Inspected the due-entry scheduling and ordering code for the Reference Average Premarket path. Confirmed that Live-first is a limited ordering rule: the processor runs the Live flow before the NonLive flow, and effective-Live rows are prioritized only within the selected due timestamp/batch. It does not create a dedicated realtime queue, preempt older due batches, or bypass cycle work such as observe/settlement processing, DB/API calls, bulk skip checks, Gamma market warmup, and per-cycle throttling. For the affected target timestamps there were `168` Reference Average runs per due timestamp and only `1` effective-Live target row; the target can be first inside its due batch but still be processed late if the worker reaches the PreOpen placement stage late. No source code, DB writes, service restart, live order submission, or cancel action was performed.
+
+## 2026-06-29T06:31:15.7658210+00:00
+Request:
+Дай мне подробно таймстамп по обработке, я не понимаю, что именно вычисляется целую минуту
+
+Result:
+Queried production PostgreSQL read-only for target lifecycle timestamps, same-due entry-event ranks, API errors, and HTTP diagnostics. Confirmed target rows were created 8-9 minutes before due, so discovery was not late. Each target due timestamp had `361` `Crypto` due runs with only `1` effective-Live target run; the target planned due rank was `1`, but actual entry-event ranks were often last or near-last. For due `08:54:30+03`, early Diff rows processed at `08:54:37.098+03`, non-live Reference Average rows around `08:54:58.915+03`, the target Live row skipped `entry_due_expired` at `08:56:25.391+03`, and previous-score rows finished around `08:57:20.068+03`. Source inspection confirmed `entry_due_expired` is checked before Gamma lookup/strategy calculation, so the minute-scale delay is queue/cycle arrival delay, not a minute spent computing the Reference Average formula. No source code, DB writes, service restart, live order submission, or cancel action was performed.

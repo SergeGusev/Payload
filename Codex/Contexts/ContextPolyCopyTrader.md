@@ -1,3 +1,17 @@
+## Active Update 2026-06-29 SOL Down 90 Processing Timestamp Breakdown
+Goal: Provide detailed processing timestamps for delayed `SOL Up or Down 5m Down 90 bps Reference Average Premarket` skips.
+Status: Completed
+Done:
+- Queried production PostgreSQL read-only for target run lifecycle timestamps after Live enable and confirmed the markets were detected/rows created 8-9 minutes before due, so delay was not market discovery.
+- Recomputed entry-event timestamps as `entered_at_utc` for entered/settled rows and `updated_at_utc` for skipped rows.
+- Confirmed each target due timestamp had `361` `Crypto` due runs and only `1` effective-Live run; the target planned due rank was `1`, but actual entry-event ranks were often last or near-last: e.g. due `08:54:30+03` target processed at `08:56:25.391+03`, `115.392s` after due, rank `357/361`.
+- For due `08:54:30+03`, early Diff rows processed at `08:54:37.098+03` (`+7.099s`), non-live Reference Average rows processed around `08:54:58.915+03` (`+28.916s`), target Live row skipped `entry_due_expired` at `08:56:25.391+03`, and previous-score rows finished around `08:57:20.068+03`.
+- Confirmed `entry_due_expired` is checked before Gamma lookup/strategy calculation in `PlaceDueEntryRunAsync`, so those minute-scale delays are queue/cycle arrival delays, not a minute spent computing the Reference Average formula.
+- Checked production `api_errors`/`polymarket_http_logs` around `08:30-09:30+03`; there were repeated 30s HTTP timeouts, including order-book refresh, Gamma ingestion, Paper mark updates, Live maintenance, and one `BtcUpDown5mPaperStrategyWorker Cycle` timeout. HTTP diagnostics showed failed `/book` calls up to `28.484s` and Gamma calls up to `27.546s`.
+Next: Add per-cycle/per-stage timing instrumentation or implement an effective-Live PreOpen fast lane if exact stage attribution or hard Live timing is required.
+Notes: Read-only source/SQL analysis only; no source code, DB writes, service restart, live submission, or cancel action.
+Blockers: None.
+
 ## Active Update 2026-06-29 Live First Delay Explanation
 Goal: Explain why Live Reference Average Premarket entries can still be delayed even though Live entries are processed first.
 Status: Completed
