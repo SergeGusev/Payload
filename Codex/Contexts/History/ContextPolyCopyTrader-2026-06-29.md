@@ -171,3 +171,10 @@ Request:
 
 Result:
 Checked production PostgreSQL read-only and confirmed the deployed service is running `46b9e58` in Live mode with a fresh heartbeat. The 3-second latency gate still failed: first post-deploy check had `245/1391` rows above 3 seconds, mostly the cold-start `17:20` slot; a later steady-state check had `1283/3142` rows above 3 seconds, worst about `6.590s`. Stage timings showed the previous persistence hot path was fixed, but queued terminal run updates were not yet flushed to PostgreSQL before the next due poll, so the same Observed runs were reprocessed and finalized late. Implemented a local finalized-run guard in `BtcUpDown5mPaperStrategyProcessor` to exclude successfully enqueued/persisted terminal run IDs from later due-query results until the background writer catches up. Added regression coverage for queued fast-diff duplicate suppression. Verification: service build passed with `0` warnings/errors; focused tests passed `7/7`; diff check passed with line-ending warnings only. No production DB writes, live orders, service restart, or cancel action was performed.
+
+## 2026-06-29T14:48:21.0772684Z
+Request:
+User deployed commit `ab41de9` and asked to verify production.
+
+Result:
+Checked production PostgreSQL read-only and confirmed the service is running `ab41de9` in Live mode with a fresh heartbeat. The initial post-restart check had no `>3s` entry delays but was too early to include all split due cycle kinds. After the next due slot, the standard latency gate passed with `1772` checked rows across `1758` strategies, `over_3s=0`, max delay `2.800s`, and all required cycle kinds present: `fast_diff_due`, `fast_diff_observe`, `main`, `main_due`, `previous_result_due`, and `previous_result_observe`. The active 3-second latency objective is complete for the checked production window. No production DB writes, live orders, service restart, or cancel action was performed.

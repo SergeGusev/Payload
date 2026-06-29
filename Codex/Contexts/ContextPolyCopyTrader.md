@@ -1,19 +1,21 @@
 ## Active Update 2026-06-29 Queued Entry Reprocessing Guard
 Goal: Reduce every BTC/ETH/SOL Up/Down strategy entry delay to no more than 3 seconds and verify the deployed service.
-Status: In Progress
+Status: Completed
 Done:
 - Verified production is running deployed commit `46b9e58` with a fresh heartbeat in Live mode.
 - The production latency gate still failed. First check after deploy had `245/1391` rows above 3 seconds, mostly cold-start `17:20` rows. A second steady-state check had `1283/3142` rows above 3 seconds, worst about `6.590s`.
 - Stage timings showed the previous persistence hot path is fixed: `deferred_persistence_enqueue` was no longer the blocker, but fast-diff runs were reprocessed in a later poll because the first poll only enqueued terminal run updates and PostgreSQL still showed the runs as `Observed` until the background writer flushed.
 - Added a local finalized-run guard in `BtcUpDown5mPaperStrategyProcessor`: after a terminal run batch is successfully enqueued or synchronously persisted, the run IDs are excluded from later due-query results for a bounded retention window.
 - Added regression coverage proving a queued fast-diff entry is not reprocessed before the queue writer flushes to the repository.
+- Verified the user deployment of `ab41de9` in production. The service heartbeat reported `Live`, `Running`, and version `1.0.0+ab41de91ec23f3c30a9d0fcfc16a418aaca12b05`.
 Verification:
 - `dotnet build src/PolyCopyTrader.Service/PolyCopyTrader.Service.csproj --no-restore -p:UseSharedCompilation=false` passed with `0` warnings/errors.
 - `dotnet test tests/PolyCopyTrader.Tests/PolyCopyTrader.Tests.csproj --no-restore --filter "FullyQualifiedName~ProcessDiffCounterFastDueEntriesAsync_DoesNotReprocessQueuedRunsBeforeWriterFlush|FullyQualifiedName~ProcessDiffCounterFastDueEntriesAsync_UsesExposureCacheForDeferredPaperPositions|FullyQualifiedName~PaperEntryPersistenceQueueTests|FullyQualifiedName~ProcessAsync_QueuesDeferredPaperEntryPersistenceWhenQueueConfigured"` passed `7/7`; the test project still prints an existing nullable warning at `BtcUpDown5mPaperStrategyProcessorTests.cs(7088,52)`.
 - `git diff --check` passed for the edited source/test files with line-ending warnings only.
-Next: Commit/push this patch, deploy the new service build, then rerun the production latency gate on fresh post-deploy rows with the new expected commit.
+- `scripts/check-strategy-entry-latency.ps1 -HostOverride 192.168.0.101 -ExpectedCommit ab41de9 -MaxDelaySeconds 3 -LookbackMinutes 10 -RequireSplitCycleKinds` passed on fresh post-start rows: `1772` rows across `1758` strategies, `over_3s=0`, max delay `2.800s`; stage timing cycle kinds included `fast_diff_due`, `fast_diff_observe`, `main`, `main_due`, `previous_result_due`, and `previous_result_observe`.
+Next: Continue monitoring normal operation; no further latency fix is required for the checked production window.
 Notes: Production checks were read-only. No production DB writes, live orders, service restart, or cancel action was performed by Codex. Existing unrelated dirty files and output folders were left untouched.
-Blockers: Final goal cannot be marked complete until this new patch is deployed and a fresh production gate proves every checked strategy entry delay is <= 3 seconds.
+Blockers: None.
 
 ## Active Update 2026-06-29 Deferred Paper Position Materialization
 Goal: Reduce every BTC/ETH/SOL Up/Down strategy entry delay to no more than 3 seconds and verify the deployed service.
