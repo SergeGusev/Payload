@@ -1,3 +1,20 @@
+## Active Update 2026-06-29 Strategy Entry Latency Gate
+Goal: Reduce every BTC/ETH/SOL Up/Down strategy entry delay to no more than 3 seconds and verify the deployed service.
+Status: In Progress
+Done:
+- Retried production verification of the user-deployed service through `192.168.0.101:5432`; both direct TCP/psql checks and the new latency gate still timed out from this machine.
+- Added `scripts/check-strategy-entry-latency.ps1`, a psql-based production gate that reads `POLYCOPYTRADER_POSTGRES_CONNECTION`, optionally overrides only the host, verifies the service heartbeat/version, summarizes enabled Up/Down 5m strategy entry delays, prints worst over-limit rows, and exits non-zero if any checked entry exceeds the configured delay budget.
+- The gate also prints recent BTC strategy stage timing cycle kinds/stages when `btc_up_down_5m_strategy_stage_timings` is present and warns if split-lane cycle kinds are absent in the selected window.
+- Updated README stage-timing documentation to include the current split-lane `cycle_kind` values and the latency-gate command.
+Verification:
+- `powershell -NoProfile -ExecutionPolicy Bypass -File scripts/check-strategy-entry-latency.ps1 -MaxDelaySeconds 3 -LookbackMinutes 5 -AllowNoRows -MaxHeartbeatAgeSeconds 999999` completed against the local stale DB, confirming script execution and graceful handling of a missing stage table.
+- `powershell -NoProfile -ExecutionPolicy Bypass -File scripts/check-strategy-entry-latency.ps1 -HostOverride 192.168.0.101 -ExpectedCommit 02cf2d6 -MaxDelaySeconds 3 -LookbackMinutes 30` failed with `psql ... timeout expired`, so production data was not read.
+- PowerShell parser syntax check passed for `scripts/check-strategy-entry-latency.ps1`.
+- `git diff --check -- README.md scripts/check-strategy-entry-latency.ps1` passed with README line-ending warning only.
+Next: Run the latency gate on the VPS or from a machine that can reach production PostgreSQL, or restore local connectivity to `192.168.0.101:5432`, then verify the deployed heartbeat contains `02cf2d6` or newer and no enabled Up/Down 5m strategy entry exceeds 3 seconds.
+Notes: No production DB writes, live orders, service restart, or cancel action was performed by Codex. Existing unrelated dirty files and output folders were left untouched.
+Blockers: Final 3-second objective still cannot be marked complete until a reachable deployed latest build produces fresh production timings proving every strategy entry delay is <= 3 seconds.
+
 ## Active Update 2026-06-29 Previous Result Due Fast Lane
 Goal: Reduce every BTC/ETH/SOL Up/Down strategy entry delay to no more than 3 seconds and verify the deployed service.
 Status: In Progress
