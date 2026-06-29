@@ -5,29 +5,20 @@ namespace PolyCopyTrader.Service.PaperTrading;
 
 public sealed class ExposureSnapshotCache(IAppRepository repository) : IExposureSnapshotCache
 {
-    private readonly object sync = new();
+    private readonly object updateSync = new();
     private readonly SemaphoreSlim refreshLock = new(1, 1);
-    private IReadOnlyList<PaperOrder> openPaperOrders = [];
-    private IReadOnlyList<PaperPosition> paperPositions = [];
-    private IReadOnlyList<LiveOrder> openLiveOrders = [];
-    private DateTimeOffset loadedAtUtc = DateTimeOffset.MinValue;
-    private bool initialized;
+    private TradingExposureSnapshot? snapshot;
 
     public async Task<TradingExposureSnapshot> GetSnapshotAsync(CancellationToken cancellationToken = default)
     {
-        if (!initialized)
+        var current = Volatile.Read(ref snapshot);
+        if (current is null)
         {
             await RefreshAsync(cancellationToken);
+            current = Volatile.Read(ref snapshot);
         }
 
-        lock (sync)
-        {
-            return new TradingExposureSnapshot(
-                openPaperOrders.ToArray(),
-                paperPositions.ToArray(),
-                openLiveOrders.ToArray(),
-                loadedAtUtc);
-        }
+        return current ?? new TradingExposureSnapshot([], [], [], DateTimeOffset.MinValue);
     }
 
     public async Task RefreshAsync(CancellationToken cancellationToken = default)
@@ -44,13 +35,14 @@ public sealed class ExposureSnapshotCache(IAppRepository repository) : IExposure
             var loadedPaperPositions = await paperPositionsTask;
             var loadedOpenLiveOrders = await openLiveOrdersTask;
 
-            lock (sync)
+            var refreshedSnapshot = new TradingExposureSnapshot(
+                loadedOpenPaperOrders.ToArray(),
+                loadedPaperPositions.ToArray(),
+                loadedOpenLiveOrders.ToArray(),
+                DateTimeOffset.UtcNow);
+            lock (updateSync)
             {
-                openPaperOrders = loadedOpenPaperOrders.ToArray();
-                paperPositions = loadedPaperPositions.ToArray();
-                openLiveOrders = loadedOpenLiveOrders.ToArray();
-                loadedAtUtc = DateTimeOffset.UtcNow;
-                initialized = true;
+                Volatile.Write(ref snapshot, refreshedSnapshot);
             }
         }
         finally
@@ -66,14 +58,20 @@ public sealed class ExposureSnapshotCache(IAppRepository repository) : IExposure
 
     public void ApplyPaperOrders(IReadOnlyCollection<PaperOrder> orders)
     {
-        lock (sync)
+        if (orders.Count == 0)
         {
-            if (!initialized || orders.Count == 0)
+            return;
+        }
+
+        lock (updateSync)
+        {
+            var current = Volatile.Read(ref snapshot);
+            if (current is null)
             {
                 return;
             }
 
-            var openOrdersById = openPaperOrders.ToDictionary(order => order.Id);
+            var openOrdersById = current.OpenPaperOrders.ToDictionary(order => order.Id);
             foreach (var order in orders)
             {
                 if (IsOpenPaperOrder(order))
@@ -86,10 +84,15 @@ public sealed class ExposureSnapshotCache(IAppRepository repository) : IExposure
                 }
             }
 
-            openPaperOrders = openOrdersById.Values
-                .OrderByDescending(item => item.CreatedAtUtc)
-                .ToArray();
-            loadedAtUtc = DateTimeOffset.UtcNow;
+            Volatile.Write(
+                ref snapshot,
+                current with
+                {
+                    OpenPaperOrders = openOrdersById.Values
+                        .OrderByDescending(item => item.CreatedAtUtc)
+                        .ToArray(),
+                    LoadedAtUtc = DateTimeOffset.UtcNow
+                });
         }
     }
 
@@ -100,37 +103,49 @@ public sealed class ExposureSnapshotCache(IAppRepository repository) : IExposure
 
     public void ApplyPaperPositions(IReadOnlyCollection<PaperPosition> positions)
     {
-        lock (sync)
+        if (positions.Count == 0)
         {
-            if (!initialized || positions.Count == 0)
+            return;
+        }
+
+        lock (updateSync)
+        {
+            var current = Volatile.Read(ref snapshot);
+            if (current is null)
             {
                 return;
             }
 
-            var positionsByKey = paperPositions.ToDictionary(
+            var positionsByKey = current.PaperPositions.ToDictionary(
                 position => PaperPositionKey.From(position.CopiedTraderWallet, position.AssetId));
             foreach (var position in positions)
             {
                 positionsByKey[PaperPositionKey.From(position.CopiedTraderWallet, position.AssetId)] = position;
             }
 
-            paperPositions = positionsByKey.Values
-                .OrderByDescending(item => item.UpdatedAtUtc)
-                .ToArray();
-            loadedAtUtc = DateTimeOffset.UtcNow;
+            Volatile.Write(
+                ref snapshot,
+                current with
+                {
+                    PaperPositions = positionsByKey.Values
+                        .OrderByDescending(item => item.UpdatedAtUtc)
+                        .ToArray(),
+                    LoadedAtUtc = DateTimeOffset.UtcNow
+                });
         }
     }
 
     public void ApplyLiveOrder(LiveOrder order)
     {
-        lock (sync)
+        lock (updateSync)
         {
-            if (!initialized)
+            var current = Volatile.Read(ref snapshot);
+            if (current is null)
             {
                 return;
             }
 
-            var orders = openLiveOrders
+            var orders = current.OpenLiveOrders
                 .Where(item => item.Id != order.Id)
                 .ToList();
             if (IsOpenLiveOrder(order))
@@ -138,10 +153,15 @@ public sealed class ExposureSnapshotCache(IAppRepository repository) : IExposure
                 orders.Add(order);
             }
 
-            openLiveOrders = orders
-                .OrderByDescending(item => item.CreatedAtUtc)
-                .ToArray();
-            loadedAtUtc = DateTimeOffset.UtcNow;
+            Volatile.Write(
+                ref snapshot,
+                current with
+                {
+                    OpenLiveOrders = orders
+                        .OrderByDescending(item => item.CreatedAtUtc)
+                        .ToArray(),
+                    LoadedAtUtc = DateTimeOffset.UtcNow
+                });
         }
     }
 

@@ -1,3 +1,23 @@
+## Active Update 2026-06-29 Previous Result Hot Path Trim
+Goal: Reduce every BTC/ETH/SOL Up/Down strategy entry delay to no more than 3 seconds and verify the deployed service.
+Status: In Progress
+Done:
+- Verified the user's deployment is running commit `46b4099`.
+- The standard production latency gate failed immediately after restart: `1375/1376` checked rows above 3 seconds, but that first window included backlog due before service start (`16:14:50`, `16:14:55`, `16:15:00` Europe/Sofia while service started `16:15:03`).
+- A fresh-only read with `entry_due_at_utc >= started_at_utc` still failed: `1767` rows across `1756` strategies, `770` above 3 seconds, max `8.409s`, with the `16:20:00` slot at `759/1363` above 3 seconds.
+- Stage timings for the `16:20:00` due slot showed the current bottleneck in `previous_result_due`: total `9658ms`, including `3484ms` in `regular_due_entries.previous_result_ready_filter`, `2734ms` in `regular_due_entries.deferred_persistence_prepare`, and `2719ms` in `regular_due_entries.decision_tasks`.
+- Removed the heavy closed-Gamma readiness fallback from the previous-result due hot path; readiness now uses the WebSocket resolved-market ledger only, defers inside the 1-second SLA, and skips after the SLA rather than blocking the due batch.
+- Reworked `ExposureSnapshotCache` so `GetSnapshotAsync` returns the current immutable snapshot without sharing the same lock as bulk `ApplyPaperOrders`/`ApplyPaperPositions`, preventing large fast-diff enqueue exposure updates from blocking previous-result `deferred_persistence_prepare`.
+- Updated `scripts/check-strategy-entry-latency.ps1` to exclude rows whose `entry_due_at_utc` is before the selected gate window, so restart backlog no longer creates false SLA failures.
+Verification:
+- `dotnet build src/PolyCopyTrader.Service/PolyCopyTrader.Service.csproj --no-restore` passed.
+- `dotnet test tests/PolyCopyTrader.Tests/PolyCopyTrader.Tests.csproj --no-restore --filter "FullyQualifiedName~ProcessPreviousResultFastDueEntriesAsync|FullyQualifiedName~ProcessPreviousResultDueEntriesAsync|FullyQualifiedName~ExposureSnapshotCacheTests|FullyQualifiedName~PaperEntryPersistenceQueueTests|FullyQualifiedName~ProcessAsync_QueuesDeferredPaperEntryPersistenceWhenQueueConfigured"` passed `12/12`.
+- PowerShell parser check for `scripts/check-strategy-entry-latency.ps1` passed.
+- `git diff --check` passed for the edited files with line-ending warnings only.
+Next: Commit/push this patch, deploy the new service build, then rerun the production latency gate on a fresh slot with expected commit `<newCommit>`.
+Notes: Production checks were read-only. No production DB writes, live orders, service restart, or cancel action was performed by Codex. Existing unrelated dirty files and output folders were left untouched.
+Blockers: Final goal cannot be marked complete until this new build is deployed and a fresh production gate proves every checked strategy entry delay is <= 3 seconds.
+
 ## Active Update 2026-06-29 Async Paper Entry Persistence Queue
 Goal: Reduce every BTC/ETH/SOL Up/Down strategy entry delay to no more than 3 seconds and verify the deployed service.
 Status: In Progress

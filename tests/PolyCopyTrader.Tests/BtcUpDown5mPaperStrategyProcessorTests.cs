@@ -11475,6 +11475,48 @@ public sealed class BtcUpDown5mPaperStrategyProcessorTests
     }
 
     [Fact]
+    public async Task ProcessPreviousResultFastDueEntriesAsync_DoesNotUseClosedGammaReadinessFallback()
+    {
+        var marketStart = DateTimeOffset.UtcNow;
+        var timeProvider = new ManualTimeProvider(marketStart.AddMilliseconds(500));
+        var repository = new TestAppRepository();
+        var market = CreateMarket(
+            marketStart,
+            marketStart.AddMinutes(5),
+            upPrice: 0.50m,
+            downPrice: 0.50m);
+        repository.PolymarketGammaMarkets.Add(market);
+        repository.StrategyMarketPaperRuns.Add(CreateObservedRun(
+            Skip1Variant,
+            market,
+            marketStart,
+            marketStart.AddMinutes(-1),
+            marketStart));
+        var gammaClient = new FakeGammaClient(
+            [],
+            [CreateClosedDiffMarket("BTC", marketStart.AddMinutes(-5), "Up")]);
+        var processor = CreateProcessorCoreWithOptions(
+            repository,
+            [],
+            DefaultOrderBooks(),
+            _ => { },
+            [],
+            CreateBtcOptions(false, [Skip1Variant.Code]),
+            btcUsdReferencePriceClient: new FakeBtcUsdReferencePriceClient(100m),
+            btcUsdReferencePriceCache: CreateBtcUsdReferenceCache([100m]),
+            gammaClient: gammaClient,
+            timeProvider: timeProvider);
+
+        var dueResult = await processor.ProcessPreviousResultFastDueEntriesAsync();
+
+        Assert.Equal(0, dueResult.EntriesPlaced);
+        Assert.Equal(0, dueResult.RunsSkipped);
+        Assert.Equal(0, gammaClient.ClosedMarketRequestCount);
+        var run = Assert.Single(repository.StrategyMarketPaperRuns, item => item.StrategyId == Skip1Variant.Id);
+        Assert.Equal(StrategyMarketPaperRunStatuses.Observed, run.Status);
+    }
+
+    [Fact]
     public async Task ProcessAsync_SkipConsecutiveResultsTreatsUpMidpointAtHalfAsUp()
     {
         var now = DateTimeOffset.UtcNow;

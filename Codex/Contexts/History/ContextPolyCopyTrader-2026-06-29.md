@@ -1,3 +1,10 @@
+## 2026-06-29T13:25:20.9849697Z
+Request:
+Deployed, check it.
+
+Result:
+Verified production heartbeat read-only: service was running commit `46b4099`. The standard gate failed immediately after restart with `1375/1376` rows above 3s, but that included backlog whose `entry_due_at_utc` was before service start. A fresh-only check (`entry_due_at_utc >= started_at_utc`) still failed: `1767` rows, `770` above 3s, max `8.409s`; the `16:20:00` Europe/Sofia slot had `759/1363` rows above 3s. Stage timings isolated the active bottleneck to `previous_result_due`: `9658ms` total, with `3484ms` in `previous_result_ready_filter`, `2734ms` in `deferred_persistence_prepare`, and `2719ms` in `decision_tasks`. Implemented the next patch: removed closed-Gamma readiness fallback from previous-result due hot path, made `ExposureSnapshotCache.GetSnapshotAsync` read the current immutable snapshot without sharing the bulk-apply lock, and fixed the latency gate to ignore pre-window `entry_due_at_utc` backlog rows. Verification passed: service build, focused previous-result/exposure/queue tests `12/12`, PowerShell parser check, and diff check. No production DB writes, live orders, service restart, or cancel action was performed.
+
 ## 2026-06-29T13:06:39.4999809Z
 Request:
 Ok, waiting for the next result.

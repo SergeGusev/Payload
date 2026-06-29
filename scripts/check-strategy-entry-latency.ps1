@@ -275,6 +275,7 @@ WITH service AS (
     FROM events_raw, bounds
     WHERE events_raw.event_at_utc IS NOT NULL
       AND events_raw.event_at_utc >= bounds.window_start_utc
+      AND events_raw.entry_due_at_utc >= bounds.window_start_utc
 )
 SELECT jsonb_build_object(
     'db_now_utc', (SELECT db_now_utc FROM bounds),

@@ -2711,13 +2711,6 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
             .ToHashSet();
         var readyKeys = new HashSet<AssetMarketStartKey>(
             await GetResolvedMarketLedgerKeysAsync(candidates, cancellationToken));
-        if (readyKeys.Count < requestedKeys.Count)
-        {
-            readyKeys.UnionWith(await GetPreviousResultReadyClosedMarketKeysAsync(
-                candidates,
-                GetUtcNow(),
-                cancellationToken));
-        }
 
         var nowUtc = GetUtcNow();
         var readyRuns = new List<StrategyMarketPaperRun>(runs.Count);
