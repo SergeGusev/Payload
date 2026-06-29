@@ -1499,6 +1499,7 @@ public static class StrategyIds
         variants.AddRange(CreateDiffProgressVariants("BTC"));
         variants.AddRange(CreateDiffShiftProgressVariants("BTC"));
         variants.AddRange(CreateDiffShiftProgressPremarketVariants("BTC"));
+        variants.AddRange(CreateDiffLimitProgressPremarketVariants("BTC"));
         variants.AddRange(CreateBtcAdjustedDiffCounterTrendVariants());
         variants.AddRange(CreateBtcShiftDiffCounterTrendVariants());
         variants.AddRange(CreateBtcPreviousScoreCounterTrendVariants());
@@ -2003,6 +2004,7 @@ public static class StrategyIds
             variants.AddRange(CreateDiffProgressVariants(asset.Symbol));
             variants.AddRange(CreateDiffShiftProgressVariants(asset.Symbol));
             variants.AddRange(CreateDiffShiftProgressPremarketVariants(asset.Symbol));
+            variants.AddRange(CreateDiffLimitProgressPremarketVariants(asset.Symbol));
 
             variants.AddRange(CreateCryptoAdjustedDiffCounterTrendVariants(asset));
             variants.AddRange(CreateCryptoShiftDiffCounterTrendVariants(asset));
@@ -2259,6 +2261,30 @@ public static class StrategyIds
         };
     }
 
+    private static IReadOnlyList<BtcUpDown5mStrategyVariant> CreateDiffLimitProgressPremarketVariants(
+        string assetSymbol)
+    {
+        var variants = new List<BtcUpDown5mStrategyVariant>(5);
+        var idGroup = GetDiffLimitProgressPremarketIdGroup(assetSymbol);
+        for (var limit = 1; limit <= 5; limit++)
+        {
+            variants.Add(CreateDiffLimitProgressPremarketVariant(assetSymbol, idGroup, limit));
+        }
+
+        return variants;
+    }
+
+    private static int GetDiffLimitProgressPremarketIdGroup(string assetSymbol)
+    {
+        return assetSymbol.ToUpperInvariant() switch
+        {
+            "BTC" => 8169,
+            "ETH" => 8170,
+            "SOL" => 8171,
+            _ => throw new ArgumentOutOfRangeException(nameof(assetSymbol), assetSymbol, "Unsupported Diff Limit Progress Premarket asset.")
+        };
+    }
+
     private static IReadOnlyList<BtcUpDown5mStrategyVariant> CreateCryptoAdjustedDiffCounterTrendVariants(CryptoUpDown5mAssetSpec asset)
     {
         var variants = new List<BtcUpDown5mStrategyVariant>(48);
@@ -2476,6 +2502,28 @@ public static class StrategyIds
             BtcUpDown5mStrategyBehavior.DiffShiftProgress,
             threshold,
             Category: "Up Or Down 5 min Diff Shift Progress",
+            ReferenceAssetSymbol: normalizedAsset);
+    }
+
+    private static BtcUpDown5mStrategyVariant CreateDiffLimitProgressPremarketVariant(
+        string assetSymbol,
+        int idGroup,
+        int limit)
+    {
+        var normalizedAsset = assetSymbol.ToUpperInvariant();
+        var assetCode = normalizedAsset.ToLowerInvariant();
+        var limitText = limit.ToString(CultureInfo.InvariantCulture);
+
+        return new BtcUpDown5mStrategyVariant(
+            Guid.Parse($"b7c50005-0000-4000-{idGroup:0000}-{limit:000000000000}"),
+            $"{assetCode}_up_down_5m_{limit}_diff_limit_progress_premarket",
+            $"{normalizedAsset} Up or Down 5m {limitText} Diff Limit Progress Premarket",
+            $"30 seconds before {normalizedAsset} 5m market open, use persistent UTC-day UpCount, DownCount, and Sum. Counts reset at 00:00 UTC. Results before the latest 5-minute market use resolved market results; the latest market result is synthesized from the current {normalizedAsset} reference price. Diff is UpCount - DownCount: Diff > 0 buys Down, Diff < 0 buys Up, and Diff 0 skips. Unit is this strategy's Paper stake amount, and each BUY FAK Paper entry uses multiplier min(abs(Diff), {limitText}) at the Diff instant max price cap.",
+            BtcUpDown5mStrategyDirection.Dynamic,
+            -30,
+            BtcUpDown5mStrategyBehavior.DiffLimitProgressPremarket,
+            limit,
+            Category: "Up Or Down 5 min Diff Limit Progress",
             ReferenceAssetSymbol: normalizedAsset);
     }
 
@@ -3380,7 +3428,8 @@ public enum BtcUpDown5mStrategyBehavior
     ShiftDiffCounterTrend,
     DiffCounterTrendFakPremarket,
     DiffProgress,
-    DiffShiftProgress
+    DiffShiftProgress,
+    DiffLimitProgressPremarket
 }
 
 public sealed record BtcUpDown5mStrategyVariant(

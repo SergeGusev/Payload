@@ -2603,6 +2603,35 @@ ON CONFLICT (id) DO UPDATE SET
     updated_at_utc = excluded.updated_at_utc;
 
 INSERT INTO strategies (id, code, name, description, enabled, live_stakes, paper_stake_amount, created_at_utc, updated_at_utc)
+WITH limits(limit_value) AS (
+    SELECT value
+    FROM generate_series(1, 5) AS generated(value)
+),
+assets(asset_symbol, id_group) AS (
+    VALUES
+        ('BTC', '8169'),
+        ('ETH', '8170'),
+        ('SOL', '8171')
+)
+SELECT
+    ('b7c50005-0000-4000-' || id_group || '-' || lpad(limit_value::text, 12, '0'))::uuid,
+    lower(asset_symbol) || '_up_down_5m_' || limit_value::text || '_diff_limit_progress_premarket',
+    asset_symbol || ' Up or Down 5m ' || limit_value::text || ' Diff Limit Progress Premarket',
+    '30 seconds before ' || asset_symbol || ' 5m market open, use persistent UTC-day UpCount, DownCount, and Sum. Counts reset at 00:00 UTC. Results before the latest 5-minute market use resolved market results; the latest market result is synthesized from the current ' || asset_symbol || ' reference price. Diff is UpCount - DownCount: Diff > 0 buys Down, Diff < 0 buys Up, and Diff 0 skips. Unit is this strategy paper_stake_amount, and each BUY FAK Paper entry uses multiplier min(abs(Diff), ' || limit_value::text || ') at the Diff instant max price cap.',
+    true,
+    false,
+    1.00,
+    now(),
+    now()
+FROM assets
+CROSS JOIN limits
+ON CONFLICT (id) DO UPDATE SET
+    code = excluded.code,
+    name = excluded.name,
+    description = excluded.description,
+    updated_at_utc = excluded.updated_at_utc;
+
+INSERT INTO strategies (id, code, name, description, enabled, live_stakes, paper_stake_amount, created_at_utc, updated_at_utc)
 WITH assets(asset_symbol, up_id_group, down_id_group, up_revert_id_group, down_revert_id_group) AS (
     VALUES
         ('BTC', '8053', '8054', '8103', '8104'),

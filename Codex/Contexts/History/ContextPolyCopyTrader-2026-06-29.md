@@ -192,3 +192,21 @@ Request:
 
 Result:
 Retried production access read-only. PostgreSQL at `192.168.0.101:5432` is available again and `Test-NetConnection` reported `TcpTestSucceeded=True` from `192.168.0.100` while ICMP ping still failed. The service heartbeat showed `Running`/`Live`, version `1.0.0+ab41de91ec23f3c30a9d0fcfc16a418aaca12b05`, with heartbeat age about `37s`. Recent activity was present in the last 5 minutes: `142` entered strategy rows, `142` paper orders, fresh run updates, and all expected stage cycle kinds. Entry latency was clean for that window: `142` checked entries, `over_3s=0`, max delay `0.566s`. No production writes, live orders, service restart, or cancel action was performed.
+## 2026-06-29T18:06:57.8589197+00:00
+Request:
+Делаем три типа стратегий, по одной для каждой из валют - CURR Up Or Down 5 min N Diff Limit Progress Premarket, где N меняется от 1 до 5. Diff считается как UpCount - DownCount, при Diff > 0 ставим Down, при Diff < 0 ставим Up
+
+Логика работы стратегий следующая:
+
+1. Значения UpCount, DownCount и Sum - персистентны, хранятся в базе и читаются после рестарта сервиса. Обнуляются каждые сутки в 0 часов UTC
+
+2. Каждая ставка имеет множитель, равный модулю Diff. Число N в имени стратегии означает максимальное значение множителя. То есть Diff может расти, но множитель упирается в потолок.
+
+3. Стратегия работает в режиме премаркета и начинает считаться за 30 секунд до его начала. Результаты последнего маркета определяются по текущему курсу валюты, результаты предыдущих - по реальным результатам рынка.
+
+8. Ставки - в FAK режиме с гарантированной выборкой стека.
+
+Добавляем все новые стратегии в категорию - Up Or Down 5 min Diff Limit Progress
+
+Result:
+Added BTC/ETH/SOL `N Diff Limit Progress Premarket` variants for `N=1..5`, schema seeding, service premarket decision logic with persistent UTC-day counters and capped Diff stake multipliers, category grouping, tests, README, and configuration reference updates. Focused tests passed `70/70`, service build passed with `0` warnings/errors, and `git diff --check` passed with line-ending warnings only. The full test project still has unrelated existing FAK/strategy assertion failures around guaranteed FAK worst price behavior.

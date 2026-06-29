@@ -1,3 +1,16 @@
+## Active Update 2026-06-29 Diff Limit Progress Premarket Strategies
+Goal: Add BTC/ETH/SOL `N Diff Limit Progress Premarket` strategy families with persistent UTC-day counters and capped Diff stake multipliers.
+Status: Completed
+Done:
+- Added BTC, ETH, and SOL `CURR Up or Down 5m N Diff Limit Progress Premarket` variants for `N=1..5`, with IDs in groups `8169`, `8170`, and `8171`.
+- Added the dashboard category `Up Or Down 5 min Diff Limit Progress` and PostgreSQL schema seeding for the 15 new strategy rows.
+- Implemented the service decision path: persistent `UpCount`, `DownCount`, and `Sum`; reset at `00:00 UTC`; premarket evaluation at `-30s`; older results from the result ledger; latest previous market result synthesized from current reference price; positive `Diff` buys Down, negative `Diff` buys Up, zero skips; stake `Unit * min(abs(Diff), N)`; FAK Paper entry path with pending-bet state.
+- Added processor/catalog/category/schema tests covering cap sizing, UTC reset, BTC/ETH/SOL catalog counts, category grouping, and schema seed text.
+- Updated README and `docs/configuration_reference.md`.
+Next: Deploy/restart the service so schema initialization inserts/enables the new strategies.
+Notes: Verification passed: `git diff --check` passed with line-ending warnings only; `dotnet build src/PolyCopyTrader.Service/PolyCopyTrader.Service.csproj --no-restore -p:UseSharedCompilation=false` passed with `0` warnings/errors; focused `dotnet test tests/PolyCopyTrader.Tests/PolyCopyTrader.Tests.csproj --no-restore --filter "FullyQualifiedName~DiffLimitProgressPremarket|FullyQualifiedName~PostgresSchema_SeedsDiffLimitProgressPremarketStrategies|FullyQualifiedName~StrategyIds_IncludeStandardMartinAndGammaBtcVariants|FullyQualifiedName~StrategyIds_IncludeEthAndSolBinanceBpsVariants|FullyQualifiedName~StrategyDisplayCategoryTests" -p:UseSharedCompilation=false` passed `70/70`. A full test-project run currently fails outside the focused gate in existing FAK/strategy assertions that still expect executable ask prices or legacy timing while the current implementation uses guaranteed FAK worst price `0.99`; this was not changed as part of the new strategy task. Existing unrelated dirty files and output folders were left untouched.
+Blockers: None.
+
 ## Active Update 2026-06-29 Current Production Work Check
 Goal: Check whether the deployed PolyCopyTrader service is currently running and processing work.
 Status: Completed

@@ -820,6 +820,16 @@ from the reference price, buy Down for positive raw Diff and Up for negative raw
 Diff, skip Diff 0, and use `Unit * abs(Diff)` FAK sizing while damping Diff back
 to zero after `abs(Diff)` reaches `N`.
 
+Diff Limit Progress Premarket rows also keep persistent `UpCount`, `DownCount`,
+and `Sum` in `crypto_up_down_5m_diff_shift_progress_states`, but the counter is
+scoped to the UTC day and resets at `00:00 UTC`. BTC, ETH, and SOL each seed
+`N=1..5`. The worker runs 30 seconds before open, uses resolved ledger results
+for older markets, synthesizes the latest previous market from the current
+reference price, buys Down when `Diff = UpCount - DownCount` is positive, buys
+Up when it is negative, skips Diff 0, and sizes BUY FAK entries as
+`Unit * min(abs(Diff), N)`. Diff itself can grow past `N`; only the stake
+multiplier is capped.
+
 The active non-Instant `Middle` variants use opening-limit pricing rather than
 taker pricing. At market open `Middle N` reads the latest Binance BTC/USDT
 trade-stream price and compares it to the arithmetic mean of the latest `N`
