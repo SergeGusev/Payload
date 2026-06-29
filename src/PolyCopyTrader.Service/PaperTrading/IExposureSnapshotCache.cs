@@ -16,7 +16,11 @@ public interface IExposureSnapshotCache
 
     void ApplyPaperOrder(PaperOrder order);
 
+    void ApplyPaperOrders(IReadOnlyCollection<PaperOrder> orders);
+
     void ApplyPaperPosition(PaperPosition position);
+
+    void ApplyPaperPositions(IReadOnlyCollection<PaperPosition> positions);
 
     void ApplyLiveOrder(LiveOrder order);
 }

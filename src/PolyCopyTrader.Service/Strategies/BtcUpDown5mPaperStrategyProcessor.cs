@@ -599,16 +599,15 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
             .Where(variant => !IsPreOpenTimedOpeningLimitEntry(variant))
             .ToArray();
 
-        controlState.RecordLoop($"BTC5mStrategy {flowName} fast placing regular due entries. Variants={regularEntryVariants.Length}", null);
-        var (regularEntriesPlaced, regularRunsSkipped) = await PlaceDueEntriesAsync(
+        controlState.RecordLoop($"BTC5mStrategy {flowName} fast placing PreOpen due entries. Variants={preOpenEntryVariants.Length}", null);
+        var (preOpenEntriesPlaced, preOpenRunsSkipped) = await PlaceDuePreOpenEntriesAsync(
             GetUtcNow(),
-            regularEntryVariants,
+            preOpenEntryVariants,
             strategySettings,
-            previousResultReadyOnly,
             cycleId,
             cycleKind,
             flowName,
-            "regular_due_entries",
+            "preopen_due_entries",
             cancellationToken,
             dueEntryLock);
 
@@ -647,15 +646,16 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
             cancellationToken,
             dueEntryLock);
 
-        controlState.RecordLoop($"BTC5mStrategy {flowName} fast placing PreOpen due entries. Variants={preOpenEntryVariants.Length}", null);
-        var (preOpenEntriesPlaced, preOpenRunsSkipped) = await PlaceDuePreOpenEntriesAsync(
+        controlState.RecordLoop($"BTC5mStrategy {flowName} fast placing regular due entries. Variants={regularEntryVariants.Length}", null);
+        var (regularEntriesPlaced, regularRunsSkipped) = await PlaceDueEntriesAsync(
             GetUtcNow(),
-            preOpenEntryVariants,
+            regularEntryVariants,
             strategySettings,
+            previousResultReadyOnly,
             cycleId,
             cycleKind,
             flowName,
-            "preopen_due_entries",
+            "regular_due_entries",
             cancellationToken,
             dueEntryLock);
 
@@ -771,6 +771,15 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
         var preOpenDiffCounterEntryVariants = diffCounterEntryVariants
             .Where(IsPreOpenTimedOpeningLimitEntry)
             .ToArray();
+        var (preOpenEntriesPlaced, preOpenRunsSkipped) = await PlaceDuePreOpenEntriesAsync(
+            GetUtcNow(),
+            preOpenDiffCounterEntryVariants,
+            strategySettings,
+            cycleId,
+            cycleKind,
+            "FastDiffDue",
+            "preopen_due_entries",
+            cancellationToken);
         var (regularEntriesPlaced, regularRunsSkipped) = await PlaceDueEntriesAsync(
             GetUtcNow(),
             regularDiffCounterEntryVariants,
@@ -780,15 +789,6 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
             cycleKind,
             "FastDiffDue",
             "regular_due_entries",
-            cancellationToken);
-        var (preOpenEntriesPlaced, preOpenRunsSkipped) = await PlaceDuePreOpenEntriesAsync(
-            GetUtcNow(),
-            preOpenDiffCounterEntryVariants,
-            strategySettings,
-            cycleId,
-            cycleKind,
-            "FastDiffDue",
-            "preopen_due_entries",
             cancellationToken);
         await RefreshLiveStrategyPrioritySnapshotIfDueAsync(diffCounterEntryVariants, strategySettings, cancellationToken);
         return new BtcUpDown5mPaperStrategyResult(
@@ -2703,9 +2703,14 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
         }
 
         var candidatesByRunId = candidates.ToDictionary(candidate => candidate.RunId);
+        var requestedKeys = candidates
+            .Select(candidate => new AssetMarketStartKey(
+                NormalizeAssetSymbol(candidate.AssetSymbol),
+                candidate.PreviousMarketStartUtc))
+            .ToHashSet();
         var readyKeys = new HashSet<AssetMarketStartKey>(
             await GetResolvedMarketLedgerKeysAsync(candidates, cancellationToken));
-        if (readyKeys.Count < candidates.Count)
+        if (readyKeys.Count < requestedKeys.Count)
         {
             readyKeys.UnionWith(await GetPreviousResultReadyClosedMarketKeysAsync(
                 candidates,
@@ -3710,6 +3715,8 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
         try
         {
             await repository.AddPaperEntryPersistenceBatchAsync(batch, cancellationToken);
+            exposureCache.ApplyPaperOrders(batch.PaperOrders);
+            exposureCache.ApplyPaperPositions(batch.PaperPositions);
             logger.LogInformation(
                 "BTC Up or Down 5m deferred paper entry persistence flushed. Signals={Signals} Orders={Orders} Fills={Fills} Positions={Positions} Runs={Runs}",
                 batch.Signals.Count,
@@ -4213,8 +4220,6 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
                                     currentBid,
                                     paperTradingEngine,
                                     nowUtc);
-                                exposureCache.ApplyPaperOrder(fakOrder);
-                                exposureCache.ApplyPaperPosition(updatedPosition);
                             }
                             finally
                             {
@@ -4370,7 +4375,11 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
                                 orderPersistedDeferred = true;
                             }
 
-                            exposureCache.ApplyPaperOrder(limitOrder);
+                            if (isPaperLiveShadowTest)
+                            {
+                                exposureCache.ApplyPaperOrder(limitOrder);
+                            }
+
                             if (isPaperLiveShadowTest && correlationId is { } shadowCorrelationId)
                             {
                                 await repository.UpdatePaperLiveShadowDecisionLinksAsync(
@@ -4747,7 +4756,10 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
                             deferredPersistence.AddPendingPaperEntry(signal, order, enteredRun);
                         }
 
-                        exposureCache.ApplyPaperOrder(order);
+                        if (shouldSubmitLegacyLiveOrder)
+                        {
+                            exposureCache.ApplyPaperOrder(order);
+                        }
                     }
                     finally
                     {
@@ -11997,7 +12009,12 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
         BtcUpDown5mStrategyVariant variant,
         DateTimeOffset nowUtc)
     {
-        _ = run;
+        if (IsPreOpenTimedOpeningLimitEntry(variant) &&
+            IsOpeningLimitSignalWaitExpired(run.EntryDueAtUtc, nowUtc))
+        {
+            return false;
+        }
+
         return IsOpeningLimitEntryAllowedAfterEntryGrace(variant, run.MarketStartUtc, nowUtc);
     }
 
@@ -12007,7 +12024,12 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
         BtcMinimumStakeSizing sizing,
         DateTimeOffset nowUtc)
     {
-        _ = run;
+        if (IsPreOpenTimedOpeningLimitEntry(variant) &&
+            IsOpeningLimitSignalWaitExpired(run.EntryDueAtUtc, nowUtc))
+        {
+            return false;
+        }
+
         return IsOpeningLimitEntryAllowedAfterEntryGrace(variant, run.MarketStartUtc, nowUtc) &&
             IsCloseBookOrderBookUnavailableReason(sizing.RejectionReason);
     }

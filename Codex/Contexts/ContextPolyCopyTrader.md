@@ -1,3 +1,22 @@
+## Active Update 2026-06-29 Previous Result/PreOpen Latency Patch
+Goal: Reduce every BTC/ETH/SOL Up/Down strategy entry delay to no more than 3 seconds and verify the deployed service.
+Status: In Progress
+Done:
+- Verified the user's new deployment is running `7b692ad`, but the production latency gate still fails on fresh cycles.
+- Initial post-restart gate was polluted by pre-service-start backlog, so a later 15:05 Sofia slot was checked separately; that fresh slot had `701/1555` checked rows above 3 seconds.
+- Stage timing showed `previous_result_due` started on time at `15:05:00`, but spent `6854ms` in `previous_result_ready_filter`, then `52010ms` in `regular_due_entries.decision_tasks`; run timestamps showed previous-result decisions were delayed about `8.157s` to `17.652s`.
+- Found and fixed a ready-filter bug: it compared resolved unique previous-result keys with all 301 due runs, so even 3 ready unique keys still triggered the heavy closed-Gamma fallback query.
+- Found and fixed an entry-lock hotspot: deferred paper entries were calling `ExposureSnapshotCache.ApplyPaperOrder` one-by-one under `entryPlacementLock`, and that method rebuilt/sorted all open paper orders each time. Deferred entries now update exposure cache in bulk after the batch persistence flush.
+- Reordered due-only flows so PreOpen due entries run before regular due entries in main and fast Diff due workers; this targets `preopen_entry_window_elapsed` rows caused by regular batches starving `-10s`/`-5s` premarket entries.
+- Tightened PreOpen silent defers: after the 1-second entry-dependency SLA, unavailable market/order-book dependencies now produce explicit technical skips instead of leaving runs `Observed` until market start.
+Verification:
+- Targeted tests passed: `dotnet test tests/PolyCopyTrader.Tests/PolyCopyTrader.Tests.csproj --filter "FullyQualifiedName~ExposureSnapshotCacheTests|FullyQualifiedName~BtcUpDown5mPaperStrategyProcessorTests.ProcessPreviousResultFastDueEntriesAsync_SharesInstantOrderBookRestFetchAcrossDueBatch|FullyQualifiedName~BtcUpDown5mPaperStrategyProcessorTests.ProcessPreviousResultFastDueEntriesAsync_SkipsWhenPreviousResultMissesSla|FullyQualifiedName~BtcUpDown5mPaperStrategyProcessorTests.ProcessDiffCounterDueEntriesAsync_DiffCounterSkipsMissingPreviousResultAfterDependencySla|FullyQualifiedName~BtcUpDown5mPaperStrategyProcessorTests.ProcessAsync_PreOpenDueEntriesUseCompleteEarliestDueGroupAndSharedBookFetch|FullyQualifiedName~BtcUpDown5mPaperStrategyProcessorTests.ProcessAsync_CurrentMarketEntriesRunBeforeSameDueFuturePreOpenEntries"` passed `8/8`.
+- Earlier targeted exposure/previous-result tests passed `6/6`.
+- Full `dotnet test PolyCopyTrader.sln` still fails in pre-existing/stale FAK/catalog expectations: `58` failed, `699` passed. Representative failures expect executable ask prices like `0.45/0.66`, while current FAK semantics use guaranteed worst price `0.99`, plus several missing revert variant expectations.
+Next: Commit/push this patch, deploy the new service build, then rerun `scripts/check-strategy-entry-latency.ps1 -HostOverride 192.168.0.101 -ExpectedCommit <newCommit> -MaxDelaySeconds 3 -LookbackMinutes 30 -RequireSplitCycleKinds` on a fresh 5-minute slot.
+Notes: Production access was read-only. No production DB writes, live orders, service restart, or cancel action was performed by Codex. Existing unrelated dirty files and output folders were left untouched.
+Blockers: Final goal cannot be marked complete until this new build is deployed and a fresh production gate proves every checked strategy entry delay is <= 3 seconds.
+
 ## Active Update 2026-06-29 Previous Result Batch Cache
 Goal: Reduce every BTC/ETH/SOL Up/Down strategy entry delay to no more than 3 seconds and verify the deployed service.
 Status: In Progress

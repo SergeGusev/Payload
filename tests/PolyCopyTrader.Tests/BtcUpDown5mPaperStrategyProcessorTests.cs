@@ -15201,16 +15201,32 @@ public sealed class BtcUpDown5mPaperStrategyProcessorTests
 
         public void ApplyPaperOrder(PaperOrder order)
         {
-            appliedPaperOrders.RemoveAll(item => item.Id == order.Id);
-            appliedPaperOrders.Add(order);
+            ApplyPaperOrders([order]);
+        }
+
+        public void ApplyPaperOrders(IReadOnlyCollection<PaperOrder> orders)
+        {
+            foreach (var order in orders)
+            {
+                appliedPaperOrders.RemoveAll(item => item.Id == order.Id);
+                appliedPaperOrders.Add(order);
+            }
         }
 
         public void ApplyPaperPosition(PaperPosition position)
         {
-            appliedPaperPositions.RemoveAll(item =>
-                string.Equals(item.CopiedTraderWallet, position.CopiedTraderWallet, StringComparison.OrdinalIgnoreCase) &&
-                string.Equals(item.AssetId, position.AssetId, StringComparison.OrdinalIgnoreCase));
-            appliedPaperPositions.Add(position);
+            ApplyPaperPositions([position]);
+        }
+
+        public void ApplyPaperPositions(IReadOnlyCollection<PaperPosition> positions)
+        {
+            foreach (var position in positions)
+            {
+                appliedPaperPositions.RemoveAll(item =>
+                    string.Equals(item.CopiedTraderWallet, position.CopiedTraderWallet, StringComparison.OrdinalIgnoreCase) &&
+                    string.Equals(item.AssetId, position.AssetId, StringComparison.OrdinalIgnoreCase));
+                appliedPaperPositions.Add(position);
+            }
         }
 
         public void ApplyLiveOrder(LiveOrder order)

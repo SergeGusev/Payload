@@ -50,6 +50,39 @@ public sealed class ExposureSnapshotCacheTests
         Assert.Empty(snapshot.OpenLiveOrders);
     }
 
+    [Fact]
+    public async Task ApplyBulkMethods_UpdateInitializedSnapshotOncePerBatch()
+    {
+        var repository = new TestAppRepository();
+        var firstOpenPaperOrder = PaperOrder(PaperOrderStatus.Pending);
+        var secondOpenPaperOrder = PaperOrder(PaperOrderStatus.Pending);
+        var closedPaperOrder = PaperOrder(PaperOrderStatus.Pending);
+        repository.PaperOrders.Add(closedPaperOrder);
+        repository.PaperPositions.Add(PaperPosition(10m));
+        var cache = new ExposureSnapshotCache(repository);
+        await cache.GetSnapshotAsync();
+
+        cache.ApplyPaperOrders([
+            firstOpenPaperOrder,
+            secondOpenPaperOrder,
+            closedPaperOrder with { Status = PaperOrderStatus.Filled }
+        ]);
+        cache.ApplyPaperPositions([
+            PaperPosition(25m),
+            PaperPosition(30m, assetId: "asset-2")
+        ]);
+
+        var snapshot = await cache.GetSnapshotAsync();
+
+        Assert.Equal(2, snapshot.OpenPaperOrders.Count);
+        Assert.Contains(snapshot.OpenPaperOrders, order => order.Id == firstOpenPaperOrder.Id);
+        Assert.Contains(snapshot.OpenPaperOrders, order => order.Id == secondOpenPaperOrder.Id);
+        Assert.DoesNotContain(snapshot.OpenPaperOrders, order => order.Id == closedPaperOrder.Id);
+        Assert.Equal(2, snapshot.PaperPositions.Count);
+        Assert.Contains(snapshot.PaperPositions, position => position is { AssetId: "asset-1", SizeShares: 25m });
+        Assert.Contains(snapshot.PaperPositions, position => position is { AssetId: "asset-2", SizeShares: 30m });
+    }
+
     private static PaperOrder PaperOrder(PaperOrderStatus status)
     {
         var now = DateTimeOffset.UtcNow;
@@ -70,10 +103,10 @@ public sealed class ExposureSnapshotCacheTests
             status == PaperOrderStatus.Filled ? now : null);
     }
 
-    private static PaperPosition PaperPosition(decimal sizeShares)
+    private static PaperPosition PaperPosition(decimal sizeShares, string assetId = "asset-1")
     {
         return new PaperPosition(
-            "asset-1",
+            assetId,
             "condition-1",
             "Yes",
             sizeShares,

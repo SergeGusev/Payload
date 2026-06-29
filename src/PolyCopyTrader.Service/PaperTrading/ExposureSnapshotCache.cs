@@ -61,22 +61,32 @@ public sealed class ExposureSnapshotCache(IAppRepository repository) : IExposure
 
     public void ApplyPaperOrder(PaperOrder order)
     {
+        ApplyPaperOrders([order]);
+    }
+
+    public void ApplyPaperOrders(IReadOnlyCollection<PaperOrder> orders)
+    {
         lock (sync)
         {
-            if (!initialized)
+            if (!initialized || orders.Count == 0)
             {
                 return;
             }
 
-            var orders = openPaperOrders
-                .Where(item => item.Id != order.Id)
-                .ToList();
-            if (IsOpenPaperOrder(order))
+            var openOrdersById = openPaperOrders.ToDictionary(order => order.Id);
+            foreach (var order in orders)
             {
-                orders.Add(order);
+                if (IsOpenPaperOrder(order))
+                {
+                    openOrdersById[order.Id] = order;
+                }
+                else
+                {
+                    openOrdersById.Remove(order.Id);
+                }
             }
 
-            openPaperOrders = orders
+            openPaperOrders = openOrdersById.Values
                 .OrderByDescending(item => item.CreatedAtUtc)
                 .ToArray();
             loadedAtUtc = DateTimeOffset.UtcNow;
@@ -85,21 +95,26 @@ public sealed class ExposureSnapshotCache(IAppRepository repository) : IExposure
 
     public void ApplyPaperPosition(PaperPosition position)
     {
+        ApplyPaperPositions([position]);
+    }
+
+    public void ApplyPaperPositions(IReadOnlyCollection<PaperPosition> positions)
+    {
         lock (sync)
         {
-            if (!initialized)
+            if (!initialized || positions.Count == 0)
             {
                 return;
             }
 
-            var positions = paperPositions
-                .Where(item =>
-                    !string.Equals(item.CopiedTraderWallet, position.CopiedTraderWallet, StringComparison.OrdinalIgnoreCase) ||
-                    !string.Equals(item.AssetId, position.AssetId, StringComparison.OrdinalIgnoreCase))
-                .ToList();
-            positions.Add(position);
+            var positionsByKey = paperPositions.ToDictionary(
+                position => PaperPositionKey.From(position.CopiedTraderWallet, position.AssetId));
+            foreach (var position in positions)
+            {
+                positionsByKey[PaperPositionKey.From(position.CopiedTraderWallet, position.AssetId)] = position;
+            }
 
-            paperPositions = positions
+            paperPositions = positionsByKey.Values
                 .OrderByDescending(item => item.UpdatedAtUtc)
                 .ToArray();
             loadedAtUtc = DateTimeOffset.UtcNow;
@@ -142,5 +157,15 @@ public sealed class ExposureSnapshotCache(IAppRepository repository) : IExposure
             or LiveOrderStatus.Delayed
             or LiveOrderStatus.Unmatched
             or LiveOrderStatus.CancelRequested;
+    }
+
+    private readonly record struct PaperPositionKey(string CopiedTraderWallet, string AssetId)
+    {
+        public static PaperPositionKey From(string copiedTraderWallet, string assetId)
+        {
+            return new PaperPositionKey(
+                copiedTraderWallet.Trim().ToUpperInvariant(),
+                assetId.Trim().ToUpperInvariant());
+        }
     }
 }
