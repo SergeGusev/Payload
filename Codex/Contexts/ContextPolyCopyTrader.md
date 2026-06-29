@@ -1,3 +1,14 @@
+## Active Update 2026-06-29 Diff Limit Progress Transition Clarification
+Goal: Clarify whether a `Diff=1` Down loss should make the next `Diff Limit Progress Premarket` multiplier become `2`.
+Status: Completed
+Done:
+- Confirmed the user's example is correct in a clean one-result transition: with `Diff=1`, the strategy buys Down; if the market resolves Up, `UpCount` increments and `Diff` becomes `2`, so the next uncapped multiplier becomes `2`.
+- Clarified the production observation: the strategy does not initialize from the first bet at multiplier `1`; it uses persistent/current UTC-day `Diff`, which for ETH N=5 was already `-7/-8`, so it started and remained at the `N=5` cap.
+- Confirmed from code that `ApplyDiffShiftProgressResults` updates `UpCount`/`DownCount` from market outcomes and updates `Sum` from pending bet PnL, but `GetDiffLimitProgressPremarketEntryDecisionAsync` sizes from `min(abs(Diff), N)`, not from `Sum`.
+Next: If desired behavior is first-bet/loss-ladder progression independent of pre-existing Diff magnitude, implement an explicit stake-level state separate from raw `Diff`.
+Notes: Explanation-only turn. No source-code changes, production DB writes, live orders, service restart, cancel action, build, or tests were performed.
+Blockers: None.
+
 ## Active Update 2026-06-29 Diff Limit Progress Stake Explanation
 Goal: Explain why `ETH Up or Down 5m 5 Diff Limit Progress Premarket` is placing all recent Paper bets around `28`.
 Status: Completed

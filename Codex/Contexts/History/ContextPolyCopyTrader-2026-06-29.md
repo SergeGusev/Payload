@@ -231,3 +231,10 @@ Request:
 
 Result:
 Explained that the current `Diff Limit Progress Premarket` implementation sizes each entry from the current raw `Diff` using `min(abs(Diff), N)`, not from a loss-based ladder. A read-only production check for `eth_up_down_5m_5_diff_limit_progress_premarket` showed recent raw `Diff=-7/-8`, cap `5`, actual `stake_multiplier=5`, and Paper notional `28.0071`, which comes from existing FAK/min-order guaranteed sizing. No production writes, live orders, source changes, restart, or cancel action were performed.
+
+## 2026-06-29T19:08:46.1058227Z
+Request:
+Ну давай разбираться. Diff = 1, делаем ставку на Down (условно - 6), проигрываем, то есть происходит Up, Diff становится 2, то есть множитель становится 2. Разве не так?
+
+Result:
+Clarified that the clean transition example is correct: `Diff=1` selects Down, an Up market result increments `UpCount`, and the next uncapped multiplier becomes `2`. Also clarified that the observed production ETH N=5 orders were already starting from persistent/current daily `Diff=-7/-8`, so they immediately hit the `N=5` cap; current code sizes from `min(abs(Diff), N)` and not from a separate loss-ladder/Sum stake state. No source changes or production writes were performed.
