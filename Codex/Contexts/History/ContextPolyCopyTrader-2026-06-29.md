@@ -88,3 +88,10 @@ Request:
 
 Result:
 Reached production PostgreSQL and confirmed deployed service commit `50288b2` was running, but the 3-second latency gate failed: `9079/10658` recent checked rows were above 3 seconds, with worst delay about `326.487s`. Stage timing showed split lanes are active, but previous-result rows can remain Observed until market end and Diff counter rows still waited for missing previous results on the old 4-minute timeout. Added a 2-second dependency-ready SLA: previous-result due rows skip as `previous_result_not_ready_by_sla`, and Diff counter missing previous-result waits now expire after the same SLA. Optimized the latency gate query and corrected GTD skipped-row event timing to use `paper_orders.created_at_utc`. Verification: service build passed; focused SLA/config tests passed `41/41`; diff check passed with line-ending warnings only. Full test project still has pre-existing stale FAK/catalog failures unrelated to this latency fix. No production DB writes, live orders, service restart, or cancel action was performed.
+
+## 2026-06-29T11:09:25.8495480Z
+Request:
+Выложил, проверяй
+
+Result:
+Checked production PostgreSQL read-only and confirmed the deployed service is now running `4a106bf`, but the 3-second latency gate still fails. The 14:05 Sofia cycle showed `1860/3518` checked rows above 3 seconds, worst about `16.537s`. Stage timings and row timelines showed deferred opening-limit dependencies, especially Binance/start-relative and previous-result-BPS style rows, can return no-op/defer, remain Observed at the head of the due queue, and delay later due rows. Added a new fix: opening-limit dependency defers now use the entry-dependency SLA instead of `max(EntryGraceSeconds, OpeningLimitGtdTtlSeconds)`, and the SLA was tightened to 1 second so unresolved dependencies skip inside the 3-second production budget. Verification: service build passed; focused Binance/dependency/config tests passed `44/44`; diff check passed with line-ending warnings only. No production DB writes, live orders, service restart, or cancel action was performed.

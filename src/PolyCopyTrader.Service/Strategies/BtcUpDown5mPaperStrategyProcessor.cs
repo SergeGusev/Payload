@@ -92,7 +92,7 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
     private const decimal AdjustedDiffTrendZeroDeadband = 1m;
     private const decimal AdjustedDiffTrendZeroMaxStep = 0.5m;
     private const string AdjustedDiffTrendZeroMode = "ema_24_slow_step_continuous";
-    private const int EntryDependencyReadySlaSeconds = 2;
+    private const int EntryDependencyReadySlaSeconds = 1;
     private static readonly TimeSpan DiffCounterPreviousResultWait = TimeSpan.FromSeconds(EntryDependencyReadySlaSeconds);
     private const int PreviousResultReadySlaSeconds = EntryDependencyReadySlaSeconds;
     private static readonly TimeSpan DiffCounterHistoryFetchFailureBackoff = TimeSpan.FromMinutes(1);
@@ -2787,7 +2787,7 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
 
     private static bool IsPreviousResultReadyWaitExpired(DateTimeOffset entryDueAtUtc, DateTimeOffset nowUtc)
     {
-        return entryDueAtUtc <= nowUtc.AddSeconds(-PreviousResultReadySlaSeconds);
+        return entryDueAtUtc < nowUtc.AddSeconds(-PreviousResultReadySlaSeconds);
     }
 
     private static string BuildPreviousResultNotReadyBySlaDiagnosticsJson(
@@ -11939,15 +11939,16 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
         BtcOpeningLimitDecision decision,
         DateTimeOffset nowUtc)
     {
+        var dependencyWaitExpired = IsOpeningLimitSignalWaitExpired(run.EntryDueAtUtc, nowUtc);
         if (IsBinanceStartRelativeOpeningLimitEntry(variant) &&
-            !IsOpeningLimitSignalWaitExpired(run.EntryDueAtUtc, nowUtc) &&
+            !dependencyWaitExpired &&
             IsStartRelativeDeferredReason(decision.SkipReason))
         {
             return true;
         }
 
         if (UsesPreviousScoreCounterTrendSignal(variant) &&
-            !IsOpeningLimitSignalWaitExpired(run.EntryDueAtUtc, nowUtc) &&
+            !dependencyWaitExpired &&
             IsPreviousScoreCounterTrendDeferredReason(decision.SkipReason))
         {
             return true;
@@ -11965,10 +11966,11 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
             (string.Equals(decision.SkipReason, "btc_previous_market_results_missing", StringComparison.Ordinal) ||
                 string.Equals(decision.SkipReason, "btc_previous_close_book_result_missing", StringComparison.Ordinal)))
         {
-            return true;
+            return !dependencyWaitExpired;
         }
 
         return UsesPreviousResultBpsThresholdMoveSignal(variant) &&
+            !dependencyWaitExpired &&
             IsSkipPreviousResultBpsThresholdDeferredReason(decision.SkipReason);
     }
 
@@ -12004,10 +12006,9 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
             string.Equals(reason, "premarket_previous_market_end_minus_30_price_missing", StringComparison.Ordinal);
     }
 
-    private bool IsOpeningLimitSignalWaitExpired(DateTimeOffset entryDueAtUtc, DateTimeOffset nowUtc)
+    private static bool IsOpeningLimitSignalWaitExpired(DateTimeOffset entryDueAtUtc, DateTimeOffset nowUtc)
     {
-        var waitSeconds = Math.Max(options.EntryGraceSeconds, options.OpeningLimitGtdTtlSeconds);
-        return entryDueAtUtc < nowUtc.AddSeconds(-waitSeconds);
+        return entryDueAtUtc < nowUtc.AddSeconds(-EntryDependencyReadySlaSeconds);
     }
 
     private bool ShouldDeferUntilTradingStarts(

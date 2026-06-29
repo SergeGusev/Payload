@@ -6482,7 +6482,7 @@ public sealed class BtcUpDown5mPaperStrategyProcessorTests
     public async Task ProcessDiffCounterDueEntriesAsync_DiffCounterSkipsMissingPreviousResultAfterDependencySla()
     {
         var startupMarketStartUtc = new DateTimeOffset(2026, 6, 8, 12, 0, 0, TimeSpan.Zero);
-        var startupNow = startupMarketStartUtc.AddSeconds(1);
+        var startupNow = startupMarketStartUtc.AddMilliseconds(500);
         var timeProvider = new ManualTimeProvider(startupNow);
         var variant = StrategyIds.UpDown5mStrategyVariants.Single(item => item.Code == "btc_up_down_5m_up_diff_5_instant");
         var repository = new TestAppRepository();
@@ -6522,7 +6522,7 @@ public sealed class BtcUpDown5mPaperStrategyProcessorTests
         Assert.Null(waitingRun.SkipReason);
         Assert.Null(waitingRun.SkipDiagnosticsJson);
 
-        timeProvider.UtcNow = startupMarketStartUtc.AddSeconds(3);
+        timeProvider.UtcNow = startupMarketStartUtc.AddSeconds(2);
 
         var timedOutResult = await processor.ProcessDiffCounterDueEntriesAsync();
 
@@ -10387,10 +10387,10 @@ public sealed class BtcUpDown5mPaperStrategyProcessorTests
     }
 
     [Fact]
-    public async Task ProcessAsync_BinanceStartRelativeDefersEqualStartPriceWithinOpeningLimitTtl()
+    public async Task ProcessAsync_BinanceStartRelativeSkipsEqualStartPriceAfterDependencySla()
     {
         var now = DateTimeOffset.UtcNow;
-        var marketStart = now.AddSeconds(-45);
+        var marketStart = now.AddSeconds(-3);
         var repository = new TestAppRepository();
         repository.PolymarketGammaMarkets.Add(CreateMarket(
             marketStart,
@@ -10412,39 +10412,12 @@ public sealed class BtcUpDown5mPaperStrategyProcessorTests
 
         Assert.Equal(1, firstResult.MarketsObserved);
         Assert.Equal(0, firstResult.EntriesPlaced);
-        Assert.Equal(0, firstResult.RunsSkipped);
-        Assert.Equal(StrategyMarketPaperRunStatuses.Observed, Assert.Single(repository.StrategyMarketPaperRuns).Status);
-        Assert.Empty(repository.PaperOrders);
-
-        AddBtcOddsTick(
-            repository,
-            "market-1",
-            marketStart,
-            sampleOffsetSeconds: 60,
-            binancePriceUsd: 99m,
-            startPriceUsd: 100m,
-            upPriceProxy: 0.40m,
-            downPriceProxy: 0.60m);
-        processor = CreateProcessorCoreWithOptions(
-            repository,
-            [],
-            DefaultOrderBooks(),
-            _ => { },
-            Array.Empty<OrderBookSnapshot>(),
-            CreateBtcOptions(paperTakerPricingEnabled: false, [BinanceVariant.Code]),
-            new FakeBtcUsdReferencePriceClient(100m),
-            CreateBtcUsdReferenceCache(100m));
-
-        var secondResult = await processor.ProcessAsync();
-
-        Assert.Equal(1, secondResult.EntriesPlaced);
+        Assert.Equal(1, firstResult.RunsSkipped);
         var run = Assert.Single(repository.StrategyMarketPaperRuns);
-        Assert.Equal(StrategyMarketPaperRunStatuses.Entered, run.Status);
-        Assert.Equal("Down", run.SelectedOutcome);
-        var order = Assert.Single(repository.PaperOrders);
-        Assert.Equal("asset-down", order.AssetId);
-        Assert.Contains("\"btc_current_source\":\"BinanceTradeWebSocketOddsArchive\"", order.RawDecisionJson, StringComparison.Ordinal);
-        Assert.Contains("\"btc_current_price_usd\":99", order.RawDecisionJson, StringComparison.Ordinal);
+        Assert.Equal(StrategyMarketPaperRunStatuses.Skipped, run.Status);
+        Assert.Equal("btc_reference_equal_market_start", run.SkipReason);
+        Assert.Contains("btc_reference_equal_market_start", run.SkipDiagnosticsJson, StringComparison.Ordinal);
+        Assert.Empty(repository.PaperOrders);
     }
 
     [Fact]
@@ -11386,7 +11359,7 @@ public sealed class BtcUpDown5mPaperStrategyProcessorTests
         var skippedRun = Assert.Single(repository.StrategyMarketPaperRuns, item => item.StrategyId == Skip1Variant.Id);
         Assert.Equal(StrategyMarketPaperRunStatuses.Skipped, skippedRun.Status);
         Assert.Equal("previous_result_not_ready_by_sla", skippedRun.SkipReason);
-        Assert.Contains("\"previous_result_ready_sla_seconds\":2", skippedRun.SkipDiagnosticsJson, StringComparison.Ordinal);
+        Assert.Contains("\"previous_result_ready_sla_seconds\":1", skippedRun.SkipDiagnosticsJson, StringComparison.Ordinal);
     }
 
     [Fact]

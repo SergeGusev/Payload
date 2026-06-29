@@ -1,3 +1,19 @@
+## Active Update 2026-06-29 Opening Limit Dependency SLA
+Goal: Reduce every BTC/ETH/SOL Up/Down strategy entry delay to no more than 3 seconds and verify the deployed service.
+Status: In Progress
+Done:
+- Verified the user's new deployment is running `4a106bf`, but the production latency gate still fails: after the 14:05 Sofia cycle it reported `1860/3518` checked rows above 3 seconds, worst about `16.537s`.
+- Stage timelines show the remaining main due-entry delay is caused by deferred opening-limit dependencies. Binance/start-relative and previous-result-BPS rows can return no-op/defer, remain Observed at the head of the due queue, and delay later rows such as `btc_up_down_5m_binance_30s`.
+- Replaced the old opening-limit signal wait of `max(EntryGraceSeconds, OpeningLimitGtdTtlSeconds)` (effectively 120s) with the same entry-dependency SLA used by previous-result/Diff dependency checks.
+- Tightened the dependency SLA from 2 seconds to 1 second so the first due batch can skip unresolved dependencies inside the 3-second production budget instead of requeueing into a later poll.
+Verification:
+- `dotnet build src/PolyCopyTrader.Service/PolyCopyTrader.Service.csproj --no-restore` passed.
+- `dotnet test tests/PolyCopyTrader.Tests/PolyCopyTrader.Tests.csproj --no-restore --filter "FullyQualifiedName~ProcessAsync_BinanceStartRelativeDefersEqualStartPriceWithinEntryGrace|FullyQualifiedName~ProcessAsync_BinanceStartRelativeSkipsEqualStartPriceAfterDependencySla|FullyQualifiedName~ProcessAsync_BinanceStartRelativeWaitsForArchivedMarketStartPrice|FullyQualifiedName~ProcessPreviousResultFastDueEntriesAsync_SkipsWhenPreviousResultMissesSla|FullyQualifiedName~ProcessDiffCounterDueEntriesAsync_DiffCounterSkipsMissingPreviousResultAfterDependencySla|FullyQualifiedName~ProcessDiffCounterFastDueEntriesAsync_DoesNotObserveMarkets|FullyQualifiedName~ConfigurationTests"` passed `44/44`.
+- `git diff --check -- src/PolyCopyTrader.Service/Strategies/BtcUpDown5mPaperStrategyProcessor.cs tests/PolyCopyTrader.Tests/BtcUpDown5mPaperStrategyProcessorTests.cs` passed with line-ending warnings only.
+Next: Deploy this new commit, then rerun `scripts/check-strategy-entry-latency.ps1 -HostOverride 192.168.0.101 -ExpectedCommit <newCommit> -MaxDelaySeconds 3 -LookbackMinutes 30 -RequireSplitCycleKinds`. If any rows remain above 3 seconds, inspect the next worst stage group from the fresh build.
+Notes: Full test project remains unsuitable as a gate because of pre-existing stale FAK/catalog expectations. No production writes, live orders, service restart, or cancel action was performed by Codex.
+Blockers: Final goal cannot be marked complete until this new build is deployed and a fresh production gate proves every checked strategy entry delay is <= 3 seconds.
+
 ## Active Update 2026-06-29 Dependency SLA Latency Fix
 Goal: Reduce every BTC/ETH/SOL Up/Down strategy entry delay to no more than 3 seconds and verify the deployed service.
 Status: In Progress
