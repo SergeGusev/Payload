@@ -12,6 +12,10 @@ public interface IBtcUpDown5mPaperStrategyProcessor
 
     Task<BtcUpDown5mPaperStrategyResult> ProcessDiffCounterDueEntriesAsync(CancellationToken cancellationToken = default);
 
+    Task<BtcUpDown5mPaperStrategyResult> ProcessPreviousResultFastDueEntriesAsync(CancellationToken cancellationToken = default);
+
+    Task<BtcUpDown5mPaperStrategyResult> ProcessPreviousResultObserveAsync(CancellationToken cancellationToken = default);
+
     Task<BtcUpDown5mPaperStrategyResult> ProcessPreviousResultDueEntriesAsync(CancellationToken cancellationToken = default);
 }
 

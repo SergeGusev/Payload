@@ -30,30 +30,28 @@ public sealed class BtcUpDown5mPreviousResultPaperStrategyWorker(
             return;
         }
 
-        var interval = TimeSpan.FromSeconds(options.PollIntervalSeconds);
+        var interval = TimeSpan.FromMilliseconds(options.DiffCounterFastPollIntervalMilliseconds);
         logger.LogInformation(
-            "BTC Up or Down 5m previous-result paper strategy worker started. Mode={Mode} RunInLiveMode={RunInLiveMode} PollIntervalSeconds={PollIntervalSeconds}",
+            "BTC Up or Down 5m previous-result due-entry paper strategy worker started. Mode={Mode} RunInLiveMode={RunInLiveMode} PollIntervalMilliseconds={PollIntervalMilliseconds}",
             botOptions.Mode,
             paperTradingOptions.RunInLiveMode,
-            options.PollIntervalSeconds);
+            options.DiffCounterFastPollIntervalMilliseconds);
 
         while (!stoppingToken.IsCancellationRequested)
         {
             try
             {
-                controlState.RecordLoop("BTC5mStrategy previous-result cycle pending", null);
-                var result = await processor.ProcessPreviousResultDueEntriesAsync(stoppingToken);
+                controlState.RecordLoop("BTC5mStrategy previous-result due-entry cycle pending", null);
+                var result = await processor.ProcessPreviousResultFastDueEntriesAsync(stoppingToken);
                 controlState.RecordLoop(
-                    $"BTC5mStrategyPreviousResult Observed={result.MarketsObserved}; Entries={result.EntriesPlaced}; Skipped={result.RunsSkipped}; Settled={result.RunsSettled}",
+                    $"BTC5mStrategyPreviousResultDue Entries={result.EntriesPlaced}; Skipped={result.RunsSkipped}; Settled={result.RunsSettled}",
                     null);
-                if (result.MarketsObserved > 0 ||
-                    result.EntriesPlaced > 0 ||
+                if (result.EntriesPlaced > 0 ||
                     result.RunsSkipped > 0 ||
                     result.RunsSettled > 0)
                 {
                     logger.LogInformation(
-                        "BTC Up or Down 5m previous-result paper strategy cycle completed. Observed={Observed} Entries={Entries} Skipped={Skipped} Settled={Settled}",
-                        result.MarketsObserved,
+                        "BTC Up or Down 5m previous-result due-entry paper strategy cycle completed. Entries={Entries} Skipped={Skipped} Settled={Settled}",
                         result.EntriesPlaced,
                         result.RunsSkipped,
                         result.RunsSettled);
@@ -65,15 +63,15 @@ public sealed class BtcUpDown5mPreviousResultPaperStrategyWorker(
             }
             catch (Exception ex)
             {
-                controlState.RecordLoop("BTC Up or Down 5m previous-result paper strategy cycle failed", ex.Message);
-                logger.LogError(ex, "BTC Up or Down 5m previous-result paper strategy cycle failed.");
+                controlState.RecordLoop("BTC Up or Down 5m previous-result due-entry paper strategy cycle failed", ex.Message);
+                logger.LogError(ex, "BTC Up or Down 5m previous-result due-entry paper strategy cycle failed.");
                 await TryRecordApiErrorAsync(ex.Message, stoppingToken);
             }
 
             await Task.Delay(interval, stoppingToken);
         }
 
-        logger.LogInformation("BTC Up or Down 5m previous-result paper strategy worker stopped.");
+        logger.LogInformation("BTC Up or Down 5m previous-result due-entry paper strategy worker stopped.");
     }
 
     private async Task TryRecordApiErrorAsync(string message, CancellationToken cancellationToken)
@@ -91,7 +89,7 @@ public sealed class BtcUpDown5mPreviousResultPaperStrategyWorker(
         }
         catch (Exception ex)
         {
-            logger.LogError(ex, "Failed to persist BTC Up or Down 5m previous-result paper strategy worker error.");
+            logger.LogError(ex, "Failed to persist BTC Up or Down 5m previous-result due-entry paper strategy worker error.");
         }
     }
 }

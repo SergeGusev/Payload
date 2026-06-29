@@ -11284,6 +11284,34 @@ public sealed class BtcUpDown5mPaperStrategyProcessorTests
     }
 
     [Fact]
+    public async Task ProcessPreviousResultFastDueEntriesAsync_DoesNotObserveMarkets()
+    {
+        var now = DateTimeOffset.UtcNow;
+        var repository = new TestAppRepository();
+        repository.PolymarketGammaMarkets.Add(CreateMarket(
+            now,
+            now.AddMinutes(5),
+            upPrice: 0.50m,
+            downPrice: 0.50m));
+        var processor = CreateProcessorWithBtcReference(
+            repository,
+            currentBtcUsd: 100m,
+            cachedBtcUsd: [100m],
+            Skip1Variant.Code);
+
+        var dueResult = await processor.ProcessPreviousResultFastDueEntriesAsync();
+
+        Assert.Equal(0, dueResult.MarketsObserved);
+        Assert.Empty(repository.StrategyMarketPaperRuns);
+
+        var observeResult = await processor.ProcessPreviousResultObserveAsync();
+
+        Assert.Equal(1, observeResult.MarketsObserved);
+        var run = Assert.Single(repository.StrategyMarketPaperRuns, item => item.StrategyId == Skip1Variant.Id);
+        Assert.Equal(StrategyMarketPaperRunStatuses.Observed, run.Status);
+    }
+
+    [Fact]
     public async Task ProcessPreviousResultDueEntriesAsync_EntersAfterResolvedLedgerArrives()
     {
         var now = DateTimeOffset.UtcNow;

@@ -1,3 +1,20 @@
+## Active Update 2026-06-29 Previous Result Due Fast Lane
+Goal: Reduce every BTC/ETH/SOL Up/Down strategy entry delay to no more than 3 seconds and verify the deployed service.
+Status: In Progress
+Done:
+- Retried production PostgreSQL verification; local `psql` and TCP checks to `192.168.0.101:5432` still timed out, so deployed heartbeat/timings could not be re-read from this machine.
+- Closed the remaining scheduler gap for previous-result strategies: the previous-result worker no longer runs full observe/due/settlement flow on the due path.
+- Added `ProcessPreviousResultFastDueEntriesAsync` for previous-result due-only processing and `ProcessPreviousResultObserveAsync` for observe-only processing; kept `ProcessPreviousResultDueEntriesAsync` as a compatibility wrapper.
+- Added `BtcUpDown5mPreviousResultObserveWorker` and registered it; changed `BtcUpDown5mPreviousResultPaperStrategyWorker` to run due-only on the fast poll interval.
+- Added focused test coverage proving previous-result fast due does not observe markets and previous-result observe does create the Observed run.
+Verification:
+- `dotnet test tests/PolyCopyTrader.Tests/PolyCopyTrader.Tests.csproj --no-restore --filter "FullyQualifiedName~ProcessPreviousResultFastDueEntriesAsync_DoesNotObserveMarkets|FullyQualifiedName~ProcessPreviousResultDueEntriesAsync_EntersAfterResolvedLedgerArrives|FullyQualifiedName~ProcessAsync_DoesNotObservePreviousResultStrategies"` passed 3/3.
+- `dotnet build PolyCopyTrader.sln --no-restore` passed with existing nullable warnings.
+- `git diff --check` passed for changed files, with line-ending warnings only.
+Next: Commit/push this previous-result split, deploy the latest service build, then repeat production heartbeat, stage timings, and entry-delay SQL. Completion requires fresh production evidence that no strategy exceeds 3 seconds.
+Notes: No production DB writes, live orders, service restart, or cancel action was performed by Codex. Existing unrelated dirty files and output folders were left untouched.
+Blockers: Final 3-second objective still cannot be marked complete until a deployed latest build is reachable and fresh production timings prove no strategy exceeds 3 seconds.
+
 ## Active Update 2026-06-29 BTC Due Persistence Prepare Cache
 Goal: Reduce every BTC/ETH/SOL Up/Down strategy entry delay to no more than 3 seconds and verify the deployed service.
 Status: In Progress
