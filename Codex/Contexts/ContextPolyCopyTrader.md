@@ -1,3 +1,16 @@
+## Active Update 2026-06-29 Live First Delay Explanation
+Goal: Explain why Live Reference Average Premarket entries can still be delayed even though Live entries are processed first.
+Status: Completed
+Done:
+- Inspected the due-entry ordering path for `BtcUpDown5mPaperStrategyProcessor`, including Live/NonLive flow split, PreOpen due-entry selection, repository ordering, and `PlaceDueEntryRunsAsync`.
+- Confirmed the current rule is limited: the processor runs the Live flow before the NonLive flow, and due-entry ordering prioritizes effective Live rows only inside the selected due timestamp/batch.
+- Confirmed the rule does not provide a separate realtime queue, does not preempt older `entry_due_at_utc` batches, and does not bypass the worker cycle, observe/settlement work, DB/API calls, bulk skip checks, Gamma market warmup, or per-cycle throttling.
+- Confirmed each affected Reference Average due timestamp had `168` Reference Average runs and only `1` effective-Live run for the target strategy; the target Live row can be first inside that due batch but still waits until the processor reaches that PreOpen placement stage.
+- Explained the observed delays as late arrival at the PreOpen placement stage: after market start the row becomes `preopen_entry_window_elapsed`; after `entry_due_at_utc + EntryGraceSeconds=60` it becomes `entry_due_expired`.
+Next: For hard Live timing, add a true effective-Live fast lane for due PreOpen rows rather than relying on in-batch ordering.
+Notes: Read-only source/SQL analysis only; no source code, DB writes, service restart, live submission, or cancel action.
+Blockers: None.
+
 ## Active Update 2026-06-29 SOL Down 90 Technical Skips Explained
 Goal: Explain all technical skips seen for `SOL Up or Down 5m Down 90 bps Reference Average Premarket`.
 Status: Completed

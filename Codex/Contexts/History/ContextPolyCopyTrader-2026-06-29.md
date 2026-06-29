@@ -25,3 +25,10 @@ Request:
 
 Result:
 Rechecked production PostgreSQL `192.168.0.101` read-only and explained all technical skips for `sol_up_down_5m_down_bps_90_fak_premarket`: `entry_due_expired=4`, `preopen_entry_window_elapsed=1`, and `crypto_reference_fetch_failed=1`. `entry_due_expired` means due processing happened more than `EntryGraceSeconds=60` after `entry_due_at_utc`; for the `-30s` premarket strategy this means after `market_start + 30s`. `preopen_entry_window_elapsed` means processing happened after market start but before the expired threshold. `crypto_reference_fetch_failed` means the current SOL reference price was unavailable, so the 90 bps condition could not be evaluated. No source code, DB writes, service restart, live order submission, or cancel action was performed.
+
+## 2026-06-29T06:19:06.4809137+00:00
+Request:
+А откуда берутся такие задержки, если у нас есть правило, что живые ставки отрабатывают в первую очередь?
+
+Result:
+Inspected the due-entry scheduling and ordering code for the Reference Average Premarket path. Confirmed that Live-first is a limited ordering rule: the processor runs the Live flow before the NonLive flow, and effective-Live rows are prioritized only within the selected due timestamp/batch. It does not create a dedicated realtime queue, preempt older due batches, or bypass cycle work such as observe/settlement processing, DB/API calls, bulk skip checks, Gamma market warmup, and per-cycle throttling. For the affected target timestamps there were `168` Reference Average runs per due timestamp and only `1` effective-Live target row; the target can be first inside its due batch but still be processed late if the worker reaches the PreOpen placement stage late. No source code, DB writes, service restart, live order submission, or cancel action was performed.
