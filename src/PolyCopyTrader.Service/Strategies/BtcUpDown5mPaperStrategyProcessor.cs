@@ -92,7 +92,9 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
     private const decimal AdjustedDiffTrendZeroDeadband = 1m;
     private const decimal AdjustedDiffTrendZeroMaxStep = 0.5m;
     private const string AdjustedDiffTrendZeroMode = "ema_24_slow_step_continuous";
-    private static readonly TimeSpan DiffCounterPreviousResultWait = TimeSpan.FromMinutes(4);
+    private const int EntryDependencyReadySlaSeconds = 2;
+    private static readonly TimeSpan DiffCounterPreviousResultWait = TimeSpan.FromSeconds(EntryDependencyReadySlaSeconds);
+    private const int PreviousResultReadySlaSeconds = EntryDependencyReadySlaSeconds;
     private static readonly TimeSpan DiffCounterHistoryFetchFailureBackoff = TimeSpan.FromMinutes(1);
     private static readonly TimeSpan MarketObserveAheadWindow = TimeSpan.FromMinutes(10);
     private static readonly TimeSpan MarketObserveBehindWindow = TimeSpan.FromMinutes(10);
@@ -2656,7 +2658,7 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
 
         if (previousResultReadyOnly)
         {
-            runs = await TrackStrategyStageAsync(
+            var previousResultFilter = await TrackStrategyStageAsync(
                 cycleId,
                 cycleKind,
                 flowName,
@@ -2669,10 +2671,24 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
                 async token => await FilterPreviousResultReadyRunsAsync(runs, variantsById, token),
                 CreateStageOutcome,
                 cancellationToken);
+            runs = previousResultFilter.ReadyRuns;
             if (runs.Count == 0)
             {
-                return (0, 0);
+                return (0, previousResultFilter.RunsSkipped);
             }
+
+            var placementResult = await PlaceDueEntryRunsAsync(
+                OrderDueEntryRunsForPlacement(runs, variantsById, strategySettings),
+                variantsById,
+                strategySettings,
+                cycleId,
+                cycleKind,
+                flowName,
+                stageName,
+                cancellationToken);
+            return (
+                placementResult.EntriesPlaced,
+                previousResultFilter.RunsSkipped + placementResult.RunsSkipped);
         }
 
         var orderedRuns = OrderDueEntryRunsForPlacement(runs, variantsById, strategySettings);
@@ -2687,7 +2703,7 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
             cancellationToken);
     }
 
-    private async Task<IReadOnlyList<StrategyMarketPaperRun>> FilterPreviousResultReadyRunsAsync(
+    private async Task<PreviousResultReadyFilterResult> FilterPreviousResultReadyRunsAsync(
         IReadOnlyList<StrategyMarketPaperRun> runs,
         IReadOnlyDictionary<Guid, BtcUpDown5mStrategyVariant> variantsById,
         CancellationToken cancellationToken)
@@ -2716,9 +2732,10 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
 
         if (candidates.Count == 0)
         {
-            return runs;
+            return new PreviousResultReadyFilterResult(runs, RunsSkipped: 0);
         }
 
+        var candidatesByRunId = candidates.ToDictionary(candidate => candidate.RunId);
         var readyKeys = new HashSet<AssetMarketStartKey>(
             await GetResolvedMarketLedgerKeysAsync(candidates, cancellationToken));
         if (readyKeys.Count < candidates.Count)
@@ -2729,19 +2746,71 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
                 cancellationToken));
         }
 
-        return runs
-            .Where(run =>
+        var nowUtc = GetUtcNow();
+        var readyRuns = new List<StrategyMarketPaperRun>(runs.Count);
+        var runsSkipped = 0;
+        foreach (var run in runs)
+        {
+            if (passThrough.Contains(run.Id))
             {
-                if (passThrough.Contains(run.Id))
-                {
-                    return true;
-                }
+                readyRuns.Add(run);
+                continue;
+            }
 
-                var candidate = candidates.FirstOrDefault(item => item.RunId == run.Id);
-                return candidate is not null &&
-                    readyKeys.Contains(new AssetMarketStartKey(candidate.AssetSymbol, candidate.PreviousMarketStartUtc));
-            })
-            .ToArray();
+            if (!candidatesByRunId.TryGetValue(run.Id, out var candidate))
+            {
+                continue;
+            }
+
+            if (readyKeys.Contains(new AssetMarketStartKey(candidate.AssetSymbol, candidate.PreviousMarketStartUtc)))
+            {
+                readyRuns.Add(run);
+                continue;
+            }
+
+            if (IsPreviousResultReadyWaitExpired(run.EntryDueAtUtc, nowUtc) &&
+                variantsById.TryGetValue(StrategyIds.Normalize(run.StrategyId), out var variant))
+            {
+                await SkipRunAsync(
+                    run,
+                    variant,
+                    "previous_result_not_ready_by_sla",
+                    nowUtc,
+                    cancellationToken,
+                    BuildPreviousResultNotReadyBySlaDiagnosticsJson(run, candidate, nowUtc));
+                runsSkipped++;
+            }
+        }
+
+        return new PreviousResultReadyFilterResult(readyRuns, runsSkipped);
+    }
+
+    private static bool IsPreviousResultReadyWaitExpired(DateTimeOffset entryDueAtUtc, DateTimeOffset nowUtc)
+    {
+        return entryDueAtUtc <= nowUtc.AddSeconds(-PreviousResultReadySlaSeconds);
+    }
+
+    private static string BuildPreviousResultNotReadyBySlaDiagnosticsJson(
+        StrategyMarketPaperRun run,
+        PreviousResultReadyCandidate candidate,
+        DateTimeOffset nowUtc)
+    {
+        var root = new JsonObject
+        {
+            ["skip_reason"] = "previous_result_not_ready_by_sla",
+            ["entry_due_at_utc"] = run.EntryDueAtUtc.ToString("O", CultureInfo.InvariantCulture),
+            ["decision_utc"] = nowUtc.ToString("O", CultureInfo.InvariantCulture),
+            ["previous_result_ready_sla_seconds"] = PreviousResultReadySlaSeconds,
+            ["reference_asset_symbol"] = candidate.AssetSymbol,
+            ["previous_market_start_utc"] = candidate.PreviousMarketStartUtc.ToString("O", CultureInfo.InvariantCulture)
+        };
+
+        if (run.MarketStartUtc is { } marketStartUtc)
+        {
+            root["market_start_utc"] = marketStartUtc.ToString("O", CultureInfo.InvariantCulture);
+        }
+
+        return root.ToJsonString();
     }
 
     private async Task<IReadOnlySet<AssetMarketStartKey>> GetResolvedMarketLedgerKeysAsync(
@@ -17522,6 +17591,15 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
             LatestEntryDueAtUtc: GetLatestEntryDueAtUtc(result.RemainingRuns));
     }
 
+    private static StrategyStageOutcome CreateStageOutcome(PreviousResultReadyFilterResult result)
+    {
+        return new StrategyStageOutcome(
+            RunCount: result.ReadyRuns.Count,
+            RunsSkipped: result.RunsSkipped,
+            EarliestEntryDueAtUtc: GetEarliestEntryDueAtUtc(result.ReadyRuns),
+            LatestEntryDueAtUtc: GetLatestEntryDueAtUtc(result.ReadyRuns));
+    }
+
     private static DateTimeOffset? GetEarliestEntryDueAtUtc(IReadOnlyList<StrategyMarketPaperRun> runs)
     {
         return runs.Count == 0 ? null : runs.Min(run => run.EntryDueAtUtc);
@@ -18288,6 +18366,10 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
         Guid RunId,
         string AssetSymbol,
         DateTimeOffset PreviousMarketStartUtc);
+
+    private sealed record PreviousResultReadyFilterResult(
+        IReadOnlyList<StrategyMarketPaperRun> ReadyRuns,
+        int RunsSkipped);
 
     private readonly record struct AssetMarketStartKey(
         string AssetSymbol,

@@ -81,3 +81,10 @@ Request:
 
 Result:
 Retried production verification from the local machine, but PostgreSQL at `192.168.0.101:5432` still timed out, including through the new gate command. Added `scripts/check-strategy-entry-latency.ps1`, a psql-based production latency gate that verifies the service heartbeat/version, checks enabled Up/Down 5m strategy entry delays against a configurable 3-second budget, prints worst over-limit rows, and summarizes BTC stage timings when available. Updated README with current split-lane `cycle_kind` values and the gate command. Verification: PowerShell syntax parse passed; local stale-DB smoke run completed with `-AllowNoRows`; production run failed with `psql ... timeout expired`; diff check passed with README line-ending warning only. No production DB writes, live orders, service restart, or cancel action was performed. Final objective remains open until fresh production data proves all strategy delays are <= 3 seconds.
+
+## 2026-06-29T09:59:00+00:00
+Request:
+попробуй сейчас
+
+Result:
+Reached production PostgreSQL and confirmed deployed service commit `50288b2` was running, but the 3-second latency gate failed: `9079/10658` recent checked rows were above 3 seconds, with worst delay about `326.487s`. Stage timing showed split lanes are active, but previous-result rows can remain Observed until market end and Diff counter rows still waited for missing previous results on the old 4-minute timeout. Added a 2-second dependency-ready SLA: previous-result due rows skip as `previous_result_not_ready_by_sla`, and Diff counter missing previous-result waits now expire after the same SLA. Optimized the latency gate query and corrected GTD skipped-row event timing to use `paper_orders.created_at_utc`. Verification: service build passed; focused SLA/config tests passed `41/41`; diff check passed with line-ending warnings only. Full test project still has pre-existing stale FAK/catalog failures unrelated to this latency fix. No production DB writes, live orders, service restart, or cancel action was performed.

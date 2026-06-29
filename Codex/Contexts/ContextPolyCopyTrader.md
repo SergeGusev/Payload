@@ -1,3 +1,19 @@
+## Active Update 2026-06-29 Dependency SLA Latency Fix
+Goal: Reduce every BTC/ETH/SOL Up/Down strategy entry delay to no more than 3 seconds and verify the deployed service.
+Status: In Progress
+Done:
+- Reached production PostgreSQL and confirmed the deployed service `50288b2` is running, but the latency gate fails: recent window had `9079/10658` checked rows above 3 seconds, with worst delay about `326.487s`.
+- Stage timing and row timelines show split due lanes are active; the remaining long tail is caused by dependency waits that leave previous-result rows Observed until market end and Diff counter rows waiting up to the previous 4-minute missing-result timeout.
+- Added a 2-second entry-dependency SLA: previous-result due rows now skip with `previous_result_not_ready_by_sla` when their previous market result is not ready by SLA, and Diff counter missing previous-result waits now expire after the same 2-second SLA instead of 4 minutes.
+- Optimized `scripts/check-strategy-entry-latency.ps1` to query bounded recent entered/skipped rows and to measure skipped GTD rows with `paper_orders.created_at_utc`, so GTD expiry updates no longer appear as placement delay.
+Verification:
+- `dotnet build src/PolyCopyTrader.Service/PolyCopyTrader.Service.csproj --no-restore` passed.
+- `dotnet test tests/PolyCopyTrader.Tests/PolyCopyTrader.Tests.csproj --no-restore --filter "FullyQualifiedName~ProcessPreviousResultFastDueEntriesAsync_SkipsWhenPreviousResultMissesSla|FullyQualifiedName~ProcessDiffCounterDueEntriesAsync_DiffCounterSkipsMissingPreviousResultAfterDependencySla|FullyQualifiedName~ProcessDiffCounterFastDueEntriesAsync_DoesNotObserveMarkets|FullyQualifiedName~ConfigurationTests"` passed `41/41`.
+- `git diff --check -- scripts/check-strategy-entry-latency.ps1 src/PolyCopyTrader.Service/Strategies/BtcUpDown5mPaperStrategyProcessor.cs tests/PolyCopyTrader.Tests/BtcUpDown5mPaperStrategyProcessorTests.cs` passed with line-ending warnings only.
+Next: Deploy this commit, then rerun `scripts/check-strategy-entry-latency.ps1 -HostOverride 192.168.0.101 -ExpectedCommit <newCommit> -MaxDelaySeconds 3 -LookbackMinutes 30 -RequireSplitCycleKinds`. If anything still exceeds 3 seconds, inspect the remaining preopen/GTD batch timings.
+Notes: Full test project still has pre-existing stale FAK/catalog failures around baseline FAK price `0.99` versus older executable-ask expectations; it was not used as the gate for this latency fix. No production writes, live orders, service restart, or cancel action was performed by Codex.
+Blockers: Final goal cannot be marked complete until this new build is deployed and a fresh production gate proves every checked strategy entry delay is <= 3 seconds.
+
 ## Active Update 2026-06-29 Deployed Latency Recheck Timeout
 Goal: Verify the newly deployed service and confirm every enabled Up/Down 5m strategy entry delay is no more than 3 seconds.
 Status: Blocked

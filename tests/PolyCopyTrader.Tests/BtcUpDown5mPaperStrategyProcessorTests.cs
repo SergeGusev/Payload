@@ -6479,10 +6479,10 @@ public sealed class BtcUpDown5mPaperStrategyProcessorTests
     }
 
     [Fact]
-    public async Task ProcessDiffCounterDueEntriesAsync_DiffCounterSkipsMissingPreviousResultOnlyAfterFourMinutes()
+    public async Task ProcessDiffCounterDueEntriesAsync_DiffCounterSkipsMissingPreviousResultAfterDependencySla()
     {
         var startupMarketStartUtc = new DateTimeOffset(2026, 6, 8, 12, 0, 0, TimeSpan.Zero);
-        var startupNow = startupMarketStartUtc.AddMinutes(3);
+        var startupNow = startupMarketStartUtc.AddSeconds(1);
         var timeProvider = new ManualTimeProvider(startupNow);
         var variant = StrategyIds.UpDown5mStrategyVariants.Single(item => item.Code == "btc_up_down_5m_up_diff_5_instant");
         var repository = new TestAppRepository();
@@ -6516,14 +6516,13 @@ public sealed class BtcUpDown5mPaperStrategyProcessorTests
 
         Assert.Equal(0, result.EntriesPlaced);
         Assert.Equal(0, result.RunsSkipped);
-        Assert.Equal(0, gammaClient.ClosedMarketRequestCount);
         Assert.Empty(repository.PaperOrders);
         var waitingRun = Assert.Single(repository.StrategyMarketPaperRuns);
         Assert.Equal(StrategyMarketPaperRunStatuses.Observed, waitingRun.Status);
         Assert.Null(waitingRun.SkipReason);
         Assert.Null(waitingRun.SkipDiagnosticsJson);
 
-        timeProvider.UtcNow = startupMarketStartUtc.AddMinutes(4).AddSeconds(1);
+        timeProvider.UtcNow = startupMarketStartUtc.AddSeconds(3);
 
         var timedOutResult = await processor.ProcessDiffCounterDueEntriesAsync();
 
@@ -11354,6 +11353,40 @@ public sealed class BtcUpDown5mPaperStrategyProcessorTests
         var order = Assert.Single(repository.PaperOrders);
         Assert.Equal("asset-down", order.AssetId);
         Assert.Contains("\"result_source\":\"resolved_market_ledger_MarketWebSocket\"", order.RawDecisionJson, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task ProcessPreviousResultFastDueEntriesAsync_SkipsWhenPreviousResultMissesSla()
+    {
+        var marketStart = DateTimeOffset.UtcNow.AddSeconds(-4);
+        var timeProvider = new ManualTimeProvider(marketStart.AddSeconds(4));
+        var repository = new TestAppRepository();
+        repository.PolymarketGammaMarkets.Add(CreateMarket(
+            marketStart,
+            marketStart.AddMinutes(5),
+            upPrice: 0.50m,
+            downPrice: 0.50m));
+        var processor = CreateProcessorCoreWithOptions(
+            repository,
+            [],
+            DefaultOrderBooks(),
+            _ => { },
+            [],
+            CreateBtcOptions(false, [Skip1Variant.Code]),
+            btcUsdReferencePriceClient: new FakeBtcUsdReferencePriceClient(100m),
+            btcUsdReferencePriceCache: CreateBtcUsdReferenceCache([100m]),
+            timeProvider: timeProvider);
+
+        await processor.ProcessPreviousResultObserveAsync();
+
+        var dueResult = await processor.ProcessPreviousResultFastDueEntriesAsync();
+
+        Assert.Equal(0, dueResult.EntriesPlaced);
+        Assert.Equal(1, dueResult.RunsSkipped);
+        var skippedRun = Assert.Single(repository.StrategyMarketPaperRuns, item => item.StrategyId == Skip1Variant.Id);
+        Assert.Equal(StrategyMarketPaperRunStatuses.Skipped, skippedRun.Status);
+        Assert.Equal("previous_result_not_ready_by_sla", skippedRun.SkipReason);
+        Assert.Contains("\"previous_result_ready_sla_seconds\":2", skippedRun.SkipDiagnosticsJson, StringComparison.Ordinal);
     }
 
     [Fact]

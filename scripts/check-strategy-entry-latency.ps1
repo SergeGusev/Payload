@@ -208,7 +208,44 @@ WITH service AS (
             COALESCE((SELECT started_at_utc FROM service), now() - interval '$LookbackMinutes minutes'),
             now() - interval '$LookbackMinutes minutes'
         ) AS window_start_utc
-), runs AS (
+), recent_entered AS MATERIALIZED (
+    SELECT
+        run.id,
+        run.strategy_id,
+        run.paper_order_id,
+        run.market_slug,
+        run.status,
+        run.skip_reason,
+        run.entry_due_at_utc,
+        run.entered_at_utc,
+        run.updated_at_utc
+    FROM strategy_market_paper_runs run
+    WHERE run.entered_at_utc IS NOT NULL
+      AND run.entry_due_at_utc IS NOT NULL
+      AND run.status IN ('Entered', 'Settled')
+    ORDER BY run.entered_at_utc DESC
+    LIMIT 20000
+), recent_skipped AS MATERIALIZED (
+    SELECT
+        run.id,
+        run.strategy_id,
+        run.paper_order_id,
+        run.market_slug,
+        run.status,
+        run.skip_reason,
+        run.entry_due_at_utc,
+        run.entered_at_utc,
+        run.updated_at_utc
+    FROM strategy_market_paper_runs run
+    WHERE run.entry_due_at_utc IS NOT NULL
+      AND run.status = 'Skipped'
+    ORDER BY run.updated_at_utc DESC
+    LIMIT 50000
+), runs AS MATERIALIZED (
+    SELECT * FROM recent_entered
+    UNION ALL
+    SELECT * FROM recent_skipped
+), events_raw AS (
     SELECT
         run.id,
         run.strategy_id,
@@ -222,22 +259,22 @@ WITH service AS (
         run.entry_due_at_utc,
         CASE
             WHEN run.status IN ('Entered', 'Settled') THEN COALESCE(run.entered_at_utc, run.updated_at_utc)
+            WHEN run.paper_order_id IS NOT NULL THEN COALESCE(paper_order.created_at_utc, run.updated_at_utc)
             WHEN run.status = 'Skipped' THEN run.updated_at_utc
             ELSE COALESCE(run.entered_at_utc, run.updated_at_utc)
         END AS event_at_utc
-    FROM strategy_market_paper_runs run
+    FROM runs run
     INNER JOIN strategies strategy ON strategy.id = run.strategy_id
+    LEFT JOIN paper_orders paper_order ON paper_order.id = run.paper_order_id
     WHERE strategy.enabled
       AND lower(strategy.code) LIKE '%\_up\_down\_5m\_%' ESCAPE '\'
-      AND run.entry_due_at_utc IS NOT NULL
-      AND run.status IN ('Entered', 'Skipped', 'Settled')
 ), events AS (
     SELECT
-        runs.*,
-        round(extract(epoch from (runs.event_at_utc - runs.entry_due_at_utc))::numeric, 3) AS delay_seconds
-    FROM runs, bounds
-    WHERE runs.event_at_utc IS NOT NULL
-      AND runs.event_at_utc >= bounds.window_start_utc
+        events_raw.*,
+        round(extract(epoch from (events_raw.event_at_utc - events_raw.entry_due_at_utc))::numeric, 3) AS delay_seconds
+    FROM events_raw, bounds
+    WHERE events_raw.event_at_utc IS NOT NULL
+      AND events_raw.event_at_utc >= bounds.window_start_utc
 )
 SELECT jsonb_build_object(
     'db_now_utc', (SELECT db_now_utc FROM bounds),
