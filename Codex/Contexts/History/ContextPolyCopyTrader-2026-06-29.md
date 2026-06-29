@@ -68,6 +68,13 @@ Continue working toward the active goal: довести задержку обр�
 Result:
 Rechecked local repo and again attempted production connectivity; `psql` and TCP checks to `192.168.0.101:5432` still timed out. Continued implementation against the remaining scheduler gap: previous-result strategies still used a full observe/due/settlement flow in their dedicated worker. Split previous-result processing into due-only (`ProcessPreviousResultFastDueEntriesAsync`) and observe-only (`ProcessPreviousResultObserveAsync`) methods while keeping `ProcessPreviousResultDueEntriesAsync` as a compatibility wrapper. Changed the existing previous-result worker to due-only fast polling, added and registered `BtcUpDown5mPreviousResultObserveWorker`, and added a focused test proving fast previous-result due does not observe markets. Verification: previous-result focused tests passed 3/3; solution build passed with existing nullable warnings; diff check passed with line-ending warnings only. No production DB writes, live orders, service restart, or cancel action was performed.
 
+## 2026-06-29T08:59:01.9440525+00:00
+Request:
+Выложил, проверяй
+
+Result:
+Pulled latest repo state and retried the production latency gate against `192.168.0.101:5432` with expected commit `50288b2`, but `psql` failed with `timeout expired` before heartbeat/version checks. Confirmed the blocker is network-level from this machine: `ping -n 2 192.168.0.101` lost 100%, and `Test-NetConnection 192.168.0.101 -Port 5432` timed out. Local `POLYCOPYTRADER_POSTGRES_CONNECTION` points to `127.0.0.1`, so running without host override would check only the stale local database. No production rows were read, and no DB writes, live orders, service restart, or cancel action was performed. The deployed 3-second SLA remains unverified until the latency gate can run on the VPS or from a machine with access to production PostgreSQL.
+
 ## 2026-06-29T07:47:01.8108552+00:00
 Request:
 Выложил новую версию сервиса, проверяй. Наша конечная задача - задержка ни по одной из стратегий не должна превышать 3 секунд.

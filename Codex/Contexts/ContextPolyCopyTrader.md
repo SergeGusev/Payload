@@ -1,3 +1,18 @@
+## Active Update 2026-06-29 Deployed Latency Recheck Timeout
+Goal: Verify the newly deployed service and confirm every enabled Up/Down 5m strategy entry delay is no more than 3 seconds.
+Status: Blocked
+Done:
+- Pulled latest repo state; local HEAD is `50288b2` (`Add strategy entry latency gate`).
+- Retried the production latency gate after the user's new deploy: `scripts/check-strategy-entry-latency.ps1 -HostOverride 192.168.0.101 -ExpectedCommit 50288b2 -MaxDelaySeconds 3 -LookbackMinutes 30 -RequireSplitCycleKinds`.
+- The gate failed before heartbeat/version checks because `psql` could not connect to `192.168.0.101:5432`: `timeout expired`.
+- Confirmed the issue is network-level from this machine: `ping -n 2 192.168.0.101` lost 100%, and `Test-NetConnection 192.168.0.101 -Port 5432` timed out.
+- Confirmed local `POLYCOPYTRADER_POSTGRES_CONNECTION` still points to `Host=127.0.0.1`, so running without `-HostOverride` would only check the stale local database, not production.
+Verification:
+- No production DB rows were read; no heartbeat, stage timings, or strategy entry delays could be verified from this machine.
+Next: Run `scripts/check-strategy-entry-latency.ps1` on the VPS or restore network access from this machine to `192.168.0.101:5432`; completion requires a fresh gate pass showing deployed `50288b2` or newer and zero enabled Up/Down 5m entries above 3 seconds.
+Notes: No production DB writes, live orders, service restart, or cancel action was performed by Codex. Existing unrelated dirty files and output folders were left untouched.
+Blockers: Production PostgreSQL host `192.168.0.101` is unreachable from this machine, so the deployed 3-second SLA cannot be verified here.
+
 ## Active Update 2026-06-29 Strategy Entry Latency Gate
 Goal: Reduce every BTC/ETH/SOL Up/Down strategy entry delay to no more than 3 seconds and verify the deployed service.
 Status: In Progress
