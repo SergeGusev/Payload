@@ -143,3 +143,10 @@ Request:
 
 Result:
 Checked production PostgreSQL read-only and confirmed the service is running code commit `37c146a` with a fresh heartbeat; local `HEAD` was `be2dcb9`, but that newer commit only recorded Codex CLI install context. The production latency gate still failed: `3519` checked rows across `1757` strategies, `705` above 3 seconds, max delay `31.579s`. Stage timings showed the new blocker is synchronous exposure-cache work in the hot path: `fast_diff_due regular_due_entries.deferred_persistence_enqueue` took `39561ms`, `main_due` took `20794ms`, and `previous_result_due` took `17506ms`. Production has about `423735` `paper_positions`, and the cache was rebuilding/sorting the full list on every batch apply. Implemented a new patch: `ExposureSnapshotCache` now keeps a paper-position index and updates by key without full sort/rebuild, and BTC deferred entry persistence uses lazy `GetPaperPosition` lookups instead of building a full initial-position dictionary per due batch. Verification passed: focused exposure/BTC queue tests `6/6`, service build with `0` warnings/errors, and diff check with line-ending warnings only. No production DB writes, live orders, service restart, or cancel action was performed.
+
+## 2026-06-29T13:52:24.7910986Z
+Request:
+Объясни мне, зачем мы читаем paper позиции делая ставки?
+
+Result:
+Explained that paper positions are read to maintain paper accounting after simulated fills: aggregate size, average entry price, estimated value, unrealized PnL, copied-position links, and exposure/risk state. Also explained that this should not require scanning/rebuilding all positions during each entry burst; the old hot-path implementation was too broad, and commit `d42aac9` narrows it to indexed/lazy lookup of only the affected `(wallet, asset)` position.

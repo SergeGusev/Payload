@@ -1,3 +1,14 @@
+## Active Update 2026-06-29 Paper Position Read Explanation
+Goal: Explain why paper positions are read while creating strategy entries.
+Status: Completed
+Done:
+- Reviewed the current BTC Up/Down entry path, `DefaultPaperTradingEngine.ApplyBuyFill`, and exposure snapshot usage.
+- Clarified that paper positions are needed for paper accounting after a simulated fill, not as a command to place the bet itself.
+- Clarified that the old implementation read/rebuilt far too much position state on the hot path, and `d42aac9` narrows this to indexed/lazy position lookup.
+Next: Deploy `d42aac9` and rerun the production latency gate.
+Notes: Explanation-only turn; no source-code changes. Existing unrelated dirty files were left untouched.
+Blockers: None for the explanation; production SLA still requires post-deploy verification.
+
 ## Active Update 2026-06-29 Exposure Snapshot Hot Path Lookup
 Goal: Reduce every BTC/ETH/SOL Up/Down strategy entry delay to no more than 3 seconds and verify the deployed service.
 Status: In Progress
