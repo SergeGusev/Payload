@@ -1047,68 +1047,411 @@ WHERE wallet = @Wallet;
 
 		await using NpgsqlConnection connection = await OpenConnectionAsync(cancellationToken);
 		await using NpgsqlTransaction transaction = await connection.BeginTransactionAsync(cancellationToken);
-		foreach (Signal signal in batch.Signals)
-		{
-			await using NpgsqlCommand signalCommand = CreateCommand(connection, "INSERT INTO signals (\n    id, leader_trade_id, trader_wallet, condition_id, asset_id, outcome, leader_price,\n    best_bid, best_ask, spread_abs, spread_pct, lag_seconds, score, decision,\n    accepted, proposed_paper_price, proposed_size_shares, proposed_notional_usd, created_at_utc, raw_context_json\n) VALUES (\n    @Id, @LeaderTradeId, @TraderWallet, @ConditionId, @AssetId, @Outcome, @LeaderPrice,\n    @BestBid, @BestAsk, @SpreadAbs, @SpreadPct, @LagSeconds, @Score, @Decision,\n    @Accepted, @ProposedPaperPrice, @ProposedSizeShares, @ProposedNotionalUsd, @CreatedAtUtc, CAST(@RawContextJson AS jsonb)\n);");
-			signalCommand.Transaction = transaction;
-			AddSignalParameters(signalCommand, signal);
-			await signalCommand.ExecuteNonQueryAsync(cancellationToken);
-		}
-
-		foreach (PaperOrder order in batch.PaperOrders)
-		{
-			await using NpgsqlCommand orderCommand = CreateCommand(connection, "INSERT INTO paper_orders (\n    id, signal_id, strategy_id, copied_trader_wallet, status, side, asset_id, condition_id, outcome, price, size_shares, notional_usd,\n    created_at_utc, expires_at_utc, filled_at_utc, cancelled_at_utc, raw_decision_json, correlation_id, execution_source\n) VALUES (\n    @Id, @SignalId, @StrategyId, @CopiedTraderWallet, @Status, @Side, @AssetId, @ConditionId, @Outcome, @Price, @SizeShares, @NotionalUsd,\n    @CreatedAtUtc, @ExpiresAtUtc, @FilledAtUtc, @CancelledAtUtc, CAST(@RawDecisionJson AS jsonb), @CorrelationId, @ExecutionSource\n);");
-			orderCommand.Transaction = transaction;
-			AddPaperOrderParameters(orderCommand, order);
-			await orderCommand.ExecuteNonQueryAsync(cancellationToken);
-		}
-
-		foreach (PaperFill fill in batch.PaperFills)
-		{
-			await using NpgsqlCommand fillCommand = CreateCommand(connection, "INSERT INTO paper_fills (id, paper_order_id, price, size_shares, filled_at_utc, evidence, realized_pnl_usd)\nVALUES (@Id, @PaperOrderId, @Price, @SizeShares, @FilledAtUtc, @Evidence, @RealizedPnlUsd);");
-			fillCommand.Transaction = transaction;
-			AddPaperFillParameters(fillCommand, fill);
-			await fillCommand.ExecuteNonQueryAsync(cancellationToken);
-		}
-
-		foreach (PaperPosition position in batch.PaperPositions)
-		{
-			await using NpgsqlCommand positionCommand = CreateCommand(connection, "INSERT INTO paper_positions (\n    id, copied_trader_wallet, asset_id, condition_id, outcome, size_shares, average_price,\n    estimated_value_usd, unrealized_pnl_usd, updated_at_utc\n) VALUES (\n    @Id, @CopiedTraderWallet, @AssetId, @ConditionId, @Outcome, @SizeShares, @AveragePrice,\n    @EstimatedValueUsd, @UnrealizedPnlUsd, @UpdatedAtUtc\n)\nON CONFLICT (copied_trader_wallet, asset_id) DO UPDATE SET\n    condition_id = excluded.condition_id,\n    outcome = excluded.outcome,\n    size_shares = excluded.size_shares,\n    average_price = excluded.average_price,\n    estimated_value_usd = excluded.estimated_value_usd,\n    unrealized_pnl_usd = excluded.unrealized_pnl_usd,\n    updated_at_utc = excluded.updated_at_utc;");
-			positionCommand.Transaction = transaction;
-			AddPaperPositionParameters(positionCommand, position);
-			await positionCommand.ExecuteNonQueryAsync(cancellationToken);
-		}
-
-		foreach (PaperCopiedLeaderPositionActivation activation in batch.CopiedLeaderPositionActivations)
-		{
-			await using NpgsqlCommand activationCommand = CreateCommand(connection, """
-UPDATE paper_copied_leader_positions
-SET status = 'Active',
-    copied_initial_size_shares = CASE
-        WHEN status = 'Active' THEN copied_initial_size_shares + @CopiedInitialSizeShares
-        ELSE @CopiedInitialSizeShares
-    END,
-    next_activity_sync_at_utc = LEAST(next_activity_sync_at_utc, @FilledAtUtc),
-    updated_at_utc = @FilledAtUtc
-WHERE entry_paper_order_id = @EntryPaperOrderId
-  AND status IN ('PendingEntry', 'Active');
-""");
-			activationCommand.Transaction = transaction;
-			activationCommand.Parameters.AddWithValue("EntryPaperOrderId", activation.EntryPaperOrderId);
-			activationCommand.Parameters.AddWithValue("CopiedInitialSizeShares", activation.CopiedInitialSizeShares);
-			activationCommand.Parameters.AddWithValue("FilledAtUtc", UtcDateTime(activation.FilledAtUtc));
-			await activationCommand.ExecuteNonQueryAsync(cancellationToken);
-		}
-
-		foreach (StrategyMarketPaperRun run in batch.StrategyRuns)
-		{
-			await using NpgsqlCommand runCommand = CreateCommand(connection, "UPDATE strategy_market_paper_runs\nSET strategy_id = @StrategyId,\n    market_id = @MarketId,\n    condition_id = @ConditionId,\n    market_slug = @MarketSlug,\n    market_title = @MarketTitle,\n    category = @Category,\n    market_start_utc = @MarketStartUtc,\n    market_end_utc = @MarketEndUtc,\n    detected_at_utc = @DetectedAtUtc,\n    entry_due_at_utc = @EntryDueAtUtc,\n    status = @Status,\n    selected_asset_id = @SelectedAssetId,\n    selected_outcome = @SelectedOutcome,\n    entry_price = @EntryPrice,\n    stake_usd = @StakeUsd,\n    size_shares = @SizeShares,\n    signal_id = @SignalId,\n    paper_order_id = @PaperOrderId,\n    entered_at_utc = @EnteredAtUtc,\n    settlement_price = @SettlementPrice,\n    settlement_value_usd = @SettlementValueUsd,\n    realized_pnl_usd = @RealizedPnlUsd,\n    settled_at_utc = @SettledAtUtc,\n    skip_reason = @SkipReason,\n    skip_diagnostics_json = CAST(@SkipDiagnosticsJson AS jsonb),\n    created_at_utc = @CreatedAtUtc,\n    updated_at_utc = @UpdatedAtUtc\nWHERE id = @Id;");
-			runCommand.Transaction = transaction;
-			AddStrategyMarketPaperRunParameters(runCommand, run);
-			await runCommand.ExecuteNonQueryAsync(cancellationToken);
-		}
+		await AddSignalsBatchAsync(connection, transaction, batch.Signals, cancellationToken);
+		await AddPaperOrdersBatchAsync(connection, transaction, batch.PaperOrders, cancellationToken);
+		await AddPaperFillsBatchAsync(connection, transaction, batch.PaperFills, cancellationToken);
+		await UpsertPaperPositionsBatchAsync(connection, transaction, batch.PaperPositions, cancellationToken);
+		await ActivatePaperCopiedLeaderPositionsBatchAsync(connection, transaction, batch.CopiedLeaderPositionActivations, cancellationToken);
+		await UpdateStrategyMarketPaperRunsBatchAsync(connection, transaction, batch.StrategyRuns, cancellationToken);
 
 		await transaction.CommitAsync(cancellationToken);
+	}
+
+	private static async Task AddSignalsBatchAsync(
+		NpgsqlConnection connection,
+		NpgsqlTransaction transaction,
+		IReadOnlyList<Signal> signals,
+		CancellationToken cancellationToken)
+	{
+		if (signals.Count == 0)
+		{
+			return;
+		}
+
+		var rows = signals.Select(signal => new
+		{
+			id = signal.Id,
+			trader_wallet = signal.LeaderTrade.TraderWallet,
+			condition_id = signal.LeaderTrade.ConditionId,
+			asset_id = signal.LeaderTrade.AssetId,
+			outcome = signal.LeaderTrade.Outcome,
+			leader_price = signal.LeaderTrade.Price,
+			score = signal.Score,
+			decision = signal.DecisionCode,
+			accepted = signal.Accepted,
+			proposed_paper_price = signal.ProposedPaperPrice,
+			proposed_size_shares = signal.ProposedSizeShares,
+			proposed_notional_usd = signal.ProposedNotionalUsd,
+			created_at_utc = UtcDateTime(signal.CreatedAtUtc),
+			raw_context_json = JsonSerializer.Serialize(signal)
+		});
+		await using NpgsqlCommand command = CreateCommand(connection, """
+INSERT INTO signals (
+    id, leader_trade_id, trader_wallet, condition_id, asset_id, outcome, leader_price,
+    best_bid, best_ask, spread_abs, spread_pct, lag_seconds, score, decision,
+    accepted, proposed_paper_price, proposed_size_shares, proposed_notional_usd, created_at_utc, raw_context_json
+)
+SELECT
+    signal.id, NULL, signal.trader_wallet, signal.condition_id, signal.asset_id, signal.outcome, signal.leader_price,
+    NULL, NULL, NULL, NULL, NULL, signal.score, signal.decision,
+    signal.accepted, signal.proposed_paper_price, signal.proposed_size_shares, signal.proposed_notional_usd,
+    signal.created_at_utc, CAST(signal.raw_context_json AS jsonb)
+FROM jsonb_to_recordset(CAST(@SignalsJson AS jsonb)) AS signal(
+    id uuid,
+    trader_wallet text,
+    condition_id text,
+    asset_id text,
+    outcome text,
+    leader_price numeric,
+    score integer,
+    decision text,
+    accepted boolean,
+    proposed_paper_price numeric,
+    proposed_size_shares numeric,
+    proposed_notional_usd numeric,
+    created_at_utc timestamptz,
+    raw_context_json text
+);
+""");
+		command.Transaction = transaction;
+		AddJsonbParameter(command, "SignalsJson", JsonSerializer.Serialize(rows));
+		await command.ExecuteNonQueryAsync(cancellationToken);
+	}
+
+	private static async Task AddPaperOrdersBatchAsync(
+		NpgsqlConnection connection,
+		NpgsqlTransaction transaction,
+		IReadOnlyList<PaperOrder> orders,
+		CancellationToken cancellationToken)
+	{
+		if (orders.Count == 0)
+		{
+			return;
+		}
+
+		var rows = orders.Select(order => new
+		{
+			id = order.Id,
+			signal_id = order.SignalId,
+			strategy_id = StrategyIds.Normalize(order.StrategyId),
+			copied_trader_wallet = order.CopiedTraderWallet,
+			status = order.Status.ToString(),
+			side = order.Side.ToString(),
+			asset_id = order.AssetId,
+			condition_id = order.ConditionId,
+			outcome = order.Outcome,
+			price = order.Price,
+			size_shares = order.SizeShares,
+			notional_usd = order.NotionalUsd,
+			created_at_utc = UtcDateTime(order.CreatedAtUtc),
+			expires_at_utc = UtcDateTime(order.ExpiresAtUtc),
+			filled_at_utc = order.FilledAtUtc.HasValue ? UtcDateTime(order.FilledAtUtc.Value) : (DateTime?)null,
+			cancelled_at_utc = order.CancelledAtUtc.HasValue ? UtcDateTime(order.CancelledAtUtc.Value) : (DateTime?)null,
+			raw_decision_json = BuildPaperOrderRawDecisionJson(order),
+			correlation_id = order.CorrelationId,
+			execution_source = order.ExecutionSource ?? string.Empty
+		});
+		await using NpgsqlCommand command = CreateCommand(connection, """
+INSERT INTO paper_orders (
+    id, signal_id, strategy_id, copied_trader_wallet, status, side, asset_id, condition_id, outcome, price,
+    size_shares, notional_usd, created_at_utc, expires_at_utc, filled_at_utc, cancelled_at_utc,
+    raw_decision_json, correlation_id, execution_source
+)
+SELECT
+    paper_order.id, paper_order.signal_id, paper_order.strategy_id, paper_order.copied_trader_wallet,
+    paper_order.status, paper_order.side, paper_order.asset_id, paper_order.condition_id, paper_order.outcome,
+    paper_order.price, paper_order.size_shares, paper_order.notional_usd, paper_order.created_at_utc,
+    paper_order.expires_at_utc, paper_order.filled_at_utc, paper_order.cancelled_at_utc,
+    CAST(paper_order.raw_decision_json AS jsonb), paper_order.correlation_id, paper_order.execution_source
+FROM jsonb_to_recordset(CAST(@PaperOrdersJson AS jsonb)) AS paper_order(
+    id uuid,
+    signal_id uuid,
+    strategy_id uuid,
+    copied_trader_wallet text,
+    status text,
+    side text,
+    asset_id text,
+    condition_id text,
+    outcome text,
+    price numeric,
+    size_shares numeric,
+    notional_usd numeric,
+    created_at_utc timestamptz,
+    expires_at_utc timestamptz,
+    filled_at_utc timestamptz,
+    cancelled_at_utc timestamptz,
+    raw_decision_json text,
+    correlation_id uuid,
+    execution_source text
+);
+""");
+		command.Transaction = transaction;
+		AddJsonbParameter(command, "PaperOrdersJson", JsonSerializer.Serialize(rows));
+		await command.ExecuteNonQueryAsync(cancellationToken);
+	}
+
+	private static async Task AddPaperFillsBatchAsync(
+		NpgsqlConnection connection,
+		NpgsqlTransaction transaction,
+		IReadOnlyList<PaperFill> fills,
+		CancellationToken cancellationToken)
+	{
+		if (fills.Count == 0)
+		{
+			return;
+		}
+
+		var rows = fills.Select(fill => new
+		{
+			id = fill.Id,
+			paper_order_id = fill.PaperOrderId,
+			price = fill.Price,
+			size_shares = fill.SizeShares,
+			filled_at_utc = UtcDateTime(fill.FilledAtUtc),
+			evidence = fill.Evidence,
+			realized_pnl_usd = fill.RealizedPnlUsd
+		});
+		await using NpgsqlCommand command = CreateCommand(connection, """
+INSERT INTO paper_fills (id, paper_order_id, price, size_shares, filled_at_utc, evidence, realized_pnl_usd)
+SELECT
+    fill.id, fill.paper_order_id, fill.price, fill.size_shares, fill.filled_at_utc, fill.evidence, fill.realized_pnl_usd
+FROM jsonb_to_recordset(CAST(@PaperFillsJson AS jsonb)) AS fill(
+    id uuid,
+    paper_order_id uuid,
+    price numeric,
+    size_shares numeric,
+    filled_at_utc timestamptz,
+    evidence text,
+    realized_pnl_usd numeric
+);
+""");
+		command.Transaction = transaction;
+		AddJsonbParameter(command, "PaperFillsJson", JsonSerializer.Serialize(rows));
+		await command.ExecuteNonQueryAsync(cancellationToken);
+	}
+
+	private static async Task UpsertPaperPositionsBatchAsync(
+		NpgsqlConnection connection,
+		NpgsqlTransaction transaction,
+		IReadOnlyList<PaperPosition> positions,
+		CancellationToken cancellationToken)
+	{
+		if (positions.Count == 0)
+		{
+			return;
+		}
+
+		var rows = positions.Select(position => new
+		{
+			id = Guid.NewGuid(),
+			copied_trader_wallet = position.CopiedTraderWallet,
+			asset_id = position.AssetId,
+			condition_id = position.ConditionId,
+			outcome = position.Outcome,
+			size_shares = position.SizeShares,
+			average_price = position.AveragePrice,
+			estimated_value_usd = position.EstimatedValueUsd,
+			unrealized_pnl_usd = position.UnrealizedPnlUsd,
+			updated_at_utc = UtcDateTime(position.UpdatedAtUtc)
+		});
+		await using NpgsqlCommand command = CreateCommand(connection, """
+INSERT INTO paper_positions (
+    id, copied_trader_wallet, asset_id, condition_id, outcome, size_shares, average_price,
+    estimated_value_usd, unrealized_pnl_usd, updated_at_utc
+)
+SELECT
+    position.id, position.copied_trader_wallet, position.asset_id, position.condition_id, position.outcome,
+    position.size_shares, position.average_price, position.estimated_value_usd, position.unrealized_pnl_usd,
+    position.updated_at_utc
+FROM jsonb_to_recordset(CAST(@PaperPositionsJson AS jsonb)) AS position(
+    id uuid,
+    copied_trader_wallet text,
+    asset_id text,
+    condition_id text,
+    outcome text,
+    size_shares numeric,
+    average_price numeric,
+    estimated_value_usd numeric,
+    unrealized_pnl_usd numeric,
+    updated_at_utc timestamptz
+)
+ON CONFLICT (copied_trader_wallet, asset_id) DO UPDATE SET
+    condition_id = excluded.condition_id,
+    outcome = excluded.outcome,
+    size_shares = excluded.size_shares,
+    average_price = excluded.average_price,
+    estimated_value_usd = excluded.estimated_value_usd,
+    unrealized_pnl_usd = excluded.unrealized_pnl_usd,
+    updated_at_utc = excluded.updated_at_utc;
+""");
+		command.Transaction = transaction;
+		AddJsonbParameter(command, "PaperPositionsJson", JsonSerializer.Serialize(rows));
+		await command.ExecuteNonQueryAsync(cancellationToken);
+	}
+
+	private static async Task ActivatePaperCopiedLeaderPositionsBatchAsync(
+		NpgsqlConnection connection,
+		NpgsqlTransaction transaction,
+		IReadOnlyList<PaperCopiedLeaderPositionActivation> activations,
+		CancellationToken cancellationToken)
+	{
+		if (activations.Count == 0)
+		{
+			return;
+		}
+
+		var rows = activations.Select(activation => new
+		{
+			entry_paper_order_id = activation.EntryPaperOrderId,
+			copied_initial_size_shares = activation.CopiedInitialSizeShares,
+			filled_at_utc = UtcDateTime(activation.FilledAtUtc)
+		});
+		await using NpgsqlCommand command = CreateCommand(connection, """
+WITH activation_rows AS (
+    SELECT
+        activation.entry_paper_order_id,
+        SUM(activation.copied_initial_size_shares) AS copied_initial_size_shares,
+        MIN(activation.filled_at_utc) AS first_filled_at_utc,
+        MAX(activation.filled_at_utc) AS last_filled_at_utc
+    FROM jsonb_to_recordset(CAST(@ActivationsJson AS jsonb)) AS activation(
+        entry_paper_order_id uuid,
+        copied_initial_size_shares numeric,
+        filled_at_utc timestamptz
+    )
+    GROUP BY activation.entry_paper_order_id
+)
+UPDATE paper_copied_leader_positions position
+SET status = 'Active',
+    copied_initial_size_shares = CASE
+        WHEN position.status = 'Active' THEN position.copied_initial_size_shares + activation_rows.copied_initial_size_shares
+        ELSE activation_rows.copied_initial_size_shares
+    END,
+    next_activity_sync_at_utc = LEAST(position.next_activity_sync_at_utc, activation_rows.first_filled_at_utc),
+    updated_at_utc = activation_rows.last_filled_at_utc
+FROM activation_rows
+WHERE position.entry_paper_order_id = activation_rows.entry_paper_order_id
+  AND position.status IN ('PendingEntry', 'Active');
+""");
+		command.Transaction = transaction;
+		AddJsonbParameter(command, "ActivationsJson", JsonSerializer.Serialize(rows));
+		await command.ExecuteNonQueryAsync(cancellationToken);
+	}
+
+	private static async Task UpdateStrategyMarketPaperRunsBatchAsync(
+		NpgsqlConnection connection,
+		NpgsqlTransaction transaction,
+		IReadOnlyList<StrategyMarketPaperRun> runs,
+		CancellationToken cancellationToken)
+	{
+		if (runs.Count == 0)
+		{
+			return;
+		}
+
+		var rows = runs.Select(run => new
+		{
+			id = run.Id,
+			strategy_id = StrategyIds.Normalize(run.StrategyId),
+			market_id = run.MarketId,
+			condition_id = run.ConditionId,
+			market_slug = run.MarketSlug,
+			market_title = run.MarketTitle,
+			category = run.Category,
+			market_start_utc = run.MarketStartUtc.HasValue ? UtcDateTime(run.MarketStartUtc.Value) : (DateTime?)null,
+			market_end_utc = run.MarketEndUtc.HasValue ? UtcDateTime(run.MarketEndUtc.Value) : (DateTime?)null,
+			detected_at_utc = UtcDateTime(run.DetectedAtUtc),
+			entry_due_at_utc = UtcDateTime(run.EntryDueAtUtc),
+			status = run.Status,
+			selected_asset_id = run.SelectedAssetId,
+			selected_outcome = run.SelectedOutcome,
+			entry_price = run.EntryPrice,
+			stake_usd = run.StakeUsd,
+			size_shares = run.SizeShares,
+			signal_id = run.SignalId,
+			paper_order_id = run.PaperOrderId,
+			entered_at_utc = run.EnteredAtUtc.HasValue ? UtcDateTime(run.EnteredAtUtc.Value) : (DateTime?)null,
+			settlement_price = run.SettlementPrice,
+			settlement_value_usd = run.SettlementValueUsd,
+			realized_pnl_usd = run.RealizedPnlUsd,
+			settled_at_utc = run.SettledAtUtc.HasValue ? UtcDateTime(run.SettledAtUtc.Value) : (DateTime?)null,
+			skip_reason = run.SkipReason,
+			skip_diagnostics_json = run.SkipDiagnosticsJson,
+			created_at_utc = UtcDateTime(run.CreatedAtUtc),
+			updated_at_utc = UtcDateTime(run.UpdatedAtUtc)
+		});
+		await using NpgsqlCommand command = CreateCommand(connection, """
+WITH run_rows AS (
+    SELECT *
+    FROM jsonb_to_recordset(CAST(@StrategyRunsJson AS jsonb)) AS run(
+        id uuid,
+        strategy_id uuid,
+        market_id text,
+        condition_id text,
+        market_slug text,
+        market_title text,
+        category text,
+        market_start_utc timestamptz,
+        market_end_utc timestamptz,
+        detected_at_utc timestamptz,
+        entry_due_at_utc timestamptz,
+        status text,
+        selected_asset_id text,
+        selected_outcome text,
+        entry_price numeric,
+        stake_usd numeric,
+        size_shares numeric,
+        signal_id uuid,
+        paper_order_id uuid,
+        entered_at_utc timestamptz,
+        settlement_price numeric,
+        settlement_value_usd numeric,
+        realized_pnl_usd numeric,
+        settled_at_utc timestamptz,
+        skip_reason text,
+        skip_diagnostics_json text,
+        created_at_utc timestamptz,
+        updated_at_utc timestamptz
+    )
+)
+UPDATE strategy_market_paper_runs target
+SET strategy_id = run_rows.strategy_id,
+    market_id = run_rows.market_id,
+    condition_id = run_rows.condition_id,
+    market_slug = run_rows.market_slug,
+    market_title = run_rows.market_title,
+    category = run_rows.category,
+    market_start_utc = run_rows.market_start_utc,
+    market_end_utc = run_rows.market_end_utc,
+    detected_at_utc = run_rows.detected_at_utc,
+    entry_due_at_utc = run_rows.entry_due_at_utc,
+    status = run_rows.status,
+    selected_asset_id = run_rows.selected_asset_id,
+    selected_outcome = run_rows.selected_outcome,
+    entry_price = run_rows.entry_price,
+    stake_usd = run_rows.stake_usd,
+    size_shares = run_rows.size_shares,
+    signal_id = run_rows.signal_id,
+    paper_order_id = run_rows.paper_order_id,
+    entered_at_utc = run_rows.entered_at_utc,
+    settlement_price = run_rows.settlement_price,
+    settlement_value_usd = run_rows.settlement_value_usd,
+    realized_pnl_usd = run_rows.realized_pnl_usd,
+    settled_at_utc = run_rows.settled_at_utc,
+    skip_reason = run_rows.skip_reason,
+    skip_diagnostics_json = CAST(run_rows.skip_diagnostics_json AS jsonb),
+    created_at_utc = run_rows.created_at_utc,
+    updated_at_utc = run_rows.updated_at_utc
+FROM run_rows
+WHERE target.id = run_rows.id;
+""");
+		command.Transaction = transaction;
+		AddJsonbParameter(command, "StrategyRunsJson", JsonSerializer.Serialize(rows));
+		await command.ExecuteNonQueryAsync(cancellationToken);
+	}
+
+	private static void AddJsonbParameter(NpgsqlCommand command, string name, string json)
+	{
+		command.Parameters.Add(name, NpgsqlDbType.Jsonb).Value = json;
 	}
 
 	public async Task UpdatePaperOrderAsync(PaperOrder order, CancellationToken cancellationToken = default(CancellationToken))

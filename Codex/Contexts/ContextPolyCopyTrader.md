@@ -1,3 +1,18 @@
+## Active Update 2026-06-29 Bulk Paper Entry Persistence
+Goal: Reduce every BTC/ETH/SOL Up/Down strategy entry delay to no more than 3 seconds and verify the deployed service.
+Status: In Progress
+Done:
+- Verified the user's new deployment is running `ae0ae68`; the first 30-minute gate was polluted by restart backlog because some worst rows had `entry_due_at_utc` before the service start.
+- Rechecked fresh post-start rows with `entry_due_at_utc >= started_at_utc`: `4898` rows across `1758` strategies, `1591` above 3 seconds, with the `15:35:00` Sofia due slot showing `520/1363` rows above 3 seconds and worst delay about `22.105s`.
+- Stage timings isolated the new bottleneck: due decision work was no longer the long pole (`fast_diff_due regular_due_entries.decision_tasks` max about `2069ms`), but `fast_diff_due regular_due_entries.deferred_persistence_flush` spent about `20235ms` flushing `1038` runs.
+- Replaced `PostgresAppRepository.AddPaperEntryPersistenceBatchAsync` per-row loops with set-based JSON `jsonb_to_recordset` statements for `signals`, `paper_orders`, `paper_fills`, `paper_positions`, copied-leader activations, and `strategy_market_paper_runs` updates inside the existing transaction.
+Verification:
+- `dotnet test PolyCopyTrader.sln --filter "FullyQualifiedName~StorageTests"` passed `48/48` with existing nullable warnings.
+- PostgreSQL syntax smoke against production DB using empty JSON arrays inside `BEGIN`/`ROLLBACK` parsed and executed all six bulk statements as zero-row `INSERT`/`UPDATE`.
+Next: Commit/push this bulk persistence patch, deploy the new service build, then rerun `scripts/check-strategy-entry-latency.ps1 -HostOverride 192.168.0.101 -ExpectedCommit <newCommit> -MaxDelaySeconds 3 -LookbackMinutes 30 -RequireSplitCycleKinds` on a fresh 5-minute slot.
+Notes: Production diagnostics were read-only. The SQL smoke used empty JSON arrays and rolled back; no production data writes, live orders, service restart, or cancel action were performed by Codex. Existing unrelated dirty files and output folders were left untouched.
+Blockers: Final goal cannot be marked complete until this new build is deployed and a fresh production gate proves every checked strategy entry delay is <= 3 seconds.
+
 ## Active Update 2026-06-29 Previous Result/PreOpen Latency Patch
 Goal: Reduce every BTC/ETH/SOL Up/Down strategy entry delay to no more than 3 seconds and verify the deployed service.
 Status: In Progress
