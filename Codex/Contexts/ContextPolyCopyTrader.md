@@ -1,3 +1,17 @@
+## Active Update 2026-06-29 SOL Down 90 Reference Average Live Inspection
+Goal: Explain why `SOL Up or Down 5m Down 90 bps Reference Average Premarket` is not placing Live bets.
+Status: Completed
+Done:
+- Queried production PostgreSQL at `192.168.0.101` read-only for `sol_up_down_5m_down_bps_90_fak_premarket`.
+- Confirmed the strategy is enabled, not paused, `live_stakes=true`, `auto_live_paused=false`, and `live_enabled_at_utc=2026-06-29T05:34:47Z`; service is `Running`/`Live` on commit `342ca8c`.
+- Found the last qualifying Paper entry was created at `2026-06-29T05:34:38Z`, 9 seconds before Live was enabled, so it remained Paper-only with no `correlation_id` and no Live shadow.
+- Confirmed that after Live was enabled there were `0` Paper orders, `0` paper-live shadow decisions, and `0` Live orders for this strategy.
+- Recent post-enable windows did not reach Live submission: `05:39:30Z` skipped `preopen_entry_window_elapsed`, `05:44:30Z` and `05:54:30Z` skipped `entry_due_expired`, and `05:49:30Z` skipped `crypto_reference_fetch_failed`.
+- Checked recent SOL reference feed errors: there was a short Binance SOL/USDT stale-price period around `05:52-05:53Z`, but ticks were fresh again by `05:56Z`.
+Next: Monitor the next due windows; if late `entry_due_expired` continues for this family, inspect due-entry scheduling/backlog for Reference Average Premarket strategies.
+Notes: Read-only diagnostics only; no source code, DB writes, service restart, live submission, or cancel action. A broad Reference Average check since `05:34Z` showed most rows were processed normally, but this target strategy's post-enable windows did not create a new Paper entry.
+Blockers: None.
+
 ## Active Update 2026-06-29 FAK 0.99 Paper Live Enforcement
 Goal: Ensure current Up/Down FAK strategies submit Paper and Live bets with worst price `0.99`.
 Status: Completed
