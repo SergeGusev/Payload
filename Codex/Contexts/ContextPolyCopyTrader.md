@@ -1,3 +1,14 @@
+## Active Update 2026-06-29 Live Cond Skip Classification Check
+Goal: Clarify whether failed Live conditions should increase `Live cond skip` for `SOL Up or Down 5m Down 90 bps Reference Average Premarket`.
+Status: Completed
+Done:
+- Inspected Dashboard/Postgres aggregation SQL for `LiveConditionSkippedOrdersCount` and confirmed it counts only post-`live_enabled_at_utc` skipped runs whose `skip_reason` is classified as a market/strategy condition reason, including reasons containing `threshold`, `edge`, `countertrend`, `neutral`, `not_triggered`, `no_candidate`, `spread_too_wide`, or `price_cap`.
+- Confirmed `reference_average_move_below_bps_threshold` would count as `Live cond skip`.
+- Queried production PostgreSQL read-only for `sol_up_down_5m_down_bps_90_fak_premarket`; current post-enable classification is `live_technical`: `crypto_reference_fetch_failed=1`, `entry_due_expired=3`, `preopen_entry_window_elapsed=1`, and no `live_condition` rows.
+Next: If the Dashboard should treat late/stale reference cases differently, update the classification rules deliberately.
+Notes: Read-only source/SQL inspection and production read-only SQL only; no source code, DB writes, service restart, live submission, or cancel action.
+Blockers: None.
+
 ## Active Update 2026-06-29 SOL Down 90 Reference Average Live Inspection
 Goal: Explain why `SOL Up or Down 5m Down 90 bps Reference Average Premarket` is not placing Live bets.
 Status: Completed
