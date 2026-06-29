@@ -45,7 +45,7 @@ public sealed class ConfigurationTests
         Assert.Equal(1.00m, configuration.BtcUpDown5mStrategy.StakeUsd);
         Assert.Equal(60, configuration.BtcUpDown5mStrategy.EntryGraceSeconds);
         Assert.Equal(3_000, configuration.BtcUpDown5mStrategy.MaxEntriesPerCycle);
-        Assert.Equal(64, configuration.BtcUpDown5mStrategy.MaxConcurrentEntryDecisions);
+        Assert.Equal(128, configuration.BtcUpDown5mStrategy.MaxConcurrentEntryDecisions);
         Assert.Equal(1, configuration.BtcUpDown5mStrategy.MartinStakeLevels);
         Assert.False(configuration.BtcUpDown5mStrategy.PaperTakerPricingEnabled);
         Assert.True(configuration.BtcUpDown5mStrategy.PaperTakerRestFallbackEnabled);

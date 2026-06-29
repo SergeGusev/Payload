@@ -577,7 +577,7 @@ public sealed class BtcUpDown5mStrategyOptions
 
     public int MaxEntriesPerCycle { get; init; } = 3000;
 
-    public int MaxConcurrentEntryDecisions { get; init; } = 64;
+    public int MaxConcurrentEntryDecisions { get; init; } = 128;
 
     public int MaxSettlementsPerCycle { get; init; } = 250;
 

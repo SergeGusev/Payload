@@ -9058,6 +9058,77 @@ public sealed class BtcUpDown5mPaperStrategyProcessorTests
     }
 
     [Fact]
+    public async Task ProcessPreviousResultFastDueEntriesAsync_SharesInstantOrderBookRestFetchAcrossDueBatch()
+    {
+        var now = DateTimeOffset.UtcNow;
+        var marketStart = now.AddSeconds(-2);
+        var previousStart = marketStart.AddMinutes(-5);
+        var previousSuffix = previousStart.ToUnixTimeSeconds().ToString(CultureInfo.InvariantCulture);
+        var previousMarketId = "btc-ws-market-" + previousSuffix;
+        var variants = new[]
+        {
+            UpBps2InstantVariant,
+            StrategyIds.BtcUpDown5mVariants.Single(variant => variant.Code == "btc_up_down_5m_up_bps_3_instant"),
+            StrategyIds.BtcUpDown5mVariants.Single(variant => variant.Code == "btc_up_down_5m_up_bps_4_instant")
+        };
+        var repository = new TestAppRepository();
+        var market = CreateMarket(
+            marketStart,
+            marketStart.AddMinutes(5),
+            upPrice: 0.50m,
+            downPrice: 0.50m);
+        repository.PolymarketGammaMarkets.Add(market);
+        repository.CryptoUpDown5mWebSocketResolvedMarkets.Add(CreateWebSocketDiffResult(
+            "BTC",
+            previousStart,
+            "Down"));
+        AddBtcOddsTick(repository, previousMarketId, previousStart, 0, 100m, 100m, 0.50m, 0.50m);
+        AddBtcOddsTick(repository, previousMarketId, previousStart, 299, 99.95m, 100m, 0.50m, 0.50m);
+        foreach (var variant in variants)
+        {
+            repository.StrategySettings[variant.Id] = StrategyRuntimeSettings.Default(variant.Id) with
+            {
+                PaperStakeAmount = 2.50m
+            };
+            repository.StrategyMarketPaperRuns.Add(CreateObservedRun(
+                variant,
+                market,
+                marketStart,
+                marketStart.AddSeconds(-1),
+                marketStart));
+        }
+
+        var clobClient = new FakeClobClient(
+            [OrderBook(
+                "asset-up",
+                [new OrderBookLevel(0.39m, 100m)],
+                [new OrderBookLevel(0.41m, 100m)],
+                now,
+                minOrderSize: 5m)],
+            responseDelay: TimeSpan.FromMilliseconds(50));
+        var processor = CreateProcessorCoreWithOptions(
+            repository,
+            [],
+            [],
+            _ => { },
+            [],
+            CreateBtcOptions(
+                paperTakerPricingEnabled: false,
+                variants.Select(variant => variant.Code).ToArray(),
+                maxConcurrentEntryDecisions: 4),
+            new FakeBtcUsdReferencePriceClient(100m),
+            CreateBtcUsdReferenceCache([100m]),
+            clobClient: clobClient);
+
+        var result = await processor.ProcessPreviousResultFastDueEntriesAsync();
+
+        Assert.Equal(3, result.EntriesPlaced);
+        Assert.Equal(3, repository.PaperOrders.Count);
+        Assert.All(repository.PaperOrders, order => Assert.Equal("asset-up", order.AssetId));
+        Assert.Equal(1, clobClient.GetOrderBookCalls);
+    }
+
+    [Fact]
     public async Task ProcessAsync_UpBpsInstantSkipsWhenPreviousMovePointsUp()
     {
         var now = DateTimeOffset.UtcNow;
@@ -15200,6 +15271,7 @@ public sealed class BtcUpDown5mPaperStrategyProcessorTests
     private sealed class FakeClobClient : IPolymarketClobPublicClient
     {
         private readonly IReadOnlyDictionary<string, OrderBookSnapshot> orderBooksByAssetId;
+        private readonly TimeSpan responseDelay;
         private readonly object sync = new();
         private readonly Dictionary<string, int> orderBookCallsByAssetId = new(StringComparer.OrdinalIgnoreCase);
 
@@ -15219,14 +15291,15 @@ public sealed class BtcUpDown5mPaperStrategyProcessorTests
         {
         }
 
-        public FakeClobClient(IReadOnlyList<OrderBookSnapshot> orderBooks)
+        public FakeClobClient(IReadOnlyList<OrderBookSnapshot> orderBooks, TimeSpan? responseDelay = null)
         {
             orderBooksByAssetId = orderBooks
                 .Where(orderBook => !string.IsNullOrWhiteSpace(orderBook.AssetId))
                 .ToDictionary(orderBook => orderBook.AssetId, StringComparer.OrdinalIgnoreCase);
+            this.responseDelay = responseDelay ?? TimeSpan.Zero;
         }
 
-        public Task<OrderBookSnapshot?> GetOrderBookAsync(string assetId, CancellationToken cancellationToken = default)
+        public async Task<OrderBookSnapshot?> GetOrderBookAsync(string assetId, CancellationToken cancellationToken = default)
         {
             lock (sync)
             {
@@ -15234,10 +15307,14 @@ public sealed class BtcUpDown5mPaperStrategyProcessorTests
                 orderBookCallsByAssetId[assetId] = calls + 1;
             }
 
-            return Task.FromResult(
-                orderBooksByAssetId.TryGetValue(assetId, out var orderBook)
-                    ? orderBook
-                    : null);
+            if (responseDelay > TimeSpan.Zero)
+            {
+                await Task.Delay(responseDelay, cancellationToken);
+            }
+
+            return orderBooksByAssetId.TryGetValue(assetId, out var orderBook)
+                ? orderBook
+                : null;
         }
 
         public Task<DateTimeOffset> GetServerTimeAsync(CancellationToken cancellationToken = default)

@@ -1,3 +1,23 @@
+## Active Update 2026-06-29 Previous Result Batch Cache
+Goal: Reduce every BTC/ETH/SOL Up/Down strategy entry delay to no more than 3 seconds and verify the deployed service.
+Status: In Progress
+Done:
+- Verified the user's new deployment is running `3cd28fa`, but the production latency gate still fails: recent window reported `1637/3213` checked rows above 3 seconds.
+- The target `sol_up_down_5m_down_bps_90_fak_premarket` is currently fast (`max_delay_seconds=0.259`), but previous-result instant/FAK families still show `10-13s` delays.
+- Stage timings show previous-result due is the active bottleneck: live previous-result due can run `~7.5s`, non-live previous-result due `~11.8s`, with repeated ready-filter and decision-task work.
+- Reworked previous-result fast due from sequential `PreviousResultLiveDue` then `PreviousResultNonLiveDue` into one live-first due batch, preserving the existing run ordering while removing the live-flow barrier and duplicate ready filtering.
+- Shared previous-result BPS signal cache across instant/FAK variants for the same asset/window, and shared instant/FAK order-book REST fallback within a due batch so many strategies on the same asset id wait on one `/book` task instead of issuing duplicate CLOB requests.
+- Raised `MaxConcurrentEntryDecisions` from 64 to 128 in defaults and service appsettings.
+- Added a regression test proving simultaneous previous-result instant entries share one REST order-book fetch for the same selected asset.
+Verification:
+- `dotnet build src/PolyCopyTrader.Service/PolyCopyTrader.Service.csproj --no-restore` passed.
+- `dotnet test tests/PolyCopyTrader.Tests/PolyCopyTrader.Tests.csproj --no-restore --filter "FullyQualifiedName~ProcessPreviousResultFastDueEntriesAsync|FullyQualifiedName~ConfigurationTests"` passed `41/41`.
+- `git diff --check` passed with line-ending warnings only.
+- A broader instant/FAK-focused test filter still has pre-existing stale expectations for executable ask prices versus current FAK worst-price semantics (`0.99`); it was not used as the gate for this latency patch.
+Next: Commit/push this patch, deploy the new service build, then rerun `scripts/check-strategy-entry-latency.ps1 -HostOverride 192.168.0.101 -ExpectedCommit <newCommit> -MaxDelaySeconds 3 -LookbackMinutes 30 -RequireSplitCycleKinds`.
+Notes: Direct ad-hoc psql/TCP checks to `192.168.0.101:5432` intermittently timed out after the gate succeeded once; no production writes, live orders, service restart, or cancel action was performed by Codex. Unrelated dirty files were left untouched.
+Blockers: Final goal cannot be marked complete until this new build is deployed and a fresh production gate proves every checked strategy entry delay is <= 3 seconds.
+
 ## Active Update 2026-06-29 Opening Limit Dependency SLA
 Goal: Reduce every BTC/ETH/SOL Up/Down strategy entry delay to no more than 3 seconds and verify the deployed service.
 Status: In Progress

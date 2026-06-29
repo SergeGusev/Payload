@@ -839,64 +839,31 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
             return new BtcUpDown5mPaperStrategyResult(0, 0, 0, 0);
         }
 
-        var liveEntryVariants = entryVariants
-            .Where(variant => GetStrategySettings(strategySettings, variant.Id).EffectiveLiveStakes)
-            .ToArray();
-        var nonLiveEntryVariants = entryVariants
-            .Where(variant => !GetStrategySettings(strategySettings, variant.Id).EffectiveLiveStakes)
-            .ToArray();
-
-        var liveFlow = await TrackStrategyStageAsync(
+        var dueFlow = await TrackStrategyStageAsync(
             cycleId,
             cycleKind,
-            "PreviousResultLiveDue",
+            "PreviousResultDue",
             "due_entry_flow",
             detail: null,
-            liveEntryVariants.Length,
+            entryVariants.Length,
             runCount: null,
             earliestEntryDueAtUtc: null,
             latestEntryDueAtUtc: null,
             async token => await ProcessDueEntryVariantFlowAsync(
                 cycleId,
                 cycleKind,
-                "PreviousResultLiveDue",
-                liveEntryVariants,
+                "PreviousResultDue",
+                entryVariants,
                 strategySettings,
                 previousResultReadyOnly: true,
                 token),
             CreateStageOutcome,
             cancellationToken);
-        strategySettings = liveFlow.StrategySettings;
-
-        var nonLiveFlow = await TrackStrategyStageAsync(
-            cycleId,
-            cycleKind,
-            "PreviousResultNonLiveDue",
-            "due_entry_flow",
-            detail: null,
-            nonLiveEntryVariants.Length,
-            runCount: null,
-            earliestEntryDueAtUtc: null,
-            latestEntryDueAtUtc: null,
-            async token => await ProcessDueEntryVariantFlowAsync(
-                cycleId,
-                cycleKind,
-                "PreviousResultNonLiveDue",
-                nonLiveEntryVariants,
-                strategySettings,
-                previousResultReadyOnly: true,
-                token),
-            CreateStageOutcome,
-            cancellationToken);
-        strategySettings = nonLiveFlow.StrategySettings;
+        strategySettings = dueFlow.StrategySettings;
 
         await RefreshLiveStrategyPrioritySnapshotIfDueAsync(entryVariants, strategySettings, cancellationToken);
 
-        return new BtcUpDown5mPaperStrategyResult(
-            liveFlow.Result.MarketsObserved + nonLiveFlow.Result.MarketsObserved,
-            liveFlow.Result.EntriesPlaced + nonLiveFlow.Result.EntriesPlaced,
-            liveFlow.Result.RunsSkipped + nonLiveFlow.Result.RunsSkipped,
-            liveFlow.Result.RunsSettled + nonLiveFlow.Result.RunsSettled);
+        return dueFlow.Result;
     }
 
     public async Task<BtcUpDown5mPaperStrategyResult> ProcessPreviousResultObserveAsync(
@@ -4056,6 +4023,7 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
                             market.OrderMinSize,
                             stakeMultiplier,
                             nowUtc,
+                            orderBookFetchTasks,
                             cancellationToken);
                         if (!limitPricing.ShouldEnter)
                         {
@@ -6105,6 +6073,7 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
         decimal? fallbackMinOrderSize,
         decimal stakeMultiplier,
         DateTimeOffset nowUtc,
+        System.Collections.Concurrent.ConcurrentDictionary<string, Lazy<Task<OrderBookFetchResult>>> orderBookFetchTasks,
         CancellationToken cancellationToken)
     {
         if (limitPriceOverride is { } overriddenLimitPrice)
@@ -6167,6 +6136,7 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
                 assetId,
                 rawDecisionJson,
                 nowUtc,
+                orderBookFetchTasks,
                 cancellationToken);
         }
 
@@ -6179,6 +6149,7 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
                 fallbackMinOrderSize,
                 stakeMultiplier,
                 nowUtc,
+                orderBookFetchTasks,
                 cancellationToken);
         }
 
@@ -6382,9 +6353,14 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
         decimal? fallbackMinOrderSize,
         decimal stakeMultiplier,
         DateTimeOffset nowUtc,
+        System.Collections.Concurrent.ConcurrentDictionary<string, Lazy<Task<OrderBookFetchResult>>> orderBookFetchTasks,
         CancellationToken cancellationToken)
     {
-        var lookup = await GetFreshTakerOrderBookAsync(assetId, nowUtc, cancellationToken);
+        var lookup = await GetFreshTakerOrderBookAsync(
+            assetId,
+            nowUtc,
+            orderBookFetchTasks,
+            cancellationToken);
         if (lookup.RejectionReason is not null || lookup.OrderBook is null)
         {
             var rejected = BtcInstantOpeningLimitPriceDecision.Reject(
@@ -6423,9 +6399,14 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
         string assetId,
         string rawDecisionJson,
         DateTimeOffset nowUtc,
+        System.Collections.Concurrent.ConcurrentDictionary<string, Lazy<Task<OrderBookFetchResult>>> orderBookFetchTasks,
         CancellationToken cancellationToken)
     {
-        var lookup = await GetFreshTakerOrderBookAsync(assetId, nowUtc, cancellationToken);
+        var lookup = await GetFreshTakerOrderBookAsync(
+            assetId,
+            nowUtc,
+            orderBookFetchTasks,
+            cancellationToken);
         if (lookup.RejectionReason is not null || lookup.OrderBook is null)
         {
             var reason = lookup.RejectionReason ?? SignalReasonCodes.MissingOrderBook;
@@ -10863,7 +10844,7 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
         var cacheKey = string.Concat(
             GetReferenceAssetSymbol(variant),
             ":",
-            variant.Behavior.ToString(),
+            IsFixedOutcomePreviousResultBpsFakPremarketEntry(variant) ? "premarket" : "close_book",
             ":",
             variant.MarketInterval,
             ":",
@@ -13891,6 +13872,19 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
         DateTimeOffset nowUtc,
         CancellationToken cancellationToken)
     {
+        return await GetFreshTakerOrderBookAsync(
+            assetId,
+            nowUtc,
+            orderBookFetchTasks: null,
+            cancellationToken);
+    }
+
+    private async Task<TakerOrderBookLookupResult> GetFreshTakerOrderBookAsync(
+        string assetId,
+        DateTimeOffset nowUtc,
+        System.Collections.Concurrent.ConcurrentDictionary<string, Lazy<Task<OrderBookFetchResult>>>? orderBookFetchTasks,
+        CancellationToken cancellationToken)
+    {
         var maxAge = GetPaperTakerMaxQuoteAge();
         var lookup = marketDataCache.GetOrderBook(assetId, maxAge);
         if (lookup is { Status: OrderBookCacheLookupStatus.Fresh, Snapshot: { } cached } &&
@@ -13907,7 +13901,9 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
 
         if (options.PaperTakerRestFallbackEnabled)
         {
-            var restLookup = await GetFreshRestTakerOrderBookAsync(assetId, nowUtc, cancellationToken);
+            var restLookup = orderBookFetchTasks is null
+                ? await GetFreshRestTakerOrderBookAsync(assetId, nowUtc, cancellationToken)
+                : await GetFreshRestTakerOrderBookAsync(assetId, nowUtc, orderBookFetchTasks, cancellationToken);
             return restLookup with
             {
                 RestAttempted = true,
@@ -13948,6 +13944,26 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
         CancellationToken cancellationToken)
     {
         var fetched = await FetchAndCacheOrderBookAsync(assetId, cancellationToken, stampWithLocalReceiveTime: true);
+        return CreateFreshRestTakerOrderBookLookupResult(fetched);
+    }
+
+    private async Task<TakerOrderBookLookupResult> GetFreshRestTakerOrderBookAsync(
+        string assetId,
+        DateTimeOffset nowUtc,
+        System.Collections.Concurrent.ConcurrentDictionary<string, Lazy<Task<OrderBookFetchResult>>> orderBookFetchTasks,
+        CancellationToken cancellationToken)
+    {
+        var fetched = await GetOrFetchOrderBookAsync(
+            assetId,
+            orderBookFetchTasks,
+            cancellationToken,
+            stampWithLocalReceiveTime: true);
+        return CreateFreshRestTakerOrderBookLookupResult(fetched);
+    }
+
+    private TakerOrderBookLookupResult CreateFreshRestTakerOrderBookLookupResult(
+        OrderBookFetchResult fetched)
+    {
         if (fetched.RejectionReason is not null || fetched.OrderBook is null)
         {
             return TakerOrderBookLookupResult.Reject(
@@ -14006,14 +14022,21 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
     private Task<OrderBookFetchResult> GetOrFetchOrderBookAsync(
         string assetId,
         System.Collections.Concurrent.ConcurrentDictionary<string, Lazy<Task<OrderBookFetchResult>>> orderBookFetchTasks,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        bool stampWithLocalReceiveTime = false)
     {
+        var cacheKey = stampWithLocalReceiveTime
+            ? string.Concat(assetId, ":local_receive_time")
+            : assetId;
         var fetchTask = orderBookFetchTasks.GetOrAdd(
-            assetId,
+            cacheKey,
             static (key, state) => new Lazy<Task<OrderBookFetchResult>>(
-                () => state.Processor.FetchAndCacheOrderBookAsync(key, state.CancellationToken),
+                () => state.Processor.FetchAndCacheOrderBookAsync(
+                    state.AssetId,
+                    state.CancellationToken,
+                    state.StampWithLocalReceiveTime),
                 LazyThreadSafetyMode.ExecutionAndPublication),
-            (Processor: this, CancellationToken: cancellationToken));
+            (Processor: this, AssetId: assetId, StampWithLocalReceiveTime: stampWithLocalReceiveTime, CancellationToken: cancellationToken));
         return fetchTask.Value;
     }
 

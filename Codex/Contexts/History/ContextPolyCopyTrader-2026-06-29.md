@@ -95,3 +95,10 @@ Request:
 
 Result:
 Checked production PostgreSQL read-only and confirmed the deployed service is now running `4a106bf`, but the 3-second latency gate still fails. The 14:05 Sofia cycle showed `1860/3518` checked rows above 3 seconds, worst about `16.537s`. Stage timings and row timelines showed deferred opening-limit dependencies, especially Binance/start-relative and previous-result-BPS style rows, can return no-op/defer, remain Observed at the head of the due queue, and delay later due rows. Added a new fix: opening-limit dependency defers now use the entry-dependency SLA instead of `max(EntryGraceSeconds, OpeningLimitGtdTtlSeconds)`, and the SLA was tightened to 1 second so unresolved dependencies skip inside the 3-second production budget. Verification: service build passed; focused Binance/dependency/config tests passed `44/44`; diff check passed with line-ending warnings only. No production DB writes, live orders, service restart, or cancel action was performed.
+
+## 2026-06-29T11:49:39.3474680Z
+Request:
+Выложил, проверяй
+
+Result:
+Checked the deployed service at `3cd28fa`: the production latency gate still failed (`1637/3213` rows above 3 seconds), with the remaining mass delay in previous-result instant/FAK batches rather than the target SOL reference-average strategy. Implemented a new latency patch: one live-first previous-result due batch, shared previous-result BPS signal cache, shared instant/FAK REST order-book fetch cache per due batch, `MaxConcurrentEntryDecisions=128`, and regression coverage for shared REST fetches. Verification passed for service build, focused previous-result/config tests `41/41`, and `git diff --check`; broader instant/FAK tests still contain known stale executable-price expectations from current FAK `0.99` semantics.
