@@ -378,6 +378,7 @@ builder.Services.AddHostedService<StartupSafetyCheckService>();
 // BTC 5m focused mode: HTTP-log retention is not part of BTC Up or Down 5m strategy execution.
 // builder.Services.AddHostedService<PolymarketHttpLogRetentionWorker>();
 builder.Services.AddHostedService<BotWorker>();
+builder.Services.AddHostedService<ExposureSnapshotCacheWarmupService>();
 builder.Services.AddHostedService<PaperTradingWorker>();
 builder.Services.AddHostedService<LiveTradingMaintenanceWorker>();
 builder.Services.AddHostedService<LocalControlServer>();

@@ -3522,7 +3522,7 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
             IsFakOrderEntry(variant) &&
             !ShouldRunPaperLiveShadowTest(GetStrategySettings(strategySettings, variant.Id)));
         var positions = needsPositionState
-            ? await repository.GetPaperPositionsAsync(cancellationToken)
+            ? (await exposureCache.GetSnapshotAsync(cancellationToken)).PaperPositions
             : Array.Empty<PaperPosition>();
         return new DeferredPaperEntryPersistence(positions);
     }

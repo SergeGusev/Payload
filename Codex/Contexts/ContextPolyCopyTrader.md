@@ -1,3 +1,21 @@
+## Active Update 2026-06-29 BTC Due Persistence Prepare Cache
+Goal: Reduce every BTC/ETH/SOL Up/Down strategy entry delay to no more than 3 seconds and verify the deployed service.
+Status: In Progress
+Done:
+- Retried production PostgreSQL verification from the local machine; `psql` with `PGCONNECT_TIMEOUT=5` timed out against `192.168.0.101:5432`, and `Test-NetConnection` also did not complete within the local timeout.
+- Continued from the already measured bottleneck: `deferred_persistence_prepare` could spend about 3 seconds loading paper positions before due-entry decision tasks started.
+- Changed `CreateDeferredPaperEntryPersistenceAsync` to use `IExposureSnapshotCache.GetSnapshotAsync().PaperPositions` instead of calling `repository.GetPaperPositionsAsync()` for every FAK due batch.
+- Added `ExposureSnapshotCacheWarmupService` and registered it before paper/live strategy workers so the exposure cache is warmed once at service startup rather than inside the first due batch.
+- Added focused test coverage proving fast Diff due uses the exposure cache for deferred paper positions and does not call repository `GetPaperPositionsAsync` on that path.
+Verification:
+- `dotnet build PolyCopyTrader.sln --no-restore` passed with existing nullable warnings.
+- `dotnet test tests/PolyCopyTrader.Tests/PolyCopyTrader.Tests.csproj --no-restore --filter "FullyQualifiedName~ProcessDiffCounterFastDueEntriesAsync_DoesNotObserveMarkets|FullyQualifiedName~ProcessDiffCounterFastDueEntriesAsync_UsesExposureCacheForDeferredPaperPositions"` passed 2/2.
+- `dotnet test tests/PolyCopyTrader.Tests/PolyCopyTrader.Tests.csproj --no-build --filter "FullyQualifiedName~ProcessDiffCounterDueEntriesAsync_DiffCounterRecordsSnapshotsForEachEnabledAsset"` passed 1/1.
+- `git diff --check` passed for changed files, with line-ending warnings only.
+Next: Commit/push this cache optimization, deploy the latest service build, then repeat production heartbeat, stage timings, and entry-delay SQL. If any strategy still exceeds 3 seconds, optimize the next measured stage.
+Notes: No production DB writes, live orders, service restart, or cancel action was performed by Codex. Existing unrelated dirty files and output folders were left untouched.
+Blockers: Final 3-second objective still cannot be marked complete until a deployed latest build is reachable and fresh production timings prove no strategy exceeds 3 seconds.
+
 ## Active Update 2026-06-29 BTC Strategy Due Fast Lanes
 Goal: Reduce every BTC/ETH/SOL Up/Down strategy entry delay to no more than 3 seconds and verify the deployed service.
 Status: In Progress

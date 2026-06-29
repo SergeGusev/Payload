@@ -22,6 +22,8 @@ internal sealed class TestAppRepository : IAppRepository
 
     public int PaperEntryPersistenceBatchCalls { get; private set; }
 
+    public int GetPaperPositionsCalls { get; private set; }
+
     public List<LeaderTrade> LeaderTrades { get; } = [];
 
     public List<LeaderPosition> LeaderPositions { get; } = [];
@@ -1174,6 +1176,7 @@ internal sealed class TestAppRepository : IAppRepository
 
     public Task<IReadOnlyList<PaperPosition>> GetPaperPositionsAsync(CancellationToken cancellationToken = default)
     {
+        GetPaperPositionsCalls++;
         return Task.FromResult<IReadOnlyList<PaperPosition>>(PaperPositions.ToArray());
     }
 

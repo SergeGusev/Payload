@@ -4732,6 +4732,66 @@ public sealed class BtcUpDown5mPaperStrategyProcessorTests
     }
 
     [Fact]
+    public async Task ProcessDiffCounterFastDueEntriesAsync_UsesExposureCacheForDeferredPaperPositions()
+    {
+        var startupMarketStartUtc = new DateTimeOffset(2026, 6, 8, 12, 0, 0, TimeSpan.Zero);
+        var startupNow = startupMarketStartUtc.AddMinutes(3);
+        var entryNow = startupMarketStartUtc.AddMinutes(37);
+        var entryMarketStartUtc = startupMarketStartUtc.AddMinutes(35);
+        var timeProvider = new ManualTimeProvider(startupNow);
+        var variant = StrategyIds.UpDown5mStrategyVariants.Single(item => item.Code == "btc_up_down_5m_up_diff_2_instant");
+        var repository = new TestAppRepository();
+        repository.PolymarketGammaMarkets.Add(CreateMarket(
+            startupMarketStartUtc,
+            startupMarketStartUtc.AddMinutes(5),
+            upPrice: 0.50m,
+            downPrice: 0.50m));
+        AddWebSocketDiffResults(
+            repository,
+            "BTC",
+            entryMarketStartUtc.AddMinutes(-5),
+            "Up",
+            "Up",
+            "Up",
+            "Up",
+            "Up");
+        var orderBooks = new[]
+        {
+            OrderBook("asset-up", bestBid: 0.54m, bestAsk: 0.55m, entryNow),
+            OrderBook("asset-down", bestBid: 0.44m, bestAsk: 0.45m, entryNow)
+        };
+        var exposureCache = new TestExposureSnapshotCache([]);
+        var processor = CreateProcessorCoreWithOptions(
+            repository,
+            [],
+            orderBooks,
+            _ => { },
+            orderBooks,
+            CreateBtcOptions(paperTakerPricingEnabled: false, [variant.Code]),
+            gammaClient: new FakeGammaClient([]),
+            timeProvider: timeProvider,
+            exposureSnapshotCache: exposureCache);
+
+        repository.PolymarketGammaMarkets.Add(CreateMarket(
+            entryMarketStartUtc,
+            entryMarketStartUtc.AddMinutes(5),
+            upPrice: 0.50m,
+            downPrice: 0.50m,
+            marketId: "diff-entry-market",
+            conditionId: "diff-entry-condition"));
+        timeProvider.UtcNow = entryMarketStartUtc.AddMinutes(-2);
+        _ = await processor.ProcessDiffCounterObserveAsync();
+        timeProvider.UtcNow = entryNow;
+
+        var result = await processor.ProcessDiffCounterFastDueEntriesAsync();
+
+        Assert.Equal(1, result.EntriesPlaced);
+        Assert.Equal(1, exposureCache.GetSnapshotCalls);
+        Assert.Equal(0, repository.GetPaperPositionsCalls);
+        Assert.Single(exposureCache.AppliedPaperPositions);
+    }
+
+    [Fact]
     public async Task ProcessDiffCounterDueEntriesAsync_DiffUpThresholdBuysDownAtInstantExecutableAskPrice()
     {
         var startupMarketStartUtc = new DateTimeOffset(2026, 6, 8, 12, 0, 0, TimeSpan.Zero);
@@ -13647,7 +13707,8 @@ public sealed class BtcUpDown5mPaperStrategyProcessorTests
         TimeProvider? timeProvider = null,
         LiveTradingOptions? liveTradingOptions = null,
         IPolymarketGeoClient? geoClient = null,
-        ICryptoReferencePriceAverageProvider? cryptoReferencePriceAverageProvider = null)
+        ICryptoReferencePriceAverageProvider? cryptoReferencePriceAverageProvider = null,
+        IExposureSnapshotCache? exposureSnapshotCache = null)
     {
         var marketDataWebSocketOptions = new MarketDataWebSocketOptions { StaleAfterSeconds = 30 };
         var marketDataCache = new MarketDataCache(marketDataWebSocketOptions);
@@ -13697,7 +13758,7 @@ public sealed class BtcUpDown5mPaperStrategyProcessorTests
             cryptoReferencePriceAverageProvider ?? new FakeCryptoReferencePriceAverageProvider(),
             marketDataCache,
             activeMarketAssetSubscriptionRegistry,
-            new ExposureSnapshotCache(repository),
+            exposureSnapshotCache ?? new ExposureSnapshotCache(repository),
             new ServiceControlState(),
             new StrategyStateProvider(NullLogger<StrategyStateProvider>.Instance, repository),
             repository,
@@ -15005,6 +15066,52 @@ public sealed class BtcUpDown5mPaperStrategyProcessorTests
         public Task<string?> GetEventCategoryAsync(string eventId, CancellationToken cancellationToken = default)
         {
             return Task.FromResult<string?>(null);
+        }
+    }
+
+    private sealed class TestExposureSnapshotCache(IReadOnlyList<PaperPosition> paperPositions) : IExposureSnapshotCache
+    {
+        private readonly List<PaperOrder> appliedPaperOrders = [];
+        private readonly List<PaperPosition> appliedPaperPositions = [.. paperPositions];
+        private readonly List<LiveOrder> appliedLiveOrders = [];
+
+        public int GetSnapshotCalls { get; private set; }
+
+        public IReadOnlyList<PaperPosition> AppliedPaperPositions => appliedPaperPositions;
+
+        public Task<TradingExposureSnapshot> GetSnapshotAsync(CancellationToken cancellationToken = default)
+        {
+            GetSnapshotCalls++;
+            return Task.FromResult(new TradingExposureSnapshot(
+                appliedPaperOrders.ToArray(),
+                appliedPaperPositions.ToArray(),
+                appliedLiveOrders.ToArray(),
+                DateTimeOffset.UtcNow));
+        }
+
+        public Task RefreshAsync(CancellationToken cancellationToken = default)
+        {
+            return Task.CompletedTask;
+        }
+
+        public void ApplyPaperOrder(PaperOrder order)
+        {
+            appliedPaperOrders.RemoveAll(item => item.Id == order.Id);
+            appliedPaperOrders.Add(order);
+        }
+
+        public void ApplyPaperPosition(PaperPosition position)
+        {
+            appliedPaperPositions.RemoveAll(item =>
+                string.Equals(item.CopiedTraderWallet, position.CopiedTraderWallet, StringComparison.OrdinalIgnoreCase) &&
+                string.Equals(item.AssetId, position.AssetId, StringComparison.OrdinalIgnoreCase));
+            appliedPaperPositions.Add(position);
+        }
+
+        public void ApplyLiveOrder(LiveOrder order)
+        {
+            appliedLiveOrders.RemoveAll(item => item.Id == order.Id);
+            appliedLiveOrders.Add(order);
         }
     }
 
