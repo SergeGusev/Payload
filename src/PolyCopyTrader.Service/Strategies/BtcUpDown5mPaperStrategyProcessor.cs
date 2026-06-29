@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using System.Diagnostics;
 using System.Globalization;
 using System.Text.Json;
@@ -103,6 +104,7 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
     private static readonly TimeSpan CloseBookCaptureOrderBookTimeout = TimeSpan.FromSeconds(2);
     private static readonly TimeSpan SettlementMetadataTimeout = TimeSpan.FromSeconds(3);
     private static readonly TimeSpan LiveStrategyPriorityRefreshInterval = TimeSpan.FromMinutes(1);
+    private static readonly TimeSpan LocalFinalizedEntryRunRetention = TimeSpan.FromMinutes(30);
     private const long StrategyStageTimingMinDurationMs = 1_000;
 
     private readonly ConservativePaperGtdFillEstimator conservativeGtdFillEstimator = new(options);
@@ -118,6 +120,7 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
     private readonly Dictionary<string, DiffCounterState> adjustedDiffCounterStates = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<string, DiffCounterState> shiftDiffCounterStates = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<string, DiffProgressRuntimeState> diffProgressStates = new(StringComparer.OrdinalIgnoreCase);
+    private readonly ConcurrentDictionary<Guid, DateTimeOffset> locallyFinalizedEntryRuns = new();
     private readonly TimeProvider clock = timeProvider ?? TimeProvider.System;
     private LiveStrategyPrioritySnapshot liveStrategyPrioritySnapshot = LiveStrategyPrioritySnapshot.Empty;
 
@@ -2559,6 +2562,59 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
         }
     }
 
+    private IReadOnlyList<StrategyMarketPaperRun> FilterLocallyFinalizedEntryRuns(
+        IReadOnlyList<StrategyMarketPaperRun> runs,
+        DateTimeOffset nowUtc)
+    {
+        CleanupLocallyFinalizedEntryRuns(nowUtc);
+        if (locallyFinalizedEntryRuns.IsEmpty)
+        {
+            return runs;
+        }
+
+        var filteredRuns = runs
+            .Where(run => !locallyFinalizedEntryRuns.ContainsKey(run.Id))
+            .ToArray();
+        if (filteredRuns.Length != runs.Count)
+        {
+            logger.LogInformation(
+                "BTC Up or Down 5m due-entry query skipped locally finalized runs. Original={OriginalCount} Remaining={RemainingCount}",
+                runs.Count,
+                filteredRuns.Length);
+        }
+
+        return filteredRuns;
+    }
+
+    private void MarkLocallyFinalizedEntryRuns(IReadOnlyCollection<StrategyMarketPaperRun> runs)
+    {
+        if (runs.Count == 0)
+        {
+            return;
+        }
+
+        var nowUtc = GetUtcNow();
+        CleanupLocallyFinalizedEntryRuns(nowUtc);
+        foreach (var run in runs)
+        {
+            locallyFinalizedEntryRuns[run.Id] = nowUtc;
+        }
+    }
+
+    private void CleanupLocallyFinalizedEntryRuns(DateTimeOffset nowUtc)
+    {
+        if (locallyFinalizedEntryRuns.IsEmpty)
+        {
+            return;
+        }
+
+        var cutoffUtc = nowUtc.Subtract(LocalFinalizedEntryRunRetention);
+        foreach (var item in locallyFinalizedEntryRuns.Where(item => item.Value < cutoffUtc).ToArray())
+        {
+            locallyFinalizedEntryRuns.TryRemove(item.Key, out _);
+        }
+    }
+
     private async Task<(int EntriesPlaced, int RunsSkipped)> PlaceDueEntriesAsync(
         DateTimeOffset nowUtc,
         IReadOnlyList<BtcUpDown5mStrategyVariant> variants,
@@ -2619,6 +2675,12 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
                 token),
             CreateStageOutcome,
             cancellationToken);
+        if (runs.Count == 0)
+        {
+            return (0, 0);
+        }
+
+        runs = FilterLocallyFinalizedEntryRuns(runs, nowUtc);
         if (runs.Count == 0)
         {
             return (0, 0);
@@ -2980,6 +3042,12 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
                 token),
             CreateStageOutcome,
             cancellationToken);
+        if (runs.Count == 0)
+        {
+            return (0, 0);
+        }
+
+        runs = FilterLocallyFinalizedEntryRuns(runs, nowUtc);
         if (runs.Count == 0)
         {
             return (0, 0);
@@ -3703,6 +3771,7 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
             if (paperEntryPersistenceQueue is not null)
             {
                 await paperEntryPersistenceQueue.EnqueueAsync(batch, cancellationToken);
+                MarkLocallyFinalizedEntryRuns(batch.StrategyRuns);
                 exposureCache.ApplyPaperOrders(batch.PaperOrders);
                 logger.LogInformation(
                     "BTC Up or Down 5m deferred paper entry persistence queued. Signals={Signals} Orders={Orders} Fills={Fills} PositionMaterializations={PositionMaterializations} Positions={Positions} Runs={Runs}",
@@ -3721,6 +3790,7 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
                 exposureCache,
                 cancellationToken);
             await repository.AddPaperEntryPersistenceBatchAsync(materializedBatch, cancellationToken);
+            MarkLocallyFinalizedEntryRuns(materializedBatch.StrategyRuns);
             exposureCache.ApplyPaperOrders(materializedBatch.PaperOrders);
             exposureCache.ApplyPaperPositions(materializedBatch.PaperPositions);
             logger.LogInformation(

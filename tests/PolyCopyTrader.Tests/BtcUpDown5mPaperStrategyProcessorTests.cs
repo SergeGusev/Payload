@@ -4793,6 +4793,72 @@ public sealed class BtcUpDown5mPaperStrategyProcessorTests
     }
 
     [Fact]
+    public async Task ProcessDiffCounterFastDueEntriesAsync_DoesNotReprocessQueuedRunsBeforeWriterFlush()
+    {
+        var startupMarketStartUtc = new DateTimeOffset(2026, 6, 8, 12, 0, 0, TimeSpan.Zero);
+        var startupNow = startupMarketStartUtc.AddMinutes(3);
+        var entryNow = startupMarketStartUtc.AddMinutes(37);
+        var entryMarketStartUtc = startupMarketStartUtc.AddMinutes(35);
+        var timeProvider = new ManualTimeProvider(startupNow);
+        var variant = StrategyIds.UpDown5mStrategyVariants.Single(item => item.Code == "btc_up_down_5m_up_diff_2_instant");
+        var repository = new TestAppRepository();
+        repository.PolymarketGammaMarkets.Add(CreateMarket(
+            startupMarketStartUtc,
+            startupMarketStartUtc.AddMinutes(5),
+            upPrice: 0.50m,
+            downPrice: 0.50m));
+        AddWebSocketDiffResults(
+            repository,
+            "BTC",
+            entryMarketStartUtc.AddMinutes(-5),
+            "Up",
+            "Up",
+            "Up",
+            "Up",
+            "Up");
+        var orderBooks = new[]
+        {
+            OrderBook("asset-up", bestBid: 0.54m, bestAsk: 0.55m, entryNow),
+            OrderBook("asset-down", bestBid: 0.44m, bestAsk: 0.45m, entryNow)
+        };
+        var queue = new CapturingPaperEntryPersistenceQueue();
+        var processor = CreateProcessorCoreWithOptions(
+            repository,
+            [],
+            orderBooks,
+            _ => { },
+            orderBooks,
+            CreateBtcOptions(paperTakerPricingEnabled: false, [variant.Code]),
+            gammaClient: new FakeGammaClient([]),
+            timeProvider: timeProvider,
+            exposureSnapshotCache: new TestExposureSnapshotCache([]),
+            paperEntryPersistenceQueue: queue);
+
+        repository.PolymarketGammaMarkets.Add(CreateMarket(
+            entryMarketStartUtc,
+            entryMarketStartUtc.AddMinutes(5),
+            upPrice: 0.50m,
+            downPrice: 0.50m,
+            marketId: "diff-entry-market",
+            conditionId: "diff-entry-condition"));
+        timeProvider.UtcNow = entryMarketStartUtc.AddMinutes(-2);
+        _ = await processor.ProcessDiffCounterObserveAsync();
+        timeProvider.UtcNow = entryNow;
+
+        var firstResult = await processor.ProcessDiffCounterFastDueEntriesAsync();
+        var secondResult = await processor.ProcessDiffCounterFastDueEntriesAsync();
+
+        Assert.Equal(1, firstResult.EntriesPlaced);
+        Assert.Equal(0, secondResult.EntriesPlaced);
+        Assert.Equal(0, repository.PaperEntryPersistenceBatchCalls);
+        var batch = Assert.Single(queue.Batches);
+        Assert.Single(batch.PaperOrders);
+        Assert.Single(batch.PaperFills);
+        Assert.Single(batch.PaperPositionMaterializations);
+        Assert.Single(batch.StrategyRuns);
+    }
+
+    [Fact]
     public async Task ProcessDiffCounterDueEntriesAsync_DiffUpThresholdBuysDownAtInstantExecutableAskPrice()
     {
         var startupMarketStartUtc = new DateTimeOffset(2026, 6, 8, 12, 0, 0, TimeSpan.Zero);
