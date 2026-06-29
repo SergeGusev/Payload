@@ -1,3 +1,15 @@
+## Active Update 2026-06-29 Diff Limit Progress Stake Explanation
+Goal: Explain why `ETH Up or Down 5m 5 Diff Limit Progress Premarket` is placing all recent Paper bets around `28`.
+Status: Completed
+Done:
+- Checked the current production state and latest Paper orders for `eth_up_down_5m_5_diff_limit_progress_premarket` read-only.
+- Confirmed recent ETH N=5 orders had raw `Diff=-7/-8`, `uncapped_stake_multiplier=7/8`, `stake_multiplier_cap=5`, and actual `stake_multiplier=5`.
+- Confirmed the current implementation sizes each entry from the current raw `Diff` using `min(abs(Diff), N)`, not from a loss-based 1-2-3-4-5 ladder.
+- Noted that the observed `28.0071` Paper notional is the existing FAK/min-order guaranteed sizing result for multiplier `5`, while multiplier `1` would be around `6.0093` under the same sizing path.
+Next: If a loss ladder is desired, change the strategy rule so Diff selects direction while stake level progresses from settled losses/Sum and resets/decreases by the agreed win rule.
+Notes: Production query was read-only against `192.168.0.101`; no source-code changes, production writes, live orders, service restart, cancel action, build, or tests were performed.
+Blockers: None.
+
 ## Active Update 2026-06-29 Diff Limit Progress Diff 1 Clarification
 Goal: Clarify whether `ETH Up or Down 5m 5 Diff Limit Progress Premarket` enters when `Diff = 1`.
 Status: Completed

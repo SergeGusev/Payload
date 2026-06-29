@@ -224,3 +224,10 @@ Request:
 
 Result:
 Added BTC/ETH/SOL `N Diff Limit Progress Premarket` variants for `N=1..5`, schema seeding, service premarket decision logic with persistent UTC-day counters and capped Diff stake multipliers, category grouping, tests, README, and configuration reference updates. Focused tests passed `70/70`, service build passed with `0` warnings/errors, and `git diff --check` passed with line-ending warnings only. The full test project still has unrelated existing FAK/strategy assertion failures around guaranteed FAK worst price behavior.
+
+## 2026-06-29T19:05:01.7037995Z
+Request:
+Почему у неё все ставки по 28 ? Я думал, первая будет 6, при проигрыше - 12 и т.д.
+
+Result:
+Explained that the current `Diff Limit Progress Premarket` implementation sizes each entry from the current raw `Diff` using `min(abs(Diff), N)`, not from a loss-based ladder. A read-only production check for `eth_up_down_5m_5_diff_limit_progress_premarket` showed recent raw `Diff=-7/-8`, cap `5`, actual `stake_multiplier=5`, and Paper notional `28.0071`, which comes from existing FAK/min-order guaranteed sizing. No production writes, live orders, source changes, restart, or cancel action were performed.
