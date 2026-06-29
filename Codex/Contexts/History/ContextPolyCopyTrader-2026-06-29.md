@@ -192,6 +192,13 @@ Request:
 
 Result:
 Retried production access read-only. PostgreSQL at `192.168.0.101:5432` is available again and `Test-NetConnection` reported `TcpTestSucceeded=True` from `192.168.0.100` while ICMP ping still failed. The service heartbeat showed `Running`/`Live`, version `1.0.0+ab41de91ec23f3c30a9d0fcfc16a418aaca12b05`, with heartbeat age about `37s`. Recent activity was present in the last 5 minutes: `142` entered strategy rows, `142` paper orders, fresh run updates, and all expected stage cycle kinds. Entry latency was clean for that window: `142` checked entries, `over_3s=0`, max delay `0.566s`. No production writes, live orders, service restart, or cancel action was performed.
+## 2026-06-29T18:59:17.5806640+00:00
+Request:
+Ставит ли стратегия ETH Up or Down 5m 5 Diff Limit Progress Premarket ставку, если Dif = 1 ?
+
+Result:
+Answered from the current code: yes, if `Diff = 1`, the strategy can enter, selecting Down and using strategy multiplier `min(abs(1), 5) = 1`; only `Diff = 0` skips by Diff. Normal timing, pending-state, target-outcome, and FAK liquidity gates still apply. No source code or production state was changed.
+
 ## 2026-06-29T18:50:13.8521851+00:00
 Request:
 Выложил, проверяй

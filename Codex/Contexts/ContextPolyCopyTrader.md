@@ -1,3 +1,14 @@
+## Active Update 2026-06-29 Diff Limit Progress Diff 1 Clarification
+Goal: Clarify whether `ETH Up or Down 5m 5 Diff Limit Progress Premarket` enters when `Diff = 1`.
+Status: Completed
+Done:
+- Confirmed from `GetDiffLimitProgressPremarketEntryDecisionAsync` that only `Diff = 0` skips by Diff.
+- Confirmed `Diff = 1` selects Down and uses `stake_multiplier = min(abs(1), 5) = 1`; `Diff = -1` would select Up with multiplier `1`.
+- Noted that normal non-Diff gates still apply: `-30s` premarket timing, no unresolved pending blocker, target outcome available, and FAK executable stack.
+Next: None.
+Notes: Explanation-only turn. No source-code changes, production DB writes, live orders, service restart, cancel action, build, or tests were performed.
+Blockers: None.
+
 ## Active Update 2026-06-29 Diff Limit Progress Deployment Check
 Goal: Verify the deployed `675ee33` service and the new Diff Limit Progress Premarket strategies in production.
 Status: Completed
