@@ -238,3 +238,10 @@ Request:
 
 Result:
 Clarified that the clean transition example is correct: `Diff=1` selects Down, an Up market result increments `UpCount`, and the next uncapped multiplier becomes `2`. Also clarified that the observed production ETH N=5 orders were already starting from persistent/current daily `Diff=-7/-8`, so they immediately hit the `N=5` cap; current code sizes from `min(abs(Diff), N)` and not from a separate loss-ladder/Sum stake state. No source changes or production writes were performed.
+
+## 2026-06-29T19:22:24.0183067Z
+Request:
+Понятно спасибо. Теперь давай последим за текущей работой. Всё ли успеваем правильно ставить? Успеваем ли потом записаться в базу данных? Есть ли необходимость в оптимизации базы или добавлении индексов?
+
+Result:
+Monitored production read-only. The standard 30-minute latency gate failed with `1893/10675` rows over `3s`, but the misses were mostly `Skipped` decisions. Actual entered rows were mostly healthy: a 60-minute diagnostic had `173` entered rows with `2` over `3s`, and the final 5-minute check had `135` entered rows with `0` over `3s` and max `2.954s`. Persistence looked healthy: no stale due `Observed` rows, no entered rows missing `paper_order_id`, no entered rows referencing missing orders, and hot-path persistence enqueue max was `43ms`. Identified optimization candidates: delayed skip/dependency handling around missing previous result/reference/order-book data, and database optimization for repeated full `paper_positions ORDER BY updated_at_utc DESC` reads; production has about `429k` paper positions and no leading `updated_at_utc` index, with `EXPLAIN` showing `Parallel Seq Scan + Sort`. No production writes, live orders, restart, cancel action, source-code changes, build, or tests were performed.

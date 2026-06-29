@@ -1,3 +1,18 @@
+## Active Update 2026-06-29 Production Entry And DB Monitoring
+Goal: Check whether the deployed service is placing strategy entries on time, persisting them, and whether database optimization or indexes are needed.
+Status: Completed
+Done:
+- Ran the production latency gate against deployed runtime `675ee33`; the 30-minute window failed with `10675` checked rows, `1893` over `3s`, but the misses were mostly `Skipped` decisions rather than real entries.
+- A 60-minute read-only diagnostic showed actual `Entered` rows were mostly healthy: `173` entered rows, `2` over `3s`, `p95=0.539s`, `p99=2.561s`; `Settled` rows had `0` over `3s`.
+- A final current 5-minute check showed actual entries were within SLA: `135` entered rows, `0` over `3s`, max `2.954s`.
+- Confirmed no stale due `Observed` rows over `15s`, no `Entered`/`Settled` rows missing `paper_order_id`, no entered rows referencing missing `paper_orders`, and no filled orders missing fills in the checked production window.
+- Confirmed hot-path persistence stages are not the current bottleneck: `regular_due_entries.deferred_persistence_enqueue` max `43ms`, average about `1.2ms`, with `0` over `1000ms`.
+- Identified the current timing problem as delayed skip decisions and dependency/API stalls: top recent reasons included `diff_counter_previous_market_resolved_event_missing`, `gtd_limit_not_filled`, `preopen_entry_window_elapsed`, `premarket_previous_market_end_minus_30_price_missing`, stale Binance reference prices, Polymarket/Gamma timeouts, and order-book refresh timeouts.
+- Identified a database optimization candidate: repeated active reads of all `paper_positions` sorted by `updated_at_utc DESC`; production has about `429k` paper positions, only `(copied_trader_wallet, updated_at_utc DESC)` is indexed, and `EXPLAIN` shows `Parallel Seq Scan + Sort` for the unfiltered sort.
+Next: Add a production-safe schema index `paper_positions(updated_at_utc DESC)` and/or reduce full `GetPaperPositionsAsync` refresh frequency; separately optimize due scheduling so preopen decision batches do not delay same-timestamp regular entries.
+Notes: Production checks were read-only SELECT/EXPLAIN plus the existing latency script. No production writes, live orders, restart, cancel action, source-code change, build, or tests were performed.
+Blockers: None.
+
 ## Active Update 2026-06-29 Diff Limit Progress Transition Clarification
 Goal: Clarify whether a `Diff=1` Down loss should make the next `Diff Limit Progress Premarket` multiplier become `2`.
 Status: Completed
