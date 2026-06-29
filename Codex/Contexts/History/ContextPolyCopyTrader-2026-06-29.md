@@ -150,3 +150,10 @@ Request:
 
 Result:
 Explained that paper positions are read to maintain paper accounting after simulated fills: aggregate size, average entry price, estimated value, unrealized PnL, copied-position links, and exposure/risk state. Also explained that this should not require scanning/rebuilding all positions during each entry burst; the old hot-path implementation was too broad, and commit `d42aac9` narrows it to indexed/lazy lookup of only the affected `(wallet, asset)` position.
+
+## 2026-06-29T13:58:29.0416218Z
+Request:
+Я не понимаю, почему мы не можем это делать уже после того, как сделаны все ставки.
+
+Result:
+Explained that paper position materialization can be moved after the entry burst in principle. The current code couples simulated fill creation with immediate materialized `paper_positions` updates so average price, size, PnL, exposure, and settlement state are consistent for subsequent reads. A better latency-oriented design would treat fills as the source of truth, record entries/fills/runs first, and let a background/projector phase update `paper_positions` after the burst, with safeguards for same-asset multiple fills, next-cycle risk/exposure, crash recovery, and settlement reads.

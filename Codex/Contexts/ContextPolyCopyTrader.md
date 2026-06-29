@@ -1,3 +1,14 @@
+## Active Update 2026-06-29 Deferred Position Accounting Clarification
+Goal: Explain whether paper position accounting can happen after all bets are made.
+Status: Completed
+Done:
+- Clarified that there is no hard strategy requirement to materialize `paper_positions` before every individual entry.
+- Identified the actual requirement: simulated fills need eventually consistent position accounting before dependent risk/exposure/settlement reads rely on the position.
+- Noted that the current implementation couples fill creation and position materialization in the same accounting batch, but a future projector/background phase could make `paper_positions` a derived view from fills.
+Next: If requested, implement a deferred paper-position projector so entry hot path records fills/runs first and materializes positions after the burst.
+Notes: Explanation-only turn; no source-code changes. Existing unrelated dirty files were left untouched.
+Blockers: None for the explanation.
+
 ## Active Update 2026-06-29 Paper Position Read Explanation
 Goal: Explain why paper positions are read while creating strategy entries.
 Status: Completed
