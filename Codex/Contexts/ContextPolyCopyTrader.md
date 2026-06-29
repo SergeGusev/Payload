@@ -1,3 +1,17 @@
+## Active Update 2026-06-29 Paper Positions Paging Index
+Goal: Add a paging-oriented index for Dashboard paper-position reads and apply it safely in production.
+Status: Completed
+Done:
+- Confirmed the Dashboard `PaperPositions` load still calls `GetPaperPositionsAsync` without repository-level `LIMIT/OFFSET`; `LiveOrders` is the server-side paged grid.
+- Added schema index `ix_paper_positions_updated_page_cover` on `(updated_at_utc DESC, copied_trader_wallet, asset_id)` with included grid columns to support stable `ORDER BY`/page reads.
+- Changed `GetPaperPositionsAsync` ordering to `updated_at_utc DESC, copied_trader_wallet ASC, asset_id ASC`, matching the new index and making equal timestamps deterministic for paging.
+- Added storage tests for the schema index and stable repository ordering.
+- Applied the same index to production with `CREATE INDEX CONCURRENTLY IF NOT EXISTS`; build completed successfully and `EXPLAIN` for the first page now uses `Index Only Scan using ix_paper_positions_updated_page_cover`.
+- Post-DDL sanity check showed service heartbeat `Running`/`Live`, `last_error=null`, `0` stale due `Observed` rows, and `104` recent actual `Entered` rows with `0` over `3s` and max delay `1.369s`.
+Next: Consider adding real repository-level paging for `PaperPositions` if the Dashboard should avoid loading all open paper positions each refresh.
+Notes: Verification passed: focused `dotnet test tests/PolyCopyTrader.Tests/PolyCopyTrader.Tests.csproj --no-restore --filter "FullyQualifiedName~PostgresSchema_ContainsRequiredTables|FullyQualifiedName~PostgresRepository_PaperPositionsUseStablePagingOrder" -p:UseSharedCompilation=false` passed `2/2`; `git diff --check` passed with line-ending warnings only. Production DDL was limited to the concurrent index build; no service restart, live orders, cancels, or data-row writes were performed.
+Blockers: None.
+
 ## Active Update 2026-06-29 Production Entry And DB Monitoring
 Goal: Check whether the deployed service is placing strategy entries on time, persisting them, and whether database optimization or indexes are needed.
 Status: Completed

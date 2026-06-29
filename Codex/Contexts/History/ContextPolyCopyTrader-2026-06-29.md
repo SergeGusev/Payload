@@ -245,3 +245,10 @@ Request:
 
 Result:
 Monitored production read-only. The standard 30-minute latency gate failed with `1893/10675` rows over `3s`, but the misses were mostly `Skipped` decisions. Actual entered rows were mostly healthy: a 60-minute diagnostic had `173` entered rows with `2` over `3s`, and the final 5-minute check had `135` entered rows with `0` over `3s` and max `2.954s`. Persistence looked healthy: no stale due `Observed` rows, no entered rows missing `paper_order_id`, no entered rows referencing missing orders, and hot-path persistence enqueue max was `43ms`. Identified optimization candidates: delayed skip/dependency handling around missing previous result/reference/order-book data, and database optimization for repeated full `paper_positions ORDER BY updated_at_utc DESC` reads; production has about `429k` paper positions and no leading `updated_at_utc` index, with `EXPLAIN` showing `Parallel Seq Scan + Sort`. No production writes, live orders, restart, cancel action, source-code changes, build, or tests were performed.
+
+## 2026-06-29T19:38:02.6223325Z
+Request:
+Это наверняка запрос из Dashboard. Он пейджинговый. Не хочешь сразу добавить индексы, заточенные на пейдижнг?
+
+Result:
+Added a paging-oriented paper-position index in code and production. The Dashboard code check showed `PaperPositions` still loads through `GetPaperPositionsAsync` without repository-level `LIMIT/OFFSET`, while `LiveOrders` is server-side paged. Added `ix_paper_positions_updated_page_cover` on `(updated_at_utc DESC, copied_trader_wallet, asset_id)` with included grid columns, changed `GetPaperPositionsAsync` to use deterministic `ORDER BY updated_at_utc DESC, copied_trader_wallet ASC, asset_id ASC`, and added focused storage tests. Applied the production index with `CREATE INDEX CONCURRENTLY IF NOT EXISTS`; `EXPLAIN` for the first page now uses `Index Only Scan`. Post-DDL sanity check found the service `Running`/`Live`, `last_error=null`, no stale due observed rows, and recent actual entries within `3s`. No service restart, live orders, cancels, or data-row writes were performed.

@@ -3383,6 +3383,10 @@ ON paper_positions(copied_trader_wallet, asset_id);
 CREATE INDEX IF NOT EXISTS ix_paper_positions_wallet_updated
 ON paper_positions(copied_trader_wallet, updated_at_utc DESC);
 
+CREATE INDEX CONCURRENTLY IF NOT EXISTS ix_paper_positions_updated_page_cover
+ON paper_positions(updated_at_utc DESC, copied_trader_wallet, asset_id)
+INCLUDE (condition_id, outcome, size_shares, average_price, estimated_value_usd, unrealized_pnl_usd);
+
 CREATE TABLE IF NOT EXISTS paper_position_settlements (
     id uuid PRIMARY KEY,
     copied_trader_wallet text NOT NULL,

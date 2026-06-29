@@ -1722,7 +1722,7 @@ WHERE target.id = run_rows.id;
 		await using (NpgsqlConnection connection = await OpenConnectionAsync(cancellationToken))
 		{
 			IReadOnlyList<PaperPosition> readOnlyList2;
-			await using (NpgsqlCommand command = CreateCommand(connection, "SELECT asset_id, condition_id, outcome, size_shares, average_price, estimated_value_usd, unrealized_pnl_usd, updated_at_utc, copied_trader_wallet\nFROM paper_positions\nORDER BY updated_at_utc DESC;"))
+			await using (NpgsqlCommand command = CreateCommand(connection, "SELECT asset_id, condition_id, outcome, size_shares, average_price, estimated_value_usd, unrealized_pnl_usd, updated_at_utc, copied_trader_wallet\nFROM paper_positions\nORDER BY updated_at_utc DESC, copied_trader_wallet ASC, asset_id ASC;"))
 			{
 				IReadOnlyList<PaperPosition> readOnlyList;
 				await using (NpgsqlDataReader reader = await command.ExecuteReaderAsync(cancellationToken))

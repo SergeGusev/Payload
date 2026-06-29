@@ -321,6 +321,8 @@ public sealed class StorageTests
         Assert.Contains("ix_strategy_market_paper_runs_settled_time_strategy", PostgresSchema.SchemaSql, StringComparison.Ordinal);
         Assert.Contains("ux_paper_positions_wallet_asset", PostgresSchema.SchemaSql, StringComparison.Ordinal);
         Assert.Contains("ix_paper_positions_wallet_updated", PostgresSchema.SchemaSql, StringComparison.Ordinal);
+        Assert.Contains("ix_paper_positions_updated_page_cover", PostgresSchema.SchemaSql, StringComparison.Ordinal);
+        Assert.Contains("ON paper_positions(updated_at_utc DESC, copied_trader_wallet, asset_id)", PostgresSchema.SchemaSql, StringComparison.Ordinal);
         Assert.Contains("polymarket_positions_total_pnl_usd numeric(28,8) NULL", PostgresSchema.SchemaSql, StringComparison.Ordinal);
         Assert.Contains("polymarket_leaderboard_pnl_usd numeric(28,8) NULL", PostgresSchema.SchemaSql, StringComparison.Ordinal);
         Assert.Contains("ALTER TABLE polymarket_data_api_wallet_performance", PostgresSchema.SchemaSql, StringComparison.Ordinal);
@@ -782,6 +784,23 @@ public sealed class StorageTests
         Assert.DoesNotContain("WITH deleted AS", source, StringComparison.Ordinal);
         Assert.Contains("FROM paper_position_settlements ps", source, StringComparison.Ordinal);
         Assert.Contains("COALESCE((SELECT sum(ps.realized_pnl_usd) FROM paper_position_settlements ps), 0) AS paper_pnl", source, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void PostgresRepository_PaperPositionsUseStablePagingOrder()
+    {
+        var source = ReadStorageRepositorySource();
+        var start = source.IndexOf("GetPaperPositionsAsync", StringComparison.Ordinal);
+        Assert.True(start >= 0);
+
+        var end = source.IndexOf("TryAddPaperPositionSettlementAsync", start, StringComparison.Ordinal);
+        Assert.True(end > start);
+
+        var method = source[start..end];
+        Assert.Contains(
+            "ORDER BY updated_at_utc DESC, copied_trader_wallet ASC, asset_id ASC;",
+            method,
+            StringComparison.Ordinal);
     }
 
     [Fact]
