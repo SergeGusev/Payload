@@ -1,3 +1,21 @@
+## Active Update 2026-06-29 Async Paper Entry Persistence Queue
+Goal: Reduce every BTC/ETH/SOL Up/Down strategy entry delay to no more than 3 seconds and verify the deployed service.
+Status: In Progress
+Done:
+- Implemented `PaperEntryPersistenceQueue` as a hosted background writer for BTC/ETH/SOL Up/Down deferred paper entry persistence.
+- The strategy processor now creates entry decisions and paper/live actions first; when the queue is registered it only enqueues the persistence batch and immediately updates the in-memory exposure cache, leaving PostgreSQL writes off the entry hot path.
+- The queue drains through `AddPaperEntryPersistenceBatchAsync`, coalesces up to 64 queued batches per flush, retries failed DB writes indefinitely, and keeps service shutdown waiting until pending paper-entry batches are persisted.
+- Registered the queue before strategy workers so hosted-service stop order drains the queue after producers stop; configured host shutdown timeout to 10 minutes.
+- Added queue tests for shutdown drain, retry-until-success, and rejecting new batches after stop; added processor coverage proving queued persistence does not call the repository synchronously.
+Verification:
+- `dotnet test tests/PolyCopyTrader.Tests/PolyCopyTrader.Tests.csproj --no-restore --filter "FullyQualifiedName~PaperEntryPersistenceQueueTests|FullyQualifiedName~ProcessAsync_QueuesDeferredPaperEntryPersistenceWhenQueueConfigured|FullyQualifiedName~ProcessAsync_BinanceStartRelativeConcurrentEntriesShareCurrentPriceAndFlushOnce"` passed `5/5` with one existing nullable warning.
+- `dotnet build src/PolyCopyTrader.Service/PolyCopyTrader.Service.csproj --no-restore` passed.
+- `git diff --check` passed for tracked edited files with line-ending warnings only.
+- An older targeted FAK partial-fill test still fails with `PaperEntryPersistenceBatchCalls` expected `1`, actual `2`; this appears to reflect an existing setup-cycle persistence count and was not used as the gate for this queue patch.
+Next: Commit/push this async queue patch, deploy the new service build, then rerun the production latency gate on fresh post-start rows: `scripts/check-strategy-entry-latency.ps1 -HostOverride 192.168.0.101 -ExpectedCommit <newCommit> -MaxDelaySeconds 3 -LookbackMinutes 30 -RequireSplitCycleKinds`.
+Notes: No production DB writes, live orders, service restart, or cancel action was performed by Codex. Existing unrelated dirty files and output folders were left untouched.
+Blockers: Final goal cannot be marked complete until this new build is deployed and a fresh production gate proves every checked strategy entry delay is <= 3 seconds.
+
 ## Active Update 2026-06-29 Bulk Paper Entry Persistence
 Goal: Reduce every BTC/ETH/SOL Up/Down strategy entry delay to no more than 3 seconds and verify the deployed service.
 Status: In Progress

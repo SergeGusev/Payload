@@ -39,7 +39,8 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
     ServiceControlState controlState,
     IStrategyStateProvider strategyStateProvider,
     IAppRepository repository,
-    TimeProvider? timeProvider = null) : IBtcUpDown5mPaperStrategyProcessor
+    TimeProvider? timeProvider = null,
+    IPaperEntryPersistenceQueue? paperEntryPersistenceQueue = null) : IBtcUpDown5mPaperStrategyProcessor
 {
     private const string GammaOutcomePriceSource = "gamma_outcome_price";
     private const string WebSocketCacheSource = "websocket_cache";
@@ -3646,13 +3647,13 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
                 cycleId,
                 cycleKind,
                 flowName,
-                stageName + ".deferred_persistence_flush",
+                stageName + (paperEntryPersistenceQueue is null ? ".deferred_persistence_flush" : ".deferred_persistence_enqueue"),
                 detail: null,
                 variantsById.Count,
                 remainingRuns.Count,
                 GetEarliestEntryDueAtUtc(remainingRuns),
                 GetLatestEntryDueAtUtc(remainingRuns),
-                async _ => await FlushDeferredPaperEntryPersistenceAsync(deferredPersistence, CancellationToken.None),
+                async _ => await PersistDeferredPaperEntryPersistenceAsync(deferredPersistence, CancellationToken.None),
                 CancellationToken.None);
         }
 
@@ -3702,7 +3703,7 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
         return new DeferredPaperEntryPersistence(positions);
     }
 
-    private async Task FlushDeferredPaperEntryPersistenceAsync(
+    private async Task PersistDeferredPaperEntryPersistenceAsync(
         DeferredPaperEntryPersistence deferredPersistence,
         CancellationToken cancellationToken)
     {
@@ -3714,6 +3715,21 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
 
         try
         {
+            if (paperEntryPersistenceQueue is not null)
+            {
+                await paperEntryPersistenceQueue.EnqueueAsync(batch, cancellationToken);
+                exposureCache.ApplyPaperOrders(batch.PaperOrders);
+                exposureCache.ApplyPaperPositions(batch.PaperPositions);
+                logger.LogInformation(
+                    "BTC Up or Down 5m deferred paper entry persistence queued. Signals={Signals} Orders={Orders} Fills={Fills} Positions={Positions} Runs={Runs}",
+                    batch.Signals.Count,
+                    batch.PaperOrders.Count,
+                    batch.PaperFills.Count,
+                    batch.PaperPositions.Count,
+                    batch.StrategyRuns.Count);
+                return;
+            }
+
             await repository.AddPaperEntryPersistenceBatchAsync(batch, cancellationToken);
             exposureCache.ApplyPaperOrders(batch.PaperOrders);
             exposureCache.ApplyPaperPositions(batch.PaperPositions);
@@ -3731,8 +3747,8 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
         }
         catch (Exception ex)
         {
-            logger.LogError(ex, "Failed to flush BTC Up or Down 5m deferred paper entry persistence.");
-            await TryRecordApiErrorAsync("FlushDeferredPaperEntryPersistence", ex.Message, CancellationToken.None);
+            logger.LogError(ex, "Failed to persist BTC Up or Down 5m deferred paper entry persistence.");
+            await TryRecordApiErrorAsync("PersistDeferredPaperEntryPersistence", ex.Message, CancellationToken.None);
             throw;
         }
     }

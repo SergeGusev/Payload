@@ -351,6 +351,8 @@ builder.Services.AddSingleton<MarketTradeTickDiagnosticService>();
 builder.Services.AddSingleton<IMarketTradeTickDiagnosticService>(sp => sp.GetRequiredService<MarketTradeTickDiagnosticService>());
 builder.Services.AddSingleton<ICryptoUpDown5mMarketResolvedEventRecorder, CryptoUpDown5mMarketResolvedEventRecorder>();
 builder.Services.AddSingleton<IExposureSnapshotCache, ExposureSnapshotCache>();
+builder.Services.AddSingleton<PaperEntryPersistenceQueue>();
+builder.Services.AddSingleton<IPaperEntryPersistenceQueue>(sp => sp.GetRequiredService<PaperEntryPersistenceQueue>());
 builder.Services.AddSingleton<IPaperTradingMarketDataUpdater, PaperTradingMarketDataUpdater>();
 builder.Services.AddSingleton<ConservativePaperGtdFillEstimator>();
 builder.Services.AddSingleton<IPaperTradingProcessor, PaperTradingProcessor>();
@@ -374,9 +376,14 @@ builder.Services.AddSingleton<IOnChainPaperSignalProcessor, OnChainPaperSignalPr
 builder.Services.AddSingleton<IOnChainMarketEnrichmentProcessor, OnChainMarketEnrichmentProcessor>();
 builder.Services.AddSingleton<IOnChainSignalCandidateProcessor, OnChainSignalCandidateProcessor>();
 builder.Services.AddSingleton<ServiceControlState>();
+builder.Services.Configure<HostOptions>(options =>
+{
+    options.ShutdownTimeout = TimeSpan.FromMinutes(10);
+});
 builder.Services.AddHostedService<StartupSafetyCheckService>();
 // BTC 5m focused mode: HTTP-log retention is not part of BTC Up or Down 5m strategy execution.
 // builder.Services.AddHostedService<PolymarketHttpLogRetentionWorker>();
+builder.Services.AddHostedService(sp => sp.GetRequiredService<PaperEntryPersistenceQueue>());
 builder.Services.AddHostedService<BotWorker>();
 builder.Services.AddHostedService<ExposureSnapshotCacheWarmupService>();
 builder.Services.AddHostedService<PaperTradingWorker>();

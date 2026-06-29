@@ -22,6 +22,12 @@ internal sealed class TestAppRepository : IAppRepository
 
     public int PaperEntryPersistenceBatchCalls { get; private set; }
 
+    public int PaperEntryPersistenceBatchAttempts { get; private set; }
+
+    public int PaperEntryPersistenceBatchFailuresToThrow { get; set; }
+
+    public TimeSpan PaperEntryPersistenceBatchDelay { get; set; } = TimeSpan.Zero;
+
     public int GetPaperPositionsCalls { get; private set; }
 
     public List<LeaderTrade> LeaderTrades { get; } = [];
@@ -1016,6 +1022,28 @@ internal sealed class TestAppRepository : IAppRepository
 
         lock (sync)
         {
+            PaperEntryPersistenceBatchAttempts++;
+            if (PaperEntryPersistenceBatchFailuresToThrow > 0)
+            {
+                PaperEntryPersistenceBatchFailuresToThrow--;
+                throw new InvalidOperationException("Injected paper entry persistence batch failure.");
+            }
+        }
+
+        return AddPaperEntryPersistenceBatchCoreAsync(batch, cancellationToken);
+    }
+
+    private async Task AddPaperEntryPersistenceBatchCoreAsync(
+        PaperEntryPersistenceBatch batch,
+        CancellationToken cancellationToken)
+    {
+        if (PaperEntryPersistenceBatchDelay > TimeSpan.Zero)
+        {
+            await Task.Delay(PaperEntryPersistenceBatchDelay, cancellationToken);
+        }
+
+        lock (sync)
+        {
             PaperEntryPersistenceBatchCalls++;
             Signals.AddRange(batch.Signals);
             PaperOrders.AddRange(batch.PaperOrders);
@@ -1057,8 +1085,6 @@ internal sealed class TestAppRepository : IAppRepository
                 StrategyMarketPaperRuns.Add(run);
             }
         }
-
-        return Task.CompletedTask;
     }
 
     public Task UpdatePaperOrderAsync(PaperOrder order, CancellationToken cancellationToken = default)

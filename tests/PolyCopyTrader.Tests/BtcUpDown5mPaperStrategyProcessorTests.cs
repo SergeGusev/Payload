@@ -10,6 +10,7 @@ using PolyCopyTrader.Service.ExternalPrices;
 using PolyCopyTrader.Service.MarketData;
 using PolyCopyTrader.Service.PaperTrading;
 using PolyCopyTrader.Service.Strategies;
+using PolyCopyTrader.Storage;
 using PolyCopyTrader.Strategy;
 
 namespace PolyCopyTrader.Tests;
@@ -11227,6 +11228,46 @@ public sealed class BtcUpDown5mPaperStrategyProcessorTests
     }
 
     [Fact]
+    public async Task ProcessAsync_QueuesDeferredPaperEntryPersistenceWhenQueueConfigured()
+    {
+        var now = DateTimeOffset.UtcNow;
+        var repository = new TestAppRepository();
+        repository.PolymarketGammaMarkets.Add(CreateMarket(
+            now,
+            now.AddMinutes(5),
+            upPrice: 0.62m,
+            downPrice: 0.38m));
+        AddBtcOddsStartTick(repository, "market-1", now, startPriceUsd: 100m);
+        repository.StrategySettings[BinanceVariant.Id] = StrategyRuntimeSettings.Default(BinanceVariant.Id) with
+        {
+            PaperStakeAmount = 2.50m
+        };
+        var queue = new CapturingPaperEntryPersistenceQueue();
+        var exposureCache = new TestExposureSnapshotCache([]);
+        var processor = CreateProcessorCoreWithOptions(
+            repository,
+            [],
+            DefaultOrderBooks(),
+            _ => { },
+            Array.Empty<OrderBookSnapshot>(),
+            CreateBtcOptions(paperTakerPricingEnabled: false, [BinanceVariant.Code]),
+            new FakeBtcUsdReferencePriceClient(101m),
+            CreateBtcUsdReferenceCache(100m),
+            exposureSnapshotCache: exposureCache,
+            paperEntryPersistenceQueue: queue);
+
+        var result = await processor.ProcessAsync();
+
+        Assert.Equal(1, result.EntriesPlaced);
+        Assert.Equal(0, repository.PaperEntryPersistenceBatchAttempts);
+        Assert.Equal(0, repository.PaperEntryPersistenceBatchCalls);
+        var batch = Assert.Single(queue.Batches);
+        Assert.Single(batch.PaperOrders);
+        Assert.Single(batch.StrategyRuns);
+        Assert.Single(exposureCache.AppliedPaperOrders);
+    }
+
+    [Fact]
     public async Task ProcessAsync_SkipConsecutiveResultsBuysDownAfterThreeUpMarkets()
     {
         var now = DateTimeOffset.UtcNow;
@@ -13813,7 +13854,8 @@ public sealed class BtcUpDown5mPaperStrategyProcessorTests
         LiveTradingOptions? liveTradingOptions = null,
         IPolymarketGeoClient? geoClient = null,
         ICryptoReferencePriceAverageProvider? cryptoReferencePriceAverageProvider = null,
-        IExposureSnapshotCache? exposureSnapshotCache = null)
+        IExposureSnapshotCache? exposureSnapshotCache = null,
+        IPaperEntryPersistenceQueue? paperEntryPersistenceQueue = null)
     {
         var marketDataWebSocketOptions = new MarketDataWebSocketOptions { StaleAfterSeconds = 30 };
         var marketDataCache = new MarketDataCache(marketDataWebSocketOptions);
@@ -13867,7 +13909,8 @@ public sealed class BtcUpDown5mPaperStrategyProcessorTests
             new ServiceControlState(),
             new StrategyStateProvider(NullLogger<StrategyStateProvider>.Instance, repository),
             repository,
-            timeProvider);
+            timeProvider,
+            paperEntryPersistenceQueue);
     }
 
     private static IReadOnlyList<OrderBookSnapshot> ToClobOrderBooks(OrderBookSnapshot? orderBook)
@@ -15182,6 +15225,8 @@ public sealed class BtcUpDown5mPaperStrategyProcessorTests
 
         public int GetSnapshotCalls { get; private set; }
 
+        public IReadOnlyList<PaperOrder> AppliedPaperOrders => appliedPaperOrders;
+
         public IReadOnlyList<PaperPosition> AppliedPaperPositions => appliedPaperPositions;
 
         public Task<TradingExposureSnapshot> GetSnapshotAsync(CancellationToken cancellationToken = default)
@@ -15233,6 +15278,24 @@ public sealed class BtcUpDown5mPaperStrategyProcessorTests
         {
             appliedLiveOrders.RemoveAll(item => item.Id == order.Id);
             appliedLiveOrders.Add(order);
+        }
+    }
+
+    private sealed class CapturingPaperEntryPersistenceQueue : IPaperEntryPersistenceQueue
+    {
+        private readonly List<PaperEntryPersistenceBatch> batches = [];
+
+        public IReadOnlyList<PaperEntryPersistenceBatch> Batches => batches;
+
+        public int PendingBatches => batches.Count;
+
+        public ValueTask EnqueueAsync(
+            PaperEntryPersistenceBatch batch,
+            CancellationToken cancellationToken = default)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            batches.Add(batch);
+            return ValueTask.CompletedTask;
         }
     }
 
