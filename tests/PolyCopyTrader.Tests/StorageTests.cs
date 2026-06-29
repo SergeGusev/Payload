@@ -33,6 +33,9 @@ public sealed class StorageTests
 
         Assert.Contains("CREATE UNIQUE INDEX IF NOT EXISTS ux_leader_trades_dedup", PostgresSchema.SchemaSql, StringComparison.Ordinal);
         Assert.Contains("CREATE INDEX IF NOT EXISTS ix_polymarket_http_logs_requested", PostgresSchema.SchemaSql, StringComparison.Ordinal);
+        Assert.Contains("CREATE TABLE IF NOT EXISTS btc_up_down_5m_strategy_stage_timings", PostgresSchema.SchemaSql, StringComparison.Ordinal);
+        Assert.Contains("ix_btc_up_down_5m_strategy_stage_timings_started", PostgresSchema.SchemaSql, StringComparison.Ordinal);
+        Assert.Contains("ix_btc_up_down_5m_strategy_stage_timings_cycle", PostgresSchema.SchemaSql, StringComparison.Ordinal);
         Assert.Contains("CREATE TABLE IF NOT EXISTS polymarket_onchain_wallet_positions", PostgresSchema.SchemaSql, StringComparison.Ordinal);
         Assert.Contains("CREATE TABLE IF NOT EXISTS polymarket_onchain_trade_captures", PostgresSchema.SchemaSql, StringComparison.Ordinal);
         Assert.Contains("CREATE TABLE IF NOT EXISTS polymarket_onchain_trade_capture_cursors", PostgresSchema.SchemaSql, StringComparison.Ordinal);
@@ -1203,6 +1206,27 @@ CREATE INDEX first_table_id_idx ON first_table(id);
             true,
             "{}",
             null));
+        await repository.AddBtcUpDown5mStrategyStageTimingAsync(new BtcUpDown5mStrategyStageTiming(
+            Guid.NewGuid(),
+            Guid.NewGuid(),
+            "test",
+            "TestFlow",
+            "test_stage",
+            null,
+            DateTimeOffset.UtcNow,
+            DateTimeOffset.UtcNow,
+            1,
+            1,
+            1,
+            0,
+            0,
+            0,
+            0,
+            null,
+            null,
+            true,
+            null,
+            DateTimeOffset.UtcNow));
         await repository.TryAddPolymarketWebSocketTradeTickAsync(new PolymarketWebSocketTradeTick(
             Guid.NewGuid(),
             "tick-1",

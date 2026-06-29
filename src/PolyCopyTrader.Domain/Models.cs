@@ -186,6 +186,28 @@ public sealed record BtcOrderBookLagDiagnosticEvent(
     string RawEventType,
     DateTimeOffset CreatedAtUtc);
 
+public sealed record BtcUpDown5mStrategyStageTiming(
+    Guid Id,
+    Guid CycleId,
+    string CycleKind,
+    string? FlowName,
+    string StageName,
+    string? Detail,
+    DateTimeOffset StartedAtUtc,
+    DateTimeOffset CompletedAtUtc,
+    long DurationMilliseconds,
+    int? VariantCount,
+    int? RunCount,
+    int? EntriesPlaced,
+    int? RunsSkipped,
+    int? RunsSettled,
+    int? MarketsObserved,
+    DateTimeOffset? EarliestEntryDueAtUtc,
+    DateTimeOffset? LatestEntryDueAtUtc,
+    bool Succeeded,
+    string? ErrorMessage,
+    DateTimeOffset CreatedAtUtc);
+
 public sealed record BtcUpDown5mOddsTick(
     Guid Id,
     string MarketId,

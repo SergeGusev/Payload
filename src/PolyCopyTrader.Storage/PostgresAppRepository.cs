@@ -3918,6 +3918,30 @@ WHERE events.ctid IN (
 		return await command.ExecuteNonQueryAsync(cancellationToken);
 	}
 
+	public async Task AddBtcUpDown5mStrategyStageTimingAsync(
+		BtcUpDown5mStrategyStageTiming timing,
+		CancellationToken cancellationToken = default(CancellationToken))
+	{
+		await using NpgsqlConnection connection = await OpenConnectionAsync(cancellationToken);
+		await using NpgsqlCommand command = CreateCommand(connection, """
+INSERT INTO btc_up_down_5m_strategy_stage_timings (
+    id, cycle_id, cycle_kind, flow_name, stage_name, detail,
+    started_at_utc, completed_at_utc, duration_ms,
+    variant_count, run_count, entries_placed, runs_skipped, runs_settled, markets_observed,
+    earliest_entry_due_at_utc, latest_entry_due_at_utc,
+    succeeded, error_message, created_at_utc
+) VALUES (
+    @Id, @CycleId, @CycleKind, @FlowName, @StageName, @Detail,
+    @StartedAtUtc, @CompletedAtUtc, @DurationMs,
+    @VariantCount, @RunCount, @EntriesPlaced, @RunsSkipped, @RunsSettled, @MarketsObserved,
+    @EarliestEntryDueAtUtc, @LatestEntryDueAtUtc,
+    @Succeeded, @ErrorMessage, @CreatedAtUtc
+);
+""");
+		AddBtcUpDown5mStrategyStageTimingParameters(command, timing);
+		await command.ExecuteNonQueryAsync(cancellationToken);
+	}
+
 	public async Task AddBtcUpDown5mOddsTickAsync(BtcUpDown5mOddsTick tick, CancellationToken cancellationToken = default(CancellationToken))
 	{
 		await using NpgsqlConnection connection = await OpenConnectionAsync(cancellationToken);
@@ -8977,6 +9001,32 @@ LIMIT @Limit;
 		command.Parameters.AddWithValue("LocalLagMs", NullableDecimal(diagnosticEvent.LocalLagMilliseconds));
 		command.Parameters.AddWithValue("RawEventType", diagnosticEvent.RawEventType);
 		command.Parameters.AddWithValue("CreatedAtUtc", UtcDateTime(diagnosticEvent.CreatedAtUtc));
+	}
+
+	private static void AddBtcUpDown5mStrategyStageTimingParameters(
+		NpgsqlCommand command,
+		BtcUpDown5mStrategyStageTiming timing)
+	{
+		command.Parameters.AddWithValue("Id", timing.Id);
+		command.Parameters.AddWithValue("CycleId", timing.CycleId);
+		command.Parameters.AddWithValue("CycleKind", timing.CycleKind);
+		command.Parameters.AddWithValue("FlowName", ((object?)timing.FlowName) ?? DBNull.Value);
+		command.Parameters.AddWithValue("StageName", timing.StageName);
+		command.Parameters.AddWithValue("Detail", ((object?)timing.Detail) ?? DBNull.Value);
+		command.Parameters.AddWithValue("StartedAtUtc", UtcDateTime(timing.StartedAtUtc));
+		command.Parameters.AddWithValue("CompletedAtUtc", UtcDateTime(timing.CompletedAtUtc));
+		command.Parameters.AddWithValue("DurationMs", timing.DurationMilliseconds);
+		command.Parameters.AddWithValue("VariantCount", ((object?)timing.VariantCount) ?? DBNull.Value);
+		command.Parameters.AddWithValue("RunCount", ((object?)timing.RunCount) ?? DBNull.Value);
+		command.Parameters.AddWithValue("EntriesPlaced", ((object?)timing.EntriesPlaced) ?? DBNull.Value);
+		command.Parameters.AddWithValue("RunsSkipped", ((object?)timing.RunsSkipped) ?? DBNull.Value);
+		command.Parameters.AddWithValue("RunsSettled", ((object?)timing.RunsSettled) ?? DBNull.Value);
+		command.Parameters.AddWithValue("MarketsObserved", ((object?)timing.MarketsObserved) ?? DBNull.Value);
+		command.Parameters.AddWithValue("EarliestEntryDueAtUtc", NullableDateTime(timing.EarliestEntryDueAtUtc));
+		command.Parameters.AddWithValue("LatestEntryDueAtUtc", NullableDateTime(timing.LatestEntryDueAtUtc));
+		command.Parameters.AddWithValue("Succeeded", timing.Succeeded);
+		command.Parameters.AddWithValue("ErrorMessage", ((object?)timing.ErrorMessage) ?? DBNull.Value);
+		command.Parameters.AddWithValue("CreatedAtUtc", UtcDateTime(timing.CreatedAtUtc));
 	}
 
 	private static void AddBtcUpDown5mOddsTickParameters(NpgsqlCommand command, BtcUpDown5mOddsTick tick)

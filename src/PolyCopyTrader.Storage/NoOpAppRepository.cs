@@ -711,4 +711,11 @@ public sealed class NoOpAppRepository : IAppRepository
     {
         return Task.FromResult<IReadOnlyList<ServiceHeartbeat>>([]);
     }
+
+    public Task AddBtcUpDown5mStrategyStageTimingAsync(
+        BtcUpDown5mStrategyStageTiming timing,
+        CancellationToken cancellationToken = default)
+    {
+        return Task.CompletedTask;
+    }
 }

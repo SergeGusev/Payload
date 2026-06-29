@@ -659,6 +659,13 @@ public interface IAppRepository
         return Task.FromResult(0);
     }
 
+    Task AddBtcUpDown5mStrategyStageTimingAsync(
+        BtcUpDown5mStrategyStageTiming timing,
+        CancellationToken cancellationToken = default)
+    {
+        return Task.CompletedTask;
+    }
+
     Task AddBtcUpDown5mOddsTickAsync(
         BtcUpDown5mOddsTick tick,
         CancellationToken cancellationToken = default)

@@ -31,6 +31,7 @@ public static class PostgresSchema
         "btc_usd_reference_correlation_samples",
         "crypto_reference_price_ticks",
         "btc_order_book_lag_diagnostic_events",
+        "btc_up_down_5m_strategy_stage_timings",
         "btc_up_down_5m_odds_ticks",
         "btc_5m_history",
         "btc_5m_history_live_observations",
@@ -3489,6 +3490,38 @@ WHERE asset_id IS NOT NULL;
 CREATE INDEX IF NOT EXISTS ix_btc_order_book_lag_events_condition_received
 ON btc_order_book_lag_diagnostic_events(condition_id, received_at_utc DESC)
 WHERE condition_id IS NOT NULL;
+
+CREATE TABLE IF NOT EXISTS btc_up_down_5m_strategy_stage_timings (
+    id uuid PRIMARY KEY,
+    cycle_id uuid NOT NULL,
+    cycle_kind text NOT NULL,
+    flow_name text NULL,
+    stage_name text NOT NULL,
+    detail text NULL,
+    started_at_utc timestamptz NOT NULL,
+    completed_at_utc timestamptz NOT NULL,
+    duration_ms bigint NOT NULL,
+    variant_count integer NULL,
+    run_count integer NULL,
+    entries_placed integer NULL,
+    runs_skipped integer NULL,
+    runs_settled integer NULL,
+    markets_observed integer NULL,
+    earliest_entry_due_at_utc timestamptz NULL,
+    latest_entry_due_at_utc timestamptz NULL,
+    succeeded boolean NOT NULL,
+    error_message text NULL,
+    created_at_utc timestamptz NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS ix_btc_up_down_5m_strategy_stage_timings_started
+ON btc_up_down_5m_strategy_stage_timings(started_at_utc DESC);
+
+CREATE INDEX IF NOT EXISTS ix_btc_up_down_5m_strategy_stage_timings_cycle
+ON btc_up_down_5m_strategy_stage_timings(cycle_id, started_at_utc);
+
+CREATE INDEX IF NOT EXISTS ix_btc_up_down_5m_strategy_stage_timings_stage
+ON btc_up_down_5m_strategy_stage_timings(stage_name, started_at_utc DESC);
 
 CREATE TABLE IF NOT EXISTS btc_up_down_5m_odds_ticks (
     id uuid PRIMARY KEY,

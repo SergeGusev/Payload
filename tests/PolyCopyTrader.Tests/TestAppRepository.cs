@@ -122,6 +122,8 @@ internal sealed class TestAppRepository : IAppRepository
 
     public List<BtcUpDown5mResultStreakDiagnostic> BtcUpDown5mResultStreakDiagnostics { get; } = [];
 
+    public List<BtcUpDown5mStrategyStageTiming> BtcUpDown5mStrategyStageTimings { get; } = [];
+
     public List<CryptoUpDown5mOddsTick> CryptoUpDown5mOddsTicks { get; } = [];
 
     public List<CryptoUpDown5mDiffSnapshot> CryptoUpDown5mDiffSnapshots { get; } = [];
@@ -2294,6 +2296,18 @@ internal sealed class TestAppRepository : IAppRepository
     public Task AddPaperLiveShadowDiscrepancyAsync(PaperLiveShadowDiscrepancy discrepancy, CancellationToken cancellationToken = default)
     {
         PaperLiveShadowDiscrepancies.Add(discrepancy);
+        return Task.CompletedTask;
+    }
+
+    public Task AddBtcUpDown5mStrategyStageTimingAsync(
+        BtcUpDown5mStrategyStageTiming timing,
+        CancellationToken cancellationToken = default)
+    {
+        lock (sync)
+        {
+            BtcUpDown5mStrategyStageTimings.Add(timing);
+        }
+
         return Task.CompletedTask;
     }
 

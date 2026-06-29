@@ -1,3 +1,20 @@
+## Active Update 2026-06-29 BTC Strategy Stage Timing Instrumentation
+Goal: Add production timestamp breakdown for BTC/ETH/SOL Up/Down strategy processing delays and explain why not to use one raw thread per strategy.
+Status: Completed
+Done:
+- Added persisted `BtcUpDown5mStrategyStageTiming` diagnostics and PostgreSQL table `btc_up_down_5m_strategy_stage_timings` keyed by `cycle_id`, `cycle_kind`, `flow_name`, and `stage_name`.
+- Instrumented `BtcUpDown5mPaperStrategyProcessor` around main, fast Diff, and previous-result flows, including due-run SQL, previous-result filter, bulk middle-reference skip, market warmup, deferred persistence prepare/flush, decision tasks, observe, maker high-water, PreOpen sell exits, and settlement.
+- Persist timing rows only for failed, slow (`>=1000ms`), or non-empty stages to avoid fast-cycle noise while keeping real bottlenecks visible.
+- Added no-op/test repository support, schema assertions, README documentation, and a ready SQL query for recent stage timelines in Europe/Sofia time.
+- Explained that a thread per strategy would multiply concurrent CLOB/Gamma/DB/risk work and create exposure/persistence races; the safer architecture is bounded fast lanes/queues with shared caches after measuring the actual bottleneck.
+Verification:
+- `dotnet build src\PolyCopyTrader.Service\PolyCopyTrader.Service.csproj --no-restore` passed with existing nullable warnings.
+- `dotnet test tests\PolyCopyTrader.Tests\PolyCopyTrader.Tests.csproj --no-restore --filter "PostgresSchema_ContainsRequiredTables|NoOpRepository_IsSafeWhenDatabaseIsNotConfigured"` passed 2/2.
+- Full test project compiled but still has the known stale FAK/catalog failures documented by the previous 0.99 FAK work: 694 passed, 57 failed.
+Next: Use `btc_up_down_5m_strategy_stage_timings` on the running service to identify whether delays come from SQL selection, warmup, decision tasks, persistence flush, observe, or settlement before building an effective-Live fast lane.
+Notes: No live order placement, DB production writes, service restart, or cancel action was performed.
+Blockers: Full solution build remains unsuitable while Dashboard/Visual Studio lock WPF output DLLs; broad processor tests still contain stale expectations from earlier FAK/catalog changes.
+
 ## Active Update 2026-06-29 SOL Down 90 Processing Timestamp Breakdown
 Goal: Provide detailed processing timestamps for delayed `SOL Up or Down 5m Down 90 bps Reference Average Premarket` skips.
 Status: Completed
