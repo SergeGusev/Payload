@@ -136,3 +136,10 @@ npm install -g @openai/codex
 
 Result:
 Ran the requested global npm install. The first shell command timed out after package contents were installed; a retry failed with `EBUSY` because this active Codex session is running from the same global `@openai/codex` package and Windows has the native `codex.exe` locked. Verified `npm list -g @openai/codex --depth=0` reports `@openai/codex@0.142.4`, and verified the `codex`, `codex.cmd`, and `codex.ps1` global shims exist and are discoverable on PATH. No project source code was changed.
+
+## 2026-06-29T13:49:06.3089074Z
+Request:
+Я выложил последнюю версию, проверяй
+
+Result:
+Checked production PostgreSQL read-only and confirmed the service is running code commit `37c146a` with a fresh heartbeat; local `HEAD` was `be2dcb9`, but that newer commit only recorded Codex CLI install context. The production latency gate still failed: `3519` checked rows across `1757` strategies, `705` above 3 seconds, max delay `31.579s`. Stage timings showed the new blocker is synchronous exposure-cache work in the hot path: `fast_diff_due regular_due_entries.deferred_persistence_enqueue` took `39561ms`, `main_due` took `20794ms`, and `previous_result_due` took `17506ms`. Production has about `423735` `paper_positions`, and the cache was rebuilding/sorting the full list on every batch apply. Implemented a new patch: `ExposureSnapshotCache` now keeps a paper-position index and updates by key without full sort/rebuild, and BTC deferred entry persistence uses lazy `GetPaperPosition` lookups instead of building a full initial-position dictionary per due batch. Verification passed: focused exposure/BTC queue tests `6/6`, service build with `0` warnings/errors, and diff check with line-ending warnings only. No production DB writes, live orders, service restart, or cancel action was performed.

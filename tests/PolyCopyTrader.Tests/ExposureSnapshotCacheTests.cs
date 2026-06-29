@@ -83,6 +83,33 @@ public sealed class ExposureSnapshotCacheTests
         Assert.Contains(snapshot.PaperPositions, position => position is { AssetId: "asset-2", SizeShares: 30m });
     }
 
+    [Fact]
+    public async Task ApplyPaperPositions_UpdatesLargeInitializedSnapshotByKey()
+    {
+        var repository = new TestAppRepository();
+        for (var i = 0; i < 10_000; i++)
+        {
+            repository.PaperPositions.Add(PaperPosition(i + 1m, assetId: $"asset-{i}"));
+        }
+
+        var cache = new ExposureSnapshotCache(repository);
+        await cache.GetSnapshotAsync();
+
+        cache.ApplyPaperPositions([
+            PaperPosition(42m, assetId: "asset-9999"),
+            PaperPosition(7m, assetId: "asset-new")
+        ]);
+
+        var snapshot = await cache.GetSnapshotAsync();
+
+        Assert.Equal(10_001, snapshot.PaperPositions.Count);
+        Assert.Contains(snapshot.PaperPositions, position => position is { AssetId: "asset-9999", SizeShares: 42m });
+        Assert.Contains(snapshot.PaperPositions, position => position is { AssetId: "asset-new", SizeShares: 7m });
+        Assert.Single(snapshot.PaperPositions, position => position.AssetId == "asset-9999");
+        Assert.Equal(42m, cache.GetPaperPosition("0xleader", "asset-9999")?.SizeShares);
+        Assert.Equal(7m, cache.GetPaperPosition("0xleader", "asset-new")?.SizeShares);
+    }
+
     private static PaperOrder PaperOrder(PaperOrderStatus status)
     {
         var now = DateTimeOffset.UtcNow;

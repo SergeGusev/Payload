@@ -1,3 +1,22 @@
+## Active Update 2026-06-29 Exposure Snapshot Hot Path Lookup
+Goal: Reduce every BTC/ETH/SOL Up/Down strategy entry delay to no more than 3 seconds and verify the deployed service.
+Status: In Progress
+Done:
+- Checked the user's new deployment read-only through production PostgreSQL; service is running `37c146a` (`Trim previous result due hot path`) in Live mode with a fresh heartbeat.
+- The production latency gate still failed on post-start rows: `3519` checked rows across `1757` strategies, `705` above 3 seconds, max delay `31.579s`.
+- Worst fresh rows were in `btc-updown-5m-1782740400`: `btc_up_down_5m_binance_30s` and `btc_up_down_5m_less_30` due at `16:40:30` Europe/Sofia entered at about `16:41:01`, plus `16:40:00` market-open bursts up to about `5.394s`.
+- Stage timings isolated the blocker to synchronous exposure-cache work inside the "enqueue" stage: `fast_diff_due regular_due_entries.deferred_persistence_enqueue` took `39561ms`, `main_due` took `20794ms`, and `previous_result_due` took `17506ms`.
+- Confirmed production exposure snapshot size is the cause: `paper_positions` has about `423735` rows, while `open_paper_orders` has only `86`; the cache was rebuilding and sorting the full positions list on every hot-path batch apply.
+- Reworked `ExposureSnapshotCache` to keep a paper-position index by `(wallet, asset)` and update large initialized snapshots by key without `ToDictionary + OrderBy` over all positions on every batch.
+- Added `IExposureSnapshotCache.GetPaperPosition` and changed BTC deferred entry persistence preparation to lazy lookup only the positions actually filled in the current batch, avoiding full `423k` position dictionary construction in every due batch.
+Verification:
+- `dotnet test tests/PolyCopyTrader.Tests/PolyCopyTrader.Tests.csproj --no-restore --filter "FullyQualifiedName~ExposureSnapshotCacheTests|FullyQualifiedName~ProcessDiffCounterFastDueEntriesAsync_UsesExposureCacheForDeferredPaperPositions|FullyQualifiedName~ProcessAsync_QueuesDeferredPaperEntryPersistenceWhenQueueConfigured"` passed `6/6` with one existing nullable warning.
+- `dotnet build src/PolyCopyTrader.Service/PolyCopyTrader.Service.csproj --no-restore` passed with `0` warnings/errors.
+- `git diff --check` passed for the edited source/test files with line-ending warnings only.
+Next: Commit/push this patch, deploy the new service build, then rerun `scripts/check-strategy-entry-latency.ps1 -HostOverride 192.168.0.101 -ExpectedCommit <newCommit> -MaxDelaySeconds 3 -LookbackMinutes 30 -RequireSplitCycleKinds` on fresh post-deploy rows.
+Notes: Production checks were read-only. No production DB writes, live orders, service restart, or cancel action was performed by Codex. Existing unrelated dirty files and output folders were left untouched.
+Blockers: Final goal cannot be marked complete until this patch is deployed and a fresh production gate proves every checked strategy entry delay is <= 3 seconds.
+
 ## Active Update 2026-06-29 Codex CLI Global Install
 Goal: Install the OpenAI Codex CLI globally through npm.
 Status: Completed

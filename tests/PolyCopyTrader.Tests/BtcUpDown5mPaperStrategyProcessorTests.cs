@@ -15281,6 +15281,13 @@ public sealed class BtcUpDown5mPaperStrategyProcessorTests
                 DateTimeOffset.UtcNow));
         }
 
+        public PaperPosition? GetPaperPosition(string copiedTraderWallet, string assetId)
+        {
+            return appliedPaperPositions.FirstOrDefault(position =>
+                string.Equals(position.CopiedTraderWallet, copiedTraderWallet, StringComparison.OrdinalIgnoreCase) &&
+                string.Equals(position.AssetId, assetId, StringComparison.OrdinalIgnoreCase));
+        }
+
         public Task RefreshAsync(CancellationToken cancellationToken = default)
         {
             return Task.CompletedTask;

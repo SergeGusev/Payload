@@ -12,6 +12,8 @@ public interface IExposureSnapshotCache
 {
     Task<TradingExposureSnapshot> GetSnapshotAsync(CancellationToken cancellationToken = default);
 
+    PaperPosition? GetPaperPosition(string copiedTraderWallet, string assetId);
+
     Task RefreshAsync(CancellationToken cancellationToken = default);
 
     void ApplyPaperOrder(PaperOrder order);

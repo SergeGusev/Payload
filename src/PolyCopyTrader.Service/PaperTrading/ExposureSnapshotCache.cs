@@ -7,6 +7,7 @@ public sealed class ExposureSnapshotCache(IAppRepository repository) : IExposure
 {
     private readonly object updateSync = new();
     private readonly SemaphoreSlim refreshLock = new(1, 1);
+    private Dictionary<PaperPositionKey, int> paperPositionIndexes = [];
     private TradingExposureSnapshot? snapshot;
 
     public async Task<TradingExposureSnapshot> GetSnapshotAsync(CancellationToken cancellationToken = default)
@@ -19,6 +20,28 @@ public sealed class ExposureSnapshotCache(IAppRepository repository) : IExposure
         }
 
         return current ?? new TradingExposureSnapshot([], [], [], DateTimeOffset.MinValue);
+    }
+
+    public PaperPosition? GetPaperPosition(string copiedTraderWallet, string assetId)
+    {
+        lock (updateSync)
+        {
+            var current = Volatile.Read(ref snapshot);
+            if (current is null)
+            {
+                return null;
+            }
+
+            var key = PaperPositionKey.From(copiedTraderWallet, assetId);
+            if (!paperPositionIndexes.TryGetValue(key, out var index) ||
+                index < 0 ||
+                index >= current.PaperPositions.Count)
+            {
+                return null;
+            }
+
+            return current.PaperPositions[index];
+        }
     }
 
     public async Task RefreshAsync(CancellationToken cancellationToken = default)
@@ -42,6 +65,7 @@ public sealed class ExposureSnapshotCache(IAppRepository repository) : IExposure
                 DateTimeOffset.UtcNow);
             lock (updateSync)
             {
+                paperPositionIndexes = CreatePaperPositionIndexes(refreshedSnapshot.PaperPositions);
                 Volatile.Write(ref snapshot, refreshedSnapshot);
             }
         }
@@ -116,20 +140,41 @@ public sealed class ExposureSnapshotCache(IAppRepository repository) : IExposure
                 return;
             }
 
-            var positionsByKey = current.PaperPositions.ToDictionary(
-                position => PaperPositionKey.From(position.CopiedTraderWallet, position.AssetId));
+            var currentPositions = current.PaperPositions as PaperPosition[] ?? current.PaperPositions.ToArray();
+            if (paperPositionIndexes.Count == 0 && currentPositions.Length > 0)
+            {
+                paperPositionIndexes = CreatePaperPositionIndexes(currentPositions);
+            }
+
+            var updatesByKey = new Dictionary<PaperPositionKey, PaperPosition>(positions.Count);
             foreach (var position in positions)
             {
-                positionsByKey[PaperPositionKey.From(position.CopiedTraderWallet, position.AssetId)] = position;
+                updatesByKey[PaperPositionKey.From(position.CopiedTraderWallet, position.AssetId)] = position;
+            }
+
+            var newPositionCount = updatesByKey.Keys.Count(key => !paperPositionIndexes.ContainsKey(key));
+            var updatedPositions = new PaperPosition[currentPositions.Length + newPositionCount];
+            Array.Copy(currentPositions, updatedPositions, currentPositions.Length);
+
+            var nextIndex = currentPositions.Length;
+            foreach (var (key, position) in updatesByKey)
+            {
+                if (paperPositionIndexes.TryGetValue(key, out var index))
+                {
+                    updatedPositions[index] = position;
+                    continue;
+                }
+
+                paperPositionIndexes[key] = nextIndex;
+                updatedPositions[nextIndex] = position;
+                nextIndex++;
             }
 
             Volatile.Write(
                 ref snapshot,
                 current with
                 {
-                    PaperPositions = positionsByKey.Values
-                        .OrderByDescending(item => item.UpdatedAtUtc)
-                        .ToArray(),
+                    PaperPositions = updatedPositions,
                     LoadedAtUtc = DateTimeOffset.UtcNow
                 });
         }
@@ -177,6 +222,18 @@ public sealed class ExposureSnapshotCache(IAppRepository repository) : IExposure
             or LiveOrderStatus.Delayed
             or LiveOrderStatus.Unmatched
             or LiveOrderStatus.CancelRequested;
+    }
+
+    private static Dictionary<PaperPositionKey, int> CreatePaperPositionIndexes(IReadOnlyList<PaperPosition> positions)
+    {
+        var indexes = new Dictionary<PaperPositionKey, int>(positions.Count);
+        for (var i = 0; i < positions.Count; i++)
+        {
+            var position = positions[i];
+            indexes[PaperPositionKey.From(position.CopiedTraderWallet, position.AssetId)] = i;
+        }
+
+        return indexes;
     }
 
     private readonly record struct PaperPositionKey(string CopiedTraderWallet, string AssetId)
