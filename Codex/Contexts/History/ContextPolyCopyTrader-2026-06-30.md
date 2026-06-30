@@ -39,3 +39,10 @@ Request:
 
 Result:
 Checked production read-only. The service heartbeat was fresh (`Running`/`Live`, version `info=1.0.0+6a563792d489d578d1d5602c8bca887804a108a8`, heartbeat age about `44s`, no heartbeat error). Paper betting/order creation was active: corrected counts showed `101` Paper orders in the last `5m`, `320` in `15m`, and `704` in `60m`; latest Paper order was `2026-06-30T09:16:30.349208+03:00`. Actual Paper entries were timely: `97` actual `Entered` rows in the last `5m`, `0` over `3s`, max delay `1.866s`, latest actual entered row `2026-06-30T09:17:30.28261+03:00`. Live orders were not currently being created: corrected counts showed `0` Live orders in the last `5m`, `15m`, and `60m`; latest Live order in the last 24h was `2026-06-29T17:24:30.419033+03:00`. Two strategies had `live_stakes=true` and were enabled/not auto-paused: `eth_up_down_5m_up_bps_50_instant` and `sol_up_down_5m_down_bps_90_fak_premarket`. The broad latency script failed due to delayed skipped diagnostic rows, not actual Paper entries. No production DB writes, live orders, service restart, cancel action, source-code changes, build, or tests were performed.
+
+## 2026-06-30T06:26:18.0988561+00:00
+Request:
+Live ставки не идут, потому что не проходят условия?
+
+Result:
+Checked the two live-enabled production strategies read-only. Both were enabled, `live_stakes=true`, not auto-live-paused, and not manually paused. Neither produced an `Entered`/`Settled` run or Paper-shadow order in the last `60m`, so no Live order path/preflight was reached. There were no Live preflight rejections in the last 24h; the latest Live orders for both strategies were successful matched orders from `2026-06-29`. `eth_up_down_5m_up_bps_50_instant` skipped recent markets with `previous_result_not_ready_by_sla` because the previous market result was not ready inside the `1s` SLA. `sol_up_down_5m_down_bps_90_fak_premarket` skipped mostly with `reference_average_move_below_bps_threshold`; latest diagnostics showed about `7.89 bps` movement versus required `90 bps`. No production DB writes, live orders, service restart, cancel action, source-code changes, build, or tests were performed.

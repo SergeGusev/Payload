@@ -1,3 +1,16 @@
+## Active Update 2026-06-30 Live Conditions Check
+Goal: Determine whether Live orders are absent because live-enabled strategies are not passing entry conditions.
+Status: Completed
+Done:
+- Confirmed both live-enabled strategies are enabled, `live_stakes=true`, not auto-live-paused, and not manually paused: `eth_up_down_5m_up_bps_50_instant` and `sol_up_down_5m_down_bps_90_fak_premarket`.
+- Confirmed neither strategy produced an `Entered`/`Settled` run or Paper-shadow order in the last `60m`; therefore no Live order path/preflight was reached.
+- Confirmed no Live preflight rejections in the last 24h for those two strategies; their latest Live orders were successful matched orders from `2026-06-29`.
+- For `eth_up_down_5m_up_bps_50_instant`, all recent skips were `previous_result_not_ready_by_sla`; the latest diagnostic showed previous market `2026-06-30T06:20:00Z` was not ready within the `1s` SLA for entry due `2026-06-30T06:25:00Z`.
+- For `sol_up_down_5m_down_bps_90_fak_premarket`, recent skips were mostly `reference_average_move_below_bps_threshold`; the latest diagnostic showed the 20m SOL reference move was about `7.89 bps` versus required `90 bps`.
+Next: If Live should be more active, decide whether to change the ETH previous-result SLA behavior and/or lower/replace the SOL 90 bps premarket threshold.
+Notes: Production checks were read-only SELECT queries. No production DB writes, live orders, service restart, cancel action, source-code changes, build, or tests were performed. Existing unrelated dirty files were left untouched.
+Blockers: None.
+
 ## Active Update 2026-06-30 Current Betting Check
 Goal: Check whether production betting/order creation is currently active.
 Status: Completed
