@@ -32,3 +32,10 @@ Request:
 
 Result:
 Explained how to verify Windows sleep/hibernate using Event Viewer and PowerShell on the server. The recommended check is to inspect System log events around `2026-06-30 00:18` and `08:41` Europe/Sofia for `Kernel-Power` sleep/resume events (`42`, `107`), `Power-Troubleshooter` resume event (`1`), reboot/shutdown events (`Kernel-General` `12`/`13`, `EventLog` `6005`/`6006`), and crash/power-loss events (`Kernel-Power` `41`, `EventLog` `6008`). Also recommended `powercfg /lastwake` and optional sleep diagnostic reports. No production DB writes, live orders, service restart, cancel action, source-code changes, build, or tests were performed.
+
+## 2026-06-30T06:17:53.0036087+00:00
+Request:
+Сейчас ставки идут?
+
+Result:
+Checked production read-only. The service heartbeat was fresh (`Running`/`Live`, version `info=1.0.0+6a563792d489d578d1d5602c8bca887804a108a8`, heartbeat age about `44s`, no heartbeat error). Paper betting/order creation was active: corrected counts showed `101` Paper orders in the last `5m`, `320` in `15m`, and `704` in `60m`; latest Paper order was `2026-06-30T09:16:30.349208+03:00`. Actual Paper entries were timely: `97` actual `Entered` rows in the last `5m`, `0` over `3s`, max delay `1.866s`, latest actual entered row `2026-06-30T09:17:30.28261+03:00`. Live orders were not currently being created: corrected counts showed `0` Live orders in the last `5m`, `15m`, and `60m`; latest Live order in the last 24h was `2026-06-29T17:24:30.419033+03:00`. Two strategies had `live_stakes=true` and were enabled/not auto-paused: `eth_up_down_5m_up_bps_50_instant` and `sol_up_down_5m_down_bps_90_fak_premarket`. The broad latency script failed due to delayed skipped diagnostic rows, not actual Paper entries. No production DB writes, live orders, service restart, cancel action, source-code changes, build, or tests were performed.

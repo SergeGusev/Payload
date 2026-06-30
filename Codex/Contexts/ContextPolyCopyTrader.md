@@ -1,3 +1,17 @@
+## Active Update 2026-06-30 Current Betting Check
+Goal: Check whether production betting/order creation is currently active.
+Status: Completed
+Done:
+- Confirmed production service heartbeat is fresh: `Running`/`Live`, version `info=1.0.0+6a563792d489d578d1d5602c8bca887804a108a8`, heartbeat age about `44s`, no heartbeat `last_error`.
+- Confirmed Paper orders are actively being created: corrected read-only count showed `101` Paper orders in the last `5m`, `320` in `15m`, and `704` in `60m`; latest Paper order was `2026-06-30T09:16:30.349208+03:00`.
+- Confirmed actual Paper entries are timely: `97` actual `Entered` rows in the last `5m`, `0` over `3s`, max delay `1.866s`, latest actual entered row `2026-06-30T09:17:30.28261+03:00`.
+- Confirmed Live orders are not currently being created: corrected read-only count showed `0` Live orders in the last `5m`, `15m`, and `60m`; latest Live order in the last 24h was `2026-06-29T17:24:30.419033+03:00`.
+- Confirmed two strategies currently have `live_stakes=true` and are enabled/not auto-paused: `eth_up_down_5m_up_bps_50_instant` and `sol_up_down_5m_down_bps_90_fak_premarket`.
+- Noted the broad 5-minute latency script failed because `396` skipped diagnostic rows exceeded `3s`, mostly around `3.4..3.6s` for missing previous result events; this did not affect actual Paper entries in the checked window.
+Next: Continue monitoring Live separately if a live-enabled strategy should be producing live orders now.
+Notes: Production checks were read-only SELECT queries plus the existing latency script. No production DB writes, live orders, service restart, cancel action, source-code changes, build, or tests were performed. Existing unrelated dirty files were left untouched.
+Blockers: None.
+
 ## Active Update 2026-06-30 Windows Sleep Check Guidance
 Goal: Explain how to verify whether Windows entered sleep/hibernate during the overnight service gap.
 Status: Completed
