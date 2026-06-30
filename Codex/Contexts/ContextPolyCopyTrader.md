@@ -1,3 +1,15 @@
+## Active Update 2026-06-30 ASUS Removal Command Sequencing
+Goal: Correct the execution order for ASUS SCI removal and post-reboot verification.
+Status: Completed
+Done:
+- Reviewed the user-provided PowerShell block for exporting and deleting `oem61.inf`/`oem47.inf`, stopping ASUS SCI services, rebooting, and verifying the result.
+- Clarified that the block should not be run as one continuous paste because `Restart-Computer` terminates the session, so verification commands below it will not run in the same session.
+- Reframed the procedure into two phases: run removal/export/disable/delete as Administrator, reboot, then run verification after signing back into Windows.
+- Confirmed the command targets remain `oem61.inf` and `oem47.inf` plus the six ASUS SCI services; unrelated ASUS/Realtek/firmware packages remain out of scope.
+Next: User should run the first phase, reboot, then paste the post-reboot verification output.
+Notes: Guidance-only turn. No production DB writes, live orders, service restart, cancel action, source-code changes, build, or tests were performed.
+Blockers: Need server-side administrator execution and verification output.
+
 ## Active Update 2026-06-30 ASUS SCI Driver Packages Identified
 Goal: Interpret server discovery output and choose the exact ASUS packages to remove.
 Status: Completed

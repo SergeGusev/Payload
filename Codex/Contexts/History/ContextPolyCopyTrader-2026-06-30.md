@@ -88,3 +88,10 @@ User attached pasted server output after applying no-sleep power settings and di
 
 Result:
 Confirmed the no-sleep AC power settings were applied and identified the exact ASUS System Control Interface removal targets. The running ASUS services under the relevant DriverStore path are `AsusAppService`, `ASUSOptimization`, `ASUSSoftwareManager`, `ASUSSwitch`, `ASUSSystemAnalysis`, and `ASUSSystemDiagnosis`. The relevant published driver packages are `oem47.inf` and `oem61.inf`, both with `Original Name: asussci2.inf`; `oem61.inf` is version `3.1.66.0` and `oem47.inf` is version `3.1.64.0`. Recommended targeting only those two `asussci2.inf` packages and leaving unrelated ASUS touchpad/display/audio/firmware/Realtek extension packages untouched. Provided the next admin removal and post-reboot verification commands. No production DB writes, live orders, service restart, cancel action, source-code changes, build, or tests were performed.
+
+## 2026-06-30T08:54:35.4545894+00:00
+Request:
+User pasted the full PowerShell block for exporting/removing `oem61.inf` and `oem47.inf`, stopping ASUS SCI services, running `Restart-Computer`, and then running post-reboot verification commands.
+
+Result:
+Clarified that the pasted commands should not be run as one continuous block because `Restart-Computer` ends the current session and the verification commands below it will not run after reboot. Reframed the process into two phases: first run the administrator removal/export/disable/delete block and reboot; then, after signing back into Windows, run the verification block and paste the output. No production DB writes, live orders, service restart, cancel action, source-code changes, build, or tests were performed.
