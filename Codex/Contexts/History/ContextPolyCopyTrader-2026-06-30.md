@@ -102,3 +102,10 @@ User attached pasted post-reboot verification output for ASUS services, `pnputil
 
 Result:
 Verified that ASUS SCI/Optimization removal appears successful: filtered `pnputil` output no longer shows `asussci2.inf` or ASUS Optimization, and the previous ASUS SCI services are gone. Only `AsusPTPService` remains, from separate `asusptpfilter.inf`, so it was left alone. AC sleep settings are now protected (`Sleep after=0`, `System unattended sleep timeout=0`, `Hibernate after=0`, `Allow Standby States=0`) and `powercfg /requests` has no active blockers. A read-only TCP check confirmed PostgreSQL is reachable at `192.168.0.101:5432`, but the existing read-only heartbeat/latency script showed `PolyCopyTrader.Service` heartbeat stale at about `655s` with the old `started_at_utc=2026-06-30T00:11:07.231916+03`, indicating the Windows service likely did not restart or is not writing heartbeats after the reboot. Provided server-side commands to check/start `PolyCopyTrader.Service` and then rerun verification. No production DB writes, live orders, cancel action, source-code changes, build, or tests were performed.
+
+## 2026-06-30T09:13:31.4252514+00:00
+Request:
+Проверь, в порядке ли сервер
+
+Result:
+Checked production externally after ASUS removal and reboot. PostgreSQL TCP connectivity to `192.168.0.101:5432` succeeded. The existing read-only latency/heartbeat script reported a fresh `PolyCopyTrader.Service` heartbeat: `Running`/`Live`, version `info=1.0.0+6a563792d489d578d1d5602c8bca887804a108a8`, heartbeat age about `45s`, and `started_at_utc=2026-06-30T12:10:22.860602+03:00`, confirming the service restarted after the earlier stale heartbeat state. The checked entry window had `20` entry rows across `17` strategies, `0` over `3s`, and the script passed. Some observe-stage timings were slow, but entry SLA passed in the checked window. No production DB writes, live orders, service restart, cancel action, source-code changes, build, or tests were performed.

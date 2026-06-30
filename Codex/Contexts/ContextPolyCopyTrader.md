@@ -1,3 +1,17 @@
+## Active Update 2026-06-30 Server Post ASUS Removal Health Check
+Goal: Check whether the production server, PostgreSQL, and PolyCopyTrader service are healthy after ASUS removal and reboot.
+Status: Completed
+Done:
+- Confirmed the repository was up to date and reviewed project context before checking production.
+- Confirmed PostgreSQL TCP connectivity from this machine to `192.168.0.101:5432` succeeded.
+- Ran the existing read-only latency/heartbeat script against `192.168.0.101`; the service heartbeat is fresh: `Running`/`Live`, version `info=1.0.0+6a563792d489d578d1d5602c8bca887804a108a8`, heartbeat age about `45s`.
+- Confirmed `PolyCopyTrader.Service` has restarted after the earlier stale-heartbeat state: `started_at_utc=2026-06-30T12:10:22.860602+03:00`.
+- Confirmed the checked entry window had `20` entry rows across `17` strategies, `0` over `3s`, and the latency script passed.
+- Noted stage timings still show some slow observe stages, but the entry SLA passed in the checked window.
+Next: Continue normal monitoring; if the service stops again after reboot, inspect Windows Service startup type/event log.
+Notes: Production checks were read-only TCP/SELECT via the existing latency script. No production DB writes, live orders, service restart, cancel action, source-code changes, build, or tests were performed.
+Blockers: None.
+
 ## Active Update 2026-06-30 ASUS Removal Verified Service Heartbeat Stale
 Goal: Verify post-reboot ASUS removal and identify any remaining production service issue.
 Status: Completed
