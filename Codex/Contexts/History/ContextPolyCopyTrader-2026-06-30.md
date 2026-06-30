@@ -53,3 +53,10 @@ Request:
 
 Result:
 Provided server-side diagnostic commands to investigate Windows sleep/suspend: System log event queries around `2026-06-30 00:00..09:00` for sleep/resume/reboot/crash providers and event IDs, `powercfg /lastwake`, `/a`, `/requests`, `/waketimers`, full power plan export, and network adapter power-management checks. Listed settings to inspect: Power Options sleep/hibernate timers, hybrid sleep, wake timers, unattended sleep timeout, PCI Express link state power management, USB selective suspend, network adapter "Allow the computer to turn off this device", and energy-saving Ethernet options. No production DB writes, live orders, service restart, cancel action, source-code changes, build, or tests were performed.
+
+## 2026-06-30T06:42:42.2456446+00:00
+Request:
+User pasted the server output for hostname, current time, OS boot time, `powercfg /lastwake`, `powercfg /a`, `powercfg /requests`, and `powercfg /waketimers`.
+
+Result:
+Interpreted the output as strong evidence for sleep/suspend/Modern Standby rather than a morning reboot. The server `DESKTOP-QO1ON6E` reported current time `2026-06-30 09:40:10` and `LastBootUpTime` `2026-06-29 20:12:38`, so it did not reboot around the `08:41` production activity resume. `powercfg /a` showed `Standby (S0 Low Power Idle) Network Connected`, Hibernate, and Fast Startup available, while classic `S3` sleep and Hybrid Sleep are unavailable. `powercfg /lastwake` showed one wake but no source, and `powercfg /requests` plus `/waketimers` showed no current blockers/timers. Directed the next check to the Windows System event log around the known overnight gap and the current power plan sleep settings. No production DB writes, live orders, service restart, cancel action, source-code changes, build, or tests were performed.

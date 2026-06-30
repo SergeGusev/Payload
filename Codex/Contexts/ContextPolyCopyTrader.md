@@ -1,3 +1,16 @@
+## Active Update 2026-06-30 Server Powercfg Initial Output
+Goal: Interpret initial Windows power diagnostics for the overnight outage.
+Status: Completed
+Done:
+- Interpreted server output showing hostname `DESKTOP-QO1ON6E`, current time `2026-06-30 09:40`, and OS boot time `2026-06-29 20:12:38`, confirming there was no morning reboot around the `08:41` service resume.
+- Noted the machine supports `Standby (S0 Low Power Idle) Network Connected`, Hibernate, and Fast Startup; classic `S3` sleep and Hybrid Sleep are unavailable.
+- Noted `powercfg /lastwake` recorded one wake but no wake source, which is useful evidence but not enough to identify the trigger.
+- Noted `powercfg /requests` and `/waketimers` currently show no active sleep blockers or wake timers, so Windows is not currently being kept awake by an application/service request.
+- Directed the next check to the Windows System event log around the known `00:18..08:41` activity gap and to the current power plan sleep settings.
+Next: Review event IDs `Kernel-Power 42/107`, `Power-Troubleshooter 1`, `Kernel-General 12/13`, and `EventLog 6005/6006/6008`.
+Notes: Guidance-only turn. No production DB writes, live orders, service restart, cancel action, source-code changes, build, or tests were performed.
+Blockers: Need server-side event log output to confirm the exact sleep/resume event and trigger.
+
 ## Active Update 2026-06-30 Server Sleep Investigation Commands
 Goal: Provide commands and settings to investigate why the Windows server entered sleep or suspended overnight.
 Status: Completed
