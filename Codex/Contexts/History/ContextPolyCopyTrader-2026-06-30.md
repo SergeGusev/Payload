@@ -116,3 +116,10 @@ Request:
 
 Result:
 Deleted production strategy `SOL Up or Down 5m 1 Diff Up Progress` (`sol_up_down_5m_diff_1_up_progress`, id `b7c50005-0000-4000-8158-000000000001`) and its related history after first disabling/pausing the row. Deleted counts were `strategies=1`, `strategy_market_paper_runs=478`, `paper_orders=170`, `paper_fills=170`, `paper_positions=170`, `paper_position_settlements=170`, `signals=170`, and zero rows in dry-run/live/shadow/diff-shift-state tables. A follow-up read-only production verification returned zero leftover rows for the target strategy id/code and wallet. Updated runtime strategy generation, PostgreSQL seeding, strategy/category tests, README, active context, and history so the retired strategy is not recreated. Verification: service build passed, targeted strategy/category tests passed, and `git diff --check` passed. Production heartbeat was fresh after deletion, but the broad latency script failed in the sampled window due to unrelated >3s entry delays on other strategies.
+
+## 2026-06-30T13:02:56.9912043+00:00
+Request:
+Что означает поле Filled в Live stakes ?
+
+Result:
+Reviewed Dashboard bindings and repository aggregation for strategy rows. Clarified that `Filled` without the `Live` prefix is a Paper order count for statuses `Filled`, `PartiallyFilled`, or `PartiallyFilledExpired`, while the Live-specific metric is `Live filled`, counted from `live_orders` rows where `filled_size > 0`. No production DB writes, live orders, service restart, cancel action, source-code behavior changes, build, or tests were performed.

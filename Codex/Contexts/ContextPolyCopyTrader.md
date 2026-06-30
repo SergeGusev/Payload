@@ -1,3 +1,14 @@
+## Active Update 2026-06-30 Dashboard Filled Field Clarified
+Goal: Clarify what the Dashboard `Filled`/`Live filled` fields mean in strategy rows.
+Status: Completed
+Done:
+- Traced the Dashboard bindings and repository aggregation for `Filled`, `Live filled`, `Live orders`, and `Live settles`.
+- Confirmed `Filled` without the `Live` prefix is the Paper order count with status `Filled`, `PartiallyFilled`, or `PartiallyFilledExpired`.
+- Confirmed `Live filled` is the Live order count where `live_orders.filled_size > 0`; it counts orders with any matched live quantity, including partial fills.
+Next: None.
+Notes: Read-only explanation task. No production DB writes, live orders, service restart, cancel action, source-code behavior changes, build, or tests were performed.
+Blockers: None.
+
 ## Active Update 2026-06-30 Retired SOL Diff Up Progress Strategy
 Goal: Delete `SOL Up or Down 5m 1 Diff Up Progress` and prevent it from being recreated.
 Status: Completed
