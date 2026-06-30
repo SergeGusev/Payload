@@ -1,3 +1,15 @@
+## Active Update 2026-06-30 Overnight Server Work Check Blocked
+Goal: Determine whether the production service and database worked overnight before the morning outage.
+Status: Blocked
+Done:
+- Re-initialized repository context and confirmed `master` was already up to date.
+- Rechecked `192.168.0.101:5432` after the user started a server reboot; the PostgreSQL TCP port remained unavailable through repeated polling from `2026-06-30 08:25` to `08:34` Europe/Sofia.
+- Confirmed the host itself was not reachable from this machine during the polling window: `ping=False`, earlier `ping` showed `Destination host unreachable`, and `arp -a` had no entry for `192.168.0.101`.
+- Could not query overnight rows because production PostgreSQL never became reachable during this turn.
+Next: When `192.168.0.101` is visible again, run a read-only overnight activity query over service heartbeat, strategy runs, stage cycles, Paper/Live orders, and API errors.
+Notes: No production DB writes, live orders, service restart, cancel action, source-code changes, build, or tests were performed. Existing unrelated dirty files were left untouched.
+Blockers: The production host is not reachable from this machine, so the database cannot be queried yet.
+
 ## Active Update 2026-06-30 Server Database Availability Check
 Goal: Check whether the production PostgreSQL database server is reachable from this machine.
 Status: Completed
