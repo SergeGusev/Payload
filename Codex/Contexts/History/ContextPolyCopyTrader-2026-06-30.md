@@ -95,3 +95,10 @@ User pasted the full PowerShell block for exporting/removing `oem61.inf` and `oe
 
 Result:
 Clarified that the pasted commands should not be run as one continuous block because `Restart-Computer` ends the current session and the verification commands below it will not run after reboot. Reframed the process into two phases: first run the administrator removal/export/disable/delete block and reboot; then, after signing back into Windows, run the verification block and paste the output. No production DB writes, live orders, service restart, cancel action, source-code changes, build, or tests were performed.
+
+## 2026-06-30T09:01:17.4261081+00:00
+Request:
+User attached pasted post-reboot verification output for ASUS services, `pnputil` driver search, `powercfg /qh SCHEME_CURRENT SUB_SLEEP`, and `powercfg /requests`.
+
+Result:
+Verified that ASUS SCI/Optimization removal appears successful: filtered `pnputil` output no longer shows `asussci2.inf` or ASUS Optimization, and the previous ASUS SCI services are gone. Only `AsusPTPService` remains, from separate `asusptpfilter.inf`, so it was left alone. AC sleep settings are now protected (`Sleep after=0`, `System unattended sleep timeout=0`, `Hibernate after=0`, `Allow Standby States=0`) and `powercfg /requests` has no active blockers. A read-only TCP check confirmed PostgreSQL is reachable at `192.168.0.101:5432`, but the existing read-only heartbeat/latency script showed `PolyCopyTrader.Service` heartbeat stale at about `655s` with the old `started_at_utc=2026-06-30T00:11:07.231916+03`, indicating the Windows service likely did not restart or is not writing heartbeats after the reboot. Provided server-side commands to check/start `PolyCopyTrader.Service` and then rerun verification. No production DB writes, live orders, cancel action, source-code changes, build, or tests were performed.

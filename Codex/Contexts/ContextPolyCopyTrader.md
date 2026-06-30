@@ -1,3 +1,17 @@
+## Active Update 2026-06-30 ASUS Removal Verified Service Heartbeat Stale
+Goal: Verify post-reboot ASUS removal and identify any remaining production service issue.
+Status: Completed
+Done:
+- Reviewed post-reboot server verification output: `asussci2.inf`/ASUS Optimization no longer appears in the `pnputil` filtered output, and the ASUS SCI services are gone.
+- Confirmed only `AsusPTPService` remains, running from `asusptpfilter.inf`; this is a separate touchpad driver package and not the previously identified sleep caller.
+- Confirmed current AC sleep protection settings are applied: `STANDBYIDLE=0`, `UNATTENDSLEEP=0`, `HIBERNATEIDLE=0`, and `ALLOWSTANDBY=0`.
+- Noted DC settings still allow some sleep behavior (`UNATTENDSLEEP=120s`, `ALLOWSTANDBY=1`), so recommended applying the same no-sleep settings to DC if the machine can switch to battery/UPS mode.
+- Ran a read-only production TCP probe from this machine and confirmed PostgreSQL is reachable on `192.168.0.101:5432`.
+- Ran the existing read-only latency/heartbeat script against `192.168.0.101`; it failed only because `PolyCopyTrader.Service` heartbeat was stale (`~655s`) and still showed old `started_at_utc=2026-06-30T00:11:07.231916+03`, indicating the Windows service likely did not restart or is not writing heartbeats after the reboot.
+Next: Check and start `PolyCopyTrader.Service` on the server, then rerun heartbeat verification.
+Notes: Production checks were read-only TCP/SELECT via the existing latency script. No production DB writes, live orders, service restart from this machine, cancel action, source-code changes, build, or tests were performed.
+Blockers: Need server-side administrator check/start of the Windows service and fresh heartbeat verification.
+
 ## Active Update 2026-06-30 ASUS Removal Command Sequencing
 Goal: Correct the execution order for ASUS SCI removal and post-reboot verification.
 Status: Completed
