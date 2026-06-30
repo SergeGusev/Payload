@@ -81,3 +81,10 @@ Request:
 
 Result:
 Provided a safe administrator procedure to remove ASUS Optimization/System Control Interface from the server. The guidance avoids manually deleting files from `C:\Windows\System32\DriverStore`; instead it first enforces no-sleep power settings, discovers ASUS services/tasks/packages, disables ASUS Optimization-related services, exports the matching driver package for rollback, deletes only the matching `asussci2.inf` published driver package through `pnputil`, reboots, and verifies that ASUS Optimization is gone and sleep remains disabled. Warned that ASUS-specific hotkeys/power/fan/keyboard functions may be affected, which is usually acceptable for a 24/7 server if those features are not needed. No production DB writes, live orders, service restart, cancel action, source-code changes, build, or tests were performed.
+
+## 2026-06-30T08:46:28.2497262+00:00
+Request:
+User attached pasted server output after applying no-sleep power settings and discovering ASUS services plus matching driver packages.
+
+Result:
+Confirmed the no-sleep AC power settings were applied and identified the exact ASUS System Control Interface removal targets. The running ASUS services under the relevant DriverStore path are `AsusAppService`, `ASUSOptimization`, `ASUSSoftwareManager`, `ASUSSwitch`, `ASUSSystemAnalysis`, and `ASUSSystemDiagnosis`. The relevant published driver packages are `oem47.inf` and `oem61.inf`, both with `Original Name: asussci2.inf`; `oem61.inf` is version `3.1.66.0` and `oem47.inf` is version `3.1.64.0`. Recommended targeting only those two `asussci2.inf` packages and leaving unrelated ASUS touchpad/display/audio/firmware/Realtek extension packages untouched. Provided the next admin removal and post-reboot verification commands. No production DB writes, live orders, service restart, cancel action, source-code changes, build, or tests were performed.

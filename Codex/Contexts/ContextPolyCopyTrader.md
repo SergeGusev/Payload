@@ -1,3 +1,16 @@
+## Active Update 2026-06-30 ASUS SCI Driver Packages Identified
+Goal: Interpret server discovery output and choose the exact ASUS packages to remove.
+Status: Completed
+Done:
+- Confirmed the server applied the AC no-sleep power settings before ASUS removal.
+- Reviewed discovered ASUS services running from the `asussci2.inf_amd64_cfd6e6fcf484217d` DriverStore package: `AsusAppService`, `ASUSOptimization`, `ASUSSoftwareManager`, `ASUSSwitch`, `ASUSSystemAnalysis`, and `ASUSSystemDiagnosis`.
+- Identified the two installed ASUS System Control Interface packages matching `Original Name: asussci2.inf`: `oem47.inf` version `3.1.64.0` and `oem61.inf` version `3.1.66.0`.
+- Decided the removal should target only those two `asussci2.inf` published packages for now, not unrelated ASUS touchpad, display, audio, firmware, or Realtek extension packages.
+- Prepared the next server-side admin commands to export both packages for rollback, stop/disable the ASUS SCI services, delete `oem61.inf` and `oem47.inf` through `pnputil`, reboot, and verify.
+Next: User should run the targeted removal commands on the server and paste the output if deletion fails or services remain after reboot.
+Notes: Guidance-only turn. No production DB writes, live orders, service restart, cancel action, source-code changes, build, or tests were performed.
+Blockers: Need server-side administrator execution and post-reboot verification.
+
 ## Active Update 2026-06-30 ASUS Optimization Removal Plan
 Goal: Provide a safe Windows admin procedure to remove ASUS Optimization after it was identified as the sleep caller.
 Status: Completed
