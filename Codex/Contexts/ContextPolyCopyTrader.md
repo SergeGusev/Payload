@@ -1,3 +1,14 @@
+## Active Update 2026-06-30 Windows Sleep Check Guidance
+Goal: Explain how to verify whether Windows entered sleep/hibernate during the overnight service gap.
+Status: Completed
+Done:
+- Provided the Event Viewer and PowerShell checks to look for sleep/resume evidence around `2026-06-30 00:18` and `08:41` Europe/Sofia.
+- Identified the key event sources and IDs: `Microsoft-Windows-Kernel-Power` `42`/`107`, `Microsoft-Windows-Power-Troubleshooter` `1`, `Kernel-General` `12`/`13`, and `EventLog` `6005`/`6006`/`6008`.
+- Included `powercfg /lastwake`, optional sleep diagnostic reports, and the interpretation of sleep/resume vs reboot/crash evidence.
+Next: Run the checks directly on the server and compare event times to the DB gap.
+Notes: Guidance-only turn. No production DB writes, live orders, service restart, cancel action, source-code changes, build, or tests were performed.
+Blockers: None.
+
 ## Active Update 2026-06-30 Overnight Server Work Check
 Goal: Determine whether the production service and database worked overnight before the morning outage.
 Status: Completed
