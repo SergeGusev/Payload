@@ -74,3 +74,10 @@ User attached pasted server output for `powercfg /qh SCHEME_CURRENT SUB_SLEEP` a
 
 Result:
 Found the likely concrete sleep caller and hidden power setting. Hidden sleep settings show `System unattended sleep timeout` (`UNATTENDSLEEP`) set to `0x00000078` seconds (`120s`) on AC and DC. `Kernel-Power` event `187` properties identify the user-mode caller path as `...\Windows\System32\DriverStore\FileRepository\asussci2.inf_amd64_cfd6e6fcf484217d\ASUSOptimization\AsusOptimization.exe`, which called `SetSuspendState`/`SetSystemPowerState` at `2026-06-30 00:18:39`. This connects the sequence: Modern Standby entered at `00:16:05` due to idle timeout, then ASUS Optimization triggered sleep roughly two minutes later. Recommended disabling unattended sleep on AC and making the server power scheme reject standby for 24/7 operation. No production DB writes, live orders, service restart, cancel action, source-code changes, build, or tests were performed.
+
+## 2026-06-30T07:30:12.6939245+00:00
+Request:
+Давай вообще удалим ASUS Optimization
+
+Result:
+Provided a safe administrator procedure to remove ASUS Optimization/System Control Interface from the server. The guidance avoids manually deleting files from `C:\Windows\System32\DriverStore`; instead it first enforces no-sleep power settings, discovers ASUS services/tasks/packages, disables ASUS Optimization-related services, exports the matching driver package for rollback, deletes only the matching `asussci2.inf` published driver package through `pnputil`, reboots, and verifies that ASUS Optimization is gone and sleep remains disabled. Warned that ASUS-specific hotkeys/power/fan/keyboard functions may be affected, which is usually acceptable for a 24/7 server if those features are not needed. No production DB writes, live orders, service restart, cancel action, source-code changes, build, or tests were performed.

@@ -1,3 +1,15 @@
+## Active Update 2026-06-30 ASUS Optimization Removal Plan
+Goal: Provide a safe Windows admin procedure to remove ASUS Optimization after it was identified as the sleep caller.
+Status: Completed
+Done:
+- Advised against manually deleting `AsusOptimization.exe` from `C:\Windows\System32\DriverStore` because it belongs to an installed driver package.
+- Provided a staged removal approach for the server: first enforce no-sleep power settings, then discover ASUS services/tasks/packages, stop and disable ASUS Optimization-related services, export the matching driver package for rollback, remove the matching `asussci2.inf` published package with `pnputil`, reboot, and verify.
+- Included a guard that the driver package should be deleted only if it clearly matches `asussci2.inf`/ASUS System Control Interface, avoiding broad wildcard deletion of unrelated ASUS drivers.
+- Noted that removing ASUS Optimization/System Control Interface can affect ASUS-specific hotkeys, power/fan/keyboard functions, but this is acceptable for a 24/7 server if those features are not needed.
+Next: User should run the admin PowerShell removal procedure on the server and paste the discovery/removal output if any command fails.
+Notes: Guidance-only turn. No production DB writes, live orders, service restart, cancel action, source-code changes, build, or tests were performed.
+Blockers: Need server-side administrator execution and post-reboot verification.
+
 ## Active Update 2026-06-30 ASUS Optimization Sleep Caller Found
 Goal: Identify the application or hidden power setting that caused the confirmed Windows sleep outage.
 Status: Completed
