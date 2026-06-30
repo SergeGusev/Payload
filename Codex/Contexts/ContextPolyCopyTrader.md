@@ -1,3 +1,19 @@
+## Active Update 2026-06-30 Overnight Server Work Check
+Goal: Determine whether the production service and database worked overnight before the morning outage.
+Status: Completed
+Done:
+- Confirmed `192.168.0.101:5432` became reachable again from this machine; `ping` still timed out, but ARP had a dynamic entry and TCP/PostgreSQL worked.
+- Confirmed production heartbeat is fresh: `Running`/`Live`, version `info=1.0.0+6a563792d489d578d1d5602c8bca887804a108a8`, last heartbeat age about `38s` during the check, and no heartbeat `last_error`.
+- Confirmed the service process does not look newly restarted: `started_at_utc` remained `2026-06-30T00:11:07.231916+03:00`.
+- Found a major overnight activity gap: `stage_timings` stopped at `2026-06-30T00:18:36+03:00` and resumed at `2026-06-30T08:41:18+03:00`; `paper_run_updates` stopped at `00:17:05+03` and resumed at `08:41:19+03`; `paper_orders` stopped at `00:18:32+03` and resumed at `08:41:23+03`.
+- Confirmed hourly activity was present in `00:00` and `08:00` local hours but zero for every local hour `01:00` through `07:00`.
+- Confirmed post-resume API errors reported stale Binance prices with age around `30180s`, matching the 8h23m gap, plus WebSocket close/cancel messages after resume.
+- Confirmed the first resumed stage timing rows had durations around `30,164,000ms`, indicating work started before the gap and completed only after the machine/process resumed.
+- Confirmed current post-resume entry latency is healthy in a fresh 3-minute window: `20` checked entry rows, `0` over `3s`.
+Next: Check Windows power/sleep/hibernate/network-adapter settings and Event Viewer around `2026-06-30 00:18` and `08:41` Europe/Sofia; the DB evidence points to host/process suspension or machine sleep/freeze, not a normal PostgreSQL-only outage.
+Notes: Production checks were read-only SELECT queries plus the existing latency script. No production DB writes, live orders, service restart, cancel action, source-code changes, build, or tests were performed. Existing unrelated dirty files were left untouched.
+Blockers: None.
+
 ## Active Update 2026-06-30 Overnight Server Work Check Blocked
 Goal: Determine whether the production service and database worked overnight before the morning outage.
 Status: Blocked

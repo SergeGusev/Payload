@@ -18,3 +18,10 @@ Request:
 
 Result:
 Attempted to check whether the production service/database worked overnight, but the production host never became reachable during the turn. After context initialization, repeated TCP polling of `192.168.0.101:5432` from `2026-06-30 08:25` to `08:34` Europe/Sofia always timed out. `ping` was false/unreachable and `arp -a` had no entry for `192.168.0.101`, so the current evidence points to host/network unreachability rather than only PostgreSQL being down. No overnight database rows could be queried. No production DB writes, live orders, service restart, cancel action, source-code changes, build, or tests were performed.
+
+## 2026-06-30T05:48:52.9207769+00:00
+Request:
+Проверь сейчас
+
+Result:
+Rechecked production after the server became reachable. `192.168.0.101:5432` accepted TCP/PostgreSQL connections; `ping` still timed out, but ARP had a dynamic entry. Production heartbeat was fresh (`Running`/`Live`, `info=1.0.0+6a563792d489d578d1d5602c8bca887804a108a8`, no heartbeat error), while `started_at_utc` remained `2026-06-30T00:11:07.231916+03:00`, so the service process did not look newly restarted. Read-only DB evidence showed no overnight work from about `00:18` to `08:41` Europe/Sofia: stage timings stopped at `00:18:36` and resumed at `08:41:18`; paper run updates stopped at `00:17:05` and resumed at `08:41:19`; paper orders stopped at `00:18:32` and resumed at `08:41:23`. Hours `01:00` through `07:00` had zero stage rows, zero run updates, and zero orders. Post-resume errors showed stale Binance price ages around `30180s`, matching the gap, plus WebSocket close/cancel messages. A fresh 3-minute post-resume latency check passed with `20` entry rows and `0` over `3s`. No production DB writes, live orders, service restart, cancel action, source-code changes, build, or tests were performed.
