@@ -1,3 +1,17 @@
+## Active Update 2026-06-30 Confirmed Windows Low Power Sleep
+Goal: Confirm whether the overnight production outage was caused by Windows sleep and identify the next evidence to collect.
+Status: Completed
+Done:
+- Interpreted server System log events showing `Kernel-Power` event `42` at `2026-06-30 00:18:39` local with `Sleep Reason: Application API`.
+- Interpreted `Power-Troubleshooter` event `1` showing low-power sleep time `2026-06-29T21:18:39Z` and wake time `2026-06-30T05:41:18Z`, which converts to `2026-06-30 00:18:39..08:41:18` Europe/Sofia.
+- Matched the Windows sleep/wake interval to the production DB/service activity gap found earlier (`00:18..08:41` Europe/Sofia).
+- Interpreted the power plan output: active plan is `Balanced`; AC `Sleep after` is `0` seconds and AC `Hibernate after` is `0` seconds, so the outage was not caused by the normal idle sleep/hibernate timers.
+- Noted AC wake timers are enabled, but that setting wakes the machine and does not explain entering sleep.
+- Directed the next investigation to all System events around `00:16..00:20`, Task Scheduler history around `00:00..00:25`, and button/sleep-button power settings to find the `Application API` caller.
+Next: Review nearby System and Task Scheduler events and search scheduled tasks/actions that can call sleep/hibernate/shutdown APIs.
+Notes: Guidance-only turn. No production DB writes, live orders, service restart, cancel action, source-code changes, build, or tests were performed.
+Blockers: Need server-side event/task output to identify which application, task, policy, or user action requested sleep.
+
 ## Active Update 2026-06-30 Server Powercfg Initial Output
 Goal: Interpret initial Windows power diagnostics for the overnight outage.
 Status: Completed

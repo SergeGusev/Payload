@@ -60,3 +60,10 @@ User pasted the server output for hostname, current time, OS boot time, `powercf
 
 Result:
 Interpreted the output as strong evidence for sleep/suspend/Modern Standby rather than a morning reboot. The server `DESKTOP-QO1ON6E` reported current time `2026-06-30 09:40:10` and `LastBootUpTime` `2026-06-29 20:12:38`, so it did not reboot around the `08:41` production activity resume. `powercfg /a` showed `Standby (S0 Low Power Idle) Network Connected`, Hibernate, and Fast Startup available, while classic `S3` sleep and Hybrid Sleep are unavailable. `powercfg /lastwake` showed one wake but no source, and `powercfg /requests` plus `/waketimers` showed no current blockers/timers. Directed the next check to the Windows System event log around the known overnight gap and the current power plan sleep settings. No production DB writes, live orders, service restart, cancel action, source-code changes, build, or tests were performed.
+
+## 2026-06-30T06:51:14.5317399+00:00
+Request:
+User pasted the Windows System event output for `2026-06-30 00:00..09:00` and the `powercfg /getactivescheme` plus `powercfg /query SCHEME_CURRENT SUB_SLEEP` output.
+
+Result:
+Confirmed the production outage was caused by Windows entering a low-power sleep state. `Kernel-Power` event `42` recorded sleep at `2026-06-30 00:18:39` local with `Sleep Reason: Application API`, and `Power-Troubleshooter` event `1` recorded sleep time `2026-06-29T21:18:39Z` and wake time `2026-06-30T05:41:18Z`, i.e. `2026-06-30 00:18:39..08:41:18` Europe/Sofia. This matches the previously observed DB/service inactivity gap almost exactly. The active plan is `Balanced`; AC `Sleep after` and AC `Hibernate after` are both `0` seconds, so the normal idle timers did not cause the sleep. Directed the next investigation to nearby System events, Task Scheduler history, scheduled task actions, and power button/sleep-button settings to find the `Application API` caller. No production DB writes, live orders, service restart, cancel action, source-code changes, build, or tests were performed.
