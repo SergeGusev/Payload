@@ -1,3 +1,14 @@
+## Active Update 2026-06-30 Server Sleep Investigation Commands
+Goal: Provide commands and settings to investigate why the Windows server entered sleep or suspended overnight.
+Status: Completed
+Done:
+- Provided read-only PowerShell commands for the server to collect System log sleep/resume/reboot/crash events around `2026-06-30 00:00..09:00`.
+- Included `powercfg` checks for last wake source, available sleep states, active requests, wake timers, and current power plan settings.
+- Listed Windows settings to inspect: sleep/hibernate timers, hybrid sleep, wake timers, unattended sleep timeout, network adapter power saving, PCIe link state power management, USB selective suspend, and screen lock/display settings.
+Next: Review the command output from the server and decide which power/network setting to disable.
+Notes: Guidance-only turn. No production DB writes, live orders, service restart, cancel action, source-code changes, build, or tests were performed.
+Blockers: Need server-side command output to identify the actual sleep trigger.
+
 ## Active Update 2026-06-30 Live Conditions Check
 Goal: Determine whether Live orders are absent because live-enabled strategies are not passing entry conditions.
 Status: Completed

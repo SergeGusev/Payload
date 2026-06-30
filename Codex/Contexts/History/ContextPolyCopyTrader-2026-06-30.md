@@ -46,3 +46,10 @@ Live ставки не идут, потому что не проходят ус�
 
 Result:
 Checked the two live-enabled production strategies read-only. Both were enabled, `live_stakes=true`, not auto-live-paused, and not manually paused. Neither produced an `Entered`/`Settled` run or Paper-shadow order in the last `60m`, so no Live order path/preflight was reached. There were no Live preflight rejections in the last 24h; the latest Live orders for both strategies were successful matched orders from `2026-06-29`. `eth_up_down_5m_up_bps_50_instant` skipped recent markets with `previous_result_not_ready_by_sla` because the previous market result was not ready inside the `1s` SLA. `sol_up_down_5m_down_bps_90_fak_premarket` skipped mostly with `reference_average_move_below_bps_threshold`; latest diagnostics showed about `7.89 bps` movement versus required `90 bps`. No production DB writes, live orders, service restart, cancel action, source-code changes, build, or tests were performed.
+
+## 2026-06-30T06:29:04.2889060+00:00
+Request:
+Давай разбираться, почему сервер ушёл в Sleep. Давай команды для исполнения, я буду их выполнять. И скажи, какие настройки посмотреть
+
+Result:
+Provided server-side diagnostic commands to investigate Windows sleep/suspend: System log event queries around `2026-06-30 00:00..09:00` for sleep/resume/reboot/crash providers and event IDs, `powercfg /lastwake`, `/a`, `/requests`, `/waketimers`, full power plan export, and network adapter power-management checks. Listed settings to inspect: Power Options sleep/hibernate timers, hybrid sleep, wake timers, unattended sleep timeout, PCI Express link state power management, USB selective suspend, network adapter "Allow the computer to turn off this device", and energy-saving Ethernet options. No production DB writes, live orders, service restart, cancel action, source-code changes, build, or tests were performed.
