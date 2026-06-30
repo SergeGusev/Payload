@@ -911,8 +911,8 @@ public sealed class BtcUpDown5mPaperStrategyProcessorTests
     [Fact]
     public void StrategyIds_IncludeEthAndSolBinanceBpsVariants()
     {
-        Assert.Equal(2418, StrategyIds.CryptoUpDown5mVariants.Count);
-        Assert.Equal(3949, StrategyIds.UpDown5mStrategyVariants.Count);
+        Assert.Equal(2417, StrategyIds.CryptoUpDown5mVariants.Count);
+        Assert.Equal(3948, StrategyIds.UpDown5mStrategyVariants.Count);
         Assert.Equal(
             StrategyIds.UpDown5mStrategyVariants.Count,
             StrategyIds.UpDown5mStrategyVariants.Select(variant => variant.Id).Distinct().Count());
@@ -921,7 +921,7 @@ public sealed class BtcUpDown5mPaperStrategyProcessorTests
             StrategyIds.UpDown5mStrategyVariants.Select(variant => variant.Code).Distinct().Count());
         Assert.Equal(1241, StrategyIds.CryptoUpDown5mVariants.Count(variant =>
             string.Equals(variant.ReferenceAssetSymbol, "ETH", StringComparison.OrdinalIgnoreCase)));
-        Assert.Equal(1177, StrategyIds.CryptoUpDown5mVariants.Count(variant =>
+        Assert.Equal(1176, StrategyIds.CryptoUpDown5mVariants.Count(variant =>
             string.Equals(variant.ReferenceAssetSymbol, "SOL", StringComparison.OrdinalIgnoreCase)));
         Assert.Equal(100, StrategyIds.CryptoUpDown5mVariants.Count(variant =>
             variant.Behavior == BtcUpDown5mStrategyBehavior.CryptoBinanceStartRelativeBpsThreshold));
@@ -971,7 +971,7 @@ public sealed class BtcUpDown5mPaperStrategyProcessorTests
             variant.Behavior == BtcUpDown5mStrategyBehavior.AdjustedDiffCounterTrend));
         Assert.Equal(288, StrategyIds.CryptoUpDown5mVariants.Count(variant =>
             variant.Behavior == BtcUpDown5mStrategyBehavior.ShiftDiffCounterTrend));
-        Assert.Equal(199, StrategyIds.CryptoUpDown5mVariants.Count(variant =>
+        Assert.Equal(198, StrategyIds.CryptoUpDown5mVariants.Count(variant =>
             variant.Behavior == BtcUpDown5mStrategyBehavior.DiffProgress));
         Assert.Equal(14, StrategyIds.CryptoUpDown5mVariants.Count(variant =>
             variant.Behavior == BtcUpDown5mStrategyBehavior.DiffShiftProgress));
@@ -14677,7 +14677,7 @@ public sealed class BtcUpDown5mPaperStrategyProcessorTests
     private static int ExpectedDiffProgressCount(string assetSymbol)
     {
         return string.Equals(assetSymbol, "SOL", StringComparison.OrdinalIgnoreCase)
-            ? 99
+            ? 98
             : 100;
     }
 
@@ -14689,7 +14689,7 @@ public sealed class BtcUpDown5mPaperStrategyProcessorTests
         if (string.Equals(assetSymbol, "SOL", StringComparison.OrdinalIgnoreCase) &&
             triggerOutcome == BtcUpDownFixedOutcome.Up)
         {
-            thresholds = thresholds.Where(threshold => threshold != 1);
+            thresholds = thresholds.Where(threshold => threshold is not (1 or 2));
         }
 
         return thresholds.ToArray();

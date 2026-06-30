@@ -123,3 +123,10 @@ Request:
 
 Result:
 Reviewed Dashboard bindings and repository aggregation for strategy rows. Clarified that `Filled` without the `Live` prefix is a Paper order count for statuses `Filled`, `PartiallyFilled`, or `PartiallyFilledExpired`, while the Live-specific metric is `Live filled`, counted from `live_orders` rows where `filled_size > 0`. No production DB writes, live orders, service restart, cancel action, source-code behavior changes, build, or tests were performed.
+
+## 2026-06-30T15:36:31.5234685+00:00
+Request:
+Удали стратегию SOL Up or Down 5m 2 Diff Up Progress и её историю
+
+Result:
+Deleted production strategy `SOL Up or Down 5m 2 Diff Up Progress` (`sol_up_down_5m_diff_2_up_progress`, id `b7c50005-0000-4000-8158-000000000002`) and its related history after first disabling/pausing the row. Deleted counts were `strategies=1`, `strategy_market_paper_runs=512`, `paper_orders=164`, `paper_fills=164`, `paper_positions=164`, `paper_position_settlements=164`, `signals=164`, and zero rows in dry-run/live/shadow/diff-shift-state tables. A follow-up read-only production verification returned zero leftover rows for the target strategy id/code and wallet. Updated runtime strategy generation, PostgreSQL seeding, strategy/category tests, README, active context, and history so retired SOL Diff Up Progress thresholds `1` and `2` are not recreated. Also fixed the previous SOL Diff Progress seed guard placement by moving it from an unrelated bps seed block into the actual Diff Progress seed block. Verification: targeted strategy/category tests passed, service build passed, `git diff --check` passed, and the production heartbeat check was fresh.

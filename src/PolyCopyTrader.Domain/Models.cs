@@ -2214,7 +2214,7 @@ public static class StrategyIds
         bool isUpDiffGroup)
     {
         return isUpDiffGroup &&
-            threshold == 1 &&
+            threshold is 1 or 2 &&
             string.Equals(assetSymbol, "SOL", StringComparison.OrdinalIgnoreCase);
     }
 

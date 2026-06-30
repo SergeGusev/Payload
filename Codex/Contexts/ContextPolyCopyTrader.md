@@ -1,3 +1,17 @@
+## Active Update 2026-06-30 Retired SOL Diff Up Progress Threshold 2
+Goal: Delete `SOL Up or Down 5m 2 Diff Up Progress` and prevent it from being recreated.
+Status: Completed
+Done:
+- Deleted production strategy `sol_up_down_5m_diff_2_up_progress` (`b7c50005-0000-4000-8158-000000000002`) and its related history after first disabling/pausing the strategy row.
+- Production delete counts were: `strategies=1`, `strategy_market_paper_runs=512`, `paper_orders=164`, `paper_fills=164`, `paper_positions=164`, `paper_position_settlements=164`, `signals=164`, and zero rows in dry-run/live/shadow/diff-shift-state tables.
+- Verified after deletion that all checked leftover counts are `0` for the target strategy id/code and wallet `strategy:sol_up_down_5m_diff_2_up_progress`.
+- Updated runtime `StrategyIds` generation to retire SOL Diff Up Progress thresholds `1` and `2`.
+- Fixed the previous seed guard placement by removing the SOL Diff Progress guard from an unrelated bps seed block and placing it in the actual Diff Progress seed block with `threshold_value IN (1, 2)`.
+- Updated strategy count/category tests and README documentation for both retired SOL Diff Up Progress variants.
+Next: Continue normal monitoring; current production stage timings still show unrelated observe/entry flow delays around 3-4s for many non-live strategy rows.
+Notes: `dotnet test tests/PolyCopyTrader.Tests/PolyCopyTrader.Tests.csproj --no-restore --filter "FullyQualifiedName=PolyCopyTrader.Tests.BtcUpDown5mPaperStrategyProcessorTests.StrategyIds_IncludeEthAndSolBinanceBpsVariants|FullyQualifiedName=PolyCopyTrader.Tests.StrategyDisplayCategoryTests.DiffProgressStrategiesShareCurrencyDisplayCategories|FullyQualifiedName=PolyCopyTrader.Tests.StrategyDisplayCategoryTests.PreservesExistingDisplayCategories" -p:UseSharedCompilation=false` passed. `dotnet build src/PolyCopyTrader.Service/PolyCopyTrader.Service.csproj --no-restore -p:UseSharedCompilation=false` passed. `git diff --check` passed. Production heartbeat check passed with fresh `Running`/`Live` heartbeat.
+Blockers: None.
+
 ## Active Update 2026-06-30 Dashboard Filled Field Clarified
 Goal: Clarify what the Dashboard `Filled`/`Live filled` fields mean in strategy rows.
 Status: Completed
