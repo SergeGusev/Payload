@@ -2197,11 +2197,25 @@ public static class StrategyIds
         var variants = new List<BtcUpDown5mStrategyVariant>(100);
         foreach (var threshold in CreateDiffProgressThresholds())
         {
-            variants.Add(CreateDiffProgressVariant(assetSymbol, idGroups.Up, threshold, isUpDiffGroup: true));
+            if (!IsRetiredDiffProgressVariant(assetSymbol, threshold, isUpDiffGroup: true))
+            {
+                variants.Add(CreateDiffProgressVariant(assetSymbol, idGroups.Up, threshold, isUpDiffGroup: true));
+            }
+
             variants.Add(CreateDiffProgressVariant(assetSymbol, idGroups.Down, threshold, isUpDiffGroup: false));
         }
 
         return variants;
+    }
+
+    private static bool IsRetiredDiffProgressVariant(
+        string assetSymbol,
+        int threshold,
+        bool isUpDiffGroup)
+    {
+        return isUpDiffGroup &&
+            threshold == 1 &&
+            string.Equals(assetSymbol, "SOL", StringComparison.OrdinalIgnoreCase);
     }
 
     private static (int Up, int Down) GetDiffProgressIdGroups(

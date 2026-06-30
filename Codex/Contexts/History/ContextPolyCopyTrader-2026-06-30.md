@@ -109,3 +109,10 @@ Request:
 
 Result:
 Checked production externally after ASUS removal and reboot. PostgreSQL TCP connectivity to `192.168.0.101:5432` succeeded. The existing read-only latency/heartbeat script reported a fresh `PolyCopyTrader.Service` heartbeat: `Running`/`Live`, version `info=1.0.0+6a563792d489d578d1d5602c8bca887804a108a8`, heartbeat age about `45s`, and `started_at_utc=2026-06-30T12:10:22.860602+03:00`, confirming the service restarted after the earlier stale heartbeat state. The checked entry window had `20` entry rows across `17` strategies, `0` over `3s`, and the script passed. Some observe-stage timings were slow, but entry SLA passed in the checked window. No production DB writes, live orders, service restart, cancel action, source-code changes, build, or tests were performed.
+
+## 2026-06-30T12:49:52.5017273+00:00
+Request:
+Удали стратегию SOL Up or Down 5m 1 Diff Up Progress и её историю
+
+Result:
+Deleted production strategy `SOL Up or Down 5m 1 Diff Up Progress` (`sol_up_down_5m_diff_1_up_progress`, id `b7c50005-0000-4000-8158-000000000001`) and its related history after first disabling/pausing the row. Deleted counts were `strategies=1`, `strategy_market_paper_runs=478`, `paper_orders=170`, `paper_fills=170`, `paper_positions=170`, `paper_position_settlements=170`, `signals=170`, and zero rows in dry-run/live/shadow/diff-shift-state tables. A follow-up read-only production verification returned zero leftover rows for the target strategy id/code and wallet. Updated runtime strategy generation, PostgreSQL seeding, strategy/category tests, README, active context, and history so the retired strategy is not recreated. Verification: service build passed, targeted strategy/category tests passed, and `git diff --check` passed. Production heartbeat was fresh after deletion, but the broad latency script failed in the sampled window due to unrelated >3s entry delays on other strategies.

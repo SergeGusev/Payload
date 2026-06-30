@@ -859,6 +859,7 @@ Do not enable live trading unless `dotnet build`, `dotnet test`, `--print-config
 
 ## Known Limitations
 
+- `SOL Up or Down 5m 1 Diff Up Progress` is retired: it is no longer seeded and its production history was removed.
 - API credential bootstrap currently supports Windows Credential Manager storage only.
 - Trader enable/disable and cancel selected paper order dashboard buttons are placeholders until command-specific IPC is added.
 - On-chain leader scoring is a transparent first pass over resolved positions; it has no current mark-to-market yet.

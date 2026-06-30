@@ -1,3 +1,16 @@
+## Active Update 2026-06-30 Retired SOL Diff Up Progress Strategy
+Goal: Delete `SOL Up or Down 5m 1 Diff Up Progress` and prevent it from being recreated.
+Status: Completed
+Done:
+- Deleted production strategy `sol_up_down_5m_diff_1_up_progress` (`b7c50005-0000-4000-8158-000000000001`) and its related history after first disabling/pausing the strategy row.
+- Production delete counts were: `strategies=1`, `strategy_market_paper_runs=478`, `paper_orders=170`, `paper_fills=170`, `paper_positions=170`, `paper_position_settlements=170`, `signals=170`, and zero rows in dry-run/live/shadow/diff-shift-state tables.
+- Verified after deletion that all checked leftover counts are `0` for the target strategy id/code and wallet `strategy:sol_up_down_5m_diff_1_up_progress`.
+- Removed the retired variant from runtime `StrategyIds` generation and from PostgreSQL strategy seeding so schema initialization will not recreate it.
+- Updated strategy count/category tests and README documentation for the retired exception.
+Next: Monitor the normal service entry latency separately if the current >3s entry delays persist.
+Notes: `dotnet build src/PolyCopyTrader.Service/PolyCopyTrader.Service.csproj --no-restore -p:UseSharedCompilation=false` passed. Targeted tests passed for `StrategyIds_IncludeEthAndSolBinanceBpsVariants`, `DiffProgressStrategiesShareCurrencyDisplayCategories`, and `KnownStrategyNamesMapToExpectedCategories`. `git diff --check` passed. Production heartbeat after deletion was fresh (`Running`/`Live`, age about `17s`), but the broad latency script failed in that sampled window because `715` entry rows across other strategies exceeded `3s`; this is recorded as a separate monitoring issue, not leftover target-strategy history.
+Blockers: None.
+
 ## Active Update 2026-06-30 Server Post ASUS Removal Health Check
 Goal: Check whether the production server, PostgreSQL, and PolyCopyTrader service are healthy after ASUS removal and reboot.
 Status: Completed

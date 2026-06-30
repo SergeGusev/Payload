@@ -1974,6 +1974,11 @@ SELECT
     now(),
     now()
 FROM formatted
+WHERE NOT (
+    asset_symbol = 'SOL'
+    AND diff_code = 'up'
+    AND threshold_value = 1
+)
 ON CONFLICT (id) DO UPDATE SET
     code = excluded.code,
     name = excluded.name,
