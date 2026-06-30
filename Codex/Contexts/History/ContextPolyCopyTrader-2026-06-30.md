@@ -67,3 +67,10 @@ User pasted the Windows System event output for `2026-06-30 00:00..09:00` and th
 
 Result:
 Confirmed the production outage was caused by Windows entering a low-power sleep state. `Kernel-Power` event `42` recorded sleep at `2026-06-30 00:18:39` local with `Sleep Reason: Application API`, and `Power-Troubleshooter` event `1` recorded sleep time `2026-06-29T21:18:39Z` and wake time `2026-06-30T05:41:18Z`, i.e. `2026-06-30 00:18:39..08:41:18` Europe/Sofia. This matches the previously observed DB/service inactivity gap almost exactly. The active plan is `Balanced`; AC `Sleep after` and AC `Hibernate after` are both `0` seconds, so the normal idle timers did not cause the sleep. Directed the next investigation to nearby System events, Task Scheduler history, scheduled task actions, and power button/sleep-button settings to find the `Application API` caller. No production DB writes, live orders, service restart, cancel action, source-code changes, build, or tests were performed.
+
+## 2026-06-30T07:27:24.6379741+00:00
+Request:
+User attached pasted server output for `powercfg /qh SCHEME_CURRENT SUB_SLEEP` and detailed `Kernel-Power` event `187` properties.
+
+Result:
+Found the likely concrete sleep caller and hidden power setting. Hidden sleep settings show `System unattended sleep timeout` (`UNATTENDSLEEP`) set to `0x00000078` seconds (`120s`) on AC and DC. `Kernel-Power` event `187` properties identify the user-mode caller path as `...\Windows\System32\DriverStore\FileRepository\asussci2.inf_amd64_cfd6e6fcf484217d\ASUSOptimization\AsusOptimization.exe`, which called `SetSuspendState`/`SetSystemPowerState` at `2026-06-30 00:18:39`. This connects the sequence: Modern Standby entered at `00:16:05` due to idle timeout, then ASUS Optimization triggered sleep roughly two minutes later. Recommended disabling unattended sleep on AC and making the server power scheme reject standby for 24/7 operation. No production DB writes, live orders, service restart, cancel action, source-code changes, build, or tests were performed.

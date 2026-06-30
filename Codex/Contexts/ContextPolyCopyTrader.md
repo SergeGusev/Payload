@@ -1,3 +1,16 @@
+## Active Update 2026-06-30 ASUS Optimization Sleep Caller Found
+Goal: Identify the application or hidden power setting that caused the confirmed Windows sleep outage.
+Status: Completed
+Done:
+- Interpreted hidden `powercfg /qh SCHEME_CURRENT SUB_SLEEP` output: `System unattended sleep timeout` (`UNATTENDSLEEP`) is enabled at `0x00000078` seconds, i.e. `120s`, on AC and DC.
+- Interpreted `Kernel-Power` event `187` details: the user-mode caller path is `...\Windows\System32\DriverStore\FileRepository\asussci2.inf_amd64_cfd6e6fcf484217d\ASUSOptimization\AsusOptimization.exe`.
+- Connected the sequence: Modern Standby began at `2026-06-30 00:16:05` due to idle timeout, then about two minutes later `AsusOptimization.exe` called `SetSuspendState`/`SetSystemPowerState` at `00:18:39`, causing sleep.
+- Identified the likely root cause as ASUS Optimization/System Control Interface power management combined with the hidden unattended sleep timeout, not PostgreSQL, the app service, or normal `Sleep after`/`Hibernate after` timers.
+- Recommended disabling unattended sleep on AC, disallowing standby on AC for the current power scheme, setting the start-menu power button away from Sleep, and checking ASUS Optimization services/tasks only after applying the power-plan fix.
+Next: Apply the AC power settings on the server, then verify with `powercfg /qh SCHEME_CURRENT SUB_SLEEP` and overnight monitoring.
+Notes: Guidance-only turn. No production DB writes, live orders, service restart, cancel action, source-code changes, build, or tests were performed.
+Blockers: Need the user to apply/verify Windows power settings on the server.
+
 ## Active Update 2026-06-30 Confirmed Windows Low Power Sleep
 Goal: Confirm whether the overnight production outage was caused by Windows sleep and identify the next evidence to collect.
 Status: Completed
