@@ -1,3 +1,14 @@
+## Active Update 2026-07-01 Paper Notional Field Clarified
+Goal: Clarify whether Paper `Notional` means the actual amount placed.
+Status: Completed
+Done:
+- Traced Paper order creation and Dashboard binding for `PaperOrder.NotionalUsd`.
+- Confirmed Paper `Notional` is the created order notional, usually `price * sizeShares` or the signal's proposed notional, not necessarily the actually filled amount.
+- Confirmed actual Paper fill cost is derived from `paper_fills` as `fill.Price * fill.SizeShares`; for full fills at the order price it matches `Notional`, while partial/unfilled/expired orders can differ.
+Next: None.
+Notes: Read-only explanation task. No production DB writes, live orders, service restart, cancel action, source-code behavior changes, build, or tests were performed.
+Blockers: None.
+
 ## Active Update 2026-06-30 Retired SOL Diff Up Progress Threshold 2
 Goal: Delete `SOL Up or Down 5m 2 Diff Up Progress` and prevent it from being recreated.
 Status: Completed
