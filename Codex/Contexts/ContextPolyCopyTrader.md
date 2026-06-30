@@ -1,3 +1,15 @@
+## Active Update 2026-06-30 Server Database Availability Check
+Goal: Check whether the production PostgreSQL database server is reachable from this machine.
+Status: Completed
+Done:
+- Confirmed the local repository was already up to date before the check.
+- Checked `192.168.0.101:5432` with a short TCP probe; the connection timed out.
+- Checked host reachability with `ping`; this machine received `Destination host unreachable` from `192.168.0.100`.
+- Ran the existing PostgreSQL latency-check script with `-HostOverride 192.168.0.101`; `psql` failed with `connection to server at "192.168.0.101", port 5432 failed: timeout expired`.
+Next: Restore network/VPS reachability, then repeat the same read-only database check.
+Notes: The local `POLYCOPYTRADER_POSTGRES_CONNECTION` environment variable points to `127.0.0.1`, so the server check explicitly used the known production host override `192.168.0.101`. No production DB writes, live orders, service restart, cancel action, source-code changes, build, or tests were performed.
+Blockers: Production PostgreSQL is not reachable from this machine at the time of the check.
+
 ## Active Update 2026-06-30 Diff Real Limit Progress Deployment Check
 Goal: Verify the deployed `6a56379` service and the new Diff Real Limit Progress Premarket strategies in production.
 Status: Completed
