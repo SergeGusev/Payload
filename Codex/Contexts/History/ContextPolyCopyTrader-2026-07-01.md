@@ -43,3 +43,10 @@ Request:
 
 Result:
 Implemented the new BTC/ETH/SOL `Diff Reference Average Premarket` strategy family. Added catalog variants and PostgreSQL seeds for thresholds `1..10`, `15`, `20`, `25`, and `30` under id groups `8175`/`8176`/`8177`; added Dashboard category `Up Or Down 5 min Diff Reference Average`; implemented rolling 24h Diff reconstruction without UTC-day reset, synthetic previous 5m premarket result inclusion, full-window averages over `24h`, `12h`, `6h`, `3h`, `90m`, and `45m` only, selected by maximum `abs(averageDiff)`, with direction chosen by `currentDiff - selectedAverageDiff`. Updated raw diagnostics, README, schema/category/catalog tests, and an end-to-end ETH premarket processor test. Verification passed: focused test filter passed `77/77`, service build passed with `0` warnings/errors, and `git diff --check` passed with LF/CRLF warnings only.
+
+## 2026-07-01T21:00:39.4057143+00:00
+Request:
+Выложил, проверяй
+
+Result:
+Verified the production deployment read-only against PostgreSQL `192.168.0.101`. The service heartbeat is fresh, running in `Live` mode on deployed commit `06ae3df`, with no heartbeat error. Confirmed all `42` Diff Reference Average Premarket strategy rows exist on the server DB: BTC/ETH/SOL each have thresholds `1..10`, `15`, `20`, `25`, and `30`; all are enabled and `live_stakes=false`. Confirmed the new family is actively processed: after deployment it created Paper Filled entries for BTC thresholds `1`/`2`, skipped ETH on low Diff delta, skipped SOL when the previous premarket reference price was unchanged, and created no Live orders. The normal `23:59:30+03` post-deploy cycle had `0` rows over `3s` and max delay `0.613s`. The broad latency script still fails on unrelated existing Diff Progress / Diff Shift Progress skip rows around `3.5s`, not on the new family.

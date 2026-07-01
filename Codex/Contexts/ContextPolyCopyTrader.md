@@ -1,3 +1,18 @@
+## Active Update 2026-07-01 Diff Reference Average Premarket Deployment Check
+Goal: Verify the deployed server build and the new Diff Reference Average Premarket strategy family on production data.
+Status: Completed
+Done:
+- Confirmed PostgreSQL on `192.168.0.101:5432` is reachable and `PolyCopyTrader.Service` heartbeat is fresh.
+- Confirmed the service is running the deployed commit `06ae3df` in `Live` mode with `last_error = null`; `started_at_utc=2026-07-01 23:54:01+03`, fresh heartbeat checked at `2026-07-02 00:00:16+03`.
+- Confirmed the server DB contains all `42` new Diff Reference Average Premarket strategy rows: BTC/ETH/SOL each have thresholds `1..10`, `15`, `20`, `25`, and `30`; all are enabled, not paused, and have `live_stakes=false`.
+- Confirmed the new strategy family is actively processed: the first completed post-deploy cycle created Paper Filled entries for BTC thresholds `1`/`2`, skipped ETH on `diff_reference_average_delta_below_threshold`, and skipped SOL on `premarket_previous_market_reference_price_unchanged`.
+- Confirmed normal post-deploy timing for the new family: the `23:59:30+03` due cycle had `42` rows, `0` over `3s`, max delay `0.613s`.
+- Confirmed no Live orders were created for the new family in the checked window.
+- Noted broad latency script still fails because unrelated existing Diff Progress / Diff Shift Progress skip rows exceed `3s` around `3.5s`; this is not caused by the new Diff Reference Average family.
+Next: Continue collecting Paper settlements for the new family before assessing profitability; investigate the broader existing Diff Progress skip latency separately if needed.
+Notes: Read-only production checks against `192.168.0.101`; no database writes, service restarts, Live enablement, order submissions, cancel actions, source-code changes, build, or tests were performed.
+Blockers: None.
+
 ## Active Update 2026-07-01 Diff Reference Average Premarket
 Goal: Add BTC/ETH/SOL Diff Reference Average Premarket strategies that choose direction from rolling Diff averages.
 Status: Completed
