@@ -1,3 +1,17 @@
+## Active Update 2026-07-01 Reference Average Premarket Explained
+Goal: Explain the implemented principle of Reference Average Premarket strategies.
+Status: Completed
+Done:
+- Reviewed README and source implementation for `ReferenceAverageBpsThresholdFakPremarket`.
+- Confirmed these strategies run `30s` before the 5-minute market open for BTC/ETH/SOL, with Up/Down trigger rows and thresholds `1..10`, then `15..100` step `5`.
+- Confirmed they select the highest full in-memory reference average across `24h`, `12h`, `6h`, `3h`, `90m`, `45m`, `20m`, and `10m` windows.
+- Confirmed move is calculated as `(currentPrice - selectedAverage) / selectedAverage * 10000` bps.
+- Confirmed Up trigger rows require move `>= N bps` and buy Down; Down trigger rows require move `<= -N bps` and buy Up.
+- Confirmed entries use the FAK taker ask-depth path: Paper simulates a BUY from executable ask depth and Live-shadow submits a FAK market amount, with unfilled remainder cancelled.
+Next: None.
+Notes: Read-only explanation task. No production DB writes, live orders, service restart, source-code changes, build, or tests were performed.
+Blockers: None.
+
 ## Active Update 2026-07-01 Hourly Reset Limit Progress Simulation
 Goal: Model `Diff Limit Progress Premarket` and `Diff Real Limit Progress Premarket` profitability if UpCount/DownCount reset every hour instead of every UTC day, using server data.
 Status: Completed
