@@ -1,3 +1,19 @@
+## Active Update 2026-07-01 Hourly Reset Limit Progress Simulation
+Goal: Model `Diff Limit Progress Premarket` and `Diff Real Limit Progress Premarket` profitability if UpCount/DownCount reset every hour instead of every UTC day, using server data.
+Status: Completed
+Done:
+- Queried the remote Dashboard PostgreSQL database at `192.168.0.101` read-only.
+- Simulated all 30 variants: BTC/ETH/SOL x limits `1..5` x `Limit`/`RealLimit`.
+- Used resolved 5m markets from `crypto_up_down_5m_websocket_resolved_markets` over the common server window `2026-06-29 21:40+03` through `2026-07-01 18:35+03`; each asset had `450` resolved markets.
+- Modeled hourly reset by clearing counters at each `:00` hour boundary; first market of each hour starts from zero and skips unless later prior-hour results are within the same hour.
+- Used server Paper FAK fill samples for entry prices when available, falling back to same market/outcome fill samples and then first odds tick after open; rows still missing price samples were excluded from PnL and reported as unpriced.
+- Hourly reset model results: best `Limit` variants were SOL N=3 `+$302.56` / `8.87% ROI`, SOL N=4 `+$298.29` / `8.38%`, SOL N=5 `+$277.94` / `7.64%`, BTC N=3 `+$229.75` / `7.07%`, BTC N=2 `+$215.22` / `7.76%`; all ETH `Limit` variants were negative, worst ETH N=5 `-$393.82` / `-9.64%`.
+- Best `RealLimit` variants were SOL N=4 `+$296.34` / `8.39%`, SOL N=3 `+$286.15` / `8.70%`, SOL N=5 `+$283.94` / `7.82%`, SOL N=2 `+$262.18` / `10.22%`, BTC N=3 `+$203.63` / `6.58%`; ETH `RealLimit` was roughly flat only at N=1 (`+$3.23`) and negative for N=2..5.
+- Compared with actual daily-reset Paper results in the same window: hourly reset materially improved SOL `Limit` (daily reset was negative for N=2..5) and modestly improved most SOL `RealLimit`; it generally worsened ETH; BTC remained profitable but hourly reset underperformed daily reset for many BTC `Limit` rows.
+Next: If this looks promising, implement a separate hourly-reset strategy family or add a configurable counter reset period rather than changing existing daily-reset behavior in place.
+Notes: Verification was read-only SQL/modeling against `192.168.0.101`; no production DB writes, live orders, service restart, source-code changes, build, or tests were performed.
+Blockers: Some counterfactual entries lacked server price samples (`7-11` per modeled row), so reported PnL excludes those unpriced entries.
+
 ## Active Update 2026-07-01 ETH Diff Shift Progress Premarket Server Recheck
 Goal: Recheck `ETH Up or Down 5m 1 Diff Shift Progress Premarket` on the actual Dashboard server after the screenshot showed it exists.
 Status: Completed
