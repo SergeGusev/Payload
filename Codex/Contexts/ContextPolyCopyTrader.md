@@ -1,3 +1,17 @@
+## Active Update 2026-07-01 ETH Diff Shift Progress Premarket Server Recheck
+Goal: Recheck `ETH Up or Down 5m 1 Diff Shift Progress Premarket` on the actual Dashboard server after the screenshot showed it exists.
+Status: Completed
+Done:
+- Inspected the screenshot and confirmed Dashboard is connected to `Remote database (192.168.0.101)`.
+- Rechecked PostgreSQL with an explicit host override to `192.168.0.101`; confirmed the previous assessment used the wrong local configured target and is superseded.
+- Found strategy `eth_up_down_5m_1_diff_shift_progress_premarket` (`b7c50005-0000-4000-8167-000000000001`) on server DB `polycopytrader`, enabled, not paused, `live_stakes=false`, `paper_stake_amount=1`, `live_stake_amount=1`, `live_available_balance=100`, open Live reserve `0`.
+- Server history at `2026-07-01T05:47:33Z`: `359` settled Paper runs, `196` wins, `163` losses, realized PnL `$502.96230872`; `363` Paper orders/fills, no Live orders.
+- Historical risk: worst cumulative PnL from zero `-$170.00280061`, maximum drawdown from prior peak `-$279.06356815`, worst single loss `-$88.00110023`, max consecutive losses `6` with `-$170.00280061`, max Paper run/order/fill notional about `$93.00060067` at stake multiplier `17`.
+- Live balance conclusion: current code's live-shadow path uses configured `LiveStakeAmount` rather than the Paper Diff multiplier, so the hard technical minimum for the next Live preflight is roughly the one-unit notional (historically `$6.0093`) plus open Live reserve; `$100` is enough technically. To mirror/survive historical Paper sizing, exact replay needed at least `$258.00390061`, and a safer drawdown-plus-next-max-stake reserve is about `$372.06416882`.
+Next: If enabling this strategy in Live, decide whether the intended Live exposure should mirror Paper Diff sizing or remain at the current fixed one-unit Live stake.
+Notes: Read-only SQL against `192.168.0.101` and screenshot inspection only. No production DB writes, live orders, service restart, source-code changes, build, or tests were performed.
+Blockers: None.
+
 ## Active Update 2026-07-01 ETH Diff Shift Progress Premarket Assessment
 Goal: Assess `ETH Up or Down 5m 1 Diff Shift Progress Premarket` risk, maximum stake, and required Live balance.
 Status: Completed
