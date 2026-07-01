@@ -1501,6 +1501,7 @@ public static class StrategyIds
         variants.AddRange(CreateDiffShiftProgressPremarketVariants("BTC"));
         variants.AddRange(CreateDiffLimitProgressPremarketVariants("BTC"));
         variants.AddRange(CreateDiffRealLimitProgressPremarketVariants("BTC"));
+        variants.AddRange(CreateDiffReferenceAveragePremarketVariants("BTC"));
         variants.AddRange(CreateBtcAdjustedDiffCounterTrendVariants());
         variants.AddRange(CreateBtcShiftDiffCounterTrendVariants());
         variants.AddRange(CreateBtcPreviousScoreCounterTrendVariants());
@@ -2007,6 +2008,7 @@ public static class StrategyIds
             variants.AddRange(CreateDiffShiftProgressPremarketVariants(asset.Symbol));
             variants.AddRange(CreateDiffLimitProgressPremarketVariants(asset.Symbol));
             variants.AddRange(CreateDiffRealLimitProgressPremarketVariants(asset.Symbol));
+            variants.AddRange(CreateDiffReferenceAveragePremarketVariants(asset.Symbol));
 
             variants.AddRange(CreateCryptoAdjustedDiffCounterTrendVariants(asset));
             variants.AddRange(CreateCryptoShiftDiffCounterTrendVariants(asset));
@@ -2325,6 +2327,30 @@ public static class StrategyIds
         };
     }
 
+    private static IReadOnlyList<BtcUpDown5mStrategyVariant> CreateDiffReferenceAveragePremarketVariants(
+        string assetSymbol)
+    {
+        var variants = new List<BtcUpDown5mStrategyVariant>(14);
+        var idGroup = GetDiffReferenceAveragePremarketIdGroup(assetSymbol);
+        foreach (var threshold in CreateDiffReferenceAveragePremarketThresholds())
+        {
+            variants.Add(CreateDiffReferenceAveragePremarketVariant(assetSymbol, idGroup, threshold));
+        }
+
+        return variants;
+    }
+
+    private static int GetDiffReferenceAveragePremarketIdGroup(string assetSymbol)
+    {
+        return assetSymbol.ToUpperInvariant() switch
+        {
+            "BTC" => 8175,
+            "ETH" => 8176,
+            "SOL" => 8177,
+            _ => throw new ArgumentOutOfRangeException(nameof(assetSymbol), assetSymbol, "Unsupported Diff Reference Average Premarket asset.")
+        };
+    }
+
     private static IReadOnlyList<BtcUpDown5mStrategyVariant> CreateCryptoAdjustedDiffCounterTrendVariants(CryptoUpDown5mAssetSpec asset)
     {
         var variants = new List<BtcUpDown5mStrategyVariant>(48);
@@ -2389,6 +2415,19 @@ public static class StrategyIds
         }
 
         for (var threshold = 15; threshold <= 100; threshold += 5)
+        {
+            yield return threshold;
+        }
+    }
+
+    private static IEnumerable<int> CreateDiffReferenceAveragePremarketThresholds()
+    {
+        for (var threshold = 1; threshold <= 10; threshold++)
+        {
+            yield return threshold;
+        }
+
+        foreach (var threshold in new[] { 15, 20, 25, 30 })
         {
             yield return threshold;
         }
@@ -2586,6 +2625,29 @@ public static class StrategyIds
             BtcUpDown5mStrategyBehavior.DiffRealLimitProgressPremarket,
             limit,
             Category: "Up Or Down 5 min Diff Real Limit Progress",
+            ReferenceAssetSymbol: normalizedAsset);
+    }
+
+    private static BtcUpDown5mStrategyVariant CreateDiffReferenceAveragePremarketVariant(
+        string assetSymbol,
+        int idGroup,
+        int threshold)
+    {
+        var normalizedAsset = assetSymbol.ToUpperInvariant();
+        var assetCode = normalizedAsset.ToLowerInvariant();
+        var thresholdText = threshold.ToString(CultureInfo.InvariantCulture);
+
+        return new BtcUpDown5mStrategyVariant(
+            Guid.Parse($"b7c50005-0000-4000-{idGroup:0000}-{threshold:000000000000}"),
+            $"{assetCode}_up_down_5m_{thresholdText}_diff_reference_average_premarket",
+            $"{normalizedAsset} Up or Down 5m {thresholdText} Diff Reference Average Premarket",
+            $"30 seconds before {normalizedAsset} 5m market open, compute the rolling 24-hour raw Diff = UpCount - DownCount without a UTC-day reset. Results before the latest 5-minute market use resolved market results; the latest market result is synthesized from the current {normalizedAsset} reference price. Average Diff is calculated over full 24h, 12h, 6h, 3h, 90m, and 45m windows, then the average farthest from zero is selected. If current Diff minus that selected Average Diff is at least {thresholdText}, BUY Down; if it is at most -{thresholdText}, BUY Up; otherwise skip. Paper entry simulates the same taker BUY from executable ask depth using the worst-price cap, while Live-shadow submits a market BUY amount so available liquidity is taken immediately and any remainder is cancelled.",
+            BtcUpDown5mStrategyDirection.Dynamic,
+            -30,
+            BtcUpDown5mStrategyBehavior.DiffReferenceAveragePremarket,
+            threshold,
+            threshold,
+            Category: "Up Or Down 5 min Diff Reference Average",
             ReferenceAssetSymbol: normalizedAsset);
     }
 
@@ -3492,7 +3554,8 @@ public enum BtcUpDown5mStrategyBehavior
     DiffProgress,
     DiffShiftProgress,
     DiffLimitProgressPremarket,
-    DiffRealLimitProgressPremarket
+    DiffRealLimitProgressPremarket,
+    DiffReferenceAveragePremarket
 }
 
 public sealed record BtcUpDown5mStrategyVariant(

@@ -2666,6 +2666,38 @@ ON CONFLICT (id) DO UPDATE SET
     updated_at_utc = excluded.updated_at_utc;
 
 INSERT INTO strategies (id, code, name, description, enabled, live_stakes, paper_stake_amount, created_at_utc, updated_at_utc)
+WITH thresholds(threshold_value) AS (
+    SELECT value
+    FROM generate_series(1, 10) AS generated(value)
+    UNION ALL
+    SELECT value
+    FROM (VALUES (15), (20), (25), (30)) AS extra(value)
+),
+assets(asset_symbol, id_group) AS (
+    VALUES
+        ('BTC', '8175'),
+        ('ETH', '8176'),
+        ('SOL', '8177')
+)
+SELECT
+    ('b7c50005-0000-4000-' || id_group || '-' || lpad(threshold_value::text, 12, '0'))::uuid,
+    lower(asset_symbol) || '_up_down_5m_' || threshold_value::text || '_diff_reference_average_premarket',
+    asset_symbol || ' Up or Down 5m ' || threshold_value::text || ' Diff Reference Average Premarket',
+    '30 seconds before ' || asset_symbol || ' 5m market open, compute the rolling 24-hour raw Diff = UpCount - DownCount without a UTC-day reset. Results before the latest 5-minute market use resolved market results; the latest market result is synthesized from the current ' || asset_symbol || ' reference price. Average Diff is calculated over full 24h, 12h, 6h, 3h, 90m, and 45m windows, then the average farthest from zero is selected. If current Diff minus that selected Average Diff is at least ' || threshold_value::text || ', BUY Down; if it is at most -' || threshold_value::text || ', BUY Up; otherwise skip. Paper entry simulates the same taker BUY from executable ask depth using the worst-price cap, while Live-shadow submits a market BUY amount so available liquidity is taken immediately and any remainder is cancelled.',
+    true,
+    false,
+    1.00,
+    now(),
+    now()
+FROM assets
+CROSS JOIN thresholds
+ON CONFLICT (id) DO UPDATE SET
+    code = excluded.code,
+    name = excluded.name,
+    description = excluded.description,
+    updated_at_utc = excluded.updated_at_utc;
+
+INSERT INTO strategies (id, code, name, description, enabled, live_stakes, paper_stake_amount, created_at_utc, updated_at_utc)
 WITH assets(asset_symbol, up_id_group, down_id_group, up_revert_id_group, down_revert_id_group) AS (
     VALUES
         ('BTC', '8053', '8054', '8103', '8104'),

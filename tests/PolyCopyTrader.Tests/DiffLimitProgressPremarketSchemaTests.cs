@@ -43,4 +43,24 @@ public sealed class DiffLimitProgressPremarketSchemaTests
             PostgresSchema.SchemaSql,
             StringComparison.Ordinal);
     }
+
+    [Fact]
+    public void PostgresSchema_SeedsDiffReferenceAveragePremarketStrategies()
+    {
+        Assert.Contains("('BTC', '8175')", PostgresSchema.SchemaSql, StringComparison.Ordinal);
+        Assert.Contains("('ETH', '8176')", PostgresSchema.SchemaSql, StringComparison.Ordinal);
+        Assert.Contains("('SOL', '8177')", PostgresSchema.SchemaSql, StringComparison.Ordinal);
+        Assert.Contains(
+            "lower(asset_symbol) || '_up_down_5m_' || threshold_value::text || '_diff_reference_average_premarket'",
+            PostgresSchema.SchemaSql,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "asset_symbol || ' Up or Down 5m ' || threshold_value::text || ' Diff Reference Average Premarket'",
+            PostgresSchema.SchemaSql,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "Average Diff is calculated over full 24h, 12h, 6h, 3h, 90m, and 45m windows",
+            PostgresSchema.SchemaSql,
+            StringComparison.Ordinal);
+    }
 }

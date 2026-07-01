@@ -105,6 +105,15 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
     private static readonly TimeSpan SettlementMetadataTimeout = TimeSpan.FromSeconds(3);
     private static readonly TimeSpan LiveStrategyPriorityRefreshInterval = TimeSpan.FromMinutes(1);
     private static readonly TimeSpan LocalFinalizedEntryRunRetention = TimeSpan.FromMinutes(30);
+    private static readonly IReadOnlyList<DiffReferenceAverageWindowSpec> DiffReferenceAverageWindows =
+    [
+        new("24h", TimeSpan.FromHours(24)),
+        new("12h", TimeSpan.FromHours(12)),
+        new("6h", TimeSpan.FromHours(6)),
+        new("3h", TimeSpan.FromHours(3)),
+        new("90m", TimeSpan.FromMinutes(90)),
+        new("45m", TimeSpan.FromMinutes(45))
+    ];
     private const long StrategyStageTimingMinDurationMs = 1_000;
 
     private readonly ConservativePaperGtdFillEstimator conservativeGtdFillEstimator = new(options);
@@ -5598,7 +5607,8 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
             BtcUpDown5mStrategyBehavior.DiffProgress or
             BtcUpDown5mStrategyBehavior.DiffShiftProgress or
             BtcUpDown5mStrategyBehavior.DiffLimitProgressPremarket or
-            BtcUpDown5mStrategyBehavior.DiffRealLimitProgressPremarket;
+            BtcUpDown5mStrategyBehavior.DiffRealLimitProgressPremarket or
+            BtcUpDown5mStrategyBehavior.DiffReferenceAveragePremarket;
     }
 
     private static bool IsMiddleReferenceOpeningLimitEntry(BtcUpDown5mStrategyVariant variant)
@@ -5664,7 +5674,8 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
             IsPreviousScoreCounterTrendFakPremarketEntry(variant) ||
             IsDiffCounterTrendFakPremarketEntry(variant) ||
             IsDiffShiftProgressPremarketEntry(variant) ||
-            IsDiffLimitProgressPremarketEntry(variant);
+            IsDiffLimitProgressPremarketEntry(variant) ||
+            IsDiffReferenceAveragePremarketEntry(variant);
     }
 
     private static bool IsPreOpenFixedDirectionSellExit(BtcUpDown5mStrategyVariant variant)
@@ -5726,7 +5737,8 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
             BtcUpDown5mStrategyBehavior.DiffProgress or
             BtcUpDown5mStrategyBehavior.DiffShiftProgress or
             BtcUpDown5mStrategyBehavior.DiffLimitProgressPremarket or
-            BtcUpDown5mStrategyBehavior.DiffRealLimitProgressPremarket;
+            BtcUpDown5mStrategyBehavior.DiffRealLimitProgressPremarket or
+            BtcUpDown5mStrategyBehavior.DiffReferenceAveragePremarket;
     }
 
     private static bool IsSimpleFixedOutcomeInstantEntry(BtcUpDown5mStrategyVariant variant)
@@ -5766,6 +5778,11 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
             BtcUpDown5mStrategyBehavior.DiffRealLimitProgressPremarket;
     }
 
+    private static bool IsDiffReferenceAveragePremarketEntry(BtcUpDown5mStrategyVariant variant)
+    {
+        return variant.Behavior == BtcUpDown5mStrategyBehavior.DiffReferenceAveragePremarket;
+    }
+
     private static bool IsPersistentDiffProgressStateEntry(BtcUpDown5mStrategyVariant variant)
     {
         return IsDiffShiftProgressEntry(variant) ||
@@ -5784,7 +5801,8 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
         return IsFixedOutcomePreviousResultBpsFakEntry(variant) ||
             IsReferenceAverageBpsFakPremarketEntry(variant) ||
             IsPreviousScoreCounterTrendFakStatsEntry(variant) ||
-            IsDiffCounterTrendFakPremarketEntry(variant);
+            IsDiffCounterTrendFakPremarketEntry(variant) ||
+            IsDiffReferenceAveragePremarketEntry(variant);
     }
 
     private static bool IsFakOrderEntry(BtcUpDown5mStrategyVariant variant)
@@ -6152,6 +6170,12 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
                 stakeUsd,
                 nowUtc,
                 freezeCountersAtLimit: true,
+                cancellationToken),
+            BtcUpDown5mStrategyBehavior.DiffReferenceAveragePremarket => await GetDiffReferenceAveragePremarketEntryDecisionAsync(
+                market,
+                variant,
+                stakeUsd,
+                nowUtc,
                 cancellationToken),
             BtcUpDown5mStrategyBehavior.DiffCounterTrend or
                 BtcUpDown5mStrategyBehavior.AdjustedDiffCounterTrend or
@@ -7142,6 +7166,7 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
         var referenceMarketStartUtc = GetDiffCounterReferenceMarketStartUtc(nowUtc);
         var counterModes = variants
             .Where(variant => !IsPersistentDiffProgressStateEntry(variant))
+            .Where(variant => !IsDiffReferenceAveragePremarketEntry(variant))
             .Select(variant => new
             {
                 AssetSymbol = GetReferenceAssetSymbol(variant),
@@ -8618,6 +8643,339 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
                 stakeUsd));
     }
 
+    private async Task<BtcOpeningLimitDecision> GetDiffReferenceAveragePremarketEntryDecisionAsync(
+        PolymarketGammaMarket market,
+        BtcUpDown5mStrategyVariant variant,
+        decimal stakeUsd,
+        DateTimeOffset nowUtc,
+        CancellationToken cancellationToken)
+    {
+        var marketStartUtc = GetMarketWindowStartUtc(market, variant);
+        if (marketStartUtc is null)
+        {
+            return BtcOpeningLimitDecision.Reject(
+                "diff_reference_average_current_market_start_missing",
+                BuildDiffReferenceAverageRawDecisionJson(
+                    market,
+                    variant,
+                    stakeUsd,
+                    nowUtc,
+                    rollingStartUtc: null,
+                    rollingEndUtc: null,
+                    resultFetchStartUtc: null,
+                    resultFetchEndUtc: null,
+                    historicalResultCount: 0,
+                    samples: [],
+                    averages: [],
+                    selectedAverage: null,
+                    selectedDirection: null,
+                    selectedOutcome: null,
+                    diffDeltaFromAverage: null,
+                    premarketResultOutcome: null,
+                    premarketMoveBps: null,
+                    premarketSignalReason: null,
+                    reason: "diff_reference_average_current_market_start_missing"));
+        }
+
+        if (stakeUsd <= 0m)
+        {
+            return BtcOpeningLimitDecision.Reject(
+                "diff_reference_average_stake_non_positive",
+                BuildDiffReferenceAverageRawDecisionJson(
+                    market,
+                    variant,
+                    stakeUsd,
+                    nowUtc,
+                    rollingStartUtc: null,
+                    rollingEndUtc: null,
+                    resultFetchStartUtc: null,
+                    resultFetchEndUtc: null,
+                    historicalResultCount: 0,
+                    samples: [],
+                    averages: [],
+                    selectedAverage: null,
+                    selectedDirection: null,
+                    selectedOutcome: null,
+                    diffDeltaFromAverage: null,
+                    premarketResultOutcome: null,
+                    premarketMoveBps: null,
+                    premarketSignalReason: null,
+                    reason: "diff_reference_average_stake_non_positive"));
+        }
+
+        var assetSymbol = GetReferenceAssetSymbol(variant);
+        var intervalDuration = BtcUpDown5mMarketAnalyzer.GetIntervalDuration(variant.MarketInterval);
+        var previousMarketStartUtc = marketStartUtc.Value.Subtract(intervalDuration);
+        var rollingStartUtc = previousMarketStartUtc.Subtract(TimeSpan.FromHours(24)).Add(intervalDuration);
+        var historicalTargetMarketStartUtc = previousMarketStartUtc.Subtract(intervalDuration);
+        var premarketResultSource = GetPremarketPreviousResultSource(variant);
+        IReadOnlyList<DiffCounterMarketResult> historicalResults = [];
+        if (rollingStartUtc <= historicalTargetMarketStartUtc)
+        {
+            try
+            {
+                historicalResults = await FetchDiffCounterMarketResultsAsync(
+                    assetSymbol,
+                    rollingStartUtc,
+                    historicalTargetMarketStartUtc,
+                    cancellationToken);
+            }
+            catch (OperationCanceledException)
+            {
+                throw;
+            }
+            catch (Exception ex)
+            {
+                logger.LogWarning(
+                    ex,
+                    "BTC Up or Down 5m Diff Reference Average Premarket result fetch failed. Strategy={StrategyCode} Asset={AssetSymbol} StartUtc={StartUtc} EndUtc={EndUtc}",
+                    variant.Code,
+                    assetSymbol,
+                    rollingStartUtc,
+                    historicalTargetMarketStartUtc);
+                await TryRecordApiErrorAsync("GetDiffReferenceAveragePremarketResults", ex.Message, cancellationToken);
+                return BtcOpeningLimitDecision.Reject(
+                    "diff_reference_average_history_fetch_failed",
+                    BuildDiffReferenceAverageRawDecisionJson(
+                        market,
+                        variant,
+                        stakeUsd,
+                        nowUtc,
+                        rollingStartUtc,
+                        previousMarketStartUtc,
+                        rollingStartUtc,
+                        historicalTargetMarketStartUtc,
+                        historicalResultCount: 0,
+                        samples: [],
+                        averages: [],
+                        selectedAverage: null,
+                        selectedDirection: null,
+                        selectedOutcome: null,
+                        diffDeltaFromAverage: null,
+                        premarketResultOutcome: null,
+                        premarketMoveBps: null,
+                        premarketSignalReason: null,
+                        reason: "diff_reference_average_history_fetch_failed"));
+            }
+        }
+
+        var premarketSignal = await CalculatePremarketPreviousResultBpsMoveSignalAsync(
+            variant,
+            marketStartUtc.Value,
+            cancellationToken);
+        var premarketResultOutcome = NormalizeNullableUpDownOutcome(premarketSignal.StreakWinningOutcome);
+        if (!premarketSignal.ShouldEnter || premarketResultOutcome is null)
+        {
+            var reason = premarketSignal.RejectionReason ?? "diff_reference_average_premarket_result_missing";
+            return BtcOpeningLimitDecision.Reject(
+                reason,
+                BuildDiffReferenceAverageRawDecisionJson(
+                    market,
+                    variant,
+                    stakeUsd,
+                    nowUtc,
+                    rollingStartUtc,
+                    previousMarketStartUtc,
+                    rollingStartUtc,
+                    historicalTargetMarketStartUtc,
+                    historicalResults.Count,
+                    samples: [],
+                    averages: [],
+                    selectedAverage: null,
+                    selectedDirection: null,
+                    selectedOutcome: null,
+                    diffDeltaFromAverage: null,
+                    premarketResultOutcome: null,
+                    premarketMoveBps: premarketSignal.MoveBps,
+                    premarketSignalReason: reason,
+                    reason));
+        }
+
+        var premarketResult = CreateDiffShiftProgressPremarketResult(
+            premarketSignal,
+            premarketResultOutcome,
+            premarketResultSource);
+        var combinedResults = historicalResults
+            .Concat(new[] { premarketResult })
+            .ToArray();
+        var samples = BuildDiffReferenceAverageSamples(combinedResults);
+        var averages = BuildDiffReferenceAverageWindows(samples, previousMarketStartUtc, intervalDuration);
+        var currentSample = samples.LastOrDefault(sample => sample.MarketStartUtc == previousMarketStartUtc);
+        if (currentSample is null)
+        {
+            const string reason = "diff_reference_average_current_diff_missing";
+            return BtcOpeningLimitDecision.Reject(
+                reason,
+                BuildDiffReferenceAverageRawDecisionJson(
+                    market,
+                    variant,
+                    stakeUsd,
+                    nowUtc,
+                    rollingStartUtc,
+                    previousMarketStartUtc,
+                    rollingStartUtc,
+                    historicalTargetMarketStartUtc,
+                    historicalResults.Count,
+                    samples,
+                    averages,
+                    selectedAverage: null,
+                    selectedDirection: null,
+                    selectedOutcome: null,
+                    diffDeltaFromAverage: null,
+                    premarketResultOutcome,
+                    premarketMoveBps: premarketSignal.MoveBps,
+                    premarketSignalReason: premarketSignal.RejectionReason,
+                    reason));
+        }
+
+        var rollingWindow = averages.FirstOrDefault(average =>
+            string.Equals(average.WindowLabel, "24h", StringComparison.OrdinalIgnoreCase));
+        if (rollingWindow is null || !rollingWindow.IsFullWindow)
+        {
+            const string reason = "diff_reference_average_rolling_window_missing";
+            return BtcOpeningLimitDecision.Reject(
+                reason,
+                BuildDiffReferenceAverageRawDecisionJson(
+                    market,
+                    variant,
+                    stakeUsd,
+                    nowUtc,
+                    rollingStartUtc,
+                    previousMarketStartUtc,
+                    rollingStartUtc,
+                    historicalTargetMarketStartUtc,
+                    historicalResults.Count,
+                    samples,
+                    averages,
+                    selectedAverage: null,
+                    selectedDirection: null,
+                    selectedOutcome: null,
+                    diffDeltaFromAverage: null,
+                    premarketResultOutcome,
+                    premarketMoveBps: premarketSignal.MoveBps,
+                    premarketSignalReason: premarketSignal.RejectionReason,
+                    reason));
+        }
+
+        var selectedAverage = averages
+            .Where(average => average.IsFullWindow && average.AverageDiff is not null)
+            .OrderByDescending(average => Math.Abs(average.AverageDiff.GetValueOrDefault()))
+            .ThenByDescending(average => average.WindowSeconds)
+            .FirstOrDefault();
+        if (selectedAverage is null)
+        {
+            const string reason = "diff_reference_average_full_window_missing";
+            return BtcOpeningLimitDecision.Reject(
+                reason,
+                BuildDiffReferenceAverageRawDecisionJson(
+                    market,
+                    variant,
+                    stakeUsd,
+                    nowUtc,
+                    rollingStartUtc,
+                    previousMarketStartUtc,
+                    rollingStartUtc,
+                    historicalTargetMarketStartUtc,
+                    historicalResults.Count,
+                    samples,
+                    averages,
+                    selectedAverage: null,
+                    selectedDirection: null,
+                    selectedOutcome: null,
+                    diffDeltaFromAverage: null,
+                    premarketResultOutcome,
+                    premarketMoveBps: premarketSignal.MoveBps,
+                    premarketSignalReason: premarketSignal.RejectionReason,
+                    reason));
+        }
+
+        var diffDeltaFromAverage = currentSample.Diff - selectedAverage.AverageDiff.GetValueOrDefault();
+        var threshold = GetDiffReferenceAverageMinDelta(variant);
+        BtcPriceDirection? selectedDirection = diffDeltaFromAverage switch
+        {
+            var delta when delta >= threshold => BtcPriceDirection.Down,
+            var delta when delta <= -threshold => BtcPriceDirection.Up,
+            _ => null
+        };
+        if (selectedDirection is null)
+        {
+            const string reason = "diff_reference_average_delta_below_threshold";
+            return BtcOpeningLimitDecision.Reject(
+                reason,
+                BuildDiffReferenceAverageRawDecisionJson(
+                    market,
+                    variant,
+                    stakeUsd,
+                    nowUtc,
+                    rollingStartUtc,
+                    previousMarketStartUtc,
+                    rollingStartUtc,
+                    historicalTargetMarketStartUtc,
+                    historicalResults.Count,
+                    samples,
+                    averages,
+                    selectedAverage,
+                    selectedDirection: null,
+                    selectedOutcome: null,
+                    diffDeltaFromAverage,
+                    premarketResultOutcome,
+                    premarketMoveBps: premarketSignal.MoveBps,
+                    premarketSignalReason: premarketSignal.RejectionReason,
+                    reason));
+        }
+
+        var selectedOutcome = TrySelectOutcomeForDirection(market, selectedDirection.Value);
+        if (selectedOutcome is null)
+        {
+            const string reason = "target_outcome_not_available";
+            return BtcOpeningLimitDecision.Reject(
+                reason,
+                BuildDiffReferenceAverageRawDecisionJson(
+                    market,
+                    variant,
+                    stakeUsd,
+                    nowUtc,
+                    rollingStartUtc,
+                    previousMarketStartUtc,
+                    rollingStartUtc,
+                    historicalTargetMarketStartUtc,
+                    historicalResults.Count,
+                    samples,
+                    averages,
+                    selectedAverage,
+                    selectedDirection,
+                    selectedOutcome: null,
+                    diffDeltaFromAverage,
+                    premarketResultOutcome,
+                    premarketMoveBps: premarketSignal.MoveBps,
+                    premarketSignalReason: premarketSignal.RejectionReason,
+                    reason));
+        }
+
+        return BtcOpeningLimitDecision.Enter(
+            selectedOutcome,
+            BuildDiffReferenceAverageRawDecisionJson(
+                market,
+                variant,
+                stakeUsd,
+                nowUtc,
+                rollingStartUtc,
+                previousMarketStartUtc,
+                rollingStartUtc,
+                historicalTargetMarketStartUtc,
+                historicalResults.Count,
+                samples,
+                averages,
+                selectedAverage,
+                selectedDirection,
+                selectedOutcome,
+                diffDeltaFromAverage,
+                premarketResultOutcome,
+                premarketMoveBps: premarketSignal.MoveBps,
+                premarketSignalReason: premarketSignal.RejectionReason,
+                reason: null));
+    }
+
     private async Task<CryptoUpDown5mDiffShiftProgressState> GetOrCreateDiffShiftProgressStateAsync(
         BtcUpDown5mStrategyVariant variant,
         string assetSymbol,
@@ -8829,6 +9187,110 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
             signal.PreviousMarketEndUtc,
             NormalizeUpDownOutcome(winningOutcome),
             source);
+    }
+
+    private static IReadOnlyList<DiffReferenceAverageSample> BuildDiffReferenceAverageSamples(
+        IReadOnlyList<DiffCounterMarketResult> results)
+    {
+        var upCount = 0;
+        var downCount = 0;
+        var samples = new List<DiffReferenceAverageSample>(results.Count);
+        foreach (var result in results
+            .Where(result => string.Equals(result.WinningOutcome, "Up", StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(result.WinningOutcome, "Down", StringComparison.OrdinalIgnoreCase))
+            .GroupBy(result => result.MarketStartUtc)
+            .Select(group => group
+                .OrderByDescending(result => !string.IsNullOrWhiteSpace(result.MarketId))
+                .ThenBy(result => result.MarketSlug, StringComparer.OrdinalIgnoreCase)
+                .First())
+            .OrderBy(result => result.MarketStartUtc))
+        {
+            var winningOutcome = NormalizeUpDownOutcome(result.WinningOutcome);
+            if (string.Equals(winningOutcome, "Up", StringComparison.OrdinalIgnoreCase))
+            {
+                upCount++;
+            }
+            else
+            {
+                downCount++;
+            }
+
+            samples.Add(new DiffReferenceAverageSample(
+                result.MarketStartUtc,
+                winningOutcome,
+                result.Source,
+                upCount,
+                downCount,
+                upCount - downCount));
+        }
+
+        return samples;
+    }
+
+    private static IReadOnlyList<DiffReferenceAverageWindow> BuildDiffReferenceAverageWindows(
+        IReadOnlyList<DiffReferenceAverageSample> samples,
+        DateTimeOffset rollingEndUtc,
+        TimeSpan intervalDuration)
+    {
+        return DiffReferenceAverageWindows
+            .Select(spec =>
+            {
+                var windowStartExclusiveUtc = rollingEndUtc.Subtract(spec.Duration);
+                var windowSamples = samples
+                    .Where(sample => sample.MarketStartUtc > windowStartExclusiveUtc &&
+                        sample.MarketStartUtc <= rollingEndUtc)
+                    .OrderBy(sample => sample.MarketStartUtc)
+                    .ToArray();
+                var expectedSampleCount = GetDiffReferenceAverageExpectedSampleCount(spec.Duration, intervalDuration);
+                var isFullWindow = windowSamples.Length == expectedSampleCount &&
+                    windowSamples.FirstOrDefault()?.MarketStartUtc == windowStartExclusiveUtc.Add(intervalDuration) &&
+                    windowSamples.LastOrDefault()?.MarketStartUtc == rollingEndUtc &&
+                    HasContiguousDiffReferenceAverageSamples(windowSamples, intervalDuration);
+                var averageDiff = windowSamples.Length == 0
+                    ? (decimal?)null
+                    : windowSamples.Average(sample => (decimal)sample.Diff);
+                return new DiffReferenceAverageWindow(
+                    spec.Label,
+                    (int)spec.Duration.TotalSeconds,
+                    (int)intervalDuration.TotalSeconds,
+                    windowSamples.Length,
+                    expectedSampleCount,
+                    isFullWindow,
+                    averageDiff,
+                    windowSamples.FirstOrDefault()?.MarketStartUtc,
+                    windowSamples.LastOrDefault()?.MarketStartUtc);
+            })
+            .ToArray();
+    }
+
+    private static int GetDiffReferenceAverageExpectedSampleCount(
+        TimeSpan windowDuration,
+        TimeSpan intervalDuration)
+    {
+        return intervalDuration.Ticks <= 0
+            ? 0
+            : (int)(windowDuration.Ticks / intervalDuration.Ticks);
+    }
+
+    private static bool HasContiguousDiffReferenceAverageSamples(
+        IReadOnlyList<DiffReferenceAverageSample> samples,
+        TimeSpan intervalDuration)
+    {
+        for (var index = 1; index < samples.Count; index++)
+        {
+            if (samples[index].MarketStartUtc - samples[index - 1].MarketStartUtc != intervalDuration)
+            {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    private static decimal GetDiffReferenceAverageMinDelta(BtcUpDown5mStrategyVariant variant)
+    {
+        var threshold = variant.DecisionThresholdBps ?? variant.DecisionDepth;
+        return threshold > 0m ? threshold : 1m;
     }
 
     private static string GetDiffShiftProgressPremarketMode(CryptoUpDown5mDiffShiftProgressState state)
@@ -15437,6 +15899,109 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
         });
     }
 
+    private static string BuildDiffReferenceAverageRawDecisionJson(
+        PolymarketGammaMarket market,
+        BtcUpDown5mStrategyVariant variant,
+        decimal targetNotionalUsd,
+        DateTimeOffset nowUtc,
+        DateTimeOffset? rollingStartUtc,
+        DateTimeOffset? rollingEndUtc,
+        DateTimeOffset? resultFetchStartUtc,
+        DateTimeOffset? resultFetchEndUtc,
+        int historicalResultCount,
+        IReadOnlyList<DiffReferenceAverageSample> samples,
+        IReadOnlyList<DiffReferenceAverageWindow> averages,
+        DiffReferenceAverageWindow? selectedAverage,
+        BtcPriceDirection? selectedDirection,
+        BtcUpDown5mOutcomeQuote? selectedOutcome,
+        decimal? diffDeltaFromAverage,
+        string? premarketResultOutcome,
+        decimal? premarketMoveBps,
+        string? premarketSignalReason,
+        string? reason)
+    {
+        var marketStartUtc = GetMarketWindowStartUtc(market, variant);
+        var entryDueAtUtc = GetEntryDueAtUtc(marketStartUtc, variant);
+        var currentSample = samples.LastOrDefault();
+        return JsonSerializer.Serialize(new
+        {
+            pricing_mode = OpeningLimitPricingMode,
+            order_execution_mode = FakOrderType,
+            order_type = FakOrderType,
+            post_only = false,
+            diff_reference_average_premarket_enabled = true,
+            fak_stats_probe = true,
+            strategy_code = variant.Code,
+            strategy_category = variant.Category,
+            decision_source = "rolling_24h_diff_reference_average_premarket",
+            reference_asset_symbol = GetReferenceAssetSymbol(variant),
+            quote_received_at_utc = nowUtc,
+            condition_id = market.ConditionId,
+            market_id = market.MarketId,
+            market_slug = market.Slug,
+            market_start_utc = marketStartUtc,
+            market_end_utc = market.EndDateUtc,
+            entry_delay_seconds = variant.EntryDelaySeconds,
+            entry_due_at_utc = entryDueAtUtc,
+            decision_delay_ms = GetDecisionDelayMilliseconds(entryDueAtUtc, nowUtc),
+            counter_mode = "rolling_24h_no_utc_day_reset",
+            counter_result_source = "ResolvedMarketLedger+" + GetPremarketPreviousResultSource(variant),
+            rolling_diff_window_hours = 24,
+            rolling_start_market_start_utc = rollingStartUtc,
+            rolling_end_market_start_utc = rollingEndUtc,
+            result_fetch_start_utc = resultFetchStartUtc,
+            result_fetch_end_utc = resultFetchEndUtc,
+            historical_result_count = historicalResultCount,
+            synthetic_premarket_result_included = premarketResultOutcome is not null,
+            premarket_result_outcome = premarketResultOutcome,
+            premarket_move_bps = premarketMoveBps,
+            premarket_signal_rejection_reason = premarketSignalReason,
+            diff_sample_count = samples.Count,
+            current_diff_market_start_utc = currentSample?.MarketStartUtc,
+            current_diff_result_outcome = currentSample?.WinningOutcome,
+            current_diff_result_source = currentSample?.Source,
+            up_count = currentSample?.UpCount,
+            down_count = currentSample?.DownCount,
+            diff = currentSample?.Diff,
+            current_diff = currentSample?.Diff,
+            selected_average_window = selectedAverage?.WindowLabel,
+            selected_average_window_seconds = selectedAverage?.WindowSeconds,
+            selected_average_sample_step_seconds = selectedAverage?.SampleStepSeconds,
+            selected_average_sample_count = selectedAverage?.SampleCount,
+            selected_average_expected_sample_count = selectedAverage?.ExpectedSampleCount,
+            selected_average_is_full_window = selectedAverage?.IsFullWindow,
+            selected_average_diff = selectedAverage?.AverageDiff,
+            selected_average_abs_diff = selectedAverage?.AverageDiff is { } averageDiff ? Math.Abs(averageDiff) : (decimal?)null,
+            selected_average_first_market_start_utc = selectedAverage?.FirstMarketStartUtc,
+            selected_average_last_market_start_utc = selectedAverage?.LastMarketStartUtc,
+            diff_average_count = averages.Count,
+            diff_full_average_count = averages.Count(average => average.IsFullWindow),
+            diff_averages = averages
+                .Select(average => new
+                {
+                    window = average.WindowLabel,
+                    window_seconds = average.WindowSeconds,
+                    sample_step_seconds = average.SampleStepSeconds,
+                    sample_count = average.SampleCount,
+                    expected_sample_count = average.ExpectedSampleCount,
+                    is_full_window = average.IsFullWindow,
+                    average_diff = average.AverageDiff,
+                    average_abs_diff = average.AverageDiff is { } itemAverageDiff ? Math.Abs(itemAverageDiff) : (decimal?)null,
+                    first_market_start_utc = average.FirstMarketStartUtc,
+                    last_market_start_utc = average.LastMarketStartUtc
+                })
+                .ToArray(),
+            diff_delta_from_average = diffDeltaFromAverage,
+            diff_abs_delta_from_average = diffDeltaFromAverage is { } delta ? Math.Abs(delta) : (decimal?)null,
+            diff_reference_average_min_delta = GetDiffReferenceAverageMinDelta(variant),
+            selected_direction = selectedDirection?.ToString(),
+            asset_id = selectedOutcome?.AssetId,
+            outcome = selectedOutcome?.Outcome,
+            target_notional_usd = targetNotionalUsd,
+            skip_reason = reason
+        });
+    }
+
     private static decimal? GetDiffCounterEffectiveDiff(
         DiffCounterSnapshot? snapshot,
         BtcPriceDirection? triggerDirection,
@@ -19056,6 +19621,29 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
         DateTimeOffset? MarketEndUtc,
         string WinningOutcome,
         string Source);
+
+    private sealed record DiffReferenceAverageWindowSpec(
+        string Label,
+        TimeSpan Duration);
+
+    private sealed record DiffReferenceAverageSample(
+        DateTimeOffset MarketStartUtc,
+        string WinningOutcome,
+        string Source,
+        int UpCount,
+        int DownCount,
+        int Diff);
+
+    private sealed record DiffReferenceAverageWindow(
+        string WindowLabel,
+        int WindowSeconds,
+        int SampleStepSeconds,
+        int SampleCount,
+        int ExpectedSampleCount,
+        bool IsFullWindow,
+        decimal? AverageDiff,
+        DateTimeOffset? FirstMarketStartUtc,
+        DateTimeOffset? LastMarketStartUtc);
 
     private sealed record DiffShiftProgressApplyResult(
         CryptoUpDown5mDiffShiftProgressState State,

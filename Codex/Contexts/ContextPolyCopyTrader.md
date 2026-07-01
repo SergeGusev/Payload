@@ -1,3 +1,16 @@
+## Active Update 2026-07-01 Diff Reference Average Premarket
+Goal: Add BTC/ETH/SOL Diff Reference Average Premarket strategies that choose direction from rolling Diff averages.
+Status: Completed
+Done:
+- Added `DiffReferenceAveragePremarket` strategy behavior and BTC/ETH/SOL catalog variants with thresholds `1..10`, `15`, `20`, `25`, and `30`.
+- Seeded PostgreSQL strategy rows under id groups `8175`/`8176`/`8177` and Dashboard category `Up Or Down 5 min Diff Reference Average`.
+- Implemented the decision path in `BtcUpDown5mPaperStrategyProcessor`: rebuild rolling 24h `Diff = UpCount - DownCount` without UTC-day reset, append the synthetic previous 5m premarket result, calculate full-window average Diff over `24h`, `12h`, `6h`, `3h`, `90m`, and `45m`, select the average with maximum `abs(averageDiff)`, buy Down when `currentDiff - selectedAverageDiff >= N`, buy Up when `<= -N`, otherwise skip.
+- Added raw decision diagnostics for selected average window/diff, current diff, delta, premarket synthetic result, and skip reason.
+- Updated README and focused tests for catalog counts, display category, schema seeds, and an end-to-end ETH premarket decision using 24h history plus synthetic previous result.
+Next: Restart the service/Dashboard so schema initialization inserts the new strategies, then enable desired rows from the Dashboard.
+Notes: `git pull --ff-only` succeeded and reported already up to date. Verification passed: focused `dotnet test tests\PolyCopyTrader.Tests\PolyCopyTrader.Tests.csproj --no-restore --filter "FullyQualifiedName~DiffReferenceAveragePremarket|FullyQualifiedName~DiffLimitProgressPremarketSchemaTests|FullyQualifiedName~StrategyIds_IncludeStandardMartinAndGammaBtcVariants|FullyQualifiedName~StrategyIds_IncludeEthAndSolBinanceBpsVariants|FullyQualifiedName~StrategyDisplayCategoryTests" -p:UseSharedCompilation=false` passed `77/77`; `dotnet build src\PolyCopyTrader.Service\PolyCopyTrader.Service.csproj --no-restore -p:UseSharedCompilation=false` passed with `0` warnings/errors; `git diff --check -- <changed files>` passed with LF/CRLF warnings only. Existing unrelated dirty files and output folders were left untouched.
+Blockers: None.
+
 ## Active Update 2026-07-01 Reference Average Premarket Explained
 Goal: Explain the implemented principle of Reference Average Premarket strategies.
 Status: Completed

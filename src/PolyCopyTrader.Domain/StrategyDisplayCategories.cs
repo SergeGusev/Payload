@@ -92,6 +92,11 @@ public static class StrategyDisplayCategories
             return "Up Or Down 5 min Diff Real Limit Progress";
         }
 
+        if (IsDiffReferenceAverage(suffix))
+        {
+            return "Up Or Down 5 min Diff Reference Average";
+        }
+
         if (StartsWithDiffThreshold(suffix, "Up", out var diffUpRevert))
         {
             return categoryPrefix + "Diff Up" + GetDiffCategorySuffix(suffix, diffUpRevert);
@@ -305,6 +310,16 @@ public static class StrategyDisplayCategories
             string.Equals(parts[2], "Real", StringComparison.OrdinalIgnoreCase) &&
             string.Equals(parts[3], "Limit", StringComparison.OrdinalIgnoreCase) &&
             string.Equals(parts[4], "Progress", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static bool IsDiffReferenceAverage(string value)
+    {
+        var parts = value.Split(new[] { ' ' }, StringSplitOptions.RemoveEmptyEntries);
+        return parts.Length >= 4 &&
+            int.TryParse(parts[0], NumberStyles.Integer, CultureInfo.InvariantCulture, out _) &&
+            string.Equals(parts[1], "Diff", StringComparison.OrdinalIgnoreCase) &&
+            string.Equals(parts[2], "Reference", StringComparison.OrdinalIgnoreCase) &&
+            string.Equals(parts[3], "Average", StringComparison.OrdinalIgnoreCase);
     }
 
     private static bool TryGetShiftDiffCategory(string value, string word, out string category)

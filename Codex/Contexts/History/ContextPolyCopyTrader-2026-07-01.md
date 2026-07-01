@@ -32,3 +32,14 @@ Request:
 
 Result:
 Reviewed README and source implementation for `ReferenceAverageBpsThresholdFakPremarket`. Explained that BTC/ETH/SOL Reference Average Premarket rows run 30 seconds before market open, use Up/Down trigger rows with thresholds `1..10` and `15..100` step `5`, select the highest full in-memory reference average across `24h`, `12h`, `6h`, `3h`, `90m`, `45m`, `20m`, and `10m`, compute move as `(currentPrice - selectedAverage) / selectedAverage * 10000` bps, buy the opposite outcome when threshold is crossed (`Up` trigger buys Down, `Down` trigger buys Up), and use the FAK taker ask-depth path for Paper/Live-shadow execution. No production DB writes, live orders, service restart, source-code changes, build, or tests were performed.
+
+## 2026-07-01T20:11:30.8152503+00:00
+Request:
+Давай 20 и 10 минут уберём.
+
+1. Правильный вариант Вариант A: average с максимальным abs(averageDiff), то есть самый дальний от нуля
+2. для Diff нужны другие, например 1..10, 15, 20, 25, 30
+3. Да, включаем
+
+Result:
+Implemented the new BTC/ETH/SOL `Diff Reference Average Premarket` strategy family. Added catalog variants and PostgreSQL seeds for thresholds `1..10`, `15`, `20`, `25`, and `30` under id groups `8175`/`8176`/`8177`; added Dashboard category `Up Or Down 5 min Diff Reference Average`; implemented rolling 24h Diff reconstruction without UTC-day reset, synthetic previous 5m premarket result inclusion, full-window averages over `24h`, `12h`, `6h`, `3h`, `90m`, and `45m` only, selected by maximum `abs(averageDiff)`, with direction chosen by `currentDiff - selectedAverageDiff`. Updated raw diagnostics, README, schema/category/catalog tests, and an end-to-end ETH premarket processor test. Verification passed: focused test filter passed `77/77`, service build passed with `0` warnings/errors, and `git diff --check` passed with LF/CRLF warnings only.
