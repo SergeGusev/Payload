@@ -1,3 +1,16 @@
+## Active Update 2026-07-01 ETH Diff Shift Progress Premarket Assessment
+Goal: Assess `ETH Up or Down 5m 1 Diff Shift Progress Premarket` risk, maximum stake, and required Live balance.
+Status: Completed
+Done:
+- Confirmed from code and schema that the target strategy code is `eth_up_down_5m_1_diff_shift_progress_premarket` with id `b7c50005-0000-4000-8167-000000000001`.
+- Verified the strategy catalog exists in source and `PostgresSchema`, but the production database currently has no `strategies`, `strategy_market_paper_runs`, `paper_orders`, `paper_fills`, `live_orders`, or raw diagnostic rows for the target strategy or the broader `816x` Diff Shift Progress group.
+- Confirmed there is no historical Paper/Live data in production from which to calculate realized drawdown, maximum historical stake, or win/loss behavior for this strategy.
+- Inspected Live preflight logic: strategy Live balance checks use `live_available_balance - open_live_order_notional >= required live notional`; open Live statuses are `Submitted`, `Live`, `Delayed`, `Unmatched`, and `CancelRequested`.
+- Confirmed the Paper premarket variant sizes entries as `Paper unit * abs(Diff)`, while the current paper-live-shadow path passes the configured `LiveStakeAmount` into live sizing rather than reusing the Paper Diff multiplier.
+Next: Run/deploy the schema initialization/current service version before expecting this strategy to appear in production history; then reassess after enough settled Paper runs exist.
+Notes: Read-only source inspection and production SQL only. No database writes, live orders, service restarts, source-code changes, build, or tests were performed.
+Blockers: Production DB has no rows/history for the requested strategy.
+
 ## Active Update 2026-07-01 Paper Notional Field Clarified
 Goal: Clarify whether Paper `Notional` means the actual amount placed.
 Status: Completed
