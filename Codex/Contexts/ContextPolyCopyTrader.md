@@ -1,3 +1,17 @@
+## Active Update 2026-07-02 Server Health Check
+Goal: Check whether the production server, database, service heartbeat, and live order path are alive.
+Status: Completed
+Done:
+- Confirmed TCP connectivity to PostgreSQL `192.168.0.101:5432`.
+- Confirmed `PolyCopyTrader.Service` heartbeat is fresh: `Running`/`Live`, version `info=1.0.0+06ae3df...`, started `2026-07-01 23:54:01+03`, heartbeat age about `40s`, `last_error = null`.
+- Confirmed Paper activity is current: `216` Paper orders in `5m`, `625` in `15m`, `2615` in `60m`; latest Paper order at `2026-07-02 18:10:15+03`.
+- Confirmed Live activity is current: `3` Live orders in `5m`, `9` in `15m`, `30` in `60m`; latest Live order at `2026-07-02 18:09:30+03`.
+- Confirmed current Live orders are matched FAK SOL orders with no validation summary error.
+- Confirmed `api_errors_10m=0`.
+Next: None.
+Notes: Read-only production SQL/TCP checks only. No database writes, service restarts, Live enablement changes, order submissions, cancel actions, source-code changes, build, or tests were performed.
+Blockers: None.
+
 ## Active Update 2026-07-01 Diff Reference Average Premarket Deployment Check
 Goal: Verify the deployed server build and the new Diff Reference Average Premarket strategy family on production data.
 Status: Completed
