@@ -3298,6 +3298,11 @@ CREATE INDEX CONCURRENTLY IF NOT EXISTS ix_paper_orders_strategy_perf_cover
 ON paper_orders(strategy_id, created_at_utc DESC)
 INCLUDE (status, side, notional_usd);
 
+CREATE INDEX CONCURRENTLY IF NOT EXISTS ix_paper_orders_countertrend_signal_perf
+ON paper_orders(strategy_id, created_at_utc DESC)
+WHERE raw_decision_json IS NOT NULL
+  AND (raw_decision_json ? 'previous_score' OR raw_decision_json ? 'previous_score_bps');
+
 CREATE INDEX CONCURRENTLY IF NOT EXISTS ix_paper_orders_id_strategy_side_cover
 ON paper_orders(id)
 INCLUDE (strategy_id, side);

@@ -1,3 +1,19 @@
+## Active Update 2026-07-02 Dashboard Strategy Performance Timeout
+Goal: Diagnose and reduce the Dashboard `NpgsqlException: Timeout during reading attempt` in `GetStrategyPerformanceAsync`.
+Status: Completed
+Done:
+- Inspected the screenshot and confirmed the failure is a Dashboard read timeout in `PostgresAppRepository.GetStrategyPerformanceAsync`, not a service/database outage.
+- Checked production table sizes: about `8,182` strategies, `599k` Paper orders, `540k` Paper fills, `538k` Paper positions, `538k` Paper settlements, and `4.0M` `strategy_market_paper_runs`.
+- Measured the slow CTEs on `192.168.0.101`: the countertrend JSON scan over `paper_orders.raw_decision_json` took about `65.7s`, and `run_agg` over strategy runs took about `35s`.
+- Added schema index `ix_paper_orders_countertrend_signal_perf` for Paper orders that actually contain `previous_score` or `previous_score_bps`.
+- Applied the same index online on production with `CREATE INDEX CONCURRENTLY`; creation took about `2m39s` and did not require stopping the service.
+- Verified the countertrend scan now uses the new index-only scan and dropped to about `0.05s`.
+- Verified the full `GetStrategyPerformanceAsync` SELECT now completes in about `1m45s`, below the current `180s` command timeout.
+- Added a focused schema test for the new index.
+Next: If Dashboard refresh is still too slow for interactive use, optimize the remaining all-time `run_agg` path with a summary table or a Dashboard-specific active-strategy query; the immediate timeout should be mitigated by the new index.
+Notes: Verification passed: `dotnet test tests\PolyCopyTrader.Tests\PolyCopyTrader.Tests.csproj --no-restore --filter "FullyQualifiedName~StrategyPerformanceSchemaTests" -p:UseSharedCompilation=false` passed `1/1` with existing nullable warnings. Production DB write was limited to an online index creation; no service restart, strategy state change, Live enablement change, order submission, or cancel action was performed. Existing unrelated dirty files were left untouched.
+Blockers: None.
+
 ## Active Update 2026-07-02 Server Health Check
 Goal: Check whether the production server, database, service heartbeat, and live order path are alive.
 Status: Completed
