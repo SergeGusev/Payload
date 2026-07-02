@@ -293,6 +293,7 @@ builder.Services.AddWindowsService(options => options.ServiceName = "PolyCopyTra
 builder.Services.AddSingleton<PostgresConnectionFactory>();
 builder.Services.AddSingleton<IStorageSchemaInitializer, PostgresSchemaInitializer>();
 builder.Services.AddSingleton<IAppRepository, PostgresAppRepository>();
+builder.Services.AddSingleton<IDashboardSnapshotRepository, PostgresDashboardSnapshotRepository>();
 
 builder.Services.AddSingleton<IPolymarketApiErrorSink, RepositoryPolymarketApiErrorSink>();
 builder.Services.AddSingleton<IPolymarketHttpLogSink, RepositoryPolymarketHttpLogSink>();
@@ -385,6 +386,7 @@ builder.Services.AddHostedService<StartupSafetyCheckService>();
 // builder.Services.AddHostedService<PolymarketHttpLogRetentionWorker>();
 builder.Services.AddHostedService(sp => sp.GetRequiredService<PaperEntryPersistenceQueue>());
 builder.Services.AddHostedService<BotWorker>();
+builder.Services.AddHostedService<DashboardStrategyPerformanceSnapshotWorker>();
 builder.Services.AddHostedService<ExposureSnapshotCacheWarmupService>();
 builder.Services.AddHostedService<PaperTradingWorker>();
 builder.Services.AddHostedService<LiveTradingMaintenanceWorker>();

@@ -9,6 +9,7 @@ namespace PolyCopyTrader.Dashboard.Services;
 
 public sealed class DashboardCsvExporter(
     IAppRepository repository,
+    IDashboardSnapshotRepository dashboardSnapshots,
     AppConfiguration configuration)
 {
     private const int ExportLimit = 25_000;
@@ -174,7 +175,7 @@ public sealed class DashboardCsvExporter(
         await WriteAsync(
             Path.Combine(exportDirectory, "Strategies.csv"),
             ["Name", "Enabled", "LiveStakes", "AutoLivePaused", "Paused", "PausedUntilUtc", "PaperStakeAmount", "LiveStakeAmount", "PaperLostCoeff", "LiveLostCoeff", "PaperLostCounter", "LiveLostCounter", "LiveAvailableBalance", "OrdersCount", "FilledOrdersCount", "OpenOrdersCount", "OpenPositionsCount", "ObservedRunsCount", "EnteredRunsCount", "SkippedRunsCount", "PaperConditionSkippedRunsCount", "PaperNotAcceptedRunsCount", "SettledRunsCount", "SettledPositionsCount", "WonPositionsCount", "LostPositionsCount", "StakeUsd", "RealizedPnlUsd", "OpenUnrealizedPnlUsd", "MarkToMarketPnlUsd", "WinRatePct", "LossRatePct", "AvgWinPnlUsd", "AvgLossPnlUsd", "ProfitFactor", "ExpectancyPnlUsd", "MarkToMarketRoiPct", "ClosedRoiPct", "AvgEntryDelaySeconds", "MaxEntryDelaySeconds", "AvgCountertrendScoreBps", "AvgCountertrendSignalBps", "LastCountertrendSignalBps", "LiveOrdersCount", "LiveFilledOrdersCount", "LiveOpenOrdersCount", "LiveSettledOrdersCount", "LiveSkippedOrdersCount", "LiveConditionSkippedOrdersCount", "LiveTechnicalSkippedOrdersCount", "LiveIgnoredOrdersCount", "LiveIgnoredGtdUnfilledCount", "LiveIgnoredCancelledOrdersCount", "LiveIgnoredRejectedOrdersCount", "LiveWonOrdersCount", "LiveLostOrdersCount", "LiveStakeUsd", "LiveRealizedPnlUsd", "LiveWinRatePct", "LiveLossRatePct", "LiveAvgWinPnlUsd", "LiveAvgLossPnlUsd", "LiveProfitFactor", "LiveExpectancyPnlUsd", "LiveRoiPct", "LiveLastOrderUtc", "LiveLastSettlementUtc", "LastOrderUtc", "LastRunUtc"],
-            (await repository.GetStrategyPerformanceAsync(ExportLimit, cancellationToken)).Select(strategy => new object?[]
+            (await dashboardSnapshots.GetStrategyPerformanceSnapshotAsync(ExportLimit, cancellationToken)).Select(strategy => new object?[]
             {
                 strategy.Name,
                 strategy.Enabled,

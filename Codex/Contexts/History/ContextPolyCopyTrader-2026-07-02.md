@@ -11,3 +11,19 @@ Screenshot of Dashboard error: `NpgsqlException: Exception while reading from st
 
 Result:
 Diagnosed the Dashboard timeout as a heavy remote strategy-performance aggregation, not a server outage. Production currently has about `8,182` strategies and `4.0M` `strategy_market_paper_runs`; the countertrend JSON scan over `paper_orders.raw_decision_json` alone took about `65.7s`, and `run_agg` took about `35s`. Added schema index `ix_paper_orders_countertrend_signal_perf` for Paper orders with `previous_score`/`previous_score_bps`, applied it online on production with `CREATE INDEX CONCURRENTLY` in about `2m39s`, and verified the countertrend scan now uses an index-only scan in about `0.05s`. The full `GetStrategyPerformanceAsync` SELECT now completes in about `1m45s`, under the current `180s` timeout. Added a focused schema test; targeted test passed `1/1` with existing nullable warnings. No service restart, strategy state change, Live enablement change, order submission, or cancel action was performed.
+
+## 2026-07-02T18:45:27.2955133+00:00
+Request:
+Давай начинать работу таким образом, чтобы для выборок в Dashboard применялись плоские запросы на заранее подготовленные данные.
+
+То есть нормальный цикл жизни сервиса такой:
+
+1. Отслеживание временных событий начала рынка.
+2. Постановка ставок.
+3. Запись ставок в базу.
+4. В паузу - подготовка предвычесленных данных для Dashboard
+
+И в итоге Dashboard должен показывать уже подготовленные данные без долгих вычислений
+
+Result:
+Implemented the first Dashboard precompute slice for strategy performance. Added PostgreSQL table `dashboard_strategy_performance_snapshots`, a dedicated snapshot repository, and a service hosted worker that computes the existing heavy strategy-performance aggregation outside the UI and refreshes the snapshot every 10 minutes during a quiet slot about one minute after a 5-minute market boundary. Switched Dashboard strategy rows and `Strategies.csv` export to read the flat snapshot table. Added focused source/schema tests. Verification passed for service build, test-project build, `DashboardSnapshotTests` (`3/3`), and `StorageTests` (`49/49`). Full solution build was blocked by a running Dashboard process locking WPF output DLLs; full unfiltered tests still have unrelated existing `BtcUpDown5mPaperStrategyProcessorTests` failures.

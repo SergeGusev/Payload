@@ -556,6 +556,7 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         var nextRuntime = DashboardRepositoryFactory.Create(databaseSource);
         var nextDataService = new DashboardDataService(
             nextRuntime.Repository,
+            nextRuntime.DashboardSnapshots,
             nextRuntime.Configuration,
             nextRuntime.StorageConfigured,
             nextRuntime.AuthService);
@@ -563,7 +564,10 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         var nextCertificateCheckService = new PolymarketCertificateCheckService(
             nextRuntime.Configuration.Polymarket,
             nextRuntime.Configuration.MarketDataWebSocket);
-        var nextCsvExporter = new DashboardCsvExporter(nextRuntime.Repository, nextRuntime.Configuration);
+        var nextCsvExporter = new DashboardCsvExporter(
+            nextRuntime.Repository,
+            nextRuntime.DashboardSnapshots,
+            nextRuntime.Configuration);
 
         runtime = nextRuntime;
         dataService = nextDataService;

@@ -8,6 +8,7 @@ namespace PolyCopyTrader.Dashboard.Services;
 
 public sealed class DashboardDataService(
     IAppRepository repository,
+    IDashboardSnapshotRepository dashboardSnapshots,
     AppConfiguration configuration,
     bool storageConfigured,
     IPolymarketAuthService authService)
@@ -381,7 +382,7 @@ public sealed class DashboardDataService(
             return cachedStrategyPerformance;
         }
 
-        cachedStrategyPerformance = await repository.GetStrategyPerformanceAsync(StrategyDashboardFetchLimit, cancellationToken);
+        cachedStrategyPerformance = await dashboardSnapshots.GetStrategyPerformanceSnapshotAsync(StrategyDashboardFetchLimit, cancellationToken);
         cachedStrategyPerformanceAtUtc = nowUtc;
         return cachedStrategyPerformance;
     }

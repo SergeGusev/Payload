@@ -1,3 +1,17 @@
+## Active Update 2026-07-02 Dashboard Precomputed Strategy Snapshot
+Goal: Start moving Dashboard strategy-performance reads to flat queries over service-precomputed data.
+Status: Completed
+Done:
+- Added `dashboard_strategy_performance_snapshots` to the PostgreSQL schema with columns matching `StrategyPerformance` plus `refreshed_at_utc`, and code/refreshed-at indexes.
+- Added `IDashboardSnapshotRepository` with PostgreSQL and NoOp implementations; the PostgreSQL read path is a flat `SELECT` from the snapshot table.
+- Added `DashboardStrategyPerformanceSnapshotWorker` to the service; it computes the existing heavy strategy-performance aggregation outside the UI and upserts a snapshot every 10 minutes at a quiet slot about one minute after a 5-minute market boundary.
+- Switched Dashboard strategy rows and `Strategies.csv` export from `IAppRepository.GetStrategyPerformanceAsync` to `IDashboardSnapshotRepository.GetStrategyPerformanceSnapshotAsync`.
+- Registered the snapshot repository and hosted worker in service/Dashboard construction paths.
+- Added focused tests proving the schema/table exists, Dashboard reads the precomputed snapshot, and the snapshot repository read SQL does not scan the heavy order/run tables.
+Next: Deploy/restart the service so schema initialization creates the snapshot table and the first quiet-slot refresh populates Dashboard data; later slices can precompute additional Dashboard tabs the same way.
+Notes: Verification passed: `dotnet build src\PolyCopyTrader.Service\PolyCopyTrader.Service.csproj`; `dotnet build tests\PolyCopyTrader.Tests\PolyCopyTrader.Tests.csproj --no-dependencies`; `dotnet test tests\PolyCopyTrader.Tests\PolyCopyTrader.Tests.csproj --no-build --filter "FullyQualifiedName~DashboardSnapshotTests"` passed `3/3`; `dotnet test tests\PolyCopyTrader.Tests\PolyCopyTrader.Tests.csproj --no-build --filter "FullyQualifiedName~StorageTests"` passed `49/49`. Full `dotnet build PolyCopyTrader.sln` could not complete because a running `PolyCopyTrader.Dashboard` process locks the WPF output DLLs. Full unfiltered tests currently fail in existing `BtcUpDown5mPaperStrategyProcessorTests` cases unrelated to this Dashboard snapshot work. Existing unrelated dirty files were left untouched.
+Blockers: Full solution build requires closing the running Dashboard process; full suite has pre-existing strategy-test failures outside this task.
+
 ## Active Update 2026-07-02 Dashboard Strategy Performance Timeout
 Goal: Diagnose and reduce the Dashboard `NpgsqlException: Timeout during reading attempt` in `GetStrategyPerformanceAsync`.
 Status: Completed

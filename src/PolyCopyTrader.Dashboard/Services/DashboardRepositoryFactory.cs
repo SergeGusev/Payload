@@ -52,14 +52,17 @@ public static class DashboardRepositoryFactory
         }
 
         IAppRepository repository;
+        IDashboardSnapshotRepository dashboardSnapshots;
         if (StorageConnectionResolver.IsConfigured(appConfiguration.Storage))
         {
             var connectionFactory = new PostgresConnectionFactory(appConfiguration.Storage);
             repository = new PostgresAppRepository(connectionFactory);
+            dashboardSnapshots = new PostgresDashboardSnapshotRepository(connectionFactory);
         }
         else
         {
             repository = new NoOpAppRepository();
+            dashboardSnapshots = new NoOpDashboardSnapshotRepository();
         }
 
         var secretProvider = PolymarketSecretProviderFactory.Create(appConfiguration.PolymarketAuth);
@@ -70,6 +73,7 @@ public static class DashboardRepositoryFactory
 
         return new DashboardRuntime(
             repository,
+            dashboardSnapshots,
             appConfiguration,
             StorageConnectionResolver.IsConfigured(appConfiguration.Storage),
             authService,
@@ -155,6 +159,7 @@ public static class DashboardRepositoryFactory
 
 public sealed record DashboardRuntime(
     IAppRepository Repository,
+    IDashboardSnapshotRepository DashboardSnapshots,
     AppConfiguration Configuration,
     bool StorageConfigured,
     IPolymarketAuthService AuthService,
