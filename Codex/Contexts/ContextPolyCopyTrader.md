@@ -1,3 +1,18 @@
+## Active Update 2026-07-02 BTC Diff Limit Progress Live Balance Assessment
+Goal: Assess historical downside, maximum stake, and sensible Live balance for `BTC Up or Down 5m 5 Diff Limit Progress Premarket`.
+Status: Completed
+Done:
+- Queried the Dashboard server database at `192.168.0.101` / `polycopytrader` read-only for strategy `btc_up_down_5m_5_diff_limit_progress_premarket` (`b7c50005-0000-4000-8169-000000000005`).
+- Confirmed current settings: `enabled=true`, `live_stakes=false`, `paper_stake_amount=1`, `live_stake_amount=1`, `live_available_balance=100`, and no Live orders/open Live reserve.
+- Measured `688` settled Paper runs over `2026-06-29 21:40+03` through `2026-07-02 23:50+03`: `382` wins, `306` losses, realized PnL `$1125.54079340`.
+- Historical risk metrics: worst cumulative PnL from zero `-$99.34740919`, maximum peak-to-trough drawdown `-$277.69596872`, worst single loss `-$28.00710017`, and worst/longest loss streak `7` losses totaling `-$190.05029990`.
+- Maximum Paper stake/fill cost was about `$28.00710026` with capped multiplier `5`; historical uncapped abs diff reached `12`, but the strategy cap limited stake multiplier to `5`.
+- Calculated replay balance references: exact historical replay from zero needed at least about `$127.35450919` before a same-sized next entry; drawdown-plus-next-max-stake reserve is about `$305.70306898`.
+- Confirmed current code uses `LiveStakeAmount` as the Live sizing multiplier for this paper-live-shadow path, not the Paper Diff multiplier; with current `Live $=1`, the observed one-unit notional is about `$6.0093` plus any open Live reserve.
+Next: None.
+Notes: Read-only production SQL and source inspection only. No production writes, service restart, Live enablement change, order submission, cancel action, source-code behavior change, build, or tests were performed.
+Blockers: None.
+
 ## Active Update 2026-07-02 Retired ETH Diff Shift Progress Premarket Threshold 2
 Goal: Delete `ETH Up or Down 5m 2 Diff Shift Progress Premarket` and its server-side history.
 Status: Completed
