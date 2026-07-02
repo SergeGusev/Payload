@@ -1,3 +1,15 @@
+## Active Update 2026-07-02 Dashboard Snapshot Cadence Explained
+Goal: Explain why the first Dashboard strategy-performance snapshot refresh cadence is 10 minutes and whether a low-priority infinite refresh loop can avoid service interference.
+Status: Completed
+Done:
+- Reviewed `DashboardStrategyPerformanceSnapshotWorker`: it runs as a separate hosted background worker, waits for a quiet slot about one minute after a 5-minute market boundary, and enforces a 10-minute cadence.
+- Clarified that the 10-minute cadence was a conservative first-slice throttle because the current source aggregation is still the all-time heavy `GetStrategyPerformanceAsync` query and previously measured around `1m45s` on production.
+- Clarified that a dedicated low-priority .NET thread cannot guarantee non-interference because the dominant shared resource is PostgreSQL CPU/I/O/cache/locks, not the C# worker thread CPU.
+- Recommended best-effort safeguards for the next slice: configurable cadence, DB-side timeouts, single refresh connection, skip/cancel near entry windows, and eventually incremental precompute after order/run writes instead of repeated all-history aggregation.
+Next: If requested, change the worker from fixed 10-minute cadence to a configurable low-impact loop with DB/query circuit breakers and operational-window gating.
+Notes: Explanation-only task after reading workflow/context/source. No code changes, production DB writes, service restarts, Live enablement changes, order submissions, cancel actions, build, or tests were performed.
+Blockers: A hard guarantee requires removing the heavy all-history source aggregation from the refresh path or isolating DB resources; thread priority alone cannot provide it.
+
 ## Active Update 2026-07-02 Dashboard Precomputed Strategy Snapshot
 Goal: Start moving Dashboard strategy-performance reads to flat queries over service-precomputed data.
 Status: Completed

@@ -27,3 +27,10 @@ Request:
 
 Result:
 Implemented the first Dashboard precompute slice for strategy performance. Added PostgreSQL table `dashboard_strategy_performance_snapshots`, a dedicated snapshot repository, and a service hosted worker that computes the existing heavy strategy-performance aggregation outside the UI and refreshes the snapshot every 10 minutes during a quiet slot about one minute after a 5-minute market boundary. Switched Dashboard strategy rows and `Strategies.csv` export to read the flat snapshot table. Added focused source/schema tests. Verification passed for service build, test-project build, `DashboardSnapshotTests` (`3/3`), and `StorageTests` (`49/49`). Full solution build was blocked by a running Dashboard process locking WPF output DLLs; full unfiltered tests still have unrelated existing `BtcUpDown5mPaperStrategyProcessorTests` failures.
+
+## 2026-07-02T18:57:48.1201834+00:00
+Request:
+Объясни, почему снимок будет обновляться каждые 10 минут? Мы можем сделать отдельный поток с низким приоритетом, который гарантированно не будет мешать текущей работе сервиса, но при этом будет в бесконечном цикле обновлять снимок?
+
+Result:
+Explained that the first 10-minute cadence is a conservative throttle because the source snapshot refresh still uses the heavy all-history `GetStrategyPerformanceAsync` aggregation, previously measured around `1m45s` on production. Explained that the current implementation is already a separate hosted background worker, but a low-priority .NET thread cannot guarantee non-interference because the dominant shared resource is PostgreSQL CPU/I/O/cache/locks, not C# thread CPU. Recommended a low-impact loop with configurable cadence, database timeouts, a single refresh connection, operational-window skip/cancel logic, and eventually incremental precompute after order/run writes instead of repeated all-history aggregation. No code changes or production actions were performed.
