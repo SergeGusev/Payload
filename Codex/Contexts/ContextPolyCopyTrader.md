@@ -1,3 +1,18 @@
+## Active Update 2026-07-02 Dashboard Snapshot Deployment Check
+Goal: Verify the deployed Dashboard snapshot build on the production server after restart.
+Status: Completed
+Done:
+- Confirmed PostgreSQL `192.168.0.101:5432` is reachable and `PolyCopyTrader.Service` heartbeat is fresh.
+- Confirmed production service is running deployed commit `ea795e5` in `Live` mode, started `2026-07-02T19:08:06Z`, with `last_error` empty.
+- Confirmed `dashboard_strategy_performance_snapshots` exists and the first snapshot refresh populated `8182` rows at `2026-07-02T19:11:52Z`.
+- Confirmed `DashboardStrategyPerformanceSnapshotWorker` recorded `0` API errors in the last hour.
+- Measured the flat Dashboard snapshot read path with `SELECT * ... ORDER BY ... LIMIT 25000`: `8182` rows returned/countable in about `441 ms` from this machine.
+- Confirmed current activity after deploy: Paper and Live rows continue to be written; one sample showed `571` Paper orders and `3` Live orders in the previous 15 minutes.
+- Ran production latency gate after deployment. It failed on the first windows after restart: `341/1833` rows over `3s` in the first checked window and `398/1841` rows over `3s` in a follow-up short window. Worst rows were skipped Diff/Shift/Progress rows around `3.5s-3.75s`; the first snapshot completed after the first affected entry slot, so this does not look caused by the snapshot refresh.
+Next: Dashboard can be used against the precomputed strategy snapshot. Separately investigate the existing skip/observe latency if the `>3s` skipped rows matter operationally.
+Notes: Read-only production SQL and latency gate only. No production DB writes, service restarts, Live enablement changes, order submissions, cancel actions, source-code changes, build, or tests were performed. Local worktree still has unrelated dirty files from prior tasks.
+Blockers: Snapshot deployment is verified. The separate 3-second latency gate remains red for skipped strategy rows unrelated to snapshot table reads.
+
 ## Active Update 2026-07-02 Dashboard Snapshot Cadence Explained
 Goal: Explain why the first Dashboard strategy-performance snapshot refresh cadence is 10 minutes and whether a low-priority infinite refresh loop can avoid service interference.
 Status: Completed

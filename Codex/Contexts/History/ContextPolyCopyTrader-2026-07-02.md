@@ -34,3 +34,10 @@ Request:
 
 Result:
 Explained that the first 10-minute cadence is a conservative throttle because the source snapshot refresh still uses the heavy all-history `GetStrategyPerformanceAsync` aggregation, previously measured around `1m45s` on production. Explained that the current implementation is already a separate hosted background worker, but a low-priority .NET thread cannot guarantee non-interference because the dominant shared resource is PostgreSQL CPU/I/O/cache/locks, not C# thread CPU. Recommended a low-impact loop with configurable cadence, database timeouts, a single refresh connection, operational-window skip/cancel logic, and eventually incremental precompute after order/run writes instead of repeated all-history aggregation. No code changes or production actions were performed.
+
+## 2026-07-02T19:19:06.2532027+00:00
+Request:
+Проверяй
+
+Result:
+Verified the deployed production build read-only. PostgreSQL `192.168.0.101:5432` is reachable and `PolyCopyTrader.Service` is running commit `ea795e5` in `Live` mode with a fresh heartbeat and empty `last_error`. The new table `dashboard_strategy_performance_snapshots` exists and the first refresh populated `8182` rows at `2026-07-02T19:11:52Z`; `DashboardStrategyPerformanceSnapshotWorker` has `0` API errors in the last hour. A flat snapshot read over `SELECT * ... ORDER BY ... LIMIT 25000` returned/countable `8182` rows in about `441 ms` from this machine. Current activity continues: one sample showed `571` Paper orders and `3` Live orders in the previous 15 minutes. The separate production latency gate is still red after restart (`341/1833` rows over `3s`, then `398/1841` rows over `3s`), mostly skipped Diff/Shift/Progress rows around `3.5s-3.75s`; the first snapshot completed after the first affected entry slot, so this does not look caused by the snapshot refresh. No production writes, service actions, live toggles, orders, or cancels were performed.
