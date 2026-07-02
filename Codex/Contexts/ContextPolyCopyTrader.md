@@ -1,3 +1,17 @@
+## Active Update 2026-07-02 Live Balance Safety Confirmation
+Goal: Confirm whether zero or negative strategy `LiveAvailableBalance` prevents further Live stakes before leaving the service running overnight.
+Status: Completed
+Done:
+- Verified the Live order preflight path in both `SignalProcessor` and `BtcUpDown5mPaperStrategyProcessor`: before `PlaceLiveOrderAsync`, code calls `ValidateStrategyLiveBalanceAsync` and requires `LiveAvailableBalance - reserved open Live notional >= requiredNotionalUsd`.
+- Confirmed that when the balance check fails, the order is persisted as `PreflightRejected`, `SetStrategyLiveStakesAsync(... false)` is called for that strategy, a `StrategyLiveBalance` event is recorded, and the trading client is not called.
+- Confirmed the focused test `ProcessAsync_LiveStakeWithInsufficientStrategyBalanceDisablesLiveStakes` asserts `PlaceCalls == 0`, `LiveStakes == false`, and a preflight rejection when available balance is below required live stake.
+- Confirmed negative `LiveAvailableBalance` cannot be saved through normal paths: Dashboard rejects negative values, `SetStrategyLiveAvailableBalanceAsync` only updates when `@LiveAvailableBalance >= 0`, the schema has `ck_strategies_live_available_balance_nonnegative`, and settlement clamps balance with `GREATEST(0, ...)`.
+- Confirmed settlement logic disables `live_stakes` when the updated available balance falls below `live_stake_amount`.
+- Checked the configured server database read-only: no strategies currently have `live_stakes=true` or `auto_live_paused=true`, no open Live orders were returned, and no Live orders were found in the last 24 hours in that connection.
+Next: For strongest overnight safety, leave strategy `Live` unchecked or set `LiveAvailableBalance` to `0`; zero balance prevents new Live orders, but it does not cancel already-submitted/matched orders.
+Notes: Read-only source inspection and production SQL only. No code changes, production writes, Live enablement changes, order submissions, cancel actions, build, or tests were performed.
+Blockers: None.
+
 ## Active Update 2026-07-02 Dashboard Recent Performance Snapshot
 Goal: Diagnose why local Dashboard startup can wait over a minute after the first strategy-performance snapshot deployment, and remove the remaining heavy startup calculation.
 Status: Completed
