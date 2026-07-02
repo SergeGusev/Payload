@@ -1,3 +1,15 @@
+## Active Update 2026-07-02 Retired ETH Diff Shift Progress Premarket Threshold 2
+Goal: Delete `ETH Up or Down 5m 2 Diff Shift Progress Premarket` and its server-side history.
+Status: Completed
+Done:
+- Connected to the Dashboard server database at `192.168.0.101` / `polycopytrader` using the existing PostgreSQL environment connection with the host overridden to the Dashboard server.
+- Confirmed the exact target strategy existed as `eth_up_down_5m_2_diff_shift_progress_premarket` with id `b7c50005-0000-4000-8167-000000000002`; it was enabled but `live_stakes=false`, and there were no open Live orders for it.
+- Deleted the strategy and related history in one guarded transaction. Delete counts were: `strategies=1`, `paper_orders=806`, `paper_fills=806`, `strategy_market_paper_runs=1020`, `signals=806`, `crypto_up_down_5m_diff_shift_progress_states=1`, and `dashboard_strategy_performance_snapshots=1`.
+- Verified after deletion that the target strategy name/code returns `0` rows and that checked leftover rows by strategy id are `0` for `paper_orders`, `strategy_market_paper_runs`, `live_orders`, `dry_run_orders`, `crypto_up_down_5m_diff_shift_progress_states`, and `dashboard_strategy_performance_snapshots`.
+Next: Restart/refresh Dashboard if the row is still visible from an old in-memory view.
+Notes: Production DB write was limited to the requested strategy/history deletion. No source-code changes, service restart, Live enablement change, order submission, or cancel action was performed. No tests were run because this task changed only production data.
+Blockers: None.
+
 ## Active Update 2026-07-02 Live Balance Clamp Explanation
 Goal: Answer whether a losing Live stake can make strategy `LiveAvailableBalance` negative.
 Status: Completed

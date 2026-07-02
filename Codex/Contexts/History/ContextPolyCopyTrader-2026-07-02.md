@@ -62,3 +62,10 @@ Request:
 
 Result:
 Confirmed from `PostgresAppRepository.ApplyLiveOrderSettlementToStrategyBalanceAsync` that settlement stores `live_available_balance = GREATEST(0, live_available_balance + @RealizedPnlUsd)`. Therefore a hypothetical losing Live order with current `LiveAvailableBalance=3.4` and `realized_pnl_usd=-6` would store `0`, not `-2.6`. Also clarified that a new `6` notional Live order should not be submitted when current available balance is only `3.4`, because preflight requires available balance to cover the required notional and disables `live_stakes` on failure. No code changes or production writes were performed.
+
+## 2026-07-02T20:38:00.0000000+00:00
+Request:
+Delete strategy `ETH Up or Down 5m 2 Diff Shift Progress Premarket` and its history.
+
+Result:
+Deleted the strategy from the Dashboard server database `192.168.0.101` / `polycopytrader` in one guarded transaction. The target was `eth_up_down_5m_2_diff_shift_progress_premarket` with id `b7c50005-0000-4000-8167-000000000002`; it had no open Live orders. Delete counts were `strategies=1`, `paper_orders=806`, `paper_fills=806`, `strategy_market_paper_runs=1020`, `signals=806`, `crypto_up_down_5m_diff_shift_progress_states=1`, and `dashboard_strategy_performance_snapshots=1`. Verification after deletion returned `0` rows for the target strategy name/code and `0` checked leftovers by strategy id in paper orders, runs, live orders, dry-run orders, diff-shift state, and dashboard snapshot. No source-code changes, service restart, Live enablement change, order submission, or cancel action was performed.
