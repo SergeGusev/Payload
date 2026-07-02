@@ -8,8 +8,17 @@ public interface IDashboardSnapshotRepository
         int limit = 25_000,
         CancellationToken cancellationToken = default);
 
+    Task<IReadOnlyList<StrategyRecentPerformance>> GetStrategyRecentPerformanceSnapshotAsync(
+        int limit = 25_000,
+        CancellationToken cancellationToken = default);
+
     Task<int> UpsertStrategyPerformanceSnapshotAsync(
         IReadOnlyList<StrategyPerformance> strategies,
+        DateTimeOffset refreshedAtUtc,
+        CancellationToken cancellationToken = default);
+
+    Task<int> UpsertStrategyRecentPerformanceSnapshotAsync(
+        IReadOnlyList<StrategyRecentPerformance> strategies,
         DateTimeOffset refreshedAtUtc,
         CancellationToken cancellationToken = default);
 }

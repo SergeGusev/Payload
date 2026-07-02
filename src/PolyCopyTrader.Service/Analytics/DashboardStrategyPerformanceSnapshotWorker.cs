@@ -33,13 +33,19 @@ public sealed class DashboardStrategyPerformanceSnapshotWorker(
         {
             var startedAtUtc = DateTimeOffset.UtcNow;
             var strategies = await repository.GetStrategyPerformanceAsync(StrategySnapshotLimit, cancellationToken);
-            var rowCount = await dashboardSnapshots.UpsertStrategyPerformanceSnapshotAsync(
+            var strategyRowCount = await dashboardSnapshots.UpsertStrategyPerformanceSnapshotAsync(
                 strategies,
                 DateTimeOffset.UtcNow,
                 cancellationToken);
+            var recentStrategies = await repository.GetStrategyRecentPerformanceAsync(StrategySnapshotLimit, cancellationToken);
+            var recentRowCount = await dashboardSnapshots.UpsertStrategyRecentPerformanceSnapshotAsync(
+                recentStrategies,
+                DateTimeOffset.UtcNow,
+                cancellationToken);
             logger.LogInformation(
-                "Dashboard strategy performance snapshot refreshed. Rows={RowCount} DurationMs={DurationMs}",
-                rowCount,
+                "Dashboard strategy performance snapshots refreshed. StrategyRows={StrategyRowCount} RecentRows={RecentRowCount} DurationMs={DurationMs}",
+                strategyRowCount,
+                recentRowCount,
                 (DateTimeOffset.UtcNow - startedAtUtc).TotalMilliseconds);
         }
         catch (OperationCanceledException)
@@ -61,7 +67,7 @@ public sealed class DashboardStrategyPerformanceSnapshotWorker(
                 new ApiError(
                     Guid.NewGuid(),
                     nameof(DashboardStrategyPerformanceSnapshotWorker),
-                    "RefreshStrategyPerformance",
+                    "RefreshStrategyPerformanceSnapshots",
                     message,
                     DateTimeOffset.UtcNow),
                 cancellationToken);

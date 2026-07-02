@@ -252,7 +252,7 @@ public sealed class DashboardCsvExporter(
         await WriteAsync(
             Path.Combine(exportDirectory, "StrategyRecentPerformance.csv"),
             ["Window", "Name", "OrdersCount", "FilledOrdersCount", "ExpiredOrdersCount", "OpenOrdersCount", "EnteredRunsCount", "SkippedRunsCount", "PaperConditionSkippedRunsCount", "PaperNotAcceptedRunsCount", "SettledRunsCount", "WonRunsCount", "LostRunsCount", "WinRatePct", "RoiPct", "LiveSettledOrdersCount", "LiveSkippedOrdersCount", "LiveConditionSkippedOrdersCount", "LiveTechnicalSkippedOrdersCount", "LiveIgnoredOrdersCount", "LiveIgnoredGtdUnfilledCount", "LiveIgnoredCancelledOrdersCount", "LiveIgnoredRejectedOrdersCount", "LiveWonOrdersCount", "LiveLostOrdersCount", "LiveRealizedPnlUsd", "LiveRoiPct", "RealizedPnlUsd", "FilledCostUsd", "AvgFillPrice", "AvgEntryDelaySeconds", "MaxEntryDelaySeconds", "TopSkipReason", "LastOrderUtc", "LastRunUtc"],
-            (await repository.GetStrategyRecentPerformanceAsync(ExportLimit, cancellationToken)).Select(strategy => new object?[]
+            (await dashboardSnapshots.GetStrategyRecentPerformanceSnapshotAsync(ExportLimit, cancellationToken)).Select(strategy => new object?[]
             {
                 strategy.Window,
                 strategy.Name,

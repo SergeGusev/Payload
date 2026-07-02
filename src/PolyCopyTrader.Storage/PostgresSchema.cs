@@ -23,6 +23,7 @@ public static class PostgresSchema
         "signal_rejections",
         "strategies",
         "dashboard_strategy_performance_snapshots",
+        "dashboard_strategy_recent_performance_snapshots",
         "paper_orders",
         "paper_fills",
         "strategy_market_paper_runs",
@@ -3332,6 +3333,61 @@ ON dashboard_strategy_performance_snapshots (code);
 
 CREATE INDEX CONCURRENTLY IF NOT EXISTS ix_dashboard_strategy_performance_snapshots_refreshed_at
 ON dashboard_strategy_performance_snapshots (refreshed_at_utc DESC);
+
+CREATE TABLE IF NOT EXISTS dashboard_strategy_recent_performance_snapshots (
+    strategy_id uuid NOT NULL,
+    code text NOT NULL,
+    name text NOT NULL,
+    live_stakes boolean NOT NULL,
+    window_label text NOT NULL,
+    window_hours integer NOT NULL,
+    window_start_utc timestamptz NOT NULL,
+    window_end_utc timestamptz NOT NULL,
+    orders_count integer NOT NULL,
+    filled_orders_count integer NOT NULL,
+    expired_orders_count integer NOT NULL,
+    open_orders_count integer NOT NULL,
+    entered_runs_count integer NOT NULL,
+    skipped_runs_count integer NOT NULL,
+    paper_condition_skipped_runs_count integer NOT NULL,
+    paper_not_accepted_runs_count integer NOT NULL,
+    settled_runs_count integer NOT NULL,
+    won_runs_count integer NOT NULL,
+    lost_runs_count integer NOT NULL,
+    filled_cost_usd numeric(28,8) NOT NULL,
+    realized_pnl_usd numeric(28,8) NOT NULL,
+    avg_fill_price numeric(28,8) NOT NULL,
+    avg_entry_delay_seconds numeric(28,8) NOT NULL,
+    max_entry_delay_seconds numeric(28,8) NOT NULL,
+    win_rate_pct numeric(28,8) NOT NULL,
+    roi_pct numeric(28,8) NOT NULL,
+    live_settled_orders_count integer NOT NULL,
+    live_skipped_orders_count integer NOT NULL,
+    live_condition_skipped_orders_count integer NOT NULL,
+    live_technical_skipped_orders_count integer NOT NULL,
+    live_ignored_orders_count integer NOT NULL,
+    live_ignored_gtd_unfilled_count integer NOT NULL,
+    live_ignored_cancelled_orders_count integer NOT NULL,
+    live_ignored_rejected_orders_count integer NOT NULL,
+    live_won_orders_count integer NOT NULL,
+    live_lost_orders_count integer NOT NULL,
+    live_realized_pnl_usd numeric(28,8) NOT NULL,
+    live_roi_pct numeric(28,8) NOT NULL,
+    top_skip_reason text NOT NULL,
+    last_order_utc timestamptz NULL,
+    last_run_utc timestamptz NULL,
+    refreshed_at_utc timestamptz NOT NULL,
+    PRIMARY KEY (strategy_id, window_label)
+);
+
+CREATE INDEX CONCURRENTLY IF NOT EXISTS ix_dashboard_strategy_recent_performance_snapshots_code
+ON dashboard_strategy_recent_performance_snapshots (code);
+
+CREATE INDEX CONCURRENTLY IF NOT EXISTS ix_dashboard_strategy_recent_performance_snapshots_window_hours
+ON dashboard_strategy_recent_performance_snapshots (window_hours);
+
+CREATE INDEX CONCURRENTLY IF NOT EXISTS ix_dashboard_strategy_recent_performance_snapshots_refreshed_at
+ON dashboard_strategy_recent_performance_snapshots (refreshed_at_utc DESC);
 
 CREATE TABLE IF NOT EXISTS paper_orders (
     id uuid PRIMARY KEY,

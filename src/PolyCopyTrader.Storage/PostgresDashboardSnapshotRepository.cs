@@ -306,6 +306,187 @@ ON CONFLICT (strategy_id) DO UPDATE SET
     refreshed_at_utc = EXCLUDED.refreshed_at_utc;
 """;
 
+    private const string SelectStrategyRecentPerformanceSnapshotSql = """
+SELECT
+    strategy_id,
+    code,
+    name,
+    live_stakes,
+    window_label,
+    window_hours,
+    window_start_utc,
+    window_end_utc,
+    orders_count,
+    filled_orders_count,
+    expired_orders_count,
+    open_orders_count,
+    entered_runs_count,
+    skipped_runs_count,
+    paper_condition_skipped_runs_count,
+    paper_not_accepted_runs_count,
+    settled_runs_count,
+    won_runs_count,
+    lost_runs_count,
+    filled_cost_usd,
+    realized_pnl_usd,
+    avg_fill_price,
+    avg_entry_delay_seconds,
+    max_entry_delay_seconds,
+    win_rate_pct,
+    roi_pct,
+    live_settled_orders_count,
+    live_skipped_orders_count,
+    live_condition_skipped_orders_count,
+    live_technical_skipped_orders_count,
+    live_ignored_orders_count,
+    live_ignored_gtd_unfilled_count,
+    live_ignored_cancelled_orders_count,
+    live_ignored_rejected_orders_count,
+    live_won_orders_count,
+    live_lost_orders_count,
+    live_realized_pnl_usd,
+    live_roi_pct,
+    top_skip_reason,
+    last_order_utc,
+    last_run_utc
+FROM dashboard_strategy_recent_performance_snapshots
+ORDER BY
+    CASE WHEN code = 'follow_leader' THEN 0 ELSE 1 END,
+    code,
+    window_hours
+LIMIT (@Limit * 3);
+""";
+
+    private const string UpsertStrategyRecentPerformanceSnapshotSql = """
+INSERT INTO dashboard_strategy_recent_performance_snapshots (
+    strategy_id,
+    code,
+    name,
+    live_stakes,
+    window_label,
+    window_hours,
+    window_start_utc,
+    window_end_utc,
+    orders_count,
+    filled_orders_count,
+    expired_orders_count,
+    open_orders_count,
+    entered_runs_count,
+    skipped_runs_count,
+    paper_condition_skipped_runs_count,
+    paper_not_accepted_runs_count,
+    settled_runs_count,
+    won_runs_count,
+    lost_runs_count,
+    filled_cost_usd,
+    realized_pnl_usd,
+    avg_fill_price,
+    avg_entry_delay_seconds,
+    max_entry_delay_seconds,
+    win_rate_pct,
+    roi_pct,
+    live_settled_orders_count,
+    live_skipped_orders_count,
+    live_condition_skipped_orders_count,
+    live_technical_skipped_orders_count,
+    live_ignored_orders_count,
+    live_ignored_gtd_unfilled_count,
+    live_ignored_cancelled_orders_count,
+    live_ignored_rejected_orders_count,
+    live_won_orders_count,
+    live_lost_orders_count,
+    live_realized_pnl_usd,
+    live_roi_pct,
+    top_skip_reason,
+    last_order_utc,
+    last_run_utc,
+    refreshed_at_utc)
+VALUES (
+    @StrategyId,
+    @Code,
+    @Name,
+    @LiveStakes,
+    @Window,
+    @WindowHours,
+    @WindowStartUtc,
+    @WindowEndUtc,
+    @OrdersCount,
+    @FilledOrdersCount,
+    @ExpiredOrdersCount,
+    @OpenOrdersCount,
+    @EnteredRunsCount,
+    @SkippedRunsCount,
+    @PaperConditionSkippedRunsCount,
+    @PaperNotAcceptedRunsCount,
+    @SettledRunsCount,
+    @WonRunsCount,
+    @LostRunsCount,
+    @FilledCostUsd,
+    @RealizedPnlUsd,
+    @AvgFillPrice,
+    @AvgEntryDelaySeconds,
+    @MaxEntryDelaySeconds,
+    @WinRatePct,
+    @RoiPct,
+    @LiveSettledOrdersCount,
+    @LiveSkippedOrdersCount,
+    @LiveConditionSkippedOrdersCount,
+    @LiveTechnicalSkippedOrdersCount,
+    @LiveIgnoredOrdersCount,
+    @LiveIgnoredGtdUnfilledCount,
+    @LiveIgnoredCancelledOrdersCount,
+    @LiveIgnoredRejectedOrdersCount,
+    @LiveWonOrdersCount,
+    @LiveLostOrdersCount,
+    @LiveRealizedPnlUsd,
+    @LiveRoiPct,
+    @TopSkipReason,
+    @LastOrderUtc,
+    @LastRunUtc,
+    @RefreshedAtUtc)
+ON CONFLICT (strategy_id, window_label) DO UPDATE SET
+    code = EXCLUDED.code,
+    name = EXCLUDED.name,
+    live_stakes = EXCLUDED.live_stakes,
+    window_hours = EXCLUDED.window_hours,
+    window_start_utc = EXCLUDED.window_start_utc,
+    window_end_utc = EXCLUDED.window_end_utc,
+    orders_count = EXCLUDED.orders_count,
+    filled_orders_count = EXCLUDED.filled_orders_count,
+    expired_orders_count = EXCLUDED.expired_orders_count,
+    open_orders_count = EXCLUDED.open_orders_count,
+    entered_runs_count = EXCLUDED.entered_runs_count,
+    skipped_runs_count = EXCLUDED.skipped_runs_count,
+    paper_condition_skipped_runs_count = EXCLUDED.paper_condition_skipped_runs_count,
+    paper_not_accepted_runs_count = EXCLUDED.paper_not_accepted_runs_count,
+    settled_runs_count = EXCLUDED.settled_runs_count,
+    won_runs_count = EXCLUDED.won_runs_count,
+    lost_runs_count = EXCLUDED.lost_runs_count,
+    filled_cost_usd = EXCLUDED.filled_cost_usd,
+    realized_pnl_usd = EXCLUDED.realized_pnl_usd,
+    avg_fill_price = EXCLUDED.avg_fill_price,
+    avg_entry_delay_seconds = EXCLUDED.avg_entry_delay_seconds,
+    max_entry_delay_seconds = EXCLUDED.max_entry_delay_seconds,
+    win_rate_pct = EXCLUDED.win_rate_pct,
+    roi_pct = EXCLUDED.roi_pct,
+    live_settled_orders_count = EXCLUDED.live_settled_orders_count,
+    live_skipped_orders_count = EXCLUDED.live_skipped_orders_count,
+    live_condition_skipped_orders_count = EXCLUDED.live_condition_skipped_orders_count,
+    live_technical_skipped_orders_count = EXCLUDED.live_technical_skipped_orders_count,
+    live_ignored_orders_count = EXCLUDED.live_ignored_orders_count,
+    live_ignored_gtd_unfilled_count = EXCLUDED.live_ignored_gtd_unfilled_count,
+    live_ignored_cancelled_orders_count = EXCLUDED.live_ignored_cancelled_orders_count,
+    live_ignored_rejected_orders_count = EXCLUDED.live_ignored_rejected_orders_count,
+    live_won_orders_count = EXCLUDED.live_won_orders_count,
+    live_lost_orders_count = EXCLUDED.live_lost_orders_count,
+    live_realized_pnl_usd = EXCLUDED.live_realized_pnl_usd,
+    live_roi_pct = EXCLUDED.live_roi_pct,
+    top_skip_reason = EXCLUDED.top_skip_reason,
+    last_order_utc = EXCLUDED.last_order_utc,
+    last_run_utc = EXCLUDED.last_run_utc,
+    refreshed_at_utc = EXCLUDED.refreshed_at_utc;
+""";
+
     public async Task<IReadOnlyList<StrategyPerformance>> GetStrategyPerformanceSnapshotAsync(
         int limit = 25_000,
         CancellationToken cancellationToken = default)
@@ -320,6 +501,25 @@ ON CONFLICT (strategy_id) DO UPDATE SET
         while (await reader.ReadAsync(cancellationToken))
         {
             results.Add(ReadStrategyPerformance(reader));
+        }
+
+        return results;
+    }
+
+    public async Task<IReadOnlyList<StrategyRecentPerformance>> GetStrategyRecentPerformanceSnapshotAsync(
+        int limit = 25_000,
+        CancellationToken cancellationToken = default)
+    {
+        await using var connection = connectionFactory.CreateConnection();
+        await connection.OpenAsync(cancellationToken);
+        await using var command = new NpgsqlCommand(SelectStrategyRecentPerformanceSnapshotSql, connection);
+        command.Parameters.AddWithValue("Limit", limit);
+
+        var results = new List<StrategyRecentPerformance>();
+        await using var reader = await command.ExecuteReaderAsync(cancellationToken);
+        while (await reader.ReadAsync(cancellationToken))
+        {
+            results.Add(ReadStrategyRecentPerformance(reader));
         }
 
         return results;
@@ -352,6 +552,44 @@ ON CONFLICT (strategy_id) DO UPDATE SET
         await using var deleteStaleCommand = new NpgsqlCommand(
             """
 DELETE FROM dashboard_strategy_performance_snapshots
+WHERE refreshed_at_utc < @RefreshedAtUtc;
+""",
+            connection,
+            transaction);
+        deleteStaleCommand.Parameters.AddWithValue("RefreshedAtUtc", UtcDateTime(refreshedAtUtc));
+        await deleteStaleCommand.ExecuteNonQueryAsync(cancellationToken);
+
+        await transaction.CommitAsync(cancellationToken);
+        return strategies.Count;
+    }
+
+    public async Task<int> UpsertStrategyRecentPerformanceSnapshotAsync(
+        IReadOnlyList<StrategyRecentPerformance> strategies,
+        DateTimeOffset refreshedAtUtc,
+        CancellationToken cancellationToken = default)
+    {
+        if (strategies.Count == 0)
+        {
+            return 0;
+        }
+
+        await using var connection = connectionFactory.CreateConnection();
+        await connection.OpenAsync(cancellationToken);
+        await using var transaction = await connection.BeginTransactionAsync(cancellationToken);
+        await using var batch = new NpgsqlBatch(connection)
+        {
+            Transaction = transaction
+        };
+
+        foreach (var strategy in strategies)
+        {
+            batch.BatchCommands.Add(CreateUpsertCommand(strategy, refreshedAtUtc));
+        }
+
+        await batch.ExecuteNonQueryAsync(cancellationToken);
+        await using var deleteStaleCommand = new NpgsqlCommand(
+            """
+DELETE FROM dashboard_strategy_recent_performance_snapshots
 WHERE refreshed_at_utc < @RefreshedAtUtc;
 """,
             connection,
@@ -443,6 +681,56 @@ WHERE refreshed_at_utc < @RefreshedAtUtc;
         return command;
     }
 
+    private static NpgsqlBatchCommand CreateUpsertCommand(
+        StrategyRecentPerformance strategy,
+        DateTimeOffset refreshedAtUtc)
+    {
+        var command = new NpgsqlBatchCommand(UpsertStrategyRecentPerformanceSnapshotSql);
+        Add(command, "StrategyId", strategy.StrategyId);
+        Add(command, "Code", strategy.Code);
+        Add(command, "Name", strategy.Name);
+        Add(command, "LiveStakes", strategy.LiveStakes);
+        Add(command, "Window", strategy.Window);
+        Add(command, "WindowHours", strategy.WindowHours);
+        Add(command, "WindowStartUtc", UtcDateTime(strategy.WindowStartUtc));
+        Add(command, "WindowEndUtc", UtcDateTime(strategy.WindowEndUtc));
+        Add(command, "OrdersCount", strategy.OrdersCount);
+        Add(command, "FilledOrdersCount", strategy.FilledOrdersCount);
+        Add(command, "ExpiredOrdersCount", strategy.ExpiredOrdersCount);
+        Add(command, "OpenOrdersCount", strategy.OpenOrdersCount);
+        Add(command, "EnteredRunsCount", strategy.EnteredRunsCount);
+        Add(command, "SkippedRunsCount", strategy.SkippedRunsCount);
+        Add(command, "PaperConditionSkippedRunsCount", strategy.PaperConditionSkippedRunsCount);
+        Add(command, "PaperNotAcceptedRunsCount", strategy.PaperNotAcceptedRunsCount);
+        Add(command, "SettledRunsCount", strategy.SettledRunsCount);
+        Add(command, "WonRunsCount", strategy.WonRunsCount);
+        Add(command, "LostRunsCount", strategy.LostRunsCount);
+        Add(command, "FilledCostUsd", strategy.FilledCostUsd);
+        Add(command, "RealizedPnlUsd", strategy.RealizedPnlUsd);
+        Add(command, "AvgFillPrice", strategy.AvgFillPrice);
+        Add(command, "AvgEntryDelaySeconds", strategy.AvgEntryDelaySeconds);
+        Add(command, "MaxEntryDelaySeconds", strategy.MaxEntryDelaySeconds);
+        Add(command, "WinRatePct", strategy.WinRatePct);
+        Add(command, "RoiPct", strategy.RoiPct);
+        Add(command, "LiveSettledOrdersCount", strategy.LiveSettledOrdersCount);
+        Add(command, "LiveSkippedOrdersCount", strategy.LiveSkippedOrdersCount);
+        Add(command, "LiveConditionSkippedOrdersCount", strategy.LiveConditionSkippedOrdersCount);
+        Add(command, "LiveTechnicalSkippedOrdersCount", strategy.LiveTechnicalSkippedOrdersCount);
+        Add(command, "LiveIgnoredOrdersCount", strategy.LiveIgnoredOrdersCount);
+        Add(command, "LiveIgnoredGtdUnfilledCount", strategy.LiveIgnoredGtdUnfilledCount);
+        Add(command, "LiveIgnoredCancelledOrdersCount", strategy.LiveIgnoredCancelledOrdersCount);
+        Add(command, "LiveIgnoredRejectedOrdersCount", strategy.LiveIgnoredRejectedOrdersCount);
+        Add(command, "LiveWonOrdersCount", strategy.LiveWonOrdersCount);
+        Add(command, "LiveLostOrdersCount", strategy.LiveLostOrdersCount);
+        Add(command, "LiveRealizedPnlUsd", strategy.LiveRealizedPnlUsd);
+        Add(command, "LiveRoiPct", strategy.LiveRoiPct);
+        Add(command, "TopSkipReason", strategy.TopSkipReason);
+        Add(command, "LastOrderUtc", NullableDateTime(strategy.LastOrderUtc));
+        Add(command, "LastRunUtc", NullableDateTime(strategy.LastRunUtc));
+        Add(command, "RefreshedAtUtc", UtcDateTime(refreshedAtUtc));
+        return command;
+    }
+
     private static StrategyPerformance ReadStrategyPerformance(NpgsqlDataReader reader)
     {
         return new StrategyPerformance(
@@ -517,6 +805,52 @@ WHERE refreshed_at_utc < @RefreshedAtUtc;
             reader.IsDBNull(68) ? null : DateTimeOffsetFromUtc(reader.GetDateTime(68)),
             reader.IsDBNull(69) ? null : DateTimeOffsetFromUtc(reader.GetDateTime(69)),
             reader.IsDBNull(70) ? null : DateTimeOffsetFromUtc(reader.GetDateTime(70)));
+    }
+
+    private static StrategyRecentPerformance ReadStrategyRecentPerformance(NpgsqlDataReader reader)
+    {
+        return new StrategyRecentPerformance(
+            reader.GetGuid(0),
+            reader.GetString(1),
+            reader.GetString(2),
+            reader.GetBoolean(3),
+            reader.GetString(4),
+            reader.GetInt32(5),
+            DateTimeOffsetFromUtc(reader.GetDateTime(6)),
+            DateTimeOffsetFromUtc(reader.GetDateTime(7)),
+            reader.GetInt32(8),
+            reader.GetInt32(9),
+            reader.GetInt32(10),
+            reader.GetInt32(11),
+            reader.GetInt32(12),
+            reader.GetInt32(13),
+            reader.GetInt32(14),
+            reader.GetInt32(15),
+            reader.GetInt32(16),
+            reader.GetInt32(17),
+            reader.GetInt32(18),
+            reader.GetDecimal(19),
+            reader.GetDecimal(20),
+            reader.GetDecimal(21),
+            reader.GetDecimal(22),
+            reader.GetDecimal(23),
+            reader.GetDecimal(24),
+            reader.GetDecimal(25),
+            reader.GetInt32(26),
+            reader.GetInt32(27),
+            reader.GetInt32(28),
+            reader.GetInt32(29),
+            reader.GetInt32(30),
+            reader.GetInt32(31),
+            reader.GetInt32(32),
+            reader.GetInt32(33),
+            reader.GetInt32(34),
+            reader.GetInt32(35),
+            reader.GetDecimal(36),
+            reader.GetDecimal(37),
+            reader.GetString(38),
+            reader.IsDBNull(39) ? null : DateTimeOffsetFromUtc(reader.GetDateTime(39)),
+            reader.IsDBNull(40) ? null : DateTimeOffsetFromUtc(reader.GetDateTime(40)));
     }
 
     private static void Add(NpgsqlBatchCommand command, string name, object value)

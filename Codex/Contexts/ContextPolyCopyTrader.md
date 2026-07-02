@@ -1,3 +1,18 @@
+## Active Update 2026-07-02 Dashboard Recent Performance Snapshot
+Goal: Diagnose why local Dashboard startup can wait over a minute after the first strategy-performance snapshot deployment, and remove the remaining heavy startup calculation.
+Status: Completed
+Done:
+- Checked the running local `PolyCopyTrader.Dashboard` process: it was alive/responding, and at the checked moment there were no active database connections from `192.168.0.100`.
+- Confirmed the strategy-only Dashboard load path already reads `StrategyPerformance` from `dashboard_strategy_performance_snapshots`, but still called the old computed `IAppRepository.GetStrategyRecentPerformanceAsync` for the 1h/6h/24h strategy tabs.
+- Added `dashboard_strategy_recent_performance_snapshots` with a `(strategy_id, window_label)` primary key and indexes for code/window/refreshed-at.
+- Extended `IDashboardSnapshotRepository`/PostgreSQL/NoOp implementations to upsert and read recent performance snapshots with a flat single-table `SELECT`.
+- Updated `DashboardStrategyPerformanceSnapshotWorker` to refresh both all-time strategy performance and recent 1h/6h/24h performance snapshots in the quiet-slot background cycle.
+- Switched Dashboard startup and `StrategyRecentPerformance.csv` export to read the precomputed recent-performance snapshot instead of running the heavy repository aggregation.
+- Added focused tests proving the recent snapshot table exists, Dashboard reads the precomputed recent snapshot, and the snapshot read SQL does not scan `paper_orders`, `strategy_market_paper_runs`, or `live_orders`.
+Next: Deploy/restart the service so schema initialization creates/fills the new recent-performance snapshot table, then restart Dashboard with the new build. The first startup after service restart may show empty 1h/6h/24h strategy rows until the first quiet-slot refresh completes.
+Notes: Verification passed: `dotnet test tests\PolyCopyTrader.Tests\PolyCopyTrader.Tests.csproj --filter DashboardSnapshotTests --no-restore -p:UseSharedCompilation=false` passed `6/6`; service build and Dashboard build passed with separate verification output folders and existing nullable warnings. Initial parallel builds failed only due file locks from the running Dashboard/parallel compiler output and were retried sequentially. Existing unrelated dirty files were left untouched.
+Blockers: The currently running Dashboard process still uses the old binaries; it must be restarted after deploying/building this change. Production deployment was not performed in this task.
+
 ## Active Update 2026-07-02 Dashboard Snapshot Deployment Check
 Goal: Verify the deployed Dashboard snapshot build on the production server after restart.
 Status: Completed

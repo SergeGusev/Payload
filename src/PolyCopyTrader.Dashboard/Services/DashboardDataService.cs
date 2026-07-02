@@ -398,7 +398,7 @@ public sealed class DashboardDataService(
             return cachedStrategyRecentPerformance;
         }
 
-        cachedStrategyRecentPerformance = await repository.GetStrategyRecentPerformanceAsync(StrategyDashboardFetchLimit, cancellationToken);
+        cachedStrategyRecentPerformance = await dashboardSnapshots.GetStrategyRecentPerformanceSnapshotAsync(StrategyDashboardFetchLimit, cancellationToken);
         cachedStrategyRecentPerformanceAtUtc = nowUtc;
         return cachedStrategyRecentPerformance;
     }
