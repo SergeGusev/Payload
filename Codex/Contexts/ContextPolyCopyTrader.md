@@ -1,3 +1,15 @@
+## Active Update 2026-07-02 Live Balance Clamp Explanation
+Goal: Answer whether a losing Live stake can make strategy `LiveAvailableBalance` negative.
+Status: Completed
+Done:
+- Rechecked settlement code in `PostgresAppRepository.ApplyLiveOrderSettlementToStrategyBalanceAsync`.
+- Confirmed settlement updates strategy balance with `live_available_balance = GREATEST(0, live_available_balance + @RealizedPnlUsd)`.
+- Confirmed that if a strategy somehow settles a losing Live order where prior `LiveAvailableBalance=3.4` and `realized_pnl_usd=-6`, the stored balance becomes `0`, not `-2.6`.
+- Clarified that a new `6` notional Live order should not be submitted when `LiveAvailableBalance=3.4`, because preflight requires available strategy balance to cover the required notional and disables `live_stakes` when it cannot.
+Next: None.
+Notes: Source inspection only. No code changes, production writes, Live enablement changes, order submissions, cancel actions, build, or tests were performed.
+Blockers: None.
+
 ## Active Update 2026-07-02 Live Balance Safety Confirmation
 Goal: Confirm whether zero or negative strategy `LiveAvailableBalance` prevents further Live stakes before leaving the service running overnight.
 Status: Completed

@@ -55,3 +55,10 @@ Request:
 
 Result:
 Confirmed from source and read-only server SQL that `LiveAvailableBalance=0` prevents new Live orders. Both `SignalProcessor` and `BtcUpDown5mPaperStrategyProcessor` validate `LiveAvailableBalance - reserved open Live notional >= requiredNotionalUsd` before calling `PlaceLiveOrderAsync`; when validation fails, the candidate Live order is persisted as `PreflightRejected`, `SetStrategyLiveStakesAsync(... false)` disables Live for that strategy, a `StrategyLiveBalance` event is recorded, and the trading client is not called. Negative Live balance cannot be saved through normal paths because Dashboard rejects it, repository update requires `@LiveAvailableBalance >= 0`, schema has `ck_strategies_live_available_balance_nonnegative`, and settlement clamps to `GREATEST(0, ...)`. Settlement also disables `live_stakes` if updated balance falls below `live_stake_amount`. Current queried server DB had no `live_stakes=true`/`auto_live_paused=true` strategies, no open Live orders, and no Live orders in the last 24 hours. No code changes or production writes were performed.
+
+## 2026-07-02T20:12:00.0000000+00:00
+Request:
+Если в Live bal стоит 3.4, ставка на 6 проигрывает, сколько запишется в Live bal ? 0 или -2.6 ?
+
+Result:
+Confirmed from `PostgresAppRepository.ApplyLiveOrderSettlementToStrategyBalanceAsync` that settlement stores `live_available_balance = GREATEST(0, live_available_balance + @RealizedPnlUsd)`. Therefore a hypothetical losing Live order with current `LiveAvailableBalance=3.4` and `realized_pnl_usd=-6` would store `0`, not `-2.6`. Also clarified that a new `6` notional Live order should not be submitted when current available balance is only `3.4`, because preflight requires available balance to cover the required notional and disables `live_stakes` on failure. No code changes or production writes were performed.
