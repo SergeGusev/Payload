@@ -1,3 +1,14 @@
+## Active Update 2026-07-03 Paper FAK Partial Depth Clarification
+Goal: Clarify whether Paper-only FAK should skip insufficient depth or record partial fills.
+Status: Completed
+Done:
+- Clarified that "skip stale or no depth" means stale/missing/non-executable snapshots, not fresh snapshots with some executable ask depth.
+- Confirmed the existing `TakerBuyFillEstimator` already models FAK partial fills: it fills available ask depth within `maxAllowedPrice` and records the lower actual notional when target notional cannot be fully spent.
+- Clarified the intended Paper-only rule: fresh partial depth should be recorded as a partial fill; stale snapshots, missing best ask, best ask above cap, no executable shares within cap, or invalid/min-size conditions should be skipped or explicitly rejected.
+Next: If requested, make Dashboard expose partial-fill diagnostics/evidence class so partial Paper-only FAK rows are visually distinct from fully filled rows.
+Notes: Explanation/source-inspection task only. No source-code behavior changes, production DB writes, service restarts, Live enablement changes, order submissions, cancel actions, build, or tests were performed.
+Blockers: None.
+
 ## Active Update 2026-07-03 Paper Only Statistical Reliability
 Goal: Clarify whether Paper-only strategy statistics can ever be 100% trustworthy.
 Status: Completed

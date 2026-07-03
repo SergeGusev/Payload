@@ -19,3 +19,12 @@ Request:
 
 Result:
 Clarified that Paper-only statistics can be made 100% reproducible and honest relative to recorded snapshots and a versioned fill model, but cannot be 100% equivalent to actual Live execution without a real exchange fill. Recommended separating evidence classes in Dashboard/statistics: Live actual, Live-shadow actual, Paper executable-snapshot model, and Paper maker/model rows. No source-code behavior changes, production writes, Live changes, orders, restarts, build, or tests were performed.
+
+## 2026-07-03T05:57:54.6758348Z
+Request:
+Ты написал: если стакан stale или глубины нет, пропускать
+
+А почему пропускать, а не исполнять частично по реальной глубине стакана?
+
+Result:
+Clarified that fresh partial ask depth should be recorded as a partial Paper FAK fill, not skipped. The skip recommendation applies to stale/missing/non-executable snapshots where the depth is not reliable or there are zero executable shares within the cap. Source inspection showed `TakerBuyFillEstimator.Estimate` already supports partial FAK fills by filling available ask depth within `maxAllowedPrice` and recording the lower actual notional. No source-code behavior changes, production writes, Live changes, orders, restarts, build, or tests were performed.
