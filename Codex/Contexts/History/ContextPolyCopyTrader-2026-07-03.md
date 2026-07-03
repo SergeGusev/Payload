@@ -12,3 +12,10 @@ Request:
 
 Result:
 Explained and implemented the required alignment for future FAK paper-live-shadow rows: old accumulated Paper rows for FAK Live-shadow strategies are not exact Live history because they were simulated separately from the actual Live amount-order fill. Updated `BtcUpDown5mPaperStrategyProcessor` so matched FAK live-shadow entries copy actual Live average fill price, filled size, and cost basis into the Paper order, Paper fill, and strategy run, with raw diagnostics marked `paper_fak_fill_model=live_order_actual_fill_v1`. Added/updated ETH FAK live-shadow regression tests for regular and premarket paths; targeted verification passed `2/2`. Full test project still has broad existing strategy-test failures (`78` failed, `711` passed), so only the focused regression was clean. No production deployment, database backfill, Live enablement change, order submission, cancel action, or service restart was performed.
+
+## 2026-07-03T05:53:58.7685864Z
+Request:
+Но Paper-статистика для FAK Live-shadow не решает проблему с только Paper стратегиями. Она решаема в принципе?
+
+Result:
+Clarified that Paper-only statistics can be made 100% reproducible and honest relative to recorded snapshots and a versioned fill model, but cannot be 100% equivalent to actual Live execution without a real exchange fill. Recommended separating evidence classes in Dashboard/statistics: Live actual, Live-shadow actual, Paper executable-snapshot model, and Paper maker/model rows. No source-code behavior changes, production writes, Live changes, orders, restarts, build, or tests were performed.

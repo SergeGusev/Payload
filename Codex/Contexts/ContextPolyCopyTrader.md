@@ -1,3 +1,15 @@
+## Active Update 2026-07-03 Paper Only Statistical Reliability
+Goal: Clarify whether Paper-only strategy statistics can ever be 100% trustworthy.
+Status: Completed
+Done:
+- Clarified the key boundary: Paper-only rows can be made 100% reproducible and honest relative to a recorded fill model and immutable market snapshot, but cannot be 100% equivalent to actual Live execution without a real order/fill from the exchange.
+- Identified that FAK/taker Paper-only can be made the most reliable by using fresh CLOB order book snapshots, amount-based sizing, explicit staleness limits, deterministic depth-VWAP fill simulation, and persisted `fill_model`/snapshot/input diagnostics for replay.
+- Clarified that GTD/maker Paper-only is inherently less exact because queue position, matching priority, latency, and order book changes after the decision cannot be known without submitting a real order.
+- Recommended separating Dashboard/statistics by execution evidence class: Live actual, Live-shadow actual, Paper executable-snapshot model, and Paper model/maker; old and new rows should not be mixed without `fill_model` versioning.
+Next: If requested, implement execution-evidence classification and Paper-only FAK amount-based snapshot accounting for future rows.
+Notes: Explanation-only task after context recovery. No source-code behavior changes, production DB writes, service restarts, Live enablement changes, order submissions, cancel actions, build, or tests were performed.
+Blockers: None.
+
 ## Active Update 2026-07-03 FAK Live Shadow Paper Accounting Alignment
 Goal: Make FAK paper-live-shadow Paper statistics use actual Live fill accounting instead of a separate local fill simulation.
 Status: Completed
