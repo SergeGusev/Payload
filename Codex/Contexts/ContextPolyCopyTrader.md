@@ -1,3 +1,15 @@
+## Active Update 2026-07-03 BTC Diff Limit Progress Live Snapshot Cleared
+Goal: Remove Live display/enablement from `BTC Up or Down 5m 1 Diff Limit Progress Premarket` on the server.
+Status: Completed
+Done:
+- Checked production PostgreSQL at `192.168.0.101` for exact code `btc_up_down_5m_1_diff_limit_progress_premarket` (`b7c50005-0000-4000-8169-000000000001`).
+- Found `strategies.live_stakes=false` and `live_enabled_at_utc=NULL` already in the source-of-truth strategy row, but stale Dashboard snapshot rows still had Live enabled: `dashboard_strategy_performance_snapshots.live_stakes=true` and `3` recent snapshot rows with `live_stakes=true`.
+- Ran a guarded transaction for that exact strategy code: kept `strategies.live_stakes=false`, cleared `live_enabled_at_utc`, and set related performance/recent Dashboard snapshot `live_stakes=false`.
+- Verified after the update: strategy `live_stakes=false`, performance snapshot `live_stakes=false`, recent snapshot live rows `0`, and `live_available_balance=94.79370800`.
+Next: Refresh Dashboard; if it still displays Live, it is showing an old in-memory view.
+Notes: Production DB write only changed the target strategy Live flag/timestamp and Dashboard snapshot `live_stakes` flags. No Live orders were submitted, cancelled, or deleted. Existing Live order history for the strategy had status `Matched` only (`246` rows).
+Blockers: None.
+
 ## Active Update 2026-07-03 Dashboard Live Toggle Snapshot Freshness
 Goal: Explain and fix why the Dashboard `Live` checkbox sometimes appeared to apply only after multiple clicks.
 Status: Completed

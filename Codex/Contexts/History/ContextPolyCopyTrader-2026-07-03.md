@@ -54,3 +54,10 @@ Request:
 
 Result:
 Found and fixed the Dashboard freshness bug. The `Live` checkbox save wrote immediately to `strategies`, but the subsequent Dashboard refresh read from the precomputed `dashboard_strategy_performance_snapshots` row, where `live_stakes` could still be stale until the background snapshot worker rebuilt it. Updated `PostgresDashboardSnapshotRepository` so the Dashboard still reads heavy statistics from precomputed snapshot tables, but reads current mutable strategy settings from `strategies` via a flat join. Added Dashboard snapshot regression assertions and verified `dotnet test tests/PolyCopyTrader.Tests/PolyCopyTrader.Tests.csproj --filter "FullyQualifiedName~DashboardSnapshotTests"` passed `6/6`. No production DB writes, Live order submissions, cancel actions, or service restarts were performed.
+
+## 2026-07-03T13:30:59.1987393Z
+Request:
+Я так и не смог снять Live у BTC Up or Down 5m 1 Diff Limit Progress Premarket. Сними плиз
+
+Result:
+Updated production PostgreSQL `192.168.0.101/polycopytrader` for exact strategy `btc_up_down_5m_1_diff_limit_progress_premarket` (`b7c50005-0000-4000-8169-000000000001`). The source-of-truth `strategies` row already had `live_stakes=false` and `live_enabled_at_utc=NULL`, but stale Dashboard snapshot rows still showed Live enabled. Ran a guarded transaction that kept the strategy Live flag false and updated related `dashboard_strategy_performance_snapshots` and `dashboard_strategy_recent_performance_snapshots` `live_stakes=false`. Final verification showed strategy `live_stakes=false`, performance snapshot `false`, recent snapshot live rows `0`, and `live_available_balance=94.79370800`. No Live orders were submitted, cancelled, or deleted; existing Live order history for this strategy had `246` `Matched` rows.
