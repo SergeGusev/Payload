@@ -1,3 +1,18 @@
+## Active Update 2026-07-03 SOL Down 8 Live Hour PnL Analysis
+Goal: Analyze whether Live PnL for `SOL Up or Down 5m Down 8 bps Reference Average Premarket` correlates with the hour of day when the bet was placed.
+Status: Completed
+Done:
+- Queried production PostgreSQL `192.168.0.101/polycopytrader` read-only for exact strategy `sol_up_down_5m_down_bps_8_fak_premarket` (`b7c50005-0000-4000-8139-000000000108`).
+- Confirmed full Live history for this strategy at query time: `417` Live rows, all settled with PnL, from `2026-07-01T05:49:30.480782Z` through `2026-07-03T18:09:30.043210Z`.
+- Overall Live result: cost basis `$2502.04615300`, realized PnL `$172.19600400`, ROI `6.8822%`; statuses were `412` `Matched/matched` rows with `$177.96250400` PnL and `5` reconciled matched rows with `-$5.76650000` PnL.
+- Grouped by entry hour in `Europe/Sofia` local time. Best PnL hours were `20` (`+$52.63`, `16` orders, `81.25%` win rate), `10` (`+$45.64`, `22` orders, `68.18%`), `15` (`+$35.00`, `28` orders, `64.29%`), `21` (`+$33.43`, `12` orders, `75.00%`), and `11` (`+$32.93`, `17` orders, `70.59%`).
+- Worst PnL hours were `01` (`-$44.47`, `21` orders, `33.33%` win rate), `07` (`-$27.13`, `22` orders, `40.91%`), `22` (`-$19.65`, `17` orders, `41.18%`), `19` (`-$18.93`, `18` orders, `44.44%`), and `03` (`-$14.64`, `20` orders, `45.00%`).
+- Correlation/association checks were weak: linear hour/PnL correlation `0.098823`, circular sin/cos correlations `-0.069917` / `-0.062656`, and hour-of-day eta-squared `0.052293` (hour explains about `5.2%` of per-order PnL variance in this small sample).
+- Daily local totals: `2026-07-01` `+$110.23` over `109` orders, `2026-07-02` `-$0.26` over `175` orders, `2026-07-03` `+$62.22` over `133` orders.
+Next: Treat hour filters as hypotheses only until there is more Live history; if narrowing, avoid or reduce `01`, `07`, `22`, `19`, `03` and monitor `20`, `10`, `15`, `21`, `11` separately.
+Notes: Read-only SQL analysis only. No production DB writes, Live changes, order submissions, cancels, service restarts, source-code changes, build, or tests were performed.
+Blockers: None.
+
 ## Active Update 2026-07-03 Bet Placement Status Check
 Goal: Check whether bets are currently being placed after PostgreSQL became reachable again.
 Status: Completed
