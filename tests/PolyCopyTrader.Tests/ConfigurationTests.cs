@@ -141,7 +141,7 @@ public sealed class ConfigurationTests
         Assert.Equal(500, configuration.CryptoUpDown5mResultPolling.BinanceTimedClosePollIntervalMilliseconds);
         Assert.Equal(500, configuration.CryptoUpDown5mResultPolling.BinanceTimedCloseDelayMilliseconds);
         Assert.Equal(30, configuration.CryptoUpDown5mResultPolling.BinanceTimedCloseMaxCandidateAgeSeconds);
-        Assert.Equal(1_000, configuration.CryptoUpDown5mResultPolling.BinanceTimedCloseMaxPriceAgeMilliseconds);
+        Assert.Equal(5_000, configuration.CryptoUpDown5mResultPolling.BinanceTimedCloseMaxPriceAgeMilliseconds);
         Assert.Equal(15_000, configuration.CryptoUpDown5mResultPolling.ReferencePriceResultMaxEndAgeMilliseconds);
         Assert.Equal(2, configuration.CryptoUpDown5mResultPolling.ReferencePriceResultMinSamples);
         Assert.True(configuration.CryptoUpDown5mResultPolling.ProvisionalOrderBookResultEnabled);

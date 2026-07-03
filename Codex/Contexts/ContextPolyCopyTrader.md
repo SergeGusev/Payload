@@ -1,3 +1,23 @@
+## Active Update 2026-07-03 Post-Close Binance Price Window
+Goal: Verify the deployed `a2fc59c` Binance timed-close hotfix and fix why it still missed a just-ended market after restart.
+Status: Completed
+Done:
+- Checked production PostgreSQL on `192.168.0.101` read-only after deploy.
+- Confirmed `PolyCopyTrader.Service` was running in `Live` mode with a fresh heartbeat and version `1.0.0+a2fc59c...`.
+- Confirmed `a2fc59c` did produce one fast `BinanceTimedClose` row before the later restart: ETH `23:20-23:25 Europe/Sofia`, resolved at `23:25:00.840`, delay `0.840s`.
+- Waited through the next 5m close after restart and found no new `BinanceTimedClose` rows; fallback `ReferenceStartEnd` rows resolved BTC/ETH/SOL around `23:50:10`, roughly `10.4s` after close.
+- Found root cause: the old `BinanceTimedCloseMaxPriceAgeMilliseconds=1000` guard required the Binance source timestamp to be within 1s of market end in either direction. Server data showed ETH/SOL first useful post-close Binance ticks arrived about `+3.8s/+4.0s`, while BTC had only a pre-close tick around `-4.5s`, so all candidates were rejected.
+- Changed the guard to reject any pre-close Binance close timestamp and accept only post-close timestamps within the configured max offset.
+- Increased the default and appsettings `BinanceTimedCloseMaxPriceAgeMilliseconds` from `1000` to `5000`.
+- Added regression tests for skipping pre-close prices and accepting a post-close price within the 5s offset.
+Verification:
+- `dotnet build src/PolyCopyTrader.Service/PolyCopyTrader.Service.csproj --no-restore` passed with 0 warnings and 0 errors.
+- `dotnet test tests/PolyCopyTrader.Tests/PolyCopyTrader.Tests.csproj --filter "FullyQualifiedName~CryptoUpDown5mResultPollingProcessorTests|FullyQualifiedName~ConfigurationTests|FullyQualifiedName~ProcessPreviousResultDueEntriesAsync_EntersAfterResolvedLedgerArrives"` passed 50/50; one existing nullable warning remains in `BtcUpDown5mPaperStrategyProcessorTests.cs`.
+- `git diff --check` passed with LF/CRLF warnings only.
+Next: Deploy/restart the service again, then verify after the next 5m close that fresh `source='BinanceTimedClose'` rows appear.
+Notes: Production DB checks were read-only. No production writes, Live setting changes, order submissions, cancels, or service restarts were performed by Codex. Existing unrelated dirty files remain untouched.
+Blockers: None.
+
 ## Active Update 2026-07-03 Post-Deploy Binance Timed Close Check
 Goal: Verify the deployed tie-rule build and fix why `BinanceTimedClose` was not producing resolved rows on the server.
 Status: Completed

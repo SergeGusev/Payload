@@ -241,6 +241,63 @@ public sealed class CryptoUpDown5mResultPollingProcessorTests
     }
 
     [Fact]
+    public async Task ProcessBinanceTimedCloseAsync_SkipsPreClosePrice()
+    {
+        var repository = new TestAppRepository();
+        var startUtc = DateTimeOffset.UtcNow.AddMinutes(-5).AddMilliseconds(-100);
+        var market = CreateCryptoMarket("SOL", startUtc, closed: false, winningOutcome: null);
+        repository.PolymarketGammaMarkets.Add(market);
+        AddCryptoOddsTick(repository, market, "SOL", startUtc.AddSeconds(1), startPrice: 100m, price: 100m);
+        var cryptoClient = new FakeCryptoReferencePriceClient();
+        cryptoClient.SetPrice(
+            "SOL",
+            101m,
+            "SOLUSDT",
+            market.EndDateUtc!.Value.AddMilliseconds(-100),
+            DateTimeOffset.UtcNow);
+        var processor = CreateProcessor(
+            repository,
+            new FakeGammaClient([]),
+            cryptoReferencePriceClient: cryptoClient);
+
+        var result = await processor.ProcessBinanceTimedCloseAsync();
+
+        Assert.Equal(1, result.Candidates);
+        Assert.Equal(0, result.Resolved);
+        Assert.Equal(1, result.MissingClosePrice);
+        Assert.Empty(repository.CryptoUpDown5mWebSocketResolvedMarkets);
+    }
+
+    [Fact]
+    public async Task ProcessBinanceTimedCloseAsync_AcceptsPostClosePriceWithinMaxOffset()
+    {
+        var repository = new TestAppRepository();
+        var startUtc = DateTimeOffset.UtcNow.AddMinutes(-5).AddSeconds(-5);
+        var market = CreateCryptoMarket("SOL", startUtc, closed: false, winningOutcome: null);
+        repository.PolymarketGammaMarkets.Add(market);
+        AddCryptoOddsTick(repository, market, "SOL", startUtc.AddSeconds(1), startPrice: 100m, price: 100m);
+        var cryptoClient = new FakeCryptoReferencePriceClient();
+        cryptoClient.SetPrice(
+            "SOL",
+            101m,
+            "SOLUSDT",
+            market.EndDateUtc!.Value.AddSeconds(4),
+            DateTimeOffset.UtcNow.AddMilliseconds(-250));
+        var processor = CreateProcessor(
+            repository,
+            new FakeGammaClient([]),
+            cryptoReferencePriceClient: cryptoClient);
+
+        var result = await processor.ProcessBinanceTimedCloseAsync();
+
+        Assert.Equal(1, result.Candidates);
+        Assert.Equal(1, result.Resolved);
+        var resolved = Assert.Single(repository.CryptoUpDown5mWebSocketResolvedMarkets);
+        Assert.Equal("Up", resolved.WinningOutcome);
+        Assert.Contains("\"close_price_offset_ms\":4000", resolved.RawJson, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task ProcessBinanceTimedCloseAsync_ResolvesTinyNegativeMoveAsDown()
     {
         var repository = new TestAppRepository();
@@ -285,7 +342,7 @@ public sealed class CryptoUpDown5mResultPollingProcessorTests
                 BinanceTimedClosePollIntervalMilliseconds = 500,
                 BinanceTimedCloseDelayMilliseconds = 0,
                 BinanceTimedCloseMaxCandidateAgeSeconds = 30,
-                BinanceTimedCloseMaxPriceAgeMilliseconds = 1_000,
+                BinanceTimedCloseMaxPriceAgeMilliseconds = 5_000,
                 ReferencePriceResultMaxEndAgeMilliseconds = 15_000,
                 ReferencePriceResultMinSamples = 2,
                 ProvisionalOrderBookResultEnabled = true,
@@ -486,15 +543,17 @@ public sealed class CryptoUpDown5mResultPollingProcessorTests
         public void SetPrice(
             string assetSymbol,
             decimal priceUsd,
-            string binanceSymbol)
+            string binanceSymbol,
+            DateTimeOffset? sourceUpdatedAtUtc = null,
+            DateTimeOffset? fetchedAtUtc = null)
         {
             var now = DateTimeOffset.UtcNow;
             prices[assetSymbol.Trim().ToUpperInvariant()] = new CryptoReferencePricePoint(
                 assetSymbol.Trim().ToUpperInvariant(),
                 binanceSymbol,
                 priceUsd,
-                now,
-                now,
+                sourceUpdatedAtUtc ?? now,
+                fetchedAtUtc ?? now,
                 "FakeBinance");
         }
 

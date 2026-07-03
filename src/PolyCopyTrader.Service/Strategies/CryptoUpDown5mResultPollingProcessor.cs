@@ -260,7 +260,7 @@ public sealed class CryptoUpDown5mResultPollingProcessor(
 
         var closeOffset = close.Price.SourceUpdatedAtUtc - candidate.MarketEndUtc;
         var maxCloseAge = TimeSpan.FromMilliseconds(Math.Max(1, options.BinanceTimedCloseMaxPriceAgeMilliseconds));
-        if (closeAge > maxCloseAge || closeOffset.Duration() > maxCloseAge)
+        if (closeAge > maxCloseAge || closeOffset < TimeSpan.Zero || closeOffset > maxCloseAge)
         {
             return BinanceTimedCloseResult.MissingClosePrice();
         }
