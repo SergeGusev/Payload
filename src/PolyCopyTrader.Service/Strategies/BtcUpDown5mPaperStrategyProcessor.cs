@@ -96,9 +96,6 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
     private const decimal AdjustedDiffTrendZeroDeadband = 1m;
     private const decimal AdjustedDiffTrendZeroMaxStep = 0.5m;
     private const string AdjustedDiffTrendZeroMode = "ema_24_slow_step_continuous";
-    private const int EntryDependencyReadySlaSeconds = 1;
-    private static readonly TimeSpan DiffCounterPreviousResultWait = TimeSpan.FromSeconds(EntryDependencyReadySlaSeconds);
-    private const int PreviousResultReadySlaSeconds = EntryDependencyReadySlaSeconds;
     private static readonly TimeSpan DiffCounterHistoryFetchFailureBackoff = TimeSpan.FromMinutes(1);
     private static readonly TimeSpan MarketObserveAheadWindow = TimeSpan.FromMinutes(10);
     private static readonly TimeSpan MarketObserveBehindWindow = TimeSpan.FromMinutes(10);
@@ -2807,16 +2804,16 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
                 continue;
             }
 
-            if (IsPreviousResultReadyWaitExpired(run.EntryDueAtUtc, nowUtc) &&
+            if (IsEntryExpired(run.EntryDueAtUtc, nowUtc) &&
                 variantsById.TryGetValue(StrategyIds.Normalize(run.StrategyId), out var variant))
             {
                 await SkipRunAsync(
                     run,
                     variant,
-                    "previous_result_not_ready_by_sla",
+                    "previous_result_not_ready_by_entry_grace",
                     nowUtc,
                     cancellationToken,
-                    BuildPreviousResultNotReadyBySlaDiagnosticsJson(run, candidate, nowUtc));
+                    BuildPreviousResultNotReadyByEntryGraceDiagnosticsJson(run, candidate, nowUtc));
                 runsSkipped++;
             }
         }
@@ -2824,22 +2821,17 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
         return new PreviousResultReadyFilterResult(readyRuns, runsSkipped);
     }
 
-    private static bool IsPreviousResultReadyWaitExpired(DateTimeOffset entryDueAtUtc, DateTimeOffset nowUtc)
-    {
-        return entryDueAtUtc < nowUtc.AddSeconds(-PreviousResultReadySlaSeconds);
-    }
-
-    private static string BuildPreviousResultNotReadyBySlaDiagnosticsJson(
+    private string BuildPreviousResultNotReadyByEntryGraceDiagnosticsJson(
         StrategyMarketPaperRun run,
         PreviousResultReadyCandidate candidate,
         DateTimeOffset nowUtc)
     {
         var root = new JsonObject
         {
-            ["skip_reason"] = "previous_result_not_ready_by_sla",
+            ["skip_reason"] = "previous_result_not_ready_by_entry_grace",
             ["entry_due_at_utc"] = run.EntryDueAtUtc.ToString("O", CultureInfo.InvariantCulture),
             ["decision_utc"] = nowUtc.ToString("O", CultureInfo.InvariantCulture),
-            ["previous_result_ready_sla_seconds"] = PreviousResultReadySlaSeconds,
+            ["entry_grace_seconds"] = options.EntryGraceSeconds,
             ["reference_asset_symbol"] = candidate.AssetSymbol,
             ["previous_market_start_utc"] = candidate.PreviousMarketStartUtc.ToString("O", CultureInfo.InvariantCulture)
         };
@@ -12966,8 +12958,7 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
 
         if (IsDiffCounterTrendOpeningLimitEntry(variant) &&
             string.Equals(decision.SkipReason, "diff_counter_previous_market_resolved_event_missing", StringComparison.Ordinal) &&
-            run.MarketStartUtc is { } marketStartUtc &&
-            nowUtc < marketStartUtc.Add(DiffCounterPreviousResultWait))
+            !dependencyWaitExpired)
         {
             return true;
         }
@@ -13016,9 +13007,9 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
             string.Equals(reason, "premarket_previous_market_end_minus_30_price_missing", StringComparison.Ordinal);
     }
 
-    private static bool IsOpeningLimitSignalWaitExpired(DateTimeOffset entryDueAtUtc, DateTimeOffset nowUtc)
+    private bool IsOpeningLimitSignalWaitExpired(DateTimeOffset entryDueAtUtc, DateTimeOffset nowUtc)
     {
-        return entryDueAtUtc < nowUtc.AddSeconds(-EntryDependencyReadySlaSeconds);
+        return IsEntryExpired(entryDueAtUtc, nowUtc);
     }
 
     private bool ShouldDeferUntilTradingStarts(

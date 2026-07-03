@@ -1,3 +1,21 @@
+## Active Update 2026-07-03 Remove Hidden Previous Result SLA
+Goal: Remove the hidden one-second previous-result/dependency wait and decide whether Polymarket or Binance is the fastest source for the previous 5m market result.
+Status: Completed
+Done:
+- Removed the hardcoded one-second dependency constants from `BtcUpDown5mPaperStrategyProcessor`: `EntryDependencyReadySlaSeconds`, `PreviousResultReadySlaSeconds`, and `DiffCounterPreviousResultWait`.
+- Previous-result fast entries now wait until the normal strategy `EntryGraceSeconds` expires via `IsEntryExpired(...)`; if still missing, they skip with `previous_result_not_ready_by_entry_grace` and diagnostics include `entry_grace_seconds`.
+- Opening-limit dependency waits now use the same entry-grace expiry instead of a separate hidden one-second cap. Diff-counter missing previous-market-result deferral also waits until entry grace expires.
+- Updated focused tests to use explicit `entryGraceSeconds: 1` only where a fast test needs to cross the grace window, and renamed the old SLA test names to entry-grace terminology.
+- Decided from current code path and the previously checked server ledger stats that the fastest reliable previous-market-result source is the Binance/reference-price path (`ReferenceStartEnd`), not Polymarket. Current result polling tries `ReferenceStartEnd` first, then Polymarket terminal order book, then Gamma closed market. The practical latency bottleneck is the 5 second `CryptoUpDown5mResultPolling` loop, not Polymarket API speed.
+Verification:
+- Passed targeted tests: `ProcessDiffCounterDueEntriesAsync_DiffCounterSkipsMissingPreviousResultAfterEntryGrace`, `ProcessAsync_BinanceStartRelativeSkipsEqualStartPriceAfterEntryGrace`, and `ProcessPreviousResultFastDueEntriesAsync_SkipsWhenPreviousResultMissesEntryGrace`.
+- Confirmed old SLA identifiers/strings are gone from service and focused tests via `rg`.
+- `git diff --check` passed for the changed service/test files.
+- Broader `BtcUpDown5mPaperStrategyProcessorTests` class is not a clean baseline: `179` passed and `51` failed, with failures spanning unrelated current strategy-test issues such as missing variant lookups, live-shadow pricing expectations, and close-book/previous-result expectations.
+Next: Deploy/restart the service to apply the hidden-SLA removal. If faster previous-result readiness is still needed, implement a dedicated fast Binance/reference result resolver around market close (roughly 250-500 ms cadence for just-ended BTC/ETH/SOL markets) and let strategies wake as soon as the ledger row appears.
+Notes: Source/test changes only. No production DB writes, Live setting changes, order submissions, cancels, or service restarts were performed in this task. A fresh DB stats query was not run because the current process did not have the PostgreSQL connection string environment variable.
+Blockers: None for the code change; broad strategy test baseline remains dirty.
+
 ## Active Update 2026-07-03 Dependency SLA Origin Accountability
 Goal: Trace where the one-second previous-result SLA came from and why it appeared without explicit user approval.
 Status: Completed

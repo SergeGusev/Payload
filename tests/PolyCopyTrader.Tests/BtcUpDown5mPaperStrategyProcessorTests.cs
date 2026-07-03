@@ -7005,7 +7005,7 @@ public sealed class BtcUpDown5mPaperStrategyProcessorTests
     }
 
     [Fact]
-    public async Task ProcessDiffCounterDueEntriesAsync_DiffCounterSkipsMissingPreviousResultAfterDependencySla()
+    public async Task ProcessDiffCounterDueEntriesAsync_DiffCounterSkipsMissingPreviousResultAfterEntryGrace()
     {
         var startupMarketStartUtc = new DateTimeOffset(2026, 6, 8, 12, 0, 0, TimeSpan.Zero);
         var startupNow = startupMarketStartUtc.AddMilliseconds(500);
@@ -7034,7 +7034,7 @@ public sealed class BtcUpDown5mPaperStrategyProcessorTests
             DefaultOrderBooks(),
             _ => { },
             Array.Empty<OrderBookSnapshot>(),
-            CreateBtcOptions(paperTakerPricingEnabled: false, [variant.Code]),
+            CreateBtcOptions(paperTakerPricingEnabled: false, [variant.Code], entryGraceSeconds: 1),
             gammaClient: gammaClient,
             timeProvider: timeProvider);
 
@@ -11035,7 +11035,7 @@ public sealed class BtcUpDown5mPaperStrategyProcessorTests
     }
 
     [Fact]
-    public async Task ProcessAsync_BinanceStartRelativeSkipsEqualStartPriceAfterDependencySla()
+    public async Task ProcessAsync_BinanceStartRelativeSkipsEqualStartPriceAfterEntryGrace()
     {
         var now = DateTimeOffset.UtcNow;
         var marketStart = now.AddSeconds(-3);
@@ -11052,7 +11052,7 @@ public sealed class BtcUpDown5mPaperStrategyProcessorTests
             DefaultOrderBooks(),
             _ => { },
             Array.Empty<OrderBookSnapshot>(),
-            CreateBtcOptions(paperTakerPricingEnabled: false, [BinanceVariant.Code]),
+            CreateBtcOptions(paperTakerPricingEnabled: false, [BinanceVariant.Code], entryGraceSeconds: 1),
             new FakeBtcUsdReferencePriceClient(100m),
             CreateBtcUsdReferenceCache(100m));
 
@@ -12020,7 +12020,7 @@ public sealed class BtcUpDown5mPaperStrategyProcessorTests
     }
 
     [Fact]
-    public async Task ProcessPreviousResultFastDueEntriesAsync_SkipsWhenPreviousResultMissesSla()
+    public async Task ProcessPreviousResultFastDueEntriesAsync_SkipsWhenPreviousResultMissesEntryGrace()
     {
         var marketStart = DateTimeOffset.UtcNow.AddSeconds(-4);
         var timeProvider = new ManualTimeProvider(marketStart.AddSeconds(4));
@@ -12036,7 +12036,7 @@ public sealed class BtcUpDown5mPaperStrategyProcessorTests
             DefaultOrderBooks(),
             _ => { },
             [],
-            CreateBtcOptions(false, [Skip1Variant.Code]),
+            CreateBtcOptions(false, [Skip1Variant.Code], entryGraceSeconds: 1),
             btcUsdReferencePriceClient: new FakeBtcUsdReferencePriceClient(100m),
             btcUsdReferencePriceCache: CreateBtcUsdReferenceCache([100m]),
             timeProvider: timeProvider);
@@ -12049,8 +12049,8 @@ public sealed class BtcUpDown5mPaperStrategyProcessorTests
         Assert.Equal(1, dueResult.RunsSkipped);
         var skippedRun = Assert.Single(repository.StrategyMarketPaperRuns, item => item.StrategyId == Skip1Variant.Id);
         Assert.Equal(StrategyMarketPaperRunStatuses.Skipped, skippedRun.Status);
-        Assert.Equal("previous_result_not_ready_by_sla", skippedRun.SkipReason);
-        Assert.Contains("\"previous_result_ready_sla_seconds\":1", skippedRun.SkipDiagnosticsJson, StringComparison.Ordinal);
+        Assert.Equal("previous_result_not_ready_by_entry_grace", skippedRun.SkipReason);
+        Assert.Contains("\"entry_grace_seconds\":1", skippedRun.SkipDiagnosticsJson, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -14551,12 +14551,13 @@ public sealed class BtcUpDown5mPaperStrategyProcessorTests
         int maxSettlementsPerCycle = 50,
         int maxConcurrentSettlements = 1,
         int maxMarketsPerCycle = 500,
-        int paperTakerMaxQuoteAgeMilliseconds = 1_500)
+        int paperTakerMaxQuoteAgeMilliseconds = 1_500,
+        int entryGraceSeconds = 10)
     {
         return new BtcUpDown5mStrategyOptions
         {
             StakeUsd = 1m,
-            EntryGraceSeconds = 10,
+            EntryGraceSeconds = entryGraceSeconds,
             MaxMarketsPerCycle = maxMarketsPerCycle,
             MaxEntriesPerCycle = maxEntriesPerCycle,
             MaxConcurrentEntryDecisions = maxConcurrentEntryDecisions,
