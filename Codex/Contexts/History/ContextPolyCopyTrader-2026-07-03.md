@@ -48,3 +48,9 @@ Request:
 
 Result:
 Implemented future-row Paper-only FAK executable-snapshot accounting: fresh executable order book before simulation, sizing from that same snapshot, stale/missing/non-executable rejection, spread-limit checking, partial depth fills, average-fill `PaperOrder.Price`, and raw diagnostics `paper_execution_evidence_class = paper_executable_snapshot_model` plus `paper_fak_fill_model = fak_taker_executable_snapshot_v2`. Also aligned generic pending FAK Paper processing to the same average-fill price/model markers. Focused FAK tests passed; full test suite still has existing broad strategy failures unrelated to the focused Paper FAK change.
+## 2026-07-03T13:27:34.6541768Z
+Request:
+Почему установка/сбрасывание Live галочки из Dashboard срабатывает со второго-третьего раза?
+
+Result:
+Found and fixed the Dashboard freshness bug. The `Live` checkbox save wrote immediately to `strategies`, but the subsequent Dashboard refresh read from the precomputed `dashboard_strategy_performance_snapshots` row, where `live_stakes` could still be stale until the background snapshot worker rebuilt it. Updated `PostgresDashboardSnapshotRepository` so the Dashboard still reads heavy statistics from precomputed snapshot tables, but reads current mutable strategy settings from `strategies` via a flat join. Added Dashboard snapshot regression assertions and verified `dotnet test tests/PolyCopyTrader.Tests/PolyCopyTrader.Tests.csproj --filter "FullyQualifiedName~DashboardSnapshotTests"` passed `6/6`. No production DB writes, Live order submissions, cancel actions, or service restarts were performed.

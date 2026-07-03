@@ -72,6 +72,11 @@ public sealed class DashboardSnapshotTests
 
         var selectSql = source[start..end];
         Assert.Contains("FROM dashboard_strategy_performance_snapshots", selectSql, StringComparison.Ordinal);
+        Assert.Contains("JOIN strategies AS strategy ON strategy.id = snapshot.strategy_id", selectSql, StringComparison.Ordinal);
+        Assert.Contains("strategy.live_stakes", selectSql, StringComparison.Ordinal);
+        Assert.Contains("strategy.enabled", selectSql, StringComparison.Ordinal);
+        Assert.Contains("strategy.paused", selectSql, StringComparison.Ordinal);
+        Assert.Contains("strategy.live_available_balance", selectSql, StringComparison.Ordinal);
         Assert.DoesNotContain("WITH ", selectSql, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain("paper_orders", selectSql, StringComparison.Ordinal);
         Assert.DoesNotContain("strategy_market_paper_runs", selectSql, StringComparison.Ordinal);
@@ -90,6 +95,8 @@ public sealed class DashboardSnapshotTests
 
         var selectSql = source[start..end];
         Assert.Contains("FROM dashboard_strategy_recent_performance_snapshots", selectSql, StringComparison.Ordinal);
+        Assert.Contains("JOIN strategies AS strategy ON strategy.id = snapshot.strategy_id", selectSql, StringComparison.Ordinal);
+        Assert.Contains("strategy.live_stakes", selectSql, StringComparison.Ordinal);
         Assert.DoesNotContain("WITH ", selectSql, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain("paper_orders", selectSql, StringComparison.Ordinal);
         Assert.DoesNotContain("strategy_market_paper_runs", selectSql, StringComparison.Ordinal);

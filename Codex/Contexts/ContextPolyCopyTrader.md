@@ -1,3 +1,15 @@
+## Active Update 2026-07-03 Dashboard Live Toggle Snapshot Freshness
+Goal: Explain and fix why the Dashboard `Live` checkbox sometimes appeared to apply only after multiple clicks.
+Status: Completed
+Done:
+- Identified the cause: Dashboard saved `LiveStakes` immediately into `strategies`, invalidated its local cache, then refreshed from `dashboard_strategy_performance_snapshots`; that precomputed snapshot could still contain the old `live_stakes` value until the service rebuilt it, so the UI could visually flip back after a successful save.
+- Changed `PostgresDashboardSnapshotRepository` so strategy performance and recent-performance snapshot reads keep the heavy statistics from precomputed snapshot tables but read current mutable strategy settings directly from `strategies`.
+- Current Dashboard rows now read fresh `enabled`, `live_stakes`, `auto_live_paused`, `paused`, stake amounts, loss counters, and `live_available_balance` from `strategies`; recent-performance rows read fresh `live_stakes` from `strategies`.
+- Added regression assertions to `DashboardSnapshotTests` so the flat snapshot reads must join current strategy settings and still avoid heavy `paper_orders`, `strategy_market_paper_runs`, and `live_orders` source tables.
+Next: Deploy/restart Dashboard (and service if the same binaries are deployed together) so the refreshed executable uses the updated snapshot read.
+Notes: Verification passed: `dotnet test tests/PolyCopyTrader.Tests/PolyCopyTrader.Tests.csproj --filter "FullyQualifiedName~DashboardSnapshotTests"` passed `6/6`. The build emitted existing nullable warnings in `PostgresAppRepository`; no new Live order placement, cancel action, or production DB write was performed.
+Blockers: None.
+
 ## Active Update 2026-07-03 Production Paper History Reset
 Goal: Clear old production Paper history without deleting Live orders while the service was being redeployed.
 Status: Completed
