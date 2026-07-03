@@ -10138,8 +10138,11 @@ public sealed class BtcUpDown5mPaperStrategyProcessorTests
     public async Task ProcessAsync_EthDown9FakLiveStakeSubmitsFakMarketBuyAmount()
     {
         var now = DateTimeOffset.UtcNow;
-        var previousStart = now.AddMinutes(-5);
+        var currentMarketStart = GetCurrentFiveMinuteMarketStartUtc();
+        var previousStart = currentMarketStart.AddMinutes(-5);
         var previousSuffix = previousStart.ToUnixTimeSeconds().ToString(CultureInfo.InvariantCulture);
+        var previousMarketId = "eth-ws-market-" + previousSuffix;
+        var previousConditionId = "eth-ws-condition-" + previousSuffix;
         var variant = StrategyIds.CryptoUpDown5mVariants.Single(item => item.Code == "eth_up_down_5m_down_bps_9_fak");
         var repository = new TestAppRepository();
         repository.StrategySettings[variant.Id] = StrategyRuntimeSettings.Default(variant.Id) with
@@ -10152,40 +10155,44 @@ public sealed class BtcUpDown5mPaperStrategyProcessorTests
             PaperStakeAmount = 1m
         };
         repository.PolymarketGammaMarkets.Add(CreateMarket(
-            now,
-            now.AddMinutes(5),
+            currentMarketStart,
+            currentMarketStart.AddMinutes(5),
             upPrice: 0.50m,
             downPrice: 0.50m,
-            slug: $"eth-updown-5m-{now.ToUnixTimeSeconds().ToString(CultureInfo.InvariantCulture)}",
+            slug: $"eth-updown-5m-{currentMarketStart.ToUnixTimeSeconds().ToString(CultureInfo.InvariantCulture)}",
             seriesSlug: "eth-up-or-down-5m",
             question: "ETH Up or Down - test",
             marketId: "eth-market-1",
             conditionId: "eth-condition-1",
             upAssetId: "eth-asset-up",
             downAssetId: "eth-asset-down"));
-        var closeBookOrderBooks = AddCryptoCloseBookResults(repository, "ETH", now, "Up");
+        var closeBookOrderBooks = AddCryptoCloseBookResults(repository, "ETH", currentMarketStart, "Up");
+        repository.CryptoUpDown5mWebSocketResolvedMarkets.Add(CreateWebSocketDiffResult(
+            "ETH",
+            previousStart,
+            "Up"));
         AddCryptoOddsTick(
             repository,
             "ETH",
-            "eth-close-market-" + previousSuffix,
-            "eth-close-condition-" + previousSuffix,
+            previousMarketId,
+            previousConditionId,
             previousStart,
             sampleOffsetSeconds: 0,
             binancePriceUsd: 3_200m,
             startPriceUsd: 3_200m,
-            upAssetId: "eth-close-up-" + previousSuffix,
-            downAssetId: "eth-close-down-" + previousSuffix);
+            upAssetId: "eth-ws-up-" + previousSuffix,
+            downAssetId: "eth-ws-down-" + previousSuffix);
         AddCryptoOddsTick(
             repository,
             "ETH",
-            "eth-close-market-" + previousSuffix,
-            "eth-close-condition-" + previousSuffix,
+            previousMarketId,
+            previousConditionId,
             previousStart,
             sampleOffsetSeconds: 299,
             binancePriceUsd: 3_202.88m,
             startPriceUsd: 3_200m,
-            upAssetId: "eth-close-up-" + previousSuffix,
-            downAssetId: "eth-close-down-" + previousSuffix);
+            upAssetId: "eth-ws-up-" + previousSuffix,
+            downAssetId: "eth-ws-down-" + previousSuffix);
         OrderBookSnapshot[] orderBooks =
         [
             OrderBook(
@@ -10249,11 +10256,28 @@ public sealed class BtcUpDown5mPaperStrategyProcessorTests
 
         var paperOrder = Assert.Single(repository.PaperOrders);
         Assert.Equal(PaperOrderStatus.Filled, paperOrder.Status);
+        Assert.Equal(0.64m, paperOrder.Price);
+        Assert.Equal(1.25m, paperOrder.SizeShares);
+        Assert.Equal(0.80m, paperOrder.NotionalUsd);
         Assert.Equal("btc_updown5m_fak_taker_paper", paperOrder.ExecutionSource);
         Assert.Equal(liveOrder.CorrelationId, paperOrder.CorrelationId);
         Assert.Contains("\"order_type\":\"FAK\"", paperOrder.RawDecisionJson, StringComparison.Ordinal);
         Assert.Contains("\"live_order_type\":\"FAK\"", paperOrder.RawDecisionJson, StringComparison.Ordinal);
         Assert.Contains("\"fak_stats_probe\":true", paperOrder.RawDecisionJson, StringComparison.Ordinal);
+        Assert.Contains("\"paper_fak_fill_model\":\"live_order_actual_fill_v1\"", paperOrder.RawDecisionJson, StringComparison.Ordinal);
+        Assert.Contains("\"paper_live_shadow_actual_fill\":true", paperOrder.RawDecisionJson, StringComparison.Ordinal);
+
+        var paperFill = Assert.Single(repository.PaperFills);
+        Assert.Equal(paperOrder.Id, paperFill.PaperOrderId);
+        Assert.Equal(0.64m, paperFill.Price);
+        Assert.Equal(1.25m, paperFill.SizeShares);
+
+        var run = Assert.Single(repository.StrategyMarketPaperRuns, item =>
+            item.StrategyId == variant.Id &&
+            item.Status == StrategyMarketPaperRunStatuses.Entered);
+        Assert.Equal(0.64m, run.EntryPrice);
+        Assert.Equal(0.80m, run.StakeUsd);
+        Assert.Equal(1.25m, run.SizeShares);
 
         var decision = Assert.Single(repository.PaperLiveShadowDecisions);
         Assert.Equal("FAK", decision.OrderType);
@@ -10355,6 +10379,31 @@ public sealed class BtcUpDown5mPaperStrategyProcessorTests
         Assert.Equal("Up", liveOrder.Outcome);
         Assert.DoesNotContain("has not started", liveOrder.ValidationSummary, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain("Geoblock check failed", liveOrder.ValidationSummary, StringComparison.OrdinalIgnoreCase);
+        Assert.Equal(1.25m, liveOrder.FilledSize);
+        Assert.Equal(0.64m, liveOrder.AverageFillPrice);
+        Assert.Equal(0.80m, liveOrder.FilledNotionalUsd);
+        Assert.Equal(0.80m, liveOrder.CostBasisUsd);
+
+        var paperOrder = Assert.Single(repository.PaperOrders);
+        Assert.Equal(PaperOrderStatus.Filled, paperOrder.Status);
+        Assert.Equal(0.64m, paperOrder.Price);
+        Assert.Equal(1.25m, paperOrder.SizeShares);
+        Assert.Equal(0.80m, paperOrder.NotionalUsd);
+        Assert.Equal("btc_updown5m_fak_taker_paper", paperOrder.ExecutionSource);
+        Assert.Contains("\"paper_fak_fill_model\":\"live_order_actual_fill_v1\"", paperOrder.RawDecisionJson, StringComparison.Ordinal);
+        Assert.Contains("\"paper_live_shadow_actual_fill\":true", paperOrder.RawDecisionJson, StringComparison.Ordinal);
+
+        var paperFill = Assert.Single(repository.PaperFills);
+        Assert.Equal(paperOrder.Id, paperFill.PaperOrderId);
+        Assert.Equal(0.64m, paperFill.Price);
+        Assert.Equal(1.25m, paperFill.SizeShares);
+
+        var run = Assert.Single(repository.StrategyMarketPaperRuns, item =>
+            item.StrategyId == variant.Id &&
+            item.Status == StrategyMarketPaperRunStatuses.Entered);
+        Assert.Equal(0.64m, run.EntryPrice);
+        Assert.Equal(0.80m, run.StakeUsd);
+        Assert.Equal(1.25m, run.SizeShares);
 
         var decision = Assert.Single(repository.PaperLiveShadowDecisions);
         Assert.Equal("live_submitted", decision.Status);

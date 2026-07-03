@@ -1,3 +1,16 @@
+## Active Update 2026-07-03 FAK Live Shadow Paper Accounting Alignment
+Goal: Make FAK paper-live-shadow Paper statistics use actual Live fill accounting instead of a separate local fill simulation.
+Status: Completed
+Done:
+- Changed `BtcUpDown5mPaperStrategyProcessor` so a successful matched FAK paper-live-shadow placement returns the persisted `LiveOrder` to the Paper accounting path.
+- For FAK live-shadow Paper entries, Paper order/fill/run values now come from actual Live accounting: average fill price, filled size, and cost basis/filled notional. The Paper order price is the actual average fill price, not the `0.99` FAK cap.
+- Added raw-decision diagnostics with `paper_fak_fill_model = live_order_actual_fill_v1`, `paper_live_shadow_actual_fill = true`, Live order id, requested Live notional, actual filled notional, actual size, and preserved shadow sizing fields.
+- Extended FAK live-shadow tests to assert that Live fill `0.80` cost / `1.25` shares / `0.64` average price is copied exactly into Paper order, Paper fill, and strategy run for both regular and premarket ETH FAK paths.
+- Stabilized the regular ETH FAK live-shadow test data by aligning the previous-result resolved-market ledger id and crypto odds samples.
+Next: Deploy/restart the service before relying on new Paper rows. If exact historical Paper comparison is needed, backfill or mark old FAK live-shadow Paper rows from linked `live_orders`; old accumulated Paper rows remain only a model, not exact Live accounting.
+Notes: Verification passed: `dotnet test tests/PolyCopyTrader.Tests/PolyCopyTrader.Tests.csproj --filter "FullyQualifiedName~ProcessAsync_EthDown9FakLiveStakeSubmitsFakMarketBuyAmount|FullyQualifiedName~ProcessAsync_EthDown9FakPremarketLiveStakeSubmitsBeforeMarketStart"` passed `2/2`. Full `dotnet test tests/PolyCopyTrader.Tests/PolyCopyTrader.Tests.csproj` currently fails broadly (`78` failed, `711` passed) in existing strategy tests, mostly old FAK price/readiness expectations and missing catalog variants, so it is not a clean suite for this change.
+Blockers: None.
+
 ## Active Update 2026-07-03 SOL Reference Average Paper Live PnL Gap
 Goal: Explain why `SOL Up or Down 5m Down 8 bps Reference Average Premarket` shows near-flat Paper PnL but negative Live PnL over 24h.
 Status: Completed

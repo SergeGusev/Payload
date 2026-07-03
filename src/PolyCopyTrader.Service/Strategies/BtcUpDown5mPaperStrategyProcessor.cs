@@ -4513,7 +4513,7 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
                                 liveStakeMultiplier = liveLostCounterAdjustment.EffectiveStakeUsd;
                             }
 
-                            var liveShadowPlaced = await TryPlacePaperLiveShadowOrderAsync(
+                            var liveShadowPlacement = await TryPlacePaperLiveShadowOrderAsync(
                                 limitSignal,
                                 limitSelectedOutcome,
                                 variant,
@@ -4526,90 +4526,91 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
                                 market.EndDateUtc,
                                 nowUtc,
                                 cancellationToken);
-                            if (liveShadowPlaced &&
+                            if (liveShadowPlacement.Placed &&
                                 IsFakOrderEntry(variant) &&
-                                shadowSnapshot?.OrderBook is { } shadowFakOrderBook)
+                                liveShadowPlacement.LiveOrder is { } matchedLiveOrder &&
+                                TryResolveLiveOrderFillAccounting(
+                                    matchedLiveOrder,
+                                    out var actualAverageFillPrice,
+                                    out var actualFilledSize,
+                                    out var actualFilledNotionalUsd))
                             {
-                                var fakEstimate = TakerBuyFillEstimator.Estimate(
-                                    shadowFakOrderBook,
-                                    stakeUsd,
-                                    orderPrice,
-                                    shadowFakOrderBook.MinOrderSize);
-                                var shadowFakLookup = TakerOrderBookLookupResult.Found(
-                                    shadowFakOrderBook,
-                                    shadowSnapshot.Source,
-                                    shadowSnapshot.Age);
-                                var fakRawDecisionJson = AttachFakPaperFillSimulationJson(
+                                var shadowFakLookup = shadowSnapshot?.OrderBook is { } shadowFakOrderBook
+                                    ? TakerOrderBookLookupResult.Found(
+                                        shadowFakOrderBook,
+                                        shadowSnapshot.Source,
+                                        shadowSnapshot.Age)
+                                    : null;
+                                var fakRawDecisionJson = AttachFakPaperLiveShadowActualFillJson(
                                     limitRawDecisionJson,
                                     shadowFakLookup,
                                     limitSizing,
-                                    fakEstimate,
-                                    fakEstimate.RejectionReason,
+                                    matchedLiveOrder,
+                                    actualAverageFillPrice,
+                                    actualFilledSize,
+                                    actualFilledNotionalUsd,
                                     nowUtc);
-                                if (fakEstimate.Filled)
+                                var fillEvidence = string.Concat(
+                                    "BtcUpDown5mPaper:",
+                                    variant.Code,
+                                    ": FAK taker paper live-shadow fill from matched live order response. LiveOrderId=",
+                                    matchedLiveOrder.Id.ToString("D"),
+                                    " ClobOrderId=",
+                                    matchedLiveOrder.OrderId ?? string.Empty,
+                                    " WorstPrice=",
+                                    orderPrice.ToString("0.########", CultureInfo.InvariantCulture),
+                                    " AvgFillPrice=",
+                                    actualAverageFillPrice.ToString("0.########", CultureInfo.InvariantCulture),
+                                    " FilledSize=",
+                                    actualFilledSize.ToString("0.########", CultureInfo.InvariantCulture),
+                                    " FilledNotionalUsd=",
+                                    actualFilledNotionalUsd.ToString("0.########", CultureInfo.InvariantCulture),
+                                    " RequestedLiveNotionalUsd=",
+                                    matchedLiveOrder.NotionalUsd.ToString("0.########", CultureInfo.InvariantCulture),
+                                    ".");
+                                var fakFill = new PaperFill(
+                                    Guid.NewGuid(),
+                                    limitOrder.Id,
+                                    actualAverageFillPrice,
+                                    actualFilledSize,
+                                    nowUtc,
+                                    fillEvidence);
+                                var filledOrder = limitOrder with
                                 {
-                                    var fillEvidence = string.Concat(
-                                        "BtcUpDown5mPaper:",
-                                        variant.Code,
-                                        ": FAK taker paper live-shadow fill from ",
-                                        shadowFakLookup.Source,
-                                        " ask depth. WorstPrice=",
-                                        orderPrice.ToString("0.########", CultureInfo.InvariantCulture),
-                                        " AvgFillPrice=",
-                                        fakEstimate.AverageFillPrice.ToString("0.########", CultureInfo.InvariantCulture),
-                                        " FilledSize=",
-                                        fakEstimate.SizeShares.ToString("0.########", CultureInfo.InvariantCulture),
-                                        " FilledNotionalUsd=",
-                                        fakEstimate.NotionalUsd.ToString("0.########", CultureInfo.InvariantCulture),
-                                        " RequestedNotionalUsd=",
-                                        stakeUsd.ToString("0.########", CultureInfo.InvariantCulture),
-                                        " LevelsUsed=",
-                                        fakEstimate.LevelsUsed.ToString(CultureInfo.InvariantCulture),
-                                        ".");
-                                    var fakFill = new PaperFill(
-                                        Guid.NewGuid(),
-                                        limitOrder.Id,
-                                        fakEstimate.AverageFillPrice,
-                                        fakEstimate.SizeShares,
-                                        nowUtc,
-                                        fillEvidence);
-                                    var filledOrder = limitOrder with
-                                    {
-                                        Status = PaperOrderStatus.Filled,
-                                        Price = orderPrice,
-                                        SizeShares = fakEstimate.SizeShares,
-                                        NotionalUsd = fakEstimate.NotionalUsd,
-                                        ExpiresAtUtc = nowUtc,
-                                        FilledAtUtc = nowUtc,
-                                        RawDecisionJson = fakRawDecisionJson,
-                                        ExecutionSource = BtcFakTakerPaperExecutionSource
-                                    };
+                                    Status = PaperOrderStatus.Filled,
+                                    Price = actualAverageFillPrice,
+                                    SizeShares = actualFilledSize,
+                                    NotionalUsd = actualFilledNotionalUsd,
+                                    ExpiresAtUtc = nowUtc,
+                                    FilledAtUtc = nowUtc,
+                                    RawDecisionJson = fakRawDecisionJson,
+                                    ExecutionSource = BtcFakTakerPaperExecutionSource
+                                };
 
-                                    await repository.AddPaperFillAsync(fakFill, cancellationToken);
-                                    await repository.UpdatePaperOrderAsync(filledOrder, cancellationToken);
-                                    exposureCache.ApplyPaperOrder(filledOrder);
-                                    var positions = await repository.GetPaperPositionsAsync(cancellationToken);
-                                    var currentPosition = FindPaperPosition(positions, filledOrder);
-                                    var currentBid = shadowFakOrderBook.BestBid ?? fakEstimate.AverageFillPrice;
-                                    var updatedPosition = paperTradingEngine.ApplyBuyFill(
-                                        currentPosition,
-                                        filledOrder,
-                                        fakFill,
-                                        currentBid,
-                                        nowUtc);
-                                    await repository.UpsertPaperPositionAsync(updatedPosition, cancellationToken);
-                                    exposureCache.ApplyPaperPosition(updatedPosition);
-                                    await repository.ActivatePaperCopiedLeaderPositionAsync(
-                                        filledOrder.Id,
-                                        fakFill.SizeShares,
-                                        fakFill.FilledAtUtc,
-                                        cancellationToken);
+                                await repository.AddPaperFillAsync(fakFill, cancellationToken);
+                                await repository.UpdatePaperOrderAsync(filledOrder, cancellationToken);
+                                exposureCache.ApplyPaperOrder(filledOrder);
+                                var positions = await repository.GetPaperPositionsAsync(cancellationToken);
+                                var currentPosition = FindPaperPosition(positions, filledOrder);
+                                var currentBid = shadowFakLookup?.OrderBook?.BestBid ?? actualAverageFillPrice;
+                                var updatedPosition = paperTradingEngine.ApplyBuyFill(
+                                    currentPosition,
+                                    filledOrder,
+                                    fakFill,
+                                    currentBid,
+                                    nowUtc);
+                                await repository.UpsertPaperPositionAsync(updatedPosition, cancellationToken);
+                                exposureCache.ApplyPaperPosition(updatedPosition);
+                                await repository.ActivatePaperCopiedLeaderPositionAsync(
+                                    filledOrder.Id,
+                                    fakFill.SizeShares,
+                                    fakFill.FilledAtUtc,
+                                    cancellationToken);
 
-                                    limitOrder = filledOrder;
-                                    entryPrice = fakEstimate.AverageFillPrice;
-                                    entryStakeUsd = fakEstimate.NotionalUsd;
-                                    entrySizeShares = fakEstimate.SizeShares;
-                                }
+                                limitOrder = filledOrder;
+                                entryPrice = actualAverageFillPrice;
+                                entryStakeUsd = actualFilledNotionalUsd;
+                                entrySizeShares = actualFilledSize;
                             }
                         }
 
@@ -14752,6 +14753,93 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
         return root.ToJsonString();
     }
 
+    private static string AttachFakPaperLiveShadowActualFillJson(
+        string rawDecisionJson,
+        TakerOrderBookLookupResult? lookup,
+        BtcMinimumStakeSizing sizing,
+        LiveOrder liveOrder,
+        decimal averageFillPrice,
+        decimal filledSize,
+        decimal filledNotionalUsd,
+        DateTimeOffset nowUtc)
+    {
+        JsonObject root;
+        try
+        {
+            root = JsonNode.Parse(rawDecisionJson)?.AsObject() ?? new JsonObject();
+        }
+        catch (JsonException)
+        {
+            root = new JsonObject();
+        }
+        catch (InvalidOperationException)
+        {
+            root = new JsonObject();
+        }
+
+        root["order_type"] = FakOrderType;
+        root["order_execution_mode"] = FakOrderType;
+        root["post_only"] = false;
+        root["paper_order_type"] = FakOrderType;
+        root["paper_order_execution_mode"] = FakOrderType;
+        root["paper_execution_source"] = BtcFakTakerPaperExecutionSource;
+        root["paper_fak_fill_model"] = "live_order_actual_fill_v1";
+        root["paper_live_shadow_actual_fill"] = true;
+        root["paper_live_shadow_live_order_id"] = liveOrder.Id.ToString("D");
+        root["paper_live_shadow_clob_order_id"] = liveOrder.OrderId;
+        root["paper_fak_evaluated_at_utc"] = nowUtc.ToString("O", CultureInfo.InvariantCulture);
+        root["paper_fak_source"] = lookup?.Source;
+        root["paper_fak_quote_age_ms"] = lookup?.Age?.TotalMilliseconds;
+        root["paper_fak_snapshot_at_utc"] = lookup?.OrderBook?.SnapshotAtUtc.ToString("O", CultureInfo.InvariantCulture);
+        root["paper_fak_best_bid"] = lookup?.OrderBook?.BestBid;
+        root["paper_fak_best_ask"] = lookup?.OrderBook?.BestAsk;
+        root["paper_fak_spread"] = lookup?.OrderBook?.SpreadAbs;
+        root["paper_fak_requested_notional_usd"] = liveOrder.NotionalUsd;
+        root["paper_fak_requested_size_shares_at_cap"] = liveOrder.SizeShares;
+        root["paper_fak_worst_price"] = liveOrder.Price;
+        root["paper_fak_average_fill_price"] = averageFillPrice;
+        root["paper_fak_filled_size_shares"] = filledSize;
+        root["paper_fak_filled_notional_usd"] = filledNotionalUsd;
+        root["paper_fak_target_size_shares"] = liveOrder.SizeShares;
+        root["paper_fak_levels_used"] = null;
+        root["paper_fak_partial_fill"] = filledNotionalUsd < liveOrder.NotionalUsd;
+        root["paper_fak_rejection_reason"] = null;
+        root["paper_shadow_requested_notional_usd"] = sizing.TargetNotionalUsd;
+        root["paper_shadow_requested_size_shares_at_cap"] = sizing.TargetSizeShares;
+
+        return root.ToJsonString();
+    }
+
+    private static bool TryResolveLiveOrderFillAccounting(
+        LiveOrder liveOrder,
+        out decimal averageFillPrice,
+        out decimal filledSize,
+        out decimal filledNotionalUsd)
+    {
+        averageFillPrice = liveOrder.AverageFillPrice.GetValueOrDefault();
+        filledSize = liveOrder.FilledSize;
+        filledNotionalUsd = liveOrder.CostBasisUsd > 0m
+            ? liveOrder.CostBasisUsd
+            : liveOrder.FilledNotionalUsd > 0m
+                ? liveOrder.FilledNotionalUsd + Math.Max(0m, liveOrder.FeeUsd)
+                : 0m;
+
+        if (averageFillPrice <= 0m && filledNotionalUsd > 0m && filledSize > 0m)
+        {
+            averageFillPrice = filledNotionalUsd / filledSize;
+        }
+
+        if (filledNotionalUsd <= 0m && averageFillPrice > 0m && filledSize > 0m)
+        {
+            filledNotionalUsd = averageFillPrice * filledSize;
+        }
+
+        return liveOrder.Status == LiveOrderStatus.Matched &&
+            averageFillPrice > 0m &&
+            filledSize > 0m &&
+            filledNotionalUsd > 0m;
+    }
+
     private static string SerializePaperLiveShadowOrderBookSnapshot(
         OrderBookSnapshot orderBook,
         string source,
@@ -17566,7 +17654,15 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
         return marketStartUtc?.Add(BtcUpDown5mMarketAnalyzer.GetIntervalDuration(variant.MarketInterval));
     }
 
-    private async Task<bool> TryPlacePaperLiveShadowOrderAsync(
+    private sealed record PaperLiveShadowPlacementResult(bool Placed, LiveOrder? LiveOrder)
+    {
+        public static PaperLiveShadowPlacementResult NotPlaced(LiveOrder? liveOrder = null)
+        {
+            return new PaperLiveShadowPlacementResult(false, liveOrder);
+        }
+    }
+
+    private async Task<PaperLiveShadowPlacementResult> TryPlacePaperLiveShadowOrderAsync(
         Signal signal,
         BtcUpDown5mOutcomeQuote outcome,
         BtcUpDown5mStrategyVariant variant,
@@ -17763,7 +17859,7 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
                 "live_preflight_rejected",
                 nowUtc,
                 cancellationToken);
-            return false;
+            return PaperLiveShadowPlacementResult.NotPlaced(rejectedOrder);
         }
 
         var intent = CreatePaperLiveShadowLiveOrder(
@@ -17803,7 +17899,7 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
             await repository.AddLiveTradingEventAsync(
                 new LiveTradingEvent(Guid.NewGuid(), "BtcUpDown5mPaperLiveShadowIntent", "Error", ex.Message, nowUtc),
                 cancellationToken);
-            return false;
+            return PaperLiveShadowPlacementResult.NotPlaced();
         }
 
         var submitUtc = DateTimeOffset.UtcNow;
@@ -17837,7 +17933,7 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
             await repository.AddLiveTradingEventAsync(
                 new LiveTradingEvent(Guid.NewGuid(), "BtcUpDown5mPaperLiveShadowPlaceOrder", "Error", ex.Message, DateTimeOffset.UtcNow),
                 cancellationToken);
-            return false;
+            return PaperLiveShadowPlacementResult.NotPlaced(errorOrder);
         }
 
         var placementStatus = MapPlacementStatus(result);
@@ -17906,7 +18002,7 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
             await repository.AddLiveTradingEventAsync(
                 new LiveTradingEvent(Guid.NewGuid(), "BtcUpDown5mPaperLiveShadowPersistSubmit", "Error", ex.Message, DateTimeOffset.UtcNow),
                 cancellationToken);
-            return false;
+            return PaperLiveShadowPlacementResult.NotPlaced(updatedLiveOrder);
         }
 
         exposureCache.ApplyLiveOrder(updatedLiveOrder);
@@ -17930,10 +18026,12 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
         if (!result.Success || status is LiveOrderStatus.Rejected or LiveOrderStatus.Error)
         {
             await CancelPaperShadowOrderAsync(paperOrder, DateTimeOffset.UtcNow, cancellationToken);
-            return false;
+            return PaperLiveShadowPlacementResult.NotPlaced(updatedLiveOrder);
         }
 
-        return status is LiveOrderStatus.Live or LiveOrderStatus.Delayed or LiveOrderStatus.Matched or LiveOrderStatus.Unmatched or LiveOrderStatus.Submitted;
+        return new PaperLiveShadowPlacementResult(
+            status is LiveOrderStatus.Live or LiveOrderStatus.Delayed or LiveOrderStatus.Matched or LiveOrderStatus.Unmatched or LiveOrderStatus.Submitted,
+            updatedLiveOrder);
     }
 
     private static void AddLiveMarketWindowValidation(
