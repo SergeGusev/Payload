@@ -187,3 +187,10 @@ Request:
 
 Result:
 Rechecked production reachability from the local machine. PostgreSQL on `192.168.0.101:5432` is reachable again; `pg_isready` reports accepting connections, and ARP resolves the host MAC. Ping still fails, and service/status `5118`, RDP `3389`, and SMB `445` did not answer. Read-only SQL confirmed database time `2026-07-04 00:04:47+03` and `PolyCopyTrader.Service` is alive: `Running`/`Live`, started `2026-07-03 23:46:00+03`, latest heartbeat `2026-07-04 00:04:23+03`, heartbeat age `24s`, `last_error` empty. The running service build is still `info=1.0.0+a2fc59c...`, so the pushed Binance post-close hotfix `3cf5898` is not deployed/running yet. Paper orders are being created (`13` in last `5m`, latest `2026-07-04 00:04:39+03`); Live orders had `0` in last `5m`, latest `2026-07-03 23:34:30+03`. Recent API errors showed stale Binance trade streams and WebSocket close-handshake errors, but the heartbeat continued after them. Recent resolved-market rows in the last `15m` used `ReferenceStartEnd` and `GammaClosedMarket`; no fresh `BinanceTimedClose` row was observed. No production writes, Live changes, orders, cancels, service restart, source-code changes, build, or tests were performed.
+
+## 2026-07-03T21:08:47.8096107Z
+Request:
+Это у нас ASUS Optimization опять появился откуда-то и отправляет систему спать
+
+Result:
+Treated ASUS Optimization as a plausible but unproven cause of the latest host outage. Explained that the evidence so far shows full host/network unreachability, not a PostgreSQL-only failure, and that proof requires server-side checks for ASUS services, drivers, scheduled tasks, Store packages, and sleep/wake/install events. Recommended first keeping AC sleep, hibernate, and unattended sleep disabled, then enumerating `ASUSOptimization`, `asussci2.inf`, MyASUS, Armoury Crate, and ASUS scheduled tasks before removing or blocking the component. No production writes, Live changes, order submissions, cancels, service restarts, source-code changes, build, or tests were performed.

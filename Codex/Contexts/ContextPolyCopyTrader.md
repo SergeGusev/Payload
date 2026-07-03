@@ -1,3 +1,14 @@
+## Active Update 2026-07-04 ASUS Optimization Sleep Hypothesis
+Goal: Respond to the hypothesis that ASUS Optimization reappeared and put the server to sleep again.
+Status: Completed
+Done:
+- Treated ASUS Optimization as a plausible but not yet proven cause because the latest observed outage looked like full host/network unreachability rather than a PostgreSQL-only failure.
+- Prepared server-side PowerShell checks to enumerate ASUS services, scheduled tasks, drivers, Store packages, recent service/driver install events, and recent sleep/wake events.
+- Recommended immediately keeping AC sleep/hibernate/unattended sleep disabled, then disabling/removing ASUS services/drivers only after confirming what reappeared.
+Next: Run the ASUS enumeration commands on the server and inspect whether `ASUSOptimization`, `asussci2.inf`, MyASUS, Armoury Crate, or ASUS scheduled tasks are present again.
+Notes: Advisory only. No production writes, Live changes, order submissions, cancels, service restarts, source-code changes, build, or tests were performed.
+Blockers: Need server-side PowerShell output to prove the exact component that returned.
+
 ## Active Update 2026-07-04 Server Database Recovered
 Goal: Recheck whether the server PostgreSQL database and service are alive after Dashboard connection failures.
 Status: Completed
