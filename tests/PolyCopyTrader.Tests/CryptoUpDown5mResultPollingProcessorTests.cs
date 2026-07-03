@@ -183,6 +183,40 @@ public sealed class CryptoUpDown5mResultPollingProcessorTests
     }
 
     [Fact]
+    public async Task ProcessBinanceTimedCloseAsync_UsesEndingWindowWhenManyOlderMarketsExist()
+    {
+        var repository = new TestAppRepository();
+        var oldStartUtc = DateTimeOffset.UtcNow.AddHours(-20);
+        for (var index = 0; index < 150; index++)
+        {
+            repository.PolymarketGammaMarkets.Add(CreateCryptoMarket(
+                index % 2 == 0 ? "ETH" : "SOL",
+                oldStartUtc.AddMinutes(index * 5),
+                closed: false,
+                winningOutcome: null));
+        }
+
+        var startUtc = DateTimeOffset.UtcNow.AddMinutes(-5).AddMilliseconds(-100);
+        var market = CreateCryptoMarket("ETH", startUtc, closed: false, winningOutcome: null);
+        repository.PolymarketGammaMarkets.Add(market);
+        AddCryptoOddsTick(repository, market, "ETH", startUtc.AddSeconds(1), startPrice: 3200m, price: 3200m);
+        var cryptoClient = new FakeCryptoReferencePriceClient();
+        cryptoClient.SetPrice("ETH", 3201m, "ETHUSDT");
+        var processor = CreateProcessor(
+            repository,
+            new FakeGammaClient([]),
+            cryptoReferencePriceClient: cryptoClient);
+
+        var result = await processor.ProcessBinanceTimedCloseAsync();
+
+        Assert.Equal(1, result.Candidates);
+        Assert.Equal(1, result.Resolved);
+        var resolved = Assert.Single(repository.CryptoUpDown5mWebSocketResolvedMarkets);
+        Assert.Equal(market.MarketId, resolved.MarketId);
+        Assert.Equal("BinanceTimedClose", resolved.Source);
+    }
+
+    [Fact]
     public async Task ProcessBinanceTimedCloseAsync_ResolvesEqualClosePriceAsUp()
     {
         var repository = new TestAppRepository();

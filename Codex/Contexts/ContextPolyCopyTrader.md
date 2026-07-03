@@ -1,3 +1,24 @@
+## Active Update 2026-07-03 Post-Deploy Binance Timed Close Check
+Goal: Verify the deployed tie-rule build and fix why `BinanceTimedClose` was not producing resolved rows on the server.
+Status: Completed
+Done:
+- Checked production PostgreSQL on `192.168.0.101` read-only after deploy.
+- Confirmed `PolyCopyTrader.Service` was running in `Live` mode with fresh heartbeat and version `1.0.0+b3c5ac8...`.
+- Confirmed Paper and Live order flow was active at check time, but `BinanceTimedClose` had produced `0` resolved rows in the last 2 hours; current resolved rows were still `ReferenceStartEnd` with roughly 2.6-9.6 second delays.
+- Found root cause: `GetCryptoUpDown5mGammaMarketsAsync` returned `1341` active crypto up/down markets, while `BinanceTimedClose` only read the first `100`, whose newest start was around `21:20`; current just-ended markets were outside that page.
+- Added repository method `GetCryptoUpDown5mGammaMarketsEndingBetweenAsync(...)` that selects only 5m crypto markets ending in the fast-close window.
+- Updated `ProcessBinanceTimedCloseAsync` to query the `[now - maxCandidateAge, now - closeDelay]` ending window instead of the generic oldest-first market page.
+- Added a regression test proving many older markets no longer hide the current fast-close candidate.
+Verification:
+- Read-only server checks confirmed deployed commit `b3c5ac8`, fresh heartbeat, active order flow, no `BinanceTimedClose` rows, and the 1341-vs-100 market-page issue.
+- `dotnet build src/PolyCopyTrader.Service/PolyCopyTrader.Service.csproj --no-restore` passed with 0 warnings and 0 errors after the fix.
+- `dotnet test tests/PolyCopyTrader.Tests/PolyCopyTrader.Tests.csproj --filter "FullyQualifiedName~CryptoUpDown5mResultPollingProcessorTests|FullyQualifiedName~ConfigurationTests|FullyQualifiedName~ProcessPreviousResultDueEntriesAsync_EntersAfterResolvedLedgerArrives"` passed 48/48; one existing nullable warning remains in `BtcUpDown5mPaperStrategyProcessorTests.cs`.
+- Ran the new ending-window SQL shape read-only against production; query executed successfully.
+- `git diff --check` passed before context update; rerun staged diff check before commit.
+Next: Deploy/restart the service again after this hotfix, then verify that `source='BinanceTimedClose'` rows appear after the next 5m close.
+Notes: Production DB checks were read-only. No production writes, Live setting changes, order submissions, cancels, or service restarts were performed by Codex. Existing unrelated dirty files remain untouched.
+Blockers: None.
+
 ## Active Update 2026-07-03 Match Polymarket Tie Rule
 Goal: Make the Binance timed close provisional resolver count equal start/finish prices the same way as Polymarket and remove the 1 bps guard.
 Status: Completed

@@ -151,6 +151,16 @@ public interface IAppRepository
         return Task.FromResult<IReadOnlyList<PolymarketGammaMarket>>([]);
     }
 
+    Task<IReadOnlyList<PolymarketGammaMarket>> GetCryptoUpDown5mGammaMarketsEndingBetweenAsync(
+        IReadOnlyCollection<string> assetSymbols,
+        DateTimeOffset endAfterUtc,
+        DateTimeOffset endBeforeUtc,
+        int limit,
+        CancellationToken cancellationToken = default)
+    {
+        return Task.FromResult<IReadOnlyList<PolymarketGammaMarket>>([]);
+    }
+
     Task<PolymarketGammaMarket?> GetPolymarketGammaMarketAsync(
         string marketId,
         CancellationToken cancellationToken = default)

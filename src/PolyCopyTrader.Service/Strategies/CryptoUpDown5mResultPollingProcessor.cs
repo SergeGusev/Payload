@@ -142,8 +142,19 @@ public sealed class CryptoUpDown5mResultPollingProcessor(
             return new CryptoUpDown5mBinanceTimedCloseCycleResult(0, 0, 0, 0, 0, 0, 0);
         }
 
-        var markets = await repository.GetCryptoUpDown5mGammaMarketsAsync(
+        var closeDelay = TimeSpan.FromMilliseconds(Math.Max(0, options.BinanceTimedCloseDelayMilliseconds));
+        var maxAge = TimeSpan.FromSeconds(Math.Max(1, options.BinanceTimedCloseMaxCandidateAgeSeconds));
+        var endBeforeUtc = nowUtc.Subtract(closeDelay);
+        var endAfterUtc = nowUtc.Subtract(maxAge);
+        if (endBeforeUtc < endAfterUtc)
+        {
+            return new CryptoUpDown5mBinanceTimedCloseCycleResult(0, 0, 0, 0, 0, 0, 0);
+        }
+
+        var markets = await repository.GetCryptoUpDown5mGammaMarketsEndingBetweenAsync(
             assetSymbols,
+            endAfterUtc,
+            endBeforeUtc,
             options.MaxMarketsPerCycle,
             cancellationToken);
         var candidates = SelectBinanceTimedCloseCandidates(markets, assetSymbols, nowUtc).ToArray();

@@ -2602,6 +2602,43 @@ internal sealed class TestAppRepository : IAppRepository
                 .ToArray());
     }
 
+    public Task<IReadOnlyList<PolymarketGammaMarket>> GetCryptoUpDown5mGammaMarketsEndingBetweenAsync(
+        IReadOnlyCollection<string> assetSymbols,
+        DateTimeOffset endAfterUtc,
+        DateTimeOffset endBeforeUtc,
+        int limit,
+        CancellationToken cancellationToken = default)
+    {
+        var allowed = assetSymbols
+            .Select(symbol => symbol.Trim().ToUpperInvariant())
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+        return Task.FromResult<IReadOnlyList<PolymarketGammaMarket>>(
+            PolymarketGammaMarkets
+                .Where(market =>
+                    market.Active &&
+                    !market.Archived &&
+                    CryptoUpDown5mMarketAnalyzer.TryGetAssetSymbol(market, allowed, out _) &&
+                    CryptoUpDown5mMarketAnalyzer.GetMarketInterval(market) == BtcUpDownMarketInterval.FiveMinutes)
+                .Select(market => new
+                {
+                    Market = market,
+                    StartUtc = CryptoUpDown5mMarketAnalyzer.GetWindowStartUtc(market)
+                })
+                .Where(item => item.StartUtc is not null)
+                .Select(item => new
+                {
+                    item.Market,
+                    EndUtc = item.StartUtc!.Value.Add(CryptoUpDown5mMarketAnalyzer.GetIntervalDuration(BtcUpDownMarketInterval.FiveMinutes))
+                })
+                .Where(item => item.EndUtc >= endAfterUtc && item.EndUtc <= endBeforeUtc)
+                .OrderBy(item => item.EndUtc)
+                .ThenBy(item => item.Market.MarketId, StringComparer.OrdinalIgnoreCase)
+                .Take(Math.Max(1, limit))
+                .Select(item => item.Market)
+                .ToArray());
+    }
+
     public Task AddCryptoUpDown5mOddsTickAsync(CryptoUpDown5mOddsTick tick, CancellationToken cancellationToken = default)
     {
         CryptoUpDown5mOddsTicks.Add(tick);
