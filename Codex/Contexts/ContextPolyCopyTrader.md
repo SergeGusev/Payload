@@ -1,3 +1,20 @@
+## Active Update 2026-07-04 Server Database Recovered
+Goal: Recheck whether the server PostgreSQL database and service are alive after Dashboard connection failures.
+Status: Completed
+Done:
+- Confirmed local machine remains on the expected LAN and server host `192.168.0.101` is reachable at TCP level for PostgreSQL.
+- `ping` to `192.168.0.101` still failed, but ARP/neighbor cache resolved the host MAC and PostgreSQL `5432` accepted connections.
+- `pg_isready` reported `192.168.0.101:5432 - accepting connections`.
+- Read production PostgreSQL read-only: database time `2026-07-04 00:04:47+03`.
+- Confirmed `PolyCopyTrader.Service` heartbeat is alive: `Running`/`Live`, started `2026-07-03 23:46:00+03`, latest heartbeat `2026-07-04 00:04:23+03`, age `24s`, `last_error` empty.
+- The service is still running build `info=1.0.0+a2fc59c...`, so the newer pushed Binance post-close hotfix `3cf5898` is not deployed/running yet.
+- Paper orders are being created: `13` in the last `5m`, latest `2026-07-04 00:04:39+03`; Live orders had `0` in the last `5m`, latest `2026-07-03 23:34:30+03`.
+- Recent API errors show Binance trade streams stale / WebSocket close-handshake errors around `00:03:36-00:03:57+03`, but the service heartbeat continued after those errors.
+- Recent resolved-market sources in the last `15m` were `ReferenceStartEnd` and `GammaClosedMarket`; no fresh `BinanceTimedClose` rows were observed in that window.
+Next: Dashboard should be able to reconnect to PostgreSQL now. Deploy/restart the service with `3cf5898` or newer if the Binance post-close hotfix should be active.
+Notes: Read-only network and SQL checks only. No production writes, Live changes, order submissions, cancels, service restarts, source-code changes, build, or tests were performed.
+Blockers: None for database connectivity at the check time; service is not on the latest pushed build.
+
 ## Active Update 2026-07-03 Server Database Unreachable
 Goal: Check whether the server PostgreSQL database and service are reachable when Dashboard cannot connect.
 Status: Completed

@@ -180,3 +180,10 @@ Request:
 
 Result:
 Checked server reachability from the local machine. The local machine is on the expected LAN (`Wi-Fi 192.168.0.100`, gateway `192.168.0.1`) and the gateway is reachable. Server host `192.168.0.101` is unreachable: ping failed; TCP probes failed for PostgreSQL `5432`, service/status `5118`, RDP `3389`, and SMB `445`; `pg_isready` reported `192.168.0.101:5432 - no response`; neighbor cache showed `192.168.0.101` as `Incomplete` with `00-00-00-00-00-00`. No SQL query or service heartbeat check could run because the host/port is unreachable. Conclusion: Dashboard cannot connect because the server host/network is unavailable from this machine, not because of a slow Dashboard query. No production writes, Live changes, orders, cancels, service restart, source-code changes, build, or tests were performed.
+
+## 2026-07-03T21:05:26.8774527Z
+Request:
+А сейчас?
+
+Result:
+Rechecked production reachability from the local machine. PostgreSQL on `192.168.0.101:5432` is reachable again; `pg_isready` reports accepting connections, and ARP resolves the host MAC. Ping still fails, and service/status `5118`, RDP `3389`, and SMB `445` did not answer. Read-only SQL confirmed database time `2026-07-04 00:04:47+03` and `PolyCopyTrader.Service` is alive: `Running`/`Live`, started `2026-07-03 23:46:00+03`, latest heartbeat `2026-07-04 00:04:23+03`, heartbeat age `24s`, `last_error` empty. The running service build is still `info=1.0.0+a2fc59c...`, so the pushed Binance post-close hotfix `3cf5898` is not deployed/running yet. Paper orders are being created (`13` in last `5m`, latest `2026-07-04 00:04:39+03`); Live orders had `0` in last `5m`, latest `2026-07-03 23:34:30+03`. Recent API errors showed stale Binance trade streams and WebSocket close-handshake errors, but the heartbeat continued after them. Recent resolved-market rows in the last `15m` used `ReferenceStartEnd` and `GammaClosedMarket`; no fresh `BinanceTimedClose` row was observed. No production writes, Live changes, orders, cancels, service restart, source-code changes, build, or tests were performed.
