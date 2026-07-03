@@ -1,3 +1,18 @@
+## Active Update 2026-07-03 Live Idle Reason Check
+Goal: Determine why currently enabled Live strategies are not placing new Live orders.
+Status: Completed
+Done:
+- Queried production PostgreSQL `192.168.0.101/polycopytrader` read-only for the four current Live-enabled strategies.
+- Confirmed Live is not disabled by settings: all four strategies are `enabled=true`, `live_stakes=true`, `auto_live_paused=false`, `paused=false`, and balances are above `live_stake_amount=1`.
+- Confirmed service heartbeat remains fresh at check time `2026-07-03T18:45:27Z`: `PolyCopyTrader.Service` last heartbeat `2026-07-03T18:45:17.764515Z`, age about `10` seconds, `last_error` empty.
+- Found no open stuck Live orders and no Live preflight/rejection errors in the recent window; last four-hour `live_trading_events` for Paper Live-shadow placement were `OK` only, latest `2026-07-03T18:09:31.509152Z`.
+- Root cause for current idle: the enabled Live strategies are not currently reaching entry. `eth_up_down_5m_up_bps_50_instant` skipped recent due markets with `previous_result_not_ready_by_sla` because the previous ETH 5m result was not ready within the configured `1` second SLA. `sol_up_down_5m_down_bps_8_fak_premarket`, `sol_up_down_5m_down_bps_85_fak_premarket`, and `sol_up_down_5m_down_bps_90_fak_premarket` mostly skipped with `reference_average_move_below_bps_threshold`.
+- For latest SOL skip at `2026-07-03T18:44:30Z`, current SOL was `81.95`, selected average was `20m` at `81.82775`, move was `+14.9399 bps`, but these `Down bps` strategies require move `<= -threshold`; therefore SOL 8 failed by direction/sign, while SOL 85/90 also failed magnitude.
+- Observed secondary data issues in recent `api_errors`: stale Binance SOL/ETH trade-stream messages and one `BtcUpDown5mPaperStrategyProcessor/GetCryptoReferencePrice` SOL stale read around `2026-07-03T18:19:31Z`, which caused one `crypto_reference_fetch_failed` skip, but current latest skips had usable current SOL price and were strategy-condition skips.
+Next: If more Live frequency is desired, consider tuning ETH previous-result readiness wait/SLA and reassessing the SOL Down bps trigger/thresholds; no Live subsystem fix is indicated by this check.
+Notes: Read-only PostgreSQL and source-code inspection only. No production DB writes, Live changes, order submissions, cancels, service restarts, source-code changes, build, or tests were performed.
+Blockers: None.
+
 ## Active Update 2026-07-03 Current Bet Flow Status Check
 Goal: Check whether betting has stopped or whether orders are still being created.
 Status: Completed
