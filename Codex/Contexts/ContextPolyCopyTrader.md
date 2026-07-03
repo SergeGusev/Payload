@@ -1,3 +1,17 @@
+## Active Update 2026-07-03 Server Database Unreachable
+Goal: Check whether the server PostgreSQL database and service are reachable when Dashboard cannot connect.
+Status: Completed
+Done:
+- Confirmed local machine is on the expected LAN: Wi-Fi `192.168.0.100`, gateway `192.168.0.1`.
+- Checked server host `192.168.0.101` from the local machine.
+- `ping` to `192.168.0.101` failed.
+- TCP probes failed for PostgreSQL `5432`, service/status `5118`, RDP `3389`, and SMB `445`.
+- `pg_isready` reported `192.168.0.101:5432 - no response`.
+- Neighbor cache showed `192.168.0.101` as `Incomplete` on Wi-Fi with `00-00-00-00-00-00`, while gateway `192.168.0.1` was `Reachable`.
+Next: Check the server host itself: power/sleep/network/IP address, then PostgreSQL service/listener after the host is reachable.
+Notes: No SQL query could run because the host/port is unreachable. Service heartbeat cannot be checked through PostgreSQL until the database host is reachable. No production writes, Live changes, order submissions, cancels, service restarts, source-code changes, build, or tests were performed.
+Blockers: Server host `192.168.0.101` is currently unreachable from this machine.
+
 ## Active Update 2026-07-03 Post-Close Binance Price Window
 Goal: Verify the deployed `a2fc59c` Binance timed-close hotfix and fix why it still missed a just-ended market after restart.
 Status: Completed
