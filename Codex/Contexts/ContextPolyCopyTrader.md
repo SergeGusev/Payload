@@ -1,3 +1,16 @@
+## Active Update 2026-07-03 Current Bet Flow Status Check
+Goal: Check whether betting has stopped or whether orders are still being created.
+Status: Completed
+Done:
+- Queried production PostgreSQL `192.168.0.101/polycopytrader` read-only.
+- Confirmed `PolyCopyTrader.Service` is running in `Live` mode with fresh heartbeat: database UTC check time `2026-07-03T18:40:22Z`, last heartbeat `2026-07-03T18:40:17.724271Z`, age about `4` seconds, `last_error` empty, current loop `BTC5mOnly WatchlistScanner=CommentedOut; FollowLeaderSignals=CommentedOut`.
+- Confirmed Paper orders are actively being created: `130` in the last `5` minutes, `400` in the last `15` minutes, `1670` in the last `60` minutes; latest detailed Paper row was `2026-07-03T18:41:06.485474Z`, about `22` seconds old at query time.
+- Confirmed Live orders are not currently being created: `0` in the last `5` minutes, `0` in the last `15` minutes, `2` in the last `60` minutes; latest Live order was `2026-07-03T18:09:30.043210Z`, about `32` minutes old at query time.
+- Confirmed `4` effective Live-enabled strategies remain enabled/live/not paused: `eth_up_down_5m_up_bps_50_instant`, `sol_up_down_5m_down_bps_8_fak_premarket`, `sol_up_down_5m_down_bps_85_fak_premarket`, and `sol_up_down_5m_down_bps_90_fak_premarket`.
+Next: If Live freshness is the concern, inspect recent skip/rejection reasons for those four Live-enabled strategies.
+Notes: Read-only PostgreSQL check only. A broad `strategy_market_paper_runs` aggregation hit the 15s statement timeout and was skipped; lighter order/heartbeat checks succeeded. No source-code changes, production DB writes, Live changes, order submissions, cancels, service restarts, build, or tests were performed.
+Blockers: None.
+
 ## Active Update 2026-07-03 SOL Down 8 Live Hour PnL Analysis
 Goal: Analyze whether Live PnL for `SOL Up or Down 5m Down 8 bps Reference Average Premarket` correlates with the hour of day when the bet was placed.
 Status: Completed
