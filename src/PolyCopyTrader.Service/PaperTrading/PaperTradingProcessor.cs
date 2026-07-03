@@ -23,6 +23,8 @@ public sealed class PaperTradingProcessor(
 {
     private const string PaperLiveShadowTestSource = "paper_live_shadow_test";
     private const string BtcFakTakerPaperExecutionSource = "btc_updown5m_fak_taker_paper";
+    private const string PaperExecutableSnapshotEvidenceClass = "paper_executable_snapshot_model";
+    private const string PaperFakExecutableSnapshotFillModel = "fak_taker_executable_snapshot_v2";
     private const decimal FakGuaranteedWorstPrice = 0.99m;
 
     public async Task<PaperTradingProcessingResult> ProcessOpenOrdersAsync(CancellationToken cancellationToken = default)
@@ -347,7 +349,7 @@ public sealed class PaperTradingProcessor(
             var filledOrder = order with
             {
                 Status = PaperOrderStatus.Filled,
-                Price = worstPrice,
+                Price = estimate.AverageFillPrice,
                 SizeShares = estimate.SizeShares,
                 NotionalUsd = estimate.NotionalUsd,
                 FilledAtUtc = nowUtc,
@@ -464,7 +466,8 @@ public sealed class PaperTradingProcessor(
         root["paper_order_type"] = "FAK";
         root["paper_order_execution_mode"] = "FAK";
         root["paper_execution_source"] = BtcFakTakerPaperExecutionSource;
-        root["paper_fak_fill_model"] = "fak_taker_depth_vwap_v1";
+        root["paper_execution_evidence_class"] = PaperExecutableSnapshotEvidenceClass;
+        root["paper_fak_fill_model"] = PaperFakExecutableSnapshotFillModel;
         root["paper_fak_processed_at_utc"] = nowUtc.ToString("O", CultureInfo.InvariantCulture);
         root["paper_fak_snapshot_at_utc"] = orderBook?.SnapshotAtUtc.ToString("O", CultureInfo.InvariantCulture);
         root["paper_fak_best_bid"] = orderBook?.BestBid;

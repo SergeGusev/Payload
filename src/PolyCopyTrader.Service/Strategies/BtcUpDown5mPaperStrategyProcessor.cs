@@ -52,6 +52,8 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
     private const string BtcPreOpenSellExitExecutionSource = "btc_preopen_sell_exit";
     private const string BtcMakerExecutionSource = "btc_updown5m_maker_post_only";
     private const string BtcFakTakerPaperExecutionSource = "btc_updown5m_fak_taker_paper";
+    private const string PaperExecutableSnapshotEvidenceClass = "paper_executable_snapshot_model";
+    private const string PaperFakExecutableSnapshotFillModel = "fak_taker_executable_snapshot_v2";
     private const string StrategyPausedSkipReason = "strategy_paused";
     private const string EthSkipUpDirectionTemporarilyDisabledReason = "eth_skip_up_direction_temporarily_disabled";
     private static readonly TimeSpan StrategyPauseLookback = TimeSpan.FromHours(12);
@@ -4167,7 +4169,8 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
                             limitSizing,
                             expiration,
                             paperLostCounterAdjustment);
-                        if (!limitSizing.Available)
+                        var usePaperFakFillModel = IsFakOrderEntry(variant) && !isPaperLiveShadowTest;
+                        if (!limitSizing.Available && !usePaperFakFillModel)
                         {
                             if (ShouldDeferOpeningLimitStakeSizing(run, variant, limitSizing, nowUtc))
                             {
@@ -4186,11 +4189,34 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
                             continue;
                         }
 
-                        var stakeUsd = limitSizing.TargetNotionalUsd;
-                        var limitSizeShares = limitSizing.TargetSizeShares;
-                        if (IsFakOrderEntry(variant) && !isPaperLiveShadowTest)
+                        if (usePaperFakFillModel)
                         {
-                            if (limitPricing.OrderBookLookup?.OrderBook is not { } fakOrderBook)
+                            var paperFakLookup = await GetFreshTakerOrderBookAsync(
+                                limitSelectedOutcome.AssetId,
+                                nowUtc,
+                                orderBookFetchTasks,
+                                cancellationToken);
+                            if (paperFakLookup.RejectionReason is not null)
+                            {
+                                await RecordEntryRunSkippedAsync(
+                                    run,
+                                    variant,
+                                    paperFakLookup.RejectionReason,
+                                    nowUtc,
+                                    deferredPersistence,
+                                    cancellationToken,
+                                    AttachFakPaperFillSimulationJson(
+                                        limitRawDecisionJson,
+                                        paperFakLookup,
+                                        limitSizing,
+                                        null,
+                                        paperFakLookup.RejectionReason,
+                                        nowUtc));
+                                runsSkipped++;
+                                continue;
+                            }
+
+                            if (paperFakLookup.OrderBook is not { } paperFakOrderBook)
                             {
                                 await RecordEntryRunSkippedAsync(
                                     run,
@@ -4201,7 +4227,7 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
                                     cancellationToken,
                                     AttachFakPaperFillSimulationJson(
                                         limitRawDecisionJson,
-                                        limitPricing.OrderBookLookup,
+                                        paperFakLookup,
                                         limitSizing,
                                         null,
                                         "paper_fak_orderbook_missing",
@@ -4210,15 +4236,50 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
                                 continue;
                             }
 
+                            var fakOrderBook = ApplyFallbackMinOrderSize(paperFakOrderBook, market.OrderMinSize);
+                            paperFakLookup = paperFakLookup with { OrderBook = fakOrderBook };
+                            var paperFakSizing = CreateLimitMinimumStakeSizing(
+                                fakOrderBook,
+                                orderPrice,
+                                stakeMultiplier,
+                                paperFakLookup.Source);
+                            var paperFakRawDecisionJson = AttachOpeningLimitStakeSizingJson(
+                                limitPricing.RawDecisionJson,
+                                stakeMultiplier,
+                                paperFakSizing,
+                                expiration,
+                                paperLostCounterAdjustment);
+                            if (!paperFakSizing.Available)
+                            {
+                                await RecordEntryRunSkippedAsync(
+                                    run,
+                                    variant,
+                                    paperFakSizing.RejectionReason ?? "paper_fak_stake_sizing_rejected",
+                                    nowUtc,
+                                    deferredPersistence,
+                                    cancellationToken,
+                                    AttachFakPaperFillSimulationJson(
+                                        paperFakRawDecisionJson,
+                                        paperFakLookup,
+                                        paperFakSizing,
+                                        null,
+                                        paperFakSizing.RejectionReason ?? "paper_fak_stake_sizing_rejected",
+                                        nowUtc));
+                                runsSkipped++;
+                                continue;
+                            }
+
+                            var paperFakStakeUsd = paperFakSizing.TargetNotionalUsd;
                             var fakEstimate = TakerBuyFillEstimator.Estimate(
                                 fakOrderBook,
-                                stakeUsd,
+                                paperFakStakeUsd,
                                 orderPrice,
-                                fakOrderBook.MinOrderSize);
+                                fakOrderBook.MinOrderSize,
+                                options.PaperTakerMaxSpreadAbs);
                             var fakRawDecisionJson = AttachFakPaperFillSimulationJson(
-                                limitRawDecisionJson,
-                                limitPricing.OrderBookLookup,
-                                limitSizing,
+                                paperFakRawDecisionJson,
+                                paperFakLookup,
+                                paperFakSizing,
                                 fakEstimate,
                                 fakEstimate.RejectionReason,
                                 nowUtc);
@@ -4240,7 +4301,7 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
                                 "BtcUpDown5mPaper:",
                                 variant.Code,
                                 ": FAK taker paper fill from ",
-                                limitPricing.OrderBookLookup.Source,
+                                paperFakLookup.Source,
                                 " ask depth. WorstPrice=",
                                 orderPrice.ToString("0.########", CultureInfo.InvariantCulture),
                                 " AvgFillPrice=",
@@ -4250,7 +4311,7 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
                                 " FilledNotionalUsd=",
                                 fakEstimate.NotionalUsd.ToString("0.########", CultureInfo.InvariantCulture),
                                 " RequestedNotionalUsd=",
-                                stakeUsd.ToString("0.########", CultureInfo.InvariantCulture),
+                                paperFakStakeUsd.ToString("0.########", CultureInfo.InvariantCulture),
                                 " LevelsUsed=",
                                 fakEstimate.LevelsUsed.ToString(CultureInfo.InvariantCulture),
                                 ".");
@@ -4273,7 +4334,7 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
                                     fakSignal,
                                     limitSelectedOutcome,
                                     variant,
-                                    orderPrice,
+                                    fakEstimate.AverageFillPrice,
                                     fakEstimate.SizeShares,
                                     fakEstimate.NotionalUsd,
                                     nowUtc,
@@ -4334,6 +4395,8 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
                             continue;
                         }
 
+                        var stakeUsd = limitSizing.TargetNotionalUsd;
+                        var limitSizeShares = limitSizing.TargetSizeShares;
                         PaperLiveShadowOrderBookSnapshotResult? shadowSnapshot = null;
                         if (isPaperLiveShadowTest)
                         {
@@ -14727,7 +14790,8 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
         root["paper_order_type"] = FakOrderType;
         root["paper_order_execution_mode"] = FakOrderType;
         root["paper_execution_source"] = BtcFakTakerPaperExecutionSource;
-        root["paper_fak_fill_model"] = "fak_taker_depth_vwap_v1";
+        root["paper_execution_evidence_class"] = PaperExecutableSnapshotEvidenceClass;
+        root["paper_fak_fill_model"] = PaperFakExecutableSnapshotFillModel;
         root["paper_fak_evaluated_at_utc"] = nowUtc.ToString("O", CultureInfo.InvariantCulture);
         root["paper_fak_source"] = lookup?.Source;
         root["paper_fak_quote_age_ms"] = lookup?.Age?.TotalMilliseconds;

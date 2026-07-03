@@ -28,3 +28,9 @@ Request:
 
 Result:
 Clarified that fresh partial ask depth should be recorded as a partial Paper FAK fill, not skipped. The skip recommendation applies to stale/missing/non-executable snapshots where the depth is not reliable or there are zero executable shares within the cap. Source inspection showed `TakerBuyFillEstimator.Estimate` already supports partial FAK fills by filling available ask depth within `maxAllowedPrice` and recording the lower actual notional. No source-code behavior changes, production writes, Live changes, orders, restarts, build, or tests were performed.
+## 2026-07-03T06:08:49.9959173Z
+Request:
+Ок, давай переделывай Paper на эту приближенную к реальности модель. Потом решим, что делать с историей
+
+Result:
+Implemented future-row Paper-only FAK executable-snapshot accounting: fresh executable order book before simulation, sizing from that same snapshot, stale/missing/non-executable rejection, spread-limit checking, partial depth fills, average-fill `PaperOrder.Price`, and raw diagnostics `paper_execution_evidence_class = paper_executable_snapshot_model` plus `paper_fak_fill_model = fak_taker_executable_snapshot_v2`. Also aligned generic pending FAK Paper processing to the same average-fill price/model markers. Focused FAK tests passed; full test suite still has existing broad strategy failures unrelated to the focused Paper FAK change.

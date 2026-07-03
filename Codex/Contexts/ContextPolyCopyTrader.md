@@ -1,3 +1,16 @@
+## Active Update 2026-07-03 Paper FAK Executable Snapshot Accounting
+Goal: Make future Paper-only FAK accounting use the closer-to-reality executable snapshot model without rewriting history.
+Status: Completed
+Done:
+- Changed Paper-only FAK entry accounting in `BtcUpDown5mPaperStrategyProcessor` to fetch a fresh executable order book immediately before simulating the fill, recalculate stake sizing from that same snapshot, reject stale/missing/non-executable snapshots, apply the configured spread limit, and preserve partial fills when available depth is smaller than the requested notional.
+- Changed Paper-only FAK filled `PaperOrder.Price` to the simulated average fill price; the guaranteed worst FAK cap remains recorded separately as `paper_fak_worst_price`.
+- Updated the generic `PaperTradingProcessor` FAK pending-order path to use the same average-fill order price and the same model markers.
+- Added raw-decision diagnostics `paper_execution_evidence_class = paper_executable_snapshot_model` and `paper_fak_fill_model = fak_taker_executable_snapshot_v2` for new Paper executable-snapshot rows.
+- Updated focused strategy and pipeline tests for partial FAK depth, Premarket FAK, and pending FAK processing.
+Next: Deploy/restart the service before relying on new Paper rows; decide separately whether/how to mark or backfill historical Paper rows.
+Notes: Verification passed: `dotnet test tests/PolyCopyTrader.Tests/PolyCopyTrader.Tests.csproj --filter "FullyQualifiedName~ProcessAsync_EthDown9FakPremarketUsesReferenceAverageAndCurrentOrderBook|FullyQualifiedName~ProcessDiffCounterDueEntriesAsync_DiffInstantFakFillsAvailablePartialAskDepth|FullyQualifiedName~PaperTradingProcessor_FakPaperOrder"` passed `4/4`; `dotnet test tests/PolyCopyTrader.Tests/PolyCopyTrader.Tests.csproj --filter "FullyQualifiedName~ProcessAsync_EthDown9FakLiveStakeSubmitsFakMarketBuyAmount|FullyQualifiedName~ProcessAsync_EthDown9FakPremarketLiveStakeSubmitsBeforeMarketStart"` passed `2/2`; `dotnet test tests/PolyCopyTrader.Tests/PolyCopyTrader.Tests.csproj --filter "FullyQualifiedName~TakerBuyFillEstimatorTests"` passed `6/6`. Full `dotnet test tests/PolyCopyTrader.Tests/PolyCopyTrader.Tests.csproj` still fails on existing broad strategy-suite issues (`51` failed, `738` passed), mostly old readiness/catalog/FAK price expectations outside the focused Paper FAK change.
+Blockers: None.
+
 ## Active Update 2026-07-03 Paper FAK Partial Depth Clarification
 Goal: Clarify whether Paper-only FAK should skip insufficient depth or record partial fills.
 Status: Completed

@@ -5230,10 +5230,11 @@ public sealed class BtcUpDown5mPaperStrategyProcessorTests
             marketId: "diff-partial-entry-market",
             conditionId: "diff-partial-entry-condition"));
 
+        var batchCallsBeforeEntry = repository.PaperEntryPersistenceBatchCalls;
         var result = await processor.ProcessDiffCounterDueEntriesAsync();
 
         Assert.Equal(1, result.EntriesPlaced);
-        Assert.Equal(1, repository.PaperEntryPersistenceBatchCalls);
+        Assert.Equal(batchCallsBeforeEntry + 1, repository.PaperEntryPersistenceBatchCalls);
         var run = repository.StrategyMarketPaperRuns.Single(item => item.Status == StrategyMarketPaperRunStatuses.Entered);
         Assert.Equal(variant.Id, run.StrategyId);
         Assert.Equal("asset-up", run.SelectedAssetId);
@@ -5253,6 +5254,8 @@ public sealed class BtcUpDown5mPaperStrategyProcessorTests
         Assert.Contains("\"order_execution_mode\":\"FAK\"", order.RawDecisionJson, StringComparison.Ordinal);
         Assert.Contains("\"instant_fak_enabled\":true", order.RawDecisionJson, StringComparison.Ordinal);
         Assert.Contains("\"paper_order_execution_mode\":\"FAK\"", order.RawDecisionJson, StringComparison.Ordinal);
+        Assert.Contains("\"paper_execution_evidence_class\":\"paper_executable_snapshot_model\"", order.RawDecisionJson, StringComparison.Ordinal);
+        Assert.Contains("\"paper_fak_fill_model\":\"fak_taker_executable_snapshot_v2\"", order.RawDecisionJson, StringComparison.Ordinal);
         Assert.Contains("\"paper_fak_partial_fill\":true", order.RawDecisionJson, StringComparison.Ordinal);
         Assert.Contains("\"paper_fak_filled_notional_usd\":0.37", order.RawDecisionJson, StringComparison.Ordinal);
         var fill = Assert.Single(repository.PaperFills);
@@ -10043,6 +10046,8 @@ public sealed class BtcUpDown5mPaperStrategyProcessorTests
         Assert.Contains("\"reference_average_move_from_middle_bps\":-12.5", order.RawDecisionJson, StringComparison.Ordinal);
         Assert.Contains("\"premarket_reference_average_enabled\":true", order.RawDecisionJson, StringComparison.Ordinal);
         Assert.Contains("\"fak_stats_probe\":true", order.RawDecisionJson, StringComparison.Ordinal);
+        Assert.Contains("\"paper_execution_evidence_class\":\"paper_executable_snapshot_model\"", order.RawDecisionJson, StringComparison.Ordinal);
+        Assert.Contains("\"paper_fak_fill_model\":\"fak_taker_executable_snapshot_v2\"", order.RawDecisionJson, StringComparison.Ordinal);
     }
 
     [Fact]

@@ -511,10 +511,11 @@ public sealed class PipelineIntegrationTests
 
         var updatedOrder = Assert.Single(repository.PaperOrders);
         Assert.Equal(PaperOrderStatus.Filled, updatedOrder.Status);
-        Assert.Equal(0.99m, updatedOrder.Price);
+        Assert.Equal(0.25m, updatedOrder.Price);
         Assert.Equal(20m, updatedOrder.SizeShares);
         Assert.Equal(5m, updatedOrder.NotionalUsd);
-        Assert.Contains("fak_taker_depth_vwap_v1", updatedOrder.RawDecisionJson);
+        Assert.Contains("fak_taker_executable_snapshot_v2", updatedOrder.RawDecisionJson);
+        Assert.Contains("\"paper_execution_evidence_class\":\"paper_executable_snapshot_model\"", updatedOrder.RawDecisionJson);
         Assert.Contains("\"paper_fak_worst_price\":0.99", updatedOrder.RawDecisionJson);
         Assert.Contains("\"paper_fak_average_fill_price\":0.25", updatedOrder.RawDecisionJson);
 
@@ -567,7 +568,8 @@ public sealed class PipelineIntegrationTests
         Assert.Equal(0.99m, updatedOrder.Price);
         Assert.NotNull(updatedOrder.CancelledAtUtc);
         Assert.Contains("best_ask_above_max_entry", updatedOrder.RawDecisionJson);
-        Assert.Contains("fak_taker_depth_vwap_v1", updatedOrder.RawDecisionJson);
+        Assert.Contains("fak_taker_executable_snapshot_v2", updatedOrder.RawDecisionJson);
+        Assert.Contains("\"paper_execution_evidence_class\":\"paper_executable_snapshot_model\"", updatedOrder.RawDecisionJson);
     }
 
     private static PaperTradingProcessor CreatePaperProcessor(
