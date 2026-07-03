@@ -1,3 +1,14 @@
+## Active Update 2026-07-03 ETH Previous Result SLA Explanation
+Goal: Explain where the `previous_result_not_ready_by_sla` one-second cutoff for `eth_up_down_5m_up_bps_50_instant` comes from.
+Status: Completed
+Done:
+- Inspected `BtcUpDown5mPaperStrategyProcessor`: `EntryDependencyReadySlaSeconds` is hardcoded to `1`, `PreviousResultReadySlaSeconds` aliases it, and `IsPreviousResultReadyWaitExpired` skips a run when `entryDueAtUtc < nowUtc.AddSeconds(-PreviousResultReadySlaSeconds)`.
+- Confirmed from production PostgreSQL read-only that recent `eth_up_down_5m_up_bps_50_instant` skips happened `1.040` to `1.540` seconds after `entry_due_at_utc`, with diagnostics `previous_result_ready_sla_seconds=1`.
+- Clarified the dependency: the filter computes the previous market start as current `market_start_utc - 5m`, then checks whether that ETH previous market is already present in the accepted resolved-market ledger; if not present by the one-second cutoff, the run is skipped before Paper/Live entry.
+Next: If requested, make the SLA configurable or increase it for previous-result instant strategies; consider using the existing Gamma closed-market readiness helper as fallback if latency persists.
+Notes: Read-only source and PostgreSQL inspection only. No source-code changes, production DB writes, Live changes, order submissions, cancels, service restarts, build, or tests were performed.
+Blockers: None.
+
 ## Active Update 2026-07-03 Live Idle Reason Check
 Goal: Determine why currently enabled Live strategies are not placing new Live orders.
 Status: Completed
