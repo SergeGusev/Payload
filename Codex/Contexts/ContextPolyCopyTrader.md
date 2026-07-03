@@ -1,3 +1,15 @@
+## Active Update 2026-07-04 Historical Binance Hour Analysis Feasibility
+Goal: Assess whether the SOL Down 8 bps Reference Average Premarket hourly analysis can be repeated over about six months using Binance historical data.
+Status: Completed
+Done:
+- Confirmed the analysis is feasible as a historical Binance-based signal simulation for `SOLUSDT`.
+- Clarified the key limitation: Binance data can reconstruct trigger/win-rate by hour, but not exact Live PnL/fill economics without historical Polymarket odds/order-book/fill data.
+- Rechecked implementation semantics: Reference Average Premarket runs 30 seconds before market open; it selects the highest full reference average across configured windows; `Down 8 bps` triggers when current SOL price is at least 8 bps below that selected average and buys `Up`.
+- Recommended using C#/.NET tooling and cached Binance historical candles/trades, not Python/Node sidecars.
+Next: If requested, implement a C# historical backtest/report that downloads/caches SOLUSDT history, simulates entries, groups by Europe/Sofia hour, and reports signal count/win rate/proxy ROI.
+Notes: Advisory/code-read only. No production DB writes, Live changes, order submissions, cancels, service restarts, source-code changes, build, or tests were performed.
+Blockers: Exact PnL requires Polymarket historical entry prices/fill model; Binance alone gives directional outcome/proxy return.
+
 ## Active Update 2026-07-04 Service Recovered Paper Active Live Idle
 Goal: Recheck whether the service recovered and whether bets are being placed now.
 Status: Completed
