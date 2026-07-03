@@ -1,3 +1,15 @@
+## Active Update 2026-07-03 Dependency SLA Origin Accountability
+Goal: Trace where the one-second previous-result SLA came from and why it appeared without explicit user approval.
+Status: Completed
+Done:
+- Used Git history/blame to trace `EntryDependencyReadySlaSeconds`.
+- Found commit `4a106bf` (`Add dependency SLA for due entry latency`, `2026-06-29 13:12 +0300`) introduced `EntryDependencyReadySlaSeconds = 2` while working on the user goal that strategy entry delay should not exceed `3` seconds; context says previous-result rows could remain `Observed` until market end and Diff rows still waited on the old `4` minute timeout.
+- Found commit `3cd28fa` (`Cap opening limit dependency waits`, `2026-06-29 14:10 +0300`) changed the constant from `2` to `1` and applied it as a cap for opening-limit dependency waits; its context says the production latency gate still failed and the SLA was tightened to `1` second so unresolved dependencies skip inside the `3` second budget.
+- Concluded this was an engineering latency guard, not an explicitly requested trading rule. It was incorrectly hardcoded as a global dependency SLA and not surfaced as configuration/Dashboard behavior, which is why the user only discovered it through later Live idle diagnostics.
+Next: Fix should be to make dependency waiting policy explicit/configurable and review affected previous-result/instant strategies; do not leave the hidden `1` second hardcoded behavior as-is.
+Notes: Git/source/history inspection only. No source-code changes, production DB writes, Live changes, order submissions, cancels, service restarts, build, or tests were performed.
+Blockers: None.
+
 ## Active Update 2026-07-03 ETH Previous Result SLA Explanation
 Goal: Explain where the `previous_result_not_ready_by_sla` one-second cutoff for `eth_up_down_5m_up_bps_50_instant` comes from.
 Status: Completed
