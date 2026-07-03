@@ -28,6 +28,13 @@ Request:
 
 Result:
 Clarified that fresh partial ask depth should be recorded as a partial Paper FAK fill, not skipped. The skip recommendation applies to stale/missing/non-executable snapshots where the depth is not reliable or there are zero executable shares within the cap. Source inspection showed `TakerBuyFillEstimator.Estimate` already supports partial FAK fills by filling available ask depth within `maxAllowedPrice` and recording the lower actual notional. No source-code behavior changes, production writes, Live changes, orders, restarts, build, or tests were performed.
+## 2026-07-03T06:16:50.1512427Z
+Request:
+Пока я перевыкладываю, попробуй оценить уровень достоверности текущей истории по шкале от 1 (нужно всё чистить и копить заново) до 10 (можно в принципе ориентироваться на неё)
+
+Result:
+Assessed accumulated history qualitatively after the Paper FAK accounting change: old Paper history is not a full reset case, but must be segmented. Overall old Paper reliability was estimated around 5/10, with directional/win-rate evidence around 6/10 and old Paper PnL/drawdown/Live-balance sizing around 3/10. Recommended preserving old history as exploratory baseline while treating post-deploy `fak_taker_executable_snapshot_v2` rows as a new comparison window.
+
 ## 2026-07-03T06:08:49.9959173Z
 Request:
 Ок, давай переделывай Paper на эту приближенную к реальности модель. Потом решим, что делать с историей

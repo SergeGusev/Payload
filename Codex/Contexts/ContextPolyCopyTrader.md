@@ -1,3 +1,14 @@
+## Active Update 2026-07-03 Historical Paper Reliability Assessment
+Goal: Estimate whether accumulated Paper history can still be used after changing Paper FAK accounting.
+Status: Completed
+Done:
+- Rated current accumulated Paper history as usable only with segmentation, not deletion: roughly `5/10` overall for old Paper stats, `6/10` for directional/win-rate signals, and `3/10` for old Paper PnL/drawdown/Live-balance sizing.
+- Separated evidence classes conceptually: actual Live rows remain high confidence, old FAK live-shadow Paper rows before actual-fill alignment are unreliable for notional/PnL, old Paper-only FAK rows are exploratory model history, and GTD/maker Paper remains weak as a Live-execution proxy because queue position cannot be known.
+- Recommended preserving old history as exploratory baseline while starting a clean post-deploy comparison window for `paper_fak_fill_model = fak_taker_executable_snapshot_v2` and never mixing old/new Paper PnL in one decision.
+Next: After deployment, compare new-model rows separately and consider marking historical rows by fill model/evidence class in Dashboard.
+Notes: Assessment based on project memory and recent source/model changes only. No production DB writes, source changes, Live changes, order submissions, build, or tests were performed.
+Blockers: None.
+
 ## Active Update 2026-07-03 Paper FAK Executable Snapshot Accounting
 Goal: Make future Paper-only FAK accounting use the closer-to-reality executable snapshot model without rewriting history.
 Status: Completed
