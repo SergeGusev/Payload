@@ -1,3 +1,20 @@
+## Active Update 2026-07-04 Service Recovered Paper Active Live Idle
+Goal: Recheck whether the service recovered and whether bets are being placed now.
+Status: Completed
+Done:
+- Confirmed PostgreSQL on `192.168.0.101:5432` is reachable and `pg_isready` reports accepting connections.
+- Read production PostgreSQL read-only at database time `2026-07-04 00:19:40+03`.
+- Confirmed `PolyCopyTrader.Service` restarted and heartbeat is fresh: `Running`/`Live`, started `2026-07-04 00:18:29+03`, latest heartbeat `2026-07-04 00:19:29+03`, age `11.4s`, `last_error` empty.
+- Service is still running build `info=1.0.0+a2fc59c...`; newer pushed `3cf5898` is not deployed/running.
+- Paper orders resumed: `77` in last `5m`, `209` in last `15m`, latest Paper order `2026-07-04 00:19:30+03`.
+- Live orders did not resume yet: `0` in last `5m` and `0` in last `15m`, latest Live order `2026-07-03 23:34:30+03`.
+- Four effective Live strategies are enabled with positive balances.
+- Recent Live-strategy runs after restart were skips/observed rows, not Live placements: ETH mostly `previous_result_not_ready_by_entry_grace`; SOL Live strategies mostly `entry_due_expired` from restart backlog and `reference_average_full_window_missing` while reference windows warm up.
+- Recent `live_trading_events` only showed `StartupGeoblockCheck OK`.
+Next: Paper flow is active. Recheck Live after another 5-10 minutes or once reference windows/previous-result data are ready; deploy `3cf5898` if the Binance timed-close hotfix should be active.
+Notes: Read-only network and SQL checks only. No production writes, Live changes, order submissions, cancels, service restarts, source-code changes, build, or tests were performed.
+Blockers: None for Paper/order processing; Live has no current placements because strategy conditions/dependencies are not passing yet.
+
 ## Active Update 2026-07-04 Service Heartbeat Stale And Bets Stopped
 Goal: Confirm whether the server, service, and bet placement are currently working.
 Status: Completed
