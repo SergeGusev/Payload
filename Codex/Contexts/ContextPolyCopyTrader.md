@@ -1,3 +1,15 @@
+## Active Update 2026-07-03 Server Database Connection Timeout
+Goal: Diagnose the Dashboard screenshot showing timeout connecting to PostgreSQL at `192.168.0.101:5432`.
+Status: Completed
+Done:
+- Interpreted the screenshot as a connection-level failure: `NpgsqlException: Failed to connect to 192.168.0.101:5432` with `Timeout during connection attempt`, not a slow Dashboard query.
+- Checked from the local machine: Wi-Fi is on `192.168.0.100` with gateway `192.168.0.1`, so it is in the same LAN as the expected server address.
+- `Test-Connection 192.168.0.101` returned false; TCP probes to `5432` PostgreSQL, `3389` RDP, `445` SMB, and `5985` WinRM all failed; neighbor cache marks `192.168.0.101` as `Unreachable` with `00-00-00-00-00-00`.
+- `DESKTOP-QO1ON6E` did not resolve from this machine.
+Next: Check the server host itself: power/sleep/network, current IP address, and PostgreSQL service/listener. Dashboard cannot recover until the host or route to `192.168.0.101` is reachable.
+Notes: Network diagnostics only. No source-code changes, production DB writes, Live changes, order submissions, cancels, service restarts, build, or tests were performed.
+Blockers: Server host `192.168.0.101` is unreachable from this machine.
+
 ## Active Update 2026-07-03 BTC Diff Limit Progress Live Snapshot Cleared
 Goal: Remove Live display/enablement from `BTC Up or Down 5m 1 Diff Limit Progress Premarket` on the server.
 Status: Completed

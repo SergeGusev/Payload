@@ -61,3 +61,10 @@ Request:
 
 Result:
 Updated production PostgreSQL `192.168.0.101/polycopytrader` for exact strategy `btc_up_down_5m_1_diff_limit_progress_premarket` (`b7c50005-0000-4000-8169-000000000001`). The source-of-truth `strategies` row already had `live_stakes=false` and `live_enabled_at_utc=NULL`, but stale Dashboard snapshot rows still showed Live enabled. Ran a guarded transaction that kept the strategy Live flag false and updated related `dashboard_strategy_performance_snapshots` and `dashboard_strategy_recent_performance_snapshots` `live_stakes=false`. Final verification showed strategy `live_stakes=false`, performance snapshot `false`, recent snapshot live rows `0`, and `live_available_balance=94.79370800`. No Live orders were submitted, cancelled, or deleted; existing Live order history for this strategy had `246` `Matched` rows.
+
+## 2026-07-03T15:39:18.6129481Z
+Request:
+Screenshot showing Dashboard error `NpgsqlException: Failed to connect to 192.168.0.101:5432` / `Timeout during connection attempt`.
+
+Result:
+Diagnosed the screenshot as a connection-level PostgreSQL/network failure, not a slow Dashboard query. Local machine is on the same LAN (`192.168.0.100`, gateway `192.168.0.1`), but `192.168.0.101` does not respond to ping, TCP probes to `5432` PostgreSQL, `3389` RDP, `445` SMB, or `5985` WinRM, and the neighbor cache marks `192.168.0.101` as unreachable. Hostname `DESKTOP-QO1ON6E` also did not resolve. No production DB writes, Live changes, order submissions, cancels, service restarts, source-code changes, build, or tests were performed. Dashboard cannot connect until the server host/network or PostgreSQL listener becomes reachable again.
