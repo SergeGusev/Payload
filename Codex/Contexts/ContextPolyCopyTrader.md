@@ -1,3 +1,18 @@
+## Active Update 2026-07-03 SOL Reference Average Paper Live PnL Gap
+Goal: Explain why `SOL Up or Down 5m Down 8 bps Reference Average Premarket` shows near-flat Paper PnL but negative Live PnL over 24h.
+Status: Completed
+Done:
+- Queried the Dashboard server database at `192.168.0.101` / `polycopytrader` read-only for strategy `sol_up_down_5m_down_bps_8_fak_premarket` (`b7c50005-0000-4000-8139-000000000108`).
+- Confirmed the strategy is `enabled=true`, `live_stakes=true`, `auto_live_paused=false`, `Live $=1`, and current `Live bal` was about `$53.20`; no production writes or Live changes were performed.
+- Reproduced the user's observed shape: one latest loss settled after the user's view; excluding that newest loss gives roughly the user's `99/95`, Paper `+$0.54`, Live `-$8.77`. At query time the rolling 24h raw data had `99/96`, Paper `-$2.44`, Live `-$14.77`.
+- Confirmed there were no missing-paper/missing-live winners in the rolling 24h comparison: all `195` Live settled orders matched the same `195` Paper runs by `paper_order_id`.
+- Identified the cause as exposure/notional mismatch, not different outcomes: Paper stake summed about `$603.37`, while Live cost basis summed about `$1170.03`, about `1.94x` larger; average Paper stake was about `$3.09`, average Live cost about `$6.00`.
+- Confirmed Paper uses about `6.07` shares per row from worst-price sizing at `0.99`, while Live market-buy amount fills about `11.67` shares on average at actual prices around `0.518`; aggregate Live filled shares were about `1.92x` Paper shares.
+- Concluded that the FAK live-shadow Paper accounting and Live amount-order accounting are not directly comparable for this strategy: Live spends the configured amount, while Paper effectively accounts a smaller share-sized position.
+Next: Align Paper live-shadow FAK amount simulation with actual Live amount-order sizing before using Paper PnL as an exact Live expectation for these rows.
+Notes: Read-only production SQL and source inspection only. No production writes, service restart, Live enablement change, order submission, cancel action, source-code behavior change, build, or tests were performed.
+Blockers: None.
+
 ## Active Update 2026-07-02 BTC Diff Limit Progress Live Balance Assessment
 Goal: Assess historical downside, maximum stake, and sensible Live balance for `BTC Up or Down 5m 5 Diff Limit Progress Premarket`.
 Status: Completed
