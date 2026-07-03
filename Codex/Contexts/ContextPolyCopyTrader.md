@@ -1,3 +1,15 @@
+## Active Update 2026-07-03 Server Database Port Recovered Too Many Clients
+Goal: Re-check whether the server PostgreSQL database is reachable now.
+Status: Completed
+Done:
+- Repeated connectivity check to `192.168.0.101`.
+- Current network status changed: `ping=false`, but TCP connection to PostgreSQL port `5432=true`.
+- `pg_isready` reported `192.168.0.101:5432 - accepting connections`.
+- A read-only `psql` connection attempt reached PostgreSQL but failed before SQL execution with `FATAL: sorry, too many clients already`.
+Next: Check PostgreSQL connections on the server and clear/restart leaking clients or PostgreSQL; SQL reads cannot run until a connection slot is available.
+Notes: Network/connection diagnostics only. No source-code changes, production DB writes, Live changes, order submissions, cancels, service restarts, build, or tests were performed.
+Blockers: PostgreSQL is reachable but client slots are exhausted.
+
 ## Active Update 2026-07-03 Server Database Still Unreachable Second Recheck
 Goal: Re-check again whether `192.168.0.101:5432` is reachable.
 Status: Completed

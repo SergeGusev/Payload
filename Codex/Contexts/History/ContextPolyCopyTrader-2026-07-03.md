@@ -82,3 +82,10 @@ Request:
 
 Result:
 Repeated the current connectivity check to `192.168.0.101`. Result was still unreachable: `ping=false` and TCP connection to PostgreSQL port `5432=false`. No SQL query could be executed because the PostgreSQL host/port was unavailable. No production DB writes, Live changes, order submissions, cancels, service restarts, source-code changes, build, or tests were performed.
+
+## 2026-07-03T16:04:39.5630701Z
+Request:
+а сейчас?
+
+Result:
+Re-checked connectivity to `192.168.0.101`. Network status changed: ping still failed, but TCP connection to PostgreSQL port `5432` succeeded and `pg_isready` reported accepting connections. A read-only `psql` attempt reached PostgreSQL but failed before running SQL with `FATAL: sorry, too many clients already`, meaning PostgreSQL is reachable but all client slots are exhausted. No production DB writes, Live changes, order submissions, cancels, service restarts, source-code changes, build, or tests were performed.
