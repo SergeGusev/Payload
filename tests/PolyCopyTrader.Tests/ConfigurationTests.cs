@@ -142,7 +142,6 @@ public sealed class ConfigurationTests
         Assert.Equal(500, configuration.CryptoUpDown5mResultPolling.BinanceTimedCloseDelayMilliseconds);
         Assert.Equal(30, configuration.CryptoUpDown5mResultPolling.BinanceTimedCloseMaxCandidateAgeSeconds);
         Assert.Equal(1_000, configuration.CryptoUpDown5mResultPolling.BinanceTimedCloseMaxPriceAgeMilliseconds);
-        Assert.Equal(1.0m, configuration.CryptoUpDown5mResultPolling.BinanceTimedCloseMinMoveBps);
         Assert.Equal(15_000, configuration.CryptoUpDown5mResultPolling.ReferencePriceResultMaxEndAgeMilliseconds);
         Assert.Equal(2, configuration.CryptoUpDown5mResultPolling.ReferencePriceResultMinSamples);
         Assert.True(configuration.CryptoUpDown5mResultPolling.ProvisionalOrderBookResultEnabled);
@@ -555,7 +554,6 @@ public sealed class ConfigurationTests
                 BinanceTimedCloseDelayMilliseconds = -1,
                 BinanceTimedCloseMaxCandidateAgeSeconds = 0,
                 BinanceTimedCloseMaxPriceAgeMilliseconds = 0,
-                BinanceTimedCloseMinMoveBps = -1m,
                 ReferencePriceResultMaxEndAgeMilliseconds = 0,
                 ReferencePriceResultMinSamples = 0,
                 ProvisionalWinnerBidMin = 0.40m,
@@ -575,7 +573,6 @@ public sealed class ConfigurationTests
         Assert.Contains(errors, error => error.Contains("CryptoUpDown5mResultPolling.BinanceTimedCloseDelayMilliseconds", StringComparison.Ordinal));
         Assert.Contains(errors, error => error.Contains("CryptoUpDown5mResultPolling.BinanceTimedCloseMaxCandidateAgeSeconds", StringComparison.Ordinal));
         Assert.Contains(errors, error => error.Contains("CryptoUpDown5mResultPolling.BinanceTimedCloseMaxPriceAgeMilliseconds", StringComparison.Ordinal));
-        Assert.Contains(errors, error => error.Contains("CryptoUpDown5mResultPolling.BinanceTimedCloseMinMoveBps", StringComparison.Ordinal));
         Assert.Contains(errors, error => error.Contains("CryptoUpDown5mResultPolling.ReferencePriceResultMaxEndAgeMilliseconds", StringComparison.Ordinal));
         Assert.Contains(errors, error => error.Contains("CryptoUpDown5mResultPolling.ReferencePriceResultMinSamples", StringComparison.Ordinal));
         Assert.Contains(errors, error => error.Contains("CryptoUpDown5mResultPolling.ProvisionalWinnerBidMin", StringComparison.Ordinal));

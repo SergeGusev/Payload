@@ -188,7 +188,6 @@ public static class AppOptionsValidator
             $"Crypto Up or Down 5m Binance timed close enabled: {configuration.CryptoUpDown5mResultPolling.BinanceTimedCloseEnabled}",
             $"Crypto Up or Down 5m Binance timed close poll interval ms: {configuration.CryptoUpDown5mResultPolling.BinanceTimedClosePollIntervalMilliseconds}",
             $"Crypto Up or Down 5m Binance timed close delay ms: {configuration.CryptoUpDown5mResultPolling.BinanceTimedCloseDelayMilliseconds}",
-            $"Crypto Up or Down 5m Binance timed close min move bps: {configuration.CryptoUpDown5mResultPolling.BinanceTimedCloseMinMoveBps}",
             $"Crypto Up or Down 5m provisional order-book result enabled: {configuration.CryptoUpDown5mResultPolling.ProvisionalOrderBookResultEnabled}",
             $"Crypto Up or Down 5m provisional winner bid min: {configuration.CryptoUpDown5mResultPolling.ProvisionalWinnerBidMin}",
             $"Crypto Up or Down 5m provisional loser ask max: {configuration.CryptoUpDown5mResultPolling.ProvisionalLoserAskMax}",
@@ -1730,12 +1729,6 @@ public static class AppOptionsValidator
             options.BinanceTimedCloseMaxPriceAgeMilliseconds > 300_000)
         {
             errors.Add("CryptoUpDown5mResultPolling.BinanceTimedCloseMaxPriceAgeMilliseconds must be between 1 and 300000.");
-        }
-
-        if (options.BinanceTimedCloseMinMoveBps < 0m ||
-            options.BinanceTimedCloseMinMoveBps > 1_000m)
-        {
-            errors.Add("CryptoUpDown5mResultPolling.BinanceTimedCloseMinMoveBps must be between 0 and 1000.");
         }
 
         if (options.ProvisionalWinnerBidMin <= 0m || options.ProvisionalWinnerBidMin >= 1m)

@@ -132,14 +132,14 @@ public sealed class CryptoUpDown5mResultPollingProcessor(
     {
         if (!options.Enabled || !options.BinanceTimedCloseEnabled)
         {
-            return new CryptoUpDown5mBinanceTimedCloseCycleResult(0, 0, 0, 0, 0, 0, 0, 0);
+            return new CryptoUpDown5mBinanceTimedCloseCycleResult(0, 0, 0, 0, 0, 0, 0);
         }
 
         var nowUtc = DateTimeOffset.UtcNow;
         var assetSymbols = NormalizeSymbols(options.AssetSymbols);
         if (assetSymbols.Count == 0)
         {
-            return new CryptoUpDown5mBinanceTimedCloseCycleResult(0, 0, 0, 0, 0, 0, 0, 0);
+            return new CryptoUpDown5mBinanceTimedCloseCycleResult(0, 0, 0, 0, 0, 0, 0);
         }
 
         var markets = await repository.GetCryptoUpDown5mGammaMarketsAsync(
@@ -149,7 +149,7 @@ public sealed class CryptoUpDown5mResultPollingProcessor(
         var candidates = SelectBinanceTimedCloseCandidates(markets, assetSymbols, nowUtc).ToArray();
         if (candidates.Length == 0)
         {
-            return new CryptoUpDown5mBinanceTimedCloseCycleResult(markets.Count, 0, 0, 0, 0, 0, 0, 0);
+            return new CryptoUpDown5mBinanceTimedCloseCycleResult(markets.Count, 0, 0, 0, 0, 0, 0);
         }
 
         var earliestStartUtc = candidates.Min(candidate => candidate.MarketStartUtc);
@@ -166,7 +166,6 @@ public sealed class CryptoUpDown5mResultPollingProcessor(
 
         var alreadyResolved = 0;
         var resolved = 0;
-        var skippedUncertain = 0;
         var missingStartPrice = 0;
         var missingClosePrice = 0;
         var errors = 0;
@@ -191,9 +190,6 @@ public sealed class CryptoUpDown5mResultPollingProcessor(
                             cancellationToken);
                         resolved++;
                         resolvedKeys.Add(new AssetMarketStartKey(candidate.AssetSymbol, candidate.MarketStartUtc));
-                        break;
-                    case BinanceTimedCloseResultStatus.Uncertain:
-                        skippedUncertain++;
                         break;
                     case BinanceTimedCloseResultStatus.MissingStartPrice:
                         missingStartPrice++;
@@ -223,7 +219,6 @@ public sealed class CryptoUpDown5mResultPollingProcessor(
             candidates.Length,
             alreadyResolved,
             resolved,
-            skippedUncertain,
             missingStartPrice,
             missingClosePrice,
             errors);
@@ -268,13 +263,7 @@ public sealed class CryptoUpDown5mResultPollingProcessor(
 
         var moveUsd = close.Price.PriceUsd - start.PriceUsd;
         var moveBps = moveUsd / start.PriceUsd * 10_000m;
-        var minMoveBps = Math.Max(0m, options.BinanceTimedCloseMinMoveBps);
-        if (Math.Abs(moveBps) < minMoveBps)
-        {
-            return BinanceTimedCloseResult.Uncertain();
-        }
-
-        var winningOutcome = moveBps > 0m ? "Up" : "Down";
+        var winningOutcome = moveBps >= 0m ? "Up" : "Down";
         var result = new InferredMarketResult(
             winningOutcome,
             TryGetOutcomeAssetId(candidate.Market, winningOutcome),
@@ -292,7 +281,6 @@ public sealed class CryptoUpDown5mResultPollingProcessor(
                 close_price_usd = close.Price.PriceUsd,
                 move_usd = moveUsd,
                 move_bps = moveBps,
-                min_move_bps = minMoveBps,
                 winning_outcome = winningOutcome,
                 start_price_sampled_at_utc = start.SampledAtUtc,
                 close_price_source_updated_at_utc = close.Price.SourceUpdatedAtUtc,
@@ -1151,7 +1139,6 @@ public sealed class CryptoUpDown5mResultPollingProcessor(
     private enum BinanceTimedCloseResultStatus
     {
         Resolved,
-        Uncertain,
         MissingStartPrice,
         MissingClosePrice
     }
@@ -1163,11 +1150,6 @@ public sealed class CryptoUpDown5mResultPollingProcessor(
         public static BinanceTimedCloseResult Resolved(InferredMarketResult result)
         {
             return new BinanceTimedCloseResult(BinanceTimedCloseResultStatus.Resolved, result);
-        }
-
-        public static BinanceTimedCloseResult Uncertain()
-        {
-            return new BinanceTimedCloseResult(BinanceTimedCloseResultStatus.Uncertain);
         }
 
         public static BinanceTimedCloseResult MissingStartPrice()

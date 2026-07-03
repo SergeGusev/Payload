@@ -1,3 +1,20 @@
+## Active Update 2026-07-03 Match Polymarket Tie Rule
+Goal: Make the Binance timed close provisional resolver count equal start/finish prices the same way as Polymarket and remove the 1 bps guard.
+Status: Completed
+Done:
+- Changed `BinanceTimedClose` result inference to `finish >= start => Up`, `finish < start => Down`.
+- Removed `BinanceTimedCloseMinMoveBps` from domain configuration, appsettings, loader normalization, validation, sanitized config summary, raw result JSON, worker logs, and tests.
+- Removed the now-unused `Uncertain` Binance timed close status and `SkippedUncertain` cycle counter.
+- Added focused tests for equal close price resolving as `Up` and tiny negative movement resolving as `Down`.
+Verification:
+- `dotnet build src/PolyCopyTrader.Service/PolyCopyTrader.Service.csproj --no-restore` passed with 0 errors; current unrelated dirty `PostgresAppRepository.cs` produced existing nullable warnings during build.
+- `dotnet test tests/PolyCopyTrader.Tests/PolyCopyTrader.Tests.csproj --filter "FullyQualifiedName~CryptoUpDown5mResultPollingProcessorTests|FullyQualifiedName~ConfigurationTests|FullyQualifiedName~ProcessPreviousResultDueEntriesAsync_EntersAfterResolvedLedgerArrives"` passed 47/47; one existing nullable warning remains in `BtcUpDown5mPaperStrategyProcessorTests.cs`.
+- `rg` confirmed no remaining `BinanceTimedCloseMinMoveBps`, `min_move_bps`, `SkippedUncertain`, or `Uncertain` references in `src`/`tests`.
+- `git diff --check` passed.
+Next: Deploy/restart the service so the resolver applies Polymarket tie semantics.
+Notes: Source/test/config/context changes only. No production DB writes, Live setting changes, order submissions, cancels, or service restarts were performed in this task. Existing unrelated dirty files remain untouched.
+Blockers: None.
+
 ## Active Update 2026-07-03 Binance Timed Close Resolver
 Goal: Add a faster previous-market result path using Binance price data at the 5m market close, without Chainlink access.
 Status: Completed

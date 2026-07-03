@@ -840,8 +840,6 @@ public sealed class CryptoUpDown5mResultPollingOptions
 
     public int BinanceTimedCloseMaxPriceAgeMilliseconds { get; init; } = 1_000;
 
-    public decimal BinanceTimedCloseMinMoveBps { get; init; } = 1m;
-
     public int ReferencePriceResultMaxEndAgeMilliseconds { get; init; } = 15_000;
 
     public int ReferencePriceResultMinSamples { get; init; } = 2;

@@ -20,13 +20,12 @@ public sealed class CryptoUpDown5mBinanceTimedCloseWorker(
 
         var interval = TimeSpan.FromMilliseconds(Math.Max(1, options.BinanceTimedClosePollIntervalMilliseconds));
         logger.LogInformation(
-            "Crypto Up or Down 5m Binance timed close worker started. Assets={Assets} PollIntervalMilliseconds={PollIntervalMilliseconds} CloseDelayMilliseconds={CloseDelayMilliseconds} MaxCandidateAgeSeconds={MaxCandidateAgeSeconds} MaxPriceAgeMilliseconds={MaxPriceAgeMilliseconds} MinMoveBps={MinMoveBps}",
+            "Crypto Up or Down 5m Binance timed close worker started. Assets={Assets} PollIntervalMilliseconds={PollIntervalMilliseconds} CloseDelayMilliseconds={CloseDelayMilliseconds} MaxCandidateAgeSeconds={MaxCandidateAgeSeconds} MaxPriceAgeMilliseconds={MaxPriceAgeMilliseconds}",
             string.Join(",", options.AssetSymbols),
             options.BinanceTimedClosePollIntervalMilliseconds,
             options.BinanceTimedCloseDelayMilliseconds,
             options.BinanceTimedCloseMaxCandidateAgeSeconds,
-            options.BinanceTimedCloseMaxPriceAgeMilliseconds,
-            options.BinanceTimedCloseMinMoveBps);
+            options.BinanceTimedCloseMaxPriceAgeMilliseconds);
 
         using var timer = new PeriodicTimer(interval);
         while (!stoppingToken.IsCancellationRequested)
@@ -34,15 +33,14 @@ public sealed class CryptoUpDown5mBinanceTimedCloseWorker(
             try
             {
                 var result = await processor.ProcessBinanceTimedCloseAsync(stoppingToken);
-                if (result.Candidates > 0 || result.Resolved > 0 || result.SkippedUncertain > 0 || result.Errors > 0)
+                if (result.Candidates > 0 || result.Resolved > 0 || result.Errors > 0)
                 {
                     logger.LogInformation(
-                        "Crypto Up or Down 5m Binance timed close cycle completed. MarketsScanned={MarketsScanned} Candidates={Candidates} AlreadyResolved={AlreadyResolved} Resolved={Resolved} SkippedUncertain={SkippedUncertain} MissingStartPrice={MissingStartPrice} MissingClosePrice={MissingClosePrice} Errors={Errors}",
+                        "Crypto Up or Down 5m Binance timed close cycle completed. MarketsScanned={MarketsScanned} Candidates={Candidates} AlreadyResolved={AlreadyResolved} Resolved={Resolved} MissingStartPrice={MissingStartPrice} MissingClosePrice={MissingClosePrice} Errors={Errors}",
                         result.MarketsScanned,
                         result.Candidates,
                         result.AlreadyResolved,
                         result.Resolved,
-                        result.SkippedUncertain,
                         result.MissingStartPrice,
                         result.MissingClosePrice,
                         result.Errors);

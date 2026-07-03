@@ -20,7 +20,6 @@ public sealed record CryptoUpDown5mBinanceTimedCloseCycleResult(
     int Candidates,
     int AlreadyResolved,
     int Resolved,
-    int SkippedUncertain,
     int MissingStartPrice,
     int MissingClosePrice,
     int Errors);

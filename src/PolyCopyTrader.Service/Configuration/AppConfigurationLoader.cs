@@ -100,7 +100,6 @@ public static class AppConfigurationLoader
             BinanceTimedCloseDelayMilliseconds = options.BinanceTimedCloseDelayMilliseconds,
             BinanceTimedCloseMaxCandidateAgeSeconds = options.BinanceTimedCloseMaxCandidateAgeSeconds,
             BinanceTimedCloseMaxPriceAgeMilliseconds = options.BinanceTimedCloseMaxPriceAgeMilliseconds,
-            BinanceTimedCloseMinMoveBps = options.BinanceTimedCloseMinMoveBps,
             ReferencePriceResultMaxEndAgeMilliseconds = options.ReferencePriceResultMaxEndAgeMilliseconds,
             ReferencePriceResultMinSamples = options.ReferencePriceResultMinSamples,
             ProvisionalOrderBookResultEnabled = options.ProvisionalOrderBookResultEnabled,

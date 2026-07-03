@@ -172,7 +172,6 @@ public sealed class CryptoUpDown5mResultPollingProcessorTests
 
         Assert.Equal(1, result.Candidates);
         Assert.Equal(1, result.Resolved);
-        Assert.Equal(0, result.SkippedUncertain);
         var resolved = Assert.Single(repository.CryptoUpDown5mWebSocketResolvedMarkets);
         Assert.Equal("ETH", resolved.AssetSymbol);
         Assert.Equal(startUtc, resolved.MarketStartUtc);
@@ -181,11 +180,10 @@ public sealed class CryptoUpDown5mResultPollingProcessorTests
         Assert.Equal("binance_timed_close_provisional", resolved.RawEventType);
         Assert.Contains("\"start_price_usd\":3200", resolved.RawJson, StringComparison.Ordinal);
         Assert.Contains("\"close_price_usd\":3201", resolved.RawJson, StringComparison.Ordinal);
-        Assert.Contains("\"min_move_bps\":1", resolved.RawJson, StringComparison.Ordinal);
     }
 
     [Fact]
-    public async Task ProcessBinanceTimedCloseAsync_SkipsNearZeroMoveAsUncertain()
+    public async Task ProcessBinanceTimedCloseAsync_ResolvesEqualClosePriceAsUp()
     {
         var repository = new TestAppRepository();
         var startUtc = DateTimeOffset.UtcNow.AddMinutes(-5).AddMilliseconds(-100);
@@ -193,7 +191,7 @@ public sealed class CryptoUpDown5mResultPollingProcessorTests
         repository.PolymarketGammaMarkets.Add(market);
         AddCryptoOddsTick(repository, market, "SOL", startUtc.AddSeconds(1), startPrice: 100m, price: 100m);
         var cryptoClient = new FakeCryptoReferencePriceClient();
-        cryptoClient.SetPrice("SOL", 100.005m, "SOLUSDT");
+        cryptoClient.SetPrice("SOL", 100m, "SOLUSDT");
         var processor = CreateProcessor(
             repository,
             new FakeGammaClient([]),
@@ -202,9 +200,33 @@ public sealed class CryptoUpDown5mResultPollingProcessorTests
         var result = await processor.ProcessBinanceTimedCloseAsync();
 
         Assert.Equal(1, result.Candidates);
-        Assert.Equal(0, result.Resolved);
-        Assert.Equal(1, result.SkippedUncertain);
-        Assert.Empty(repository.CryptoUpDown5mWebSocketResolvedMarkets);
+        Assert.Equal(1, result.Resolved);
+        var resolved = Assert.Single(repository.CryptoUpDown5mWebSocketResolvedMarkets);
+        Assert.Equal("Up", resolved.WinningOutcome);
+        Assert.Contains("\"move_bps\":0", resolved.RawJson, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task ProcessBinanceTimedCloseAsync_ResolvesTinyNegativeMoveAsDown()
+    {
+        var repository = new TestAppRepository();
+        var startUtc = DateTimeOffset.UtcNow.AddMinutes(-5).AddMilliseconds(-100);
+        var market = CreateCryptoMarket("SOL", startUtc, closed: false, winningOutcome: null);
+        repository.PolymarketGammaMarkets.Add(market);
+        AddCryptoOddsTick(repository, market, "SOL", startUtc.AddSeconds(1), startPrice: 100m, price: 100m);
+        var cryptoClient = new FakeCryptoReferencePriceClient();
+        cryptoClient.SetPrice("SOL", 99.999m, "SOLUSDT");
+        var processor = CreateProcessor(
+            repository,
+            new FakeGammaClient([]),
+            cryptoReferencePriceClient: cryptoClient);
+
+        var result = await processor.ProcessBinanceTimedCloseAsync();
+
+        Assert.Equal(1, result.Candidates);
+        Assert.Equal(1, result.Resolved);
+        var resolved = Assert.Single(repository.CryptoUpDown5mWebSocketResolvedMarkets);
+        Assert.Equal("Down", resolved.WinningOutcome);
     }
 
     private static CryptoUpDown5mResultPollingProcessor CreateProcessor(
@@ -230,7 +252,6 @@ public sealed class CryptoUpDown5mResultPollingProcessorTests
                 BinanceTimedCloseDelayMilliseconds = 0,
                 BinanceTimedCloseMaxCandidateAgeSeconds = 30,
                 BinanceTimedCloseMaxPriceAgeMilliseconds = 1_000,
-                BinanceTimedCloseMinMoveBps = 1m,
                 ReferencePriceResultMaxEndAgeMilliseconds = 15_000,
                 ReferencePriceResultMinSamples = 2,
                 ProvisionalOrderBookResultEnabled = true,
