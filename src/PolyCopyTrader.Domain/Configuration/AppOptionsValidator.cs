@@ -185,6 +185,10 @@ public static class AppOptionsValidator
             $"Crypto Up or Down 5m result polling assets: {string.Join(",", configuration.CryptoUpDown5mResultPolling.AssetSymbols)}",
             $"Crypto Up or Down 5m result polling interval seconds: {configuration.CryptoUpDown5mResultPolling.PollIntervalSeconds}",
             $"Crypto Up or Down 5m result polling max wait minutes: {configuration.CryptoUpDown5mResultPolling.MaxResultWaitMinutes}",
+            $"Crypto Up or Down 5m Binance timed close enabled: {configuration.CryptoUpDown5mResultPolling.BinanceTimedCloseEnabled}",
+            $"Crypto Up or Down 5m Binance timed close poll interval ms: {configuration.CryptoUpDown5mResultPolling.BinanceTimedClosePollIntervalMilliseconds}",
+            $"Crypto Up or Down 5m Binance timed close delay ms: {configuration.CryptoUpDown5mResultPolling.BinanceTimedCloseDelayMilliseconds}",
+            $"Crypto Up or Down 5m Binance timed close min move bps: {configuration.CryptoUpDown5mResultPolling.BinanceTimedCloseMinMoveBps}",
             $"Crypto Up or Down 5m provisional order-book result enabled: {configuration.CryptoUpDown5mResultPolling.ProvisionalOrderBookResultEnabled}",
             $"Crypto Up or Down 5m provisional winner bid min: {configuration.CryptoUpDown5mResultPolling.ProvisionalWinnerBidMin}",
             $"Crypto Up or Down 5m provisional loser ask max: {configuration.CryptoUpDown5mResultPolling.ProvisionalLoserAskMax}",
@@ -1702,6 +1706,36 @@ public static class AppOptionsValidator
             options.ReferencePriceResultMinSamples > 500)
         {
             errors.Add("CryptoUpDown5mResultPolling.ReferencePriceResultMinSamples must be between 1 and 500.");
+        }
+
+        if (options.BinanceTimedClosePollIntervalMilliseconds <= 0 ||
+            options.BinanceTimedClosePollIntervalMilliseconds > 60_000)
+        {
+            errors.Add("CryptoUpDown5mResultPolling.BinanceTimedClosePollIntervalMilliseconds must be between 1 and 60000.");
+        }
+
+        if (options.BinanceTimedCloseDelayMilliseconds < 0 ||
+            options.BinanceTimedCloseDelayMilliseconds > 60_000)
+        {
+            errors.Add("CryptoUpDown5mResultPolling.BinanceTimedCloseDelayMilliseconds must be between 0 and 60000.");
+        }
+
+        if (options.BinanceTimedCloseMaxCandidateAgeSeconds <= 0 ||
+            options.BinanceTimedCloseMaxCandidateAgeSeconds > 3_600)
+        {
+            errors.Add("CryptoUpDown5mResultPolling.BinanceTimedCloseMaxCandidateAgeSeconds must be between 1 and 3600.");
+        }
+
+        if (options.BinanceTimedCloseMaxPriceAgeMilliseconds <= 0 ||
+            options.BinanceTimedCloseMaxPriceAgeMilliseconds > 300_000)
+        {
+            errors.Add("CryptoUpDown5mResultPolling.BinanceTimedCloseMaxPriceAgeMilliseconds must be between 1 and 300000.");
+        }
+
+        if (options.BinanceTimedCloseMinMoveBps < 0m ||
+            options.BinanceTimedCloseMinMoveBps > 1_000m)
+        {
+            errors.Add("CryptoUpDown5mResultPolling.BinanceTimedCloseMinMoveBps must be between 0 and 1000.");
         }
 
         if (options.ProvisionalWinnerBidMin <= 0m || options.ProvisionalWinnerBidMin >= 1m)

@@ -87,6 +87,7 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
     private const string StakeNotionalRoundingMode = "ceil_usd";
     private const string DiffCounterWebSocketResultSource = "MarketWebSocket";
     private const string DiffCounterReferenceStartEndResultSource = "ReferenceStartEnd";
+    private const string DiffCounterBinanceTimedCloseResultSource = "BinanceTimedClose";
     private const string DiffCounterTerminalOrderBookResultSource = "TerminalOrderBook";
     private const string DiffCounterGammaClosedMarketResultSource = "GammaClosedMarket";
     private const string PremarketPreviousResultSourcePrefix = "ReferencePricePremarketEndMinus";
@@ -9625,6 +9626,7 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
     {
         return string.Equals(source, DiffCounterWebSocketResultSource, StringComparison.OrdinalIgnoreCase) ||
             string.Equals(source, DiffCounterReferenceStartEndResultSource, StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(source, DiffCounterBinanceTimedCloseResultSource, StringComparison.OrdinalIgnoreCase) ||
             string.Equals(source, DiffCounterTerminalOrderBookResultSource, StringComparison.OrdinalIgnoreCase) ||
             string.Equals(source, DiffCounterGammaClosedMarketResultSource, StringComparison.OrdinalIgnoreCase);
     }

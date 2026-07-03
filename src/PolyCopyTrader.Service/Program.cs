@@ -413,6 +413,7 @@ builder.Services.AddHostedService<BtcUpDown5mOddsArchiveWorker>();
 builder.Services.AddHostedService<BtcUpDown5mStatisticsWorker>();
 builder.Services.AddHostedService<BtcUpDown5mArbitrageScannerWorker>();
 builder.Services.AddHostedService<CryptoUpDown5mOddsArchiveWorker>();
+builder.Services.AddHostedService<CryptoUpDown5mBinanceTimedCloseWorker>();
 builder.Services.AddHostedService<CryptoUpDown5mResultPollingWorker>();
 // Up/Down focused mode: trader research/rating workers are paused.
 // builder.Services.AddHostedService<DataApiTraderActivityIngestionWorker>();

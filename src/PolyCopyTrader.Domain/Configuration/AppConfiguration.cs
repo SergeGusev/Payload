@@ -830,6 +830,18 @@ public sealed class CryptoUpDown5mResultPollingOptions
 
     public bool ReferencePriceResultEnabled { get; init; } = true;
 
+    public bool BinanceTimedCloseEnabled { get; init; } = true;
+
+    public int BinanceTimedClosePollIntervalMilliseconds { get; init; } = 500;
+
+    public int BinanceTimedCloseDelayMilliseconds { get; init; } = 500;
+
+    public int BinanceTimedCloseMaxCandidateAgeSeconds { get; init; } = 30;
+
+    public int BinanceTimedCloseMaxPriceAgeMilliseconds { get; init; } = 1_000;
+
+    public decimal BinanceTimedCloseMinMoveBps { get; init; } = 1m;
+
     public int ReferencePriceResultMaxEndAgeMilliseconds { get; init; } = 15_000;
 
     public int ReferencePriceResultMinSamples { get; init; } = 2;

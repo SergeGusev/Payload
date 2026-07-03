@@ -12005,7 +12005,8 @@ public sealed class BtcUpDown5mPaperStrategyProcessorTests
         repository.CryptoUpDown5mWebSocketResolvedMarkets.Add(CreateWebSocketDiffResult(
             "BTC",
             now.AddMinutes(-5),
-            "Up"));
+            "Up",
+            "BinanceTimedClose"));
 
         var enteredResult = await processor.ProcessPreviousResultDueEntriesAsync();
 
@@ -12016,7 +12017,7 @@ public sealed class BtcUpDown5mPaperStrategyProcessorTests
         Assert.Equal("Down", enteredRun.SelectedOutcome);
         var order = Assert.Single(repository.PaperOrders);
         Assert.Equal("asset-down", order.AssetId);
-        Assert.Contains("\"result_source\":\"resolved_market_ledger_MarketWebSocket\"", order.RawDecisionJson, StringComparison.Ordinal);
+        Assert.Contains("\"result_source\":\"resolved_market_ledger_BinanceTimedClose\"", order.RawDecisionJson, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -15089,7 +15090,8 @@ public sealed class BtcUpDown5mPaperStrategyProcessorTests
     private static CryptoUpDown5mWebSocketResolvedMarket CreateWebSocketDiffResult(
         string assetSymbol,
         DateTimeOffset marketStartUtc,
-        string winningOutcome)
+        string winningOutcome,
+        string source = "MarketWebSocket")
     {
         var normalized = assetSymbol.Trim().ToUpperInvariant();
         var prefix = normalized.ToLowerInvariant();
@@ -15113,8 +15115,10 @@ public sealed class BtcUpDown5mPaperStrategyProcessorTests
             receivedAtUtc,
             1,
             8m,
-            "MarketWebSocket",
-            "market_resolved",
+            source,
+            string.Equals(source, "BinanceTimedClose", StringComparison.OrdinalIgnoreCase)
+                ? "binance_timed_close_provisional"
+                : "market_resolved",
             "{}",
             receivedAtUtc,
             receivedAtUtc);

@@ -2,6 +2,7 @@ using Microsoft.Extensions.Logging.Abstractions;
 using PolyCopyTrader.Domain;
 using PolyCopyTrader.Domain.Configuration;
 using PolyCopyTrader.Polymarket;
+using PolyCopyTrader.Service.ExternalPrices;
 using PolyCopyTrader.Service.MarketData;
 using PolyCopyTrader.Service.Strategies;
 
@@ -152,10 +153,66 @@ public sealed class CryptoUpDown5mResultPollingProcessorTests
         Assert.Equal("ReferenceStartEnd", resolved.Source);
     }
 
+    [Fact]
+    public async Task ProcessBinanceTimedCloseAsync_StoresFreshBinanceTimedCloseResult()
+    {
+        var repository = new TestAppRepository();
+        var startUtc = DateTimeOffset.UtcNow.AddMinutes(-5).AddMilliseconds(-100);
+        var market = CreateCryptoMarket("ETH", startUtc, closed: false, winningOutcome: null);
+        repository.PolymarketGammaMarkets.Add(market);
+        AddCryptoOddsTick(repository, market, "ETH", startUtc.AddSeconds(1), startPrice: 3200m, price: 3200m);
+        var cryptoClient = new FakeCryptoReferencePriceClient();
+        cryptoClient.SetPrice("ETH", 3201m, "ETHUSDT");
+        var processor = CreateProcessor(
+            repository,
+            new FakeGammaClient([]),
+            cryptoReferencePriceClient: cryptoClient);
+
+        var result = await processor.ProcessBinanceTimedCloseAsync();
+
+        Assert.Equal(1, result.Candidates);
+        Assert.Equal(1, result.Resolved);
+        Assert.Equal(0, result.SkippedUncertain);
+        var resolved = Assert.Single(repository.CryptoUpDown5mWebSocketResolvedMarkets);
+        Assert.Equal("ETH", resolved.AssetSymbol);
+        Assert.Equal(startUtc, resolved.MarketStartUtc);
+        Assert.Equal("Up", resolved.WinningOutcome);
+        Assert.Equal("BinanceTimedClose", resolved.Source);
+        Assert.Equal("binance_timed_close_provisional", resolved.RawEventType);
+        Assert.Contains("\"start_price_usd\":3200", resolved.RawJson, StringComparison.Ordinal);
+        Assert.Contains("\"close_price_usd\":3201", resolved.RawJson, StringComparison.Ordinal);
+        Assert.Contains("\"min_move_bps\":1", resolved.RawJson, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task ProcessBinanceTimedCloseAsync_SkipsNearZeroMoveAsUncertain()
+    {
+        var repository = new TestAppRepository();
+        var startUtc = DateTimeOffset.UtcNow.AddMinutes(-5).AddMilliseconds(-100);
+        var market = CreateCryptoMarket("SOL", startUtc, closed: false, winningOutcome: null);
+        repository.PolymarketGammaMarkets.Add(market);
+        AddCryptoOddsTick(repository, market, "SOL", startUtc.AddSeconds(1), startPrice: 100m, price: 100m);
+        var cryptoClient = new FakeCryptoReferencePriceClient();
+        cryptoClient.SetPrice("SOL", 100.005m, "SOLUSDT");
+        var processor = CreateProcessor(
+            repository,
+            new FakeGammaClient([]),
+            cryptoReferencePriceClient: cryptoClient);
+
+        var result = await processor.ProcessBinanceTimedCloseAsync();
+
+        Assert.Equal(1, result.Candidates);
+        Assert.Equal(0, result.Resolved);
+        Assert.Equal(1, result.SkippedUncertain);
+        Assert.Empty(repository.CryptoUpDown5mWebSocketResolvedMarkets);
+    }
+
     private static CryptoUpDown5mResultPollingProcessor CreateProcessor(
         TestAppRepository repository,
         FakeGammaClient gammaClient,
-        FakeClobPublicClient? clobClient = null)
+        FakeClobPublicClient? clobClient = null,
+        FakeBtcUsdReferencePriceClient? btcUsdReferencePriceClient = null,
+        FakeCryptoReferencePriceClient? cryptoReferencePriceClient = null)
     {
         return new CryptoUpDown5mResultPollingProcessor(
             NullLogger<CryptoUpDown5mResultPollingProcessor>.Instance,
@@ -168,6 +225,12 @@ public sealed class CryptoUpDown5mResultPollingProcessorTests
                 MaxMarketAgeMinutes = 60,
                 MaxResultWaitMinutes = 20,
                 ReferencePriceResultEnabled = true,
+                BinanceTimedCloseEnabled = true,
+                BinanceTimedClosePollIntervalMilliseconds = 500,
+                BinanceTimedCloseDelayMilliseconds = 0,
+                BinanceTimedCloseMaxCandidateAgeSeconds = 30,
+                BinanceTimedCloseMaxPriceAgeMilliseconds = 1_000,
+                BinanceTimedCloseMinMoveBps = 1m,
                 ReferencePriceResultMaxEndAgeMilliseconds = 15_000,
                 ReferencePriceResultMinSamples = 2,
                 ProvisionalOrderBookResultEnabled = true,
@@ -180,7 +243,9 @@ public sealed class CryptoUpDown5mResultPollingProcessorTests
             repository,
             gammaClient,
             clobClient ?? new FakeClobPublicClient(new Dictionary<string, OrderBookSnapshot>(StringComparer.OrdinalIgnoreCase)),
-            new MarketDataCache(new MarketDataWebSocketOptions()));
+            new MarketDataCache(new MarketDataWebSocketOptions()),
+            btcUsdReferencePriceClient ?? new FakeBtcUsdReferencePriceClient(65_000m),
+            cryptoReferencePriceClient ?? new FakeCryptoReferencePriceClient());
     }
 
     private static PolymarketGammaMarket CreateCryptoMarket(
@@ -343,6 +408,77 @@ public sealed class CryptoUpDown5mResultPollingProcessorTests
             null,
             "{}",
             sampledAtUtc));
+    }
+
+    private sealed class FakeBtcUsdReferencePriceClient(decimal priceUsd) : IBtcUsdReferencePriceClient
+    {
+        public DateTimeOffset FetchedAtUtc { get; set; } = DateTimeOffset.UtcNow;
+
+        public Task<BtcUsdReferencePricePoint> GetBtcUsdPriceAsync(CancellationToken cancellationToken = default)
+        {
+            return Task.FromResult(new BtcUsdReferencePricePoint(
+                priceUsd,
+                FetchedAtUtc,
+                FetchedAtUtc,
+                "FakeBinance"));
+        }
+    }
+
+    private sealed class FakeCryptoReferencePriceClient : ICryptoReferencePriceClient
+    {
+        private readonly Dictionary<string, CryptoReferencePricePoint> prices = new(StringComparer.OrdinalIgnoreCase);
+
+        public void SetPrice(
+            string assetSymbol,
+            decimal priceUsd,
+            string binanceSymbol)
+        {
+            var now = DateTimeOffset.UtcNow;
+            prices[assetSymbol.Trim().ToUpperInvariant()] = new CryptoReferencePricePoint(
+                assetSymbol.Trim().ToUpperInvariant(),
+                binanceSymbol,
+                priceUsd,
+                now,
+                now,
+                "FakeBinance");
+        }
+
+        public Task<CryptoReferencePricePoint> GetPriceAsync(
+            string assetSymbol,
+            CancellationToken cancellationToken = default)
+        {
+            var normalized = assetSymbol.Trim().ToUpperInvariant();
+            if (!prices.TryGetValue(normalized, out var price))
+            {
+                throw new InvalidOperationException("Missing fake crypto price for " + normalized + ".");
+            }
+
+            return Task.FromResult(price);
+        }
+
+        public BtcUsdReferencePriceSnapshot GetSnapshot(string assetSymbol)
+        {
+            var normalized = assetSymbol.Trim().ToUpperInvariant();
+            if (!prices.TryGetValue(normalized, out var price))
+            {
+                return new BtcUsdReferencePriceSnapshot("FakeBinance", 1, 0, false, null, null, [], DateTimeOffset.UtcNow);
+            }
+
+            var point = new BtcUsdReferencePricePoint(
+                price.PriceUsd,
+                price.SourceUpdatedAtUtc,
+                price.FetchedAtUtc,
+                price.Source);
+            return new BtcUsdReferencePriceSnapshot(
+                price.Source,
+                1,
+                1,
+                true,
+                price.PriceUsd,
+                point,
+                [point],
+                DateTimeOffset.UtcNow);
+        }
     }
 
     private sealed class FakeGammaClient(IReadOnlyList<PolymarketGammaMarket?> closedMarketResponses) : IPolymarketGammaClient

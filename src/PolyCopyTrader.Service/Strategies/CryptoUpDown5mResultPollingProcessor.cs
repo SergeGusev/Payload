@@ -1,6 +1,7 @@
 using PolyCopyTrader.Domain;
 using PolyCopyTrader.Domain.Configuration;
 using PolyCopyTrader.Polymarket;
+using PolyCopyTrader.Service.ExternalPrices;
 using PolyCopyTrader.Service.MarketData;
 using PolyCopyTrader.Storage;
 using System.Text.Json;
@@ -13,11 +14,14 @@ public sealed class CryptoUpDown5mResultPollingProcessor(
     IAppRepository repository,
     IPolymarketGammaClient gammaClient,
     IPolymarketClobPublicClient clobClient,
-    IMarketDataCache marketDataCache) : ICryptoUpDown5mResultPollingProcessor
+    IMarketDataCache marketDataCache,
+    IBtcUsdReferencePriceClient btcUsdReferencePriceClient,
+    ICryptoReferencePriceClient cryptoReferencePriceClient) : ICryptoUpDown5mResultPollingProcessor
 {
     private const decimal ResultThreshold = 0.50m;
     private const string SourceMarketWebSocket = "MarketWebSocket";
     private const string SourceReferenceStartEnd = "ReferenceStartEnd";
+    private const string SourceBinanceTimedClose = "BinanceTimedClose";
     private const string SourceTerminalOrderBook = "TerminalOrderBook";
     private const string SourceGammaClosedMarket = "GammaClosedMarket";
     private const string StatusPending = "Pending";
@@ -121,6 +125,251 @@ public sealed class CryptoUpDown5mResultPollingProcessor(
             resultsFound,
             timedOut,
             errors);
+    }
+
+    public async Task<CryptoUpDown5mBinanceTimedCloseCycleResult> ProcessBinanceTimedCloseAsync(
+        CancellationToken cancellationToken = default)
+    {
+        if (!options.Enabled || !options.BinanceTimedCloseEnabled)
+        {
+            return new CryptoUpDown5mBinanceTimedCloseCycleResult(0, 0, 0, 0, 0, 0, 0, 0);
+        }
+
+        var nowUtc = DateTimeOffset.UtcNow;
+        var assetSymbols = NormalizeSymbols(options.AssetSymbols);
+        if (assetSymbols.Count == 0)
+        {
+            return new CryptoUpDown5mBinanceTimedCloseCycleResult(0, 0, 0, 0, 0, 0, 0, 0);
+        }
+
+        var markets = await repository.GetCryptoUpDown5mGammaMarketsAsync(
+            assetSymbols,
+            options.MaxMarketsPerCycle,
+            cancellationToken);
+        var candidates = SelectBinanceTimedCloseCandidates(markets, assetSymbols, nowUtc).ToArray();
+        if (candidates.Length == 0)
+        {
+            return new CryptoUpDown5mBinanceTimedCloseCycleResult(markets.Count, 0, 0, 0, 0, 0, 0, 0);
+        }
+
+        var earliestStartUtc = candidates.Min(candidate => candidate.MarketStartUtc);
+        var latestStartUtc = candidates.Max(candidate => candidate.MarketStartUtc);
+        var resolvedMarkets = await repository.GetCryptoUpDown5mWebSocketResolvedMarketsAsync(
+            assetSymbols,
+            earliestStartUtc.AddMinutes(-1),
+            latestStartUtc.AddMinutes(1),
+            cancellationToken);
+        var resolvedKeys = resolvedMarkets
+            .Where(IsAcceptedResolvedMarketLedgerResult)
+            .Select(result => new AssetMarketStartKey(result.AssetSymbol.Trim().ToUpperInvariant(), result.MarketStartUtc))
+            .ToHashSet();
+
+        var alreadyResolved = 0;
+        var resolved = 0;
+        var skippedUncertain = 0;
+        var missingStartPrice = 0;
+        var missingClosePrice = 0;
+        var errors = 0;
+
+        foreach (var candidate in candidates)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            if (resolvedKeys.Contains(new AssetMarketStartKey(candidate.AssetSymbol, candidate.MarketStartUtc)))
+            {
+                alreadyResolved++;
+                continue;
+            }
+
+            try
+            {
+                var result = await TryCreateBinanceTimedCloseResultAsync(candidate, nowUtc, cancellationToken);
+                switch (result.Status)
+                {
+                    case BinanceTimedCloseResultStatus.Resolved:
+                        await repository.UpsertCryptoUpDown5mWebSocketResolvedMarketAsync(
+                            BuildResolvedMarketLedgerRow(candidate, result.Result!, nowUtc, SourceBinanceTimedClose),
+                            cancellationToken);
+                        resolved++;
+                        resolvedKeys.Add(new AssetMarketStartKey(candidate.AssetSymbol, candidate.MarketStartUtc));
+                        break;
+                    case BinanceTimedCloseResultStatus.Uncertain:
+                        skippedUncertain++;
+                        break;
+                    case BinanceTimedCloseResultStatus.MissingStartPrice:
+                        missingStartPrice++;
+                        break;
+                    case BinanceTimedCloseResultStatus.MissingClosePrice:
+                        missingClosePrice++;
+                        break;
+                }
+            }
+            catch (OperationCanceledException)
+            {
+                throw;
+            }
+            catch (Exception ex)
+            {
+                errors++;
+                logger.LogDebug(
+                    ex,
+                    "Crypto Up or Down 5m Binance timed close result failed. Asset={AssetSymbol} MarketSlug={MarketSlug}",
+                    candidate.AssetSymbol,
+                    candidate.MarketSlug);
+            }
+        }
+
+        return new CryptoUpDown5mBinanceTimedCloseCycleResult(
+            markets.Count,
+            candidates.Length,
+            alreadyResolved,
+            resolved,
+            skippedUncertain,
+            missingStartPrice,
+            missingClosePrice,
+            errors);
+    }
+
+    private async Task<BinanceTimedCloseResult> TryCreateBinanceTimedCloseResultAsync(
+        PollCandidate candidate,
+        DateTimeOffset observedAtUtc,
+        CancellationToken cancellationToken)
+    {
+        var start = await TryGetBinanceTimedCloseStartPriceAsync(candidate, cancellationToken);
+        if (start is null)
+        {
+            return BinanceTimedCloseResult.MissingStartPrice();
+        }
+
+        var close = await TryGetBinanceTimedClosePriceAsync(candidate.AssetSymbol, cancellationToken);
+        if (close is null)
+        {
+            return BinanceTimedCloseResult.MissingClosePrice();
+        }
+
+        var closeAge = observedAtUtc - close.Price.FetchedAtUtc;
+        if (closeAge < TimeSpan.Zero)
+        {
+            closeAge = TimeSpan.Zero;
+        }
+
+        var closeOffset = close.Price.SourceUpdatedAtUtc - candidate.MarketEndUtc;
+        var maxCloseAge = TimeSpan.FromMilliseconds(Math.Max(1, options.BinanceTimedCloseMaxPriceAgeMilliseconds));
+        if (closeAge > maxCloseAge || closeOffset.Duration() > maxCloseAge)
+        {
+            return BinanceTimedCloseResult.MissingClosePrice();
+        }
+
+        if (start.PriceUsd <= 0m || close.Price.PriceUsd <= 0m)
+        {
+            return start.PriceUsd <= 0m
+                ? BinanceTimedCloseResult.MissingStartPrice()
+                : BinanceTimedCloseResult.MissingClosePrice();
+        }
+
+        var moveUsd = close.Price.PriceUsd - start.PriceUsd;
+        var moveBps = moveUsd / start.PriceUsd * 10_000m;
+        var minMoveBps = Math.Max(0m, options.BinanceTimedCloseMinMoveBps);
+        if (Math.Abs(moveBps) < minMoveBps)
+        {
+            return BinanceTimedCloseResult.Uncertain();
+        }
+
+        var winningOutcome = moveBps > 0m ? "Up" : "Down";
+        var result = new InferredMarketResult(
+            winningOutcome,
+            TryGetOutcomeAssetId(candidate.Market, winningOutcome),
+            close.Price.SourceUpdatedAtUtc,
+            JsonSerializer.Serialize(new
+            {
+                source = SourceBinanceTimedClose,
+                provisional = true,
+                inferred_at_utc = observedAtUtc,
+                market_start_utc = candidate.MarketStartUtc,
+                market_end_utc = candidate.MarketEndUtc,
+                asset_symbol = candidate.AssetSymbol,
+                binance_symbol = close.BinanceSymbol,
+                start_price_usd = start.PriceUsd,
+                close_price_usd = close.Price.PriceUsd,
+                move_usd = moveUsd,
+                move_bps = moveBps,
+                min_move_bps = minMoveBps,
+                winning_outcome = winningOutcome,
+                start_price_sampled_at_utc = start.SampledAtUtc,
+                close_price_source_updated_at_utc = close.Price.SourceUpdatedAtUtc,
+                close_price_fetched_at_utc = close.Price.FetchedAtUtc,
+                close_price_age_ms = ToDecimalMilliseconds(closeAge),
+                close_price_offset_ms = ToDecimalMilliseconds(closeOffset),
+                max_close_price_age_or_offset_ms = Math.Max(1, options.BinanceTimedCloseMaxPriceAgeMilliseconds),
+                close_delay_ms = Math.Max(0, options.BinanceTimedCloseDelayMilliseconds)
+            }));
+        return BinanceTimedCloseResult.Resolved(result);
+    }
+
+    private async Task<BinanceTimedCloseStartPrice?> TryGetBinanceTimedCloseStartPriceAsync(
+        PollCandidate candidate,
+        CancellationToken cancellationToken)
+    {
+        if (string.Equals(candidate.AssetSymbol, "BTC", StringComparison.OrdinalIgnoreCase))
+        {
+            var ticks = await repository.GetBtcUpDown5mOddsTicksForMarketAsync(
+                candidate.Market.MarketId,
+                limit: 50,
+                cancellationToken);
+            var tick = ticks.FirstOrDefault(item => item.BinanceStartPriceUsd > 0m);
+            return tick is null
+                ? null
+                : new BinanceTimedCloseStartPrice(
+                    tick.BinanceStartPriceUsd,
+                    tick.SampledAtUtc,
+                    "BTCUSDT");
+        }
+
+        var cryptoTicks = await repository.GetCryptoUpDown5mOddsTicksForMarketAsync(
+            candidate.AssetSymbol,
+            candidate.Market.MarketId,
+            limit: 50,
+            cancellationToken);
+        var cryptoTick = cryptoTicks.FirstOrDefault(item => item.BinanceStartPriceUsd > 0m);
+        return cryptoTick is null
+            ? null
+            : new BinanceTimedCloseStartPrice(
+                cryptoTick.BinanceStartPriceUsd,
+                cryptoTick.SampledAtUtc,
+                cryptoTick.BinanceSymbol);
+    }
+
+    private async Task<BinanceTimedClosePrice?> TryGetBinanceTimedClosePriceAsync(
+        string assetSymbol,
+        CancellationToken cancellationToken)
+    {
+        if (string.Equals(assetSymbol, "BTC", StringComparison.OrdinalIgnoreCase))
+        {
+            try
+            {
+                var price = await btcUsdReferencePriceClient.GetBtcUsdPriceAsync(cancellationToken);
+                return new BinanceTimedClosePrice("BTCUSDT", price);
+            }
+            catch (InvalidOperationException)
+            {
+                return null;
+            }
+        }
+
+        try
+        {
+            var cryptoPrice = await cryptoReferencePriceClient.GetPriceAsync(assetSymbol, cancellationToken);
+            return new BinanceTimedClosePrice(
+                cryptoPrice.BinanceSymbol,
+                new BtcUsdReferencePricePoint(
+                    cryptoPrice.PriceUsd,
+                    cryptoPrice.SourceUpdatedAtUtc,
+                    cryptoPrice.FetchedAtUtc,
+                    cryptoPrice.Source));
+        }
+        catch (InvalidOperationException)
+        {
+            return null;
+        }
     }
 
     private async Task<PollResult> PollCandidateAsync(
@@ -567,6 +816,7 @@ public sealed class CryptoUpDown5mResultPollingProcessor(
             {
                 SourceGammaClosedMarket => "gamma_closed_market",
                 SourceReferenceStartEnd => "reference_start_end",
+                SourceBinanceTimedClose => "binance_timed_close_provisional",
                 _ => "terminal_order_book_provisional"
             },
             result.RawJson,
@@ -731,6 +981,27 @@ public sealed class CryptoUpDown5mResultPollingProcessor(
             .ToArray();
     }
 
+    private IReadOnlyList<PollCandidate> SelectBinanceTimedCloseCandidates(
+        IReadOnlyCollection<PolymarketGammaMarket> markets,
+        IReadOnlySet<string> assetSymbols,
+        DateTimeOffset nowUtc)
+    {
+        var closeDelay = TimeSpan.FromMilliseconds(Math.Max(0, options.BinanceTimedCloseDelayMilliseconds));
+        var maxAge = TimeSpan.FromSeconds(Math.Max(1, options.BinanceTimedCloseMaxCandidateAgeSeconds));
+        return markets
+            .Select(market => TryCreateCandidate(market, assetSymbols, nowUtc, maxAge, out var candidate)
+                ? candidate
+                : null)
+            .Where(candidate => candidate is not null)
+            .Select(candidate => candidate!)
+            .Where(candidate =>
+                nowUtc >= candidate.MarketEndUtc.Add(closeDelay) &&
+                nowUtc - candidate.MarketEndUtc <= maxAge)
+            .OrderBy(candidate => candidate.MarketEndUtc)
+            .ThenBy(candidate => candidate.AssetSymbol, StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+    }
+
     private static bool TryCreateCandidate(
         PolymarketGammaMarket market,
         IReadOnlySet<string> assetSymbols,
@@ -854,6 +1125,7 @@ public sealed class CryptoUpDown5mResultPollingProcessor(
     private static bool IsAcceptedResolvedMarketLedgerSource(string? source)
     {
         return string.Equals(source, SourceReferenceStartEnd, StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(source, SourceBinanceTimedClose, StringComparison.OrdinalIgnoreCase) ||
             string.Equals(source, SourceMarketWebSocket, StringComparison.OrdinalIgnoreCase) ||
             string.Equals(source, SourceTerminalOrderBook, StringComparison.OrdinalIgnoreCase) ||
             string.Equals(source, SourceGammaClosedMarket, StringComparison.OrdinalIgnoreCase);
@@ -866,6 +1138,48 @@ public sealed class CryptoUpDown5mResultPollingProcessor(
         string? WinningAssetId,
         DateTimeOffset EventTimestampUtc,
         string RawJson);
+
+    private sealed record BinanceTimedCloseStartPrice(
+        decimal PriceUsd,
+        DateTimeOffset SampledAtUtc,
+        string BinanceSymbol);
+
+    private sealed record BinanceTimedClosePrice(
+        string BinanceSymbol,
+        BtcUsdReferencePricePoint Price);
+
+    private enum BinanceTimedCloseResultStatus
+    {
+        Resolved,
+        Uncertain,
+        MissingStartPrice,
+        MissingClosePrice
+    }
+
+    private sealed record BinanceTimedCloseResult(
+        BinanceTimedCloseResultStatus Status,
+        InferredMarketResult? Result = null)
+    {
+        public static BinanceTimedCloseResult Resolved(InferredMarketResult result)
+        {
+            return new BinanceTimedCloseResult(BinanceTimedCloseResultStatus.Resolved, result);
+        }
+
+        public static BinanceTimedCloseResult Uncertain()
+        {
+            return new BinanceTimedCloseResult(BinanceTimedCloseResultStatus.Uncertain);
+        }
+
+        public static BinanceTimedCloseResult MissingStartPrice()
+        {
+            return new BinanceTimedCloseResult(BinanceTimedCloseResultStatus.MissingStartPrice);
+        }
+
+        public static BinanceTimedCloseResult MissingClosePrice()
+        {
+            return new BinanceTimedCloseResult(BinanceTimedCloseResultStatus.MissingClosePrice);
+        }
+    }
 
     private sealed record PollCandidate(
         string AssetSymbol,

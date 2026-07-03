@@ -1,3 +1,21 @@
+## Active Update 2026-07-03 Binance Timed Close Resolver
+Goal: Add a faster previous-market result path using Binance price data at the 5m market close, without Chainlink access.
+Status: Completed
+Done:
+- Added `BinanceTimedClose` as a provisional resolved-market source for Crypto Up/Down 5m markets.
+- Added `CryptoUpDown5mBinanceTimedCloseWorker`, running on a 500 ms interval by default, to scan just-ended BTC/ETH/SOL 5m markets after a 500 ms close delay.
+- The resolver reuses existing Binance trade-stream clients instead of adding a new REST side path, then writes to `crypto_up_down_5m_websocket_resolved_markets` only when both start and close prices are available and fresh.
+- Guard rails: candidate age defaults to 30 seconds; close price source timestamp and local fetch age must be within 1000 ms; absolute move must be at least 1 bps, otherwise the resolver skips as uncertain and the existing polling fallback remains responsible.
+- Added `BinanceTimedClose` to accepted resolved-ledger sources for result polling and Diff/previous-result strategy logic.
+- Added configuration options, appsettings defaults, validation, and focused tests for resolved and uncertain Binance timed close outcomes.
+Verification:
+- `dotnet build src/PolyCopyTrader.Service/PolyCopyTrader.Service.csproj --no-restore` passed with 0 warnings and 0 errors.
+- `dotnet test tests/PolyCopyTrader.Tests/PolyCopyTrader.Tests.csproj --filter "FullyQualifiedName~CryptoUpDown5mResultPollingProcessorTests|FullyQualifiedName~ConfigurationTests|FullyQualifiedName~ProcessPreviousResultDueEntriesAsync_EntersAfterResolvedLedgerArrives"` passed 46/46.
+- `git diff --check` passed before context update; rerun after context update before commit.
+Next: Deploy/restart the service so the Binance timed close worker starts. If official late reconciliation is desired, add a separate reconciler that compares provisional `BinanceTimedClose` rows with later Gamma/official outcomes without blocking entry latency.
+Notes: Source/test/config changes only. No production DB writes, Live setting changes, order submissions, cancels, or service restarts were performed in this task. Existing unrelated dirty files in storage tests, storage repository, history, artifacts, and outputs were left untouched.
+Blockers: None for this implementation.
+
 ## Active Update 2026-07-03 Remove Hidden Previous Result SLA
 Goal: Remove the hidden one-second previous-result/dependency wait and decide whether Polymarket or Binance is the fastest source for the previous 5m market result.
 Status: Completed
