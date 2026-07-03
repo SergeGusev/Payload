@@ -1,3 +1,18 @@
+## Active Update 2026-07-04 Service Heartbeat Stale And Bets Stopped
+Goal: Confirm whether the server, service, and bet placement are currently working.
+Status: Completed
+Done:
+- Confirmed PostgreSQL on `192.168.0.101:5432` is reachable and `pg_isready` reports accepting connections.
+- Read production PostgreSQL read-only at database time `2026-07-04 00:15:26+03`.
+- `PolyCopyTrader.Service` row still says `Running`/`Live`, but heartbeat is stale: latest heartbeat `2026-07-04 00:08:23+03`, age `422.5s`, `last_error` empty.
+- Service is still running build `info=1.0.0+a2fc59c...`; newer pushed `3cf5898` is not deployed/running.
+- Paper orders are not currently being created: `0` in last `5m`, latest Paper order `2026-07-04 00:08:30+03`; there were `145` in last `15m` because they are from before the stop.
+- Live orders are not currently being created: `0` in last `5m` and `0` in last `15m`; latest Live order `2026-07-03 23:34:30+03`.
+- API errors did not continue after `2026-07-04 00:03:57+03`; latest recent issue before the stop was Binance stale/WebSocket close.
+Next: Check/restart the Windows service on the server, then recheck heartbeat and new Paper orders.
+Notes: Read-only network and SQL checks only. No production writes, Live changes, order submissions, cancels, service restarts, source-code changes, build, or tests were performed.
+Blockers: Service heartbeat and order creation are stale despite PostgreSQL being reachable.
+
 ## Active Update 2026-07-04 ASUS Optimization Disabled Overnight
 Goal: Record the user's mitigation for suspected ASUS Optimization sleep behavior.
 Status: Completed

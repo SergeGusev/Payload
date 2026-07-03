@@ -201,3 +201,10 @@ Request:
 
 Result:
 Recorded the overnight mitigation: the suspected ASUS Optimization component was set to startup mode `Disabled` by the user. Noted that this prevents future starts but does not stop an already running service unless its current state is also `Stopped`. Recommended checking the service state and then reviewing overnight Windows sleep/wake events after the night. No production writes, Live changes, orders, cancels, service restart, source-code changes, build, or tests were performed.
+
+## 2026-07-03T21:15:39.9458013Z
+Request:
+Подтверди, что сейчас всё работает и ставки ставятся
+
+Result:
+Checked production read-only. PostgreSQL on `192.168.0.101:5432` is reachable and `pg_isready` reports accepting connections, but current service/order flow is not healthy. At database time `2026-07-04 00:15:26+03`, `PolyCopyTrader.Service` still showed `Running`/`Live`, but latest heartbeat was `2026-07-04 00:08:23+03`, age `422.5s`, with empty `last_error`. The running build is still `info=1.0.0+a2fc59c...`, so pushed hotfix `3cf5898` is not deployed/running. Paper orders are not currently being created: `0` in last `5m`, latest Paper order `2026-07-04 00:08:30+03`; `145` in last `15m` were from before the stop. Live orders are also not being created: `0` in last `5m` and `15m`, latest Live order `2026-07-03 23:34:30+03`. API errors did not continue after `2026-07-04 00:03:57+03`; the last recent issues before the stop were Binance stale/WebSocket close errors. Conclusion: database is alive, but service heartbeat/order creation are stale and bets are not currently being placed. No production writes, Live changes, order submissions, cancels, service restart, source-code changes, build, or tests were performed.
