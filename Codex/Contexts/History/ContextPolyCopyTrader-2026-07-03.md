@@ -89,3 +89,10 @@ Request:
 
 Result:
 Re-checked connectivity to `192.168.0.101`. Network status changed: ping still failed, but TCP connection to PostgreSQL port `5432` succeeded and `pg_isready` reported accepting connections. A read-only `psql` attempt reached PostgreSQL but failed before running SQL with `FATAL: sorry, too many clients already`, meaning PostgreSQL is reachable but all client slots are exhausted. No production DB writes, Live changes, order submissions, cancels, service restarts, source-code changes, build, or tests were performed.
+
+## 2026-07-03T16:16:09.8811879Z
+Request:
+а сейчас?
+
+Result:
+Re-checked server database connectivity. `192.168.0.101:5432` is reachable, `pg_isready` reports accepting connections, and a read-only `psql` query succeeded against database `polycopytrader`: server UTC time `2026-07-03 16:16:04.714928`, `strategies_count=8182`. Ping still fails, but PostgreSQL itself is reachable and usable. No production DB writes, Live changes, order submissions, cancels, service restarts, source-code changes, build, or tests were performed.

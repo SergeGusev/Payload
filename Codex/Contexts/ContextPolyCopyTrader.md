@@ -1,3 +1,14 @@
+## Active Update 2026-07-03 Server Database Reachable Again
+Goal: Re-check whether the server PostgreSQL database is reachable now.
+Status: Completed
+Done:
+- Repeated connectivity check to `192.168.0.101`.
+- Current status: `ping=false`, but TCP connection to PostgreSQL port `5432=true`; `pg_isready` reports accepting connections.
+- A read-only `psql` query succeeded: database `polycopytrader`, server UTC time `2026-07-03 16:16:04.714928`, and `strategies_count=8182`.
+Next: Dashboard should be able to connect now; if it still fails, restart/refresh Dashboard to clear its old error state.
+Notes: Read-only PostgreSQL check only. No source-code changes, production DB writes, Live changes, order submissions, cancels, service restarts, build, or tests were performed.
+Blockers: None.
+
 ## Active Update 2026-07-03 Server Database Port Recovered Too Many Clients
 Goal: Re-check whether the server PostgreSQL database is reachable now.
 Status: Completed
