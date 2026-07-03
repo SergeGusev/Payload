@@ -1,3 +1,13 @@
+## Active Update 2026-07-04 ASUS Optimization Disabled Overnight
+Goal: Record the user's mitigation for suspected ASUS Optimization sleep behavior.
+Status: Completed
+Done:
+- User set the suspected ASUS Optimization component startup mode to `Disabled` and plans to observe whether the server survives the night.
+- Noted that `StartupType=Disabled` prevents future starts but does not stop an already running service until its `State` is also `Stopped`.
+Next: After the night, check Windows System sleep/wake events and confirm the ASUS service remained `Disabled`/`Stopped`.
+Notes: Advisory/context update only. No production writes, Live changes, order submissions, cancels, service restarts, source-code changes, build, or tests were performed.
+Blockers: Need overnight result and server-side service/event output.
+
 ## Active Update 2026-07-04 ASUS Optimization Sleep Hypothesis
 Goal: Respond to the hypothesis that ASUS Optimization reappeared and put the server to sleep again.
 Status: Completed

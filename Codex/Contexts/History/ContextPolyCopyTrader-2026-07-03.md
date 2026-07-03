@@ -194,3 +194,10 @@ Request:
 
 Result:
 Treated ASUS Optimization as a plausible but unproven cause of the latest host outage. Explained that the evidence so far shows full host/network unreachability, not a PostgreSQL-only failure, and that proof requires server-side checks for ASUS services, drivers, scheduled tasks, Store packages, and sleep/wake/install events. Recommended first keeping AC sleep, hibernate, and unattended sleep disabled, then enumerating `ASUSOptimization`, `asussci2.inf`, MyASUS, Armoury Crate, and ASUS scheduled tasks before removing or blocking the component. No production writes, Live changes, order submissions, cancels, service restarts, source-code changes, build, or tests were performed.
+
+## 2026-07-03T21:11:57.2696313Z
+Request:
+Я сделал его Startup режим Disabled, пока он лежит. Посмотрим, как ночь пройдёт
+
+Result:
+Recorded the overnight mitigation: the suspected ASUS Optimization component was set to startup mode `Disabled` by the user. Noted that this prevents future starts but does not stop an already running service unless its current state is also `Stopped`. Recommended checking the service state and then reviewing overnight Windows sleep/wake events after the night. No production writes, Live changes, orders, cancels, service restart, source-code changes, build, or tests were performed.
