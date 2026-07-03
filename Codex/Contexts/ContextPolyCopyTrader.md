@@ -1,3 +1,16 @@
+## Active Update 2026-07-03 Bet Placement Status Check
+Goal: Check whether bets are currently being placed after PostgreSQL became reachable again.
+Status: Completed
+Done:
+- Queried production PostgreSQL `192.168.0.101/polycopytrader` read-only.
+- Confirmed `PolyCopyTrader.Service` heartbeat is fresh and running in `Live` mode: last heartbeat `2026-07-03T16:18:15.977752Z`, age about `25` seconds at query time, current loop `BTC5mOnly WatchlistScanner=CommentedOut; FollowLeaderSignals=CommentedOut`.
+- Paper orders are actively being created: `106` in the last `5` minutes, `291` in the last `15` minutes, `949` in the last `60` minutes; latest Paper order was about `1` second old at `2026-07-03T16:18:39.909870Z`.
+- Live orders are not currently being created: `0` in the last `5` minutes, `0` in the last `15` minutes, `4` in the last `60` minutes; latest Live order was `2026-07-03T15:34:30.028206Z`, about `44` minutes old at query time.
+- Found `4` effective Live-enabled strategies: `eth_up_down_5m_up_bps_50_instant`, `sol_up_down_5m_down_bps_8_fak_premarket`, `sol_up_down_5m_down_bps_85_fak_premarket`, and `sol_up_down_5m_down_bps_90_fak_premarket`.
+Next: If Live order freshness matters, inspect recent skip reasons for the four Live-enabled strategies.
+Notes: Read-only PostgreSQL check only. No source-code changes, production DB writes, Live changes, order submissions, cancels, service restarts, build, or tests were performed.
+Blockers: None.
+
 ## Active Update 2026-07-03 Server Database Reachable Again
 Goal: Re-check whether the server PostgreSQL database is reachable now.
 Status: Completed

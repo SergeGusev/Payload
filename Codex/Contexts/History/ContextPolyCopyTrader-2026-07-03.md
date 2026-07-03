@@ -96,3 +96,10 @@ Request:
 
 Result:
 Re-checked server database connectivity. `192.168.0.101:5432` is reachable, `pg_isready` reports accepting connections, and a read-only `psql` query succeeded against database `polycopytrader`: server UTC time `2026-07-03 16:16:04.714928`, `strategies_count=8182`. Ping still fails, but PostgreSQL itself is reachable and usable. No production DB writes, Live changes, order submissions, cancels, service restarts, source-code changes, build, or tests were performed.
+
+## 2026-07-03T16:19:22.2844454Z
+Request:
+Ставки ставятся?
+
+Result:
+Checked production PostgreSQL `192.168.0.101/polycopytrader` read-only. Service heartbeat was fresh and running in `Live` mode: `PolyCopyTrader.Service` last heartbeat `2026-07-03T16:18:15.977752Z`, about `25` seconds old at query time. Paper orders are actively being placed: `106` in last `5` minutes, `291` in last `15` minutes, `949` in last `60` minutes; latest Paper order was about `1` second old at `2026-07-03T16:18:39.909870Z`. Live orders were not currently being created: `0` in last `5` minutes, `0` in last `15` minutes, `4` in last `60` minutes; latest Live order was `2026-07-03T15:34:30.028206Z`. There are `4` effective Live-enabled strategies: `eth_up_down_5m_up_bps_50_instant`, `sol_up_down_5m_down_bps_8_fak_premarket`, `sol_up_down_5m_down_bps_85_fak_premarket`, and `sol_up_down_5m_down_bps_90_fak_premarket`. No production DB writes, Live changes, order submissions, cancels, service restarts, source-code changes, build, or tests were performed.
