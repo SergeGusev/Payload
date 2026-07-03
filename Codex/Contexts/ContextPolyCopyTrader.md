@@ -1,3 +1,19 @@
+## Active Update 2026-07-03 Production Paper History Reset
+Goal: Clear old production Paper history without deleting Live orders while the service was being redeployed.
+Status: Completed
+Done:
+- Ran production cleanup against remote PostgreSQL `192.168.0.101` / `polycopytrader` using the existing environment connection with host override.
+- Confirmed before cleanup that `live_orders` had rows but no Live rows were deleted; `755` existing `live_orders.paper_order_id` links had to be unlinked by the reset utility because `live_orders.paper_order_id` references `paper_orders(id)`.
+- Cleared old Paper-dependent history in batches with short lock/statement timeouts: `paper_fills`, `strategy_market_paper_runs`, `paper_positions`, `paper_position_settlements`, `paper_copied_trader_performance`, copied-leader Paper tables, on-chain Paper signal results, and Paper live-shadow decisions/discrepancies.
+- The first reset utility timed out from the tool side after applying most dependent deletes and part of `paper_orders`; after it completed, continued deleting old `paper_orders` manually in smaller `1000` row batches.
+- Deleted the remaining old `paper_orders` up to cleanup start cutoff `2026-07-03T06:30:39Z`; final verification showed `paper_orders_old_cutoff=0`, `paper_fills_old_cutoff=0`, and `strategy_market_paper_runs_old_cutoff=0`.
+- Cleared stale Dashboard Paper performance snapshots and reset diff-shift progress state by deleting `dashboard_strategy_performance_snapshots`, `dashboard_strategy_recent_performance_snapshots`, and `crypto_up_down_5m_diff_shift_progress_states`.
+- Preserved new post-cutoff Paper rows written by the freshly deployed service: final verification had `paper_orders=981`, `paper_orders_v2=733`, `paper_fills=836`, `paper_positions=850`, `paper_position_settlements=628`, `strategy_market_paper_runs=23379`, `paper_live_shadow_decisions=14`, and `live_orders_with_paper_order_id=14`.
+- Confirmed final Live rows remained present: `live_orders=2392` with statuses `CancelFailed=116`, `Cancelled=8`, `Matched=2105`, `PreflightRejected=105`, `Rejected=58`; no Live rows were deleted.
+Next: Let the service rebuild Dashboard snapshots from the new post-cutoff Paper data; old Paper history is gone, but Live history remains.
+Notes: Production DB writes were limited to Paper history/snapshots/state plus nullable `live_orders.paper_order_id` unlinking required by FK constraints. No Live orders were deleted, no order submissions/cancels were made, no source-code behavior changes were made. One `ANALYZE` step stopped on lock timeout after the deletes had committed; final read-only verification passed for the Paper reset counts.
+Blockers: None.
+
 ## Active Update 2026-07-03 Historical Paper Reliability Assessment
 Goal: Estimate whether accumulated Paper history can still be used after changing Paper FAK accounting.
 Status: Completed

@@ -28,6 +28,13 @@ Request:
 
 Result:
 Clarified that fresh partial ask depth should be recorded as a partial Paper FAK fill, not skipped. The skip recommendation applies to stale/missing/non-executable snapshots where the depth is not reliable or there are zero executable shares within the cap. Source inspection showed `TakerBuyFillEstimator.Estimate` already supports partial FAK fills by filling available ask depth within `maxAllowedPrice` and recording the lower actual notional. No source-code behavior changes, production writes, Live changes, orders, restarts, build, or tests were performed.
+## 2026-07-03T07:12:45.5229925Z
+Request:
+Ладно, давай чисть всю старую историю. Аккуратно, медленно, так, чтобы не мешать текущей работе. / Live ордера не чисть, только Paper
+
+Result:
+Cleared old production Paper history on remote PostgreSQL `192.168.0.101/polycopytrader` with cutoff `2026-07-03T06:30:39Z`. No Live orders were deleted. The reset utility unlinked old `live_orders.paper_order_id` references required by FK constraints, then Paper dependent rows were deleted in batches. After the tool-side timeout, the remaining old `paper_orders` were deleted manually in smaller 1000-row batches. Final verification: `paper_orders_old_cutoff=0`, `paper_fills_old_cutoff=0`, `strategy_market_paper_runs_old_cutoff=0`, Dashboard performance snapshots `0`, recent snapshots `0`, diff-shift state `0`. New post-cutoff Paper rows were preserved: `paper_orders=981` (`733` v2), `paper_fills=836`, `strategy_market_paper_runs=23379`, `paper_positions=850`, `paper_position_settlements=628`, `paper_live_shadow_decisions=14`, `live_orders_with_paper_order_id=14`. Live rows remained: `live_orders=2392` with statuses `CancelFailed=116`, `Cancelled=8`, `Matched=2105`, `PreflightRejected=105`, `Rejected=58`.
+
 ## 2026-07-03T06:16:50.1512427Z
 Request:
 Пока я перевыкладываю, попробуй оценить уровень достоверности текущей истории по шкале от 1 (нужно всё чистить и копить заново) до 10 (можно в принципе ориентироваться на неё)
