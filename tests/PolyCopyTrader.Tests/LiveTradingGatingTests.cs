@@ -687,7 +687,7 @@ public sealed class LiveTradingGatingTests
     }
 
     [Fact]
-    public async Task LiveProcessorReconcilesShadowFillFromDataApiPosition()
+    public async Task LiveProcessorDoesNotSettleShadowFillFromAggregateDataApiPosition()
     {
         var repository = new TestAppRepository();
         var now = DateTimeOffset.UtcNow;
@@ -766,20 +766,27 @@ public sealed class LiveTradingGatingTests
                 ]),
             new PolymarketAuthOptions { FunderAddress = Wallet });
 
-        await processor.ProcessOpenOrdersAsync();
+        var result = await processor.ProcessOpenOrdersAsync();
 
         var liveOrder = Assert.Single(repository.LiveOrders);
-        Assert.Equal(LiveOrderStatus.Matched, liveOrder.Status);
-        Assert.Equal("data_api_current_position_reconciled", liveOrder.ResponseStatus);
-        Assert.Equal(6.9m, liveOrder.FilledSize);
-        Assert.Equal(0m, liveOrder.RemainingSize);
-        Assert.Equal(0.29m, liveOrder.AverageFillPrice);
-        Assert.Equal(2.001m, liveOrder.FilledNotionalUsd);
-        var paperFill = Assert.Single(repository.PaperFills);
-        Assert.Equal(6.9m, paperFill.SizeShares);
-        Assert.Equal(0.29m, paperFill.Price);
-        Assert.Equal(PaperOrderStatus.Filled, Assert.Single(repository.PaperOrders).Status);
-        Assert.Single(repository.LiveTradingEvents, item => item.Action == "LiveDataApiPositionReconciliation" && item.Status == "OK");
+        Assert.Equal(1, result.DataApiPositionObservations);
+        Assert.Equal(LiveOrderStatus.CancelFailed, liveOrder.Status);
+        Assert.Equal("live", liveOrder.ResponseStatus);
+        Assert.Equal(0m, liveOrder.FilledSize);
+        Assert.Equal(6.9m, liveOrder.RemainingSize);
+        Assert.Null(liveOrder.AverageFillPrice);
+        Assert.Equal(0m, liveOrder.FilledNotionalUsd);
+        Assert.Equal(0m, liveOrder.CostBasisUsd);
+        Assert.False(liveOrder.BalanceEffectApplied);
+        Assert.Contains("exact per-order fill not applied", liveOrder.ValidationSummary, StringComparison.OrdinalIgnoreCase);
+        Assert.Empty(repository.PaperFills);
+        Assert.Equal(PaperOrderStatus.Cancelled, Assert.Single(repository.PaperOrders).Status);
+        Assert.Single(repository.LiveTradingEvents, item => item.Action == "LiveDataApiPositionObservation" && item.Status == "Warning");
+
+        var secondResult = await processor.ProcessOpenOrdersAsync();
+
+        Assert.Equal(0, secondResult.DataApiPositionObservations);
+        Assert.Single(repository.LiveTradingEvents, item => item.Action == "LiveDataApiPositionObservation");
     }
 
     [Fact]

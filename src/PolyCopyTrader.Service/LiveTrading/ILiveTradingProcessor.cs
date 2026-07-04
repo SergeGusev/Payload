@@ -12,4 +12,4 @@ public sealed record LiveTradingProcessingResult(
     int OrdersPolled,
     int OrdersCanceled,
     int BalanceSettlementsApplied = 0,
-    int DataApiReconciledOrders = 0);
+    int DataApiPositionObservations = 0);

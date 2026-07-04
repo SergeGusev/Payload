@@ -485,6 +485,10 @@ trading does not use this balance.
 Live order response bodies are stored in PostgreSQL `jsonb`. Plain-text CLOB
 error bodies, such as temporary service-unavailable messages, are wrapped before
 storage so they are still persisted without causing a JSON cast failure.
+Live FAK accounting uses exact CLOB order-level fill data when available.
+Aggregate Polymarket Data API positions are recorded only as observations and do
+not update per-order filled size, average fill price, Paper-shadow fills, or
+realized Live PnL.
 Paper/Live-shadow persistence failures are logged and cancel the affected
 submitted order when possible, but they do not clear the strategy Live flag;
 strategy Live is still disabled by explicit risk failures such as insufficient

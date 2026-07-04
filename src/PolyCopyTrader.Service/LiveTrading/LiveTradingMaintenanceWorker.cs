@@ -26,15 +26,15 @@ public sealed class LiveTradingMaintenanceWorker(
                     result.OrdersPolled > 0 ||
                     result.OrdersCanceled > 0 ||
                     result.BalanceSettlementsApplied > 0 ||
-                    result.DataApiReconciledOrders > 0)
+                    result.DataApiPositionObservations > 0)
                 {
                     logger.LogInformation(
-                        "Live trading maintenance cycle completed. OpenChecked={OpenChecked} Polled={Polled} Canceled={Canceled} BalanceSettled={BalanceSettled} DataApiReconciled={DataApiReconciled}",
+                        "Live trading maintenance cycle completed. OpenChecked={OpenChecked} Polled={Polled} Canceled={Canceled} BalanceSettled={BalanceSettled} DataApiPositionObserved={DataApiPositionObserved}",
                         result.OpenOrdersChecked,
                         result.OrdersPolled,
                         result.OrdersCanceled,
                         result.BalanceSettlementsApplied,
-                        result.DataApiReconciledOrders);
+                        result.DataApiPositionObservations);
                 }
             }
             catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)

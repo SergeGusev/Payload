@@ -1,3 +1,16 @@
+## Active Update 2026-07-04 Exact Live Fill Accounting
+Goal: Stop using aggregate Polymarket Data API positions as per-order Live fill/PnL evidence.
+Status: Completed
+Done:
+- Changed Live maintenance so matching Data API wallet positions are recorded only as `LiveDataApiPositionObservation` warnings with a validation marker.
+- Data API aggregate positions no longer set `live_orders.filled_size`, `average_fill_price`, `filled_notional_usd`, `cost_basis_usd`, status `Matched`, Paper-shadow fills, or realized Live PnL.
+- Renamed the maintenance result/log field from Data API reconciliation to Data API position observation.
+- Updated the focused LiveTrading test to assert aggregate Data API positions do not settle a Live-shadow order and do not repeat the warning after the marker is recorded.
+- Updated README and configuration reference to document that Live FAK accounting requires exact CLOB order-level fill data.
+Next: Deploy/restart the service; then optionally repair existing `data_api_*_position_reconciled` rows whose PnL was already settled from aggregate Data API positions.
+Notes: `dotnet build src\PolyCopyTrader.Service\PolyCopyTrader.Service.csproj --no-restore -p:UseSharedCompilation=false -p:OutDir="$env:TEMP\PolyCopyTraderServiceLiveExactBuild\"` passed with existing nullable warnings. First focused test attempt hit a locked compiler output file; after `dotnet build-server shutdown`, `dotnet test tests\PolyCopyTrader.Tests\PolyCopyTrader.Tests.csproj --no-restore -p:UseSharedCompilation=false --filter "FullyQualifiedName~LiveTradingGatingTests|FullyQualifiedName~AuthPlaceholderTests.LiveOrderPlacementAccounting"` passed 22/22. `git diff --check` for changed files passed with only existing line-ending warnings.
+Blockers: Historical rows already settled from Data API aggregate observations remain as-is until an explicit DB repair task is run.
+
 ## Active Update 2026-07-04 ETH Down 6 Live PnL Reconciliation
 Goal: Explain why the winning `ETH Up or Down 5m Down 6 bps Reference Average Premarket` Live bet showed very small profit.
 Status: Completed

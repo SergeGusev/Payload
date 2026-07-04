@@ -11,3 +11,10 @@ Request:
 
 Result:
 Queried production PostgreSQL read-only at `192.168.0.101`. The winning Live order `29bc3286-462b-4717-8e1a-818069e52c31` was recorded as `6.07` shares at `0.99`, cost `6.0093`, settlement value `6.07`, and realized PnL `0.0607`. In the same ETH 6:40-6:45 market, five Live orders bought `Up`: three direct CLOB `matched` responses recorded true fill prices around `0.52` and PnL around `$5.3-$5.6`, while `Down 1` and `Down 6` lacked direct CLOB making/taking amounts and were reconciled from the aggregate Data API position, causing the code to fall back to worst price `0.99`. Paper shadow for `Down 6` saw `best_ask=0.51` and simulated about `$6` filled at average `0.51`; aggregate Data API size matched the five-order paper expected shares. Conclusion: the small displayed profit is a Live reconciliation/accounting artifact, not evidence that the real fill was near `0.99`. No production writes, source changes, service restarts, order submissions, or cancels were performed.
+
+## 2026-07-04T11:10:27.5207434+00:00
+Request:
+Давай ориентироваться на точные данный из Polimarket для живых ставок, иначе у меня не будет объективной информации
+
+Result:
+Changed Live maintenance so aggregate Polymarket Data API wallet positions are recorded only as `LiveDataApiPositionObservation` warnings and no longer update per-order Live fill fields, Paper-shadow fills, or realized Live PnL. Exact Live FAK accounting now remains tied to CLOB order-level fill data such as `makingAmount`/`takingAmount`; if exact order-level fill is missing, the order is marked diagnostically instead of being settled from aggregate Data API position size/price. Renamed the maintenance result/log field to Data API position observation, updated focused tests, README, and configuration reference. Verification passed after shutting down a stale compiler server: focused LiveTrading tests 22/22, service build with existing nullable warnings, and diff check with only line-ending warnings. No production DB writes, service restart, order submissions, or cancels were performed.

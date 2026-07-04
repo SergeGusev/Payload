@@ -24,18 +24,19 @@ public sealed class LiveTradingProcessor(
     PolymarketAuthOptions? authOptions = null) : ILiveTradingProcessor
 {
     private const string PaperLiveShadowTestSource = "paper_live_shadow_test";
+    private const string DataApiPositionObservationMarker = "Data API aggregate position observed; exact per-order fill not applied.";
     private const decimal ShadowPriceTolerance = 0.000001m;
     private const decimal FillSizeTolerance = 0.000001m;
     private static readonly TimeSpan StrategyPauseLookback = TimeSpan.FromHours(12);
 
     public async Task<LiveTradingProcessingResult> ProcessOpenOrdersAsync(CancellationToken cancellationToken = default)
     {
-        var dataApiReconciledOrders = await ReconcileRecentLiveOrdersFromDataApiPositionsAsync(cancellationToken);
+        var dataApiPositionObservations = await ObserveRecentLiveOrderDataApiPositionsAsync(cancellationToken);
         var balanceSettlementsApplied = await SettleMatchedOrdersAsync(cancellationToken);
         var openOrders = await repository.GetOpenLiveOrdersAsync(cancellationToken);
         if (openOrders.Count == 0)
         {
-            return new LiveTradingProcessingResult(0, 0, 0, balanceSettlementsApplied, dataApiReconciledOrders);
+            return new LiveTradingProcessingResult(0, 0, 0, balanceSettlementsApplied, dataApiPositionObservations);
         }
 
         var polled = 0;
@@ -82,10 +83,10 @@ public sealed class LiveTradingProcessor(
             }
         }
 
-        return new LiveTradingProcessingResult(openOrders.Count, polled, canceled, balanceSettlementsApplied, dataApiReconciledOrders);
+        return new LiveTradingProcessingResult(openOrders.Count, polled, canceled, balanceSettlementsApplied, dataApiPositionObservations);
     }
 
-    private async Task<int> ReconcileRecentLiveOrdersFromDataApiPositionsAsync(CancellationToken cancellationToken)
+    private async Task<int> ObserveRecentLiveOrderDataApiPositionsAsync(CancellationToken cancellationToken)
     {
         if (dataApiClient is null || authOptions is null || string.IsNullOrWhiteSpace(authOptions.FunderAddress))
         {
@@ -95,6 +96,7 @@ public sealed class LiveTradingProcessor(
         var recentOrders = await repository.GetRecentLiveOrdersAsync(100, cancellationToken);
         var candidates = recentOrders
             .Where(IsDataApiPositionReconciliationCandidate)
+            .Where(order => !HasDataApiPositionObservation(order))
             .ToArray();
         if (candidates.Length == 0)
         {
@@ -125,9 +127,9 @@ public sealed class LiveTradingProcessor(
         }
         catch (Exception ex)
         {
-            logger.LogWarning(ex, "Live Data API position reconciliation failed.");
+            logger.LogWarning(ex, "Live Data API position observation failed.");
             await repository.AddLiveTradingEventAsync(
-                new LiveTradingEvent(Guid.NewGuid(), "LiveDataApiPositionReconciliation", "Error", ex.Message, DateTimeOffset.UtcNow),
+                new LiveTradingEvent(Guid.NewGuid(), "LiveDataApiPositionObservation", "Error", ex.Message, DateTimeOffset.UtcNow),
                 cancellationToken);
             return 0;
         }
@@ -146,21 +148,14 @@ public sealed class LiveTradingProcessor(
                 continue;
             }
 
-            var updatedOrder = ApplyDataApiPositionFill(order, position, DateTimeOffset.UtcNow);
-            if (updatedOrder.FilledSize <= order.FilledSize + FillSizeTolerance)
-            {
-                continue;
-            }
-
+            var updatedOrder = ApplyDataApiPositionObservation(order, position, DateTimeOffset.UtcNow);
             await repository.UpdateLiveOrderAsync(updatedOrder, cancellationToken);
-            exposureCache.ApplyLiveOrder(updatedOrder);
-            await SyncPaperShadowAsync(updatedOrder, cancellationToken);
             await repository.AddLiveTradingEventAsync(
                 new LiveTradingEvent(
                     Guid.NewGuid(),
-                    "LiveDataApiPositionReconciliation",
-                    "OK",
-                    $"LiveOrderId={updatedOrder.Id}; status={position.Status}; filled={updatedOrder.FilledSize:0.########}; avg={updatedOrder.AverageFillPrice:0.########}.",
+                    "LiveDataApiPositionObservation",
+                    "Warning",
+                    $"LiveOrderId={updatedOrder.Id}; status={position.Status}; observedShares={GetObservedFilledShares(position):0.########}; avg={position.AvgPrice:0.########}; exactFillApplied=false.",
                     updatedOrder.UpdatedAtUtc),
                 cancellationToken);
             reconciled++;
@@ -203,49 +198,38 @@ public sealed class LiveTradingProcessor(
             .FirstOrDefault(position => GetObservedFilledShares(position) > FillSizeTolerance);
     }
 
-    private static LiveOrder ApplyDataApiPositionFill(
+    private static bool HasDataApiPositionObservation(LiveOrder order)
+    {
+        return order.ValidationSummary.Contains(
+            DataApiPositionObservationMarker,
+            StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static LiveOrder ApplyDataApiPositionObservation(
         LiveOrder order,
         PolymarketDataApiPosition position,
         DateTimeOffset now)
     {
-        var observedFilledShares = Math.Min(order.SizeShares, GetObservedFilledShares(position));
-        var filledSize = Math.Max(order.FilledSize, observedFilledShares);
-        var remaining = Math.Max(0m, order.SizeShares - filledSize);
-        var fillPrice = position.AvgPrice > 0m
-            ? position.AvgPrice
-            : order.AverageFillPrice ?? order.Price;
-        var filledNotional = filledSize * fillPrice;
-        var raw = JsonSerializer.Serialize(new
-        {
-            source = "data_api_position_reconciliation",
-            position_status = position.Status.ToString(),
-            wallet = position.Wallet,
-            asset_id = position.AssetId,
-            condition_id = position.ConditionId,
-            outcome = position.Outcome,
-            total_bought = position.TotalBought,
-            size = position.Size,
-            avg_price = position.AvgPrice,
-            current_value = position.CurrentValue,
-            cash_pnl = position.CashPnl,
-            realized_pnl = position.RealizedPnl,
-            raw_position = position.RawJson
-        });
+        var observedShares = GetObservedFilledShares(position);
+        var observation = $"{DataApiPositionObservationMarker} position_status={position.Status}; observed_shares={observedShares:0.########}; avg_price={position.AvgPrice:0.########}.";
 
         return order with
         {
-            Status = LiveOrderStatus.Matched,
-            ResponseStatus = position.Status == PolymarketDataApiPositionStatus.Closed
-                ? "data_api_closed_position_reconciled"
-                : "data_api_current_position_reconciled",
-            FilledSize = filledSize,
-            RemainingSize = remaining,
-            AverageFillPrice = fillPrice,
-            FilledNotionalUsd = filledNotional,
-            CostBasisUsd = filledNotional + order.FeeUsd,
-            RawResponseJson = raw,
+            ValidationSummary = AppendValidationSummary(order.ValidationSummary, observation),
             UpdatedAtUtc = now
         };
+    }
+
+    private static string AppendValidationSummary(string existing, string addition)
+    {
+        if (string.IsNullOrWhiteSpace(existing))
+        {
+            return addition;
+        }
+
+        return existing.Contains(addition, StringComparison.OrdinalIgnoreCase)
+            ? existing
+            : existing.TrimEnd() + "; " + addition;
     }
 
     private static decimal GetObservedFilledShares(PolymarketDataApiPosition position)
