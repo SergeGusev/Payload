@@ -216,6 +216,18 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
     [ObservableProperty]
     private bool showOnlyBigSettlesStrategy1Hour;
 
+    [ObservableProperty]
+    private bool hideProgressStrategies;
+
+    [ObservableProperty]
+    private bool hideProgressStrategy24Hours;
+
+    [ObservableProperty]
+    private bool hideProgressStrategy6Hours;
+
+    [ObservableProperty]
+    private bool hideProgressStrategy1Hour;
+
     public ObservableCollection<OverviewMetric> Overview { get; } = [];
 
     public ObservableCollection<WatchlistRow> Watchlist { get; } = [];
@@ -436,6 +448,26 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
     }
 
     partial void OnShowOnlyBigSettlesStrategy1HourChanged(bool value)
+    {
+        ApplyStrategyFilters();
+    }
+
+    partial void OnHideProgressStrategiesChanged(bool value)
+    {
+        ApplyStrategyFilters();
+    }
+
+    partial void OnHideProgressStrategy24HoursChanged(bool value)
+    {
+        ApplyStrategyFilters();
+    }
+
+    partial void OnHideProgressStrategy6HoursChanged(bool value)
+    {
+        ApplyStrategyFilters();
+    }
+
+    partial void OnHideProgressStrategy1HourChanged(bool value)
     {
         ApplyStrategyFilters();
     }
@@ -1446,6 +1478,7 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
             Strategies,
             allStrategies
                 .Where(item => IsStrategyCategoryVisible(item.Name, SelectedStrategyCategory))
+                .Where(item => IsStrategyProgressVisible(item.Name, HideProgressStrategies))
                 .Where(item => IsStrategyPositiveVisible(item, ShowOnlyPositiveStrategies))
                 .Where(item => IsStrategyEnabledVisible(item, ShowOnlyEnabledStrategies))
                 .Where(item => IsStrategyLiveVisible(item, ShowOnlyLiveStrategies))
@@ -1456,6 +1489,7 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
             StrategyRecentPerformance,
             allStrategyRecentPerformance
                 .Where(item => IsStrategyCategoryVisible(item.Name, SelectedStrategyCategory))
+                .Where(item => IsStrategyProgressVisible(item.Name, HideProgressStrategies))
                 .Where(item => IsStrategyRecentEnabledVisible(item, ShowOnlyEnabledStrategies, enabledStrategyNames))
                 .Where(item => IsStrategyRecentLiveVisible(item, ShowOnlyLiveStrategies))
                 .Where(item => IsStrategyRecentBigRoiVisible(item, ShowOnlyBigRoiStrategies))
@@ -1466,6 +1500,7 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
             allStrategyRecentPerformance
                 .Where(item => string.Equals(item.Window, "24h", StringComparison.OrdinalIgnoreCase))
                 .Where(item => IsStrategyCategoryVisible(item.Name, SelectedStrategy24HoursCategory))
+                .Where(item => IsStrategyProgressVisible(item.Name, HideProgressStrategy24Hours))
                 .Where(item => IsStrategyRecentPositiveVisible(item, ShowOnlyPositiveStrategy24Hours))
                 .Where(item => IsStrategyRecentEnabledVisible(item, ShowOnlyEnabledStrategy24Hours, enabledStrategyNames))
                 .Where(item => IsStrategyRecentLiveVisible(item, ShowOnlyLiveStrategy24Hours))
@@ -1477,6 +1512,7 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
             allStrategyRecentPerformance
                 .Where(item => string.Equals(item.Window, "6h", StringComparison.OrdinalIgnoreCase))
                 .Where(item => IsStrategyCategoryVisible(item.Name, SelectedStrategy6HoursCategory))
+                .Where(item => IsStrategyProgressVisible(item.Name, HideProgressStrategy6Hours))
                 .Where(item => IsStrategyRecentPositiveVisible(item, ShowOnlyPositiveStrategy6Hours))
                 .Where(item => IsStrategyRecentEnabledVisible(item, ShowOnlyEnabledStrategy6Hours, enabledStrategyNames))
                 .Where(item => IsStrategyRecentLiveVisible(item, ShowOnlyLiveStrategy6Hours))
@@ -1488,6 +1524,7 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
             allStrategyRecentPerformance
                 .Where(item => string.Equals(item.Window, "1h", StringComparison.OrdinalIgnoreCase))
                 .Where(item => IsStrategyCategoryVisible(item.Name, SelectedStrategy1HourCategory))
+                .Where(item => IsStrategyProgressVisible(item.Name, HideProgressStrategy1Hour))
                 .Where(item => IsStrategyRecentPositiveVisible(item, ShowOnlyPositiveStrategy1Hour))
                 .Where(item => IsStrategyRecentEnabledVisible(item, ShowOnlyEnabledStrategy1Hour, enabledStrategyNames))
                 .Where(item => IsStrategyRecentLiveVisible(item, ShowOnlyLiveStrategy1Hour))
@@ -1724,6 +1761,12 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
     private static bool IsStrategyPositiveVisible(StrategyPerformanceRow strategy, bool onlyPositive)
     {
         return !onlyPositive || strategy.ClosedRoiPct >= 0m;
+    }
+
+    private static bool IsStrategyProgressVisible(string strategyName, bool hideProgress)
+    {
+        return !hideProgress ||
+            strategyName.IndexOf("Progress", StringComparison.OrdinalIgnoreCase) < 0;
     }
 
     private static bool IsStrategyEnabledVisible(StrategyPerformanceRow strategy, bool onlyEnabled)

@@ -361,6 +361,10 @@
                                           IsChecked="{Binding ShowOnlyBigSettlesStrategies, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
                                           VerticalAlignment="Center"
                                           Margin="12,0,0,0" />
+                                <CheckBox Content="Hide progress"
+                                          IsChecked="{Binding HideProgressStrategies, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                          VerticalAlignment="Center"
+                                          Margin="12,0,0,0" />
                             </StackPanel>
                             <DataGrid ItemsSource="{Binding Strategies}"
                                       behaviors:DataGridSelectionPersistence.KeyProperties="StrategyId">
@@ -582,6 +586,10 @@
                                           IsChecked="{Binding ShowOnlyBigSettlesStrategy24Hours, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
                                           VerticalAlignment="Center"
                                           Margin="12,0,0,0" />
+                                <CheckBox Content="Hide progress"
+                                          IsChecked="{Binding HideProgressStrategy24Hours, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                          VerticalAlignment="Center"
+                                          Margin="12,0,0,0" />
                             </StackPanel>
                             <ContentControl Content="{Binding StrategyRecent24Hours}"
                                             ContentTemplate="{StaticResource StrategyRecentGridTemplate}" />
@@ -620,6 +628,10 @@
                                           IsChecked="{Binding ShowOnlyBigSettlesStrategy6Hours, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
                                           VerticalAlignment="Center"
                                           Margin="12,0,0,0" />
+                                <CheckBox Content="Hide progress"
+                                          IsChecked="{Binding HideProgressStrategy6Hours, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                          VerticalAlignment="Center"
+                                          Margin="12,0,0,0" />
                             </StackPanel>
                             <ContentControl Content="{Binding StrategyRecent6Hours}"
                                             ContentTemplate="{StaticResource StrategyRecentGridTemplate}" />
@@ -656,6 +668,10 @@
                                           Margin="12,0,0,0" />
                                 <CheckBox Content="Big settles"
                                           IsChecked="{Binding ShowOnlyBigSettlesStrategy1Hour, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                          VerticalAlignment="Center"
+                                          Margin="12,0,0,0" />
+                                <CheckBox Content="Hide progress"
+                                          IsChecked="{Binding HideProgressStrategy1Hour, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
                                           VerticalAlignment="Center"
                                           Margin="12,0,0,0" />
                             </StackPanel>

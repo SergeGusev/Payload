@@ -1,3 +1,15 @@
+## Active Update 2026-07-04 Dashboard Hide Progress Filter
+Goal: Add Dashboard filters that hide Progress strategy rows in every Strategies tab.
+Status: Completed
+Done:
+- Added `Hide progress` checkboxes to the Strategies `All`, `24 hours`, `6 hours`, and `1 hour` tabs.
+- Wired each checkbox to Dashboard filtering so strategy rows whose visible name contains `Progress` are hidden case-insensitively.
+- Applied the `All` tab setting to both the main strategy grid and the nested recent-performance grid shown in that tab.
+- Updated README and configuration reference documentation for the new filter.
+Next: None
+Notes: `dotnet build src\PolyCopyTrader.Dashboard\PolyCopyTrader.Dashboard.csproj --no-restore -p:UseSharedCompilation=false -p:OutDir="$env:TEMP\PolyCopyTraderDashboardHideProgressBuild\"` passed. `git diff --check -- src/PolyCopyTrader.Dashboard/ViewModels/MainViewModel.cs src/PolyCopyTrader.Dashboard/MainWindow.xaml README.md docs/configuration_reference.md` passed with only existing line-ending warnings. Worktree contained unrelated pending changes before this task; staging/commit includes only this task's hunks.
+Blockers: None.
+
 ## Active Update 2026-07-04 Historical Binance Hour Analysis Feasibility
 Goal: Assess whether the SOL Down 8 bps Reference Average Premarket hourly analysis can be repeated over about six months using Binance historical data.
 Status: Completed

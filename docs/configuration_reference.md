@@ -1063,12 +1063,13 @@ stake add-on applies only while the matching counter is positive:
 `Stake * min(Cnt, 2)` is added to the already computed Paper or Live stake at
 entry time, so the final stake is capped at three original stakes.
 The strategy grids include `Only positive`, `Enabled only`, `Live only`,
-`Big ROI`, and `Big settles` filters. `Live only` keeps rows whose manual Live
+`Big ROI`, `Big settles`, and `Hide progress` filters. `Live only` keeps rows whose manual Live
 flag is enabled, even when `Auto Live Pause` is currently suppressing effective
 Live entries. `Big ROI` keeps rows with ROI greater than `10` (`Closed ROI` in
 `All`, recent `ROI` in the period tabs). `Big settles` keeps rows whose settled
 count is greater than `100` (`Settled` positions in `All`, recent `Settles`
-runs in the period tabs).
+runs in the period tabs). `Hide progress` hides rows whose strategy name contains
+`Progress`.
 The `Enabled` checkbox writes `strategies.enabled` immediately, and the `Paused`
 checkbox writes `strategies.paused`. The service refreshes enabled, manual pause,
 and auto Live pause state through a short in-memory cache, so disabled strategies
