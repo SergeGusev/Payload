@@ -1,3 +1,15 @@
+## Active Update 2026-07-04 ETH Down 6 Live PnL Reconciliation
+Goal: Explain why the winning `ETH Up or Down 5m Down 6 bps Reference Average Premarket` Live bet showed very small profit.
+Status: Completed
+Done:
+- Queried production PostgreSQL read-only at `192.168.0.101` without printing secrets.
+- Found Live order `29bc3286-462b-4717-8e1a-818069e52c31` from `2026-07-04 13:39:30 Europe/Sofia`: outcome `Up`, winner `Up`, recorded fill `6.07` shares at `0.99`, cost `6.0093`, settlement value `6.07`, realized PnL `0.0607`.
+- Compared the same ETH 6:40-6:45 market cluster: five `Down N bps Reference Average Premarket` Live orders bought `Up`; three had direct `matched` CLOB responses with average fill prices about `0.519`, `0.530`, and `0.521`, while `Down 1` and `Down 6` were `data_api_current_position_reconciled` with no order id/making/taking amounts and fell back to worst price `0.99`.
+- Confirmed Paper shadow for `Down 6` saw `best_ask=0.51` and simulated about `$6` filled at average `0.51`; aggregate Data API position size `57.924` matches the five-order paper expected shares, so the low recorded PnL is an accounting/reconciliation artifact rather than evidence that the real market fill was near `0.99`.
+Next: Fix Live FAK reconciliation so Data API aggregate-position fallback does not settle market-amount orders at worst price; either recover exact CLOB fills or allocate aggregate position delta/expected paper FAK shares across same-market orders before balance settlement.
+Notes: Diagnostic/read-only only. No production DB writes, Live flag changes, order submissions, cancels, service restarts, source-code changes, builds, or tests were performed.
+Blockers: Exact per-order true fill for rows without CLOB `makingAmount`/`takingAmount` is not available from the current row alone; correction needs an explicit accounting policy.
+
 ## Active Update 2026-07-04 Dashboard Hide Progress Filter
 Goal: Add Dashboard filters that hide Progress strategy rows in every Strategies tab.
 Status: Completed
