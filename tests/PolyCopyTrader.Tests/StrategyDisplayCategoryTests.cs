@@ -113,7 +113,7 @@ public sealed class StrategyDisplayCategoryTests
             .Where(variant => variant.Behavior == BtcUpDown5mStrategyBehavior.DiffCounterTrendFakPremarket)
             .ToArray();
 
-        Assert.Equal(120, variants.Length);
+        Assert.Equal(100, variants.Length);
         Assert.Contains(variants, variant =>
             variant.Name == "BTC Up or Down 5m Up 3 Diff Premarket");
         Assert.Contains(variants, variant =>
@@ -121,11 +121,10 @@ public sealed class StrategyDisplayCategoryTests
         Assert.Contains(variants, variant =>
             variant.Name == "ETH Up or Down 5m Up 3 Diff Premarket");
         Assert.Contains(variants, variant =>
-            variant.Name == "ETH Up or Down 5m Up 3 Diff Revert Premarket");
-        Assert.Contains(variants, variant =>
             variant.Name == "ETH Up or Down 5m Down 3 Diff Premarket");
-        Assert.Contains(variants, variant =>
-            variant.Name == "ETH Up or Down 5m Down 3 Diff Revert Premarket");
+        Assert.DoesNotContain(variants, variant =>
+            variant.Name.StartsWith("ETH Up or Down 5m ", StringComparison.Ordinal) &&
+            variant.Name.Contains(" Diff Revert Premarket", StringComparison.Ordinal));
         Assert.Contains(variants, variant =>
             variant.Name == "SOL Up or Down 5m Up 3 Diff Premarket");
         Assert.Contains(variants, variant =>
@@ -140,14 +139,12 @@ public sealed class StrategyDisplayCategoryTests
         Assert.Equal(10, categoryCounts["BTC Up or Down 5m Diff Down Premarket"]);
         Assert.Equal(10, categoryCounts["BTC Up or Down 5m Diff Down Revert Premarket"]);
         Assert.Equal(10, categoryCounts["ETH Up or Down 5m Diff Up Premarket"]);
-        Assert.Equal(10, categoryCounts["ETH Up or Down 5m Diff Up Revert Premarket"]);
         Assert.Equal(10, categoryCounts["ETH Up or Down 5m Diff Down Premarket"]);
-        Assert.Equal(10, categoryCounts["ETH Up or Down 5m Diff Down Revert Premarket"]);
         Assert.Equal(10, categoryCounts["SOL Up or Down 5m Diff Up Premarket"]);
         Assert.Equal(10, categoryCounts["SOL Up or Down 5m Diff Up Revert Premarket"]);
         Assert.Equal(10, categoryCounts["SOL Up or Down 5m Diff Down Premarket"]);
         Assert.Equal(10, categoryCounts["SOL Up or Down 5m Diff Down Revert Premarket"]);
-        Assert.Equal(12, categoryCounts.Count);
+        Assert.Equal(10, categoryCounts.Count);
     }
 
     [Fact]

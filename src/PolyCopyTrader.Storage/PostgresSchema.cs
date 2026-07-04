@@ -2477,6 +2477,7 @@ SELECT
     now(),
     now()
 FROM formatted
+WHERE NOT (asset_symbol = 'ETH' AND strategy_kind = 'revert')
 ON CONFLICT (id) DO UPDATE SET
     code = excluded.code,
     name = excluded.name,

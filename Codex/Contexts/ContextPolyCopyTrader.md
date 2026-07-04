@@ -1,3 +1,19 @@
+## Active Update 2026-07-04 Remove ETH Diff Revert Premarket
+Goal: Remove `ETH Up or Down 5m Up/Down N Diff Revert Premarket` strategies and their history without disrupting running processes.
+Status: Completed
+Done:
+- Production PostgreSQL cleanup at `192.168.0.101`: first disabled/paused the 20 target ETH Diff Revert Premarket strategies, then deleted their related history in small batches with short timeouts and sleeps.
+- Deleted target history included `7200` `strategy_market_paper_runs`, `2862` `paper_orders`, `2862` `paper_fills`, `2862` `paper_positions`, `2852` `paper_position_settlements`, `17379` `signals` (`2862` linked plus `14517` extra strategy-wallet signals), `60` recent dashboard snapshots, `20` all-time dashboard snapshots, and `20` strategy rows; no target `live_orders` existed.
+- Dropped the temporary maintenance helper tables after verification.
+- Updated the strategy catalog so ETH no longer creates Diff Revert Premarket variants, while BTC/SOL still do.
+- Updated PostgreSQL seed SQL to skip `asset_symbol = 'ETH'` with `strategy_kind = 'revert'`, preventing schema initialization from recreating deleted ETH rows.
+- Updated README and focused tests so ETH Diff Revert Premarket is documented and asserted as removed; moved Revert processor coverage to SOL.
+- Final production checks showed 0 target strategies by id/code/name and 0 indexed linked rows for paper orders/fills/positions/settlements/runs, live orders, shadow decisions, dashboard snapshots, and on-chain paper signal results. The full unindexed `signals.trader_wallet` check was confirmed as 0 immediately after cleanup and was not repeated later to avoid a heavy scan.
+- Confirmed `PolyCopyTrader.Service` remained `Running`/`Live` with fresh heartbeat around 30 seconds and empty `last_error`; no service restart, order submission, cancel, or Live flag change was performed.
+Next: Deploy/restart the service when convenient so the running binary also has the no-reseed code; the production database is already cleaned.
+Notes: `dotnet test tests\PolyCopyTrader.Tests\PolyCopyTrader.Tests.csproj --no-restore -p:UseSharedCompilation=false --filter "FullyQualifiedName~StorageTests|FullyQualifiedName~StrategyIds_IncludeEthAndSolBinanceBpsVariants|FullyQualifiedName~DiffCounterTrendFakPremarketStrategiesHaveDedicatedDisplayCategories|FullyQualifiedName~ProcessDiffCounterDueEntriesAsync_SolDown4RevertFakPremarketBuysDownFromPremarketOrderBook|FullyQualifiedName~ProcessDiffCounterDueEntriesAsync_SolUp4RevertFakPremarketBuysUpFromPremarketOrderBook"` passed 47/47. A broader `BtcUpDown5mPaperStrategyProcessorTests|StrategyDisplayCategoryTests|StorageTests` run still has unrelated pre-existing failures in the large processor suite. Worktree contained many unrelated pending changes before this task; stage only this task's hunks.
+Blockers: None.
+
 ## Active Update 2026-07-04 Exact Live Fill Accounting
 Goal: Stop using aggregate Polymarket Data API positions as per-order Live fill/PnL evidence.
 Status: Completed

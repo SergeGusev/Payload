@@ -2168,13 +2168,20 @@ public static class StrategyIds
         string assetSymbol)
     {
         var idGroups = GetDiffCounterTrendFakPremarketIdGroups(assetSymbol);
-        var variants = new List<BtcUpDown5mStrategyVariant>(40);
+        var includeRevertVariants = !string.Equals(assetSymbol, "ETH", StringComparison.OrdinalIgnoreCase);
+        var variants = new List<BtcUpDown5mStrategyVariant>(includeRevertVariants ? 40 : 20);
         foreach (var threshold in CreateDiffCounterTrendFakPremarketThresholds())
         {
             variants.Add(CreateDiffCounterTrendFakPremarketVariant(assetSymbol, idGroups.Up, threshold, isUpDiffGroup: true));
-            variants.Add(CreateDiffCounterTrendFakPremarketVariant(assetSymbol, idGroups.UpRevert, threshold, isUpDiffGroup: true, isRevert: true));
+            if (includeRevertVariants)
+            {
+                variants.Add(CreateDiffCounterTrendFakPremarketVariant(assetSymbol, idGroups.UpRevert, threshold, isUpDiffGroup: true, isRevert: true));
+            }
             variants.Add(CreateDiffCounterTrendFakPremarketVariant(assetSymbol, idGroups.Down, threshold, isUpDiffGroup: false));
-            variants.Add(CreateDiffCounterTrendFakPremarketVariant(assetSymbol, idGroups.DownRevert, threshold, isUpDiffGroup: false, isRevert: true));
+            if (includeRevertVariants)
+            {
+                variants.Add(CreateDiffCounterTrendFakPremarketVariant(assetSymbol, idGroups.DownRevert, threshold, isUpDiffGroup: false, isRevert: true));
+            }
         }
 
         return variants;

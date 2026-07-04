@@ -205,6 +205,7 @@ public sealed class StorageTests
         Assert.Contains("'b7c50005-0000-4000-8134-000000000003'", PostgresSchema.SchemaSql, StringComparison.Ordinal);
         Assert.Contains("'eth_up_down_5m_down_diff_3_fak_premarket'", PostgresSchema.SchemaSql, StringComparison.Ordinal);
         Assert.Contains("'ETH Up or Down 5m Down 3 Diff Premarket'", PostgresSchema.SchemaSql, StringComparison.Ordinal);
+        Assert.Contains("WHERE NOT (asset_symbol = 'ETH' AND strategy_kind = 'revert')", PostgresSchema.SchemaSql, StringComparison.Ordinal);
         Assert.Contains("lower(asset_symbol) || '_up_down_5m_' || direction_code || '_simple'", PostgresSchema.SchemaSql, StringComparison.Ordinal);
         Assert.Contains("asset_symbol || ' Up or Down 5m ' || direction_name || ' Simple'", PostgresSchema.SchemaSql, StringComparison.Ordinal);
         Assert.DoesNotContain("description = excluded.description,\n    live_stakes = false,\n    updated_at_utc = excluded.updated_at_utc", normalizedSchemaSql, StringComparison.Ordinal);
