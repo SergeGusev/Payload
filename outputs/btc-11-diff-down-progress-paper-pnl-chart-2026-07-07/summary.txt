@@ -1,0 +1,31 @@
+﻿BTC Up or Down 5m 11 Diff Down Progress Paper PnL chart
+Generated at UTC: 2026-07-07 18:13:37
+
+Strategy:
+  Code: btc_up_down_5m_diff_11_down_progress
+  Name: BTC Up or Down 5m 11 Diff Down Progress
+  Enabled: True
+  Live: False
+  Paused: False
+  Paper stake amount: +1
+  Live stake amount: +1
+
+Paper settled rows:
+  Settled rows: 38
+  Wins/Losses/Flat: 27/11/0
+  First settled/entered row UTC: 2026-07-04 12:00:24
+  Last settled/entered row UTC: 2026-07-07 14:10:36
+  Total stake: +327.3435
+  Total Paper PnL: +135.77227909
+  ROI on settled stake: 41.477%
+  Max stake: +22.0077
+  Best single PnL: +20.3148
+  Worst single PnL: -17.0082
+  Max cumulative PnL: +135.77227909
+  Min cumulative PnL: -11.77961267
+  Max drawdown: +28.017 from record 3 to 5
+
+Live rows for same strategy:
+  Live orders: 0
+  Settled live orders: 0
+  Live realized PnL: 0

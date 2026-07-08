@@ -163,11 +163,12 @@ public sealed class PolymarketTradingClient : IPolymarketTradingClient
         if (!response.IsSuccessStatusCode)
         {
             await RecordErrorAsync("PostOrder", response.Body, ct);
+            var responseError = ExtractErrorMessage(response.Body);
             return new LiveOrderPlacementResult(
                 false,
                 null,
-                response.StatusCode.ToString(),
-                $"HTTP {(int)response.StatusCode}",
+                GetRejectedOrderResponseStatus(response.StatusCode, responseError),
+                GetRejectedOrderErrorMessage(response.StatusCode, responseError),
                 null,
                 null,
                 Redact(response.Body),
@@ -287,6 +288,47 @@ public sealed class PolymarketTradingClient : IPolymarketTradingClient
 
         return new AuthenticatedSecrets(
             new PolymarketApiCredentials(apiKey, apiSecret, apiPassphrase));
+    }
+
+    private static string GetRejectedOrderResponseStatus(HttpStatusCode statusCode, string? responseError)
+    {
+        return LiveOrderRejectionClassifier.IsInsufficientBalanceOrAllowance(responseError)
+            ? LiveOrderRejectionClassifier.InsufficientBalanceOrAllowanceStatus
+            : statusCode.ToString();
+    }
+
+    private static string GetRejectedOrderErrorMessage(HttpStatusCode statusCode, string? responseError)
+    {
+        if (LiveOrderRejectionClassifier.IsInsufficientBalanceOrAllowance(responseError))
+        {
+            return LiveOrderRejectionClassifier.FormatInsufficientBalanceOrAllowance(responseError);
+        }
+
+        return string.IsNullOrWhiteSpace(responseError)
+            ? $"HTTP {(int)statusCode}"
+            : $"HTTP {(int)statusCode}: {responseError}";
+    }
+
+    private static string? ExtractErrorMessage(string body)
+    {
+        if (string.IsNullOrWhiteSpace(body))
+        {
+            return null;
+        }
+
+        try
+        {
+            using var json = JsonDocument.Parse(body);
+            var root = json.RootElement;
+            return GetString(root, "error") ??
+                   GetString(root, "errorMsg") ??
+                   GetString(root, "message") ??
+                   GetString(root, "detail");
+        }
+        catch (JsonException)
+        {
+            return Redact(body);
+        }
     }
 
     private async Task<string> ReadRequiredSecretAsync(string name, string label, CancellationToken ct)

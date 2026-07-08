@@ -30,7 +30,7 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
     private const int LiveOrdersTabIndex = 16;
     private const int LiveOrdersPageSize = 100;
     private const decimal BigRoiThresholdPct = 10m;
-    private const int BigSettlesThreshold = 100;
+    private const int BigSettlesThreshold = 1000;
     private static readonly StrategyOrderFilterOption AllOrderStrategiesOption = new(null, AllOrderStrategies);
 
     private DashboardRuntime runtime = null!;
@@ -1786,7 +1786,7 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
 
     private static bool IsStrategyBigSettlesVisible(StrategyPerformanceRow strategy, bool onlyBigSettles)
     {
-        return !onlyBigSettles || strategy.SettledPositionsCount > BigSettlesThreshold;
+        return !onlyBigSettles || strategy.SettledPositionsCount >= BigSettlesThreshold;
     }
 
     private static bool IsOrderStrategyVisible(Guid strategyId, StrategyOrderFilterOption? selectedStrategy)
@@ -1822,7 +1822,7 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         StrategyRecentPerformanceRow strategy,
         bool onlyBigSettles)
     {
-        return !onlyBigSettles || strategy.SettledRunsCount > BigSettlesThreshold;
+        return !onlyBigSettles || strategy.SettledRunsCount >= BigSettlesThreshold;
     }
 
     private static void Replace<T>(ObservableCollection<T> target, IReadOnlyList<T> source)

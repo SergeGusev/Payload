@@ -118,56 +118,65 @@ public sealed class StorageTests
         Assert.DoesNotContain("SET paused = false", PostgresSchema.SchemaSql, StringComparison.Ordinal);
         Assert.Contains("ALTER TABLE strategies ALTER COLUMN live_stake_amount SET DEFAULT 1.00", PostgresSchema.SchemaSql, StringComparison.Ordinal);
         Assert.Contains("ck_strategies_live_available_balance_nonnegative", PostgresSchema.SchemaSql, StringComparison.Ordinal);
+        Assert.Contains("ck_strategies_live_available_balance_maximum", PostgresSchema.SchemaSql, StringComparison.Ordinal);
+        Assert.Contains("WHERE live_available_balance > 100.00", PostgresSchema.SchemaSql, StringComparison.Ordinal);
         Assert.Contains("'follow_leader'", PostgresSchema.SchemaSql, StringComparison.Ordinal);
-        Assert.Contains("'btc_up_down_5m_less_30'", PostgresSchema.SchemaSql, StringComparison.Ordinal);
-        Assert.Contains("'btc_up_down_5m_less_30_gamma'", PostgresSchema.SchemaSql, StringComparison.Ordinal);
-        Assert.Contains("'btc_up_down_5m_less_180_martin'", PostgresSchema.SchemaSql, StringComparison.Ordinal);
-        Assert.Contains("'btc_up_down_5m_more_270'", PostgresSchema.SchemaSql, StringComparison.Ordinal);
-        Assert.Contains("'btc_up_down_5m_more_30_below_55'", PostgresSchema.SchemaSql, StringComparison.Ordinal);
-        Assert.Contains("'btc_up_down_5m_more_60_below_60'", PostgresSchema.SchemaSql, StringComparison.Ordinal);
-        Assert.Contains("'btc_up_down_5m_more_60_below_55'", PostgresSchema.SchemaSql, StringComparison.Ordinal);
-        Assert.Contains("'btc_up_down_5m_more_120_below_70'", PostgresSchema.SchemaSql, StringComparison.Ordinal);
-        Assert.Contains("'btc_up_down_5m_more_150_below_65'", PostgresSchema.SchemaSql, StringComparison.Ordinal);
-        Assert.Contains("'btc_up_down_5m_more_270_below_65'", PostgresSchema.SchemaSql, StringComparison.Ordinal);
-        Assert.Contains("'btc_up_down_5m_more_270_below_60'", PostgresSchema.SchemaSql, StringComparison.Ordinal);
-        Assert.Contains("'btc_up_down_5m_less_120_below_20'", PostgresSchema.SchemaSql, StringComparison.Ordinal);
-        Assert.Contains("'btc_up_down_5m_less_120_below_30'", PostgresSchema.SchemaSql, StringComparison.Ordinal);
-        Assert.Contains("'btc_up_down_5m_less_90_below_20'", PostgresSchema.SchemaSql, StringComparison.Ordinal);
-        Assert.Contains("'btc_up_down_5m_less_60_below_20'", PostgresSchema.SchemaSql, StringComparison.Ordinal);
-        Assert.Contains("'btc_up_down_5m_more_90_below_70'", PostgresSchema.SchemaSql, StringComparison.Ordinal);
-        Assert.Contains("'btc_up_down_5m_more_90_below_65'", PostgresSchema.SchemaSql, StringComparison.Ordinal);
-        Assert.Contains("'btc_up_down_5m_more_60_gamma_below_70'", PostgresSchema.SchemaSql, StringComparison.Ordinal);
-        Assert.Contains("'btc_up_down_5m_more_120_gamma_below_65'", PostgresSchema.SchemaSql, StringComparison.Ordinal);
-        Assert.Contains("'btc_up_down_5m_more_150_gamma_below_80'", PostgresSchema.SchemaSql, StringComparison.Ordinal);
-        Assert.Contains("'btc_up_down_5m_more_270_gamma'", PostgresSchema.SchemaSql, StringComparison.Ordinal);
-        Assert.Contains("'btc_up_down_5m_middle_100'", PostgresSchema.SchemaSql, StringComparison.Ordinal);
+        Assert.DoesNotContain("'btc_up_down_5m_less_30'", PostgresSchema.SchemaSql, StringComparison.Ordinal);
+        Assert.DoesNotContain("'btc_up_down_5m_less_30_gamma'", PostgresSchema.SchemaSql, StringComparison.Ordinal);
+        Assert.DoesNotContain("'btc_up_down_5m_less_180_martin'", PostgresSchema.SchemaSql, StringComparison.Ordinal);
+        Assert.DoesNotContain("'btc_up_down_5m_more_270'", PostgresSchema.SchemaSql, StringComparison.Ordinal);
+        Assert.DoesNotContain("'btc_up_down_5m_more_30_below_55'", PostgresSchema.SchemaSql, StringComparison.Ordinal);
+        Assert.DoesNotContain("'btc_up_down_5m_more_60_below_60'", PostgresSchema.SchemaSql, StringComparison.Ordinal);
+        Assert.DoesNotContain("'btc_up_down_5m_more_60_below_55'", PostgresSchema.SchemaSql, StringComparison.Ordinal);
+        Assert.DoesNotContain("'btc_up_down_5m_more_120_below_70'", PostgresSchema.SchemaSql, StringComparison.Ordinal);
+        Assert.DoesNotContain("'btc_up_down_5m_more_150_below_65'", PostgresSchema.SchemaSql, StringComparison.Ordinal);
+        Assert.DoesNotContain("'btc_up_down_5m_more_270_below_65'", PostgresSchema.SchemaSql, StringComparison.Ordinal);
+        Assert.DoesNotContain("'btc_up_down_5m_more_270_below_60'", PostgresSchema.SchemaSql, StringComparison.Ordinal);
+        Assert.DoesNotContain("'btc_up_down_5m_less_120_below_20'", PostgresSchema.SchemaSql, StringComparison.Ordinal);
+        Assert.DoesNotContain("'btc_up_down_5m_less_120_below_30'", PostgresSchema.SchemaSql, StringComparison.Ordinal);
+        Assert.DoesNotContain("'btc_up_down_5m_less_90_below_20'", PostgresSchema.SchemaSql, StringComparison.Ordinal);
+        Assert.DoesNotContain("'btc_up_down_5m_less_60_below_20'", PostgresSchema.SchemaSql, StringComparison.Ordinal);
+        Assert.DoesNotContain("'btc_up_down_5m_more_90_below_70'", PostgresSchema.SchemaSql, StringComparison.Ordinal);
+        Assert.DoesNotContain("'btc_up_down_5m_more_90_below_65'", PostgresSchema.SchemaSql, StringComparison.Ordinal);
+        Assert.DoesNotContain("'btc_up_down_5m_more_60_gamma_below_70'", PostgresSchema.SchemaSql, StringComparison.Ordinal);
+        Assert.DoesNotContain("'btc_up_down_5m_more_60_gamma_below_80'", PostgresSchema.SchemaSql, StringComparison.Ordinal);
+        Assert.DoesNotContain("'btc_up_down_5m_more_120_gamma_below_65'", PostgresSchema.SchemaSql, StringComparison.Ordinal);
+        Assert.DoesNotContain("'btc_up_down_5m_more_90_gamma_below_70'", PostgresSchema.SchemaSql, StringComparison.Ordinal);
+        Assert.DoesNotContain("'btc_up_down_5m_more_120_gamma_below_70'", PostgresSchema.SchemaSql, StringComparison.Ordinal);
+        Assert.DoesNotContain("'btc_up_down_5m_more_150_gamma_below_70'", PostgresSchema.SchemaSql, StringComparison.Ordinal);
+        Assert.DoesNotContain("'btc_up_down_5m_more_150_gamma_below_80'", PostgresSchema.SchemaSql, StringComparison.Ordinal);
+        Assert.DoesNotContain("'btc_up_down_5m_more_270_gamma'", PostgresSchema.SchemaSql, StringComparison.Ordinal);
+        Assert.DoesNotContain("'btc_up_down_5m_middle_100'", PostgresSchema.SchemaSql, StringComparison.Ordinal);
         Assert.DoesNotContain("'btc_up_down_5m_middle_100_revert'", PostgresSchema.SchemaSql, StringComparison.Ordinal);
-        Assert.Contains("'btc_up_down_5m_middle_' || depths.depth || '_bps_' || thresholds.threshold_digit", PostgresSchema.SchemaSql, StringComparison.Ordinal);
-        Assert.Contains("'btc_up_down_5m_middle_' || depths.depth || '_bps_' || thresholds.threshold_digit || '_instant'", PostgresSchema.SchemaSql, StringComparison.Ordinal);
+        Assert.DoesNotContain("'btc_up_down_5m_middle_' || depths.depth || '_bps_' || thresholds.threshold_digit", PostgresSchema.SchemaSql, StringComparison.Ordinal);
+        Assert.DoesNotContain("'btc_up_down_5m_middle_' || depths.depth || '_bps_' || thresholds.threshold_digit || '_instant'", PostgresSchema.SchemaSql, StringComparison.Ordinal);
         Assert.DoesNotContain("'btc_up_down_5m_middle_' || depths.depth || '_revert_bps_' || thresholds.threshold_digit", PostgresSchema.SchemaSql, StringComparison.Ordinal);
         Assert.DoesNotContain("'btc_up_down_5m_middle_' || depths.depth || '_revert_bps_' || thresholds.threshold_digit || '_instant'", PostgresSchema.SchemaSql, StringComparison.Ordinal);
-        Assert.Contains("'b7c50005-0000-4000-8029-' || lpad((CASE WHEN depths.depth = 100 THEN 100 + thresholds.threshold_digit ELSE (depths.depth * 100) + thresholds.threshold_digit END)::text, 12, '0')", PostgresSchema.SchemaSql, StringComparison.Ordinal);
+        Assert.DoesNotContain("'b7c50005-0000-4000-8029-' || lpad((CASE WHEN depths.depth = 100 THEN 100 + thresholds.threshold_digit ELSE (depths.depth * 100) + thresholds.threshold_digit END)::text, 12, '0')", PostgresSchema.SchemaSql, StringComparison.Ordinal);
         Assert.DoesNotContain("'b7c50005-0000-4000-8030-' || lpad((CASE WHEN depths.depth = 100 THEN 100 + thresholds.threshold_digit ELSE (depths.depth * 100) + thresholds.threshold_digit END)::text, 12, '0')", PostgresSchema.SchemaSql, StringComparison.Ordinal);
-        Assert.Contains("generate_series(1, 100)", PostgresSchema.SchemaSql, StringComparison.Ordinal);
-        Assert.Contains("VALUES (100), (90), (80), (70), (60), (50), (40), (30), (20), (10)", PostgresSchema.SchemaSql, StringComparison.Ordinal);
-        Assert.Contains("lower(asset_symbol) || '_up_down_5m_middle_' || depth || code_suffix", PostgresSchema.SchemaSql, StringComparison.Ordinal);
-        Assert.Contains("lower(asset_symbol) || '_up_down_5m_middle_' || depths.depth || '_bps_' || thresholds.threshold_digit", PostgresSchema.SchemaSql, StringComparison.Ordinal);
-        Assert.Contains("lower(asset_symbol) || '_up_down_5m_middle_' || depths.depth || '_bps_' || thresholds.threshold_digit || '_instant'", PostgresSchema.SchemaSql, StringComparison.Ordinal);
+        Assert.DoesNotContain("generate_series(1, 100)", PostgresSchema.SchemaSql, StringComparison.Ordinal);
+        Assert.DoesNotContain("VALUES (100), (90), (80), (70), (60), (50), (40), (30), (20), (10)", PostgresSchema.SchemaSql, StringComparison.Ordinal);
+        Assert.DoesNotContain("lower(asset_symbol) || '_up_down_5m_middle_' || depth || code_suffix", PostgresSchema.SchemaSql, StringComparison.Ordinal);
+        Assert.DoesNotContain("lower(asset_symbol) || '_up_down_5m_middle_' || depths.depth || '_bps_' || thresholds.threshold_digit", PostgresSchema.SchemaSql, StringComparison.Ordinal);
+        Assert.DoesNotContain("lower(asset_symbol) || '_up_down_5m_middle_' || depths.depth || '_bps_' || thresholds.threshold_digit || '_instant'", PostgresSchema.SchemaSql, StringComparison.Ordinal);
         Assert.DoesNotContain("lower(asset_symbol) || '_up_down_5m_middle_' || depths.depth || '_revert_bps_' || thresholds.threshold_digit", PostgresSchema.SchemaSql, StringComparison.Ordinal);
         Assert.DoesNotContain("lower(asset_symbol) || '_up_down_5m_middle_' || depths.depth || '_revert_bps_' || thresholds.threshold_digit || '_instant'", PostgresSchema.SchemaSql, StringComparison.Ordinal);
-        Assert.Contains("('ETH', '8071', '8072', '8073', '8074')", PostgresSchema.SchemaSql, StringComparison.Ordinal);
-        Assert.Contains("('SOL', '8075', '8076', '8077', '8078')", PostgresSchema.SchemaSql, StringComparison.Ordinal);
+        Assert.DoesNotContain("('ETH', '8071', '8072', '8073', '8074')", PostgresSchema.SchemaSql, StringComparison.Ordinal);
+        Assert.DoesNotContain("('SOL', '8075', '8076', '8077', '8078')", PostgresSchema.SchemaSql, StringComparison.Ordinal);
         Assert.Contains("20260522_rescale_middle_bps_history_reset", PostgresSchema.SchemaSql, StringComparison.Ordinal);
         Assert.Contains("20260522_retire_middle_depth_2_5", PostgresSchema.SchemaSql, StringComparison.Ordinal);
-        Assert.Contains("'btc_up_down_5m_skip_1'", PostgresSchema.SchemaSql, StringComparison.Ordinal);
-        Assert.Contains("'btc_up_down_5m_skip_5'", PostgresSchema.SchemaSql, StringComparison.Ordinal);
+        Assert.DoesNotContain("'btc_up_down_5m_skip_1'", PostgresSchema.SchemaSql, StringComparison.Ordinal);
+        Assert.DoesNotContain("'btc_up_down_5m_skip_5'", PostgresSchema.SchemaSql, StringComparison.Ordinal);
         Assert.DoesNotContain("'btc_up_down_5m_skip_1_revert'", PostgresSchema.SchemaSql, StringComparison.Ordinal);
         Assert.DoesNotContain("'btc_up_down_5m_skip_5_revert'", PostgresSchema.SchemaSql, StringComparison.Ordinal);
-        Assert.Contains("lower(asset_symbol) || '_up_down_5m_skip_' || depth_name", PostgresSchema.SchemaSql, StringComparison.Ordinal);
+        Assert.DoesNotContain("lower(asset_symbol) || '_up_down_5m_skip_' || depth_name", PostgresSchema.SchemaSql, StringComparison.Ordinal);
         Assert.DoesNotContain("lower(asset_symbol) || '_up_down_5m_skip_bps_' || code_suffix", PostgresSchema.SchemaSql, StringComparison.Ordinal);
         Assert.DoesNotContain("lower(asset_symbol) || '_up_down_5m_skip_bps_' || code_suffix || '_instant'", PostgresSchema.SchemaSql, StringComparison.Ordinal);
-        Assert.Contains("'btc_up_down_5m_up'", PostgresSchema.SchemaSql, StringComparison.Ordinal);
-        Assert.Contains("'btc_up_down_5m_down'", PostgresSchema.SchemaSql, StringComparison.Ordinal);
+        Assert.DoesNotContain("('ETH', '8061', '8062')", PostgresSchema.SchemaSql, StringComparison.Ordinal);
+        Assert.Contains("('SOL', '8063', '8064')", PostgresSchema.SchemaSql, StringComparison.Ordinal);
+        Assert.Contains("20260707_remove_eth_binance_bps_strategies", PostgresSchema.SchemaSql, StringComparison.Ordinal);
+        Assert.DoesNotContain("'btc_up_down_5m_up'", PostgresSchema.SchemaSql, StringComparison.Ordinal);
+        Assert.DoesNotContain("'btc_up_down_5m_down'", PostgresSchema.SchemaSql, StringComparison.Ordinal);
         Assert.Contains("('BTC', '8121', '8122')", PostgresSchema.SchemaSql, StringComparison.Ordinal);
         Assert.Contains("('ETH', '8123', '8124')", PostgresSchema.SchemaSql, StringComparison.Ordinal);
         Assert.Contains("('SOL', '8125', '8126')", PostgresSchema.SchemaSql, StringComparison.Ordinal);
@@ -180,10 +189,20 @@ public sealed class StorageTests
         Assert.Contains("('BTC', '8135', '8136')", PostgresSchema.SchemaSql, StringComparison.Ordinal);
         Assert.Contains("('ETH', '8137', '8140')", PostgresSchema.SchemaSql, StringComparison.Ordinal);
         Assert.Contains("('SOL', '8138', '8139')", PostgresSchema.SchemaSql, StringComparison.Ordinal);
+        Assert.Contains("('BTC', '8178')", PostgresSchema.SchemaSql, StringComparison.Ordinal);
+        Assert.Contains("('ETH', '8179')", PostgresSchema.SchemaSql, StringComparison.Ordinal);
+        Assert.Contains("('SOL', '8180')", PostgresSchema.SchemaSql, StringComparison.Ordinal);
+        Assert.Contains("'b7c50005-0000-4000-8181-' || lpad((100 + threshold_tenths)::text, 12, '0')", PostgresSchema.SchemaSql, StringComparison.Ordinal);
         Assert.Contains("generate_series(15, 100, 5)", PostgresSchema.SchemaSql, StringComparison.Ordinal);
         Assert.Contains("THEN '_reference_average' ELSE '' END ||", PostgresSchema.SchemaSql, StringComparison.Ordinal);
         Assert.Contains("asset_symbol || ' Up or Down 5m ' || trigger_name || ' ' || threshold_name || ' bps Reference Average Premarket'", PostgresSchema.SchemaSql, StringComparison.Ordinal);
+        Assert.Contains("lower(asset_symbol) || '_up_down_5m_reference_average_bps_' || code_suffix || '_fak_premarket'", PostgresSchema.SchemaSql, StringComparison.Ordinal);
+        Assert.Contains("asset_symbol || ' Up or Down 5m ' || threshold_name || ' bps Reference Average Premarket'", PostgresSchema.SchemaSql, StringComparison.Ordinal);
+        Assert.Contains("'eth_up_down_5m_down_filtered_average_bps_' || code_suffix || '_fak_premarket'", PostgresSchema.SchemaSql, StringComparison.Ordinal);
+        Assert.Contains("'ETH Up or Down 5m Down ' || threshold_name || ' bps Filtered Average Premarket'", PostgresSchema.SchemaSql, StringComparison.Ordinal);
+        Assert.Contains("If the selected reference window is 6h or 12h, skip.", PostgresSchema.SchemaSql, StringComparison.Ordinal);
         Assert.Contains("largest full in-memory reference average across 24h, 12h, 6h, 3h, 90m, 45m, 20m, and 10m windows", PostgresSchema.SchemaSql, StringComparison.Ordinal);
+        Assert.Contains("If the current price is above that maximum average by at least", PostgresSchema.SchemaSql, StringComparison.Ordinal);
         Assert.Contains("strategies.code ~ '^eth_up_down_5m_down_bps_[0-9]+_fak_premarket$'", PostgresSchema.SchemaSql, StringComparison.Ordinal);
         Assert.Contains("replace(name, ' bps FAK Premarket', ' bps Premarket')", PostgresSchema.SchemaSql, StringComparison.Ordinal);
         Assert.DoesNotContain("legacy.live_stakes AS legacy_live_stakes", PostgresSchema.SchemaSql, StringComparison.Ordinal);
@@ -202,84 +221,121 @@ public sealed class StorageTests
         Assert.Contains("(8133, -5, 5, 35)", PostgresSchema.SchemaSql, StringComparison.Ordinal);
         Assert.Contains("'eth_up_down_5m_down_bps_' || code_suffix || '_fak_premarket_' || premarket_suffix", PostgresSchema.SchemaSql, StringComparison.Ordinal);
         Assert.Contains("'ETH Up or Down 5m Down ' || threshold_name || ' bps Premarket -' || sample_seconds_before_end::text || 's'", PostgresSchema.SchemaSql, StringComparison.Ordinal);
-        Assert.Contains("'b7c50005-0000-4000-8134-000000000003'", PostgresSchema.SchemaSql, StringComparison.Ordinal);
-        Assert.Contains("'eth_up_down_5m_down_diff_3_fak_premarket'", PostgresSchema.SchemaSql, StringComparison.Ordinal);
-        Assert.Contains("'ETH Up or Down 5m Down 3 Diff Premarket'", PostgresSchema.SchemaSql, StringComparison.Ordinal);
-        Assert.Contains("WHERE NOT (asset_symbol = 'ETH' AND strategy_kind = 'revert')", PostgresSchema.SchemaSql, StringComparison.Ordinal);
+        Assert.Contains("('BTC', '8146', '8148')", PostgresSchema.SchemaSql, StringComparison.Ordinal);
+        Assert.Contains("('ETH', '8144', '8134')", PostgresSchema.SchemaSql, StringComparison.Ordinal);
+        Assert.Contains("('SOL', '8150', '8152')", PostgresSchema.SchemaSql, StringComparison.Ordinal);
+        Assert.Contains("('up', 'Up', 'UpCount - DownCount', 'Down', 'countertrend')", PostgresSchema.SchemaSql, StringComparison.Ordinal);
+        Assert.Contains("('down', 'Down', 'DownCount - UpCount', 'Up', 'countertrend')", PostgresSchema.SchemaSql, StringComparison.Ordinal);
+        Assert.Contains("lower(asset_symbol) || '_up_down_5m_' || diff_code || '_diff_' || threshold_value::text || '_fak_premarket'", PostgresSchema.SchemaSql, StringComparison.Ordinal);
+        Assert.DoesNotContain("revert_code_suffix", PostgresSchema.SchemaSql, StringComparison.Ordinal);
+        Assert.DoesNotContain("strategy_kind = 'revert'", PostgresSchema.SchemaSql, StringComparison.Ordinal);
         Assert.Contains("lower(asset_symbol) || '_up_down_5m_' || direction_code || '_simple'", PostgresSchema.SchemaSql, StringComparison.Ordinal);
         Assert.Contains("asset_symbol || ' Up or Down 5m ' || direction_name || ' Simple'", PostgresSchema.SchemaSql, StringComparison.Ordinal);
         Assert.DoesNotContain("description = excluded.description,\n    live_stakes = false,\n    updated_at_utc = excluded.updated_at_utc", normalizedSchemaSql, StringComparison.Ordinal);
-        Assert.Contains("'btc_up_down_5m_up_maker'", PostgresSchema.SchemaSql, StringComparison.Ordinal);
-        Assert.Contains("'btc_up_down_5m_down_maker'", PostgresSchema.SchemaSql, StringComparison.Ordinal);
-        Assert.Contains("('BTC', '8097', '8098', '8115', '8116')", PostgresSchema.SchemaSql, StringComparison.Ordinal);
-        Assert.Contains("('ETH', '8099', '8100', '8117', '8118')", PostgresSchema.SchemaSql, StringComparison.Ordinal);
-        Assert.Contains("('SOL', '8101', '8102', '8119', '8120')", PostgresSchema.SchemaSql, StringComparison.Ordinal);
-        Assert.Contains("lower(asset_symbol) || '_up_down_5m_' || diff_code || '_shift_diff_' || shift_value::text || '_' || threshold_value::text || revert_code_suffix || '_instant'", PostgresSchema.SchemaSql, StringComparison.Ordinal);
-        Assert.Contains("asset_symbol || ' Up or Down 5m ' || diff_name || ' ' || shift_value::text || ' ' || threshold_value::text || ' ShiftDiff' || revert_name_suffix || ' Instant'", PostgresSchema.SchemaSql, StringComparison.Ordinal);
-        Assert.Contains("'btc_up_down_5m_statistics'", PostgresSchema.SchemaSql, StringComparison.Ordinal);
-        Assert.Contains("'btc_up_down_5m_prev_score_countertrend_' || prices.price_cents", PostgresSchema.SchemaSql, StringComparison.Ordinal);
-        Assert.Contains("'b7c50005-0000-4000-8025-' || lpad(prices.price_cents::text, 12, '0')", PostgresSchema.SchemaSql, StringComparison.Ordinal);
-        Assert.Contains("generate_series(10, 90, 5)", PostgresSchema.SchemaSql, StringComparison.Ordinal);
-        Assert.Contains("'b7c50005-0000-4000-8025-000000000998'", PostgresSchema.SchemaSql, StringComparison.Ordinal);
-        Assert.Contains("'btc_up_down_5m_prev_score_countertrend_fak'", PostgresSchema.SchemaSql, StringComparison.Ordinal);
-        Assert.Contains("'BTC Up or Down 5m Prev Score Countertrend'", PostgresSchema.SchemaSql, StringComparison.Ordinal);
-        Assert.Contains("'b7c50005-0000-4000-8025-000000000997'", PostgresSchema.SchemaSql, StringComparison.Ordinal);
-        Assert.Contains("'btc_up_down_5m_prev_score_countertrend_fak_premarket'", PostgresSchema.SchemaSql, StringComparison.Ordinal);
-        Assert.Contains("'BTC Up or Down 5m Prev Score Countertrend Premarket'", PostgresSchema.SchemaSql, StringComparison.Ordinal);
-        Assert.Contains("'b7c50005-0000-4000-8025-000000000999'", PostgresSchema.SchemaSql, StringComparison.Ordinal);
-        Assert.Contains("'btc_up_down_5m_prev_score_countertrend_fak_revert'", PostgresSchema.SchemaSql, StringComparison.Ordinal);
-        Assert.Contains("'BTC Up or Down 5m Prev Score Countertrend Revert'", PostgresSchema.SchemaSql, StringComparison.Ordinal);
-        Assert.Contains("('ETH', '8141')", PostgresSchema.SchemaSql, StringComparison.Ordinal);
-        Assert.Contains("('SOL', '8142')", PostgresSchema.SchemaSql, StringComparison.Ordinal);
-        Assert.Contains("lower(asset_symbol) || '_up_down_5m_prev_score_countertrend_fak'", PostgresSchema.SchemaSql, StringComparison.Ordinal);
-        Assert.Contains("asset_symbol || ' Up or Down 5m Prev Score Countertrend'", PostgresSchema.SchemaSql, StringComparison.Ordinal);
-        Assert.Contains("lower(asset_symbol) || '_up_down_5m_prev_score_countertrend_fak_premarket'", PostgresSchema.SchemaSql, StringComparison.Ordinal);
-        Assert.Contains("asset_symbol || ' Up or Down 5m Prev Score Countertrend Premarket'", PostgresSchema.SchemaSql, StringComparison.Ordinal);
+        Assert.DoesNotContain("'btc_up_down_5m_up_maker'", PostgresSchema.SchemaSql, StringComparison.Ordinal);
+        Assert.DoesNotContain("'btc_up_down_5m_down_maker'", PostgresSchema.SchemaSql, StringComparison.Ordinal);
+        Assert.DoesNotContain("'btc_up_down_5m_down_maker_50'", PostgresSchema.SchemaSql, StringComparison.Ordinal);
+        Assert.DoesNotContain("('BTC', '8097', '8098', '8115', '8116')", PostgresSchema.SchemaSql, StringComparison.Ordinal);
+        Assert.DoesNotContain("('ETH', '8099', '8100', '8117', '8118')", PostgresSchema.SchemaSql, StringComparison.Ordinal);
+        Assert.DoesNotContain("('SOL', '8101', '8102', '8119', '8120')", PostgresSchema.SchemaSql, StringComparison.Ordinal);
+        Assert.DoesNotContain("lower(asset_symbol) || '_up_down_5m_' || diff_code || '_shift_diff_' || shift_value::text || '_' || threshold_value::text || revert_code_suffix || '_instant'", PostgresSchema.SchemaSql, StringComparison.Ordinal);
+        Assert.DoesNotContain("asset_symbol || ' Up or Down 5m ' || diff_name || ' ' || shift_value::text || ' ' || threshold_value::text || ' ShiftDiff' || revert_name_suffix || ' Instant'", PostgresSchema.SchemaSql, StringComparison.Ordinal);
+        Assert.DoesNotContain("'btc_up_down_5m_statistics'", PostgresSchema.SchemaSql, StringComparison.Ordinal);
+        Assert.DoesNotContain("'btc_up_down_5m_prev_score_countertrend_' || prices.price_cents", PostgresSchema.SchemaSql, StringComparison.Ordinal);
+        Assert.DoesNotContain("'b7c50005-0000-4000-8025-' || lpad(prices.price_cents::text, 12, '0')", PostgresSchema.SchemaSql, StringComparison.Ordinal);
+        Assert.DoesNotContain("btc_up_down_5m_prev_score_countertrend_90", PostgresSchema.SchemaSql, StringComparison.Ordinal);
+        Assert.DoesNotContain("BTC Up or Down 5m Prev Score Countertrend 90", PostgresSchema.SchemaSql, StringComparison.Ordinal);
+        Assert.DoesNotContain("btc_up_down_5m_prev_score_countertrend_85", PostgresSchema.SchemaSql, StringComparison.Ordinal);
+        Assert.DoesNotContain("BTC Up or Down 5m Prev Score Countertrend 85", PostgresSchema.SchemaSql, StringComparison.Ordinal);
+        Assert.DoesNotContain("btc_up_down_5m_prev_score_countertrend_80", PostgresSchema.SchemaSql, StringComparison.Ordinal);
+        Assert.DoesNotContain("BTC Up or Down 5m Prev Score Countertrend 80", PostgresSchema.SchemaSql, StringComparison.Ordinal);
+        Assert.DoesNotContain("btc_up_down_5m_prev_score_countertrend_75", PostgresSchema.SchemaSql, StringComparison.Ordinal);
+        Assert.DoesNotContain("BTC Up or Down 5m Prev Score Countertrend 75", PostgresSchema.SchemaSql, StringComparison.Ordinal);
+        Assert.DoesNotContain("btc_up_down_5m_prev_score_countertrend_70", PostgresSchema.SchemaSql, StringComparison.Ordinal);
+        Assert.DoesNotContain("BTC Up or Down 5m Prev Score Countertrend 70", PostgresSchema.SchemaSql, StringComparison.Ordinal);
+        Assert.DoesNotContain("btc_up_down_5m_prev_score_countertrend_65", PostgresSchema.SchemaSql, StringComparison.Ordinal);
+        Assert.DoesNotContain("BTC Up or Down 5m Prev Score Countertrend 65", PostgresSchema.SchemaSql, StringComparison.Ordinal);
+        Assert.DoesNotContain("btc_up_down_5m_prev_score_countertrend_60", PostgresSchema.SchemaSql, StringComparison.Ordinal);
+        Assert.DoesNotContain("BTC Up or Down 5m Prev Score Countertrend 60", PostgresSchema.SchemaSql, StringComparison.Ordinal);
+        Assert.DoesNotContain("btc_up_down_5m_prev_score_countertrend_55", PostgresSchema.SchemaSql, StringComparison.Ordinal);
+        Assert.DoesNotContain("BTC Up or Down 5m Prev Score Countertrend 55", PostgresSchema.SchemaSql, StringComparison.Ordinal);
+        Assert.DoesNotContain("'b7c50005-0000-4000-8025-000000000998'", PostgresSchema.SchemaSql, StringComparison.Ordinal);
+        Assert.DoesNotContain("'btc_up_down_5m_prev_score_countertrend_fak'", PostgresSchema.SchemaSql, StringComparison.Ordinal);
+        Assert.DoesNotContain("'BTC Up or Down 5m Prev Score Countertrend'", PostgresSchema.SchemaSql, StringComparison.Ordinal);
+        Assert.DoesNotContain("'b7c50005-0000-4000-8025-000000000997'", PostgresSchema.SchemaSql, StringComparison.Ordinal);
+        Assert.DoesNotContain("'btc_up_down_5m_prev_score_countertrend_fak_premarket'", PostgresSchema.SchemaSql, StringComparison.Ordinal);
+        Assert.DoesNotContain("'BTC Up or Down 5m Prev Score Countertrend Premarket'", PostgresSchema.SchemaSql, StringComparison.Ordinal);
+        Assert.DoesNotContain("'b7c50005-0000-4000-8025-000000000999'", PostgresSchema.SchemaSql, StringComparison.Ordinal);
+        Assert.DoesNotContain("'btc_up_down_5m_prev_score_countertrend_fak_revert'", PostgresSchema.SchemaSql, StringComparison.Ordinal);
+        Assert.DoesNotContain("'BTC Up or Down 5m Prev Score Countertrend Revert'", PostgresSchema.SchemaSql, StringComparison.Ordinal);
+        Assert.DoesNotContain("'b7c50005-0000-4000-8025-000000000996'", PostgresSchema.SchemaSql, StringComparison.Ordinal);
+        Assert.DoesNotContain("'btc_up_down_5m_prev_score_countertrend_fak_premarket_revert'", PostgresSchema.SchemaSql, StringComparison.Ordinal);
+        Assert.DoesNotContain("'BTC Up or Down 5m Prev Score Countertrend Premarket Revert'", PostgresSchema.SchemaSql, StringComparison.Ordinal);
+        Assert.DoesNotContain("('ETH', '8141')", PostgresSchema.SchemaSql, StringComparison.Ordinal);
+        Assert.DoesNotContain("('SOL', '8142')", PostgresSchema.SchemaSql, StringComparison.Ordinal);
+        Assert.DoesNotContain("lower(asset_symbol) || '_up_down_5m_prev_score_countertrend_fak'", PostgresSchema.SchemaSql, StringComparison.Ordinal);
+        Assert.DoesNotContain("asset_symbol || ' Up or Down 5m Prev Score Countertrend'", PostgresSchema.SchemaSql, StringComparison.Ordinal);
+        Assert.DoesNotContain("'b7c50005-0000-4000-8141-000000000999'", PostgresSchema.SchemaSql, StringComparison.Ordinal);
+        Assert.DoesNotContain("'eth_up_down_5m_prev_score_countertrend_fak_revert'", PostgresSchema.SchemaSql, StringComparison.Ordinal);
+        Assert.DoesNotContain("'ETH Up or Down 5m Prev Score Countertrend Revert'", PostgresSchema.SchemaSql, StringComparison.Ordinal);
+        Assert.DoesNotContain("'b7c50005-0000-4000-8142-000000000999'", PostgresSchema.SchemaSql, StringComparison.Ordinal);
+        Assert.DoesNotContain("'sol_up_down_5m_prev_score_countertrend_fak_revert'", PostgresSchema.SchemaSql, StringComparison.Ordinal);
+        Assert.DoesNotContain("'SOL Up or Down 5m Prev Score Countertrend Revert'", PostgresSchema.SchemaSql, StringComparison.Ordinal);
+        Assert.DoesNotContain("'b7c50005-0000-4000-8141-000000000996'", PostgresSchema.SchemaSql, StringComparison.Ordinal);
+        Assert.DoesNotContain("'eth_up_down_5m_prev_score_countertrend_fak_premarket_revert'", PostgresSchema.SchemaSql, StringComparison.Ordinal);
+        Assert.DoesNotContain("'ETH Up or Down 5m Prev Score Countertrend Premarket Revert'", PostgresSchema.SchemaSql, StringComparison.Ordinal);
+        Assert.DoesNotContain("'b7c50005-0000-4000-8142-000000000996'", PostgresSchema.SchemaSql, StringComparison.Ordinal);
+        Assert.DoesNotContain("'sol_up_down_5m_prev_score_countertrend_fak_premarket_revert'", PostgresSchema.SchemaSql, StringComparison.Ordinal);
+        Assert.DoesNotContain("'SOL Up or Down 5m Prev Score Countertrend Premarket Revert'", PostgresSchema.SchemaSql, StringComparison.Ordinal);
+        Assert.DoesNotContain("lower(asset_symbol) || '_up_down_5m_prev_score_countertrend_fak_premarket'", PostgresSchema.SchemaSql, StringComparison.Ordinal);
+        Assert.DoesNotContain("asset_symbol || ' Up or Down 5m Prev Score Countertrend Premarket'", PostgresSchema.SchemaSql, StringComparison.Ordinal);
         Assert.DoesNotContain("'btc_up_down_' || intervals.interval_code || '_preopen_'", PostgresSchema.SchemaSql, StringComparison.Ordinal);
         Assert.DoesNotContain("'b7c50005-0000-4000-803' || intervals.interval_id", PostgresSchema.SchemaSql, StringComparison.Ordinal);
         Assert.DoesNotContain("_preopen_full_", PostgresSchema.SchemaSql, StringComparison.Ordinal);
         Assert.DoesNotContain("'b7c50005-0000-4000-804' || intervals.interval_id", PostgresSchema.SchemaSql, StringComparison.Ordinal);
         Assert.DoesNotContain("PreOpen Full ' || outcomes.outcome_name || ' ' || prices.price_cents || ' Sell'", PostgresSchema.SchemaSql, StringComparison.Ordinal);
         Assert.Contains("lower(COALESCE(NEW.category, '')) LIKE '%preopen%'", PostgresSchema.SchemaSql, StringComparison.Ordinal);
-        Assert.Contains("BTC Up or Down 5m Less 30", PostgresSchema.SchemaSql, StringComparison.Ordinal);
-        Assert.Contains("BTC Up or Down 5m Less 30 Gamma", PostgresSchema.SchemaSql, StringComparison.Ordinal);
-        Assert.Contains("BTC Less 180 Martin", PostgresSchema.SchemaSql, StringComparison.Ordinal);
-        Assert.Contains("BTC Up or Down 5m More 270", PostgresSchema.SchemaSql, StringComparison.Ordinal);
-        Assert.Contains("BTC Up or Down 5m More 30 Below 55", PostgresSchema.SchemaSql, StringComparison.Ordinal);
-        Assert.Contains("BTC Up or Down 5m More 60 Below 60", PostgresSchema.SchemaSql, StringComparison.Ordinal);
-        Assert.Contains("BTC Up or Down 5m More 60 Below 55", PostgresSchema.SchemaSql, StringComparison.Ordinal);
-        Assert.Contains("BTC Up or Down 5m More 120 Below 70", PostgresSchema.SchemaSql, StringComparison.Ordinal);
-        Assert.Contains("BTC Up or Down 5m More 150 Below 65", PostgresSchema.SchemaSql, StringComparison.Ordinal);
-        Assert.Contains("BTC Up or Down 5m More 270 Below 65", PostgresSchema.SchemaSql, StringComparison.Ordinal);
-        Assert.Contains("BTC Up or Down 5m More 270 Below 60", PostgresSchema.SchemaSql, StringComparison.Ordinal);
-        Assert.Contains("BTC Up or Down 5m Less 120 Below 20", PostgresSchema.SchemaSql, StringComparison.Ordinal);
-        Assert.Contains("BTC Up or Down 5m Less 120 Below 30", PostgresSchema.SchemaSql, StringComparison.Ordinal);
-        Assert.Contains("BTC Up or Down 5m Less 90 Below 20", PostgresSchema.SchemaSql, StringComparison.Ordinal);
-        Assert.Contains("BTC Up or Down 5m Less 60 Below 20", PostgresSchema.SchemaSql, StringComparison.Ordinal);
-        Assert.Contains("BTC Up or Down 5m More 90 Below 70", PostgresSchema.SchemaSql, StringComparison.Ordinal);
-        Assert.Contains("BTC Up or Down 5m More 90 Below 65", PostgresSchema.SchemaSql, StringComparison.Ordinal);
-        Assert.Contains("BTC Up or Down 5m Up Maker", PostgresSchema.SchemaSql, StringComparison.Ordinal);
-        Assert.Contains("BTC Up or Down 5m Down Maker", PostgresSchema.SchemaSql, StringComparison.Ordinal);
-        Assert.Contains("BTC Up or Down 5m Up Maker 50", PostgresSchema.SchemaSql, StringComparison.Ordinal);
-        Assert.Contains("BTC Up or Down 5m Down Maker 50", PostgresSchema.SchemaSql, StringComparison.Ordinal);
-        Assert.Contains("BTC Up or Down 5m More 60 Gamma Below 70", PostgresSchema.SchemaSql, StringComparison.Ordinal);
-        Assert.Contains("BTC Up or Down 5m More 120 Gamma Below 65", PostgresSchema.SchemaSql, StringComparison.Ordinal);
-        Assert.Contains("BTC Up or Down 5m More 150 Gamma Below 80", PostgresSchema.SchemaSql, StringComparison.Ordinal);
-        Assert.Contains("BTC Up or Down 5m More 270 Gamma", PostgresSchema.SchemaSql, StringComparison.Ordinal);
-        Assert.Contains("BTC Up or Down 5m Middle 100", PostgresSchema.SchemaSql, StringComparison.Ordinal);
+        Assert.DoesNotContain("BTC Up or Down 5m Less 30", PostgresSchema.SchemaSql, StringComparison.Ordinal);
+        Assert.DoesNotContain("BTC Up or Down 5m Less 30 Gamma", PostgresSchema.SchemaSql, StringComparison.Ordinal);
+        Assert.DoesNotContain("BTC Less 180 Martin", PostgresSchema.SchemaSql, StringComparison.Ordinal);
+        Assert.DoesNotContain("BTC Up or Down 5m More 270", PostgresSchema.SchemaSql, StringComparison.Ordinal);
+        Assert.DoesNotContain("BTC Up or Down 5m More 30 Below 55", PostgresSchema.SchemaSql, StringComparison.Ordinal);
+        Assert.DoesNotContain("BTC Up or Down 5m More 60 Below 60", PostgresSchema.SchemaSql, StringComparison.Ordinal);
+        Assert.DoesNotContain("BTC Up or Down 5m More 60 Below 55", PostgresSchema.SchemaSql, StringComparison.Ordinal);
+        Assert.DoesNotContain("BTC Up or Down 5m More 120 Below 70", PostgresSchema.SchemaSql, StringComparison.Ordinal);
+        Assert.DoesNotContain("BTC Up or Down 5m More 150 Below 65", PostgresSchema.SchemaSql, StringComparison.Ordinal);
+        Assert.DoesNotContain("BTC Up or Down 5m More 270 Below 65", PostgresSchema.SchemaSql, StringComparison.Ordinal);
+        Assert.DoesNotContain("BTC Up or Down 5m More 270 Below 60", PostgresSchema.SchemaSql, StringComparison.Ordinal);
+        Assert.DoesNotContain("BTC Up or Down 5m Less 120 Below 20", PostgresSchema.SchemaSql, StringComparison.Ordinal);
+        Assert.DoesNotContain("BTC Up or Down 5m Less 120 Below 30", PostgresSchema.SchemaSql, StringComparison.Ordinal);
+        Assert.DoesNotContain("BTC Up or Down 5m Less 90 Below 20", PostgresSchema.SchemaSql, StringComparison.Ordinal);
+        Assert.DoesNotContain("BTC Up or Down 5m Less 60 Below 20", PostgresSchema.SchemaSql, StringComparison.Ordinal);
+        Assert.DoesNotContain("BTC Up or Down 5m More 90 Below 70", PostgresSchema.SchemaSql, StringComparison.Ordinal);
+        Assert.DoesNotContain("BTC Up or Down 5m More 90 Below 65", PostgresSchema.SchemaSql, StringComparison.Ordinal);
+        Assert.DoesNotContain("BTC Up or Down 5m Up Maker 50", PostgresSchema.SchemaSql, StringComparison.Ordinal);
+        Assert.DoesNotContain("BTC Up or Down 5m Down Maker 50", PostgresSchema.SchemaSql, StringComparison.Ordinal);
+        Assert.DoesNotContain("BTC Up or Down 5m More 60 Gamma Below 70", PostgresSchema.SchemaSql, StringComparison.Ordinal);
+        Assert.DoesNotContain("BTC Up or Down 5m More 60 Gamma Below 80", PostgresSchema.SchemaSql, StringComparison.Ordinal);
+        Assert.DoesNotContain("BTC Up or Down 5m More 120 Gamma Below 65", PostgresSchema.SchemaSql, StringComparison.Ordinal);
+        Assert.DoesNotContain("BTC Up or Down 5m More 90 Gamma Below 70", PostgresSchema.SchemaSql, StringComparison.Ordinal);
+        Assert.DoesNotContain("BTC Up or Down 5m More 120 Gamma Below 70", PostgresSchema.SchemaSql, StringComparison.Ordinal);
+        Assert.DoesNotContain("BTC Up or Down 5m More 150 Gamma Below 70", PostgresSchema.SchemaSql, StringComparison.Ordinal);
+        Assert.DoesNotContain("BTC Up or Down 5m More 150 Gamma Below 80", PostgresSchema.SchemaSql, StringComparison.Ordinal);
+        Assert.DoesNotContain("BTC Up or Down 5m More 270 Gamma", PostgresSchema.SchemaSql, StringComparison.Ordinal);
+        Assert.DoesNotContain("BTC Up or Down 5m Middle 100", PostgresSchema.SchemaSql, StringComparison.Ordinal);
         Assert.DoesNotContain("BTC Up or Down 5m Middle 100 Revert", PostgresSchema.SchemaSql, StringComparison.Ordinal);
-        Assert.Contains("BTC Up or Down 5m Middle ' || depths.depth || ' ' || thresholds.threshold_name || ' bps Instant", PostgresSchema.SchemaSql, StringComparison.Ordinal);
+        Assert.DoesNotContain("BTC Up or Down 5m Middle ' || depths.depth || ' ' || thresholds.threshold_name || ' bps Instant", PostgresSchema.SchemaSql, StringComparison.Ordinal);
         Assert.DoesNotContain("BTC Up or Down 5m Middle ' || depths.depth || ' Revert ' || thresholds.threshold_name || ' bps Instant", PostgresSchema.SchemaSql, StringComparison.Ordinal);
-        Assert.Contains("BTC Up or Down 5m Middle ' || depths.depth || ' ' || thresholds.threshold_name || ' bps", PostgresSchema.SchemaSql, StringComparison.Ordinal);
+        Assert.DoesNotContain("BTC Up or Down 5m Middle ' || depths.depth || ' ' || thresholds.threshold_name || ' bps", PostgresSchema.SchemaSql, StringComparison.Ordinal);
         Assert.DoesNotContain("BTC Up or Down 5m Middle ' || depths.depth || ' Revert ' || thresholds.threshold_name || ' bps", PostgresSchema.SchemaSql, StringComparison.Ordinal);
-        Assert.Contains("BTC Up or Down 5m Skip 5", PostgresSchema.SchemaSql, StringComparison.Ordinal);
+        Assert.DoesNotContain("BTC Up or Down 5m Skip 5", PostgresSchema.SchemaSql, StringComparison.Ordinal);
         Assert.DoesNotContain("BTC Up or Down 5m Skip 5 Revert", PostgresSchema.SchemaSql, StringComparison.Ordinal);
-        Assert.Contains("asset_symbol || ' Up or Down 5m Skip ' || depth_name", PostgresSchema.SchemaSql, StringComparison.Ordinal);
+        Assert.DoesNotContain("asset_symbol || ' Up or Down 5m Skip ' || depth_name", PostgresSchema.SchemaSql, StringComparison.Ordinal);
         Assert.DoesNotContain("asset_symbol || ' Up or Down 5m Skip ' || threshold_name || ' bps Instant", PostgresSchema.SchemaSql, StringComparison.Ordinal);
-        Assert.Contains("BTC Up or Down 5m Up", PostgresSchema.SchemaSql, StringComparison.Ordinal);
-        Assert.Contains("BTC Up or Down 5m Down", PostgresSchema.SchemaSql, StringComparison.Ordinal);
+        Assert.DoesNotContain("'BTC Up or Down 5m Up',", PostgresSchema.SchemaSql, StringComparison.Ordinal);
+        Assert.DoesNotContain("'BTC Up or Down 5m Down',", PostgresSchema.SchemaSql, StringComparison.Ordinal);
         Assert.Contains("Simple strategy", PostgresSchema.SchemaSql, StringComparison.Ordinal);
-        Assert.Contains("BTC Up or Down 5m Statistics", PostgresSchema.SchemaSql, StringComparison.Ordinal);
+        Assert.DoesNotContain("BTC Up or Down 5m Statistics", PostgresSchema.SchemaSql, StringComparison.Ordinal);
         Assert.DoesNotContain("'btc_up_down_5m',", PostgresSchema.SchemaSql, StringComparison.Ordinal);
         Assert.Contains("strategy_id uuid NOT NULL DEFAULT 'f0110a0d-1ead-4c00-8b01-000000000001'", PostgresSchema.SchemaSql, StringComparison.Ordinal);
         Assert.Contains("REFERENCES strategies(id)", PostgresSchema.SchemaSql, StringComparison.Ordinal);
@@ -436,6 +492,25 @@ public sealed class StorageTests
     }
 
     [Fact]
+    public void PostgresRepository_UpdatePaperOrderPersistsFillEconomics()
+    {
+        var source = ReadStorageRepositorySource();
+        var start = source.IndexOf("UpdatePaperOrderAsync", StringComparison.Ordinal);
+        Assert.True(start >= 0);
+
+        var end = source.IndexOf("GetOpenPaperOrdersAsync", start, StringComparison.Ordinal);
+        Assert.True(end > start);
+
+        var method = source[start..end];
+        Assert.Contains("price = @Price", method, StringComparison.Ordinal);
+        Assert.Contains("size_shares = @SizeShares", method, StringComparison.Ordinal);
+        Assert.Contains("notional_usd = @NotionalUsd", method, StringComparison.Ordinal);
+        Assert.Contains("AddWithValue(\"Price\", order.Price)", method, StringComparison.Ordinal);
+        Assert.Contains("AddWithValue(\"SizeShares\", order.SizeShares)", method, StringComparison.Ordinal);
+        Assert.Contains("AddWithValue(\"NotionalUsd\", order.NotionalUsd)", method, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void PostgresRepository_GetRecentLiveOrders_SupportsStrategyFilteredFirstPage()
     {
         var source = ReadStorageRepositorySource();
@@ -510,6 +585,18 @@ public sealed class StorageTests
     }
 
     [Fact]
+    public void Dashboard_MainViewModel_BigSettlesFilterStartsAtOneThousand()
+    {
+        var source = ReadRepositorySource("src", "PolyCopyTrader.Dashboard", "ViewModels", "MainViewModel.cs");
+
+        Assert.Contains("private const int BigSettlesThreshold = 1000;", source, StringComparison.Ordinal);
+        Assert.Contains("strategy.SettledPositionsCount >= BigSettlesThreshold", source, StringComparison.Ordinal);
+        Assert.Contains("strategy.SettledRunsCount >= BigSettlesThreshold", source, StringComparison.Ordinal);
+        Assert.DoesNotContain("strategy.SettledPositionsCount > BigSettlesThreshold", source, StringComparison.Ordinal);
+        Assert.DoesNotContain("strategy.SettledRunsCount > BigSettlesThreshold", source, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void DashboardRepositoryFactory_ReadsConfiguredDefaultDatabaseSource()
     {
         var source = ReadRepositorySource("src", "PolyCopyTrader.Dashboard", "Services", "DashboardRepositoryFactory.cs");
@@ -548,7 +635,7 @@ public sealed class StorageTests
         var repository = new TestAppRepository();
         var now = DateTimeOffset.UtcNow;
         var firstStrategy = StrategyIds.FollowLeader;
-        var secondStrategy = StrategyIds.BtcUpDown5mBinanceBps2;
+        var secondStrategy = StrategyIds.BtcUpDown5mUpSimple;
         repository.PaperOrders.Add(CreatePaperOrder(secondStrategy, now.AddMinutes(-1)));
         repository.PaperOrders.Add(CreatePaperOrder(firstStrategy, now.AddMinutes(-2)));
         repository.PaperOrders.Add(CreatePaperOrder(firstStrategy, now.AddMinutes(-3)));
@@ -805,37 +892,7 @@ public sealed class StorageTests
     }
 
     [Fact]
-    public void PostgresRepository_StrategyAutoLivePauseSeparatesLivePauseFromPaperResume()
-    {
-        var source = ReadStorageRepositorySource();
-        var start = source.IndexOf("UpdateStrategyAutoLivePauseFromRecentPnlAsync", StringComparison.Ordinal);
-        Assert.True(start >= 0);
-
-        var end = source.IndexOf("SetStrategyStakeAmountsAsync", start, StringComparison.Ordinal);
-        Assert.True(end > start);
-
-        var method = source[start..end];
-        Assert.Contains("count(*)::integer AS settled_count", method, StringComparison.Ordinal);
-        Assert.Contains("PauseFromLiveSettlements", method, StringComparison.Ordinal);
-        Assert.Contains("ResumeFromPaperSettlements", method, StringComparison.Ordinal);
-        Assert.Contains("FROM live_orders live_order", method, StringComparison.Ordinal);
-        Assert.Contains("FROM strategy_market_paper_runs run", method, StringComparison.Ordinal);
-        Assert.Contains("FROM paper_position_settlements settlement", method, StringComparison.Ordinal);
-        Assert.Contains("AND (SELECT settled_count FROM live_pnl) > 1", method, StringComparison.Ordinal);
-        Assert.Contains("strategy_state AS", method, StringComparison.Ordinal);
-        Assert.Contains("resume_window_start_utc", method, StringComparison.Ordinal);
-        Assert.Contains("post_pause_settled_count", method, StringComparison.Ordinal);
-        Assert.Contains("WHERE settled_at_utc >= (SELECT resume_window_start_utc FROM strategy_state)", method, StringComparison.Ordinal);
-        Assert.Contains("AND (SELECT post_pause_settled_count FROM paper_pnl) > 0 THEN false", method, StringComparison.Ordinal);
-        Assert.Contains("SET auto_live_paused = transition.auto_live_paused", method, StringComparison.Ordinal);
-        Assert.Contains("auto_live_paused_at_utc = transition.auto_live_paused_at_utc", method, StringComparison.Ordinal);
-        Assert.Contains("auto_live_pause_window_start_utc = transition.auto_live_pause_window_start_utc", method, StringComparison.Ordinal);
-        Assert.Contains("AS recent_settled_count", method, StringComparison.Ordinal);
-        Assert.DoesNotContain("paused_until_utc", method, StringComparison.Ordinal);
-    }
-
-    [Fact]
-    public void PostgresRepository_StrategyRecentPerformanceKeepsRawLiveFlagForDashboardFilter()
+    public void PostgresRepository_StrategyRecentPerformanceUsesLiveFlagAsEffectiveLive()
     {
         var source = ReadStorageRepositorySource();
         var start = source.IndexOf("GetStrategyRecentPerformanceAsync", StringComparison.Ordinal);
@@ -846,13 +903,32 @@ public sealed class StorageTests
 
         var method = source[start..end];
         Assert.Contains(
-            "SELECT id, code, name, live_stakes, auto_live_paused, live_enabled_at_utc, live_stakes AND NOT auto_live_paused AS effective_live_stakes",
+            "SELECT id, code, name, live_stakes, live_enabled_at_utc, live_stakes AS effective_live_stakes",
             method,
             StringComparison.Ordinal);
         Assert.Contains("sw.live_stakes,", method, StringComparison.Ordinal);
         Assert.Contains("CASE WHEN sw.effective_live_stakes", method, StringComparison.Ordinal);
         Assert.Contains("run.live_enabled_at_utc IS NOT NULL", method, StringComparison.Ordinal);
         Assert.Contains("run.updated_at_utc >= run.live_enabled_at_utc", method, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void PostgresRepository_StrategyPerformanceRoundsCountertrendBpsForDecimalReader()
+    {
+        var source = ReadStorageRepositorySource();
+        var start = source.IndexOf("GetStrategyPerformanceAsync", StringComparison.Ordinal);
+        Assert.True(start >= 0);
+
+        var end = source.IndexOf("GetLiveRealizedPnlByStrategyAsync", start, StringComparison.Ordinal);
+        Assert.True(end > start);
+
+        var method = source[start..end];
+        Assert.Contains("round((raw_decision_json ->> 'previous_score_bps')::numeric, 8)::numeric(28,8)", method, StringComparison.Ordinal);
+        Assert.Contains("round((raw_decision_json ->> 'previous_score')::numeric * 10000, 8)::numeric(28,8)", method, StringComparison.Ordinal);
+        Assert.Contains("round((raw_decision_json ->> 'selected_signal_bps')::numeric, 8)::numeric(28,8)", method, StringComparison.Ordinal);
+        Assert.Contains("round(COALESCE(selected_signal_bps, abs(previous_score_bps)), 8)::numeric(28,8) AS signal_bps", method, StringComparison.Ordinal);
+        Assert.Contains("COALESCE(round(avg(previous_score_bps), 8), 0)::numeric(28,8) AS avg_countertrend_score_bps", method, StringComparison.Ordinal);
+        Assert.Contains("COALESCE(round(avg(signal_bps), 8), 0)::numeric(28,8) AS avg_countertrend_signal_bps", method, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -892,24 +968,6 @@ public sealed class StorageTests
     }
 
     [Fact]
-    public void PostgresRepository_StrategyAutoLivePauseClearKeepsAllowlistedStrategiesPaused()
-    {
-        var source = ReadStorageRepositorySource();
-        var start = source.IndexOf("ClearStrategyAutoLivePauseExceptAsync", StringComparison.Ordinal);
-        Assert.True(start >= 0);
-
-        var end = source.IndexOf("SetStrategyStakeAmountsAsync", start, StringComparison.Ordinal);
-        Assert.True(end > start);
-
-        var method = source[start..end];
-        Assert.Contains("SET auto_live_paused = false", method, StringComparison.Ordinal);
-        Assert.Contains("auto_live_paused_at_utc = NULL", method, StringComparison.Ordinal);
-        Assert.Contains("auto_live_pause_window_start_utc = NULL", method, StringComparison.Ordinal);
-        Assert.Contains("WHERE auto_live_paused", method, StringComparison.Ordinal);
-        Assert.Contains("id <> ALL(@AllowlistedStrategyIds)", method, StringComparison.Ordinal);
-    }
-
-    [Fact]
     public void PostgresRepository_SetStrategyStakeAmountsSavesLostCoefficients()
     {
         var source = ReadStorageRepositorySource();
@@ -935,6 +993,29 @@ public sealed class StorageTests
     }
 
     [Fact]
+    public void PostgresRepository_StrategyLiveAvailableBalanceIsCappedAtOneHundred()
+    {
+        var source = ReadStorageRepositorySource();
+        var start = source.IndexOf("SetStrategyLiveAvailableBalanceAsync", StringComparison.Ordinal);
+        Assert.True(start >= 0);
+
+        var end = source.IndexOf("UpdateStrategyLostCounterAfterSettlementAsync", start, StringComparison.Ordinal);
+        Assert.True(end > start);
+
+        var method = source[start..end];
+        Assert.Contains("live_available_balance = LEAST(100.00, @LiveAvailableBalance)", method, StringComparison.Ordinal);
+
+        start = source.IndexOf("ApplyLiveOrderSettlementToStrategyBalanceAsync", StringComparison.Ordinal);
+        Assert.True(start >= 0);
+
+        end = source.IndexOf("GetRecentLiveOrdersAsync", start, StringComparison.Ordinal);
+        Assert.True(end > start);
+
+        method = source[start..end];
+        Assert.Contains("LEAST(100.00, GREATEST(0, live_available_balance + @RealizedPnlUsd))", method, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void PostgresRepository_UpdateStrategyLostCounterAfterSettlementUpdatesSelectedModeOnly()
     {
         var source = ReadStorageRepositorySource();
@@ -955,168 +1036,6 @@ public sealed class StorageTests
         Assert.Contains("WHEN @Won THEN live_lost_counter - 1", method, StringComparison.Ordinal);
         Assert.Contains("ELSE live_lost_counter + 1", method, StringComparison.Ordinal);
         Assert.Contains("RETURNING paper_lost_counter, live_lost_counter", method, StringComparison.Ordinal);
-    }
-
-    [Fact]
-    public async Task TestRepository_StrategyAutoLivePausePausesOnlyFromRecentLivePnlNegative()
-    {
-        var now = DateTimeOffset.UtcNow;
-        var strategyId = StrategyIds.BtcUpDown5mBinanceBps2;
-        var repository = new TestAppRepository();
-        repository.StrategySettings[strategyId] = StrategyRuntimeSettings.Default(strategyId) with
-        {
-            LiveStakes = true
-        };
-        await repository.AddLiveOrderAsync(CreateSettledLiveOrder(strategyId, now.AddMinutes(-10), -1m));
-        await repository.AddLiveOrderAsync(CreateSettledLiveOrder(strategyId, now.AddMinutes(-5), -1m));
-
-        var decision = await repository.UpdateStrategyAutoLivePauseFromRecentPnlAsync(
-            strategyId,
-            now.AddHours(-12),
-            now,
-            StrategyAutoLivePauseUpdateMode.PauseFromLiveSettlements,
-            CancellationToken.None);
-
-        Assert.True(decision.AutoLivePaused);
-        Assert.False(decision.AutoLiveResumed);
-        Assert.True(decision.AutoLivePauseChanged);
-        Assert.Equal(2, decision.RecentSettledCount);
-        Assert.Equal(-2m, decision.RecentPnlUsd);
-        Assert.True(repository.StrategySettings[strategyId].LiveStakes);
-        Assert.True(repository.StrategySettings[strategyId].AutoLivePaused);
-        Assert.Equal(now, repository.StrategySettings[strategyId].AutoLivePausedAtUtc);
-        Assert.Equal(now.AddHours(-12), repository.StrategySettings[strategyId].AutoLivePauseWindowStartUtc);
-        Assert.False(repository.StrategySettings[strategyId].Paused);
-        Assert.Null(repository.StrategySettings[strategyId].PausedUntilUtc);
-    }
-
-    [Fact]
-    public async Task TestRepository_StrategyAutoLivePauseDoesNotPauseFromPaperLoss()
-    {
-        var now = DateTimeOffset.UtcNow;
-        var strategyId = StrategyIds.BtcUpDown5mBinanceBps2;
-        var repository = new TestAppRepository();
-        repository.StrategySettings[strategyId] = StrategyRuntimeSettings.Default(strategyId) with
-        {
-            LiveStakes = true
-        };
-        repository.StrategyMarketPaperRuns.Add(CreateSettledStrategyRun(strategyId, now.AddMinutes(-10), -1m));
-        repository.StrategyMarketPaperRuns.Add(CreateSettledStrategyRun(strategyId, now.AddMinutes(-5), -1m));
-
-        var decision = await repository.UpdateStrategyAutoLivePauseFromRecentPnlAsync(
-            strategyId,
-            now.AddHours(-12),
-            now,
-            StrategyAutoLivePauseUpdateMode.ResumeFromPaperSettlements,
-            CancellationToken.None);
-
-        Assert.False(decision.AutoLivePaused);
-        Assert.False(decision.AutoLiveResumed);
-        Assert.False(decision.AutoLivePauseChanged);
-        Assert.Equal(2, decision.RecentSettledCount);
-        Assert.Equal(-2m, decision.RecentPnlUsd);
-        Assert.True(repository.StrategySettings[strategyId].LiveStakes);
-        Assert.False(repository.StrategySettings[strategyId].AutoLivePaused);
-    }
-
-    [Fact]
-    public async Task TestRepository_StrategyAutoLivePauseDoesNotClearWithoutPostPausePaperSettlement()
-    {
-        var now = DateTimeOffset.UtcNow;
-        var pausedAt = now.AddMinutes(-10);
-        var windowStart = pausedAt.AddHours(-12);
-        var strategyId = StrategyIds.BtcUpDown5mBinanceBps2;
-        var repository = new TestAppRepository();
-        repository.StrategySettings[strategyId] = StrategyRuntimeSettings.Default(strategyId) with
-        {
-            LiveStakes = true,
-            AutoLivePaused = true,
-            AutoLivePausedAtUtc = pausedAt,
-            AutoLivePauseWindowStartUtc = windowStart
-        };
-        repository.StrategyMarketPaperRuns.Add(CreateSettledStrategyRun(strategyId, pausedAt.AddMinutes(-5), 2m));
-        repository.StrategyMarketPaperRuns.Add(CreateSettledStrategyRun(strategyId, pausedAt.AddMinutes(-1), 2m));
-
-        var decision = await repository.UpdateStrategyAutoLivePauseFromRecentPnlAsync(
-            strategyId,
-            windowStart,
-            now,
-            StrategyAutoLivePauseUpdateMode.ResumeFromPaperSettlements,
-            CancellationToken.None);
-
-        Assert.True(decision.AutoLivePaused);
-        Assert.False(decision.AutoLiveResumed);
-        Assert.False(decision.AutoLivePauseChanged);
-        Assert.Equal(2, decision.RecentSettledCount);
-        Assert.Equal(4m, decision.RecentPnlUsd);
-        Assert.True(repository.StrategySettings[strategyId].LiveStakes);
-        Assert.True(repository.StrategySettings[strategyId].AutoLivePaused);
-    }
-
-    [Fact]
-    public async Task TestRepository_StrategyAutoLivePauseClearsFromAnchoredPaperPnlPositive()
-    {
-        var now = DateTimeOffset.UtcNow;
-        var pausedAt = now.AddMinutes(-10);
-        var windowStart = pausedAt.AddHours(-12);
-        var strategyId = StrategyIds.BtcUpDown5mBinanceBps2;
-        var repository = new TestAppRepository();
-        repository.StrategySettings[strategyId] = StrategyRuntimeSettings.Default(strategyId) with
-        {
-            LiveStakes = true,
-            AutoLivePaused = true,
-            AutoLivePausedAtUtc = pausedAt,
-            AutoLivePauseWindowStartUtc = windowStart
-        };
-        repository.StrategyMarketPaperRuns.Add(CreateSettledStrategyRun(strategyId, windowStart.AddMinutes(-1), -100m));
-        repository.StrategyMarketPaperRuns.Add(CreateSettledStrategyRun(strategyId, pausedAt.AddMinutes(-5), 2m));
-        repository.StrategyMarketPaperRuns.Add(CreateSettledStrategyRun(strategyId, pausedAt.AddMinutes(1), 1m));
-
-        var decision = await repository.UpdateStrategyAutoLivePauseFromRecentPnlAsync(
-            strategyId,
-            windowStart,
-            now,
-            StrategyAutoLivePauseUpdateMode.ResumeFromPaperSettlements,
-            CancellationToken.None);
-
-        Assert.False(decision.AutoLivePaused);
-        Assert.True(decision.AutoLiveResumed);
-        Assert.True(decision.AutoLivePauseChanged);
-        Assert.Equal(2, decision.RecentSettledCount);
-        Assert.Equal(3m, decision.RecentPnlUsd);
-        Assert.True(repository.StrategySettings[strategyId].LiveStakes);
-        Assert.False(repository.StrategySettings[strategyId].AutoLivePaused);
-        Assert.Null(repository.StrategySettings[strategyId].AutoLivePausedAtUtc);
-        Assert.Null(repository.StrategySettings[strategyId].AutoLivePauseWindowStartUtc);
-    }
-
-    [Fact]
-    public async Task TestRepository_StrategyAutoLivePauseDoesNotClearFromLiveWin()
-    {
-        var now = DateTimeOffset.UtcNow;
-        var strategyId = StrategyIds.BtcUpDown5mBinanceBps2;
-        var repository = new TestAppRepository();
-        repository.StrategySettings[strategyId] = StrategyRuntimeSettings.Default(strategyId) with
-        {
-            LiveStakes = true,
-            AutoLivePaused = true
-        };
-        await repository.AddLiveOrderAsync(CreateSettledLiveOrder(strategyId, now.AddMinutes(-10), 2m));
-
-        var decision = await repository.UpdateStrategyAutoLivePauseFromRecentPnlAsync(
-            strategyId,
-            now.AddHours(-12),
-            now,
-            StrategyAutoLivePauseUpdateMode.PauseFromLiveSettlements,
-            CancellationToken.None);
-
-        Assert.True(decision.AutoLivePaused);
-        Assert.False(decision.AutoLiveResumed);
-        Assert.False(decision.AutoLivePauseChanged);
-        Assert.Equal(1, decision.RecentSettledCount);
-        Assert.Equal(2m, decision.RecentPnlUsd);
-        Assert.True(repository.StrategySettings[strategyId].LiveStakes);
-        Assert.True(repository.StrategySettings[strategyId].AutoLivePaused);
     }
 
     [Fact]

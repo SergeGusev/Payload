@@ -1,0 +1,63 @@
+[     0.0s] Delete target strategy cleanup started at 2026-06-24T14:40:31.0800884+00:00
+[     0.0s] Target id: b7c50005-0000-4000-8022-000000150080
+[     0.0s] Target code: btc_up_down_5m_more_150_gamma_below_80
+[     0.0s] Target name: BTC Up or Down 5m More 150 Gamma Below 80
+[     0.0s] Target wallet: strategy:btc_up_down_5m_more_150_gamma_below_80
+[     0.0s] Dry run: False
+[     0.0s] Execute: False
+[     0.0s] Verify only: True
+[     0.0s] Batch size: 1000
+[     0.0s] Batch pause ms: 100
+[     0.0s] Batch lock timeout ms: 500
+[     0.0s] Batch statement timeout ms: 20000
+[     0.4s] Database: polycopytrader
+[     0.4s] Server address: 192.168.0.101/32
+[     0.4s] Server time UTC: 6/24/2026 2:40:31 PM
+[     0.4s] Last heartbeat UTC: 2026-06-24T14:39:44Z
+[     0.4s] Preparing target temp tables...
+[    31.0s] Strategy rows matching target id/code/name: 0
+[    31.0s] Exact target strategy rows: 0
+[    31.1s] Foreign keys touching cleanup parents:
+[    31.1s]   paper_live_shadow_decisions -> live_orders (paper_live_shadow_decisions_live_order_id_fkey)
+[    31.1s]   live_orders -> paper_orders (live_orders_paper_order_id_fkey)
+[    31.1s]   paper_fills -> paper_orders (paper_fills_paper_order_id_fkey)
+[    31.1s]   paper_live_shadow_decisions -> paper_orders (paper_live_shadow_decisions_paper_order_id_fkey)
+[    31.1s]   strategy_market_paper_runs -> paper_orders (strategy_market_paper_runs_paper_order_id_fkey)
+[    31.1s]   paper_live_shadow_decisions -> signals (paper_live_shadow_decisions_signal_id_fkey)
+[    31.1s]   signal_rejections -> signals (signal_rejections_signal_id_fkey)
+[    31.1s]   strategy_market_paper_runs -> signals (strategy_market_paper_runs_signal_id_fkey)
+[    31.1s]   dry_run_orders -> strategies (dry_run_orders_strategy_id_fkey)
+[    31.1s]   live_orders -> strategies (live_orders_strategy_id_fkey)
+[    31.1s]   paper_live_shadow_decisions -> strategies (paper_live_shadow_decisions_strategy_id_fkey)
+[    31.1s]   paper_live_shadow_discrepancies -> strategies (paper_live_shadow_discrepancies_strategy_id_fkey)
+[    31.1s]   paper_orders -> strategies (paper_orders_strategy_id_fkey)
+[    31.1s]   strategy_market_paper_runs -> strategies (strategy_market_paper_runs_strategy_id_fkey)
+[    31.1s] Target strategy row matches:
+[    31.1s]   <none>
+[    31.1s] Target summary (before):
+[    31.1s]   strategy matches: 0
+[    31.1s]   exact strategy row still in strategies: 0
+[    31.1s]   paper_orders temp ids: 0
+[    31.1s]   remaining paper_orders by temp: 0
+[    31.2s]   remaining paper_orders by strategy/wallet: 0
+[    31.2s]   paper_fills temp ids: 0
+[    31.2s]   remaining paper_fills by target orders: 0
+[    31.2s]   strategy runs temp ids: 0
+[    31.2s]   remaining strategy runs by strategy: 0
+[    31.2s]   dry_run_orders: 0
+[    31.3s]   live_orders temp ids: 0
+[    31.3s]   remaining live_orders: 0
+[    31.3s]   open/unsettled live_orders: 0
+[    31.3s]   shadow correlation ids: 0
+[    31.3s]   paper_live_shadow_decisions: 0
+[    31.4s]   paper_live_shadow_discrepancies: 0
+[    31.4s]   paper_positions: 0
+[    31.4s]   paper_position_settlements: 0
+[    31.4s]   paper_copied_trader_performance: 0
+[    31.4s]   paper_copied_leader_positions: 0
+[    31.4s]   paper_copied_leader_activity_events: 0
+[    31.4s]   polymarket_onchain_paper_signal_results: 0
+[    31.4s]   signal ids temp: 0
+[    31.4s]   remaining signals by temp: 0
+[    31.4s]   remaining signal_rejections by temp: 0
+[    31.4s] Verification finished at 2026-06-24T14:41:02.5223801+00:00

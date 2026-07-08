@@ -417,6 +417,27 @@ public interface IAppRepository
         return Task.FromResult<IReadOnlyList<StrategyRecentPerformance>>([]);
     }
 
+    Task<int> RefreshDateDependentStrategyHourlyPaperPnlAsync(
+        IReadOnlyCollection<Guid> strategyIds,
+        DateTimeOffset refreshedAtUtc,
+        CancellationToken cancellationToken = default)
+    {
+        return Task.FromResult(0);
+    }
+
+    Task<decimal?> GetDateDependentStrategyHourlyPaperPnlAsync(
+        Guid strategyId,
+        int hourUtc,
+        CancellationToken cancellationToken = default)
+    {
+        if (hourUtc is < 0 or > 23)
+        {
+            throw new ArgumentOutOfRangeException(nameof(hourUtc), hourUtc, "UTC hour must be in the range 0..23.");
+        }
+
+        return Task.FromResult<decimal?>(null);
+    }
+
     Task<IReadOnlyDictionary<Guid, bool>> GetStrategyEnabledStatesAsync(CancellationToken cancellationToken = default)
     {
         return Task.FromResult<IReadOnlyDictionary<Guid, bool>>(
@@ -455,24 +476,6 @@ public interface IAppRepository
         CancellationToken cancellationToken = default)
     {
         return Task.FromResult(false);
-    }
-
-    Task<StrategyAutoLivePauseDecision> UpdateStrategyAutoLivePauseFromRecentPnlAsync(
-        Guid strategyId,
-        DateTimeOffset lookbackStartUtc,
-        DateTimeOffset updatedAtUtc,
-        StrategyAutoLivePauseUpdateMode updateMode,
-        CancellationToken cancellationToken = default)
-    {
-        return Task.FromResult(new StrategyAutoLivePauseDecision(false, false, false, 0m, 0, lookbackStartUtc));
-    }
-
-    Task<int> ClearStrategyAutoLivePauseExceptAsync(
-        IReadOnlyCollection<Guid> allowlistedStrategyIds,
-        DateTimeOffset updatedAtUtc,
-        CancellationToken cancellationToken = default)
-    {
-        return Task.FromResult(0);
     }
 
     Task<bool> SetStrategyStakeAmountsAsync(

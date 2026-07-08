@@ -298,7 +298,7 @@ public sealed class LiveTradingGatingTests
     }
 
     [Fact]
-    public async Task LiveModeWithInsufficientStrategyBalanceDisablesStrategyLiveStakes()
+    public async Task LiveModeWithInsufficientStrategyBalanceKeepsStrategyLiveStakesEnabled()
     {
         var repository = new TestAppRepository();
         var queue = new InMemoryLeaderTradeCandidateQueue();
@@ -316,7 +316,7 @@ public sealed class LiveTradingGatingTests
 
         Assert.Equal(0, result.LiveOrdersSubmitted);
         Assert.Equal(0, tradingClient.PlaceCalls);
-        Assert.False(repository.StrategySettings[StrategyIds.FollowLeader].LiveStakes);
+        Assert.True(repository.StrategySettings[StrategyIds.FollowLeader].LiveStakes);
         var order = Assert.Single(repository.LiveOrders);
         Assert.Equal(LiveOrderStatus.PreflightRejected, order.Status);
         Assert.Contains("live available balance is insufficient", order.ValidationSummary, StringComparison.OrdinalIgnoreCase);
@@ -446,11 +446,11 @@ public sealed class LiveTradingGatingTests
         var correlationId = Guid.NewGuid();
         var signalId = Guid.NewGuid();
         var paperOrderId = Guid.NewGuid();
-        var strategyId = StrategyIds.BtcUpDown5mVariants.Single(variant => variant.Code == "btc_up_down_5m_skip_1").Id;
+        var strategyId = StrategyIds.BtcUpDown5mUpSimple;
         await repository.AddPaperOrderAsync(new PaperOrder(
             paperOrderId,
             signalId,
-            "btc_up_down_5m_skip_1",
+            StrategyIds.BtcUpDown5mUpSimpleCode,
             PaperOrderStatus.Pending,
             TradeSide.Buy,
             "asset-yes",
@@ -473,9 +473,9 @@ public sealed class LiveTradingGatingTests
             "asset-yes",
             "condition-1",
             "Yes",
-            0.40m,
+            0.99m,
             5m,
-            2m,
+            4.95m,
             "FAK",
             now.AddMinutes(-1),
             now.AddMinutes(4),
@@ -530,11 +530,11 @@ public sealed class LiveTradingGatingTests
         var correlationId = Guid.NewGuid();
         var signalId = Guid.NewGuid();
         var paperOrderId = Guid.NewGuid();
-        var strategyId = StrategyIds.BtcUpDown5mVariants.Single(variant => variant.Code == "btc_up_down_5m_up_maker").Id;
+        var strategyId = StrategyIds.BtcUpDown5mUpSimple;
         await repository.AddPaperOrderAsync(new PaperOrder(
             paperOrderId,
             signalId,
-            "btc_up_down_5m_up_maker",
+            StrategyIds.BtcUpDown5mUpSimpleCode,
             PaperOrderStatus.Pending,
             TradeSide.Buy,
             "asset-up",
@@ -558,9 +558,9 @@ public sealed class LiveTradingGatingTests
             "asset-up",
             "condition-1",
             "Up",
-            0.44m,
+            0.99m,
             5m,
-            2.20m,
+            4.95m,
             "FAK",
             now.AddMinutes(-1),
             now.AddMinutes(4),
@@ -600,14 +600,14 @@ public sealed class LiveTradingGatingTests
     }
 
     [Fact]
-    public async Task LiveProcessorDisablesShadowLiveWhenPaperAndLivePriceDifferByMoreThanMicroTolerance()
+    public async Task LiveProcessorIgnoresExpectedFakPaperAndLivePriceDifference()
     {
         var repository = new TestAppRepository();
         var now = DateTimeOffset.UtcNow;
         var correlationId = Guid.NewGuid();
         var signalId = Guid.NewGuid();
         var paperOrderId = Guid.NewGuid();
-        var strategyId = StrategyIds.BtcUpDown5mBinanceBps1;
+        var strategyId = StrategyIds.BtcUpDown5mUpSimple;
         repository.StrategySettings[strategyId] = StrategyRuntimeSettings.Default(strategyId) with
         {
             LiveStakes = true
@@ -615,7 +615,7 @@ public sealed class LiveTradingGatingTests
         await repository.AddPaperOrderAsync(new PaperOrder(
             paperOrderId,
             signalId,
-            StrategyIds.BtcUpDown5mBinanceBps1Code,
+            StrategyIds.BtcUpDown5mUpSimpleCode,
             PaperOrderStatus.Pending,
             TradeSide.Buy,
             "asset-up",
@@ -638,10 +638,186 @@ public sealed class LiveTradingGatingTests
             "asset-up",
             "condition-1",
             "Up",
+            0.99m,
+            10m,
+            9.90m,
+            "FAK",
+            now.AddMinutes(-1),
+            now.AddMinutes(4),
+            now.AddMinutes(-1),
+            "live",
+            0m,
+            10m,
+            string.Empty,
+            "{}",
+            string.Empty,
+            now.AddMinutes(-1),
+            StrategyId: strategyId,
+            CorrelationId: correlationId,
+            ExecutionSource: "paper_live_shadow_test",
+            PostOnly: false,
+            PaperOrderId: paperOrderId));
+        var tradingClient = new CapturingTradingClient
+        {
+            StatusResult = new LiveOrderStatusResult("0xorder", "LIVE", "10000000", "0", "0.400002", "{}")
+        };
+        var processor = new LiveTradingProcessor(
+            NullLogger<LiveTradingProcessor>.Instance,
+            new LiveTradingOptions(),
+            new RiskOptions(),
+            new FakeGammaClient([]),
+            tradingClient,
+            repository,
+            new ExposureSnapshotCache(repository),
+            new DefaultPaperTradingEngine(),
+            new ServiceControlState());
+
+        var result = await processor.ProcessOpenOrdersAsync();
+
+        Assert.Equal(1, result.OrdersPolled);
+        Assert.Equal(0, tradingClient.CancelOrderCalls);
+        Assert.True(repository.StrategySettings[strategyId].LiveStakes);
+        Assert.Empty(repository.StrategyLiveStakeUpdates);
+        Assert.Empty(repository.PaperLiveShadowDiscrepancies);
+        Assert.Empty(repository.PaperFills);
+        Assert.Equal(LiveOrderStatus.Live, Assert.Single(repository.LiveOrders).Status);
+        Assert.DoesNotContain(repository.LiveTradingEvents, item => item.Action == "PaperLiveShadowIncident");
+        Assert.DoesNotContain(repository.LiveTradingEvents, item => item.Action == "PaperLiveShadowDiscrepancy");
+    }
+
+    [Fact]
+    public async Task LiveProcessorRecordsIncidentButKeepsShadowLiveWhenFakWorstPriceIsUnexpected()
+    {
+        var repository = new TestAppRepository();
+        var now = DateTimeOffset.UtcNow;
+        var correlationId = Guid.NewGuid();
+        var signalId = Guid.NewGuid();
+        var paperOrderId = Guid.NewGuid();
+        var strategyId = StrategyIds.BtcUpDown5mUpSimple;
+        repository.StrategySettings[strategyId] = StrategyRuntimeSettings.Default(strategyId) with
+        {
+            LiveStakes = true
+        };
+        await repository.AddPaperOrderAsync(new PaperOrder(
+            paperOrderId,
+            signalId,
+            StrategyIds.BtcUpDown5mUpSimpleCode,
+            PaperOrderStatus.Pending,
+            TradeSide.Buy,
+            "asset-up",
+            "condition-1",
+            "Up",
+            0.400000m,
+            10m,
+            4m,
+            now.AddMinutes(-1),
+            now.AddMinutes(4),
+            StrategyId: strategyId,
+            CorrelationId: correlationId,
+            ExecutionSource: "paper_live_shadow_test"));
+        await repository.AddLiveOrderAsync(new LiveOrder(
+            Guid.NewGuid(),
+            signalId,
+            LiveOrderStatus.Live,
+            "0xorder",
+            TradeSide.Buy,
+            "asset-up",
+            "condition-1",
+            "Up",
+            0.980000m,
+            10m,
+            9.8m,
+            "FAK",
+            now.AddMinutes(-1),
+            now.AddMinutes(4),
+            now.AddMinutes(-1),
+            "live",
+            0m,
+            10m,
+            string.Empty,
+            "{}",
+            string.Empty,
+            now.AddMinutes(-1),
+            StrategyId: strategyId,
+            CorrelationId: correlationId,
+            ExecutionSource: "paper_live_shadow_test",
+            PostOnly: false,
+            PaperOrderId: paperOrderId));
+        var tradingClient = new CapturingTradingClient
+        {
+            StatusResult = new LiveOrderStatusResult("0xorder", "LIVE", "10000000", "0", "0.98", "{}")
+        };
+        var processor = new LiveTradingProcessor(
+            NullLogger<LiveTradingProcessor>.Instance,
+            new LiveTradingOptions(),
+            new RiskOptions(),
+            new FakeGammaClient([]),
+            tradingClient,
+            repository,
+            new ExposureSnapshotCache(repository),
+            new DefaultPaperTradingEngine(),
+            new ServiceControlState());
+
+        var result = await processor.ProcessOpenOrdersAsync();
+
+        Assert.Equal(1, result.OrdersPolled);
+        Assert.Equal(0, tradingClient.CancelOrderCalls);
+        Assert.True(repository.StrategySettings[strategyId].LiveStakes);
+        Assert.Empty(repository.StrategyLiveStakeUpdates);
+        var discrepancy = Assert.Single(repository.PaperLiveShadowDiscrepancies);
+        Assert.Equal(strategyId, discrepancy.StrategyId);
+        Assert.Equal("paper_live_shadow_shape_incident", discrepancy.Classification);
+        Assert.Equal("warning", discrepancy.Severity);
+        Assert.Contains("FAK worst_price unexpected", discrepancy.Details, StringComparison.Ordinal);
+        Assert.Empty(repository.PaperFills);
+        Assert.Equal(LiveOrderStatus.Live, Assert.Single(repository.LiveOrders).Status);
+        Assert.Single(repository.LiveTradingEvents, item => item.Action == "PaperLiveShadowIncident");
+    }
+
+    [Fact]
+    public async Task LiveProcessorStillDisablesShadowLiveWhenNonFakPaperAndLivePriceDiffer()
+    {
+        var repository = new TestAppRepository();
+        var now = DateTimeOffset.UtcNow;
+        var correlationId = Guid.NewGuid();
+        var signalId = Guid.NewGuid();
+        var paperOrderId = Guid.NewGuid();
+        var strategyId = StrategyIds.BtcUpDown5mUpSimple;
+        repository.StrategySettings[strategyId] = StrategyRuntimeSettings.Default(strategyId) with
+        {
+            LiveStakes = true
+        };
+        await repository.AddPaperOrderAsync(new PaperOrder(
+            paperOrderId,
+            signalId,
+            StrategyIds.BtcUpDown5mUpSimpleCode,
+            PaperOrderStatus.Pending,
+            TradeSide.Buy,
+            "asset-up",
+            "condition-1",
+            "Up",
+            0.400000m,
+            10m,
+            4m,
+            now.AddMinutes(-1),
+            now.AddMinutes(4),
+            StrategyId: strategyId,
+            RawDecisionJson: "{\"live_order_type\":\"GTD\"}",
+            CorrelationId: correlationId,
+            ExecutionSource: "paper_live_shadow_test"));
+        await repository.AddLiveOrderAsync(new LiveOrder(
+            Guid.NewGuid(),
+            signalId,
+            LiveOrderStatus.Live,
+            "0xorder",
+            TradeSide.Buy,
+            "asset-up",
+            "condition-1",
+            "Up",
             0.400002m,
             10m,
             4.00002m,
-            "FAK",
+            "GTD",
             now.AddMinutes(-1),
             now.AddMinutes(4),
             now.AddMinutes(-1),
@@ -694,11 +870,11 @@ public sealed class LiveTradingGatingTests
         var correlationId = Guid.NewGuid();
         var signalId = Guid.NewGuid();
         var paperOrderId = Guid.NewGuid();
-        var strategyId = StrategyIds.BtcUpDown5mVariants.Single(variant => variant.Code == "btc_up_down_5m_skip_1").Id;
+        var strategyId = StrategyIds.BtcUpDown5mUpSimple;
         await repository.AddPaperOrderAsync(new PaperOrder(
             paperOrderId,
             signalId,
-            "btc_up_down_5m_skip_1",
+            StrategyIds.BtcUpDown5mUpSimpleCode,
             PaperOrderStatus.Cancelled,
             TradeSide.Buy,
             "asset-up",
@@ -790,7 +966,7 @@ public sealed class LiveTradingGatingTests
     }
 
     [Fact]
-    public async Task LiveProcessorSettlesMatchedWinningOrderAndIncreasesStrategyBalance()
+    public async Task LiveProcessorSettlesMatchedWinningOrderAndCapsStrategyBalance()
     {
         var repository = new TestAppRepository();
         repository.StrategySettings[StrategyIds.FollowLeader] = StrategyRuntimeSettings.Default(StrategyIds.FollowLeader) with
@@ -845,7 +1021,7 @@ public sealed class LiveTradingGatingTests
         Assert.True(order.BalanceEffectApplied);
         Assert.Equal(10m, order.SettlementValueUsd);
         Assert.Equal(6m, order.RealizedPnlUsd);
-        Assert.Equal(106m, repository.StrategySettings[StrategyIds.FollowLeader].LiveAvailableBalance);
+        Assert.Equal(100m, repository.StrategySettings[StrategyIds.FollowLeader].LiveAvailableBalance);
         Assert.Equal(-1, repository.StrategySettings[StrategyIds.FollowLeader].LiveLostCounter);
         Assert.True(repository.StrategySettings[StrategyIds.FollowLeader].LiveStakes);
     }
@@ -911,52 +1087,6 @@ public sealed class LiveTradingGatingTests
         Assert.Equal(1, repository.StrategySettings[StrategyIds.FollowLeader].LiveLostCounter);
         Assert.False(repository.StrategySettings[StrategyIds.FollowLeader].LiveStakes);
         Assert.Single(repository.LiveTradingEvents, item => item.Action == "StrategyLiveBalance");
-    }
-
-    [Fact]
-    public async Task LiveProcessorDoesNotAutoPauseStrategyWhenAutoPauseAllowlistIsEmpty()
-    {
-        var repository = new TestAppRepository();
-        repository.StrategySettings[StrategyIds.FollowLeader] = StrategyRuntimeSettings.Default(StrategyIds.FollowLeader) with
-        {
-            LiveStakes = true,
-            LiveAvailableBalance = 100m,
-            LiveStakeAmount = 2.50m
-        };
-        var now = DateTimeOffset.UtcNow;
-        await repository.AddLiveOrderAsync(CreateMatchedLiveOrder(now.AddMinutes(-10), "0xorder-1"));
-        await repository.AddLiveOrderAsync(CreateMatchedLiveOrder(now.AddMinutes(-5), "0xorder-2"));
-        var processor = CreateLiveSettlementProcessor(repository, new LiveTradingOptions());
-
-        var result = await processor.ProcessOpenOrdersAsync();
-
-        Assert.Equal(2, result.BalanceSettlementsApplied);
-        Assert.False(repository.StrategySettings[StrategyIds.FollowLeader].AutoLivePaused);
-        Assert.True(repository.StrategySettings[StrategyIds.FollowLeader].LiveStakes);
-    }
-
-    [Fact]
-    public async Task LiveProcessorAutoPausesAllowlistedStrategyAfterRecentLiveLosses()
-    {
-        var repository = new TestAppRepository();
-        repository.StrategySettings[StrategyIds.FollowLeader] = StrategyRuntimeSettings.Default(StrategyIds.FollowLeader) with
-        {
-            LiveStakes = true,
-            LiveAvailableBalance = 100m,
-            LiveStakeAmount = 2.50m
-        };
-        var now = DateTimeOffset.UtcNow;
-        await repository.AddLiveOrderAsync(CreateMatchedLiveOrder(now.AddMinutes(-10), "0xorder-1"));
-        await repository.AddLiveOrderAsync(CreateMatchedLiveOrder(now.AddMinutes(-5), "0xorder-2"));
-        var processor = CreateLiveSettlementProcessor(
-            repository,
-            new LiveTradingOptions { AutoLivePauseStrategies = [StrategyIds.FollowLeaderCode] });
-
-        var result = await processor.ProcessOpenOrdersAsync();
-
-        Assert.Equal(2, result.BalanceSettlementsApplied);
-        Assert.True(repository.StrategySettings[StrategyIds.FollowLeader].AutoLivePaused);
-        Assert.True(repository.StrategySettings[StrategyIds.FollowLeader].LiveStakes);
     }
 
     private sealed class CapturingLiveTradingProcessor : ILiveTradingProcessor

@@ -21,6 +21,11 @@ public static class LiveApiErrorLockoutPolicy
             return false;
         }
 
+        if (LiveOrderRejectionClassifier.IsInsufficientBalanceOrAllowance(error.Message))
+        {
+            return false;
+        }
+
         return LiveOrderApiComponents.Any(component =>
             error.Component.StartsWith(component, StringComparison.OrdinalIgnoreCase));
     }

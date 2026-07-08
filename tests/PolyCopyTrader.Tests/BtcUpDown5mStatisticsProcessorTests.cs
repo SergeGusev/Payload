@@ -181,6 +181,10 @@ public sealed class BtcUpDown5mStatisticsProcessorTests
         FakeClobPublicClient? clobClient = null,
         FakeGammaClient? gammaClient = null)
     {
+        repository.StrategySettings[StrategyIds.BtcUpDown5mStatistics] =
+            StrategyRuntimeSettings.Default(StrategyIds.BtcUpDown5mStatistics);
+        repository.StrategyEnabledStates[StrategyIds.BtcUpDown5mStatistics] = true;
+
         return new BtcUpDown5mStatisticsProcessor(
             NullLogger<BtcUpDown5mStatisticsProcessor>.Instance,
             new BtcUpDown5mStatisticsOptions

@@ -1151,36 +1151,8 @@ public static class StrategyIds
     public const string FollowLeaderIdValue = "f0110a0d-1ead-4c00-8b01-000000000001";
     public const string FollowLeaderCode = "follow_leader";
     public const string FollowLeaderName = "Follow leader";
-    public const string BtcUpDown5mLess180MartinIdValue = "b7c50005-0000-4000-8003-000000000180";
-    public const string BtcUpDown5mLess180MartinCode = "btc_up_down_5m_less_180_martin";
-    public const string BtcUpDown5mLess180MartinName = "BTC Less 180 Martin";
-    public const string BtcUpDown5mAlwaysUpIdValue = "b7c50005-0000-4000-8010-000000000001";
-    public const string BtcUpDown5mAlwaysDownIdValue = "b7c50005-0000-4000-8010-000000000002";
     public const string BtcUpDown5mUpSimpleIdValue = "b7c50005-0000-4000-8121-000000000001";
     public const string BtcUpDown5mDownSimpleIdValue = "b7c50005-0000-4000-8122-000000000001";
-    public const string BtcUpDown5mUpMakerIdValue = "b7c50005-0000-4000-8027-000000000001";
-    public const string BtcUpDown5mDownMakerIdValue = "b7c50005-0000-4000-8027-000000000002";
-    public const string BtcUpDown5mUpMaker50IdValue = "b7c50005-0000-4000-8027-000000000050";
-    public const string BtcUpDown5mDownMaker50IdValue = "b7c50005-0000-4000-8027-000000000051";
-    public const string BtcUpDown5mBinanceIdValue = "b7c50005-0000-4000-8011-000000000001";
-    public const string BtcUpDown5mBinanceCleverIdValue = "b7c50005-0000-4000-8011-000000000002";
-    public const string BtcUpDown5mBinance45IdValue = "b7c50005-0000-4000-8011-000000000045";
-    public const string BtcUpDown5mBinance47IdValue = "b7c50005-0000-4000-8011-000000000047";
-    public const string BtcUpDown5mBinance49IdValue = "b7c50005-0000-4000-8011-000000000049";
-    public const string BtcUpDown5mBinanceCleverAggressiveIdValue = "b7c50005-0000-4000-8011-000000000101";
-    public const string BtcUpDown5mBinanceCleverConservativeIdValue = "b7c50005-0000-4000-8011-000000000105";
-    public const string BtcUpDown5mBinanceBps01IdValue = "b7c50005-0000-4000-8013-000000000010";
-    public const string BtcUpDown5mBinanceBps02IdValue = "b7c50005-0000-4000-8013-000000000020";
-    public const string BtcUpDown5mBinanceBps03IdValue = "b7c50005-0000-4000-8013-000000000030";
-    public const string BtcUpDown5mBinanceBps04IdValue = "b7c50005-0000-4000-8013-000000000040";
-    public const string BtcUpDown5mBinanceBps05IdValue = "b7c50005-0000-4000-8013-000000000050";
-    public const string BtcUpDown5mBinanceBps06IdValue = "b7c50005-0000-4000-8013-000000000060";
-    public const string BtcUpDown5mBinanceBps07IdValue = "b7c50005-0000-4000-8013-000000000070";
-    public const string BtcUpDown5mBinanceBps08IdValue = "b7c50005-0000-4000-8013-000000000080";
-    public const string BtcUpDown5mBinanceBps09IdValue = "b7c50005-0000-4000-8013-000000000090";
-    public const string BtcUpDown5mBinanceBps1IdValue = "b7c50005-0000-4000-8013-000000000001";
-    public const string BtcUpDown5mBinanceBps2IdValue = "b7c50005-0000-4000-8013-000000000002";
-    public const string BtcUpDown5mBinanceBps5IdValue = "b7c50005-0000-4000-8013-000000000005";
     public const string BtcUpDown5mMore90Below70IdValue = "b7c50005-0000-4000-8012-000000000070";
     public const string BtcUpDown5mMore90Below65IdValue = "b7c50005-0000-4000-8012-000000000065";
     public const string BtcUpDown5mMore90Below60IdValue = "b7c50005-0000-4000-8012-000000000060";
@@ -1192,47 +1164,9 @@ public static class StrategyIds
     public const string BtcUpDown5mMore150Below65IdValue = "b7c50005-0000-4000-8020-000000150065";
     public const string BtcUpDown5mMore270Below65IdValue = "b7c50005-0000-4000-8020-000000270065";
     public const string BtcUpDown5mMore270Below60IdValue = "b7c50005-0000-4000-8020-000000270060";
-    public const string BtcUpDown5mLess120Below20IdValue = "b7c50005-0000-4000-8021-000000120020";
-    public const string BtcUpDown5mLess120Below30IdValue = "b7c50005-0000-4000-8021-000000120030";
-    public const string BtcUpDown5mLess90Below20IdValue = "b7c50005-0000-4000-8021-000000090020";
-    public const string BtcUpDown5mLess60Below20IdValue = "b7c50005-0000-4000-8021-000000060020";
-    public const string BtcUpDown5mBinanceEdge2IdValue = "b7c50005-0000-4000-8014-000000000002";
-    public const string BtcUpDown5mBinanceEdge4IdValue = "b7c50005-0000-4000-8014-000000000004";
-    public const string BtcUpDown5mBinanceEdge6IdValue = "b7c50005-0000-4000-8014-000000000006";
-    public const string BtcUpDown5mBinanceDelayed15IdValue = "b7c50005-0000-4000-8015-000000000015";
-    public const string BtcUpDown5mBinanceDelayed30IdValue = "b7c50005-0000-4000-8015-000000000030";
-    public const string BtcUpDown5mBinanceDelayed45IdValue = "b7c50005-0000-4000-8015-000000000045";
-    public const string BtcUpDown5mEnsemble2Of3IdValue = "b7c50005-0000-4000-8016-000000000002";
-    public const string BtcUpDown5mDynamicMarkovIdValue = "b7c50005-0000-4000-8017-000000000050";
-    public const string BtcUpDown5mStrategySelectorIdValue = "b7c50005-0000-4000-8018-000000000030";
     public const string BtcUpDown5mStatisticsIdValue = "b7c50005-0000-4000-8050-000000000001";
-    public const string BtcUpDown5mAlwaysUpCode = "btc_up_down_5m_up";
-    public const string BtcUpDown5mAlwaysDownCode = "btc_up_down_5m_down";
     public const string BtcUpDown5mUpSimpleCode = "btc_up_down_5m_up_simple";
     public const string BtcUpDown5mDownSimpleCode = "btc_up_down_5m_down_simple";
-    public const string BtcUpDown5mUpMakerCode = "btc_up_down_5m_up_maker";
-    public const string BtcUpDown5mDownMakerCode = "btc_up_down_5m_down_maker";
-    public const string BtcUpDown5mUpMaker50Code = "btc_up_down_5m_up_maker_50";
-    public const string BtcUpDown5mDownMaker50Code = "btc_up_down_5m_down_maker_50";
-    public const string BtcUpDown5mBinanceCode = "btc_up_down_5m_binance";
-    public const string BtcUpDown5mBinanceCleverCode = "btc_up_down_5m_binance_clever";
-    public const string BtcUpDown5mBinance45Code = "btc_up_down_5m_binance_45";
-    public const string BtcUpDown5mBinance47Code = "btc_up_down_5m_binance_47";
-    public const string BtcUpDown5mBinance49Code = "btc_up_down_5m_binance_49";
-    public const string BtcUpDown5mBinanceCleverAggressiveCode = "btc_up_down_5m_binance_clever_aggressive";
-    public const string BtcUpDown5mBinanceCleverConservativeCode = "btc_up_down_5m_binance_clever_conservative";
-    public const string BtcUpDown5mBinanceBps01Code = "btc_up_down_5m_binance_bps_1";
-    public const string BtcUpDown5mBinanceBps02Code = "btc_up_down_5m_binance_bps_2";
-    public const string BtcUpDown5mBinanceBps03Code = "btc_up_down_5m_binance_bps_3";
-    public const string BtcUpDown5mBinanceBps04Code = "btc_up_down_5m_binance_bps_4";
-    public const string BtcUpDown5mBinanceBps05Code = "btc_up_down_5m_binance_bps_5";
-    public const string BtcUpDown5mBinanceBps06Code = "btc_up_down_5m_binance_bps_6";
-    public const string BtcUpDown5mBinanceBps07Code = "btc_up_down_5m_binance_bps_7";
-    public const string BtcUpDown5mBinanceBps08Code = "btc_up_down_5m_binance_bps_8";
-    public const string BtcUpDown5mBinanceBps09Code = "btc_up_down_5m_binance_bps_9";
-    public const string BtcUpDown5mBinanceBps1Code = "btc_up_down_5m_binance_bps_10";
-    public const string BtcUpDown5mBinanceBps2Code = "btc_up_down_5m_binance_bps_20";
-    public const string BtcUpDown5mBinanceBps5Code = "btc_up_down_5m_binance_bps_50";
     public const string BtcUpDown5mMore90Below70Code = "btc_up_down_5m_more_90_below_70";
     public const string BtcUpDown5mMore90Below65Code = "btc_up_down_5m_more_90_below_65";
     public const string BtcUpDown5mMore90Below60Code = "btc_up_down_5m_more_90_below_60";
@@ -1244,51 +1178,13 @@ public static class StrategyIds
     public const string BtcUpDown5mMore150Below65Code = "btc_up_down_5m_more_150_below_65";
     public const string BtcUpDown5mMore270Below65Code = "btc_up_down_5m_more_270_below_65";
     public const string BtcUpDown5mMore270Below60Code = "btc_up_down_5m_more_270_below_60";
-    public const string BtcUpDown5mLess120Below20Code = "btc_up_down_5m_less_120_below_20";
-    public const string BtcUpDown5mLess120Below30Code = "btc_up_down_5m_less_120_below_30";
-    public const string BtcUpDown5mLess90Below20Code = "btc_up_down_5m_less_90_below_20";
-    public const string BtcUpDown5mLess60Below20Code = "btc_up_down_5m_less_60_below_20";
-    public const string BtcUpDown5mBinanceEdge2Code = "btc_up_down_5m_binance_edge_2";
-    public const string BtcUpDown5mBinanceEdge4Code = "btc_up_down_5m_binance_edge_4";
-    public const string BtcUpDown5mBinanceEdge6Code = "btc_up_down_5m_binance_edge_6";
-    public const string BtcUpDown5mBinanceDelayed15Code = "btc_up_down_5m_binance_15s";
-    public const string BtcUpDown5mBinanceDelayed30Code = "btc_up_down_5m_binance_30s";
-    public const string BtcUpDown5mBinanceDelayed45Code = "btc_up_down_5m_binance_45s";
-    public const string BtcUpDown5mEnsemble2Of3Code = "btc_up_down_5m_ensemble_2_of_3";
-    public const string BtcUpDown5mDynamicMarkovCode = "btc_up_down_5m_dynamic_markov";
-    public const string BtcUpDown5mStrategySelectorCode = "btc_up_down_5m_strategy_selector";
     public const string BtcUpDown5mStatisticsCode = "btc_up_down_5m_statistics";
     public const string BtcUpDown5mStatisticsName = "BTC Up or Down 5m Statistics";
+    public const string SolUpDown5mDown8BpsReferenceAveragePremarketCode = "sol_up_down_5m_down_bps_8_fak_premarket";
 
     public static readonly Guid FollowLeader = Guid.Parse(FollowLeaderIdValue);
-    public static readonly Guid BtcUpDown5mLess180Martin = Guid.Parse(BtcUpDown5mLess180MartinIdValue);
-    public static readonly Guid BtcUpDown5mAlwaysUp = Guid.Parse(BtcUpDown5mAlwaysUpIdValue);
-    public static readonly Guid BtcUpDown5mAlwaysDown = Guid.Parse(BtcUpDown5mAlwaysDownIdValue);
     public static readonly Guid BtcUpDown5mUpSimple = Guid.Parse(BtcUpDown5mUpSimpleIdValue);
     public static readonly Guid BtcUpDown5mDownSimple = Guid.Parse(BtcUpDown5mDownSimpleIdValue);
-    public static readonly Guid BtcUpDown5mUpMaker = Guid.Parse(BtcUpDown5mUpMakerIdValue);
-    public static readonly Guid BtcUpDown5mDownMaker = Guid.Parse(BtcUpDown5mDownMakerIdValue);
-    public static readonly Guid BtcUpDown5mUpMaker50 = Guid.Parse(BtcUpDown5mUpMaker50IdValue);
-    public static readonly Guid BtcUpDown5mDownMaker50 = Guid.Parse(BtcUpDown5mDownMaker50IdValue);
-    public static readonly Guid BtcUpDown5mBinance = Guid.Parse(BtcUpDown5mBinanceIdValue);
-    public static readonly Guid BtcUpDown5mBinanceClever = Guid.Parse(BtcUpDown5mBinanceCleverIdValue);
-    public static readonly Guid BtcUpDown5mBinance45 = Guid.Parse(BtcUpDown5mBinance45IdValue);
-    public static readonly Guid BtcUpDown5mBinance47 = Guid.Parse(BtcUpDown5mBinance47IdValue);
-    public static readonly Guid BtcUpDown5mBinance49 = Guid.Parse(BtcUpDown5mBinance49IdValue);
-    public static readonly Guid BtcUpDown5mBinanceCleverAggressive = Guid.Parse(BtcUpDown5mBinanceCleverAggressiveIdValue);
-    public static readonly Guid BtcUpDown5mBinanceCleverConservative = Guid.Parse(BtcUpDown5mBinanceCleverConservativeIdValue);
-    public static readonly Guid BtcUpDown5mBinanceBps01 = Guid.Parse(BtcUpDown5mBinanceBps01IdValue);
-    public static readonly Guid BtcUpDown5mBinanceBps02 = Guid.Parse(BtcUpDown5mBinanceBps02IdValue);
-    public static readonly Guid BtcUpDown5mBinanceBps03 = Guid.Parse(BtcUpDown5mBinanceBps03IdValue);
-    public static readonly Guid BtcUpDown5mBinanceBps04 = Guid.Parse(BtcUpDown5mBinanceBps04IdValue);
-    public static readonly Guid BtcUpDown5mBinanceBps05 = Guid.Parse(BtcUpDown5mBinanceBps05IdValue);
-    public static readonly Guid BtcUpDown5mBinanceBps06 = Guid.Parse(BtcUpDown5mBinanceBps06IdValue);
-    public static readonly Guid BtcUpDown5mBinanceBps07 = Guid.Parse(BtcUpDown5mBinanceBps07IdValue);
-    public static readonly Guid BtcUpDown5mBinanceBps08 = Guid.Parse(BtcUpDown5mBinanceBps08IdValue);
-    public static readonly Guid BtcUpDown5mBinanceBps09 = Guid.Parse(BtcUpDown5mBinanceBps09IdValue);
-    public static readonly Guid BtcUpDown5mBinanceBps1 = Guid.Parse(BtcUpDown5mBinanceBps1IdValue);
-    public static readonly Guid BtcUpDown5mBinanceBps2 = Guid.Parse(BtcUpDown5mBinanceBps2IdValue);
-    public static readonly Guid BtcUpDown5mBinanceBps5 = Guid.Parse(BtcUpDown5mBinanceBps5IdValue);
     public static readonly Guid BtcUpDown5mMore90Below70 = Guid.Parse(BtcUpDown5mMore90Below70IdValue);
     public static readonly Guid BtcUpDown5mMore90Below65 = Guid.Parse(BtcUpDown5mMore90Below65IdValue);
     public static readonly Guid BtcUpDown5mMore90Below60 = Guid.Parse(BtcUpDown5mMore90Below60IdValue);
@@ -1300,19 +1196,6 @@ public static class StrategyIds
     public static readonly Guid BtcUpDown5mMore150Below65 = Guid.Parse(BtcUpDown5mMore150Below65IdValue);
     public static readonly Guid BtcUpDown5mMore270Below65 = Guid.Parse(BtcUpDown5mMore270Below65IdValue);
     public static readonly Guid BtcUpDown5mMore270Below60 = Guid.Parse(BtcUpDown5mMore270Below60IdValue);
-    public static readonly Guid BtcUpDown5mLess120Below20 = Guid.Parse(BtcUpDown5mLess120Below20IdValue);
-    public static readonly Guid BtcUpDown5mLess120Below30 = Guid.Parse(BtcUpDown5mLess120Below30IdValue);
-    public static readonly Guid BtcUpDown5mLess90Below20 = Guid.Parse(BtcUpDown5mLess90Below20IdValue);
-    public static readonly Guid BtcUpDown5mLess60Below20 = Guid.Parse(BtcUpDown5mLess60Below20IdValue);
-    public static readonly Guid BtcUpDown5mBinanceEdge2 = Guid.Parse(BtcUpDown5mBinanceEdge2IdValue);
-    public static readonly Guid BtcUpDown5mBinanceEdge4 = Guid.Parse(BtcUpDown5mBinanceEdge4IdValue);
-    public static readonly Guid BtcUpDown5mBinanceEdge6 = Guid.Parse(BtcUpDown5mBinanceEdge6IdValue);
-    public static readonly Guid BtcUpDown5mBinanceDelayed15 = Guid.Parse(BtcUpDown5mBinanceDelayed15IdValue);
-    public static readonly Guid BtcUpDown5mBinanceDelayed30 = Guid.Parse(BtcUpDown5mBinanceDelayed30IdValue);
-    public static readonly Guid BtcUpDown5mBinanceDelayed45 = Guid.Parse(BtcUpDown5mBinanceDelayed45IdValue);
-    public static readonly Guid BtcUpDown5mEnsemble2Of3 = Guid.Parse(BtcUpDown5mEnsemble2Of3IdValue);
-    public static readonly Guid BtcUpDown5mDynamicMarkov = Guid.Parse(BtcUpDown5mDynamicMarkovIdValue);
-    public static readonly Guid BtcUpDown5mStrategySelector = Guid.Parse(BtcUpDown5mStrategySelectorIdValue);
     public static readonly Guid BtcUpDown5mStatistics = Guid.Parse(BtcUpDown5mStatisticsIdValue);
 
     public static readonly IReadOnlyList<BtcUpDown5mStrategyVariant> BtcUpDown5mVariants =
@@ -1321,9 +1204,11 @@ public static class StrategyIds
         CreateCryptoUpDown5mVariants();
     public static readonly IReadOnlyList<BtcUpDown5mStrategyVariant> UpDown5mStrategyVariants =
         [.. BtcUpDown5mVariants, .. CryptoUpDown5mVariants];
+    public static readonly IReadOnlyList<BtcUpDown5mStrategyVariant> DateDependentStrategyVariants =
+        CreateDateDependentStrategyVariants();
 
     public static readonly IReadOnlyList<Guid> AllStrategyIds =
-        [FollowLeader, BtcUpDown5mStatistics, .. UpDown5mStrategyVariants.Select(variant => variant.Id)];
+        [FollowLeader, .. UpDown5mStrategyVariants.Select(variant => variant.Id)];
 
     public static Guid Normalize(Guid strategyId)
     {
@@ -1343,11 +1228,6 @@ public static class StrategyIds
             return FollowLeader;
         }
 
-        if (string.Equals(normalizedCode, BtcUpDown5mStatisticsCode, StringComparison.OrdinalIgnoreCase))
-        {
-            return BtcUpDown5mStatistics;
-        }
-
         return UpDown5mStrategyVariants
             .FirstOrDefault(variant => string.Equals(variant.Code, normalizedCode, StringComparison.OrdinalIgnoreCase))
             ?.Id;
@@ -1364,74 +1244,25 @@ public static class StrategyIds
             variant.Behavior == behavior);
     }
 
+    private static IReadOnlyList<BtcUpDown5mStrategyVariant> CreateDateDependentStrategyVariants()
+    {
+        return
+        [
+            GetUpDown5mVariantByCode(SolUpDown5mDown8BpsReferenceAveragePremarketCode)
+        ];
+    }
+
+    private static BtcUpDown5mStrategyVariant GetUpDown5mVariantByCode(string code)
+    {
+        return UpDown5mStrategyVariants.FirstOrDefault(variant =>
+            string.Equals(variant.Code, code, StringComparison.OrdinalIgnoreCase))
+            ?? throw new InvalidOperationException($"Strategy variant '{code}' is not registered.");
+    }
+
     private static IReadOnlyList<BtcUpDown5mStrategyVariant> CreateBtcUpDown5mVariants()
     {
         int[] delays = [30, 60, 90, 120, 150, 180, 210, 240, 270];
         var variants = new List<BtcUpDown5mStrategyVariant>(5244);
-
-        foreach (var delay in delays)
-        {
-            variants.Add(CreateBtcUpDown5mVariant(BtcUpDown5mStrategyDirection.Less, delay, 1, BtcUpDown5mStrategyBehavior.Standard));
-            if (delay == 180)
-            {
-                variants.Add(new BtcUpDown5mStrategyVariant(
-                    BtcUpDown5mLess180Martin,
-                    BtcUpDown5mLess180MartinCode,
-                    BtcUpDown5mLess180MartinName,
-                    "After BTC Less 180 loses three times in a row, bet on the lower-priced BTC 5m outcome 180 seconds after window start using a 1/2/4/8/16 USD paper stake progression until this strategy wins.",
-                    BtcUpDown5mStrategyDirection.Less,
-                    180,
-                    BtcUpDown5mStrategyBehavior.Less180Martin));
-            }
-        }
-
-        foreach (var delay in delays)
-        {
-            variants.Add(CreateBtcUpDown5mVariant(BtcUpDown5mStrategyDirection.More, delay, 2, BtcUpDown5mStrategyBehavior.Standard));
-        }
-
-        variants.Add(CreateBtcUpDown5mEntryPriceCapVariant(BtcUpDown5mMore30Below55, BtcUpDown5mMore30Below55Code, BtcUpDown5mStrategyDirection.More, 30, 55));
-        variants.Add(CreateBtcUpDown5mEntryPriceCapVariant(BtcUpDown5mMore60Below60, BtcUpDown5mMore60Below60Code, BtcUpDown5mStrategyDirection.More, 60, 60));
-        variants.Add(CreateBtcUpDown5mEntryPriceCapVariant(BtcUpDown5mMore60Below55, BtcUpDown5mMore60Below55Code, BtcUpDown5mStrategyDirection.More, 60, 55));
-        variants.Add(CreateBtcUpDown5mEntryPriceCapVariant(BtcUpDown5mMore90Below70, BtcUpDown5mMore90Below70Code, BtcUpDown5mStrategyDirection.More, 90, 70));
-        variants.Add(CreateBtcUpDown5mEntryPriceCapVariant(BtcUpDown5mMore90Below65, BtcUpDown5mMore90Below65Code, BtcUpDown5mStrategyDirection.More, 90, 65));
-        variants.Add(CreateBtcUpDown5mEntryPriceCapVariant(BtcUpDown5mMore90Below60, BtcUpDown5mMore90Below60Code, BtcUpDown5mStrategyDirection.More, 90, 60));
-        variants.Add(CreateBtcUpDown5mEntryPriceCapVariant(BtcUpDown5mMore90Below55, BtcUpDown5mMore90Below55Code, BtcUpDown5mStrategyDirection.More, 90, 55));
-        variants.Add(CreateBtcUpDown5mEntryPriceCapVariant(BtcUpDown5mMore120Below70, BtcUpDown5mMore120Below70Code, BtcUpDown5mStrategyDirection.More, 120, 70));
-        variants.Add(CreateBtcUpDown5mEntryPriceCapVariant(BtcUpDown5mMore150Below65, BtcUpDown5mMore150Below65Code, BtcUpDown5mStrategyDirection.More, 150, 65));
-        variants.Add(CreateBtcUpDown5mEntryPriceCapVariant(BtcUpDown5mMore270Below65, BtcUpDown5mMore270Below65Code, BtcUpDown5mStrategyDirection.More, 270, 65));
-        variants.Add(CreateBtcUpDown5mEntryPriceCapVariant(BtcUpDown5mMore270Below60, BtcUpDown5mMore270Below60Code, BtcUpDown5mStrategyDirection.More, 270, 60));
-        variants.Add(CreateBtcUpDown5mEntryPriceCapVariant(BtcUpDown5mLess60Below20, BtcUpDown5mLess60Below20Code, BtcUpDown5mStrategyDirection.Less, 60, 20));
-        variants.Add(CreateBtcUpDown5mEntryPriceCapVariant(BtcUpDown5mLess90Below20, BtcUpDown5mLess90Below20Code, BtcUpDown5mStrategyDirection.Less, 90, 20));
-        variants.Add(CreateBtcUpDown5mEntryPriceCapVariant(BtcUpDown5mLess120Below20, BtcUpDown5mLess120Below20Code, BtcUpDown5mStrategyDirection.Less, 120, 20));
-        variants.Add(CreateBtcUpDown5mEntryPriceCapVariant(BtcUpDown5mLess120Below30, BtcUpDown5mLess120Below30Code, BtcUpDown5mStrategyDirection.Less, 120, 30));
-
-        foreach (var delay in delays)
-        {
-            variants.Add(CreateBtcUpDown5mVariant(BtcUpDown5mStrategyDirection.Less, delay, 4, BtcUpDown5mStrategyBehavior.GammaOutcomeSelection));
-        }
-
-        foreach (var delay in delays)
-        {
-            variants.Add(CreateBtcUpDown5mVariant(BtcUpDown5mStrategyDirection.More, delay, 5, BtcUpDown5mStrategyBehavior.GammaOutcomeSelection));
-        }
-
-        foreach (var depth in CreateMiddleReferenceSampleDepths())
-        {
-            variants.Add(CreateBtcUpDown5mMiddleVariant(depth));
-
-            foreach (var thresholdBps in CreateMiddleReferenceThresholdBpsValues())
-            {
-                variants.Add(CreateBtcUpDown5mMiddleBpsThresholdVariant(depth, thresholdBps));
-                variants.Add(CreateBtcUpDown5mMiddleBpsThresholdInstantVariant(depth, thresholdBps));
-            }
-
-        }
-
-        for (var depth = 1; depth <= 5; depth++)
-        {
-            variants.Add(CreateBtcUpDown5mSkipVariant(depth));
-        }
 
         for (var thresholdTenths = 1; thresholdTenths <= 50; thresholdTenths++)
         {
@@ -1444,6 +1275,10 @@ public static class StrategyIds
         {
             variants.Add(CreateReferenceAverageBpsThresholdFakPremarketVariant("BTC", 8135, thresholdBps, isUpTrigger: true));
             variants.Add(CreateReferenceAverageBpsThresholdFakPremarketVariant("BTC", 8136, thresholdBps, isUpTrigger: false));
+            variants.Add(CreateReferenceAverageBpsThresholdNeutralFakPremarketVariant(
+                "BTC",
+                GetReferenceAverageBpsNeutralPremarketIdGroup("BTC"),
+                thresholdBps));
         }
 
         for (var thresholdTenths = 1; thresholdTenths <= 50; thresholdTenths++)
@@ -1461,40 +1296,8 @@ public static class StrategyIds
                 BtcUpDownMarketInterval.FifteenMinutes));
         }
 
-        variants.Add(CreateBtcUpDown5mAlwaysDirectionVariant(isUp: true));
-        variants.Add(CreateBtcUpDown5mAlwaysDirectionVariant(isUp: false));
         variants.Add(CreateSimpleFixedOutcomeInstantVariant("BTC", 8121, isUp: true));
         variants.Add(CreateSimpleFixedOutcomeInstantVariant("BTC", 8122, isUp: false));
-        variants.Add(CreateBtcUpDown5mMakerVariant(isUp: true));
-        variants.Add(CreateBtcUpDown5mMakerVariant(isUp: false));
-        variants.Add(CreateBtcUpDown5mMakerVariant(isUp: true, fixedHalfPrice: true));
-        variants.Add(CreateBtcUpDown5mMakerVariant(isUp: false, fixedHalfPrice: true));
-        variants.Add(CreateBtcUpDown5mBinanceVariant());
-        for (var thresholdTenths = 1; thresholdTenths <= 50; thresholdTenths++)
-        {
-            var minMoveBps = (decimal)thresholdTenths;
-            variants.Add(CreateBtcUpDown5mBinanceBpsThresholdVariant(
-                GetBtcUpDown5mBinanceBpsThresholdId(thresholdTenths),
-                GetBtcUpDown5mBinanceBpsThresholdCode(thresholdTenths),
-                minMoveBps));
-        }
-
-        variants.Add(CreateBtcUpDown5mBinanceFixedPriceVariant(BtcUpDown5mBinance45, BtcUpDown5mBinance45Code, 45));
-        variants.Add(CreateBtcUpDown5mBinanceFixedPriceVariant(BtcUpDown5mBinance47, BtcUpDown5mBinance47Code, 47));
-        variants.Add(CreateBtcUpDown5mBinanceFixedPriceVariant(BtcUpDown5mBinance49, BtcUpDown5mBinance49Code, 49));
-        variants.Add(CreateBtcUpDown5mBinanceCleverVariant());
-        variants.Add(CreateBtcUpDown5mBinanceCleverMarginVariant(BtcUpDown5mBinanceCleverAggressive, BtcUpDown5mBinanceCleverAggressiveCode, "Aggressive", 1));
-        variants.Add(CreateBtcUpDown5mBinanceCleverMarginVariant(BtcUpDown5mBinanceCleverConservative, BtcUpDown5mBinanceCleverConservativeCode, "Conservative", 5));
-        variants.Add(CreateBtcUpDown5mBinanceEdgeVariant(BtcUpDown5mBinanceEdge2, BtcUpDown5mBinanceEdge2Code, 2));
-        variants.Add(CreateBtcUpDown5mBinanceEdgeVariant(BtcUpDown5mBinanceEdge4, BtcUpDown5mBinanceEdge4Code, 4));
-        variants.Add(CreateBtcUpDown5mBinanceEdgeVariant(BtcUpDown5mBinanceEdge6, BtcUpDown5mBinanceEdge6Code, 6));
-        variants.Add(CreateBtcUpDown5mBinanceDelayedVariant(BtcUpDown5mBinanceDelayed15, BtcUpDown5mBinanceDelayed15Code, 15));
-        variants.Add(CreateBtcUpDown5mBinanceDelayedVariant(BtcUpDown5mBinanceDelayed30, BtcUpDown5mBinanceDelayed30Code, 30));
-        variants.Add(CreateBtcUpDown5mBinanceDelayedVariant(BtcUpDown5mBinanceDelayed45, BtcUpDown5mBinanceDelayed45Code, 45));
-        variants.Add(CreateBtcUpDown5mEnsembleVariant());
-        variants.Add(CreateBtcUpDown5mDynamicMarkovVariant());
-        variants.Add(CreateBtcUpDown5mStrategySelectorVariant());
-        variants.AddRange(CreateBtcDiffCounterTrendVariants());
         variants.AddRange(CreateDiffCounterTrendFakPremarketVariants("BTC"));
         variants.AddRange(CreateDiffProgressVariants("BTC"));
         variants.AddRange(CreateDiffShiftProgressVariants("BTC"));
@@ -1502,9 +1305,6 @@ public static class StrategyIds
         variants.AddRange(CreateDiffLimitProgressPremarketVariants("BTC"));
         variants.AddRange(CreateDiffRealLimitProgressPremarketVariants("BTC"));
         variants.AddRange(CreateDiffReferenceAveragePremarketVariants("BTC"));
-        variants.AddRange(CreateBtcAdjustedDiffCounterTrendVariants());
-        variants.AddRange(CreateBtcShiftDiffCounterTrendVariants());
-        variants.AddRange(CreateBtcPreviousScoreCounterTrendVariants());
         variants.AddRange(CreateBtcPreOpenFixedDirectionVariants());
 
         return variants;
@@ -1663,32 +1463,6 @@ public static class StrategyIds
         return $"the latest {depth} sampled Binance {assetSymbol}/USDT reference price(s)";
     }
 
-    private static BtcUpDown5mStrategyVariant CreateBtcUpDown5mSkipVariant(int depth)
-    {
-        return new BtcUpDown5mStrategyVariant(
-            Guid.Parse($"b7c50005-0000-4000-8007-000000000{depth:000}"),
-            $"btc_up_down_5m_skip_{depth}",
-            $"BTC Up or Down 5m Skip {depth}",
-            $"Immediately after BTC 5m market open, inspect the latest {depth} settled BTC 5m market result(s); after consecutive Up results buy Down, after consecutive Down results buy Up, otherwise skip. Paper entry is a GTD limit BUY with dynamic break-even pricing; settlement uses only actually filled shares.",
-            BtcUpDown5mStrategyDirection.Dynamic,
-            0,
-            BtcUpDown5mStrategyBehavior.SkipConsecutiveMarketResults,
-            depth);
-    }
-
-    private static BtcUpDown5mStrategyVariant CreateBtcUpDown5mSkipRevertVariant(int depth)
-    {
-        return new BtcUpDown5mStrategyVariant(
-            Guid.Parse($"b7c50005-0000-4000-8008-000000000{depth:000}"),
-            $"btc_up_down_5m_skip_{depth}_revert",
-            $"BTC Up or Down 5m Skip {depth} Revert",
-            $"Immediately after BTC 5m market open, inspect the latest {depth} settled BTC 5m market result(s), then invert the standard Skip {depth} decision; after consecutive Up results buy Up, after consecutive Down results buy Down, otherwise skip. Paper entry is a GTD limit BUY with dynamic break-even pricing; settlement uses only actually filled shares.",
-            BtcUpDown5mStrategyDirection.Dynamic,
-            0,
-            BtcUpDown5mStrategyBehavior.SkipConsecutiveMarketResultsRevert,
-            depth);
-    }
-
     private static BtcUpDown5mStrategyVariant CreateBtcUpDown5mFixedOutcomeBpsThresholdInstantVariant(
         int thresholdTenths,
         decimal minMoveBps,
@@ -1756,20 +1530,6 @@ public static class StrategyIds
         return GetUpDownIntervalCode(marketInterval);
     }
 
-    private static BtcUpDown5mStrategyVariant CreateBtcUpDown5mAlwaysDirectionVariant(bool isUp)
-    {
-        return new BtcUpDown5mStrategyVariant(
-            isUp ? BtcUpDown5mAlwaysUp : BtcUpDown5mAlwaysDown,
-            isUp ? BtcUpDown5mAlwaysUpCode : BtcUpDown5mAlwaysDownCode,
-            isUp ? "BTC Up or Down 5m Up" : "BTC Up or Down 5m Down",
-            isUp
-                ? "After BTC 5m trading starts, always place an Up GTD limit BUY at 0.45 until the configured BTC GTD deadline; settlement uses only actually filled shares."
-                : "After BTC 5m trading starts, always place a Down GTD limit BUY at 0.45 until the configured BTC GTD deadline; settlement uses only actually filled shares.",
-            BtcUpDown5mStrategyDirection.Dynamic,
-            0,
-            isUp ? BtcUpDown5mStrategyBehavior.AlwaysUp : BtcUpDown5mStrategyBehavior.AlwaysDown);
-    }
-
     private static BtcUpDown5mStrategyVariant CreateSimpleFixedOutcomeInstantVariant(
         string assetSymbol,
         int idGroup,
@@ -1794,112 +1554,6 @@ public static class StrategyIds
             ReferenceAssetSymbol: normalizedAsset);
     }
 
-    private static BtcUpDown5mStrategyVariant CreateBtcUpDown5mMakerVariant(
-        bool isUp,
-        bool fixedHalfPrice = false)
-    {
-        var outcome = isUp ? BtcUpDownFixedOutcome.Up : BtcUpDownFixedOutcome.Down;
-        var outcomeName = isUp ? "Up" : "Down";
-        var id = fixedHalfPrice
-            ? isUp ? BtcUpDown5mUpMaker50 : BtcUpDown5mDownMaker50
-            : isUp ? BtcUpDown5mUpMaker : BtcUpDown5mDownMaker;
-        var code = fixedHalfPrice
-            ? isUp ? BtcUpDown5mUpMaker50Code : BtcUpDown5mDownMaker50Code
-            : isUp ? BtcUpDown5mUpMakerCode : BtcUpDown5mDownMakerCode;
-        var name = fixedHalfPrice
-            ? $"BTC Up or Down 5m {outcomeName} Maker 50"
-            : $"BTC Up or Down 5m {outcomeName} Maker";
-        var description = fixedHalfPrice
-            ? $"Maker strategy: after BTC 5m trading starts, baseline the {outcomeName} outcome order book, then on 30-second slots place a minimum-size post-only GTD BUY at fixed 0.50 only when the current best ask is above 0.50 and exceeds the previously fixed best-ask maximum."
-            : $"Maker strategy: after BTC 5m trading starts, baseline the {outcomeName} outcome order book, then on 30-second slots place a minimum-size post-only GTD BUY just below best ask when the current best ask exceeds the previously fixed best-ask maximum.";
-        return new BtcUpDown5mStrategyVariant(
-            id,
-            code,
-            name,
-            description,
-            BtcUpDown5mStrategyDirection.Dynamic,
-            0,
-            BtcUpDown5mStrategyBehavior.FixedOutcomeMaker,
-            FixedOutcome: outcome,
-            FixedLimitPrice: fixedHalfPrice ? 0.50m : null,
-            Category: "BTC Up/Down 5m Maker",
-            MakerMinBestAskExclusive: fixedHalfPrice ? 0.50m : null);
-    }
-
-    private static BtcUpDown5mStrategyVariant CreateBtcUpDown5mBinanceVariant()
-    {
-        return new BtcUpDown5mStrategyVariant(
-            BtcUpDown5mBinance,
-            BtcUpDown5mBinanceCode,
-            "BTC Up or Down 5m Binance",
-            "After BTC 5m trading starts, compare the latest Binance BTC/USDT trade-stream price with the archived market-start reference; above start buys Up, below start buys Down, equal skips. Paper entry is a GTD limit BUY capped at 0.50 until the configured BTC GTD deadline; settlement uses only actually filled shares.",
-            BtcUpDown5mStrategyDirection.Dynamic,
-            0,
-            BtcUpDown5mStrategyBehavior.BinanceStartRelative);
-    }
-
-    private static BtcUpDown5mStrategyVariant CreateBtcUpDown5mBinanceFixedPriceVariant(
-        Guid id,
-        string code,
-        int limitPriceCents)
-    {
-        var limitPrice = limitPriceCents / 100m;
-        return new BtcUpDown5mStrategyVariant(
-            id,
-            code,
-            $"BTC Up or Down 5m Binance {limitPriceCents}",
-            $"After BTC 5m trading starts, compare the latest Binance BTC/USDT trade-stream price with the archived market-start reference; above start buys Up, below start buys Down, equal skips. Paper entry is a GTD limit BUY at fixed {limitPrice.ToString("0.00", CultureInfo.InvariantCulture)} until the configured BTC GTD deadline; settlement uses only actually filled shares.",
-            BtcUpDown5mStrategyDirection.Dynamic,
-            0,
-            BtcUpDown5mStrategyBehavior.BinanceStartRelativeFixedPrice,
-            limitPriceCents);
-    }
-
-    private static BtcUpDown5mStrategyVariant CreateBtcUpDown5mBinanceBpsThresholdVariant(
-        Guid id,
-        string code,
-        decimal minMoveBps)
-    {
-        var thresholdName = minMoveBps.ToString("0.###", CultureInfo.InvariantCulture);
-        return new BtcUpDown5mStrategyVariant(
-            id,
-            code,
-            $"BTC Up or Down 5m Binance {thresholdName} bps",
-            $"After BTC 5m trading starts, compare the latest Binance BTC/USDT trade-stream price with the archived market-start reference; skip unless the absolute move from start is at least {thresholdName} bps; above start buys Up, below start buys Down. Paper entry is a GTD limit BUY capped at 0.50 until the configured BTC GTD deadline; settlement uses only actually filled shares.",
-            BtcUpDown5mStrategyDirection.Dynamic,
-            0,
-            BtcUpDown5mStrategyBehavior.BinanceStartRelativeBpsThreshold,
-            minMoveBps >= 1m && minMoveBps == decimal.Truncate(minMoveBps)
-                ? (int)minMoveBps
-                : 0,
-            minMoveBps);
-    }
-
-    private static Guid GetBtcUpDown5mBinanceBpsThresholdId(int thresholdTenths)
-    {
-        return thresholdTenths switch
-        {
-            1 => BtcUpDown5mBinanceBps01,
-            2 => BtcUpDown5mBinanceBps02,
-            3 => BtcUpDown5mBinanceBps03,
-            4 => BtcUpDown5mBinanceBps04,
-            5 => BtcUpDown5mBinanceBps05,
-            6 => BtcUpDown5mBinanceBps06,
-            7 => BtcUpDown5mBinanceBps07,
-            8 => BtcUpDown5mBinanceBps08,
-            9 => BtcUpDown5mBinanceBps09,
-            10 => BtcUpDown5mBinanceBps1,
-            20 => BtcUpDown5mBinanceBps2,
-            50 => BtcUpDown5mBinanceBps5,
-            _ => Guid.Parse($"b7c50005-0000-4000-8013-{100 + thresholdTenths:000000000000}")
-        };
-    }
-
-    private static string GetBtcUpDown5mBinanceBpsThresholdCode(int thresholdTenths)
-    {
-        return "btc_up_down_5m_binance_bps_" + thresholdTenths.ToString(CultureInfo.InvariantCulture);
-    }
-
     private static IReadOnlyList<BtcUpDown5mStrategyVariant> CreateCryptoUpDown5mVariants()
     {
         CryptoUpDown5mAssetSpec[] assets =
@@ -1910,28 +1564,15 @@ public static class StrategyIds
         var variants = new List<BtcUpDown5mStrategyVariant>(assets.Length * 4815 + 64);
         foreach (var asset in assets)
         {
-            for (var depth = 1; depth <= 5; depth++)
-            {
-                variants.Add(CreateCryptoUpDown5mSkipVariant(asset, depth));
-            }
-
-            foreach (var depth in CreateMiddleReferenceSampleDepths())
-            {
-                variants.Add(CreateCryptoUpDown5mMiddleVariant(asset, depth));
-
-                foreach (var thresholdBps in CreateMiddleReferenceThresholdBpsValues())
-                {
-                    variants.Add(CreateCryptoUpDown5mMiddleBpsThresholdVariant(asset, depth, thresholdBps));
-                    variants.Add(CreateCryptoUpDown5mMiddleBpsThresholdInstantVariant(asset, depth, thresholdBps));
-                }
-
-            }
-
             for (var thresholdTenths = 1; thresholdTenths <= 50; thresholdTenths++)
             {
                 var minMoveBps = (decimal)thresholdTenths;
-                variants.Add(CreateCryptoUpDown5mBinanceBpsThresholdVariant(asset, thresholdTenths, minMoveBps));
-                variants.Add(CreateCryptoUpDown5mBinanceBpsThresholdInstantVariant(asset, thresholdTenths, minMoveBps));
+                if (!string.Equals(asset.Symbol, "ETH", StringComparison.OrdinalIgnoreCase))
+                {
+                    variants.Add(CreateCryptoUpDown5mBinanceBpsThresholdVariant(asset, thresholdTenths, minMoveBps));
+                    variants.Add(CreateCryptoUpDown5mBinanceBpsThresholdInstantVariant(asset, thresholdTenths, minMoveBps));
+                }
+
                 variants.Add(CreateCryptoUpDown5mFixedOutcomeBpsThresholdInstantVariant(asset, thresholdTenths, minMoveBps, isUp: true));
                 variants.Add(CreateCryptoUpDown5mFixedOutcomeBpsThresholdInstantVariant(asset, thresholdTenths, minMoveBps, isUp: false));
                 if (string.Equals(asset.Symbol, "ETH", StringComparison.OrdinalIgnoreCase))
@@ -1988,20 +1629,25 @@ public static class StrategyIds
                     GetReferenceAverageBpsPremarketIdGroup(asset.Symbol, isUpTrigger: false),
                     thresholdBps,
                     isUpTrigger: false));
+                variants.Add(CreateReferenceAverageBpsThresholdNeutralFakPremarketVariant(
+                    asset.Symbol,
+                    GetReferenceAverageBpsNeutralPremarketIdGroup(asset.Symbol),
+                    thresholdBps));
+            }
+
+            if (string.Equals(asset.Symbol, "ETH", StringComparison.OrdinalIgnoreCase))
+            {
+                for (var thresholdBps = 1; thresholdBps <= 10; thresholdBps++)
+                {
+                    variants.Add(CreateFilteredReferenceAverageBpsThresholdFakPremarketVariant(
+                        asset.Symbol,
+                        thresholdBps));
+                }
             }
 
             variants.Add(CreateSimpleFixedOutcomeInstantVariant(asset.Symbol, asset.SimpleUpIdGroup, isUp: true));
             variants.Add(CreateSimpleFixedOutcomeInstantVariant(asset.Symbol, asset.SimpleDownIdGroup, isUp: false));
-            variants.Add(CreateCryptoPreviousScoreCounterTrendFakVariant(asset));
-            variants.Add(CreateCryptoPreviousScoreCounterTrendFakPremarketVariant(asset));
-            if (string.Equals(asset.Symbol, "ETH", StringComparison.OrdinalIgnoreCase) ||
-                string.Equals(asset.Symbol, "SOL", StringComparison.OrdinalIgnoreCase))
-            {
-                variants.Add(CreateCryptoPreviousScoreCounterTrendFakRevertVariant(asset));
-                variants.Add(CreateCryptoPreviousScoreCounterTrendFakPremarketRevertVariant(asset));
-            }
 
-            variants.AddRange(CreateCryptoDiffCounterTrendVariants(asset));
             variants.AddRange(CreateDiffCounterTrendFakPremarketVariants(asset.Symbol));
             variants.AddRange(CreateDiffProgressVariants(asset.Symbol));
             variants.AddRange(CreateDiffShiftProgressVariants(asset.Symbol));
@@ -2009,156 +1655,6 @@ public static class StrategyIds
             variants.AddRange(CreateDiffLimitProgressPremarketVariants(asset.Symbol));
             variants.AddRange(CreateDiffRealLimitProgressPremarketVariants(asset.Symbol));
             variants.AddRange(CreateDiffReferenceAveragePremarketVariants(asset.Symbol));
-
-            variants.AddRange(CreateCryptoAdjustedDiffCounterTrendVariants(asset));
-            variants.AddRange(CreateCryptoShiftDiffCounterTrendVariants(asset));
-        }
-
-        return variants;
-    }
-
-    private static IReadOnlyList<BtcUpDown5mStrategyVariant> CreateBtcDiffCounterTrendVariants()
-    {
-        var variants = new List<BtcUpDown5mStrategyVariant>(152);
-        foreach (var threshold in CreateDiffCounterThresholds())
-        {
-            variants.Add(CreateDiffCounterTrendVariant("BTC", 8053, 8054, threshold, isUpDiffGroup: true));
-            variants.Add(CreateDiffCounterTrendVariant("BTC", 8053, 8054, threshold, isUpDiffGroup: false));
-        }
-
-        return variants;
-    }
-
-    private static BtcUpDown5mStrategyVariant CreateCryptoPreviousScoreCounterTrendFakVariant(
-        CryptoUpDown5mAssetSpec asset)
-    {
-        var normalizedAsset = asset.Symbol.ToUpperInvariant();
-        var assetCode = normalizedAsset.ToLowerInvariant();
-        var idGroup = normalizedAsset switch
-        {
-            "ETH" => 8141,
-            "SOL" => 8142,
-            _ => throw new ArgumentOutOfRangeException(nameof(asset), asset.Symbol, "Unsupported crypto asset.")
-        };
-
-        return new BtcUpDown5mStrategyVariant(
-            Guid.Parse($"b7c50005-0000-4000-{idGroup:0000}-000000000998"),
-            $"{assetCode}_up_down_5m_prev_score_countertrend_fak",
-            $"{normalizedAsset} Up or Down 5m Prev Score Countertrend",
-            $"At {normalizedAsset} 5m market open, score the immediately previous {normalizedAsset} 5m market from archived Binance {normalizedAsset} samples using a time-weighted winsorized average deviation from market start; previous Up buys Down, previous Down buys Up, neutral or insufficient samples skip. Paper entry takes current executable ask depth immediately and cancels any unfilled remainder.",
-            BtcUpDown5mStrategyDirection.Dynamic,
-            0,
-            BtcUpDown5mStrategyBehavior.PreviousScoreCounterTrendFak,
-            Category: $"{normalizedAsset} Up/Down 5m Previous Score Countertrend",
-            ReferenceAssetSymbol: normalizedAsset);
-    }
-
-    private static BtcUpDown5mStrategyVariant CreateCryptoPreviousScoreCounterTrendFakPremarketVariant(
-        CryptoUpDown5mAssetSpec asset)
-    {
-        var normalizedAsset = asset.Symbol.ToUpperInvariant();
-        var assetCode = normalizedAsset.ToLowerInvariant();
-        var idGroup = normalizedAsset switch
-        {
-            "ETH" => 8141,
-            "SOL" => 8142,
-            _ => throw new ArgumentOutOfRangeException(nameof(asset), asset.Symbol, "Unsupported crypto asset.")
-        };
-
-        return new BtcUpDown5mStrategyVariant(
-            Guid.Parse($"b7c50005-0000-4000-{idGroup:0000}-000000000997"),
-            $"{assetCode}_up_down_5m_prev_score_countertrend_fak_premarket",
-            $"{normalizedAsset} Up or Down 5m Prev Score Countertrend Premarket",
-            $"30 seconds before {normalizedAsset} 5m market open, score the synthetic {normalizedAsset} 5.5-minute window ending at the entry time from archived Binance {normalizedAsset} samples: the last minute of the market before the currently running market plus the first 4 minutes 30 seconds of the currently running market. Positive score buys Down, negative score buys Up, neutral or insufficient samples skip. Paper entry takes current premarket executable ask depth immediately and cancels any unfilled remainder.",
-            BtcUpDown5mStrategyDirection.Dynamic,
-            -30,
-            BtcUpDown5mStrategyBehavior.PreviousScoreCounterTrendFakPremarket,
-            Category: $"{normalizedAsset} Up/Down 5m Previous Score Countertrend Premarket",
-            ReferenceAssetSymbol: normalizedAsset);
-    }
-
-    private static BtcUpDown5mStrategyVariant CreateCryptoPreviousScoreCounterTrendFakRevertVariant(
-        CryptoUpDown5mAssetSpec asset)
-    {
-        var normalizedAsset = asset.Symbol.ToUpperInvariant();
-        var assetCode = normalizedAsset.ToLowerInvariant();
-        var idGroup = normalizedAsset switch
-        {
-            "ETH" => 8141,
-            "SOL" => 8142,
-            _ => throw new ArgumentOutOfRangeException(nameof(asset), asset.Symbol, "Unsupported crypto previous score Revert asset.")
-        };
-
-        return new BtcUpDown5mStrategyVariant(
-            Guid.Parse($"b7c50005-0000-4000-{idGroup:0000}-000000000999"),
-            $"{assetCode}_up_down_5m_prev_score_countertrend_fak_revert",
-            $"{normalizedAsset} Up or Down 5m Prev Score Countertrend Revert",
-            $"At {normalizedAsset} 5m market open, score the immediately previous {normalizedAsset} 5m market from archived Binance {normalizedAsset} samples using a time-weighted winsorized average deviation from market start; previous Up buys Up, previous Down buys Down, neutral or insufficient samples skip. Paper entry takes current executable ask depth immediately and cancels any unfilled remainder.",
-            BtcUpDown5mStrategyDirection.Dynamic,
-            0,
-            BtcUpDown5mStrategyBehavior.PreviousScoreCounterTrendFakRevert,
-            Category: $"{normalizedAsset} Up/Down 5m Previous Score Countertrend",
-            ReferenceAssetSymbol: normalizedAsset);
-    }
-
-    private static BtcUpDown5mStrategyVariant CreateCryptoPreviousScoreCounterTrendFakPremarketRevertVariant(
-        CryptoUpDown5mAssetSpec asset)
-    {
-        var normalizedAsset = asset.Symbol.ToUpperInvariant();
-        var assetCode = normalizedAsset.ToLowerInvariant();
-        var idGroup = normalizedAsset switch
-        {
-            "ETH" => 8141,
-            "SOL" => 8142,
-            _ => throw new ArgumentOutOfRangeException(nameof(asset), asset.Symbol, "Unsupported crypto previous score Premarket Revert asset.")
-        };
-
-        return new BtcUpDown5mStrategyVariant(
-            Guid.Parse($"b7c50005-0000-4000-{idGroup:0000}-000000000996"),
-            $"{assetCode}_up_down_5m_prev_score_countertrend_fak_premarket_revert",
-            $"{normalizedAsset} Up or Down 5m Prev Score Countertrend Premarket Revert",
-            $"30 seconds before {normalizedAsset} 5m market open, score the synthetic {normalizedAsset} 5.5-minute window ending at the entry time from archived Binance {normalizedAsset} samples: the last minute of the market before the currently running market plus the first 4 minutes 30 seconds of the currently running market. Positive score buys Up, negative score buys Down, neutral or insufficient samples skip. Paper entry takes current premarket executable ask depth immediately and cancels any unfilled remainder.",
-            BtcUpDown5mStrategyDirection.Dynamic,
-            -30,
-            BtcUpDown5mStrategyBehavior.PreviousScoreCounterTrendFakPremarketRevert,
-            Category: $"{normalizedAsset} Up/Down 5m Previous Score Countertrend Premarket",
-            ReferenceAssetSymbol: normalizedAsset);
-    }
-
-    private static IReadOnlyList<BtcUpDown5mStrategyVariant> CreateBtcAdjustedDiffCounterTrendVariants()
-    {
-        var variants = new List<BtcUpDown5mStrategyVariant>(48);
-        foreach (var threshold in CreateAdjustedDiffCounterThresholds())
-        {
-            variants.Add(CreateAdjustedDiffCounterTrendVariant("BTC", 8091, 8092, threshold, isUpDiffGroup: true));
-            variants.Add(CreateAdjustedDiffCounterTrendVariant("BTC", 8091, 8092, threshold, isUpDiffGroup: false));
-        }
-
-        return variants;
-    }
-
-    private static IReadOnlyList<BtcUpDown5mStrategyVariant> CreateBtcShiftDiffCounterTrendVariants()
-    {
-        var variants = new List<BtcUpDown5mStrategyVariant>(288);
-        foreach (var shift in CreateShiftDiffCounterShifts())
-        {
-            foreach (var threshold in CreateShiftDiffCounterThresholds())
-            {
-                variants.Add(CreateShiftDiffCounterTrendVariant("BTC", 8097, 8098, shift, threshold, isUpDiffGroup: true));
-                variants.Add(CreateShiftDiffCounterTrendVariant("BTC", 8097, 8098, shift, threshold, isUpDiffGroup: false));
-            }
-        }
-
-        return variants;
-    }
-
-    private static IReadOnlyList<BtcUpDown5mStrategyVariant> CreateCryptoDiffCounterTrendVariants(CryptoUpDown5mAssetSpec asset)
-    {
-        var variants = new List<BtcUpDown5mStrategyVariant>(152);
-        foreach (var threshold in CreateDiffCounterThresholds())
-        {
-            variants.Add(CreateDiffCounterTrendVariant(asset.Symbol, asset.DiffUpIdGroup, asset.DiffDownIdGroup, threshold, isUpDiffGroup: true));
-            variants.Add(CreateDiffCounterTrendVariant(asset.Symbol, asset.DiffUpIdGroup, asset.DiffDownIdGroup, threshold, isUpDiffGroup: false));
         }
 
         return variants;
@@ -2168,33 +1664,29 @@ public static class StrategyIds
         string assetSymbol)
     {
         var idGroups = GetDiffCounterTrendFakPremarketIdGroups(assetSymbol);
-        var includeRevertVariants = !string.Equals(assetSymbol, "ETH", StringComparison.OrdinalIgnoreCase);
-        var variants = new List<BtcUpDown5mStrategyVariant>(includeRevertVariants ? 40 : 20);
-        foreach (var threshold in CreateDiffCounterTrendFakPremarketThresholds())
+        var variants = new List<BtcUpDown5mStrategyVariant>(
+            string.Equals(assetSymbol, "BTC", StringComparison.OrdinalIgnoreCase) ? 40 : 20);
+        foreach (var threshold in CreateDiffCounterTrendFakPremarketThresholds(assetSymbol, isUpDiffGroup: true))
         {
             variants.Add(CreateDiffCounterTrendFakPremarketVariant(assetSymbol, idGroups.Up, threshold, isUpDiffGroup: true));
-            if (includeRevertVariants)
-            {
-                variants.Add(CreateDiffCounterTrendFakPremarketVariant(assetSymbol, idGroups.UpRevert, threshold, isUpDiffGroup: true, isRevert: true));
-            }
+        }
+
+        foreach (var threshold in CreateDiffCounterTrendFakPremarketThresholds(assetSymbol, isUpDiffGroup: false))
+        {
             variants.Add(CreateDiffCounterTrendFakPremarketVariant(assetSymbol, idGroups.Down, threshold, isUpDiffGroup: false));
-            if (includeRevertVariants)
-            {
-                variants.Add(CreateDiffCounterTrendFakPremarketVariant(assetSymbol, idGroups.DownRevert, threshold, isUpDiffGroup: false, isRevert: true));
-            }
         }
 
         return variants;
     }
 
-    private static (int Up, int UpRevert, int Down, int DownRevert) GetDiffCounterTrendFakPremarketIdGroups(
+    private static (int Up, int Down) GetDiffCounterTrendFakPremarketIdGroups(
         string assetSymbol)
     {
         return assetSymbol.ToUpperInvariant() switch
         {
-            "BTC" => (8146, 8147, 8148, 8149),
-            "ETH" => (8144, 8145, 8134, 8143),
-            "SOL" => (8150, 8151, 8152, 8153),
+            "BTC" => (8146, 8148),
+            "ETH" => (8144, 8134),
+            "SOL" => (8150, 8152),
             _ => throw new ArgumentOutOfRangeException(nameof(assetSymbol), assetSymbol, "Unsupported Diff Premarket asset.")
         };
     }
@@ -2358,49 +1850,14 @@ public static class StrategyIds
         };
     }
 
-    private static IReadOnlyList<BtcUpDown5mStrategyVariant> CreateCryptoAdjustedDiffCounterTrendVariants(CryptoUpDown5mAssetSpec asset)
+    private static IEnumerable<int> CreateDiffCounterTrendFakPremarketThresholds(
+        string assetSymbol,
+        bool isUpDiffGroup)
     {
-        var variants = new List<BtcUpDown5mStrategyVariant>(48);
-        foreach (var threshold in CreateAdjustedDiffCounterThresholds())
-        {
-            variants.Add(CreateAdjustedDiffCounterTrendVariant(asset.Symbol, asset.AdjustedDiffUpIdGroup, asset.AdjustedDiffDownIdGroup, threshold, isUpDiffGroup: true));
-            variants.Add(CreateAdjustedDiffCounterTrendVariant(asset.Symbol, asset.AdjustedDiffUpIdGroup, asset.AdjustedDiffDownIdGroup, threshold, isUpDiffGroup: false));
-        }
-
-        return variants;
-    }
-
-    private static IReadOnlyList<BtcUpDown5mStrategyVariant> CreateCryptoShiftDiffCounterTrendVariants(CryptoUpDown5mAssetSpec asset)
-    {
-        var variants = new List<BtcUpDown5mStrategyVariant>(288);
-        foreach (var shift in CreateShiftDiffCounterShifts())
-        {
-            foreach (var threshold in CreateShiftDiffCounterThresholds())
-            {
-                variants.Add(CreateShiftDiffCounterTrendVariant(asset.Symbol, asset.ShiftDiffUpIdGroup, asset.ShiftDiffDownIdGroup, shift, threshold, isUpDiffGroup: true));
-                variants.Add(CreateShiftDiffCounterTrendVariant(asset.Symbol, asset.ShiftDiffUpIdGroup, asset.ShiftDiffDownIdGroup, shift, threshold, isUpDiffGroup: false));
-            }
-        }
-
-        return variants;
-    }
-
-    private static IEnumerable<int> CreateDiffCounterThresholds()
-    {
-        for (var threshold = 1; threshold <= 10; threshold++)
-        {
-            yield return threshold;
-        }
-
-        for (var threshold = 15; threshold <= 150; threshold += 5)
-        {
-            yield return threshold;
-        }
-    }
-
-    private static IEnumerable<int> CreateDiffCounterTrendFakPremarketThresholds()
-    {
-        for (var threshold = 1; threshold <= 10; threshold++)
+        var maxThreshold = string.Equals(assetSymbol, "BTC", StringComparison.OrdinalIgnoreCase) && !isUpDiffGroup
+            ? 30
+            : 10;
+        for (var threshold = 1; threshold <= maxThreshold; threshold++)
         {
             yield return threshold;
         }
@@ -2440,41 +1897,12 @@ public static class StrategyIds
         }
     }
 
-    private static IEnumerable<int> CreateAdjustedDiffCounterThresholds()
-    {
-        for (var threshold = 1; threshold <= 10; threshold++)
-        {
-            yield return threshold;
-        }
-
-        for (var threshold = 15; threshold <= 20; threshold += 5)
-        {
-            yield return threshold;
-        }
-    }
-
-    private static IEnumerable<int> CreateShiftDiffCounterShifts()
-    {
-        for (var shift = 1; shift <= 6; shift++)
-        {
-            yield return shift;
-        }
-    }
-
-    private static IEnumerable<int> CreateShiftDiffCounterThresholds()
-    {
-        for (var threshold = 1; threshold <= 12; threshold++)
-        {
-            yield return threshold;
-        }
-    }
-
-    private static BtcUpDown5mStrategyVariant CreateDiffCounterTrendVariant(
+    private static BtcUpDown5mStrategyVariant CreateDiffCounterTrendFakPremarketVariant(
         string assetSymbol,
-        int upDiffIdGroup,
-        int downDiffIdGroup,
+        int idGroup,
         int threshold,
         bool isUpDiffGroup,
+        int entryDelaySeconds = -30,
         bool isRevert = false)
     {
         var normalizedAsset = assetSymbol.ToUpperInvariant();
@@ -2490,19 +1918,19 @@ public static class StrategyIds
         var diffExpression = isUpDiffGroup
             ? "UpCount - DownCount"
             : "DownCount - UpCount";
-        var idGroup = isUpDiffGroup ? upDiffIdGroup : downDiffIdGroup;
+        var secondsBeforeOpen = Math.Abs(entryDelaySeconds);
 
         return new BtcUpDown5mStrategyVariant(
             Guid.Parse($"b7c50005-0000-4000-{idGroup:0000}-{threshold:000000000000}"),
-            $"{assetCode}_up_down_5m_{diffGroupCode}_diff_{threshold}{revertCodeSuffix}_instant",
-            $"{normalizedAsset} Up or Down 5m {diffGroupName} {threshold} Diff{revertNameSuffix} Instant",
-            $"Diff {strategyKindName} strategy: after the {normalizedAsset} 5m market opens, use the in-memory UTC-day raw {diffExpression} counter reset at 00:00 UTC. If the absolute Diff side is at least {threshold}, submit a BUY FAK taker entry on {targetOutcomeName} from current executable ask depth. Otherwise skip. Settlement uses only actually filled shares.",
+            $"{assetCode}_up_down_5m_{diffGroupCode}_diff_{threshold}{revertCodeSuffix}_fak_premarket",
+            $"{normalizedAsset} Up or Down 5m {diffGroupName} {threshold} Diff{revertNameSuffix} Premarket",
+            $"{secondsBeforeOpen.ToString(CultureInfo.InvariantCulture)} seconds before {normalizedAsset} 5m market open, use the in-memory UTC-day raw {diffExpression} counter reset at 00:00 UTC. Diff {strategyKindName} strategy: if the absolute Diff side is at least {threshold}, BUY {targetOutcomeName} from the current premarket executable ask depth using the worst-price cap. Otherwise skip. Paper entry simulates the same taker BUY, while Live-shadow submits a market BUY amount so available liquidity is taken immediately and any remainder is cancelled.",
             BtcUpDown5mStrategyDirection.Dynamic,
-            0,
-            BtcUpDown5mStrategyBehavior.DiffCounterTrend,
+            entryDelaySeconds,
+            BtcUpDown5mStrategyBehavior.DiffCounterTrendFakPremarket,
             threshold,
             FixedOutcome: targetOutcome,
-            Category: $"{normalizedAsset} Up/Down 5m Diff {diffGroupName}{revertNameSuffix}",
+            Category: $"{normalizedAsset} Up/Down 5m Diff {diffGroupName}{revertNameSuffix} Premarket",
             ReferenceAssetSymbol: normalizedAsset,
             DiffCounterTriggerOutcome: triggerOutcome);
     }
@@ -2523,6 +1951,9 @@ public static class StrategyIds
         var diffExpression = isUpDiffGroup
             ? "UpCount - DownCount"
             : "DownCount - UpCount";
+        var category = string.Equals(normalizedAsset, "BTC", StringComparison.OrdinalIgnoreCase)
+            ? $"{normalizedAsset} Up/Down 5m Diff {diffGroupName} Progress"
+            : $"{normalizedAsset} Up/Down 5m Diff Progress";
 
         return new BtcUpDown5mStrategyVariant(
             Guid.Parse($"b7c50005-0000-4000-{idGroup:0000}-{threshold:000000000000}"),
@@ -2534,7 +1965,7 @@ public static class StrategyIds
             BtcUpDown5mStrategyBehavior.DiffProgress,
             threshold,
             FixedOutcome: targetOutcome,
-            Category: $"{normalizedAsset} Up/Down 5m Diff Progress",
+            Category: category,
             ReferenceAssetSymbol: normalizedAsset,
             DiffCounterTriggerOutcome: triggerOutcome);
     }
@@ -2587,7 +2018,7 @@ public static class StrategyIds
             -30,
             BtcUpDown5mStrategyBehavior.DiffShiftProgress,
             threshold,
-            Category: "Up Or Down 5 min Diff Shift Progress",
+            Category: $"{normalizedAsset} Up/Down 5m Diff Shift Progress Premarket",
             ReferenceAssetSymbol: normalizedAsset);
     }
 
@@ -2654,126 +2085,8 @@ public static class StrategyIds
             BtcUpDown5mStrategyBehavior.DiffReferenceAveragePremarket,
             threshold,
             threshold,
-            Category: "Up Or Down 5 min Diff Reference Average",
+            Category: $"{normalizedAsset} Up/Down 5m Diff Reference Average Premarket",
             ReferenceAssetSymbol: normalizedAsset);
-    }
-
-    private static BtcUpDown5mStrategyVariant CreateDiffCounterTrendFakPremarketVariant(
-        string assetSymbol,
-        int idGroup,
-        int threshold,
-        bool isUpDiffGroup,
-        int entryDelaySeconds = -30,
-        bool isRevert = false)
-    {
-        var normalizedAsset = assetSymbol.ToUpperInvariant();
-        var assetCode = normalizedAsset.ToLowerInvariant();
-        var diffGroupName = isUpDiffGroup ? "Up" : "Down";
-        var diffGroupCode = isUpDiffGroup ? "up" : "down";
-        var triggerOutcome = isUpDiffGroup ? BtcUpDownFixedOutcome.Up : BtcUpDownFixedOutcome.Down;
-        var targetOutcome = isRevert ? triggerOutcome : GetOppositeFixedOutcome(triggerOutcome);
-        var targetOutcomeName = targetOutcome.ToString();
-        var revertCodeSuffix = isRevert ? "_revert" : string.Empty;
-        var revertNameSuffix = isRevert ? " Revert" : string.Empty;
-        var strategyKindName = isRevert ? "revert" : "countertrend";
-        var diffExpression = isUpDiffGroup
-            ? "UpCount - DownCount"
-            : "DownCount - UpCount";
-        var secondsBeforeOpen = Math.Abs(entryDelaySeconds);
-
-        return new BtcUpDown5mStrategyVariant(
-            Guid.Parse($"b7c50005-0000-4000-{idGroup:0000}-{threshold:000000000000}"),
-            $"{assetCode}_up_down_5m_{diffGroupCode}_diff_{threshold}{revertCodeSuffix}_fak_premarket",
-            $"{normalizedAsset} Up or Down 5m {diffGroupName} {threshold} Diff{revertNameSuffix} Premarket",
-            $"{secondsBeforeOpen.ToString(CultureInfo.InvariantCulture)} seconds before {normalizedAsset} 5m market open, use the in-memory UTC-day raw {diffExpression} counter reset at 00:00 UTC. Diff {strategyKindName} strategy: if the absolute Diff side is at least {threshold}, BUY {targetOutcomeName} from the current premarket executable ask depth using the worst-price cap. Otherwise skip. Paper entry simulates the same taker BUY, while Live-shadow submits a market BUY amount so available liquidity is taken immediately and any remainder is cancelled.",
-            BtcUpDown5mStrategyDirection.Dynamic,
-            entryDelaySeconds,
-            BtcUpDown5mStrategyBehavior.DiffCounterTrendFakPremarket,
-            threshold,
-            FixedOutcome: targetOutcome,
-            Category: $"{normalizedAsset} Up/Down 5m Diff {diffGroupName}{revertNameSuffix} Premarket",
-            ReferenceAssetSymbol: normalizedAsset,
-            DiffCounterTriggerOutcome: triggerOutcome);
-    }
-
-    private static BtcUpDown5mStrategyVariant CreateAdjustedDiffCounterTrendVariant(
-        string assetSymbol,
-        int upDiffIdGroup,
-        int downDiffIdGroup,
-        int threshold,
-        bool isUpDiffGroup,
-        bool isRevert = false)
-    {
-        var normalizedAsset = assetSymbol.ToUpperInvariant();
-        var assetCode = normalizedAsset.ToLowerInvariant();
-        var diffGroupName = isUpDiffGroup ? "Up" : "Down";
-        var diffGroupCode = isUpDiffGroup ? "up" : "down";
-        var triggerOutcome = isUpDiffGroup ? BtcUpDownFixedOutcome.Up : BtcUpDownFixedOutcome.Down;
-        var targetOutcome = isRevert ? triggerOutcome : GetOppositeFixedOutcome(triggerOutcome);
-        var targetOutcomeName = targetOutcome.ToString();
-        var revertCodeSuffix = isRevert ? "_revert" : string.Empty;
-        var revertNameSuffix = isRevert ? " Revert" : string.Empty;
-        var strategyKindName = isRevert ? "revert" : "countertrend";
-        var diffExpression = isUpDiffGroup
-            ? "AdjustedDiff = raw Diff - trend zero"
-            : "AdjustedDiff = trend zero - raw Diff";
-        var idGroup = isUpDiffGroup ? upDiffIdGroup : downDiffIdGroup;
-
-        return new BtcUpDown5mStrategyVariant(
-            Guid.Parse($"b7c50005-0000-4000-{idGroup:0000}-{threshold:000000000000}"),
-            $"{assetCode}_up_down_5m_{diffGroupCode}_adjusted_diff_{threshold}{revertCodeSuffix}_instant",
-            $"{normalizedAsset} Up or Down 5m {diffGroupName} {threshold} AdjustedDiff{revertNameSuffix} Instant",
-            $"AdjustedDiff {strategyKindName} strategy: after the {normalizedAsset} 5m market opens, use the in-memory continuous raw Diff counter without the 00:00 UTC reset, compute a slow EMA trend zero, then evaluate {diffExpression}. If the adjusted Diff side is at least {threshold}, submit a BUY FAK taker entry on {targetOutcomeName} from current executable ask depth. Otherwise skip. Settlement uses only actually filled shares.",
-            BtcUpDown5mStrategyDirection.Dynamic,
-            0,
-            BtcUpDown5mStrategyBehavior.AdjustedDiffCounterTrend,
-            threshold,
-            FixedOutcome: targetOutcome,
-            Category: $"{normalizedAsset} Up/Down 5m AdjustedDiff {diffGroupName}{revertNameSuffix}",
-            ReferenceAssetSymbol: normalizedAsset,
-            DiffCounterTriggerOutcome: triggerOutcome);
-    }
-
-    private static BtcUpDown5mStrategyVariant CreateShiftDiffCounterTrendVariant(
-        string assetSymbol,
-        int upDiffIdGroup,
-        int downDiffIdGroup,
-        int shift,
-        int threshold,
-        bool isUpDiffGroup,
-        bool isRevert = false)
-    {
-        var normalizedAsset = assetSymbol.ToUpperInvariant();
-        var assetCode = normalizedAsset.ToLowerInvariant();
-        var diffGroupName = isUpDiffGroup ? "Up" : "Down";
-        var diffGroupCode = isUpDiffGroup ? "up" : "down";
-        var triggerOutcome = isUpDiffGroup ? BtcUpDownFixedOutcome.Up : BtcUpDownFixedOutcome.Down;
-        var targetOutcome = isRevert ? triggerOutcome : GetOppositeFixedOutcome(triggerOutcome);
-        var targetOutcomeName = targetOutcome.ToString();
-        var revertCodeSuffix = isRevert ? "_revert" : string.Empty;
-        var revertNameSuffix = isRevert ? " Revert" : string.Empty;
-        var strategyKindName = isRevert ? "revert" : "countertrend";
-        var diffExpression = isUpDiffGroup
-            ? "UpCount - DownCount"
-            : "DownCount - UpCount";
-        var idGroup = isUpDiffGroup ? upDiffIdGroup : downDiffIdGroup;
-        var idSuffix = (shift * 100) + threshold;
-        var shiftTrigger = (shift * 2) + 1;
-
-        return new BtcUpDown5mStrategyVariant(
-            Guid.Parse($"b7c50005-0000-4000-{idGroup:0000}-{idSuffix:000000000000}"),
-            $"{assetCode}_up_down_5m_{diffGroupCode}_shift_diff_{shift}_{threshold}{revertCodeSuffix}_instant",
-            $"{normalizedAsset} Up or Down 5m {diffGroupName} {shift} {threshold} ShiftDiff{revertNameSuffix} Instant",
-            $"ShiftDiff {strategyKindName} strategy: after the {normalizedAsset} 5m market opens, use this strategy's own continuous in-memory raw {diffExpression} counter without the 00:00 UTC reset. After each included result, when raw Diff reaches {shiftTrigger}, reduce UpCount by {shift}; when raw Diff reaches -{shiftTrigger}, reduce DownCount by {shift}; then evaluate the shifted Diff side. If the shifted Diff side is at least {threshold}, submit a BUY FAK taker entry on {targetOutcomeName} from current executable ask depth. Otherwise skip. Settlement uses only actually filled shares.",
-            BtcUpDown5mStrategyDirection.Dynamic,
-            0,
-            BtcUpDown5mStrategyBehavior.ShiftDiffCounterTrend,
-            threshold,
-            FixedOutcome: targetOutcome,
-            Category: $"{normalizedAsset} Up/Down 5m ShiftDiff {shift}{revertNameSuffix}",
-            ReferenceAssetSymbol: normalizedAsset,
-            ShiftDiffCount: shift,
-            DiffCounterTriggerOutcome: triggerOutcome);
     }
 
     private static BtcUpDownFixedOutcome GetOppositeFixedOutcome(BtcUpDownFixedOutcome outcome)
@@ -2816,8 +2129,59 @@ public static class StrategyIds
             thresholdBps,
             ReferenceAssetSymbol: normalizedAsset,
             FixedOutcome: targetOutcome,
-            Category: $"{normalizedAsset} Up/Down 5m Reference Average Bps Premarket",
+            Category: $"{normalizedAsset} Up/Down 5m {triggerName} Bps Reference Average Premarket",
             DiffCounterTriggerOutcome: triggerOutcome);
+    }
+
+    private static BtcUpDown5mStrategyVariant CreateReferenceAverageBpsThresholdNeutralFakPremarketVariant(
+        string assetSymbol,
+        int idGroup,
+        int thresholdBps,
+        int entryDelaySeconds = -30)
+    {
+        var normalizedAsset = assetSymbol.ToUpperInvariant();
+        var assetCode = normalizedAsset.ToLowerInvariant();
+        var secondsBeforeOpen = Math.Abs(entryDelaySeconds);
+        var thresholdName = thresholdBps.ToString(CultureInfo.InvariantCulture);
+
+        return new BtcUpDown5mStrategyVariant(
+            Guid.Parse($"b7c50005-0000-4000-{idGroup:0000}-{100 + thresholdBps:000000000000}"),
+            $"{assetCode}_up_down_5m_reference_average_bps_{thresholdName}_fak_premarket",
+            $"{normalizedAsset} Up or Down 5m {thresholdName} bps Reference Average Premarket",
+            $"{secondsBeforeOpen.ToString(CultureInfo.InvariantCulture)} seconds before {normalizedAsset} 5m market open, compare the latest Binance {normalizedAsset}/USDT reference price with the largest full in-memory reference average across 24h, 12h, 6h, 3h, 90m, 45m, 20m, and 10m windows. If the current price is above that maximum average by at least {thresholdName} bps, BUY Down; if it is below that maximum average by at least {thresholdName} bps, BUY Up. Otherwise skip. Paper entry simulates the same taker BUY, while Live-shadow submits a market BUY amount so available liquidity is taken immediately and any remainder is cancelled.",
+            BtcUpDown5mStrategyDirection.Dynamic,
+            entryDelaySeconds,
+            BtcUpDown5mStrategyBehavior.ReferenceAverageBpsThresholdFakPremarket,
+            thresholdBps,
+            thresholdBps,
+            ReferenceAssetSymbol: normalizedAsset,
+            Category: $"{normalizedAsset} Up/Down 5m Bps Reference Average Premarket");
+    }
+
+    private static BtcUpDown5mStrategyVariant CreateFilteredReferenceAverageBpsThresholdFakPremarketVariant(
+        string assetSymbol,
+        int thresholdBps,
+        int entryDelaySeconds = -30)
+    {
+        var normalizedAsset = assetSymbol.ToUpperInvariant();
+        var assetCode = normalizedAsset.ToLowerInvariant();
+        var secondsBeforeOpen = Math.Abs(entryDelaySeconds);
+        var thresholdName = thresholdBps.ToString(CultureInfo.InvariantCulture);
+
+        return new BtcUpDown5mStrategyVariant(
+            Guid.Parse($"b7c50005-0000-4000-8181-{100 + thresholdBps:000000000000}"),
+            $"{assetCode}_up_down_5m_down_filtered_average_bps_{thresholdName}_fak_premarket",
+            $"{normalizedAsset} Up or Down 5m Down {thresholdName} bps Filtered Average Premarket",
+            $"{secondsBeforeOpen.ToString(CultureInfo.InvariantCulture)} seconds before {normalizedAsset} 5m market open, compare the latest Binance {normalizedAsset}/USDT reference price with the largest full in-memory reference average across 24h, 12h, 6h, 3h, 90m, 45m, 20m, and 10m windows. If the selected reference window is 6h or 12h, skip. If the absolute move from the selected average is at least 20 bps and below 80 bps, skip. Otherwise, when the current price moves Down by at least {thresholdName} bps from that maximum average, BUY Up from current premarket executable ask depth using the worst-price cap. Paper entry simulates the same taker BUY, while Live-shadow submits a market BUY amount so available liquidity is taken immediately and any remainder is cancelled.",
+            BtcUpDown5mStrategyDirection.Dynamic,
+            entryDelaySeconds,
+            BtcUpDown5mStrategyBehavior.FilteredReferenceAverageBpsThresholdFakPremarket,
+            thresholdBps,
+            thresholdBps,
+            ReferenceAssetSymbol: normalizedAsset,
+            FixedOutcome: BtcUpDownFixedOutcome.Up,
+            Category: $"{normalizedAsset} Up/Down 5m Down Bps Filtered Average Premarket",
+            DiffCounterTriggerOutcome: BtcUpDownFixedOutcome.Down);
     }
 
     private static int GetReferenceAverageBpsPremarketIdGroup(string assetSymbol, bool isUpTrigger)
@@ -2831,20 +2195,15 @@ public static class StrategyIds
         };
     }
 
-    private static BtcUpDown5mStrategyVariant CreateCryptoUpDown5mSkipVariant(
-        CryptoUpDown5mAssetSpec asset,
-        int depth)
+    private static int GetReferenceAverageBpsNeutralPremarketIdGroup(string assetSymbol)
     {
-        return new BtcUpDown5mStrategyVariant(
-            Guid.Parse($"b7c50005-0000-4000-{asset.SkipIdGroup:0000}-000000000{depth:000}"),
-            $"{asset.Symbol.ToLowerInvariant()}_up_down_5m_skip_{depth}",
-            $"{asset.Symbol} Up or Down 5m Skip {depth}",
-            $"Immediately after {asset.Symbol} 5m market open, inspect the latest {depth} settled {asset.Symbol} 5m market result(s); after consecutive Up results buy Down, after consecutive Down results buy Up, otherwise skip. Paper entry is a GTD limit BUY with dynamic break-even pricing; settlement uses only actually filled shares.",
-            BtcUpDown5mStrategyDirection.Dynamic,
-            0,
-            BtcUpDown5mStrategyBehavior.SkipConsecutiveMarketResults,
-            depth,
-            ReferenceAssetSymbol: asset.Symbol);
+        return assetSymbol.ToUpperInvariant() switch
+        {
+            "BTC" => 8178,
+            "ETH" => 8179,
+            "SOL" => 8180,
+            _ => throw new ArgumentOutOfRangeException(nameof(assetSymbol), assetSymbol, "Unsupported neutral reference-average Premarket asset.")
+        };
     }
 
     private static BtcUpDown5mStrategyVariant CreateCryptoUpDown5mMiddleVariant(
@@ -3147,196 +2506,6 @@ public static class StrategyIds
         return assetSymbol.ToLowerInvariant() + "_up_down_5m_" + directionCode + "_bps_" + thresholdTenths.ToString(CultureInfo.InvariantCulture) + "_fak";
     }
 
-    private static BtcUpDown5mStrategyVariant CreateBtcUpDown5mBinanceCleverVariant()
-    {
-        return new BtcUpDown5mStrategyVariant(
-            BtcUpDown5mBinanceClever,
-            BtcUpDown5mBinanceCleverCode,
-            "BTC Up or Down 5m Binance Clever",
-            "After BTC 5m trading starts, compare the latest Binance BTC/USDT trade-stream price with the archived market-start reference, estimate a fair target outcome price from recent odds archive samples with similar BTC move/time-to-close/book quality, and place a GTD limit BUY only below fair value with a safety margin until the configured BTC GTD deadline.",
-            BtcUpDown5mStrategyDirection.Dynamic,
-            0,
-            BtcUpDown5mStrategyBehavior.BinanceStartRelativeClever);
-    }
-
-    private static BtcUpDown5mStrategyVariant CreateBtcUpDown5mBinanceCleverMarginVariant(
-        Guid id,
-        string code,
-        string marginName,
-        int marginCents)
-    {
-        var margin = marginCents / 100m;
-        return new BtcUpDown5mStrategyVariant(
-            id,
-            code,
-            $"BTC Up or Down 5m Binance Clever {marginName}",
-            $"After BTC 5m trading starts, compare the latest Binance BTC/USDT trade-stream price with the archived market-start reference, estimate a fair target outcome price from recent odds archive samples with similar BTC move/time-to-close/book quality, and place a GTD limit BUY only below fair value with a {margin.ToString("0.00", CultureInfo.InvariantCulture)} safety margin until the configured BTC GTD deadline.",
-            BtcUpDown5mStrategyDirection.Dynamic,
-            0,
-            BtcUpDown5mStrategyBehavior.BinanceStartRelativeCleverMargin,
-            marginCents);
-    }
-
-    private static BtcUpDown5mStrategyVariant CreateBtcUpDown5mBinanceEdgeVariant(
-        Guid id,
-        string code,
-        int edgeCents)
-    {
-        var margin = edgeCents / 100m;
-        return new BtcUpDown5mStrategyVariant(
-            id,
-            code,
-            $"BTC Up or Down 5m Binance Edge {edgeCents}",
-            $"After BTC 5m trading starts, use the Binance start-relative direction, estimate fair value from the BTC odds archive, and place a GTD limit BUY only when the safe price is at least {margin.ToString("0.00", CultureInfo.InvariantCulture)} below fair value, until the configured BTC GTD deadline.",
-            BtcUpDown5mStrategyDirection.Dynamic,
-            0,
-            BtcUpDown5mStrategyBehavior.BinanceStartRelativeEdge,
-            edgeCents);
-    }
-
-    private static BtcUpDown5mStrategyVariant CreateBtcUpDown5mBinanceDelayedVariant(
-        Guid id,
-        string code,
-        int entryDelaySeconds)
-    {
-        return new BtcUpDown5mStrategyVariant(
-            id,
-            code,
-            $"BTC Up or Down 5m Binance {entryDelaySeconds}s",
-            $"Wait {entryDelaySeconds} seconds after BTC 5m trading starts, then compare the latest Binance BTC/USDT trade-stream price with the archived market-start reference; above start buys Up, below start buys Down, equal skips. Paper entry is a GTD limit BUY capped at 0.50 until the configured BTC GTD deadline.",
-            BtcUpDown5mStrategyDirection.Dynamic,
-            entryDelaySeconds,
-            BtcUpDown5mStrategyBehavior.BinanceStartRelativeDelayed,
-            entryDelaySeconds);
-    }
-
-    private static BtcUpDown5mStrategyVariant CreateBtcUpDown5mEnsembleVariant()
-    {
-        return new BtcUpDown5mStrategyVariant(
-            BtcUpDown5mEnsemble2Of3,
-            BtcUpDown5mEnsemble2Of3Code,
-            "BTC Up or Down 5m Ensemble 2 of 3",
-            "Immediately after BTC 5m market open, vote between Binance start-relative, Middle 100, and Skip 1 signals. Enter only when at least two available votes select the same outcome. Paper entry is a GTD limit BUY with dynamic break-even pricing.",
-            BtcUpDown5mStrategyDirection.Dynamic,
-            0,
-            BtcUpDown5mStrategyBehavior.EnsembleVote,
-            2);
-    }
-
-    private static BtcUpDown5mStrategyVariant CreateBtcUpDown5mDynamicMarkovVariant()
-    {
-        return new BtcUpDown5mStrategyVariant(
-            BtcUpDown5mDynamicMarkov,
-            BtcUpDown5mDynamicMarkovCode,
-            "BTC Up or Down 5m Dynamic Markov",
-            "Immediately after BTC 5m market open, estimate the next result from recent BTC 5m result transitions and enter only when the transition edge is strong enough. Paper entry is a GTD limit BUY with dynamic break-even pricing.",
-            BtcUpDown5mStrategyDirection.Dynamic,
-            0,
-            BtcUpDown5mStrategyBehavior.DynamicMarkov,
-            50);
-    }
-
-    private static BtcUpDown5mStrategyVariant CreateBtcUpDown5mStrategySelectorVariant()
-    {
-        return new BtcUpDown5mStrategyVariant(
-            BtcUpDown5mStrategySelector,
-            BtcUpDown5mStrategySelectorCode,
-            "BTC Up or Down 5m Strategy Selector",
-            "Immediately after BTC 5m market open, choose the best positive-expectancy opening BTC strategy from recent settled Paper history, then reuse that strategy's current direction signal for one GTD limit BUY.",
-            BtcUpDown5mStrategyDirection.Dynamic,
-            0,
-            BtcUpDown5mStrategyBehavior.StrategySelector,
-            30);
-    }
-
-    private static IReadOnlyList<BtcUpDown5mStrategyVariant> CreateBtcPreviousScoreCounterTrendVariants()
-    {
-        var variants = new List<BtcUpDown5mStrategyVariant>(13);
-        for (var priceCents = 10; priceCents <= 50; priceCents += 5)
-        {
-            variants.Add(CreateBtcPreviousScoreCounterTrendVariant(priceCents));
-        }
-
-        variants.Add(CreateBtcPreviousScoreCounterTrendFakVariant());
-        variants.Add(CreateBtcPreviousScoreCounterTrendFakPremarketVariant());
-        variants.Add(CreateBtcPreviousScoreCounterTrendFakRevertVariant());
-        variants.Add(CreateBtcPreviousScoreCounterTrendFakPremarketRevertVariant());
-
-        return variants;
-    }
-
-    private static BtcUpDown5mStrategyVariant CreateBtcPreviousScoreCounterTrendVariant(int limitPriceCents)
-    {
-        var limitPrice = limitPriceCents / 100m;
-        return new BtcUpDown5mStrategyVariant(
-            Guid.Parse($"b7c50005-0000-4000-8025-000000000{limitPriceCents:000}"),
-            $"btc_up_down_5m_prev_score_countertrend_{limitPriceCents}",
-            $"BTC Up or Down 5m Prev Score Countertrend {limitPriceCents}",
-            $"At BTC 5m market open, score the immediately previous BTC 5m market from archived Binance BTC samples using a time-weighted winsorized average deviation from market start; previous Up buys Down, previous Down buys Up, neutral or insufficient samples skip. Paper entry is a fixed-price GTD limit BUY at {limitPrice.ToString("0.00", CultureInfo.InvariantCulture)}.",
-            BtcUpDown5mStrategyDirection.Dynamic,
-            0,
-            BtcUpDown5mStrategyBehavior.PreviousScoreCounterTrend,
-            limitPriceCents,
-            null,
-            BtcUpDownMarketInterval.FiveMinutes,
-            BtcUpDownPreOpenLifetimeMode.Default,
-            null,
-            limitPrice,
-            "BTC Up/Down 5m Previous Score Countertrend");
-    }
-
-    private static BtcUpDown5mStrategyVariant CreateBtcPreviousScoreCounterTrendFakVariant()
-    {
-        return new BtcUpDown5mStrategyVariant(
-            Guid.Parse("b7c50005-0000-4000-8025-000000000998"),
-            "btc_up_down_5m_prev_score_countertrend_fak",
-            "BTC Up or Down 5m Prev Score Countertrend",
-            "At BTC 5m market open, score the immediately previous BTC 5m market from archived Binance BTC samples using a time-weighted winsorized average deviation from market start; previous Up buys Down, previous Down buys Up, neutral or insufficient samples skip. Paper entry takes current executable ask depth immediately and cancels any unfilled remainder.",
-            BtcUpDown5mStrategyDirection.Dynamic,
-            0,
-            BtcUpDown5mStrategyBehavior.PreviousScoreCounterTrendFak,
-            Category: "BTC Up/Down 5m Previous Score Countertrend");
-    }
-
-    private static BtcUpDown5mStrategyVariant CreateBtcPreviousScoreCounterTrendFakPremarketVariant()
-    {
-        return new BtcUpDown5mStrategyVariant(
-            Guid.Parse("b7c50005-0000-4000-8025-000000000997"),
-            "btc_up_down_5m_prev_score_countertrend_fak_premarket",
-            "BTC Up or Down 5m Prev Score Countertrend Premarket",
-            "30 seconds before BTC 5m market open, score the synthetic BTC 5.5-minute window ending at the entry time from archived Binance BTC samples: the last minute of the market before the currently running market plus the first 4 minutes 30 seconds of the currently running market. Positive score buys Down, negative score buys Up, neutral or insufficient samples skip. Paper entry takes current premarket executable ask depth immediately and cancels any unfilled remainder.",
-            BtcUpDown5mStrategyDirection.Dynamic,
-            -30,
-            BtcUpDown5mStrategyBehavior.PreviousScoreCounterTrendFakPremarket,
-            Category: "BTC Up/Down 5m Previous Score Countertrend Premarket");
-    }
-
-    private static BtcUpDown5mStrategyVariant CreateBtcPreviousScoreCounterTrendFakRevertVariant()
-    {
-        return new BtcUpDown5mStrategyVariant(
-            Guid.Parse("b7c50005-0000-4000-8025-000000000999"),
-            "btc_up_down_5m_prev_score_countertrend_fak_revert",
-            "BTC Up or Down 5m Prev Score Countertrend Revert",
-            "At BTC 5m market open, score the immediately previous BTC 5m market from archived Binance BTC samples using a time-weighted winsorized average deviation from market start; previous Up buys Up, previous Down buys Down, neutral or insufficient samples skip. Paper entry takes current executable ask depth immediately and cancels any unfilled remainder.",
-            BtcUpDown5mStrategyDirection.Dynamic,
-            0,
-            BtcUpDown5mStrategyBehavior.PreviousScoreCounterTrendFakRevert,
-            Category: "BTC Up/Down 5m Previous Score Countertrend");
-    }
-
-    private static BtcUpDown5mStrategyVariant CreateBtcPreviousScoreCounterTrendFakPremarketRevertVariant()
-    {
-        return new BtcUpDown5mStrategyVariant(
-            Guid.Parse("b7c50005-0000-4000-8025-000000000996"),
-            "btc_up_down_5m_prev_score_countertrend_fak_premarket_revert",
-            "BTC Up or Down 5m Prev Score Countertrend Premarket Revert",
-            "30 seconds before BTC 5m market open, score the synthetic BTC 5.5-minute window ending at the entry time from archived Binance BTC samples: the last minute of the market before the currently running market plus the first 4 minutes 30 seconds of the currently running market. Positive score buys Up, negative score buys Down, neutral or insufficient samples skip. Paper entry takes current premarket executable ask depth immediately and cancels any unfilled remainder.",
-            BtcUpDown5mStrategyDirection.Dynamic,
-            -30,
-            BtcUpDown5mStrategyBehavior.PreviousScoreCounterTrendFakPremarketRevert,
-            Category: "BTC Up/Down 5m Previous Score Countertrend Premarket");
-    }
-
     private static BtcUpDown5mStrategyVariant CreateBtcUpDown5mEntryPriceCapVariant(
         Guid id,
         string code,
@@ -3515,7 +2684,6 @@ public enum BtcUpDown5mStrategyBehavior
 {
     Standard,
     GammaOutcomeSelection,
-    Less180Martin,
     MiddleReference,
     MiddleReferenceRevert,
     MiddleReferenceInstant,
@@ -3552,6 +2720,7 @@ public enum BtcUpDown5mStrategyBehavior
     FixedOutcomePreviousResultBpsThresholdFak,
     FixedOutcomePreviousResultBpsThresholdFakPremarket,
     ReferenceAverageBpsThresholdFakPremarket,
+    FilteredReferenceAverageBpsThresholdFakPremarket,
     SimpleFixedOutcomeInstant,
     FixedOutcomeMaker,
     DiffCounterTrend,
@@ -3646,9 +2815,6 @@ public sealed record StrategyRuntimeSettings(
     Guid StrategyId,
     bool Enabled,
     bool LiveStakes,
-    bool AutoLivePaused,
-    DateTimeOffset? AutoLivePausedAtUtc,
-    DateTimeOffset? AutoLivePauseWindowStartUtc,
     bool Paused,
     DateTimeOffset? PausedUntilUtc,
     decimal PaperStakeAmount,
@@ -3660,7 +2826,7 @@ public sealed record StrategyRuntimeSettings(
     decimal LiveAvailableBalance,
     DateTimeOffset? LiveEnabledAtUtc)
 {
-    public bool EffectiveLiveStakes => LiveStakes && !AutoLivePaused;
+    public bool EffectiveLiveStakes => LiveStakes;
 
     public bool IsPausedAt(DateTimeOffset nowUtc)
     {
@@ -3673,9 +2839,6 @@ public sealed record StrategyRuntimeSettings(
             StrategyIds.Normalize(strategyId),
             Enabled: true,
             LiveStakes: false,
-            AutoLivePaused: false,
-            AutoLivePausedAtUtc: null,
-            AutoLivePauseWindowStartUtc: null,
             Paused: false,
             PausedUntilUtc: null,
             PaperStakeAmount: 1.00m,
@@ -3688,20 +2851,6 @@ public sealed record StrategyRuntimeSettings(
             LiveEnabledAtUtc: null);
     }
 }
-
-public enum StrategyAutoLivePauseUpdateMode
-{
-    PauseFromLiveSettlements,
-    ResumeFromPaperSettlements
-}
-
-public sealed record StrategyAutoLivePauseDecision(
-    bool AutoLivePaused,
-    bool AutoLiveResumed,
-    bool AutoLivePauseChanged,
-    decimal RecentPnlUsd,
-    int RecentSettledCount,
-    DateTimeOffset LookbackStartUtc);
 
 public sealed record StrategyLiveBalanceAdjustmentResult(
     bool Applied,
@@ -3719,7 +2868,6 @@ public sealed record StrategyPerformance(
     string Name,
     bool Enabled,
     bool LiveStakes,
-    bool AutoLivePaused,
     bool Paused,
     DateTimeOffset? PausedUntilUtc,
     decimal PaperStakeAmount,

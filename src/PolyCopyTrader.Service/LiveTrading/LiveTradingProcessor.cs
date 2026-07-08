@@ -26,8 +26,8 @@ public sealed class LiveTradingProcessor(
     private const string PaperLiveShadowTestSource = "paper_live_shadow_test";
     private const string DataApiPositionObservationMarker = "Data API aggregate position observed; exact per-order fill not applied.";
     private const decimal ShadowPriceTolerance = 0.000001m;
+    private const decimal ExpectedFakWorstPrice = 0.99m;
     private const decimal FillSizeTolerance = 0.000001m;
-    private static readonly TimeSpan StrategyPauseLookback = TimeSpan.FromHours(12);
 
     public async Task<LiveTradingProcessingResult> ProcessOpenOrdersAsync(CancellationToken cancellationToken = default)
     {
@@ -295,7 +295,6 @@ public sealed class LiveTradingProcessor(
                     result.AvailableBalance);
 
                 await UpdateStrategyLiveLostCounterAfterSettlementAsync(order.StrategyId, settlementValue > 0m, now, cancellationToken);
-                await UpdateStrategyAutoLivePauseAsync(order.StrategyId, now, cancellationToken);
 
                 if (result.LiveStakesDisabled)
                 {
@@ -377,68 +376,6 @@ public sealed class LiveTradingProcessor(
                 string.Equals(order.AssetId, winningAssetId, StringComparison.OrdinalIgnoreCase)) ||
             (!string.IsNullOrWhiteSpace(winningOutcome) &&
                 string.Equals(order.Outcome, winningOutcome, StringComparison.OrdinalIgnoreCase));
-    }
-
-    private async Task UpdateStrategyAutoLivePauseAsync(
-        Guid strategyId,
-        DateTimeOffset nowUtc,
-        CancellationToken cancellationToken)
-    {
-        if (!StrategyAutoLivePausePolicy.IsEnabledForStrategy(liveTradingOptions, strategyId))
-        {
-            logger.LogInformation(
-                "Strategy auto live pause skipped because it is not enabled for this strategy. StrategyId={StrategyId}",
-                StrategyIds.Normalize(strategyId));
-            return;
-        }
-
-        try
-        {
-            var decision = await repository.UpdateStrategyAutoLivePauseFromRecentPnlAsync(
-                strategyId,
-                nowUtc.Subtract(StrategyPauseLookback),
-                nowUtc,
-                StrategyAutoLivePauseUpdateMode.PauseFromLiveSettlements,
-                cancellationToken);
-            if (!decision.AutoLivePauseChanged)
-            {
-                logger.LogInformation(
-                    "Live settlement left strategy auto live pause unchanged. StrategyId={StrategyId} RecentPnlUsd={RecentPnlUsd} RecentSettledCount={RecentSettledCount} AutoLivePaused={AutoLivePaused}",
-                    StrategyIds.Normalize(strategyId),
-                    decision.RecentPnlUsd,
-                    decision.RecentSettledCount,
-                    decision.AutoLivePaused);
-                return;
-            }
-
-            if (decision.AutoLivePaused)
-            {
-                logger.LogWarning(
-                    "Strategy auto live pause enabled after recent PnL turned negative. StrategyId={StrategyId} RecentPnlUsd={RecentPnlUsd} RecentSettledCount={RecentSettledCount}",
-                    StrategyIds.Normalize(strategyId),
-                    decision.RecentPnlUsd,
-                    decision.RecentSettledCount);
-            }
-            else
-            {
-                logger.LogInformation(
-                    "Strategy auto live pause cleared after recent PnL turned positive. StrategyId={StrategyId} RecentPnlUsd={RecentPnlUsd} RecentSettledCount={RecentSettledCount}",
-                    StrategyIds.Normalize(strategyId),
-                    decision.RecentPnlUsd,
-                    decision.RecentSettledCount);
-            }
-        }
-        catch (OperationCanceledException)
-        {
-            throw;
-        }
-        catch (Exception ex)
-        {
-            logger.LogError(ex, "Failed to update strategy auto live pause after live settlement. StrategyId={StrategyId}", StrategyIds.Normalize(strategyId));
-            await repository.AddLiveTradingEventAsync(
-                new LiveTradingEvent(Guid.NewGuid(), "StrategyAutoLivePause", "Error", ex.Message, nowUtc),
-                cancellationToken);
-        }
     }
 
     public async Task CancelAllOpenOrdersAsync(string source, CancellationToken cancellationToken = default)
@@ -562,16 +499,26 @@ public sealed class LiveTradingProcessor(
             return;
         }
 
-        var mismatches = ValidateShadowOrderShape(paperOrder, liveOrder);
-        if (mismatches.Count > 0)
+        var validation = ValidateShadowOrderShape(paperOrder, liveOrder);
+        if (validation.BlockingMismatches.Count > 0)
         {
             await RecordShadowDiscrepancyAndDisableLiveAsync(
                 liveOrder,
                 "paper_live_shadow_shape_mismatch",
                 "critical",
-                string.Join("; ", mismatches),
+                string.Join("; ", validation.BlockingMismatches),
                 cancellationToken);
             return;
+        }
+
+        if (validation.Incidents.Count > 0)
+        {
+            await RecordShadowIncidentAsync(
+                liveOrder,
+                "paper_live_shadow_shape_incident",
+                "warning",
+                string.Join("; ", validation.Incidents),
+                cancellationToken);
         }
 
         var existingFills = await repository.GetPaperFillsForOrderAsync(paperOrder.Id, cancellationToken);
@@ -638,9 +585,10 @@ public sealed class LiveTradingProcessor(
         return string.Equals(order.ExecutionSource, PaperLiveShadowTestSource, StringComparison.OrdinalIgnoreCase);
     }
 
-    private static IReadOnlyList<string> ValidateShadowOrderShape(PaperOrder paperOrder, LiveOrder liveOrder)
+    private static ShadowOrderShapeValidation ValidateShadowOrderShape(PaperOrder paperOrder, LiveOrder liveOrder)
     {
         var mismatches = new List<string>();
+        var incidents = new List<string>();
         if (!string.Equals(paperOrder.AssetId, liveOrder.AssetId, StringComparison.OrdinalIgnoreCase))
         {
             mismatches.Add("asset_id mismatch");
@@ -656,12 +604,28 @@ public sealed class LiveTradingProcessor(
             mismatches.Add("outcome mismatch");
         }
 
-        if (Math.Abs(paperOrder.Price - liveOrder.Price) > ShadowPriceTolerance)
+        var expectedOrderType = GetExpectedShadowOrderType(paperOrder);
+        var isExpectedFak = string.Equals(expectedOrderType, "FAK", StringComparison.OrdinalIgnoreCase) &&
+            string.Equals(liveOrder.OrderType, "FAK", StringComparison.OrdinalIgnoreCase);
+
+        if (isExpectedFak)
+        {
+            if (paperOrder.Price - liveOrder.Price > ShadowPriceTolerance)
+            {
+                incidents.Add($"FAK worst_price below paper price: paper={paperOrder.Price:0.########}; live={liveOrder.Price:0.########}");
+            }
+
+            if (Math.Abs(liveOrder.Price - ExpectedFakWorstPrice) > ShadowPriceTolerance)
+            {
+                incidents.Add(
+                    $"FAK worst_price unexpected: expected={ExpectedFakWorstPrice:0.########}; live={liveOrder.Price:0.########}; paper={paperOrder.Price:0.########}");
+            }
+        }
+        else if (Math.Abs(paperOrder.Price - liveOrder.Price) > ShadowPriceTolerance)
         {
             mismatches.Add($"limit_price mismatch: paper={paperOrder.Price:0.########}; live={liveOrder.Price:0.########}");
         }
 
-        var expectedOrderType = GetExpectedShadowOrderType(paperOrder);
         if (!string.Equals(liveOrder.OrderType, expectedOrderType, StringComparison.OrdinalIgnoreCase))
         {
             mismatches.Add($"order_type mismatch: expected={expectedOrderType}; live={liveOrder.OrderType}");
@@ -674,7 +638,7 @@ public sealed class LiveTradingProcessor(
                 $"post_only mismatch: expected={expectedPostOnly.ToString().ToLowerInvariant()}; live={(liveOrder.PostOnly is { } livePostOnly ? livePostOnly.ToString().ToLowerInvariant() : "null")}");
         }
 
-        return mismatches;
+        return new ShadowOrderShapeValidation(mismatches, incidents);
     }
 
     private static bool GetExpectedShadowPostOnly(PaperOrder _)
@@ -765,6 +729,45 @@ public sealed class LiveTradingProcessor(
             new LiveTradingEvent(Guid.NewGuid(), "PaperLiveShadowDiscrepancy", "Error", details, now),
             cancellationToken);
     }
+
+    private async Task RecordShadowIncidentAsync(
+        LiveOrder liveOrder,
+        string classification,
+        string severity,
+        string details,
+        CancellationToken cancellationToken)
+    {
+        var now = DateTimeOffset.UtcNow;
+        var correlationId = liveOrder.CorrelationId ?? Guid.Empty;
+        await repository.AddPaperLiveShadowDiscrepancyAsync(
+            new PaperLiveShadowDiscrepancy(
+                Guid.NewGuid(),
+                correlationId,
+                liveOrder.StrategyId,
+                classification,
+                severity,
+                details,
+                JsonSerializer.Serialize(new
+                {
+                    live_order_id = liveOrder.Id,
+                    live_exchange_order_id = liveOrder.OrderId,
+                    correlation_id = correlationId,
+                    strategy_id = StrategyIds.Normalize(liveOrder.StrategyId),
+                    live_status = liveOrder.Status.ToString(),
+                    live_response_status = liveOrder.ResponseStatus,
+                    live_stakes_disabled = false
+                }),
+                now),
+            cancellationToken);
+
+        await repository.AddLiveTradingEventAsync(
+            new LiveTradingEvent(Guid.NewGuid(), "PaperLiveShadowIncident", "Warning", details, now),
+            cancellationToken);
+    }
+
+    private sealed record ShadowOrderShapeValidation(
+        IReadOnlyList<string> BlockingMismatches,
+        IReadOnlyList<string> Incidents);
 
     private static PaperPosition? FindPosition(IEnumerable<PaperPosition> positions, PaperOrder order)
     {

@@ -30,16 +30,14 @@ Live trading is disabled by default. Use this checklist before any live session.
 - Plain-text CLOB error bodies are normalized before storage in `live_orders.raw_response_json`; Paper/Live-shadow persistence failures are logged and trigger cancellation of the affected submitted order when possible, but they no longer clear the strategy `Live` flag. Risk failures such as insufficient strategy live balance and critical Paper/Live shape mismatch still disable `LiveStakes`.
 - `LiveTrading:MaxOrderNotionalUsd` is a hard emergency ceiling, not the normal
   stake-sizing control. Intended stake sizing is set per strategy through
-  Dashboard `Live $`, optional `Live Lost` add-on, and `Live bal`.
+  Dashboard `Live $`, optional `Live Lost` add-on, and `Live bal`. Stored
+  `Live bal` is capped at `100.00` per strategy.
 - Candidate Live BUY placement is blocked only when an open Live BUY already
   exists for the opposite outcome in the same market, or when a stale Live order
   still needs maintenance cancellation. Paper orders do not trigger this
   opposite-outcome Live block.
-- `LiveTrading:AutoLivePauseStrategies` may be left empty. Add specific
-  strategy codes only when those strategies should auto-pause Live after recent
-  Live losses and resume from positive recent Paper evidence.
-- On service startup, stored `auto_live_paused=true` rows are cleared for
-  strategies outside the current `AutoLivePauseStrategies` list.
+- Automatic Live-only strategy pausing is removed. Use the Dashboard `Live`
+  checkbox for live eligibility and `Paused` for manual full Paper+Live pause.
 - For Paper/Live-shadow, `LiveTrading` market/total exposure caps are
   checked against open Live orders only; Paper backlog must still be monitored
   separately, but it must not consume Live safety ceilings.

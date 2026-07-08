@@ -17,7 +17,8 @@ Do not commit real credentials.
 - `ManualEnableCode`: must equal `LIVE_TRADING_ENABLED` for live trading.
 - `MaxOrderNotionalUsd`: hard per-order safety ceiling. The service config keeps
   this high enough not to act as the old tiny smoke-test cap; intended stake
-  sizing is controlled by each strategy's `Live $` and `Live bal` values.
+  sizing is controlled by each strategy's `Live $` and `Live bal` values. Stored
+  `Live bal` is capped at `100.00` per strategy.
 - `MaxTradeBankrollPct`: per-live-order bankroll safety ceiling.
 - `MaxMarketBankrollPct`: per-market live exposure safety ceiling.
 - `MaxDailyLossPct`: live daily loss lockout reference.
@@ -36,10 +37,6 @@ Do not commit real credentials.
   response with `blocked=true` blocks live placement; endpoint failures are
   recorded as `GeoblockCheck` warnings.
 - `CancelAllOnKillSwitch`: documents intended kill-switch behavior.
-- `AutoLivePauseStrategies`: strategy codes or ids where automatic Live-only
-  pause is enabled. Default `[]`, meaning no strategy is auto-live-paused by
-  recent PnL unless it is explicitly listed. The service config currently leaves
-  this list empty, so no strategy participates in automatic Live pause/resume.
 
 ## Polymarket
 
@@ -236,8 +233,8 @@ is for research and diagnostics; it does not place or modify orders.
 
 ## BtcUpDown5mStatistics
 
-Runs the read-only `BTC Up or Down 5m Statistics` research worker. It polls the
-current BTC price during active BTC 5-minute markets, estimates Up/Down
+Configures the disabled read-only BTC 5m statistics research worker. It polls
+the current BTC price during active BTC 5-minute markets, estimates Up/Down
 probability from `btc_5m_history` with four-point interpolation, stores decision
 ticks in `btc_up_down_5m_statistics_ticks`, and queues live observations for
 later application to `btc_5m_history` after the market result is known. It does
@@ -479,8 +476,9 @@ as reserved notional. If the remaining strategy balance is below the required
 live stake, the service logs a `StrategyLiveBalance` error, sets that strategy's
 `live_stakes=false`, and stops new live bets for that strategy. Matched live
 orders adjust this balance only after closed Gamma metadata identifies the
-winner: realized live PnL is added for wins and subtracted for losses. Paper
-trading does not use this balance.
+winner: realized live PnL is added for wins and subtracted for losses, then the
+stored value is clamped to the `0.00` to `100.00` range. Paper trading does not
+use this balance.
 
 Live order response bodies are stored in PostgreSQL `jsonb`. Plain-text CLOB
 error bodies, such as temporary service-unavailable messages, are wrapped before
@@ -711,24 +709,17 @@ spread, last trade price, `orderMinSize`, and `orderPriceMinTickSize`.
 
 Runs the experimental Up/Down strategy family in `Paper` mode only.
 The worker observes BTC 5-minute Gamma markets, plus ETH/SOL 5-minute Gamma
-markets for the crypto Binance, non-Revert Skip, and Diff-family variants, and records one lifecycle row per
+markets for the crypto Binance and Diff-family variants, and records one lifecycle row per
 market and strategy variant in `strategy_market_paper_runs`. Built-in BTC variants
-are standard `Less` and `More` plus comparison `Less Gamma` and `More Gamma` at
-30-second steps from 30 to 270 seconds after window start, plus `Middle N`
+no longer include standard `Less`/`More` or Gamma comparison rows; the remaining rows include `Middle N`
 for `N=100,90,80,...,10`, threshold `Middle N 1..100 bps` and matching
-`Instant` variants, `Middle N Revert`, threshold `Middle N Revert 1..100 bps`
-and matching `Instant` variants, `Skip 1..5`,
-`Skip 1..5 Revert`, threshold `Skip 1..50 bps` in 1 bps increments, matching
-`Skip 1..50 bps Instant` variants, fixed `Up 1..50 bps Instant` and
+`Instant` variants, fixed `Up 1..50 bps Instant` and
 `Down 1..50 bps Instant` variants, `Up Simple` / `Down Simple`, `Binance`, threshold `Binance 1..50 bps` in 1 bps increments, matching `Binance 1..50 bps Instant` variants, fixed-price `Binance 45/47/49`, delayed
 `Binance 15s/30s/45s`, `Binance Clever`, fair-value `Binance Edge 2/4/6`,
-`Prev Score Countertrend 10..90`, singular immediate ask-depth `Prev Score Countertrend`, `Prev Score Countertrend Revert`, `Ensemble 2 of 3`, `Dynamic Markov`, `Strategy Selector`, Diff `Up/Down N Instant` thresholds `1..10` in steps of 1 and `15..150` in steps of 5 plus matching Revert rows, AdjustedDiff `Up/Down N Instant` thresholds `1..10`, `15`, and `20` plus matching Revert rows, ShiftDiff `Up/Down S N Instant` rows for shift `1..6` and thresholds `1..12` plus matching Revert rows, capped `Less`
-comparison variants, capped `More` comparison variants, and capped `More Gamma`
-comparison variants. ETH/SOL variants include Binance bps `1..50`, Binance bps
-`1..50 Instant`, Skip `1..5`, Skip bps `1..50`, Skip bps `1..50 Instant`,
+`Prev Score Countertrend 10..90`, singular immediate ask-depth `Prev Score Countertrend`, `Ensemble 2 of 3`, `Dynamic Markov`, `Strategy Selector`, Diff `Up/Down N Instant` thresholds `1..10` in steps of 1 and `15..150` in steps of 5, AdjustedDiff `Up/Down N Instant` thresholds `1..10`, `15`, and `20`, and ShiftDiff `Up/Down S N Instant` rows for shift `1..6` and thresholds `1..12`. SOL variants include Binance bps `1..50`, Binance bps
+`1..50 Instant`; ETH Binance bps rows have been removed from the seed set and local/server history. ETH/SOL variants also include
 fixed `Up 1..50 bps Instant` / `Down 1..50 bps Instant` rows, `Up Simple` / `Down Simple`, Diff
-`Up/Down N Instant` rows with thresholds `1..10` in steps of 1 and `15..150` in steps of 5 plus matching Revert rows, AdjustedDiff `Up/Down N Instant` rows plus matching Revert rows, and ShiftDiff `Up/Down S N Instant` rows plus matching Revert rows;
-ETH/SOL Skip Revert variants are intentionally not seeded. When
+`Up/Down N Instant` rows with thresholds `1..10` in steps of 1 and `15..150` in steps of 5, AdjustedDiff `Up/Down N Instant` rows, and ShiftDiff `Up/Down S N Instant` rows. More and Revert variants have been removed from the seed set and local/server history. The deleted comparison selector logic is retained only for old diagnostics/tests: when
 `PaperTakerPricingEnabled=false`, `Less` selects the lower-priced Gamma
 `outcomePrices` entry, `More` selects the higher-priced entry, and that Gamma
 reference remains the Paper BUY entry price. When `PaperTakerPricingEnabled=true`,
@@ -739,17 +730,17 @@ depth is missing or stale, computes executable ask-depth BUY VWAP for currently
 available executable asks, then selects `Less` as the lower executable VWAP and `More` as the higher
 executable VWAP. If a candidate book exists but has no executable asks, the
 worker creates a resting GTD BUY limit from the Gamma reference plus
-`PaperTakerMaxReferenceSlippage` instead of skipping immediately. Capped `Less ... Below ...` and `More ... Below ...` variants
-keep the standard CLOB-first selector at their respective delays, but they place
+`PaperTakerMaxReferenceSlippage` instead of skipping immediately. Historical capped `Less ... Below ...` and `More ... Below ...` variants kept
+the standard CLOB-first selector at their respective delays and placed
 a GTD limit BUY at the configured `Below` cap instead of requiring
-immediate executable liquidity below that cap. The
+immediate executable liquidity below that cap. The historical
 `Gamma`-suffixed variants intentionally use the older
 Gamma-first selector for comparison: `Less Gamma` selects the lower Gamma
 outcome price, `More Gamma` selects the higher Gamma outcome price, and the
 selected asset then uses the CLOB/WebSocket quote as the GTD limit seed, or the
-same resting-limit empty-ask fallback when the selected book has no asks. The
-`More ... Gamma Below ...` variants keep that Gamma-first selection but place
-a GTD limit BUY at the configured cap. The Gamma variants are Paper comparison strategies and are not submitted to live
+same resting-limit empty-ask fallback when the selected book has no asks. Historical
+`More ... Gamma Below ...` variants kept that Gamma-first selection but placed
+a GTD limit BUY at the configured cap. Gamma comparison strategy rows are no longer seeded for live
 trading. CLOB/WebSocket/REST prices are trusted for BTC taker Paper; CLOB/Gamma
 drift remains diagnostic and is not a skip reason. The run is skipped if a
 needed order book is missing/stale, spread is too wide on available executable quotes, the submitted
@@ -780,8 +771,7 @@ Diff Instant` rows use `UpCount - DownCount`; when that value is at least `N`,
 they BUY FAK `Down` from current executable ask depth. Parent `Down N Diff
 Instant` rows use `DownCount - UpCount`; when that value is at least `N`, they
 BUY FAK `Up`. Diff thresholds are `1..10` in steps of 1 and `15..150` in steps
-of 5. Each Diff Revert row uses the same trigger side and threshold as its parent
-but buys the opposite parent outcome.
+of 5. Revert Diff rows have been removed and are not seeded.
 
 AdjustedDiff Instant variants are parallel copies. They use the same
 accepted result rows, but keep a separate continuous in-memory counter that does
@@ -790,14 +780,12 @@ not reset at `00:00 UTC`. They compute a slow trend zero from an EMA of raw
 `1` deadband), then compare thresholds against `AdjustedDiff = raw Diff -
 trend_zero` for Up-Diff groups and the opposite value for Down-Diff groups.
 AdjustedDiff thresholds are capped at `20`: `1..10`, `15`, and `20`. Revert
-copies use the same adjusted trigger-side comparison and invert only the
-purchased outcome.
+AdjustedDiff rows have been removed and are not seeded.
 
 ShiftDiff Instant variants are copies with per-strategy continuous
 counters. They apply their configured shift value before comparing the trigger
-side to thresholds `1..12`; shift values are `1..6`. ShiftDiff Revert copies use
-the same shift, trigger side, threshold, pricing, and freshness checks as the
-parent row, then buy the opposite parent outcome.
+side to thresholds `1..12`; shift values are `1..6`. Revert ShiftDiff rows have
+been removed and are not seeded.
 
 All Diff-family variants use the dedicated fast Diff worker. A strategy for market `T`
 requires the previous 5-minute market `T-5m` to have an accepted result row; if
@@ -813,13 +801,12 @@ counters are not restored from PostgreSQL, but each fast cycle writes compact
 BTC/ETH/SOL snapshots to `crypto_up_down_5m_diff_snapshots` with `up_count`,
 `down_count`, `diff`, `market_start_utc`, `sampled_at_utc`, and high-water
 metadata so daily Diff charts can be generated later. Diff/AdjustedDiff/ShiftDiff
-rows and their Revert copies can enter the Paper/Live-shadow order path when
+rows can enter the Paper/Live-shadow order path when
 their Dashboard `Live` flag is enabled and all live gates pass. Dashboard categories split them into
-`Diff Up`/`Diff Down`, `AdjustedDiff Up`/`AdjustedDiff Down`, ShiftDiff-by-shift,
-and matching `... Revert` categories per asset.
+`Diff Up`/`Diff Down`, `AdjustedDiff Up`/`AdjustedDiff Down`, and ShiftDiff-by-shift categories per asset.
 Diff Shift Progress rows keep their own persistent counters and Sum in
 `crypto_up_down_5m_diff_shift_progress_states`. The `N Diff Shift Progress
-Premarket` rows run 30 seconds before open, synthesize the latest market result
+Premarket` rows have separate BTC/ETH/SOL Dashboard categories, run 30 seconds before open, synthesize the latest market result
 from the reference price, buy Down for positive raw Diff and Up for negative raw
 Diff, skip Diff 0, and use `Unit * abs(Diff)` FAK sizing while damping Diff back
 to zero after `abs(Diff)` reaches `N`.
@@ -858,7 +845,7 @@ the configured threshold; otherwise the run skips with
 `btc_reference_mean_deviation_below_threshold`. Matching `Instant` Middle bps
 rows keep the same signal and threshold gate, then submit BUY FAK taker entries
 from executable ask depth using the same instant sizing path and
-`InstantOpeningLimitMaxPrice` cap as Binance instant variants. The `Skip` variants inspect the exact immediately previous 5-minute windows without gaps, but they infer those results from close-book
+`InstantOpeningLimitMaxPrice` cap as Binance instant variants. Previous-result bps logic inspects the exact immediately previous 5-minute windows without gaps, but infers those results from close-book
 CLOB price evidence instead of waiting for Gamma settlement. The worker captures
 `/book` snapshots for active BTC strategy markets and ETH/SOL 5-minute or 15-minute markets during the final
 `CloseBookCaptureLookbackSeconds` seconds before close, throttled by
@@ -868,20 +855,7 @@ token if the book stops responding after close. A full `Up` midpoint still maps
 `Up best_bid >= 0.5` means `Up`, `Up best_ask < 0.5` means `Down`,
 `Down best_ask <= 0.5` means `Up`, and `Down best_bid > 0.5` means `Down`.
 Conflicting one-sided signals skip with `btc_close_book_inference_conflict`; no
-usable current or stored book skips with close-book diagnostics. After `N`
-consecutive inferred `Up` results the `Skip` variants buy `Down`; after `N`
-consecutive inferred `Down` results they buy `Up`; otherwise they skip. The `Skip Revert`
-variants inspect the same result stack and invert that final decision:
-consecutive `Up` buys `Up`, and consecutive `Down` buys `Down`. `Skip 1..50
-bps` variants inspect the immediately previous close-book result, walk backward
-through the current streak of identical inferred outcomes, sum each streak
-market's archived Binance BTC start-to-close absolute bps move, buy the opposite
-outcome, and require that cumulative streak move to reach the configured
-threshold. A completed below-threshold cumulative move skips with
-`btc_previous_market_move_below_bps_threshold`. Standard `Skip bps` variants use
-a fixed `0.50` GTD BUY, while matching `Instant` variants use the same selected
-outcome executable ask-depth FAK sizing path as Binance instant variants.
-The shared Skip bps streak calculation also records one
+usable current or stored book skips with close-book diagnostics. The previous-result bps calculation also records one
 `btc_up_down_5m_result_streak_diagnostics` row per target market. Use
 `close_book_streak_result_count` to find the longest same-outcome run and
 `cumulative_abs_move_bps` to find the maximum accumulated BTC move over the run.
@@ -889,36 +863,23 @@ The shared Skip bps streak calculation also records one
 Instant` reuse that same previous-result streak and cumulative BTC move gate,
 but keep only one fixed countertrend side. The former `BTC Up or Down 15m
 Up/Down 1..50 bps Instant` rows were removed from production and are no longer
-seeded because current 15-minute liquidity/volume is too thin for Live use. `Up` enters only when the Skip bps
+seeded because current 15-minute liquidity/volume is too thin for Live use. `Up` enters only when the previous-result bps
 countertrend decision is `Up` after a `Down` streak; `Down` enters only when the
 countertrend decision is `Down` after an `Up` streak. The opposite side skips
 with `btc_previous_market_move_fixed_outcome_mismatch`, and accepted entries use
 the executable ask-depth FAK path with an effective max BUY price of
 `1.00`, so `InstantOpeningLimitMaxPrice` no longer blocks fixed Up/Down bps
 entries.
-ETH/SOL Skip rows mirror the non-Revert BTC Skip behavior: plain `Skip 1..5`
-uses ETH/SOL close-book result streaks, `Skip bps` uses ETH/SOL close-book
-streaks plus archived `crypto_up_down_5m_odds_ticks` start-to-close Binance
-move, and `Skip bps Instant` uses the same executable ask-depth FAK path as
-the BTC Instant variants. `ETH/SOL Up 1..50 bps Instant` and `ETH/SOL Down
+`ETH/SOL Up 1..50 bps Instant` and `ETH/SOL Down
 1..50 bps Instant` reuse that same crypto streak/move gate but enter only when
-the Skip bps countertrend decision matches the fixed side; the opposite side
+the previous-result bps countertrend decision matches the fixed side; the opposite side
 skips with `btc_previous_market_move_fixed_outcome_mismatch`. The former ETH/SOL
 15-minute fixed Up/Down bps Instant rows were removed from production and are no
-longer seeded. ETH/SOL Skip
-Revert rows are not seeded. Seeded ETH/SOL Skip/fixed rows can enter the
+longer seeded. Seeded ETH/SOL fixed rows can enter the
 Paper/Live-shadow path when their Dashboard `Live` flag is enabled and normal
 live gates pass.
-Temporary ETH Skip guard: if an ETH `Skip`, `Skip bps`, or `Skip bps Instant`
-row selects countertrend `Up`, the run is skipped before Paper, Live-shadow, or
-Live order creation with `eth_skip_up_direction_temporarily_disabled`. Temporary
-SOL Skip 42 guard: if `SOL Up or Down 5m Skip 42 bps Instant` selects
-countertrend `Up`, the run is skipped before Paper, Live-shadow, or Live order
-creation with `sol_skip_42_up_direction_temporarily_disabled`. Other SOL Skip
-rows and fixed ETH/SOL `Up/Down bps Instant` rows are not affected by these
-guards.
-`Middle`,
-`Middle Revert`, `Skip`, and `Skip Revert` create pending Paper BUY orders as
+Skip strategy rows have been removed from the seed set.
+The remaining historical opening-limit rows create pending Paper BUY orders as
 ordinary GTD limit orders. Their limit
 price is dynamic by default: the worker reads recent settled runs for the same
 strategy, computes `wins / settledRuns`, subtracts
@@ -928,24 +889,18 @@ fewer than `OpeningLimitBreakEvenMinSettledRuns` settled rows, the worker first
 bootstraps from the selected outcome order book: `best_ask` at or below `0.50`
 is used directly; otherwise `best_bid + tick` is used with a `0.50` cap. If the
 book does not contain a usable price, or the resulting limit is not positive,
-the run is skipped with explicit diagnostics. Until a new `Middle Revert` or
-`Skip Revert` variant has enough own settled rows, it first bootstraps dynamic
+the run is skipped with explicit diagnostics. Until a new `Middle Revert`
+variant has enough own settled rows, it first bootstraps dynamic
 pricing from the paired base strategy history by treating base losses as
 estimated Revert wins; if that sample is also insufficient, it uses the same
-order-book bootstrap. The
-`BTC Up or Down 5m Up` and `BTC Up or Down 5m Down` wait until the market is
-actually accepting orders with an order book, then place a GTD BUY at
-fixed price `0.45` on the corresponding outcome. The
-`BTC Up or Down 5m Up Maker` and `BTC Up or Down 5m Down Maker` variants use a
-maker-style paper decision path and are grouped under `BTC Up/Down 5m Maker`. After a BTC 5-minute
-market starts, each variant baselines the selected outcome best ask, tracks a
-fixed high-water best ask in memory, and evaluates entries only on 30-second
-slots (`30s` through `270s`, maximum 9 attempts per BTC 5-minute market). On a
-slot it creates a minimum-size post-only GTD BUY one tick below the current best
-ask only when that ask exceeds the previously fixed high-water value. `BTC Up or
-Down 5m Up Maker 50` and `BTC Up or Down 5m Down Maker 50` use the same
-high-water/slot rules, but place at fixed `0.50` and only when the selected
-outcome best ask is strictly above `0.50`. The high-water value is updated only
+order-book bootstrap. The remaining BTC Maker variant, `BTC Up or Down 5m Up
+Maker 50`, uses a maker-style paper decision path and is grouped under `BTC
+Up/Down 5m Maker`. After a BTC 5-minute market starts, it baselines the Up
+outcome best ask, tracks a fixed high-water best ask in memory, and evaluates
+entries only on 30-second slots (`30s` through `270s`, maximum 9 attempts per BTC
+5-minute market). On a slot it creates a minimum-size post-only GTD BUY at fixed
+`0.50` only when the selected outcome best ask is strictly above `0.50` and
+exceeds the previously fixed high-water value. The high-water value is updated only
 when a Maker paper order is actually created; between-slot book moves and
 no-order slots do not raise it. Flat or falling asks do not create orders; after
 a Maker order at `0.55` and a fall to `0.52`, the next Maker order waits until a
@@ -1003,9 +958,9 @@ that synthetic window is used as the score start price; positive score buys
 `Down`, negative score buys `Up`, and neutral or insufficient samples skip.
 `Prev Score Countertrend Revert` keeps the BTC previous bias direction and uses
 the same immediate ask-depth entry model.
-`Ensemble 2 of 3` votes between Binance
-start-relative, Middle 100, and Skip 1 and enters only when at least two available
-votes agree on the same single outcome. `Dynamic Markov` estimates the next
+The removed `Ensemble 2 of 3` family voted between selected legacy signals and
+entered only when at least two available votes agreed on the same single outcome.
+`Dynamic Markov` estimates the next
 result from recent BTC 5-minute result transitions and enters only when the
 conditional next-outcome probability is at least `0.55`. `Strategy Selector`
 ranks selected opening-limit strategies by recent positive Paper expectancy and
@@ -1068,8 +1023,7 @@ stake add-on applies only while the matching counter is positive:
 entry time, so the final stake is capped at three original stakes.
 The strategy grids include `Only positive`, `Enabled only`, `Live only`,
 `Big ROI`, `Big settles`, and `Hide progress` filters. `Live only` keeps rows whose manual Live
-flag is enabled, even when `Auto Live Pause` is currently suppressing effective
-Live entries. `Big ROI` keeps rows with ROI greater than `10` (`Closed ROI` in
+flag is enabled. `Big ROI` keeps rows with ROI greater than `10` (`Closed ROI` in
 `All`, recent `ROI` in the period tabs). `Big settles` keeps rows whose settled
 count is greater than `100` (`Settled` positions in `All`, recent `Settles`
 runs in the period tabs). `Hide progress` hides rows whose strategy name contains
@@ -1089,27 +1043,9 @@ opened from a recent performance period tab (`24 hours`, `6 hours`, or
 `1 hour`), both order tabs also pass the same rolling window to storage as
 `created_at_utc >= now - window`, and Live paging stays inside that window.
 
-Automatic strategy pausing is Live-only and opt-in per strategy through
-`LiveTrading:AutoLivePauseStrategies`; an empty list disables automatic Live
-pause for every strategy. The service config currently leaves this list empty,
-so automatic Live pause is disabled globally and startup clears any stored
-`auto_live_paused=true` rows. Entries may be strategy codes such as
-`follow_leader` or strategy ids. If strategies are later allowlisted again,
-pause and resume use different evidence. After a Live settlement,
-the service checks that strategy's settled Live orders over the last 12 hours.
-If more than one Live bet exists and the 12-hour Live realized PnL is negative,
-it sets `strategies.auto_live_paused=true`, stores
-`auto_live_paused_at_utc`, and stores `auto_live_pause_window_start_utc` as the
-start of the 12-hour Live-loss window; Live settlements never clear the flag.
-The strategy keeps creating Paper entries, and after each Paper settlement the
-service checks all settled Paper rows from the stored Live-loss window start
-through the current settlement. If that anchored Paper realized PnL is positive
-and at least one of those Paper settlements happened after
-`auto_live_paused_at_utc`, it clears `strategies.auto_live_paused` and Live
-entries resume if the manual `Live` flag is still enabled. Paper settlements
-never set the flag. The
-Dashboard `Paused` checkbox remains a manual full Paper+Live pause, while
-`Auto Live Pause` is read-only state for the automatic Live gate.
+Automatic Live-only strategy pausing has been removed. The Dashboard `Paused`
+checkbox remains a manual full Paper+Live pause, and the Dashboard `Live`
+checkbox is the persisted live eligibility flag.
 
 - `Dashboard:RefreshIntervalSeconds`: UI refresh timer for the Dashboard; default `60`.
 - `Dashboard:StrategyRefreshIntervalSeconds`: minimum interval between Dashboard strategy-performance database refreshes; default `60`. Strategy toggle/stake commands invalidate the cache so command results are shown immediately.
@@ -1118,12 +1054,12 @@ Dashboard `Paused` checkbox remains a manual full Paper+Live pause, while
 
 - `Enabled`: runs the BTC 5-minute strategy worker when true; default `true`.
 - `PollIntervalSeconds`: worker loop delay; default `1` in the service config to reduce BTC entry timing drift.
-- `DiffCounterFastPollIntervalMilliseconds`: dedicated Diff-family worker loop delay; default `500`. The fast worker observes Diff/AdjustedDiff/ShiftDiff markets and their Revert copies and processes only their due entries, while the main BTC strategy worker no longer places those entries.
-- Diff Countertrend uses raw UTC-day counts reset at `00:00 UTC`: after each accepted BTC/ETH/SOL 5-minute result in the current UTC day, the processor updates `UpCount` or `DownCount`, computes `Diff = UpCount - DownCount`, and stores `DiffCount` as a diagnostic cumulative sum of observed Diff values. Strategy thresholds compare against raw `Diff`; `DiffCount` no longer shifts either side of the counter. AdjustedDiff Countertrend keeps a separate continuous in-memory counter, does not reset it at `00:00 UTC`, and compares thresholds against raw `Diff` adjusted by its slow EMA trend zero. ShiftDiff keeps per-strategy continuous counters and applies the configured shift before comparison. Revert copies use the same trigger-side comparison as the parent and invert only the purchased outcome. When the immediately previous result is still missing, a Diff-family run stays pending until four minutes after its own market start; only then it is skipped with `diff_counter_previous_market_resolved_event_missing`.
-- `DiffCounterInstantMaxPrice`: maximum BUY price cap for Diff/AdjustedDiff/ShiftDiff Instant entries and their Revert copies; default `1.00`, which effectively removes the old `0.50` Diff-family cap because valid BUY prices are below `1.00`. Diff-family entries submit BUY FAK taker fills from current executable ask depth and no longer place resting BUYs at `0.50` when current executable ask depth is above half. Fixed Up/Down bps Instant variants also use an effective max BUY price of `1.00`, independent of `InstantOpeningLimitMaxPrice`. Simple Up/Down variants still use an explicit `0.50` cap but skip above the cap instead of placing a resting order. Other Instant strategy families continue to use `InstantOpeningLimitMaxPrice` and still skip above their cap with `instant_price_above_max`.
-- `ETH Up or Down 5m Down 9 bps`: targeted stats-entry variant that reuses the fixed Down previous-result bps signal from the matching Instant strategy. The ordinary `BTC/ETH/SOL Up or Down 5m Up/Down N bps Reference Average Premarket` rows now use the in-memory crypto reference averages, not the previous market result. They run 30 seconds before open; `N` covers `1..10` in steps of `1`, then `15..100` in steps of `5`. `Up` trigger rows select the largest full `middle` average across `24h`, `12h`, `6h`, `3h`, `90m`, `45m`, `20m`, and `10m`; when the current Binance reference price is at least `N` bps above that average they buy `Down`. `Down` trigger rows mirror the rule and buy `Up` when current price is at least `N` bps below the selected average. ETH Down reference-average rows use the distinct `...down_reference_average_bps...` code/id family, so they do not share the legacy ETH Down previous-result Premarket Dashboard category. Legacy selected ETH previous-result Premarket rows remain at `-10s` for `40..42 bps` and `-5s` for `30..38 bps`; old `-30s` previous-result rows remain catalogued for history/settlement but are disabled by schema initialization. These variants simulate BUY `FAK` taker entry from executable ask depth at worst price `1 - tick`, record fills at ask-depth VWAP, keep only actually filled partial notional, and reject/skip zero-fill cases. Live-shadow submits a BUY `FAK` market amount with `postOnly=false`, no GTD expiration, and no Live Lost counter multiplier. A zero-fill FAK response is stored as a rejected live entry instead of an open order.
+- `DiffCounterFastPollIntervalMilliseconds`: dedicated Diff-family worker loop delay; default `500`. The fast worker observes Diff/AdjustedDiff/ShiftDiff markets and processes only their due entries, while the main BTC strategy worker no longer places those entries.
+- Diff Countertrend uses raw UTC-day counts reset at `00:00 UTC`: after each accepted BTC/ETH/SOL 5-minute result in the current UTC day, the processor updates `UpCount` or `DownCount`, computes `Diff = UpCount - DownCount`, and stores `DiffCount` as a diagnostic cumulative sum of observed Diff values. Strategy thresholds compare against raw `Diff`; `DiffCount` no longer shifts either side of the counter. AdjustedDiff Countertrend keeps a separate continuous in-memory counter, does not reset it at `00:00 UTC`, and compares thresholds against raw `Diff` adjusted by its slow EMA trend zero. ShiftDiff keeps per-strategy continuous counters and applies the configured shift before comparison. Revert variants have been removed. When the immediately previous result is still missing, a Diff-family run stays pending until four minutes after its own market start; only then it is skipped with `diff_counter_previous_market_resolved_event_missing`.
+- `DiffCounterInstantMaxPrice`: maximum BUY price cap for Diff/AdjustedDiff/ShiftDiff Instant entries; default `1.00`, which effectively removes the old `0.50` Diff-family cap because valid BUY prices are below `1.00`. Diff-family entries submit BUY FAK taker fills from current executable ask depth and no longer place resting BUYs at `0.50` when current executable ask depth is above half. Fixed Up/Down bps Instant variants also use an effective max BUY price of `1.00`, independent of `InstantOpeningLimitMaxPrice`. Simple Up/Down variants still use an explicit `0.50` cap but skip above the cap instead of placing a resting order. Other Instant strategy families continue to use `InstantOpeningLimitMaxPrice` and still skip above their cap with `instant_price_above_max`.
+- `ETH Up or Down 5m Down 9 bps`: targeted stats-entry variant that reuses the fixed Down previous-result bps signal from the matching Instant strategy. The ordinary `BTC/ETH/SOL Up or Down 5m Up/Down N bps Reference Average Premarket` and neutral `BTC/ETH/SOL Up or Down 5m N bps Reference Average Premarket` rows now use the in-memory crypto reference averages, not the previous market result. They run 30 seconds before open; `N` covers `1..10` in steps of `1`, then `15..100` in steps of `5`. `Up` trigger rows select the largest full `middle` average across `24h`, `12h`, `6h`, `3h`, `90m`, `45m`, `20m`, and `10m`; when the current Binance reference price is at least `N` bps above that average they buy `Down`. `Down` trigger rows mirror the rule and buy `Up` when current price is at least `N` bps below the selected average. Neutral rows choose the trigger side from the sign of the current move from that selected average: positive buys `Down`, negative buys `Up`, and an absolute move below `N` bps skips. ETH Down reference-average rows use the distinct `...down_reference_average_bps...` code/id family, so they do not share the legacy ETH Down previous-result Premarket Dashboard category. ETH also has filtered Down reference-average clones named `ETH Up or Down 5m Down N bps Filtered Average Premarket` for `N=1..10`; they use the same Down-trigger/BUY Up signal but skip selected `6h`/`12h` average windows and skip absolute moves from the selected average in `[20, 80)` bps. Legacy selected ETH previous-result Premarket rows remain at `-10s` for `40..42 bps` and `-5s` for `30..38 bps`; old `-30s` previous-result rows remain catalogued for history/settlement but are disabled by schema initialization. These variants simulate BUY `FAK` taker entry from executable ask depth at worst price `1 - tick`, record fills at ask-depth VWAP, keep only actually filled partial notional, and reject/skip zero-fill cases. Live-shadow submits a BUY `FAK` market amount with `postOnly=false`, no GTD expiration, and no Live Lost counter multiplier. A zero-fill FAK response is stored as a rejected live entry instead of an open order.
 - `StakeUsd`: fallback/default BTC stake multiplier; default `1.00`. When fresh market `min_order_size` is available, BTC Paper and Live stake notional is computed as the minimum passing order notional plus `10%`, multiplied by the strategy's Paper or Live stake value, then rounded up to the next whole USD.
-- `EntryGraceSeconds`: maximum late-entry grace after a variant's due time before the run is skipped; default `60`. Strict `Skip` / `Skip Revert` decisions no longer wait for Gamma settlement: they infer each immediately previous BTC 5-minute result from close-book CLOB price evidence. Full `Up` midpoint maps `>= 0.5` to `Up` and `< 0.5` to `Down`; single-sided `Up best_bid >= 0.5`, `Up best_ask < 0.5`, `Down best_ask <= 0.5`, and `Down best_bid > 0.5` are also decisive. If current close-book fetch stops responding, the worker uses the latest stored snapshot for that token when available. Missing or conflicting evidence is skipped with diagnostics in `skip_diagnostics_json`.
+- `EntryGraceSeconds`: maximum late-entry grace after a variant's due time before the run is skipped; default `60`. Previous-result close-book helpers infer each immediately previous BTC 5-minute result from close-book CLOB price evidence. Full `Up` midpoint maps `>= 0.5` to `Up` and `< 0.5` to `Down`; single-sided `Up best_bid >= 0.5`, `Up best_ask < 0.5`, `Down best_ask <= 0.5`, and `Down best_bid > 0.5` are also decisive. If current close-book fetch stops responding, the worker uses the latest stored snapshot for that token when available. Missing or conflicting evidence is skipped with diagnostics in `skip_diagnostics_json`.
 - `MaxMarketsPerCycle`: maximum BTC 5-minute Gamma markets observed per cycle; default `500`.
 - `MaxEntriesPerCycle`: maximum due entries processed per cycle across variants; default `3000`. Regular due-entry selection expands the final batch boundary to include every run with the same `entry_due_at_utc`, so a single market-open timestamp is not split across cycles. Within the same due timestamp, Live-enabled strategies are processed first and then ordered by a prepared in-memory Live realized PnL snapshot, with the highest Live realized strategies first. Middle reference opening-limit variants also get a shared fast skip pass before generic order placement, skipped runs are batch-updated through one repository call, and accepted BTC Paper signal/order rows are inserted through one transactional repository call.
 - `MaxConcurrentEntryDecisions`: maximum due-entry decision work items processed concurrently after the shared fast paths; default `64` in the service config.
@@ -1139,16 +1075,16 @@ Dashboard `Paused` checkbox remains a manual full Paper+Live pause, while
 - `PaperTakerMaxReferenceSlippage`: maximum resting-limit uplift above each outcome's Gamma reference when executable ask depth is absent; executable quotes can still seed a higher GTD limit through the temporary best-ask allowance.
 - `PaperTakerMaxSpreadAbs`: maximum absolute bid/ask spread accepted for BTC Paper taker entries; default `0.10`.
 - `PaperTakerMaxGammaClobDiff`: legacy diagnostic threshold retained in config; BTC taker Paper now records Gamma/CLOB drift but does not skip solely because of it.
-- `OpeningLimitDynamicBreakEvenPricingEnabled`: when true, `Middle`, `Middle Revert`, `Skip`, and `Skip Revert` GTD limit prices are derived from each strategy's own recent settled win-rate; default `true`.
+- `OpeningLimitDynamicBreakEvenPricingEnabled`: when true, historical opening-limit GTD limit prices are derived from each strategy's own recent settled win-rate; default `true`.
 - `OpeningLimitBreakEvenLookbackRuns`: maximum settled runs read for the dynamic opening-limit win-rate; default `100`.
-- `OpeningLimitBreakEvenMinSettledRuns`: minimum settled runs required before a dynamic `Middle`/`Middle Revert`/`Skip`/`Skip Revert` break-even price is trusted; before that, opening orders use the selected outcome order-book bootstrap; default `30`.
-- `OpeningLimitBreakEvenMargin`: safety amount subtracted from `wins / settledRuns` before placing `Middle`/`Middle Revert`/`Skip`/`Skip Revert` opening-limit orders; default `0.10`.
-- `OpeningLimitMaxPrice`: maximum `Middle`/`Middle Revert`/`Skip`/`Skip Revert` opening-limit BUY price after the break-even margin; default and maximum `0.50`.
-- `OpeningLimitPriceTickSize`: tick used to floor dynamic `Middle`/`Middle Revert`/`Skip`/`Skip Revert` opening-limit prices; default `0.01`.
+- `OpeningLimitBreakEvenMinSettledRuns`: minimum settled runs required before a dynamic historical opening-limit break-even price is trusted; before that, opening orders use the selected outcome order-book bootstrap; default `30`.
+- `OpeningLimitBreakEvenMargin`: safety amount subtracted from `wins / settledRuns` before placing historical opening-limit orders; default `0.10`.
+- `OpeningLimitMaxPrice`: maximum historical opening-limit BUY price after the break-even margin; default and maximum `0.50`.
+- `OpeningLimitPriceTickSize`: tick used to floor dynamic historical opening-limit prices; default `0.01`.
 - `OpeningLimitGtdTtlSeconds`: fallback lifetime for BTC opening-limit GTD Paper and Paper/Live-shadow orders when market-relative expiration is disabled or market end is unavailable; default `120`, valid range `30..300`.
 - `OpeningLimitExpireBeforeMarketEndSeconds`: local BTC opening-limit GTD cancel deadline offset from market close; default `60`, valid range `0..300`, with `0` disabling the market-relative deadline and falling back to `OpeningLimitGtdTtlSeconds`.
 - `ClobGtdExpirationSecurityBufferSeconds`: extra seconds added to the CLOB wire `expiration` for GTD orders so the local effective deadline honors Polymarket's GTD security threshold; default `60`, valid range `60..300`.
-- `PreviousScoreCounterTrendEpsilonScore`: minimum absolute previous-market time-weighted score required before `Prev Score Countertrend` fixed-price, immediate ask-depth, Premarket, or Revert variants enter; default `0.0001`.
+- `PreviousScoreCounterTrendEpsilonScore`: minimum absolute previous-market time-weighted score required before `Prev Score Countertrend` fixed-price, immediate ask-depth, or Premarket variants enter; default `0.0001`.
 - `PreviousScoreCounterTrendMinSamples`: minimum archived BTC/ETH/SOL reference samples required from the immediately previous 5-minute market, or from the synthetic 5.5-minute Premarket score window; default `10`.
 - `PreviousScoreCounterTrendWinsorPercent`: lower/upper tail percentage used to winsorize previous-market deviations before averaging; default `0.10`, valid range `0..<0.50`.
 - `PreviousScoreCounterTrendEnableTimeShareFilter`: when true, requires the previous-market bias to also meet the configured positive/negative duration share before entering; default `false`.

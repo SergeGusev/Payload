@@ -8,8 +8,8 @@ public sealed class StrategyRunOrderingTests
     public async Task GetDueStrategyMarketPaperRunsAsync_PrioritizesLiveOnlyWithinSameEntryDue()
     {
         var repository = new TestAppRepository();
-        var paperStrategyId = StrategyIds.BtcUpDown5mBinanceBps2;
-        var liveStrategyId = StrategyIds.BtcUpDown5mBinanceBps1;
+        var paperStrategyId = StrategyIds.BtcUpDown5mUpSimple;
+        var liveStrategyId = StrategyIds.BtcUpDown5mDownSimple;
         EnableLiveStakes(repository, liveStrategyId);
 
         var dueAtUtc = new DateTimeOffset(2026, 5, 16, 12, 0, 0, TimeSpan.Zero);
@@ -48,8 +48,8 @@ public sealed class StrategyRunOrderingTests
     public async Task GetDueStrategyMarketPaperRunsAtEarliestDueAsync_PrioritizesLiveWithinEarliestDueBatch()
     {
         var repository = new TestAppRepository();
-        var paperStrategyId = StrategyIds.BtcUpDown5mBinanceBps2;
-        var liveStrategyId = StrategyIds.BtcUpDown5mBinanceBps1;
+        var paperStrategyId = StrategyIds.BtcUpDown5mUpSimple;
+        var liveStrategyId = StrategyIds.BtcUpDown5mDownSimple;
         EnableLiveStakes(repository, liveStrategyId);
 
         var dueAtUtc = new DateTimeOffset(2026, 5, 16, 12, 5, 0, TimeSpan.Zero);
@@ -87,8 +87,8 @@ public sealed class StrategyRunOrderingTests
     public async Task GetPreOpenSellExitDueRunsAsync_PrioritizesLiveWhenExitTimeTies()
     {
         var repository = new TestAppRepository();
-        var paperStrategyId = StrategyIds.BtcUpDown5mBinanceBps2;
-        var liveStrategyId = StrategyIds.BtcUpDown5mBinanceBps1;
+        var paperStrategyId = StrategyIds.BtcUpDown5mUpSimple;
+        var liveStrategyId = StrategyIds.BtcUpDown5mDownSimple;
         EnableLiveStakes(repository, liveStrategyId);
 
         var marketStartUtc = new DateTimeOffset(2026, 5, 16, 12, 10, 0, TimeSpan.Zero);
@@ -129,8 +129,8 @@ public sealed class StrategyRunOrderingTests
     public async Task GetStrategyMarketPaperRunsForSettlementAsync_PrioritizesLiveWhenSettlementTimeTies()
     {
         var repository = new TestAppRepository();
-        var paperStrategyId = StrategyIds.BtcUpDown5mBinanceBps2;
-        var liveStrategyId = StrategyIds.BtcUpDown5mBinanceBps1;
+        var paperStrategyId = StrategyIds.BtcUpDown5mUpSimple;
+        var liveStrategyId = StrategyIds.BtcUpDown5mDownSimple;
         EnableLiveStakes(repository, liveStrategyId);
 
         var marketStartUtc = new DateTimeOffset(2026, 5, 16, 12, 15, 0, TimeSpan.Zero);

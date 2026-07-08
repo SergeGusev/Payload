@@ -417,12 +417,11 @@ public sealed class SignalProcessor(
             $"AvailableForNewStake={availableForNewStake:0.########}; Required={requiredNotionalUsd:0.########}.";
         validation.Add(message);
         logger.LogError(
-            "Strategy live available balance is insufficient. StrategyId={StrategyId} Available={AvailableBalance} Reserved={ReservedNotionalUsd} Required={RequiredNotionalUsd}. Live stakes will be disabled for this strategy.",
+            "Strategy live available balance is insufficient. StrategyId={StrategyId} Available={AvailableBalance} Reserved={ReservedNotionalUsd} Required={RequiredNotionalUsd}. Current live order will be rejected, but live stakes remain enabled.",
             normalizedStrategyId,
             strategySettings.LiveAvailableBalance,
             reservedNotionalUsd,
             requiredNotionalUsd);
-        await repository.SetStrategyLiveStakesAsync(normalizedStrategyId, false, nowUtc, cancellationToken);
         await repository.AddLiveTradingEventAsync(
             new LiveTradingEvent(Guid.NewGuid(), "StrategyLiveBalance", "Error", message, nowUtc),
             cancellationToken);

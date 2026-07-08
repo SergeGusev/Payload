@@ -72,13 +72,24 @@ public static class StrategyDisplayCategories
             return categoryPrefix + shiftDiffDownCategory;
         }
 
-        if (StartsWithDiffProgressThreshold(suffix))
+        if (TryGetDiffProgressSide(suffix, out var diffProgressSide))
         {
+            if (string.Equals(upDownPrefix, "BTC Up or Down ", StringComparison.OrdinalIgnoreCase) &&
+                string.Equals(interval, "5m", StringComparison.OrdinalIgnoreCase))
+            {
+                return categoryPrefix + "Diff " + diffProgressSide + " Progress";
+            }
+
             return categoryPrefix + "Diff Progress";
         }
 
         if (IsDiffShiftProgress(suffix))
         {
+            if (IsDiffShiftProgressPremarket(suffix))
+            {
+                return categoryPrefix + "Diff Shift Progress Premarket";
+            }
+
             return "Up Or Down 5 min Diff Shift Progress";
         }
 
@@ -94,7 +105,7 @@ public static class StrategyDisplayCategories
 
         if (IsDiffReferenceAverage(suffix))
         {
-            return "Up Or Down 5 min Diff Reference Average";
+            return categoryPrefix + "Diff Reference Average Premarket";
         }
 
         if (StartsWithDiffThreshold(suffix, "Up", out var diffUpRevert))
@@ -109,6 +120,39 @@ public static class StrategyDisplayCategories
 
         if (IsPremarketBpsThreshold(suffix))
         {
+            if (HasFilteredAverageMarker(suffix))
+            {
+                if (StartsWithBpsThreshold(suffix, "Down"))
+                {
+                    return categoryPrefix + "Down Bps Filtered Average Premarket";
+                }
+
+                if (StartsWithBpsThreshold(suffix, "Up"))
+                {
+                    return categoryPrefix + "Up Bps Filtered Average Premarket";
+                }
+
+                return categoryPrefix + "Bps Filtered Average Premarket";
+            }
+
+            if (HasReferenceAverageMarker(suffix))
+            {
+                if (StartsWithBpsThreshold(suffix, "Down"))
+                {
+                    return categoryPrefix + "Down Bps Reference Average Premarket";
+                }
+
+                if (StartsWithBpsThreshold(suffix, "Up"))
+                {
+                    return categoryPrefix + "Up Bps Reference Average Premarket";
+                }
+
+                if (StartsWithNeutralBpsThreshold(suffix))
+                {
+                    return categoryPrefix + "Bps Reference Average Premarket";
+                }
+            }
+
             if (string.Equals(upDownPrefix, "ETH Up or Down ", StringComparison.OrdinalIgnoreCase) &&
                 string.Equals(interval, "5m", StringComparison.OrdinalIgnoreCase) &&
                 StartsWithBpsThreshold(suffix, "Down") &&
@@ -208,9 +252,19 @@ public static class StrategyDisplayCategories
 
     private static bool IsPremarketBpsThreshold(string value)
     {
-        return (StartsWithBpsThreshold(value, "Up") || StartsWithBpsThreshold(value, "Down")) &&
+        return (StartsWithBpsThreshold(value, "Up") ||
+                StartsWithBpsThreshold(value, "Down") ||
+                (StartsWithNeutralBpsThreshold(value) && HasReferenceAverageMarker(value))) &&
             ContainsStrategyWord(value, "Premarket") &&
             !HasPremarketTimingSuffix(value);
+    }
+
+    private static bool StartsWithNeutralBpsThreshold(string value)
+    {
+        var parts = value.Split(new[] { ' ' }, StringSplitOptions.RemoveEmptyEntries);
+        return parts.Length >= 2 &&
+            decimal.TryParse(parts[0], NumberStyles.Number, CultureInfo.InvariantCulture, out _) &&
+            string.Equals(parts[1], "bps", StringComparison.OrdinalIgnoreCase);
     }
 
     private static bool HasPremarketTimingSuffix(string value)
@@ -226,6 +280,12 @@ public static class StrategyDisplayCategories
     private static bool HasReferenceAverageMarker(string value)
     {
         return ContainsStrategyWord(value, "Reference") &&
+            ContainsStrategyWord(value, "Average");
+    }
+
+    private static bool HasFilteredAverageMarker(string value)
+    {
+        return ContainsStrategyWord(value, "Filtered") &&
             ContainsStrategyWord(value, "Average");
     }
 
@@ -260,15 +320,31 @@ public static class StrategyDisplayCategories
         return matches;
     }
 
-    private static bool StartsWithDiffProgressThreshold(string value)
+    private static bool TryGetDiffProgressSide(string value, out string side)
     {
+        side = string.Empty;
         var parts = value.Split(new[] { ' ' }, StringSplitOptions.RemoveEmptyEntries);
-        return parts.Length >= 4 &&
-            int.TryParse(parts[0], NumberStyles.Number, CultureInfo.InvariantCulture, out _) &&
-            string.Equals(parts[1], "Diff", StringComparison.OrdinalIgnoreCase) &&
-            (string.Equals(parts[2], "Up", StringComparison.OrdinalIgnoreCase) ||
-                string.Equals(parts[2], "Down", StringComparison.OrdinalIgnoreCase)) &&
-            string.Equals(parts[3], "Progress", StringComparison.OrdinalIgnoreCase);
+        if (parts.Length < 4 ||
+            !int.TryParse(parts[0], NumberStyles.Number, CultureInfo.InvariantCulture, out _) ||
+            !string.Equals(parts[1], "Diff", StringComparison.OrdinalIgnoreCase) ||
+            !string.Equals(parts[3], "Progress", StringComparison.OrdinalIgnoreCase))
+        {
+            return false;
+        }
+
+        if (string.Equals(parts[2], "Up", StringComparison.OrdinalIgnoreCase))
+        {
+            side = "Up";
+            return true;
+        }
+
+        if (string.Equals(parts[2], "Down", StringComparison.OrdinalIgnoreCase))
+        {
+            side = "Down";
+            return true;
+        }
+
+        return false;
     }
 
     private static bool IsDiffShiftProgress(string value)
@@ -289,6 +365,17 @@ public static class StrategyDisplayCategories
             string.Equals(parts[1], "Diff", StringComparison.OrdinalIgnoreCase) &&
             string.Equals(parts[2], "Shift", StringComparison.OrdinalIgnoreCase) &&
             string.Equals(parts[3], "Progress", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static bool IsDiffShiftProgressPremarket(string value)
+    {
+        var parts = value.Split(new[] { ' ' }, StringSplitOptions.RemoveEmptyEntries);
+        return parts.Length >= 5 &&
+            int.TryParse(parts[0], NumberStyles.Number, CultureInfo.InvariantCulture, out _) &&
+            string.Equals(parts[1], "Diff", StringComparison.OrdinalIgnoreCase) &&
+            string.Equals(parts[2], "Shift", StringComparison.OrdinalIgnoreCase) &&
+            string.Equals(parts[3], "Progress", StringComparison.OrdinalIgnoreCase) &&
+            string.Equals(parts[4], "Premarket", StringComparison.OrdinalIgnoreCase);
     }
 
     private static bool IsDiffLimitProgress(string value)

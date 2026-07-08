@@ -135,7 +135,7 @@ public sealed class PaperEntryPersistenceQueueTests
             [
                 new StrategyMarketPaperRun(
                     runId,
-                    StrategyIds.BtcUpDown5mAlwaysDown,
+                    StrategyIds.BtcUpDown5mDownSimple,
                     "market-1",
                     "condition-1",
                     "btc-updown-5m-1",

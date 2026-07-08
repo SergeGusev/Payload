@@ -223,7 +223,6 @@ public sealed class ConfigurationTests
         Assert.Equal(1_000, configuration.PaperTrading.LeaderActivityExitTrackingErrorDelayMilliseconds);
         Assert.Equal(30_000, configuration.PaperTrading.LeaderActivityExitTrackingMaxErrorDelayMilliseconds);
         Assert.Equal(5, configuration.LiveTrading.MaintenancePollIntervalSeconds);
-        Assert.Empty(configuration.LiveTrading.AutoLivePauseStrategies);
         Assert.Equal(60, configuration.Dashboard.RefreshIntervalSeconds);
         Assert.Equal(60, configuration.Dashboard.StrategyRefreshIntervalSeconds);
         Assert.True(configuration.Dashboard.StrategiesOnlyMode);
@@ -911,53 +910,6 @@ public sealed class ConfigurationTests
         Assert.Empty(errors);
     }
 
-    [Fact]
-    public void LiveTrading_AutoLivePauseStrategiesAreOptInByStrategy()
-    {
-        var options = new LiveTradingOptions();
-        var ethUpBps2InstantStrategyId = StrategyIds.CryptoUpDown5mVariants
-            .Single(variant => variant.Code == "eth_up_down_5m_up_bps_2_instant")
-            .Id;
-        var btcMiddle1Bps45InstantStrategyId = StrategyIds.BtcUpDown5mVariants
-            .Single(variant => variant.Code == "btc_up_down_5m_middle_100_bps_45_instant")
-            .Id;
-
-        Assert.False(StrategyAutoLivePausePolicy.IsEnabledForStrategy(options, StrategyIds.FollowLeader));
-        Assert.False(StrategyAutoLivePausePolicy.IsEnabledForStrategy(options, ethUpBps2InstantStrategyId));
-        Assert.False(StrategyAutoLivePausePolicy.IsEnabledForStrategy(options, btcMiddle1Bps45InstantStrategyId));
-
-        options = new LiveTradingOptions
-        {
-            AutoLivePauseStrategies =
-            [
-                StrategyIds.FollowLeaderCode,
-                StrategyIds.BtcUpDown5mBinanceBps1.ToString("D")
-            ]
-        };
-
-        Assert.True(StrategyAutoLivePausePolicy.IsEnabledForStrategy(options, StrategyIds.FollowLeader));
-        Assert.True(StrategyAutoLivePausePolicy.IsEnabledForStrategy(options, StrategyIds.BtcUpDown5mBinanceBps1));
-        Assert.False(StrategyAutoLivePausePolicy.IsEnabledForStrategy(options, ethUpBps2InstantStrategyId));
-        Assert.False(StrategyAutoLivePausePolicy.IsEnabledForStrategy(options, btcMiddle1Bps45InstantStrategyId));
-        Assert.False(StrategyAutoLivePausePolicy.IsEnabledForStrategy(options, StrategyIds.BtcUpDown5mBinanceBps2));
-    }
-
-    [Fact]
-    public void LiveTrading_RejectsUnknownAutoLivePauseStrategies()
-    {
-        var configuration = new AppConfiguration
-        {
-            LiveTrading = new LiveTradingOptions
-            {
-                AutoLivePauseStrategies = ["not_a_strategy"]
-            }
-        };
-
-        var errors = AppOptionsValidator.Validate(configuration);
-
-        Assert.Contains(errors, error => error.Contains("LiveTrading.AutoLivePauseStrategies", StringComparison.Ordinal));
-    }
-
     [Theory]
     [InlineData("PolymarketClobPublicClient", true)]
     [InlineData("PolymarketTradingClient", true)]
@@ -980,6 +932,24 @@ public sealed class ConfigurationTests
             DateTimeOffset.UtcNow);
 
         Assert.Equal(expected, LiveApiErrorLockoutPolicy.CountsForLiveOrderLockout(error));
+    }
+
+    [Theory]
+    [InlineData("not enough balance / allowance: the balance is not enough -> balance: 2514192, order amount: 6004200")]
+    [InlineData("""{"error":"not enough balance / allowance: the balance is not enough -\u003e balance: 2514192, order amount: 6004200"}""")]
+    [InlineData("balance is not enough")]
+    [InlineData("not enough allowance")]
+    public void LiveApiErrorLockoutPolicy_DoesNotCountInsufficientBalanceOrAllowance(
+        string message)
+    {
+        var error = new ApiError(
+            Guid.NewGuid(),
+            "PolymarketTradingClient",
+            "PostOrder",
+            message,
+            DateTimeOffset.UtcNow);
+
+        Assert.False(LiveApiErrorLockoutPolicy.CountsForLiveOrderLockout(error));
     }
 
     [Fact]

@@ -984,14 +984,6 @@ public static class AppOptionsValidator
             errors.Add("LiveTrading.ApiErrorLockoutWindowMinutes must be greater than zero.");
         }
 
-        foreach (var strategy in options.AutoLivePauseStrategies)
-        {
-            if (!StrategyAutoLivePausePolicy.TryNormalizeStrategyIdentifier(strategy, out _))
-            {
-                errors.Add($"LiveTrading.AutoLivePauseStrategies contains an unknown strategy code/id: '{strategy}'.");
-            }
-        }
-
         if (!bot.EnableLiveTrading)
         {
             return;

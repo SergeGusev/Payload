@@ -503,8 +503,6 @@ public sealed class LiveTradingOptions
     public bool BlockOnGeoblockCheckFailure { get; init; } = true;
 
     public bool CancelAllOnKillSwitch { get; init; } = true;
-
-    public List<string> AutoLivePauseStrategies { get; init; } = [];
 }
 
 public sealed class DashboardOptions

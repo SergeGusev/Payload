@@ -1,0 +1,17 @@
+﻿Paper PnL chart
+Generated UTC: 2026-07-07 10:08:29
+Database: 192.168.0.101:5432/polycopytrader
+Strategy: ETH Up or Down 5m 95 bps Reference Average Premarket
+Code: eth_up_down_5m_reference_average_bps_95_fak_premarket
+Records: 120
+Period UTC: 2026-07-04 15:19:05 - 2026-07-07 08:53:42
+Wins/Losses/Flat: 69/51/0
+Total stake USD: +720.76
+Total PnL USD: +64.48
+Max single PnL USD: +7.05
+Min single PnL USD: -6.01
+Max stake USD: +6.01
+Max cumulative PnL USD: +110.96
+Min cumulative PnL USD: +4.54
+Max drawdown USD: +62.02
+Max drawdown records: 88 -> 117

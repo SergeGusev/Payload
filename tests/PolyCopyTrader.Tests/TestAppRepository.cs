@@ -84,6 +84,8 @@ internal sealed class TestAppRepository : IAppRepository
     public Dictionary<Guid, StrategyRuntimeSettings> StrategySettings { get; } =
         StrategyIds.AllStrategyIds.ToDictionary(StrategyIds.Normalize, StrategyRuntimeSettings.Default);
 
+    public Dictionary<(Guid StrategyId, int HourUtc), decimal> DateDependentStrategyHourlyPaperPnl { get; } = [];
+
     public bool ThrowOnNextLiveOrderAdd { get; set; }
 
     public bool ThrowOnNextLiveOrderUpdate { get; set; }
@@ -1275,14 +1277,6 @@ internal sealed class TestAppRepository : IAppRepository
             Name = StrategyIds.FollowLeaderName,
             Settings = GetStrategySettings(StrategyIds.FollowLeader)
         });
-        strategies.Add(new
-        {
-            Id = StrategyIds.BtcUpDown5mStatistics,
-            Code = StrategyIds.BtcUpDown5mStatisticsCode,
-            Name = StrategyIds.BtcUpDown5mStatisticsName,
-            Settings = GetStrategySettings(StrategyIds.BtcUpDown5mStatistics)
-        });
-
         var rows = new List<StrategyPerformance>();
         foreach (var strategy in strategies)
         {
@@ -1417,7 +1411,6 @@ internal sealed class TestAppRepository : IAppRepository
                 strategy.Name,
                 strategy.Settings.Enabled,
                 strategy.Settings.LiveStakes,
-                strategy.Settings.AutoLivePaused,
                 strategy.Settings.Paused,
                 strategy.Settings.PausedUntilUtc,
                 strategy.Settings.PaperStakeAmount,
@@ -1585,13 +1578,6 @@ internal sealed class TestAppRepository : IAppRepository
             Code = StrategyIds.FollowLeaderCode,
             Name = StrategyIds.FollowLeaderName,
             Settings = GetStrategySettings(StrategyIds.FollowLeader)
-        });
-        strategies.Add(new
-        {
-            Id = StrategyIds.BtcUpDown5mStatistics,
-            Code = StrategyIds.BtcUpDown5mStatisticsCode,
-            Name = StrategyIds.BtcUpDown5mStatisticsName,
-            Settings = GetStrategySettings(StrategyIds.BtcUpDown5mStatistics)
         });
         var orderedStrategies = strategies
             .OrderBy(strategy => strategy.Code == StrategyIds.FollowLeaderCode ? 0 : 1)
@@ -1814,129 +1800,6 @@ internal sealed class TestAppRepository : IAppRepository
         return Task.FromResult(true);
     }
 
-    public Task<StrategyAutoLivePauseDecision> UpdateStrategyAutoLivePauseFromRecentPnlAsync(
-        Guid strategyId,
-        DateTimeOffset lookbackStartUtc,
-        DateTimeOffset updatedAtUtc,
-        StrategyAutoLivePauseUpdateMode updateMode,
-        CancellationToken cancellationToken = default)
-    {
-        var normalizedStrategyId = StrategyIds.Normalize(strategyId);
-        var paperRunSettlements = StrategyMarketPaperRuns
-            .Where(run => StrategyIds.Normalize(run.StrategyId) == normalizedStrategyId)
-            .Where(run => string.Equals(run.Status, StrategyMarketPaperRunStatuses.Settled, StringComparison.OrdinalIgnoreCase))
-            .Where(run => run.SettledAtUtc <= updatedAtUtc)
-            .Where(run => run.RealizedPnlUsd is not null)
-            .Select(run => (SettledAtUtc: run.SettledAtUtc.GetValueOrDefault(), PnlUsd: run.RealizedPnlUsd ?? 0m))
-            .ToArray();
-        var liveSettlements = LiveOrders
-            .Where(order => StrategyIds.Normalize(order.StrategyId) == normalizedStrategyId)
-            .Where(order => order.SettledAtUtc >= lookbackStartUtc && order.SettledAtUtc <= updatedAtUtc)
-            .Where(order => order.RealizedPnlUsd is not null)
-            .ToArray();
-        var followLeaderPaperSettlements = normalizedStrategyId == StrategyIds.FollowLeader
-            ? PaperPositionSettlements
-                .Where(settlement => !settlement.CopiedTraderWallet.StartsWith("strategy:", StringComparison.OrdinalIgnoreCase))
-                .Where(settlement => settlement.SettledAtUtc <= updatedAtUtc)
-                .Select(settlement => (settlement.SettledAtUtc, PnlUsd: settlement.RealizedPnlUsd))
-                .ToArray()
-            : [];
-        var existingSettings = GetStrategySettings(normalizedStrategyId);
-        var resumeWindowStartUtc = existingSettings.AutoLivePauseWindowStartUtc ?? lookbackStartUtc;
-        var autoLivePausedAtUtc = existingSettings.AutoLivePausedAtUtc ?? lookbackStartUtc;
-        var paperResumeSettlements = paperRunSettlements
-            .Concat(followLeaderPaperSettlements)
-            .Where(settlement => settlement.SettledAtUtc >= resumeWindowStartUtc)
-            .ToArray();
-        var livePnl = liveSettlements.Sum(order => order.RealizedPnlUsd ?? 0m);
-        var paperPnl = paperResumeSettlements.Sum(settlement => settlement.PnlUsd);
-        var paperSettledCount = paperResumeSettlements.Length;
-        var postPausePaperSettledCount = paperResumeSettlements.Count(settlement => settlement.SettledAtUtc > autoLivePausedAtUtc);
-        var recentPnl = updateMode switch
-        {
-            StrategyAutoLivePauseUpdateMode.PauseFromLiveSettlements => livePnl,
-            StrategyAutoLivePauseUpdateMode.ResumeFromPaperSettlements => paperPnl,
-            _ => throw new ArgumentOutOfRangeException(nameof(updateMode), updateMode, null)
-        };
-        var recentSettledCount = updateMode switch
-        {
-            StrategyAutoLivePauseUpdateMode.PauseFromLiveSettlements => liveSettlements.Length,
-            StrategyAutoLivePauseUpdateMode.ResumeFromPaperSettlements => paperSettledCount,
-            _ => throw new ArgumentOutOfRangeException(nameof(updateMode), updateMode, null)
-        };
-        var nextAutoLivePaused = existingSettings.AutoLivePaused;
-        var nextAutoLivePausedAtUtc = existingSettings.AutoLivePausedAtUtc;
-        var nextAutoLivePauseWindowStartUtc = existingSettings.AutoLivePauseWindowStartUtc;
-        if (updateMode == StrategyAutoLivePauseUpdateMode.PauseFromLiveSettlements &&
-            recentPnl < 0m &&
-            recentSettledCount > 1)
-        {
-            nextAutoLivePaused = true;
-            nextAutoLivePausedAtUtc = updatedAtUtc;
-            nextAutoLivePauseWindowStartUtc = lookbackStartUtc;
-        }
-        else if (updateMode == StrategyAutoLivePauseUpdateMode.ResumeFromPaperSettlements &&
-            existingSettings.AutoLivePaused &&
-            recentPnl > 0m &&
-            recentSettledCount > 0 &&
-            postPausePaperSettledCount > 0)
-        {
-            nextAutoLivePaused = false;
-            nextAutoLivePausedAtUtc = null;
-            nextAutoLivePauseWindowStartUtc = null;
-        }
-
-        var changed = nextAutoLivePaused != existingSettings.AutoLivePaused ||
-            nextAutoLivePausedAtUtc != existingSettings.AutoLivePausedAtUtc ||
-            nextAutoLivePauseWindowStartUtc != existingSettings.AutoLivePauseWindowStartUtc;
-        if (changed)
-        {
-            StrategySettings[normalizedStrategyId] = existingSettings with
-            {
-                AutoLivePaused = nextAutoLivePaused,
-                AutoLivePausedAtUtc = nextAutoLivePausedAtUtc,
-                AutoLivePauseWindowStartUtc = nextAutoLivePauseWindowStartUtc
-            };
-        }
-
-        return Task.FromResult(new StrategyAutoLivePauseDecision(
-            nextAutoLivePaused,
-            changed && !nextAutoLivePaused,
-            changed,
-            recentPnl,
-            recentSettledCount,
-            lookbackStartUtc));
-    }
-
-    public Task<int> ClearStrategyAutoLivePauseExceptAsync(
-        IReadOnlyCollection<Guid> allowlistedStrategyIds,
-        DateTimeOffset updatedAtUtc,
-        CancellationToken cancellationToken = default)
-    {
-        var allowlist = allowlistedStrategyIds
-            .Select(StrategyIds.Normalize)
-            .ToHashSet();
-        var cleared = 0;
-        foreach (var item in StrategySettings.ToArray())
-        {
-            var normalizedStrategyId = StrategyIds.Normalize(item.Key);
-            if (!item.Value.AutoLivePaused || allowlist.Contains(normalizedStrategyId))
-            {
-                continue;
-            }
-
-            StrategySettings[normalizedStrategyId] = item.Value with
-            {
-                AutoLivePaused = false,
-                AutoLivePausedAtUtc = null,
-                AutoLivePauseWindowStartUtc = null
-            };
-            cleared++;
-        }
-
-        return Task.FromResult(cleared);
-    }
-
     public Task<bool> SetStrategyStakeAmountsAsync(
         Guid strategyId,
         decimal paperStakeAmount,
@@ -1985,7 +1848,7 @@ internal sealed class TestAppRepository : IAppRepository
 
         StrategySettings[normalizedStrategyId] = GetStrategySettings(normalizedStrategyId) with
         {
-            LiveAvailableBalance = liveAvailableBalance
+            LiveAvailableBalance = Math.Min(100m, liveAvailableBalance)
         };
         return Task.FromResult(true);
     }
@@ -2248,7 +2111,7 @@ internal sealed class TestAppRepository : IAppRepository
         });
 
         var settings = GetStrategySettings(normalizedStrategyId);
-        var availableBalance = Math.Max(0m, settings.LiveAvailableBalance + realizedPnlUsd);
+        var availableBalance = Math.Min(100m, Math.Max(0m, settings.LiveAvailableBalance + realizedPnlUsd));
         var liveStakes = availableBalance < settings.LiveStakeAmount ? false : settings.LiveStakes;
         StrategySettings[normalizedStrategyId] = settings with
         {
@@ -2288,6 +2151,21 @@ internal sealed class TestAppRepository : IAppRepository
     public Task<IReadOnlyList<LiveTradingEvent>> GetRecentLiveTradingEventsAsync(int limit = 100, CancellationToken cancellationToken = default)
     {
         return Task.FromResult<IReadOnlyList<LiveTradingEvent>>(LiveTradingEvents.OrderByDescending(item => item.CreatedAtUtc).Take(limit).ToArray());
+    }
+
+    public Task<decimal?> GetDateDependentStrategyHourlyPaperPnlAsync(
+        Guid strategyId,
+        int hourUtc,
+        CancellationToken cancellationToken = default)
+    {
+        if (hourUtc is < 0 or > 23)
+        {
+            throw new ArgumentOutOfRangeException(nameof(hourUtc), hourUtc, "UTC hour must be in the range 0..23.");
+        }
+
+        return Task.FromResult(DateDependentStrategyHourlyPaperPnl.TryGetValue((StrategyIds.Normalize(strategyId), hourUtc), out var pnl)
+            ? pnl
+            : (decimal?)null);
     }
 
     public Task AddPaperLiveShadowDecisionAsync(PaperLiveShadowDecision decision, CancellationToken cancellationToken = default)

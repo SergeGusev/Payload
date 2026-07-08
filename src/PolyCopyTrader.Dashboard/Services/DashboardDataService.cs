@@ -359,8 +359,7 @@ public sealed class DashboardDataService(
     {
         var namesById = new Dictionary<Guid, string>
         {
-            [StrategyIds.FollowLeader] = StrategyIds.FollowLeaderName,
-            [StrategyIds.BtcUpDown5mStatistics] = StrategyIds.BtcUpDown5mStatisticsName
+            [StrategyIds.FollowLeader] = StrategyIds.FollowLeaderName
         };
 
         foreach (var variant in StrategyIds.UpDown5mStrategyVariants)
@@ -1192,7 +1191,6 @@ public sealed class DashboardDataService(
             performance.Name,
             performance.Enabled,
             performance.LiveStakes,
-            performance.AutoLivePaused,
             performance.Paused,
             FormatDate(performance.PausedUntilUtc),
             performance.PaperStakeAmount,
@@ -1539,7 +1537,7 @@ public sealed class DashboardDataService(
 
     private static bool IsEffectiveLiveStrategy(StrategyPerformance strategy)
     {
-        return strategy.LiveStakes && !strategy.AutoLivePaused;
+        return strategy.LiveStakes;
     }
 
     private static LiveReadinessRow BuildGeoblockReadinessRow(LiveTradingEvent? latestGeoblock)

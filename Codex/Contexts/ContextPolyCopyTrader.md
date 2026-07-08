@@ -1,3 +1,1134 @@
+## Active Update 2026-07-08 Dashboard Big Settles Threshold
+Goal: Change Dashboard `Big settles` checkbox filtering from about `100` settled bets to `1000+` settled bets.
+Status: Completed
+Done:
+- Updated `src/PolyCopyTrader.Dashboard/ViewModels/MainViewModel.cs` so `BigSettlesThreshold` is `1000`.
+- Changed both full strategy and recent strategy `Big settles` predicates to use inclusive `>= BigSettlesThreshold`, so exactly `1000` settled positions/runs is included.
+- Added a focused source-contract test in `tests/PolyCopyTrader.Tests/StorageTests.cs` to guard the `1000` threshold and inclusive comparisons.
+Next: Deploy/restart Dashboard so the UI uses the new threshold.
+Notes: Verification passed: focused `dotnet test tests\PolyCopyTrader.Tests\PolyCopyTrader.Tests.csproj --no-restore --filter "FullyQualifiedName~StorageTests.Dashboard_MainViewModel_BigSettlesFilterStartsAtOneThousand" -p:UseSharedCompilation=false /nr:false /nologo -v:minimal` passed `1/1`; Dashboard build to `artifacts\codex-dashboard-big-settles-build` passed with `0` errors and existing Storage nullable warnings; `git diff --check` on touched files passed with LF/CRLF warnings only. Temporary build output was removed. No DB writes, staging, commit, or push were performed because the worktree already contains many unrelated dirty changes, including in `StorageTests.cs`.
+Blockers: None.
+
+## Active Update 2026-07-08 Filtered Average Deploy Check
+Goal: Verify the deployed `ETH Up or Down 5m Down N bps Filtered Average Premarket` family on server PostgreSQL after user deployment.
+Status: Completed
+Done:
+- Queried server PostgreSQL `192.168.0.101:5432/polycopytrader` read-only after deploy; all 10 target rows `eth_up_down_5m_down_filtered_average_bps_1..10_fak_premarket` exist with the requested names, `enabled=true`, `paused=false`, and `live_stakes=false`.
+- Confirmed `PolyCopyTrader.Service` heartbeat is fresh: status `Running`, mode `Live`, version `info=1.0.0+d5457d3f65663780d8d909657ce588fd8d2b799b`, started `2026-07-08 13:13:42+03`, heartbeat `2026-07-08 13:17:42+03`, age `20.308s`, `last_error=null`.
+- Confirmed the new strategies are executing: each has `6` runs, `1` entered Paper order, `3` skipped runs, `2` observed runs; latest Paper orders are filled BUY `Up`, use selected reference window `24h`, and raw decision JSON has `reference_average_filtered_enabled=true` plus skip bounds `20` and `80`.
+- Confirmed Dashboard performance snapshots contain all 10 target rows with fresh refresh time `2026-07-08 13:16:58+03`; all have `live_orders_count=0`.
+- General activity check showed Paper flow is active (`235` Paper orders in last `5m`, `832` in last `15m`), no Live orders in last `15m`, and zero Live orders ever for the new filtered family.
+Next: Watch the family through several more markets so both explicit filter skip reasons (`reference_average_filtered_window_skipped`, `reference_average_filtered_abs_move_zone_skipped`) appear naturally; current skip reason seen after restart was only `entry_due_already_passed`.
+Notes: Read-only verification only. No production DB writes, source behavior changes, service restart, tests, staging, commit, or push were performed. Local Windows service lookup did not find a `Poly*` service name, but DB heartbeat confirms the running service.
+Blockers: None.
+
+## Active Update 2026-07-08 ETH Down Filtered Average Premarket Clones
+Goal: Add Paper-only clones `ETH Up or Down 5m Down N bps Filtered Average Premarket` for `N=1..10`, combining skip `6h/12h` reference windows with skip absolute reference-average move `[20,80)` bps.
+Status: Completed
+Done:
+- Added 10 ETH-only strategy variants with codes `eth_up_down_5m_down_filtered_average_bps_N_fak_premarket`, behavior `FilteredReferenceAverageBpsThresholdFakPremarket`, threshold `N=1..10`, category `ETH Up or Down 5m Down Bps Filtered Average Premarket`, and Paper defaults (`live_stakes=false` in seed SQL).
+- Added processor logic so filtered-average entries reuse the reference-average FAK Premarket path but reject selected `6h`/`12h` windows and reject absolute move `>=20` and `<80` bps, with explicit skip reasons and diagnostics fields.
+- Added PostgreSQL seed SQL for the 10 strategy rows, Dashboard category classification, README/configuration docs, and focused tests for metadata, category, seed SQL, and both filter branches.
+Next: Deploy/restart the service/dashboard so schema initialization seeds the new rows; keep them Paper-only until reviewed in live-like operation.
+Notes: Verification passed: focused `dotnet test tests\PolyCopyTrader.Tests\PolyCopyTrader.Tests.csproj --no-restore --filter "...filtered/category/storage..." -p:UseSharedCompilation=false /nr:false /nologo -v:minimal` passed `83/83`; service and dashboard builds passed with `0` errors and existing Storage nullable warnings; `git diff --check` passed with LF/CRLF warnings only. Temporary dashboard build output was removed. No production DB writes, staging, commit, or push were performed because the worktree already contains unrelated dirty changes.
+Blockers: None.
+
+## Active Update 2026-07-08 ETH Down 2 Bps Loss Reduction Ideas
+Goal: Analyze how to reduce losses for `ETH Up or Down 5m Down 2 bps Reference Average Premarket`.
+Status: Completed
+Done:
+- Queried server PostgreSQL `192.168.0.101:5432/polycopytrader` read-only for current settled Paper history of `eth_up_down_5m_down_reference_average_bps_2_fak_premarket`; one additional settled row appeared after the chart, so current sample is `1010` rows, total PnL `+208.42`, ROI `+3.43%`, max drawdown `166.81`.
+- Found the main negative contributors: selected reference windows `12h` (`-101.55`, ROI `-6.10%`) and `6h` (`-80.59`, ROI `-12.31%`); absolute reference-average move bucket `20-40 bps` (`-101.48`) and `40-80 bps` (`-48.81`); worst UTC hours include `18`, `08`, `01`, `09`, `02`, `21`.
+- Counterfactual filters on current history: skipping `6h/12h` windows gives `624` rows, PnL `+390.56`, ROI `+10.42%`, max drawdown `58.58`; skipping `20-80 bps` gives `579` rows, PnL `+358.71`, ROI `+10.31%`, max drawdown `59.55`; combining both gives `390` rows, PnL `+313.56`, ROI `+13.38%`, max drawdown `39.19`.
+- Compared ETH Down reference-average thresholds: `N=55..80` have lower turnover but better ROI and lower max drawdown than `N=2`; `N=80` has `306` rows, PnL `+166.80`, ROI `+9.07%`, max drawdown `51.20`.
+- Rolling risk evidence: worst 50-row rolling PnL reached `-71.80`; worst 100-row rolling PnL reached `-102.65`.
+Next: If implementing, prefer Paper-only clones before Live: window-filtered clone, bps-zone-filtered clone, combined conservative clone, and higher-threshold `N=55/60/70/80` comparison.
+Notes: Analysis-only task. No production DB writes, source code changes, service restart, tests, staging, commit, or push were performed. Worktree remains dirty from prior unrelated changes.
+Blockers: None.
+
+## Active Update 2026-07-08 ETH Down 2 Bps Reference Average Paper PnL Chart
+Goal: Build a PnL chart for `ETH Up or Down 5m Down 2 bps Reference Average Premarket`.
+Status: Completed
+Done:
+- Resolved the exact strategy code as `eth_up_down_5m_down_reference_average_bps_2_fak_premarket`.
+- Confirmed local PostgreSQL has the strategy row but no settled Paper runs; server PostgreSQL `192.168.0.101:5432/polycopytrader` has the active strategy row with `enabled=true`, `live_stakes=false`, `paused=false`.
+- Queried server PostgreSQL read-only and generated `outputs/eth-down2-bps-reference-average-paper-pnl-chart-2026-07-08/paper-pnl-chart.svg`, `paper-pnl-records.csv`, and `summary.txt`.
+- Paper settled rows: `1009`, wins/losses/flat `538/471/0`, period `2026-07-03 06:50:21 UTC` to `2026-07-08 09:50:15 UTC`, total stake `6061.79`, total PnL `+214.43`, ROI `+3.54%`, max stake `6.01`, max drawdown `166.81`.
+Next: None.
+Notes: Report-only task. Verification: output files exist, CSV row count is `1009`, SVG parses as XML, and temporary .NET report utility under `artifacts\paper-pnl-report` was removed. No production DB writes, source code changes, service restart, tests, staging, commit, or push were performed.
+Blockers: None.
+
+## Active Update 2026-07-08 ETH 10 Diff Reference Average Paper PnL Chart
+Goal: Build a PnL chart for `ETH Up or Down 5m 10 Diff Reference Average Premarket`.
+Status: Completed
+Done:
+- Confirmed local PostgreSQL has the strategy row but no settled Paper runs for this strategy; server PostgreSQL `192.168.0.101:5432/polycopytrader` has the active strategy row with `enabled=true`, `live_stakes=false`, `paused=false`.
+- Queried server PostgreSQL read-only for `eth_up_down_5m_10_diff_reference_average_premarket` settled Paper run history.
+- Generated `outputs/eth-10-diff-reference-average-paper-pnl-chart-2026-07-08/paper-pnl-chart.svg`, `paper-pnl-records.csv`, and `summary.txt`.
+- Paper settled rows: `12`, wins/losses/flat `10/2/0`, period `2026-07-05 01:29:50 UTC` to `2026-07-05 18:04:55 UTC`, total stake `72.08`, total PnL `+40.77`, ROI `+56.56%`, max stake `6.01`, max drawdown `6.01`.
+Next: None.
+Notes: Report-only task. Verification: output files exist, CSV row count is `12`, SVG parses as XML, and temporary .NET report utility under `artifacts\eth-10-diff-reference-average-pnl` was removed. No production DB writes, source code changes, service restart, tests, staging, commit, or push were performed.
+Blockers: None.
+
+## Active Update 2026-07-08 Split Diff Reference Average Premarket Categories
+Goal: Split `Currency Up or Down 5m N Diff Reference Average Premarket` Dashboard categories by currency.
+Status: Completed
+Done:
+- Updated `StrategyDisplayCategories.GetCategory` so `N Diff Reference Average Premarket` rows now map to asset-specific categories: `BTC/ETH/SOL Up or Down 5m Diff Reference Average Premarket`.
+- Updated `CreateDiffReferenceAveragePremarketVariant` metadata category to use the asset-specific `BTC/ETH/SOL Up/Down 5m Diff Reference Average Premarket` label.
+- Updated focused category/metadata tests and README Dashboard category documentation.
+Next: Deploy/restart Dashboard/service build so the running UI and refreshed snapshots use the new category labels.
+Notes: Verification passed: focused `dotnet test tests\PolyCopyTrader.Tests\PolyCopyTrader.Tests.csproj --no-restore --filter "FullyQualifiedName~StrategyDisplayCategoryTests|FullyQualifiedName~BtcUpDown5mPaperStrategyProcessorTests.BtcUpDown5mStrategiesHaveExpectedMetadata|FullyQualifiedName~BtcUpDown5mPaperStrategyProcessorTests.CryptoUpDown5mStrategiesHaveExpectedMetadata" -p:UseSharedCompilation=false /nr:false /nologo -v:minimal` passed `76/76`; `dotnet build src\PolyCopyTrader.Dashboard\PolyCopyTrader.Dashboard.csproj --no-restore -o artifacts\codex-dashboard-diff-reference-category-build -p:UseSharedCompilation=false /nr:false /nologo -v:minimal` passed with `0` errors and existing nullable warnings in Storage code; `git diff --check` on touched files passed with LF/CRLF warnings only. Temporary build output was removed. No DB writes, staging, commit, or push were performed because the worktree already contains many unrelated dirty changes.
+Blockers: None.
+
+## Active Update 2026-07-08 ETH 1 Diff Reference Average Paper PnL Chart
+Goal: Build a PnL chart for `ETH Up or Down 5m 1 Diff Reference Average Premarket`.
+Status: Completed
+Done:
+- Confirmed the exact server strategy code is `eth_up_down_5m_1_diff_reference_average_premarket`; it is `enabled=true`, `live_stakes=false`, `paused=false`.
+- Queried server PostgreSQL `192.168.0.101:5432/polycopytrader` read-only and exported settled Paper run history.
+- Generated `outputs/eth-1-diff-reference-average-paper-pnl-chart-2026-07-08/paper-pnl-chart.svg`, `paper-pnl-records.csv`, and `summary.txt`.
+- Paper settled rows: `780`, wins/losses/flat `424/356/0`, period `2026-07-03 06:55:36 UTC` to `2026-07-08 06:09:53 UTC`, total stake `4687.25`, total PnL `+218.46`, ROI `+4.66%`, max stake `6.01`, max drawdown `101.37`.
+Next: None.
+Notes: Report-only task. No production DB writes, source code changes, service restart, tests, staging, commit, or push were performed. File existence and CSV row count (`780`) were verified.
+Blockers: None.
+
+## Active Update 2026-07-08 BTC Diff Shift Progress Premarket N Assessment
+Goal: Assess whether `BTC Up or Down 5m N Diff Shift Progress Premarket` should extend `N` beyond 1..5 and whether observed `N`/Diff values are traceable.
+Status: Completed
+Done:
+- Re-read the current Diff Shift Progress Premarket catalog and processor logic: seeded BTC/ETH/SOL Premarket thresholds are `N=1..5`, and `N` controls when damping mode starts, not whether low-Diff entries are skipped.
+- Queried server PostgreSQL `192.168.0.101` read-only for `btc_up_down_5m_[1-5]_diff_shift_progress_premarket`; all five rows exist, `enabled=true`, `live_stakes=false`, `paused=false`.
+- Confirmed Paper history range for the five BTC variants is `2026-07-03T06:20:00Z` through `2026-07-08T05:55:00Z`.
+- Existing settled Paper performance by variant: `N=1` `929` entries, PnL `+892.905388`, ROI `5.3434%`, max abs Diff `14`; `N=2` `852`, `+1170.861730`, `10.8985%`, max `8`; `N=3` `908`, `+892.036391`, `7.3185%`, max `16`; `N=4` `971`, `+458.328112`, `3.8830%`, max `9`; `N=5` `996`, `+612.159182`, `4.9068%`, max `9`.
+- Confirmed saved Paper decision JSON contains traceable fields including `diff`, `stake_multiplier`, `threshold`, `progress_mode`, `damping_active`, `shift_count`, `sum_amount`, and selected outcome.
+- Raw BTC diff snapshots during the strategy-history window have `1427` rows, max `abs(diff)=15`, median `3`, p90 `9`, p99 `12`; `391/1427` rows are above `5`.
+Next: If higher damping thresholds are desired, add Paper-only `N=6..15` or run a replay/backtest before considering Live; do not infer exact `N>5` counterfactual PnL directly from current `N=1..5` rows because damping changes strategy state.
+Notes: Read-only analysis only. `git pull --ff-only` succeeded; `git status --short` shows many unrelated pre-existing dirty files. No source changes, production DB writes, tests, staging, commit, or push were performed.
+Blockers: None.
+
+## Active Update 2026-07-08 Split Diff Shift Progress Premarket Categories
+Goal: Split `Currency Up or Down 5m N Diff Shift Progress Premarket` Dashboard categories by currency.
+Status: Completed
+Done:
+- Updated `StrategyDisplayCategories.GetCategory` so `N Diff Shift Progress Premarket` rows now map to asset-specific categories: `BTC/ETH/SOL Up or Down 5m Diff Shift Progress Premarket`.
+- Kept non-Premarket `Diff Up/Down Shift Progress` rows in the existing shared `Up Or Down 5 min Diff Shift Progress` category.
+- Updated `CreateDiffShiftProgressPremarketVariant` metadata category to `BTC/ETH/SOL Up/Down 5m Diff Shift Progress Premarket`.
+- Updated focused category/metadata tests and README/configuration docs.
+Next: Deploy/restart Dashboard/service build so the running UI and refreshed snapshots use the new category labels.
+Notes: Verification passed: focused `dotnet test tests\PolyCopyTrader.Tests\PolyCopyTrader.Tests.csproj --no-restore --filter "FullyQualifiedName~StrategyDisplayCategoryTests|FullyQualifiedName~BtcUpDown5mPaperStrategyProcessorTests.BtcUpDown5mStrategiesHaveExpectedMetadata|FullyQualifiedName~BtcUpDown5mPaperStrategyProcessorTests.CryptoUpDown5mStrategiesHaveExpectedMetadata" -p:UseSharedCompilation=false /nr:false /nologo -v:minimal` passed `76/76`. Normal Dashboard build was blocked by locked output DLLs held by `devenv.exe` and running `PolyCopyTrader.Dashboard.exe`; `dotnet build src\PolyCopyTrader.Dashboard\PolyCopyTrader.Dashboard.csproj --no-restore -o artifacts\codex-dashboard-category-build -p:UseSharedCompilation=false /nr:false /nologo -v:minimal` passed with `0` errors and existing nullable warnings in Storage code. `git diff --check` on touched files passed with LF/CRLF warnings only; temporary build output was removed. No DB writes, staging, commit, or push were performed because the worktree already contains many unrelated dirty changes.
+Blockers: None.
+
+## Active Update 2026-07-07 Up Advantage Definition Options
+Goal: Suggest ways to define a reliable `Up` advantage for Diff-style ETH/BTC/SOL strategies.
+Status: Completed
+Done:
+- Proposed several signal definitions: raw Diff threshold, normalized Diff share, rolling-window Diff, multi-window confirmation, recency-weighted Diff, price-confirmed Diff, orderbook-confirmed Diff, persistence/hysteresis, z-score vs historical baseline, and PnL-aware hour/date filter.
+- Recommended using these as Paper-only strategy variants first and keeping Progress sizing separate from signal detection, because prior `ETH 1 Diff Up Progress` losses were amplified mostly by stake sizing.
+Next: Pick one or two definitions to model on existing Paper history before implementing.
+Notes: Answer/design only. No source changes, DB writes, builds, tests, staging, commit, or push were performed. `git pull --ff-only` succeeded during initialization; worktree remains dirty from previous tasks.
+Blockers: None.
+
+## Active Update 2026-07-07 Explain ETH 1 Diff Up Progress Losses
+Goal: Explain why `ETH Up or Down 5m 1 Diff Up Progress` shows large losses.
+Status: Completed
+Done:
+- Queried server PostgreSQL `192.168.0.101` read-only and found strategy code `eth_up_down_5m_diff_1_up_progress`.
+- Confirmed from code that `Diff Up Progress` is countertrend: when `UpCount - DownCount > N`, it buys `Down`; for `N=1`, stake multiplier is `effectiveDiff - 1`, capped at `10`.
+- Server Paper history has `402` settled entries, `184` wins / `218` losses, total stake `18360.143996`, total Paper PnL `-2234.959498`, average stake `45.672000`, max stake `55.004401`, and `0` Live orders.
+- `291` of `402` entries used max progress multiplier `10`; these rows alone contributed Paper PnL `-1744.957276` on stake `16006.280396`.
+- Current strategy settings are `paper_stake_amount=1`, `paper_lost_coeff=1`, `paper_lost_counter=0`, so the large stake is not caused by current Paper Lost settings.
+- Raw decision JSON shows `progress_stake_usd=10`, but final Paper FAK sizing uses CLOB minimum order size plus `MinimumStakeSafetyMultiplier=1.10`, so actual `target_notional_usd` becomes about `55.0044` at max multiplier.
+- Counterfactual using only recorded `progress_stake_usd` would have been about `-406.061209` PnL on `3332` stake; actual minimum-sizing inflation added about `15028.143996` extra stake and about `-1828.898289` extra loss.
+- PostgreSQL briefly returned `too many clients` / closed one connection during read-only diagnostics; a later `pg_isready` check showed `192.168.0.101:5432` accepting connections again.
+Next: If this strategy remains interesting, consider changing Progress sizing to multiply the configured stake directly or capping effective notional before CLOB minimum-size expansion; no code change was made in this analysis task.
+Notes: Read-only analysis only. No source changes, DB writes, builds, tests, staging, commit, or push were performed. `git pull --ff-only` succeeded; worktree was already dirty from previous tasks and was left untouched except for context/history updates.
+Blockers: None.
+
+## Active Update 2026-07-07 Remove ETH Binance Bps Strategies
+Goal: Remove `ETH Up or Down 5m Binance N bps` strategies and their history locally and on the server.
+Status: Completed
+Done:
+- Removed ETH Binance bps and ETH Binance bps Instant variants from the active `StrategyIds.CryptoUpDown5mVariants` catalog; SOL Binance bps and SOL Binance bps Instant remain seeded and active.
+- Removed ETH Binance bps rows from the PostgreSQL seed SQL and added data migration `20260707_remove_eth_binance_bps_strategies` to purge old rows/history during schema initialization.
+- Updated focused strategy metadata, behavior, and storage tests plus README/configuration docs so ETH Binance bps rows are no longer described as active seed rows.
+- Purged local PostgreSQL `127.0.0.1`: deleted `100` ETH Binance bps strategies; no Paper orders, fills, runs, signals, positions, settlements, dashboard snapshots, or Live orders were present for those rows.
+- Purged server PostgreSQL `192.168.0.101`: deleted `100` ETH Binance bps strategies, `100` dashboard snapshots, and `300` recent dashboard snapshots; no Paper orders, fills, runs, signals, positions, settlements, or Live orders were present for those rows.
+- Final local control query returned `0` remaining strategies matching `eth_up_down_5m_binance_bps_%` or `ETH Up or Down 5m Binance % bps%`; earlier server control query after deletion also returned `0`.
+Next: Deploy/restart the updated service and Dashboard so the running catalog and UI metadata cannot recreate/show ETH Binance bps rows.
+Notes: Verification passed: focused `dotnet test tests\PolyCopyTrader.Tests\PolyCopyTrader.Tests.csproj --no-restore --filter "FullyQualifiedName~BtcUpDown5mPaperStrategyProcessorTests.StrategyIds_IncludeSolBinanceBpsVariantsAndNoEthBinanceBpsVariants|FullyQualifiedName~BtcUpDown5mPaperStrategyProcessorTests.ProcessAsync_SolBinanceBpsThresholdEntersWhenMoveReachesThreshold|FullyQualifiedName~StorageTests" -p:UseSharedCompilation=false /nr:false /nologo -v:minimal` passed `46/46`; local schema initializer integration test passed `1/1`; `dotnet build src\PolyCopyTrader.Service\PolyCopyTrader.Service.csproj --no-restore -p:UseSharedCompilation=false /nr:false /nologo -v:minimal` passed with `0` warnings/errors; `git diff --check` on touched files passed with LF/CRLF warnings only. The current shell has only the local PostgreSQL connection string, so the post-summary repeat control query could only be rerun locally. Temporary variant-count utility under `artifacts\variant-counts-2026-07-07` was removed. No staging, commit, or push were performed because the worktree already contains many unrelated dirty changes.
+Blockers: None.
+
+## Active Update 2026-07-07 Remove Skip Strategies
+Goal: Remove all `Skip` strategies and their history locally and on server.
+Status: Completed
+Done:
+- Removed BTC/ETH/SOL `Skip` strategy variants from the active `StrategyIds` seed/catalog and removed obsolete Skip candidate references from selector/ensemble helper paths.
+- Removed Skip seed rows from `PostgresSchema` and added data migration `20260707_remove_skip_strategies` so old Skip rows/history are purged on schema initialization if they still exist in another database.
+- Updated tests/docs so active strategy metadata and Dashboard-facing documentation no longer describe seeded Skip strategy rows; previous-result fixed Up/Down bps helpers remain because active fixed bps strategies still use that calculation.
+- Purged local PostgreSQL `127.0.0.1`: deleted `315` Skip strategies, `209` Paper orders, `55` Paper fills, `5,590` strategy runs, `1,554` signals, `55` Paper positions, and `55` Paper position settlements; no Live orders were present.
+- Purged server PostgreSQL `192.168.0.101`: deleted `15` Skip strategies, `15` dashboard snapshots, and `45` recent dashboard snapshots; no Paper/Live orders, runs, signals, positions, or settlements were present.
+- Final dry-run checks on local and server returned zero target strategies and zero related rows in all checked tables.
+- Post-clean server read-only check confirmed `0` remaining Skip strategy rows, `PolyCopyTrader.Service` status `Running`, fresh heartbeat at `2026-07-07 22:35:07+03`, and empty `last_error`.
+Next: Deploy/restart the updated service/Dashboard so the running seed/catalog and Dashboard metadata match the cleaned database state.
+Notes: Verification passed: focused `dotnet test tests\PolyCopyTrader.Tests\PolyCopyTrader.Tests.csproj --no-restore --filter "FullyQualifiedName~BtcUpDown5mPaperStrategyProcessorTests.StrategyIds_IncludeStandardMartinAndGammaBtcVariants|FullyQualifiedName~BtcUpDown5mPaperStrategyProcessorTests.CryptoUpDown5mStrategiesHaveExpectedMetadata|FullyQualifiedName~StorageTests|FullyQualifiedName~StrategyStakeAdminCommandTests|FullyQualifiedName~LiveTradingGatingTests.LiveProcessorMirrorsShadowLiveFillToPaperOrder|FullyQualifiedName~LiveTradingGatingTests.LiveProcessorDoesNotSettleShadowFillFromAggregateDataApiPosition" -p:UseSharedCompilation=false /nr:false /nologo -v:minimal` passed `53/53`; schema initializer integration test with `POLYCOPYTRADER_TEST_POSTGRES_CONNECTION=$env:POLYCOPYTRADER_POSTGRES_CONNECTION` passed `1/1`; `dotnet build src\PolyCopyTrader.Service\PolyCopyTrader.Service.csproj --no-restore -p:UseSharedCompilation=false /nr:false /nologo -v:minimal` passed with `0` warnings/errors; `git diff --check` on touched files passed with LF/CRLF warnings only. Temporary cleanup utility under `artifacts\skip-strategy-cleanup-2026-07-07` was removed. No staging, commit, or push were performed because the worktree already contains many unrelated dirty changes.
+Blockers: None.
+
+## Active Update 2026-07-07 Split Reference Average Bps Dashboard Categories
+Goal: Split Dashboard categories for BTC/ETH/SOL reference-average bps Premarket strategies into Down, neutral, and Up groups.
+Status: Completed
+Done:
+- Updated `StrategyDisplayCategories.GetCategory` so `Down N bps Reference Average Premarket`, neutral `N bps Reference Average Premarket`, and `Up N bps Reference Average Premarket` now map to separate Dashboard categories per asset.
+- Updated BTC/ETH/SOL reference-average bps Premarket variant metadata categories to match the split: `Down Bps Reference Average Premarket`, `Bps Reference Average Premarket`, and `Up Bps Reference Average Premarket`.
+- Updated focused Dashboard category and strategy metadata tests plus README category documentation.
+Next: Deploy/restart the service and Dashboard build so the running UI uses the new category classifier.
+Notes: Verification passed: focused `dotnet test tests\PolyCopyTrader.Tests\PolyCopyTrader.Tests.csproj --no-restore --filter "FullyQualifiedName~StrategyDisplayCategoryTests|FullyQualifiedName~BtcUpDown5mPaperStrategyProcessorTests.StrategyIds_IncludeReferenceAverageFakPremarketVariants|FullyQualifiedName~BtcUpDown5mPaperStrategyProcessorTests.CryptoUpDown5mStrategiesHaveExpectedMetadata" -p:UseSharedCompilation=false /nr:false /nologo -v:minimal` passed `76/76`; normal Dashboard build was blocked by locked output DLLs held by `devenv.exe` and running `PolyCopyTrader.Dashboard.exe`, then `dotnet build src\PolyCopyTrader.Dashboard\PolyCopyTrader.Dashboard.csproj --no-restore -o artifacts\codex-dashboard-build -p:UseSharedCompilation=false /nr:false /nologo -v:minimal` passed with `0` errors; temporary build output was removed; `git diff --check` on touched files passed with LF/CRLF warnings only. No production DB writes, service restart, staging, commit, or push were performed because the worktree already contains many unrelated dirty changes, including changes in files touched by this task.
+Blockers: None.
+
+## Active Update 2026-07-07 Remove Selected BTC Strategies
+Goal: Remove `BTC Up or Down 5m Statistics`, `BTC Up or Down 5m Up Maker 50`, `BTC Up or Down 5m Strategy Selector`, `BTC Up or Down 5m Ensemble 2 of 3`, and `BTC Up or Down 5m Dynamic Markov` plus their histories locally and on the server.
+Status: Completed
+Done:
+- Removed the four active BTC 5m variants from `StrategyIds.BtcUpDown5mVariants`: `btc_up_down_5m_up_maker_50`, `btc_up_down_5m_strategy_selector`, `btc_up_down_5m_ensemble_2_of_3`, and `btc_up_down_5m_dynamic_markov`.
+- Removed the five target strategy seed rows from `PostgresSchema`; `btc_up_down_5m_statistics` is no longer seeded or shown by Dashboard fallback names, while the disabled Statistics worker/table infrastructure remains for code compatibility.
+- Removed obsolete tests for the deleted Maker/Ensemble/Markov/Selector strategy behavior and updated catalog/storage/Dashboard test expectations.
+- Purged local PostgreSQL `127.0.0.1`: deleted `5` strategies, `119` Paper orders, `39` Paper fills, `429` strategy runs, `1,387` signals, `38` Paper positions, `38` Paper settlements, `376` statistics ticks, and `112` BTC statistics live observations; no Live orders were present.
+- Purged server PostgreSQL `192.168.0.101`: deleted `5` strategies, `5` dashboard snapshots, `15` recent snapshots, and `46,833` BTC statistics live observations; server had no Paper/Live orders, runs, signals, positions, or statistics ticks for the target rows.
+Next: Deploy/restart the updated service/Dashboard code before any future service restart if the old deployed binary still contains the removed seed rows.
+Notes: Verification passed: focused `dotnet test tests\PolyCopyTrader.Tests\PolyCopyTrader.Tests.csproj --no-restore --filter "FullyQualifiedName~BtcUpDown5mPaperStrategyProcessorTests.StrategyIds_IncludeStandardMartinAndGammaBtcVariants|FullyQualifiedName~BtcUpDown5mStatisticsProcessorTests|FullyQualifiedName~StorageTests|FullyQualifiedName~StrategyDisplayCategoryTests|FullyQualifiedName~StrategyStakeAdminCommandTests.ExecuteLiveStakesOnlyAsync_EnablesOnlyRequestedStrategyCodes|FullyQualifiedName~LiveTradingGatingTests.LiveProcessorAllowsShadowFakWhenPaperDecisionExpectsNonPostOnly" -p:UseSharedCompilation=false /nr:false /nologo -v:minimal` passed `125/125`; `dotnet build src\PolyCopyTrader.Service\PolyCopyTrader.Service.csproj --no-restore -p:UseSharedCompilation=false /nr:false /nologo -v:minimal` passed with `0` warnings/errors; `git diff --check` on touched files passed. A temporary C# DB maintenance utility under `artifacts\remove-selected-btc-strategies-2026-07-07` was removed after use. No staging, commit, or push were performed because the worktree already contains many unrelated dirty changes.
+Blockers: None.
+
+## Active Update 2026-07-07 BTC 11 Diff Down Progress Paper PnL Chart
+Goal: Build a PnL chart for `BTC Up or Down 5m 11 Diff Down Progress`.
+Status: Completed
+Done:
+- Queried server PostgreSQL `192.168.0.101:5432/polycopytrader` read-only for strategy code `btc_up_down_5m_diff_11_down_progress`.
+- Generated `outputs/btc-11-diff-down-progress-paper-pnl-chart-2026-07-07/paper-pnl-chart.svg`, `paper-pnl-records.csv`, and `summary.txt`.
+- Paper settled rows: `38`, wins/losses/flat `27/11/0`, first row `2026-07-04 12:00:24 UTC`, last row `2026-07-07 14:10:36 UTC`, total stake `327.3435`, total Paper PnL `+135.77227909`, ROI `41.477%`, max stake `22.0077`, max drawdown `28.017`.
+- Confirmed the same strategy has `0` Live orders, so the chart is Paper-only.
+Next: None.
+Notes: Created, ran, and removed a temporary C# report utility under `artifacts/btc-11-diff-down-progress-pnl-chart`. No production DB writes, source changes, service restart, staging, commit, or push were performed.
+Blockers: None.
+
+## Active Update 2026-07-07 Split BTC Diff Progress Dashboard Categories
+Goal: Split Dashboard categories for BTC `Diff Up Progress` and `Diff Down Progress` strategies.
+Status: Completed
+Done:
+- Updated `StrategyDisplayCategories.GetCategory` so only BTC 5m Diff Progress rows are separated into `BTC Up or Down 5m Diff Up Progress` and `BTC Up or Down 5m Diff Down Progress`.
+- Updated BTC Diff Progress variant metadata so `variant.Category` also includes the trigger side: `BTC Up/Down 5m Diff Up Progress` or `BTC Up/Down 5m Diff Down Progress`.
+- Left ETH/SOL Diff Progress grouping unchanged as requested scope was BTC.
+- Updated focused metadata and Dashboard category tests.
+Next: Deploy/restart the Dashboard/service build so the new category classifier is used by the UI.
+Notes: Verification passed: focused `dotnet test tests\PolyCopyTrader.Tests\PolyCopyTrader.Tests.csproj --no-restore --filter "FullyQualifiedName~StrategyDisplayCategoryTests|FullyQualifiedName~BtcUpDown5mPaperStrategyProcessorTests.BtcUpDown5mStrategiesHaveExpectedMetadata|FullyQualifiedName~BtcUpDown5mPaperStrategyProcessorTests.CryptoUpDown5mStrategiesHaveExpectedMetadata" -p:UseSharedCompilation=false /nr:false /nologo -v:minimal` passed `75/75`. `dotnet build src\PolyCopyTrader.Dashboard\PolyCopyTrader.Dashboard.csproj --no-restore ...` was blocked by locked output DLLs held by `devenv.exe` and running `PolyCopyTrader.Dashboard.exe`; compilation reached dependency builds before copy failure. `git diff --check` passed with LF/CRLF warnings only. No production DB writes, service restart, staging, commit, or push were performed because the worktree already contains many unrelated dirty changes.
+Blockers: Running Dashboard/Visual Studio lock the Dashboard output folder for local Dashboard build.
+
+## Active Update 2026-07-07 Explain BTC Diff Down Progress
+Goal: Explain the implemented behavior of `BTC Up or Down 5m N Diff Down Progress`.
+Status: Completed
+Done:
+- Read the current `DiffProgress` strategy catalog and processor logic in `src/PolyCopyTrader.Domain/Models.cs` and `src/PolyCopyTrader.Service/Strategies/BtcUpDown5mPaperStrategyProcessor.cs`.
+- Confirmed `BTC ... N Diff Down Progress` uses `Diff = DownCount - UpCount` from resolved BTC 5m markets for the current UTC day, backfilled on service restart.
+- Confirmed it is a countertrend strategy: when Down-side Diff is above threshold `N`, it buys `Up`, not `Down`.
+- Confirmed `EntryDelaySeconds = 0`, FAK execution mode, `Waiting`/`Betting` runtime state, strict entry condition `effectiveDiff > N`, and stake override `baseStake * min(effectiveDiff - N, 10)`.
+Next: None.
+Notes: Code-reading/explanation only. No source changes, production DB reads/writes, builds, tests, staging, commit, or push were performed.
+Blockers: None.
+
+## Active Update 2026-07-07 Verify BTC Down Diff 11-30 Server Seed
+Goal: Check why newly deployed `BTC Up or Down 5m Down N Diff Premarket` rows appeared missing after deployment.
+Status: Completed
+Done:
+- Queried server PostgreSQL `192.168.0.101:5432/polycopytrader` read-only after the user deployed the new service.
+- Confirmed `PolyCopyTrader.Service` is running in `Live` mode with fresh heartbeat, empty `last_error`, and version `info=1.0.0+d5457d3f65663780d8d909657ce588fd8d2b799b`.
+- Confirmed server `strategies` contains all `BTC Up or Down 5m Down 1..30 Diff Premarket` rows; new `N=11..30` rows were created at `2026-07-07 17:46:04 UTC`, with `enabled=true`, `live_stakes=false`, `paused=false`, and `paper_stake_amount=1.00`.
+- Confirmed the strategy processor is already creating recent runs for new `N=11..30` rows, latest checked run time `2026-07-07 17:50:07 UTC`.
+- Confirmed `dashboard_strategy_performance_snapshots` also contains all `1..30` rows, refreshed at `2026-07-07 17:51:53 UTC`; no missing dashboard snapshot rows.
+Next: If Dashboard still does not show the rows, refresh/restart the Dashboard and check UI filters/category/search rather than reseeding the server.
+Notes: Created, ran, and removed a temporary C# read-only diagnostic utility under `artifacts/check-btc-down-diff-seed`. No production DB writes, source-code changes, service restart, staging, commit, or push were performed. One old snapshot-worker API error from `2026-07-05 19:08:06 UTC` (`Exception while reading from stream`) was present but unrelated to the successful current snapshot.
+Blockers: None.
+
+## Active Update 2026-07-07 Live Insufficient Balance Handling
+Goal: Make Polymarket insufficient balance/allowance failures visible without causing automatic live-order lockout or live-stake disabling.
+Status: Completed
+Done:
+- Added `LiveOrderRejectionClassifier` and changed `LiveApiErrorLockoutPolicy` so `not enough balance / allowance`, `balance is not enough`, and `not enough allowance` errors from live order placement no longer count toward the API error lockout.
+- Updated `PolymarketTradingClient.PlaceLiveOrderAsync` so rejected PostOrder responses extract the exchange error body; insufficient balance/allowance now returns response status `InsufficientBalanceOrAllowance` and a clear validation summary instead of plain `HTTP 400`.
+- Removed preflight auto-disabling of `live_stakes` when the strategy's internal live available balance is insufficient; the current attempt is still rejected with `StrategyLiveBalance`, but the strategy remains live-enabled for future attempts.
+- Updated focused tests for lockout classification, CLOB rejection status, follow-leader preflight balance handling, and BTC/SOL 5m paper-live preflight balance handling.
+Next: Deploy/restart the updated service before expecting server live orders to use the new status and lockout behavior.
+Notes: Verification passed: focused `dotnet test tests\PolyCopyTrader.Tests\PolyCopyTrader.Tests.csproj --no-restore --filter "FullyQualifiedName~ConfigurationTests.LiveApiErrorLockoutPolicy|FullyQualifiedName~AuthPlaceholderTests.TradingClient_InsufficientBalanceRejectionReturnsActionableStatus|FullyQualifiedName~LiveTradingGatingTests.LiveModeWithInsufficientStrategyBalanceKeepsStrategyLiveStakesEnabled|FullyQualifiedName~BtcUpDown5mPaperStrategyProcessorTests.ProcessAsync_LiveStakeWithInsufficientStrategyBalanceKeepsLiveStakesEnabled" -p:UseSharedCompilation=false /nr:false /nologo -v:minimal` passed `16/16`; `dotnet build src\PolyCopyTrader.Service\PolyCopyTrader.Service.csproj --no-restore -p:UseSharedCompilation=false /nr:false /nologo -v:minimal` passed with `0` warnings/errors; `git diff --check` on touched files passed with CRLF warnings only. No production DB writes, service restart, staging, commit, or push were performed because the worktree already contains many unrelated dirty changes in overlapping files.
+Blockers: Updated behavior is not active on the server until deployment/restart.
+
+## Active Update 2026-07-07 Extend BTC Down Diff Premarket To 30
+Goal: Add `BTC Up or Down 5m Down N Diff Premarket` strategy variants up to `N=30`.
+Status: Completed
+Done:
+- Updated `src/PolyCopyTrader.Domain/Models.cs` so only BTC Down Diff Premarket expands to thresholds `1..30`; BTC Up Diff Premarket and ETH/SOL Up/Down Diff Premarket remain `1..10`.
+- Updated `src/PolyCopyTrader.Storage/PostgresSchema.cs` seed SQL to generate the same asymmetric grid: BTC/down thresholds through `30`, all other Diff Premarket sides through `10`. Seeded rows remain `enabled=true`, `live_stakes=false`, and `paper_stake_amount=1.00`.
+- Updated focused catalog/category tests so BTC Diff Premarket count is now `40` (`10` Up-side plus `30` Down-side), total Diff Premarket count is `80`, and the `BTC ... Diff Down Premarket` display category count is `30`.
+Next: Deploy/restart the updated service so schema initialization creates the new server rows and the running strategy processor knows about them.
+Notes: Verification passed: focused `dotnet test` filter for BTC/Crypto metadata, Diff Premarket display category, and `StorageTests` passed `45/45`; `dotnet build src\PolyCopyTrader.Service\PolyCopyTrader.Service.csproj --no-restore` passed with `0` warnings/errors after rerunning sequentially. A first parallel build attempt failed due a transient compiler file lock from the simultaneous test run. No production DB writes, service restart, staging, commit, or push were performed because the worktree already contains many unrelated dirty changes.
+Blockers: New strategies are not active on the server until the updated code is deployed/restarted.
+
+## Active Update 2026-07-07 BTC Down Diff Observed N Analysis
+Goal: Determine which `N` values actually occurred for `BTC Up or Down 5m Down N Diff Premarket` and whether raising maximum `N` above `10` is supported by data.
+Status: Completed
+Done:
+- Queried server PostgreSQL `192.168.0.101:5432/polycopytrader` read-only using `crypto_up_down_5m_diff_snapshots` for deduplicated one-row-per-market BTC Diff values, plus actual `strategy_market_paper_runs` for the existing `BTC ... Down 1..10 Diff Premarket` family.
+- Generated `outputs/btc-down-diff-n-observed-2026-07-07/summary.txt`, `down_n_distribution.csv`, `threshold_counts.csv`, `existing_n_1_10_performance.csv`, and `simulated_n_above_10_from_n10.csv`.
+- Snapshot coverage: `8242` BTC market samples from `2026-06-08 07:40:00 UTC` through `2026-07-07 17:10:00 UTC`; max observed `DownCount - UpCount` was `28`, while opposite-side max abs was `36`.
+- Down-side threshold counts: `N>=10` occurred `1335` times (`16.20%` of samples), `N>=11` `1160`, `N>=12` `981`, `N>=13` `838`, `N>=15` `601`, `N>=20` `213`, and `N>=28` `3`.
+- Actual available Paper history for the Down `1..10` family starts at `2026-07-06 05:05:00 UTC`; existing N performance: `N=7` PnL `+44.710222`, `N=8` `+25.023347`, `N=9` `+63.065565`, `N=10` `+23.328079`, while `N=1..5` were negative and `N=6` was approximately flat.
+- Proxy for raising above 10 using existing `N=10` settled rows was unfavorable in the current overlap: `N=11` proxy `37` rows, `14/23`, PnL `-58.619908`; `N=12` proxy `19` rows, `5/14`, PnL `-55.652309`; `N=13` proxy `5` rows, `0/5`, PnL `-30.027897`; no settled overlap rows yet for `N>=14`.
+Next: If raising `N` is still desired, add new thresholds conservatively and collect live/Paper history rather than relying only on the current short overlap.
+Notes: Created, ran, and removed a temporary C# analysis utility under `artifacts/btc-down-diff-n-analysis`; only output artifacts remain. No production DB writes, source-code changes, service restart, staging, commit, or push were performed.
+Blockers: None.
+
+## Active Update 2026-07-07 Stake Status Check
+Goal: Check current Paper/Live staking status on the server.
+Status: Completed
+Done:
+- Queried server PostgreSQL `192.168.0.101:5432/polycopytrader` read-only at database time `2026-07-07 12:40:36 UTC`.
+- Confirmed `PolyCopyTrader.Service` is `Running` in `Live` mode with fresh heartbeat age about `7.4s`, current loop `BTC5mOnly WatchlistScanner=CommentedOut; FollowLeaderSignals=CommentedOut`, and empty `last_error`.
+- Recent order flow: last `5m` had `287` Paper created/filled and `1` Live created/filled; last `15m` had `687` Paper and `1` Live; last `60m` had `2797` Paper and `1` Live.
+- Latest Live order was `2026-07-07 12:40:04 UTC`: `ETH Up or Down 5m Up 49 bps Instant`, status `Matched`, outcome `Up`, notional `6.0093`, filled size `8.823528`, average fill price `0.68`, filled notional `5.999999`.
+- Current Live-enabled strategies: `ETH Up or Down 5m Down 100 bps Reference Average Premarket`, `ETH Up or Down 5m Up 49 bps Instant`, `ETH Up or Down 5m Up 50 bps Instant`, `SOL Up or Down 5m 100 bps Reference Average Premarket`, and `SOL Up or Down 5m Down 100 bps Reference Average Premarket`; all are enabled and not paused.
+- Recent Live-strategy run statuses in the last `30m`: `18` skips by `reference_average_move_below_bps_threshold`, `11` skips by `btc_previous_market_move_below_bps_threshold`, `10` observed, and `1` entered.
+Next: Resume the interrupted `ETH Up or Down 5m 100 bps Reference Average Premarket` Paper PnL chart if still needed.
+Notes: Created, ran, and removed a temporary C# status utility under `artifacts/stake-status-check`. No production DB writes, source-code changes, service restart, staging, commit, or push were performed.
+Blockers: None.
+
+## Active Update 2026-07-07 ETH 95 Reference Average Paper PnL Chart
+Goal: Build a PnL chart from Paper records for `ETH Up or Down 5m 95 bps Reference Average Premarket`.
+Status: Completed
+Done:
+- Queried server PostgreSQL `192.168.0.101:5432/polycopytrader` read-only and found the exact strategy code `eth_up_down_5m_reference_average_bps_95_fak_premarket`.
+- Exported all `120` settled `strategy_market_paper_runs` rows with non-null Paper PnL, ordered by settlement/event time from `2026-07-04 15:19:05 UTC` through `2026-07-07 08:53:42 UTC`.
+- Generated `outputs/eth-95-reference-average-paper-pnl-chart-2026-07-07/paper-pnl-chart.svg`, `paper-pnl-records.csv`, and `summary.txt`.
+- Report totals: wins/losses/flat `69/51/0`, total stake `720.76`, total Paper PnL `+64.48`, max single PnL `+7.05`, min single PnL `-6.01`, max stake `6.01`, max cumulative PnL `+110.96`, min cumulative PnL `+4.54`, and max drawdown `62.02` from record `88` to `117`.
+Next: None.
+Notes: Created, ran, and removed a temporary C# report utility under `artifacts/eth-95-reference-paper-pnl-chart`; only output artifacts remain. No production DB writes, source-code changes, service restart, staging, commit, or push were performed.
+Blockers: None.
+
+## Active Update 2026-07-07 BTC 2 Diff Shift Progress Paper PnL Chart
+Goal: Build a PnL chart from Paper records for `BTC Up or Down 5m 2 Diff Shift Progress Premarket`.
+Status: Completed
+Done:
+- Queried server PostgreSQL `192.168.0.101:5432/polycopytrader` read-only and found the exact strategy code `btc_up_down_5m_2_diff_shift_progress_premarket`.
+- Exported all `695` settled `strategy_market_paper_runs` rows with non-null Paper PnL, ordered by settlement/event time from `2026-07-03 06:49:39 UTC` through `2026-07-07 09:53:34 UTC`.
+- Generated `outputs/btc-2-diff-shift-progress-paper-pnl-chart-2026-07-07/paper-pnl-chart.svg`, `paper-pnl-records.csv`, and `summary.txt`.
+- Report totals: wins/losses/flat `375/320/0`, total stake `8832.00`, total Paper PnL `+847.61`, max single PnL `+42.84`, min single PnL `-44.01`, max stake `44.01`, max cumulative PnL `+864.63`, min cumulative PnL `+10.18`, and max drawdown `315.16` from record `398` to `418`.
+Next: None.
+Notes: Created, ran, and removed a temporary C# report utility under `artifacts/btc-diff-shift-paper-pnl-chart`; only output artifacts remain. No production DB writes, source-code changes, service restart, staging, commit, or push were performed.
+Blockers: None.
+
+## Active Update 2026-07-07 ETH Down 1 Reference Paper PnL Chart
+Goal: Build a PnL chart from Paper records for `ETH Up or Down 5m Down 1 bps Reference Average Premarket`.
+Status: Completed
+Done:
+- Queried server PostgreSQL `192.168.0.101:5432/polycopytrader` read-only and found the exact strategy code `eth_up_down_5m_down_reference_average_bps_1_fak_premarket`.
+- Exported all `782` settled `strategy_market_paper_runs` rows with non-null Paper PnL, ordered by settlement/event time from `2026-07-03 06:50:21 UTC` through `2026-07-07 09:50:19 UTC`.
+- Generated `outputs/eth-down1-reference-paper-pnl-chart-2026-07-07/paper-pnl-chart.svg`, `paper-pnl-records.csv`, and `summary.txt`.
+- Report totals: wins/losses/flat `428/354/0`, total stake `4698.85`, total Paper PnL `+297.11`, max single PnL `+7.65`, min single PnL `-6.01`, max stake `6.01`, max cumulative PnL `+360.97`, min cumulative PnL `+5.32`, and max drawdown `82.94` from record `293` to `413`.
+Next: None.
+Notes: Created, ran, and removed a temporary C# report utility under `artifacts/eth-down1-paper-pnl-chart`; only output artifacts remain. No production DB writes, source-code changes, service restart, staging, commit, or push were performed.
+Blockers: None.
+
+## Active Update 2026-07-06 Remove Selected BTC Up/Down Opening Strategies
+Goal: Remove `BTC Up or Down 5m Up`, `BTC Up or Down 5m Down`, `BTC Up or Down 5m Down Maker 50`, `BTC Up or Down 5m Up Maker`, and `BTC Up or Down 5m Down Maker` plus their history locally and on the server.
+Status: Completed
+Done:
+- Removed the five target BTC strategy variants from `src/PolyCopyTrader.Domain/Models.cs`; their old constants/factories are gone, and only `BTC Up or Down 5m Up Maker 50` remains from this Maker group.
+- Updated `src/PolyCopyTrader.Storage/PostgresSchema.cs` so schema initialization no longer seeds those five target strategy rows while keeping `btc_up_down_5m_up_maker_50`.
+- Updated focused tests and docs to treat the five target rows as removed and to keep `Up Maker 50` as the remaining Maker variant.
+- Purged local PostgreSQL `127.0.0.1`: deleted `5` target strategies, `288` strategy runs, `195` Paper orders, `33` Paper fills, `2,392` strategy signals, `32` Paper positions, and `32` Paper position settlements; no local Live orders were present.
+- Purged server PostgreSQL `192.168.0.101`: first disabled/paused the `5` target strategies because the running service was still adding rows, then deleted `5` strategies, `9,750` strategy runs, `9,460` Paper orders, `518` Paper fills, `34,058` strategy signals, `411` Paper positions, `205` Paper position settlements, `5` dashboard snapshots, and `15` recent snapshots; no server Live orders were present.
+- Final verification after a short wait showed `0` target strategies, Paper orders, Paper fills, Live orders, strategy runs, signals, positions, settlements, dashboard snapshots, and recent snapshots on both local and server databases.
+Next: Deploy/restart the updated service code before the next server restart; an old deployed binary that still contains the old seed could recreate these five rows during schema initialization.
+Notes: Verification passed: focused catalog/storage/stake-admin/live-gating/persistence tests passed `13/13`, focused Maker tests passed `10/10`, `dotnet build src\PolyCopyTrader.Service\PolyCopyTrader.Service.csproj --no-restore` passed with `0` warnings and `0` errors, and `git diff --check` on touched files passed with CRLF warnings only. A temporary maintenance utility under `artifacts\target-btc-strategy-maintenance-2026-07-06` was created, used, and removed. No staging, commit, or push was performed because the worktree already contains many unrelated dirty changes.
+Blockers: Updated code still needs deployment to the server to prevent old seed recreation on service restart.
+
+## Active Update 2026-07-06 Remove More Strategies
+Goal: Remove all BTC `More` strategy rows and their history locally and on the server.
+Status: Completed
+Done:
+- Removed active BTC `More` strategy generation from `src/PolyCopyTrader.Domain/Models.cs`: standard `More`, capped `More ... Below`, and `More ... Gamma` variants are no longer registered in `StrategyIds.BtcUpDown5mVariants`.
+- Updated `src/PolyCopyTrader.Storage/PostgresSchema.cs` so schema initialization no longer seeds any `btc_up_down_5m_more_%` rows.
+- Updated focused tests and docs to treat `More` rows as removed from the active seed/catalog.
+- Purged local PostgreSQL `127.0.0.1`: deleted `36` More strategies, `5,163` strategy runs, `3,131` Paper orders, `1,793` Paper fills, `24` inactive Live orders, `21,741` signals, `1,757` Paper positions, and `1,754` settlements.
+- Purged server PostgreSQL `192.168.0.101`: initial delete hit a PostgreSQL deadlock while deleting final `strategies` rows; then `29` server More strategies were disabled/paused, the service cycle was allowed to release locks, and the delete was retried successfully. The successful server purge deleted `29` More strategies, `7,203` strategy runs, `6,154` Paper orders, `2,498` Paper fills, `24,660` signals, `2,500` Paper positions, `2,497` settlements, `29` dashboard snapshots, and `87` recent snapshots; no Live orders were present on the server.
+- Final DB verification after a short wait showed `0` More strategies, Paper orders, Live orders, strategy runs, signals, Paper positions, settlements, dashboard snapshots, and recent snapshots on both local and server databases.
+Next: Deploy/restart the updated service code before the next server restart; an old deployed binary that still contains the old seed could recreate `btc_up_down_5m_more_%` rows during schema initialization.
+Notes: Verification passed: focused `dotnet test` filter for strategy catalog, storage schema, stake admin, and strategy performance tests passed `17/17`; `dotnet build src\PolyCopyTrader.Service\PolyCopyTrader.Service.csproj --no-restore` passed with `0` warnings and `0` errors; `git diff --check` on touched files passed with CRLF warnings only. A first parallel service build attempt failed because the concurrent test compile locked a Domain output file; the sequential rerun passed. No staging, commit, or push was performed because the worktree already contains many unrelated dirty changes.
+Blockers: Updated code still needs deployment to the server to prevent old seed recreation on service restart.
+
+## Active Update 2026-07-06 Remove Revert Strategies
+Goal: Remove all Revert strategy rows and their history locally and on the server.
+Status: Completed
+Done:
+- Removed active `Diff Revert Premarket` generation from `src/PolyCopyTrader.Domain/Models.cs`: BTC/ETH/SOL `DiffCounterTrendFakPremarket` now create only non-Revert Up/Down rows.
+- Updated `src/PolyCopyTrader.Storage/PostgresSchema.cs` so schema initialization seeds only non-Revert BTC/ETH/SOL `Up/Down 1..10 Diff Premarket` rows.
+- Updated focused tests and docs to reflect that Revert strategy rows are removed and not seeded.
+- Purged server PostgreSQL `192.168.0.101`: first transaction deleted `40` Revert strategies, `6,960` strategy runs, `1,647` Paper orders, `1,647` Paper fills, `1,647` strategy signals, `1,647` Paper positions, `1,612` Paper position settlements, `40` dashboard snapshots, and `120` recent snapshots; no Live orders were present. A second orphan-history pass deleted `12,245` old `strategy:%revert%` signals plus `3,400` Paper positions and `3,400` settlements.
+- Purged local PostgreSQL `127.0.0.1`: first transaction deleted `45` Revert strategies, `810` strategy runs, `196` Paper orders, `66` Paper fills, `1,541` strategy signals, `63` Paper positions, and `63` settlements; no Live orders were present. A second orphan-history pass deleted `3` remaining old `strategy:%revert%` signals.
+- A final follow-up check found `120` remaining/recreated server recent dashboard snapshot rows with Revert codes and deleted them.
+- Final DB verification on both local and server showed `0` Revert strategies, Paper orders, Live orders, strategy runs, strategy signals, Paper positions, settlements, dashboard snapshots, and recent snapshots.
+Next: Deploy/restart the updated service code before the next server restart; an old deployed binary that still contains the old seed could recreate Revert rows during schema initialization.
+Notes: Verification passed: focused `dotnet test` filter for DiffCounterTrendFakPremarket/StrategyDisplayCategoryTests/PostgresSchema table test passed `75/75`; `dotnet build src\PolyCopyTrader.Service\PolyCopyTrader.Service.csproj --no-restore` passed with `0` warnings and `0` errors; `git diff --check` on touched files passed. Dashboard build was attempted but blocked by file locks from `devenv.exe` and a running `PolyCopyTrader.Dashboard.exe`, not by compile errors visible before the copy step. No staging, commit, or push was performed because the worktree already contains many unrelated dirty changes.
+Blockers: Updated code still needs deployment to the server to prevent old seed recreation on service restart.
+
+## Active Update 2026-07-06 Current Live Daily Excel Report
+Goal: Build a one-sheet Excel daily realised PnL report for strategies currently marked Live on the server.
+Status: Completed
+Done:
+- Queried server PostgreSQL `192.168.0.101:5432` for current `strategies.live_stakes = true` rows and their historical `live_orders.realized_pnl_usd` grouped by UTC date.
+- Generated `outputs/live-daily-report-2026-07-06/current-live-daily-realized-report.xlsx` with one worksheet, strategy columns sorted by ascending total Live realised, date rows, per-date totals, per-strategy totals, and a grand total.
+- Report contents at generation time: `9` current Live strategies, `445` matching Live orders, date range `2026-06-05` through `2026-07-06`, grand total `253.73`.
+- Rendered and inspected the workbook preview; verified the sheet is `A1:K32`, has one worksheet, and contains total formulas.
+Next: None.
+Notes: Reporting artifact only; no production DB writes, service restarts, source code changes, staging, commit, or push were performed.
+Blockers: None.
+
+## Active Update 2026-07-06 Server Deploy Recheck Successful
+Goal: Recheck the server after the previous PostgreSQL `too many clients` blocker.
+Status: Completed
+Done:
+- Reconnected successfully to remote PostgreSQL `192.168.0.101:5432`; the previous `too many clients already` blocker was no longer present.
+- Verified `PolyCopyTrader.Service` heartbeat on the server: status `Running`, mode `Live`, current loop `BTC5mOnly WatchlistScanner=CommentedOut; FollowLeaderSignals=CommentedOut`, last heartbeat at `2026-07-06 08:55:03 +03` with age about `16` seconds and no last error.
+- Verified restored `Diff FAK Premarket` server state remains correct: `100` target rows, `100` enabled, `0` paused, `0` live.
+- Verified service activity: recent Paper processing is active, including `182` entered runs and `173` filled Paper orders in the recent 10-minute window at the time of check.
+- Verified Live: no Live orders were created in the latest 20-30 minute window; latest Live order remained `2026-07-05 20:54:30 +03`. The latest Live-enabled strategies were processed but skipped by normal strategy conditions (`reference_average_move_below_bps_threshold`, `diff_reference_average_delta_below_threshold`, `btc_previous_market_move_below_bps_threshold`, or `previous_result_not_ready_by_entry_grace`), not by a database/startup failure.
+Next: Continue monitoring future premarket windows if a fresh Live fill is required; current service/database state is healthy.
+Notes: Remote DB read-only checks only. No source edits, DB writes, service restart, tests, staging, commit, or push were performed.
+Blockers: None.
+
+## Active Update 2026-07-06 Server Deploy Check Blocked By PostgreSQL Connection Limit
+Goal: Check the server after deployment of the PostgreSQL seed syntax fix.
+Status: Blocked
+Done:
+- Confirmed the previous local startup failure no longer reproduces in the fresh Debug log: after the old `42601` failure, the later run reached normal strategy cycles and did not log the same seed syntax exception.
+- Checked remote PostgreSQL at `192.168.0.101:5432`: TCP port is open and `pg_isready` reports accepting connections, but every `psql` attempt to both `polycopytrader` and `postgres` fails with `FATAL: sorry, too many clients already`.
+- Confirmed the current machine is `192.168.0.102`, so `192.168.0.101` is a separate host; local `127.0.0.1` PostgreSQL is healthy and the restored Diff FAK Premarket family is `100` rows, `100` enabled, `0` paused, `0` live.
+- Tried remote process/file inspection via WinRM/admin share; WinRM authentication failed and admin-share access timed out.
+Next: Free or inspect PostgreSQL connections directly on `192.168.0.101`, then re-run the heartbeat/strategy/server DB checks.
+Notes: No source edits, DB writes, service restart, staging, commit, or push were performed. This check found a server-side PostgreSQL connection saturation issue, not the previous seed syntax error.
+Blockers: Remote PostgreSQL rejects new sessions with `too many clients already`, preventing heartbeat/API-error/strategy verification from this machine.
+
+## Active Update 2026-07-06 Fix PostgreSQL Schema Seed Syntax
+Goal: Fix the service startup failure caused by malformed PostgreSQL seed SQL near `btc_up_down_5m_more_30`.
+Status: Completed
+Done:
+- Inspected the provided startup screenshot and traced PostgreSQL error `42601: syntax error at or near "b7c50005-0000-4000-8002-000000000030"` to `src/PolyCopyTrader.Storage/PostgresSchema.cs`.
+- Fixed the `INSERT INTO strategies ... VALUES` seed list by restoring the missing opening tuple parenthesis before `btc_up_down_5m_more_30`.
+- Verified the full schema initializer against a temporary local PostgreSQL database, then dropped the temporary database; no production/server database writes were performed for this validation.
+Next: Restart the service from the rebuilt code; the schema startup step should now pass the previous failing statement.
+Notes: Verification passed: `PostgresRepository_InitializesSchema_WhenTestConnectionIsConfigured` passed `1/1` against a temporary local DB, focused catalog/storage tests passed `77/77`, and `git diff --check -- src/PolyCopyTrader.Storage/PostgresSchema.cs` passed with LF/CRLF warning only. No staging, commit, or push was performed because the worktree already contains many unrelated dirty changes, including in the touched file.
+Blockers: None.
+
+## Active Update 2026-07-06 Enable Restored Diff FAK Premarket Strategies
+Goal: Set the restored `Diff FAK Premarket` strategy family to enabled and unpaused while keeping Live off.
+Status: Completed
+Done:
+- Updated both local `127.0.0.1/polycopytrader` and server `192.168.0.101/polycopytrader` rows matching `^(btc|eth|sol)_up_down_5m_(up|down)_diff_([1-9]|10)(_revert)?_fak_premarket$`.
+- Final DB verification on both hosts showed `100` target rows, `100` enabled, `0` paused, and `0` Live-enabled.
+- Refreshed server Dashboard snapshots for the restored family: `100` main snapshot rows and `300` recent snapshot rows were updated to the same Enabled/Paused/Live state.
+- Updated `src/PolyCopyTrader.Storage/PostgresSchema.cs` so a clean seed creates the restored family with `enabled=true`, `paused=false`, and `live_stakes=false`.
+Next: Deploy/restart with the updated seed when convenient; the current DB state is already changed. Paper history can now start accumulating for these strategies.
+Notes: Focused tests passed: `dotnet test tests\PolyCopyTrader.Tests\PolyCopyTrader.Tests.csproj --no-restore --filter "FullyQualifiedName~StrategyIds_IncludeStandardMartinAndGammaBtcVariants|FullyQualifiedName~StrategyIds_IncludeEthAndSolBinanceBpsVariants|FullyQualifiedName~DiffCounterTrendFakPremarket|FullyQualifiedName~StrategyDisplayCategoryTests|FullyQualifiedName~StorageTests.PostgresSchema_ContainsRequiredTables" -p:UseSharedCompilation=false /nr:false /nologo -v:minimal` passed `77/77` with existing nullable warnings. `git diff --check -- src/PolyCopyTrader.Storage/PostgresSchema.cs` passed with LF/CRLF warning only. No staging, commit, or push was performed because the worktree already contains unrelated dirty changes.
+Blockers: None.
+
+## Active Update 2026-07-06 Restore Diff FAK Premarket Strategies Without History
+Goal: Restore the mistakenly removed user-facing `Diff FAK Premarket` strategies without restoring old Paper/Live history.
+Status: Completed
+Done:
+- Restored `DiffCounterTrendFakPremarket` catalog registration for BTC/ETH/SOL in `StrategyIds`: BTC `40`, ETH `20` without revert variants, SOL `40`, total `100`.
+- Restored the corresponding PostgreSQL seed block for codes like `btc_up_down_5m_up_diff_1_fak_premarket`; the seed creates this family disabled, paused, and Live off so a clean DB does not start accumulating history immediately.
+- Updated catalog, display-category, and storage tests to expect the restored `Diff FAK Premarket` family while still treating ordinary Countertrend, AdjustedDiff, ShiftDiff Countertrend, Binance, Less, and Middle families as removed.
+- Restored the `100` strategy rows on both local `127.0.0.1/polycopytrader` and server `192.168.0.101/polycopytrader`.
+- Cleaned restored-family history on both DBs: final verification showed Paper runs/orders/fills `0`, Live orders `0`, signals `0`, Paper positions/settlements `0`, and shadow decisions/discrepancies `0`.
+- Left the restored DB strategies `enabled=false`, `paused=true`, and `live_stakes=false` on both local and server databases to prevent immediate new history creation; server Dashboard snapshot rows were refreshed to match this zero-stat disabled/paused state.
+Next: Deploy the code change; when ready to start collecting new Paper history, manually enable/unpause the restored strategies.
+Notes: Focused tests passed: `dotnet test tests\PolyCopyTrader.Tests\PolyCopyTrader.Tests.csproj --no-restore --filter "FullyQualifiedName~StrategyIds_IncludeStandardMartinAndGammaBtcVariants|FullyQualifiedName~StrategyIds_IncludeEthAndSolBinanceBpsVariants|FullyQualifiedName~DiffCounterTrendFakPremarket|FullyQualifiedName~StrategyDisplayCategoryTests|FullyQualifiedName~StorageTests.PostgresSchema_ContainsRequiredTables" -p:UseSharedCompilation=false /nr:false /nologo -v:minimal` passed `77/77` with existing nullable warnings. `git diff --check` on touched files passed with LF/CRLF warnings only. No staging, commit, or push was performed because the worktree already contains many unrelated dirty changes, including in touched files.
+Blockers: None.
+
+## Active Update 2026-07-06 Diff FAK Premarket Naming Correction
+Goal: Correct the previous wording around deleted Diff FAK Premarket strategies.
+Status: Completed
+Done:
+- Clarified that `Diff Countertrend FAK Premarket` was an internal behavior/test name (`DiffCounterTrendFakPremarket`), not the user-facing strategy name.
+- Correct user-facing deleted family name: `Diff FAK Premarket`, including codes such as `eth_up_down_5m_down_diff_3_fak_premarket`.
+Next: None.
+Notes: Answer-only correction. No source edits, DB writes, tests, service restart, staging, commit, or push were performed.
+Blockers: None.
+
+## Active Update 2026-07-06 Diff Deletion Clarification
+Goal: Clarify whether any Diff strategies were removed in the latest cleanup sequence.
+Status: Completed
+Done:
+- Clarified that some Diff-family variants were removed: all `AdjustedDiff` variants, plus Countertrend-owned `Diff Countertrend`, `Diff Countertrend FAK Premarket`, and `ShiftDiff Countertrend` variants.
+- Clarified that ordinary `Diff Progress`, `Diff Shift Progress`, `Diff Limit Progress`, `Diff Real Limit Progress`, and `Diff Reference Average` families were explicitly kept.
+Next: None.
+Notes: Answer-only task. No source edits, DB writes, tests, service restart, staging, commit, or push were performed.
+Blockers: None.
+
+## Active Update 2026-07-06 Deleted Strategy List
+Goal: List the strategy families removed during the latest cleanup sequence.
+Status: Completed
+Done:
+- Confirmed from active context/history that the removed families were: `AdjustedDiff`, BTC Binance bps, remaining BTC Binance variants, Countertrend, BTC Less, and BTC/ETH/SOL Middle.
+Next: None.
+Notes: Answer-only task. No source edits, DB writes, tests, service restart, staging, commit, or push were performed.
+Blockers: None.
+
+## Active Update 2026-07-05 Remove Middle Strategies
+Goal: Remove all BTC/ETH/SOL 5m `Middle` strategies and their local/server history.
+Status: Completed
+Done:
+- Removed BTC and ETH/SOL Middle variant registration loops from `StrategyIds`: base Middle, Middle bps, and Middle bps Instant variants are no longer added to the strategy catalogs.
+- Removed Middle strategy seed blocks from `src/PolyCopyTrader.Storage/PostgresSchema.cs`, including explicit `btc_up_down_5m_middle_100`, BTC depth/bps generators, and ETH/SOL Middle generators.
+- Removed the deleted `btc_up_down_5m_middle_100` candidate from BTC Ensemble/Strategy Selector candidate lists and updated the Ensemble description.
+- Updated focused catalog/storage/instant-limit tests to expect Middle variants and seed rows to be absent.
+- Purged local PostgreSQL `127.0.0.1:5432/polycopytrader`: `12,140` strategies, `70,229` Paper runs, `1,361` Paper orders, `678` Paper fills, `673` Paper positions, `601` Paper position settlements, and `8,134` Middle wallet signals (`5,790` linked target signals plus `2,344` older orphan signal rows). Local Live orders deleted: `0`.
+- Disabled then purged server PostgreSQL `192.168.0.101:5432/polycopytrader`: `6,030` strategies, `6,030` dashboard snapshots, and `18,090` recent dashboard snapshots. Server Paper/Live/signal/history rows found and deleted: `0`; server Live orders deleted: `0`.
+- Verified afterward on both local and server DBs: Middle strategies `0`, Middle wallet signals `0`, Middle Paper orders `0`, Middle Paper positions `0`, and Middle Paper settlements `0`; server dashboard Middle snapshots `0`.
+Next: Deploy/restart the service with the updated code so an old running binary cannot recreate Middle rows from old code/seed on restart.
+Notes: Focused tests passed: `dotnet test tests\PolyCopyTrader.Tests\PolyCopyTrader.Tests.csproj --no-restore --filter "FullyQualifiedName~StrategyIds_IncludeStandardMartinAndGammaBtcVariants|FullyQualifiedName~StrategyIds_IncludeEthAndSolBinanceBpsVariants|FullyQualifiedName~BtcUpDown5mInstantOpeningLimitPriceTests|FullyQualifiedName~StorageTests.PostgresSchema_ContainsRequiredTables" -p:UseSharedCompilation=false /nr:false /nologo -v:minimal` passed `5/5`. `git diff --check` on touched files passed with LF/CRLF warnings only. No staging, commit, or push was performed because the worktree already contains unrelated dirty changes, including in touched files.
+Blockers: None.
+
+## Active Update 2026-07-05 Remove BTC Less Strategies
+Goal: Remove `BTC Up or Down 5m Less*` strategies and their local/server history.
+Status: Completed
+Done:
+- Removed BTC `Less` strategy registration from `StrategyIds`: standard `btc_up_down_5m_less_*`, `Less ... Below ...`, `Less ... Gamma`, and `btc_up_down_5m_less_180_martin` are no longer added to the BTC strategy catalog.
+- Removed the BTC `Less` seed rows from `src/PolyCopyTrader.Storage/PostgresSchema.cs`, so updated service startup will not recreate these strategies.
+- Removed the now-unreachable `Less 180 Martin` special processing path from `BtcUpDown5mPaperStrategyProcessor`.
+- Updated affected tests and generic fixtures to expect BTC Less strategies to be absent and to use remaining non-Less BTC variants where a generic strategy id was needed.
+- Disabled all target rows before DB cleanup to prevent the old running service from creating more target Paper rows while deleting.
+- Purged local PostgreSQL `127.0.0.1:5432/polycopytrader`: `23` strategies, `3,102` Paper runs, `1,897` Paper orders, `1,012` Paper fills, `1,897` signals, `986` Paper positions, and `986` Paper position settlements. Local Live orders deleted: `0`.
+- Purged server PostgreSQL `192.168.0.101:5432/polycopytrader`: `23` strategies, `8,173` Paper runs, `7,643` Paper orders, `5,582` Paper fills, `7,643` signals, `5,581` Paper positions, `5,575` Paper position settlements, `23` dashboard snapshots, and `69` recent dashboard snapshots. Server Live orders deleted: `0`.
+- Verified afterward on both local and server DBs: target strategies `0`, target Paper orders `0`, target Paper runs `0`, target Live orders `0`; server dashboard snapshot leftovers `0`.
+Next: Deploy/restart the service with the updated code so the old running binary cannot recreate BTC Less rows from old code/seed.
+Notes: Focused tests passed: `dotnet test tests\PolyCopyTrader.Tests\PolyCopyTrader.Tests.csproj --no-restore --filter "FullyQualifiedName~StrategyIds_IncludeStandardMartinAndGammaBtcVariants|FullyQualifiedName~StorageTests.PostgresSchema_ContainsRequiredTables|FullyQualifiedName~StrategyStakeAdminCommandTests|FullyQualifiedName~StrategyPerformanceTests.GetStrategyPerformanceAsync_ComputesClosedRoiFromSettledStakeOnly" -p:UseSharedCompilation=false /nr:false /nologo -v:minimal` passed `9/9`. `git diff --check` on touched files passed with LF/CRLF warnings only. Source search confirmed no `btc_up_down_5m_less_*`, `BtcUpDown5mLess*`, or `Less180Martin` patterns remain in `src`. A broader processor-class run remains unsuitable in the current dirty worktree and had unrelated failures, consistent with prior tasks. No staging, commit, or push was performed because the worktree already contains unrelated dirty changes.
+Blockers: None.
+
+## Active Update 2026-07-05 Remove All Countertrend Strategies
+Goal: Remove all Countertrend strategy families from code/seed data and purge existing local/server database rows and history.
+Status: Completed
+Done:
+- Removed Countertrend variant registration from `StrategyIds`: BTC/ETH/SOL Diff Countertrend instant, Diff Countertrend FAK Premarket, ShiftDiff Countertrend instant, and Previous Score Countertrend variants are no longer added to the strategy catalogs.
+- Removed the now-unregistered Countertrend factory methods from `src/PolyCopyTrader.Domain/Models.cs`, leaving only dormant lower-level processor/metric support that is no longer reachable from registered strategies.
+- Removed Countertrend seed blocks from `src/PolyCopyTrader.Storage/PostgresSchema.cs`: Diff Countertrend instant, Diff Countertrend FAK Premarket, ShiftDiff Countertrend instant, and Previous Score Countertrend rows will not be recreated on startup.
+- Updated catalog/display/storage/performance tests so Countertrend variants are expected to be absent while Diff Progress, Diff Shift Progress, Diff Limit Progress, Diff Real Limit Progress, and Diff Reference Average stay intact.
+- Disabled `enabled`/`live_stakes` on all target Countertrend rows before deletion to prevent new server Live placements from the old running binary during cleanup.
+- Purged local PostgreSQL `127.0.0.1:5432/polycopytrader`: `1,342` strategies, `21,270` strategy runs, `865` Paper orders, `254` Paper fills, `865` signals, `32` Paper positions, and `26` Paper position settlements. Local Live orders deleted: `0`.
+- Purged server PostgreSQL `192.168.0.101:5432/polycopytrader`: `781` strategies, `561,820` strategy runs, `64,176` Paper orders, `64,166` Paper fills, `64,176` signals, `172` Live orders, `129` paper-live shadow decisions, `213` shadow discrepancies, `787` Paper positions, `829` Paper position settlements, `781` dashboard snapshots, and `2,343` recent dashboard snapshots.
+- Before server deletion, verified the `172` target Live orders had no unsettled matched rows; all `159` Matched rows had `balance_effect_applied=true` and `settled_at_utc` populated.
+- Verified afterward on both local and server DBs: target strategies `0`, target Paper orders `0`, target Live orders `0`, target strategy runs `0`; server dashboard snapshot leftovers by target code patterns `0`.
+Next: Deploy/restart the service with the updated code so the old running binary cannot attempt deleted Countertrend variants.
+Notes: Focused tests passed: `dotnet test tests\PolyCopyTrader.Tests\PolyCopyTrader.Tests.csproj --no-restore --filter "FullyQualifiedName~StrategyIds_IncludeStandardMartinAndGammaBtcVariants|FullyQualifiedName~StrategyIds_IncludeEthAndSolBinanceBpsVariants|FullyQualifiedName~StrategyDisplayCategoryTests|FullyQualifiedName~StorageTests.PostgresSchema_ContainsRequiredTables|FullyQualifiedName~StrategyPerformanceTests.GetStrategyPerformanceAsync_ComputesCountertrendSignalBpsMetrics|FullyQualifiedName~StrategyPerformanceSchemaTests.PostgresSchema_AddsCountertrendSignalPerformanceIndex" -p:UseSharedCompilation=false /nr:false /nologo -v:minimal` passed `79/79` with existing nullable warnings. `git diff --check` on touched files passed with LF/CRLF warnings only. Source search confirmed no Countertrend factory registrations or seed code patterns remain. No staging, commit, or push was performed because the worktree already contains unrelated dirty changes, including in files touched by earlier tasks.
+Blockers: None.
+
+## Active Update 2026-07-05 Remove All BTC Binance Strategies
+Goal: Remove all `BTC Up or Down 5m Binance*` strategies locally and from the server, including history.
+Status: Completed
+Done:
+- Removed the remaining non-bps BTC Binance variants from source registration in `src/PolyCopyTrader.Domain/Models.cs`: base Binance, fixed 45/47/49, Clever, Clever Aggressive/Conservative, Edge 2/4/6, and delayed 15s/30s/45s.
+- Removed the same remaining non-bps BTC Binance seed rows from `src/PolyCopyTrader.Storage/PostgresSchema.cs`.
+- Kept ETH/SOL Binance bps/instant strategy support intact; only BTC `btc_up_down_5m_binance*` is gone.
+- Updated `BtcUpDown5mPaperStrategyProcessor` ensemble/selector candidate handling so deleted BTC Binance variants are no longer looked up, and updated the Ensemble description to mention only Middle 100 and Skip 1 votes.
+- Updated tests and fixtures to expect zero BTC `btc_up_down_5m_binance*` variants and to use existing non-Binance BTC strategy IDs as generic fixtures.
+- Purged local PostgreSQL `127.0.0.1:5432/polycopytrader`: `63` strategies, `2,820` strategy runs, `1,242` Paper orders, `548` Paper fills, `11,817` signals, `529` Paper positions, and `529` Paper position settlements. Local Live orders deleted: `0`.
+- Purged server PostgreSQL `192.168.0.101:5432/polycopytrader`: `13` strategies, `9,412` strategy runs, `7,498` Paper orders, `1,524` Paper fills, `31,971` signals, `1,526` Paper positions, `1,524` Paper position settlements, `13` dashboard snapshots, and `39` recent dashboard snapshots. Server Live orders deleted: `0`.
+- The first server deletion attempt rolled back safely because the running service created a new Paper order during the transaction; the successful retry locked target strategy rows first, recollected dependent rows, and then deleted.
+- Verified afterward on both local and server DBs: target strategies `0`, target Paper orders `0`, target Live orders `0`, target Paper runs `0`.
+Next: Deploy/restart the service with the updated code so the old running binary stops attempting deleted BTC Binance variants.
+Notes: Focused tests passed: `dotnet test tests\PolyCopyTrader.Tests\PolyCopyTrader.Tests.csproj --no-restore --filter "FullyQualifiedName~StrategyIds_IncludeStandardMartinAndGammaBtcVariants|FullyQualifiedName~StrategyIds_IncludeEthAndSolBinanceBpsVariants|FullyQualifiedName~StrategyStakeAdminCommandTests|FullyQualifiedName~StrategyRunOrderingTests|FullyQualifiedName~LiveTradingGatingTests|FullyQualifiedName~StorageTests" -p:UseSharedCompilation=false /nr:false /nologo -v:minimal` passed `79/79` with existing nullable warnings. `git diff --check` on touched files passed with LF/CRLF warnings only. No staging, commit, or push was performed because the worktree already contains unrelated dirty changes.
+Blockers: None.
+
+## Active Update 2026-07-05 Remove BTC Binance Bps Strategies
+Goal: Remove local and server `BTC Up or Down 5m Binance N bps` strategies and their history.
+Status: Completed
+Done:
+- Removed the BTC `btc_up_down_5m_binance_bps_*` domain constants, generation loop, and helper factory/id/code methods from `src/PolyCopyTrader.Domain/Models.cs`.
+- Removed the PostgreSQL seed rows and generator block for `btc_up_down_5m_binance_bps_*` from `src/PolyCopyTrader.Storage/PostgresSchema.cs`, so updated service startup will not recreate this strategy family.
+- Updated affected tests and fixtures to expect zero BTC `BinanceStartRelativeBpsThreshold` variants and to use other existing BTC strategies as generic test IDs.
+- Deleted the family from local PostgreSQL `127.0.0.1:5432/polycopytrader`: `50` strategies, `1,550` `strategy_market_paper_runs`, `7` `paper_orders`, and `7` `signals`; local Live rows deleted: `0`.
+- Deleted the family from server PostgreSQL `192.168.0.101:5432/polycopytrader`: `50` strategies; server Paper/Live/run/signal rows found and deleted: `0`.
+- Verified after deletion on both local and server DBs: target strategy rows `0`, target Paper orders `0`, target Live orders `0`.
+Next: Deploy/restart the service with the updated code before any restart of the old deployed binary can recreate these rows from the old seed.
+Notes: Focused tests passed: `dotnet test tests\PolyCopyTrader.Tests\PolyCopyTrader.Tests.csproj --no-restore --filter "FullyQualifiedName~StrategyIds_IncludeStandardMartinAndGammaBtcVariants|FullyQualifiedName~StrategyIds_IncludeEthAndSolBinanceBpsVariants|FullyQualifiedName~StrategyStakeAdminCommandTests|FullyQualifiedName~StrategyRunOrderingTests|FullyQualifiedName~LiveTradingGatingTests|FullyQualifiedName~StorageTests" -p:UseSharedCompilation=false /nr:false /nologo -v:minimal` passed `79/79` with one existing nullable warning. A broader targeted processor-class run failed in unrelated dirty-worktree processor tests (`34` failures in Skip/Middle/ETH/SOL/general BTC scenarios), so it was not used as completion evidence. `git diff --check` on touched files passed with LF/CRLF warnings only. No staging, commit, or push was performed because the worktree already has many unrelated dirty changes, including in touched files.
+Blockers: None.
+
+## Active Update 2026-07-05 Confirm Remote Adjusted Diff Purge
+Goal: Verify whether the previous `AdjustedDiff` purge was applied to the actual remote server database and complete it if needed.
+Status: Completed
+Done:
+- Rechecked the database used by the earlier deletion: `polycopytrader` on `127.0.0.1:5432` had `0` remaining `AdjustedDiff` strategies/history rows.
+- Checked the remote server database explicitly at `192.168.0.101:5432`; it still had `72` `AdjustedDiff` strategies, `49,512` `strategy_market_paper_runs`, `2,808` `paper_orders`, and `2,808` `paper_fills`.
+- Confirmed before remote deletion that those remote strategies had `0` `live_stakes`, `0` `live_orders`, `0` shadow decisions/discrepancies, and `0` dry-run orders.
+- Deleted the remaining remote `AdjustedDiff` data from `192.168.0.101` in one transaction: `72` strategies, `49,512` Paper runs, `2,808` Paper orders, and `2,808` Paper fills. Live orders deleted: `0`.
+- Verified after deletion on `192.168.0.101` that `AdjustedDiff` remaining counts are `0` for strategies, Paper runs, Paper orders, Paper fills, and Live orders.
+Next: Deploy/restart the service with the updated code/seed so old deployed code cannot recreate `AdjustedDiff` strategies on startup.
+Notes: Database-only correction and verification. No source edits, tests, staging, commit, or push were performed in this follow-up.
+Blockers: None.
+
+## Active Update 2026-07-05 Remove Adjusted Diff Strategies
+Goal: Remove all `AdjustedDiff` strategy variants from code/seed data and purge existing server database rows and history for those strategies.
+Status: Completed
+Done:
+- Removed `AdjustedDiff` strategy registration from `StrategyIds`: BTC no longer adds `CreateBtcAdjustedDiffCounterTrendVariants()`, and ETH/SOL no longer add `CreateCryptoAdjustedDiffCounterTrendVariants(...)`.
+- Removed the now-unused private `AdjustedDiff` strategy factory/threshold methods from `src/PolyCopyTrader.Domain/Models.cs`.
+- Removed the PostgreSQL seed block that inserted `*_adjusted_diff_*` strategies from `src/PolyCopyTrader.Storage/PostgresSchema.cs`, so service startup will not recreate them.
+- Updated strategy-count/category tests to expect zero `AdjustedDiffCounterTrend` variants and no `_adjusted_diff_` codes.
+- Purged the configured PostgreSQL database `polycopytrader`: deleted `144` `AdjustedDiff` strategies, `2,232` `strategy_market_paper_runs`, `9` `paper_orders`, and `3` `paper_fills`.
+- Confirmed before deletion that `AdjustedDiff` had `0` `live_stakes` and `0` `live_orders`, so no Live order history was removed.
+- Verified after deletion that `strategies`, `strategy_market_paper_runs`, `paper_orders`, `paper_fills`, and `live_orders` all have `0` remaining rows for `AdjustedDiff` strategies.
+Next: Deploy/restart the service and refresh Dashboard so the running app uses the updated strategy list and seed.
+Notes: `dotnet test tests\PolyCopyTrader.Tests\PolyCopyTrader.Tests.csproj --no-restore --filter "FullyQualifiedName~StrategyIds_|FullyQualifiedName~StrategyDisplayCategory" -p:UseSharedCompilation=false /nr:false /nologo -v:minimal` passed `82/82` with existing nullable warnings. `git diff --check -- src\PolyCopyTrader.Domain\Models.cs src\PolyCopyTrader.Storage\PostgresSchema.cs tests\PolyCopyTrader.Tests\BtcUpDown5mPaperStrategyProcessorTests.cs tests\PolyCopyTrader.Tests\StrategyDisplayCategoryTests.cs Codex\Contexts\ContextPolyCopyTrader.md Codex\Contexts\History\ContextPolyCopyTrader-2026-07-05.md` passed with LF/CRLF warnings only. No staging, commit, or push was performed because the worktree already contains many unrelated dirty changes, including in touched files.
+Blockers: None.
+
+## Active Update 2026-07-05 BTC Up Simple Half-Year Binance Rolling Date-Gate Simulation
+Goal: Model `BTC Up or Down 5m Up Simple` over roughly six months of historical Binance BTCUSDT 5m candles using the rolling UTC-day hourly gate scheme.
+Status: Completed
+Done:
+- Used Binance public `BTCUSDT` 5m klines read-only; no production DB writes were performed.
+- Covered UTC range `2026-01-05 00:00` through `2026-07-05 11:20`, `52,265` 5m candles across `182` UTC days.
+- Modeled the strategy as always betting Up, with Up winning when candle close is greater than or equal to open, matching the service result rule for equal start/end price.
+- Because historical Binance data does not include Polymarket premarket order-book depth, modeled fixed entry prices instead of exact FAK fills: `0.50` and `0.52`.
+- Rolling gate logic: zero day `2026-01-05` places all trades; later days place only current UTC hours whose cumulative prior hourly PnL is non-negative (`>= 0`), plus a strict `> 0` comparison variant. Paper/history statistics continue accumulating in every hour even when the model skips.
+- At entry price `0.50`, all-trades PnL was `-3`; the `>= 0` hourly gate produced `-32` (worse by `-29`), while strict `> 0` produced `-106`.
+- At entry price `0.52`, all-trades PnL was `-2013.0769`; the `>= 0` hourly gate produced `-276.0000`, improving by `+1737.0769`; strict `> 0` produced `-276.9231`, improving by `+1736.1538`.
+- Primary `0.52`/`>= 0` model placed `5,201` trades and skipped `47,064`; model W/L was `2,561/2,640`, win rate `49.24%`.
+- Monthly primary `0.52`/`>= 0` model PnL: Jan `-186.0000`, Feb `-7.5385`, Mar `-54.1538`, Apr `+2.6923`, May `+6.8462`, Jun `-37.8462`, partial Jul `0`.
+- After the full six-month accumulation at `0.52`, all 24 UTC hours were negative, so the current gate state would allow no hours.
+Next: Treat this only as an outcome/price approximation. For production-like confidence, either use actual Paper/Live history or archive historical Polymarket order books; Binance candles alone cannot reproduce premarket FAK liquidity and real fill prices.
+Notes: Read-only external API analysis only. No source edits, tests, DB writes, service restart, staging, commit, or push were performed.
+Blockers: Exact half-year Polymarket order-book history was not available, so real historical FAK fill quality could not be reconstructed.
+
+## Active Update 2026-07-05 BTC Up Simple Rolling Date-Gate Full-History Simulation
+Goal: Simulate the full Paper history of `BTC Up or Down 5m Up Simple` with the same rolling UTC-day hourly gate used for the SOL Down 8 analysis.
+Status: Completed
+Done:
+- Queried production PostgreSQL at `192.168.0.101/polycopytrader` read-only.
+- Resolved the strategy to code `btc_up_down_5m_up_simple`.
+- Used settled Paper rows from `strategy_market_paper_runs`, grouped by UTC day and UTC hour of `entered_at_utc`.
+- Modeled day 0 as all trades, later days as only hours whose cumulative prior Paper PnL is non-negative (`>= 0`), with a strict `> 0` variant for comparison.
+- History window covered UTC days with settled Paper rows from `2026-06-13` through partial `2026-07-05`, `838` settled Paper rows total.
+- Actual settled Paper PnL was `+119.15578350`; rolling non-negative hourly gate simulated PnL was `+142.09130934`, an improvement of `+22.93552584`.
+- Strict `prior cumulative hourly PnL > 0` variant simulated PnL was `+191.47728534`, an improvement of `+72.32150184`.
+- Current strategy settings at query time: `enabled=true`, `live_stakes=false`, `live_stake_amount=1.00000000`, `live_available_balance=100.00000000`. Live orders had `497` settled rows, W/L `233/264`, realized Live PnL `+0.25196700`.
+- Day-level non-negative gate results: day0 `2026-06-13` same as actual `+79.17709100`; `2026-06-14` actual `-75.24648700` vs gated `-69.24348700`; `2026-06-15` actual `+2.61376300` vs gated `+0.25686300`; `2026-06-16` actual `-6.29240000` vs gated `+16.03260000`; `2026-07-03` actual `+35.97718315` vs gated `+5.94671860`; `2026-07-04` actual `+67.85641353` vs gated `+61.54239632`; partial `2026-07-05` actual `+15.07021982` vs gated `+48.37912742`.
+Next: If this filter is considered for BTC Up Simple, decide whether the rule should be production-style `>= 0` or strict `> 0`; the strict variant performed materially better in this historical slice.
+Notes: Read-only DB analysis only. No DB writes, source edits, service restart, tests, staging, commit, or push were performed.
+Blockers: None.
+
+## Active Update 2026-07-05 Remove SOL Down 8 Date-Gate Live Filter
+Goal: Remove the hourly date-dependent snapshot filter from Live placement after the full-history rolling simulation showed only a small and unstable benefit.
+Status: Completed
+Done:
+- Removed the negative hourly snapshot Live skip from `BtcUpDown5mPaperStrategyProcessor` in both the Paper live-shadow placement path and the legacy Live placement path.
+- Removed the gate helper, `DateDependentStrategyIds` cache, `DateDependentStrategyLiveGateDecision`, `DateDependentSnapshotLiveGate` event recording path, and `live_date_dependent_snapshot_skipped` shadow decision path from the processor.
+- Left `StrategyIds.DateDependentStrategyVariants`, `DateDependentStrategyHourlyPaperPnlWorker`, repository methods, and hourly snapshot data intact so Paper statistics continue to accumulate for analysis.
+- Updated the SOL Down 8 date-dependent test so a negative hourly snapshot no longer blocks Live and no `DateDependentSnapshotLiveGate` event is recorded.
+Next: Deploy/restart the service, then verify that SOL Down 8 no longer records `DateDependentSnapshotLiveGate` skips and Live orders are not filtered by hourly snapshot PnL.
+Notes: `dotnet test tests\PolyCopyTrader.Tests\PolyCopyTrader.Tests.csproj --no-restore --filter "DateDependent" -p:UseSharedCompilation=false /nr:false /nologo -v:minimal` passed 7/7. `dotnet test tests\PolyCopyTrader.Tests\PolyCopyTrader.Tests.csproj --no-restore --filter "FullyQualifiedName~DateDependent|FullyQualifiedName~PaperLiveShadow" -p:UseSharedCompilation=false /nr:false /nologo -v:minimal` passed 9/9. `git diff --check -- src\PolyCopyTrader.Service\Strategies\BtcUpDown5mPaperStrategyProcessor.cs tests\PolyCopyTrader.Tests\BtcUpDown5mPaperStrategyProcessorTests.cs` passed with LF/CRLF warnings only. No DB writes, service restart, staging, commit, or push were performed. The touched files already contain unrelated dirty changes from earlier tasks, so no commit was created.
+Blockers: None.
+
+## Active Update 2026-07-05 SOL Down 8 Rolling Date-Gate Full-History Simulation
+Goal: Simulate the full Paper history of `SOL Up or Down 5m Down 8 bps Reference Average Premarket` with a rolling UTC-day hourly gate: day 0 trades all hours, later days trade only hours whose cumulative prior Paper PnL is non-negative.
+Status: Completed
+Done:
+- Queried production PostgreSQL at `192.168.0.101/polycopytrader` read-only.
+- Used strategy code `sol_up_down_5m_down_bps_8_fak_premarket` and settled Paper rows from `strategy_market_paper_runs`.
+- Modeled the production rule `prior cumulative hourly PnL >= 0` as allowed, with Paper statistics continuing in all hours.
+- History window covered UTC days `2026-07-01` through partial `2026-07-05`, `755` settled Paper rows.
+- Actual settled Paper PnL was `+116.88894830`; rolling non-negative hourly gate simulated PnL was `+139.08182562`, an improvement of `+22.19287732`.
+- Strict `prior cumulative hourly PnL > 0` variant simulated PnL was `+139.74957662`, an improvement of `+22.86062832`.
+- Current strategy settings at query time: `live_stakes=true`, `live_stake_amount=1.00000000`, `live_available_balance=42.89306300`. Live orders had `732` settled rows, W/L `388/344`, realized Live PnL `+100.39959600`.
+- Day-level non-negative gate results: day0 `2026-07-01` same as actual `+65.49594300`; `2026-07-02` actual `+57.11244600` vs gated `+21.00640100`; `2026-07-03` actual `+56.63235900` vs gated `+78.73168900`; `2026-07-04` actual `-60.05946700` vs gated `+34.01389000`; partial `2026-07-05` actual `-2.29233270` vs gated `-60.16609738`.
+Next: Re-run after full UTC day `2026-07-05` settles; current partial day is the main unstable part.
+Notes: Read-only DB analysis only. No DB writes, source edits, service restart, tests, staging, commit, or push were performed. The comparison assumes the intended system design where Paper continues to place all hours even when Live is skipped, so future hourly statistics remain complete.
+Blockers: None.
+
+## Active Update 2026-07-05 Reenable SOL Down 8 Date-Gate Live Filter
+Goal: Re-enable the hourly date-dependent snapshot Live filter, but keep it scoped only to `SOL Up or Down 5m Down 8 bps Reference Average Premarket`.
+Status: Completed
+Done:
+- Restored the negative hourly snapshot Live skip in `BtcUpDown5mPaperStrategyProcessor` for strategies in `StrategyIds.DateDependentStrategyVariants`.
+- Confirmed `StrategyIds.DateDependentStrategyVariants` currently contains only `SolUpDown5mDown8BpsReferenceAveragePremarketCode`, so the restored filter applies only to `SOL Up or Down 5m Down 8 bps Reference Average Premarket`.
+- Restored gate behavior in both Paper live-shadow placement and legacy Live placement: if the current UTC-hour snapshot row exists and `realized_pnl_usd < 0`, Live is skipped; Paper is kept for future snapshot statistics.
+- Restored `DateDependentSnapshotLiveGate` event recording and `live_date_dependent_snapshot_skipped` paper live-shadow decision status for blocked Live-shadow attempts.
+- Updated the focused SOL Down 8 test so a negative hourly snapshot skips Live but keeps the Paper entry.
+Next: Deploy/restart the service, then verify future negative-hour SOL Down 8 attempts record `DateDependentSnapshotLiveGate` while other strategies are unaffected.
+Notes: `dotnet test tests\PolyCopyTrader.Tests\PolyCopyTrader.Tests.csproj --no-restore --filter "DateDependent" -p:UseSharedCompilation=false /nr:false /nologo -v:minimal` passed 7/7. `dotnet test tests\PolyCopyTrader.Tests\PolyCopyTrader.Tests.csproj --no-restore --filter "FullyQualifiedName~DateDependent|FullyQualifiedName~PaperLiveShadow" -p:UseSharedCompilation=false /nr:false /nologo -v:minimal` passed 9/9. `git diff --check -- src\PolyCopyTrader.Service\Strategies\BtcUpDown5mPaperStrategyProcessor.cs tests\PolyCopyTrader.Tests\BtcUpDown5mPaperStrategyProcessorTests.cs` passed with LF/CRLF warnings only. No DB writes, service restart, staging, commit, or push were performed. The touched files already contain unrelated dirty changes from earlier tasks, so no commit was created.
+Blockers: None.
+
+## Active Update 2026-07-05 Disable Date-Gate Live Filter
+Goal: Temporarily remove the hourly date-dependent snapshot filter from Live placement while continuing to collect hourly Paper statistics.
+Status: Completed
+Done:
+- Removed the negative hourly snapshot Live skip from `BtcUpDown5mPaperStrategyProcessor` in both the Paper live-shadow placement path and the legacy Live placement path.
+- Left `StrategyIds.DateDependentStrategyVariants`, `DateDependentStrategyHourlyPaperPnlWorker`, repository reads/writes, and snapshot data model intact so hourly Paper snapshots can keep updating.
+- Removed the old `EvaluateDateDependentStrategyLiveGateAsync` gate helper and the `DateDependentStrategyIds` cache from the processor.
+- Updated the SOL Down 8 date-dependent test so a negative hourly snapshot no longer blocks Live and no `DateDependentSnapshotLiveGate` event is recorded.
+Next: Deploy/restart the service, then verify that SOL Down 8 no longer records `DateDependentSnapshotLiveGate` skips and Live orders are not filtered by hourly snapshot PnL.
+Notes: `dotnet test tests\PolyCopyTrader.Tests\PolyCopyTrader.Tests.csproj --no-restore --filter "DateDependent" -p:UseSharedCompilation=false /nr:false /nologo -v:minimal` passed 7/7. `dotnet test tests\PolyCopyTrader.Tests\PolyCopyTrader.Tests.csproj --no-restore --filter "FullyQualifiedName~DateDependent|FullyQualifiedName~PaperLiveShadow" -p:UseSharedCompilation=false /nr:false /nologo -v:minimal` passed 9/9. `git diff --check -- src\PolyCopyTrader.Service\Strategies\BtcUpDown5mPaperStrategyProcessor.cs tests\PolyCopyTrader.Tests\BtcUpDown5mPaperStrategyProcessorTests.cs` passed with LF/CRLF warnings only. No DB writes, service restart, staging, commit, or push were performed. The touched files already contain unrelated dirty changes from earlier tasks, so no commit was created.
+Blockers: None.
+
+## Active Update 2026-07-05 Date-Gate Recommendation
+Goal: Decide whether to keep the hourly date-dependent Live gate or keep collecting statistics only.
+Status: Completed
+Done:
+- Recommended keeping the hourly snapshot gate enabled for `SOL Up or Down 5m Down 8 bps Reference Average Premarket` as a Live risk filter, not as a proven statistical edge.
+- Basis: the SOL Down 8 historical simulation improved the last `2026-07-04 00:00 UTC` to `2026-07-05 10:27 UTC` window by `+54.99463700`, but the effect was unstable by day: `2026-07-04` improved by `+94.07335700`, while current partial `2026-07-05` worsened by `-39.07872000`.
+- Recommended continuing to collect Paper in all hours and reviewing the filter after several more full UTC days, with special attention to whether each blocked hour is consistently negative across days rather than just negative in total.
+Next: Monitor SOL Down 8 date-gate skipped Live events versus Paper outcomes for at least several more days before generalizing the filter to other strategies.
+Notes: Advisory decision only. No DB queries beyond task initialization, no DB writes, source edits, tests, service restart, staging, commit, or push were performed. Worktree remains dirty with unrelated prior changes.
+Blockers: None.
+
+## Active Update 2026-07-05 SOL Down 8 Historical Date-Gate Simulation
+Goal: Model how `SOL Up or Down 5m Down 8 bps Reference Average Premarket` would have performed if a UTC-hour snapshot existed before `2026-07-04 00:00 UTC` and Live-style gating allowed only non-negative snapshot hours through the following day and current partial day.
+Status: Completed
+Done:
+- Queried production PostgreSQL at `192.168.0.101/polycopytrader` read-only.
+- Used strategy code `sol_up_down_5m_down_bps_8_fak_premarket` and settled Paper rows from `strategy_market_paper_runs`.
+- Built a pre-cutoff UTC-hour snapshot from settled Paper runs with `entered_at_utc < 2026-07-04 00:00 UTC`.
+- Simulated the post-cutoff window from `2026-07-04 00:00 UTC` through DB time `2026-07-05 10:27:08 UTC`: actual Paper PnL was `-81.14684438`, while gated PnL would have been `-26.15220738`.
+- The model would have skipped `127` settled Paper bets in UTC hours `0,1,3,4,6,10,16,19,21,22`; those skipped bets actually made `-54.99463700`, so the gate would have improved PnL by `+54.99463700`.
+- Day split: `2026-07-04` actual `-60.05946700` versus gated `+34.01389000`; `2026-07-05` actual `-21.08737738` versus gated `-60.16609738`.
+Next: None.
+Notes: Read-only DB analysis only. No DB writes, source edits, service restart, tests, staging, commit, or push were performed. The simulation used a fixed as-of timestamp inside one database session so summary/day/hour numbers are consistent while live data continues changing.
+Blockers: None.
+
+## Active Update 2026-07-05 ETH Down 1 Historical Date-Gate Simulation
+Goal: Model how `ETH Up or Down 5m Down 1 bps Reference Average Premarket` would have performed if a UTC-hour snapshot existed before `2026-07-04 00:00 UTC` and Live-style gating allowed only non-negative snapshot hours through the following day and current partial day.
+Status: Completed
+Done:
+- Queried production PostgreSQL at `192.168.0.101/polycopytrader` read-only.
+- Used strategy code `eth_up_down_5m_down_reference_average_bps_1_fak_premarket` and settled Paper rows from `strategy_market_paper_runs`.
+- Built a pre-cutoff UTC-hour snapshot from settled Paper runs with `entered_at_utc < 2026-07-04 00:00 UTC`.
+- Simulated the post-cutoff window from `2026-07-04 00:00 UTC` through DB time `2026-07-05 10:20:50 UTC`: actual Paper PnL was `+44.37936944`, while gated PnL would have been `-21.65901620`.
+- The model would have skipped `36` settled Paper bets in UTC hours `11,14,17,19,21`; those skipped bets actually made `+66.03838564`, so the gate would have worsened PnL by `-66.03838564`.
+- Day split: `2026-07-04` actual `+96.78923902` versus gated `+30.75085338`; `2026-07-05` actual and gated both `-52.40986958` because no settled bets so far fell into blocked hours.
+Next: None.
+Notes: Read-only DB analysis only. No DB writes, source edits, service restart, tests, staging, commit, or push were performed. The pre-cutoff snapshot is based on limited early Paper history; UTC hours `00`-`05` had no pre-cutoff rows and were allowed because their snapshot PnL was `0`.
+Blockers: None.
+
+## Active Update 2026-07-05 ETH Down 1 Paper Hourly Snapshot
+Goal: Build a UTC-hourly Paper-history PnL layout for `ETH Up or Down 5m Down 1 bps Reference Average Premarket`.
+Status: Completed
+Done:
+- Queried production PostgreSQL at `192.168.0.101/polycopytrader` read-only.
+- Used strategy code `eth_up_down_5m_down_reference_average_bps_1_fak_premarket`.
+- Grouped `strategy_market_paper_runs` by UTC hour of `entered_at_utc`.
+- Counted entered runs, settled runs, W/L, current open entered runs, settled stake, and realized Paper PnL.
+- Totals by entered Paper history: `414` entered runs, `412` settled, `231` won, `181` lost, `1` open entered, PnL `+203.07019518`.
+- Also noted `205` skipped runs in total for the strategy; most skipped rows do not have `entered_at_utc`, so they are not included in the hourly-by-entry table.
+- Best UTC hours by settled Paper PnL: `07:00` `+75.60627036`, `10:00` `+29.79384573`, `15:00` `+23.86952371`, `06:00` `+23.39847726`, `05:00` `+21.76842822`.
+- Worst UTC hours: `01:00` `-21.48084547`, `08:00` `-13.93505226`, `00:00` `-12.14054240`, `18:00` `-7.97965094`, `14:00` `-7.87730081`.
+Next: None.
+Notes: Read-only DB analysis only. No DB writes, source edits, service restart, tests, staging, commit, or push were performed. Worktree remains dirty with unrelated prior changes.
+Blockers: None.
+
+## Active Update 2026-07-05 ETH Down 2 Live Snapshot By Day
+Goal: Split the Live hourly snapshot for `ETH Up or Down 5m Down 2 bps Reference Average Premarket` by UTC day.
+Status: Completed
+Done:
+- Queried production PostgreSQL at `192.168.0.101/polycopytrader` read-only.
+- Recomputed the same Live-order snapshot grouped by `(UTC day, UTC hour)` from `live_orders.created_at_utc`.
+- Noted data changed since the immediately previous hourly snapshot because new Live orders appeared.
+- Day `2026-07-04`: `108` Live orders, `106` matched, `2` cancelled, `0` preflight rejected, `106` settled, `57` won, `49` lost, PnL `+6.90881200`.
+- Day `2026-07-05`: `56` Live orders, `49` matched, `3` cancelled, `4` preflight rejected, `47` settled, `19` won, `28` lost, PnL `-63.42644300`.
+- Combined current totals: `164` Live orders, `155` matched, `5` cancelled, `4` preflight rejected, `153` settled, `76` won, `77` lost, PnL `-56.51763100`.
+Next: Re-run after more settlements if a fully settled current-day table is needed.
+Notes: Read-only DB analysis only. No DB writes, source edits, service restart, tests, staging, commit, or push were performed. Worktree remains dirty with unrelated prior changes.
+Blockers: None.
+
+## Active Update 2026-07-05 ETH Down 2 Live Hourly Snapshot
+Goal: Build a UTC-hourly PnL snapshot for `ETH Up or Down 5m Down 2 bps Reference Average Premarket` from Live orders.
+Status: Completed
+Done:
+- Queried production PostgreSQL at `192.168.0.101/polycopytrader` read-only.
+- Used strategy code `eth_up_down_5m_down_reference_average_bps_2_fak_premarket`.
+- Grouped Live orders by UTC hour of `live_orders.created_at_utc`.
+- Counted Live orders, matched/cancelled/preflight rejected orders, settled rows, wins/losses, filled notional, and realized Live PnL.
+- Totals: `161` Live orders, `153` matched, `4` cancelled, `4` preflight rejected, `150` settled, `75` won, `75` lost, realized PnL `-50.26763300`.
+- Best UTC hours by settled Live PnL in this snapshot: `07:00` `+28.854215`, `19:00` `+22.466801`, `11:00` `+15.112941`, `10:00` `+11.105000`, `09:00` `+7.559651`.
+- Worst UTC hours: `13:00` `-35.999994`, `06:00` `-24.679243`, `00:00` `-21.296092`, `20:00` `-14.757922`, `08:00` `-13.148764`.
+Next: If this Live-based hourly snapshot should be persistent/automated, add a dedicated Live hourly snapshot table/worker instead of reusing the Paper-only `date_dependent_strategy_hourly_paper_pnl` table.
+Notes: Read-only DB analysis only. No DB writes, source edits, service restart, tests, staging, commit, or push were performed. Worktree remains dirty with unrelated prior changes.
+Blockers: None.
+
+## Active Update 2026-07-05 Post-Deploy Date Gate Check
+Goal: Verify the deployed service after adding the date-dependent hourly snapshot Live gate.
+Status: Completed
+Done:
+- Queried production PostgreSQL at `192.168.0.101/polycopytrader` after the user's deploy.
+- Confirmed `PolyCopyTrader.Service` is `Running` in `Live` mode, started at `2026-07-05 10:49:06+03`, with heartbeat age about `8` seconds at check time.
+- Confirmed post-start Live activity: `5` Live orders after service start, all `Matched`, `0` `PreflightRejected`, `0` `Cancelled`.
+- Confirmed post-start live-shadow sync health: `5` shadow decisions after service start, and `bad_matched_shadow_rows_post_start=0`; Paper shadow rows matched Live average fill, notional, and size.
+- Confirmed `sol_up_down_5m_down_bps_8_fak_premarket` stayed enabled and Live; latest current-hour snapshot row was UTC hour `7` with PnL `+67.40309798`, so the new gate correctly had no reason to block Live.
+- Confirmed no `DateDependentSnapshotLiveGate` events yet; this is expected while the current snapshot hour is positive.
+- Noted only `3` post-start API errors: initial BTC/ETH/SOL Binance trade stream "has not received a price yet" messages at startup; no ongoing post-start API error stream was seen in this check.
+Next: Watch a UTC hour with negative snapshot PnL to verify the `DateDependentSnapshotLiveGate` skip path in production.
+Notes: Production DB read-only check only. No source edits, DB writes, service restart, staging, commit, or push were performed. `git pull --ff-only` was already up to date; worktree remains dirty with unrelated prior changes.
+Blockers: None.
+
+## Active Update 2026-07-05 Date-Dependent Live Snapshot Gate
+Goal: Before Live placement, make date-dependent strategies use their UTC-hour Paper PnL snapshot as a Live-only gate while always preserving Paper data.
+Status: Completed
+Done:
+- Added a flat repository read for `date_dependent_strategy_hourly_paper_pnl` by strategy id and UTC hour.
+- Added a date-dependent Live gate in `BtcUpDown5mPaperStrategyProcessor`: strategies in `StrategyIds.DateDependentStrategyVariants` read the current UTC hour snapshot before Live placement.
+- If a snapshot row exists and `realized_pnl_usd < 0`, Live is skipped without changing the strategy `Live` checkbox; a `DateDependentSnapshotLiveGate` event is recorded and the Paper live-shadow decision gets `live_date_dependent_snapshot_skipped`.
+- If snapshot PnL is `0` or positive, Live continues normally. If no snapshot row exists, Live is not blocked.
+- Kept Paper history intact for blocked Live-shadow attempts by filling the Paper shadow through the already calculated paper-mode FAK/order-book model and leaving the run `Entered`.
+- Applied the gate to both Paper live-shadow placement and the legacy Live placement path.
+- Added focused tests for `SOL Up or Down 5m Down 8 bps Reference Average Premarket`: negative hourly snapshot skips Live but keeps Paper entry; zero hourly snapshot allows Live.
+Next: Deploy/restart the service, then confirm future negative-hour skips appear as `DateDependentSnapshotLiveGate` events and Paper rows still settle into the hourly snapshot.
+Notes: `dotnet test tests\PolyCopyTrader.Tests\PolyCopyTrader.Tests.csproj --no-restore --filter "DateDependent"` passed 7/7. `dotnet test tests\PolyCopyTrader.Tests\PolyCopyTrader.Tests.csproj --no-restore --filter "FullyQualifiedName~DateDependent|FullyQualifiedName~PaperLiveShadow"` passed 9/9. A broader `DateDependent|PaperLiveShadow|LiveStake` subset passed 39 tests and failed 2 existing ETH `LiveStake` tests with `EntriesPlaced=0`; those tests use current-time previous-result due logic and are outside the new snapshot gate. `git diff --check` passed with LF/CRLF warnings only. No DB writes, service restart, staging, commit, or push were performed because the worktree already contains many unrelated dirty changes, including shared files touched by this task.
+Blockers: None.
+
+## Active Update 2026-07-05 SOL Down 8 Snapshot Paper Live Hourly Compare
+Goal: Compare UTC-hourly snapshot, direct Paper, and direct Live data for `SOL Up or Down 5m Down 8 bps Reference Average Premarket`.
+Status: Completed
+Done:
+- Queried production PostgreSQL `192.168.0.101/polycopytrader` read-only.
+- Compared `date_dependent_strategy_hourly_paper_pnl`, `strategy_market_paper_runs` grouped by UTC hour of `entered_at_utc`, and `live_orders` grouped by UTC hour of `created_at_utc`.
+- Snapshot totals: `718` settled, `384` won, `334` lost, PnL `+137.25461743`.
+- Direct Paper totals: `720` settled, `386` won, `334` lost, PnL `+149.25461743`.
+- Direct Live totals: `708` settled, `379` won, `329` lost, PnL `+139.83472800`.
+- Snapshot vs Paper differs only at UTC hour `06:00`: Paper has `2` extra wins and `+12.000000` PnL after the latest snapshot refresh.
+- Live vs Paper differs at UTC hours `05:00` and `06:00`; all other UTC hours match exactly.
+Next: Refresh the date-dependent snapshot again if the dashboard must reflect the newest Paper rows immediately.
+Notes: Read-only diagnostics only. No DB writes, source edits, tests, build, service restart, staging, commit, or push were performed.
+Blockers: None.
+
+## Active Update 2026-07-05 SOL Down 8 Hourly Snapshot Refresh
+Goal: Recalculate the date-dependent hourly Paper PnL snapshot for `SOL Up or Down 5m Down 8 bps Reference Average Premarket`.
+Status: Completed
+Done:
+- Connected to production PostgreSQL at `192.168.0.101/polycopytrader`.
+- Scoped refresh to `sol_up_down_5m_down_bps_8_fak_premarket` (`b7c50005-0000-4000-8139-000000000108`) and upserted its 24 UTC-hour snapshot rows in `date_dependent_strategy_hourly_paper_pnl`.
+- Left other strategy snapshot rows untouched.
+- Verified source settled Paper runs and snapshot totals match exactly: `718` settled, `384` won, `334` lost, stake `4308.20400704`, realized PnL `+137.25461743`.
+- Snapshot rows refreshed at `2026-07-05 09:49:46.466729+03`.
+Next: None.
+Notes: Production DB write only. No source code edits, build, tests, service restart, staging, commit, or push were performed. The strategy was enabled and Live at refresh time.
+Blockers: None.
+
+## Active Update 2026-07-05 FAK Live Shadow Expected Price Difference
+Goal: Treat the normal FAK `paper fill price` versus `live worst-price cap` difference as a regular path, not an incident.
+Status: Completed
+Done:
+- Updated `src/PolyCopyTrader.Service/LiveTrading/LiveTradingProcessor.cs` so expected FAK shadow pricing no longer records an incident when `paper.Price` is below the Live FAK cap and `live.Price` is the expected `0.99`.
+- Kept non-blocking incident recording only for suspicious FAK price shape: Paper price above Live cap, or Live FAK cap not equal to `0.99`.
+- Preserved critical disabling behavior for real blocking shape mismatches and non-FAK price mismatches.
+- Updated `tests/PolyCopyTrader.Tests/LiveTradingGatingTests.cs`: the normal FAK `paper≈0.52/live=0.99` path now expects no discrepancy/event; a separate unexpected-cap test still expects a warning incident.
+Next: Deploy/restart the service. After that the normal FAK price gap should be silent; only truly suspicious FAK caps should appear as `PaperLiveShadowIncident`.
+Notes: `dotnet test tests\PolyCopyTrader.Tests\PolyCopyTrader.Tests.csproj --no-restore --filter "FullyQualifiedName~LiveTradingGatingTests" -p:UseSharedCompilation=false /nr:false /nologo -v:minimal` passed 23/23 with one existing test nullable warning. `git diff --check -- src\PolyCopyTrader.Service\LiveTrading\LiveTradingProcessor.cs tests\PolyCopyTrader.Tests\LiveTradingGatingTests.cs` passed with LF/CRLF warnings only. No DB writes, service restart, staging, commit, or push were performed. The touched files already contain unrelated dirty changes from earlier tasks; they were preserved.
+Blockers: None.
+
+## Active Update 2026-07-05 FAK Live Shadow Price Incident
+Goal: Stop FAK Paper/Live shadow price divergence from automatically removing the strategy `Live` checkbox, while still recording it for follow-up.
+Status: Completed
+Done:
+- Changed `src/PolyCopyTrader.Service/LiveTrading/LiveTradingProcessor.cs` so FAK live-shadow `limit_price mismatch` is classified as a non-blocking incident instead of a blocking shape mismatch.
+- The service now writes these FAK price divergences to `paper_live_shadow_discrepancies` with classification `paper_live_shadow_shape_incident`, severity `warning`, and `live_stakes_disabled=false` in raw JSON.
+- The service also writes a `live_trading_events` row with action `PaperLiveShadowIncident`, status `Warning`.
+- `Live` is no longer set to false and open live orders are no longer cancelled for this FAK price-divergence case.
+- Other blocking shadow mismatches, including non-FAK price mismatches, still use the existing critical discrepancy path and still disable Live.
+- Updated `tests/PolyCopyTrader.Tests/LiveTradingGatingTests.cs` to cover both the new FAK incident behavior and preserved non-FAK disabling behavior.
+Next: Deploy/restart the service, then manually re-enable the intended Live strategies; future FAK `paper≈0.52/live=0.99` cases should log incidents instead of dropping `Live`.
+Notes: `dotnet test tests\PolyCopyTrader.Tests\PolyCopyTrader.Tests.csproj --no-restore --filter "FullyQualifiedName~LiveTradingGatingTests" -p:UseSharedCompilation=false /nr:false /nologo -v:minimal` passed 22/22 with existing Storage nullable warnings. `git diff --check -- src\PolyCopyTrader.Service\LiveTrading\LiveTradingProcessor.cs tests\PolyCopyTrader.Tests\LiveTradingGatingTests.cs` passed with LF/CRLF warnings only. No DB writes, service restart, staging, commit, or push were performed. The touched files already contained unrelated dirty changes from earlier tasks; they were preserved.
+Blockers: None.
+
+## Active Update 2026-07-05 Live Checkbox Auto Reset Diagnosis
+Goal: Diagnose why server strategies automatically lose the `Live` checkbox.
+Status: Completed
+Done:
+- Connected read-only to production PostgreSQL at `192.168.0.101/polycopytrader` and confirmed `PolyCopyTrader.Service` is running in `Live` mode with heartbeat at `2026-07-05 09:18:39+03`, started at `2026-07-05 08:51:38+03`.
+- Found only `1` strategy currently has `live_stakes=true`: `eth_up_down_5m_up_bps_50_instant`.
+- Confirmed this is not caused by Live balance exhaustion in the current strategy table: no strategies have `live_available_balance < live_stake_amount` or `live_available_balance <= 0`.
+- Found the active cause in `paper_live_shadow_discrepancies` / `live_trading_events`: `paper_live_shadow_shape_mismatch` with `limit_price mismatch: paper=~0.51/0.52; live=0.99`.
+- Affected strategies in the last 12h include `sol_up_down_5m_down_bps_8_fak_premarket`, `sol_up_down_5m_down_bps_85_fak_premarket`, `sol_up_down_5m_down_bps_90_fak_premarket`, `eth_up_down_5m_down_reference_average_bps_2_fak_premarket`, `btc_up_down_5m_down_diff_1_fak_premarket`, and `btc_up_down_5m_down_diff_2_fak_premarket`.
+- Verified the code path: `LiveTradingProcessor.SyncPaperShadowAsync` calls `ValidateShadowOrderShape`; on any mismatch it calls `RecordShadowDiscrepancyAndDisableLiveAsync`, which records the discrepancy and calls `SetStrategyLiveStakesAsync(..., false, ...)`.
+- Root cause assessment: for FAK Live-shadow orders, `liveOrder.Price=0.99` is the guaranteed worst-price / market-buy cap, while the Paper shadow price around `0.52` is the simulated/executable fill price. The validator currently compares these as if both were the same limit price, so it falsely treats valid FAK shadow orders as critical shape mismatches and disables Live.
+Next: Fix FAK live-shadow validation so it does not compare Paper fill price to Live worst-price cap; for FAK it should compare asset/condition/outcome/order type/post-only and rely on actual Live average fill when syncing Paper. After deployment, re-enable intended Live strategies manually.
+Notes: Read-only production diagnostics only. A follow-up compact DB query was blocked by PostgreSQL `too many clients already`, but the root-cause tables had already been read successfully. No source edits, DB writes, tests, staging, or commit were performed.
+Blockers: Production PostgreSQL intermittently rejects new connections due to client exhaustion.
+
+## Active Update 2026-07-05 SOL Down 90 Hourly Snapshot
+Goal: Rebuild the hourly Paper success/PnL snapshot for `SOL Up or Down 5m Down 90 bps Reference Average Premarket`.
+Status: Completed
+Done:
+- Refreshed production `date_dependent_strategy_hourly_paper_pnl` manually for strategy `sol_up_down_5m_down_bps_90_fak_premarket` (`b7c50005-0000-4000-8139-000000000190`) on `192.168.0.101/polycopytrader`.
+- Upserted `24` UTC-hour rows from settled `strategy_market_paper_runs`.
+- Verified snapshot totals match source runs exactly: `149` settled, `88` won, `61` lost, stake `894.07317208`, realized PnL `+106.08307648`.
+- Noted the strategy is enabled but not Live and not paused at refresh time.
+Next: Add Down 90 to `StrategyIds.DateDependentStrategyVariants` if this snapshot should be maintained automatically; the current date-dependent worker allowlist still contains only SOL Down 8 and can delete this manual Down 90 snapshot on a future refresh.
+Notes: Production DB write only. No source edits, service restart, tests, staging, or commit were performed.
+Blockers: None.
+
+## Active Update 2026-07-05 Paper History Trust Assessment
+Goal: Estimate current production Paper history reliability after the Paper-shadow sync and follow-up deploy.
+Status: Completed
+Done:
+- Verified production `PolyCopyTrader.Service` is running in `Live` mode after restart at `2026-07-05 08:51:38+03` with fresh heartbeat.
+- Checked current Paper history on `192.168.0.101/polycopytrader`: `153127+` paper orders, first `2026-06-05`, latest current.
+- Confirmed Live-shadow exact-copy data is clean: `0` bad linked Live/Paper shadow rows after sync; live-shadow actual-fill rows use `live_order_actual_fill_v1`.
+- Confirmed the main Paper-only body is the new executable FAK snapshot model: about `129k` filled rows with `fak_taker_executable_snapshot_v2`; order/fill mismatches were `0`, run price/size differences were `0`, max run/order notional difference was only `0.00000145`.
+- Checked FAK model quote quality: mostly `websocket_cache` with average quote age about `185ms`, max about `1.5s`, `0` partial fills, max `10` ask levels used.
+- Found lower-trust legacy/no-model rows remain: about `7188` filled rows with `fill_model=(none)`, mostly old/current BTC `Less/More`, `Binance`, maker, and GTD limit strategies; `9` such rows were created after the latest restart.
+- Found `145` settled old maker rows missing `paper_position_settlements`; this affects settlement-table aggregates but not `strategy_market_paper_runs` PnL.
+Next: Treat `live_order_actual_fill_v1` as exact, `fak_taker_executable_snapshot_v2` as usable but simulated, and `fill_model=(none)` as low-confidence legacy history unless those strategies are explicitly migrated or excluded.
+Notes: Read-only production diagnostics only. No production writes, source edits, service restart, tests, staging, or commit were performed in this assessment turn.
+Blockers: None.
+
+## Active Update 2026-07-05 Paper Shadow Live Sync
+Goal: Synchronize existing production Paper-shadow orders with their linked Live orders.
+Status: Completed
+Done:
+- Connected to the production PostgreSQL database at `192.168.0.101/polycopytrader`; the local `127.0.0.1` database was not used because it was stale.
+- Synced `3026` matched Live-shadow orders into their Paper-shadow duplicates: `paper_orders`, `paper_fills`, `strategy_market_paper_runs`, `paper_positions`, and `paper_position_settlements` now use actual Live fill price, size, notional, settlement value, and realized PnL.
+- Corrected `30` non-matched Live-shadow orders whose Paper rows were still filled: Paper orders are cancelled, fills/settlements removed, runs marked skipped, and positions zeroed.
+- Created audit table `maintenance_paper_shadow_live_sync_20260705` with `3056` before-change snapshots.
+- Verified production after sync: `matched_bad=0`, `nonmatched_bad=0`; settled Live-shadow totals match exactly across Live, Paper runs, and Paper settlements (`+375.15089286`).
+- Refreshed the SOL Down 8 hourly Paper PnL snapshot after sync; it now matches source runs: `704` settled, `375` won, `329` lost, PnL `+116.75780602`.
+- Fixed `PostgresAppRepository.UpdatePaperOrderAsync` so future Paper-shadow actual-fill updates persist `price`, `size_shares`, and `notional_usd`, and added a storage regression test.
+Next: Deploy/restart the service again so the `UpdatePaperOrderAsync` persistence fix is active in production; the currently running service is still on commit `d5457d3f`.
+Notes: Production service remained `Running`/`Live` with fresh heartbeat after the DB sync. Verification passed: focused storage regression test 1/1, service build passed with existing Storage nullable warnings, isolated ETH Down9 tests 2/2, broad live-shadow/FAK filter 34/34. General Dashboard performance snapshots were not manually rebuilt because they are refreshed by the dashboard snapshot worker and are broader/heavier than this targeted sync.
+Blockers: No commit/stage was performed because the worktree already contains many unrelated dirty changes, including shared files touched by this task.
+
+## Active Update 2026-07-05 Paper Live Shadow Actual Fill Duplicate
+Goal: Make Paper live-shadow rows duplicate the actual Live fill while keeping Paper-only strategies as realistic order-book simulations.
+Status: Completed
+Done:
+- Adopted the final intended model: normal Paper strategies use the realistic FAK/order-book model from configured `PaperStakeAmount`; Paper live-shadow rows are accounting duplicates of the actual Live fill.
+- Changed live-shadow lifecycle so the Paper shadow starts as a linked placeholder, then after a successful matched Live FAK response it is updated to `Filled` from `LiveOrder.AverageFillPrice`, `LiveOrder.FilledSize`, and `LiveOrder.FilledNotionalUsd`.
+- Added actual-fill metadata to shadow raw JSON: `paper_live_shadow_actual_fill=true` and `paper_fill_model=live_order_actual_fill_v1`.
+- Changed Live reject/preflight/error behavior so shadow Paper orders are cancelled and their strategy runs are marked skipped instead of leaving misleading filled Paper history.
+- Kept Paper-only FAK behavior independent and realistic: it still uses executable ask depth and the configured Paper amount.
+- Updated live-shadow tests to assert exact Live fill duplication and cancelled/skipped shadow rows when Live does not execute.
+Next: Deploy/restart the service so future live-shadow Paper rows become exact Live accounting duplicates.
+Notes: Service build passed with existing Storage nullable warnings. Focused 7-test actual-fill shadow check passed. Broader live-shadow/FAK test filter passed 34/34. `git diff --check` passed for touched files with LF/CRLF warnings only. No production DB writes, service restart, staging, or commit were performed.
+Blockers: None.
+
+## Active Update 2026-07-05 Paper Live Shadow Mirrors Live Stake
+Goal: Clarify and enforce that Paper live-shadow rows mirror the Live order intent, especially the effective Live stake amount.
+Status: Completed
+Done:
+- Clarified the intended semantics: Paper live-shadow copies the Live request/intent (market, outcome, FAK/live order mode, correlation, and effective Live notional), while Paper fill/PnL remains an independent realistic order-book simulation instead of being overwritten from the actual Polymarket Live fill response.
+- Fixed live-shadow sizing in both maker/high-water and opening-limit FAK paths so the Paper shadow uses `LiveStakeAmount` plus the Live lost-counter adjustment, not `PaperStakeAmount`.
+- Preserved Paper-only behavior: non-shadow Paper strategies still use `PaperStakeAmount` and Paper lost-counter settings.
+- Added focused tests where `PaperStakeAmount` intentionally differs from `LiveStakeAmount`; the Paper shadow notional must now match the submitted Live market-buy amount.
+Next: Deploy/restart the service so future live-shadow Paper rows mirror Live stake size correctly.
+Notes: Service build passed with existing Storage nullable warnings. Focused 3-test live-shadow stake mismatch check passed. Broader live-shadow/FAK filter passed 34/34. `git diff --check` passed for touched files with LF/CRLF warnings only. No production DB writes, service restart, staging, or commit were performed.
+Blockers: None.
+
+## Active Update 2026-07-04 Realistic Paper FAK Model Everywhere
+Goal: Make Paper FAK entries model Live-like market-buy behavior everywhere it is used, not only the explicit shadow path.
+Status: Completed
+Done:
+- Centralized Paper FAK filling through `EstimatePaperFakFill`, using executable ask depth, target USD notional, worst price, min order size, and spread checks.
+- Removed the old live-shadow behavior that rewrote Paper rows from actual Live fill accounting; `live_order_actual_fill_v1`/`paper_live_shadow_actual_fill` no longer exist in production code.
+- Changed opening-limit live-shadow so every FAK Live shadow path, including non-`IsFakOrderEntry` variants, creates a Filled Paper order from the FAK ask-depth model instead of a pending limit placeholder.
+- Changed maker/high-water live-shadow to do the same: Paper is Filled from the executable snapshot, with a `paper_fak_fill_model=fak_taker_executable_snapshot_v2` decision JSON marker, Paper fill row, position update, and copied-position activation before Live placement is attempted.
+- If the Paper FAK model cannot get fresh/executable depth or cannot size/fill, the run is skipped instead of recording misleading Paper history.
+- Updated focused tests so Paper shadow rows are expected as independent Filled FAK Paper rows while Live orders remain separate FAK placements.
+Next: Deploy/restart the service so future Paper rows use the corrected model; decide separately whether to clean/backfill old Paper history created before this fix.
+Notes: `dotnet build src\PolyCopyTrader.Service\PolyCopyTrader.Service.csproj --no-restore -p:UseSharedCompilation=false -p:OutDir="$env:TEMP\PolyCopyTraderServicePaperFakBuild\" /nr:false /nologo -v:minimal` passed with existing Storage nullable warnings. Focused live-shadow/FAK test filter passed 34/34. `rg` confirmed removed old actual-Live-fill markers from `src`; only negative `DoesNotContain` tests remain. `git diff --check` passed for touched files with LF/CRLF warnings only. A full `BtcUpDown5mPaperStrategyProcessorTests` run still has 31 failures in unrelated existing strategy/test drift areas (previous-result readiness, missing revert variants, and old instant-price expectations). No production DB writes, service restart, staging, or commit were performed because the worktree already contained many unrelated pending changes, including in shared files.
+Blockers: Full large processor suite is not clean because of existing unrelated drift.
+
+## Active Update 2026-07-04 SOL Down 8 Live Paper PnL Gap Root Cause
+Goal: Explain why Live PnL differs from Paper PnL for `SOL Up or Down 5m Down 8 bps Reference Average Premarket`.
+Status: Completed
+Done:
+- Queried production PostgreSQL `192.168.0.101/polycopytrader` read-only and compared linked Live/Paper rows.
+- Found outcomes match: `615` linked rows, `331` wins and `284` losses in both Live and Paper.
+- Found the PnL gap is caused by size/cost basis, not by direction: Live PnL `+139.576548`, Paper PnL `+81.540466`, difference `+58.036082`.
+- Live uses full market buy amount around `6.0093` per order: total Live cost `3690.092482`, total Live size `7138.286970`.
+- Paper uses about `6.07` shares per order at actual fill price around `0.47-0.52`, so effective Paper stake is about `3.13` per order: total Paper stake `1927.629534`, total Paper size `3733.050000`.
+- Code inspection confirms the mismatch: Paper sizing falls back to `TargetSizeShares = stakeMultiplier / referencePrice` with reference/worst price `0.99`, while Live FAK submits `MarketBuyAmountUsd = liveNotional` and allows filled size above requested for FAK, so at a real ask around `0.50` Live receives nearly double shares.
+Next: Fix Paper FAK shadow semantics so Paper models the same market-buy amount as Live, then decide whether to backfill existing Paper history.
+Notes: Read-only diagnostics plus code inspection only. No production writes, source edits beyond context/history, service restart, build, tests, staging, or commit were performed.
+Blockers: None.
+
+## Active Update 2026-07-04 SOL Down 8 Snapshot Paper Live Compare
+Goal: Compare three UTC+0 hourly sources for `SOL Up or Down 5m Down 8 bps Reference Average Premarket`: snapshot table, direct Paper rows, and direct Live rows.
+Status: Completed
+Done:
+- Queried production PostgreSQL `192.168.0.101/polycopytrader` read-only.
+- Compared `date_dependent_strategy_hourly_paper_pnl` snapshot, current `strategy_market_paper_runs`, and current `live_orders`, all grouped by UTC hour.
+- Snapshot is stale only in UTC hour `20`: snapshot has `23` rows / PnL `+24.954100`; current Paper and Live each have `25` rows / `16` wins / `9` losses, with Paper PnL `+18.695034` and Live PnL `+36.398996`.
+- Totals: snapshot `612` rows, `330/282`, PnL `+84.909008`; current Paper `614` rows, `330/284`, PnL `+78.649942`; current Live `614` rows, `330/284`, PnL `+134.121832`.
+- Live-Paper PnL difference is `+55.471890` overall; Paper minus snapshot is `-6.259065`, fully explained by the two newer UTC-20 Paper rows after the manual snapshot refresh.
+Next: Refresh the snapshot manually or deploy/restart the worker build before treating snapshot values as current.
+Notes: Read-only diagnostics only. No production writes, Live changes, service restart, build, tests, staging, or commit were performed.
+Blockers: None.
+
+## Active Update 2026-07-04 SOL Down 8 Hourly Discrepancy
+Goal: Explain why the earlier hourly SOL Down 8 table differs from the newly printed hourly snapshot table.
+Status: Completed
+Done:
+- Rechecked production PostgreSQL `192.168.0.101/polycopytrader` read-only.
+- Confirmed the earlier quoted figures match `live_orders.realized_pnl_usd` grouped by `Europe/Sofia` order-created hour, e.g. `10:00 Sofia = +61.638391`, `20:00 Sofia = +62.986072`, `01:00 Sofia = -64.117141`.
+- Confirmed the new table is `date_dependent_strategy_hourly_paper_pnl`, built from `strategy_market_paper_runs.realized_pnl_usd`, grouped by `entered_at_utc` hour in UTC+0.
+- For same real hours after timezone shift, Paper snapshot differs from Live accounting: `10:00 Sofia => UTC 07` has Paper `+35.079714` vs Live `+61.638391`; `20:00 Sofia => UTC 17` has Paper `+35.427779` vs Live `+62.986072`.
+- Noted the manual snapshot is also slightly stale: source Paper now has `613` settled rows and `realized_pnl_usd=81.874008`, while the printed snapshot has `612` rows and `84.909008` from `2026-07-04 20:19:28 UTC`; the worker has not yet been deployed to keep it automatic.
+Next: Deploy/restart the worker build or manually refresh the snapshot before using it as a current decision table.
+Notes: Diagnostic/read-only only. No production writes, Live changes, service restart, build, tests, staging, or commit were performed.
+Blockers: None.
+
+## Active Update 2026-07-04 Show SOL Down 8 Hourly Paper PnL
+Goal: Show the populated production hourly Paper PnL snapshot for `SOL Up or Down 5m Down 8 bps Reference Average Premarket`.
+Status: Completed
+Done:
+- Queried production PostgreSQL at `192.168.0.101/polycopytrader` read-only.
+- Retrieved all `24` rows from `date_dependent_strategy_hourly_paper_pnl` for `sol_up_down_5m_down_bps_8_fak_premarket`, ordered by `hour_utc`.
+- Snapshot refresh timestamp was `2026-07-04 20:19:28 UTC`; totals remain `612` settled, `330` won, `282` lost, `realized_pnl_usd=84.909008`.
+Next: None.
+Notes: Read-only output request. No DB writes, source edits beyond context/history, service restart, build, tests, staging, or commit were performed.
+Blockers: None.
+
+## Active Update 2026-07-04 Populate SOL Down 8 Hourly Paper PnL
+Goal: Populate the production hourly Paper PnL snapshot table for `SOL Up or Down 5m Down 8 bps Reference Average Premarket`.
+Status: Completed
+Done:
+- Connected to production PostgreSQL at `192.168.0.101/polycopytrader`; the local `127.0.0.1` database was checked first and intentionally not used because it did not contain the server Paper history.
+- Created `date_dependent_strategy_hourly_paper_pnl` if missing, with supporting indexes, on the production database.
+- Upserted exactly `24` UTC-hour rows for `sol_up_down_5m_down_bps_8_fak_premarket` from settled `strategy_market_paper_runs`, grouped by `entered_at_utc` hour in UTC+0.
+- Verification matched source totals: `24` snapshot rows, `612` settled runs, `330` won, `282` lost, `stake_usd=1918.190992`, `realized_pnl_usd=84.909008`.
+- Confirmed `PolyCopyTrader.Service` remained `Running`/`Live` with fresh heartbeat and empty `last_error`.
+Next: After deploying/restarting the new service build, `DateDependentStrategyHourlyPaperPnlWorker` will keep this table current automatically after each UTC hour.
+Notes: Production DB write only. No Live orders, Paper order history, strategy settings, source files, service restart, staging, or commit were performed. Verification used SQL summary/source reconciliation plus service heartbeat check.
+Blockers: None.
+
+## Active Update 2026-07-04 Date-Dependent Hourly Paper PnL
+Goal: Keep an always-current UTC hour-of-day Paper PnL snapshot for configured date-dependent strategies.
+Status: Completed
+Done:
+- Added `StrategyIds.DateDependentStrategyVariants`, currently containing only `SOL Up or Down 5m Down 8 bps Reference Average Premarket` (`sol_up_down_5m_down_bps_8_fak_premarket`).
+- Added PostgreSQL snapshot table `date_dependent_strategy_hourly_paper_pnl`, with one row per `(strategy_id, hour_utc)`, 24 UTC-hour rows per configured strategy, and `ON DELETE CASCADE` because the data is derived.
+- Added repository refresh logic that rebuilds the snapshot from settled `strategy_market_paper_runs`, grouped by `entered_at_utc` hour in UTC+0, including settled/won/lost counts, stake, realized PnL, average PnL, first/last entry timestamps, and refresh time.
+- Added independent service worker `DateDependentStrategyHourlyPaperPnlWorker`; it populates the snapshot immediately on service start and then refreshes after each UTC hour boundary at `HH:01`.
+- Registered the worker in the service host and documented the new Dashboard analytics snapshot in README.
+- Added focused tests covering the configured strategy collection, schema, repository SQL, worker schedule, and service registration.
+Next: Deploy/restart the service so schema initialization creates the new table and the worker starts refreshing the 24-row snapshot in production.
+Notes: `dotnet build src\PolyCopyTrader.Service\PolyCopyTrader.Service.csproj --no-restore -p:UseSharedCompilation=false -p:OutDir="$env:TEMP\PolyCopyTraderServiceDateDependentBuild\" /nr:false` passed with 0 warnings/errors. Focused tests passed 6/6. Full test project run currently has 52 failures in `BtcUpDown5mPaperStrategyProcessorTests`; this matches existing strategy/test drift in the dirty worktree and is outside this hourly-snapshot change. `git diff --check` passed for touched files with LF/CRLF warnings only. No production DB writes, service restart, staging, or commit were performed.
+Blockers: Full suite is not clean because of existing BTC/crypto strategy processor test failures.
+
+## Active Update 2026-07-04 Live Paper Restore
+Goal: Restore missing Paper history rows for Live orders after the earlier Paper-history cleanup.
+Status: Completed
+Done:
+- Queried production PostgreSQL at `192.168.0.101` and found `2378` `live_orders` without an existing `paper_orders` link; `2091` of them were filled and settled Live stakes.
+- Restored `2378` `paper_orders` and linked all affected `live_orders.paper_order_id` values through audit table `maintenance_live_paper_restore_20260704`.
+- Restored Paper execution/accounting rows for the `2091` filled Live stakes: `2091` `paper_fills`, `2091` `paper_position_settlements`, `2086` new `strategy_market_paper_runs`, and `5` existing `Skipped` runs corrected to `Settled`.
+- Preserved the existing Paper-shadow model: Paper order intent comes from the Live order cap/notional, fills use the Live execution price/filled size, and Paper run/settlement PnL is based on the Paper order size.
+- Limited Live-row changes to `paper_order_id` relinking and a technical `updated_at_utc` correction back to each row's lifecycle time; no restored row remains marked as updated in the last hour.
+- Final verification showed `0` Live orders still missing Paper links, `0` filled Live orders missing Paper links, and `0` settled Live orders missing Paper links.
+- Confirmed `PolyCopyTrader.Service` remained `Running`/`Live` with a fresh heartbeat and empty `last_error`.
+Next: Wait for the normal Dashboard snapshot worker refresh if the Dashboard does not show the restored Paper stats immediately.
+Notes: Production data write only; no Live orders were deleted, no Live financial fields were recalculated, no service restart, no source-code change, no build/test run, no staging, and no commit were performed. Snapshot tables were not manually refreshed; the service refreshes them on its normal quiet-slot cadence.
+Blockers: None.
+
+## Active Update 2026-07-04 SOL Down 8 Historical vs Live Compare
+Goal: Compare the half-year `0.52` historical model with current Live results for `SOL Up or Down 5m Down 8 bps Reference Average Premarket`.
+Status: Completed
+Done:
+- Queried production PostgreSQL at `192.168.0.101` read-only and recalculated current Live hourly results using the same fixed `0.52` entry model for apples-to-apples comparison.
+- Compared signs against `outputs/sol-down8-historical-052-2026-07-04/hourly_summary.csv`; historical and Live signs matched in `17/24` hours.
+- Matching positive hours included `02`, `05`, `10`, `11`, `12`, `14`, `15`, `17`, `18`, `20`, and `23`; matching negative hours included `00`, `01`, `04`, `07`, `09`, and `19`.
+- Conflicting hours were `03`, `06`, `08`, `13`, `16`, `21`, and `22`; the biggest conflicts were historical `21:00 -251.93` vs Live model `+42.53`, and historical `22:00 +191.84` vs Live model `-39.29`.
+- Conclusion: direction broadly overlaps, but Live sample is too short to call it validated; current Live has only `8-40` trades per hour versus about `1,600-1,845` historical trades per hour.
+Next: Accumulate more Live data or use the historical model only as a soft prior, not a hard hour filter.
+Notes: Diagnostic/read-only only. No production writes, Live changes, order submissions, cancels, service restarts, service source changes, builds, tests, staging, or commit were performed.
+Blockers: Live sample is still too small for strong per-hour validation.
+
+## Active Update 2026-07-04 SOL Down 8 Historical 0.52 Backtest
+Goal: Calculate the half-year hourly historical breakdown for `SOL Up or Down 5m Down 8 bps Reference Average Premarket` using fixed entry price `0.52`.
+Status: Completed
+Done:
+- Added and ran a temporary C#/.NET diagnostic tool under `out/sol-down8-backtest`; it uses public Binance SOLUSDT daily `1s` kline archives and writes local output files only.
+- Backtested `2026-01-04T00:00:00Z` through `2026-07-04T00:00:00Z`, with `2026-01-03` used as the 24h rolling-average warmup.
+- Modeled entry at `market_start - 30s`, selected the maximum full Reference Average over `24h`, `12h`, `6h`, `3h`, `90m`, `45m`, `20m`, and `10m`, triggered when SOL was at least `8 bps` below that average, and resolved ties as `Up`.
+- Used fixed entry price `0.52` and stake `6.0093`, so each win is `+5.54704615` and each loss is `-6.0093`.
+- Result: `52,128` observed 5m markets, `40,603` modeled entries, `21,400` wins, `19,203` losses, win rate `52.7055%`, total modeled PnL `+3310.199792`, ROI `+1.3567%`.
+- Best hourly modeled PnL in `Europe/Sofia`: `23:00 +538.99`, `02:00 +526.97`, `11:00 +469.19`, `17:00 +403.55`, `06:00 +300.00`, `14:00 +299.54`.
+- Worst hourly modeled PnL in `Europe/Sofia`: `21:00 -251.93`, `04:00 -221.88`, `01:00 -114.64`, `19:00 -85.98`, `08:00 -71.19`, `09:00 -54.55`.
+- Output files are in `outputs/sol-down8-historical-052-2026-07-04/`: `summary.txt`, `hourly_summary.csv`, `daily_hour_summary.csv`, and `trades.csv`.
+Next: If this model should drive Live filtering, decide whether to use only clearly positive hours or require additional filters for day-of-week/regime.
+Notes: No production DB writes, Live changes, order submissions, cancels, service restarts, service source changes, staging, or commit were performed. The tool downloaded public Binance data and does not depend on secrets.
+Blockers: Modeled PnL assumes constant Polymarket entry price `0.52`; it does not reconstruct historical Polymarket order-book depth or real fills.
+
+## Active Update 2026-07-04 Historical SOL Down 8 Backtest Plan
+Goal: Define how to obtain a half-year hourly breakdown analogous to the Live analysis for `SOL Up or Down 5m Down 8 bps Reference Average Premarket`.
+Status: Completed
+Done:
+- Confirmed from local code that Reference Average bps strategies enter `30` seconds before the 5m market start, compare current Binance SOL/USDT price against the largest full rolling average, and for `Down 8 bps` buy `Up` when current price is at least `8 bps` below that selected average.
+- Confirmed configured price-average windows are `24h`, `12h`, `6h`, `3h`, `90m`, `45m`, `20m`, and `10m`; cache uses `60` target samples per window, with proportional sample steps and bucket-average means.
+- Identified the most reliable historical path: Binance-only reconstruction of signal, selected average, trigger/no-trigger, Up/Down result, and hourly win/loss/edge over six months.
+- Identified the main limitation: exact Polymarket historical execution PnL needs historical premarket order book or price history; without it, PnL must be modeled with assumptions or reported separately from signal quality.
+Next: If requested, implement a read-only C# backtest tool that downloads/reads Binance SOLUSDT historical data and produces hourly CSV/Excel output.
+Notes: Used local code inspection plus official Binance/Polymarket documentation. No production DB writes, Live changes, order submissions, cancels, service restarts, source-code changes, builds, tests, staging, or commit were performed.
+Blockers: Exact half-year Polymarket fill economics are not recoverable from Binance alone.
+
+## Active Update 2026-07-04 SOL Down 8 Hourly Live Analysis
+Goal: Re-run hourly live-order analysis for `SOL Up or Down 5m Down 8 bps Reference Average Premarket`.
+Status: Completed
+Done:
+- Queried production PostgreSQL at `192.168.0.101` read-only without printing credentials.
+- Confirmed the strategy row `sol_up_down_5m_down_bps_8_fak_premarket` is enabled, Live, not paused, with `live_available_balance=71.534308`; service heartbeat was fresh.
+- Analyzed all `588` live orders from `2026-07-01T05:49:30Z` through `2026-07-04T17:19:30Z`; all were settled, with `316` wins, `272` losses, and total Live PnL `+127.181210`.
+- Grouped PnL by the hour of order creation in `Europe/Sofia`; strongest hours by total PnL were `20:00 +62.99`, `10:00 +61.64`, `23:00 +48.63`, `02:00 +36.52`, `21:00 +33.43`, and `08:00 +30.80`.
+- Worst hours by total PnL were `01:00 -64.12`, `22:00 -37.65`, `09:00 -37.26`, `07:00 -33.13`, `13:00 -32.53`, `03:00 -20.87`, and `06:00 -20.20`.
+- Checked reliability: `578` orders had exact `matched` response status with PnL `+144.784210`; `10` older `data_api_current_position_reconciled` rows contributed `-17.603000` and remain less reliable exact-fill evidence.
+Next: None.
+Notes: Diagnostic/read-only only. No production writes, Live changes, order submissions, cancels, service restarts, source-code changes, builds, tests, staging, or commit were performed.
+Blockers: None.
+
+## Active Update 2026-07-04 ETH Down 1 Reference Average Skips
+Goal: Explain why `ETH Up or Down 5m Down 1 bps Reference Average Premarket` is skipping.
+Status: Completed
+Done:
+- Queried production PostgreSQL at `192.168.0.101` read-only without printing credentials.
+- Confirmed the exact strategy is enabled, Live, not paused, with `live_available_balance=91.943693` and fresh `PolyCopyTrader.Service` heartbeat.
+- Found recent skips are strategy-condition skips, not infrastructure failures: the dominant reason is `reference_average_move_below_bps_threshold`.
+- In the last `24h`, runs were `164 Settled`, `122 Skipped`, `2 Observed`, and `1 Entered`; skip reasons were mostly threshold skips (`104`), with older small counts for expired/missing/fetch cases.
+- In the last `6h`, all `28` skips were threshold skips; in the last `1h`, all `8` skips were threshold skips.
+- Diagnostics showed this `Down 1 bps` strategy requires current ETH to be at least `1 bps` below the selected maximum full Reference Average; most skips had current ETH above the selected average, and the rest were below by less than `1 bps`.
+- Dashboard snapshot agrees: recent `top_skip_reason=reference_average_move_below_bps_threshold`, `live_condition_skipped_orders_count` matches those threshold skips, and `live_technical_skipped_orders_count=0`.
+Next: None.
+Notes: Read-only diagnostics only. No production writes, Live changes, order submissions, cancels, service restarts, source-code changes, builds, tests, staging, or commit were performed.
+Blockers: None.
+
+## Active Update 2026-07-04 Neutral Reference Average Deploy Verification
+Goal: Verify production after deploying neutral `N bps Reference Average Premarket` strategies.
+Status: Completed
+Done:
+- Queried production PostgreSQL at `192.168.0.101` read-only without printing credentials.
+- Confirmed `PolyCopyTrader.Service` is `Running`/`Live`, started `2026-07-04T14:28:54Z`, with fresh heartbeat age about `33s` and empty `last_error`.
+- Confirmed all expected `84` neutral Reference Average Premarket strategies exist: BTC/ETH/SOL each have `28` thresholds `1..10` and `15..100` step `5`; all are enabled, not paused, and not Live by default.
+- Confirmed the new strategies are being processed: in the last `30m`, neutral rows had `756` runs, `58` entered, `459` skipped, and latest run update at `2026-07-04T14:45:15Z`.
+- Confirmed decision JSON uses the new auto-direction path: recent SOL neutral entries had `reference_average_auto_direction_enabled=true`, `reference_average_direction_source=move_sign`, negative move around `-52.94 bps`, trigger `Down`, target/outcome `Up`, and `fixed_outcome=null`; higher thresholds skipped with `reference_average_move_below_bps_threshold`.
+- Confirmed current order flow is alive: last `15m` had `1015` Paper orders and `4` Live orders; Live orders were all `Matched/matched`; `live_trading_events` had `4` events and `0` non-OK.
+- Recent API errors were transient SOL Binance stale ticks plus WebSocket close/cancel messages; heartbeat and order flow continued.
+Next: None.
+Notes: `service_heartbeats.version` still reports `info=1.0.0+d5457d3...` because the neutral-strategy code was deployed from a dirty/uncommitted working tree; DB rows and live runs confirm the new binary/schema ran despite the unchanged commit marker. No production writes, Live changes, order submissions, cancels, service restarts, source-code changes, build, tests, staging, or commit were performed.
+Blockers: None.
+
+## Active Update 2026-07-04 Neutral Reference Average Premarket
+Goal: Add neutral `Currency Up or Down 5m N bps Reference Average Premarket` strategies that choose Up/Down from the reference-average move sign.
+Status: Completed
+Done:
+- Added BTC/ETH/SOL neutral Reference Average Premarket variants for thresholds `1..10` and `15..100` step `5`, with codes like `eth_up_down_5m_reference_average_bps_9_fak_premarket` and names like `ETH Up or Down 5m 9 bps Reference Average Premarket`.
+- Reused the existing Reference Average Premarket execution path: positive current-price move from the selected maximum full average buys `Down`, negative move buys `Up`, and absolute move below the threshold skips.
+- Added PostgreSQL schema seed rows in id groups `8178`/`8179`/`8180`, Dashboard category parsing for neutral bps names, diagnostics fields for auto direction source, focused processor/catalog/category/storage tests, and README/configuration documentation.
+Next: Deploy/restart the service so schema initialization creates the new strategy rows in production.
+Notes: Focused `dotnet test tests\PolyCopyTrader.Tests\PolyCopyTrader.Tests.csproj --no-restore -p:UseSharedCompilation=false --filter "...ReferenceAverage...|StorageTests"` passed 50/50. `dotnet build src\PolyCopyTrader.Service\PolyCopyTrader.Service.csproj --no-restore -p:UseSharedCompilation=false -p:OutDir="$env:TEMP\PolyCopyTraderServiceNeutralRefAvgBuild\"` passed with existing Storage nullable warnings. `git diff --check` passed with LF/CRLF warnings only. Worktree had unrelated pending changes in the same files before this task, so no commit/stage was performed.
+Blockers: None.
+
 ## Active Update 2026-07-04 Remove ETH Diff Revert Premarket
 Goal: Remove `ETH Up or Down 5m Up/Down N Diff Revert Premarket` strategies and their history without disrupting running processes.
 Status: Completed
@@ -12,6 +1143,49 @@ Done:
 - Confirmed `PolyCopyTrader.Service` remained `Running`/`Live` with fresh heartbeat around 30 seconds and empty `last_error`; no service restart, order submission, cancel, or Live flag change was performed.
 Next: Deploy/restart the service when convenient so the running binary also has the no-reseed code; the production database is already cleaned.
 Notes: `dotnet test tests\PolyCopyTrader.Tests\PolyCopyTrader.Tests.csproj --no-restore -p:UseSharedCompilation=false --filter "FullyQualifiedName~StorageTests|FullyQualifiedName~StrategyIds_IncludeEthAndSolBinanceBpsVariants|FullyQualifiedName~DiffCounterTrendFakPremarketStrategiesHaveDedicatedDisplayCategories|FullyQualifiedName~ProcessDiffCounterDueEntriesAsync_SolDown4RevertFakPremarketBuysDownFromPremarketOrderBook|FullyQualifiedName~ProcessDiffCounterDueEntriesAsync_SolUp4RevertFakPremarketBuysUpFromPremarketOrderBook"` passed 47/47. A broader `BtcUpDown5mPaperStrategyProcessorTests|StrategyDisplayCategoryTests|StorageTests` run still has unrelated pre-existing failures in the large processor suite. Worktree contained many unrelated pending changes before this task; stage only this task's hunks.
+Blockers: None.
+
+## Active Update 2026-07-04 Full Premarket Orderbook Capture
+Goal: Re-run the next half-hour Premarket depth capture with full order books rather than top-5 ask levels.
+Status: Completed
+Done:
+- Created a read-only collector under `outputs/premarket-full-orderbook-2026-07-04-1530/collect_full_orderbook.ps1`.
+- Collected six consecutive 5m markets at T-30s: `15:30-15:35`, `15:35-15:40`, `15:40-15:45`, `15:45-15:50`, `15:50-15:55`, and `15:55-16:00` Europe/Sofia.
+- Covered BTC, ETH, and SOL, both Up and Down outcomes: 36 books total.
+- Saved full CLOB `asks` and `bids` returned by `https://clob.polymarket.com/book` without top-5 truncation.
+- Produced `full_orderbook_summary.csv` with 36 book rows, `full_orderbook_levels.csv` with 3549 level rows, `full_orderbook_captures.jsonl` with 36 full JSON snapshots, and `capture_schedule.csv` with 36 schedule/token rows.
+- Built `outputs/premarket-full-orderbook-2026-07-04-1530/premarket-full-orderbook-2026-07-04-1530.xlsx` with `Summary`, `Book Summary`, `All Levels`, `Ask Levels`, `Bid Levels`, and `Schedule` sheets.
+Next: Use the workbook filters to inspect per-asset/per-market depth; if this should be repeated regularly, move the collector into a documented diagnostic script that always persists full books.
+Notes: Used public Gamma metadata and public CLOB book endpoints only. No production database writes, service changes, Live changes, order submissions, cancels, source changes, builds, tests, staging, or commit were performed. Workbook verification rendered `Summary`, `All Levels`, and `Book Summary`; formula-error scan matched 0 entries. Existing unrelated dirty worktree was left untouched.
+Blockers: None.
+
+## Active Update 2026-07-04 Premarket Ask Levels Workbook
+Goal: Create an Excel workbook with ask-level data for the six monitored Premarket markets.
+Status: Completed
+Done:
+- Created `outputs/premarket-ask-levels-2026-07-04/premarket-ask-levels-2026-07-04.xlsx`.
+- Confirmed the original direct CLOB monitor persisted only the first 5 ask levels for all 36 target books plus aggregate depth through `0.99`; exact missing historical ask levels for all 36 books cannot be reconstructed after the fact.
+- Queried production PostgreSQL at `192.168.0.101` read-only and found server-side `paper_live_shadow_decisions` snapshots for 9 matching books near T-30s; those stored 20 ask levels each.
+- Workbook sheets include: `Summary`, `Direct Monitor Summary`, `Direct Top5 Ask Levels`, `Server Shadow Coverage`, and `Server Shadow Ask Levels`.
+- Data included: 36 direct monitor summary rows, 180 direct monitor top-5 ask level rows, 36 shadow coverage rows, and 180 server-shadow ask level rows.
+Next: For future monitoring, update the capture script/service snapshot logic to persist the full ask ladder for every target book at T-30s if exact full-depth historical analysis is required.
+Notes: Used the bundled spreadsheet runtime and `@oai/artifact-tool`; rendered visual previews for `Summary`, `Direct Top5 Ask Levels`, and `Server Shadow Ask Levels`; formula-error scan matched 0 entries. No production writes, Live changes, order submissions, cancels, service restarts, source changes, builds, tests, staging, or commit were performed.
+Blockers: Full historical ask ladders for all 36 books were not persisted by the earlier monitor; only stored data can be exported.
+
+## Active Update 2026-07-04 ETH Live Batch Monitoring
+Goal: Monitor newly enabled ETH Live strategies for normal order placement, skips, and execution errors.
+Status: Completed
+Done:
+- Queried production PostgreSQL at `192.168.0.101` read-only without printing secrets.
+- Confirmed 9 active ETH Live strategies: `ETH Up or Down 5m Down 1..8 bps Reference Average Premarket` plus `ETH Up or Down 5m Up 50 bps Instant`; all were enabled, Live, not paused, and had positive Live balance.
+- Observed the `14:54:30 Europe/Sofia` Premarket cycle: Down 1..5 entered Live and all 5 live orders were `Matched` at average fill `0.52999999`; Down 6..8 skipped by `reference_average_move_below_bps_threshold`.
+- Observed the `14:59:30` cycle: Down 1..2 entered Live and both live orders were `Matched` at average fill `0.51000000`; Down 3..8 skipped by `reference_average_move_below_bps_threshold`.
+- Observed the `15:04:30` and `15:09:30` cycles: Down 1..8 all skipped by `reference_average_move_below_bps_threshold`; no ETH live orders were placed in those cycles.
+- Confirmed `ETH Up 50 bps Instant` skipped by `btc_previous_market_move_below_bps_threshold` during the observed interval.
+- Checked `live_trading_events`: 0 non-OK events in the last 30 minutes at final check.
+- A temporary websocket `Stale` status at `15:10:03` cleared by `15:10:52`; final status was `Connected`/`stale=false` for the global, critical crypto-updown, and shard-001 entries.
+Next: Continue watching if more ETH Live strategies are enabled, or add an aggregate same-market liquidity/risk gate if simultaneous ETH Live entries become too dense.
+Notes: No production writes, Live changes, order submissions, cancels, service restarts, source changes, builds, tests, staging, or commit were performed. Verification was read-only SQL against production status/order/run/event tables plus `git diff --check` for context/history updates.
 Blockers: None.
 
 ## Active Update 2026-07-04 Exact Live Fill Accounting
@@ -36,7 +1210,7 @@ Done:
 - Compared the same ETH 6:40-6:45 market cluster: five `Down N bps Reference Average Premarket` Live orders bought `Up`; three had direct `matched` CLOB responses with average fill prices about `0.519`, `0.530`, and `0.521`, while `Down 1` and `Down 6` were `data_api_current_position_reconciled` with no order id/making/taking amounts and fell back to worst price `0.99`.
 - Confirmed Paper shadow for `Down 6` saw `best_ask=0.51` and simulated about `$6` filled at average `0.51`; aggregate Data API position size `57.924` matches the five-order paper expected shares, so the low recorded PnL is an accounting/reconciliation artifact rather than evidence that the real market fill was near `0.99`.
 Next: Fix Live FAK reconciliation so Data API aggregate-position fallback does not settle market-amount orders at worst price; either recover exact CLOB fills or allocate aggregate position delta/expected paper FAK shares across same-market orders before balance settlement.
-Notes: Diagnostic/read-only only. No production DB writes, Live flag changes, order submissions, cancels, service restarts, source-code changes, builds, or tests were performed.
+Notes: Diagnostic/read-only only. No production DB writes, Live flag changes, order submissions, cancels, service restarts, source-code changes, builds, tests, staging, or commit were performed.
 Blockers: Exact per-order true fill for rows without CLOB `makingAmount`/`takingAmount` is not available from the current row alone; correction needs an explicit accounting policy.
 
 ## Active Update 2026-07-04 Dashboard Hide Progress Filter
@@ -48,8 +1222,99 @@ Done:
 - Applied the `All` tab setting to both the main strategy grid and the nested recent-performance grid shown in that tab.
 - Updated README and configuration reference documentation for the new filter.
 Next: None
-Notes: `dotnet build src\PolyCopyTrader.Dashboard\PolyCopyTrader.Dashboard.csproj --no-restore -p:UseSharedCompilation=false -p:OutDir="$env:TEMP\PolyCopyTraderDashboardHideProgressBuild\"` passed. `git diff --check -- src/PolyCopyTrader.Dashboard/ViewModels/MainViewModel.cs src/PolyCopyTrader.Dashboard/MainWindow.xaml README.md docs/configuration_reference.md` passed with only existing line-ending warnings. Worktree contained unrelated pending changes before this task; staging/commit includes only this task's hunks.
+Notes: `dotnet build src\PolyCopyTrader.Dashboard\PolyCopyTrader.Dashboard.csproj --no-restore -p:UseSharedCompilation=false -p:OutDir="$env:TEMP\PolyCopyTraderDashboardHideProgressBuild\"` passed. `git diff --check -- src/PolyCopyTrader.Dashboard/ViewModels/MainViewModel.cs src/PolyCopyTrader.Dashboard/MainWindow.xaml README.md docs/configuration_reference.md` passed with only existing line-ending warnings. Worktree contained unrelated pending changes before this task; staging/commit should include only this task's hunks.
 Blockers: None.
+
+## Active Update 2026-07-04 BTC SOL Premarket Depth Check
+Goal: Compare BTC and SOL 5m Premarket order-book depth against a `5 x $6` simultaneous live stake cluster.
+Status: Completed
+Done:
+- Queried production PostgreSQL read-only for current BTC/SOL 5m token ids and sampled public CLOB `/book` around the 2026-07-04 13:34:30 Europe/Sofia Premarket point for the 13:35-13:40 markets.
+- BTC Up: best ask `0.51`, top ask about `$700.47`, depth through `0.52` about `$935.64`, simulated `5 x $6.0093` fills entirely at `0.51`.
+- BTC Down: best ask `0.50`, top ask about `$260.08`, depth through `0.51` about `$279.06`, simulated `5 x $6.0093` fills entirely at `0.50`.
+- SOL Up: best ask `0.52`, top ask only about `$2.60`, depth through `0.53` about `$32.19`, simulated `5 x $6.0093` uses two levels with VWAP about `0.5291` and last price `0.53`.
+- SOL Down: best ask `0.49`, top ask about `$24.50`, depth through `0.50` about `$127.00`, simulated `5 x $6.0093` uses two levels with VWAP about `0.4918` and last price `0.50`.
+Next: If increasing live exposure, add an aggregate same-market/outcome VWAP/price-impact gate; BTC current depth looks comfortable for `5 x $6`, while SOL should be guarded because top-of-book can be very thin.
+Notes: Diagnostic only. No production DB writes, Live flag changes, order submissions, cancels, service restarts, source-code changes, builds, or tests were performed.
+Blockers: None.
+
+## Active Update 2026-07-04 ETH Live Stake Depth Check
+Goal: Estimate how close multiple simultaneous ETH Live stakes are to available Premarket order-book depth.
+Status: Completed
+Done:
+- Checked production PostgreSQL read-only and public CLOB `/book` without printing secrets.
+- Confirmed the 2026-07-04 13:24:30 Europe/Sofia ETH Premarket cycle placed 4 live ETH Down Reference Average orders, all buying `Up`, all `Matched`, each filled about `$6.00` / `12` shares at average price `0.50`.
+- Confirmed the actual 4-order ETH cluster consumed about `$24` / `48` shares and did not move average fill above `0.50`.
+- Estimated the 5-strategy case as about `$30.0465` target notional, requiring about `60` shares at price `0.50`.
+- Noted that saved `paper_live_shadow_decisions.order_book_snapshot_json` keeps `best_ask` but truncates the ask list in source order, so it did not preserve the full best-level depth needed for an exact historical Premarket depth calculation.
+- Took a full public CLOB book sample for the next ETH Up token at `2026-07-04 13:25:28 Europe/Sofia` as a scale check: best ask `0.57`, top ask notional about `$17.07`, depth through `0.58` about `$48.75`, through `0.60` about `$164.87`, and through `0.99` about `$15,751`.
+Next: Consider adding an aggregate per-market live preflight that sums all strategy orders for the same market/outcome and enforces a max VWAP/price-impact cap before submitting.
+Notes: Diagnostic only. No production DB writes, Live flag changes, order submissions, cancels, service restarts, source-code changes, builds, or tests were performed.
+Blockers: Exact historical Premarket best-level depth is not recoverable from the currently persisted truncated snapshot JSON.
+
+## Active Update 2026-07-04 Live Strategies Placement Watch
+Goal: Monitor newly enabled Live strategies and confirm whether live orders are placing normally.
+Status: Completed
+Done:
+- Connected read-only to production PostgreSQL at `192.168.0.101` using the existing `POLYCOPYTRADER_POSTGRES_CONNECTION` credentials with host override; no secrets were printed.
+- Confirmed `PolyCopyTrader.Service` is `Running`/`Live`, heartbeat is fresh around `2026-07-04 13:19:35 Europe/Sofia`, and `last_error` is empty.
+- Found 9 enabled/non-paused Live strategies, all with `live_available_balance >= live_stake_amount`.
+- Monitored the `13:14:30` and `13:19:30 Europe/Sofia` cycles after the user enabled several new strategies.
+- Confirmed SOL Down 8/85/90 Reference Average Premarket placed live orders in both monitored cycles; all returned `Matched` with `response_status=matched`, notional about `$6.0093`, filled about `$6.00`.
+- Confirmed ETH Down 1/2/3/4/6 Reference Average Premarket were not failing placement; their recent cycles skipped because `reference_average_move_below_bps_threshold` did not pass.
+- Confirmed ETH Up 50 bps Instant is still skipping because `btc_previous_market_move_below_bps_threshold` does not pass.
+- Confirmed the last 2 hours of active Live strategy orders had only `Matched` statuses: 67 `matched` plus 5 `data_api_current_position_reconciled`, with 0 rejects.
+- Confirmed there were 0 non-OK `live_trading_events` in the last 2 hours.
+- At the final check, 6 recent SOL orders from `13:14:30` and `13:19:30` were still unsettled, which is expected shortly after placement.
+Next: Recheck later if the user wants settlement/PnL follow-up; current placement path looks healthy.
+Notes: Read-only SQL checks only. No production DB writes, Live flag changes, order submissions, cancels, service restarts, source-code changes, builds, or tests were performed.
+Blockers: None.
+
+## Active Update 2026-07-04 Cap Live Balance At 100
+Goal: Ensure live strategy balance updates never store `Live bal` above `100.00`.
+Status: Completed
+Done:
+- Capped Dashboard/manual live balance saves in `PostgresAppRepository.SetStrategyLiveAvailableBalanceAsync` with `LEAST(100.00, @LiveAvailableBalance)`.
+- Capped live settlement balance updates in `PostgresAppRepository.ApplyLiveOrderSettlementToStrategyBalanceAsync` to the `0.00` to `100.00` range while preserving the existing auto-disable behavior when the resulting balance falls below stake size.
+- Added PostgreSQL schema protection: startup clamps existing `live_available_balance > 100.00` rows down to `100.00`, and the `ck_strategies_live_available_balance_maximum` check constraint prevents future values above `100.00`.
+- Updated the in-memory test repository and focused tests to match the production cap.
+- Updated README and live/configuration docs so `Live bal` is documented as capped at `100.00`.
+Verification:
+- `dotnet test tests\PolyCopyTrader.Tests\PolyCopyTrader.Tests.csproj --no-restore --filter "FullyQualifiedName~StorageTests|FullyQualifiedName~LiveTradingGatingTests"` passed 64/64.
+- `dotnet build src\PolyCopyTrader.Service\PolyCopyTrader.Service.csproj --no-restore` passed.
+- `git diff --check` reported only existing line-ending warnings.
+Next: Deploy/restart the service so production schema initialization applies the clamp; any existing live balance above `100.00` will become `100.00`.
+Notes: No production DB writes, order submissions, cancels, or service restarts were performed. Worktree already contained unrelated pending changes, so no commit/stage was made.
+Blockers: None.
+
+## Active Update 2026-07-04 ETH Down 2 bps Live Watch
+Goal: Check how `ETH Up or Down 5m Down 2 bps Reference Average Premarket` behaves after the user enabled it in Live.
+Status: Completed
+Done:
+- Confirmed production PostgreSQL `192.168.0.101:5432` is reachable and read-only queries succeeded.
+- Confirmed `PolyCopyTrader.Service` is `Running`/`Live` with fresh heartbeat around `2026-07-04 10:14:37 Europe/Sofia`, no `last_error`, running version `info=1.0.0+a2fc59c...`.
+- Confirmed exact strategy `eth_up_down_5m_down_reference_average_bps_2_fak_premarket` is `enabled=true`, `live_stakes=true`, `paused=false`, `live_stake_amount=1`, `live_available_balance=100` at initial check, and Live was enabled at `2026-07-04 10:03:47 Europe/Sofia`.
+- Observed three Live orders since enablement: `10:04:30`, `10:09:30`, and `10:14:30 Europe/Sofia`; all were `Matched` on `Up`, with filled notional about `$6` each.
+- Confirmed first Live order settled as a win via `gamma_resolved_metadata`: filled `$5.999999`, settlement value `$11.538460`, realized PnL `$5.538461`, and strategy `live_available_balance` increased to `$105.538461`.
+- The `10:09:30` and `10:14:30` Live orders were still unsettled at the last check.
+Next: Recheck after the next settlement cycles to evaluate whether the later Live entries win/loss and how balance changes.
+Notes: Read-only production SQL only. No production writes, Live setting changes, order submissions, cancels, service restarts, source-code changes, build, or tests were performed. The first attempted query used the local `127.0.0.1` connection and was discarded; production checks used host override `192.168.0.101`.
+Blockers: None.
+
+## Active Update 2026-07-04 Remove AutoPause Mechanism
+Goal: Remove the AutoPause/Auto Live Pause mechanism from code and Dashboard.
+Status: Completed
+Done:
+- Removed `AutoLivePauseStrategies` from live trading configuration, appsettings, validation, and current docs.
+- Removed `StrategyAutoLivePausePolicy`, startup allowlist synchronization, repository AutoPause update/clear APIs, service settlement hooks, and test repository AutoPause behavior.
+- Changed effective live eligibility to the persisted `Live` flag only; manual `Paused` remains the full Paper+Live pause.
+- Removed Auto Live Pause from `StrategyRuntimeSettings`, `StrategyPerformance`, Dashboard strategy rows, XAML grid, CSV export, and Dashboard effective-live filtering.
+- Updated storage queries so live-priority ordering and recent live skip metrics use `live_stakes` directly.
+- Kept legacy PostgreSQL `auto_live_paused*` columns/migrations for existing database compatibility; snapshot writes no longer expose the field and rely on a default `false`.
+- Removed AutoPause-specific tests and updated affected configuration/storage/settlement/live-gating tests.
+Next: Deploy/restart service and Dashboard so the running processes pick up the removed AutoPause behavior and UI column.
+Notes: `dotnet build src\PolyCopyTrader.Service\PolyCopyTrader.Service.csproj --no-restore` passed. Normal Dashboard build was blocked by running `devenv.exe`/`PolyCopyTrader.Dashboard.exe` locking output DLLs; `dotnet build src\PolyCopyTrader.Dashboard\PolyCopyTrader.Dashboard.csproj --no-restore -p:OutDir=D:\My\Business\PolyMarket\out\dashboard-build\` passed. Focused tests passed 110/110: `ConfigurationTests`, `StorageTests`, `PaperSettlementProcessorTests`, `LiveTradingGatingTests`, and `StrategyPerformanceTests`. Full test suite currently has 50 unrelated failures in `BtcUpDown5mPaperStrategyProcessorTests`, consistent with existing strategy/test drift rather than AutoPause removal.
+Blockers: Full suite is not clean because of existing BTC/crypto strategy test failures. Legacy AutoPause columns remain in schema for compatibility and can be dropped only with an explicit DB migration task.
 
 ## Active Update 2026-07-04 Historical Binance Hour Analysis Feasibility
 Goal: Assess whether the SOL Down 8 bps Reference Average Premarket hourly analysis can be repeated over about six months using Binance historical data.
@@ -15867,6 +17132,20 @@ Done:
 Next: Watch the next few `BTC Less 180 Martin` rows; after a max-stake loss the configured behavior resets to the base stake, while standard Less losses remain market outcomes rather than a code inversion.
 Notes: Branch `master` has no upstream, so automatic pull/push/commit cannot run. Touched files are in the already-untracked BTC strategy/test paths. Focused `BtcUpDown5mPaperStrategyProcessorTests` passed 16/16. Full test project passed 262/262. Service Verify build and Dashboard Verify build passed with 0 warnings/errors. `git diff --check` for touched tracked paths passed; untracked source/test paths are not included by Git diff. Fresh log tail after restart had no `[ERR]`, fatal, exception, SSL, or DNS errors.
 Blockers: Automatic pull/push cannot run until a Git upstream is configured.
+
+## Active Update 2026-07-04 Six Premarket Depth Windows
+Goal: Monitor six consecutive 5m Premarket windows for BTC, ETH, and SOL at T-30s and estimate book depth risk for always placing five 0.99-capped live stakes of about $6.0093 each.
+Status: Completed
+Done:
+- Captured public CLOB books for 36 token books: six 5m markets from 13:45-14:15 Europe/Sofia, BTC/ETH/SOL, Up and Down, at about 30 seconds before each market start.
+- Used production PostgreSQL read-only only to resolve server market/token ids; no production writes, order submissions, Live changes, cancels, service restarts, source changes, builds, tests, staging, or commit were performed.
+- Total simulated cluster size was $30.0465 (`5 x $6.0093`) per side. No CLOB read errors occurred.
+- BTC summary: 12 books, minimum best-level ask notional $12.8469, average best-level ask notional $220.7007, first level broken once, maximum levels used 2, maximum simulated worst ask 0.53, minimum depth through 0.99 was $50,356.8189.
+- ETH summary: 12 books, minimum best-level ask notional $2.50, average best-level ask notional $219.3168, first level broken 5 times, maximum levels used 4, maximum simulated worst ask 0.53, minimum depth through 0.99 was $31,426.1701.
+- SOL summary: 12 books, minimum best-level ask notional $1.53, average best-level ask notional $36.1382, first level broken 7 times, maximum levels used 3, maximum simulated worst ask 0.54, minimum depth through 0.99 was $22,447.8213.
+Next: If this risk should be reduced in Live, consider adding a same-market cluster/liquidity gate that limits total per market side or rejects when best-level notional is below the aggregate planned live stake.
+Notes: The depth through 0.99 was large in all samples, but that is not the safety metric: a 0.99 cap can sweep many levels. The practical risk is thin best ask levels, especially SOL and ETH, where multiple live strategies on the same side can push fills beyond the top level even when total depth to 0.99 is huge.
+Blockers: None.
 
 ## Active Update 2026-06-23 ETH Premarket Category Split
 Goal: Separate new ETH Down reference-average Premarket strategies from legacy ETH Down previous-result Premarket strategies.

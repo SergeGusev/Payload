@@ -24,6 +24,7 @@ public static class PostgresSchema
         "strategies",
         "dashboard_strategy_performance_snapshots",
         "dashboard_strategy_recent_performance_snapshots",
+        "date_dependent_strategy_hourly_paper_pnl",
         "paper_orders",
         "paper_fills",
         "strategy_market_paper_runs",
@@ -936,7 +937,8 @@ CREATE TABLE IF NOT EXISTS strategies (
     CONSTRAINT ck_strategies_live_stake_amount_positive CHECK (live_stake_amount > 0),
     CONSTRAINT ck_strategies_paper_lost_coeff_minimum CHECK (paper_lost_coeff >= 1),
     CONSTRAINT ck_strategies_live_lost_coeff_minimum CHECK (live_lost_coeff >= 1),
-    CONSTRAINT ck_strategies_live_available_balance_nonnegative CHECK (live_available_balance >= 0)
+    CONSTRAINT ck_strategies_live_available_balance_nonnegative CHECK (live_available_balance >= 0),
+    CONSTRAINT ck_strategies_live_available_balance_maximum CHECK (live_available_balance <= 100.00)
 );
 
 ALTER TABLE strategies ADD COLUMN IF NOT EXISTS live_stakes boolean NOT NULL DEFAULT false;
@@ -960,6 +962,11 @@ ALTER TABLE strategies ALTER COLUMN paper_lost_counter SET DEFAULT 0;
 ALTER TABLE strategies ALTER COLUMN live_lost_counter SET DEFAULT 0;
 ALTER TABLE strategies DROP CONSTRAINT IF EXISTS ck_strategies_paper_lost_counter_nonnegative;
 ALTER TABLE strategies DROP CONSTRAINT IF EXISTS ck_strategies_live_lost_counter_nonnegative;
+
+UPDATE strategies
+SET live_available_balance = 100.00,
+    updated_at_utc = clock_timestamp()
+WHERE live_available_balance > 100.00;
 
 DO $$
 BEGIN
@@ -1012,6 +1019,16 @@ BEGIN
         ALTER TABLE strategies
             ADD CONSTRAINT ck_strategies_live_available_balance_nonnegative CHECK (live_available_balance >= 0);
     END IF;
+
+    IF NOT EXISTS (
+        SELECT 1
+        FROM pg_constraint
+        WHERE conname = 'ck_strategies_live_available_balance_maximum'
+          AND conrelid = 'public.strategies'::regclass
+    ) THEN
+        ALTER TABLE strategies
+            ADD CONSTRAINT ck_strategies_live_available_balance_maximum CHECK (live_available_balance <= 100.00);
+    END IF;
 END $$;
 
 INSERT INTO strategies (id, code, name, description, enabled, created_at_utc, updated_at_utc)
@@ -1020,312 +1037,6 @@ VALUES (
     'follow_leader',
     'Follow leader',
     'Follow accepted signals from selected leader traders.',
-    true,
-    now(),
-    now()
-),
-(
-    'b7c50005-0000-4000-8001-000000000030',
-    'btc_up_down_5m_less_30',
-    'BTC Up or Down 5m Less 30',
-    'Bet the configured Paper stake multiplier on the lower-priced BTC 5m outcome 30 seconds after window start.',
-    true,
-    now(),
-    now()
-),
-(
-    'b7c50005-0000-4000-8001-000000000060',
-    'btc_up_down_5m_less_60',
-    'BTC Up or Down 5m Less 60',
-    'Bet the configured Paper stake multiplier on the lower-priced BTC 5m outcome 60 seconds after window start.',
-    true,
-    now(),
-    now()
-),
-(
-    'b7c50005-0000-4000-8021-000000060020',
-    'btc_up_down_5m_less_60_below_20',
-    'BTC Up or Down 5m Less 60 Below 20',
-    'Bet the configured Paper stake multiplier on the lower-priced BTC 5m outcome 60 seconds after window start using a GTD limit BUY at 0.20.',
-    true,
-    now(),
-    now()
-),
-(
-    'b7c50005-0000-4000-8001-000000000090',
-    'btc_up_down_5m_less_90',
-    'BTC Up or Down 5m Less 90',
-    'Bet the configured Paper stake multiplier on the lower-priced BTC 5m outcome 90 seconds after window start.',
-    true,
-    now(),
-    now()
-),
-(
-    'b7c50005-0000-4000-8021-000000090020',
-    'btc_up_down_5m_less_90_below_20',
-    'BTC Up or Down 5m Less 90 Below 20',
-    'Bet the configured Paper stake multiplier on the lower-priced BTC 5m outcome 90 seconds after window start using a GTD limit BUY at 0.20.',
-    true,
-    now(),
-    now()
-),
-(
-    'b7c50005-0000-4000-8001-000000000120',
-    'btc_up_down_5m_less_120',
-    'BTC Up or Down 5m Less 120',
-    'Bet the configured Paper stake multiplier on the lower-priced BTC 5m outcome 120 seconds after window start.',
-    true,
-    now(),
-    now()
-),
-(
-    'b7c50005-0000-4000-8021-000000120020',
-    'btc_up_down_5m_less_120_below_20',
-    'BTC Up or Down 5m Less 120 Below 20',
-    'Bet the configured Paper stake multiplier on the lower-priced BTC 5m outcome 120 seconds after window start using a GTD limit BUY at 0.20.',
-    true,
-    now(),
-    now()
-),
-(
-    'b7c50005-0000-4000-8021-000000120030',
-    'btc_up_down_5m_less_120_below_30',
-    'BTC Up or Down 5m Less 120 Below 30',
-    'Bet the configured Paper stake multiplier on the lower-priced BTC 5m outcome 120 seconds after window start using a GTD limit BUY at 0.30.',
-    true,
-    now(),
-    now()
-),
-(
-    'b7c50005-0000-4000-8001-000000000150',
-    'btc_up_down_5m_less_150',
-    'BTC Up or Down 5m Less 150',
-    'Bet the configured Paper stake multiplier on the lower-priced BTC 5m outcome 150 seconds after window start.',
-    true,
-    now(),
-    now()
-),
-(
-    'b7c50005-0000-4000-8001-000000000180',
-    'btc_up_down_5m_less_180',
-    'BTC Up or Down 5m Less 180',
-    'Bet the configured Paper stake multiplier on the lower-priced BTC 5m outcome 180 seconds after window start.',
-    true,
-    now(),
-    now()
-),
-(
-    'b7c50005-0000-4000-8003-000000000180',
-    'btc_up_down_5m_less_180_martin',
-    'BTC Less 180 Martin',
-    'After BTC Less 180 loses three times in a row, bet on the lower-priced BTC 5m outcome 180 seconds after window start using the configured Paper stake multiplier progression until this strategy wins.',
-    true,
-    now(),
-    now()
-),
-(
-    'b7c50005-0000-4000-8001-000000000210',
-    'btc_up_down_5m_less_210',
-    'BTC Up or Down 5m Less 210',
-    'Bet the configured Paper stake multiplier on the lower-priced BTC 5m outcome 210 seconds after window start.',
-    true,
-    now(),
-    now()
-),
-(
-    'b7c50005-0000-4000-8001-000000000240',
-    'btc_up_down_5m_less_240',
-    'BTC Up or Down 5m Less 240',
-    'Bet the configured Paper stake multiplier on the lower-priced BTC 5m outcome 240 seconds after window start.',
-    true,
-    now(),
-    now()
-),
-(
-    'b7c50005-0000-4000-8001-000000000270',
-    'btc_up_down_5m_less_270',
-    'BTC Up or Down 5m Less 270',
-    'Bet the configured Paper stake multiplier on the lower-priced BTC 5m outcome 270 seconds after window start.',
-    true,
-    now(),
-    now()
-),
-(
-    'b7c50005-0000-4000-8002-000000000030',
-    'btc_up_down_5m_more_30',
-    'BTC Up or Down 5m More 30',
-    'Bet the configured Paper stake multiplier on the higher-priced BTC 5m outcome 30 seconds after window start.',
-    true,
-    now(),
-    now()
-),
-(
-    'b7c50005-0000-4000-8020-000000030055',
-    'btc_up_down_5m_more_30_below_55',
-    'BTC Up or Down 5m More 30 Below 55',
-    'Bet the configured Paper stake multiplier on the higher-priced BTC 5m outcome 30 seconds after window start using a GTD limit BUY at 0.55.',
-    true,
-    now(),
-    now()
-),
-(
-    'b7c50005-0000-4000-8002-000000000060',
-    'btc_up_down_5m_more_60',
-    'BTC Up or Down 5m More 60',
-    'Bet the configured Paper stake multiplier on the higher-priced BTC 5m outcome 60 seconds after window start.',
-    true,
-    now(),
-    now()
-),
-(
-    'b7c50005-0000-4000-8019-000000000060',
-    'btc_up_down_5m_more_60_below_60',
-    'BTC Up or Down 5m More 60 Below 60',
-    'Bet the configured Paper stake multiplier on the higher-priced BTC 5m outcome 60 seconds after window start using a GTD limit BUY at 0.60.',
-    true,
-    now(),
-    now()
-),
-(
-    'b7c50005-0000-4000-8019-000000000055',
-    'btc_up_down_5m_more_60_below_55',
-    'BTC Up or Down 5m More 60 Below 55',
-    'Bet the configured Paper stake multiplier on the higher-priced BTC 5m outcome 60 seconds after window start using a GTD limit BUY at 0.55.',
-    true,
-    now(),
-    now()
-),
-(
-    'b7c50005-0000-4000-8002-000000000090',
-    'btc_up_down_5m_more_90',
-    'BTC Up or Down 5m More 90',
-    'Bet the configured Paper stake multiplier on the higher-priced BTC 5m outcome 90 seconds after window start.',
-    true,
-    now(),
-    now()
-),
-(
-    'b7c50005-0000-4000-8012-000000000070',
-    'btc_up_down_5m_more_90_below_70',
-    'BTC Up or Down 5m More 90 Below 70',
-    'Bet the configured Paper stake multiplier on the higher-priced BTC 5m outcome 90 seconds after window start using a GTD limit BUY at 0.70.',
-    true,
-    now(),
-    now()
-),
-(
-    'b7c50005-0000-4000-8012-000000000065',
-    'btc_up_down_5m_more_90_below_65',
-    'BTC Up or Down 5m More 90 Below 65',
-    'Bet the configured Paper stake multiplier on the higher-priced BTC 5m outcome 90 seconds after window start using a GTD limit BUY at 0.65.',
-    true,
-    now(),
-    now()
-),
-(
-    'b7c50005-0000-4000-8012-000000000060',
-    'btc_up_down_5m_more_90_below_60',
-    'BTC Up or Down 5m More 90 Below 60',
-    'Bet the configured Paper stake multiplier on the higher-priced BTC 5m outcome 90 seconds after window start using a GTD limit BUY at 0.60.',
-    true,
-    now(),
-    now()
-),
-(
-    'b7c50005-0000-4000-8012-000000000055',
-    'btc_up_down_5m_more_90_below_55',
-    'BTC Up or Down 5m More 90 Below 55',
-    'Bet the configured Paper stake multiplier on the higher-priced BTC 5m outcome 90 seconds after window start using a GTD limit BUY at 0.55.',
-    true,
-    now(),
-    now()
-),
-(
-    'b7c50005-0000-4000-8002-000000000120',
-    'btc_up_down_5m_more_120',
-    'BTC Up or Down 5m More 120',
-    'Bet the configured Paper stake multiplier on the higher-priced BTC 5m outcome 120 seconds after window start.',
-    true,
-    now(),
-    now()
-),
-(
-    'b7c50005-0000-4000-8020-000000120070',
-    'btc_up_down_5m_more_120_below_70',
-    'BTC Up or Down 5m More 120 Below 70',
-    'Bet the configured Paper stake multiplier on the higher-priced BTC 5m outcome 120 seconds after window start using a GTD limit BUY at 0.70.',
-    true,
-    now(),
-    now()
-),
-(
-    'b7c50005-0000-4000-8002-000000000150',
-    'btc_up_down_5m_more_150',
-    'BTC Up or Down 5m More 150',
-    'Bet the configured Paper stake multiplier on the higher-priced BTC 5m outcome 150 seconds after window start.',
-    true,
-    now(),
-    now()
-),
-(
-    'b7c50005-0000-4000-8020-000000150065',
-    'btc_up_down_5m_more_150_below_65',
-    'BTC Up or Down 5m More 150 Below 65',
-    'Bet the configured Paper stake multiplier on the higher-priced BTC 5m outcome 150 seconds after window start using a GTD limit BUY at 0.65.',
-    true,
-    now(),
-    now()
-),
-(
-    'b7c50005-0000-4000-8002-000000000180',
-    'btc_up_down_5m_more_180',
-    'BTC Up or Down 5m More 180',
-    'Bet the configured Paper stake multiplier on the higher-priced BTC 5m outcome 180 seconds after window start.',
-    true,
-    now(),
-    now()
-),
-(
-    'b7c50005-0000-4000-8002-000000000210',
-    'btc_up_down_5m_more_210',
-    'BTC Up or Down 5m More 210',
-    'Bet the configured Paper stake multiplier on the higher-priced BTC 5m outcome 210 seconds after window start.',
-    true,
-    now(),
-    now()
-),
-(
-    'b7c50005-0000-4000-8002-000000000240',
-    'btc_up_down_5m_more_240',
-    'BTC Up or Down 5m More 240',
-    'Bet the configured Paper stake multiplier on the higher-priced BTC 5m outcome 240 seconds after window start.',
-    true,
-    now(),
-    now()
-),
-(
-    'b7c50005-0000-4000-8002-000000000270',
-    'btc_up_down_5m_more_270',
-    'BTC Up or Down 5m More 270',
-    'Bet the configured Paper stake multiplier on the higher-priced BTC 5m outcome 270 seconds after window start.',
-    true,
-    now(),
-    now()
-),
-(
-    'b7c50005-0000-4000-8020-000000270065',
-    'btc_up_down_5m_more_270_below_65',
-    'BTC Up or Down 5m More 270 Below 65',
-    'Bet the configured Paper stake multiplier on the higher-priced BTC 5m outcome 270 seconds after window start using a GTD limit BUY at 0.65.',
-    true,
-    now(),
-    now()
-),
-(
-    'b7c50005-0000-4000-8020-000000270060',
-    'btc_up_down_5m_more_270_below_60',
-    'BTC Up or Down 5m More 270 Below 60',
-    'Bet the configured Paper stake multiplier on the higher-priced BTC 5m outcome 270 seconds after window start using a GTD limit BUY at 0.60.',
     true,
     now(),
     now()
@@ -1343,644 +1054,14 @@ SET
     updated_at_utc = now()
 WHERE (
         code LIKE 'btc_up_down_5m_binance_bps_%'
-     OR code LIKE 'btc_up_down_5m_skip_bps_%'
-     OR code LIKE 'eth_up_down_5m_binance_bps_%'
-     OR code LIKE 'eth_up_down_5m_skip_bps_%'
      OR code LIKE 'sol_up_down_5m_binance_bps_%'
-     OR code LIKE 'sol_up_down_5m_skip_bps_%'
     )
   AND EXISTS (
         SELECT 1
         FROM strategies legacy_strategy
         WHERE legacy_strategy.code LIKE 'btc_up_down_5m_binance_bps_0_%'
-           OR legacy_strategy.code LIKE 'btc_up_down_5m_skip_bps_0_%'
-           OR legacy_strategy.code LIKE 'eth_up_down_5m_binance_bps_0_%'
-           OR legacy_strategy.code LIKE 'eth_up_down_5m_skip_bps_0_%'
            OR legacy_strategy.code LIKE 'sol_up_down_5m_binance_bps_0_%'
-           OR legacy_strategy.code LIKE 'sol_up_down_5m_skip_bps_0_%'
     );
-
-INSERT INTO strategies (id, code, name, description, enabled, paper_stake_amount, created_at_utc, updated_at_utc)
-VALUES (
-    'b7c50005-0000-4000-8004-000000000030',
-    'btc_up_down_5m_less_30_gamma',
-    'BTC Up or Down 5m Less 30 Gamma',
-    'Experimental comparison strategy: choose the lower-priced BTC 5m outcome from Gamma outcomePrices 30 seconds after window start, then use taker Paper pricing for the selected asset.',
-    true,
-    1.00,
-    now(),
-    now()
-),
-(
-    'b7c50005-0000-4000-8004-000000000060',
-    'btc_up_down_5m_less_60_gamma',
-    'BTC Up or Down 5m Less 60 Gamma',
-    'Experimental comparison strategy: choose the lower-priced BTC 5m outcome from Gamma outcomePrices 60 seconds after window start, then use taker Paper pricing for the selected asset.',
-    true,
-    1.00,
-    now(),
-    now()
-),
-(
-    'b7c50005-0000-4000-8004-000000000090',
-    'btc_up_down_5m_less_90_gamma',
-    'BTC Up or Down 5m Less 90 Gamma',
-    'Experimental comparison strategy: choose the lower-priced BTC 5m outcome from Gamma outcomePrices 90 seconds after window start, then use taker Paper pricing for the selected asset.',
-    true,
-    1.00,
-    now(),
-    now()
-),
-(
-    'b7c50005-0000-4000-8004-000000000120',
-    'btc_up_down_5m_less_120_gamma',
-    'BTC Up or Down 5m Less 120 Gamma',
-    'Experimental comparison strategy: choose the lower-priced BTC 5m outcome from Gamma outcomePrices 120 seconds after window start, then use taker Paper pricing for the selected asset.',
-    true,
-    1.00,
-    now(),
-    now()
-),
-(
-    'b7c50005-0000-4000-8004-000000000150',
-    'btc_up_down_5m_less_150_gamma',
-    'BTC Up or Down 5m Less 150 Gamma',
-    'Experimental comparison strategy: choose the lower-priced BTC 5m outcome from Gamma outcomePrices 150 seconds after window start, then use taker Paper pricing for the selected asset.',
-    true,
-    1.00,
-    now(),
-    now()
-),
-(
-    'b7c50005-0000-4000-8004-000000000180',
-    'btc_up_down_5m_less_180_gamma',
-    'BTC Up or Down 5m Less 180 Gamma',
-    'Experimental comparison strategy: choose the lower-priced BTC 5m outcome from Gamma outcomePrices 180 seconds after window start, then use taker Paper pricing for the selected asset.',
-    true,
-    1.00,
-    now(),
-    now()
-),
-(
-    'b7c50005-0000-4000-8004-000000000210',
-    'btc_up_down_5m_less_210_gamma',
-    'BTC Up or Down 5m Less 210 Gamma',
-    'Experimental comparison strategy: choose the lower-priced BTC 5m outcome from Gamma outcomePrices 210 seconds after window start, then use taker Paper pricing for the selected asset.',
-    true,
-    1.00,
-    now(),
-    now()
-),
-(
-    'b7c50005-0000-4000-8004-000000000240',
-    'btc_up_down_5m_less_240_gamma',
-    'BTC Up or Down 5m Less 240 Gamma',
-    'Experimental comparison strategy: choose the lower-priced BTC 5m outcome from Gamma outcomePrices 240 seconds after window start, then use taker Paper pricing for the selected asset.',
-    true,
-    1.00,
-    now(),
-    now()
-),
-(
-    'b7c50005-0000-4000-8004-000000000270',
-    'btc_up_down_5m_less_270_gamma',
-    'BTC Up or Down 5m Less 270 Gamma',
-    'Experimental comparison strategy: choose the lower-priced BTC 5m outcome from Gamma outcomePrices 270 seconds after window start, then use taker Paper pricing for the selected asset.',
-    true,
-    1.00,
-    now(),
-    now()
-),
-(
-    'b7c50005-0000-4000-8005-000000000030',
-    'btc_up_down_5m_more_30_gamma',
-    'BTC Up or Down 5m More 30 Gamma',
-    'Experimental comparison strategy: choose the higher-priced BTC 5m outcome from Gamma outcomePrices 30 seconds after window start, then use taker Paper pricing for the selected asset.',
-    true,
-    1.00,
-    now(),
-    now()
-),
-(
-    'b7c50005-0000-4000-8005-000000000060',
-    'btc_up_down_5m_more_60_gamma',
-    'BTC Up or Down 5m More 60 Gamma',
-    'Experimental comparison strategy: choose the higher-priced BTC 5m outcome from Gamma outcomePrices 60 seconds after window start, then use taker Paper pricing for the selected asset.',
-    true,
-    1.00,
-    now(),
-    now()
-),
-(
-    'b7c50005-0000-4000-8005-000000000090',
-    'btc_up_down_5m_more_90_gamma',
-    'BTC Up or Down 5m More 90 Gamma',
-    'Experimental comparison strategy: choose the higher-priced BTC 5m outcome from Gamma outcomePrices 90 seconds after window start, then use taker Paper pricing for the selected asset.',
-    true,
-    1.00,
-    now(),
-    now()
-),
-(
-    'b7c50005-0000-4000-8005-000000000120',
-    'btc_up_down_5m_more_120_gamma',
-    'BTC Up or Down 5m More 120 Gamma',
-    'Experimental comparison strategy: choose the higher-priced BTC 5m outcome from Gamma outcomePrices 120 seconds after window start, then use taker Paper pricing for the selected asset.',
-    true,
-    1.00,
-    now(),
-    now()
-),
-(
-    'b7c50005-0000-4000-8005-000000000150',
-    'btc_up_down_5m_more_150_gamma',
-    'BTC Up or Down 5m More 150 Gamma',
-    'Experimental comparison strategy: choose the higher-priced BTC 5m outcome from Gamma outcomePrices 150 seconds after window start, then use taker Paper pricing for the selected asset.',
-    true,
-    1.00,
-    now(),
-    now()
-),
-(
-    'b7c50005-0000-4000-8005-000000000180',
-    'btc_up_down_5m_more_180_gamma',
-    'BTC Up or Down 5m More 180 Gamma',
-    'Experimental comparison strategy: choose the higher-priced BTC 5m outcome from Gamma outcomePrices 180 seconds after window start, then use taker Paper pricing for the selected asset.',
-    true,
-    1.00,
-    now(),
-    now()
-),
-(
-    'b7c50005-0000-4000-8005-000000000210',
-    'btc_up_down_5m_more_210_gamma',
-    'BTC Up or Down 5m More 210 Gamma',
-    'Experimental comparison strategy: choose the higher-priced BTC 5m outcome from Gamma outcomePrices 210 seconds after window start, then use taker Paper pricing for the selected asset.',
-    true,
-    1.00,
-    now(),
-    now()
-),
-(
-    'b7c50005-0000-4000-8005-000000000240',
-    'btc_up_down_5m_more_240_gamma',
-    'BTC Up or Down 5m More 240 Gamma',
-    'Experimental comparison strategy: choose the higher-priced BTC 5m outcome from Gamma outcomePrices 240 seconds after window start, then use taker Paper pricing for the selected asset.',
-    true,
-    1.00,
-    now(),
-    now()
-),
-(
-    'b7c50005-0000-4000-8005-000000000270',
-    'btc_up_down_5m_more_270_gamma',
-    'BTC Up or Down 5m More 270 Gamma',
-    'Experimental comparison strategy: choose the higher-priced BTC 5m outcome from Gamma outcomePrices 270 seconds after window start, then use taker Paper pricing for the selected asset.',
-    true,
-    1.00,
-    now(),
-    now()
-)
-ON CONFLICT (id) DO UPDATE SET
-    code = excluded.code,
-    name = excluded.name,
-    description = excluded.description,
-    updated_at_utc = excluded.updated_at_utc;
-
-INSERT INTO strategies (id, code, name, description, enabled, paper_stake_amount, created_at_utc, updated_at_utc)
-VALUES (
-    'b7c50005-0000-4000-8006-000000000001',
-    'btc_up_down_5m_middle_100',
-    'BTC Up or Down 5m Middle 100',
-    'Immediately after BTC 5m market open, compare the latest Binance BTC/USDT trade-stream price against the arithmetic mean of the latest 100 sampled Binance BTC/USDT reference price(s); above mean buys Down, below mean buys Up, otherwise skip until all 100 sampled prices are available. Paper entry is an ordinary GTD Paper BUY with dynamic break-even pricing.',
-    true,
-    1.00,
-    now(),
-    now()
-),
-(
-    'b7c50005-0000-4000-8007-000000000001',
-    'btc_up_down_5m_skip_1',
-    'BTC Up or Down 5m Skip 1',
-    'Immediately after BTC 5m market open, inspect the latest 1 settled BTC 5m market result(s); after consecutive Up results buy Down, after consecutive Down results buy Up, otherwise skip. Paper entry is an ordinary GTD Paper BUY with dynamic break-even pricing.',
-    true,
-    1.00,
-    now(),
-    now()
-),
-(
-    'b7c50005-0000-4000-8007-000000000002',
-    'btc_up_down_5m_skip_2',
-    'BTC Up or Down 5m Skip 2',
-    'Immediately after BTC 5m market open, inspect the latest 2 settled BTC 5m market result(s); after consecutive Up results buy Down, after consecutive Down results buy Up, otherwise skip. Paper entry is an ordinary GTD Paper BUY with dynamic break-even pricing.',
-    true,
-    1.00,
-    now(),
-    now()
-),
-(
-    'b7c50005-0000-4000-8007-000000000003',
-    'btc_up_down_5m_skip_3',
-    'BTC Up or Down 5m Skip 3',
-    'Immediately after BTC 5m market open, inspect the latest 3 settled BTC 5m market result(s); after consecutive Up results buy Down, after consecutive Down results buy Up, otherwise skip. Paper entry is an ordinary GTD Paper BUY with dynamic break-even pricing.',
-    true,
-    1.00,
-    now(),
-    now()
-),
-(
-    'b7c50005-0000-4000-8007-000000000004',
-    'btc_up_down_5m_skip_4',
-    'BTC Up or Down 5m Skip 4',
-    'Immediately after BTC 5m market open, inspect the latest 4 settled BTC 5m market result(s); after consecutive Up results buy Down, after consecutive Down results buy Up, otherwise skip. Paper entry is an ordinary GTD Paper BUY with dynamic break-even pricing.',
-    true,
-    1.00,
-    now(),
-    now()
-),
-(
-    'b7c50005-0000-4000-8007-000000000005',
-    'btc_up_down_5m_skip_5',
-    'BTC Up or Down 5m Skip 5',
-    'Immediately after BTC 5m market open, inspect the latest 5 settled BTC 5m market result(s); after consecutive Up results buy Down, after consecutive Down results buy Up, otherwise skip. Paper entry is an ordinary GTD Paper BUY with dynamic break-even pricing.',
-    true,
-    1.00,
-    now(),
-    now()
-),
-(
-    'b7c50005-0000-4000-8010-000000000001',
-    'btc_up_down_5m_up',
-    'BTC Up or Down 5m Up',
-    'After BTC 5m trading starts, always place an Up GTD limit BUY at 0.45 until the configured BTC GTD deadline; settlement uses only actually filled shares.',
-    true,
-    1.00,
-    now(),
-    now()
-),
-(
-    'b7c50005-0000-4000-8010-000000000002',
-    'btc_up_down_5m_down',
-    'BTC Up or Down 5m Down',
-    'After BTC 5m trading starts, always place a Down GTD limit BUY at 0.45 until the configured BTC GTD deadline; settlement uses only actually filled shares.',
-    true,
-    1.00,
-    now(),
-    now()
-),
-(
-    'b7c50005-0000-4000-8027-000000000001',
-    'btc_up_down_5m_up_maker',
-    'BTC Up or Down 5m Up Maker',
-    'Maker strategy: after BTC 5m trading starts, baseline the Up outcome order book, then on 30-second slots place a minimum-size post-only GTD BUY just below best ask when the current best ask exceeds the previously fixed best-ask maximum.',
-    true,
-    1.00,
-    now(),
-    now()
-),
-(
-    'b7c50005-0000-4000-8027-000000000002',
-    'btc_up_down_5m_down_maker',
-    'BTC Up or Down 5m Down Maker',
-    'Maker strategy: after BTC 5m trading starts, baseline the Down outcome order book, then on 30-second slots place a minimum-size post-only GTD BUY just below best ask when the current best ask exceeds the previously fixed best-ask maximum.',
-    true,
-    1.00,
-    now(),
-    now()
-),
-(
-    'b7c50005-0000-4000-8027-000000000050',
-    'btc_up_down_5m_up_maker_50',
-    'BTC Up or Down 5m Up Maker 50',
-    'Maker strategy: after BTC 5m trading starts, baseline the Up outcome order book, then on 30-second slots place a minimum-size post-only GTD BUY at fixed 0.50 only when the current best ask is above 0.50 and exceeds the previously fixed best-ask maximum.',
-    true,
-    1.00,
-    now(),
-    now()
-),
-(
-    'b7c50005-0000-4000-8027-000000000051',
-    'btc_up_down_5m_down_maker_50',
-    'BTC Up or Down 5m Down Maker 50',
-    'Maker strategy: after BTC 5m trading starts, baseline the Down outcome order book, then on 30-second slots place a minimum-size post-only GTD BUY at fixed 0.50 only when the current best ask is above 0.50 and exceeds the previously fixed best-ask maximum.',
-    true,
-    1.00,
-    now(),
-    now()
-),
-(
-    'b7c50005-0000-4000-8011-000000000001',
-    'btc_up_down_5m_binance',
-    'BTC Up or Down 5m Binance',
-    'After BTC 5m trading starts, compare the latest Binance BTC/USDT trade-stream price with the archived market-start reference; above start buys Up, below start buys Down, equal skips. Paper entry is a GTD limit BUY capped at 0.50 until the configured BTC GTD deadline; settlement uses only actually filled shares.',
-    true,
-    1.00,
-    now(),
-    now()
-),
-(
-    'b7c50005-0000-4000-8013-000000000010',
-    'btc_up_down_5m_binance_bps_1',
-    'BTC Up or Down 5m Binance 1 bps',
-    'After BTC 5m trading starts, compare the latest Binance BTC/USDT trade-stream price with the archived market-start reference; skip unless the absolute move from start is at least 1 bps; above start buys Up, below start buys Down. Paper entry is a GTD limit BUY capped at 0.50 until the configured BTC GTD deadline; settlement uses only actually filled shares.',
-    true,
-    1.00,
-    now(),
-    now()
-),
-(
-    'b7c50005-0000-4000-8013-000000000020',
-    'btc_up_down_5m_binance_bps_2',
-    'BTC Up or Down 5m Binance 2 bps',
-    'After BTC 5m trading starts, compare the latest Binance BTC/USDT trade-stream price with the archived market-start reference; skip unless the absolute move from start is at least 2 bps; above start buys Up, below start buys Down. Paper entry is a GTD limit BUY capped at 0.50 until the configured BTC GTD deadline; settlement uses only actually filled shares.',
-    true,
-    1.00,
-    now(),
-    now()
-),
-(
-    'b7c50005-0000-4000-8013-000000000030',
-    'btc_up_down_5m_binance_bps_3',
-    'BTC Up or Down 5m Binance 3 bps',
-    'After BTC 5m trading starts, compare the latest Binance BTC/USDT trade-stream price with the archived market-start reference; skip unless the absolute move from start is at least 3 bps; above start buys Up, below start buys Down. Paper entry is a GTD limit BUY capped at 0.50 until the configured BTC GTD deadline; settlement uses only actually filled shares.',
-    true,
-    1.00,
-    now(),
-    now()
-),
-(
-    'b7c50005-0000-4000-8013-000000000040',
-    'btc_up_down_5m_binance_bps_4',
-    'BTC Up or Down 5m Binance 4 bps',
-    'After BTC 5m trading starts, compare the latest Binance BTC/USDT trade-stream price with the archived market-start reference; skip unless the absolute move from start is at least 4 bps; above start buys Up, below start buys Down. Paper entry is a GTD limit BUY capped at 0.50 until the configured BTC GTD deadline; settlement uses only actually filled shares.',
-    true,
-    1.00,
-    now(),
-    now()
-),
-(
-    'b7c50005-0000-4000-8013-000000000050',
-    'btc_up_down_5m_binance_bps_5',
-    'BTC Up or Down 5m Binance 5 bps',
-    'After BTC 5m trading starts, compare the latest Binance BTC/USDT trade-stream price with the archived market-start reference; skip unless the absolute move from start is at least 5 bps; above start buys Up, below start buys Down. Paper entry is a GTD limit BUY capped at 0.50 until the configured BTC GTD deadline; settlement uses only actually filled shares.',
-    true,
-    1.00,
-    now(),
-    now()
-),
-(
-    'b7c50005-0000-4000-8013-000000000060',
-    'btc_up_down_5m_binance_bps_6',
-    'BTC Up or Down 5m Binance 6 bps',
-    'After BTC 5m trading starts, compare the latest Binance BTC/USDT trade-stream price with the archived market-start reference; skip unless the absolute move from start is at least 6 bps; above start buys Up, below start buys Down. Paper entry is a GTD limit BUY capped at 0.50 until the configured BTC GTD deadline; settlement uses only actually filled shares.',
-    true,
-    1.00,
-    now(),
-    now()
-),
-(
-    'b7c50005-0000-4000-8013-000000000070',
-    'btc_up_down_5m_binance_bps_7',
-    'BTC Up or Down 5m Binance 7 bps',
-    'After BTC 5m trading starts, compare the latest Binance BTC/USDT trade-stream price with the archived market-start reference; skip unless the absolute move from start is at least 7 bps; above start buys Up, below start buys Down. Paper entry is a GTD limit BUY capped at 0.50 until the configured BTC GTD deadline; settlement uses only actually filled shares.',
-    true,
-    1.00,
-    now(),
-    now()
-),
-(
-    'b7c50005-0000-4000-8013-000000000080',
-    'btc_up_down_5m_binance_bps_8',
-    'BTC Up or Down 5m Binance 8 bps',
-    'After BTC 5m trading starts, compare the latest Binance BTC/USDT trade-stream price with the archived market-start reference; skip unless the absolute move from start is at least 8 bps; above start buys Up, below start buys Down. Paper entry is a GTD limit BUY capped at 0.50 until the configured BTC GTD deadline; settlement uses only actually filled shares.',
-    true,
-    1.00,
-    now(),
-    now()
-),
-(
-    'b7c50005-0000-4000-8013-000000000090',
-    'btc_up_down_5m_binance_bps_9',
-    'BTC Up or Down 5m Binance 9 bps',
-    'After BTC 5m trading starts, compare the latest Binance BTC/USDT trade-stream price with the archived market-start reference; skip unless the absolute move from start is at least 9 bps; above start buys Up, below start buys Down. Paper entry is a GTD limit BUY capped at 0.50 until the configured BTC GTD deadline; settlement uses only actually filled shares.',
-    true,
-    1.00,
-    now(),
-    now()
-),
-(
-    'b7c50005-0000-4000-8013-000000000001',
-    'btc_up_down_5m_binance_bps_10',
-    'BTC Up or Down 5m Binance 10 bps',
-    'After BTC 5m trading starts, compare the latest Binance BTC/USDT trade-stream price with the archived market-start reference; skip unless the absolute move from start is at least 10 bps; above start buys Up, below start buys Down. Paper entry is a GTD limit BUY capped at 0.50 until the configured BTC GTD deadline; settlement uses only actually filled shares.',
-    true,
-    1.00,
-    now(),
-    now()
-),
-(
-    'b7c50005-0000-4000-8013-000000000002',
-    'btc_up_down_5m_binance_bps_20',
-    'BTC Up or Down 5m Binance 20 bps',
-    'After BTC 5m trading starts, compare the latest Binance BTC/USDT trade-stream price with the archived market-start reference; skip unless the absolute move from start is at least 20 bps; above start buys Up, below start buys Down. Paper entry is a GTD limit BUY capped at 0.50 until the configured BTC GTD deadline; settlement uses only actually filled shares.',
-    true,
-    1.00,
-    now(),
-    now()
-),
-(
-    'b7c50005-0000-4000-8013-000000000005',
-    'btc_up_down_5m_binance_bps_50',
-    'BTC Up or Down 5m Binance 50 bps',
-    'After BTC 5m trading starts, compare the latest Binance BTC/USDT trade-stream price with the archived market-start reference; skip unless the absolute move from start is at least 50 bps; above start buys Up, below start buys Down. Paper entry is a GTD limit BUY capped at 0.50 until the configured BTC GTD deadline; settlement uses only actually filled shares.',
-    true,
-    1.00,
-    now(),
-    now()
-),
-(
-    'b7c50005-0000-4000-8011-000000000045',
-    'btc_up_down_5m_binance_45',
-    'BTC Up or Down 5m Binance 45',
-    'After BTC 5m trading starts, compare the latest Binance BTC/USDT trade-stream price with the archived market-start reference; above start buys Up, below start buys Down, equal skips. Paper entry is a GTD limit BUY at fixed 0.45 until the configured BTC GTD deadline; settlement uses only actually filled shares.',
-    true,
-    1.00,
-    now(),
-    now()
-),
-(
-    'b7c50005-0000-4000-8011-000000000047',
-    'btc_up_down_5m_binance_47',
-    'BTC Up or Down 5m Binance 47',
-    'After BTC 5m trading starts, compare the latest Binance BTC/USDT trade-stream price with the archived market-start reference; above start buys Up, below start buys Down, equal skips. Paper entry is a GTD limit BUY at fixed 0.47 until the configured BTC GTD deadline; settlement uses only actually filled shares.',
-    true,
-    1.00,
-    now(),
-    now()
-),
-(
-    'b7c50005-0000-4000-8011-000000000049',
-    'btc_up_down_5m_binance_49',
-    'BTC Up or Down 5m Binance 49',
-    'After BTC 5m trading starts, compare the latest Binance BTC/USDT trade-stream price with the archived market-start reference; above start buys Up, below start buys Down, equal skips. Paper entry is a GTD limit BUY at fixed 0.49 until the configured BTC GTD deadline; settlement uses only actually filled shares.',
-    true,
-    1.00,
-    now(),
-    now()
-),
-(
-    'b7c50005-0000-4000-8011-000000000002',
-    'btc_up_down_5m_binance_clever',
-    'BTC Up or Down 5m Binance Clever',
-    'After BTC 5m trading starts, compare the latest Binance BTC/USDT trade-stream price with the archived market-start reference, estimate a fair target outcome price from recent odds archive samples with similar BTC move/time-to-close/book quality, and place a GTD limit BUY only below fair value with a safety margin.',
-    true,
-    1.00,
-    now(),
-    now()
-),
-(
-    'b7c50005-0000-4000-8011-000000000101',
-    'btc_up_down_5m_binance_clever_aggressive',
-    'BTC Up or Down 5m Binance Clever Aggressive',
-    'After BTC 5m trading starts, compare the latest Binance BTC/USDT trade-stream price with the archived market-start reference, estimate a fair target outcome price from recent odds archive samples with similar BTC move/time-to-close/book quality, and place a GTD limit BUY only below fair value with a 0.01 safety margin.',
-    true,
-    1.00,
-    now(),
-    now()
-),
-(
-    'b7c50005-0000-4000-8011-000000000105',
-    'btc_up_down_5m_binance_clever_conservative',
-    'BTC Up or Down 5m Binance Clever Conservative',
-    'After BTC 5m trading starts, compare the latest Binance BTC/USDT trade-stream price with the archived market-start reference, estimate a fair target outcome price from recent odds archive samples with similar BTC move/time-to-close/book quality, and place a GTD limit BUY only below fair value with a 0.05 safety margin.',
-    true,
-    1.00,
-    now(),
-    now()
-),
-(
-    'b7c50005-0000-4000-8014-000000000002',
-    'btc_up_down_5m_binance_edge_2',
-    'BTC Up or Down 5m Binance Edge 2',
-    'After BTC 5m trading starts, use the Binance start-relative direction, estimate fair value from the BTC odds archive, and place a GTD limit BUY only when the safe price is at least 0.02 below fair value.',
-    true,
-    1.00,
-    now(),
-    now()
-),
-(
-    'b7c50005-0000-4000-8014-000000000004',
-    'btc_up_down_5m_binance_edge_4',
-    'BTC Up or Down 5m Binance Edge 4',
-    'After BTC 5m trading starts, use the Binance start-relative direction, estimate fair value from the BTC odds archive, and place a GTD limit BUY only when the safe price is at least 0.04 below fair value.',
-    true,
-    1.00,
-    now(),
-    now()
-),
-(
-    'b7c50005-0000-4000-8014-000000000006',
-    'btc_up_down_5m_binance_edge_6',
-    'BTC Up or Down 5m Binance Edge 6',
-    'After BTC 5m trading starts, use the Binance start-relative direction, estimate fair value from the BTC odds archive, and place a GTD limit BUY only when the safe price is at least 0.06 below fair value.',
-    true,
-    1.00,
-    now(),
-    now()
-),
-(
-    'b7c50005-0000-4000-8015-000000000015',
-    'btc_up_down_5m_binance_15s',
-    'BTC Up or Down 5m Binance 15s',
-    'Wait 15 seconds after BTC 5m trading starts, then compare the latest Binance BTC/USDT trade-stream price with the archived market-start reference; above start buys Up, below start buys Down, equal skips. Paper entry is a GTD limit BUY capped at 0.50 until the configured BTC GTD deadline.',
-    true,
-    1.00,
-    now(),
-    now()
-),
-(
-    'b7c50005-0000-4000-8015-000000000030',
-    'btc_up_down_5m_binance_30s',
-    'BTC Up or Down 5m Binance 30s',
-    'Wait 30 seconds after BTC 5m trading starts, then compare the latest Binance BTC/USDT trade-stream price with the archived market-start reference; above start buys Up, below start buys Down, equal skips. Paper entry is a GTD limit BUY capped at 0.50 until the configured BTC GTD deadline.',
-    true,
-    1.00,
-    now(),
-    now()
-),
-(
-    'b7c50005-0000-4000-8015-000000000045',
-    'btc_up_down_5m_binance_45s',
-    'BTC Up or Down 5m Binance 45s',
-    'Wait 45 seconds after BTC 5m trading starts, then compare the latest Binance BTC/USDT trade-stream price with the archived market-start reference; above start buys Up, below start buys Down, equal skips. Paper entry is a GTD limit BUY capped at 0.50 until the configured BTC GTD deadline.',
-    true,
-    1.00,
-    now(),
-    now()
-),
-(
-    'b7c50005-0000-4000-8016-000000000002',
-    'btc_up_down_5m_ensemble_2_of_3',
-    'BTC Up or Down 5m Ensemble 2 of 3',
-    'Immediately after BTC 5m market open, vote between Binance start-relative, Middle 100, and Skip 1 signals. Enter only when at least two available votes select the same outcome. Paper entry is a GTD limit BUY with dynamic break-even pricing.',
-    true,
-    1.00,
-    now(),
-    now()
-),
-(
-    'b7c50005-0000-4000-8017-000000000050',
-    'btc_up_down_5m_dynamic_markov',
-    'BTC Up or Down 5m Dynamic Markov',
-    'Immediately after BTC 5m market open, estimate the next result from recent BTC 5m result transitions and enter only when the transition edge is strong enough. Paper entry is a GTD limit BUY with dynamic break-even pricing.',
-    true,
-    1.00,
-    now(),
-    now()
-),
-(
-    'b7c50005-0000-4000-8018-000000000030',
-    'btc_up_down_5m_strategy_selector',
-    'BTC Up or Down 5m Strategy Selector',
-    'Immediately after BTC 5m market open, choose the best positive-expectancy opening BTC strategy from recent settled Paper history, then reuse that strategy''s current direction signal for one GTD limit BUY.',
-    true,
-    1.00,
-    now(),
-    now()
-)
-ON CONFLICT (id) DO UPDATE SET
-    code = excluded.code,
-    name = excluded.name,
-    description = excluded.description,
-    updated_at_utc = excluded.updated_at_utc;
-
-INSERT INTO strategies (id, code, name, description, enabled, paper_stake_amount, created_at_utc, updated_at_utc)
-WITH thresholds(threshold_tenths) AS (
-    SELECT generate_series(10, 50)
-),
-formatted AS (
-    SELECT
-        threshold_tenths,
-        threshold_tenths::text AS threshold_name,
-        threshold_tenths::text AS code_suffix
-    FROM thresholds
-    WHERE threshold_tenths NOT IN (10, 20, 50)
-)
-SELECT
-    ('b7c50005-0000-4000-8013-' || lpad((100 + threshold_tenths)::text, 12, '0'))::uuid,
-    'btc_up_down_5m_binance_bps_' || code_suffix,
-    'BTC Up or Down 5m Binance ' || threshold_name || ' bps',
-    'After BTC 5m trading starts, compare the latest Binance BTC/USDT trade-stream price with the archived market-start reference; skip unless the absolute move from start is at least ' || threshold_name || ' bps; above start buys Up, below start buys Down. Paper entry is a GTD limit BUY capped at 0.50 until the configured BTC GTD deadline; settlement uses only actually filled shares.',
-    true,
-    1.00,
-    now(),
-    now()
-FROM formatted
-ON CONFLICT (id) DO UPDATE SET
-    code = excluded.code,
-    name = excluded.name,
-    description = excluded.description,
-    updated_at_utc = excluded.updated_at_utc;
 
 INSERT INTO strategies (id, code, name, description, enabled, paper_stake_amount, created_at_utc, updated_at_utc)
 WITH variants(direction_code, direction_name, opposite_direction_name, id_group) AS (
@@ -2007,7 +1088,7 @@ SELECT
     ('b7c50005-0000-4000-' || id_group || '-' || lpad((100 + threshold_tenths)::text, 12, '0'))::uuid,
     'btc_up_down_5m_' || direction_code || '_bps_' || code_suffix || '_instant',
     'BTC Up or Down 5m ' || direction_name || ' ' || threshold_name || ' bps Instant',
-    'Immediately after BTC 5m market open, use the same previous close-book result streak and archived Binance BTC start/end move gate as Skip ' || threshold_name || ' bps Instant; enter only when the cumulative streak move is at least ' || threshold_name || ' bps and the countertrend direction is ' || direction_name || '. If the countertrend direction is ' || opposite_direction_name || ', skip. Paper entry simulates a BUY FAK taker fill from current executable ask depth; available liquidity is taken immediately, any remainder is cancelled, and settlement uses only actually filled shares.',
+    'Immediately after BTC 5m market open, use the previous close-book result streak and archived Binance BTC start/end move gate; enter only when the cumulative streak move is at least ' || threshold_name || ' bps and the countertrend direction is ' || direction_name || '. If the countertrend direction is ' || opposite_direction_name || ', skip. Paper entry simulates a BUY FAK taker fill from current executable ask depth; available liquidity is taken immediately, any remainder is cancelled, and settlement uses only actually filled shares.',
     true,
     1.00,
     now(),
@@ -2020,38 +1101,8 @@ ON CONFLICT (id) DO UPDATE SET
     updated_at_utc = excluded.updated_at_utc;
 
 INSERT INTO strategies (id, code, name, description, enabled, paper_stake_amount, created_at_utc, updated_at_utc)
-WITH depths(depth) AS (
-    VALUES (90), (80), (70), (60), (50), (40), (30), (20), (10)
-),
-variants(id_group, code_suffix, name_suffix, description_suffix) AS (
-    VALUES
-        ('8006', '', '', '; above mean buys Down, below mean buys Up, otherwise skip until all ')
-)
-SELECT
-    ('b7c50005-0000-4000-' || variants.id_group || '-000000000' || lpad(depths.depth::text, 3, '0'))::uuid,
-    'btc_up_down_5m_middle_' || depths.depth || variants.code_suffix,
-    'BTC Up or Down 5m Middle ' || depths.depth || variants.name_suffix,
-    CASE
-        WHEN variants.code_suffix = ''
-        THEN 'Immediately after BTC 5m market open, compare the latest Binance BTC/USDT trade-stream price against the arithmetic mean of the latest ' || depths.depth || ' sampled Binance BTC/USDT reference price(s); above mean buys Down, below mean buys Up, otherwise skip until all ' || depths.depth || ' sampled prices are available. Paper entry is an ordinary GTD Paper BUY with dynamic break-even pricing.'
-        ELSE 'Immediately after BTC 5m market open, compare the latest Binance BTC/USDT trade-stream price against the arithmetic mean of the latest ' || depths.depth || ' sampled Binance BTC/USDT reference price(s), then invert the standard Middle ' || depths.depth || ' decision; above mean buys Up, below mean buys Down, otherwise skip until all ' || depths.depth || ' sampled prices are available. Paper entry is an ordinary GTD Paper BUY with dynamic break-even pricing.'
-    END,
-    true,
-    1.00,
-    now(),
-    now()
-FROM depths
-CROSS JOIN variants
-ON CONFLICT (id) DO UPDATE SET
-    code = excluded.code,
-    name = excluded.name,
-    description = excluded.description,
-    updated_at_utc = excluded.updated_at_utc;
-
-INSERT INTO strategies (id, code, name, description, enabled, paper_stake_amount, created_at_utc, updated_at_utc)
 WITH assets(asset_symbol, bps_id_group, instant_id_group) AS (
     VALUES
-        ('ETH', '8061', '8062'),
         ('SOL', '8063', '8064')
 ),
 thresholds(threshold_tenths) AS (
@@ -2087,7 +1138,6 @@ ON CONFLICT (id) DO UPDATE SET
 INSERT INTO strategies (id, code, name, description, enabled, paper_stake_amount, created_at_utc, updated_at_utc)
 WITH assets(asset_symbol, bps_id_group, instant_id_group) AS (
     VALUES
-        ('ETH', '8061', '8062'),
         ('SOL', '8063', '8064')
 ),
 thresholds(threshold_tenths) AS (
@@ -2110,40 +1160,6 @@ SELECT
     asset_symbol || ' Up or Down 5m Binance ' || threshold_name || ' bps Instant',
     'After ' || asset_symbol || ' 5m trading starts, compare the latest Binance ' || asset_symbol || '/USDT trade-stream price with the archived market-start reference; skip unless the absolute move from start is at least ' || threshold_name || ' bps; above start buys Up, below start buys Down. Paper entry simulates a BUY FAK taker fill from current executable ask depth; available liquidity is taken immediately, any remainder is cancelled, and settlement uses only actually filled shares.',
     false,
-    1.00,
-    now(),
-    now()
-FROM formatted
-ON CONFLICT (id) DO UPDATE SET
-    code = excluded.code,
-    name = excluded.name,
-    description = excluded.description,
-    updated_at_utc = excluded.updated_at_utc;
-
-INSERT INTO strategies (id, code, name, description, enabled, paper_stake_amount, created_at_utc, updated_at_utc)
-WITH assets(asset_symbol, skip_id_group) AS (
-    VALUES
-        ('ETH', '8065'),
-        ('SOL', '8068')
-),
-depths(depth) AS (
-    SELECT generate_series(1, 5)
-),
-formatted AS (
-    SELECT
-        asset_symbol,
-        skip_id_group,
-        depth,
-        depth::text AS depth_name
-    FROM assets
-    CROSS JOIN depths
-)
-SELECT
-    ('b7c50005-0000-4000-' || skip_id_group || '-' || lpad(depth::text, 12, '0'))::uuid,
-    lower(asset_symbol) || '_up_down_5m_skip_' || depth_name,
-    asset_symbol || ' Up or Down 5m Skip ' || depth_name,
-    'Immediately after ' || asset_symbol || ' 5m market open, inspect the latest ' || depth_name || ' settled ' || asset_symbol || ' 5m market result(s); after consecutive Up results buy Down, after consecutive Down results buy Up, otherwise skip. Paper entry is a GTD limit BUY with dynamic break-even pricing; settlement uses only actually filled shares.',
-    true,
     1.00,
     now(),
     now()
@@ -2189,7 +1205,7 @@ SELECT
     ('b7c50005-0000-4000-' || id_group || '-' || lpad((100 + threshold_tenths)::text, 12, '0'))::uuid,
     lower(asset_symbol) || '_up_down_5m_' || direction_code || '_bps_' || code_suffix || '_instant',
     asset_symbol || ' Up or Down 5m ' || direction_name || ' ' || threshold_name || ' bps Instant',
-    'Immediately after ' || asset_symbol || ' 5m market open, use the same previous close-book result streak and archived Binance ' || asset_symbol || ' start/end move gate as Skip ' || threshold_name || ' bps Instant; enter only when the cumulative streak move is at least ' || threshold_name || ' bps and the countertrend direction is ' || direction_name || '. If the countertrend direction is ' || opposite_direction_name || ', skip. Paper entry simulates a BUY FAK taker fill from current executable ask depth; available liquidity is taken immediately, any remainder is cancelled, and settlement uses only actually filled shares.',
+    'Immediately after ' || asset_symbol || ' 5m market open, use the previous close-book result streak and archived Binance ' || asset_symbol || ' start/end move gate; enter only when the cumulative streak move is at least ' || threshold_name || ' bps and the countertrend direction is ' || direction_name || '. If the countertrend direction is ' || opposite_direction_name || ', skip. Paper entry simulates a BUY FAK taker fill from current executable ask depth; available liquidity is taken immediately, any remainder is cancelled, and settlement uses only actually filled shares.',
     true,
     1.00,
     now(),
@@ -2207,7 +1223,7 @@ VALUES (
     'eth_up_down_5m_down_bps_9_fak',
     'ETH Up or Down 5m Down 9 bps',
     'Immediately after ETH 5m market open, use the previous ETH 5m close-book result streak and archived Binance ETH start/end move gate; enter only when the cumulative streak move is at least 9 bps and the countertrend direction is Down. If the countertrend direction is Up, skip. Paper entry simulates the same taker BUY from executable ask depth using the worst-price cap, while Live-shadow submits a market BUY amount so available liquidity is taken immediately and any remainder is cancelled.',
-    true,
+    false,
     false,
     1.00,
     now(),
@@ -2335,6 +1351,142 @@ ON CONFLICT (id) DO UPDATE SET
     description = excluded.description,
     updated_at_utc = excluded.updated_at_utc;
 
+INSERT INTO strategies (
+    id,
+    code,
+    name,
+    description,
+    enabled,
+    live_stakes,
+    paper_stake_amount,
+    live_stake_amount,
+    live_available_balance,
+    paused,
+    paused_until_utc,
+    auto_live_paused,
+    auto_live_paused_at_utc,
+    auto_live_pause_window_start_utc,
+    live_enabled_at_utc,
+    paper_lost_coeff,
+    live_lost_coeff,
+    paper_lost_counter,
+    live_lost_counter,
+    created_at_utc,
+    updated_at_utc)
+WITH assets(asset_symbol, id_group) AS (
+    VALUES
+        ('BTC', '8178'),
+        ('ETH', '8179'),
+        ('SOL', '8180')
+),
+thresholds(threshold_tenths) AS (
+    SELECT value
+    FROM generate_series(1, 10) AS generated(value)
+    UNION ALL
+    SELECT value
+    FROM generate_series(15, 100, 5) AS generated(value)
+),
+formatted AS (
+    SELECT
+        assets.asset_symbol,
+        assets.id_group,
+        threshold_tenths,
+        threshold_tenths::text AS threshold_name,
+        threshold_tenths::text AS code_suffix
+    FROM assets
+    CROSS JOIN thresholds
+)
+SELECT
+    ('b7c50005-0000-4000-' || id_group || '-' || lpad((100 + threshold_tenths)::text, 12, '0'))::uuid,
+    lower(asset_symbol) || '_up_down_5m_reference_average_bps_' || code_suffix || '_fak_premarket',
+    asset_symbol || ' Up or Down 5m ' || threshold_name || ' bps Reference Average Premarket',
+    'Thirty seconds before ' || asset_symbol || ' 5m market open, compare the latest Binance ' || asset_symbol || '/USDT reference price with the largest full in-memory reference average across 24h, 12h, 6h, 3h, 90m, 45m, 20m, and 10m windows. If the current price is above that maximum average by at least ' || threshold_name || ' bps, BUY Down; if it is below that maximum average by at least ' || threshold_name || ' bps, BUY Up. Otherwise skip. Paper entry simulates the same taker BUY, while Live-shadow submits a market BUY amount so available liquidity is taken immediately and any remainder is cancelled.',
+    true,
+    false,
+    1.00,
+    1.00,
+    100.00,
+    false,
+    NULL,
+    false,
+    NULL,
+    NULL,
+    NULL,
+    1.00,
+    1.00,
+    0,
+    0,
+    now(),
+    now()
+FROM formatted
+ON CONFLICT (id) DO UPDATE SET
+    code = excluded.code,
+    name = excluded.name,
+    description = excluded.description,
+    updated_at_utc = excluded.updated_at_utc;
+
+INSERT INTO strategies (
+    id,
+    code,
+    name,
+    description,
+    enabled,
+    live_stakes,
+    paper_stake_amount,
+    live_stake_amount,
+    live_available_balance,
+    paused,
+    paused_until_utc,
+    auto_live_paused,
+    auto_live_paused_at_utc,
+    auto_live_pause_window_start_utc,
+    live_enabled_at_utc,
+    paper_lost_coeff,
+    live_lost_coeff,
+    paper_lost_counter,
+    live_lost_counter,
+    created_at_utc,
+    updated_at_utc)
+WITH thresholds(threshold_tenths) AS (
+    SELECT value
+    FROM generate_series(1, 10) AS generated(value)
+),
+formatted AS (
+    SELECT
+        threshold_tenths,
+        threshold_tenths::text AS threshold_name,
+        threshold_tenths::text AS code_suffix
+    FROM thresholds
+)
+SELECT
+    ('b7c50005-0000-4000-8181-' || lpad((100 + threshold_tenths)::text, 12, '0'))::uuid,
+    'eth_up_down_5m_down_filtered_average_bps_' || code_suffix || '_fak_premarket',
+    'ETH Up or Down 5m Down ' || threshold_name || ' bps Filtered Average Premarket',
+    'Thirty seconds before ETH 5m market open, compare the latest Binance ETH/USDT reference price with the largest full in-memory reference average across 24h, 12h, 6h, 3h, 90m, 45m, 20m, and 10m windows. If the selected reference window is 6h or 12h, skip. If the absolute move from the selected average is at least 20 bps and below 80 bps, skip. Otherwise, when the current price moves Down by at least ' || threshold_name || ' bps from that maximum average, BUY Up from current premarket executable ask depth using the worst-price cap. Paper entry simulates the same taker BUY, while Live-shadow submits a market BUY amount so available liquidity is taken immediately and any remainder is cancelled.',
+    true,
+    false,
+    1.00,
+    1.00,
+    100.00,
+    false,
+    NULL,
+    false,
+    NULL,
+    NULL,
+    NULL,
+    1.00,
+    1.00,
+    0,
+    0,
+    now(),
+    now()
+FROM formatted
+ON CONFLICT (id) DO UPDATE SET
+    code = excluded.code,
+    name = excluded.name,
+    description = excluded.description,
+    updated_at_utc = excluded.updated_at_utc;
+
 UPDATE strategies
 SET name = replace(name, ' bps FAK Premarket', ' bps Premarket'),
     description = replace(replace(replace(description, ' FAK ', ' '), 'FAK ', ''), ' FAK', ''),
@@ -2428,22 +1580,16 @@ ON CONFLICT (id) DO UPDATE SET
     updated_at_utc = excluded.updated_at_utc;
 
 INSERT INTO strategies (id, code, name, description, enabled, live_stakes, paper_stake_amount, created_at_utc, updated_at_utc)
-WITH thresholds(threshold_value) AS (
-    SELECT value
-    FROM generate_series(1, 10) AS generated(value)
-),
-assets(asset_symbol, up_id_group, up_revert_id_group, down_id_group, down_revert_id_group) AS (
+WITH assets(asset_symbol, up_id_group, down_id_group) AS (
     VALUES
-        ('BTC', '8146', '8147', '8148', '8149'),
-        ('ETH', '8144', '8145', '8134', '8143'),
-        ('SOL', '8150', '8151', '8152', '8153')
+        ('BTC', '8146', '8148'),
+        ('ETH', '8144', '8134'),
+        ('SOL', '8150', '8152')
 ),
-variants(diff_code, diff_name, diff_expression, target_outcome, is_revert, revert_code_suffix, revert_name_suffix, strategy_kind) AS (
+variants(diff_code, diff_name, diff_expression, target_outcome, strategy_kind) AS (
     VALUES
-        ('up', 'Up', 'UpCount - DownCount', 'Down', false, '', '', 'countertrend'),
-        ('up', 'Up', 'UpCount - DownCount', 'Up', true, '_revert', ' Revert', 'revert'),
-        ('down', 'Down', 'DownCount - UpCount', 'Up', false, '', '', 'countertrend'),
-        ('down', 'Down', 'DownCount - UpCount', 'Down', true, '_revert', ' Revert', 'revert')
+        ('up', 'Up', 'UpCount - DownCount', 'Down', 'countertrend'),
+        ('down', 'Down', 'DownCount - UpCount', 'Up', 'countertrend')
 ),
 formatted AS (
     SELECT
@@ -2452,24 +1598,25 @@ formatted AS (
         variants.diff_name,
         variants.diff_expression,
         variants.target_outcome,
-        variants.revert_code_suffix,
-        variants.revert_name_suffix,
         variants.strategy_kind,
         CASE
-            WHEN variants.diff_code = 'up' AND variants.is_revert THEN assets.up_revert_id_group
             WHEN variants.diff_code = 'up' THEN assets.up_id_group
-            WHEN variants.is_revert THEN assets.down_revert_id_group
             ELSE assets.down_id_group
         END AS id_group,
         thresholds.threshold_value
     FROM assets
     CROSS JOIN variants
-    CROSS JOIN thresholds
+    CROSS JOIN LATERAL generate_series(
+        1,
+        CASE
+            WHEN assets.asset_symbol = 'BTC' AND variants.diff_code = 'down' THEN 30
+            ELSE 10
+        END) AS thresholds(threshold_value)
 )
 SELECT
     ('b7c50005-0000-4000-' || id_group || '-' || lpad(threshold_value::text, 12, '0'))::uuid,
-    lower(asset_symbol) || '_up_down_5m_' || diff_code || '_diff_' || threshold_value::text || revert_code_suffix || '_fak_premarket',
-    asset_symbol || ' Up or Down 5m ' || diff_name || ' ' || threshold_value::text || ' Diff' || revert_name_suffix || ' Premarket',
+    lower(asset_symbol) || '_up_down_5m_' || diff_code || '_diff_' || threshold_value::text || '_fak_premarket',
+    asset_symbol || ' Up or Down 5m ' || diff_name || ' ' || threshold_value::text || ' Diff Premarket',
     '30 seconds before ' || asset_symbol || ' 5m market open, use the in-memory UTC-day raw ' || diff_expression || ' counter reset at 00:00 UTC. Diff ' || strategy_kind || ' strategy: if the absolute Diff side is at least ' || threshold_value::text || ', BUY ' || target_outcome || ' from the current premarket executable ask depth using the worst-price cap. Otherwise skip. Paper entry simulates the same taker BUY, while Live-shadow submits a market BUY amount so available liquidity is taken immediately and any remainder is cancelled.',
     true,
     false,
@@ -2477,7 +1624,6 @@ SELECT
     now(),
     now()
 FROM formatted
-WHERE NOT (asset_symbol = 'ETH' AND strategy_kind = 'revert')
 ON CONFLICT (id) DO UPDATE SET
     code = excluded.code,
     name = excluded.name,
@@ -2700,556 +1846,6 @@ ON CONFLICT (id) DO UPDATE SET
     description = excluded.description,
     updated_at_utc = excluded.updated_at_utc;
 
-INSERT INTO strategies (id, code, name, description, enabled, live_stakes, paper_stake_amount, created_at_utc, updated_at_utc)
-WITH assets(asset_symbol, up_id_group, down_id_group, up_revert_id_group, down_revert_id_group) AS (
-    VALUES
-        ('BTC', '8053', '8054', '8103', '8104'),
-        ('ETH', '8087', '8088', '8105', '8106'),
-        ('SOL', '8089', '8090', '8107', '8108')
-),
-variants(diff_code, diff_name, target_outcome, is_revert, revert_code_suffix, revert_name_suffix, strategy_kind) AS (
-    VALUES
-        ('up', 'Up', 'Down', false, '', '', 'countertrend'),
-        ('down', 'Down', 'Up', false, '', '', 'countertrend')
-),
-thresholds(threshold_value) AS (
-    SELECT value
-    FROM generate_series(1, 10) AS generated(value)
-    UNION ALL
-    SELECT value
-    FROM generate_series(15, 150, 5) AS generated(value)
-),
-formatted AS (
-    SELECT
-        assets.asset_symbol,
-        variants.diff_code,
-        variants.diff_name,
-        variants.target_outcome,
-        variants.revert_code_suffix,
-        variants.revert_name_suffix,
-        variants.strategy_kind,
-        CASE
-            WHEN variants.diff_code = 'up' AND variants.is_revert THEN assets.up_revert_id_group
-            WHEN variants.diff_code = 'up' THEN assets.up_id_group
-            WHEN variants.is_revert THEN assets.down_revert_id_group
-            ELSE assets.down_id_group
-        END AS id_group,
-        CASE
-            WHEN variants.diff_code = 'up' THEN 'UpCount - DownCount'
-            ELSE 'DownCount - UpCount'
-        END AS diff_expression,
-        threshold_value
-    FROM assets
-    CROSS JOIN variants
-    CROSS JOIN thresholds
-)
-SELECT
-    ('b7c50005-0000-4000-' || id_group || '-' || lpad(threshold_value::text, 12, '0'))::uuid,
-    lower(asset_symbol) || '_up_down_5m_' || diff_code || '_diff_' || threshold_value::text || revert_code_suffix || '_instant',
-    asset_symbol || ' Up or Down 5m ' || diff_name || ' ' || threshold_value::text || ' Diff' || revert_name_suffix || ' Instant',
-    'Diff ' || strategy_kind || ' strategy: after the ' || asset_symbol || ' 5m market opens, use the in-memory UTC-day raw ' || diff_expression || ' counter reset at 00:00 UTC. If the absolute Diff side is at least ' || threshold_value::text || ', submit a BUY FAK taker entry on ' || target_outcome || ' from current executable ask depth. Otherwise skip. Settlement uses only actually filled shares.',
-    true,
-    false,
-    1.00,
-    now(),
-    now()
-FROM formatted
-ON CONFLICT (id) DO UPDATE SET
-    code = excluded.code,
-    name = excluded.name,
-    description = excluded.description,
-    updated_at_utc = excluded.updated_at_utc;
-
-INSERT INTO strategies (id, code, name, description, enabled, live_stakes, paper_stake_amount, created_at_utc, updated_at_utc)
-WITH assets(asset_symbol, up_id_group, down_id_group, up_revert_id_group, down_revert_id_group) AS (
-    VALUES
-        ('BTC', '8091', '8092', '8109', '8110'),
-        ('ETH', '8093', '8094', '8111', '8112'),
-        ('SOL', '8095', '8096', '8113', '8114')
-),
-variants(diff_code, diff_name, target_outcome, is_revert, revert_code_suffix, revert_name_suffix, strategy_kind) AS (
-    VALUES
-        ('up', 'Up', 'Down', false, '', '', 'countertrend'),
-        ('down', 'Down', 'Up', false, '', '', 'countertrend')
-),
-thresholds(threshold_value) AS (
-    SELECT value
-    FROM generate_series(1, 10) AS generated(value)
-    UNION ALL
-    SELECT value
-    FROM generate_series(15, 20, 5) AS generated(value)
-),
-formatted AS (
-    SELECT
-        assets.asset_symbol,
-        variants.diff_code,
-        variants.diff_name,
-        variants.target_outcome,
-        variants.revert_code_suffix,
-        variants.revert_name_suffix,
-        variants.strategy_kind,
-        CASE
-            WHEN variants.diff_code = 'up' AND variants.is_revert THEN assets.up_revert_id_group
-            WHEN variants.diff_code = 'up' THEN assets.up_id_group
-            WHEN variants.is_revert THEN assets.down_revert_id_group
-            ELSE assets.down_id_group
-        END AS id_group,
-        CASE
-            WHEN variants.diff_code = 'up' THEN 'AdjustedDiff = raw Diff - trend zero'
-            ELSE 'AdjustedDiff = trend zero - raw Diff'
-        END AS diff_expression,
-        threshold_value
-    FROM assets
-    CROSS JOIN variants
-    CROSS JOIN thresholds
-)
-SELECT
-    ('b7c50005-0000-4000-' || id_group || '-' || lpad(threshold_value::text, 12, '0'))::uuid,
-    lower(asset_symbol) || '_up_down_5m_' || diff_code || '_adjusted_diff_' || threshold_value::text || revert_code_suffix || '_instant',
-    asset_symbol || ' Up or Down 5m ' || diff_name || ' ' || threshold_value::text || ' AdjustedDiff' || revert_name_suffix || ' Instant',
-    'AdjustedDiff ' || strategy_kind || ' strategy: after the ' || asset_symbol || ' 5m market opens, use the in-memory continuous raw Diff counter without the 00:00 UTC reset, compute a slow EMA trend zero, then evaluate ' || diff_expression || '. If the adjusted Diff side is at least ' || threshold_value::text || ', submit a BUY FAK taker entry on ' || target_outcome || ' from current executable ask depth. Otherwise skip. Settlement uses only actually filled shares.',
-    true,
-    false,
-    1.00,
-    now(),
-    now()
-FROM formatted
-ON CONFLICT (id) DO UPDATE SET
-    code = excluded.code,
-    name = excluded.name,
-    description = excluded.description,
-    updated_at_utc = excluded.updated_at_utc;
-
-INSERT INTO strategies (id, code, name, description, enabled, live_stakes, paper_stake_amount, created_at_utc, updated_at_utc)
-WITH assets(asset_symbol, up_id_group, down_id_group, up_revert_id_group, down_revert_id_group) AS (
-    VALUES
-        ('BTC', '8097', '8098', '8115', '8116'),
-        ('ETH', '8099', '8100', '8117', '8118'),
-        ('SOL', '8101', '8102', '8119', '8120')
-),
-variants(diff_code, diff_name, target_outcome, is_revert, revert_code_suffix, revert_name_suffix, strategy_kind) AS (
-    VALUES
-        ('up', 'Up', 'Down', false, '', '', 'countertrend'),
-        ('down', 'Down', 'Up', false, '', '', 'countertrend')
-),
-shifts(shift_value) AS (
-    SELECT generate_series(1, 6)
-),
-thresholds(threshold_value) AS (
-    SELECT generate_series(1, 12)
-),
-formatted AS (
-    SELECT
-        assets.asset_symbol,
-        variants.diff_code,
-        variants.diff_name,
-        variants.target_outcome,
-        variants.revert_code_suffix,
-        variants.revert_name_suffix,
-        variants.strategy_kind,
-        shifts.shift_value,
-        thresholds.threshold_value,
-        ((shifts.shift_value * 100) + thresholds.threshold_value) AS id_suffix,
-        ((shifts.shift_value * 2) + 1) AS shift_trigger,
-        CASE
-            WHEN variants.diff_code = 'up' AND variants.is_revert THEN assets.up_revert_id_group
-            WHEN variants.diff_code = 'up' THEN assets.up_id_group
-            WHEN variants.is_revert THEN assets.down_revert_id_group
-            ELSE assets.down_id_group
-        END AS id_group,
-        CASE
-            WHEN variants.diff_code = 'up' THEN 'UpCount - DownCount'
-            ELSE 'DownCount - UpCount'
-        END AS diff_expression
-    FROM assets
-    CROSS JOIN variants
-    CROSS JOIN shifts
-    CROSS JOIN thresholds
-)
-SELECT
-    ('b7c50005-0000-4000-' || id_group || '-' || lpad(id_suffix::text, 12, '0'))::uuid,
-    lower(asset_symbol) || '_up_down_5m_' || diff_code || '_shift_diff_' || shift_value::text || '_' || threshold_value::text || revert_code_suffix || '_instant',
-    asset_symbol || ' Up or Down 5m ' || diff_name || ' ' || shift_value::text || ' ' || threshold_value::text || ' ShiftDiff' || revert_name_suffix || ' Instant',
-    'ShiftDiff ' || strategy_kind || ' strategy: after the ' || asset_symbol || ' 5m market opens, use this strategy''s own continuous in-memory raw ' || diff_expression || ' counter without the 00:00 UTC reset. After each included result, when raw Diff reaches ' || shift_trigger::text || ', reduce UpCount by ' || shift_value::text || '; when raw Diff reaches -' || shift_trigger::text || ', reduce DownCount by ' || shift_value::text || '; then evaluate the shifted Diff side. If the shifted Diff side is at least ' || threshold_value::text || ', submit a BUY FAK taker entry on ' || target_outcome || ' from current executable ask depth. Otherwise skip. Settlement uses only actually filled shares.',
-    true,
-    false,
-    1.00,
-    now(),
-    now()
-FROM formatted
-ON CONFLICT (id) DO UPDATE SET
-    code = excluded.code,
-    name = excluded.name,
-    description = excluded.description,
-    updated_at_utc = excluded.updated_at_utc;
-
-INSERT INTO strategies (id, code, name, description, enabled, paper_stake_amount, created_at_utc, updated_at_utc)
-VALUES (
-    'b7c50005-0000-4000-8050-000000000001',
-    'btc_up_down_5m_statistics',
-    'BTC Up or Down 5m Statistics',
-    'Read-only statistics strategy: estimate BTC 5m Up/Down probability from btc_5m_history, compare it with current market prices, record the decision status, and update btc_5m_history only after the observed market resolves.',
-    true,
-    1.00,
-    now(),
-    now()
-)
-ON CONFLICT (id) DO UPDATE SET
-    code = excluded.code,
-    name = excluded.name,
-    description = excluded.description,
-    updated_at_utc = excluded.updated_at_utc;
-
-INSERT INTO strategies (id, code, name, description, enabled, paper_stake_amount, created_at_utc, updated_at_utc)
-WITH depths(depth, sample_description) AS (
-    SELECT
-        depth,
-        'the latest ' || depth::text || ' sampled Binance BTC/USDT reference price(s)'
-    FROM (VALUES (100), (90), (80), (70), (60), (50), (40), (30), (20), (10)) AS depth_values(depth)
-),
-thresholds(threshold_digit, threshold_name) AS (
-    SELECT value, value::text
-    FROM generate_series(1, 100) AS generated(value)
-)
-SELECT
-    ('b7c50005-0000-4000-8023-' || lpad((CASE WHEN depths.depth = 100 THEN 100 + thresholds.threshold_digit ELSE (depths.depth * 100) + thresholds.threshold_digit END)::text, 12, '0'))::uuid,
-    'btc_up_down_5m_middle_' || depths.depth || '_bps_' || thresholds.threshold_digit,
-    'BTC Up or Down 5m Middle ' || depths.depth || ' ' || thresholds.threshold_name || ' bps',
-    'Immediately after BTC 5m market open, compare the latest Binance BTC/USDT trade-stream price against the arithmetic mean of ' || depths.sample_description || '; above mean buys Down, below mean buys Up, otherwise skip until all ' || depths.depth || ' sampled prices are available. Enter only when the current price is at least ' || thresholds.threshold_name || ' bps away from the mean. Paper entry is a GTD limit BUY with dynamic break-even pricing; settlement uses only actually filled shares.',
-    true,
-    1.00,
-    now(),
-    now()
-FROM depths
-CROSS JOIN thresholds
-ON CONFLICT (id) DO UPDATE SET
-    code = excluded.code,
-    name = excluded.name,
-    description = excluded.description,
-    updated_at_utc = excluded.updated_at_utc;
-
-WITH depths(depth, sample_description) AS (
-    SELECT
-        depth,
-        'the latest ' || depth::text || ' sampled Binance BTC/USDT reference price(s)'
-    FROM (VALUES (100), (90), (80), (70), (60), (50), (40), (30), (20), (10)) AS depth_values(depth)
-),
-thresholds(threshold_digit, threshold_name) AS (
-    SELECT value, value::text
-    FROM generate_series(1, 100) AS generated(value)
-)
-INSERT INTO strategies (id, code, name, description, enabled, paper_stake_amount, created_at_utc, updated_at_utc)
-SELECT
-    ('b7c50005-0000-4000-8029-' || lpad((CASE WHEN depths.depth = 100 THEN 100 + thresholds.threshold_digit ELSE (depths.depth * 100) + thresholds.threshold_digit END)::text, 12, '0'))::uuid,
-    'btc_up_down_5m_middle_' || depths.depth || '_bps_' || thresholds.threshold_digit || '_instant',
-    'BTC Up or Down 5m Middle ' || depths.depth || ' ' || thresholds.threshold_name || ' bps Instant',
-    'Immediately after BTC 5m market open, compare the latest Binance BTC/USDT trade-stream price against the arithmetic mean of ' || depths.sample_description || '; above mean buys Down, below mean buys Up, otherwise skip until all ' || depths.depth || ' sampled prices are available. Enter only when the current price is at least ' || thresholds.threshold_name || ' bps away from the mean. Paper entry simulates a BUY FAK taker fill from current executable ask depth; available liquidity is taken immediately, any remainder is cancelled, and settlement uses only actually filled shares.',
-    true,
-    1.00,
-    now(),
-    now()
-FROM depths
-CROSS JOIN thresholds
-ON CONFLICT (id) DO UPDATE SET
-    code = excluded.code,
-    name = excluded.name,
-    description = excluded.description,
-    updated_at_utc = excluded.updated_at_utc;
-
-INSERT INTO strategies (id, code, name, description, enabled, paper_stake_amount, created_at_utc, updated_at_utc)
-WITH assets(asset_symbol, middle_id_group, middle_revert_id_group) AS (
-    VALUES
-        ('ETH', '8071', '8073'),
-        ('SOL', '8075', '8077')
-),
-depths(depth) AS (
-    VALUES (100), (90), (80), (70), (60), (50), (40), (30), (20), (10)
-),
-variants AS (
-    SELECT
-        asset_symbol,
-        middle_id_group AS id_group,
-        '' AS code_suffix,
-        '' AS name_suffix,
-        false AS is_revert,
-        depth
-    FROM assets
-    CROSS JOIN depths
-)
-SELECT
-    ('b7c50005-0000-4000-' || id_group || '-000000000' || lpad((CASE WHEN depth = 100 THEN 1 ELSE depth END)::text, 3, '0'))::uuid,
-    lower(asset_symbol) || '_up_down_5m_middle_' || depth || code_suffix,
-    asset_symbol || ' Up or Down 5m Middle ' || depth || name_suffix,
-    CASE
-        WHEN is_revert
-        THEN 'Immediately after ' || asset_symbol || ' 5m market open, compare the latest Binance ' || asset_symbol || '/USDT trade-stream price against the arithmetic mean of the latest ' || depth || ' sampled Binance ' || asset_symbol || '/USDT reference price(s), then invert the standard Middle ' || depth || ' decision; above mean buys Up, below mean buys Down, otherwise skip until all ' || depth || ' sampled prices are available. Paper entry is a GTD limit BUY with dynamic break-even pricing; settlement uses only actually filled shares.'
-        ELSE 'Immediately after ' || asset_symbol || ' 5m market open, compare the latest Binance ' || asset_symbol || '/USDT trade-stream price against the arithmetic mean of the latest ' || depth || ' sampled Binance ' || asset_symbol || '/USDT reference price(s); above mean buys Down, below mean buys Up, otherwise skip until all ' || depth || ' sampled prices are available. Paper entry is a GTD limit BUY with dynamic break-even pricing; settlement uses only actually filled shares.'
-    END,
-    true,
-    1.00,
-    now(),
-    now()
-FROM variants
-ON CONFLICT (id) DO UPDATE SET
-    code = excluded.code,
-    name = excluded.name,
-    description = excluded.description,
-    updated_at_utc = excluded.updated_at_utc;
-
-INSERT INTO strategies (id, code, name, description, enabled, paper_stake_amount, created_at_utc, updated_at_utc)
-WITH assets(asset_symbol, middle_id_group, middle_instant_id_group, middle_revert_id_group, middle_revert_instant_id_group) AS (
-    VALUES
-        ('ETH', '8071', '8072', '8073', '8074'),
-        ('SOL', '8075', '8076', '8077', '8078')
-),
-thresholds(threshold_digit, threshold_name) AS (
-    SELECT value, value::text
-    FROM generate_series(1, 100) AS generated(value)
-),
-depths(depth) AS (
-    VALUES (100), (90), (80), (70), (60), (50), (40), (30), (20), (10)
-),
-variants AS (
-    SELECT
-        asset_symbol,
-        middle_id_group AS id_group,
-        lower(asset_symbol) || '_up_down_5m_middle_' || depths.depth || '_bps_' || thresholds.threshold_digit AS code,
-        asset_symbol || ' Up or Down 5m Middle ' || depths.depth || ' ' || thresholds.threshold_name || ' bps' AS name,
-        'Immediately after ' || asset_symbol || ' 5m market open, compare the latest Binance ' || asset_symbol || '/USDT trade-stream price against the arithmetic mean of the latest ' || depths.depth || ' sampled Binance ' || asset_symbol || '/USDT reference price(s); above mean buys Down, below mean buys Up, otherwise skip until all ' || depths.depth || ' sampled prices are available. Enter only when the current price is at least ' || thresholds.threshold_name || ' bps away from the mean. Paper entry is a GTD limit BUY with dynamic break-even pricing; settlement uses only actually filled shares.' AS description,
-        depths.depth,
-        thresholds.threshold_digit
-    FROM assets
-    CROSS JOIN thresholds
-    CROSS JOIN depths
-    UNION ALL
-    SELECT
-        asset_symbol,
-        middle_instant_id_group AS id_group,
-        lower(asset_symbol) || '_up_down_5m_middle_' || depths.depth || '_bps_' || thresholds.threshold_digit || '_instant' AS code,
-        asset_symbol || ' Up or Down 5m Middle ' || depths.depth || ' ' || thresholds.threshold_name || ' bps Instant' AS name,
-        'Immediately after ' || asset_symbol || ' 5m market open, compare the latest Binance ' || asset_symbol || '/USDT trade-stream price against the arithmetic mean of the latest ' || depths.depth || ' sampled Binance ' || asset_symbol || '/USDT reference price(s); above mean buys Down, below mean buys Up, otherwise skip until all ' || depths.depth || ' sampled prices are available. Enter only when the current price is at least ' || thresholds.threshold_name || ' bps away from the mean. Paper entry simulates a BUY FAK taker fill from current executable ask depth; available liquidity is taken immediately, any remainder is cancelled, and settlement uses only actually filled shares.' AS description,
-        depths.depth,
-        thresholds.threshold_digit
-    FROM assets
-    CROSS JOIN thresholds
-    CROSS JOIN depths
-)
-SELECT
-    ('b7c50005-0000-4000-' || id_group || '-' || lpad((CASE WHEN depth = 100 THEN 100 + threshold_digit ELSE (depth * 100) + threshold_digit END)::text, 12, '0'))::uuid,
-    code,
-    name,
-    description,
-    true,
-    1.00,
-    now(),
-    now()
-FROM variants
-ON CONFLICT (id) DO UPDATE SET
-    code = excluded.code,
-    name = excluded.name,
-    description = excluded.description,
-    updated_at_utc = excluded.updated_at_utc;
-
-WITH prices(price_cents) AS (
-    SELECT generate_series(10, 50, 5)
-)
-INSERT INTO strategies (id, code, name, description, enabled, paper_stake_amount, created_at_utc, updated_at_utc)
-SELECT
-    ('b7c50005-0000-4000-8025-' || lpad(prices.price_cents::text, 12, '0'))::uuid,
-    'btc_up_down_5m_prev_score_countertrend_' || prices.price_cents,
-    'BTC Up or Down 5m Prev Score Countertrend ' || prices.price_cents,
-    'At BTC 5m market open, score the immediately previous BTC 5m market from archived Binance BTC samples using a time-weighted winsorized average deviation from market start; previous Up buys Down, previous Down buys Up, neutral or insufficient samples skip. Paper entry is a fixed-price GTD limit BUY at ' || to_char((prices.price_cents::numeric / 100), 'FM0.00') || '.',
-    true,
-    1.00,
-    now(),
-    now()
-FROM prices
-ON CONFLICT (id) DO UPDATE SET
-    code = excluded.code,
-    name = excluded.name,
-    description = excluded.description,
-    updated_at_utc = excluded.updated_at_utc;
-
-INSERT INTO strategies (id, code, name, description, enabled, paper_stake_amount, created_at_utc, updated_at_utc)
-VALUES (
-    'b7c50005-0000-4000-8025-000000000998',
-    'btc_up_down_5m_prev_score_countertrend_fak',
-    'BTC Up or Down 5m Prev Score Countertrend',
-    'At BTC 5m market open, score the immediately previous BTC 5m market from archived Binance BTC samples using a time-weighted winsorized average deviation from market start; previous Up buys Down, previous Down buys Up, neutral or insufficient samples skip. Paper entry takes current executable ask depth immediately and cancels any unfilled remainder.',
-    true,
-    1.00,
-    now(),
-    now()
-)
-ON CONFLICT (id) DO UPDATE SET
-    code = excluded.code,
-    name = excluded.name,
-    description = excluded.description,
-    updated_at_utc = excluded.updated_at_utc;
-
-INSERT INTO strategies (id, code, name, description, enabled, paper_stake_amount, created_at_utc, updated_at_utc)
-VALUES (
-    'b7c50005-0000-4000-8025-000000000997',
-    'btc_up_down_5m_prev_score_countertrend_fak_premarket',
-    'BTC Up or Down 5m Prev Score Countertrend Premarket',
-    '30 seconds before BTC 5m market open, score the synthetic BTC 5.5-minute window ending at the entry time from archived Binance BTC samples: the last minute of the market before the currently running market plus the first 4 minutes 30 seconds of the currently running market. Positive score buys Down, negative score buys Up, neutral or insufficient samples skip. Paper entry takes current premarket executable ask depth immediately and cancels any unfilled remainder.',
-    true,
-    1.00,
-    now(),
-    now()
-)
-ON CONFLICT (id) DO UPDATE SET
-    code = excluded.code,
-    name = excluded.name,
-    description = excluded.description,
-    updated_at_utc = excluded.updated_at_utc;
-
-INSERT INTO strategies (id, code, name, description, enabled, paper_stake_amount, created_at_utc, updated_at_utc)
-VALUES (
-    'b7c50005-0000-4000-8025-000000000999',
-    'btc_up_down_5m_prev_score_countertrend_fak_revert',
-    'BTC Up or Down 5m Prev Score Countertrend Revert',
-    'At BTC 5m market open, score the immediately previous BTC 5m market from archived Binance BTC samples using a time-weighted winsorized average deviation from market start; previous Up buys Up, previous Down buys Down, neutral or insufficient samples skip. Paper entry takes current executable ask depth immediately and cancels any unfilled remainder.',
-    true,
-    1.00,
-    now(),
-    now()
-)
-ON CONFLICT (id) DO UPDATE SET
-    code = excluded.code,
-    name = excluded.name,
-    description = excluded.description,
-    updated_at_utc = excluded.updated_at_utc;
-
-INSERT INTO strategies (id, code, name, description, enabled, paper_stake_amount, created_at_utc, updated_at_utc)
-VALUES (
-    'b7c50005-0000-4000-8025-000000000996',
-    'btc_up_down_5m_prev_score_countertrend_fak_premarket_revert',
-    'BTC Up or Down 5m Prev Score Countertrend Premarket Revert',
-    '30 seconds before BTC 5m market open, score the synthetic BTC 5.5-minute window ending at the entry time from archived Binance BTC samples: the last minute of the market before the currently running market plus the first 4 minutes 30 seconds of the currently running market. Positive score buys Up, negative score buys Down, neutral or insufficient samples skip. Paper entry takes current premarket executable ask depth immediately and cancels any unfilled remainder.',
-    true,
-    1.00,
-    now(),
-    now()
-)
-ON CONFLICT (id) DO UPDATE SET
-    code = excluded.code,
-    name = excluded.name,
-    description = excluded.description,
-    updated_at_utc = excluded.updated_at_utc;
-
-INSERT INTO strategies (id, code, name, description, enabled, paper_stake_amount, created_at_utc, updated_at_utc)
-VALUES (
-    'b7c50005-0000-4000-8141-000000000996',
-    'eth_up_down_5m_prev_score_countertrend_fak_premarket_revert',
-    'ETH Up or Down 5m Prev Score Countertrend Premarket Revert',
-    '30 seconds before ETH 5m market open, score the synthetic ETH 5.5-minute window ending at the entry time from archived Binance ETH samples: the last minute of the market before the currently running market plus the first 4 minutes 30 seconds of the currently running market. Positive score buys Up, negative score buys Down, neutral or insufficient samples skip. Paper entry takes current premarket executable ask depth immediately and cancels any unfilled remainder.',
-    true,
-    1.00,
-    now(),
-    now()
-)
-ON CONFLICT (id) DO UPDATE SET
-    code = excluded.code,
-    name = excluded.name,
-    description = excluded.description,
-    updated_at_utc = excluded.updated_at_utc;
-
-INSERT INTO strategies (id, code, name, description, enabled, paper_stake_amount, created_at_utc, updated_at_utc)
-VALUES (
-    'b7c50005-0000-4000-8142-000000000996',
-    'sol_up_down_5m_prev_score_countertrend_fak_premarket_revert',
-    'SOL Up or Down 5m Prev Score Countertrend Premarket Revert',
-    '30 seconds before SOL 5m market open, score the synthetic SOL 5.5-minute window ending at the entry time from archived Binance SOL samples: the last minute of the market before the currently running market plus the first 4 minutes 30 seconds of the currently running market. Positive score buys Up, negative score buys Down, neutral or insufficient samples skip. Paper entry takes current premarket executable ask depth immediately and cancels any unfilled remainder.',
-    true,
-    1.00,
-    now(),
-    now()
-)
-ON CONFLICT (id) DO UPDATE SET
-    code = excluded.code,
-    name = excluded.name,
-    description = excluded.description,
-    updated_at_utc = excluded.updated_at_utc;
-
-INSERT INTO strategies (id, code, name, description, enabled, paper_stake_amount, created_at_utc, updated_at_utc)
-WITH assets(asset_symbol, id_group) AS (
-    VALUES
-        ('ETH', '8141'),
-        ('SOL', '8142')
-)
-SELECT
-    ('b7c50005-0000-4000-' || id_group || '-000000000998')::uuid,
-    lower(asset_symbol) || '_up_down_5m_prev_score_countertrend_fak',
-    asset_symbol || ' Up or Down 5m Prev Score Countertrend',
-    'At ' || asset_symbol || ' 5m market open, score the immediately previous ' || asset_symbol || ' 5m market from archived Binance ' || asset_symbol || ' samples using a time-weighted winsorized average deviation from market start; previous Up buys Down, previous Down buys Up, neutral or insufficient samples skip. Paper entry takes current executable ask depth immediately and cancels any unfilled remainder.',
-    true,
-    1.00,
-    now(),
-    now()
-FROM assets
-ON CONFLICT (id) DO UPDATE SET
-    code = excluded.code,
-    name = excluded.name,
-    description = excluded.description,
-    updated_at_utc = excluded.updated_at_utc;
-
-INSERT INTO strategies (id, code, name, description, enabled, paper_stake_amount, created_at_utc, updated_at_utc)
-VALUES (
-    'b7c50005-0000-4000-8141-000000000999',
-    'eth_up_down_5m_prev_score_countertrend_fak_revert',
-    'ETH Up or Down 5m Prev Score Countertrend Revert',
-    'At ETH 5m market open, score the immediately previous ETH 5m market from archived Binance ETH samples using a time-weighted winsorized average deviation from market start; previous Up buys Up, previous Down buys Down, neutral or insufficient samples skip. Paper entry takes current executable ask depth immediately and cancels any unfilled remainder.',
-    true,
-    1.00,
-    now(),
-    now()
-)
-ON CONFLICT (id) DO UPDATE SET
-    code = excluded.code,
-    name = excluded.name,
-    description = excluded.description,
-    updated_at_utc = excluded.updated_at_utc;
-
-INSERT INTO strategies (id, code, name, description, enabled, paper_stake_amount, created_at_utc, updated_at_utc)
-VALUES (
-    'b7c50005-0000-4000-8142-000000000999',
-    'sol_up_down_5m_prev_score_countertrend_fak_revert',
-    'SOL Up or Down 5m Prev Score Countertrend Revert',
-    'At SOL 5m market open, score the immediately previous SOL 5m market from archived Binance SOL samples using a time-weighted winsorized average deviation from market start; previous Up buys Up, previous Down buys Down, neutral or insufficient samples skip. Paper entry takes current executable ask depth immediately and cancels any unfilled remainder.',
-    true,
-    1.00,
-    now(),
-    now()
-)
-ON CONFLICT (id) DO UPDATE SET
-    code = excluded.code,
-    name = excluded.name,
-    description = excluded.description,
-    updated_at_utc = excluded.updated_at_utc;
-
-INSERT INTO strategies (id, code, name, description, enabled, paper_stake_amount, created_at_utc, updated_at_utc)
-WITH assets(asset_symbol, id_group) AS (
-    VALUES
-        ('ETH', '8141'),
-        ('SOL', '8142')
-)
-SELECT
-    ('b7c50005-0000-4000-' || id_group || '-000000000997')::uuid,
-    lower(asset_symbol) || '_up_down_5m_prev_score_countertrend_fak_premarket',
-    asset_symbol || ' Up or Down 5m Prev Score Countertrend Premarket',
-    '30 seconds before ' || asset_symbol || ' 5m market open, score the synthetic ' || asset_symbol || ' 5.5-minute window ending at the entry time from archived Binance ' || asset_symbol || ' samples: the last minute of the market before the currently running market plus the first 4 minutes 30 seconds of the currently running market. Positive score buys Down, negative score buys Up, neutral or insufficient samples skip. Paper entry takes current premarket executable ask depth immediately and cancels any unfilled remainder.',
-    true,
-    1.00,
-    now(),
-    now()
-FROM assets
-ON CONFLICT (id) DO UPDATE SET
-    code = excluded.code,
-    name = excluded.name,
-    description = excluded.description,
-    updated_at_utc = excluded.updated_at_utc;
-
 -- PreOpen fixed-direction strategy rows were physically removed from production
 -- and are intentionally no longer seeded. Missing PreOpen strategy rows are
 -- treated as deleted/disabled by the strategy-market-run insert guard below.
@@ -3260,7 +1856,7 @@ CREATE TABLE IF NOT EXISTS dashboard_strategy_performance_snapshots (
     name text NOT NULL,
     enabled boolean NOT NULL,
     live_stakes boolean NOT NULL,
-    auto_live_paused boolean NOT NULL,
+    auto_live_paused boolean NOT NULL DEFAULT false,
     paused boolean NOT NULL,
     paused_until_utc timestamptz NULL,
     paper_stake_amount numeric(28,8) NOT NULL,
@@ -3329,6 +1925,9 @@ CREATE TABLE IF NOT EXISTS dashboard_strategy_performance_snapshots (
     refreshed_at_utc timestamptz NOT NULL
 );
 
+ALTER TABLE dashboard_strategy_performance_snapshots
+    ALTER COLUMN auto_live_paused SET DEFAULT false;
+
 CREATE INDEX CONCURRENTLY IF NOT EXISTS ix_dashboard_strategy_performance_snapshots_code
 ON dashboard_strategy_performance_snapshots (code);
 
@@ -3389,6 +1988,29 @@ ON dashboard_strategy_recent_performance_snapshots (window_hours);
 
 CREATE INDEX CONCURRENTLY IF NOT EXISTS ix_dashboard_strategy_recent_performance_snapshots_refreshed_at
 ON dashboard_strategy_recent_performance_snapshots (refreshed_at_utc DESC);
+
+CREATE TABLE IF NOT EXISTS date_dependent_strategy_hourly_paper_pnl (
+    strategy_id uuid NOT NULL REFERENCES strategies(id) ON DELETE CASCADE,
+    code text NOT NULL,
+    name text NOT NULL,
+    hour_utc integer NOT NULL CHECK (hour_utc >= 0 AND hour_utc <= 23),
+    settled_runs_count integer NOT NULL,
+    won_runs_count integer NOT NULL,
+    lost_runs_count integer NOT NULL,
+    stake_usd numeric(28,8) NOT NULL,
+    realized_pnl_usd numeric(28,8) NOT NULL,
+    avg_pnl_usd numeric(28,8) NOT NULL,
+    first_entered_at_utc timestamptz NULL,
+    last_entered_at_utc timestamptz NULL,
+    refreshed_at_utc timestamptz NOT NULL,
+    PRIMARY KEY (strategy_id, hour_utc)
+);
+
+CREATE INDEX CONCURRENTLY IF NOT EXISTS ix_date_dependent_strategy_hourly_paper_pnl_code_hour
+ON date_dependent_strategy_hourly_paper_pnl (code, hour_utc);
+
+CREATE INDEX CONCURRENTLY IF NOT EXISTS ix_date_dependent_strategy_hourly_paper_pnl_refreshed
+ON date_dependent_strategy_hourly_paper_pnl (refreshed_at_utc DESC);
 
 CREATE TABLE IF NOT EXISTS paper_orders (
     id uuid PRIMARY KEY,
@@ -5531,11 +4153,7 @@ BEGIN
         SELECT strategy.id
         FROM strategies strategy
         WHERE strategy.code LIKE 'btc_up_down_5m_binance_bps_%'
-           OR strategy.code LIKE 'btc_up_down_5m_skip_bps_%'
-           OR strategy.code LIKE 'eth_up_down_5m_binance_bps_%'
-           OR strategy.code LIKE 'eth_up_down_5m_skip_bps_%'
-           OR strategy.code LIKE 'sol_up_down_5m_binance_bps_%'
-           OR strategy.code LIKE 'sol_up_down_5m_skip_bps_%';
+           OR strategy.code LIKE 'sol_up_down_5m_binance_bps_%';
 
         SELECT count(*)::integer
         INTO target_strategy_count
@@ -5574,11 +4192,7 @@ BEGIN
         SELECT signal.id
         FROM signals signal
         WHERE signal.trader_wallet LIKE 'strategy:btc_up_down_5m_binance_bps_%'
-           OR signal.trader_wallet LIKE 'strategy:btc_up_down_5m_skip_bps_%'
-           OR signal.trader_wallet LIKE 'strategy:eth_up_down_5m_binance_bps_%'
-           OR signal.trader_wallet LIKE 'strategy:eth_up_down_5m_skip_bps_%'
-           OR signal.trader_wallet LIKE 'strategy:sol_up_down_5m_binance_bps_%'
-           OR signal.trader_wallet LIKE 'strategy:sol_up_down_5m_skip_bps_%';
+           OR signal.trader_wallet LIKE 'strategy:sol_up_down_5m_binance_bps_%';
 
         SELECT count(*)::integer
         INTO active_live_orders
@@ -5668,20 +4282,12 @@ BEGIN
 
             DELETE FROM paper_positions paper_position
             WHERE paper_position.copied_trader_wallet LIKE 'strategy:btc_up_down_5m_binance_bps_%'
-               OR paper_position.copied_trader_wallet LIKE 'strategy:btc_up_down_5m_skip_bps_%'
-               OR paper_position.copied_trader_wallet LIKE 'strategy:eth_up_down_5m_binance_bps_%'
-               OR paper_position.copied_trader_wallet LIKE 'strategy:eth_up_down_5m_skip_bps_%'
-               OR paper_position.copied_trader_wallet LIKE 'strategy:sol_up_down_5m_binance_bps_%'
-               OR paper_position.copied_trader_wallet LIKE 'strategy:sol_up_down_5m_skip_bps_%';
+               OR paper_position.copied_trader_wallet LIKE 'strategy:sol_up_down_5m_binance_bps_%';
             GET DIAGNOSTICS deleted_paper_positions = ROW_COUNT;
 
             DELETE FROM paper_position_settlements settlement
             WHERE settlement.copied_trader_wallet LIKE 'strategy:btc_up_down_5m_binance_bps_%'
-               OR settlement.copied_trader_wallet LIKE 'strategy:btc_up_down_5m_skip_bps_%'
-               OR settlement.copied_trader_wallet LIKE 'strategy:eth_up_down_5m_binance_bps_%'
-               OR settlement.copied_trader_wallet LIKE 'strategy:eth_up_down_5m_skip_bps_%'
-               OR settlement.copied_trader_wallet LIKE 'strategy:sol_up_down_5m_binance_bps_%'
-               OR settlement.copied_trader_wallet LIKE 'strategy:sol_up_down_5m_skip_bps_%';
+               OR settlement.copied_trader_wallet LIKE 'strategy:sol_up_down_5m_binance_bps_%';
             GET DIAGNOSTICS deleted_paper_position_settlements = ROW_COUNT;
 
             INSERT INTO schema_data_migrations (migration_key, applied_at_utc, details)
@@ -5882,6 +4488,444 @@ BEGIN
                 ';signal_rejections=' || deleted_signal_rejections::text ||
                 ';paper_positions=' || deleted_paper_positions::text ||
                 ';paper_position_settlements=' || deleted_paper_position_settlements::text
+            );
+        END IF;
+    END IF;
+END $$;
+
+DO $$
+DECLARE
+    migration_key_value text := '20260707_remove_eth_binance_bps_strategies';
+    target_strategy_count integer := 0;
+    deleted_shadow_discrepancies integer := 0;
+    deleted_shadow_decisions integer := 0;
+    deleted_live_orders integer := 0;
+    deleted_strategy_runs integer := 0;
+    deleted_paper_fills integer := 0;
+    deleted_paper_orders integer := 0;
+    deleted_signal_rejections integer := 0;
+    deleted_signals integer := 0;
+    deleted_paper_positions integer := 0;
+    deleted_paper_position_settlements integer := 0;
+    deleted_dashboard_snapshots integer := 0;
+    deleted_dashboard_recent_snapshots integer := 0;
+    deleted_strategies integer := 0;
+    active_live_orders integer := 0;
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1
+        FROM schema_data_migrations migration
+        WHERE migration.migration_key = migration_key_value
+    ) THEN
+        DROP TABLE IF EXISTS tmp_eth_binance_bps_strategy_targets;
+        DROP TABLE IF EXISTS tmp_eth_binance_bps_paper_orders;
+        DROP TABLE IF EXISTS tmp_eth_binance_bps_live_orders;
+        DROP TABLE IF EXISTS tmp_eth_binance_bps_signals;
+
+        CREATE TEMP TABLE tmp_eth_binance_bps_strategy_targets ON COMMIT DROP AS
+        SELECT strategy.id, strategy.code
+        FROM strategies strategy
+        WHERE strategy.code LIKE 'eth_up_down_5m_binance_bps_%'
+           OR strategy.name ILIKE 'ETH Up or Down 5m Binance % bps%';
+
+        SELECT count(*)::integer
+        INTO target_strategy_count
+        FROM tmp_eth_binance_bps_strategy_targets;
+
+        CREATE TEMP TABLE tmp_eth_binance_bps_paper_orders ON COMMIT DROP AS
+        SELECT paper_order.id
+        FROM paper_orders paper_order
+        WHERE paper_order.strategy_id IN (
+                SELECT target.id
+                FROM tmp_eth_binance_bps_strategy_targets target
+            )
+           OR paper_order.copied_trader_wallet IN (
+                SELECT 'strategy:' || target.code
+                FROM tmp_eth_binance_bps_strategy_targets target
+            );
+
+        CREATE TEMP TABLE tmp_eth_binance_bps_live_orders ON COMMIT DROP AS
+        SELECT live_order.id
+        FROM live_orders live_order
+        WHERE live_order.strategy_id IN (
+            SELECT target.id
+            FROM tmp_eth_binance_bps_strategy_targets target
+        );
+
+        CREATE TEMP TABLE tmp_eth_binance_bps_signals ON COMMIT DROP AS
+        SELECT signal.id
+        FROM signals signal
+        WHERE signal.trader_wallet IN (
+            SELECT 'strategy:' || target.code
+            FROM tmp_eth_binance_bps_strategy_targets target
+        );
+
+        SELECT count(*)::integer
+        INTO active_live_orders
+        FROM live_orders live_order
+        WHERE live_order.id IN (
+                SELECT target.id
+                FROM tmp_eth_binance_bps_live_orders target
+            )
+          AND live_order.status IN ('Submitted', 'Live', 'Delayed', 'Unmatched', 'CancelRequested');
+
+        IF active_live_orders = 0 THEN
+            DELETE FROM paper_live_shadow_discrepancies discrepancy
+            WHERE discrepancy.strategy_id IN (
+                SELECT target.id
+                FROM tmp_eth_binance_bps_strategy_targets target
+            );
+            GET DIAGNOSTICS deleted_shadow_discrepancies = ROW_COUNT;
+
+            DELETE FROM paper_live_shadow_decisions decision
+            WHERE decision.strategy_id IN (
+                    SELECT target.id
+                    FROM tmp_eth_binance_bps_strategy_targets target
+                )
+               OR decision.paper_order_id IN (
+                    SELECT target.id
+                    FROM tmp_eth_binance_bps_paper_orders target
+                )
+               OR decision.live_order_id IN (
+                    SELECT target.id
+                    FROM tmp_eth_binance_bps_live_orders target
+                )
+               OR decision.signal_id IN (
+                    SELECT target.id
+                    FROM tmp_eth_binance_bps_signals target
+                );
+            GET DIAGNOSTICS deleted_shadow_decisions = ROW_COUNT;
+
+            DELETE FROM live_orders live_order
+            WHERE live_order.id IN (
+                SELECT target.id
+                FROM tmp_eth_binance_bps_live_orders target
+            );
+            GET DIAGNOSTICS deleted_live_orders = ROW_COUNT;
+
+            DELETE FROM strategy_market_paper_runs run
+            WHERE run.strategy_id IN (
+                    SELECT target.id
+                    FROM tmp_eth_binance_bps_strategy_targets target
+                )
+               OR run.paper_order_id IN (
+                    SELECT target.id
+                    FROM tmp_eth_binance_bps_paper_orders target
+                )
+               OR run.signal_id IN (
+                    SELECT target.id
+                    FROM tmp_eth_binance_bps_signals target
+                );
+            GET DIAGNOSTICS deleted_strategy_runs = ROW_COUNT;
+
+            DELETE FROM paper_fills fill
+            WHERE fill.paper_order_id IN (
+                SELECT target.id
+                FROM tmp_eth_binance_bps_paper_orders target
+            );
+            GET DIAGNOSTICS deleted_paper_fills = ROW_COUNT;
+
+            DELETE FROM paper_orders paper_order
+            WHERE paper_order.id IN (
+                SELECT target.id
+                FROM tmp_eth_binance_bps_paper_orders target
+            );
+            GET DIAGNOSTICS deleted_paper_orders = ROW_COUNT;
+
+            DELETE FROM signal_rejections rejection
+            WHERE rejection.signal_id IN (
+                SELECT target.id
+                FROM tmp_eth_binance_bps_signals target
+            );
+            GET DIAGNOSTICS deleted_signal_rejections = ROW_COUNT;
+
+            DELETE FROM signals signal
+            WHERE signal.id IN (
+                SELECT target.id
+                FROM tmp_eth_binance_bps_signals target
+            );
+            GET DIAGNOSTICS deleted_signals = ROW_COUNT;
+
+            DELETE FROM paper_positions paper_position
+            WHERE paper_position.copied_trader_wallet IN (
+                SELECT 'strategy:' || target.code
+                FROM tmp_eth_binance_bps_strategy_targets target
+            );
+            GET DIAGNOSTICS deleted_paper_positions = ROW_COUNT;
+
+            DELETE FROM paper_position_settlements settlement
+            WHERE settlement.copied_trader_wallet IN (
+                SELECT 'strategy:' || target.code
+                FROM tmp_eth_binance_bps_strategy_targets target
+            );
+            GET DIAGNOSTICS deleted_paper_position_settlements = ROW_COUNT;
+
+            DELETE FROM dashboard_strategy_performance_snapshots snapshot
+            WHERE snapshot.strategy_id IN (
+                    SELECT target.id
+                    FROM tmp_eth_binance_bps_strategy_targets target
+                )
+               OR snapshot.code IN (
+                    SELECT target.code
+                    FROM tmp_eth_binance_bps_strategy_targets target
+                );
+            GET DIAGNOSTICS deleted_dashboard_snapshots = ROW_COUNT;
+
+            DELETE FROM dashboard_strategy_recent_performance_snapshots snapshot
+            WHERE snapshot.strategy_id IN (
+                    SELECT target.id
+                    FROM tmp_eth_binance_bps_strategy_targets target
+                )
+               OR snapshot.code IN (
+                    SELECT target.code
+                    FROM tmp_eth_binance_bps_strategy_targets target
+                );
+            GET DIAGNOSTICS deleted_dashboard_recent_snapshots = ROW_COUNT;
+
+            DELETE FROM strategies strategy
+            WHERE strategy.id IN (
+                SELECT target.id
+                FROM tmp_eth_binance_bps_strategy_targets target
+            );
+            GET DIAGNOSTICS deleted_strategies = ROW_COUNT;
+
+            INSERT INTO schema_data_migrations (migration_key, applied_at_utc, details)
+            VALUES (
+                migration_key_value,
+                clock_timestamp(),
+                'target_strategies=' || target_strategy_count::text ||
+                ';paper_orders=' || deleted_paper_orders::text ||
+                ';paper_fills=' || deleted_paper_fills::text ||
+                ';strategy_runs=' || deleted_strategy_runs::text ||
+                ';live_orders=' || deleted_live_orders::text ||
+                ';shadow_decisions=' || deleted_shadow_decisions::text ||
+                ';shadow_discrepancies=' || deleted_shadow_discrepancies::text ||
+                ';signals=' || deleted_signals::text ||
+                ';signal_rejections=' || deleted_signal_rejections::text ||
+                ';paper_positions=' || deleted_paper_positions::text ||
+                ';paper_position_settlements=' || deleted_paper_position_settlements::text ||
+                ';dashboard_snapshots=' || deleted_dashboard_snapshots::text ||
+                ';dashboard_recent_snapshots=' || deleted_dashboard_recent_snapshots::text ||
+                ';strategies=' || deleted_strategies::text
+            );
+        END IF;
+    END IF;
+END $$;
+
+DO $$
+DECLARE
+    migration_key_value text := '20260707_remove_skip_strategies';
+    target_strategy_count integer := 0;
+    deleted_shadow_discrepancies integer := 0;
+    deleted_shadow_decisions integer := 0;
+    deleted_live_orders integer := 0;
+    deleted_strategy_runs integer := 0;
+    deleted_paper_fills integer := 0;
+    deleted_paper_orders integer := 0;
+    deleted_signal_rejections integer := 0;
+    deleted_signals integer := 0;
+    deleted_paper_positions integer := 0;
+    deleted_paper_position_settlements integer := 0;
+    deleted_dashboard_snapshots integer := 0;
+    deleted_dashboard_recent_snapshots integer := 0;
+    deleted_strategies integer := 0;
+    active_live_orders integer := 0;
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1
+        FROM schema_data_migrations migration
+        WHERE migration.migration_key = migration_key_value
+    ) THEN
+        DROP TABLE IF EXISTS tmp_skip_strategy_targets;
+        DROP TABLE IF EXISTS tmp_skip_strategy_paper_orders;
+        DROP TABLE IF EXISTS tmp_skip_strategy_live_orders;
+        DROP TABLE IF EXISTS tmp_skip_strategy_signals;
+
+        CREATE TEMP TABLE tmp_skip_strategy_targets ON COMMIT DROP AS
+        SELECT strategy.id, strategy.code
+        FROM strategies strategy
+        WHERE strategy.code LIKE '%\_up\_down\_5m\_skip\_%' ESCAPE '\'
+           OR strategy.name ILIKE '% Up or Down 5m Skip %';
+
+        SELECT count(*)::integer
+        INTO target_strategy_count
+        FROM tmp_skip_strategy_targets;
+
+        CREATE TEMP TABLE tmp_skip_strategy_paper_orders ON COMMIT DROP AS
+        SELECT paper_order.id
+        FROM paper_orders paper_order
+        WHERE paper_order.strategy_id IN (
+                SELECT target.id
+                FROM tmp_skip_strategy_targets target
+            )
+           OR paper_order.copied_trader_wallet IN (
+                SELECT 'strategy:' || target.code
+                FROM tmp_skip_strategy_targets target
+            );
+
+        CREATE TEMP TABLE tmp_skip_strategy_live_orders ON COMMIT DROP AS
+        SELECT live_order.id
+        FROM live_orders live_order
+        WHERE live_order.strategy_id IN (
+            SELECT target.id
+            FROM tmp_skip_strategy_targets target
+        );
+
+        CREATE TEMP TABLE tmp_skip_strategy_signals ON COMMIT DROP AS
+        SELECT signal.id
+        FROM signals signal
+        WHERE signal.trader_wallet IN (
+            SELECT 'strategy:' || target.code
+            FROM tmp_skip_strategy_targets target
+        );
+
+        SELECT count(*)::integer
+        INTO active_live_orders
+        FROM live_orders live_order
+        WHERE live_order.id IN (
+                SELECT target.id
+                FROM tmp_skip_strategy_live_orders target
+            )
+          AND live_order.status IN ('Submitted', 'Live', 'Delayed', 'Unmatched', 'CancelRequested');
+
+        IF active_live_orders = 0 THEN
+            DELETE FROM paper_live_shadow_discrepancies discrepancy
+            WHERE discrepancy.strategy_id IN (
+                SELECT target.id
+                FROM tmp_skip_strategy_targets target
+            );
+            GET DIAGNOSTICS deleted_shadow_discrepancies = ROW_COUNT;
+
+            DELETE FROM paper_live_shadow_decisions decision
+            WHERE decision.strategy_id IN (
+                    SELECT target.id
+                    FROM tmp_skip_strategy_targets target
+                )
+               OR decision.paper_order_id IN (
+                    SELECT target.id
+                    FROM tmp_skip_strategy_paper_orders target
+                )
+               OR decision.live_order_id IN (
+                    SELECT target.id
+                    FROM tmp_skip_strategy_live_orders target
+                )
+               OR decision.signal_id IN (
+                    SELECT target.id
+                    FROM tmp_skip_strategy_signals target
+                );
+            GET DIAGNOSTICS deleted_shadow_decisions = ROW_COUNT;
+
+            DELETE FROM live_orders live_order
+            WHERE live_order.id IN (
+                SELECT target.id
+                FROM tmp_skip_strategy_live_orders target
+            );
+            GET DIAGNOSTICS deleted_live_orders = ROW_COUNT;
+
+            DELETE FROM strategy_market_paper_runs run
+            WHERE run.strategy_id IN (
+                    SELECT target.id
+                    FROM tmp_skip_strategy_targets target
+                )
+               OR run.paper_order_id IN (
+                    SELECT target.id
+                    FROM tmp_skip_strategy_paper_orders target
+                )
+               OR run.signal_id IN (
+                    SELECT target.id
+                    FROM tmp_skip_strategy_signals target
+                );
+            GET DIAGNOSTICS deleted_strategy_runs = ROW_COUNT;
+
+            DELETE FROM paper_fills fill
+            WHERE fill.paper_order_id IN (
+                SELECT target.id
+                FROM tmp_skip_strategy_paper_orders target
+            );
+            GET DIAGNOSTICS deleted_paper_fills = ROW_COUNT;
+
+            DELETE FROM paper_orders paper_order
+            WHERE paper_order.id IN (
+                SELECT target.id
+                FROM tmp_skip_strategy_paper_orders target
+            );
+            GET DIAGNOSTICS deleted_paper_orders = ROW_COUNT;
+
+            DELETE FROM signal_rejections rejection
+            WHERE rejection.signal_id IN (
+                SELECT target.id
+                FROM tmp_skip_strategy_signals target
+            );
+            GET DIAGNOSTICS deleted_signal_rejections = ROW_COUNT;
+
+            DELETE FROM signals signal
+            WHERE signal.id IN (
+                SELECT target.id
+                FROM tmp_skip_strategy_signals target
+            );
+            GET DIAGNOSTICS deleted_signals = ROW_COUNT;
+
+            DELETE FROM paper_positions paper_position
+            WHERE paper_position.copied_trader_wallet IN (
+                SELECT 'strategy:' || target.code
+                FROM tmp_skip_strategy_targets target
+            );
+            GET DIAGNOSTICS deleted_paper_positions = ROW_COUNT;
+
+            DELETE FROM paper_position_settlements settlement
+            WHERE settlement.copied_trader_wallet IN (
+                SELECT 'strategy:' || target.code
+                FROM tmp_skip_strategy_targets target
+            );
+            GET DIAGNOSTICS deleted_paper_position_settlements = ROW_COUNT;
+
+            DELETE FROM dashboard_strategy_performance_snapshots snapshot
+            WHERE snapshot.strategy_id IN (
+                    SELECT target.id
+                    FROM tmp_skip_strategy_targets target
+                )
+               OR snapshot.code IN (
+                    SELECT target.code
+                    FROM tmp_skip_strategy_targets target
+                );
+            GET DIAGNOSTICS deleted_dashboard_snapshots = ROW_COUNT;
+
+            DELETE FROM dashboard_strategy_recent_performance_snapshots snapshot
+            WHERE snapshot.strategy_id IN (
+                    SELECT target.id
+                    FROM tmp_skip_strategy_targets target
+                )
+               OR snapshot.code IN (
+                    SELECT target.code
+                    FROM tmp_skip_strategy_targets target
+                );
+            GET DIAGNOSTICS deleted_dashboard_recent_snapshots = ROW_COUNT;
+
+            DELETE FROM strategies strategy
+            WHERE strategy.id IN (
+                SELECT target.id
+                FROM tmp_skip_strategy_targets target
+            );
+            GET DIAGNOSTICS deleted_strategies = ROW_COUNT;
+
+            INSERT INTO schema_data_migrations (migration_key, applied_at_utc, details)
+            VALUES (
+                migration_key_value,
+                clock_timestamp(),
+                'target_strategies=' || target_strategy_count::text ||
+                ';paper_orders=' || deleted_paper_orders::text ||
+                ';paper_fills=' || deleted_paper_fills::text ||
+                ';strategy_runs=' || deleted_strategy_runs::text ||
+                ';live_orders=' || deleted_live_orders::text ||
+                ';shadow_decisions=' || deleted_shadow_decisions::text ||
+                ';shadow_discrepancies=' || deleted_shadow_discrepancies::text ||
+                ';signals=' || deleted_signals::text ||
+                ';signal_rejections=' || deleted_signal_rejections::text ||
+                ';paper_positions=' || deleted_paper_positions::text ||
+                ';paper_position_settlements=' || deleted_paper_position_settlements::text ||
+                ';dashboard_snapshots=' || deleted_dashboard_snapshots::text ||
+                ';dashboard_recent_snapshots=' || deleted_dashboard_recent_snapshots::text ||
+                ';strategies=' || deleted_strategies::text
             );
         END IF;
     END IF;

@@ -9,7 +9,7 @@ public sealed class StrategyStakeAdminCommandTests
     public async Task ExecuteAsync_UpdatesPaperStakeForAllStrategiesWithoutChangingLiveStake()
     {
         var repository = new TestAppRepository();
-        var strategyId = StrategyIds.GetBtcUpDown5mVariant(BtcUpDown5mStrategyDirection.Less, 30).Id;
+        var strategyId = StrategyIds.BtcUpDown5mUpSimple;
         repository.StrategySettings[strategyId] = repository.StrategySettings[strategyId] with
         {
             PaperStakeAmount = 2.50m,
@@ -32,7 +32,7 @@ public sealed class StrategyStakeAdminCommandTests
     public async Task ExecuteAsync_UpdatesPaperAndLiveStakeForAllStrategies()
     {
         var repository = new TestAppRepository();
-        var strategyId = StrategyIds.GetBtcUpDown5mVariant(BtcUpDown5mStrategyDirection.Less, 30).Id;
+        var strategyId = StrategyIds.BtcUpDown5mUpSimple;
         repository.StrategySettings[strategyId] = repository.StrategySettings[strategyId] with
         {
             PaperStakeAmount = 5.00m,
@@ -71,15 +71,15 @@ public sealed class StrategyStakeAdminCommandTests
     public async Task ExecuteLiveStakesOnlyAsync_EnablesOnlyRequestedStrategyCode()
     {
         var repository = new TestAppRepository();
-        var target = StrategyIds.BtcUpDown5mVariants.Single(item => item.Code == "btc_up_down_5m_skip_1").Id;
-        var other = StrategyIds.BtcUpDown5mVariants.Single(item => item.Code == "btc_up_down_5m_skip_2").Id;
+        var target = StrategyIds.BtcUpDown5mUpSimple;
+        var other = StrategyIds.BtcUpDown5mDownSimple;
         repository.StrategySettings[target] = repository.StrategySettings[target] with { LiveStakes = false };
         repository.StrategySettings[other] = repository.StrategySettings[other] with { LiveStakes = true };
         using var output = new StringWriter();
 
         var exitCode = await StrategyStakeAdminCommand.ExecuteLiveStakesOnlyAsync(
             repository,
-            "btc_up_down_5m_skip_1",
+            StrategyIds.BtcUpDown5mUpSimpleCode,
             output,
             CancellationToken.None);
 
@@ -94,31 +94,25 @@ public sealed class StrategyStakeAdminCommandTests
     public async Task ExecuteLiveStakesOnlyAsync_EnablesOnlyRequestedStrategyCodes()
     {
         var repository = new TestAppRepository();
-        var first = StrategyIds.BtcUpDown5mVariants.Single(item => item.Code == "btc_up_down_5m_binance_bps_17").Id;
-        var second = StrategyIds.BtcUpDown5mVariants.Single(item => item.Code == "btc_up_down_5m_binance_bps_18").Id;
-        var third = StrategyIds.BtcUpDown5mVariants.Single(item => item.Code == "btc_up_down_5m_binance_bps_19").Id;
-        var fourth = StrategyIds.BtcUpDown5mBinanceBps2;
-        var fifth = StrategyIds.BtcUpDown5mVariants.Single(item => item.Code == "btc_up_down_5m_binance_bps_21").Id;
-        var sixth = StrategyIds.BtcUpDown5mVariants.Single(item => item.Code == "btc_up_down_5m_binance_bps_22").Id;
-        var seventh = StrategyIds.BtcUpDown5mVariants.Single(item => item.Code == "btc_up_down_5m_binance_bps_23").Id;
-        var eighth = StrategyIds.BtcUpDown5mVariants.Single(item => item.Code == "btc_up_down_5m_binance_bps_24").Id;
-        var ninth = StrategyIds.CryptoUpDown5mVariants.Single(item => item.Code == "sol_up_down_5m_binance_bps_24_instant").Id;
-        var other = StrategyIds.BtcUpDown5mVariants.Single(item => item.Code == "btc_up_down_5m_skip_1").Id;
+        var first = StrategyIds.BtcUpDown5mVariants.Single(item => item.Code == "btc_up_down_5m_up_bps_2_instant").Id;
+        var second = StrategyIds.BtcUpDown5mVariants.Single(item => item.Code == "btc_up_down_5m_down_bps_2_instant").Id;
+        var third = StrategyIds.BtcUpDown5mUpSimple;
+        var fourth = StrategyIds.BtcUpDown5mDownSimple;
+        var fifth = StrategyIds.BtcUpDown5mVariants.Single(item => item.Code == "btc_up_down_5m_up_bps_3_instant").Id;
+        var sixth = StrategyIds.CryptoUpDown5mVariants.Single(item => item.Code == "sol_up_down_5m_binance_bps_24_instant").Id;
+        var other = StrategyIds.BtcUpDown5mVariants.Single(item => item.Code == "btc_up_down_5m_down_bps_3_instant").Id;
         repository.StrategySettings[first] = repository.StrategySettings[first] with { LiveStakes = false };
         repository.StrategySettings[second] = repository.StrategySettings[second] with { LiveStakes = false };
         repository.StrategySettings[third] = repository.StrategySettings[third] with { LiveStakes = false };
         repository.StrategySettings[fourth] = repository.StrategySettings[fourth] with { LiveStakes = false };
         repository.StrategySettings[fifth] = repository.StrategySettings[fifth] with { LiveStakes = false };
         repository.StrategySettings[sixth] = repository.StrategySettings[sixth] with { LiveStakes = false };
-        repository.StrategySettings[seventh] = repository.StrategySettings[seventh] with { LiveStakes = false };
-        repository.StrategySettings[eighth] = repository.StrategySettings[eighth] with { LiveStakes = false };
-        repository.StrategySettings[ninth] = repository.StrategySettings[ninth] with { LiveStakes = false };
         repository.StrategySettings[other] = repository.StrategySettings[other] with { LiveStakes = true };
         using var output = new StringWriter();
 
         var exitCode = await StrategyStakeAdminCommand.ExecuteLiveStakesOnlyAsync(
             repository,
-            ["btc_up_down_5m_binance_bps_17", "btc_up_down_5m_binance_bps_18", "btc_up_down_5m_binance_bps_19", StrategyIds.BtcUpDown5mBinanceBps2Code, "btc_up_down_5m_binance_bps_21", "btc_up_down_5m_binance_bps_22", "btc_up_down_5m_binance_bps_23", "btc_up_down_5m_binance_bps_24", "sol_up_down_5m_binance_bps_24_instant"],
+            ["btc_up_down_5m_up_bps_2_instant", "btc_up_down_5m_down_bps_2_instant", StrategyIds.BtcUpDown5mUpSimpleCode, StrategyIds.BtcUpDown5mDownSimpleCode, "btc_up_down_5m_up_bps_3_instant", "sol_up_down_5m_binance_bps_24_instant"],
             output,
             CancellationToken.None);
 
@@ -129,11 +123,8 @@ public sealed class StrategyStakeAdminCommandTests
         Assert.True(repository.StrategySettings[fourth].LiveStakes);
         Assert.True(repository.StrategySettings[fifth].LiveStakes);
         Assert.True(repository.StrategySettings[sixth].LiveStakes);
-        Assert.True(repository.StrategySettings[seventh].LiveStakes);
-        Assert.True(repository.StrategySettings[eighth].LiveStakes);
-        Assert.True(repository.StrategySettings[ninth].LiveStakes);
         Assert.All(
-            repository.StrategySettings.Where(item => item.Key != first && item.Key != second && item.Key != third && item.Key != fourth && item.Key != fifth && item.Key != sixth && item.Key != seventh && item.Key != eighth && item.Key != ninth),
+            repository.StrategySettings.Where(item => item.Key != first && item.Key != second && item.Key != third && item.Key != fourth && item.Key != fifth && item.Key != sixth),
             item => Assert.False(item.Value.LiveStakes));
     }
 

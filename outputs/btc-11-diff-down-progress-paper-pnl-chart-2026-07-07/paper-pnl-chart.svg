@@ -1,0 +1,27 @@
+﻿<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="720" viewBox="0 0 1280 720">
+<rect width="100%" height="100%" fill="#ffffff"/>
+<text x="82" y="34" font-family="Segoe UI, Arial, sans-serif" font-size="22" font-weight="700" fill="#111827">BTC Up or Down 5m 11 Diff Down Progress - Paper cumulative PnL</text>
+<text x="82" y="60" font-family="Segoe UI, Arial, sans-serif" font-size="14" fill="#475467">38 settled rows | total +135.77227909 | generated 2026-07-07 18:13:37 UTC</text>
+<rect x="82" y="82" width="1166" height="554" fill="#f8fafc" stroke="#d0d5dd"/>
+<line x1="82" y1="82" x2="1248" y2="82" stroke="#e4e7ec" stroke-width="1"/>
+<text x="72" y="86" text-anchor="end" font-family="Segoe UI, Arial, sans-serif" font-size="12" fill="#667085">+147.57643043</text>
+<line x1="82" y1="192.8" x2="1248" y2="192.8" stroke="#e4e7ec" stroke-width="1"/>
+<text x="72" y="196.8" text-anchor="end" font-family="Segoe UI, Arial, sans-serif" font-size="12" fill="#667085">+113.34439154</text>
+<line x1="82" y1="303.6" x2="1248" y2="303.6" stroke="#e4e7ec" stroke-width="1"/>
+<text x="72" y="307.6" text-anchor="end" font-family="Segoe UI, Arial, sans-serif" font-size="12" fill="#667085">+79.11235265</text>
+<line x1="82" y1="414.4" x2="1248" y2="414.4" stroke="#e4e7ec" stroke-width="1"/>
+<text x="72" y="418.4" text-anchor="end" font-family="Segoe UI, Arial, sans-serif" font-size="12" fill="#667085">+44.88031377</text>
+<line x1="82" y1="525.2" x2="1248" y2="525.2" stroke="#e4e7ec" stroke-width="1"/>
+<text x="72" y="529.2" text-anchor="end" font-family="Segoe UI, Arial, sans-serif" font-size="12" fill="#667085">+10.64827488</text>
+<line x1="82" y1="636" x2="1248" y2="636" stroke="#e4e7ec" stroke-width="1"/>
+<text x="72" y="640" text-anchor="end" font-family="Segoe UI, Arial, sans-serif" font-size="12" fill="#667085">-23.58376401</text>
+<line x1="82" y1="559.67" x2="1248" y2="559.67" stroke="#667085" stroke-width="1.3" stroke-dasharray="5 5"/>
+<polyline points="82,543.75 113.51,525.06 145.03,507.11 176.54,542.74 208.05,597.79 239.57,532.04 271.08,479.15 302.59,514.78 334.11,459.73 365.62,424.1 397.14,415.36 428.65,434.81 460.16,396.21 491.68,383.77 523.19,374.19 554.7,338.56 586.22,325.04 617.73,300.29 649.24,283.04 680.76,302.49 712.27,272.13 743.78,291.59 775.3,311.04 806.81,275.4 838.32,256.72 869.84,237.26 901.35,215.33 932.86,234.78 964.38,197.69 995.89,174.86 1027.41,194.31 1058.92,138.58 1090.43,122.01 1121.95,141.46 1153.46,177.09 1184.97,158.41 1216.49,138.16 1248,120.21" fill="none" stroke="#147a46" stroke-width="3" stroke-linejoin="round" stroke-linecap="round"/>
+<circle cx="1248" cy="120.21" r="4.5" fill="#147a46"/>
+<line x1="82" y1="636" x2="1248" y2="636" stroke="#98a2b3"/>
+<line x1="82" y1="82" x2="82" y2="636" stroke="#98a2b3"/>
+<text x="82" y="686" font-family="Segoe UI, Arial, sans-serif" font-size="12" fill="#667085">2026-07-04 12:00:24</text>
+<text x="1248" y="686" text-anchor="end" font-family="Segoe UI, Arial, sans-serif" font-size="12" fill="#667085">2026-07-07 14:10:36</text>
+<text x="665" y="706" text-anchor="middle" font-family="Segoe UI, Arial, sans-serif" font-size="12" fill="#667085">Settled Paper records ordered by settlement time</text>
+<text transform="translate(22 359) rotate(-90)" text-anchor="middle" font-family="Segoe UI, Arial, sans-serif" font-size="12" fill="#667085">Cumulative PnL, USD</text>
+</svg>

@@ -713,6 +713,39 @@ public sealed class AuthPlaceholderTests
     }
 
     [Fact]
+    public async Task TradingClient_InsufficientBalanceRejectionReturnsActionableStatus()
+    {
+        var signer = new ClobV2OrderSigner();
+        var privateKey = DeterministicUnfundedTestPrivateKey;
+        var signerAddress = signer.GetAddress(privateKey);
+        var handler = new CapturingHttpMessageHandler(_ => new HttpResponseMessage(System.Net.HttpStatusCode.BadRequest)
+        {
+            Content = new StringContent("""{"error":"not enough balance / allowance: the balance is not enough -> balance: 2514192, order amount: 6004200"}""")
+        });
+        var client = CreateLiveClient(handler, new Dictionary<string, string>
+        {
+            ["api-key"] = "fixture-key",
+            ["api-key-owner"] = "fixture-owner",
+            ["api-secret"] = "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=",
+            ["api-passphrase"] = "fixture-passphrase",
+            ["live-private-key"] = privateKey
+        });
+
+        var result = await client.PlaceLiveOrderAsync(FixedOrderRequest() with
+        {
+            MakerAddress = signerAddress,
+            SignerAddress = signerAddress
+        }, CancellationToken.None);
+
+        Assert.False(result.Success);
+        Assert.Equal(
+            LiveOrderRejectionClassifier.InsufficientBalanceOrAllowanceStatus,
+            result.ResponseStatus);
+        Assert.Contains("insufficient balance or allowance", result.ErrorMessage, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("balance: 2514192", result.ErrorMessage, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task ClobMinimumLiveOrderSmokeCommand_RefusesWithoutSubmitFlag()
     {
         var output = new StringWriter();

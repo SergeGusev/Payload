@@ -1,0 +1,21 @@
+Strategy: SOL Up or Down 5m Down 8 bps Reference Average Premarket
+RangeUtc: 2026-01-04T00:00:00.0000000+00:00 - 2026-07-04T00:00:00.0000000+00:00
+Data: Binance SOLUSDT spot daily 1s klines
+EntryPrice: 0.52
+StakeUsd: 6.0093
+WinPnlPerTrade: 5.54704615
+LossPnlPerTrade: -6.0093
+SecondsRead: 15724800
+MarketsObserved: 52128
+Trades: 40603
+SkippedNoFullAverage: 0
+SkippedThreshold: 11524
+SkippedMissingStartOrClose: 0
+Wins: 21400
+Losses: 19203
+WinRatePct: 52.70546511
+TotalPnlUsd: 3310.19979231
+RoiPct: 1.35666368
+HourlySummaryCsv: D:\My\Business\PolyMarket\outputs\sol-down8-historical-052-2026-07-04\hourly_summary.csv
+DailyHourSummaryCsv: D:\My\Business\PolyMarket\outputs\sol-down8-historical-052-2026-07-04\daily_hour_summary.csv
+TradesCsv: D:\My\Business\PolyMarket\outputs\sol-down8-historical-052-2026-07-04\trades.csv

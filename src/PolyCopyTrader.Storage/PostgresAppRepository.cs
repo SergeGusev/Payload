@@ -677,7 +677,7 @@ WHERE wallet = @Wallet;
 		}
 
 		await using NpgsqlConnection connection = await OpenConnectionAsync(cancellationToken);
-		await using NpgsqlCommand command = CreateCommand(connection, "SELECT run.id, run.strategy_id, run.market_id, run.condition_id, run.market_slug, run.market_title, run.category,\n       run.market_start_utc, run.market_end_utc, run.detected_at_utc, run.entry_due_at_utc, run.status,\n       run.selected_asset_id, run.selected_outcome, run.entry_price, run.stake_usd, run.size_shares,\n       run.signal_id, run.paper_order_id, run.entered_at_utc, run.settlement_price, run.settlement_value_usd,\n       run.realized_pnl_usd, run.settled_at_utc, run.skip_reason, run.created_at_utc, run.updated_at_utc,\n       run.skip_diagnostics_json::text\nFROM strategy_market_paper_runs run\nINNER JOIN strategies strategy ON strategy.id = run.strategy_id\nWHERE run.strategy_id = ANY(@StrategyIds)\n  AND run.status = @Status\n  AND run.entry_due_at_utc <= @DueBeforeUtc\nORDER BY run.entry_due_at_utc ASC, (strategy.live_stakes AND NOT strategy.auto_live_paused) DESC, run.detected_at_utc ASC, run.strategy_id ASC\nLIMIT @Limit;");
+		await using NpgsqlCommand command = CreateCommand(connection, "SELECT run.id, run.strategy_id, run.market_id, run.condition_id, run.market_slug, run.market_title, run.category,\n       run.market_start_utc, run.market_end_utc, run.detected_at_utc, run.entry_due_at_utc, run.status,\n       run.selected_asset_id, run.selected_outcome, run.entry_price, run.stake_usd, run.size_shares,\n       run.signal_id, run.paper_order_id, run.entered_at_utc, run.settlement_price, run.settlement_value_usd,\n       run.realized_pnl_usd, run.settled_at_utc, run.skip_reason, run.created_at_utc, run.updated_at_utc,\n       run.skip_diagnostics_json::text\nFROM strategy_market_paper_runs run\nINNER JOIN strategies strategy ON strategy.id = run.strategy_id\nWHERE run.strategy_id = ANY(@StrategyIds)\n  AND run.status = @Status\n  AND run.entry_due_at_utc <= @DueBeforeUtc\nORDER BY run.entry_due_at_utc ASC, strategy.live_stakes DESC, run.detected_at_utc ASC, run.strategy_id ASC\nLIMIT @Limit;");
 		command.Parameters.AddWithValue("StrategyIds", normalizedStrategyIds);
 		command.Parameters.AddWithValue("Status", status);
 		command.Parameters.Add("DueBeforeUtc", NpgsqlDbType.TimestampTz).Value = UtcDateTime(dueBeforeUtc);
@@ -708,7 +708,7 @@ WHERE wallet = @Wallet;
 		}
 
 		await using NpgsqlConnection connection = await OpenConnectionAsync(cancellationToken);
-		await using NpgsqlCommand command = CreateCommand(connection, "WITH ordered_runs AS (\n    SELECT run.id, run.strategy_id, run.market_id, run.condition_id, run.market_slug, run.market_title, run.category,\n           run.market_start_utc, run.market_end_utc, run.detected_at_utc, run.entry_due_at_utc, run.status,\n           run.selected_asset_id, run.selected_outcome, run.entry_price, run.stake_usd, run.size_shares,\n           run.signal_id, run.paper_order_id, run.entered_at_utc, run.settlement_price, run.settlement_value_usd,\n           run.realized_pnl_usd, run.settled_at_utc, run.skip_reason, run.created_at_utc, run.updated_at_utc,\n           run.skip_diagnostics_json::text AS skip_diagnostics_json,\n           row_number() OVER (\n               ORDER BY run.entry_due_at_utc ASC,\n                        (strategy.live_stakes AND NOT strategy.auto_live_paused) DESC,\n                        run.detected_at_utc ASC,\n                        run.strategy_id ASC\n           ) AS due_row_number\n    FROM strategy_market_paper_runs run\n    INNER JOIN strategies strategy ON strategy.id = run.strategy_id\n    WHERE run.strategy_id = ANY(@StrategyIds)\n      AND run.status = @Status\n      AND run.entry_due_at_utc <= @DueBeforeUtc\n), cutoff AS (\n    SELECT entry_due_at_utc\n    FROM ordered_runs\n    WHERE due_row_number = @Limit\n)\nSELECT id, strategy_id, market_id, condition_id, market_slug, market_title, category,\n       market_start_utc, market_end_utc, detected_at_utc, entry_due_at_utc, status,\n       selected_asset_id, selected_outcome, entry_price, stake_usd, size_shares,\n       signal_id, paper_order_id, entered_at_utc, settlement_price, settlement_value_usd,\n       realized_pnl_usd, settled_at_utc, skip_reason, created_at_utc, updated_at_utc,\n       skip_diagnostics_json\nFROM ordered_runs\nWHERE due_row_number <= @Limit\n   OR ((SELECT entry_due_at_utc FROM cutoff) IS NOT NULL\n       AND entry_due_at_utc = (SELECT entry_due_at_utc FROM cutoff))\nORDER BY due_row_number ASC;");
+		await using NpgsqlCommand command = CreateCommand(connection, "WITH ordered_runs AS (\n    SELECT run.id, run.strategy_id, run.market_id, run.condition_id, run.market_slug, run.market_title, run.category,\n           run.market_start_utc, run.market_end_utc, run.detected_at_utc, run.entry_due_at_utc, run.status,\n           run.selected_asset_id, run.selected_outcome, run.entry_price, run.stake_usd, run.size_shares,\n           run.signal_id, run.paper_order_id, run.entered_at_utc, run.settlement_price, run.settlement_value_usd,\n           run.realized_pnl_usd, run.settled_at_utc, run.skip_reason, run.created_at_utc, run.updated_at_utc,\n           run.skip_diagnostics_json::text AS skip_diagnostics_json,\n           row_number() OVER (\n               ORDER BY run.entry_due_at_utc ASC,\n                        strategy.live_stakes DESC,\n                        run.detected_at_utc ASC,\n                        run.strategy_id ASC\n           ) AS due_row_number\n    FROM strategy_market_paper_runs run\n    INNER JOIN strategies strategy ON strategy.id = run.strategy_id\n    WHERE run.strategy_id = ANY(@StrategyIds)\n      AND run.status = @Status\n      AND run.entry_due_at_utc <= @DueBeforeUtc\n), cutoff AS (\n    SELECT entry_due_at_utc\n    FROM ordered_runs\n    WHERE due_row_number = @Limit\n)\nSELECT id, strategy_id, market_id, condition_id, market_slug, market_title, category,\n       market_start_utc, market_end_utc, detected_at_utc, entry_due_at_utc, status,\n       selected_asset_id, selected_outcome, entry_price, stake_usd, size_shares,\n       signal_id, paper_order_id, entered_at_utc, settlement_price, settlement_value_usd,\n       realized_pnl_usd, settled_at_utc, skip_reason, created_at_utc, updated_at_utc,\n       skip_diagnostics_json\nFROM ordered_runs\nWHERE due_row_number <= @Limit\n   OR ((SELECT entry_due_at_utc FROM cutoff) IS NOT NULL\n       AND entry_due_at_utc = (SELECT entry_due_at_utc FROM cutoff))\nORDER BY due_row_number ASC;");
 		command.Parameters.AddWithValue("StrategyIds", normalizedStrategyIds);
 		command.Parameters.AddWithValue("Status", status);
 		command.Parameters.Add("DueBeforeUtc", NpgsqlDbType.TimestampTz).Value = UtcDateTime(dueBeforeUtc);
@@ -739,7 +739,7 @@ WHERE wallet = @Wallet;
 		}
 
 		await using NpgsqlConnection connection = await OpenConnectionAsync(cancellationToken);
-		await using NpgsqlCommand command = CreateCommand(connection, "WITH earliest_due AS (\n    SELECT min(entry_due_at_utc) AS entry_due_at_utc\n    FROM strategy_market_paper_runs\n    WHERE strategy_id = ANY(@StrategyIds)\n      AND status = @Status\n      AND entry_due_at_utc <= @DueBeforeUtc\n)\nSELECT run.id, run.strategy_id, run.market_id, run.condition_id, run.market_slug, run.market_title, run.category,\n       run.market_start_utc, run.market_end_utc, run.detected_at_utc, run.entry_due_at_utc, run.status,\n       run.selected_asset_id, run.selected_outcome, run.entry_price, run.stake_usd, run.size_shares,\n       run.signal_id, run.paper_order_id, run.entered_at_utc, run.settlement_price, run.settlement_value_usd,\n       run.realized_pnl_usd, run.settled_at_utc, run.skip_reason, run.created_at_utc, run.updated_at_utc,\n       run.skip_diagnostics_json::text\nFROM strategy_market_paper_runs run\nINNER JOIN strategies strategy ON strategy.id = run.strategy_id\nCROSS JOIN earliest_due due\nWHERE run.strategy_id = ANY(@StrategyIds)\n  AND run.status = @Status\n  AND due.entry_due_at_utc IS NOT NULL\n  AND run.entry_due_at_utc = due.entry_due_at_utc\nORDER BY run.entry_due_at_utc ASC, (strategy.live_stakes AND NOT strategy.auto_live_paused) DESC, run.detected_at_utc ASC, run.strategy_id ASC;");
+		await using NpgsqlCommand command = CreateCommand(connection, "WITH earliest_due AS (\n    SELECT min(entry_due_at_utc) AS entry_due_at_utc\n    FROM strategy_market_paper_runs\n    WHERE strategy_id = ANY(@StrategyIds)\n      AND status = @Status\n      AND entry_due_at_utc <= @DueBeforeUtc\n)\nSELECT run.id, run.strategy_id, run.market_id, run.condition_id, run.market_slug, run.market_title, run.category,\n       run.market_start_utc, run.market_end_utc, run.detected_at_utc, run.entry_due_at_utc, run.status,\n       run.selected_asset_id, run.selected_outcome, run.entry_price, run.stake_usd, run.size_shares,\n       run.signal_id, run.paper_order_id, run.entered_at_utc, run.settlement_price, run.settlement_value_usd,\n       run.realized_pnl_usd, run.settled_at_utc, run.skip_reason, run.created_at_utc, run.updated_at_utc,\n       run.skip_diagnostics_json::text\nFROM strategy_market_paper_runs run\nINNER JOIN strategies strategy ON strategy.id = run.strategy_id\nCROSS JOIN earliest_due due\nWHERE run.strategy_id = ANY(@StrategyIds)\n  AND run.status = @Status\n  AND due.entry_due_at_utc IS NOT NULL\n  AND run.entry_due_at_utc = due.entry_due_at_utc\nORDER BY run.entry_due_at_utc ASC, strategy.live_stakes DESC, run.detected_at_utc ASC, run.strategy_id ASC;");
 		command.Parameters.AddWithValue("StrategyIds", normalizedStrategyIds);
 		command.Parameters.AddWithValue("Status", status);
 		command.Parameters.Add("DueBeforeUtc", NpgsqlDbType.TimestampTz).Value = UtcDateTime(dueBeforeUtc);
@@ -781,7 +781,7 @@ WHERE wallet = @Wallet;
 		}
 
 		await using NpgsqlConnection connection = await OpenConnectionAsync(cancellationToken);
-		await using NpgsqlCommand command = CreateCommand(connection, "SELECT run.id, run.strategy_id, run.market_id, run.condition_id, run.market_slug, run.market_title, run.category,\n       run.market_start_utc, run.market_end_utc, run.detected_at_utc, run.entry_due_at_utc, run.status,\n       run.selected_asset_id, run.selected_outcome, run.entry_price, run.stake_usd, run.size_shares,\n       run.signal_id, run.paper_order_id, run.entered_at_utc, run.settlement_price, run.settlement_value_usd,\n       run.realized_pnl_usd, run.settled_at_utc, run.skip_reason, run.created_at_utc, run.updated_at_utc,\n       run.skip_diagnostics_json::text\nFROM strategy_market_paper_runs run\nINNER JOIN strategies strategy ON strategy.id = run.strategy_id\nLEFT JOIN paper_orders paper_order ON paper_order.id = run.paper_order_id\nLEFT JOIN LATERAL (\n    SELECT 1 AS has_fill\n    FROM paper_fills fill_row\n    WHERE fill_row.paper_order_id = run.paper_order_id\n    LIMIT 1\n) fill_row ON true\nWHERE run.strategy_id = ANY(@StrategyIds)\n  AND run.status = @Status\n  AND run.market_end_utc IS NOT NULL\n  AND run.market_end_utc <= @MarketEndedBeforeUtc\nORDER BY\n  CASE\n    WHEN fill_row.has_fill IS NOT NULL THEN 0\n    WHEN paper_order.status IN ('Filled', 'PartiallyFilled', 'PartiallyFilledExpired') THEN 1\n    WHEN paper_order.status = 'Expired' THEN 2\n    WHEN paper_order.id IS NULL THEN 3\n    ELSE 4\n  END ASC,\n  run.market_end_utc ASC,\n  run.entered_at_utc ASC,\n  (strategy.live_stakes AND NOT strategy.auto_live_paused) DESC,\n  run.detected_at_utc ASC,\n  run.strategy_id ASC\nLIMIT @Limit;");
+		await using NpgsqlCommand command = CreateCommand(connection, "SELECT run.id, run.strategy_id, run.market_id, run.condition_id, run.market_slug, run.market_title, run.category,\n       run.market_start_utc, run.market_end_utc, run.detected_at_utc, run.entry_due_at_utc, run.status,\n       run.selected_asset_id, run.selected_outcome, run.entry_price, run.stake_usd, run.size_shares,\n       run.signal_id, run.paper_order_id, run.entered_at_utc, run.settlement_price, run.settlement_value_usd,\n       run.realized_pnl_usd, run.settled_at_utc, run.skip_reason, run.created_at_utc, run.updated_at_utc,\n       run.skip_diagnostics_json::text\nFROM strategy_market_paper_runs run\nINNER JOIN strategies strategy ON strategy.id = run.strategy_id\nLEFT JOIN paper_orders paper_order ON paper_order.id = run.paper_order_id\nLEFT JOIN LATERAL (\n    SELECT 1 AS has_fill\n    FROM paper_fills fill_row\n    WHERE fill_row.paper_order_id = run.paper_order_id\n    LIMIT 1\n) fill_row ON true\nWHERE run.strategy_id = ANY(@StrategyIds)\n  AND run.status = @Status\n  AND run.market_end_utc IS NOT NULL\n  AND run.market_end_utc <= @MarketEndedBeforeUtc\nORDER BY\n  CASE\n    WHEN fill_row.has_fill IS NOT NULL THEN 0\n    WHEN paper_order.status IN ('Filled', 'PartiallyFilled', 'PartiallyFilledExpired') THEN 1\n    WHEN paper_order.status = 'Expired' THEN 2\n    WHEN paper_order.id IS NULL THEN 3\n    ELSE 4\n  END ASC,\n  run.market_end_utc ASC,\n  run.entered_at_utc ASC,\n  strategy.live_stakes DESC,\n  run.detected_at_utc ASC,\n  run.strategy_id ASC\nLIMIT @Limit;");
 		command.Parameters.AddWithValue("StrategyIds", normalizedStrategyIds);
 		command.Parameters.AddWithValue("Status", StrategyMarketPaperRunStatuses.Entered);
 		command.Parameters.Add("MarketEndedBeforeUtc", NpgsqlDbType.TimestampTz).Value = UtcDateTime(marketEndedBeforeUtc);
@@ -807,7 +807,7 @@ WHERE wallet = @Wallet;
 		}
 
 		await using NpgsqlConnection connection = await OpenConnectionAsync(cancellationToken);
-		await using NpgsqlCommand command = CreateCommand(connection, "SELECT run.id, run.strategy_id, run.market_id, run.condition_id, run.market_slug, run.market_title, run.category,\n       run.market_start_utc, run.market_end_utc, run.detected_at_utc, run.entry_due_at_utc, run.status,\n       run.selected_asset_id, run.selected_outcome, run.entry_price, run.stake_usd, run.size_shares,\n       run.signal_id, run.paper_order_id, run.entered_at_utc, run.settlement_price, run.settlement_value_usd,\n       run.realized_pnl_usd, run.settled_at_utc, run.skip_reason, run.created_at_utc, run.updated_at_utc,\n       run.skip_diagnostics_json::text\nFROM strategy_market_paper_runs run\nINNER JOIN strategies strategy ON strategy.id = run.strategy_id\nWHERE run.strategy_id = ANY(@StrategyIds)\n  AND run.status = @Status\n  AND run.market_start_utc IS NOT NULL\n  AND run.market_end_utc IS NOT NULL\n  AND run.market_start_utc < run.market_end_utc\n  AND run.market_end_utc > @DueBeforeUtc\n  AND run.market_start_utc + ((run.market_end_utc - run.market_start_utc) * 0.75) <= @DueBeforeUtc\nORDER BY run.market_end_utc ASC, run.entered_at_utc ASC, (strategy.live_stakes AND NOT strategy.auto_live_paused) DESC, run.detected_at_utc ASC, run.strategy_id ASC\nLIMIT @Limit;");
+		await using NpgsqlCommand command = CreateCommand(connection, "SELECT run.id, run.strategy_id, run.market_id, run.condition_id, run.market_slug, run.market_title, run.category,\n       run.market_start_utc, run.market_end_utc, run.detected_at_utc, run.entry_due_at_utc, run.status,\n       run.selected_asset_id, run.selected_outcome, run.entry_price, run.stake_usd, run.size_shares,\n       run.signal_id, run.paper_order_id, run.entered_at_utc, run.settlement_price, run.settlement_value_usd,\n       run.realized_pnl_usd, run.settled_at_utc, run.skip_reason, run.created_at_utc, run.updated_at_utc,\n       run.skip_diagnostics_json::text\nFROM strategy_market_paper_runs run\nINNER JOIN strategies strategy ON strategy.id = run.strategy_id\nWHERE run.strategy_id = ANY(@StrategyIds)\n  AND run.status = @Status\n  AND run.market_start_utc IS NOT NULL\n  AND run.market_end_utc IS NOT NULL\n  AND run.market_start_utc < run.market_end_utc\n  AND run.market_end_utc > @DueBeforeUtc\n  AND run.market_start_utc + ((run.market_end_utc - run.market_start_utc) * 0.75) <= @DueBeforeUtc\nORDER BY run.market_end_utc ASC, run.entered_at_utc ASC, strategy.live_stakes DESC, run.detected_at_utc ASC, run.strategy_id ASC\nLIMIT @Limit;");
 		command.Parameters.AddWithValue("StrategyIds", normalizedStrategyIds);
 		command.Parameters.AddWithValue("Status", StrategyMarketPaperRunStatuses.Entered);
 		command.Parameters.Add("DueBeforeUtc", NpgsqlDbType.TimestampTz).Value = UtcDateTime(dueBeforeUtc);
@@ -1485,10 +1485,13 @@ WHERE target.id = run_rows.id;
 	public async Task UpdatePaperOrderAsync(PaperOrder order, CancellationToken cancellationToken = default(CancellationToken))
 	{
 		await using NpgsqlConnection connection = await OpenConnectionAsync(cancellationToken);
-		await using NpgsqlCommand command = CreateCommand(connection, "UPDATE paper_orders\nSET status = @Status,\n    strategy_id = @StrategyId,\n    filled_at_utc = @FilledAtUtc,\n    cancelled_at_utc = @CancelledAtUtc,\n    raw_decision_json = CAST(@RawDecisionJson AS jsonb),\n    correlation_id = @CorrelationId,\n    execution_source = @ExecutionSource\nWHERE id = @Id;");
+		await using NpgsqlCommand command = CreateCommand(connection, "UPDATE paper_orders\nSET status = @Status,\n    strategy_id = @StrategyId,\n    filled_at_utc = @FilledAtUtc,\n    cancelled_at_utc = @CancelledAtUtc,\n    price = @Price,\n    size_shares = @SizeShares,\n    notional_usd = @NotionalUsd,\n    raw_decision_json = CAST(@RawDecisionJson AS jsonb),\n    correlation_id = @CorrelationId,\n    execution_source = @ExecutionSource\nWHERE id = @Id;");
 		command.Parameters.AddWithValue("Id", order.Id);
 		command.Parameters.AddWithValue("StrategyId", StrategyIds.Normalize(order.StrategyId));
 		command.Parameters.AddWithValue("Status", order.Status.ToString());
+		command.Parameters.AddWithValue("Price", order.Price);
+		command.Parameters.AddWithValue("SizeShares", order.SizeShares);
+		command.Parameters.AddWithValue("NotionalUsd", order.NotionalUsd);
 		NpgsqlParameterCollection parameters = command.Parameters;
 		DateTimeOffset? filledAtUtc = order.FilledAtUtc;
 		object value;
@@ -2101,18 +2104,18 @@ countertrend_score_rows AS (
         COALESCE(
             CASE
                 WHEN jsonb_typeof(raw_decision_json -> 'previous_score_bps') = 'number'
-                THEN (raw_decision_json ->> 'previous_score_bps')::numeric
+                THEN round((raw_decision_json ->> 'previous_score_bps')::numeric, 8)::numeric(28,8)
                 ELSE NULL
             END,
             CASE
                 WHEN jsonb_typeof(raw_decision_json -> 'previous_score') = 'number'
-                THEN (raw_decision_json ->> 'previous_score')::numeric * 10000.0
+                THEN round((raw_decision_json ->> 'previous_score')::numeric * 10000, 8)::numeric(28,8)
                 ELSE NULL
             END
         ) AS previous_score_bps,
         CASE
             WHEN jsonb_typeof(raw_decision_json -> 'selected_signal_bps') = 'number'
-            THEN (raw_decision_json ->> 'selected_signal_bps')::numeric
+            THEN round((raw_decision_json ->> 'selected_signal_bps')::numeric, 8)::numeric(28,8)
             ELSE NULL
         END AS selected_signal_bps
     FROM paper_orders
@@ -2124,16 +2127,16 @@ countertrend_signal_rows AS (
         strategy_id,
         created_at_utc,
         previous_score_bps,
-        COALESCE(selected_signal_bps, abs(previous_score_bps)) AS signal_bps
+        round(COALESCE(selected_signal_bps, abs(previous_score_bps)), 8)::numeric(28,8) AS signal_bps
     FROM countertrend_score_rows
     WHERE previous_score_bps IS NOT NULL
 ),
 countertrend_signal_agg AS (
     SELECT
         strategy_id,
-        COALESCE(avg(previous_score_bps), 0) AS avg_countertrend_score_bps,
-        COALESCE(avg(signal_bps), 0) AS avg_countertrend_signal_bps,
-        (array_agg(signal_bps ORDER BY created_at_utc DESC) FILTER (WHERE signal_bps IS NOT NULL))[1] AS last_countertrend_signal_bps
+        COALESCE(round(avg(previous_score_bps), 8), 0)::numeric(28,8) AS avg_countertrend_score_bps,
+        COALESCE(round(avg(signal_bps), 8), 0)::numeric(28,8) AS avg_countertrend_signal_bps,
+        ((array_agg(signal_bps ORDER BY created_at_utc DESC) FILTER (WHERE signal_bps IS NOT NULL))[1])::numeric(28,8) AS last_countertrend_signal_bps
     FROM countertrend_signal_rows
     GROUP BY strategy_id
 ),
@@ -2345,7 +2348,6 @@ combined AS (
         strategy.name,
         strategy.enabled,
         strategy.live_stakes,
-        strategy.auto_live_paused,
         strategy.paused AND (strategy.paused_until_utc IS NULL OR strategy.paused_until_utc > @NowUtc) AS paused,
         CASE
             WHEN strategy.paused AND (strategy.paused_until_utc IS NULL OR strategy.paused_until_utc > @NowUtc) THEN strategy.paused_until_utc
@@ -2423,18 +2425,18 @@ combined AS (
         COALESCE(live_order_agg.live_filled_orders_count, 0) AS live_filled_orders_count,
         COALESCE(live_order_agg.live_open_orders_count, 0) AS live_open_orders_count,
         COALESCE(live_order_agg.live_settled_orders_count, 0) AS live_settled_orders_count,
-        CASE WHEN strategy.live_stakes AND NOT strategy.auto_live_paused THEN COALESCE(run_agg.live_condition_skipped_orders_count, 0) ELSE 0 END AS live_condition_skipped_orders_count,
-        CASE WHEN strategy.live_stakes AND NOT strategy.auto_live_paused THEN COALESCE(run_agg.live_technical_skipped_orders_count, 0) ELSE 0 END
+        CASE WHEN strategy.live_stakes THEN COALESCE(run_agg.live_condition_skipped_orders_count, 0) ELSE 0 END AS live_condition_skipped_orders_count,
+        CASE WHEN strategy.live_stakes THEN COALESCE(run_agg.live_technical_skipped_orders_count, 0) ELSE 0 END
             + COALESCE(live_order_agg.live_technical_skipped_orders_count, 0) AS live_technical_skipped_orders_count,
-        CASE WHEN strategy.live_stakes AND NOT strategy.auto_live_paused THEN COALESCE(run_agg.live_ignored_gtd_unfilled_count, 0) ELSE 0 END
+        CASE WHEN strategy.live_stakes THEN COALESCE(run_agg.live_ignored_gtd_unfilled_count, 0) ELSE 0 END
             + COALESCE(live_order_agg.live_ignored_cancelled_orders_count, 0)
             + COALESCE(live_order_agg.live_ignored_rejected_orders_count, 0) AS live_ignored_orders_count,
-        CASE WHEN strategy.live_stakes AND NOT strategy.auto_live_paused THEN COALESCE(run_agg.live_ignored_gtd_unfilled_count, 0) ELSE 0 END AS live_ignored_gtd_unfilled_count,
+        CASE WHEN strategy.live_stakes THEN COALESCE(run_agg.live_ignored_gtd_unfilled_count, 0) ELSE 0 END AS live_ignored_gtd_unfilled_count,
         COALESCE(live_order_agg.live_ignored_cancelled_orders_count, 0) AS live_ignored_cancelled_orders_count,
         COALESCE(live_order_agg.live_ignored_rejected_orders_count, 0) AS live_ignored_rejected_orders_count,
-        CASE WHEN strategy.live_stakes AND NOT strategy.auto_live_paused THEN COALESCE(run_agg.live_condition_skipped_orders_count, 0) ELSE 0 END
-            + CASE WHEN strategy.live_stakes AND NOT strategy.auto_live_paused THEN COALESCE(run_agg.live_technical_skipped_orders_count, 0) ELSE 0 END
-            + CASE WHEN strategy.live_stakes AND NOT strategy.auto_live_paused THEN COALESCE(run_agg.live_ignored_gtd_unfilled_count, 0) ELSE 0 END
+        CASE WHEN strategy.live_stakes THEN COALESCE(run_agg.live_condition_skipped_orders_count, 0) ELSE 0 END
+            + CASE WHEN strategy.live_stakes THEN COALESCE(run_agg.live_technical_skipped_orders_count, 0) ELSE 0 END
+            + CASE WHEN strategy.live_stakes THEN COALESCE(run_agg.live_ignored_gtd_unfilled_count, 0) ELSE 0 END
             + COALESCE(live_order_agg.live_technical_skipped_orders_count, 0)
             + COALESCE(live_order_agg.live_ignored_cancelled_orders_count, 0)
             + COALESCE(live_order_agg.live_ignored_rejected_orders_count, 0) AS live_skipped_orders_count,
@@ -2466,7 +2468,6 @@ SELECT
     name,
     enabled,
     live_stakes,
-    auto_live_paused,
     paused,
     paused_until_utc,
     paper_stake_amount,
@@ -2553,15 +2554,15 @@ LIMIT @Limit;
 				reader.GetBoolean(3),
 				reader.GetBoolean(4),
 				reader.GetBoolean(5),
-				reader.GetBoolean(6),
-				reader.IsDBNull(7) ? null : DateTimeOffsetFromUtc(reader.GetDateTime(7)),
+				reader.IsDBNull(6) ? null : DateTimeOffsetFromUtc(reader.GetDateTime(6)),
+				reader.GetDecimal(7),
 				reader.GetDecimal(8),
 				reader.GetDecimal(9),
 				reader.GetDecimal(10),
-				reader.GetDecimal(11),
+				reader.GetInt32(11),
 				reader.GetInt32(12),
-				reader.GetInt32(13),
-				reader.GetDecimal(14),
+				reader.GetDecimal(13),
+				reader.GetInt32(14),
 				reader.GetInt32(15),
 				reader.GetInt32(16),
 				reader.GetInt32(17),
@@ -2574,7 +2575,7 @@ LIMIT @Limit;
 				reader.GetInt32(24),
 				reader.GetInt32(25),
 				reader.GetInt32(26),
-				reader.GetInt32(27),
+				reader.GetDecimal(27),
 				reader.GetDecimal(28),
 				reader.GetDecimal(29),
 				reader.GetDecimal(30),
@@ -2582,16 +2583,16 @@ LIMIT @Limit;
 				reader.GetDecimal(32),
 				reader.GetDecimal(33),
 				reader.GetDecimal(34),
-				reader.GetDecimal(35),
-				reader.IsDBNull(36) ? null : reader.GetDecimal(36),
+				reader.IsDBNull(35) ? null : reader.GetDecimal(35),
+				reader.GetDecimal(36),
 				reader.GetDecimal(37),
 				reader.GetDecimal(38),
 				reader.GetDecimal(39),
 				reader.GetDecimal(40),
 				reader.GetDecimal(41),
 				reader.GetDecimal(42),
-				reader.GetDecimal(43),
-				reader.IsDBNull(44) ? null : reader.GetDecimal(44),
+				reader.IsDBNull(43) ? null : reader.GetDecimal(43),
+				reader.GetInt32(44),
 				reader.GetInt32(45),
 				reader.GetInt32(46),
 				reader.GetInt32(47),
@@ -2604,20 +2605,19 @@ LIMIT @Limit;
 				reader.GetInt32(54),
 				reader.GetInt32(55),
 				reader.GetInt32(56),
-				reader.GetInt32(57),
+				reader.GetDecimal(57),
 				reader.GetDecimal(58),
 				reader.GetDecimal(59),
 				reader.GetDecimal(60),
 				reader.GetDecimal(61),
 				reader.GetDecimal(62),
-				reader.GetDecimal(63),
-				reader.IsDBNull(64) ? null : reader.GetDecimal(64),
+				reader.IsDBNull(63) ? null : reader.GetDecimal(63),
+				reader.GetDecimal(64),
 				reader.GetDecimal(65),
-				reader.GetDecimal(66),
+				reader.IsDBNull(66) ? null : DateTimeOffsetFromUtc(reader.GetDateTime(66)),
 				reader.IsDBNull(67) ? null : DateTimeOffsetFromUtc(reader.GetDateTime(67)),
 				reader.IsDBNull(68) ? null : DateTimeOffsetFromUtc(reader.GetDateTime(68)),
-				reader.IsDBNull(69) ? null : DateTimeOffsetFromUtc(reader.GetDateTime(69)),
-				reader.IsDBNull(70) ? null : DateTimeOffsetFromUtc(reader.GetDateTime(70))));
+				reader.IsDBNull(69) ? null : DateTimeOffsetFromUtc(reader.GetDateTime(69))));
 		}
 
 		return results;
@@ -2655,13 +2655,152 @@ GROUP BY strategy_id;
 		return results;
 	}
 
+	public async Task<int> RefreshDateDependentStrategyHourlyPaperPnlAsync(
+		IReadOnlyCollection<Guid> strategyIds,
+		DateTimeOffset refreshedAtUtc,
+		CancellationToken cancellationToken = default(CancellationToken))
+	{
+		Guid[] normalizedStrategyIds = strategyIds
+			.Select(StrategyIds.Normalize)
+			.Distinct()
+			.ToArray();
+		if (normalizedStrategyIds.Length == 0)
+		{
+			return 0;
+		}
+
+		await using NpgsqlConnection connection = await OpenConnectionAsync(cancellationToken);
+		await using NpgsqlCommand command = CreateCommand(connection, """
+WITH selected_strategy_ids AS (
+    SELECT unnest(@StrategyIds::uuid[]) AS strategy_id
+),
+selected_strategies AS (
+    SELECT strategy.id, strategy.code, strategy.name
+    FROM strategies strategy
+    INNER JOIN selected_strategy_ids selected ON selected.strategy_id = strategy.id
+),
+hours AS (
+    SELECT generate_series(0, 23)::integer AS hour_utc
+),
+run_agg AS (
+    SELECT
+        run.strategy_id,
+        EXTRACT(HOUR FROM run.entered_at_utc AT TIME ZONE 'UTC')::integer AS hour_utc,
+        count(*)::integer AS settled_runs_count,
+        (count(*) FILTER (WHERE COALESCE(run.realized_pnl_usd, 0) > 0))::integer AS won_runs_count,
+        (count(*) FILTER (WHERE COALESCE(run.realized_pnl_usd, 0) < 0))::integer AS lost_runs_count,
+        COALESCE(sum(run.stake_usd), 0)::numeric(28,8) AS stake_usd,
+        COALESCE(sum(run.realized_pnl_usd), 0)::numeric(28,8) AS realized_pnl_usd,
+        COALESCE(avg(run.realized_pnl_usd), 0)::numeric(28,8) AS avg_pnl_usd,
+        min(run.entered_at_utc) AS first_entered_at_utc,
+        max(run.entered_at_utc) AS last_entered_at_utc
+    FROM strategy_market_paper_runs run
+    INNER JOIN selected_strategies strategy ON strategy.id = run.strategy_id
+    WHERE run.status = 'Settled'
+      AND run.entered_at_utc IS NOT NULL
+      AND run.realized_pnl_usd IS NOT NULL
+    GROUP BY
+        run.strategy_id,
+        EXTRACT(HOUR FROM run.entered_at_utc AT TIME ZONE 'UTC')::integer
+),
+upserted AS (
+    INSERT INTO date_dependent_strategy_hourly_paper_pnl (
+        strategy_id,
+        code,
+        name,
+        hour_utc,
+        settled_runs_count,
+        won_runs_count,
+        lost_runs_count,
+        stake_usd,
+        realized_pnl_usd,
+        avg_pnl_usd,
+        first_entered_at_utc,
+        last_entered_at_utc,
+        refreshed_at_utc
+    )
+    SELECT
+        strategy.id,
+        strategy.code,
+        strategy.name,
+        hour_row.hour_utc,
+        COALESCE(run_agg.settled_runs_count, 0),
+        COALESCE(run_agg.won_runs_count, 0),
+        COALESCE(run_agg.lost_runs_count, 0),
+        COALESCE(run_agg.stake_usd, 0),
+        COALESCE(run_agg.realized_pnl_usd, 0),
+        COALESCE(run_agg.avg_pnl_usd, 0),
+        run_agg.first_entered_at_utc,
+        run_agg.last_entered_at_utc,
+        CAST(@RefreshedAtUtc AS timestamptz)
+    FROM selected_strategies strategy
+    CROSS JOIN hours hour_row
+    LEFT JOIN run_agg
+        ON run_agg.strategy_id = strategy.id
+       AND run_agg.hour_utc = hour_row.hour_utc
+    ON CONFLICT (strategy_id, hour_utc) DO UPDATE SET
+        code = EXCLUDED.code,
+        name = EXCLUDED.name,
+        settled_runs_count = EXCLUDED.settled_runs_count,
+        won_runs_count = EXCLUDED.won_runs_count,
+        lost_runs_count = EXCLUDED.lost_runs_count,
+        stake_usd = EXCLUDED.stake_usd,
+        realized_pnl_usd = EXCLUDED.realized_pnl_usd,
+        avg_pnl_usd = EXCLUDED.avg_pnl_usd,
+        first_entered_at_utc = EXCLUDED.first_entered_at_utc,
+        last_entered_at_utc = EXCLUDED.last_entered_at_utc,
+        refreshed_at_utc = EXCLUDED.refreshed_at_utc
+    RETURNING 1
+),
+deleted AS (
+    DELETE FROM date_dependent_strategy_hourly_paper_pnl snapshot
+    WHERE NOT EXISTS (
+        SELECT 1
+        FROM selected_strategy_ids selected
+        WHERE selected.strategy_id = snapshot.strategy_id
+    )
+    RETURNING 1
+)
+SELECT (SELECT count(*) FROM upserted)::integer AS upserted_rows,
+       (SELECT count(*) FROM deleted)::integer AS deleted_rows;
+""");
+		command.CommandTimeout = StrategyPerformanceCommandTimeoutSeconds;
+		command.Parameters.Add("StrategyIds", NpgsqlDbType.Array | NpgsqlDbType.Uuid).Value = normalizedStrategyIds;
+		command.Parameters.AddWithValue("RefreshedAtUtc", UtcDateTime(refreshedAtUtc));
+		object? value = await command.ExecuteScalarAsync(cancellationToken);
+		return value is null or DBNull ? 0 : Convert.ToInt32(value);
+	}
+
+	public async Task<decimal?> GetDateDependentStrategyHourlyPaperPnlAsync(
+		Guid strategyId,
+		int hourUtc,
+		CancellationToken cancellationToken = default(CancellationToken))
+	{
+		if (hourUtc is < 0 or > 23)
+		{
+			throw new ArgumentOutOfRangeException(nameof(hourUtc), hourUtc, "UTC hour must be in the range 0..23.");
+		}
+
+		await using NpgsqlConnection connection = await OpenConnectionAsync(cancellationToken);
+		await using NpgsqlCommand command = CreateCommand(connection, """
+SELECT realized_pnl_usd
+FROM date_dependent_strategy_hourly_paper_pnl
+WHERE strategy_id = @StrategyId
+  AND hour_utc = @HourUtc;
+""");
+		command.Parameters.AddWithValue("StrategyId", StrategyIds.Normalize(strategyId));
+		command.Parameters.AddWithValue("HourUtc", hourUtc);
+		object? value = await command.ExecuteScalarAsync(cancellationToken);
+		return value is null or DBNull ? null : (decimal)value;
+	}
+
 	public async Task<IReadOnlyList<StrategyRecentPerformance>> GetStrategyRecentPerformanceAsync(int limit = 25_000, CancellationToken cancellationToken = default(CancellationToken))
 	{
 		DateTimeOffset nowUtc = DateTimeOffset.UtcNow;
 		await using NpgsqlConnection connection = await OpenConnectionAsync(cancellationToken);
 		await using NpgsqlCommand command = CreateCommand(connection, """
 WITH selected_strategies AS (
-    SELECT id, code, name, live_stakes, auto_live_paused, live_enabled_at_utc, live_stakes AND NOT auto_live_paused AS effective_live_stakes
+    SELECT id, code, name, live_stakes, live_enabled_at_utc, live_stakes AS effective_live_stakes
     FROM strategies
     ORDER BY
         CASE WHEN code = 'follow_leader' THEN 0 ELSE 1 END,
@@ -3107,9 +3246,6 @@ ORDER BY
 SELECT id,
        enabled,
        live_stakes,
-       auto_live_paused,
-       auto_live_paused_at_utc,
-       auto_live_pause_window_start_utc,
        paused AND (paused_until_utc IS NULL OR paused_until_utc > @NowUtc) AS paused,
        CASE
            WHEN paused AND (paused_until_utc IS NULL OR paused_until_utc > @NowUtc) THEN paused_until_utc
@@ -3137,17 +3273,14 @@ FROM strategies;
 				reader.GetBoolean(2),
 				reader.GetBoolean(3),
 				reader.IsDBNull(4) ? null : DateTimeOffsetFromUtc(reader.GetDateTime(4)),
-				reader.IsDBNull(5) ? null : DateTimeOffsetFromUtc(reader.GetDateTime(5)),
-				reader.GetBoolean(6),
-				reader.IsDBNull(7) ? null : DateTimeOffsetFromUtc(reader.GetDateTime(7)),
+				reader.GetDecimal(5),
+				reader.GetDecimal(6),
+				reader.GetDecimal(7),
 				reader.GetDecimal(8),
-				reader.GetDecimal(9),
-				reader.GetDecimal(10),
+				reader.GetInt32(9),
+				reader.GetInt32(10),
 				reader.GetDecimal(11),
-				reader.GetInt32(12),
-				reader.GetInt32(13),
-				reader.GetDecimal(14),
-				reader.IsDBNull(15) ? null : DateTimeOffsetFromUtc(reader.GetDateTime(15)));
+				reader.IsDBNull(12) ? null : DateTimeOffsetFromUtc(reader.GetDateTime(12)));
 		}
 
 		return results;
@@ -3240,193 +3373,6 @@ WHERE id = @StrategyId;
 		return rows > 0;
 	}
 
-	public async Task<StrategyAutoLivePauseDecision> UpdateStrategyAutoLivePauseFromRecentPnlAsync(
-		Guid strategyId,
-		DateTimeOffset lookbackStartUtc,
-		DateTimeOffset updatedAtUtc,
-		StrategyAutoLivePauseUpdateMode updateMode,
-		CancellationToken cancellationToken = default(CancellationToken))
-	{
-		var normalizedStrategyId = StrategyIds.Normalize(strategyId);
-		await using NpgsqlConnection connection = await OpenConnectionAsync(cancellationToken);
-		await using NpgsqlCommand command = CreateCommand(connection, """
-WITH paper_rows AS (
-    SELECT
-        COALESCE(run.realized_pnl_usd, 0) AS pnl_usd,
-        run.settled_at_utc
-    FROM strategy_market_paper_runs run
-    WHERE run.strategy_id = @StrategyId
-      AND run.status = 'Settled'
-      AND run.settled_at_utc <= @UpdatedAtUtc
-      AND run.realized_pnl_usd IS NOT NULL
-    UNION ALL
-    SELECT
-        COALESCE(settlement.realized_pnl_usd, 0) AS pnl_usd,
-        settlement.settled_at_utc
-    FROM paper_position_settlements settlement
-    WHERE @StrategyId = @FollowLeaderStrategyId
-      AND lower(settlement.copied_trader_wallet) NOT LIKE 'strategy:%'
-      AND settlement.settled_at_utc <= @UpdatedAtUtc
-),
-strategy_state AS (
-    SELECT
-        auto_live_paused,
-        auto_live_paused_at_utc,
-        auto_live_pause_window_start_utc,
-        COALESCE(auto_live_paused_at_utc, @LookbackStartUtc) AS resume_auto_live_paused_at_utc,
-        COALESCE(auto_live_pause_window_start_utc, @LookbackStartUtc) AS resume_window_start_utc
-    FROM strategies
-    WHERE id = @StrategyId
-),
-paper_resume_rows AS (
-    SELECT pnl_usd, settled_at_utc
-    FROM paper_rows
-    WHERE settled_at_utc >= (SELECT resume_window_start_utc FROM strategy_state)
-),
-paper_pnl AS (
-    SELECT
-        COALESCE(sum(pnl_usd), 0) AS pnl_usd,
-        count(*)::integer AS settled_count,
-        count(*) FILTER (
-            WHERE settled_at_utc > (SELECT resume_auto_live_paused_at_utc FROM strategy_state)
-        )::integer AS post_pause_settled_count
-    FROM paper_resume_rows
-),
-live_rows AS (
-    SELECT COALESCE(live_order.realized_pnl_usd, 0) AS pnl_usd
-    FROM live_orders live_order
-    WHERE live_order.strategy_id = @StrategyId
-      AND live_order.settled_at_utc >= @LookbackStartUtc
-      AND live_order.settled_at_utc <= @UpdatedAtUtc
-      AND live_order.realized_pnl_usd IS NOT NULL
-),
-live_pnl AS (
-    SELECT
-        COALESCE(sum(pnl_usd), 0) AS pnl_usd,
-        count(*)::integer AS settled_count
-    FROM live_rows
-),
-selected_pnl AS (
-    SELECT
-        CASE
-            WHEN @UpdateMode = @PauseFromLiveSettlements THEN (SELECT pnl_usd FROM live_pnl)
-            WHEN @UpdateMode = @ResumeFromPaperSettlements THEN (SELECT pnl_usd FROM paper_pnl)
-            ELSE 0
-        END AS pnl_usd,
-        CASE
-            WHEN @UpdateMode = @PauseFromLiveSettlements THEN (SELECT settled_count FROM live_pnl)
-            WHEN @UpdateMode = @ResumeFromPaperSettlements THEN (SELECT settled_count FROM paper_pnl)
-            ELSE 0
-        END AS settled_count
-),
-transition AS (
-    SELECT
-        CASE
-            WHEN @UpdateMode = @PauseFromLiveSettlements
-                 AND (SELECT pnl_usd FROM live_pnl) < 0
-                 AND (SELECT settled_count FROM live_pnl) > 1 THEN true
-            WHEN @UpdateMode = @ResumeFromPaperSettlements
-                 AND (SELECT auto_live_paused FROM strategy_state)
-                 AND (SELECT pnl_usd FROM paper_pnl) > 0
-                 AND (SELECT settled_count FROM paper_pnl) > 0
-                 AND (SELECT post_pause_settled_count FROM paper_pnl) > 0 THEN false
-            ELSE (SELECT auto_live_paused FROM strategy_state)
-        END AS auto_live_paused,
-        CASE
-            WHEN @UpdateMode = @PauseFromLiveSettlements
-                 AND (SELECT pnl_usd FROM live_pnl) < 0
-                 AND (SELECT settled_count FROM live_pnl) > 1 THEN @UpdatedAtUtc
-            WHEN @UpdateMode = @ResumeFromPaperSettlements
-                 AND (SELECT auto_live_paused FROM strategy_state)
-                 AND (SELECT pnl_usd FROM paper_pnl) > 0
-                 AND (SELECT settled_count FROM paper_pnl) > 0
-                 AND (SELECT post_pause_settled_count FROM paper_pnl) > 0 THEN NULL
-            ELSE (SELECT auto_live_paused_at_utc FROM strategy_state)
-        END AS auto_live_paused_at_utc,
-        CASE
-            WHEN @UpdateMode = @PauseFromLiveSettlements
-                 AND (SELECT pnl_usd FROM live_pnl) < 0
-                 AND (SELECT settled_count FROM live_pnl) > 1 THEN @LookbackStartUtc
-            WHEN @UpdateMode = @ResumeFromPaperSettlements
-                 AND (SELECT auto_live_paused FROM strategy_state)
-                 AND (SELECT pnl_usd FROM paper_pnl) > 0
-                 AND (SELECT settled_count FROM paper_pnl) > 0
-                 AND (SELECT post_pause_settled_count FROM paper_pnl) > 0 THEN NULL
-            ELSE (SELECT auto_live_pause_window_start_utc FROM strategy_state)
-        END AS auto_live_pause_window_start_utc
-),
-updated AS (
-    UPDATE strategies
-    SET auto_live_paused = transition.auto_live_paused,
-        auto_live_paused_at_utc = transition.auto_live_paused_at_utc,
-        auto_live_pause_window_start_utc = transition.auto_live_pause_window_start_utc,
-        updated_at_utc = @UpdatedAtUtc
-    FROM transition
-    WHERE id = @StrategyId
-      AND (
-          strategies.auto_live_paused IS DISTINCT FROM transition.auto_live_paused
-          OR strategies.auto_live_paused_at_utc IS DISTINCT FROM transition.auto_live_paused_at_utc
-          OR strategies.auto_live_pause_window_start_utc IS DISTINCT FROM transition.auto_live_pause_window_start_utc
-      )
-    RETURNING auto_live_paused
-)
-SELECT
-    COALESCE((SELECT auto_live_paused FROM updated), (SELECT auto_live_paused FROM strategies WHERE id = @StrategyId), false) AS auto_live_paused,
-    EXISTS(SELECT 1 FROM updated WHERE auto_live_paused = false) AS auto_live_resumed,
-    EXISTS(SELECT 1 FROM updated) AS auto_live_pause_changed,
-    (SELECT pnl_usd FROM selected_pnl) AS recent_pnl_usd,
-    (SELECT settled_count FROM selected_pnl) AS recent_settled_count;
-""");
-		command.Parameters.AddWithValue("StrategyId", normalizedStrategyId);
-		command.Parameters.AddWithValue("FollowLeaderStrategyId", StrategyIds.FollowLeader);
-		command.Parameters.AddWithValue("LookbackStartUtc", UtcDateTime(lookbackStartUtc));
-		command.Parameters.AddWithValue("UpdatedAtUtc", UtcDateTime(updatedAtUtc));
-		command.Parameters.AddWithValue("UpdateMode", updateMode.ToString());
-		command.Parameters.AddWithValue(
-			"PauseFromLiveSettlements",
-			StrategyAutoLivePauseUpdateMode.PauseFromLiveSettlements.ToString());
-		command.Parameters.AddWithValue(
-			"ResumeFromPaperSettlements",
-			StrategyAutoLivePauseUpdateMode.ResumeFromPaperSettlements.ToString());
-		await using NpgsqlDataReader reader = await command.ExecuteReaderAsync(cancellationToken);
-		if (!await reader.ReadAsync(cancellationToken))
-		{
-			return new StrategyAutoLivePauseDecision(false, false, false, 0m, 0, lookbackStartUtc);
-		}
-
-		return new StrategyAutoLivePauseDecision(
-			reader.GetBoolean(0),
-			reader.GetBoolean(1),
-			reader.GetBoolean(2),
-			reader.GetDecimal(3),
-			reader.GetInt32(4),
-			lookbackStartUtc);
-	}
-
-	public async Task<int> ClearStrategyAutoLivePauseExceptAsync(
-		IReadOnlyCollection<Guid> allowlistedStrategyIds,
-		DateTimeOffset updatedAtUtc,
-		CancellationToken cancellationToken = default(CancellationToken))
-	{
-		var normalizedAllowlist = allowlistedStrategyIds
-			.Select(StrategyIds.Normalize)
-			.Distinct()
-			.ToArray();
-		await using NpgsqlConnection connection = await OpenConnectionAsync(cancellationToken);
-		await using NpgsqlCommand command = CreateCommand(connection, """
-UPDATE strategies
-SET auto_live_paused = false,
-    auto_live_paused_at_utc = NULL,
-    auto_live_pause_window_start_utc = NULL,
-    updated_at_utc = @UpdatedAtUtc
-WHERE auto_live_paused
-  AND id <> ALL(@AllowlistedStrategyIds);
-""");
-		command.Parameters.Add("AllowlistedStrategyIds", NpgsqlDbType.Array | NpgsqlDbType.Uuid).Value = normalizedAllowlist;
-		command.Parameters.AddWithValue("UpdatedAtUtc", UtcDateTime(updatedAtUtc));
-		return await command.ExecuteNonQueryAsync(cancellationToken);
-	}
-
 	public async Task<bool> SetStrategyStakeAmountsAsync(
 		Guid strategyId,
 		decimal paperStakeAmount,
@@ -3475,7 +3421,7 @@ WHERE id = @StrategyId
 		await using NpgsqlConnection connection = await OpenConnectionAsync(cancellationToken);
 		await using NpgsqlCommand command = CreateCommand(connection, """
 UPDATE strategies
-SET live_available_balance = @LiveAvailableBalance,
+SET live_available_balance = LEAST(100.00, @LiveAvailableBalance),
     updated_at_utc = @UpdatedAtUtc
 WHERE id = @StrategyId
   AND @LiveAvailableBalance >= 0;
@@ -3929,9 +3875,9 @@ RETURNING id;
 
 		await using (NpgsqlCommand command = CreateCommand(connection, """
 UPDATE strategies
-SET live_available_balance = GREATEST(0, live_available_balance + @RealizedPnlUsd),
+SET live_available_balance = LEAST(100.00, GREATEST(0, live_available_balance + @RealizedPnlUsd)),
     live_stakes = CASE
-        WHEN GREATEST(0, live_available_balance + @RealizedPnlUsd) < live_stake_amount THEN false
+        WHEN LEAST(100.00, GREATEST(0, live_available_balance + @RealizedPnlUsd)) < live_stake_amount THEN false
         ELSE live_stakes
     END,
     updated_at_utc = @UpdatedAtUtc

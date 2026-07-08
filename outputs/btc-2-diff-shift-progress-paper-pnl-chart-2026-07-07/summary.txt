@@ -1,0 +1,17 @@
+﻿Paper PnL chart
+Generated UTC: 2026-07-07 09:59:39
+Database: 192.168.0.101:5432/polycopytrader
+Strategy: BTC Up or Down 5m 2 Diff Shift Progress Premarket
+Code: btc_up_down_5m_2_diff_shift_progress_premarket
+Records: 695
+Period UTC: 2026-07-03 06:49:39 - 2026-07-07 09:53:34
+Wins/Losses/Flat: 375/320/0
+Total stake USD: +8832.00
+Total PnL USD: +847.61
+Max single PnL USD: +42.84
+Min single PnL USD: -44.01
+Max stake USD: +44.01
+Max cumulative PnL USD: +864.63
+Min cumulative PnL USD: +10.18
+Max drawdown USD: +315.16
+Max drawdown records: 398 -> 418
