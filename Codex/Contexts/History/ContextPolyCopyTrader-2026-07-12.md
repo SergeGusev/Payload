@@ -87,3 +87,10 @@ Request:
 
 Result:
 Continued the server PostgreSQL backup after `192.168.0.101:5432` became reachable. Created a successful logical backup of database `polycopytrader` with PostgreSQL 18 `pg_dump` from Docker, using directory format `pg_dump -Fd -j 2 -Z 0`. The copied host artifact is `outputs/postgres-backups/polycopytrader_server_20260712t140409z.dir`, with 106 files and size `33.147 GB` / `35,591,613,355` bytes. Docker state and copied exit file both show exit code `0`; `pg_restore -l` read the copied archive and reported format `DIRECTORY`, database `polycopytrader`, no compression, and `TOC Entries: 614`. Created SHA256 manifest `outputs/postgres-backups/polycopytrader_server_20260712t140409z.dir.sha256` with 109 entries and removed the backup container afterward. Physical `pg_basebackup` remains unavailable until `pg_hba.conf` permits replication from `192.168.0.100`; the completed logical backup does not depend on that.
+
+## 2026-07-12T18:16:31.9517575Z
+Request:
+Построй Pnl график стратегии BTC Up or Down 5m 1 Diff Down Progress, укажи максимальную ставку и максимальный провал
+
+Result:
+Resolved exactly one server strategy row: `b7c50005-0000-4000-8155-000000000001` / `btc_up_down_5m_diff_1_down_progress`; it is enabled, unpaused, and has zero Live orders. Exported 1053 settled Paper rows from server PostgreSQL `192.168.0.101:5432/polycopytrader` covering `2026-07-03 09:54:43.278393 UTC` through `2026-07-12 18:07:46.203679 UTC`. Server SQL and independent local CSV calculations matched: wins/losses/flat `553/500/0`, total stake `$29,294.49600086`, total Paper PnL `+$1,386.19947654`, ROI `4.7319451288709841%`, maximum stake `$55.00440090`, maximum drawdown `$756.40794092` from `2026-07-06 18:42:10.274425 UTC` peak to `2026-07-12 06:34:35.333244 UTC` trough. Rendered and visually inspected PNG `outputs/btc-1-diff-down-progress-paper-pnl-chart-2026-07-12/paper-pnl-chart.png`; saved CSV, SQL, server aggregate, status counts, and summary in the same ignored output directory. Production access was read-only.

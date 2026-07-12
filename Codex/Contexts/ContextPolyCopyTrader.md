@@ -1,3 +1,17 @@
+## Active Update 2026-07-12 BTC Diff Down Progress 1 PnL Chart
+Goal: Build and display the cumulative Paper PnL chart for `BTC Up or Down 5m 1 Diff Down Progress`, including maximum stake and maximum drawdown.
+Status: Completed
+Done:
+- Resolved exactly one server strategy row: ID `b7c50005-0000-4000-8155-000000000001`, code `btc_up_down_5m_diff_1_down_progress`, name `BTC Up or Down 5m 1 Diff Down Progress`; it is enabled, unpaused, and has `live_stakes=false`.
+- Verified the exact strategy has `0` Live orders, so the chart is Paper-only.
+- Exported `1053` settled Paper rows from server PostgreSQL `192.168.0.101:5432/polycopytrader`, ordered by `settled_at_utc, id`, covering `2026-07-03 09:54:43.278393 UTC` through `2026-07-12 18:07:46.203679 UTC`.
+- Independently matched server SQL and local CSV calculations: wins/losses/flat `553/500/0`, total stake `$29,294.49600086`, total Paper PnL `+$1,386.19947654`, ROI `4.7319451288709841%`, maximum stake `$55.00440090`, and maximum drawdown `$756.40794092`.
+- Maximum drawdown ran from cumulative PnL peak `+$1,116.07192716` at `2026-07-06 18:42:10.274425 UTC` to trough `+$359.66398624` at `2026-07-12 06:34:35.333244 UTC`.
+- Rendered and visually inspected `outputs/btc-1-diff-down-progress-paper-pnl-chart-2026-07-12/paper-pnl-chart.png`; saved the source CSV, SQL, server aggregate, status counts, and summary in the same ignored output directory.
+Next: None.
+Notes: Initial `git pull --ff-only` failed because GitHub was unreachable from this machine. Production access was read-only; no strategy, order, service, source, or database state changed.
+Blockers: None.
+
 ## Active Update 2026-07-12 Server PostgreSQL Backup Completed
 Goal: Create a PostgreSQL backup for the server database.
 Status: Completed
