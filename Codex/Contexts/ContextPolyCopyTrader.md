@@ -1,3 +1,15 @@
+## Active Update 2026-07-12 Commit Remaining Project Changes
+Goal: Commit and push the remaining repository changes after the Git hygiene cleanup.
+Status: Completed
+Done:
+- Staged the remaining non-ignored project files: source, tests, docs, and context/history files. No `outputs`, `artifacts`, `keys`, `.codex`, `runlogs`, `bin`, `obj`, or `node_modules` paths were staged.
+- Verified staged generated/local path scan was empty, staged files over 1 MB were absent, and staged targeted secret scan found no PEM/private-key blocks or high-risk literal secret values. `keys/` staged count was `0`.
+- Fixed trailing whitespace in two history files so `git diff --cached --check` passed with only LF/CRLF warnings.
+- Committed the accumulated source/docs/test/history changes as `bfe81b83 Persist strategy dashboard and redeem updates`.
+Next: Fix the remaining red full test suite before treating the branch as fully verified.
+Notes: Verification before commit: `dotnet build src\PolyCopyTrader.Dashboard\PolyCopyTrader.Dashboard.csproj --no-restore -p:OutDir=<temp>` passed with 0 errors; full `dotnet build PolyCopyTrader.sln` was blocked only by locked Dashboard output DLLs held by `devenv.exe` and `PolyCopyTrader.Dashboard.exe`; `dotnet test tests\PolyCopyTrader.Tests\PolyCopyTrader.Tests.csproj --no-restore` failed with 112 failed, 659 passed, 771 total. The broad test failures are rooted in tests that still reference strategy variants removed from the current catalog, for example `StrategyIds.GetBtcUpDown5mVariant(More, 60)`.
+Blockers: Full test suite is not green.
+
 ## Active Update 2026-07-12 Git Hygiene Cleanup
 Goal: Stop generated outputs, build artifacts, local Codex workspace files, and local secrets from polluting Git.
 Status: Completed
