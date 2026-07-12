@@ -1,3 +1,18 @@
+## Active Update 2026-07-12 Server PostgreSQL Backup Attempt
+Goal: Create a PostgreSQL logical backup for the server database.
+Status: Blocked
+Done:
+- Verified the intended production database endpoint from current evidence as `192.168.0.101:5432`, database `polycopytrader`; the local environment variable still points at `127.0.0.1`, so it cannot be used unchanged for a server backup.
+- Verified successful direct host connection earlier in the attempt: PostgreSQL `18.3`, database size about `39 GB`, database `polycopytrader`, user `postgres`.
+- Verified local Windows `pg_dump` is only `17.5`; a schema-only test against the server failed with the expected server-version mismatch: server `18.3`, client `17.5`.
+- Verified WinRM is reachable on `192.168.0.101:5985`, but current Windows credentials cannot authenticate, so running server-local `pg_dump` remotely is not available from this session.
+- Tried installing PostgreSQL 18 client via Scoop; Scoop's package download failed hash/extraction checks and was cleaned up afterward.
+- Verified Docker is available and found a usable PostgreSQL 18 client binary path inside `postgres:17.10-alpine` after installing `postgresql18-client`: `/usr/libexec/postgresql18/pg_dump`, version `18.4`.
+- Stopped leftover diagnostic `psql.exe` processes and removed the failed Scoop PostgreSQL install/cache.
+Next: Retry once `192.168.0.101` is reachable again; preferred backup path is Docker `postgres:17.10-alpine` plus Alpine `postgresql18-client`, using `/usr/libexec/postgresql18/pg_dump` to write a custom-format dump under ignored `outputs/postgres-backups/`.
+Notes: Backup was not created. Final network verification from the host failed: `ping 192.168.0.101` had 100% timeout, `Test-NetConnection 192.168.0.101 -Port 5432` was false, and direct `psql` timed out.
+Blockers: Server `192.168.0.101` is currently unreachable from this machine.
+
 ## Active Update 2026-07-12 Commit Remaining Project Changes
 Goal: Commit and push the remaining repository changes after the Git hygiene cleanup.
 Status: Completed
