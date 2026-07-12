@@ -1,7 +1,0 @@
-﻿StrategyCode,StrategyName,CurrentPnl,FullFillPracticePnl,FillAdjustedPracticePnl,FillAdjustedVsCurrent,FullFillVsCurrent,Decisions,CurrentSettled,GtdLimitNotFilled,CurrentPriceAboveMaxSkipped,SimplePracticeRestingAt0.50,SimplePracticeComputable,SimplePracticeNotComputable
-btc_up_down_5m_down_bps_50_instant,BTC Up or Down 5m Down 50 bps Instant,40.004509,219.6556,28.19038261,-11.81412639,179.651091,91,59,12,20,65,89,2
-btc_up_down_5m_up_bps_50_instant,BTC Up or Down 5m Up 50 bps Instant,3.539853,82.974,15.50530435,11.96545135,79.434147,100,75,4,21,60,93,7
-eth_up_down_5m_down_bps_50_instant,ETH Up or Down 5m Down 50 bps Instant,34.88854203,242.52874503,41.0343972,6.14585517,207.640203,147,100,17,30,98,133,14
-eth_up_down_5m_up_bps_50_instant,ETH Up or Down 5m Up 50 bps Instant,59.11129999,305.65523599,41.25088816,-17.86041183,246.543936,134,101,10,23,88,123,11
-sol_up_down_5m_down_bps_50_instant,SOL Up or Down 5m Down 50 bps Instant,39.411549,292.96940702,34.03549398,-5.37605502,253.55785802,202,137,18,47,125,183,19
-sol_up_down_5m_up_bps_50_instant,SOL Up or Down 5m Up 50 bps Instant,-5.14526604,100.98652704,20.75348356,25.8987496,106.13179308,214,163,16,35,112,200,14

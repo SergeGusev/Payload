@@ -1,5 +1,0 @@
-D:\My\Business\PolyMarket\artifacts\dashboard-live-orders-paging-test-build-obj\Debug\net10.0\PolyCopyTrader.Domain.GeneratedMSBuildEditorConfig.editorconfig
-D:\My\Business\PolyMarket\artifacts\dashboard-live-orders-paging-test-build-obj\Debug\net10.0\PolyCopyTrader.Domain.AssemblyInfoInputs.cache
-D:\My\Business\PolyMarket\artifacts\dashboard-live-orders-paging-test-build-obj\Debug\net10.0\PolyCopyTrader.Domain.AssemblyInfo.cs
-D:\My\Business\PolyMarket\artifacts\dashboard-live-orders-paging-test-build-obj\Debug\net10.0\PolyCopyTrader.Domain.csproj.CoreCompileInputs.cache
-D:\My\Business\PolyMarket\artifacts\dashboard-live-orders-paging-test-build-obj\Debug\net10.0\PolyCopyTrader.Domain.sourcelink.json

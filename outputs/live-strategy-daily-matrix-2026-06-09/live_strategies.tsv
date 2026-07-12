@@ -1,7 +1,0 @@
-code	name	enabled	live_stakes	auto_live_paused	live_enabled_utc
-btc_up_down_5m_down_bps_50_instant	BTC Up or Down 5m Down 50 bps Instant	True	True	False	2026-06-05T08:39:47Z
-btc_up_down_5m_up_bps_50_instant	BTC Up or Down 5m Up 50 bps Instant	True	True	False	2026-06-05T08:39:47Z
-eth_up_down_5m_down_bps_50_instant	ETH Up or Down 5m Down 50 bps Instant	True	True	False	2026-06-05T08:39:47Z
-eth_up_down_5m_up_bps_50_instant	ETH Up or Down 5m Up 50 bps Instant	True	True	False	2026-06-05T08:39:47Z
-sol_up_down_5m_down_bps_50_instant	SOL Up or Down 5m Down 50 bps Instant	True	True	False	2026-06-05T08:39:47Z
-sol_up_down_5m_up_bps_50_instant	SOL Up or Down 5m Up 50 bps Instant	True	True	False	2026-06-05T08:39:47Z

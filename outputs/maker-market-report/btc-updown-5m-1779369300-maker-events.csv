@@ -1,8 +1,0 @@
-﻿created_at_utc,strategy_code,status,selected_outcome,entry_price,stake_usd,size_shares,previous_max_best_ask,current_max_best_ask,maker_limit_price,skip_reason,blocking_strategy_code,blocking_outcome,blocking_status,paper_order_id,market_id
-"2026-05-21T13:16:35.5148520+00:00","btc_up_down_5m_up_maker","Skipped","Up",,1,,0.46,0.53,0.52,"opposite_outcome_open_order","btc_up_down_5m_binance_30s","Down","Expired",,"2312656:maker:up:0.53"
-"2026-05-21T13:17:03.9057350+00:00","btc_up_down_5m_up_maker","Skipped","Up",,1,,0.53,0.54,0.53,"opposite_outcome_open_order","btc_up_down_5m_binance_30s","Down","Expired",,"2312656:maker:up:0.54"
-"2026-05-21T13:19:15.1546130+00:00","btc_up_down_5m_down_maker","Skipped","Down",,1,,0.9,0.91,0.9,"maker_expiration_elapsed",,,,,"2312656:maker:down:0.91"
-"2026-05-21T13:19:19.5184790+00:00","btc_up_down_5m_down_maker","Skipped","Down",,1,,0.91,0.92,0.91,"maker_expiration_elapsed",,,,,"2312656:maker:down:0.92"
-"2026-05-21T13:19:26.3613490+00:00","btc_up_down_5m_down_maker","Skipped","Down",,1,,0.92,0.93,0.92,"maker_expiration_elapsed",,,,,"2312656:maker:down:0.93"
-"2026-05-21T13:19:30.1054280+00:00","btc_up_down_5m_down_maker","Skipped","Down",,1,,0.93,0.94,0.93,"maker_expiration_elapsed",,,,,"2312656:maker:down:0.94"
-"2026-05-21T13:19:33.9291430+00:00","btc_up_down_5m_down_maker","Skipped","Down",,1,,0.94,0.96,0.95,"maker_expiration_elapsed",,,,,"2312656:maker:down:0.96"

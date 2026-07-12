@@ -1,7 +1,0 @@
-﻿created_at_utc,strategy_code,status,selected_outcome,entry_price,stake_usd,size_shares,previous_max_best_ask,current_max_best_ask,maker_limit_price,skip_reason,blocking_strategy_code,blocking_outcome,blocking_status,paper_order_id,market_id
-"2026-05-21T15:35:33.2041910+00:00","btc_up_down_5m_up_maker","Skipped","Up",0.71,4.0044,5.64,,,,"gtd_limit_not_filled",,,,"9ca5f94a-92bf-4eef-853b-04d6b1299db2","2313094:maker:up:0.72:1:1779377733204"
-"2026-05-21T15:36:02.1297050+00:00","btc_up_down_5m_up_maker","Skipped","Up",0.75,5.0025,6.67,,,,"gtd_limit_not_filled",,,,"c9853bfa-5066-4122-847e-74ab657275e2","2313094:maker:up:0.76:2:1779377762129"
-"2026-05-21T15:36:31.2477970+00:00","btc_up_down_5m_down_maker","Skipped","Down",0.45,3.0015,6.67,,,,"gtd_limit_not_filled",,,,"1b2ed9e8-9985-4170-92d4-acf104032878","2313094:maker:down:0.46:1:1779377791247"
-"2026-05-21T15:37:01.8558840+00:00","btc_up_down_5m_down_maker","Entered","Down",0.71,4.0044,5.64,,,,,,,,"af315b84-8e4a-4be4-b481-b117fe6acd7d","2313094:maker:down:0.72:2:1779377821855"
-"2026-05-21T15:38:30.1202870+00:00","btc_up_down_5m_up_maker","Skipped","Up",0.76,5.0008,6.58,,,,"gtd_limit_not_filled",,,,"a6a427d0-4e2b-4637-b08c-1b2593006571","2313094:maker:up:0.77:3:1779377910120"
-"2026-05-21T15:39:32.4011410+00:00","btc_up_down_5m_up_maker","Skipped","Up",0.97,6.0043,6.19,,,,"gtd_limit_not_filled",,,,"b39c9d53-7b78-46c3-87f2-ee782b47ab89","2313094:maker:up:0.98:4:1779377972401"

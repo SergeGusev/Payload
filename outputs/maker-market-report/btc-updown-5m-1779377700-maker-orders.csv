@@ -1,7 +1,0 @@
-﻿created_at_utc,strategy_code,status,outcome,price,size_shares,notional_usd,expires_at_utc,filled_at_utc,cancelled_at_utc,previous_max_best_ask,current_max_best_ask,order_id
-"2026-05-21T15:35:33.2041910+00:00","btc_up_down_5m_up_maker","Expired","Up",0.71,5.64,4.0044,"2026-05-21T15:40:00.0000000+00:00",,,,,"9ca5f94a-92bf-4eef-853b-04d6b1299db2"
-"2026-05-21T15:36:02.1297050+00:00","btc_up_down_5m_up_maker","Expired","Up",0.75,6.67,5.0025,"2026-05-21T15:40:00.0000000+00:00",,,,,"c9853bfa-5066-4122-847e-74ab657275e2"
-"2026-05-21T15:36:31.2477970+00:00","btc_up_down_5m_down_maker","Expired","Down",0.45,6.67,3.0015,"2026-05-21T15:40:00.0000000+00:00",,,,,"1b2ed9e8-9985-4170-92d4-acf104032878"
-"2026-05-21T15:37:01.8558840+00:00","btc_up_down_5m_down_maker","Filled","Down",0.71,5.64,4.0044,"2026-05-21T15:40:00.0000000+00:00","2026-05-21T15:38:18.3597280+00:00",,,,"af315b84-8e4a-4be4-b481-b117fe6acd7d"
-"2026-05-21T15:38:30.1202870+00:00","btc_up_down_5m_up_maker","Expired","Up",0.76,6.58,5.0008,"2026-05-21T15:40:00.0000000+00:00",,,,,"a6a427d0-4e2b-4637-b08c-1b2593006571"
-"2026-05-21T15:39:32.4011410+00:00","btc_up_down_5m_up_maker","Expired","Up",0.97,6.19,6.0043,"2026-05-21T15:40:00.0000000+00:00",,,,,"b39c9d53-7b78-46c3-87f2-ee782b47ab89"

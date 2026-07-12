@@ -1,7 +1,0 @@
-﻿StrategyCode,StrategyName,CurrentPnl,SkipOver0.50Pnl,AlwaysMarketPnl,SkipVsCurrent,AlwaysMarketVsCurrent,Decisions,CurrentSettled,GtdLimitNotFilled,CappedOver0.50,CappedOver0.50Settled,CappedOver0.50Unfilled,AlwaysMarketComputable,AlwaysMarketNotComputable
-btc_up_down_5m_down_simple,BTC Up or Down 5m Down Simple,-59.9579,-59.4579,-557.2682,0.5,-497.3103,660,298,362,365,3,362,660,0
-btc_up_down_5m_up_simple,BTC Up or Down 5m Up Simple,133.682443,97.686043,441.457,-35.9964,307.774557,658,429,229,296,73,223,658,0
-eth_up_down_5m_down_simple,ETH Up or Down 5m Down Simple,-70.9139,-70.2089,-298.1774,0.705,-227.2635,660,330,330,341,11,330,660,0
-eth_up_down_5m_up_simple,ETH Up or Down 5m Up Simple,-29.1032,-25.5182,164.8519,3.585,193.9551,659,306,353,361,8,353,659,0
-sol_up_down_5m_down_simple,SOL Up or Down 5m Down Simple,-60.6484,-91.9434,-587.121,-31.295,-526.4726,660,311,349,404,55,349,660,0
-sol_up_down_5m_up_simple,SOL Up or Down 5m Up Simple,25.3722,14.3372,177.4633,-11.035,152.0911,660,253,407,451,44,407,660,0

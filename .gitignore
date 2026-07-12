@@ -24,21 +24,30 @@ _ReSharper*/
 
 ## Logs and runtime data
 logs/
+runlogs/
+outputs/
+output-*/
+artifacts/
 *.log
 *.db
 *.db-shm
 *.db-wal
 *.sqlite
 *.sqlite3
-artifacts/btc-source-comparison/
-artifacts/net48-secret-transfer/
 
 ## Secrets/config overrides
+keys/
+*.pem
+*.key
+*.pfx
 appsettings.Development.local.json
 appsettings.Production.local.json
 *.secrets.json
 .env
 .env.*
+
+## Local Codex workspace
+.codex/
 
 ## NuGet
 *.nupkg

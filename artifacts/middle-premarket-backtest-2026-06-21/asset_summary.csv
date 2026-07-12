@@ -1,4 +1,0 @@
-asset,markets_evaluated,baseline_up_win_rate_pct,baseline_down_win_rate_pct,baseline_up_roi_pct_at_0_50,baseline_down_roi_pct_at_0_50,best_offset_seconds,best_depth,best_threshold_bps,best_settled_trades,best_win_rate_pct,best_roi_pct_at_0_50,best_break_even_entry_price,best_roi_pct_at_0_52,best_suitability
-BTC,52416,50.0497,49.9503,0.0995,-0.0995,30,10,45,514,56.8093,13.6187,0.5681,9.2487,research_candidate
-ETH,52416,50.0708,49.9292,0.1416,-0.1416,5,20,80,688,56.1047,12.2093,0.561,7.8936,research_candidate
-SOL,52416,49.9861,50.0139,-0.0277,0.0277,10,10,65,512,57.6172,14.9712,0.5762,10.8023,research_candidate

@@ -1,7 +1,0 @@
-dotnet.exe : Unhandled exception. Npgsql.NpgsqlException (0x80004005): Exception while reading from stream
-At D:\My\Business\PolyMarket\outputs\delete-revert-strategies-2026-06-16\run-execute-loop.ps1:21 char:5
-+     & dotnet run --project $Project --configuration Release -- `
-+     ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-    + CategoryInfo          : NotSpecified: (Unhandled excep...ing from stream:String) [], RemoteException
-    + FullyQualifiedErrorId : NativeCommandError
- 
