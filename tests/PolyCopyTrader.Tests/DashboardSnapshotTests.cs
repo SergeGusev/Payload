@@ -77,6 +77,7 @@ public sealed class DashboardSnapshotTests
         Assert.Contains("strategy.enabled", selectSql, StringComparison.Ordinal);
         Assert.Contains("strategy.paused", selectSql, StringComparison.Ordinal);
         Assert.Contains("strategy.live_available_balance", selectSql, StringComparison.Ordinal);
+        Assert.Contains("strategy.paused_until_utc > CURRENT_TIMESTAMP", selectSql, StringComparison.Ordinal);
         Assert.DoesNotContain("WITH ", selectSql, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain("paper_orders", selectSql, StringComparison.Ordinal);
         Assert.DoesNotContain("strategy_market_paper_runs", selectSql, StringComparison.Ordinal);
@@ -97,10 +98,59 @@ public sealed class DashboardSnapshotTests
         Assert.Contains("FROM dashboard_strategy_recent_performance_snapshots", selectSql, StringComparison.Ordinal);
         Assert.Contains("JOIN strategies AS strategy ON strategy.id = snapshot.strategy_id", selectSql, StringComparison.Ordinal);
         Assert.Contains("strategy.live_stakes", selectSql, StringComparison.Ordinal);
+        Assert.Contains("CURRENT_TIMESTAMP - (snapshot.window_hours * interval '1 hour')", selectSql, StringComparison.Ordinal);
         Assert.DoesNotContain("WITH ", selectSql, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain("paper_orders", selectSql, StringComparison.Ordinal);
         Assert.DoesNotContain("strategy_market_paper_runs", selectSql, StringComparison.Ordinal);
         Assert.DoesNotContain("FROM live_orders", selectSql, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void DashboardProjectionSchema_ContainsDurableOutboxAndSourceTriggers()
+    {
+        var source = ReadRepositorySource("src", "PolyCopyTrader.Storage", "DashboardProjectionSchema.cs");
+
+        Assert.Contains("CREATE TABLE IF NOT EXISTS dashboard_projection_events", source, StringComparison.Ordinal);
+        Assert.Contains("transaction_id xid8 NOT NULL", source, StringComparison.Ordinal);
+        Assert.Contains("dashboard_strategy_lifetime_projection_states", source, StringComparison.Ordinal);
+        Assert.Contains("dashboard_strategy_recent_projection_facts", source, StringComparison.Ordinal);
+        Assert.Contains("dashboard_strategy_position_projection_facts", source, StringComparison.Ordinal);
+        Assert.Contains("ux_dashboard_projection_events_paper_position", source, StringComparison.Ordinal);
+        Assert.Contains("ON CONFLICT (source_kind, source_id) WHERE source_kind = 'PaperPosition'", source, StringComparison.Ordinal);
+        Assert.Contains("trg_dashboard_projection_paper_order", source, StringComparison.Ordinal);
+        Assert.Contains("trg_dashboard_projection_strategy_run", source, StringComparison.Ordinal);
+        Assert.Contains("trg_dashboard_projection_live_order", source, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void DashboardProjectionWorkers_UseIncrementalAndIndependentReconciliationLoops()
+    {
+        var projectionWorker = ReadRepositorySource(
+            "src",
+            "PolyCopyTrader.Service",
+            "Analytics",
+            "DashboardStrategyPerformanceSnapshotWorker.cs");
+        var reconciliationWorker = ReadRepositorySource(
+            "src",
+            "PolyCopyTrader.Service",
+            "Analytics",
+            "DashboardStrategyProjectionReconciliationWorker.cs");
+        var program = ReadRepositorySource("src", "PolyCopyTrader.Service", "Program.cs");
+        var reconciliationRepository = ReadRepositorySource(
+            "src",
+            "PolyCopyTrader.Storage",
+            "PostgresDashboardProjectionRepository.Reconciliation.cs");
+
+        Assert.Contains("ApplyPendingEventsAsync", projectionWorker, StringComparison.Ordinal);
+        Assert.Contains("ExpireRecentFactsAsync", projectionWorker, StringComparison.Ordinal);
+        Assert.DoesNotContain("GetStrategyPerformanceAsync", projectionWorker, StringComparison.Ordinal);
+        Assert.DoesNotContain("GetStrategyRecentPerformanceAsync", projectionWorker, StringComparison.Ordinal);
+        Assert.Contains("TimeSpan.FromMinutes(1)", reconciliationWorker, StringComparison.Ordinal);
+        Assert.Contains("ReconcileNextStrategyAsync", reconciliationWorker, StringComparison.Ordinal);
+        Assert.Contains("AddHostedService<DashboardStrategyProjectionReconciliationWorker>", program, StringComparison.Ordinal);
+        Assert.Contains("SET LOCAL max_parallel_workers_per_gather = 0", reconciliationRepository, StringComparison.Ordinal);
+        Assert.Contains("SET LOCAL work_mem = '4MB'", reconciliationRepository, StringComparison.Ordinal);
+        Assert.Contains("SET LOCAL statement_timeout = '15s'", reconciliationRepository, StringComparison.Ordinal);
     }
 
     private static string ReadRepositorySource(params string[] segments)

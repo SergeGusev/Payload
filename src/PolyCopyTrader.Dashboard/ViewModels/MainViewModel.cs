@@ -23,6 +23,7 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
 
     private const int MaxDashboardErrors = 500;
     private const string AllStrategyCategories = "All categories";
+    private const string AllStrategyCurrencies = "All";
     private const string AllOrderStrategies = "All strategies";
     private const int OverviewTabIndex = 0;
     private const int StrategiesTabIndex = 1;
@@ -131,6 +132,18 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
 
     [ObservableProperty]
     private string selectedStrategy1HourCategory = AllStrategyCategories;
+
+    [ObservableProperty]
+    private string selectedStrategyCurrency = AllStrategyCurrencies;
+
+    [ObservableProperty]
+    private string selectedStrategy24HoursCurrency = AllStrategyCurrencies;
+
+    [ObservableProperty]
+    private string selectedStrategy6HoursCurrency = AllStrategyCurrencies;
+
+    [ObservableProperty]
+    private string selectedStrategy1HourCurrency = AllStrategyCurrencies;
 
     [ObservableProperty]
     private StrategyOrderFilterOption? selectedPaperOrdersStrategy = AllOrderStrategiesOption;
@@ -262,6 +275,14 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
 
     public ObservableCollection<string> StrategyCategoryOptions { get; } = [AllStrategyCategories];
 
+    public ObservableCollection<string> Strategy24HoursCategoryOptions { get; } = [AllStrategyCategories];
+
+    public ObservableCollection<string> Strategy6HoursCategoryOptions { get; } = [AllStrategyCategories];
+
+    public ObservableCollection<string> Strategy1HourCategoryOptions { get; } = [AllStrategyCategories];
+
+    public IReadOnlyList<string> StrategyCurrencyOptions { get; } = [AllStrategyCurrencies, "BTC", "ETH", "SOL"];
+
     public ObservableCollection<StrategyRecentPerformanceRow> StrategyRecent24Hours { get; } = [];
 
     public ObservableCollection<StrategyRecentPerformanceRow> StrategyRecent6Hours { get; } = [];
@@ -332,6 +353,30 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
 
     partial void OnSelectedStrategy1HourCategoryChanged(string value)
     {
+        ApplyStrategyFilters();
+    }
+
+    partial void OnSelectedStrategyCurrencyChanged(string value)
+    {
+        RefreshStrategyCategoryOptions();
+        ApplyStrategyFilters();
+    }
+
+    partial void OnSelectedStrategy24HoursCurrencyChanged(string value)
+    {
+        RefreshStrategyCategoryOptions();
+        ApplyStrategyFilters();
+    }
+
+    partial void OnSelectedStrategy6HoursCurrencyChanged(string value)
+    {
+        RefreshStrategyCategoryOptions();
+        ApplyStrategyFilters();
+    }
+
+    partial void OnSelectedStrategy1HourCurrencyChanged(string value)
+    {
+        RefreshStrategyCategoryOptions();
         ApplyStrategyFilters();
     }
 
@@ -1425,20 +1470,30 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
             SelectedStrategy6HoursCategory,
             SelectedStrategy1HourCategory
         };
+        Replace(StrategyCategoryOptions, BuildStrategyCategoryOptions(SelectedStrategyCurrency));
+        Replace(Strategy24HoursCategoryOptions, BuildStrategyCategoryOptions(SelectedStrategy24HoursCurrency));
+        Replace(Strategy6HoursCategoryOptions, BuildStrategyCategoryOptions(SelectedStrategy6HoursCurrency));
+        Replace(Strategy1HourCategoryOptions, BuildStrategyCategoryOptions(SelectedStrategy1HourCurrency));
+
+        SelectedStrategyCategory = NormalizeSelectedStrategyCategory(selected[0], StrategyCategoryOptions);
+        SelectedStrategy24HoursCategory = NormalizeSelectedStrategyCategory(selected[1], Strategy24HoursCategoryOptions);
+        SelectedStrategy6HoursCategory = NormalizeSelectedStrategyCategory(selected[2], Strategy6HoursCategoryOptions);
+        SelectedStrategy1HourCategory = NormalizeSelectedStrategyCategory(selected[3], Strategy1HourCategoryOptions);
+    }
+
+    private string[] BuildStrategyCategoryOptions(string selectedCurrency)
+    {
         var categories = allStrategies
             .Select(item => item.Name)
             .Concat(allStrategyRecentPerformance.Select(item => item.Name))
+            .Where(name => IsStrategyCurrencyVisible(name, selectedCurrency))
             .Select(StrategyDisplayCategories.GetCategory)
             .Where(item => !string.IsNullOrWhiteSpace(item))
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .OrderBy(item => item, StringComparer.OrdinalIgnoreCase)
             .ToArray();
 
-        Replace(StrategyCategoryOptions, new[] { AllStrategyCategories }.Concat(categories).ToArray());
-        SelectedStrategyCategory = NormalizeSelectedStrategyCategory(selected[0]);
-        SelectedStrategy24HoursCategory = NormalizeSelectedStrategyCategory(selected[1]);
-        SelectedStrategy6HoursCategory = NormalizeSelectedStrategyCategory(selected[2]);
-        SelectedStrategy1HourCategory = NormalizeSelectedStrategyCategory(selected[3]);
+        return new[] { AllStrategyCategories }.Concat(categories).ToArray();
     }
 
     private void RefreshStrategyOrderOptions()
@@ -1478,6 +1533,7 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
             Strategies,
             allStrategies
                 .Where(item => IsStrategyCategoryVisible(item.Name, SelectedStrategyCategory))
+                .Where(item => IsStrategyCurrencyVisible(item.Name, SelectedStrategyCurrency))
                 .Where(item => IsStrategyProgressVisible(item.Name, HideProgressStrategies))
                 .Where(item => IsStrategyPositiveVisible(item, ShowOnlyPositiveStrategies))
                 .Where(item => IsStrategyEnabledVisible(item, ShowOnlyEnabledStrategies))
@@ -1489,6 +1545,7 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
             StrategyRecentPerformance,
             allStrategyRecentPerformance
                 .Where(item => IsStrategyCategoryVisible(item.Name, SelectedStrategyCategory))
+                .Where(item => IsStrategyCurrencyVisible(item.Name, SelectedStrategyCurrency))
                 .Where(item => IsStrategyProgressVisible(item.Name, HideProgressStrategies))
                 .Where(item => IsStrategyRecentEnabledVisible(item, ShowOnlyEnabledStrategies, enabledStrategyNames))
                 .Where(item => IsStrategyRecentLiveVisible(item, ShowOnlyLiveStrategies))
@@ -1500,6 +1557,7 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
             allStrategyRecentPerformance
                 .Where(item => string.Equals(item.Window, "24h", StringComparison.OrdinalIgnoreCase))
                 .Where(item => IsStrategyCategoryVisible(item.Name, SelectedStrategy24HoursCategory))
+                .Where(item => IsStrategyCurrencyVisible(item.Name, SelectedStrategy24HoursCurrency))
                 .Where(item => IsStrategyProgressVisible(item.Name, HideProgressStrategy24Hours))
                 .Where(item => IsStrategyRecentPositiveVisible(item, ShowOnlyPositiveStrategy24Hours))
                 .Where(item => IsStrategyRecentEnabledVisible(item, ShowOnlyEnabledStrategy24Hours, enabledStrategyNames))
@@ -1512,6 +1570,7 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
             allStrategyRecentPerformance
                 .Where(item => string.Equals(item.Window, "6h", StringComparison.OrdinalIgnoreCase))
                 .Where(item => IsStrategyCategoryVisible(item.Name, SelectedStrategy6HoursCategory))
+                .Where(item => IsStrategyCurrencyVisible(item.Name, SelectedStrategy6HoursCurrency))
                 .Where(item => IsStrategyProgressVisible(item.Name, HideProgressStrategy6Hours))
                 .Where(item => IsStrategyRecentPositiveVisible(item, ShowOnlyPositiveStrategy6Hours))
                 .Where(item => IsStrategyRecentEnabledVisible(item, ShowOnlyEnabledStrategy6Hours, enabledStrategyNames))
@@ -1524,6 +1583,7 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
             allStrategyRecentPerformance
                 .Where(item => string.Equals(item.Window, "1h", StringComparison.OrdinalIgnoreCase))
                 .Where(item => IsStrategyCategoryVisible(item.Name, SelectedStrategy1HourCategory))
+                .Where(item => IsStrategyCurrencyVisible(item.Name, SelectedStrategy1HourCurrency))
                 .Where(item => IsStrategyProgressVisible(item.Name, HideProgressStrategy1Hour))
                 .Where(item => IsStrategyRecentPositiveVisible(item, ShowOnlyPositiveStrategy1Hour))
                 .Where(item => IsStrategyRecentEnabledVisible(item, ShowOnlyEnabledStrategy1Hour, enabledStrategyNames))
@@ -1714,9 +1774,11 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         LiveOrdersPageStatus = $"Page {liveOrdersPageIndex + 1}: rows {firstRow}-{lastRow}, {LiveOrdersPageSize} per page";
     }
 
-    private string NormalizeSelectedStrategyCategory(string selected)
+    private static string NormalizeSelectedStrategyCategory(
+        string selected,
+        IEnumerable<string> categoryOptions)
     {
-        return StrategyCategoryOptions.Contains(selected, StringComparer.OrdinalIgnoreCase)
+        return categoryOptions.Contains(selected, StringComparer.OrdinalIgnoreCase)
             ? selected
             : AllStrategyCategories;
     }
@@ -1756,6 +1818,13 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         return string.IsNullOrWhiteSpace(selectedCategory) ||
             string.Equals(selectedCategory, AllStrategyCategories, StringComparison.OrdinalIgnoreCase) ||
             string.Equals(StrategyDisplayCategories.GetCategory(strategyName), selectedCategory, StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static bool IsStrategyCurrencyVisible(string strategyName, string selectedCurrency)
+    {
+        return string.IsNullOrWhiteSpace(selectedCurrency) ||
+            string.Equals(selectedCurrency, AllStrategyCurrencies, StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(StrategyDisplayCategories.GetAssetSymbol(strategyName), selectedCurrency, StringComparison.OrdinalIgnoreCase);
     }
 
     private static bool IsStrategyPositiveVisible(StrategyPerformanceRow strategy, bool onlyPositive)

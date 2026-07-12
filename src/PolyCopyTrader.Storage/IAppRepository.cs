@@ -86,6 +86,21 @@ public interface IAppRepository
         return Task.FromResult(new PolymarketDataApiPerformanceRefreshResult(0, 0, 0, 0, 0));
     }
 
+    Task<PolymarketAutoRedeemAttempt?> GetPolymarketAutoRedeemAttemptAsync(
+        string wallet,
+        string conditionId,
+        CancellationToken cancellationToken = default)
+    {
+        return Task.FromResult<PolymarketAutoRedeemAttempt?>(null);
+    }
+
+    Task UpsertPolymarketAutoRedeemAttemptAsync(
+        PolymarketAutoRedeemAttempt attempt,
+        CancellationToken cancellationToken = default)
+    {
+        return Task.CompletedTask;
+    }
+
     Task<IReadOnlyList<string>> GetMissingPolymarketLeaderboardCategoryMappingsAsync(
         string wallet,
         int limit = 100,
@@ -415,6 +430,29 @@ public interface IAppRepository
     Task<IReadOnlyList<StrategyRecentPerformance>> GetStrategyRecentPerformanceAsync(int limit = 25_000, CancellationToken cancellationToken = default)
     {
         return Task.FromResult<IReadOnlyList<StrategyRecentPerformance>>([]);
+    }
+
+    Task<IReadOnlyList<StrategyLookbackPnl>> GetStrategySettledPnlByLookbackHoursAsync(
+        IReadOnlyCollection<Guid> strategyIds,
+        DateTimeOffset nowUtc,
+        int maxLookbackHours,
+        CancellationToken cancellationToken = default)
+    {
+        return Task.FromResult<IReadOnlyList<StrategyLookbackPnl>>([]);
+    }
+
+    Task<IReadOnlyList<StrategyChildParentAssignment>> GetActiveStrategyChildParentAssignmentsAsync(
+        CancellationToken cancellationToken = default)
+    {
+        return Task.FromResult<IReadOnlyList<StrategyChildParentAssignment>>([]);
+    }
+
+    Task UpsertStrategyChildParentSelectionsAsync(
+        IReadOnlyList<StrategyChildParentSelection> selections,
+        DateTimeOffset nowUtc,
+        CancellationToken cancellationToken = default)
+    {
+        return Task.CompletedTask;
     }
 
     Task<int> RefreshDateDependentStrategyHourlyPaperPnlAsync(

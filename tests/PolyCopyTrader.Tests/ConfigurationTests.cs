@@ -45,7 +45,7 @@ public sealed class ConfigurationTests
         Assert.Equal(1.00m, configuration.BtcUpDown5mStrategy.StakeUsd);
         Assert.Equal(60, configuration.BtcUpDown5mStrategy.EntryGraceSeconds);
         Assert.Equal(3_000, configuration.BtcUpDown5mStrategy.MaxEntriesPerCycle);
-        Assert.Equal(128, configuration.BtcUpDown5mStrategy.MaxConcurrentEntryDecisions);
+        Assert.Equal(32, configuration.BtcUpDown5mStrategy.MaxConcurrentEntryDecisions);
         Assert.Equal(1, configuration.BtcUpDown5mStrategy.MartinStakeLevels);
         Assert.False(configuration.BtcUpDown5mStrategy.PaperTakerPricingEnabled);
         Assert.True(configuration.BtcUpDown5mStrategy.PaperTakerRestFallbackEnabled);
@@ -90,6 +90,14 @@ public sealed class ConfigurationTests
         Assert.Equal(60, configuration.BinanceCryptoReference.SampleIntervalSeconds);
         Assert.Equal(100, configuration.BinanceCryptoReference.WindowSize);
         Assert.Equal(5, configuration.BinanceCryptoReference.StaleAfterSeconds);
+        Assert.True(configuration.OkxExpiryFuturesReference.Enabled);
+        Assert.Equal("https://www.okx.com", configuration.OkxExpiryFuturesReference.RestBaseUrl);
+        Assert.Equal(["BTC", "ETH", "SOL"], configuration.OkxExpiryFuturesReference.AssetSymbols);
+        Assert.Equal(1_000, configuration.OkxExpiryFuturesReference.PollIntervalMilliseconds);
+        Assert.Equal(300, configuration.OkxExpiryFuturesReference.InstrumentRefreshIntervalSeconds);
+        Assert.Equal(2_000, configuration.OkxExpiryFuturesReference.RequestTimeoutMilliseconds);
+        Assert.Equal(5, configuration.OkxExpiryFuturesReference.StaleAfterSeconds);
+        Assert.Equal("PolyCopyTrader/1.0 OKX-expiry-futures-reference", configuration.OkxExpiryFuturesReference.UserAgent);
         Assert.True(configuration.CryptoReferencePriceHistory.Enabled);
         Assert.Equal(["BTC", "ETH", "SOL"], configuration.CryptoReferencePriceHistory.AssetSymbols);
         Assert.Equal(10, configuration.CryptoReferencePriceHistory.WriteIntervalSeconds);
@@ -315,6 +323,39 @@ public sealed class ConfigurationTests
 
         Assert.Contains(errors, error => error.Contains("GammaMarketIngestion.PollIntervalSeconds", StringComparison.Ordinal));
         Assert.Contains(errors, error => error.Contains("GammaMarketIngestion.PageLimit", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void StorageOptions_RejectNonPositiveConfiguredPoolSize()
+    {
+        var configuration = new AppConfiguration
+        {
+            Storage = new StorageOptions
+            {
+                MaxPoolSize = 0
+            }
+        };
+
+        var errors = AppOptionsValidator.Validate(configuration);
+
+        Assert.Contains(errors, error => error.Contains("Storage.MaxPoolSize", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void PolymarketAutoRedeemOptions_ValidateLiveSubmissionLimit()
+    {
+        var configuration = new AppConfiguration
+        {
+            PolymarketAutoRedeem = new PolymarketAutoRedeemOptions
+            {
+                MaxClaimsPerCycle = 2,
+                MaxLiveSubmissionsPerCycle = 3
+            }
+        };
+
+        var errors = AppOptionsValidator.Validate(configuration);
+
+        Assert.Contains(errors, error => error.Contains("PolymarketAutoRedeem.MaxLiveSubmissionsPerCycle", StringComparison.Ordinal));
     }
 
     [Fact]
@@ -635,6 +676,34 @@ public sealed class ConfigurationTests
         Assert.Contains(errors, error => error.Contains("BinanceCryptoReference.ReconnectBaseDelaySeconds", StringComparison.Ordinal));
         Assert.Contains(errors, error => error.Contains("BinanceCryptoReference.ReconnectMaxDelaySeconds", StringComparison.Ordinal));
         Assert.Contains(errors, error => error.Contains("BinanceCryptoReference.ReceiveBufferBytes", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void OkxExpiryFuturesReferenceOptions_AreValidated()
+    {
+        var configuration = new AppConfiguration
+        {
+            OkxExpiryFuturesReference = new OkxExpiryFuturesReferenceOptions
+            {
+                RestBaseUrl = "ws://www.okx.com",
+                AssetSymbols = ["BTC", "BTC"],
+                PollIntervalMilliseconds = 0,
+                InstrumentRefreshIntervalSeconds = 0,
+                RequestTimeoutMilliseconds = 0,
+                StaleAfterSeconds = 0,
+                UserAgent = ""
+            }
+        };
+
+        var errors = AppOptionsValidator.Validate(configuration);
+
+        Assert.Contains(errors, error => error.Contains("OkxExpiryFuturesReference.RestBaseUrl", StringComparison.Ordinal));
+        Assert.Contains(errors, error => error.Contains("OkxExpiryFuturesReference.AssetSymbols", StringComparison.Ordinal));
+        Assert.Contains(errors, error => error.Contains("OkxExpiryFuturesReference.PollIntervalMilliseconds", StringComparison.Ordinal));
+        Assert.Contains(errors, error => error.Contains("OkxExpiryFuturesReference.InstrumentRefreshIntervalSeconds", StringComparison.Ordinal));
+        Assert.Contains(errors, error => error.Contains("OkxExpiryFuturesReference.RequestTimeoutMilliseconds", StringComparison.Ordinal));
+        Assert.Contains(errors, error => error.Contains("OkxExpiryFuturesReference.StaleAfterSeconds", StringComparison.Ordinal));
+        Assert.Contains(errors, error => error.Contains("OkxExpiryFuturesReference.UserAgent", StringComparison.Ordinal));
     }
 
     [Fact]

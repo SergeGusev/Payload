@@ -24,10 +24,18 @@ public static class PostgresSchema
         "strategies",
         "dashboard_strategy_performance_snapshots",
         "dashboard_strategy_recent_performance_snapshots",
+        "dashboard_projection_control",
+        "dashboard_projection_events",
+        "dashboard_projection_reconciliation_queue",
+        "dashboard_strategy_lifetime_projection_states",
+        "dashboard_strategy_recent_projection_states",
+        "dashboard_strategy_recent_projection_facts",
+        "dashboard_strategy_position_projection_facts",
         "date_dependent_strategy_hourly_paper_pnl",
         "paper_orders",
         "paper_fills",
         "strategy_market_paper_runs",
+        "strategy_child_parent_assignments",
         "paper_positions",
         "paper_position_settlements",
         "paper_copied_trader_performance",
@@ -93,7 +101,7 @@ public static class PostgresSchema
         "service_heartbeats"
     ];
 
-    public const string SchemaSql = """
+    private const string BaseSchemaSql = """
 CREATE TABLE IF NOT EXISTS traders (
     id uuid PRIMARY KEY,
     name text NOT NULL,
@@ -440,6 +448,48 @@ ON polymarket_data_api_positions(category);
 
 CREATE INDEX IF NOT EXISTS ix_polymarket_data_api_positions_timestamp
 ON polymarket_data_api_positions(timestamp_utc DESC NULLS LAST);
+
+CREATE TABLE IF NOT EXISTS polymarket_auto_redeem_attempts (
+    id uuid PRIMARY KEY,
+    wallet text NOT NULL,
+    proxy_wallet text NULL,
+    condition_id text NOT NULL,
+    asset_id text NOT NULL,
+    market_slug text NOT NULL,
+    market_title text NOT NULL,
+    outcome text NOT NULL,
+    outcome_index integer NULL,
+    redeemable_value_usd numeric(28,8) NULL,
+    size numeric(28,8) NULL,
+    status text NOT NULL,
+    dry_run boolean NOT NULL,
+    auto_submit_enabled boolean NOT NULL,
+    target_contract text NOT NULL DEFAULT '',
+    calldata text NOT NULL,
+    collateral_token text NOT NULL,
+    parent_collection_id text NOT NULL,
+    index_sets_json jsonb NOT NULL,
+    relayer_transaction_id text NULL,
+    transaction_hash text NULL,
+    last_error text NULL,
+    detected_at_utc timestamptz NOT NULL,
+    last_seen_at_utc timestamptz NOT NULL,
+    submitted_at_utc timestamptz NULL,
+    confirmed_at_utc timestamptz NULL,
+    updated_at_utc timestamptz NOT NULL,
+    raw_position_json jsonb NOT NULL
+);
+
+ALTER TABLE polymarket_auto_redeem_attempts ADD COLUMN IF NOT EXISTS target_contract text NOT NULL DEFAULT '';
+
+CREATE UNIQUE INDEX IF NOT EXISTS ux_polymarket_auto_redeem_attempts_wallet_condition
+ON polymarket_auto_redeem_attempts(wallet, condition_id);
+
+CREATE INDEX IF NOT EXISTS ix_polymarket_auto_redeem_attempts_status_updated
+ON polymarket_auto_redeem_attempts(status, updated_at_utc DESC);
+
+CREATE INDEX IF NOT EXISTS ix_polymarket_auto_redeem_attempts_detected
+ON polymarket_auto_redeem_attempts(detected_at_utc DESC);
 
 CREATE TABLE IF NOT EXISTS polymarket_data_api_wallet_performance (
     wallet text PRIMARY KEY,
@@ -1031,22 +1081,6 @@ BEGIN
     END IF;
 END $$;
 
-INSERT INTO strategies (id, code, name, description, enabled, created_at_utc, updated_at_utc)
-VALUES (
-    'f0110a0d-1ead-4c00-8b01-000000000001',
-    'follow_leader',
-    'Follow leader',
-    'Follow accepted signals from selected leader traders.',
-    true,
-    now(),
-    now()
-)
-ON CONFLICT (id) DO UPDATE SET
-    code = excluded.code,
-    name = excluded.name,
-    description = excluded.description,
-    updated_at_utc = excluded.updated_at_utc;
-
 UPDATE strategies
 SET
     code = 'legacy_bps_seed_' || replace(id::text, '-', '_'),
@@ -1090,76 +1124,6 @@ SELECT
     'BTC Up or Down 5m ' || direction_name || ' ' || threshold_name || ' bps Instant',
     'Immediately after BTC 5m market open, use the previous close-book result streak and archived Binance BTC start/end move gate; enter only when the cumulative streak move is at least ' || threshold_name || ' bps and the countertrend direction is ' || direction_name || '. If the countertrend direction is ' || opposite_direction_name || ', skip. Paper entry simulates a BUY FAK taker fill from current executable ask depth; available liquidity is taken immediately, any remainder is cancelled, and settlement uses only actually filled shares.',
     true,
-    1.00,
-    now(),
-    now()
-FROM formatted
-ON CONFLICT (id) DO UPDATE SET
-    code = excluded.code,
-    name = excluded.name,
-    description = excluded.description,
-    updated_at_utc = excluded.updated_at_utc;
-
-INSERT INTO strategies (id, code, name, description, enabled, paper_stake_amount, created_at_utc, updated_at_utc)
-WITH assets(asset_symbol, bps_id_group, instant_id_group) AS (
-    VALUES
-        ('SOL', '8063', '8064')
-),
-thresholds(threshold_tenths) AS (
-    SELECT generate_series(1, 50)
-),
-formatted AS (
-    SELECT
-        asset_symbol,
-        bps_id_group,
-        instant_id_group,
-        threshold_tenths,
-        threshold_tenths::text AS threshold_name,
-        threshold_tenths::text AS code_suffix
-    FROM assets
-    CROSS JOIN thresholds
-)
-SELECT
-    ('b7c50005-0000-4000-' || bps_id_group || '-' || lpad((100 + threshold_tenths)::text, 12, '0'))::uuid,
-    lower(asset_symbol) || '_up_down_5m_binance_bps_' || code_suffix,
-    asset_symbol || ' Up or Down 5m Binance ' || threshold_name || ' bps',
-    'After ' || asset_symbol || ' 5m trading starts, compare the latest Binance ' || asset_symbol || '/USDT trade-stream price with the archived market-start reference; skip unless the absolute move from start is at least ' || threshold_name || ' bps; above start buys Up, below start buys Down. Paper entry is a GTD limit BUY capped at 0.50 until the configured GTD deadline; settlement uses only actually filled shares.',
-    false,
-    1.00,
-    now(),
-    now()
-FROM formatted
-ON CONFLICT (id) DO UPDATE SET
-    code = excluded.code,
-    name = excluded.name,
-    description = excluded.description,
-    updated_at_utc = excluded.updated_at_utc;
-
-INSERT INTO strategies (id, code, name, description, enabled, paper_stake_amount, created_at_utc, updated_at_utc)
-WITH assets(asset_symbol, bps_id_group, instant_id_group) AS (
-    VALUES
-        ('SOL', '8063', '8064')
-),
-thresholds(threshold_tenths) AS (
-    SELECT generate_series(1, 50)
-),
-formatted AS (
-    SELECT
-        asset_symbol,
-        bps_id_group,
-        instant_id_group,
-        threshold_tenths,
-        threshold_tenths::text AS threshold_name,
-        threshold_tenths::text AS code_suffix
-    FROM assets
-    CROSS JOIN thresholds
-)
-SELECT
-    ('b7c50005-0000-4000-' || instant_id_group || '-' || lpad((100 + threshold_tenths)::text, 12, '0'))::uuid,
-    lower(asset_symbol) || '_up_down_5m_binance_bps_' || code_suffix || '_instant',
-    asset_symbol || ' Up or Down 5m Binance ' || threshold_name || ' bps Instant',
-    'After ' || asset_symbol || ' 5m trading starts, compare the latest Binance ' || asset_symbol || '/USDT trade-stream price with the archived market-start reference; skip unless the absolute move from start is at least ' || threshold_name || ' bps; above start buys Up, below start buys Down. Paper entry simulates a BUY FAK taker fill from current executable ask depth; available liquidity is taken immediately, any remainder is cancelled, and settlement uses only actually filled shares.',
-    false,
     1.00,
     now(),
     now()
@@ -1257,6 +1221,165 @@ SELECT
     now(),
     now()
 FROM formatted
+ON CONFLICT (id) DO UPDATE SET
+    code = excluded.code,
+    name = excluded.name,
+    description = excluded.description,
+    updated_at_utc = excluded.updated_at_utc;
+
+INSERT INTO strategies (
+    id,
+    code,
+    name,
+    description,
+    enabled,
+    live_stakes,
+    paper_stake_amount,
+    live_stake_amount,
+    live_available_balance,
+    paused,
+    paused_until_utc,
+    auto_live_paused,
+    auto_live_paused_at_utc,
+    auto_live_pause_window_start_utc,
+    live_enabled_at_utc,
+    paper_lost_coeff,
+    live_lost_coeff,
+    paper_lost_counter,
+    live_lost_counter,
+    created_at_utc,
+    updated_at_utc)
+WITH assets(asset_symbol, child_id_group, child_progress_id_group, child_roi_id_group, child_progress_roi_id_group) AS (
+    VALUES
+        ('BTC', '8185', '8188', '8194', '8197'),
+        ('ETH', '8186', '8189', '8195', '8198'),
+        ('SOL', '8187', '8190', '8196', '8199')
+),
+modes(mode_code, mode_name, mode_description, id_group_selector, metric_name) AS (
+    VALUES
+        ('child', 'Child', 'excluding strategies whose name contains Progress', 'child', 'positive paper PnL'),
+        ('child_progress', 'Child Progress', 'including Progress strategies', 'child_progress', 'positive paper PnL'),
+        ('child_roi', 'Child ROI', 'excluding strategies whose name contains Progress', 'child_roi', 'sample-adjusted paper ROI after minimum sample gates'),
+        ('child_progress_roi', 'Child Progress ROI', 'including Progress strategies', 'child_progress_roi', 'sample-adjusted paper ROI after minimum sample gates')
+),
+lookbacks(lookback_hours) AS (
+    SELECT value
+    FROM generate_series(1, 24) AS generated(value)
+),
+formatted AS (
+    SELECT
+        assets.asset_symbol,
+        modes.mode_code,
+        modes.mode_name,
+        modes.mode_description,
+        modes.metric_name,
+        CASE
+            WHEN modes.id_group_selector = 'child' THEN assets.child_id_group
+            WHEN modes.id_group_selector = 'child_progress' THEN assets.child_progress_id_group
+            WHEN modes.id_group_selector = 'child_roi' THEN assets.child_roi_id_group
+            ELSE assets.child_progress_roi_id_group
+        END AS id_group,
+        lookbacks.lookback_hours
+    FROM assets
+    CROSS JOIN modes
+    CROSS JOIN lookbacks
+)
+SELECT
+    ('b7c50005-0000-4000-' || id_group || '-' || lpad(lookback_hours::text, 12, '0'))::uuid,
+    lower(asset_symbol) || '_up_down_5m_' || lookback_hours::text || '_' || mode_code,
+    asset_symbol || ' Up or Down 5m ' || lookback_hours::text || ' ' || mode_name,
+    'After all market-opening entries and database writes are complete, select the enabled non-Child, non-Futures ' || asset_symbol || ' strategy with the highest ' || metric_name || ' over the last ' || lookback_hours::text || ' hour(s), ' || mode_description || '. While the parent link is active, copy each accepted parent entry in the same market, outcome, notional, and share size.',
+    true,
+    false,
+    1.00,
+    1.00,
+    100.00,
+    false,
+    NULL,
+    false,
+    NULL,
+    NULL,
+    NULL,
+    1.00,
+    1.00,
+    0,
+    0,
+    now(),
+    now()
+FROM formatted
+ON CONFLICT (id) DO UPDATE SET
+    code = excluded.code,
+    name = excluded.name,
+    description = excluded.description,
+    updated_at_utc = excluded.updated_at_utc;
+
+INSERT INTO strategies (
+    id,
+    code,
+    name,
+    description,
+    enabled,
+    live_stakes,
+    paper_stake_amount,
+    live_stake_amount,
+    live_available_balance,
+    paused,
+    paused_until_utc,
+    auto_live_paused,
+    auto_live_paused_at_utc,
+    auto_live_pause_window_start_utc,
+    live_enabled_at_utc,
+    paper_lost_coeff,
+    live_lost_coeff,
+    paper_lost_counter,
+    live_lost_counter,
+    created_at_utc,
+    updated_at_utc)
+WITH assets(asset_symbol, standard_id_group, revert_id_group) AS (
+    VALUES
+        ('BTC', '8182', '8191'),
+        ('ETH', '8183', '8192'),
+        ('SOL', '8184', '8193')
+),
+thresholds(threshold_value) AS (
+    SELECT value
+    FROM (VALUES (1), (2), (3), (5), (8), (10), (15), (20)) AS generated(value)
+)
+SELECT
+    ('b7c50005-0000-4000-' || id_group || '-' || lpad((100 + threshold_value)::text, 12, '0'))::uuid,
+    lower(asset_symbol) || '_up_down_5m_futures_basis_bps_' || threshold_value::text || mode_code || '_fak_premarket',
+    asset_symbol || ' Up or Down 5m ' || threshold_value::text || ' bps Futures Basis' || mode_name || ' Premarket',
+    'Thirty seconds before ' || asset_symbol || ' 5m market open, select the three live OKX linear USD fixed-expiry contracts with the closest distinct expiries at or after the target market end and compare each best bid/ask mid with the simultaneous OKX ' || asset_symbol || '-USD index. Apply the ' || threshold_value::text || ' bps threshold only to the nearest expiry and require both following expiries to confirm its nonzero basis sign. ' ||
+        CASE
+            WHEN mode_code = '_revert'
+            THEN 'If the nearest futures mid is above the index by at least ' || threshold_value::text || ' bps and both confirmations are positive, BUY Down; if it is below the index by at least ' || threshold_value::text || ' bps and both confirmations are negative, BUY Up.'
+            ELSE 'If the nearest futures mid is above the index by at least ' || threshold_value::text || ' bps and both confirmations are positive, BUY Up; if it is below the index by at least ' || threshold_value::text || ' bps and both confirmations are negative, BUY Down.'
+        END ||
+        ' Otherwise skip. Require all three fresh contracts and never substitute a perpetual contract. Paper entry simulates the same taker BUY from executable ask depth using the worst-price cap, while Live-shadow remains disabled by default until manually enabled and normal live gates pass.',
+    true,
+    false,
+    1.00,
+    1.00,
+    100.00,
+    false,
+    NULL,
+    false,
+    NULL,
+    NULL,
+    NULL,
+    1.00,
+    1.00,
+    0,
+    0,
+    now(),
+    now()
+FROM assets
+CROSS JOIN thresholds
+CROSS JOIN LATERAL (
+    VALUES
+        ('', '', assets.standard_id_group),
+        ('_revert', ' Revert', assets.revert_id_group)
+) AS modes(mode_code, mode_name, id_group)
 ON CONFLICT (id) DO UPDATE SET
     code = excluded.code,
     name = excluded.name,
@@ -1425,68 +1548,6 @@ ON CONFLICT (id) DO UPDATE SET
     description = excluded.description,
     updated_at_utc = excluded.updated_at_utc;
 
-INSERT INTO strategies (
-    id,
-    code,
-    name,
-    description,
-    enabled,
-    live_stakes,
-    paper_stake_amount,
-    live_stake_amount,
-    live_available_balance,
-    paused,
-    paused_until_utc,
-    auto_live_paused,
-    auto_live_paused_at_utc,
-    auto_live_pause_window_start_utc,
-    live_enabled_at_utc,
-    paper_lost_coeff,
-    live_lost_coeff,
-    paper_lost_counter,
-    live_lost_counter,
-    created_at_utc,
-    updated_at_utc)
-WITH thresholds(threshold_tenths) AS (
-    SELECT value
-    FROM generate_series(1, 10) AS generated(value)
-),
-formatted AS (
-    SELECT
-        threshold_tenths,
-        threshold_tenths::text AS threshold_name,
-        threshold_tenths::text AS code_suffix
-    FROM thresholds
-)
-SELECT
-    ('b7c50005-0000-4000-8181-' || lpad((100 + threshold_tenths)::text, 12, '0'))::uuid,
-    'eth_up_down_5m_down_filtered_average_bps_' || code_suffix || '_fak_premarket',
-    'ETH Up or Down 5m Down ' || threshold_name || ' bps Filtered Average Premarket',
-    'Thirty seconds before ETH 5m market open, compare the latest Binance ETH/USDT reference price with the largest full in-memory reference average across 24h, 12h, 6h, 3h, 90m, 45m, 20m, and 10m windows. If the selected reference window is 6h or 12h, skip. If the absolute move from the selected average is at least 20 bps and below 80 bps, skip. Otherwise, when the current price moves Down by at least ' || threshold_name || ' bps from that maximum average, BUY Up from current premarket executable ask depth using the worst-price cap. Paper entry simulates the same taker BUY, while Live-shadow submits a market BUY amount so available liquidity is taken immediately and any remainder is cancelled.',
-    true,
-    false,
-    1.00,
-    1.00,
-    100.00,
-    false,
-    NULL,
-    false,
-    NULL,
-    NULL,
-    NULL,
-    1.00,
-    1.00,
-    0,
-    0,
-    now(),
-    now()
-FROM formatted
-ON CONFLICT (id) DO UPDATE SET
-    code = excluded.code,
-    name = excluded.name,
-    description = excluded.description,
-    updated_at_utc = excluded.updated_at_utc;
-
 UPDATE strategies
 SET name = replace(name, ' bps FAK Premarket', ' bps Premarket'),
     description = replace(replace(replace(description, ' FAK ', ' '), 'FAK ', ''), ' FAK', ''),
@@ -1526,47 +1587,6 @@ SELECT
     'eth_up_down_5m_down_bps_' || code_suffix || '_fak_premarket_' || premarket_suffix,
     'ETH Up or Down 5m Down ' || threshold_name || ' bps Premarket -' || sample_seconds_before_end::text || 's',
     sample_seconds_before_end::text || ' seconds before ETH 5m market open, infer the previous ETH 5m market result from archived Binance ETH start price versus the current reference price sampled ' || sample_seconds_before_end::text || ' seconds before previous market close; enter only when the inferred countertrend direction is Down and the absolute move is at least ' || threshold_name || ' bps. If the inferred countertrend direction is Up, skip. Paper entry simulates the same taker BUY from executable ask depth using the current premarket order book and worst-price cap, while Live-shadow submits a market BUY amount so available liquidity is taken immediately and any remainder is cancelled.',
-    true,
-    false,
-    1.00,
-    now(),
-    now()
-FROM formatted
-ON CONFLICT (id) DO UPDATE SET
-    code = excluded.code,
-    name = excluded.name,
-    description = excluded.description,
-    updated_at_utc = excluded.updated_at_utc;
-
-INSERT INTO strategies (id, code, name, description, enabled, live_stakes, paper_stake_amount, created_at_utc, updated_at_utc)
-WITH assets(asset_symbol, up_id_group, down_id_group) AS (
-    VALUES
-        ('BTC', '8121', '8122'),
-        ('ETH', '8123', '8124'),
-        ('SOL', '8125', '8126')
-),
-variants(direction_code, direction_name) AS (
-    VALUES
-        ('up', 'Up'),
-        ('down', 'Down')
-),
-formatted AS (
-    SELECT
-        assets.asset_symbol,
-        variants.direction_code,
-        variants.direction_name,
-        CASE
-            WHEN variants.direction_code = 'up' THEN assets.up_id_group
-            ELSE assets.down_id_group
-        END AS id_group
-    FROM assets
-    CROSS JOIN variants
-)
-SELECT
-    ('b7c50005-0000-4000-' || id_group || '-000000000001')::uuid,
-    lower(asset_symbol) || '_up_down_5m_' || direction_code || '_simple',
-    asset_symbol || ' Up or Down 5m ' || direction_name || ' Simple',
-    'Simple strategy: immediately after ' || asset_symbol || ' 5m market open, always select ' || direction_name || '. Paper entry simulates a BUY FAK taker fill from current executable ask depth at or below 0.50; above the cap it skips instead of placing a resting order. Settlement uses only actually filled shares.',
     true,
     false,
     1.00,
@@ -1836,6 +1856,136 @@ SELECT
     true,
     false,
     1.00,
+    now(),
+    now()
+FROM assets
+CROSS JOIN thresholds
+ON CONFLICT (id) DO UPDATE SET
+    code = excluded.code,
+    name = excluded.name,
+    description = excluded.description,
+    updated_at_utc = excluded.updated_at_utc;
+
+INSERT INTO strategies (
+    id,
+    code,
+    name,
+    description,
+    enabled,
+    live_stakes,
+    paper_stake_amount,
+    live_stake_amount,
+    live_available_balance,
+    paused,
+    paused_until_utc,
+    auto_live_paused,
+    auto_live_paused_at_utc,
+    auto_live_pause_window_start_utc,
+    live_enabled_at_utc,
+    paper_lost_coeff,
+    live_lost_coeff,
+    paper_lost_counter,
+    live_lost_counter,
+    created_at_utc,
+    updated_at_utc)
+WITH assets(asset_symbol, id_group, confirmation_diff_threshold) AS (
+    VALUES
+        ('BTC', '8200', 5),
+        ('ETH', '8201', 3),
+        ('SOL', '8202', 1)
+),
+thresholds(threshold_value) AS (
+    SELECT value
+    FROM generate_series(1, 10) AS generated(value)
+    UNION ALL
+    SELECT value
+    FROM generate_series(15, 100, 5) AS generated(value)
+)
+SELECT
+    ('b7c50005-0000-4000-' || id_group || '-' || lpad((100 + threshold_value)::text, 12, '0'))::uuid,
+    lower(asset_symbol) || '_up_down_5m_' || threshold_value::text || '_bps_confirmed_average_premarket',
+    asset_symbol || ' Up or Down 5m ' || threshold_value::text || ' bps Confirmed Average Premarket',
+    '30 seconds before ' || asset_symbol || ' 5m market open, evaluate the exact neutral ' || threshold_value::text || ' bps Reference Average signal and independently evaluate the exact ' || confirmation_diff_threshold::text || ' Diff Reference Average signal. Enter only when both signals are present and select the same outcome; otherwise skip. Paper entry simulates the same taker BUY from executable ask depth using the worst-price cap, while Live-shadow submits a market BUY amount so available liquidity is taken immediately and any remainder is cancelled.',
+    true,
+    false,
+    1.00,
+    1.00,
+    100.00,
+    false,
+    NULL,
+    false,
+    NULL,
+    NULL,
+    NULL,
+    1.00,
+    1.00,
+    0,
+    0,
+    now(),
+    now()
+FROM assets
+CROSS JOIN thresholds
+ON CONFLICT (id) DO UPDATE SET
+    code = excluded.code,
+    name = excluded.name,
+    description = excluded.description,
+    updated_at_utc = excluded.updated_at_utc;
+
+INSERT INTO strategies (
+    id,
+    code,
+    name,
+    description,
+    enabled,
+    live_stakes,
+    paper_stake_amount,
+    live_stake_amount,
+    live_available_balance,
+    paused,
+    paused_until_utc,
+    auto_live_paused,
+    auto_live_paused_at_utc,
+    auto_live_pause_window_start_utc,
+    live_enabled_at_utc,
+    paper_lost_coeff,
+    live_lost_coeff,
+    paper_lost_counter,
+    live_lost_counter,
+    created_at_utc,
+    updated_at_utc)
+WITH assets(asset_symbol, id_group, confirmation_bps_threshold) AS (
+    VALUES
+        ('BTC', '8203', 45),
+        ('ETH', '8204', 5),
+        ('SOL', '8205', 35)
+),
+thresholds(threshold_value) AS (
+    SELECT value
+    FROM generate_series(1, 10) AS generated(value)
+    UNION ALL
+    SELECT value
+    FROM (VALUES (15), (20), (25), (30)) AS extra(value)
+)
+SELECT
+    ('b7c50005-0000-4000-' || id_group || '-' || lpad(threshold_value::text, 12, '0'))::uuid,
+    lower(asset_symbol) || '_up_down_5m_' || threshold_value::text || '_diff_confirmed_average_premarket',
+    asset_symbol || ' Up or Down 5m ' || threshold_value::text || ' Diff Confirmed Average Premarket',
+    '30 seconds before ' || asset_symbol || ' 5m market open, evaluate the exact ' || threshold_value::text || ' Diff Reference Average signal and independently evaluate the exact neutral ' || confirmation_bps_threshold::text || ' bps Reference Average signal. Enter only when both signals are present and select the same outcome; otherwise skip. Paper entry simulates the same taker BUY from executable ask depth using the worst-price cap, while Live-shadow submits a market BUY amount so available liquidity is taken immediately and any remainder is cancelled.',
+    true,
+    false,
+    1.00,
+    1.00,
+    100.00,
+    false,
+    NULL,
+    false,
+    NULL,
+    NULL,
+    NULL,
+    1.00,
+    1.00,
+    0,
+    0,
     now(),
     now()
 FROM assets
@@ -2164,6 +2314,34 @@ WHERE entered_at_utc IS NOT NULL;
 CREATE INDEX CONCURRENTLY IF NOT EXISTS ix_strategy_market_paper_runs_settled_time_strategy
 ON strategy_market_paper_runs(settled_at_utc, strategy_id)
 WHERE settled_at_utc IS NOT NULL;
+
+CREATE TABLE IF NOT EXISTS strategy_child_parent_assignments (
+    id uuid PRIMARY KEY,
+    child_strategy_id uuid NOT NULL REFERENCES strategies(id),
+    parent_strategy_id uuid NOT NULL REFERENCES strategies(id),
+    asset_symbol text NOT NULL,
+    lookback_hours integer NOT NULL,
+    child_mode text NOT NULL,
+    parent_pnl_usd numeric(28,8) NOT NULL,
+    parent_roi_pct numeric(28,8) NOT NULL DEFAULT 0,
+    assigned_at_utc timestamptz NOT NULL,
+    ended_at_utc timestamptz NULL,
+    updated_at_utc timestamptz NOT NULL
+);
+
+ALTER TABLE strategy_child_parent_assignments
+ADD COLUMN IF NOT EXISTS parent_roi_pct numeric(28,8) NOT NULL DEFAULT 0;
+
+CREATE UNIQUE INDEX IF NOT EXISTS ux_strategy_child_parent_assignments_active_child
+ON strategy_child_parent_assignments(child_strategy_id)
+WHERE ended_at_utc IS NULL;
+
+CREATE INDEX IF NOT EXISTS ix_strategy_child_parent_assignments_active_parent
+ON strategy_child_parent_assignments(parent_strategy_id, child_strategy_id)
+WHERE ended_at_utc IS NULL;
+
+CREATE INDEX IF NOT EXISTS ix_strategy_child_parent_assignments_child_time
+ON strategy_child_parent_assignments(child_strategy_id, assigned_at_utc DESC);
 
 CREATE OR REPLACE FUNCTION public.skip_deleted_strategy_market_paper_run()
 RETURNS trigger
@@ -4714,6 +4892,308 @@ END $$;
 
 DO $$
 DECLARE
+    migration_key_value text := '20260709_remove_sol_binance_bps_strategies';
+    target_strategy_count integer := 0;
+    deleted_shadow_discrepancies integer := 0;
+    deleted_shadow_decisions integer := 0;
+    deleted_live_orders integer := 0;
+    deleted_strategy_runs integer := 0;
+    deleted_paper_fills integer := 0;
+    deleted_paper_orders integer := 0;
+    deleted_signal_rejections integer := 0;
+    deleted_signals integer := 0;
+    deleted_paper_positions integer := 0;
+    deleted_paper_position_settlements integer := 0;
+    deleted_dashboard_snapshots integer := 0;
+    deleted_dashboard_recent_snapshots integer := 0;
+    deleted_dry_run_orders integer := 0;
+    deleted_date_dependent_hourly_pnl integer := 0;
+    deleted_diff_shift_states integer := 0;
+    deleted_child_assignments integer := 0;
+    deleted_strategies integer := 0;
+    active_live_orders integer := 0;
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1
+        FROM schema_data_migrations migration
+        WHERE migration.migration_key = migration_key_value
+    ) THEN
+        DROP TABLE IF EXISTS tmp_sol_binance_bps_strategy_targets;
+        DROP TABLE IF EXISTS tmp_sol_binance_bps_paper_orders;
+        DROP TABLE IF EXISTS tmp_sol_binance_bps_live_orders;
+        DROP TABLE IF EXISTS tmp_sol_binance_bps_runs;
+        DROP TABLE IF EXISTS tmp_sol_binance_bps_signals;
+
+        CREATE TEMP TABLE tmp_sol_binance_bps_strategy_targets ON COMMIT DROP AS
+        SELECT strategy.id, strategy.code
+        FROM strategies strategy
+        WHERE strategy.code LIKE 'sol_up_down_5m_binance_bps_%'
+           OR strategy.name ILIKE 'SOL Up or Down 5m Binance % bps%';
+
+        SELECT count(*)::integer
+        INTO target_strategy_count
+        FROM tmp_sol_binance_bps_strategy_targets;
+
+        IF target_strategy_count = 0 THEN
+            INSERT INTO schema_data_migrations (migration_key, applied_at_utc, details)
+            VALUES (
+                migration_key_value,
+                clock_timestamp(),
+                'target_strategies=0' ||
+                ';paper_orders=0' ||
+                ';paper_fills=0' ||
+                ';strategy_runs=0' ||
+                ';live_orders=0' ||
+                ';shadow_decisions=0' ||
+                ';shadow_discrepancies=0' ||
+                ';signals=0' ||
+                ';signal_rejections=0' ||
+                ';paper_positions=0' ||
+                ';paper_position_settlements=0' ||
+                ';dashboard_snapshots=0' ||
+                ';dashboard_recent_snapshots=0' ||
+                ';dry_run_orders=0' ||
+                ';date_dependent_hourly_pnl=0' ||
+                ';diff_shift_states=0' ||
+                ';child_assignments=0' ||
+                ';strategies=0'
+            );
+        ELSE
+            CREATE TEMP TABLE tmp_sol_binance_bps_paper_orders ON COMMIT DROP AS
+            SELECT paper_order.id, paper_order.signal_id
+            FROM paper_orders paper_order
+            WHERE paper_order.strategy_id IN (
+                    SELECT target.id
+                    FROM tmp_sol_binance_bps_strategy_targets target
+                )
+               OR paper_order.copied_trader_wallet IN (
+                    SELECT 'strategy:' || target.code
+                    FROM tmp_sol_binance_bps_strategy_targets target
+                );
+
+            CREATE TEMP TABLE tmp_sol_binance_bps_live_orders ON COMMIT DROP AS
+            SELECT live_order.id
+            FROM live_orders live_order
+            WHERE live_order.strategy_id IN (
+                SELECT target.id
+                FROM tmp_sol_binance_bps_strategy_targets target
+            );
+
+            CREATE TEMP TABLE tmp_sol_binance_bps_runs ON COMMIT DROP AS
+            SELECT run.id, run.paper_order_id, run.signal_id
+            FROM strategy_market_paper_runs run
+            WHERE run.strategy_id IN (
+                SELECT target.id
+                FROM tmp_sol_binance_bps_strategy_targets target
+            );
+
+            CREATE TEMP TABLE tmp_sol_binance_bps_signals(id uuid) ON COMMIT DROP;
+
+            INSERT INTO tmp_sol_binance_bps_signals
+            SELECT DISTINCT paper_order.signal_id
+            FROM tmp_sol_binance_bps_paper_orders paper_order
+            WHERE paper_order.signal_id IS NOT NULL
+              AND paper_order.signal_id NOT IN (
+                  SELECT signal.id
+                  FROM tmp_sol_binance_bps_signals signal
+              );
+
+            INSERT INTO tmp_sol_binance_bps_signals
+            SELECT DISTINCT run.signal_id
+            FROM tmp_sol_binance_bps_runs run
+            WHERE run.signal_id IS NOT NULL
+              AND run.signal_id NOT IN (
+                  SELECT signal.id
+                  FROM tmp_sol_binance_bps_signals signal
+              );
+
+            SELECT count(*)::integer
+            INTO active_live_orders
+            FROM live_orders live_order
+            WHERE live_order.id IN (
+                    SELECT target.id
+                    FROM tmp_sol_binance_bps_live_orders target
+                )
+              AND live_order.status IN ('Submitted', 'Live', 'Delayed', 'Unmatched', 'CancelRequested');
+
+            IF active_live_orders = 0 THEN
+                DELETE FROM paper_live_shadow_discrepancies discrepancy
+                WHERE discrepancy.strategy_id IN (
+                    SELECT target.id
+                    FROM tmp_sol_binance_bps_strategy_targets target
+                );
+                GET DIAGNOSTICS deleted_shadow_discrepancies = ROW_COUNT;
+
+                DELETE FROM paper_live_shadow_decisions decision
+                WHERE decision.strategy_id IN (
+                        SELECT target.id
+                        FROM tmp_sol_binance_bps_strategy_targets target
+                    )
+                   OR decision.paper_order_id IN (
+                        SELECT target.id
+                        FROM tmp_sol_binance_bps_paper_orders target
+                    )
+                   OR decision.live_order_id IN (
+                        SELECT target.id
+                        FROM tmp_sol_binance_bps_live_orders target
+                    )
+                   OR decision.signal_id IN (
+                        SELECT target.id
+                        FROM tmp_sol_binance_bps_signals target
+                    );
+                GET DIAGNOSTICS deleted_shadow_decisions = ROW_COUNT;
+
+                DELETE FROM dry_run_orders dry_run_order
+                WHERE dry_run_order.strategy_id IN (
+                    SELECT target.id
+                    FROM tmp_sol_binance_bps_strategy_targets target
+                );
+                GET DIAGNOSTICS deleted_dry_run_orders = ROW_COUNT;
+
+                DELETE FROM date_dependent_strategy_hourly_paper_pnl hourly_pnl
+                WHERE hourly_pnl.strategy_id IN (
+                    SELECT target.id
+                    FROM tmp_sol_binance_bps_strategy_targets target
+                );
+                GET DIAGNOSTICS deleted_date_dependent_hourly_pnl = ROW_COUNT;
+
+                DELETE FROM crypto_up_down_5m_diff_shift_progress_states state
+                WHERE state.strategy_id IN (
+                    SELECT target.id
+                    FROM tmp_sol_binance_bps_strategy_targets target
+                );
+                GET DIAGNOSTICS deleted_diff_shift_states = ROW_COUNT;
+
+                DELETE FROM strategy_child_parent_assignments assignment
+                WHERE assignment.child_strategy_id IN (
+                        SELECT target.id
+                        FROM tmp_sol_binance_bps_strategy_targets target
+                    )
+                   OR assignment.parent_strategy_id IN (
+                        SELECT target.id
+                        FROM tmp_sol_binance_bps_strategy_targets target
+                    );
+                GET DIAGNOSTICS deleted_child_assignments = ROW_COUNT;
+
+                DELETE FROM dashboard_strategy_performance_snapshots snapshot
+                WHERE snapshot.strategy_id IN (
+                        SELECT target.id
+                        FROM tmp_sol_binance_bps_strategy_targets target
+                    )
+                   OR snapshot.code IN (
+                        SELECT target.code
+                        FROM tmp_sol_binance_bps_strategy_targets target
+                    );
+                GET DIAGNOSTICS deleted_dashboard_snapshots = ROW_COUNT;
+
+                DELETE FROM dashboard_strategy_recent_performance_snapshots snapshot
+                WHERE snapshot.strategy_id IN (
+                        SELECT target.id
+                        FROM tmp_sol_binance_bps_strategy_targets target
+                    )
+                   OR snapshot.code IN (
+                        SELECT target.code
+                        FROM tmp_sol_binance_bps_strategy_targets target
+                    );
+                GET DIAGNOSTICS deleted_dashboard_recent_snapshots = ROW_COUNT;
+
+                DELETE FROM live_orders live_order
+                WHERE live_order.id IN (
+                    SELECT target.id
+                    FROM tmp_sol_binance_bps_live_orders target
+                );
+                GET DIAGNOSTICS deleted_live_orders = ROW_COUNT;
+
+                DELETE FROM strategy_market_paper_runs run
+                WHERE run.id IN (
+                    SELECT target.id
+                    FROM tmp_sol_binance_bps_runs target
+                );
+                GET DIAGNOSTICS deleted_strategy_runs = ROW_COUNT;
+
+                DELETE FROM paper_fills fill
+                WHERE fill.paper_order_id IN (
+                    SELECT target.id
+                    FROM tmp_sol_binance_bps_paper_orders target
+                );
+                GET DIAGNOSTICS deleted_paper_fills = ROW_COUNT;
+
+                DELETE FROM paper_orders paper_order
+                WHERE paper_order.id IN (
+                    SELECT target.id
+                    FROM tmp_sol_binance_bps_paper_orders target
+                );
+                GET DIAGNOSTICS deleted_paper_orders = ROW_COUNT;
+
+                DELETE FROM signal_rejections rejection
+                WHERE rejection.signal_id IN (
+                    SELECT target.id
+                    FROM tmp_sol_binance_bps_signals target
+                );
+                GET DIAGNOSTICS deleted_signal_rejections = ROW_COUNT;
+
+                DELETE FROM signals signal
+                WHERE signal.id IN (
+                    SELECT target.id
+                    FROM tmp_sol_binance_bps_signals target
+                );
+                GET DIAGNOSTICS deleted_signals = ROW_COUNT;
+
+                DELETE FROM paper_positions paper_position
+                WHERE paper_position.copied_trader_wallet IN (
+                    SELECT 'strategy:' || target.code
+                    FROM tmp_sol_binance_bps_strategy_targets target
+                );
+                GET DIAGNOSTICS deleted_paper_positions = ROW_COUNT;
+
+                DELETE FROM paper_position_settlements settlement
+                WHERE settlement.copied_trader_wallet IN (
+                    SELECT 'strategy:' || target.code
+                    FROM tmp_sol_binance_bps_strategy_targets target
+                );
+                GET DIAGNOSTICS deleted_paper_position_settlements = ROW_COUNT;
+
+                DELETE FROM strategies strategy
+                WHERE strategy.id IN (
+                        SELECT target.id
+                        FROM tmp_sol_binance_bps_strategy_targets target
+                    )
+                   OR strategy.code IN (
+                        SELECT target.code
+                        FROM tmp_sol_binance_bps_strategy_targets target
+                    );
+                GET DIAGNOSTICS deleted_strategies = ROW_COUNT;
+
+                INSERT INTO schema_data_migrations (migration_key, applied_at_utc, details)
+                VALUES (
+                    migration_key_value,
+                    clock_timestamp(),
+                    'target_strategies=' || target_strategy_count::text ||
+                    ';paper_orders=' || deleted_paper_orders::text ||
+                    ';paper_fills=' || deleted_paper_fills::text ||
+                    ';strategy_runs=' || deleted_strategy_runs::text ||
+                    ';live_orders=' || deleted_live_orders::text ||
+                    ';shadow_decisions=' || deleted_shadow_decisions::text ||
+                    ';shadow_discrepancies=' || deleted_shadow_discrepancies::text ||
+                    ';signals=' || deleted_signals::text ||
+                    ';signal_rejections=' || deleted_signal_rejections::text ||
+                    ';paper_positions=' || deleted_paper_positions::text ||
+                    ';paper_position_settlements=' || deleted_paper_position_settlements::text ||
+                    ';dashboard_snapshots=' || deleted_dashboard_snapshots::text ||
+                    ';dashboard_recent_snapshots=' || deleted_dashboard_recent_snapshots::text ||
+                    ';dry_run_orders=' || deleted_dry_run_orders::text ||
+                    ';date_dependent_hourly_pnl=' || deleted_date_dependent_hourly_pnl::text ||
+                    ';diff_shift_states=' || deleted_diff_shift_states::text ||
+                    ';child_assignments=' || deleted_child_assignments::text ||
+                    ';strategies=' || deleted_strategies::text
+                );
+            END IF;
+        END IF;
+    END IF;
+END $$;
+
+DO $$
+DECLARE
     migration_key_value text := '20260707_remove_skip_strategies';
     target_strategy_count integer := 0;
     deleted_shadow_discrepancies integer := 0;
@@ -4933,6 +5413,979 @@ END $$;
 
 DO $$
 DECLARE
+    migration_key_value text := '20260708_remove_simple_strategies';
+    target_strategy_count integer := 0;
+    deleted_shadow_discrepancies integer := 0;
+    deleted_shadow_decisions integer := 0;
+    deleted_live_orders integer := 0;
+    deleted_strategy_runs integer := 0;
+    deleted_paper_fills integer := 0;
+    deleted_paper_orders integer := 0;
+    deleted_signal_rejections integer := 0;
+    deleted_signals integer := 0;
+    deleted_paper_positions integer := 0;
+    deleted_paper_position_settlements integer := 0;
+    deleted_dashboard_snapshots integer := 0;
+    deleted_dashboard_recent_snapshots integer := 0;
+    deleted_dry_run_orders integer := 0;
+    deleted_date_dependent_hourly_pnl integer := 0;
+    deleted_diff_shift_states integer := 0;
+    deleted_strategies integer := 0;
+    active_live_orders integer := 0;
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1
+        FROM schema_data_migrations migration
+        WHERE migration.migration_key = migration_key_value
+    ) THEN
+        DROP TABLE IF EXISTS tmp_simple_strategy_targets;
+        DROP TABLE IF EXISTS tmp_simple_strategy_paper_orders;
+        DROP TABLE IF EXISTS tmp_simple_strategy_live_orders;
+        DROP TABLE IF EXISTS tmp_simple_strategy_runs;
+        DROP TABLE IF EXISTS tmp_simple_strategy_signals;
+
+        CREATE TEMP TABLE tmp_simple_strategy_targets(id, code) ON COMMIT DROP AS
+        VALUES
+            ('b7c50005-0000-4000-8121-000000000001'::uuid, 'btc_up_down_5m_up_simple'),
+            ('b7c50005-0000-4000-8122-000000000001'::uuid, 'btc_up_down_5m_down_simple'),
+            ('b7c50005-0000-4000-8123-000000000001'::uuid, 'eth_up_down_5m_up_simple'),
+            ('b7c50005-0000-4000-8124-000000000001'::uuid, 'eth_up_down_5m_down_simple'),
+            ('b7c50005-0000-4000-8125-000000000001'::uuid, 'sol_up_down_5m_up_simple'),
+            ('b7c50005-0000-4000-8126-000000000001'::uuid, 'sol_up_down_5m_down_simple');
+
+        SELECT count(*)::integer
+        INTO target_strategy_count
+        FROM strategies strategy
+        WHERE strategy.id IN (
+                SELECT target.id
+                FROM tmp_simple_strategy_targets target
+            )
+           OR strategy.code IN (
+                SELECT target.code
+                FROM tmp_simple_strategy_targets target
+            );
+
+        CREATE TEMP TABLE tmp_simple_strategy_paper_orders ON COMMIT DROP AS
+        SELECT paper_order.id, paper_order.signal_id
+        FROM paper_orders paper_order
+        WHERE paper_order.strategy_id IN (
+                SELECT target.id
+                FROM tmp_simple_strategy_targets target
+            )
+           OR paper_order.copied_trader_wallet IN (
+                SELECT 'strategy:' || target.code
+                FROM tmp_simple_strategy_targets target
+            );
+
+        CREATE TEMP TABLE tmp_simple_strategy_live_orders ON COMMIT DROP AS
+        SELECT live_order.id
+        FROM live_orders live_order
+        WHERE live_order.strategy_id IN (
+            SELECT target.id
+            FROM tmp_simple_strategy_targets target
+        );
+
+        CREATE TEMP TABLE tmp_simple_strategy_runs ON COMMIT DROP AS
+        SELECT run.id, run.paper_order_id, run.signal_id
+        FROM strategy_market_paper_runs run
+        WHERE run.strategy_id IN (
+            SELECT target.id
+            FROM tmp_simple_strategy_targets target
+        );
+
+        CREATE TEMP TABLE tmp_simple_strategy_signals ON COMMIT DROP AS
+        SELECT signal.id
+        FROM signals signal
+        WHERE signal.trader_wallet IN (
+            SELECT 'strategy:' || target.code
+            FROM tmp_simple_strategy_targets target
+        );
+
+        INSERT INTO tmp_simple_strategy_signals
+        SELECT DISTINCT paper_order.signal_id
+        FROM tmp_simple_strategy_paper_orders paper_order
+        WHERE paper_order.signal_id IS NOT NULL
+          AND paper_order.signal_id NOT IN (
+              SELECT signal.id
+              FROM tmp_simple_strategy_signals signal
+          );
+
+        INSERT INTO tmp_simple_strategy_signals
+        SELECT DISTINCT run.signal_id
+        FROM tmp_simple_strategy_runs run
+        WHERE run.signal_id IS NOT NULL
+          AND run.signal_id NOT IN (
+              SELECT signal.id
+              FROM tmp_simple_strategy_signals signal
+          );
+
+        SELECT count(*)::integer
+        INTO active_live_orders
+        FROM live_orders live_order
+        WHERE live_order.id IN (
+                SELECT target.id
+                FROM tmp_simple_strategy_live_orders target
+            )
+          AND live_order.status IN ('Submitted', 'Live', 'Delayed', 'Unmatched', 'CancelRequested');
+
+        IF active_live_orders = 0 THEN
+            DELETE FROM paper_live_shadow_discrepancies discrepancy
+            WHERE discrepancy.strategy_id IN (
+                SELECT target.id
+                FROM tmp_simple_strategy_targets target
+            );
+            GET DIAGNOSTICS deleted_shadow_discrepancies = ROW_COUNT;
+
+            DELETE FROM paper_live_shadow_decisions decision
+            WHERE decision.strategy_id IN (
+                    SELECT target.id
+                    FROM tmp_simple_strategy_targets target
+                )
+               OR decision.paper_order_id IN (
+                    SELECT target.id
+                    FROM tmp_simple_strategy_paper_orders target
+                )
+               OR decision.live_order_id IN (
+                    SELECT target.id
+                    FROM tmp_simple_strategy_live_orders target
+                )
+               OR decision.signal_id IN (
+                    SELECT target.id
+                    FROM tmp_simple_strategy_signals target
+                );
+            GET DIAGNOSTICS deleted_shadow_decisions = ROW_COUNT;
+
+            DELETE FROM dry_run_orders dry_run_order
+            WHERE dry_run_order.strategy_id IN (
+                SELECT target.id
+                FROM tmp_simple_strategy_targets target
+            );
+            GET DIAGNOSTICS deleted_dry_run_orders = ROW_COUNT;
+
+            DELETE FROM date_dependent_strategy_hourly_paper_pnl hourly_pnl
+            WHERE hourly_pnl.strategy_id IN (
+                SELECT target.id
+                FROM tmp_simple_strategy_targets target
+            );
+            GET DIAGNOSTICS deleted_date_dependent_hourly_pnl = ROW_COUNT;
+
+            DELETE FROM crypto_up_down_5m_diff_shift_progress_states state
+            WHERE state.strategy_id IN (
+                SELECT target.id
+                FROM tmp_simple_strategy_targets target
+            );
+            GET DIAGNOSTICS deleted_diff_shift_states = ROW_COUNT;
+
+            DELETE FROM dashboard_strategy_performance_snapshots snapshot
+            WHERE snapshot.strategy_id IN (
+                    SELECT target.id
+                    FROM tmp_simple_strategy_targets target
+                )
+               OR snapshot.code IN (
+                    SELECT target.code
+                    FROM tmp_simple_strategy_targets target
+                );
+            GET DIAGNOSTICS deleted_dashboard_snapshots = ROW_COUNT;
+
+            DELETE FROM dashboard_strategy_recent_performance_snapshots snapshot
+            WHERE snapshot.strategy_id IN (
+                    SELECT target.id
+                    FROM tmp_simple_strategy_targets target
+                )
+               OR snapshot.code IN (
+                    SELECT target.code
+                    FROM tmp_simple_strategy_targets target
+                );
+            GET DIAGNOSTICS deleted_dashboard_recent_snapshots = ROW_COUNT;
+
+            DELETE FROM live_orders live_order
+            WHERE live_order.id IN (
+                SELECT target.id
+                FROM tmp_simple_strategy_live_orders target
+            );
+            GET DIAGNOSTICS deleted_live_orders = ROW_COUNT;
+
+            DELETE FROM strategy_market_paper_runs run
+            WHERE run.strategy_id IN (
+                    SELECT target.id
+                    FROM tmp_simple_strategy_targets target
+                )
+               OR run.paper_order_id IN (
+                    SELECT target.id
+                    FROM tmp_simple_strategy_paper_orders target
+                )
+               OR run.signal_id IN (
+                    SELECT target.id
+                    FROM tmp_simple_strategy_signals target
+                );
+            GET DIAGNOSTICS deleted_strategy_runs = ROW_COUNT;
+
+            DELETE FROM paper_fills fill
+            WHERE fill.paper_order_id IN (
+                SELECT target.id
+                FROM tmp_simple_strategy_paper_orders target
+            );
+            GET DIAGNOSTICS deleted_paper_fills = ROW_COUNT;
+
+            DELETE FROM paper_orders paper_order
+            WHERE paper_order.id IN (
+                SELECT target.id
+                FROM tmp_simple_strategy_paper_orders target
+            );
+            GET DIAGNOSTICS deleted_paper_orders = ROW_COUNT;
+
+            DELETE FROM signal_rejections rejection
+            WHERE rejection.signal_id IN (
+                SELECT target.id
+                FROM tmp_simple_strategy_signals target
+            );
+            GET DIAGNOSTICS deleted_signal_rejections = ROW_COUNT;
+
+            DELETE FROM signals signal
+            WHERE signal.id IN (
+                SELECT target.id
+                FROM tmp_simple_strategy_signals target
+            );
+            GET DIAGNOSTICS deleted_signals = ROW_COUNT;
+
+            DELETE FROM paper_positions paper_position
+            WHERE paper_position.copied_trader_wallet IN (
+                SELECT 'strategy:' || target.code
+                FROM tmp_simple_strategy_targets target
+            );
+            GET DIAGNOSTICS deleted_paper_positions = ROW_COUNT;
+
+            DELETE FROM paper_position_settlements settlement
+            WHERE settlement.copied_trader_wallet IN (
+                SELECT 'strategy:' || target.code
+                FROM tmp_simple_strategy_targets target
+            );
+            GET DIAGNOSTICS deleted_paper_position_settlements = ROW_COUNT;
+
+            DELETE FROM strategies strategy
+            WHERE strategy.id IN (
+                SELECT target.id
+                FROM tmp_simple_strategy_targets target
+            );
+            GET DIAGNOSTICS deleted_strategies = ROW_COUNT;
+
+            INSERT INTO schema_data_migrations (migration_key, applied_at_utc, details)
+            VALUES (
+                migration_key_value,
+                clock_timestamp(),
+                'target_strategies=' || target_strategy_count::text ||
+                ';paper_orders=' || deleted_paper_orders::text ||
+                ';paper_fills=' || deleted_paper_fills::text ||
+                ';strategy_runs=' || deleted_strategy_runs::text ||
+                ';live_orders=' || deleted_live_orders::text ||
+                ';shadow_decisions=' || deleted_shadow_decisions::text ||
+                ';shadow_discrepancies=' || deleted_shadow_discrepancies::text ||
+                ';signals=' || deleted_signals::text ||
+                ';signal_rejections=' || deleted_signal_rejections::text ||
+                ';paper_positions=' || deleted_paper_positions::text ||
+                ';paper_position_settlements=' || deleted_paper_position_settlements::text ||
+                ';dashboard_snapshots=' || deleted_dashboard_snapshots::text ||
+                ';dashboard_recent_snapshots=' || deleted_dashboard_recent_snapshots::text ||
+                ';dry_run_orders=' || deleted_dry_run_orders::text ||
+                ';date_dependent_hourly_pnl=' || deleted_date_dependent_hourly_pnl::text ||
+                ';diff_shift_states=' || deleted_diff_shift_states::text ||
+                ';strategies=' || deleted_strategies::text
+            );
+        END IF;
+    END IF;
+END $$;
+
+DO $$
+DECLARE
+    migration_key_value text := '20260709_remove_follow_leader_strategy';
+    follow_leader_id uuid := 'f0110a0d-1ead-4c00-8b01-000000000001';
+    target_strategy_count integer := 0;
+    deleted_shadow_discrepancies integer := 0;
+    deleted_shadow_decisions integer := 0;
+    deleted_live_orders integer := 0;
+    deleted_strategy_runs integer := 0;
+    deleted_paper_fills integer := 0;
+    deleted_paper_orders integer := 0;
+    deleted_dashboard_snapshots integer := 0;
+    deleted_dashboard_recent_snapshots integer := 0;
+    deleted_dry_run_orders integer := 0;
+    deleted_date_dependent_hourly_pnl integer := 0;
+    deleted_diff_shift_states integer := 0;
+    deleted_child_assignments integer := 0;
+    deleted_paper_positions integer := 0;
+    deleted_paper_position_settlements integer := 0;
+    deleted_strategies integer := 0;
+    active_live_orders integer := 0;
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1
+        FROM schema_data_migrations migration
+        WHERE migration.migration_key = migration_key_value
+    ) THEN
+        DROP TABLE IF EXISTS tmp_follow_leader_strategy_targets;
+        DROP TABLE IF EXISTS tmp_follow_leader_paper_orders;
+        DROP TABLE IF EXISTS tmp_follow_leader_live_orders;
+        DROP TABLE IF EXISTS tmp_follow_leader_runs;
+
+        CREATE TEMP TABLE tmp_follow_leader_strategy_targets(id, code) ON COMMIT DROP AS
+        VALUES (follow_leader_id, 'follow_leader');
+
+        SELECT count(*)::integer
+        INTO target_strategy_count
+        FROM strategies strategy
+        WHERE strategy.id IN (
+                SELECT target.id
+                FROM tmp_follow_leader_strategy_targets target
+            )
+           OR strategy.code IN (
+                SELECT target.code
+                FROM tmp_follow_leader_strategy_targets target
+            );
+
+        IF target_strategy_count = 0 THEN
+            INSERT INTO schema_data_migrations (migration_key, applied_at_utc, details)
+            VALUES (
+                migration_key_value,
+                clock_timestamp(),
+                'target_strategies=0' ||
+                ';paper_orders=0' ||
+                ';paper_fills=0' ||
+                ';strategy_runs=0' ||
+                ';live_orders=0' ||
+                ';shadow_decisions=0' ||
+                ';shadow_discrepancies=0' ||
+                ';paper_positions=0' ||
+                ';paper_position_settlements=0' ||
+                ';dashboard_snapshots=0' ||
+                ';dashboard_recent_snapshots=0' ||
+                ';dry_run_orders=0' ||
+                ';date_dependent_hourly_pnl=0' ||
+                ';diff_shift_states=0' ||
+                ';child_assignments=0' ||
+                ';strategies=0'
+            );
+        ELSE
+        CREATE TEMP TABLE tmp_follow_leader_paper_orders ON COMMIT DROP AS
+        SELECT paper_order.id
+        FROM paper_orders paper_order
+        WHERE paper_order.strategy_id IN (
+            SELECT target.id
+            FROM tmp_follow_leader_strategy_targets target
+        );
+
+        CREATE TEMP TABLE tmp_follow_leader_live_orders ON COMMIT DROP AS
+        SELECT live_order.id
+        FROM live_orders live_order
+        WHERE live_order.strategy_id IN (
+            SELECT target.id
+            FROM tmp_follow_leader_strategy_targets target
+        );
+
+        CREATE TEMP TABLE tmp_follow_leader_runs ON COMMIT DROP AS
+        SELECT run.id
+        FROM strategy_market_paper_runs run
+        WHERE run.strategy_id IN (
+            SELECT target.id
+            FROM tmp_follow_leader_strategy_targets target
+        );
+
+        SELECT count(*)::integer
+        INTO active_live_orders
+        FROM live_orders live_order
+        WHERE live_order.id IN (
+                SELECT target.id
+                FROM tmp_follow_leader_live_orders target
+            )
+          AND live_order.status IN ('Submitted', 'Live', 'Delayed', 'Unmatched', 'CancelRequested');
+
+        IF active_live_orders = 0 THEN
+            DELETE FROM paper_live_shadow_discrepancies discrepancy
+            WHERE discrepancy.strategy_id IN (
+                SELECT target.id
+                FROM tmp_follow_leader_strategy_targets target
+            );
+            GET DIAGNOSTICS deleted_shadow_discrepancies = ROW_COUNT;
+
+            DELETE FROM paper_live_shadow_decisions decision
+            WHERE decision.strategy_id IN (
+                    SELECT target.id
+                    FROM tmp_follow_leader_strategy_targets target
+                )
+               OR decision.paper_order_id IN (
+                    SELECT target.id
+                    FROM tmp_follow_leader_paper_orders target
+                )
+               OR decision.live_order_id IN (
+                    SELECT target.id
+                    FROM tmp_follow_leader_live_orders target
+                );
+            GET DIAGNOSTICS deleted_shadow_decisions = ROW_COUNT;
+
+            DELETE FROM dry_run_orders dry_run_order
+            WHERE dry_run_order.strategy_id IN (
+                SELECT target.id
+                FROM tmp_follow_leader_strategy_targets target
+            );
+            GET DIAGNOSTICS deleted_dry_run_orders = ROW_COUNT;
+
+            DELETE FROM date_dependent_strategy_hourly_paper_pnl hourly_pnl
+            WHERE hourly_pnl.strategy_id IN (
+                SELECT target.id
+                FROM tmp_follow_leader_strategy_targets target
+            );
+            GET DIAGNOSTICS deleted_date_dependent_hourly_pnl = ROW_COUNT;
+
+            DELETE FROM crypto_up_down_5m_diff_shift_progress_states state
+            WHERE state.strategy_id IN (
+                SELECT target.id
+                FROM tmp_follow_leader_strategy_targets target
+            );
+            GET DIAGNOSTICS deleted_diff_shift_states = ROW_COUNT;
+
+            DELETE FROM strategy_child_parent_assignments assignment
+            WHERE assignment.child_strategy_id IN (
+                    SELECT target.id
+                    FROM tmp_follow_leader_strategy_targets target
+                )
+               OR assignment.parent_strategy_id IN (
+                    SELECT target.id
+                    FROM tmp_follow_leader_strategy_targets target
+                );
+            GET DIAGNOSTICS deleted_child_assignments = ROW_COUNT;
+
+            DELETE FROM dashboard_strategy_performance_snapshots snapshot
+            WHERE snapshot.strategy_id IN (
+                    SELECT target.id
+                    FROM tmp_follow_leader_strategy_targets target
+                )
+               OR snapshot.code IN (
+                    SELECT target.code
+                    FROM tmp_follow_leader_strategy_targets target
+                );
+            GET DIAGNOSTICS deleted_dashboard_snapshots = ROW_COUNT;
+
+            DELETE FROM dashboard_strategy_recent_performance_snapshots snapshot
+            WHERE snapshot.strategy_id IN (
+                    SELECT target.id
+                    FROM tmp_follow_leader_strategy_targets target
+                )
+               OR snapshot.code IN (
+                    SELECT target.code
+                    FROM tmp_follow_leader_strategy_targets target
+                );
+            GET DIAGNOSTICS deleted_dashboard_recent_snapshots = ROW_COUNT;
+
+            DELETE FROM live_orders live_order
+            WHERE live_order.id IN (
+                SELECT target.id
+                FROM tmp_follow_leader_live_orders target
+            );
+            GET DIAGNOSTICS deleted_live_orders = ROW_COUNT;
+
+            DELETE FROM strategy_market_paper_runs run
+            WHERE run.id IN (
+                SELECT target.id
+                FROM tmp_follow_leader_runs target
+            );
+            GET DIAGNOSTICS deleted_strategy_runs = ROW_COUNT;
+
+            DELETE FROM paper_fills fill
+            WHERE fill.paper_order_id IN (
+                SELECT target.id
+                FROM tmp_follow_leader_paper_orders target
+            );
+            GET DIAGNOSTICS deleted_paper_fills = ROW_COUNT;
+
+            DELETE FROM paper_orders paper_order
+            WHERE paper_order.id IN (
+                SELECT target.id
+                FROM tmp_follow_leader_paper_orders target
+            );
+            GET DIAGNOSTICS deleted_paper_orders = ROW_COUNT;
+
+            DELETE FROM paper_positions paper_position
+            WHERE paper_position.copied_trader_wallet = 'strategy:follow_leader';
+            GET DIAGNOSTICS deleted_paper_positions = ROW_COUNT;
+
+            DELETE FROM paper_position_settlements settlement
+            WHERE settlement.copied_trader_wallet = 'strategy:follow_leader';
+            GET DIAGNOSTICS deleted_paper_position_settlements = ROW_COUNT;
+
+            DELETE FROM strategies strategy
+            WHERE strategy.id IN (
+                    SELECT target.id
+                    FROM tmp_follow_leader_strategy_targets target
+                )
+               OR strategy.code IN (
+                    SELECT target.code
+                    FROM tmp_follow_leader_strategy_targets target
+                );
+            GET DIAGNOSTICS deleted_strategies = ROW_COUNT;
+
+            INSERT INTO schema_data_migrations (migration_key, applied_at_utc, details)
+            VALUES (
+                migration_key_value,
+                clock_timestamp(),
+                'target_strategies=' || target_strategy_count::text ||
+                ';paper_orders=' || deleted_paper_orders::text ||
+                ';paper_fills=' || deleted_paper_fills::text ||
+                ';strategy_runs=' || deleted_strategy_runs::text ||
+                ';live_orders=' || deleted_live_orders::text ||
+                ';shadow_decisions=' || deleted_shadow_decisions::text ||
+                ';shadow_discrepancies=' || deleted_shadow_discrepancies::text ||
+                ';paper_positions=' || deleted_paper_positions::text ||
+                ';paper_position_settlements=' || deleted_paper_position_settlements::text ||
+                ';dashboard_snapshots=' || deleted_dashboard_snapshots::text ||
+                ';dashboard_recent_snapshots=' || deleted_dashboard_recent_snapshots::text ||
+                ';dry_run_orders=' || deleted_dry_run_orders::text ||
+                ';date_dependent_hourly_pnl=' || deleted_date_dependent_hourly_pnl::text ||
+                ';diff_shift_states=' || deleted_diff_shift_states::text ||
+                ';child_assignments=' || deleted_child_assignments::text ||
+                ';strategies=' || deleted_strategies::text
+            );
+        END IF;
+        END IF;
+    END IF;
+END $$;
+
+DO $$
+DECLARE
+    migration_key_value text := '20260712_remove_eth_down_filtered_average_premarket_strategies';
+    target_strategy_count integer := 0;
+    deleted_shadow_discrepancies integer := 0;
+    deleted_shadow_decisions integer := 0;
+    deleted_live_orders integer := 0;
+    deleted_strategy_runs integer := 0;
+    deleted_paper_fills integer := 0;
+    deleted_paper_orders integer := 0;
+    deleted_signal_rejections integer := 0;
+    deleted_signals integer := 0;
+    deleted_paper_positions integer := 0;
+    deleted_paper_position_settlements integer := 0;
+    deleted_dashboard_snapshots integer := 0;
+    deleted_dashboard_recent_snapshots integer := 0;
+    deleted_dashboard_projection_events integer := 0;
+    deleted_dashboard_projection_queue integer := 0;
+    deleted_dashboard_lifetime_projection_states integer := 0;
+    deleted_dashboard_position_projection_facts integer := 0;
+    deleted_dashboard_recent_projection_facts integer := 0;
+    deleted_dashboard_recent_projection_states integer := 0;
+    deleted_dry_run_orders integer := 0;
+    deleted_date_dependent_hourly_pnl integer := 0;
+    deleted_diff_shift_states integer := 0;
+    deleted_child_assignments integer := 0;
+    deleted_strategies integer := 0;
+    active_live_orders integer := 0;
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1
+        FROM schema_data_migrations migration
+        WHERE migration.migration_key = migration_key_value
+    ) THEN
+        DROP TABLE IF EXISTS tmp_eth_down_filtered_average_strategy_targets;
+        DROP TABLE IF EXISTS tmp_eth_down_filtered_average_paper_orders;
+        DROP TABLE IF EXISTS tmp_eth_down_filtered_average_live_orders;
+        DROP TABLE IF EXISTS tmp_eth_down_filtered_average_runs;
+        DROP TABLE IF EXISTS tmp_eth_down_filtered_average_signals;
+        DROP TABLE IF EXISTS tmp_eth_down_filtered_average_positions;
+        DROP TABLE IF EXISTS tmp_eth_down_filtered_average_position_settlements;
+
+        CREATE TEMP TABLE tmp_eth_down_filtered_average_strategy_targets ON COMMIT DROP AS
+        SELECT DISTINCT strategy.id, strategy.code
+        FROM strategies strategy
+        JOIN (
+            VALUES
+                ('b7c50005-0000-4000-8181-000000000101'::uuid, 'eth_up_down_5m_down_filtered_average_bps_1_fak_premarket'),
+                ('b7c50005-0000-4000-8181-000000000102'::uuid, 'eth_up_down_5m_down_filtered_average_bps_2_fak_premarket'),
+                ('b7c50005-0000-4000-8181-000000000103'::uuid, 'eth_up_down_5m_down_filtered_average_bps_3_fak_premarket'),
+                ('b7c50005-0000-4000-8181-000000000104'::uuid, 'eth_up_down_5m_down_filtered_average_bps_4_fak_premarket'),
+                ('b7c50005-0000-4000-8181-000000000105'::uuid, 'eth_up_down_5m_down_filtered_average_bps_5_fak_premarket'),
+                ('b7c50005-0000-4000-8181-000000000106'::uuid, 'eth_up_down_5m_down_filtered_average_bps_6_fak_premarket'),
+                ('b7c50005-0000-4000-8181-000000000107'::uuid, 'eth_up_down_5m_down_filtered_average_bps_7_fak_premarket'),
+                ('b7c50005-0000-4000-8181-000000000108'::uuid, 'eth_up_down_5m_down_filtered_average_bps_8_fak_premarket'),
+                ('b7c50005-0000-4000-8181-000000000109'::uuid, 'eth_up_down_5m_down_filtered_average_bps_9_fak_premarket'),
+                ('b7c50005-0000-4000-8181-000000000110'::uuid, 'eth_up_down_5m_down_filtered_average_bps_10_fak_premarket')
+        ) AS target(id, code)
+            ON strategy.id = target.id
+            OR strategy.code = target.code;
+
+        SELECT count(*)::integer
+        INTO target_strategy_count
+        FROM tmp_eth_down_filtered_average_strategy_targets;
+
+        IF target_strategy_count = 0 THEN
+            INSERT INTO schema_data_migrations (migration_key, applied_at_utc, details)
+            VALUES (
+                migration_key_value,
+                clock_timestamp(),
+                'target_strategies=0' ||
+                ';paper_orders=0' ||
+                ';paper_fills=0' ||
+                ';strategy_runs=0' ||
+                ';live_orders=0' ||
+                ';shadow_decisions=0' ||
+                ';shadow_discrepancies=0' ||
+                ';signals=0' ||
+                ';signal_rejections=0' ||
+                ';paper_positions=0' ||
+                ';paper_position_settlements=0' ||
+                ';dashboard_snapshots=0' ||
+                ';dashboard_recent_snapshots=0' ||
+                ';dashboard_projection_events=0' ||
+                ';dashboard_projection_queue=0' ||
+                ';dashboard_lifetime_projection_states=0' ||
+                ';dashboard_position_projection_facts=0' ||
+                ';dashboard_recent_projection_facts=0' ||
+                ';dashboard_recent_projection_states=0' ||
+                ';dry_run_orders=0' ||
+                ';date_dependent_hourly_pnl=0' ||
+                ';diff_shift_states=0' ||
+                ';child_assignments=0' ||
+                ';strategies=0'
+            );
+        ELSE
+            CREATE TEMP TABLE tmp_eth_down_filtered_average_paper_orders ON COMMIT DROP AS
+            SELECT paper_order.id, paper_order.signal_id
+            FROM paper_orders paper_order
+            WHERE paper_order.strategy_id IN (
+                    SELECT target.id
+                    FROM tmp_eth_down_filtered_average_strategy_targets target
+                )
+               OR paper_order.copied_trader_wallet IN (
+                    SELECT 'strategy:' || target.code
+                    FROM tmp_eth_down_filtered_average_strategy_targets target
+                );
+
+            CREATE TEMP TABLE tmp_eth_down_filtered_average_live_orders ON COMMIT DROP AS
+            SELECT live_order.id, live_order.signal_id
+            FROM live_orders live_order
+            WHERE live_order.strategy_id IN (
+                SELECT target.id
+                FROM tmp_eth_down_filtered_average_strategy_targets target
+            );
+
+            CREATE TEMP TABLE tmp_eth_down_filtered_average_runs ON COMMIT DROP AS
+            SELECT run.id, run.paper_order_id, run.signal_id
+            FROM strategy_market_paper_runs run
+            WHERE run.strategy_id IN (
+                SELECT target.id
+                FROM tmp_eth_down_filtered_average_strategy_targets target
+            );
+
+            CREATE TEMP TABLE tmp_eth_down_filtered_average_signals ON COMMIT DROP AS
+            SELECT DISTINCT signal.id
+            FROM signals signal
+            WHERE signal.id IN (
+                    SELECT target.signal_id
+                    FROM tmp_eth_down_filtered_average_paper_orders target
+                )
+               OR signal.id IN (
+                    SELECT target.signal_id
+                    FROM tmp_eth_down_filtered_average_live_orders target
+                )
+               OR signal.id IN (
+                    SELECT target.signal_id
+                    FROM tmp_eth_down_filtered_average_runs target
+                )
+               OR signal.trader_wallet IN (
+                    SELECT 'strategy:' || target.code
+                    FROM tmp_eth_down_filtered_average_strategy_targets target
+                );
+
+            CREATE TEMP TABLE tmp_eth_down_filtered_average_positions ON COMMIT DROP AS
+            SELECT paper_position.id
+            FROM paper_positions paper_position
+            WHERE paper_position.copied_trader_wallet IN (
+                SELECT 'strategy:' || target.code
+                FROM tmp_eth_down_filtered_average_strategy_targets target
+            );
+
+            CREATE TEMP TABLE tmp_eth_down_filtered_average_position_settlements ON COMMIT DROP AS
+            SELECT settlement.id
+            FROM paper_position_settlements settlement
+            WHERE settlement.copied_trader_wallet IN (
+                SELECT 'strategy:' || target.code
+                FROM tmp_eth_down_filtered_average_strategy_targets target
+            );
+
+            SELECT count(*)::integer
+            INTO active_live_orders
+            FROM live_orders live_order
+            WHERE live_order.id IN (
+                    SELECT target.id
+                    FROM tmp_eth_down_filtered_average_live_orders target
+                )
+              AND live_order.status NOT IN (
+                    'Cancelled',
+                    'Rejected',
+                    'Failed',
+                    'Expired',
+                    'Filled',
+                    'Settled',
+                    'Ignored',
+                    'PreflightRejected'
+                );
+
+            IF active_live_orders > 0 THEN
+                RAISE EXCEPTION 'Refusing to delete ETH Down Filtered Average Premarket strategies because % live orders are still active.', active_live_orders;
+            ELSE
+                IF to_regclass('public.dashboard_projection_events') IS NOT NULL THEN
+                    DELETE FROM dashboard_projection_events event
+                    WHERE event.strategy_id IN (
+                            SELECT target.id
+                            FROM tmp_eth_down_filtered_average_strategy_targets target
+                        )
+                       OR event.source_id IN (
+                            SELECT target.id
+                            FROM tmp_eth_down_filtered_average_strategy_targets target
+                        )
+                       OR event.source_id IN (
+                            SELECT target.id
+                            FROM tmp_eth_down_filtered_average_paper_orders target
+                        )
+                       OR event.source_id IN (
+                            SELECT target.id
+                            FROM tmp_eth_down_filtered_average_live_orders target
+                        )
+                       OR event.source_id IN (
+                            SELECT target.id
+                            FROM tmp_eth_down_filtered_average_positions target
+                        )
+                       OR event.source_id IN (
+                            SELECT target.id
+                            FROM tmp_eth_down_filtered_average_position_settlements target
+                        );
+                    GET DIAGNOSTICS deleted_dashboard_projection_events = ROW_COUNT;
+                END IF;
+
+                IF to_regclass('public.dashboard_projection_reconciliation_queue') IS NOT NULL THEN
+                    DELETE FROM dashboard_projection_reconciliation_queue queue
+                    WHERE queue.strategy_id IN (
+                        SELECT target.id
+                        FROM tmp_eth_down_filtered_average_strategy_targets target
+                    );
+                    GET DIAGNOSTICS deleted_dashboard_projection_queue = ROW_COUNT;
+                END IF;
+
+                IF to_regclass('public.dashboard_strategy_lifetime_projection_states') IS NOT NULL THEN
+                    DELETE FROM dashboard_strategy_lifetime_projection_states state
+                    WHERE state.strategy_id IN (
+                        SELECT target.id
+                        FROM tmp_eth_down_filtered_average_strategy_targets target
+                    );
+                    GET DIAGNOSTICS deleted_dashboard_lifetime_projection_states = ROW_COUNT;
+                END IF;
+
+                IF to_regclass('public.dashboard_strategy_position_projection_facts') IS NOT NULL THEN
+                    DELETE FROM dashboard_strategy_position_projection_facts fact
+                    WHERE fact.strategy_id IN (
+                        SELECT target.id
+                        FROM tmp_eth_down_filtered_average_strategy_targets target
+                    );
+                    GET DIAGNOSTICS deleted_dashboard_position_projection_facts = ROW_COUNT;
+                END IF;
+
+                IF to_regclass('public.dashboard_strategy_recent_projection_facts') IS NOT NULL THEN
+                    DELETE FROM dashboard_strategy_recent_projection_facts fact
+                    WHERE fact.strategy_id IN (
+                        SELECT target.id
+                        FROM tmp_eth_down_filtered_average_strategy_targets target
+                    );
+                    GET DIAGNOSTICS deleted_dashboard_recent_projection_facts = ROW_COUNT;
+                END IF;
+
+                IF to_regclass('public.dashboard_strategy_recent_projection_states') IS NOT NULL THEN
+                    DELETE FROM dashboard_strategy_recent_projection_states state
+                    WHERE state.strategy_id IN (
+                        SELECT target.id
+                        FROM tmp_eth_down_filtered_average_strategy_targets target
+                    );
+                    GET DIAGNOSTICS deleted_dashboard_recent_projection_states = ROW_COUNT;
+                END IF;
+
+                DELETE FROM paper_live_shadow_discrepancies discrepancy
+                WHERE discrepancy.strategy_id IN (
+                    SELECT target.id
+                    FROM tmp_eth_down_filtered_average_strategy_targets target
+                );
+                GET DIAGNOSTICS deleted_shadow_discrepancies = ROW_COUNT;
+
+                DELETE FROM paper_live_shadow_decisions decision
+                WHERE decision.strategy_id IN (
+                        SELECT target.id
+                        FROM tmp_eth_down_filtered_average_strategy_targets target
+                    )
+                   OR decision.paper_order_id IN (
+                        SELECT target.id
+                        FROM tmp_eth_down_filtered_average_paper_orders target
+                    )
+                   OR decision.live_order_id IN (
+                        SELECT target.id
+                        FROM tmp_eth_down_filtered_average_live_orders target
+                    )
+                   OR decision.signal_id IN (
+                        SELECT target.id
+                        FROM tmp_eth_down_filtered_average_signals target
+                    );
+                GET DIAGNOSTICS deleted_shadow_decisions = ROW_COUNT;
+
+                DELETE FROM dry_run_orders dry_run_order
+                WHERE dry_run_order.strategy_id IN (
+                    SELECT target.id
+                    FROM tmp_eth_down_filtered_average_strategy_targets target
+                );
+                GET DIAGNOSTICS deleted_dry_run_orders = ROW_COUNT;
+
+                DELETE FROM date_dependent_strategy_hourly_paper_pnl hourly_pnl
+                WHERE hourly_pnl.strategy_id IN (
+                    SELECT target.id
+                    FROM tmp_eth_down_filtered_average_strategy_targets target
+                );
+                GET DIAGNOSTICS deleted_date_dependent_hourly_pnl = ROW_COUNT;
+
+                DELETE FROM crypto_up_down_5m_diff_shift_progress_states state
+                WHERE state.strategy_id IN (
+                    SELECT target.id
+                    FROM tmp_eth_down_filtered_average_strategy_targets target
+                );
+                GET DIAGNOSTICS deleted_diff_shift_states = ROW_COUNT;
+
+                DELETE FROM strategy_child_parent_assignments assignment
+                WHERE assignment.child_strategy_id IN (
+                        SELECT target.id
+                        FROM tmp_eth_down_filtered_average_strategy_targets target
+                    )
+                   OR assignment.parent_strategy_id IN (
+                        SELECT target.id
+                        FROM tmp_eth_down_filtered_average_strategy_targets target
+                    );
+                GET DIAGNOSTICS deleted_child_assignments = ROW_COUNT;
+
+                DELETE FROM dashboard_strategy_performance_snapshots snapshot
+                WHERE snapshot.strategy_id IN (
+                        SELECT target.id
+                        FROM tmp_eth_down_filtered_average_strategy_targets target
+                    )
+                   OR snapshot.code IN (
+                        SELECT target.code
+                        FROM tmp_eth_down_filtered_average_strategy_targets target
+                    );
+                GET DIAGNOSTICS deleted_dashboard_snapshots = ROW_COUNT;
+
+                DELETE FROM dashboard_strategy_recent_performance_snapshots snapshot
+                WHERE snapshot.strategy_id IN (
+                        SELECT target.id
+                        FROM tmp_eth_down_filtered_average_strategy_targets target
+                    )
+                   OR snapshot.code IN (
+                        SELECT target.code
+                        FROM tmp_eth_down_filtered_average_strategy_targets target
+                    );
+                GET DIAGNOSTICS deleted_dashboard_recent_snapshots = ROW_COUNT;
+
+                DELETE FROM live_orders live_order
+                WHERE live_order.id IN (
+                    SELECT target.id
+                    FROM tmp_eth_down_filtered_average_live_orders target
+                );
+                GET DIAGNOSTICS deleted_live_orders = ROW_COUNT;
+
+                DELETE FROM strategy_market_paper_runs run
+                WHERE run.id IN (
+                    SELECT target.id
+                    FROM tmp_eth_down_filtered_average_runs target
+                );
+                GET DIAGNOSTICS deleted_strategy_runs = ROW_COUNT;
+
+                DELETE FROM paper_fills fill
+                WHERE fill.paper_order_id IN (
+                    SELECT target.id
+                    FROM tmp_eth_down_filtered_average_paper_orders target
+                );
+                GET DIAGNOSTICS deleted_paper_fills = ROW_COUNT;
+
+                DELETE FROM paper_orders paper_order
+                WHERE paper_order.id IN (
+                    SELECT target.id
+                    FROM tmp_eth_down_filtered_average_paper_orders target
+                );
+                GET DIAGNOSTICS deleted_paper_orders = ROW_COUNT;
+
+                DELETE FROM signal_rejections rejection
+                WHERE rejection.signal_id IN (
+                    SELECT target.id
+                    FROM tmp_eth_down_filtered_average_signals target
+                );
+                GET DIAGNOSTICS deleted_signal_rejections = ROW_COUNT;
+
+                DELETE FROM signals signal
+                WHERE signal.id IN (
+                    SELECT target.id
+                    FROM tmp_eth_down_filtered_average_signals target
+                );
+                GET DIAGNOSTICS deleted_signals = ROW_COUNT;
+
+                DELETE FROM paper_positions paper_position
+                WHERE paper_position.id IN (
+                    SELECT target.id
+                    FROM tmp_eth_down_filtered_average_positions target
+                );
+                GET DIAGNOSTICS deleted_paper_positions = ROW_COUNT;
+
+                DELETE FROM paper_position_settlements settlement
+                WHERE settlement.id IN (
+                    SELECT target.id
+                    FROM tmp_eth_down_filtered_average_position_settlements target
+                );
+                GET DIAGNOSTICS deleted_paper_position_settlements = ROW_COUNT;
+
+                DELETE FROM strategies strategy
+                WHERE strategy.id IN (
+                        SELECT target.id
+                        FROM tmp_eth_down_filtered_average_strategy_targets target
+                    )
+                   OR strategy.code IN (
+                        SELECT target.code
+                        FROM tmp_eth_down_filtered_average_strategy_targets target
+                    );
+                GET DIAGNOSTICS deleted_strategies = ROW_COUNT;
+
+                INSERT INTO schema_data_migrations (migration_key, applied_at_utc, details)
+                VALUES (
+                    migration_key_value,
+                    clock_timestamp(),
+                    'target_strategies=' || target_strategy_count::text ||
+                    ';paper_orders=' || deleted_paper_orders::text ||
+                    ';paper_fills=' || deleted_paper_fills::text ||
+                    ';strategy_runs=' || deleted_strategy_runs::text ||
+                    ';live_orders=' || deleted_live_orders::text ||
+                    ';shadow_decisions=' || deleted_shadow_decisions::text ||
+                    ';shadow_discrepancies=' || deleted_shadow_discrepancies::text ||
+                    ';signals=' || deleted_signals::text ||
+                    ';signal_rejections=' || deleted_signal_rejections::text ||
+                    ';paper_positions=' || deleted_paper_positions::text ||
+                    ';paper_position_settlements=' || deleted_paper_position_settlements::text ||
+                    ';dashboard_snapshots=' || deleted_dashboard_snapshots::text ||
+                    ';dashboard_recent_snapshots=' || deleted_dashboard_recent_snapshots::text ||
+                    ';dashboard_projection_events=' || deleted_dashboard_projection_events::text ||
+                    ';dashboard_projection_queue=' || deleted_dashboard_projection_queue::text ||
+                    ';dashboard_lifetime_projection_states=' || deleted_dashboard_lifetime_projection_states::text ||
+                    ';dashboard_position_projection_facts=' || deleted_dashboard_position_projection_facts::text ||
+                    ';dashboard_recent_projection_facts=' || deleted_dashboard_recent_projection_facts::text ||
+                    ';dashboard_recent_projection_states=' || deleted_dashboard_recent_projection_states::text ||
+                    ';dry_run_orders=' || deleted_dry_run_orders::text ||
+                    ';date_dependent_hourly_pnl=' || deleted_date_dependent_hourly_pnl::text ||
+                    ';diff_shift_states=' || deleted_diff_shift_states::text ||
+                    ';child_assignments=' || deleted_child_assignments::text ||
+                    ';strategies=' || deleted_strategies::text
+                );
+            END IF;
+        END IF;
+    END IF;
+END $$;
+
+DO $$
+DECLARE
     migration_key_value text := '20260522_retire_middle_depth_2_5';
     retired_strategy_count integer := 0;
 BEGIN
@@ -4981,4 +6434,9 @@ BEGIN
     END IF;
 END $$;
 """;
+
+    public static string SchemaSql { get; } = string.Concat(
+        BaseSchemaSql,
+        Environment.NewLine,
+        DashboardProjectionSchema.SchemaSql);
 }

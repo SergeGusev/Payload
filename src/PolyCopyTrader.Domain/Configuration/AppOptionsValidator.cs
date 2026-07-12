@@ -21,6 +21,7 @@ public static class AppOptionsValidator
         ValidateBot(configuration.Bot, errors);
         ValidatePolymarket(configuration.Polymarket, configuration.MarketDataWebSocket, errors);
         ValidatePolymarketAuth(configuration.PolymarketAuth, errors);
+        ValidatePolymarketAutoRedeem(configuration.PolymarketAutoRedeem, configuration.PolymarketAuth, errors);
         ValidateMarketDataWebSocket(configuration.MarketDataWebSocket, errors);
         ValidateMarketTradeDiagnostics(configuration.MarketTradeDiagnostics, errors);
         ValidateBtcOrderBookLagDiagnostics(configuration.BtcOrderBookLagDiagnostics, errors);
@@ -40,6 +41,7 @@ public static class AppOptionsValidator
         ValidateCoinbaseExchange(configuration.CoinbaseExchange, errors);
         ValidateBinanceBtcUsdReference(configuration.BinanceBtcUsdReference, errors);
         ValidateBinanceCryptoReference(configuration.BinanceCryptoReference, errors);
+        ValidateOkxExpiryFuturesReference(configuration.OkxExpiryFuturesReference, errors);
         ValidateCryptoReferencePriceHistory(configuration.CryptoReferencePriceHistory, errors);
         ValidateBtcUpDown5mOddsArchive(configuration.BtcUpDown5mOddsArchive, errors);
         ValidateBtcUpDown5mStatistics(configuration.BtcUpDown5mStatistics, errors);
@@ -63,6 +65,7 @@ public static class AppOptionsValidator
             $"Storage provider: {configuration.Storage.Provider}",
             $"Storage configured: {StorageConnectionResolver.IsConfigured(configuration.Storage)}",
             $"Storage env var: {configuration.Storage.ConnectionStringEnvironmentVariable}",
+            $"Storage max pool size: {configuration.Storage.MaxPoolSize?.ToString() ?? "connection-string default"}",
             $"Polymarket data API: {configuration.Polymarket.DataApiBaseUrl}",
             $"Polymarket CLOB API: {configuration.Polymarket.ClobBaseUrl}",
             $"Polymarket certificate pinned hosts: {configuration.Polymarket.CertificatePins?.Count ?? 0}",
@@ -74,6 +77,9 @@ public static class AppOptionsValidator
             $"Auth provider: {configuration.PolymarketAuth.SecretProvider}",
             $"Auth configured: {configuration.PolymarketAuth.Enabled && IsAddressLike(configuration.PolymarketAuth.SigningAddress)}",
             $"Dry-run signing enabled: {configuration.PolymarketAuth.DryRunSigningEnabled}",
+            $"Auto redeem enabled: {configuration.PolymarketAutoRedeem.Enabled}",
+            $"Auto redeem dry-run: {configuration.PolymarketAutoRedeem.DryRun}",
+            $"Auto redeem submit enabled: {configuration.PolymarketAutoRedeem.AutoSubmitEnabled}",
             $"Live max order notional USD: {configuration.LiveTrading.MaxOrderNotionalUsd}",
             $"Live manual approval present: {!string.IsNullOrWhiteSpace(configuration.LiveTrading.ManualEnableCode)}",
             $"Market WebSocket enabled: {configuration.Bot.UseWebSockets && configuration.MarketDataWebSocket.Enabled}",
@@ -160,6 +166,13 @@ public static class AppOptionsValidator
             $"Binance crypto reference sample interval seconds: {configuration.BinanceCryptoReference.SampleIntervalSeconds}",
             $"Binance crypto reference window size: {configuration.BinanceCryptoReference.WindowSize}",
             $"Binance crypto reference stale after seconds: {configuration.BinanceCryptoReference.StaleAfterSeconds}",
+            $"OKX expiry futures reference enabled: {configuration.OkxExpiryFuturesReference.Enabled}",
+            $"OKX expiry futures reference REST base URL: {configuration.OkxExpiryFuturesReference.RestBaseUrl}",
+            $"OKX expiry futures reference assets: {string.Join(",", configuration.OkxExpiryFuturesReference.AssetSymbols)}",
+            $"OKX expiry futures reference poll interval milliseconds: {configuration.OkxExpiryFuturesReference.PollIntervalMilliseconds}",
+            $"OKX expiry futures instrument refresh interval seconds: {configuration.OkxExpiryFuturesReference.InstrumentRefreshIntervalSeconds}",
+            $"OKX expiry futures request timeout milliseconds: {configuration.OkxExpiryFuturesReference.RequestTimeoutMilliseconds}",
+            $"OKX expiry futures stale after seconds: {configuration.OkxExpiryFuturesReference.StaleAfterSeconds}",
             $"Crypto reference price history enabled: {configuration.CryptoReferencePriceHistory.Enabled}",
             $"Crypto reference price history assets: {string.Join(",", configuration.CryptoReferencePriceHistory.AssetSymbols)}",
             $"Crypto reference price history write interval seconds: {configuration.CryptoReferencePriceHistory.WriteIntervalSeconds}",
@@ -1467,6 +1480,186 @@ public static class AppOptionsValidator
         }
     }
 
+    private static void ValidateOkxExpiryFuturesReference(OkxExpiryFuturesReferenceOptions options, List<string> errors)
+    {
+        ValidateAbsoluteHttpsUrl(options.RestBaseUrl, "OkxExpiryFuturesReference.RestBaseUrl", errors);
+        ValidateCryptoAssetSymbols(options.AssetSymbols, "OkxExpiryFuturesReference.AssetSymbols", errors);
+
+        if (options.PollIntervalMilliseconds <= 0 || options.PollIntervalMilliseconds > 86_400_000)
+        {
+            errors.Add("OkxExpiryFuturesReference.PollIntervalMilliseconds must be between 1 and 86400000.");
+        }
+
+        if (options.InstrumentRefreshIntervalSeconds <= 0 || options.InstrumentRefreshIntervalSeconds > 86_400)
+        {
+            errors.Add("OkxExpiryFuturesReference.InstrumentRefreshIntervalSeconds must be between 1 and 86400.");
+        }
+
+        if (options.RequestTimeoutMilliseconds <= 0 || options.RequestTimeoutMilliseconds > 120_000)
+        {
+            errors.Add("OkxExpiryFuturesReference.RequestTimeoutMilliseconds must be between 1 and 120000.");
+        }
+
+        if (options.StaleAfterSeconds <= 0 || options.StaleAfterSeconds > 3_600)
+        {
+            errors.Add("OkxExpiryFuturesReference.StaleAfterSeconds must be between 1 and 3600.");
+        }
+
+        if (string.IsNullOrWhiteSpace(options.UserAgent))
+        {
+            errors.Add("OkxExpiryFuturesReference.UserAgent is required.");
+        }
+    }
+
+    private static void ValidatePolymarketAutoRedeem(
+        PolymarketAutoRedeemOptions options,
+        PolymarketAuthOptions auth,
+        List<string> errors)
+    {
+        if (options.PollIntervalSeconds <= 0 || options.PollIntervalSeconds > 86_400)
+        {
+            errors.Add("PolymarketAutoRedeem.PollIntervalSeconds must be between 1 and 86400.");
+        }
+
+        if (options.BackgroundErrorDelaySeconds <= 0)
+        {
+            errors.Add("PolymarketAutoRedeem.BackgroundErrorDelaySeconds must be greater than zero.");
+        }
+
+        if (options.BackgroundMaxErrorDelaySeconds < options.BackgroundErrorDelaySeconds)
+        {
+            errors.Add("PolymarketAutoRedeem.BackgroundMaxErrorDelaySeconds must be greater than or equal to BackgroundErrorDelaySeconds.");
+        }
+
+        if (options.CurrentPositionsLimit <= 0 || options.CurrentPositionsLimit > 1_000)
+        {
+            errors.Add("PolymarketAutoRedeem.CurrentPositionsLimit must be between 1 and 1000.");
+        }
+
+        if (options.MaxPositionPages <= 0 || options.MaxPositionPages > 20)
+        {
+            errors.Add("PolymarketAutoRedeem.MaxPositionPages must be between 1 and 20.");
+        }
+
+        if (options.MaxClaimsPerCycle <= 0 || options.MaxClaimsPerCycle > 100)
+        {
+            errors.Add("PolymarketAutoRedeem.MaxClaimsPerCycle must be between 1 and 100.");
+        }
+
+        if (options.MaxLiveSubmissionsPerCycle <= 0 || options.MaxLiveSubmissionsPerCycle > options.MaxClaimsPerCycle)
+        {
+            errors.Add("PolymarketAutoRedeem.MaxLiveSubmissionsPerCycle must be between 1 and MaxClaimsPerCycle.");
+        }
+
+        if (options.MinRedeemableValueUsd < 0)
+        {
+            errors.Add("PolymarketAutoRedeem.MinRedeemableValueUsd must be zero or greater.");
+        }
+
+        if (!Uri.TryCreate(options.RelayerBaseUrl, UriKind.Absolute, out var relayerUri) ||
+            relayerUri.Scheme != Uri.UriSchemeHttps)
+        {
+            errors.Add("PolymarketAutoRedeem.RelayerBaseUrl must be an absolute HTTPS URL.");
+        }
+
+        if (!string.Equals(options.WalletType, "SAFE", StringComparison.OrdinalIgnoreCase) &&
+            !string.Equals(options.WalletType, "PROXY", StringComparison.OrdinalIgnoreCase) &&
+            !string.Equals(options.WalletType, "WALLET", StringComparison.OrdinalIgnoreCase))
+        {
+            errors.Add("PolymarketAutoRedeem.WalletType must be SAFE, PROXY, or WALLET.");
+        }
+
+        if (options.RelayerSubmissionDeadlineSeconds < 60 || options.RelayerSubmissionDeadlineSeconds > 3_600)
+        {
+            errors.Add("PolymarketAutoRedeem.RelayerSubmissionDeadlineSeconds must be between 60 and 3600.");
+        }
+
+        if (!IsAddressLike(options.ConditionalTokensAddress))
+        {
+            errors.Add("PolymarketAutoRedeem.ConditionalTokensAddress must be a 0x-prefixed Ethereum address.");
+        }
+
+        if (!IsAddressLike(options.CollateralTokenAddress))
+        {
+            errors.Add("PolymarketAutoRedeem.CollateralTokenAddress must be a 0x-prefixed Ethereum address.");
+        }
+
+        if (!IsBytes32(options.ParentCollectionId))
+        {
+            errors.Add("PolymarketAutoRedeem.ParentCollectionId must be a 0x-prefixed bytes32 value.");
+        }
+
+        if (!string.IsNullOrWhiteSpace(options.WalletAddress) && !IsAddressLike(options.WalletAddress))
+        {
+            errors.Add("PolymarketAutoRedeem.WalletAddress must be a 0x-prefixed Ethereum address when set.");
+        }
+
+        if (!string.IsNullOrWhiteSpace(options.ProxyWalletAddress) && !IsAddressLike(options.ProxyWalletAddress))
+        {
+            errors.Add("PolymarketAutoRedeem.ProxyWalletAddress must be a 0x-prefixed Ethereum address when set.");
+        }
+
+        if (!options.Enabled)
+        {
+            return;
+        }
+
+        if (string.IsNullOrWhiteSpace(options.WalletAddress) && !IsAddressLike(auth.FunderAddress))
+        {
+            errors.Add("PolymarketAutoRedeem.WalletAddress or PolymarketAuth.FunderAddress must be configured when auto redeem is enabled.");
+        }
+
+        if (!options.AutoSubmitEnabled)
+        {
+            return;
+        }
+
+        if (!string.Equals(options.ManualEnableCode, "AUTO_REDEEM_ENABLED", StringComparison.Ordinal))
+        {
+            errors.Add("PolymarketAutoRedeem.ManualEnableCode must be AUTO_REDEEM_ENABLED when auto submit is enabled.");
+        }
+
+        if (options.DryRun)
+        {
+            errors.Add("PolymarketAutoRedeem.DryRun must be false when auto submit is enabled.");
+        }
+
+        if (!auth.Enabled)
+        {
+            errors.Add("PolymarketAuth.Enabled must be true when auto redeem submit is enabled.");
+        }
+
+        if (!IsAddressLike(auth.SigningAddress))
+        {
+            errors.Add("PolymarketAuth.SigningAddress must be configured when auto redeem submit is enabled.");
+        }
+
+        if (!IsAddressLike(auth.FunderAddress))
+        {
+            errors.Add("PolymarketAuth.FunderAddress must be configured when auto redeem submit is enabled.");
+        }
+
+        if (string.IsNullOrWhiteSpace(options.RelayerApiKeyName))
+        {
+            errors.Add("PolymarketAutoRedeem.RelayerApiKeyName is required when auto submit is enabled.");
+        }
+
+        if (string.IsNullOrWhiteSpace(options.RelayerApiKeyAddressName))
+        {
+            errors.Add("PolymarketAutoRedeem.RelayerApiKeyAddressName is required when auto submit is enabled.");
+        }
+
+        if (string.IsNullOrWhiteSpace(options.RelayerSigningPrivateKeyName))
+        {
+            errors.Add("PolymarketAutoRedeem.RelayerSigningPrivateKeyName is required when auto submit is enabled.");
+        }
+
+        if (!string.Equals(options.WalletType, "WALLET", StringComparison.OrdinalIgnoreCase))
+        {
+            errors.Add("PolymarketAutoRedeem auto submit currently supports WalletType=WALLET only.");
+        }
+    }
+
     private static void ValidateCryptoReferencePriceHistory(CryptoReferencePriceHistoryOptions options, List<string> errors)
     {
         ValidateCryptoAssetSymbols(options.AssetSymbols, "CryptoReferencePriceHistory.AssetSymbols", errors);
@@ -2060,6 +2253,11 @@ public static class AppOptionsValidator
             errors.Add("Storage.ConnectionStringEnvironmentVariable is required.");
         }
 
+        if (options.MaxPoolSize is <= 0)
+        {
+            errors.Add("Storage.MaxPoolSize must be greater than zero when configured.");
+        }
+
         if (options.RequireConfiguredDatabase && !StorageConnectionResolver.IsConfigured(options))
         {
             errors.Add("Storage is required, but no PostgreSQL connection string is configured.");
@@ -2218,6 +2416,13 @@ public static class AppOptionsValidator
     private static bool IsAddressLike(string value)
     {
         return value.Length == 42 &&
+            value.StartsWith("0x", StringComparison.OrdinalIgnoreCase) &&
+            value.Skip(2).All(Uri.IsHexDigit);
+    }
+
+    private static bool IsBytes32(string value)
+    {
+        return value.Length == 66 &&
             value.StartsWith("0x", StringComparison.OrdinalIgnoreCase) &&
             value.Skip(2).All(Uri.IsHexDigit);
     }

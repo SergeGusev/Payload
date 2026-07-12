@@ -16,6 +16,8 @@ public static class AppConfigurationLoader
 
         var binanceCryptoReference = NormalizeBinanceCryptoReferenceOptions(
             configuration.GetSection("BinanceCryptoReference").Get<BinanceCryptoReferenceOptions>() ?? new BinanceCryptoReferenceOptions());
+        var okxExpiryFuturesReference = NormalizeOkxExpiryFuturesReferenceOptions(
+            configuration.GetSection("OkxExpiryFuturesReference").Get<OkxExpiryFuturesReferenceOptions>() ?? new OkxExpiryFuturesReferenceOptions());
         var cryptoUpDown5mOddsArchive = NormalizeCryptoUpDown5mOddsArchiveOptions(
             configuration.GetSection("CryptoUpDown5mOddsArchive").Get<CryptoUpDown5mOddsArchiveOptions>() ?? new CryptoUpDown5mOddsArchiveOptions());
         var cryptoUpDown5mResultPolling = NormalizeCryptoUpDown5mResultPollingOptions(
@@ -30,6 +32,7 @@ public static class AppConfigurationLoader
             Polymarket = configuration.GetSection("Polymarket").Get<PolymarketOptions>() ?? new PolymarketOptions(),
             PolymarketHttpLogging = configuration.GetSection("PolymarketHttpLogging").Get<PolymarketHttpLoggingOptions>() ?? new PolymarketHttpLoggingOptions(),
             PolymarketAuth = configuration.GetSection("PolymarketAuth").Get<PolymarketAuthOptions>() ?? new PolymarketAuthOptions(),
+            PolymarketAutoRedeem = configuration.GetSection("PolymarketAutoRedeem").Get<PolymarketAutoRedeemOptions>() ?? new PolymarketAutoRedeemOptions(),
             MarketDataWebSocket = configuration.GetSection("MarketDataWebSocket").Get<MarketDataWebSocketOptions>() ?? new MarketDataWebSocketOptions(),
             MarketTradeDiagnostics = configuration.GetSection("MarketTradeDiagnostics").Get<MarketTradeDiagnosticsOptions>() ?? new MarketTradeDiagnosticsOptions(),
             BtcOrderBookLagDiagnostics = configuration.GetSection("BtcOrderBookLagDiagnostics").Get<BtcOrderBookLagDiagnosticsOptions>() ?? new BtcOrderBookLagDiagnosticsOptions(),
@@ -45,6 +48,7 @@ public static class AppConfigurationLoader
             CoinbaseExchange = configuration.GetSection("CoinbaseExchange").Get<CoinbaseExchangeOptions>() ?? new CoinbaseExchangeOptions(),
             BinanceBtcUsdReference = configuration.GetSection("BinanceBtcUsdReference").Get<BinanceBtcUsdReferenceOptions>() ?? new BinanceBtcUsdReferenceOptions(),
             BinanceCryptoReference = binanceCryptoReference,
+            OkxExpiryFuturesReference = okxExpiryFuturesReference,
             BtcUpDown5mOddsArchive = configuration.GetSection("BtcUpDown5mOddsArchive").Get<BtcUpDown5mOddsArchiveOptions>() ?? new BtcUpDown5mOddsArchiveOptions(),
             BtcUpDown5mStatistics = configuration.GetSection("BtcUpDown5mStatistics").Get<BtcUpDown5mStatisticsOptions>() ?? new BtcUpDown5mStatisticsOptions(),
             BtcUpDown5mArbitrageScanner = configuration.GetSection("BtcUpDown5mArbitrageScanner").Get<BtcUpDown5mArbitrageScannerOptions>() ?? new BtcUpDown5mArbitrageScannerOptions(),
@@ -64,10 +68,27 @@ public static class AppConfigurationLoader
             Enabled = options.Enabled,
             CombinedStreamBaseUrl = options.CombinedStreamBaseUrl,
             AssetSymbols = NormalizeAssetSymbols(options.AssetSymbols),
+            SampleIntervalSeconds = options.SampleIntervalSeconds,
+            WindowSize = options.WindowSize,
             StaleAfterSeconds = options.StaleAfterSeconds,
             ReconnectBaseDelaySeconds = options.ReconnectBaseDelaySeconds,
             ReconnectMaxDelaySeconds = options.ReconnectMaxDelaySeconds,
             ReceiveBufferBytes = options.ReceiveBufferBytes
+        };
+    }
+
+    private static OkxExpiryFuturesReferenceOptions NormalizeOkxExpiryFuturesReferenceOptions(OkxExpiryFuturesReferenceOptions options)
+    {
+        return new OkxExpiryFuturesReferenceOptions
+        {
+            Enabled = options.Enabled,
+            RestBaseUrl = options.RestBaseUrl,
+            AssetSymbols = NormalizeAssetSymbols(options.AssetSymbols),
+            PollIntervalMilliseconds = options.PollIntervalMilliseconds,
+            InstrumentRefreshIntervalSeconds = options.InstrumentRefreshIntervalSeconds,
+            RequestTimeoutMilliseconds = options.RequestTimeoutMilliseconds,
+            StaleAfterSeconds = options.StaleAfterSeconds,
+            UserAgent = options.UserAgent
         };
     }
 

@@ -439,6 +439,79 @@ WHERE wallet = @Wallet;
 		return result;
 	}
 
+	public async Task<PolymarketAutoRedeemAttempt?> GetPolymarketAutoRedeemAttemptAsync(string wallet, string conditionId, CancellationToken cancellationToken = default(CancellationToken))
+	{
+		await using NpgsqlConnection connection = await OpenConnectionAsync(cancellationToken);
+		await using NpgsqlCommand command = CreateCommand(connection, """
+SELECT id, wallet, proxy_wallet, condition_id, asset_id, market_slug, market_title, outcome,
+       outcome_index, redeemable_value_usd, size, status, dry_run, auto_submit_enabled,
+       target_contract, calldata, collateral_token, parent_collection_id, index_sets_json::text,
+       relayer_transaction_id, transaction_hash, last_error, detected_at_utc, last_seen_at_utc,
+       submitted_at_utc, confirmed_at_utc, updated_at_utc, raw_position_json::text
+FROM polymarket_auto_redeem_attempts
+WHERE wallet = @Wallet
+  AND condition_id = @ConditionId;
+""");
+		command.Parameters.AddWithValue("Wallet", wallet);
+		command.Parameters.AddWithValue("ConditionId", conditionId);
+		await using NpgsqlDataReader reader = await command.ExecuteReaderAsync(cancellationToken);
+		return await reader.ReadAsync(cancellationToken)
+			? ReadPolymarketAutoRedeemAttempt(reader)
+			: null;
+	}
+
+	public async Task UpsertPolymarketAutoRedeemAttemptAsync(PolymarketAutoRedeemAttempt attempt, CancellationToken cancellationToken = default(CancellationToken))
+	{
+		await using NpgsqlConnection connection = await OpenConnectionAsync(cancellationToken);
+		await using NpgsqlCommand command = CreateCommand(connection, """
+INSERT INTO polymarket_auto_redeem_attempts (
+    id, wallet, proxy_wallet, condition_id, asset_id, market_slug, market_title, outcome,
+    outcome_index, redeemable_value_usd, size, status, dry_run, auto_submit_enabled,
+    target_contract, calldata, collateral_token, parent_collection_id, index_sets_json,
+    relayer_transaction_id, transaction_hash, last_error, detected_at_utc, last_seen_at_utc,
+    submitted_at_utc, confirmed_at_utc, updated_at_utc, raw_position_json
+) VALUES (
+    @Id, @Wallet, @ProxyWallet, @ConditionId, @AssetId, @MarketSlug, @MarketTitle, @Outcome,
+    @OutcomeIndex, @RedeemableValueUsd, @Size, @Status, @DryRun, @AutoSubmitEnabled,
+    @TargetContract, @Calldata, @CollateralToken, @ParentCollectionId, CAST(@IndexSetsJson AS jsonb),
+    @RelayerTransactionId, @TransactionHash, @LastError, @DetectedAtUtc, @LastSeenAtUtc,
+    @SubmittedAtUtc, @ConfirmedAtUtc, @UpdatedAtUtc, CAST(@RawPositionJson AS jsonb)
+)
+ON CONFLICT (wallet, condition_id) DO UPDATE SET
+    proxy_wallet = excluded.proxy_wallet,
+    asset_id = excluded.asset_id,
+    market_slug = excluded.market_slug,
+    market_title = excluded.market_title,
+    outcome = excluded.outcome,
+    outcome_index = excluded.outcome_index,
+    redeemable_value_usd = excluded.redeemable_value_usd,
+    size = excluded.size,
+    status = CASE
+        WHEN polymarket_auto_redeem_attempts.status IN ('Submitted', 'Confirmed')
+            THEN polymarket_auto_redeem_attempts.status
+        ELSE excluded.status
+    END,
+    dry_run = excluded.dry_run,
+    auto_submit_enabled = excluded.auto_submit_enabled,
+    target_contract = excluded.target_contract,
+    calldata = excluded.calldata,
+    collateral_token = excluded.collateral_token,
+    parent_collection_id = excluded.parent_collection_id,
+    index_sets_json = excluded.index_sets_json,
+    relayer_transaction_id = COALESCE(polymarket_auto_redeem_attempts.relayer_transaction_id, excluded.relayer_transaction_id),
+    transaction_hash = COALESCE(polymarket_auto_redeem_attempts.transaction_hash, excluded.transaction_hash),
+    last_error = excluded.last_error,
+    detected_at_utc = LEAST(polymarket_auto_redeem_attempts.detected_at_utc, excluded.detected_at_utc),
+    last_seen_at_utc = GREATEST(polymarket_auto_redeem_attempts.last_seen_at_utc, excluded.last_seen_at_utc),
+    submitted_at_utc = COALESCE(polymarket_auto_redeem_attempts.submitted_at_utc, excluded.submitted_at_utc),
+    confirmed_at_utc = COALESCE(polymarket_auto_redeem_attempts.confirmed_at_utc, excluded.confirmed_at_utc),
+    updated_at_utc = excluded.updated_at_utc,
+    raw_position_json = excluded.raw_position_json;
+""");
+		AddPolymarketAutoRedeemAttemptParameters(command, attempt);
+		await command.ExecuteNonQueryAsync(cancellationToken);
+	}
+
 	public async Task<IReadOnlyList<string>> GetMissingPolymarketLeaderboardCategoryMappingsAsync(string wallet, int limit = 100, CancellationToken cancellationToken = default(CancellationToken))
 	{
 		IReadOnlyList<string> result;
@@ -1440,37 +1513,85 @@ WITH run_rows AS (
         created_at_utc timestamptz,
         updated_at_utc timestamptz
     )
+),
+updated_rows AS (
+    UPDATE strategy_market_paper_runs target
+    SET strategy_id = run_rows.strategy_id,
+        market_id = run_rows.market_id,
+        condition_id = run_rows.condition_id,
+        market_slug = run_rows.market_slug,
+        market_title = run_rows.market_title,
+        category = run_rows.category,
+        market_start_utc = run_rows.market_start_utc,
+        market_end_utc = run_rows.market_end_utc,
+        detected_at_utc = run_rows.detected_at_utc,
+        entry_due_at_utc = run_rows.entry_due_at_utc,
+        status = run_rows.status,
+        selected_asset_id = run_rows.selected_asset_id,
+        selected_outcome = run_rows.selected_outcome,
+        entry_price = run_rows.entry_price,
+        stake_usd = run_rows.stake_usd,
+        size_shares = run_rows.size_shares,
+        signal_id = run_rows.signal_id,
+        paper_order_id = run_rows.paper_order_id,
+        entered_at_utc = run_rows.entered_at_utc,
+        settlement_price = run_rows.settlement_price,
+        settlement_value_usd = run_rows.settlement_value_usd,
+        realized_pnl_usd = run_rows.realized_pnl_usd,
+        settled_at_utc = run_rows.settled_at_utc,
+        skip_reason = run_rows.skip_reason,
+        skip_diagnostics_json = CAST(run_rows.skip_diagnostics_json AS jsonb),
+        created_at_utc = run_rows.created_at_utc,
+        updated_at_utc = run_rows.updated_at_utc
+    FROM run_rows
+    WHERE target.id = run_rows.id
+    RETURNING target.id
 )
-UPDATE strategy_market_paper_runs target
-SET strategy_id = run_rows.strategy_id,
-    market_id = run_rows.market_id,
-    condition_id = run_rows.condition_id,
-    market_slug = run_rows.market_slug,
-    market_title = run_rows.market_title,
-    category = run_rows.category,
-    market_start_utc = run_rows.market_start_utc,
-    market_end_utc = run_rows.market_end_utc,
-    detected_at_utc = run_rows.detected_at_utc,
-    entry_due_at_utc = run_rows.entry_due_at_utc,
-    status = run_rows.status,
-    selected_asset_id = run_rows.selected_asset_id,
-    selected_outcome = run_rows.selected_outcome,
-    entry_price = run_rows.entry_price,
-    stake_usd = run_rows.stake_usd,
-    size_shares = run_rows.size_shares,
-    signal_id = run_rows.signal_id,
-    paper_order_id = run_rows.paper_order_id,
-    entered_at_utc = run_rows.entered_at_utc,
-    settlement_price = run_rows.settlement_price,
-    settlement_value_usd = run_rows.settlement_value_usd,
-    realized_pnl_usd = run_rows.realized_pnl_usd,
-    settled_at_utc = run_rows.settled_at_utc,
-    skip_reason = run_rows.skip_reason,
-    skip_diagnostics_json = CAST(run_rows.skip_diagnostics_json AS jsonb),
-    created_at_utc = run_rows.created_at_utc,
-    updated_at_utc = run_rows.updated_at_utc
+INSERT INTO strategy_market_paper_runs (
+    id, strategy_id, market_id, condition_id, market_slug, market_title, category,
+    market_start_utc, market_end_utc, detected_at_utc, entry_due_at_utc, status,
+    selected_asset_id, selected_outcome, entry_price, stake_usd, size_shares,
+    signal_id, paper_order_id, entered_at_utc, settlement_price, settlement_value_usd,
+    realized_pnl_usd, settled_at_utc, skip_reason, skip_diagnostics_json, created_at_utc, updated_at_utc
+)
+SELECT
+    run_rows.id, run_rows.strategy_id, run_rows.market_id, run_rows.condition_id, run_rows.market_slug, run_rows.market_title, run_rows.category,
+    run_rows.market_start_utc, run_rows.market_end_utc, run_rows.detected_at_utc, run_rows.entry_due_at_utc, run_rows.status,
+    run_rows.selected_asset_id, run_rows.selected_outcome, run_rows.entry_price, run_rows.stake_usd, run_rows.size_shares,
+    run_rows.signal_id, run_rows.paper_order_id, run_rows.entered_at_utc, run_rows.settlement_price, run_rows.settlement_value_usd,
+    run_rows.realized_pnl_usd, run_rows.settled_at_utc, run_rows.skip_reason, CAST(run_rows.skip_diagnostics_json AS jsonb), run_rows.created_at_utc, run_rows.updated_at_utc
 FROM run_rows
-WHERE target.id = run_rows.id;
+WHERE NOT EXISTS (
+    SELECT 1
+    FROM updated_rows
+    WHERE updated_rows.id = run_rows.id
+)
+ON CONFLICT (strategy_id, market_id) DO UPDATE SET
+    condition_id = excluded.condition_id,
+    market_slug = excluded.market_slug,
+    market_title = excluded.market_title,
+    category = excluded.category,
+    market_start_utc = excluded.market_start_utc,
+    market_end_utc = excluded.market_end_utc,
+    detected_at_utc = excluded.detected_at_utc,
+    entry_due_at_utc = excluded.entry_due_at_utc,
+    status = excluded.status,
+    selected_asset_id = excluded.selected_asset_id,
+    selected_outcome = excluded.selected_outcome,
+    entry_price = excluded.entry_price,
+    stake_usd = excluded.stake_usd,
+    size_shares = excluded.size_shares,
+    signal_id = excluded.signal_id,
+    paper_order_id = excluded.paper_order_id,
+    entered_at_utc = excluded.entered_at_utc,
+    settlement_price = excluded.settlement_price,
+    settlement_value_usd = excluded.settlement_value_usd,
+    realized_pnl_usd = excluded.realized_pnl_usd,
+    settled_at_utc = excluded.settled_at_utc,
+    skip_reason = excluded.skip_reason,
+    skip_diagnostics_json = excluded.skip_diagnostics_json,
+    created_at_utc = excluded.created_at_utc,
+    updated_at_utc = excluded.updated_at_utc;
 """);
 		command.Transaction = transaction;
 		AddJsonbParameter(command, "StrategyRunsJson", JsonSerializer.Serialize(rows));
@@ -3237,6 +3358,244 @@ ORDER BY
 		}
 
 		return results;
+	}
+
+	public async Task<IReadOnlyList<StrategyLookbackPnl>> GetStrategySettledPnlByLookbackHoursAsync(
+		IReadOnlyCollection<Guid> strategyIds,
+		DateTimeOffset nowUtc,
+		int maxLookbackHours,
+		CancellationToken cancellationToken = default(CancellationToken))
+	{
+		var normalizedStrategyIds = strategyIds
+			.Select(StrategyIds.Normalize)
+			.Distinct()
+			.ToArray();
+		if (normalizedStrategyIds.Length == 0 || maxLookbackHours <= 0)
+		{
+			return Array.Empty<StrategyLookbackPnl>();
+		}
+
+		var normalizedMaxLookbackHours = Math.Min(maxLookbackHours, 24);
+		await using NpgsqlConnection connection = await OpenConnectionAsync(cancellationToken);
+		await using NpgsqlCommand command = CreateCommand(connection, """
+WITH windows AS (
+    SELECT generate_series(1, @MaxLookbackHours)::integer AS lookback_hours
+),
+lookback_pnl AS (
+    SELECT
+        run.strategy_id,
+        windows.lookback_hours,
+        COALESCE(sum(run.realized_pnl_usd), 0) AS realized_pnl_usd,
+        COALESCE(sum(run.stake_usd), 0) AS stake_usd,
+        count(*)::integer AS settled_runs_count
+    FROM windows
+    INNER JOIN strategy_market_paper_runs run
+        ON run.strategy_id = ANY(@StrategyIds)
+        AND run.status = @Status
+        AND run.realized_pnl_usd IS NOT NULL
+        AND run.settled_at_utc IS NOT NULL
+        AND run.settled_at_utc >= CAST(@NowUtc AS timestamptz) - make_interval(hours => windows.lookback_hours)
+        AND run.settled_at_utc <= CAST(@NowUtc AS timestamptz)
+    GROUP BY run.strategy_id, windows.lookback_hours
+)
+SELECT
+    strategy_id,
+    lookback_hours,
+    realized_pnl_usd,
+    stake_usd,
+    CASE
+        WHEN stake_usd > 0 THEN realized_pnl_usd * 100 / stake_usd
+        ELSE 0
+    END AS roi_pct,
+    settled_runs_count
+FROM lookback_pnl
+WHERE realized_pnl_usd > 0
+  AND stake_usd > 0
+ORDER BY lookback_hours ASC, realized_pnl_usd DESC, strategy_id ASC;
+""");
+		command.Parameters.Add("StrategyIds", NpgsqlDbType.Array | NpgsqlDbType.Uuid).Value = normalizedStrategyIds;
+		command.Parameters.AddWithValue("Status", StrategyMarketPaperRunStatuses.Settled);
+		command.Parameters.AddWithValue("NowUtc", UtcDateTime(nowUtc));
+		command.Parameters.AddWithValue("MaxLookbackHours", normalizedMaxLookbackHours);
+		await using NpgsqlDataReader reader = await command.ExecuteReaderAsync(cancellationToken);
+		List<StrategyLookbackPnl> results = [];
+		while (await reader.ReadAsync(cancellationToken))
+		{
+			results.Add(new StrategyLookbackPnl(
+				reader.GetGuid(0),
+				reader.GetInt32(1),
+				reader.GetDecimal(2),
+				reader.GetDecimal(3),
+				reader.GetDecimal(4),
+				reader.GetInt32(5)));
+		}
+
+		return results;
+	}
+
+	public async Task<IReadOnlyList<StrategyChildParentAssignment>> GetActiveStrategyChildParentAssignmentsAsync(
+		CancellationToken cancellationToken = default(CancellationToken))
+	{
+		await using NpgsqlConnection connection = await OpenConnectionAsync(cancellationToken);
+		await using NpgsqlCommand command = CreateCommand(connection, """
+SELECT id, child_strategy_id, parent_strategy_id, asset_symbol, lookback_hours, child_mode,
+       parent_pnl_usd, parent_roi_pct, assigned_at_utc, ended_at_utc, updated_at_utc
+FROM strategy_child_parent_assignments
+WHERE ended_at_utc IS NULL
+ORDER BY parent_strategy_id ASC, child_strategy_id ASC;
+""");
+		await using NpgsqlDataReader reader = await command.ExecuteReaderAsync(cancellationToken);
+		List<StrategyChildParentAssignment> results = [];
+		while (await reader.ReadAsync(cancellationToken))
+		{
+			results.Add(ReadStrategyChildParentAssignment(reader));
+		}
+
+		return results;
+	}
+
+	public async Task UpsertStrategyChildParentSelectionsAsync(
+		IReadOnlyList<StrategyChildParentSelection> selections,
+		DateTimeOffset nowUtc,
+		CancellationToken cancellationToken = default(CancellationToken))
+	{
+		if (selections.Count == 0)
+		{
+			return;
+		}
+
+		var rows = selections.Select(selection => new
+		{
+			id = Guid.NewGuid(),
+			child_strategy_id = StrategyIds.Normalize(selection.ChildStrategyId),
+			parent_strategy_id = selection.ParentStrategyId.HasValue
+				? StrategyIds.Normalize(selection.ParentStrategyId.Value)
+				: (Guid?)null,
+			asset_symbol = selection.AssetSymbol.Trim().ToUpperInvariant(),
+			lookback_hours = selection.LookbackHours,
+			child_mode = selection.ChildMode,
+			parent_pnl_usd = selection.ParentPnlUsd ?? 0m,
+			parent_roi_pct = selection.ParentRoiPct ?? 0m
+		});
+		var selectionsJson = JsonSerializer.Serialize(rows);
+		await using NpgsqlConnection connection = await OpenConnectionAsync(cancellationToken);
+		await using NpgsqlTransaction transaction = await connection.BeginTransactionAsync(cancellationToken);
+		await using (NpgsqlCommand closeCommand = CreateCommand(connection, """
+WITH selection_rows AS (
+    SELECT *
+    FROM jsonb_to_recordset(CAST(@SelectionsJson AS jsonb)) AS selection(
+        id uuid,
+        child_strategy_id uuid,
+        parent_strategy_id uuid,
+        asset_symbol text,
+        lookback_hours integer,
+        child_mode text,
+        parent_pnl_usd numeric,
+        parent_roi_pct numeric
+    )
+)
+UPDATE strategy_child_parent_assignments active
+SET ended_at_utc = @NowUtc,
+    updated_at_utc = @NowUtc
+FROM selection_rows
+WHERE active.child_strategy_id = selection_rows.child_strategy_id
+  AND active.ended_at_utc IS NULL
+  AND (
+      selection_rows.parent_strategy_id IS NULL
+      OR active.parent_strategy_id <> selection_rows.parent_strategy_id
+      OR active.asset_symbol <> selection_rows.asset_symbol
+      OR active.lookback_hours <> selection_rows.lookback_hours
+      OR active.child_mode <> selection_rows.child_mode
+  );
+"""))
+		{
+			closeCommand.Transaction = transaction;
+			AddJsonbParameter(closeCommand, "SelectionsJson", selectionsJson);
+			closeCommand.Parameters.AddWithValue("NowUtc", UtcDateTime(nowUtc));
+			await closeCommand.ExecuteNonQueryAsync(cancellationToken);
+		}
+
+		await using (NpgsqlCommand updateCommand = CreateCommand(connection, """
+WITH selection_rows AS (
+    SELECT *
+    FROM jsonb_to_recordset(CAST(@SelectionsJson AS jsonb)) AS selection(
+        id uuid,
+        child_strategy_id uuid,
+        parent_strategy_id uuid,
+        asset_symbol text,
+        lookback_hours integer,
+        child_mode text,
+        parent_pnl_usd numeric,
+        parent_roi_pct numeric
+    )
+)
+UPDATE strategy_child_parent_assignments active
+SET parent_pnl_usd = selection_rows.parent_pnl_usd,
+    parent_roi_pct = selection_rows.parent_roi_pct,
+    updated_at_utc = @NowUtc
+FROM selection_rows
+WHERE active.child_strategy_id = selection_rows.child_strategy_id
+  AND active.parent_strategy_id = selection_rows.parent_strategy_id
+  AND active.asset_symbol = selection_rows.asset_symbol
+  AND active.lookback_hours = selection_rows.lookback_hours
+  AND active.child_mode = selection_rows.child_mode
+  AND active.ended_at_utc IS NULL
+  AND selection_rows.parent_strategy_id IS NOT NULL;
+"""))
+		{
+			updateCommand.Transaction = transaction;
+			AddJsonbParameter(updateCommand, "SelectionsJson", selectionsJson);
+			updateCommand.Parameters.AddWithValue("NowUtc", UtcDateTime(nowUtc));
+			await updateCommand.ExecuteNonQueryAsync(cancellationToken);
+		}
+
+		await using (NpgsqlCommand insertCommand = CreateCommand(connection, """
+WITH selection_rows AS (
+    SELECT *
+    FROM jsonb_to_recordset(CAST(@SelectionsJson AS jsonb)) AS selection(
+        id uuid,
+        child_strategy_id uuid,
+        parent_strategy_id uuid,
+        asset_symbol text,
+        lookback_hours integer,
+        child_mode text,
+        parent_pnl_usd numeric,
+        parent_roi_pct numeric
+    )
+)
+INSERT INTO strategy_child_parent_assignments (
+    id, child_strategy_id, parent_strategy_id, asset_symbol, lookback_hours, child_mode,
+    parent_pnl_usd, parent_roi_pct, assigned_at_utc, ended_at_utc, updated_at_utc
+)
+SELECT
+    selection_rows.id,
+    selection_rows.child_strategy_id,
+    selection_rows.parent_strategy_id,
+    selection_rows.asset_symbol,
+    selection_rows.lookback_hours,
+    selection_rows.child_mode,
+    selection_rows.parent_pnl_usd,
+    selection_rows.parent_roi_pct,
+    @NowUtc,
+    NULL,
+    @NowUtc
+FROM selection_rows
+WHERE selection_rows.parent_strategy_id IS NOT NULL
+  AND NOT EXISTS (
+      SELECT 1
+      FROM strategy_child_parent_assignments active
+      WHERE active.child_strategy_id = selection_rows.child_strategy_id
+        AND active.ended_at_utc IS NULL
+  );
+"""))
+		{
+			insertCommand.Transaction = transaction;
+			AddJsonbParameter(insertCommand, "SelectionsJson", selectionsJson);
+			insertCommand.Parameters.AddWithValue("NowUtc", UtcDateTime(nowUtc));
+			await insertCommand.ExecuteNonQueryAsync(cancellationToken);
+		}
+
+		await transaction.CommitAsync(cancellationToken);
 	}
 
 	public async Task<IReadOnlyDictionary<Guid, StrategyRuntimeSettings>> GetStrategyRuntimeSettingsAsync(CancellationToken cancellationToken = default(CancellationToken))
@@ -7539,6 +7898,22 @@ LIMIT @Limit;
 			reader.IsDBNull(27) ? null : reader.GetString(27));
 	}
 
+	private static StrategyChildParentAssignment ReadStrategyChildParentAssignment(NpgsqlDataReader reader)
+	{
+		return new StrategyChildParentAssignment(
+			reader.GetGuid(0),
+			reader.GetGuid(1),
+			reader.GetGuid(2),
+			reader.GetString(3),
+			reader.GetInt32(4),
+			reader.GetString(5),
+			reader.GetDecimal(6),
+			reader.GetDecimal(7),
+			DateTimeOffsetFromUtc(reader.GetDateTime(8)),
+			reader.IsDBNull(9) ? null : DateTimeOffsetFromUtc(reader.GetDateTime(9)),
+			DateTimeOffsetFromUtc(reader.GetDateTime(10)));
+	}
+
 	private static void AddStrategyMarketPaperRunParameters(NpgsqlCommand command, StrategyMarketPaperRun run)
 	{
 		command.Parameters.AddWithValue("Id", run.Id);
@@ -10156,6 +10531,38 @@ LIMIT @Limit;
 		command.Parameters.AddWithValue("UpdatedAtUtc", now);
 	}
 
+	private static void AddPolymarketAutoRedeemAttemptParameters(NpgsqlCommand command, PolymarketAutoRedeemAttempt attempt)
+	{
+		command.Parameters.AddWithValue("Id", attempt.Id);
+		command.Parameters.AddWithValue("Wallet", attempt.Wallet);
+		command.Parameters.AddWithValue("ProxyWallet", (object?)attempt.ProxyWallet ?? DBNull.Value);
+		command.Parameters.AddWithValue("ConditionId", attempt.ConditionId);
+		command.Parameters.AddWithValue("AssetId", attempt.AssetId);
+		command.Parameters.AddWithValue("MarketSlug", attempt.MarketSlug);
+		command.Parameters.AddWithValue("MarketTitle", attempt.MarketTitle);
+		command.Parameters.AddWithValue("Outcome", attempt.Outcome);
+		command.Parameters.Add("OutcomeIndex", NpgsqlDbType.Integer).Value = attempt.OutcomeIndex.HasValue ? attempt.OutcomeIndex.Value : (object)DBNull.Value;
+		command.Parameters.Add("RedeemableValueUsd", NpgsqlDbType.Numeric).Value = attempt.RedeemableValueUsd.HasValue ? attempt.RedeemableValueUsd.Value : (object)DBNull.Value;
+		command.Parameters.Add("Size", NpgsqlDbType.Numeric).Value = attempt.Size.HasValue ? attempt.Size.Value : (object)DBNull.Value;
+		command.Parameters.AddWithValue("Status", attempt.Status);
+		command.Parameters.AddWithValue("DryRun", attempt.DryRun);
+		command.Parameters.AddWithValue("AutoSubmitEnabled", attempt.AutoSubmitEnabled);
+		command.Parameters.AddWithValue("TargetContract", attempt.TargetContract);
+		command.Parameters.AddWithValue("Calldata", attempt.Calldata);
+		command.Parameters.AddWithValue("CollateralToken", attempt.CollateralToken);
+		command.Parameters.AddWithValue("ParentCollectionId", attempt.ParentCollectionId);
+		command.Parameters.AddWithValue("IndexSetsJson", JsonSerializer.Serialize(attempt.IndexSets));
+		command.Parameters.AddWithValue("RelayerTransactionId", (object?)attempt.RelayerTransactionId ?? DBNull.Value);
+		command.Parameters.AddWithValue("TransactionHash", (object?)attempt.TransactionHash ?? DBNull.Value);
+		command.Parameters.AddWithValue("LastError", (object?)attempt.LastError ?? DBNull.Value);
+		command.Parameters.Add("DetectedAtUtc", NpgsqlDbType.TimestampTz).Value = UtcDateTime(attempt.DetectedAtUtc);
+		command.Parameters.Add("LastSeenAtUtc", NpgsqlDbType.TimestampTz).Value = UtcDateTime(attempt.LastSeenAtUtc);
+		command.Parameters.Add("SubmittedAtUtc", NpgsqlDbType.TimestampTz).Value = NullableDateTime(attempt.SubmittedAtUtc);
+		command.Parameters.Add("ConfirmedAtUtc", NpgsqlDbType.TimestampTz).Value = NullableDateTime(attempt.ConfirmedAtUtc);
+		command.Parameters.Add("UpdatedAtUtc", NpgsqlDbType.TimestampTz).Value = UtcDateTime(attempt.UpdatedAtUtc);
+		command.Parameters.AddWithValue("RawPositionJson", string.IsNullOrWhiteSpace(attempt.RawPositionJson) ? "{}" : attempt.RawPositionJson);
+	}
+
 	private static void AddPolymarketDataApiWalletCategoryRatingParameters(NpgsqlCommand command, PolymarketDataApiWalletCategoryRating rating)
 	{
 		DateTime refreshedAtUtc = UtcDateTime(rating.RefreshedAtUtc);
@@ -10206,6 +10613,52 @@ LIMIT @Limit;
 	private static PolymarketDataApiTrader ReadPolymarketDataApiTrader(NpgsqlDataReader reader)
 	{
 		return new PolymarketDataApiTrader(reader.GetString(0), reader.GetString(1), reader.IsDBNull(2) ? null : reader.GetString(2), reader.IsDBNull(3) ? null : reader.GetString(3), reader.IsDBNull(4) ? null : reader.GetString(4), reader.IsDBNull(5) ? null : reader.GetString(5), DateTimeOffsetFromUtc(reader.GetDateTime(6)), DateTimeOffsetFromUtc(reader.GetDateTime(7)), reader.IsDBNull(8) ? ((DateTimeOffset?)null) : new DateTimeOffset?(DateTimeOffsetFromUtc(reader.GetDateTime(8))), reader.IsDBNull(9) ? ((DateTimeOffset?)null) : new DateTimeOffset?(DateTimeOffsetFromUtc(reader.GetDateTime(9))), reader.IsDBNull(10) ? ((DateTimeOffset?)null) : new DateTimeOffset?(DateTimeOffsetFromUtc(reader.GetDateTime(10))), reader.IsDBNull(11) ? ((DateTimeOffset?)null) : new DateTimeOffset?(DateTimeOffsetFromUtc(reader.GetDateTime(11))), reader.GetBoolean(12), reader.GetInt32(13), reader.GetInt32(14), reader.GetInt32(15), DateTimeOffsetFromUtc(reader.GetDateTime(16)), reader.FieldCount > 17 && !reader.IsDBNull(17) ? DateTimeOffsetFromUtc(reader.GetDateTime(17)) : null, reader.FieldCount > 18 && !reader.IsDBNull(18) ? DateTimeOffsetFromUtc(reader.GetDateTime(18)) : null, reader.FieldCount > 19 ? reader.GetInt32(19) : 0, reader.FieldCount > 20 && !reader.IsDBNull(20) ? reader.GetString(20) : null);
+	}
+
+	private static PolymarketAutoRedeemAttempt ReadPolymarketAutoRedeemAttempt(NpgsqlDataReader reader)
+	{
+		int[]? indexSets = null;
+		if (!reader.IsDBNull(18))
+		{
+			try
+			{
+				indexSets = JsonSerializer.Deserialize<int[]>(reader.GetString(18));
+			}
+			catch (JsonException)
+			{
+				indexSets = [];
+			}
+		}
+
+		return new PolymarketAutoRedeemAttempt(
+			reader.GetGuid(0),
+			reader.GetString(1),
+			reader.IsDBNull(2) ? null : reader.GetString(2),
+			reader.GetString(3),
+			reader.GetString(4),
+			reader.GetString(5),
+			reader.GetString(6),
+			reader.GetString(7),
+			reader.IsDBNull(8) ? null : reader.GetInt32(8),
+			reader.IsDBNull(9) ? null : reader.GetDecimal(9),
+			reader.IsDBNull(10) ? null : reader.GetDecimal(10),
+			reader.GetString(11),
+			reader.GetBoolean(12),
+			reader.GetBoolean(13),
+			reader.GetString(14),
+			reader.GetString(15),
+			reader.GetString(16),
+			reader.GetString(17),
+			indexSets ?? [],
+			reader.IsDBNull(19) ? null : reader.GetString(19),
+			reader.IsDBNull(20) ? null : reader.GetString(20),
+			reader.IsDBNull(21) ? null : reader.GetString(21),
+			DateTimeOffsetFromUtc(reader.GetDateTime(22)),
+			DateTimeOffsetFromUtc(reader.GetDateTime(23)),
+			reader.IsDBNull(24) ? null : DateTimeOffsetFromUtc(reader.GetDateTime(24)),
+			reader.IsDBNull(25) ? null : DateTimeOffsetFromUtc(reader.GetDateTime(25)),
+			DateTimeOffsetFromUtc(reader.GetDateTime(26)),
+			reader.GetString(27));
 	}
 
 	private static void AddTraderDiscoveryParameters(NpgsqlCommand command, TraderDiscoveryCandidate candidate)

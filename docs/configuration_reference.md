@@ -119,6 +119,41 @@ on every successful HTTP call being archived.
   Default `6`.
 - `FailedRetentionDays`: retention for failed HTTP logs. Default `14`.
 
+## PolymarketAutoRedeem
+
+Claims resolved winning Polymarket positions from the always-on service. It
+fetches redeemable Data API positions, builds standard binary CTF
+`redeemPositions(address,bytes32,bytes32,uint256[])` calldata, records the
+attempt in `polymarket_auto_redeem_attempts`, and can submit Deposit Wallet
+`WALLET` batches through the Polymarket relayer.
+
+- `Enabled`: runs the background auto-redeem worker when true.
+- `DryRun`: records claim-ready attempts without submitting.
+- `AutoSubmitEnabled`: live relayer submission gate. Live submit currently
+  supports `WalletType=WALLET` only.
+- `ManualEnableCode`: must equal `AUTO_REDEEM_ENABLED` before live submit can be
+  configured.
+- `WalletAddress`: wallet/proxy address used for Data API position lookup. If
+  empty, the service falls back to `PolymarketAuth:FunderAddress`.
+- `ProxyWalletAddress`: optional explicit relayer proxy wallet address for
+  recorded attempts.
+- `RelayerBaseUrl` and relayer secret-name fields: relayer endpoint and secret
+  references. Do not place secret values in appsettings.
+- `WalletType`: `WALLET`, `SAFE`, or `PROXY`; auto-submit is currently limited
+  to `WALLET`.
+- `RelayerSubmissionDeadlineSeconds`: Deposit Wallet batch signature deadline.
+- `CurrentPositionsLimit`, `MaxPositionPages`, `MaxClaimsPerCycle`,
+  `MaxLiveSubmissionsPerCycle`, and `MinRedeemableValueUsd`: paging and
+  throttling limits. Live relayer submission defaults to one claim per cycle so
+  the Deposit Wallet nonce is not reused while an earlier action is still
+  active.
+- `ConditionalTokensAddress`, `CollateralTokenAddress`, `ParentCollectionId`:
+  CTF target and calldata constants. The default collateral is pUSD and parent
+  collection is the zero bytes32 value.
+
+Negative-risk positions are intentionally recorded as `SkippedUnsupported`
+until the adapter-specific redeem path is implemented.
+
 ## BinanceBtcUsdReference
 
 The service can keep a live Binance BTC/USDT trade WebSocket open, expose the
@@ -190,6 +225,26 @@ it does not place orders.
 - `ReconnectMaxDelaySeconds`: maximum reconnect delay after repeated stream
   failures, default `60`.
 - `ReceiveBufferBytes`: WebSocket receive buffer size, default `16384`.
+
+## OkxExpiryFuturesReference
+
+The service polls public OKX market data for the live linear USD fixed-expiry
+contracts and USD index prices used by the BTC/ETH/SOL Futures Basis Premarket
+strategies. Each decision requires the three nearest distinct eligible
+expiries; the nearest supplies the threshold signal and the following two
+confirm only its strict basis sign. It never places OKX orders, degrades to
+fewer than three contracts, or substitutes a perpetual contract.
+
+- `Enabled`: runs the futures reference poller when true; default `true`.
+- `RestBaseUrl`: OKX REST base URL, default `https://www.okx.com`.
+- `AssetSymbols`: fixed-expiry/index assets, default `BTC`, `ETH`, `SOL`.
+- `PollIntervalMilliseconds`: per-cycle poll interval, default `1000`.
+- `InstrumentRefreshIntervalSeconds`: cadence for refreshing the live
+  fixed-expiry instrument catalog, default `300`.
+- `RequestTimeoutMilliseconds`: HTTP timeout for each public market-data request,
+  default `2000`.
+- `StaleAfterSeconds`: maximum accepted futures or index quote age, default `5`.
+- `UserAgent`: HTTP User-Agent header sent to OKX.
 
 ## CryptoReferencePriceHistory
 
@@ -428,6 +483,7 @@ response body. None of these commands sends a live order.
 - `Provider`: must be `PostgreSQL`.
 - `ConnectionString`: local override; prefer environment variables.
 - `ConnectionStringEnvironmentVariable`: defaults to `POLYCOPYTRADER_POSTGRES_CONNECTION`.
+- `MaxPoolSize`: optional Npgsql connection-pool ceiling. The service config uses `64`; the Dashboard config uses `8`.
 - `RequireConfiguredDatabase`: set true when the process must fail if storage is missing. The service requires PostgreSQL even if this is overridden; the dashboard can still run without storage.
 
 ## IPC
@@ -714,11 +770,10 @@ market and strategy variant in `strategy_market_paper_runs`. Built-in BTC varian
 no longer include standard `Less`/`More` or Gamma comparison rows; the remaining rows include `Middle N`
 for `N=100,90,80,...,10`, threshold `Middle N 1..100 bps` and matching
 `Instant` variants, fixed `Up 1..50 bps Instant` and
-`Down 1..50 bps Instant` variants, `Up Simple` / `Down Simple`, `Binance`, threshold `Binance 1..50 bps` in 1 bps increments, matching `Binance 1..50 bps Instant` variants, fixed-price `Binance 45/47/49`, delayed
+`Down 1..50 bps Instant` variants, `Binance`, threshold `Binance 1..50 bps` in 1 bps increments, matching `Binance 1..50 bps Instant` variants, fixed-price `Binance 45/47/49`, delayed
 `Binance 15s/30s/45s`, `Binance Clever`, fair-value `Binance Edge 2/4/6`,
-`Prev Score Countertrend 10..90`, singular immediate ask-depth `Prev Score Countertrend`, `Ensemble 2 of 3`, `Dynamic Markov`, `Strategy Selector`, Diff `Up/Down N Instant` thresholds `1..10` in steps of 1 and `15..150` in steps of 5, AdjustedDiff `Up/Down N Instant` thresholds `1..10`, `15`, and `20`, and ShiftDiff `Up/Down S N Instant` rows for shift `1..6` and thresholds `1..12`. SOL variants include Binance bps `1..50`, Binance bps
-`1..50 Instant`; ETH Binance bps rows have been removed from the seed set and local/server history. ETH/SOL variants also include
-fixed `Up 1..50 bps Instant` / `Down 1..50 bps Instant` rows, `Up Simple` / `Down Simple`, Diff
+`Prev Score Countertrend 10..90`, singular immediate ask-depth `Prev Score Countertrend`, `Ensemble 2 of 3`, `Dynamic Markov`, `Strategy Selector`, Diff `Up/Down N Instant` thresholds `1..10` in steps of 1 and `15..150` in steps of 5, AdjustedDiff `Up/Down N Instant` thresholds `1..10`, `15`, and `20`, and ShiftDiff `Up/Down S N Instant` rows for shift `1..6` and thresholds `1..12`. ETH/SOL Binance bps rows have been removed from the seed set and local/server history. ETH/SOL variants also include
+fixed `Up 1..50 bps Instant` / `Down 1..50 bps Instant` rows, Diff
 `Up/Down N Instant` rows with thresholds `1..10` in steps of 1 and `15..150` in steps of 5, AdjustedDiff `Up/Down N Instant` rows, and ShiftDiff `Up/Down S N Instant` rows. More and Revert variants have been removed from the seed set and local/server history. The deleted comparison selector logic is retained only for old diagnostics/tests: when
 `PaperTakerPricingEnabled=false`, `Less` selects the lower-priced Gamma
 `outcomePrices` entry, `More` selects the higher-priced entry, and that Gamma
@@ -814,7 +869,7 @@ to zero after `abs(Diff)` reaches `N`.
 Diff Limit Progress Premarket rows also keep persistent `UpCount`, `DownCount`,
 and `Sum` in `crypto_up_down_5m_diff_shift_progress_states`, but the counter is
 scoped to the UTC day and resets at `00:00 UTC`. BTC, ETH, and SOL each seed
-`N=1..5`. The worker runs 30 seconds before open, uses resolved ledger results
+`N=1..5` in separate Dashboard categories. The worker runs 30 seconds before open, uses resolved ledger results
 for older markets, synthesizes the latest previous market from the current
 reference price, buys Down when `Diff = UpCount - DownCount` is positive, buys
 Up when it is negative, skips Diff 0, and sizes BUY FAK entries as
@@ -822,7 +877,7 @@ Up when it is negative, skips Diff 0, and sizes BUY FAK entries as
 multiplier is capped.
 
 Diff Real Limit Progress Premarket rows are clones with a saturated real Diff
-counter. BTC, ETH, and SOL each seed `N=1..5`. The worker uses the same
+counter. BTC, ETH, and SOL each seed `N=1..5` in separate Dashboard categories. The worker uses the same
 premarket timing, persistence, direction rule, and BUY FAK sizing, but
 `UpCount` does not increase when `Diff` is already `N` and the next result is
 Up, and `DownCount` does not increase when `Diff` is already `-N` and the next
@@ -988,10 +1043,9 @@ production and are no longer seeded. Missing PreOpen strategy rows are treated
 as deleted/disabled by the strategy-market-run insert guard, so their Dashboard
 grouping categories disappear with the deleted strategy rows.
 
-The dashboard `Strategies` tab reads all rows from `strategies`, including
-`follow_leader`, and aggregates Paper orders, positions, settlements, and
-strategy run lifecycle counters so the BTC variants can be compared against the
-current leader-following strategy. It also aggregates Live outcome accounting
+The dashboard `Strategies` tab reads all rows from `strategies` and aggregates
+Paper orders, positions, settlements, and strategy run lifecycle counters so
+strategy variants can be compared against each other. It also aggregates Live outcome accounting
 from `live_orders` separately from Paper metrics: order/fill/open/settled
 counts, won/lost counts, settled cost basis, realized PnL, win/loss rate,
 average win/loss, profit factor, expectancy, ROI, and latest live order and
@@ -1028,11 +1082,13 @@ flag is enabled. `Big ROI` keeps rows with ROI greater than `10` (`Closed ROI` i
 count is greater than `100` (`Settled` positions in `All`, recent `Settles`
 runs in the period tabs). `Hide progress` hides rows whose strategy name contains
 `Progress`.
+Each `Strategies` tab has its own currency filter; selecting BTC, ETH, or SOL
+narrows both the visible rows and that tab's category dropdown to categories
+present for the selected currency.
 The `Enabled` checkbox writes `strategies.enabled` immediately, and the `Paused`
 checkbox writes `strategies.paused`. The service refreshes enabled, manual pause,
 and auto Live pause state through a short in-memory cache, so disabled strategies
-stop creating new Follow leader signals or BTC 5-minute entries without a
-restart, while manually paused strategies stay enabled but skip new Paper and
+stop creating BTC/ETH/SOL 5-minute entries without a restart, while manually paused strategies stay enabled but skip new Paper and
 Live entries with reason `strategy_paused`. Existing Paper positions can still
 be settled, and copied leader exits can still be tracked.
 The Dashboard `Paper orders` tab loads the first recent orders page; when a
@@ -1052,17 +1108,22 @@ checkbox is the persisted live eligibility flag.
 - `Dashboard:StrategiesOnlyMode`: when true, the Dashboard reads service heartbeat plus strategy performance grids and still shows the local `Dashboard Errors` tab for copied/saved refresh, command, export, and strategy edit failures; default `true`. Heartbeat staleness is evaluated against the selected PostgreSQL server clock, not the Dashboard machine clock.
 - `Dashboard:OptionalReportTimeoutSeconds`: timeout for optional Dashboard analytics report grids; default `8`. Used only when `Dashboard:StrategiesOnlyMode=false`. If a report times out, the Dashboard keeps the main refresh alive and shows a Diagnostics warning for the skipped report.
 
+The strategy grids read flat precomputed rows from `dashboard_strategy_performance_snapshots` and `dashboard_strategy_recent_performance_snapshots`. On first use, the service builds projection state from one repeatable-read PostgreSQL snapshot. Durable outbox triggers then capture changes to strategy state, Paper orders/fills/runs/positions/settlements, and Live orders; high-frequency Paper position marks are coalesced to one pending event per position and compared with a stored position contribution. The projection worker applies those changes continuously and maintains exact `1h`, `6h`, and `24h` expiry. An independent worker performs one indexed full-strategy reconciliation per minute with PostgreSQL parallel workers disabled, `work_mem='4MB'`, and a `15s` per-statement timeout. These worker intervals are implementation safeguards and currently have no user-facing configuration keys.
+
 - `Enabled`: runs the BTC 5-minute strategy worker when true; default `true`.
 - `PollIntervalSeconds`: worker loop delay; default `1` in the service config to reduce BTC entry timing drift.
 - `DiffCounterFastPollIntervalMilliseconds`: dedicated Diff-family worker loop delay; default `500`. The fast worker observes Diff/AdjustedDiff/ShiftDiff markets and processes only their due entries, while the main BTC strategy worker no longer places those entries.
 - Diff Countertrend uses raw UTC-day counts reset at `00:00 UTC`: after each accepted BTC/ETH/SOL 5-minute result in the current UTC day, the processor updates `UpCount` or `DownCount`, computes `Diff = UpCount - DownCount`, and stores `DiffCount` as a diagnostic cumulative sum of observed Diff values. Strategy thresholds compare against raw `Diff`; `DiffCount` no longer shifts either side of the counter. AdjustedDiff Countertrend keeps a separate continuous in-memory counter, does not reset it at `00:00 UTC`, and compares thresholds against raw `Diff` adjusted by its slow EMA trend zero. ShiftDiff keeps per-strategy continuous counters and applies the configured shift before comparison. Revert variants have been removed. When the immediately previous result is still missing, a Diff-family run stays pending until four minutes after its own market start; only then it is skipped with `diff_counter_previous_market_resolved_event_missing`.
-- `DiffCounterInstantMaxPrice`: maximum BUY price cap for Diff/AdjustedDiff/ShiftDiff Instant entries; default `1.00`, which effectively removes the old `0.50` Diff-family cap because valid BUY prices are below `1.00`. Diff-family entries submit BUY FAK taker fills from current executable ask depth and no longer place resting BUYs at `0.50` when current executable ask depth is above half. Fixed Up/Down bps Instant variants also use an effective max BUY price of `1.00`, independent of `InstantOpeningLimitMaxPrice`. Simple Up/Down variants still use an explicit `0.50` cap but skip above the cap instead of placing a resting order. Other Instant strategy families continue to use `InstantOpeningLimitMaxPrice` and still skip above their cap with `instant_price_above_max`.
-- `ETH Up or Down 5m Down 9 bps`: targeted stats-entry variant that reuses the fixed Down previous-result bps signal from the matching Instant strategy. The ordinary `BTC/ETH/SOL Up or Down 5m Up/Down N bps Reference Average Premarket` and neutral `BTC/ETH/SOL Up or Down 5m N bps Reference Average Premarket` rows now use the in-memory crypto reference averages, not the previous market result. They run 30 seconds before open; `N` covers `1..10` in steps of `1`, then `15..100` in steps of `5`. `Up` trigger rows select the largest full `middle` average across `24h`, `12h`, `6h`, `3h`, `90m`, `45m`, `20m`, and `10m`; when the current Binance reference price is at least `N` bps above that average they buy `Down`. `Down` trigger rows mirror the rule and buy `Up` when current price is at least `N` bps below the selected average. Neutral rows choose the trigger side from the sign of the current move from that selected average: positive buys `Down`, negative buys `Up`, and an absolute move below `N` bps skips. ETH Down reference-average rows use the distinct `...down_reference_average_bps...` code/id family, so they do not share the legacy ETH Down previous-result Premarket Dashboard category. ETH also has filtered Down reference-average clones named `ETH Up or Down 5m Down N bps Filtered Average Premarket` for `N=1..10`; they use the same Down-trigger/BUY Up signal but skip selected `6h`/`12h` average windows and skip absolute moves from the selected average in `[20, 80)` bps. Legacy selected ETH previous-result Premarket rows remain at `-10s` for `40..42 bps` and `-5s` for `30..38 bps`; old `-30s` previous-result rows remain catalogued for history/settlement but are disabled by schema initialization. These variants simulate BUY `FAK` taker entry from executable ask depth at worst price `1 - tick`, record fills at ask-depth VWAP, keep only actually filled partial notional, and reject/skip zero-fill cases. Live-shadow submits a BUY `FAK` market amount with `postOnly=false`, no GTD expiration, and no Live Lost counter multiplier. A zero-fill FAK response is stored as a rejected live entry instead of an open order.
+- `DiffCounterInstantMaxPrice`: maximum BUY price cap for Diff/AdjustedDiff/ShiftDiff Instant entries; default `1.00`, which effectively removes the old `0.50` Diff-family cap because valid BUY prices are below `1.00`. Diff-family entries submit BUY FAK taker fills from current executable ask depth and no longer place resting BUYs at `0.50` when current executable ask depth is above half. Fixed Up/Down bps Instant variants also use an effective max BUY price of `1.00`, independent of `InstantOpeningLimitMaxPrice`. Other Instant strategy families continue to use `InstantOpeningLimitMaxPrice` and still skip above their cap with `instant_price_above_max`.
+- `ETH Up or Down 5m Down 9 bps`: targeted stats-entry variant that reuses the fixed Down previous-result bps signal from the matching Instant strategy. The ordinary `BTC/ETH/SOL Up or Down 5m Up/Down N bps Reference Average Premarket` and neutral `BTC/ETH/SOL Up or Down 5m N bps Reference Average Premarket` rows now use the in-memory crypto reference averages, not the previous market result. They run 30 seconds before open; `N` covers `1..10` in steps of `1`, then `15..100` in steps of `5`. `Up` trigger rows select the largest full `middle` average across `24h`, `12h`, `6h`, `3h`, `90m`, `45m`, `20m`, and `10m`; when the current Binance reference price is at least `N` bps above that average they buy `Down`. `Down` trigger rows mirror the rule and buy `Up` when current price is at least `N` bps below the selected average. Neutral rows choose the trigger side from the sign of the current move from that selected average: positive buys `Down`, negative buys `Up`, and an absolute move below `N` bps skips. ETH Down reference-average rows use the distinct `...down_reference_average_bps...` code/id family, so they do not share the legacy ETH Down previous-result Premarket Dashboard category. The former ETH filtered Down reference-average clones named `ETH Up or Down 5m Down N bps Filtered Average Premarket` for `N=1..10` have been removed and are purged by schema initialization. Legacy selected ETH previous-result Premarket rows remain at `-10s` for `40..42 bps` and `-5s` for `30..38 bps`; old `-30s` previous-result rows remain catalogued for history/settlement but are disabled by schema initialization. These variants simulate BUY `FAK` taker entry from executable ask depth at worst price `1 - tick`, record fills at ask-depth VWAP, keep only actually filled partial notional, and reject/skip zero-fill cases. Live-shadow submits a BUY `FAK` market amount with `postOnly=false`, no GTD expiration, and no Live Lost counter multiplier. A zero-fill FAK response is stored as a rejected live entry instead of an open order.
+- `BTC/ETH/SOL Up or Down 5m N bps Confirmed Average Premarket`: `84` neutral Bps clones for `N=1..10` and `15..100` step `5`. The base Bps signal must agree with the exact asset-specific Diff Reference Average signal: BTC `M=5`, ETH `M=3`, SOL `M=1`. `BTC/ETH/SOL Up or Down 5m K Diff Confirmed Average Premarket` adds `42` Diff clones for `K=1..10,15,20,25,30`; their base Diff signal must agree with neutral Bps Reference Average BTC `L=45`, ETH `L=5`, SOL `L=35`. Both families run 30 seconds before open, use BUY `FAK` Paper/Live-shadow execution, and store both nested decisions in diagnostics. A missing or rejected confirmation skips, and opposite outcomes skip with `confirmed_average_signal_mismatch`. The exact linked signal logic is evaluated independently of the linked row's runtime flags. First insertion uses `Enabled=true`, `Live=false`, `Paused=false`; `ON CONFLICT` preserves later runtime controls.
+- `BTC/ETH/SOL Up or Down 5m N bps Futures Basis Premarket`: futures-basis variants that run 30 seconds before open for `N = 1, 2, 3, 5, 8, 10, 15, 20`. They select the three live OKX linear USD fixed-expiry contracts with the nearest distinct expiries at or after the target market end and compare each best-bid/ask mid with the simultaneous OKX `<asset>-USD` index. The nearest expiry alone must reach the signed `N bps` threshold; the second and third expiries may have any magnitude but must both have the same nonzero basis sign. A zero/opposite confirmation skips with `futures_basis_confirmation_sign_mismatch`, while a nearest basis below threshold retains `futures_basis_move_below_bps_threshold`. Matching Revert variants confirm the raw sign first and invert only the final direction. Missing, invalid, or stale data for any of the three contracts causes an explicit reference-fetch skip; there is no reduced-count or perpetual fallback. Entries use the same BUY `FAK` executable ask-depth path as other Premarket reference strategies, and seeded `Live` is disabled by default.
+- `BTC/ETH/SOL Up or Down 5m N Child` and `N Child Progress`: Child mirror variants for `N = 1..24` hour lookbacks. After entry work and database writes, each enabled Child row selects the enabled, unpaused same-asset non-Child, non-Futures parent with the highest positive settled Paper PnL in its lookback window. Plain Child excludes parent strategies whose names contain `Progress`; Child Progress includes them. All Child modes exclude Futures strategies from parent selection. `BTC/ETH/SOL Up or Down 5m N Child ROI` and `N Child Progress ROI` are exact clones except the parent selector requires at least `10` settled runs, at least `$60` settled stake, and positive PnL in the lookback window, then ranks by sample-adjusted ROI `roi_pct * stake_usd / (stake_usd + 120)` instead of raw ROI. Active assignments store both the selected parent PnL and raw ROI, and copied Paper orders include both values in the raw decision JSON.
 - `StakeUsd`: fallback/default BTC stake multiplier; default `1.00`. When fresh market `min_order_size` is available, BTC Paper and Live stake notional is computed as the minimum passing order notional plus `10%`, multiplied by the strategy's Paper or Live stake value, then rounded up to the next whole USD.
 - `EntryGraceSeconds`: maximum late-entry grace after a variant's due time before the run is skipped; default `60`. Previous-result close-book helpers infer each immediately previous BTC 5-minute result from close-book CLOB price evidence. Full `Up` midpoint maps `>= 0.5` to `Up` and `< 0.5` to `Down`; single-sided `Up best_bid >= 0.5`, `Up best_ask < 0.5`, `Down best_ask <= 0.5`, and `Down best_bid > 0.5` are also decisive. If current close-book fetch stops responding, the worker uses the latest stored snapshot for that token when available. Missing or conflicting evidence is skipped with diagnostics in `skip_diagnostics_json`.
 - `MaxMarketsPerCycle`: maximum BTC 5-minute Gamma markets observed per cycle; default `500`.
 - `MaxEntriesPerCycle`: maximum due entries processed per cycle across variants; default `3000`. Regular due-entry selection expands the final batch boundary to include every run with the same `entry_due_at_utc`, so a single market-open timestamp is not split across cycles. Within the same due timestamp, Live-enabled strategies are processed first and then ordered by a prepared in-memory Live realized PnL snapshot, with the highest Live realized strategies first. Middle reference opening-limit variants also get a shared fast skip pass before generic order placement, skipped runs are batch-updated through one repository call, and accepted BTC Paper signal/order rows are inserted through one transactional repository call.
-- `MaxConcurrentEntryDecisions`: maximum due-entry decision work items processed concurrently after the shared fast paths; default `64` in the service config.
+- `MaxConcurrentEntryDecisions`: maximum due-entry decision work items processed concurrently after the shared fast paths; default `32` in the service config. This is one processor-wide allowance shared by main, fast Diff, previous-result, and pre-open sell-exit flows rather than a separate allowance for each worker.
 - `MaxSettlementsPerCycle`: maximum due settlements selected per cycle from the global settlement queue across variants; default `250`.
 - `MaxConcurrentSettlements`: maximum due settlement work items processed concurrently; default `16` in the service config.
 - `MartinTriggerLosses`: fresh consecutive losses required from standard `BTC Up or Down 5m Less 180` before `BTC Less 180 Martin` starts; default `3`.

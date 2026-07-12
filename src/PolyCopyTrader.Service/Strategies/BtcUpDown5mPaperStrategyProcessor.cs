@@ -34,6 +34,7 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
     IBtcUsdReferencePriceCache btcUsdReferencePriceCache,
     ICryptoReferencePriceClient cryptoReferencePriceClient,
     ICryptoReferencePriceAverageProvider cryptoReferencePriceAverageProvider,
+    IExpiryFuturesReferencePriceClient expiryFuturesReferencePriceClient,
     IMarketDataCache marketDataCache,
     IActiveMarketAssetSubscriptionRegistry activeMarketAssetSubscriptionRegistry,
     IExposureSnapshotCache exposureCache,
@@ -54,6 +55,8 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
     private const string BtcPreOpenSellExitExecutionSource = "btc_preopen_sell_exit";
     private const string BtcMakerExecutionSource = "btc_updown5m_maker_post_only";
     private const string BtcFakTakerPaperExecutionSource = "btc_updown5m_fak_taker_paper";
+    private const string BtcChildMirrorPaperExecutionSource = "btc_updown5m_child_mirror_paper";
+    private const string BtcChildMirrorFakPaperExecutionSource = "btc_updown5m_child_mirror_fak_paper";
     private const string PaperExecutableSnapshotEvidenceClass = "paper_executable_snapshot_model";
     private const string PaperFakExecutableSnapshotFillModel = "fak_taker_executable_snapshot_v2";
     private const string StrategyPausedSkipReason = "strategy_paused";
@@ -61,6 +64,8 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
     private static readonly IReadOnlySet<string> CryptoReferenceAssetSymbols = StrategyIds.CryptoUpDown5mVariants
         .Select(GetReferenceAssetSymbol)
         .ToHashSet(StringComparer.OrdinalIgnoreCase);
+    private static readonly IReadOnlyDictionary<Guid, BtcUpDown5mStrategyVariant> StrategyVariantsById =
+        StrategyIds.UpDown5mStrategyVariants.ToDictionary(variant => StrategyIds.Normalize(variant.Id));
     private const string OpeningLimitPricingMode = "paper_gtd_limit";
     private const string OpeningLimitOrderType = "GTD";
     private const string FakOrderType = "FAK";
@@ -79,6 +84,7 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
     private const decimal FillSizeTolerance = 0.000001m;
     private const decimal CloseBookResultThreshold = 0.50m;
     private const decimal UncappedInstantOpeningLimitMaxPrice = 1.00m;
+    private const int FuturesBasisRequiredExpiryCount = 3;
     private const int SkipPreviousResultEndPriceMaxAgeSeconds = 15;
     private const int SkipPreviousResultBpsMaxStreakMarkets = 100;
     private const int PremarketPreviousResultDefaultSampleSecondsBeforeEnd = 30;
@@ -105,6 +111,10 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
     private static readonly TimeSpan CloseBookCaptureOrderBookTimeout = TimeSpan.FromSeconds(2);
     private static readonly TimeSpan SettlementMetadataTimeout = TimeSpan.FromSeconds(3);
     private static readonly TimeSpan LiveStrategyPriorityRefreshInterval = TimeSpan.FromMinutes(1);
+    private static readonly TimeSpan ChildParentRefreshInterval = TimeSpan.FromSeconds(30);
+    private const int ChildRoiMinimumSettledRuns = 10;
+    private const decimal ChildRoiMinimumStakeUsd = 60m;
+    private const decimal ChildRoiPriorStakeUsd = 120m;
     private static readonly TimeSpan LocalFinalizedEntryRunRetention = TimeSpan.FromMinutes(30);
     private static readonly IReadOnlyList<DiffReferenceAverageWindowSpec> DiffReferenceAverageWindows =
     [
@@ -120,9 +130,13 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
     private readonly ConservativePaperGtdFillEstimator conservativeGtdFillEstimator = new(options);
     private readonly IPaperTradingEngine paperTradingEngine = new DefaultPaperTradingEngine();
     private readonly SemaphoreSlim entryPlacementLock = new(1, 1);
+    private readonly SemaphoreSlim entryDecisionConcurrencyLock = new(
+        options.MaxConcurrentEntryDecisions,
+        options.MaxConcurrentEntryDecisions);
     private readonly SemaphoreSlim mainDueEntryProcessingLock = new(1, 1);
     private readonly SemaphoreSlim diffCounterStateLock = new(1, 1);
     private readonly SemaphoreSlim liveStrategyPriorityRefreshLock = new(1, 1);
+    private readonly SemaphoreSlim childParentRefreshLock = new(1, 1);
     private readonly object diffProgressStateSync = new();
     private readonly Dictionary<string, DateTimeOffset> closingOrderBookCaptureAttempts = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<string, BtcMakerHighWaterState> makerHighWaterStates = new(StringComparer.OrdinalIgnoreCase);
@@ -133,6 +147,7 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
     private readonly ConcurrentDictionary<Guid, DateTimeOffset> locallyFinalizedEntryRuns = new();
     private readonly TimeProvider clock = timeProvider ?? TimeProvider.System;
     private LiveStrategyPrioritySnapshot liveStrategyPrioritySnapshot = LiveStrategyPrioritySnapshot.Empty;
+    private DateTimeOffset? lastChildParentRefreshUtc;
 
     public async Task<BtcUpDown5mPaperStrategyResult> ProcessAsync(CancellationToken cancellationToken = default)
     {
@@ -149,6 +164,7 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
         var strategySettings = await strategyStateProvider.GetStrategySettingsAsync(cancellationToken);
         var entryVariants = configuredVariants
             .Where(variant => GetStrategySettings(strategySettings, variant.Id).Enabled)
+            .Where(variant => !IsChildMirrorStrategy(variant))
             .Where(variant => !UsesPreviousResultEntryFlow(variant))
             .ToArray();
         entryVariants = OrderEntryVariantsForPlacement(entryVariants, strategySettings);
@@ -159,8 +175,14 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
             if (settledRuns > 0)
             {
                 await strategyStateProvider.ForceRefreshAsync(cancellationToken);
+                strategySettings = await strategyStateProvider.GetStrategySettingsAsync(cancellationToken);
             }
 
+            await RefreshChildParentAssignmentsIfDueAsync(
+                configuredVariants,
+                strategySettings,
+                GetUtcNow(),
+                cancellationToken);
             return new BtcUpDown5mPaperStrategyResult(0, 0, 0, settledRuns);
         }
 
@@ -242,6 +264,11 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
         controlState.RecordLoop("BTC5mStrategy capturing close-book snapshots", null);
         await CaptureClosingOrderBookSnapshotsAsync(GetUtcNow(), observedMarkets, cancellationToken);
         await RefreshLiveStrategyPrioritySnapshotIfDueAsync(entryVariants, strategySettings, cancellationToken);
+        await RefreshChildParentAssignmentsIfDueAsync(
+            configuredVariants,
+            strategySettings,
+            GetUtcNow(),
+            cancellationToken);
         return new BtcUpDown5mPaperStrategyResult(
             liveFlow.Result.MarketsObserved + nonLiveFlow.Result.MarketsObserved,
             liveFlow.Result.EntriesPlaced + nonLiveFlow.Result.EntriesPlaced,
@@ -264,6 +291,7 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
         var strategySettings = await strategyStateProvider.GetStrategySettingsAsync(cancellationToken);
         var entryVariants = configuredVariants
             .Where(variant => GetStrategySettings(strategySettings, variant.Id).Enabled)
+            .Where(variant => !IsChildMirrorStrategy(variant))
             .Where(variant => !UsesPreviousResultEntryFlow(variant))
             .Where(variant => !IsDiffCounterTrendOpeningLimitEntry(variant))
             .ToArray();
@@ -271,6 +299,11 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
 
         if (entryVariants.Length == 0)
         {
+            await RefreshChildParentAssignmentsIfDueAsync(
+                configuredVariants,
+                strategySettings,
+                GetUtcNow(),
+                cancellationToken);
             return new BtcUpDown5mPaperStrategyResult(0, 0, 0, 0);
         }
 
@@ -328,6 +361,11 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
         strategySettings = nonLiveFlow.StrategySettings;
 
         await RefreshLiveStrategyPrioritySnapshotIfDueAsync(entryVariants, strategySettings, cancellationToken);
+        await RefreshChildParentAssignmentsIfDueAsync(
+            configuredVariants,
+            strategySettings,
+            GetUtcNow(),
+            cancellationToken);
         return new BtcUpDown5mPaperStrategyResult(
             liveFlow.Result.MarketsObserved + nonLiveFlow.Result.MarketsObserved,
             liveFlow.Result.EntriesPlaced + nonLiveFlow.Result.EntriesPlaced,
@@ -2143,6 +2181,63 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
             : variant.ReferenceAssetSymbol.Trim().ToUpperInvariant();
     }
 
+    private static bool IsChildMirrorStrategy(BtcUpDown5mStrategyVariant variant)
+    {
+        return variant.Behavior is BtcUpDown5mStrategyBehavior.ChildMirror or
+            BtcUpDown5mStrategyBehavior.ChildProgressMirror or
+            BtcUpDown5mStrategyBehavior.ChildRoiMirror or
+            BtcUpDown5mStrategyBehavior.ChildProgressRoiMirror;
+    }
+
+    private static bool IsChildProgressMirrorStrategy(BtcUpDown5mStrategyVariant variant)
+    {
+        return variant.Behavior is BtcUpDown5mStrategyBehavior.ChildProgressMirror or
+            BtcUpDown5mStrategyBehavior.ChildProgressRoiMirror;
+    }
+
+    private static bool IsChildRoiMirrorStrategy(BtcUpDown5mStrategyVariant variant)
+    {
+        return variant.Behavior is BtcUpDown5mStrategyBehavior.ChildRoiMirror or
+            BtcUpDown5mStrategyBehavior.ChildProgressRoiMirror;
+    }
+
+    private static int GetChildLookbackHours(BtcUpDown5mStrategyVariant variant)
+    {
+        return Math.Clamp(variant.DecisionDepth, 1, 24);
+    }
+
+    private static string GetChildAssignmentMode(BtcUpDown5mStrategyVariant variant)
+    {
+        return (IsChildProgressMirrorStrategy(variant), IsChildRoiMirrorStrategy(variant)) switch
+        {
+            (false, false) => StrategyChildParentAssignmentModes.Child,
+            (true, false) => StrategyChildParentAssignmentModes.ChildProgress,
+            (false, true) => StrategyChildParentAssignmentModes.ChildRoi,
+            _ => StrategyChildParentAssignmentModes.ChildProgressRoi
+        };
+    }
+
+    private static bool HasProgressInName(BtcUpDown5mStrategyVariant variant)
+    {
+        return variant.Name.Contains("Progress", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static bool IsFuturesChildParentCandidate(BtcUpDown5mStrategyVariant variant)
+    {
+        return variant.Code.Contains("futures", StringComparison.OrdinalIgnoreCase) ||
+            variant.Name.Contains("Futures", StringComparison.OrdinalIgnoreCase) ||
+            variant.Category.Contains("Futures", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static bool IsStrategyActiveForChildSelection(
+        BtcUpDown5mStrategyVariant variant,
+        IReadOnlyDictionary<Guid, StrategyRuntimeSettings> strategySettings,
+        DateTimeOffset nowUtc)
+    {
+        var settings = GetStrategySettings(strategySettings, variant.Id);
+        return settings.Enabled && !settings.IsPausedAt(nowUtc);
+    }
+
     private static DateTimeOffset? GetMarketWindowStartUtc(
         PolymarketGammaMarket market,
         BtcUpDown5mStrategyVariant variant)
@@ -3181,8 +3276,6 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
         var positions = await repository.GetPaperPositionsAsync(cancellationToken);
         var orderBookFetchTasks = new System.Collections.Concurrent.ConcurrentDictionary<string, Lazy<Task<OrderBookFetchResult>>>(
             StringComparer.OrdinalIgnoreCase);
-        var maxConcurrency = Math.Max(1, Math.Min(options.MaxConcurrentEntryDecisions, runs.Count));
-        using var throttler = new SemaphoreSlim(maxConcurrency, maxConcurrency);
         var tasks = runs.Select(async run =>
         {
             if (!variantsById.TryGetValue(StrategyIds.Normalize(run.StrategyId), out var variant))
@@ -3190,7 +3283,7 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
                 return 0;
             }
 
-            await throttler.WaitAsync(cancellationToken);
+            await entryDecisionConcurrencyLock.WaitAsync(cancellationToken);
             try
             {
                 return await PlaceDuePreOpenSellExitRunAsync(
@@ -3203,7 +3296,7 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
             }
             finally
             {
-                throttler.Release();
+                entryDecisionConcurrencyLock.Release();
             }
         }).ToArray();
 
@@ -3665,6 +3758,8 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
             StringComparer.OrdinalIgnoreCase);
         var skipBpsStreakMoveSignalTasks = new System.Collections.Concurrent.ConcurrentDictionary<string, Lazy<Task<BtcPreviousMarketMoveSignal>>>(
             StringComparer.OrdinalIgnoreCase);
+        var diffReferenceAverageResultTasks = new System.Collections.Concurrent.ConcurrentDictionary<string, Lazy<Task<DiffReferenceAverageMarketResultsLookup>>>(
+            StringComparer.OrdinalIgnoreCase);
         var middleFastPathResult = await TrackStrategyStageAsync(
             cycleId,
             cycleKind,
@@ -3729,8 +3824,24 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
                 token),
             outcomeFactory: null,
             cancellationToken);
-        using var throttler = new SemaphoreSlim(maxConcurrency, maxConcurrency);
-
+        var childAssignmentsByParent = await TrackStrategyStageAsync(
+            cycleId,
+            cycleKind,
+            flowName,
+            stageName + ".child_parent_assignments",
+            detail: null,
+            variantsById.Count,
+            remainingRuns.Count,
+            GetEarliestEntryDueAtUtc(remainingRuns),
+            GetLatestEntryDueAtUtc(remainingRuns),
+            async token => await GetActiveChildAssignmentsByParentAsync(
+                remainingRuns,
+                variantsById,
+                strategySettings,
+                GetUtcNow(),
+                token),
+            outcomeFactory: null,
+            cancellationToken);
         var tasks = remainingRuns.Select(async run =>
         {
             if (!variantsById.TryGetValue(StrategyIds.Normalize(run.StrategyId), out var variant))
@@ -3738,7 +3849,7 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
                 return (EntriesPlaced: 0, RunsSkipped: 0);
             }
 
-            await throttler.WaitAsync(cancellationToken);
+            await entryDecisionConcurrencyLock.WaitAsync(cancellationToken);
             try
             {
                 return await PlaceDueEntryRunAsync(
@@ -3750,12 +3861,14 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
                     marketLookupTasks,
                     orderBookFetchTasks,
                     skipBpsStreakMoveSignalTasks,
+                    diffReferenceAverageResultTasks,
                     deferredPersistence,
+                    childAssignmentsByParent,
                     cancellationToken);
             }
             finally
             {
-                throttler.Release();
+                entryDecisionConcurrencyLock.Release();
             }
         }).ToArray();
 
@@ -3767,7 +3880,7 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
                 cycleKind,
                 flowName,
                 stageName + ".decision_tasks",
-                $"MaxConcurrency={maxConcurrency.ToString(CultureInfo.InvariantCulture)}",
+                $"MaxConcurrency={maxConcurrency.ToString(CultureInfo.InvariantCulture)};SharedAcrossEntryFlows=true",
                 variantsById.Count,
                 remainingRuns.Count,
                 GetEarliestEntryDueAtUtc(remainingRuns),
@@ -3888,6 +4001,492 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
         }
     }
 
+    private async Task RefreshChildParentAssignmentsIfDueAsync(
+        IReadOnlyList<BtcUpDown5mStrategyVariant> configuredVariants,
+        IReadOnlyDictionary<Guid, StrategyRuntimeSettings> strategySettings,
+        DateTimeOffset nowUtc,
+        CancellationToken cancellationToken)
+    {
+        if (!configuredVariants.Any(IsChildMirrorStrategy))
+        {
+            return;
+        }
+
+        if (lastChildParentRefreshUtc is { } lastRefresh &&
+            nowUtc - lastRefresh < ChildParentRefreshInterval)
+        {
+            return;
+        }
+
+        if (!await childParentRefreshLock.WaitAsync(0, cancellationToken))
+        {
+            return;
+        }
+
+        try
+        {
+            nowUtc = GetUtcNow();
+            if (lastChildParentRefreshUtc is { } lockedLastRefresh &&
+                nowUtc - lockedLastRefresh < ChildParentRefreshInterval)
+            {
+                return;
+            }
+
+            await RefreshChildParentAssignmentsAsync(
+                configuredVariants,
+                strategySettings,
+                nowUtc,
+                cancellationToken);
+            lastChildParentRefreshUtc = nowUtc;
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "BTC Up or Down 5m child-parent assignment refresh failed.");
+            await TryRecordApiErrorAsync("RefreshChildParentAssignments", ex.Message, CancellationToken.None);
+        }
+        finally
+        {
+            childParentRefreshLock.Release();
+        }
+    }
+
+    private async Task RefreshChildParentAssignmentsAsync(
+        IReadOnlyList<BtcUpDown5mStrategyVariant> configuredVariants,
+        IReadOnlyDictionary<Guid, StrategyRuntimeSettings> strategySettings,
+        DateTimeOffset nowUtc,
+        CancellationToken cancellationToken)
+    {
+        var childVariants = configuredVariants
+            .Where(IsChildMirrorStrategy)
+            .ToArray();
+        if (childVariants.Length == 0)
+        {
+            return;
+        }
+
+        var parentVariants = configuredVariants
+            .Where(variant => !IsChildMirrorStrategy(variant))
+            .Where(variant => !IsFuturesChildParentCandidate(variant))
+            .Where(variant => variant.MarketInterval == BtcUpDownMarketInterval.FiveMinutes)
+            .Where(variant => IsStrategyActiveForChildSelection(variant, strategySettings, nowUtc))
+            .ToArray();
+        var parentIds = parentVariants
+            .Select(variant => StrategyIds.Normalize(variant.Id))
+            .Distinct()
+            .ToArray();
+        var maxLookbackHours = childVariants.Max(GetChildLookbackHours);
+        IReadOnlyList<StrategyLookbackPnl> lookbackPnls = parentIds.Length == 0
+            ? Array.Empty<StrategyLookbackPnl>()
+            : await repository.GetStrategySettledPnlByLookbackHoursAsync(
+                parentIds,
+                nowUtc,
+                maxLookbackHours,
+                cancellationToken);
+        var performanceByKey = lookbackPnls.ToDictionary(
+            item => (StrategyIds.Normalize(item.StrategyId), item.LookbackHours),
+            item => item);
+        var selections = new List<StrategyChildParentSelection>(childVariants.Length);
+        foreach (var childVariant in childVariants)
+        {
+            var assetSymbol = GetReferenceAssetSymbol(childVariant);
+            var lookbackHours = GetChildLookbackHours(childVariant);
+            var childMode = GetChildAssignmentMode(childVariant);
+            var useRoiSelection = IsChildRoiMirrorStrategy(childVariant);
+            if (!IsStrategyActiveForChildSelection(childVariant, strategySettings, nowUtc))
+            {
+                selections.Add(new StrategyChildParentSelection(
+                    StrategyIds.Normalize(childVariant.Id),
+                    null,
+                    assetSymbol,
+                    lookbackHours,
+                    childMode,
+                    null,
+                    null));
+                continue;
+            }
+
+            var includeProgressParents = IsChildProgressMirrorStrategy(childVariant);
+            var parentSelection = parentVariants
+                .Where(parent => string.Equals(GetReferenceAssetSymbol(parent), assetSymbol, StringComparison.OrdinalIgnoreCase))
+                .Where(parent => includeProgressParents || !HasProgressInName(parent))
+                .Select(parent => new
+                {
+                    Parent = parent,
+                    Performance = performanceByKey.TryGetValue((StrategyIds.Normalize(parent.Id), lookbackHours), out var performance)
+                        ? performance
+                        : null
+                })
+                .Where(item => item.Performance is not null && IsEligibleChildParentPerformance(item.Performance, useRoiSelection))
+                .OrderByDescending(item => useRoiSelection ? CalculateChildRoiParentScore(item.Performance!) : item.Performance!.RealizedPnlUsd)
+                .ThenByDescending(item => useRoiSelection ? item.Performance!.RealizedPnlUsd : 0m)
+                .ThenBy(item => item.Parent.Code, StringComparer.OrdinalIgnoreCase)
+                .FirstOrDefault();
+
+            selections.Add(new StrategyChildParentSelection(
+                StrategyIds.Normalize(childVariant.Id),
+                parentSelection?.Parent.Id,
+                assetSymbol,
+                lookbackHours,
+                childMode,
+                parentSelection?.Performance?.RealizedPnlUsd,
+                parentSelection?.Performance?.RoiPct));
+        }
+
+        await repository.UpsertStrategyChildParentSelectionsAsync(
+            selections,
+            nowUtc,
+            cancellationToken);
+        logger.LogInformation(
+            "BTC Up or Down 5m child-parent assignments refreshed. Children={Children} ActiveParents={ActiveParents}",
+            selections.Count,
+            selections.Count(selection => selection.ParentStrategyId is not null));
+    }
+
+    private static bool IsEligibleChildParentPerformance(StrategyLookbackPnl performance, bool useRoiSelection)
+    {
+        if (performance.RealizedPnlUsd <= 0m)
+        {
+            return false;
+        }
+
+        return !useRoiSelection ||
+            (performance.SettledRunsCount >= ChildRoiMinimumSettledRuns &&
+             performance.StakeUsd >= ChildRoiMinimumStakeUsd);
+    }
+
+    private static decimal CalculateChildRoiParentScore(StrategyLookbackPnl performance)
+    {
+        return performance.StakeUsd <= 0m
+            ? 0m
+            : performance.RoiPct * performance.StakeUsd / (performance.StakeUsd + ChildRoiPriorStakeUsd);
+    }
+
+    private async Task<IReadOnlyDictionary<Guid, IReadOnlyList<ActiveChildMirrorAssignment>>> GetActiveChildAssignmentsByParentAsync(
+        IReadOnlyList<StrategyMarketPaperRun> runs,
+        IReadOnlyDictionary<Guid, BtcUpDown5mStrategyVariant> variantsById,
+        IReadOnlyDictionary<Guid, StrategyRuntimeSettings> strategySettings,
+        DateTimeOffset nowUtc,
+        CancellationToken cancellationToken)
+    {
+        if (runs.Count == 0)
+        {
+            return new Dictionary<Guid, IReadOnlyList<ActiveChildMirrorAssignment>>();
+        }
+
+        var parentIds = runs
+            .Select(run => StrategyIds.Normalize(run.StrategyId))
+            .Where(strategyId =>
+                variantsById.TryGetValue(strategyId, out var variant) &&
+                !IsFuturesChildParentCandidate(variant))
+            .ToHashSet();
+        if (parentIds.Count == 0)
+        {
+            return new Dictionary<Guid, IReadOnlyList<ActiveChildMirrorAssignment>>();
+        }
+
+        var childVariantsById = StrategyIds.UpDown5mStrategyVariants
+            .Where(IsChildMirrorStrategy)
+            .ToDictionary(variant => StrategyIds.Normalize(variant.Id));
+        var assignments = await repository.GetActiveStrategyChildParentAssignmentsAsync(cancellationToken);
+        var grouped = assignments
+            .Where(assignment => parentIds.Contains(StrategyIds.Normalize(assignment.ParentStrategyId)))
+            .Select(assignment =>
+            {
+                var childStrategyId = StrategyIds.Normalize(assignment.ChildStrategyId);
+                return childVariantsById.TryGetValue(childStrategyId, out var childVariant)
+                    ? new ActiveChildMirrorAssignment(assignment, childVariant)
+                    : null;
+            })
+            .Where(item => item is not null)
+            .Select(item => item!)
+            .Where(item => IsStrategyActiveForChildSelection(item.ChildVariant, strategySettings, nowUtc))
+            .GroupBy(item => StrategyIds.Normalize(item.Assignment.ParentStrategyId))
+            .ToDictionary(
+                group => group.Key,
+                group => (IReadOnlyList<ActiveChildMirrorAssignment>)group
+                    .OrderBy(item => item.ChildVariant.Code, StringComparer.OrdinalIgnoreCase)
+                    .ToArray());
+
+        return grouped;
+    }
+
+    private int AddChildPendingPaperEntries(
+        IReadOnlyDictionary<Guid, IReadOnlyList<ActiveChildMirrorAssignment>> childAssignmentsByParent,
+        BtcUpDown5mStrategyVariant parentVariant,
+        PolymarketGammaMarket market,
+        BtcUpDown5mOutcomeQuote selectedOutcome,
+        StrategyMarketPaperRun parentRun,
+        Guid parentSignalId,
+        Guid parentOrderId,
+        decimal orderPrice,
+        decimal entryPrice,
+        decimal stakeUsd,
+        decimal sizeShares,
+        DateTimeOffset expiresAtUtc,
+        DateTimeOffset nowUtc,
+        string executionSource,
+        DeferredPaperEntryPersistence deferredPersistence)
+    {
+        if (!childAssignmentsByParent.TryGetValue(StrategyIds.Normalize(parentVariant.Id), out var childAssignments) ||
+            childAssignments.Count == 0)
+        {
+            return 0;
+        }
+
+        var entriesPlaced = 0;
+        foreach (var childAssignment in childAssignments)
+        {
+            var childVariant = childAssignment.ChildVariant;
+            var rawDecisionJson = BuildChildMirrorRawDecisionJson(
+                parentVariant,
+                childVariant,
+                childAssignment.Assignment,
+                parentRun,
+                parentSignalId,
+                parentOrderId,
+                orderPrice,
+                entryPrice,
+                stakeUsd,
+                sizeShares,
+                executionSource,
+                nowUtc);
+            var childSignal = CreateSignal(
+                market,
+                selectedOutcome,
+                childVariant,
+                entryPrice,
+                sizeShares,
+                stakeUsd,
+                nowUtc);
+            var childOrder = CreatePendingOpeningLimitPaperOrder(
+                childSignal,
+                selectedOutcome,
+                childVariant,
+                orderPrice,
+                sizeShares,
+                stakeUsd,
+                nowUtc,
+                expiresAtUtc,
+                rawDecisionJson,
+                executionSource: executionSource);
+            var childRun = CreateChildEnteredRun(
+                parentRun,
+                childVariant,
+                entryPrice,
+                stakeUsd,
+                sizeShares,
+                childSignal.Id,
+                childOrder.Id,
+                nowUtc);
+            deferredPersistence.AddPendingPaperEntry(childSignal, childOrder, childRun);
+            entriesPlaced++;
+        }
+
+        if (entriesPlaced > 0)
+        {
+            logger.LogInformation(
+                "BTC Up or Down 5m child mirror pending entries created. ParentStrategy={ParentStrategyCode} Market={MarketSlug} Children={Children} Outcome={Outcome} Price={Price} StakeUsd={StakeUsd} SizeShares={SizeShares}",
+                parentVariant.Code,
+                market.Slug,
+                entriesPlaced,
+                selectedOutcome.Outcome,
+                orderPrice,
+                stakeUsd,
+                sizeShares);
+        }
+
+        return entriesPlaced;
+    }
+
+    private int AddChildFilledPaperEntries(
+        IReadOnlyDictionary<Guid, IReadOnlyList<ActiveChildMirrorAssignment>> childAssignmentsByParent,
+        BtcUpDown5mStrategyVariant parentVariant,
+        PolymarketGammaMarket market,
+        BtcUpDown5mOutcomeQuote selectedOutcome,
+        StrategyMarketPaperRun parentRun,
+        Guid parentSignalId,
+        Guid parentOrderId,
+        decimal fillPrice,
+        decimal sizeShares,
+        decimal stakeUsd,
+        decimal currentBid,
+        DateTimeOffset nowUtc,
+        string executionSource,
+        DeferredPaperEntryPersistence deferredPersistence)
+    {
+        if (!childAssignmentsByParent.TryGetValue(StrategyIds.Normalize(parentVariant.Id), out var childAssignments) ||
+            childAssignments.Count == 0)
+        {
+            return 0;
+        }
+
+        var entriesPlaced = 0;
+        foreach (var childAssignment in childAssignments)
+        {
+            var childVariant = childAssignment.ChildVariant;
+            var rawDecisionJson = BuildChildMirrorRawDecisionJson(
+                parentVariant,
+                childVariant,
+                childAssignment.Assignment,
+                parentRun,
+                parentSignalId,
+                parentOrderId,
+                fillPrice,
+                fillPrice,
+                stakeUsd,
+                sizeShares,
+                executionSource,
+                nowUtc);
+            var childSignal = CreateSignal(
+                market,
+                selectedOutcome,
+                childVariant,
+                fillPrice,
+                sizeShares,
+                stakeUsd,
+                nowUtc);
+            var childOrder = CreateFilledPaperOrder(
+                childSignal,
+                selectedOutcome,
+                childVariant,
+                fillPrice,
+                sizeShares,
+                stakeUsd,
+                nowUtc,
+                rawDecisionJson,
+                executionSource);
+            var childFill = new PaperFill(
+                Guid.NewGuid(),
+                childOrder.Id,
+                fillPrice,
+                sizeShares,
+                nowUtc,
+                string.Concat(
+                    "Child mirror copied parent paper fill. ParentStrategy=",
+                    parentVariant.Code,
+                    " ParentRunId=",
+                    parentRun.Id.ToString("D"),
+                    " ParentPaperOrderId=",
+                    parentOrderId.ToString("D"),
+                    "."));
+            var childRun = CreateChildEnteredRun(
+                parentRun,
+                childVariant,
+                fillPrice,
+                stakeUsd,
+                sizeShares,
+                childSignal.Id,
+                childOrder.Id,
+                nowUtc);
+            deferredPersistence.AddFilledPaperEntry(
+                childSignal,
+                childOrder,
+                childFill,
+                childRun,
+                currentBid,
+                nowUtc);
+            entriesPlaced++;
+        }
+
+        if (entriesPlaced > 0)
+        {
+            logger.LogInformation(
+                "BTC Up or Down 5m child mirror filled entries created. ParentStrategy={ParentStrategyCode} Market={MarketSlug} Children={Children} Outcome={Outcome} FillPrice={FillPrice} StakeUsd={StakeUsd} SizeShares={SizeShares}",
+                parentVariant.Code,
+                market.Slug,
+                entriesPlaced,
+                selectedOutcome.Outcome,
+                fillPrice,
+                stakeUsd,
+                sizeShares);
+        }
+
+        return entriesPlaced;
+    }
+
+    private static StrategyMarketPaperRun CreateChildEnteredRun(
+        StrategyMarketPaperRun parentRun,
+        BtcUpDown5mStrategyVariant childVariant,
+        decimal entryPrice,
+        decimal stakeUsd,
+        decimal sizeShares,
+        Guid signalId,
+        Guid paperOrderId,
+        DateTimeOffset nowUtc)
+    {
+        return parentRun with
+        {
+            Id = Guid.NewGuid(),
+            StrategyId = StrategyIds.Normalize(childVariant.Id),
+            Status = StrategyMarketPaperRunStatuses.Entered,
+            EntryPrice = entryPrice,
+            StakeUsd = stakeUsd,
+            SizeShares = sizeShares,
+            SignalId = signalId,
+            PaperOrderId = paperOrderId,
+            EnteredAtUtc = nowUtc,
+            SettlementPrice = null,
+            SettlementValueUsd = null,
+            RealizedPnlUsd = null,
+            SettledAtUtc = null,
+            SkipReason = null,
+            SkipDiagnosticsJson = null,
+            CreatedAtUtc = nowUtc,
+            UpdatedAtUtc = nowUtc
+        };
+    }
+
+    private static string BuildChildMirrorRawDecisionJson(
+        BtcUpDown5mStrategyVariant parentVariant,
+        BtcUpDown5mStrategyVariant childVariant,
+        StrategyChildParentAssignment assignment,
+        StrategyMarketPaperRun parentRun,
+        Guid parentSignalId,
+        Guid parentOrderId,
+        decimal orderPrice,
+        decimal entryPrice,
+        decimal stakeUsd,
+        decimal sizeShares,
+        string executionSource,
+        DateTimeOffset nowUtc)
+    {
+        return JsonSerializer.Serialize(new
+        {
+            pricing_mode = "child_parent_mirror",
+            execution_source = executionSource,
+            copied_at_utc = nowUtc,
+            assignment_id = assignment.Id,
+            child_strategy_id = childVariant.Id,
+            child_strategy_code = childVariant.Code,
+            child_strategy_name = childVariant.Name,
+            child_mode = assignment.ChildMode,
+            lookback_hours = assignment.LookbackHours,
+            asset_symbol = assignment.AssetSymbol,
+            parent_selection_metric = IsChildRoiMirrorStrategy(childVariant) ? "adjusted_roi" : "pnl",
+            selected_parent_pnl_usd = assignment.ParentPnlUsd,
+            selected_parent_roi_pct = assignment.ParentRoiPct,
+            parent_strategy_id = parentVariant.Id,
+            parent_strategy_code = parentVariant.Code,
+            parent_strategy_name = parentVariant.Name,
+            parent_run_id = parentRun.Id,
+            parent_signal_id = parentSignalId,
+            parent_paper_order_id = parentOrderId,
+            market_id = parentRun.MarketId,
+            condition_id = parentRun.ConditionId,
+            market_slug = parentRun.MarketSlug,
+            outcome = parentRun.SelectedOutcome,
+            asset_id = parentRun.SelectedAssetId,
+            order_price = orderPrice,
+            entry_price = entryPrice,
+            stake_usd = stakeUsd,
+            size_shares = sizeShares
+        });
+    }
+
     private async Task<MiddleReferenceBulkSkipResult> SkipMiddleReferenceRunsInBulkAsync(
         IReadOnlyList<StrategyMarketPaperRun> runs,
         IReadOnlyDictionary<Guid, BtcUpDown5mStrategyVariant> variantsById,
@@ -3996,7 +4595,9 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
         System.Collections.Concurrent.ConcurrentDictionary<string, Lazy<Task<PolymarketGammaMarket?>>> marketLookupTasks,
         System.Collections.Concurrent.ConcurrentDictionary<string, Lazy<Task<OrderBookFetchResult>>> orderBookFetchTasks,
         System.Collections.Concurrent.ConcurrentDictionary<string, Lazy<Task<BtcPreviousMarketMoveSignal>>> skipBpsStreakMoveSignalTasks,
+        System.Collections.Concurrent.ConcurrentDictionary<string, Lazy<Task<DiffReferenceAverageMarketResultsLookup>>> diffReferenceAverageResultTasks,
         DeferredPaperEntryPersistence deferredPersistence,
+        IReadOnlyDictionary<Guid, IReadOnlyList<ActiveChildMirrorAssignment>> childAssignmentsByParent,
         CancellationToken cancellationToken)
     {
         var entriesPlaced = 0;
@@ -4129,6 +4730,7 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
                             nowUtc,
                             btcCurrentPrices,
                             skipBpsStreakMoveSignalTasks,
+                            diffReferenceAverageResultTasks,
                             cancellationToken);
                         if (!limitDecision.ShouldEnter || limitDecision.SelectedOutcome is null)
                         {
@@ -4361,6 +4963,7 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
                             Signal? fakSignal = null;
                             PaperOrder? fakOrder = null;
                             PaperFill? fakFill = null;
+                            var fakChildEntriesPlaced = 0;
                             await entryPlacementLock.WaitAsync(cancellationToken);
                             try
                             {
@@ -4407,6 +5010,21 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
                                     enteredRun,
                                     currentBid,
                                     nowUtc);
+                                fakChildEntriesPlaced = AddChildFilledPaperEntries(
+                                    childAssignmentsByParent,
+                                    variant,
+                                    market,
+                                    limitSelectedOutcome,
+                                    enteredRun,
+                                    fakSignal.Id,
+                                    fakOrder.Id,
+                                    fakEstimate.AverageFillPrice,
+                                    fakEstimate.SizeShares,
+                                    fakEstimate.NotionalUsd,
+                                    currentBid,
+                                    nowUtc,
+                                    BtcChildMirrorFakPaperExecutionSource,
+                                    deferredPersistence);
                             }
                             finally
                             {
@@ -4418,7 +5036,7 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
                                 continue;
                             }
 
-                            entriesPlaced++;
+                            entriesPlaced += 1 + fakChildEntriesPlaced;
 
                             logger.LogInformation(
                                 "BTC Up or Down 5m FAK taker paper order filled. Strategy={StrategyCode} Market={MarketSlug} Outcome={Outcome} AvgFillPrice={AvgFillPrice} FilledNotionalUsd={FilledNotionalUsd} FilledSize={FilledSize} WorstPrice={WorstPrice}",
@@ -4574,6 +5192,7 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
                         var entryStakeUsd = stakeUsd;
                         var entrySizeShares = limitSizeShares;
                         var orderPersistedDeferred = false;
+                        var openingChildEntriesPlaced = 0;
                         await entryPlacementLock.WaitAsync(cancellationToken);
                         try
                         {
@@ -4671,6 +5290,22 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
                                     nowUtc);
                                 deferredPersistence.AddPendingPaperEntry(limitSignal, limitOrder, enteredRun);
                                 orderPersistedDeferred = true;
+                                openingChildEntriesPlaced = AddChildPendingPaperEntries(
+                                    childAssignmentsByParent,
+                                    variant,
+                                    market,
+                                    limitSelectedOutcome,
+                                    enteredRun,
+                                    limitSignal.Id,
+                                    limitOrder.Id,
+                                    orderPrice,
+                                    entryPrice,
+                                    entryStakeUsd,
+                                    entrySizeShares,
+                                    cancelDeadlineUtc,
+                                    nowUtc,
+                                    BtcChildMirrorPaperExecutionSource,
+                                    deferredPersistence);
                             }
 
                             if (isPaperLiveShadowTest)
@@ -4702,7 +5337,7 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
 
                         if (orderPersistedDeferred)
                         {
-                            entriesPlaced++;
+                            entriesPlaced += 1 + openingChildEntriesPlaced;
 
                             logger.LogInformation(
                                 "BTC Up or Down 5m GTD limit paper order placed. Strategy={StrategyCode} Market={MarketSlug} Outcome={Outcome} Price={Price} StakeUsd={StakeUsd} SizeShares={SizeShares}",
@@ -4964,6 +5599,7 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
                         CanSubmitLegacyBtcLiveOrder(variant);
                     Signal? signal = null;
                     PaperOrder? order = null;
+                    var gtdChildEntriesPlaced = 0;
                     await entryPlacementLock.WaitAsync(cancellationToken);
                     try
                     {
@@ -4997,6 +5633,22 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
                                 order.Id,
                                 nowUtc);
                             deferredPersistence.AddPendingPaperEntry(signal, order, enteredRun);
+                            gtdChildEntriesPlaced = AddChildPendingPaperEntries(
+                                childAssignmentsByParent,
+                                variant,
+                                market,
+                                selectedOutcome,
+                                enteredRun,
+                                signal.Id,
+                                order.Id,
+                                gtdLimitPrice,
+                                gtdLimitPrice,
+                                reservedNotionalUsd,
+                                sizeShares,
+                                gtdCancelDeadlineUtc,
+                                nowUtc,
+                                BtcChildMirrorPaperExecutionSource,
+                                deferredPersistence);
                         }
 
                         if (shouldSubmitLegacyLiveOrder)
@@ -5043,7 +5695,7 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
                             cancellationToken);
                     }
 
-                    entriesPlaced++;
+                    entriesPlaced += 1 + gtdChildEntriesPlaced;
 
                     logger.LogInformation(
                         "BTC Up or Down 5m GTD paper order placed. Strategy={StrategyCode} Market={MarketSlug} Outcome={Outcome} Price={Price} StakeUsd={StakeUsd} SizeShares={SizeShares}",
@@ -5659,7 +6311,13 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
             BtcUpDown5mStrategyBehavior.FixedOutcomePreviousResultBpsThresholdFakPremarket or
             BtcUpDown5mStrategyBehavior.ReferenceAverageBpsThresholdFakPremarket or
             BtcUpDown5mStrategyBehavior.FilteredReferenceAverageBpsThresholdFakPremarket or
+            BtcUpDown5mStrategyBehavior.FuturesBasisBpsThresholdFakPremarket or
+            BtcUpDown5mStrategyBehavior.FuturesBasisBpsThresholdFakPremarketRevert or
             BtcUpDown5mStrategyBehavior.SimpleFixedOutcomeInstant or
+            BtcUpDown5mStrategyBehavior.ChildMirror or
+            BtcUpDown5mStrategyBehavior.ChildProgressMirror or
+            BtcUpDown5mStrategyBehavior.ChildRoiMirror or
+            BtcUpDown5mStrategyBehavior.ChildProgressRoiMirror or
             BtcUpDown5mStrategyBehavior.AlwaysUp or
             BtcUpDown5mStrategyBehavior.AlwaysDown or
             BtcUpDown5mStrategyBehavior.BinanceStartRelative or
@@ -5693,7 +6351,9 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
             BtcUpDown5mStrategyBehavior.DiffShiftProgress or
             BtcUpDown5mStrategyBehavior.DiffLimitProgressPremarket or
             BtcUpDown5mStrategyBehavior.DiffRealLimitProgressPremarket or
-            BtcUpDown5mStrategyBehavior.DiffReferenceAveragePremarket;
+            BtcUpDown5mStrategyBehavior.DiffReferenceAveragePremarket or
+            BtcUpDown5mStrategyBehavior.BpsConfirmedAveragePremarket or
+            BtcUpDown5mStrategyBehavior.DiffConfirmedAveragePremarket;
     }
 
     private static bool IsMiddleReferenceOpeningLimitEntry(BtcUpDown5mStrategyVariant variant)
@@ -5735,12 +6395,24 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
     private static bool IsReferenceAverageBpsFakPremarketEntry(BtcUpDown5mStrategyVariant variant)
     {
         return variant.Behavior is BtcUpDown5mStrategyBehavior.ReferenceAverageBpsThresholdFakPremarket or
-            BtcUpDown5mStrategyBehavior.FilteredReferenceAverageBpsThresholdFakPremarket;
+            BtcUpDown5mStrategyBehavior.FilteredReferenceAverageBpsThresholdFakPremarket or
+            BtcUpDown5mStrategyBehavior.BpsConfirmedAveragePremarket;
     }
 
     private static bool IsFilteredReferenceAverageBpsFakPremarketEntry(BtcUpDown5mStrategyVariant variant)
     {
         return variant.Behavior == BtcUpDown5mStrategyBehavior.FilteredReferenceAverageBpsThresholdFakPremarket;
+    }
+
+    private static bool IsFuturesBasisBpsFakPremarketEntry(BtcUpDown5mStrategyVariant variant)
+    {
+        return variant.Behavior is BtcUpDown5mStrategyBehavior.FuturesBasisBpsThresholdFakPremarket or
+            BtcUpDown5mStrategyBehavior.FuturesBasisBpsThresholdFakPremarketRevert;
+    }
+
+    private static bool IsFuturesBasisBpsFakPremarketRevertEntry(BtcUpDown5mStrategyVariant variant)
+    {
+        return variant.Behavior == BtcUpDown5mStrategyBehavior.FuturesBasisBpsThresholdFakPremarketRevert;
     }
 
     private static int GetPremarketPreviousResultSampleSecondsBeforeEnd(BtcUpDown5mStrategyVariant variant)
@@ -5761,6 +6433,7 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
         return IsPreOpenFixedDirectionOpeningLimitEntry(variant) ||
             IsFixedOutcomePreviousResultBpsFakPremarketEntry(variant) ||
             IsReferenceAverageBpsFakPremarketEntry(variant) ||
+            IsFuturesBasisBpsFakPremarketEntry(variant) ||
             IsPreviousScoreCounterTrendFakPremarketEntry(variant) ||
             IsDiffCounterTrendFakPremarketEntry(variant) ||
             IsDiffShiftProgressPremarketEntry(variant) ||
@@ -5828,7 +6501,8 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
             BtcUpDown5mStrategyBehavior.DiffShiftProgress or
             BtcUpDown5mStrategyBehavior.DiffLimitProgressPremarket or
             BtcUpDown5mStrategyBehavior.DiffRealLimitProgressPremarket or
-            BtcUpDown5mStrategyBehavior.DiffReferenceAveragePremarket;
+            BtcUpDown5mStrategyBehavior.DiffReferenceAveragePremarket or
+            BtcUpDown5mStrategyBehavior.DiffConfirmedAveragePremarket;
     }
 
     private static bool IsSimpleFixedOutcomeInstantEntry(BtcUpDown5mStrategyVariant variant)
@@ -5870,7 +6544,8 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
 
     private static bool IsDiffReferenceAveragePremarketEntry(BtcUpDown5mStrategyVariant variant)
     {
-        return variant.Behavior == BtcUpDown5mStrategyBehavior.DiffReferenceAveragePremarket;
+        return variant.Behavior is BtcUpDown5mStrategyBehavior.DiffReferenceAveragePremarket or
+            BtcUpDown5mStrategyBehavior.DiffConfirmedAveragePremarket;
     }
 
     private static bool IsPersistentDiffProgressStateEntry(BtcUpDown5mStrategyVariant variant)
@@ -5890,6 +6565,7 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
     {
         return IsFixedOutcomePreviousResultBpsFakEntry(variant) ||
             IsReferenceAverageBpsFakPremarketEntry(variant) ||
+            IsFuturesBasisBpsFakPremarketEntry(variant) ||
             IsPreviousScoreCounterTrendFakStatsEntry(variant) ||
             IsDiffCounterTrendFakPremarketEntry(variant) ||
             IsDiffReferenceAveragePremarketEntry(variant);
@@ -6063,6 +6739,16 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
         return Math.Max(0m, variant.DecisionDepth);
     }
 
+    private static decimal GetFuturesBasisMinMoveBps(BtcUpDown5mStrategyVariant variant)
+    {
+        if (variant.DecisionThresholdBps is > 0m)
+        {
+            return variant.DecisionThresholdBps.Value;
+        }
+
+        return Math.Max(0m, variant.DecisionDepth);
+    }
+
     private static BtcPriceDirection? GetReferenceAverageTriggerDirection(BtcUpDown5mStrategyVariant variant)
     {
         if (!IsReferenceAverageBpsFakPremarketEntry(variant))
@@ -6137,6 +6823,7 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
         DateTimeOffset nowUtc,
         BtcCurrentPriceLookupCache middleReferenceCurrentPrices,
         System.Collections.Concurrent.ConcurrentDictionary<string, Lazy<Task<BtcPreviousMarketMoveSignal>>> skipBpsStreakMoveSignalTasks,
+        System.Collections.Concurrent.ConcurrentDictionary<string, Lazy<Task<DiffReferenceAverageMarketResultsLookup>>> diffReferenceAverageResultTasks,
         CancellationToken cancellationToken)
     {
         return variant.Behavior switch
@@ -6183,6 +6870,13 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
                 nowUtc,
                 middleReferenceCurrentPrices,
                 cancellationToken),
+            BtcUpDown5mStrategyBehavior.FuturesBasisBpsThresholdFakPremarket or
+                BtcUpDown5mStrategyBehavior.FuturesBasisBpsThresholdFakPremarketRevert => await GetFuturesBasisBpsThresholdEntryDecisionAsync(
+                market,
+                variant,
+                stakeUsd,
+                nowUtc,
+                cancellationToken),
             BtcUpDown5mStrategyBehavior.AlwaysUp or
                 BtcUpDown5mStrategyBehavior.AlwaysDown => GetAlwaysDirectionEntryDecision(
                 market,
@@ -6225,6 +6919,7 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
                 nowUtc,
                 middleReferenceCurrentPrices,
                 skipBpsStreakMoveSignalTasks,
+                diffReferenceAverageResultTasks,
                 cancellationToken),
             BtcUpDown5mStrategyBehavior.DynamicMarkov => await GetDynamicMarkovEntryDecisionAsync(
                 market,
@@ -6273,6 +6968,18 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
                 variant,
                 stakeUsd,
                 nowUtc,
+                skipBpsStreakMoveSignalTasks,
+                diffReferenceAverageResultTasks,
+                cancellationToken),
+            BtcUpDown5mStrategyBehavior.BpsConfirmedAveragePremarket or
+                BtcUpDown5mStrategyBehavior.DiffConfirmedAveragePremarket => await GetConfirmedAveragePremarketEntryDecisionAsync(
+                market,
+                variant,
+                stakeUsd,
+                nowUtc,
+                middleReferenceCurrentPrices,
+                skipBpsStreakMoveSignalTasks,
+                diffReferenceAverageResultTasks,
                 cancellationToken),
             BtcUpDown5mStrategyBehavior.DiffCounterTrend or
                 BtcUpDown5mStrategyBehavior.AdjustedDiffCounterTrend or
@@ -6290,6 +6997,7 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
                 nowUtc,
                 middleReferenceCurrentPrices,
                 skipBpsStreakMoveSignalTasks,
+                diffReferenceAverageResultTasks,
                 cancellationToken),
             BtcUpDown5mStrategyBehavior.StandardEntryPriceCap => await GetStandardEntryPriceCapOpeningLimitEntryDecisionAsync(
                 market,
@@ -8740,11 +9448,333 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
                 stakeUsd));
     }
 
+    private async Task<BtcOpeningLimitDecision> GetConfirmedAveragePremarketEntryDecisionAsync(
+        PolymarketGammaMarket market,
+        BtcUpDown5mStrategyVariant variant,
+        decimal stakeUsd,
+        DateTimeOffset nowUtc,
+        BtcCurrentPriceLookupCache currentPrices,
+        System.Collections.Concurrent.ConcurrentDictionary<string, Lazy<Task<BtcPreviousMarketMoveSignal>>> premarketSignalTasks,
+        System.Collections.Concurrent.ConcurrentDictionary<string, Lazy<Task<DiffReferenceAverageMarketResultsLookup>>> resultTasks,
+        CancellationToken cancellationToken)
+    {
+        var baseVariant = TryGetLinkedSignalVariant(variant.BaseSignalStrategyId);
+        var confirmationVariant = TryGetLinkedSignalVariant(variant.ConfirmationSignalStrategyId);
+        var configurationError = GetConfirmedAverageConfigurationError(
+            variant,
+            baseVariant,
+            confirmationVariant);
+        if (configurationError is not null)
+        {
+            const string reason = "confirmed_average_strategy_link_invalid";
+            return BtcOpeningLimitDecision.Reject(
+                reason,
+                BuildConfirmedAverageRawDecisionJson(
+                    market,
+                    variant,
+                    stakeUsd,
+                    nowUtc,
+                    baseVariant,
+                    confirmationVariant,
+                    baseDecision: null,
+                    confirmationDecision: null,
+                    signalsAgree: false,
+                    configurationError: configurationError,
+                    selectedOutcome: null,
+                    reason: reason));
+        }
+
+        var baseDecision = await GetOpeningLimitEntryDecisionAsync(
+            market,
+            baseVariant!,
+            stakeUsd,
+            nowUtc,
+            currentPrices,
+            premarketSignalTasks,
+            resultTasks,
+            cancellationToken);
+        if (!baseDecision.ShouldEnter || baseDecision.SelectedOutcome is null)
+        {
+            var reason = baseDecision.SkipReason ?? "confirmed_average_base_signal_not_available";
+            return BtcOpeningLimitDecision.Reject(
+                reason,
+                BuildConfirmedAverageRawDecisionJson(
+                    market,
+                    variant,
+                    stakeUsd,
+                    nowUtc,
+                    baseVariant,
+                    confirmationVariant,
+                    baseDecision,
+                    confirmationDecision: null,
+                    signalsAgree: false,
+                    configurationError: null,
+                    selectedOutcome: null,
+                    reason: reason));
+        }
+
+        var confirmationDecision = await GetOpeningLimitEntryDecisionAsync(
+            market,
+            confirmationVariant!,
+            stakeUsd,
+            nowUtc,
+            currentPrices,
+            premarketSignalTasks,
+            resultTasks,
+            cancellationToken);
+        if (!confirmationDecision.ShouldEnter || confirmationDecision.SelectedOutcome is null)
+        {
+            const string reason = "confirmed_average_confirmation_signal_not_available";
+            return BtcOpeningLimitDecision.Reject(
+                reason,
+                BuildConfirmedAverageRawDecisionJson(
+                    market,
+                    variant,
+                    stakeUsd,
+                    nowUtc,
+                    baseVariant,
+                    confirmationVariant,
+                    baseDecision,
+                    confirmationDecision,
+                    signalsAgree: false,
+                    configurationError: null,
+                    selectedOutcome: null,
+                    reason: reason));
+        }
+
+        var signalsAgree = string.Equals(
+            baseDecision.SelectedOutcome.Outcome,
+            confirmationDecision.SelectedOutcome.Outcome,
+            StringComparison.OrdinalIgnoreCase);
+        if (!signalsAgree)
+        {
+            const string reason = "confirmed_average_signal_mismatch";
+            return BtcOpeningLimitDecision.Reject(
+                reason,
+                BuildConfirmedAverageRawDecisionJson(
+                    market,
+                    variant,
+                    stakeUsd,
+                    nowUtc,
+                    baseVariant,
+                    confirmationVariant,
+                    baseDecision,
+                    confirmationDecision,
+                    signalsAgree: false,
+                    configurationError: null,
+                    selectedOutcome: null,
+                    reason: reason));
+        }
+
+        if (!string.Equals(
+            baseDecision.SelectedOutcome.AssetId,
+            confirmationDecision.SelectedOutcome.AssetId,
+            StringComparison.OrdinalIgnoreCase))
+        {
+            const string reason = "confirmed_average_target_asset_mismatch";
+            return BtcOpeningLimitDecision.Reject(
+                reason,
+                BuildConfirmedAverageRawDecisionJson(
+                    market,
+                    variant,
+                    stakeUsd,
+                    nowUtc,
+                    baseVariant,
+                    confirmationVariant,
+                    baseDecision,
+                    confirmationDecision,
+                    signalsAgree: true,
+                    configurationError: null,
+                    selectedOutcome: null,
+                    reason: reason));
+        }
+
+        return BtcOpeningLimitDecision.Enter(
+            baseDecision.SelectedOutcome,
+            BuildConfirmedAverageRawDecisionJson(
+                market,
+                variant,
+                stakeUsd,
+                nowUtc,
+                baseVariant,
+                confirmationVariant,
+                baseDecision,
+                confirmationDecision,
+                signalsAgree: true,
+                configurationError: null,
+                selectedOutcome: baseDecision.SelectedOutcome,
+                reason: null),
+            baseDecision.LimitPriceOverride,
+            baseDecision.StakeUsdOverride,
+            baseDecision.DiffShiftProgressPendingBet);
+    }
+
+    private static BtcUpDown5mStrategyVariant? TryGetLinkedSignalVariant(Guid? strategyId)
+    {
+        return strategyId is { } id &&
+            StrategyVariantsById.TryGetValue(StrategyIds.Normalize(id), out var variant)
+            ? variant
+            : null;
+    }
+
+    private static string? GetConfirmedAverageConfigurationError(
+        BtcUpDown5mStrategyVariant variant,
+        BtcUpDown5mStrategyVariant? baseVariant,
+        BtcUpDown5mStrategyVariant? confirmationVariant)
+    {
+        if (baseVariant is null)
+        {
+            return "base_signal_strategy_not_registered";
+        }
+
+        if (confirmationVariant is null)
+        {
+            return "confirmation_signal_strategy_not_registered";
+        }
+
+        var isBpsConfirmed = variant.Behavior == BtcUpDown5mStrategyBehavior.BpsConfirmedAveragePremarket;
+        var expectedBaseBehavior = isBpsConfirmed
+            ? BtcUpDown5mStrategyBehavior.ReferenceAverageBpsThresholdFakPremarket
+            : BtcUpDown5mStrategyBehavior.DiffReferenceAveragePremarket;
+        var expectedConfirmationBehavior = isBpsConfirmed
+            ? BtcUpDown5mStrategyBehavior.DiffReferenceAveragePremarket
+            : BtcUpDown5mStrategyBehavior.ReferenceAverageBpsThresholdFakPremarket;
+        if (baseVariant.Behavior != expectedBaseBehavior)
+        {
+            return "base_signal_strategy_behavior_mismatch";
+        }
+
+        if (confirmationVariant.Behavior != expectedConfirmationBehavior)
+        {
+            return "confirmation_signal_strategy_behavior_mismatch";
+        }
+
+        if (!string.Equals(
+                GetReferenceAssetSymbol(variant),
+                GetReferenceAssetSymbol(baseVariant),
+                StringComparison.OrdinalIgnoreCase) ||
+            !string.Equals(
+                GetReferenceAssetSymbol(variant),
+                GetReferenceAssetSymbol(confirmationVariant),
+                StringComparison.OrdinalIgnoreCase))
+        {
+            return "signal_strategy_asset_mismatch";
+        }
+
+        if (variant.MarketInterval != baseVariant.MarketInterval ||
+            variant.MarketInterval != confirmationVariant.MarketInterval ||
+            variant.EntryDelaySeconds != baseVariant.EntryDelaySeconds ||
+            variant.EntryDelaySeconds != confirmationVariant.EntryDelaySeconds)
+        {
+            return "signal_strategy_timing_mismatch";
+        }
+
+        if (isBpsConfirmed && variant.DecisionThresholdBps != baseVariant.DecisionThresholdBps)
+        {
+            return "base_bps_threshold_mismatch";
+        }
+
+        if (!isBpsConfirmed && variant.DecisionDepth != baseVariant.DecisionDepth)
+        {
+            return "base_diff_threshold_mismatch";
+        }
+
+        var bpsSignalVariant = isBpsConfirmed ? baseVariant : confirmationVariant;
+        if (bpsSignalVariant.FixedOutcome is not null || bpsSignalVariant.DiffCounterTriggerOutcome is not null)
+        {
+            return "bps_signal_strategy_is_not_neutral";
+        }
+
+        return null;
+    }
+
+    private static string BuildConfirmedAverageRawDecisionJson(
+        PolymarketGammaMarket market,
+        BtcUpDown5mStrategyVariant variant,
+        decimal stakeUsd,
+        DateTimeOffset nowUtc,
+        BtcUpDown5mStrategyVariant? baseVariant,
+        BtcUpDown5mStrategyVariant? confirmationVariant,
+        BtcOpeningLimitDecision? baseDecision,
+        BtcOpeningLimitDecision? confirmationDecision,
+        bool signalsAgree,
+        string? configurationError,
+        BtcUpDown5mOutcomeQuote? selectedOutcome,
+        string? reason)
+    {
+        var isBpsConfirmed = variant.Behavior == BtcUpDown5mStrategyBehavior.BpsConfirmedAveragePremarket;
+        var root = new JsonObject
+        {
+            ["pricing_mode"] = OpeningLimitPricingMode,
+            ["order_execution_mode"] = FakOrderType,
+            ["order_type"] = FakOrderType,
+            ["post_only"] = false,
+            ["confirmed_average_premarket_enabled"] = true,
+            ["confirmed_average_base_family"] = isBpsConfirmed ? "bps_reference_average" : "diff_reference_average",
+            ["confirmed_average_confirmation_family"] = isBpsConfirmed ? "diff_reference_average" : "bps_reference_average",
+            ["fak_stats_probe"] = true,
+            ["strategy_code"] = variant.Code,
+            ["strategy_category"] = variant.Category,
+            ["decision_source"] = isBpsConfirmed
+                ? "bps_reference_average_confirmed_by_diff_reference_average_premarket"
+                : "diff_reference_average_confirmed_by_bps_reference_average_premarket",
+            ["reference_asset_symbol"] = GetReferenceAssetSymbol(variant),
+            ["quote_received_at_utc"] = nowUtc,
+            ["condition_id"] = market.ConditionId,
+            ["market_id"] = market.MarketId,
+            ["market_slug"] = market.Slug,
+            ["entry_delay_seconds"] = variant.EntryDelaySeconds,
+            ["base_signal_strategy_id"] = baseVariant?.Id.ToString(),
+            ["base_signal_strategy_code"] = baseVariant?.Code,
+            ["base_signal_strategy_name"] = baseVariant?.Name,
+            ["base_signal_should_enter"] = baseDecision?.ShouldEnter,
+            ["base_signal_skip_reason"] = baseDecision?.SkipReason,
+            ["base_signal_asset_id"] = baseDecision?.SelectedOutcome?.AssetId,
+            ["base_signal_outcome"] = baseDecision?.SelectedOutcome?.Outcome,
+            ["confirmation_signal_strategy_id"] = confirmationVariant?.Id.ToString(),
+            ["confirmation_signal_strategy_code"] = confirmationVariant?.Code,
+            ["confirmation_signal_strategy_name"] = confirmationVariant?.Name,
+            ["confirmation_signal_should_enter"] = confirmationDecision?.ShouldEnter,
+            ["confirmation_signal_skip_reason"] = confirmationDecision?.SkipReason,
+            ["confirmation_signal_asset_id"] = confirmationDecision?.SelectedOutcome?.AssetId,
+            ["confirmation_signal_outcome"] = confirmationDecision?.SelectedOutcome?.Outcome,
+            ["signals_agree"] = signalsAgree,
+            ["configuration_error"] = configurationError,
+            ["selected_direction"] = selectedOutcome?.Outcome,
+            ["asset_id"] = selectedOutcome?.AssetId,
+            ["outcome"] = selectedOutcome?.Outcome,
+            ["target_notional_usd"] = stakeUsd,
+            ["skip_reason"] = reason
+        };
+        root["base_signal_decision"] = ParseNestedDecisionJson(baseDecision?.RawDecisionJson);
+        root["confirmation_signal_decision"] = ParseNestedDecisionJson(confirmationDecision?.RawDecisionJson);
+        return root.ToJsonString();
+    }
+
+    private static JsonNode? ParseNestedDecisionJson(string? rawDecisionJson)
+    {
+        if (string.IsNullOrWhiteSpace(rawDecisionJson))
+        {
+            return null;
+        }
+
+        try
+        {
+            return JsonNode.Parse(rawDecisionJson);
+        }
+        catch (JsonException)
+        {
+            return JsonValue.Create(rawDecisionJson);
+        }
+    }
+
     private async Task<BtcOpeningLimitDecision> GetDiffReferenceAveragePremarketEntryDecisionAsync(
         PolymarketGammaMarket market,
         BtcUpDown5mStrategyVariant variant,
         decimal stakeUsd,
         DateTimeOffset nowUtc,
+        System.Collections.Concurrent.ConcurrentDictionary<string, Lazy<Task<BtcPreviousMarketMoveSignal>>> premarketSignalTasks,
+        System.Collections.Concurrent.ConcurrentDictionary<string, Lazy<Task<DiffReferenceAverageMarketResultsLookup>>> resultTasks,
         CancellationToken cancellationToken)
     {
         var marketStartUtc = GetMarketWindowStartUtc(market, variant);
@@ -8809,28 +9839,14 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
         IReadOnlyList<DiffCounterMarketResult> historicalResults = [];
         if (rollingStartUtc <= historicalTargetMarketStartUtc)
         {
-            try
+            var resultLookup = await GetCachedDiffReferenceAverageMarketResultsAsync(
+                resultTasks,
+                assetSymbol,
+                rollingStartUtc,
+                historicalTargetMarketStartUtc,
+                cancellationToken);
+            if (!resultLookup.Succeeded)
             {
-                historicalResults = await FetchDiffCounterMarketResultsAsync(
-                    assetSymbol,
-                    rollingStartUtc,
-                    historicalTargetMarketStartUtc,
-                    cancellationToken);
-            }
-            catch (OperationCanceledException)
-            {
-                throw;
-            }
-            catch (Exception ex)
-            {
-                logger.LogWarning(
-                    ex,
-                    "BTC Up or Down 5m Diff Reference Average Premarket result fetch failed. Strategy={StrategyCode} Asset={AssetSymbol} StartUtc={StartUtc} EndUtc={EndUtc}",
-                    variant.Code,
-                    assetSymbol,
-                    rollingStartUtc,
-                    historicalTargetMarketStartUtc);
-                await TryRecordApiErrorAsync("GetDiffReferenceAveragePremarketResults", ex.Message, cancellationToken);
                 return BtcOpeningLimitDecision.Reject(
                     "diff_reference_average_history_fetch_failed",
                     BuildDiffReferenceAverageRawDecisionJson(
@@ -8854,9 +9870,12 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
                         premarketSignalReason: null,
                         reason: "diff_reference_average_history_fetch_failed"));
             }
+
+            historicalResults = resultLookup.Results;
         }
 
-        var premarketSignal = await CalculatePremarketPreviousResultBpsMoveSignalAsync(
+        var premarketSignal = await GetCachedDiffReferenceAveragePremarketSignalAsync(
+            premarketSignalTasks,
             variant,
             marketStartUtc.Value,
             cancellationToken);
@@ -9071,6 +10090,89 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
                 premarketMoveBps: premarketSignal.MoveBps,
                 premarketSignalReason: premarketSignal.RejectionReason,
                 reason: null));
+    }
+
+    private Task<DiffReferenceAverageMarketResultsLookup> GetCachedDiffReferenceAverageMarketResultsAsync(
+        System.Collections.Concurrent.ConcurrentDictionary<string, Lazy<Task<DiffReferenceAverageMarketResultsLookup>>> resultTasks,
+        string assetSymbol,
+        DateTimeOffset startTimeMinUtc,
+        DateTimeOffset startTimeMaxUtc,
+        CancellationToken cancellationToken)
+    {
+        var normalizedAsset = NormalizeAssetSymbol(assetSymbol);
+        var cacheKey = string.Concat(
+            normalizedAsset,
+            ":",
+            startTimeMinUtc.ToUnixTimeSeconds().ToString(CultureInfo.InvariantCulture),
+            ":",
+            startTimeMaxUtc.ToUnixTimeSeconds().ToString(CultureInfo.InvariantCulture));
+        var lazy = resultTasks.GetOrAdd(
+            cacheKey,
+            _ => new Lazy<Task<DiffReferenceAverageMarketResultsLookup>>(
+                () => FetchDiffReferenceAverageMarketResultsAsync(
+                    normalizedAsset,
+                    startTimeMinUtc,
+                    startTimeMaxUtc,
+                    cancellationToken),
+                LazyThreadSafetyMode.ExecutionAndPublication));
+        return lazy.Value;
+    }
+
+    private async Task<DiffReferenceAverageMarketResultsLookup> FetchDiffReferenceAverageMarketResultsAsync(
+        string assetSymbol,
+        DateTimeOffset startTimeMinUtc,
+        DateTimeOffset startTimeMaxUtc,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            var results = await FetchDiffCounterMarketResultsAsync(
+                assetSymbol,
+                startTimeMinUtc,
+                startTimeMaxUtc,
+                cancellationToken);
+            return DiffReferenceAverageMarketResultsLookup.Success(results);
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            logger.LogWarning(
+                ex,
+                "BTC Up or Down 5m Diff Reference Average Premarket result fetch failed. Asset={AssetSymbol} StartUtc={StartUtc} EndUtc={EndUtc}",
+                assetSymbol,
+                startTimeMinUtc,
+                startTimeMaxUtc);
+            await TryRecordApiErrorAsync("GetDiffReferenceAveragePremarketResults", ex.Message, cancellationToken);
+            return DiffReferenceAverageMarketResultsLookup.Failure(ex.Message);
+        }
+    }
+
+    private Task<BtcPreviousMarketMoveSignal> GetCachedDiffReferenceAveragePremarketSignalAsync(
+        System.Collections.Concurrent.ConcurrentDictionary<string, Lazy<Task<BtcPreviousMarketMoveSignal>>> signalTasks,
+        BtcUpDown5mStrategyVariant variant,
+        DateTimeOffset marketStartUtc,
+        CancellationToken cancellationToken)
+    {
+        var cacheKey = string.Concat(
+            GetReferenceAssetSymbol(variant),
+            ":diff_reference_average_premarket:",
+            variant.MarketInterval,
+            ":",
+            GetPremarketPreviousResultSampleSecondsBeforeEnd(variant).ToString(CultureInfo.InvariantCulture),
+            ":",
+            marketStartUtc.ToUnixTimeSeconds().ToString(CultureInfo.InvariantCulture));
+        var lazy = signalTasks.GetOrAdd(
+            cacheKey,
+            _ => new Lazy<Task<BtcPreviousMarketMoveSignal>>(
+                () => CalculatePremarketPreviousResultBpsMoveSignalAsync(
+                    variant,
+                    marketStartUtc,
+                    cancellationToken),
+                LazyThreadSafetyMode.ExecutionAndPublication));
+        return lazy.Value;
     }
 
     private async Task<CryptoUpDown5mDiffShiftProgressState> GetOrCreateDiffShiftProgressStateAsync(
@@ -10750,6 +11852,7 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
         DateTimeOffset nowUtc,
         BtcCurrentPriceLookupCache currentPrices,
         System.Collections.Concurrent.ConcurrentDictionary<string, Lazy<Task<BtcPreviousMarketMoveSignal>>> skipBpsStreakMoveSignalTasks,
+        System.Collections.Concurrent.ConcurrentDictionary<string, Lazy<Task<DiffReferenceAverageMarketResultsLookup>>> diffReferenceAverageResultTasks,
         CancellationToken cancellationToken)
     {
         var requiredVotes = Math.Max(2, variant.DecisionDepth);
@@ -10764,6 +11867,7 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
                 nowUtc,
                 currentPrices,
                 skipBpsStreakMoveSignalTasks,
+                diffReferenceAverageResultTasks,
                 cancellationToken);
             var direction = decision.ShouldEnter && decision.SelectedOutcome is not null
                 ? TryResolveDirectionFromOutcome(decision.SelectedOutcome.Outcome)
@@ -10995,6 +12099,7 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
         DateTimeOffset nowUtc,
         BtcCurrentPriceLookupCache currentPrices,
         System.Collections.Concurrent.ConcurrentDictionary<string, Lazy<Task<BtcPreviousMarketMoveSignal>>> skipBpsStreakMoveSignalTasks,
+        System.Collections.Concurrent.ConcurrentDictionary<string, Lazy<Task<DiffReferenceAverageMarketResultsLookup>>> diffReferenceAverageResultTasks,
         CancellationToken cancellationToken)
     {
         var lookback = Math.Max(10, variant.DecisionDepth);
@@ -11052,6 +12157,7 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
                 nowUtc,
                 currentPrices,
                 skipBpsStreakMoveSignalTasks,
+                diffReferenceAverageResultTasks,
                 cancellationToken);
             if (!candidateDecision.ShouldEnter || candidateDecision.SelectedOutcome is null)
             {
@@ -11468,6 +12574,148 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
                 selectedDirection,
                 selectedOutcome,
                 moveFromAverageBps,
+                reason: null));
+    }
+
+    private async Task<BtcOpeningLimitDecision> GetFuturesBasisBpsThresholdEntryDecisionAsync(
+        PolymarketGammaMarket market,
+        BtcUpDown5mStrategyVariant variant,
+        decimal stakeUsd,
+        DateTimeOffset nowUtc,
+        CancellationToken cancellationToken)
+    {
+        var marketStartUtc = GetMarketWindowStartUtc(market, variant);
+        var targetMarketEndUtc = GetEffectiveMarketEndUtc(market, variant, marketStartUtc);
+        if (targetMarketEndUtc is null)
+        {
+            const string reason = "expiry_futures_target_market_end_not_available";
+            return BtcOpeningLimitDecision.Reject(
+                reason,
+                BuildFuturesBasisBpsRawDecisionJson(
+                    market,
+                    variant,
+                    stakeUsd,
+                    nowUtc,
+                    futuresPrices: null,
+                    basisBpsByExpiry: null,
+                    selectedDirection: null,
+                    selectedOutcome: null,
+                    reason));
+        }
+
+        IReadOnlyList<ExpiryFuturesReferencePricePoint> futuresPrices;
+        try
+        {
+            futuresPrices = await expiryFuturesReferencePriceClient.GetNearestExpiryPricesAsync(
+                GetReferenceAssetSymbol(variant),
+                targetMarketEndUtc.Value,
+                FuturesBasisRequiredExpiryCount,
+                cancellationToken);
+            if (futuresPrices.Count != FuturesBasisRequiredExpiryCount)
+            {
+                throw new InvalidOperationException(
+                    $"Expected exactly {FuturesBasisRequiredExpiryCount} OKX expiry futures price points but received {futuresPrices.Count}.");
+            }
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            await TryRecordApiErrorAsync("GetNearestExpiryFuturesReferencePrices", ex.Message, cancellationToken);
+            const string reason = "expiry_futures_reference_fetch_failed";
+            return BtcOpeningLimitDecision.Reject(
+                reason,
+                BuildFuturesBasisBpsRawDecisionJson(
+                    market,
+                    variant,
+                    stakeUsd,
+                    nowUtc,
+                    futuresPrices: null,
+                    basisBpsByExpiry: null,
+                    selectedDirection: null,
+                    selectedOutcome: null,
+                    reason));
+        }
+
+        var basisBpsByExpiry = futuresPrices
+            .Select(price => GetMeanDeviationBps(price.MidPriceUsd, price.IndexPriceUsd))
+            .ToArray();
+        var primaryBasisBps = basisBpsByExpiry[0];
+        var thresholdBps = GetFuturesBasisMinMoveBps(variant);
+        var triggerDirection = primaryBasisBps switch
+        {
+            var value when value >= thresholdBps => BtcPriceDirection.Up,
+            var value when value <= -thresholdBps => BtcPriceDirection.Down,
+            _ => (BtcPriceDirection?)null
+        };
+        if (triggerDirection is null)
+        {
+            const string reason = "futures_basis_move_below_bps_threshold";
+            return BtcOpeningLimitDecision.Reject(
+                reason,
+                BuildFuturesBasisBpsRawDecisionJson(
+                    market,
+                    variant,
+                    stakeUsd,
+                    nowUtc,
+                    futuresPrices,
+                    basisBpsByExpiry,
+                    selectedDirection: null,
+                    selectedOutcome: null,
+                    reason));
+        }
+
+        if (!HaveMatchingFuturesBasisConfirmationSigns(basisBpsByExpiry))
+        {
+            const string reason = "futures_basis_confirmation_sign_mismatch";
+            return BtcOpeningLimitDecision.Reject(
+                reason,
+                BuildFuturesBasisBpsRawDecisionJson(
+                    market,
+                    variant,
+                    stakeUsd,
+                    nowUtc,
+                    futuresPrices,
+                    basisBpsByExpiry,
+                    selectedDirection: null,
+                    selectedOutcome: null,
+                    reason));
+        }
+
+        var selectedDirection = IsFuturesBasisBpsFakPremarketRevertEntry(variant)
+            ? InvertDirection(triggerDirection.Value)
+            : triggerDirection.Value;
+        var selectedOutcome = TrySelectOutcomeForDirection(market, selectedDirection);
+        if (selectedOutcome is null)
+        {
+            const string reason = "target_outcome_not_available";
+            return BtcOpeningLimitDecision.Reject(
+                reason,
+                BuildFuturesBasisBpsRawDecisionJson(
+                    market,
+                    variant,
+                    stakeUsd,
+                    nowUtc,
+                    futuresPrices,
+                    basisBpsByExpiry,
+                    selectedDirection,
+                    selectedOutcome: null,
+                    reason));
+        }
+
+        return BtcOpeningLimitDecision.Enter(
+            selectedOutcome,
+            BuildFuturesBasisBpsRawDecisionJson(
+                market,
+                variant,
+                stakeUsd,
+                nowUtc,
+                futuresPrices,
+                basisBpsByExpiry,
+                selectedDirection,
+                selectedOutcome,
                 reason: null));
     }
 
@@ -15685,6 +16933,167 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
         });
     }
 
+    private static string BuildFuturesBasisBpsRawDecisionJson(
+        PolymarketGammaMarket market,
+        BtcUpDown5mStrategyVariant variant,
+        decimal targetNotionalUsd,
+        DateTimeOffset nowUtc,
+        IReadOnlyList<ExpiryFuturesReferencePricePoint>? futuresPrices,
+        IReadOnlyList<decimal>? basisBpsByExpiry,
+        BtcPriceDirection? selectedDirection,
+        BtcUpDown5mOutcomeQuote? selectedOutcome,
+        string? reason)
+    {
+        var marketStartUtc = GetMarketWindowStartUtc(market, variant);
+        var marketEndUtc = GetEffectiveMarketEndUtc(market, variant, marketStartUtc);
+        var entryDueAtUtc = GetEntryDueAtUtc(marketStartUtc, variant);
+        var referenceAssetSymbol = GetReferenceAssetSymbol(variant);
+        var primaryFuturesPrice = futuresPrices?.FirstOrDefault();
+        var primaryBasisBps = basisBpsByExpiry is { Count: > 0 } ? basisBpsByExpiry[0] : (decimal?)null;
+        var confirmationSignsMatch = basisBpsByExpiry is { Count: FuturesBasisRequiredExpiryCount }
+            ? HaveMatchingFuturesBasisConfirmationSigns(basisBpsByExpiry)
+            : (bool?)null;
+        var confirmationMatchingCount = basisBpsByExpiry is { Count: > 0 }
+            ? CountMatchingFuturesBasisConfirmationSigns(basisBpsByExpiry)
+            : (int?)null;
+        var futuresExpiryDiagnostics = futuresPrices?
+            .Select((price, index) => new
+            {
+                expiry_rank = index + 1,
+                role = index == 0 ? "primary_threshold" : "sign_confirmation",
+                instrument_id = price.InstrumentId,
+                expiry_at_utc = price.ExpiryAtUtc,
+                horizon_after_market_end_seconds = marketEndUtc is { } targetEndUtc
+                    ? (price.ExpiryAtUtc - targetEndUtc).TotalSeconds
+                    : (double?)null,
+                bid_price_usd = price.BidPriceUsd,
+                ask_price_usd = price.AskPriceUsd,
+                mid_price_usd = price.MidPriceUsd,
+                index_price_usd = price.IndexPriceUsd,
+                futures_source_updated_at_utc = price.FuturesSourceUpdatedAtUtc,
+                index_source_updated_at_utc = price.IndexSourceUpdatedAtUtc,
+                fetched_at_utc = price.FetchedAtUtc,
+                basis_bps = basisBpsByExpiry is not null && index < basisBpsByExpiry.Count
+                    ? basisBpsByExpiry[index]
+                    : (decimal?)null,
+                basis_sign = basisBpsByExpiry is not null && index < basisBpsByExpiry.Count
+                    ? GetFuturesBasisSignName(basisBpsByExpiry[index])
+                    : null
+            })
+            .ToArray();
+        return JsonSerializer.Serialize(new
+        {
+            pricing_mode = OpeningLimitPricingMode,
+            order_execution_mode = FakOrderType,
+            post_only = false,
+            strategy_code = variant.Code,
+            reference_asset_symbol = referenceAssetSymbol,
+            reference_index_instrument_id = referenceAssetSymbol + "-USD",
+            futures_instrument_id = primaryFuturesPrice?.InstrumentId,
+            decision_source = IsFuturesBasisBpsFakPremarketRevertEntry(variant)
+                ? "okx_three_expiry_confirmed_futures_basis_bps_revert_premarket"
+                : "okx_three_expiry_confirmed_futures_basis_bps_premarket",
+            revert_decision = IsFuturesBasisBpsFakPremarketRevertEntry(variant),
+            futures_basis_source = primaryFuturesPrice?.Source,
+            quote_received_at_utc = nowUtc,
+            condition_id = market.ConditionId,
+            market_id = market.MarketId,
+            market_slug = market.Slug,
+            market_start_utc = marketStartUtc,
+            market_end_utc = marketEndUtc,
+            entry_delay_seconds = variant.EntryDelaySeconds,
+            entry_due_at_utc = entryDueAtUtc,
+            decision_delay_ms = GetDecisionDelayMilliseconds(entryDueAtUtc, nowUtc),
+            current_price_usd = primaryFuturesPrice?.IndexPriceUsd,
+            reference_index_price_usd = primaryFuturesPrice?.IndexPriceUsd,
+            reference_index_source_updated_at_utc = primaryFuturesPrice?.IndexSourceUpdatedAtUtc,
+            futures_bid_price_usd = primaryFuturesPrice?.BidPriceUsd,
+            futures_ask_price_usd = primaryFuturesPrice?.AskPriceUsd,
+            futures_mid_price_usd = primaryFuturesPrice?.MidPriceUsd,
+            futures_source_updated_at_utc = primaryFuturesPrice?.FuturesSourceUpdatedAtUtc,
+            futures_fetched_at_utc = primaryFuturesPrice?.FetchedAtUtc,
+            futures_expiry_at_utc = primaryFuturesPrice?.ExpiryAtUtc,
+            futures_horizon_after_market_end_seconds = primaryFuturesPrice is not null && marketEndUtc is { } targetEndUtc
+                ? (primaryFuturesPrice.ExpiryAtUtc - targetEndUtc).TotalSeconds
+                : (double?)null,
+            futures_basis_bps = primaryBasisBps,
+            futures_basis_abs_bps = primaryBasisBps is { } basis ? Math.Abs(basis) : (decimal?)null,
+            futures_basis_min_move_bps = GetFuturesBasisMinMoveBps(variant),
+            futures_basis_direction_source = "okx_three_fixed_expiry_mids_minus_okx_usd_index",
+            futures_basis_trigger_direction = GetFuturesBasisTriggerDirectionName(variant, primaryBasisBps),
+            futures_basis_target_direction = selectedDirection?.ToString(),
+            futures_required_expiry_count = FuturesBasisRequiredExpiryCount,
+            futures_expiry_count = futuresPrices?.Count,
+            futures_confirmation_required_count = FuturesBasisRequiredExpiryCount - 1,
+            futures_confirmation_matching_count = confirmationMatchingCount,
+            futures_confirmation_signs_match = confirmationSignsMatch,
+            futures_confirmation_rule = "second_and_third_basis_sign_match_primary",
+            futures_expiries = futuresExpiryDiagnostics,
+            fak_stats_probe = true,
+            premarket_futures_basis_enabled = true,
+            futures_basis_sign_confirmation_enabled = true,
+            asset_id = selectedOutcome?.AssetId,
+            outcome = selectedOutcome?.Outcome,
+            target_notional_usd = targetNotionalUsd,
+            skip_reason = reason
+        });
+    }
+
+    private static bool HaveMatchingFuturesBasisConfirmationSigns(IReadOnlyList<decimal> basisBpsByExpiry)
+    {
+        if (basisBpsByExpiry.Count != FuturesBasisRequiredExpiryCount)
+        {
+            return false;
+        }
+
+        var primarySign = Math.Sign(basisBpsByExpiry[0]);
+        return primarySign != 0 &&
+            basisBpsByExpiry.Skip(1).All(value => Math.Sign(value) == primarySign);
+    }
+
+    private static int CountMatchingFuturesBasisConfirmationSigns(IReadOnlyList<decimal> basisBpsByExpiry)
+    {
+        if (basisBpsByExpiry.Count == 0)
+        {
+            return 0;
+        }
+
+        var primarySign = Math.Sign(basisBpsByExpiry[0]);
+        return primarySign == 0
+            ? 0
+            : basisBpsByExpiry.Skip(1).Count(value => Math.Sign(value) == primarySign);
+    }
+
+    private static string GetFuturesBasisSignName(decimal basisBps)
+    {
+        return Math.Sign(basisBps) switch
+        {
+            > 0 => BtcPriceDirection.Up.ToString(),
+            < 0 => BtcPriceDirection.Down.ToString(),
+            _ => "Zero"
+        };
+    }
+
+    private static string? GetFuturesBasisTriggerDirectionName(
+        BtcUpDown5mStrategyVariant variant,
+        decimal? basisBps)
+    {
+        if (basisBps is not { } value)
+        {
+            return null;
+        }
+
+        var thresholdBps = GetFuturesBasisMinMoveBps(variant);
+        if (value >= thresholdBps)
+        {
+            return BtcPriceDirection.Up.ToString();
+        }
+
+        return value <= -thresholdBps
+            ? BtcPriceDirection.Down.ToString()
+            : null;
+    }
+
     private static bool IsFilteredReferenceAverageWindowSkipped(string? windowLabel)
     {
         return string.Equals(windowLabel, "6h", StringComparison.OrdinalIgnoreCase) ||
@@ -19408,6 +20817,10 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
         DateTimeOffset UpdatedAtUtc,
         DateTimeOffset? MarketEndUtc);
 
+    private sealed record ActiveChildMirrorAssignment(
+        StrategyChildParentAssignment Assignment,
+        BtcUpDown5mStrategyVariant ChildVariant);
+
     private sealed record BtcMakerDecisionSlot(
         bool Available,
         int CurrentSlot,
@@ -19996,6 +21409,23 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
         DateTimeOffset? MarketEndUtc,
         string WinningOutcome,
         string Source);
+
+    private sealed record DiffReferenceAverageMarketResultsLookup(
+        bool Succeeded,
+        IReadOnlyList<DiffCounterMarketResult> Results,
+        string? ErrorMessage)
+    {
+        public static DiffReferenceAverageMarketResultsLookup Success(
+            IReadOnlyList<DiffCounterMarketResult> results)
+        {
+            return new DiffReferenceAverageMarketResultsLookup(true, results, null);
+        }
+
+        public static DiffReferenceAverageMarketResultsLookup Failure(string errorMessage)
+        {
+            return new DiffReferenceAverageMarketResultsLookup(false, [], errorMessage);
+        }
+    }
 
     private sealed record DiffReferenceAverageWindowSpec(
         string Label,

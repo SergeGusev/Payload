@@ -44,6 +44,8 @@ internal sealed class TestAppRepository : IAppRepository
 
     public List<PolymarketDataApiPerformanceRefreshResult> PolymarketDataApiPerformanceRefreshResults { get; } = [];
 
+    public List<PolymarketAutoRedeemAttempt> PolymarketAutoRedeemAttempts { get; } = [];
+
     public List<PolymarketDataApiWalletCategoryRating> PolymarketDataApiWalletCategoryRatings { get; } = [];
 
     public List<PolymarketCategoryMapping> PolymarketCategoryMappings { get; } =
@@ -77,6 +79,8 @@ internal sealed class TestAppRepository : IAppRepository
     public List<PolymarketGammaMarket> PolymarketGammaMarkets { get; } = [];
 
     public List<StrategyMarketPaperRun> StrategyMarketPaperRuns { get; } = [];
+
+    public List<StrategyChildParentAssignment> StrategyChildParentAssignments { get; } = [];
 
     public Dictionary<Guid, bool> StrategyEnabledStates { get; } =
         StrategyIds.AllStrategyIds.ToDictionary(strategyId => strategyId, _ => true);
@@ -211,6 +215,11 @@ internal sealed class TestAppRepository : IAppRepository
     public bool ThrowOnAddApiError { get; set; }
 
     public bool ThrowOnGetCryptoUpDown5mWebSocketResolvedMarkets { get; set; }
+
+    private int getCryptoUpDown5mWebSocketResolvedMarketsCalls;
+
+    public int GetCryptoUpDown5mWebSocketResolvedMarketsCalls =>
+        Volatile.Read(ref getCryptoUpDown5mWebSocketResolvedMarketsCalls);
 
     public bool ThrowOnUpsertServiceHeartbeat { get; set; }
 
@@ -444,6 +453,29 @@ internal sealed class TestAppRepository : IAppRepository
             currentPositions.Count + closedPositions.Count > 0 ? 1 : 0);
         PolymarketDataApiPerformanceRefreshResults.Add(result);
         return Task.FromResult(result);
+    }
+
+    public Task<PolymarketAutoRedeemAttempt?> GetPolymarketAutoRedeemAttemptAsync(
+        string wallet,
+        string conditionId,
+        CancellationToken cancellationToken = default)
+    {
+        var attempt = PolymarketAutoRedeemAttempts.FirstOrDefault(item =>
+            string.Equals(item.Wallet, wallet, StringComparison.OrdinalIgnoreCase) &&
+            string.Equals(item.ConditionId, conditionId, StringComparison.OrdinalIgnoreCase));
+
+        return Task.FromResult(attempt);
+    }
+
+    public Task UpsertPolymarketAutoRedeemAttemptAsync(
+        PolymarketAutoRedeemAttempt attempt,
+        CancellationToken cancellationToken = default)
+    {
+        PolymarketAutoRedeemAttempts.RemoveAll(item =>
+            string.Equals(item.Wallet, attempt.Wallet, StringComparison.OrdinalIgnoreCase) &&
+            string.Equals(item.ConditionId, attempt.ConditionId, StringComparison.OrdinalIgnoreCase));
+        PolymarketAutoRedeemAttempts.Add(attempt);
+        return Task.CompletedTask;
     }
 
     public Task<IReadOnlyList<string>> GetMissingPolymarketLeaderboardCategoryMappingsAsync(
@@ -921,7 +953,10 @@ internal sealed class TestAppRepository : IAppRepository
             BulkStrategyMarketPaperRunUpdateCalls++;
             foreach (var run in runs)
             {
-                StrategyMarketPaperRuns.RemoveAll(item => item.Id == run.Id);
+                StrategyMarketPaperRuns.RemoveAll(item =>
+                    item.Id == run.Id ||
+                    (StrategyIds.Normalize(item.StrategyId) == StrategyIds.Normalize(run.StrategyId) &&
+                        string.Equals(item.MarketId, run.MarketId, StringComparison.OrdinalIgnoreCase)));
                 StrategyMarketPaperRuns.Add(run);
             }
         }
@@ -1083,7 +1118,10 @@ internal sealed class TestAppRepository : IAppRepository
 
             foreach (var run in batch.StrategyRuns)
             {
-                StrategyMarketPaperRuns.RemoveAll(item => item.Id == run.Id);
+                StrategyMarketPaperRuns.RemoveAll(item =>
+                    item.Id == run.Id ||
+                    (StrategyIds.Normalize(item.StrategyId) == StrategyIds.Normalize(run.StrategyId) &&
+                        string.Equals(item.MarketId, run.MarketId, StringComparison.OrdinalIgnoreCase)));
                 StrategyMarketPaperRuns.Add(run);
             }
         }
@@ -1721,6 +1759,140 @@ internal sealed class TestAppRepository : IAppRepository
         }
 
         return Task.FromResult<IReadOnlyList<StrategyRecentPerformance>>(rows);
+    }
+
+    public Task<IReadOnlyList<StrategyLookbackPnl>> GetStrategySettledPnlByLookbackHoursAsync(
+        IReadOnlyCollection<Guid> strategyIds,
+        DateTimeOffset nowUtc,
+        int maxLookbackHours,
+        CancellationToken cancellationToken = default)
+    {
+        var normalizedStrategyIds = strategyIds
+            .Select(StrategyIds.Normalize)
+            .ToHashSet();
+        if (normalizedStrategyIds.Count == 0 || maxLookbackHours <= 0)
+        {
+            return Task.FromResult<IReadOnlyList<StrategyLookbackPnl>>([]);
+        }
+
+        var normalizedMaxLookbackHours = Math.Min(maxLookbackHours, 24);
+        lock (sync)
+        {
+            var rows = new List<StrategyLookbackPnl>();
+            foreach (var lookbackHours in Enumerable.Range(1, normalizedMaxLookbackHours))
+            {
+                var windowStartUtc = nowUtc.AddHours(-lookbackHours);
+                rows.AddRange(StrategyMarketPaperRuns
+                    .Where(run => normalizedStrategyIds.Contains(StrategyIds.Normalize(run.StrategyId)))
+                    .Where(run => string.Equals(run.Status, StrategyMarketPaperRunStatuses.Settled, StringComparison.OrdinalIgnoreCase))
+                    .Where(run => run.SettledAtUtc is { } settledAt && settledAt >= windowStartUtc && settledAt <= nowUtc)
+                    .Where(run => run.RealizedPnlUsd is not null)
+                    .GroupBy(run => StrategyIds.Normalize(run.StrategyId))
+                    .Select(group =>
+                    {
+                        var realizedPnlUsd = group.Sum(run => run.RealizedPnlUsd ?? 0m);
+                        var stakeUsd = group.Sum(run => run.StakeUsd);
+                        var roiPct = stakeUsd > 0m ? realizedPnlUsd * 100m / stakeUsd : 0m;
+                        return new StrategyLookbackPnl(
+                            group.Key,
+                            lookbackHours,
+                            realizedPnlUsd,
+                            stakeUsd,
+                            roiPct,
+                            group.Count());
+                    })
+                    .Where(item => item.RealizedPnlUsd > 0m));
+            }
+
+            return Task.FromResult<IReadOnlyList<StrategyLookbackPnl>>(rows
+                .OrderBy(item => item.LookbackHours)
+                .ThenByDescending(item => item.RealizedPnlUsd)
+                .ThenBy(item => item.StrategyId)
+                .ToArray());
+        }
+    }
+
+    public Task<IReadOnlyList<StrategyChildParentAssignment>> GetActiveStrategyChildParentAssignmentsAsync(
+        CancellationToken cancellationToken = default)
+    {
+        lock (sync)
+        {
+            return Task.FromResult<IReadOnlyList<StrategyChildParentAssignment>>(
+                StrategyChildParentAssignments
+                    .Where(assignment => assignment.EndedAtUtc is null)
+                    .OrderBy(assignment => assignment.ParentStrategyId)
+                    .ThenBy(assignment => assignment.ChildStrategyId)
+                    .ToArray());
+        }
+    }
+
+    public Task UpsertStrategyChildParentSelectionsAsync(
+        IReadOnlyList<StrategyChildParentSelection> selections,
+        DateTimeOffset nowUtc,
+        CancellationToken cancellationToken = default)
+    {
+        lock (sync)
+        {
+            foreach (var selection in selections)
+            {
+                var childStrategyId = StrategyIds.Normalize(selection.ChildStrategyId);
+                var parentStrategyId = selection.ParentStrategyId.HasValue
+                    ? StrategyIds.Normalize(selection.ParentStrategyId.Value)
+                    : (Guid?)null;
+                var assetSymbol = selection.AssetSymbol.Trim().ToUpperInvariant();
+                var active = StrategyChildParentAssignments.FirstOrDefault(assignment =>
+                    StrategyIds.Normalize(assignment.ChildStrategyId) == childStrategyId &&
+                    assignment.EndedAtUtc is null);
+                var activeChanged = active is not null &&
+                    (parentStrategyId is null ||
+                        StrategyIds.Normalize(active.ParentStrategyId) != parentStrategyId.Value ||
+                        !string.Equals(active.AssetSymbol, assetSymbol, StringComparison.Ordinal) ||
+                        active.LookbackHours != selection.LookbackHours ||
+                        !string.Equals(active.ChildMode, selection.ChildMode, StringComparison.Ordinal));
+                if (activeChanged)
+                {
+                    StrategyChildParentAssignments.Remove(active!);
+                    StrategyChildParentAssignments.Add(active! with
+                    {
+                        EndedAtUtc = nowUtc,
+                        UpdatedAtUtc = nowUtc
+                    });
+                    active = null;
+                }
+
+                if (parentStrategyId is null)
+                {
+                    continue;
+                }
+
+                if (active is not null)
+                {
+                    StrategyChildParentAssignments.Remove(active);
+                    StrategyChildParentAssignments.Add(active with
+                    {
+                        ParentPnlUsd = selection.ParentPnlUsd ?? active.ParentPnlUsd,
+                        ParentRoiPct = selection.ParentRoiPct ?? active.ParentRoiPct,
+                        UpdatedAtUtc = nowUtc
+                    });
+                    continue;
+                }
+
+                StrategyChildParentAssignments.Add(new StrategyChildParentAssignment(
+                    Guid.NewGuid(),
+                    childStrategyId,
+                    parentStrategyId.Value,
+                    assetSymbol,
+                    selection.LookbackHours,
+                    selection.ChildMode,
+                    selection.ParentPnlUsd ?? 0m,
+                    selection.ParentRoiPct ?? 0m,
+                    nowUtc,
+                    EndedAtUtc: null,
+                    UpdatedAtUtc: nowUtc));
+            }
+        }
+
+        return Task.CompletedTask;
     }
 
     public Task<IReadOnlyDictionary<Guid, bool>> GetStrategyEnabledStatesAsync(CancellationToken cancellationToken = default)
@@ -2719,6 +2891,7 @@ internal sealed class TestAppRepository : IAppRepository
         DateTimeOffset endUtc,
         CancellationToken cancellationToken = default)
     {
+        Interlocked.Increment(ref getCryptoUpDown5mWebSocketResolvedMarketsCalls);
         if (ThrowOnGetCryptoUpDown5mWebSocketResolvedMarkets)
         {
             throw new InvalidOperationException("temporary websocket result storage failure");

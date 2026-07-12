@@ -1,4 +1,5 @@
 using System.Text.Json;
+using Npgsql;
 using PolyCopyTrader.Domain;
 using PolyCopyTrader.Domain.Configuration;
 using PolyCopyTrader.Storage;
@@ -34,6 +35,12 @@ public sealed class StorageTests
         Assert.Contains("CREATE UNIQUE INDEX IF NOT EXISTS ux_leader_trades_dedup", PostgresSchema.SchemaSql, StringComparison.Ordinal);
         Assert.Contains("CREATE INDEX IF NOT EXISTS ix_polymarket_http_logs_requested", PostgresSchema.SchemaSql, StringComparison.Ordinal);
         Assert.Contains("CREATE TABLE IF NOT EXISTS btc_up_down_5m_strategy_stage_timings", PostgresSchema.SchemaSql, StringComparison.Ordinal);
+        Assert.Contains("CREATE TABLE IF NOT EXISTS strategy_child_parent_assignments", PostgresSchema.SchemaSql, StringComparison.Ordinal);
+        Assert.Contains("parent_roi_pct numeric(28,8) NOT NULL DEFAULT 0", PostgresSchema.SchemaSql, StringComparison.Ordinal);
+        Assert.Contains("ALTER TABLE strategy_child_parent_assignments", PostgresSchema.SchemaSql, StringComparison.Ordinal);
+        Assert.Contains("ADD COLUMN IF NOT EXISTS parent_roi_pct numeric(28,8) NOT NULL DEFAULT 0", PostgresSchema.SchemaSql, StringComparison.Ordinal);
+        Assert.Contains("ux_strategy_child_parent_assignments_active_child", PostgresSchema.SchemaSql, StringComparison.Ordinal);
+        Assert.Contains("ix_strategy_child_parent_assignments_active_parent", PostgresSchema.SchemaSql, StringComparison.Ordinal);
         Assert.Contains("ix_btc_up_down_5m_strategy_stage_timings_started", PostgresSchema.SchemaSql, StringComparison.Ordinal);
         Assert.Contains("ix_btc_up_down_5m_strategy_stage_timings_cycle", PostgresSchema.SchemaSql, StringComparison.Ordinal);
         Assert.Contains("CREATE TABLE IF NOT EXISTS polymarket_onchain_wallet_positions", PostgresSchema.SchemaSql, StringComparison.Ordinal);
@@ -120,7 +127,8 @@ public sealed class StorageTests
         Assert.Contains("ck_strategies_live_available_balance_nonnegative", PostgresSchema.SchemaSql, StringComparison.Ordinal);
         Assert.Contains("ck_strategies_live_available_balance_maximum", PostgresSchema.SchemaSql, StringComparison.Ordinal);
         Assert.Contains("WHERE live_available_balance > 100.00", PostgresSchema.SchemaSql, StringComparison.Ordinal);
-        Assert.Contains("'follow_leader'", PostgresSchema.SchemaSql, StringComparison.Ordinal);
+        Assert.Contains("20260709_remove_follow_leader_strategy", PostgresSchema.SchemaSql, StringComparison.Ordinal);
+        Assert.DoesNotContain("Follow accepted signals from selected leader traders.", PostgresSchema.SchemaSql, StringComparison.Ordinal);
         Assert.DoesNotContain("'btc_up_down_5m_less_30'", PostgresSchema.SchemaSql, StringComparison.Ordinal);
         Assert.DoesNotContain("'btc_up_down_5m_less_30_gamma'", PostgresSchema.SchemaSql, StringComparison.Ordinal);
         Assert.DoesNotContain("'btc_up_down_5m_less_180_martin'", PostgresSchema.SchemaSql, StringComparison.Ordinal);
@@ -173,13 +181,14 @@ public sealed class StorageTests
         Assert.DoesNotContain("lower(asset_symbol) || '_up_down_5m_skip_bps_' || code_suffix", PostgresSchema.SchemaSql, StringComparison.Ordinal);
         Assert.DoesNotContain("lower(asset_symbol) || '_up_down_5m_skip_bps_' || code_suffix || '_instant'", PostgresSchema.SchemaSql, StringComparison.Ordinal);
         Assert.DoesNotContain("('ETH', '8061', '8062')", PostgresSchema.SchemaSql, StringComparison.Ordinal);
-        Assert.Contains("('SOL', '8063', '8064')", PostgresSchema.SchemaSql, StringComparison.Ordinal);
+        Assert.DoesNotContain("('SOL', '8063', '8064')", PostgresSchema.SchemaSql, StringComparison.Ordinal);
         Assert.Contains("20260707_remove_eth_binance_bps_strategies", PostgresSchema.SchemaSql, StringComparison.Ordinal);
+        Assert.Contains("20260709_remove_sol_binance_bps_strategies", PostgresSchema.SchemaSql, StringComparison.Ordinal);
         Assert.DoesNotContain("'btc_up_down_5m_up'", PostgresSchema.SchemaSql, StringComparison.Ordinal);
         Assert.DoesNotContain("'btc_up_down_5m_down'", PostgresSchema.SchemaSql, StringComparison.Ordinal);
-        Assert.Contains("('BTC', '8121', '8122')", PostgresSchema.SchemaSql, StringComparison.Ordinal);
-        Assert.Contains("('ETH', '8123', '8124')", PostgresSchema.SchemaSql, StringComparison.Ordinal);
-        Assert.Contains("('SOL', '8125', '8126')", PostgresSchema.SchemaSql, StringComparison.Ordinal);
+        Assert.DoesNotContain("('BTC', '8121', '8122')", PostgresSchema.SchemaSql, StringComparison.Ordinal);
+        Assert.DoesNotContain("('ETH', '8123', '8124')", PostgresSchema.SchemaSql, StringComparison.Ordinal);
+        Assert.DoesNotContain("('SOL', '8125', '8126')", PostgresSchema.SchemaSql, StringComparison.Ordinal);
         Assert.Contains("'b7c50005-0000-4000-8130-000000000109'", PostgresSchema.SchemaSql, StringComparison.Ordinal);
         Assert.Contains("'eth_up_down_5m_down_bps_9_fak'", PostgresSchema.SchemaSql, StringComparison.Ordinal);
         Assert.Contains("'ETH Up or Down 5m Down 9 bps'", PostgresSchema.SchemaSql, StringComparison.Ordinal);
@@ -192,15 +201,35 @@ public sealed class StorageTests
         Assert.Contains("('BTC', '8178')", PostgresSchema.SchemaSql, StringComparison.Ordinal);
         Assert.Contains("('ETH', '8179')", PostgresSchema.SchemaSql, StringComparison.Ordinal);
         Assert.Contains("('SOL', '8180')", PostgresSchema.SchemaSql, StringComparison.Ordinal);
-        Assert.Contains("'b7c50005-0000-4000-8181-' || lpad((100 + threshold_tenths)::text, 12, '0')", PostgresSchema.SchemaSql, StringComparison.Ordinal);
+        Assert.Contains("('BTC', '8182', '8191')", PostgresSchema.SchemaSql, StringComparison.Ordinal);
+        Assert.Contains("('ETH', '8183', '8192')", PostgresSchema.SchemaSql, StringComparison.Ordinal);
+        Assert.Contains("('SOL', '8184', '8193')", PostgresSchema.SchemaSql, StringComparison.Ordinal);
+        Assert.Contains("lower(asset_symbol) || '_up_down_5m_futures_basis_bps_' || threshold_value::text || mode_code || '_fak_premarket'", PostgresSchema.SchemaSql, StringComparison.Ordinal);
+        Assert.Contains("asset_symbol || ' Up or Down 5m ' || threshold_value::text || ' bps Futures Basis' || mode_name || ' Premarket'", PostgresSchema.SchemaSql, StringComparison.Ordinal);
+        Assert.Contains("select the three live OKX linear USD fixed-expiry contracts with the closest distinct expiries at or after the target market end", PostgresSchema.SchemaSql, StringComparison.Ordinal);
+        Assert.Contains("threshold only to the nearest expiry and require both following expiries to confirm its nonzero basis sign", PostgresSchema.SchemaSql, StringComparison.Ordinal);
+        Assert.Contains("Require all three fresh contracts and never substitute a perpetual contract", PostgresSchema.SchemaSql, StringComparison.Ordinal);
+        Assert.DoesNotContain("Binance USD-M futures ' || asset_symbol || 'USDT", PostgresSchema.SchemaSql, StringComparison.Ordinal);
+        Assert.Contains("('_revert', ' Revert', assets.revert_id_group)", PostgresSchema.SchemaSql, StringComparison.Ordinal);
+        Assert.Contains("('BTC', '8185', '8188', '8194', '8197')", PostgresSchema.SchemaSql, StringComparison.Ordinal);
+        Assert.Contains("('ETH', '8186', '8189', '8195', '8198')", PostgresSchema.SchemaSql, StringComparison.Ordinal);
+        Assert.Contains("('SOL', '8187', '8190', '8196', '8199')", PostgresSchema.SchemaSql, StringComparison.Ordinal);
+        Assert.Contains("lower(asset_symbol) || '_up_down_5m_' || lookback_hours::text || '_' || mode_code", PostgresSchema.SchemaSql, StringComparison.Ordinal);
+        Assert.Contains("asset_symbol || ' Up or Down 5m ' || lookback_hours::text || ' ' || mode_name", PostgresSchema.SchemaSql, StringComparison.Ordinal);
+        Assert.Contains("select the enabled non-Child, non-Futures ' || asset_symbol || ' strategy", PostgresSchema.SchemaSql, StringComparison.Ordinal);
+        Assert.Contains("('child_roi', 'Child ROI', 'excluding strategies whose name contains Progress', 'child_roi', 'sample-adjusted paper ROI after minimum sample gates')", PostgresSchema.SchemaSql, StringComparison.Ordinal);
+        Assert.Contains("('child_progress_roi', 'Child Progress ROI', 'including Progress strategies', 'child_progress_roi', 'sample-adjusted paper ROI after minimum sample gates')", PostgresSchema.SchemaSql, StringComparison.Ordinal);
+        Assert.DoesNotContain("'b7c50005-0000-4000-8181-' || lpad((100 + threshold_tenths)::text, 12, '0')", PostgresSchema.SchemaSql, StringComparison.Ordinal);
+        Assert.Contains("20260712_remove_eth_down_filtered_average_premarket_strategies", PostgresSchema.SchemaSql, StringComparison.Ordinal);
+        Assert.Contains("'b7c50005-0000-4000-8181-000000000101'::uuid", PostgresSchema.SchemaSql, StringComparison.Ordinal);
         Assert.Contains("generate_series(15, 100, 5)", PostgresSchema.SchemaSql, StringComparison.Ordinal);
         Assert.Contains("THEN '_reference_average' ELSE '' END ||", PostgresSchema.SchemaSql, StringComparison.Ordinal);
         Assert.Contains("asset_symbol || ' Up or Down 5m ' || trigger_name || ' ' || threshold_name || ' bps Reference Average Premarket'", PostgresSchema.SchemaSql, StringComparison.Ordinal);
         Assert.Contains("lower(asset_symbol) || '_up_down_5m_reference_average_bps_' || code_suffix || '_fak_premarket'", PostgresSchema.SchemaSql, StringComparison.Ordinal);
         Assert.Contains("asset_symbol || ' Up or Down 5m ' || threshold_name || ' bps Reference Average Premarket'", PostgresSchema.SchemaSql, StringComparison.Ordinal);
-        Assert.Contains("'eth_up_down_5m_down_filtered_average_bps_' || code_suffix || '_fak_premarket'", PostgresSchema.SchemaSql, StringComparison.Ordinal);
-        Assert.Contains("'ETH Up or Down 5m Down ' || threshold_name || ' bps Filtered Average Premarket'", PostgresSchema.SchemaSql, StringComparison.Ordinal);
-        Assert.Contains("If the selected reference window is 6h or 12h, skip.", PostgresSchema.SchemaSql, StringComparison.Ordinal);
+        Assert.DoesNotContain("'eth_up_down_5m_down_filtered_average_bps_' || code_suffix || '_fak_premarket'", PostgresSchema.SchemaSql, StringComparison.Ordinal);
+        Assert.DoesNotContain("'ETH Up or Down 5m Down ' || threshold_name || ' bps Filtered Average Premarket'", PostgresSchema.SchemaSql, StringComparison.Ordinal);
+        Assert.DoesNotContain("If the selected reference window is 6h or 12h, skip.", PostgresSchema.SchemaSql, StringComparison.Ordinal);
         Assert.Contains("largest full in-memory reference average across 24h, 12h, 6h, 3h, 90m, 45m, 20m, and 10m windows", PostgresSchema.SchemaSql, StringComparison.Ordinal);
         Assert.Contains("If the current price is above that maximum average by at least", PostgresSchema.SchemaSql, StringComparison.Ordinal);
         Assert.Contains("strategies.code ~ '^eth_up_down_5m_down_bps_[0-9]+_fak_premarket$'", PostgresSchema.SchemaSql, StringComparison.Ordinal);
@@ -229,8 +258,9 @@ public sealed class StorageTests
         Assert.Contains("lower(asset_symbol) || '_up_down_5m_' || diff_code || '_diff_' || threshold_value::text || '_fak_premarket'", PostgresSchema.SchemaSql, StringComparison.Ordinal);
         Assert.DoesNotContain("revert_code_suffix", PostgresSchema.SchemaSql, StringComparison.Ordinal);
         Assert.DoesNotContain("strategy_kind = 'revert'", PostgresSchema.SchemaSql, StringComparison.Ordinal);
-        Assert.Contains("lower(asset_symbol) || '_up_down_5m_' || direction_code || '_simple'", PostgresSchema.SchemaSql, StringComparison.Ordinal);
-        Assert.Contains("asset_symbol || ' Up or Down 5m ' || direction_name || ' Simple'", PostgresSchema.SchemaSql, StringComparison.Ordinal);
+        Assert.Contains("20260708_remove_simple_strategies", PostgresSchema.SchemaSql, StringComparison.Ordinal);
+        Assert.DoesNotContain("lower(asset_symbol) || '_up_down_5m_' || direction_code || '_simple'", PostgresSchema.SchemaSql, StringComparison.Ordinal);
+        Assert.DoesNotContain("asset_symbol || ' Up or Down 5m ' || direction_name || ' Simple'", PostgresSchema.SchemaSql, StringComparison.Ordinal);
         Assert.DoesNotContain("description = excluded.description,\n    live_stakes = false,\n    updated_at_utc = excluded.updated_at_utc", normalizedSchemaSql, StringComparison.Ordinal);
         Assert.DoesNotContain("'btc_up_down_5m_up_maker'", PostgresSchema.SchemaSql, StringComparison.Ordinal);
         Assert.DoesNotContain("'btc_up_down_5m_down_maker'", PostgresSchema.SchemaSql, StringComparison.Ordinal);
@@ -334,7 +364,7 @@ public sealed class StorageTests
         Assert.DoesNotContain("asset_symbol || ' Up or Down 5m Skip ' || threshold_name || ' bps Instant", PostgresSchema.SchemaSql, StringComparison.Ordinal);
         Assert.DoesNotContain("'BTC Up or Down 5m Up',", PostgresSchema.SchemaSql, StringComparison.Ordinal);
         Assert.DoesNotContain("'BTC Up or Down 5m Down',", PostgresSchema.SchemaSql, StringComparison.Ordinal);
-        Assert.Contains("Simple strategy", PostgresSchema.SchemaSql, StringComparison.Ordinal);
+        Assert.DoesNotContain("Simple strategy: immediately after", PostgresSchema.SchemaSql, StringComparison.Ordinal);
         Assert.DoesNotContain("BTC Up or Down 5m Statistics", PostgresSchema.SchemaSql, StringComparison.Ordinal);
         Assert.DoesNotContain("'btc_up_down_5m',", PostgresSchema.SchemaSql, StringComparison.Ordinal);
         Assert.Contains("strategy_id uuid NOT NULL DEFAULT 'f0110a0d-1ead-4c00-8b01-000000000001'", PostgresSchema.SchemaSql, StringComparison.Ordinal);
@@ -451,6 +481,44 @@ public sealed class StorageTests
         Assert.Contains("CREATE TABLE IF NOT EXISTS paper_copied_leader_activity_events", PostgresSchema.SchemaSql, StringComparison.Ordinal);
         Assert.Contains("UNIQUE (dedup_key)", PostgresSchema.SchemaSql, StringComparison.Ordinal);
         Assert.Contains("ix_paper_copied_leader_activity_events_wallet_asset_time", PostgresSchema.SchemaSql, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void PostgresSchema_SeedsConfirmedAveragePremarketStrategiesPaperOnly()
+    {
+        var statements = PostgresSchemaInitializer.SplitSchemaSqlStatements(PostgresSchema.SchemaSql);
+        var bpsStatement = Assert.Single(statements, statement =>
+            statement.Contains("'_bps_confirmed_average_premarket'", StringComparison.Ordinal));
+        var diffStatement = Assert.Single(statements, statement =>
+            statement.Contains("'_diff_confirmed_average_premarket'", StringComparison.Ordinal));
+
+        Assert.Contains("('BTC', '8200', 5)", bpsStatement, StringComparison.Ordinal);
+        Assert.Contains("('ETH', '8201', 3)", bpsStatement, StringComparison.Ordinal);
+        Assert.Contains("('SOL', '8202', 1)", bpsStatement, StringComparison.Ordinal);
+        Assert.Contains("generate_series(1, 10)", bpsStatement, StringComparison.Ordinal);
+        Assert.Contains("generate_series(15, 100, 5)", bpsStatement, StringComparison.Ordinal);
+        Assert.Contains("lpad((100 + threshold_value)::text, 12, '0')", bpsStatement, StringComparison.Ordinal);
+
+        Assert.Contains("('BTC', '8203', 45)", diffStatement, StringComparison.Ordinal);
+        Assert.Contains("('ETH', '8204', 5)", diffStatement, StringComparison.Ordinal);
+        Assert.Contains("('SOL', '8205', 35)", diffStatement, StringComparison.Ordinal);
+        Assert.Contains("generate_series(1, 10)", diffStatement, StringComparison.Ordinal);
+        Assert.Contains("(VALUES (15), (20), (25), (30))", diffStatement, StringComparison.Ordinal);
+
+        foreach (var statement in new[] { bpsStatement, diffStatement })
+        {
+            var normalizedStatement = statement.Replace("\r\n", "\n", StringComparison.Ordinal);
+            Assert.Contains("enabled,", statement, StringComparison.Ordinal);
+            Assert.Contains("live_stakes,", statement, StringComparison.Ordinal);
+            Assert.Contains("paused,", statement, StringComparison.Ordinal);
+            Assert.Contains(
+                "true,\n    false,\n    1.00,\n    1.00,\n    100.00,\n    false,",
+                normalizedStatement,
+                StringComparison.Ordinal);
+            Assert.DoesNotContain("enabled = excluded.enabled", statement, StringComparison.Ordinal);
+            Assert.DoesNotContain("live_stakes = excluded.live_stakes", statement, StringComparison.Ordinal);
+            Assert.DoesNotContain("paused = excluded.paused", statement, StringComparison.Ordinal);
+        }
     }
 
     [Fact]
@@ -611,6 +679,18 @@ public sealed class StorageTests
         var source = ReadRepositorySource("src", "PolyCopyTrader.Dashboard", "appsettings.json");
 
         Assert.Contains("\"DefaultDatabaseSource\": \"Remote database\"", source, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void StorageAppSettings_CapServiceAndDashboardConnectionPools()
+    {
+        using var service = JsonDocument.Parse(
+            ReadRepositorySource("src", "PolyCopyTrader.Service", "appsettings.json"));
+        using var dashboard = JsonDocument.Parse(
+            ReadRepositorySource("src", "PolyCopyTrader.Dashboard", "appsettings.json"));
+
+        Assert.Equal(64, service.RootElement.GetProperty("Storage").GetProperty("MaxPoolSize").GetInt32());
+        Assert.Equal(8, dashboard.RootElement.GetProperty("Storage").GetProperty("MaxPoolSize").GetInt32());
     }
 
     [Fact]
@@ -1114,6 +1194,33 @@ CREATE INDEX first_table_id_idx ON first_table(id);
         };
 
         Assert.Throws<InvalidOperationException>(() => new PostgresConnectionFactory(options));
+    }
+
+    [Fact]
+    public void ConnectionFactory_AppliesConfiguredMaximumPoolSize()
+    {
+        var factory = new PostgresConnectionFactory(new StorageOptions
+        {
+            ConnectionString = "Host=localhost;Database=polycopytrader;Username=test;Password=test",
+            MaxPoolSize = 64
+        });
+
+        var connectionString = new NpgsqlConnectionStringBuilder(factory.ConnectionString);
+
+        Assert.Equal(64, connectionString.MaxPoolSize);
+    }
+
+    [Fact]
+    public void ConnectionFactory_PreservesConnectionStringMaximumPoolSizeWhenOptionIsUnset()
+    {
+        var factory = new PostgresConnectionFactory(new StorageOptions
+        {
+            ConnectionString = "Host=localhost;Database=polycopytrader;Username=test;Password=test;Maximum Pool Size=23"
+        });
+
+        var connectionString = new NpgsqlConnectionStringBuilder(factory.ConnectionString);
+
+        Assert.Equal(23, connectionString.MaxPoolSize);
     }
 
     [Fact]

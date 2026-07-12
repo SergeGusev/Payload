@@ -24,19 +24,16 @@ public sealed class BtcUpDown5mInstantOpeningLimitPriceTests
     }
 
     [Fact]
-    public void OtherOpeningLimitFamiliesKeepConfiguredMaxPrices()
+    public void DiffOpeningLimitFamiliesKeepConfiguredMaxPrices()
     {
         var options = new BtcUpDown5mStrategyOptions
         {
             InstantOpeningLimitMaxPrice = 0.65m,
             DiffCounterInstantMaxPrice = 0.75m
         };
-        var simpleVariant = StrategyIds.UpDown5mStrategyVariants
-            .First(variant => variant.Behavior == BtcUpDown5mStrategyBehavior.SimpleFixedOutcomeInstant);
         var diffVariant = StrategyIds.UpDown5mStrategyVariants
             .First(variant => variant.Behavior == BtcUpDown5mStrategyBehavior.DiffProgress);
 
-        Assert.Equal(0.50m, BtcUpDown5mPaperStrategyProcessor.GetEffectiveInstantOpeningLimitMaxPrice(simpleVariant, options));
         Assert.Equal(0.75m, BtcUpDown5mPaperStrategyProcessor.GetEffectiveInstantOpeningLimitMaxPrice(diffVariant, options));
     }
 }

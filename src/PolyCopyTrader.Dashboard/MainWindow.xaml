@@ -330,9 +330,10 @@
                 <TabControl>
                     <TabItem Header="All">
                         <DockPanel>
-                            <StackPanel DockPanel.Dock="Top"
-                                        Orientation="Horizontal"
-                                        Margin="0,0,0,8">
+                            <WrapPanel DockPanel.Dock="Top"
+                                       Orientation="Horizontal"
+                                       ItemHeight="34"
+                                       Margin="0,0,0,8">
                                 <TextBlock Text="Category"
                                            VerticalAlignment="Center"
                                            Foreground="#6B7280" />
@@ -341,10 +342,19 @@
                                           Margin="8,0,0,0"
                                           ItemsSource="{Binding StrategyCategoryOptions}"
                                           SelectedItem="{Binding SelectedStrategyCategory, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
+                                <TextBlock Text="Currency"
+                                           VerticalAlignment="Center"
+                                           Foreground="#6B7280"
+                                           Margin="16,0,0,0" />
+                                <ComboBox Width="90"
+                                          Height="30"
+                                          Margin="8,0,0,0"
+                                          ItemsSource="{Binding StrategyCurrencyOptions}"
+                                          SelectedItem="{Binding SelectedStrategyCurrency, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
                                 <CheckBox Content="Only positive"
                                           IsChecked="{Binding ShowOnlyPositiveStrategies, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
                                           VerticalAlignment="Center"
-                                          Margin="4,0,0,0" />
+                                          Margin="12,0,0,0" />
                                 <CheckBox Content="Enabled only"
                                           IsChecked="{Binding ShowOnlyEnabledStrategies, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
                                           VerticalAlignment="Center"
@@ -365,7 +375,7 @@
                                           IsChecked="{Binding HideProgressStrategies, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
                                           VerticalAlignment="Center"
                                           Margin="12,0,0,0" />
-                            </StackPanel>
+                            </WrapPanel>
                             <DataGrid ItemsSource="{Binding Strategies}"
                                       behaviors:DataGridSelectionPersistence.KeyProperties="StrategyId">
                     <DataGrid.Columns>
@@ -554,21 +564,31 @@
                     </TabItem>
                     <TabItem Header="24 hours">
                         <DockPanel>
-                            <StackPanel DockPanel.Dock="Top"
-                                        Orientation="Horizontal"
-                                        Margin="0,0,0,8">
+                            <WrapPanel DockPanel.Dock="Top"
+                                       Orientation="Horizontal"
+                                       ItemHeight="34"
+                                       Margin="0,0,0,8">
                                 <TextBlock Text="Category"
                                            VerticalAlignment="Center"
                                            Foreground="#6B7280" />
                                 <ComboBox Width="300"
                                           Height="30"
                                           Margin="8,0,0,0"
-                                          ItemsSource="{Binding StrategyCategoryOptions}"
+                                          ItemsSource="{Binding Strategy24HoursCategoryOptions}"
                                           SelectedItem="{Binding SelectedStrategy24HoursCategory, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
+                                <TextBlock Text="Currency"
+                                           VerticalAlignment="Center"
+                                           Foreground="#6B7280"
+                                           Margin="16,0,0,0" />
+                                <ComboBox Width="90"
+                                          Height="30"
+                                          Margin="8,0,0,0"
+                                          ItemsSource="{Binding StrategyCurrencyOptions}"
+                                          SelectedItem="{Binding SelectedStrategy24HoursCurrency, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
                                 <CheckBox Content="Only positive"
                                           IsChecked="{Binding ShowOnlyPositiveStrategy24Hours, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
                                           VerticalAlignment="Center"
-                                          Margin="4,0,0,0" />
+                                          Margin="12,0,0,0" />
                                 <CheckBox Content="Enabled only"
                                           IsChecked="{Binding ShowOnlyEnabledStrategy24Hours, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
                                           VerticalAlignment="Center"
@@ -589,28 +609,38 @@
                                           IsChecked="{Binding HideProgressStrategy24Hours, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
                                           VerticalAlignment="Center"
                                           Margin="12,0,0,0" />
-                            </StackPanel>
+                            </WrapPanel>
                             <ContentControl Content="{Binding StrategyRecent24Hours}"
                                             ContentTemplate="{StaticResource StrategyRecentGridTemplate}" />
                         </DockPanel>
                     </TabItem>
                     <TabItem Header="6 hours">
                         <DockPanel>
-                            <StackPanel DockPanel.Dock="Top"
-                                        Orientation="Horizontal"
-                                        Margin="0,0,0,8">
+                            <WrapPanel DockPanel.Dock="Top"
+                                       Orientation="Horizontal"
+                                       ItemHeight="34"
+                                       Margin="0,0,0,8">
                                 <TextBlock Text="Category"
                                            VerticalAlignment="Center"
                                            Foreground="#6B7280" />
                                 <ComboBox Width="300"
                                           Height="30"
                                           Margin="8,0,0,0"
-                                          ItemsSource="{Binding StrategyCategoryOptions}"
+                                          ItemsSource="{Binding Strategy6HoursCategoryOptions}"
                                           SelectedItem="{Binding SelectedStrategy6HoursCategory, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
+                                <TextBlock Text="Currency"
+                                           VerticalAlignment="Center"
+                                           Foreground="#6B7280"
+                                           Margin="16,0,0,0" />
+                                <ComboBox Width="90"
+                                          Height="30"
+                                          Margin="8,0,0,0"
+                                          ItemsSource="{Binding StrategyCurrencyOptions}"
+                                          SelectedItem="{Binding SelectedStrategy6HoursCurrency, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
                                 <CheckBox Content="Only positive"
                                           IsChecked="{Binding ShowOnlyPositiveStrategy6Hours, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
                                           VerticalAlignment="Center"
-                                          Margin="4,0,0,0" />
+                                          Margin="12,0,0,0" />
                                 <CheckBox Content="Enabled only"
                                           IsChecked="{Binding ShowOnlyEnabledStrategy6Hours, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
                                           VerticalAlignment="Center"
@@ -631,28 +661,38 @@
                                           IsChecked="{Binding HideProgressStrategy6Hours, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
                                           VerticalAlignment="Center"
                                           Margin="12,0,0,0" />
-                            </StackPanel>
+                            </WrapPanel>
                             <ContentControl Content="{Binding StrategyRecent6Hours}"
                                             ContentTemplate="{StaticResource StrategyRecentGridTemplate}" />
                         </DockPanel>
                     </TabItem>
                     <TabItem Header="1 hour">
                         <DockPanel>
-                            <StackPanel DockPanel.Dock="Top"
-                                        Orientation="Horizontal"
-                                        Margin="0,0,0,8">
+                            <WrapPanel DockPanel.Dock="Top"
+                                       Orientation="Horizontal"
+                                       ItemHeight="34"
+                                       Margin="0,0,0,8">
                                 <TextBlock Text="Category"
                                            VerticalAlignment="Center"
                                            Foreground="#6B7280" />
                                 <ComboBox Width="300"
                                           Height="30"
                                           Margin="8,0,0,0"
-                                          ItemsSource="{Binding StrategyCategoryOptions}"
+                                          ItemsSource="{Binding Strategy1HourCategoryOptions}"
                                           SelectedItem="{Binding SelectedStrategy1HourCategory, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
+                                <TextBlock Text="Currency"
+                                           VerticalAlignment="Center"
+                                           Foreground="#6B7280"
+                                           Margin="16,0,0,0" />
+                                <ComboBox Width="90"
+                                          Height="30"
+                                          Margin="8,0,0,0"
+                                          ItemsSource="{Binding StrategyCurrencyOptions}"
+                                          SelectedItem="{Binding SelectedStrategy1HourCurrency, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
                                 <CheckBox Content="Only positive"
                                           IsChecked="{Binding ShowOnlyPositiveStrategy1Hour, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
                                           VerticalAlignment="Center"
-                                          Margin="4,0,0,0" />
+                                          Margin="12,0,0,0" />
                                 <CheckBox Content="Enabled only"
                                           IsChecked="{Binding ShowOnlyEnabledStrategy1Hour, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
                                           VerticalAlignment="Center"
@@ -673,7 +713,7 @@
                                           IsChecked="{Binding HideProgressStrategy1Hour, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
                                           VerticalAlignment="Center"
                                           Margin="12,0,0,0" />
-                            </StackPanel>
+                            </WrapPanel>
                             <ContentControl Content="{Binding StrategyRecent1Hour}"
                                             ContentTemplate="{StaticResource StrategyRecentGridTemplate}" />
                         </DockPanel>

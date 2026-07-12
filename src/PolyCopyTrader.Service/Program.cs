@@ -1,5 +1,6 @@
 using System.Globalization;
 using PolyCopyTrader.Service;
+using PolyCopyTrader.Service.AutoRedeem;
 using PolyCopyTrader.Domain.Configuration;
 using PolyCopyTrader.Polymarket;
 using PolyCopyTrader.Polymarket.Auth;
@@ -264,6 +265,7 @@ builder.Services.AddSingleton(appConfiguration.Signal);
 builder.Services.AddSingleton(appConfiguration.Polymarket);
 builder.Services.AddSingleton(appConfiguration.PolymarketHttpLogging);
 builder.Services.AddSingleton(appConfiguration.PolymarketAuth);
+builder.Services.AddSingleton(appConfiguration.PolymarketAutoRedeem);
 builder.Services.AddSingleton(appConfiguration.MarketDataWebSocket);
 builder.Services.AddSingleton(appConfiguration.BtcOrderBookLagDiagnostics);
 builder.Services.AddSingleton(appConfiguration.Watchlist);
@@ -277,6 +279,7 @@ builder.Services.AddSingleton(appConfiguration.Analytics);
     builder.Services.AddSingleton(appConfiguration.CoinbaseExchange);
     builder.Services.AddSingleton(appConfiguration.BinanceBtcUsdReference);
     builder.Services.AddSingleton(appConfiguration.BinanceCryptoReference);
+    builder.Services.AddSingleton(appConfiguration.OkxExpiryFuturesReference);
     builder.Services.AddSingleton(appConfiguration.CryptoReferencePriceHistory);
     builder.Services.AddSingleton(appConfiguration.BtcUpDown5mOddsArchive);
     builder.Services.AddSingleton(appConfiguration.BtcUpDown5mStatistics);
@@ -294,6 +297,7 @@ builder.Services.AddSingleton<PostgresConnectionFactory>();
 builder.Services.AddSingleton<IStorageSchemaInitializer, PostgresSchemaInitializer>();
 builder.Services.AddSingleton<IAppRepository, PostgresAppRepository>();
 builder.Services.AddSingleton<IDashboardSnapshotRepository, PostgresDashboardSnapshotRepository>();
+builder.Services.AddSingleton<IDashboardProjectionRepository, PostgresDashboardProjectionRepository>();
 
 builder.Services.AddSingleton<IPolymarketApiErrorSink, RepositoryPolymarketApiErrorSink>();
 builder.Services.AddSingleton<IPolymarketHttpLogSink, RepositoryPolymarketHttpLogSink>();
@@ -306,6 +310,8 @@ builder.Services.AddSingleton<OrderAmountCalculator>();
 builder.Services.AddSingleton<ClobV2OrderBuilder>();
 builder.Services.AddSingleton<ClobV2OrderSigner>();
 builder.Services.AddSingleton<ClobV2OrderPayloadSerializer>();
+builder.Services.AddSingleton<PolymarketRedeemCalldataBuilder>();
+builder.Services.AddSingleton<PolymarketDepositWalletBatchSigner>();
 builder.Services.AddHttpClient<IPolymarketDataApiClient, PolymarketDataApiClient>()
     .ConfigurePrimaryHttpMessageHandler(() => CreatePolymarketHttpHandler(appConfiguration.Polymarket));
 builder.Services.AddHttpClient<IPolymarketGammaClient, PolymarketGammaClient>()
@@ -316,6 +322,10 @@ builder.Services.AddHttpClient<IPolymarketGeoClient, PolymarketGeoClient>()
     .ConfigurePrimaryHttpMessageHandler(() => CreatePolymarketHttpHandler(appConfiguration.Polymarket));
 builder.Services.AddHttpClient<IPolymarketTradingClient, PolymarketTradingClient>()
     .ConfigurePrimaryHttpMessageHandler(() => CreatePolymarketHttpHandler(appConfiguration.Polymarket));
+builder.Services.AddHttpClient<IPolymarketRelayerClient, PolymarketRelayerClient>(client =>
+{
+    client.Timeout = TimeSpan.FromSeconds(appConfiguration.Polymarket.TimeoutSeconds);
+});
 builder.Services.AddHttpClient<IPolygonRpcClient, PolygonRpcClient>(client =>
 {
     client.Timeout = TimeSpan.FromMinutes(2);
@@ -334,6 +344,13 @@ builder.Services.AddSingleton<BinanceBtcUsdTradeStreamService>();
 builder.Services.AddSingleton<IBtcUsdReferencePriceClient>(sp => sp.GetRequiredService<BinanceBtcUsdTradeStreamService>());
 builder.Services.AddSingleton<BinanceCryptoReferenceTradeStreamService>();
 builder.Services.AddSingleton<ICryptoReferencePriceClient>(sp => sp.GetRequiredService<BinanceCryptoReferenceTradeStreamService>());
+builder.Services.AddHttpClient("OkxExpiryFuturesReference", client =>
+{
+    client.Timeout = TimeSpan.FromMilliseconds(Math.Max(1, appConfiguration.OkxExpiryFuturesReference.RequestTimeoutMilliseconds));
+    client.DefaultRequestHeaders.UserAgent.ParseAdd(appConfiguration.OkxExpiryFuturesReference.UserAgent);
+});
+builder.Services.AddSingleton<OkxExpiryFuturesReferencePriceService>();
+builder.Services.AddSingleton<IExpiryFuturesReferencePriceClient>(sp => sp.GetRequiredService<OkxExpiryFuturesReferencePriceService>());
 builder.Services.AddSingleton<CryptoReferencePriceAverageCache>();
 builder.Services.AddSingleton<ICryptoReferencePriceAverageCache>(sp => sp.GetRequiredService<CryptoReferencePriceAverageCache>());
 builder.Services.AddSingleton<ICryptoReferencePriceAverageProvider>(sp => sp.GetRequiredService<CryptoReferencePriceAverageCache>());
@@ -360,6 +377,7 @@ builder.Services.AddSingleton<IPaperTradingProcessor, PaperTradingProcessor>();
 builder.Services.AddSingleton<IPaperSettlementProcessor, PaperSettlementProcessor>();
 builder.Services.AddSingleton<ILeaderActivityExitProcessor, LeaderActivityExitProcessor>();
 builder.Services.AddSingleton<ILiveTradingProcessor, LiveTradingProcessor>();
+builder.Services.AddSingleton<IPolymarketAutoRedeemProcessor, PolymarketAutoRedeemProcessor>();
 builder.Services.AddSingleton<ITraderDiscoveryProcessor, TraderDiscoveryProcessor>();
 builder.Services.AddSingleton<IGammaMarketIngestionProcessor, GammaMarketIngestionProcessor>();
 builder.Services.AddSingleton<IStrategyStateProvider, StrategyStateProvider>();
@@ -386,10 +404,12 @@ builder.Services.AddHostedService<StartupSafetyCheckService>();
 builder.Services.AddHostedService(sp => sp.GetRequiredService<PaperEntryPersistenceQueue>());
 builder.Services.AddHostedService<BotWorker>();
 builder.Services.AddHostedService<DashboardStrategyPerformanceSnapshotWorker>();
+builder.Services.AddHostedService<DashboardStrategyProjectionReconciliationWorker>();
 builder.Services.AddHostedService<DateDependentStrategyHourlyPaperPnlWorker>();
 builder.Services.AddHostedService<ExposureSnapshotCacheWarmupService>();
 builder.Services.AddHostedService<PaperTradingWorker>();
 builder.Services.AddHostedService<LiveTradingMaintenanceWorker>();
+builder.Services.AddHostedService<PolymarketAutoRedeemWorker>();
 builder.Services.AddHostedService<LocalControlServer>();
 builder.Services.AddHostedService<GammaMarketIngestionWorker>();
 if (appConfiguration.BtcOrderBookLagDiagnostics.Enabled)
@@ -400,6 +420,7 @@ if (appConfiguration.BtcOrderBookLagDiagnostics.Enabled)
 builder.Services.AddHostedService<BtcUsdReferencePriceCacheWarmupService>();
 builder.Services.AddHostedService(sp => sp.GetRequiredService<BinanceBtcUsdTradeStreamService>());
 builder.Services.AddHostedService(sp => sp.GetRequiredService<BinanceCryptoReferenceTradeStreamService>());
+builder.Services.AddHostedService(sp => sp.GetRequiredService<OkxExpiryFuturesReferencePriceService>());
 builder.Services.AddHostedService<CryptoReferencePriceHistoryWorker>();
 builder.Services.AddHostedService<ChainlinkBtcUsdCorrelationWorker>();
 builder.Services.AddHostedService<BtcUpDown5mOrderBookRefreshWorker>();

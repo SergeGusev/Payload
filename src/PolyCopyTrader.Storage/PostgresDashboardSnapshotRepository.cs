@@ -12,8 +12,15 @@ SELECT
     strategy.name,
     strategy.enabled,
     strategy.live_stakes,
-    strategy.paused,
-    strategy.paused_until_utc,
+    strategy.paused AND (
+        strategy.paused_until_utc IS NULL OR strategy.paused_until_utc > CURRENT_TIMESTAMP
+    ) AS paused,
+    CASE
+        WHEN strategy.paused AND (
+            strategy.paused_until_utc IS NULL OR strategy.paused_until_utc > CURRENT_TIMESTAMP
+        ) THEN strategy.paused_until_utc
+        ELSE NULL
+    END AS paused_until_utc,
     strategy.paper_stake_amount,
     strategy.live_stake_amount,
     strategy.paper_lost_coeff,
@@ -311,8 +318,8 @@ SELECT
     strategy.live_stakes,
     snapshot.window_label,
     snapshot.window_hours,
-    snapshot.window_start_utc,
-    snapshot.window_end_utc,
+    CURRENT_TIMESTAMP - (snapshot.window_hours * interval '1 hour') AS window_start_utc,
+    CURRENT_TIMESTAMP AS window_end_utc,
     snapshot.orders_count,
     snapshot.filled_orders_count,
     snapshot.expired_orders_count,
@@ -599,7 +606,7 @@ WHERE refreshed_at_utc < @RefreshedAtUtc;
         return strategies.Count;
     }
 
-    private static NpgsqlBatchCommand CreateUpsertCommand(
+    internal static NpgsqlBatchCommand CreateUpsertCommand(
         StrategyPerformance strategy,
         DateTimeOffset refreshedAtUtc)
     {
@@ -678,7 +685,7 @@ WHERE refreshed_at_utc < @RefreshedAtUtc;
         return command;
     }
 
-    private static NpgsqlBatchCommand CreateUpsertCommand(
+    internal static NpgsqlBatchCommand CreateUpsertCommand(
         StrategyRecentPerformance strategy,
         DateTimeOffset refreshedAtUtc)
     {

@@ -1,61 +1,130 @@
-using PolyCopyTrader.Domain;
 using PolyCopyTrader.Storage;
 
 namespace PolyCopyTrader.Service.Analytics;
 
 public sealed class DashboardStrategyPerformanceSnapshotWorker(
     ILogger<DashboardStrategyPerformanceSnapshotWorker> logger,
-    IAppRepository repository,
-    IDashboardSnapshotRepository dashboardSnapshots) : BackgroundService
+    IDashboardProjectionRepository projection,
+    IAppRepository repository) : BackgroundService
 {
-    private const int StrategySnapshotLimit = 25_000;
-    private static readonly TimeSpan RefreshCadence = TimeSpan.FromMinutes(10);
-    private static readonly TimeSpan MarketCadence = TimeSpan.FromMinutes(5);
-    private static readonly TimeSpan QuietSlotOffset = TimeSpan.FromMinutes(1);
+    private const int EventBatchSize = 2_000;
+    private const int ExpiryBatchSize = 5_000;
+    private static readonly TimeSpan IdleDelay = TimeSpan.FromSeconds(1);
+    private static readonly TimeSpan ExpiryCadence = TimeSpan.FromSeconds(5);
+    private static readonly TimeSpan FailureDelay = TimeSpan.FromMinutes(1);
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
-        var lastRefreshAttemptAtUtc = DateTimeOffset.MinValue;
+        var nextExpiryAtUtc = DateTimeOffset.MinValue;
 
         while (!stoppingToken.IsCancellationRequested)
         {
-            await DelayAsync(
-                GetDelayUntilNextQuietSlot(DateTimeOffset.UtcNow, lastRefreshAttemptAtUtc),
-                stoppingToken);
-            lastRefreshAttemptAtUtc = DateTimeOffset.UtcNow;
-            await RefreshAsync(stoppingToken);
+            try
+            {
+                var control = await projection.GetControlStateAsync(stoppingToken);
+                if (!control.Initialized ||
+                    control.CalculationVersion != DashboardProjectionVersions.Current)
+                {
+                    var bootstrap = await projection.BootstrapAsync(stoppingToken);
+                    logger.LogInformation(
+                        "Dashboard projection bootstrapped. Strategies={Strategies} RecentFacts={RecentFacts} RecentRows={RecentRows} DiscardedEvents={DiscardedEvents} DurationMs={DurationMs}",
+                        bootstrap.Strategies,
+                        bootstrap.RecentFacts,
+                        bootstrap.RecentRows,
+                        bootstrap.BootstrappedEventsDiscarded,
+                        bootstrap.Duration.TotalMilliseconds);
+                    nextExpiryAtUtc = DateTimeOffset.UtcNow + ExpiryCadence;
+                    continue;
+                }
+
+                var eventBatch = await projection.ApplyPendingEventsAsync(EventBatchSize, stoppingToken);
+                if (eventBatch.EventsApplied > 0 || eventBatch.ReconciliationsQueued > 0)
+                {
+                    logger.LogInformation(
+                        "Dashboard projection events applied. Read={EventsRead} Applied={EventsApplied} Strategies={StrategiesUpdated} ReconciliationsQueued={ReconciliationsQueued}",
+                        eventBatch.EventsRead,
+                        eventBatch.EventsApplied,
+                        eventBatch.StrategiesUpdated,
+                        eventBatch.ReconciliationsQueued);
+                }
+
+                if (eventBatch.ReconciliationsQueued > 0)
+                {
+                    await ReconcileOnceAsync(stoppingToken);
+                    continue;
+                }
+
+                var nowUtc = DateTimeOffset.UtcNow;
+                if (nowUtc >= nextExpiryAtUtc)
+                {
+                    var expiry = await projection.ExpireRecentFactsAsync(ExpiryBatchSize, stoppingToken);
+                    if (expiry.FactsExpired > 0)
+                    {
+                        logger.LogInformation(
+                            "Dashboard recent projection facts expired. Facts={FactsExpired} Strategies={StrategiesUpdated}",
+                            expiry.FactsExpired,
+                            expiry.StrategiesUpdated);
+                    }
+
+                    nextExpiryAtUtc = DateTimeOffset.UtcNow + ExpiryCadence;
+                }
+
+                if (eventBatch.EventsRead == 0)
+                {
+                    await Task.Delay(IdleDelay, stoppingToken);
+                }
+            }
+            catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
+            {
+                break;
+            }
+            catch (Exception ex)
+            {
+                logger.LogError(ex, "Dashboard incremental projection cycle failed.");
+                await TryRecordApiErrorAsync(ex.Message, stoppingToken);
+                await projection.RecordFailureAsync(
+                    "ProjectionCycle",
+                    ex.Message,
+                    stoppingToken);
+                await Task.Delay(FailureDelay, stoppingToken);
+            }
         }
     }
 
-    private async Task RefreshAsync(CancellationToken cancellationToken)
+    private async Task ReconcileOnceAsync(CancellationToken cancellationToken)
     {
-        try
+        var result = await projection.ReconcileNextStrategyAsync(cancellationToken);
+        if (result.Error is not null)
         {
-            var startedAtUtc = DateTimeOffset.UtcNow;
-            var strategies = await repository.GetStrategyPerformanceAsync(StrategySnapshotLimit, cancellationToken);
-            var strategyRowCount = await dashboardSnapshots.UpsertStrategyPerformanceSnapshotAsync(
-                strategies,
-                DateTimeOffset.UtcNow,
-                cancellationToken);
-            var recentStrategies = await repository.GetStrategyRecentPerformanceAsync(StrategySnapshotLimit, cancellationToken);
-            var recentRowCount = await dashboardSnapshots.UpsertStrategyRecentPerformanceSnapshotAsync(
-                recentStrategies,
-                DateTimeOffset.UtcNow,
-                cancellationToken);
+            logger.LogWarning(
+                "Dashboard strategy projection reconciliation deferred. StrategyId={StrategyId} Code={Code} DurationMs={DurationMs} Error={Error}",
+                result.StrategyId,
+                result.StrategyCode,
+                result.Duration.TotalMilliseconds,
+                result.Error);
+            return;
+        }
+
+        if (!result.Reconciled)
+        {
+            return;
+        }
+
+        if (result.ValuesChanged)
+        {
+            logger.LogWarning(
+                "Dashboard strategy projection drift repaired. StrategyId={StrategyId} Code={Code} DurationMs={DurationMs}",
+                result.StrategyId,
+                result.StrategyCode,
+                result.Duration.TotalMilliseconds);
+        }
+        else
+        {
             logger.LogInformation(
-                "Dashboard strategy performance snapshots refreshed. StrategyRows={StrategyRowCount} RecentRows={RecentRowCount} DurationMs={DurationMs}",
-                strategyRowCount,
-                recentRowCount,
-                (DateTimeOffset.UtcNow - startedAtUtc).TotalMilliseconds);
-        }
-        catch (OperationCanceledException)
-        {
-            throw;
-        }
-        catch (Exception ex)
-        {
-            logger.LogError(ex, "Dashboard strategy performance snapshot refresh failed.");
-            await TryRecordApiErrorAsync(ex.Message, cancellationToken);
+                "Dashboard strategy projection reconciled. StrategyId={StrategyId} Code={Code} DurationMs={DurationMs}",
+                result.StrategyId,
+                result.StrategyCode,
+                result.Duration.TotalMilliseconds);
         }
     }
 
@@ -64,54 +133,17 @@ public sealed class DashboardStrategyPerformanceSnapshotWorker(
         try
         {
             await repository.AddApiErrorAsync(
-                new ApiError(
+                new PolyCopyTrader.Domain.ApiError(
                     Guid.NewGuid(),
                     nameof(DashboardStrategyPerformanceSnapshotWorker),
-                    "RefreshStrategyPerformanceSnapshots",
+                    "IncrementalProjection",
                     message,
                     DateTimeOffset.UtcNow),
                 cancellationToken);
         }
         catch (Exception ex)
         {
-            logger.LogError(ex, "Failed to persist dashboard strategy performance snapshot refresh error.");
+            logger.LogError(ex, "Failed to persist Dashboard projection error.");
         }
-    }
-
-    private static async Task DelayAsync(TimeSpan delay, CancellationToken cancellationToken)
-    {
-        if (delay > TimeSpan.Zero)
-        {
-            await Task.Delay(delay, cancellationToken);
-        }
-    }
-
-    private static TimeSpan GetDelayUntilNextQuietSlot(
-        DateTimeOffset nowUtc,
-        DateTimeOffset lastRefreshAttemptAtUtc)
-    {
-        var earliestRefreshAtUtc = lastRefreshAttemptAtUtc == DateTimeOffset.MinValue
-            ? nowUtc
-            : Max(nowUtc, lastRefreshAttemptAtUtc + RefreshCadence);
-        var nextQuietSlotUtc = GetNextQuietSlotAtOrAfter(earliestRefreshAtUtc);
-        return nextQuietSlotUtc <= nowUtc ? TimeSpan.Zero : nextQuietSlotUtc - nowUtc;
-    }
-
-    private static DateTimeOffset GetNextQuietSlotAtOrAfter(DateTimeOffset timestampUtc)
-    {
-        var utcDateTime = timestampUtc.UtcDateTime;
-        var boundaryTicks = utcDateTime.Ticks - utcDateTime.Ticks % MarketCadence.Ticks;
-        var candidate = new DateTimeOffset(new DateTime(boundaryTicks, DateTimeKind.Utc)) + QuietSlotOffset;
-        while (candidate < timestampUtc)
-        {
-            candidate += MarketCadence;
-        }
-
-        return candidate;
-    }
-
-    private static DateTimeOffset Max(DateTimeOffset first, DateTimeOffset second)
-    {
-        return first >= second ? first : second;
     }
 }

@@ -16,6 +16,8 @@ public sealed class AppConfiguration
 
     public PolymarketAuthOptions PolymarketAuth { get; init; } = new();
 
+    public PolymarketAutoRedeemOptions PolymarketAutoRedeem { get; init; } = new();
+
     public MarketDataWebSocketOptions MarketDataWebSocket { get; init; } = new();
 
     public MarketTradeDiagnosticsOptions MarketTradeDiagnostics { get; init; } = new();
@@ -45,6 +47,8 @@ public sealed class AppConfiguration
     public BinanceBtcUsdReferenceOptions BinanceBtcUsdReference { get; init; } = new();
 
     public BinanceCryptoReferenceOptions BinanceCryptoReference { get; init; } = new();
+
+    public OkxExpiryFuturesReferenceOptions OkxExpiryFuturesReference { get; init; } = new();
 
     public CryptoReferencePriceHistoryOptions CryptoReferencePriceHistory { get; init; } = new();
 
@@ -258,6 +262,55 @@ public sealed class PolymarketAuthOptions
     public string ApiSecretName { get; init; } = "POLYCOPYTRADER_POLYMARKET_API_SECRET";
 
     public string ApiPassphraseName { get; init; } = "POLYCOPYTRADER_POLYMARKET_API_PASSPHRASE";
+}
+
+public sealed class PolymarketAutoRedeemOptions
+{
+    public bool Enabled { get; init; }
+
+    public bool DryRun { get; init; } = true;
+
+    public bool AutoSubmitEnabled { get; init; }
+
+    public string ManualEnableCode { get; init; } = string.Empty;
+
+    public string WalletAddress { get; init; } = string.Empty;
+
+    public string ProxyWalletAddress { get; init; } = string.Empty;
+
+    public string RelayerBaseUrl { get; init; } = "https://relayer-v2.polymarket.com";
+
+    public string RelayerApiKeyName { get; init; } = "POLYCOPYTRADER_POLYMARKET_RELAYER_API_KEY";
+
+    public string RelayerApiKeyAddressName { get; init; } = "POLYCOPYTRADER_POLYMARKET_RELAYER_API_KEY_ADDRESS";
+
+    public string RelayerSigningPrivateKeyName { get; init; } = "POLYCOPYTRADER_POLYMARKET_ORDER_SIGNING_PRIVATE_KEY";
+
+    public string WalletType { get; init; } = "WALLET";
+
+    public int RelayerSubmissionDeadlineSeconds { get; init; } = 600;
+
+    public int PollIntervalSeconds { get; init; } = 300;
+
+    public int BackgroundErrorDelaySeconds { get; init; } = 30;
+
+    public int BackgroundMaxErrorDelaySeconds { get; init; } = 300;
+
+    public int CurrentPositionsLimit { get; init; } = 500;
+
+    public int MaxPositionPages { get; init; } = 4;
+
+    public int MaxClaimsPerCycle { get; init; } = 25;
+
+    public int MaxLiveSubmissionsPerCycle { get; init; } = 1;
+
+    public decimal MinRedeemableValueUsd { get; init; } = 0.01m;
+
+    public string ConditionalTokensAddress { get; init; } = "0x4D97DCd97eC945f40cF65F87097ACe5EA0476045";
+
+    public string CollateralTokenAddress { get; init; } = "0xC011a7E12a19f7B1f670d46F03B03f3342E82DFB";
+
+    public string ParentCollectionId { get; init; } = "0x0000000000000000000000000000000000000000000000000000000000000000";
 }
 
 public sealed class MarketDataWebSocketOptions
@@ -575,7 +628,7 @@ public sealed class BtcUpDown5mStrategyOptions
 
     public int MaxEntriesPerCycle { get; init; } = 3000;
 
-    public int MaxConcurrentEntryDecisions { get; init; } = 128;
+    public int MaxConcurrentEntryDecisions { get; init; } = 32;
 
     public int MaxSettlementsPerCycle { get; init; } = 250;
 
@@ -715,6 +768,25 @@ public sealed class BinanceCryptoReferenceOptions
     public int ReconnectMaxDelaySeconds { get; init; } = 60;
 
     public int ReceiveBufferBytes { get; init; } = 16_384;
+}
+
+public sealed class OkxExpiryFuturesReferenceOptions
+{
+    public bool Enabled { get; init; } = true;
+
+    public string RestBaseUrl { get; init; } = "https://www.okx.com";
+
+    public List<string> AssetSymbols { get; init; } = ["BTC", "ETH", "SOL"];
+
+    public int PollIntervalMilliseconds { get; init; } = 1_000;
+
+    public int InstrumentRefreshIntervalSeconds { get; init; } = 300;
+
+    public int RequestTimeoutMilliseconds { get; init; } = 2_000;
+
+    public int StaleAfterSeconds { get; init; } = 5;
+
+    public string UserAgent { get; init; } = "PolyCopyTrader/1.0 OKX-expiry-futures-reference";
 }
 
 public sealed class CryptoReferencePriceHistoryOptions
@@ -1018,6 +1090,8 @@ public sealed class StorageOptions
     public string ConnectionString { get; init; } = string.Empty;
 
     public string ConnectionStringEnvironmentVariable { get; init; } = "POLYCOPYTRADER_POSTGRES_CONNECTION";
+
+    public int? MaxPoolSize { get; init; }
 
     public bool RequireConfiguredDatabase { get; init; }
 }

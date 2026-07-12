@@ -357,10 +357,7 @@ public sealed class DashboardDataService(
 
     private static IReadOnlyDictionary<Guid, string> BuildConfiguredStrategyNamesById()
     {
-        var namesById = new Dictionary<Guid, string>
-        {
-            [StrategyIds.FollowLeader] = StrategyIds.FollowLeaderName
-        };
+        var namesById = new Dictionary<Guid, string>();
 
         foreach (var variant in StrategyIds.UpDown5mStrategyVariants)
         {

@@ -7,6 +7,18 @@ public static class StrategyDisplayCategories
     private static readonly string[] UpDownAssetSymbols = ["BTC", "ETH", "SOL"];
     private static readonly string[] UpDownIntervals = ["5m", "15m", "1h", "4h"];
 
+    public static string? GetAssetSymbol(string? strategyName)
+    {
+        if (string.IsNullOrWhiteSpace(strategyName))
+        {
+            return null;
+        }
+
+        var name = strategyName.Trim();
+        return UpDownAssetSymbols.FirstOrDefault(asset =>
+            name.StartsWith(asset + " ", StringComparison.OrdinalIgnoreCase));
+    }
+
     public static string GetCategory(string? strategyName)
     {
         if (string.IsNullOrWhiteSpace(strategyName))
@@ -34,6 +46,26 @@ public static class StrategyDisplayCategories
 
         var categoryPrefix = upDownPrefix + interval + " ";
         var suffix = suffixAfterAsset.Substring(interval.Length).Trim();
+        if (IsChildMirror(suffix, includeProgress: false, useRoi: false))
+        {
+            return categoryPrefix + "Child";
+        }
+
+        if (IsChildMirror(suffix, includeProgress: true, useRoi: false))
+        {
+            return categoryPrefix + "Child Progress";
+        }
+
+        if (IsChildMirror(suffix, includeProgress: false, useRoi: true))
+        {
+            return categoryPrefix + "Child ROI";
+        }
+
+        if (IsChildMirror(suffix, includeProgress: true, useRoi: true))
+        {
+            return categoryPrefix + "Child Progress ROI";
+        }
+
         if (StartsWithStrategyWord(suffix, "PreOpen"))
         {
             var parts = suffix.Split(new[] { ' ' }, StringSplitOptions.RemoveEmptyEntries);
@@ -45,11 +77,6 @@ public static class StrategyDisplayCategories
             }
 
             return categoryPrefix + "PreOpen";
-        }
-
-        if (StartsWithSimpleFixedOutcome(suffix))
-        {
-            return "Simple";
         }
 
         if (StartsWithAdjustedDiffThreshold(suffix, "Up", out var adjustedDiffUpRevert))
@@ -90,22 +117,37 @@ public static class StrategyDisplayCategories
                 return categoryPrefix + "Diff Shift Progress Premarket";
             }
 
-            return "Up Or Down 5 min Diff Shift Progress";
+            return categoryPrefix + "Diff Shift Progress";
         }
 
         if (IsDiffLimitProgress(suffix))
         {
-            return "Up Or Down 5 min Diff Limit Progress";
+            return categoryPrefix + "Diff Limit Progress";
         }
 
         if (IsDiffRealLimitProgress(suffix))
         {
-            return "Up Or Down 5 min Diff Real Limit Progress";
+            return categoryPrefix + "Diff Real Limit Progress";
+        }
+
+        if (IsDiffConfirmedAverage(suffix))
+        {
+            return categoryPrefix + "Diff Confirmed Average Premarket";
         }
 
         if (IsDiffReferenceAverage(suffix))
         {
             return categoryPrefix + "Diff Reference Average Premarket";
+        }
+
+        if (IsBpsConfirmedAverage(suffix))
+        {
+            return categoryPrefix + "Bps Confirmed Average Premarket";
+        }
+
+        if (IsFuturesBasisBpsThreshold(suffix, out var futuresBasisRevert))
+        {
+            return categoryPrefix + "Bps Futures Basis" + (futuresBasisRevert ? " Revert" : string.Empty) + " Premarket";
         }
 
         if (StartsWithDiffThreshold(suffix, "Up", out var diffUpRevert))
@@ -289,15 +331,6 @@ public static class StrategyDisplayCategories
             ContainsStrategyWord(value, "Average");
     }
 
-    private static bool StartsWithSimpleFixedOutcome(string value)
-    {
-        var parts = value.Split(new[] { ' ' }, StringSplitOptions.RemoveEmptyEntries);
-        return parts.Length >= 2 &&
-            (string.Equals(parts[0], "Up", StringComparison.OrdinalIgnoreCase) ||
-                string.Equals(parts[0], "Down", StringComparison.OrdinalIgnoreCase)) &&
-            string.Equals(parts[1], "Simple", StringComparison.OrdinalIgnoreCase);
-    }
-
     private static string GetDiffCategorySuffix(string value, bool isRevert)
     {
         var suffix = isRevert ? " Revert" : string.Empty;
@@ -407,6 +440,86 @@ public static class StrategyDisplayCategories
             string.Equals(parts[1], "Diff", StringComparison.OrdinalIgnoreCase) &&
             string.Equals(parts[2], "Reference", StringComparison.OrdinalIgnoreCase) &&
             string.Equals(parts[3], "Average", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static bool IsDiffConfirmedAverage(string value)
+    {
+        var parts = value.Split(new[] { ' ' }, StringSplitOptions.RemoveEmptyEntries);
+        return parts.Length == 5 &&
+            int.TryParse(parts[0], NumberStyles.Integer, CultureInfo.InvariantCulture, out _) &&
+            string.Equals(parts[1], "Diff", StringComparison.OrdinalIgnoreCase) &&
+            string.Equals(parts[2], "Confirmed", StringComparison.OrdinalIgnoreCase) &&
+            string.Equals(parts[3], "Average", StringComparison.OrdinalIgnoreCase) &&
+            string.Equals(parts[4], "Premarket", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static bool IsBpsConfirmedAverage(string value)
+    {
+        var parts = value.Split(new[] { ' ' }, StringSplitOptions.RemoveEmptyEntries);
+        return parts.Length == 5 &&
+            decimal.TryParse(parts[0], NumberStyles.Number, CultureInfo.InvariantCulture, out _) &&
+            string.Equals(parts[1], "bps", StringComparison.OrdinalIgnoreCase) &&
+            string.Equals(parts[2], "Confirmed", StringComparison.OrdinalIgnoreCase) &&
+            string.Equals(parts[3], "Average", StringComparison.OrdinalIgnoreCase) &&
+            string.Equals(parts[4], "Premarket", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static bool IsFuturesBasisBpsThreshold(string value, out bool isRevert)
+    {
+        isRevert = false;
+        var parts = value.Split(new[] { ' ' }, StringSplitOptions.RemoveEmptyEntries);
+        var matches = parts.Length >= 5 &&
+            decimal.TryParse(parts[0], NumberStyles.Number, CultureInfo.InvariantCulture, out _) &&
+            string.Equals(parts[1], "bps", StringComparison.OrdinalIgnoreCase) &&
+            string.Equals(parts[2], "Futures", StringComparison.OrdinalIgnoreCase) &&
+            string.Equals(parts[3], "Basis", StringComparison.OrdinalIgnoreCase);
+        if (!matches)
+        {
+            return false;
+        }
+
+        if (string.Equals(parts[4], "Premarket", StringComparison.OrdinalIgnoreCase))
+        {
+            return true;
+        }
+
+        isRevert = parts.Length >= 6 &&
+            string.Equals(parts[4], "Revert", StringComparison.OrdinalIgnoreCase) &&
+            string.Equals(parts[5], "Premarket", StringComparison.OrdinalIgnoreCase);
+        return isRevert;
+    }
+
+    private static bool IsChildMirror(string value, bool includeProgress, bool useRoi)
+    {
+        var parts = value.Split(new[] { ' ' }, StringSplitOptions.RemoveEmptyEntries);
+        if (includeProgress && useRoi)
+        {
+            return parts.Length == 4 &&
+                int.TryParse(parts[0], NumberStyles.Integer, CultureInfo.InvariantCulture, out _) &&
+                string.Equals(parts[1], "Child", StringComparison.OrdinalIgnoreCase) &&
+                string.Equals(parts[2], "Progress", StringComparison.OrdinalIgnoreCase) &&
+                string.Equals(parts[3], "ROI", StringComparison.OrdinalIgnoreCase);
+        }
+
+        if (includeProgress)
+        {
+            return parts.Length == 3 &&
+                int.TryParse(parts[0], NumberStyles.Integer, CultureInfo.InvariantCulture, out _) &&
+                string.Equals(parts[1], "Child", StringComparison.OrdinalIgnoreCase) &&
+                string.Equals(parts[2], "Progress", StringComparison.OrdinalIgnoreCase);
+        }
+
+        if (useRoi)
+        {
+            return parts.Length == 3 &&
+                int.TryParse(parts[0], NumberStyles.Integer, CultureInfo.InvariantCulture, out _) &&
+                string.Equals(parts[1], "Child", StringComparison.OrdinalIgnoreCase) &&
+                string.Equals(parts[2], "ROI", StringComparison.OrdinalIgnoreCase);
+        }
+
+        return parts.Length == 2 &&
+            int.TryParse(parts[0], NumberStyles.Integer, CultureInfo.InvariantCulture, out _) &&
+            string.Equals(parts[1], "Child", StringComparison.OrdinalIgnoreCase);
     }
 
     private static bool TryGetShiftDiffCategory(string value, string word, out string category)
