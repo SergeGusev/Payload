@@ -1,3 +1,1460 @@
+## Active Update 2026-07-12 Git Hygiene Cleanup
+Goal: Stop generated outputs, build artifacts, local Codex workspace files, and local secrets from polluting Git.
+Status: Completed
+Done:
+- Verified tracked generated/local files before cleanup: `outputs` had 47,526 tracked files, `artifacts` had 9,186 tracked files, and `keys` had 2 tracked PEM files. Key contents were not read or printed.
+- Updated `.gitignore` to ignore `runlogs/`, `outputs/`, `output-*/`, `artifacts/`, `keys/`, `*.pem`, `*.key`, `*.pfx`, and `.codex/`.
+- Removed `outputs`, `artifacts`, and `keys` from the Git index only with `git rm --cached -r -- outputs artifacts keys`; verified `git ls-files outputs artifacts keys` now returns `0`.
+- Verified representative files still exist on disk after the index cleanup, including an `outputs` backup file, an `artifacts` build DLL, and the local PEM under `keys`.
+- Verified ignore coverage with `git check-ignore -v` for representative `outputs`, `artifacts`, `keys`, and `.codex` paths.
+- Committed the cleanup as `152980f7 Ignore generated artifacts and local secrets`.
+Next: Rotate any active private key that was previously tracked because removing it from the current index does not purge Git history.
+Notes: The repository still has unrelated pre-existing source/test/context changes from earlier work; this cleanup did not stage or revert them.
+Blockers: None.
+
+## Active Update 2026-07-12 Remove ETH Down Filtered Average Premarket Strategies
+Goal: Delete the `ETH Up or Down 5m Down N bps Filtered Average Premarket` strategies and prevent them from being reseeded.
+Status: Completed
+Done:
+- Resolved the exact target allowlist as the 10 ETH filtered Down average strategy IDs `b7c50005-0000-4000-8181-000000000101..110` and codes `eth_up_down_5m_down_filtered_average_bps_1..10_fak_premarket`.
+- Created a production backup before mutation at `outputs/eth-down-filtered-purge-2026-07-12/server-target-backup.jsonl` with SHA256 `38D6F16F3119EDC8C29FB68D99EA86D60C8456E1A99B21A1F6614FCA400748F5`.
+- On server PostgreSQL `192.168.0.101`, first disabled the 10 target strategies (`enabled=false`, `live_stakes=false`, `paused=true`), waited for strategy-state refresh, and verified no target orders/runs appeared in the following 10 seconds.
+- Deleted the target strategies and their history transactionally with exact IDs/codes. Migration audit row `20260712_remove_eth_down_filtered_average_premarket_strategies_manual` recorded: `strategies=10`, `strategy_runs=11500`, `paper_orders=3331`, `paper_fills=3331`, `signals=3331`, `paper_positions=3331`, `paper_position_settlements=3331`, `dashboard_snapshots=10`, `dashboard_recent_snapshots=30`, `dashboard_lifetime_projection_states=10`, `dashboard_position_projection_facts=3331`, `dashboard_recent_projection_facts=7067`, `dashboard_recent_projection_states=30`, `child_assignments=712`, and zero Live/shadow/dry-run/date-dependent/diff-shift rows.
+- Post-verified on server that exact target strategy rows are `0`; direct `strategy_id` dependencies, wallet dependencies, `signals_by_target_wallet`, child assignments, projection events/queue, and Dashboard/projection state rows are all `0`.
+- Final heartbeat check showed `PolyCopyTrader.Service` `Running`/`Live`, heartbeat age `7` seconds, and empty `last_error`.
+- Removed the catalog creation loop and unused factory for these variants from `src/PolyCopyTrader.Domain/Models.cs`.
+- Removed the filtered-average seed block from `src/PolyCopyTrader.Storage/PostgresSchema.cs` and added idempotent purge migration `20260712_remove_eth_down_filtered_average_premarket_strategies` for future/local deployments.
+- Updated tests and docs to treat the filtered family as removed, not as a current Dashboard/category family.
+Next: Deploy the source change when ready so future schema initialization cannot recreate the removed strategies.
+Notes: Verification passed: focused `dotnet test` filter for strategy catalog, Dashboard category, and Storage schema tests passed `141/141`; `git diff --check` passed with only existing LF/CRLF warnings. No staging, commit, or push was attempted because the worktree was already broadly dirty with unrelated and overlapping changes, including files touched by this task.
+Blockers: None.
+
+## Active Update 2026-07-12 ETH Down Filtered vs Reference Average Comparison
+Goal: Compare `ETH Up or Down 5m Down N bps Filtered Average Premarket` strategies with matching unfiltered Reference Average strategies for N=1..10.
+Status: Completed
+Done:
+- Verified the authoritative comparison must use the server PostgreSQL host `192.168.0.101`; the local `127.0.0.1` database was stale with latest strategy run update `2026-07-08 16:54:08 UTC`.
+- Resolved all 20 exact server strategy rows: matching filtered/reference N=1..10 rows exist, are enabled, unpaused, and currently `live_stakes=false`.
+- Verified filtered rows have zero Live orders, so only Paper provides an A/B comparison; reference rows have historical Live orders but filtered rows do not.
+- Compared settled Paper `strategy_market_paper_runs` in the common window from the first filtered observed entry due time `2026-07-08 09:59:30 UTC` through the fresh server snapshot around `2026-07-12 09:35 UTC`.
+- Found reference total: 11,450 observed, 7,279 settled, `$43,741.69470635` stake, `+$1,964.71643766` PnL, `4.49163310%` ROI.
+- Found filtered total: 11,450 observed, 3,331 settled, `$20,016.97830316` stake, `+$963.90402157` PnL, `4.81543221%` ROI.
+- Concluded the deployed combined filter raises ROI by `+0.32379911` percentage points but worsens absolute Paper income by `-$1,000.81241609` across N=1..10 in the common window.
+- Verified direct filter effect: `6h/12h` window skips removed a losing reference block (`-$421.02147855`), but `20..80 bps` abs-move skips removed a much larger profitable reference block (`+$1,534.36243900`).
+- Saved the reproducible summary under `outputs/eth-down-filtered-vs-reference-average-2026-07-12/README.md`.
+Next: Consider disabling or revising the `20..80 bps` abs-move skip before judging the filter by Live results.
+Notes: Production queries were read-only with statement timeouts. Dashboard all-time snapshot PnL matched run-table all-time PnL exactly for filtered and reference groups. No strategy flags, orders, service process, source behavior, or database rows were changed. No product build/test was needed because this was analysis-only. The worktree remains broadly dirty with unrelated existing changes, so no staging, commit, or push was attempted.
+Blockers: None.
+
+## Active Update 2026-07-12 ETH Up5 Chart Straight-Line Explanation
+Goal: Explain why the ETH Up5 Paper PnL overlay contains many long straight segments.
+Status: Completed
+Done:
+- Inspected the exact frozen 278-row Paper CSV and the renderer used for `outputs/eth-up5-bps-reference-average-vs-ethusdt-2026-07-12/paper-pnl-vs-ethusdt-chart.png`.
+- Verified the renderer builds one PnL point per settlement and calls `Graphics.DrawLines`, which linearly connects consecutive settlement points across periods with no intervening strategy result.
+- Measured the source sparsity over 206.536 hours: median settlement gap `9.910` minutes, 105 gaps over 15 minutes, 63 over 30 minutes, 37 over one hour, and 11 over three hours. The maximum gap is `1,870.113` minutes (`31h 10m`).
+- Established that the diagonal straight segments are visual interpolation, not gradual changes in cumulative PnL. The actual cumulative PnL remains constant between settlements and changes only when another run settles.
+- Identified a step chart as the accurate representation: horizontal between settlements, then a vertical jump at each realized result. The dense one-minute ETHUSDT line does not have the same sparsity issue.
+Next: Re-render this and future cumulative-PnL graphs as step charts when the user requests the correction.
+Notes: This was a read-only inspection of the frozen CSV and renderer. No graph, product source, production row, strategy state, service process, staging, commit, or push changed.
+Blockers: None.
+
+## Active Update 2026-07-12 Dashboard Category Dropdown Currency Filter
+Goal: Make each `Strategies` tab category dropdown follow that tab's selected currency, not only the visible grid rows.
+Status: Completed
+Done:
+- Verified current Dashboard behavior from `MainViewModel` and `MainWindow.xaml`: all four category ComboBoxes used one shared `StrategyCategoryOptions`, while each tab already had its own selected currency and row filter.
+- Added separate category option collections for `All`, `24 hours`, `6 hours`, and `1 hour` tabs.
+- Rebuilt each category option collection through `BuildStrategyCategoryOptions(selectedCurrency)`, filtering source strategy names with `StrategyDisplayCategories.GetAssetSymbol` before collecting categories.
+- Recomputed category option lists whenever any tab's currency changes, and normalized the selected category back to `All categories` when the old category is not present for the selected currency.
+- Updated XAML so period tabs bind to `Strategy24HoursCategoryOptions`, `Strategy6HoursCategoryOptions`, and `Strategy1HourCategoryOptions`; the `All` tab continues to bind to `StrategyCategoryOptions`.
+- Updated README and `docs/configuration_reference.md` to document that each tab's currency filter narrows both visible strategy rows and the category dropdown.
+- Verification: `dotnet test tests\PolyCopyTrader.Tests\PolyCopyTrader.Tests.csproj --no-restore --filter "FullyQualifiedName~StrategyDisplayCategoryTests" -p:UseSharedCompilation=false /nr:false /nologo -v:minimal` passed 89/89.
+- Verification: `dotnet build src\PolyCopyTrader.Dashboard\PolyCopyTrader.Dashboard.csproj --no-restore -p:UseSharedCompilation=false -p:OutDir="<temp>" /nr:false /nologo -v:minimal` passed with 0 errors.
+- Verification: `git diff --check -- src\PolyCopyTrader.Dashboard\ViewModels\MainViewModel.cs src\PolyCopyTrader.Dashboard\MainWindow.xaml README.md docs\configuration_reference.md` passed.
+Next: Deploy/restart Dashboard if this local UI change should be visible in the running instance.
+Notes: Build warnings are existing nullable warnings in Storage. The worktree already contains extensive unrelated and overlapping changes; no staging, commit, push, production data, runtime flags, orders, or service processes were changed.
+Blockers: None.
+
+## Active Update 2026-07-12 Dashboard Currency-Split Progress Categories
+Goal: Split current Dashboard strategy categories that combined BTC/ETH/SOL into separate per-currency categories.
+Status: Completed
+Done:
+- Verified the Dashboard strategy category options and filtering use `StrategyDisplayCategories.GetCategory(strategyName)` from strategy names in `MainViewModel`.
+- Verified the helper still returned shared cross-currency categories for `Diff Shift Progress`, `Diff Limit Progress`, and `Diff Real Limit Progress`; no remaining hardcoded `Up Or Down 5 min Diff ... Progress` category strings were left after the change.
+- Changed `StrategyDisplayCategories.GetCategory` so the affected families now return `BTC/ETH/SOL Up or Down 5m Diff Shift Progress`, `... Diff Limit Progress`, and `... Diff Real Limit Progress` display categories.
+- Updated `BtcUpDown5mStrategyVariant.Category` metadata for the same families to per-asset `BTC/ETH/SOL Up/Down 5m ...` category names so future strategy-run metadata does not keep using the old shared category.
+- Updated Dashboard/category tests, catalog tests, README, and `docs/configuration_reference.md` to describe and verify the per-currency split.
+- Verification: `dotnet test tests\PolyCopyTrader.Tests\PolyCopyTrader.Tests.csproj --no-restore --filter "FullyQualifiedName~StrategyDisplayCategoryTests" -p:UseSharedCompilation=false /nr:false /nologo -v:minimal` passed 89/89.
+- Verification: `dotnet test tests\PolyCopyTrader.Tests\PolyCopyTrader.Tests.csproj --no-restore --filter "FullyQualifiedName~BtcUpDown5mPaperStrategyProcessorTests.StrategyIds_IncludeStandardMartinAndGammaBtcVariants" -p:UseSharedCompilation=false /nr:false /nologo -v:minimal` passed 1/1.
+- Verification: `dotnet test tests\PolyCopyTrader.Tests\PolyCopyTrader.Tests.csproj --no-restore --filter "FullyQualifiedName~BtcUpDown5mPaperStrategyProcessorTests.StrategyIds_ExcludeCryptoBinanceBpsVariants" -p:UseSharedCompilation=false /nr:false /nologo -v:minimal` passed 1/1.
+- Verification: normal Dashboard build was blocked by locked existing output files held by `devenv.exe` and `PolyCopyTrader.Dashboard.exe`; rerunning the same Dashboard build with a temporary `OutDir` passed with 0 errors.
+- Verification: `git diff --check -- ...` passed, and exact `rg` search found no remaining old shared category strings in `README.md`, `docs`, `src`, or `tests`.
+Next: Deploy/restart the Dashboard/service build if these local source changes should be reflected on the running machine.
+Notes: The worktree was already broadly dirty with unrelated changes; no unrelated files were reverted and no staging, commit, push, production data, runtime flags, orders, or service processes were changed. Build/test warnings are existing nullable warnings in Storage/test code.
+Blockers: None.
+
+## Active Update 2026-07-12 ETH Up5 PnL With ETHUSDT Overlay
+Goal: Build and directly display cumulative Paper PnL for `ETH Up or Down 5m Up 5 bps Reference Average Premarket` with ETH price over the same period.
+Status: Completed
+Done:
+- Resolved exactly one production strategy: ID `b7c50005-0000-4000-8137-000000000105`, code `eth_up_down_5m_up_bps_5_fak_premarket`. It is enabled, unpaused, and Paper-only.
+- Fixed the read-only server cutoff at `2026-07-12 09:10:06.187595 UTC` and exported all 278 settled Paper runs ordered by `settled_at_utc, id`, covering `2026-07-03 06:42:10.756555` through `2026-07-11 21:14:19.410573 UTC`.
+- Calculated 167 wins, 111 losses, zero flat rows, `$1,670.58540003` stake, `+$199.39010411` PnL, and `11.93534339%` ROI.
+- Independently calculated a `$61.35626055` maximum PnL drawdown from `2026-07-10 07:37:06.723167 UTC` through `2026-07-10 21:45:17.299039 UTC`.
+- Fetched and continuity-checked all 12,393 official Binance Spot ETHUSDT one-minute candles from `2026-07-03 06:42` through `2026-07-11 21:14 UTC` in 13 paginated requests. ETHUSDT changed from `$1,716.36` to `$1,826.51` (`+6.41765131%`); observed low/high were `$1,713.44` / `$1,833.40`.
+- Independently compared Binance candles with 12,287 server-persisted ETHUSDT WebSocket sampled minutes. All 12,287 matched a candle minute, zero were unmatched, and mean absolute close difference was `$0.14243916`.
+- Rendered and visually inspected an `1800x920` PNG with common UTC time, cumulative Paper PnL on the independent left scale, ETHUSDT on the independent right scale, and the maximum-PnL-drawdown period shaded.
+- Saved frozen SQL, Paper and price CSVs, independent aggregate, server price validation, fetch/validation/render scripts, summaries, and PNG under `outputs/eth-up5-bps-reference-average-vs-ethusdt-2026-07-12/`.
+Next: None.
+Notes: Local decimal calculations exactly matched the independent PostgreSQL aggregate; every expected Binance minute was present exactly once; every available server ETH sample minute matched a Binance candle key. Production queries were read-only with statement timeouts; no strategy, order, database row, service process, source behavior, or deployment changed, and no `psql` process remained. No product build/test was needed. No staging, commit, or push was attempted because the worktree contains extensive unrelated and overlapping changes.
+Blockers: None.
+
+## Active Update 2026-07-12 ETH Down3 PnL With ETHUSDT Overlay
+Goal: Build and directly display an updated cumulative Paper PnL chart for `ETH Up or Down 5m Down 3 bps Reference Average Premarket` with ETH price over the identical period.
+Status: Completed
+Done:
+- Resolved exactly one production strategy: ID `b7c50005-0000-4000-8140-000000000103`, code `eth_up_down_5m_down_reference_average_bps_3_fak_premarket`. It is enabled, unpaused, and Paper-only.
+- Fixed the read-only server cutoff at `2026-07-12 08:56:09.121387 UTC` and exported all 1,791 settled Paper runs ordered by `settled_at_utc, id`, covering `2026-07-03 06:50:21.501842` through `2026-07-12 08:54:05.093517 UTC`.
+- Calculated 958 wins, 833 losses, zero flat rows, `$10,762.47028283` stake, `+$448.28672988` PnL, and `4.16527728%` ROI.
+- Independently calculated a `$236.71751337` maximum PnL drawdown from `2026-07-07 01:24:21.877389 UTC` through `2026-07-08 15:27:09.040059 UTC`.
+- Fetched and continuity-checked all 13,085 official Binance Spot ETHUSDT one-minute candles from `2026-07-03 06:50` through `2026-07-12 08:54 UTC` in 14 paginated requests. ETHUSDT changed from `$1,715.80` to `$1,804.67` (`+5.17950810%`); observed low/high were `$1,713.44` / `$1,833.40`.
+- Independently compared the Binance candles with 12,978 server-persisted ETHUSDT WebSocket sampled minutes. All 12,978 matched a candle minute, zero were unmatched, and mean absolute close difference was `$0.14023424`.
+- Rendered and visually inspected an `1800x920` PNG. Both series share UTC time only; cumulative Paper PnL uses the left linear scale and ETHUSDT uses the independent right linear scale. The maximum-PnL-drawdown period is shaded.
+- Saved frozen SQL, Paper and price CSVs, independent aggregate, server price validation, fetch/validation/render scripts, summaries, and PNG under `outputs/eth-down3-bps-reference-average-vs-ethusdt-2026-07-12/`.
+Next: None.
+Notes: Local decimal calculations exactly matched the independent PostgreSQL aggregate, every expected Binance minute was present exactly once, and the full available server ETH price sample matched Binance minute keys. Binance endpoint semantics were checked against official Spot REST documentation. Production queries were read-only with statement timeouts; no strategy, order, database row, service process, source behavior, or deployment changed, and no `psql` process remained. No product build/test was needed. No staging, commit, or push was attempted because the worktree contains extensive unrelated and overlapping changes.
+Blockers: None.
+
+## Active Update 2026-07-12 Direct Graph Delivery Rule
+Goal: Ensure requested graphs appear immediately instead of relying on a disappearing inline visualization preview.
+Status: Completed
+Done:
+- Verified the reported behavior is associated with the inline visualization delivery used in the immediately preceding graph response; the underlying PNG exists and renders correctly.
+- Added a global `Graph And Image Delivery` rule to `C:/Users/serge/.codex/AGENTS.md`, applying to every repository and conversation.
+- The rule requires every requested graph/chart/plot/image to be embedded directly as a local PNG or JPEG through Markdown with an absolute path in the first final response.
+- The rule prohibits using an inline visualization directive as the sole delivery mechanism and requires existence plus visual inspection before responding.
+- Prepared the current ETH Child Progress ROI graph for immediate direct embedding from its verified output PNG.
+Next: Apply direct image embedding to every future graph request; use inline visualizations only as optional supplements.
+Notes: The existing `1600x840` PNG was already visually inspected and its source/visualization copies had matching SHA-256. This preference change does not affect product source, production data, strategy behavior, or service state. No product build/test was needed. No repository commit was attempted because the worktree contains extensive unrelated and overlapping changes.
+Blockers: None.
+
+## Active Update 2026-07-12 ETH Child Progress ROI PnL Chart
+Goal: Build and display the cumulative PnL chart for the exact `ETH Up or Down 5m 1 Child Progress ROI` strategy from production history.
+Status: Completed
+Done:
+- Resolved exactly one production strategy: ID `b7c50005-0000-4000-8198-000000000001`, code `eth_up_down_5m_1_child_progress_roi`. It is enabled, unpaused, Paper-only, and has zero Live orders.
+- Fixed the read-only server cutoff at `2026-07-12 08:37:26.079671 UTC` and exported all 472 settled Paper runs ordered by `settled_at_utc, id`, covering `2026-07-09 13:37:09.641843` through `2026-07-12 08:34:15.796725 UTC`.
+- Calculated 247 wins, 225 losses, zero flat results, `$15,573.98699329` total stake, `+$2,138.68326629` PnL, and `13.73240691%` ROI.
+- Calculated a `$1,739.01846195` maximum drawdown from row 201 at `2026-07-10 20:34:47.041587 UTC` to row 408 at `2026-07-11 23:09:19.930949 UTC`; minimum cumulative PnL was `-$915.63252206` and maximum was `+$2,144.69256631`.
+- Rendered and visually inspected a `1600x840` PNG with the cumulative Paper PnL curve, zero line, final value, and shaded maximum-drawdown interval.
+- Saved the frozen source query, 472-row CSV, independent aggregate query/result, renderer, summary, and PNG under `outputs/eth-1-child-progress-roi-paper-pnl-chart-2026-07-12/`.
+- Created the inline visualization fragment and matching PNG under `.codex/visualizations/2026/07/12/019f16f8-e7af-7523-a1a4-063862ebef92/`.
+Next: None.
+Notes: Independent server-side SQL and a separate local decimal calculation matched row count, wins/losses, stake, PnL, cumulative extrema, maximum stake, and maximum drawdown exactly. The image was visually inspected and the visualization copy matched the source PNG. Production queries were read-only with a statement timeout; no strategy, order, database row, service process, source behavior, or deployment changed, and no `psql` process remained. No product build/test was needed. No staging, commit, or push was attempted because the worktree contains extensive unrelated and overlapping existing changes.
+Blockers: None.
+
+## Active Update 2026-07-12 SOL Diff Confirmed Bps M Analysis
+Goal: Select the best neutral Bps confirmation threshold M for SOL Diff Confirmed Average Premarket and test whether M should differ by base Diff threshold K.
+Status: Completed
+Done:
+- Reverified implementation and production catalog state: all 14 SOL Diff Confirmed variants currently share neutral Bps M=35; production contains the exact 14 Diff bases, 28 neutral Bps candidates, and 14 Confirmed rows.
+- Fixed the eligibility cutoff at `2026-07-11 21:25:28.052544 UTC` and calculated the complete `14 K x 28 M = 392` signal-level matrix from 3,132 settled Diff Paper rows and 32,264 eligible Bps signal rows over nine UTC dates. K=1..10 have settled history; K=15/20/25/30 do not.
+- Established the unconfirmed base: 3,132 strategy bets across 1,215 markets, `$18,821.03459280` stake, `-$338.94354362` PnL, and `-1.80087626%` ROI.
+- Found current M35 to maximize absolute confirmed PnL: 1,160 strategy bets across 344 markets, `+$435.82268575` PnL, `6.25220448%` ROI, `+$165.13029879` train PnL, and `+$270.69238696` holdout PnL. All ten active K variants are positive overall.
+- Found M60 to maximize global ROI at `6.75661165%`, but it produces `+$319.94209436`, which is `$115.88059139` less PnL than M35, and retains 372 fewer strategy bets and 90 fewer markets.
+- Recorded the directional limitation: M35 retained 1,155 Up bets for `+$420.26616692` but only five Down bets on four markets for `+$15.55651883`. Its one negative active UTC date is `2026-07-08` at `-$87.60167109`; family-level market-sequence maximum drawdown is `$466.61319642`.
+- Tested separate M values for each K. A train-selected map underperformed fixed M35 on holdout by `$4.96691690`; all four daily walk-forward configurations underperformed fixed M35 by `$335.99634659` to `$372.77951770`. Current data does not support per-K thresholds.
+- Independently measured actual deployed M35 history: 82 settled strategy bets on 33 markets, `$492.76260002` stake, `+$192.86650379` PnL, and `39.13984214%` ROI. All 82 were Up, so this short operational sample is not an independent directional validation.
+- Recommended retaining shared M35 for all SOL Diff Confirmed variants. No source, database, strategy state, service process, or deployment changed.
+- Saved reproducible scripts, full matrix, daily/per-K results, mappings, walk-forward output, metadata, and two server-side verification exports under `outputs/sol-diff-confirmed-bps-per-k-full-history-2026-07-12/`.
+Next: Accumulate more independent dates, especially Down confirmations and K=15/20/25/30 history, then rerun the same fixed-cutoff methodology before reconsidering M35 or per-K values.
+Notes: All 28 global M rows reconcile exactly to 392 per-K rows and 3,528 daily rows. An independent read-only PostgreSQL query matched M35/M60 aggregate, train/holdout, direction, and every active-K count, stake, and PnL. A separate query matched actual M35 strategy history. No build/test was needed because no product code changed. The worktree remains broadly dirty with unrelated existing changes, so no staging, commit, or push was attempted.
+Blockers: None.
+
+## Active Update 2026-07-12 SOL Bps Confirmed Diff1 Production Verification
+Goal: Verify that the republished production service is healthy and that fresh SOL Bps Confirmed Average Premarket decisions use Diff1 rather than Diff9.
+Status: Completed
+Done:
+- Confirmed PostgreSQL access and a fresh `PolyCopyTrader.Service` heartbeat. The deployed process started at `2026-07-11 21:08:16.227079 UTC`, is `Running` in `Live` mode, has an empty `last_error`, and had a 14-second heartbeat age at the final check.
+- Verified the schema initializer ran immediately before service start at `2026-07-11 21:08:15.787884 UTC`: all 28 SOL Bps Confirmed strategy descriptions identify exact Diff1, and zero identify Diff9.
+- Inspected three completed post-restart SOL markets with entry due times `21:09:30`, `21:14:30`, and `21:19:30 UTC`. All `84/84` Confirmed run diagnostics contain `confirmation_signal_strategy_code=sol_up_down_5m_1_diff_reference_average_premarket`; zero contain the Diff9 code.
+- Independently verified the linked strategy UUID in the first two completed markets: all `56/56` diagnostics use exact Diff1 ID `b7c50005-0000-4000-8177-000000000001`, and zero use Diff9 ID `...000009`.
+- No SOL Confirmed entry was accepted in those first three markets. Six rows had an eligible base Bps signal but no Diff1 signal; the other 78 skipped because the base Bps move was below threshold. This is verified decision behavior, not a stalled worker.
+- Confirmed wider post-restart service activity: 888 Paper orders from 412 distinct strategies, latest at `2026-07-11 21:20:16.355377 UTC`. No Live order was created during this short post-restart window.
+Next: Continue accumulating post-change SOL Confirmed decisions; the first accepted rows should be checked for expected stake/fill accounting once Diff1 and base Bps signals agree.
+Notes: All production checks were read-only with an 8-second PostgreSQL statement timeout. Heartbeat, seed descriptions, structured runtime code/UUID links, fresh strategy-run transitions, and wider Paper-order activity provide independent evidence. No database row, service process, strategy flag, balance, order, source file, deployment, staging, commit, or push changed during verification; no local `psql` process remained.
+Blockers: None.
+
+## Active Update 2026-07-11 SOL Bps Confirmed Diff1 Switch
+Goal: Replace the shared SOL Bps Confirmed Average Premarket confirmation signal from Diff9 with Diff1 while preserving existing strategy rows, controls, and history.
+Status: Completed
+Done:
+- Changed the compiled asset-specific Bps Confirmed mapping in `StrategyIds` from SOL Diff9 to the exact `SOL Up or Down 5m 1 Diff Reference Average Premarket` variant. BTC remains Diff5 and ETH remains Diff3.
+- Preserved all 28 SOL Bps Confirmed strategy IDs, codes, names, N thresholds, categories, and runtime ownership. The linked confirmation ID changes at catalog construction time; existing Paper/Live history and runtime controls stay attached to the same Confirmed rows.
+- Changed the PostgreSQL seed tuple from `('SOL', '8202', 9)` to `('SOL', '8202', 1)`. The existing `ON CONFLICT (id)` path updates only code, name, description, and timestamp; it does not reset Enabled, Live, Paused, balances, stakes, or lost counters.
+- Updated the exact crypto catalog assertion and PostgreSQL seed assertion from SOL M9 to M1.
+- Updated README and the configuration reference to document BTC M5, ETH M3, and SOL M1 for Bps Confirmed Average Premarket.
+- Verified no stale SOL M9 Confirmed references remain in current source, tests, README, or configuration documentation.
+Next: User republishes and restarts the service, then verify production descriptions and fresh SOL Confirmed diagnostics link `sol_up_down_5m_1_diff_reference_average_premarket`, with no new decisions linked to Diff9.
+Notes: Focused Release tests passed `8/8`, covering catalog grid, schema seed, display/category and Confirmed agreement/skip/Live-shadow behavior. Their build emitted existing nullable warnings from untouched `PostgresAppRepository.cs`; a subsequent explicit Release Service build passed with `0` warnings and `0` errors. `git diff --check` passed apart from existing line-ending notices. No production database row, strategy flag, balance, order, service process, or deployment changed. No staging, commit, or push was attempted because all six touched tracked files overlap the existing broad dirty worktree and cannot be isolated without including unrelated user/session changes.
+Blockers: Production activation requires republish and service restart.
+
+## Active Update 2026-07-11 SOL Bps Confirmed Diff M Recalculation
+Goal: Recalculate the SOL Bps Confirmed Average Premarket Diff confirmation threshold to restore meaningful activity without selecting an in-sample-only rule.
+Status: Completed
+Done:
+- Reverified source and production state: all 28 SOL Bps Confirmed variants currently share Diff M=9; the exact catalog contains 28 neutral Bps bases, 14 Diff candidates (`1..10,15,20,25,30`), and 28 Confirmed rows.
+- Fixed eligibility cutoff at `2026-07-11 18:28:45.070106 UTC` and calculated all `28 x 14 = 392` signal-level pairs from 31,957 settled Bps Paper rows and 3,347 eligible Diff signal rows across eight UTC dates. Signal eligibility includes `entry_due_at_utc <= cutoff`.
+- Verified actual Confirmed inactivity since the rows were created at `2026-07-10 20:11:27.898823 UTC`: 7,560 persisted runs contain zero accepted Paper strategy bets and zero accepted markets. The skip breakdown is 3,764 confirmation-signal-unavailable, 3,040 base-below-threshold, 672 reference-fetch-failed, and 84 already-passed entries.
+- Found M1 to be the only robust activity candidate. M1 retains 10,953 strategy bets across 625 markets (`34.27%` of base rows), produces `+$2,654.24340247` PnL at `4.03262714%` ROI, and is positive on train/holdout (`+$781.31249693` / `+$1,872.93090554`) and Up/Down (`+$1,731.85454646` / `+$922.38885601`).
+- Compared current M9: 1,164 retained bets across 60 markets, `+$259.00764374`, and `3.70290071%` ROI. M1 increases strategy-bet activity by `9.41x` and unique-market activity by `10.42x`. M2 through M8 and M10 are negative overall; M15+ emitted no eligible signals.
+- Tested every N independently. M1 maximizes both full-history and train PnL for all 28 N values, and every N is positive on both train and holdout. Fixed-M1, train-selected, and all-history-best mappings are identical.
+- Ran one- through four-day walk-forward selection. Every personalized run loses `$1,131.57626314` to fixed M1 over its comparable evaluation dates.
+- Recalculated the exact Confirmed operational window. Current M9 has zero retained rows; M1 would retain 986 strategy bets on 65 markets, with `$5,925.16980277` stake and `+$2,081.59208647` PnL. This short-window PnL is a regime observation, not a forecast.
+- Recorded risk: M1 has two negative UTC dates (`-$1,296.91305863` and `-$924.25308454`) and a family-level maximum drawdown of `$3,551.87982399` across all 28 variants.
+- Recommended changing shared SOL Bps Confirmed Diff M from 9 to 1, subject to explicit approval. No source, database, deployment, or service state changed in this analysis.
+- Saved matrix, daily/per-N results, mappings, walk-forward output, methodology, server verification, and independent operational verifier under `outputs/sol-bps-confirmed-diff-per-n-full-history-2026-07-11/`.
+Next: If the user approves M1, change the compiled SOL Bps Confirmed mapping and PostgreSQL seed description, update exact tests/docs, build/test, then request republish and verify fresh runtime diagnostics.
+Notes: All 14 global rows reconcile exactly to 392 per-N and 3,136 daily rows. Direct PostgreSQL verification matched M1/M9 aggregates, outcomes, every retained per-N row, and actual zero activity. A separate 29-query indexed extraction independently matched the 986-bet/65-market operational M1 result. Queries were read-only with server-side timeouts; no local `psql` process remained. No build/test was needed for analysis. No staging, commit, or push was attempted because the broad dirty worktree prevents an isolated artifact/context commit.
+Blockers: Source change requires explicit user approval of M1.
+
+## Active Update 2026-07-11 ETH Diff Confirmed Bps Per-K Analysis
+Goal: Select the best neutral Bps confirmation threshold M for ETH Diff Confirmed Average Premarket and test whether M should differ by base Diff threshold K.
+Status: Completed
+Done:
+- Reverified the implementation and production catalog: all 14 ETH Diff Confirmed variants currently share neutral Bps M=5; production contains the exact 14 Diff bases, 28 neutral Bps candidates, and 14 Confirmed rows.
+- Fixed eligibility cutoff at `2026-07-11 16:43:28.568763 UTC` and calculated the complete `14 x 28 = 392` signal-level matrix from 3,147 settled Diff Paper rows and 27,502 eligible Bps signal rows across nine UTC dates. Signal eligibility includes `entry_due_at_utc <= cutoff` so pre-created future-due rows are excluded.
+- Established the unconfirmed base: 3,147 strategy bets across 1,315 markets, `$18,911.23919853` stake, `+$1,132.91203353` PnL, and `5.99068111%` ROI. K=1..10 have history, K=15 has only two rows, and K=20/25/30 have none.
+- Found that M=1 maximizes full-history PnL: 1,941 bets, 734 markets, `+$1,210.88168384`, and `10.38132136%` ROI. Current M=5 has 1,810 bets, 665 markets, `+$1,192.81082867`, and `10.96652701%` ROI; both train/holdout and Up/Down are positive.
+- Selected current M=5 as the robustness recommendation. It gives only `$18.07085517` less PnL than M1, has ROI higher by `0.58520565` points, and has eight positive, zero negative, and one zero UTC date versus M1's seven positive, one negative, and one zero date.
+- Tested a different M for every K. The all-history map raises PnL to `+$1,297.85686437` but leaks holdout data. Train-only selection earns only `+$140.91454868` on holdout versus `+$497.62563296` for fixed M5, underperforming by `$356.71108428`.
+- Ran daily walk-forward per-K selection with one through four initial days. Personalized PnL trails fixed M5 by `$405.72461062`, `$405.72461062`, `$366.10650461`, and `$205.03375007`; current data does not support per-K thresholds.
+- Saved scripts, all 392 matrix rows, 3,528 daily rows, fixed/personalized mappings, walk-forward details, methodology, and independent server verification under `outputs/eth-diff-confirmed-bps-per-k-full-history-2026-07-11/`.
+Next: Keep accumulating independent Paper dates and rerun the same fixed methodology before reconsidering M=5 or per-K thresholds.
+Notes: Every global M reconciles exactly to both its per-K and daily rows. An independent read-only PostgreSQL query matched M1/M5 aggregate, train/holdout, direction, and every active per-K count, stake, and PnL exactly. The first analysis invocation reached its external 180-second local timeout after database extraction; subsequent runs completed with a larger caller timeout, and no database timeout or mutation occurred. No product source, production row, strategy state, service process, build, test, staging, commit, or push changed; the broad dirty worktree prevents an isolated artifact/context commit.
+Blockers: None.
+
+## Active Update 2026-07-11 ETH Bps Confirmed Per-N Diff Analysis
+Goal: Determine whether each ETH neutral Bps Reference Average threshold N needs its own Diff confirmation threshold M instead of the current shared M=3.
+Status: Completed
+Done:
+- Reverified the implementation and production catalog: the 28 ETH Bps Confirmed variants currently share exact ETH Diff3; production exposes all 28 neutral Bps bases and all 14 Diff candidates (`1..10,15,20,25,30`).
+- Fixed the production cutoff at `2026-07-11 16:09:48.439793 UTC` and calculated all `28 x 14 = 392` signal-level pairs from 27,388 settled Bps Paper rows and 3,364 usable Diff signal rows across eight UTC dates. Catalog thresholds and strategy/condition uniqueness were exact.
+- Established the unconfirmed base: 27,388 strategy bets, `$164,581.11792841` stake, `+$5,948.36767222` PnL, and `3.61424673%` ROI.
+- Compared shared thresholds. M=2 maximizes confirmed PnL (`8,527` bets, `506` markets, `+$5,371.95035750`, `10.48374987%` ROI). Current M=3 has `5,753` bets across `314` markets, `+$5,074.48155170`, and `14.67839068%` ROI; all 28 N are positive in both chronological halves, and Up/Down contribute `+$4,421.89436701` / `+$652.58718469`.
+- Calculated the tempting all-history per-N map: M1 for 15 N, M2 for nine, and M3 for four. It raises in-sample PnL to `+$5,679.97628639` but lowers ROI to `10.43048881%`; its selection uses the evaluation dates and is not deployable evidence.
+- Ran a leakage-free split. Selecting each N's M only on `2026-07-04..07` chooses M3 for all N through 25, M2 for `30,35,40,45,50,55,90,95`, and M1 for `60,65,70,75,80,85,100`. On `2026-07-08..11`, that personalized map produces `+$1,704.49048313` versus `+$1,916.36205778` for fixed M3, underperforming by `$211.87157465`. Fourteen of the 15 changed N lose to M3; only N60 improves, by `$2.70917674`.
+- Added daily walk-forward selection with one-, two-, and three-day initial windows. Personalized minus fixed-M3 PnL is respectively `-$278.17596562`, `-$89.93423137`, and `+$72.40225896`; the unstable sign does not support per-N deployment.
+- Recommended keeping M=3 for every ETH N. No code, schema, database, or deployment change is needed.
+- Saved the complete matrix, per-N map, mapping comparisons, daily/walk-forward results, scripts, metadata, methodology, and independent server verification under `outputs/eth-bps-confirmed-diff-per-n-full-history-2026-07-11/`.
+Next: Accumulate more independent UTC dates, then rerun the same fixed methodology and reconsider per-N values only if they beat M3 consistently out of sample.
+Notes: All 392 matrix rows reconcile exactly to 3,136 daily rows and every aggregate M reconciles to its 28 N rows. An independent verifier recalculated global M3 and the train-selected map on PostgreSQL through 28 indexed per-strategy queries; every N and all/train/holdout count, stake, and PnL matched exactly. An initial broad server verifier was canceled by its 15-second timeout and replaced with the indexed version; no local `psql` process remained. Queries were read-only. No product source behavior, production row, service process, build, test, staging, commit, or push changed; the broad dirty worktree prevents an isolated artifact/context commit.
+Blockers: None.
+
+## Active Update 2026-07-11 BTC Diff Confirmed Bps45 Production Verification
+Goal: Verify that the newly deployed production service is running and actually uses neutral Bps45 for all BTC Diff Confirmed Average Premarket decisions.
+Status: Completed
+Done:
+- Confirmed PostgreSQL access and a current `PolyCopyTrader.Service` heartbeat: the service started at `2026-07-11 15:47:18.877535 UTC`, status is `Running`, mode is `Live`, `last_error` is empty, and the heartbeat remained fresh at the final database check (`2026-07-11 16:01:57.415641 UTC`).
+- Matched the deployed heartbeat MVID prefix `14b53f65a600` to the exact local Release assembly MVID `14b53f65a6004fecb28f02b16dbc79ac`, independently confirming that production runs the Release build containing the Bps45 mapping.
+- Verified all 14 production BTC Diff Confirmed strategy descriptions now identify the exact neutral 45 bps confirmation; zero descriptions retain neutral 10 bps.
+- Inspected all three completed post-restart decision markets through the final cutoff: 42 due strategy runs consist of 40 skipped decisions and two settled entries. Every one of the 40 persisted Confirmed diagnostics links `btc_up_down_5m_reference_average_bps_45_fak_premarket`; zero link Bps10.
+- Confirmed the two accepted post-restart entries were K=1 and K=2 on the `15:49:30 UTC` due market. Each created a Filled Paper order for `$6.00930000` and settled at `+$4.35156207`. Entered/settled run rows do not retain skip diagnostics, but their timestamps follow the verified Bps45 Release process and the remaining same-process decisions provide the exact runtime link evidence.
+- Confirmed wider service activity since restart: 1,589 Paper orders from 789 distinct strategies, latest at `2026-07-11 16:00:22.092366 UTC`, plus one Live order at `15:50:02.847245 UTC`.
+Next: Continue accumulating post-change Paper history and reassess the known M=45 directional imbalance after a larger number of Down signals.
+Notes: All production queries were read-only with an 8-second PostgreSQL statement timeout. A local Release build used only for MVID comparison passed with `0` warnings and `0` errors. No database row, strategy state, order, service process, or deployment was changed, and no local `psql` process remained. No staging, commit, or push was attempted because only the shared context/history changed within the existing broad dirty worktree.
+Blockers: None.
+
+## Active Update 2026-07-11 BTC Diff Confirmed Bps45 Switch
+Goal: Replace the BTC Diff Confirmed Average Premarket confirmation signal from neutral Bps10 with neutral Bps45 while preserving existing strategies and history.
+Status: Completed
+Done:
+- Changed the asset-specific Diff Confirmed Average catalog mapping from BTC Bps10 to the exact `BTC Up or Down 5m 45 bps Reference Average Premarket` variant. ETH remains Bps5 and SOL remains Bps35.
+- Preserved all 14 BTC Diff Confirmed strategy IDs, codes, names, Diff K thresholds, Dashboard categories, and runtime ownership. Existing Paper/Live history, Enabled, Live, Paused, balances, and stake controls remain attached to the same strategy rows.
+- Updated the PostgreSQL seed description parameter from BTC Bps10 to Bps45. Its existing `ON CONFLICT` path updates only code/name/description/timestamp fields and does not recreate rows or reset runtime controls.
+- Updated the exact BTC catalog assertion, PostgreSQL seed assertion, README, and configuration reference to state BTC L=45.
+- Verified both focused test runs: `3/3` catalog/schema tests and `7/7` Confirmed Average behavior tests passed. The Service build passed with `0` warnings and `0` errors, and `git diff --check` passed apart from existing line-ending notices.
+Next: User republishes and restarts the service, then verify fresh BTC Diff Confirmed diagnostics link `btc_up_down_5m_reference_average_bps_45_fak_premarket` and no new decisions use Bps10 as confirmation.
+Notes: The confirmation link is compiled into the Domain catalog, so a database-only change cannot activate Bps45. No production database row, service process, strategy flag, balance, order, or history changed in this task. The first focused build emitted existing nullable warnings from `PostgresAppRepository.cs`; the subsequent explicit Service build was clean. The known broad dirty-worktree suite baseline was not rerun because the two exact focused suites cover this six-value change and the full suite already contains unrelated removed-catalog failures. No staging, commit, or push was attempted because all touched tracked files and the context/history surfaces overlap the existing broad dirty worktree.
+Blockers: Production verification requires the new service build to be deployed and restarted.
+
+## Active Update 2026-07-11 BTC Diff Confirmed Bps Candidate Analysis
+Goal: Select the best neutral BTC Bps Reference Average confirmation threshold M for the `BTC Up or Down 5m K Diff Confirmed Average Premarket` family using current full Paper history.
+Status: Completed
+Done:
+- Reverified the source/runtime contract: 14 base `K Diff Reference Average Premarket` variants (`K=1..10,15,20,25,30`) require same-direction confirmation from one neutral `M bps Reference Average Premarket` variant; the current compiled BTC mapping is M=10.
+- Fixed the production cutoff at `2026-07-11 13:21:00.726543 UTC` and validated the exact production catalog before calculation: 14 Diff bases and all 28 Bps candidates (`1..10,15..100`), with no missing thresholds or duplicate strategy/condition rows.
+- Recalculated all 28 candidates from 3,118 settled base Diff Paper rows and 24,454 usable Bps signal rows. The unconfirmed base is 3,118 strategy bets across 1,346 unique markets, `$18,736.99739960` stake, `+$415.99910614` PnL, and `2.22020155%` ROI.
+- M=35 has the maximum confirmed PnL: 582 strategy bets, 248 unique markets, `+$203.82811158`, and `5.82796870%` ROI. M=50 has the maximum ROI among candidates with at least 100 markets: 434 bets, 176 markets, `+$175.28379899`, and `6.72091127%`.
+- Selected M=45 as the current robustness-oriented research candidate: 474 strategy bets across 195 markets, `+$176.36523459` PnL, `6.19171208%` ROI, positive first/second date halves (`+$72.84055827` / `+$103.52467632`), and all nine K variants with retained bets positive. M=45 covers 10.8% more unique markets than M=50 while giving only `$1.08143560` less PnL.
+- Preserved the critical limitation: M=45 is directionally concentrated. Up contributes 463 bets and `+$219.35484229`; Down has only 11 bets across four markets and loses `-$42.98960770`. It has four positive, two negative, and three zero-signal UTC dates, and its market-level maximum drawdown is `$227.93976646`.
+- Reassessed current M=10: 1,169 bets across 494 markets, `+$97.10649770`, and `1.38232415%` ROI. M=5 and M=10 are the only candidates positive in both chronological halves and both directions, but M=10 lowers PnL and ROI versus the unconfirmed base and leaves K=1 and K=4 negative.
+- Saved the reproducible read-only script, full summary, daily matrix, per-K matrix, metadata, methodology, and an independent server verification under `outputs/btc-diff-confirmed-bps-full-history-2026-07-11/`.
+Next: User decides whether to change the compiled BTC Diff Confirmed mapping from M=10 to the M=45 research candidate, retain M=10 for directional breadth, or accumulate more Paper history.
+Notes: Local daily and per-K totals reconcile exactly for M=10/35/45/50. Independent PostgreSQL aggregation for M=45 matched bets, wins, markets, stake, PnL, ROI, daily, direction, and per-K totals exactly. All queries were read-only with server-side timeouts. The initial broad extraction was canceled by its 15-second PostgreSQL timeout; the completed run used indexed per-strategy queries, and no local `psql` process remained. No product source behavior, production row, strategy flag, order, balance, or service process changed. No build/test run was needed for this analysis. No staging, commit, or push was attempted because the active context/history and broader worktree already contain extensive overlapping user/session changes.
+Blockers: None.
+
+## Active Update 2026-07-11 BTC Confirmed Average Diff5 Switch
+Goal: Replace the BTC Bps Confirmed Average Premarket confirmation signal from Diff7 with Diff5 while preserving existing strategies and history.
+Status: Completed
+Done:
+- Changed the asset-specific Bps Confirmed Average catalog mapping from BTC Diff7 to the exact `BTC Up or Down 5m 5 Diff Reference Average Premarket` variant. ETH remains Diff3 and SOL remains Diff9.
+- Preserved all 28 BTC Confirmed strategy IDs, codes, names, thresholds, and Dashboard categories. The linked confirmation strategy is resolved from the compiled catalog, so existing Paper/Live history and runtime controls stay attached to the same strategy rows.
+- Updated the PostgreSQL seed description parameter from BTC Diff7 to Diff5. Its existing `ON CONFLICT` path updates descriptive catalog fields without replacing IDs or resetting Enabled, Live, Paused, balance, or stake controls.
+- Updated exact catalog/schema assertions and the README/configuration reference to state BTC M=5.
+- Verified both targeted test runs: `3/3` catalog/schema tests and `7/7` Confirmed Average behavior tests passed. The Service build passed with `0` warnings and `0` errors, and `git diff --check` passed apart from existing line-ending notices.
+Next: User republishes and restarts the service, then production runtime diagnostics should be checked for fresh BTC Confirmed decisions linked to `btc_up_down_5m_5_diff_reference_average_premarket` rather than Diff7.
+Notes: This switch cannot be completed with a database-only update because the confirmation link is not stored as a strategy-row field; it is compiled into the Domain catalog. No production database row, service process, strategy flag, balance, order, or history was changed in this task. The full current dirty-worktree suite ran `773` tests: `659` passed and `114` failed in unrelated legacy/removed catalog tests; both focused runs for this change passed. No staging, commit, or push was attempted because the touched files already overlap the broad dirty worktree.
+Blockers: Production verification requires the new service build to be deployed and restarted.
+
+## Active Update 2026-07-11 BTC Diff Below Seven Candidate Analysis
+Goal: Select a BTC Diff confirmation threshold below seven whose full-history aggregate PnL and ROI are positive for the 28 neutral BTC Bps Reference Average strategies.
+Status: Completed
+Done:
+- Reused the original signal-level matrix definition and fixed the fresh production cutoff to `2026-07-11 12:32:45.523553 UTC`. The exact baseline is 24,395 settled Paper strategy rows from `2026-07-04 14:29:33 UTC` through `2026-07-11 12:19:30 UTC`, `$146,596.14801693` stake, `-$169.37433112` PnL, and `-0.11553805%` ROI.
+- Recalculated exact BTC Diff thresholds M=1..6. Positive full-period candidates are M=2 (`6,178` bets, `+$354.09901228`, `+0.95379585%`), M=5 (`1,157`, `+$254.78256737`, `+3.66450053%`), and M=6 (`593`, `+$5.18046133`, `+0.14537504%`). M=1, M=3, and M=4 remain negative.
+- Split the eight UTC dates chronologically into `2026-07-04..07` and `2026-07-08..11`. M=2 is `+$897.33303252` then `-$543.23402024`; M=6 is `-$308.62157665` then `+$313.80203798`. M=5 is the only candidate below seven positive in both halves: `+$6.36882557` and `+$248.41374180`.
+- Selected M=5 as the best robustness candidate below seven rather than the maximum-total-PnL M=2. M=5 has the highest qualifying ROI, 22/28 positive Bps variants, 76 unique matched markets, and maximum drawdown `$717.01741300`.
+- Recorded the material M=5 limitations: only 4/8 UTC dates are positive; first-half PnL is barely above zero; Up contributes `+$332.98105556` at `+6.08247335%` ROI while Down loses `-$78.19848819` at `-5.28980136%`; 1,157 strategy rows represent only 76 unique markets; the final UTC date is partial.
+- Saved the fixed-cutoff read-only script, summary, daily, per-Bps-N, metadata, and methodology under `outputs/btc-bps-confirmed-diff1-6-full-history-2026-07-11/`.
+Next: User decides whether the deployed BTC Bps Confirmed Average family should be changed from Diff7 to Diff5; no implementation change was made in this task.
+Notes: A separate server-side M=5 aggregate independently matched all local totals, including stake, PnL, ROI, unique markets, and directions. A second direct SQL query matched all eight daily rows. Local daily, per-variant, partition, and direction sums reconcile exactly for all six candidates. Queries were read-only with 15-second server-side timeouts and left no local `psql` process. No production row, strategy flag, source behavior, service process, build, test, staging, commit, or push changed; the broad dirty worktree prevents an isolated context/report commit.
+Blockers: None.
+
+## Active Update 2026-07-11 Historical Confirmed Pair Reconciliation
+Goal: Determine whether an early pre-matrix analysis showed a large improvement for BTC 1 bps Reference Average confirmed by BTC 1 Diff Reference Average.
+Status: Completed
+Done:
+- Searched the complete persisted daily-history set and the saved July 10 combination/matrix artifacts for the exact BTC and ETH strategy pairs.
+- Confirmed that the first standalone BTC combination analysis was `BTC 30 bps Reference Average + BTC 5 Diff Reference Average`, not BTC 1+1. Its strict same-signal Bps leg had `30` bets, `+$10.20569421` PnL, and `5.6611%` ROI versus standalone common-period Bps30 `762` bets, `+$142.77702685`, and `3.1180%` ROI.
+- Confirmed that the impressive early exact 1+1 analysis was ETH: standalone ETH Bps1 had `1,527` bets, `+$125.68840115` PnL, and `1.3697%` ROI; the one-stake same-signal combination had `624` bets, `+$205.58883687`, and `5.4827%` ROI.
+- Confirmed that the later full matrix did contain exact `BTC Bps1 + BTC Diff1`: baseline `1,544` bets, `-$143.09608736`, `-1.54225639%`; filtered `604` bets, `-$45.56201534`, `-1.25528431%`. It improved PnL by `$97.53407202` and ROI by `0.28697207` points but remained negative, so this was not the impressive result.
+- Confirmed that the full matrix's impressive BTC Bps1 row used Diff7: the same baseline filtered to `21` bets, `+$40.48238382` PnL, and `32.07915337%` ROI, a `+$183.57847118` PnL and `+33.62140975` point change. The all-N BTC Diff7 aggregate was the result that led to the M=7 recommendation.
+Next: None.
+Notes: Evidence came from `ContextPolyCopyTrader-2026-07-10.md`, the standalone BTC/ETH agreement summaries, and `candidate-per-variant-comparison.csv` plus `recommended-parameters-summary.csv`. No database query, source behavior change, strategy state change, build, test, staging, commit, or push was needed. The existing broad dirty worktree still prevents an isolated context-only commit.
+Blockers: None.
+
+## Active Update 2026-07-11 BTC Confirmed Average Diff1 Production Analysis
+Goal: Explain the near-zero BTC N bps Confirmed Average Premarket activity and compare the deployed Diff7 gate with a hypothetical Diff1 gate over the strategies' operational lifetime.
+Status: Completed
+Done:
+- Reverified the current source path and exact deployed mapping: all 28 BTC Bps Confirmed Average variants use the corresponding neutral BTC N bps Reference Average signal as their base and `BTC Up or Down 5m 7 Diff Reference Average Premarket` as confirmation.
+- Fixed the production analysis window to the 189 completed markets whose T-30 entry due time followed strategy creation: market starts `2026-07-10 20:15:00 UTC` through `2026-07-11 11:55:00 UTC`, with a fixed market-end cutoff at `2026-07-11 12:00:00 UTC`. Excluded three older per-strategy catch-up rows with `entry_due_already_passed` because no confirmation decision was evaluated for them.
+- Resolved exactly 28 Confirmed and 28 corresponding base strategies. The joined dataset contains `5,292` Confirmed strategy-market rows, no duplicates, no missing base runs, and no missing Diff1 runs.
+- The corresponding base strategies made `800` settled Paper bets. The deployed Diff7 condition skipped `799`: all `799` were unavailable Diff7 signals and `0` were opposite-direction mismatches. Only one Confirmed strategy bet settled, for N=1.
+- The `799` actual confirmation skips break down by nested Diff7 reason into `707` `diff_reference_average_delta_below_threshold`, `83` missing T-30 previous-market prices, and `9` unchanged reference prices. Across the 189 unique markets, standalone Diff7 emitted only two signals, and only one coincided with any base Bps signal.
+- A hypothetical Diff1 gate would skip `535` of the same 800 base bets: `474` because Diff1 had no signal and `61` because its direction was opposite. It would retain `265` bets.
+- Aggregate baseline was `$544.53290342` PnL on `$4,807.44000049` stake (`11.326879%` ROI). The Diff1-filtered counterfactual was `$145.88342931` PnL on `$1,592.46450014` stake (`9.160859%` ROI): PnL delta `-$398.64947411`, ROI delta `-2.166020` percentage points.
+- Stored the exact read-only SQL and methodology under `outputs/btc-bps-confirmed-average-diff1-analysis-2026-07-11/`.
+Next: Accumulate a longer sample and evaluate candidate confirmation thresholds out of sample before changing production; the current window is only about 15 hours 40 minutes.
+Notes: Server-side aggregation and an independent client-side decimal recalculation of all `5,292` joined rows matched exactly. Baseline counts also reconciled for every N as actual Diff7 skips plus Confirmed settled bets. Queries used fixed UTC bounds, exact strategy mappings, and server-side statement timeouts; no local `psql` process remained. No source behavior, strategy flag, order, service process, or production row changed, and no build/test run was needed for this read-only analysis. No staging, commit, or push was attempted because the existing worktree has 598 unrelated/overlapping dirty entries, including the shared active context/history surface, so an isolated commit is not safe.
+Blockers: None.
+
+## Active Update 2026-07-11 Production Three-Expiry Skip Impact
+Goal: Measure how many additional Futures Basis skips the new two-expiry sign confirmation caused during the latest production hour.
+Status: Completed
+Done:
+- Confirmed production deployment from runtime evidence: `PolyCopyTrader.Service` heartbeat was `Running`, mode `Live`, with empty `last_error`, and completed Futures rows use only the new `okx_three_expiry_confirmed_futures_basis_bps_*` decision sources. The first fresh three-expiry decision in the inspected range was due at `2026-07-11 09:04:30 UTC`.
+- Fixed the comparison boundary to production database time `2026-07-11 11:03:11.166236 UTC`. The latest window is `[10:03:11.166236, 11:03:11.166236) UTC`; the preceding comparison window is `[09:03:11.166236, 10:03:11.166236) UTC`.
+- Latest hour contained `576` completed Futures strategy decisions: `192` each for BTC, ETH, and SOL. The old nearest-expiry threshold condition accounts for `388` skips; the new confirmation condition added exactly `2`, taking total skips to `390`.
+- The direct increase is therefore `2/576 = 0.3472` percentage points of all decisions, or `2/388 = 0.5155%` more skips relative to the old skip count. Of `188` decisions that passed the nearest-expiry threshold, `2` were filtered, reducing accepted signals to `186`, a `1.0638%` reduction.
+- Both additional rows were the Standard and Revert forms of the same underlying `SOL 1 bps` threshold signal at `2026-07-11 10:39:30 UTC`. Stored bases were primary `+1.926040 bps`, second `-3.852080 bps`, and third `-19.902414 bps`; thus neither confirmation matched the primary sign. This is `2` strategy-run skips but only `1` unique asset/market/threshold signal.
+- By asset in the latest hour: BTC `96` old-threshold skips + `0` confirmation skips; ETH `162 + 0`; SOL `130 + 2`.
+- Independently recomputed mismatch flags from the three persisted basis values and each row's threshold. The recomputed result matched persisted `skip_reason` exactly: `2` versus `2`, providing an independent numerical cross-check.
+- In the preceding hour, the new condition produced `30` skips (`2` ETH and `28` SOL), so confirmation skips decreased by `28` hour over hour. Total skips also decreased from `422` to `390` (`-32`, or `-5.5556` percentage points), but that observed period comparison is not causal because the nearest-expiry bases differed between hours.
+Next: Accumulate a longer sample and compare filtered versus accepted signal settlement results; one hour is enough to measure skip volume but not whether the filter improves PnL or hit rate.
+Notes: Production queries were read-only, used exact Futures strategy IDs, fixed UTC boundaries, and PostgreSQL `statement_timeout=8s` below the outer shell timeout. No local `psql` process remained. No source, strategy flag, order, service process, or production row changed. No build/test run was needed for this data analysis.
+Blockers: None.
+
+## Active Update 2026-07-11 Three-Expiry Futures Sign Confirmation
+Goal: Change BTC/ETH/SOL Futures Basis Premarket decisions to use three expiries, with the second and third confirming the nearest expiry's sign.
+Status: Completed
+Done:
+- Replaced the singular expiry-price client contract with an ordered multi-price contract and changed OKX selection to return the three nearest distinct live linear USD expiries at or after the target Polymarket market end.
+- Kept the existing `N bps` threshold exclusively on the first/nearest expiry. The second and third expiries confirm only its strict raw basis sign; either zero or an opposite sign skips with `futures_basis_confirmation_sign_mismatch`.
+- Preserved Revert semantics after confirmation: all three raw signs are checked before the accepted trigger direction is inverted. Missing, invalid, or stale data for any selected contract causes `expiry_futures_reference_fetch_failed`; there is no two-expiry or perpetual fallback.
+- Preserved all `48` strategy IDs, codes, names, Dashboard categories, runtime flags, and existing history. Updated in-code/PostgreSQL descriptions and documentation to describe the three-expiry rule.
+- Preserved legacy singular diagnostic fields as nearest-expiry aliases and added a `futures_expiries` array containing all three ranks, roles, instruments, expiries, horizons, bid/ask/mid, index, timestamps, basis values, and signs plus aggregate confirmation fields.
+- Changed new-history separation to `okx_three_expiry_confirmed_futures_basis_bps_premarket` and `okx_three_expiry_confirmed_futures_basis_bps_revert_premarket`; old one-expiry and Binance rows remain untouched.
+- Verified the current public OKX catalog exposes fresh bid/ask for `260717`, `260724`, and `260925` USD linear expiries for BTC, ETH, and SOL. A live read-only snapshot showed BTC `Up/Up/Up`, ETH `Down/Down/Up`, and SOL `Down/Down/Down`, so the implemented rule would accept the sign check for BTC/SOL and reject ETH at that instant.
+Next: User deploys/restarts the service; then verify fresh Paper rows contain the new decision source, exactly three expiry diagnostics, and expected confirmation mismatch skips.
+Notes: Targeted Futures/parser/storage tests passed `58/58`. The Service compiled as part of that run. A normal solution build reached the Dashboard but could not overwrite DLLs locked by running `devenv.exe` and `PolyCopyTrader.Dashboard.exe`; an isolated Dashboard build passed with `0` errors and existing warnings. Full tests ran `773`: `661` passed and `112` failed in the current dirty catalog/test baseline, with failures including tests that request removed More/old strategy variants; the changed Futures tests pass independently. `git diff --check` passed on tracked touched files, and untracked Futures files had no trailing whitespace. No production database, strategy state, order, service process, deployment, staging, commit, or push changed; an isolated commit was not safe because the touched tracked files already contain extensive unrelated changes and the OKX files are part of the broader untracked worktree.
+Blockers: None for deployment; production verification requires the new service build to be deployed and restarted.
+
+## Active Update 2026-07-11 Multi-Expiry Futures Accuracy Assessment
+Goal: Assess whether using several fixed-expiry Futures contracts is likely to improve five-minute direction accuracy.
+Status: Completed
+Done:
+- Reverified the current implementation boundary: each decision uses and persists exactly one nearest eligible OKX expiry point; the current database therefore has no historical second- or third-expiry quotes from which to backtest a multi-expiry rule.
+- Reviewed primary evidence on fixed-expiry crypto carry and term structure. The BIS `Crypto carry` study treats maturities separately and annualizes basis; its OKEx daily data showed a `0.97` correlation between one- and three-month BTC carry, demonstrating that extra expiries are strongly redundant rather than independent votes in that sample.
+- Separated the evidence from the hypothesis: multiple expiries may reduce idiosyncratic nearest-contract noise and improve hit rate when used as a confirmation/veto, but no inspected primary source establishes improved accuracy for this exact five-minute Polymarket target. Basis also reflects carry, positioning pressure, risk premia, and maturity, so a raw multi-contract average would be invalid.
+- Queried production read-only with explicit Futures strategy IDs and short server-side timeouts. The clean post-reset history currently covers `110` distinct markets per asset from `2026-07-10 22:59:30 UTC` through `2026-07-11 08:04:30 UTC`; the `1,760` runs per asset are sixteen threshold/revert variants over those same markets, not `1,760` independent observations.
+- Recommended a shadow-only experiment: retain nearest expiry as the primary signal, capture all eligible expiry bid/ask/mid/expiry values at T-30, compare maturity-normalized basis, and test agreement/disagreement as a veto with walk-forward out-of-sample evaluation of PnL, ROI, hit rate, coverage, and drawdown before any production rule change.
+Next: If authorized, add diagnostic capture for the full expiry curve without changing Paper or Live decisions, then accumulate enough markets for an out-of-sample comparison.
+Notes: Read-only source, production PostgreSQL, and primary-source research only. One broad JSON diagnostic aggregate hit its `8s` PostgreSQL statement timeout; a replacement exact-ID indexed query completed in `3.4s`, and no local `psql` process remained. No source, configuration, strategy state, order, or production row changed.
+Blockers: Existing history cannot answer the multi-expiry question because only the selected nearest contract was stored.
+
+## Active Update 2026-07-11 Single-Contract Futures Basis Explanation
+Goal: Explain whether current Futures Basis decisions use one nearest expiry or combine multiple expiries/trends.
+Status: Completed
+Done:
+- Reverified the only production dispatch path: the OKX background service downloads and caches the complete filtered live fixed-expiry instrument catalog and ticker set for BTC, ETH, and SOL, but `GetNearestExpiryPriceAsync` returns exactly one `ExpiryFuturesReferencePricePoint` per asset/target market end.
+- Confirmed selection is `asset match AND expiry >= target market end`, ordered by expiry and then instrument ID, followed by `FirstOrDefault`; therefore only the earliest eligible expiry contributes to a decision.
+- Confirmed the processor calculates one point-in-time basis `(selected futures bid/ask midpoint - simultaneous OKX USD index) / index * 10,000` and compares that same number with thresholds `1,2,3,5,8,10,15,20` bps. Standard variants follow its sign; Revert variants invert the resulting direction.
+- A broad source/test search found no second Futures expiry, term-structure calculation, expiry slope, cross-expiry confirmation, moving average, or prior Futures-basis history in the decision path. Per-second refresh keeps the current point fresh but does not create a temporal trend input.
+- Confirmed failure behavior: if the selected nearest contract has no ticker or a stale ticker, the decision fails/skips; it does not try the second-nearest expiry and does not fall back to perpetual.
+- Fresh production Paper rows for the `2026-07-11 07:50 UTC` market independently confirmed one instrument and one basis per asset across every placed threshold variant: BTC `BTC-USD_UM-260717` at `+3.141859 bps`, ETH `ETH-USD_UM-260717` at `-1.862549 bps`, and SOL `SOL-USD_UM-260717` at `-1.924064 bps`.
+Next: Decide separately whether to research a multi-expiry term-structure confirmation model; it is not part of the current strategy.
+Notes: Read-only code and production inspection. No source, configuration, strategy state, or production row changed. One broader run-diagnostics query was canceled by a server-side `10s` statement timeout and left no local `psql` process, validating the new diagnostic safety procedure.
+Blockers: None.
+
+## Active Update 2026-07-11 Dashboard Snapshot Timeout Root Cause Cleanup
+Goal: Diagnose and resolve the Dashboard timeout shown in `GetStrategyPerformanceSnapshotAsync` without disrupting production trading.
+Status: Completed
+Done:
+- Verified the stack trace points to the flat serving query over `dashboard_strategy_performance_snapshots`, not an old aggregate query.
+- Production `pg_stat_activity` exposed backend PID `4032` from this session's earlier Futures deletion preview: the local shell had timed out, but its child `psql` and PostgreSQL transaction remained active for `7h 51m`, performing I/O on the read-only/temp preview query.
+- Verified the orphan held an old transaction snapshot while high-churn Dashboard projection tables were updated. Autovacuum could not reclaim those row versions: lifetime snapshots had `232,082` dead tuples for `1,568` live rows, recent snapshots had about `1.4m` dead for roughly `4.3k` live rows, and multiple projection state/fact tables had similarly large dead-tuple backlogs.
+- Verified the timed-out Dashboard snapshot backend was waiting on `IO/AioIoCompletion`; the database had `44/100` connections, no lock blockers, and no idle-in-transaction pool leak, so connection exhaustion and lock blocking were excluded.
+- Terminated only the exact orphan backend after matching PID, client address, and query text, then terminated its parentless local `psql.exe`. The preview transaction rolled back and its temporary tables disappeared; no persistent application row was mutated.
+- Allowed online autovacuum to finish rather than adding a manual I/O spike. Lifetime snapshot dead tuples fell from `232,082` to about `2k`; recent snapshot dead tuples fell from about `1.4m` to `16,852` when its vacuum completed.
+- Replayed the exact production lifetime and recent snapshot SQL. Before cleanup the first lifetime read took `20.5s` and the recent read `13.2s`; after cleanup three complete cycles measured lifetime `0.58-0.60s`, recent `0.98-1.05s`, and combined `1.58-1.63s`.
+- Confirmed final service heartbeat `Running` and fresh (`20s`), Paper writes continued, no application query exceeded `30s`, no idle transaction remained, and local orphan `psql` process count was `0`.
+Next: User refreshes/reopens Dashboard. Monitor for recurrence after a cold cache; schedule controlled table rewrite/`VACUUM FULL` only if physical bloat still causes timeouts, because normal vacuum cleaned dead tuples but did not shrink the `101 MB` lifetime and `499 MB` recent heap files.
+Notes: No product source or configuration change was justified: `EXPLAIN ANALYZE` showed index lookups and the exact queries were fast after operational cleanup. Future manual `psql` diagnostics must set a PostgreSQL `statement_timeout` shorter than the outer shell timeout and audit both `pg_stat_activity` and local child processes after interruption. No build/test run was required. No staging, commit, or push was performed in the extensively dirty worktree.
+Blockers: None.
+
+## Active Update 2026-07-11 Server And Bet Activity Check
+Goal: Verify production server/database availability and determine whether Paper and Live bets are currently being placed.
+Status: Completed
+Done:
+- Confirmed TCP connectivity to `192.168.0.101:5432` and a successful production PostgreSQL query.
+- Confirmed `PolyCopyTrader.Service` heartbeat status `Running`, mode `Live`, empty `last_error`, and heartbeat age `46s` at the first database check; fresh strategy-run and order writes independently confirmed continued execution.
+- Verified active Paper flow: `540` Paper orders from `330` strategies in the preceding `15m`; the latest Paper order was written at `2026-07-11 06:45:04.601609 UTC`, only `19s` before that query. Future runs were already Observed for `06:45` and `06:50 UTC` entry times.
+- Verified only one strategy currently has Live enabled: `ETH Up or Down 5m Up 50 bps Instant`, with balance `79.12747100` and configured Live stake `1.00`.
+- Verified Live is currently idle: only `2` Live orders existed in the preceding `24h`, the latest at `2026-07-10 14:20:04.514504 UTC` (`59,119s` old). Recent runs for the Live strategy were skipped predominantly as `btc_previous_market_move_below_bps_threshold`, with one `btc_previous_market_end_price_missing`; therefore no current Live order was eligible.
+- Found partial but non-total market-data degradation: the critical crypto Up/Down 5m Polymarket WebSocket component reported `Connected`, while the aggregate component reported `Stale` with `2/6` stale shards. Recent API errors were intermittent stale Binance reference ticks (`5` SOL and `1` ETH in `15m`), while fresh Paper orders continued to be persisted.
+Next: Monitor the stale noncritical shards and intermittent SOL/ETH Binance tick age; Live will remain idle until the sole Live strategy receives a qualifying 50 bps signal.
+Notes: Read-only production inspection only. No source, configuration, strategy state, order, or database row was changed. The first combined aggregate diagnostic exceeded its local timeout and was replaced with short indexed queries.
+Blockers: None.
+
+## Active Update 2026-07-11 Futures Data Source And Horizon Explanation
+Goal: Explain the deployed Futures Basis data source and the actual temporal horizon represented by its signal.
+Status: Completed
+Done:
+- Rechecked the deployed implementation path: unauthenticated OKX REST instruments, all Futures tickers, and per-asset USD index tickers feed the Futures Basis strategies for BTC, ETH, and SOL.
+- Confirmed instrument filtering to live linear USD-settled fixed-expiry `FUTURES` in the `<asset>-USD_UM` family, excluding `XPERP`; selection is the earliest expiry greater than or equal to the target Polymarket five-minute market end, with no maximum horizon and no perpetual fallback.
+- Confirmed the sampled Futures price is the midpoint of current best bid/ask, the comparison price is the simultaneous OKX `<asset>-USD` index, and basis is `(futures_mid - index) / index * 10,000` bps.
+- Confirmed runtime cadence/default guards: instrument catalog every `300s`, Futures and index quotes every `1s`, `2s` request timeout, and rejection when either quote is older than `5s`.
+- Verified fresh production decisions for BTC, ETH, and SOL at `2026-07-10 23:19:30 UTC`: all selected the `*-USD_UM-260717` contract expiring `2026-07-17 08:00 UTC`. For the target market ending `23:25 UTC`, the stored horizon was `549,300s`, or `6d 8h 35m`.
+- Recorded the key semantic limitation: this is a roughly six-day fixed-expiry forward-basis observation sampled 30 seconds before a five-minute market; it is not an exchange-provided forecast of the price five minutes later. Its value for five-minute direction must be established empirically from clean Paper results.
+Next: Accumulate clean OKX Futures Basis Paper history and measure whether basis sign/size has out-of-sample predictive value for the next five-minute outcome.
+Notes: The production heartbeat was Running and fresh. Latest observed basis values were BTC `+7.0600 bps`, ETH `-4.1779 bps`, and SOL `-5.1289 bps`; these are current price differentials, not expected five-minute returns. No source, configuration, strategy state, or production data changed.
+Blockers: None.
+
+## Active Update 2026-07-11 Futures History Reset After OKX Replacement
+Goal: Clear obsolete Futures Basis strategy history on the production server without deleting strategies or disrupting active market runs.
+Status: Completed
+Done:
+- Resolved an exact allowlist of `48` deployed Futures Basis strategy GUID/code pairs; all `48` matched exactly, no other database strategy code contained `futures`, all remained Enabled, none had Live enabled, and no target Live order existed.
+- Read-only preview found `9,748` Paper orders/fills/positions, `24,880` strategy runs, `9,748` candidate signals, `9,718` settlements at the preview point, and `344` ended Child-parent assignments; target signals had no references from non-target Paper orders or runs.
+- Detected operational state and preserved it instead of treating it as history: at the mutation snapshot, `30` Entered and `96` Observed runs plus their `30` Paper orders were excluded from deletion.
+- Executed one `REPEATABLE READ` production transaction with exact-ID assertions, a `2s` lock timeout, rollback-on-error behavior, and a durable `schema_data_migrations` audit row named `20260711_clear_futures_basis_history_after_okx_replacement`.
+- Deleted only terminal history: `24,786` Settled/Skipped runs; `9,718` each of Paper orders, fills, positions, settlements, and signals; and `344` ended Child-parent assignments. No strategy row, strategy flag, active run, Live order, or Live history was deleted.
+- Post-verification found `0` old `binance_futures_basis*` Paper decisions and `0` old Binance run diagnostics. Fresh history continues under `okx_nearest_expiry_futures_basis*`; BTC, ETH, and SOL rows name their respective `*-USD_UM-260717` fixed-expiry contracts and `*-USD` indices.
+- Confirmed raw and Dashboard aggregate parity after projection processing: orders `66/66`, Settled runs `30/30`, Skipped `126/126`, Entered `36/36`, Observed `96/96`, settlements `30/30`, and realized PnL `-3.19141791/-3.19141791` at the verification instant.
+Next: Allow the normal low-priority reconciliation queue to finish its independent checks and accumulate clean OKX nearest-expiry Futures history.
+Notes: The service heartbeat was `Running` and fresh, and `OkxExpiryFuturesReferencePriceService` had `0` recorded API errors since this service start. The projection event backlog drained; `30` queued strategy reconciliations remained, but raw rows and Dashboard snapshots already matched exactly. This was production database maintenance only, so no source build or test run was required. No staging, commit, or push was performed because the worktree contains extensive unrelated changes.
+Blockers: None.
+
+## Active Update 2026-07-11 OKX Nearest-Expiry Futures Replacement
+Goal: Replace the existing BTC/ETH/SOL Futures Basis strategy signal with the closest fixed-expiry market signal while retaining the current strategy family.
+Status: Completed
+Done:
+- Verified from official OKX documentation and live public APIs that OKX exposes live linear USD fixed-expiry contracts plus USD indices for BTC, ETH, and SOL; the nearest live contract for all three during verification was the `260717` expiry at `2026-07-17 08:00 UTC`.
+- Replaced the Binance perpetual book-ticker service/configuration with `OkxExpiryFuturesReference`, which refreshes the live fixed-expiry catalog, all relevant futures tickers, and per-asset OKX USD indices using public unauthenticated endpoints.
+- Preserved all `48` existing strategy GUIDs, codes, `N bps` thresholds, Standard/Revert behavior, Enabled/Live runtime state, and `T-30s` Premarket timing.
+- The signal now chooses the earliest eligible expiry at or after the target five-minute market end, has no maximum horizon, excludes inverse contracts and `XPERP`, and never falls back to a perpetual contract.
+- Standard/Revert direction now uses the selected contract's best-bid/ask midpoint versus the simultaneous OKX `<asset>-USD` index; raw diagnostics record instrument, expiry, horizon, bid/ask/mid, index, source timestamps, basis, and the new `okx_nearest_expiry_*` decision source.
+- Updated PostgreSQL seed descriptions, configuration validation/defaults, README/configuration reference, parser/configuration/schema/strategy tests, and processor test fakes.
+Next: User deploys/restarts the service; then verify fresh service logs and new Futures Basis Paper rows for each asset and decide whether old pre-OKX Paper history should be retained or cleared.
+Notes: Live OKX verification produced valid current quotes for `BTC-USD_UM-260717`, `ETH-USD_UM-260717`, and `SOL-USD_UM-260717`. Service build passed with existing Storage nullable warnings. Focused tests passed `143/143`. Dashboard build first failed because the running Dashboard/Visual Studio locked Debug DLLs, then passed using an isolated output directory. Full tests ran `771`: `657` passed and `114` pre-existing dirty-baseline tests failed because they still expect previously removed More/Middle/old Diff/Countertrend families. `git diff --check` passed on tracked touched files; new files have no trailing whitespace. No production database mutation, service restart, deployment, staging, commit, or push was performed. The dirty worktree contains unrelated and pre-existing changes, so an isolated commit was not made.
+Blockers: Deployment verification is pending. Existing historical rows remain semantically mixed under the retained IDs, but new rows can be separated by `decision_source`.
+
+## Active Update 2026-07-11 Nearest-Expiry Premarket Timing
+Goal: Finalize the decision timestamp for the three-asset nearest-expiry Futures signal.
+Status: Completed
+Done:
+- Confirmed the strategy remains Premarket and evaluates its signal exactly `30` seconds before each BTC, ETH, or SOL five-minute market opens.
+- Combined this with the already confirmed rule: select the closest fixed expiry after market end with no maximum horizon and never substitute a perpetual contract.
+Next: Verify current fixed-expiry instrument/API coverage and quote semantics for BTC, ETH, and SOL before proposing source changes.
+Notes: Requirements clarification and current catalog inspection only. The existing Futures Basis catalog already uses `entryDelaySeconds = -30`, but its current perpetual-basis signal remains a different implementation. No source, configuration, production state, service state, strategy flag, staging, commit, or push changed.
+Blockers: None for source research; replacing the existing Futures Basis family versus creating a separate family must be resolved before catalog/schema changes.
+
+## Active Update 2026-07-11 Three-Asset Unbounded Nearest Expiry
+Goal: Finalize the asset scope and maximum-horizon rule for the nearest-expiry Futures strategy.
+Status: Completed
+Done:
+- Confirmed the strategy scope is all three assets: BTC, ETH, and SOL.
+- Confirmed selection of the closest available fixed expiry after the target five-minute market end, with no maximum horizon; daily, weekly, or quarterly expiry is admissible when it is the closest available one.
+- Preserved the prohibition on silently substituting a perpetual contract when a fixed-expiry instrument is unavailable.
+Next: Confirm whether the existing Premarket decision time of `T-30s` remains part of the strategy, then verify current fixed-expiry/API coverage and quote semantics for BTC, ETH, and SOL.
+Notes: Requirements clarification only. No source, configuration, production state, service state, strategy flag, staging, commit, or push changed.
+Blockers: The decision timestamp remains unconfirmed.
+
+## Active Update 2026-07-11 Nearest-Expiry Futures Scope
+Goal: Record the user's authorization to use the closest available fixed-expiry futures horizon when an exact five-minute contract is unavailable.
+Status: Completed
+Done:
+- Expanded the admissible source from an exact `T+5m` contract to the fixed-expiry contract whose settlement time is closest to the target market end, with a one-day contract given as an acceptable example.
+- Kept this explicitly distinct from a true five-minute forecast: the selected contract supplies a longer-horizon forward proxy for the five-minute Polymarket decision.
+- Kept perpetual contracts and internally generated predictive models outside the authorized rule.
+- Identified the remaining material selection ambiguity: whether expiry must be after the Polymarket target and whether one day is a hard maximum or only an example before falling back to weekly/quarterly expiries.
+Next: Obtain the user's precise expiry-selection boundary, then verify candidate instruments and quote semantics before implementation.
+Notes: Requirements clarification only. No source, configuration, production state, service state, strategy flag, staging, commit, or push changed.
+Blockers: Exact expiry-side and maximum-horizon rules are not yet confirmed.
+
+## Active Update 2026-07-11 Futures Strategy Task Restatement
+Goal: Restate the intended Futures strategy without replacing it with a different predictive model.
+Status: Completed
+Done:
+- Re-read the user's original three-step definition and the exact current Futures Basis implementation.
+- Restated the intended input as a real tradable market quote whose economic horizon is the end of the upcoming five-minute market, compared with the current spot/reference price.
+- Kept current perpetual-versus-spot basis, fixed-expiry contracts with a different horizon, five-minute candles, and internally modeled order-flow predictions explicitly outside the task.
+- Identified unconfirmed implementation details: BTC-only versus BTC/ETH/SOL, exact decision timestamp, equal-price behavior, and whether any nonzero threshold is intended.
+Next: Await the user's correction or confirmation of the restated task before any research or implementation.
+Notes: Read-only inspection of persisted history and current source. No code, configuration, production state, service state, strategy flag, staging, commit, or push changed.
+Blockers: Implementation remains blocked until an instrument/API with the required rolling five-minute economic horizon is verified and the unresolved behavior details are confirmed.
+
+## Active Update 2026-07-11 Current Model Mode Verification
+Goal: Verify the model and reasoning mode active for the user's current turn.
+Status: Completed
+Done:
+- Resolved the active Codex thread and the exact in-progress turn identifier.
+- Read that turn's persisted `turn_context` and verified `model = gpt-5.6-sol` and `effort = ultra`; the collaboration model and collaboration reasoning effort contain the same values.
+- Independently re-read the global config and confirmed `model = "gpt-5.6-sol"` with `model_reasoning_effort = "ultra"`.
+Next: Continue the current task in the verified Ultra mode.
+Notes: This conclusion comes from the current turn context, not from the config default alone. No code, configuration, production state, service state, staging, commit, or push changed.
+Blockers: None.
+
+## Active Update 2026-07-11 Ultra Restart Requirement
+Goal: Determine whether the user must restart Codex after setting the global reasoning default to Ultra.
+Status: Completed
+Done:
+- Confirmed no restart is required for the current task because the supplied UI screenshot already showed `5.6 Sol Ultra` before the global config default was changed.
+- Kept the separate future-task config reload question explicitly unresolved; it does not affect the current task and was not needed to answer the user's immediate question.
+Next: Continue the current task without restarting Codex.
+Notes: Read-only reasoning from verified UI/config state. No further configuration, code, production state, service state, staging, commit, or push change occurred.
+Blockers: None.
+
+## Active Update 2026-07-11 Global Ultra Reasoning Default
+Goal: Set the global Codex configuration to the exact reasoning-effort value represented by UI `Ultra`.
+Status: Completed
+Done:
+- Verified from the current Codex tool schema that `gpt-5.6-sol` explicitly supports reasoning efforts `low`, `medium`, `high`, `xhigh`, `max`, and `ultra`; therefore the exact config value is `ultra`, not an inferred mapping to `high` or `xhigh`.
+- Changed only `C:\Users\serge\.codex\config.toml` line 4 from `model_reasoning_effort = "low"` to `model_reasoning_effort = "ultra"`.
+- Re-read the model lines and confirmed `model = "gpt-5.6-sol"` plus `model_reasoning_effort = "ultra"`.
+- Launched the installed CLI against the updated config; it exited successfully and reported `codex-cli 0.144.0-alpha.4`, confirming the TOML and effort value are accepted.
+Next: Resume the separate anti-goal-drift prevention discussion if requested.
+Notes: No other global config value, repository source, production state, strategy flag, service state, staging, commit, or push changed. The current task UI already displayed Ultra before this default was changed.
+Blockers: None.
+
+## Active Update 2026-07-11 Codex Config Versus Active UI Mode
+Goal: Explain the contents of the global Codex `config.toml` and resolve the conflict between its reasoning default and the current UI selection.
+Status: Completed
+Done:
+- Read all `110` lines of `C:\Users\serge\.codex\config.toml` without modifying it.
+- Verified the file contains global defaults `model = "gpt-5.6-sol"`, `model_reasoning_effort = "low"`, `personality = "pragmatic"`, `service_tier = "priority"`, `sandbox_mode = "danger-full-access"`, and `approval_policy = "never"`.
+- Inspected the supplied screenshot at original resolution and verified the current task UI displays `5.6 Sol Ultra`.
+- Corrected the prior unsupported inference: the on-disk global `low` value does not prove the current task is running at low effort; the UI selection demonstrates a task-level override or otherwise effective active selection of Ultra.
+- Catalogued the remaining config sections: model migrations, nine trusted project paths, elevated Windows sandbox, local plugin marketplaces, seven enabled plugins, desktop queue/detail/open-in settings, disabled JS REPL feature, and the local `node_repl` MCP/browser environment.
+Next: Return to the anti-goal-drift prevention discussion without treating low reasoning effort as a cause.
+Notes: Read-only configuration inspection. No config, code, production state, strategy flags, service state, staging, commit, or push changed. No obvious API key, token, password, or private-key assignment was present in the file.
+Blockers: The exact persistence/precedence mechanism for the UI Ultra override was not yet inspected; it is unnecessary to answer what the file contains.
+
+## Active Update 2026-07-11 Five-Minute Forecast Terminology Correction
+Goal: Correct the apparent contradiction between Binance quarterly forward prices and the later Binance WebSocket recommendation.
+Status: Completed
+Done:
+- Withdrew the misleading formulation that Binance "provides a forecast only for a quarter." Binance provides current market data for perpetual contracts and contract prices for specific fixed expiries; neither is a guaranteed forecast.
+- Separated the two tasks that had been incorrectly conflated: obtaining a ready-made market price specifically for `now + 5 minutes`, versus building an internal five-minute prediction model from current Futures trades/order books.
+- Confirmed the original literal task has no identified solution among the reviewed Binance, Bybit, OKX, Deribit, and Kraken active instruments: none provides a rolling `now + 5 minutes` futures quote.
+- Restricted the prior Binance USD-M WebSocket recommendation: it is only a candidate input for a new internally calculated predictive model and does not implement the original ready-made-forward-price concept.
+- Stopped before any implementation because moving from a quoted five-minute forward price to an internally modeled forecast changes the strategy definition and was not explicitly authorized.
+Next: Await an explicit decision whether to abandon the original Futures strategy or separately authorize research into an internally calculated five-minute model.
+Notes: Clarification and correction only. No code, production state, strategy flags, service state, staging, commit, or push changed.
+Blockers: The reviewed venues expose no rolling five-minute-maturity contract; an internal model would be a materially different strategy.
+
+## Active Update 2026-07-11 Five-Minute Futures Signal Source Decision
+Goal: Select the best verified data source and research path for forecasting BTC/ETH/SOL five-minute Polymarket direction 30 seconds before market open.
+Status: Completed
+Done:
+- Selected Binance USD-M perpetual Futures as the primary source, using real-time trade/order-book flow rather than the absolute perpetual-minus-spot basis sign.
+- Verified the current service already has reusable C# Binance WebSocket/reconnect/parser infrastructure for BTC/ETH/SOL spot trades, while Futures currently use only one-second REST `bookTicker` polling; the source change can stay within the existing .NET architecture.
+- Verified official Binance USD-M historical archives for all BTCUSDT, ETHUSDT, and SOLUSDT at both ends of a six-month span (`2026-01-09` and `2026-07-09`): `aggTrades`, `bookDepth`, and `metrics` all returned HTTP 200.
+- Inspected archive schemas: `aggTrades` provides price, quantity, timestamps, and buyer-maker side; `bookDepth` provides timestamped percentage/depth/notional levels; `metrics` provides five-minute open interest, top-trader long/short ratios, account ratios, and taker-volume ratio.
+- Chose a staged evidence path: derive short-window returns, signed aggressive trade flow, depth asymmetry, and open-interest/ratio context at `open-30s`; perform walk-forward/out-of-sample testing against exact five-minute outcomes; only then deploy an eligible signal as Paper-only.
+- Rejected Deribit daily futures as the primary source because their fixed `08:00 UTC` expiry does not match rolling five-minute markets. Bybit, OKX, Deribit, and Kraken may later be used only for independent confirmation if Binance-only out-of-sample results justify added complexity.
+Next: Build a reproducible six-month research dataset and walk-forward evaluation before defining runtime thresholds or strategy variants.
+Notes: Source, official API documentation, and archive availability were inspected read-only. No code, production state, strategy flags, service state, staging, commit, or push changed. Existing unrelated dirty worktree changes remain untouched.
+Blockers: None.
+
+## Active Update 2026-07-11 Alternative Crypto Futures APIs
+Goal: Identify other public crypto futures APIs and determine whether any reviewed venue exposes a rolling five-minute-maturity BTC futures contract.
+Status: Completed
+Done:
+- Verified public market-data APIs and live active BTC instrument lists for Bybit, OKX, Deribit, and Kraken Futures.
+- At `2026-07-10 21:44 UTC`, observed the nearest fixed BTC expiries: Deribit daily `BTC-11JUL26`; Bybit `BTCUSDT-17JUL26`; OKX `BTC-USD-260717`; Kraken `FF_XBTUSD_260717`. Each venue also exposes perpetual and/or later fixed-expiry contracts.
+- Verified that these APIs expose public instruments, order books, recent trades, and/or WebSocket market-data streams. Kraken additionally exposes market analytics such as aggressor differential, CVD, order-book metrics, basis, funding, and open interest.
+- Verified a live Deribit ticker for `BTC-11JUL26`, including current bid/ask, mark, index, volume, and open interest; this confirms a shorter fixed-expiry futures market than Binance quarterly contracts.
+- Found no rolling `now + 5 minutes` futures maturity in the explicitly reviewed active BTC instrument sets. Deribit daily futures are the closest fixed-expiry product, but settle at a fixed `08:00 UTC` and only become a five-minute-horizon instrument during their final five minutes.
+Next: If requested, design a read-only Paper research feed using cross-exchange perpetual trades/order-book imbalance plus Deribit daily futures/options as supplementary features.
+Notes: Official documentation and public unauthenticated APIs only. No source or production state changed.
+Blockers: None.
+
+## Active Update 2026-07-11 Quarterly Futures Interpretation
+Goal: Determine whether Binance quarterly futures provide a future-price forecast and whether their minimum horizon is one quarter.
+Status: Completed
+Done:
+- Verified live Binance USD-M exchange information: BTC currently has `BTCUSDT_260925` (`CURRENT_QUARTER`, delivery `2026-09-25 08:00 UTC`) and `BTCUSDT_261225` (`NEXT_QUARTER`, delivery `2026-12-25 08:00 UTC`), alongside `BTCUSDT` perpetual.
+- Clarified that a fixed-expiry futures quote is a market-implied forward/contract price for its exact settlement date, not a pure or guaranteed forecast of future spot; basis, financing/carry, supply/demand, and risk premia can separate the two.
+- Clarified that the minimum horizon is not always a full quarter: time remaining to `CURRENT_QUARTER` shrinks continuously, but Binance does not offer an arbitrary rolling `now + 5 minutes` maturity. It represents a five-minute horizon only during the final five minutes before its once-per-quarter expiry.
+- Confirmed that the current service does not query either quarterly symbol; it queries the perpetual `BTCUSDT` book ticker.
+Next: None.
+Notes: Official Binance documentation and live public exchange-information API were inspected read-only. No code or production state changed.
+Blockers: None.
+
+## Active Update 2026-07-11 Binance Futures API Clarification
+Goal: Clarify whether Binance Futures API exists and whether it supplies a five-minute future BTC price.
+Status: Completed
+Done:
+- Verified that Binance has a USD-M Futures REST API at `fapi.binance.com`, and the service already uses it through `/fapi/v1/ticker/bookTicker`.
+- Distinguished API scope from forecast semantics: `bookTicker` returns the current best bid/ask of a futures instrument; it does not return an exchange prediction for `t+5m`.
+- Verified that the selected `BTCUSDT` instrument is `PERPETUAL`; Binance also exposes current- and next-quarter contract types, but no five-minute-maturity contract.
+- Verified that `5m` in Futures API endpoints is a candle/basis aggregation interval, not a delivery horizon.
+Next: None until a replacement five-minute predictive signal is explicitly defined.
+Notes: Documentation/source inspection only. No code, production state, strategy flags, service state, staging, commit, or push changed.
+Blockers: None.
+
+## Active Update 2026-07-11 Futures Basis Intent Mismatch
+Goal: Reconcile the user's intended five-minute Binance futures forecast with the implemented Futures Basis strategy.
+Status: Completed
+Done:
+- Rechecked the exact runtime path: it requests `/fapi/v1/ticker/bookTicker?symbol=BTCUSDT` and compares the current best-bid/ask midpoint of that instrument with the current spot reference.
+- Verified independently from Binance exchange information and official documentation that `BTCUSDT` on this endpoint is a `PERPETUAL` contract. It has no five-minute expiry; `bookTicker` returns the current best bid and ask, not a BTC price contracted for delivery five minutes later.
+- Corrected the interpretation: the current strategy measures contemporaneous perpetual-versus-spot basis and maps its sign to the Polymarket outcome. It does not implement or test the user's intended "future price after five minutes versus current price" rule.
+- Established that the intended rule cannot be implemented literally from the selected Binance USD-M perpetual endpoint because Binance exposes no five-minute-maturity BTC futures contract there. Binance API `5m` values are data aggregation intervals, not contract maturities.
+Next: Before changing code, define a separately testable five-minute predictive signal (for example, futures price momentum/order flow) or choose another instrument that actually encodes a five-minute terminal distribution.
+Notes: Read-only verification only. No source behavior, production data, strategy flags, service state, deployment, staging, commit, or push changed. Existing unrelated dirty worktree changes were left untouched.
+Blockers: The clarified intent references a Binance five-minute forward price that the current Binance futures product/API does not provide.
+
+## Active Update 2026-07-11 Futures Basis Negative PnL Diagnosis
+Goal: Determine whether the large negative Futures Basis Paper PnL means Binance predictions are consistently wrong and identify the verified loss mechanism.
+Status: Completed
+Done:
+- Inspected the exact implementation: 30 seconds before market open, standard Futures Basis compares Binance USD-M futures bid/ask mid with Binance spot reference; positive basis buys Up, negative basis buys Down. Revert uses the identical trigger and buys the opposite outcome. This is a contemporaneous basis rule, not a Binance forecast API or predictive model.
+- Resolved the exact production family by code shape: `48` enabled Paper-only rows (`24` Standard and `24` Revert), all with `live_stakes=false`.
+- Fixed all calculations at `2026-07-10 21:20:00 UTC`. Across `9,303` settled rows, every persisted basis was negative: range `-8.7397..-1.0939 bps`; therefore all `5,524` Standard rows bought Down and all `3,779` Revert rows bought Up.
+- Standard totals: `2,667/5,524` wins (`48.2802%`), weighted entry `0.506562`, approximate break-even `50.6562%`, PnL `-1,617.2342 USD`, ROI `-4.8719%`. By asset: BTC `-179.4249`, ETH `-870.7688`, SOL `-567.0405`.
+- Revert totals: `1,942/3,779` wins (`51.3893%`), weighted entry `0.505328`, approximate break-even `50.5328%`, PnL `+325.5737 USD`, ROI `+1.4337%`. By asset: BTC `-105.4064`, ETH `+254.7072`, SOL `+176.2728`.
+- On exactly paired Standard/Revert markets, BTC Standard was `+18.0752` versus Revert `-123.4343`; ETH Standard `-503.8252` versus Revert `+254.7072`; SOL Standard `-433.6848` versus Revert `+182.2821`. Opposite outcomes are complementary, but combined PnL is negative because both asks include spread/cost.
+- Removed threshold duplication from the directional check by using only paired `N=1`: Revert win rates were BTC `49.2386%` (`194/394`), ETH `52.3077%` (`204/390`), SOL `52.2310%` (`199/381`). Wilson 95% intervals were respectively `44.33..54.16%`, `47.35..57.22%`, and `47.22..57.20%`; all include 50%, so the sample does not establish a reliable inverted edge.
+- Quantified correlated amplification: Standard fired on average `3.093` BTC, `3.216` ETH, and `3.514` SOL threshold variants per unique market; one wrong market therefore lost as much as `24.0372 USD` for BTC/ETH and `30.0465 USD` for SOL.
+- Verified data integrity: all `9,303` settled runs had linked Paper orders and fills; fill notional/size matched run stake/size; settlement value, win/loss payout, and realized-PnL formulas had zero mismatches.
+- Preserved the exact read-only SQL and output under `outputs/futures-basis-diagnostic-2026-07-11/`.
+Next: Before changing direction, collect a larger non-duplicated per-market sample and add mark price/index price/funding-rate evidence to determine why the observed perpetual basis stayed one-sided.
+Notes: Average fetched quote ages were about `0.60..1.46s` for spot and `1.25..1.28s` for futures; maximum futures fetched age was below `3.64s`. This does not identify the cause of the consistently negative basis; current data cannot distinguish a real perpetual discount from a systematic source-comparison bias. Production PostgreSQL access was authenticated read-only with statement/lock timeouts. No strategy flags, production data, source behavior, service state, order, deployment, staging, commit, or push changed. The existing dirty worktree prevents a safe isolated commit.
+Blockers: None.
+
+## Active Update 2026-07-11 Three ETH Reference Average PnL Curves With ETHUSDT
+Goal: Add `ETH Up or Down 5m Up 5 bps Reference Average Premarket` and `ETH Up or Down 5m 3 bps Reference Average Premarket` to the existing Down 3 bps Paper PnL versus ETHUSDT chart.
+Status: Completed
+Done:
+- Resolved the exact production rows: Up 5 bps ID `b7c50005-0000-4000-8137-000000000105`, code `eth_up_down_5m_up_bps_5_fak_premarket`; neutral 3 bps ID `b7c50005-0000-4000-8179-000000000103`, code `eth_up_down_5m_reference_average_bps_3_fak_premarket`.
+- Preserved the original fixed chart interval `2026-07-03 06:50:00` through `2026-07-10 20:36:47.354703 UTC` and reset each cumulative PnL curve to zero at that interval start.
+- Exported and independently aggregated `3,273` settled Paper rows: Down 3 bps `1,526` rows, PnL `+349.00483931 USD`, ROI `+3.80593914%`; Up 5 bps `227` rows, PnL `+133.17027449 USD`, ROI `+9.76242144%`; neutral 3 bps `1,520` rows, PnL `+171.03115177 USD`, ROI `+1.87243930%`.
+- Kept the exact previously verified `10,907`-candle ETHUSDT dataset; its copied SHA-256 matched the source file.
+- Generated and visually inspected `outputs/eth-reference-average-three-strategies-vs-ethusdt-2026-07-11/three-strategies-paper-pnl-vs-ethusdt.png` at `1900x980`, with one shared PnL scale, a separate ETHUSDT scale, distinct line styles, readable endpoint labels, and the Down 3 bps maximum-drawdown interval shaded.
+- Recorded the important period exclusions: one Up 5 bps row predates the fixed interval; one Down 3 bps row and two neutral 3 bps rows postdate it. Neutral 3 bps first settles at `2026-07-04 14:37:36 UTC`, so its graph remains at zero before then.
+Next: None.
+Notes: Production PostgreSQL access was authenticated read-only with statement and lock timeouts. The renderer independently recomputed every series count, stake, PnL, ROI, cumulative range, and drawdown and matched the SQL aggregates exactly. The PNG was visually inspected at original resolution. No production data, strategy flag, service state, source behavior, order, deployment, staging, commit, or push changed. The existing dirty worktree prevents a safe isolated commit.
+Blockers: None.
+
+## Active Update 2026-07-10 ETH Down 3 Paper PnL With ETHUSDT Overlay
+Goal: Overlay the ETH price path on the existing cumulative Paper PnL chart for `ETH Up or Down 5m Down 3 bps Reference Average Premarket` with readable independent scales.
+Status: Completed
+Done:
+- Kept the previously fixed `1,526`-row Paper PnL export unchanged: final PnL `+349.00483931 USD`, ROI `+3.80593914%`, and maximum drawdown `236.71751337 USD`.
+- Fetched and continuity-validated all `10,907` official Binance Spot `ETHUSDT` one-minute candles from `2026-07-03 06:50` through `2026-07-10 20:36 UTC`; first/last close `1715.80/1793.58`, change `+4.53316237%`, low/high `1713.44/1833.40`.
+- Independently compared Binance candle closes with all `10,801` server minutes available from `crypto_reference_price_ticks`; every server minute matched, with mean absolute difference `0.15136376 USD` and maximum `6.24 USD` because server rows are periodic samples rather than exact candle closes.
+- Generated and visually inspected `paper-pnl-vs-ethusdt-chart.png` with a common UTC time axis, Paper PnL on the left scale, ETHUSDT on the right scale, and the maximum PnL drawdown interval shaded.
+- Preserved the Binance fetch, server query, source validation, rendering scripts, CSV files, and summaries under `outputs/eth-down3-bps-reference-average-paper-pnl-chart-2026-07-10/`.
+Next: None.
+Notes: Verification passed: all expected Binance minutes were present exactly once, Paper totals/drawdown matched the fixed SQL export, all server sampled minutes matched Binance minutes, and the `1800x920` PNG was inspected at original resolution. Production PostgreSQL access and Binance API access were read-only. No service/source behavior, strategy flag, production data, order, deployment, staging, commit, or push changed. The existing dirty worktree prevents a safe isolated commit.
+Blockers: None.
+
+## Active Update 2026-07-10 ETH Down 3 Chart Direct Display
+Goal: Re-display the completed Paper PnL chart in a format visible in the Codex desktop client.
+Status: Completed
+Done:
+- Verified the existing `paper-pnl-chart.png` is present and non-empty at `1600x820` resolution.
+- Switched the response from the failed inline-HTML directive to a direct absolute-path PNG embed.
+Next: None.
+Notes: No analysis, source data, production state, service state, or chart contents changed. No tests were required. The existing dirty worktree prevents an isolated context-only commit.
+Blockers: None.
+
+## Active Update 2026-07-10 ETH Down 3 Bps Paper PnL Chart
+Goal: Build a reproducible cumulative Paper PnL chart for the exact production strategy `ETH Up or Down 5m Down 3 bps Reference Average Premarket`.
+Status: Completed
+Done:
+- Resolved the exact production strategy row: ID `b7c50005-0000-4000-8140-000000000103`, code `eth_up_down_5m_down_reference_average_bps_3_fak_premarket`.
+- Exported `1,526` settled Paper runs through `2026-07-10 20:44:01.717988 UTC`, ordered by `settled_at_utc, id`; the covered settlement period is `2026-07-03 06:50:21` through `2026-07-10 20:36:47 UTC`.
+- Calculated total Paper PnL `+349.00483931 USD`, total stake `9,170.00578272 USD`, ROI `+3.80593914%`, and wins/losses/flat `814/712/0`.
+- Calculated maximum peak-to-trough drawdown `236.71751337 USD`, from row `647` at `2026-07-07 01:24:21 UTC` to row `1065` at `2026-07-08 15:27:09 UTC`.
+- Created the PNG chart, source CSV, exact SQL, renderer, and summary under `outputs/eth-down3-bps-reference-average-paper-pnl-chart-2026-07-10/`, plus the inline visualization wrapper.
+Next: None.
+Notes: Production access was read-only with statement and lock timeouts. A local decimal calculation over the exported rows exactly matched the independent SQL count, stake, PnL, maximum drawdown, and peak/trough rows. The PNG was visually inspected at original resolution. No service/source behavior, production data, strategy flag, order, deployment, staging, commit, or push was changed. The worktree already contains extensive unrelated and overlapping changes, so no isolated commit was created.
+Blockers: None.
+
+## Active Update 2026-07-10 Confirmed Average Deployment Verification
+Goal: Verify the deployed Confirmed Average strategy catalog, runtime decisions, persistence, Dashboard projection, service health, and database load without mutating production.
+Status: Completed
+Done:
+- Connected read-only to production PostgreSQL `192.168.0.101:5432/polycopytrader`; server time and queries were responsive.
+- Confirmed `PolyCopyTrader.Service` restarted at `2026-07-10 20:11:29.691 UTC`, reports `Running`, `Live` mode, blank `last_error`, build `e58c6dd64a94b289f70464ce3f12fdf35fc435b3`, and MVID `0a95b1085667`.
+- Independently rebuilt the exact expected code/GUID set in SQL and matched production: `126` expected, `126` actual, `0` missing codes, `0` unexpected codes, and `0` GUID mismatches.
+- Verified all `126` rows have `Enabled=true`, `Live=false`, `Paused=false`; the per-family/per-asset split is exactly `28` Bps and `14` Diff rows for each BTC/ETH/SOL.
+- Verified runtime diagnostics use the approved exact confirmation links: Bps Confirmed uses BTC Diff `7`, ETH Diff `3`, SOL Diff `9`; Diff Confirmed uses BTC Bps `10`, ETH Bps `5`, SOL Bps `35`.
+- Observed completed post-deploy markets. Before the dedicated boundary check, BTC Diff Confirmed had already placed `11` filled Paper FAK orders with matching base/confirmation outcomes and `signals_agree=true`.
+- Observed the full `20:30 UTC` entry cycle: BTC Diff Confirmed entered `4` rows; BTC/ETH/SOL Bps Confirmed and ETH/SOL Diff Confirmed skipped only for their recorded signal conditions. SOL Diff included one explicit `confirmed_average_signal_mismatch`. No API error was recorded during this boundary window.
+- Independently joined the four entered runs to persistence: `4` linked Paper orders, `4` `Filled` orders, `4` Paper fill rows, `4` Confirmed markers, and `4` agreement markers. Confirmed strategies have `0` Live orders, consistent with their disabled Live flags.
+- Verified Dashboard projection coverage: `126` lifetime snapshot rows and `378` recent snapshot rows (`1h/6h/24h`), refreshed at `2026-07-10 20:25:39.900 UTC` during the check.
+- Found no `GetDiffReferenceAveragePremarketResults` errors. Startup recorded transient Binance/WebSocket errors, including stale SOL reference prices; no API errors occurred in the final two-minute/boundary checks, and subsequent BTC/ETH/SOL source updates resumed.
+- Compared timing samples for the 30 minutes before deployment against the post-deploy window. Measured averages did not regress: NonLive entry flow `13.75s -> 12.59s`, FastDiff observe `14.21s -> 12.11s`, and FastDiff premarket decisions `833ms -> 152ms`. The observed `20:30` Confirmed-containing decision batches completed in `870ms` (FastDiff) and `907ms` (NonLive).
+- Observed PostgreSQL usage at `36..47` non-diagnostic connections with `13..18` active during sampled checks, below the `97` ordinary-slot ceiling and far below the previous saturation event.
+Next: Continue collecting Paper results; watch the Binance crypto feed for repeated SOL staleness before considering any Confirmed strategy for Live.
+Notes: All production operations were authenticated read-only queries with statement/lock timeouts. No source, production data, strategy flags, service state, order state, deployment, staging, commit, or push was changed by Codex.
+Blockers: None.
+
+## Active Update 2026-07-10 Confirmed Average Strategy Implementation
+Goal: Add one Bps Confirmed Average Premarket clone grid and one Diff Confirmed Average Premarket clone grid per BTC/ETH/SOL using the user-approved confirmation thresholds and initial runtime flags.
+Status: Completed
+Done:
+- Added `84` `N bps Confirmed Average Premarket` variants (`28` per asset) linked to neutral Bps Reference Average as the base signal and Diff Reference Average confirmation `M`: BTC `7`, ETH `3`, SOL `9`.
+- Added `42` `K Diff Confirmed Average Premarket` variants (`14` per asset) linked to Diff Reference Average as the base signal and neutral Bps Reference Average confirmation `L`: BTC `10`, ETH `5`, SOL `35`.
+- Stored exact base/confirmation strategy GUIDs in each catalog variant; preserved prior enum ordinals by appending the two new behaviors; assigned unused catalog/seed UUID groups `8200..8205`.
+- Implemented signal composition in the opening-limit processor: only equal non-null outcomes enter, the base decision supplies the outcome/stake/price overrides, mismatches use `confirmed_average_signal_mismatch`, and structured diagnostics retain both linked IDs/codes and both nested decisions.
+- Reused the existing FAK Paper/Live-shadow path for both families and added a processing-cycle cache for Diff history and synthetic previous-market signals so clones sharing a confirmation do not repeat the same 24-hour read.
+- Added separate per-asset Dashboard categories for Bps Confirmed Average and Diff Confirmed Average.
+- Added PostgreSQL seed rows with first-insert flags `Enabled=true`, `Live=false`, `Paused=false`; conflict updates change only identity/description fields and therefore preserve later runtime controls.
+- Updated README and configuration reference with exact grids, thresholds, flags, execution rules, skip reasons, diagnostics, and linked-signal runtime independence.
+Next: Deploy/restart the service, then verify exactly `126` new production rows, their initial flags, fresh Paper run creation, mismatch skips, Diff-history query load, and Dashboard categories before enabling any row for Live.
+Notes: Focused Confirmed/catalog/category/schema tests passed `13/13`; dedicated entry/mismatch/cache/FAK Live-shadow tests passed `4/4`. Full schema initialization passed against a disposable local PostgreSQL 17 database, and an independent query returned `126|126` for total Confirmed rows and rows with `Enabled=true, Live=false, Paused=false`; the disposable database was dropped. Service build passed with `0` errors and existing Storage nullable warnings. The normal Dashboard output was locked by the running Dashboard/Visual Studio; the same project built successfully to a separate output with `0` errors and existing warnings, and that temporary output was removed. Full tests are `658 passed / 112 failed / 770`; the failure count is unchanged from the persisted pre-task baseline and remains the known deleted-strategy/test backlog. Scoped `git diff --check` passed. No production database write, deployment, service action, Live flag change, order action, staging, commit, or push was performed. The worktree already contained extensive unrelated and overlapping user changes in the same files, so creating a safe isolated commit was not possible without including user work.
+Blockers: None.
+
+## Active Update 2026-07-10 Confirmed Average Strategy Research
+Goal: Select one Diff confirmation threshold M and one Bps confirmation threshold L per BTC/ETH/SOL, then add Bps and Diff Confirmed Average Premarket clone families without creating an N-by-M strategy matrix.
+Status: In Progress
+Done:
+- Fixed the production Paper dataset at `2026-07-10T15:07:51.322291Z`; enumerated exact grids of 28 neutral Bps and 14 Diff Reference Average variants per asset.
+- Calculated all `42` asset/M family aggregates and all `84` asset/L family aggregates using signal-level agreement by `condition_id`; actual settled base-strategy stake and PnL supply the simulated execution.
+- Verified no duplicate strategy/condition signals and no conflicting outcomes in scope. Daily aggregates and independently queried market aggregates matched exactly for all 25 risk-shortlisted candidates.
+- Corrected and invalidated an initial local train/holdout split that had converted the UTC cutoff to UTC+3; rebuilt both summaries using ordinal UTC-date comparison and enforced `train_bets + holdout_bets = bets` for every candidate.
+- Used UTC dates `2026-07-04..2026-07-07` as training and `2026-07-08..2026-07-10` as holdout. Produced family baselines, per-base-variant comparisons, unique-market counts, direction splits, and aggregate portfolio drawdowns.
+- Current robustness recommendation is `M: BTC=7, ETH=3, SOL=9` and `L: BTC=10, ETH=5, SOL=35`. SOL M=9 is provisional because its matched sample is concentrated in only two UTC dates and is `1162 Up / 2 Down` variant-bets.
+- Wrote reproducible SQL, PowerShell, raw daily/market CSVs, full candidate summaries, and `recommended-parameters-summary.csv` under `outputs/all-assets-confirmed-average-research-2026-07-10/`.
+- Inspected the exact catalog factories, enum/variant record, opening-limit dispatch, Reference Average Bps decision, Diff Reference Average decision, and entry orchestration. Confirmed that a direct recursive composition would repeat expensive Diff history queries for many clones, so implementation needs a shared per-entry-cycle Diff history/signal cache.
+Next: After user confirms the six recommended thresholds and initial strategy flags, implement 84 Bps Confirmed and 42 Diff Confirmed variants, seed SQL, categories, shared signal cache, diagnostics, tests, and builds.
+Notes: Read-only production queries only; no production mutation, service action, strategy creation, source behavior change, build, test, stage, commit, or push occurred. The worktree already contains extensive unrelated user changes and they were left untouched.
+Blockers: User confirmation is required because maximum total PnL, maximum ROI, and the robustness criterion select different thresholds; initial `Enabled/Live/Paused` flags were not specified.
+
+## Active Update 2026-07-10 All ETH Bps Reference Average Gated By Diff1 Signal
+Goal: Recalculate every neutral `ETH Up or Down 5m N bps Reference Average Premarket` strategy as if it placed a bet only when `ETH Up or Down 5m 1 Diff Reference Average Premarket` selected the same direction, and compare every strategy plus their summed portfolio.
+Status: Completed
+Done:
+- Enumerated an exact production allowlist of `28` enabled, unpaused, Paper-only Bps strategies: `N=1..10`, then `15..100` in steps of `5`.
+- Fixed the server dataset at cutoff `2026-07-10T15:07:51.322291Z` and used the user-selected signal-level method: Diff1 `selected_outcome`, plus `skip_diagnostics_json.outcome` for post-signal technical skips; PnL/stake come only from actual settled Bps Paper runs.
+- Original aggregate: `25,535` bets, stake `$153,445.88502708`, PnL `+$4,310.18899979`, ROI `+2.80893098%`.
+- Diff1-gated aggregate: `11,217` bets, stake `$67,405.55541024`, PnL `+$4,617.50139918`, ROI `+6.85032765%`.
+- The gate increased aggregate PnL by `$307.31239939` and ROI by `4.04139667` percentage points while reducing deployed stake by `56.07%`.
+- Filtered ROI improved for all `28/28` strategies; absolute PnL improved for `18/28` and declined for `10/28` (`N=35..80`).
+- Filtered rows comprise `10,603` Diff1 settled signals and `614` Diff1 post-signal skipped signals. Diff1 has no duplicate condition ids in scope; local per-strategy recomputation matched the server comparison for all 28 rows.
+- The summed filtered portfolio spans `662` unique markets, averages `16.944` Bps variants per market, reaches all `28` variants and `$168.2604014` stake on one market, and has maximum cumulative drawdown `$1,183.06887532`.
+- Filtered PnL was positive on all `7/7` covered UTC dates. Up contributed `+$3,879.95` at `+6.28%` ROI; Down contributed `+$737.55` at `+13.14%` ROI.
+- Wrote `strategy-comparison.csv`, `filtered-bets.csv`, `comparison.md`, and `summary.txt` under `outputs/eth-bps-reference-average-diff1-signal-filter-2026-07-10/`.
+Next: Treat the summed portfolio as highly correlated multi-bet exposure, not 11,217 independent observations; continue collecting calendar coverage before implementing a Live gate.
+Notes: Read-only production analysis and local artifacts only. A repeated broad verification query was stopped by timeout, then replaced with one bounded aggregate plus one filtered-row export and local grouping. No production writes, source changes, service actions, order actions, tests, staging, commit, or push were performed.
+Blockers: None.
+
+## Active Update 2026-07-10 ETH Diff1 And Bps1 Agreement Analysis
+Goal: Repeat the same-signal PnL analysis for `ETH Up or Down 5m 1 Diff Reference Average Premarket` and `ETH Up or Down 5m 1 bps Reference Average Premarket`.
+Status: Completed
+Done:
+- Resolved exact production codes/ids and fixed a read-only server dataset at cutoff `2026-07-10T14:37:50.574144Z`.
+- Found `950` markets where both strategies had settled Paper bets: `624` same-signal and `326` opposite-signal. Same-signal rows were `517 Up / 107 Down`, with `344` wins / `280` losses.
+- On the 624 strict same-signal markets, Diff1 made `+$207.88822468` on `$3749.80320021` (`+5.5440%` ROI), Bps1 made `+$203.28944906` on `$3749.80320008` (`+5.4213%`), and summing both actual legs made `+$411.17767374` on `$7499.60640029` (`+5.4827%`) with `$161.76390533` maximum drawdown.
+- Clarified the hypothetical single-position combination: one stake on each of the 624 agreement markets, using the neutral average of the two nearly identical actual executions, yields PnL `+$205.58883687` and ROI `+5.4827%`; the doubled `+$411.18` result is not the requested model.
+- Both directions were positive: same-Up Diff1/Bps1 PnL `+$200.4435 / +$196.2621`; same-Down `+$7.4447 / +$7.0273`.
+- Common-period standalone comparison: Diff1 `983` bets, `+$216.04461819`, `+3.6573%` ROI; Bps1 `1527` bets, `+$125.68840115`, `+1.3697%` ROI. Agreement improved ROI for both and would have raised Bps1 PnL by excluding net-negative opposite/solo cohorts.
+- Verified both legs remain near-duplicate exposure: stake differs by at most `$0.00000009`; entry price matches on `514/624` and differs by at most `0.02546152`.
+- Strict same-signal results were positive on `6/7` UTC dates. Win rate was `55.1282%`, Wilson 95% interval `51.2063%..58.9874%`, versus empirical break-even `52.2325%`.
+- Found `85` additional Diff1 post-signal skips, all `missing_orderbook_cache_stale`; `38` matched settled Bps1 signals and lost `-$37.49775957`. A broader 662-market one-leg proxy remains positive at `+$165.79168949` / `+4.1676%`, but is counterfactual for missing Diff1 fills.
+- Exported the strict `624`-market dataset and methodology to `outputs/eth-diff1-bps1-reference-agreement-2026-07-10/`.
+- Confirmed both strategies have zero Live rows.
+Next: Continue collecting date coverage before a Live gate; the result is materially stronger than the BTC pair but still covers only seven UTC dates and is Up-heavy.
+Notes: Read-only production analysis and local artifacts only. No production writes, source changes, service actions, order actions, tests, staging, commit, or push were performed.
+Blockers: None.
+
+## Active Update 2026-07-10 BTC Diff5 And Bps30 Agreement Analysis
+Goal: Calculate PnL when `BTC Up or Down 5m 5 Diff Reference Average Premarket` and `BTC Up or Down 5m 30 bps Reference Average Premarket` select the same outcome.
+Status: Completed
+Done:
+- Resolved exact production codes/ids and fixed a read-only server dataset at cutoff `2026-07-10T14:29:24.954883Z`.
+- Defined the strict actual-execution match as the same non-empty `condition_id`, both runs settled with non-null PnL, and equal `selected_outcome`.
+- Found `39` markets where both had settled Paper bets: `30` same-signal and `9` opposite-signal. Same-signal rows were `29 Up / 1 Down`, with `17` wins / `13` losses.
+- On the 30 strict same-signal markets, Diff5 made `+$10.04150569` on `$180.27899997` (`+5.5700%` ROI), Bps30 made `+$10.20569421` on the same stake (`+5.6611%`), and summing both actual legs made `+$20.24719990` on `$360.55799994` (`+5.6155%`) with `$39.19692950` maximum drawdown.
+- Verified the two legs are almost duplicate exposure: settled stake matched on all 30 rows and entry price matched on 29/30, with maximum difference `0.01`.
+- Common-period standalone comparison: Diff5 `92` bets, `+$79.49363025`, `+14.3787%` ROI; Bps30 `762` bets, `+$142.77702685`, `+3.1180%` ROI. Agreement filtering improved Bps30 ROI but reduced Diff5 ROI materially.
+- Found `10` additional Diff5 post-signal skips, all `missing_orderbook_cache_stale`; five matched a settled Bps30 signal and produced Bps30 PnL `-$7.13522549`. A broader 35-market signal-level proxy therefore yields only `+$3.07046872` / `+1.4599%`, but is counterfactual for the absent Diff5 fills.
+- Exported the strict 30-market dataset and methodology to `outputs/btc-diff5-bps30-reference-agreement-2026-07-10/`.
+- Confirmed both strategies have zero Live rows.
+Next: Accumulate a materially larger, direction-balanced sample before using agreement as a production gate; current 95% Wilson win-rate interval is `39.2%..72.6%`.
+Notes: Read-only production analysis and local artifacts only. No production writes, source changes, service actions, order actions, tests, staging, commit, or push were performed.
+Blockers: None.
+
+## Active Update 2026-07-10 Early Rise Then Plateau Analysis
+Goal: Explain why the PnL curve for `BTC Up or Down 5m 5 Diff Real Limit Progress Premarket`, and several other requested strategies, rises sharply early and then becomes nearly flat.
+Status: Completed
+Done:
+- Analyzed the fixed `1581`-row Paper dataset used for the chart, without production writes.
+- Split at 48 hours: the first `467` bets produced `+$757.9187` on `$6859.9377` filled notional (`+11.05%` ROI), while the following `1114` bets produced only `+$56.5949` on `$17987.2308` (`+0.31%` ROI).
+- Confirmed the plateau was not caused by lower activity or stake: later history contains more than twice as many bets and a higher average actual stake.
+- Found the statistical mechanism: early win rate was `54.60%` versus an empirical break-even rate of `48.98%`; later win rate was `51.44%` versus break-even `51.27%`, leaving essentially no edge.
+- Early multiplier-4 and multiplier-5 bets contributed `+$537.36` (`70.9%` of early PnL). Later multiplier-2 and multiplier-3 bets lost `-$617.17`, almost cancelling the `+$673.77` from multipliers 1, 4, and 5.
+- Direction split changed materially: early Up selections made `+$443.69` at `60.26%` wins; later Up selections made `-$81.04` at `51.06%`. Down selections declined from `+$314.23` to `+$137.63`.
+- Verified all rows in both phases used the same runtime markers: `persistent_utc_day_diff_real_limit_progress_premarket`, `fak_taker_executable_snapshot_v2`, `paper_executable_snapshot_model`, and unit stake `$1`; no fill-model or configured-unit-stake transition explains the shape.
+- Verified from current implementation that the strategy does not learn from cumulative PnL: its bounded Diff counter resets each UTC day and PnL is not an entry input.
+- Compared `11` previously exported Paper datasets with more than 48 hours of coverage: `9/11` earned more in their first 48 hours than afterward. This selected, overlapping sample supports a shared early-cohort effect but is not a random or independent estimate of all strategies.
+- Identified the production Paper reset cutoff `2026-07-03T06:30:39Z`; many current curves therefore start in the same market window, amplifying common regime and selection effects.
+Next: For a defensible all-strategy conclusion, run a fixed-cohort walk-forward analysis by strategy family and start date, including negative/deleted candidates or an immutable registry, rather than selecting currently positive survivors.
+Notes: The strongest verified explanation for the exact strategy is disappearance of its early conditional edge, not reduced betting or accounting-version drift. Whether the underlying cause was a BTC volatility/trend regime requires a separate price-regime analysis. No source, production data, service state, tests, staging, commit, or push changed.
+Blockers: None.
+
+## Active Update 2026-07-10 BTC 5 Diff Real Limit Progress Paper PnL Chart
+Goal: Build a current PnL chart for the exact strategy `BTC Up or Down 5m 5 Diff Real Limit Progress Premarket` and identify its maximum actual stake.
+Status: Completed
+Done:
+- Resolved the exact production strategy as `btc_up_down_5m_5_diff_real_limit_progress_premarket`; excluded the similarly named 1-4 Diff and non-Real-Limit variants.
+- Queried server PostgreSQL `192.168.0.101:5432/polycopytrader` read-only and fixed the dataset at cutoff `2026-07-10T13:41:49.538225Z`.
+- Exported `1581` settled Paper runs joined to their Paper fills and generated `outputs/btc-5-diff-real-limit-progress-paper-pnl-chart-2026-07-10/paper-pnl-chart.png`, CSV, and summary.
+- Verified from actual fill notional that the maximum stake was `$28.0071002459541510` (`$28.01`) at `2026-07-04T23:44:36.516479Z`; the corresponding run stake differs only by storage precision.
+- Independently matched exported-row calculations, repeated raw SQL, and the Dashboard snapshot: `828` wins, `753` losses, PnL `+$814.51359715`, ROI `+3.2781%`, and maximum drawdown `$450.57619261`.
+- Confirmed the strategy has zero Live orders and visually inspected the generated PNG.
+Next: None.
+Notes: Analysis and artifact generation only. No production writes, source behavior changes, service actions, order actions, tests, staging, commit, or push were performed. Existing unrelated dirty worktree changes were left untouched.
+Blockers: None.
+
+## Active Update 2026-07-10 SOL 22 Child Paper PnL Chart
+Goal: Build a current PnL chart for the exact strategy `SOL Up or Down 5m 22 Child`.
+Status: Completed
+Done:
+- Resolved the exact production strategy as `sol_up_down_5m_22_child`; excluded the similarly named Progress and ROI variants.
+- Queried server PostgreSQL `192.168.0.101:5432/polycopytrader` read-only and fixed the dataset at cutoff `2026-07-10T11:28:47.803428Z`.
+- Exported `187` settled Paper runs to `outputs/sol-22-child-pnl-chart-2026-07-10/paper-pnl-records.csv` and generated `paper-pnl-chart.png` plus `summary.txt`.
+- Verified totals independently from the exported rows, a repeated raw SQL aggregate, and the Dashboard snapshot: `103` wins, `84` losses, stake `$1123.73910052`, PnL `+$175.45591174`, ROI `+15.6136%`, and maximum drawdown `$69.21531048`.
+- Confirmed the strategy has zero Live orders and visually inspected the generated PNG.
+Next: None.
+Notes: Analysis and artifact generation only. No production writes, source behavior changes, service actions, order actions, tests, staging, commit, or push were performed. Existing unrelated dirty worktree changes were left untouched.
+Blockers: None.
+
+## Active Update 2026-07-10 Final Projection Recovery Deployment Verification
+Goal: Verify that the deployed multi-event projection fix drains the production backlog without affecting database or betting health.
+Status: Completed
+Done:
+- Confirmed a new production service start at `2026-07-10T11:14:48.885155Z` with assembly MVID `5eb3eebef4fe`, fresh `Running`/`Live` heartbeat, and no heartbeat error.
+- Observed the projection backlog fall from the prior `17114` events to `3055`, then to `0`; it remained at `0` on the final check. The reconciliation queue is also `0`.
+- Confirmed no `DashboardStrategyPerformanceSnapshotWorker/IncrementalProjection` error occurred after the new process start; the prior PostgreSQL `23505` duplicate-key failure did not recur.
+- Confirmed projection control, expiry, and reconciliation timestamps all advanced after recovery, and both lifetime and recent snapshot tables were refreshed through `2026-07-10T11:18:50.548632Z`.
+- Confirmed the connection guardrail remained effective while backlog processing and the `11:15Z` market overlapped: production had `47` client connections including diagnostics, below the service pool cap and far below the prior `97`-slot exhaustion.
+- Confirmed post-start strategy activity: `2719` run updates and `233` Paper orders. The sole enabled Live strategy skipped the `11:15Z` market with `btc_previous_market_move_below_bps_threshold`; no technical Live failure or post-warmup API error was recorded.
+- Measured representative flat Dashboard reads with `EXPLAIN ANALYZE`: lifetime projection plus authoritative strategy controls returned `1442` rows in `334.156ms`; recent projection returned `4326` rows in `466.371ms`.
+Next: Continue normal monitoring; no recovery or cleanup action is required.
+Notes: Production inspection used read-only PostgreSQL queries and `EXPLAIN ANALYZE` SELECTs. No production writes, service actions, order actions, source changes, tests, staging, commit, or push were performed in this deployment-verification turn. Existing unrelated dirty worktree changes were left untouched.
+Blockers: None.
+
+## Active Update 2026-07-10 Connection Guardrail Verification And Projection Multi-Event Fix
+Goal: Verify the restarted service under live market-boundary load and repair any remaining incremental Dashboard projection failure.
+Status: In Progress
+Done:
+- Confirmed a new production service process started at `2026-07-10T11:02:43.601467Z` with a changed assembly MVID, fresh `Running`/`Live` heartbeat, and empty heartbeat error.
+- Confirmed the deployed entry guardrail is active in production stage timings: main, fast Diff, previous-result, and pre-open flows report `MaxConcurrency=32;SharedAcrossEntryFlows=true`.
+- Observed two market boundaries under overlapping load. At `11:05Z`, PreviousResult and FastDiff decision stages both ran for about `6.5s` and PostgreSQL had `38` client connections including the diagnostic connection. At `11:10Z`, their maximum durations were `9.855s` and `9.638s`, PostgreSQL had `43` client connections including diagnostics, and no connection-admission failure occurred.
+- Confirmed active trading work: `280` new Paper orders around the `11:05Z` boundary and `381` around `11:10Z`. The only enabled Live strategy, `ETH Up or Down 5m Up 50 bps Instant`, skipped both boundaries with the explicit market-condition reason `btc_previous_market_move_below_bps_threshold`; there was no technical Live failure.
+- Found a separate projection error repeating once per minute: PostgreSQL `23505` on duplicate `(StrategyRun, source_id, RunActivity)` recent facts. The projection event queue grew to `17114`, while reconciliation and service trading continued.
+- Proved the cause from the event batch implementation: multiple updates for one source correctly evolved in-memory state but appended every intermediate fact set to one SQL insert list after a single source delete.
+- Changed pending-event persistence to retain exactly one final recent-fact set per `(source_kind, source_id)` in each batch.
+- Added an integration regression that inserts an Observed run, updates it to Skipped and then Settled, applies all three events in one batch, and verifies one final fact set and final settled metrics.
+Next: Deploy/restart the newly rebuilt service once more, then verify the `23505` errors stop, the `17114+` event backlog drains, snapshot timestamps catch up, connection count remains bounded, and fresh Paper/Live activity continues.
+Notes: The new regression passed against a clean disposable local PostgreSQL database; the complete incremental projection integration class passed `2/2` there. Configuration/storage/projection unit tests passed `98/98`, and the Service build passed with `0` warnings/errors. Both disposable test databases were verified connection-free and dropped. No production writes, cleanup, service action, order action, staging, commit, or push were performed by Codex; the working files still overlap extensive unrelated user changes.
+Blockers: Production projection recovery requires deploying the final-fact batching fix; the current service remains trade-capable but its Dashboard projection worker cannot consume the backlog.
+
+## Active Update 2026-07-10 PostgreSQL Connection Exhaustion Root Cause And Guardrails
+Goal: Verify the deployed Dashboard projection, identify why PostgreSQL exhausted all client slots, and prevent recurrence.
+Status: In Progress
+Done:
+- After the user stopped `PolyCopyTrader.Service`, confirmed production PostgreSQL `192.168.0.101:5432/polycopytrader` became immediately accessible and had only the diagnostic client connection; the service heartbeat is stale at `2026-07-10T10:26:28.790463Z`, so the service remains stopped.
+- Confirmed production PostgreSQL is configured with `max_connections=100` and `superuser_reserved_connections=3`, leaving exactly `97` ordinary client slots; the user's server-side process inventory showed `PolyCopyTrader.Service` owned exactly `97` established PostgreSQL connections before it was stopped.
+- Confirmed the incremental projection successfully bootstrapped before the stop: schema/control version `2`, `initialized=true`, no queued projection events or reconciliations, `1442` lifetime snapshot/state rows, `4326` recent snapshot/state rows, and no recorded projection error.
+- Identified the exact production concurrency overlap in `btc_up_down_5m_strategy_stage_timings`: at `10:25:02.759Z`, `PreviousResultDue` started `301` decision tasks with `MaxConcurrency=128` and ran for `9066ms`; at `10:25:03.262Z`, `FastDiffDue` started another batch with `MaxConcurrency=128` while the first batch was still running. Repository calls open pooled Npgsql connections independently, and the configured connection string had no maximum-pool override.
+- Changed entry-decision throttling from an independent semaphore per worker batch to one processor-wide semaphore shared by main, fast Diff, previous-result, pre-open, and pre-open sell-exit paths; reduced `MaxConcurrentEntryDecisions` from `128` to `32`.
+- Added `Storage.MaxPoolSize` support in `PostgresConnectionFactory`; service config now caps its pool at `64` and Dashboard config at `8`, preserving a minimum of `33` ordinary server slots outside a fully occupied service pool on the current PostgreSQL server.
+- Added validator/factory/appsettings tests and updated README/configuration documentation.
+Next: Deploy the rebuilt Service and Dashboard, start the service, then monitor server TCP connections, heartbeat, projection backlog, entry timing, and fresh Paper/Live activity across at least one market boundary.
+Notes: Focused configuration/storage/projection tests passed `98/98`; an active PreviousResult flow test passed. Service and Dashboard builds passed with `0` warnings/errors. One pre-existing test for the previously deleted `BTC Up or Down 5m Up Simple` strategy still fails with `0` entries instead of `4`; it does not enter the changed limiter path and belongs to the known deleted-strategy test backlog. No production writes, service restart, order action, staging, commit, or push were performed. The changed files already contain extensive unrelated and overlapping user work, so they were not committed as one mixed changeset.
+Blockers: Runtime verification of the guardrails requires deploying the current local build; the old service must remain stopped until then.
+
+## Active Update 2026-07-10 Post-Deploy PostgreSQL Connection Exhaustion
+Goal: Verify the deployed incremental Dashboard projection and continued service/trading health.
+Status: In Progress
+Done:
+- Ran `git pull --ff-only` (`Already up to date`) and resumed from the persisted projection implementation state.
+- Attempted production PostgreSQL read-only verification immediately after the user deployment, again after `15s`, and again after `60s`; every authenticated connection was rejected with `FATAL: sorry, too many clients already`.
+- Confirmed TCP `192.168.0.101:5432` remains reachable, so the failure is PostgreSQL admission rather than host/network loss.
+- Confirmed this workstation has zero established TCP connections to `192.168.0.101:5432`, so no local Dashboard/diagnostic slot can be released here.
+- Audited the new projection repository: bootstrap opens two connections and all projection/event/expiry/reconciliation paths use `await using`; no code evidence yet identifies the source of the connection saturation.
+- Confirmed WinRM TCP `5985` is reachable but remote authentication fails for this session, so server process/connection inspection cannot be executed remotely without user action.
+Next: Run the supplied non-mutating PowerShell connection/process inventory directly on the server, identify the owning client process and connection count, then choose the smallest recovery action based on that evidence.
+Notes: No production write, service stop/restart, PostgreSQL restart, order action, source behavior change, staging, commit, or push was performed.
+Blockers: PostgreSQL has no available client slot and this session lacks authenticated Windows remote execution; production schema/bootstrap/trading verification cannot proceed until at least one DB slot is freed.
+
+## Active Update 2026-07-10 Incremental Projection Deployment Gate Check
+Goal: Resume the incremental Dashboard work and determine the first remaining executable step.
+Status: Completed
+Done:
+- Ran the required repository recovery workflow; `git pull --ff-only` reported `Already up to date`, local HEAD remains `e58c6dd6`, and the implementation is still present as uncommitted work in the existing dirty worktree.
+- Queried production PostgreSQL `192.168.0.101:5432/polycopytrader` read-only with a `5s` statement timeout.
+- Confirmed `dashboard_projection_control`, `dashboard_projection_events`, and `dashboard_strategy_position_projection_facts` are all absent on production.
+- Independently confirmed the running `PolyCopyTrader.Service` process started at `2026-07-09T19:35:24.471207Z` and reports build `e58c6dd64a94b289f70464ce3f12fdf35fc435b3`; its heartbeat was current and `last_error` was empty at the check.
+Next: User deploys/restarts the newly built service; then inspect schema version `2`, bootstrap state/duration, event backlog, reconciliation, Dashboard latency, and live trading activity.
+Notes: No source behavior, production data, service state, order state, tests, staging, commit, or push changed in this resume check.
+Blockers: Production verification cannot continue until the new service is deployed and restarted.
+
+## Active Update 2026-07-10 Incremental Dashboard Projection Implementation
+Goal: Replace repeated all-history Dashboard aggregation with continuously maintained flat projection rows plus independent per-strategy reconciliation.
+Status: Completed
+Done:
+- Reused `dashboard_strategy_performance_snapshots` and `dashboard_strategy_recent_performance_snapshots` as the flat Dashboard read model; Dashboard reads contain no raw-history aggregate and retain only the authoritative primary-key join to `strategies` for controls.
+- Added a calculation-versioned, MVCC-consistent bootstrap; durable PostgreSQL outbox triggers for strategies, Paper orders/fills/runs/positions/settlements, and Live orders; typed lifetime/recent contribution state; and exact event-driven `1h`/`6h`/`24h` expiry.
+- Added incremental old-to-new contribution replacement, candidate rebuilds, explicit source/strategy deletion handling, source-strategy/side-change reconciliation, and UTC-normalized JSON timestamps.
+- Added a bounded Paper-position path: one pending outbox row per `position_id`, a stored last-applied position contribution, irrelevant-update filtering, and tested lock/delete/upsert behavior so repeated WebSocket marks neither grow an unbounded queue nor lose the latest update.
+- Replaced the old periodic full-all-strategies worker with a continuous event/expiry worker and an independent worker that reconciles one strategy per minute. Reconciliation uses indexed strategy filters, `max_parallel_workers_per_gather=0`, `work_mem='4MB'`, `lock_timeout='250ms'`, and `statement_timeout='15s'`.
+- Preserved current PostgreSQL-time semantics for rolling windows and temporary pause state, registered the projection repository/workers in DI, extended required schema tables, and documented the new read model and position-event coalescing.
+- Measured production read-only position activity before deployment: `104` distinct position rows updated in one minute and `722` rows across `420` strategy wallets / `19` assets in five minutes. No production writes were made.
+Next: Deploy/restart the service, then verify schema version `2`, bootstrap completion time, event backlog, reconciliation progress, snapshot freshness, Dashboard connection latency, and continued trading activity on production.
+Notes: Focused contract/unit tests passed `12/12`. The isolated disposable PostgreSQL integration test passed `1/1` and covered schema/bootstrap, all source deltas, insert/update coalescing, a concurrent locked-event replacement, raw-versus-projected lifetime and all recent windows, expiry, reconciliation with no drift, and strategy cleanup. Service build passed with `0` warnings/errors. Dashboard build passed with `0` errors and the existing `119` Storage nullable warnings using a separate output because the running Dashboard locks normal Debug artifacts. Full suite remains `643 passed / 112 failed / 755`; failures reproduce the pre-existing deleted-strategy catalog/test mismatch (`Middle`, `More`, `Simple`, Countertrend and similar missing variants) and do not involve the projection tests. `git diff --check` and trailing-whitespace checks passed. No commit or push was made because the worktree contains extensive unrelated and overlapping user changes.
+Blockers: Production behavior is not yet verified because this implementation has not been deployed; the first full bootstrap duration on the production data volume is therefore unknown.
+
+## Active Update 2026-07-10 Incremental Dashboard Projection With Reconciliation
+Goal: Evaluate the proposed design of incrementally maintained Dashboard rows plus a low-impact per-strategy full reconciliation loop.
+Status: Completed
+Done:
+- Confirmed that the proposed architecture addresses the measured bottleneck: updating fixed-size projection rows after source events is independent of total history size, even when most strategies change every market, while a background full calculation detects and repairs projection drift.
+- Verified that the existing `dashboard_strategy_performance_snapshots` and `dashboard_strategy_recent_performance_snapshots` already hold the displayed full and `1h/6h/24h` rows; the current problem is that `DashboardStrategyPerformanceSnapshotWorker` fully aggregates raw history and rewrites every row each cycle.
+- Verified that Dashboard currently joins snapshot statistics to authoritative `strategies` rows for control fields such as Enabled, Live, Paused, stakes, counters, and Live balance. Recommended retaining that small primary-key join rather than making critical controls have two sources of truth.
+- Identified required correctness mechanisms: a durable event/outbox stream; one stored contribution per strategy and market; atomic old-contribution-to-new-contribution deltas; hidden sums/counts behind averages, ROI, and profit factor; time buckets or expiry deltas for rolling windows; and idempotent event versions.
+- Identified the reconciliation race: a full calculation must not overwrite a newer incremental result. The projection needs a monotonic source/event version, and a reconciliation result may be applied only if that version has not advanced; otherwise it must be discarded and retried later.
+- Verified that the current full calculation has no strategy-ID input and groups entire source tables. A real reconciliation path must push `strategy_id` into every CTE/source query; filtering only the final result would retain the full scan.
+- Calculated that at the current `1442` strategies, one reconciliation per minute completes a round in `1442` minutes, or about `24h02m`. Actual per-strategy query cost and a safe timeout remain unverified until the new bounded query is implemented and benchmarked.
+- Clarified that an OS/.NET thread priority cannot guarantee low PostgreSQL impact. Isolation must be structural: one bounded read-only query at a time, no parallel query workers, measured statement/lock limits, an explicit trading-activity gate, adaptive delay, and a short atomic projection repair.
+- Identified an incremental-mode incompatibility in the current repository: snapshot upserts delete every row whose `refreshed_at_utc` is older than the current generation. Incremental methods must replace this with explicit strategy deletion/tombstone handling.
+Next: Await explicit implementation instruction; recommended implementation reuses the current snapshot tables as projections, adds contribution/event/version state, replaces the full worker with incremental projection plus guarded per-strategy reconciliation, and retains a bootstrap rebuild path.
+Notes: Design review and source inspection only. No source behavior, schema, production data, service state, tests, staging, commit, or push were changed.
+Blockers: Per-strategy reconciliation latency and safe resource limits require a benchmark during implementation; no unsupported performance guarantee was made.
+
+## Active Update 2026-07-10 Dashboard Dirty Queue Saturation Check
+Goal: Determine whether a future dirty-strategy queue would mark nearly every strategy after each 5-minute market.
+Status: Completed
+Done:
+- Verified in the current snapshot SQL that every `strategy_market_paper_runs` lifecycle state contributes to the full Dashboard row: `Observed`, `Entered`, `Skipped`, and `Settled`; condition skips and not-accepted Paper orders have dedicated counters. The recent snapshot also counts entered and skipped runs by their event timestamps.
+- Queried server PostgreSQL `192.168.0.101:5432/polycopytrader` read-only through the indexed `updated_at_utc` path, after a broader `market_start_utc` scan correctly stopped at the 30-second statement timeout.
+- On the completed `2026-07-10 07:50 UTC` BTC/ETH/SOL markets, `1238/1442` enabled and unpaused 5-minute strategies had a run row, or `85.9%`: BTC `409/467`, ETH `442/530`, SOL `387/445`.
+- Among the `1354` strategies that produced any run update in the checked trailing 30 minutes, the same market touched `1238`, or `91.4%`.
+- The completed market split was `938` condition-skipped runs with no Paper order and `300` settled runs with a Paper order. Therefore skips, not bets, were the majority of changed strategy rows.
+- The next detected `08:05 UTC` market had already created `Observed` runs for `1144/1442` strategies (`79.3%`) approximately ten minutes before market start, showing that dirty events occur before entry evaluation as well as on skip/entry and settlement.
+- Concluded that a naive dirty-ID design which reruns each strategy's full historical aggregate would be nearly saturated every five minutes and would not remove the main cost. The scalable design is per-run delta projection plus small time buckets for rolling windows, with periodic raw-history reconciliation; a dirty set remains useful only for coalescing and infrequent settings/balance/MTM changes.
+Next: If Dashboard acceleration is implemented, use delta-maintained rollups and rolling time buckets rather than full-history recomputation per dirty strategy ID.
+Notes: Analysis and server inspection were read-only. No source, schema, production data, service state, tests, staging, commit, or push were changed.
+Blockers: None.
+
+## Active Update 2026-07-10 Dashboard Dirty Strategy Definition
+Goal: Clarify which strategy IDs must be considered changed in a future incremental Dashboard refresh design.
+Status: Completed
+Done:
+- Defined a dirty strategy as any strategy whose Dashboard row can change, not only a strategy with a newly created bet.
+- Confirmed dirty events include Paper/Live order creation or status changes, fills, run entry/skip/settlement changes, realized PnL and balance changes, strategy runtime-setting changes, and open-position mark-to-market updates.
+- Identified a separate time-driven requirement for `1h/6h/24h` snapshots: metrics can change when an old event exits a rolling window even if no new bet occurs, so recent-window maintenance needs expiry scheduling or time-bucket recomputation in addition to the dirty-ID queue.
+- Distinguished full/lifetime snapshots, which change only on data/settings/mark-to-market events, from rolling recent snapshots, which also change as time advances.
+Next: Use this broader definition if incremental Dashboard refresh is implemented.
+Notes: Design clarification only. No source, schema, production data, service state, tests, staging, commit, or push were changed.
+Blockers: None.
+
+## Active Update 2026-07-10 Dashboard Snapshot Acceleration Options
+Goal: Identify evidence-based ways to reduce Dashboard snapshot staleness without affecting the trading cycle.
+Status: Completed
+Done:
+- Inspected the deployed-path implementation: one `DashboardStrategyPerformanceSnapshotWorker` targets a 10-minute cadence aligned to `+1 minute` quiet slots, then sequentially computes full-history strategy performance, writes the full snapshot, computes `1h/6h/24h` recent performance, and writes the recent snapshot.
+- Confirmed the full-history query re-aggregates all raw Paper orders/fills/positions/settlements/runs and Live orders on every cycle; the recent query separately re-aggregates three rolling windows.
+- Measured server scale from PostgreSQL statistics: about `2.102M` strategy runs (`14 GB` total relation size), `378K` Paper orders (`2.9 GB`), `442K` Paper positions, `436K` settlements, `395K` fills, and `1442` strategies.
+- Observed a live full-snapshot interval of about `15m06s` (`07:22:19Z` to `07:37:25Z`) despite the 10-minute target; the full and recent snapshot timestamps differed by about `77.5s`, which covers full-snapshot upsert plus recent aggregation before its upsert timestamp.
+- Confirmed no snapshot-worker errors in `api_errors` during the preceding 24 hours and no PostgreSQL lock waits during the stale period.
+- Identified substantial write amplification: current snapshot tables contain only `1442` and `4326` live rows but PostgreSQL statistics report about `3.08M` and `8.13M` tuple updates, only one HOT update each, and more than `1000` autovacuum runs per table; changing indexed `refreshed_at_utc` forces every row to be rewritten every cycle.
+- Evaluated options: cadence-only reduction, query/index tuning, separate fast/recent workers, changed-row/COPY snapshot writes, dirty-strategy incremental refresh, and durable incremental rollups with periodic full reconciliation.
+- Recommended eliminating repeated full-history scans as the primary solution: maintain a durable incremental read model/rollups, refresh recent and changed strategies after market cycles, and retain the current raw-history calculation only as a slower reconciliation job. A smaller first step is to stop rewriting unchanged snapshot rows and separate the refresh-generation timestamp from each indexed row.
+Next: Await user decision on implementation scope; the recommended path is incremental rollups plus periodic reconciliation, not merely reducing `RefreshCadence`.
+Notes: Analysis and server inspection were read-only. The server has no `pg_stat_statements` extension, so per-query cumulative timing was unavailable; an SMB log-path probe timed out, while DB error/timestamp/statistics evidence completed successfully. No source, schema, production data, service state, tests, staging, commit, or push were changed.
+Blockers: None.
+
+## Active Update 2026-07-10 Child Placement And Dashboard Freshness Check
+Goal: Verify whether all Child strategy families are still placing bets or have stalled.
+Status: Completed
+Done:
+- Queried server PostgreSQL `192.168.0.101:5432/polycopytrader` read-only and identified exactly `288` BTC/ETH/SOL Child strategies across `Child`, `Child Progress`, `Child ROI`, and `Child Progress ROI`; all `288` are enabled, none paused, and all remain Paper-only.
+- Confirmed all `288/288` Child strategies have active parent assignments; every mode had `72/72`, with the newest assignment update at `2026-07-10 07:28:35.040837Z` and no missing assignment.
+- Confirmed active placement rather than stale historical data: `275` Child Paper orders in the final 10-minute window, latest at `2026-07-10 07:30:27.190886Z`; all 12 asset/mode combinations produced fresh orders.
+- Confirmed all `275/275` recent Child orders contain a parent-order reference and every referenced parent Paper order exists; zero parent links were missing.
+- Confirmed `1267` Child Paper orders in the checked trailing hour and every one had status `Filled`; fresh Child entered runs independently tracked the same activity.
+- Confirmed service health at the final server sample: `PolyCopyTrader.Service` was `Running` in `Live` mode, heartbeat `2026-07-10 07:33:37.760711Z`, approximately `17.5s` old, with no `last_error`.
+- Found a separate Dashboard visibility lag: the Child full snapshot was still refreshed at `2026-07-10 07:22:19.807206Z` and exposed latest Child order `07:20:11.144970Z`, while raw orders had advanced to `07:30:27.190886Z`; PostgreSQL had zero lock waiters.
+Next: If the Dashboard snapshot remains stale, diagnose the snapshot refresh worker separately; Child placement itself is currently working.
+Notes: Read-only diagnostics only. One broad historical status query hit its statement timeout; subsequent bounded/indexed queries completed and supplied the reported evidence. No production writes, source changes, service restart, tests, staging, commit, or push were performed.
+Blockers: None.
+
+## Active Update 2026-07-10 Global Zero-Assumption Rules
+Goal: Make evidence-first, zero-assumption behavior mandatory for Codex across every repository and project.
+Status: Completed
+Done:
+- Populated the global Codex guidance file `C:\Users\serge\.codex\AGENTS.md`, which was previously empty, with universal evidence and anti-hallucination rules.
+- Prohibited factual claims, causal explanations, recommendations, code, commands, queries, and system changes based on unverified assumptions, names, similarity, chat history, or model memory.
+- Required direct evidence discovery first, followed by an immediate stop and focused clarification request whenever required information remains missing, conflicting, stale, or ambiguous; silent defaults and "reasonable assumptions" are prohibited.
+- Added exact identity resolution, deployed-versus-local separation, fact/deduction/unknown discipline, causal-evidence gates, independent verification for critical work, reproducible numerical analysis, destructive-operation safeguards, similarity/contradiction checks, correction blast-radius review, and a pre-final evidence audit.
+- Kept the requested technical observability enhancements out of scope; no heartbeat, build-version, decision-metadata, service, database, or application changes were made.
+- Verified against official Codex customization documentation that `~/.codex/AGENTS.md` is the global developer guidance file and repo-local files add closer-scope instructions.
+Next: None.
+Notes: Global file verification passed: `91` lines, `7495` bytes, SHA-256 `1FA25DE2B1CE315258E7E14AB85428C401914B19D8B40B831A3E25C313C8C278`, and all required zero-assumption clauses were present. The Codex manual helper failed because its response lacked `x-content-sha256`; the official Codex customization page was used as the documented fallback. No production data, project source behavior, service state, tests, staging, commit, or push were changed.
+Blockers: None.
+
+## Active Update 2026-07-10 Anti-Hallucination Rule Design
+Goal: Define enforceable project rules that reduce unsupported claims and semantic substitutions across all Codex work.
+Status: Completed
+Done:
+- Designed an evidence-first policy centered on exact identity resolution, prohibition of behavior inference from names/chat memory, separation of observation/inference/hypothesis, local-versus-deployed runtime distinction, and claim-level provenance.
+- Proposed a mandatory strict-evidence mode for production state, trading, financial/statistical conclusions, destructive database work, security, and causal explanations.
+- Proposed a pre-final claim audit, two-source validation for consequential claims, correction blast-radius review, reproducible numeric evidence, and explicit `unknown` outcomes when required evidence is absent.
+- Identified supporting observability changes: deployed commit/version reporting and persisted strategy behavior/decision source/input metadata.
+Next: After user selects the desired strictness, add the agreed hard rules to `AGENTS.md` and the execution/audit checklist to `Codex/Rules/Workflow.md`.
+Notes: No project rules, source behavior, production data, service state, tests, staging, commit, or push were changed in this design-only task.
+Blockers: None.
+
+## Active Update 2026-07-10 Correct Reference Average Interpretation
+Goal: Explain and correct the erroneous claim that neutral Reference Average direction was selected from Diff.
+Status: Completed
+Done:
+- Confirmed from the exact strategy dispatch and decision method that `BTC Up or Down 5m 30 bps Reference Average Premarket` does not use Diff.
+- Its neutral decision selects the largest full price average, computes the signed current-price deviation from that average, and enters countertrend: positive deviation buys `Down`, negative deviation buys `Up`, with a `30 bps` absolute threshold.
+- Identified the failure as an unsupported semantic carry-over from the separate `Diff Reference Average Premarket` family: the prior analysis used valid observed outcomes but did not verify the exact strategy behavior before attributing a cause.
+- Separated still-valid measurements (`743/755` observed `Up` outcomes, BTC/PnL alignment, drawdown interval, and regime aggregates) from the invalid Diff-based explanation and the unsupported suggestion that Diff direction selection was malfunctioning.
+Next: Re-run causal analysis against each run's Reference Average raw-decision fields, especially selected average window/price and signed move from average.
+Notes: Read-only source inspection only. No production database writes, source changes, service restart, tests, staging, commit, or push were performed.
+Blockers: None.
+
+## Active Update 2026-07-10 BTC 30 Reference Average Correlation With BTC
+Goal: Compare the Paper PnL path of `BTC Up or Down 5m 30 bps Reference Average Premarket` with BTC price behavior and identify plausible drawdown relationships.
+Status: Completed
+Done:
+- Matched all `755` settled Paper rows from `2026-07-04 23:15 UTC` through `2026-07-10 02:20 UTC` to Binance `BTCUSDT` 5-minute candles; Binance candle direction agreed with the Paper win/loss sign for `733/755` rows (`97.09%`).
+- Generated the aligned BTC/PnL chart `outputs/btc-30-reference-average-correlation-2026-07-10/btc-vs-strategy-pnl.png` and the inline visualization `.codex/visualizations/2026/07/10/019f16f8-e7af-7523-a1a4-063862ebef92/btc-price-vs-paper-pnl.html`; visual inspection passed.
+- Confirmed a strong contemporaneous relation (`r=+0.667` for raw 5-minute BTC return versus bet PnL), driven by the strategy choosing `Up` for `743/755` bets (`98.41%`).
+- The maximum PnL drawdown was `$118.2159` from `2026-07-07 02:10 UTC` to `2026-07-08 15:50 UTC`; BTC fell `3.337%` from about `$63,828` to `$61,698` during the same interval, while `338/339` drawdown-period bets were `Up`.
+- Pre-bet linear return correlations were weak, but regime grouping showed negative results when trailing 6-hour BTC return was below `-0.75%` (`315` bets, `-$31.3428`, `-1.656% ROI`) and in the highest prior-hour volatility quartile (`189` bets, `-$26.3509`, `-2.320% ROI`).
+- Wrote reproducible exports and calculations under `outputs/btc-30-reference-average-correlation-2026-07-10/`, including joined per-bet data, correlations, hourly/daily aggregates, regime tables, drawdown breakdown, and explicitly labeled in-sample filter simulations.
+Next: None.
+Notes: Analysis scripts ran successfully and the `1800x1100` PNG was inspected at original resolution. Data access was read-only: existing server export plus public Binance klines; no production database writes, strategy/source behavior changes, service restart, tests, staging, commit, or push were performed. The worktree already contains unrelated user changes.
+Blockers: None.
+
+## Active Update 2026-07-10 BTC 30 Reference Average Paper PnL Chart
+Goal: Build the same PnL chart for `BTC Up or Down 5m 30 bps Reference Average Premarket`.
+Status: Completed
+Done:
+- Resolved the exact server strategy as `btc_up_down_5m_reference_average_bps_30_fak_premarket` (`b7c50005-0000-4000-8178-000000000130`), enabled, unpaused, and Paper-only with zero Live settlements.
+- Queried server PostgreSQL `192.168.0.101:5432/polycopytrader` read-only and exported all settled Paper runs to `outputs/btc-30-reference-average-paper-pnl-chart-2026-07-10/paper-pnl-records.csv`.
+- Generated and visually inspected `paper-pnl-chart.png`, wrote `summary.txt`, and created `.codex/visualizations/2026/07/10/019f16f8-e7af-7523-a1a4-063862ebef92/btc-30-reference-average-pnl.html` with an image fallback.
+- Settled sample: `755` rows from `2026-07-04T23:24:38.204092Z` to `2026-07-10T02:30:22.547499Z`, wins/losses `401/354`, total stake `$4537.0215`, total PnL `+$150.3745`, ROI `+3.3144%`, max stake `$6.0093`, and max drawdown `$118.2159`.
+Next: None.
+Notes: Final server recheck remained at `755` rows and `+$150.3745`. Verification confirmed a `1600x820` PNG, `755` CSV rows, valid fragment structure under 2 MB, and successful visual inspection. No production writes, source behavior changes, service restart, tests, staging, commit, or push were performed.
+Blockers: None.
+
+## Active Update 2026-07-10 BTC Down 30 Reference Average Paper PnL Chart
+Goal: Build a PnL chart for `BTC Up or Down 5m Down 30 bps Reference Average Premarket`.
+Status: Completed
+Done:
+- Resolved the exact server strategy as `btc_up_down_5m_down_bps_30_fak_premarket` (`b7c50005-0000-4000-8136-000000000130`), enabled, unpaused, and Paper-only with zero Live settlements.
+- Queried server PostgreSQL `192.168.0.101:5432/polycopytrader` read-only and exported all settled Paper runs to `outputs/btc-down30-reference-average-paper-pnl-chart-2026-07-10/paper-pnl-records.csv`.
+- Generated and visually inspected `paper-pnl-chart.png`, and wrote `summary.txt`; also created the thread visualization fragment `.codex/visualizations/2026/07/10/019f16f8-e7af-7523-a1a4-063862ebef92/btc-down30-reference-average-pnl.html` with an image fallback.
+- Settled sample: `752` rows from `2026-07-03T14:22:19.755047Z` to `2026-07-10T01:20:18.491458Z`, wins/losses `401/351`, total stake `$4518.9936`, total PnL `+$168.8785`, ROI `+3.7371%`, max stake `$6.0093`, and max drawdown `$121.3016`.
+Next: None.
+Notes: Final server recheck remained at `752` rows and `+$168.8785`. Verification confirmed a `1600x820` PNG, `752` CSV rows, a valid fragment structure under 2 MB, and successful visual inspection. No production writes, source behavior changes, service restart, tests, staging, commit, or push were performed.
+Blockers: None.
+
+## Active Update 2026-07-10 Dashboard Strategy Currency Filters
+Goal: Add independent `All / BTC / ETH / SOL` strategy currency filters to every strategy statistics tab in Dashboard.
+Status: Completed
+Done:
+- Added a `Currency` ComboBox to the `Strategies` sub-tabs `All`, `24 hours`, `6 hours`, and `1 hour`; every selector defaults to `All` and keeps independent state.
+- Added ViewModel properties and change callbacks for all four selectors, and applied each currency filter alongside the existing category, positivity, Enabled, Live, ROI, settles, and Progress filters.
+- Added `StrategyDisplayCategories.GetAssetSymbol` to identify `BTC`, `ETH`, and `SOL` from the strategy-name prefix; strategies without a supported currency prefix remain visible only under `All`.
+- Replaced the four fixed horizontal filter panels with wrapping panels so controls remain accessible at the Dashboard minimum window width.
+- Added unit coverage for BTC/ETH/SOL detection, case-insensitive matching, surrounding whitespace, unknown prefixes, and null input.
+Next: Publish/restart Dashboard to load the new controls; the background service and database do not require a restart or migration.
+Notes: `StrategyDisplayCategoryTests` passed `84/84`. The normal Dashboard output directory was locked by the running `PolyCopyTrader.Dashboard.exe`, so the app was left running and the project was rebuilt successfully to a separate verification output with `0` warnings and `0` errors. Final targeted `git diff --check` passed with line-ending warnings only. No production database writes, service restart, Dashboard process termination, staging, commit, or push were performed.
+Blockers: None.
+
+## Active Update 2026-07-09 SOL 22 Child Chart Delivery Fallback
+Goal: Deliver the previously generated `SOL Up or Down 5m 22 Child` PnL graph after the inline chart did not render in the conversation.
+Status: Completed
+Done:
+- Confirmed the inline visualization source exists but was not displayed by the conversation renderer.
+- Generated and visually inspected `outputs/sol-22-child-pnl-chart-2026-07-09/paper-pnl-chart.png` as a direct image fallback.
+- The image shows all `98` settled Paper runs, final PnL `+$153.53`, ROI `+26.07%`, and max drawdown `$42.07` on a UTC time axis.
+Next: None.
+Notes: PNG generation used the already verified 98-point dataset; visual inspection confirmed labels, axes, line, final value, and drawdown annotation render correctly. No production database writes, source behavior changes, service restart, tests, staging, commit, or push were performed.
+Blockers: None.
+
+## Active Update 2026-07-09 SOL 22 Child Paper PnL Chart
+Goal: Build a PnL chart for `SOL Up or Down 5m 22 Child`.
+Status: Completed
+Done:
+- Resolved the exact server strategy as `sol_up_down_5m_22_child` (`b7c50005-0000-4000-8187-000000000022`), enabled, unpaused, and Paper-only.
+- Queried server PostgreSQL `192.168.0.101:5432/polycopytrader` read-only for all settled Paper runs.
+- Built the inline cumulative Paper PnL chart `.codex/visualizations/2026/07/09/019f16f8-e7af-7523-a1a4-063862ebef92/sol-22-child-pnl.html` with UTC time, per-bet hover details, final PnL, ROI, and maximum drawdown annotation.
+- Settled sample: `98` rows from `2026-07-08 21:00:23.527699Z` to `2026-07-09 20:25:12.933197Z`, wins/losses `58/40`, total stake `$588.9114`, total PnL `+$153.5259`, ROI `+26.0694%`, and max drawdown `$42.0651`.
+Next: None.
+Notes: Verification confirmed the fragment is under 2 MB, contains exactly 98 plotted records, has no document wrapper or escaped markup, and the server totals remained unchanged on the final read. No production writes, source behavior changes, service restart, tests, staging, commit, or push were performed.
+Blockers: None.
+
+## Active Update 2026-07-09 Non-Progress PnL And Dashboard Timeout Check
+Goal: Aggregate total PnL across all non-Progress strategies and check a Dashboard PostgreSQL read timeout.
+Status: Completed
+Done:
+- Queried server PostgreSQL `192.168.0.101:5432/polycopytrader` read-only using the configured app connection string with host forced to `192.168.0.101`.
+- Dashboard snapshot aggregate excluding strategies whose code/name contains `Progress`: `949` rows, snapshot refreshed `2026-07-09 22:51:39.521084+03`, Paper PnL `+25255.2937` on stake `1630166.7718` (`+1.5492% ROI`, `271335` settled runs), Live PnL `+175.0401` on stake `14915.5271` (`+1.1735% ROI`, `2926` settled orders).
+- Earlier direct raw-history scan for the same non-Progress filter was also positive: Paper `+25543.7401` on stake `1627576.7636` (`+1.5694% ROI`, `271287` settled runs), Live `+175.0401` on stake `14915.5271` (`+1.1735% ROI`, `2926` settled orders).
+- Investigated the user screenshot with Dashboard `NpgsqlException: Timeout during reading from stream` in `GetDatabaseNowUtcAsync` / `LoadStrategiesOnlyAsync`.
+- Confirmed DB connectivity is currently fast (`SELECT clock_timestamp(), count(*) FROM strategies` returned in under a second), service heartbeat is fresh (`PolyCopyTrader.Service`, `Running`, `Live`, heartbeat age about `24s`, empty `last_error`), and no PostgreSQL sessions are waiting on locks (`waiting_on_lock=0`, max active query age about `2s`).
+- Confirmed no local `psql.exe` diagnostic process remained running after the earlier timed-out top/bottom strategy breakdown attempt.
+Next: If Dashboard repeats the timeout, restart Dashboard first; if it recurs immediately, inspect `pg_stat_activity` again for long active reads from client `192.168.0.100` and consider adding shorter Dashboard command timeouts or more snapshot-only loading paths.
+Notes: No production writes, source code changes, service restart, tests, staging, commit, or push were performed.
+Blockers: None.
+
+## Active Update 2026-07-09 Child ROI Sample-Adjusted Selection
+Goal: Make Child ROI parent selection robust against tiny one-win samples.
+Status: Completed
+Done:
+- Changed Child ROI and Child Progress ROI parent selection from raw ROI ranking to sample-adjusted ROI ranking.
+- ROI-parent eligibility now requires positive lookback PnL, at least `10` settled runs, and at least `$60` settled stake in the same lookback window.
+- ROI-parent score is now `roi_pct * stake_usd / (stake_usd + 120)`, so a tiny high-ROI sample is heavily discounted while larger samples approach raw ROI.
+- Plain Child and Child Progress PnL-based selection remains unchanged, including the existing non-Child/non-Futures parent filter.
+- Extended `StrategyLookbackPnl` and the PostgreSQL/test repository lookback aggregation with `SettledRunsCount`.
+- Updated Child ROI descriptions in the in-memory catalog, PostgreSQL seed text, README, and configuration reference; copied Child ROI order diagnostics now use `parent_selection_metric = "adjusted_roi"`.
+- Updated tests so a one-win high-ROI parent is ignored, and a lower raw ROI parent with stronger sample/adjusted score is selected.
+Next: Monitor Child ROI behavior on Paper after the new sample-adjusted assignments settle.
+Notes: Verification passed: `dotnet test tests\PolyCopyTrader.Tests\PolyCopyTrader.Tests.csproj --no-restore --filter "FullyQualifiedName~BtcUpDown5mPaperStrategyProcessorTests.ProcessAsync_ChildRoiMirrorSelectsParentByAdjustedRoiAfterMinimumSample|FullyQualifiedName~BtcUpDown5mPaperStrategyProcessorTests.ProcessAsync_ChildMirrorStrategiesExcludeFuturesParents|FullyQualifiedName~ChildMirrorStrategyCatalogTests|FullyQualifiedName~StorageTests.PostgresSchema_ContainsRequiredTables" -p:UseSharedCompilation=false /nr:false /nologo -v:minimal` passed 5/5 with existing nullable warnings; `dotnet build src\PolyCopyTrader.Service\PolyCopyTrader.Service.csproj --no-restore -p:UseSharedCompilation=false /nr:false /nologo -v:minimal` passed with 0 warnings and 0 errors after clearing a transient compiler file lock; `git diff --check` on touched files passed with LF/CRLF warnings only. User deployed and server verification passed on `192.168.0.101:5432/polycopytrader`: `PolyCopyTrader.Service` heartbeat fresh in Live mode, started `2026-07-09 19:35:24Z`; all `144` Child ROI/Progress ROI strategy descriptions contain `sample-adjusted paper ROI after minimum sample gates`; active assignments refreshed at `2026-07-09 19:41:30Z`; all `144/144` active ROI assignments pass new gates, with `0` Futures parents and minimum settled/stake per group at `10` / `$60.0930`; latest copied ROI Child Paper orders have `parent_selection_metric=adjusted_roi`. Market data status still reports aggregate/critical WebSocket `Stale` with `healthy_shards=4/5`, despite active connected shards. No production DB writes, service restart, staging, commit, or push were performed by Codex because the worktree already contains unrelated dirty/untracked changes.
+Blockers: None.
+
+## Active Update 2026-07-09 Child Exclude Futures Parents
+Goal: Prevent all Child strategy modes from selecting Futures strategies as parents.
+Status: Completed
+Done:
+- Updated Child parent selection so parent candidates exclude any strategy whose code, name, or category contains `Futures`.
+- Added a defensive mirror-time guard so an already-active assignment to a Futures parent is ignored for child mirroring until the refresh cycle replaces or closes it.
+- Applied the rule to all Child modes: `Child`, `Child Progress`, `Child ROI`, and `Child Progress ROI`.
+- Updated Child strategy descriptions in the in-memory catalog and PostgreSQL seed text to say `non-Child, non-Futures`.
+- Updated README/configuration reference and added tests covering all four Child modes when a Futures parent has better PnL/ROI than a non-Futures parent.
+Next: Deploy/restart the service so the refresh loop replaces or closes any currently active Child assignments that point to Futures strategies.
+Notes: Verification passed: `dotnet build src\PolyCopyTrader.Service\PolyCopyTrader.Service.csproj --no-restore -p:UseSharedCompilation=false /nr:false /nologo -v:minimal` passed with 0 warnings and 0 errors; focused `dotnet test tests\PolyCopyTrader.Tests\PolyCopyTrader.Tests.csproj --no-restore --filter "FullyQualifiedName~BtcUpDown5mPaperStrategyProcessorTests.ProcessAsync_ChildMirrorStrategiesExcludeFuturesParents|FullyQualifiedName~BtcUpDown5mPaperStrategyProcessorTests.ProcessAsync_ChildRoiMirrorSelectsParentByHighestRoi|FullyQualifiedName~ChildMirrorStrategyCatalogTests|FullyQualifiedName~StorageTests.PostgresSchema_ContainsRequiredTables" -p:UseSharedCompilation=false /nr:false /nologo -v:minimal` passed 5/5 with one pre-existing nullable test warning; `git diff --check` on touched files passed with LF/CRLF warnings only. An initial parallel build/test attempt hit a transient compiler file lock, then passed after `dotnet build-server shutdown` and serial rerun. No production DB writes, service restart, staging, commit, or push were performed because the worktree already contains unrelated dirty/untracked changes.
+Blockers: None.
+
+## Active Update 2026-07-09 ETH 55 Reference Average Paper PnL Chart
+Goal: Build a PnL chart for `ETH Up or Down 5m 55 bps Reference Average Premarket`.
+Status: Completed
+Done:
+- Resolved the server strategy row as code `eth_up_down_5m_reference_average_bps_55_fak_premarket`, enabled, Paper-only, unpaused.
+- Queried server PostgreSQL `192.168.0.101:5432/polycopytrader` read-only for settled Paper runs.
+- Generated `outputs/eth-55-reference-average-paper-pnl-chart-2026-07-09/paper-pnl-chart.png`, `paper-pnl-chart.svg`, `paper-pnl-records.csv`, and `summary.txt`.
+- Settled Paper sample: `639` rows from `2026-07-04 15:19:05.437Z` to `2026-07-09 16:58:48.104Z`, wins/losses/flat `354/285/0`, total stake `3839.94`, total PnL `+277.07`, ROI `+7.22%`, max drawdown `119.19`.
+Next: None.
+Notes: Output verification passed: CSV row count is `639`, SVG parses as XML, PNG rendered successfully for visual inspection. No production DB writes, source code changes, service restart, tests, staging, commit, or push were performed.
+Blockers: None.
+
+## Active Update 2026-07-09 Remove SOL Binance Bps Strategies
+Goal: Remove `SOL Up or Down 5m Binance N bps` strategies.
+Status: Completed
+Done:
+- Removed SOL Binance bps and SOL Binance bps Instant generation from the active crypto Up/Down 5m strategy catalog/seed path.
+- Removed the PostgreSQL seed blocks for `SOL Up or Down 5m Binance 1..50 bps` and `SOL Up or Down 5m Binance 1..50 bps Instant`.
+- Added schema data migration `20260709_remove_sol_binance_bps_strategies` that deletes matching SOL Binance bps rows and dependent Dashboard/order/run/shadow/hourly/state data when there are no active live orders.
+- Updated catalog/schema/category/admin tests and docs so ETH/SOL Binance bps rows are treated as removed.
+- Cleaned server PostgreSQL `192.168.0.101:5432/polycopytrader` directly: deleted `100` strategy rows, `100` full Dashboard snapshot rows, and `300` recent Dashboard snapshot rows for `sol_up_down_5m_binance_bps_%`.
+- Verified before deletion that there were `0` active Live orders and `0` Paper/Live/DryRun/order/run/shadow/position/settlement rows linked to the SOL Binance bps strategies.
+- Verified after deletion that `0` rows remain in `strategies`, `dashboard_strategy_performance_snapshots`, and `dashboard_strategy_recent_performance_snapshots` for SOL Binance bps codes/names; `schema_data_migrations` key `20260709_remove_sol_binance_bps_strategies` was intentionally left absent so the next deployed service can still delete/record the migration if an old seed recreates rows before deploy.
+Next: Deploy/restart the service with this code so the old deployed seed cannot recreate SOL Binance bps rows on a future restart.
+Notes: Verification passed: `dotnet build src\PolyCopyTrader.Storage\PolyCopyTrader.Storage.csproj --no-restore -p:UseSharedCompilation=false /nr:false /nologo -v:minimal` passed with 0 errors and existing nullable warnings; `dotnet build src\PolyCopyTrader.Service\PolyCopyTrader.Service.csproj --no-restore -p:UseSharedCompilation=false /nr:false /nologo -v:minimal` passed with 0 errors and existing nullable warnings; focused `dotnet test tests\PolyCopyTrader.Tests\PolyCopyTrader.Tests.csproj --no-restore --filter "FullyQualifiedName~BtcUpDown5mPaperStrategyProcessorTests.StrategyIds_ExcludeCryptoBinanceBpsVariants|FullyQualifiedName~StorageTests.PostgresSchema_ContainsRequiredTables|FullyQualifiedName~StrategyStakeAdminCommandTests.ExecuteLiveStakesOnlyAsync_EnablesOnlyRequestedStrategyCodes|FullyQualifiedName~StrategyStakeAdminCommandTests.ExecuteLiveStakesOnlyAsync_EnablesOnlyRequestedStrategyCode|FullyQualifiedName~StrategyStakeAdminCommandTests.ExecuteAsync_UpdatesPaperStakeForAllStrategiesWithoutChangingLiveStake|FullyQualifiedName~StrategyStakeAdminCommandTests.ExecuteAsync_UpdatesPaperAndLiveStakeForAllStrategies|FullyQualifiedName~StrategyDisplayCategoryTests" -p:UseSharedCompilation=false /nr:false /nologo -v:minimal` passed 84/84 with one pre-existing nullable test warning. No staging, commit, or push were performed because the worktree already contains unrelated dirty/untracked changes.
+Blockers: None.
+
+## Active Update 2026-07-09 Remove Follow Leader Strategy
+Goal: Remove the legacy `Follow leader` strategy.
+Status: Completed
+Done:
+- Removed the active PostgreSQL seed for strategy id `f0110a0d-1ead-4c00-8b01-000000000001`, code `follow_leader`, name `Follow leader`.
+- Added schema data migration `20260709_remove_follow_leader_strategy` that deletes the legacy strategy row and dependent Dashboard snapshots / Paper-Live shadow rows / DryRun / Live / Paper orders / runs when there are no active live orders.
+- Removed `Follow leader` from the Dashboard configured strategy-name fallback so it is no longer shown as a configured strategy when snapshot data is absent.
+- Updated README and configuration reference to describe `Follow leader` as removed from the active seed set instead of an active Dashboard strategy.
+- Cleaned the server PostgreSQL database `192.168.0.101:5432/polycopytrader` directly: deleted `1` `strategies` row, `1` full Dashboard snapshot row, and `3` recent Dashboard snapshot rows for `follow_leader`.
+- Verified server cleanup: `0` rows remain for `follow_leader` in `strategies`, Dashboard snapshot tables, Paper/Live/DryRun orders, strategy runs, Paper/Live shadow tables, and date-dependent hourly PnL; migration key was intentionally left absent so the new deployed code can record/apply it on startup.
+- Validated the new migration block against the server inside a transaction followed by `ROLLBACK`; it executed successfully and left `schema_data_migrations` unchanged. The migration now records a zero-row result without scanning large run/order tables when the strategy row is already absent.
+Next: Deploy/restart the service with this code so the old deployed seed cannot recreate `Follow leader` on the next service restart.
+Notes: Verification passed: `dotnet build src\PolyCopyTrader.Storage\PolyCopyTrader.Storage.csproj --no-restore -p:UseSharedCompilation=false /nr:false /nologo -v:minimal` passed with 0 warnings/errors; `dotnet build src\PolyCopyTrader.Dashboard\PolyCopyTrader.Dashboard.csproj --no-restore -p:UseSharedCompilation=false /nr:false /nologo -v:minimal` passed with 0 warnings/errors; focused `StorageTests.PostgresSchema_ContainsRequiredTables` passed 1/1 with one pre-existing nullable test warning. One initial `psql` password prompt process was terminated. A parallel build/test attempt hit a transient DLL file lock, then passed after `dotnet build-server shutdown` and rerun. No staging, commit, or push were performed because the worktree already contains unrelated dirty/untracked changes.
+Blockers: None.
+
+## Active Update 2026-07-09 Child ROI Server Placement Check
+Goal: Explain why Child ROI strategies appear not to place bets.
+Status: Completed
+Done:
+- Queried server PostgreSQL `192.168.0.101:5432/polycopytrader` read-only and confirmed service is running in Live mode with heartbeat `2026-07-09 16:47:14+03` and empty `last_error`.
+- Confirmed ROI Child schema/seed is deployed on server: `parent_roi_pct` column exists, `144` `*child*roi*` strategies exist, all `144` enabled, none paused, and all have `live_stakes=false`.
+- Confirmed all `144` ROI Child rows have active parent assignments: `72` `ChildRoi` and `72` `ChildProgressRoi`, latest assignment update `2026-07-09 16:47:57+03`.
+- Confirmed ROI Child Paper placement is working: `47` Paper orders/runs total, latest Paper order/run at `2026-07-09 16:45:10+03`; `25` ordinary Child ROI orders and `22` Child Progress ROI orders.
+- Confirmed Dashboard full snapshot already contains all `144` ROI rows, with `41` rows showing activity and latest snapshot refresh `2026-07-09 16:47:14+03`.
+Next: If the user expects Live orders, enable `Live` manually for specific ROI Child rows after reviewing Paper behavior; if the rows are not visible, restart/update Dashboard or check category/filter selection.
+Notes: Read-only server diagnostics only. No database writes, source behavior changes, service restart, tests, staging, commit, or push were performed.
+Blockers: None.
+
+## Active Update 2026-07-09 Child ROI Mirror Strategies
+Goal: Add ROI-ranked clones of every BTC/ETH/SOL Child mirror strategy.
+Status: Completed
+Done:
+- Added `ChildRoiMirror` and `ChildProgressRoiMirror` strategy behaviors and generated `BTC/ETH/SOL Up or Down 5m N Child ROI` plus `N Child Progress ROI` variants for `N=1..24`.
+- Kept existing Child/Child Progress behavior unchanged: old variants still select parent by highest positive settled Paper PnL.
+- Extended Child parent lookback performance to calculate settled Paper PnL, stake, and ROI; ROI Child variants now select the enabled, unpaused same-asset non-Child parent with the highest positive ROI in the same lookback window.
+- Plain ROI Child variants still exclude parent strategy names containing `Progress`; ROI Child Progress variants include Progress parents.
+- Added PostgreSQL seed rows using id groups `8194..8199`, Dashboard categories `Child ROI` and `Child Progress ROI`, and `parent_roi_pct` assignment storage plus raw-decision JSON diagnostics.
+- Updated README/configuration reference and focused unit tests for catalog, Dashboard categories, schema, and ROI parent selection behavior.
+Next: Deploy/restart the service so schema initialization adds `parent_roi_pct` and seeds the new ROI Child rows; keep them Paper-only until reviewed.
+Notes: Verification passed: `dotnet test tests\PolyCopyTrader.Tests\PolyCopyTrader.Tests.csproj --no-restore --filter "FullyQualifiedName~ChildMirrorStrategyCatalogTests|FullyQualifiedName~BtcUpDown5mPaperStrategyProcessorTests.ProcessAsync_ChildRoiMirrorSelectsParentByHighestRoi|FullyQualifiedName~BtcUpDown5mPaperStrategyProcessorTests.StrategyIds_IncludeStandardMartinAndGammaBtcVariants|FullyQualifiedName~BtcUpDown5mPaperStrategyProcessorTests.StrategyIds_IncludeSolBinanceBpsVariantsAndNoEthBinanceBpsVariants|FullyQualifiedName~StorageTests.PostgresSchema_ContainsRequiredTables" -p:UseSharedCompilation=false /nr:false /nologo -v:minimal` passed 6/6, with one pre-existing nullable test warning. `dotnet build src\PolyCopyTrader.Service\PolyCopyTrader.Service.csproj --no-restore -p:UseSharedCompilation=false /nr:false /nologo -v:minimal` passed with 0 warnings and 0 errors. `git diff --check` on touched files passed with LF/CRLF warnings only. No production DB writes, service restart, staging, commit, or push were performed because the worktree already contains unrelated dirty/untracked changes.
+Blockers: None.
+
+## Active Update 2026-07-09 Child Negative PnL Diagnosis
+Goal: Explain why Child strategies can have negative PnL despite selecting the currently best parent strategy by lookback PnL.
+Status: Completed
+Done:
+- Inspected Child Mirror implementation and confirmed parent selection uses settled Paper PnL over the Child strategy's `1..24` hour lookback window, requires positive PnL, and refreshes assignments every 30 seconds.
+- Confirmed Child order creation copies the selected parent's next accepted Paper entry in the same market/outcome/notional/share size; it does not know the future result of that copied entry.
+- Queried server PostgreSQL `192.168.0.101:5432/polycopytrader` read-only and confirmed `144` active Child assignments, all with positive selected parent PnL (`min_parent_pnl=17.04464555`, `non_positive_assignments=0`).
+- Confirmed current settled Child results: ordinary Child rows `4568` settled / `2190` won / `2378` lost / `-928.1458` PnL / max stake `6.0093`; Child Progress rows `7961` settled / `3882` won / `4079` lost / `-10596.9010` PnL / max stake `256.0041`.
+- Found concrete examples where a Child Progress row selected a parent with strongly positive historical PnL, then copied the parent's next losing Progress stake exactly, for example `ETH Up or Down 5m 1 Child Progress` selected a parent with `+472.6706` lookback PnL and then lost `-235.0062` on the copied order.
+Next: If Child Progress should be less volatile, consider limiting eligible parents by max stake/lost counter, excluding Progress parents, or selecting by risk-adjusted recent expectancy rather than raw positive PnL.
+Notes: Read-only code and server diagnostics only. No source behavior changes, database writes, service restart, tests, staging, commit, or push were performed. One heavier JSON aggregate query timed out and was replaced by lighter read-only aggregates.
+Blockers: None.
+
+## Active Update 2026-07-09 Futures Basis Revert Deploy Check
+Goal: Verify the deployed Futures Basis Revert strategies on server PostgreSQL after user deployment.
+Status: Completed
+Done:
+- Connected read-only to server PostgreSQL `192.168.0.101:5432/polycopytrader` and confirmed the service DB target with `inet_server_addr() = 192.168.0.101/32`.
+- Confirmed `PolyCopyTrader.Service` is running in `Live` mode after deploy: started `2026-07-09 14:29:12+03`, latest heartbeat `2026-07-09 14:34:12+03`, age about `20s`, `last_error` empty.
+- Confirmed all 24 Revert Futures Basis rows exist: BTC/ETH/SOL each have thresholds `1,2,3,5,8,10,15,20`, all enabled, none paused, and `live_stakes=false`.
+- Confirmed standard Futures Basis rows still exist in parallel: 24 standard rows with the same thresholds, all Paper-only.
+- Confirmed Dashboard snapshots include all 24 Revert rows: full snapshot refreshed at `2026-07-09 14:31:58+03`; `1h`, `6h`, and `24h` recent snapshots refreshed at `2026-07-09 14:32:55+03`.
+- Confirmed first Revert Paper activity after deploy: in the last 30 minutes there were 144 Revert runs, 10 entered, 86 skipped, 48 observed; latest Paper orders were at `2026-07-09 14:29:30+03`.
+- Confirmed Revert direction is working from latest Paper orders: negative basis produced trigger `Down` and target `Up` for BTC/ETH/SOL Revert rows; all 10 latest Revert Paper orders were filled.
+- Confirmed zero Live orders for Revert Futures Basis rows.
+Next: Continue Paper monitoring through several cycles and settlements before enabling Live on any Revert Futures Basis row.
+Notes: Read-only deploy verification only. No production DB writes, service restart, source changes, tests, staging, commit, or push were performed. One recent Binance/Futures API error was a `FetchFuturesBookTicker` timeout at `2026-07-09 14:15:02+03`, before the current service start; service heartbeat `last_error` is empty.
+Blockers: None.
+
+## Active Update 2026-07-09 Futures Basis Revert Strategies
+Goal: Add Revert variants for all BTC/ETH/SOL Futures Basis 5-minute strategies.
+Status: Completed
+Done:
+- Added `FuturesBasisBpsThresholdFakPremarketRevert` strategy behavior and 24 Revert variants across BTC/ETH/SOL for thresholds `1`, `2`, `3`, `5`, `8`, `10`, `15`, and `20` bps.
+- Added names/codes/categories like `BTC Up or Down 5m 2 bps Futures Basis Revert Premarket` / `btc_up_down_5m_futures_basis_bps_2_revert_fak_premarket`.
+- Added PostgreSQL seed rows for the Revert family with separate id groups `8191`, `8192`, and `8193`, Paper enabled and `live_stakes=false` by default.
+- Updated the Futures Basis entry decision so standard variants buy with the basis direction and Revert variants invert it: positive futures basis buys Down, negative futures basis buys Up.
+- Updated Dashboard category classification, README/configuration docs, and focused tests for strategy catalog, categories, schema seed, and processor behavior.
+Next: Deploy/restart the service so schema initialization creates the new strategy rows; keep Live disabled until the Paper behavior is reviewed.
+Notes: Verification passed: `dotnet build src\PolyCopyTrader.Service\PolyCopyTrader.Service.csproj --no-restore /p:UseSharedCompilation=false -v:minimal`; focused tests for `BinanceFuturesReferenceTests`, Futures Basis Dashboard category/schema checks, and `BtcUpDown5mPaperStrategyProcessorTests.ProcessAsync_BtcFuturesBasis` all passed; `git diff --check` on touched files passed with LF/CRLF warnings only. Full `dotnet test tests\PolyCopyTrader.Tests\PolyCopyTrader.Tests.csproj --no-restore /p:UseSharedCompilation=false -v:minimal` still fails on pre-existing dirty-baseline tests that expect removed old strategy families/id groups such as Simple, More, Middle, and old `8121` ids. No staging, commit, push, production DB writes, or service restart were performed because the worktree already contains unrelated dirty/untracked changes, including in files this task builds on.
+Blockers: None.
+
+## Active Update 2026-07-09 Server Dashboard Snapshot Timing Check
+Goal: Answer when the server Dashboard snapshots were last refreshed.
+Status: Completed
+Done:
+- Queried server PostgreSQL `192.168.0.101:5432/polycopytrader` read-only and confirmed `inet_server_addr() = 192.168.0.101`.
+- Confirmed DB time was `2026-07-09 12:41:11+03`.
+- Confirmed full Dashboard strategy performance snapshot latest `refreshed_at_utc` was `2026-07-09 12:36:56.812384+03`, age about `4m14s`.
+- Confirmed recent Dashboard strategy performance snapshots (`1h`, `6h`, `24h`) latest `refreshed_at_utc` was `2026-07-09 12:37:50.249113+03`, age about `3m21s`.
+- Confirmed service heartbeat was fresh: `2026-07-09 12:40:38.110897+03`, age about `34s`, `last_error` empty.
+Next: None.
+Notes: Read-only server diagnostics only. No database writes, source behavior changes, service restart, tests, staging, commit, or push were performed.
+Blockers: None.
+
+## Active Update 2026-07-09 Server Child Bet Timing Check
+Goal: Answer when Child strategies last placed bets on the server.
+Status: Completed
+Done:
+- Queried server PostgreSQL `192.168.0.101:5432/polycopytrader` read-only and confirmed `inet_server_addr() = 192.168.0.101`.
+- Confirmed there are `144` Child strategies and all `144` are active.
+- Confirmed active Child strategies are Paper-only: `0` active live-stakes Child strategies.
+- Confirmed latest Child Paper order and entered run were both at `2026-07-09 12:35:02.94677+03`.
+- Confirmed recent Child activity: `55` Child Paper orders / entered runs in 5 minutes, `207` in 15 minutes, and `908` in 60 minutes.
+- Confirmed no Child Live orders exist in the checked windows; latest Child Live order is `null`.
+Next: None.
+Notes: Read-only server diagnostics only. No database writes, source behavior changes, service restart, tests, staging, commit, or push were performed.
+Blockers: None.
+
+## Active Update 2026-07-09 Server Bet Flow Check After Restart
+Goal: Check whether betting resumed on the server after the service restart.
+Status: Completed
+Done:
+- Corrected scope: the prior bet-flow check used local `127.0.0.1`; this check targeted server PostgreSQL `192.168.0.101:5432/polycopytrader`.
+- Confirmed server DB connection with `inet_server_addr() = 192.168.0.101`.
+- Confirmed `PolyCopyTrader.Service` is running on the server DB heartbeat: started `2026-07-09 12:32:37+03`, heartbeat `2026-07-09 12:34:38+03`, mode `Live`, `last_error` empty.
+- Confirmed Paper betting resumed: `220` paper orders / entered runs in the last 5 minutes, `756` in 15 minutes, `3330` in 60 minutes; latest Paper order/run at `2026-07-09 12:35:13+03`.
+- Confirmed no Live orders in the last 60 minutes; latest Live order was `2026-07-09 05:00:03+03`.
+- Confirmed server has `1375` strategies total, `1274` active, with `1` active live-stakes strategy: `ETH Up or Down 5m Up 50 bps Instant`.
+- Observed `27` API errors in the last 120 minutes, latest at restart time `2026-07-09 12:32:41+03`, mostly transient Binance tick-stale/no-price and WebSocket disconnect/cancel messages.
+Next: Monitor the next 5-minute server cycle if Live activity is expected; Paper betting is currently flowing.
+Notes: Read-only server diagnostics only. No database writes, source behavior changes, service restart, tests, staging, commit, or push were performed.
+Blockers: None.
+
+## Active Update 2026-07-09 Bet Flow Check
+Goal: Check whether bets are currently being created.
+Status: Completed
+Done:
+- Connected read-only to PostgreSQL from `POLYCOPYTRADER_POSTGRES_CONNECTION` targeting `127.0.0.1:5432/polycopytrader`.
+- Confirmed `PolyCopyTrader.Service` heartbeat is stale: last heartbeat was `2026-07-08 19:53:36+03`, while DB time was `2026-07-09 12:28+03`.
+- Confirmed no `paper_orders`, `live_orders`, or `strategy_market_paper_runs` were created in the last 60 minutes.
+- Confirmed latest `paper_orders` timestamp is `2026-07-08 19:50:01+03`, latest run timestamp is `2026-07-08 19:50:03+03`, and `live_orders` total is zero.
+- Confirmed no Windows service or process for `PolyCopyTrader.Service` is currently running; only `PolyCopyTrader.Dashboard` and PostgreSQL were observed.
+- Confirmed all active strategies are Paper-only in this DB: `1913` active strategies, `0` active `live_stakes` strategies.
+Next: Start/restart `PolyCopyTrader.Service` if betting should resume; Dashboard alone does not create bets.
+Notes: Read-only diagnostics only. No production DB writes, source behavior changes, service restart, tests, staging, commit, or push were performed.
+Blockers: None.
+
+## Active Update 2026-07-09 Dashboard Snapshot Cadence
+Goal: Answer how often Dashboard performance snapshots are currently refreshed.
+Status: Completed
+Done:
+- Confirmed `DashboardStrategyPerformanceSnapshotWorker` uses a 10-minute refresh cadence.
+- Confirmed snapshot refreshes are aligned to quiet slots 1 minute after 5-minute market boundaries.
+- Confirmed Dashboard UI/cache refresh is separate and currently configured at 60 seconds for general and strategy reads.
+Next: None.
+Notes: Read-only code/config inspection only. No source behavior changes, database writes, service restart, tests, staging, commit, or push were performed.
+Blockers: None.
+
+## Active Update 2026-07-08 Futures Paper Visibility Check
+Goal: Clarify why Futures Basis Paper bets appeared not to be placed.
+Status: Completed
+Done:
+- Rechecked server PostgreSQL read-only for Futures Basis Paper orders and Dashboard snapshots.
+- Confirmed actual Futures Paper orders exist: 30 total, latest at `2026-07-08 23:59:30+03`.
+- Confirmed the strategies that currently place orders are BTC `1/2/3 bps`, ETH `1/2/3 bps`, and SOL `1/2/3/5 bps`; higher thresholds are skipped because current basis is below threshold.
+- Found the visibility issue: Dashboard snapshots were stale immediately after the orders; full snapshot still showed `0` while actual `paper_orders` already had 30.
+- Confirmed the snapshot worker later caught up: full snapshot refreshed at `2026-07-09 00:01:45+03` and recent `1h` snapshot refreshed at `2026-07-09 00:03:01+03`, both showing 30 Futures Paper orders.
+Next: None for placement. If this delay is too confusing, reduce Dashboard snapshot cadence or add a "snapshot age" warning/filter in the UI.
+Notes: Read-only diagnostics only. No production DB writes, service restart, source changes, staging, commit, or push were performed.
+Blockers: None.
+
+## Active Update 2026-07-08 Futures Basis Placement Check
+Goal: Explain why Futures Basis strategy bets appear not to be placed.
+Status: Completed
+Done:
+- Checked server PostgreSQL `192.168.0.101:5432/polycopytrader` read-only for `*_up_down_5m_futures_basis_bps_*_fak_premarket` strategies.
+- Confirmed all 24 Futures Basis rows are enabled and unpaused, but all are Paper-only (`live_stakes=false`), so no Live orders are expected.
+- Confirmed Futures Paper orders are being placed: 20 Paper Filled orders in the last 2 hours, with latest entries at `2026-07-08 23:49:30+03` and `2026-07-08 23:54:30+03`.
+- Confirmed zero Futures Live orders in the last 24 hours.
+- Confirmed higher thresholds are skipped by design with `futures_basis_move_below_bps_threshold`: latest basis was about BTC `-3.34` bps, ETH `-3.26` bps, SOL `-5.84` bps, so BTC/ETH placed only `1/2/3` bps Down and SOL placed `1/2/3/5` bps Down; higher thresholds skipped.
+- Confirmed no Binance Futures feed errors in `api_errors` over the last 30 minutes and service heartbeat is running with `last_error=null`.
+Next: If Live Futures betting is desired, manually enable `live_stakes` only for reviewed Futures rows; otherwise monitor Paper PnL first.
+Notes: Read-only diagnostics only. No production DB writes, service restart, source changes, staging, commit, or push were performed.
+Blockers: None.
+
+## Active Update 2026-07-08 Child Mirror Deploy Check
+Goal: Verify deployed BTC/ETH/SOL Child Mirror strategies on server PostgreSQL after user deployment.
+Status: Completed
+Done:
+- Connected read-only to server PostgreSQL `192.168.0.101:5432/polycopytrader` using the configured environment connection, without printing secrets.
+- Confirmed `PolyCopyTrader.Service` restarted at `2026-07-08 23:45:05+03`, is `Running` in `Live` mode, has `last_error=null`, and continues updating heartbeat.
+- Confirmed schema and seed applied: `strategy_child_parent_assignments` exists with expected indexes, and all 144 `BTC/ETH/SOL Up or Down 5m N Child` / `N Child Progress` strategy rows exist, enabled, unpaused, and Paper-only (`live_stakes=false`).
+- Confirmed parent-child selection is active: 144 active assignments exist, with persistent history total 188; normal Child has zero Progress parents, Child Progress has Progress parents, no active assignment has wrong asset, Child parent, non-positive parent PnL, or invalid Progress inclusion.
+- Confirmed first live Paper mirror cycle worked at `2026-07-08 23:49:30+03`: 79 child Paper orders/runs were created from parent Paper FAK orders, and validation found zero mismatches in copied asset id, outcome, price, size, or notional.
+- Confirmed Dashboard full performance snapshot contains all 144 Child rows, and zero live orders exist for Child strategies.
+Next: Keep watching the next cycles for settlement of child runs and Dashboard recent-window population after child runs age into those windows.
+Notes: Verification was read-only except for context/history updates. No production DB writes, service restart, source behavior changes, staging, commit, or push were performed. Existing unrelated dirty/untracked local worktree changes were left untouched.
+Blockers: None.
+
+## Active Update 2026-07-08 Child Mirror Strategies
+Goal: Add BTC/ETH/SOL `CURR Up or Down 5m N Child` and `CURR Up or Down 5m N Child Progress` strategy families for `N=1..24`.
+Status: Completed
+Done:
+- Added 144 Paper-default Child strategy variants across BTC/ETH/SOL: plain Child excludes Progress parents, Child Progress can choose Progress parents, and Child variants cannot be selected as parents.
+- Added persistent parent-child assignment history table `strategy_child_parent_assignments`, seed SQL for the new strategies, repository methods for lookback PnL selection and assignment upsert, and indexes for active child/parent lookups plus child history.
+- Added post-entry-cycle parent refresh: after market-entry work and DB writes, each active Child strategy chooses the same-asset non-child configured parent with the highest positive settled PnL over its `N`-hour lookback.
+- Added paper mirroring for parent entries in the existing FAK filled and deferred opening-limit paths: child runs repeat the parent currency, direction, stake/size/notional, price data, and store raw JSON pointing to the parent run/order and assignment.
+- Updated Dashboard category classification for `BTC/ETH/SOL Up or Down 5m Child` and `BTC/ETH/SOL Up or Down 5m Child Progress`.
+Verification:
+- `dotnet build src\PolyCopyTrader.Service\PolyCopyTrader.Service.csproj --no-restore` passed with `0` warnings and `0` errors.
+- `dotnet test tests\PolyCopyTrader.Tests\PolyCopyTrader.Tests.csproj --no-restore --filter "FullyQualifiedName~ChildMirrorStrategyCatalogTests|FullyQualifiedName~StorageTests|FullyQualifiedName~BtcUpDown5mPaperStrategyProcessorTests.StrategyIds_IncludeStandardMartinAndGammaBtcVariants|FullyQualifiedName~BtcUpDown5mPaperStrategyProcessorTests.StrategyIds_IncludeSolBinanceBpsVariantsAndNoEthBinanceBpsVariants"` passed `49/49` with one existing nullable test warning.
+- Full solution build was not conclusive because the running Dashboard/Visual Studio processes lock Dashboard output DLLs (`devenv.exe`, `PolyCopyTrader.Dashboard.exe`); affected server/test projects compile cleanly.
+Next: Deploy/restart the service so schema initialization seeds the 144 Child rows and starts maintaining assignment history. Keep Child rows Paper-only until the mirrored behavior is observed.
+Notes: Full test project `dotnet test tests\PolyCopyTrader.Tests\PolyCopyTrader.Tests.csproj --no-restore --no-build` currently reports `625` passed and `118` failed; failures are tied to pre-existing dirty-baseline tests that still look for removed/retired old strategy families such as More/Middle/Simple/PreviousScore variants. Existing unrelated dirty/untracked auto-redeem, Binance Futures Basis, Simple cleanup, and output artifact changes were left untouched. No production DB writes, service restart, staging, commit, or push were performed.
+Blockers: None.
+
+## Active Update 2026-07-08 Remove Simple Strategies
+Goal: Remove all BTC/ETH/SOL `Simple` strategies and purge their local/server history.
+Status: Completed
+Done:
+- Removed Simple variants from the active `StrategyIds` BTC/ETH/SOL catalogs and removed the dedicated `Simple` Dashboard display category; old Simple ids/codes remain only as retired constants/test fixtures and cleanup identifiers.
+- Removed Simple seed SQL from `PostgresSchema` and added migration `20260708_remove_simple_strategies` to delete the six retired strategy rows plus related paper/live orders, fills, runs, signals, positions, settlements, Dashboard snapshots, dry-run/date-dependent/shadow rows.
+- Updated README/configuration docs and tests so Simple rows are documented as removed and no longer expected in the active catalog/seed.
+- Applied cleanup locally: removed 6 strategies, 9 paper orders, 9 paper fills, 148 strategy runs, 9 signals, 9 positions, 5 settlements, 6 snapshots, and 18 recent snapshots.
+- Applied cleanup on server `192.168.0.101`: first delete attempt rolled back on FK because the running old service created/left a Simple paper row during cleanup; Simple rows were disabled/paused, then cleanup removed 6 strategies, 4093 paper orders, 4005 paper fills, 10079 strategy runs, 585 live orders, 11437 signals, 3508 positions, 4002 settlements, 6 snapshots, and 18 recent snapshots. A follow-up cleanup removed 4 late positions, 3 late settlements, and 6 regenerated Dashboard snapshots.
+- Final server verification showed zero remaining rows for the six Simple ids/codes/wallets across strategies, paper/live orders, runs, signals, positions, settlements, Dashboard snapshots, shadow, dry-run, date-dependent, and diff-state tables.
+Verification:
+- `dotnet build src\PolyCopyTrader.Service\PolyCopyTrader.Service.csproj --no-restore -p:UseSharedCompilation=false /nr:false /nologo -v:minimal` passed with existing nullable warnings.
+- `dotnet test tests\PolyCopyTrader.Tests\PolyCopyTrader.Tests.csproj --no-restore --filter "FullyQualifiedName~BtcUpDown5mPaperStrategyProcessorTests.StrategyIds|FullyQualifiedName~StrategyDisplayCategoryTests|FullyQualifiedName~BtcUpDown5mInstantOpeningLimitPriceTests|FullyQualifiedName~StorageTests" -p:UseSharedCompilation=false /nr:false /nologo -v:minimal` passed `133/133`.
+- `git diff --check` passed with LF/CRLF warnings only.
+Next: Deploy/restart the server with the updated code so the running service no longer has the retired Simple variants in memory.
+Notes: Existing unrelated dirty/untracked auto-redeem and Futures Basis worktree changes were left untouched. No staging, commit, or push were performed.
+Blockers: None.
+
+## Active Update 2026-07-08 Binance Futures Basis Premarket Implementation
+Goal: Implement Paper-default BTC/ETH/SOL 5-minute Up/Down strategies that compare current spot/reference price against Binance USD-M Futures book-ticker mid.
+Status: Completed
+Done:
+- Added `BinanceFuturesReference` configuration and a background public market-data service that polls Binance USD-M Futures `GET /fapi/v1/ticker/bookTicker` for configured BTC/ETH/SOL `<asset>USDT` symbols, parses bid/ask/time, computes mid, stores the latest quote in memory, and records explicit API errors.
+- Added strategy behavior `FuturesBasisBpsThresholdFakPremarket`, `BinanceFuturesReferencePricePoint`, and BTC/ETH/SOL strategy variants named `CURR Up or Down 5m N bps Futures Basis Premarket` for `N = 1, 2, 3, 5, 8, 10, 15, 20`.
+- Strategy rule: 30 seconds before 5-minute market open, read current spot/reference price and futures mid; compute `(futuresMid - spotPrice) / spotPrice * 10000`; buy `Up` when basis is at least `N` bps, buy `Down` when basis is at most `-N` bps, otherwise skip with `futures_basis_move_below_bps_threshold`.
+- Integrated the variants into the existing opening-limit FAK Paper/Live-shadow entry path, Dashboard categories, config loading/validation, appsettings, PostgreSQL schema seed, README, and configuration reference.
+- Seeded runtime `Live` disabled by default for the new rows; Paper can run when the strategy row is enabled.
+Verification:
+- `dotnet build src\PolyCopyTrader.Service\PolyCopyTrader.Service.csproj --no-restore -p:UseSharedCompilation=false /nr:false -maxcpucount:1` passed.
+- `dotnet test tests\PolyCopyTrader.Tests\PolyCopyTrader.Tests.csproj --no-restore --filter "FullyQualifiedName~BinanceFuturesReferenceTests|FullyQualifiedName~ConfigurationTests|FullyQualifiedName~StorageTests" -p:UseSharedCompilation=false /nr:false` passed `93/93`.
+- `git diff --check` returned only existing LF/CRLF warnings.
+Next: Deploy/restart when ready, then monitor the new Futures Basis categories in Dashboard and backtest by asset/hour/threshold before enabling Live on any row.
+Notes: No Binance keys are used; the feed is public market data only. An initial parallel build/test run hit a transient service DLL file lock because both commands compiled the same target; the repeated standalone build passed. Existing unrelated dirty/untracked auto-redeem and output artifacts remain untouched. No staging, commit, push, service restart, production DB writes, or live order changes were performed.
+Blockers: None.
+
 ## Active Update 2026-07-08 Dashboard Big Settles Threshold
 Goal: Change Dashboard `Big settles` checkbox filtering from about `100` settled bets to `1000+` settled bets.
 Status: Completed
