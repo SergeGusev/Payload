@@ -1,3 +1,16 @@
+## Active Update 2026-07-12 Dashboard Recent Snapshot Timeout
+Goal: Diagnose and harden Dashboard refresh after the screenshot showed an Npgsql read timeout in recent strategy performance snapshots.
+Status: Completed
+Done:
+- Resolved the screenshot stack to `DashboardDataService.RefreshAsync` -> `DashboardDataService.LoadStrategiesOnlyAsync` -> `DashboardDataService.GetStrategyRecentPerformanceAsync` -> `PostgresDashboardSnapshotRepository.GetStrategyRecentPerformanceSnapshotAsync`, failing with `NpgsqlException` / `TimeoutException: Timeout during reading attempt`.
+- Checked server PostgreSQL `192.168.0.101:5432/polycopytrader` read-only during the task: the exact recent snapshot query returned `4674` rows in about `109 ms`, while `dashboard_strategy_recent_performance_snapshots` occupied about `476 MB` for `4674` rows. No production data was mutated.
+- Updated `DashboardDataService` so a non-cancellation failure while reading recent strategy performance snapshots no longer aborts the whole Dashboard refresh: it now uses cached recent rows when available, otherwise returns an empty recent-strategy list and adds a warning diagnostic.
+- Applied the same warning path to full Dashboard load and `StrategiesOnlyMode`; strategy performance snapshot reads remain on the normal precomputed snapshot path.
+- Added a focused regression test covering the non-fatal recent snapshot failure path.
+Next: Consider controlled PostgreSQL maintenance for the bloated recent snapshot table after explicit approval; do not run locking maintenance implicitly.
+Notes: Verification passed: `dotnet build src\PolyCopyTrader.Dashboard\PolyCopyTrader.Dashboard.csproj --no-restore -p:UseSharedCompilation=false -p:OutDir="D:\My\Business\PolyMarket\artifacts\dashboard-timeout-build\" /nr:false /nologo -v:minimal` with 0 errors and existing nullable warnings; `dotnet test tests\PolyCopyTrader.Tests\PolyCopyTrader.Tests.csproj --no-restore --filter "FullyQualifiedName~DashboardSnapshotTests" -p:UseSharedCompilation=false /nr:false /nologo -v:minimal` passed 9/9; `git diff --check` passed with only LF/CRLF warnings.
+Blockers: None.
+
 ## Active Update 2026-07-12 BTC Diff Down Progress 1 PnL Chart
 Goal: Build and display the cumulative Paper PnL chart for `BTC Up or Down 5m 1 Diff Down Progress`, including maximum stake and maximum drawdown.
 Status: Completed

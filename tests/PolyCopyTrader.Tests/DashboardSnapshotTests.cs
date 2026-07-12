@@ -61,6 +61,23 @@ public sealed class DashboardSnapshotTests
     }
 
     [Fact]
+    public void DashboardDataService_StrategyRecentPerformanceSnapshotFailuresAreNonFatal()
+    {
+        var source = ReadRepositorySource("src", "PolyCopyTrader.Dashboard", "Services", "DashboardDataService.cs");
+        var start = source.IndexOf("private async Task<IReadOnlyList<StrategyRecentPerformance>> GetStrategyRecentPerformanceAsync", StringComparison.Ordinal);
+        Assert.True(start >= 0);
+
+        var end = source.IndexOf("private async Task<IReadOnlyList<T>> LoadOptionalReportAsync", start, StringComparison.Ordinal);
+        Assert.True(end > start);
+
+        var method = source[start..end];
+        Assert.Contains("catch (Exception ex) when (!cancellationToken.IsCancellationRequested)", method, StringComparison.Ordinal);
+        Assert.Contains("Recent strategy performance snapshot failed", method, StringComparison.Ordinal);
+        Assert.Contains("AddStrategyRecentPerformanceWarning(diagnostics)", method, StringComparison.Ordinal);
+        Assert.Contains("cachedStrategyRecentPerformance ?? []", method, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void PostgresDashboardSnapshotRepository_StrategyPerformanceReadIsFlatSelect()
     {
         var source = ReadRepositorySource("src", "PolyCopyTrader.Storage", "PostgresDashboardSnapshotRepository.cs");

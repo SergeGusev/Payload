@@ -21,6 +21,7 @@ public sealed class DashboardDataService(
     private DateTimeOffset cachedStrategyPerformanceAtUtc = DateTimeOffset.MinValue;
     private IReadOnlyList<StrategyRecentPerformance>? cachedStrategyRecentPerformance;
     private DateTimeOffset cachedStrategyRecentPerformanceAtUtc = DateTimeOffset.MinValue;
+    private string? strategyRecentPerformanceWarning;
 
     public async Task<DashboardSnapshot> LoadAsync(
         Guid? paperOrdersStrategyId = null,
@@ -72,8 +73,9 @@ public sealed class DashboardDataService(
         var openPaperOrders = await repository.GetOpenPaperOrdersAsync(cancellationToken);
         var paperPositions = await repository.GetPaperPositionsAsync(cancellationToken);
         var paperCopiedTraderPerformance = await repository.GetPaperCopiedTraderPerformanceAsync(250, cancellationToken);
+        var dashboardDiagnostics = new List<DiagnosticRow>();
         var strategyPerformance = await GetStrategyPerformanceAsync(cancellationToken);
-        var strategyRecentPerformance = await GetStrategyRecentPerformanceAsync(cancellationToken);
+        var strategyRecentPerformance = await GetStrategyRecentPerformanceAsync(dashboardDiagnostics, cancellationToken);
         var strategyNamesById = strategyPerformance.ToDictionary(
             item => StrategyIds.Normalize(item.StrategyId),
             item => item.Name);
@@ -94,7 +96,7 @@ public sealed class DashboardDataService(
             item => item.AssetId,
             StringComparer.OrdinalIgnoreCase);
         var reportLimit = configuration.Analytics.DashboardReportLimit;
-        var optionalReportDiagnostics = new List<DiagnosticRow>();
+        var optionalReportDiagnostics = dashboardDiagnostics;
         var dailyReports = await LoadOptionalReportAsync(
             "Daily reports",
             token => repository.GetDailyReportsAsync(reportLimit, token),
@@ -205,8 +207,9 @@ public sealed class DashboardDataService(
             heartbeats,
             databaseNowUtc,
             GetServiceHeartbeatStaleAfter());
+        var dashboardDiagnostics = new List<DiagnosticRow>();
         var strategyPerformance = await GetStrategyPerformanceAsync(cancellationToken);
-        var strategyRecentPerformance = await GetStrategyRecentPerformanceAsync(cancellationToken);
+        var strategyRecentPerformance = await GetStrategyRecentPerformanceAsync(dashboardDiagnostics, cancellationToken);
         var strategyNamesById = strategyPerformance.ToDictionary(
             item => StrategyIds.Normalize(item.StrategyId),
             item => item.Name);
@@ -226,6 +229,7 @@ public sealed class DashboardDataService(
             serviceAvailability,
             strategyPerformance,
             strategyRecentPerformance,
+            dashboardDiagnostics,
             controlStatus,
             controlStatusError);
 
@@ -384,6 +388,7 @@ public sealed class DashboardDataService(
     }
 
     private async Task<IReadOnlyList<StrategyRecentPerformance>> GetStrategyRecentPerformanceAsync(
+        List<DiagnosticRow> diagnostics,
         CancellationToken cancellationToken)
     {
         var nowUtc = DateTimeOffset.UtcNow;
@@ -391,12 +396,27 @@ public sealed class DashboardDataService(
         if (cachedStrategyRecentPerformance is not null &&
             nowUtc - cachedStrategyRecentPerformanceAtUtc < refreshInterval)
         {
+            AddStrategyRecentPerformanceWarning(diagnostics);
             return cachedStrategyRecentPerformance;
         }
 
-        cachedStrategyRecentPerformance = await dashboardSnapshots.GetStrategyRecentPerformanceSnapshotAsync(StrategyDashboardFetchLimit, cancellationToken);
-        cachedStrategyRecentPerformanceAtUtc = nowUtc;
-        return cachedStrategyRecentPerformance;
+        try
+        {
+            cachedStrategyRecentPerformance = await dashboardSnapshots.GetStrategyRecentPerformanceSnapshotAsync(
+                StrategyDashboardFetchLimit,
+                cancellationToken);
+            cachedStrategyRecentPerformanceAtUtc = nowUtc;
+            strategyRecentPerformanceWarning = null;
+            return cachedStrategyRecentPerformance;
+        }
+        catch (Exception ex) when (!cancellationToken.IsCancellationRequested)
+        {
+            strategyRecentPerformanceWarning = cachedStrategyRecentPerformance is { Count: > 0 }
+                ? $"Recent strategy performance snapshot failed; using cached rows from {FormatDate(cachedStrategyRecentPerformanceAtUtc)}. {FormatOptionalReportException(ex)}"
+                : $"Recent strategy performance snapshot failed; recent strategy tabs are temporarily empty. {FormatOptionalReportException(ex)}";
+            AddStrategyRecentPerformanceWarning(diagnostics);
+            return cachedStrategyRecentPerformance ?? [];
+        }
     }
 
     private async Task<IReadOnlyList<T>> LoadOptionalReportAsync<T>(
@@ -427,6 +447,17 @@ public sealed class DashboardDataService(
         return $"{exception.GetType().Name}: {exception.Message}";
     }
 
+    private void AddStrategyRecentPerformanceWarning(List<DiagnosticRow> diagnostics)
+    {
+        if (!string.IsNullOrWhiteSpace(strategyRecentPerformanceWarning))
+        {
+            diagnostics.Add(new DiagnosticRow(
+                "Recent strategy performance",
+                strategyRecentPerformanceWarning,
+                "Warning"));
+        }
+    }
+
     private IReadOnlyList<OverviewMetric> BuildStrategyOnlyOverview(
         ServiceAvailability serviceAvailability,
         IReadOnlyList<StrategyPerformance> strategies,
@@ -451,6 +482,7 @@ public sealed class DashboardDataService(
         ServiceAvailability serviceAvailability,
         IReadOnlyList<StrategyPerformance> strategies,
         IReadOnlyList<StrategyRecentPerformance> recentStrategies,
+        IReadOnlyList<DiagnosticRow> dashboardDiagnostics,
         ControlStatusResponse? controlStatus,
         string? controlStatusError)
     {
@@ -465,8 +497,8 @@ public sealed class DashboardDataService(
             ? string.IsNullOrWhiteSpace(controlStatusError) ? "Not checked during refresh" : controlStatusError
             : $"{controlStatus.State}: {controlStatus.LastError}";
 
-        return
-        [
+        var rows = new List<DiagnosticRow>
+        {
             new DiagnosticRow(
                 "Dashboard scope",
                 "StrategiesOnlyMode=True; loaded strategies plus recent Paper/Live orders; skipped watchlist, trader discovery, on-chain, signals, market data, reports, risk, logs and auth readiness queries.",
@@ -480,7 +512,10 @@ public sealed class DashboardDataService(
                 strategies.Count == 0 ? "Warning" : "OK"),
             new DiagnosticRow("Recent strategy windows", windows.Length == 0 ? "none" : string.Join("; ", windows), recentStrategies.Count == 0 ? "Warning" : "OK"),
             new DiagnosticRow("IPC controls", ipcStatus, "Info")
-        ];
+        };
+
+        rows.AddRange(dashboardDiagnostics);
+        return rows;
     }
 
     private IReadOnlyList<OverviewMetric> BuildOverview(

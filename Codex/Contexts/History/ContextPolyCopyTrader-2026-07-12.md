@@ -94,3 +94,10 @@ Request:
 
 Result:
 Resolved exactly one server strategy row: `b7c50005-0000-4000-8155-000000000001` / `btc_up_down_5m_diff_1_down_progress`; it is enabled, unpaused, and has zero Live orders. Exported 1053 settled Paper rows from server PostgreSQL `192.168.0.101:5432/polycopytrader` covering `2026-07-03 09:54:43.278393 UTC` through `2026-07-12 18:07:46.203679 UTC`. Server SQL and independent local CSV calculations matched: wins/losses/flat `553/500/0`, total stake `$29,294.49600086`, total Paper PnL `+$1,386.19947654`, ROI `4.7319451288709841%`, maximum stake `$55.00440090`, maximum drawdown `$756.40794092` from `2026-07-06 18:42:10.274425 UTC` peak to `2026-07-12 06:34:35.333244 UTC` trough. Rendered and visually inspected PNG `outputs/btc-1-diff-down-progress-paper-pnl-chart-2026-07-12/paper-pnl-chart.png`; saved CSV, SQL, server aggregate, status counts, and summary in the same ignored output directory. Production access was read-only.
+
+## 2026-07-12T18:48:22.2055995+00:00
+Request:
+Screenshot of a Dashboard failure showing `Npgsql.NpgsqlException: Exception while reading from stream` with inner `System.TimeoutException: Timeout during reading attempt` in `PostgresDashboardSnapshotRepository.GetStrategyRecentPerformanceSnapshotAsync`.
+
+Result:
+Resolved the failing path to the Dashboard recent strategy performance snapshot read. Server PostgreSQL was checked read-only during the task: the exact recent snapshot query returned 4674 rows in about 109 ms, while `dashboard_strategy_recent_performance_snapshots` occupied about 476 MB for 4674 rows. Updated `DashboardDataService` so non-cancellation failures in recent strategy snapshot loading no longer abort the whole Dashboard refresh: it now uses cached rows when available, otherwise returns an empty recent-strategy list, and adds a warning diagnostic in full and StrategiesOnly modes. Added a focused regression test. Verification passed: Dashboard build had 0 errors with existing nullable warnings; `DashboardSnapshotTests` passed 9/9; `git diff --check` passed with only LF/CRLF warnings. No production data was mutated.
