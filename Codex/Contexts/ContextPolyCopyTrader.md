@@ -1,3 +1,18 @@
+## Active Update 2026-07-12 Server PostgreSQL Backup Completed
+Goal: Create a PostgreSQL backup for the server database.
+Status: Completed
+Done:
+- Created a verified logical PostgreSQL backup from server `192.168.0.101:5432`, database `polycopytrader`, using Docker image `postgres:17.10-alpine` plus Alpine `postgresql18-client`; the effective `pg_dump` version was `18.4`.
+- Final successful backup command used directory format with moderate parallelism and no compression: `pg_dump -Fd -j 2 -Z 0`.
+- Successful backup artifact is `outputs/postgres-backups/polycopytrader_server_20260712t140409z.dir`; it contains `106` files and is `33.147 GB` / `35,591,613,355` bytes after copying from Docker to the host.
+- `pg_dump` finished with Docker state `ExitCode=0` at `2026-07-12T17:40:24.0143597Z`, and the copied exit file contains `0`.
+- Verified the copied archive with PostgreSQL 18 `pg_restore -l`; list file `outputs/postgres-backups/polycopytrader_server_20260712t140409z.dir.pg_restore.list` has `625` lines, reports database `polycopytrader`, format `DIRECTORY`, no compression, and `TOC Entries: 614`.
+- Created SHA256 manifest `outputs/postgres-backups/polycopytrader_server_20260712t140409z.dir.sha256` with `109` entries covering the `106` archive files plus exit/log/restore-list files.
+- Removed the stopped Docker backup container `poly-pg-backup-20260712t140409z` after the host copy, restore-list verification, and SHA256 manifest were complete.
+Next: None.
+Notes: Earlier attempts were stopped or failed before the final directory-format backup: one compressed custom dump failed when the server closed the connection, one compressed custom dump was too slow, one bind-mount custom dump was too slow, and one Docker-filesystem custom dump was superseded by directory format. Physical `pg_basebackup` was not available because the server rejected replication connections from `192.168.0.100` with `no pg_hba.conf entry for replication connection`. Backup artifacts are under ignored `outputs/postgres-backups/`; no production data was mutated and no secrets were printed.
+Blockers: None.
+
 ## Active Update 2026-07-12 Server PostgreSQL Backup Attempt
 Goal: Create a PostgreSQL logical backup for the server database.
 Status: Blocked

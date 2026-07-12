@@ -80,3 +80,10 @@ Request:
 
 Result:
 Backup was attempted but not created. Verified the server database target as `192.168.0.101:5432/polycopytrader` and initially connected directly from the host, confirming PostgreSQL `18.3` and database size about `39 GB`. Local Windows `pg_dump` is only `17.5` and failed a schema-only test with a server-version mismatch. WinRM on the server is reachable but current Windows credentials cannot authenticate for server-local `pg_dump`. Tried to obtain a PostgreSQL 18 client: Scoop package install failed hash/extraction checks and was cleaned up; Docker is available and can provide `/usr/libexec/postgresql18/pg_dump` version `18.4` via `postgres:17.10-alpine` plus `postgresql18-client`. The attempt is blocked because the server later became unreachable from this host: `ping` timed out, `Test-NetConnection 192.168.0.101 -Port 5432` was false, and direct `psql` timed out. No backup file was produced.
+
+## 2026-07-12T17:51:32.9703572Z
+Request:
+Продолжай
+
+Result:
+Continued the server PostgreSQL backup after `192.168.0.101:5432` became reachable. Created a successful logical backup of database `polycopytrader` with PostgreSQL 18 `pg_dump` from Docker, using directory format `pg_dump -Fd -j 2 -Z 0`. The copied host artifact is `outputs/postgres-backups/polycopytrader_server_20260712t140409z.dir`, with 106 files and size `33.147 GB` / `35,591,613,355` bytes. Docker state and copied exit file both show exit code `0`; `pg_restore -l` read the copied archive and reported format `DIRECTORY`, database `polycopytrader`, no compression, and `TOC Entries: 614`. Created SHA256 manifest `outputs/postgres-backups/polycopytrader_server_20260712t140409z.dir.sha256` with 109 entries and removed the backup container afterward. Physical `pg_basebackup` remains unavailable until `pg_hba.conf` permits replication from `192.168.0.100`; the completed logical backup does not depend on that.
