@@ -1,3 +1,17 @@
+## Active Update 2026-07-13 ETH Down3 Today PnL With ETHUSDT Overlay
+Goal: Repeat the cumulative Paper PnL plus ETHUSDT chart for the current UTC day only.
+Status: Completed
+Done:
+- Resolved the exact production strategy as ID `b7c50005-0000-4000-8140-000000000103`, name `ETH Up or Down 5m Down 3 bps Reference Average Premarket`, code `eth_up_down_5m_down_reference_average_bps_3_fak_premarket`; it remains enabled.
+- Fixed the read-only server cutoff at `2026-07-13 18:27:56.278598 UTC` and exported today's settled Paper runs from `00:00 UTC` through that cutoff. The export contains `215` rows from `00:05:22.576091` through `18:25:25.020593 UTC`.
+- Independently matched the ordered export and server-side SQL aggregate: `97` wins, `118` losses, stake `$1,291.99950010`, PnL `-$163.19343456`, ROI `-12.63107567%`, maximum stake `$6.00930005`, and maximum drawdown `$185.87965707` from row `10` through row `215`.
+- Fetched and continuity-checked all `1,107` closed Binance Spot ETHUSDT one-minute candles from `2026-07-13 00:00` through `18:26 UTC`. ETHUSDT moved from `$1,804.85` to `$1,758.69` (`-2.55755326%`), with observed low/high `$1,750.20/$1,846.00`.
+- Independently compared all `1,107` server-persisted ETHUSDT WebSocket minute-last samples with the Binance candle-minute keys: `1,107` matched, `0` unmatched, and mean absolute close difference was `$0.19763324`.
+- Rendered and visually inspected the `1800x920` PNG at `outputs/eth-down3-bps-reference-average-vs-ethusdt-today-2026-07-13/paper-pnl-vs-ethusdt-today-chart.png`. Corrected the ignored report renderer's final-label placement and confirmed the PnL and ETH labels no longer overlap.
+Next: None.
+Notes: Frozen SQL, CSV inputs, validation summaries, Binance fetch script, and PNG are under the ignored output directory. Production access was read-only with timeouts; no database row, strategy state, service process, product source, or deployment changed. No product build/test was required.
+Blockers: None.
+
 ## Active Update 2026-07-13 ETH Down3 Predictive Drop Signal
 Goal: Test whether a sharp ETH decline predicts that this strategy's next bet or next several bets will lose.
 Status: Completed
