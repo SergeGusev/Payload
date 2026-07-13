@@ -138,3 +138,21 @@ Request:
 
 Result:
 Confirmed with a fresh read-only production query that ten seconds is the target persisted sampling interval, not a guarantee that every bucket exists. Over the preceding ten minutes, median intervals were `10.006s` for BTC and `10.008s` for ETH/SOL. BTC had all `60` expected rows; ETH and SOL each had `59`, with one approximately `20s` gap. Missing buckets are not backfilled. No production state changed.
+
+## 2026-07-13T20:12:46.0811885+00:00
+Request:
+Делаем три новых категории стратегий, по одной для каждой из валют - Currency Up or Down 5m H N bps Absolute Premarket
+
+1. H - это количество часов, от 1 до 24
+2. N - bps: от 1 до 30, но не подряд, а с постоянно увеличивающимся интервалом.
+
+Суть стратегий: - берётся максимальное значение курса валюты за последних H часов и стравнивается с текущим. Если текущий курс превышает максимум на N и больше bps - ставим Down.
+
+Аналогично берём минимум и сравниваем с текущим, если текущий меньше на N и больше bps - ставим Up.
+
+То есть похоже на Average стратегии, но берём не среднее, а max/min.
+
+Ставки в режиме премаркет, за 30 секунд.
+
+Result:
+Inspected the exact local catalog, Reference Average decision/execution path, ten-second history cache, PostgreSQL strategy seeds, and Dashboard category parser. Implementation was not started because the requested increasing-gap `N` range is not unique, and the requirement does not state the H-window completeness/current-price boundary or whether orders must use the existing Reference Average FAK taker path and default Live state. Requested the smallest set of confirmations needed before changing financial behavior.

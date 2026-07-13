@@ -1,3 +1,14 @@
+## Active Update 2026-07-13 Absolute Premarket Strategy Grid
+Goal: Add BTC/ETH/SOL `H N bps Absolute Premarket` strategy families using H-hour historical extrema and a fresh Binance decision price 30 seconds before market open.
+Status: In Progress
+Done:
+- Inspected the current Reference Average catalog, behavior dispatch, FAK premarket execution path, strategy seeding SQL, rolling ten-second price cache, and Dashboard category parser.
+- Established that the requested `N` wording does not define a unique sequence. Both `1,2,4,7,11,16,22,29` (gaps increase by one) and `1,2,4,8,16,30` (multiplicative spacing with a terminal cap) satisfy an increasing-gap interpretation, while the repository also has a separate Futures sequence `1,2,3,5,8,10,15,20`.
+- Identified two additional behavior choices that affect money and cannot be inferred safely: exact H-window completeness/current-price exclusion and whether execution must copy Reference Average's FAK taker/worst-price-cap path with Paper enabled and Live disabled by default.
+Next: Obtain the user's exact contracts, then implement catalog IDs/codes/names/categories, extrema cache/provider, processor decision and diagnostics, PostgreSQL seeds, documentation, and focused tests.
+Notes: No product source, database row, service process, or deployment was changed. Worktree contained only this context/history update.
+Blockers: Exact `N` values, range-completeness contract, and order-execution/default-enable contract require user confirmation.
+
 ## Active Update 2026-07-13 Ten-Second Price Sampling Clarification
 Goal: Confirm whether persisted currency reference prices form a ten-second series.
 Status: Completed
