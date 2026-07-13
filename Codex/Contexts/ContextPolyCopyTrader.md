@@ -1,3 +1,20 @@
+## Active Update 2026-07-13 ETH Down3 Regime PnL And ETH Charts
+Goal: Render separate Paper PnL plus ETHUSDT charts for every independent prolonged post-drop regime, from the measured fall through ETH recovery or the current settled cutoff.
+Status: Completed
+Done:
+- Refreshed the read-only production boundary at `2026-07-13 19:08:44.662420 UTC`; the latest settled strategy market ended at `19:00 UTC`, and the settled-run export increased from `2,137` to `2,141` rows.
+- Fetched and continuity-checked `15,201` official Binance Spot ETHUSDT one-minute candles from `2026-07-03 05:40` through `2026-07-13 19:00 UTC`.
+- Rendered five separate `1800x980` PNG charts under `outputs/eth-down3-full-history-post-drop-regimes-2026-07-13/charts/`: prior loss analogue, strongest prior analogue, profitable counterexample, partial loss analogue, and the current unrecovered episode.
+- Each chart starts at the beginning of the measured 60-minute shock and ends at the first ETH close at or above its pre-shock close. The current chart ends at the latest settled cutoff because ETH had not recovered by `19:00 UTC`.
+- To isolate post-shock behavior and avoid settlement-write lag, chart PnL starts at zero at `shock_end_utc`, includes only runs entered after that timestamp, and attributes every realized result to `market_end_utc`. The red band marks the 60-minute shock; the gray band marks maximum PnL drawdown; the pre-shock ETH level and recovery/cutoff are explicitly marked.
+- The current chart now contains `182` post-shock runs (`84W/98L`), PnL `-$111.62584943`, minimum from start `-$141.96817647`, and max drawdown `$144.47261700`; ETH closed at `$1,764.97` at the chart boundary versus pre-shock `$1,814.66`.
+- Independently reproduced all five chart aggregates with production PostgreSQL. Every one of the `1,255/1,255` included runs selected `Up` and matched Gamma settlement PnL.
+- Independently compared `15,078` server-persisted ETHUSDT minute samples with the official Binance candles: all server minute keys matched, zero were unmatched, and mean absolute close difference was `$0.14394283`.
+- Visually inspected all five full charts and additional split QA renders. Titles, axes, shock/recovery markers, minima, endpoint values, and labels were visible without overlap or clipping.
+Next: None.
+Notes: The renderer, frozen SQL, source CSVs, chart summaries, validation reports, final PNGs, and QA renders are in the ignored analysis directory. Production access was read-only; no database row, strategy state, service process, source behavior, or deployment changed. No product build/test was required.
+Blockers: None.
+
 ## Active Update 2026-07-13 ETH Down3 Full-History Post-Drop Regimes
 Goal: Search the complete Paper history of `ETH Up or Down 5m Down 3 bps Reference Average Premarket` for episodes resembling the current sharp ETH drop followed by sustained low prices and declining strategy PnL.
 Status: Completed
