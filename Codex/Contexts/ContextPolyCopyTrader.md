@@ -1,3 +1,19 @@
+## Active Update 2026-07-13 ETH Rebound Versus PnL Attribution
+Goal: Verify whether the profitable post-drop counterexample earned because ETH recovered while the other regimes stayed near their post-shock levels.
+Status: Completed
+Done:
+- Reused the five frozen regime charts, `2,141` settled production Paper rows, and `15,201` contiguous official Binance ETHUSDT one-minute candles through `2026-07-13 19:00 UTC`.
+- Calculated exact post-shock `1h/3h/6h/12h/24h` horizons and `128` complete hourly phases. PnL includes only runs entered after shock end and is attributed to market end.
+- Confirmed the user's main visual observation for the profitable counterexample: ETH recovered `12.4734%`, `17.6245%`, `22.2222%`, and `36.2708%` of the original shock after `1/3/6/12h`, while PnL rose to `+$10.38711583`, `+$36.14858562`, `+$47.78964166`, and `+$91.22995137`. PnL became positive and never fell below zero again from `2026-07-10 15:20 UTC`, only 28 minutes after shock end.
+- The counterexample finished `91W/64L`; wins contributed `+$513.15469112`, losses `-$384.59520001`, and net PnL was `+$128.55949111`. Its hourly ETH-change/PnL-change correlation was `0.66495498`; ETH-rising complete hours contributed `+$135.92968739` versus `-$13.37949632` in ETH-falling hours.
+- Refuted the stronger claim that all other regimes simply stayed flat. The partial analogue recovered `70.7074%` of its shock by `3h` and PnL reached `+$42.57586521`; ETH then pulled back and PnL fell to `-$12.67166974` at `6h`, before both recovered again. The strongest prior analogue eventually moved from a `-$143.97232858` PnL trough to `+$83.49764287` as ETH recovered. Their hourly ETH/PnL correlations were `0.81088002` and `0.65853493`.
+- Established that aggregate price recovery alone is insufficient. At `6h`, the profitable counterexample and current episode had recovered almost the same fraction of their shocks (`22.2222%` and `22.4109%`), but the counterexample was `33W/23L`, `+$47.78964166`, whereas the current episode was `34W/36L`, `-$21.03931609`. At `12h`, the current ETH price was back to only `0.6508%` recovery and PnL was `-$62.91263605`, so its rebound was temporary rather than sustained.
+- Verified the direct mechanism: every included strategy position selected `Up`, so authoritative Gamma `Up` settlements create wins. Aggregate ETH recovery is contemporaneous supporting evidence, but exact PnL is determined by the sequence of binary five-minute Gamma outcomes and entry prices. Official Binance five-minute direction agreed with Gamma direction on `94.8052%` of non-flat counterexample markets.
+- Independently matched all five six-hour run counts, W/L, PnL, selected outcomes, and Gamma PnL with direct production SQL. Server-persisted Binance samples independently agreed with official candles on the sign of six-hour recovery in every case; maximum recovery-fraction difference was `2.75415980` percentage points.
+Next: If requested, test a strategy rule based on sustained short-horizon direction or Up/Down streak structure; do not use aggregate rebound level alone.
+Notes: Reproducible scripts, SQL, horizon/hourly CSVs, direction alignment, and verification reports are under ignored directory `outputs/eth-down3-full-history-post-drop-regimes-2026-07-13/`. Production remained read-only and unchanged; no product build/test was required.
+Blockers: None.
+
 ## Active Update 2026-07-13 ETH Down3 Regime PnL And ETH Charts
 Goal: Render separate Paper PnL plus ETHUSDT charts for every independent prolonged post-drop regime, from the measured fall through ETH recovery or the current settled cutoff.
 Status: Completed
