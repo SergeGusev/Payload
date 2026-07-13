@@ -1,3 +1,19 @@
+## Active Update 2026-07-13 ETH Down3 PnL Lag Analysis
+Goal: Confirm or refute whether the final cumulative Paper PnL decline visually lagged the ETH decline.
+Status: Completed
+Done:
+- Kept the exact prior graph scope: production strategy `b7c50005-0000-4000-8140-000000000103`, fixed cutoff `2026-07-13 17:24:33.009607 UTC`, `2,120` settled Paper runs, and official Binance Spot ETHUSDT one-minute candles.
+- Verified that the graph timestamps PnL at `settled_at_utc` and draws straight segments between cumulative settlement points. It is realized settlement PnL, not continuous mark-to-market PnL.
+- Exported `market_start_utc`, `market_end_utc`, `settled_at_utc`, Gamma outcome, and PnL for all `2,120` runs. SQL and an independent PowerShell calculation matched: settlement delay from market end had min/p50/p90/p95/max `81.887/297.025/326.638/332.918/1916.300` seconds. In the final 251-run period, the values were `82.918/292.281/332.467/343.277/388.072` seconds, and all `251/251` settlements used `BtcUpDown5mGammaClosedMarket`.
+- Isolated the largest final-period five-minute ETHUSDT close decline: `$1,795.21 -> $1,775.71` (`-$19.50`, `-1.0862%`) from `2026-07-13 03:29:59.999` to `03:34:59.999 UTC`. It mapped to the `03:30-03:35` market, which resolved `Down`, lost `$6.00930000`, and was written at `03:37:40.479908 UTC`, `160.480` seconds after market end.
+- Isolated the visually prominent initial 15-minute decline from `00:25:59.999` to `00:40:59.999 UTC`: ETHUSDT fell `$1,833.25 -> $1,811.13` (`-1.2066%`). Three corresponding markets all resolved `Down`, lost `$18.02790000`, and were recorded from `00:35:14.528702` through `00:46:04.203974 UTC`.
+- Established that the apparent final cliff was compressed by the full-chart scale: the actual ETH high-to-low move was `$1,846.00 -> $1,762.44` (`-4.5265%`) over `14h05m`, from `00:11:59.999` to `14:16:59.999 UTC`, not one instantaneous event. During that same interval, 164 strategy markets produced `75 Up / 89 Down` and market-end-attributed PnL fell `$114.93447921`; settlement-timestamp PnL fell `$114.32310161` between the same endpoints.
+- Derived from verified dimensions that the `297.025`-second median lag occupies only `0.5106` pixel on the original `1,550`-pixel, `10.435`-day plot, so the visibly broad delay cannot be the settlement lag itself.
+- Conclusion: a short technical recording lag of roughly five minutes is real, but the hypothesis of a long delayed PnL reaction is refuted. The slow-looking decline comes from a 14-hour ETH move compressed onto a 10.4-day chart, discrete capped PnL from successive five-minute markets, mixed wins and losses, and straight-line rendering between settlement points.
+Next: None.
+Notes: Reproducible read-only artifacts are under `outputs/eth-down3-bps-reference-average-vs-ethusdt-2026-07-13/`: `lag-analysis-export.sql`, `lag-analysis-runs.csv`, `analyze-pnl-lag.ps1`, `lag-analysis-summary.txt`, and `lag-analysis-crash-runs.csv`. SQL and PowerShell totals, point-in-time PnL, event rows, and delay percentiles matched. Production access was read-only; no database row, strategy state, service process, source behavior, or deployment changed. No product build/test was required.
+Blockers: None.
+
 ## Active Update 2026-07-13 ETH Down3 Final Decline Attribution
 Goal: Determine whether the final visible Paper PnL decline for `ETH Up or Down 5m Down 3 bps Reference Average Premarket` was caused by ETH falling.
 Status: Completed
