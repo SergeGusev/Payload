@@ -1,3 +1,16 @@
+## Active Update 2026-07-13 Excel Negative Values White Background
+Goal: Change the generated Dashboard category Paper PnL Excel reports so negative values keep a white background while showing red text.
+Status: Completed
+Done:
+- Updated the ignored report builder copies under `outputs/currency-dashboard-category-paper-pnl-2026-07-13/builder/` and `outputs/currency-dashboard-category-paper-pnl-progress-split-2026-07-13/builder/` so the negative-value differential format uses explicit white fill.
+- Regenerated the three all-current currency reports from existing CSV inputs; no database reads or production mutations were performed.
+- Updated all nine generated `.xlsx` reports in place through Excel COM, including the currently open `btc-regular-dashboard-category-paper-pnl.xlsx`, so the numeric report range uses one `<0` conditional-formatting rule with red font and white fill.
+- Verified all nine workbooks through Excel COM: each numeric range had exactly one conditional-formatting rule, operator `<0`, formula `=0`, font color `393372`, fill color `16777215` (white), at least one negative value, and zero formula errors.
+- Rendered and visually inspected `outputs/currency-dashboard-category-paper-pnl-progress-split-2026-07-13/qa/eth-progress-negative-format-preview.png`; negative cells showed red text on white background.
+Next: None.
+Notes: Generated workbook files remain ignored under `outputs/`. No production data, source code, service process, or configuration was changed.
+Blockers: None.
+
 ## Active Update 2026-07-13 Currency Dashboard Category Progress Split Paper PnL Excel Reports
 Goal: Create six Excel reports, split by BTC/ETH/SOL and Regular/Progress strategies, with UTC daily Paper PnL grouped by Dashboard category.
 Status: Completed
