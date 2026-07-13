@@ -1,3 +1,17 @@
+## Active Update 2026-07-13 Progress Strategy Retention Recommendation
+Goal: Recommend which Progress strategy families appear worth keeping and which should be removed or disabled.
+Status: Completed
+Done:
+- Started from the existing ignored split-report CSV inputs under `outputs/currency-dashboard-category-paper-pnl-progress-split-2026-07-13/` and ranked 493 current Progress strategies, 341 with settled Paper PnL rows in the report data.
+- Added a fresh read-only server PostgreSQL aggregate from `192.168.0.101:5432/polycopytrader` over settled `strategy_market_paper_runs`, including `stake_usd`, `realized_pnl_usd`, ROI, and PnL since `2026-07-07`.
+- Strong keep candidates from fresh DB: BTC `Diff Down Progress` family, 14 strategies, `+9250.35117163` PnL, `$125623.67400496` stake, `+7.3635%` ROI, `+3621.79324982` since `2026-07-07`; BTC `Child Progress ROI`, 24 strategies, `+6321.01439928` PnL, `$105888.49918412` stake, `+5.9695%` ROI.
+- Strong SOL keep candidates from fresh DB: SOL `Diff Real Limit Progress Premarket`, 5 strategies, `+2900.77588033` PnL, `+2.8720%` ROI, `+3118.80278546` since `2026-07-07`; SOL `Diff Up Progress` is only useful from about N=17 upward because N=3..15 are negative while N=17..35 are positive; SOL `Diff Shift Progress Premarket` should only keep N=2,3,5 because N=1 and N=4 are negative.
+- ETH remains globally dangerous: fresh DB shows ETH Progress total is heavily negative. Only ETH `Diff Down Progress` (`+3381.06542322`, `+3.1185%` ROI) and ETH `Diff Real Limit Progress Premarket` (`+1853.75713317`, `+1.7957%` ROI) are plausible paper-only watch candidates; ETH `Child Progress`, `Diff Up Progress`, and `Diff Shift Progress Premarket` should be removed/disabled.
+- Recommended not deleting every Progress strategy blindly; instead disable/delete all non-whitelisted Progress strategies, with ETH Progress handled most conservatively. Because this is in-sample Paper performance, deletion/retention should not be treated as a proven future edge.
+Next: If requested, implement a cautious disable/delete pass with exact allowlist/denylist preview, backup, and post-verification.
+Notes: Read-only analysis only. No production data, source code, service process, or strategy state was changed.
+Blockers: None.
+
 ## Active Update 2026-07-13 Regular Vs Progress PnL Summary
 Goal: Summarize whether current Regular and Progress strategy groups are gaining or losing based on the generated split reports.
 Status: Completed
