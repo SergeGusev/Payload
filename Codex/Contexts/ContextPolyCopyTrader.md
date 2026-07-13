@@ -1,3 +1,14 @@
+## Active Update 2026-07-13 Ten-Second Price Sampling Clarification
+Goal: Confirm whether persisted currency reference prices form a ten-second series.
+Status: Completed
+Done:
+- Confirmed that `10` seconds is the configured target write interval and PostgreSQL stores one latest-price snapshot per asset and aligned ten-second bucket.
+- Clarified that the series is not guaranteed to contain every bucket: failed or unavailable price reads leave gaps and are not backfilled.
+- Rechecked production at `2026-07-13 20:01:24 UTC`. Median intervals over the preceding ten minutes were `10.006s` for BTC and `10.008s` for ETH/SOL; BTC had `60` rows, ETH/SOL had `59`, and the largest ETH/SOL gap was about `20s`.
+Next: None.
+Notes: Production PostgreSQL access was read-only; no product behavior, database row, service process, or deployment changed. No product test was required for this read-only confirmation.
+Blockers: None.
+
 ## Active Update 2026-07-13 Reference Average Price Pipeline
 Goal: Explain and verify the exact currency-price source, persistence, bucketing, averaging, and window-selection path used by Reference Average strategies.
 Status: Completed

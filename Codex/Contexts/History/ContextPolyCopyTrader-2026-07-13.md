@@ -131,3 +131,10 @@ Request:
 
 Result:
 Verified the complete Reference Average price path in current source, focused unit tests, and read-only production PostgreSQL diagnostics. Binance Spot trade WebSockets provide `BTCUSDT`, `ETHUSDT`, and `SOLUSDT` last-trade prices; the service persists the latest valid price approximately every ten seconds and restores the preceding 24 hours after restart. The cache builds `10m`, `20m`, `45m`, `90m`, `3h`, `6h`, `12h`, and `24h` equal-time-bucket arithmetic averages, requiring 60 buckets for eligibility. The strategy selects the highest-priced full average, not a fixed 24-hour average, and computes `(current-selectedAverage)/selectedAverage*10000` bps. Production ticks were fresh and had approximately ten-second median cadence; exact ETH Down 3 runtime evidence selected the highest `24h` average and excluded an incomplete `10m` window. Focused tests passed `3/3`; production remained read-only and unchanged.
+
+## 2026-07-13T20:01:27.4476195+00:00
+Request:
+То есть у нас есть курсы валют с шагом 10 секунд, правильно?
+
+Result:
+Confirmed with a fresh read-only production query that ten seconds is the target persisted sampling interval, not a guarantee that every bucket exists. Over the preceding ten minutes, median intervals were `10.006s` for BTC and `10.008s` for ETH/SOL. BTC had all `60` expected rows; ETH and SOL each had `59`, with one approximately `20s` gap. Missing buckets are not backfilled. No production state changed.
