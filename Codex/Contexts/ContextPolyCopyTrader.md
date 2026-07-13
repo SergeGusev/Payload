@@ -1,3 +1,18 @@
+## Active Update 2026-07-13 Reference Average Price Pipeline
+Goal: Explain and verify the exact currency-price source, persistence, bucketing, averaging, and window-selection path used by Reference Average strategies.
+Status: Completed
+Done:
+- Verified from current source that the service consumes Binance Spot trade WebSockets for `BTCUSDT`, `ETHUSDT`, and `SOLUSDT`; parser field `p` is the last trade price and `T` (falling back to `E`) is the source timestamp. USDT is treated as USD by the domain models.
+- Verified that `CryptoReferencePriceHistoryWorker` reads the latest valid stream price for every asset approximately every `10` seconds, upserts one PostgreSQL row per asset and aligned 10-second bucket, and updates the rolling in-memory average cache. On startup it reloads the preceding `24` hours from PostgreSQL.
+- Verified the configured average windows and sampling steps: `10m/10s`, `20m/20s`, `45m/45s`, `90m/90s`, `3h/180s`, `6h/360s`, `12h/720s`, and `24h/1440s`. Each step bucket is averaged first, then the bucket means are averaged with equal weight; a window is eligible only with at least `60` buckets.
+- Verified that a Reference Average strategy keeps only full positive windows and selects the one with the highest average price, using the longer window only as a tie-breaker. It then computes `(current - selectedAverage) / selectedAverage * 10000` bps.
+- Independently confirmed current production ingestion at `2026-07-13 19:48 UTC`: latest ticks were about `1.3s` old; median intervals over the preceding ten minutes were `10.008s` for BTC, `10.009s` for ETH, and `10.011s` for SOL. Recorded sources were `BinanceTradeWebSocket` for BTC and `BinanceCryptoTradeWebSocket` for ETH/SOL.
+- Confirmed the deployed decision evidence for exact ETH Down 3 strategy ID `b7c50005-0000-4000-8140-000000000103`: at `2026-07-13 19:49:40.984807 UTC`, seven windows were full, `24h` was the highest at `$1,788.27778118`, current ETH was `$1,770.28`, and the recorded deviation was `-100.6431 bps`; the incomplete `10m` window was excluded.
+- Ran focused unit verification for the rolling-average cache and ETH Reference Average strategy selection: `3/3` tests passed.
+Next: None.
+Notes: Production PostgreSQL access was read-only. Two broad exploratory JSON scans over all `paper_orders` reached the `30s` statement timeout; exact strategy-indexed checks completed successfully. No product behavior, database row, service process, or deployment changed.
+Blockers: None.
+
 ## Active Update 2026-07-13 Shock Versus Subsequent Direction
 Goal: Verify whether abrupt ETH drops themselves are irrelevant while subsequent ETH direction controls this strategy's PnL slope.
 Status: Completed
