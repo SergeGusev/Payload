@@ -1,3 +1,16 @@
+## Active Update 2026-07-13 Regular Vs Progress PnL Summary
+Goal: Summarize whether current Regular and Progress strategy groups are gaining or losing based on the generated split reports.
+Status: Completed
+Done:
+- Used existing ignored CSV inputs from `outputs/currency-dashboard-category-paper-pnl-progress-split-2026-07-13/`, not a fresh production database read.
+- Independently recomputed split totals from `data/dashboard_strategies.csv` and `data/daily_strategy_pnl.csv` and reconciled them with `report-summary.csv`.
+- For `2026-06-05` through `2026-07-13` UTC, Regular total Paper PnL was `+43079.28060613`, averaging `+1104.59693862` per calendar day, with BTC `+4237.40752332`, ETH `+19455.37603767`, and SOL `+19386.49704514`.
+- For the same report period, Progress total Paper PnL was `-91518.04350584`, averaging `-2346.61650015` per calendar day; its first non-zero day was `2026-07-02`, and from then through `2026-07-13` it averaged `-7626.50362549` per day. BTC Progress was `+17958.76205261`, ETH Progress was `-105165.33267094`, and SOL Progress was `-4311.47288751`.
+- Last seven report dates (`2026-07-07` through `2026-07-13` UTC): Regular was `+11445.95267638`; Progress was `-75700.67536371`.
+Next: None.
+Notes: Read-only analysis of generated CSV/report artifacts. No production data, source code, service process, or configuration was changed.
+Blockers: None.
+
 ## Active Update 2026-07-13 Excel Negative Values White Background
 Goal: Change the generated Dashboard category Paper PnL Excel reports so negative values keep a white background while showing red text.
 Status: Completed
