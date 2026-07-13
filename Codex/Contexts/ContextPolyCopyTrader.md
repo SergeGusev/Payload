@@ -1,3 +1,19 @@
+## Active Update 2026-07-13 ETH Down3 Post-Drop Follow-Through
+Goal: Verify the user's observation that after the sharp ETH drop, cumulative Paper PnL kept declining while ETH remained in a lower price regime.
+Status: Completed
+Done:
+- Reinspected the exact current-day graph and frozen inputs for production strategy `b7c50005-0000-4000-8140-000000000103` in UTC.
+- Confirmed and refined the visual boundaries. ETH closed at `$1,812.32` at `02:38`, `$1,806.21` at `03:00`, and the sharp decline continued to `$1,778.96` at `03:35`, a total `-1.84073453%`. From `03:35` through `16:00`, all `746/746` minute closes stayed below `$1,800`; low/high were `$1,762.44/$1,793.56`, average close `$1,780.40372654`, and the `16:00` close was `$1,776.41`.
+- Confirmed the displayed follow-through: cumulative Paper PnL was `-$28.80512287` at `04:00` and `-$97.29904608` at `16:00`, a further decline of `-$68.49392321` across `142` recorded settlements (`67W/75L`).
+- Verified the deployed strategy description and accepted-order runtime diagnostics. The strategy compares ETH with the largest full reference average and, when ETH is at least `3 bps` below it, buys `Up`. For all `142` accepted `04:00-16:00` markets, selected outcome was `Up`, trigger direction was `Down`, target direction was `Up`, and the observed deviation was `-65.94293081` to `-189.11094969 bps`, so the trigger remained active throughout.
+- The selected slow reference was `24h` for `118` entries and `12h` for `24`; this is the verified mechanism that turned the initial level shift into prolonged countertrend exposure. Two of the `144` expected market windows were skipped with `crypto_reference_fetch_failed` rather than entered.
+- Gamma settlement independently matched all `142` accepted runs: `67 Up` wins contributed `+$382.20357673`; `75 Down` losses contributed `-$450.69749993`; net PnL was `-$68.49392320` on `$853.32059997` stake, ROI `-8.02675140%`. The median settlement delay was only `276.076634` seconds.
+- Corrected the prior interpretation: the long visual follow-through is not an hours-long accounting delay, but the earlier explanation was incomplete because it omitted the slow-reference-average mechanism. The user's description is valid as strategy-level lag: the old average kept the strategy repeatedly long `Up`, while results arrived one five-minute market at a time.
+- Revalidated the broader prior predictive result separately: one observed regime does not overturn the fixed 10.4-day no-look-ahead finding that a generic pre-entry sharp drop did not generally increase losses on the next bet(s). The current-day event establishes a concrete mechanism and realized episode, not a validated universal production filter.
+Next: If requested, test a maximum-deviation/cooldown filter out of sample rather than changing production from this one day.
+Notes: Reproducible read-only artifacts are under `outputs/eth-down3-bps-reference-average-vs-ethusdt-today-2026-07-13/`: `plateau-follow-through-analysis.sql`, `plateau-follow-through-db-results.txt`, `analyze-plateau-follow-through.ps1`, and `plateau-follow-through-local-summary.txt`. Production access was read-only; no database row, strategy state, service process, source behavior, or deployment changed. No product build/test was required.
+Blockers: None.
+
 ## Active Update 2026-07-13 ETH Down3 Today PnL With ETHUSDT Overlay
 Goal: Repeat the cumulative Paper PnL plus ETHUSDT chart for the current UTC day only.
 Status: Completed
