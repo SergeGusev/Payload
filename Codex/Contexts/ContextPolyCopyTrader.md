@@ -1,3 +1,18 @@
+## Active Update 2026-07-13 Shock Versus Subsequent Direction
+Goal: Verify whether abrupt ETH drops themselves are irrelevant while subsequent ETH direction controls this strategy's PnL slope.
+Status: Completed
+Done:
+- Separated three distinct effects that the proposed wording combined. The abrupt drop directly affects any already-entered `Up` market occurring during the drop; in the prior full-history alignment, every complete strategy market that fell at least `20 bps` lost (`107/107`).
+- The abrupt drop also affects entry eligibility: it moves ETH below the selected reference average and can create or maintain the strategy's `Down >= 3 bps` trigger, after which the strategy repeatedly buys `Up`. It is therefore not correct to say the drop has no effect at all.
+- Reconfirmed the separate no-look-ahead result: once the drop is already known before a later entry, its size did not predict increased losses on the next bet or next several bets across the tested `5/15/30m` windows and thresholds. The one-off shock is not the verified driver of later PnL direction.
+- Confirmed that subsequent contemporaneous direction is the main driver of PnL slope for this all-`Up` strategy. Across `128` complete post-shock hourly phases using official Binance candles, `74` ETH-rising hours contained `659` runs (`395W/264L`) and produced `+$717.39135166`; `54` ETH-falling hours contained `576` runs (`240W/336L`) and produced `-$694.14431645`. Pooled hourly ETH-change/PnL-change correlation was `+0.68474694`.
+- Independently repeated the hourly grouping in production PostgreSQL with server-persisted Binance trade-stream samples. It classified `73` rising hours with PnL `+$729.29364771` and `55` falling hours with PnL `-$706.04661250`, confirming the direction and magnitude despite one hour changing classification because server samples are not exact candle closes.
+- Preserved the key limitation: aggregate net ETH change over a multi-hour period is not enough. The profitable counterexample and current episode both recovered about `22%` of their shocks after six hours, but produced `33W/23L`, `+$47.78964166` versus `34W/36L`, `-$21.03931609`. Binary five-minute Gamma outcomes and entry prices determine exact PnL.
+Conclusion: the precise model is `initial shock -> current-market loss and/or trigger activation`; then `subsequent five-minute Up/Down sequence -> subsequent PnL slope`. The initial shock did not provide an independent predictive signal for later PnL in the tested history.
+Next: If requested, test a new filter based on recent five-minute directional persistence; do not use the size of the original shock or aggregate price-level recovery alone.
+Notes: Reproducible hourly CSV analysis and independent production SQL are under ignored directory `outputs/eth-down3-full-history-post-drop-regimes-2026-07-13/`. Production remained read-only and unchanged; no product build/test was required.
+Blockers: None.
+
 ## Active Update 2026-07-13 ETH Rebound Versus PnL Attribution
 Goal: Verify whether the profitable post-drop counterexample earned because ETH recovered while the other regimes stayed near their post-shock levels.
 Status: Completed
