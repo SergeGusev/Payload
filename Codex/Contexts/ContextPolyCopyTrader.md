@@ -1,3 +1,17 @@
+## Active Update 2026-07-13 Server Service Health Check
+Goal: Check whether the deployed `PolyCopyTrader.Service` and its database-backed activity look healthy.
+Status: Completed
+Done:
+- Verified server PostgreSQL connectivity read-only: `current_database=polycopytrader`, `inet_server_addr=192.168.0.101`, DB UTC time around `2026-07-13 06:50:45`.
+- Verified `PolyCopyTrader.Service` heartbeat row: `Running`, `Live`, started `2026-07-11 21:08:16.227079 UTC`, latest heartbeat `2026-07-13 06:50:56.653111 UTC`, heartbeat age `24.7` seconds at query time, `last_error` empty, current loop `BTC5mOnly WatchlistScanner=CommentedOut; FollowLeaderSignals=CommentedOut`.
+- Verified active Paper activity: `358` Paper orders and `358` entered Paper runs in the last 5 minutes; `4672` Paper orders and `4670` entered Paper runs in the last 60 minutes. Latest Paper order/run entry was `2026-07-13 06:50:23.106294 UTC`.
+- Verified Dashboard projection is fresh: lifetime and recent snapshots both had latest refresh `2026-07-13 06:51:56.490305 UTC`; projection control was `initialized=true`, `status=Running`, queue rows `0`, due rows `0`, and `last_error` empty.
+- Verified live-trading state: `1558` enabled/unpaused strategies, `1` enabled/unpaused Live strategy (`ETH Up or Down 5m Up 50 bps Instant`) with live balance `$84.29704600`; no active open Live orders; no Live orders/events in the last hour; latest Live event/order was an OK matched order at `2026-07-13 03:35:16 UTC`.
+- Found a non-fatal warning condition: market-data WebSocket aggregate and crypto critical rows are `Stale`; aggregate reports `healthy_shards=4/7`, one stale shard, and old/connecting shard rows. Recent API errors in the last hour were mostly stale Binance ticks, plus three `RefreshChildParentAssignments` read-stream errors and a few WebSocket/order-book transient errors.
+Next: Watch or repair the market-data WebSocket shard freshness if the stale status persists; service and Paper betting were active during this check.
+Notes: One broad diagnostic query over `strategy_market_paper_runs` was cancelled by the intentional `statement_timeout`; follow-up index-scoped queries succeeded. No production data, source code, service process, or configuration was changed.
+Blockers: None.
+
 ## Active Update 2026-07-12 Dashboard Recent Snapshot Timeout
 Goal: Diagnose and harden Dashboard refresh after the screenshot showed an Npgsql read timeout in recent strategy performance snapshots.
 Status: Completed
