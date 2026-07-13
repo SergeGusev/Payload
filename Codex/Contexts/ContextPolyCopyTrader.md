@@ -1,3 +1,19 @@
+## Active Update 2026-07-13 Currency Dashboard Category Progress Split Paper PnL Excel Reports
+Goal: Create six Excel reports, split by BTC/ETH/SOL and Regular/Progress strategies, with UTC daily Paper PnL grouped by Dashboard category.
+Status: Completed
+Done:
+- Confirmed the Dashboard category source is `StrategyDisplayCategories.GetCategory(strategyName)` and the currency source is `StrategyDisplayCategories.GetAssetSymbol(strategyName)`.
+- Confirmed the Dashboard `Hide progress` rule is `strategyName.IndexOf("Progress", StringComparison.OrdinalIgnoreCase) < 0`; used the inverse as the Progress split and non-matching names as Regular.
+- Exported fresh server PostgreSQL inputs read-only from `192.168.0.101:5432/polycopytrader`: current `dashboard_strategy_performance_snapshots` rows and settled `strategy_market_paper_runs.realized_pnl_usd` grouped by UTC `settled_at_utc` date and `strategy_id`.
+- Built six ignored Excel workbooks under `outputs/currency-dashboard-category-paper-pnl-progress-split-2026-07-13/reports/`: BTC/ETH/SOL `regular` and `progress` variants.
+- Each workbook has one `Report` sheet, continuous dates from `2026-06-05` through `2026-07-13`, Dashboard categories as columns, a final `Daily Total` column, a final `Category Total` row, and grand total at the intersection. Negative numbers use red number formatting and conditional formatting.
+- Verified all six `.xlsx` files by OpenXML inspection: workbook/sheet/styles exist, formulas are present, one conditional-formatting block exists per workbook, and there is no formula-error text.
+- Verified all six `.xlsx` files opened via Excel COM read-only; used ranges and grand totals matched the CSV summary.
+- Independently reconciled split totals from source CSV: BTC Regular `4237.40752332`, BTC Progress `17958.76205261`, ETH Regular `19455.37603767`, ETH Progress `-105165.33267094`, SOL Regular `19386.49704514`, SOL Progress `-4311.47288751`. Regular + Progress matched the fresh all-current total per currency.
+Next: None.
+Notes: Generated files and builder/data inputs are under ignored `outputs/`. No production data, source code, service process, or configuration was changed.
+Blockers: None.
+
 ## Active Update 2026-07-13 Currency Dashboard Category Daily Paper PnL Excel Reports
 Goal: Create three Excel reports, one per BTC/ETH/SOL, with UTC daily Paper PnL grouped by Dashboard strategy category.
 Status: Completed
