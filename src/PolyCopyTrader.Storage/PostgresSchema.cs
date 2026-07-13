@@ -1563,6 +1563,73 @@ ON CONFLICT (id) DO UPDATE SET
     description = excluded.description,
     updated_at_utc = excluded.updated_at_utc;
 
+INSERT INTO strategies (
+    id,
+    code,
+    name,
+    description,
+    enabled,
+    live_stakes,
+    paper_stake_amount,
+    live_stake_amount,
+    live_available_balance,
+    paused,
+    paused_until_utc,
+    auto_live_paused,
+    auto_live_paused_at_utc,
+    auto_live_pause_window_start_utc,
+    live_enabled_at_utc,
+    paper_lost_coeff,
+    live_lost_coeff,
+    paper_lost_counter,
+    live_lost_counter,
+    created_at_utc,
+    updated_at_utc)
+WITH assets(asset_symbol, id_group) AS (
+    VALUES
+        ('BTC', '8206'),
+        ('ETH', '8207'),
+        ('SOL', '8208')
+),
+lookbacks(lookback_hours) AS (
+    SELECT value
+    FROM generate_series(1, 24) AS generated(value)
+),
+thresholds(threshold_bps) AS (
+    SELECT value
+    FROM generate_series(1, 5) AS generated(value)
+)
+SELECT
+    ('b7c50005-0000-4000-' || id_group || '-' || lpad((lookback_hours * 100 + threshold_bps)::text, 12, '0'))::uuid,
+    lower(asset_symbol) || '_up_down_5m_' || lookback_hours::text || 'h_absolute_bps_' || threshold_bps::text || '_fak_premarket',
+    asset_symbol || ' Up or Down 5m ' || lookback_hours::text || 'h ' || threshold_bps::text || ' bps Absolute Premarket',
+    'Thirty seconds before ' || asset_symbol || ' 5m market open, read the full ' || lookback_hours::text || 'h rolling extrema window built from persisted ten-second Binance ' || asset_symbol || '/USDT reference-price samples observed before the fresh decision price. If the current price is at least ' || threshold_bps::text || ' bps above the historical maximum, BUY Down; if it is at least ' || threshold_bps::text || ' bps below the historical minimum, BUY Up; otherwise skip. Paper entry simulates a FAK taker BUY from executable ask depth using the guaranteed worst-price cap, while Live-shadow remains disabled by default until manually enabled and normal live gates pass.',
+    true,
+    false,
+    1.00,
+    1.00,
+    100.00,
+    false,
+    NULL,
+    false,
+    NULL,
+    NULL,
+    NULL,
+    1.00,
+    1.00,
+    0,
+    0,
+    now(),
+    now()
+FROM assets
+CROSS JOIN lookbacks
+CROSS JOIN thresholds
+ON CONFLICT (id) DO UPDATE SET
+    code = excluded.code,
+    name = excluded.name,
+    description = excluded.description,
+    updated_at_utc = excluded.updated_at_utc;
+
 UPDATE strategies
 SET name = replace(name, ' bps FAK Premarket', ' bps Premarket'),
     description = replace(replace(replace(description, ' FAK ', ' '), 'FAK ', ''), ' FAK', ''),

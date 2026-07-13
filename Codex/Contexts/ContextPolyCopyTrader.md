@@ -1,13 +1,17 @@
 ## Active Update 2026-07-13 Absolute Premarket Strategy Grid
 Goal: Add BTC/ETH/SOL `H N bps Absolute Premarket` strategy families using H-hour historical extrema and a fresh Binance decision price 30 seconds before market open.
-Status: In Progress
+Status: Completed
 Done:
-- Inspected the current Reference Average catalog, behavior dispatch, FAK premarket execution path, strategy seeding SQL, rolling ten-second price cache, and Dashboard category parser.
-- Established that the requested `N` wording does not define a unique sequence. Both `1,2,4,7,11,16,22,29` (gaps increase by one) and `1,2,4,8,16,30` (multiplicative spacing with a terminal cap) satisfy an increasing-gap interpretation, while the repository also has a separate Futures sequence `1,2,3,5,8,10,15,20`.
-- Identified two additional behavior choices that affect money and cannot be inferred safely: exact H-window completeness/current-price exclusion and whether execution must copy Reference Average's FAK taker/worst-price-cap path with Paper enabled and Live disabled by default.
-Next: Obtain the user's exact contracts, then implement catalog IDs/codes/names/categories, extrema cache/provider, processor decision and diagnostics, PostgreSQL seeds, documentation, and focused tests.
-Notes: No product source, database row, service process, or deployment was changed. Worktree contained only this context/history update.
-Blockers: Exact `N` values, range-completeness contract, and order-execution/default-enable contract require user confirmation.
+- Added `360` variants: BTC/ETH/SOL x `H=1..24` x consecutive `N=1..5`, named `{CURR} Up or Down 5m {H}h {N} bps Absolute Premarket`.
+- Added an exact rolling extrema cache backed by the existing persisted ten-second Binance price history. It retains individual observations, trims them at the precise H-hour boundary, requires full-window boundary coverage, tolerates isolated missing ten-second ticks, and reevaluates freshness at decision time.
+- Added the Absolute decision path. Historical extrema are read before the fresh decision price so that price is excluded from its own reference window. A move at least `N` bps above the maximum selects `Down`; a move at least `N` bps below the minimum selects `Up`; otherwise the strategy skips with explicit diagnostics.
+- Reused the established Reference Average premarket execution contract: decision at `-30s`, FAK taker submission, guaranteed worst-price stack selection, Paper enabled, Live disabled, and not paused in newly seeded rows.
+- Added three Dashboard categories, one per currency, and PostgreSQL idempotent seeding for all `360` variants while preserving existing runtime enable/live/pause settings on conflict.
+- Added focused catalog, category, schema, cache-boundary/freshness, direction, FAK, and skip-path tests; updated README behavior and operating notes.
+- Verification: focused Absolute suite passed `13/13`; Service and Dashboard projects built with `0` errors. The complete test suite remained at the exact baseline set of `112` known failures (`674` passed versus baseline `663` passed), with no new failed test names.
+Next: Deploy and restart the server service when requested, then verify seeded strategy rows and fresh runtime diagnostics against the deployed version.
+Notes: No database, running service, or deployment was changed. The ordinary Dashboard Debug output was locked by the running local Dashboard, so its build was independently verified with a separate output directory.
+Blockers: None.
 
 ## Active Update 2026-07-13 Ten-Second Price Sampling Clarification
 Goal: Confirm whether persisted currency reference prices form a ten-second series.

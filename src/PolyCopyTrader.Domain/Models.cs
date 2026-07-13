@@ -163,6 +163,24 @@ public sealed record CryptoReferencePriceAveragesSnapshot(
     DateTimeOffset SnapshotAtUtc,
     IReadOnlyList<CryptoReferencePriceAverage> Averages);
 
+public sealed record CryptoReferencePriceExtrema(
+    string AssetSymbol,
+    string BinanceSymbol,
+    int LookbackHours,
+    int WindowSeconds,
+    int CoverageBucketSeconds,
+    int TickCount,
+    int CoverageBucketCount,
+    int ExpectedCoverageBucketCount,
+    bool IsFullWindow,
+    decimal? MinimumPriceUsd,
+    DateTimeOffset? MinimumSampledAtUtc,
+    decimal? MaximumPriceUsd,
+    DateTimeOffset? MaximumSampledAtUtc,
+    DateTimeOffset? FirstBucketStartUtc,
+    DateTimeOffset? LastBucketStartUtc,
+    DateTimeOffset UpdatedAtUtc);
+
 public sealed record BtcUsdReferenceCorrelationSample(
     Guid Id,
     decimal BinancePriceUsd,
@@ -1350,6 +1368,8 @@ public static class StrategyIds
                 thresholdBps));
         }
 
+        variants.AddRange(CreateAbsoluteBpsThresholdPremarketVariants("BTC"));
+
         variants.AddRange(CreateFuturesBasisBpsThresholdPremarketVariants("BTC"));
 
         for (var thresholdTenths = 1; thresholdTenths <= 50; thresholdTenths++)
@@ -1676,6 +1696,8 @@ public static class StrategyIds
                     GetReferenceAverageBpsNeutralPremarketIdGroup(asset.Symbol),
                     thresholdBps));
             }
+
+            variants.AddRange(CreateAbsoluteBpsThresholdPremarketVariants(asset.Symbol));
 
             variants.AddRange(CreateFuturesBasisBpsThresholdPremarketVariants(asset.Symbol));
 
@@ -2060,6 +2082,56 @@ public static class StrategyIds
         {
             yield return threshold;
         }
+    }
+
+    private static IReadOnlyList<BtcUpDown5mStrategyVariant> CreateAbsoluteBpsThresholdPremarketVariants(
+        string assetSymbol)
+    {
+        const int minimumLookbackHours = 1;
+        const int maximumLookbackHours = 24;
+        const int minimumThresholdBps = 1;
+        const int maximumThresholdBps = 5;
+        var normalizedAsset = assetSymbol.ToUpperInvariant();
+        var assetCode = normalizedAsset.ToLowerInvariant();
+        var idGroup = GetAbsoluteBpsThresholdPremarketIdGroup(normalizedAsset);
+        var variants = new List<BtcUpDown5mStrategyVariant>(
+            (maximumLookbackHours - minimumLookbackHours + 1) *
+            (maximumThresholdBps - minimumThresholdBps + 1));
+
+        for (var lookbackHours = minimumLookbackHours; lookbackHours <= maximumLookbackHours; lookbackHours++)
+        {
+            for (var thresholdBps = minimumThresholdBps; thresholdBps <= maximumThresholdBps; thresholdBps++)
+            {
+                var idSuffix = lookbackHours * 100 + thresholdBps;
+                var lookbackText = lookbackHours.ToString(CultureInfo.InvariantCulture) + "h";
+                var thresholdText = thresholdBps.ToString(CultureInfo.InvariantCulture);
+                variants.Add(new BtcUpDown5mStrategyVariant(
+                    Guid.Parse($"b7c50005-0000-4000-{idGroup:0000}-{idSuffix:000000000000}"),
+                    $"{assetCode}_up_down_5m_{lookbackText}_absolute_bps_{thresholdText}_fak_premarket",
+                    $"{normalizedAsset} Up or Down 5m {lookbackText} {thresholdText} bps Absolute Premarket",
+                    $"30 seconds before {normalizedAsset} 5m market open, read the full {lookbackText} rolling extrema window built from persisted ten-second Binance {normalizedAsset}/USDT reference-price samples observed before the fresh decision price. If the current price is at least {thresholdText} bps above the historical maximum, BUY Down; if it is at least {thresholdText} bps below the historical minimum, BUY Up; otherwise skip. Paper entry simulates a FAK taker BUY from executable ask depth using the guaranteed worst-price cap, while Live-shadow remains disabled by default until manually enabled and normal live gates pass.",
+                    BtcUpDown5mStrategyDirection.Dynamic,
+                    -30,
+                    BtcUpDown5mStrategyBehavior.AbsoluteBpsThresholdFakPremarket,
+                    lookbackHours,
+                    thresholdBps,
+                    Category: $"{normalizedAsset} Up/Down 5m Absolute Premarket",
+                    ReferenceAssetSymbol: normalizedAsset));
+            }
+        }
+
+        return variants;
+    }
+
+    private static int GetAbsoluteBpsThresholdPremarketIdGroup(string assetSymbol)
+    {
+        return assetSymbol.ToUpperInvariant() switch
+        {
+            "BTC" => 8206,
+            "ETH" => 8207,
+            "SOL" => 8208,
+            _ => throw new ArgumentOutOfRangeException(nameof(assetSymbol), assetSymbol, "Unsupported Absolute Premarket asset.")
+        };
     }
 
     private static IEnumerable<int> CreateDiffReferenceAveragePremarketThresholds()
@@ -3109,7 +3181,8 @@ public enum BtcUpDown5mStrategyBehavior
     DiffRealLimitProgressPremarket,
     DiffReferenceAveragePremarket,
     BpsConfirmedAveragePremarket,
-    DiffConfirmedAveragePremarket
+    DiffConfirmedAveragePremarket,
+    AbsoluteBpsThresholdFakPremarket
 }
 
 public sealed record BtcUpDown5mStrategyVariant(

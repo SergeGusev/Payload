@@ -354,6 +354,9 @@ builder.Services.AddSingleton<IExpiryFuturesReferencePriceClient>(sp => sp.GetRe
 builder.Services.AddSingleton<CryptoReferencePriceAverageCache>();
 builder.Services.AddSingleton<ICryptoReferencePriceAverageCache>(sp => sp.GetRequiredService<CryptoReferencePriceAverageCache>());
 builder.Services.AddSingleton<ICryptoReferencePriceAverageProvider>(sp => sp.GetRequiredService<CryptoReferencePriceAverageCache>());
+builder.Services.AddSingleton<CryptoReferencePriceExtremaCache>();
+builder.Services.AddSingleton<ICryptoReferencePriceExtremaCache>(sp => sp.GetRequiredService<CryptoReferencePriceExtremaCache>());
+builder.Services.AddSingleton<ICryptoReferencePriceExtremaProvider>(sp => sp.GetRequiredService<CryptoReferencePriceExtremaCache>());
 builder.Services.AddHttpClient<ChainlinkBtcUsdCorrelationWorker>();
 if (appConfiguration.BtcOrderBookLagDiagnostics.Enabled)
 {

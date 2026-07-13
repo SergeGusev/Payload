@@ -34,6 +34,7 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
     IBtcUsdReferencePriceCache btcUsdReferencePriceCache,
     ICryptoReferencePriceClient cryptoReferencePriceClient,
     ICryptoReferencePriceAverageProvider cryptoReferencePriceAverageProvider,
+    ICryptoReferencePriceExtremaProvider cryptoReferencePriceExtremaProvider,
     IExpiryFuturesReferencePriceClient expiryFuturesReferencePriceClient,
     IMarketDataCache marketDataCache,
     IActiveMarketAssetSubscriptionRegistry activeMarketAssetSubscriptionRegistry,
@@ -6311,6 +6312,7 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
             BtcUpDown5mStrategyBehavior.FixedOutcomePreviousResultBpsThresholdFakPremarket or
             BtcUpDown5mStrategyBehavior.ReferenceAverageBpsThresholdFakPremarket or
             BtcUpDown5mStrategyBehavior.FilteredReferenceAverageBpsThresholdFakPremarket or
+            BtcUpDown5mStrategyBehavior.AbsoluteBpsThresholdFakPremarket or
             BtcUpDown5mStrategyBehavior.FuturesBasisBpsThresholdFakPremarket or
             BtcUpDown5mStrategyBehavior.FuturesBasisBpsThresholdFakPremarketRevert or
             BtcUpDown5mStrategyBehavior.SimpleFixedOutcomeInstant or
@@ -6404,6 +6406,11 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
         return variant.Behavior == BtcUpDown5mStrategyBehavior.FilteredReferenceAverageBpsThresholdFakPremarket;
     }
 
+    private static bool IsAbsoluteBpsFakPremarketEntry(BtcUpDown5mStrategyVariant variant)
+    {
+        return variant.Behavior == BtcUpDown5mStrategyBehavior.AbsoluteBpsThresholdFakPremarket;
+    }
+
     private static bool IsFuturesBasisBpsFakPremarketEntry(BtcUpDown5mStrategyVariant variant)
     {
         return variant.Behavior is BtcUpDown5mStrategyBehavior.FuturesBasisBpsThresholdFakPremarket or
@@ -6433,6 +6440,7 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
         return IsPreOpenFixedDirectionOpeningLimitEntry(variant) ||
             IsFixedOutcomePreviousResultBpsFakPremarketEntry(variant) ||
             IsReferenceAverageBpsFakPremarketEntry(variant) ||
+            IsAbsoluteBpsFakPremarketEntry(variant) ||
             IsFuturesBasisBpsFakPremarketEntry(variant) ||
             IsPreviousScoreCounterTrendFakPremarketEntry(variant) ||
             IsDiffCounterTrendFakPremarketEntry(variant) ||
@@ -6565,6 +6573,7 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
     {
         return IsFixedOutcomePreviousResultBpsFakEntry(variant) ||
             IsReferenceAverageBpsFakPremarketEntry(variant) ||
+            IsAbsoluteBpsFakPremarketEntry(variant) ||
             IsFuturesBasisBpsFakPremarketEntry(variant) ||
             IsPreviousScoreCounterTrendFakStatsEntry(variant) ||
             IsDiffCounterTrendFakPremarketEntry(variant) ||
@@ -6864,6 +6873,13 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
                 middleReferenceCurrentPrices,
                 cancellationToken),
             BtcUpDown5mStrategyBehavior.FilteredReferenceAverageBpsThresholdFakPremarket => await GetReferenceAverageBpsThresholdEntryDecisionAsync(
+                market,
+                variant,
+                stakeUsd,
+                nowUtc,
+                middleReferenceCurrentPrices,
+                cancellationToken),
+            BtcUpDown5mStrategyBehavior.AbsoluteBpsThresholdFakPremarket => await GetAbsoluteBpsThresholdEntryDecisionAsync(
                 market,
                 variant,
                 stakeUsd,
@@ -12577,6 +12593,201 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
                 reason: null));
     }
 
+    private async Task<BtcOpeningLimitDecision> GetAbsoluteBpsThresholdEntryDecisionAsync(
+        PolymarketGammaMarket market,
+        BtcUpDown5mStrategyVariant variant,
+        decimal stakeUsd,
+        DateTimeOffset nowUtc,
+        BtcCurrentPriceLookupCache currentPrices,
+        CancellationToken cancellationToken)
+    {
+        var referenceAssetSymbol = GetReferenceAssetSymbol(variant);
+        var lookbackHours = variant.DecisionDepth;
+        if (lookbackHours is < 1 or > 24)
+        {
+            const string reason = "absolute_reference_lookback_invalid";
+            return BtcOpeningLimitDecision.Reject(
+                reason,
+                BuildAbsoluteBpsRawDecisionJson(
+                    market,
+                    variant,
+                    stakeUsd,
+                    nowUtc,
+                    currentPrice: null,
+                    extrema: null,
+                    selectedBoundary: null,
+                    selectedDirection: null,
+                    selectedOutcome: null,
+                    moveAboveMaximumBps: null,
+                    moveBelowMinimumBps: null,
+                    reason));
+        }
+
+        if (variant.DecisionThresholdBps is not > 0m)
+        {
+            const string reason = "absolute_reference_threshold_invalid";
+            return BtcOpeningLimitDecision.Reject(
+                reason,
+                BuildAbsoluteBpsRawDecisionJson(
+                    market,
+                    variant,
+                    stakeUsd,
+                    nowUtc,
+                    currentPrice: null,
+                    extrema: null,
+                    selectedBoundary: null,
+                    selectedDirection: null,
+                    selectedOutcome: null,
+                    moveAboveMaximumBps: null,
+                    moveBelowMinimumBps: null,
+                    reason));
+        }
+
+        var extrema = cryptoReferencePriceExtremaProvider.GetExtrema(referenceAssetSymbol, lookbackHours, nowUtc);
+        if (extrema is null ||
+            !extrema.IsFullWindow ||
+            extrema.MinimumPriceUsd is not > 0m ||
+            extrema.MaximumPriceUsd is not > 0m)
+        {
+            const string reason = "absolute_reference_full_window_missing";
+            return BtcOpeningLimitDecision.Reject(
+                reason,
+                BuildAbsoluteBpsRawDecisionJson(
+                    market,
+                    variant,
+                    stakeUsd,
+                    nowUtc,
+                    currentPrice: null,
+                    extrema,
+                    selectedBoundary: null,
+                    selectedDirection: null,
+                    selectedOutcome: null,
+                    moveAboveMaximumBps: null,
+                    moveBelowMinimumBps: null,
+                    reason));
+        }
+
+        var minimumPriceUsd = extrema.MinimumPriceUsd.Value;
+        var maximumPriceUsd = extrema.MaximumPriceUsd.Value;
+        if (minimumPriceUsd > maximumPriceUsd)
+        {
+            const string reason = "absolute_reference_extrema_invalid";
+            return BtcOpeningLimitDecision.Reject(
+                reason,
+                BuildAbsoluteBpsRawDecisionJson(
+                    market,
+                    variant,
+                    stakeUsd,
+                    nowUtc,
+                    currentPrice: null,
+                    extrema,
+                    selectedBoundary: null,
+                    selectedDirection: null,
+                    selectedOutcome: null,
+                    moveAboveMaximumBps: null,
+                    moveBelowMinimumBps: null,
+                    reason));
+        }
+
+        var currentPriceLookup = IsBtcReferenceVariant(variant)
+            ? await GetBtcCurrentPriceAsync(market, currentPrices, cancellationToken)
+            : await GetCryptoCurrentPriceAsync(market, variant, currentPrices, cancellationToken);
+        if (currentPriceLookup.Price is not { } currentPrice)
+        {
+            var reason = IsBtcReferenceVariant(variant)
+                ? "btc_reference_fetch_failed"
+                : "crypto_reference_fetch_failed";
+            return BtcOpeningLimitDecision.Reject(
+                reason,
+                BuildAbsoluteBpsRawDecisionJson(
+                    market,
+                    variant,
+                    stakeUsd,
+                    nowUtc,
+                    currentPrice: null,
+                    extrema,
+                    selectedBoundary: null,
+                    selectedDirection: null,
+                    selectedOutcome: null,
+                    moveAboveMaximumBps: null,
+                    moveBelowMinimumBps: null,
+                    reason));
+        }
+
+        var moveAboveMaximumBps = GetMeanDeviationBps(currentPrice.PriceUsd, maximumPriceUsd);
+        var moveBelowMinimumBps = GetMeanDeviationBps(currentPrice.PriceUsd, minimumPriceUsd);
+        var thresholdBps = variant.DecisionThresholdBps.Value;
+        BtcPriceDirection? selectedDirection = null;
+        string? selectedBoundary = null;
+        if (moveAboveMaximumBps >= thresholdBps)
+        {
+            selectedDirection = BtcPriceDirection.Down;
+            selectedBoundary = "maximum";
+        }
+        else if (moveBelowMinimumBps <= -thresholdBps)
+        {
+            selectedDirection = BtcPriceDirection.Up;
+            selectedBoundary = "minimum";
+        }
+
+        if (selectedDirection is null)
+        {
+            const string reason = "absolute_reference_move_below_bps_threshold";
+            return BtcOpeningLimitDecision.Reject(
+                reason,
+                BuildAbsoluteBpsRawDecisionJson(
+                    market,
+                    variant,
+                    stakeUsd,
+                    nowUtc,
+                    currentPrice,
+                    extrema,
+                    selectedBoundary: null,
+                    selectedDirection: null,
+                    selectedOutcome: null,
+                    moveAboveMaximumBps,
+                    moveBelowMinimumBps,
+                    reason));
+        }
+
+        var selectedOutcome = TrySelectOutcomeForDirection(market, selectedDirection.Value);
+        if (selectedOutcome is null)
+        {
+            const string reason = "target_outcome_not_available";
+            return BtcOpeningLimitDecision.Reject(
+                reason,
+                BuildAbsoluteBpsRawDecisionJson(
+                    market,
+                    variant,
+                    stakeUsd,
+                    nowUtc,
+                    currentPrice,
+                    extrema,
+                    selectedBoundary,
+                    selectedDirection,
+                    selectedOutcome: null,
+                    moveAboveMaximumBps,
+                    moveBelowMinimumBps,
+                    reason));
+        }
+
+        return BtcOpeningLimitDecision.Enter(
+            selectedOutcome,
+            BuildAbsoluteBpsRawDecisionJson(
+                market,
+                variant,
+                stakeUsd,
+                nowUtc,
+                currentPrice,
+                extrema,
+                selectedBoundary,
+                selectedDirection,
+                selectedOutcome,
+                moveAboveMaximumBps,
+                moveBelowMinimumBps,
+                reason: null));
+    }
+
     private async Task<BtcOpeningLimitDecision> GetFuturesBasisBpsThresholdEntryDecisionAsync(
         PolymarketGammaMarket market,
         BtcUpDown5mStrategyVariant variant,
@@ -16926,6 +17137,79 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
             reference_average_filtered_abs_move_skip_max_exclusive_bps = IsFilteredReferenceAverageBpsFakPremarketEntry(variant) ? 80m : (decimal?)null,
             fak_stats_probe = true,
             premarket_reference_average_enabled = true,
+            asset_id = selectedOutcome?.AssetId,
+            outcome = selectedOutcome?.Outcome,
+            target_notional_usd = targetNotionalUsd,
+            skip_reason = reason
+        });
+    }
+
+    private static string BuildAbsoluteBpsRawDecisionJson(
+        PolymarketGammaMarket market,
+        BtcUpDown5mStrategyVariant variant,
+        decimal targetNotionalUsd,
+        DateTimeOffset nowUtc,
+        BtcUsdReferencePricePoint? currentPrice,
+        CryptoReferencePriceExtrema? extrema,
+        string? selectedBoundary,
+        BtcPriceDirection? selectedDirection,
+        BtcUpDown5mOutcomeQuote? selectedOutcome,
+        decimal? moveAboveMaximumBps,
+        decimal? moveBelowMinimumBps,
+        string? reason)
+    {
+        var marketStartUtc = GetMarketWindowStartUtc(market, variant);
+        var entryDueAtUtc = GetEntryDueAtUtc(marketStartUtc, variant);
+        var referenceAssetSymbol = GetReferenceAssetSymbol(variant);
+        var isBtcReference = IsBtcReferenceVariant(variant);
+        return JsonSerializer.Serialize(new
+        {
+            pricing_mode = OpeningLimitPricingMode,
+            order_execution_mode = FakOrderType,
+            post_only = false,
+            strategy_code = variant.Code,
+            reference_asset_symbol = referenceAssetSymbol,
+            reference_binance_symbol = extrema?.BinanceSymbol ?? referenceAssetSymbol + "USDT",
+            decision_source = "reference_price_absolute_range_bps_premarket",
+            absolute_reference_source = "crypto_reference_price_extrema_cache",
+            quote_received_at_utc = nowUtc,
+            condition_id = market.ConditionId,
+            market_id = market.MarketId,
+            market_slug = market.Slug,
+            market_start_utc = marketStartUtc,
+            market_end_utc = market.EndDateUtc,
+            entry_delay_seconds = variant.EntryDelaySeconds,
+            entry_due_at_utc = entryDueAtUtc,
+            decision_delay_ms = GetDecisionDelayMilliseconds(entryDueAtUtc, nowUtc),
+            btc_current_price_usd = isBtcReference ? currentPrice?.PriceUsd : null,
+            btc_current_source_updated_at_utc = isBtcReference ? currentPrice?.SourceUpdatedAtUtc : null,
+            btc_current_fetched_at_utc = isBtcReference ? currentPrice?.FetchedAtUtc : null,
+            crypto_asset_symbol = isBtcReference ? null : referenceAssetSymbol,
+            crypto_current_price_usd = isBtcReference ? null : currentPrice?.PriceUsd,
+            crypto_current_source_updated_at_utc = isBtcReference ? null : currentPrice?.SourceUpdatedAtUtc,
+            crypto_current_fetched_at_utc = isBtcReference ? null : currentPrice?.FetchedAtUtc,
+            current_price_usd = currentPrice?.PriceUsd,
+            absolute_reference_lookback_hours = variant.DecisionDepth,
+            absolute_reference_window_seconds = extrema?.WindowSeconds,
+            absolute_reference_coverage_bucket_seconds = extrema?.CoverageBucketSeconds,
+            absolute_reference_tick_count = extrema?.TickCount,
+            absolute_reference_coverage_bucket_count = extrema?.CoverageBucketCount,
+            absolute_reference_expected_coverage_bucket_count = extrema?.ExpectedCoverageBucketCount,
+            absolute_reference_is_full_window = extrema?.IsFullWindow,
+            absolute_reference_minimum_price_usd = extrema?.MinimumPriceUsd,
+            absolute_reference_minimum_sampled_at_utc = extrema?.MinimumSampledAtUtc,
+            absolute_reference_maximum_price_usd = extrema?.MaximumPriceUsd,
+            absolute_reference_maximum_sampled_at_utc = extrema?.MaximumSampledAtUtc,
+            absolute_reference_first_bucket_utc = extrema?.FirstBucketStartUtc,
+            absolute_reference_last_bucket_utc = extrema?.LastBucketStartUtc,
+            absolute_reference_updated_at_utc = extrema?.UpdatedAtUtc,
+            absolute_reference_threshold_bps = variant.DecisionThresholdBps,
+            absolute_reference_move_above_maximum_bps = moveAboveMaximumBps,
+            absolute_reference_move_below_minimum_bps = moveBelowMinimumBps,
+            absolute_reference_selected_boundary = selectedBoundary,
+            absolute_reference_target_direction = selectedDirection?.ToString(),
+            fak_stats_probe = true,
+            premarket_absolute_enabled = true,
             asset_id = selectedOutcome?.AssetId,
             outcome = selectedOutcome?.Outcome,
             target_notional_usd = targetNotionalUsd,

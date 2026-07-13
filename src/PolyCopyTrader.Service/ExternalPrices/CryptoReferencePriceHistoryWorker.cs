@@ -10,7 +10,8 @@ public sealed class CryptoReferencePriceHistoryWorker(
     IAppRepository repository,
     IBtcUsdReferencePriceClient btcUsdReferencePriceClient,
     ICryptoReferencePriceClient cryptoReferencePriceClient,
-    ICryptoReferencePriceAverageCache averageCache) : BackgroundService
+    ICryptoReferencePriceAverageCache averageCache,
+    ICryptoReferencePriceExtremaCache extremaCache) : BackgroundService
 {
     private readonly string[] assetSymbols = options.AssetSymbols
         .Select(NormalizeAssetSymbol)
@@ -84,6 +85,7 @@ public sealed class CryptoReferencePriceHistoryWorker(
                 nowUtc,
                 cancellationToken);
             averageCache.Reset(ticks, nowUtc);
+            extremaCache.Reset(ticks, nowUtc);
             logger.LogInformation(
                 "Crypto reference price averages initialized from PostgreSQL. Ticks={Ticks} Assets={Assets} StartUtc={StartUtc} EndUtc={EndUtc}",
                 ticks.Count,
@@ -99,6 +101,7 @@ public sealed class CryptoReferencePriceHistoryWorker(
         {
             logger.LogError(ex, "Failed to initialize crypto reference price averages from PostgreSQL.");
             averageCache.Reset([], DateTimeOffset.UtcNow);
+            extremaCache.Reset([], DateTimeOffset.UtcNow);
             await TryRecordApiErrorAsync("InitializeCache", ex.Message, cancellationToken);
         }
     }
@@ -112,7 +115,9 @@ public sealed class CryptoReferencePriceHistoryWorker(
             {
                 var tick = await CreateCurrentTickAsync(assetSymbol, cancellationToken);
                 await repository.UpsertCryptoReferencePriceTickAsync(tick, cancellationToken);
-                averageCache.Add(tick, DateTimeOffset.UtcNow);
+                var cacheUpdatedAtUtc = DateTimeOffset.UtcNow;
+                averageCache.Add(tick, cacheUpdatedAtUtc);
+                extremaCache.Add(tick, cacheUpdatedAtUtc);
                 stored++;
             }
             catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)

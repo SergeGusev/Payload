@@ -206,7 +206,7 @@ public sealed class BtcUpDown5mPaperStrategyProcessorTests
     [Fact]
     public void StrategyIds_IncludeStandardMartinAndGammaBtcVariants()
     {
-        Assert.Equal(920, StrategyIds.BtcUpDown5mVariants.Count);
+        Assert.Equal(1040, StrategyIds.BtcUpDown5mVariants.Count);
         Assert.Equal(StrategyIds.BtcUpDown5mVariants.Count, StrategyIds.BtcUpDown5mVariants.Select(variant => variant.Id).Distinct().Count());
         Assert.Equal(StrategyIds.BtcUpDown5mVariants.Count, StrategyIds.BtcUpDown5mVariants.Select(variant => variant.Code).Distinct().Count());
         Assert.Equal(0, StrategyIds.BtcUpDown5mVariants.Count(variant => variant.Behavior == BtcUpDown5mStrategyBehavior.Standard));
@@ -232,6 +232,7 @@ public sealed class BtcUpDown5mPaperStrategyProcessorTests
             variant.Code.Contains("_up_down_5m_skip_", StringComparison.Ordinal));
         Assert.Equal(200, StrategyIds.BtcUpDown5mVariants.Count(variant => variant.Behavior == BtcUpDown5mStrategyBehavior.FixedOutcomePreviousResultBpsThresholdInstant));
         Assert.Equal(84, StrategyIds.BtcUpDown5mVariants.Count(variant => variant.Behavior == BtcUpDown5mStrategyBehavior.ReferenceAverageBpsThresholdFakPremarket));
+        Assert.Equal(120, StrategyIds.BtcUpDown5mVariants.Count(variant => variant.Behavior == BtcUpDown5mStrategyBehavior.AbsoluteBpsThresholdFakPremarket));
         Assert.Equal(0, StrategyIds.BtcUpDown5mVariants.Count(variant => variant.Behavior == BtcUpDown5mStrategyBehavior.AlwaysUp));
         Assert.Equal(0, StrategyIds.BtcUpDown5mVariants.Count(variant => variant.Behavior == BtcUpDown5mStrategyBehavior.AlwaysDown));
         Assert.Equal(0, StrategyIds.BtcUpDown5mVariants.Count(variant => variant.Behavior == BtcUpDown5mStrategyBehavior.SimpleFixedOutcomeInstant));
@@ -521,17 +522,17 @@ public sealed class BtcUpDown5mPaperStrategyProcessorTests
     [Fact]
     public void StrategyIds_ExcludeCryptoBinanceBpsVariants()
     {
-        Assert.Equal(1191, StrategyIds.CryptoUpDown5mVariants.Count);
-        Assert.Equal(2111, StrategyIds.UpDown5mStrategyVariants.Count);
+        Assert.Equal(1431, StrategyIds.CryptoUpDown5mVariants.Count);
+        Assert.Equal(2471, StrategyIds.UpDown5mStrategyVariants.Count);
         Assert.Equal(
             StrategyIds.UpDown5mStrategyVariants.Count,
             StrategyIds.UpDown5mStrategyVariants.Select(variant => variant.Id).Distinct().Count());
         Assert.Equal(
             StrategyIds.UpDown5mStrategyVariants.Count,
             StrategyIds.UpDown5mStrategyVariants.Select(variant => variant.Code).Distinct().Count());
-        Assert.Equal(612, StrategyIds.CryptoUpDown5mVariants.Count(variant =>
+        Assert.Equal(732, StrategyIds.CryptoUpDown5mVariants.Count(variant =>
             string.Equals(variant.ReferenceAssetSymbol, "ETH", StringComparison.OrdinalIgnoreCase)));
-        Assert.Equal(579, StrategyIds.CryptoUpDown5mVariants.Count(variant =>
+        Assert.Equal(699, StrategyIds.CryptoUpDown5mVariants.Count(variant =>
             string.Equals(variant.ReferenceAssetSymbol, "SOL", StringComparison.OrdinalIgnoreCase)));
         Assert.Equal(0, StrategyIds.CryptoUpDown5mVariants.Count(variant =>
             variant.Behavior == BtcUpDown5mStrategyBehavior.CryptoBinanceStartRelativeBpsThreshold));
@@ -565,6 +566,8 @@ public sealed class BtcUpDown5mPaperStrategyProcessorTests
             variant.Behavior == BtcUpDown5mStrategyBehavior.FixedOutcomePreviousResultBpsThresholdFakPremarket));
         Assert.Equal(168, StrategyIds.CryptoUpDown5mVariants.Count(variant =>
             variant.Behavior == BtcUpDown5mStrategyBehavior.ReferenceAverageBpsThresholdFakPremarket));
+        Assert.Equal(240, StrategyIds.CryptoUpDown5mVariants.Count(variant =>
+            variant.Behavior == BtcUpDown5mStrategyBehavior.AbsoluteBpsThresholdFakPremarket));
         Assert.Equal(0, StrategyIds.CryptoUpDown5mVariants.Count(variant =>
             variant.Behavior == BtcUpDown5mStrategyBehavior.FilteredReferenceAverageBpsThresholdFakPremarket));
         Assert.Equal(0, StrategyIds.CryptoUpDown5mVariants.Count(variant =>
@@ -7992,6 +7995,195 @@ public sealed class BtcUpDown5mPaperStrategyProcessorTests
         Assert.Contains("\"paper_fak_fill_model\":\"fak_taker_executable_snapshot_v2\"", order.RawDecisionJson, StringComparison.Ordinal);
     }
 
+    [Theory]
+    [InlineData(true, "Down", "eth-absolute-down", 60)]
+    [InlineData(false, "Up", "eth-absolute-up", 41)]
+    public async Task ProcessAsync_EthAbsolutePremarketUsesExactExtremaThresholdAndFakStack(
+        bool aboveMaximum,
+        string expectedOutcome,
+        string expectedAssetId,
+        int expectedEntryPriceCents)
+    {
+        var now = new DateTimeOffset(2026, 7, 13, 12, 0, 0, TimeSpan.Zero);
+        var marketStartUtc = now.AddSeconds(30);
+        var variant = StrategyIds.CryptoUpDown5mVariants.Single(item =>
+            item.Code == "eth_up_down_5m_6h_absolute_bps_5_fak_premarket");
+        var repository = new TestAppRepository();
+        repository.PolymarketGammaMarkets.Add(CreateMarket(
+            marketStartUtc,
+            marketStartUtc.AddMinutes(5),
+            upPrice: 0.50m,
+            downPrice: 0.50m,
+            slug: $"eth-updown-5m-{marketStartUtc.ToUnixTimeSeconds().ToString(CultureInfo.InvariantCulture)}",
+            seriesSlug: "eth-up-or-down-5m",
+            question: "ETH Up or Down - absolute test",
+            marketId: "eth-absolute-market",
+            conditionId: "eth-absolute-condition",
+            upAssetId: "eth-absolute-up",
+            downAssetId: "eth-absolute-down"));
+        var cryptoPriceClient = new FakeCryptoReferencePriceClient();
+        cryptoPriceClient.SetPrice("ETH", aboveMaximum ? 110.055m : 89.955m);
+        var extremaProvider = new FakeCryptoReferencePriceExtremaProvider();
+        extremaProvider.SetExtrema("ETH", lookbackHours: 6, minimumPriceUsd: 90m, maximumPriceUsd: 110m);
+        OrderBookSnapshot[] orderBooks =
+        [
+            OrderBook(
+                "eth-absolute-up",
+                [new OrderBookLevel(0.39m, 100m)],
+                [new OrderBookLevel(0.41m, 100m)],
+                now,
+                minOrderSize: 1m),
+            OrderBook(
+                "eth-absolute-down",
+                [new OrderBookLevel(0.58m, 100m)],
+                [new OrderBookLevel(0.60m, 100m)],
+                now,
+                minOrderSize: 1m)
+        ];
+        var processor = CreateProcessorCoreWithOptions(
+            repository,
+            [],
+            orderBooks,
+            _ => { },
+            orderBooks,
+            CreateBtcOptions(paperTakerPricingEnabled: false, [variant.Code]),
+            cryptoReferencePriceClient: cryptoPriceClient,
+            timeProvider: new ManualTimeProvider(now),
+            cryptoReferencePriceExtremaProvider: extremaProvider);
+
+        var result = await processor.ProcessAsync();
+
+        Assert.Equal(1, result.EntriesPlaced);
+        var run = Assert.Single(repository.StrategyMarketPaperRuns, item =>
+            item.StrategyId == variant.Id &&
+            item.Status == StrategyMarketPaperRunStatuses.Entered);
+        Assert.Equal(now, run.EntryDueAtUtc);
+        Assert.Equal(expectedAssetId, run.SelectedAssetId);
+        Assert.Equal(expectedOutcome, run.SelectedOutcome);
+        Assert.Equal(expectedEntryPriceCents / 100m, run.EntryPrice);
+
+        var order = Assert.Single(repository.PaperOrders);
+        Assert.Equal(PaperOrderStatus.Filled, order.Status);
+        Assert.Equal("btc_updown5m_fak_taker_paper", order.ExecutionSource);
+        Assert.Equal(expectedAssetId, order.AssetId);
+        Assert.Equal(expectedOutcome, order.Outcome);
+        Assert.NotNull(order.RawDecisionJson);
+        Assert.Contains("\"decision_source\":\"reference_price_absolute_range_bps_premarket\"", order.RawDecisionJson, StringComparison.Ordinal);
+        Assert.Contains("\"absolute_reference_source\":\"crypto_reference_price_extrema_cache\"", order.RawDecisionJson, StringComparison.Ordinal);
+        Assert.Contains("\"absolute_reference_lookback_hours\":6", order.RawDecisionJson, StringComparison.Ordinal);
+        Assert.Contains("\"absolute_reference_threshold_bps\":5", order.RawDecisionJson, StringComparison.Ordinal);
+        Assert.Contains("\"absolute_reference_minimum_price_usd\":90", order.RawDecisionJson, StringComparison.Ordinal);
+        Assert.Contains("\"absolute_reference_maximum_price_usd\":110", order.RawDecisionJson, StringComparison.Ordinal);
+        Assert.Contains($"\"absolute_reference_selected_boundary\":\"{(aboveMaximum ? "maximum" : "minimum")}\"", order.RawDecisionJson, StringComparison.Ordinal);
+        Assert.Contains($"\"absolute_reference_target_direction\":\"{expectedOutcome}\"", order.RawDecisionJson, StringComparison.Ordinal);
+        Assert.Contains(aboveMaximum
+            ? "\"absolute_reference_move_above_maximum_bps\":5"
+            : "\"absolute_reference_move_below_minimum_bps\":-5", order.RawDecisionJson, StringComparison.Ordinal);
+        Assert.Contains("\"opening_limit_price_mode\":\"fak_stats_probe_worst_price\"", order.RawDecisionJson, StringComparison.Ordinal);
+        Assert.Contains("\"paper_fak_fill_model\":\"fak_taker_executable_snapshot_v2\"", order.RawDecisionJson, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task ProcessAsync_EthAbsolutePremarketSkipsBeforeFreshPriceWhenFullWindowIsMissing()
+    {
+        var now = new DateTimeOffset(2026, 7, 13, 12, 0, 0, TimeSpan.Zero);
+        var marketStartUtc = now.AddSeconds(30);
+        var variant = StrategyIds.CryptoUpDown5mVariants.Single(item =>
+            item.Code == "eth_up_down_5m_6h_absolute_bps_5_fak_premarket");
+        var repository = new TestAppRepository();
+        repository.PolymarketGammaMarkets.Add(CreateMarket(
+            marketStartUtc,
+            marketStartUtc.AddMinutes(5),
+            upPrice: 0.50m,
+            downPrice: 0.50m,
+            slug: $"eth-updown-5m-{marketStartUtc.ToUnixTimeSeconds().ToString(CultureInfo.InvariantCulture)}",
+            seriesSlug: "eth-up-or-down-5m",
+            question: "ETH Up or Down - incomplete absolute test",
+            marketId: "eth-absolute-incomplete-market",
+            conditionId: "eth-absolute-incomplete-condition",
+            upAssetId: "eth-absolute-incomplete-up",
+            downAssetId: "eth-absolute-incomplete-down"));
+        var cryptoPriceClient = new FakeCryptoReferencePriceClient();
+        cryptoPriceClient.SetPrice("ETH", 110.055m);
+        var extremaProvider = new FakeCryptoReferencePriceExtremaProvider();
+        extremaProvider.SetExtrema(
+            "ETH",
+            lookbackHours: 6,
+            minimumPriceUsd: 90m,
+            maximumPriceUsd: 110m,
+            isFullWindow: false);
+        var processor = CreateProcessorCoreWithOptions(
+            repository,
+            [],
+            DefaultOrderBooks(),
+            _ => { },
+            [],
+            CreateBtcOptions(paperTakerPricingEnabled: false, [variant.Code]),
+            cryptoReferencePriceClient: cryptoPriceClient,
+            timeProvider: new ManualTimeProvider(now),
+            cryptoReferencePriceExtremaProvider: extremaProvider);
+
+        var result = await processor.ProcessAsync();
+
+        Assert.Equal(0, result.EntriesPlaced);
+        Assert.Equal(1, result.RunsSkipped);
+        Assert.Equal(0, cryptoPriceClient.GetPriceCalls);
+        Assert.Empty(repository.PaperOrders);
+        var run = Assert.Single(repository.StrategyMarketPaperRuns, item => item.StrategyId == variant.Id);
+        Assert.Equal(StrategyMarketPaperRunStatuses.Skipped, run.Status);
+        Assert.Equal("absolute_reference_full_window_missing", run.SkipReason);
+        Assert.Contains("\"absolute_reference_is_full_window\":false", run.SkipDiagnosticsJson, StringComparison.Ordinal);
+        Assert.Contains("\"current_price_usd\":null", run.SkipDiagnosticsJson, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task ProcessAsync_EthAbsolutePremarketSkipsWhenCurrentPriceStaysInsideExtrema()
+    {
+        var now = new DateTimeOffset(2026, 7, 13, 12, 0, 0, TimeSpan.Zero);
+        var marketStartUtc = now.AddSeconds(30);
+        var variant = StrategyIds.CryptoUpDown5mVariants.Single(item =>
+            item.Code == "eth_up_down_5m_6h_absolute_bps_5_fak_premarket");
+        var repository = new TestAppRepository();
+        repository.PolymarketGammaMarkets.Add(CreateMarket(
+            marketStartUtc,
+            marketStartUtc.AddMinutes(5),
+            upPrice: 0.50m,
+            downPrice: 0.50m,
+            slug: $"eth-updown-5m-{marketStartUtc.ToUnixTimeSeconds().ToString(CultureInfo.InvariantCulture)}",
+            seriesSlug: "eth-up-or-down-5m",
+            question: "ETH Up or Down - inside absolute range test",
+            marketId: "eth-absolute-inside-market",
+            conditionId: "eth-absolute-inside-condition",
+            upAssetId: "eth-absolute-inside-up",
+            downAssetId: "eth-absolute-inside-down"));
+        var cryptoPriceClient = new FakeCryptoReferencePriceClient();
+        cryptoPriceClient.SetPrice("ETH", 100m);
+        var extremaProvider = new FakeCryptoReferencePriceExtremaProvider();
+        extremaProvider.SetExtrema("ETH", lookbackHours: 6, minimumPriceUsd: 90m, maximumPriceUsd: 110m);
+        var processor = CreateProcessorCoreWithOptions(
+            repository,
+            [],
+            DefaultOrderBooks(),
+            _ => { },
+            [],
+            CreateBtcOptions(paperTakerPricingEnabled: false, [variant.Code]),
+            cryptoReferencePriceClient: cryptoPriceClient,
+            timeProvider: new ManualTimeProvider(now),
+            cryptoReferencePriceExtremaProvider: extremaProvider);
+
+        var result = await processor.ProcessAsync();
+
+        Assert.Equal(0, result.EntriesPlaced);
+        Assert.Equal(1, result.RunsSkipped);
+        Assert.Equal(1, cryptoPriceClient.GetPriceCalls);
+        Assert.Empty(repository.PaperOrders);
+        var run = Assert.Single(repository.StrategyMarketPaperRuns, item => item.StrategyId == variant.Id);
+        Assert.Equal("absolute_reference_move_below_bps_threshold", run.SkipReason);
+        Assert.Contains("\"current_price_usd\":100", run.SkipDiagnosticsJson, StringComparison.Ordinal);
+        Assert.Contains("\"absolute_reference_selected_boundary\":null", run.SkipDiagnosticsJson, StringComparison.Ordinal);
+        Assert.Contains("\"absolute_reference_target_direction\":null", run.SkipDiagnosticsJson, StringComparison.Ordinal);
+    }
+
     [Fact]
     public async Task ProcessAsync_BtcFuturesBasisPremarketBuysUpWhenFuturesMidIsAboveSpot()
     {
@@ -10073,6 +10265,7 @@ public sealed class BtcUpDown5mPaperStrategyProcessorTests
             btcUsdReferencePriceCache,
             cryptoReferencePriceClient,
             new FakeCryptoReferencePriceAverageProvider(),
+            new FakeCryptoReferencePriceExtremaProvider(),
             new FakeExpiryFuturesReferencePriceClient(),
             marketDataCache,
             new ActiveMarketAssetSubscriptionRegistry(),
@@ -10255,6 +10448,7 @@ public sealed class BtcUpDown5mPaperStrategyProcessorTests
         LiveTradingOptions? liveTradingOptions = null,
         IPolymarketGeoClient? geoClient = null,
         ICryptoReferencePriceAverageProvider? cryptoReferencePriceAverageProvider = null,
+        ICryptoReferencePriceExtremaProvider? cryptoReferencePriceExtremaProvider = null,
         IExposureSnapshotCache? exposureSnapshotCache = null,
         IPaperEntryPersistenceQueue? paperEntryPersistenceQueue = null)
     {
@@ -10304,6 +10498,7 @@ public sealed class BtcUpDown5mPaperStrategyProcessorTests
             btcUsdReferencePriceCache ?? CreateBtcUsdReferenceCache(100m),
             cryptoReferencePriceClient ?? new FakeCryptoReferencePriceClient(),
             cryptoReferencePriceAverageProvider ?? new FakeCryptoReferencePriceAverageProvider(),
+            cryptoReferencePriceExtremaProvider ?? new FakeCryptoReferencePriceExtremaProvider(),
             expiryFuturesReferencePriceClient ?? new FakeExpiryFuturesReferencePriceClient(),
             marketDataCache,
             activeMarketAssetSubscriptionRegistry,
@@ -11907,6 +12102,8 @@ public sealed class BtcUpDown5mPaperStrategyProcessorTests
             ["SOL"] = [150m]
         };
 
+        public int GetPriceCalls { get; private set; }
+
         public void SetPrice(string assetSymbol, decimal priceUsd)
         {
             var normalized = assetSymbol.Trim().ToUpperInvariant();
@@ -11924,6 +12121,7 @@ public sealed class BtcUpDown5mPaperStrategyProcessorTests
             CancellationToken cancellationToken = default)
         {
             cancellationToken.ThrowIfCancellationRequested();
+            GetPriceCalls++;
             var normalized = assetSymbol.Trim().ToUpperInvariant();
             if (!prices.TryGetValue(normalized, out var priceUsd))
             {
@@ -12107,6 +12305,60 @@ public sealed class BtcUpDown5mPaperStrategyProcessorTests
         {
             return GetAssetAverages(assetSymbol)
                 .FirstOrDefault(average => string.Equals(average.WindowLabel, windowLabel, StringComparison.OrdinalIgnoreCase));
+        }
+    }
+
+    private sealed class FakeCryptoReferencePriceExtremaProvider : ICryptoReferencePriceExtremaProvider
+    {
+        private readonly Dictionary<(string AssetSymbol, int LookbackHours), CryptoReferencePriceExtrema> extrema = [];
+
+        public void SetExtrema(
+            string assetSymbol,
+            int lookbackHours,
+            decimal minimumPriceUsd,
+            decimal maximumPriceUsd,
+            bool isFullWindow = true)
+        {
+            var normalized = assetSymbol.Trim().ToUpperInvariant();
+            var now = DateTimeOffset.UtcNow;
+            extrema[(normalized, lookbackHours)] = new CryptoReferencePriceExtrema(
+                normalized,
+                normalized + "USDT",
+                lookbackHours,
+                lookbackHours * 3_600,
+                lookbackHours * 60,
+                TickCount: lookbackHours * 360,
+                CoverageBucketCount: isFullWindow ? 60 : 59,
+                ExpectedCoverageBucketCount: 60,
+                isFullWindow,
+                minimumPriceUsd,
+                now.AddMinutes(-45),
+                maximumPriceUsd,
+                now.AddMinutes(-15),
+                now.AddHours(-lookbackHours),
+                now,
+                now);
+        }
+
+        public IReadOnlyList<CryptoReferencePriceExtrema> GetAssetExtrema(
+            string assetSymbol,
+            DateTimeOffset nowUtc)
+        {
+            var normalized = assetSymbol.Trim().ToUpperInvariant();
+            return extrema
+                .Where(item => string.Equals(item.Key.AssetSymbol, normalized, StringComparison.OrdinalIgnoreCase))
+                .OrderBy(item => item.Key.LookbackHours)
+                .Select(item => item.Value)
+                .ToArray();
+        }
+
+        public CryptoReferencePriceExtrema? GetExtrema(
+            string assetSymbol,
+            int lookbackHours,
+            DateTimeOffset nowUtc)
+        {
+            var normalized = assetSymbol.Trim().ToUpperInvariant();
+            return extrema.TryGetValue((normalized, lookbackHours), out var value) ? value : null;
         }
     }
 

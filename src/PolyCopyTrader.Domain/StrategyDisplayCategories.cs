@@ -150,6 +150,11 @@ public static class StrategyDisplayCategories
             return categoryPrefix + "Bps Futures Basis" + (futuresBasisRevert ? " Revert" : string.Empty) + " Premarket";
         }
 
+        if (IsAbsoluteBpsPremarket(suffix))
+        {
+            return categoryPrefix + "Absolute Premarket";
+        }
+
         if (StartsWithDiffThreshold(suffix, "Up", out var diffUpRevert))
         {
             return categoryPrefix + "Diff Up" + GetDiffCategorySuffix(suffix, diffUpRevert);
@@ -487,6 +492,19 @@ public static class StrategyDisplayCategories
             string.Equals(parts[4], "Revert", StringComparison.OrdinalIgnoreCase) &&
             string.Equals(parts[5], "Premarket", StringComparison.OrdinalIgnoreCase);
         return isRevert;
+    }
+
+    private static bool IsAbsoluteBpsPremarket(string value)
+    {
+        var parts = value.Split(new[] { ' ' }, StringSplitOptions.RemoveEmptyEntries);
+        return parts.Length == 5 &&
+            parts[0].EndsWith("h", StringComparison.OrdinalIgnoreCase) &&
+            int.TryParse(parts[0][..^1], NumberStyles.Integer, CultureInfo.InvariantCulture, out var lookbackHours) &&
+            lookbackHours is >= 1 and <= 24 &&
+            decimal.TryParse(parts[1], NumberStyles.Number, CultureInfo.InvariantCulture, out _) &&
+            string.Equals(parts[2], "bps", StringComparison.OrdinalIgnoreCase) &&
+            string.Equals(parts[3], "Absolute", StringComparison.OrdinalIgnoreCase) &&
+            string.Equals(parts[4], "Premarket", StringComparison.OrdinalIgnoreCase);
     }
 
     private static bool IsChildMirror(string value, bool includeProgress, bool useRoi)

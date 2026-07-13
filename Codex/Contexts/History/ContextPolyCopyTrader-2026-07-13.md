@@ -156,3 +156,12 @@ Request:
 
 Result:
 Inspected the exact local catalog, Reference Average decision/execution path, ten-second history cache, PostgreSQL strategy seeds, and Dashboard category parser. Implementation was not started because the requested increasing-gap `N` range is not unique, and the requirement does not state the H-window completeness/current-price boundary or whether orders must use the existing Reference Average FAK taker path and default Live state. Requested the smallest set of confirmations needed before changing financial behavior.
+
+## 2026-07-13T20:39:20.0324457+00:00
+Request:
+1. Давай сетку до 5 без перерывов
+
+Остальное - правильно
+
+Result:
+Implemented and documented all `360` Absolute Premarket variants for BTC, ETH, and SOL using `H=1..24` and consecutive `N=1..5`. Added exact rolling historical min/max windows sourced from the persisted ten-second Binance history, full-window and freshness checks, exclusion of the fresh decision price from its own reference extrema, `Down` entries at or above the maximum plus `N` bps, and `Up` entries at or below the minimum minus `N` bps. Reused the existing `-30s` FAK taker path with guaranteed worst-price stack selection. Added three currency-specific Dashboard categories, idempotent PostgreSQL seeds with Paper enabled and Live disabled, focused tests, and README documentation. Focused verification passed `13/13`; Service and Dashboard builds completed with zero errors. A clean-HEAD baseline comparison showed the complete suite has the same `112` pre-existing failed test names and no new failures. No database, running service, or deployment was changed.
