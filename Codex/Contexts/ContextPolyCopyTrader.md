@@ -1,3 +1,18 @@
+## Active Update 2026-07-13 ETH Down3 Final Decline Attribution
+Goal: Determine whether the final visible Paper PnL decline for `ETH Up or Down 5m Down 3 bps Reference Average Premarket` was caused by ETH falling.
+Status: Completed
+Done:
+- Defined the inspected interval from the global cumulative Paper PnL maximum at `2026-07-12 19:29:43.506813 UTC` through the final graph point at `2026-07-13 17:17:24.067722 UTC`.
+- Verified the current implementation path: `Down 3 bps` is the trigger condition, while this strategy selects the opposite fixed outcome, `Up`; settlement uses closed Gamma market metadata and pays the selected outcome at `1` only when it is the winning outcome.
+- Recomputed the interval directly from `strategy_market_paper_runs`: cumulative PnL declined from `+$514.88431472` to `+$363.11549586`, a loss of `$151.76881886` across `244` bets. All `244/244` selected `Up`.
+- Independently joined the same `244` runs to `paper_position_settlements`: all matched, all used source `BtcUpDown5mGammaClosedMarket`, outcomes were `113 Up` and `131 Down`, settlement PnL matched run PnL on `244/244` rows, and both sources summed to `-$151.76881886`.
+- Winning rows contributed `+$635.44948121`; losing rows contributed `-$787.21830007`. ETHUSDT moved from `$1,821.69` at the peak minute to `$1,773.92` at the final minute, a decline of `$47.77` or `2.62229029%`.
+- Found a source conflict: the internal inferred WebSocket result ledger disagreed with authoritative Gamma settlement on `19/244` markets. It was not used for attribution because Paper PnL was generated from the matching Gamma closed-market settlements.
+- Saved the reproducible read-only query and results under `outputs/eth-down3-bps-reference-average-vs-ethusdt-2026-07-13/` as `latest-decline-analysis.sql`, `.csv`, and `.txt`.
+Next: None.
+Notes: The broad ETH decline is supporting context, while the verified direct mechanism is that this all-`Up` strategy encountered more Gamma `Down` outcomes than `Up` outcomes during the interval. Production access was read-only; no database row, strategy state, service process, source behavior, or deployment changed. No product build/test was required.
+Blockers: None.
+
 ## Active Update 2026-07-13 ETH Down3 Paper PnL With ETHUSDT Overlay
 Goal: Build an updated cumulative PnL chart for `ETH Up or Down 5m Down 3 bps Reference Average Premarket` with ETH price over the same period.
 Status: Completed
