@@ -165,3 +165,10 @@ Request:
 
 Result:
 Implemented and documented all `360` Absolute Premarket variants for BTC, ETH, and SOL using `H=1..24` and consecutive `N=1..5`. Added exact rolling historical min/max windows sourced from the persisted ten-second Binance history, full-window and freshness checks, exclusion of the fresh decision price from its own reference extrema, `Down` entries at or above the maximum plus `N` bps, and `Up` entries at or below the minimum minus `N` bps. Reused the existing `-30s` FAK taker path with guaranteed worst-price stack selection. Added three currency-specific Dashboard categories, idempotent PostgreSQL seeds with Paper enabled and Live disabled, focused tests, and README documentation. Focused verification passed `13/13`; Service and Dashboard builds completed with zero errors. A clean-HEAD baseline comparison showed the complete suite has the same `112` pre-existing failed test names and no new failures. No database, running service, or deployment was changed.
+
+## 2026-07-13T20:41:12.6988389Z
+Request:
+Почему сегодня так сурово расколбасило? Всё по минусам
+
+Result:
+Captured a fixed read-only production snapshot and separated Europe/Sofia calendar day, UTC calendar day, rolling 24h/6h/1h, Paper, and Live. The Europe/Sofia Paper day and rolling 24h were positive (`+$28,300.98098491` and `+$29,799.14402275`), while the visible rolling-six-hour drawdown was `-$13,073.73316472`. Verified that `69.3646%` of six-hour stake selected `Up`; Up positions lost `-$23,722.02968726` and Down positions offset `+$10,648.29652254`. BTC was the main contributor at `-$19,244.92424567`. Exact deployed code and rows showed that BTC Diff Down Progress is an opposite-direction Progress family and alone lost `-$6,171.95640252`; highly correlated strategy copies produced more than 150 simultaneous Up positions on several BTC Down markets. Raw 24h rows matched all Dashboard snapshots exactly, and actual Live remained positive at `+$33.83376400`. No production state changed.

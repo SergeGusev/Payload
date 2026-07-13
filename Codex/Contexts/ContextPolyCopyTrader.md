@@ -1,3 +1,20 @@
+## Active Update 2026-07-13 Current Paper Drawdown Attribution
+Goal: Determine why current strategy PnL looked broadly negative and distinguish actual Live, calendar-day, rolling-window, and intraday-drawdown results.
+Status: Completed
+Done:
+- Captured a production PostgreSQL snapshot at `2026-07-13 20:34:26.435116 UTC` (`23:34:26` Europe/Sofia) in a `REPEATABLE READ`, `READ ONLY` transaction against exact endpoint `192.168.0.101/polycopytrader`.
+- Corrected and withdrew an initial diagnostic local-day boundary that incorrectly evaluated to `03:00 UTC`; the final explicitly typed Europe/Sofia boundary is `2026-07-12 21:00:00 UTC` and independently matched date-grouped rows exactly.
+- Verified that the Europe/Sofia calendar day was positive, not negative: `110,198` settled Paper runs, `+$28,300.98098491`, `+2.39666131%` ROI, and `608` positive versus `588` negative strategies. Rolling 24h was `+$29,799.14402275`; UTC calendar day was nearly flat at `-$183.54550313`.
+- Isolated the visible damage to the rolling six-hour window: `31,829` runs, `-$13,073.73316472`, `-3.65958429%` ROI, with `448` positive and `509` negative strategies. The rolling final hour had already recovered `+$1,305.11573854`.
+- Established the direct mechanism from settled rows: `69.3646%` of six-hour stake selected `Up`; those positions lost `-$23,722.02968726`, while `Down` positions added `+$10,648.29652254`. BTC contributed `-$19,244.92424567`, ETH `-$5,069.21927053`, and SOL offset `+$11,240.41035148`.
+- Verified high concentration rather than independent failures. The BTC market ending `17:00 UTC` had `162/166` positions on `Up` and lost `-$2,837.22333528`; the next market at `17:05 UTC` had `153/159` on `Up` and lost `-$2,784.84140000`.
+- Inspected exact deployed commit `e58c6dd64a94b289f70464ce3f12fdf35fc435b3`. `BTC Diff Down Progress` is intentionally countertrend: `DownCount - UpCount > N` triggers an opposite `Up` bet with multiplier `Diff - N`, capped at `10`. Its 30 current variants made `1,463` six-hour `Up` positions, lost `-$6,171.95640252`, and used `$42.94818946` average actual stake.
+- Reconstructed the calendar-day portfolio from hourly aggregates: it rose to about `+$55,959.46`, reached a deepest hourly point of `+$21,025.39`, and ended at `+$28,300.98`, so the visible event was about a `-$34,934.07` drawdown from the hourly peak despite a positive day.
+- Verified no accounting/snapshot explanation: all `1,501` rolling-24h strategy snapshot PnLs matched raw rows exactly with zero mismatch and `$0` maximum difference. Only one strategy had settled Live rows; its `14` orders were `10W/4L`, `+$33.83376400`, and its Paper-shadow was `+$33.83376404`.
+Next: None.
+Notes: Reproducible read-only code, raw CSV exports, and the report are under ignored directory `outputs/today-loss-attribution-2026-07-13/`. The service heartbeat at cutoff was `0.473s` old, mode `Live`, with empty `last_error`. No database row, strategy state, running process, source behavior, or deployment was changed. Six-hour run/stake/PnL totals matched independently across window-, strategy-, and asset/outcome-level queries.
+Blockers: None.
+
 ## Active Update 2026-07-13 Absolute Premarket Strategy Grid
 Goal: Add BTC/ETH/SOL `H N bps Absolute Premarket` strategy families using H-hour historical extrema and a fresh Binance decision price 30 seconds before market open.
 Status: Completed
