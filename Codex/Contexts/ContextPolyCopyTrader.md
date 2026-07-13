@@ -1,3 +1,19 @@
+## Active Update 2026-07-13 ETH Down3 Paper PnL With ETHUSDT Overlay
+Goal: Build an updated cumulative PnL chart for `ETH Up or Down 5m Down 3 bps Reference Average Premarket` with ETH price over the same period.
+Status: Completed
+Done:
+- Resolved the exact production strategy among three similarly named rows: ID `b7c50005-0000-4000-8140-000000000103`, code `eth_up_down_5m_down_reference_average_bps_3_fak_premarket`; it is enabled, unpaused, and currently has `live_stakes=false`.
+- Fixed the read-only server cutoff at `2026-07-13 17:24:33.009607 UTC` and exported all `2,120` settled Paper runs ordered by `settled_at_utc, id`, covering `2026-07-03 06:50:21.501842` through `2026-07-13 17:17:24.067722 UTC`.
+- Independently matched raw-row decimal calculations and the server SQL aggregate: wins/losses/flat `1,120/1,000/0`, stake `$12,739.52998324`, PnL `+$363.11549586`, ROI `2.85030528%`, and maximum drawdown `$236.71751337`.
+- Maximum drawdown remained from cumulative PnL `+$329.63242287` at `2026-07-07 01:24:21.877389 UTC` to `+$92.91490950` at `2026-07-08 15:27:09.040059 UTC`.
+- Fetched and continuity-checked `15,028` official Binance Spot ETHUSDT one-minute candles covering the identical chart-minute range. ETHUSDT moved from `$1,715.80` to `$1,773.92` (`+3.38734118%`); observed low/high were `$1,713.44/$1,846.00`.
+- Independently compared `14,905` server-persisted ETHUSDT WebSocket sampled minutes with Binance candles: every server minute matched a candle minute, zero were unmatched, and mean absolute close difference was `$0.14323046`.
+- Rendered and visually inspected the `1800x920` PNG at `outputs/eth-down3-bps-reference-average-vs-ethusdt-2026-07-13/paper-pnl-vs-ethusdt-chart.png`; cumulative Paper PnL uses the left scale, ETHUSDT uses the right scale, and the maximum-PnL-drawdown interval is shaded.
+- Kept execution models separate: the graph is explicitly Paper PnL. The strategy also has `22` historical Live orders, `21` settled, with total settled Live PnL `-$4.16334300`; those rows are not mixed into the Paper curve.
+Next: None.
+Notes: Saved frozen SQL, Paper/price CSVs, independent aggregate, Binance fetch/continuity evidence, server-price validation, scripts, summaries, and PNG in the ignored output directory. Production access was read-only with timeouts; no database row, strategy flag, order, service process, source behavior, or deployment changed. No product build/test was required.
+Blockers: None.
+
 ## Active Update 2026-07-13 Hopeless Progress Strategy Purge
 Goal: Delete only Progress strategies with persistently negative evidence and retain variants that still merit observation.
 Status: Completed in the server database and implemented in source; server deployment is still required before the next service restart.
