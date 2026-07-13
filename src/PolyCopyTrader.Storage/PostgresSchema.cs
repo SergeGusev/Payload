@@ -1307,6 +1307,21 @@ SELECT
     now(),
     now()
 FROM formatted
+WHERE NOT (
+        asset_symbol = 'ETH'
+        AND mode_code = 'child_progress'
+        AND lookback_hours IN (1, 2, 3, 4, 5, 6, 8, 9, 10, 11, 13, 14, 19, 21, 24)
+    )
+  AND NOT (
+        asset_symbol = 'ETH'
+        AND mode_code = 'child_progress_roi'
+        AND lookback_hours IN (3, 5, 7, 8, 9, 11, 12, 13, 14, 15, 16, 17, 18, 19, 21, 22, 23, 24)
+    )
+  AND NOT (
+        asset_symbol = 'SOL'
+        AND mode_code = 'child_progress_roi'
+        AND lookback_hours IN (4, 5, 6, 13, 14, 19, 21, 23)
+    )
 ON CONFLICT (id) DO UPDATE SET
     code = excluded.code,
     name = excluded.name,
@@ -1698,6 +1713,11 @@ WHERE NOT (
     AND diff_code = 'up'
     AND threshold_value IN (1, 2)
 )
+  AND NOT (
+    asset_symbol = 'ETH'
+    AND diff_code = 'up'
+    AND threshold_value IN (1, 2, 13, 14, 15, 16)
+)
 ON CONFLICT (id) DO UPDATE SET
     code = excluded.code,
     name = excluded.name,
@@ -1770,6 +1790,14 @@ SELECT
     now()
 FROM assets
 CROSS JOIN thresholds
+WHERE NOT (
+        asset_symbol = 'BTC'
+        AND threshold_value IN (1, 2, 4, 5)
+    )
+  AND NOT (
+        asset_symbol = 'ETH'
+        AND threshold_value = 4
+    )
 ON CONFLICT (id) DO UPDATE SET
     code = excluded.code,
     name = excluded.name,
@@ -1799,6 +1827,7 @@ SELECT
     now()
 FROM assets
 CROSS JOIN limits
+WHERE asset_symbol <> 'BTC'
 ON CONFLICT (id) DO UPDATE SET
     code = excluded.code,
     name = excluded.name,
@@ -6381,6 +6410,451 @@ BEGIN
                 );
             END IF;
         END IF;
+    END IF;
+END $$;
+
+DO $$
+DECLARE
+    migration_key_value text := '20260713_remove_hopeless_progress_strategies';
+    allowlist_count integer := 0;
+    target_strategy_count integer := 0;
+    active_live_orders integer := 0;
+    deleted_strategies integer := 0;
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1
+        FROM schema_data_migrations migration
+        WHERE migration.migration_key = migration_key_value
+    ) THEN
+        DROP TABLE IF EXISTS tmp_hopeless_progress_allowlist;
+        DROP TABLE IF EXISTS tmp_hopeless_progress_targets;
+        DROP TABLE IF EXISTS tmp_hopeless_progress_wallets;
+        DROP TABLE IF EXISTS tmp_hopeless_progress_paper_orders;
+        DROP TABLE IF EXISTS tmp_hopeless_progress_live_orders;
+        DROP TABLE IF EXISTS tmp_hopeless_progress_runs;
+        DROP TABLE IF EXISTS tmp_hopeless_progress_signals;
+        DROP TABLE IF EXISTS tmp_hopeless_progress_positions;
+        DROP TABLE IF EXISTS tmp_hopeless_progress_settlements;
+
+        CREATE TEMP TABLE tmp_hopeless_progress_allowlist (
+            id uuid PRIMARY KEY,
+            code text UNIQUE NOT NULL
+        ) ON COMMIT DROP;
+
+        INSERT INTO tmp_hopeless_progress_allowlist (id, code)
+        SELECT
+            ('b7c50005-0000-4000-8169-' || lpad(value::text, 12, '0'))::uuid,
+            'btc_up_down_5m_' || value::text || '_diff_limit_progress_premarket'
+        FROM generate_series(1, 5) AS selected(value)
+        UNION ALL
+        SELECT
+            ('b7c50005-0000-4000-8166-' || lpad(value::text, 12, '0'))::uuid,
+            'btc_up_down_5m_' || value::text || '_diff_shift_progress_premarket'
+        FROM unnest(ARRAY[1, 2, 4, 5]) AS selected(value)
+        UNION ALL
+        SELECT
+            ('b7c50005-0000-4000-8189-' || lpad(value::text, 12, '0'))::uuid,
+            'eth_up_down_5m_' || value::text || '_child_progress'
+        FROM unnest(ARRAY[1, 2, 3, 4, 5, 6, 8, 9, 10, 11, 13, 14, 19, 21, 24]) AS selected(value)
+        UNION ALL
+        SELECT
+            ('b7c50005-0000-4000-8198-' || lpad(value::text, 12, '0'))::uuid,
+            'eth_up_down_5m_' || value::text || '_child_progress_roi'
+        FROM unnest(ARRAY[3, 5, 7, 8, 9, 11, 12, 13, 14, 15, 16, 17, 18, 19, 21, 22, 23, 24]) AS selected(value)
+        UNION ALL
+        SELECT
+            'b7c50005-0000-4000-8167-000000000004'::uuid,
+            'eth_up_down_5m_4_diff_shift_progress_premarket'
+        UNION ALL
+        SELECT
+            ('b7c50005-0000-4000-8156-' || lpad(value::text, 12, '0'))::uuid,
+            'eth_up_down_5m_diff_' || value::text || '_up_progress'
+        FROM unnest(ARRAY[1, 2, 13, 14, 15, 16]) AS selected(value)
+        UNION ALL
+        SELECT
+            ('b7c50005-0000-4000-8199-' || lpad(value::text, 12, '0'))::uuid,
+            'sol_up_down_5m_' || value::text || '_child_progress_roi'
+        FROM unnest(ARRAY[4, 5, 6, 13, 14, 19, 21, 23]) AS selected(value);
+
+        SELECT count(*)::integer
+        INTO allowlist_count
+        FROM tmp_hopeless_progress_allowlist;
+
+        IF allowlist_count <> 57 THEN
+            RAISE EXCEPTION 'Refusing hopeless Progress cleanup because allowlist contains % rows instead of 57.', allowlist_count;
+        END IF;
+
+        IF EXISTS (
+            SELECT 1
+            FROM strategies strategy
+            JOIN tmp_hopeless_progress_allowlist target
+                ON strategy.id = target.id OR strategy.code = target.code
+            WHERE strategy.id <> target.id OR strategy.code <> target.code
+        ) THEN
+            RAISE EXCEPTION 'Refusing hopeless Progress cleanup because a strategy id/code collision was found.';
+        END IF;
+
+        CREATE TEMP TABLE tmp_hopeless_progress_targets ON COMMIT DROP AS
+        SELECT strategy.id, strategy.code
+        FROM strategies strategy
+        JOIN tmp_hopeless_progress_allowlist target
+            ON strategy.id = target.id AND strategy.code = target.code;
+
+        SELECT count(*)::integer
+        INTO target_strategy_count
+        FROM tmp_hopeless_progress_targets;
+
+        IF target_strategy_count > 0 THEN
+            UPDATE strategies strategy
+            SET enabled = false,
+                live_stakes = false,
+                auto_live_paused = false,
+                auto_live_paused_at_utc = NULL,
+                auto_live_pause_window_start_utc = NULL,
+                live_enabled_at_utc = NULL,
+                updated_at_utc = clock_timestamp()
+            WHERE strategy.id IN (
+                SELECT target.id
+                FROM tmp_hopeless_progress_targets target
+            );
+
+            CREATE TEMP TABLE tmp_hopeless_progress_wallets ON COMMIT DROP AS
+            SELECT 'strategy:' || target.code AS wallet
+            FROM tmp_hopeless_progress_targets target;
+
+            CREATE TEMP TABLE tmp_hopeless_progress_paper_orders ON COMMIT DROP AS
+            SELECT paper_order.id, paper_order.signal_id, paper_order.correlation_id
+            FROM paper_orders paper_order
+            WHERE paper_order.strategy_id IN (
+                    SELECT target.id
+                    FROM tmp_hopeless_progress_targets target
+                )
+               OR paper_order.copied_trader_wallet IN (
+                    SELECT target.wallet
+                    FROM tmp_hopeless_progress_wallets target
+                );
+
+            CREATE TEMP TABLE tmp_hopeless_progress_live_orders ON COMMIT DROP AS
+            SELECT live_order.id, live_order.signal_id, live_order.paper_order_id, live_order.correlation_id
+            FROM live_orders live_order
+            WHERE live_order.strategy_id IN (
+                    SELECT target.id
+                    FROM tmp_hopeless_progress_targets target
+                )
+               OR live_order.paper_order_id IN (
+                    SELECT target.id
+                    FROM tmp_hopeless_progress_paper_orders target
+                );
+
+            CREATE TEMP TABLE tmp_hopeless_progress_runs ON COMMIT DROP AS
+            SELECT run.id, run.paper_order_id, run.signal_id
+            FROM strategy_market_paper_runs run
+            WHERE run.strategy_id IN (
+                    SELECT target.id
+                    FROM tmp_hopeless_progress_targets target
+                )
+               OR run.paper_order_id IN (
+                    SELECT target.id
+                    FROM tmp_hopeless_progress_paper_orders target
+                );
+
+            CREATE TEMP TABLE tmp_hopeless_progress_signals ON COMMIT DROP AS
+            SELECT DISTINCT signal.id
+            FROM signals signal
+            WHERE signal.trader_wallet IN (
+                    SELECT target.wallet
+                    FROM tmp_hopeless_progress_wallets target
+                )
+               OR signal.id IN (
+                    SELECT target.signal_id
+                    FROM tmp_hopeless_progress_paper_orders target
+                    WHERE target.signal_id IS NOT NULL
+                )
+               OR signal.id IN (
+                    SELECT target.signal_id
+                    FROM tmp_hopeless_progress_live_orders target
+                    WHERE target.signal_id IS NOT NULL
+                )
+               OR signal.id IN (
+                    SELECT target.signal_id
+                    FROM tmp_hopeless_progress_runs target
+                    WHERE target.signal_id IS NOT NULL
+                );
+
+            CREATE TEMP TABLE tmp_hopeless_progress_positions ON COMMIT DROP AS
+            SELECT position.id
+            FROM paper_positions position
+            WHERE position.copied_trader_wallet IN (
+                SELECT target.wallet
+                FROM tmp_hopeless_progress_wallets target
+            );
+
+            CREATE TEMP TABLE tmp_hopeless_progress_settlements ON COMMIT DROP AS
+            SELECT settlement.id
+            FROM paper_position_settlements settlement
+            WHERE settlement.copied_trader_wallet IN (
+                SELECT target.wallet
+                FROM tmp_hopeless_progress_wallets target
+            );
+
+            SELECT count(*)::integer
+            INTO active_live_orders
+            FROM live_orders live_order
+            WHERE live_order.id IN (
+                    SELECT target.id
+                    FROM tmp_hopeless_progress_live_orders target
+                )
+              AND live_order.settled_at_utc IS NULL
+              AND (
+                    lower(live_order.status) IN (
+                        'created', 'queued', 'validated', 'submitted', 'open', 'live',
+                        'unmatched', 'partiallymatched', 'pending', 'cancelrequested'
+                    )
+                    OR lower(live_order.cancel_status) IN ('requested', 'pending')
+                    OR (
+                        live_order.remaining_size > 0
+                        AND lower(live_order.status) NOT IN (
+                            'matched', 'rejected', 'preflightrejected', 'cancelled', 'cancelfailed'
+                        )
+                    )
+                );
+
+            IF active_live_orders > 0 THEN
+                RAISE EXCEPTION 'Refusing hopeless Progress cleanup because % active Live orders still exist.', active_live_orders;
+            END IF;
+
+            IF to_regclass('public.dashboard_projection_events') IS NOT NULL THEN
+                DELETE FROM dashboard_projection_events event
+                WHERE event.strategy_id IN (
+                        SELECT target.id
+                        FROM tmp_hopeless_progress_targets target
+                    )
+                   OR event.source_id IN (
+                        SELECT target.id
+                        FROM tmp_hopeless_progress_paper_orders target
+                    )
+                   OR event.source_id IN (
+                        SELECT target.id
+                        FROM tmp_hopeless_progress_live_orders target
+                    )
+                   OR event.source_id IN (
+                        SELECT target.id
+                        FROM tmp_hopeless_progress_positions target
+                    )
+                   OR event.source_id IN (
+                        SELECT target.id
+                        FROM tmp_hopeless_progress_settlements target
+                    );
+            END IF;
+
+            IF to_regclass('public.dashboard_projection_reconciliation_queue') IS NOT NULL THEN
+                DELETE FROM dashboard_projection_reconciliation_queue queue
+                WHERE queue.strategy_id IN (
+                    SELECT target.id
+                    FROM tmp_hopeless_progress_targets target
+                );
+            END IF;
+
+            IF to_regclass('public.dashboard_projection_control') IS NOT NULL THEN
+                UPDATE dashboard_projection_control control
+                SET reconciliation_cursor_strategy_id = NULL
+                WHERE control.reconciliation_cursor_strategy_id IN (
+                    SELECT target.id
+                    FROM tmp_hopeless_progress_targets target
+                );
+            END IF;
+
+            DELETE FROM paper_live_shadow_discrepancies discrepancy
+            WHERE discrepancy.strategy_id IN (
+                    SELECT target.id
+                    FROM tmp_hopeless_progress_targets target
+                )
+               OR discrepancy.correlation_id IN (
+                    SELECT target.correlation_id
+                    FROM tmp_hopeless_progress_paper_orders target
+                    WHERE target.correlation_id IS NOT NULL
+                )
+               OR discrepancy.correlation_id IN (
+                    SELECT target.correlation_id
+                    FROM tmp_hopeless_progress_live_orders target
+                    WHERE target.correlation_id IS NOT NULL
+                );
+
+            DELETE FROM paper_live_shadow_decisions decision
+            WHERE decision.strategy_id IN (
+                    SELECT target.id
+                    FROM tmp_hopeless_progress_targets target
+                )
+               OR decision.paper_order_id IN (
+                    SELECT target.id
+                    FROM tmp_hopeless_progress_paper_orders target
+                )
+               OR decision.live_order_id IN (
+                    SELECT target.id
+                    FROM tmp_hopeless_progress_live_orders target
+                )
+               OR decision.signal_id IN (
+                    SELECT target.id
+                    FROM tmp_hopeless_progress_signals target
+                );
+
+            DELETE FROM polymarket_onchain_paper_signal_results result
+            WHERE result.copied_trader_wallet IN (
+                    SELECT target.wallet
+                    FROM tmp_hopeless_progress_wallets target
+                )
+               OR result.paper_order_id IN (
+                    SELECT target.id
+                    FROM tmp_hopeless_progress_paper_orders target
+                )
+               OR result.signal_id IN (
+                    SELECT target.id
+                    FROM tmp_hopeless_progress_signals target
+                );
+
+            DELETE FROM dry_run_orders dry_run_order
+            WHERE dry_run_order.strategy_id IN (
+                SELECT target.id
+                FROM tmp_hopeless_progress_targets target
+            );
+
+            DELETE FROM date_dependent_strategy_hourly_paper_pnl hourly_pnl
+            WHERE hourly_pnl.strategy_id IN (
+                SELECT target.id
+                FROM tmp_hopeless_progress_targets target
+            );
+
+            DELETE FROM crypto_up_down_5m_diff_shift_progress_states state
+            WHERE state.strategy_id IN (
+                SELECT target.id
+                FROM tmp_hopeless_progress_targets target
+            );
+
+            DELETE FROM strategy_child_parent_assignments assignment
+            WHERE assignment.child_strategy_id IN (
+                    SELECT target.id
+                    FROM tmp_hopeless_progress_targets target
+                )
+               OR assignment.parent_strategy_id IN (
+                    SELECT target.id
+                    FROM tmp_hopeless_progress_targets target
+                );
+
+            DELETE FROM dashboard_strategy_performance_snapshots snapshot
+            WHERE snapshot.strategy_id IN (
+                    SELECT target.id
+                    FROM tmp_hopeless_progress_targets target
+                )
+               OR snapshot.code IN (
+                    SELECT target.code
+                    FROM tmp_hopeless_progress_targets target
+                );
+
+            DELETE FROM dashboard_strategy_recent_performance_snapshots snapshot
+            WHERE snapshot.strategy_id IN (
+                    SELECT target.id
+                    FROM tmp_hopeless_progress_targets target
+                )
+               OR snapshot.code IN (
+                    SELECT target.code
+                    FROM tmp_hopeless_progress_targets target
+                );
+
+            DELETE FROM paper_copied_leader_activity_events activity
+            WHERE activity.copied_trader_wallet IN (
+                SELECT target.wallet
+                FROM tmp_hopeless_progress_wallets target
+            );
+
+            DELETE FROM paper_copied_leader_positions copied_position
+            WHERE copied_position.copied_trader_wallet IN (
+                SELECT target.wallet
+                FROM tmp_hopeless_progress_wallets target
+            );
+
+            DELETE FROM paper_copied_trader_performance performance
+            WHERE performance.copied_trader_wallet IN (
+                SELECT target.wallet
+                FROM tmp_hopeless_progress_wallets target
+            );
+
+            DELETE FROM live_orders live_order
+            WHERE live_order.id IN (
+                SELECT target.id
+                FROM tmp_hopeless_progress_live_orders target
+            );
+
+            DELETE FROM strategy_market_paper_runs run
+            WHERE run.id IN (
+                SELECT target.id
+                FROM tmp_hopeless_progress_runs target
+            );
+
+            DELETE FROM paper_fills fill
+            WHERE fill.paper_order_id IN (
+                SELECT target.id
+                FROM tmp_hopeless_progress_paper_orders target
+            );
+
+            DELETE FROM paper_position_settlements settlement
+            WHERE settlement.id IN (
+                SELECT target.id
+                FROM tmp_hopeless_progress_settlements target
+            );
+
+            DELETE FROM paper_positions position
+            WHERE position.id IN (
+                SELECT target.id
+                FROM tmp_hopeless_progress_positions target
+            );
+
+            DELETE FROM paper_orders paper_order
+            WHERE paper_order.id IN (
+                SELECT target.id
+                FROM tmp_hopeless_progress_paper_orders target
+            );
+
+            DELETE FROM signal_rejections rejection
+            WHERE rejection.signal_id IN (
+                SELECT target.id
+                FROM tmp_hopeless_progress_signals target
+            );
+
+            DELETE FROM signals signal
+            WHERE signal.id IN (
+                SELECT target.id
+                FROM tmp_hopeless_progress_signals target
+            );
+
+            DELETE FROM strategies strategy
+            WHERE strategy.id IN (
+                    SELECT target.id
+                    FROM tmp_hopeless_progress_targets target
+                )
+               OR strategy.code IN (
+                    SELECT target.code
+                    FROM tmp_hopeless_progress_targets target
+                );
+            GET DIAGNOSTICS deleted_strategies = ROW_COUNT;
+
+            IF to_regclass('public.dashboard_projection_events') IS NOT NULL THEN
+                DELETE FROM dashboard_projection_events event
+                WHERE event.strategy_id IN (
+                    SELECT target.id
+                    FROM tmp_hopeless_progress_targets target
+                );
+            END IF;
+        END IF;
+
+        INSERT INTO schema_data_migrations (migration_key, applied_at_utc, details)
+        VALUES (
+            migration_key_value,
+            clock_timestamp(),
+            'allowlist=57' ||
+            ';target_strategies=' || target_strategy_count::text ||
+            ';active_live_orders=' || active_live_orders::text ||
+            ';deleted_strategies=' || deleted_strategies::text
+        );
     END IF;
 END $$;
 

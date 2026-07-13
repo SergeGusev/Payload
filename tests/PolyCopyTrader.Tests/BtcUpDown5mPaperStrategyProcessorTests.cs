@@ -206,7 +206,7 @@ public sealed class BtcUpDown5mPaperStrategyProcessorTests
     [Fact]
     public void StrategyIds_IncludeStandardMartinAndGammaBtcVariants()
     {
-        Assert.Equal(929, StrategyIds.BtcUpDown5mVariants.Count);
+        Assert.Equal(920, StrategyIds.BtcUpDown5mVariants.Count);
         Assert.Equal(StrategyIds.BtcUpDown5mVariants.Count, StrategyIds.BtcUpDown5mVariants.Select(variant => variant.Id).Distinct().Count());
         Assert.Equal(StrategyIds.BtcUpDown5mVariants.Count, StrategyIds.BtcUpDown5mVariants.Select(variant => variant.Code).Distinct().Count());
         Assert.Equal(0, StrategyIds.BtcUpDown5mVariants.Count(variant => variant.Behavior == BtcUpDown5mStrategyBehavior.Standard));
@@ -256,8 +256,8 @@ public sealed class BtcUpDown5mPaperStrategyProcessorTests
             variant.Code.Contains("_adjusted_diff_", StringComparison.Ordinal));
         Assert.Equal(0, StrategyIds.BtcUpDown5mVariants.Count(variant => variant.Behavior == BtcUpDown5mStrategyBehavior.ShiftDiffCounterTrend));
         Assert.Equal(100, StrategyIds.BtcUpDown5mVariants.Count(variant => variant.Behavior == BtcUpDown5mStrategyBehavior.DiffProgress));
-        Assert.Equal(7, StrategyIds.BtcUpDown5mVariants.Count(variant => variant.Behavior == BtcUpDown5mStrategyBehavior.DiffShiftProgress));
-        Assert.Equal(5, StrategyIds.BtcUpDown5mVariants.Count(variant => variant.Behavior == BtcUpDown5mStrategyBehavior.DiffLimitProgressPremarket));
+        Assert.Equal(3, StrategyIds.BtcUpDown5mVariants.Count(variant => variant.Behavior == BtcUpDown5mStrategyBehavior.DiffShiftProgress));
+        Assert.Equal(0, StrategyIds.BtcUpDown5mVariants.Count(variant => variant.Behavior == BtcUpDown5mStrategyBehavior.DiffLimitProgressPremarket));
         Assert.Equal(5, StrategyIds.BtcUpDown5mVariants.Count(variant => variant.Behavior == BtcUpDown5mStrategyBehavior.DiffRealLimitProgressPremarket));
         Assert.Equal(14, StrategyIds.BtcUpDown5mVariants.Count(variant => variant.Behavior == BtcUpDown5mStrategyBehavior.DiffReferenceAveragePremarket));
         Assert.Equal(28, StrategyIds.BtcUpDown5mVariants.Count(variant => variant.Behavior == BtcUpDown5mStrategyBehavior.BpsConfirmedAveragePremarket));
@@ -521,17 +521,17 @@ public sealed class BtcUpDown5mPaperStrategyProcessorTests
     [Fact]
     public void StrategyIds_ExcludeCryptoBinanceBpsVariants()
     {
-        Assert.Equal(1239, StrategyIds.CryptoUpDown5mVariants.Count);
-        Assert.Equal(2168, StrategyIds.UpDown5mStrategyVariants.Count);
+        Assert.Equal(1191, StrategyIds.CryptoUpDown5mVariants.Count);
+        Assert.Equal(2111, StrategyIds.UpDown5mStrategyVariants.Count);
         Assert.Equal(
             StrategyIds.UpDown5mStrategyVariants.Count,
             StrategyIds.UpDown5mStrategyVariants.Select(variant => variant.Id).Distinct().Count());
         Assert.Equal(
             StrategyIds.UpDown5mStrategyVariants.Count,
             StrategyIds.UpDown5mStrategyVariants.Select(variant => variant.Code).Distinct().Count());
-        Assert.Equal(652, StrategyIds.CryptoUpDown5mVariants.Count(variant =>
+        Assert.Equal(612, StrategyIds.CryptoUpDown5mVariants.Count(variant =>
             string.Equals(variant.ReferenceAssetSymbol, "ETH", StringComparison.OrdinalIgnoreCase)));
-        Assert.Equal(587, StrategyIds.CryptoUpDown5mVariants.Count(variant =>
+        Assert.Equal(579, StrategyIds.CryptoUpDown5mVariants.Count(variant =>
             string.Equals(variant.ReferenceAssetSymbol, "SOL", StringComparison.OrdinalIgnoreCase)));
         Assert.Equal(0, StrategyIds.CryptoUpDown5mVariants.Count(variant =>
             variant.Behavior == BtcUpDown5mStrategyBehavior.CryptoBinanceStartRelativeBpsThreshold));
@@ -587,9 +587,9 @@ public sealed class BtcUpDown5mPaperStrategyProcessorTests
             variant.Code.Contains("_adjusted_diff_", StringComparison.Ordinal));
         Assert.Equal(0, StrategyIds.CryptoUpDown5mVariants.Count(variant =>
             variant.Behavior == BtcUpDown5mStrategyBehavior.ShiftDiffCounterTrend));
-        Assert.Equal(198, StrategyIds.CryptoUpDown5mVariants.Count(variant =>
+        Assert.Equal(192, StrategyIds.CryptoUpDown5mVariants.Count(variant =>
             variant.Behavior == BtcUpDown5mStrategyBehavior.DiffProgress));
-        Assert.Equal(14, StrategyIds.CryptoUpDown5mVariants.Count(variant =>
+        Assert.Equal(13, StrategyIds.CryptoUpDown5mVariants.Count(variant =>
             variant.Behavior == BtcUpDown5mStrategyBehavior.DiffShiftProgress));
         Assert.Equal(10, StrategyIds.CryptoUpDown5mVariants.Count(variant =>
             variant.Behavior == BtcUpDown5mStrategyBehavior.DiffLimitProgressPremarket));
@@ -603,11 +603,11 @@ public sealed class BtcUpDown5mPaperStrategyProcessorTests
             variant.Behavior == BtcUpDown5mStrategyBehavior.DiffConfirmedAveragePremarket));
         Assert.Equal(48, StrategyIds.CryptoUpDown5mVariants.Count(variant =>
             variant.Behavior == BtcUpDown5mStrategyBehavior.ChildMirror));
-        Assert.Equal(48, StrategyIds.CryptoUpDown5mVariants.Count(variant =>
+        Assert.Equal(33, StrategyIds.CryptoUpDown5mVariants.Count(variant =>
             variant.Behavior == BtcUpDown5mStrategyBehavior.ChildProgressMirror));
         Assert.Equal(48, StrategyIds.CryptoUpDown5mVariants.Count(variant =>
             variant.Behavior == BtcUpDown5mStrategyBehavior.ChildRoiMirror));
-        Assert.Equal(48, StrategyIds.CryptoUpDown5mVariants.Count(variant =>
+        Assert.Equal(22, StrategyIds.CryptoUpDown5mVariants.Count(variant =>
             variant.Behavior == BtcUpDown5mStrategyBehavior.ChildProgressRoiMirror));
         AssertDiffCounterTrendFakPremarketGrid(StrategyIds.CryptoUpDown5mVariants, "ETH");
         AssertDiffCounterTrendFakPremarketGrid(StrategyIds.CryptoUpDown5mVariants, "SOL");
@@ -10542,8 +10542,14 @@ public sealed class BtcUpDown5mPaperStrategyProcessorTests
                 variant.Behavior == BtcUpDown5mStrategyBehavior.DiffShiftProgress &&
                 string.Equals(variant.ReferenceAssetSymbol, assetSymbol, StringComparison.OrdinalIgnoreCase))
             .ToArray();
+        int[] expectedPremarketThresholds = assetSymbol.ToUpperInvariant() switch
+        {
+            "BTC" => [3],
+            "ETH" => [1, 2, 3, 5],
+            _ => [1, 2, 3, 4, 5]
+        };
 
-        Assert.Equal(7, assetVariants.Length);
+        Assert.Equal(2 + expectedPremarketThresholds.Length, assetVariants.Length);
         Assert.All(assetVariants, variant =>
         {
             var expectedCategory = variant.EntryDelaySeconds < 0
@@ -10552,7 +10558,7 @@ public sealed class BtcUpDown5mPaperStrategyProcessorTests
             Assert.Equal(expectedCategory, variant.Category);
         });
         Assert.Equal(
-            [1, 2, 3, 4, 5],
+            expectedPremarketThresholds,
             assetVariants
                 .Where(variant => variant.EntryDelaySeconds < 0)
                 .Select(variant => variant.DecisionDepth)
@@ -10592,8 +10598,11 @@ public sealed class BtcUpDown5mPaperStrategyProcessorTests
                 variant.Behavior == BtcUpDown5mStrategyBehavior.DiffLimitProgressPremarket &&
                 string.Equals(variant.ReferenceAssetSymbol, assetSymbol, StringComparison.OrdinalIgnoreCase))
             .ToArray();
+        var expectedThresholds = string.Equals(assetSymbol, "BTC", StringComparison.OrdinalIgnoreCase)
+            ? []
+            : new[] { 1, 2, 3, 4, 5 };
 
-        Assert.Equal(5, assetVariants.Length);
+        Assert.Equal(expectedThresholds.Length, assetVariants.Length);
         Assert.All(assetVariants, variant =>
         {
             Assert.Equal($"{assetSymbol} Up/Down 5m Diff Limit Progress", variant.Category);
@@ -10602,15 +10611,18 @@ public sealed class BtcUpDown5mPaperStrategyProcessorTests
             Assert.Null(variant.DiffCounterTriggerOutcome);
         });
         Assert.Equal(
-            [1, 2, 3, 4, 5],
+            expectedThresholds,
             assetVariants
                 .Select(variant => variant.DecisionDepth)
                 .OrderBy(threshold => threshold)
                 .ToArray());
 
-        Assert.Contains(assetVariants, variant =>
-            variant.Code == $"{assetCode}_up_down_5m_3_diff_limit_progress_premarket" &&
-            variant.Name == $"{assetSymbol} Up or Down 5m 3 Diff Limit Progress Premarket");
+        if (expectedThresholds.Length > 0)
+        {
+            Assert.Contains(assetVariants, variant =>
+                variant.Code == $"{assetCode}_up_down_5m_3_diff_limit_progress_premarket" &&
+                variant.Name == $"{assetSymbol} Up or Down 5m 3 Diff Limit Progress Premarket");
+        }
     }
 
     private static void AssertDiffRealLimitProgressPremarketGrid(
@@ -10791,15 +10803,17 @@ public sealed class BtcUpDown5mPaperStrategyProcessorTests
                 variant.Behavior == BtcUpDown5mStrategyBehavior.ChildProgressRoiMirror &&
                 string.Equals(variant.ReferenceAssetSymbol, assetSymbol, StringComparison.OrdinalIgnoreCase))
             .ToArray();
+        var expectedProgressLookbacks = ExpectedChildProgressLookbacks(assetSymbol);
+        var expectedProgressRoiLookbacks = ExpectedChildProgressRoiLookbacks(assetSymbol);
 
         Assert.Equal(24, childVariants.Length);
-        Assert.Equal(24, progressVariants.Length);
+        Assert.Equal(expectedProgressLookbacks.Length, progressVariants.Length);
         Assert.Equal(24, roiVariants.Length);
-        Assert.Equal(24, progressRoiVariants.Length);
+        Assert.Equal(expectedProgressRoiLookbacks.Length, progressRoiVariants.Length);
         Assert.Equal(Enumerable.Range(1, 24).ToArray(), childVariants.Select(variant => variant.DecisionDepth).Order().ToArray());
-        Assert.Equal(Enumerable.Range(1, 24).ToArray(), progressVariants.Select(variant => variant.DecisionDepth).Order().ToArray());
+        Assert.Equal(expectedProgressLookbacks, progressVariants.Select(variant => variant.DecisionDepth).Order().ToArray());
         Assert.Equal(Enumerable.Range(1, 24).ToArray(), roiVariants.Select(variant => variant.DecisionDepth).Order().ToArray());
-        Assert.Equal(Enumerable.Range(1, 24).ToArray(), progressRoiVariants.Select(variant => variant.DecisionDepth).Order().ToArray());
+        Assert.Equal(expectedProgressRoiLookbacks, progressRoiVariants.Select(variant => variant.DecisionDepth).Order().ToArray());
 
         Assert.All(childVariants, variant =>
         {
@@ -10834,14 +10848,14 @@ public sealed class BtcUpDown5mPaperStrategyProcessorTests
             variant.Code == $"{assetCode}_up_down_5m_1_child" &&
             variant.Name == $"{assetSymbol} Up or Down 5m 1 Child");
         Assert.Contains(progressVariants, variant =>
-            variant.Code == $"{assetCode}_up_down_5m_24_child_progress" &&
-            variant.Name == $"{assetSymbol} Up or Down 5m 24 Child Progress");
+            variant.Code == $"{assetCode}_up_down_5m_{expectedProgressLookbacks[0]}_child_progress" &&
+            variant.Name == $"{assetSymbol} Up or Down 5m {expectedProgressLookbacks[0]} Child Progress");
         Assert.Contains(roiVariants, variant =>
             variant.Code == $"{assetCode}_up_down_5m_1_child_roi" &&
             variant.Name == $"{assetSymbol} Up or Down 5m 1 Child ROI");
         Assert.Contains(progressRoiVariants, variant =>
-            variant.Code == $"{assetCode}_up_down_5m_24_child_progress_roi" &&
-            variant.Name == $"{assetSymbol} Up or Down 5m 24 Child Progress ROI");
+            variant.Code == $"{assetCode}_up_down_5m_{expectedProgressRoiLookbacks[0]}_child_progress_roi" &&
+            variant.Name == $"{assetSymbol} Up or Down 5m {expectedProgressRoiLookbacks[0]} Child Progress ROI");
     }
 
     private static bool IsCountertrendVariant(BtcUpDown5mStrategyVariant variant)
@@ -10865,9 +10879,8 @@ public sealed class BtcUpDown5mPaperStrategyProcessorTests
 
     private static int ExpectedDiffProgressCount(string assetSymbol)
     {
-        return string.Equals(assetSymbol, "SOL", StringComparison.OrdinalIgnoreCase)
-            ? 98
-            : 100;
+        return ExpectedDiffProgressThresholds(assetSymbol, BtcUpDownFixedOutcome.Up).Length +
+            ExpectedDiffProgressThresholds(assetSymbol, BtcUpDownFixedOutcome.Down).Length;
     }
 
     private static int[] ExpectedDiffProgressThresholds(
@@ -10880,8 +10893,32 @@ public sealed class BtcUpDown5mPaperStrategyProcessorTests
         {
             thresholds = thresholds.Where(threshold => threshold is not (1 or 2));
         }
+        else if (string.Equals(assetSymbol, "ETH", StringComparison.OrdinalIgnoreCase) &&
+                 triggerOutcome == BtcUpDownFixedOutcome.Up)
+        {
+            thresholds = thresholds.Where(threshold => threshold is not (1 or 2 or 13 or 14 or 15 or 16));
+        }
 
         return thresholds.ToArray();
+    }
+
+    private static int[] ExpectedChildProgressLookbacks(string assetSymbol)
+    {
+        return string.Equals(assetSymbol, "ETH", StringComparison.OrdinalIgnoreCase)
+            ? [7, 12, 15, 16, 17, 18, 20, 22, 23]
+            : Enumerable.Range(1, 24).ToArray();
+    }
+
+    private static int[] ExpectedChildProgressRoiLookbacks(string assetSymbol)
+    {
+        if (string.Equals(assetSymbol, "ETH", StringComparison.OrdinalIgnoreCase))
+        {
+            return [1, 2, 4, 6, 10, 20];
+        }
+
+        return string.Equals(assetSymbol, "SOL", StringComparison.OrdinalIgnoreCase)
+            ? [1, 2, 3, 7, 8, 9, 10, 11, 12, 15, 16, 17, 18, 20, 22, 24]
+            : Enumerable.Range(1, 24).ToArray();
     }
 
     private static decimal[] ExpectedReferenceAverageBpsThresholds()

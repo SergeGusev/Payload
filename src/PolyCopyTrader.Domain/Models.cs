@@ -1379,7 +1379,7 @@ public static class StrategyIds
         variants.AddRange(CreateChildMirrorVariants("BTC"));
         variants.AddRange(CreateBtcPreOpenFixedDirectionVariants());
 
-        return variants;
+        return ExcludeRetiredProgressVariants(variants);
     }
 
     private static BtcUpDown5mStrategyVariant CreateBtcUpDown5mVariant(
@@ -1691,7 +1691,45 @@ public static class StrategyIds
             variants.AddRange(CreateChildMirrorVariants(asset.Symbol));
         }
 
-        return variants;
+        return ExcludeRetiredProgressVariants(variants);
+    }
+
+    private static IReadOnlyList<BtcUpDown5mStrategyVariant> ExcludeRetiredProgressVariants(
+        IEnumerable<BtcUpDown5mStrategyVariant> variants)
+    {
+        return variants
+            .Where(variant => !IsRetiredProgressVariant(variant))
+            .ToArray();
+    }
+
+    private static bool IsRetiredProgressVariant(BtcUpDown5mStrategyVariant variant)
+    {
+        var threshold = variant.DecisionDepth;
+        if (string.Equals(variant.ReferenceAssetSymbol, "BTC", StringComparison.OrdinalIgnoreCase))
+        {
+            return variant.Behavior == BtcUpDown5mStrategyBehavior.DiffLimitProgressPremarket ||
+                (variant.Behavior == BtcUpDown5mStrategyBehavior.DiffShiftProgress &&
+                 variant.EntryDelaySeconds < 0 &&
+                 threshold is 1 or 2 or 4 or 5);
+        }
+
+        if (string.Equals(variant.ReferenceAssetSymbol, "ETH", StringComparison.OrdinalIgnoreCase))
+        {
+            return (variant.Behavior == BtcUpDown5mStrategyBehavior.ChildProgressMirror &&
+                    threshold is 1 or 2 or 3 or 4 or 5 or 6 or 8 or 9 or 10 or 11 or 13 or 14 or 19 or 21 or 24) ||
+                (variant.Behavior == BtcUpDown5mStrategyBehavior.ChildProgressRoiMirror &&
+                 threshold is 3 or 5 or 7 or 8 or 9 or 11 or 12 or 13 or 14 or 15 or 16 or 17 or 18 or 19 or 21 or 22 or 23 or 24) ||
+                (variant.Behavior == BtcUpDown5mStrategyBehavior.DiffShiftProgress &&
+                 variant.EntryDelaySeconds < 0 &&
+                 threshold == 4) ||
+                (variant.Behavior == BtcUpDown5mStrategyBehavior.DiffProgress &&
+                 variant.DiffCounterTriggerOutcome == BtcUpDownFixedOutcome.Up &&
+                 threshold is 1 or 2 or 13 or 14 or 15 or 16);
+        }
+
+        return string.Equals(variant.ReferenceAssetSymbol, "SOL", StringComparison.OrdinalIgnoreCase) &&
+            variant.Behavior == BtcUpDown5mStrategyBehavior.ChildProgressRoiMirror &&
+            threshold is 4 or 5 or 6 or 13 or 14 or 19 or 21 or 23;
     }
 
     private static IReadOnlyList<BtcUpDown5mStrategyVariant> CreateDiffCounterTrendFakPremarketVariants(

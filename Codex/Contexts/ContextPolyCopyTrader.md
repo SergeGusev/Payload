@@ -1,3 +1,21 @@
+## Active Update 2026-07-13 Hopeless Progress Strategy Purge
+Goal: Delete only Progress strategies with persistently negative evidence and retain variants that still merit observation.
+Status: Completed in the server database and implemented in source; server deployment is still required before the next service restart.
+Done:
+- Defined the destructive scope from exact strategy IDs/codes, requiring both lifetime settled Paper PnL below zero and exact Dashboard 24-hour settled Paper PnL below zero at the final quiescent check. This is an operational deletion criterion, not proof of future performance.
+- Rechecked the live values throughout the preview/disable/quiescence process. The preliminary 61 candidates became 58 after SOL Child Progress ROI `N=7,8,16` recovered over 24 hours, then 57 after ETH Child Progress ROI `N=10` recovered to positive lifetime PnL. Those four rows were restored/retained.
+- Deleted exactly 57 server strategies: all five BTC Diff Limit Progress Premarket rows; BTC Diff Shift Progress Premarket `N=1,2,4,5`; ETH Child Progress `N=1,2,3,4,5,6,8,9,10,11,13,14,19,21,24`; ETH Child Progress ROI `N=3,5,7,8,9,11,12,13,14,15,16,17,18,19,21,22,23,24`; ETH Diff Shift Progress Premarket `N=4`; ETH Diff Up Progress `N=1,2,13,14,15,16`; SOL Child Progress ROI `N=4,5,6,13,14,19,21,23`.
+- Frozen final scope represented `45,508` settled Paper results with lifetime PnL `-$72,612.20664673` and `6,344` exact 24-hour settled results with PnL `-$15,212.27993051`.
+- Captured the complete target backup at `outputs/progress-strategy-purge-2026-07-13/server-target-backup.jsonl`: `398,723` rows, `548,858,015` bytes, SHA-256 `836AE7D4266E6B06159EE0B2FF2A9DA6BA03FDDB9A88BA30AC0F213E4FCC0CA7`. The hash was independently recomputed after deletion and matched the metadata.
+- Preserved original runtime settings before disable in `server-pre-disable-strategies.jsonl` and a final disabled-state snapshot in `server-pre-delete-disabled-strategies.jsonl`. A prior full PostgreSQL directory backup from 2026-07-12 also remains available under `outputs/postgres-backups/`.
+- Removed the exact targets slowly in committed batches after waiting for active target Paper runs to finish. No active Live order matched the target set. Inserted audit migration row `20260713_remove_hopeless_progress_strategies_manual`.
+- Independently verified the final database state twice: all 57 target strategy rows and all checked dependency rows were zero; total strategies changed `1558 -> 1501`; Progress strategies changed `493 -> 436`; ten retained control strategies still had history. `PolyCopyTrader.Service` remained `Running` in `Live` mode with a fresh heartbeat, empty `last_error`, and fresh Paper-run activity.
+- Re-ran the full exact post-purge verifier at `2026-07-13 15:49:28 UTC`: target rows `0`, nonzero dependency counts `0`, retained controls `10`, strategies `1501`, Progress strategies `436`; the service heartbeat age was `22.2` seconds and `last_error` remained empty. Retained control history counts had increased since the first post-check.
+- Updated the catalog, PostgreSQL seeds, exact cleanup migration, tests, README, and configuration reference so deleted rows are not recreated after the updated service is deployed.
+Next: Deploy the committed source before restarting the currently deployed older service; its old seed catalog can recreate deleted strategy rows on startup.
+Notes: The server database purge is complete. Verification passed: service Release build with `0` errors; focused catalog/category/migration tests `96/96`; disposable local PostgreSQL schema-initialization test `1/1`, followed by successful database removal. A full solution test run was also attempted and remains non-clean because of existing processor-test failures; one representative failure was reproduced unchanged on baseline commit `c052ed3c`.
+Blockers: None.
+
 ## Active Update 2026-07-13 Progress Strategy Retention Recommendation
 Goal: Recommend which Progress strategy families appear worth keeping and which should be removed or disabled.
 Status: Completed

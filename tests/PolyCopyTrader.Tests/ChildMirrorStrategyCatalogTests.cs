@@ -9,6 +9,8 @@ public sealed class ChildMirrorStrategyCatalogTests
     {
         foreach (var assetSymbol in new[] { "BTC", "ETH", "SOL" })
         {
+            var expectedChildProgressLookbacks = GetExpectedChildProgressLookbacks(assetSymbol);
+            var expectedChildProgressRoiLookbacks = GetExpectedChildProgressRoiLookbacks(assetSymbol);
             var childVariants = StrategyIds.UpDown5mStrategyVariants
                 .Where(variant =>
                     string.Equals(variant.ReferenceAssetSymbol, assetSymbol, StringComparison.OrdinalIgnoreCase) &&
@@ -35,9 +37,9 @@ public sealed class ChildMirrorStrategyCatalogTests
                 .ToArray();
 
             Assert.Equal(Enumerable.Range(1, 24), childVariants.Select(variant => variant.DecisionDepth));
-            Assert.Equal(Enumerable.Range(1, 24), childProgressVariants.Select(variant => variant.DecisionDepth));
+            Assert.Equal(expectedChildProgressLookbacks, childProgressVariants.Select(variant => variant.DecisionDepth));
             Assert.Equal(Enumerable.Range(1, 24), childRoiVariants.Select(variant => variant.DecisionDepth));
-            Assert.Equal(Enumerable.Range(1, 24), childProgressRoiVariants.Select(variant => variant.DecisionDepth));
+            Assert.Equal(expectedChildProgressRoiLookbacks, childProgressRoiVariants.Select(variant => variant.DecisionDepth));
             Assert.All(childVariants, variant =>
             {
                 Assert.EndsWith(" Child", variant.Name, StringComparison.Ordinal);
@@ -82,5 +84,24 @@ public sealed class ChildMirrorStrategyCatalogTests
         Assert.Equal(
             "ETH Up or Down 5m Child Progress ROI",
             StrategyDisplayCategories.GetCategory("ETH Up or Down 5m 12 Child Progress ROI"));
+    }
+
+    private static int[] GetExpectedChildProgressLookbacks(string assetSymbol)
+    {
+        return string.Equals(assetSymbol, "ETH", StringComparison.OrdinalIgnoreCase)
+            ? [7, 12, 15, 16, 17, 18, 20, 22, 23]
+            : Enumerable.Range(1, 24).ToArray();
+    }
+
+    private static int[] GetExpectedChildProgressRoiLookbacks(string assetSymbol)
+    {
+        if (string.Equals(assetSymbol, "ETH", StringComparison.OrdinalIgnoreCase))
+        {
+            return [1, 2, 4, 6, 10, 20];
+        }
+
+        return string.Equals(assetSymbol, "SOL", StringComparison.OrdinalIgnoreCase)
+            ? [1, 2, 3, 7, 8, 9, 10, 11, 12, 15, 16, 17, 18, 20, 22, 24]
+            : Enumerable.Range(1, 24).ToArray();
     }
 }
