@@ -1,3 +1,18 @@
+## Active Update 2026-07-13 Currency Dashboard Category Daily Paper PnL Excel Reports
+Goal: Create three Excel reports, one per BTC/ETH/SOL, with UTC daily Paper PnL grouped by Dashboard strategy category.
+Status: Completed
+Done:
+- Verified Dashboard grouping source from `StrategyDisplayCategories.GetCategory(strategyName)` and currency filter from `StrategyDisplayCategories.GetAssetSymbol(strategyName)`, matching `MainViewModel` category dropdown behavior.
+- Exported server PostgreSQL data read-only from `192.168.0.101:5432/polycopytrader`: current `dashboard_strategy_performance_snapshots` strategy rows and settled `strategy_market_paper_runs.realized_pnl_usd` grouped by `settled_at_utc` UTC date and `strategy_id`.
+- Built three ignored Excel workbooks under `outputs/currency-dashboard-category-paper-pnl-2026-07-13/reports/`: `btc-dashboard-category-paper-pnl.xlsx`, `eth-dashboard-category-paper-pnl.xlsx`, and `sol-dashboard-category-paper-pnl.xlsx`.
+- Each workbook has one `Report` sheet with rows as continuous UTC dates `2026-06-05` through `2026-07-13`, columns as Dashboard categories for that currency, a final `Daily Total` column, a final `Category Total` row, and the grand total at the intersection.
+- Negative numeric cells use red number formatting plus conditional formatting. The totals are formulas with cached values.
+- Verified all workbooks via Excel COM read-only open and XML inspection: BTC `A1:X41`, ETH `A1:X41`, SOL `A1:W41`; formula counts `62/62/61`; one conditional-formatting block per workbook; no formula-error text.
+- Independently reconciled source CSV totals with workbook grand totals: BTC `210438` settled runs, Paper PnL `$24325.42493411`; ETH `235584` settled runs, Paper PnL `-$86870.45696516`; SOL `248464` settled runs, Paper PnL `$16173.85029821`.
+Next: None.
+Notes: One broad SQL summary join was cancelled locally due to timeout and its leftover diagnostic `psql` process was stopped; the successful report inputs were already exported before that and were verified independently. No production data, source code, service process, or configuration was changed.
+Blockers: None.
+
 ## Active Update 2026-07-13 Server Service Health Check
 Goal: Check whether the deployed `PolyCopyTrader.Service` and its database-backed activity look healthy.
 Status: Completed

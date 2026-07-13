@@ -4,3 +4,16 @@ Request:
 
 Result:
 Checked the deployed server path read-only via PostgreSQL `192.168.0.101:5432/polycopytrader`. The database connection was verified against `inet_server_addr=192.168.0.101`. `PolyCopyTrader.Service` was `Running` in `Live` mode with empty `last_error`, started at `2026-07-11 21:08:16.227079 UTC`, and had a fresh heartbeat at `2026-07-13 06:50:56.653111 UTC` with age `24.7` seconds at query time. Paper betting was active: 358 Paper orders and 358 entered Paper runs in the last 5 minutes, 4672 Paper orders and 4670 entered Paper runs in the last 60 minutes, latest entry `2026-07-13 06:50:23.106294 UTC`. Dashboard projection was fresh, with lifetime/recent snapshots refreshed at `2026-07-13 06:51:56.490305 UTC`, projection status `Running`, queue size `0`, and empty projection `last_error`. Live trading had one enabled/unpaused Live strategy, no active open Live orders, and no Live orders/events in the last hour; the latest Live event was OK/matched at `2026-07-13 03:35:16 UTC`. The main warning was market-data WebSocket freshness: aggregate and crypto-critical status rows were `Stale`, with `healthy_shards=4/7`, old/connecting shard rows, and 25 API errors in the last hour mostly from stale Binance ticks plus a few WebSocket/order-book/read-stream transient errors. No production data, source code, service process, or configuration was changed.
+
+## 2026-07-13T10:34:40.2807298+00:00
+Request:
+Сделай три отчёта, отдельно по каждой валюте, в Excel формате.
+
+В столбцах - группирующие категории из Dashboard. То есть не по каждой стратегии отдельно показываем, а оцениваем всю категорию.
+В строках - даты
+В ячейках - Paper Pnl за эту дату. Отрицательные значения выделяются красным.
+
+Последний столбец - сумма по дню, последняя строчка - сумма по категории. На их пересечении - общий Total
+
+Result:
+Created three ignored Excel workbooks under `outputs/currency-dashboard-category-paper-pnl-2026-07-13/reports/`: `btc-dashboard-category-paper-pnl.xlsx`, `eth-dashboard-category-paper-pnl.xlsx`, and `sol-dashboard-category-paper-pnl.xlsx`. The reports use the same Dashboard grouping logic as the UI (`StrategyDisplayCategories.GetCategory`) and UTC settlement dates from settled `strategy_market_paper_runs.realized_pnl_usd`, joined to the current `dashboard_strategy_performance_snapshots` strategy list from server PostgreSQL `192.168.0.101:5432/polycopytrader`. Each workbook has categories as columns, continuous dates from `2026-06-05` through `2026-07-13` as rows, `Daily Total` as the last column, `Category Total` as the last row, and grand total at the intersection; negative values have red number formatting plus conditional formatting. Excel COM opened all three workbooks read-only; XML inspection found formulas, conditional formatting, and no formula-error text. Independent CSV totals matched workbook totals: BTC `+$24325.42493411` across `210438` settled runs, ETH `-$86870.45696516` across `235584` settled runs, and SOL `+$16173.85029821` across `248464` settled runs. No production data, source code, service process, or configuration was changed.
