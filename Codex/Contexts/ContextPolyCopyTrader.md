@@ -1,3 +1,21 @@
+## Active Update 2026-07-13 Absolute Premarket Production Verification
+Goal: Verify the deployed Absolute Premarket strategy grid and current production service/database behavior without changing production state.
+Status: Completed
+Done:
+- Connected read-only to exact production PostgreSQL endpoint `192.168.0.101:5432/polycopytrader` and verified the service heartbeat reports `Running`, mode `Live`, empty `last_error`, and exact deployed commit `85b784bc4746a7dfe5e3f2f57540ee9861c2273e`. The process started at `2026-07-13 20:49:26.563748 UTC`.
+- Independently generated the expected UUID/code/name grid and matched all `360/360` rows exactly: `120` each for BTC, ETH, and SOL; missing `0`, conflicting IDs `0`, unexpected Absolute rows `0`, enabled `360`, Live `0`, paused `0`.
+- Verified real runtime dispatch for two normal premarket cycles. At `20:54:30 UTC`, all `360` variants wrote `reference_price_absolute_range_bps_premarket` decisions with full extrema windows in `1.398..1.634s`; at `20:59:30 UTC`, all `360` again had full windows and completed in `4.004..4.316s`.
+- Both cycles correctly skipped every variant with `absolute_reference_move_below_bps_threshold`; there were no Absolute entries because the fresh prices remained inside the historical extrema by the required threshold. Therefore deployed FAK Paper order placement has not yet been observed and remains runtime-unverified until the first real breakout signal.
+- Confirmed all `360` strategies are present in `dashboard_strategy_performance_snapshots`; the latest snapshot refresh covered them through `2026-07-13 21:00:56.584818 UTC`.
+- Verified the rolling-price worker recovered after startup and intermittent stale-price events. The final BTC/ETH/SOL persisted samples were about `9.2/11.8/12.4s` old, and all three source timestamps were about `9.6/12.3/12.6s` old.
+- The independent `check-strategy-entry-latency.ps1` check failed: in its five-minute post-restart window, `530/1733` terminal strategy rows exceeded `3s`. The next market boundary independently showed `960/1347` non-Absolute Paper rows over `3s` with maximum `25.300s`; the only Live-enabled strategy completed its check in `4.529s` and created no Live order.
+- Confirmed this global latency problem predates the deployment: unambiguously pre-restart `20:35` and `20:40 UTC` due buckets already had `637/1293` and `641/1300` non-Absolute rows over `3s`, with maxima `25.027s` and `63.794s`. The new grid increased the NonLive observed-variant count from `446` to `806`, but the measured stage durations are not monotonic across the restart, so the incremental causal impact of the new variants is unknown.
+- Observed intermittent post-restart OKX two-second HTTP timeouts (`41` index-ticker and `16` futures-ticker errors through `21:01:06 UTC`), while `58` Futures entries across `48` strategies independently proved the provider was degraded rather than completely unavailable. Startup/momentary Binance stale-price errors also occurred and subsequently recovered.
+- Final database inspection found no blocking sessions. The only active query over `30s` was an unblocked autovacuum on `dashboard_strategy_recent_projection_facts` waiting on `VacuumDelay`.
+Next: Investigate and reduce due-entry scheduling latency before treating the service as healthy; separately inspect the new OKX timeout burst, and monitor the first genuine Absolute breakout to verify the deployed FAK Paper-entry path.
+Notes: Every production query used `READ ONLY` transactions with statement/lock/connect timeouts. One initial broad aggregate reached its intentional `20s` statement timeout and was canceled; subsequent indexed queries completed. No database row, strategy setting, order, service process, deployment, or production file was changed.
+Blockers: None.
+
 ## Active Update 2026-07-13 Current Paper Drawdown Attribution
 Goal: Determine why current strategy PnL looked broadly negative and distinguish actual Live, calendar-day, rolling-window, and intraday-drawdown results.
 Status: Completed
