@@ -1,3 +1,19 @@
+## Active Update 2026-07-14 SOL 19 Child Paper PnL Chart
+Goal: Build and directly display the cumulative Paper PnL chart for the exact production strategy `SOL Up or Down 5m 19 Child`.
+Status: Completed
+Done:
+- Resolved exactly three similarly named production candidates and selected only exact strategy ID `b7c50005-0000-4000-8187-000000000019`, code `sol_up_down_5m_19_child`; excluded the Progress and ROI variants. The target is enabled, unpaused, Paper-only, and has zero Live orders.
+- Fixed the production PostgreSQL cutoff to `2026-07-13 21:20:44.108529 UTC` and exported all `779` settled Paper runs ordered by `settled_at_utc, id`, covering `2026-07-08 21:22:52.121516` through `2026-07-13 21:10:32.576285 UTC`.
+- Calculated `409` wins, `370` losses, `$4,681.24470009` stake, realized PnL `+$258.52321462`, and realized ROI `+5.52253153%`.
+- Measured maximum drawdown `$157.22474434`, from cumulative PnL `$291.05272539` at `2026-07-12 20:12:41.818157 UTC` to `$133.82798105` at `2026-07-13 09:50:26.098905 UTC`.
+- Resolved the apparent Dashboard discrepancy: its realized PnL matched the settled-run total exactly, while its Total PnL was `$258.77892951` because one open position contributed `$0.25571489` unrealized PnL at the inspected snapshot. The chart intentionally contains realized settled PnL only.
+- Generated a true step chart, CSV export, independent aggregate, reproducible PowerShell builder, and summary under `outputs/sol-19-child-paper-pnl-chart-2026-07-14/`.
+- Independently matched local decimal row count, W/L/flat, stake, PnL, ROI, single-run extrema, cumulative extrema, maximum drawdown, and drawdown rows against a separate server-side SQL aggregate.
+- Visually inspected the final `1600x840` PNG at original resolution. Labels, axes, endpoint, and drawdown annotation are visible without overlap; SHA-256 is `D0CDBF25E209E07FFF8235959485215FA8BFD68D87BE0B4D493CC69600A9D73C`.
+Next: None.
+Notes: Production access was read-only with transaction and statement timeouts. The first renderer attempt stopped before querying because of a missing parenthesis; the second validation exposed only SQL ROI display-scale rounding and the final run completed successfully. No production row, strategy setting, order, service process, source behavior, or deployment changed. No product build/test was required.
+Blockers: None.
+
 ## Active Update 2026-07-13 Absolute Premarket Production Verification
 Goal: Verify the deployed Absolute Premarket strategy grid and current production service/database behavior without changing production state.
 Status: Completed
