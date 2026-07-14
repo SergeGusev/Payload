@@ -137,3 +137,19 @@ Request:
 
 Result:
 Built and visually inspected one common-scale `1800x920` chart containing the full cumulative Paper PnL histories of the three exact BTC strategies through frozen cutoff `2026-07-14 18:52:34.418284 UTC`, using solid lines and a solid zero axis only. Independent raw-row and server calculations matched: Down 1 bps `2,492` bets / `+$184.03763627`; neutral 35 bps `1,073` / `+$75.36701811`; Up 10 bps `131` / `+$40.78853462`. A repeated server aggregate exactly matched the first export, and all three strategies had zero Live-order rows. Added a persistent solid-lines-only chart rule to repository `AGENTS.md`. Reproducible artifacts are under `outputs/btc-reference-average-three-strategies-paper-pnl-2026-07-14/`. Production remained read-only and unchanged; application code did not change.
+
+## 2026-07-14T18:58:23.5937688+00:00
+Request:
+Сделай Excel отчёт по Child и Child ROI стратегиям по всем трём валютам. На одной вкладке.
+
+Столбцы - стратегии с самым высоким Pnl в рамках валюты и типа, всего получится шесть стратегий, в отчете их нужно сгруппировать от самого низкого Pnl к самому высокому.
+
+В строках - даты
+В ячейках - Paper Pnl за эту дату. Отрицательные значения выделяются красным на белом фоне.
+
+Последний столбец - сумма по дню, последняя строчка - сумма по категории. На их пересечении - общий Total
+
+Первую строчку и первый столбец закрепи, чтобы не пропадали при скролллинге
+
+Result:
+Captured one production PostgreSQL read-only repeatable-read snapshot at cutoff `2026-07-14T18:51:45.265764Z`, evaluated `77,146` settled Paper rows for all `144` current non-Progress Child and Child ROI candidates, and independently verified the six unique category winners and every selected strategy/date aggregate. Generated one-sheet workbook `outputs/child-child-roi-best-daily-paper-pnl-report-2026-07-14/reports/child-child-roi-best-daily-paper-pnl.xlsx` with six strategy columns sorted by total PnL ascending, seven UTC date rows, formula-driven daily/strategy/grand totals, and red-on-white negatives. Excel verified zero formula errors, exact grand total `$1,444.38361641`, all negative styles, and frozen first row/column; OpenXML independently confirmed `xSplit=1`, `ySplit=1`, `topLeftCell=B2`, `state=frozen`. The final sheet was rendered through Excel and visually inspected. Production remained read-only and unchanged.

@@ -12,6 +12,22 @@ Next: None.
 Notes: Reproducible SQL, source/aggregate CSVs, renderer, summary, Live-scope check, and PNG are in the ignored output directory. Production access was read-only; no database row, strategy setting, order, service process, deployment, product behavior, or runtime configuration changed. Product build/tests were not required because application code was unchanged.
 Blockers: None.
 
+## Active Update 2026-07-14 Best Child And Child ROI Daily Paper PnL Excel Report
+Goal: Create one-sheet Excel report with UTC daily Paper PnL for the highest-all-history-PnL strategy in each BTC/ETH/SOL Child and Child ROI category.
+Status: Completed
+Done:
+- Reverified the exact current scope from source and production: six non-Progress categories (`BTC/ETH/SOL` x `Child/Child ROI`), each containing `N=1..24`, for `144` candidates total.
+- Captured one production PostgreSQL `REPEATABLE READ, READ ONLY` snapshot from exact endpoint `192.168.0.101:5432/polycopytrader` at cutoff `2026-07-14T18:51:45.265764Z` and evaluated `77,146` settled Paper rows over seven continuous UTC dates (`2026-07-08` through `2026-07-14`).
+- Selected the unique maximum-PnL strategy in each category and sorted the report columns by total PnL ascending: BTC `N=8` Child `+$164.23610810`; SOL `N=18` Child ROI `+$174.94734133`; BTC `N=4` Child ROI `+$243.72094332`; ETH `N=2` Child `+$273.90593783`; ETH `N=6` Child ROI `+$282.17718702`; SOL `N=22` Child `+$305.39609881`.
+- Independently reconciled local raw-row aggregates against server SQL for all `144` candidates, matched all six local winners against a separate server-side ranking, and matched every selected strategy/date value against an independent server daily aggregate.
+- Created `outputs/child-child-roi-best-daily-paper-pnl-report-2026-07-14/reports/child-child-roi-best-daily-paper-pnl.xlsx` with one `Daily PnL` sheet, formula-driven daily totals, formula-driven per-strategy totals, and formula-driven grand total `$1,444.38361641`.
+- Applied red text on a white background to negative values and verified all `9` negative data/total cells through Excel `DisplayFormat`.
+- Explicitly persisted and independently verified the requested frozen first row and first column: OpenXML contains `xSplit=1`, `ySplit=1`, `topLeftCell=B2`, `state=frozen`; Excel reported `FreezePanes=True`, `SplitRow=1`, and `SplitColumn=1`.
+- Excel recalculated the workbook and verified one sheet, used range `9x8`, exact headers/values/formulas, zero formula errors, exact strategy totals, and exact grand total. The final Excel-native render was visually inspected with no clipped headers, values, or totals. SHA-256 is `4DE41C24051ACA8572E1DC651246E259C50428AB5B269564C5AC251AD91B5CDC`.
+Next: None.
+Notes: The report dates use `settled_at_utc` and are explicitly labeled UTC. Production access was read-only; no database row, strategy setting, order, service process, application code, deployment, or configuration changed. Reproducible C#/SQL export, artifact-tool builder, OpenXML pane fix, Excel verification, source CSV/JSON, and QA images are in the ignored output directory. Artifact-tool's post-Excel re-import retained data/formulas but produced a defective black PNG; final visual verification therefore used Excel's rendering of the final workbook. Product tests were not required because product code was unchanged.
+Blockers: None.
+
 ## Active Update 2026-07-14 Three ETH Reference Average Paper PnL Comparison
 Goal: Plot the full cumulative Paper PnL histories of the requested ETH Down 3 bps, neutral 5 bps, and Up 5 bps Reference Average Premarket strategies on one chart.
 Status: Completed
