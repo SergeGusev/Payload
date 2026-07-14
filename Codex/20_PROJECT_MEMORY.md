@@ -1,6 +1,6 @@
 # PolyCopyTrader Project Memory
 
-Last updated: 2026-07-07, Europe/Sofia.
+Last updated: 2026-07-14, Europe/Sofia.
 
 This file is the high-context memory note for a future Codex session. If the user asks
 "what did we build?" or "continue the PolyCopyTrader project", read this file first,
@@ -38,6 +38,9 @@ The repository also has local debugging and trader discovery support after task 
 
 Recent runtime note:
 
+- Strategy observation rows now use bounded in-memory deduplication plus PostgreSQL JSONB batch inserts; failed batches release reservations for retry.
+- Child/Parent assignment refresh runs in a dedicated five-minute-boundary worker, defaulting to one minute after market start, and its 1..24-hour PnL query uses hour buckets plus cumulative windows instead of multiplying each settled row across lookbacks.
+- Due-entry timing rows include a `*.wait_breakdown` diagnostic for semaphore, market lookup, reference decision, order-book, and placement-lock waits.
 - Skip strategy rows have been removed from the active seed set. The remaining
   fixed ETH/SOL `Up/Down bps Instant` rows keep their normal behavior.
 - ETH `Up or Down 5m Binance N bps` rows, including the Instant copies, have

@@ -129,6 +129,7 @@ public static class AppOptionsValidator
             $"BTC Up or Down 5m strategy stake multiplier: {configuration.BtcUpDown5mStrategy.StakeUsd}",
             $"BTC Up or Down 5m strategy entry grace seconds: {configuration.BtcUpDown5mStrategy.EntryGraceSeconds}",
             $"BTC Up or Down 5m strategy max concurrent entry decisions: {configuration.BtcUpDown5mStrategy.MaxConcurrentEntryDecisions}",
+            $"BTC Up or Down 5m Child/Parent refresh delay seconds: {configuration.BtcUpDown5mStrategy.ChildParentRefreshDelaySeconds}",
             $"BTC Up or Down 5m Paper taker pricing enabled: {configuration.BtcUpDown5mStrategy.PaperTakerPricingEnabled}",
             $"BTC Up or Down 5m Paper taker max quote age ms: {configuration.BtcUpDown5mStrategy.PaperTakerMaxQuoteAgeMilliseconds}",
             $"BTC Up or Down 5m Paper taker max entry price: {configuration.BtcUpDown5mStrategy.PaperTakerMaxEntryPrice}",
@@ -1156,6 +1157,11 @@ public static class AppOptionsValidator
         if (options.MaxConcurrentEntryDecisions <= 0 || options.MaxConcurrentEntryDecisions > 128)
         {
             errors.Add("BtcUpDown5mStrategy.MaxConcurrentEntryDecisions must be between 1 and 128.");
+        }
+
+        if (options.ChildParentRefreshDelaySeconds < 0 || options.ChildParentRefreshDelaySeconds > 240)
+        {
+            errors.Add("BtcUpDown5mStrategy.ChildParentRefreshDelaySeconds must be between 0 and 240.");
         }
 
         if (options.MaxSettlementsPerCycle <= 0)

@@ -20,6 +20,12 @@ internal sealed class TestAppRepository : IAppRepository
 
     public int BulkStrategyMarketPaperRunUpdateCalls { get; private set; }
 
+    public int BulkStrategyMarketPaperRunInsertCalls { get; private set; }
+
+    public int BulkStrategyMarketPaperRunInsertCandidates { get; private set; }
+
+    public int BulkStrategyMarketPaperRunInsertFailuresToThrow { get; set; }
+
     public int PaperEntryPersistenceBatchCalls { get; private set; }
 
     public int PaperEntryPersistenceBatchAttempts { get; private set; }
@@ -672,6 +678,46 @@ internal sealed class TestAppRepository : IAppRepository
 
             StrategyMarketPaperRuns.Add(run);
             return Task.FromResult(true);
+        }
+    }
+
+    public Task<IReadOnlySet<Guid>> TryAddStrategyMarketPaperRunsAsync(
+        IReadOnlyList<StrategyMarketPaperRun> runs,
+        CancellationToken cancellationToken = default)
+    {
+        lock (sync)
+        {
+            BulkStrategyMarketPaperRunInsertCalls++;
+            BulkStrategyMarketPaperRunInsertCandidates += runs.Count;
+            if (BulkStrategyMarketPaperRunInsertFailuresToThrow > 0)
+            {
+                BulkStrategyMarketPaperRunInsertFailuresToThrow--;
+                throw new InvalidOperationException("Simulated bulk strategy run insert failure.");
+            }
+
+            var insertedIds = new HashSet<Guid>();
+            foreach (var run in runs)
+            {
+                var normalizedRun = run with { StrategyId = StrategyIds.Normalize(run.StrategyId) };
+                if (StrategyMarketPaperRuns.Any(item =>
+                    StrategyIds.Normalize(item.StrategyId) == normalizedRun.StrategyId &&
+                    string.Equals(item.MarketId, normalizedRun.MarketId, StringComparison.OrdinalIgnoreCase)))
+                {
+                    continue;
+                }
+
+                if (EnforceStrategyRunPaperOrderForeignKey &&
+                    normalizedRun.PaperOrderId is { } paperOrderId &&
+                    PaperOrders.All(order => order.Id != paperOrderId))
+                {
+                    throw new InvalidOperationException("StrategyMarketPaperRun references a missing paper order.");
+                }
+
+                StrategyMarketPaperRuns.Add(normalizedRun);
+                insertedIds.Add(normalizedRun.Id);
+            }
+
+            return Task.FromResult<IReadOnlySet<Guid>>(insertedIds);
         }
     }
 

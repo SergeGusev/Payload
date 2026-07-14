@@ -42,3 +42,10 @@ Request:
 
 Result:
 Captured a production PostgreSQL read-only repeatable-read snapshot at cutoff `2026-07-14T06:17:34.074606Z`, evaluated `69,558` settled Paper rows for all `144` current BTC/ETH/SOL Child and Child ROI candidates, and selected the unique maximum-final-PnL strategy from each `N=1..24` category. The selected strategies were BTC Child `N=4` `+$148.71061421`, BTC Child ROI `N=4` `+$196.50703612`, ETH Child `N=2` `+$163.51497850`, ETH Child ROI `N=2` `+$181.29745354`, SOL Child `N=19` `+$276.01857647`, and SOL Child ROI `N=18` `+$179.11433417`. Local raw-row aggregates matched independent per-strategy server SQL and Dashboard snapshot values exactly for all candidates. Generated and visually verified the combined `1800x1000` step chart `outputs/child-vs-child-roi-all-assets-paper-pnl-chart-2026-07-14/paper-pnl-best-child-vs-child-roi.png`. Production remained unchanged.
+
+## 2026-07-14T06:50:40.9411224+00:00
+Request:
+Ок, действуй по своему плану
+
+Result:
+Implemented the first verified latency-remediation phase: batched and cached observation inserts with retry after failed batches; a dedicated five-minute-boundary Child/Parent refresh worker; a one-scan hour-bucket/cumulative-window lookback query; and post-persistence entry wait diagnostics for semaphore, market, reference, order-book, and placement-lock phases. Updated configuration and documentation and added focused tests. Service build passed with zero warnings/errors, all 58 focused cases passed, and the final full-suite result matched the exact pre-change baseline (`682 passed / 112 known failed`, identical failure names). The new SQL was checked with read-only production-schema `EXPLAIN` and an independent boundary fixture. No production data, service, or deployment was changed, so runtime latency improvement remains to be measured after a requested rollout.

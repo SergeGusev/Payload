@@ -22,6 +22,13 @@ public sealed class PostgresAppRepository(PostgresConnectionFactory connectionFa
 
 	private const int StrategyPerformanceCommandTimeoutSeconds = 180;
 
+	private const int StrategyMarketPaperRunInsertBatchSize = 2_000;
+
+	private static readonly JsonSerializerOptions BulkInsertJsonOptions = new()
+	{
+		PropertyNamingPolicy = JsonNamingPolicy.SnakeCaseLower
+	};
+
 	private const string PolymarketGammaMarketSelectColumns = "market_id, condition_id, question_id, slug, question, event_id, event_slug, event_title,\n       series_slug, category, active, closed, archived, restricted, accepting_orders, enable_order_book,\n       negative_risk, liquidity, liquidity_clob, volume, volume_24hr, best_bid, best_ask, spread,\n       created_at_utc, updated_at_utc, start_date_utc, end_date_utc, event_start_time_utc,\n       outcomes_json, clob_token_ids_json, raw_json, fetched_at_utc, last_trade_price, order_min_size,\n       order_price_min_tick_size";
 
 	private const string PaperOrderSelectColumns = "id, signal_id, strategy_id, copied_trader_wallet, status, side, asset_id, condition_id, outcome, price, size_shares, notional_usd,\n       created_at_utc, expires_at_utc, filled_at_utc, cancelled_at_utc, raw_decision_json::text, correlation_id, execution_source";
@@ -714,6 +721,89 @@ ON CONFLICT (wallet, condition_id) DO UPDATE SET
 		await using NpgsqlCommand command = CreateCommand(connection, "INSERT INTO strategy_market_paper_runs (\n    id, strategy_id, market_id, condition_id, market_slug, market_title, category,\n    market_start_utc, market_end_utc, detected_at_utc, entry_due_at_utc, status,\n    selected_asset_id, selected_outcome, entry_price, stake_usd, size_shares,\n    signal_id, paper_order_id, entered_at_utc, settlement_price, settlement_value_usd,\n    realized_pnl_usd, settled_at_utc, skip_reason, skip_diagnostics_json, created_at_utc, updated_at_utc\n) VALUES (\n    @Id, @StrategyId, @MarketId, @ConditionId, @MarketSlug, @MarketTitle, @Category,\n    @MarketStartUtc, @MarketEndUtc, @DetectedAtUtc, @EntryDueAtUtc, @Status,\n    @SelectedAssetId, @SelectedOutcome, @EntryPrice, @StakeUsd, @SizeShares,\n    @SignalId, @PaperOrderId, @EnteredAtUtc, @SettlementPrice, @SettlementValueUsd,\n    @RealizedPnlUsd, @SettledAtUtc, @SkipReason, CAST(@SkipDiagnosticsJson AS jsonb), @CreatedAtUtc, @UpdatedAtUtc\n)\nON CONFLICT (strategy_id, market_id) DO NOTHING;");
 		AddStrategyMarketPaperRunParameters(command, run);
 		return await command.ExecuteNonQueryAsync(cancellationToken) > 0;
+	}
+
+	public async Task<IReadOnlySet<Guid>> TryAddStrategyMarketPaperRunsAsync(
+		IReadOnlyList<StrategyMarketPaperRun> runs,
+		CancellationToken cancellationToken = default(CancellationToken))
+	{
+		if (runs.Count == 0)
+		{
+			return new HashSet<Guid>();
+		}
+
+		await using NpgsqlConnection connection = await OpenConnectionAsync(cancellationToken);
+		var insertedIds = new HashSet<Guid>();
+		for (var offset = 0; offset < runs.Count; offset += StrategyMarketPaperRunInsertBatchSize)
+		{
+			var count = Math.Min(StrategyMarketPaperRunInsertBatchSize, runs.Count - offset);
+			var batch = new StrategyMarketPaperRun[count];
+			for (var index = 0; index < count; index++)
+			{
+				var run = runs[offset + index];
+				batch[index] = run with { StrategyId = StrategyIds.Normalize(run.StrategyId) };
+			}
+
+			await using NpgsqlCommand command = CreateCommand(connection, """
+WITH run_rows AS (
+    SELECT *
+    FROM jsonb_to_recordset(@RunsJson) AS run_row(
+        id uuid,
+        strategy_id uuid,
+        market_id text,
+        condition_id text,
+        market_slug text,
+        market_title text,
+        category text,
+        market_start_utc timestamptz,
+        market_end_utc timestamptz,
+        detected_at_utc timestamptz,
+        entry_due_at_utc timestamptz,
+        status text,
+        selected_asset_id text,
+        selected_outcome text,
+        entry_price numeric,
+        stake_usd numeric,
+        size_shares numeric,
+        signal_id uuid,
+        paper_order_id uuid,
+        entered_at_utc timestamptz,
+        settlement_price numeric,
+        settlement_value_usd numeric,
+        realized_pnl_usd numeric,
+        settled_at_utc timestamptz,
+        skip_reason text,
+        created_at_utc timestamptz,
+        updated_at_utc timestamptz,
+        skip_diagnostics_json text
+    )
+)
+INSERT INTO strategy_market_paper_runs (
+    id, strategy_id, market_id, condition_id, market_slug, market_title, category,
+    market_start_utc, market_end_utc, detected_at_utc, entry_due_at_utc, status,
+    selected_asset_id, selected_outcome, entry_price, stake_usd, size_shares,
+    signal_id, paper_order_id, entered_at_utc, settlement_price, settlement_value_usd,
+    realized_pnl_usd, settled_at_utc, skip_reason, skip_diagnostics_json, created_at_utc, updated_at_utc
+)
+SELECT
+    id, strategy_id, market_id, condition_id, market_slug, market_title, category,
+    market_start_utc, market_end_utc, detected_at_utc, entry_due_at_utc, status,
+    selected_asset_id, selected_outcome, entry_price, stake_usd, size_shares,
+    signal_id, paper_order_id, entered_at_utc, settlement_price, settlement_value_usd,
+    realized_pnl_usd, settled_at_utc, skip_reason, CAST(skip_diagnostics_json AS jsonb), created_at_utc, updated_at_utc
+FROM run_rows
+ON CONFLICT (strategy_id, market_id) DO NOTHING
+RETURNING id;
+""");
+			command.Parameters.Add("RunsJson", NpgsqlDbType.Jsonb).Value = JsonSerializer.Serialize(batch, BulkInsertJsonOptions);
+			await using NpgsqlDataReader reader = await command.ExecuteReaderAsync(cancellationToken);
+			while (await reader.ReadAsync(cancellationToken))
+			{
+				insertedIds.Add(reader.GetGuid(0));
+			}
+		}
+
+		return insertedIds;
 	}
 
 	public async Task<IReadOnlyList<StrategyMarketPaperRun>> GetDueStrategyMarketPaperRunsAsync(Guid strategyId, string status, DateTimeOffset dueBeforeUtc, int limit, CancellationToken cancellationToken = default(CancellationToken))
@@ -3381,22 +3471,56 @@ ORDER BY
 WITH windows AS (
     SELECT generate_series(1, @MaxLookbackHours)::integer AS lookback_hours
 ),
-lookback_pnl AS (
+requested_strategies AS (
+    SELECT unnest(CAST(@StrategyIds AS uuid[])) AS strategy_id
+),
+filtered_runs AS (
     SELECT
         run.strategy_id,
-        windows.lookback_hours,
-        COALESCE(sum(run.realized_pnl_usd), 0) AS realized_pnl_usd,
-        COALESCE(sum(run.stake_usd), 0) AS stake_usd,
+        LEAST(
+            @MaxLookbackHours,
+            GREATEST(
+                1,
+                CEIL(EXTRACT(EPOCH FROM (CAST(@NowUtc AS timestamptz) - run.settled_at_utc)) / 3600.0)::integer
+            )
+        ) AS first_lookback_hours,
+        run.realized_pnl_usd,
+        run.stake_usd
+    FROM strategy_market_paper_runs run
+    WHERE run.strategy_id = ANY(@StrategyIds)
+      AND run.status = @Status
+      AND run.realized_pnl_usd IS NOT NULL
+      AND run.settled_at_utc IS NOT NULL
+      AND run.settled_at_utc >= CAST(@NowUtc AS timestamptz) - make_interval(hours => @MaxLookbackHours)
+      AND run.settled_at_utc <= CAST(@NowUtc AS timestamptz)
+),
+hour_buckets AS (
+    SELECT
+        strategy_id,
+        first_lookback_hours,
+        sum(realized_pnl_usd) AS realized_pnl_usd,
+        sum(stake_usd) AS stake_usd,
         count(*)::integer AS settled_runs_count
-    FROM windows
-    INNER JOIN strategy_market_paper_runs run
-        ON run.strategy_id = ANY(@StrategyIds)
-        AND run.status = @Status
-        AND run.realized_pnl_usd IS NOT NULL
-        AND run.settled_at_utc IS NOT NULL
-        AND run.settled_at_utc >= CAST(@NowUtc AS timestamptz) - make_interval(hours => windows.lookback_hours)
-        AND run.settled_at_utc <= CAST(@NowUtc AS timestamptz)
-    GROUP BY run.strategy_id, windows.lookback_hours
+    FROM filtered_runs
+    GROUP BY strategy_id, first_lookback_hours
+),
+lookback_pnl AS (
+    SELECT
+        requested_strategies.strategy_id,
+        windows.lookback_hours,
+        sum(COALESCE(hour_buckets.realized_pnl_usd, 0)) OVER cumulative_window AS realized_pnl_usd,
+        sum(COALESCE(hour_buckets.stake_usd, 0)) OVER cumulative_window AS stake_usd,
+        (sum(COALESCE(hour_buckets.settled_runs_count, 0)) OVER cumulative_window)::integer AS settled_runs_count
+    FROM requested_strategies
+    CROSS JOIN windows
+    LEFT JOIN hour_buckets
+        ON hour_buckets.strategy_id = requested_strategies.strategy_id
+       AND hour_buckets.first_lookback_hours = windows.lookback_hours
+    WINDOW cumulative_window AS (
+        PARTITION BY requested_strategies.strategy_id
+        ORDER BY windows.lookback_hours
+        ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW
+    )
 )
 SELECT
     strategy_id,

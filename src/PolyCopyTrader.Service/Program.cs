@@ -429,6 +429,7 @@ builder.Services.AddHostedService<ChainlinkBtcUsdCorrelationWorker>();
 builder.Services.AddHostedService<BtcUpDown5mOrderBookRefreshWorker>();
 builder.Services.AddHostedService<BtcUpDown5mDueEntryPaperStrategyWorker>();
 builder.Services.AddHostedService<BtcUpDown5mPaperStrategyWorker>();
+builder.Services.AddHostedService<BtcUpDown5mChildParentRefreshWorker>();
 builder.Services.AddHostedService<BtcUpDown5mPreviousResultObserveWorker>();
 builder.Services.AddHostedService<BtcUpDown5mPreviousResultPaperStrategyWorker>();
 builder.Services.AddHostedService<BtcUpDown5mDiffCounterObserveWorker>();

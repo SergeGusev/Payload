@@ -190,6 +190,22 @@ public interface IAppRepository
         return Task.FromResult(false);
     }
 
+    async Task<IReadOnlySet<Guid>> TryAddStrategyMarketPaperRunsAsync(
+        IReadOnlyList<StrategyMarketPaperRun> runs,
+        CancellationToken cancellationToken = default)
+    {
+        var insertedIds = new HashSet<Guid>();
+        foreach (var run in runs)
+        {
+            if (await TryAddStrategyMarketPaperRunAsync(run, cancellationToken))
+            {
+                insertedIds.Add(run.Id);
+            }
+        }
+
+        return insertedIds;
+    }
+
     Task<IReadOnlyList<StrategyMarketPaperRun>> GetDueStrategyMarketPaperRunsAsync(
         Guid strategyId,
         string status,

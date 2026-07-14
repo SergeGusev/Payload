@@ -630,6 +630,8 @@ public sealed class BtcUpDown5mStrategyOptions
 
     public int MaxConcurrentEntryDecisions { get; init; } = 32;
 
+    public int ChildParentRefreshDelaySeconds { get; init; } = 60;
+
     public int MaxSettlementsPerCycle { get; init; } = 250;
 
     public int MaxConcurrentSettlements { get; init; } = 16;

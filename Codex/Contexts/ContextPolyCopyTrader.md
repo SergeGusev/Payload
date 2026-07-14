@@ -1,3 +1,17 @@
+## Active Update 2026-07-14 Due Entry Latency Remediation Phase One
+Goal: Remove the two verified non-deadline workloads from strategy entry bursts and add evidence for the remaining internal entry waits.
+Status: Completed
+Done:
+- Replaced sequential per-strategy/per-market observation inserts with PostgreSQL JSONB batches using `ON CONFLICT (strategy_id, market_id) DO NOTHING RETURNING id`; a time-bounded processor cache suppresses repeated active-market attempts and releases reservations after a failed batch so the next cycle retries.
+- Removed Child/Parent selection from main and due-entry processing. A dedicated worker now refreshes once per UTC-aligned five-minute interval after configurable `ChildParentRefreshDelaySeconds` (`60` by default, valid `0..240`).
+- Rewrote Child/Parent `1..24h` settled-PnL selection to filter the maximum lookback once, aggregate rows into their first eligible hour bucket, and calculate cumulative windows over the small strategy/hour grid.
+- Added one due-batch `*.wait_breakdown` diagnostic with counts, total milliseconds, and maximum milliseconds for decision-semaphore, market lookup, reference-decision, order-book, and placement-lock waits. Diagnostic persistence runs only after required deferred entry persistence is flushed or enqueued.
+- Added focused coverage for observation batching/deduplication/retry, Child selection and Futures exclusion through the dedicated refresh path, exact refresh scheduling boundaries, option validation, and latency diagnostic phase counts; updated README, configuration reference, appsettings, and project memory.
+- Validated the rewritten lookback statement against the production PostgreSQL schema with read-only `EXPLAIN`, and independently matched its hour-bucket semantics to direct per-window aggregation on a boundary-focused SQL fixture.
+Next: After an explicitly requested deployment/restart, compare fresh production entry-latency and observation-stage distributions with the pre-change baseline, then use `*.wait_breakdown` rows to choose any next concurrency/cache optimization.
+Notes: `dotnet build src/PolyCopyTrader.Service/PolyCopyTrader.Service.csproj -c Verify --no-restore` passed with 0 warnings/errors. All 58 focused cases passed. The final full run was `682 passed / 112 failed / 794 total`; its 112 failing test names match the pre-change baseline exactly. Two order-sensitive tests failed only in the first full attempt, then passed `2/2` alone, and the complete rerun returned to the exact baseline. `git diff --check` passed apart from line-ending conversion warnings. Production database access was read-only; no deployment, service restart, strategy setting, order, or production row was changed, so production latency improvement is not yet runtime-verified.
+Blockers: None.
+
 ## Active Update 2026-07-14 Best Child And Child ROI Paper PnL Chart
 Goal: Plot one best-by-PnL strategy from each current BTC/ETH/SOL Child and Child ROI Dashboard category on one chart.
 Status: Completed

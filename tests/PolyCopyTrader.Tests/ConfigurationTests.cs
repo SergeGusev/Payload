@@ -46,6 +46,7 @@ public sealed class ConfigurationTests
         Assert.Equal(60, configuration.BtcUpDown5mStrategy.EntryGraceSeconds);
         Assert.Equal(3_000, configuration.BtcUpDown5mStrategy.MaxEntriesPerCycle);
         Assert.Equal(32, configuration.BtcUpDown5mStrategy.MaxConcurrentEntryDecisions);
+        Assert.Equal(60, configuration.BtcUpDown5mStrategy.ChildParentRefreshDelaySeconds);
         Assert.Equal(1, configuration.BtcUpDown5mStrategy.MartinStakeLevels);
         Assert.False(configuration.BtcUpDown5mStrategy.PaperTakerPricingEnabled);
         Assert.True(configuration.BtcUpDown5mStrategy.PaperTakerRestFallbackEnabled);
@@ -371,6 +372,7 @@ public sealed class ConfigurationTests
                 PaperTakerMaxSpreadAbs = -0.01m,
                 PaperTakerMaxGammaClobDiff = -0.01m,
                 DiffCounterFastPollIntervalMilliseconds = 99,
+                ChildParentRefreshDelaySeconds = 241,
                 OpeningLimitBreakEvenLookbackRuns = 0,
                 OpeningLimitBreakEvenMinSettledRuns = 2,
                 OpeningLimitBreakEvenMargin = -0.01m,
@@ -403,6 +405,7 @@ public sealed class ConfigurationTests
         Assert.Contains(errors, error => error.Contains("BtcUpDown5mStrategy.PaperTakerMaxSpreadAbs", StringComparison.Ordinal));
         Assert.Contains(errors, error => error.Contains("BtcUpDown5mStrategy.PaperTakerMaxGammaClobDiff", StringComparison.Ordinal));
         Assert.Contains(errors, error => error.Contains("BtcUpDown5mStrategy.DiffCounterFastPollIntervalMilliseconds", StringComparison.Ordinal));
+        Assert.Contains(errors, error => error.Contains("BtcUpDown5mStrategy.ChildParentRefreshDelaySeconds", StringComparison.Ordinal));
         Assert.Contains(errors, error => error.Contains("BtcUpDown5mStrategy.OpeningLimitBreakEvenLookbackRuns", StringComparison.Ordinal));
         Assert.Contains(errors, error => error.Contains("BtcUpDown5mStrategy.OpeningLimitBreakEvenMinSettledRuns", StringComparison.Ordinal));
         Assert.Contains(errors, error => error.Contains("BtcUpDown5mStrategy.OpeningLimitBreakEvenMargin", StringComparison.Ordinal));

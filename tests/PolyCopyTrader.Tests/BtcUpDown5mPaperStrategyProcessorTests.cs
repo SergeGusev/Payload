@@ -962,7 +962,7 @@ public sealed class BtcUpDown5mPaperStrategyProcessorTests
     }
 
     [Fact]
-    public async Task ProcessAsync_ChildRoiMirrorSelectsParentByAdjustedRoiAfterMinimumSample()
+    public async Task ProcessChildParentRefreshAsync_ChildRoiMirrorSelectsParentByAdjustedRoiAfterMinimumSample()
     {
         var now = DateTimeOffset.UtcNow;
         var repository = new TestAppRepository();
@@ -990,7 +990,7 @@ public sealed class BtcUpDown5mPaperStrategyProcessorTests
             rawRoiParent.Code,
             adjustedRoiParent.Code);
 
-        await processor.ProcessAsync();
+        await processor.ProcessChildParentRefreshAsync();
 
         var assignment = Assert.Single(repository.StrategyChildParentAssignments, item =>
             item.EndedAtUtc is null &&
@@ -1002,7 +1002,7 @@ public sealed class BtcUpDown5mPaperStrategyProcessorTests
     }
 
     [Fact]
-    public async Task ProcessAsync_ChildMirrorStrategiesExcludeFuturesParents()
+    public async Task ProcessChildParentRefreshAsync_ChildMirrorStrategiesExcludeFuturesParents()
     {
         var now = DateTimeOffset.UtcNow;
         var repository = new TestAppRepository();
@@ -1031,7 +1031,7 @@ public sealed class BtcUpDown5mPaperStrategyProcessorTests
                 .Append(nonFuturesParent.Code)
                 .ToArray());
 
-        await processor.ProcessAsync();
+        await processor.ProcessChildParentRefreshAsync();
 
         var activeAssignments = repository.StrategyChildParentAssignments
             .Where(assignment => assignment.EndedAtUtc is null)
@@ -1132,6 +1132,63 @@ public sealed class BtcUpDown5mPaperStrategyProcessorTests
 
         Assert.Empty(repository.PaperFills);
         Assert.Empty(repository.PaperPositions);
+    }
+
+    [Fact]
+    public async Task ProcessAsync_RepeatedObservationUsesSingleBulkInsert()
+    {
+        var now = DateTimeOffset.UtcNow;
+        var repository = new TestAppRepository();
+        var variants = StrategyIds.BtcUpDown5mVariants
+            .Where(item => item.Code is
+                "btc_up_down_5m_reference_average_bps_1_fak_premarket" or
+                "btc_up_down_5m_reference_average_bps_2_fak_premarket")
+            .ToArray();
+        Assert.Equal(2, variants.Length);
+        repository.PolymarketGammaMarkets.Add(CreateMarket(
+            now.AddMinutes(2),
+            now.AddMinutes(7),
+            upPrice: 0.50m,
+            downPrice: 0.50m));
+        var processor = CreateProcessorWithoutOrderBooks(
+            repository,
+            [],
+            variants.Select(variant => variant.Code).ToArray());
+
+        var firstResult = await processor.ProcessAsync();
+        var secondResult = await processor.ProcessAsync();
+
+        Assert.Equal(2, firstResult.MarketsObserved);
+        Assert.Equal(0, secondResult.MarketsObserved);
+        Assert.Equal(2, repository.StrategyMarketPaperRuns.Count);
+        Assert.Equal(1, repository.BulkStrategyMarketPaperRunInsertCalls);
+        Assert.Equal(2, repository.BulkStrategyMarketPaperRunInsertCandidates);
+    }
+
+    [Fact]
+    public async Task ProcessAsync_BulkObservationFailureIsRetriedOnNextCycle()
+    {
+        var now = DateTimeOffset.UtcNow;
+        var repository = new TestAppRepository
+        {
+            BulkStrategyMarketPaperRunInsertFailuresToThrow = 1
+        };
+        var variant = StrategyIds.BtcUpDown5mVariants.Single(item =>
+            item.Code == "btc_up_down_5m_reference_average_bps_1_fak_premarket");
+        repository.PolymarketGammaMarkets.Add(CreateMarket(
+            now.AddMinutes(2),
+            now.AddMinutes(7),
+            upPrice: 0.50m,
+            downPrice: 0.50m));
+        var processor = CreateProcessorWithoutOrderBooks(repository, [], variant.Code);
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() => processor.ProcessAsync());
+        var retryResult = await processor.ProcessAsync();
+
+        Assert.Equal(1, retryResult.MarketsObserved);
+        Assert.Single(repository.StrategyMarketPaperRuns);
+        Assert.Equal(2, repository.BulkStrategyMarketPaperRunInsertCalls);
+        Assert.Equal(2, repository.BulkStrategyMarketPaperRunInsertCandidates);
     }
 
     [Fact]
@@ -8054,6 +8111,15 @@ public sealed class BtcUpDown5mPaperStrategyProcessorTests
         var result = await processor.ProcessAsync();
 
         Assert.Equal(1, result.EntriesPlaced);
+        var latencyTiming = Assert.Single(repository.BtcUpDown5mStrategyStageTimings, item =>
+            item.StageName.EndsWith(".wait_breakdown", StringComparison.Ordinal));
+        Assert.Equal(1, latencyTiming.RunCount);
+        Assert.NotNull(latencyTiming.Detail);
+        Assert.Contains("decision_semaphore_wait=count:1", latencyTiming.Detail, StringComparison.Ordinal);
+        Assert.Contains("market_lookup=count:1", latencyTiming.Detail, StringComparison.Ordinal);
+        Assert.Contains("reference_decision=count:1", latencyTiming.Detail, StringComparison.Ordinal);
+        Assert.Contains("order_book=count:3", latencyTiming.Detail, StringComparison.Ordinal);
+        Assert.Contains("placement_lock_wait=count:1", latencyTiming.Detail, StringComparison.Ordinal);
         var run = Assert.Single(repository.StrategyMarketPaperRuns, item =>
             item.StrategyId == variant.Id &&
             item.Status == StrategyMarketPaperRunStatuses.Entered);
