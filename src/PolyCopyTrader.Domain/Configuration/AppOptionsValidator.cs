@@ -1159,6 +1159,18 @@ public static class AppOptionsValidator
             errors.Add("BtcUpDown5mStrategy.MaxConcurrentEntryDecisions must be between 1 and 128.");
         }
 
+        if (options.FastDiffReservedEntryDecisionSlots < 0 ||
+            options.FastDiffReservedEntryDecisionSlots >= options.MaxConcurrentEntryDecisions)
+        {
+            errors.Add("BtcUpDown5mStrategy.FastDiffReservedEntryDecisionSlots must be at least 0 and less than MaxConcurrentEntryDecisions.");
+        }
+
+        if (options.ObservationMarketSnapshotTtlMilliseconds < 100 ||
+            options.ObservationMarketSnapshotTtlMilliseconds > 60_000)
+        {
+            errors.Add("BtcUpDown5mStrategy.ObservationMarketSnapshotTtlMilliseconds must be between 100 and 60000.");
+        }
+
         if (options.ChildParentRefreshDelaySeconds < 0 || options.ChildParentRefreshDelaySeconds > 240)
         {
             errors.Add("BtcUpDown5mStrategy.ChildParentRefreshDelaySeconds must be between 0 and 240.");

@@ -35,14 +35,16 @@ public sealed class BtcUpDown5mPaperStrategyWorker(
             ? StrategyIds.UpDown5mStrategyVariants.Count
             : options.EnabledVariantCodes.Count;
         logger.LogInformation(
-            "BTC Up or Down 5m paper strategy worker started. Mode={Mode} RunInLiveMode={RunInLiveMode} PollIntervalSeconds={PollIntervalSeconds} VariantCount={VariantCount} StakeUsd={StakeUsd} EntryGraceSeconds={EntryGraceSeconds} MaxConcurrentEntryDecisions={MaxConcurrentEntryDecisions}",
+            "BTC Up or Down 5m paper strategy worker started. Mode={Mode} RunInLiveMode={RunInLiveMode} PollIntervalSeconds={PollIntervalSeconds} VariantCount={VariantCount} StakeUsd={StakeUsd} EntryGraceSeconds={EntryGraceSeconds} MaxConcurrentEntryDecisions={MaxConcurrentEntryDecisions} FastDiffReservedEntryDecisionSlots={FastDiffReservedEntryDecisionSlots} ObservationMarketSnapshotTtlMilliseconds={ObservationMarketSnapshotTtlMilliseconds}",
             botOptions.Mode,
             paperTradingOptions.RunInLiveMode,
             options.PollIntervalSeconds,
             enabledVariantCount,
             options.StakeUsd,
             options.EntryGraceSeconds,
-            options.MaxConcurrentEntryDecisions);
+            options.MaxConcurrentEntryDecisions,
+            options.FastDiffReservedEntryDecisionSlots,
+            options.ObservationMarketSnapshotTtlMilliseconds);
 
         while (!stoppingToken.IsCancellationRequested)
         {

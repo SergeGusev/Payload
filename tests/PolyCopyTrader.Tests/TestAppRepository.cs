@@ -11,12 +11,37 @@ internal sealed class TestAppRepository : IAppRepository
     private readonly HashSet<string> leaderTradeKeys = [];
     private int polymarketGammaMarketLookupsInFlight;
     private int maxPolymarketGammaMarketLookupsInFlight;
+    private int btcUpDownStrategyGammaMarketCalls;
+    private int cryptoUpDownGammaMarketCalls;
+    private int observationGammaMarketCalls;
+    private int endingBetweenGammaMarketCalls;
 
     public TimeSpan PolymarketGammaMarketLookupDelay { get; set; } = TimeSpan.Zero;
+    public TimeSpan ObservationGammaMarketLookupDelay { get; set; } = TimeSpan.Zero;
     public bool EnforceStrategyRunPaperOrderForeignKey { get; set; }
 
     public int MaxConcurrentPolymarketGammaMarketLookups =>
         System.Threading.Volatile.Read(ref maxPolymarketGammaMarketLookupsInFlight);
+
+    public int BtcUpDownStrategyGammaMarketCalls =>
+        System.Threading.Volatile.Read(ref btcUpDownStrategyGammaMarketCalls);
+
+    public int CryptoUpDownGammaMarketCalls =>
+        System.Threading.Volatile.Read(ref cryptoUpDownGammaMarketCalls);
+
+    public int ObservationGammaMarketCalls =>
+        System.Threading.Volatile.Read(ref observationGammaMarketCalls);
+
+    public int EndingBetweenGammaMarketCalls =>
+        System.Threading.Volatile.Read(ref endingBetweenGammaMarketCalls);
+
+    public IReadOnlyList<string> LastObservationGammaAssetSymbols { get; private set; } = [];
+
+    public DateTimeOffset? LastObservationGammaMarketEndAtOrAfterUtc { get; private set; }
+
+    public DateTimeOffset? LastObservationGammaMarketStartAtOrBeforeUtc { get; private set; }
+
+    public int? LastObservationGammaLimit { get; private set; }
 
     public int BulkStrategyMarketPaperRunUpdateCalls { get; private set; }
 
@@ -607,6 +632,7 @@ internal sealed class TestAppRepository : IAppRepository
         int limit,
         CancellationToken cancellationToken = default)
     {
+        System.Threading.Interlocked.Increment(ref btcUpDownStrategyGammaMarketCalls);
         return Task.FromResult<IReadOnlyList<PolymarketGammaMarket>>(PolymarketGammaMarkets
             .Where(market =>
                 market.Active &&
@@ -2686,6 +2712,7 @@ internal sealed class TestAppRepository : IAppRepository
         int limit,
         CancellationToken cancellationToken = default)
     {
+        System.Threading.Interlocked.Increment(ref cryptoUpDownGammaMarketCalls);
         var allowed = assetSymbols
             .Select(symbol => symbol.Trim().ToUpperInvariant())
             .ToHashSet(StringComparer.OrdinalIgnoreCase);
@@ -2698,6 +2725,49 @@ internal sealed class TestAppRepository : IAppRepository
                 .ToArray());
     }
 
+    public async Task<IReadOnlyList<PolymarketGammaMarket>> GetUpDownStrategyGammaMarketsForObservationAsync(
+        IReadOnlyCollection<string> assetSymbols,
+        DateTimeOffset marketEndAtOrAfterUtc,
+        DateTimeOffset marketStartAtOrBeforeUtc,
+        int limit,
+        CancellationToken cancellationToken = default)
+    {
+        System.Threading.Interlocked.Increment(ref observationGammaMarketCalls);
+        LastObservationGammaAssetSymbols = assetSymbols
+            .Select(symbol => symbol.Trim().ToUpperInvariant())
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .OrderBy(symbol => symbol, StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+        LastObservationGammaMarketEndAtOrAfterUtc = marketEndAtOrAfterUtc;
+        LastObservationGammaMarketStartAtOrBeforeUtc = marketStartAtOrBeforeUtc;
+        LastObservationGammaLimit = limit;
+        if (ObservationGammaMarketLookupDelay > TimeSpan.Zero)
+        {
+            await Task.Delay(ObservationGammaMarketLookupDelay, cancellationToken);
+        }
+
+        var allowed = LastObservationGammaAssetSymbols.ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var cryptoAllowed = allowed
+            .Where(symbol => !string.Equals(symbol, "BTC", StringComparison.OrdinalIgnoreCase))
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+        return PolymarketGammaMarkets
+            .Where(market => market.Active && !market.Archived)
+            .Where(market =>
+                (allowed.Contains("BTC") && BtcUpDown5mMarketAnalyzer.IsStrategyCandidate(market)) ||
+                CryptoUpDown5mMarketAnalyzer.TryGetAssetSymbol(market, cryptoAllowed, out _))
+            .Where(market =>
+                market.EventStartTimeUtc is null ||
+                market.EventStartTimeUtc <= marketStartAtOrBeforeUtc)
+            .Where(market =>
+                market.EndDateUtc >= marketEndAtOrAfterUtc ||
+                (market.EndDateUtc is null &&
+                    (market.EventStartTimeUtc is null || market.EventStartTimeUtc >= marketEndAtOrAfterUtc)))
+            .OrderBy(market => market.EventStartTimeUtc ?? market.EndDateUtc ?? market.CreatedAtUtc)
+            .ThenBy(market => market.MarketId, StringComparer.OrdinalIgnoreCase)
+            .Take(Math.Max(1, limit))
+            .ToArray();
+    }
+
     public Task<IReadOnlyList<PolymarketGammaMarket>> GetCryptoUpDown5mGammaMarketsEndingBetweenAsync(
         IReadOnlyCollection<string> assetSymbols,
         DateTimeOffset endAfterUtc,
@@ -2705,6 +2775,7 @@ internal sealed class TestAppRepository : IAppRepository
         int limit,
         CancellationToken cancellationToken = default)
     {
+        System.Threading.Interlocked.Increment(ref endingBetweenGammaMarketCalls);
         var allowed = assetSymbols
             .Select(symbol => symbol.Trim().ToUpperInvariant())
             .ToHashSet(StringComparer.OrdinalIgnoreCase);

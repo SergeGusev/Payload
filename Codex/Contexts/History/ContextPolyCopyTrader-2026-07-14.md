@@ -56,3 +56,10 @@ Request:
 
 Result:
 Verified exact production deployment `d1a42bf4` through its fresh heartbeat and runtime rows. Across three warm cycles, all `597` actual Paper entries due at premarket `-30s` met the `3s` target (`p95 1.116s`, max `1.531s`), while all `152` market-open/other entries remained late (`p95/max 26.605s`). Source inspection plus `wait_breakdown` rows proved that delayed PreviousResult availability and the shared `32`-slot decision semaphore delayed concurrent FastDiff work; at the `10:15` boundary BTC/SOL results arrived about `17.2s` late and processing added about `9.1s`. Independently confirmed the new observation batch/cache eliminated the prior conflict-index scan load, but repeated Gamma market queries now perform wide parallel sequential scans and wait on I/O. The dedicated Child worker ran successfully at `+60s`; all `512` captured entered runs had complete signal/order persistence, though exact queue commit latency remains unobservable. Production access was read-only and no production state was changed.
+
+## 2026-07-14T08:17:38.0904595+00:00
+Request:
+Ок, делай следующий обоснованный этап
+
+Result:
+Implemented the second evidence-driven latency-remediation phase. Observation workers now share one five-second, time-bounded BTC/ETH/SOL Gamma snapshot; result polling and PreviousResult fallback use bounded ending-window reads backed by two new partial active-market indexes; PreviousResult signal work completes before entry-decision capacity is acquired; and exact FastDiff due work has eight reserved slots within the unchanged 32-slot total. Production read-only SQL proved the rewritten ending predicate returns identical rows in three windows. A disposable local PostgreSQL integration verified schema creation, valid/ready indexes, and indexed plan use. The solution built with zero warnings/errors, all 111 focused tests passed, and the current full suite added four passing tests while matching the baseline's exact 112 known failure names. No production state or deployment was changed; runtime latency impact remains to be verified after deployment.

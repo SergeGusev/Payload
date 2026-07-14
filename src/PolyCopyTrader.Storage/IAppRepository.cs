@@ -166,6 +166,54 @@ public interface IAppRepository
         return Task.FromResult<IReadOnlyList<PolymarketGammaMarket>>([]);
     }
 
+    async Task<IReadOnlyList<PolymarketGammaMarket>> GetUpDownStrategyGammaMarketsForObservationAsync(
+        IReadOnlyCollection<string> assetSymbols,
+        DateTimeOffset marketEndAtOrAfterUtc,
+        DateTimeOffset marketStartAtOrBeforeUtc,
+        int limit,
+        CancellationToken cancellationToken = default)
+    {
+        var normalizedSymbols = assetSymbols
+            .Where(symbol => !string.IsNullOrWhiteSpace(symbol))
+            .Select(symbol => symbol.Trim().ToUpperInvariant())
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+        if (normalizedSymbols.Length == 0 || marketStartAtOrBeforeUtc < marketEndAtOrAfterUtc)
+        {
+            return [];
+        }
+
+        var markets = new List<PolymarketGammaMarket>();
+        if (normalizedSymbols.Contains("BTC", StringComparer.OrdinalIgnoreCase))
+        {
+            markets.AddRange(await GetBtcUpDownStrategyGammaMarketsAsync(limit, cancellationToken));
+        }
+
+        var cryptoSymbols = normalizedSymbols
+            .Where(symbol => !string.Equals(symbol, "BTC", StringComparison.OrdinalIgnoreCase))
+            .ToArray();
+        if (cryptoSymbols.Length > 0)
+        {
+            markets.AddRange(await GetCryptoUpDown5mGammaMarketsAsync(cryptoSymbols, limit, cancellationToken));
+        }
+
+        return markets
+            .Where(market =>
+                market.EventStartTimeUtc is null ||
+                market.EventStartTimeUtc <= marketStartAtOrBeforeUtc)
+            .Where(market =>
+                market.EndDateUtc >= marketEndAtOrAfterUtc ||
+                (market.EndDateUtc is null &&
+                    (market.EventStartTimeUtc is null ||
+                        market.EventStartTimeUtc >= marketEndAtOrAfterUtc)))
+            .GroupBy(market => market.MarketId, StringComparer.OrdinalIgnoreCase)
+            .Select(group => group.First())
+            .OrderBy(market => market.EventStartTimeUtc ?? market.EndDateUtc ?? market.CreatedAtUtc)
+            .ThenBy(market => market.MarketId, StringComparer.OrdinalIgnoreCase)
+            .Take(Math.Max(1, limit))
+            .ToArray();
+    }
+
     Task<IReadOnlyList<PolymarketGammaMarket>> GetCryptoUpDown5mGammaMarketsEndingBetweenAsync(
         IReadOnlyCollection<string> assetSymbols,
         DateTimeOffset endAfterUtc,

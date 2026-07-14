@@ -3880,6 +3880,55 @@ public sealed class BtcUpDown5mPaperStrategyProcessorTests
     }
 
     [Fact]
+    public async Task ObserveWorkers_ShareOneBoundedGammaSnapshotUntilTtlExpires()
+    {
+        var marketStartUtc = new DateTimeOffset(2026, 6, 8, 12, 0, 0, TimeSpan.Zero);
+        var nowUtc = marketStartUtc.AddMinutes(-2);
+        var timeProvider = new ManualTimeProvider(nowUtc);
+        var diffVariant = StrategyIds.UpDown5mStrategyVariants.Single(item =>
+            item.Code == "btc_up_down_5m_up_diff_2_fak_premarket");
+        var previousResultVariant = UpBps2InstantVariant;
+        var repository = new TestAppRepository
+        {
+            ObservationGammaMarketLookupDelay = TimeSpan.FromMilliseconds(50)
+        };
+        repository.PolymarketGammaMarkets.Add(CreateMarket(
+            marketStartUtc,
+            marketStartUtc.AddMinutes(5),
+            upPrice: 0.50m,
+            downPrice: 0.50m));
+        var processor = CreateProcessorCoreWithOptions(
+            repository,
+            [],
+            [],
+            _ => { },
+            [],
+            CreateBtcOptions(
+                paperTakerPricingEnabled: false,
+                [diffVariant.Code, previousResultVariant.Code]),
+            gammaClient: new FakeGammaClient([]),
+            timeProvider: timeProvider);
+
+        await Task.WhenAll(
+            processor.ProcessDiffCounterObserveAsync(),
+            processor.ProcessPreviousResultObserveAsync());
+
+        Assert.Equal(1, repository.ObservationGammaMarketCalls);
+        Assert.Equal(["BTC", "ETH", "SOL"], repository.LastObservationGammaAssetSymbols);
+        Assert.Equal(nowUtc.AddMinutes(-10), repository.LastObservationGammaMarketEndAtOrAfterUtc);
+        Assert.Equal(nowUtc.AddMinutes(10), repository.LastObservationGammaMarketStartAtOrBeforeUtc);
+        Assert.Equal(1_000, repository.LastObservationGammaLimit);
+        Assert.Equal(2, repository.StrategyMarketPaperRuns.Count);
+
+        _ = await processor.ProcessDiffCounterObserveAsync();
+        Assert.Equal(1, repository.ObservationGammaMarketCalls);
+
+        timeProvider.UtcNow = nowUtc.AddMilliseconds(5_000);
+        _ = await processor.ProcessDiffCounterObserveAsync();
+        Assert.Equal(2, repository.ObservationGammaMarketCalls);
+    }
+
+    [Fact]
     public async Task ProcessDiffCounterFastDueEntriesAsync_DoesNotObserveMarkets()
     {
         var startupMarketStartUtc = new DateTimeOffset(2026, 6, 8, 12, 0, 0, TimeSpan.Zero);
@@ -7725,6 +7774,10 @@ public sealed class BtcUpDown5mPaperStrategyProcessorTests
             "BTC",
             previousStart,
             "Down"));
+        repository.CryptoUpDown5mWebSocketResolvedMarkets.Add(CreateWebSocketDiffResult(
+            "BTC",
+            previousStart.AddMinutes(-5),
+            "Up"));
         AddBtcOddsTick(repository, previousMarketId, previousStart, 0, 100m, 100m, 0.50m, 0.50m);
         AddBtcOddsTick(repository, previousMarketId, previousStart, 299, 99.95m, 100m, 0.50m, 0.50m);
         foreach (var variant in variants)
@@ -7769,6 +7822,83 @@ public sealed class BtcUpDown5mPaperStrategyProcessorTests
         Assert.Equal(3, repository.PaperOrders.Count);
         Assert.All(repository.PaperOrders, order => Assert.Equal("asset-up", order.AssetId));
         Assert.Equal(1, clobClient.GetOrderBookCalls);
+        Assert.Equal(0, repository.BtcUpDownStrategyGammaMarketCalls);
+        Assert.Equal(0, repository.CryptoUpDownGammaMarketCalls);
+        Assert.Equal(0, repository.EndingBetweenGammaMarketCalls);
+    }
+
+    [Fact]
+    public async Task ProcessPreviousResultFastDueEntriesAsync_UsesBoundedGammaFallbackForOlderStreakMarkets()
+    {
+        var now = DateTimeOffset.UtcNow;
+        var marketStart = now.AddSeconds(-2);
+        var previousStart = marketStart.AddMinutes(-5);
+        var previousSuffix = previousStart.ToUnixTimeSeconds().ToString(CultureInfo.InvariantCulture);
+        var previousMarketId = "btc-ws-market-" + previousSuffix;
+        var repository = new TestAppRepository();
+        var market = CreateMarket(
+            marketStart,
+            marketStart.AddMinutes(5),
+            upPrice: 0.50m,
+            downPrice: 0.50m);
+        repository.PolymarketGammaMarkets.Add(market);
+        repository.CryptoUpDown5mWebSocketResolvedMarkets.Add(CreateWebSocketDiffResult(
+            "BTC",
+            previousStart,
+            "Down"));
+        AddBtcOddsTick(repository, previousMarketId, previousStart, 0, 100m, 100m, 0.50m, 0.50m);
+        AddBtcOddsTick(repository, previousMarketId, previousStart, 299, 99.98m, 100m, 0.50m, 0.50m);
+        repository.StrategySettings[UpBps2InstantVariant.Id] =
+            StrategyRuntimeSettings.Default(UpBps2InstantVariant.Id) with
+            {
+                PaperStakeAmount = 2.50m
+            };
+        repository.StrategyMarketPaperRuns.Add(CreateObservedRun(
+            UpBps2InstantVariant,
+            market,
+            marketStart,
+            marketStart.AddSeconds(-1),
+            marketStart));
+        var clobClient = new FakeClobClient(
+            [OrderBook(
+                "asset-up",
+                [new OrderBookLevel(0.39m, 100m)],
+                [new OrderBookLevel(0.41m, 100m)],
+                now,
+                minOrderSize: 5m)]);
+        var processor = CreateProcessorCoreWithOptions(
+            repository,
+            [],
+            [],
+            _ => { },
+            [],
+            CreateBtcOptions(
+                paperTakerPricingEnabled: false,
+                [UpBps2InstantVariant.Code],
+                maxConcurrentEntryDecisions: 4),
+            new FakeBtcUsdReferencePriceClient(100m),
+            CreateBtcUsdReferenceCache([100m]),
+            clobClient: clobClient);
+
+        var result = await processor.ProcessPreviousResultFastDueEntriesAsync();
+
+        Assert.True(
+            result.EntriesPlaced == 1,
+            string.Join(
+                " | ",
+                repository.StrategyMarketPaperRuns.Select(run =>
+                    $"{run.MarketId}:{run.Status}:{run.SkipReason}:{run.SkipDiagnosticsJson}")));
+        var order = Assert.Single(repository.PaperOrders);
+        Assert.Equal(UpBps2InstantVariant.Id, order.StrategyId);
+        Assert.Equal("asset-up", order.AssetId);
+        Assert.Equal(0, repository.BtcUpDownStrategyGammaMarketCalls);
+        Assert.Equal(0, repository.CryptoUpDownGammaMarketCalls);
+        Assert.Equal(1, repository.EndingBetweenGammaMarketCalls);
+        var signalWarmup = Assert.Single(repository.BtcUpDown5mStrategyStageTimings, timing =>
+            timing.StageName.EndsWith(".previous_result_signal_warmup", StringComparison.Ordinal));
+        var decisionTasks = Assert.Single(repository.BtcUpDown5mStrategyStageTimings, timing =>
+            timing.StageName.EndsWith(".decision_tasks", StringComparison.Ordinal));
+        Assert.True(signalWarmup.CompletedAtUtc <= decisionTasks.StartedAtUtc);
     }
 
     [Fact]

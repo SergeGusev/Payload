@@ -49,8 +49,10 @@ public sealed class CryptoUpDown5mResultPollingProcessor(
             return new CryptoUpDown5mResultPollingCycleResult(0, 0, 0, 0, 0, 0);
         }
 
-        var markets = await repository.GetCryptoUpDown5mGammaMarketsAsync(
+        var markets = await repository.GetCryptoUpDown5mGammaMarketsEndingBetweenAsync(
             assetSymbols,
+            nowUtc.AddMinutes(-options.MaxMarketAgeMinutes),
+            nowUtc,
             options.MaxMarketsPerCycle,
             cancellationToken);
         var candidates = SelectCandidates(markets, assetSymbols, nowUtc).ToArray();

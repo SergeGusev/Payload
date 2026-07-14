@@ -79,6 +79,8 @@ public sealed class StorageTests
         Assert.Contains("CREATE TABLE IF NOT EXISTS polymarket_gamma_markets", PostgresSchema.SchemaSql, StringComparison.Ordinal);
         Assert.Contains("ix_polymarket_gamma_markets_created", PostgresSchema.SchemaSql, StringComparison.Ordinal);
         Assert.Contains("ix_polymarket_gamma_markets_condition", PostgresSchema.SchemaSql, StringComparison.Ordinal);
+        Assert.Contains("ix_polymarket_gamma_markets_active_end_date", PostgresSchema.SchemaSql, StringComparison.Ordinal);
+        Assert.Contains("ix_polymarket_gamma_markets_active_event_start", PostgresSchema.SchemaSql, StringComparison.Ordinal);
         Assert.Contains("ix_polymarket_gamma_markets_clob_token_ids", PostgresSchema.SchemaSql, StringComparison.Ordinal);
         Assert.Contains("order_min_size numeric", PostgresSchema.SchemaSql, StringComparison.Ordinal);
         Assert.Contains("order_price_min_tick_size numeric", PostgresSchema.SchemaSql, StringComparison.Ordinal);

@@ -42,6 +42,36 @@ public sealed class CryptoUpDown5mResultPollingProcessorTests
     }
 
     [Fact]
+    public async Task ProcessAsync_UsesEndingWindowWhenManyOlderMarketsExist()
+    {
+        var repository = new TestAppRepository();
+        var oldStartUtc = DateTimeOffset.UtcNow.AddHours(-20);
+        for (var index = 0; index < 150; index++)
+        {
+            repository.PolymarketGammaMarkets.Add(CreateCryptoMarket(
+                index % 2 == 0 ? "ETH" : "SOL",
+                oldStartUtc.AddMinutes(index * 5),
+                closed: false,
+                winningOutcome: null));
+        }
+
+        var startUtc = FloorToFiveMinutes(DateTimeOffset.UtcNow).AddMinutes(-10);
+        var openMarket = CreateCryptoMarket("BTC", startUtc, closed: false, winningOutcome: null);
+        var closedMarket = CreateCryptoMarket("BTC", startUtc, closed: true, winningOutcome: "Down");
+        repository.PolymarketGammaMarkets.Add(openMarket);
+        var gammaClient = new FakeGammaClient([closedMarket]);
+        var processor = CreateProcessor(repository, gammaClient);
+
+        var result = await processor.ProcessAsync();
+
+        Assert.Equal(1, result.Candidates);
+        Assert.Equal(1, result.ResultsFound);
+        Assert.Equal([openMarket.Slug], gammaClient.RequestedSlugs);
+        Assert.Equal(1, repository.EndingBetweenGammaMarketCalls);
+        Assert.Equal(0, repository.CryptoUpDownGammaMarketCalls);
+    }
+
+    [Fact]
     public async Task ProcessAsync_ReusesPendingObservationUntilWinnerAppears()
     {
         var repository = new TestAppRepository();

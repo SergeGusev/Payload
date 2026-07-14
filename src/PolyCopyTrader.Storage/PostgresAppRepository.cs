@@ -678,6 +678,34 @@ ON CONFLICT (wallet, condition_id) DO UPDATE SET
 		return results;
 	}
 
+	public async Task<IReadOnlyList<PolymarketGammaMarket>> GetUpDownStrategyGammaMarketsForObservationAsync(IReadOnlyCollection<string> assetSymbols, DateTimeOffset marketEndAtOrAfterUtc, DateTimeOffset marketStartAtOrBeforeUtc, int limit, CancellationToken cancellationToken = default(CancellationToken))
+	{
+		var normalizedSymbols = assetSymbols
+			.Select(symbol => symbol.Trim().ToLowerInvariant())
+			.Where(symbol => !string.IsNullOrWhiteSpace(symbol))
+			.Distinct(StringComparer.OrdinalIgnoreCase)
+			.ToArray();
+		if (normalizedSymbols.Length == 0 || marketStartAtOrBeforeUtc < marketEndAtOrAfterUtc)
+		{
+			return [];
+		}
+
+		await using NpgsqlConnection connection = await OpenConnectionAsync(cancellationToken);
+		await using NpgsqlCommand command = CreateCommand(connection, "WITH requested_assets AS (\n    SELECT unnest(@AssetSymbols::text[]) AS asset_symbol\n)\nSELECT " + PolymarketGammaMarketSelectColumns + "\nFROM polymarket_gamma_markets\nWHERE active\n  AND NOT archived\n  AND (event_start_time_utc IS NULL OR event_start_time_utc <= @MarketStartAtOrBeforeUtc)\n  AND (\n      end_date_utc >= @MarketEndAtOrAfterUtc\n      OR (\n          end_date_utc IS NULL\n          AND (event_start_time_utc IS NULL OR event_start_time_utc >= @MarketEndAtOrAfterUtc)\n      )\n  )\n  AND EXISTS (\n      SELECT 1\n      FROM requested_assets asset\n      WHERE (\n          asset.asset_symbol = 'btc'\n          AND (\n              lower(slug) ~ '^btc-updown-(5m|15m|4h)-[0-9]+$'\n              OR lower(COALESCE(event_slug, '')) ~ '^btc-updown-(5m|15m|4h)-[0-9]+$'\n              OR lower(COALESCE(series_slug, '')) IN ('btc-up-or-down-5m', 'btc-up-or-down-15m', 'btc-up-or-down-hourly', 'btc-up-or-down-4h')\n          )\n      )\n      OR (\n          asset.asset_symbol <> 'btc'\n          AND (\n              lower(slug) ~ ('^' || asset.asset_symbol || '-updown-(5m|15m)-[0-9]+$')\n              OR lower(COALESCE(event_slug, '')) ~ ('^' || asset.asset_symbol || '-updown-(5m|15m)-[0-9]+$')\n              OR lower(COALESCE(series_slug, '')) IN (asset.asset_symbol || '-up-or-down-5m', asset.asset_symbol || '-up-or-down-15m')\n          )\n      )\n  )\nORDER BY COALESCE(event_start_time_utc, end_date_utc, created_at_utc) ASC NULLS LAST,\n         market_id ASC\nLIMIT @Limit;");
+		command.Parameters.Add("AssetSymbols", NpgsqlDbType.Array | NpgsqlDbType.Text).Value = normalizedSymbols;
+		command.Parameters.Add("MarketEndAtOrAfterUtc", NpgsqlDbType.TimestampTz).Value = UtcDateTime(marketEndAtOrAfterUtc);
+		command.Parameters.Add("MarketStartAtOrBeforeUtc", NpgsqlDbType.TimestampTz).Value = UtcDateTime(marketStartAtOrBeforeUtc);
+		command.Parameters.AddWithValue("Limit", Math.Max(1, limit));
+		List<PolymarketGammaMarket> results = [];
+		await using NpgsqlDataReader reader = await command.ExecuteReaderAsync(cancellationToken);
+		while (await reader.ReadAsync(cancellationToken))
+		{
+			results.Add(ReadPolymarketGammaMarket(reader));
+		}
+
+		return results;
+	}
+
 	public async Task<IReadOnlyList<PolymarketGammaMarket>> GetCryptoUpDown5mGammaMarketsEndingBetweenAsync(IReadOnlyCollection<string> assetSymbols, DateTimeOffset endAfterUtc, DateTimeOffset endBeforeUtc, int limit, CancellationToken cancellationToken = default(CancellationToken))
 	{
 		var normalizedSymbols = assetSymbols
@@ -690,11 +718,15 @@ ON CONFLICT (wallet, condition_id) DO UPDATE SET
 			return [];
 		}
 
+		var marketStartAfterUtc = endAfterUtc.Subtract(TimeSpan.FromMinutes(5));
+		var marketStartBeforeUtc = endBeforeUtc.Subtract(TimeSpan.FromMinutes(5));
 		await using NpgsqlConnection connection = await OpenConnectionAsync(cancellationToken);
-		await using NpgsqlCommand command = CreateCommand(connection, "WITH requested_assets AS (\n    SELECT unnest(@AssetSymbols::text[]) AS asset_symbol\n), candidate_markets AS (\n    SELECT " + PolymarketGammaMarketSelectColumns + ",\n           COALESCE(event_start_time_utc + interval '5 minutes', end_date_utc) AS inferred_market_end_utc\n    FROM polymarket_gamma_markets\n    WHERE active\n      AND NOT archived\n      AND EXISTS (\n          SELECT 1\n          FROM requested_assets asset\n          WHERE lower(slug) ~ ('^' || asset.asset_symbol || '-updown-5m-[0-9]+$')\n             OR lower(COALESCE(event_slug, '')) ~ ('^' || asset.asset_symbol || '-updown-5m-[0-9]+$')\n             OR lower(COALESCE(series_slug, '')) = asset.asset_symbol || '-up-or-down-5m'\n      )\n)\nSELECT " + PolymarketGammaMarketSelectColumns + "\nFROM candidate_markets\nWHERE inferred_market_end_utc >= @EndAfterUtc\n  AND inferred_market_end_utc <= @EndBeforeUtc\nORDER BY inferred_market_end_utc ASC, market_id ASC\nLIMIT @Limit;");
+		await using NpgsqlCommand command = CreateCommand(connection, "WITH requested_assets AS (\n    SELECT unnest(@AssetSymbols::text[]) AS asset_symbol\n)\nSELECT " + PolymarketGammaMarketSelectColumns + "\nFROM polymarket_gamma_markets\nWHERE active\n  AND NOT archived\n  AND EXISTS (\n      SELECT 1\n      FROM requested_assets asset\n      WHERE lower(slug) ~ ('^' || asset.asset_symbol || '-updown-5m-[0-9]+$')\n         OR lower(COALESCE(event_slug, '')) ~ ('^' || asset.asset_symbol || '-updown-5m-[0-9]+$')\n         OR lower(COALESCE(series_slug, '')) = asset.asset_symbol || '-up-or-down-5m'\n  )\n  AND (\n      (\n          event_start_time_utc IS NOT NULL\n          AND event_start_time_utc >= @MarketStartAfterUtc\n          AND event_start_time_utc <= @MarketStartBeforeUtc\n      )\n      OR (\n          event_start_time_utc IS NULL\n          AND end_date_utc >= @EndAfterUtc\n          AND end_date_utc <= @EndBeforeUtc\n      )\n  )\nORDER BY COALESCE(event_start_time_utc + interval '5 minutes', end_date_utc) ASC,\n         market_id ASC\nLIMIT @Limit;");
 		command.Parameters.Add("AssetSymbols", NpgsqlDbType.Array | NpgsqlDbType.Text).Value = normalizedSymbols;
 		command.Parameters.Add("EndAfterUtc", NpgsqlDbType.TimestampTz).Value = UtcDateTime(endAfterUtc);
 		command.Parameters.Add("EndBeforeUtc", NpgsqlDbType.TimestampTz).Value = UtcDateTime(endBeforeUtc);
+		command.Parameters.Add("MarketStartAfterUtc", NpgsqlDbType.TimestampTz).Value = UtcDateTime(marketStartAfterUtc);
+		command.Parameters.Add("MarketStartBeforeUtc", NpgsqlDbType.TimestampTz).Value = UtcDateTime(marketStartBeforeUtc);
 		command.Parameters.AddWithValue("Limit", Math.Max(1, limit));
 		List<PolymarketGammaMarket> results = [];
 		await using NpgsqlDataReader reader = await command.ExecuteReaderAsync(cancellationToken);

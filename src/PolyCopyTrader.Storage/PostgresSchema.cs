@@ -741,6 +741,14 @@ ON polymarket_gamma_markets(condition_id);
 CREATE INDEX IF NOT EXISTS ix_polymarket_gamma_markets_slug
 ON polymarket_gamma_markets(slug);
 
+CREATE INDEX CONCURRENTLY IF NOT EXISTS ix_polymarket_gamma_markets_active_end_date
+ON polymarket_gamma_markets(end_date_utc)
+WHERE active AND NOT archived;
+
+CREATE INDEX CONCURRENTLY IF NOT EXISTS ix_polymarket_gamma_markets_active_event_start
+ON polymarket_gamma_markets(event_start_time_utc)
+WHERE active AND NOT archived;
+
 CREATE INDEX IF NOT EXISTS ix_polymarket_gamma_markets_event
 ON polymarket_gamma_markets(event_id);
 
