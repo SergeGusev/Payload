@@ -1,3 +1,17 @@
+## Active Update 2026-07-14 Three ETH Reference Average Paper PnL Comparison
+Goal: Plot the full cumulative Paper PnL histories of the requested ETH Down 3 bps, neutral 5 bps, and Up 5 bps Reference Average Premarket strategies on one chart.
+Status: Completed
+Done:
+- Resolved exactly three production strategy rows: Down 3 bps ID `b7c50005-0000-4000-8140-000000000103`, neutral 5 bps ID `b7c50005-0000-4000-8179-000000000105`, and Up 5 bps ID `b7c50005-0000-4000-8137-000000000105`; all are enabled, unpaused, and currently Paper-only.
+- Fixed the read-only server cutoff at `2026-07-14 18:40:06.773310 UTC` and exported each strategy's complete settled Paper history through that cutoff.
+- Independently reconciled raw rows against server SQL: Down 3 bps `2,326` bets / `+$522.91716788` / `3.74114968%` ROI / `$236.71751337` max drawdown; neutral 5 bps `2,322` / `+$416.41485046` / `2.98428371%` / `$218.46477346`; Up 5 bps `358` / `+$219.08045596` / `10.18349194%` / `$61.35626055`.
+- Repeated the independent server aggregate after rendering and obtained an exact file match, proving that the frozen-cutoff result did not change during generation.
+- Verified Live history separately: only Down 3 bps has Live results (`21` realized-PnL rows totaling `-$4.16334300`); no Live rows were mixed into the requested comparable Paper curves.
+- Rendered and visually inspected the `1800x920` common-scale PNG at `outputs/eth-reference-average-three-strategies-paper-pnl-2026-07-14/three-strategies-paper-pnl.png`; SHA-256 is `28D7EAF22AA63C063C3A9EB11ED703F17866ABF499DA298ED9410D06674866FE`.
+Next: None.
+Notes: Reproducible SQL, source/aggregate CSVs, renderer, summary, Live-scope check, and PNG are in the ignored output directory. Production access was read-only; no database row, strategy setting, order, service process, deployment, product source, or runtime configuration changed. Product build/tests were not required because application code was unchanged.
+Blockers: None.
+
 ## Active Update 2026-07-14 ETH Down3 Paper PnL With ETHUSDT Overlay
 Goal: Build and directly display an updated cumulative Paper PnL chart for `ETH Up or Down 5m Down 3 bps Reference Average Premarket` with ETH price over the same full-history period.
 Status: Completed

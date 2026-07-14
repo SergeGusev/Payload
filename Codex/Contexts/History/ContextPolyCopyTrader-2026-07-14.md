@@ -121,3 +121,10 @@ Request:
 
 Result:
 Built an updated full-history cumulative Paper PnL chart for the exact production strategy and overlaid official Binance Spot ETHUSDT one-minute candles on the same UTC time axis with an independent price scale. The frozen read-only production export contained `2,296` settled rows through `2026-07-14 15:50:03.331792 UTC`, final PnL `+$514.51614403`, ROI `3.72914347%`, and maximum drawdown `$236.71751337`; raw-row calculations matched an independent server aggregate exactly. All `16,381` expected Binance minutes were present, and all `16,252` server-persisted ETH sampled minutes matched Binance minute keys. The `1800x920` PNG was visually inspected and saved with reproducible sources and scripts under `outputs/eth-down3-bps-reference-average-vs-ethusdt-2026-07-14/`. Production remained read-only and unchanged; product code did not change.
+
+## 2026-07-14T18:43:15.4679238+00:00
+Request:
+Сделай на одном графике графики pnl стратегий ETH Up or Down 5m Down 3 bps Reference Average Premarket, ETH Up or Down 5m 5 bps Reference Average Premarket, ETH Up or Down 5m Up 5 bps Reference Average Premarket
+
+Result:
+Built and visually inspected one common-scale `1800x920` chart containing the full cumulative Paper PnL histories of the three exact production strategies through frozen cutoff `2026-07-14 18:40:06.773310 UTC`. Independent raw-row and server calculations matched: Down 3 bps `2,326` bets / `+$522.91716788`; neutral 5 bps `2,322` / `+$416.41485046`; Up 5 bps `358` / `+$219.08045596`. A repeated server aggregate exactly matched the first export. Live results were checked separately and excluded; only Down 3 bps had any realized Live history. Reproducible artifacts are under `outputs/eth-reference-average-three-strategies-paper-pnl-2026-07-14/`. Production remained read-only and unchanged; product code did not change.
