@@ -1,3 +1,15 @@
+## Active Update 2026-07-14 Excel Frozen Header Feasibility
+Goal: Answer whether future Excel reports can keep category headers visible while scrolling, without changing the current reports.
+Status: Completed
+Done:
+- Confirmed the appropriate Excel mechanism is a frozen top row (`Freeze Panes`); the first `Date` column can also be frozen when horizontal navigation should retain dates.
+- Verified an earlier generated report contains an actual worksheet pane with `xSplit="1"`, `ySplit="1"`, and `state="frozen"`, proving the report format supports this behavior.
+- Found that the latest artifact-tool builder calls `freezeRows(1)` and `freezeColumns(1)`, but an inspected exported workbook did not contain a persisted worksheet pane. Future generation must therefore verify the final `.xlsx` and apply an explicit OpenXML/Excel post-export fix if necessary.
+- Made no change to any current workbook, report data, production database, service, configuration, or application behavior, as requested.
+Next: On the next Excel report request, freeze the top header row and verify the pane in the exported workbook; freeze the first date column too unless the user requests otherwise.
+Notes: Read-only inspection only. No product build or tests were required.
+Blockers: None.
+
 ## Active Update 2026-07-14 Sorted Currency Dashboard Category Progress Split Excel Reports
 Goal: Create six Excel reports split by BTC/ETH/SOL and Regular/Progress, with UTC daily Paper PnL grouped by Dashboard category and category columns sorted from lowest to highest total PnL.
 Status: Completed

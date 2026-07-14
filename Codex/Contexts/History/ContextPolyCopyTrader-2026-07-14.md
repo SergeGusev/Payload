@@ -17,3 +17,10 @@ Request:
 
 Result:
 Generated six ignored Excel workbooks from one production PostgreSQL read-only repeatable-read snapshot at `2026-07-14T05:23:03.713784Z`, split by BTC/ETH/SOL and Regular/Progress. The workbooks use the current Dashboard category implementation and Progress text rule, contain continuous UTC settlement dates `2026-06-05` through `2026-07-14`, formula-driven daily/category/grand totals, category columns sorted by total Paper PnL ascending, and red negative values on white fill. Every report total matched an independent server-side SQL aggregate exactly. All six sheets were rendered and visually inspected; Excel COM opened and recalculated them with `313` formulas, zero errors, exact totals, ascending category totals, and verified red/white negative formatting. Production remained unchanged.
+
+## 2026-07-14T05:41:22.0368125+00:00
+Request:
+Делать сейчас не нужно, просто вопрос на будущее - есть возможность делать так, чтобы заголовок в Excel был привязан сверху и не скроллировался? Чтобы название категории было всегда видно?
+
+Result:
+Confirmed that future reports can freeze the top header row with Excel `Freeze Panes`, and can simultaneously freeze the first date column. No current workbook was changed. Inspection also found that the current artifact-tool export did not persist its requested pane even though the builder called the freeze API, while an earlier OpenXML-generated workbook contains a valid frozen pane. Future reports should therefore verify the exported `.xlsx` and apply an explicit post-export pane fix when required.
