@@ -24,3 +24,12 @@ Request:
 
 Result:
 Confirmed that future reports can freeze the top header row with Excel `Freeze Panes`, and can simultaneously freeze the first date column. No current workbook was changed. Inspection also found that the current artifact-tool export did not persist its requested pane even though the builder called the freeze API, while an earlier OpenXML-generated workbook contains a valid frozen pane. Future reports should therefore verify the exported `.xlsx` and apply an explicit post-export pane fix when required.
+
+## 2026-07-14T06:15:04.2615817+00:00
+Request:
+Ты говорил, что появились задержки при постановке ставок. Ты понимаешь их причины и пути устранения?
+
+Продолжай
+
+Result:
+Reverified current production Paper-entry latency with a fresh 30-minute read-only sample and deployed-source inspection. Of `1,102` actual Paper entries, `446` exceeded `3s`, with `16.030s` p95 and `30.892s` maximum; `89` additional runs expired before their premarket entry window. Established the primary mechanism as three observation flows repeatedly issuing sequential per-strategy/per-market `INSERT ... ON CONFLICT DO NOTHING` calls: `315` slow observation stages created no rows, and an independent PostgreSQL sample recorded `4,663` unique-index scans in `10.449s` with zero inserts. Also verified a heavy 30-second Child/Parent lookback refresh with repeated stream-read failures, and localized secondary delay to shared due-decision batches without enough substage timing to assign their exact internal shares. Confirmed required indexes already exist, the run table is about `16GB`, no lock waits were present, and non-Absolute delays existed before the current service process. Defined remediation order: deduplicated bulk observation, isolated/incremental Child refresh, deadline-path isolation and finer wait instrumentation, then targeted tuning. Production and product code were unchanged; no actual Live entry occurred, so Live latency remains unverified.
