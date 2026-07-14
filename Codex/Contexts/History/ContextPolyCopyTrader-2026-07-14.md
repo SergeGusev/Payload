@@ -49,3 +49,10 @@ Request:
 
 Result:
 Implemented the first verified latency-remediation phase: batched and cached observation inserts with retry after failed batches; a dedicated five-minute-boundary Child/Parent refresh worker; a one-scan hour-bucket/cumulative-window lookback query; and post-persistence entry wait diagnostics for semaphore, market, reference, order-book, and placement-lock phases. Updated configuration and documentation and added focused tests. Service build passed with zero warnings/errors, all 58 focused cases passed, and the final full-suite result matched the exact pre-change baseline (`682 passed / 112 known failed`, identical failure names). The new SQL was checked with read-only production-schema `EXPLAIN` and an independent boundary fixture. No production data, service, or deployment was changed, so runtime latency improvement remains to be measured after a requested rollout.
+
+## 2026-07-14T07:21:00.7307815Z
+Request:
+Выложил, проверяй
+
+Result:
+Verified exact production deployment `d1a42bf4` through its fresh heartbeat and runtime rows. Across three warm cycles, all `597` actual Paper entries due at premarket `-30s` met the `3s` target (`p95 1.116s`, max `1.531s`), while all `152` market-open/other entries remained late (`p95/max 26.605s`). Source inspection plus `wait_breakdown` rows proved that delayed PreviousResult availability and the shared `32`-slot decision semaphore delayed concurrent FastDiff work; at the `10:15` boundary BTC/SOL results arrived about `17.2s` late and processing added about `9.1s`. Independently confirmed the new observation batch/cache eliminated the prior conflict-index scan load, but repeated Gamma market queries now perform wide parallel sequential scans and wait on I/O. The dedicated Child worker ran successfully at `+60s`; all `512` captured entered runs had complete signal/order persistence, though exact queue commit latency remains unobservable. Production access was read-only and no production state was changed.
