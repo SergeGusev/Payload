@@ -63,3 +63,10 @@ Request:
 
 Result:
 Implemented the second evidence-driven latency-remediation phase. Observation workers now share one five-second, time-bounded BTC/ETH/SOL Gamma snapshot; result polling and PreviousResult fallback use bounded ending-window reads backed by two new partial active-market indexes; PreviousResult signal work completes before entry-decision capacity is acquired; and exact FastDiff due work has eight reserved slots within the unchanged 32-slot total. Production read-only SQL proved the rewritten ending predicate returns identical rows in three windows. A disposable local PostgreSQL integration verified schema creation, valid/ready indexes, and indexed plan use. The solution built with zero warnings/errors, all 111 focused tests passed, and the current full suite added four passing tests while matching the baseline's exact 112 known failure names. No production state or deployment was changed; runtime latency impact remains to be verified after deployment.
+
+## 2026-07-14T08:49:41.5491891+00:00
+Request:
+Выложил, проверяй
+
+Result:
+Verified exact production deployment `3a96e92d` through a fresh heartbeat and independent phase-two stage markers. Across five complete post-start cycles, all `1,158/1,158` actual Paper entries met the `3s` target; maximum premarket delay was `1.375s` and maximum market-open delay was `2.376s`. The latest `11:45` cycle placed `213` entries with complete signal/order persistence and a `1.772s` maximum. Both new partial Gamma indexes were valid, ready, and actively used with zero sequential scans in two counter intervals. The deployment therefore resolved the sampled market-open deadline failure. Remaining production issues were kept separate: high server-local temp/index workload from Dashboard/Gamma reads, repeated broad and critical WebSocket staleness, transient SOL/OKX/WebSocket errors, and no post-start Live order with which to verify the Live placement path. Production remained read-only and unchanged.
