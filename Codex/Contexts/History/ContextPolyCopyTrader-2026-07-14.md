@@ -167,3 +167,10 @@ Request:
 
 Result:
 Confirmed the production computer and PostgreSQL endpoint `192.168.0.101:5432/polycopytrader` are reachable and responsive; PostgreSQL restarted at `2026-07-14 19:02:00.991792 UTC`. `PolyCopyTrader.Service` is not operationally alive: at final database time `19:07:56.713641 UTC`, its heartbeat was `574.050s` stale, it had zero PostgreSQL sessions, the latest strategy-run update was `652.817s` old, and the latest persisted crypto tick was `536.166s` old. A second check showed no recovery. The stored `Running`/`Live` text is stale and is not evidence of a running process. A remote Windows `Get-Service` query timed out, so the exact Windows process state and stop reason remain unknown. All checks were read-only; production was unchanged.
+
+## 2026-07-14T19:17:39.5422676+00:00
+Request:
+А почему отрицательные суммы без знака минус? И почему они текстовые, а не number?
+
+Result:
+Verified in the original workbook that the values were numeric, not text: sampled negative cells had `System.Double` values and Excel `ISNUMBER=TRUE`. The missing minus came from the chosen accounting number format, which displayed negatives in parentheses and zeros as a dash. Because the original workbook was open and locked in the user's Excel process, left it unchanged and generated `child-child-roi-best-daily-paper-pnl-corrected.xlsx`. The corrected workbook uses explicit `-$` negatives and `$0.00` zeros. All `56` financial cells passed Excel numeric checks, all `9` negatives retained red text on white, formula errors remained zero, the grand total remained `$1,444.38361641`, and freeze panes remained active. Replaced the daily total formula with the equivalent `SUM(B:G)+0*A` form to eliminate Excel's false `Formula omits adjacent cells` warning caused by the numeric UTC date in column A. A reopen check found zero number-as-text and zero omitted-cell warning flags. The final corrected sheet was visually inspected.

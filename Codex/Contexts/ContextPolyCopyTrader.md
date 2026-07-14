@@ -12,6 +12,21 @@ Next: Check `Get-Service PolyCopyTrader.Service`, the Windows Application/System
 Notes: All server/database checks were read-only. No row, service process, order, strategy setting, deployment, source file, or runtime configuration changed. Product build/tests were not required because application code was unchanged.
 Blockers: Remote Windows service-control access is unavailable from this workstation, so the exact process state and stop reason require a local/server-side check.
 
+## Active Update 2026-07-14 Child Excel Numeric Display Correction
+Goal: Explain and correct the missing minus signs and verify that every financial cell in the Child/Child ROI Excel report is numeric rather than text.
+Status: Completed
+Done:
+- Inspected the original workbook through Excel. Negative source cell `B3` had numeric `Value2=-95.08399453`, runtime type `System.Double`, and `ISNUMBER(B3)=TRUE`; the same checks passed for other source and formula cells. The missing minus sign came solely from the accounting display format `$#,##0.00;[Red]($#,##0.00);-`, which renders negatives in parentheses and zeros as a dash.
+- The original workbook was open in the user's visible Excel process and therefore locked. Left it untouched and created `outputs/child-child-roi-best-daily-paper-pnl-report-2026-07-14/reports/child-child-roi-best-daily-paper-pnl-corrected.xlsx`.
+- Changed the numeric format to `$#,##0.00;[Red]-$#,##0.00;$0.00`, so negatives display with an explicit minus and zeros display as numeric `$0.00`; the red-on-white conditional formatting remains intact.
+- Identified Excel warning index `5` on the daily total formulas as `Formula omits adjacent cells`, not `Number stored as text`. Because the UTC date in column A is itself a numeric Excel date, changed each exact daily total to `=SUM(Bn:Gn)+0*An`; this preserves the verified result while explicitly accounting for the adjacent date with zero weight.
+- Excel independently verified all `56` financial cells with `ISNUMBER=TRUE`, all `9` negative cells with red text, explicit `-$` display, white fill, zero formula errors, exact grand total `$1,444.38361641`, and the preserved frozen first row/column.
+- Reopened the saved corrected workbook and found zero Excel `Number stored as text` and zero `Formula omits adjacent cells` flags. OpenXML independently stores sampled negative source and formula results as numeric-default cells with negative numeric values.
+- Rendered and visually inspected the corrected final sheet; explicit minus signs, `$0.00` zeros, headers, daily totals, strategy totals, and grand total are visible without warning markers or clipping. SHA-256 is `922AB9888D82723805328E7BC46028314EA7B52FE712EBF5282B188120E08F5B`.
+Next: None.
+Notes: The report uses the same frozen production data and totals as before; no production query or data refresh was needed. No database row, strategy, order, service, product code, deployment, or runtime configuration changed. The original locked workbook remains unchanged; the corrected workbook is the deliverable.
+Blockers: None.
+
 ## Active Update 2026-07-14 Three SOL Reference Average Paper PnL Comparison
 Goal: Plot the full cumulative Paper PnL histories of the requested SOL Down 75 bps, neutral 1 bps, and Up 1 bps Reference Average Premarket strategies using solid lines only.
 Status: Completed
