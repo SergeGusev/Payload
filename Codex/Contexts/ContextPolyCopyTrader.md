@@ -1,3 +1,18 @@
+## Active Update 2026-07-14 Open Exposure And WebSocket Hot Path Optimization
+Goal: Remove the verified full-table Paper exposure and recent-signal work from runtime hot paths without changing trading decisions or production state.
+Status: Completed
+Done:
+- Added PostgreSQL-specific positive-size Paper position and exact wallet/asset position reads while retaining interface fallbacks for non-PostgreSQL implementations.
+- Moved Paper processing, settlement, copied-leader exits, strategy sell scans, exposure bootstrap, and WebSocket subscription discovery from the full historical position table to the positive-size query. BUY accounting now performs one indexed wallet/asset lookup.
+- Changed WebSocket Paper dispatch to use the shared exposure snapshot and filter orders/positions by asset in memory. The cache now contains only positive-size positions and removes a position immediately when its size becomes zero.
+- Rewrote recent-signal loading to materialize the requested newest rows before aggregating their rejection codes. Added concurrent descending recent-signal, partial open-order, and covering partial open-position indexes.
+- Assigned distinct PostgreSQL `application_name` values to Service and Dashboard sessions and added bulk/slow WebSocket frame timing logs with update, failure, payload-size, and duration fields.
+- Updated README and added focused coverage for repository SQL shape, indexes, application names, open-position subscription behavior, cache removal, and absence of per-update repository exposure reads.
+- Ran the real schema initializer on a disposable local PostgreSQL 17 database, loaded 20,000-row fixtures, and verified all three new indexes are valid/ready. Forced plans used the recent-signal index, open-position index-only scan, indexed point lookup, and partial open-order index; the disposable database was dropped and independently confirmed absent.
+Next: Deploy this commit, let startup complete all concurrent index builds, then verify the exact deployed revision, index validity/use, Service/Dashboard attribution, critical WebSocket frame/PONG gaps and reconnect count, operational subscription size, database temporary-file/read load, and unchanged strategy-entry/persistence timing. Introduce a bounded per-asset WebSocket side-effect queue only if post-deployment timing still shows synchronous handler stalls.
+Notes: Focused tests passed `104/104`; the disposable PostgreSQL schema integration test passed `1/1`. The Release solution build passed with `0` warnings/errors. The current complete suite is `693 passed / 112 failed / 805 total`; the pre-change run was `686 passed / 112 failed / 798 total`, and all 112 failing test names match exactly with zero new or removed failures. The separate Service Verify build had `0` errors and `119` pre-existing Storage nullable warnings; Dashboard Verify passed with `0` warnings/errors. `git diff --check` remained clean apart from line-ending conversion notices. No production database row, strategy setting, order, service process, deployment, or configuration was changed.
+Blockers: None.
+
 ## Active Update 2026-07-14 Next Production Optimization Analysis
 Goal: Determine the next evidence-based optimization stage after phase-two entry latency remediation, without changing production or product behavior.
 Status: Completed

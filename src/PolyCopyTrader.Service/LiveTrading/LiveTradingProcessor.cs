@@ -549,8 +549,10 @@ public sealed class LiveTradingProcessor(
             await repository.UpdatePaperOrderAsync(filledOrder, cancellationToken);
             exposureCache.ApplyPaperOrder(filledOrder);
 
-            var positions = await repository.GetPaperPositionsAsync(cancellationToken);
-            var currentPosition = FindPosition(positions, paperOrder);
+            var currentPosition = await repository.GetPaperPositionAsync(
+                paperOrder.CopiedTraderWallet,
+                paperOrder.AssetId,
+                cancellationToken);
             var updatedPosition = paperTradingEngine.ApplyBuyFill(currentPosition, paperOrder, fill, fillPrice, now);
             await repository.UpsertPaperPositionAsync(updatedPosition, cancellationToken);
             exposureCache.ApplyPaperPosition(updatedPosition);
@@ -768,13 +770,6 @@ public sealed class LiveTradingProcessor(
     private sealed record ShadowOrderShapeValidation(
         IReadOnlyList<string> BlockingMismatches,
         IReadOnlyList<string> Incidents);
-
-    private static PaperPosition? FindPosition(IEnumerable<PaperPosition> positions, PaperOrder order)
-    {
-        return positions.FirstOrDefault(position =>
-            string.Equals(position.AssetId, order.AssetId, StringComparison.OrdinalIgnoreCase) &&
-            string.Equals(position.CopiedTraderWallet, order.CopiedTraderWallet, StringComparison.OrdinalIgnoreCase));
-    }
 
     private static decimal FromTokenUnits(string value)
     {

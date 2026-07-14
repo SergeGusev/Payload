@@ -50,7 +50,7 @@ public sealed class ExposureSnapshotCache(IAppRepository repository) : IExposure
         try
         {
             var openPaperOrdersTask = repository.GetOpenPaperOrdersAsync(cancellationToken);
-            var paperPositionsTask = repository.GetPaperPositionsAsync(cancellationToken);
+            var paperPositionsTask = repository.GetOpenPaperPositionsAsync(cancellationToken);
             var openLiveOrdersTask = repository.GetOpenLiveOrdersAsync(cancellationToken);
 
             await Task.WhenAll(openPaperOrdersTask, paperPositionsTask, openLiveOrdersTask);
@@ -140,41 +140,47 @@ public sealed class ExposureSnapshotCache(IAppRepository repository) : IExposure
                 return;
             }
 
-            var currentPositions = current.PaperPositions as PaperPosition[] ?? current.PaperPositions.ToArray();
-            if (paperPositionIndexes.Count == 0 && currentPositions.Length > 0)
-            {
-                paperPositionIndexes = CreatePaperPositionIndexes(currentPositions);
-            }
-
             var updatesByKey = new Dictionary<PaperPositionKey, PaperPosition>(positions.Count);
             foreach (var position in positions)
             {
                 updatesByKey[PaperPositionKey.From(position.CopiedTraderWallet, position.AssetId)] = position;
             }
 
-            var newPositionCount = updatesByKey.Keys.Count(key => !paperPositionIndexes.ContainsKey(key));
-            var updatedPositions = new PaperPosition[currentPositions.Length + newPositionCount];
-            Array.Copy(currentPositions, updatedPositions, currentPositions.Length);
-
-            var nextIndex = currentPositions.Length;
-            foreach (var (key, position) in updatesByKey)
+            var updatedPositions = new List<PaperPosition>(current.PaperPositions.Count + updatesByKey.Count);
+            foreach (var currentPosition in current.PaperPositions)
             {
-                if (paperPositionIndexes.TryGetValue(key, out var index))
+                var key = PaperPositionKey.From(currentPosition.CopiedTraderWallet, currentPosition.AssetId);
+                if (updatesByKey.Remove(key, out var updatedPosition))
                 {
-                    updatedPositions[index] = position;
+                    if (updatedPosition.SizeShares > 0m)
+                    {
+                        updatedPositions.Add(updatedPosition);
+                    }
                     continue;
                 }
 
-                paperPositionIndexes[key] = nextIndex;
-                updatedPositions[nextIndex] = position;
-                nextIndex++;
+                if (currentPosition.SizeShares > 0m)
+                {
+                    updatedPositions.Add(currentPosition);
+                }
             }
+
+            foreach (var position in updatesByKey.Values)
+            {
+                if (position.SizeShares > 0m)
+                {
+                    updatedPositions.Add(position);
+                }
+            }
+
+            var updatedPositionArray = updatedPositions.ToArray();
+            paperPositionIndexes = CreatePaperPositionIndexes(updatedPositionArray);
 
             Volatile.Write(
                 ref snapshot,
                 current with
                 {
-                    PaperPositions = updatedPositions,
+                    PaperPositions = updatedPositionArray,
                     LoadedAtUtc = DateTimeOffset.UtcNow
                 });
         }

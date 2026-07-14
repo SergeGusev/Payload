@@ -61,6 +61,10 @@ internal sealed class TestAppRepository : IAppRepository
 
     public int GetPaperPositionsCalls { get; private set; }
 
+    public int GetOpenPaperPositionsCalls { get; private set; }
+
+    public int GetPaperPositionCalls { get; private set; }
+
     public List<LeaderTrade> LeaderTrades { get; } = [];
 
     public List<LeaderPosition> LeaderPositions { get; } = [];
@@ -1316,6 +1320,25 @@ internal sealed class TestAppRepository : IAppRepository
     {
         GetPaperPositionsCalls++;
         return Task.FromResult<IReadOnlyList<PaperPosition>>(PaperPositions.ToArray());
+    }
+
+    public Task<IReadOnlyList<PaperPosition>> GetOpenPaperPositionsAsync(CancellationToken cancellationToken = default)
+    {
+        GetOpenPaperPositionsCalls++;
+        return Task.FromResult<IReadOnlyList<PaperPosition>>(PaperPositions
+            .Where(position => position.SizeShares > 0m)
+            .ToArray());
+    }
+
+    public Task<PaperPosition?> GetPaperPositionAsync(
+        string copiedTraderWallet,
+        string assetId,
+        CancellationToken cancellationToken = default)
+    {
+        GetPaperPositionCalls++;
+        return Task.FromResult(PaperPositions.FirstOrDefault(position =>
+            string.Equals(position.CopiedTraderWallet, copiedTraderWallet, StringComparison.OrdinalIgnoreCase) &&
+            string.Equals(position.AssetId, assetId, StringComparison.OrdinalIgnoreCase)));
     }
 
     public Task<bool> TryAddPaperPositionSettlementAsync(PaperPositionSettlement settlement, CancellationToken cancellationToken = default)

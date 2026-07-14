@@ -40,12 +40,13 @@ public sealed class PaperTradingMarketDataUpdater(
             }
 
             var now = DateTimeOffset.UtcNow;
-            var openOrders = await repository.GetOpenPaperOrdersAsync(cancellationToken);
-            var matchingOrders = openOrders
+            var exposure = await exposureCache.GetSnapshotAsync(cancellationToken);
+            var matchingOrders = exposure.OpenPaperOrders
                 .Where(order => string.Equals(order.AssetId, update.AssetId, StringComparison.OrdinalIgnoreCase))
                 .ToArray();
-
-            var positions = (await repository.GetPaperPositionsAsync(cancellationToken)).ToList();
+            var positions = exposure.PaperPositions
+                .Where(position => string.Equals(position.AssetId, update.AssetId, StringComparison.OrdinalIgnoreCase))
+                .ToList();
 
             foreach (var order in matchingOrders)
             {

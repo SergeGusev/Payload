@@ -55,7 +55,7 @@ public sealed class LeaderActivityExitProcessor(
             return new LeaderActivityExitProcessingResult(0, 0, 0, 0, 0, 0, 0);
         }
 
-        var paperPositions = await repository.GetPaperPositionsAsync(cancellationToken);
+        var paperPositions = await repository.GetOpenPaperPositionsAsync(cancellationToken);
         var openOrders = (await repository.GetOpenPaperOrdersAsync(cancellationToken)).ToList();
         var walletsChecked = 0;
         var activityRowsFetched = 0;

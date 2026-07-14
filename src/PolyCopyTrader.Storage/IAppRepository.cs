@@ -459,6 +459,24 @@ public interface IAppRepository
 
     Task<IReadOnlyList<PaperPosition>> GetPaperPositionsAsync(CancellationToken cancellationToken = default);
 
+    async Task<IReadOnlyList<PaperPosition>> GetOpenPaperPositionsAsync(
+        CancellationToken cancellationToken = default)
+    {
+        return (await GetPaperPositionsAsync(cancellationToken))
+            .Where(position => position.SizeShares > 0m)
+            .ToArray();
+    }
+
+    async Task<PaperPosition?> GetPaperPositionAsync(
+        string copiedTraderWallet,
+        string assetId,
+        CancellationToken cancellationToken = default)
+    {
+        return (await GetPaperPositionsAsync(cancellationToken)).FirstOrDefault(position =>
+            string.Equals(position.CopiedTraderWallet, copiedTraderWallet, StringComparison.OrdinalIgnoreCase) &&
+            string.Equals(position.AssetId, assetId, StringComparison.OrdinalIgnoreCase));
+    }
+
     Task<bool> TryAddPaperPositionSettlementAsync(PaperPositionSettlement settlement, CancellationToken cancellationToken = default);
 
     Task<IReadOnlyList<PaperPositionSettlement>> GetRecentPaperPositionSettlementsAsync(int limit = 100, CancellationToken cancellationToken = default);

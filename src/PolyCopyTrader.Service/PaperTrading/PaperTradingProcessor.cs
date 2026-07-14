@@ -31,7 +31,7 @@ public sealed class PaperTradingProcessor(
     {
         var now = DateTimeOffset.UtcNow;
         var openOrders = PrioritizeOpenOrders(await repository.GetOpenPaperOrdersAsync(cancellationToken), now);
-        var positions = (await repository.GetPaperPositionsAsync(cancellationToken)).ToList();
+        var positions = (await repository.GetOpenPaperPositionsAsync(cancellationToken)).ToList();
         if (openOrders.Count == 0)
         {
             var updatedPositionMarks = await UpdatePositionMarksAsync(positions, cancellationToken);

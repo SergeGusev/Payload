@@ -2031,8 +2031,10 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
                     nowUtc,
                     shadowFakFillEvidence ?? string.Empty);
                 await repository.AddPaperFillAsync(paperFakFill, cancellationToken);
-                var positions = await repository.GetPaperPositionsAsync(cancellationToken);
-                var currentPosition = FindPaperPosition(positions, order);
+                var currentPosition = await repository.GetPaperPositionAsync(
+                    order.CopiedTraderWallet,
+                    order.AssetId,
+                    cancellationToken);
                 var currentBid = shadowFakLookup?.OrderBook?.BestBid ?? shadowFakEstimate.AverageFillPrice;
                 var updatedPosition = paperTradingEngine.ApplyBuyFill(
                     currentPosition,
@@ -3396,7 +3398,7 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
             return 0;
         }
 
-        var positions = await repository.GetPaperPositionsAsync(cancellationToken);
+        var positions = await repository.GetOpenPaperPositionsAsync(cancellationToken);
         var orderBookFetchTasks = new System.Collections.Concurrent.ConcurrentDictionary<string, Lazy<Task<OrderBookFetchResult>>>(
             StringComparer.OrdinalIgnoreCase);
         var tasks = runs.Select(async run =>
@@ -6412,8 +6414,10 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
 
         if (evaluation.Order.Side == TradeSide.Buy)
         {
-            var positions = await repository.GetPaperPositionsAsync(cancellationToken);
-            var currentPosition = FindPaperPosition(positions, evaluation.Order);
+            var currentPosition = await repository.GetPaperPositionAsync(
+                evaluation.Order.CopiedTraderWallet,
+                evaluation.Order.AssetId,
+                cancellationToken);
             var updatedPosition = paperTradingEngine.ApplyBuyFill(
                 currentPosition,
                 evaluation.Order,
@@ -6555,15 +6559,6 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
     private static decimal GetFilledShares(IReadOnlyList<PaperFill> fills, decimal maxShares)
     {
         return Math.Min(maxShares, fills.Sum(fill => Math.Max(0m, fill.SizeShares)));
-    }
-
-    private static PaperPosition? FindPaperPosition(
-        IEnumerable<PaperPosition> positions,
-        PaperOrder order)
-    {
-        return positions.FirstOrDefault(position =>
-            string.Equals(position.AssetId, order.AssetId, StringComparison.OrdinalIgnoreCase) &&
-            string.Equals(position.CopiedTraderWallet, order.CopiedTraderWallet, StringComparison.OrdinalIgnoreCase));
     }
 
     private bool IsEntryExpired(DateTimeOffset entryDueAtUtc, DateTimeOffset nowUtc)
@@ -20776,8 +20771,10 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
                 evidence);
             await repository.AddPaperFillAsync(paperFill, cancellationToken);
 
-            var positions = await repository.GetPaperPositionsAsync(cancellationToken);
-            var currentPosition = FindPaperPosition(positions, actualPaperOrder);
+            var currentPosition = await repository.GetPaperPositionAsync(
+                actualPaperOrder.CopiedTraderWallet,
+                actualPaperOrder.AssetId,
+                cancellationToken);
             var updatedPosition = paperTradingEngine.ApplyBuyFill(
                 currentPosition,
                 actualPaperOrder,
@@ -20878,8 +20875,10 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
                     "."));
             await repository.AddPaperFillAsync(paperFill, cancellationToken);
 
-            var positions = await repository.GetPaperPositionsAsync(cancellationToken);
-            var currentPosition = FindPaperPosition(positions, actualPaperOrder);
+            var currentPosition = await repository.GetPaperPositionAsync(
+                actualPaperOrder.CopiedTraderWallet,
+                actualPaperOrder.AssetId,
+                cancellationToken);
             var updatedPosition = paperTradingEngine.ApplyBuyFill(
                 currentPosition,
                 actualPaperOrder,

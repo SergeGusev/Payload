@@ -12,9 +12,7 @@ public sealed class PaperSettlementProcessor(
 {
     public async Task<PaperSettlementProcessingResult> ProcessOpenPositionsAsync(CancellationToken cancellationToken = default)
     {
-        var positions = (await repository.GetPaperPositionsAsync(cancellationToken))
-            .Where(position => position.SizeShares > 0m)
-            .ToArray();
+        var positions = (await repository.GetOpenPaperPositionsAsync(cancellationToken)).ToArray();
         if (positions.Length == 0)
         {
             var refreshed = await repository.RefreshPaperCopiedTraderPerformanceAsync(cancellationToken);
@@ -95,8 +93,7 @@ public sealed class PaperSettlementProcessor(
             return new PaperSettlementProcessingResult(0, 0, 0, 0);
         }
 
-        var positions = (await repository.GetPaperPositionsAsync(cancellationToken))
-            .Where(position => position.SizeShares > 0m)
+        var positions = (await repository.GetOpenPaperPositionsAsync(cancellationToken))
             .Where(position =>
                 (!string.IsNullOrWhiteSpace(conditionId) &&
                     string.Equals(position.ConditionId, conditionId, StringComparison.OrdinalIgnoreCase)) ||

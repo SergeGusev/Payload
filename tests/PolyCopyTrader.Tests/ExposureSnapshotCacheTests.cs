@@ -15,6 +15,7 @@ public sealed class ExposureSnapshotCacheTests
         var cancelledLiveOrder = LiveOrder(LiveOrderStatus.Cancelled);
         repository.PaperOrders.AddRange([openPaperOrder, filledPaperOrder]);
         repository.PaperPositions.Add(PaperPosition(10m));
+        repository.PaperPositions.Add(PaperPosition(0m, assetId: "closed-asset"));
         repository.LiveOrders.AddRange([openLiveOrder, cancelledLiveOrder]);
         var cache = new ExposureSnapshotCache(repository);
 
@@ -23,8 +24,25 @@ public sealed class ExposureSnapshotCacheTests
         Assert.Single(snapshot.OpenPaperOrders);
         Assert.Equal(openPaperOrder.Id, snapshot.OpenPaperOrders[0].Id);
         Assert.Single(snapshot.PaperPositions);
+        Assert.Equal(1, repository.GetOpenPaperPositionsCalls);
+        Assert.Equal(0, repository.GetPaperPositionsCalls);
         Assert.Single(snapshot.OpenLiveOrders);
         Assert.Equal(openLiveOrder.Id, snapshot.OpenLiveOrders[0].Id);
+    }
+
+    [Fact]
+    public async Task ApplyPaperPosition_RemovesClosedPositionFromSnapshot()
+    {
+        var repository = new TestAppRepository();
+        repository.PaperPositions.Add(PaperPosition(10m));
+        var cache = new ExposureSnapshotCache(repository);
+        await cache.GetSnapshotAsync();
+
+        cache.ApplyPaperPosition(PaperPosition(0m));
+
+        var snapshot = await cache.GetSnapshotAsync();
+        Assert.Empty(snapshot.PaperPositions);
+        Assert.Null(cache.GetPaperPosition("0xleader", "asset-1"));
     }
 
     [Fact]

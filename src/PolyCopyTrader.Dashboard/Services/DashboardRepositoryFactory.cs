@@ -55,7 +55,9 @@ public static class DashboardRepositoryFactory
         IDashboardSnapshotRepository dashboardSnapshots;
         if (StorageConnectionResolver.IsConfigured(appConfiguration.Storage))
         {
-            var connectionFactory = new PostgresConnectionFactory(appConfiguration.Storage);
+            var connectionFactory = new PostgresConnectionFactory(
+                appConfiguration.Storage,
+                "PolyCopyTrader.Dashboard");
             repository = new PostgresAppRepository(connectionFactory);
             dashboardSnapshots = new PostgresDashboardSnapshotRepository(connectionFactory);
         }

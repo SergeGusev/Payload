@@ -156,6 +156,19 @@ public sealed class NoOpAppRepository : IAppRepository
         return Task.FromResult<IReadOnlyList<PaperPosition>>([]);
     }
 
+    public Task<IReadOnlyList<PaperPosition>> GetOpenPaperPositionsAsync(CancellationToken cancellationToken = default)
+    {
+        return Task.FromResult<IReadOnlyList<PaperPosition>>([]);
+    }
+
+    public Task<PaperPosition?> GetPaperPositionAsync(
+        string copiedTraderWallet,
+        string assetId,
+        CancellationToken cancellationToken = default)
+    {
+        return Task.FromResult<PaperPosition?>(null);
+    }
+
     public Task<bool> TryAddPaperPositionSettlementAsync(PaperPositionSettlement settlement, CancellationToken cancellationToken = default)
     {
         return Task.FromResult(false);

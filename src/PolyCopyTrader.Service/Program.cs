@@ -293,7 +293,9 @@ builder.Services.AddSingleton(appConfiguration.OnChainIngestion);
 builder.Services.AddSingleton(appConfiguration.Ipc);
 builder.Services.AddSingleton(appConfiguration.Storage);
 builder.Services.AddWindowsService(options => options.ServiceName = "PolyCopyTrader.Service");
-builder.Services.AddSingleton<PostgresConnectionFactory>();
+builder.Services.AddSingleton(_ => new PostgresConnectionFactory(
+    appConfiguration.Storage,
+    "PolyCopyTrader.Service"));
 builder.Services.AddSingleton<IStorageSchemaInitializer, PostgresSchemaInitializer>();
 builder.Services.AddSingleton<IAppRepository, PostgresAppRepository>();
 builder.Services.AddSingleton<IDashboardSnapshotRepository, PostgresDashboardSnapshotRepository>();

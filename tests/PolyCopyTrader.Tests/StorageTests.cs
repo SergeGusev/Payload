@@ -974,6 +974,58 @@ public sealed class StorageTests
     }
 
     [Fact]
+    public void PostgresRepository_OpenPaperPositionsAndPointLookupAreServerSide()
+    {
+        var source = ReadStorageRepositorySource();
+        var openStart = source.IndexOf("GetOpenPaperPositionsAsync", StringComparison.Ordinal);
+        var pointStart = source.IndexOf("GetPaperPositionAsync", openStart, StringComparison.Ordinal);
+        var end = source.IndexOf("TryAddPaperPositionSettlementAsync", pointStart, StringComparison.Ordinal);
+        Assert.True(openStart >= 0);
+        Assert.True(pointStart > openStart);
+        Assert.True(end > pointStart);
+
+        var openMethod = source[openStart..pointStart];
+        Assert.Contains("WHERE size_shares > 0", openMethod, StringComparison.Ordinal);
+        Assert.DoesNotContain("GetPaperPositionsAsync", openMethod, StringComparison.Ordinal);
+
+        var pointMethod = source[pointStart..end];
+        Assert.Contains("copied_trader_wallet = @CopiedTraderWallet", pointMethod, StringComparison.Ordinal);
+        Assert.Contains("asset_id = @AssetId", pointMethod, StringComparison.Ordinal);
+        Assert.Contains("LIMIT 1", pointMethod, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void PostgresRepository_RecentSignalsLimitsBeforeRejectionAggregation()
+    {
+        var source = ReadStorageRepositorySource();
+        var start = source.IndexOf("GetRecentSignalsAsync", StringComparison.Ordinal);
+        var end = source.IndexOf("AddSignalRejectionAsync", start, StringComparison.Ordinal);
+        Assert.True(start >= 0);
+        Assert.True(end > start);
+
+        var method = source[start..end];
+        Assert.Contains("WITH recent_signals AS MATERIALIZED", method, StringComparison.Ordinal);
+        Assert.Contains("ORDER BY created_at_utc DESC, id DESC", method, StringComparison.Ordinal);
+        Assert.True(
+            method.IndexOf("LIMIT @Limit", StringComparison.Ordinal) <
+            method.IndexOf("FROM signal_rejections", StringComparison.Ordinal));
+        Assert.DoesNotContain("LEFT JOIN signal_rejections sr ON sr.signal_id = s.id", method, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void PostgresSchema_HasOpenExposureAndRecentSignalIndexes()
+    {
+        var source = ReadRepositorySource("src", "PolyCopyTrader.Storage", "PostgresSchema.cs");
+
+        Assert.Contains("ix_signals_created_time", source, StringComparison.Ordinal);
+        Assert.Contains("ON signals(created_at_utc DESC, id DESC)", source, StringComparison.Ordinal);
+        Assert.Contains("ix_paper_orders_open_time_asset", source, StringComparison.Ordinal);
+        Assert.Contains("WHERE status IN ('Pending', 'PartiallyFilled')", source, StringComparison.Ordinal);
+        Assert.Contains("ix_paper_positions_open_updated_cover", source, StringComparison.Ordinal);
+        Assert.Contains("WHERE size_shares > 0", source, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void PostgresRepository_StrategyRecentPerformanceUsesLiveFlagAsEffectiveLive()
     {
         var source = ReadStorageRepositorySource();
@@ -1223,6 +1275,35 @@ CREATE INDEX first_table_id_idx ON first_table(id);
         var connectionString = new NpgsqlConnectionStringBuilder(factory.ConnectionString);
 
         Assert.Equal(23, connectionString.MaxPoolSize);
+    }
+
+    [Fact]
+    public void ConnectionFactory_AppliesExplicitApplicationName()
+    {
+        var factory = new PostgresConnectionFactory(
+            new StorageOptions
+            {
+                ConnectionString = "Host=localhost;Database=polycopytrader;Username=test;Password=test"
+            },
+            "PolyCopyTrader.Service");
+
+        var connectionString = new NpgsqlConnectionStringBuilder(factory.ConnectionString);
+
+        Assert.Equal("PolyCopyTrader.Service", connectionString.ApplicationName);
+    }
+
+    [Fact]
+    public void ServiceAndDashboard_SetDistinctPostgresApplicationNames()
+    {
+        var service = ReadRepositorySource("src", "PolyCopyTrader.Service", "Program.cs");
+        var dashboard = ReadRepositorySource(
+            "src",
+            "PolyCopyTrader.Dashboard",
+            "Services",
+            "DashboardRepositoryFactory.cs");
+
+        Assert.Contains("\"PolyCopyTrader.Service\"", service, StringComparison.Ordinal);
+        Assert.Contains("\"PolyCopyTrader.Dashboard\"", dashboard, StringComparison.Ordinal);
     }
 
     [Fact]

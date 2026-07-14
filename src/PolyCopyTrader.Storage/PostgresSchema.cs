@@ -953,6 +953,9 @@ ALTER TABLE signals ADD COLUMN IF NOT EXISTS proposed_size_shares numeric(28,8) 
 ALTER TABLE signals ADD COLUMN IF NOT EXISTS proposed_notional_usd numeric(28,8) NULL;
 ALTER TABLE signals ADD COLUMN IF NOT EXISTS accepted boolean NOT NULL DEFAULT false;
 
+CREATE INDEX CONCURRENTLY IF NOT EXISTS ix_signals_created_time
+ON signals(created_at_utc DESC, id DESC);
+
 CREATE TABLE IF NOT EXISTS signal_rejections (
     id uuid PRIMARY KEY,
     signal_id uuid NOT NULL REFERENCES signals(id),
@@ -2326,6 +2329,10 @@ CREATE INDEX IF NOT EXISTS ix_paper_orders_correlation
 ON paper_orders(correlation_id)
 WHERE correlation_id IS NOT NULL;
 
+CREATE INDEX CONCURRENTLY IF NOT EXISTS ix_paper_orders_open_time_asset
+ON paper_orders(created_at_utc DESC, asset_id)
+WHERE status IN ('Pending', 'PartiallyFilled');
+
 CREATE TABLE IF NOT EXISTS paper_fills (
     id uuid PRIMARY KEY,
     paper_order_id uuid NOT NULL REFERENCES paper_orders(id),
@@ -2500,6 +2507,11 @@ ON paper_positions(copied_trader_wallet, updated_at_utc DESC);
 CREATE INDEX CONCURRENTLY IF NOT EXISTS ix_paper_positions_updated_page_cover
 ON paper_positions(updated_at_utc DESC, copied_trader_wallet, asset_id)
 INCLUDE (condition_id, outcome, size_shares, average_price, estimated_value_usd, unrealized_pnl_usd);
+
+CREATE INDEX CONCURRENTLY IF NOT EXISTS ix_paper_positions_open_updated_cover
+ON paper_positions(updated_at_utc DESC, copied_trader_wallet, asset_id)
+INCLUDE (condition_id, outcome, size_shares, average_price, estimated_value_usd, unrealized_pnl_usd)
+WHERE size_shares > 0;
 
 CREATE TABLE IF NOT EXISTS paper_position_settlements (
     id uuid PRIMARY KEY,

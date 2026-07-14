@@ -1,4 +1,5 @@
 using System.Collections.Concurrent;
+using System.Diagnostics;
 using System.Text.Json;
 using PolyCopyTrader.Domain;
 using PolyCopyTrader.Domain.Configuration;
@@ -288,6 +289,8 @@ public sealed class MarketDataWebSocketService(
             return;
         }
 
+        var processingStarted = Stopwatch.GetTimestamp();
+        var failedUpdates = 0;
         foreach (var update in updates)
         {
             try
@@ -323,9 +326,32 @@ public sealed class MarketDataWebSocketService(
             }
             catch (Exception ex)
             {
+                failedUpdates++;
                 logger.LogError(ex, "Failed to persist or dispatch market data update {EventType} from {Component}.", update.EventType, component);
                 await TryRecordApiErrorAsync(component, "ProcessMarketDataUpdate", ex.Message, cancellationToken);
             }
+        }
+
+        var processingDuration = Stopwatch.GetElapsedTime(processingStarted);
+        if (processingDuration >= TimeSpan.FromSeconds(1))
+        {
+            logger.LogWarning(
+                "Market WebSocket frame processing was slow. Component={Component} Updates={Updates} FailedUpdates={FailedUpdates} PayloadChars={PayloadChars} DurationMs={DurationMs}",
+                component,
+                updates.Count,
+                failedUpdates,
+                message.Length,
+                processingDuration.TotalMilliseconds);
+        }
+        else if (updates.Count >= 100)
+        {
+            logger.LogInformation(
+                "Market WebSocket initial/bulk frame processed. Component={Component} Updates={Updates} FailedUpdates={FailedUpdates} PayloadChars={PayloadChars} DurationMs={DurationMs}",
+                component,
+                updates.Count,
+                failedUpdates,
+                message.Length,
+                processingDuration.TotalMilliseconds);
         }
     }
 

@@ -1132,7 +1132,7 @@ RETURNING id;
 		await using (NpgsqlConnection connection = await OpenConnectionAsync(cancellationToken))
 		{
 			IReadOnlyList<SignalSummary> readOnlyList2;
-			await using (NpgsqlCommand command = CreateCommand(connection, "SELECT s.id, s.trader_wallet, s.condition_id, s.asset_id, s.outcome, s.leader_price,\n       s.best_bid, s.best_ask, s.spread_abs, s.spread_pct, s.lag_seconds, s.score,\n       s.accepted, s.decision, s.proposed_paper_price, s.proposed_size_shares,\n       s.proposed_notional_usd, s.created_at_utc,\n       COALESCE(string_agg(sr.reason_code, ',' ORDER BY sr.created_at_utc), '') AS reason_codes\nFROM signals s\nLEFT JOIN signal_rejections sr ON sr.signal_id = s.id\nGROUP BY s.id\nORDER BY s.created_at_utc DESC\nLIMIT @Limit;"))
+			await using (NpgsqlCommand command = CreateCommand(connection, "WITH recent_signals AS MATERIALIZED (\n    SELECT id, trader_wallet, condition_id, asset_id, outcome, leader_price,\n           best_bid, best_ask, spread_abs, spread_pct, lag_seconds, score,\n           accepted, decision, proposed_paper_price, proposed_size_shares,\n           proposed_notional_usd, created_at_utc\n    FROM signals\n    ORDER BY created_at_utc DESC, id DESC\n    LIMIT @Limit\n), rejection_codes AS (\n    SELECT sr.signal_id, string_agg(sr.reason_code, ',' ORDER BY sr.created_at_utc) AS reason_codes\n    FROM signal_rejections sr\n    INNER JOIN recent_signals recent ON recent.id = sr.signal_id\n    GROUP BY sr.signal_id\n)\nSELECT s.id, s.trader_wallet, s.condition_id, s.asset_id, s.outcome, s.leader_price,\n       s.best_bid, s.best_ask, s.spread_abs, s.spread_pct, s.lag_seconds, s.score,\n       s.accepted, s.decision, s.proposed_paper_price, s.proposed_size_shares,\n       s.proposed_notional_usd, s.created_at_utc,\n       COALESCE(rejection.reason_codes, '') AS reason_codes\nFROM recent_signals s\nLEFT JOIN rejection_codes rejection ON rejection.signal_id = s.id\nORDER BY s.created_at_utc DESC, s.id DESC;"))
 			{
 				command.Parameters.AddWithValue("Limit", limit);
 				IReadOnlyList<SignalSummary> readOnlyList;
@@ -2004,7 +2004,7 @@ ON CONFLICT (strategy_id, market_id) DO UPDATE SET
 					List<PaperPosition> results = new List<PaperPosition>();
 					while (await reader.ReadAsync(cancellationToken))
 					{
-						results.Add(new PaperPosition(reader.GetString(0), reader.GetString(1), reader.GetString(2), reader.GetDecimal(3), reader.GetDecimal(4), reader.GetDecimal(5), reader.GetDecimal(6), DateTimeOffsetFromUtc(reader.GetDateTime(7)), reader.GetString(8)));
+						results.Add(ReadPaperPosition(reader));
 					}
 					readOnlyList = results;
 				}
@@ -2013,6 +2013,35 @@ ON CONFLICT (strategy_id, market_id) DO UPDATE SET
 			result = readOnlyList2;
 		}
 		return result;
+	}
+
+	public async Task<IReadOnlyList<PaperPosition>> GetOpenPaperPositionsAsync(CancellationToken cancellationToken = default(CancellationToken))
+	{
+		await using NpgsqlConnection connection = await OpenConnectionAsync(cancellationToken);
+		await using NpgsqlCommand command = CreateCommand(connection, "SELECT asset_id, condition_id, outcome, size_shares, average_price, estimated_value_usd, unrealized_pnl_usd, updated_at_utc, copied_trader_wallet\nFROM paper_positions\nWHERE size_shares > 0\nORDER BY updated_at_utc DESC, copied_trader_wallet ASC, asset_id ASC;");
+		await using NpgsqlDataReader reader = await command.ExecuteReaderAsync(cancellationToken);
+		List<PaperPosition> results = new List<PaperPosition>();
+		while (await reader.ReadAsync(cancellationToken))
+		{
+			results.Add(ReadPaperPosition(reader));
+		}
+
+		return results;
+	}
+
+	public async Task<PaperPosition?> GetPaperPositionAsync(string copiedTraderWallet, string assetId, CancellationToken cancellationToken = default(CancellationToken))
+	{
+		if (string.IsNullOrWhiteSpace(assetId))
+		{
+			return null;
+		}
+
+		await using NpgsqlConnection connection = await OpenConnectionAsync(cancellationToken);
+		await using NpgsqlCommand command = CreateCommand(connection, "SELECT asset_id, condition_id, outcome, size_shares, average_price, estimated_value_usd, unrealized_pnl_usd, updated_at_utc, copied_trader_wallet\nFROM paper_positions\nWHERE copied_trader_wallet = @CopiedTraderWallet\n  AND asset_id = @AssetId\nLIMIT 1;");
+		command.Parameters.AddWithValue("CopiedTraderWallet", copiedTraderWallet ?? string.Empty);
+		command.Parameters.AddWithValue("AssetId", assetId.Trim());
+		await using NpgsqlDataReader reader = await command.ExecuteReaderAsync(cancellationToken);
+		return await reader.ReadAsync(cancellationToken) ? ReadPaperPosition(reader) : null;
 	}
 
 	public async Task<bool> TryAddPaperPositionSettlementAsync(PaperPositionSettlement settlement, CancellationToken cancellationToken = default(CancellationToken))
@@ -8367,6 +8396,20 @@ LIMIT @Limit;
 			DateTimeOffsetFromUtc(reader.GetDateTime(4)),
 			reader.GetString(5),
 			reader.GetDecimal(6));
+	}
+
+	private static PaperPosition ReadPaperPosition(NpgsqlDataReader reader)
+	{
+		return new PaperPosition(
+			reader.GetString(0),
+			reader.GetString(1),
+			reader.GetString(2),
+			reader.GetDecimal(3),
+			reader.GetDecimal(4),
+			reader.GetDecimal(5),
+			reader.GetDecimal(6),
+			DateTimeOffsetFromUtc(reader.GetDateTime(7)),
+			reader.GetString(8));
 	}
 
 	private static PaperCopiedTraderPerformance ReadPaperCopiedTraderPerformance(NpgsqlDataReader reader)

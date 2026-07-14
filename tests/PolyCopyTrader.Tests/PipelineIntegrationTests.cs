@@ -337,6 +337,8 @@ public sealed class PipelineIntegrationTests
         var updatedOrder = Assert.Single(repository.PaperOrders);
         Assert.Equal(PaperOrderStatus.PartiallyFilled, updatedOrder.Status);
         Assert.Contains("filled_immediate_marketable", updatedOrder.RawDecisionJson);
+        Assert.Equal(1, repository.GetOpenPaperPositionsCalls);
+        Assert.Equal(0, repository.GetPaperPositionsCalls);
     }
 
     [Fact]
@@ -407,6 +409,8 @@ public sealed class PipelineIntegrationTests
         var updatedOrder = Assert.Single(repository.PaperOrders);
         Assert.Equal(PaperOrderStatus.PartiallyFilled, updatedOrder.Status);
         Assert.Contains("filled_immediate_marketable", updatedOrder.RawDecisionJson);
+        Assert.Equal(1, repository.GetOpenPaperPositionsCalls);
+        Assert.Equal(0, repository.GetPaperPositionsCalls);
     }
 
     [Fact]

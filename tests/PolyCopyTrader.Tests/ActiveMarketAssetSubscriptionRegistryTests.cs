@@ -46,6 +46,43 @@ public sealed class ActiveMarketAssetSubscriptionRegistryTests
     }
 
     [Fact]
+    public async Task RelevantMarketAssetProvider_ExcludesClosedPaperPositions()
+    {
+        var repository = new TestAppRepository();
+        repository.PaperPositions.Add(new PaperPosition(
+            "open-asset",
+            "open-condition",
+            "Up",
+            5m,
+            0.50m,
+            2.50m,
+            0m,
+            DateTimeOffset.UtcNow,
+            "open-wallet"));
+        repository.PaperPositions.Add(new PaperPosition(
+            "closed-asset",
+            "closed-condition",
+            "Down",
+            0m,
+            0.50m,
+            0m,
+            0m,
+            DateTimeOffset.UtcNow,
+            "closed-wallet"));
+        var provider = new RelevantMarketAssetProvider(
+            new MarketDataWebSocketOptions(),
+            repository,
+            new ActiveMarketAssetSubscriptionRegistry());
+
+        var assetIds = await provider.GetRelevantAssetIdsAsync();
+
+        Assert.Contains("open-asset", assetIds, StringComparer.OrdinalIgnoreCase);
+        Assert.DoesNotContain("closed-asset", assetIds, StringComparer.OrdinalIgnoreCase);
+        Assert.Equal(1, repository.GetOpenPaperPositionsCalls);
+        Assert.Equal(0, repository.GetPaperPositionsCalls);
+    }
+
+    [Fact]
     public async Task RetainAssets_RemovesAssetsMissingFromFullScanAndSignalsChange()
     {
         var registry = new ActiveMarketAssetSubscriptionRegistry();
