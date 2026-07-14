@@ -1,3 +1,17 @@
+## Active Update 2026-07-14 Three BTC Reference Average Paper PnL Comparison
+Goal: Plot the full cumulative Paper PnL histories of the requested BTC Down 1 bps, neutral 35 bps, and Up 10 bps Reference Average Premarket strategies using solid lines only.
+Status: Completed
+Done:
+- Resolved exactly three production strategy rows: Down 1 bps ID `b7c50005-0000-4000-8136-000000000101`, neutral 35 bps ID `b7c50005-0000-4000-8178-000000000135`, and Up 10 bps ID `b7c50005-0000-4000-8135-000000000110`; all are enabled, unpaused, and Paper-only.
+- Fixed the read-only server cutoff at `2026-07-14 18:52:34.418284 UTC` and exported each strategy's complete settled Paper history through that cutoff.
+- Independently reconciled raw rows against server SQL: Down 1 bps `2,492` bets / `+$184.03763627` / `1.22895144%` ROI / `$263.49599913` max drawdown; neutral 35 bps `1,073` / `+$75.36701811` / `1.16884716%` / `$196.41044578`; Up 10 bps `131` / `+$40.78853462` / `5.18134990%` / `$44.52232514`.
+- Repeated the independent server aggregate after rendering and obtained an exact file match. Independently verified that all three strategies have zero Live-order rows, so the chart contains Paper results only without excluding any comparable Live history.
+- Rendered every strategy line and the zero axis as solid. Added a persistent repository instruction to `AGENTS.md` prohibiting dashed, dotted, and dash-dot chart lines.
+- Rendered and visually inspected the `1800x920` common-scale PNG at `outputs/btc-reference-average-three-strategies-paper-pnl-2026-07-14/three-strategies-paper-pnl.png`; SHA-256 is `3E2409D87782C7E109D6AA219E77586A84B562A4E05ED6A40AE22C7A5AB0B3C4`.
+Next: None.
+Notes: Reproducible SQL, source/aggregate CSVs, renderer, summary, Live-scope check, and PNG are in the ignored output directory. Production access was read-only; no database row, strategy setting, order, service process, deployment, product behavior, or runtime configuration changed. Product build/tests were not required because application code was unchanged.
+Blockers: None.
+
 ## Active Update 2026-07-14 Three ETH Reference Average Paper PnL Comparison
 Goal: Plot the full cumulative Paper PnL histories of the requested ETH Down 3 bps, neutral 5 bps, and Up 5 bps Reference Average Premarket strategies on one chart.
 Status: Completed

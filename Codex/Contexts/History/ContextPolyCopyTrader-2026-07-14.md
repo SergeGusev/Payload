@@ -128,3 +128,12 @@ Request:
 
 Result:
 Built and visually inspected one common-scale `1800x920` chart containing the full cumulative Paper PnL histories of the three exact production strategies through frozen cutoff `2026-07-14 18:40:06.773310 UTC`. Independent raw-row and server calculations matched: Down 3 bps `2,326` bets / `+$522.91716788`; neutral 5 bps `2,322` / `+$416.41485046`; Up 5 bps `358` / `+$219.08045596`. A repeated server aggregate exactly matched the first export. Live results were checked separately and excluded; only Down 3 bps had any realized Live history. Reproducible artifacts are under `outputs/eth-reference-average-three-strategies-paper-pnl-2026-07-14/`. Production remained read-only and unchanged; product code did not change.
+
+## 2026-07-14T18:54:54.5224490+00:00
+Request:
+Сделай такой же график для стратегий BTC Up or Down 5m Down 1 bps Reference Average Premarket, BTC Up or Down 5m 35 bps Reference Average Premarket, BTC Up or Down 5m Up 10 bps Reference Average Premarket
+
+Не используй никогда в графиках пунктиры, пожалуйста
+
+Result:
+Built and visually inspected one common-scale `1800x920` chart containing the full cumulative Paper PnL histories of the three exact BTC strategies through frozen cutoff `2026-07-14 18:52:34.418284 UTC`, using solid lines and a solid zero axis only. Independent raw-row and server calculations matched: Down 1 bps `2,492` bets / `+$184.03763627`; neutral 35 bps `1,073` / `+$75.36701811`; Up 10 bps `131` / `+$40.78853462`. A repeated server aggregate exactly matched the first export, and all three strategies had zero Live-order rows. Added a persistent solid-lines-only chart rule to repository `AGENTS.md`. Reproducible artifacts are under `outputs/btc-reference-average-three-strategies-paper-pnl-2026-07-14/`. Production remained read-only and unchanged; application code did not change.
