@@ -1,3 +1,18 @@
+## Active Update 2026-07-14 Best Child And Child ROI Paper PnL Chart
+Goal: Plot one best-by-PnL strategy from each current BTC/ETH/SOL Child and Child ROI Dashboard category on one chart.
+Status: Completed
+Done:
+- Reverified the exact current scope from source and production: six categories (`BTC/ETH/SOL` x `Child/Child ROI`), each containing exactly the enabled, unpaused `N=1..24` strategies; Progress variants were excluded.
+- Captured a production PostgreSQL `REPEATABLE READ, READ ONLY` snapshot from exact endpoint `192.168.0.101:5432/polycopytrader` at cutoff `2026-07-14T06:17:34.074606Z` and evaluated all `69,558` settled Paper rows for the `144` candidates.
+- Selected the unique maximum-final-Paper-PnL strategy in each category: BTC Child `N=4` `+$148.71061421`; BTC Child ROI `N=4` `+$196.50703612`; ETH Child `N=2` `+$163.51497850`; ETH Child ROI `N=2` `+$181.29745354`; SOL Child `N=19` `+$276.01857647`; SOL Child ROI `N=18` `+$179.11433417`.
+- Independently reconciled local raw-row aggregates against separate server-side per-strategy SQL and Dashboard snapshot values for all `144` candidates; run counts and PnL matched exactly. The six category-level aggregates also matched independently.
+- Verified that all `144` candidate strategies have zero Live-order rows, so the requested comparison is necessarily based on Paper PnL.
+- Generated reproducible exports, selected-strategy details, five-minute cumulative step series, summary, and the `1800x1000` PNG under `outputs/child-vs-child-roi-all-assets-paper-pnl-chart-2026-07-14/`.
+- Visually inspected `paper-pnl-best-child-vs-child-roi.png` at original resolution; all six lines, exact strategy names, endpoint values, axes, and legend are visible without clipping or overlap. SHA-256 is `65BD25B4B9FCE5AFF0E8373B8071788FF1197A5DF727714B0C83490055ADF8F3`.
+Next: None.
+Notes: Selection is in-sample: each category winner is chosen by final PnL over the same history displayed by the graph and is not an out-of-sample performance claim. Production access was read-only; no database row, strategy state, service process, application source, or deployment changed. Product build/tests were not required because application code was unchanged.
+Blockers: None.
+
 ## Active Update 2026-07-14 Strategy Entry Latency Root Cause Analysis
 Goal: Determine whether current strategy-entry delays are real, identify verified causes, and define a safe remediation order without changing production.
 Status: Completed

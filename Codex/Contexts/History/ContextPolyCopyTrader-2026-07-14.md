@@ -33,3 +33,12 @@ Request:
 
 Result:
 Reverified current production Paper-entry latency with a fresh 30-minute read-only sample and deployed-source inspection. Of `1,102` actual Paper entries, `446` exceeded `3s`, with `16.030s` p95 and `30.892s` maximum; `89` additional runs expired before their premarket entry window. Established the primary mechanism as three observation flows repeatedly issuing sequential per-strategy/per-market `INSERT ... ON CONFLICT DO NOTHING` calls: `315` slow observation stages created no rows, and an independent PostgreSQL sample recorded `4,663` unique-index scans in `10.449s` with zero inserts. Also verified a heavy 30-second Child/Parent lookback refresh with repeated stream-read failures, and localized secondary delay to shared due-decision batches without enough substage timing to assign their exact internal shares. Confirmed required indexes already exist, the run table is about `16GB`, no lock waits were present, and non-Absolute delays existed before the current service process. Defined remediation order: deduplicated bulk observation, isolated/incremental Child refresh, deadline-path isolation and finer wait instrumentation, then targeted tuning. Production and product code were unchanged; no actual Live entry occurred, so Live latency remains unverified.
+
+## 2026-07-14T06:20:33.5155641+00:00
+Request:
+Сделай на одном графике графики Pnl Child и Child ROI для всех трёх валют
+
+Уточнение - по каждой категории от каждой валюты в графике должна участвовать лучшая по Pnl стратегий
+
+Result:
+Captured a production PostgreSQL read-only repeatable-read snapshot at cutoff `2026-07-14T06:17:34.074606Z`, evaluated `69,558` settled Paper rows for all `144` current BTC/ETH/SOL Child and Child ROI candidates, and selected the unique maximum-final-PnL strategy from each `N=1..24` category. The selected strategies were BTC Child `N=4` `+$148.71061421`, BTC Child ROI `N=4` `+$196.50703612`, ETH Child `N=2` `+$163.51497850`, ETH Child ROI `N=2` `+$181.29745354`, SOL Child `N=19` `+$276.01857647`, and SOL Child ROI `N=18` `+$179.11433417`. Local raw-row aggregates matched independent per-strategy server SQL and Dashboard snapshot values exactly for all candidates. Generated and visually verified the combined `1800x1000` step chart `outputs/child-vs-child-roi-all-assets-paper-pnl-chart-2026-07-14/paper-pnl-best-child-vs-child-roi.png`. Production remained unchanged.
