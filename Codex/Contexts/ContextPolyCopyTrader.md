@@ -1,3 +1,17 @@
+## Active Update 2026-07-14 Production Server And Service Availability Check
+Goal: Determine whether the production server, PostgreSQL database, and `PolyCopyTrader.Service` are currently alive without changing production.
+Status: Completed
+Done:
+- Confirmed TCP connectivity from `192.168.0.100` to exact production endpoint `192.168.0.101:5432` at `2026-07-14 19:05:53 UTC`.
+- Queried exact PostgreSQL endpoint `192.168.0.101:5432/polycopytrader` successfully. At final check `2026-07-14 19:07:56.713641 UTC`, PostgreSQL had been running since `19:02:00.991792 UTC` and responded to read-only SQL.
+- Determined that `PolyCopyTrader.Service` is not operationally alive. Its persisted `Running`/`Live` status is stale: `last_heartbeat_utc=2026-07-14 18:58:22.663388 UTC`, age `574.050s`, versus the Dashboard's verified `180s` stale threshold.
+- Independently confirmed zero current PostgreSQL sessions with `application_name='PolyCopyTrader.Service'`, latest strategy-run update age `652.817s`, and latest persisted crypto-price tick age `536.166s`. A second check showed no recovery or heartbeat advancement.
+- Observed settlement timeouts and a critical WebSocket close immediately before activity stopped, and a PostgreSQL restart afterward. These observations do not establish why the Windows service stopped or failed to reconnect.
+- Attempted a read-only remote Windows `Get-Service` query, but it timed out after 30 seconds. The exact Windows process/service-control state is therefore unknown even though database evidence proves the application is not operating.
+Next: Check `Get-Service PolyCopyTrader.Service`, the Windows Application/System event logs, and the service log locally on `192.168.0.101`; restart the service if it is stopped, then verify a new heartbeat, service DB session, price tick, and Paper activity.
+Notes: All server/database checks were read-only. No row, service process, order, strategy setting, deployment, source file, or runtime configuration changed. Product build/tests were not required because application code was unchanged.
+Blockers: Remote Windows service-control access is unavailable from this workstation, so the exact process state and stop reason require a local/server-side check.
+
 ## Active Update 2026-07-14 Three SOL Reference Average Paper PnL Comparison
 Goal: Plot the full cumulative Paper PnL histories of the requested SOL Down 75 bps, neutral 1 bps, and Up 1 bps Reference Average Premarket strategies using solid lines only.
 Status: Completed

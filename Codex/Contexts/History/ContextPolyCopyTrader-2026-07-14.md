@@ -160,3 +160,10 @@ Request:
 
 Result:
 Built and visually inspected one common-scale `1800x920` chart containing the full cumulative Paper PnL histories of the three exact SOL strategies through frozen cutoff `2026-07-14 19:01:27.060982 UTC`, using solid lines and a solid zero axis only. Independent raw-row and server calculations matched: Down 75 bps `1,112` bets / `+$119.35614607`; neutral 1 bps `2,579` / `+$219.58293657`; Up 1 bps `422` / `+$250.11248092`. A repeated server aggregate exactly matched the first export, and all three strategies had zero Live-order rows. The initial database connection timed out before SQL execution; port availability and the successful repeated query were independently confirmed. Reproducible artifacts are under `outputs/sol-reference-average-three-strategies-paper-pnl-2026-07-14/`. Production remained read-only and unchanged; application code did not change.
+
+## 2026-07-14T19:08:10.4066456+00:00
+Request:
+Проверь, жив ли сервер
+
+Result:
+Confirmed the production computer and PostgreSQL endpoint `192.168.0.101:5432/polycopytrader` are reachable and responsive; PostgreSQL restarted at `2026-07-14 19:02:00.991792 UTC`. `PolyCopyTrader.Service` is not operationally alive: at final database time `19:07:56.713641 UTC`, its heartbeat was `574.050s` stale, it had zero PostgreSQL sessions, the latest strategy-run update was `652.817s` old, and the latest persisted crypto tick was `536.166s` old. A second check showed no recovery. The stored `Running`/`Live` text is stale and is not evidence of a running process. A remote Windows `Get-Service` query timed out, so the exact Windows process state and stop reason remain unknown. All checks were read-only; production was unchanged.
