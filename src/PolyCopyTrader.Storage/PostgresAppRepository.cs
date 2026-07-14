@@ -1990,6 +1990,21 @@ ON CONFLICT (strategy_id, market_id) DO UPDATE SET
 		await command.ExecuteNonQueryAsync(cancellationToken);
 	}
 
+	public async Task UpsertPaperPositionsAsync(
+		IReadOnlyList<PaperPosition> positions,
+		CancellationToken cancellationToken = default(CancellationToken))
+	{
+		if (positions.Count == 0)
+		{
+			return;
+		}
+
+		await using NpgsqlConnection connection = await OpenConnectionAsync(cancellationToken);
+		await using NpgsqlTransaction transaction = await connection.BeginTransactionAsync(cancellationToken);
+		await UpsertPaperPositionsBatchAsync(connection, transaction, positions, cancellationToken);
+		await transaction.CommitAsync(cancellationToken);
+	}
+
 	public async Task<IReadOnlyList<PaperPosition>> GetPaperPositionsAsync(CancellationToken cancellationToken = default(CancellationToken))
 	{
 		IReadOnlyList<PaperPosition> result;
@@ -2021,6 +2036,51 @@ ON CONFLICT (strategy_id, market_id) DO UPDATE SET
 		await using NpgsqlCommand command = CreateCommand(connection, "SELECT asset_id, condition_id, outcome, size_shares, average_price, estimated_value_usd, unrealized_pnl_usd, updated_at_utc, copied_trader_wallet\nFROM paper_positions\nWHERE size_shares > 0\nORDER BY updated_at_utc DESC, copied_trader_wallet ASC, asset_id ASC;");
 		await using NpgsqlDataReader reader = await command.ExecuteReaderAsync(cancellationToken);
 		List<PaperPosition> results = new List<PaperPosition>();
+		while (await reader.ReadAsync(cancellationToken))
+		{
+			results.Add(ReadPaperPosition(reader));
+		}
+
+		return results;
+	}
+
+	public async Task<IReadOnlyList<PaperPosition>> GetOpenPaperPositionsForMarketAsync(
+		string? conditionId,
+		string? assetId,
+		CancellationToken cancellationToken = default(CancellationToken))
+	{
+		var normalizedConditionId = string.IsNullOrWhiteSpace(conditionId) ? null : conditionId;
+		var normalizedAssetId = string.IsNullOrWhiteSpace(assetId) ? null : assetId;
+		if (normalizedConditionId is null && normalizedAssetId is null)
+		{
+			return [];
+		}
+
+		var marketPredicate = normalizedConditionId is not null && normalizedAssetId is not null
+			? "(lower(condition_id) = lower(@ConditionId) OR lower(asset_id) = lower(@AssetId))"
+			: normalizedConditionId is not null
+				? "lower(condition_id) = lower(@ConditionId)"
+				: "lower(asset_id) = lower(@AssetId)";
+		await using NpgsqlConnection connection = await OpenConnectionAsync(cancellationToken);
+		await using NpgsqlCommand command = CreateCommand(connection, $"""
+SELECT asset_id, condition_id, outcome, size_shares, average_price, estimated_value_usd, unrealized_pnl_usd, updated_at_utc, copied_trader_wallet
+FROM paper_positions
+WHERE size_shares > 0
+  AND {marketPredicate}
+ORDER BY updated_at_utc DESC, copied_trader_wallet ASC, asset_id ASC;
+""");
+		if (normalizedConditionId is not null)
+		{
+			command.Parameters.AddWithValue("ConditionId", normalizedConditionId);
+		}
+
+		if (normalizedAssetId is not null)
+		{
+			command.Parameters.AddWithValue("AssetId", normalizedAssetId);
+		}
+
+		await using NpgsqlDataReader reader = await command.ExecuteReaderAsync(cancellationToken);
+		List<PaperPosition> results = [];
 		while (await reader.ReadAsync(cancellationToken))
 		{
 			results.Add(ReadPaperPosition(reader));
@@ -2078,6 +2138,99 @@ RETURNING 1;
 		command.Parameters.AddWithValue("SettledAtUtc", UtcDateTime(settlement.SettledAtUtc));
 		command.Parameters.AddWithValue("CreatedAtUtc", UtcDateTime(settlement.CreatedAtUtc));
 		return await command.ExecuteScalarAsync(cancellationToken) is not null;
+	}
+
+	public async Task<int> PersistPaperPositionSettlementBatchAsync(
+		IReadOnlyList<PaperPositionSettlementWrite> writes,
+		CancellationToken cancellationToken = default(CancellationToken))
+	{
+		if (writes.Count == 0)
+		{
+			return 0;
+		}
+
+		await using NpgsqlConnection connection = await OpenConnectionAsync(cancellationToken);
+		await using NpgsqlTransaction transaction = await connection.BeginTransactionAsync(cancellationToken);
+		var inserted = await AddPaperPositionSettlementsBatchAsync(
+			connection,
+			transaction,
+			writes.Select(write => write.Settlement).ToArray(),
+			cancellationToken);
+		await UpsertPaperPositionsBatchAsync(
+			connection,
+			transaction,
+			writes.Select(write => write.SettledPosition).ToArray(),
+			cancellationToken);
+		await transaction.CommitAsync(cancellationToken);
+		return inserted;
+	}
+
+	private static async Task<int> AddPaperPositionSettlementsBatchAsync(
+		NpgsqlConnection connection,
+		NpgsqlTransaction transaction,
+		IReadOnlyList<PaperPositionSettlement> settlements,
+		CancellationToken cancellationToken)
+	{
+		var rows = settlements.Select(settlement => new
+		{
+			id = settlement.Id,
+			copied_trader_wallet = settlement.CopiedTraderWallet,
+			asset_id = settlement.AssetId,
+			condition_id = settlement.ConditionId,
+			outcome = settlement.Outcome,
+			winning_asset_id = settlement.WinningAssetId,
+			winning_outcome = settlement.WinningOutcome,
+			category = settlement.Category,
+			settled_size_shares = settlement.SettledSizeShares,
+			average_price = settlement.AveragePrice,
+			cost_basis_usd = settlement.CostBasisUsd,
+			settlement_value_usd = settlement.SettlementValueUsd,
+			realized_pnl_usd = settlement.RealizedPnlUsd,
+			won = settlement.Won,
+			settlement_source = settlement.SettlementSource,
+			settled_at_utc = UtcDateTime(settlement.SettledAtUtc),
+			created_at_utc = UtcDateTime(settlement.CreatedAtUtc)
+		});
+		await using NpgsqlCommand command = CreateCommand(connection, """
+WITH inserted AS (
+    INSERT INTO paper_position_settlements (
+        id, copied_trader_wallet, asset_id, condition_id, outcome, winning_asset_id, winning_outcome,
+        category, settled_size_shares, average_price, cost_basis_usd, settlement_value_usd,
+        realized_pnl_usd, won, settlement_source, settled_at_utc, created_at_utc
+    )
+    SELECT
+        settlement.id, settlement.copied_trader_wallet, settlement.asset_id, settlement.condition_id,
+        settlement.outcome, settlement.winning_asset_id, settlement.winning_outcome, settlement.category,
+        settlement.settled_size_shares, settlement.average_price, settlement.cost_basis_usd,
+        settlement.settlement_value_usd, settlement.realized_pnl_usd, settlement.won,
+        settlement.settlement_source, settlement.settled_at_utc, settlement.created_at_utc
+    FROM jsonb_to_recordset(CAST(@SettlementsJson AS jsonb)) AS settlement(
+        id uuid,
+        copied_trader_wallet text,
+        asset_id text,
+        condition_id text,
+        outcome text,
+        winning_asset_id text,
+        winning_outcome text,
+        category text,
+        settled_size_shares numeric,
+        average_price numeric,
+        cost_basis_usd numeric,
+        settlement_value_usd numeric,
+        realized_pnl_usd numeric,
+        won boolean,
+        settlement_source text,
+        settled_at_utc timestamptz,
+        created_at_utc timestamptz
+    )
+    ON CONFLICT (copied_trader_wallet, asset_id) DO NOTHING
+    RETURNING 1
+)
+SELECT count(*)::integer FROM inserted;
+""");
+		command.Transaction = transaction;
+		AddJsonbParameter(command, "SettlementsJson", JsonSerializer.Serialize(rows));
+		return Convert.ToInt32(await command.ExecuteScalarAsync(cancellationToken) ?? 0);
 	}
 
 	public async Task<IReadOnlyList<PaperPositionSettlement>> GetRecentPaperPositionSettlementsAsync(int limit = 100, CancellationToken cancellationToken = default(CancellationToken))

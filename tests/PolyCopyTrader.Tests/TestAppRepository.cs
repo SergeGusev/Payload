@@ -63,7 +63,15 @@ internal sealed class TestAppRepository : IAppRepository
 
     public int GetOpenPaperPositionsCalls { get; private set; }
 
+    public int GetOpenPaperPositionsForMarketCalls { get; private set; }
+
     public int GetPaperPositionCalls { get; private set; }
+
+    public int UpsertPaperPositionsBatchCalls { get; private set; }
+
+    public int PaperPositionSettlementBatchCalls { get; private set; }
+
+    public int RefreshPaperCopiedTraderPerformanceCalls { get; private set; }
 
     public List<LeaderTrade> LeaderTrades { get; } = [];
 
@@ -1323,6 +1331,30 @@ internal sealed class TestAppRepository : IAppRepository
         return Task.CompletedTask;
     }
 
+    public Task UpsertPaperPositionsAsync(
+        IReadOnlyList<PaperPosition> positions,
+        CancellationToken cancellationToken = default)
+    {
+        if (ThrowOnUpsertPaperPosition)
+        {
+            throw new InvalidOperationException("simulated paper position upsert failure");
+        }
+
+        lock (sync)
+        {
+            UpsertPaperPositionsBatchCalls++;
+            foreach (var position in positions)
+            {
+                PaperPositions.RemoveAll(item =>
+                    string.Equals(item.AssetId, position.AssetId, StringComparison.OrdinalIgnoreCase) &&
+                    string.Equals(item.CopiedTraderWallet, position.CopiedTraderWallet, StringComparison.OrdinalIgnoreCase));
+                PaperPositions.Add(position);
+            }
+        }
+
+        return Task.CompletedTask;
+    }
+
     public Task<IReadOnlyList<PaperPosition>> GetPaperPositionsAsync(CancellationToken cancellationToken = default)
     {
         GetPaperPositionsCalls++;
@@ -1334,6 +1366,22 @@ internal sealed class TestAppRepository : IAppRepository
         GetOpenPaperPositionsCalls++;
         return Task.FromResult<IReadOnlyList<PaperPosition>>(PaperPositions
             .Where(position => position.SizeShares > 0m)
+            .ToArray());
+    }
+
+    public Task<IReadOnlyList<PaperPosition>> GetOpenPaperPositionsForMarketAsync(
+        string? conditionId,
+        string? assetId,
+        CancellationToken cancellationToken = default)
+    {
+        GetOpenPaperPositionsForMarketCalls++;
+        return Task.FromResult<IReadOnlyList<PaperPosition>>(PaperPositions
+            .Where(position => position.SizeShares > 0m)
+            .Where(position =>
+                (!string.IsNullOrWhiteSpace(conditionId) &&
+                    string.Equals(position.ConditionId, conditionId, StringComparison.OrdinalIgnoreCase)) ||
+                (!string.IsNullOrWhiteSpace(assetId) &&
+                    string.Equals(position.AssetId, assetId, StringComparison.OrdinalIgnoreCase)))
             .ToArray());
     }
 
@@ -1364,6 +1412,39 @@ internal sealed class TestAppRepository : IAppRepository
         }
     }
 
+    public Task<int> PersistPaperPositionSettlementBatchAsync(
+        IReadOnlyList<PaperPositionSettlementWrite> writes,
+        CancellationToken cancellationToken = default)
+    {
+        if (ThrowOnUpsertPaperPosition)
+        {
+            throw new InvalidOperationException("simulated paper position upsert failure");
+        }
+
+        lock (sync)
+        {
+            PaperPositionSettlementBatchCalls++;
+            var inserted = 0;
+            foreach (var write in writes)
+            {
+                if (!PaperPositionSettlements.Any(item =>
+                        string.Equals(item.AssetId, write.Settlement.AssetId, StringComparison.OrdinalIgnoreCase) &&
+                        string.Equals(item.CopiedTraderWallet, write.Settlement.CopiedTraderWallet, StringComparison.OrdinalIgnoreCase)))
+                {
+                    PaperPositionSettlements.Add(write.Settlement);
+                    inserted++;
+                }
+
+                PaperPositions.RemoveAll(item =>
+                    string.Equals(item.AssetId, write.SettledPosition.AssetId, StringComparison.OrdinalIgnoreCase) &&
+                    string.Equals(item.CopiedTraderWallet, write.SettledPosition.CopiedTraderWallet, StringComparison.OrdinalIgnoreCase));
+                PaperPositions.Add(write.SettledPosition);
+            }
+
+            return Task.FromResult(inserted);
+        }
+    }
+
     public Task<IReadOnlyList<PaperPositionSettlement>> GetRecentPaperPositionSettlementsAsync(int limit = 100, CancellationToken cancellationToken = default)
     {
         return Task.FromResult<IReadOnlyList<PaperPositionSettlement>>(PaperPositionSettlements
@@ -1374,6 +1455,7 @@ internal sealed class TestAppRepository : IAppRepository
 
     public Task<int> RefreshPaperCopiedTraderPerformanceAsync(CancellationToken cancellationToken = default)
     {
+        RefreshPaperCopiedTraderPerformanceCalls++;
         PaperCopiedTraderPerformances.Clear();
         var rows = BuildPaperCopiedTraderPerformance();
         PaperCopiedTraderPerformances.AddRange(rows);

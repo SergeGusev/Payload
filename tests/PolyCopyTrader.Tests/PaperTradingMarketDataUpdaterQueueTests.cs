@@ -95,8 +95,65 @@ public sealed class PaperTradingMarketDataUpdaterQueueTests
         Assert.Equal("ApplyUpdate/UpdatePositionMarks", apiError.Operation);
         Assert.Contains("AssetId=asset-1", apiError.Message, StringComparison.Ordinal);
         Assert.Contains("EventType=Book", apiError.Message, StringComparison.Ordinal);
-        Assert.Contains("Operation=IAppRepository.UpsertPaperPosition", apiError.Message, StringComparison.Ordinal);
+        Assert.Contains("Operation=IAppRepository.UpsertPaperPositions", apiError.Message, StringComparison.Ordinal);
         Assert.Contains("simulated paper position upsert failure", apiError.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task ApplyUpdateAsync_BatchesPositionMarkPersistence()
+    {
+        var repository = new TestAppRepository();
+        var receivedAtUtc = DateTimeOffset.UtcNow;
+        repository.PaperPositions.AddRange(
+        [
+            new PaperPosition(
+                "asset-1",
+                "condition-1",
+                "Yes",
+                10m,
+                0.50m,
+                5m,
+                0m,
+                receivedAtUtc.AddMinutes(-1),
+                "strategy:one"),
+            new PaperPosition(
+                "asset-1",
+                "condition-1",
+                "Yes",
+                5m,
+                0.30m,
+                1.5m,
+                0m,
+                receivedAtUtc.AddMinutes(-1),
+                "strategy:two")
+        ]);
+        var updater = new PaperTradingMarketDataUpdater(
+            NullLogger<PaperTradingMarketDataUpdater>.Instance,
+            new DefaultPaperTradingEngine(),
+            new NoOpPaperSettlementProcessor(),
+            new ExposureSnapshotCache(repository),
+            new ConservativePaperGtdFillEstimator(new BtcUpDown5mStrategyOptions()),
+            repository);
+
+        await updater.ApplyUpdateAsync(
+            BookUpdate(receivedAtUtc),
+            receivedAtUtc,
+            new HashSet<Guid>(),
+            CancellationToken.None);
+
+        Assert.Equal(1, repository.UpsertPaperPositionsBatchCalls);
+        Assert.Collection(
+            repository.PaperPositions.OrderBy(position => position.CopiedTraderWallet),
+            position =>
+            {
+                Assert.Equal(4m, position.EstimatedValueUsd);
+                Assert.Equal(-1m, position.UnrealizedPnlUsd);
+            },
+            position =>
+            {
+                Assert.Equal(2m, position.EstimatedValueUsd);
+                Assert.Equal(0.5m, position.UnrealizedPnlUsd);
+            });
     }
 
     private static MarketDataUpdate BookUpdate(DateTimeOffset timestamp)

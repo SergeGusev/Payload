@@ -1,3 +1,17 @@
+## Active Update 2026-07-14 Paper Settlement And Mark Persistence Batching
+Goal: Remove verified per-wallet PostgreSQL round trips from Paper resolution and mark persistence while preserving settlement accounting and isolating full performance rebuilds from the WebSocket path.
+Status: Completed
+Done:
+- Added an exact server-side positive-size Paper-position read for a resolution condition and/or asset, preserving the prior case-insensitive matching behavior without loading every open position into the service.
+- Added repository batch contracts and a PostgreSQL implementation that inserts all `paper_position_settlements` rows and zeroes all matching `paper_positions` rows in one transaction. Duplicate settlement rows retain the existing `ON CONFLICT DO NOTHING` behavior, while any position-write failure rolls back both statements.
+- Changed WebSocket mark persistence to collect all changed positions for an asset and write them through one batch transaction before updating the exposure cache.
+- Removed the full `paper_copied_trader_performance` rebuild from direct resolution handling. `PaperAccountingWorker` still performs one rebuild at the end of its scan/cycle, with the configured default cadence of 30 seconds.
+- Added settlement phase/error diagnostics for open-position load, batch preparation, transactional persistence, cache application, and total duration; operations at or above one second log a warning.
+- Added unit/source-contract coverage and a PostgreSQL integration test proving market filtering, two-row settlement, unrelated-position preservation, and rollback of both tables after an intentional second-statement constraint failure. Updated README behavior, limitation, and deployment-verification guidance.
+Next: Deploy this commit and compare settlement phase durations, Paper-position transaction-lock waits, projection-event volume, queue delay, zeroed-position/settlement parity, and copied-trader performance refresh cadence across busy five-minute boundaries. Treat critical WebSocket remote closes as a separate unresolved problem.
+Notes: Release solution build completed with zero errors and 120 existing nullable warnings (the unchanged baseline worktree emitted the same Storage warning family). The expanded affected-path suite passed `88/88`; the disposable PostgreSQL 17.5 integration passed `1/1`, left both test tables empty, and the exact disposable database was dropped and independently confirmed absent. The final full suite is `710 passed / 112 failed / 822 total`; all 112 failure names match the saved baseline exactly, with zero new or missing names. An initial full run transiently added two time-boundary ETH FAK failures; both passed on unchanged `b23e7d89` and then on current code, and the complete rerun returned to the exact baseline. No production database row, service process, order, strategy setting, deployment, or runtime configuration changed. Batched updates still execute row-level Dashboard projection triggers, so runtime lock reduction is not yet proven.
+Blockers: None.
+
 ## Active Update 2026-07-14 WebSocket Side-Effect Queue Production Verification
 Goal: Verify the exact deployed side-effect-queue build, entry/persistence correctness, receive-loop decoupling, diagnostic sampling, settlement latency, projection locks, and remaining WebSocket/database risks on production.
 Status: Completed

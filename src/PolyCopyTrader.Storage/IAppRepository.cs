@@ -457,6 +457,16 @@ public interface IAppRepository
 
     Task UpsertPaperPositionAsync(PaperPosition position, CancellationToken cancellationToken = default);
 
+    async Task UpsertPaperPositionsAsync(
+        IReadOnlyList<PaperPosition> positions,
+        CancellationToken cancellationToken = default)
+    {
+        foreach (var position in positions)
+        {
+            await UpsertPaperPositionAsync(position, cancellationToken);
+        }
+    }
+
     Task<IReadOnlyList<PaperPosition>> GetPaperPositionsAsync(CancellationToken cancellationToken = default);
 
     async Task<IReadOnlyList<PaperPosition>> GetOpenPaperPositionsAsync(
@@ -464,6 +474,25 @@ public interface IAppRepository
     {
         return (await GetPaperPositionsAsync(cancellationToken))
             .Where(position => position.SizeShares > 0m)
+            .ToArray();
+    }
+
+    async Task<IReadOnlyList<PaperPosition>> GetOpenPaperPositionsForMarketAsync(
+        string? conditionId,
+        string? assetId,
+        CancellationToken cancellationToken = default)
+    {
+        if (string.IsNullOrWhiteSpace(conditionId) && string.IsNullOrWhiteSpace(assetId))
+        {
+            return [];
+        }
+
+        return (await GetOpenPaperPositionsAsync(cancellationToken))
+            .Where(position =>
+                (!string.IsNullOrWhiteSpace(conditionId) &&
+                    string.Equals(position.ConditionId, conditionId, StringComparison.OrdinalIgnoreCase)) ||
+                (!string.IsNullOrWhiteSpace(assetId) &&
+                    string.Equals(position.AssetId, assetId, StringComparison.OrdinalIgnoreCase)))
             .ToArray();
     }
 
@@ -478,6 +507,24 @@ public interface IAppRepository
     }
 
     Task<bool> TryAddPaperPositionSettlementAsync(PaperPositionSettlement settlement, CancellationToken cancellationToken = default);
+
+    async Task<int> PersistPaperPositionSettlementBatchAsync(
+        IReadOnlyList<PaperPositionSettlementWrite> writes,
+        CancellationToken cancellationToken = default)
+    {
+        var inserted = 0;
+        foreach (var write in writes)
+        {
+            if (await TryAddPaperPositionSettlementAsync(write.Settlement, cancellationToken))
+            {
+                inserted++;
+            }
+
+            await UpsertPaperPositionAsync(write.SettledPosition, cancellationToken);
+        }
+
+        return inserted;
+    }
 
     Task<IReadOnlyList<PaperPositionSettlement>> GetRecentPaperPositionSettlementsAsync(int limit = 100, CancellationToken cancellationToken = default);
 
@@ -1268,3 +1315,7 @@ public sealed record PaperCopiedLeaderPositionActivation(
     Guid EntryPaperOrderId,
     decimal CopiedInitialSizeShares,
     DateTimeOffset FilledAtUtc);
+
+public sealed record PaperPositionSettlementWrite(
+    PaperPositionSettlement Settlement,
+    PaperPosition SettledPosition);

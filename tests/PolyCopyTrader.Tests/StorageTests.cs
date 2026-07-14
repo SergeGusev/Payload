@@ -995,6 +995,36 @@ public sealed class StorageTests
     }
 
     [Fact]
+    public void PostgresRepository_MarketPaperPositionsAndSettlementPersistenceAreSetBased()
+    {
+        var source = ReadStorageRepositorySource();
+        var marketStart = source.IndexOf("GetOpenPaperPositionsForMarketAsync", StringComparison.Ordinal);
+        var marketEnd = source.IndexOf("GetPaperPositionAsync", marketStart, StringComparison.Ordinal);
+        Assert.True(marketStart >= 0);
+        Assert.True(marketEnd > marketStart);
+
+        var marketMethod = source[marketStart..marketEnd];
+        Assert.Contains("WHERE size_shares > 0", marketMethod, StringComparison.Ordinal);
+        Assert.Contains("lower(condition_id) = lower(@ConditionId)", marketMethod, StringComparison.Ordinal);
+        Assert.Contains("lower(asset_id) = lower(@AssetId)", marketMethod, StringComparison.Ordinal);
+        Assert.DoesNotContain("GetOpenPaperPositionsAsync", marketMethod, StringComparison.Ordinal);
+
+        var batchStart = source.IndexOf("PersistPaperPositionSettlementBatchAsync", StringComparison.Ordinal);
+        var batchEnd = source.IndexOf("GetRecentPaperPositionSettlementsAsync", batchStart, StringComparison.Ordinal);
+        Assert.True(batchStart >= 0);
+        Assert.True(batchEnd > batchStart);
+
+        var batchMethod = source[batchStart..batchEnd];
+        Assert.Contains("BeginTransactionAsync", batchMethod, StringComparison.Ordinal);
+        Assert.Contains("jsonb_to_recordset", batchMethod, StringComparison.Ordinal);
+        Assert.Contains("UpsertPaperPositionsBatchAsync", batchMethod, StringComparison.Ordinal);
+        Assert.Contains("transaction.CommitAsync", batchMethod, StringComparison.Ordinal);
+        Assert.True(
+            batchMethod.IndexOf("AddPaperPositionSettlementsBatchAsync", StringComparison.Ordinal) <
+            batchMethod.IndexOf("UpsertPaperPositionsBatchAsync", StringComparison.Ordinal));
+    }
+
+    [Fact]
     public void PostgresRepository_RecentSignalsLimitsBeforeRejectionAggregation()
     {
         var source = ReadStorageRepositorySource();

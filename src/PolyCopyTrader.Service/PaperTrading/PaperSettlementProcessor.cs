@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using PolyCopyTrader.Domain;
 using PolyCopyTrader.Polymarket;
 using PolyCopyTrader.Storage;
@@ -93,63 +94,109 @@ public sealed class PaperSettlementProcessor(
             return new PaperSettlementProcessingResult(0, 0, 0, 0);
         }
 
-        var positions = (await repository.GetOpenPaperPositionsAsync(cancellationToken))
-            .Where(position =>
-                (!string.IsNullOrWhiteSpace(conditionId) &&
-                    string.Equals(position.ConditionId, conditionId, StringComparison.OrdinalIgnoreCase)) ||
-                (!string.IsNullOrWhiteSpace(assetId) &&
-                    string.Equals(position.AssetId, assetId, StringComparison.OrdinalIgnoreCase)))
-            .ToArray();
-        if (positions.Length == 0)
+        var operationStarted = Stopwatch.GetTimestamp();
+        var phase = "LoadOpenPositions";
+        var loadDuration = TimeSpan.Zero;
+        var prepareDuration = TimeSpan.Zero;
+        var persistenceDuration = TimeSpan.Zero;
+        var cacheDuration = TimeSpan.Zero;
+        try
         {
-            return new PaperSettlementProcessingResult(0, 0, 0, 0);
-        }
-
-        var inserted = 0;
-        foreach (var position in positions)
-        {
-            var won = IsWinningPosition(position, winningAssetId, winningOutcome);
-            var costBasis = position.AveragePrice * position.SizeShares;
-            var settlementValue = won ? position.SizeShares : 0m;
-            var now = DateTimeOffset.UtcNow;
-            var settlement = new PaperPositionSettlement(
-                Guid.NewGuid(),
-                position.CopiedTraderWallet,
-                position.AssetId,
-                position.ConditionId,
-                position.Outcome,
-                winningAssetId,
-                winningOutcome ?? string.Empty,
-                category,
-                position.SizeShares,
-                position.AveragePrice,
-                costBasis,
-                settlementValue,
-                settlementValue - costBasis,
-                won,
-                settlementSource,
-                settledAtUtc,
-                now);
-
-            if (await repository.TryAddPaperPositionSettlementAsync(settlement, cancellationToken))
+            var phaseStarted = Stopwatch.GetTimestamp();
+            var positions = (await repository.GetOpenPaperPositionsForMarketAsync(
+                    conditionId,
+                    assetId,
+                    cancellationToken))
+                .ToArray();
+            loadDuration = Stopwatch.GetElapsedTime(phaseStarted);
+            if (positions.Length == 0)
             {
-                inserted++;
+                return new PaperSettlementProcessingResult(0, 0, 0, 0);
             }
 
-            var settledPosition = position with
+            phase = "PrepareSettlementBatch";
+            phaseStarted = Stopwatch.GetTimestamp();
+            var writes = new List<PaperPositionSettlementWrite>(positions.Length);
+            foreach (var position in positions)
             {
-                SizeShares = 0m,
-                AveragePrice = 0m,
-                EstimatedValueUsd = 0m,
-                UnrealizedPnlUsd = 0m,
-                UpdatedAtUtc = now
-            };
-            await repository.UpsertPaperPositionAsync(settledPosition, cancellationToken);
-            exposureCache.ApplyPaperPosition(settledPosition);
-        }
+                var won = IsWinningPosition(position, winningAssetId, winningOutcome);
+                var costBasis = position.AveragePrice * position.SizeShares;
+                var settlementValue = won ? position.SizeShares : 0m;
+                var now = DateTimeOffset.UtcNow;
+                var settlement = new PaperPositionSettlement(
+                    Guid.NewGuid(),
+                    position.CopiedTraderWallet,
+                    position.AssetId,
+                    position.ConditionId,
+                    position.Outcome,
+                    winningAssetId,
+                    winningOutcome ?? string.Empty,
+                    category,
+                    position.SizeShares,
+                    position.AveragePrice,
+                    costBasis,
+                    settlementValue,
+                    settlementValue - costBasis,
+                    won,
+                    settlementSource,
+                    settledAtUtc,
+                    now);
+                var settledPosition = position with
+                {
+                    SizeShares = 0m,
+                    AveragePrice = 0m,
+                    EstimatedValueUsd = 0m,
+                    UnrealizedPnlUsd = 0m,
+                    UpdatedAtUtc = now
+                };
+                writes.Add(new PaperPositionSettlementWrite(settlement, settledPosition));
+            }
+            prepareDuration = Stopwatch.GetElapsedTime(phaseStarted);
 
-        var performanceRows = await repository.RefreshPaperCopiedTraderPerformanceAsync(cancellationToken);
-        return new PaperSettlementProcessingResult(positions.Length, positions.Length, inserted, performanceRows);
+            phase = "PersistSettlementBatch";
+            phaseStarted = Stopwatch.GetTimestamp();
+            var inserted = await repository.PersistPaperPositionSettlementBatchAsync(writes, cancellationToken);
+            persistenceDuration = Stopwatch.GetElapsedTime(phaseStarted);
+
+            phase = "ApplyExposureCache";
+            phaseStarted = Stopwatch.GetTimestamp();
+            foreach (var write in writes)
+            {
+                exposureCache.ApplyPaperPosition(write.SettledPosition);
+            }
+            cacheDuration = Stopwatch.GetElapsedTime(phaseStarted);
+
+            var totalDuration = Stopwatch.GetElapsedTime(operationStarted);
+            var logLevel = totalDuration >= TimeSpan.FromSeconds(1) ? LogLevel.Warning : LogLevel.Debug;
+            logger.Log(
+                logLevel,
+                "Paper resolution settlement completed. ConditionId={ConditionId} AssetId={AssetId} Positions={Positions} SettlementsInserted={SettlementsInserted} LoadDurationMs={LoadDurationMs} PrepareDurationMs={PrepareDurationMs} PersistenceDurationMs={PersistenceDurationMs} CacheDurationMs={CacheDurationMs} TotalDurationMs={TotalDurationMs}",
+                conditionId,
+                assetId,
+                positions.Length,
+                inserted,
+                loadDuration.TotalMilliseconds,
+                prepareDuration.TotalMilliseconds,
+                persistenceDuration.TotalMilliseconds,
+                cacheDuration.TotalMilliseconds,
+                totalDuration.TotalMilliseconds);
+            return new PaperSettlementProcessingResult(positions.Length, positions.Length, inserted, 0);
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(
+                ex,
+                "Paper resolution settlement failed. ConditionId={ConditionId} AssetId={AssetId} Phase={Phase} DurationMs={DurationMs}",
+                conditionId,
+                assetId,
+                phase,
+                Stopwatch.GetElapsedTime(operationStarted).TotalMilliseconds);
+            throw;
+        }
     }
 
     private async Task<IReadOnlyList<PolymarketOnChainTokenMetadata>> GetResolvedMetadataAsync(
