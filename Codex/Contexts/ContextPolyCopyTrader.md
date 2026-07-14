@@ -1,3 +1,17 @@
+## Active Update 2026-07-14 ETH Down3 Paper PnL With ETHUSDT Overlay
+Goal: Build and directly display an updated cumulative Paper PnL chart for `ETH Up or Down 5m Down 3 bps Reference Average Premarket` with ETH price over the same full-history period.
+Status: Completed
+Done:
+- Reverified exact production endpoint `192.168.0.101:5432/polycopytrader` and resolved the target among three similar candidates as ID `b7c50005-0000-4000-8140-000000000103`, code `eth_up_down_5m_down_reference_average_bps_3_fak_premarket`; it is enabled, unpaused, and Paper-only.
+- Fixed the read-only cutoff at `2026-07-14 15:58:12.632439 UTC` and exported all `2,296` settled Paper rows through `2026-07-14 15:50:03.331792 UTC`.
+- Independently matched raw-row decimal calculations and server-side SQL: `1,222` wins, `1,074` losses, stake `$13,797.16678322`, final PnL `+$514.51614403`, ROI `3.72914347%`, and maximum drawdown `$236.71751337`.
+- Fetched and continuity-checked all `16,381` official Binance Spot ETHUSDT one-minute candles from `2026-07-03 06:50` through `2026-07-14 15:50 UTC`. ETHUSDT moved from `$1,715.80` to `$1,879.28` (`+9.52791701%`), with observed low/high `$1,713.44/$1,888.80`.
+- Independently compared all `16,252` server-persisted ETHUSDT sampled minutes with the Binance candle keys: `16,252` matched, zero were unmatched, and mean absolute close difference was `$0.14601280`.
+- Rendered and visually inspected the `1800x920` PNG at `outputs/eth-down3-bps-reference-average-vs-ethusdt-2026-07-14/paper-pnl-vs-ethusdt-chart.png`; SHA-256 is `17665922752AF0B0229326CBCB86CD7166E8076647E65D1442EF4DD7676B426E`.
+Next: None.
+Notes: Reproducible SQL, CSV exports, fetch/validation/render scripts, summaries, and the PNG are in the ignored output directory. Both lines share UTC time only and use independent vertical scales. Production access was read-only; no database row, strategy setting, order, service process, source behavior, deployment, or product code changed. Product build/tests were not required because application code was unchanged.
+Blockers: None.
+
 ## Active Update 2026-07-14 Paper Settlement And Mark Persistence Batching
 Goal: Remove verified per-wallet PostgreSQL round trips from Paper resolution and mark persistence while preserving settlement accounting and isolating full performance rebuilds from the WebSocket path.
 Status: Completed

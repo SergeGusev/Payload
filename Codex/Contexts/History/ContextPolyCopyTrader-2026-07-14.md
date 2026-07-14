@@ -114,3 +114,10 @@ Request:
 
 Result:
 Implemented the next verified Paper persistence optimization without changing production. Resolution now reads only matching positive-size positions, inserts all settlement rows and zeroes all positions in one PostgreSQL transaction, and reports phase-level timings. WebSocket mark changes for one asset are also persisted in one batch transaction. Direct WebSocket resolution no longer performs the full copied-trader performance rebuild; the existing accounting worker still rebuilds it once per cycle at the configured 30-second cadence. Focused tests passed `88/88`; a disposable PostgreSQL 17.5 test proved filtering, successful settlement, and cross-table rollback, then the empty test database was removed. The final full suite is `710 passed / 112 known failed / 822 total`, with exactly the same 112 failing names as the saved baseline. README and active context were updated. Row-level Dashboard projection triggers still run for every changed position, so the remaining lock reduction must be verified after deployment.
+
+## 2026-07-14T16:03:48.0337824+00:00
+Request:
+Сделай Pnl график стратегии ETH Up or Down 5m Down 3 bps Reference Average Premarket с наложенным курсом ETH
+
+Result:
+Built an updated full-history cumulative Paper PnL chart for the exact production strategy and overlaid official Binance Spot ETHUSDT one-minute candles on the same UTC time axis with an independent price scale. The frozen read-only production export contained `2,296` settled rows through `2026-07-14 15:50:03.331792 UTC`, final PnL `+$514.51614403`, ROI `3.72914347%`, and maximum drawdown `$236.71751337`; raw-row calculations matched an independent server aggregate exactly. All `16,381` expected Binance minutes were present, and all `16,252` server-persisted ETH sampled minutes matched Binance minute keys. The `1800x920` PNG was visually inspected and saved with reproducible sources and scripts under `outputs/eth-down3-bps-reference-average-vs-ethusdt-2026-07-14/`. Production remained read-only and unchanged; product code did not change.
