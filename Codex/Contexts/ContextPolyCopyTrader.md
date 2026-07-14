@@ -1,3 +1,18 @@
+## Active Update 2026-07-14 Sorted Currency Dashboard Category Progress Split Excel Reports
+Goal: Create six Excel reports split by BTC/ETH/SOL and Regular/Progress, with UTC daily Paper PnL grouped by Dashboard category and category columns sorted from lowest to highest total PnL.
+Status: Completed
+Done:
+- Reverified the current Dashboard contracts from source: category is `StrategyDisplayCategories.GetCategory(strategyName)`, currency is `GetAssetSymbol`, and Progress matches the Dashboard `Hide progress` text rule (`Progress` contained case-insensitively); Regular is the inverse.
+- Captured one production PostgreSQL `REPEATABLE READ, READ ONLY` snapshot from exact endpoint `192.168.0.101:5432/polycopytrader` at `2026-07-14T05:23:03.713784Z`. It contained `1,861` current Dashboard snapshot strategies and `10,694` strategy/day aggregates over continuous UTC dates `2026-06-05` through `2026-07-14`.
+- Generated six ignored workbooks under `outputs/currency-dashboard-category-paper-pnl-progress-split-sorted-2026-07-14/reports/` using the bundled spreadsheet runtime and `@oai/artifact-tool`: one for each BTC/ETH/SOL and Regular/Progress combination.
+- Each workbook has Dashboard categories as columns, UTC settlement dates as rows, formula-driven `Daily Total`, formula-driven `Category Total`, and formula-driven grand total. Category columns are sorted by full-period category Paper PnL ascending, with the category name as deterministic tie-breaker.
+- Negative values use red text on an explicit white background. All six rendered worksheet previews were visually inspected at original resolution; headers, dates, totals, and negative styling were legible without clipping or overlap.
+- Independently reconciled each local aggregate exactly against a separate server-side SQL aggregate: BTC Regular `158,546` runs / `-$4,199.95393741`; BTC Progress `60,760` / `+$1,421.17957405`; ETH Regular `181,446` / `+$14,439.41123084`; ETH Progress `56,380` / `-$42,702.50997536`; SOL Regular `197,241` / `+$19,960.79325982`; SOL Progress `80,795` / `+$15,136.48243089`.
+- Excel COM opened and recalculated all six files read-only. It found `313` formulas total, zero formula errors, exact grand-total matches, ascending category totals in every workbook, red rendered negative font color, and white rendered negative fill color.
+Next: None.
+Notes: The production export used one read-only transaction with lock, statement, and idle-transaction timeouts and took about `169.7s`; it made no database, strategy, order, service, configuration, deployment, or source-code behavior change. The ignored output folder also contains reproducible export, C# aggregation, workbook-build, source CSV/JSON, and verification artifacts. No product test suite was required because application source was unchanged; the focused C# report preparer built with zero warnings/errors.
+Blockers: None.
+
 ## Active Update 2026-07-14 SOL 19 Child Paper PnL Chart
 Goal: Build and directly display the cumulative Paper PnL chart for the exact production strategy `SOL Up or Down 5m 19 Child`.
 Status: Completed

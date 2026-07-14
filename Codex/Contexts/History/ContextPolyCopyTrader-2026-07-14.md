@@ -4,3 +4,16 @@ Request:
 
 Result:
 Resolved exact Paper-only production strategy `b7c50005-0000-4000-8187-000000000019` and excluded its Progress and ROI namesakes. Fixed cutoff `2026-07-13 21:20:44.108529 UTC` and exported all `779` settled Paper runs from `2026-07-08 21:22:52.121516` through `2026-07-13 21:10:32.576285 UTC`. Calculated `409W/370L`, stake `$4,681.24470009`, realized PnL `+$258.52321462`, ROI `+5.52253153%`, and maximum drawdown `$157.22474434`. Confirmed Dashboard realized PnL matches; its extra `$0.25571489` was unrealized PnL from one open position and was excluded from the settled curve. Generated and visually inspected a `1600x840` step PNG plus reproducible CSV, PowerShell builder, independent server aggregate, and summary under `outputs/sol-19-child-paper-pnl-chart-2026-07-14/`. Local decimal calculations matched the independent SQL aggregate exactly. Production remained read-only and unchanged.
+
+## 2026-07-14T05:29:56.7993726+00:00
+Request:
+Сделай шесть отчётов, отдельно по каждой валюте и Progress/Regular, в Excel формате.
+
+В столбцах - группирующие категории из Dashboard. То есть не по каждой стратегии отдельно показываем, а оцениваем всю категорию. Сортируй столбцы от самой невыгодной стратегии к самой выгодной
+В строках - даты
+В ячейках - Paper Pnl за эту дату. Отрицательные значения выделяются красным на белом фоне.
+
+Последний столбец - сумма по дню, последняя строчка - сумма по категории. На их пересечении - общий Total
+
+Result:
+Generated six ignored Excel workbooks from one production PostgreSQL read-only repeatable-read snapshot at `2026-07-14T05:23:03.713784Z`, split by BTC/ETH/SOL and Regular/Progress. The workbooks use the current Dashboard category implementation and Progress text rule, contain continuous UTC settlement dates `2026-06-05` through `2026-07-14`, formula-driven daily/category/grand totals, category columns sorted by total Paper PnL ascending, and red negative values on white fill. Every report total matched an independent server-side SQL aggregate exactly. All six sheets were rendered and visually inspected; Excel COM opened and recalculated them with `313` formulas, zero errors, exact totals, ascending category totals, and verified red/white negative formatting. Production remained unchanged.
