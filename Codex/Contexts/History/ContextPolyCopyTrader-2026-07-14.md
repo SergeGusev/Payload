@@ -153,3 +153,10 @@ Request:
 
 Result:
 Captured one production PostgreSQL read-only repeatable-read snapshot at cutoff `2026-07-14T18:51:45.265764Z`, evaluated `77,146` settled Paper rows for all `144` current non-Progress Child and Child ROI candidates, and independently verified the six unique category winners and every selected strategy/date aggregate. Generated one-sheet workbook `outputs/child-child-roi-best-daily-paper-pnl-report-2026-07-14/reports/child-child-roi-best-daily-paper-pnl.xlsx` with six strategy columns sorted by total PnL ascending, seven UTC date rows, formula-driven daily/strategy/grand totals, and red-on-white negatives. Excel verified zero formula errors, exact grand total `$1,444.38361641`, all negative styles, and frozen first row/column; OpenXML independently confirmed `xSplit=1`, `ySplit=1`, `topLeftCell=B2`, `state=frozen`. The final sheet was rendered through Excel and visually inspected. Production remained read-only and unchanged.
+
+## 2026-07-14T19:03:13.8649195+00:00
+Request:
+Повтори для стратегий SOL Up or Down 5m Down 75 bps Reference Average Premarket, SOL Up or Down 5m 1 bps Reference Average Premarket, SOL Up or Down 5m Up 1 bps Reference Average Premarket
+
+Result:
+Built and visually inspected one common-scale `1800x920` chart containing the full cumulative Paper PnL histories of the three exact SOL strategies through frozen cutoff `2026-07-14 19:01:27.060982 UTC`, using solid lines and a solid zero axis only. Independent raw-row and server calculations matched: Down 75 bps `1,112` bets / `+$119.35614607`; neutral 1 bps `2,579` / `+$219.58293657`; Up 1 bps `422` / `+$250.11248092`. A repeated server aggregate exactly matched the first export, and all three strategies had zero Live-order rows. The initial database connection timed out before SQL execution; port availability and the successful repeated query were independently confirmed. Reproducible artifacts are under `outputs/sol-reference-average-three-strategies-paper-pnl-2026-07-14/`. Production remained read-only and unchanged; application code did not change.

@@ -1,3 +1,17 @@
+## Active Update 2026-07-14 Three SOL Reference Average Paper PnL Comparison
+Goal: Plot the full cumulative Paper PnL histories of the requested SOL Down 75 bps, neutral 1 bps, and Up 1 bps Reference Average Premarket strategies using solid lines only.
+Status: Completed
+Done:
+- Resolved exactly three production strategy rows: Down 75 bps ID `b7c50005-0000-4000-8139-000000000175`, neutral 1 bps ID `b7c50005-0000-4000-8180-000000000101`, and Up 1 bps ID `b7c50005-0000-4000-8138-000000000101`; all are enabled, unpaused, and Paper-only.
+- Fixed the read-only server cutoff at `2026-07-14 19:01:27.060982 UTC` and exported each strategy's complete settled Paper history through that cutoff. The first connection attempt timed out before SQL execution; TCP `5432` then passed and the repeated query completed.
+- Independently reconciled raw rows against server SQL: Down 75 bps `1,112` bets / `+$119.35614607` / `1.78614254%` ROI / `$236.64928192` max drawdown; neutral 1 bps `2,579` / `+$219.58293657` / `1.41684832%` / `$325.85035972`; Up 1 bps `422` / `+$250.11248092` / `9.86277277%` / `$71.73488638`.
+- Repeated the independent server aggregate after rendering and obtained an exact file match. Independently verified that all three strategies have zero Live-order rows, so the chart contains Paper results only.
+- Rendered every strategy line and the zero axis as solid, then source-checked that the renderer contains no non-solid line style.
+- Rendered and visually inspected the `1800x920` common-scale PNG at `outputs/sol-reference-average-three-strategies-paper-pnl-2026-07-14/three-strategies-paper-pnl.png`; SHA-256 is `0F02E4554020654CE1A2365094BF0631486C55742D54AEC1F88B59427822D74F`.
+Next: None.
+Notes: Reproducible SQL, source/aggregate CSVs, renderer, summary, Live-scope check, and PNG are in the ignored output directory. Production access was read-only; no database row, strategy setting, order, service process, deployment, product behavior, or runtime configuration changed. Product build/tests were not required because application code was unchanged.
+Blockers: None.
+
 ## Active Update 2026-07-14 Three BTC Reference Average Paper PnL Comparison
 Goal: Plot the full cumulative Paper PnL histories of the requested BTC Down 1 bps, neutral 35 bps, and Up 10 bps Reference Average Premarket strategies using solid lines only.
 Status: Completed
