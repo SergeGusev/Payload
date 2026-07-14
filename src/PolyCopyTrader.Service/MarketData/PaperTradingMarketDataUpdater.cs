@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using PolyCopyTrader.Domain;
 using PolyCopyTrader.Service.PaperTrading;
 using PolyCopyTrader.Storage;
@@ -15,18 +16,39 @@ public sealed class PaperTradingMarketDataUpdater(
 {
     private readonly SemaphoreSlim sync = new(1, 1);
 
-    public async Task ApplyUpdateAsync(MarketDataUpdate update, CancellationToken cancellationToken = default)
+    public async Task ApplyUpdateAsync(
+        MarketDataUpdate update,
+        DateTimeOffset? receivedAtUtc = null,
+        IReadOnlySet<Guid>? eligiblePaperOrderIds = null,
+        CancellationToken cancellationToken = default)
     {
         if (string.IsNullOrWhiteSpace(update.AssetId))
         {
             return;
         }
 
+        var operationStarted = Stopwatch.GetTimestamp();
+        var lockWaitStarted = Stopwatch.GetTimestamp();
         await sync.WaitAsync(cancellationToken);
+        var lockWaitDuration = Stopwatch.GetElapsedTime(lockWaitStarted);
+        if (lockWaitDuration >= TimeSpan.FromSeconds(1))
+        {
+            logger.LogWarning(
+                "Paper market-data updater waited for its serialization lock. AssetId={AssetId} EventType={EventType} WaitDurationMs={WaitDurationMs}",
+                update.AssetId,
+                update.EventType,
+                lockWaitDuration.TotalMilliseconds);
+        }
+
+        var phase = "Initialize";
+        var operation = "None";
+        Guid? paperOrderId = null;
         try
         {
             if (update.MarketResolved)
             {
+                phase = "SettleMarketResolution";
+                operation = "PaperSettlementProcessor.SettleMarketResolution";
                 await paperSettlementProcessor.SettleMarketResolutionAsync(
                     update.ConditionId,
                     update.AssetId,
@@ -39,10 +61,14 @@ public sealed class PaperTradingMarketDataUpdater(
                 return;
             }
 
-            var now = DateTimeOffset.UtcNow;
+            var observedAtUtc = receivedAtUtc ?? DateTimeOffset.UtcNow;
+            phase = "LoadExposureSnapshot";
+            operation = "ExposureSnapshotCache.GetSnapshot";
             var exposure = await exposureCache.GetSnapshotAsync(cancellationToken);
             var matchingOrders = exposure.OpenPaperOrders
-                .Where(order => string.Equals(order.AssetId, update.AssetId, StringComparison.OrdinalIgnoreCase))
+                .Where(order =>
+                    string.Equals(order.AssetId, update.AssetId, StringComparison.OrdinalIgnoreCase) &&
+                    (eligiblePaperOrderIds is null || eligiblePaperOrderIds.Contains(order.Id)))
                 .ToArray();
             var positions = exposure.PaperPositions
                 .Where(position => string.Equals(position.AssetId, update.AssetId, StringComparison.OrdinalIgnoreCase))
@@ -50,6 +76,9 @@ public sealed class PaperTradingMarketDataUpdater(
 
             foreach (var order in matchingOrders)
             {
+                paperOrderId = order.Id;
+                phase = "LoadPaperFills";
+                operation = "IAppRepository.GetPaperFillsForOrder";
                 var existingFills = await repository.GetPaperFillsForOrderAsync(order.Id, cancellationToken);
                 var previouslyFilledShares = GetFilledShares(existingFills, order.SizeShares);
                 var orderForFill = order;
@@ -57,7 +86,7 @@ public sealed class PaperTradingMarketDataUpdater(
                 var conservativeGtdEvaluation = conservativeGtdFillEstimator.Evaluate(
                     order,
                     update.OrderBookSnapshot,
-                    now,
+                    observedAtUtc,
                     previouslyFilledShares);
 
                 if (conservativeGtdEvaluation.Handled)
@@ -69,13 +98,17 @@ public sealed class PaperTradingMarketDataUpdater(
                     {
                         if (conservativeGtdEvaluation.OrderChanged)
                         {
+                            phase = "UpdateConservativePaperOrder";
+                            operation = "IAppRepository.UpdatePaperOrder";
                             await repository.UpdatePaperOrderAsync(orderForFill, cancellationToken);
                             exposureCache.ApplyPaperOrder(orderForFill);
                         }
 
-                        var expiredOrder = paperTradingEngine.ExpireIfNeeded(orderForFill, now);
+                        var expiredOrder = paperTradingEngine.ExpireIfNeeded(orderForFill, observedAtUtc);
                         if (expiredOrder.Status != orderForFill.Status)
                         {
+                            phase = "ExpireConservativePaperOrder";
+                            operation = "IAppRepository.UpdatePaperOrder";
                             await repository.UpdatePaperOrderAsync(expiredOrder, cancellationToken);
                             exposureCache.ApplyPaperOrder(expiredOrder);
                         }
@@ -85,9 +118,11 @@ public sealed class PaperTradingMarketDataUpdater(
                 }
                 else
                 {
-                    var expiredOrder = paperTradingEngine.ExpireIfNeeded(order, now);
+                    var expiredOrder = paperTradingEngine.ExpireIfNeeded(order, observedAtUtc);
                     if (expiredOrder.Status != order.Status)
                     {
+                        phase = "ExpirePaperOrder";
+                        operation = "IAppRepository.UpdatePaperOrder";
                         await repository.UpdatePaperOrderAsync(expiredOrder, cancellationToken);
                         exposureCache.ApplyPaperOrder(expiredOrder);
                         continue;
@@ -97,7 +132,7 @@ public sealed class PaperTradingMarketDataUpdater(
                         order,
                         update.OrderBookSnapshot,
                         ToObservedTrade(order, update),
-                        now,
+                        observedAtUtc,
                         previouslyFilledShares);
                 }
 
@@ -122,17 +157,25 @@ public sealed class PaperTradingMarketDataUpdater(
                 }
 
                 var filledOrder = paperTradingEngine.ApplyFillStatus(orderForFill, fill, previouslyFilledShares);
+                phase = "AddPaperFill";
+                operation = "IAppRepository.AddPaperFill";
                 await repository.AddPaperFillAsync(fill, cancellationToken);
+                phase = "UpdateFilledPaperOrder";
+                operation = "IAppRepository.UpdatePaperOrder";
                 await repository.UpdatePaperOrderAsync(filledOrder, cancellationToken);
                 exposureCache.ApplyPaperOrder(filledOrder);
 
                 var updatedPosition = orderForFill.Side == TradeSide.Buy
-                    ? paperTradingEngine.ApplyBuyFill(currentPosition, orderForFill, fill, currentBid, now)
-                    : paperTradingEngine.ApplySellFill(currentPosition!, orderForFill, fill, currentBid, now);
+                    ? paperTradingEngine.ApplyBuyFill(currentPosition, orderForFill, fill, currentBid, observedAtUtc)
+                    : paperTradingEngine.ApplySellFill(currentPosition!, orderForFill, fill, currentBid, observedAtUtc);
+                phase = "UpsertFilledPaperPosition";
+                operation = "IAppRepository.UpsertPaperPosition";
                 await repository.UpsertPaperPositionAsync(updatedPosition, cancellationToken);
                 exposureCache.ApplyPaperPosition(updatedPosition);
                 if (orderForFill.Side == TradeSide.Buy)
                 {
+                    phase = "ActivateCopiedLeaderPosition";
+                    operation = "IAppRepository.ActivatePaperCopiedLeaderPosition";
                     await repository.ActivatePaperCopiedLeaderPositionAsync(
                         orderForFill.Id,
                         fill.SizeShares,
@@ -146,7 +189,16 @@ public sealed class PaperTradingMarketDataUpdater(
 
             if (update.OrderBookSnapshot?.BestBid is { } bestBid)
             {
-                await UpdatePositionMarksAsync(positions, update.AssetId, bestBid, now, cancellationToken);
+                paperOrderId = null;
+                phase = "UpdatePositionMarks";
+                operation = "IAppRepository.UpsertPaperPosition";
+                await UpdatePositionMarksAsync(
+                    positions,
+                    update.AssetId,
+                    bestBid,
+                    observedAtUtc,
+                    receivedAtUtc,
+                    cancellationToken);
             }
         }
         catch (OperationCanceledException)
@@ -155,8 +207,20 @@ public sealed class PaperTradingMarketDataUpdater(
         }
         catch (Exception ex)
         {
-            logger.LogError(ex, "Failed to apply WebSocket market data update to paper trading for asset {AssetId}.", update.AssetId);
-            await TryRecordApiErrorAsync("ApplyUpdate", ex.Message, cancellationToken);
+            var duration = Stopwatch.GetElapsedTime(operationStarted);
+            logger.LogError(
+                ex,
+                "Failed to apply WebSocket market data update to paper trading. AssetId={AssetId} EventType={EventType} Phase={Phase} Operation={Operation} PaperOrderId={PaperOrderId} DurationMs={DurationMs}",
+                update.AssetId,
+                update.EventType,
+                phase,
+                operation,
+                paperOrderId,
+                duration.TotalMilliseconds);
+            await TryRecordApiErrorAsync(
+                $"ApplyUpdate/{phase}",
+                $"AssetId={update.AssetId}; EventType={update.EventType}; Operation={operation}; PaperOrderId={paperOrderId?.ToString() ?? "<null>"}; DurationMs={duration.TotalMilliseconds:F0}; Error={ex.Message}",
+                cancellationToken);
         }
         finally
         {
@@ -169,10 +233,16 @@ public sealed class PaperTradingMarketDataUpdater(
         string assetId,
         decimal bestBid,
         DateTimeOffset now,
+        DateTimeOffset? receivedAtUtc,
         CancellationToken cancellationToken)
     {
         foreach (var position in positions.Where(position => string.Equals(position.AssetId, assetId, StringComparison.OrdinalIgnoreCase)))
         {
+            if (receivedAtUtc is { } receivedAt && position.UpdatedAtUtc > receivedAt)
+            {
+                continue;
+            }
+
             var estimatedValue = position.SizeShares * bestBid;
             var unrealizedPnl = estimatedValue - position.SizeShares * position.AveragePrice;
             if (estimatedValue == position.EstimatedValueUsd && unrealizedPnl == position.UnrealizedPnlUsd)

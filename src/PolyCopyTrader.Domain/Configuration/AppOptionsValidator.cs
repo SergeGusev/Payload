@@ -92,6 +92,11 @@ public static class AppOptionsValidator
             $"Market WebSocket watchdog stale seconds: {configuration.MarketDataWebSocket.WatchdogStaleSeconds}",
             $"Market WebSocket persists order book snapshots: {configuration.MarketDataWebSocket.PersistOrderBookSnapshots}",
             $"Market WebSocket persists market data events: {configuration.MarketDataWebSocket.PersistMarketDataEvents}",
+            $"Market WebSocket side-effect max pending updates per asset: {configuration.MarketDataWebSocket.SideEffectMaxPendingUpdatesPerAsset}",
+            $"Market WebSocket side-effect diagnostic queue capacity: {configuration.MarketDataWebSocket.SideEffectDiagnosticQueueCapacity}",
+            $"Market WebSocket side-effect metrics interval seconds: {configuration.MarketDataWebSocket.SideEffectMetricsIntervalSeconds}",
+            $"Market WebSocket side-effect slow processing milliseconds: {configuration.MarketDataWebSocket.SideEffectSlowProcessingMilliseconds}",
+            $"Market WebSocket critical frame diagnostic sample every: {configuration.MarketDataWebSocket.CriticalFrameDiagnosticSampleEvery}",
             $"Market trade diagnostics enabled: {configuration.MarketTradeDiagnostics.Enabled}",
             $"BTC/order-book lag diagnostics enabled: {configuration.BtcOrderBookLagDiagnostics.Enabled}",
             $"BTC/order-book lag diagnostics retention minutes: {configuration.BtcOrderBookLagDiagnostics.RetentionMinutes}",
@@ -116,6 +121,7 @@ public static class AppOptionsValidator
             $"IPC enabled: {configuration.Ipc.Enabled}",
             $"IPC dashboard URL: {configuration.Ipc.DashboardBaseUrl}",
             $"Dashboard strategies-only mode: {configuration.Dashboard.StrategiesOnlyMode}",
+            $"Dashboard projection event batch size: {configuration.Dashboard.ProjectionEventBatchSize}",
             $"Daily reports enabled: {configuration.Analytics.DailyReportGenerationEnabled}",
             $"Trader discovery enabled: {configuration.TraderDiscovery.Enabled}",
             $"Trader discovery category: {configuration.TraderDiscovery.Category}",
@@ -517,6 +523,31 @@ public static class AppOptionsValidator
         if (options.StatusPersistIntervalSeconds <= 0)
         {
             errors.Add("MarketDataWebSocket.StatusPersistIntervalSeconds must be greater than zero.");
+        }
+
+        if (options.SideEffectMaxPendingUpdatesPerAsset <= 0)
+        {
+            errors.Add("MarketDataWebSocket.SideEffectMaxPendingUpdatesPerAsset must be greater than zero.");
+        }
+
+        if (options.SideEffectDiagnosticQueueCapacity <= 0)
+        {
+            errors.Add("MarketDataWebSocket.SideEffectDiagnosticQueueCapacity must be greater than zero.");
+        }
+
+        if (options.SideEffectMetricsIntervalSeconds <= 0)
+        {
+            errors.Add("MarketDataWebSocket.SideEffectMetricsIntervalSeconds must be greater than zero.");
+        }
+
+        if (options.SideEffectSlowProcessingMilliseconds <= 0)
+        {
+            errors.Add("MarketDataWebSocket.SideEffectSlowProcessingMilliseconds must be greater than zero.");
+        }
+
+        if (options.CriticalFrameDiagnosticSampleEvery < 0)
+        {
+            errors.Add("MarketDataWebSocket.CriticalFrameDiagnosticSampleEvery must not be negative. Use 0 to retain only important frames.");
         }
 
         if (options.StrongSignalMinimumScore < 0)
@@ -1044,6 +1075,11 @@ public static class AppOptionsValidator
         if (options.OptionalReportTimeoutSeconds <= 0)
         {
             errors.Add("Dashboard.OptionalReportTimeoutSeconds must be greater than zero.");
+        }
+
+        if (options.ProjectionEventBatchSize <= 0 || options.ProjectionEventBatchSize > 2_000)
+        {
+            errors.Add("Dashboard.ProjectionEventBatchSize must be between 1 and 2000.");
         }
     }
 

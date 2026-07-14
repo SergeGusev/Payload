@@ -1,3 +1,18 @@
+## Active Update 2026-07-14 WebSocket Side-Effect Queue And Projection Lock Mitigation
+Goal: Remove verified database side effects from the critical WebSocket receive loop, reduce diagnostic write volume and Dashboard projection lock duration, and add diagnostics needed for production verification.
+Status: Completed
+Done:
+- Moved resolved-event recording, trade diagnostics, optional raw persistence, Paper order/position updates, and API-error persistence from the WebSocket receive loop into a hosted side-effect queue with one update worker and one diagnostic worker.
+- Preserved per-asset processing order. The queue coalesces only replaceable quote updates when raw persistence is disabled, the exposure cache is initialized, and the exact asset has no open Paper order; LastTrade, resolution, open-order, unknown-exposure, persistence-enabled, and boundary-crossing updates remain non-coalescible.
+- Captured the exact set of open Paper order IDs and frame receipt time before queueing. Deferred Paper fills are restricted to those IDs and evaluated at receipt time, while stale deferred position marks cannot overwrite a newer position.
+- Added queue depth, coalescing, overflow, delay, processing-time, and exact updater phase/operation diagnostics. Important diagnostics and non-replaceable updates are retained past configured soft bounds; routine frame samples are dropped first when their diagnostic capacity is full.
+- Replaced unconditional critical-frame persistence with configurable sampling while always retaining parse failures, PING/PONG, resolution, and large bulk frames.
+- Reduced each Dashboard projection transaction from a hardcoded `2000` events to a configurable `ProjectionEventBatchSize`, set to `250` in service configuration, shortening the verified event-lock transaction without changing projection semantics.
+- Updated dependency injection, configuration validation and sanitized output, README documentation, exposure-cache behavior, and focused tests for queue safety boundaries, diagnostics, deferred fills, configuration, and Dashboard batching.
+Next: Deploy this commit and verify the exact deployed revision, queue depth/delay/coalescing/overflow metrics, critical-frame and PONG gaps, updater phase/operation errors, Dashboard-related lock waits, raw-frame growth, and Paper entry/persistence correctness before changing worker concurrency or queue limits.
+Notes: The Release solution build passed with `0` warnings and `0` errors. Sanitized `--print-config` output contained the expected queue, sampling, and Dashboard batch values. The final full test run is `707 passed / 112 failed / 819 total`; all `112` failing test names match the saved baseline exactly, with zero new or removed failures. The final queue-boundary subset passed `15/15`. `git diff --check` was clean apart from line-ending conversion notices. No production database row, order, strategy, service process, deployment, or configuration was changed, so runtime improvement is not yet verified.
+Blockers: None for implementation. Production behavior remains unknown until deployment and runtime verification.
+
 ## Active Update 2026-07-14 Open Exposure Optimization Production Verification
 Goal: Verify the exact deployed open-exposure/database hot-path build, entry deadlines, persistence, PostgreSQL load, and remaining WebSocket risks on production.
 Status: Completed

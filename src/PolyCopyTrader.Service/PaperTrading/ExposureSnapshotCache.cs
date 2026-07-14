@@ -5,9 +5,11 @@ namespace PolyCopyTrader.Service.PaperTrading;
 
 public sealed class ExposureSnapshotCache(IAppRepository repository) : IExposureSnapshotCache
 {
+    private static readonly IReadOnlySet<Guid> EmptyPaperOrderIds = new HashSet<Guid>();
     private readonly object updateSync = new();
     private readonly SemaphoreSlim refreshLock = new(1, 1);
     private Dictionary<PaperPositionKey, int> paperPositionIndexes = [];
+    private Dictionary<string, HashSet<Guid>> openPaperOrderIdsByAsset = new(StringComparer.OrdinalIgnoreCase);
     private TradingExposureSnapshot? snapshot;
 
     public async Task<TradingExposureSnapshot> GetSnapshotAsync(CancellationToken cancellationToken = default)
@@ -44,6 +46,24 @@ public sealed class ExposureSnapshotCache(IAppRepository repository) : IExposure
         }
     }
 
+    public bool TryGetOpenPaperOrderIds(string assetId, out IReadOnlySet<Guid> orderIds)
+    {
+        lock (updateSync)
+        {
+            if (Volatile.Read(ref snapshot) is null)
+            {
+                orderIds = EmptyPaperOrderIds;
+                return false;
+            }
+
+            orderIds = !string.IsNullOrWhiteSpace(assetId) &&
+                openPaperOrderIdsByAsset.TryGetValue(assetId.Trim(), out var matchingOrderIds)
+                    ? matchingOrderIds
+                    : EmptyPaperOrderIds;
+            return true;
+        }
+    }
+
     public async Task RefreshAsync(CancellationToken cancellationToken = default)
     {
         await refreshLock.WaitAsync(cancellationToken);
@@ -66,6 +86,7 @@ public sealed class ExposureSnapshotCache(IAppRepository repository) : IExposure
             lock (updateSync)
             {
                 paperPositionIndexes = CreatePaperPositionIndexes(refreshedSnapshot.PaperPositions);
+                openPaperOrderIdsByAsset = CreateOpenPaperOrderIdsByAsset(refreshedSnapshot.OpenPaperOrders);
                 Volatile.Write(ref snapshot, refreshedSnapshot);
             }
         }
@@ -107,6 +128,8 @@ public sealed class ExposureSnapshotCache(IAppRepository repository) : IExposure
                     openOrdersById.Remove(order.Id);
                 }
             }
+
+            openPaperOrderIdsByAsset = CreateOpenPaperOrderIdsByAsset(openOrdersById.Values);
 
             Volatile.Write(
                 ref snapshot,
@@ -240,6 +263,29 @@ public sealed class ExposureSnapshotCache(IAppRepository repository) : IExposure
         }
 
         return indexes;
+    }
+
+    private static Dictionary<string, HashSet<Guid>> CreateOpenPaperOrderIdsByAsset(IEnumerable<PaperOrder> orders)
+    {
+        var orderIdsByAsset = new Dictionary<string, HashSet<Guid>>(StringComparer.OrdinalIgnoreCase);
+        foreach (var order in orders.Where(IsOpenPaperOrder))
+        {
+            var assetId = order.AssetId.Trim();
+            if (assetId.Length == 0)
+            {
+                continue;
+            }
+
+            if (!orderIdsByAsset.TryGetValue(assetId, out var orderIds))
+            {
+                orderIds = [];
+                orderIdsByAsset[assetId] = orderIds;
+            }
+
+            orderIds.Add(order.Id);
+        }
+
+        return orderIdsByAsset;
     }
 
     private readonly record struct PaperPositionKey(string CopiedTraderWallet, string AssetId)

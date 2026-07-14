@@ -159,6 +159,8 @@ public sealed class DashboardSnapshotTests
             "PostgresDashboardProjectionRepository.Reconciliation.cs");
 
         Assert.Contains("ApplyPendingEventsAsync", projectionWorker, StringComparison.Ordinal);
+        Assert.Contains("options.ProjectionEventBatchSize", projectionWorker, StringComparison.Ordinal);
+        Assert.DoesNotContain("EventBatchSize = 2_000", projectionWorker, StringComparison.Ordinal);
         Assert.Contains("ExpireRecentFactsAsync", projectionWorker, StringComparison.Ordinal);
         Assert.DoesNotContain("GetStrategyPerformanceAsync", projectionWorker, StringComparison.Ordinal);
         Assert.DoesNotContain("GetStrategyRecentPerformanceAsync", projectionWorker, StringComparison.Ordinal);

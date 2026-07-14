@@ -347,6 +347,16 @@ public sealed class MarketDataWebSocketOptions
 
     public bool PersistMarketDataEvents { get; init; }
 
+    public int SideEffectMaxPendingUpdatesPerAsset { get; init; } = 32;
+
+    public int SideEffectDiagnosticQueueCapacity { get; init; } = 256;
+
+    public int SideEffectMetricsIntervalSeconds { get; init; } = 30;
+
+    public int SideEffectSlowProcessingMilliseconds { get; init; } = 1_000;
+
+    public int CriticalFrameDiagnosticSampleEvery { get; init; } = 100;
+
     public int StatusPersistIntervalSeconds { get; init; } = 60;
 
     public int StrongSignalMinimumScore { get; init; } = 90;
@@ -567,6 +577,8 @@ public sealed class DashboardOptions
     public bool StrategiesOnlyMode { get; init; } = true;
 
     public int OptionalReportTimeoutSeconds { get; init; } = 8;
+
+    public int ProjectionEventBatchSize { get; init; } = 250;
 
     public string DefaultDatabaseSource { get; init; } = "Local database";
 }

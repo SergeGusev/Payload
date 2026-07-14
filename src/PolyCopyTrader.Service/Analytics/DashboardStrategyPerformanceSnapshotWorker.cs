@@ -1,13 +1,14 @@
+using PolyCopyTrader.Domain.Configuration;
 using PolyCopyTrader.Storage;
 
 namespace PolyCopyTrader.Service.Analytics;
 
 public sealed class DashboardStrategyPerformanceSnapshotWorker(
     ILogger<DashboardStrategyPerformanceSnapshotWorker> logger,
+    DashboardOptions options,
     IDashboardProjectionRepository projection,
     IAppRepository repository) : BackgroundService
 {
-    private const int EventBatchSize = 2_000;
     private const int ExpiryBatchSize = 5_000;
     private static readonly TimeSpan IdleDelay = TimeSpan.FromSeconds(1);
     private static readonly TimeSpan ExpiryCadence = TimeSpan.FromSeconds(5);
@@ -37,7 +38,9 @@ public sealed class DashboardStrategyPerformanceSnapshotWorker(
                     continue;
                 }
 
-                var eventBatch = await projection.ApplyPendingEventsAsync(EventBatchSize, stoppingToken);
+                var eventBatch = await projection.ApplyPendingEventsAsync(
+                    options.ProjectionEventBatchSize,
+                    stoppingToken);
                 if (eventBatch.EventsApplied > 0 || eventBatch.ReconciliationsQueued > 0)
                 {
                     logger.LogInformation(

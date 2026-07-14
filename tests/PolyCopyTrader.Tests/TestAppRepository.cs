@@ -249,6 +249,8 @@ internal sealed class TestAppRepository : IAppRepository
 
     public bool ThrowOnAddApiError { get; set; }
 
+    public bool ThrowOnUpsertPaperPosition { get; set; }
+
     public bool ThrowOnGetCryptoUpDown5mWebSocketResolvedMarkets { get; set; }
 
     private int getCryptoUpDown5mWebSocketResolvedMarketsCalls;
@@ -1306,6 +1308,11 @@ internal sealed class TestAppRepository : IAppRepository
 
     public Task UpsertPaperPositionAsync(PaperPosition position, CancellationToken cancellationToken = default)
     {
+        if (ThrowOnUpsertPaperPosition)
+        {
+            throw new InvalidOperationException("simulated paper position upsert failure");
+        }
+
         lock (sync)
         {
             PaperPositions.RemoveAll(item =>

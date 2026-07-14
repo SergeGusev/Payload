@@ -14,6 +14,8 @@ public interface IExposureSnapshotCache
 
     PaperPosition? GetPaperPosition(string copiedTraderWallet, string assetId);
 
+    bool TryGetOpenPaperOrderIds(string assetId, out IReadOnlySet<Guid> orderIds);
+
     Task RefreshAsync(CancellationToken cancellationToken = default);
 
     void ApplyPaperOrder(PaperOrder order);

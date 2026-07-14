@@ -6,6 +6,17 @@ namespace PolyCopyTrader.Tests;
 public sealed class ExposureSnapshotCacheTests
 {
     [Fact]
+    public void TryGetOpenPaperOrderIds_ReturnsUnknownBeforeInitialLoad()
+    {
+        var cache = new ExposureSnapshotCache(new TestAppRepository());
+
+        var initialized = cache.TryGetOpenPaperOrderIds("asset-1", out var orderIds);
+
+        Assert.False(initialized);
+        Assert.Empty(orderIds);
+    }
+
+    [Fact]
     public async Task GetSnapshotAsync_LoadsOpenExposureFromRepository()
     {
         var repository = new TestAppRepository();
@@ -28,6 +39,8 @@ public sealed class ExposureSnapshotCacheTests
         Assert.Equal(0, repository.GetPaperPositionsCalls);
         Assert.Single(snapshot.OpenLiveOrders);
         Assert.Equal(openLiveOrder.Id, snapshot.OpenLiveOrders[0].Id);
+        Assert.True(cache.TryGetOpenPaperOrderIds("ASSET-1", out var openPaperOrderIds));
+        Assert.Equal(new HashSet<Guid> { openPaperOrder.Id }, openPaperOrderIds);
     }
 
     [Fact]
@@ -64,6 +77,8 @@ public sealed class ExposureSnapshotCacheTests
         var snapshot = await cache.GetSnapshotAsync();
 
         Assert.Empty(snapshot.OpenPaperOrders);
+        Assert.True(cache.TryGetOpenPaperOrderIds("asset-1", out var openPaperOrderIds));
+        Assert.Empty(openPaperOrderIds);
         Assert.Equal(25m, Assert.Single(snapshot.PaperPositions).SizeShares);
         Assert.Empty(snapshot.OpenLiveOrders);
     }
@@ -96,6 +111,10 @@ public sealed class ExposureSnapshotCacheTests
         Assert.Contains(snapshot.OpenPaperOrders, order => order.Id == firstOpenPaperOrder.Id);
         Assert.Contains(snapshot.OpenPaperOrders, order => order.Id == secondOpenPaperOrder.Id);
         Assert.DoesNotContain(snapshot.OpenPaperOrders, order => order.Id == closedPaperOrder.Id);
+        Assert.True(cache.TryGetOpenPaperOrderIds("asset-1", out var openPaperOrderIds));
+        Assert.Equal(
+            new HashSet<Guid> { firstOpenPaperOrder.Id, secondOpenPaperOrder.Id },
+            openPaperOrderIds);
         Assert.Equal(2, snapshot.PaperPositions.Count);
         Assert.Contains(snapshot.PaperPositions, position => position is { AssetId: "asset-1", SizeShares: 25m });
         Assert.Contains(snapshot.PaperPositions, position => position is { AssetId: "asset-2", SizeShares: 30m });

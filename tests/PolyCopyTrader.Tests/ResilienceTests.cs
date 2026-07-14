@@ -240,9 +240,9 @@ public sealed class ResilienceTests
             assetProvider,
             new ActiveMarketAssetSubscriptionRegistry(),
             new NoOpBtcOrderBookLagDiagnosticService(),
-            new NoOpMarketTradeTickDiagnosticService(),
             cache,
-            new NoOpPaperTradingMarketDataUpdater(),
+            new ExposureSnapshotCache(new NoOpAppRepository()),
+            new NoOpMarketDataSideEffectQueue(),
             new NoOpAppRepository());
 
         await service.StartAsync(CancellationToken.None);
@@ -458,14 +458,6 @@ public sealed class ResilienceTests
         }
     }
 
-    private sealed class NoOpMarketTradeTickDiagnosticService : IMarketTradeTickDiagnosticService
-    {
-        public Task RecordAsync(MarketDataUpdate update, CancellationToken cancellationToken = default)
-        {
-            return Task.CompletedTask;
-        }
-    }
-
     private sealed class NoOpBtcOrderBookLagDiagnosticService : IBtcOrderBookLagDiagnosticService
     {
         public void RecordBinanceTrade(BtcUsdReferencePricePoint point)
@@ -477,11 +469,33 @@ public sealed class ResilienceTests
         }
     }
 
-    private sealed class NoOpPaperTradingMarketDataUpdater : IPaperTradingMarketDataUpdater
+    private sealed class NoOpMarketDataSideEffectQueue : IMarketDataSideEffectQueue
     {
-        public Task ApplyUpdateAsync(MarketDataUpdate update, CancellationToken cancellationToken = default)
+        public MarketDataSideEffectEnqueueOutcome EnqueueUpdate(
+            string component,
+            MarketDataUpdate update,
+            ActiveMarketAssetSnapshot? activeMarketSnapshot,
+            DateTimeOffset receivedAtUtc,
+            IReadOnlySet<Guid>? eligiblePaperOrderIds)
         {
-            return Task.CompletedTask;
+            return MarketDataSideEffectEnqueueOutcome.Enqueued;
+        }
+
+        public MarketDataSideEffectEnqueueOutcome EnqueueFrameDiagnostic(
+            MarketWebSocketFrameDiagnostic diagnostic,
+            bool important)
+        {
+            return MarketDataSideEffectEnqueueOutcome.Enqueued;
+        }
+
+        public MarketDataSideEffectEnqueueOutcome EnqueueApiError(ApiError apiError)
+        {
+            return MarketDataSideEffectEnqueueOutcome.Enqueued;
+        }
+
+        public MarketDataSideEffectQueueMetrics GetMetrics()
+        {
+            return new MarketDataSideEffectQueueMetrics(0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0);
         }
     }
 

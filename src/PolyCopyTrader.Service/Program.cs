@@ -377,6 +377,9 @@ builder.Services.AddSingleton<IExposureSnapshotCache, ExposureSnapshotCache>();
 builder.Services.AddSingleton<PaperEntryPersistenceQueue>();
 builder.Services.AddSingleton<IPaperEntryPersistenceQueue>(sp => sp.GetRequiredService<PaperEntryPersistenceQueue>());
 builder.Services.AddSingleton<IPaperTradingMarketDataUpdater, PaperTradingMarketDataUpdater>();
+builder.Services.AddSingleton<IMarketDataSideEffectHandler, MarketDataSideEffectHandler>();
+builder.Services.AddSingleton<MarketDataSideEffectQueue>();
+builder.Services.AddSingleton<IMarketDataSideEffectQueue>(sp => sp.GetRequiredService<MarketDataSideEffectQueue>());
 builder.Services.AddSingleton<ConservativePaperGtdFillEstimator>();
 builder.Services.AddSingleton<IPaperTradingProcessor, PaperTradingProcessor>();
 builder.Services.AddSingleton<IPaperSettlementProcessor, PaperSettlementProcessor>();
@@ -407,6 +410,7 @@ builder.Services.AddHostedService<StartupSafetyCheckService>();
 // BTC 5m focused mode: HTTP-log retention is not part of BTC Up or Down 5m strategy execution.
 // builder.Services.AddHostedService<PolymarketHttpLogRetentionWorker>();
 builder.Services.AddHostedService(sp => sp.GetRequiredService<PaperEntryPersistenceQueue>());
+builder.Services.AddHostedService(sp => sp.GetRequiredService<MarketDataSideEffectQueue>());
 builder.Services.AddHostedService<BotWorker>();
 builder.Services.AddHostedService<DashboardStrategyPerformanceSnapshotWorker>();
 builder.Services.AddHostedService<DashboardStrategyProjectionReconciliationWorker>();

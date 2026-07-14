@@ -12682,6 +12682,17 @@ public sealed class BtcUpDown5mPaperStrategyProcessorTests
                 string.Equals(position.AssetId, assetId, StringComparison.OrdinalIgnoreCase));
         }
 
+        public bool TryGetOpenPaperOrderIds(string assetId, out IReadOnlySet<Guid> orderIds)
+        {
+            orderIds = appliedPaperOrders
+                .Where(order =>
+                    (order.Status is PaperOrderStatus.Pending or PaperOrderStatus.PartiallyFilled) &&
+                    string.Equals(order.AssetId, assetId, StringComparison.OrdinalIgnoreCase))
+                .Select(order => order.Id)
+                .ToHashSet();
+            return true;
+        }
+
         public Task RefreshAsync(CancellationToken cancellationToken = default)
         {
             return Task.CompletedTask;

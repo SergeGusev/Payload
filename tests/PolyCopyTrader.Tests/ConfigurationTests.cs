@@ -22,6 +22,11 @@ public sealed class ConfigurationTests
         Assert.Equal(90, configuration.MarketDataWebSocket.WatchdogStaleSeconds);
         Assert.False(configuration.MarketDataWebSocket.PersistOrderBookSnapshots);
         Assert.False(configuration.MarketDataWebSocket.PersistMarketDataEvents);
+        Assert.Equal(32, configuration.MarketDataWebSocket.SideEffectMaxPendingUpdatesPerAsset);
+        Assert.Equal(256, configuration.MarketDataWebSocket.SideEffectDiagnosticQueueCapacity);
+        Assert.Equal(30, configuration.MarketDataWebSocket.SideEffectMetricsIntervalSeconds);
+        Assert.Equal(1_000, configuration.MarketDataWebSocket.SideEffectSlowProcessingMilliseconds);
+        Assert.Equal(100, configuration.MarketDataWebSocket.CriticalFrameDiagnosticSampleEvery);
         Assert.Equal(60, configuration.MarketDataWebSocket.StatusPersistIntervalSeconds);
         Assert.Equal(1000, configuration.Polymarket.RetryBaseDelayMilliseconds);
         Assert.True(configuration.PolymarketHttpLogging.Enabled);
@@ -238,6 +243,7 @@ public sealed class ConfigurationTests
         Assert.Equal(60, configuration.Dashboard.StrategyRefreshIntervalSeconds);
         Assert.True(configuration.Dashboard.StrategiesOnlyMode);
         Assert.Equal(8, configuration.Dashboard.OptionalReportTimeoutSeconds);
+        Assert.Equal(250, configuration.Dashboard.ProjectionEventBatchSize);
     }
 
     [Fact]
@@ -264,13 +270,19 @@ public sealed class ConfigurationTests
                 MaxShardConnections = -1,
                 WatchdogIntervalSeconds = 0,
                 WatchdogStaleSeconds = 1,
+                SideEffectMaxPendingUpdatesPerAsset = 0,
+                SideEffectDiagnosticQueueCapacity = 0,
+                SideEffectMetricsIntervalSeconds = 0,
+                SideEffectSlowProcessingMilliseconds = 0,
+                CriticalFrameDiagnosticSampleEvery = -1,
                 StatusPersistIntervalSeconds = 0
             },
             Dashboard = new DashboardOptions
             {
                 RefreshIntervalSeconds = 0,
                 StrategyRefreshIntervalSeconds = 0,
-                OptionalReportTimeoutSeconds = 0
+                OptionalReportTimeoutSeconds = 0,
+                ProjectionEventBatchSize = 0
             },
             PolymarketHttpLogging = new PolymarketHttpLoggingOptions
             {
@@ -298,9 +310,15 @@ public sealed class ConfigurationTests
         Assert.Contains(errors, error => error.Contains("MarketDataWebSocket.WatchdogIntervalSeconds", StringComparison.Ordinal));
         Assert.Contains(errors, error => error.Contains("MarketDataWebSocket.WatchdogStaleSeconds", StringComparison.Ordinal));
         Assert.Contains(errors, error => error.Contains("MarketDataWebSocket.StatusPersistIntervalSeconds", StringComparison.Ordinal));
+        Assert.Contains(errors, error => error.Contains("MarketDataWebSocket.SideEffectMaxPendingUpdatesPerAsset", StringComparison.Ordinal));
+        Assert.Contains(errors, error => error.Contains("MarketDataWebSocket.SideEffectDiagnosticQueueCapacity", StringComparison.Ordinal));
+        Assert.Contains(errors, error => error.Contains("MarketDataWebSocket.SideEffectMetricsIntervalSeconds", StringComparison.Ordinal));
+        Assert.Contains(errors, error => error.Contains("MarketDataWebSocket.SideEffectSlowProcessingMilliseconds", StringComparison.Ordinal));
+        Assert.Contains(errors, error => error.Contains("MarketDataWebSocket.CriticalFrameDiagnosticSampleEvery", StringComparison.Ordinal));
         Assert.Contains(errors, error => error.Contains("Dashboard.RefreshIntervalSeconds", StringComparison.Ordinal));
         Assert.Contains(errors, error => error.Contains("Dashboard.StrategyRefreshIntervalSeconds", StringComparison.Ordinal));
         Assert.Contains(errors, error => error.Contains("Dashboard.OptionalReportTimeoutSeconds", StringComparison.Ordinal));
+        Assert.Contains(errors, error => error.Contains("Dashboard.ProjectionEventBatchSize", StringComparison.Ordinal));
         Assert.Contains(errors, error => error.Contains("PolymarketHttpLogging.SuccessfulRequestSampleRate", StringComparison.Ordinal));
         Assert.Contains(errors, error => error.Contains("PolymarketHttpLogging.CleanupIntervalMinutes", StringComparison.Ordinal));
         Assert.Contains(errors, error => error.Contains("PolymarketHttpLogging.CleanupBatchSize", StringComparison.Ordinal));
@@ -1098,6 +1116,8 @@ public sealed class ConfigurationTests
 
         Assert.Contains("Mode:", summary);
         Assert.Contains("Paper runs in live mode:", summary);
+        Assert.Contains("Market WebSocket side-effect max pending updates per asset:", summary);
+        Assert.Contains("Dashboard projection event batch size:", summary);
         Assert.DoesNotContain("private", summary, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain("secret", summary, StringComparison.OrdinalIgnoreCase);
     }

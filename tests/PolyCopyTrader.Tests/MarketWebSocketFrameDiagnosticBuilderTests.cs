@@ -1,4 +1,6 @@
 using System.Text.Json;
+using PolyCopyTrader.Domain;
+using PolyCopyTrader.Domain.Configuration;
 using PolyCopyTrader.Polymarket;
 using PolyCopyTrader.Service.MarketData;
 
@@ -6,6 +8,57 @@ namespace PolyCopyTrader.Tests;
 
 public sealed class MarketWebSocketFrameDiagnosticBuilderTests
 {
+    [Fact]
+    public void Sampler_CapturesOnlyEveryConfiguredRoutineFrame()
+    {
+        var sampler = new MarketWebSocketFrameDiagnosticSampler(new MarketDataWebSocketOptions
+        {
+            CriticalFrameDiagnosticSampleEvery = 3
+        });
+
+        Assert.False(sampler.Evaluate("{}", [], parseSucceeded: true).ShouldCapture);
+        Assert.False(sampler.Evaluate("{}", [], parseSucceeded: true).ShouldCapture);
+        var third = sampler.Evaluate("{}", [], parseSucceeded: true);
+
+        Assert.True(third.ShouldCapture);
+        Assert.False(third.Important);
+        Assert.Equal("routine_sample", third.Reason);
+    }
+
+    [Fact]
+    public void Sampler_AlwaysCapturesImportantFramesWhenRoutineSamplingIsDisabled()
+    {
+        var sampler = new MarketWebSocketFrameDiagnosticSampler(new MarketDataWebSocketOptions
+        {
+            CriticalFrameDiagnosticSampleEvery = 0
+        });
+        var resolvedUpdate = new MarketDataUpdate(
+            MarketDataEventType.MarketResolved,
+            "market_resolved",
+            "asset-1",
+            "condition-1",
+            null,
+            null,
+            null,
+            null,
+            null,
+            TradeSide.Unknown,
+            true,
+            DateTimeOffset.UtcNow);
+        var bulkUpdates = Enumerable.Repeat(resolvedUpdate with
+        {
+            EventType = MarketDataEventType.BestBidAsk,
+            RawEventType = "best_bid_ask",
+            MarketResolved = false
+        }, 100).ToArray();
+
+        Assert.True(sampler.Evaluate("not-json", null, parseSucceeded: false).Important);
+        Assert.True(sampler.Evaluate("PONG", [], parseSucceeded: true).Important);
+        Assert.True(sampler.Evaluate("{}", [resolvedUpdate], parseSucceeded: true).Important);
+        Assert.True(sampler.Evaluate("[]", bulkUpdates, parseSucceeded: true).Important);
+        Assert.False(sampler.Evaluate("{}", [], parseSucceeded: true).ShouldCapture);
+    }
+
     [Fact]
     public void Build_ExtractsEventTypesAssetIdsAndResolvedFlags()
     {

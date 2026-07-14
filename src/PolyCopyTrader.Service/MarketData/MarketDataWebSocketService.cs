@@ -5,6 +5,7 @@ using PolyCopyTrader.Domain;
 using PolyCopyTrader.Domain.Configuration;
 using PolyCopyTrader.Polymarket;
 using PolyCopyTrader.Service.Diagnostics;
+using PolyCopyTrader.Service.PaperTrading;
 using PolyCopyTrader.Storage;
 
 namespace PolyCopyTrader.Service.MarketData;
@@ -18,15 +19,13 @@ public sealed class MarketDataWebSocketService(
     IRelevantMarketAssetProvider assetProvider,
     IActiveMarketAssetSubscriptionRegistry activeMarketAssetSubscriptionRegistry,
     IBtcOrderBookLagDiagnosticService btcOrderBookLagDiagnosticService,
-    IMarketTradeTickDiagnosticService tradeTickDiagnosticService,
     IMarketDataCache marketDataCache,
-    IPaperTradingMarketDataUpdater paperTradingUpdater,
-    IAppRepository repository,
-    ICryptoUpDown5mMarketResolvedEventRecorder? cryptoUpDown5mMarketResolvedEventRecorder = null) : BackgroundService
+    IExposureSnapshotCache exposureSnapshotCache,
+    IMarketDataSideEffectQueue sideEffectQueue,
+    IAppRepository repository) : BackgroundService
 {
     private const string ComponentName = "PolymarketMarketWebSocket";
-    private readonly ICryptoUpDown5mMarketResolvedEventRecorder cryptoResolvedEventRecorder =
-        cryptoUpDown5mMarketResolvedEventRecorder ?? NoOpCryptoUpDown5mMarketResolvedEventRecorder.Instance;
+    private readonly MarketWebSocketFrameDiagnosticSampler frameDiagnosticSampler = new(options);
     private readonly ConcurrentDictionary<string, MarketDataWebSocketShardRunner> shardRunners = new(StringComparer.OrdinalIgnoreCase);
     private readonly MarketDataWebSocketShardAllocator shardAllocator = new(new MarketDataWebSocketOptionsAdapter(
         options.ShardMaxAssets,
@@ -253,7 +252,7 @@ public sealed class MarketDataWebSocketService(
         return TimeSpan.FromSeconds(Math.Min(delaySeconds, 10));
     }
 
-    private async Task ProcessTextMessageAsync(string component, string message, DateTimeOffset receivedAtUtc, CancellationToken cancellationToken)
+    private Task ProcessTextMessageAsync(string component, string message, DateTimeOffset receivedAtUtc, CancellationToken cancellationToken)
     {
         IReadOnlyList<MarketDataUpdate> updates;
         try
@@ -262,37 +261,38 @@ public sealed class MarketDataWebSocketService(
         }
         catch (JsonException ex)
         {
-            await TryRecordCriticalFrameDiagnosticAsync(
+            TryQueueCriticalFrameDiagnostic(
                 component,
                 message,
                 receivedAtUtc,
                 null,
                 parseSucceeded: false,
-                parseError: ex.Message,
-                cancellationToken);
+                parseError: ex.Message);
             logger.LogWarning(ex, "Market WebSocket shard {Component} message parsing failed.", component);
-            await TryRecordApiErrorAsync(component, "ParseMarketMessage", ex.Message, cancellationToken);
-            return;
+            TryQueueApiError(component, "ParseMarketMessage", ex.Message);
+            return Task.CompletedTask;
         }
 
-        await TryRecordCriticalFrameDiagnosticAsync(
+        TryQueueCriticalFrameDiagnostic(
             component,
             message,
             receivedAtUtc,
             updates,
             parseSucceeded: true,
-            parseError: null,
-            cancellationToken);
+            parseError: null);
 
         if (updates.Count == 0)
         {
-            return;
+            return Task.CompletedTask;
         }
 
         var processingStarted = Stopwatch.GetTimestamp();
         var failedUpdates = 0;
+        var queuedUpdates = 0;
+        var coalescedUpdates = 0;
         foreach (var update in updates)
         {
+            cancellationToken.ThrowIfCancellationRequested();
             try
             {
                 ActiveMarketAssetSnapshot? activeMarketSnapshot = null;
@@ -303,22 +303,41 @@ public sealed class MarketDataWebSocketService(
                     activeMarketSnapshot = snapshot;
                 }
 
-                await cryptoResolvedEventRecorder.RecordAsync(component, update, activeMarketSnapshot, receivedAtUtc, cancellationToken);
                 activeMarketAssetSubscriptionRegistry.ApplyMarketDataUpdate(update);
                 marketDataCache.ApplyUpdate(update);
                 btcOrderBookLagDiagnosticService.RecordPolymarketTopOfBook(update, receivedAtUtc);
-                await tradeTickDiagnosticService.RecordAsync(update, cancellationToken);
-                if (options.PersistOrderBookSnapshots && update.OrderBookSnapshot is not null)
+                IReadOnlySet<Guid>? eligiblePaperOrderIds = null;
+                if (exposureSnapshotCache.TryGetOpenPaperOrderIds(
+                    update.AssetId ?? string.Empty,
+                    out var capturedPaperOrderIds))
                 {
-                    await repository.AddOrderBookSnapshotAsync(update.OrderBookSnapshot, cancellationToken);
+                    eligiblePaperOrderIds = capturedPaperOrderIds;
                 }
 
-                if (options.PersistMarketDataEvents)
+                var outcome = sideEffectQueue.EnqueueUpdate(
+                    component,
+                    update,
+                    activeMarketSnapshot,
+                    receivedAtUtc,
+                    eligiblePaperOrderIds);
+                switch (outcome)
                 {
-                    await repository.AddMarketDataEventAsync(ToMarketDataEvent(update), cancellationToken);
+                    case MarketDataSideEffectEnqueueOutcome.Enqueued:
+                        queuedUpdates++;
+                        break;
+                    case MarketDataSideEffectEnqueueOutcome.Coalesced:
+                        coalescedUpdates++;
+                        break;
+                    default:
+                        failedUpdates++;
+                        logger.LogWarning(
+                            "Market-data side effect was not accepted. Component={Component} EventType={EventType} AssetId={AssetId} Outcome={Outcome}",
+                            component,
+                            update.EventType,
+                            update.AssetId,
+                            outcome);
+                        break;
                 }
-
-                await paperTradingUpdater.ApplyUpdateAsync(update, cancellationToken);
             }
             catch (OperationCanceledException)
             {
@@ -327,8 +346,8 @@ public sealed class MarketDataWebSocketService(
             catch (Exception ex)
             {
                 failedUpdates++;
-                logger.LogError(ex, "Failed to persist or dispatch market data update {EventType} from {Component}.", update.EventType, component);
-                await TryRecordApiErrorAsync(component, "ProcessMarketDataUpdate", ex.Message, cancellationToken);
+                logger.LogError(ex, "Failed to dispatch market data update {EventType} from {Component}.", update.EventType, component);
+                TryQueueApiError(component, "DispatchMarketDataUpdate", ex.Message);
             }
         }
 
@@ -336,9 +355,11 @@ public sealed class MarketDataWebSocketService(
         if (processingDuration >= TimeSpan.FromSeconds(1))
         {
             logger.LogWarning(
-                "Market WebSocket frame processing was slow. Component={Component} Updates={Updates} FailedUpdates={FailedUpdates} PayloadChars={PayloadChars} DurationMs={DurationMs}",
+                "Market WebSocket frame dispatch was slow. Component={Component} Updates={Updates} QueuedUpdates={QueuedUpdates} CoalescedUpdates={CoalescedUpdates} FailedUpdates={FailedUpdates} PayloadChars={PayloadChars} DurationMs={DurationMs}",
                 component,
                 updates.Count,
+                queuedUpdates,
+                coalescedUpdates,
                 failedUpdates,
                 message.Length,
                 processingDuration.TotalMilliseconds);
@@ -346,49 +367,69 @@ public sealed class MarketDataWebSocketService(
         else if (updates.Count >= 100)
         {
             logger.LogInformation(
-                "Market WebSocket initial/bulk frame processed. Component={Component} Updates={Updates} FailedUpdates={FailedUpdates} PayloadChars={PayloadChars} DurationMs={DurationMs}",
+                "Market WebSocket initial/bulk frame dispatched. Component={Component} Updates={Updates} QueuedUpdates={QueuedUpdates} CoalescedUpdates={CoalescedUpdates} FailedUpdates={FailedUpdates} PayloadChars={PayloadChars} DurationMs={DurationMs}",
                 component,
                 updates.Count,
+                queuedUpdates,
+                coalescedUpdates,
                 failedUpdates,
                 message.Length,
                 processingDuration.TotalMilliseconds);
         }
+
+        return Task.CompletedTask;
     }
 
-    private async Task TryRecordCriticalFrameDiagnosticAsync(
+    private void TryQueueCriticalFrameDiagnostic(
         string component,
         string message,
         DateTimeOffset receivedAtUtc,
         IReadOnlyCollection<MarketDataUpdate>? updates,
         bool parseSucceeded,
-        string? parseError,
-        CancellationToken cancellationToken)
+        string? parseError)
     {
         if (!string.Equals(component, CriticalCryptoUpDown5mAssetSelector.ComponentName, StringComparison.OrdinalIgnoreCase))
         {
             return;
         }
 
-        try
+        var samplingDecision = frameDiagnosticSampler.Evaluate(message, updates, parseSucceeded);
+        if (!samplingDecision.ShouldCapture)
         {
-            await repository.AddMarketWebSocketFrameDiagnosticAsync(
-                MarketWebSocketFrameDiagnosticBuilder.Build(
-                    component,
-                    message,
-                    receivedAtUtc,
-                    updates,
-                    parseSucceeded,
-                    parseError),
-                cancellationToken);
+            return;
         }
-        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+
+        var outcome = sideEffectQueue.EnqueueFrameDiagnostic(
+            MarketWebSocketFrameDiagnosticBuilder.Build(
+                component,
+                message,
+                receivedAtUtc,
+                updates,
+                parseSucceeded,
+                parseError),
+            samplingDecision.Important);
+        if (outcome is MarketDataSideEffectEnqueueOutcome.Dropped or MarketDataSideEffectEnqueueOutcome.Rejected)
         {
-            throw;
+            logger.LogWarning(
+                "Critical market WebSocket frame diagnostic was not queued. Component={Component} Reason={Reason} Important={Important} Outcome={Outcome}",
+                component,
+                samplingDecision.Reason,
+                samplingDecision.Important,
+                outcome);
         }
-        catch (Exception ex)
+    }
+
+    private void TryQueueApiError(string component, string operation, string message)
+    {
+        var outcome = sideEffectQueue.EnqueueApiError(
+            new ApiError(Guid.NewGuid(), component, operation, message, DateTimeOffset.UtcNow));
+        if (outcome is MarketDataSideEffectEnqueueOutcome.Dropped or MarketDataSideEffectEnqueueOutcome.Rejected)
         {
-            logger.LogError(ex, "Failed to persist critical market WebSocket frame diagnostic.");
-            await TryRecordApiErrorAsync(component, "RecordFrameDiagnostic", ex.Message, cancellationToken);
+            logger.LogWarning(
+                "Market WebSocket API error was not queued. Component={Component} Operation={Operation} Outcome={Outcome}",
+                component,
+                operation,
+                outcome);
         }
     }
 
@@ -641,24 +682,6 @@ public sealed class MarketDataWebSocketService(
             TimeSpan.FromSeconds(options.StatusPersistIntervalSeconds);
     }
 
-    private async Task TryRecordApiErrorAsync(
-        string component,
-        string operation,
-        string message,
-        CancellationToken cancellationToken)
-    {
-        try
-        {
-            await repository.AddApiErrorAsync(
-                new ApiError(Guid.NewGuid(), component, operation, message, DateTimeOffset.UtcNow),
-                cancellationToken);
-        }
-        catch (Exception ex)
-        {
-            logger.LogError(ex, "Failed to persist market WebSocket API error for {Component}.", component);
-        }
-    }
-
     private static DateTimeOffset? MaxDate(IEnumerable<DateTimeOffset?> values)
     {
         return values
@@ -668,27 +691,5 @@ public sealed class MarketDataWebSocketService(
             .Max() is { } max && max != default
             ? max
             : null;
-    }
-
-    private static MarketDataEvent ToMarketDataEvent(MarketDataUpdate update)
-    {
-        var message = update.EventType switch
-        {
-            MarketDataEventType.Book => "Order book snapshot received.",
-            MarketDataEventType.PriceChange => "Price change received.",
-            MarketDataEventType.LastTradePrice => "Last trade price received.",
-            MarketDataEventType.BestBidAsk => "Best bid/ask received.",
-            MarketDataEventType.MarketResolved => "Market resolved event received.",
-            MarketDataEventType.TickSizeChange => "Tick size change received.",
-            _ => $"Market data event received: {update.RawEventType}."
-        };
-
-        return new MarketDataEvent(
-            Guid.NewGuid(),
-            update.EventType,
-            update.AssetId,
-            update.ConditionId,
-            message,
-            DateTimeOffset.UtcNow);
     }
 }
