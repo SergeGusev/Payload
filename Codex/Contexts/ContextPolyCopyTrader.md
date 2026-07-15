@@ -1,3 +1,19 @@
+## Active Update 2026-07-15 Best Child And Child ROI Daily Paper PnL Excel Report Refresh
+Goal: Create a refreshed one-sheet Excel report with UTC daily Paper PnL for the highest-all-history-PnL strategy in each BTC/ETH/SOL Child and Child ROI Dashboard category.
+Status: Completed
+Done:
+- Reverified the exact category contract from `StrategyDisplayCategories` and catalog tests: six non-Progress categories (`BTC/ETH/SOL` x `Child/Child ROI`), each containing `N=1..24`, for `144` candidate strategies total.
+- Captured one production PostgreSQL `REPEATABLE READ, READ ONLY` snapshot from exact endpoint `192.168.0.101:5432/polycopytrader` at cutoff `2026-07-15T18:47:05.887967Z` and evaluated `87,451` settled Paper rows over eight continuous UTC dates (`2026-07-08` through partial `2026-07-15`).
+- Independently reconciled raw-row aggregates against server SQL for all `144` candidates, matched all six local winners against a separate server-side ranking, and matched every selected strategy/date value against an independent server daily aggregate.
+- Selected and sorted the unique category winners by total Paper PnL ascending: BTC `N=8` Child `+$164.81492097`; SOL `N=21` Child ROI `+$174.41278264`; BTC `N=5` Child ROI `+$276.46113769`; ETH `N=4` Child `+$279.59542828`; SOL `N=22` Child `+$301.63961411`; ETH `N=6` Child ROI `+$311.50840757`.
+- Created `outputs/child-child-roi-best-daily-paper-pnl-report-2026-07-15/reports/child-child-roi-best-daily-paper-pnl-2026-07-15.xlsx` with one `Daily PnL` sheet, formula-driven daily totals, formula-driven strategy totals, and formula-driven grand total `$1,508.43229126`.
+- Applied red text on a white background with an explicit minus sign to negative values and independently verified all `9` negative financial cells through Excel `DisplayFormat`.
+- Verified through Excel that the workbook has one `10x8` used range, `63` numeric financial cells, `15` exact total formulas, zero formula-error cells, exact source values/totals, and frozen first row/column (`FreezePanes=True`, `SplitRow=1`, `SplitColumn=1`). OpenXML independently confirmed `xSplit=1`, `ySplit=1`, `topLeftCell=B2`, and `state=frozen`.
+- Rendered the final workbook through Excel and visually verified legible headers, dates, values, negative signs/colors, daily totals, category totals, and grand total. Final SHA-256 is `8553A940FA30AC552906D807B2B961562868E61A8190C93A9593C132E879405E`.
+Next: None.
+Notes: The `2026-07-15` row is partial through the exact UTC cutoff. Production access was read-only; no database row, strategy setting, order, service process, deployment, product code, or configuration changed. Reproducible source exports, independent aggregate files, workbook builder, verification scripts, inspection output, and QA render are in the ignored output directory. Product tests were not required because product code was unchanged.
+Blockers: None.
+
 ## Active Update 2026-07-15 Projector Durable Inflight Queue Lock Fix
 Goal: Remove the verified long copied-performance queue-row lock from Paper position/settlement writes without losing or duplicating refresh obligations incorrectly.
 Status: Completed

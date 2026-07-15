@@ -66,3 +66,19 @@ Request:
 
 Result:
 Implemented the copied-performance queue-lock fix with a short durable pending-to-inflight claim transaction and a separate long aggregation transaction under one session advisory lock. New events no longer wait on the projector's queue-row lock, interrupted work is recovered before fresh work, and seed/cursor/projection/inflight acknowledgement remain atomic. Added deterministic PostgreSQL blocker-graph, concurrent settlement, cancellation/recovery, quota-precedence, and cleanup coverage; updated README and configuration documentation with downgrade handling. Disposable PostgreSQL tests passed `6/6` with verified database cleanup, focused tests passed, Release build completed with zero errors, and the final full suite retained the exact known `112`-failure baseline (`736` passed, zero new/missing failure names). No production state or deployment was changed.
+
+## 2026-07-15T18:50:47.8689003+00:00
+Request:
+Сделай Excel отчёт по Child и Child ROI стратегиям по всем трём валютам. На одной вкладке.
+
+Столбцы - стратегии с самым высоким Pnl в рамках валюты и типа, всего получится шесть стратегий, в отчете их нужно сгруппировать от самого низкого Pnl к самому высокому.
+
+В строках - даты
+В ячейках - Paper Pnl за эту дату. Отрицательные значения выделяются красным на белом фоне со знаком минус.
+
+Последний столбец - сумма по дню, последняя строчка - сумма по категории. На их пересечении - общий Total
+
+Первую строчку и первый столбец закрепи, чтобы не пропадали при скролллинге
+
+Result:
+Created a refreshed one-sheet Excel report from a production `REPEATABLE READ, READ ONLY` snapshot at `2026-07-15T18:47:05.887967Z`. Evaluated 87,451 settled Paper rows across all 144 non-Progress BTC/ETH/SOL Child and Child ROI candidates, independently matched all aggregates, six winners, and daily values against server SQL, and sorted the six selected columns by total PnL ascending. Excel verified one sheet, exact formula-driven daily/category/grand totals (`$1,508.43229126`), 63 numeric financial cells, 9 red-on-white explicit-minus negative cells, zero formula errors, and frozen first row/column. The final workbook was visually inspected and saved in the ignored output directory; production and product code were unchanged.
