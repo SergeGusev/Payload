@@ -1110,6 +1110,36 @@ public sealed class StorageTests
     }
 
     [Fact]
+    public void PostgresRepository_SinglePaperPositionMutationsUseWalletLockTransactionContract()
+    {
+        var source = ReadStorageRepositorySource();
+        var upsertStart = source.IndexOf("UpsertPaperPositionAsync", StringComparison.Ordinal);
+        var markStart = source.IndexOf("TryUpdatePaperPositionMarkAsync", upsertStart, StringComparison.Ordinal);
+        var batchMarkStart = source.IndexOf("TryUpdatePaperPositionMarksAsync", markStart, StringComparison.Ordinal);
+        Assert.True(upsertStart >= 0);
+        Assert.True(markStart > upsertStart);
+        Assert.True(batchMarkStart > markStart);
+
+        var upsertMethod = source[upsertStart..markStart];
+        var upsertTransaction = upsertMethod.IndexOf("BeginTransactionAsync", StringComparison.Ordinal);
+        var upsertLock = upsertMethod.IndexOf("LockPaperPositionKeysAsync", StringComparison.Ordinal);
+        var upsertWrite = upsertMethod.IndexOf("INSERT INTO paper_positions", StringComparison.Ordinal);
+        var upsertCommit = upsertMethod.IndexOf("transaction.CommitAsync", StringComparison.Ordinal);
+        Assert.True(upsertTransaction >= 0 && upsertLock > upsertTransaction);
+        Assert.True(upsertWrite > upsertLock && upsertCommit > upsertWrite);
+        Assert.Contains("command.Transaction = transaction", upsertMethod, StringComparison.Ordinal);
+
+        var markMethod = source[markStart..batchMarkStart];
+        var markTransaction = markMethod.IndexOf("BeginTransactionAsync", StringComparison.Ordinal);
+        var markLock = markMethod.IndexOf("LockPaperPositionKeysAsync", StringComparison.Ordinal);
+        var markWrite = markMethod.IndexOf("UPDATE paper_positions", StringComparison.Ordinal);
+        var markCommit = markMethod.IndexOf("transaction.CommitAsync", StringComparison.Ordinal);
+        Assert.True(markTransaction >= 0 && markLock > markTransaction);
+        Assert.True(markWrite > markLock && markCommit > markWrite);
+        Assert.Contains("command.Transaction = transaction", markMethod, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void PaperCopiedTraderPerformancePositionTriggers_OrderWalletQueueLocks()
     {
         var source = ReadRepositorySource(

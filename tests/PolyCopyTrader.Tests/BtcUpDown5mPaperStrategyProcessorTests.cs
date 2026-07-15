@@ -9876,6 +9876,195 @@ public sealed class BtcUpDown5mPaperStrategyProcessorTests
     }
 
     [Fact]
+    public async Task ProcessDueEntriesAsync_SharedCryptoLookupFailureDefersReferenceAverageBatchAndRetriesFreshNextPoll()
+    {
+        var now = new DateTimeOffset(2026, 7, 16, 12, 0, 0, TimeSpan.Zero);
+        var marketStartUtc = now.AddSeconds(30);
+        var timeProvider = new ManualTimeProvider(now);
+        var variants = new[]
+        {
+            StrategyIds.CryptoUpDown5mVariants.Single(variant =>
+                variant.Code == "sol_up_down_5m_down_bps_8_fak_premarket"),
+            StrategyIds.CryptoUpDown5mVariants.Single(variant =>
+                variant.Code == "sol_up_down_5m_down_bps_9_fak_premarket")
+        };
+        var repository = new TestAppRepository();
+        var market = CreateMarket(
+            marketStartUtc,
+            marketStartUtc.AddMinutes(5),
+            upPrice: 0.50m,
+            downPrice: 0.50m,
+            slug: $"sol-updown-5m-{marketStartUtc.ToUnixTimeSeconds().ToString(CultureInfo.InvariantCulture)}",
+            seriesSlug: "sol-up-or-down-5m",
+            question: "SOL Up or Down - transient reference-average test",
+            marketId: "sol-reference-retry-market",
+            conditionId: "sol-reference-retry-condition",
+            upAssetId: "sol-reference-retry-up",
+            downAssetId: "sol-reference-retry-down");
+        repository.PolymarketGammaMarkets.Add(market);
+        foreach (var variant in variants)
+        {
+            repository.StrategySettings[variant.Id] = StrategyRuntimeSettings.Default(variant.Id) with
+            {
+                PaperStakeAmount = 1m
+            };
+            repository.StrategyMarketPaperRuns.Add(CreateObservedRun(
+                variant,
+                market,
+                marketStartUtc,
+                now.AddSeconds(-1),
+                now));
+        }
+
+        var cryptoPriceClient = new FailingCryptoReferencePriceClient(
+            "SOL",
+            successPriceUsd: 149.80m,
+            snapshotPricesUsd: [150m]);
+        var averageProvider = new FakeCryptoReferencePriceAverageProvider();
+        averageProvider.SetFullAverages("SOL", 149m, 150m, 148m, 147m);
+        OrderBookSnapshot[] orderBooks =
+        [
+            OrderBook(
+                "sol-reference-retry-up",
+                [new OrderBookLevel(0.39m, 100m)],
+                [new OrderBookLevel(0.41m, 100m)],
+                now,
+                minOrderSize: 1m),
+            OrderBook(
+                "sol-reference-retry-down",
+                [new OrderBookLevel(0.58m, 100m)],
+                [new OrderBookLevel(0.60m, 100m)],
+                now,
+                minOrderSize: 1m)
+        ];
+        var processor = CreateProcessorCoreWithOptions(
+            repository,
+            [],
+            orderBooks,
+            _ => { },
+            orderBooks,
+            CreateBtcOptions(
+                paperTakerPricingEnabled: false,
+                variants.Select(variant => variant.Code).ToArray(),
+                maxConcurrentEntryDecisions: 4,
+                entryGraceSeconds: 10),
+            cryptoReferencePriceClient: cryptoPriceClient,
+            timeProvider: timeProvider,
+            cryptoReferencePriceAverageProvider: averageProvider);
+
+        var firstPoll = await processor.ProcessDueEntriesAsync();
+
+        Assert.Equal(0, firstPoll.EntriesPlaced);
+        Assert.Equal(0, firstPoll.RunsSkipped);
+        Assert.Equal(1, cryptoPriceClient.GetPriceCalls);
+        Assert.Empty(repository.PaperOrders);
+        Assert.All(repository.StrategyMarketPaperRuns, run =>
+        {
+            Assert.Equal(StrategyMarketPaperRunStatuses.Observed, run.Status);
+            Assert.Null(run.SkipReason);
+            Assert.Null(run.SkipDiagnosticsJson);
+        });
+        Assert.Single(repository.ApiErrors, error => error.Operation == "GetCryptoReferencePrice");
+
+        timeProvider.UtcNow = now.AddMilliseconds(500);
+
+        var secondPoll = await processor.ProcessDueEntriesAsync();
+
+        Assert.Equal(2, secondPoll.EntriesPlaced);
+        Assert.Equal(0, secondPoll.RunsSkipped);
+        Assert.Equal(2, cryptoPriceClient.GetPriceCalls);
+        Assert.Equal(2, repository.PaperOrders.Count);
+        Assert.All(repository.PaperOrders, order =>
+        {
+            Assert.Equal(PaperOrderStatus.Filled, order.Status);
+            Assert.Equal("sol-reference-retry-up", order.AssetId);
+            Assert.Equal("Up", order.Outcome);
+        });
+        Assert.All(repository.StrategyMarketPaperRuns, run =>
+        {
+            Assert.Equal(StrategyMarketPaperRunStatuses.Entered, run.Status);
+            Assert.Equal("sol-reference-retry-up", run.SelectedAssetId);
+            Assert.Equal("Up", run.SelectedOutcome);
+            Assert.Null(run.SkipReason);
+        });
+    }
+
+    [Fact]
+    public async Task ProcessDueEntriesAsync_CryptoLookupFailureStopsDeferringAfterEntryGrace()
+    {
+        var now = new DateTimeOffset(2026, 7, 16, 12, 0, 0, TimeSpan.Zero);
+        var marketStartUtc = now.AddSeconds(30);
+        var timeProvider = new ManualTimeProvider(now);
+        var variant = StrategyIds.CryptoUpDown5mVariants.Single(item =>
+            item.Code == "sol_up_down_5m_down_bps_8_fak_premarket");
+        var repository = new TestAppRepository();
+        var market = CreateMarket(
+            marketStartUtc,
+            marketStartUtc.AddMinutes(5),
+            upPrice: 0.50m,
+            downPrice: 0.50m,
+            slug: $"sol-updown-5m-{marketStartUtc.ToUnixTimeSeconds().ToString(CultureInfo.InvariantCulture)}",
+            seriesSlug: "sol-up-or-down-5m",
+            question: "SOL Up or Down - bounded transient reference test",
+            marketId: "sol-reference-expiry-market",
+            conditionId: "sol-reference-expiry-condition",
+            upAssetId: "sol-reference-expiry-up",
+            downAssetId: "sol-reference-expiry-down");
+        repository.PolymarketGammaMarkets.Add(market);
+        repository.StrategySettings[variant.Id] = StrategyRuntimeSettings.Default(variant.Id) with
+        {
+            PaperStakeAmount = 1m
+        };
+        repository.StrategyMarketPaperRuns.Add(CreateObservedRun(
+            variant,
+            market,
+            marketStartUtc,
+            now.AddSeconds(-1),
+            now));
+        var cryptoPriceClient = new FailingCryptoReferencePriceClient(
+            "SOL",
+            successPriceUsd: 149.80m,
+            snapshotPricesUsd: [150m],
+            failuresBeforeSuccess: int.MaxValue);
+        var averageProvider = new FakeCryptoReferencePriceAverageProvider();
+        averageProvider.SetFullAverages("SOL", 149m, 150m, 148m, 147m);
+        var processor = CreateProcessorCoreWithOptions(
+            repository,
+            [],
+            DefaultOrderBooks(),
+            _ => { },
+            [],
+            CreateBtcOptions(
+                paperTakerPricingEnabled: false,
+                [variant.Code],
+                entryGraceSeconds: 10),
+            cryptoReferencePriceClient: cryptoPriceClient,
+            timeProvider: timeProvider,
+            cryptoReferencePriceAverageProvider: averageProvider);
+
+        var firstPoll = await processor.ProcessDueEntriesAsync();
+
+        Assert.Equal(0, firstPoll.EntriesPlaced);
+        Assert.Equal(0, firstPoll.RunsSkipped);
+        Assert.Equal(1, cryptoPriceClient.GetPriceCalls);
+        var waitingRun = Assert.Single(repository.StrategyMarketPaperRuns);
+        Assert.Equal(StrategyMarketPaperRunStatuses.Observed, waitingRun.Status);
+        Assert.Null(waitingRun.SkipReason);
+
+        timeProvider.UtcNow = now.AddSeconds(10).AddTicks(1);
+
+        var expiredPoll = await processor.ProcessDueEntriesAsync();
+
+        Assert.Equal(0, expiredPoll.EntriesPlaced);
+        Assert.Equal(1, expiredPoll.RunsSkipped);
+        Assert.Equal(2, cryptoPriceClient.GetPriceCalls);
+        Assert.Empty(repository.PaperOrders);
+        var expiredRun = Assert.Single(repository.StrategyMarketPaperRuns);
+        Assert.Equal(StrategyMarketPaperRunStatuses.Skipped, expiredRun.Status);
+        Assert.Equal("crypto_reference_fetch_failed", expiredRun.SkipReason);
+    }
+
+    [Fact]
     public async Task ProcessAsync_QueuesDeferredPaperEntryPersistenceWhenQueueConfigured()
     {
         var now = DateTimeOffset.UtcNow;
@@ -12282,6 +12471,45 @@ public sealed class BtcUpDown5mPaperStrategyProcessorTests
             RequestCount++;
             var now = DateTimeOffset.UtcNow;
             return Task.FromResult(new BtcUsdReferencePricePoint(priceUsd, now, now, "Test"));
+        }
+    }
+
+    private sealed class FailingCryptoReferencePriceClient : ICryptoReferencePriceClient
+    {
+        private readonly FakeCryptoReferencePriceClient inner = new();
+        private readonly int failuresBeforeSuccess;
+        private int getPriceCalls;
+
+        public FailingCryptoReferencePriceClient(
+            string assetSymbol,
+            decimal successPriceUsd,
+            IReadOnlyList<decimal> snapshotPricesUsd,
+            int failuresBeforeSuccess = 1)
+        {
+            ArgumentOutOfRangeException.ThrowIfNegative(failuresBeforeSuccess);
+            inner.SetPrice(assetSymbol, successPriceUsd);
+            inner.SetSamples(assetSymbol, snapshotPricesUsd.ToArray());
+            this.failuresBeforeSuccess = failuresBeforeSuccess;
+        }
+
+        public int GetPriceCalls => Volatile.Read(ref getPriceCalls);
+
+        public Task<CryptoReferencePricePoint> GetPriceAsync(
+            string assetSymbol,
+            CancellationToken cancellationToken = default)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            if (Interlocked.Increment(ref getPriceCalls) <= failuresBeforeSuccess)
+            {
+                throw new InvalidOperationException("Transient crypto reference price failure.");
+            }
+
+            return inner.GetPriceAsync(assetSymbol, cancellationToken);
+        }
+
+        public BtcUsdReferencePriceSnapshot GetSnapshot(string assetSymbol)
+        {
+            return inner.GetSnapshot(assetSymbol);
         }
     }
 

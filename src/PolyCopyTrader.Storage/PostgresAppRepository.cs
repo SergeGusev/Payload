@@ -2103,7 +2103,10 @@ ON CONFLICT (strategy_id, market_id) DO UPDATE SET
 	public async Task UpsertPaperPositionAsync(PaperPosition position, CancellationToken cancellationToken = default(CancellationToken))
 	{
 		await using NpgsqlConnection connection = await OpenConnectionAsync(cancellationToken);
+		await using NpgsqlTransaction transaction = await connection.BeginTransactionAsync(cancellationToken);
+		await LockPaperPositionKeysAsync(connection, transaction, [position], [], cancellationToken);
 		await using NpgsqlCommand command = CreateCommand(connection, "INSERT INTO paper_positions (\n    id, copied_trader_wallet, asset_id, condition_id, outcome, size_shares, average_price,\n    estimated_value_usd, unrealized_pnl_usd, updated_at_utc\n) VALUES (\n    @Id, @CopiedTraderWallet, @AssetId, @ConditionId, @Outcome, @SizeShares, @AveragePrice,\n    @EstimatedValueUsd, @UnrealizedPnlUsd, @UpdatedAtUtc\n)\nON CONFLICT (copied_trader_wallet, asset_id) DO UPDATE SET\n    condition_id = excluded.condition_id,\n    outcome = excluded.outcome,\n    size_shares = excluded.size_shares,\n    average_price = excluded.average_price,\n    estimated_value_usd = excluded.estimated_value_usd,\n    unrealized_pnl_usd = excluded.unrealized_pnl_usd,\n    updated_at_utc = excluded.updated_at_utc;");
+		command.Transaction = transaction;
 		command.Parameters.AddWithValue("Id", Guid.NewGuid());
 		command.Parameters.AddWithValue("CopiedTraderWallet", position.CopiedTraderWallet);
 		command.Parameters.AddWithValue("AssetId", position.AssetId);
@@ -2115,6 +2118,7 @@ ON CONFLICT (strategy_id, market_id) DO UPDATE SET
 		command.Parameters.AddWithValue("UnrealizedPnlUsd", position.UnrealizedPnlUsd);
 		command.Parameters.AddWithValue("UpdatedAtUtc", UtcDateTime(position.UpdatedAtUtc));
 		await command.ExecuteNonQueryAsync(cancellationToken);
+		await transaction.CommitAsync(cancellationToken);
 	}
 
 	public async Task<bool> TryUpdatePaperPositionMarkAsync(
@@ -2125,6 +2129,8 @@ ON CONFLICT (strategy_id, market_id) DO UPDATE SET
 		CancellationToken cancellationToken = default(CancellationToken))
 	{
 		await using NpgsqlConnection connection = await OpenConnectionAsync(cancellationToken);
+		await using NpgsqlTransaction transaction = await connection.BeginTransactionAsync(cancellationToken);
+		await LockPaperPositionKeysAsync(connection, transaction, [expectedPosition], [], cancellationToken);
 		await using NpgsqlCommand command = CreateCommand(connection, """
 UPDATE paper_positions
 SET estimated_value_usd = @EstimatedValueUsd,
@@ -2140,6 +2146,7 @@ WHERE copied_trader_wallet = @CopiedTraderWallet
   AND unrealized_pnl_usd = @ExpectedUnrealizedPnlUsd
   AND updated_at_utc = @ExpectedUpdatedAtUtc;
 """);
+		command.Transaction = transaction;
 		command.Parameters.AddWithValue("CopiedTraderWallet", expectedPosition.CopiedTraderWallet);
 		command.Parameters.AddWithValue("AssetId", expectedPosition.AssetId);
 		command.Parameters.AddWithValue("ExpectedConditionId", expectedPosition.ConditionId);
@@ -2152,7 +2159,9 @@ WHERE copied_trader_wallet = @CopiedTraderWallet
 		command.Parameters.AddWithValue("EstimatedValueUsd", estimatedValueUsd);
 		command.Parameters.AddWithValue("UnrealizedPnlUsd", unrealizedPnlUsd);
 		command.Parameters.AddWithValue("UpdatedAtUtc", UtcDateTime(updatedAtUtc));
-		return await command.ExecuteNonQueryAsync(cancellationToken) == 1;
+		var updated = await command.ExecuteNonQueryAsync(cancellationToken) == 1;
+		await transaction.CommitAsync(cancellationToken);
+		return updated;
 	}
 
 	public async Task<IReadOnlyList<PaperPosition>> TryUpdatePaperPositionMarksAsync(

@@ -14861,6 +14861,12 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
         DateTimeOffset nowUtc)
     {
         var dependencyWaitExpired = IsOpeningLimitSignalWaitExpired(run.EntryDueAtUtc, nowUtc);
+        if (!dependencyWaitExpired &&
+            string.Equals(decision.SkipReason, "crypto_reference_fetch_failed", StringComparison.Ordinal))
+        {
+            return true;
+        }
+
         if (IsBinanceStartRelativeOpeningLimitEntry(variant) &&
             !dependencyWaitExpired &&
             IsStartRelativeDeferredReason(decision.SkipReason))
