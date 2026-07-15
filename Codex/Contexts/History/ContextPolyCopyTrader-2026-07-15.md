@@ -89,3 +89,10 @@ Request:
 
 Result:
 Verified exact production deployment `1d71e907717e712f889e7ea05d5351129ce8c699` strictly read-only. Paper betting remained active and exactly reconciled in both the initial and final fixed windows; the final 15-minute cohort contained `823` orders/fills/runs with zero mismatches and zero entries over `3s`. Four actual Live fills were independently matched to the official Polymarket Data API. The durable-inflight projector fix worked in the observed scope: across `250` high-frequency samples it blocked service sessions `0` times, pending work coexisted with in-flight work, cadence remained `30s`, and the queue was net draining, although its oldest high-priority item remained about `502s` old. Two repeatable Paper mark/settlement deadlocks exposed an opposite lock order that needs a deterministic position-before-queue fix and PostgreSQL interleaving coverage. The critical WebSocket also retained a `60s` backoff across successful reconnects, producing `94` closes and mostly one-minute recoveries; reset-after-success plus reconnect/flap tests are required. The service recovered from all observed incidents and remained active. No production or product state changed; only this required audit record was added.
+
+## 2026-07-15T19:13:56.2610761Z
+Request:
+Сделай также график Pnl этих стратегий
+
+Result:
+Created one cumulative settled Paper PnL chart for the same six BTC/ETH/SOL Child and Child ROI strategies selected in the refreshed Excel report, using its frozen `2026-07-15T18:47:05.887967Z` source exports. Recomputed exact settlement-time series from 3,803 selected rows, matched every strategy's count, stake, and final PnL to the report, and independently confirmed combined final PnL `$1,508.43229126`. The `1800x1080` PNG uses six distinct solid lines and collision-separated endpoint labels; it was visually inspected and hashed. No production or product state changed.

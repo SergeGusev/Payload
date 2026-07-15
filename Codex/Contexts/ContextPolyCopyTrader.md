@@ -1,3 +1,16 @@
+## Active Update 2026-07-15 Six Child And Child ROI Cumulative Paper PnL Chart
+Goal: Plot cumulative settled Paper PnL for the same six BTC/ETH/SOL Child and Child ROI strategies selected in the refreshed Excel report.
+Status: Completed
+Done:
+- Reused the exact frozen report snapshot at cutoff `2026-07-15T18:47:05.887967Z`; no new production query was required. The chart scope is the same six exact strategy GUIDs selected as the unique maximum-PnL strategy within each BTC/ETH/SOL x Child/Child ROI category.
+- Re-read all `87,451` exported settled Paper rows, filtered `3,803` rows for the selected strategies by exact GUID, and rebuilt each cumulative series at exact settlement timestamps through the frozen cutoff.
+- Verified every selected strategy's row count, stake, and final PnL exactly against `selected-strategies.csv`; an independent second aggregation confirmed `6` strategies, `3,803` rows, and combined final PnL `$1,508.43229126`.
+- Rendered `outputs/child-child-roi-best-daily-paper-pnl-report-2026-07-15/charts/child-child-roi-six-strategies-cumulative-paper-pnl.png` at `1800x1080`, with six distinct solid-color step lines, solid axes/grid/connectors, and collision-separated endpoint labels.
+- Visually inspected the final PNG and confirmed that the title, legend, axes, series, endpoint values, and footer are legible and non-overlapping. Final SHA-256 is `0AFF4C1A182DFD7F964C1D8092483D04D1E3C2BFC45A71170B3273530B73970B`.
+Next: None.
+Notes: The underlying report had already independently matched all `144` candidate aggregates, all six winner selections, and every selected daily PnL against production server SQL. The new chart used only those frozen local exports; no production row, strategy, order, service, deployment, product source file, or configuration changed. Reproducible renderer, exact cumulative series, and chart verification are in the ignored report output directory; product build/tests were not required because product code did not change.
+Blockers: None.
+
 ## Active Update 2026-07-15 Deployed Durable Inflight, Betting, And Remaining-Risk Verification
 Goal: Verify exact production deployment `1d71e907`, confirm Paper/Live betting and settlement correctness, validate the durable-inflight projector lock fix, and identify remaining evidence-backed work.
 Status: Completed
