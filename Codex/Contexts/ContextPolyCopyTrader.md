@@ -1,3 +1,17 @@
+## Active Update 2026-07-15 Local Dashboard ExecutionEngineException Check
+Goal: Determine whether the reported `System.ExecutionEngineException` reflects a current Dashboard failure and identify its cause from available evidence.
+Status: Completed
+Done:
+- At initial inspection, local `PolyCopyTrader.Dashboard` process `49256` was launched by Visual Studio and reported `Responding=False`; it later exited before a stack or dump could be captured. The pasted exception could not be independently tied to that exact process.
+- Searched repository source, tests, current local logs, recent project history, Windows Application events, WER reports, and CrashDumps for `ExecutionEngineException`, `0x80131506`, and the unavailable-stack message. No matching project throw site, Dashboard crash event, dump, or usable exception stack was found.
+- Verified from Microsoft documentation that `System.ExecutionEngineException` is obsolete and is no longer raised by the modern .NET runtime. The available text therefore does not prove a CLR failure, an application failure, or a specific project-code fault.
+- Confirmed the project targets `net10.0-windows`, the installed default .NET host is `10.0.9`, and the current source builds successfully in Release with `0` errors and `119` existing nullable warnings.
+- Observed the restarted Dashboard process `46292`, launched by elevated Visual Studio process `57892`, for one complete 60-second refresh interval from `09:11:10` through `09:12:10 Europe/Sofia`. All seven samples reported `Responding=True`; the process remained alive and CPU advanced.
+- Rechecked Windows Application events after the restart and found no relevant `.NET Runtime`, `Application Error`, `Application Hang`, WER, `PolyCopyTrader`, or `0x80131506` event.
+Next: If the exception recurs, leave Visual Studio paused and capture `Debug > Save Dump As` as a minidump with heap plus the `Call Stack` and Debug `Output` before continuing or restarting.
+Notes: The initial Debug build attempt failed only because the running Visual Studio/Dashboard processes locked Debug output DLLs; the independent Release build passed. No product source, production database row, service process, strategy, order, deployment, configuration, or runtime setting changed. Product tests were not run because application code was unchanged.
+Blockers: The first exception's exact cause is unknown because its process was restarted before any stack, debugger output, or dump was preserved; it was not reproducible during the observed restart.
+
 ## Active Update 2026-07-14 Production Server And Service Availability Check
 Goal: Determine whether the production server, PostgreSQL database, and `PolyCopyTrader.Service` are currently alive without changing production.
 Status: Completed
